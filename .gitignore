@@ -1,0 +1,6 @@
+# Go
+/gg
+/gg.exe
+*.test
+*.out
+/dist/
