@@ -28,6 +28,9 @@ the *smart sync* operations end-to-end.
   are cancellable.
 - An engine↔frontend contract designed for the hardest consumer (an MCP agent
   that cannot block on a human), so CLI and MCP fall out of it later.
+- **Observability** (§9): an always-on bounded ring buffer of recent git
+  commands + operation spans with timings; opt-in verbose tracing (`GG_TRACE`);
+  and a **debug dump** that serializes app state for diagnosing failures.
 
 ### Non-Goals (M1 — deferred, see §10)
 - Visual commit graph rendering (commit *list* only in M1).
@@ -65,7 +68,12 @@ deliberate divergence recorded in §3.1.
 - `internal/gitexec` — the process layer (lazygit's `oscommands`): exec the git
   binary, context cancellation / process-group kill, env, **streaming via an
   `onLine` callback**, and **credential-prompt handling**. Exposes a small
-  `Runner` interface with a **fake** implementation for tests.
+  `Runner` interface with a **fake** implementation for tests. Every run is timed
+  and recorded into the observability ring buffer (§9).
+- `internal/observ` — the observability layer: the always-on ring buffer, the
+  span/timing recorder, the opt-in trace logger, and the debug-dump serializer
+  (§9). Depended on by `gitexec` and `engine`; depends on neither frontend nor
+  git verbs.
 - `internal/gitcmd` — a fluent command builder (lazygit's `GitCommandBuilder`):
   `Arg/ArgIf/Config/Dir(-C path)/GitDir/WorktreePath`. The `.Dir`/`WorktreePath`
   args are how we target *another worktree* in smart-pull.
@@ -135,6 +143,9 @@ type Decider interface {
 - `GitLine{Raw}` — a raw line of git stdout/stderr (for a live log view).
 - `DecisionNeeded{Request}` — emitted alongside the `Decider` call so passive
   observers can render the prompt.
+- `Timing{Span, Duration}` — a completed span (a git subprocess or an operation
+  step) with its elapsed time. Always emitted; consumers may ignore it. Drives
+  both the always-on ring buffer and (when enabled) the verbose trace log (§9).
 - `Done{Result}` — terminal event.
 
 ### Decision resolution per frontend
@@ -241,7 +252,49 @@ panels, arrows/`hjkl` navigate, `q` quit, `?` help.
   waiting for input. (lazygit handles this via `PromptOnCredentialRequest` /
   `FailOnCredentialRequest`; gg keeps it behind the frontend-agnostic `Decider`.)
 
-## 9. Testing
+## 9. Observability: timing & debug dump
+
+Timing/tracing and the debug dump share one substrate: a bounded, always-on
+**ring buffer** of recent activity. Tracing streams it; the dump serializes it.
+
+### 9.1 Spans & the ring buffer (always on)
+- A **span** is opened for every git subprocess (in `gitexec`) and every
+  `Operation` step (in `engine`); git spans nest under the operation span that
+  spawned them. On close, a `Timing{Span, Duration}` event is emitted.
+- An **always-on ring buffer** (default ~200 entries, fixed memory cap) records
+  each closed span: operation/command name, redacted args, exit code, duration,
+  start time, and parent. Overhead is negligible; it exists so a dump taken after
+  an *unexpected* failure already has history — no "reproduce with tracing on".
+- Args are **redacted** before recording (tokens in URLs, `-c credential.*`, etc.).
+
+### 9.2 Verbose tracing (opt-in)
+- Enabled by `GG_TRACE=1` (env) or `--trace` (flag). When on, every `Timing` and
+  `GitLine` event is also written as **JSON lines** to a trace log in the
+  OS-appropriate state/log dir, and the TUI log pane shows live per-line output.
+- When off, no per-line capture and no file I/O — only the in-memory ring buffer
+  (§9.1) is maintained.
+- Purpose: trace which operation/step/git call dominates wall time so we can tune
+  performance on real monorepos.
+
+### 9.3 Debug dump
+A single JSON document capturing the most important state for diagnosis:
+- **Build/env:** gg version + build info, OS/arch, system `git` version.
+- **Repo:** repo paths (worktree / git dir / common dir), current branch + HEAD,
+  upstream, worktree list, sparse-checkout & partial-clone status.
+- **Working tree:** *summary counts only* (staged / unstaged / untracked /
+  conflicted) — **never** full diffs or file contents (a monorepo dump must stay
+  small and safe).
+- **History:** the §9.1 ring buffer (recent commands + spans + timings) and the
+  most recent errors.
+- **UI:** current TUI focus/panel + active operation, if any.
+- **Redaction:** credentials, tokens, and remote-URL secrets stripped.
+
+**Triggers (M1):** a TUI key / command-palette action ("write debug dump");
+**and** an automatic dump on panic (a top-level `recover` writes a dump before
+exit, then re-panics). The dump path is printed so it can be attached to a bug
+report. (A `gg debug dump` CLI subcommand is the natural M2 extension.)
+
+## 10. Testing
 
 - **Engine:** tested against **real throwaway git repositories** created in temp
   dirs — not mocks — because the entire risk surface is git's real behavior.
@@ -251,11 +304,14 @@ panels, arrows/`hjkl` navigate, `q` quit, `?` help.
   worktree output.
 - **TUI:** `Model`/`Update` logic unit-tested via Bubble Tea message dispatch;
   `View` rendering smoke-tested for panic-freedom and basic layout.
+- **Observability:** ring buffer eviction + memory cap; redaction of secrets in
+  recorded args and in the debug dump; the debug dump never includes file
+  contents/diffs (asserted); panic-triggered dump is written before exit.
 - **Smart pull:** each branch of the §5 tree has a dedicated fixture + test
   asserting the chosen path and the post-condition (ref state, working tree,
   stash list).
 
-## 10. Roadmap context (not specified here)
+## 11. Roadmap context (not specified here)
 
 - **M2 — CLI + Workspaces.** Add the CLI frontend (every smart op as a
   subcommand sharing the engine) and **Workspaces**: group & sync multiple repos,
@@ -265,7 +321,7 @@ panels, arrows/`hjkl` navigate, `q` quit, `?` help.
   conflict editor, rich/side-by-side diff, visual commit graph, sparse-checkout
   management.
 
-## 11. Open questions for planning
+## 12. Open questions for planning
 
 - Exact keybinding map (refine against lazygit muscle memory).
 - Whether `pull-and-stay` vs `pull-in-background` intent is a per-invocation
