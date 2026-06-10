@@ -58,16 +58,53 @@ frontends sit on top; only the TUI is built in M1.
 ```
 
 ### Module layout
+Mirrors lazygit's proven sublayering (studied directly from its source), with one
+deliberate divergence recorded in §3.1.
+
 - `cmd/gg` — entrypoint, flag parsing, launches the TUI.
-- `internal/git` — the git runner (process exec, context cancellation, env) and
-  output parsers (porcelain v2 status, branch lists, log, worktree list).
-- `internal/engine` — operation types, the `Operation`/`Decider`/`Event`
-  contract, and the concrete smart operations.
-- `internal/tui` — the Bubble Tea application (`Model`/`Update`/`View`), panels,
-  and the modal `Decider` implementation.
+- `internal/gitexec` — the process layer (lazygit's `oscommands`): exec the git
+  binary, context cancellation / process-group kill, env, **streaming via an
+  `onLine` callback**, and **credential-prompt handling**. Exposes a small
+  `Runner` interface with a **fake** implementation for tests.
+- `internal/gitcmd` — a fluent command builder (lazygit's `GitCommandBuilder`):
+  `Arg/ArgIf/Config/Dir(-C path)/GitDir/WorktreePath`. The `.Dir`/`WorktreePath`
+  args are how we target *another worktree* in smart-pull.
+- `internal/git` — domain-grouped **thin git verbs** (lazygit's `git_commands`):
+  `branch`, `commit`, `status`, `stash`, `sync` (fetch/pull/push/fast-forward),
+  `worktree`, plus a **loader/command split** — `*_loader.go` reads+parses
+  (porcelain v2 status, branch/log/worktree lists), the command files mutate.
+- `internal/model` — shared data types (lazygit's `models`): `Branch`, `Commit`,
+  `File`, `Worktree`, `StashEntry`, `WorkingTreeState`.
+- `internal/engine` — operation types and the `Operation`/`Decider`/`Event`
+  contract, plus the concrete **smart operations** (the orchestration; see §3.1).
+- `internal/tui` — the Bubble Tea application. Sub-structured along lazygit's
+  GUI lines: **panels** (≈ lazygit `context`s, the focusable views), **update
+  handlers** (≈ `controllers`, keybinding → action), **presentation**
+  (model → rendered strings), and the modal `Decider` implementation.
 
 The engine package has **zero** dependency on any frontend package. Frontends
 depend on the engine, never the reverse.
+
+### 3.1 Layering: adopted from lazygit, with one deliberate divergence
+
+**Adopted** (validated against lazygit source): the `oscommands`→`git_commands`→
+`models` layering, the runner interface + fake, the fluent command builder, the
+loader/command split, the DI aggregator, and concrete sync primitives — a
+`FastForward(branch, remote, remoteBranch)` that fetches a refspec without
+checkout (= §5 step 2), `Pull` options carrying `WorktreeGitDir`/`WorktreePath`
+(= §5 step 3), `--no-write-fetch-head` to allow concurrent fetch/pull, and a
+background-fetch variant that fails (not prompts) on credential request.
+
+**Divergence (justified by the three-frontend goal):** in lazygit the *smart
+workflow orchestration* — "is the branch tracking? behind? prompt for upstream
+or force-push? stash then checkout then pull then restore?" — lives in
+`pkg/gui/controllers/*` (the UI layer), and the command layer even imports
+`gocui.Task` for credential prompts. That orchestration is therefore **not
+reusable by a CLI or MCP frontend**. gg moves all such orchestration **down into
+the frontend-agnostic `engine` as `Operation`s**, and replaces the `gocui.Task`
+leak with the `Decider`/`Event` abstraction (§4). This is the single most
+important structural choice: it is what lets one engine drive all three
+frontends, which lazygit's design cannot do.
 
 ## 4. The engine↔frontend contract (keystone)
 
@@ -142,7 +179,9 @@ Encoded as logic. Given a target branch `T` and the user's *intent*
 
 Step 2 (`git fetch <remote> T:T`) is the headline simplification: most
 "pull branch X" intents do not require a checkout at all, so we skip the
-stash/switch/restore dance that a GUI performs internally.
+stash/switch/restore dance that a GUI performs internally. lazygit implements
+exactly this as `SyncCommands.FastForward`; gg reuses that primitive and adds
+the decision tree on top of it.
 
 **Safety rule:** any auto-stash created by smart pull is tagged
 (`gg-autostash:<branch>:<timestamp>`) and is never dropped until its contents
@@ -195,6 +234,12 @@ panels, arrows/`hjkl` navigate, `q` quit, `?` help.
   plus the captured `GitLine` log, so the user can see exactly what git said.
 - Cancellation (`ctx`) is a first-class outcome, not an error: it leaves the repo
   in a safe, documented state (e.g. mid-stash is always resolvable).
+- **Credential handling** (push/pull/fetch over HTTPS/SSH): the `gitexec` runner
+  detects git's credential prompt and routes it through the `Decider` (TUI: a
+  secure modal; MCP: must be pre-supplied via `Policy`/credential helper, never
+  blocks). Background fetch uses a *fail-on-credential* variant so it never hangs
+  waiting for input. (lazygit handles this via `PromptOnCredentialRequest` /
+  `FailOnCredentialRequest`; gg keeps it behind the frontend-agnostic `Decider`.)
 
 ## 9. Testing
 
