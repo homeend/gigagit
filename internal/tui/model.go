@@ -219,6 +219,9 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.repo = &git.Repo{Runner: gitexec.NewExecRunner("git", path, observ.NewRing(200))}
 	m.switchTarget = path
 	m.loading = true
+	// Drop selections from the old repo so the highlight doesn't land on a
+	// surprising row in the newly-loaded panels.
+	m.sel = map[panel]int{}
 	return m, m.loadCmd()
 }
 

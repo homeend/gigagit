@@ -2,6 +2,7 @@ package tui
 
 import (
 	"math/rand/v2"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -485,5 +486,26 @@ func TestPopupOverlaysInterfaceCenteredAndFits(t *testing.T) {
 	}
 	if !strings.Contains(boxLine[strings.Index(boxLine, "╗"):], "│") {
 		t.Errorf("expected interface visible to the right of the centered popup: %q", boxLine)
+	}
+}
+
+// End-to-end: pressing W runs a real CreateWorktree op and the model ends up
+// rooted in the worktree that was actually created (closing the seam between
+// the popup, the engine op, and reRoot).
+func TestPopupCreateAndSwitchEndToEnd(t *testing.T) {
+	m := modelWithConfig(t, "b/from-<parent-branch>", "../<repo>.worktrees/<branch>")
+	updated, _ := m.Update(keyMsg("w"))
+	m = updated.(Model)
+	updated, cmd := m.Update(keyMsg("W")) // create AND switch
+	m = updated.(Model)
+
+	m = driveOp(t, m, cmd) // run the real op to completion
+
+	if m.switchTarget == "" {
+		t.Fatal("expected switchTarget set to the created worktree")
+	}
+	// The worktree was really created and switchTarget points at it.
+	if _, err := os.Stat(filepath.Join(m.switchTarget, "README.md")); err != nil {
+		t.Fatalf("created worktree not at switchTarget %q: %v", m.switchTarget, err)
 	}
 }

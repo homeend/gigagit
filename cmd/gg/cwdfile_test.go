@@ -16,6 +16,7 @@ func TestExtractCwdFile(t *testing.T) {
 		{"space form", []string{"--cwd-file", "/tmp/x", "status"}, "/tmp/x", []string{"status"}},
 		{"equals form", []string{"--cwd-file=/tmp/y"}, "/tmp/y", []string{}},
 		{"before subcommand", []string{"--cwd-file", "/tmp/z", "worktree", "add"}, "/tmp/z", []string{"worktree", "add"}},
+		{"after subcommand", []string{"status", "--cwd-file", "/tmp/a"}, "/tmp/a", []string{"status"}},
 		{"no value is dropped safely", []string{"--cwd-file"}, "", []string{}},
 	}
 	for _, tc := range tests {
