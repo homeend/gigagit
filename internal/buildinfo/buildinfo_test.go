@@ -3,6 +3,8 @@ package buildinfo
 import "testing"
 
 func TestStringIncludesVersion(t *testing.T) {
+	orig := Version
+	t.Cleanup(func() { Version = orig })
 	Version = "9.9.9"
 	if got := String(); got == "" {
 		t.Fatal("String() returned empty")
