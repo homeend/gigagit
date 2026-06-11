@@ -8,7 +8,7 @@
 
 **Tech Stack:** Go 1.26, `github.com/pelletier/go-toml/v2` (new dep), `math/rand/v2` (stdlib, seedable). Module is `github.com/gigagit/gg`.
 
-**Spec:** `docs/superpowers/specs/2026-06-11-worktree-management-design.md` §3, §4, §5, §12.
+**Spec:** `docs/superpowers/specs/2026-06-11-worktree-management-design.md` §3, §4, §5 (token resolution only — **branch-name validation via `git check-ref-format` and path absolutization are git I/O and belong to A2, not A1**), §12.
 
 **Conventions (read before starting):**
 - TDD red→green. After each task: `go test ./...`, `go vet ./...`, and `gofmt -l internal` must be clean (empty output from `gofmt -l`).
@@ -328,6 +328,8 @@ func TestResolveSubstitutionTokens(t *testing.T) {
 		{"date", "d-<date:yyyy-MM-dd HH:mm>", nil, fixedCtx(), "d-2026-06-11 14:05"},
 		{"seq padded", "i-<seq:issue:4>", nil, fixedCtx(), "i-0042"},
 		{"seq unpadded", "i-<seq:issue>", nil, fixedCtx(), "i-42"},
+		// Resolver only substitutes the supplied number; an absent key => 0. The
+		// 1-based start ("first worktree gets 1") lives in config.PeekSeq, not here.
 		{"seq missing is zero", "i-<seq:unknown:3>", nil, fixedCtx(), "i-000"},
 		{"user input", "issue/<user:issue-id>", map[string]string{"issue-id": "777"}, fixedCtx(), "issue/777"},
 		{"user reused once", "<user:id>-<user:id>", map[string]string{"id": "x"}, fixedCtx(), "x-x"},
