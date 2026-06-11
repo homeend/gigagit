@@ -5,3 +5,6 @@
 *.out
 /dist/
 /main
+
+# screenshots / scratch
+/tui.png
