@@ -22,8 +22,9 @@ TOML) and a reusable **template engine**, both of which later features build on.
 - **A2 — Worktree engine + display.** A `git worktree add` verb, a
   `CreateWorktree` engine operation, the **Worktrees panel**, and the
   **has-worktree icon** in the Branches panel. Headless-testable.
-- **A3 — Create UX.** The `w`/`W` popup, keybindings, live preview, and
-  create-and-switch (TUI re-root).
+- **A3 — Create UX + shell integration.** The `w`/`W` popup, keybindings, live
+  preview, create-and-switch (TUI re-root), and the `--cwd-file` / `gg shell-init`
+  cd-on-switch shell wrapper (§7.1).
 
 **Deferred:** removing worktrees; adding a worktree for an *existing* branch
 (no new branch); the repo-switcher (Plan B). **Backlog:** multi-repo open at once.
@@ -174,18 +175,42 @@ branch `issue/123` → container `/work/aaa.worktrees/`, worktree dir `issue-123
 `Ctrl+w`/`Ctrl+W` cannot be distinguished — plain `w`/`W` keep case and give the
 intended lower=create / upper=create-and-switch split.)
 
-## 8. Monorepo performance (the implied constraint)
+### 7.1 Shell integration — cd-on-switch (for mc/vim and any shell tool)
 
-`git worktree add` **materializes a full checkout** of the start-point's tree — on
-a 20GB head this is seconds-to-minutes and gigabytes written. Therefore:
-- `CreateWorktree` is a **streamed, cancellable** Operation (honoring the
-  non-blocking invariant): it streams progress and respects `ctx` cancellation.
-- **Sparse-checkout:** if the repo has sparse-checkout enabled, the new worktree
-  must inherit the sparse set rather than materializing the full tree. A2 detects
-  an active sparse configuration and applies it to the new worktree (e.g. via
-  `git -C <newpath> sparse-checkout` init/set mirroring the source). Full sparse
-  *management* (editing the set) remains M3; worktree-create must simply not
-  force a full 20GB checkout when the repo is sparse.
+A worktree is just a directory of real files, so mc/vim edit it like any folder.
+The only friction is getting the **shell** into the new worktree, and a child
+process cannot `cd` its parent shell. gigagit bridges this the way lazygit does:
+
+- A global flag `--cwd-file <path>`: on exit, gigagit writes the directory the
+  shell should move to (the worktree last switched to via `W` / selected in the
+  Worktrees panel, else the current repo root) to that file.
+- `gg shell-init [bash|zsh|fish]` prints a tiny `gg()` wrapper function. The user
+  adds `eval "$(gg shell-init zsh)"` to their rc; the wrapper runs the real binary
+  with a temp `--cwd-file`, then `cd`s to its contents on exit.
+
+With the wrapper installed, `W` (create-and-switch) — and selecting a worktree
+then switching — drops the shell into that directory, so `mc`/`vim` open there
+with no manual `cd`. Without the wrapper (or when `--cwd-file` is unset), nothing
+special happens: gigagit just shows the path in the Worktrees panel and the user
+`cd`s themselves. The CLI `gg worktree add` writes the new path to `--cwd-file`
+too, so a `gg`-wrapped shell follows it. (The same `--cwd-file` mechanism powers
+Plan B's repo-switcher.)
+
+## 8. Monorepo performance & worktree checkout
+
+`git worktree add` **materializes a checkout** of the start-point's tree — on a
+20GB head this is seconds-to-minutes and gigabytes written. So `CreateWorktree`
+is a **streamed, cancellable** Operation (honoring the non-blocking invariant):
+it streams progress and respects `ctx` cancellation (killing the `git` process
+group on cancel).
+
+**Sparse-checkout is out of scope for M2.** Worktree creation is a plain
+`git worktree add` — a full checkout on a normal repo, which is exactly what a
+file-manager/editor (mc, vim) workflow wants: every file present on disk.
+Sparse-checkout *awareness* (limiting which paths a worktree materializes) is
+designed together with the M3 sparse-checkout management feature, not bolted on
+here. So M2 worktrees show all files; M3 will add the option to materialize only
+a slice.
 
 ## 9. Resolved semantics
 
@@ -210,9 +235,10 @@ pure display, independent of creation.
   (prompting on stdin for each `<user:LABEL>`), then calls `CreateWorktree`;
   prints the created branch and path.
 - `gg worktree list` — lists worktrees (reuses the worktree loader).
-- **Switch caveat:** a child `gg` process cannot `cd` the parent shell, so the
-  CLI cannot "switch into" the worktree — it creates and **prints the path**
-  (the user `cd`s, or wraps it in a shell function). Re-rooting is TUI-only.
+- **Switch:** a child `gg` process cannot `cd` the parent shell, so the CLI
+  creates the worktree and **prints the path**; with `--cwd-file` set (the
+  `gg shell-init` wrapper, §7.1) it also writes that path so the wrapped shell
+  `cd`s there. In-process TUI re-rooting remains TUI-only.
 - (Wiring `gg worktree …` into `cmd/gg` and `IsCommand` happens with A3, or as a
   small follow-up — the engine op and template/config are the substance.)
 
@@ -230,13 +256,16 @@ pure display, independent of creation.
   new repo and panels reload). Fit-invariant test extended for the 3-panel left
   column.
 - CLI: `worktree add`/`list` against a temp repo.
+- Shell integration: `--cwd-file` is written with the expected path on
+  switch/create-and-switch; `gg shell-init <shell>` emits a wrapper that `cd`s to
+  the file's contents (snapshot/smoke test of the emitted script).
 
 ## 13. Plan sequence
 
 - **A1** — config + template engine (this spec, §3–§5).
 - **A2** — `AddWorktree` verb + `CreateWorktree` op + Worktrees panel + branch icon
   (§3, §6, §7 display, §8, §10).
-- **A3** — `w`/`W` popup + create-and-switch re-root + (optional) `gg worktree`
-  CLI (§7 interaction, §11).
+- **A3** — `w`/`W` popup + create-and-switch re-root + `--cwd-file`/`gg shell-init`
+  cd-on-switch (§7.1) + (optional) `gg worktree` CLI (§7 interaction, §11).
 - Later: worktree removal, existing-branch worktrees, repo-switcher (Plan B),
   multi-repo (backlog).
