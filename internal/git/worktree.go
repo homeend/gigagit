@@ -52,3 +52,28 @@ func (r *Repo) GitCommonDir(ctx context.Context) (string, error) {
 	}
 	return strings.TrimSpace(res.Stdout), nil
 }
+
+// RemoveWorktree removes the linked worktree at path
+// (`git worktree remove [--force] <path>`). onLine receives any output lines
+// (nil is allowed; git currently emits none on success). A non-zero exit
+// (e.g. a dirty tree without force) is returned as an error.
+func (r *Repo) RemoveWorktree(ctx context.Context, path string, force bool, onLine func(string)) error {
+	if onLine == nil {
+		onLine = func(string) {}
+	}
+	argv := gitcmd.New("worktree").Arg("remove").ArgIf(force, "--force").Arg(path).ToArgv()
+	_, err := r.Runner.Stream(ctx, "git worktree remove", argv, onLine)
+	return err
+}
+
+// DeleteBranch deletes a local branch (`git branch -d|-D <name>`). Without force
+// git refuses to delete a branch that is not fully merged; force uses -D.
+func (r *Repo) DeleteBranch(ctx context.Context, name string, force bool) error {
+	flag := "-d"
+	if force {
+		flag = "-D"
+	}
+	argv := gitcmd.New("branch").Arg(flag, name).ToArgv()
+	_, err := r.Runner.Run(ctx, "git branch (delete)", argv)
+	return err
+}

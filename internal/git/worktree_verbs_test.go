@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -68,5 +69,78 @@ func TestGitCommonDirIsAbsolute(t *testing.T) {
 	}
 	if !filepath.IsAbs(got) {
 		t.Fatalf("GitCommonDir = %q, want an absolute path", got)
+	}
+}
+
+func TestRemoveWorktreeRemovesLinkedTree(t *testing.T) {
+	dir, runner := newTestRepo(t)
+	repo := &Repo{Runner: runner}
+
+	wt := filepath.Join(filepath.Dir(dir), "wt-rm")
+	if err := repo.AddWorktree(context.Background(), wt, "feature/rm", "main", nil); err != nil {
+		t.Fatalf("AddWorktree: %v", err)
+	}
+	if err := repo.RemoveWorktree(context.Background(), wt, false, nil); err != nil {
+		t.Fatalf("RemoveWorktree: %v", err)
+	}
+	if _, err := os.Stat(wt); !os.IsNotExist(err) {
+		t.Fatalf("worktree dir still present: %v", err)
+	}
+}
+
+func TestRemoveWorktreeRefusesDirtyUntilForced(t *testing.T) {
+	dir, runner := newTestRepo(t)
+	repo := &Repo{Runner: runner}
+
+	wt := filepath.Join(filepath.Dir(dir), "wt-dirty")
+	if err := repo.AddWorktree(context.Background(), wt, "feature/d", "main", nil); err != nil {
+		t.Fatalf("AddWorktree: %v", err)
+	}
+	// Make the worktree dirty so a non-forced removal is refused.
+	if err := os.WriteFile(filepath.Join(wt, "README.md"), []byte("changed\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.RemoveWorktree(context.Background(), wt, false, nil); err == nil {
+		t.Fatal("non-forced removal of a dirty worktree should fail")
+	}
+	if err := repo.RemoveWorktree(context.Background(), wt, true, nil); err != nil {
+		t.Fatalf("forced removal: %v", err)
+	}
+	if _, err := os.Stat(wt); !os.IsNotExist(err) {
+		t.Fatalf("worktree dir still present after force: %v", err)
+	}
+}
+
+func TestDeleteBranchRefusesUnmergedUntilForced(t *testing.T) {
+	dir, runner := newTestRepo(t)
+	repo := &Repo{Runner: runner}
+	gitDo := func(args ...string) {
+		c := exec.Command("git", args...)
+		c.Dir = dir
+		c.Env = append(os.Environ(),
+			"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t",
+			"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+		if out, err := c.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	// Create an unmerged branch: commit on it, then return to main.
+	gitDo("checkout", "-b", "feature/unmerged")
+	if err := os.WriteFile(filepath.Join(dir, "extra.txt"), []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitDo("add", ".")
+	gitDo("commit", "-m", "unmerged work")
+	gitDo("checkout", "main")
+
+	if err := repo.DeleteBranch(context.Background(), "feature/unmerged", false); err == nil {
+		t.Fatal("safe delete of an unmerged branch should fail")
+	}
+	if err := repo.DeleteBranch(context.Background(), "feature/unmerged", true); err != nil {
+		t.Fatalf("forced delete: %v", err)
+	}
+	out, _ := exec.Command("git", "-C", dir, "branch", "--list", "feature/unmerged").CombinedOutput()
+	if strings.TrimSpace(string(out)) != "" {
+		t.Fatalf("branch still present after force delete: %q", out)
 	}
 }

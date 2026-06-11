@@ -78,6 +78,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.currentWorktree = msg.currentWorktree
 			m.cfg = msg.cfg
 			m.gitCommonDir = msg.gitCommonDir
+			// Clamp selections so a row removed since the last load (e.g. a
+			// deleted worktree) can't leave an index pointing past the end.
+			for p := panel(0); p < panelCount; p++ {
+				if n := m.panelLen(p); m.sel[p] >= n {
+					if n > 0 {
+						m.sel[p] = n - 1
+					} else {
+						m.sel[p] = 0
+					}
+				}
+			}
 		}
 	case tea.KeyMsg:
 		if m.modal != nil {
@@ -136,6 +147,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if mm, ok := m.openWorktreePopup(); ok {
 					return mm, nil
 				}
+			}
+		case "d":
+			if !m.running && !m.loading && m.focus == panelWorktrees && len(m.worktrees) > 0 {
+				wt := m.worktrees[m.sel[panelWorktrees]]
+				return m.startOp(engine.RemoveWorktree{Path: wt.Path, Branch: wt.Branch})
 			}
 		case "enter":
 			if !m.running && !m.loading && m.focus == panelWorktrees && len(m.worktrees) > 0 {
