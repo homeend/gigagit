@@ -14,11 +14,41 @@ func (r *Repo) Fetch(ctx context.Context, remote string) error {
 	return err
 }
 
-// PullFFOnly fetches and fast-forwards the current branch only; it never
-// creates a merge commit. Fails if the remote is not a fast-forward.
+// PullStrategy selects how Pull integrates upstream changes.
+type PullStrategy int
+
+const (
+	PullFF     PullStrategy = iota // --ff-only: never create a merge commit
+	PullRebase                     // --rebase: replay local commits on top
+	PullMerge                      // --no-rebase: create a merge commit if needed
+)
+
+// Pull integrates remote/branch into the current branch using the given strategy.
+func (r *Repo) Pull(ctx context.Context, remote, branch string, strategy PullStrategy) error {
+	b := gitcmd.New("pull").Arg("--no-edit")
+	switch strategy {
+	case PullRebase:
+		b = b.Arg("--rebase")
+	case PullMerge:
+		b = b.Arg("--no-rebase")
+	default:
+		b = b.Arg("--ff-only")
+	}
+	b = b.Arg(remote, branch)
+	_, err := r.Runner.Run(ctx, "git pull", b.ToArgv())
+	return err
+}
+
+// PullFFOnly fast-forwards the current branch only (no merge commit).
 func (r *Repo) PullFFOnly(ctx context.Context, remote, branch string) error {
-	argv := gitcmd.New("pull").Arg("--no-edit", "--ff-only", remote, branch).ToArgv()
-	_, err := r.Runner.Run(ctx, "git pull --ff-only", argv)
+	return r.Pull(ctx, remote, branch, PullFF)
+}
+
+// PullInWorktree fast-forwards branch inside another linked worktree at
+// worktreePath, without touching the current worktree.
+func (r *Repo) PullInWorktree(ctx context.Context, worktreePath, remote, branch string) error {
+	argv := gitcmd.New("pull").Dir(worktreePath).Arg("--no-edit", "--ff-only", remote, branch).ToArgv()
+	_, err := r.Runner.Run(ctx, "git pull (worktree)", argv)
 	return err
 }
 
