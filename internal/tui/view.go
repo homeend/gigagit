@@ -15,54 +15,166 @@ var (
 	modalStyle   = lipgloss.NewStyle().Border(lipgloss.DoubleBorder()).BorderForeground(lipgloss.Color("11")).Padding(1, 2)
 )
 
-// render draws the three panels and a footer.
+// render draws the header, the three panels, and the footer/status, sized to fit
+// the current terminal so the output never exceeds width×height.
 func (m Model) render() string {
 	if m.modal != nil {
 		return m.renderModal()
 	}
-	header := titleStyle.Render("gigagit") + "  branch " + m.status.Branch
-	if m.status.Upstream != "" {
-		header += fmt.Sprintf(" (↑%d ↓%d)", m.status.Ahead, m.status.Behind)
+
+	w, h := m.width, m.height
+	if w <= 0 {
+		w = 80
+	}
+	if h <= 0 {
+		h = 24
 	}
 
-	branches := m.renderList(panelBranches, "Branches", m.branchRows())
-	status := m.renderList(panelStatus, "Status", m.statusRows())
-	commits := m.renderList(panelCommits, "Commits", m.commitRows())
-
-	body := lipgloss.JoinHorizontal(lipgloss.Top,
-		lipgloss.JoinVertical(lipgloss.Left, branches, status),
-		commits,
-	)
-	footer := "[p]ull [P]ush [s]witch [S]tash [u]ndo  •  [tab] focus  [r] reload  [q] quit"
+	header := m.headerLine(w)
+	footer := truncate("[p]ull [P]ush [s]witch [S]tash [u]ndo  •  [tab] focus  [r] reload  [q] quit", w)
 	statusLine := m.statusMsg
 	if m.running {
 		statusLine = "⏳ " + statusLine
 	}
-	return strings.Join([]string{header, body, footer, statusLine}, "\n") + "\n"
+	statusLine = truncate(statusLine, w)
+
+	// Rows available for the panel body, between header and footer/status.
+	bodyH := h - 3
+	if bodyH < 6 {
+		bodyH = 6
+	}
+
+	// Narrow terminals: a single commits column (two columns won't fit cleanly).
+	if w < 40 {
+		body := m.renderPanel(panelCommits, "Commits", m.commitRows(), w, bodyH)
+		return strings.Join([]string{header, body, footer, statusLine}, "\n")
+	}
+
+	// Two columns: a narrow left (branches over status) and a wide commits panel.
+	leftW := w / 3
+	if leftW < 16 {
+		leftW = 16
+	}
+	if leftW > w-24 {
+		leftW = w - 24
+	}
+	rightW := w - leftW
+
+	branchesH := bodyH / 2
+	statusH := bodyH - branchesH
+
+	left := lipgloss.JoinVertical(lipgloss.Left,
+		m.renderPanel(panelBranches, "Branches", m.branchRows(), leftW, branchesH),
+		m.renderPanel(panelStatus, "Status", m.statusRows(), leftW, statusH),
+	)
+	right := m.renderPanel(panelCommits, "Commits", m.commitRows(), rightW, bodyH)
+	body := lipgloss.JoinHorizontal(lipgloss.Top, left, right)
+
+	return strings.Join([]string{header, body, footer, statusLine}, "\n")
 }
 
-func (m Model) renderList(p panel, label string, rows []string) string {
-	var b strings.Builder
-	b.WriteString(label)
-	b.WriteString("\n")
+// headerLine renders the bold title plus branch info, truncated to width.
+func (m Model) headerLine(w int) string {
+	rest := "  branch " + m.status.Branch
+	if m.status.Upstream != "" {
+		rest += fmt.Sprintf(" (↑%d ↓%d)", m.status.Ahead, m.status.Behind)
+	}
+	return titleStyle.Render("gigagit") + truncate(rest, w-7)
+}
+
+// renderPanel draws one bordered panel of fixed size boxW×boxH, windowing rows
+// around the selection and truncating each to fit. Border (2) + padding (2) are
+// accounted for so the rendered box matches the requested dimensions.
+func (m Model) renderPanel(p panel, label string, rows []string, boxW, boxH int) string {
+	contentH := boxH - 2 // top/bottom border
+	if contentH < 1 {
+		contentH = 1
+	}
+	innerW := boxW - 4 // border (2) + horizontal padding (2)
+	if innerW < 1 {
+		innerW = 1
+	}
+	rowsCap := contentH - 1 // one line reserved for the label
+	if rowsCap < 0 {
+		rowsCap = 0
+	}
+
+	lines := make([]string, 0, contentH)
+	lines = append(lines, padRight(truncate(label, innerW), innerW))
+
 	if len(rows) == 0 {
-		b.WriteString("  (none)")
-	}
-	for i, row := range rows {
-		if i == m.sel[p] && p == m.focus {
-			b.WriteString(selectedRow.Render("> " + row))
-		} else {
-			b.WriteString("  " + row)
+		if rowsCap >= 1 {
+			lines = append(lines, padRight(truncate("  (none)", innerW), innerW))
 		}
-		if i < len(rows)-1 {
-			b.WriteString("\n")
+	} else {
+		win, selInWin := windowRows(rows, rowsCap, m.sel[p])
+		for i, row := range win {
+			focused := i == selInWin && p == m.focus
+			prefix := "  "
+			if focused {
+				prefix = "> "
+			}
+			line := padRight(truncate(prefix+row, innerW), innerW)
+			if focused {
+				line = selectedRow.Render(line)
+			}
+			lines = append(lines, line)
 		}
 	}
+	for len(lines) < contentH {
+		lines = append(lines, padRight("", innerW))
+	}
+
 	style := bluredPanel
 	if p == m.focus {
 		style = focusedPanel
 	}
-	return style.Render(b.String())
+	return style.Render(strings.Join(lines, "\n"))
+}
+
+// windowRows returns at most n rows scrolled so sel stays visible, plus sel's
+// index within the returned window.
+func windowRows(rows []string, n, sel int) ([]string, int) {
+	if n <= 0 {
+		n = 1
+	}
+	if len(rows) <= n {
+		return rows, sel
+	}
+	start := sel - n/2
+	if start < 0 {
+		start = 0
+	}
+	if start+n > len(rows) {
+		start = len(rows) - n
+	}
+	if start < 0 {
+		start = 0
+	}
+	return rows[start : start+n], sel - start
+}
+
+// truncate shortens s to at most n display columns, adding an ellipsis.
+func truncate(s string, n int) string {
+	if n <= 0 {
+		return ""
+	}
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	if n == 1 {
+		return "…"
+	}
+	return string(r[:n-1]) + "…"
+}
+
+// padRight right-pads s with spaces to n display columns (no-op if already wider).
+func padRight(s string, n int) string {
+	if w := lipgloss.Width(s); w < n {
+		return s + strings.Repeat(" ", n-w)
+	}
+	return s
 }
 
 func (m Model) branchRows() []string {
