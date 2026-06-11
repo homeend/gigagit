@@ -34,7 +34,7 @@ func (m Model) render() string {
 	}
 
 	header := m.headerLine(w)
-	footer := truncate("[p]ull [P]ush [s]witch [S]tash [u]ndo  •  [tab] focus  [r] reload  [q] quit", w)
+	footer := truncate("[p]ull [P]ush [s]witch [S]tash [u]ndo [w]orktree  •  [tab] focus  [r] reload  [q] quit", w)
 	statusLine := m.statusMsg
 	if m.running {
 		statusLine = "⏳ " + statusLine

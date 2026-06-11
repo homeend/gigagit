@@ -309,6 +309,24 @@ func TestSeqNoBumpOnError(t *testing.T) {
 	}
 }
 
+func TestRenderWorktreePopupShowsPreview(t *testing.T) {
+	m := modelWithConfig(t, "b/from-<parent-branch>", "../<repo>.worktrees/<branch>")
+	m.width, m.height = 80, 24
+	updated, _ := m.Update(keyMsg("w"))
+	m = updated.(Model)
+
+	out := m.View()
+	if !contains(out, m.popup.previewBranch) {
+		t.Errorf("popup view should show the preview branch %q:\n%s", m.popup.previewBranch, out)
+	}
+	if !contains(out, "create") {
+		t.Errorf("popup view should show the action hint:\n%s", out)
+	}
+	if !contains(out, m.popup.startPoint) {
+		t.Errorf("popup view should name the start-point branch %q", m.popup.startPoint)
+	}
+}
+
 var errTest = errTestType("boom")
 
 type errTestType string

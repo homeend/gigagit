@@ -3,6 +3,7 @@ package tui
 import (
 	"math/rand/v2"
 	"path/filepath"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -251,7 +252,42 @@ func (m Model) startCreateFromPopup() (tea.Model, tea.Cmd) {
 	return m.startOp(op)
 }
 
-// renderWorktreePopup gets its real body in Task 8.
+// renderWorktreePopup draws the create-worktree dialog (fields, live preview,
+// and state-specific key hints).
 func (m Model) renderWorktreePopup() string {
-	return "create worktree…\n"
+	p := m.popup
+	var b strings.Builder
+	b.WriteString("Create worktree from " + p.startPoint + "\n\n")
+
+	for i, lbl := range p.labels {
+		cursor := "  "
+		if p.state == stInput && i == p.fieldIdx {
+			cursor = "> "
+		}
+		b.WriteString(cursor + lbl + ": " + p.inputs[lbl] + "\n")
+	}
+	if len(p.labels) > 0 {
+		b.WriteString("\n")
+	}
+
+	branch := p.previewBranch
+	if p.state == stEdit {
+		branch = p.editBuf
+	}
+	b.WriteString("branch: " + branch + "\n")
+	b.WriteString("path:   " + p.previewPath + "\n")
+	if p.previewErr != nil {
+		b.WriteString("\n⚠ " + p.previewErr.Error() + "\n")
+	}
+
+	b.WriteString("\n")
+	switch p.state {
+	case stInput:
+		b.WriteString("[type] value  [tab/enter] next field  [esc] cancel")
+	case stEdit:
+		b.WriteString("[type] edit name  [enter] done  [esc] discard")
+	default:
+		b.WriteString("[w/enter] create  [e] edit name  [esc] cancel")
+	}
+	return modalStyle.Render(b.String()) + "\n"
 }
