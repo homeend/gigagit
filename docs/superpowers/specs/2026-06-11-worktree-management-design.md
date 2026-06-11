@@ -37,8 +37,13 @@ frontends (TUI, CLI, future MCP) reuse it.
   - `Resolve(tmpl string, inputs map[string]string, ctx Ctx) (string, error)`
   - `UserLabels(tmpl string) []string` — distinct `<user:LABEL>` labels, in order,
     so a frontend knows which input fields to render.
-  - `Ctx` carries the non-`<user:>` inputs (`ParentBranch`, `Repo`) plus an
-    injected `Now func() time.Time` and a seedable `Rand` source, for determinism.
+  - `SeqNames(tmpl string) []string` — distinct `<seq:NAME:N>` counter names, so
+    the create flow knows which counters to read for preview and to bump on
+    success.
+  - `Ctx` carries the non-`<user:>` inputs (`ParentBranch`, `Repo`), the current
+    counter values (`Seqs map[string]int`, supplied by the caller — the resolver
+    never mutates them), plus an injected `Now func() time.Time` and a seedable
+    `Rand` source, for determinism.
 - `internal/config` — loads `~/.config/gg/config.toml` then `<repo>/.gg.toml`,
   merging with repo-wins precedence; exposes a typed `Config`.
 - `internal/git` — thin verb:
@@ -76,6 +81,24 @@ future `gg worktree add` both reduce to "resolve template → call the same op".
 - Missing files are not errors: absent config yields built-in defaults
   (`path_template` and `default_branch_template` above).
 
+**Local per-repo state (counters):** mutable runtime state lives separately from
+the committed config, at `<repo>/.git/gg/state.toml` — inside `.git/`, so git
+never tracks it (no merge conflicts, machine-local). It holds the `<seq:NAME>`
+counters:
+```toml
+[seq]
+issue = 42
+deploy = 7
+```
+`config` exposes:
+- `PeekSeq(repoGitDir, name string) int` — current value (0 if unset), no mutation
+  (used to build the preview).
+- `BumpSeq(repoGitDir, name string) (int, error)` — atomically increment and
+  persist; called once per used counter after a successful create.
+
+The committed `.gg.toml` is read-only at runtime; only `.git/gg/state.toml` is
+written.
+
 ## 5. Template engine
 
 **Function tokens** (auto-computed, no user input):
@@ -87,6 +110,15 @@ future `gg worktree add` both reduce to "resolve template → call the same op".
   (mapped internally to Go's reference layout). E.g. `<date:yyyy-MM-dd HH:mm>`.
 - `<random-alpha:N>` — N random lowercase ASCII letters.
 - `<random-num:N>` — N random digits.
+- `<seq:NAME:N>` — a **persistent per-repo named counter** (`NAME`) that is
+  incremented on every successful worktree creation and zero-padded to `N`
+  digits. `N` is optional (`<seq:NAME>` = no padding). The counter is stored in
+  local repo state, **not** the committed `.gg.toml` (see §4) — it is mutable,
+  machine-local, and would otherwise cause merge conflicts. To preserve the
+  resolver's purity, the *current* counter value is supplied to `Resolve` via
+  `Ctx`; the resolver only substitutes it. The increment + persist happens in the
+  create flow **only after a worktree is successfully created** (§7/§11), so
+  previews and cancellations never consume a number.
 
 **Input token:**
 - `<user:LABEL>` — a free-text value the frontend collects; the same LABEL
@@ -132,6 +164,11 @@ branch `issue/123` → container `/work/aaa.worktrees/`, worktree dir `issue-123
   state change (the process does not move; the TUI just operates on a new repo
   root). This "open repo at path" primitive is built cleanly here because **Plan
   B (the repo-switcher) reuses it exactly.**
+- **Counter consumption:** the preview reads each `<seq:NAME>` via `PeekSeq`; only
+  after the worktree is successfully created does the flow call `BumpSeq` once per
+  counter the template used (so cancels, errors, and previews never advance a
+  counter). Free-editing the name with `e` does not change which counters the
+  *template* referenced.
 
 **Keys:** `w`/`W` are currently unbound. (Terminals collapse Ctrl+letter case, so
 `Ctrl+w`/`Ctrl+W` cannot be distinguished — plain `w`/`W` keep case and give the
@@ -183,7 +220,9 @@ pure display, independent of creation.
 
 - `template`: table-driven, injected `Now`/`Rand` — every function token, `<user>`
   label extraction/reuse, date-format mapping, sanitization, unknown-token error.
-- `config`: global-only, repo-only, merged precedence, missing-files-defaults.
+- `config`: global-only, repo-only, merged precedence, missing-files-defaults;
+  `PeekSeq`/`BumpSeq` round-trip + padding + counter persists across loads and is
+  not written to the committed `.gg.toml`.
 - `git.AddWorktree` + `CreateWorktree`: real throwaway repos — assert the worktree
   directory and new branch exist, progress streamed, and the error cases in §10.
 - TUI: Worktrees panel render + has-worktree icon; popup `Update` (field entry,
