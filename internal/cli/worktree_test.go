@@ -183,6 +183,8 @@ func TestWorktreeRemoveDirtyNeedsForce(t *testing.T) {
 	os.WriteFile(filepath.Join(wt, "README.md"), []byte("changed\n"), 0o644)
 
 	var out, errb bytes.Buffer
+	// Non-interactive because os.Stdin is not a TTY under `go test`, so the
+	// worktree-dirty decision cannot be answered without --force.
 	if code := Run(dir, []string{"worktree", "remove", wt}, strings.NewReader(""), &out, &errb, ""); code == 0 {
 		t.Fatal("dirty removal without --force should fail non-interactively")
 	}

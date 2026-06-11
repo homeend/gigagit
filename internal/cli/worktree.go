@@ -184,10 +184,5 @@ func cmdWorktreeRemove(repo *repoT, args []string, stdin io.Reader, stdout, stde
 
 	res, err := runOperation(ctxBg, repo,
 		engine.RemoveWorktree{Path: match.Path, Branch: match.Branch}, dec, stderr)
-	if err != nil {
-		fmt.Fprintln(stderr, "error:", err)
-		return 1
-	}
-	fmt.Fprintln(stdout, "✓ "+res.Summary)
-	return 0
+	return finish(res, err, stdout, stderr)
 }
