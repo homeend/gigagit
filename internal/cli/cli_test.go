@@ -11,7 +11,7 @@ import (
 func runCLI(t *testing.T, workdir string, args ...string) (int, string, string) {
 	t.Helper()
 	var out, errb bytes.Buffer
-	code := Run(workdir, args, &out, &errb)
+	code := Run(workdir, args, strings.NewReader(""), &out, &errb, "")
 	return code, out.String(), errb.String()
 }
 
