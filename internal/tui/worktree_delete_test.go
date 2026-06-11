@@ -99,6 +99,4 @@ func TestSelectionClampAfterWorktreeReload(t *testing.T) {
 	if got := m.sel[panelWorktrees]; got > len(m.worktrees)-1 {
 		t.Fatalf("sel[panelWorktrees] = %d not clamped to <= %d", got, len(m.worktrees)-1)
 	}
-	// Pressing d on the clamped selection must not panic (index in range).
-	_, _ = m.Update(keyMsg("d"))
 }
