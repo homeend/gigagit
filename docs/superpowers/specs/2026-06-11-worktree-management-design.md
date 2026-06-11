@@ -66,7 +66,11 @@ future `gg worktree add` both reduce to "resolve template → call the same op".
 
 - **Global:** `~/.config/gg/config.toml` (honor `$XDG_CONFIG_HOME`).
 - **Per-repo:** committed `<repo-root>/.gg.toml` (so a team shares conventions).
-- **Precedence:** repo overrides global, per top-level key.
+- **Precedence:** field-level overlay — start from built-in defaults, overlay any
+  field the global file sets, then overlay any field the repo file sets (repo
+  wins). A file setting one field never wipes sibling fields from a lower layer.
+  Each file is decoded into its own value and merged in Go, so the result does
+  not depend on the TOML library's nested-decode semantics.
 - **Format:** TOML via `github.com/pelletier/go-toml/v2` (one small, standard dep).
 - **Worktree schema (illustrative):**
   ```toml
@@ -92,10 +96,13 @@ issue = 42
 deploy = 7
 ```
 `config` exposes:
-- `PeekSeq(repoGitDir, name string) int` — current value (0 if unset), no mutation
-  (used to build the preview).
-- `BumpSeq(repoGitDir, name string) (int, error)` — atomically increment and
-  persist; called once per used counter after a successful create.
+Counters are **1-based**: the first worktree a template creates gets `1`, not `0`.
+The stored value is the last *consumed* number (absent = 0 = nothing consumed yet).
+- `PeekSeq(repoGitDir, name string) int` — the *next* value that will be used
+  (stored + 1, so `1` when unset); no mutation. Used to build the preview.
+- `BumpSeq(repoGitDir, name string) (int, error)` — atomically increment the
+  stored value and return the newly consumed number (matches the prior `PeekSeq`).
+  Called once per used counter after a successful create.
 
 The committed `.gg.toml` is read-only at runtime; only `.git/gg/state.toml` is
 written.
