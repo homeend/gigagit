@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/gigagit/gg/internal/config"
 	"github.com/gigagit/gg/internal/template"
 )
@@ -111,5 +113,71 @@ func TestPopupEscCancels(t *testing.T) {
 	updated, _ = m.Update(keyMsg("esc"))
 	if updated.(Model).popup != nil {
 		t.Error("esc should cancel the popup")
+	}
+}
+
+func TestPopupInputFieldsAndPreview(t *testing.T) {
+	m := modelWithConfig(t, "<user:user>/fix/<user:issue>", "wt/<branch>")
+	updated, _ := m.Update(keyMsg("w"))
+	m = updated.(Model)
+	if m.popup.state != stInput {
+		t.Fatalf("state = %v, want stInput with user fields", m.popup.state)
+	}
+	if len(m.popup.labels) != 2 || m.popup.labels[0] != "user" || m.popup.labels[1] != "issue" {
+		t.Fatalf("labels = %v, want [user issue]", m.popup.labels)
+	}
+
+	for _, ch := range []string{"a", "l", "i", "c", "e"} {
+		updated, _ = m.Update(keyMsg(ch))
+		m = updated.(Model)
+	}
+	if m.popup.inputs["user"] != "alice" {
+		t.Fatalf("first field = %q, want alice", m.popup.inputs["user"])
+	}
+
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	m = updated.(Model)
+	if m.popup.inputs["user"] != "alic" {
+		t.Fatalf("after backspace = %q, want alic", m.popup.inputs["user"])
+	}
+
+	updated, _ = m.Update(keyMsg("tab"))
+	m = updated.(Model)
+	if m.popup.fieldIdx != 1 {
+		t.Fatalf("fieldIdx = %d, want 1 after tab", m.popup.fieldIdx)
+	}
+	for _, ch := range []string{"7", "7"} {
+		updated, _ = m.Update(keyMsg(ch))
+		m = updated.(Model)
+	}
+	updated, _ = m.Update(keyMsg("enter"))
+	m = updated.(Model)
+	if m.popup.state != stAction {
+		t.Fatalf("state = %v, want stAction after last field", m.popup.state)
+	}
+	if m.popup.previewBranch != "alic/fix/77" {
+		t.Fatalf("preview branch = %q, want alic/fix/77", m.popup.previewBranch)
+	}
+}
+
+func TestPopupBackspaceOnEmptyField(t *testing.T) {
+	m := modelWithConfig(t, "issue/<user:id>", "wt/<branch>")
+	updated, _ := m.Update(keyMsg("w"))
+	m = updated.(Model)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	m = updated.(Model)
+	if m.popup.inputs["id"] != "" {
+		t.Fatalf("field = %q, want empty", m.popup.inputs["id"])
+	}
+}
+
+func TestPopupMultiByteRune(t *testing.T) {
+	m := modelWithConfig(t, "issue/<user:id>", "wt/<branch>")
+	updated, _ := m.Update(keyMsg("w"))
+	m = updated.(Model)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("é")})
+	m = updated.(Model)
+	if m.popup.inputs["id"] != "é" {
+		t.Fatalf("field = %q, want é", m.popup.inputs["id"])
 	}
 }
