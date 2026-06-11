@@ -42,6 +42,16 @@ func Run(workdir string, args []string, stdout, stderr io.Writer) int {
 	}
 }
 
+var commands = map[string]bool{
+	"status": true, "commit": true, "pull": true, "push": true,
+	"switch": true, "stash": true, "undo": true, "inspect": true,
+}
+
+// IsCommand reports whether tok is a gg CLI subcommand (used by cmd/gg to
+// choose between the CLI and launching the TUI). Note: "inspect" is routed by
+// cmd/gg to its own handler, not by Run.
+func IsCommand(tok string) bool { return commands[tok] }
+
 func cmdStatus(repo *repoT, stdout, stderr io.Writer) int {
 	st, err := repo.Status(context.Background())
 	if err != nil {

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gigagit/gg/internal/app"
+	"github.com/gigagit/gg/internal/cli"
 	"github.com/gigagit/gg/internal/git"
 	"github.com/gigagit/gg/internal/gitexec"
 	"github.com/gigagit/gg/internal/observ"
@@ -16,10 +17,15 @@ import (
 )
 
 func main() {
-	if len(os.Args) > 1 && os.Args[1] == "inspect" {
-		runInspect(os.Args[2:])
+	args := os.Args[1:]
+	if len(args) > 0 && args[0] == "inspect" {
+		runInspect(args[1:])
 		return
 	}
+	if len(args) > 0 && cli.IsCommand(args[0]) {
+		os.Exit(cli.Run(".", args, os.Stdout, os.Stderr))
+	}
+	// No (or unknown) subcommand: launch the TUI.
 	ring := observ.NewRing(200)
 	repo := &git.Repo{Runner: gitexec.NewExecRunner("git", ".", ring)}
 	defer func() {

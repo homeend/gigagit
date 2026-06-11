@@ -57,3 +57,25 @@ func TestUnknownCommand(t *testing.T) {
 		t.Fatalf("expected 'unknown' in stderr:\n%s", errb)
 	}
 }
+
+func TestNoArgsReturnsUsage(t *testing.T) {
+	dir := newRepoDir(t)
+	code, _, errb := runCLI(t, dir) // no subcommand
+	if code == 0 {
+		t.Fatal("no command should return non-zero")
+	}
+	if !strings.Contains(errb, "usage") {
+		t.Fatalf("expected usage on stderr:\n%s", errb)
+	}
+}
+
+func TestIsCommand(t *testing.T) {
+	for _, c := range []string{"status", "commit", "pull", "push", "switch", "stash", "undo", "inspect"} {
+		if !IsCommand(c) {
+			t.Fatalf("%q should be a known command", c)
+		}
+	}
+	if IsCommand("definitely-not-a-command") {
+		t.Fatal("unknown token must not be a command")
+	}
+}
