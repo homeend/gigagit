@@ -26,6 +26,16 @@ func Run(workdir string, args []string, stdout, stderr io.Writer) int {
 		return cmdStatus(repo, stdout, stderr)
 	case "commit":
 		return cmdCommit(repo, rest, stdout, stderr)
+	case "pull":
+		return cmdPull(repo, rest, stdout, stderr)
+	case "push":
+		return cmdPush(repo, rest, stdout, stderr)
+	case "switch":
+		return cmdSwitch(repo, rest, stdout, stderr)
+	case "stash":
+		return cmdStash(repo, rest, stdout, stderr)
+	case "undo":
+		return cmdUndo(repo, rest, stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "unknown command %q\n", cmd)
 		return 2
