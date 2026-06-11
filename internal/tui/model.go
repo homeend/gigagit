@@ -20,6 +20,9 @@ type Model struct {
 	branches []model.Branch
 	commits  []model.Commit
 
+	worktrees       []model.Worktree
+	currentWorktree string
+
 	running   bool
 	statusMsg string
 	opMsgs    chan tea.Msg
@@ -59,6 +62,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status = msg.status
 			m.branches = msg.branches
 			m.commits = msg.commits
+			m.worktrees = msg.worktrees
+			m.currentWorktree = msg.currentWorktree
 		}
 	case tea.KeyMsg:
 		if m.modal != nil {

@@ -10,10 +10,12 @@ import (
 
 // dataLoadedMsg carries a full repo snapshot loaded off the UI thread.
 type dataLoadedMsg struct {
-	status   model.WorkingTreeStatus
-	branches []model.Branch
-	commits  []model.Commit
-	err      error
+	status          model.WorkingTreeStatus
+	branches        []model.Branch
+	commits         []model.Commit
+	worktrees       []model.Worktree
+	currentWorktree string
+	err             error
 }
 
 // loadCmd loads status, branches, and recent commits as a single snapshot.
@@ -35,6 +37,15 @@ func (m Model) loadCmd() tea.Cmd {
 		if out.commits, err = repo.Log(ctx, 50); err != nil {
 			out.err = err
 			return out
+		}
+		if out.worktrees, err = repo.Worktrees(ctx); err != nil {
+			out.err = err
+			return out
+		}
+		// TopLevel marks which listed worktree is the current one; a failure here
+		// is non-fatal (the marker just won't show).
+		if top, topErr := repo.TopLevel(ctx); topErr == nil {
+			out.currentWorktree = top
 		}
 		return out
 	}

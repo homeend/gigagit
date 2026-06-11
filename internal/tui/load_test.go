@@ -66,3 +66,13 @@ func TestUpdateAppliesLoadedData(t *testing.T) {
 		t.Fatal("loading should be false after data applied")
 	}
 }
+
+func TestLoadIncludesWorktrees(t *testing.T) {
+	m := loadedModel(t)
+	if len(m.worktrees) < 1 {
+		t.Fatalf("expected at least the main worktree, got %d", len(m.worktrees))
+	}
+	if m.currentWorktree == "" {
+		t.Error("expected currentWorktree to be set")
+	}
+}
