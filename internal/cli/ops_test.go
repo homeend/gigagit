@@ -91,3 +91,37 @@ func TestStashAndUndo(t *testing.T) {
 		t.Fatalf("expected 'undid' in output:\n%s", out)
 	}
 }
+
+func TestPullDivergedRebaseViaOnConflict(t *testing.T) {
+	clone := cloneBehind(t)
+	// Diverge locally so ff-only fails and a decision is required.
+	os.WriteFile(filepath.Join(clone, "local.txt"), []byte("l\n"), 0o644)
+	gitIn(t, clone, "add", ".")
+	gitIn(t, clone, "commit", "-m", "local")
+
+	code, out, errb := runCLI(t, clone, "pull", "--on-conflict", "rebase")
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0 (stderr: %s)", code, errb)
+	}
+	if !strings.Contains(out, "pulled") {
+		t.Fatalf("expected 'pulled' in output:\n%s", out)
+	}
+	// Rebase applied the remote v2 change and kept the local commit.
+	if b, _ := os.ReadFile(filepath.Join(clone, "f.txt")); string(b) != "v2\n" {
+		t.Fatalf("f.txt = %q, want v2 (remote change applied via rebase)", string(b))
+	}
+	if _, err := os.Stat(filepath.Join(clone, "local.txt")); err != nil {
+		t.Fatalf("local.txt missing after rebase: %v", err)
+	}
+}
+
+func TestPullBackgroundRejectsOnConflict(t *testing.T) {
+	dir := newRepoDir(t)
+	code, _, errb := runCLI(t, dir, "pull", "--background", "--on-conflict", "rebase")
+	if code != 2 {
+		t.Fatalf("exit = %d, want 2 for the rejected flag combo", code)
+	}
+	if !strings.Contains(errb, "on-conflict") {
+		t.Fatalf("expected an --on-conflict error:\n%s", errb)
+	}
+}

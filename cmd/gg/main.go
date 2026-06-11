@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/gigagit/gg/internal/app"
@@ -25,7 +26,13 @@ func main() {
 	if len(args) > 0 && cli.IsCommand(args[0]) {
 		os.Exit(cli.Run(".", args, os.Stdout, os.Stderr))
 	}
-	// No (or unknown) subcommand: launch the TUI.
+	// A mistyped/unknown subcommand should error, not silently open the TUI.
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		fmt.Fprintf(os.Stderr, "gg: unknown command %q\n", args[0])
+		fmt.Fprintln(os.Stderr, "commands: status commit pull push switch stash undo inspect (run `gg` with no arguments for the TUI)")
+		os.Exit(2)
+	}
+	// No subcommand: launch the TUI.
 	ring := observ.NewRing(200)
 	repo := &git.Repo{Runner: gitexec.NewExecRunner("git", ".", ring)}
 	defer func() {

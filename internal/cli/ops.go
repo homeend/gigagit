@@ -18,6 +18,10 @@ func cmdPull(repo *repoT, args []string, stdout, stderr io.Writer) int {
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
+	if *background && *onConflict != "" {
+		fmt.Fprintln(stderr, "pull: --on-conflict applies to same-branch divergence, not --background")
+		return 2
+	}
 	intent := engine.PullAndStay
 	if *background {
 		intent = engine.PullInBackground
