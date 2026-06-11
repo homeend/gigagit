@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/gigagit/gg/internal/config"
 	"github.com/gigagit/gg/internal/template"
 )
@@ -112,4 +114,129 @@ func peekSeqs(gitCommonDir string, names []string) map[string]int {
 // repoNameFrom returns the <repo> token value for a worktree root path.
 func repoNameFrom(root string) string {
 	return filepath.Base(root)
+}
+
+// openWorktreePopup builds a popup for the currently-selected branch. Returns
+// (model, false) if there is no branch to base it on.
+func (m Model) openWorktreePopup() (Model, bool) {
+	if len(m.branches) == 0 {
+		return m, false
+	}
+	bt := m.cfg.Worktree.DefaultBranchTemplate
+	pt := m.cfg.Worktree.PathTemplate
+
+	var labels []string
+	for _, l := range template.UserLabels(bt) {
+		labels = distinctAppend(labels, l)
+	}
+	for _, l := range template.UserLabels(pt) {
+		labels = distinctAppend(labels, l)
+	}
+	var seqNames []string
+	for _, n := range template.SeqNames(bt) {
+		seqNames = distinctAppend(seqNames, n)
+	}
+	for _, n := range template.SeqNames(pt) {
+		seqNames = distinctAppend(seqNames, n)
+	}
+
+	p := &worktreePopup{
+		startPoint: m.branches[m.sel[panelBranches]].Name,
+		branchTmpl: bt,
+		pathTmpl:   pt,
+		repoName:   repoNameFrom(m.currentWorktree),
+		labels:     labels,
+		inputs:     map[string]string{},
+		seqNames:   seqNames,
+		seqs:       peekSeqs(m.gitCommonDir, seqNames),
+		seed:       rand.Uint64(),
+		now:        time.Now(),
+	}
+	for _, l := range labels {
+		p.inputs[l] = ""
+	}
+	if len(labels) > 0 {
+		p.state = stInput
+	} else {
+		p.state = stAction
+	}
+	p.recompute()
+	m.popup = p
+	return m, true
+}
+
+// updatePopupKey handles one key while the popup is open.
+func (m Model) updatePopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	p := m.popup
+	switch p.state {
+	case stInput:
+		switch msg.Type {
+		case tea.KeyEsc:
+			m.popup = nil
+		case tea.KeyEnter, tea.KeyTab:
+			p.fieldIdx++
+			if p.fieldIdx >= len(p.labels) {
+				p.fieldIdx = len(p.labels) - 1
+				p.state = stAction
+			}
+			p.recompute()
+		case tea.KeyBackspace:
+			lbl := p.labels[p.fieldIdx]
+			if r := []rune(p.inputs[lbl]); len(r) > 0 {
+				p.inputs[lbl] = string(r[:len(r)-1])
+			}
+			p.recompute()
+		case tea.KeyRunes:
+			p.inputs[p.labels[p.fieldIdx]] += string(msg.Runes)
+			p.recompute()
+		case tea.KeySpace:
+			p.inputs[p.labels[p.fieldIdx]] += " "
+			p.recompute()
+		}
+		return m, nil
+	case stEdit:
+		switch msg.Type {
+		case tea.KeyEnter:
+			p.branchOverride = p.editBuf
+			p.state = stAction
+			p.recompute()
+		case tea.KeyEsc:
+			p.state = stAction
+			p.recompute()
+		case tea.KeyBackspace:
+			if r := []rune(p.editBuf); len(r) > 0 {
+				p.editBuf = string(r[:len(r)-1])
+			}
+			p.recompute()
+		case tea.KeyRunes:
+			p.editBuf += string(msg.Runes)
+			p.recompute()
+		case tea.KeySpace:
+			p.editBuf += " "
+			p.recompute()
+		}
+		return m, nil
+	default: // stAction
+		switch msg.String() {
+		case "esc":
+			m.popup = nil
+		case "e":
+			p.editBuf = p.previewBranch
+			p.state = stEdit
+			p.recompute()
+		case "w", "enter":
+			return m.startCreateFromPopup()
+		}
+		return m, nil
+	}
+}
+
+// startCreateFromPopup gets its real body in Task 7.
+func (m Model) startCreateFromPopup() (tea.Model, tea.Cmd) {
+	return m, nil
+}
+
+// renderWorktreePopup gets its real body in Task 8.
+func (m Model) renderWorktreePopup() string {
+	return "create worktree…\n"
 }

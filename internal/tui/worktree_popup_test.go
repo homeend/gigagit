@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gigagit/gg/internal/config"
 	"github.com/gigagit/gg/internal/template"
 )
 
@@ -58,5 +59,57 @@ func TestResolveWorktreeNamesUserInput(t *testing.T) {
 	}
 	if branch != "issue/42" {
 		t.Fatalf("branch = %q, want issue/42", branch)
+	}
+}
+
+func modelWithConfig(t *testing.T, branchTmpl, pathTmpl string) Model {
+	t.Helper()
+	m := loadedModel(t)
+	m.cfg = config.Config{Worktree: config.WorktreeConfig{
+		DefaultBranchTemplate: branchTmpl,
+		PathTemplate:          pathTmpl,
+	}}
+	return m
+}
+
+func TestOpenPopupOnW(t *testing.T) {
+	m := modelWithConfig(t, "b/from-<parent-branch>", "../<repo>.worktrees/<branch>")
+	updated, _ := m.Update(keyMsg("w"))
+	mm := updated.(Model)
+	if mm.popup == nil {
+		t.Fatal("pressing w should open the worktree popup")
+	}
+	if mm.popup.startPoint == "" {
+		t.Error("popup startPoint (selected branch) should be set")
+	}
+	if mm.popup.state != stAction {
+		t.Errorf("state = %v, want stAction when no user fields", mm.popup.state)
+	}
+	if mm.popup.previewBranch == "" {
+		t.Error("preview should be computed on open")
+	}
+}
+
+func TestPopupSwallowsGlobalKeys(t *testing.T) {
+	m := modelWithConfig(t, "b/x", "../<repo>.worktrees/<branch>")
+	updated, _ := m.Update(keyMsg("w"))
+	m = updated.(Model)
+	updated, _ = m.Update(keyMsg("s"))
+	m = updated.(Model)
+	if m.running {
+		t.Error("global keys must not fire while the popup is open")
+	}
+	if m.popup == nil {
+		t.Error("popup should still be open after an inert key")
+	}
+}
+
+func TestPopupEscCancels(t *testing.T) {
+	m := modelWithConfig(t, "b/x", "../<repo>.worktrees/<branch>")
+	updated, _ := m.Update(keyMsg("w"))
+	m = updated.(Model)
+	updated, _ = m.Update(keyMsg("esc"))
+	if updated.(Model).popup != nil {
+		t.Error("esc should cancel the popup")
 	}
 }

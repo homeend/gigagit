@@ -21,6 +21,9 @@ func (m Model) render() string {
 	if m.modal != nil {
 		return m.renderModal()
 	}
+	if m.popup != nil {
+		return m.renderWorktreePopup()
+	}
 
 	w, h := m.width, m.height
 	if w <= 0 {

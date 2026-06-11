@@ -27,6 +27,8 @@ type Model struct {
 	cfg          config.Config
 	gitCommonDir string
 
+	popup *worktreePopup
+
 	running   bool
 	statusMsg string
 	opMsgs    chan tea.Msg
@@ -92,6 +94,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+		if m.popup != nil {
+			return m.updatePopupKey(msg)
+		}
 		switch msg.String() {
 		case "q", "ctrl+c":
 			return m, tea.Quit
@@ -120,6 +125,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "u":
 			if !m.running && !m.loading {
 				return m.startOp(engine.UndoLastCommit{})
+			}
+		case "w":
+			if !m.running && !m.loading {
+				if mm, ok := m.openWorktreePopup(); ok {
+					return mm, nil
+				}
 			}
 		case "tab":
 			m.focus = (m.focus + 1) % panelCount
