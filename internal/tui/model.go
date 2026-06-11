@@ -4,6 +4,7 @@ package tui
 import (
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/gigagit/gg/internal/engine"
 	"github.com/gigagit/gg/internal/git"
 	"github.com/gigagit/gg/internal/model"
 )
@@ -18,6 +19,11 @@ type Model struct {
 	status   model.WorkingTreeStatus
 	branches []model.Branch
 	commits  []model.Commit
+
+	running   bool
+	statusMsg string
+	opMsgs    chan tea.Msg
+	modal     *decisionState
 
 	focus panel
 	sel   map[panel]int
@@ -55,12 +61,54 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.commits = msg.commits
 		}
 	case tea.KeyMsg:
+		if m.modal != nil {
+			switch msg.String() {
+			case "up", "k":
+				if m.modal.sel > 0 {
+					m.modal.sel--
+				}
+			case "down", "j":
+				if m.modal.sel < len(m.modal.req.Options)-1 {
+					m.modal.sel++
+				}
+			case "enter":
+				m.modal.reply <- engine.DecisionResponse{Option: m.modal.req.Options[m.modal.sel]}
+				m.modal = nil
+			case "esc":
+				m.modal.reply <- engine.DecisionResponse{Option: abortOption(m.modal.req.Options)}
+				m.modal = nil
+			}
+			return m, nil
+		}
 		switch msg.String() {
 		case "q", "ctrl+c":
 			return m, tea.Quit
 		case "r":
-			m.loading = true
-			return m, m.loadCmd()
+			if !m.running {
+				m.loading = true
+				return m, m.loadCmd()
+			}
+		case "p":
+			if !m.running && !m.loading {
+				return m.startOp(engine.SmartPull{Intent: engine.PullAndStay})
+			}
+		case "P":
+			if !m.running && !m.loading && m.status.Branch != "" {
+				return m.startOp(engine.Push{Remote: "origin", Branch: m.status.Branch, SetUpstream: true})
+			}
+		case "s":
+			if !m.running && !m.loading && len(m.branches) > 0 {
+				target := m.branches[m.sel[panelBranches]].Name
+				return m.startOp(engine.SmartSwitch{Branch: target})
+			}
+		case "S":
+			if !m.running && !m.loading {
+				return m.startOp(engine.Stash{Message: "gg stash"})
+			}
+		case "u":
+			if !m.running && !m.loading {
+				return m.startOp(engine.UndoLastCommit{})
+			}
 		case "tab":
 			m.focus = (m.focus + 1) % panelCount
 		case "up", "k":
@@ -72,6 +120,29 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.sel[m.focus]++
 			}
 		}
+	case opEventMsg:
+		switch e := msg.event.(type) {
+		case engine.Progress:
+			m.statusMsg = e.Step
+			if e.Detail != "" {
+				m.statusMsg += ": " + e.Detail
+			}
+		case engine.Done:
+			m.statusMsg = e.Result.Summary
+		}
+		return m, waitForOp(m.opMsgs)
+	case opDecisionMsg:
+		m.modal = &decisionState{req: msg.req, reply: msg.reply}
+		return m, waitForOp(m.opMsgs)
+	case opFinishedMsg:
+		m.running = false
+		m.opMsgs = nil
+		if msg.err != nil {
+			m.statusMsg = "error: " + msg.err.Error()
+		} else if msg.res.Summary != "" {
+			m.statusMsg = msg.res.Summary
+		}
+		return m, m.loadCmd()
 	}
 	return m, nil
 }
@@ -91,6 +162,9 @@ func (m Model) panelLen(p panel) int {
 
 // View implements tea.Model.
 func (m Model) View() string {
+	if m.modal != nil {
+		return m.render()
+	}
 	if m.loading {
 		return "gigagit (loading…)\n"
 	}
@@ -101,3 +175,16 @@ func (m Model) View() string {
 }
 
 var _ tea.Model = Model{}
+
+// abortOption returns "abort" if offered, else the last option (safe default).
+func abortOption(opts []string) string {
+	for _, o := range opts {
+		if o == "abort" {
+			return o
+		}
+	}
+	if len(opts) > 0 {
+		return opts[len(opts)-1]
+	}
+	return ""
+}

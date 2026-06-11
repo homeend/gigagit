@@ -1,0 +1,69 @@
+package tui
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/gigagit/gg/internal/engine"
+)
+
+func modalModel() (Model, chan engine.DecisionResponse) {
+	m := New(nil)
+	reply := make(chan engine.DecisionResponse, 1)
+	m.modal = &decisionState{
+		req:   engine.DecisionRequest{ID: "non-fast-forward", Prompt: "diverged", Options: []string{"rebase", "merge", "abort"}},
+		reply: reply,
+	}
+	return m, reply
+}
+
+func TestModalEnterSendsSelectedOption(t *testing.T) {
+	m, reply := modalModel()
+	updated, _ := m.Update(keyMsg("down")) // → "merge"
+	m = updated.(Model)
+	updated, _ = m.Update(keyMsg("enter"))
+	m = updated.(Model)
+
+	if m.modal != nil {
+		t.Fatal("modal should be cleared after a choice")
+	}
+	select {
+	case resp := <-reply:
+		if resp.Option != "merge" {
+			t.Fatalf("option = %q, want merge", resp.Option)
+		}
+	default:
+		t.Fatal("no response sent on the reply channel")
+	}
+}
+
+func TestModalEscAborts(t *testing.T) {
+	m, reply := modalModel()
+	updated, _ := m.Update(keyMsg("esc"))
+	m = updated.(Model)
+	if m.modal != nil {
+		t.Fatal("modal should be cleared after esc")
+	}
+	select {
+	case resp := <-reply:
+		if resp.Option != "abort" {
+			t.Fatalf("esc option = %q, want abort", resp.Option)
+		}
+	default:
+		t.Fatal("esc should send a response")
+	}
+}
+
+func TestModalRendersPromptAndOptions(t *testing.T) {
+	m, _ := modalModel()
+	m.width, m.height = 80, 24
+	out := m.View()
+	if !strings.Contains(out, "diverged") {
+		t.Fatalf("modal view missing prompt:\n%s", out)
+	}
+	for _, opt := range []string{"rebase", "merge", "abort"} {
+		if !strings.Contains(out, opt) {
+			t.Fatalf("modal view missing option %q:\n%s", opt, out)
+		}
+	}
+}
