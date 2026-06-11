@@ -7,7 +7,9 @@ import (
 	"github.com/gigagit/gg/internal/config"
 	"github.com/gigagit/gg/internal/engine"
 	"github.com/gigagit/gg/internal/git"
+	"github.com/gigagit/gg/internal/gitexec"
 	"github.com/gigagit/gg/internal/model"
+	"github.com/gigagit/gg/internal/observ"
 )
 
 // Model is the root Bubble Tea model.
@@ -29,6 +31,8 @@ type Model struct {
 
 	popup          *worktreePopup
 	pendingSeqBump []string
+	pendingSwitch  bool
+	switchTarget   string
 
 	running   bool
 	statusMsg string
@@ -191,6 +195,17 @@ func (m Model) panelLen(p panel) int {
 		return len(m.commits)
 	}
 	return 0
+}
+
+// reRoot points the model at the repository rooted at path and triggers a full
+// reload. switchTarget records where a shell should follow on exit (written to
+// --cwd-file by cmd/gg). A fresh span ring is used for the new root; the cmd/gg
+// panic dump still references the original repo (acceptable for a debug aid).
+func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
+	m.repo = &git.Repo{Runner: gitexec.NewExecRunner("git", path, observ.NewRing(200))}
+	m.switchTarget = path
+	m.loading = true
+	return m, m.loadCmd()
 }
 
 // View implements tea.Model.
