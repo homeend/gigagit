@@ -9,13 +9,13 @@ import (
 type fakeOp struct{}
 
 func (fakeOp) Run(ctx context.Context, deps OpDeps) (Result, error) {
-	deps.emit(Progress{Step: "working"})
+	deps.emit(ctx, Progress{Step: "working"})
 	resp, err := deps.decide(ctx, DecisionRequest{ID: "go?", Options: []string{"yes", "no"}})
 	if err != nil {
 		return Result{}, err
 	}
 	res := Result{Summary: "did " + resp.Option, Changed: resp.Option == "yes"}
-	deps.emit(Done{Result: res})
+	deps.emit(ctx, Done{Result: res})
 	return res, nil
 }
 
@@ -49,7 +49,7 @@ func TestOpDepsEmitAndDecide(t *testing.T) {
 
 func TestOpDepsEmitNilChannelDoesNotPanic(t *testing.T) {
 	deps := OpDeps{}
-	deps.emit(Progress{Step: "x"})
+	deps.emit(context.Background(), Progress{Step: "x"})
 	_, err := deps.decide(context.Background(), DecisionRequest{ID: "y"})
 	if err == nil {
 		t.Fatal("decide with nil Decider should return an error")

@@ -9,12 +9,12 @@ type Commit struct {
 }
 
 func (op Commit) Run(ctx context.Context, deps OpDeps) (Result, error) {
-	deps.emit(Progress{Step: "committing", Detail: op.Message})
+	deps.emit(ctx, Progress{Step: "committing", Detail: op.Message})
 	if err := deps.Repo.Commit(ctx, op.Message, op.All); err != nil {
 		return Result{}, err
 	}
 	res := Result{Summary: "committed", Changed: true}
-	deps.emit(Done{Result: res})
+	deps.emit(ctx, Done{Result: res})
 	return res, nil
 }
 
@@ -26,12 +26,12 @@ type Push struct {
 }
 
 func (op Push) Run(ctx context.Context, deps OpDeps) (Result, error) {
-	deps.emit(Progress{Step: "pushing", Detail: op.Remote + " " + op.Branch})
+	deps.emit(ctx, Progress{Step: "pushing", Detail: op.Remote + " " + op.Branch})
 	if err := deps.Repo.Push(ctx, op.Remote, op.Branch, op.SetUpstream); err != nil {
 		return Result{}, err
 	}
 	res := Result{Summary: "pushed", Changed: true}
-	deps.emit(Done{Result: res})
+	deps.emit(ctx, Done{Result: res})
 	return res, nil
 }
 
@@ -41,12 +41,12 @@ type Stash struct {
 }
 
 func (op Stash) Run(ctx context.Context, deps OpDeps) (Result, error) {
-	deps.emit(Progress{Step: "stashing", Detail: op.Message})
+	deps.emit(ctx, Progress{Step: "stashing", Detail: op.Message})
 	if err := deps.Repo.StashPush(ctx, op.Message); err != nil {
 		return Result{}, err
 	}
 	res := Result{Summary: "stashed", Changed: true}
-	deps.emit(Done{Result: res})
+	deps.emit(ctx, Done{Result: res})
 	return res, nil
 }
 
