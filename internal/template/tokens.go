@@ -73,7 +73,9 @@ var dateLayoutReplacer = strings.NewReplacer(
 )
 
 // goLayout converts a human date format (yyyy MM dd HH mm ss, with arbitrary
-// separators) into Go's reference-time layout string.
+// separators) into Go's reference-time layout string. Literal text in the
+// format must avoid the token substrings yyyy/MM/dd/HH/mm/ss, which are always
+// rewritten.
 func goLayout(human string) string {
 	return dateLayoutReplacer.Replace(human)
 }

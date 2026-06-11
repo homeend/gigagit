@@ -37,7 +37,9 @@ func readSeqState(gitDir string) (seqState, error) {
 }
 
 // PeekSeq returns the next value the named counter will produce (1-based, so 1
-// when unset). It does not mutate state.
+// when unset). It does not mutate state. If the state file cannot be read or
+// parsed, PeekSeq collapses to 1 (the preview degrades gracefully rather than
+// failing).
 func PeekSeq(gitDir, name string) int {
 	st, err := readSeqState(gitDir)
 	if err != nil {
@@ -48,6 +50,8 @@ func PeekSeq(gitDir, name string) int {
 
 // BumpSeq increments the named counter and persists it atomically, returning the
 // newly consumed number (which equals the PeekSeq value taken just before).
+// Concurrent bumps of the same counter from multiple processes are out of scope
+// (gigagit assumes a single interactive user).
 func BumpSeq(gitDir, name string) (int, error) {
 	st, err := readSeqState(gitDir)
 	if err != nil {

@@ -139,3 +139,37 @@ func TestResolveRandomErrors(t *testing.T) {
 		}
 	}
 }
+
+func TestResolveNilCtxDependenciesError(t *testing.T) {
+	// Reachable via the shipped default branch template when Rand/Now are not
+	// injected: must return an error, never panic.
+	if _, err := Resolve("<date:yyyy>", nil, Ctx{}); err == nil {
+		t.Error("nil Ctx.Now should error, not panic")
+	}
+	if _, err := Resolve("<random-alpha:4>", nil, Ctx{}); err == nil {
+		t.Error("nil Ctx.Rand should error, not panic")
+	}
+	if _, err := Resolve("<random-num:4>", nil, Ctx{}); err == nil {
+		t.Error("nil Ctx.Rand should error, not panic")
+	}
+}
+
+func TestResolveUserInputNotReprocessed(t *testing.T) {
+	// A <user:> value that itself contains <...> must survive verbatim:
+	// ReplaceAllStringFunc is single-pass and does not re-scan replacements.
+	got, err := Resolve("x-<user:id>", map[string]string{"id": "<repo>"}, fixedCtx())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != "x-<repo>" {
+		t.Fatalf("user input was re-processed: got %q, want x-<repo>", got)
+	}
+}
+
+func TestResolveFirstErrorDeterministic(t *testing.T) {
+	// With two bad tokens, the left-to-right first one is reported.
+	_, err := Resolve("<bogus>-<alsobad>", nil, fixedCtx())
+	if err == nil || !strings.Contains(err.Error(), "bogus") {
+		t.Fatalf("want first (bogus) error, got %v", err)
+	}
+}

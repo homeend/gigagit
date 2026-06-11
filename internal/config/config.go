@@ -69,7 +69,9 @@ func decodeFile(path string) (Config, bool, error) {
 }
 
 // overlayWorktree copies each non-empty field of src onto dst (field-level
-// overlay: an unset field in src leaves dst untouched).
+// overlay: an unset field in src leaves dst untouched). A field left empty in
+// src is treated as unset, so a higher layer cannot deliberately reset a lower
+// layer's field to empty; this is intentional.
 func overlayWorktree(dst *WorktreeConfig, src WorktreeConfig) {
 	if src.PathTemplate != "" {
 		dst.PathTemplate = src.PathTemplate

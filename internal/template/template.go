@@ -23,7 +23,9 @@ type Ctx struct {
 // Resolve substitutes every <...> token in tmpl. inputs supplies <user:LABEL>
 // values. Unknown tokens, a <branch> token with an unset Ctx.Branch, a missing
 // user input, or malformed token arguments are returned as errors (never
-// silently passed through).
+// silently passed through). A <date:...> token requires Ctx.Now and a
+// <random-*> token requires Ctx.Rand; if the corresponding field is nil,
+// Resolve returns an error rather than panicking.
 func Resolve(tmpl string, inputs map[string]string, ctx Ctx) (string, error) {
 	var firstErr error
 	out := tokenRe.ReplaceAllStringFunc(tmpl, func(tok string) string {
@@ -58,6 +60,9 @@ func resolveToken(body string, inputs map[string]string, ctx Ctx) (string, error
 	case "date":
 		if !hasColon {
 			return "", fmt.Errorf("template: <date> requires a format, e.g. <date:yyyy-MM-dd>")
+		}
+		if ctx.Now == nil {
+			return "", fmt.Errorf("template: <date> requires Ctx.Now to be set")
 		}
 		return ctx.Now().Format(goLayout(rest)), nil
 	case "seq":
@@ -114,6 +119,9 @@ func resolveRandom(prefix, rest string, hasColon bool, ctx Ctx) (string, error) 
 	n, err := strconv.Atoi(rest)
 	if err != nil || n <= 0 {
 		return "", fmt.Errorf("template: <%s:%s> length must be a positive integer", prefix, rest)
+	}
+	if ctx.Rand == nil {
+		return "", fmt.Errorf("template: <%s> requires Ctx.Rand to be set", prefix)
 	}
 	alphabet := lowerAlpha
 	if prefix == "random-num" {
