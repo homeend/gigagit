@@ -126,7 +126,9 @@ func TestDeleteBranchRefusesUnmergedUntilForced(t *testing.T) {
 	}
 	// Create an unmerged branch: commit on it, then return to main.
 	gitDo("checkout", "-b", "feature/unmerged")
-	os.WriteFile(filepath.Join(dir, "extra.txt"), []byte("x\n"), 0o644)
+	if err := os.WriteFile(filepath.Join(dir, "extra.txt"), []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	gitDo("add", ".")
 	gitDo("commit", "-m", "unmerged work")
 	gitDo("checkout", "main")

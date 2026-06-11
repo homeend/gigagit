@@ -54,8 +54,9 @@ func (r *Repo) GitCommonDir(ctx context.Context) (string, error) {
 }
 
 // RemoveWorktree removes the linked worktree at path
-// (`git worktree remove [--force] <path>`). Output lines are forwarded to onLine
-// (nil is allowed). A non-zero exit (e.g. a dirty tree without force) is an error.
+// (`git worktree remove [--force] <path>`). onLine receives any output lines
+// (nil is allowed; git currently emits none on success). A non-zero exit
+// (e.g. a dirty tree without force) is returned as an error.
 func (r *Repo) RemoveWorktree(ctx context.Context, path string, force bool, onLine func(string)) error {
 	if onLine == nil {
 		onLine = func(string) {}
