@@ -60,13 +60,27 @@ func (m Model) render() string {
 	}
 	rightW := w - leftW
 
-	branchesH := bodyH / 2
-	statusH := bodyH - branchesH
-
-	left := lipgloss.JoinVertical(lipgloss.Left,
-		m.renderPanel(panelBranches, "Branches", m.branchRows(), leftW, branchesH),
-		m.renderPanel(panelStatus, "Status", m.statusRows(), leftW, statusH),
-	)
+	var left string
+	if bodyH >= 9 {
+		// Three stacked left panels: Branches, Worktrees, Status. Each bordered
+		// panel needs >=3 rows, so this layout requires bodyH >= 9.
+		h1 := bodyH / 3
+		h2 := bodyH / 3
+		h3 := bodyH - h1 - h2
+		left = lipgloss.JoinVertical(lipgloss.Left,
+			m.renderPanel(panelBranches, "Branches", m.branchRows(), leftW, h1),
+			m.renderPanel(panelWorktrees, "Worktrees", m.worktreeRows(), leftW, h2),
+			m.renderPanel(panelStatus, "Status", m.statusRows(), leftW, h3),
+		)
+	} else {
+		// Short terminal: fall back to two left panels (Branches over Status).
+		branchesH := bodyH / 2
+		statusH := bodyH - branchesH
+		left = lipgloss.JoinVertical(lipgloss.Left,
+			m.renderPanel(panelBranches, "Branches", m.branchRows(), leftW, branchesH),
+			m.renderPanel(panelStatus, "Status", m.statusRows(), leftW, statusH),
+		)
+	}
 	right := m.renderPanel(panelCommits, "Commits", m.commitRows(), rightW, bodyH)
 	body := lipgloss.JoinHorizontal(lipgloss.Top, left, right)
 
@@ -177,14 +191,46 @@ func padRight(s string, n int) string {
 	return s
 }
 
+// worktreeBranchSet returns the set of branch names checked out in a worktree.
+func (m Model) worktreeBranchSet() map[string]bool {
+	set := make(map[string]bool, len(m.worktrees))
+	for _, w := range m.worktrees {
+		if w.Branch != "" {
+			set[w.Branch] = true
+		}
+	}
+	return set
+}
+
 func (m Model) branchRows() []string {
+	hasWt := m.worktreeBranchSet()
 	out := make([]string, 0, len(m.branches))
 	for _, b := range m.branches {
 		marker := "  "
 		if b.IsHead {
 			marker = "* "
 		}
-		out = append(out, marker+b.Name)
+		row := marker + b.Name
+		if hasWt[b.Name] {
+			row += " ◫"
+		}
+		out = append(out, row)
+	}
+	return out
+}
+
+func (m Model) worktreeRows() []string {
+	out := make([]string, 0, len(m.worktrees))
+	for _, w := range m.worktrees {
+		marker := "  "
+		if w.Path == m.currentWorktree {
+			marker = "* "
+		}
+		branch := w.Branch
+		if branch == "" {
+			branch = "(detached)"
+		}
+		out = append(out, marker+branch+"  "+w.Path)
 	}
 	return out
 }

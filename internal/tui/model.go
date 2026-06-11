@@ -36,6 +36,7 @@ type panel int
 
 const (
 	panelBranches panel = iota
+	panelWorktrees
 	panelStatus
 	panelCommits
 	panelCount
@@ -157,6 +158,8 @@ func (m Model) panelLen(p panel) int {
 	switch p {
 	case panelBranches:
 		return len(m.branches)
+	case panelWorktrees:
+		return len(m.worktrees)
 	case panelStatus:
 		return len(m.status.Files)
 	case panelCommits:
