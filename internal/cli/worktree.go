@@ -3,6 +3,7 @@ package cli
 import (
 	"bufio"
 	"context"
+	"flag"
 	"fmt"
 	"io"
 	"math/rand/v2"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/gigagit/gg/internal/config"
 	"github.com/gigagit/gg/internal/engine"
+	"github.com/gigagit/gg/internal/model"
 	"github.com/gigagit/gg/internal/template"
 	"github.com/gigagit/gg/internal/worktree"
 )
@@ -20,7 +22,7 @@ import (
 // cmdWorktree dispatches `gg worktree <sub>`.
 func cmdWorktree(repo *repoT, args []string, stdin io.Reader, stdout, stderr io.Writer, cwdFile string) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: gg worktree <list|add> [args]")
+		fmt.Fprintln(stderr, "usage: gg worktree <list|add|remove> [args]")
 		return 2
 	}
 	switch args[0] {
@@ -28,8 +30,10 @@ func cmdWorktree(repo *repoT, args []string, stdin io.Reader, stdout, stderr io.
 		return cmdWorktreeList(repo, stdout, stderr)
 	case "add":
 		return cmdWorktreeAdd(repo, args[1:], stdin, stdout, stderr, cwdFile)
+	case "remove":
+		return cmdWorktreeRemove(repo, args[1:], stdin, stdout, stderr)
 	default:
-		fmt.Fprintf(stderr, "worktree: unknown subcommand %q (use list or add)\n", args[0])
+		fmt.Fprintf(stderr, "worktree: unknown subcommand %q (use list, add, or remove)\n", args[0])
 		return 2
 	}
 }
@@ -129,5 +133,61 @@ func cmdWorktreeAdd(repo *repoT, args []string, stdin io.Reader, stdout, stderr 
 	if cwdFile != "" && res.Path != "" {
 		_ = os.WriteFile(cwdFile, []byte(res.Path), 0o644)
 	}
+	return 0
+}
+
+// cmdWorktreeRemove implements `gg worktree remove [--with-branch] [--force] <path>`.
+// Flags must precede the path. --with-branch also deletes the branch;
+// --force ignores uncommitted changes and unmerged commits.
+func cmdWorktreeRemove(repo *repoT, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("worktree remove", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	withBranch := fs.Bool("with-branch", false, "also delete the worktree's branch")
+	force := fs.Bool("force", false, "ignore uncommitted changes and unmerged commits")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if fs.NArg() < 1 || fs.Arg(0) == "" {
+		fmt.Fprintln(stderr, "worktree remove: a worktree path is required")
+		return 2
+	}
+	target := fs.Arg(0)
+
+	ctxBg := context.Background()
+	wts, err := repo.Worktrees(ctxBg)
+	if err != nil {
+		fmt.Fprintln(stderr, "error:", err)
+		return 1
+	}
+	absTarget, _ := filepath.Abs(target)
+	var match *model.Worktree
+	for i := range wts {
+		if wts[i].Path == target || wts[i].Path == absTarget {
+			match = &wts[i]
+			break
+		}
+	}
+	if match == nil {
+		fmt.Fprintf(stderr, "worktree remove: no worktree at %q\n", target)
+		return 1
+	}
+
+	policy := map[string]string{"remove-scope": "worktree-only"}
+	if *withBranch {
+		policy["remove-scope"] = "worktree-and-branch"
+	}
+	if *force {
+		policy["worktree-dirty"] = "force"
+		policy["branch-unmerged"] = "force-delete"
+	}
+	dec := cliDecider{policy: policy, in: stdin, out: stderr, interactive: stdinIsTerminal()}
+
+	res, err := runOperation(ctxBg, repo,
+		engine.RemoveWorktree{Path: match.Path, Branch: match.Branch}, dec, stderr)
+	if err != nil {
+		fmt.Fprintln(stderr, "error:", err)
+		return 1
+	}
+	fmt.Fprintln(stdout, "✓ "+res.Summary)
 	return 0
 }

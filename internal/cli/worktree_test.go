@@ -131,3 +131,82 @@ func TestWorktreeAddEOFWithoutNewline(t *testing.T) {
 		t.Fatalf("EOF-without-newline input not captured; output:\n%s", out.String())
 	}
 }
+
+// addCLIWorktree creates a linked worktree of dir and returns its path.
+func addCLIWorktree(t *testing.T, dir, branch, name string) string {
+	t.Helper()
+	wt := filepath.Join(filepath.Dir(dir), name)
+	c := exec.Command("git", "-C", dir, "worktree", "add", "-b", branch, wt, "main")
+	c.Env = append(os.Environ(),
+		"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t",
+		"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+	if out, err := c.CombinedOutput(); err != nil {
+		t.Fatalf("worktree add: %v\n%s", err, out)
+	}
+	return wt
+}
+
+func TestWorktreeRemoveWorktreeOnly(t *testing.T) {
+	dir := newCLIRepo(t)
+	wt := addCLIWorktree(t, dir, "feature/rm1", "wt-cli-rm1")
+
+	var out, errb bytes.Buffer
+	code := Run(dir, []string{"worktree", "remove", wt}, strings.NewReader(""), &out, &errb, "")
+	if code != 0 {
+		t.Fatalf("exit = %d, stderr=%s", code, errb.String())
+	}
+	if _, err := os.Stat(wt); !os.IsNotExist(err) {
+		t.Fatalf("worktree dir still present: %v", err)
+	}
+	if exec.Command("git", "-C", dir, "rev-parse", "--verify", "refs/heads/feature/rm1").Run() != nil {
+		t.Fatal("branch should be kept without --with-branch")
+	}
+}
+
+func TestWorktreeRemoveWithBranch(t *testing.T) {
+	dir := newCLIRepo(t)
+	wt := addCLIWorktree(t, dir, "feature/rm2", "wt-cli-rm2")
+
+	var out, errb bytes.Buffer
+	code := Run(dir, []string{"worktree", "remove", "--with-branch", wt}, strings.NewReader(""), &out, &errb, "")
+	if code != 0 {
+		t.Fatalf("exit = %d, stderr=%s", code, errb.String())
+	}
+	if exec.Command("git", "-C", dir, "rev-parse", "--verify", "refs/heads/feature/rm2").Run() == nil {
+		t.Fatal("branch should be deleted with --with-branch")
+	}
+}
+
+func TestWorktreeRemoveDirtyNeedsForce(t *testing.T) {
+	dir := newCLIRepo(t)
+	wt := addCLIWorktree(t, dir, "feature/rm3", "wt-cli-rm3")
+	os.WriteFile(filepath.Join(wt, "README.md"), []byte("changed\n"), 0o644)
+
+	var out, errb bytes.Buffer
+	if code := Run(dir, []string{"worktree", "remove", wt}, strings.NewReader(""), &out, &errb, ""); code == 0 {
+		t.Fatal("dirty removal without --force should fail non-interactively")
+	}
+	if _, err := os.Stat(wt); err != nil {
+		t.Fatalf("worktree should still exist: %v", err)
+	}
+	var out2, errb2 bytes.Buffer
+	if code := Run(dir, []string{"worktree", "remove", "--force", wt}, strings.NewReader(""), &out2, &errb2, ""); code != 0 {
+		t.Fatalf("forced removal exit = %d, stderr=%s", code, errb2.String())
+	}
+	if _, err := os.Stat(wt); !os.IsNotExist(err) {
+		t.Fatalf("worktree not removed after --force: %v", err)
+	}
+}
+
+func TestWorktreeRemoveUnknownPath(t *testing.T) {
+	dir := newCLIRepo(t)
+	var out, errb bytes.Buffer
+	code := Run(dir, []string{"worktree", "remove", filepath.Join(dir, "nope")},
+		strings.NewReader(""), &out, &errb, "")
+	if code == 0 {
+		t.Fatal("removing an unknown path should be a non-zero exit")
+	}
+	if !strings.Contains(errb.String(), "no worktree") {
+		t.Fatalf("stderr should explain the unknown path: %s", errb.String())
+	}
+}
