@@ -4,6 +4,7 @@ package tui
 import (
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/gigagit/gg/internal/engine"
 	"github.com/gigagit/gg/internal/git"
 	"github.com/gigagit/gg/internal/model"
 )
@@ -18,6 +19,11 @@ type Model struct {
 	status   model.WorkingTreeStatus
 	branches []model.Branch
 	commits  []model.Commit
+
+	running   bool
+	statusMsg string
+	opMsgs    chan tea.Msg
+	modal     *decisionState
 
 	focus panel
 	sel   map[panel]int
@@ -72,6 +78,29 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.sel[m.focus]++
 			}
 		}
+	case opEventMsg:
+		switch e := msg.event.(type) {
+		case engine.Progress:
+			m.statusMsg = e.Step
+			if e.Detail != "" {
+				m.statusMsg += ": " + e.Detail
+			}
+		case engine.Done:
+			m.statusMsg = e.Result.Summary
+		}
+		return m, waitForOp(m.opMsgs)
+	case opDecisionMsg:
+		m.modal = &decisionState{req: msg.req, reply: msg.reply}
+		return m, waitForOp(m.opMsgs)
+	case opFinishedMsg:
+		m.running = false
+		m.opMsgs = nil
+		if msg.err != nil {
+			m.statusMsg = "error: " + msg.err.Error()
+		} else if msg.res.Summary != "" {
+			m.statusMsg = msg.res.Summary
+		}
+		return m, m.loadCmd()
 	}
 	return m, nil
 }
