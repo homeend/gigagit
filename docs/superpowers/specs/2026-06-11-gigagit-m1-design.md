@@ -321,6 +321,19 @@ report. (A `gg debug dump` CLI subcommand is the natural M2 extension.)
   conflict editor, rich/side-by-side diff, visual commit graph, sparse-checkout
   management.
 
+### Candidate smart operations (not yet specified)
+
+- **SmartMerge** — a safe "merge branch X into branch Y" smart op in the spirit
+  of SmartPull: stash the working tree → check out the target branch → merge the
+  chosen branch in → switch back to the originally-checked-out branch → unstash.
+  Conflicts surface via `DecisionNeeded{resolve | abort}`, reusing SmartPull's
+  rule that the stash is never dropped while a conflict is unresolved. Two modes
+  to design: merge into the **current** branch (auto-stash around it) vs merge
+  into **any chosen** branch while returning you to where you were. With worktrees
+  available (M2), merging into a non-current branch can instead be done in a
+  throwaway linked worktree, avoiding the stash/switch dance entirely. Needs its
+  own brainstorm + spec; conflict-resolution UX overlaps the M3 conflict editor.
+
 ## 12. Open questions for planning
 
 - Exact keybinding map (refine against lazygit muscle memory).
