@@ -137,6 +137,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return mm, nil
 				}
 			}
+		case "enter":
+			if !m.running && !m.loading && m.focus == panelWorktrees && len(m.worktrees) > 0 {
+				target := m.worktrees[m.sel[panelWorktrees]].Path
+				if target != "" && target != m.currentWorktree {
+					return m.reRoot(target)
+				}
+			}
 		case "tab":
 			m.focus = (m.focus + 1) % panelCount
 		case "up", "k":
