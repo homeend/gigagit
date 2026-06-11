@@ -61,7 +61,7 @@ func (op RemoveWorktree) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	if err := deps.Repo.RemoveWorktree(ctx, op.Path, false, onLine); err != nil {
 		force, derr := deps.decide(ctx, DecisionRequest{
 			ID:      "worktree-dirty",
-			Prompt:  "Cannot remove " + op.Path + " cleanly (uncommitted changes or untracked files). Force?",
+			Prompt:  "Cannot remove " + op.Path + " cleanly (it may have uncommitted changes). Force?",
 			Options: []string{"force", "abort"},
 		})
 		if derr != nil {
