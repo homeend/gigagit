@@ -169,19 +169,25 @@ func windowRows(rows []string, n, sel int) ([]string, int) {
 	return rows[start : start+n], sel - start
 }
 
-// truncate shortens s to at most n display columns, adding an ellipsis.
+// truncate shortens s to at most n display columns, adding an ellipsis. Width is
+// measured in display columns (lipgloss.Width), not runes, so wide glyphs like
+// the ⏳ spinner cannot push a line one column past the terminal edge.
 func truncate(s string, n int) string {
 	if n <= 0 {
 		return ""
 	}
-	r := []rune(s)
-	if len(r) <= n {
+	if lipgloss.Width(s) <= n {
 		return s
 	}
 	if n == 1 {
 		return "…"
 	}
-	return string(r[:n-1]) + "…"
+	// Drop trailing runes until the remainder plus the 1-column ellipsis fits.
+	r := []rune(s)
+	for len(r) > 0 && lipgloss.Width(string(r))+1 > n {
+		r = r[:len(r)-1]
+	}
+	return string(r) + "…"
 }
 
 // padRight right-pads s with spaces to n display columns (no-op if already wider).

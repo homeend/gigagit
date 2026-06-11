@@ -74,3 +74,19 @@ func TestRenderThreePanelLeftFits(t *testing.T) {
 		}
 	}
 }
+
+// The running spinner (⏳, a 2-column glyph) must not push the status line one
+// column past the terminal edge: truncate measures display columns, not runes.
+func TestRenderRunningSpinnerStatusFits(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 80, 24
+	m.running = true
+	m.statusMsg = strings.Repeat("x", 300)
+
+	out := m.View()
+	for i, ln := range strings.Split(strings.TrimRight(out, "\n"), "\n") {
+		if w := lipgloss.Width(ln); w > m.width {
+			t.Fatalf("line %d is %d cols wide, want <= %d: %q", i, w, m.width, ln)
+		}
+	}
+}

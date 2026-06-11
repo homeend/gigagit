@@ -62,3 +62,29 @@ func TestPanelLenWorktrees(t *testing.T) {
 		t.Fatalf("panelLen(panelWorktrees) = %d, want 3", n)
 	}
 }
+
+// Real-repo integration: the loaded model's worktree list contains the repo's
+// own root, so the current-worktree marker actually fires (not just on synthetic
+// equal strings) and the checked-out branch gets the has-worktree marker.
+func TestWorktreeMarkersFireOnRealRepo(t *testing.T) {
+	m := loadedModel(t)
+	marked := false
+	for _, row := range m.worktreeRows() {
+		if strings.HasPrefix(row, "* ") {
+			marked = true
+		}
+	}
+	if !marked {
+		t.Errorf("no worktree row marked current; rows=%v current=%q", m.worktreeRows(), m.currentWorktree)
+	}
+	// The checked-out branch (main) is in a worktree, so it carries the marker.
+	foundMarker := false
+	for _, row := range m.branchRows() {
+		if strings.Contains(row, "◫") {
+			foundMarker = true
+		}
+	}
+	if !foundMarker {
+		t.Errorf("expected a has-worktree branch marker; rows=%v", m.branchRows())
+	}
+}
