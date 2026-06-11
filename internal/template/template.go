@@ -101,7 +101,27 @@ func sanitizeSegment(branch string) string {
 	return strings.ReplaceAll(branch, "/", "-")
 }
 
-// resolveRandom is fully implemented in the next task.
+const lowerAlpha = "abcdefghijklmnopqrstuvwxyz"
+const digits = "0123456789"
+
+// resolveRandom handles <random-alpha:N> (N lowercase letters) and
+// <random-num:N> (N digits), drawing from ctx.Rand so seeded runs are
+// reproducible. N must be a positive integer.
 func resolveRandom(prefix, rest string, hasColon bool, ctx Ctx) (string, error) {
-	return "", fmt.Errorf("template: %s not yet implemented", prefix)
+	if !hasColon {
+		return "", fmt.Errorf("template: <%s> requires a length, e.g. <%s:4>", prefix, prefix)
+	}
+	n, err := strconv.Atoi(rest)
+	if err != nil || n <= 0 {
+		return "", fmt.Errorf("template: <%s:%s> length must be a positive integer", prefix, rest)
+	}
+	alphabet := lowerAlpha
+	if prefix == "random-num" {
+		alphabet = digits
+	}
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = alphabet[ctx.Rand.IntN(len(alphabet))]
+	}
+	return string(b), nil
 }

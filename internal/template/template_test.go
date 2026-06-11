@@ -1,6 +1,7 @@
 package template
 
 import (
+	"math/rand/v2"
 	"strings"
 	"testing"
 	"time"
@@ -85,4 +86,56 @@ func TestResolveErrors(t *testing.T) {
 			t.Fatalf("want error for non-numeric seq padding")
 		}
 	})
+}
+
+func TestResolveRandom(t *testing.T) {
+	mk := func() Ctx {
+		c := fixedCtx()
+		c.Rand = rand.New(rand.NewPCG(1, 2)) // seeded: deterministic
+		return c
+	}
+
+	alpha, err := Resolve("b-<random-alpha:4>", nil, mk())
+	if err != nil {
+		t.Fatalf("alpha error: %v", err)
+	}
+	if len(alpha) != len("b-")+4 {
+		t.Fatalf("alpha length wrong: %q", alpha)
+	}
+	for _, r := range strings.TrimPrefix(alpha, "b-") {
+		if r < 'a' || r > 'z' {
+			t.Fatalf("random-alpha produced non-lowercase-letter %q in %q", r, alpha)
+		}
+	}
+
+	num, err := Resolve("n-<random-num:6>", nil, mk())
+	if err != nil {
+		t.Fatalf("num error: %v", err)
+	}
+	digits := strings.TrimPrefix(num, "n-")
+	if len(digits) != 6 {
+		t.Fatalf("num length wrong: %q", num)
+	}
+	for _, r := range digits {
+		if r < '0' || r > '9' {
+			t.Fatalf("random-num produced non-digit %q in %q", r, num)
+		}
+	}
+
+	// Same seed -> same output (determinism for tests/preview reproducibility).
+	a1, _ := Resolve("<random-alpha:8>", nil, mk())
+	a2, _ := Resolve("<random-alpha:8>", nil, mk())
+	if a1 != a2 {
+		t.Fatalf("seeded random not deterministic: %q vs %q", a1, a2)
+	}
+}
+
+func TestResolveRandomErrors(t *testing.T) {
+	c := fixedCtx()
+	c.Rand = rand.New(rand.NewPCG(1, 2))
+	for _, tmpl := range []string{"<random-alpha>", "<random-alpha:0>", "<random-num:-1>", "<random-alpha:x>"} {
+		if _, err := Resolve(tmpl, nil, c); err == nil {
+			t.Errorf("Resolve(%q): want error, got nil", tmpl)
+		}
+	}
 }
