@@ -57,3 +57,16 @@ func TestAddWorktreeCreatesDirAndBranch(t *testing.T) {
 		t.Fatalf("new branch not created: %v\n%s", e, out)
 	}
 }
+
+func TestGitCommonDirIsAbsolute(t *testing.T) {
+	_, runner := newTestRepo(t)
+	repo := &Repo{Runner: runner}
+
+	got, err := repo.GitCommonDir(context.Background())
+	if err != nil {
+		t.Fatalf("GitCommonDir: %v", err)
+	}
+	if !filepath.IsAbs(got) {
+		t.Fatalf("GitCommonDir = %q, want an absolute path", got)
+	}
+}

@@ -39,3 +39,16 @@ func (r *Repo) AddWorktree(ctx context.Context, path, branch, startPoint string,
 	_, err := r.Runner.Stream(ctx, "git worktree add", argv, onLine)
 	return err
 }
+
+// GitCommonDir returns the absolute path of the repository's common git
+// directory (`git rev-parse --path-format=absolute --git-common-dir`). For a
+// linked worktree this is the main repo's .git, so per-repo state (e.g. <seq>
+// counters) is shared across all worktrees.
+func (r *Repo) GitCommonDir(ctx context.Context) (string, error) {
+	argv := gitcmd.New("rev-parse").Arg("--path-format=absolute", "--git-common-dir").ToArgv()
+	res, err := r.Runner.Run(ctx, "git rev-parse (common-dir)", argv)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(res.Stdout), nil
+}
