@@ -8,3 +8,5 @@
 
 # screenshots / scratch (shared by the user during review)
 /*.png
+
+.idea/
