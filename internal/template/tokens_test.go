@@ -46,3 +46,17 @@ func TestSeqNames(t *testing.T) {
 		})
 	}
 }
+
+func TestGoLayout(t *testing.T) {
+	tests := []struct{ in, want string }{
+		{"yyyy-MM-dd", "2006-01-02"},
+		{"yyyy/MM/dd HH:mm:ss", "2006/01/02 15:04:05"},
+		{"HH:mm", "15:04"},
+		{"yyyyMMdd", "20060102"},
+	}
+	for _, tc := range tests {
+		if got := goLayout(tc.in); got != tc.want {
+			t.Errorf("goLayout(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}

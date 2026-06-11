@@ -3,7 +3,10 @@
 // resolution is deterministic and fully unit-testable.
 package template
 
-import "regexp"
+import (
+	"regexp"
+	"strings"
+)
 
 // tokenRe matches a single <...> token, capturing the inside (no '>' allowed,
 // so tokens never span). Used by every parsing/resolution function.
@@ -54,4 +57,23 @@ func cutColon(s string) (string, string, bool) {
 		}
 	}
 	return s, "", false
+}
+
+// dateLayoutReplacer maps human date tokens to Go's reference-time layout.
+// Order matters only in that longer tokens are listed before shorter ones that
+// could be a prefix; the current token set has no such overlap, but the ordered
+// slice keeps the mapping explicit and stable.
+var dateLayoutReplacer = strings.NewReplacer(
+	"yyyy", "2006",
+	"MM", "01",
+	"dd", "02",
+	"HH", "15",
+	"mm", "04",
+	"ss", "05",
+)
+
+// goLayout converts a human date format (yyyy MM dd HH mm ss, with arbitrary
+// separators) into Go's reference-time layout string.
+func goLayout(human string) string {
+	return dateLayoutReplacer.Replace(human)
 }
