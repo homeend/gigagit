@@ -2,9 +2,11 @@ package tui
 
 import (
 	"context"
+	"path/filepath"
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/gigagit/gg/internal/config"
 	"github.com/gigagit/gg/internal/model"
 )
 
@@ -15,6 +17,8 @@ type dataLoadedMsg struct {
 	commits         []model.Commit
 	worktrees       []model.Worktree
 	currentWorktree string
+	cfg             config.Config
+	gitCommonDir    string
 	err             error
 }
 
@@ -46,6 +50,18 @@ func (m Model) loadCmd() tea.Cmd {
 		// is non-fatal (the marker just won't show).
 		if top, topErr := repo.TopLevel(ctx); topErr == nil {
 			out.currentWorktree = top
+			// Config: built-in defaults overlaid by the global file then the repo's
+			// committed .gg.toml. Load errors fall back to defaults.
+			if cfg, cfgErr := config.Load(config.DefaultGlobalPath(), filepath.Join(top, ".gg.toml")); cfgErr == nil {
+				out.cfg = cfg
+			} else {
+				out.cfg = config.Defaults()
+			}
+		} else {
+			out.cfg = config.Defaults()
+		}
+		if gcd, gcdErr := repo.GitCommonDir(ctx); gcdErr == nil {
+			out.gitCommonDir = gcd
 		}
 		return out
 	}

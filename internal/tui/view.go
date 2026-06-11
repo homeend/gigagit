@@ -5,7 +5,56 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
+
+// overlayCenter composites fg centered on top of bg, replacing the cells fg
+// covers while keeping the surrounding bg visible. Both are treated as a grid of
+// termW×termH cells; the result never exceeds those bounds. ANSI styling in both
+// layers is preserved (slicing is width-aware).
+func overlayCenter(bg, fg string, termW, termH int) string {
+	bgLines := strings.Split(bg, "\n")
+	for len(bgLines) < termH {
+		bgLines = append(bgLines, "")
+	}
+	fgLines := strings.Split(fg, "\n")
+
+	fgW := 0
+	for _, l := range fgLines {
+		if w := ansi.StringWidth(l); w > fgW {
+			fgW = w
+		}
+	}
+	top := (termH - len(fgLines)) / 2
+	if top < 0 {
+		top = 0
+	}
+	left := (termW - fgW) / 2
+	if left < 0 {
+		left = 0
+	}
+
+	for i, fl := range fgLines {
+		row := top + i
+		if row < 0 || row >= len(bgLines) {
+			continue
+		}
+		bgLine := bgLines[row]
+		// Left slice of the background, padded out to the popup's left edge.
+		leftPart := ansi.Truncate(bgLine, left, "")
+		if w := ansi.StringWidth(leftPart); w < left {
+			leftPart += strings.Repeat(" ", left-w)
+		}
+		// Pad the popup line to a clean rectangle so its right edge is straight.
+		if w := ansi.StringWidth(fl); w < fgW {
+			fl += strings.Repeat(" ", fgW-w)
+		}
+		// Background to the right of the popup (empty if the bg line is shorter).
+		rightPart := ansi.TruncateLeft(bgLine, left+fgW, "")
+		bgLines[row] = leftPart + fl + rightPart
+	}
+	return strings.Join(bgLines, "\n")
+}
 
 var (
 	titleStyle   = lipgloss.NewStyle().Bold(true)
@@ -15,13 +64,29 @@ var (
 	modalStyle   = lipgloss.NewStyle().Border(lipgloss.DoubleBorder()).BorderForeground(lipgloss.Color("11")).Padding(1, 2)
 )
 
-// render draws the header, the three panels, and the footer/status, sized to fit
-// the current terminal so the output never exceeds width×height.
+// render draws the interface, compositing the worktree popup centered on top of
+// it when one is open. The output never exceeds width×height.
 func (m Model) render() string {
 	if m.modal != nil {
 		return m.renderModal()
 	}
+	bg := m.renderInterface()
+	if m.popup != nil {
+		w, h := m.width, m.height
+		if w <= 0 {
+			w = 80
+		}
+		if h <= 0 {
+			h = 24
+		}
+		return overlayCenter(bg, m.renderWorktreePopup(), w, h)
+	}
+	return bg
+}
 
+// renderInterface draws the header, the panels, and the footer/status, sized to
+// fit the current terminal so the output never exceeds width×height.
+func (m Model) renderInterface() string {
 	w, h := m.width, m.height
 	if w <= 0 {
 		w = 80
@@ -31,7 +96,7 @@ func (m Model) render() string {
 	}
 
 	header := m.headerLine(w)
-	footer := truncate("[p]ull [P]ush [s]witch [S]tash [u]ndo  •  [tab] focus  [r] reload  [q] quit", w)
+	footer := truncate("[p]ull [P]ush [s]witch [S]tash [u]ndo [w]orktree  •  [tab] focus  [r] reload  [q] quit", w)
 	statusLine := m.statusMsg
 	if m.running {
 		statusLine = "⏳ " + statusLine

@@ -76,3 +76,16 @@ func TestLoadIncludesWorktrees(t *testing.T) {
 		t.Error("expected currentWorktree to be set")
 	}
 }
+
+func TestLoadIncludesConfigAndCommonDir(t *testing.T) {
+	m := loadedModel(t)
+	if m.cfg.Worktree.DefaultBranchTemplate == "" {
+		t.Error("expected a default branch template from config defaults")
+	}
+	if m.cfg.Worktree.PathTemplate == "" {
+		t.Error("expected a default path template from config defaults")
+	}
+	if m.gitCommonDir == "" {
+		t.Error("expected gitCommonDir to be set")
+	}
+}

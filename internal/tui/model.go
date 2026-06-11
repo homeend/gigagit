@@ -4,6 +4,7 @@ package tui
 import (
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/gigagit/gg/internal/config"
 	"github.com/gigagit/gg/internal/engine"
 	"github.com/gigagit/gg/internal/git"
 	"github.com/gigagit/gg/internal/model"
@@ -22,6 +23,12 @@ type Model struct {
 
 	worktrees       []model.Worktree
 	currentWorktree string
+
+	cfg          config.Config
+	gitCommonDir string
+
+	popup          *worktreePopup
+	pendingSeqBump []string
 
 	running   bool
 	statusMsg string
@@ -65,6 +72,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.commits = msg.commits
 			m.worktrees = msg.worktrees
 			m.currentWorktree = msg.currentWorktree
+			m.cfg = msg.cfg
+			m.gitCommonDir = msg.gitCommonDir
 		}
 	case tea.KeyMsg:
 		if m.modal != nil {
@@ -85,6 +94,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.modal = nil
 			}
 			return m, nil
+		}
+		if m.popup != nil {
+			return m.updatePopupKey(msg)
 		}
 		switch msg.String() {
 		case "q", "ctrl+c":
@@ -114,6 +126,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "u":
 			if !m.running && !m.loading {
 				return m.startOp(engine.UndoLastCommit{})
+			}
+		case "w":
+			if !m.running && !m.loading {
+				if mm, ok := m.openWorktreePopup(); ok {
+					return mm, nil
+				}
 			}
 		case "tab":
 			m.focus = (m.focus + 1) % panelCount
@@ -145,9 +163,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.opMsgs = nil
 		if msg.err != nil {
 			m.statusMsg = "error: " + msg.err.Error()
-		} else if msg.res.Summary != "" {
-			m.statusMsg = msg.res.Summary
+		} else {
+			if msg.res.Summary != "" {
+				m.statusMsg = msg.res.Summary
+			}
+			// A successful create consumes the <seq> counters its template used.
+			for _, name := range m.pendingSeqBump {
+				_, _ = config.BumpSeq(m.gitCommonDir, name)
+			}
 		}
+		m.pendingSeqBump = nil
 		return m, m.loadCmd()
 	}
 	return m, nil
