@@ -14,7 +14,7 @@ type repoT = git.Repo
 
 // Run dispatches a CLI subcommand against the repo at workdir, writing to
 // stdout/stderr, and returns a process exit code.
-func Run(workdir string, args []string, stdout, stderr io.Writer) int {
+func Run(workdir string, args []string, stdin io.Reader, stdout, stderr io.Writer, cwdFile string) int {
 	if len(args) == 0 {
 		fmt.Fprintln(stderr, "usage: gg <command> [args]")
 		return 2
@@ -36,6 +36,8 @@ func Run(workdir string, args []string, stdout, stderr io.Writer) int {
 		return cmdStash(repo, rest, stdout, stderr)
 	case "undo":
 		return cmdUndo(repo, rest, stdout, stderr)
+	case "worktree":
+		return cmdWorktree(repo, rest, stdin, stdout, stderr, cwdFile)
 	default:
 		fmt.Fprintf(stderr, "unknown command %q\n", cmd)
 		return 2
@@ -44,7 +46,7 @@ func Run(workdir string, args []string, stdout, stderr io.Writer) int {
 
 var commands = map[string]bool{
 	"status": true, "commit": true, "pull": true, "push": true,
-	"switch": true, "stash": true, "undo": true, "inspect": true,
+	"switch": true, "stash": true, "undo": true, "worktree": true, "inspect": true,
 }
 
 // IsCommand reports whether tok is a gg CLI subcommand (used by cmd/gg to
@@ -95,6 +97,12 @@ func cmdCommit(repo *repoT, args []string, stdout, stderr io.Writer) int {
 	res, err := runOperation(context.Background(), repo,
 		engine.Commit{Message: *msg, All: *all}, cliDecider{}, stderr)
 	return finish(res, err, stdout, stderr)
+}
+
+// cmdWorktree is implemented in internal/cli/worktree.go (Task 4).
+func cmdWorktree(repo *repoT, args []string, stdin io.Reader, stdout, stderr io.Writer, cwdFile string) int {
+	fmt.Fprintln(stderr, "worktree: not yet implemented")
+	return 2
 }
 
 // finish prints the result summary (or error) and maps to an exit code.

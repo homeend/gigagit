@@ -29,7 +29,7 @@ func main() {
 		return
 	}
 	if len(args) > 0 && cli.IsCommand(args[0]) {
-		os.Exit(cli.Run(".", args, os.Stdout, os.Stderr))
+		os.Exit(cli.Run(".", args, os.Stdin, os.Stdout, os.Stderr, cwdFile))
 	}
 	// A mistyped/unknown subcommand should error, not silently open the TUI.
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
