@@ -18,11 +18,23 @@ type Model struct {
 	status   model.WorkingTreeStatus
 	branches []model.Branch
 	commits  []model.Commit
+
+	focus panel
+	sel   map[panel]int
 }
+
+type panel int
+
+const (
+	panelBranches panel = iota
+	panelStatus
+	panelCommits
+	panelCount
+)
 
 // New constructs the initial model for repo.
 func New(repo *git.Repo) Model {
-	return Model{repo: repo, loading: true}
+	return Model{repo: repo, loading: true, sel: map[panel]int{}}
 }
 
 // Init implements tea.Model.
@@ -49,9 +61,32 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "r":
 			m.loading = true
 			return m, m.loadCmd()
+		case "tab":
+			m.focus = (m.focus + 1) % panelCount
+		case "up", "k":
+			if m.sel[m.focus] > 0 {
+				m.sel[m.focus]--
+			}
+		case "down", "j":
+			if m.sel[m.focus] < m.panelLen(m.focus)-1 {
+				m.sel[m.focus]++
+			}
 		}
 	}
 	return m, nil
+}
+
+// panelLen returns the number of rows in a panel, for selection clamping.
+func (m Model) panelLen(p panel) int {
+	switch p {
+	case panelBranches:
+		return len(m.branches)
+	case panelStatus:
+		return len(m.status.Files)
+	case panelCommits:
+		return len(m.commits)
+	}
+	return 0
 }
 
 // View implements tea.Model.
@@ -62,7 +97,7 @@ func (m Model) View() string {
 	if m.err != nil {
 		return "error: " + m.err.Error() + "\n"
 	}
-	return "gigagit — branch " + m.status.Branch + "\n"
+	return m.render()
 }
 
 var _ tea.Model = Model{}
