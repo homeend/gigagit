@@ -2,6 +2,7 @@ package tui
 
 import (
 	"math/rand/v2"
+	"strings"
 	"testing"
 	"time"
 
@@ -10,6 +11,8 @@ import (
 	"github.com/gigagit/gg/internal/config"
 	"github.com/gigagit/gg/internal/template"
 )
+
+func contains(s, sub string) bool { return strings.Contains(s, sub) }
 
 func testCtx() template.Ctx {
 	return template.Ctx{
@@ -179,5 +182,61 @@ func TestPopupMultiByteRune(t *testing.T) {
 	m = updated.(Model)
 	if m.popup.inputs["id"] != "é" {
 		t.Fatalf("field = %q, want é", m.popup.inputs["id"])
+	}
+}
+
+func TestPopupEditMode(t *testing.T) {
+	m := modelWithConfig(t, "b/auto", "../<repo>.worktrees/<branch>")
+	updated, _ := m.Update(keyMsg("w"))
+	m = updated.(Model)
+	if m.popup.previewBranch != "b/auto" {
+		t.Fatalf("preview branch = %q, want b/auto", m.popup.previewBranch)
+	}
+
+	updated, _ = m.Update(keyMsg("e"))
+	m = updated.(Model)
+	if m.popup.state != stEdit {
+		t.Fatalf("state = %v, want stEdit", m.popup.state)
+	}
+	if m.popup.editBuf != "b/auto" {
+		t.Fatalf("editBuf = %q, want b/auto", m.popup.editBuf)
+	}
+
+	for len([]rune(m.popup.editBuf)) > 0 {
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+		m = updated.(Model)
+	}
+	for _, ch := range []string{"m", "y", "/", "b"} {
+		updated, _ = m.Update(keyMsg(ch))
+		m = updated.(Model)
+	}
+	updated, _ = m.Update(keyMsg("enter"))
+	m = updated.(Model)
+	if m.popup.state != stAction {
+		t.Fatalf("state = %v, want stAction after enter", m.popup.state)
+	}
+	if m.popup.previewBranch != "my/b" {
+		t.Fatalf("preview branch = %q, want my/b", m.popup.previewBranch)
+	}
+	if !contains(m.popup.previewPath, "my-b") {
+		t.Fatalf("preview path = %q, want it to contain my-b", m.popup.previewPath)
+	}
+}
+
+func TestPopupEditEscDiscards(t *testing.T) {
+	m := modelWithConfig(t, "b/auto", "../<repo>.worktrees/<branch>")
+	updated, _ := m.Update(keyMsg("w"))
+	m = updated.(Model)
+	updated, _ = m.Update(keyMsg("e"))
+	m = updated.(Model)
+	updated, _ = m.Update(keyMsg("z"))
+	m = updated.(Model)
+	updated, _ = m.Update(keyMsg("esc"))
+	m = updated.(Model)
+	if m.popup.state != stAction {
+		t.Fatalf("state = %v, want stAction after esc", m.popup.state)
+	}
+	if m.popup.previewBranch != "b/auto" {
+		t.Fatalf("preview branch = %q, want b/auto after discard", m.popup.previewBranch)
 	}
 }
