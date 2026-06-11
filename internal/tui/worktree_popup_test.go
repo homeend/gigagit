@@ -332,3 +332,57 @@ var errTest = errTestType("boom")
 type errTestType string
 
 func (e errTestType) Error() string { return string(e) }
+
+// The created op must carry exactly the previewed (already-resolved) names, so
+// the worktree equals what was shown — including after a hand-edit.
+func TestCreateOpEqualsPreview(t *testing.T) {
+	m := modelWithConfig(t, "b/auto", "../<repo>.worktrees/<branch>")
+	updated, _ := m.Update(keyMsg("w"))
+	m = updated.(Model)
+	op := m.popup.createOp()
+	if op.Branch != m.popup.previewBranch || op.Path != m.popup.previewPath {
+		t.Fatalf("op {%q,%q} != preview {%q,%q}", op.Branch, op.Path, m.popup.previewBranch, m.popup.previewPath)
+	}
+	if op.StartPoint != m.popup.startPoint {
+		t.Fatalf("op.StartPoint = %q, want %q", op.StartPoint, m.popup.startPoint)
+	}
+
+	// After a confirmed edit, the op carries the edited branch.
+	updated, _ = m.Update(keyMsg("e"))
+	m = updated.(Model)
+	for len([]rune(m.popup.editBuf)) > 0 {
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+		m = updated.(Model)
+	}
+	for _, ch := range []string{"h", "f"} {
+		updated, _ = m.Update(keyMsg(ch))
+		m = updated.(Model)
+	}
+	updated, _ = m.Update(keyMsg("enter"))
+	m = updated.(Model)
+	if op := m.popup.createOp(); op.Branch != "hf" || op.Branch != m.popup.previewBranch {
+		t.Fatalf("edited op.Branch = %q, want hf (== preview %q)", op.Branch, m.popup.previewBranch)
+	}
+}
+
+// Hand-editing the branch away from its <seq> must NOT bump the branch counter;
+// only the path template's <seq> (if any) is consumed.
+func TestConsumedSeqNamesAfterEdit(t *testing.T) {
+	m := modelWithConfig(t, "issue/<seq:issue>", "../<repo>.worktrees/<branch>")
+	updated, _ := m.Update(keyMsg("w"))
+	m = updated.(Model)
+	// Before any edit: the branch <seq:issue> is consumed.
+	if got := m.popup.consumedSeqNames(); len(got) != 1 || got[0] != "issue" {
+		t.Fatalf("pre-edit consumedSeqNames = %v, want [issue]", got)
+	}
+	// Hand-edit the branch (override); path template has no <seq>, so nothing is consumed.
+	updated, _ = m.Update(keyMsg("e"))
+	m = updated.(Model)
+	updated, _ = m.Update(keyMsg("x"))
+	m = updated.(Model)
+	updated, _ = m.Update(keyMsg("enter"))
+	m = updated.(Model)
+	if got := m.popup.consumedSeqNames(); len(got) != 0 {
+		t.Fatalf("post-edit consumedSeqNames = %v, want [] (branch <seq> no longer used)", got)
+	}
+}

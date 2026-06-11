@@ -90,3 +90,16 @@ func TestBumpSeqWritesUnderGitDirOnly(t *testing.T) {
 		t.Fatalf("state.toml not written under gitDir/gg: %v", err)
 	}
 }
+
+// Regression: an empty gitDir must error rather than write a stray gg/state.toml
+// relative to the process working directory.
+func TestBumpSeqEmptyDirErrors(t *testing.T) {
+	if _, err := BumpSeq("", "issue"); err == nil {
+		t.Fatal("BumpSeq with empty gitDir should error, not write")
+	}
+	// And no stray gg/ dir was created in the CWD.
+	if _, statErr := os.Stat("gg"); statErr == nil {
+		_ = os.RemoveAll("gg")
+		t.Fatal("BumpSeq wrote a stray gg/ directory in the CWD")
+	}
+}

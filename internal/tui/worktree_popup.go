@@ -169,6 +169,11 @@ func (m Model) openWorktreePopup() (Model, bool) {
 
 // updatePopupKey handles one key while the popup is open.
 func (m Model) updatePopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// ctrl+c always quits, even from inside the popup, so a user can never be
+	// trapped (Esc also cancels from every state).
+	if msg.Type == tea.KeyCtrlC {
+		return m, tea.Quit
+	}
 	p := m.popup
 	switch p.state {
 	case stInput:
@@ -242,14 +247,29 @@ func (m Model) startCreateFromPopup() (tea.Model, tea.Cmd) {
 		m.statusMsg = "cannot create: " + p.previewErr.Error()
 		return m, nil
 	}
-	op := engine.CreateWorktree{
+	m.pendingSeqBump = p.consumedSeqNames()
+	m.popup = nil
+	return m.startOp(p.createOp())
+}
+
+// createOp builds the engine operation from the (already-resolved) preview, so
+// the worktree that gets created is exactly what the preview showed.
+func (p *worktreePopup) createOp() engine.CreateWorktree {
+	return engine.CreateWorktree{
 		StartPoint: p.startPoint,
 		Branch:     p.previewBranch,
 		Path:       p.previewPath,
 	}
-	m.pendingSeqBump = p.seqNames
-	m.popup = nil
-	return m.startOp(op)
+}
+
+// consumedSeqNames returns the <seq> counters the created names actually used.
+// A confirmed hand-edit (branchOverride) bypasses the branch template, so its
+// branch <seq> tokens are no longer consumed — only the path template's remain.
+func (p *worktreePopup) consumedSeqNames() []string {
+	if p.branchOverride != "" {
+		return template.SeqNames(p.pathTmpl)
+	}
+	return p.seqNames
 }
 
 // renderWorktreePopup draws the create-worktree dialog (fields, live preview,

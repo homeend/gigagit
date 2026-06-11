@@ -53,6 +53,11 @@ func PeekSeq(gitDir, name string) int {
 // Concurrent bumps of the same counter from multiple processes are out of scope
 // (gigagit assumes a single interactive user).
 func BumpSeq(gitDir, name string) (int, error) {
+	if gitDir == "" {
+		// No common git dir was resolved; refuse to write rather than create a
+		// stray gg/state.toml relative to the process working directory.
+		return 0, fmt.Errorf("config: no git dir; refusing to write seq state")
+	}
 	st, err := readSeqState(gitDir)
 	if err != nil {
 		return 0, err
