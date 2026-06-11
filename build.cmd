@@ -25,7 +25,7 @@ if not defined COMMIT set "COMMIT=none"
 set "LDFLAGS=-s -w -X github.com/gigagit/gg/internal/buildinfo.Version=!VERSION! -X github.com/gigagit/gg/internal/buildinfo.Commit=!COMMIT!"
 
 set "TARGET=%~1"
-if "%TARGET%"=="" set "TARGET=all"
+if "%TARGET%"=="" set "TARGET=windows"
 
 if /i "%TARGET%"=="linux" (
 	call :build linux gg

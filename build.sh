@@ -28,7 +28,7 @@ build() {
 		go build -trimpath -ldflags "${LDFLAGS}" -o "${out}" "${PKG}"
 }
 
-target="${1:-all}"
+target="${1:-linux}"
 case "${target}" in
 	linux)   build linux   ./gg ;;
 	windows) build windows ./gg.exe ;;
