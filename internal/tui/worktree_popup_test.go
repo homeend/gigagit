@@ -7,6 +7,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/gigagit/gg/internal/config"
 	"github.com/gigagit/gg/internal/engine"
@@ -384,5 +385,52 @@ func TestConsumedSeqNamesAfterEdit(t *testing.T) {
 	m = updated.(Model)
 	if got := m.popup.consumedSeqNames(); len(got) != 0 {
 		t.Fatalf("post-edit consumedSeqNames = %v, want [] (branch <seq> no longer used)", got)
+	}
+}
+
+// The popup is composited centered over the interface: panels remain visible
+// behind it, the box is horizontally centered (not flush-left), and a long
+// branch/path never pushes any line past the terminal width.
+func TestPopupOverlaysInterfaceCenteredAndFits(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 80, 24
+	m.popup = &worktreePopup{
+		startPoint:    "main",
+		state:         stAction,
+		previewBranch: "feature/some-longish-branch-name",
+		previewPath:   "/home/user/projects/acme-monorepo.worktrees/feature-some-longish-branch-name",
+	}
+	out := m.View()
+	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+
+	// Fit invariant: nothing exceeds the terminal width.
+	for i, ln := range lines {
+		if w := lipgloss.Width(ln); w > m.width {
+			t.Fatalf("line %d width %d exceeds terminal %d: %q", i, w, m.width, ln)
+		}
+	}
+	// Interface visible behind the popup.
+	if !strings.Contains(out, "Commits") {
+		t.Error("expected the interface (Commits panel) visible behind the popup")
+	}
+	// Popup present and horizontally centered (its top border is indented).
+	var boxLine string
+	for _, ln := range lines {
+		if strings.Contains(ln, "╔") {
+			boxLine = ln
+			break
+		}
+	}
+	if boxLine == "" {
+		t.Fatal("expected the popup's double-border box in the output")
+	}
+	// Centered: the box's top-left corner is not at column 0 (interface shows to
+	// its left), and there is interface to its right too.
+	idx := strings.Index(boxLine, "╔")
+	if idx <= 0 {
+		t.Errorf("popup box should be centered (indented), got: %q", boxLine)
+	}
+	if !strings.Contains(boxLine[strings.Index(boxLine, "╗"):], "│") {
+		t.Errorf("expected interface visible to the right of the centered popup: %q", boxLine)
 	}
 }
