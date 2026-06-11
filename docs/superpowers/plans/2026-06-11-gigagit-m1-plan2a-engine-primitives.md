@@ -1171,4 +1171,10 @@ git commit -m "feat: add thin Commit/Push/Stash engine operations"
 1. Plan 1 — Foundation & read-only inspection ✅ (merged).
 2. **Plan 2A — Engine contract & git operation primitives** (this document).
 3. Plan 2B — Smart operations: SmartPull (§5 tree), SmartSwitch, stash-pop conflict handling, ref-only Undo, credential routing.
+   - **Carry-over from 2A review:** `OpDeps.emit` does a bare `d.Events <- e` with no
+     `ctx.Done()` select, so a slow/absent consumer on an unbuffered channel can
+     block the operation goroutine and ignore cancellation. In 2B, either change
+     `emit` to `select { case d.Events <- e: case <-ctx.Done(): }` or document that
+     frontends MUST supply a buffered/always-drained `Events` channel. Decide when
+     the TUI's consumption model is designed.
 4. Plan 3 — TUI (Bubble Tea) on top of the engine.
