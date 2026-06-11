@@ -51,7 +51,7 @@ func (op CreateWorktree) Run(ctx context.Context, deps OpDeps) (Result, error) {
 		return Result{}, fmt.Errorf("create worktree: %w", err)
 	}
 
-	res := Result{Summary: "worktree created: " + abs, Changed: true}
+	res := Result{Summary: "worktree created: " + abs, Changed: true, Path: abs}
 	deps.emit(ctx, Done{Result: res})
 	return res, nil
 }
