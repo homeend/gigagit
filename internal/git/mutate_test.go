@@ -41,3 +41,17 @@ func TestCreateBranchAndSwitch(t *testing.T) {
 		t.Fatalf("current branch = %q, want feature", cur)
 	}
 }
+
+func TestCurrentBranchDetachedReturnsEmpty(t *testing.T) {
+	dir, runner := newTestRepo(t)
+	repo := &Repo{Runner: runner}
+	gitIn(t, dir, "commit", "--allow-empty", "-m", "second")
+	gitIn(t, dir, "checkout", "HEAD~1") // detach
+	cur, err := repo.CurrentBranch(context.Background())
+	if err != nil {
+		t.Fatalf("detached HEAD should not error: %v", err)
+	}
+	if cur != "" {
+		t.Fatalf("current branch = %q, want empty on detached HEAD", cur)
+	}
+}

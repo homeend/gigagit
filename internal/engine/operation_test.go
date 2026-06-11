@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"testing"
 )
 
@@ -52,5 +53,27 @@ func TestOpDepsEmitNilChannelDoesNotPanic(t *testing.T) {
 	_, err := deps.decide(context.Background(), DecisionRequest{ID: "y"})
 	if err == nil {
 		t.Fatal("decide with nil Decider should return an error")
+	}
+}
+
+func TestDecideEmitsDecisionNeededThenErrsWithoutDecider(t *testing.T) {
+	ch := make(chan Event, 4)
+	deps := OpDeps{Events: ch} // nil Decider
+	_, err := deps.decide(context.Background(), DecisionRequest{
+		ID:      "non-fast-forward",
+		Options: []string{"rebase", "abort"},
+	})
+	if !errors.Is(err, ErrDecisionRequired) {
+		t.Fatalf("err = %v, want ErrDecisionRequired", err)
+	}
+	close(ch)
+	var sawDecision bool
+	for e := range ch {
+		if dn, ok := e.(DecisionNeeded); ok && dn.Request.ID == "non-fast-forward" {
+			sawDecision = true
+		}
+	}
+	if !sawDecision {
+		t.Fatal("expected a DecisionNeeded event emitted before erroring")
 	}
 }
