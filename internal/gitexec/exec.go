@@ -92,6 +92,9 @@ func (r *ExecRunner) Run(ctx context.Context, name string, argv []string) (Resul
 
 	res := Result{Stdout: stdout.String(), Stderr: stderr.String(), ExitCode: exit, Duration: dur}
 	if runErr != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return res, fmt.Errorf("%s cancelled: %w", name, ctxErr)
+		}
 		return res, fmt.Errorf("%s failed (exit %d): %s", name, exit, strings.TrimSpace(stderr.String()))
 	}
 	return res, nil
@@ -119,6 +122,7 @@ func (r *ExecRunner) Stream(ctx context.Context, name string, argv []string, onL
 		all.WriteByte('\n')
 		onLine(line)
 	}
+	scanErr := scanner.Err()
 	runErr := cmd.Wait()
 	dur := r.now().Sub(start)
 	exit := exitCodeOf(runErr)
@@ -126,7 +130,13 @@ func (r *ExecRunner) Stream(ctx context.Context, name string, argv []string, onL
 
 	res := Result{Stdout: all.String(), Stderr: stderr.String(), ExitCode: exit, Duration: dur}
 	if runErr != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return res, fmt.Errorf("%s cancelled: %w", name, ctxErr)
+		}
 		return res, fmt.Errorf("%s failed (exit %d): %s", name, exit, strings.TrimSpace(stderr.String()))
+	}
+	if scanErr != nil {
+		return res, fmt.Errorf("%s: reading output: %w", name, scanErr)
 	}
 	return res, nil
 }

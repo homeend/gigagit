@@ -2,9 +2,9 @@ package gitexec
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/gigagit/gg/internal/observ"
 )
@@ -56,5 +56,7 @@ func TestExecRunnerHonorsContextCancellation(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error from cancelled context")
 	}
-	_ = time.Now
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("error should wrap context.Canceled, got %v", err)
+	}
 }

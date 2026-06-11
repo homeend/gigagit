@@ -1,6 +1,10 @@
 package git
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/gigagit/gg/internal/model"
+)
 
 func TestParseStatusV2(t *testing.T) {
 	// Fields within an entry are space-separated; entries are NUL-terminated.
@@ -36,6 +40,31 @@ func TestParseStatusV2(t *testing.T) {
 	c := st.Counts()
 	if c.Staged != 1 || c.Unstaged != 1 || c.Conflicted != 1 || c.Untracked != 1 {
 		t.Fatalf("counts = %+v, want staged1 unstaged1 conflicted1 untracked1", c)
+	}
+}
+
+func TestParseStatusV2UnmergedPathWithSpace(t *testing.T) {
+	entries := []string{
+		"# branch.head main",
+		"u UU N... 100644 100644 100644 000000 h1 h2 h3 con flict.txt",
+	}
+	var data []byte
+	for _, e := range entries {
+		data = append(data, []byte(e)...)
+		data = append(data, 0)
+	}
+	st, err := ParseStatusV2(data)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(st.Files) != 1 {
+		t.Fatalf("files = %d, want 1", len(st.Files))
+	}
+	if st.Files[0].Path != "con flict.txt" {
+		t.Fatalf("unmerged path = %q, want %q", st.Files[0].Path, "con flict.txt")
+	}
+	if st.Files[0].Kind != model.KindUnmerged {
+		t.Fatalf("kind = %v, want KindUnmerged", st.Files[0].Kind)
 	}
 }
 

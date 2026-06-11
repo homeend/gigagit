@@ -50,10 +50,10 @@ func ParseStatusV2(data []byte) (model.WorkingTreeStatus, error) {
 				})
 			}
 		case 'u':
-			fields := strings.Fields(tok)
+			fields := strings.SplitN(tok, " ", 11)
 			path := ""
-			if len(fields) > 0 {
-				path = fields[len(fields)-1]
+			if len(fields) >= 11 {
+				path = fields[10]
 			}
 			st.Files = append(st.Files, model.FileStatus{Path: path, Kind: model.KindUnmerged})
 		case '?':
