@@ -1,0 +1,49 @@
+# Changelog
+
+All notable changes to gigagit (`gg`) are documented here.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+No tagged release has been cut yet; everything lives under **Unreleased**.
+
+## [Unreleased]
+
+### Added
+
+#### Foundation & engine (M1)
+- Frontend-agnostic core **engine**: the `Operation` contract with a streamed
+  `Event` union (`Progress`/`GitLine`/`DecisionNeeded`/`Timing`/`Done`) and a
+  `Decider` for mid-flight, option-list-only forks.
+- Thin git verb layer (`internal/git`) over a `gitcmd` argv builder and a
+  `gitexec` process runner (with a `FakeRunner` for tests).
+- Smart operations: `SmartPull` (worktree-aware divergence decision tree),
+  `SmartSwitch` (auto-stash/restore), `Commit`, `Push`, `Stash`, and a
+  ref-only `UndoLastCommit`.
+- Observability: span ring buffer, tracing, redaction, and a panic debug dump
+  (`gg inspect`, `--debug-dump`, `--trace`).
+- Interactive **TUI** (Bubble Tea): size-aware multi-panel layout, a modal
+  Decider, and a panic-safe dump on crash.
+
+#### CLI (M2)
+- Scriptable commands: `gg status`, `commit`, `pull` (`--background`,
+  `--on-conflict`), `push`, `switch`, `stash`, `undo`.
+- Forks resolved by flags, an interactive stdin prompt, or a clear error when
+  neither is available; unknown-subcommand guard.
+
+#### Worktree management (M2)
+- TOML config (`.gg.toml`) with field-level overlay and worktree branch/path
+  **templates** (`<parent-branch>`, `<repo>`, `<date:…>`, `<seq:…>`, `<user:…>`);
+  per-repo `<seq>` counters in `<git-common-dir>/gg/state.toml`.
+- **Create**: TUI `w` create popup (live preview, editable name) and `W`
+  create-and-switch; `gg worktree add [<start-point>]`; shared resolution in
+  `internal/worktree`.
+- **Switch**: `enter` on the Worktrees panel re-roots the TUI into the selected
+  worktree; `gg shell-init [bash|zsh|fish]` follows the switch with a real `cd`
+  via `--cwd-file`.
+- **Delete**: TUI `d` on the Worktrees panel and
+  `gg worktree remove [--with-branch] [--force] <path>`. Reactive-force model —
+  choose worktree-only vs. worktree+branch up front, then force is offered only
+  when git refuses (dirty tree or unmerged branch). Engine guards refuse
+  removing the current or primary worktree.
+
+[Unreleased]: https://github.com/gigagit/gg
