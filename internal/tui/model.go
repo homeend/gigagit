@@ -61,6 +61,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.commits = msg.commits
 		}
 	case tea.KeyMsg:
+		if m.modal != nil {
+			switch msg.String() {
+			case "up", "k":
+				if m.modal.sel > 0 {
+					m.modal.sel--
+				}
+			case "down", "j":
+				if m.modal.sel < len(m.modal.req.Options)-1 {
+					m.modal.sel++
+				}
+			case "enter":
+				m.modal.reply <- engine.DecisionResponse{Option: m.modal.req.Options[m.modal.sel]}
+				m.modal = nil
+			case "esc":
+				m.modal.reply <- engine.DecisionResponse{Option: abortOption(m.modal.req.Options)}
+				m.modal = nil
+			}
+			return m, nil
+		}
 		switch msg.String() {
 		case "q", "ctrl+c":
 			return m, tea.Quit
@@ -120,6 +139,9 @@ func (m Model) panelLen(p panel) int {
 
 // View implements tea.Model.
 func (m Model) View() string {
+	if m.modal != nil {
+		return m.render()
+	}
 	if m.loading {
 		return "gigagit (loading…)\n"
 	}
@@ -130,3 +152,16 @@ func (m Model) View() string {
 }
 
 var _ tea.Model = Model{}
+
+// abortOption returns "abort" if offered, else the last option (safe default).
+func abortOption(opts []string) string {
+	for _, o := range opts {
+		if o == "abort" {
+			return o
+		}
+	}
+	if len(opts) > 0 {
+		return opts[len(opts)-1]
+	}
+	return ""
+}

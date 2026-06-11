@@ -12,10 +12,14 @@ var (
 	focusedPanel = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("12")).Padding(0, 1)
 	bluredPanel  = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("240")).Padding(0, 1)
 	selectedRow  = lipgloss.NewStyle().Reverse(true)
+	modalStyle   = lipgloss.NewStyle().Border(lipgloss.DoubleBorder()).BorderForeground(lipgloss.Color("11")).Padding(1, 2)
 )
 
 // render draws the three panels and a footer.
 func (m Model) render() string {
+	if m.modal != nil {
+		return m.renderModal()
+	}
 	header := titleStyle.Render("gigagit") + "  branch " + m.status.Branch
 	if m.status.Upstream != "" {
 		header += fmt.Sprintf(" (↑%d ↓%d)", m.status.Ahead, m.status.Behind)
@@ -95,4 +99,20 @@ func (m Model) commitRows() []string {
 		out = append(out, h+" "+c.Subject)
 	}
 	return out
+}
+
+func (m Model) renderModal() string {
+	var b strings.Builder
+	b.WriteString(m.modal.req.Prompt)
+	b.WriteString("\n\n")
+	for i, opt := range m.modal.req.Options {
+		if i == m.modal.sel {
+			b.WriteString(selectedRow.Render("> " + opt))
+		} else {
+			b.WriteString("  " + opt)
+		}
+		b.WriteString("\n")
+	}
+	b.WriteString("\n[↑/↓] choose  [enter] confirm  [esc] abort")
+	return modalStyle.Render(b.String()) + "\n"
 }
