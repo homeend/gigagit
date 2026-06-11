@@ -4,6 +4,7 @@ package tui
 import (
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/gigagit/gg/internal/config"
 	"github.com/gigagit/gg/internal/engine"
 	"github.com/gigagit/gg/internal/git"
 	"github.com/gigagit/gg/internal/model"
@@ -22,6 +23,9 @@ type Model struct {
 
 	worktrees       []model.Worktree
 	currentWorktree string
+
+	cfg          config.Config
+	gitCommonDir string
 
 	running   bool
 	statusMsg string
@@ -65,6 +69,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.commits = msg.commits
 			m.worktrees = msg.worktrees
 			m.currentWorktree = msg.currentWorktree
+			m.cfg = msg.cfg
+			m.gitCommonDir = msg.gitCommonDir
 		}
 	case tea.KeyMsg:
 		if m.modal != nil {
