@@ -116,10 +116,11 @@ func (m Model) renderPanel(p panel, label string, rows []string, boxW, boxH int)
 	lines := make([]string, 0, contentH)
 	lines = append(lines, padRight(truncate(label, innerW), innerW))
 
-	if len(rows) == 0 {
-		if rowsCap >= 1 {
-			lines = append(lines, padRight(truncate("  (none)", innerW), innerW))
-		}
+	if rowsCap < 1 {
+		// No room for any data rows below the label; render the label only so the
+		// panel never exceeds boxH (windowRows would otherwise force one row).
+	} else if len(rows) == 0 {
+		lines = append(lines, padRight(truncate("  (none)", innerW), innerW))
 	} else {
 		win, selInWin := windowRows(rows, rowsCap, m.sel[p])
 		for i, row := range win {

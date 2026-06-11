@@ -47,3 +47,30 @@ func TestRenderTinyTerminal(t *testing.T) {
 		}
 	}
 }
+
+// The 3-panel left column must also respect terminal bounds, even with many
+// worktrees and a medium height where each left panel is near its 3-row floor.
+func TestRenderThreePanelLeftFits(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 60, 12 // bodyH = 9 -> three left panels of 3 rows each
+
+	m.worktrees = make([]model.Worktree, 40)
+	for i := range m.worktrees {
+		m.worktrees[i] = model.Worktree{Path: "/very/long/path/to/worktree/number", Branch: "branch-name"}
+	}
+	m.branches = make([]model.Branch, 40)
+	for i := range m.branches {
+		m.branches[i] = model.Branch{Name: "branch-name"}
+	}
+
+	out := m.View()
+	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+	if len(lines) > m.height {
+		t.Fatalf("render produced %d lines, want <= %d", len(lines), m.height)
+	}
+	for i, ln := range lines {
+		if w := lipgloss.Width(ln); w > m.width {
+			t.Fatalf("line %d is %d cols wide, want <= %d: %q", i, w, m.width, ln)
+		}
+	}
+}
