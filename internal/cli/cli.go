@@ -99,12 +99,6 @@ func cmdCommit(repo *repoT, args []string, stdout, stderr io.Writer) int {
 	return finish(res, err, stdout, stderr)
 }
 
-// cmdWorktree is implemented in internal/cli/worktree.go (Task 4).
-func cmdWorktree(repo *repoT, args []string, stdin io.Reader, stdout, stderr io.Writer, cwdFile string) int {
-	fmt.Fprintln(stderr, "worktree: not yet implemented")
-	return 2
-}
-
 // finish prints the result summary (or error) and maps to an exit code.
 func finish(res engine.Result, err error, stdout, stderr io.Writer) int {
 	if err != nil {
