@@ -88,11 +88,12 @@ func cmdWorktreeAdd(repo *repoT, args []string, stdin io.Reader, stdout, stderr 
 		Path:   cfg.Worktree.PathTemplate,
 	}
 
-	// Prompt stdin for each <user:LABEL>.
+	// Prompt stdin for each <user:LABEL>. Prompts go to stderr so stdout stays
+	// clean for scripting.
 	inputs := map[string]string{}
 	reader := bufio.NewReader(stdin)
 	for _, label := range tm.Labels() {
-		fmt.Fprintf(stdout, "%s: ", label)
+		fmt.Fprintf(stderr, "%s: ", label)
 		line, _ := reader.ReadString('\n')
 		inputs[label] = strings.TrimRight(line, "\r\n")
 	}
