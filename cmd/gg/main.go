@@ -5,6 +5,8 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
+	"time"
 
 	"github.com/gigagit/gg/internal/app"
 	"github.com/gigagit/gg/internal/git"
@@ -18,7 +20,16 @@ func main() {
 		runInspect(os.Args[2:])
 		return
 	}
-	repo := &git.Repo{Runner: gitexec.NewExecRunner("git", ".", observ.NewRing(200))}
+	ring := observ.NewRing(200)
+	repo := &git.Repo{Runner: gitexec.NewExecRunner("git", ".", ring)}
+	defer func() {
+		if r := recover(); r != nil {
+			path := filepath.Join(os.TempDir(), fmt.Sprintf("gg-panic-%d.json", time.Now().Unix()))
+			_ = app.DumpRepo(context.Background(), path, repo, ring, []string{fmt.Sprintf("panic: %v", r)})
+			fmt.Fprintf(os.Stderr, "gg panicked; debug dump written to %s\n", path)
+			panic(r)
+		}
+	}()
 	if err := tui.Run(repo); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)

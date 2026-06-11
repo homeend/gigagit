@@ -14,11 +14,8 @@ import (
 	"github.com/gigagit/gg/internal/git"
 	"github.com/gigagit/gg/internal/gitcmd"
 	"github.com/gigagit/gg/internal/gitexec"
-	"github.com/gigagit/gg/internal/model"
 	"github.com/gigagit/gg/internal/observ"
 )
-
-type gitStatus = model.WorkingTreeStatus
 
 // Options configures an Inspect run.
 type Options struct {
@@ -65,7 +62,7 @@ func Inspect(ctx context.Context, opts Options) error {
 	fmt.Fprintf(opts.Stdout, "worktrees: %d\n", len(wts))
 
 	if opts.DumpPath != "" {
-		if derr := writeDump(ctx, opts.DumpPath, runner, ring, st, errs); derr != nil {
+		if derr := DumpRepo(ctx, opts.DumpPath, repo, ring, errs); derr != nil {
 			return fmt.Errorf("write debug dump: %w", derr)
 		}
 		fmt.Fprintf(opts.Stdout, "debug dump written: %s\n", opts.DumpPath)
@@ -73,9 +70,15 @@ func Inspect(ctx context.Context, opts Options) error {
 	return nil
 }
 
-func writeDump(ctx context.Context, path string, runner gitexec.Runner, ring *observ.Ring, st gitStatus, errs []string) error {
+// DumpRepo assembles and writes a debug dump for repo using ring's recent spans.
+// It is best-effort: git failures degrade gracefully into the dump's fields.
+func DumpRepo(ctx context.Context, path string, repo *git.Repo, ring *observ.Ring, errs []string) error {
+	st, err := repo.Status(ctx)
+	if err != nil {
+		errs = append(errs, err.Error())
+	}
 	gitVer := ""
-	if res, err := runner.Run(ctx, "git version", gitcmd.New("version").ToArgv()); err == nil {
+	if res, verr := repo.Runner.Run(ctx, "git version", gitcmd.New("version").ToArgv()); verr == nil {
 		gitVer = strings.TrimSpace(res.Stdout)
 	}
 	c := st.Counts()
