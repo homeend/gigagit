@@ -156,7 +156,12 @@ func (op SmartPull) checkoutPull(ctx context.Context, deps OpDeps, remote, targe
 	if returnTo != "" && returnTo != target {
 		deps.emit(ctx, Progress{Step: "switching back", Detail: returnTo})
 		if err := repo.Switch(ctx, returnTo); err != nil {
-			return Result{}, err
+			if stashed {
+				_ = repo.StashPop(ctx) // restore on target rather than strand the stash
+				stashed = false
+			}
+			return Result{Summary: "pulled " + target + "; could not switch back to " + returnTo + " (changes restored on " + target + ")", Changed: true},
+				fmt.Errorf("smart pull: switch back to %s failed: %w", returnTo, err)
 		}
 	}
 
