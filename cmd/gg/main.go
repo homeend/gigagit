@@ -14,11 +14,16 @@ import (
 	"github.com/gigagit/gg/internal/git"
 	"github.com/gigagit/gg/internal/gitexec"
 	"github.com/gigagit/gg/internal/observ"
+	"github.com/gigagit/gg/internal/shellinit"
 	"github.com/gigagit/gg/internal/tui"
 )
 
 func main() {
-	args := os.Args[1:]
+	cwdFile, args := extractCwdFile(os.Args[1:])
+	if len(args) > 0 && args[0] == "shell-init" {
+		runShellInit(args[1:])
+		return
+	}
 	if len(args) > 0 && args[0] == "inspect" {
 		runInspect(args[1:])
 		return
@@ -43,10 +48,52 @@ func main() {
 			panic(r)
 		}
 	}()
-	if err := tui.Run(repo); err != nil {
+	cwd, err := tui.Run(repo)
+	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
+	// Only write the cwd file when the user actually switched worktrees, so a
+	// gg-wrapped shell stays put otherwise.
+	if cwdFile != "" && cwd != "" {
+		_ = os.WriteFile(cwdFile, []byte(cwd), 0o644)
+	}
+}
+
+// extractCwdFile pulls a global --cwd-file flag (in either "--cwd-file path" or
+// "--cwd-file=path" form) out of args, returning its value and the remaining
+// args. A trailing "--cwd-file" with no value is dropped.
+func extractCwdFile(args []string) (string, []string) {
+	path := ""
+	rest := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "--cwd-file":
+			if i+1 < len(args) {
+				path = args[i+1]
+				i++
+			}
+		case strings.HasPrefix(a, "--cwd-file="):
+			path = strings.TrimPrefix(a, "--cwd-file=")
+		default:
+			rest = append(rest, a)
+		}
+	}
+	return path, rest
+}
+
+func runShellInit(args []string) {
+	if len(args) != 1 {
+		fmt.Fprintln(os.Stderr, "usage: gg shell-init [bash|zsh|fish]")
+		os.Exit(2)
+	}
+	script, err := shellinit.Script(args[0])
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
+	fmt.Fprint(os.Stdout, script)
 }
 
 func runInspect(args []string) {

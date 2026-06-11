@@ -82,3 +82,16 @@ func TestCreateWorktreeMissingFieldsError(t *testing.T) {
 		t.Fatal("missing StartPoint should error")
 	}
 }
+
+func TestCreateWorktreeResultCarriesAbsolutePath(t *testing.T) {
+	dir, repo := newRepo(t)
+	res, err := CreateWorktree{StartPoint: "main", Branch: "feature/p", Path: "../wt-p"}.
+		Run(context.Background(), OpDeps{Repo: repo})
+	if err != nil {
+		t.Fatalf("CreateWorktree: %v", err)
+	}
+	want := filepath.Clean(filepath.Join(dir, "..", "wt-p"))
+	if res.Path != want {
+		t.Fatalf("Result.Path = %q, want %q", res.Path, want)
+	}
+}

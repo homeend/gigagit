@@ -10,6 +10,7 @@ import (
 type Result struct {
 	Summary string
 	Changed bool
+	Path    string // when an operation creates/targets a path (e.g. CreateWorktree), its absolute path
 }
 
 // OpDeps is everything an operation needs: the repo to act on, an optional

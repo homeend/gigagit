@@ -7,7 +7,9 @@ import (
 	"github.com/gigagit/gg/internal/config"
 	"github.com/gigagit/gg/internal/engine"
 	"github.com/gigagit/gg/internal/git"
+	"github.com/gigagit/gg/internal/gitexec"
 	"github.com/gigagit/gg/internal/model"
+	"github.com/gigagit/gg/internal/observ"
 )
 
 // Model is the root Bubble Tea model.
@@ -29,6 +31,8 @@ type Model struct {
 
 	popup          *worktreePopup
 	pendingSeqBump []string
+	pendingSwitch  bool
+	switchTarget   string
 
 	running   bool
 	statusMsg string
@@ -133,6 +137,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return mm, nil
 				}
 			}
+		case "enter":
+			if !m.running && !m.loading && m.focus == panelWorktrees && len(m.worktrees) > 0 {
+				target := m.worktrees[m.sel[panelWorktrees]].Path
+				if target != "" && target != m.currentWorktree {
+					return m.reRoot(target)
+				}
+			}
 		case "tab":
 			m.focus = (m.focus + 1) % panelCount
 		case "up", "k":
@@ -161,18 +172,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case opFinishedMsg:
 		m.running = false
 		m.opMsgs = nil
+		switchTo := ""
 		if msg.err != nil {
 			m.statusMsg = "error: " + msg.err.Error()
 		} else {
 			if msg.res.Summary != "" {
 				m.statusMsg = msg.res.Summary
 			}
-			// A successful create consumes the <seq> counters its template used.
 			for _, name := range m.pendingSeqBump {
 				_, _ = config.BumpSeq(m.gitCommonDir, name)
 			}
+			if m.pendingSwitch && msg.res.Path != "" {
+				switchTo = msg.res.Path
+			}
 		}
 		m.pendingSeqBump = nil
+		m.pendingSwitch = false
+		if switchTo != "" {
+			return m.reRoot(switchTo)
+		}
 		return m, m.loadCmd()
 	}
 	return m, nil
@@ -191,6 +209,20 @@ func (m Model) panelLen(p panel) int {
 		return len(m.commits)
 	}
 	return 0
+}
+
+// reRoot points the model at the repository rooted at path and triggers a full
+// reload. switchTarget records where a shell should follow on exit (written to
+// --cwd-file by cmd/gg). A fresh span ring is used for the new root; the cmd/gg
+// panic dump still references the original repo (acceptable for a debug aid).
+func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
+	m.repo = &git.Repo{Runner: gitexec.NewExecRunner("git", path, observ.NewRing(200))}
+	m.switchTarget = path
+	m.loading = true
+	// Drop selections from the old repo so the highlight doesn't land on a
+	// surprising row in the newly-loaded panels.
+	m.sel = map[panel]int{}
+	return m, m.loadCmd()
 }
 
 // View implements tea.Model.
