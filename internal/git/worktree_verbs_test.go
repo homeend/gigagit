@@ -2,6 +2,8 @@ package git
 
 import (
 	"context"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 )
@@ -32,5 +34,26 @@ func TestCheckRefFormatBranch(t *testing.T) {
 	}
 	if err := repo.CheckRefFormatBranch(context.Background(), "bad..name"); err == nil {
 		t.Error("invalid name 'bad..name' should be rejected")
+	}
+}
+
+func TestAddWorktreeCreatesDirAndBranch(t *testing.T) {
+	dir, runner := newTestRepo(t)
+	repo := &Repo{Runner: runner}
+
+	wtPath := filepath.Join(filepath.Dir(dir), "wt-feature")
+	err := repo.AddWorktree(context.Background(), wtPath, "feature/x", "main", nil)
+	if err != nil {
+		t.Fatalf("AddWorktree: %v", err)
+	}
+
+	// The worktree directory exists and contains the committed file.
+	if _, statErr := os.Stat(filepath.Join(wtPath, "README.md")); statErr != nil {
+		t.Fatalf("worktree checkout missing: %v", statErr)
+	}
+	// The new branch exists.
+	cmd := exec.Command("git", "-C", dir, "rev-parse", "--verify", "refs/heads/feature/x")
+	if out, e := cmd.CombinedOutput(); e != nil {
+		t.Fatalf("new branch not created: %v\n%s", e, out)
 	}
 }

@@ -26,3 +26,16 @@ func (r *Repo) CheckRefFormatBranch(ctx context.Context, name string) error {
 	_, err := r.Runner.Run(ctx, "git check-ref-format", argv)
 	return err
 }
+
+// AddWorktree creates a new linked worktree at path on a new branch, based on
+// startPoint (`git worktree add -b <branch> <path> <startPoint>`). Output lines
+// are forwarded to onLine (nil is allowed) so a frontend can show progress; the
+// checkout is cancellable via ctx.
+func (r *Repo) AddWorktree(ctx context.Context, path, branch, startPoint string, onLine func(string)) error {
+	if onLine == nil {
+		onLine = func(string) {}
+	}
+	argv := gitcmd.New("worktree").Arg("add", "-b", branch, path, startPoint).ToArgv()
+	_, err := r.Runner.Stream(ctx, "git worktree add", argv, onLine)
+	return err
+}
