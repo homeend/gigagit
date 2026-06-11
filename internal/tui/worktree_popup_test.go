@@ -2,6 +2,7 @@ package tui
 
 import (
 	"math/rand/v2"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -325,6 +326,58 @@ func TestRenderWorktreePopupShowsPreview(t *testing.T) {
 	}
 	if !contains(out, m.popup.startPoint) {
 		t.Errorf("popup view should name the start-point branch %q", m.popup.startPoint)
+	}
+}
+
+func TestPopupCreateAndSwitchSetsPendingSwitch(t *testing.T) {
+	m := modelWithConfig(t, "b/auto", "../<repo>.worktrees/<branch>")
+	updated, _ := m.Update(keyMsg("w"))
+	m = updated.(Model)
+	updated, _ = m.Update(keyMsg("W")) // create AND switch
+	m = updated.(Model)
+	if m.popup != nil {
+		t.Error("popup should close on create-and-switch")
+	}
+	if !m.running {
+		t.Error("create-and-switch should start the op")
+	}
+	if !m.pendingSwitch {
+		t.Error("W should mark pendingSwitch so the model re-roots on success")
+	}
+}
+
+func TestPlainCreateDoesNotSwitch(t *testing.T) {
+	m := modelWithConfig(t, "b/auto", "../<repo>.worktrees/<branch>")
+	updated, _ := m.Update(keyMsg("w"))
+	m = updated.(Model)
+	updated, _ = m.Update(keyMsg("w")) // plain create
+	m = updated.(Model)
+	if m.pendingSwitch {
+		t.Error("plain create (w) must not set pendingSwitch")
+	}
+}
+
+func TestOpFinishedSwitchesOnPendingSwitch(t *testing.T) {
+	dir, repo := newRepoDir(t)
+	m := New(repo)
+	updated, _ := m.Update(m.loadCmd()())
+	m = updated.(Model)
+
+	// Pre-create a worktree so reRoot has a real target.
+	wt := filepath.Join(filepath.Dir(dir), "wt-sw")
+	runGit(t, dir, "worktree", "add", "-b", "feature/sw", wt, "main")
+
+	m.pendingSwitch = true
+	updated, cmd := m.Update(opFinishedMsg{res: engine.Result{Summary: "created", Changed: true, Path: wt}})
+	m = updated.(Model)
+	if m.switchTarget != wt {
+		t.Fatalf("switchTarget = %q, want %q (should re-root to Result.Path)", m.switchTarget, wt)
+	}
+	if m.pendingSwitch {
+		t.Error("pendingSwitch should be cleared after handling")
+	}
+	if cmd == nil {
+		t.Fatal("expected a reload command from the switch")
 	}
 }
 

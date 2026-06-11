@@ -232,7 +232,9 @@ func (m Model) updatePopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			p.state = stEdit
 			p.recompute()
 		case "w", "enter":
-			return m.startCreateFromPopup()
+			return m.startCreateFromPopup(false)
+		case "W":
+			return m.startCreateFromPopup(true)
 		}
 		return m, nil
 	}
@@ -241,13 +243,14 @@ func (m Model) updatePopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // startCreateFromPopup launches the CreateWorktree op for the previewed names,
 // closes the popup, and records which <seq> counters to bump on success. A
 // preview error refuses to launch.
-func (m Model) startCreateFromPopup() (tea.Model, tea.Cmd) {
+func (m Model) startCreateFromPopup(switchAfter bool) (tea.Model, tea.Cmd) {
 	p := m.popup
 	if p.previewErr != nil {
 		m.statusMsg = "cannot create: " + p.previewErr.Error()
 		return m, nil
 	}
 	m.pendingSeqBump = p.consumedSeqNames()
+	m.pendingSwitch = switchAfter
 	m.popup = nil
 	return m.startOp(p.createOp())
 }
@@ -307,7 +310,7 @@ func (m Model) renderWorktreePopup() string {
 	case stEdit:
 		b.WriteString("[type] edit name  [enter] done  [esc] discard")
 	default:
-		b.WriteString("[w/enter] create  [e] edit name  [esc] cancel")
+		b.WriteString("[w] create  [W] create & switch  [e] edit name  [esc] cancel")
 	}
 
 	// Fixed, comfortably-wide content width so a long branch/path wraps (full name

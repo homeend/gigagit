@@ -165,18 +165,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case opFinishedMsg:
 		m.running = false
 		m.opMsgs = nil
+		switchTo := ""
 		if msg.err != nil {
 			m.statusMsg = "error: " + msg.err.Error()
 		} else {
 			if msg.res.Summary != "" {
 				m.statusMsg = msg.res.Summary
 			}
-			// A successful create consumes the <seq> counters its template used.
 			for _, name := range m.pendingSeqBump {
 				_, _ = config.BumpSeq(m.gitCommonDir, name)
 			}
+			if m.pendingSwitch && msg.res.Path != "" {
+				switchTo = msg.res.Path
+			}
 		}
 		m.pendingSeqBump = nil
+		m.pendingSwitch = false
+		if switchTo != "" {
+			return m.reRoot(switchTo)
+		}
 		return m, m.loadCmd()
 	}
 	return m, nil
