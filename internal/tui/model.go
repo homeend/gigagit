@@ -84,8 +84,31 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "q", "ctrl+c":
 			return m, tea.Quit
 		case "r":
-			m.loading = true
-			return m, m.loadCmd()
+			if !m.running {
+				m.loading = true
+				return m, m.loadCmd()
+			}
+		case "p":
+			if !m.running && !m.loading {
+				return m.startOp(engine.SmartPull{Intent: engine.PullAndStay})
+			}
+		case "P":
+			if !m.running && !m.loading && m.status.Branch != "" {
+				return m.startOp(engine.Push{Remote: "origin", Branch: m.status.Branch, SetUpstream: true})
+			}
+		case "s":
+			if !m.running && !m.loading && len(m.branches) > 0 {
+				target := m.branches[m.sel[panelBranches]].Name
+				return m.startOp(engine.SmartSwitch{Branch: target})
+			}
+		case "S":
+			if !m.running && !m.loading {
+				return m.startOp(engine.Stash{Message: "gg stash"})
+			}
+		case "u":
+			if !m.running && !m.loading {
+				return m.startOp(engine.UndoLastCommit{})
+			}
 		case "tab":
 			m.focus = (m.focus + 1) % panelCount
 		case "up", "k":

@@ -33,8 +33,12 @@ func (m Model) render() string {
 		lipgloss.JoinVertical(lipgloss.Left, branches, status),
 		commits,
 	)
-	footer := "[tab] focus  [↑/↓ or k/j] move  [r] reload  [q] quit"
-	return strings.Join([]string{header, body, footer}, "\n") + "\n"
+	footer := "[p]ull [P]ush [s]witch [S]tash [u]ndo  •  [tab] focus  [r] reload  [q] quit"
+	statusLine := m.statusMsg
+	if m.running {
+		statusLine = "⏳ " + statusLine
+	}
+	return strings.Join([]string{header, body, footer, statusLine}, "\n") + "\n"
 }
 
 func (m Model) renderList(p panel, label string, rows []string) string {
