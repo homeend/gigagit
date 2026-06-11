@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/gigagit/gg/internal/config"
+	"github.com/gigagit/gg/internal/engine"
 	"github.com/gigagit/gg/internal/template"
 )
 
@@ -240,3 +241,76 @@ func TestPopupEditEscDiscards(t *testing.T) {
 		t.Fatalf("preview branch = %q, want b/auto after discard", m.popup.previewBranch)
 	}
 }
+
+func TestPopupCreateLaunchesOpAndClearsPopup(t *testing.T) {
+	m := modelWithConfig(t, "b/auto", "../<repo>.worktrees/<branch>")
+	updated, _ := m.Update(keyMsg("w"))
+	m = updated.(Model)
+	updated, cmd := m.Update(keyMsg("w")) // create
+	m = updated.(Model)
+	if m.popup != nil {
+		t.Error("popup should close when the create op starts")
+	}
+	if !m.running {
+		t.Error("create should put the model into the running state")
+	}
+	if cmd == nil {
+		t.Error("create should return a command that waits for op messages")
+	}
+}
+
+func TestPopupCreatePreviewErrorBlocks(t *testing.T) {
+	m := modelWithConfig(t, "b-<bogus>", "../<repo>.worktrees/<branch>")
+	updated, _ := m.Update(keyMsg("w"))
+	m = updated.(Model)
+	if m.popup.previewErr == nil {
+		t.Fatal("expected a preview error for the bad template")
+	}
+	updated, _ = m.Update(keyMsg("w")) // attempt create
+	m = updated.(Model)
+	if m.running {
+		t.Error("create must not launch when the preview has an error")
+	}
+	if m.popup == nil {
+		t.Error("popup should stay open when create is blocked")
+	}
+}
+
+func TestSeqBumpOnSuccess(t *testing.T) {
+	dir := t.TempDir() // stand-in git common dir
+	m := loadedModel(t)
+	m.gitCommonDir = dir
+	m.pendingSeqBump = []string{"issue"}
+
+	before := config.PeekSeq(dir, "issue") // 1 (unset)
+	updated, _ := m.Update(opFinishedMsg{res: engine.Result{Summary: "worktree created", Changed: true}})
+	m = updated.(Model)
+	if m.pendingSeqBump != nil {
+		t.Error("pendingSeqBump should be cleared after handling")
+	}
+	after := config.PeekSeq(dir, "issue")
+	if after != before+1 {
+		t.Fatalf("counter not bumped: before=%d after=%d", before, after)
+	}
+}
+
+func TestSeqNoBumpOnError(t *testing.T) {
+	dir := t.TempDir()
+	m := loadedModel(t)
+	m.gitCommonDir = dir
+	m.pendingSeqBump = []string{"issue"}
+
+	before := config.PeekSeq(dir, "issue")
+	updated, _ := m.Update(opFinishedMsg{err: errTest})
+	m = updated.(Model)
+	after := config.PeekSeq(dir, "issue")
+	if after != before {
+		t.Fatalf("counter must not bump on error: before=%d after=%d", before, after)
+	}
+}
+
+var errTest = errTestType("boom")
+
+type errTestType string
+
+func (e errTestType) Error() string { return string(e) }

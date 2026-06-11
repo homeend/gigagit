@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/gigagit/gg/internal/config"
+	"github.com/gigagit/gg/internal/engine"
 	"github.com/gigagit/gg/internal/template"
 )
 
@@ -231,9 +232,23 @@ func (m Model) updatePopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 }
 
-// startCreateFromPopup gets its real body in Task 7.
+// startCreateFromPopup launches the CreateWorktree op for the previewed names,
+// closes the popup, and records which <seq> counters to bump on success. A
+// preview error refuses to launch.
 func (m Model) startCreateFromPopup() (tea.Model, tea.Cmd) {
-	return m, nil
+	p := m.popup
+	if p.previewErr != nil {
+		m.statusMsg = "cannot create: " + p.previewErr.Error()
+		return m, nil
+	}
+	op := engine.CreateWorktree{
+		StartPoint: p.startPoint,
+		Branch:     p.previewBranch,
+		Path:       p.previewPath,
+	}
+	m.pendingSeqBump = p.seqNames
+	m.popup = nil
+	return m.startOp(op)
 }
 
 // renderWorktreePopup gets its real body in Task 8.

@@ -27,7 +27,8 @@ type Model struct {
 	cfg          config.Config
 	gitCommonDir string
 
-	popup *worktreePopup
+	popup          *worktreePopup
+	pendingSeqBump []string
 
 	running   bool
 	statusMsg string
@@ -162,9 +163,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.opMsgs = nil
 		if msg.err != nil {
 			m.statusMsg = "error: " + msg.err.Error()
-		} else if msg.res.Summary != "" {
-			m.statusMsg = msg.res.Summary
+		} else {
+			if msg.res.Summary != "" {
+				m.statusMsg = msg.res.Summary
+			}
+			// A successful create consumes the <seq> counters its template used.
+			for _, name := range m.pendingSeqBump {
+				_, _ = config.BumpSeq(m.gitCommonDir, name)
+			}
 		}
+		m.pendingSeqBump = nil
 		return m, m.loadCmd()
 	}
 	return m, nil
