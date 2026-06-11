@@ -15,7 +15,9 @@ type Repo struct {
 
 // Status returns the working-tree status.
 func (r *Repo) Status(ctx context.Context) (model.WorkingTreeStatus, error) {
-	argv := gitcmd.New("status").Arg("--porcelain=v2", "-z", "--branch").ToArgv()
+	// --untracked-files=all lists each untracked file individually rather than
+	// collapsing a fully-untracked directory into a single "dir/" entry.
+	argv := gitcmd.New("status").Arg("--porcelain=v2", "-z", "--branch", "--untracked-files=all").ToArgv()
 	res, err := r.Runner.Run(ctx, "git status", argv)
 	if err != nil {
 		return model.WorkingTreeStatus{}, err

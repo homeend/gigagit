@@ -6,5 +6,5 @@
 /dist/
 /main
 
-# screenshots / scratch
-/tui.png
+# screenshots / scratch (shared by the user during review)
+/*.png
