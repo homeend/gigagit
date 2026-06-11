@@ -22,3 +22,15 @@ func TestTopLevelReturnsRepoRoot(t *testing.T) {
 		t.Fatalf("TopLevel = %q, want %q", gotResolved, wantResolved)
 	}
 }
+
+func TestCheckRefFormatBranch(t *testing.T) {
+	_, runner := newTestRepo(t)
+	repo := &Repo{Runner: runner}
+
+	if err := repo.CheckRefFormatBranch(context.Background(), "feature/ok-1"); err != nil {
+		t.Errorf("valid name rejected: %v", err)
+	}
+	if err := repo.CheckRefFormatBranch(context.Background(), "bad..name"); err == nil {
+		t.Error("invalid name 'bad..name' should be rejected")
+	}
+}
