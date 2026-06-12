@@ -45,6 +45,7 @@ e2e/
   harness_test.go   # discovers scenarios/*.toml; one subtest per file
   scenario.go       # schema structs + strict TOML loader (unknown keys = error)
   builder.go        # executes [input] steps; builds origin + clone topology
+  gitserver.go      # real HTTP git server: net/http/cgi → `git http-backend`
   runner.go         # Runner interface; CLIRunner → cli.Run() in-process
   assert.go         # semantic assertions; collects ALL mismatches per scenario
   scenarios/
@@ -80,14 +81,29 @@ scenario.toml ─load→ Scenario
 - Subtests run `t.Parallel()`; every scenario is fully sandboxed in
   `t.TempDir()`.
 
-### Remote topology
+### Remote topology — served over real HTTP
 
 If `[input.origin]` is present:
 
 1. Build the origin repo from `origin.steps` in `sandbox/origin`.
-2. `git clone origin local` → the scenario's repo is `sandbox/local`.
+2. Start a per-scenario **HTTP git server** for the sandbox and clone via
+   `http://127.0.0.1:<port>/origin` → the scenario's repo is `sandbox/local`.
 3. Run `[input].steps` in the clone.
 4. Run `origin.after` steps in origin (creates behind/diverged states).
+
+The server (`gitserver.go`) wraps git's own smart-protocol implementation:
+an `httptest.Server` whose handler is `net/http/cgi` executing
+`git http-backend` (`GIT_PROJECT_ROOT=sandbox`, `GIT_HTTP_EXPORT_ALL=1`,
+origin config `http.receivepack=true`). Fetch, clone, pull, and push all
+travel the genuine network transport (upload-pack/receive-pack over HTTP),
+not filesystem shortcuts — no Docker or external services, works inside
+plain `go test` on all platforms, and each parallel subtest gets its own
+listener on an ephemeral port.
+
+`[input.origin] transport = "http"` is the default; `transport = "path"`
+remains available for scenarios where transport is irrelevant and speed
+matters. Anonymous access only — auth/credential flows are out of scope
+(future work alongside MCP).
 
 Origin is a normal (non-bare) repo with `receive.denyCurrentBranch=ignore`
 so push scenarios work; **origin-side assertions read refs/log only, never
@@ -212,9 +228,10 @@ unpredictable past it) but still prints the gg stderr captured for that run.
    steps), CLIRunner, assertions for `branch`/`branches`/`clean`/`files`/
    `status`/`stashes`/`stash`; seed scenarios S1, S2, S13 (switch happy path,
    pop-conflict, undo).
-2. **Remote + history** — `[input.origin]` topology, `ahead`/`behind`,
-   `in_progress`, `[[expect.log]]`, `[expect.origin]`, worktree steps and
-   scoped assertions; scenarios S3–S12, S14.
+2. **Remote + history** — HTTP git server (`gitserver.go`), `[input.origin]`
+   topology, `ahead`/`behind`, `in_progress`, `[[expect.log]]`,
+   `[expect.origin]`, worktree steps and scoped assertions; scenarios
+   S3–S12, S14.
 3. **Authoring skill + corpus** — write the skill, then author the remaining
    corpus for current ops; zip escape hatch (`input.zip`) if still wanted.
 
@@ -231,3 +248,8 @@ ship; the schema already covers them.
   scenario is a loader-level validation error.
 - **git version drift**: subjects/state checks are stable across modern git;
   CI should still pin a known git version eventually.
+- **`git http-backend` on Windows**: ships with Git for Windows but lives in
+  `libexec/git-core`; the CGI handler must locate it via
+  `git --exec-path` rather than assuming it is on PATH. If a platform proves
+  hostile, the `transport = "path"` fallback keeps scenarios runnable while
+  the server issue is fixed.
