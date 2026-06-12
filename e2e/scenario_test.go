@@ -73,6 +73,7 @@ func TestStepMustHaveExactlyOneAction(t *testing.T) {
 		`{ write = "a", commit = "c" }`, // two actions
 		`{ content = "x" }`,             // content without write
 		`{ cwd = "local" }`,             // no action at all
+		`{}`,                            // empty table → zero Step → must fail kind()
 	} {
 		_, err := LoadScenario(writeScenario(t, `
 name = "x"
@@ -127,6 +128,23 @@ exit = 0
 `))
 	if err == nil || !strings.Contains(err.Error(), "commit") {
 		t.Fatalf("want needs-a-commit error, got %v", err)
+	}
+}
+
+func TestOriginRequiresCommitInOriginSteps(t *testing.T) {
+	// origin present, but all commits only in input.steps → invalid
+	_, err := LoadScenario(writeScenario(t, `
+name = "x"
+[input]
+steps = [ { write = "a.txt", content = "x" }, { commit = "local" } ]
+[input.origin]
+steps = [ { write = "b.txt", content = "y" } ]
+[[run]]
+cmd = ["status"]
+exit = 0
+`))
+	if err == nil || !strings.Contains(err.Error(), "origin.steps") {
+		t.Fatalf("want origin.steps-needs-commit error, got %v", err)
 	}
 }
 

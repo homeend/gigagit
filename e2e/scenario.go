@@ -37,12 +37,14 @@ type Origin struct {
 // Step is one repo-building action; exactly one action field is set.
 // Cwd retargets the step to another directory (sandbox-root-relative).
 type Step struct {
-	Write    string `toml:"write"`
-	Content  string `toml:"content"`
-	Rm       string `toml:"rm"`
-	Commit   string `toml:"commit"`
-	Branch   string `toml:"branch"`
-	Switch   string `toml:"switch"`
+	Write   string `toml:"write"`
+	Content string `toml:"content"`
+	Rm      string `toml:"rm"`
+	Commit  string `toml:"commit"`
+	Branch  string `toml:"branch"`
+	Switch  string `toml:"switch"`
+	// Stash is the stash message; the step runs `git stash push -u -m <msg>`.
+	// The builder for executing this step is added in a later task.
 	Stash    string `toml:"stash"`
 	Worktree string `toml:"worktree"` // sandbox-root-relative path; Branch holds the branch
 	Cwd      string `toml:"cwd"`
@@ -202,35 +204,41 @@ func (s *Scenario) validate() error {
 	if s.Name == "" {
 		return fmt.Errorf("name is required")
 	}
-	hasCommit := false
-	check := func(steps []Step) error {
+	hasCommitIn := func(steps []Step) (bool, error) {
+		found := false
 		for _, st := range steps {
 			k, err := st.kind()
 			if err != nil {
-				return err
+				return false, err
 			}
 			if k == "commit" {
-				hasCommit = true
+				found = true
 			}
 		}
-		return nil
+		return found, nil
 	}
-	if err := check(s.Input.Steps); err != nil {
+	inputHasCommit, err := hasCommitIn(s.Input.Steps)
+	if err != nil {
 		return err
 	}
 	if o := s.Input.Origin; o != nil {
 		if o.Transport != "" && o.Transport != "http" && o.Transport != "path" {
 			return fmt.Errorf("origin.transport %q: want http or path", o.Transport)
 		}
-		if err := check(o.Steps); err != nil {
+		originHasCommit, err := hasCommitIn(o.Steps)
+		if err != nil {
 			return err
 		}
-		if err := check(o.After); err != nil {
+		if _, err := hasCommitIn(o.After); err != nil {
 			return err
 		}
-	}
-	if !hasCommit {
-		return fmt.Errorf("input needs at least one commit step (the harness-injected .gg.toml must be committed)")
+		if !originHasCommit {
+			return fmt.Errorf("origin.steps needs at least one commit step (the clone needs history)")
+		}
+	} else {
+		if !inputHasCommit {
+			return fmt.Errorf("input.steps needs at least one commit step (the harness-injected .gg.toml must be committed)")
+		}
 	}
 	if len(s.Runs) == 0 {
 		return fmt.Errorf("at least one [[run]] is required")
@@ -325,8 +333,8 @@ func normalizeFiles(raw map[string]any) (map[string]FileExpect, error) {
 				switch k {
 				case "sha256":
 					s, ok := kv.(string)
-					if !ok {
-						return nil, fmt.Errorf("file %q: sha256 must be a string", path)
+					if !ok || s == "" {
+						return nil, fmt.Errorf("file %q: sha256 must be a non-empty string", path)
 					}
 					fe.SHA256 = s
 				case "unchanged":
