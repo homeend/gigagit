@@ -27,7 +27,7 @@ func TestCreateBranchAndSwitch(t *testing.T) {
 	_, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 
-	if err := repo.CreateBranch(context.Background(), "feature"); err != nil {
+	if err := repo.CreateBranch(context.Background(), "feature", ""); err != nil {
 		t.Fatalf("create branch: %v", err)
 	}
 	if err := repo.Switch(context.Background(), "feature"); err != nil {
@@ -39,6 +39,32 @@ func TestCreateBranchAndSwitch(t *testing.T) {
 	}
 	if cur != "feature" {
 		t.Fatalf("current branch = %q, want feature", cur)
+	}
+}
+
+func TestCreateBranchFromStartPoint(t *testing.T) {
+	dir, runner := newTestRepo(t)
+	repo := &Repo{Runner: runner}
+
+	// Pin "base" at the initial commit, then advance main so HEAD != base.
+	if err := repo.CreateBranch(context.Background(), "base", ""); err != nil {
+		t.Fatalf("create base: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("v2\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.Commit(context.Background(), "second", true); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+
+	if err := repo.CreateBranch(context.Background(), "from-base", "base"); err != nil {
+		t.Fatalf("create from start point: %v", err)
+	}
+	if got, want := revParse(t, dir, "from-base"), revParse(t, dir, "base"); got != want {
+		t.Fatalf("from-base = %s, want tip of base %s", got, want)
+	}
+	if revParse(t, dir, "from-base") == revParse(t, dir, "main") {
+		t.Fatal("from-base must not point at advanced main")
 	}
 }
 

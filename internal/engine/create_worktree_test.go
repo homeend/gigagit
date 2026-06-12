@@ -65,7 +65,7 @@ func TestCreateWorktreeExistingPathErrors(t *testing.T) {
 
 func TestCreateWorktreeDuplicateBranchErrors(t *testing.T) {
 	_, repo := newRepo(t)
-	if err := repo.CreateBranch(context.Background(), "dup"); err != nil {
+	if err := repo.CreateBranch(context.Background(), "dup", ""); err != nil {
 		t.Fatal(err)
 	}
 	op := CreateWorktree{StartPoint: "main", Branch: "dup", Path: "../wt-dup"}

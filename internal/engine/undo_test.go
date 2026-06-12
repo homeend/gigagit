@@ -33,7 +33,7 @@ func TestUndoLastCommitRefusesWhenLastOpNotCommit(t *testing.T) {
 	dir, repo := newRepo(t)
 	ctx := context.Background()
 
-	if err := repo.CreateBranch(ctx, "feature"); err != nil {
+	if err := repo.CreateBranch(ctx, "feature", ""); err != nil {
 		t.Fatal(err)
 	}
 	if err := repo.Switch(ctx, "feature"); err != nil {
