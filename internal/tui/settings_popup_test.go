@@ -135,4 +135,12 @@ func TestSettingsSwallowsGlobalKeys(t *testing.T) {
 	if m.settings == nil {
 		t.Fatal("popup should still be open")
 	}
+	u, cmd := m.Update(keyMsg("q"))
+	m = u.(Model)
+	if cmd != nil {
+		t.Fatal("q inside the popup must not emit a command (quit leak)")
+	}
+	if m.settings == nil {
+		t.Fatal("popup should still be open after q")
+	}
 }

@@ -145,17 +145,8 @@ func (m Model) renderRepoPopup() string {
 	}
 	b.WriteString("\n[enter] switch  [ctrl+d] forget  [esc] cancel")
 
-	w := m.width
-	if w <= 0 {
-		w = 80
-	}
-	inner := 56
-	if max := w - 8; inner > max {
-		inner = max
-	}
-	if inner < 20 {
-		inner = 20
-	}
+	w, _ := m.overlayDims()
+	inner := popupInnerWidth(w)
 	return modalStyle.Width(inner).Render(strings.TrimRight(b.String(), "\n")) + "\n"
 }
 
