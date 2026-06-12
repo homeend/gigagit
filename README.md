@@ -43,7 +43,11 @@ Run `gg` with no arguments to open the interactive UI.
 | `enter` | on the Worktrees panel: switch into the selected worktree |
 | `d` | on the Worktrees panel: delete the selected worktree |
 | `tab` | move focus between panels |
+| `shift+tab` | move focus backwards |
 | `j`/`k` or `↑`/`↓` | move selection |
+| `pgup`/`pgdn` | move selection by 25% of the panel viewport |
+| `o` | cycle the focused panel's sort order (name/date, asc/desc) |
+| `/` | filter the focused panel (type, then `enter` to keep, `esc` to clear) |
 | `r` / `q` | reload / quit |
 
 When an operation hits a fork (e.g. a diverged branch, or a worktree with
