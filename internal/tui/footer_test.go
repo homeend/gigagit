@@ -220,7 +220,7 @@ func TestFooterRenderedInInterface(t *testing.T) {
 	m.running = true
 	out = ansi.Strip(m.render())
 	if strings.Contains(out, "[s]witch") || strings.Contains(out, "[p]ull") {
-		t.Errorf("running: gated keys must leave the rendered footer:\n%s", out)
+		t.Errorf("running: gated keys must not appear in the rendered footer:\n%s", out)
 	}
 }
 

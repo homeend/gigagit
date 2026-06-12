@@ -10,6 +10,17 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ### Added
 
+#### Contextual footer
+- TUI: the footer now shows only the keys that work right now — panel/row
+  specific actions first (`[s]witch` hides on the checked-out branch,
+  `[enter] switch`/`[d]elete` hide on the current worktree, the `m` hint
+  reads mark/unmark/pair to match the mark state), then the global tail.
+  While an operation runs it collapses to `[tab] [?] [q]`; filter input
+  shows its own line. Availability predicates are shared between the key
+  dispatch and the footer, so a shown key always works — and `s`/`d` on the
+  checked-out branch or `d` on the current worktree are now clean no-ops
+  instead of operations git rejects.
+
 #### Mark-and-pair operations + SmartMerge
 - TUI: `m` marks a row; `m` on a second row of the same panel opens a
   pair-operation picker (generic per-panel registry). Branches offer

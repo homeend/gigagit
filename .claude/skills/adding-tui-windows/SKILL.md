@@ -41,7 +41,7 @@ modal selection) MUST live behind a **pointer field** (`popup *worktreePopup`,
 | 3 | `model.go` `panelLen` | Case returning the row count — drives selection clamping and ↑/↓ bounds automatically. |
 | 4 | `load.go` | Field on `dataLoadedMsg` + fetch in `loadCmd` (non-fatal if optional) + assignment in the `dataLoadedMsg` case in `model.go`. |
 | 5 | `view.go` | A `xRows() []string` builder + a `renderPanel(panelX, "Title", rows, w, h)` call in the layout. Bordered panels need ≥3 rows each; the layout branches on `bodyH` thresholds (see the `bodyH >= 9` three-panel branch) — add a taller breakpoint rather than squeezing. |
-| 6 | Keys | tab-cycling, ↑/↓, and the post-load selection clamp are automatic via `panelCount`/`panelLen`. Panel-specific actions: guard with `m.focus == panelX`. Footer hint: the `footerText` const in `view.go`. New global keys must also get a row in `helpContent()` (`help.go`) — `TestHelpFooterCoverage` fails otherwise. |
+| 6 | Keys | tab-cycling, ↑/↓, and the post-load selection clamp are automatic via `panelCount`/`panelLen`. Panel-specific actions: guard with `m.focus == panelX`. Footer hint: add a `footerBinding` to `contextBindings`/`globalBindings` in `footer.go`, gated by a shared predicate from `avail.go` (the same predicate must gate the `Update` arm). New global keys must also get a row in `helpContent()` (`help.go`) — `TestHelpFooterCoverage` fails otherwise. |
 
 ## Popup checklist
 
@@ -82,4 +82,4 @@ mark mechanism, popup, and dispatch are already generic.
 | Popup keys leaking to global handlers | Swallow everything; test it. |
 | New panel squeezed into an existing `bodyH` branch | Add a taller breakpoint; 3 rows minimum per bordered panel. |
 | String `truncate` by `len()` | Width must be display-aware (`lipgloss.Width`) — wide runes/ANSI. |
-| Forgetting the footer hint | The `footerText` const in `view.go`. New global keys must also get a row in `helpContent()` (`help.go`) — `TestHelpFooterCoverage` fails otherwise. |
+| Forgetting the footer hint | The binding registry in `footer.go` (predicates in `avail.go`). New global keys must also get a row in `helpContent()` (`help.go`) — `TestHelpFooterCoverage` fails otherwise. |
