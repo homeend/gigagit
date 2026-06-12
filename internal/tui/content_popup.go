@@ -131,13 +131,30 @@ func (m Model) updateContentPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// contentPopupWidth is the viewer's box width: wider than the standard
+// 56-column form popup (popupInnerWidth) because it shows a two-column
+// reference table — most of the terminal, capped at 100 columns.
+func contentPopupWidth(w int) int {
+	inner := 100
+	if max := w - 8; inner > max {
+		inner = max
+	}
+	if inner < 20 {
+		inner = 20
+	}
+	return inner
+}
+
 // renderContentPopup draws the viewer box (composited by render via
 // overlayCenter). Headings render bold, the cursor row reversed; the window
 // follows the cursor via the same windowRows helper the panels use.
 func (m Model) renderContentPopup() string {
 	p := m.contentPopup
 	w, _ := m.overlayDims()
-	inner := popupInnerWidth(w)
+	inner := contentPopupWidth(w)
+	// lipgloss wraps text at Width minus the horizontal padding; truncate to
+	// that true text width so a full-width row can never spill onto a wrap line.
+	textW := inner - modalStyle.GetHorizontalPadding()
 
 	vis := p.visible()
 	rows := make([]string, len(vis))
@@ -146,11 +163,11 @@ func (m Model) renderContentPopup() string {
 		case i == p.sel:
 			// Cursor highlight wins over heading style: the cursor must remain
 			// visible even when it rests on a heading row.
-			rows[i] = selectedRow.Render(truncate("> "+l.text, inner))
+			rows[i] = selectedRow.Render(truncate("> "+l.text, textW))
 		case l.heading:
-			rows[i] = titleStyle.Render(truncate(l.text, inner))
+			rows[i] = titleStyle.Render(truncate(l.text, textW))
 		default:
-			rows[i] = truncate("  "+l.text, inner)
+			rows[i] = truncate("  "+l.text, textW)
 		}
 	}
 	capRows := m.contentPageRows()
@@ -161,7 +178,7 @@ func (m Model) renderContentPopup() string {
 		title += "  /" + p.query
 	}
 	var b strings.Builder
-	b.WriteString(truncate(title, inner) + "\n\n")
+	b.WriteString(truncate(title, textW) + "\n\n")
 	if len(win) == 0 {
 		b.WriteString("  (no match)\n")
 	}
@@ -172,6 +189,6 @@ func (m Model) renderContentPopup() string {
 	if len(vis) > capRows {
 		hint = fmt.Sprintf("%d/%d  %s", p.sel+1, len(vis), hint)
 	}
-	b.WriteString(truncate(hint, inner))
+	b.WriteString(truncate(hint, textW))
 	return modalStyle.Width(inner).Render(b.String()) + "\n"
 }

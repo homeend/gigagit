@@ -294,3 +294,43 @@ func TestMouseIgnoredWithoutContentPopup(t *testing.T) {
 		t.Fatal("mouse must be inert when no content popup is open")
 	}
 }
+
+// TestContentPopupRowsNeverWrap pins a rendering regression: rows were
+// truncated to the box Width, but lipgloss wraps text at Width minus the
+// horizontal padding, so every full-width row spilled a "…" fragment onto a
+// continuation line. A long row must occupy exactly one rendered line.
+func TestContentPopupRowsNeverWrap(t *testing.T) {
+	m := Model{width: 80, height: 24}
+	m.contentPopup = newContentPopup("T", []contentLine{
+		{text: strings.Repeat("a", 200)},
+	})
+	out := ansi.Strip(m.render())
+	n := 0
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, "aaa") {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Fatalf("a long row must render as exactly 1 line, got %d:\n%s", n, out)
+	}
+}
+
+// TestContentPopupUsesWideBox: the key table needs more room than the
+// standard 56-column form popup; on a wide terminal an 80-char row must
+// survive untruncated.
+func TestContentPopupUsesWideBox(t *testing.T) {
+	for _, c := range []struct{ w, want int }{{160, 100}, {80, 72}, {30, 22}} {
+		if got := contentPopupWidth(c.w); got != c.want {
+			t.Errorf("contentPopupWidth(%d) = %d, want %d", c.w, got, c.want)
+		}
+	}
+	m := Model{width: 120, height: 24}
+	m.contentPopup = newContentPopup("T", []contentLine{
+		{text: strings.Repeat("b", 80)},
+	})
+	out := ansi.Strip(m.render())
+	if !strings.Contains(out, strings.Repeat("b", 80)) {
+		t.Fatalf("80-char row must fit untruncated at 120 cols:\n%s", out)
+	}
+}
