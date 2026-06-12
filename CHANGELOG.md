@@ -10,6 +10,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ### Added
 
+#### Branch management
+- Branch management: `b` (create-branch popup) / `B` (create and smart-switch)
+  / `d` (delete with confirm + unmerged force fork) on the TUI Branches panel,
+  and `gg branch create <name> [<start>]` / `gg branch delete [--force] <name>`
+  in the CLI. The embedded using-gg agent skill is now v2.
+
 #### Foundation & engine (M1)
 - Frontend-agnostic core **engine**: the `Operation` contract with a streamed
   `Event` union (`Progress`/`GitLine`/`DecisionNeeded`/`Timing`/`Done`) and a

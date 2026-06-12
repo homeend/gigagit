@@ -37,11 +37,12 @@ Run `gg` with no arguments to open the interactive UI.
 |-----|--------|
 | `p` / `P` | pull / push |
 | `s` | smart-switch to the selected branch |
+| `b` | create a branch off the selected one (popup); `B` create **and** switch to it |
 | `S` | stash |
 | `u` | undo last commit (ref-only, soft reset) |
 | `w` | create a worktree (popup); `W` create **and** switch into it |
 | `enter` | on the Worktrees panel: switch into the selected worktree |
-| `d` | on the Worktrees panel: delete the selected worktree |
+| `d` | on the Worktrees panel: delete the selected worktree; on the Branches panel: delete the selected branch |
 | `tab` | move focus between panels |
 | `shift+tab` | move focus backwards |
 | `j`/`k` or `↑`/`↓` | move selection |
@@ -66,6 +67,8 @@ gg commit -m "msg"            # add -a to stage tracked changes
 gg pull [--background] [--on-conflict rebase|merge|abort]
 gg push
 gg switch <branch>
+gg branch create <name> [<start-point>]
+gg branch delete [--force] <name>
 gg stash [-m msg]
 gg undo
 gg worktree list

@@ -83,6 +83,10 @@ func (m Model) render() string {
 		w, h := m.overlayDims()
 		return overlayCenter(bg, m.renderSettingsPopup(), w, h)
 	}
+	if m.branchPopup != nil {
+		w, h := m.overlayDims()
+		return overlayCenter(bg, m.renderBranchPopup(), w, h)
+	}
 	return bg
 }
 
@@ -118,7 +122,7 @@ func (m Model) renderInterface() string {
 	g := m.layout()
 
 	header := m.headerLine(g.w)
-	footer := truncate("[p]ull [P]ush [s]witch [S]tash [u]ndo [w]orktree [d]elete [o]rder [/]filter [R]epo [,] settings  •  [tab] focus  [r] reload  [q] quit", g.w)
+	footer := truncate("[p]ull [P]ush [s]witch [b]ranch [S]tash [u]ndo [w]orktree [d]elete [o]rder [/]filter [R]epo [,] settings  •  [tab] focus  [r] reload  [q] quit", g.w)
 	statusLine := m.statusMsg
 	if m.running {
 		statusLine = "⏳ " + statusLine

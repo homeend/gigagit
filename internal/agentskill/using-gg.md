@@ -16,6 +16,12 @@ guards against removing the worktree you are standing in.
 - `gg push` — push the current branch (sets upstream when missing).
 - `gg switch <branch>` — switch branches, auto-stashing and restoring local
   changes; on a restore conflict the stash is preserved, never dropped.
+- `gg branch create <name> [<start-point>]` — create a branch (no switch);
+  start point defaults to HEAD.
+- `gg branch delete [--force] <name>` — delete a branch; refuses the
+  checked-out branch and branches checked out in a worktree. An unmerged
+  branch is a `branch-unmerged` fork (`force-delete`/`keep`): pass `--force`
+  to pre-answer it.
 - `gg stash [-m <msg>]` — stash the working tree.
 - `gg undo` — undo the last commit, keeping its changes (ref-only soft reset).
 - `gg worktree list` / `gg worktree add [<start-point>]` /
@@ -35,7 +41,8 @@ gg never hangs waiting for input mid-operation. When an operation hits a fork
 - Interactive terminals get a prompt; **non-interactive runs fail with exit 1
   and print the decision and its options to stderr** instead of blocking.
 - Pre-answer decisions with the matching flag: `--on-conflict` for pull
-  divergence; `--with-branch` / `--force` for worktree removal.
+  divergence; `--with-branch` / `--force` for worktree removal; `--force`
+  for unmerged branch deletion.
 - On a non-zero exit, read stderr: it names the decision and the valid
   options; re-run with the matching flag.
 

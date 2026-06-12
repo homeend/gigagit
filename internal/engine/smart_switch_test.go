@@ -9,7 +9,7 @@ import (
 
 func TestSmartSwitchCleanTree(t *testing.T) {
 	dir, repo := newRepo(t)
-	if err := repo.CreateBranch(context.Background(), "feature"); err != nil {
+	if err := repo.CreateBranch(context.Background(), "feature", ""); err != nil {
 		t.Fatal(err)
 	}
 	_ = dir
@@ -29,7 +29,7 @@ func TestSmartSwitchCleanTree(t *testing.T) {
 
 func TestSmartSwitchStashesDirtyTreeAndRestores(t *testing.T) {
 	dir, repo := newRepo(t)
-	if err := repo.CreateBranch(context.Background(), "feature"); err != nil {
+	if err := repo.CreateBranch(context.Background(), "feature", ""); err != nil {
 		t.Fatal(err)
 	}
 	os.WriteFile(filepath.Join(dir, "README.md"), []byte("dirty\n"), 0o644)
@@ -67,7 +67,7 @@ func TestSmartSwitchStashPopConflictPreservesStash(t *testing.T) {
 	ctx := context.Background()
 
 	// feature commits an overlapping change to README.md.
-	if err := repo.CreateBranch(ctx, "feature"); err != nil {
+	if err := repo.CreateBranch(ctx, "feature", ""); err != nil {
 		t.Fatal(err)
 	}
 	if err := repo.Switch(ctx, "feature"); err != nil {

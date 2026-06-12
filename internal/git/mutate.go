@@ -22,9 +22,10 @@ func (r *Repo) Switch(ctx context.Context, branch string) error {
 	return err
 }
 
-// CreateBranch creates a new branch at HEAD without switching to it.
-func (r *Repo) CreateBranch(ctx context.Context, name string) error {
-	argv := gitcmd.New("branch").Arg(name).ToArgv()
+// CreateBranch creates a new branch without switching to it. An empty
+// startPoint means HEAD.
+func (r *Repo) CreateBranch(ctx context.Context, name, startPoint string) error {
+	argv := gitcmd.New("branch").Arg(name).ArgIf(startPoint != "", startPoint).ToArgv()
 	_, err := r.Runner.Run(ctx, "git branch", argv)
 	return err
 }

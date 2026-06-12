@@ -56,6 +56,8 @@ func Run(workdir string, args []string, stdin io.Reader, stdout, stderr io.Write
 		return cmdPush(repo, rest, stdout, stderr)
 	case "switch":
 		return cmdSwitch(repo, rest, stdout, stderr)
+	case "branch":
+		return cmdBranch(repo, rest, stdin, stdout, stderr)
 	case "stash":
 		return cmdStash(repo, rest, stdout, stderr)
 	case "undo":
@@ -74,8 +76,8 @@ func Run(workdir string, args []string, stdin io.Reader, stdout, stderr io.Write
 
 var commands = map[string]bool{
 	"status": true, "commit": true, "pull": true, "push": true,
-	"switch": true, "stash": true, "undo": true, "worktree": true, "inspect": true,
-	"repo": true, "init": true,
+	"switch": true, "branch": true, "stash": true, "undo": true, "worktree": true,
+	"inspect": true, "repo": true, "init": true,
 }
 
 // IsCommand reports whether tok is a gg CLI subcommand (used by cmd/gg to
