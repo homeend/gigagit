@@ -94,9 +94,10 @@ func (m Model) filesPageRows() int {
 	return n
 }
 
-// updateFilesViewKey routes keys while the files view is open: the commit
-// list keeps selection movement (follow-live reload), the tree gets
-// scroll/search keys, q/ctrl+c still quit, everything else is swallowed.
+// updateFilesViewKey routes keys while the files view is open. ←/→/tab pick
+// which side owns vertical movement (filesTreeFocused); the commits side
+// keeps the follow-live reload; ctrl+↑/↓ always scrolls the tree; /-search,
+// close keys and quit are focus-independent; everything else is swallowed.
 func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	p := m.filesView
 	if msg.Type == tea.KeyCtrlC {
@@ -134,26 +135,50 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.filesView = nil
+		m.filesTreeFocused = false
 		return m, nil
 	case "l":
 		m.filesView = nil
+		m.filesTreeFocused = false
 		return m, nil
 	case "/":
 		p.typing = true
 		p.query = ""
 		p.sel = 0
+	case "left":
+		m.filesTreeFocused = true
+	case "right":
+		m.filesTreeFocused = false
+	case "tab", "shift+tab":
+		m.filesTreeFocused = !m.filesTreeFocused
 	case "up", "k":
+		if m.filesTreeFocused {
+			p.move(-1)
+			return m, nil
+		}
 		return m.moveCommitUnderFilesView(-1)
 	case "down", "j":
+		if m.filesTreeFocused {
+			p.move(1)
+			return m, nil
+		}
 		return m.moveCommitUnderFilesView(1)
-	case "ctrl+up":
+	case "ctrl+up": // always the tree, from either side
 		p.move(-1)
 	case "ctrl+down":
 		p.move(1)
 	case "pgup":
-		p.move(-m.filesPageRows())
+		if m.filesTreeFocused {
+			p.move(-m.filesPageRows())
+			return m, nil
+		}
+		return m.moveCommitUnderFilesView(-m.pageStep())
 	case "pgdown":
-		p.move(m.filesPageRows())
+		if m.filesTreeFocused {
+			p.move(m.filesPageRows())
+			return m, nil
+		}
+		return m.moveCommitUnderFilesView(m.pageStep())
 	}
 	return m, nil
 }

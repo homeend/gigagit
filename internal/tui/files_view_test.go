@@ -265,10 +265,11 @@ func TestFilesViewSwallowsActionKeys(t *testing.T) {
 			t.Fatalf("key %q must be swallowed while the view is open", key)
 		}
 	}
-	before := m.focus
+	// tab is no longer swallowed — it toggles focus (covered by
+	// TestFilesViewArrowsAndTabSwitchFocus); m.focus itself must never move.
 	m = pressType(t, m, tea.KeyTab)
-	if m.focus != before || m.filesView == nil {
-		t.Fatal("tab must be swallowed while the view is open")
+	if m.focus != panelCommits || m.filesView == nil {
+		t.Fatal("tab inside the view must not move m.focus off the commits panel")
 	}
 }
 
@@ -411,5 +412,131 @@ func TestFooterSwitchesToFilesViewMode(t *testing.T) {
 	}
 	if strings.Contains(f, "[p]ull") {
 		t.Fatalf("footer = %q, must not advertise swallowed keys", f)
+	}
+}
+
+func TestFilesViewArrowsAndTabSwitchFocus(t *testing.T) {
+	m := openFilesView(t, filesModel())
+	if m.filesTreeFocused {
+		t.Fatal("the view must open with the commit list focused")
+	}
+	u, _ := m.Update(keyMsg("left"))
+	m = u.(Model)
+	if !m.filesTreeFocused {
+		t.Fatal("left must focus the tree")
+	}
+	u, _ = m.Update(keyMsg("left")) // already leftmost: no-op
+	m = u.(Model)
+	if !m.filesTreeFocused {
+		t.Fatal("left on the tree must keep it focused")
+	}
+	u, _ = m.Update(keyMsg("right"))
+	m = u.(Model)
+	if m.filesTreeFocused {
+		t.Fatal("right must focus the commit list")
+	}
+	u, _ = m.Update(keyMsg("tab"))
+	m = u.(Model)
+	if !m.filesTreeFocused {
+		t.Fatal("tab must toggle to the tree")
+	}
+	u, _ = m.Update(keyMsg("shift+tab"))
+	m = u.(Model)
+	if m.filesTreeFocused {
+		t.Fatal("shift+tab must toggle back to the commit list")
+	}
+}
+
+func TestFilesViewMovementFollowsFocus(t *testing.T) {
+	m := openFilesView(t, filesModel())
+	// Commits focused: j moves the commit selection and fires a reload.
+	u, cmd := m.Update(keyMsg("j"))
+	m = u.(Model)
+	if m.sel[panelCommits] != 1 || cmd == nil {
+		t.Fatalf("sel = %d cmd-nil=%v, want commit move + reload", m.sel[panelCommits], cmd == nil)
+	}
+	u, _ = m.Update(cmd())
+	m = u.(Model)
+	// Tree focused: j moves the tree cursor, not the commit selection.
+	u, _ = m.Update(keyMsg("left"))
+	m = u.(Model)
+	u, cmd = m.Update(keyMsg("j"))
+	m = u.(Model)
+	if m.filesView.sel != 1 {
+		t.Fatalf("tree sel = %d after j, want 1", m.filesView.sel)
+	}
+	if m.sel[panelCommits] != 1 || cmd != nil {
+		t.Fatal("j with the tree focused must not touch commits or fire a reload")
+	}
+}
+
+func TestFilesViewPagingFollowsFocus(t *testing.T) {
+	m := openFilesView(t, filesModel())
+	// Commits focused: pgdown pages the commit selection via ONE reload.
+	u, cmd := m.Update(keyMsg("pgdown"))
+	m = u.(Model)
+	if m.sel[panelCommits] != 1 {
+		t.Fatalf("sel = %d after pgdown, want 1 (clamped page jump)", m.sel[panelCommits])
+	}
+	if cmd == nil {
+		t.Fatal("paging commits must fire a follow-live reload")
+	}
+	u, _ = m.Update(cmd())
+	m = u.(Model)
+	// Tree focused: pgdown pages the tree.
+	u, _ = m.Update(keyMsg("left"))
+	m = u.(Model)
+	before := m.sel[panelCommits]
+	u, cmd = m.Update(keyMsg("pgdown"))
+	m = u.(Model)
+	if m.filesView.sel == 0 {
+		t.Fatal("pgdown with the tree focused must move the tree cursor")
+	}
+	if m.sel[panelCommits] != before || cmd != nil {
+		t.Fatal("pgdown with the tree focused must not touch commits")
+	}
+}
+
+func TestFilesViewCtrlArrowsAlwaysScrollTree(t *testing.T) {
+	m := openFilesView(t, filesModel())
+	u, _ := m.Update(keyMsg("ctrl+down")) // commits focused
+	m = u.(Model)
+	if m.filesView.sel != 1 {
+		t.Fatalf("tree sel = %d, ctrl+down must scroll the tree from the commits side", m.filesView.sel)
+	}
+	u, _ = m.Update(keyMsg("left")) // tree focused
+	m = u.(Model)
+	u, _ = m.Update(keyMsg("ctrl+down"))
+	m = u.(Model)
+	if m.filesView.sel != 2 {
+		t.Fatalf("tree sel = %d, ctrl+down must scroll the tree from the tree side too", m.filesView.sel)
+	}
+}
+
+func TestFilesViewCloseResetsTreeFocus(t *testing.T) {
+	for _, close := range []string{"l", "esc"} {
+		m := openFilesView(t, filesModel())
+		u, _ := m.Update(keyMsg("left"))
+		m = u.(Model)
+		u, _ = m.Update(keyMsg(close))
+		m = u.(Model)
+		if m.filesView != nil {
+			t.Fatalf("%s must close the view", close)
+		}
+		m = openFilesView(t, m)
+		if m.filesTreeFocused {
+			t.Fatalf("reopening after %s-close must start commits-focused", close)
+		}
+	}
+}
+
+func TestFilesViewNarrowResizeResetsTreeFocus(t *testing.T) {
+	m := openFilesView(t, filesModel())
+	u, _ := m.Update(keyMsg("left"))
+	m = u.(Model)
+	u, _ = m.Update(tea.WindowSizeMsg{Width: 30, Height: 24})
+	m = u.(Model)
+	if m.filesView != nil || m.filesTreeFocused {
+		t.Fatal("the narrow auto-close must clear the view AND the tree focus")
 	}
 }

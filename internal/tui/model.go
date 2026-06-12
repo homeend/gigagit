@@ -44,9 +44,10 @@ type Model struct {
 	mark      *markState   // the m-key mark; nil = none (see mark.go)
 	pairPopup *pairOpPopup // two-row operation picker; nil = closed
 
-	filesView  *contentPopup // commit files tree replacing the left column; nil = closed
-	filesTitle string        // "Files <short-hash> <subject>", updated with the content
-	filesHash  string        // commit the view wants; gates stale async results
+	filesView        *contentPopup // commit files tree replacing the left column; nil = closed
+	filesTitle       string        // "Files <short-hash> <subject>", updated with the content
+	filesHash        string        // commit the view wants; gates stale async results
+	filesTreeFocused bool          // true = the tree side owns vertical movement (←/→/tab)
 
 	running   bool
 	statusMsg string
@@ -97,6 +98,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// The narrow layout has no left column; without this the view
 			// would keep capturing keys while invisible.
 			m.filesView = nil
+			m.filesTreeFocused = false
 			m.statusMsg = "files view closed: terminal too narrow"
 		}
 	case commitFilesMsg:
@@ -345,6 +347,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.filesView = &contentPopup{lines: []contentLine{{text: "(loading…)"}}}
 				m.filesTitle = "Files " + shortHash(c.Hash) + " " + c.Subject
 				m.filesHash = c.Hash
+				m.filesTreeFocused = false // always open on the commit list
 				return m, m.loadCommitFilesCmd(c)
 			}
 		case "m":
