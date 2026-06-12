@@ -2,10 +2,12 @@ package tui
 
 import (
 	"context"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/gigagit/gg/internal/engine"
+	"github.com/gigagit/gg/internal/observ"
 )
 
 // opEventMsg carries one engine event (progress/done/gitline) to the UI.
@@ -55,11 +57,18 @@ func (m Model) startOp(op engine.Operation) (Model, tea.Cmd) {
 	events := make(chan engine.Event, 32)
 	repo := m.repo
 	go func() {
+		opStart := time.Now()
 		res, err := op.Run(context.Background(), engine.OpDeps{
 			Repo:    repo,
 			Events:  events,
 			Decider: uiDecider{msgs: msgs},
 		})
+		span := observ.Span{Name: "op " + engine.OpName(op), Start: opStart, Duration: time.Since(opStart)}
+		if err != nil {
+			span.ExitCode = 1
+			span.Err = err.Error()
+		}
+		observ.EmitSpan(span)
 		close(events)
 		msgs <- opFinishedMsg{res: res, err: err}
 	}()
