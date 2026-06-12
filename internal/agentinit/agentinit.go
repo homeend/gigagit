@@ -39,7 +39,8 @@ func Builtins() []Agent {
 	return []Agent{
 		{ID: "claude-project", Label: "Claude Code (project)", Detect: ".claude", Target: ".claude/skills/using-gg/SKILL.md", Mode: ModeSkillFile},
 		{ID: "claude-global", Label: "Claude Code (global)", Detect: "~/.claude", Target: "~/.claude/skills/using-gg/SKILL.md", Mode: ModeSkillFile},
-		{ID: "junie", Label: "Junie (JetBrains)", Detect: ".junie", Target: ".junie/skills/using-gg/SKILL.md", Mode: ModeSkillFile},
+		{ID: "junie", Label: "Junie (project)", Detect: ".junie", Target: ".junie/skills/using-gg/SKILL.md", Mode: ModeSkillFile},
+		{ID: "junie-global", Label: "Junie (global)", Detect: "~/.junie", Target: "~/.junie/skills/using-gg/SKILL.md", Mode: ModeSkillFile},
 		{ID: "codex", Label: "Codex (global)", Detect: "~/.codex", Target: "~/.codex/AGENTS.md", Mode: ModeBlock},
 		{ID: "opencode", Label: "OpenCode (global)", Detect: "~/.config/opencode", Target: "~/.config/opencode/AGENTS.md", Mode: ModeBlock},
 		{ID: "agents-md", Label: "AGENTS.md (generic)", Detect: "AGENTS.md", Target: "AGENTS.md", Mode: ModeBlock},
