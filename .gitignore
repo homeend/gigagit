@@ -10,3 +10,6 @@
 /*.png
 
 .idea/
+
+# Claude session worktrees (machine-local)
+.claude/worktrees/
