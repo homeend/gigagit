@@ -171,5 +171,5 @@ func (m Model) renderContentPopup() string {
 		hint = fmt.Sprintf("%d/%d  %s", p.sel+1, len(vis), hint)
 	}
 	b.WriteString(truncate(hint, inner))
-	return modalStyle.Width(inner).Render(b.String())
+	return modalStyle.Width(inner).Render(b.String()) + "\n"
 }
