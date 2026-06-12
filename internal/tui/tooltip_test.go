@@ -137,3 +137,12 @@ func TestTooltipY(t *testing.T) {
 		t.Errorf("tooltipY(1,3) = %d, want 2 (flips below)", y)
 	}
 }
+
+func TestTooltipSuppressedByContentPopup(t *testing.T) {
+	m := tooltipModel()
+	m.contentPopup = newContentPopup("T", contentLines(2))
+	out := ansi.Strip(m.render())
+	if strings.Contains(out, longPath) {
+		t.Fatal("content popup view must not contain the tooltip")
+	}
+}
