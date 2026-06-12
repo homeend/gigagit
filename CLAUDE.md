@@ -78,6 +78,11 @@ Features follow: **brainstorm → spec → plan → subagent-driven execution �
 `docs/superpowers/plans/`, one feature branch off `main` per feature, with a
 final review before merge.
 
+**Project skills** (in `.claude/skills/`): `adding-features` — the full
+engine→TUI→CLI wiring checklist for a new operation/command;
+`adding-tui-windows` — panel vs popup vs modal taxonomy and wiring. Use them
+whenever adding a feature or TUI surface.
+
 **After each completed stage/feature, update the project docs:**
 `CHANGELOG.md` (always), `README.md` (if user-facing surface changed), and this
 `CLAUDE.md` (if the architecture/package map/conventions changed).

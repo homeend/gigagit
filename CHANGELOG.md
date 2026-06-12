@@ -46,4 +46,9 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   when git refuses (dirty tree or unmerged branch). Engine guards refuse
   removing the current or primary worktree.
 
+#### Developer tooling
+- Project skills in `.claude/skills/`: `adding-features` (engine→TUI→CLI wiring
+  checklist for new operations/commands) and `adding-tui-windows` (panel vs
+  popup vs modal taxonomy and wiring), both validated against baseline runs.
+
 [Unreleased]: https://github.com/gigagit/gg
