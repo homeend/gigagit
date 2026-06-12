@@ -44,19 +44,21 @@ type Model struct {
 	mark      *markState   // the m-key mark; nil = none (see mark.go)
 	pairPopup *pairOpPopup // two-row operation picker; nil = closed
 
-	filesView  *contentPopup // commit files tree replacing the left column; nil = closed
-	filesTitle string        // "Files <short-hash> <subject>", updated with the content
-	filesHash  string        // commit the view wants; gates stale async results
+	filesView        *contentPopup // commit files tree replacing the left column; nil = closed
+	filesTitle       string        // "Files <short-hash> <subject>", updated with the content
+	filesHash        string        // commit the view wants; gates stale async results
+	filesTreeFocused bool          // true = the tree side owns vertical movement (←/→/tab)
 
 	running   bool
 	statusMsg string
 	opMsgs    chan tea.Msg
 	modal     *decisionState
 
-	focus     panel
-	sel       map[panel]int
-	sortModes map[panel]sortMode // per-panel display order (zero value = default)
-	headTimes map[string]int64   // worktree HEAD sha -> committer time (date sort)
+	focus         panel
+	lastLeftPanel panel // ←'s return target; zero value = panelBranches
+	sel           map[panel]int
+	sortModes     map[panel]sortMode // per-panel display order (zero value = default)
+	headTimes     map[string]int64   // worktree HEAD sha -> committer time (date sort)
 
 	filterPanel  panel  // panel the filter is bound to (meaningful only when filterQuery != "" or filterTyping)
 	filterQuery  string // case-insensitive substring; "" = no filter
@@ -96,6 +98,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// The narrow layout has no left column; without this the view
 			// would keep capturing keys while invisible.
 			m.filesView = nil
+			m.filesTreeFocused = false
 			m.statusMsg = "files view closed: terminal too narrow"
 		}
 	case commitFilesMsg:
@@ -276,9 +279,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m.reRoot(wt.Path)
 			}
 		case "tab":
+			m = m.rememberLeftFocus()
 			m.focus = (m.focus + 1) % panelCount
 		case "shift+tab":
+			m = m.rememberLeftFocus()
 			m.focus = (m.focus - 1 + panelCount) % panelCount
+		case "right":
+			if m.focus != panelCommits {
+				m = m.rememberLeftFocus()
+				m.focus = panelCommits
+			}
+		case "left":
+			// No-op when already in the left column, and when the narrow
+			// layout has no left column to focus.
+			if m.focus == panelCommits && (m.width <= 0 || m.width >= 40) {
+				m.focus = m.lastLeftPanel
+			}
 		case "pgdown":
 			if n := m.panelLen(m.focus); n > 0 {
 				m.sel[m.focus] += m.pageStep()
@@ -331,6 +347,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.filesView = &contentPopup{lines: []contentLine{{text: "(loading…)"}}}
 				m.filesTitle = "Files " + shortHash(c.Hash) + " " + c.Subject
 				m.filesHash = c.Hash
+				m.filesTreeFocused = false // always open on the commit list
 				return m, m.loadCommitFilesCmd(c)
 			}
 		case "m":
@@ -421,6 +438,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// rememberLeftFocus records the focused panel as ←'s return target when it
+// is one of the left-column panels. Called before any focus reassignment.
+func (m Model) rememberLeftFocus() Model {
+	if m.focus != panelCommits {
+		m.lastLeftPanel = m.focus
+	}
+	return m
+}
+
 // panelLen returns the number of rows in a panel, for selection clamping.
 func (m Model) panelLen(p panel) int {
 	_, idx := m.panelView(p)
@@ -441,6 +467,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.mark = nil      // a mark from the old repo must not re-attach by name in the new one
 	m.filesView = nil // the new repo has a different commit list
 	m.filesHash = ""
+	m.filesTreeFocused = false
 	return m, m.loadCmd()
 }
 

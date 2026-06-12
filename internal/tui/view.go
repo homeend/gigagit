@@ -252,7 +252,7 @@ func (m Model) renderPanel(p panel, label string, rows []string, boxW, boxH int)
 			markedInWin = md - start
 		}
 		for i, row := range win {
-			focused := i == selInWin && p == m.focus
+			focused := i == selInWin && m.panelFocused(p)
 			prefix := "  "
 			if i == markedInWin {
 				prefix = "◆ "
@@ -271,10 +271,18 @@ func (m Model) renderPanel(p panel, label string, rows []string, boxW, boxH int)
 	}
 
 	style := bluredPanel
-	if p == m.focus {
+	if m.panelFocused(p) {
 		style = focusedPanel
 	}
 	return style.Render(strings.Join(lines, "\n"))
+}
+
+// panelFocused reports whether p should render as the focused panel. While
+// the files view's tree side is focused, the Commits panel renders blurred
+// even though m.focus still points at it (focus stays there so selection
+// and follow-live machinery keep working).
+func (m Model) panelFocused(p panel) bool {
+	return p == m.focus && !(m.filesView != nil && m.filesTreeFocused)
 }
 
 // windowRows returns at most n rows scrolled so sel stays visible, sel's
