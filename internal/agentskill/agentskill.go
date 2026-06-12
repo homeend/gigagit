@@ -46,6 +46,10 @@ func Block() string {
 
 var versionRe = regexp.MustCompile(`gg:using-gg:v(\d+)`)
 
+// HasMarker reports whether content carries any gg using-gg marker (any
+// version, any rendered form).
+func HasMarker(content []byte) bool { return versionRe.Match(content) }
+
 // InstalledVersion extracts the version stamped into previously installed
 // content (any rendered form). 0 means no gg marker present.
 func InstalledVersion(content []byte) int {

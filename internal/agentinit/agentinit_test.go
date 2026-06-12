@@ -189,6 +189,27 @@ func TestInstallIdempotent(t *testing.T) {
 	}
 }
 
+func TestInstallPlainFileForCursor(t *testing.T) {
+	proj, home := fixture(t, []string{".cursor"}, nil)
+	d, ok := byID(Detect(proj, home), "cursor")
+	if !ok {
+		t.Fatal("cursor not detected")
+	}
+	if err := Install(d); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(proj, ".cursor", "rules", "using-gg.mdc"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.HasPrefix(string(data), "---\n") {
+		t.Error("cursor rules must not carry Claude frontmatter")
+	}
+	if agentskill.InstalledVersion(data) != agentskill.Version {
+		t.Error("cursor rules missing version marker")
+	}
+}
+
 func TestCheckedDefaults(t *testing.T) {
 	if StatusNew.Checked() {
 		t.Error("new targets must default unchecked")

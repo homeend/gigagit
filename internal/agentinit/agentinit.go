@@ -118,7 +118,7 @@ func status(target string) Status {
 	if err != nil {
 		return StatusNew
 	}
-	if !markerRe.Match(data) {
+	if !agentskill.HasMarker(data) {
 		return StatusNew // file exists but has no gg marker at all
 	}
 	v := agentskill.InstalledVersion(data)
@@ -130,9 +130,6 @@ func status(target string) Status {
 
 // blockRe matches a previously installed managed block, any version.
 var blockRe = regexp.MustCompile(`(?s)<!-- gg:using-gg:v\d+:begin -->.*?<!-- gg:using-gg:end -->`)
-
-// markerRe detects any gg marker (single-line or block begin), any version.
-var markerRe = regexp.MustCompile(`gg:using-gg:v\d+`)
 
 // Install writes the embedded skill into d.Target according to the agent's
 // mode, creating parent directories as needed. Shared files keep all
@@ -156,7 +153,7 @@ func Install(d Detection) error {
 			return err
 		}
 		if blockRe.Match(existing) {
-			return os.WriteFile(d.Target, blockRe.ReplaceAll(existing, []byte(block)), 0o644)
+			return os.WriteFile(d.Target, blockRe.ReplaceAllLiteral(existing, []byte(block)), 0o644)
 		}
 		sep := "\n\n"
 		if len(existing) == 0 || strings.HasSuffix(string(existing), "\n\n") {
