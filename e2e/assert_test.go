@@ -90,3 +90,71 @@ func TestCheckStash(t *testing.T) {
 	expectFail(t, sb, &Expect{Stashes: &zero}, "stash")
 	expectFail(t, sb, &Expect{Stash: []StashExpect{{Contains: map[string]string{"a.txt": "other\n"}}}}, "a.txt")
 }
+
+func TestCheckLogAndSync(t *testing.T) {
+	sb := buildSandbox(t, originScenario("path",
+		[]Step{{Write: "a.txt", Content: "v1\n"}, {Commit: "initial"}},
+		[]Step{{Write: "l.txt", Content: "l\n"}, {Commit: "local change"}},
+		[]Step{{Write: "u.txt", Content: "u\n"}, {Commit: "upstream change"}},
+	))
+	rawGit(t, sb.LocalDir, "fetch", "origin") // make @{upstream} comparison current
+	one := 1
+	expectOK(t, sb, &Expect{
+		Ahead:  &one,
+		Behind: &one,
+		Log:    []LogExpect{{Subjects: []any{"local change", "initial"}}},
+	})
+	zero := 0
+	expectFail(t, sb, &Expect{Ahead: &zero}, "ahead")
+	expectFail(t, sb, &Expect{Log: []LogExpect{{Subjects: []any{"initial"}}}}, "log")
+	expectFail(t, sb, &Expect{Log: []LogExpect{{Subjects: []any{"wrong", "initial"}}}}, "log")
+}
+
+func TestCheckLogPatternAndOtherBranch(t *testing.T) {
+	sb := buildSandbox(t, localScenario([]Step{
+		{Write: "a.txt", Content: "1\n"},
+		{Commit: "Merge branch 'x' of somewhere"},
+		{Branch: "feature/x"},
+	}))
+	expectOK(t, sb, &Expect{Log: []LogExpect{{
+		Branch:   "feature/x",
+		Subjects: []any{map[string]any{"matches": "^Merge"}},
+	}}})
+}
+
+func TestCheckInProgress(t *testing.T) {
+	sb := dirtySandbox(t) // no operation in progress
+	expectOK(t, sb, &Expect{InProgress: "none"})
+	expectFail(t, sb, &Expect{InProgress: "rebase"}, "in_progress")
+}
+
+func TestCheckWorktreesAndScoped(t *testing.T) {
+	sb := buildSandbox(t, localScenario([]Step{
+		{Write: "a.txt", Content: "v1\n"},
+		{Commit: "initial"},
+		{Branch: "feature/x"},
+		{Worktree: "wt-x", Branch: "feature/x"},
+	}))
+	expectOK(t, sb, &Expect{
+		Worktrees: []string{"wt-x"},
+		Worktree: map[string]*ScopedExpect{
+			"wt-x": {Files: map[string]any{"a.txt": "v1\n"}},
+		},
+	})
+	expectFail(t, sb, &Expect{Worktrees: []string{}}, "worktrees")
+	expectFail(t, sb, &Expect{Worktree: map[string]*ScopedExpect{
+		"wt-x": {Files: map[string]any{"a.txt": "other\n"}},
+	}}, "wt-x")
+}
+
+func TestCheckOriginSide(t *testing.T) {
+	sb := buildSandbox(t, originScenario("path",
+		[]Step{{Write: "a.txt", Content: "v1\n"}, {Commit: "initial"}, {Branch: "release"}},
+		nil, nil,
+	))
+	expectOK(t, sb, &Expect{Origin: &OriginExpect{
+		Branches: []string{"main", "release"},
+		Log:      []LogExpect{{Branch: "main", Subjects: []any{"initial"}}},
+	}})
+	expectFail(t, sb, &Expect{Origin: &OriginExpect{Branches: []string{"main"}}}, "origin branches")
+}

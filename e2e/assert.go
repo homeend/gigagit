@@ -81,6 +81,92 @@ func checkExpect(sb *Sandbox, exp *Expect) (fails []string) {
 		}
 	}
 
+	if exp.Ahead != nil || exp.Behind != nil {
+		out, err := gitOut(dir, "rev-list", "--left-right", "--count", "@{upstream}...HEAD")
+		if err != nil {
+			addf("ahead/behind: %v (no upstream?)", err)
+		} else {
+			var behind, ahead int
+			if _, err := fmt.Sscanf(out, "%d\t%d", &behind, &ahead); err != nil {
+				// some git versions separate with spaces
+				fmt.Sscanf(out, "%d %d", &behind, &ahead)
+			}
+			if exp.Ahead != nil && ahead != *exp.Ahead {
+				addf("ahead: want %d, got %d", *exp.Ahead, ahead)
+			}
+			if exp.Behind != nil && behind != *exp.Behind {
+				addf("behind: want %d, got %d", *exp.Behind, behind)
+			}
+		}
+	}
+
+	if exp.InProgress != "" {
+		got := "none"
+		probes := []struct{ state, probe string }{
+			{"rebase", "rebase-merge"},
+			{"rebase", "rebase-apply"},
+			{"merge", "MERGE_HEAD"},
+		}
+		for _, pr := range probes {
+			p, err := gitOut(dir, "rev-parse", "--git-path", pr.probe)
+			if err != nil {
+				continue
+			}
+			if !filepath.IsAbs(p) {
+				p = filepath.Join(dir, p)
+			}
+			if _, err := os.Stat(p); err == nil {
+				got = pr.state
+			}
+		}
+		if got != exp.InProgress {
+			addf("in_progress: want %s, got %s", exp.InProgress, got)
+		}
+	}
+
+	for _, le := range exp.Log {
+		checkLog(&fails, "", dir, le)
+	}
+
+	if exp.Worktrees != nil {
+		got, err := listWorktrees(dir, sb.Root)
+		if err != nil {
+			addf("worktrees: %v", err)
+		} else if !sameSet(got, exp.Worktrees) {
+			addf("worktrees: want %v, got %v", sorted(exp.Worktrees), sorted(got))
+		}
+	}
+	for _, rel := range sortedKeys(exp.Worktree) {
+		se := exp.Worktree[rel]
+		if se == nil {
+			continue
+		}
+		wdir := filepath.Join(sb.Root, rel)
+		checkFiles(&fails, rel, wdir, se.FilesN, nil)
+		if se.Status != nil {
+			st, err := readStatus(wdir)
+			if err != nil {
+				addf("worktree %s: status: %v", rel, err)
+			} else {
+				checkStatus(&fails, rel, se.Status, st)
+			}
+		}
+	}
+
+	if exp.Origin != nil {
+		if exp.Origin.Branches != nil {
+			got, err := gitLines(sb.OriginDir, "for-each-ref", "refs/heads", "--format=%(refname:short)")
+			if err != nil {
+				addf("origin branches: %v", err)
+			} else if !sameSet(got, exp.Origin.Branches) {
+				addf("origin branches: want %v, got %v", sorted(exp.Origin.Branches), sorted(got))
+			}
+		}
+		for _, le := range exp.Origin.Log {
+			checkLog(&fails, "origin", sb.OriginDir, le)
+		}
+	}
+
 	return fails
 }
 
@@ -262,4 +348,58 @@ func sortedKeys[V any](m map[string]V) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+// checkLog verifies a branch's complete subject list, newest first.
+func checkLog(fails *[]string, scope, dir string, le LogExpect) {
+	ref := le.Branch
+	if ref == "" {
+		ref = "HEAD"
+	}
+	label := "log " + ref
+	if scope != "" {
+		label = scope + " " + label
+	}
+	got, err := gitLines(dir, "log", "--format=%s", ref)
+	if err != nil {
+		*fails = append(*fails, fmt.Sprintf("%s: %v", label, err))
+		return
+	}
+	if len(got) != len(le.SubjectsN) {
+		*fails = append(*fails, fmt.Sprintf("%s: want %d commits %v, got %d: %v",
+			label, len(le.SubjectsN), le.SubjectsN, len(got), got))
+		return
+	}
+	for i, m := range le.SubjectsN {
+		if !m.match(got[i]) {
+			*fails = append(*fails, fmt.Sprintf("%s[%d]: want %s, got %q", label, i, m, got[i]))
+		}
+	}
+}
+
+// listWorktrees returns linked worktrees as sandbox-root-relative paths
+// (the main worktree is excluded).
+func listWorktrees(dir, root string) ([]string, error) {
+	lines, err := gitLines(dir, "worktree", "list", "--porcelain")
+	if err != nil {
+		return nil, err
+	}
+	var paths []string
+	for _, line := range lines {
+		if p, ok := strings.CutPrefix(line, "worktree "); ok {
+			paths = append(paths, p)
+		}
+	}
+	var out []string
+	for i, p := range paths {
+		if i == 0 {
+			continue // first entry = the main worktree
+		}
+		rel, err := filepath.Rel(root, p)
+		if err != nil {
+			rel = p
+		}
+		out = append(out, filepath.ToSlash(rel))
+	}
+	return out, nil
 }

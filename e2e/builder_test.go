@@ -156,3 +156,27 @@ func TestBuildOriginPathTransport(t *testing.T) {
 		t.Fatalf("OriginURL = %q, want a filesystem path", sb.OriginURL)
 	}
 }
+
+func TestBuildOriginIsDeterministic(t *testing.T) {
+	sc := originScenario("path",
+		[]Step{{Write: "a.txt", Content: "v1\n"}, {Commit: "initial"}},
+		[]Step{{Write: "l.txt", Content: "l\n"}, {Commit: "local"}},
+		nil,
+	)
+	a := buildSandbox(t, sc)
+	b := buildSandbox(t, sc)
+	for _, tc := range []struct {
+		name string
+		dirA string
+		dirB string
+	}{
+		{"origin", a.OriginDir, b.OriginDir},
+		{"local", a.LocalDir, b.LocalDir},
+	} {
+		ha := strings.TrimSpace(rawGit(t, tc.dirA, "log", "--format=%H"))
+		hb := strings.TrimSpace(rawGit(t, tc.dirB, "log", "--format=%H"))
+		if ha != hb {
+			t.Errorf("%s builds differ:\n%s\nvs\n%s", tc.name, ha, hb)
+		}
+	}
+}

@@ -190,6 +190,8 @@ func buildOrigin(t *testing.T, sb *Sandbox, sc *Scenario) {
 	if o.Transport == "path" {
 		sb.OriginURL = sb.OriginDir
 	} else {
+		// startGitServer registers a t.Cleanup, so the server lives until subtest
+		// cleanup — outliving the scenario's run phase as required.
 		srv := startGitServer(t, sb.Root)
 		sb.OriginURL = srv.URL + "/origin"
 	}
