@@ -194,9 +194,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if !m.running && !m.loading {
 				return m.startOp(engine.UndoLastCommit{})
 			}
-		case "w":
+		case "w": // worktree for the selected EXISTING branch
 			if !m.running && !m.loading {
-				if mm, ok := m.openWorktreePopup(); ok {
+				if mm, ok := m.openWorktreePopup(true); ok {
+					return mm, nil
+				}
+			}
+		case "W": // worktree on a NEW branch from the selected one
+			if !m.running && !m.loading {
+				if mm, ok := m.openWorktreePopup(false); ok {
 					return mm, nil
 				}
 			}

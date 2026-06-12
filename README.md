@@ -40,7 +40,7 @@ Run `gg` with no arguments to open the interactive UI.
 | `b` | create a branch off the selected one (popup); `B` create **and** switch to it |
 | `S` | stash |
 | `u` | undo last commit (ref-only, soft reset) |
-| `w` | create a worktree (popup); `W` create **and** switch into it |
+| `w` | create a worktree **for the selected branch** (popup); `W` worktree on a **new** templated branch. Inside the popup: `w`/`enter` create, `W` create **and** switch |
 | `enter` | on the Worktrees panel: switch into the selected worktree |
 | `d` | on the Worktrees panel: delete the selected worktree; on the Branches panel: delete the selected branch |
 | `tab` | move focus between panels |
@@ -73,6 +73,7 @@ gg stash [-m msg]
 gg undo
 gg worktree list
 gg worktree add [<start-point>]
+gg worktree add --branch <name>
 gg worktree remove [--with-branch] [--force] <path>
 gg repo list
 gg repo switch <query>

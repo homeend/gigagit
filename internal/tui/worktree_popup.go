@@ -26,6 +26,7 @@ const (
 // and the created branch matches what was shown.
 type worktreePopup struct {
 	startPoint string // selected branch = <parent-branch>
+	existing   bool   // checkout the startPoint branch itself; no new branch
 	branchTmpl string
 	pathTmpl   string
 	repoName   string
@@ -61,21 +62,32 @@ func (p *worktreePopup) tctx() template.Ctx {
 	}
 }
 
+// fixedBranch returns the verbatim branch when one is fixed: the selection in
+// existing mode, the live buffer while editing, or a confirmed hand-edit.
+func (p *worktreePopup) fixedBranch() string {
+	if p.existing {
+		return p.startPoint
+	}
+	if p.state == stEdit {
+		return p.editBuf
+	}
+	return p.branchOverride
+}
+
 // recompute refreshes the preview from the current fields/state. A confirmed
 // hand-edit (branchOverride) wins over the template; while actively editing, the
 // live editBuf is shown.
 func (p *worktreePopup) recompute() {
-	fixed := p.branchOverride
-	if p.state == stEdit {
-		fixed = p.editBuf
-	}
+	fixed := p.fixedBranch()
 	tm := worktree.Templates{Branch: p.branchTmpl, Path: p.pathTmpl}
 	p.previewBranch, p.previewPath, p.previewErr = worktree.Resolve(tm, fixed, p.inputs, p.tctx())
 }
 
-// openWorktreePopup builds a popup for the currently-selected branch. Returns
-// (model, false) if there is no branch to base it on.
-func (m Model) openWorktreePopup() (Model, bool) {
+// openWorktreePopup builds a popup for the currently-selected branch. In
+// existing mode the popup checks out that branch itself (no new branch): the
+// branch template is bypassed and only the path template's fields/counters
+// apply. Returns (model, false) if there is no branch to act on.
+func (m Model) openWorktreePopup(existing bool) (Model, bool) {
 	if len(m.branches) == 0 {
 		return m, false
 	}
@@ -83,6 +95,9 @@ func (m Model) openWorktreePopup() (Model, bool) {
 	pt := m.cfg.Worktree.PathTemplate
 
 	tm := worktree.Templates{Branch: bt, Path: pt}
+	if existing {
+		tm = worktree.Templates{Path: pt} // branch template bypassed entirely
+	}
 	labels := tm.Labels()
 	seqNames := tm.SeqNames()
 
@@ -92,6 +107,7 @@ func (m Model) openWorktreePopup() (Model, bool) {
 	}
 	p := &worktreePopup{
 		startPoint: m.branches[bi].Name,
+		existing:   existing,
 		branchTmpl: bt,
 		pathTmpl:   pt,
 		repoName:   worktree.RepoName(m.currentWorktree),
@@ -176,6 +192,9 @@ func (m Model) updatePopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "esc":
 			m.popup = nil
 		case "e":
+			if p.existing {
+				return m, nil // the branch IS the point of existing mode
+			}
 			p.editBuf = p.previewBranch
 			p.state = stEdit
 			p.recompute()
@@ -205,7 +224,10 @@ func (m Model) startCreateFromPopup(switchAfter bool) (tea.Model, tea.Cmd) {
 
 // createOp builds the engine operation from the (already-resolved) preview, so
 // the worktree that gets created is exactly what the preview showed.
-func (p *worktreePopup) createOp() engine.CreateWorktree {
+func (p *worktreePopup) createOp() engine.Operation {
+	if p.existing {
+		return engine.CreateWorktreeForBranch{Branch: p.previewBranch, Path: p.previewPath}
+	}
 	return engine.CreateWorktree{
 		StartPoint: p.startPoint,
 		Branch:     p.previewBranch,
@@ -214,10 +236,10 @@ func (p *worktreePopup) createOp() engine.CreateWorktree {
 }
 
 // consumedSeqNames returns the <seq> counters the created names actually used.
-// A confirmed hand-edit (branchOverride) bypasses the branch template, so its
-// branch <seq> tokens are no longer consumed — only the path template's remain.
+// In existing mode and after a confirmed hand-edit the branch template is
+// bypassed, so only the path template's <seq> tokens are consumed.
 func (p *worktreePopup) consumedSeqNames() []string {
-	if p.branchOverride != "" {
+	if p.existing || p.branchOverride != "" {
 		return worktree.Templates{Path: p.pathTmpl}.SeqNames()
 	}
 	return p.seqNames
@@ -228,7 +250,11 @@ func (p *worktreePopup) consumedSeqNames() []string {
 func (m Model) renderWorktreePopup() string {
 	p := m.popup
 	var b strings.Builder
-	b.WriteString("Create worktree from " + p.startPoint + "\n\n")
+	title := "Create worktree from " + p.startPoint
+	if p.existing {
+		title = "Create worktree for " + p.startPoint
+	}
+	b.WriteString(title + "\n\n")
 
 	for i, lbl := range p.labels {
 		cursor := "  "
@@ -258,7 +284,11 @@ func (m Model) renderWorktreePopup() string {
 	case stEdit:
 		b.WriteString("[type] edit name  [enter] done  [esc] discard")
 	default:
-		b.WriteString("[w] create  [W] create & switch  [e] edit name  [esc] cancel")
+		if p.existing {
+			b.WriteString("[w] create  [W] create & switch  [esc] cancel")
+		} else {
+			b.WriteString("[w] create  [W] create & switch  [e] edit name  [esc] cancel")
+		}
 	}
 
 	// Fixed, comfortably-wide content width so a long branch/path wraps (full name

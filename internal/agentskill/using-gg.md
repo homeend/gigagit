@@ -25,9 +25,11 @@ guards against removing the worktree you are standing in.
 - `gg stash [-m <msg>]` — stash the working tree.
 - `gg undo` — undo the last commit, keeping its changes (ref-only soft reset).
 - `gg worktree list` / `gg worktree add [<start-point>]` /
+  `gg worktree add --branch <name>` /
   `gg worktree remove [--with-branch] [--force] <path>` — linked worktrees;
   `add` resolves branch/path templates from `.gg.toml` and may prompt on stdin
-  for `<user:...>` fields.
+  for `<user:...>` fields; `add --branch` checks out the EXISTING branch in
+  the new worktree (no new branch; refuses a branch already checked out).
 - `gg repo list` / `gg repo switch <query>` — the known-repository registry
   (MRU); `switch` prints the path of the unique match.
 - `gg inspect` — one-shot repo summary (scriptable health check).

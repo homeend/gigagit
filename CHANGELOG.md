@@ -10,6 +10,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ### Added
 
+#### Worktree for an existing branch
+- `w` on the Branches panel now creates a worktree that checks out the
+  **selected existing branch** (no new branch); `W` opens the previous
+  template-driven popup (new branch + worktree). CLI:
+  `gg worktree add --branch <name>`. Embedded using-gg agent skill v3.
+
 #### Branch management
 - Branch management: `b` (create-branch popup) / `B` (create and smart-switch)
   / `d` (delete with confirm + unmerged force fork) on the TUI Branches panel,
