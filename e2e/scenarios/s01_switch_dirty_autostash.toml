@@ -1,0 +1,23 @@
+name = "switch: dirty tracked file autostashes and lands on target branch"
+
+[input]
+steps = [
+  { write = "README.md", content = "hello\n" },
+  { commit = "initial" },
+  { branch = "feature/login" },
+  { write = "README.md", content = "hello\nwip edit\n" },
+]
+
+[[run]]
+cmd  = ["switch", "feature/login"]
+exit = 0
+
+[expect]
+branch  = "feature/login"
+stashes = 0                          # autostash was popped — nothing left behind
+
+[expect.files]
+"README.md" = "hello\nwip edit\n"    # the edit traveled to the new branch
+
+[expect.status]
+unstaged = ["README.md"]

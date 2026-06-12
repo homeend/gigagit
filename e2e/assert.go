@@ -172,6 +172,8 @@ func readStatus(dir string) (*repoStatus, error) {
 		}
 		xy, path := line[:2], line[3:]
 		if i := strings.Index(path, " -> "); i >= 0 { // rename: use the new path
+			// Note: if old/new names contain spaces git may C-quote the field;
+			// scenario filenames must avoid spaces to stay unambiguous here.
 			path = path[i+4:]
 		}
 		switch {
@@ -192,7 +194,9 @@ func readStatus(dir string) (*repoStatus, error) {
 }
 
 // stashFile reads path from stash entry n: the stash commit's tree holds
-// tracked changes; untracked files live in the third parent (^3).
+// tracked changes; untracked files live in the third parent (^3). A missing
+// ^3 parent is a benign error path (the stash had no untracked files) and
+// returns ok=false.
 func stashFile(dir string, n int, path string) (string, bool) {
 	ref := fmt.Sprintf("stash@{%d}", n)
 	if out, err := gitRaw(dir, "show", ref+":"+path); err == nil {

@@ -68,6 +68,7 @@ func TestCheckFiles(t *testing.T) {
 	}})
 	expectFail(t, sb, &Expect{Files: map[string]any{"a.txt": "v1\n"}}, "a.txt")
 	expectFail(t, sb, &Expect{Files: map[string]any{"new.txt": map[string]any{"absent": true}}}, "new.txt")
+	expectFail(t, sb, &Expect{Files: map[string]any{"a.txt": map[string]any{"sha256": "deadbeef"}}}, "sha256")
 }
 
 func TestCheckStash(t *testing.T) {
