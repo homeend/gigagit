@@ -117,6 +117,7 @@ func checkExpect(sb *Sandbox, exp *Expect) (fails []string) {
 			}
 			if _, err := os.Stat(p); err == nil {
 				got = pr.state
+				break
 			}
 		}
 		if got != exp.InProgress {
@@ -359,6 +360,10 @@ func checkLog(fails *[]string, scope, dir string, le LogExpect) {
 	label := "log " + ref
 	if scope != "" {
 		label = scope + " " + label
+	}
+	if strings.HasPrefix(ref, "-") {
+		*fails = append(*fails, fmt.Sprintf("%s: invalid branch ref %q", label, ref))
+		return
 	}
 	got, err := gitLines(dir, "log", "--format=%s", ref)
 	if err != nil {

@@ -94,20 +94,23 @@ func TestCheckStash(t *testing.T) {
 func TestCheckLogAndSync(t *testing.T) {
 	sb := buildSandbox(t, originScenario("path",
 		[]Step{{Write: "a.txt", Content: "v1\n"}, {Commit: "initial"}},
-		[]Step{{Write: "l.txt", Content: "l\n"}, {Commit: "local change"}},
+		[]Step{
+			{Write: "l.txt", Content: "l\n"}, {Commit: "local change"},
+			{Write: "l2.txt", Content: "l2\n"}, {Commit: "local change 2"},
+		},
 		[]Step{{Write: "u.txt", Content: "u\n"}, {Commit: "upstream change"}},
 	))
 	rawGit(t, sb.LocalDir, "fetch", "origin") // make @{upstream} comparison current
-	one := 1
+	two, one := 2, 1
 	expectOK(t, sb, &Expect{
-		Ahead:  &one,
+		Ahead:  &two,
 		Behind: &one,
-		Log:    []LogExpect{{Subjects: []any{"local change", "initial"}}},
+		Log:    []LogExpect{{Subjects: []any{"local change 2", "local change", "initial"}}},
 	})
 	zero := 0
 	expectFail(t, sb, &Expect{Ahead: &zero}, "ahead")
 	expectFail(t, sb, &Expect{Log: []LogExpect{{Subjects: []any{"initial"}}}}, "log")
-	expectFail(t, sb, &Expect{Log: []LogExpect{{Subjects: []any{"wrong", "initial"}}}}, "log")
+	expectFail(t, sb, &Expect{Log: []LogExpect{{Subjects: []any{"wrong", "local change", "initial"}}}}, "log")
 }
 
 func TestCheckLogPatternAndOtherBranch(t *testing.T) {
