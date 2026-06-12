@@ -467,6 +467,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.mark = nil      // a mark from the old repo must not re-attach by name in the new one
 	m.filesView = nil // the new repo has a different commit list
 	m.filesHash = ""
+	m.filesTreeFocused = false
 	return m, m.loadCmd()
 }
 
