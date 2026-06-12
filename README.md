@@ -47,9 +47,10 @@ panel and selected row right now; `?` opens the full searchable reference.
 | `enter` | on the Worktrees panel: switch into the selected worktree |
 | `d` | on the Worktrees panel: delete the selected worktree; on the Branches panel: delete the selected branch |
 | `m` | mark the selected row; press `m` on a second row of the same panel to open the pair-operation picker (Branches: Merge; `esc` clears the mark before clearing the filter) |
-| `l` | on the Commits panel: show the selected commit's files as a directory tree in the left column (`j`/`k` keeps moving through commits and the tree follows; `/` searches paths; `ctrl+↑`/`ctrl+↓`, `pgup`/`pgdn`, mouse wheel scroll; `esc`/`l` close) |
+| `l` | on the Commits panel: show the selected commit's files as a directory tree in the left column (`←`/`→`/`tab` switch focus between the tree and the commit list; movement keys act on the focused side — the commits side reloads the tree; `ctrl+↑`/`ctrl+↓` always scroll the tree; `/` searches paths; `esc`/`l` close) |
 | `tab` | move focus between panels |
 | `shift+tab` | move focus backwards |
+| `←`/`→` | focus the left column / the Commits panel (inside the files view: switch between the file tree and the commit list) |
 | `j`/`k` or `↑`/`↓` | move selection |
 | `pgup`/`pgdn` | move selection by 25% of the panel viewport |
 | `o` | cycle the focused panel's sort order (name/date, asc/desc) |

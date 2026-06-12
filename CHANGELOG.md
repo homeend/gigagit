@@ -10,6 +10,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ### Added
 
+#### Arrow-key window focus
+- TUI: `←`/`→` switch focus horizontally — `→` from a left panel focuses
+  Commits, `←` returns to the last-focused left panel. Inside the commit
+  files view, `←`/`→`/`tab` switch between the file tree and the commit
+  list; vertical movement follows the focused side and `ctrl+↑`/`ctrl+↓`
+  always scroll the tree. Focus is visible: the border and row highlight
+  follow it.
+
 #### Commit files view
 - TUI: `l` on the Commits panel shows the selected commit's changed files as
   a directory-grouped tree in the left column (replacing the three left
