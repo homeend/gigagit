@@ -213,10 +213,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		case "d":
-			if !m.running && !m.loading && m.focus == panelWorktrees {
-				if bi, ok := m.backingIndex(panelWorktrees); ok {
-					wt := m.worktrees[bi]
-					return m.startOp(engine.RemoveWorktree{Path: wt.Path, Branch: wt.Branch})
+			if !m.running && !m.loading {
+				switch m.focus {
+				case panelWorktrees:
+					if bi, ok := m.backingIndex(panelWorktrees); ok {
+						wt := m.worktrees[bi]
+						return m.startOp(engine.RemoveWorktree{Path: wt.Path, Branch: wt.Branch})
+					}
+				case panelBranches:
+					if bi, ok := m.backingIndex(panelBranches); ok {
+						return m.startOp(engine.DeleteBranch{Name: m.branches[bi].Name})
+					}
 				}
 			}
 		case "enter":
