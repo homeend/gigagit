@@ -71,9 +71,12 @@ func (m Model) footerLine() string {
 			glob = append(glob, b.label)
 		}
 	}
-	line := strings.Join(glob, " ")
+	var groups []string
 	if len(ctx) > 0 {
-		line = strings.Join(ctx, " ") + "  •  " + line
+		groups = append(groups, strings.Join(ctx, " "))
 	}
-	return line
+	if len(glob) > 0 {
+		groups = append(groups, strings.Join(glob, " "))
+	}
+	return strings.Join(groups, "  •  ")
 }

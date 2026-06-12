@@ -191,6 +191,15 @@ func TestFooterRunningCollapses(t *testing.T) {
 	}
 }
 
+func TestFooterLoadingKeepsReload(t *testing.T) {
+	m := footerModel()
+	m.loading = true
+	want := "[tab] focus [r] reload [?] help [q] quit"
+	if f := m.footerLine(); f != want {
+		t.Errorf("loading footer = %q, want %q", f, want)
+	}
+}
+
 func TestFooterFilterTypingOverride(t *testing.T) {
 	m := footerModel()
 	m.filterTyping = true
