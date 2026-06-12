@@ -8,11 +8,12 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// overlayCenter composites fg centered on top of bg, replacing the cells fg
-// covers while keeping the surrounding bg visible. Both are treated as a grid of
-// termW×termH cells; the result never exceeds those bounds. ANSI styling in both
-// layers is preserved (slicing is width-aware).
-func overlayCenter(bg, fg string, termW, termH int) string {
+// overlayAt composites fg on top of bg with fg's top-left corner at cell
+// (left, top), replacing the cells fg covers while keeping the surrounding bg
+// visible. Both are treated as a grid of termW×termH cells; negative
+// coordinates clamp to 0 and rows outside the grid are dropped. ANSI styling
+// in both layers is preserved (slicing is width-aware).
+func overlayAt(bg, fg string, left, top, termW, termH int) string {
 	bgLines := strings.Split(bg, "\n")
 	for len(bgLines) < termH {
 		bgLines = append(bgLines, "")
@@ -25,11 +26,9 @@ func overlayCenter(bg, fg string, termW, termH int) string {
 			fgW = w
 		}
 	}
-	top := (termH - len(fgLines)) / 2
 	if top < 0 {
 		top = 0
 	}
-	left := (termW - fgW) / 2
 	if left < 0 {
 		left = 0
 	}
@@ -40,20 +39,32 @@ func overlayCenter(bg, fg string, termW, termH int) string {
 			continue
 		}
 		bgLine := bgLines[row]
-		// Left slice of the background, padded out to the popup's left edge.
+		// Left slice of the background, padded out to the overlay's left edge.
 		leftPart := ansi.Truncate(bgLine, left, "")
 		if w := ansi.StringWidth(leftPart); w < left {
 			leftPart += strings.Repeat(" ", left-w)
 		}
-		// Pad the popup line to a clean rectangle so its right edge is straight.
+		// Pad the overlay line to a clean rectangle so its right edge is straight.
 		if w := ansi.StringWidth(fl); w < fgW {
 			fl += strings.Repeat(" ", fgW-w)
 		}
-		// Background to the right of the popup (empty if the bg line is shorter).
+		// Background to the right of the overlay (empty if the bg line is shorter).
 		rightPart := ansi.TruncateLeft(bgLine, left+fgW, "")
 		bgLines[row] = leftPart + fl + rightPart
 	}
 	return strings.Join(bgLines, "\n")
+}
+
+// overlayCenter composites fg centered on top of bg (see overlayAt).
+func overlayCenter(bg, fg string, termW, termH int) string {
+	fgLines := strings.Split(fg, "\n")
+	fgW := 0
+	for _, l := range fgLines {
+		if w := ansi.StringWidth(l); w > fgW {
+			fgW = w
+		}
+	}
+	return overlayAt(bg, fg, (termW-fgW)/2, (termH-len(fgLines))/2, termW, termH)
 }
 
 var (
