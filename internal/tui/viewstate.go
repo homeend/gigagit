@@ -239,14 +239,27 @@ func viewLess(l panelList, mode sortMode, a, b int) bool {
 	return false
 }
 
-// panelView applies panel p's sort (and, later, filter), returning the display
-// rows and the matching backing indices (display row n shows backing element
-// idx[n]). It is the single source of truth for what a panel shows; selection,
-// paging, clamping, rendering, and action keys all consume it.
+// filterActive reports whether panel p currently has a committed or in-progress
+// filter query.
+func (m Model) filterActive(p panel) bool {
+	return p == m.filterPanel && m.filterQuery != ""
+}
+
+// panelView applies panel p's sort and filter, returning the display rows and
+// the matching backing indices (display row n shows backing element idx[n]).
+// It is the single source of truth for what a panel shows; selection, paging,
+// clamping, rendering, and action keys all consume it.
 func (m Model) panelView(p panel) (rows []string, idx []int) {
 	l := m.listFor(p)
+	q := ""
+	if m.filterActive(p) {
+		q = strings.ToLower(m.filterQuery)
+	}
 	idx = make([]int, 0, l.Len())
 	for i := 0; i < l.Len(); i++ {
+		if q != "" && !strings.Contains(strings.ToLower(l.Row(i)), q) {
+			continue
+		}
 		idx = append(idx, i)
 	}
 	sortIndices(l, m.sortModes[p], idx)
@@ -269,10 +282,15 @@ func (m Model) backingIndex(p panel) (int, bool) {
 	return idx[s], true
 }
 
-// panelLabel decorates a panel title with its active sort mode.
+// panelLabel decorates a panel title with its active sort mode and filter.
 func (m Model) panelLabel(p panel, base string) string {
 	if s := m.sortModes[p].String(); s != "" {
 		base += " ·" + s
+	}
+	if m.filterTyping && p == m.filterPanel {
+		base += " /" + m.filterQuery + "█"
+	} else if m.filterActive(p) {
+		base += " /" + m.filterQuery
 	}
 	return base
 }

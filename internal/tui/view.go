@@ -90,7 +90,7 @@ func (m Model) renderInterface() string {
 	g := m.layout()
 
 	header := m.headerLine(g.w)
-	footer := truncate("[p]ull [P]ush [s]witch [S]tash [u]ndo [w]orktree [d]elete  •  [tab] focus  [r] reload  [q] quit", g.w)
+	footer := truncate("[p]ull [P]ush [s]witch [S]tash [u]ndo [w]orktree [d]elete [o]rder [/]filter  •  [tab] focus  [r] reload  [q] quit", g.w)
 	statusLine := m.statusMsg
 	if m.running {
 		statusLine = "⏳ " + statusLine

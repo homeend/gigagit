@@ -43,6 +43,10 @@ type Model struct {
 	sel       map[panel]int
 	sortModes map[panel]sortMode // per-panel display order (zero value = default)
 	headTimes map[string]int64   // worktree HEAD sha -> committer time (date sort)
+
+	filterPanel  panel  // panel the filter is bound to (meaningful only when filterQuery != "" or filterTyping)
+	filterQuery  string // case-insensitive substring; "" = no filter
+	filterTyping bool   // true while /-input mode is capturing keys
 }
 
 type panel int
@@ -121,6 +125,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.popup != nil {
 			return m.updatePopupKey(msg)
 		}
+		// Filter-input mode captures every key (the panel label shows the query).
+		if m.filterTyping {
+			switch msg.Type {
+			case tea.KeyCtrlC:
+				return m, tea.Quit
+			case tea.KeyEsc:
+				m.filterTyping = false
+				m.filterQuery = ""
+			case tea.KeyEnter:
+				m.filterTyping = false // commit: filter stays active
+			case tea.KeyBackspace:
+				if r := []rune(m.filterQuery); len(r) > 0 {
+					m.filterQuery = string(r[:len(r)-1])
+				}
+				m.sel[m.filterPanel] = 0
+			case tea.KeySpace:
+				m.filterQuery += " "
+				m.sel[m.filterPanel] = 0
+			case tea.KeyRunes:
+				m.filterQuery += string(msg.Runes)
+				m.sel[m.filterPanel] = 0
+			}
+			return m, nil
+		}
 		switch msg.String() {
 		case "q", "ctrl+c":
 			return m, tea.Quit
@@ -197,6 +225,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if n := m.panelLen(m.focus); m.sel[m.focus] >= n && n > 0 {
 					m.sel[m.focus] = n - 1
 				}
+			}
+		case "/":
+			if !m.running && !m.loading {
+				m.filterPanel = m.focus
+				m.filterQuery = ""
+				m.filterTyping = true
+				m.sel[m.focus] = 0
+			}
+		case "esc":
+			if m.filterQuery != "" {
+				m.filterQuery = ""
 			}
 		case "up", "k":
 			if m.sel[m.focus] > 0 {
