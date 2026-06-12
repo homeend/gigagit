@@ -163,3 +163,16 @@ func TestFilterLabelRendering(t *testing.T) {
 		t.Fatalf("label missing sort+filter+cursor decoration:\n%s", out)
 	}
 }
+
+func TestFilterBackspaceCtrlHVariant(t *testing.T) {
+	m := loadedModel(t)
+	m.focus = panelBranches
+	u, _ := m.Update(keyMsg("/"))
+	m = u.(Model)
+	m = typeRunes(t, m, "ab")
+	u, _ = m.Update(keyMsg("ctrl+h"))
+	m = u.(Model)
+	if m.filterQuery != "a" {
+		t.Fatalf("ctrl+h should erase like backspace, query = %q", m.filterQuery)
+	}
+}

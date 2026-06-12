@@ -135,7 +135,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.filterQuery = ""
 			case tea.KeyEnter:
 				m.filterTyping = false // commit: filter stays active
-			case tea.KeyBackspace:
+			case tea.KeyBackspace, tea.KeyCtrlH: // some terminals send 0x08 for Backspace
 				if r := []rune(m.filterQuery); len(r) > 0 {
 					m.filterQuery = string(r[:len(r)-1])
 				}
@@ -234,6 +234,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.sel[m.focus] = 0
 			}
 		case "esc":
+			// filterPanel is intentionally left set — filterActive() gates on a
+			// non-empty query, so the residue is inert.
 			if m.filterQuery != "" {
 				m.filterQuery = ""
 			}
