@@ -33,6 +33,11 @@ var contextBindings = []footerBinding{
 	}},
 	{"enter", "[enter] switch", func(m Model) bool { return m.focus == panelWorktrees && m.canEnterWorktree() }},
 	{"d", "[d]elete", func(m Model) bool { return m.focus == panelWorktrees && m.canDeleteWorktree() }},
+	{"l", "[l] files", func(m Model) bool {
+		// Stricter than the dispatch: the narrow case is a statusMsg no-op
+		// there, so don't advertise it.
+		return m.focus == panelCommits && m.canShowCommitFiles() && !(m.width > 0 && m.width < 40)
+	}},
 }
 
 // globalBindings are the always-relevant tail, still individually predicated
@@ -59,6 +64,11 @@ var globalBindings = []footerBinding{
 func (m Model) footerLine() string {
 	if m.filterTyping {
 		return "filter: type to search  [enter] keep  [esc] cancel"
+	}
+	// The files view owns the keyboard while open (action keys are swallowed),
+	// so the registry footer would lie; show the view's own keys instead.
+	if m.filesView != nil {
+		return "files: [j/k] commits  [ctrl+↑/↓ pgup/pgdn] scroll  [/] search  [esc/l] close  [q] quit"
 	}
 	var ctx, glob []string
 	for _, b := range contextBindings {

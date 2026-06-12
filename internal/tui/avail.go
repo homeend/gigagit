@@ -73,6 +73,14 @@ func (m Model) canEnterWorktree() bool {
 	return m.opsIdle() && ok && wt.Path != "" && wt.Path != m.currentWorktree
 }
 
+// canShowCommitFiles gates l: the commit files view needs a resolvable
+// commit row. The narrow-terminal refusal stays in the dispatch (it keeps
+// an explanatory statusMsg); the footer binding adds it as a stricter check.
+func (m Model) canShowCommitFiles() bool {
+	_, ok := m.backingIndex(panelCommits)
+	return m.opsIdle() && ok
+}
+
 // canMark gates m: mark/unmark/pair needs a resolvable row in the focused
 // panel (handleMarkKey re-checks and routes the three sub-cases).
 func (m Model) canMark() bool {

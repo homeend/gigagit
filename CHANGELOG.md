@@ -10,6 +10,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ### Added
 
+#### Commit files view
+- TUI: `l` on the Commits panel shows the selected commit's changed files as
+  a directory-grouped tree in the left column (replacing the three left
+  panels while open). Follow-live: j/k keeps moving through commits and the
+  tree reloads for each one. `/` searches file paths, ctrl+↑/↓ / pgup/pgdn /
+  mouse wheel scroll, esc/`l` close. Merge commits show their first-parent
+  diff; renames render as `R old → new`.
+
 #### Contextual footer
 - TUI: the footer now shows only the keys that work right now — panel/row
   specific actions first (`[s]witch` hides on the checked-out branch,

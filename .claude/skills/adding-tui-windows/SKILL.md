@@ -73,6 +73,19 @@ in `mark.go`). Labels spell out the argument direction ("Merge A into B").
 To give a panel pair-operations, register entries in `pairOpsFor` — the
 mark mechanism, popup, and dispatch are already generic.
 
+## In-panel view (column replacement)
+
+The commit files view (`l`) is the template for a view that REPLACES a panel
+column instead of overlaying a popup: reuse the `contentPopup` struct (lines,
+query, typing, sel, `visible()`, `move()`) for state + filtering, write a
+dedicated `render<X>View(boxW, boxH)` that pads every line to `boxW-4` and
+fills to `boxH-2` (exact box size, `bluredPanel` border — focus stays on the
+surviving panel), branch in `renderInterface` where the column is built, and
+add a routing branch in `Update` BEFORE `filterTyping` that splits keys
+between the surviving panel and the view. Async per-row content loads carry
+an identity tag (commit hash) so stale results from fast movement are
+dropped. Clear the view in `reRoot`.
+
 ## Common mistakes
 
 | Mistake | Fix |
