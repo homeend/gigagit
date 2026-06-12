@@ -303,6 +303,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.sel[m.focus]++
 			}
 		}
+	case tea.MouseMsg:
+		// Mouse support is scoped to the content popup (spec non-goal: no
+		// panel clicks/wheel). Wheel ticks move the cursor like ctrl-arrows.
+		if m.contentPopup != nil && msg.Action == tea.MouseActionPress {
+			switch msg.Button {
+			case tea.MouseButtonWheelUp:
+				m.contentPopup.move(-contentWheelStep)
+			case tea.MouseButtonWheelDown:
+				m.contentPopup.move(contentWheelStep)
+			}
+		}
 	case opEventMsg:
 		switch e := msg.event.(type) {
 		case engine.Progress:

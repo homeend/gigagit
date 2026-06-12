@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -260,5 +261,36 @@ func TestContentVisibleAdjacentHeadings(t *testing.T) {
 	vis := p.visible()
 	if len(vis) != 2 || vis[0].text != "Beta" || vis[1].text != "apple row" {
 		t.Fatalf("visible() = %+v, want [Beta(heading), apple row] — Alpha must be dropped", vis)
+	}
+}
+
+func wheelMsg(up bool) tea.MouseMsg {
+	b := tea.MouseButtonWheelDown
+	if up {
+		b = tea.MouseButtonWheelUp
+	}
+	return tea.MouseMsg{Button: b, Action: tea.MouseActionPress}
+}
+
+func TestContentPopupWheelScrolls(t *testing.T) {
+	m := contentModel(30)
+	p := m.contentPopup
+	u, _ := m.Update(wheelMsg(false))
+	m = u.(Model)
+	if p.sel != 3 {
+		t.Errorf("wheel down: sel = %d, want 3", p.sel)
+	}
+	u, _ = m.Update(wheelMsg(true))
+	m = u.(Model)
+	if p.sel != 0 {
+		t.Errorf("wheel up: sel = %d, want 0", p.sel)
+	}
+}
+
+func TestMouseIgnoredWithoutContentPopup(t *testing.T) {
+	m := Model{width: 80, height: 24}
+	u, _ := m.Update(wheelMsg(false)) // must not panic or change state
+	if u.(Model).contentPopup != nil {
+		t.Fatal("mouse must be inert when no content popup is open")
 	}
 }
