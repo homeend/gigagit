@@ -137,6 +137,7 @@ type panelList interface {
 	Row(i int) string  // display text — also the filter-match target
 	Name(i int) string // what "sort by name" means for THIS panel
 	Date(i int) int64  // what "sort by date" means for THIS panel (unix; 0 = unknown)
+	Key(i int) string  // stable identity of backing element i (mark survival)
 }
 
 type branchList struct {
@@ -148,6 +149,7 @@ func (l branchList) Len() int          { return len(l.items) }
 func (l branchList) Row(i int) string  { return l.rows[i] }
 func (l branchList) Name(i int) string { return l.items[i].Name }
 func (l branchList) Date(i int) int64  { return l.items[i].UnixTime }
+func (l branchList) Key(i int) string  { return l.items[i].Name }
 
 type worktreeList struct {
 	items []model.Worktree
@@ -164,6 +166,7 @@ func (l worktreeList) Name(i int) string {
 	return l.items[i].Path // detached/bare fall back to the path
 }
 func (l worktreeList) Date(i int) int64 { return l.times[l.items[i].Head] }
+func (l worktreeList) Key(i int) string { return l.items[i].Path }
 
 type statusList struct {
 	files []model.FileStatus
@@ -175,6 +178,7 @@ type statusList struct {
 func (l statusList) Len() int          { return len(l.files) }
 func (l statusList) Row(i int) string  { return l.rows[i] }
 func (l statusList) Name(i int) string { return l.files[i].Path }
+func (l statusList) Key(i int) string  { return l.files[i].Path }
 func (l statusList) Date(i int) int64 {
 	if t, ok := l.mtime[i]; ok {
 		return t
@@ -197,6 +201,7 @@ func (l commitList) Len() int          { return len(l.items) }
 func (l commitList) Row(i int) string  { return l.rows[i] }
 func (l commitList) Name(i int) string { return l.items[i].Subject }
 func (l commitList) Date(i int) int64  { return l.items[i].UnixTime }
+func (l commitList) Key(i int) string  { return l.items[i].Hash }
 
 // listFor builds panel p's panelList from the current model snapshot.
 func (m Model) listFor(p panel) panelList {

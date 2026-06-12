@@ -82,7 +82,7 @@ func (m Model) render() string {
 		return m.renderModal()
 	}
 	bg := m.renderInterface()
-	if m.popup == nil && m.repoPopup == nil && m.settings == nil && m.branchPopup == nil {
+	if m.popup == nil && m.repoPopup == nil && m.settings == nil && m.branchPopup == nil && m.pairPopup == nil {
 		if lines, x, y, ok := m.tooltip(); ok {
 			w, h := m.overlayDims()
 			bg = overlayAt(bg, strings.Join(lines, "\n"), x, y, w, h)
@@ -103,6 +103,10 @@ func (m Model) render() string {
 	if m.branchPopup != nil {
 		w, h := m.overlayDims()
 		return overlayCenter(bg, m.renderBranchPopup(), w, h)
+	}
+	if m.pairPopup != nil {
+		w, h := m.overlayDims()
+		return overlayCenter(bg, m.renderPairOpPopup(), w, h)
 	}
 	return bg
 }
@@ -139,8 +143,16 @@ func (m Model) renderInterface() string {
 	g := m.layout()
 
 	header := m.headerLine(g.w)
-	footer := truncate("[p]ull [P]ush [s]witch [b]ranch [S]tash [u]ndo [w]orktree [d]elete [o]rder [/]filter [R]epo [,] settings  •  [tab] focus  [r] reload  [q] quit", g.w)
+	footer := truncate("[p]ull [P]ush [s]witch [b]ranch [S]tash [u]ndo [w]orktree [m]ark [d]elete [o]rder [/]filter [R]epo [,] settings  •  [tab] focus  [r] reload  [q] quit", g.w)
 	statusLine := m.statusMsg
+	if m.mark != nil && m.markAlive() {
+		hint := "◆ marked: " + m.mark.display
+		if statusLine != "" {
+			statusLine = hint + " · " + statusLine
+		} else {
+			statusLine = hint
+		}
+	}
 	if m.running {
 		statusLine = "⏳ " + statusLine
 	}
@@ -212,11 +224,17 @@ func (m Model) renderPanel(p panel, label string, rows []string, boxW, boxH int)
 	} else if len(rows) == 0 {
 		lines = append(lines, padRight(truncate("  (none)", innerW), innerW))
 	} else {
-		win, selInWin := windowRows(rows, rowsCap, m.sel[p])
+		win, selInWin, start := windowRows(rows, rowsCap, m.sel[p])
+		markedInWin := -1
+		if md := m.markDisplayIndex(p); md >= 0 {
+			markedInWin = md - start
+		}
 		for i, row := range win {
 			focused := i == selInWin && p == m.focus
 			prefix := "  "
-			if focused {
+			if i == markedInWin {
+				prefix = "◆ "
+			} else if focused {
 				prefix = "> "
 			}
 			line := padRight(truncate(prefix+row, innerW), innerW)
@@ -237,14 +255,14 @@ func (m Model) renderPanel(p panel, label string, rows []string, boxW, boxH int)
 	return style.Render(strings.Join(lines, "\n"))
 }
 
-// windowRows returns at most n rows scrolled so sel stays visible, plus sel's
-// index within the returned window.
-func windowRows(rows []string, n, sel int) ([]string, int) {
+// windowRows returns at most n rows scrolled so sel stays visible, sel's
+// index within the returned window, and the window's start offset.
+func windowRows(rows []string, n, sel int) ([]string, int, int) {
 	if n <= 0 {
 		n = 1
 	}
 	if len(rows) <= n {
-		return rows, sel
+		return rows, sel, 0
 	}
 	start := sel - n/2
 	if start < 0 {
@@ -256,7 +274,7 @@ func windowRows(rows []string, n, sel int) ([]string, int) {
 	if start < 0 {
 		start = 0
 	}
-	return rows[start : start+n], sel - start
+	return rows[start : start+n], sel - start, start
 }
 
 // truncate shortens s to at most n display columns, adding an ellipsis. Width is

@@ -39,7 +39,7 @@ func TestTooltipShowsFullRowAboveSelection(t *testing.T) {
 		t.Fatalf("tooltip must contain the full path, got %q", plain)
 	}
 	g := m.layout()
-	_, selInWin := windowRows(mustRows(t, m, panelWorktrees), g.boxH[panelWorktrees]-3, 1)
+	_, selInWin, _ := windowRows(mustRows(t, m, panelWorktrees), g.boxH[panelWorktrees]-3, 1)
 	rowY := g.pos[panelWorktrees].y + 2 + selInWin
 	if want := rowY - len(lines); y != want {
 		t.Errorf("tooltip y = %d, want %d (directly above row line %d)", y, want, rowY)

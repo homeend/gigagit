@@ -40,6 +40,9 @@ type Model struct {
 	branchPopup         *branchPopup
 	pendingSwitchBranch string // branch to SmartSwitch to after a successful op (B = create-and-switch)
 
+	mark      *markState   // the m-key mark; nil = none (see mark.go)
+	pairPopup *pairOpPopup // two-row operation picker; nil = closed
+
 	running   bool
 	statusMsg string
 	opMsgs    chan tea.Msg
@@ -139,6 +142,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.branchPopup != nil {
 			return m.updateBranchPopupKey(msg)
+		}
+		if m.pairPopup != nil {
+			return m.updatePairPopupKey(msg)
 		}
 		// Filter-input mode captures every key (the panel label shows the query).
 		if m.filterTyping {
@@ -284,7 +290,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if !m.running && !m.loading {
 				return m.openSettings(), nil
 			}
+		case "m":
+			if !m.running && !m.loading {
+				return m.handleMarkKey()
+			}
 		case "esc":
+			if m.mark != nil {
+				m.mark = nil
+				return m, nil
+			}
 			// filterPanel is intentionally left set — filterActive() gates on a
 			// non-empty query, so the residue is inert.
 			if m.filterQuery != "" {
