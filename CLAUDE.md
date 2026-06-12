@@ -90,6 +90,8 @@ whenever adding a feature or TUI surface.
 
 ## Status
 
-See `CHANGELOG.md` for what's shipped. Roadmap: workspaces/repo-switcher, then
-M3 (MCP server + heavy ops: staging, interactive rebase, conflict editor, diff,
-visual graph, sparse-checkout), plus a candidate `SmartMerge` operation.
+See `CHANGELOG.md` for what's shipped. Roadmap: workspace group sync (named
+repo groups + parallel background-pull; needs concurrent-op decision routing,
+shared with MCP), then M3 (MCP server + heavy ops: staging, interactive rebase,
+conflict editor, diff, visual graph, sparse-checkout), plus a candidate
+`SmartMerge` operation.
