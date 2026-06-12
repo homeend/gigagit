@@ -66,6 +66,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - CLI: `gg repo list` and `gg repo switch <query>` (unique substring match
   prints the path and writes `--cwd-file` so a wrapped shell `cd`s there).
 
+#### Agent init
+- `gg init` detects installed AI coding agents (Claude Code, Junie, Codex,
+  OpenCode, Cursor, AGENTS.md, …) and installs an embedded "using-gg" skill
+  teaching them to drive git through the gg CLI. Already-installed targets are
+  checked by default (applying refreshes them); new agents are explicit
+  opt-in. `--all`, `--update`, `--agents <ids>`, `--list` for scripting.
+- TUI: `,` opens a Settings popup with the same agent-skill picker.
+- The skill ships inside the gg binary (version-marked); installed copies
+  change only when a newer binary's init runs.
+
 #### Developer tooling
 - Project skills in `.claude/skills/`: `adding-features` (engine→TUI→CLI wiring
   checklist for new operations/commands) and `adding-tui-windows` (panel vs
