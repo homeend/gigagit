@@ -26,8 +26,12 @@ free. Help is its first consumer.
 
 ## UX contract
 
-- Centered overlay (`overlayCenter`), `modalStyle`, width `popupInnerWidth`;
-  long lines truncate display-aware (no horizontal scroll).
+- Centered overlay (`overlayCenter`), `modalStyle`, width `contentPopupWidth`
+  (most of the terminal, capped at 100 columns — wider than the 56-column
+  form popups because it shows a two-column reference table). Long lines
+  truncate display-aware to the box's TEXT width — lipgloss wraps at Width
+  minus padding, so truncating to the box width would spill `…` fragments
+  onto wrap lines. No wrapping, no horizontal scroll.
 - Title line shows the window title and, while filtering, ` /query`.
 - A hint line at the bottom shows position (`12/87`) when the content
   overflows, plus `[esc] close`.
