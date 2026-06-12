@@ -75,8 +75,6 @@ var (
 	modalStyle   = lipgloss.NewStyle().Border(lipgloss.DoubleBorder()).BorderForeground(lipgloss.Color("11")).Padding(1, 2)
 )
 
-// render draws the interface, compositing the worktree popup centered on top of
-// it when one is open. The output never exceeds width×height.
 // clipToHeight truncates s to at most h lines (split on "\n"), joining back
 // without a trailing newline. This guards against layout() bodyH floors that
 // add extra lines at very small terminal heights.
@@ -91,6 +89,8 @@ func clipToHeight(s string, h int) string {
 	return strings.Join(lines[:h], "\n")
 }
 
+// render draws the interface, compositing the worktree popup centered on top of
+// it when one is open. The output never exceeds width×height.
 func (m Model) render() string {
 	if m.modal != nil {
 		return m.renderModal()

@@ -143,10 +143,12 @@ func (m Model) renderContentPopup() string {
 	rows := make([]string, len(vis))
 	for i, l := range vis {
 		switch {
+		case i == p.sel:
+			// Cursor highlight wins over heading style: the cursor must remain
+			// visible even when it rests on a heading row.
+			rows[i] = selectedRow.Render(truncate("> "+l.text, inner))
 		case l.heading:
 			rows[i] = titleStyle.Render(truncate(l.text, inner))
-		case i == p.sel:
-			rows[i] = selectedRow.Render(truncate("> "+l.text, inner))
 		default:
 			rows[i] = truncate("  "+l.text, inner)
 		}
