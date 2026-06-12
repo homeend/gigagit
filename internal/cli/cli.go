@@ -116,6 +116,7 @@ func cmdCommit(repo *repoT, args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	msg := fs.String("m", "", "commit message (required)")
 	all := fs.Bool("all", false, "stage modified/deleted tracked files first (-a)")
+	fs.BoolVar(all, "a", false, "alias for --all")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}

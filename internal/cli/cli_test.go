@@ -39,6 +39,18 @@ func TestCommitCommand(t *testing.T) {
 	}
 }
 
+func TestCommitShortAllAlias(t *testing.T) {
+	dir := newRepoDir(t)
+	// modify a tracked file so -a has something to stage
+	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("changed\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	code, _, errb := runCLI(t, dir, "commit", "-m", "via alias", "-a")
+	if code != 0 {
+		t.Fatalf("commit -a exit = %d, stderr=%s", code, errb)
+	}
+}
+
 func TestCommitRequiresMessage(t *testing.T) {
 	dir := newRepoDir(t)
 	code, _, _ := runCLI(t, dir, "commit")

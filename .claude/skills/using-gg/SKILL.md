@@ -17,8 +17,9 @@ guards against removing the worktree you are standing in.
 
 - `gg status` — branch, upstream ahead/behind, changed files.
 - `gg commit -m <msg> [-a]` — commit (`-a` also stages tracked modifications).
-- `gg pull [--background] [--on-conflict rebase|merge|abort]` — smart pull;
-  `--background` fast-forwards another branch's ref without checking it out.
+- `gg pull [<branch>] [--background] [--on-conflict rebase|merge|abort]` —
+  smart pull; with `<branch>` + `--background` it fast-forwards that branch's
+  ref without checking it out.
 - `gg push` — push the current branch (sets upstream when missing).
 - `gg switch <branch>` — switch branches, auto-stashing and restoring local
   changes; on a restore conflict the stash is preserved, never dropped.
