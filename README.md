@@ -33,6 +33,9 @@ go build ./cmd/gg            # produces ./gg
 
 Run `gg` with no arguments to open the interactive UI.
 
+The footer is contextual: it lists only the keys that apply to the focused
+panel and selected row right now; `?` opens the full searchable reference.
+
 | Key | Action |
 |-----|--------|
 | `p` / `P` | pull / push |
