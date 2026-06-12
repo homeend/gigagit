@@ -1,0 +1,29 @@
+name = "pull other branch: pulls inside its linked worktree"
+
+[input]
+steps = [
+  { worktree = "wt-feature", branch = "feature/x" },
+]
+
+[input.origin]
+steps = [
+  { write = "a.txt", content = "v1\n" },
+  { commit = "initial" },
+  { branch = "feature/x" },
+]
+after = [
+  { switch = "feature/x" },
+  { write = "a.txt", content = "v2\n" },
+  { commit = "feature update" },
+]
+
+[[run]]
+cmd  = ["pull", "feature/x"]
+exit = 0
+
+[expect]
+branch    = "main"                   # the main worktree never switched
+worktrees = ["wt-feature"]
+
+[expect.worktree."wt-feature".files]
+"a.txt" = "v2\n"

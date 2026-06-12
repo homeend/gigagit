@@ -1,0 +1,34 @@
+name = "pull other branch: stash, switch, pull, restore — ends on target"
+
+[input]
+steps = [
+  { write = "b.txt", content = "local wip\n" },   # tracked edit, disjoint file
+]
+
+[input.origin]
+steps = [
+  { write = "a.txt", content = "v1\n" },
+  { write = "b.txt", content = "b1\n" },
+  { commit = "initial" },
+  { branch = "release" },
+]
+after = [
+  { switch = "release" },
+  { write = "a.txt", content = "release v2\n" },
+  { commit = "release fix" },
+]
+
+[[run]]
+cmd  = ["pull", "release"]
+exit = 0
+
+[expect]
+branch  = "release"                  # PullAndStay lands on the target branch
+stashes = 0
+
+[expect.files]
+"a.txt" = "release v2\n"
+"b.txt" = "local wip\n"              # restored on release
+
+[expect.status]
+unstaged = ["b.txt"]

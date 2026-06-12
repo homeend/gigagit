@@ -1,0 +1,19 @@
+name = "worktree add: template-driven branch and path"
+
+[input]
+steps = [
+  { write = "README.md", content = "hello\n" },
+  { commit = "initial" },
+]
+
+[[run]]
+cmd  = ["worktree", "add", "main"]
+exit = 0
+
+[expect]
+branch    = "main"
+branches  = ["main", "wt-main"]
+worktrees = ["wt/wt-main"]
+
+[expect.worktree."wt/wt-main".files]
+"README.md" = "hello\n"

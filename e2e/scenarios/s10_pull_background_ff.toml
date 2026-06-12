@@ -1,0 +1,33 @@
+name = "pull --background: target ref fast-forwards, worktree untouched"
+
+[input]
+steps = [
+  { branch = "feature/x" },                       # local ref at the clone point
+  { write = "wip.txt", content = "untouched\n" },  # untracked — proves no stash dance
+]
+
+[input.origin]
+steps = [
+  { write = "a.txt", content = "v1\n" },
+  { commit = "initial" },
+  { branch = "feature/x" },
+]
+after = [
+  { switch = "feature/x" },
+  { write = "f.txt", content = "f\n" },
+  { commit = "feature work" },
+]
+
+[[run]]
+cmd  = ["pull", "--background", "feature/x"]
+exit = 0
+
+[expect]
+branch = "main"
+
+[expect.status]
+untracked = ["wip.txt"]
+
+[[expect.log]]
+branch   = "feature/x"
+subjects = ["feature work", "initial"]

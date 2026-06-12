@@ -1,0 +1,35 @@
+name = "pull: divergence resolved by rebase (linear history, local on top)"
+
+[input]
+steps = [
+  { write = "local.txt", content = "l\n" },
+  { commit = "local change" },
+]
+
+[input.origin]
+steps = [
+  { write = "a.txt", content = "v1\n" },
+  { commit = "initial" },
+]
+after = [
+  { write = "upstream.txt", content = "u\n" },
+  { commit = "upstream change" },
+]
+
+[[run]]
+cmd  = ["pull", "--on-conflict=rebase"]
+exit = 0
+
+[expect]
+branch      = "main"
+clean       = true
+ahead       = 1                      # the rebased commit is not pushed yet
+behind      = 0
+in_progress = "none"
+
+[expect.files]
+"upstream.txt" = "u\n"
+"local.txt"    = "l\n"
+
+[[expect.log]]
+subjects = ["local change", "upstream change", "initial"]

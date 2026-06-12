@@ -1,0 +1,37 @@
+name = "commit --all and push: change reaches origin"
+
+[input]
+steps = [
+  { write = "a.txt", content = "v2\n" },
+  { write = "scratch.txt", content = "tmp\n" },
+]
+
+[input.origin]
+steps = [
+  { write = "a.txt", content = "v1\n" },
+  { commit = "initial" },
+]
+
+[[run]]
+cmd  = ["commit", "-m", "feature work", "--all"]
+exit = 0
+
+[[run]]
+cmd  = ["push"]
+exit = 0
+
+[expect]
+branch = "main"
+ahead  = 0
+behind = 0
+
+[expect.status]
+untracked = ["scratch.txt"]          # -a stages tracked changes only
+
+[[expect.log]]
+subjects = ["feature work", "initial"]
+
+[expect.origin]
+[[expect.origin.log]]
+branch   = "main"
+subjects = ["feature work", "initial"]

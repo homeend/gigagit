@@ -1,0 +1,20 @@
+name = "worktree remove --with-branch: worktree and branch both gone"
+
+[input]
+steps = [
+  { write = "README.md", content = "hello\n" },
+  { commit = "initial" },
+]
+
+[[run]]
+cmd  = ["worktree", "add", "main"]
+exit = 0
+
+[[run]]
+cmd  = ["worktree", "remove", "--with-branch", "../wt/wt-main"]
+exit = 0
+
+[expect]
+branch    = "main"
+branches  = ["main"]
+worktrees = []
