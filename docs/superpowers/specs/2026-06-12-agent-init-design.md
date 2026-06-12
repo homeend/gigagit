@@ -100,7 +100,8 @@ func Install(d Detection) error
 |----|--------|--------|------|
 | `claude-project` | `.claude` | `.claude/skills/using-gg/SKILL.md` | WholeFile |
 | `claude-global` | `~/.claude` | `~/.claude/skills/using-gg/SKILL.md` | WholeFile |
-| `junie` | `.junie` | `.junie/skills/using-gg/SKILL.md` | WholeFile (Junie discovers Agent Skills from `.junie/skills/`, same SKILL.md format as Claude Code) |
+| `junie` | `.junie` | `.junie/skills/using-gg/SKILL.md` | WholeFile (Junie discovers Agent Skills from `<projectRoot>/.junie/skills/`, same SKILL.md format as Claude Code) |
+| `junie-global` | `~/.junie` | `~/.junie/skills/using-gg/SKILL.md` | WholeFile (Junie CLI's user-scope skills; project-scope wins on name clash) |
 | `codex` | `~/.codex` | `~/.codex/AGENTS.md` | ManagedBlock |
 | `opencode` | `~/.config/opencode` | `~/.config/opencode/AGENTS.md` | ManagedBlock |
 | `agents-md` | `AGENTS.md` | `AGENTS.md` | ManagedBlock |

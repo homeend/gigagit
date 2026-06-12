@@ -172,6 +172,23 @@ func TestInstallBlockCreatesMissingFile(t *testing.T) {
 	}
 }
 
+func TestJunieGlobalDetectedFromHome(t *testing.T) {
+	proj, home := fixture(t, nil, []string{".junie"})
+	d, ok := byID(Detect(proj, home), "junie-global")
+	if !ok {
+		t.Fatal("junie-global not detected from ~/.junie")
+	}
+	if d.Agent.Mode != ModeSkillFile {
+		t.Fatalf("junie-global mode = %v, want ModeSkillFile", d.Agent.Mode)
+	}
+	if err := Install(d); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(home, ".junie", "skills", "using-gg", "SKILL.md")); err != nil {
+		t.Fatalf("global skill not installed: %v", err)
+	}
+}
+
 func TestJunieInstallsSkillFile(t *testing.T) {
 	proj, home := fixture(t, []string{".junie"}, nil)
 	d, ok := byID(Detect(proj, home), "junie")
