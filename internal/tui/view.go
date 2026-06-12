@@ -154,7 +154,7 @@ func popupInnerWidth(w int) int {
 
 // footerText abbreviates the global keys; TestHelpFooterCoverage enforces
 // that every [x] key here has a row in helpContent.
-const footerText = "[p]ull [P]ush [s]witch [b]ranch [S]tash [u]ndo [w]orktree [d]elete [o]rder / filter [R]epo [,] settings  •  [tab] focus  [r] reload  [?] help  [q] quit"
+const footerText = "[p]ull [P]ush [s]witch [b]ranch [S]tash [u]ndo [w]orktree [d]elete [o]rder [/]filter [R]epo [,] settings  •  [tab] focus  [r] reload  [?] help  [q] quit"
 
 // renderInterface draws the header, the panels, and the footer/status, sized to
 // fit the current terminal so the output never exceeds width×height.

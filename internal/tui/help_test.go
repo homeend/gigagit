@@ -62,6 +62,10 @@ func TestHelpFooterCoverage(t *testing.T) {
 			if len(f) == 0 {
 				continue
 			}
+			if f[0] == k {
+				found = true
+				continue
+			}
 			for _, alt := range strings.Split(f[0], "/") {
 				if alt == k {
 					found = true
