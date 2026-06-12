@@ -1,0 +1,27 @@
+name = "switch: pop conflict keeps changes safe in stash"
+
+[input]
+steps = [
+  { write = "shared.txt", content = "base\n" },
+  { commit = "initial" },
+  { branch = "feature/x" },
+  { switch = "feature/x" },
+  { write = "shared.txt", content = "feature version\n" },
+  { commit = "feature change" },
+  { switch = "main" },
+  { write = "shared.txt", content = "my local edit\n" },
+]
+
+[[run]]
+cmd  = ["switch", "feature/x"]
+exit = 1                             # pop conflict surfaces as an error
+
+[expect]
+branch  = "feature/x"                # the switch itself succeeded
+stashes = 1
+
+[expect.status]
+conflicted = ["shared.txt"]
+
+[[expect.stash]]
+contains = { "shared.txt" = "my local edit\n" }   # never dropped

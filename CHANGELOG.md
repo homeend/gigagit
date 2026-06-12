@@ -16,6 +16,21 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   and `gg branch create <name> [<start>]` / `gg branch delete [--force] <name>`
   in the CLI. The embedded using-gg agent skill is now v2.
 
+#### E2E harness
+- **E2E scenario harness** (`e2e/`): declarative TOML scenarios build real git
+  repos (optionally served over real HTTP via `git http-backend`), run gg CLI
+  commands in-process, and assert user-visible state — files, branches, stashes
+  and their content, sync state, history shape. 17 scenarios cover SmartSwitch,
+  SmartPull (ff/rebase/merge/abort/conflict/background/worktree), stash,
+  commit+push, undo, and worktree add/remove. New agent skill:
+  `.claude/skills/writing-e2e-scenarios/`.
+- **Fix** `gg worktree remove <relative-path>`: a repo-top-relative path now
+  matches regardless of process cwd (found by the e2e corpus; matters for
+  in-process frontends like the future MCP server).
+- **Staged test runner** `./test.sh` / `test.cmd`: quality gates (vet+gofmt)
+  → unit tests → e2e scenarios last; `race` target for the pre-merge gate,
+  `unit`/`e2e` to run one stage.
+
 #### Foundation & engine (M1)
 - Frontend-agnostic core **engine**: the `Operation` contract with a streamed
   `Event` union (`Progress`/`GitLine`/`DecisionNeeded`/`Timing`/`Done`) and a

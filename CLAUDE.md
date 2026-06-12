@@ -54,6 +54,7 @@ feature is a worktree-aware **SmartPull** decision tree.
 | `observ`     | Observability: span ring buffer, tracing, redaction, panic dump. |
 | `buildinfo`  | Version/commit injected via `-ldflags` at build. |
 | `app`        | Wires layers into runnable surfaces (`inspect`, panic `DumpRepo`). |
+| `e2e` (top-level) | Declarative e2e harness: scenarios/*.toml → real repo (+ HTTP git server) → in-process CLI runs → semantic state assertions. |
 
 Entry point: `cmd/gg/main.go` — routes `shell-init`/`inspect`/CLI subcommands, else launches the TUI.
 
@@ -70,8 +71,9 @@ Entry point: `cmd/gg/main.go` — routes `shell-init`/`inspect`/CLI subcommands,
 
 ```bash
 go build ./cmd/gg            # or ./build.sh [linux|windows|all]
-go test ./...                # add -race before merging
-go vet ./... && gofmt -l internal/ cmd/
+./test.sh                    # staged: vet+gofmt → unit tests → e2e last
+./test.sh race               # the same with -race — run before merging
+./test.sh unit | e2e         # one stage only (test.cmd mirrors on Windows)
 ```
 
 ## Development workflow
@@ -83,8 +85,10 @@ final review before merge.
 
 **Project skills** (in `.claude/skills/`): `adding-features` — the full
 engine→TUI→CLI wiring checklist for a new operation/command;
-`adding-tui-windows` — panel vs popup vs modal taxonomy and wiring. Use them
-whenever adding a feature or TUI surface.
+`adding-tui-windows` — panel vs popup vs modal taxonomy and wiring;
+`writing-e2e-scenarios` — schema + operation contracts for authoring
+`e2e/scenarios/*.toml`. Use them whenever adding a feature, TUI surface, or
+e2e scenario.
 
 **After each completed stage/feature, update the project docs:**
 `CHANGELOG.md` (always), `README.md` (if user-facing surface changed), this

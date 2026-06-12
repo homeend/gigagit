@@ -1,0 +1,30 @@
+name = "pull: fast-forward when only upstream moved"
+
+[input]
+steps = []
+
+[input.origin]
+steps = [
+  { write = "a.txt", content = "v1\n" },
+  { commit = "initial" },
+]
+after = [
+  { write = "a.txt", content = "v2\n" },
+  { commit = "upstream change" },
+]
+
+[[run]]
+cmd  = ["pull"]
+exit = 0
+
+[expect]
+branch = "main"
+clean  = true
+ahead  = 0
+behind = 0
+
+[expect.files]
+"a.txt" = "v2\n"
+
+[[expect.log]]
+subjects = ["upstream change", "initial"]

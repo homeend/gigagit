@@ -1,0 +1,23 @@
+name = "switch: untracked-only tree does not stash; file travels natively"
+
+[input]
+steps = [
+  { write = "README.md", content = "hello\n" },
+  { commit = "initial" },
+  { branch = "feature/x" },
+  { write = "notes.txt", content = "draft\n" },
+]
+
+[[run]]
+cmd  = ["switch", "feature/x"]
+exit = 0
+
+[expect]
+branch  = "feature/x"
+stashes = 0
+
+[expect.files]
+"notes.txt" = "draft\n"
+
+[expect.status]
+untracked = ["notes.txt"]

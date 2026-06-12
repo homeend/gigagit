@@ -160,9 +160,20 @@ func cmdWorktreeRemove(repo *repoT, args []string, stdin io.Reader, stdout, stde
 		return 1
 	}
 	absTarget, _ := filepath.Abs(target)
+	// A relative target is also resolved against the repo top level — the same
+	// base CreateWorktree resolves its repo-relative path template against —
+	// so the template-form path (e.g. "../wt/wt-main") works regardless of the
+	// process working directory (in-process frontends pass workdir explicitly).
+	fromTop := ""
+	if !filepath.IsAbs(target) {
+		if top, err := repo.TopLevel(ctxBg); err == nil {
+			fromTop = filepath.Clean(filepath.Join(top, target))
+		}
+	}
 	var match *model.Worktree
 	for i := range wts {
-		if wts[i].Path == target || wts[i].Path == absTarget {
+		if wts[i].Path == target || wts[i].Path == absTarget ||
+			(fromTop != "" && wts[i].Path == fromTop) {
 			match = &wts[i]
 			break
 		}

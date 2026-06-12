@@ -1,0 +1,27 @@
+name = "stash: tracked change stashed, untracked file stays in the tree"
+
+[input]
+steps = [
+  { write = "a.txt", content = "v1\n" },
+  { commit = "initial" },
+  { write = "a.txt", content = "v2\n" },
+  { write = "scratch.txt", content = "tmp\n" },
+]
+
+[[run]]
+cmd  = ["stash", "-m", "wip"]
+exit = 0
+
+[expect]
+branch  = "main"
+stashes = 1
+
+[expect.files]
+"a.txt"       = "v1\n"               # reverted by the stash
+"scratch.txt" = "tmp\n"              # untracked: NOT stashed (no -u in product)
+
+[expect.status]
+untracked = ["scratch.txt"]
+
+[[expect.stash]]
+contains = { "a.txt" = "v2\n" }

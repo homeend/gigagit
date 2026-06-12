@@ -1,0 +1,25 @@
+name = "undo: last commit unwound, changes kept staged"
+
+[input]
+steps = [
+  { write = "a.txt", content = "v1\n" },
+  { commit = "initial" },
+  { write = "a.txt", content = "v2\n" },
+  { commit = "second" },
+]
+
+[[run]]
+cmd  = ["undo"]
+exit = 0
+
+[expect]
+branch = "main"
+
+[expect.files]
+"a.txt" = "v2\n"
+
+[expect.status]
+staged = ["a.txt"]
+
+[[expect.log]]
+subjects = ["initial"]

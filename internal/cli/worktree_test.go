@@ -212,3 +212,41 @@ func TestWorktreeRemoveUnknownPath(t *testing.T) {
 		t.Fatalf("stderr should explain the unknown path: %s", errb.String())
 	}
 }
+
+// TestWorktreeRemoveRepoRelativePath verifies that a path relative to the repo
+// top level (e.g. "../wt-name") matches a worktree even when the process
+// working directory is NOT the repo directory (tests run from the package dir).
+// This exercises the fromTop resolution added in cmdWorktreeRemove: without it
+// filepath.Abs("../wt-name") resolves against the package dir and never matches.
+func TestWorktreeRemoveRepoRelativePath(t *testing.T) {
+	dir := newCLIRepo(t)
+	wt := addCLIWorktree(t, dir, "feature/rm5", "wt-cli-rm5")
+
+	// Sanity: process cwd is NOT the repo dir (it's the package dir under the
+	// source tree), so a plain filepath.Abs("../wt-cli-rm5") would not equal wt.
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	naiveAbs := filepath.Clean(filepath.Join(cwd, "../wt-cli-rm5"))
+	if naiveAbs == wt {
+		t.Skip("process cwd happens to be the repo's parent — test precondition not met")
+	}
+
+	// Pass the path relative to the repo top level, exactly as a template like
+	// "../<repo>.worktrees/<branch>" would produce.
+	repoRelative := "../wt-cli-rm5"
+
+	var out, errb bytes.Buffer
+	code := Run(dir, []string{"worktree", "remove", repoRelative}, strings.NewReader(""), &out, &errb, "")
+	if code != 0 {
+		t.Fatalf("exit = %d, stderr=%s", code, errb.String())
+	}
+	if _, err := os.Stat(wt); !os.IsNotExist(err) {
+		t.Fatalf("worktree dir still present after repo-relative remove: %v", err)
+	}
+	// Branch should be kept (no --with-branch).
+	if exec.Command("git", "-C", dir, "rev-parse", "--verify", "refs/heads/feature/rm5").Run() != nil {
+		t.Fatal("branch should be kept without --with-branch")
+	}
+}

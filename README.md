@@ -109,4 +109,10 @@ go test ./...                # -race before merging
 go vet ./... && gofmt -l internal/ cmd/
 ```
 
+The `e2e/` directory contains a declarative scenario harness: TOML files in
+`e2e/scenarios/` describe a starting repo state, a sequence of `gg` CLI
+commands, and the expected user-visible outcome (files, branches, stashes, sync
+state, history shape). Scenarios are run as standard Go tests and cover
+SmartSwitch, SmartPull, stash, commit+push, undo, and worktree add/remove.
+
 See [`CLAUDE.md`](CLAUDE.md) for architecture and contributor conventions.

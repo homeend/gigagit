@@ -1,0 +1,37 @@
+name = "pull: divergence resolved by merge (merge commit on top)"
+
+[input]
+steps = [
+  { write = "local.txt", content = "l\n" },
+  { commit = "local change" },
+]
+
+[input.origin]
+steps = [
+  { write = "a.txt", content = "v1\n" },
+  { commit = "initial" },
+]
+after = [
+  { write = "upstream.txt", content = "u\n" },
+  { commit = "upstream change" },
+]
+
+[[run]]
+cmd  = ["pull", "--on-conflict=merge"]
+exit = 0
+
+[expect]
+branch = "main"
+clean  = true
+ahead  = 2                           # merge commit + local commit
+behind = 0
+
+[expect.files]
+"upstream.txt" = "u\n"
+"local.txt"    = "l\n"
+
+[[expect.log]]
+# Default git-log order is commit-date desc: "upstream change" is committed in
+# origin.after (a later deterministic builder tick) so it sorts above the
+# earlier "local change".
+subjects = [{ matches = "^Merge" }, "upstream change", "local change", "initial"]

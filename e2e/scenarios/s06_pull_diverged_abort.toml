@@ -1,0 +1,30 @@
+name = "pull: abort on divergence is a clean no-op (exit 0)"
+
+[input]
+steps = [
+  { write = "local.txt", content = "l\n" },
+  { commit = "local change" },
+]
+
+[input.origin]
+steps = [
+  { write = "a.txt", content = "v1\n" },
+  { commit = "initial" },
+]
+after = [
+  { write = "upstream.txt", content = "u\n" },
+  { commit = "upstream change" },
+]
+
+[[run]]
+cmd  = ["pull", "--on-conflict=abort"]
+exit = 0                             # a chosen abort is an outcome, not an error
+
+[expect]
+branch = "main"
+clean  = true
+ahead  = 1                           # still diverged; fetch updated the remote ref
+behind = 1
+
+[[expect.log]]
+subjects = ["local change", "initial"]
