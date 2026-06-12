@@ -15,6 +15,11 @@ Three window types — pick the cheapest that fits, in this order:
 2. **Free-text / multi-field input → popup overlay** (exemplar:
    `internal/tui/worktree_popup.go`).
 3. **Persistent list view → panel** (exemplar: the Worktrees panel).
+4. **Transient read-only overlay → tooltip** (exemplar: `internal/tui/tooltip.go`).
+   Positioned via `layoutGeom.pos` + `overlayAt`; receives no key events, owns
+   no state, and is auto-shown from `render()` only when the plain (no modal,
+   no popup) state is active. New **interactive** surfaces must NOT use this
+   kind — use a popup instead.
 
 **The critical invariant:** `Model` is a **value receiver** — Bubble Tea copies
 it on every `Update`. Window state that must survive the copy (popup contents,
