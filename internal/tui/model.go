@@ -191,10 +191,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m.startOp(engine.Push{Remote: "origin", Branch: m.status.Branch, SetUpstream: true})
 			}
 		case "s":
-			if !m.running && !m.loading {
-				if bi, ok := m.backingIndex(panelBranches); ok {
-					return m.startOp(engine.SmartSwitch{Branch: m.branches[bi].Name})
-				}
+			if m.canSwitchBranch() {
+				b, _ := m.selectedBranch()
+				return m.startOp(engine.SmartSwitch{Branch: b.Name})
 			}
 		case "S":
 			if !m.running && !m.loading {
@@ -205,51 +204,46 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m.startOp(engine.UndoLastCommit{})
 			}
 		case "w": // worktree for the selected EXISTING branch
-			if !m.running && !m.loading {
+			if m.canOpenWorktreePopup() {
 				if mm, ok := m.openWorktreePopup(true); ok {
 					return mm, nil
 				}
 			}
 		case "W": // worktree on a NEW branch from the selected one
-			if !m.running && !m.loading {
+			if m.canOpenWorktreePopup() {
 				if mm, ok := m.openWorktreePopup(false); ok {
 					return mm, nil
 				}
 			}
 		case "b":
-			if !m.running && !m.loading && m.focus == panelBranches {
+			if m.focus == panelBranches && m.canOpenBranchPopup() {
 				if mm, ok := m.openBranchPopup(false); ok {
 					return mm, nil
 				}
 			}
 		case "B":
-			if !m.running && !m.loading && m.focus == panelBranches {
+			if m.focus == panelBranches && m.canOpenBranchPopup() {
 				if mm, ok := m.openBranchPopup(true); ok {
 					return mm, nil
 				}
 			}
 		case "d":
-			if !m.running && !m.loading {
-				switch m.focus {
-				case panelWorktrees:
-					if bi, ok := m.backingIndex(panelWorktrees); ok {
-						wt := m.worktrees[bi]
-						return m.startOp(engine.RemoveWorktree{Path: wt.Path, Branch: wt.Branch})
-					}
-				case panelBranches:
-					if bi, ok := m.backingIndex(panelBranches); ok {
-						return m.startOp(engine.DeleteBranch{Name: m.branches[bi].Name})
-					}
+			switch m.focus {
+			case panelWorktrees:
+				if m.canDeleteWorktree() {
+					wt, _ := m.selectedWorktree()
+					return m.startOp(engine.RemoveWorktree{Path: wt.Path, Branch: wt.Branch})
+				}
+			case panelBranches:
+				if m.canDeleteBranch() {
+					b, _ := m.selectedBranch()
+					return m.startOp(engine.DeleteBranch{Name: b.Name})
 				}
 			}
 		case "enter":
-			if !m.running && !m.loading && m.focus == panelWorktrees {
-				if bi, ok := m.backingIndex(panelWorktrees); ok {
-					target := m.worktrees[bi].Path
-					if target != "" && target != m.currentWorktree {
-						return m.reRoot(target)
-					}
-				}
+			if m.focus == panelWorktrees && m.canEnterWorktree() {
+				wt, _ := m.selectedWorktree()
+				return m.reRoot(wt.Path)
 			}
 		case "tab":
 			m.focus = (m.focus + 1) % panelCount
@@ -297,7 +291,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "?":
 			m.contentPopup = newContentPopup("Help — keys", helpContent())
 		case "m":
-			if !m.running && !m.loading {
+			if m.canMark() {
 				return m.handleMarkKey()
 			}
 		case "esc":
