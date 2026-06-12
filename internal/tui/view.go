@@ -294,17 +294,32 @@ func windowRows(rows []string, n, sel int) ([]string, int, int) {
 	if len(rows) <= n {
 		return rows, sel, 0
 	}
+	start := windowStart(len(rows), n, sel)
+	return rows[start : start+n], sel - start, start
+}
+
+// windowStart is the scroll offset windowRows applies: the first display row
+// shown when total rows are windowed to n around sel. Shared with the mouse
+// hit-test (panelRowAt) so a click can never select a different row than the
+// one rendered on that screen line.
+func windowStart(total, n, sel int) int {
+	if n <= 0 {
+		n = 1
+	}
+	if total <= n {
+		return 0
+	}
 	start := sel - n/2
 	if start < 0 {
 		start = 0
 	}
-	if start+n > len(rows) {
-		start = len(rows) - n
+	if start+n > total {
+		start = total - n
 	}
 	if start < 0 {
 		start = 0
 	}
-	return rows[start : start+n], sel - start, start
+	return start
 }
 
 // truncate shortens s to at most n display columns, adding an ellipsis. Width is

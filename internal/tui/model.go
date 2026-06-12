@@ -499,3 +499,13 @@ func abortOption(opts []string) string {
 	}
 	return ""
 }
+
+// wheelStep is the configured rows-per-mouse-wheel-tick ([ui] wheel_step),
+// defaulting to 3 before the first config load (m.cfg is zero until
+// dataLoadedMsg arrives).
+func (m Model) wheelStep() int {
+	if s := m.cfg.UI.WheelStep; s > 0 {
+		return s
+	}
+	return 3
+}

@@ -311,3 +311,44 @@ func (m Model) panelLabel(p panel, base string) string {
 	}
 	return base
 }
+
+// panelAt returns the panel whose box contains screen cell (x, y) under the
+// current layout (border cells count as the panel). ok is false on the
+// header/footer/status rows and any gap; panels the layout hides never match.
+func (m Model) panelAt(x, y int) (panel, bool) {
+	g := m.layout()
+	for p := panel(0); p < panelCount; p++ {
+		h := g.boxH[p]
+		if h <= 0 {
+			continue
+		}
+		w := g.leftW
+		if p == panelCommits {
+			w = g.rightW
+		}
+		pos := g.pos[p]
+		if x >= pos.x && x < pos.x+w && y >= pos.y && y < pos.y+h {
+			return p, true
+		}
+	}
+	return 0, false
+}
+
+// panelRowAt maps screen row y inside panel p to an index into p's display
+// rows (panelView order). ok is false on the border, the label line, and
+// the padding below the last row. Uses the same windowStart the renderer
+// uses, so the mapping cannot drift from what is on screen.
+func (m Model) panelRowAt(p panel, y int) (int, bool) {
+	g := m.layout()
+	rowsCap := m.panelRowsCap(p)
+	i := y - g.pos[p].y - 2 // top border + label line
+	if i < 0 || i >= rowsCap {
+		return 0, false
+	}
+	rows, _ := m.panelView(p)
+	idx := windowStart(len(rows), rowsCap, m.sel[p]) + i
+	if idx >= len(rows) {
+		return 0, false
+	}
+	return idx, true
+}
