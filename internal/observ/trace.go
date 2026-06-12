@@ -1,7 +1,6 @@
 package observ
 
 import (
-	"encoding/json"
 	"io"
 	"sync"
 )
@@ -27,14 +26,9 @@ func (t *TraceRecorder) Record(s Span) {
 	if t.w == nil {
 		return
 	}
-	s.Args = Redact(s.Args)
-	data, err := json.Marshal(s)
-	if err != nil {
-		return
-	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	_, _ = t.w.Write(append(data, '\n'))
+	writeSpanLine(t.w, s)
 }
 
 // compile-time check: TraceRecorder satisfies Recorder.

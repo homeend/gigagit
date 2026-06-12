@@ -39,16 +39,18 @@ func NewRing(capacity int) *Ring {
 }
 
 // Record stores a span, assigning it a monotonic ID and evicting the oldest
-// span when capacity is exceeded.
+// span when capacity is exceeded. A copy of the span (with its assigned ID)
+// is mirrored to the process-wide span sink when one is set.
 func (r *Ring) Record(s Span) {
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	r.nextID++
 	s.ID = r.nextID
 	r.buf = append(r.buf, s)
 	if len(r.buf) > r.cap {
 		r.buf = r.buf[len(r.buf)-r.cap:]
 	}
+	r.mu.Unlock() // sink I/O must not run under the ring lock
+	sinkWrite(s)
 }
 
 // Snapshot returns a copy of the retained spans, oldest first.
