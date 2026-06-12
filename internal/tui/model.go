@@ -53,10 +53,11 @@ type Model struct {
 	opMsgs    chan tea.Msg
 	modal     *decisionState
 
-	focus     panel
-	sel       map[panel]int
-	sortModes map[panel]sortMode // per-panel display order (zero value = default)
-	headTimes map[string]int64   // worktree HEAD sha -> committer time (date sort)
+	focus         panel
+	lastLeftPanel panel // ←'s return target; zero value = panelBranches
+	sel           map[panel]int
+	sortModes     map[panel]sortMode // per-panel display order (zero value = default)
+	headTimes     map[string]int64   // worktree HEAD sha -> committer time (date sort)
 
 	filterPanel  panel  // panel the filter is bound to (meaningful only when filterQuery != "" or filterTyping)
 	filterQuery  string // case-insensitive substring; "" = no filter
@@ -276,9 +277,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m.reRoot(wt.Path)
 			}
 		case "tab":
+			m = m.rememberLeftFocus()
 			m.focus = (m.focus + 1) % panelCount
 		case "shift+tab":
+			m = m.rememberLeftFocus()
 			m.focus = (m.focus - 1 + panelCount) % panelCount
+		case "right":
+			if m.focus != panelCommits {
+				m = m.rememberLeftFocus()
+				m.focus = panelCommits
+			}
+		case "left":
+			// No-op when already in the left column, and when the narrow
+			// layout has no left column to focus.
+			if m.focus == panelCommits && (m.width <= 0 || m.width >= 40) {
+				m.focus = m.lastLeftPanel
+			}
 		case "pgdown":
 			if n := m.panelLen(m.focus); n > 0 {
 				m.sel[m.focus] += m.pageStep()
@@ -419,6 +433,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.loadCmd()
 	}
 	return m, nil
+}
+
+// rememberLeftFocus records the focused panel as ←'s return target when it
+// is one of the left-column panels. Called before any focus reassignment.
+func (m Model) rememberLeftFocus() Model {
+	if m.focus != panelCommits {
+		m.lastLeftPanel = m.focus
+	}
+	return m
 }
 
 // panelLen returns the number of rows in a panel, for selection clamping.
