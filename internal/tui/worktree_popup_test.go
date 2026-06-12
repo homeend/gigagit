@@ -25,9 +25,9 @@ func modelWithConfig(t *testing.T, branchTmpl, pathTmpl string) Model {
 	return m
 }
 
-func TestOpenPopupOnW(t *testing.T) {
+func TestOpenNewBranchPopupOnShiftW(t *testing.T) {
 	m := modelWithConfig(t, "b/from-<parent-branch>", "../<repo>.worktrees/<branch>")
-	updated, _ := m.Update(keyMsg("w"))
+	updated, _ := m.Update(keyMsg("W"))
 	mm := updated.(Model)
 	if mm.popup == nil {
 		t.Fatal("pressing w should open the worktree popup")
@@ -45,7 +45,7 @@ func TestOpenPopupOnW(t *testing.T) {
 
 func TestPopupSwallowsGlobalKeys(t *testing.T) {
 	m := modelWithConfig(t, "b/x", "../<repo>.worktrees/<branch>")
-	updated, _ := m.Update(keyMsg("w"))
+	updated, _ := m.Update(keyMsg("W"))
 	m = updated.(Model)
 	updated, _ = m.Update(keyMsg("s"))
 	m = updated.(Model)
@@ -59,7 +59,7 @@ func TestPopupSwallowsGlobalKeys(t *testing.T) {
 
 func TestPopupEscCancels(t *testing.T) {
 	m := modelWithConfig(t, "b/x", "../<repo>.worktrees/<branch>")
-	updated, _ := m.Update(keyMsg("w"))
+	updated, _ := m.Update(keyMsg("W"))
 	m = updated.(Model)
 	updated, _ = m.Update(keyMsg("esc"))
 	if updated.(Model).popup != nil {
@@ -69,7 +69,7 @@ func TestPopupEscCancels(t *testing.T) {
 
 func TestPopupInputFieldsAndPreview(t *testing.T) {
 	m := modelWithConfig(t, "<user:user>/fix/<user:issue>", "wt/<branch>")
-	updated, _ := m.Update(keyMsg("w"))
+	updated, _ := m.Update(keyMsg("W"))
 	m = updated.(Model)
 	if m.popup.state != stInput {
 		t.Fatalf("state = %v, want stInput with user fields", m.popup.state)
@@ -113,7 +113,7 @@ func TestPopupInputFieldsAndPreview(t *testing.T) {
 
 func TestPopupBackspaceOnEmptyField(t *testing.T) {
 	m := modelWithConfig(t, "issue/<user:id>", "wt/<branch>")
-	updated, _ := m.Update(keyMsg("w"))
+	updated, _ := m.Update(keyMsg("W"))
 	m = updated.(Model)
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
 	m = updated.(Model)
@@ -124,7 +124,7 @@ func TestPopupBackspaceOnEmptyField(t *testing.T) {
 
 func TestPopupMultiByteRune(t *testing.T) {
 	m := modelWithConfig(t, "issue/<user:id>", "wt/<branch>")
-	updated, _ := m.Update(keyMsg("w"))
+	updated, _ := m.Update(keyMsg("W"))
 	m = updated.(Model)
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("é")})
 	m = updated.(Model)
@@ -135,7 +135,7 @@ func TestPopupMultiByteRune(t *testing.T) {
 
 func TestPopupEditMode(t *testing.T) {
 	m := modelWithConfig(t, "b/auto", "../<repo>.worktrees/<branch>")
-	updated, _ := m.Update(keyMsg("w"))
+	updated, _ := m.Update(keyMsg("W"))
 	m = updated.(Model)
 	if m.popup.previewBranch != "b/auto" {
 		t.Fatalf("preview branch = %q, want b/auto", m.popup.previewBranch)
@@ -173,7 +173,7 @@ func TestPopupEditMode(t *testing.T) {
 
 func TestPopupEditEscDiscards(t *testing.T) {
 	m := modelWithConfig(t, "b/auto", "../<repo>.worktrees/<branch>")
-	updated, _ := m.Update(keyMsg("w"))
+	updated, _ := m.Update(keyMsg("W"))
 	m = updated.(Model)
 	updated, _ = m.Update(keyMsg("e"))
 	m = updated.(Model)
@@ -191,7 +191,7 @@ func TestPopupEditEscDiscards(t *testing.T) {
 
 func TestPopupCreateLaunchesOpAndClearsPopup(t *testing.T) {
 	m := modelWithConfig(t, "b/auto", "../<repo>.worktrees/<branch>")
-	updated, _ := m.Update(keyMsg("w"))
+	updated, _ := m.Update(keyMsg("W"))
 	m = updated.(Model)
 	updated, cmd := m.Update(keyMsg("w")) // create
 	m = updated.(Model)
@@ -208,7 +208,7 @@ func TestPopupCreateLaunchesOpAndClearsPopup(t *testing.T) {
 
 func TestPopupCreatePreviewErrorBlocks(t *testing.T) {
 	m := modelWithConfig(t, "b-<bogus>", "../<repo>.worktrees/<branch>")
-	updated, _ := m.Update(keyMsg("w"))
+	updated, _ := m.Update(keyMsg("W"))
 	m = updated.(Model)
 	if m.popup.previewErr == nil {
 		t.Fatal("expected a preview error for the bad template")
@@ -259,7 +259,7 @@ func TestSeqNoBumpOnError(t *testing.T) {
 func TestRenderWorktreePopupShowsPreview(t *testing.T) {
 	m := modelWithConfig(t, "b/from-<parent-branch>", "../<repo>.worktrees/<branch>")
 	m.width, m.height = 80, 24
-	updated, _ := m.Update(keyMsg("w"))
+	updated, _ := m.Update(keyMsg("W"))
 	m = updated.(Model)
 
 	out := m.View()
@@ -276,7 +276,7 @@ func TestRenderWorktreePopupShowsPreview(t *testing.T) {
 
 func TestPopupCreateAndSwitchSetsPendingSwitch(t *testing.T) {
 	m := modelWithConfig(t, "b/auto", "../<repo>.worktrees/<branch>")
-	updated, _ := m.Update(keyMsg("w"))
+	updated, _ := m.Update(keyMsg("W"))
 	m = updated.(Model)
 	updated, _ = m.Update(keyMsg("W")) // create AND switch
 	m = updated.(Model)
@@ -293,7 +293,7 @@ func TestPopupCreateAndSwitchSetsPendingSwitch(t *testing.T) {
 
 func TestPlainCreateDoesNotSwitch(t *testing.T) {
 	m := modelWithConfig(t, "b/auto", "../<repo>.worktrees/<branch>")
-	updated, _ := m.Update(keyMsg("w"))
+	updated, _ := m.Update(keyMsg("W"))
 	m = updated.(Model)
 	updated, _ = m.Update(keyMsg("w")) // plain create
 	m = updated.(Model)
@@ -336,9 +336,9 @@ func (e errTestType) Error() string { return string(e) }
 // the worktree equals what was shown — including after a hand-edit.
 func TestCreateOpEqualsPreview(t *testing.T) {
 	m := modelWithConfig(t, "b/auto", "../<repo>.worktrees/<branch>")
-	updated, _ := m.Update(keyMsg("w"))
+	updated, _ := m.Update(keyMsg("W"))
 	m = updated.(Model)
-	op := m.popup.createOp()
+	op := m.popup.createOp().(engine.CreateWorktree)
 	if op.Branch != m.popup.previewBranch || op.Path != m.popup.previewPath {
 		t.Fatalf("op {%q,%q} != preview {%q,%q}", op.Branch, op.Path, m.popup.previewBranch, m.popup.previewPath)
 	}
@@ -359,7 +359,7 @@ func TestCreateOpEqualsPreview(t *testing.T) {
 	}
 	updated, _ = m.Update(keyMsg("enter"))
 	m = updated.(Model)
-	if op := m.popup.createOp(); op.Branch != "hf" || op.Branch != m.popup.previewBranch {
+	if op := m.popup.createOp().(engine.CreateWorktree); op.Branch != "hf" || op.Branch != m.popup.previewBranch {
 		t.Fatalf("edited op.Branch = %q, want hf (== preview %q)", op.Branch, m.popup.previewBranch)
 	}
 }
@@ -368,7 +368,7 @@ func TestCreateOpEqualsPreview(t *testing.T) {
 // only the path template's <seq> (if any) is consumed.
 func TestConsumedSeqNamesAfterEdit(t *testing.T) {
 	m := modelWithConfig(t, "issue/<seq:issue>", "../<repo>.worktrees/<branch>")
-	updated, _ := m.Update(keyMsg("w"))
+	updated, _ := m.Update(keyMsg("W"))
 	m = updated.(Model)
 	// Before any edit: the branch <seq:issue> is consumed.
 	if got := m.popup.consumedSeqNames(); len(got) != 1 || got[0] != "issue" {
@@ -438,7 +438,7 @@ func TestPopupOverlaysInterfaceCenteredAndFits(t *testing.T) {
 // the popup, the engine op, and reRoot).
 func TestPopupCreateAndSwitchEndToEnd(t *testing.T) {
 	m := modelWithConfig(t, "b/from-<parent-branch>", "../<repo>.worktrees/<branch>")
-	updated, _ := m.Update(keyMsg("w"))
+	updated, _ := m.Update(keyMsg("W"))
 	m = updated.(Model)
 	updated, cmd := m.Update(keyMsg("W")) // create AND switch
 	m = updated.(Model)
