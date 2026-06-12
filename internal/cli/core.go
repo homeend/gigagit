@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 
 	"github.com/gigagit/gg/internal/engine"
 	"github.com/gigagit/gg/internal/git"
@@ -47,6 +48,21 @@ func (d cliDecider) Decide(_ context.Context, req engine.DecisionRequest) (engin
 		}
 	}
 	return engine.DecisionResponse{}, fmt.Errorf("invalid choice %q for %s", choice, req.ID)
+}
+
+// syncWriter serializes writes to one underlying writer. The decider may
+// prompt from the operation goroutine while runOperation prints progress from
+// the main goroutine; both share stderr, so the writer must be safe for
+// concurrent use (a bytes.Buffer in tests is not).
+type syncWriter struct {
+	mu sync.Mutex
+	w  io.Writer
+}
+
+func (s *syncWriter) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.w.Write(p)
 }
 
 // runOperation runs op, printing each Progress step to progress, and returns the

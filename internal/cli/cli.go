@@ -15,6 +15,9 @@ type repoT = git.Repo
 // Run dispatches a CLI subcommand against the repo at workdir, writing to
 // stdout/stderr, and returns a process exit code.
 func Run(workdir string, args []string, stdin io.Reader, stdout, stderr io.Writer, cwdFile string) int {
+	// stderr is shared between the main goroutine (progress, prompts, errors)
+	// and the operation goroutine (decider prompts) — serialize it once here.
+	stderr = &syncWriter{w: stderr}
 	if len(args) == 0 {
 		fmt.Fprintln(stderr, "usage: gg <command> [args]")
 		return 2
