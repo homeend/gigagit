@@ -21,6 +21,9 @@ import (
 
 func main() {
 	cli.RepoStatePath = repos.DefaultStatePath()
+	if home, err := os.UserHomeDir(); err == nil {
+		cli.InitHomeDir = home
+	}
 	cwdFile, args := extractCwdFile(os.Args[1:])
 	if len(args) > 0 && args[0] == "shell-init" {
 		runShellInit(args[1:])
@@ -36,7 +39,7 @@ func main() {
 	// A mistyped/unknown subcommand should error, not silently open the TUI.
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 		fmt.Fprintf(os.Stderr, "gg: unknown command %q\n", args[0])
-		fmt.Fprintln(os.Stderr, "commands: status commit pull push switch stash undo worktree repo inspect (run `gg` with no arguments for the TUI)")
+		fmt.Fprintln(os.Stderr, "commands: status commit pull push switch stash undo worktree repo init inspect (run `gg` with no arguments for the TUI)")
 		os.Exit(2)
 	}
 	// No subcommand: launch the TUI.

@@ -49,6 +49,7 @@ Run `gg` with no arguments to open the interactive UI.
 | `o` | cycle the focused panel's sort order (name/date, asc/desc) |
 | `/` | filter the focused panel (type, then `enter` to keep, `esc` to clear) |
 | `R` | switch repository (popup: type to filter, `enter` to switch, `ctrl+d` to forget) |
+| `,` | settings (set up agent skills) |
 | `r` / `q` | reload / quit |
 
 When an operation hits a fork (e.g. a diverged branch, or a worktree with
@@ -72,6 +73,7 @@ gg worktree add [<start-point>]
 gg worktree remove [--with-branch] [--force] <path>
 gg repo list
 gg repo switch <query>
+gg init [--all | --update | --agents <ids> | --list]
 gg inspect [--debug-dump <path>] [--trace]
 ```
 

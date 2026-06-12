@@ -19,6 +19,11 @@ type repoT = git.Repo
 // hermetic by default.
 var RepoStatePath string
 
+// InitHomeDir is the home directory used for `gg init`'s home-scoped agent
+// detection. "" skips home-scoped agents — cmd/gg wires the real home; tests
+// stay hermetic by default.
+var InitHomeDir string
+
 // Run dispatches a CLI subcommand against the repo at workdir, writing to
 // stdout/stderr, and returns a process exit code.
 func Run(workdir string, args []string, stdin io.Reader, stdout, stderr io.Writer, cwdFile string) int {
@@ -59,6 +64,8 @@ func Run(workdir string, args []string, stdin io.Reader, stdout, stderr io.Write
 		return cmdWorktree(repo, rest, stdin, stdout, stderr, cwdFile)
 	case "repo":
 		return cmdRepo(rest, stdout, stderr, cwdFile)
+	case "init":
+		return cmdInit(workdir, rest, stdin, stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "unknown command %q\n", cmd)
 		return 2
@@ -68,7 +75,7 @@ func Run(workdir string, args []string, stdin io.Reader, stdout, stderr io.Write
 var commands = map[string]bool{
 	"status": true, "commit": true, "pull": true, "push": true,
 	"switch": true, "stash": true, "undo": true, "worktree": true, "inspect": true,
-	"repo": true,
+	"repo": true, "init": true,
 }
 
 // IsCommand reports whether tok is a gg CLI subcommand (used by cmd/gg to
@@ -109,6 +116,7 @@ func cmdCommit(repo *repoT, args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	msg := fs.String("m", "", "commit message (required)")
 	all := fs.Bool("all", false, "stage modified/deleted tracked files first (-a)")
+	fs.BoolVar(all, "a", false, "alias for --all")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}

@@ -1,0 +1,56 @@
+---
+name: using-gg
+description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
+---
+
+<!-- gg:using-gg:v1 -->
+
+# Using gg (gigagit)
+
+gg is a git client CLI built for very large repositories. When it is available
+(`gg` on PATH, or a `./gg` binary in the repo), prefer it over raw git for the
+operations below — its smart commands carry safety rails: automatic
+stash/restore around switches, a never-drop-the-stash rule on conflicts, and
+guards against removing the worktree you are standing in.
+
+## Commands
+
+- `gg status` — branch, upstream ahead/behind, changed files.
+- `gg commit -m <msg> [-a]` — commit (`-a` also stages tracked modifications).
+- `gg pull [<branch>] [--background] [--on-conflict rebase|merge|abort]` —
+  smart pull; with `<branch>` + `--background` it fast-forwards that branch's
+  ref without checking it out.
+- `gg push` — push the current branch (sets upstream when missing).
+- `gg switch <branch>` — switch branches, auto-stashing and restoring local
+  changes; on a restore conflict the stash is preserved, never dropped.
+- `gg stash [-m <msg>]` — stash the working tree.
+- `gg undo` — undo the last commit, keeping its changes (ref-only soft reset).
+- `gg worktree list` / `gg worktree add [<start-point>]` /
+  `gg worktree remove [--with-branch] [--force] <path>` — linked worktrees;
+  `add` resolves branch/path templates from `.gg.toml` and may prompt on stdin
+  for `<user:...>` fields.
+- `gg repo list` / `gg repo switch <query>` — the known-repository registry
+  (MRU); `switch` prints the path of the unique match.
+- `gg inspect` — one-shot repo summary (scriptable health check).
+- `gg init` — install/refresh this skill for detected AI agents.
+
+## The rule that matters for agents
+
+gg never hangs waiting for input mid-operation. When an operation hits a fork
+(diverged branch, dirty worktree, unmerged branch), it needs a decision:
+
+- Interactive terminals get a prompt; **non-interactive runs fail with exit 1
+  and print the decision and its options to stderr** instead of blocking.
+- Pre-answer decisions with the matching flag: `--on-conflict` for pull
+  divergence; `--with-branch` / `--force` for worktree removal.
+- On a non-zero exit, read stderr: it names the decision and the valid
+  options; re-run with the matching flag.
+
+Exit codes: 0 = success, 1 = operation failed or needs a decision,
+2 = usage error.
+
+## Shell following
+
+Worktree and repo switches write the target directory to `--cwd-file <path>`
+(human shells follow via `gg shell-init`). As an agent, just `cd` to the path
+printed on stdout.

@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"os"
+
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/gigagit/gg/internal/git"
@@ -14,6 +16,9 @@ import (
 func Run(repo *git.Repo) (string, error) {
 	m := New(repo)
 	m.statePath = repos.DefaultStatePath()
+	if home, err := os.UserHomeDir(); err == nil {
+		m.initHomeDir = home
+	}
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	final, err := p.Run()
 	if err != nil {

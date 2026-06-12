@@ -72,26 +72,44 @@ func (m Model) render() string {
 	}
 	bg := m.renderInterface()
 	if m.popup != nil {
-		w, h := m.width, m.height
-		if w <= 0 {
-			w = 80
-		}
-		if h <= 0 {
-			h = 24
-		}
+		w, h := m.overlayDims()
 		return overlayCenter(bg, m.renderWorktreePopup(), w, h)
 	}
 	if m.repoPopup != nil {
-		w, h := m.width, m.height
-		if w <= 0 {
-			w = 80
-		}
-		if h <= 0 {
-			h = 24
-		}
+		w, h := m.overlayDims()
 		return overlayCenter(bg, m.renderRepoPopup(), w, h)
 	}
+	if m.settings != nil {
+		w, h := m.overlayDims()
+		return overlayCenter(bg, m.renderSettingsPopup(), w, h)
+	}
 	return bg
+}
+
+// overlayDims returns the terminal size for popup compositing, defaulting to
+// 80x24 before the first WindowSizeMsg arrives.
+func (m Model) overlayDims() (int, int) {
+	w, h := m.width, m.height
+	if w <= 0 {
+		w = 80
+	}
+	if h <= 0 {
+		h = 24
+	}
+	return w, h
+}
+
+// popupInnerWidth is the standard popup content width: 56 columns, capped to
+// the terminal minus borders/margins, floored so the box never collapses.
+func popupInnerWidth(w int) int {
+	inner := 56
+	if max := w - 8; inner > max {
+		inner = max
+	}
+	if inner < 20 {
+		inner = 20
+	}
+	return inner
 }
 
 // renderInterface draws the header, the panels, and the footer/status, sized to
@@ -100,7 +118,7 @@ func (m Model) renderInterface() string {
 	g := m.layout()
 
 	header := m.headerLine(g.w)
-	footer := truncate("[p]ull [P]ush [s]witch [S]tash [u]ndo [w]orktree [d]elete [o]rder [/]filter [R]epo  •  [tab] focus  [r] reload  [q] quit", g.w)
+	footer := truncate("[p]ull [P]ush [s]witch [S]tash [u]ndo [w]orktree [d]elete [o]rder [/]filter [R]epo [,] settings  •  [tab] focus  [r] reload  [q] quit", g.w)
 	statusLine := m.statusMsg
 	if m.running {
 		statusLine = "⏳ " + statusLine

@@ -264,16 +264,7 @@ func (m Model) renderWorktreePopup() string {
 	// Fixed, comfortably-wide content width so a long branch/path wraps (full name
 	// stays visible) instead of stretching the box past the terminal edge. Capped
 	// to leave a margin on each side for the centered overlay.
-	w := m.width
-	if w <= 0 {
-		w = 80
-	}
-	inner := 56
-	if max := w - 8; inner > max {
-		inner = max
-	}
-	if inner < 20 {
-		inner = 20
-	}
+	w, _ := m.overlayDims()
+	inner := popupInnerWidth(w)
 	return modalStyle.Width(inner).Render(b.String()) + "\n"
 }

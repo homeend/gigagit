@@ -46,6 +46,8 @@ feature is a worktree-aware **SmartPull** decision tree.
 | `cli`        | Scriptable command frontend; `cliDecider` answers forks from a flag policy or stdin. |
 | `worktree`   | Shared worktree template resolution used by BOTH the TUI popup and the CLI. |
 | `repos`      | Machine-local MRU registry of opened repositories (XDG state file) behind the repo switcher. |
+| `agentskill` | The embedded "using-gg" skill (go:embed + version marker) that teaches AI agents the gg CLI. |
+| `agentinit`  | Hardcoded agent registry + detect/status/install behind `gg init` and the TUI Settings popup. |
 | `config`     | TOML config (`.gg.toml`), field-level overlay (defaults→global→repo), `<seq>` counters. |
 | `template`   | Pure branch/path template resolver (`<parent-branch>`, `<repo>`, `<date:…>`, `<seq:…>`, `<user:…>`, …). |
 | `shellinit`  | `gg shell-init [bash|zsh|fish]` wrappers (cd-on-switch via `--cwd-file`). |
@@ -85,8 +87,10 @@ engine→TUI→CLI wiring checklist for a new operation/command;
 whenever adding a feature or TUI surface.
 
 **After each completed stage/feature, update the project docs:**
-`CHANGELOG.md` (always), `README.md` (if user-facing surface changed), and this
-`CLAUDE.md` (if the architecture/package map/conventions changed).
+`CHANGELOG.md` (always), `README.md` (if user-facing surface changed), this
+`CLAUDE.md` (if the architecture/package map/conventions changed), and — when
+the CLI surface changed — `internal/agentskill/using-gg.md` (bump
+`agentskill.Version`, then `gg init --update` to refresh installed copies).
 
 ## Status
 

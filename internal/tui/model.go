@@ -31,6 +31,8 @@ type Model struct {
 
 	popup          *worktreePopup
 	repoPopup      *repoPopup
+	settings       *settingsPopup
+	initHomeDir    string // home dir for agent detection; "" skips home-scoped agents (tests)
 	statePath      string // repo-registry location; "" disables recording (tests)
 	pendingSeqBump []string
 	pendingSwitch  bool
@@ -129,6 +131,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.repoPopup != nil {
 			return m.updateRepoPopupKey(msg)
+		}
+		if m.settings != nil {
+			return m.updateSettingsKey(msg)
 		}
 		// Filter-input mode captures every key (the panel label shows the query).
 		if m.filterTyping {
@@ -244,6 +249,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return mm, nil
 				}
 				return m, nil
+			}
+		case ",":
+			if !m.running && !m.loading {
+				return m.openSettings(), nil
 			}
 		case "esc":
 			// filterPanel is intentionally left set — filterActive() gates on a
