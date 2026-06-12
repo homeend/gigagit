@@ -34,6 +34,9 @@ guards against removing the worktree you are standing in.
   (MRU); `switch` prints the path of the unique match.
 - `gg inspect` — one-shot repo summary (scriptable health check).
 - `gg init` — install/refresh this skill for detected AI agents.
+- `--time-track <file>` (global; combine with any command) — append one JSON
+  span per process start, git subprocess, and operation to `<file>` for
+  performance analysis.
 
 ## The rule that matters for agents
 

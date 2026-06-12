@@ -30,6 +30,7 @@ func TestBodyCoversTheCLISurface(t *testing.T) {
 		"gg branch create", "gg branch delete",
 		"--on-conflict", "--with-branch", "--force", "--branch",
 		"non-interactive", "exit 1", "stderr",
+		"--time-track",
 	} {
 		if !strings.Contains(b, want) {
 			t.Errorf("body missing %q", want)

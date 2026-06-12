@@ -85,6 +85,10 @@ Forks are answered by flags (e.g. `--on-conflict`, `--with-branch`/`--force`);
 without a flag, an interactive terminal prompts, and a non-interactive run errors
 asking for the flag.
 
+Every command (and the TUI) accepts a global `--time-track <file>` flag that
+appends one JSON span per process start, git subprocess, and operation —
+`jq . gg-perf.log` shows where the time went.
+
 ### Shell integration (cd-on-switch)
 
 So switching/creating a worktree can move your shell into it:

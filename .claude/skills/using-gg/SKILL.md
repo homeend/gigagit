@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v3 -->
+<!-- gg:using-gg:v4 -->
 
 # Using gg (gigagit)
 
@@ -41,6 +41,9 @@ guards against removing the worktree you are standing in.
   (MRU); `switch` prints the path of the unique match.
 - `gg inspect` — one-shot repo summary (scriptable health check).
 - `gg init` — install/refresh this skill for detected AI agents.
+- `--time-track <file>` (global; combine with any command) — append one JSON
+  span per process start, git subprocess, and operation to `<file>` for
+  performance analysis.
 
 ## The rule that matters for agents
 

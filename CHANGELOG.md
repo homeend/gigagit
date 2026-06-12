@@ -10,6 +10,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ### Added
 
+#### Performance log
+- Global `--time-track <file>` flag (TUI + every CLI command): appends one
+  redacted JSON span per process start, git subprocess, and engine operation.
+  Same span schema as `gg inspect --trace` and the panic dump. Embedded
+  using-gg agent skill v4.
+
 #### Worktree for an existing branch
 - `w` on the Branches panel now creates a worktree that checks out the
   **selected existing branch** (no new branch); `W` opens the previous
