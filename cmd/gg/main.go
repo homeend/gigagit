@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gigagit/gg/internal/app"
+	"github.com/gigagit/gg/internal/buildinfo"
 	"github.com/gigagit/gg/internal/cli"
 	"github.com/gigagit/gg/internal/git"
 	"github.com/gigagit/gg/internal/gitexec"
@@ -25,6 +26,13 @@ func main() {
 		cli.InitHomeDir = home
 	}
 	cwdFile, args := extractCwdFile(os.Args[1:])
+	timeTrack, args := extractTimeTrack(args)
+	if timeTrack != "" {
+		if err := setupTimeTrack(timeTrack, args); err != nil {
+			fmt.Fprintln(os.Stderr, "gg: --time-track:", err)
+			os.Exit(2)
+		}
+	}
 	if len(args) > 0 && args[0] == "shell-init" {
 		runShellInit(args[1:])
 		return
@@ -86,6 +94,48 @@ func extractCwdFile(args []string) (string, []string) {
 		}
 	}
 	return path, rest
+}
+
+// extractTimeTrack pulls the global --time-track flag (in either
+// "--time-track path" or "--time-track=path" form) out of args, returning its
+// value and the remaining args. A trailing "--time-track" with no value is
+// dropped.
+func extractTimeTrack(args []string) (string, []string) {
+	path := ""
+	rest := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "--time-track":
+			if i+1 < len(args) {
+				path = args[i+1]
+				i++
+			}
+		case strings.HasPrefix(a, "--time-track="):
+			path = strings.TrimPrefix(a, "--time-track=")
+		default:
+			rest = append(rest, a)
+		}
+	}
+	return path, rest
+}
+
+// setupTimeTrack opens path for appending (creating it if missing), routes
+// every span there, and emits the run-delimiting "gg start" span carrying the
+// (redacted) argv and the build version. The file is never explicitly closed:
+// each span is one unbuffered line, and process exit releases the handle.
+func setupTimeTrack(path string, argv []string) error {
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		return err
+	}
+	observ.SetSpanSink(f)
+	observ.EmitSpan(observ.Span{
+		Name:  "gg start",
+		Args:  append(append([]string{}, argv...), "version="+buildinfo.Version),
+		Start: time.Now(),
+	})
+	return nil
 }
 
 func runShellInit(args []string) {
