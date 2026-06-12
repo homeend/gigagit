@@ -166,8 +166,10 @@ func TestContentPopupSearchWhileScrolled(t *testing.T) {
 		u, _ := m.Update(keyMsg("down"))
 		m = u.(Model)
 	}
+	u, _ := m.Update(keyMsg("/")) // search starts only on an explicit /
+	m = u.(Model)
 	for _, r := range "line-2" { // matches line-20 … line-29 only
-		u, _ := m.Update(keyMsg(string(r)))
+		u, _ = m.Update(keyMsg(string(r)))
 		m = u.(Model)
 	}
 	p := m.contentPopup
@@ -182,8 +184,10 @@ func TestContentPopupSearchWhileScrolled(t *testing.T) {
 
 func TestContentPopupNoMatch(t *testing.T) {
 	m := contentModel(5)
+	u, _ := m.Update(keyMsg("/"))
+	m = u.(Model)
 	for _, r := range "zzz" {
-		u, _ := m.Update(keyMsg(string(r)))
+		u, _ = m.Update(keyMsg(string(r)))
 		m = u.(Model)
 	}
 	out := ansi.Strip(m.render())
@@ -192,14 +196,19 @@ func TestContentPopupNoMatch(t *testing.T) {
 	}
 }
 
-func TestContentPopupEscTwoStage(t *testing.T) {
+func TestContentPopupEscStages(t *testing.T) {
 	m := contentModel(5)
-	u, _ := m.Update(keyMsg("x"))
-	m = u.(Model)
-	u, _ = m.Update(keyMsg("esc")) // first esc clears the query
+	for _, k := range []string{"/", "x", "enter"} { // search "x", commit it
+		u, _ := m.Update(keyMsg(k))
+		m = u.(Model)
+	}
+	if m.contentPopup == nil || m.contentPopup.query != "x" || m.contentPopup.typing {
+		t.Fatalf("enter must commit the search, got %+v", m.contentPopup)
+	}
+	u, _ := m.Update(keyMsg("esc")) // first esc clears the committed search
 	m = u.(Model)
 	if m.contentPopup == nil {
-		t.Fatal("first esc must only clear the query")
+		t.Fatal("first esc must only clear the search")
 	}
 	if m.contentPopup.query != "" {
 		t.Fatalf("query = %q, want empty", m.contentPopup.query)
@@ -208,6 +217,54 @@ func TestContentPopupEscTwoStage(t *testing.T) {
 	m = u.(Model)
 	if m.contentPopup != nil {
 		t.Fatal("second esc must close the popup")
+	}
+}
+
+func TestContentPopupEscCancelsSearchInput(t *testing.T) {
+	m := contentModel(5)
+	for _, k := range []string{"/", "x", "esc"} { // esc mid-input cancels
+		u, _ := m.Update(keyMsg(k))
+		m = u.(Model)
+	}
+	if m.contentPopup == nil {
+		t.Fatal("esc during search input must not close the popup")
+	}
+	if m.contentPopup.typing || m.contentPopup.query != "" {
+		t.Fatalf("esc must cancel input and clear the query, got %+v", m.contentPopup)
+	}
+}
+
+func TestContentPopupQCloses(t *testing.T) {
+	m := contentModel(5)
+	u, cmd := m.Update(keyMsg("q"))
+	m = u.(Model)
+	if m.contentPopup != nil {
+		t.Fatal("q must close the popup")
+	}
+	if cmd != nil {
+		t.Fatal("q must close the window, not quit the app")
+	}
+}
+
+func TestContentPopupVimKeysScroll(t *testing.T) {
+	m := contentModel(30)
+	p := m.contentPopup
+	u, _ := m.Update(keyMsg("j"))
+	m = u.(Model)
+	if p.sel != 1 {
+		t.Errorf("j: sel = %d, want 1", p.sel)
+	}
+	u, _ = m.Update(keyMsg("k"))
+	m = u.(Model)
+	if p.sel != 0 {
+		t.Errorf("k: sel = %d, want 0", p.sel)
+	}
+	u, _ = m.Update(keyMsg("/")) // in search mode j filters instead
+	m = u.(Model)
+	u, _ = m.Update(keyMsg("j"))
+	m = u.(Model)
+	if p.sel != 0 || p.query != "j" {
+		t.Errorf("j while searching must edit the query, got sel=%d query=%q", p.sel, p.query)
 	}
 }
 
@@ -227,8 +284,8 @@ func TestContentPopupSwallowsGlobalKeys(t *testing.T) {
 	if m.running {
 		t.Fatal("p must not start an operation while the popup is open")
 	}
-	if m.contentPopup == nil || m.contentPopup.query != "p" {
-		t.Fatalf("typed rune must go to the filter query, got %+v", m.contentPopup)
+	if m.contentPopup == nil || m.contentPopup.query != "" {
+		t.Fatalf("p must be inert outside search mode, got %+v", m.contentPopup)
 	}
 }
 

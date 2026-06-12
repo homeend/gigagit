@@ -19,8 +19,8 @@ Three window types — pick the cheapest that fits, in this order:
 5. **Read-only scrollable/searchable text → content popup** (exemplar:
    `internal/tui/content_popup.go`). Don't build a new surface: construct
    `newContentPopup(title, []contentLine{...})` and assign it to
-   `m.contentPopup`. Filtering, scrolling (keys + wheel), windowing, and
-   rendering are free. `heading: true` lines group sections and are skipped
+   `m.contentPopup`. Search (/-gated, panel-consistent), scrolling (keys +
+   wheel), windowing, and rendering are free. `heading: true` lines group sections and are skipped
    by the filter. The help window (`help.go`) is the exemplar consumer.
    Positioned via `layoutGeom.pos` + `overlayAt`; receives no key events, owns
    no state, and is auto-shown from `render()` only when the plain (no modal,
