@@ -157,7 +157,7 @@ type statusList struct {
 	files []model.FileStatus
 	rows  []string
 	root  string
-	mtime map[int]int64 // lazy per-view stat cache; 0 = unknown (sorts last)
+	mtime map[int]int64 // dedupes os.Stat within one sort pass; 0 = unknown (sorts last)
 }
 
 func (l statusList) Len() int          { return len(l.files) }
@@ -171,6 +171,7 @@ func (l statusList) Date(i int) int64 {
 	if fi, err := os.Stat(filepath.Join(l.root, l.files[i].Path)); err == nil {
 		t = fi.ModTime().Unix()
 	}
+	// value receiver: writing through the shared map backing store is intentional
 	l.mtime[i] = t
 	return t
 }

@@ -193,9 +193,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "o":
 			if !m.running && !m.loading {
-				if m.sortModes == nil {
-					m.sortModes = map[panel]sortMode{}
-				}
 				m.sortModes[m.focus] = (m.sortModes[m.focus] + 1) % sortModeCount
 				if n := m.panelLen(m.focus); m.sel[m.focus] >= n && n > 0 {
 					m.sel[m.focus] = n - 1
