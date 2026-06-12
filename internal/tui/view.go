@@ -87,66 +87,42 @@ func (m Model) render() string {
 // renderInterface draws the header, the panels, and the footer/status, sized to
 // fit the current terminal so the output never exceeds width×height.
 func (m Model) renderInterface() string {
-	w, h := m.width, m.height
-	if w <= 0 {
-		w = 80
-	}
-	if h <= 0 {
-		h = 24
-	}
+	g := m.layout()
 
-	header := m.headerLine(w)
-	footer := truncate("[p]ull [P]ush [s]witch [S]tash [u]ndo [w]orktree [d]elete  •  [tab] focus  [r] reload  [q] quit", w)
+	header := m.headerLine(g.w)
+	footer := truncate("[p]ull [P]ush [s]witch [S]tash [u]ndo [w]orktree [d]elete [o]rder [/]filter  •  [tab] focus  [r] reload  [q] quit", g.w)
 	statusLine := m.statusMsg
 	if m.running {
 		statusLine = "⏳ " + statusLine
 	}
-	statusLine = truncate(statusLine, w)
-
-	// Rows available for the panel body, between header and footer/status.
-	bodyH := h - 3
-	if bodyH < 6 {
-		bodyH = 6
-	}
+	statusLine = truncate(statusLine, g.w)
 
 	// Narrow terminals: a single commits column (two columns won't fit cleanly).
-	if w < 40 {
-		body := m.renderPanel(panelCommits, "Commits", m.commitRows(), w, bodyH)
+	if g.w < 40 {
+		cmRows, _ := m.panelView(panelCommits)
+		body := m.renderPanel(panelCommits, m.panelLabel(panelCommits, "Commits"), cmRows, g.w, g.boxH[panelCommits])
 		return strings.Join([]string{header, body, footer, statusLine}, "\n")
 	}
 
-	// Two columns: a narrow left (branches over status) and a wide commits panel.
-	leftW := w / 3
-	if leftW < 16 {
-		leftW = 16
-	}
-	if leftW > w-24 {
-		leftW = w - 24
-	}
-	rightW := w - leftW
+	brRows, _ := m.panelView(panelBranches)
+	wtRows, _ := m.panelView(panelWorktrees)
+	stRows, _ := m.panelView(panelStatus)
+	cmRows, _ := m.panelView(panelCommits)
 
 	var left string
-	if bodyH >= 9 {
-		// Three stacked left panels: Branches, Worktrees, Status. Each bordered
-		// panel needs >=3 rows, so this layout requires bodyH >= 9.
-		h1 := bodyH / 3
-		h2 := bodyH / 3
-		h3 := bodyH - h1 - h2
+	if g.boxH[panelWorktrees] > 0 {
 		left = lipgloss.JoinVertical(lipgloss.Left,
-			m.renderPanel(panelBranches, "Branches", m.branchRows(), leftW, h1),
-			m.renderPanel(panelWorktrees, "Worktrees", m.worktreeRows(), leftW, h2),
-			m.renderPanel(panelStatus, "Status", m.statusRows(), leftW, h3),
+			m.renderPanel(panelBranches, m.panelLabel(panelBranches, "Branches"), brRows, g.leftW, g.boxH[panelBranches]),
+			m.renderPanel(panelWorktrees, m.panelLabel(panelWorktrees, "Worktrees"), wtRows, g.leftW, g.boxH[panelWorktrees]),
+			m.renderPanel(panelStatus, m.panelLabel(panelStatus, "Status"), stRows, g.leftW, g.boxH[panelStatus]),
 		)
 	} else {
-		// Short terminal: fall back to two left panels (Branches over Status).
-		branchesH := bodyH / 2
-		statusH := bodyH - branchesH
 		left = lipgloss.JoinVertical(lipgloss.Left,
-			m.renderPanel(panelBranches, "Branches", m.branchRows(), leftW, branchesH),
-			m.renderPanel(panelStatus, "Status", m.statusRows(), leftW, statusH),
+			m.renderPanel(panelBranches, m.panelLabel(panelBranches, "Branches"), brRows, g.leftW, g.boxH[panelBranches]),
+			m.renderPanel(panelStatus, m.panelLabel(panelStatus, "Status"), stRows, g.leftW, g.boxH[panelStatus]),
 		)
 	}
-	right := m.renderPanel(panelCommits, "Commits", m.commitRows(), rightW, bodyH)
+	right := m.renderPanel(panelCommits, m.panelLabel(panelCommits, "Commits"), cmRows, g.rightW, g.boxH[panelCommits])
 	body := lipgloss.JoinHorizontal(lipgloss.Top, left, right)
 
 	return strings.Join([]string{header, body, footer, statusLine}, "\n")

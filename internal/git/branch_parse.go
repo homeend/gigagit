@@ -41,6 +41,9 @@ func ParseBranches(data []byte) ([]model.Branch, error) {
 				}
 			}
 		}
+		if len(f) >= 6 {
+			b.UnixTime, _ = strconv.ParseInt(strings.TrimSpace(f[5]), 10, 64)
+		}
 		out = append(out, b)
 	}
 	return out, nil

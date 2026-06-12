@@ -27,7 +27,7 @@ func (r *Repo) Status(ctx context.Context) (model.WorkingTreeStatus, error) {
 
 // Branches returns local branches.
 func (r *Repo) Branches(ctx context.Context) ([]model.Branch, error) {
-	const format = "%(HEAD)%00%(refname:short)%00%(upstream:short)%00%(objectname:short)%00%(upstream:track)"
+	const format = "%(HEAD)%00%(refname:short)%00%(upstream:short)%00%(objectname:short)%00%(upstream:track)%00%(committerdate:unix)"
 	argv := gitcmd.New("for-each-ref").Arg("--format="+format, "refs/heads").ToArgv()
 	res, err := r.Runner.Run(ctx, "git for-each-ref", argv)
 	if err != nil {

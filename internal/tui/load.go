@@ -19,6 +19,7 @@ type dataLoadedMsg struct {
 	currentWorktree string
 	cfg             config.Config
 	gitCommonDir    string
+	headTimes       map[string]int64
 	err             error
 }
 
@@ -45,6 +46,17 @@ func (m Model) loadCmd() tea.Cmd {
 		if out.worktrees, err = repo.Worktrees(ctx); err != nil {
 			out.err = err
 			return out
+		}
+		// Worktree HEAD commit times power the Worktrees panel's date sort; a
+		// failure is non-fatal (dates read as 0 and date sort keeps backing order).
+		shas := make([]string, 0, len(out.worktrees))
+		for _, w := range out.worktrees {
+			if w.Head != "" {
+				shas = append(shas, w.Head)
+			}
+		}
+		if times, tErr := repo.CommitTimes(ctx, shas); tErr == nil {
+			out.headTimes = times
 		}
 		// TopLevel marks which listed worktree is the current one; a failure here
 		// is non-fatal (the marker just won't show).

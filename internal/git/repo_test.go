@@ -71,6 +71,21 @@ func TestRepoBranches(t *testing.T) {
 	}
 }
 
+func TestBranchesIncludeCommitterDate(t *testing.T) {
+	_, runner := newTestRepo(t)
+	repo := &Repo{Runner: runner}
+	bs, err := repo.Branches(context.Background())
+	if err != nil {
+		t.Fatalf("Branches: %v", err)
+	}
+	if len(bs) == 0 {
+		t.Fatal("expected at least one branch")
+	}
+	if bs[0].UnixTime == 0 {
+		t.Fatalf("expected nonzero UnixTime, got %+v", bs[0])
+	}
+}
+
 func TestRepoWorktrees(t *testing.T) {
 	_, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}

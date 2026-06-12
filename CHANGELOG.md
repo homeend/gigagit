@@ -46,6 +46,17 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   when git refuses (dirty tree or unmerged branch). Engine guards refuse
   removing the current or primary worktree.
 
+#### TUI list UX
+- `shift+tab` cycles panel focus backwards; `pgup`/`pgdn` move the selection by
+  25% of the focused panel's viewport.
+- `o` cycles a panel's sort order (`default → name ↑/↓ → date ↑/↓`) — each
+  panel defines its own name/date semantics (branches: committer date;
+  worktrees: HEAD commit date; status files: mtime; commits: commit time).
+  Branches default to newest-first.
+- `/` filters any list panel by case-insensitive substring (`enter` keeps the
+  filter, `esc` clears it); selection, paging, and all action keys operate on
+  the filtered, sorted view.
+
 #### Developer tooling
 - Project skills in `.claude/skills/`: `adding-features` (engine→TUI→CLI wiring
   checklist for new operations/commands) and `adding-tui-windows` (panel vs
