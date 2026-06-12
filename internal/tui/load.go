@@ -65,6 +65,8 @@ func (m Model) loadCmd() tea.Cmd {
 		// is non-fatal (the marker just won't show).
 		if top, topErr := repo.TopLevel(ctx); topErr == nil {
 			// Record this repo in the switcher registry (best-effort; "" = off).
+			// Runs on every load, so LastOpened is really "last active here" —
+			// exactly what MRU ordering wants.
 			_ = repos.Touch(statePath, top, time.Now())
 			out.currentWorktree = top
 			// Config: built-in defaults overlaid by the global file then the repo's

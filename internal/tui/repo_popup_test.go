@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -15,8 +16,13 @@ import (
 // containing otherRepo (older) and the model's own repo (newest, via load Touch).
 func seededModel(t *testing.T) (Model, string, string) {
 	t.Helper()
-	dir, repo := newRepoDir(t)
-	otherDir, _ := newRepoDir(t)
+	_, repo := newRepoDir(t)
+	// The "other" entry only needs to exist on disk; a deterministic,
+	// non-numeric name makes filter queries collision-proof.
+	otherDir := filepath.Join(t.TempDir(), "other-zebra")
+	if err := os.MkdirAll(otherDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	state := filepath.Join(t.TempDir(), "repos.toml")
 	if err := repos.Touch(state, otherDir, time.Unix(1000, 0)); err != nil {
 		t.Fatal(err)
@@ -25,7 +31,6 @@ func seededModel(t *testing.T) (Model, string, string) {
 	m.statePath = state
 	u, _ := m.Update(m.loadCmd()())
 	m = u.(Model)
-	_ = dir
 	return m, state, otherDir
 }
 
@@ -63,8 +68,7 @@ func TestPopupFilterAndSwitch(t *testing.T) {
 	m, _, otherDir := seededModel(t)
 	u, _ := m.Update(keyMsg("R"))
 	m = u.(Model)
-	base := filepath.Base(otherDir)
-	for _, r := range base {
+	for _, r := range "zebra" {
 		u, _ = m.Update(keyMsg(string(r)))
 		m = u.(Model)
 	}
