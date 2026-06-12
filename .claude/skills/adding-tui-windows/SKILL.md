@@ -16,6 +16,12 @@ Three window types — pick the cheapest that fits, in this order:
    `internal/tui/worktree_popup.go`).
 3. **Persistent list view → panel** (exemplar: the Worktrees panel).
 4. **Transient read-only overlay → tooltip** (exemplar: `internal/tui/tooltip.go`).
+5. **Read-only scrollable/searchable text → content popup** (exemplar:
+   `internal/tui/content_popup.go`). Don't build a new surface: construct
+   `newContentPopup(title, []contentLine{...})` and assign it to
+   `m.contentPopup`. Filtering, scrolling (keys + wheel), windowing, and
+   rendering are free. `heading: true` lines group sections and are skipped
+   by the filter. The help window (`help.go`) is the exemplar consumer.
    Positioned via `layoutGeom.pos` + `overlayAt`; receives no key events, owns
    no state, and is auto-shown from `render()` only when the plain (no modal,
    no popup) state is active. New **interactive** surfaces must NOT use this
@@ -35,7 +41,7 @@ modal selection) MUST live behind a **pointer field** (`popup *worktreePopup`,
 | 3 | `model.go` `panelLen` | Case returning the row count — drives selection clamping and ↑/↓ bounds automatically. |
 | 4 | `load.go` | Field on `dataLoadedMsg` + fetch in `loadCmd` (non-fatal if optional) + assignment in the `dataLoadedMsg` case in `model.go`. |
 | 5 | `view.go` | A `xRows() []string` builder + a `renderPanel(panelX, "Title", rows, w, h)` call in the layout. Bordered panels need ≥3 rows each; the layout branches on `bodyH` thresholds (see the `bodyH >= 9` three-panel branch) — add a taller breakpoint rather than squeezing. |
-| 6 | Keys | tab-cycling, ↑/↓, and the post-load selection clamp are automatic via `panelCount`/`panelLen`. Panel-specific actions: guard with `m.focus == panelX`. Footer hint: `view.go:99`. |
+| 6 | Keys | tab-cycling, ↑/↓, and the post-load selection clamp are automatic via `panelCount`/`panelLen`. Panel-specific actions: guard with `m.focus == panelX`. Footer hint: the `footerText` const in `view.go`. New global keys must also get a row in `helpContent()` (`help.go`) — `TestHelpFooterCoverage` fails otherwise. |
 
 ## Popup checklist
 
@@ -66,4 +72,4 @@ Helpers: `loadedModel(t)`, `newRepoDir(t)`, `keyMsg("x")`, `runGit`, `driveOp`
 | Popup keys leaking to global handlers | Swallow everything; test it. |
 | New panel squeezed into an existing `bodyH` branch | Add a taller breakpoint; 3 rows minimum per bordered panel. |
 | String `truncate` by `len()` | Width must be display-aware (`lipgloss.Width`) — wide runes/ANSI. |
-| Forgetting the footer hint | `view.go:99`. |
+| Forgetting the footer hint | The `footerText` const in `view.go`. New global keys must also get a row in `helpContent()` (`help.go`) — `TestHelpFooterCoverage` fails otherwise. |

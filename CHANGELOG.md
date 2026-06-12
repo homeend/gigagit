@@ -10,6 +10,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ### Added
 
+#### Help window
+- **Help window**: `?` opens a searchable list of every key binding, grouped
+  by context. Type to filter; ↑/↓, ctrl+↑/↓, pgup/pgdn, and the mouse wheel
+  scroll. Built on a new generic read-only content popup (`contentPopup`)
+  reusable for future viewers. Mouse reporting is now enabled while gg runs
+  (shift+drag for native terminal text selection).
+
 #### Performance log
 - Global `--time-track <file>` flag (TUI + every CLI command): appends one
   redacted JSON span per process start, git subprocess, and engine operation.
