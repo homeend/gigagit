@@ -1,8 +1,11 @@
 package tui
 
 import (
+	"context"
 	"path"
 	"sort"
+
+	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/gigagit/gg/internal/model"
 )
@@ -51,4 +54,127 @@ func fileLine(f model.CommitFile) string {
 		return f.Status + "  " + f.OldPath + " → " + path.Base(f.Path)
 	}
 	return f.Status + "  " + path.Base(f.Path)
+}
+
+// commitFilesMsg carries one commit's changed files, tagged with the hash so
+// stale results from fast j/k movement can be dropped.
+type commitFilesMsg struct {
+	hash    string
+	subject string
+	files   []model.CommitFile
+	err     error
+}
+
+// loadCommitFilesCmd fetches the changed files of commit c off the UI thread.
+func (m Model) loadCommitFilesCmd(c model.Commit) tea.Cmd {
+	repo := m.repo
+	return func() tea.Msg {
+		files, err := repo.CommitFiles(context.Background(), c.Hash)
+		return commitFilesMsg{hash: c.Hash, subject: c.Subject, files: files, err: err}
+	}
+}
+
+// shortHash truncates a sha to 7 characters for display.
+func shortHash(h string) string {
+	if len(h) > 7 {
+		return h[:7]
+	}
+	return h
+}
+
+// filesPageRows is the tree's visible row capacity: the left column's box
+// height minus borders (2), the title line (1), and the hint line (1).
+func (m Model) filesPageRows() int {
+	n := m.layout().bodyH - 4
+	if n < 1 {
+		n = 1
+	}
+	return n
+}
+
+// updateFilesViewKey routes keys while the files view is open: the commit
+// list keeps selection movement (follow-live reload), the tree gets
+// scroll/search keys, q/ctrl+c still quit, everything else is swallowed.
+func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	p := m.filesView
+	if msg.Type == tea.KeyCtrlC {
+		return m, tea.Quit
+	}
+	if p.typing { // /-input mode captures every key (same as the help window)
+		switch msg.Type {
+		case tea.KeyEsc:
+			p.typing = false
+			p.query = ""
+			p.sel = 0
+		case tea.KeyEnter:
+			p.typing = false // commit: search stays active
+		case tea.KeyBackspace, tea.KeyCtrlH:
+			if r := []rune(p.query); len(r) > 0 {
+				p.query = string(r[:len(r)-1])
+			}
+			p.sel = 0
+		case tea.KeySpace:
+			p.query += " "
+			p.sel = 0
+		case tea.KeyRunes:
+			p.query += string(msg.Runes)
+			p.sel = 0
+		}
+		return m, nil
+	}
+	switch msg.String() {
+	case "q":
+		return m, tea.Quit // q quits the app, view or not (top-level key)
+	case "esc":
+		if p.query != "" { // first esc clears the committed search
+			p.query = ""
+			p.sel = 0
+			return m, nil
+		}
+		m.filesView = nil
+		return m, nil
+	case "l":
+		m.filesView = nil
+		return m, nil
+	case "/":
+		p.typing = true
+		p.query = ""
+		p.sel = 0
+	case "up", "k":
+		return m.moveCommitUnderFilesView(-1)
+	case "down", "j":
+		return m.moveCommitUnderFilesView(1)
+	case "ctrl+up":
+		p.move(-1)
+	case "ctrl+down":
+		p.move(1)
+	case "pgup":
+		p.move(-m.filesPageRows())
+	case "pgdown":
+		p.move(m.filesPageRows())
+	}
+	return m, nil
+}
+
+// moveCommitUnderFilesView shifts the Commits selection by delta and fires
+// the follow-live reload when it lands on a different commit.
+func (m Model) moveCommitUnderFilesView(delta int) (tea.Model, tea.Cmd) {
+	n := m.panelLen(panelCommits)
+	s := m.sel[panelCommits] + delta
+	if s > n-1 {
+		s = n - 1
+	}
+	if s < 0 {
+		s = 0
+	}
+	if s == m.sel[panelCommits] {
+		return m, nil
+	}
+	m.sel[panelCommits] = s
+	bi, ok := m.backingIndex(panelCommits)
+	if !ok || m.commits[bi].Hash == m.filesHash {
+		return m, nil
+	}
+	m.filesHash = m.commits[bi].Hash
+	return m, m.loadCommitFilesCmd(m.commits[bi])
 }

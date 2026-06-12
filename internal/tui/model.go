@@ -44,6 +44,10 @@ type Model struct {
 	mark      *markState   // the m-key mark; nil = none (see mark.go)
 	pairPopup *pairOpPopup // two-row operation picker; nil = closed
 
+	filesView  *contentPopup // commit files tree replacing the left column; nil = closed
+	filesTitle string        // "Files <short-hash> <subject>", updated with the content
+	filesHash  string        // commit the view wants; gates stale async results
+
 	running   bool
 	statusMsg string
 	opMsgs    chan tea.Msg
@@ -88,6 +92,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+	case commitFilesMsg:
+		if m.filesView == nil || msg.hash != m.filesHash {
+			return m, nil // view closed, or a stale result from fast movement
+		}
+		if msg.err != nil {
+			m.statusMsg = "files: " + msg.err.Error()
+			return m, nil
+		}
+		q := m.filesView.query // preserve search query across reloads
+		m.filesView.lines = commitFileLines(msg.files)
+		m.filesView.sel = 0
+		m.filesView.query = q
+		m.filesTitle = "Files " + shortHash(msg.hash) + " " + msg.subject
+		return m, nil
 	case dataLoadedMsg:
 		m.loading = false
 		m.err = msg.err
@@ -149,6 +167,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.pairPopup != nil {
 			return m.updatePairPopupKey(msg)
+		}
+		if m.filesView != nil {
+			return m.updateFilesViewKey(msg)
 		}
 		// Filter-input mode captures every key (the panel label shows the query).
 		if m.filterTyping {
@@ -296,6 +317,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "?":
 			m.contentPopup = newContentPopup("Help — keys", helpContent())
+		case "l":
+			if !m.running && !m.loading && m.focus == panelCommits {
+				if m.width > 0 && m.width < 40 {
+					m.statusMsg = "terminal too narrow for the files view"
+					return m, nil
+				}
+				if bi, ok := m.backingIndex(panelCommits); ok {
+					c := m.commits[bi]
+					m.filesView = &contentPopup{lines: []contentLine{{text: "(loading…)"}}}
+					m.filesTitle = "Files " + shortHash(c.Hash) + " " + c.Subject
+					m.filesHash = c.Hash
+					return m, m.loadCommitFilesCmd(c)
+				}
+			}
 		case "m":
 			if !m.running && !m.loading {
 				return m.handleMarkKey()
@@ -320,14 +355,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 	case tea.MouseMsg:
-		// Mouse support is scoped to the content popup (spec non-goal: no
-		// panel clicks/wheel). Wheel ticks move the cursor like ctrl-arrows.
+		// Mouse support is scoped to the content popup and the files view
+		// (spec non-goal: no panel clicks/wheel).
 		if m.contentPopup != nil && msg.Action == tea.MouseActionPress {
 			switch msg.Button {
 			case tea.MouseButtonWheelUp:
 				m.contentPopup.move(-contentWheelStep)
 			case tea.MouseButtonWheelDown:
 				m.contentPopup.move(contentWheelStep)
+			}
+		} else if m.filesView != nil && msg.Action == tea.MouseActionPress {
+			switch msg.Button {
+			case tea.MouseButtonWheelUp:
+				m.filesView.move(-contentWheelStep)
+			case tea.MouseButtonWheelDown:
+				m.filesView.move(contentWheelStep)
 			}
 		}
 	case opEventMsg:
@@ -394,7 +436,9 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	// Drop selections from the old repo so the highlight doesn't land on a
 	// surprising row in the newly-loaded panels.
 	m.sel = map[panel]int{}
-	m.mark = nil // a mark from the old repo must not re-attach by name in the new one
+	m.mark = nil      // a mark from the old repo must not re-attach by name in the new one
+	m.filesView = nil // the new repo has a different commit list
+	m.filesHash = ""
 	return m, m.loadCmd()
 }
 
