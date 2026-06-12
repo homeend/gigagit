@@ -1,0 +1,23 @@
+name = "merge: guards fail fast (same branch, missing branch), nothing happens"
+
+[input]
+steps = [
+  { write = "base.txt", content = "base\n" },
+  { commit = "base" },
+]
+
+[[run]]
+cmd  = ["merge", "--into", "main", "main"]
+exit = 1
+
+[[run]]
+cmd  = ["merge", "no-such-branch"]
+exit = 1
+
+[expect]
+branch      = "main"
+clean       = true
+in_progress = "none"
+
+[[expect.log]]
+subjects = ["base"]

@@ -1,0 +1,31 @@
+name = "merge: diverged branches produce a merge commit"
+
+[input]
+steps = [
+  { write = "base.txt", content = "base\n" },
+  { commit = "base" },
+  { branch = "feat" },
+  { switch = "feat" },
+  { write = "feat.txt", content = "feat\n" },
+  { commit = "feat change" },
+  { switch = "main" },
+  { write = "main.txt", content = "main\n" },
+  { commit = "main change" },
+]
+
+[[run]]
+cmd  = ["merge", "feat"]
+exit = 0
+
+[expect]
+branch = "main"
+clean  = true
+
+[expect.files]
+"feat.txt" = "feat\n"
+"main.txt" = "main\n"
+
+[[expect.log]]
+# Merge commit on top; "main change" was committed after "feat change"
+# (later builder tick) so it sorts above it in date order.
+subjects = [{ matches = "^Merge" }, "main change", "feat change", "base"]
