@@ -16,6 +16,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   Same span schema as `gg inspect --trace` and the panic dump. Embedded
   using-gg agent skill v4.
 
+#### Truncation tooltip
+- TUI: when the focused panel's selected row is too wide and ellipsized, a
+  floating strip directly above the row shows its full text (all four list
+  panels; wraps up to 3 lines; suppressed under modals/popups).
+
 #### Worktree for an existing branch
 - `w` on the Branches panel now creates a worktree that checks out the
   **selected existing branch** (no new branch); `W` opens the previous
