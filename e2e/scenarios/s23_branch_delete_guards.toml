@@ -1,0 +1,22 @@
+name = "branch delete: refuses the current branch and a worktree-held branch"
+
+[input]
+steps = [
+  { write = "README.md", content = "hello\n" },
+  { commit = "initial" },
+  { branch = "held" },
+  { worktree = "wt/held-wt", branch = "held" },
+]
+
+[[run]]
+cmd  = ["branch", "delete", "main"]  # the checked-out branch -> guard, not git's error
+exit = 1
+
+[[run]]
+cmd  = ["branch", "delete", "held"]  # checked out in a linked worktree -> guard
+exit = 1
+
+[expect]
+branch    = "main"
+branches  = ["held", "main"]         # both refusals left everything intact
+worktrees = ["wt/held-wt"]

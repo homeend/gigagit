@@ -1,0 +1,25 @@
+name = "worktree add --branch: missing branch, held branch, start-point misuse"
+
+[input]
+steps = [
+  { write = "README.md", content = "hello\n" },
+  { commit = "initial" },
+  { branch = "feat" },
+]
+
+[[run]]
+cmd  = ["worktree", "add", "--branch", "ghost"]        # no local branch (and no
+exit = 1                                               # remote-DWIM creation)
+
+[[run]]
+cmd  = ["worktree", "add", "--branch", "main"]         # checked out in the main
+exit = 1                                               # worktree -> guard
+
+[[run]]
+cmd  = ["worktree", "add", "--branch", "feat", "main"] # --branch + start-point
+exit = 2                                               # is a usage error
+
+[expect]
+branch    = "main"
+branches  = ["feat", "main"]
+worktrees = []                       # none of the three attempts created anything

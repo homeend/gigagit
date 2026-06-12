@@ -1,0 +1,16 @@
+name = "branch delete: merged branch needs no flag and no prompt"
+
+[input]
+steps = [
+  { write = "README.md", content = "hello\n" },
+  { commit = "initial" },
+  { branch = "merged" },               # points at main's tip = fully merged
+]
+
+[[run]]
+cmd  = ["branch", "delete", "merged"]  # confirm is pre-answered by the CLI;
+exit = 0                               # stdin is not a TTY and that's fine
+
+[expect]
+branch   = "main"
+branches = ["main"]

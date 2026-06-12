@@ -30,6 +30,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   SmartPull (ff/rebase/merge/abort/conflict/background/worktree), stash,
   commit+push, undo, and worktree add/remove. New agent skill:
   `.claude/skills/writing-e2e-scenarios/`.
+- 8 more scenarios (s18–s25) covering `gg branch create/delete` (start points,
+  guards, the unmerged fork with and without `--force`) and
+  `gg worktree add --branch` (existing-branch checkout, guards, usage errors);
+  the skill's contract table gained the three new command rows.
 - **Fix** `gg worktree remove <relative-path>`: a repo-top-relative path now
   matches regardless of process cwd (found by the e2e corpus; matters for
   in-process frontends like the future MCP server).

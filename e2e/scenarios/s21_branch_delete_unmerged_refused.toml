@@ -1,0 +1,24 @@
+name = "branch delete: unmerged without --force fails and keeps the branch"
+
+[input]
+steps = [
+  { write = "README.md", content = "hello\n" },
+  { commit = "initial" },
+  { branch = "topic" },
+  { switch = "topic" },
+  { write = "work.txt", content = "wip\n" },
+  { commit = "topic work" },           # commit main doesn't have
+  { switch = "main" },
+]
+
+[[run]]
+cmd  = ["branch", "delete", "topic"]   # hits the branch-unmerged decision;
+exit = 1                               # no TTY + no --force -> unanswered -> exit 1
+
+[expect]
+branch   = "main"
+branches = ["main", "topic"]           # the branch survives untouched
+
+[[expect.log]]
+branch   = "topic"
+subjects = ["topic work", "initial"]

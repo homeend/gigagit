@@ -1,0 +1,21 @@
+name = "branch delete --force: unmerged commits are discarded"
+
+[input]
+steps = [
+  { write = "README.md", content = "hello\n" },
+  { commit = "initial" },
+  { branch = "topic" },
+  { switch = "topic" },
+  { write = "work.txt", content = "wip\n" },
+  { commit = "topic work" },
+  { switch = "main" },
+]
+
+[[run]]
+cmd  = ["branch", "delete", "--force", "topic"] # pre-answers branch-unmerged
+exit = 0
+
+[expect]
+branch   = "main"
+branches = ["main"]
+clean    = true                       # topic's file never touched main's tree

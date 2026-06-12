@@ -1,0 +1,19 @@
+name = "branch create: existing and invalid names are refused"
+
+[input]
+steps = [
+  { write = "README.md", content = "hello\n" },
+  { commit = "initial" },
+]
+
+[[run]]
+cmd  = ["branch", "create", "main"]      # already exists -> git refuses
+exit = 1
+
+[[run]]
+cmd  = ["branch", "create", "bad..name"] # illegal ref name -> fast-fail validation
+exit = 1
+
+[expect]
+branch   = "main"
+branches = ["main"]                      # nothing was created

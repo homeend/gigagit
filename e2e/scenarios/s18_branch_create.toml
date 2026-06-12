@@ -1,0 +1,30 @@
+name = "branch create: at HEAD and from a start point, never switches"
+
+[input]
+steps = [
+  { write = "README.md", content = "hello\n" },
+  { commit = "initial" },
+  { branch = "base" },                # pin a ref at the first commit
+  { write = "main.txt", content = "more\n" },
+  { commit = "second" },              # main advances past base
+]
+
+[[run]]
+cmd  = ["branch", "create", "topic"] # at HEAD = tip of main
+exit = 0
+
+[[run]]
+cmd  = ["branch", "create", "from-base", "base"]
+exit = 0
+
+[expect]
+branch   = "main"                    # create never switches
+branches = ["base", "from-base", "main", "topic"]
+
+[[expect.log]]
+branch   = "from-base"               # start point honored: only the first commit
+subjects = ["initial"]
+
+[[expect.log]]
+branch   = "topic"                   # HEAD default: both commits
+subjects = ["second", "initial"]

@@ -48,6 +48,9 @@ for `git log` order after merges). stdin is not a TTY.
 | `stash -m …` | NO `-u`: tracked changes only; untracked files remain in the tree. |
 | `undo` | Soft-resets the last commit; its changes end up STAGED; file contents keep the newer version. |
 | `worktree add [start]` | Positional = START POINT (not the branch name!). Branch/path come from the pinned templates: `worktree add main` → branch `wt-main` at sandbox path `wt/wt-main`. |
+| `worktree add --branch <b>` | Checks out the EXISTING branch `<b>` verbatim (no new branch, branch template bypassed); path still templated: sandbox path `wt/<b>`. You STAY on your current branch. Missing local branch (no remote-DWIM) or branch checked out anywhere → exit 1; `--branch` + positional start-point → exit 2. |
+| `branch create <name> [<start>]` | Creates a local branch, NEVER switches. Start defaults to HEAD. Existing name (git refuses) or illegal name (fast-fail validation) → exit 1. No decisions. |
+| `branch delete [--force] <name>` | The confirm decision is pre-answered by the CLI — a merged branch deletes with no flags and no TTY. Unmerged → `branch-unmerged` fork: unanswered (no `--force`, no TTY) → exit 1 and the branch SURVIVES; `--force` pre-answers force-delete. Guards (exit 1, nothing happens): the checked-out branch, a branch checked out in any worktree. |
 | `worktree remove <path>` | Path matched literally, cwd-absolute, or repo-top-relative; flags first: `--with-branch` deletes the branch (`remove-scope`), `--force` answers `worktree-dirty` + `branch-unmerged`. Clean+merged needs no `--force`. |
 
 Exit codes: success/chosen-abort = 0 · failed op / unanswered decision = 1 ·

@@ -1,0 +1,21 @@
+name = "worktree add --branch: checks out the existing branch, no new branch"
+
+[input]
+steps = [
+  { write = "README.md", content = "hello\n" },
+  { commit = "initial" },
+  { branch = "feat" },
+]
+
+[[run]]
+cmd  = ["worktree", "add", "--branch", "feat"]
+exit = 0
+
+[expect]
+branch    = "main"                   # you stay where you were
+branches  = ["feat", "main"]         # NO new branch — unlike plain `worktree add`
+worktrees = ["wt/feat"]              # path template `../wt/<branch>` with the
+                                     # branch name verbatim (not `wt-` templated)
+
+[expect.worktree."wt/feat".files]
+"README.md" = "hello\n"
