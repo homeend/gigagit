@@ -56,8 +56,7 @@ func (b *Sandbox) dir(rel string) string {
 	return filepath.Join(b.Root, rel)
 }
 
-// buildSandbox constructs the scenario's input state. Origin topology is
-// added in a later task; until then scenarios with [input.origin] fail.
+// buildSandbox constructs the scenario's input state.
 func buildSandbox(t *testing.T, sc *Scenario) *Sandbox {
 	t.Helper()
 	sb := &Sandbox{Root: t.TempDir()}

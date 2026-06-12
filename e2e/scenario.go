@@ -44,7 +44,6 @@ type Step struct {
 	Branch  string `toml:"branch"`
 	Switch  string `toml:"switch"`
 	// Stash is the stash message; the step runs `git stash push -u -m <msg>`.
-	// The builder for executing this step is added in a later task.
 	Stash    string `toml:"stash"`
 	Worktree string `toml:"worktree"` // sandbox-root-relative path; Branch holds the branch
 	Cwd      string `toml:"cwd"`
