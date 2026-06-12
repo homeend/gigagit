@@ -18,9 +18,15 @@ type WorktreeConfig struct {
 	BranchTemplates       []string `toml:"branch_templates"`
 }
 
+// UIConfig configures TUI behavior. TOML keys are snake_case.
+type UIConfig struct {
+	WheelStep int `toml:"wheel_step"` // rows per mouse-wheel tick; <=0 = unset
+}
+
 // Config is the merged gigagit configuration.
 type Config struct {
 	Worktree WorktreeConfig `toml:"worktree"`
+	UI       UIConfig       `toml:"ui"`
 }
 
 // Defaults returns the built-in configuration used when no files set a field.
@@ -30,6 +36,7 @@ func Defaults() Config {
 			PathTemplate:          "../<repo>.worktrees/<branch>",
 			DefaultBranchTemplate: "b/from-<parent-branch>-<random-alpha:4>",
 		},
+		UI: UIConfig{WheelStep: 3},
 	}
 }
 
@@ -46,6 +53,7 @@ func Load(globalPath, repoPath string) (Config, error) {
 		}
 		if ok {
 			overlayWorktree(&cfg.Worktree, layer.Worktree)
+			overlayUI(&cfg.UI, layer.UI)
 		}
 	}
 	return cfg, nil
@@ -81,6 +89,15 @@ func overlayWorktree(dst *WorktreeConfig, src WorktreeConfig) {
 	}
 	if len(src.BranchTemplates) > 0 {
 		dst.BranchTemplates = src.BranchTemplates
+	}
+}
+
+// overlayUI copies each set field of src onto dst. WheelStep <= 0 is unset
+// (same rule as the string fields: a higher layer cannot reset a lower
+// layer's value to the zero value).
+func overlayUI(dst *UIConfig, src UIConfig) {
+	if src.WheelStep > 0 {
+		dst.WheelStep = src.WheelStep
 	}
 }
 
