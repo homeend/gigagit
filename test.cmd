@@ -7,14 +7,23 @@ rem   test.cmd            gates + unit + e2e
 rem   test.cmd unit       unit tests only (./cmd/... ./internal/...)
 rem   test.cmd e2e        e2e scenarios only (./e2e)
 rem   test.cmd race       gates + unit + e2e, all with -race (pre-merge gate)
+rem
+rem Append -v to any form for verbose output - e2e scenarios then report what
+rem each one verified and every gg command's exit, e.g.  test.cmd e2e -v
 setlocal EnableDelayedExpansion
 
 rem Run from the project root (this script's directory) regardless of CWD.
 cd /d "%~dp0"
 
 set "RACE="
+set "VERBOSE="
 set "TARGET=%~1"
 if "%TARGET%"=="" set "TARGET=all"
+if /i "%TARGET%"=="-v" (
+	set "TARGET=all"
+	set "VERBOSE=-v"
+)
+if /i "%~2"=="-v" set "VERBOSE=-v"
 
 if /i "%TARGET%"=="unit" (
 	call :unit
@@ -34,7 +43,7 @@ if /i "%TARGET%"=="unit" (
 	if errorlevel 1 goto :fail
 	call :e2e
 ) else (
-	echo usage: %~nx0 [unit^|e2e^|race] 1>&2
+	echo usage: %~nx0 [unit^|e2e^|race] [-v] 1>&2
 	exit /b 2
 )
 if errorlevel 1 goto :fail
@@ -57,12 +66,12 @@ exit /b 0
 
 :unit
 echo == unit tests ==
-go test %RACE% ./cmd/... ./internal/...
+go test %RACE% %VERBOSE% ./cmd/... ./internal/...
 exit /b %errorlevel%
 
 :e2e
 echo == e2e scenarios (last: full CLI-engine-git stack) ==
-go test %RACE% ./e2e/
+go test %RACE% %VERBOSE% ./e2e/
 exit /b %errorlevel%
 
 :fail

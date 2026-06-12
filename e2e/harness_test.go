@@ -22,6 +22,7 @@ func TestScenarios(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			t.Log(sc.Name) // shown with -v (and on failure): what this scenario verifies
 			sb := buildSandbox(t, sc)
 			var out bytes.Buffer
 			for i, run := range sc.Runs {
@@ -32,6 +33,7 @@ func TestScenarios(t *testing.T) {
 					t.Fatalf("run[%d] gg %s: exit %d, want %d\ngg output:\n%s",
 						i, strings.Join(run.Cmd, " "), code, *run.Exit, out.String())
 				}
+				t.Logf("run[%d] gg %s → exit %d ✓", i, strings.Join(run.Cmd, " "), code)
 			}
 			assertExpect(t, sb, &sc.Expect)
 		})
