@@ -29,14 +29,16 @@ type Model struct {
 	cfg          config.Config
 	gitCommonDir string
 
-	popup          *worktreePopup
-	repoPopup      *repoPopup
-	settings       *settingsPopup
-	initHomeDir    string // home dir for agent detection; "" skips home-scoped agents (tests)
-	statePath      string // repo-registry location; "" disables recording (tests)
-	pendingSeqBump []string
-	pendingSwitch  bool
-	switchTarget   string
+	popup               *worktreePopup
+	repoPopup           *repoPopup
+	settings            *settingsPopup
+	initHomeDir         string // home dir for agent detection; "" skips home-scoped agents (tests)
+	statePath           string // repo-registry location; "" disables recording (tests)
+	pendingSeqBump      []string
+	pendingSwitch       bool
+	switchTarget        string
+	branchPopup         *branchPopup
+	pendingSwitchBranch string // branch to SmartSwitch to after a successful op (B = create-and-switch)
 
 	running   bool
 	statusMsg string
@@ -135,6 +137,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.settings != nil {
 			return m.updateSettingsKey(msg)
 		}
+		if m.branchPopup != nil {
+			return m.updateBranchPopupKey(msg)
+		}
 		// Filter-input mode captures every key (the panel label shows the query).
 		if m.filterTyping {
 			switch msg.Type {
@@ -192,6 +197,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "w":
 			if !m.running && !m.loading {
 				if mm, ok := m.openWorktreePopup(); ok {
+					return mm, nil
+				}
+			}
+		case "b":
+			if !m.running && !m.loading && m.focus == panelBranches {
+				if mm, ok := m.openBranchPopup(false); ok {
+					return mm, nil
+				}
+			}
+		case "B":
+			if !m.running && !m.loading && m.focus == panelBranches {
+				if mm, ok := m.openBranchPopup(true); ok {
 					return mm, nil
 				}
 			}
@@ -287,6 +304,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.running = false
 		m.opMsgs = nil
 		switchTo := ""
+		chainSwitch := ""
 		if msg.err != nil {
 			m.statusMsg = "error: " + msg.err.Error()
 		} else {
@@ -299,11 +317,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.pendingSwitch && msg.res.Path != "" {
 				switchTo = msg.res.Path
 			}
+			chainSwitch = m.pendingSwitchBranch
 		}
 		m.pendingSeqBump = nil
 		m.pendingSwitch = false
+		m.pendingSwitchBranch = "" // cleared before the chained op starts, so it cannot re-fire
 		if switchTo != "" {
 			return m.reRoot(switchTo)
+		}
+		if chainSwitch != "" {
+			return m.startOp(engine.SmartSwitch{Branch: chainSwitch})
 		}
 		return m, m.loadCmd()
 	}
