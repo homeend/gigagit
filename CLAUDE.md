@@ -45,6 +45,7 @@ feature is a worktree-aware **SmartPull** decision tree.
 | `tui`        | Bubble Tea Elm-style UI (value-receiver `Model`, panels, modal Decider, async ops). |
 | `cli`        | Scriptable command frontend; `cliDecider` answers forks from a flag policy or stdin. |
 | `worktree`   | Shared worktree template resolution used by BOTH the TUI popup and the CLI. |
+| `repos`      | Machine-local MRU registry of opened repositories (XDG state file) behind the repo switcher. |
 | `config`     | TOML config (`.gg.toml`), field-level overlay (defaults→global→repo), `<seq>` counters. |
 | `template`   | Pure branch/path template resolver (`<parent-branch>`, `<repo>`, `<date:…>`, `<seq:…>`, `<user:…>`, …). |
 | `shellinit`  | `gg shell-init [bash|zsh|fish]` wrappers (cd-on-switch via `--cwd-file`). |

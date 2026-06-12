@@ -57,6 +57,15 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   filter, `esc` clears it); selection, paging, and all action keys operate on
   the filtered, sorted view.
 
+#### Repo switcher
+- gg auto-records every repository it opens in a machine-local MRU registry
+  (`~/.local/state/gg/repos.toml`); dead paths are pruned automatically.
+- TUI: `R` opens a switcher popup — filter as you type, `enter` re-roots into
+  the chosen repo (the shell follows via `--cwd-file`), `ctrl+d` forgets an
+  entry.
+- CLI: `gg repo list` and `gg repo switch <query>` (unique substring match
+  prints the path and writes `--cwd-file` so a wrapped shell `cd`s there).
+
 #### Developer tooling
 - Project skills in `.claude/skills/`: `adding-features` (engine→TUI→CLI wiring
   checklist for new operations/commands) and `adding-tui-windows` (panel vs

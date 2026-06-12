@@ -12,6 +12,8 @@ import (
 )
 
 // withState points the package at a temp registry for one test.
+// Tests using this must NOT call t.Parallel() — RepoStatePath is a
+// package-level var.
 func withState(t *testing.T) string {
 	t.Helper()
 	state := filepath.Join(t.TempDir(), "repos.toml")
