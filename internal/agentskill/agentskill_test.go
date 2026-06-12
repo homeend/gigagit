@@ -2,9 +2,25 @@ package agentskill
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
+
+// TestDogfoodSkillCopyInSync guards the repo's committed dogfood copy against
+// drifting from the embedded skill: any using-gg.md or renderer change must be
+// followed by `gg init --update` + committing the refreshed SKILL.md.
+func TestDogfoodSkillCopyInSync(t *testing.T) {
+	path := filepath.Join("..", "..", ".claude", "skills", "using-gg", "SKILL.md")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Skipf("dogfood copy not present (non-repo checkout?): %v", err)
+	}
+	if string(data) != SkillFile() {
+		t.Error(".claude/skills/using-gg/SKILL.md is out of sync with the embedded skill — run `gg init --update` and commit the result")
+	}
+}
 
 func TestBodyCoversTheCLISurface(t *testing.T) {
 	b := Body()
