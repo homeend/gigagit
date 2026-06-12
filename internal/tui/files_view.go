@@ -207,8 +207,9 @@ func (m Model) moveCommitUnderFilesView(delta int) (tea.Model, tea.Cmd) {
 }
 
 // renderFilesView draws the commit files tree as one full-height left-column
-// box; it replaces the Branches/Worktrees/Status panels while open. Blurred
-// border: focus stays on the Commits panel.
+// box; it replaces the Branches/Worktrees/Status panels while open. The border
+// follows filesTreeFocused; the Commits panel blurs via panelFocused while the
+// tree side is active.
 func (m Model) renderFilesView(boxW, boxH int) string {
 	p := m.filesView
 	contentH := boxH - 2 // top/bottom border
@@ -262,5 +263,9 @@ func (m Model) renderFilesView(boxW, boxH int) string {
 	}
 	lines = append(lines, padRight(truncate(hint, innerW), innerW))
 
-	return bluredPanel.Render(strings.Join(lines, "\n"))
+	style := bluredPanel
+	if m.filesTreeFocused {
+		style = focusedPanel
+	}
+	return style.Render(strings.Join(lines, "\n"))
 }

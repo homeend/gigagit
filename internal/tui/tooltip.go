@@ -18,6 +18,11 @@ const tooltipMaxLines = 3
 // the same layout()/panelView/windowRows sources the renderer uses, so the
 // two cannot drift.
 func (m Model) tooltip() (lines []string, x, y int, ok bool) {
+	// While the files view's tree side is focused, the commits selection is
+	// not the active row — describing it would be misleading.
+	if !m.panelFocused(m.focus) {
+		return nil, 0, 0, false
+	}
 	g := m.layout()
 	p := m.focus
 	boxH := g.boxH[p]

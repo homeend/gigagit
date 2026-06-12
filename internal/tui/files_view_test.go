@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/gigagit/gg/internal/git"
 	"github.com/gigagit/gg/internal/gitexec"
@@ -538,5 +539,52 @@ func TestFilesViewNarrowResizeResetsTreeFocus(t *testing.T) {
 	m = u.(Model)
 	if m.filesView != nil || m.filesTreeFocused {
 		t.Fatal("the narrow auto-close must clear the view AND the tree focus")
+	}
+}
+
+func TestFilesViewFocusIsVisible(t *testing.T) {
+	m := openFilesView(t, filesModel())
+	out := ansi.Strip(m.render())
+	if !strings.Contains(out, "> 1111111 one") {
+		t.Fatalf("commits focused: the selected commit must carry the > prefix:\n%s", out)
+	}
+	u, _ := m.Update(keyMsg("left"))
+	m = u.(Model)
+	out = ansi.Strip(m.render())
+	if strings.Contains(out, "> 1111111 one") {
+		t.Fatalf("tree focused: the commits row must lose the > prefix:\n%s", out)
+	}
+	if !strings.Contains(out, "> ") {
+		t.Fatalf("tree focused: the tree cursor must still render:\n%s", out)
+	}
+}
+
+func TestPanelFocusedRespectsTreeFocus(t *testing.T) {
+	m := openFilesView(t, filesModel())
+	if !m.panelFocused(panelCommits) {
+		t.Fatal("commits must read focused while the commit side is active")
+	}
+	u, _ := m.Update(keyMsg("left"))
+	m = u.(Model)
+	if m.panelFocused(panelCommits) {
+		t.Fatal("commits must read blurred while the tree side is active")
+	}
+	u, _ = m.Update(keyMsg("right"))
+	if !u.(Model).panelFocused(panelCommits) {
+		t.Fatal("right must hand focus back to commits")
+	}
+}
+
+func TestTooltipSuppressedWhileTreeFocused(t *testing.T) {
+	m := filesModel()
+	m.commits[0].Subject = strings.Repeat("x", 200) // force row truncation
+	m = openFilesView(t, m)
+	if _, _, _, ok := m.tooltip(); !ok {
+		t.Fatal("setup: tooltip expected for the truncated commit row")
+	}
+	u, _ := m.Update(keyMsg("left"))
+	m = u.(Model)
+	if _, _, _, ok := m.tooltip(); ok {
+		t.Fatal("tooltip must be suppressed while the tree is focused")
 	}
 }
