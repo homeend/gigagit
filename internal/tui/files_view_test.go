@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -333,5 +334,55 @@ func TestFilesViewRenderFitsTerminal(t *testing.T) {
 	lines := strings.Split(out, "\n")
 	if len(lines) > 24 {
 		t.Fatalf("render = %d lines, must fit height 24", len(lines))
+	}
+}
+
+func TestFilesViewClosesOnNarrowResize(t *testing.T) {
+	m := openFilesView(t, filesModel())
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 30, Height: 24})
+	m = updated.(Model)
+	if m.filesView != nil {
+		t.Fatal("resizing below 40 cols must close the files view")
+	}
+	if !strings.Contains(m.statusMsg, "narrow") {
+		t.Fatalf("statusMsg = %q", m.statusMsg)
+	}
+
+	m2 := openFilesView(t, filesModel())
+	updated, _ = m2.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	if updated.(Model).filesView == nil {
+		t.Fatal("a wide resize must keep the view open")
+	}
+}
+
+func TestFilesViewNoOpWhileRunningOrLoading(t *testing.T) {
+	m := filesModel()
+	m.running = true
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("l")})
+	if updated.(Model).filesView != nil || cmd != nil {
+		t.Fatal("l must no-op while an operation is running")
+	}
+	m = filesModel()
+	m.loading = true
+	updated, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("l")})
+	if updated.(Model).filesView != nil || cmd != nil {
+		t.Fatal("l must no-op while loading")
+	}
+}
+
+func TestFilesViewLoadErrorKeepsViewAndSetsStatus(t *testing.T) {
+	m := filesModel()
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("l")})
+	m = updated.(Model)
+	updated, _ = m.Update(commitFilesMsg{hash: m.filesHash, err: fmt.Errorf("boom")})
+	m = updated.(Model)
+	if m.filesView == nil {
+		t.Fatal("a load error must not close the view")
+	}
+	if !strings.Contains(m.statusMsg, "boom") {
+		t.Fatalf("statusMsg = %q", m.statusMsg)
+	}
+	if len(m.filesView.lines) != 1 || m.filesView.lines[0].text != "(load failed)" {
+		t.Fatalf("lines = %+v, want the failed placeholder", m.filesView.lines)
 	}
 }

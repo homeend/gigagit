@@ -92,12 +92,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		if m.filesView != nil && msg.Width > 0 && msg.Width < 40 {
+			// The narrow layout has no left column; without this the view
+			// would keep capturing keys while invisible.
+			m.filesView = nil
+			m.statusMsg = "files view closed: terminal too narrow"
+		}
 	case commitFilesMsg:
 		if m.filesView == nil || msg.hash != m.filesHash {
 			return m, nil // view closed, or a stale result from fast movement
 		}
 		if msg.err != nil {
 			m.statusMsg = "files: " + msg.err.Error()
+			if len(m.filesView.lines) == 1 && m.filesView.lines[0].text == "(loading…)" {
+				m.filesView.lines = []contentLine{{text: "(load failed)"}}
+			}
 			return m, nil
 		}
 		// Only lines and cursor are replaced; the search query intentionally
