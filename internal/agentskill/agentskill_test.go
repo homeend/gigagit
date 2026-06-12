@@ -11,6 +11,7 @@ func TestBodyCoversTheCLISurface(t *testing.T) {
 	for _, want := range []string{
 		"gg status", "gg commit", "gg pull", "gg push", "gg switch",
 		"gg stash", "gg undo", "gg worktree", "gg repo", "gg inspect",
+		"gg branch create", "gg branch delete",
 		"--on-conflict", "--with-branch", "--force",
 		"non-interactive", "exit 1", "stderr",
 	} {
