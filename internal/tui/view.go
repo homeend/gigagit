@@ -152,13 +152,17 @@ func popupInnerWidth(w int) int {
 	return inner
 }
 
+// footerText abbreviates the global keys; TestHelpFooterCoverage enforces
+// that every [x] key here has a row in helpContent.
+const footerText = "[p]ull [P]ush [s]witch [b]ranch [S]tash [u]ndo [w]orktree [d]elete [o]rder / filter [R]epo [,] settings  •  [tab] focus  [r] reload  [?] help  [q] quit"
+
 // renderInterface draws the header, the panels, and the footer/status, sized to
 // fit the current terminal so the output never exceeds width×height.
 func (m Model) renderInterface() string {
 	g := m.layout()
 
 	header := m.headerLine(g.w)
-	footer := truncate("[p]ull [P]ush [s]witch [b]ranch [S]tash [u]ndo [w]orktree [d]elete [o]rder [/]filter [R]epo [,] settings  •  [tab] focus  [r] reload  [q] quit", g.w)
+	footer := truncate(footerText, g.w)
 	statusLine := m.statusMsg
 	if m.running {
 		statusLine = "⏳ " + statusLine

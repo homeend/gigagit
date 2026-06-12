@@ -288,6 +288,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if !m.running && !m.loading {
 				return m.openSettings(), nil
 			}
+		case "?":
+			m.contentPopup = newContentPopup("Help — keys", helpContent())
 		case "esc":
 			// filterPanel is intentionally left set — filterActive() gates on a
 			// non-empty query, so the residue is inert.
