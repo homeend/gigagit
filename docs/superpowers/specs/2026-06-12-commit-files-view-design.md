@@ -1,29 +1,33 @@
 # Commit files view — design
 
 Date: 2026-06-12
-Status: approved
+Status: approved (rev 2 — left-column replacement, follow-live)
 
 ## What
 
-On the Commits panel (the full-height right column), `l` replaces the panel
-in place with a read-only file list of the selected commit: a static indented
-tree (one heading level — full directory paths as headings, files beneath
-them with status letters), with the panel-consistent `/`-gated search.
-`esc`/`q`/`l` return to the commit list. TUI-only — no CLI command, no engine
-operation (read-only query, same class as `Log`).
+On the Commits panel (the full-height right column), `l` opens a read-only
+file list of the selected commit **in the left column**: the three left
+panels (Branches / Worktrees / Status) are replaced by one full-height box
+showing a static indented tree — full directory paths as headings, files
+beneath them with status letters. The Commits panel stays visible and keeps
+focus: moving the commit selection (j/k/↑/↓) reloads the file view for the
+newly selected commit (**follow-live**). `esc`/`l` close the view and the
+left panels come back. TUI-only — no CLI command, no engine operation
+(read-only query, same class as `Log`).
 
 ## Approach (decided)
 
 Reuse the `contentPopup` engine — the struct (`contentLine{text, heading}`
 lines, query, typing mode, cursor), its heading-survival filter (`visible()`),
-its movement/windowing — but render it inside the Commits panel's box
-geometry instead of as a centered overlay. This keeps the project rule
+its movement/windowing — but render it inside the left column's geometry
+instead of as a centered overlay, with a thin key-intercept layer that splits
+keys between the tree and the commit list. This keeps the project rule
 "read-only viewers use contentPopup, not custom UI" while delivering the
-requested in-place replacement.
+in-place replacement.
 
-Rejected: a `panelList` "panel mode" for `panelCommits` (headings break the
-row filter; global action keys would act on a fake commits panel), and a
-standalone view struct (duplicates filter/scroll logic the popup already has).
+Rejected: a `panelList` "panel mode" (headings break the row filter; global
+action keys would act on a fake panel), and a standalone view struct
+(duplicates filter/scroll logic the popup already has).
 
 ## Git verb
 
@@ -76,50 +80,70 @@ byte of the status field.
 ## TUI wiring
 
 **Model state** (`model.go`):
-- `filesPopup *contentPopup` — nil = closed; pointer so it persists across
+- `filesView *contentPopup` — nil = closed; pointer so it persists across
   the value-receiver copy (existing convention).
-- `filesTitle string` — `Files in <short-hash> <subject>`, captured at open.
+- `filesTitle string` — `Files <short-hash> <subject>` (hash truncated to 7),
+  updated together with the content so title and tree never disagree.
+- `filesHash string` — the commit the view currently WANTS (the selected
+  commit); used to drop stale async results.
 
 **Opening:** `l` in the normal-key section, gated like `m`
 (`!running && !loading`), only when `m.focus == panelCommits` and
-`backingIndex(panelCommits)` resolves. Returns an async `tea.Cmd` that runs
-`CommitFiles`; the result message sets `filesPopup` (and `filesTitle`).
-Error → `statusMsg`, view not opened. `l` on any other panel or an empty
-list is a no-op.
+`backingIndex(panelCommits)` resolves. Fires the async load (below). `l` on
+any other panel or an empty list is a no-op. On a narrow terminal (< 40
+cols, where the layout has no left column) `l` sets a statusMsg
+("terminal too narrow for the files view") and does not open.
+
+**Follow-live loading:** every load is a `tea.Cmd` running `CommitFiles`,
+its result message tagged with the commit hash. The model applies a result
+only when its hash equals `filesHash` (stale results from fast j/k movement
+are dropped). While a load is in flight the previous commit's tree stays on
+screen (no flicker); the title updates only when its content arrives. A load
+error sets statusMsg; the view stays on its previous content. The search
+query is KEPT across commit changes (so you can track one file through
+history); the cursor resets to the top.
 
 **Routing:** in the key-routing chain, after `pairPopup` and before
 `filterTyping`:
 
 ```
 modal → popup → repoPopup → settings → branchPopup → contentPopup
-      → pairPopup → filesPopup → filterTyping → normal keys
+      → pairPopup → filesView → filterTyping → normal keys
 ```
 
-The handler is the contentPopup key handler pointed at `filesPopup` with two
-deltas: `l` also closes (toggle), and closing means `m.filesPopup = nil`
-(commit list reappears). Shared logic is extracted so the help window and the
-files view use one handler parameterized by which field to close; behavior:
-`/` starts search, esc clears the search then closes, `q` closes, `enter`
-closes, j/k/arrows ±1, ctrl+↑/↓ ±5, pgup/pgdn page, ctrl+c quits, everything
-else swallowed. Mouse wheel scrolls it (same scoping as the help window).
+While the view is open, focus stays on the Commits panel conceptually; the
+filesView layer splits the keys:
 
-**Rendering** (`view.go`): when `filesPopup != nil`, the right column draws
-the file view instead of the Commits panel — same bordered box and geometry
-(`g.rightW × g.boxH[panelCommits]`), title `filesTitle` plus the standard
+| Key | Action |
+|---|---|
+| `j/k/↑/↓` | fall through to normal commit-selection movement, then trigger a follow-live reload for the newly selected commit |
+| `ctrl+↑/ctrl+↓` | scroll the file tree by 1 |
+| `pgup/pgdn` | page the file tree (reassigned from commit paging while open) |
+| mouse wheel | scroll the file tree (same scoping as the help window) |
+| `/` | start tree search (typing mode captures all keys; enter commits, esc cancels — identical to the help window) |
+| `esc` | clear a committed search; if none, close the view |
+| `l` | close the view (toggle) |
+| `q`/`ctrl+c` | quit the app (unchanged) |
+| anything else | swallowed — no panel actions or popups from inside the view |
+
+**Rendering** (`view.go`): when `filesView != nil`, the left column draws ONE
+bordered box (`g.leftW × bodyH` at the left column's position) instead of the
+Branches/Worktrees/Status panels — title `filesTitle` plus the standard
 `/query` suffix (block cursor while typing), headings bold, cursor row
 reversed, rows truncated to the box's text width, windowed via `windowRows`.
 Bottom line inside the box: `n/m  [/] search  [esc] close` (count only when
-content overflows). Left panels render unchanged; the truncation tooltip is
-suppressed while the view is open (it reflects panel selections).
+content overflows). The Commits panel renders unchanged and still shows its
+focus/selection. The truncation tooltip stays active for the Commits panel
+only.
 
-**Invalidation:** `reRoot` and the `r` reload clear `filesPopup` (the commit
-list may change underneath it). Opening any popup/modal over it is allowed —
-they sit earlier in the routing chain and render above.
+**Invalidation:** `reRoot` clears `filesView` (different repo). `r` (reload)
+is swallowed while the view is open, like other action keys.
 
 **Help/footer:** `footerText` is unchanged (panel-scoped key; the footer
 lists global keys). `help.go` gains a `Commits panel` section with the `l`
-row and a `Commit files view (l)` section (search/scroll/close rows). If `l`
-is ever added to `footerText`, `TestHelpFooterCoverage` enforces the rows.
+row and a `Commit files view (l)` section (move-commit/scroll/search/close
+rows). If `l` is ever added to `footerText`, `TestHelpFooterCoverage`
+enforces the rows.
 
 ## Testing
 
@@ -129,13 +153,16 @@ is ever added to `footerText`, `TestHelpFooterCoverage` enforces the rows.
   root commit, and a rename.
 - `internal/tui`: `commitFileLines` table tests (grouping, root files,
   renames, empty); interaction tests via the established pattern — `l` opens
-  with fed data, title shows hash+subject, `/` narrows and keeps headings,
-  esc clears search then closes, `q` and `l` close, `l` no-ops on other
-  panels / empty commits / while running, reload and reRoot clear the view,
-  render snapshot shows headings + status letters in the right column.
+  with fed data and the left column shows the tree while Commits stays
+  rendered; j/k moves the commit selection AND triggers a reload for the new
+  hash; a stale result (hash ≠ current) is dropped; `/` narrows and keeps
+  headings; the query survives a commit change, the cursor resets; esc clears
+  search then closes; `l` toggles closed; `l` no-ops on other panels / empty
+  commits / while running; narrow-terminal no-op with statusMsg; action keys
+  (`p`, `m`, `tab`, …) are swallowed while open; reRoot clears the view.
 
 ## Not doing (YAGNI)
 
 Collapsible tree nodes; diff-on-enter; CLI command; engine operation; sort
-modes inside the view; following the commit selection while open (the view
-is pinned to the commit it was opened for).
+modes inside the view; running operations or opening popups from inside the
+view; debouncing follow-live loads (stale-drop is enough at git speed).
