@@ -25,6 +25,8 @@ func TestHelpSearchFindsBinding(t *testing.T) {
 	m := Model{width: 80, height: 24}
 	u, _ := m.Update(keyMsg("?"))
 	m = u.(Model)
+	u, _ = m.Update(keyMsg("/")) // search starts on an explicit /
+	m = u.(Model)
 	for _, r := range "stash" {
 		u, _ = m.Update(keyMsg(string(r)))
 		m = u.(Model)

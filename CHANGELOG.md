@@ -12,8 +12,8 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 #### Help window
 - **Help window**: `?` opens a searchable list of every key binding, grouped
-  by context. Type to filter; ↑/↓, ctrl+↑/↓, pgup/pgdn, and the mouse wheel
-  scroll. Built on a new generic read-only content popup (`contentPopup`)
+  by context. `/` searches (panel-consistent); ↑/↓ or j/k, ctrl+↑/↓,
+  pgup/pgdn, and the mouse wheel scroll; `q`/esc close. Built on a new generic read-only content popup (`contentPopup`)
   reusable for future viewers. Mouse reporting is now enabled while gg runs
   (shift+drag for native terminal text selection).
 

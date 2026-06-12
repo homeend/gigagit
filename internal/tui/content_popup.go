@@ -20,10 +20,11 @@ type contentLine struct {
 // repo-popup-style type-to-filter search and cursor-driven scrolling. The
 // help window is its first consumer.
 type contentPopup struct {
-	title string
-	lines []contentLine // full, unfiltered content
-	query string        // case-insensitive substring over non-heading lines
-	sel   int           // cursor index into the FILTERED view
+	title  string
+	lines  []contentLine // full, unfiltered content
+	query  string        // case-insensitive substring over non-heading lines
+	typing bool          // true while /-input mode is capturing keys
+	sel    int           // cursor index into the FILTERED view
 }
 
 func newContentPopup(title string, lines []contentLine) *contentPopup {
@@ -87,46 +88,66 @@ func (m Model) contentPageRows() int {
 }
 
 // updateContentPopupKey handles all keys while the viewer is open. It swallows
-// everything (no fallthrough to global handlers).
+// everything (no fallthrough to global handlers). Search mirrors the panel
+// filter: / starts input mode, enter keeps the query, esc cancels it.
 func (m Model) updateContentPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	p := m.contentPopup
-	switch msg.Type {
-	case tea.KeyCtrlC:
+	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
-	case tea.KeyEsc:
-		if p.query != "" { // first esc clears the filter, second closes
+	}
+	if p.typing { // /-input mode captures every key
+		switch msg.Type {
+		case tea.KeyEsc:
+			p.typing = false
+			p.query = ""
+			p.sel = 0
+		case tea.KeyEnter:
+			p.typing = false // commit: search stays active
+		case tea.KeyBackspace, tea.KeyCtrlH:
+			if r := []rune(p.query); len(r) > 0 {
+				p.query = string(r[:len(r)-1])
+			}
+			p.sel = 0
+		case tea.KeySpace:
+			p.query += " "
+			p.sel = 0
+		case tea.KeyRunes:
+			p.query += string(msg.Runes)
+			p.sel = 0
+		}
+		return m, nil
+	}
+	switch msg.String() {
+	case "q": // close the window, not the app (q quits only at top level)
+		m.contentPopup = nil
+		return m, nil
+	case "esc":
+		if p.query != "" { // first esc clears the committed search, second closes
 			p.query = ""
 			p.sel = 0
 			return m, nil
 		}
 		m.contentPopup = nil
 		return m, nil
-	case tea.KeyEnter:
+	case "enter":
 		m.contentPopup = nil
 		return m, nil
-	case tea.KeyUp:
+	case "/":
+		p.typing = true
+		p.query = ""
+		p.sel = 0
+	case "up", "k":
 		p.move(-1)
-	case tea.KeyDown:
+	case "down", "j":
 		p.move(1)
-	case tea.KeyCtrlUp:
+	case "ctrl+up":
 		p.move(-contentFastStep)
-	case tea.KeyCtrlDown:
+	case "ctrl+down":
 		p.move(contentFastStep)
-	case tea.KeyPgUp:
+	case "pgup":
 		p.move(-m.contentPageRows())
-	case tea.KeyPgDown:
+	case "pgdown":
 		p.move(m.contentPageRows())
-	case tea.KeyBackspace, tea.KeyCtrlH:
-		if r := []rune(p.query); len(r) > 0 {
-			p.query = string(r[:len(r)-1])
-		}
-		p.sel = 0
-	case tea.KeySpace:
-		p.query += " "
-		p.sel = 0
-	case tea.KeyRunes:
-		p.query += string(msg.Runes)
-		p.sel = 0
 	}
 	return m, nil
 }
@@ -174,7 +195,9 @@ func (m Model) renderContentPopup() string {
 	win, _ := windowRows(rows, capRows, p.sel)
 
 	title := p.title
-	if p.query != "" {
+	if p.typing {
+		title += "  /" + p.query + "█"
+	} else if p.query != "" {
 		title += "  /" + p.query
 	}
 	var b strings.Builder
@@ -185,7 +208,7 @@ func (m Model) renderContentPopup() string {
 	for _, r := range win {
 		b.WriteString(r + "\n")
 	}
-	hint := "[esc] close"
+	hint := "[/] search  [q] close"
 	if len(vis) > capRows {
 		hint = fmt.Sprintf("%d/%d  %s", p.sel+1, len(vis), hint)
 	}

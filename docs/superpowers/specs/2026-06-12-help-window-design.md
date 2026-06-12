@@ -6,7 +6,7 @@ Status: approved in chat (2026-06-12). Branch: `feat/tui-help`.
 
 `?` opens a help window listing **every key binding in the TUI**, searchable by
 typing. The window is built on a new **generic content popup** — a reusable
-read-only viewer for any list of lines with type-to-filter search and
+read-only viewer for any list of lines with /-gated search and
 scrolling — so future read-only surfaces (log detail, diff preview) get it for
 free. Help is its first consumer.
 
@@ -16,8 +16,9 @@ free. Help is its first consumer.
   `[?] help`.
 - **Content:** all key contexts in one grouped, searchable list — Global,
   panel-specific actions, filter mode, each popup, the decision modal.
-- **Search:** type-to-filter immediately (like the `R` repo popup); no `/`
-  prefix.
+- **Search:** `/` starts search input (panel-consistent), enter keeps it,
+  esc cancels it. (Revised 2026-06-12 from type-to-filter after first use:
+  the user wants consistency with panel filtering, and a free `q` to close.)
 - **Generic component:** the viewer is content-agnostic and must be tested
   with content that fits the viewport AND content that overflows (scrolling),
   including searching while scrolled.
@@ -34,18 +35,21 @@ free. Help is its first consumer.
   onto wrap lines. No wrapping, no horizontal scroll.
 - Title line shows the window title and, while filtering, ` /query`.
 - A hint line at the bottom shows position (`12/87`) when the content
-  overflows, plus `[esc] close`.
+  overflows, plus `[/] search  [q] close`.
 - Cursor-based scrolling: a `> ` cursor row; the visible window follows the
   cursor via the same `windowRows` helper the panels use. When the content
   fits, everything is visible and movement just moves the cursor.
-- **Filtering:** typed runes/space append to the query, backspace deletes.
-  Case-insensitive substring match against non-heading lines. Section
-  headings survive only while at least one of their lines matches. Every
-  query change resets the cursor to 0 (searching while scrolled lands you at
-  the top of the results, never on an empty window). No match → `(no match)`.
-- **esc** clears the query if one is set; otherwise closes the popup.
-  **enter** closes (read-only window). **ctrl+c** quits. Every key is
-  swallowed — nothing falls through to global handlers.
+- **Search:** `/` enters input mode (title shows ` /query█`); typed
+  runes/space append, backspace deletes, enter commits (search stays active),
+  esc cancels input and clears. Case-insensitive substring match against
+  non-heading lines. Section headings survive only while at least one of
+  their lines matches. Every query change resets the cursor to 0 (searching
+  while scrolled lands you at the top of the results, never on an empty
+  window). No match → `(no match)`.
+- Outside input mode: **q** closes the window (the global quit stays at the
+  top level); **esc** clears a committed search if one is set, otherwise
+  closes; **enter** closes; **j/k** scroll like ↑/↓. **ctrl+c** quits. Every
+  key is swallowed — nothing falls through to global handlers.
 - **Mouse:** wheel up/down scrolls the popup when it is open; mouse events
   are ignored everywhere else. Enabling mouse reporting means terminals need
   shift+drag for native text selection while gg runs — accepted trade-off

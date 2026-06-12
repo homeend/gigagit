@@ -63,9 +63,10 @@ func helpContent() []contentLine {
 		r("enter", "confirm the option"),
 		r("esc", "abort the operation"),
 		h("Help window (?)"),
-		r("↑/↓ ctrl+↑/↓", "scroll by 1 / by 5 (mouse wheel: 3)"),
+		r("/", "search (enter keeps it, esc cancels)"),
+		r("↑/k ↓/j", "scroll by 1 (ctrl+↑/↓: by 5; mouse wheel: 3)"),
 		r("pgup/pgdn", "scroll by a page"),
 		r("esc", "clear the search, then close"),
-		r("enter", "close (type to search)"),
+		r("q/enter", "close"),
 	}
 }
