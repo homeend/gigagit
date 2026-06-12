@@ -9,13 +9,18 @@ import (
 	"github.com/gigagit/gg/internal/model"
 )
 
+// point is a cell coordinate on the rendered screen (x = column, y = row).
+type point struct{ x, y int }
+
 // layoutGeom is the panel geometry renderInterface draws with. boxH holds each
 // panel's box height under the current layout; a panel missing from the map
-// (or 0) is not visible at this terminal size.
+// (or 0) is not visible at this terminal size. pos holds each visible panel's
+// top-left corner (the header occupies screen row 0).
 type layoutGeom struct {
 	w, h, bodyH   int
 	leftW, rightW int
 	boxH          map[panel]int
+	pos           map[panel]point
 }
 
 // layout computes panel geometry for the current terminal size. It is the
@@ -33,12 +38,13 @@ func (m Model) layout() layoutGeom {
 	if bodyH < 6 {
 		bodyH = 6
 	}
-	g := layoutGeom{w: w, h: h, bodyH: bodyH, boxH: map[panel]int{}}
+	g := layoutGeom{w: w, h: h, bodyH: bodyH, boxH: map[panel]int{}, pos: map[panel]point{}}
 
 	// Narrow terminals: a single commits column.
 	if w < 40 {
 		g.rightW = w
 		g.boxH[panelCommits] = bodyH
+		g.pos[panelCommits] = point{0, 1}
 		return g
 	}
 
@@ -58,13 +64,19 @@ func (m Model) layout() layoutGeom {
 		g.boxH[panelBranches] = h1
 		g.boxH[panelWorktrees] = h2
 		g.boxH[panelStatus] = bodyH - h1 - h2
+		g.pos[panelBranches] = point{0, 1}
+		g.pos[panelWorktrees] = point{0, 1 + h1}
+		g.pos[panelStatus] = point{0, 1 + h1 + h2}
 	} else {
 		// Short terminal: Branches over Status only.
 		bh := bodyH / 2
 		g.boxH[panelBranches] = bh
 		g.boxH[panelStatus] = bodyH - bh
+		g.pos[panelBranches] = point{0, 1}
+		g.pos[panelStatus] = point{0, 1 + bh}
 	}
 	g.boxH[panelCommits] = bodyH
+	g.pos[panelCommits] = point{leftW, 1}
 	return g
 }
 
