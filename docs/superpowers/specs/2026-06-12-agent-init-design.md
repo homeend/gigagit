@@ -134,16 +134,24 @@ binary never downgrades a newer install.)
 ```
 $ gg init
 Detected agents:
-  1. Claude Code (project)   .claude/skills/using-gg/SKILL.md   [new]
-  2. Claude Code (global)    ~/.claude/skills/using-gg/SKILL.md [outdated v1→v2]
-  3. Junie                   .junie/guidelines.md               [up to date]
-Install for which? [a]ll / numbers (e.g. 1,3) / [q]uit:
+  1. [ ] Claude Code (project)   .claude/skills/using-gg/SKILL.md   new
+  2. [x] Claude Code (global)    ~/.claude/skills/using-gg/SKILL.md outdated v1→v2
+  3. [x] Junie                   .junie/guidelines.md               up to date
+Apply? [enter]=checked / a=all / numbers (e.g. 1,3) / [q]uit:
 ```
 
-- Selection input on stdin; `a` = all, comma/space-separated numbers, `q`/empty
-  = abort (exit 0, nothing written).
-- Flags (scripting): `--all`; `--agents claude-project,junie` (by ID;
-  unknown ID = error, exit 2); `--list` (print detections and exit 0).
+- **Checkbox semantics (the core rule):** a target that already has the skill
+  installed (`up to date` or `outdated`) is **checked by default** — applying
+  refreshes it. A `new` target is **unchecked** — installing into an agent for
+  the first time is always explicit opt-in.
+- Selection input on stdin: **empty/enter** applies the checked defaults
+  (refreshes everything already installed; if nothing is installed yet, says
+  so and exits 0 without writing); `a` = all; comma/space-separated numbers =
+  exactly those targets; `q` = abort (exit 0, nothing written).
+- Flags (scripting): `--all`; `--update` (the checked defaults — refresh every
+  already-installed target; the post-upgrade verb); `--agents
+  claude-project,junie` (by ID; unknown ID = error, exit 2); `--list` (print
+  detections with checkbox state and exit 0).
 - **Non-interactive** (stdin not a TTY) with no selection flag: print the list
   and exit 1 with a hint to use `--all`/`--agents` (the cliDecider philosophy —
   never hang, never guess).
@@ -164,10 +172,12 @@ a home.
 - **`,`** (comma, unbound) opens the Settings popup: a short menu list; v1 has
   one entry — **"Set up agent skills (using-gg)"**.
 - Choosing it (enter) swaps the popup to the **agent picker**: the same
-  `Detect` list with the same statuses; `↑/↓` move, **space** toggles selection
-  (pre-selected: every target that is `new` or `outdated`), **enter** installs
-  the selected set, **esc** goes back to the menu (esc again closes),
-  ctrl+c quits.
+  `Detect` list rendered with a checkbox per row (`[x]`/`[ ]`) and the status.
+  **Same checkbox rule as the CLI:** already-installed targets (`up to date` /
+  `outdated`) start **checked** — confirming updates them automatically; `new`
+  targets start **unchecked** (first-time installs are explicit). `↑/↓` move,
+  **space** toggles any row, **enter** applies the checked set, **esc** goes
+  back to the menu (esc again closes), ctrl+c quits.
 - Install runs synchronously (file writes are instant); the result lands in
   the status line (`installed 2, refreshed 1`); errors surface there too.
 - Footer hint gains `[,] settings`.
@@ -217,13 +227,17 @@ that skill for git operations gg covers.
   creates parents + overwrites; ManagedBlock appends to existing content
   preserving it, replaces an old block in place (surrounding bytes identical),
   creates missing files; idempotent double-install.
-- **CLI:** `--list` output; `--all` installs into a fake project/home
-  (HOME-injection: `Detect`/`cmdInit` take the home dir from a package
-  seam so tests never touch the real `~`); `--agents` selects by ID, unknown
-  ID errors; non-interactive without flags exits 1; interactive stdin "1"
-  installs exactly one; works outside a git repo.
+- **CLI:** `--list` output (incl. checkbox state); `--all` installs into a
+  fake project/home (HOME-injection: `Detect`/`cmdInit` take the home dir from
+  a package seam so tests never touch the real `~`); `--update` refreshes
+  exactly the already-installed targets and skips `new` ones; `--agents`
+  selects by ID, unknown ID errors; **default-checked rule:** stdin empty-enter
+  refreshes installed targets only (and is a clean no-op when nothing is
+  installed); stdin "1" installs exactly that target; non-interactive without
+  flags exits 1; works outside a git repo.
 - **TUI:** `,` opens the menu; enter on the entry shows the picker with
-  statuses; space toggles; enter installs into temp targets (Model carries an
+  checkboxes — installed targets pre-checked, `new` ones unchecked; space
+  toggles; enter applies the checked set into temp targets (Model carries an
   injectable home/proj for agentinit, mirroring `statePath` hermeticity);
   esc back/close; key swallowing; overlay fit.
 
