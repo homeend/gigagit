@@ -1,0 +1,27 @@
+name = "merge: fast-forwards when the target hasn't diverged"
+
+[input]
+steps = [
+  { write = "base.txt", content = "base\n" },
+  { commit = "base" },
+  { branch = "feat" },
+  { switch = "feat" },
+  { write = "feat.txt", content = "feat\n" },
+  { commit = "feat change" },
+  { switch = "main" },
+]
+
+[[run]]
+cmd  = ["merge", "feat"]
+exit = 0
+
+[expect]
+branch = "main"
+clean  = true
+
+[expect.files]
+"feat.txt" = "feat\n"
+
+[[expect.log]]
+# Fast-forward: no merge commit, feat's commit is simply on main.
+subjects = ["feat change", "base"]

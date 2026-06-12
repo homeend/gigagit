@@ -1,0 +1,27 @@
+name = "merge: unanswered conflict (no flag, no TTY) exits 1 with the merge left in place"
+
+[input]
+steps = [
+  { write = "shared.txt", content = "base\n" },
+  { commit = "base" },
+  { branch = "feat" },
+  { switch = "feat" },
+  { write = "shared.txt", content = "feat\n" },
+  { commit = "feat change" },
+  { switch = "main" },
+  { write = "shared.txt", content = "main\n" },
+  { commit = "main change" },
+]
+
+[[run]]
+cmd  = ["merge", "feat"]
+exit = 1
+
+[expect]
+branch      = "main"
+# The merge-conflict decision fires only AFTER the conflict exists; an
+# unanswered decision errors out with the conflicted tree still in place.
+in_progress = "merge"
+
+[expect.status]
+conflicted = ["shared.txt"]

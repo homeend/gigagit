@@ -1,0 +1,31 @@
+name = "merge: conflict with --on-conflict=abort restores the tree (exit 0)"
+
+[input]
+steps = [
+  { write = "shared.txt", content = "base\n" },
+  { commit = "base" },
+  { branch = "feat" },
+  { switch = "feat" },
+  { write = "shared.txt", content = "feat\n" },
+  { commit = "feat change" },
+  { switch = "main" },
+  { write = "shared.txt", content = "main\n" },
+  { commit = "main change" },
+]
+
+[[run]]
+cmd  = ["merge", "--on-conflict=abort", "feat"]
+exit = 0
+
+[expect]
+branch      = "main"
+clean       = true
+in_progress = "none"
+
+[expect.files]
+"shared.txt" = "main\n"
+
+[[expect.log]]
+# After abort, main is restored to its pre-merge state; feat's commit is NOT
+# on main — it only exists on the feat branch.
+subjects = ["main change", "base"]

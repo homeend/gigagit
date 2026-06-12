@@ -63,6 +63,16 @@ Helpers: `loadedModel(t)`, `newRepoDir(t)`, `keyMsg("x")`, `runGit`, `driveOp`
   (every line ≤ `m.height` lines and `lipgloss.Width(line) ≤ m.width`);
 - selection clamp if your change can shrink a list.
 
+### Pair-op popup (two-row operations)
+
+For operations taking TWO rows of one panel: the `m` key marks a row by
+stable identity (`panelList.Key`, not index — survives reload/sort/filter;
+state in `Model.mark *markState`), a second `m` on another row opens
+`pairOpPopup` listing the panel's registered `pairOp`s (`pairOpsFor(panel)`
+in `mark.go`). Labels spell out the argument direction ("Merge A into B").
+To give a panel pair-operations, register entries in `pairOpsFor` — the
+mark mechanism, popup, and dispatch are already generic.
+
 ## Common mistakes
 
 | Mistake | Fix |

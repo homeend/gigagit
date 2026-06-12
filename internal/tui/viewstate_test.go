@@ -18,6 +18,7 @@ func (l fakeList) Len() int          { return len(l.names) }
 func (l fakeList) Row(i int) string  { return l.names[i] }
 func (l fakeList) Name(i int) string { return l.names[i] }
 func (l fakeList) Date(i int) int64  { return l.dates[i] }
+func (l fakeList) Key(i int) string  { return l.names[i] }
 
 func sortedNames(l fakeList, mode sortMode) []string {
 	idx := make([]int, l.Len())

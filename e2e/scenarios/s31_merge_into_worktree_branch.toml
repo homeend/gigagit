@@ -1,0 +1,27 @@
+name = "merge --into a branch checked out in a linked worktree: merges there, you stay"
+
+[input]
+steps = [
+  { write = "base.txt", content = "base\n" },
+  { commit = "base" },
+  { branch = "side" },
+  { worktree = "wt-side", branch = "side" },
+  { write = "main.txt", content = "m\n" },
+  { commit = "main change" },
+]
+
+[[run]]
+cmd  = ["merge", "--into", "side", "main"]
+exit = 0
+
+[expect]
+branch    = "main"                   # the main worktree never switched
+worktrees = ["wt-side"]
+
+[[expect.log]]
+branch   = "side"
+# side was created at "base" and fast-forwards onto main's tip.
+subjects = ["main change", "base"]
+
+[expect.worktree."wt-side".files]
+"main.txt" = "m\n"

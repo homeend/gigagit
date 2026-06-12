@@ -1,0 +1,25 @@
+name = "merge: conflict with --on-conflict=keep leaves the merge in progress (exit 1)"
+
+[input]
+steps = [
+  { write = "shared.txt", content = "base\n" },
+  { commit = "base" },
+  { branch = "feat" },
+  { switch = "feat" },
+  { write = "shared.txt", content = "feat\n" },
+  { commit = "feat change" },
+  { switch = "main" },
+  { write = "shared.txt", content = "main\n" },
+  { commit = "main change" },
+]
+
+[[run]]
+cmd  = ["merge", "--on-conflict=keep", "feat"]
+exit = 1
+
+[expect]
+branch      = "main"
+in_progress = "merge"
+
+[expect.status]
+conflicted = ["shared.txt"]

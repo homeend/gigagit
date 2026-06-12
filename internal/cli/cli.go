@@ -62,6 +62,8 @@ func Run(workdir string, args []string, stdin io.Reader, stdout, stderr io.Write
 		return cmdStash(repo, rest, stdout, stderr)
 	case "undo":
 		return cmdUndo(repo, rest, stdout, stderr)
+	case "merge":
+		return cmdMerge(repo, rest, stdin, stdout, stderr)
 	case "worktree":
 		return cmdWorktree(repo, rest, stdin, stdout, stderr, cwdFile)
 	case "repo":
@@ -76,7 +78,7 @@ func Run(workdir string, args []string, stdin io.Reader, stdout, stderr io.Write
 
 var commands = map[string]bool{
 	"status": true, "commit": true, "pull": true, "push": true,
-	"switch": true, "branch": true, "stash": true, "undo": true, "worktree": true,
+	"switch": true, "branch": true, "stash": true, "undo": true, "merge": true, "worktree": true,
 	"inspect": true, "repo": true, "init": true,
 }
 

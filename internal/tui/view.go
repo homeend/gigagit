@@ -97,7 +97,7 @@ func (m Model) render() string {
 	}
 	_, h := m.overlayDims()
 	bg := clipToHeight(m.renderInterface(), h)
-	if m.popup == nil && m.repoPopup == nil && m.settings == nil && m.branchPopup == nil && m.contentPopup == nil {
+	if m.popup == nil && m.repoPopup == nil && m.settings == nil && m.branchPopup == nil && m.contentPopup == nil && m.pairPopup == nil {
 		if lines, x, y, ok := m.tooltip(); ok {
 			w, h := m.overlayDims()
 			bg = overlayAt(bg, strings.Join(lines, "\n"), x, y, w, h)
@@ -122,6 +122,10 @@ func (m Model) render() string {
 	if m.contentPopup != nil {
 		w, h := m.overlayDims()
 		return overlayCenter(bg, m.renderContentPopup(), w, h)
+	}
+	if m.pairPopup != nil {
+		w, h := m.overlayDims()
+		return overlayCenter(bg, m.renderPairOpPopup(), w, h)
 	}
 	return bg
 }
@@ -154,7 +158,7 @@ func popupInnerWidth(w int) int {
 
 // footerText abbreviates the global keys; TestHelpFooterCoverage enforces
 // that every [x] key here has a row in helpContent.
-const footerText = "[p]ull [P]ush [s]witch [b]ranch [S]tash [u]ndo [w]orktree [d]elete [o]rder [/]filter [R]epo [,] settings  •  [tab] focus  [r] reload  [?] help  [q] quit"
+const footerText = "[p]ull [P]ush [s]witch [b]ranch [S]tash [u]ndo [w]orktree [m]ark [d]elete [o]rder [/]filter [R]epo [,] settings  •  [tab] focus  [r] reload  [?] help  [q] quit"
 
 // renderInterface draws the header, the panels, and the footer/status, sized to
 // fit the current terminal so the output never exceeds width×height.
@@ -164,6 +168,14 @@ func (m Model) renderInterface() string {
 	header := m.headerLine(g.w)
 	footer := truncate(footerText, g.w)
 	statusLine := m.statusMsg
+	if m.mark != nil && m.markAlive() {
+		hint := "◆ marked: " + m.mark.display
+		if statusLine != "" {
+			statusLine = hint + " · " + statusLine
+		} else {
+			statusLine = hint
+		}
+	}
 	if m.running {
 		statusLine = "⏳ " + statusLine
 	}
@@ -235,11 +247,17 @@ func (m Model) renderPanel(p panel, label string, rows []string, boxW, boxH int)
 	} else if len(rows) == 0 {
 		lines = append(lines, padRight(truncate("  (none)", innerW), innerW))
 	} else {
-		win, selInWin := windowRows(rows, rowsCap, m.sel[p])
+		win, selInWin, start := windowRows(rows, rowsCap, m.sel[p])
+		markedInWin := -1
+		if md := m.markDisplayIndex(p); md >= 0 {
+			markedInWin = md - start
+		}
 		for i, row := range win {
 			focused := i == selInWin && p == m.focus
 			prefix := "  "
-			if focused {
+			if i == markedInWin {
+				prefix = "◆ "
+			} else if focused {
 				prefix = "> "
 			}
 			line := padRight(truncate(prefix+row, innerW), innerW)
@@ -260,14 +278,14 @@ func (m Model) renderPanel(p panel, label string, rows []string, boxW, boxH int)
 	return style.Render(strings.Join(lines, "\n"))
 }
 
-// windowRows returns at most n rows scrolled so sel stays visible, plus sel's
-// index within the returned window.
-func windowRows(rows []string, n, sel int) ([]string, int) {
+// windowRows returns at most n rows scrolled so sel stays visible, sel's
+// index within the returned window, and the window's start offset.
+func windowRows(rows []string, n, sel int) ([]string, int, int) {
 	if n <= 0 {
 		n = 1
 	}
 	if len(rows) <= n {
-		return rows, sel
+		return rows, sel, 0
 	}
 	start := sel - n/2
 	if start < 0 {
@@ -279,7 +297,7 @@ func windowRows(rows []string, n, sel int) ([]string, int) {
 	if start < 0 {
 		start = 0
 	}
-	return rows[start : start+n], sel - start
+	return rows[start : start+n], sel - start, start
 }
 
 // truncate shortens s to at most n display columns, adding an ellipsis. Width is

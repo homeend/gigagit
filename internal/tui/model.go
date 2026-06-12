@@ -41,6 +41,9 @@ type Model struct {
 	pendingSwitchBranch string        // branch to SmartSwitch to after a successful op (B = create-and-switch)
 	contentPopup        *contentPopup // generic read-only viewer (help window)
 
+	mark      *markState   // the m-key mark; nil = none (see mark.go)
+	pairPopup *pairOpPopup // two-row operation picker; nil = closed
+
 	running   bool
 	statusMsg string
 	opMsgs    chan tea.Msg
@@ -143,6 +146,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.contentPopup != nil {
 			return m.updateContentPopupKey(msg)
+		}
+		if m.pairPopup != nil {
+			return m.updatePairPopupKey(msg)
 		}
 		// Filter-input mode captures every key (the panel label shows the query).
 		if m.filterTyping {
@@ -290,7 +296,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "?":
 			m.contentPopup = newContentPopup("Help — keys", helpContent())
+		case "m":
+			if !m.running && !m.loading {
+				return m.handleMarkKey()
+			}
 		case "esc":
+			if m.mark != nil {
+				m.mark = nil
+				return m, nil
+			}
 			// filterPanel is intentionally left set — filterActive() gates on a
 			// non-empty query, so the residue is inert.
 			if m.filterQuery != "" {
@@ -380,6 +394,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	// Drop selections from the old repo so the highlight doesn't land on a
 	// surprising row in the newly-loaded panels.
 	m.sel = map[panel]int{}
+	m.mark = nil // a mark from the old repo must not re-attach by name in the new one
 	return m, m.loadCmd()
 }
 

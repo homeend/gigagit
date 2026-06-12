@@ -41,7 +41,7 @@ func (m Model) tooltip() (lines []string, x, y int, ok bool) {
 	if rowsCap < 1 {
 		return nil, 0, 0, false
 	}
-	_, selInWin := windowRows(rows, rowsCap, sel)
+	_, selInWin, _ := windowRows(rows, rowsCap, sel)
 	origin := g.pos[p]
 	rowY := origin.y + 2 + selInWin // top border + label line
 

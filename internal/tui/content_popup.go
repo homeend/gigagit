@@ -171,7 +171,7 @@ func (m Model) renderContentPopup() string {
 		}
 	}
 	capRows := m.contentPageRows()
-	win, _ := windowRows(rows, capRows, p.sel)
+	win, _, _ := windowRows(rows, capRows, p.sel)
 
 	title := p.title
 	if p.query != "" {

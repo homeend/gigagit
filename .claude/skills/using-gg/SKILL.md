@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v4 -->
+<!-- gg:using-gg:v5 -->
 
 # Using gg (gigagit)
 
@@ -29,6 +29,12 @@ guards against removing the worktree you are standing in.
   checked-out branch and branches checked out in a worktree. An unmerged
   branch is a `branch-unmerged` fork (`force-delete`/`keep`): pass `--force`
   to pre-answer it.
+- `gg merge [--into <target>] [--on-conflict=keep|abort] <source>` — merge one
+  branch into another (default target: the current branch; worktree-aware —
+  merges in the worktree that has the target checked out, autostashes when it
+  must switch). `--on-conflict=keep` leaves conflicts in the tree (exit 1),
+  `--on-conflict=abort` restores the tree (exit 0); with neither and no TTY, a
+  conflict exits 1 with the options on stderr.
 - `gg stash [-m <msg>]` — stash the working tree.
 - `gg undo` — undo the last commit, keeping its changes (ref-only soft reset).
 - `gg worktree list` / `gg worktree add [<start-point>]` /
