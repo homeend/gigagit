@@ -10,6 +10,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ### Added
 
+#### Mark-and-pair operations + SmartMerge
+- TUI: `m` marks a row; `m` on a second row of the same panel opens a
+  pair-operation picker (generic per-panel registry). Branches offer
+  **Merge** (worktree-aware SmartMerge: merges in place, in the worktree
+  that has the target checked out, or autostash+switch+stay) and a
+  disabled Rebase placeholder. `esc` clears the mark before the filter.
+- CLI: `gg merge [--into <target>] [--on-conflict=keep|abort] <source>`.
+  New `merge-conflict` decision (`keep-conflicts`/`abort`) shared across
+  frontends. Embedded using-gg agent skill v5.
+
 #### Performance log
 - Global `--time-track <file>` flag (TUI + every CLI command): appends one
   redacted JSON span per process start, git subprocess, and engine operation.

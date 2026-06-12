@@ -43,6 +43,7 @@ Run `gg` with no arguments to open the interactive UI.
 | `w` | create a worktree **for the selected branch** (popup); `W` worktree on a **new** templated branch. Inside the popup: `w`/`enter` create, `W` create **and** switch |
 | `enter` | on the Worktrees panel: switch into the selected worktree |
 | `d` | on the Worktrees panel: delete the selected worktree; on the Branches panel: delete the selected branch |
+| `m` | mark the selected row; press `m` on a second row of the same panel to open the pair-operation picker (Branches: Merge; `esc` clears the mark before clearing the filter) |
 | `tab` | move focus between panels |
 | `shift+tab` | move focus backwards |
 | `j`/`k` or `↑`/`↓` | move selection |
@@ -69,6 +70,7 @@ gg push
 gg switch <branch>
 gg branch create <name> [<start-point>]
 gg branch delete [--force] <name>
+gg merge [--into <target>] [--on-conflict=keep|abort] <source>
 gg stash [-m msg]
 gg undo
 gg worktree list
