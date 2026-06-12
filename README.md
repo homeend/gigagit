@@ -44,6 +44,7 @@ Run `gg` with no arguments to open the interactive UI.
 | `enter` | on the Worktrees panel: switch into the selected worktree |
 | `d` | on the Worktrees panel: delete the selected worktree; on the Branches panel: delete the selected branch |
 | `m` | mark the selected row; press `m` on a second row of the same panel to open the pair-operation picker (Branches: Merge; `esc` clears the mark before clearing the filter) |
+| `l` | on the Commits panel: show the selected commit's files as a directory tree in the left column (`j`/`k` keeps moving through commits and the tree follows; `/` searches paths; `ctrl+↑`/`ctrl+↓`, `pgup`/`pgdn`, mouse wheel scroll; `esc`/`l` close) |
 | `tab` | move focus between panels |
 | `shift+tab` | move focus backwards |
 | `j`/`k` or `↑`/`↓` | move selection |
