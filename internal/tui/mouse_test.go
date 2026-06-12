@@ -3,6 +3,7 @@ package tui
 import (
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/gigagit/gg/internal/config"
 	"github.com/gigagit/gg/internal/model"
 )
@@ -97,5 +98,113 @@ func TestWheelStepHelper(t *testing.T) {
 	m.cfg = config.Config{UI: config.UIConfig{WheelStep: 5}}
 	if m.wheelStep() != 5 {
 		t.Fatalf("wheelStep = %d, want configured 5", m.wheelStep())
+	}
+}
+
+func mouseMsg(x, y int, b tea.MouseButton) tea.MouseMsg {
+	return tea.MouseMsg{X: x, Y: y, Action: tea.MouseActionPress, Button: b}
+}
+
+func TestClickFocusesAndSelects(t *testing.T) {
+	m := mouseModel()                                      // focus starts on Branches
+	u, _ := m.Update(mouseMsg(30, 4, tea.MouseButtonLeft)) // commits, 2nd data row
+	m = u.(Model)
+	if m.focus != panelCommits {
+		t.Fatalf("focus = %v, want commits", m.focus)
+	}
+	if m.sel[panelCommits] != 1 {
+		t.Fatalf("sel = %d, want the clicked row 1", m.sel[panelCommits])
+	}
+	if m.lastLeftPanel != panelBranches {
+		t.Fatalf("lastLeftPanel = %v, want branches (recorded on leaving)", m.lastLeftPanel)
+	}
+}
+
+func TestClickOnLabelFocusesWithoutSelecting(t *testing.T) {
+	m := mouseModel()
+	m.focus = panelCommits
+	m.sel[panelBranches] = 2
+	u, _ := m.Update(mouseMsg(5, 2, tea.MouseButtonLeft)) // branches label line
+	m = u.(Model)
+	if m.focus != panelBranches {
+		t.Fatalf("focus = %v, want branches", m.focus)
+	}
+	if m.sel[panelBranches] != 2 {
+		t.Fatalf("sel = %d, a label click must not move the selection", m.sel[panelBranches])
+	}
+}
+
+func TestClickOutsidePanelsNoOps(t *testing.T) {
+	m := mouseModel()
+	u, _ := m.Update(mouseMsg(5, 0, tea.MouseButtonLeft)) // header
+	if got := u.(Model).focus; got != panelBranches {
+		t.Fatalf("focus = %v, header click must no-op", got)
+	}
+}
+
+func TestClickIgnoredUnderOverlays(t *testing.T) {
+	overlays := []func(m *Model){
+		func(m *Model) { m.modal = &decisionState{} },
+		func(m *Model) { m.popup = &worktreePopup{} },
+		func(m *Model) { m.repoPopup = &repoPopup{} },
+		func(m *Model) { m.settings = &settingsPopup{} },
+		func(m *Model) { m.branchPopup = &branchPopup{} },
+		func(m *Model) { m.pairPopup = &pairOpPopup{} },
+	}
+	for i, set := range overlays {
+		m := mouseModel()
+		set(&m)
+		u, _ := m.Update(mouseMsg(30, 4, tea.MouseButtonLeft))
+		mm := u.(Model)
+		if mm.focus != panelBranches || mm.sel[panelCommits] != 0 {
+			t.Fatalf("overlay %d: click must be ignored (focus=%v sel=%d)", i, mm.focus, mm.sel[panelCommits])
+		}
+	}
+}
+
+func TestWheelScrollsHoveredPanelWithoutFocus(t *testing.T) {
+	m := mouseModel() // focus Branches; 2 commits
+	u, _ := m.Update(mouseMsg(30, 5, tea.MouseButtonWheelDown))
+	m = u.(Model)
+	if m.focus != panelBranches {
+		t.Fatal("wheel must not move focus")
+	}
+	if m.sel[panelCommits] != 1 {
+		t.Fatalf("sel = %d, wheel over commits must move ITS selection (step 3 clamped to 1)", m.sel[panelCommits])
+	}
+	u, _ = m.Update(mouseMsg(30, 5, tea.MouseButtonWheelUp))
+	if got := u.(Model).sel[panelCommits]; got != 0 {
+		t.Fatalf("sel = %d after wheel up, want 0", got)
+	}
+}
+
+func TestWheelStepRespectsConfig(t *testing.T) {
+	m := mouseModel() // 3 branches
+	m.cfg = config.Config{UI: config.UIConfig{WheelStep: 1}}
+	u, _ := m.Update(mouseMsg(5, 4, tea.MouseButtonWheelDown))
+	if got := u.(Model).sel[panelBranches]; got != 1 {
+		t.Fatalf("sel = %d, configured step 1 must move by exactly 1", got)
+	}
+}
+
+func TestWheelOutsidePanelsNoOps(t *testing.T) {
+	m := mouseModel()
+	u, _ := m.Update(mouseMsg(5, 23, tea.MouseButtonWheelDown)) // status line
+	mm := u.(Model)
+	if mm.sel[panelBranches] != 0 || mm.sel[panelCommits] != 0 {
+		t.Fatal("wheel outside any panel must no-op")
+	}
+}
+
+func TestHelpWindowKeepsWheelPriority(t *testing.T) {
+	m := mouseModel()
+	m.contentPopup = newContentPopup("Help — keys", helpContent())
+	u, _ := m.Update(mouseMsg(30, 5, tea.MouseButtonWheelDown))
+	mm := u.(Model)
+	if mm.contentPopup.sel != 3 {
+		t.Fatalf("help sel = %d, want 3 (wheel scrolls the help window)", mm.contentPopup.sel)
+	}
+	if mm.sel[panelCommits] != 0 {
+		t.Fatal("the panel under the help window must not scroll")
 	}
 }

@@ -69,11 +69,9 @@ func (p *contentPopup) move(delta int) {
 	}
 }
 
-// contentFastStep is the ctrl+↑/↓ jump; contentWheelStep the mouse-wheel tick.
-const (
-	contentFastStep  = 5
-	contentWheelStep = 3
-)
+// contentFastStep is the ctrl+↑/↓ jump (the mouse-wheel tick is the
+// configurable wheelStep).
+const contentFastStep = 5
 
 // contentPageRows is the popup's visible row capacity: terminal height minus
 // chrome (double border 2, vertical padding 2, title 1, blank after title 1,

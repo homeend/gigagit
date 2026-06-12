@@ -374,23 +374,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 	case tea.MouseMsg:
-		// Mouse support is scoped to the content popup and the files view
-		// (spec non-goal: no panel clicks/wheel).
-		if m.contentPopup != nil && msg.Action == tea.MouseActionPress {
-			switch msg.Button {
-			case tea.MouseButtonWheelUp:
-				m.contentPopup.move(-contentWheelStep)
-			case tea.MouseButtonWheelDown:
-				m.contentPopup.move(contentWheelStep)
-			}
-		} else if m.filesView != nil && msg.Action == tea.MouseActionPress {
-			switch msg.Button {
-			case tea.MouseButtonWheelUp:
-				m.filesView.move(-contentWheelStep)
-			case tea.MouseButtonWheelDown:
-				m.filesView.move(contentWheelStep)
-			}
-		}
+		return m.handleMouse(msg)
 	case opEventMsg:
 		switch e := msg.event.(type) {
 		case engine.Progress:
