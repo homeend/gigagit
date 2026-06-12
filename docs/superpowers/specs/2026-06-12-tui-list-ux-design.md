@@ -25,8 +25,28 @@ So both features share one mechanism: a per-panel **view pipeline**
 backing slice → filter (substring) → sort (mode) → visible []int
 ```
 
-where `visible` maps display row → backing index. It is the single source of
-truth consumed by:
+where `visible` maps display row → backing index.
+
+The pipeline is **generic**: it is written once against a small per-panel
+contract, and each panel instance implements its own rules for what "name"
+and "date" mean:
+
+```go
+// panelList is what a panel must provide for generic filtering and sorting.
+// Each panel implements its own semantics; the pipeline never inspects
+// concrete types.
+type panelList interface {
+	Len() int
+	Row(i int) string  // display text — also the filter-match target
+	Name(i int) string // what "sort by name" means for THIS panel
+	Date(i int) int64  // what "sort by date" means for THIS panel (unix; 0 = unknown)
+}
+```
+
+Adding sort/filter to a future panel = implementing `panelList`; the pipeline,
+key handling, label rendering, and clamping need no changes.
+
+`visible` is the single source of truth consumed by:
 
 - `panelLen(p)` → `len(visible(p))` — selection bounds, ↑/↓, paging, and the
   post-load clamp all inherit correctness for free;
@@ -64,20 +84,21 @@ bounds the selection.
 - The panel label shows the active mode, e.g. `Branches ·date↓`
   (nothing shown for `default`).
 - Sort state is **per-panel**, lives on the Model, survives reloads.
-- Applies to the three left panels: **Branches**, **Worktrees**, **Status**
-  (the changed-files panel). Commits stays as-is (already date-ordered; the
-  mechanism is generic so adding a comparator later is trivial).
+- Applies to **all four list panels** — each implements `panelList` with its
+  own name/date semantics (table below).
 - **Defaults:** Branches starts in `date ↓` (newest first — the original ask);
-  Worktrees and Status start in `default` (git's emission order).
-  `default` always remains reachable as the escape hatch.
+  Worktrees, Status, and Commits start in `default` (git's emission order;
+  Commits is already newest-first from git). `default` always remains
+  reachable as the escape hatch.
 
-### Sort keys per panel
+### Per-panel `panelList` semantics
 
-| Panel | name | date |
-|-------|------|------|
+| Panel | `Name(i)` | `Date(i)` |
+|-------|-----------|-----------|
 | Branches | branch name | last commit time (`committerdate`) |
 | Worktrees | branch name; detached/bare fall back to path; path is the tiebreaker | HEAD commit time |
-| Status | file path | file **mtime** via `os.Stat` (no git call); stat errors (e.g. deleted files) sort last in both directions |
+| Status | file path | file **mtime** via `os.Stat` (no git call); stat errors (e.g. deleted files) report 0 and sort last in both directions |
+| Commits | subject | commit `UnixTime` (already in `model.Commit`) |
 
 Name comparisons are case-insensitive; ties break by backing order (stable).
 
@@ -143,7 +164,7 @@ semantics because every mutation happens on the returned Model copy.
 | `internal/git/branch_parse_*.go` | Parse the new field; tests. |
 | `internal/model/model.go` | `Branch.UnixTime int64`. |
 | `internal/tui/model.go` | shift+tab, pgup/pgdn, `o`, `/` + filter-input routing, sort/filter Model fields, action handlers resolve via `visible`. |
-| `internal/tui/viewstate.go` (new) | The view pipeline: filter, comparators, `visible(p) []int`, `visibleIdx`, sort-mode cycling; `panelRowsCap` sizing helper (extracted from `renderInterface`). |
+| `internal/tui/viewstate.go` (new) | The `panelList` interface; the generic pipeline (filter, sort, `visible(p) []int`, `visibleIdx`, mode cycling); the four per-panel `panelList` implementations; `panelRowsCap` sizing helper (extracted from `renderInterface`). |
 | `internal/tui/view.go` | `renderPanel` consumes visible order; label shows sort/filter; `renderInterface` uses the shared sizing helper. |
 | `internal/tui/load.go` | Load worktree HEAD commit times (non-fatal). |
 | Docs | `CHANGELOG.md`; `README.md` key table (`shift+tab`, `pgup/pgdn`, `o`, `/`, `esc`). |
@@ -153,8 +174,10 @@ semantics because every mutation happens on the returned Model copy.
 - **git:** `Branches` returns commit times (real repo, two branches, distinct
   commit timestamps); `CommitTimes` batch verb (multiple shas, one call —
   assert via FakeRunner argv too); parse tests for the extended format.
-- **Pipeline (pure-function tests):** filter narrows + maps indices; each
-  comparator both directions; stability on ties; stat-error files sort last.
+- **Pipeline (pure-function tests):** driven through the `panelList` interface
+  with a fake implementation (proves genericity), plus the four real
+  implementations: filter narrows + maps indices; name/date both directions
+  per panel; stability on ties; stat-error files sort last.
 - **TUI integration:** shift+tab full reverse cycle; pgup/pgdn step =
   max(1, rowsCap/4) and clamps at both ends; `o` cycles modes and label
   renders; `/` typing/backspace/enter/esc lifecycle; input mode swallows
@@ -165,5 +188,5 @@ semantics because every mutation happens on the returned Model copy.
 
 ## Out of scope (YAGNI)
 
-- Fuzzy matching; persistent (cross-run) sort/filter state; sorting the
-  Commits panel; CLI-side sort/filter flags; multiple simultaneous filters.
+- Fuzzy matching; persistent (cross-run) sort/filter state; CLI-side
+  sort/filter flags; multiple simultaneous filters.
