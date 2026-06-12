@@ -5,12 +5,19 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/gigagit/gg/internal/engine"
 	"github.com/gigagit/gg/internal/git"
+	"github.com/gigagit/gg/internal/repos"
 )
 
 type repoT = git.Repo
+
+// RepoStatePath is the repo-switcher registry location. "" disables recording
+// and yields an empty registry — cmd/gg wires the real path; tests stay
+// hermetic by default.
+var RepoStatePath string
 
 // Run dispatches a CLI subcommand against the repo at workdir, writing to
 // stdout/stderr, and returns a process exit code.
@@ -24,6 +31,15 @@ func Run(workdir string, args []string, stdin io.Reader, stdout, stderr io.Write
 	}
 	repo := openRepo(workdir)
 	cmd, rest := args[0], args[1:]
+	// Record this repo in the switcher registry (best-effort: errors and
+	// non-repo working directories are ignored). Skip for "repo" subcommands
+	// since they are registry management commands, not git operations, and may
+	// be run from arbitrary directories.
+	if RepoStatePath != "" && cmd != "repo" {
+		if top, err := repo.TopLevel(context.Background()); err == nil {
+			_ = repos.Touch(RepoStatePath, top, time.Now())
+		}
+	}
 	switch cmd {
 	case "status":
 		return cmdStatus(repo, stdout, stderr)
@@ -41,6 +57,8 @@ func Run(workdir string, args []string, stdin io.Reader, stdout, stderr io.Write
 		return cmdUndo(repo, rest, stdout, stderr)
 	case "worktree":
 		return cmdWorktree(repo, rest, stdin, stdout, stderr, cwdFile)
+	case "repo":
+		return cmdRepo(rest, stdout, stderr, cwdFile)
 	default:
 		fmt.Fprintf(stderr, "unknown command %q\n", cmd)
 		return 2
@@ -50,6 +68,7 @@ func Run(workdir string, args []string, stdin io.Reader, stdout, stderr io.Write
 var commands = map[string]bool{
 	"status": true, "commit": true, "pull": true, "push": true,
 	"switch": true, "stash": true, "undo": true, "worktree": true, "inspect": true,
+	"repo": true,
 }
 
 // IsCommand reports whether tok is a gg CLI subcommand (used by cmd/gg to

@@ -30,6 +30,8 @@ type Model struct {
 	gitCommonDir string
 
 	popup          *worktreePopup
+	repoPopup      *repoPopup
+	statePath      string // repo-registry location; "" disables recording (tests)
 	pendingSeqBump []string
 	pendingSwitch  bool
 	switchTarget   string
@@ -124,6 +126,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.popup != nil {
 			return m.updatePopupKey(msg)
+		}
+		if m.repoPopup != nil {
+			return m.updateRepoPopupKey(msg)
 		}
 		// Filter-input mode captures every key (the panel label shows the query).
 		if m.filterTyping {
@@ -232,6 +237,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.filterQuery = ""
 				m.filterTyping = true
 				m.sel[m.focus] = 0
+			}
+		case "R":
+			if !m.running && !m.loading {
+				if mm, ok := m.openRepoPopup(); ok {
+					return mm, nil
+				}
+				return m, nil
 			}
 		case "esc":
 			// filterPanel is intentionally left set — filterActive() gates on a

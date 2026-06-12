@@ -48,6 +48,7 @@ Run `gg` with no arguments to open the interactive UI.
 | `pgup`/`pgdn` | move selection by 25% of the panel viewport |
 | `o` | cycle the focused panel's sort order (name/date, asc/desc) |
 | `/` | filter the focused panel (type, then `enter` to keep, `esc` to clear) |
+| `R` | switch repository (popup: type to filter, `enter` to switch, `ctrl+d` to forget) |
 | `r` / `q` | reload / quit |
 
 When an operation hits a fork (e.g. a diverged branch, or a worktree with
@@ -69,6 +70,8 @@ gg undo
 gg worktree list
 gg worktree add [<start-point>]
 gg worktree remove [--with-branch] [--force] <path>
+gg repo list
+gg repo switch <query>
 gg inspect [--debug-dump <path>] [--trace]
 ```
 

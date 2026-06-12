@@ -45,6 +45,7 @@ feature is a worktree-aware **SmartPull** decision tree.
 | `tui`        | Bubble Tea Elm-style UI (value-receiver `Model`, panels, modal Decider, async ops). |
 | `cli`        | Scriptable command frontend; `cliDecider` answers forks from a flag policy or stdin. |
 | `worktree`   | Shared worktree template resolution used by BOTH the TUI popup and the CLI. |
+| `repos`      | Machine-local MRU registry of opened repositories (XDG state file) behind the repo switcher. |
 | `config`     | TOML config (`.gg.toml`), field-level overlay (defaults→global→repo), `<seq>` counters. |
 | `template`   | Pure branch/path template resolver (`<parent-branch>`, `<repo>`, `<date:…>`, `<seq:…>`, `<user:…>`, …). |
 | `shellinit`  | `gg shell-init [bash|zsh|fish]` wrappers (cd-on-switch via `--cwd-file`). |
@@ -89,6 +90,8 @@ whenever adding a feature or TUI surface.
 
 ## Status
 
-See `CHANGELOG.md` for what's shipped. Roadmap: workspaces/repo-switcher, then
-M3 (MCP server + heavy ops: staging, interactive rebase, conflict editor, diff,
-visual graph, sparse-checkout), plus a candidate `SmartMerge` operation.
+See `CHANGELOG.md` for what's shipped. Roadmap: workspace group sync (named
+repo groups + parallel background-pull; needs concurrent-op decision routing,
+shared with MCP), then M3 (MCP server + heavy ops: staging, interactive rebase,
+conflict editor, diff, visual graph, sparse-checkout), plus a candidate
+`SmartMerge` operation.

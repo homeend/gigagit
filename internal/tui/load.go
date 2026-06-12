@@ -3,11 +3,13 @@ package tui
 import (
 	"context"
 	"path/filepath"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/gigagit/gg/internal/config"
 	"github.com/gigagit/gg/internal/model"
+	"github.com/gigagit/gg/internal/repos"
 )
 
 // dataLoadedMsg carries a full repo snapshot loaded off the UI thread.
@@ -26,6 +28,7 @@ type dataLoadedMsg struct {
 // loadCmd loads status, branches, and recent commits as a single snapshot.
 func (m Model) loadCmd() tea.Cmd {
 	repo := m.repo
+	statePath := m.statePath
 	return func() tea.Msg {
 		ctx := context.Background()
 		var out dataLoadedMsg
@@ -61,6 +64,10 @@ func (m Model) loadCmd() tea.Cmd {
 		// TopLevel marks which listed worktree is the current one; a failure here
 		// is non-fatal (the marker just won't show).
 		if top, topErr := repo.TopLevel(ctx); topErr == nil {
+			// Record this repo in the switcher registry (best-effort; "" = off).
+			// Runs on every load, so LastOpened is really "last active here" —
+			// exactly what MRU ordering wants.
+			_ = repos.Touch(statePath, top, time.Now())
 			out.currentWorktree = top
 			// Config: built-in defaults overlaid by the global file then the repo's
 			// committed .gg.toml. Load errors fall back to defaults.
