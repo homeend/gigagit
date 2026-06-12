@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"regexp"
 	"strings"
 	"testing"
 
@@ -40,18 +39,20 @@ func TestHelpSearchFindsBinding(t *testing.T) {
 	}
 }
 
-// TestHelpFooterCoverage is the drift guard: every [x]-abbreviated key in the
-// footer must appear as the key column of some help row. The key column is
-// the row's first whitespace-delimited field; alternates are /-separated
-// (e.g. "q/ctrl+c").
+// TestHelpFooterCoverage is the drift guard: every key in the footer binding
+// registry (footer.go) must appear as the key column of some help row. The
+// key column is the row's first whitespace-delimited field; alternates are
+// /-separated (e.g. "q/ctrl+c").
 func TestHelpFooterCoverage(t *testing.T) {
-	re := regexp.MustCompile(`\[([^\]]+)\]`)
 	var keys []string
-	for _, mch := range re.FindAllStringSubmatch(footerText, -1) {
-		keys = append(keys, mch[1])
+	for _, b := range contextBindings {
+		keys = append(keys, b.key)
+	}
+	for _, b := range globalBindings {
+		keys = append(keys, b.key)
 	}
 	if len(keys) < 10 {
-		t.Fatalf("footer parse looks broken, got keys %v", keys)
+		t.Fatalf("binding registry looks broken, got keys %v", keys)
 	}
 	lines := helpContent()
 	for _, k := range keys {

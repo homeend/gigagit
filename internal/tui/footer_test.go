@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/gigagit/gg/internal/model"
 )
 
@@ -206,6 +207,20 @@ func TestFooterFilterTypingOverride(t *testing.T) {
 	want := "filter: type to search  [enter] keep  [esc] cancel"
 	if f := m.footerLine(); f != want {
 		t.Errorf("filter-typing footer = %q, want %q", f, want)
+	}
+}
+
+func TestFooterRenderedInInterface(t *testing.T) {
+	m := footerModel()
+	m.sel[panelBranches] = 1 // feat/x → full Branches context
+	out := ansi.Strip(m.render())
+	if !strings.Contains(out, "[s]witch") {
+		t.Errorf("rendered interface must show the contextual footer:\n%s", out)
+	}
+	m.running = true
+	out = ansi.Strip(m.render())
+	if strings.Contains(out, "[s]witch") || strings.Contains(out, "[p]ull") {
+		t.Errorf("running: gated keys must leave the rendered footer:\n%s", out)
 	}
 }
 
