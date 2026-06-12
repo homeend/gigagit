@@ -68,6 +68,7 @@ type Branch struct {
 	Behind   int
 	IsHead   bool
 	Hash     string
+	UnixTime int64 // committer time (unix seconds) of the branch tip; 0 if unknown
 }
 
 // Worktree is one entry from `git worktree list --porcelain`.
