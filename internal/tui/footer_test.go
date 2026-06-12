@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/gigagit/gg/internal/model"
 )
@@ -234,5 +235,41 @@ func TestFooterEmptyPanelsHideRowActions(t *testing.T) {
 	}
 	if !strings.Contains(f, "[p]ull") {
 		t.Errorf("global tail must survive an empty repo: %q", f)
+	}
+}
+
+func TestFooterTruncatedToWidth(t *testing.T) {
+	m := footerModel()
+	m.width, m.height = 40, 24
+	m.sel[panelBranches] = 1 // full context → longest footer
+	out := ansi.Strip(m.render())
+	for i, line := range strings.Split(out, "\n") {
+		if w := lipgloss.Width(line); w > 40 {
+			t.Errorf("line %d exceeds width 40 (%d): %q", i, w, line)
+		}
+	}
+}
+
+func TestSwitchAndWorktreeKeysWorkFromAnyPanel(t *testing.T) {
+	// s: only footer visibility is Branches-scoped; the key acts on the
+	// Branches selection from any focused panel. Use a real repo so the
+	// goroutine launched by startOp does not panic when it calls op.Run.
+	repo := newRepo(t)
+	m := footerModel()
+	m.repo = repo
+	m.sel[panelBranches] = 1 // feat/x selected in Branches
+	m.focus = panelCommits   // but focus is elsewhere
+	u, cmd := m.Update(keyMsg("s"))
+	if mm := u.(Model); !mm.running || cmd == nil {
+		t.Error("s must start a switch using the Branches selection from any panel")
+	}
+
+	// w: openWorktreePopup also acts on the Branches selection from any panel.
+	m = footerModel()
+	m.sel[panelBranches] = 1
+	m.focus = panelCommits
+	u, _ = m.Update(keyMsg("w"))
+	if u.(Model).popup == nil {
+		t.Error("w must open the worktree popup from any panel")
 	}
 }
