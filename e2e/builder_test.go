@@ -104,3 +104,55 @@ func TestBuildSnapshotsInputSums(t *testing.T) {
 		t.Error("InputSums must not include .git internals")
 	}
 }
+
+func originScenario(transport string, originSteps, localSteps, after []Step) *Scenario {
+	exit := 0
+	return &Scenario{
+		Name: "t",
+		Input: Input{
+			Steps:  localSteps,
+			Origin: &Origin{Transport: transport, Steps: originSteps, After: after},
+		},
+		Runs: []Run{{Cmd: []string{"status"}, Exit: &exit}},
+	}
+}
+
+func TestBuildOriginCloneOverHTTP(t *testing.T) {
+	sb := buildSandbox(t, originScenario("", // default = http
+		[]Step{{Write: "a.txt", Content: "v1\n"}, {Commit: "initial"}},
+		nil,
+		[]Step{{Write: "a.txt", Content: "v2\n"}, {Commit: "upstream change"}},
+	))
+	if !strings.HasPrefix(sb.OriginURL, "http://") {
+		t.Fatalf("OriginURL = %q, want http://…", sb.OriginURL)
+	}
+	// local clone is at "initial"; origin advanced after the clone
+	if log := rawGit(t, sb.LocalDir, "log", "--format=%s"); strings.Contains(log, "upstream change") {
+		t.Errorf("local clone should not have post-clone upstream commits:\n%s", log)
+	}
+	if log := rawGit(t, sb.OriginDir, "log", "--format=%s"); !strings.Contains(log, "upstream change") {
+		t.Errorf("origin missing after-steps commit:\n%s", log)
+	}
+	// the local repo's remote must be the http URL (gg pull/push hit the server)
+	if remote := strings.TrimSpace(rawGit(t, sb.LocalDir, "remote", "get-url", "origin")); remote != sb.OriginURL {
+		t.Errorf("origin url = %q, want %q", remote, sb.OriginURL)
+	}
+	// .gg.toml traveled via the origin's first commit
+	if _, err := os.Stat(filepath.Join(sb.LocalDir, ".gg.toml")); err != nil {
+		t.Error(".gg.toml not in clone")
+	}
+	// and the clone starts clean
+	if out := strings.TrimSpace(rawGit(t, sb.LocalDir, "status", "--porcelain")); out != "" {
+		t.Errorf("clone not clean:\n%s", out)
+	}
+}
+
+func TestBuildOriginPathTransport(t *testing.T) {
+	sb := buildSandbox(t, originScenario("path",
+		[]Step{{Write: "a.txt", Content: "v1\n"}, {Commit: "initial"}},
+		nil, nil,
+	))
+	if strings.HasPrefix(sb.OriginURL, "http") {
+		t.Fatalf("OriginURL = %q, want a filesystem path", sb.OriginURL)
+	}
+}

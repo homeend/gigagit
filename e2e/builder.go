@@ -172,8 +172,26 @@ func fileSHA256(path string) (string, error) {
 	return hex.EncodeToString(sum[:]), nil
 }
 
-// buildOrigin is implemented in the remote-topology task.
+// buildOrigin creates the upstream repo, serves it (http default), and
+// clones it as the local repo. Sequence: origin.steps → serve → clone →
+// (caller then runs input.steps in the clone and origin.after upstream).
 func buildOrigin(t *testing.T, sb *Sandbox, sc *Scenario) {
 	t.Helper()
-	t.Fatalf("origin topology not implemented yet (scenario %s)", sc.Name)
+	o := sc.Input.Origin
+	sb.OriginDir = filepath.Join(sb.Root, "origin")
+	sb.git(t, sb.Root, "init", "-b", "main", "origin")
+	writeGGToml(t, sb.OriginDir) // first origin commit carries it into clones
+	sb.runSteps(t, o.Steps, sb.OriginDir)
+	// Anonymous push + pushes to the checked-out branch (assertions read refs,
+	// never origin's working tree, so a stale tree is fine).
+	sb.git(t, sb.OriginDir, "config", "http.receivepack", "true")
+	sb.git(t, sb.OriginDir, "config", "receive.denyCurrentBranch", "ignore")
+
+	if o.Transport == "path" {
+		sb.OriginURL = sb.OriginDir
+	} else {
+		srv := startGitServer(t, sb.Root)
+		sb.OriginURL = srv.URL + "/origin"
+	}
+	sb.git(t, sb.Root, "clone", sb.OriginURL, "local")
 }
