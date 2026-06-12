@@ -162,6 +162,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "tab":
 			m.focus = (m.focus + 1) % panelCount
+		case "shift+tab":
+			m.focus = (m.focus - 1 + panelCount) % panelCount
+		case "pgdown":
+			if n := m.panelLen(m.focus); n > 0 {
+				m.sel[m.focus] += m.pageStep()
+				if m.sel[m.focus] > n-1 {
+					m.sel[m.focus] = n - 1
+				}
+			}
+		case "pgup":
+			if m.sel[m.focus] > 0 {
+				m.sel[m.focus] -= m.pageStep()
+				if m.sel[m.focus] < 0 {
+					m.sel[m.focus] = 0
+				}
+			}
 		case "up", "k":
 			if m.sel[m.focus] > 0 {
 				m.sel[m.focus]--
