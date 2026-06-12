@@ -279,3 +279,31 @@ func TestFilesViewMouseOutsideColumnsNoOps(t *testing.T) {
 		t.Fatal("header click must no-op in the files view")
 	}
 }
+
+func TestClickCommitsFilterTyping(t *testing.T) {
+	m := mouseModel()
+	m.filterPanel = panelBranches
+	m.filterQuery = "fe"
+	m.filterTyping = true
+	u, _ := m.Update(mouseMsg(30, 4, tea.MouseButtonLeft)) // click commits
+	mm := u.(Model)
+	if mm.filterTyping {
+		t.Fatal("a click must commit /-input mode (like enter)")
+	}
+	if mm.filterQuery != "fe" {
+		t.Fatalf("query = %q, the committed filter must survive", mm.filterQuery)
+	}
+	if mm.focus != panelCommits {
+		t.Fatalf("focus = %v, want the clicked panel", mm.focus)
+	}
+}
+
+func TestModalOutranksHelpWindowWheel(t *testing.T) {
+	m := mouseModel()
+	m.contentPopup = newContentPopup("Help — keys", helpContent())
+	m.modal = &decisionState{}
+	u, _ := m.Update(mouseMsg(30, 5, tea.MouseButtonWheelDown))
+	if got := u.(Model).contentPopup.sel; got != 0 {
+		t.Fatalf("help sel = %d, the modal must swallow the wheel", got)
+	}
+}

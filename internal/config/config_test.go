@@ -145,6 +145,15 @@ func TestUIWheelStepLayers(t *testing.T) {
 		t.Errorf("repo wheel_step = %d, want 7", cfg.UI.WheelStep)
 	}
 
+	// Repo only (no global file).
+	cfg, err = Load(missing, r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.UI.WheelStep != 7 {
+		t.Errorf("repo-only wheel_step = %d, want 7", cfg.UI.WheelStep)
+	}
+
 	// Zero and negative are unset: the repo layer cannot reset the global's.
 	writeFile(t, r, "[ui]\nwheel_step = -2\n")
 	cfg, err = Load(g, r)
