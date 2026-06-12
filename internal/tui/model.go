@@ -100,10 +100,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMsg = "files: " + msg.err.Error()
 			return m, nil
 		}
-		q := m.filesView.query // preserve search query across reloads
+		// Only lines and cursor are replaced; the search query intentionally
+		// survives the commit change (track one file through history).
 		m.filesView.lines = commitFileLines(msg.files)
 		m.filesView.sel = 0
-		m.filesView.query = q
 		m.filesTitle = "Files " + shortHash(msg.hash) + " " + msg.subject
 		return m, nil
 	case dataLoadedMsg:
