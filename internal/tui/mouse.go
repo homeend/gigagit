@@ -64,11 +64,37 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// mouseInFilesView routes mouse input while the commit files view is open.
-// Completed in the files-view task; wheel keeps today's behavior until then.
+// mouseInFilesView routes mouse input while the commit files view is open:
+// the left column is the tree box (border y=1, title y=2, windowed rows
+// from y=3), the right column the normally-rendered Commits panel. Wheel
+// and click both target whatever is under the cursor; commit-side selection
+// changes go through the follow-live path (clamped, deduped, one reload).
 func (m Model) mouseInFilesView(msg tea.MouseMsg, wheel int) (tea.Model, tea.Cmd) {
-	if wheel != 0 {
+	g := m.layout()
+	inTree := g.leftW > 0 && msg.X < g.leftW && msg.Y >= 1 && msg.Y < 1+g.bodyH
+	inCommits := false
+	if p, ok := m.panelAt(msg.X, msg.Y); ok && p == panelCommits {
+		inCommits = true
+	}
+	switch {
+	case wheel != 0 && inTree:
 		m.filesView.move(wheel)
+	case wheel != 0 && inCommits:
+		return m.moveCommitUnderFilesView(wheel)
+	case msg.Button == tea.MouseButtonLeft && inTree:
+		m.filesTreeFocused = true
+		i := msg.Y - 3 // box top (y=1) + border + title line
+		if i >= 0 && i < m.filesPageRows() {
+			vis := m.filesView.visible()
+			if idx := windowStart(len(vis), m.filesPageRows(), m.filesView.sel) + i; idx < len(vis) {
+				m.filesView.sel = idx
+			}
+		}
+	case msg.Button == tea.MouseButtonLeft && inCommits:
+		m.filesTreeFocused = false
+		if idx, ok := m.panelRowAt(panelCommits, msg.Y); ok {
+			return m.moveCommitUnderFilesView(idx - m.sel[panelCommits])
+		}
 	}
 	return m, nil
 }

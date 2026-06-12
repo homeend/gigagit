@@ -208,3 +208,74 @@ func TestHelpWindowKeepsWheelPriority(t *testing.T) {
 		t.Fatal("the panel under the help window must not scroll")
 	}
 }
+
+func TestFilesViewTreeClickFocusesAndMovesCursor(t *testing.T) {
+	m := openFilesView(t, filesModel())
+	u, _ := m.Update(mouseMsg(5, 4, tea.MouseButtonLeft)) // 2nd visible tree line
+	m = u.(Model)
+	if !m.filesTreeFocused {
+		t.Fatal("a tree click must focus the tree side")
+	}
+	if m.filesView.sel != 1 {
+		t.Fatalf("tree sel = %d, want the clicked line 1", m.filesView.sel)
+	}
+	u, _ = m.Update(mouseMsg(5, 2, tea.MouseButtonLeft)) // title line
+	m = u.(Model)
+	if m.filesView.sel != 1 {
+		t.Fatal("a title click must not move the tree cursor")
+	}
+}
+
+func TestFilesViewCommitsClickSelectsWithOneReload(t *testing.T) {
+	m := openFilesView(t, filesModel())
+	u, _ := m.Update(mouseMsg(5, 4, tea.MouseButtonLeft)) // focus the tree first
+	m = u.(Model)
+	u, cmd := m.Update(mouseMsg(30, 4, tea.MouseButtonLeft)) // commits, 2nd row
+	m = u.(Model)
+	if m.filesTreeFocused {
+		t.Fatal("a commits click must focus the commit side")
+	}
+	if m.sel[panelCommits] != 1 {
+		t.Fatalf("sel = %d, want the clicked commit 1", m.sel[panelCommits])
+	}
+	if cmd == nil {
+		t.Fatal("selecting another commit must fire ONE follow-live reload")
+	}
+	u, _ = m.Update(cmd())
+	m = u.(Model)
+	// Clicking the already-selected commit dedupes: no reload.
+	_, cmd = m.Update(mouseMsg(30, 4, tea.MouseButtonLeft))
+	if cmd != nil {
+		t.Fatal("clicking the selected commit must not reload")
+	}
+}
+
+func TestFilesViewWheelTargetsHoveredSide(t *testing.T) {
+	m := openFilesView(t, filesModel())
+	u, _ := m.Update(mouseMsg(5, 5, tea.MouseButtonWheelDown)) // over the tree
+	m = u.(Model)
+	if m.filesView.sel == 0 {
+		t.Fatal("wheel over the tree must scroll the tree")
+	}
+	if m.sel[panelCommits] != 0 {
+		t.Fatal("wheel over the tree must not move the commit selection")
+	}
+	treeSel := m.filesView.sel
+	u, cmd := m.Update(mouseMsg(30, 5, tea.MouseButtonWheelDown)) // over commits
+	m = u.(Model)
+	if m.sel[panelCommits] != 1 || cmd == nil {
+		t.Fatalf("wheel over commits must move the commit selection with a reload (sel=%d)", m.sel[panelCommits])
+	}
+	if m.filesView.sel != treeSel {
+		t.Fatal("wheel over commits must not scroll the tree")
+	}
+}
+
+func TestFilesViewMouseOutsideColumnsNoOps(t *testing.T) {
+	m := openFilesView(t, filesModel())
+	u, cmd := m.Update(mouseMsg(5, 0, tea.MouseButtonLeft)) // header
+	mm := u.(Model)
+	if mm.filesTreeFocused || mm.filesView.sel != 0 || cmd != nil {
+		t.Fatal("header click must no-op in the files view")
+	}
+}
