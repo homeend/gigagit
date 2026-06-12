@@ -1,0 +1,101 @@
+package e2e
+
+import (
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+// rawGit runs git for test verification (no date pinning).
+func rawGit(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
+	return string(out)
+}
+
+func localScenario(steps []Step) *Scenario {
+	exit := 0
+	return &Scenario{
+		Name:  "t",
+		Input: Input{Steps: steps},
+		Runs:  []Run{{Cmd: []string{"status"}, Exit: &exit}},
+	}
+}
+
+func TestBuildLocalRepo(t *testing.T) {
+	sb := buildSandbox(t, localScenario([]Step{
+		{Write: "README.md", Content: "hello\n"},
+		{Commit: "initial"},
+		{Branch: "feature/x"},
+		{Write: "README.md", Content: "hello\nwip\n"},
+	}))
+	if got := strings.TrimSpace(rawGit(t, sb.LocalDir, "branch", "--show-current")); got != "main" {
+		t.Errorf("current branch = %q, want main", got)
+	}
+	if !strings.Contains(rawGit(t, sb.LocalDir, "branch"), "feature/x") {
+		t.Error("branch feature/x missing")
+	}
+	data, err := os.ReadFile(filepath.Join(sb.LocalDir, "README.md"))
+	if err != nil || string(data) != "hello\nwip\n" {
+		t.Errorf("README.md = %q, %v", data, err)
+	}
+	if !strings.Contains(rawGit(t, sb.LocalDir, "status", "--porcelain"), " M README.md") {
+		t.Error("README.md should be modified/unstaged")
+	}
+	if _, err := os.Stat(filepath.Join(sb.LocalDir, ".gg.toml")); err != nil {
+		t.Error(".gg.toml not injected")
+	}
+}
+
+func TestBuildIsDeterministic(t *testing.T) {
+	steps := []Step{
+		{Write: "a.txt", Content: "1\n"},
+		{Commit: "one"},
+		{Write: "a.txt", Content: "2\n"},
+		{Commit: "two"},
+	}
+	a := buildSandbox(t, localScenario(steps))
+	b := buildSandbox(t, localScenario(steps))
+	ha := rawGit(t, a.LocalDir, "log", "--format=%H")
+	hb := rawGit(t, b.LocalDir, "log", "--format=%H")
+	if ha != hb {
+		t.Errorf("two builds differ:\n%s\nvs\n%s", ha, hb)
+	}
+}
+
+func TestBuildStashAndSwitchSteps(t *testing.T) {
+	sb := buildSandbox(t, localScenario([]Step{
+		{Write: "a.txt", Content: "base\n"},
+		{Commit: "initial"},
+		{Branch: "other"},
+		{Write: "a.txt", Content: "edit\n"},
+		{Stash: "wip"},
+		{Switch: "other"},
+	}))
+	if got := strings.TrimSpace(rawGit(t, sb.LocalDir, "branch", "--show-current")); got != "other" {
+		t.Errorf("current branch = %q, want other", got)
+	}
+	if got := strings.TrimSpace(rawGit(t, sb.LocalDir, "stash", "list")); !strings.Contains(got, "wip") {
+		t.Errorf("stash list = %q, want a wip entry", got)
+	}
+}
+
+func TestBuildSnapshotsInputSums(t *testing.T) {
+	sb := buildSandbox(t, localScenario([]Step{
+		{Write: "a.txt", Content: "v1\n"},
+		{Commit: "initial"},
+	}))
+	if _, ok := sb.InputSums["a.txt"]; !ok {
+		t.Errorf("InputSums missing a.txt: %v", sb.InputSums)
+	}
+	if _, ok := sb.InputSums[".git/HEAD"]; ok {
+		t.Error("InputSums must not include .git internals")
+	}
+}
