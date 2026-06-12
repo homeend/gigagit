@@ -75,6 +75,29 @@ func TestRenderThreePanelLeftFits(t *testing.T) {
 	}
 }
 
+// A visible tooltip must not push the frame beyond the terminal bounds.
+func TestRenderWithTooltipStaysInBounds(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 50, 24
+	m.focus = panelWorktrees
+	m.worktrees = []model.Worktree{
+		{Path: "/repo", Branch: "main"},
+		{Path: "/" + strings.Repeat("deep/", 40) + "end", Branch: "feature/x"},
+	}
+	m.sel[panelWorktrees] = 1
+
+	out := m.View()
+	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+	if len(lines) > m.height {
+		t.Fatalf("render produced %d lines, want <= %d", len(lines), m.height)
+	}
+	for i, ln := range lines {
+		if w := lipgloss.Width(ln); w > m.width {
+			t.Fatalf("line %d is %d cols wide, want <= %d: %q", i, w, m.width, ln)
+		}
+	}
+}
+
 // The running spinner (⏳, a 2-column glyph) must not push the status line one
 // column past the terminal edge: truncate measures display columns, not runes.
 func TestRenderRunningSpinnerStatusFits(t *testing.T) {

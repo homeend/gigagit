@@ -82,6 +82,12 @@ func (m Model) render() string {
 		return m.renderModal()
 	}
 	bg := m.renderInterface()
+	if m.popup == nil && m.repoPopup == nil && m.settings == nil && m.branchPopup == nil {
+		if lines, x, y, ok := m.tooltip(); ok {
+			w, h := m.overlayDims()
+			bg = overlayAt(bg, strings.Join(lines, "\n"), x, y, w, h)
+		}
+	}
 	if m.popup != nil {
 		w, h := m.overlayDims()
 		return overlayCenter(bg, m.renderWorktreePopup(), w, h)
