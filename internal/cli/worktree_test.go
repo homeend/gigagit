@@ -212,3 +212,56 @@ func TestWorktreeRemoveUnknownPath(t *testing.T) {
 		t.Fatalf("stderr should explain the unknown path: %s", errb.String())
 	}
 }
+
+func wtHeadCli(t *testing.T, wtPath string) string {
+	t.Helper()
+	out, err := exec.Command("git", "-C", wtPath, "symbolic-ref", "--short", "HEAD").Output()
+	if err != nil {
+		t.Fatalf("symbolic-ref in %s: %v", wtPath, err)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+func TestWorktreeAddBranchUsesExistingBranch(t *testing.T) {
+	dir := newRepoDir(t)
+	gitRun(t, dir, "branch", "feature/have")
+	// Config the path template so the destination is deterministic.
+	cfgPath := filepath.Join(dir, ".gg.toml")
+	if err := os.WriteFile(cfgPath, []byte("[worktree]\npath_template = \"../wt-cli-<branch>\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var out, errb bytes.Buffer
+	code := Run(dir, []string{"worktree", "add", "--branch", "feature/have"}, strings.NewReader(""), &out, &errb, "")
+	if code != 0 {
+		t.Fatalf("exit %d, stderr: %s", code, errb.String())
+	}
+	wt := filepath.Join(filepath.Dir(dir), "wt-cli-feature-have")
+	if got := wtHeadCli(t, wt); got != "feature/have" {
+		t.Fatalf("worktree HEAD = %q, want feature/have", got)
+	}
+	if !strings.Contains(out.String(), "created worktree feature/have") {
+		t.Fatalf("stdout: %q", out.String())
+	}
+}
+
+func TestWorktreeAddBranchRejectsStartPoint(t *testing.T) {
+	dir := newRepoDir(t)
+	gitRun(t, dir, "branch", "x")
+	var out, errb bytes.Buffer
+	if code := Run(dir, []string{"worktree", "add", "--branch", "x", "main"}, strings.NewReader(""), &out, &errb, ""); code != 2 {
+		t.Fatalf("exit = %d, want 2 (start-point is meaningless with --branch)", code)
+	}
+}
+
+func TestWorktreeAddBranchMissingBranchFails(t *testing.T) {
+	dir := newRepoDir(t)
+	var out, errb bytes.Buffer
+	code := Run(dir, []string{"worktree", "add", "--branch", "ghost"}, strings.NewReader(""), &out, &errb, "")
+	if code != 1 {
+		t.Fatalf("exit = %d, want 1", code)
+	}
+	if !strings.Contains(errb.String(), "no local branch") {
+		t.Fatalf("stderr: %s", errb.String())
+	}
+}

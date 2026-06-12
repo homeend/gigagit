@@ -55,20 +55,36 @@ func cmdWorktreeList(repo *repoT, stdout, stderr io.Writer) int {
 }
 
 func cmdWorktreeAdd(repo *repoT, args []string, stdin io.Reader, stdout, stderr io.Writer, cwdFile string) int {
+	fs := flag.NewFlagSet("worktree add", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	forBranch := fs.String("branch", "", "create the worktree for this existing branch (no new branch)")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	args = fs.Args()
+
 	ctxBg := context.Background()
 
-	// Start point: explicit arg, else the current branch.
-	startPoint := ""
-	if len(args) > 0 {
-		startPoint = args[0]
+	if *forBranch != "" && len(args) > 0 {
+		fmt.Fprintln(stderr, "worktree add: --branch and a start-point are mutually exclusive (the branch is the source)")
+		return 2
 	}
+
+	// Start point: explicit arg, else the current branch. With --branch the
+	// branch itself plays the <parent-branch> role for the path template.
+	startPoint := *forBranch
 	if startPoint == "" {
-		cur, err := repo.CurrentBranch(ctxBg)
-		if err != nil || cur == "" {
-			fmt.Fprintln(stderr, "worktree add: cannot determine current branch; pass a start-point")
-			return 2
+		if len(args) > 0 {
+			startPoint = args[0]
 		}
-		startPoint = cur
+		if startPoint == "" {
+			cur, err := repo.CurrentBranch(ctxBg)
+			if err != nil || cur == "" {
+				fmt.Fprintln(stderr, "worktree add: cannot determine current branch; pass a start-point")
+				return 2
+			}
+			startPoint = cur
+		}
 	}
 
 	top, err := repo.TopLevel(ctxBg)
@@ -91,6 +107,9 @@ func cmdWorktreeAdd(repo *repoT, args []string, stdin io.Reader, stdout, stderr 
 		Branch: cfg.Worktree.DefaultBranchTemplate,
 		Path:   cfg.Worktree.PathTemplate,
 	}
+	if *forBranch != "" {
+		tm = worktree.Templates{Path: cfg.Worktree.PathTemplate} // branch template bypassed
+	}
 
 	// Prompt stdin for each <user:LABEL>. Prompts go to stderr so stdout stays
 	// clean for scripting.
@@ -110,15 +129,17 @@ func cmdWorktreeAdd(repo *repoT, args []string, stdin io.Reader, stdout, stderr 
 		Now:          time.Now,
 		Rand:         rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64())),
 	}
-	branch, path, err := worktree.Resolve(tm, "", inputs, ctx)
+	branch, path, err := worktree.Resolve(tm, *forBranch, inputs, ctx)
 	if err != nil {
 		fmt.Fprintln(stderr, "error:", err)
 		return 1
 	}
 
-	res, err := runOperation(ctxBg, repo,
-		engine.CreateWorktree{StartPoint: startPoint, Branch: branch, Path: path},
-		cliDecider{}, stderr)
+	var op engine.Operation = engine.CreateWorktree{StartPoint: startPoint, Branch: branch, Path: path}
+	if *forBranch != "" {
+		op = engine.CreateWorktreeForBranch{Branch: branch, Path: path}
+	}
+	res, err := runOperation(ctxBg, repo, op, cliDecider{}, stderr)
 	if err != nil {
 		fmt.Fprintln(stderr, "error:", err)
 		return 1
