@@ -2,8 +2,10 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"path"
 	"sort"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -177,4 +179,63 @@ func (m Model) moveCommitUnderFilesView(delta int) (tea.Model, tea.Cmd) {
 	}
 	m.filesHash = m.commits[bi].Hash
 	return m, m.loadCommitFilesCmd(m.commits[bi])
+}
+
+// renderFilesView draws the commit files tree as one full-height left-column
+// box; it replaces the Branches/Worktrees/Status panels while open. Blurred
+// border: focus stays on the Commits panel.
+func (m Model) renderFilesView(boxW, boxH int) string {
+	p := m.filesView
+	contentH := boxH - 2 // top/bottom border
+	if contentH < 1 {
+		contentH = 1
+	}
+	innerW := boxW - 4 // border (2) + horizontal padding (2)
+	if innerW < 1 {
+		innerW = 1
+	}
+	rowsCap := contentH - 2 // title + hint lines
+	if rowsCap < 1 {
+		rowsCap = 1
+	}
+
+	title := m.filesTitle
+	if p.typing {
+		title += " /" + p.query + "█"
+	} else if p.query != "" {
+		title += " /" + p.query
+	}
+
+	vis := p.visible()
+	rows := make([]string, len(vis))
+	for i, l := range vis {
+		switch {
+		case i == p.sel:
+			// Cursor highlight wins over heading style so the cursor stays
+			// visible when it rests on a heading row.
+			rows[i] = selectedRow.Render(padRight(truncate("> "+l.text, innerW), innerW))
+		case l.heading:
+			rows[i] = titleStyle.Render(padRight(truncate(l.text, innerW), innerW))
+		default:
+			rows[i] = padRight(truncate("  "+l.text, innerW), innerW)
+		}
+	}
+	win, _, _ := windowRows(rows, rowsCap, p.sel)
+
+	lines := make([]string, 0, contentH)
+	lines = append(lines, padRight(truncate(title, innerW), innerW))
+	if len(win) == 0 {
+		lines = append(lines, padRight(truncate("  (no match)", innerW), innerW))
+	}
+	lines = append(lines, win...)
+	for len(lines) < contentH-1 {
+		lines = append(lines, padRight("", innerW))
+	}
+	hint := "[/] search  [esc] close"
+	if len(vis) > rowsCap {
+		hint = fmt.Sprintf("%d/%d  %s", p.sel+1, len(vis), hint)
+	}
+	lines = append(lines, padRight(truncate(hint, innerW), innerW))
+
+	return bluredPanel.Render(strings.Join(lines, "\n"))
 }

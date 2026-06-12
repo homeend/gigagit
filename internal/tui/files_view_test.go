@@ -294,3 +294,44 @@ func TestReRootClearsFilesView(t *testing.T) {
 		t.Fatal("reRoot must clear the files view")
 	}
 }
+
+func TestFilesViewRenderReplacesLeftColumn(t *testing.T) {
+	m := openFilesView(t, filesModel())
+	out := m.render()
+	for _, want := range []string{
+		"Files 1111111 one", // title
+		"internal/tui/",     // directory heading
+		"M  model.go",       // file row with status letter
+		"[/] search",        // hint line
+		"Commits",           // the right panel is still there
+		"2222222 two",       // and still lists commits
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("render missing %q:\n%s", want, out)
+		}
+	}
+	for _, gone := range []string{"Branches", "Worktrees", "Status"} {
+		if strings.Contains(out, gone) {
+			t.Fatalf("render still shows the %s panel:\n%s", gone, out)
+		}
+	}
+}
+
+func TestFilesViewRenderShowsSearchQuery(t *testing.T) {
+	m := openFilesView(t, filesModel())
+	m = pressRune(t, m, "/")
+	m = pressRune(t, m, "mo")
+	out := m.render()
+	if !strings.Contains(out, "/mo█") {
+		t.Fatalf("render missing the typing-mode query cursor:\n%s", out)
+	}
+}
+
+func TestFilesViewRenderFitsTerminal(t *testing.T) {
+	m := openFilesView(t, filesModel())
+	out := m.render()
+	lines := strings.Split(out, "\n")
+	if len(lines) > 24 {
+		t.Fatalf("render = %d lines, must fit height 24", len(lines))
+	}
+}

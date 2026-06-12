@@ -194,13 +194,16 @@ func (m Model) renderInterface() string {
 	cmRows, _ := m.panelView(panelCommits)
 
 	var left string
-	if g.boxH[panelWorktrees] > 0 {
+	switch {
+	case m.filesView != nil:
+		left = m.renderFilesView(g.leftW, g.bodyH)
+	case g.boxH[panelWorktrees] > 0:
 		left = lipgloss.JoinVertical(lipgloss.Left,
 			m.renderPanel(panelBranches, m.panelLabel(panelBranches, "Branches"), brRows, g.leftW, g.boxH[panelBranches]),
 			m.renderPanel(panelWorktrees, m.panelLabel(panelWorktrees, "Worktrees"), wtRows, g.leftW, g.boxH[panelWorktrees]),
 			m.renderPanel(panelStatus, m.panelLabel(panelStatus, "Status"), stRows, g.leftW, g.boxH[panelStatus]),
 		)
-	} else {
+	default:
 		left = lipgloss.JoinVertical(lipgloss.Left,
 			m.renderPanel(panelBranches, m.panelLabel(panelBranches, "Branches"), brRows, g.leftW, g.boxH[panelBranches]),
 			m.renderPanel(panelStatus, m.panelLabel(panelStatus, "Status"), stRows, g.leftW, g.boxH[panelStatus]),
