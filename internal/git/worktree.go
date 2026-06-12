@@ -40,6 +40,20 @@ func (r *Repo) AddWorktree(ctx context.Context, path, branch, startPoint string,
 	return err
 }
 
+// AddWorktreeForBranch creates a linked worktree at path that checks out the
+// EXISTING branch (`git worktree add <path> <branch>`). Output lines are
+// forwarded to onLine (nil is allowed); the checkout is cancellable via ctx.
+// Callers must ensure branch exists locally — git would otherwise DWIM a
+// remote-tracking branch into existence.
+func (r *Repo) AddWorktreeForBranch(ctx context.Context, path, branch string, onLine func(string)) error {
+	if onLine == nil {
+		onLine = func(string) {}
+	}
+	argv := gitcmd.New("worktree").Arg("add", path, branch).ToArgv()
+	_, err := r.Runner.Stream(ctx, "git worktree add", argv, onLine)
+	return err
+}
+
 // GitCommonDir returns the absolute path of the repository's common git
 // directory (`git rev-parse --path-format=absolute --git-common-dir`). For a
 // linked worktree this is the main repo's .git, so per-repo state (e.g. <seq>

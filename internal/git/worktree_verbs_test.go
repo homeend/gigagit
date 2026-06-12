@@ -111,6 +111,27 @@ func TestRemoveWorktreeRefusesDirtyUntilForced(t *testing.T) {
 	}
 }
 
+func TestAddWorktreeForBranchChecksOutExisting(t *testing.T) {
+	dir, runner := newTestRepo(t)
+	repo := &Repo{Runner: runner}
+	if err := repo.CreateBranch(context.Background(), "existing/x", ""); err != nil {
+		t.Fatalf("create branch: %v", err)
+	}
+
+	wtPath := filepath.Join(filepath.Dir(dir), "wt-existing")
+	if err := repo.AddWorktreeForBranch(context.Background(), wtPath, "existing/x", nil); err != nil {
+		t.Fatalf("AddWorktreeForBranch: %v", err)
+	}
+
+	out, err := exec.Command("git", "-C", wtPath, "symbolic-ref", "--short", "HEAD").Output()
+	if err != nil {
+		t.Fatalf("symbolic-ref in new worktree: %v", err)
+	}
+	if got := strings.TrimSpace(string(out)); got != "existing/x" {
+		t.Fatalf("worktree HEAD = %q, want existing/x", got)
+	}
+}
+
 func TestDeleteBranchRefusesUnmergedUntilForced(t *testing.T) {
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
