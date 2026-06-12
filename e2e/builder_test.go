@@ -55,6 +55,7 @@ func TestBuildLocalRepo(t *testing.T) {
 }
 
 func TestBuildIsDeterministic(t *testing.T) {
+	// Determinism holds because ticks starts at 0 per Sandbox and dateBase is fixed, with identity pinned in TestMain.
 	steps := []Step{
 		{Write: "a.txt", Content: "1\n"},
 		{Commit: "one"},
@@ -91,9 +92,13 @@ func TestBuildSnapshotsInputSums(t *testing.T) {
 	sb := buildSandbox(t, localScenario([]Step{
 		{Write: "a.txt", Content: "v1\n"},
 		{Commit: "initial"},
+		{Write: "dirty.txt", Content: "uncommitted\n"},
 	}))
 	if _, ok := sb.InputSums["a.txt"]; !ok {
 		t.Errorf("InputSums missing a.txt: %v", sb.InputSums)
+	}
+	if _, ok := sb.InputSums["dirty.txt"]; !ok {
+		t.Errorf("InputSums missing dirty.txt (uncommitted file): %v", sb.InputSums)
 	}
 	if _, ok := sb.InputSums[".git/HEAD"]; ok {
 		t.Error("InputSums must not include .git internals")

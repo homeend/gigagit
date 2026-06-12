@@ -29,7 +29,10 @@ func TestMain(m *testing.M) {
 	os.Setenv("GIT_COMMITTER_NAME", "gg-e2e")
 	os.Setenv("GIT_COMMITTER_EMAIL", "e2e@gg")
 	os.Setenv("XDG_CONFIG_HOME", filepath.Join(dir, "xdg")) // gg global config isolation
-	code := m.Run()
-	os.RemoveAll(dir)
+	os.Unsetenv("GIT_DIR")                                  // ambient GIT_DIR would redirect every git call
+	code := func() int {
+		defer os.RemoveAll(dir)
+		return m.Run()
+	}()
 	os.Exit(code)
 }

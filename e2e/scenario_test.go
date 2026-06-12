@@ -74,6 +74,7 @@ func TestStepMustHaveExactlyOneAction(t *testing.T) {
 		`{ content = "x" }`,             // content without write
 		`{ cwd = "local" }`,             // no action at all
 		`{}`,                            // empty table → zero Step → must fail kind()
+		`{ worktree = "wt-x" }`,         // worktree without branch must be rejected
 	} {
 		_, err := LoadScenario(writeScenario(t, `
 name = "x"

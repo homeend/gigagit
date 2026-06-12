@@ -78,6 +78,9 @@ func (s Step) kind() (string, error) {
 		return "", fmt.Errorf("step %+v: want exactly one action, got %v", s, kinds)
 	}
 	k := kinds[0]
+	if s.Worktree != "" && s.Branch == "" {
+		return "", fmt.Errorf("step %+v: worktree requires branch", s)
+	}
 	if s.Content != "" && k != "write" {
 		return "", fmt.Errorf("step %+v: content is only valid with write", s)
 	}

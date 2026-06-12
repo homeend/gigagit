@@ -3,10 +3,12 @@ package e2e
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -36,6 +38,8 @@ func (b *Sandbox) git(t *testing.T, dir string, args ...string) string {
 	date := dateBase.Add(time.Duration(b.ticks) * time.Second).Format(time.RFC3339)
 	cmd := exec.Command("git", args...)
 	cmd.Dir = dir
+	// GIT_AUTHOR_DATE/GIT_COMMITTER_DATE override any inherited value;
+	// identity (NAME/EMAIL) and config isolation come from TestMain's Setenv.
 	cmd.Env = append(os.Environ(), "GIT_AUTHOR_DATE="+date, "GIT_COMMITTER_DATE="+date)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -62,6 +66,9 @@ func buildSandbox(t *testing.T, sc *Scenario) *Sandbox {
 		buildOrigin(t, sb, sc) // implemented with the remote-topology task
 	} else {
 		sb.git(t, sb.Root, "init", "-b", "main", "local")
+		// .gg.toml is intentionally left uncommitted here; it is picked up by
+		// the scenario's first `commit` step (`git add -A`), which validation
+		// guarantees exists.
 		writeGGToml(t, sb.LocalDir)
 	}
 	sb.runSteps(t, sc.Input.Steps, sb.LocalDir)
@@ -122,6 +129,8 @@ func (b *Sandbox) runSteps(t *testing.T, steps []Step, defaultDir string) {
 
 // snapshotInput records each working-tree file's checksum at the end of the
 // input phase — the reference for { unchanged = true } expectations.
+// v1 limitation: only the LOCAL repo's working tree is snapshotted; linked-
+// worktree scopes have no `unchanged` support.
 func (b *Sandbox) snapshotInput(t *testing.T) {
 	t.Helper()
 	b.InputSums = map[string]string{}
@@ -135,7 +144,13 @@ func (b *Sandbox) snapshotInput(t *testing.T) {
 			}
 			return nil
 		}
-		rel, _ := filepath.Rel(b.LocalDir, path)
+		rel, err := filepath.Rel(b.LocalDir, path)
+		if err != nil {
+			return fmt.Errorf("rel %s -> %s: %w", b.LocalDir, path, err)
+		}
+		if strings.HasPrefix(rel, "..") {
+			return fmt.Errorf("snapshot: path %s escaped sandbox root %s", path, b.LocalDir)
+		}
 		sum, err := fileSHA256(path)
 		if err != nil {
 			return err
