@@ -86,8 +86,12 @@ func (m Model) openWorktreePopup() (Model, bool) {
 	labels := tm.Labels()
 	seqNames := tm.SeqNames()
 
+	bi, ok := m.backingIndex(panelBranches)
+	if !ok {
+		return m, false
+	}
 	p := &worktreePopup{
-		startPoint: m.branches[m.sel[panelBranches]].Name,
+		startPoint: m.branches[bi].Name,
 		branchTmpl: bt,
 		pathTmpl:   pt,
 		repoName:   worktree.RepoName(m.currentWorktree),

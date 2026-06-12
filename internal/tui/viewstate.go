@@ -1,5 +1,14 @@
 package tui
 
+import (
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+
+	"github.com/gigagit/gg/internal/model"
+)
+
 // layoutGeom is the panel geometry renderInterface draws with. boxH holds each
 // panel's box height under the current layout; a panel missing from the map
 // (or 0) is not visible at this terminal size.
@@ -78,4 +87,191 @@ func (m Model) pageStep() int {
 		s = 1
 	}
 	return s
+}
+
+// sortMode is a panel's display order. Cycled by the `o` key.
+type sortMode int
+
+const (
+	sortDefault sortMode = iota // git's emission order
+	sortNameAsc
+	sortNameDesc
+	sortDateAsc
+	sortDateDesc
+	sortModeCount
+)
+
+// String is the label suffix; empty for the default order.
+func (s sortMode) String() string {
+	switch s {
+	case sortNameAsc:
+		return "name↑"
+	case sortNameDesc:
+		return "name↓"
+	case sortDateAsc:
+		return "date↑"
+	case sortDateDesc:
+		return "date↓"
+	}
+	return ""
+}
+
+// panelList is the per-panel contract behind generic filtering and sorting.
+// Each panel implements its own semantics for name and date; the pipeline
+// never inspects concrete types. Row(i) must be the display text of backing
+// element i (the existing row builders are 1:1 with their slices).
+type panelList interface {
+	Len() int
+	Row(i int) string  // display text — also the filter-match target
+	Name(i int) string // what "sort by name" means for THIS panel
+	Date(i int) int64  // what "sort by date" means for THIS panel (unix; 0 = unknown)
+}
+
+type branchList struct {
+	items []model.Branch
+	rows  []string
+}
+
+func (l branchList) Len() int          { return len(l.items) }
+func (l branchList) Row(i int) string  { return l.rows[i] }
+func (l branchList) Name(i int) string { return l.items[i].Name }
+func (l branchList) Date(i int) int64  { return l.items[i].UnixTime }
+
+type worktreeList struct {
+	items []model.Worktree
+	rows  []string
+	times map[string]int64 // HEAD sha -> committer time
+}
+
+func (l worktreeList) Len() int         { return len(l.items) }
+func (l worktreeList) Row(i int) string { return l.rows[i] }
+func (l worktreeList) Name(i int) string {
+	if b := l.items[i].Branch; b != "" {
+		return b
+	}
+	return l.items[i].Path // detached/bare fall back to the path
+}
+func (l worktreeList) Date(i int) int64 { return l.times[l.items[i].Head] }
+
+type statusList struct {
+	files []model.FileStatus
+	rows  []string
+	root  string
+	mtime map[int]int64 // lazy per-view stat cache; 0 = unknown (sorts last)
+}
+
+func (l statusList) Len() int          { return len(l.files) }
+func (l statusList) Row(i int) string  { return l.rows[i] }
+func (l statusList) Name(i int) string { return l.files[i].Path }
+func (l statusList) Date(i int) int64 {
+	if t, ok := l.mtime[i]; ok {
+		return t
+	}
+	var t int64
+	if fi, err := os.Stat(filepath.Join(l.root, l.files[i].Path)); err == nil {
+		t = fi.ModTime().Unix()
+	}
+	l.mtime[i] = t
+	return t
+}
+
+type commitList struct {
+	items []model.Commit
+	rows  []string
+}
+
+func (l commitList) Len() int          { return len(l.items) }
+func (l commitList) Row(i int) string  { return l.rows[i] }
+func (l commitList) Name(i int) string { return l.items[i].Subject }
+func (l commitList) Date(i int) int64  { return l.items[i].UnixTime }
+
+// listFor builds panel p's panelList from the current model snapshot.
+func (m Model) listFor(p panel) panelList {
+	switch p {
+	case panelBranches:
+		return branchList{items: m.branches, rows: m.branchRows()}
+	case panelWorktrees:
+		return worktreeList{items: m.worktrees, rows: m.worktreeRows(), times: m.headTimes}
+	case panelStatus:
+		return statusList{files: m.status.Files, rows: m.statusRows(), root: m.currentWorktree, mtime: map[int]int64{}}
+	case panelCommits:
+		return commitList{items: m.commits, rows: m.commitRows()}
+	}
+	return commitList{}
+}
+
+// sortIndices orders backing indices in place under mode. sortDefault is a
+// no-op. Ties and unknown comparisons keep backing order (stable).
+func sortIndices(l panelList, mode sortMode, idx []int) {
+	if mode == sortDefault {
+		return
+	}
+	sort.SliceStable(idx, func(a, b int) bool { return viewLess(l, mode, idx[a], idx[b]) })
+}
+
+// viewLess orders two backing indices under mode. Unknown dates (0) sort last
+// in BOTH directions so missing data never floats to the top.
+func viewLess(l panelList, mode sortMode, a, b int) bool {
+	switch mode {
+	case sortNameAsc, sortNameDesc:
+		na, nb := strings.ToLower(l.Name(a)), strings.ToLower(l.Name(b))
+		if na == nb {
+			return false
+		}
+		if mode == sortNameAsc {
+			return na < nb
+		}
+		return na > nb
+	case sortDateAsc, sortDateDesc:
+		da, db := l.Date(a), l.Date(b)
+		if da == 0 || db == 0 {
+			return da != 0 && db == 0
+		}
+		if da == db {
+			return false
+		}
+		if mode == sortDateAsc {
+			return da < db
+		}
+		return da > db
+	}
+	return false
+}
+
+// panelView applies panel p's sort (and, later, filter), returning the display
+// rows and the matching backing indices (display row n shows backing element
+// idx[n]). It is the single source of truth for what a panel shows; selection,
+// paging, clamping, rendering, and action keys all consume it.
+func (m Model) panelView(p panel) (rows []string, idx []int) {
+	l := m.listFor(p)
+	idx = make([]int, 0, l.Len())
+	for i := 0; i < l.Len(); i++ {
+		idx = append(idx, i)
+	}
+	sortIndices(l, m.sortModes[p], idx)
+	rows = make([]string, len(idx))
+	for n, i := range idx {
+		rows[n] = l.Row(i)
+	}
+	return rows, idx
+}
+
+// backingIndex resolves panel p's current selection to an index into its
+// backing slice, accounting for the view transforms. ok is false when the
+// visible list is empty or the selection is out of range.
+func (m Model) backingIndex(p panel) (int, bool) {
+	_, idx := m.panelView(p)
+	s := m.sel[p]
+	if s < 0 || s >= len(idx) {
+		return 0, false
+	}
+	return idx[s], true
+}
+
+// panelLabel decorates a panel title with its active sort mode.
+func (m Model) panelLabel(p panel, base string) string {
+	if s := m.sortModes[p].String(); s != "" {
+		base += " ·" + s
+	}
+	return base
 }

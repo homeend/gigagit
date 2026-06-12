@@ -99,24 +99,30 @@ func (m Model) renderInterface() string {
 
 	// Narrow terminals: a single commits column (two columns won't fit cleanly).
 	if g.w < 40 {
-		body := m.renderPanel(panelCommits, "Commits", m.commitRows(), g.w, g.boxH[panelCommits])
+		cmRows, _ := m.panelView(panelCommits)
+		body := m.renderPanel(panelCommits, m.panelLabel(panelCommits, "Commits"), cmRows, g.w, g.boxH[panelCommits])
 		return strings.Join([]string{header, body, footer, statusLine}, "\n")
 	}
+
+	brRows, _ := m.panelView(panelBranches)
+	wtRows, _ := m.panelView(panelWorktrees)
+	stRows, _ := m.panelView(panelStatus)
+	cmRows, _ := m.panelView(panelCommits)
 
 	var left string
 	if g.boxH[panelWorktrees] > 0 {
 		left = lipgloss.JoinVertical(lipgloss.Left,
-			m.renderPanel(panelBranches, "Branches", m.branchRows(), g.leftW, g.boxH[panelBranches]),
-			m.renderPanel(panelWorktrees, "Worktrees", m.worktreeRows(), g.leftW, g.boxH[panelWorktrees]),
-			m.renderPanel(panelStatus, "Status", m.statusRows(), g.leftW, g.boxH[panelStatus]),
+			m.renderPanel(panelBranches, m.panelLabel(panelBranches, "Branches"), brRows, g.leftW, g.boxH[panelBranches]),
+			m.renderPanel(panelWorktrees, m.panelLabel(panelWorktrees, "Worktrees"), wtRows, g.leftW, g.boxH[panelWorktrees]),
+			m.renderPanel(panelStatus, m.panelLabel(panelStatus, "Status"), stRows, g.leftW, g.boxH[panelStatus]),
 		)
 	} else {
 		left = lipgloss.JoinVertical(lipgloss.Left,
-			m.renderPanel(panelBranches, "Branches", m.branchRows(), g.leftW, g.boxH[panelBranches]),
-			m.renderPanel(panelStatus, "Status", m.statusRows(), g.leftW, g.boxH[panelStatus]),
+			m.renderPanel(panelBranches, m.panelLabel(panelBranches, "Branches"), brRows, g.leftW, g.boxH[panelBranches]),
+			m.renderPanel(panelStatus, m.panelLabel(panelStatus, "Status"), stRows, g.leftW, g.boxH[panelStatus]),
 		)
 	}
-	right := m.renderPanel(panelCommits, "Commits", m.commitRows(), g.rightW, g.boxH[panelCommits])
+	right := m.renderPanel(panelCommits, m.panelLabel(panelCommits, "Commits"), cmRows, g.rightW, g.boxH[panelCommits])
 	body := lipgloss.JoinHorizontal(lipgloss.Top, left, right)
 
 	return strings.Join([]string{header, body, footer, statusLine}, "\n")

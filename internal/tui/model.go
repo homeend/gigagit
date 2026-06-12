@@ -39,8 +39,10 @@ type Model struct {
 	opMsgs    chan tea.Msg
 	modal     *decisionState
 
-	focus panel
-	sel   map[panel]int
+	focus     panel
+	sel       map[panel]int
+	sortModes map[panel]sortMode // per-panel display order (zero value = default)
+	headTimes map[string]int64   // worktree HEAD sha -> committer time (date sort)
 }
 
 type panel int
@@ -55,7 +57,12 @@ const (
 
 // New constructs the initial model for repo.
 func New(repo *git.Repo) Model {
-	return Model{repo: repo, loading: true, sel: map[panel]int{}}
+	return Model{
+		repo:      repo,
+		loading:   true,
+		sel:       map[panel]int{},
+		sortModes: map[panel]sortMode{panelBranches: sortDateDesc},
+	}
 }
 
 // Init implements tea.Model.
@@ -78,6 +85,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.currentWorktree = msg.currentWorktree
 			m.cfg = msg.cfg
 			m.gitCommonDir = msg.gitCommonDir
+			m.headTimes = msg.headTimes
 			// Clamp selections so a row removed since the last load (e.g. a
 			// deleted worktree) can't leave an index pointing past the end.
 			for p := panel(0); p < panelCount; p++ {
@@ -130,9 +138,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m.startOp(engine.Push{Remote: "origin", Branch: m.status.Branch, SetUpstream: true})
 			}
 		case "s":
-			if !m.running && !m.loading && len(m.branches) > 0 {
-				target := m.branches[m.sel[panelBranches]].Name
-				return m.startOp(engine.SmartSwitch{Branch: target})
+			if !m.running && !m.loading {
+				if bi, ok := m.backingIndex(panelBranches); ok {
+					return m.startOp(engine.SmartSwitch{Branch: m.branches[bi].Name})
+				}
 			}
 		case "S":
 			if !m.running && !m.loading {
@@ -149,15 +158,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		case "d":
-			if !m.running && !m.loading && m.focus == panelWorktrees && len(m.worktrees) > 0 {
-				wt := m.worktrees[m.sel[panelWorktrees]]
-				return m.startOp(engine.RemoveWorktree{Path: wt.Path, Branch: wt.Branch})
+			if !m.running && !m.loading && m.focus == panelWorktrees {
+				if bi, ok := m.backingIndex(panelWorktrees); ok {
+					wt := m.worktrees[bi]
+					return m.startOp(engine.RemoveWorktree{Path: wt.Path, Branch: wt.Branch})
+				}
 			}
 		case "enter":
-			if !m.running && !m.loading && m.focus == panelWorktrees && len(m.worktrees) > 0 {
-				target := m.worktrees[m.sel[panelWorktrees]].Path
-				if target != "" && target != m.currentWorktree {
-					return m.reRoot(target)
+			if !m.running && !m.loading && m.focus == panelWorktrees {
+				if bi, ok := m.backingIndex(panelWorktrees); ok {
+					target := m.worktrees[bi].Path
+					if target != "" && target != m.currentWorktree {
+						return m.reRoot(target)
+					}
 				}
 			}
 		case "tab":
@@ -176,6 +189,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.sel[m.focus] -= m.pageStep()
 				if m.sel[m.focus] < 0 {
 					m.sel[m.focus] = 0
+				}
+			}
+		case "o":
+			if !m.running && !m.loading {
+				if m.sortModes == nil {
+					m.sortModes = map[panel]sortMode{}
+				}
+				m.sortModes[m.focus] = (m.sortModes[m.focus] + 1) % sortModeCount
+				if n := m.panelLen(m.focus); m.sel[m.focus] >= n && n > 0 {
+					m.sel[m.focus] = n - 1
 				}
 			}
 		case "up", "k":
@@ -230,17 +253,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // panelLen returns the number of rows in a panel, for selection clamping.
 func (m Model) panelLen(p panel) int {
-	switch p {
-	case panelBranches:
-		return len(m.branches)
-	case panelWorktrees:
-		return len(m.worktrees)
-	case panelStatus:
-		return len(m.status.Files)
-	case panelCommits:
-		return len(m.commits)
-	}
-	return 0
+	_, idx := m.panelView(p)
+	return len(idx)
 }
 
 // reRoot points the model at the repository rooted at path and triggers a full
