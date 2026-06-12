@@ -71,8 +71,9 @@ Entry point: `cmd/gg/main.go` — routes `shell-init`/`inspect`/CLI subcommands,
 
 ```bash
 go build ./cmd/gg            # or ./build.sh [linux|windows|all]
-go test ./...                # add -race before merging
-go vet ./... && gofmt -l internal/ cmd/
+./test.sh                    # staged: vet+gofmt → unit tests → e2e last
+./test.sh race               # the same with -race — run before merging
+./test.sh unit | e2e         # one stage only (test.cmd mirrors on Windows)
 ```
 
 ## Development workflow

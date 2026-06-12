@@ -27,6 +27,9 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - **Fix** `gg worktree remove <relative-path>`: a repo-top-relative path now
   matches regardless of process cwd (found by the e2e corpus; matters for
   in-process frontends like the future MCP server).
+- **Staged test runner** `./test.sh` / `test.cmd`: quality gates (vet+gofmt)
+  → unit tests → e2e scenarios last; `race` target for the pre-merge gate,
+  `unit`/`e2e` to run one stage.
 
 #### Foundation & engine (M1)
 - Frontend-agnostic core **engine**: the `Operation` contract with a streamed
