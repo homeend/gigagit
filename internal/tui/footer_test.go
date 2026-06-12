@@ -65,8 +65,19 @@ func TestEnterNoOpOnCurrentWorktree(t *testing.T) {
 	m.focus = panelWorktrees
 	u, cmd := m.Update(keyMsg("enter"))
 	mm := u.(Model)
+	// reRoot sets loading (not running like startOp)
 	if cmd != nil || mm.loading {
 		t.Fatal("enter on the current worktree must not re-root")
+	}
+}
+
+func TestSwitchKeyNoOpWhileLoading(t *testing.T) {
+	m := footerModel()
+	m.loading = true
+	m.sel[panelBranches] = 1 // feat/x would otherwise be switchable
+	u, cmd := m.Update(keyMsg("s"))
+	if cmd != nil || u.(Model).running {
+		t.Fatal("s while loading must be a no-op")
 	}
 }
 

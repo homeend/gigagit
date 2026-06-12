@@ -34,7 +34,7 @@ func (m Model) selectedWorktree() (model.Worktree, bool) {
 }
 
 // canSwitchBranch gates s: SmartSwitch to the selected branch. Switching to
-// the branch already checked out here would be a no-op git rejects.
+// the branch already checked out in this worktree: git refuses, so skip it.
 func (m Model) canSwitchBranch() bool {
 	b, ok := m.selectedBranch()
 	return m.opsIdle() && ok && !b.IsHead
@@ -46,7 +46,8 @@ func (m Model) canOpenBranchPopup() bool {
 	return m.opsIdle() && ok
 }
 
-// canOpenWorktreePopup gates w/W: a worktree from the selected branch.
+// canOpenWorktreePopup gates w/W: a worktree from the selected branch. w/W
+// act on the Branches selection from any focused panel; focus is not a gate.
 func (m Model) canOpenWorktreePopup() bool {
 	_, ok := m.selectedBranch()
 	return m.opsIdle() && ok
