@@ -155,20 +155,46 @@ func TestInstallBlockPreservesSurroundingContent(t *testing.T) {
 }
 
 func TestInstallBlockCreatesMissingFile(t *testing.T) {
-	proj, home := fixture(t, []string{".junie"}, nil)
-	d, ok := byID(Detect(proj, home), "junie")
+	proj, home := fixture(t, []string{".github"}, nil)
+	d, ok := byID(Detect(proj, home), "copilot")
 	if !ok {
-		t.Fatal("junie not detected")
+		t.Fatal("copilot not detected")
 	}
 	if err := Install(d); err != nil {
 		t.Fatal(err)
 	}
-	data, err := os.ReadFile(filepath.Join(proj, ".junie", "guidelines.md"))
+	data, err := os.ReadFile(filepath.Join(proj, ".github", "copilot-instructions.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if agentskill.InstalledVersion(data) != agentskill.Version {
 		t.Error("created file missing block")
+	}
+}
+
+func TestJunieInstallsSkillFile(t *testing.T) {
+	proj, home := fixture(t, []string{".junie"}, nil)
+	d, ok := byID(Detect(proj, home), "junie")
+	if !ok {
+		t.Fatal("junie not detected")
+	}
+	// Junie discovers Agent Skills from .junie/skills/<name>/SKILL.md — a
+	// whole gg-owned skill file, not a guidelines.md block.
+	if d.Agent.Mode != ModeSkillFile {
+		t.Fatalf("junie mode = %v, want ModeSkillFile", d.Agent.Mode)
+	}
+	if err := Install(d); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(proj, ".junie", "skills", "using-gg", "SKILL.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "name: using-gg") {
+		t.Error("Junie SKILL.md missing frontmatter")
+	}
+	if agentskill.InstalledVersion(data) != agentskill.Version {
+		t.Error("Junie SKILL.md missing version marker")
 	}
 }
 
