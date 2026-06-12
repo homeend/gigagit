@@ -75,14 +75,29 @@ var (
 	modalStyle   = lipgloss.NewStyle().Border(lipgloss.DoubleBorder()).BorderForeground(lipgloss.Color("11")).Padding(1, 2)
 )
 
+// clipToHeight truncates s to at most h lines (split on "\n"), joining back
+// without a trailing newline. This guards against layout() bodyH floors that
+// add extra lines at very small terminal heights.
+func clipToHeight(s string, h int) string {
+	if h <= 0 {
+		return ""
+	}
+	lines := strings.Split(s, "\n")
+	if len(lines) <= h {
+		return s
+	}
+	return strings.Join(lines[:h], "\n")
+}
+
 // render draws the interface, compositing the worktree popup centered on top of
 // it when one is open. The output never exceeds width×height.
 func (m Model) render() string {
 	if m.modal != nil {
 		return m.renderModal()
 	}
-	bg := m.renderInterface()
-	if m.popup == nil && m.repoPopup == nil && m.settings == nil && m.branchPopup == nil {
+	_, h := m.overlayDims()
+	bg := clipToHeight(m.renderInterface(), h)
+	if m.popup == nil && m.repoPopup == nil && m.settings == nil && m.branchPopup == nil && m.contentPopup == nil {
 		if lines, x, y, ok := m.tooltip(); ok {
 			w, h := m.overlayDims()
 			bg = overlayAt(bg, strings.Join(lines, "\n"), x, y, w, h)
@@ -103,6 +118,10 @@ func (m Model) render() string {
 	if m.branchPopup != nil {
 		w, h := m.overlayDims()
 		return overlayCenter(bg, m.renderBranchPopup(), w, h)
+	}
+	if m.contentPopup != nil {
+		w, h := m.overlayDims()
+		return overlayCenter(bg, m.renderContentPopup(), w, h)
 	}
 	return bg
 }
@@ -133,13 +152,17 @@ func popupInnerWidth(w int) int {
 	return inner
 }
 
+// footerText abbreviates the global keys; TestHelpFooterCoverage enforces
+// that every [x] key here has a row in helpContent.
+const footerText = "[p]ull [P]ush [s]witch [b]ranch [S]tash [u]ndo [w]orktree [d]elete [o]rder [/]filter [R]epo [,] settings  •  [tab] focus  [r] reload  [?] help  [q] quit"
+
 // renderInterface draws the header, the panels, and the footer/status, sized to
 // fit the current terminal so the output never exceeds width×height.
 func (m Model) renderInterface() string {
 	g := m.layout()
 
 	header := m.headerLine(g.w)
-	footer := truncate("[p]ull [P]ush [s]witch [b]ranch [S]tash [u]ndo [w]orktree [d]elete [o]rder [/]filter [R]epo [,] settings  •  [tab] focus  [r] reload  [q] quit", g.w)
+	footer := truncate(footerText, g.w)
 	statusLine := m.statusMsg
 	if m.running {
 		statusLine = "⏳ " + statusLine

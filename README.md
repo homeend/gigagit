@@ -52,6 +52,7 @@ Run `gg` with no arguments to open the interactive UI.
 | `R` | switch repository (popup: type to filter, `enter` to switch, `ctrl+d` to forget) |
 | `,` | settings (set up agent skills) |
 | `r` / `q` | reload / quit |
+| `?` | help: searchable list of all key bindings (type to filter; `↑`/`↓`, `ctrl+↑`/`ctrl+↓`, `pgup`/`pgdn`, mouse wheel to scroll) |
 
 When an operation hits a fork (e.g. a diverged branch, or a worktree with
 uncommitted changes), a modal asks you to choose; `↑`/`↓` + `enter` to pick,

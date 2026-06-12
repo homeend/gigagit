@@ -1,0 +1,71 @@
+package tui
+
+// helpContent is the hand-maintained table behind the ? help window: every
+// key binding in the TUI, grouped by context. The key column is the first
+// whitespace-delimited field; /-separated alternates (e.g. "q/ctrl+c") are
+// matched individually by the footer drift guard (help_test.go).
+func helpContent() []contentLine {
+	h := func(s string) contentLine { return contentLine{text: s, heading: true} }
+	r := func(key, desc string) contentLine {
+		return contentLine{text: padRight(key, 16) + desc}
+	}
+	return []contentLine{
+		h("Global"),
+		r("p", "pull (SmartPull: autostash, ff/rebase decisions)"),
+		r("P", "push the current branch (sets upstream)"),
+		r("s", "switch to the selected branch (SmartSwitch)"),
+		r("S", "stash tracked changes"),
+		r("u", "undo the last commit (soft, ref-only)"),
+		r("w", "worktree popup for the selected existing branch"),
+		r("W", "worktree popup on a new templated branch"),
+		r("R", "repo switcher popup"),
+		r(",", "settings (agent skill install)"),
+		r("o", "cycle the focused panel's sort order"),
+		r("/", "filter the focused panel"),
+		r("tab/shift+tab", "cycle panel focus forward / backward"),
+		r("↑/k ↓/j", "move the selection"),
+		r("pgup/pgdn", "page the selection (25% of the viewport)"),
+		r("esc", "clear the active filter"),
+		r("r", "reload all panels"),
+		r("?", "this help window"),
+		r("q/ctrl+c", "quit"),
+		h("Branches panel"),
+		r("b", "create a branch off the selected one (popup)"),
+		r("B", "create a branch and switch to it"),
+		r("d", "delete the selected branch"),
+		h("Worktrees panel"),
+		r("enter", "switch into the selected worktree"),
+		r("d", "remove the selected worktree"),
+		h("Filter mode (/)"),
+		r("enter", "keep the filter and leave input mode"),
+		r("esc", "cancel the filter"),
+		r("backspace", "delete; any typed text narrows the list"),
+		h("Worktree popup (w/W)"),
+		r("enter/tab", "next input field / confirm"),
+		r("e", "edit the previewed branch name (new-branch mode)"),
+		r("w/enter", "create the worktree"),
+		r("W", "create the worktree and switch to it"),
+		r("esc", "cancel"),
+		h("Branch popup (b/B)"),
+		r("enter", "create the branch"),
+		r("esc", "cancel"),
+		h("Repo switcher (R)"),
+		r("enter", "switch to the selected repository"),
+		r("ctrl+d", "forget the selected repository"),
+		r("esc", "close (type to filter)"),
+		h("Settings (,)"),
+		r("↑/↓", "move between entries"),
+		r("enter", "open the agent picker / install checked skills"),
+		r("space", "toggle the selected agent skill (picker)"),
+		r("esc", "back to the menu, then close"),
+		h("Decision modal"),
+		r("↑/k ↓/j", "choose an option"),
+		r("enter", "confirm the option"),
+		r("esc", "abort the operation"),
+		h("Help window (?)"),
+		r("↑/↓ ctrl+↑/↓", "scroll by 1 / by 5 (mouse wheel: 3)"),
+		r("pgup/pgdn", "scroll by a page"),
+		r("esc", "clear the search, then close"),
+		r("enter", "close (type to search)"),
+	}
+}

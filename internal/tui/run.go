@@ -19,7 +19,7 @@ func Run(repo *git.Repo) (string, error) {
 	if home, err := os.UserHomeDir(); err == nil {
 		m.initHomeDir = home
 	}
-	p := tea.NewProgram(m, tea.WithAltScreen())
+	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	final, err := p.Run()
 	if err != nil {
 		return "", err

@@ -38,7 +38,8 @@ type Model struct {
 	pendingSwitch       bool
 	switchTarget        string
 	branchPopup         *branchPopup
-	pendingSwitchBranch string // branch to SmartSwitch to after a successful op (B = create-and-switch)
+	pendingSwitchBranch string        // branch to SmartSwitch to after a successful op (B = create-and-switch)
+	contentPopup        *contentPopup // generic read-only viewer (help window)
 
 	running   bool
 	statusMsg string
@@ -139,6 +140,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.branchPopup != nil {
 			return m.updateBranchPopupKey(msg)
+		}
+		if m.contentPopup != nil {
+			return m.updateContentPopupKey(msg)
 		}
 		// Filter-input mode captures every key (the panel label shows the query).
 		if m.filterTyping {
@@ -284,6 +288,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if !m.running && !m.loading {
 				return m.openSettings(), nil
 			}
+		case "?":
+			m.contentPopup = newContentPopup("Help — keys", helpContent())
 		case "esc":
 			// filterPanel is intentionally left set — filterActive() gates on a
 			// non-empty query, so the residue is inert.
@@ -297,6 +303,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "down", "j":
 			if m.sel[m.focus] < m.panelLen(m.focus)-1 {
 				m.sel[m.focus]++
+			}
+		}
+	case tea.MouseMsg:
+		// Mouse support is scoped to the content popup (spec non-goal: no
+		// panel clicks/wheel). Wheel ticks move the cursor like ctrl-arrows.
+		if m.contentPopup != nil && msg.Action == tea.MouseActionPress {
+			switch msg.Button {
+			case tea.MouseButtonWheelUp:
+				m.contentPopup.move(-contentWheelStep)
+			case tea.MouseButtonWheelDown:
+				m.contentPopup.move(contentWheelStep)
 			}
 		}
 	case opEventMsg:
