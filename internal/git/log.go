@@ -23,6 +23,32 @@ func (r *Repo) Log(ctx context.Context, limit int) ([]model.Commit, error) {
 	return ParseLog([]byte(res.Stdout))
 }
 
+// CommitTimes returns the committer time (unix seconds) for each given commit
+// in ONE invocation (`git log --no-walk --format=%H%x00%ct <sha…>`), keeping
+// the cost flat for many worktrees. Empty input returns an empty map with no
+// git call.
+func (r *Repo) CommitTimes(ctx context.Context, shas []string) (map[string]int64, error) {
+	out := map[string]int64{}
+	if len(shas) == 0 {
+		return out, nil
+	}
+	argv := gitcmd.New("log").Arg("--no-walk", "--format=%H%x00%ct").Arg(shas...).ToArgv()
+	res, err := r.Runner.Run(ctx, "git log (commit times)", argv)
+	if err != nil {
+		return nil, err
+	}
+	for _, line := range strings.Split(res.Stdout, "\n") {
+		f := strings.Split(strings.TrimSpace(line), "\x00")
+		if len(f) != 2 {
+			continue
+		}
+		if t, perr := strconv.ParseInt(f[1], 10, 64); perr == nil {
+			out[f[0]] = t
+		}
+	}
+	return out, nil
+}
+
 // ParseLog parses lines of "%H\x1f%P\x1f%an\x1f%at\x1f%s".
 func ParseLog(data []byte) ([]model.Commit, error) {
 	var out []model.Commit
