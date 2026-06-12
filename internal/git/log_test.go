@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/gigagit/gg/internal/gitexec"
+	"github.com/gigagit/gg/internal/model"
 )
 
 func TestParseLog(t *testing.T) {
@@ -93,5 +94,88 @@ func TestCommitTimesRealRepo(t *testing.T) {
 	}
 	if got[sha] == 0 {
 		t.Fatalf("no time for %s: %v", sha, got)
+	}
+}
+
+func TestParseNameStatus(t *testing.T) {
+	raw := []byte("M\tCHANGELOG.md\n" +
+		"A\tinternal/tui/files_view.go\n" +
+		"D\told.txt\n" +
+		"R100\ta/old.go\tb/new.go\n" +
+		"T\tlink\n" +
+		"\n" +
+		"bogus-line-without-tab\n")
+	got := ParseNameStatus(raw)
+	want := []model.CommitFile{
+		{Status: "M", Path: "CHANGELOG.md"},
+		{Status: "A", Path: "internal/tui/files_view.go"},
+		{Status: "D", Path: "old.txt"},
+		{Status: "R", Path: "b/new.go", OldPath: "a/old.go"},
+		{Status: "T", Path: "link"},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("files = %d, want %d: %+v", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("file[%d] = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+}
+
+func TestCommitFilesArgv(t *testing.T) {
+	f := gitexec.NewFakeRunner()
+	f.SetResponse("git diff-tree", gitexec.Result{Stdout: "M\tfile.txt\n"})
+	repo := &Repo{Runner: f}
+	got, err := repo.CommitFiles(context.Background(), "abc123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(f.Calls) != 1 {
+		t.Fatalf("git calls = %d, want 1", len(f.Calls))
+	}
+	argv := strings.Join(f.Calls[0].Argv, " ")
+	for _, part := range []string{"diff-tree", "-r", "--root", "--no-commit-id", "--name-status", "-M", "--first-parent", "-m", "abc123"} {
+		if !strings.Contains(argv, part) {
+			t.Fatalf("argv = %q, missing %q", argv, part)
+		}
+	}
+	if len(got) != 1 || got[0] != (model.CommitFile{Status: "M", Path: "file.txt"}) {
+		t.Fatalf("files = %+v", got)
+	}
+}
+
+func TestCommitFilesRealRepo(t *testing.T) {
+	dir, runner := newTestRepo(t) // initial commit contains README.md
+	repo := &Repo{Runner: runner}
+
+	// Root commit lists its files (--root).
+	out, err := exec.Command("git", "-C", dir, "rev-parse", "HEAD").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := strings.TrimSpace(string(out))
+	files, err := repo.CommitFiles(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 1 || files[0].Status != "A" || files[0].Path != "README.md" {
+		t.Fatalf("root commit files = %+v, want [A README.md]", files)
+	}
+
+	// A rename commit reports R with both paths.
+	gitIn(t, dir, "mv", "README.md", "DOCS.md")
+	gitIn(t, dir, "commit", "-m", "rename")
+	out, err = exec.Command("git", "-C", dir, "rev-parse", "HEAD").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	head := strings.TrimSpace(string(out))
+	files, err = repo.CommitFiles(context.Background(), head)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 1 || files[0].Status != "R" || files[0].OldPath != "README.md" || files[0].Path != "DOCS.md" {
+		t.Fatalf("rename commit files = %+v, want [R README.md -> DOCS.md]", files)
 	}
 }

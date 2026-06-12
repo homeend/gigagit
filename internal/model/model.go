@@ -88,3 +88,10 @@ type Commit struct {
 	Subject  string
 	UnixTime int64
 }
+
+// CommitFile is one changed path within a commit.
+type CommitFile struct {
+	Status  string // single letter: A M D R C T (score stripped from R/C)
+	Path    string // new path
+	OldPath string // set only for renames/copies
+}
