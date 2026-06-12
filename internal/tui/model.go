@@ -377,6 +377,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	// Drop selections from the old repo so the highlight doesn't land on a
 	// surprising row in the newly-loaded panels.
 	m.sel = map[panel]int{}
+	m.mark = nil // a mark from the old repo must not re-attach by name in the new one
 	return m, m.loadCmd()
 }
 

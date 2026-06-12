@@ -176,6 +176,18 @@ func TestMarkedRowRendersDiamondAndStatusHint(t *testing.T) {
 	}
 }
 
+func TestReRootClearsMark(t *testing.T) {
+	m := markModel()
+	m = pressRune(t, m, "m")
+	if m.mark == nil {
+		t.Fatal("setup: mark expected")
+	}
+	updated, _ := m.reRoot(t.TempDir())
+	if got := updated.(Model).mark; got != nil {
+		t.Fatalf("mark = %+v after reRoot, want nil", got)
+	}
+}
+
 // Integration: enter on Merge dispatches SmartMerge and the merge really runs.
 func TestPairPopupEnterRunsSmartMerge(t *testing.T) {
 	dir, repo := newRepoDir(t)
