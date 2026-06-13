@@ -44,7 +44,7 @@ panel and selected row right now; `?` opens the full searchable reference.
 | `S` | stash |
 | `u` | undo last commit (ref-only, soft reset) |
 | `w` | create a worktree **for the selected branch** (popup); `W` worktree on a **new** templated branch. Inside the popup: `w`/`enter` create, `W` create **and** switch |
-| `enter` | on the Worktrees panel: switch into the selected worktree; on the Status panel: full-screen side-by-side diff of the file (HEAD → working tree); on the files-view tree: diff of the file in the viewed commit. Inside the diff: `↑`/`↓` scroll, `pgup`/`pgdn` page, `ctrl+↑`/`ctrl+↓` jump between changes, `esc` closes |
+| `enter` | on the Worktrees panel: switch into the selected worktree; on the Status panel: full-screen side-by-side diff of the file (HEAD → working tree); on the files-view tree: diff of the file in the viewed commit. Inside the diff: `↑`/`↓` scroll, `pgup`/`pgdn` page, `n`/`p` (or `ctrl+↑`/`ctrl+↓`) jump between changes, `f` toggles full file ↔ changed-lines-only, `esc` closes |
 | `d` | on the Worktrees panel: delete the selected worktree; on the Branches panel: delete the selected branch |
 | `m` | mark the selected row; press `m` on a second row of the same panel to open the pair-operation picker (Branches: Merge; `esc` clears the mark before clearing the filter) |
 | `l` | on the Commits panel: show the selected commit's files as a directory tree in the left column (`←`/`→`/`tab` switch focus between the tree and the commit list; movement keys act on the focused side — the commits side reloads the tree; `ctrl+↑`/`ctrl+↓` always scroll the tree; `/` searches paths; `esc`/`l` close) |
