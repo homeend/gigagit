@@ -18,7 +18,7 @@ var (
 	diffEmph    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("231")) // bright fg over the hot cell bg
 )
 
-const diffHint = "[↑↓] scroll  [pgup/pgdn] page  [n/p] next/prev change  [f] toggle partial  [esc] close  [q] quit"
+const diffHint = "[↑↓] scroll  [pgup/pgdn] page  [n/p] next/prev change  [f] toggle partial  [w] wrap  [esc] close  [q] quit"
 
 // cellSeg is one pane's text for one display row: the sanitized display runes
 // and the parallel emphasis mask, already ≤ the pane's text width. A zero

@@ -53,6 +53,7 @@ type Model struct {
 	diffView    *diffView // full-screen side-by-side diff; nil = closed
 	diffTag     string    // request key of the wanted diff; gates stale async results
 	diffPartial bool      // session default for new diffs (false = full); the f key toggles it
+	diffWrap    bool      // session: word-wrap long lines in the diff view (w toggles)
 
 	svc              *domain.Service    // command layer; m.repo == svc.Repo()
 	feed             *domain.CommitFeed // single source of truth for commits
@@ -115,10 +116,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.filesTreeFocused = false
 			m.statusMsg = "files view closed: terminal too narrow"
 		}
-		if m.diffView != nil && msg.Width > 0 && msg.Width < 60 {
-			m.diffView = nil
-			m.diffTag = ""
-			m.statusMsg = "diff closed: terminal too narrow"
+		if m.diffView != nil && msg.Width > 0 {
+			if msg.Width < 60 {
+				m.diffView = nil
+				m.diffTag = ""
+				m.statusMsg = "diff closed: terminal too narrow"
+			} else {
+				// Re-wrap at the new width, keeping the viewport anchored to
+				// the logical line currently at the top.
+				v := m.diffView
+				topLine := 0
+				if v.offset < len(v.disp) {
+					topLine = v.disp[v.offset].line
+				}
+				w, _ := m.overlayDims()
+				v.relayout(w)
+				if topLine < len(v.lineStart) {
+					v.offset = v.lineStart[topLine]
+				}
+				v.scroll(0, m.diffBodyRows())
+			}
 		}
 	case diffMsg:
 		if m.diffView == nil || msg.tag != m.diffTag {
@@ -327,7 +344,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.focus == panelStatus && m.canShowFileDiff() {
 				bi, _ := m.backingIndex(panelStatus)
 				f := m.status.Files[bi]
-				m.diffView = &diffView{title: f.Path, context: "HEAD → working tree", loading: true, partial: m.diffPartial}
+				m.diffView = &diffView{title: f.Path, context: "HEAD → working tree", loading: true, partial: m.diffPartial, wrap: m.diffWrap}
 				m.diffTag = "status:" + f.Path
 				return m, m.loadStatusDiffCmd(f)
 			}

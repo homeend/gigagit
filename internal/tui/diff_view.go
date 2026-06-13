@@ -247,8 +247,9 @@ func (m Model) loadStatusDiffCmd(f model.FileStatus) tea.Cmd {
 	differ := m.diffDiffer()
 	root := m.currentWorktree
 	body := m.diffBodyRows()
+	width, _ := m.overlayDims()
 	tag := "status:" + f.Path
-	v := &diffView{title: f.Path, context: "HEAD → working tree", partial: m.diffPartial}
+	v := &diffView{title: f.Path, context: "HEAD → working tree", partial: m.diffPartial, wrap: m.diffWrap, width: width}
 
 	// Old side: absent when the file isn't in HEAD (untracked, or staged-new
 	// 'A'). Renames fetch the old name.
@@ -322,8 +323,9 @@ func (m Model) loadCommitDiffCmd(hash string, line contentLine) tea.Cmd {
 	repo := m.repo
 	differ := m.diffDiffer()
 	body := m.diffBodyRows()
+	width, _ := m.overlayDims()
 	tag := "commit:" + hash + ":" + line.path
-	v := &diffView{title: line.path, context: "@ " + strings.TrimPrefix(m.filesTitle, "Files "), partial: m.diffPartial}
+	v := &diffView{title: line.path, context: "@ " + strings.TrimPrefix(m.filesTitle, "Files "), partial: m.diffPartial, wrap: m.diffWrap, width: width}
 	// Immutable: parent(hash)→hash for a path always yields the same bytes.
 	key := hash + "^.." + hash + ":" + line.path
 
@@ -385,6 +387,19 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		v.partial = !v.partial
 		v.rebuild()
 		m.diffPartial = v.partial
+		if len(v.dispBlocks) > 0 {
+			if ord >= len(v.dispBlocks) {
+				ord = len(v.dispBlocks) - 1
+			}
+			v.jumpTo(v.dispBlocks[ord], m.diffBodyRows())
+		} else {
+			v.offset = 0
+		}
+	case "w":
+		ord := v.currentBlockOrdinal()
+		v.wrap = !v.wrap
+		v.relayout(v.width)
+		m.diffWrap = v.wrap
 		if len(v.dispBlocks) > 0 {
 			if ord >= len(v.dispBlocks) {
 				ord = len(v.dispBlocks) - 1

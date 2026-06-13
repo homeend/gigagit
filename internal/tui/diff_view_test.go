@@ -780,3 +780,72 @@ func TestRelayoutWrapOnGapSideHasNilSegments(t *testing.T) {
 		}
 	}
 }
+
+func TestDiffWToggleFlipsWrapAndSession(t *testing.T) {
+	rows := sameRowsTUI(40, 20)
+	m := diffModel()
+	m.width, m.height = 80, 24
+	m.diffView = diffViewWith(rows, []int{20})
+	m.diffView.width = 80
+	m.diffView.rebuild()
+	m.diffTag = "status:x"
+
+	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("w")})
+	mm := u.(Model)
+	if !mm.diffView.wrap {
+		t.Fatal("w must turn wrap on")
+	}
+	if !mm.diffWrap {
+		t.Fatal("w must record the session wrap flag")
+	}
+	u2, _ := mm.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("w")})
+	if u2.(Model).diffView.wrap {
+		t.Fatal("a second w must turn wrap off")
+	}
+}
+
+func TestDiffOpenInheritsSessionWrap(t *testing.T) {
+	dir, repo := newRepoDir(t)
+	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("a\nb\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, dir, "add", "f.txt")
+	gitIn(t, dir, "commit", "-m", "base")
+	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("a\nB\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := diffModel()
+	m.repo = repo
+	m.currentWorktree = dir
+	m.diffWrap = true
+	msg := m.loadStatusDiffCmd(model.FileStatus{Path: "f.txt", Staged: '.', Unstaged: 'M'})().(diffMsg)
+	if !msg.view.wrap {
+		t.Fatal("a new diff must inherit the session's wrap mode")
+	}
+}
+
+func TestDiffResizeReanchorsToTopLine(t *testing.T) {
+	rows := make([]textdiff.Row, 30)
+	wide := "this is a fairly long line that will wrap at a narrow pane width"
+	for i := range rows {
+		rows[i] = textdiff.Row{Kind: textdiff.Same, Left: wide, Right: wide, LeftNo: i + 1, RightNo: i + 1}
+	}
+	m := diffModel()
+	m.width, m.height = 80, 24
+	v := diffViewWith(rows, nil)
+	v.wrap = true
+	v.width = 80
+	v.rebuild()
+	v.offset = v.lineStart[10] // top is logical line 10
+	m.diffView = v
+	m.diffTag = "status:x"
+
+	u, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 24})
+	mm := u.(Model)
+	if mm.diffView == nil {
+		t.Fatal("a width≥60 resize must not close the diff")
+	}
+	if got := mm.diffView.disp[mm.diffView.offset].line; got != 10 {
+		t.Fatalf("after resize the top line should still be 10, got %d", got)
+	}
+}
