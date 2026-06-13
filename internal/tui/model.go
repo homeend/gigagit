@@ -141,6 +141,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.filesView.sel = 0
 		m.filesTitle = "Files " + shortHash(msg.hash) + " " + msg.subject
 		return m, nil
+	case historyListMsg:
+		if h, ok := m.stackTop().(*historyView); ok && h.listTag == msg.tag {
+			h.loading = false
+			h.err = msg.err
+			h.commits = msg.commits
+			h.sel = 0
+			if len(h.commits) > 0 {
+				return m, h.selectCmd(m)
+			}
+		}
+		return m, nil
+	case historyDiffMsg:
+		if h, ok := m.stackTop().(*historyView); ok && h.diffTag == msg.tag {
+			msg.view.partial = m.diffPartial
+			msg.view.rebuild()
+			h.diff = msg.view
+		}
+		return m, nil
 	case dataLoadedMsg:
 		if msg.gen != m.loadGen {
 			return m, nil // superseded by a newer load
