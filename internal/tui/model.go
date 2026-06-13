@@ -55,6 +55,7 @@ type Model struct {
 
 	svc      *domain.Service    // command layer; m.repo == svc.Repo()
 	opCancel context.CancelFunc // cancels the in-flight op's context; nil when idle
+	loadGen  int                // bumped per superseding load; stale dataLoadedMsg are dropped
 
 	running   bool
 	statusMsg string
@@ -138,6 +139,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.filesTitle = "Files " + shortHash(msg.hash) + " " + msg.subject
 		return m, nil
 	case dataLoadedMsg:
+		if msg.gen != m.loadGen {
+			return m, nil // superseded by a newer load
+		}
 		m.loading = false
 		m.err = msg.err
 		if msg.err == nil {
@@ -237,6 +241,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "r":
 			if !m.running {
+				m.loadGen++
 				m.loading = true
 				return m, m.loadCmd()
 			}
@@ -453,6 +458,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if chainSwitch != "" {
 			return m.startOp(engine.SmartSwitch{Branch: chainSwitch})
 		}
+		m.loadGen++
 		return m, m.loadCmd()
 	}
 	return m, nil
@@ -491,6 +497,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.filesTreeFocused = false
 	m.diffView = nil // the new repo invalidates any open diff
 	m.diffTag = ""
+	m.loadGen++
 	return m, m.loadCmd()
 }
 

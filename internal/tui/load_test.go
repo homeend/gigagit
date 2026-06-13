@@ -8,6 +8,7 @@ import (
 
 	"github.com/gigagit/gg/internal/git"
 	"github.com/gigagit/gg/internal/gitexec"
+	"github.com/gigagit/gg/internal/model"
 	"github.com/gigagit/gg/internal/observ"
 )
 
@@ -87,5 +88,22 @@ func TestLoadIncludesConfigAndCommonDir(t *testing.T) {
 	}
 	if m.gitCommonDir == "" {
 		t.Error("expected gitCommonDir to be set")
+	}
+}
+
+// TestStaleSnapshotDropped: a dataLoadedMsg from an older generation is
+// ignored, so a superseded in-flight load cannot paint over a newer one.
+func TestStaleSnapshotDropped(t *testing.T) {
+	m := New(&git.Repo{Runner: gitexec.NewFakeRunner()})
+	m.loadGen = 5
+
+	stale, _ := m.Update(dataLoadedMsg{gen: 4, branches: []model.Branch{{Name: "x"}}})
+	if mm := stale.(Model); len(mm.branches) != 0 {
+		t.Fatal("stale-generation snapshot was applied")
+	}
+
+	fresh, _ := m.Update(dataLoadedMsg{gen: 5, branches: []model.Branch{{Name: "y"}}})
+	if mm := fresh.(Model); len(mm.branches) != 1 || mm.branches[0].Name != "y" {
+		t.Fatal("current-generation snapshot was not applied")
 	}
 }
