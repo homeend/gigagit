@@ -1,9 +1,11 @@
 package tui
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -11,6 +13,35 @@ import (
 	"github.com/gigagit/gg/internal/model"
 	"github.com/gigagit/gg/internal/textdiff"
 )
+
+// gitOut runs a git command in dir and returns its trimmed stdout.
+func gitOut(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(),
+		"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t",
+		"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// filesViewModel builds an open files view with a focused tree and payload rows.
+func filesViewModel() Model {
+	m := footerModel()
+	m.focus = panelCommits
+	m.filesView = &contentPopup{lines: []contentLine{
+		{text: "dir/", heading: true},
+		{text: "  M  f.go", path: "dir/f.go", status: "M"},
+	}, sel: 1}
+	m.filesHash = "abc1234def"
+	m.filesTitle = "Files abc1234 subject line"
+	m.filesTreeFocused = true
+	return m
+}
 
 // gitIn runs a git command in dir with standard test env vars.
 func gitIn(t *testing.T, dir string, args ...string) {
@@ -322,5 +353,174 @@ func TestDiffViewJumpAtMaxScrollIsNoOp(t *testing.T) {
 	u, _ = m.Update(keyMsg("ctrl+down"))
 	if got := u.(Model).diffView.offset; got != 25 {
 		t.Fatalf("jump at max scroll must hold position, got %d", got)
+	}
+}
+
+func TestEnterInTreeOpensCommitDiff(t *testing.T) {
+	m := filesViewModel()
+	u, cmd := m.Update(keyMsg("enter"))
+	mm := u.(Model)
+	if mm.diffView == nil || !mm.diffView.loading || cmd == nil {
+		t.Fatal("enter on a tree file row must open a loading diff")
+	}
+	if mm.diffTag != "commit:abc1234def:dir/f.go" {
+		t.Fatalf("diffTag = %q", mm.diffTag)
+	}
+	if mm.filesView == nil {
+		t.Fatal("the files view must stay open beneath the diff")
+	}
+	if !strings.Contains(mm.diffView.context, "abc1234") {
+		t.Fatalf("context = %q, want the short hash", mm.diffView.context)
+	}
+}
+
+func TestEnterInTreeNoOpOnHeading(t *testing.T) {
+	m := filesViewModel()
+	m.filesView.sel = 0 // the heading row
+	u, cmd := m.Update(keyMsg("enter"))
+	if u.(Model).diffView != nil || cmd != nil {
+		t.Fatal("enter on a heading row must be a no-op")
+	}
+}
+
+func TestEnterInTreeNoOpOnCommitsSide(t *testing.T) {
+	m := filesViewModel()
+	m.filesTreeFocused = false
+	u, cmd := m.Update(keyMsg("enter"))
+	if u.(Model).diffView != nil || cmd != nil {
+		t.Fatal("enter on the commits side must not open a diff")
+	}
+}
+
+func TestEnterInTreeNarrowRefusalExplains(t *testing.T) {
+	m := filesViewModel()
+	m.width = 55 // files view open (>=40) but diff needs >=60
+	u, cmd := m.Update(keyMsg("enter"))
+	mm := u.(Model)
+	if mm.diffView != nil || cmd != nil {
+		t.Fatal("enter at 55 cols must not open the diff")
+	}
+	if mm.statusMsg == "" {
+		t.Fatal("the refusal must explain itself in statusMsg")
+	}
+}
+
+func TestCommitLoaderModifiedAndAdded(t *testing.T) {
+	dir, repo := newRepoDir(t)
+	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("v1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, dir, "add", "f.txt")
+	gitIn(t, dir, "commit", "-m", "c1")
+	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("v2\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "g.txt"), []byte("new\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, dir, "add", ".")
+	gitIn(t, dir, "commit", "-m", "c2")
+	hash := gitOut(t, dir, "rev-parse", "HEAD")
+
+	m := filesViewModel()
+	m.repo = repo
+
+	// Modified: parent vs commit.
+	msg := m.loadCommitDiffCmd(hash, contentLine{path: "f.txt", status: "M"})().(diffMsg)
+	if msg.view.err != nil {
+		t.Fatal(msg.view.err)
+	}
+	if len(msg.view.blocks) != 1 || msg.view.rows[0].Kind != textdiff.Changed {
+		t.Fatalf("modified file rows wrong: %+v", msg.view.rows)
+	}
+
+	// Added in this commit: old side empty.
+	msg = m.loadCommitDiffCmd(hash, contentLine{path: "g.txt", status: "A"})().(diffMsg)
+	if msg.view.err != nil {
+		t.Fatal(msg.view.err)
+	}
+	for _, r := range msg.view.rows {
+		if r.Kind != textdiff.Add {
+			t.Fatalf("added file must be all-Add: %+v", r)
+		}
+	}
+}
+
+func TestCommitLoaderRootCommit(t *testing.T) {
+	dir, repo := newRepoDir(t)
+	hash := gitOut(t, dir, "rev-list", "--max-parents=0", "HEAD")
+	// Every root-commit file has status "A" (CommitFiles passes --root), so
+	// the loader never dereferences hash^.
+	files, err := repo.CommitFiles(context.Background(), hash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := filesViewModel()
+	m.repo = repo
+	for _, f := range files {
+		if f.Status != "A" {
+			t.Fatalf("root commit file %q has status %q, want A", f.Path, f.Status)
+		}
+		msg := m.loadCommitDiffCmd(hash, contentLine{path: f.Path, status: f.Status})().(diffMsg)
+		if msg.view.err != nil {
+			t.Fatalf("root-commit diff failed: %v", msg.view.err)
+		}
+	}
+}
+
+func TestCommitLoaderMergeCommitUsesFirstParent(t *testing.T) {
+	dir, repo := newRepoDir(t)
+	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("base\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, dir, "add", ".")
+	gitIn(t, dir, "commit", "-m", "base")
+	gitIn(t, dir, "checkout", "-b", "side")
+	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("side\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, dir, "commit", "-am", "side edit")
+	gitIn(t, dir, "checkout", "main")
+	if err := os.WriteFile(filepath.Join(dir, "other.txt"), []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, dir, "add", ".")
+	gitIn(t, dir, "commit", "-m", "main edit")
+	gitIn(t, dir, "merge", "--no-ff", "-m", "merge", "side")
+	hash := gitOut(t, dir, "rev-parse", "HEAD")
+
+	// The tree lists the merge's FIRST-PARENT diff (CommitFiles passes
+	// --first-parent -m), and hash^ IS the first parent — sides must match.
+	files, err := repo.CommitFiles(context.Background(), hash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fEntry *model.CommitFile
+	for i := range files {
+		if files[i].Path == "f.txt" {
+			fEntry = &files[i]
+		}
+	}
+	if fEntry == nil {
+		t.Fatal("merge commit's first-parent diff must list f.txt")
+	}
+	m := filesViewModel()
+	m.repo = repo
+	msg := m.loadCommitDiffCmd(hash, contentLine{path: "f.txt", status: fEntry.Status})().(diffMsg)
+	if msg.view.err != nil {
+		t.Fatal(msg.view.err)
+	}
+	// Old side = first parent ("base"), new side = merge result ("side").
+	var sawBase, sawSide bool
+	for _, r := range msg.view.rows {
+		if r.Left == "base" {
+			sawBase = true
+		}
+		if r.Right == "side" {
+			sawSide = true
+		}
+	}
+	if !sawBase || !sawSide {
+		t.Fatalf("merge diff sides wrong: %+v", msg.view.rows)
 	}
 }

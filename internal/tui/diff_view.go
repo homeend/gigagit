@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -128,6 +129,42 @@ func fillDiff(v *diffView, oldB, newB []byte) {
 	v.rows = res.Rows
 	v.blocks = res.Blocks
 	v.truncated = res.Truncated
+}
+
+// loadCommitDiffCmd fetches both sides of line's file in commit hash:
+// first parent → commit. The tree was built by CommitFiles with
+// --first-parent -m, and hash^ is the first parent, so the sides always
+// match the tree's status letters (merge commits included). Root commits
+// never dereference hash^ — all their files carry status "A".
+func (m Model) loadCommitDiffCmd(hash string, line contentLine) tea.Cmd {
+	repo := m.repo
+	tag := "commit:" + hash + ":" + line.path
+	v := &diffView{title: line.path, context: "@ " + strings.TrimPrefix(m.filesTitle, "Files ")}
+	return func() tea.Msg {
+		var oldB, newB []byte
+		if line.status != "A" {
+			p := line.path
+			if line.oldPath != "" {
+				p = line.oldPath
+			}
+			b, err := repo.ShowFile(context.Background(), hash+"^", p)
+			if err != nil {
+				v.err = err
+				return diffMsg{tag: tag, view: v}
+			}
+			oldB = b
+		}
+		if line.status != "D" {
+			b, err := repo.ShowFile(context.Background(), hash, line.path)
+			if err != nil {
+				v.err = err
+				return diffMsg{tag: tag, view: v}
+			}
+			newB = b
+		}
+		fillDiff(v, oldB, newB)
+		return diffMsg{tag: tag, view: v}
+	}
 }
 
 // updateDiffViewKey routes keys while the diff view is open: scrolling,
