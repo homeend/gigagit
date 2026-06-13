@@ -250,19 +250,22 @@ func NewDiffer(opts DifferOptions, c cache.Cache) Differ
 ### 4. Wiring (composition root + frontends)
 
 ```
-app
- └─ cache.NewFactory(0)                       // one per running app
-      └─ domain.Open(workdir, factory)        // Service stores the factory
-           └─ Service.Differ() Differ         // NewDiffer({Enhanced,Cached:true}, factory.Cache("diff"))
-                └─ TUI Model holds the Differ (via the Service it already holds)
+domain.New(repo) / domain.Open(workdir)      // unchanged signatures
+ └─ Service constructs its own cache.NewFactory(0)   // one per Service
+      └─ Service.Differ() Differ              // lazy: NewDiffer({Enhanced,Cached:true}, factory.Cache("diff"))
+           └─ TUI loaders call m.svc.Differ().Diff(ctx, req)
 ```
 
-- `domain.Open` gains a `factory cache.Factory` parameter; `Service` stores
-  it and exposes the production `Differ` (built once, lazily). Existing
-  `domain.New(repo)` (test constructor) defaults the factory to a no-op /
-  small in-memory one so existing tests are unaffected.
+- **No constructor signatures change** (there are ~6 callers of
+  `domain.New`/`domain.Open` across the TUI and CLI). Instead the `Service`
+  owns one `cache.Factory`, built in its constructor, and exposes the
+  production `Differ` lazily via `Service.Differ()`. The cache is still
+  *injected* where it matters — `NewDiffer(opts, c cache.Cache)` takes the
+  cache as a parameter, so tests inject a fake/no-op cache directly into
+  `NewDiffer` and never touch the `Service`. The `Service` is the per-app
+  construction point (one per running TUI; one per one-shot CLI process).
 - The TUI/CLI loaders no longer call `textdiff.Compare` directly; they build
-  a `Request` and call the `Differ`.
+  a `Request` and call `Service.Differ().Diff(...)`.
 
 ## Data flow — opening a commit diff (the hot path)
 
@@ -360,14 +363,15 @@ width accounting. Plain mode (`Enhanced:false`, nil spans) must render
 - Create: `internal/domain/differ.go` (ByteSource, Request, Differ,
   DifferOptions, NewDiffer, plainDiffer, cachedDiffer).
 - Create: `internal/domain/differ_test.go`.
-- Modify: `internal/domain/service.go` (Open takes a Factory; Service holds
-  it; `Differ()` accessor). `internal/domain/service_test.go`.
+- Modify: `internal/domain/service.go` (Service builds its own `cache.Factory`
+  in the constructor; `Differ()` accessor). `internal/domain/service_test.go`.
 - Modify: `internal/tui/diff_view.go` (loaders build Requests, call the
   Differ; size/binary guard relocation), `internal/tui/diff_render.go`
   (span-aware cell renderer), and the Model/app wiring for the Differ.
   Matching `_test.go` updates.
-- Modify: `cmd/gg/main.go` / `internal/app` (construct the factory, thread it
-  through `domain.Open`).
+- No `cmd/gg/main.go` / `internal/app` change — the `Service` owns its
+  factory, so the existing `domain.Open`/`domain.New` call sites are
+  untouched.
 - Docs: `CHANGELOG.md` (always); `CLAUDE.md` package map (`cache` added;
   `domain` gains the Differ); `README.md` only if the user-facing diff
   surface changes (enrichment is visual — note it). No CLI surface change ⇒
