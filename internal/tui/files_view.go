@@ -291,7 +291,7 @@ func (m Model) renderFilesView(boxW, boxH int) string {
 	for len(lines) < contentH-1 {
 		lines = append(lines, padRight("", innerW))
 	}
-	hint := "[enter] diff  [/] search  [esc] close"
+	hint := "[enter] diff  [h] history  [/] search  [esc] close"
 	if len(vis) > rowsCap {
 		hint = fmt.Sprintf("%d/%d  %s", p.sel+1, len(vis), hint)
 	}

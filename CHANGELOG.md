@@ -10,6 +10,17 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ### Added
 
+#### File history view (`h`)
+- Press `h` on a Status-panel file, a files-view tree row, or inside the diff
+  view to open a **History** view: the commits that touched the file on the left
+  (newest first), the file's diff at the selected commit on the right. `↑`/`↓`
+  move between commits (the diff reloads); `esc`/`h` go back. Rename-following
+  via `git log --follow`; history depth caps at 200 commits for large repos.
+- Built on a new full-screen **view stack** — the first piece of the TUI layout
+  layer. Surfaces pushed on the stack own the screen and input; `esc` pops one
+  level, revealing the surface beneath. (Migrating the existing surfaces onto
+  the stack, and a Blame view, are follow-ups.)
+
 #### Diff view: partial mode + change navigation
 - The full-screen diff view gains a **partial mode** (`f` toggles): show only
   changed lines plus 3 lines of context, collapsing long unchanged runs into a

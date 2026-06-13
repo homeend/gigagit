@@ -116,7 +116,7 @@ func (h *historyView) render(m Model) string {
 	body := m.historyBodyRows()
 
 	header := truncate("history: "+h.ctx.path, w)
-	hint := truncate("[↑↓] commit  [enter] open diff  [esc] back  [q] quit", w)
+	hint := truncate("[↑↓] commit  [esc] back  [q] quit", w)
 
 	// Left list. Right pane shown only when wide enough (>=60); else list-only.
 	split := w >= 60
