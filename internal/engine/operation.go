@@ -2,8 +2,6 @@ package engine
 
 import (
 	"context"
-
-	"github.com/gigagit/gg/internal/git"
 )
 
 // Result is the outcome of an operation.
@@ -17,7 +15,7 @@ type Result struct {
 // event channel, an optional Decider for mid-flight forks, and an optional
 // hook to escalate the operation's gate reservation.
 type OpDeps struct {
-	Repo    *git.Repo
+	Repo    GitOps
 	Events  chan<- Event
 	Decider Decider
 	// Escalate trades the operation's gate reservation for an exclusive
