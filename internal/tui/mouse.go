@@ -24,6 +24,9 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	if m.modal != nil {
 		return m, nil
 	}
+	if m.stackTop() != nil {
+		return m, nil // history/blame are keyboard-only (v1)
+	}
 	// Routing invariant: the diff view comes immediately after the modal,
 	// matching Update's key routing and render().
 	if m.diffView != nil {

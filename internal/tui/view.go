@@ -95,6 +95,10 @@ func (m Model) render() string {
 	if m.modal != nil {
 		return m.renderModal()
 	}
+	if s := m.stackTop(); s != nil {
+		_, h := m.overlayDims()
+		return clipToHeight(s.render(m), h)
+	}
 	// Routing invariant: the diff view comes immediately after the modal —
 	// here and in Update's key and mouse arms.
 	if m.diffView != nil {

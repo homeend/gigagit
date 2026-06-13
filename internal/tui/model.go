@@ -188,6 +188,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+		if s := m.stackTop(); s != nil {
+			if msg.Type == tea.KeyCtrlC {
+				return m, tea.Quit
+			}
+			return s.update(m, msg)
+		}
 		// Routing invariant: the diff view is checked immediately after the
 		// modal here, in the MouseMsg arm, and in render() — the key owner
 		// must be the top visible surface (background ops will rely on it).
