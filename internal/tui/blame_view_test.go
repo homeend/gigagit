@@ -153,6 +153,20 @@ func TestBlameEscAndBPop(t *testing.T) {
 	}
 }
 
+// q no longer quits from the blame view — only the base layout quits on q.
+func TestBlameQInert(t *testing.T) {
+	m := Model{width: 100, height: 30}
+	b := blameFixture()
+	m = m.pushSurface(b)
+	m, cmd := b.update(m, keyMsg("q"))
+	if cmd != nil {
+		t.Fatal("q must not quit from the blame view (inert)")
+	}
+	if m.stackTop() == nil {
+		t.Fatal("q must leave the blame surface on the stack")
+	}
+}
+
 func TestStatusBOpensBlame(t *testing.T) {
 	m := Model{width: 100, height: 30, focus: panelStatus, sel: map[panel]int{}}
 	m.status = model.WorkingTreeStatus{Files: []model.FileStatus{{Path: "a.go"}}}

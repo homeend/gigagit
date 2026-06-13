@@ -116,7 +116,7 @@ func (b *blameView) render(m Model) string {
 	body := m.blameBodyRows()
 
 	header := truncate("blame: "+b.ctx.path+revSuffix(b.ctx.rev), w)
-	hint := truncate("[↑↓] line  [enter] history  [esc/b] back  [q] quit", w)
+	hint := truncate("[↑↓] line  [enter] history  [esc/b] back", w)
 
 	gw := blameGutterW
 	if gw > w-10 {
@@ -183,8 +183,8 @@ func (b *blameView) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 	switch msg.String() {
-	case "q":
-		return m, tea.Quit
+	// q is inert here: only the base layout quits on q. esc is the back key;
+	// ctrl+c (handled above) remains the universal quit.
 	case "esc", "b":
 		return m.popSurface(), nil
 	case "down", "j":

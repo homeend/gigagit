@@ -8,6 +8,15 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+### Changed
+
+#### `q` quits only from the home screen
+- Pressing **`q`** now quits the app **only on the base (home) layout**. In the
+  diff, file-history, blame, and commit-files views `q` is inert — **`esc`** is
+  the back key (it closes the surface and returns to the previous layout) and
+  **`ctrl+c`** remains the universal quit. This prevents accidentally quitting
+  the whole app while reading a diff or browsing history.
+
 ### Added
 
 #### Rebase (`gg rebase` + the TUI pair-op)
