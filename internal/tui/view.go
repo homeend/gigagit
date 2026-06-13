@@ -95,6 +95,12 @@ func (m Model) render() string {
 	if m.modal != nil {
 		return m.renderModal()
 	}
+	// Routing invariant: the diff view comes immediately after the modal —
+	// here and in Update's key and mouse arms.
+	if m.diffView != nil {
+		_, h := m.overlayDims()
+		return clipToHeight(m.renderDiffView(), h)
+	}
 	_, h := m.overlayDims()
 	bg := clipToHeight(m.renderInterface(), h)
 	if m.popup == nil && m.repoPopup == nil && m.settings == nil && m.branchPopup == nil && m.contentPopup == nil && m.pairPopup == nil {
