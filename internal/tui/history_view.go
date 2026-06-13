@@ -214,6 +214,14 @@ func (h *historyView) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, tea.Quit
 	case "esc", "h":
 		return m.popSurface(), nil
+	case "b":
+		if h.sel >= 0 && h.sel < len(h.commits) {
+			fc := h.commits[h.sel]
+			ctx := navContext{path: h.ctx.path, rev: fc.Hash}
+			bv := newBlameView(ctx)
+			m = m.pushSurface(bv)
+			return m, m.loadBlameCmd(ctx, bv.tag)
+		}
 	case "down", "j":
 		if h.sel < len(h.commits)-1 {
 			h.sel++

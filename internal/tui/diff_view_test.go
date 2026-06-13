@@ -276,7 +276,7 @@ func TestDiffViewSwallowsActionKeys(t *testing.T) {
 	m := diffModel()
 	m.diffView = &diffView{}
 	m.diffTag = "status:x"
-	for _, k := range []string{"p", "P", "s", "S", "u", "d", "w", "b", "m", "l", "R", ",", "/", "?", "tab", "enter"} {
+	for _, k := range []string{"p", "P", "s", "S", "u", "d", "w", "m", "l", "R", ",", "/", "?", "tab", "enter"} {
 		u, cmd := m.Update(keyMsg(k))
 		mm := u.(Model)
 		if cmd != nil || mm.running || mm.popup != nil || mm.contentPopup != nil || mm.filesView != nil || mm.filterTyping || mm.mark != nil {

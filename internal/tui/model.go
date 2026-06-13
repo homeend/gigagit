@@ -347,6 +347,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return mm, nil
 				}
 			}
+			if m.focus == panelStatus && m.canShowFileDiff() {
+				bi, _ := m.backingIndex(panelStatus)
+				f := m.status.Files[bi]
+				ctx := navContext{path: f.Path, rev: ""}
+				bv := newBlameView(ctx)
+				m = m.pushSurface(bv)
+				return m, m.loadBlameCmd(ctx, bv.tag)
+			}
 		case "B":
 			if m.focus == panelBranches && m.canOpenBranchPopup() {
 				if mm, ok := m.openBranchPopup(true); ok {

@@ -152,3 +152,69 @@ func TestBlameEscAndBPop(t *testing.T) {
 		}
 	}
 }
+
+func TestStatusBOpensBlame(t *testing.T) {
+	m := Model{width: 100, height: 30, focus: panelStatus, sel: map[panel]int{}}
+	m.status = model.WorkingTreeStatus{Files: []model.FileStatus{{Path: "a.go"}}}
+	mm, _ := m.Update(keyMsg("b"))
+	got := mm.(Model)
+	bv, ok := got.stackTop().(*blameView)
+	if !ok {
+		t.Fatal("b on a Status file should push a blameView")
+	}
+	if bv.ctx.path != "a.go" || bv.ctx.rev != "" {
+		t.Errorf("wrong navContext: %+v", bv.ctx)
+	}
+}
+
+func TestFilesViewBOpensBlame(t *testing.T) {
+	m := Model{width: 100, height: 30}
+	m.filesView = &contentPopup{lines: []contentLine{{text: "a.go", path: "a.go"}}}
+	m.filesTreeFocused = true
+	m.filesHash = "abc123"
+	mm, _ := m.updateFilesViewKey(keyMsg("b"))
+	bv, ok := mm.(Model).stackTop().(*blameView)
+	if !ok {
+		t.Fatal("b on a files-view row should push a blameView")
+	}
+	if bv.ctx.path != "a.go" || bv.ctx.rev != "abc123" {
+		t.Errorf("wrong navContext: %+v", bv.ctx)
+	}
+}
+
+func TestDiffViewBOpensBlame(t *testing.T) {
+	m := Model{width: 100, height: 30}
+	m.diffView = &diffView{title: "a.go", rev: "abc123"}
+	mm, _ := m.updateDiffViewKey(keyMsg("b"))
+	bv, ok := mm.(Model).stackTop().(*blameView)
+	if !ok {
+		t.Fatal("b in the diff view should push a blameView")
+	}
+	if bv.ctx.path != "a.go" || bv.ctx.rev != "abc123" {
+		t.Errorf("wrong navContext: %+v", bv.ctx)
+	}
+}
+
+func TestHistoryBOpensBlameAtSelected(t *testing.T) {
+	m := Model{width: 100, height: 30}
+	h := &historyView{
+		ctx: navContext{path: "a.go", rev: ""},
+		commits: []model.FileCommit{
+			{Commit: model.Commit{Hash: "aaaaaaa", Subject: "edit"}, Status: "M", Path: "a.go"},
+			{Commit: model.Commit{Hash: "bbbbbbb", Subject: "add"}, Status: "A", Path: "a.go"},
+		},
+		sel: 1,
+	}
+	m = m.pushSurface(h)
+	m, cmd := h.update(m, keyMsg("b"))
+	bv, ok := m.stackTop().(*blameView)
+	if !ok {
+		t.Fatal("b in history should push a blameView")
+	}
+	if bv.ctx.path != "a.go" || bv.ctx.rev != "bbbbbbb" {
+		t.Errorf("blame should target the selected commit, got %+v", bv.ctx)
+	}
+	if cmd == nil {
+		t.Error("pushing blame should fire its load cmd")
+	}
+}
