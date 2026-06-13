@@ -46,7 +46,7 @@ func TestRenderDiffViewStates(t *testing.T) {
 }
 
 func TestRenderDiffViewPanes(t *testing.T) {
-	res := textdiff.Compare([]byte("same\nold line\n"), []byte("same\nnew line\n"))
+	res := textdiff.Compare([]byte("same\nold line\n"), []byte("same\nnew line\n"), textdiff.Options{})
 	v := &diffView{title: "f.txt", context: "HEAD → working tree", full: res.Rows, fullBlocks: res.Blocks}
 	v.rebuild()
 	m := renderModelWithDiff(v)
@@ -84,7 +84,7 @@ func TestRenderDiffViewTabsStayInPane(t *testing.T) {
 	// Tab-indented content (every Go file): tabs must be expanded, never
 	// rendered raw — a raw \t would let the terminal push text through the
 	// separator.
-	res := textdiff.Compare([]byte("\tindented\n"), []byte("\tindented changed\n"))
+	res := textdiff.Compare([]byte("\tindented\n"), []byte("\tindented changed\n"), textdiff.Options{})
 	v := &diffView{title: "f.go", full: res.Rows, fullBlocks: res.Blocks}
 	v.rebuild()
 	m := renderModelWithDiff(v)
@@ -95,7 +95,7 @@ func TestRenderDiffViewTabsStayInPane(t *testing.T) {
 }
 
 func TestRenderDiffViewNoContentDifferenceNote(t *testing.T) {
-	res := textdiff.Compare([]byte("a\n"), []byte("a\n"))
+	res := textdiff.Compare([]byte("a\n"), []byte("a\n"), textdiff.Options{})
 	v := &diffView{title: "f", context: "@ abc1234", full: res.Rows, fullBlocks: res.Blocks}
 	v.rebuild()
 	m := renderModelWithDiff(v)
@@ -141,7 +141,7 @@ func TestRenderDiffViewPartialShowsFold(t *testing.T) {
 			newB.WriteString(itoa(i) + "\n")
 		}
 	}
-	res := textdiff.Compare([]byte(oldB.String()), []byte(newB.String()))
+	res := textdiff.Compare([]byte(oldB.String()), []byte(newB.String()), textdiff.Options{})
 	v := &diffView{title: "f", full: res.Rows, fullBlocks: res.Blocks, partial: true}
 	v.rebuild()
 	m := renderModelWithDiff(v)

@@ -3,6 +3,7 @@ package textdiff
 import (
 	"bytes"
 	"fmt"
+	"reflect"
 	"slices"
 	"testing"
 	"time"
@@ -18,7 +19,7 @@ func rowsKinds(rows []Row) []Kind {
 }
 
 func TestCompareEqualInputs(t *testing.T) {
-	res := Compare([]byte("a\nb\n"), []byte("a\nb\n"))
+	res := Compare([]byte("a\nb\n"), []byte("a\nb\n"), Options{})
 	want := []Kind{Same, Same}
 	if !slices.Equal(rowsKinds(res.Rows), want) {
 		t.Fatalf("kinds = %v, want %v", rowsKinds(res.Rows), want)
@@ -32,7 +33,7 @@ func TestCompareEqualInputs(t *testing.T) {
 }
 
 func TestComparePureInsert(t *testing.T) {
-	res := Compare([]byte("a\nc\n"), []byte("a\nb\nc\n"))
+	res := Compare([]byte("a\nc\n"), []byte("a\nb\nc\n"), Options{})
 	want := []Kind{Same, Add, Same}
 	if !slices.Equal(rowsKinds(res.Rows), want) {
 		t.Fatalf("kinds = %v, want %v", rowsKinds(res.Rows), want)
@@ -47,7 +48,7 @@ func TestComparePureInsert(t *testing.T) {
 }
 
 func TestComparePureDelete(t *testing.T) {
-	res := Compare([]byte("a\nb\nc\n"), []byte("a\nc\n"))
+	res := Compare([]byte("a\nb\nc\n"), []byte("a\nc\n"), Options{})
 	want := []Kind{Same, Del, Same}
 	if !slices.Equal(rowsKinds(res.Rows), want) {
 		t.Fatalf("kinds = %v, want %v", rowsKinds(res.Rows), want)
@@ -61,7 +62,7 @@ func TestComparePureDelete(t *testing.T) {
 func TestCompareReplaceUnequalRuns(t *testing.T) {
 	// 2 deleted lines replaced by 3 added lines: zip 2 Changed pairs, the
 	// third added line gets an Add row with a left gap.
-	res := Compare([]byte("keep\nx1\nx2\nkeep2\n"), []byte("keep\ny1\ny2\ny3\nkeep2\n"))
+	res := Compare([]byte("keep\nx1\nx2\nkeep2\n"), []byte("keep\ny1\ny2\ny3\nkeep2\n"), Options{})
 	want := []Kind{Same, Changed, Changed, Add, Same}
 	if !slices.Equal(rowsKinds(res.Rows), want) {
 		t.Fatalf("kinds = %v, want %v", rowsKinds(res.Rows), want)
@@ -75,7 +76,7 @@ func TestCompareReplaceUnequalRuns(t *testing.T) {
 }
 
 func TestCompareMultipleBlocks(t *testing.T) {
-	res := Compare([]byte("a\nb\nc\nd\ne\n"), []byte("a\nB\nc\nd\nE\n"))
+	res := Compare([]byte("a\nb\nc\nd\ne\n"), []byte("a\nB\nc\nd\nE\n"), Options{})
 	want := []Kind{Same, Changed, Same, Same, Changed}
 	if !slices.Equal(rowsKinds(res.Rows), want) {
 		t.Fatalf("kinds = %v, want %v", rowsKinds(res.Rows), want)
@@ -86,15 +87,15 @@ func TestCompareMultipleBlocks(t *testing.T) {
 }
 
 func TestCompareEmptySides(t *testing.T) {
-	res := Compare(nil, []byte("a\nb\n"))
+	res := Compare(nil, []byte("a\nb\n"), Options{})
 	if !slices.Equal(rowsKinds(res.Rows), []Kind{Add, Add}) {
 		t.Fatalf("new file: kinds = %v", rowsKinds(res.Rows))
 	}
-	res = Compare([]byte("a\nb\n"), nil)
+	res = Compare([]byte("a\nb\n"), nil, Options{})
 	if !slices.Equal(rowsKinds(res.Rows), []Kind{Del, Del}) {
 		t.Fatalf("deleted file: kinds = %v", rowsKinds(res.Rows))
 	}
-	res = Compare(nil, nil)
+	res = Compare(nil, nil, Options{})
 	if len(res.Rows) != 0 || len(res.Blocks) != 0 {
 		t.Fatalf("both empty: %+v", res)
 	}
@@ -102,7 +103,7 @@ func TestCompareEmptySides(t *testing.T) {
 
 func TestCompareTrailingNewlineBothSidesDropped(t *testing.T) {
 	// Both sides end with \n: the phantom empty last line appears on neither.
-	res := Compare([]byte("a\n"), []byte("a\n"))
+	res := Compare([]byte("a\n"), []byte("a\n"), Options{})
 	if len(res.Rows) != 1 || res.Rows[0].Kind != Same {
 		t.Fatalf("rows = %+v", res.Rows)
 	}
@@ -112,11 +113,11 @@ func TestCompareNewlineAtEOFOnlyChangeIsVisible(t *testing.T) {
 	// Old ends with \n, new does not: git reports the file modified, so the
 	// viewer must show a block, not two identical panes. The side WITH the
 	// newline keeps one extra (empty) row.
-	res := Compare([]byte("a\n"), []byte("a"))
+	res := Compare([]byte("a\n"), []byte("a"), Options{})
 	if len(res.Blocks) == 0 {
 		t.Fatalf("newline-at-EOF change produced no block: rows %+v", res.Rows)
 	}
-	res = Compare([]byte("a"), []byte("a\n"))
+	res = Compare([]byte("a"), []byte("a\n"), Options{})
 	if len(res.Blocks) == 0 {
 		t.Fatalf("reverse newline-at-EOF change produced no block: rows %+v", res.Rows)
 	}
@@ -125,7 +126,7 @@ func TestCompareNewlineAtEOFOnlyChangeIsVisible(t *testing.T) {
 func TestCompareTrimOverlapPrefixOfOther(t *testing.T) {
 	// One side is a prefix of the other: prefix+suffix trim must not
 	// double-count the shared line ("a" must not be consumed twice).
-	res := Compare([]byte("a\na\n"), []byte("a\n"))
+	res := Compare([]byte("a\na\n"), []byte("a\n"), Options{})
 	got := rowsKinds(res.Rows)
 	// Same+Del or Del+Same are both valid alignments; the invariant is one
 	// Same row and one Del row totalling the right line counts.
@@ -151,7 +152,7 @@ func TestCompareLineCapTruncates(t *testing.T) {
 		fmt.Fprintf(&oldB, "old%d\n", i)
 		fmt.Fprintf(&newB, "new%d\n", i)
 	}
-	res := Compare(oldB.Bytes(), newB.Bytes())
+	res := Compare(oldB.Bytes(), newB.Bytes(), Options{})
 	if !res.Truncated {
 		t.Fatal("expected Truncated for over-cap fully-different inputs")
 	}
@@ -173,7 +174,7 @@ func TestCompareLineCapAfterTrim(t *testing.T) {
 			fmt.Fprintf(&newB, "line%d\n", i)
 		}
 	}
-	res := Compare(oldB.Bytes(), newB.Bytes())
+	res := Compare(oldB.Bytes(), newB.Bytes(), Options{})
 	if res.Truncated {
 		t.Fatal("small change in a big file must not be Truncated")
 	}
@@ -191,7 +192,7 @@ func TestCompareEditBudgetBailsFast(t *testing.T) {
 		fmt.Fprintf(&newB, "omega%d\n", i*13)
 	}
 	start := time.Now()
-	res := Compare(oldB.Bytes(), newB.Bytes())
+	res := Compare(oldB.Bytes(), newB.Bytes(), Options{})
 	if d := time.Since(start); d > 5*time.Second {
 		t.Fatalf("Compare took %v; the edit budget must bound the worst case", d)
 	}
@@ -213,7 +214,7 @@ func TestIsBinary(t *testing.T) {
 }
 
 func TestCompareSingleLineNoNewline(t *testing.T) {
-	res := Compare([]byte("hello"), []byte("world"))
+	res := Compare([]byte("hello"), []byte("world"), Options{})
 	if !slices.Equal(rowsKinds(res.Rows), []Kind{Changed}) {
 		t.Fatalf("kinds = %v, want [Changed]", rowsKinds(res.Rows))
 	}
@@ -225,7 +226,7 @@ func TestCompareSingleLineNoNewline(t *testing.T) {
 func TestCompareCRLFLinesPreserved(t *testing.T) {
 	// Lines keep their \r — comparison is raw; display sanitizing is the
 	// TUI's job. Equal CRLF content must compare as Same.
-	res := Compare([]byte("a\r\nb\r\n"), []byte("a\r\nb\r\n"))
+	res := Compare([]byte("a\r\nb\r\n"), []byte("a\r\nb\r\n"), Options{})
 	if !slices.Equal(rowsKinds(res.Rows), []Kind{Same, Same}) {
 		t.Fatalf("kinds = %v, want [Same Same]", rowsKinds(res.Rows))
 	}
@@ -241,7 +242,7 @@ func TestExpandWrapsRows1to1(t *testing.T) {
 		t.Fatalf("len = %d, want 2", len(lines))
 	}
 	for i, l := range lines {
-		if l.Fold != 0 || l.Row != rows[i] {
+		if l.Fold != 0 || !reflect.DeepEqual(l.Row, rows[i]) {
 			t.Fatalf("line %d = %+v, want Row %+v Fold 0", i, l, rows[i])
 		}
 	}
@@ -393,8 +394,98 @@ func TestCollapseContextExceedsGapRoundTrip(t *testing.T) {
 		t.Fatalf("len = %d, want %d", len(lines), len(exp))
 	}
 	for i := range lines {
-		if lines[i] != exp[i] {
+		if !reflect.DeepEqual(lines[i], exp[i]) {
 			t.Fatalf("line %d = %+v, want %+v", i, lines[i], exp[i])
 		}
 	}
+}
+
+func TestEnhancedSingleChangedWord(t *testing.T) {
+	// "foo(a, b)" vs "foo(a, c)" → one Changed row; only b/c differ.
+	res := Compare([]byte("foo(a, b)\n"), []byte("foo(a, c)\n"), Options{Enhanced: true})
+	var row *Row
+	for i := range res.Rows {
+		if res.Rows[i].Kind == Changed {
+			row = &res.Rows[i]
+		}
+	}
+	if row == nil {
+		t.Fatal("expected a Changed row")
+	}
+	// 'b' and 'c' are at rune index 7 in "foo(a, b)" / "foo(a, c)".
+	wantL := []Span{{Start: 7, End: 8}}
+	wantR := []Span{{Start: 7, End: 8}}
+	if !equalSpans(row.LeftSpans, wantL) {
+		t.Fatalf("LeftSpans = %v, want %v", row.LeftSpans, wantL)
+	}
+	if !equalSpans(row.RightSpans, wantR) {
+		t.Fatalf("RightSpans = %v, want %v", row.RightSpans, wantR)
+	}
+}
+
+func TestEnhancedMergesAdjacentChangedTokens(t *testing.T) {
+	// "a+b" vs "a" → tokens [a][+][b] vs [a]; "+" and "b" both deleted and
+	// touch, so they merge into one left span [1,3); right has none.
+	res := Compare([]byte("a+b\n"), []byte("a\n"), Options{Enhanced: true})
+	row := changedRow(t, res)
+	wantL := []Span{{Start: 1, End: 3}}
+	if !equalSpans(row.LeftSpans, wantL) {
+		t.Fatalf("LeftSpans = %v, want %v", row.LeftSpans, wantL)
+	}
+	if len(row.RightSpans) != 0 {
+		t.Fatalf("RightSpans = %v, want none", row.RightSpans)
+	}
+}
+
+func TestEnhancedOnlyMarksChangedRows(t *testing.T) {
+	// A pure add and a pure delete must carry no spans.
+	res := Compare([]byte("keep\nold\n"), []byte("keep\n"), Options{Enhanced: true})
+	for _, r := range res.Rows {
+		if r.Kind != Changed && (len(r.LeftSpans) > 0 || len(r.RightSpans) > 0) {
+			t.Fatalf("non-Changed row %+v carries spans", r)
+		}
+	}
+}
+
+func TestNotEnhancedHasNoSpans(t *testing.T) {
+	plain := Compare([]byte("foo(a, b)\n"), []byte("foo(a, c)\n"), Options{})
+	for _, r := range plain.Rows {
+		if len(r.LeftSpans) > 0 || len(r.RightSpans) > 0 {
+			t.Fatalf("plain Compare must not produce spans: %+v", r)
+		}
+	}
+	// And the rest of the Result matches the enhanced run row-for-row in Kind.
+	enh := Compare([]byte("foo(a, b)\n"), []byte("foo(a, c)\n"), Options{Enhanced: true})
+	if len(plain.Rows) != len(enh.Rows) {
+		t.Fatalf("row count differs: %d vs %d", len(plain.Rows), len(enh.Rows))
+	}
+	for i := range plain.Rows {
+		if plain.Rows[i].Kind != enh.Rows[i].Kind {
+			t.Fatalf("row %d Kind differs", i)
+		}
+	}
+}
+
+// helpers
+func equalSpans(a, b []Span) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func changedRow(t *testing.T, res Result) *Row {
+	t.Helper()
+	for i := range res.Rows {
+		if res.Rows[i].Kind == Changed {
+			return &res.Rows[i]
+		}
+	}
+	t.Fatal("expected a Changed row")
+	return nil
 }

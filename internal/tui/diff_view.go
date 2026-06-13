@@ -197,7 +197,7 @@ func fillDiff(v *diffView, oldB, newB []byte) {
 		v.binary = true
 		return
 	}
-	res := textdiff.Compare(oldB, newB)
+	res := textdiff.Compare(oldB, newB, textdiff.Options{})
 	v.full = res.Rows
 	v.fullBlocks = res.Blocks
 	v.truncated = res.Truncated
