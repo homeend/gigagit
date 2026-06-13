@@ -48,7 +48,7 @@ func sanitizeLine(s string) string {
 func (m Model) renderDiffView() string {
 	v := m.diffView
 	w, h := m.overlayDims()
-	body := h - 2
+	body := h - 2 // header + hint are the only chrome (must match diffBodyRows)
 	if body < 1 {
 		body = 1
 	}
@@ -57,6 +57,8 @@ func (m Model) renderDiffView() string {
 	switch {
 	case v.truncated:
 		note = "  (alignment skipped: large file)"
+	// loading/err/binary/tooLarge render their own body state below; the
+	// guards here keep the note from doubling up with them.
 	case !v.loading && v.err == nil && !v.binary && !v.tooLarge && len(v.blocks) == 0:
 		note = "  (no content difference)"
 	}
@@ -136,6 +138,12 @@ func diffCell(no int, text string, gut, width int, gap, hot bool, hotStyle lipgl
 	if gap {
 		return diffGapCell.Render(strings.Repeat("·", width))
 	}
+	if gut > width-2 { // degenerate pane: keep the cell inside its width
+		gut = width - 2
+		if gut < 1 {
+			gut = 1
+		}
+	}
 	num := fmt.Sprintf("%*d ", gut, no)
 	tw := width - gut - 1
 	if tw < 1 {
@@ -145,5 +153,5 @@ func diffCell(no int, text string, gut, width int, gap, hot bool, hotStyle lipgl
 	if hot {
 		bodyTxt = hotStyle.Render(bodyTxt)
 	}
-	return diffGutter.Render(num) + bodyTxt
+	return diffGutter.Render(truncate(num, gut+1)) + bodyTxt
 }
