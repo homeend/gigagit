@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/gigagit/gg/internal/config"
+	"github.com/gigagit/gg/internal/domain"
 	"github.com/gigagit/gg/internal/engine"
 	"github.com/gigagit/gg/internal/model"
 	"github.com/gigagit/gg/internal/template"
@@ -39,7 +40,7 @@ func cmdWorktree(repo *repoT, args []string, stdin io.Reader, stdout, stderr io.
 }
 
 func cmdWorktreeList(repo *repoT, stdout, stderr io.Writer) int {
-	wts, err := repo.Worktrees(context.Background())
+	wts, err := domain.New(repo).Worktrees(context.Background())
 	if err != nil {
 		fmt.Fprintln(stderr, "error:", err)
 		return 1
@@ -175,7 +176,7 @@ func cmdWorktreeRemove(repo *repoT, args []string, stdin io.Reader, stdout, stde
 	target := fs.Arg(0)
 
 	ctxBg := context.Background()
-	wts, err := repo.Worktrees(ctxBg)
+	wts, err := domain.New(repo).Worktrees(ctxBg)
 	if err != nil {
 		fmt.Fprintln(stderr, "error:", err)
 		return 1
