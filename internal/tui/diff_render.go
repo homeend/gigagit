@@ -20,6 +20,60 @@ var (
 
 const diffHint = "[↑↓] scroll  [pgup/pgdn] page  [n/p] next/prev change  [f] toggle partial  [esc] close  [q] quit"
 
+// cellSeg is one pane's text for one display row: the sanitized display runes
+// and the parallel emphasis mask, already ≤ the pane's text width. A zero
+// cellSeg renders blank.
+type cellSeg struct {
+	disp []rune
+	emph []bool
+}
+
+// wrapCells splits a sanitized (disp, emph) line into segments each ≤ tw
+// display columns. It greedily fills to tw, then breaks after the last space
+// in the segment (word-wrap); a word longer than tw is hard-broken at the fill
+// boundary, and a single rune wider than tw is taken alone (never an empty
+// loop). The emph mask is sliced alongside so emphasis survives a split. An
+// empty input yields one empty segment (so the row still draws a line).
+func wrapCells(disp []rune, emph []bool, tw int) []cellSeg {
+	if tw < 1 {
+		tw = 1
+	}
+	if len(disp) == 0 {
+		return []cellSeg{{}}
+	}
+	var segs []cellSeg
+	start := 0
+	for start < len(disp) {
+		end, width := start, 0
+		for end < len(disp) {
+			rw := lipgloss.Width(string(disp[end]))
+			if width+rw > tw {
+				break
+			}
+			width += rw
+			end++
+		}
+		if end == start { // a single rune wider than tw
+			end = start + 1
+		}
+		brk := end
+		if end < len(disp) { // more to come: prefer a word boundary
+			sp := -1
+			for j := start; j < end; j++ {
+				if disp[j] == ' ' {
+					sp = j
+				}
+			}
+			if sp > start {
+				brk = sp + 1 // keep the space on this segment
+			}
+		}
+		segs = append(segs, cellSeg{disp: disp[start:brk], emph: emph[start:brk]})
+		start = brk
+	}
+	return segs
+}
+
 // sanitizeLine makes raw file content safe to render on one line: tabs
 // expand to a fixed 4-column stop (lipgloss.Width doesn't expand them but
 // the terminal would, pushing text through the pane separator), a trailing

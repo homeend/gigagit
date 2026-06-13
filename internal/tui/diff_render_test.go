@@ -236,3 +236,86 @@ func TestEnrichedRowRendersWithoutBreakingWidth(t *testing.T) {
 		t.Fatalf("enriched row width = %d, want %d", lipgloss.Width(lines[0]), w)
 	}
 }
+
+func segText(segs []cellSeg) []string {
+	out := make([]string, len(segs))
+	for i, s := range segs {
+		out[i] = string(s.disp)
+	}
+	return out
+}
+
+func runesEmph(s string, on bool) (disp []rune, emph []bool) {
+	disp = []rune(s)
+	emph = make([]bool, len(disp))
+	for i := range emph {
+		emph[i] = on
+	}
+	return disp, emph
+}
+
+func reflectEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func TestWrapCellsShortLineOneSegment(t *testing.T) {
+	d, e := runesEmph("hello", false)
+	segs := wrapCells(d, e, 20)
+	if got := segText(segs); len(got) != 1 || got[0] != "hello" {
+		t.Fatalf("segs = %q, want [\"hello\"]", got)
+	}
+}
+
+func TestWrapCellsEmptyIsOneEmptySegment(t *testing.T) {
+	segs := wrapCells(nil, nil, 10)
+	if len(segs) != 1 || len(segs[0].disp) != 0 {
+		t.Fatalf("empty input must yield one empty segment, got %q", segText(segs))
+	}
+}
+
+func TestWrapCellsBreaksAtWordBoundary(t *testing.T) {
+	d, e := runesEmph("foo bar baz", false)
+	segs := wrapCells(d, e, 5)
+	if got := segText(segs); !reflectEqual(got, []string{"foo ", "bar ", "baz"}) {
+		t.Fatalf("segs = %q, want [foo |bar |baz]", got)
+	}
+}
+
+func TestWrapCellsHardBreaksLongWord(t *testing.T) {
+	d, e := runesEmph("abcdefgh", false)
+	segs := wrapCells(d, e, 3)
+	if got := segText(segs); !reflectEqual(got, []string{"abc", "def", "gh"}) {
+		t.Fatalf("segs = %q, want [abc|def|gh]", got)
+	}
+}
+
+func TestWrapCellsSingleOverWideRuneTakenAlone(t *testing.T) {
+	d, e := runesEmph("ab", false)
+	segs := wrapCells(d, e, 1)
+	if got := segText(segs); !reflectEqual(got, []string{"a", "b"}) {
+		t.Fatalf("segs = %q, want [a|b]", got)
+	}
+}
+
+func TestWrapCellsCarriesEmphMask(t *testing.T) {
+	d, e := runesEmph("ab cd", true)
+	segs := wrapCells(d, e, 2)
+	for _, s := range segs {
+		if len(s.disp) != len(s.emph) {
+			t.Fatalf("seg disp/emph length mismatch: %d vs %d", len(s.disp), len(s.emph))
+		}
+		for _, on := range s.emph {
+			if !on {
+				t.Fatal("emphasis mask must carry across the split")
+			}
+		}
+	}
+}
