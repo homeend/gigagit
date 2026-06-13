@@ -185,6 +185,14 @@ func (s *Service) FileLog(ctx context.Context, rev, path string, limit int) ([]m
 	})
 }
 
+// Blame returns per-line blame for path at rev under a Read reservation,
+// coalesced per (rev, path).
+func (s *Service) Blame(ctx context.Context, rev, path string) ([]model.BlameLine, error) {
+	return query(ctx, s, "blame:"+rev+":"+path, func(ctx context.Context) ([]model.BlameLine, error) {
+		return s.repo.Blame(ctx, rev, path)
+	})
+}
+
 // GitCommonDir returns the git common dir path, under a Read reservation.
 func (s *Service) GitCommonDir(ctx context.Context) (string, error) {
 	return query(ctx, s, "gitcommondir", s.repo.GitCommonDir)

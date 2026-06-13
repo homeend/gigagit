@@ -157,6 +157,18 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		hv := newHistoryView(ctx)
 		m = m.pushSurface(hv)
 		return m, m.loadHistoryListCmd(ctx, hv.listTag)
+	case "b":
+		if !m.filesTreeFocused {
+			return m, nil
+		}
+		vis := p.visible()
+		if p.sel < 0 || p.sel >= len(vis) || vis[p.sel].path == "" {
+			return m, nil
+		}
+		ctx := navContext{path: vis[p.sel].path, rev: m.filesHash}
+		bv := newBlameView(ctx)
+		m = m.pushSurface(bv)
+		return m, m.loadBlameCmd(ctx, bv.tag)
 	case "enter":
 		if !m.filesTreeFocused {
 			return m, nil
@@ -296,7 +308,7 @@ func (m Model) renderFilesView(boxW, boxH int) string {
 	for len(lines) < contentH-1 {
 		lines = append(lines, padRight("", innerW))
 	}
-	hint := "[enter] diff  [h] history  [/] search  [esc] close"
+	hint := "[enter] diff  [h] history  [b] blame  [/] search  [esc] close"
 	if len(vis) > rowsCap {
 		hint = fmt.Sprintf("%d/%d  %s", p.sel+1, len(vis), hint)
 	}

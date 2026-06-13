@@ -24,6 +24,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   `[ui] hscroll_step` (default 8). `w` cycles scroll → wrap → truncate; the mode
   shows in the hint and is remembered for the session.
 
+#### File blame view (`b`)
+- Press `b` on a Status-panel file, a files-view tree row, or inside the diff
+  view to open a **Blame** view: the file's content with each line tagged by the
+  commit that last changed it. Consecutive lines from the same commit collapse
+  into one gutter remark (short hash, author, compact age); uncommitted lines
+  show `(uncommitted)`. `↑`/`↓` move the line cursor; `enter` opens that commit's
+  file history; `esc`/`b` go back. From the History view, `b` blames the file at
+  the selected commit — closing the history↔blame cross-link.
+- The second consumer of the TUI **view stack** (after history).
+
 #### File history view (`h`)
 - Press `h` on a Status-panel file, a files-view tree row, or inside the diff
   view to open a **History** view: the commits that touched the file on the left
@@ -33,7 +43,7 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - Built on a new full-screen **view stack** — the first piece of the TUI layout
   layer. Surfaces pushed on the stack own the screen and input; `esc` pops one
   level, revealing the surface beneath. (Migrating the existing surfaces onto
-  the stack, and a Blame view, are follow-ups.)
+  the stack is a follow-up.)
 
 #### Diff view: partial mode + change navigation
 - The full-screen diff view gains a **partial mode** (`f` toggles): show only

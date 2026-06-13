@@ -260,7 +260,7 @@ func TestFilesViewToggleClosesOnL(t *testing.T) {
 
 func TestFilesViewSwallowsActionKeys(t *testing.T) {
 	m := openFilesView(t, filesModel())
-	for _, key := range []string{"p", "s", "m", "b", "d", "w", "o", "R", ",", "r", "?"} {
+	for _, key := range []string{"p", "s", "m", "d", "w", "o", "R", ",", "r", "?"} {
 		updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(key)})
 		mm := updated.(Model)
 		if cmd != nil || mm.running || mm.mark != nil || mm.contentPopup != nil {
