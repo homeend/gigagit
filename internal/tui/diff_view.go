@@ -18,25 +18,46 @@ import (
 // "(file too large)" instead of being buffered into the compare engine.
 const maxDiffBytes = 10 << 20
 
+// diffContext is the equal lines kept on each side of a change in partial
+// mode; diffLead is the context kept above a change a jump lands on.
+const (
+	diffContext = 3
+	diffLead    = 3
+)
+
 // diffView is the open full-screen side-by-side viewer; nil = closed.
 // Pure scroll (offset) — there is no cursor row.
 type diffView struct {
-	title     string // file path, shown in the header
-	context   string // "HEAD → working tree" or "@ <short-hash> <subject>"
-	rows      []textdiff.Row
-	blocks    []int // jump targets for ctrl+↑/↓
-	offset    int   // top visible row
-	truncated bool  // alignment skipped (size guard)
-	binary    bool
-	tooLarge  bool
-	loading   bool
-	err       error
+	title      string          // file path, shown in the header
+	context    string          // "HEAD → working tree" or "@ <short-hash> <subject>"
+	full       []textdiff.Row  // immutable aligned rows (the comparison result)
+	fullBlocks []int           // immutable change-block starts into full
+	partial    bool            // current display mode (false = full)
+	lines      []textdiff.Line // displayed sequence for the current mode
+	blocks     []int           // block-start indices into lines (jump targets)
+	offset     int             // top visible line
+	truncated  bool            // alignment skipped (size guard)
+	binary     bool
+	tooLarge   bool
+	loading    bool
+	err        error
 }
 
-// scroll moves the viewport by delta, clamped to [0, len(rows)-body].
+// rebuild recomputes the displayed lines/blocks from the immutable rows for
+// the current mode. Full mode wraps 1:1; partial mode collapses unchanged runs.
+func (v *diffView) rebuild() {
+	if v.partial {
+		v.lines, v.blocks = textdiff.Collapse(v.full, v.fullBlocks, diffContext)
+	} else {
+		v.lines = textdiff.Expand(v.full)
+		v.blocks = v.fullBlocks
+	}
+}
+
+// scroll moves the viewport by delta, clamped to [0, len(lines)-body].
 func (v *diffView) scroll(delta, body int) {
 	v.offset += delta
-	max := len(v.rows) - body
+	max := len(v.lines) - body
 	if max < 0 {
 		max = 0
 	}
@@ -46,6 +67,53 @@ func (v *diffView) scroll(delta, body int) {
 	if v.offset < 0 {
 		v.offset = 0
 	}
+}
+
+// jumpTo positions block-start line b with up to diffLead lines above it,
+// clamped to the scroll range (scroll's clamp).
+func (v *diffView) jumpTo(b, body int) {
+	v.offset = b - diffLead
+	if v.offset < 0 {
+		v.offset = 0
+	}
+	v.scroll(0, body)
+}
+
+// nextBlock jumps to the first change strictly below the current one; no-op
+// past the last. The +diffLead reference neutralizes the lead so the current
+// change isn't re-selected.
+func (v *diffView) nextBlock(body int) {
+	for _, b := range v.blocks {
+		if b > v.offset+diffLead {
+			v.jumpTo(b, body)
+			return
+		}
+	}
+}
+
+// prevBlock jumps to the first change strictly above the current one.
+func (v *diffView) prevBlock(body int) {
+	for i := len(v.blocks) - 1; i >= 0; i-- {
+		if v.blocks[i] < v.offset+diffLead {
+			v.jumpTo(v.blocks[i], body)
+			return
+		}
+	}
+}
+
+// currentBlockOrdinal is the index of the change currently in view (for
+// preserving position across a mode toggle).
+func (v *diffView) currentBlockOrdinal() int {
+	ord := 0
+	for _, b := range v.blocks {
+		if b <= v.offset+diffLead {
+			ord++
+		}
+	}
+	if ord > 0 {
+		ord--
+	}
+	return ord
 }
 
 // diffMsg delivers a fully built view from a loader; tag gates stale results
@@ -126,9 +194,10 @@ func fillDiff(v *diffView, oldB, newB []byte) {
 		return
 	}
 	res := textdiff.Compare(oldB, newB)
-	v.rows = res.Rows
-	v.blocks = res.Blocks
+	v.full = res.Rows
+	v.fullBlocks = res.Blocks
 	v.truncated = res.Truncated
+	v.rebuild()
 }
 
 // loadCommitDiffCmd fetches both sides of line's file in commit hash:
@@ -191,25 +260,9 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "pgdown":
 		v.scroll(m.diffBodyRows(), m.diffBodyRows())
 	case "ctrl+down":
-		// Jump targets clamp to the scroll range; a block whose clamped
-		// position can't advance the viewport is already fully visible.
-		max := len(v.rows) - m.diffBodyRows()
-		if max < 0 {
-			max = 0
-		}
-		for _, b := range v.blocks {
-			if t := min(b, max); t > v.offset {
-				v.offset = t
-				break
-			}
-		}
+		v.nextBlock(m.diffBodyRows())
 	case "ctrl+up":
-		for i := len(v.blocks) - 1; i >= 0; i-- {
-			if v.blocks[i] < v.offset {
-				v.offset = v.blocks[i]
-				break
-			}
-		}
+		v.prevBlock(m.diffBodyRows())
 	}
 	return m, nil
 }

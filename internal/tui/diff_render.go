@@ -14,6 +14,7 @@ var (
 	diffAddCell = lipgloss.NewStyle().Background(lipgloss.Color("22"))  // dark green
 	diffGapCell = lipgloss.NewStyle().Foreground(lipgloss.Color("240")) // dim · filler
 	diffGutter  = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	diffFold    = lipgloss.NewStyle().Foreground(lipgloss.Color("240")) // dim fold rule
 )
 
 const diffHint = "[↑↓] scroll  [pgup/pgdn] page  [ctrl+↑↓] prev/next change  [esc] close  [q] quit"
@@ -64,7 +65,7 @@ func (m Model) renderDiffView() string {
 	}
 	head := "diff: " + v.title + "  " + v.context + note
 	rangeStr := ""
-	if n := len(v.rows); n > 0 {
+	if n := len(v.lines); n > 0 {
 		hi := v.offset + body
 		if hi > n {
 			hi = n
@@ -99,14 +100,15 @@ func (m Model) renderDiffView() string {
 	return strings.Join(lines, "\n")
 }
 
-// diffPaneLines renders the visible window of aligned rows as left│right.
+// diffPaneLines renders the visible window of display lines: a row Line as
+// left│right, a fold Line as a full-width dim separator.
 func (m Model) diffPaneLines(v *diffView, w, body int) []string {
 	paneW := (w - 1) / 2
 	if paneW < 4 {
 		paneW = 4
 	}
 	maxNo := 0
-	for _, r := range v.rows {
+	for _, r := range v.full { // gutter width from the full rows: stable across toggle
 		if r.LeftNo > maxNo {
 			maxNo = r.LeftNo
 		}
@@ -120,8 +122,13 @@ func (m Model) diffPaneLines(v *diffView, w, body int) []string {
 	}
 
 	out := make([]string, 0, body)
-	for i := v.offset; i < v.offset+body && i < len(v.rows); i++ {
-		r := v.rows[i]
+	for i := v.offset; i < v.offset+body && i < len(v.lines); i++ {
+		ln := v.lines[i]
+		if ln.Fold > 0 {
+			out = append(out, foldSeparator(ln.Fold, w))
+			continue
+		}
+		r := ln.Row
 		left := diffCell(r.LeftNo, r.Left, gut, paneW,
 			r.Kind == textdiff.Add, // gap on the left when the line exists only on the right
 			r.Kind == textdiff.Del || r.Kind == textdiff.Changed, diffDelCell)
@@ -131,6 +138,22 @@ func (m Model) diffPaneLines(v *diffView, w, body int) []string {
 		out = append(out, left+"│"+right)
 	}
 	return out
+}
+
+// foldSeparator renders a fold marker as a centered label on a dim rule
+// spanning the full width.
+func foldSeparator(n, w int) string {
+	label := fmt.Sprintf(" ⤬ %d unchanged lines ", n)
+	if n == 1 {
+		label = " ⤬ 1 unchanged line "
+	}
+	lw := lipgloss.Width(label)
+	if lw >= w {
+		return diffFold.Render(truncate(label, w))
+	}
+	left := (w - lw) / 2
+	right := w - lw - left
+	return diffFold.Render(strings.Repeat("─", left) + label + strings.Repeat("─", right))
 }
 
 // diffCell renders one pane cell: gutter + text, or the dim gap filler.

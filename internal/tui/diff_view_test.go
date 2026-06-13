@@ -14,6 +14,13 @@ import (
 	"github.com/gigagit/gg/internal/textdiff"
 )
 
+// diffViewWith builds a full-mode view over the given rows and block starts.
+func diffViewWith(rows []textdiff.Row, blocks []int) *diffView {
+	v := &diffView{full: rows, fullBlocks: blocks}
+	v.rebuild()
+	return v
+}
+
 // gitOut runs a git command in dir and returns its trimmed stdout.
 func gitOut(t *testing.T, dir string, args ...string) string {
 	t.Helper()
@@ -160,7 +167,7 @@ func TestStatusLoaderUntrackedIsAllAdded(t *testing.T) {
 	if msg.view.err != nil {
 		t.Fatal(msg.view.err)
 	}
-	for _, r := range msg.view.rows {
+	for _, r := range msg.view.full {
 		if r.Kind != textdiff.Add {
 			t.Fatalf("untracked file must be all-Add, got %+v", r)
 		}
@@ -184,7 +191,7 @@ func TestStatusLoaderDeletedIsAllDel(t *testing.T) {
 	if msg.view.err != nil {
 		t.Fatal(msg.view.err)
 	}
-	for _, r := range msg.view.rows {
+	for _, r := range msg.view.full {
 		if r.Kind != textdiff.Del {
 			t.Fatalf("deleted file must be all-Del, got %+v", r)
 		}
@@ -218,7 +225,7 @@ func TestDiffViewKeysScrollAndJump(t *testing.T) {
 	}
 	rows[20] = textdiff.Row{Kind: textdiff.Changed}
 	rows[30] = textdiff.Row{Kind: textdiff.Changed}
-	m.diffView = &diffView{rows: rows, blocks: []int{20, 30}}
+	m.diffView = diffViewWith(rows, []int{20, 30})
 	m.diffTag = "status:x"
 
 	u, _ := m.Update(keyMsg("down"))
@@ -226,13 +233,13 @@ func TestDiffViewKeysScrollAndJump(t *testing.T) {
 		t.Fatalf("down: offset = %d", u.(Model).diffView.offset)
 	}
 	u, _ = m.Update(keyMsg("ctrl+down"))
-	if u.(Model).diffView.offset != 20 {
-		t.Fatalf("ctrl+down: offset = %d, want 20", u.(Model).diffView.offset)
+	if u.(Model).diffView.offset != 17 {
+		t.Fatalf("ctrl+down: offset = %d, want 17", u.(Model).diffView.offset)
 	}
 	m.diffView.offset = 35
 	u, _ = m.Update(keyMsg("ctrl+up"))
-	if u.(Model).diffView.offset != 30 {
-		t.Fatalf("ctrl+up: offset = %d, want 30", u.(Model).diffView.offset)
+	if u.(Model).diffView.offset != 27 {
+		t.Fatalf("ctrl+up: offset = %d, want 27", u.(Model).diffView.offset)
 	}
 	m.diffView.offset = 0
 	u, _ = m.Update(keyMsg("pgup"))
@@ -324,7 +331,7 @@ func TestDiffViewWheelScrolls(t *testing.T) {
 	// Need enough rows that the scroll clamp doesn't fire: body = height-2 = 38,
 	// so we need at least body+wheelStep rows = 41.
 	rows := make([]textdiff.Row, 80)
-	m.diffView = &diffView{rows: rows}
+	m.diffView = diffViewWith(rows, nil)
 	m.diffTag = "status:x"
 	u, _ := m.Update(tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonWheelDown})
 	if got, want := u.(Model).diffView.offset, m.wheelStep(); got != want {
@@ -341,7 +348,8 @@ func TestDiffViewJumpAtMaxScrollIsNoOp(t *testing.T) {
 	}
 	rows[20] = textdiff.Row{Kind: textdiff.Changed}
 	rows[30] = textdiff.Row{Kind: textdiff.Changed}
-	m.diffView = &diffView{rows: rows, blocks: []int{20, 30}, offset: 20}
+	m.diffView = diffViewWith(rows, []int{20, 30})
+	m.diffView.offset = 20
 	m.diffTag = "status:x"
 
 	// 30 clamps to max (25): the jump advances to 25, and a further press
@@ -430,8 +438,8 @@ func TestCommitLoaderModifiedAndAdded(t *testing.T) {
 	if msg.view.err != nil {
 		t.Fatal(msg.view.err)
 	}
-	if len(msg.view.blocks) != 1 || msg.view.rows[0].Kind != textdiff.Changed {
-		t.Fatalf("modified file rows wrong: %+v", msg.view.rows)
+	if len(msg.view.blocks) != 1 || msg.view.full[0].Kind != textdiff.Changed {
+		t.Fatalf("modified file rows wrong: %+v", msg.view.full)
 	}
 
 	// Added in this commit: old side empty.
@@ -439,7 +447,7 @@ func TestCommitLoaderModifiedAndAdded(t *testing.T) {
 	if msg.view.err != nil {
 		t.Fatal(msg.view.err)
 	}
-	for _, r := range msg.view.rows {
+	for _, r := range msg.view.full {
 		if r.Kind != textdiff.Add {
 			t.Fatalf("added file must be all-Add: %+v", r)
 		}
@@ -512,7 +520,7 @@ func TestCommitLoaderMergeCommitUsesFirstParent(t *testing.T) {
 	}
 	// Old side = first parent ("base"), new side = merge result ("side").
 	var sawBase, sawSide bool
-	for _, r := range msg.view.rows {
+	for _, r := range msg.view.full {
 		if r.Left == "base" {
 			sawBase = true
 		}
@@ -521,6 +529,6 @@ func TestCommitLoaderMergeCommitUsesFirstParent(t *testing.T) {
 		}
 	}
 	if !sawBase || !sawSide {
-		t.Fatalf("merge diff sides wrong: %+v", msg.view.rows)
+		t.Fatalf("merge diff sides wrong: %+v", msg.view.full)
 	}
 }
