@@ -154,10 +154,15 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "pgdown":
 		v.scroll(m.diffBodyRows(), m.diffBodyRows())
 	case "ctrl+down":
+		// Jump targets clamp to the scroll range; a block whose clamped
+		// position can't advance the viewport is already fully visible.
+		max := len(v.rows) - m.diffBodyRows()
+		if max < 0 {
+			max = 0
+		}
 		for _, b := range v.blocks {
-			if b > v.offset {
-				v.offset = b
-				v.scroll(0, m.diffBodyRows()) // clamp near the end
+			if t := min(b, max); t > v.offset {
+				v.offset = t
 				break
 			}
 		}

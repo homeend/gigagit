@@ -239,7 +239,7 @@ func TestDiffViewSwallowsActionKeys(t *testing.T) {
 	for _, k := range []string{"p", "P", "s", "S", "u", "d", "w", "b", "m", "l", "R", ",", "/", "?", "tab", "enter"} {
 		u, cmd := m.Update(keyMsg(k))
 		mm := u.(Model)
-		if cmd != nil || mm.running || mm.popup != nil || mm.contentPopup != nil || mm.filesView != nil {
+		if cmd != nil || mm.running || mm.popup != nil || mm.contentPopup != nil || mm.filesView != nil || mm.filterTyping || mm.mark != nil {
 			t.Fatalf("key %q leaked through the diff view", k)
 		}
 	}
@@ -298,5 +298,29 @@ func TestDiffViewWheelScrolls(t *testing.T) {
 	u, _ := m.Update(tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonWheelDown})
 	if got := u.(Model).diffView.offset; got != contentWheelStep {
 		t.Fatalf("wheel: offset = %d, want %d", got, contentWheelStep)
+	}
+}
+
+func TestDiffViewJumpAtMaxScrollIsNoOp(t *testing.T) {
+	m := diffModel()
+	m.height = 12 // body = 10
+	rows := make([]textdiff.Row, 35)
+	for i := range rows {
+		rows[i] = textdiff.Row{Kind: textdiff.Same}
+	}
+	rows[20] = textdiff.Row{Kind: textdiff.Changed}
+	rows[30] = textdiff.Row{Kind: textdiff.Changed}
+	m.diffView = &diffView{rows: rows, blocks: []int{20, 30}, offset: 20}
+	m.diffTag = "status:x"
+
+	// 30 clamps to max (25): the jump advances to 25, and a further press
+	// is a clean no-op (the remaining block is already visible).
+	u, _ := m.Update(keyMsg("ctrl+down"))
+	if got := u.(Model).diffView.offset; got != 25 {
+		t.Fatalf("clamped jump: offset = %d, want 25", got)
+	}
+	u, _ = m.Update(keyMsg("ctrl+down"))
+	if got := u.(Model).diffView.offset; got != 25 {
+		t.Fatalf("jump at max scroll must hold position, got %d", got)
 	}
 }
