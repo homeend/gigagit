@@ -394,3 +394,22 @@ func TestMaxCellWidthIgnoresGapSides(t *testing.T) {
 		t.Fatalf("maxCellWidth = %d, want %d", got, lipgloss.Width("longer right side here"))
 	}
 }
+
+func TestScrollModeRenderShowsMarkers(t *testing.T) {
+	long := strings.Repeat("x", 200)
+	rows := []textdiff.Row{{Kind: textdiff.Same, Left: long, Right: long, LeftNo: 1, RightNo: 1}}
+	v := diffViewWith(rows, nil) // default longScroll
+	v.width = 60
+	v.rebuild()
+	m := footerModel()
+	line := ansi.Strip(m.diffPaneLines(v, 60, 1)[0])
+	if !strings.Contains(line, "›") || strings.Contains(line, "‹") {
+		t.Fatalf("scroll@0 should show › and not ‹: %q", line)
+	}
+	v.hOffset = 40
+	v.clampHOffset()
+	line = ansi.Strip(m.diffPaneLines(v, 60, 1)[0])
+	if !strings.Contains(line, "‹") {
+		t.Fatalf("scrolled right, ‹ must appear: %q", line)
+	}
+}

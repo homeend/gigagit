@@ -932,3 +932,27 @@ func TestDiffPanNoOpWhenNotScroll(t *testing.T) {
 		t.Fatal("→ must be a no-op outside scroll mode")
 	}
 }
+
+func TestDiffResizeReclampsHOffset(t *testing.T) {
+	long := strings.Repeat("x", 200)
+	rows := make([]textdiff.Row, 3)
+	for i := range rows {
+		rows[i] = textdiff.Row{Kind: textdiff.Same, Left: long, Right: long, LeftNo: i + 1, RightNo: i + 1}
+	}
+	m := diffModel()
+	m.width, m.height = 60, 24
+	v := diffViewWith(rows, nil) // default scroll
+	v.width = 60
+	v.rebuild()
+	v.hOffset = v.maxCell // overshoot, then clamp to the width-60 max
+	v.clampHOffset()
+	wide := v.hOffset
+	m.diffView = v
+	m.diffTag = "status:x"
+	// Growing width enlarges tw, shrinking the pan ceiling: hOffset must drop.
+	u, _ := m.Update(tea.WindowSizeMsg{Width: 200, Height: 24})
+	nv := u.(Model).diffView
+	if nv.hOffset >= wide {
+		t.Fatalf("growing width should re-clamp hOffset down: %d (was %d)", nv.hOffset, wide)
+	}
+}
