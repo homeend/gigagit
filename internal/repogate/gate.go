@@ -212,7 +212,12 @@ func (r *Reservation) Escalate(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	// Released() may inspect r.h from another goroutine (concurrent ops,
+	// queue UI), so the swap happens under the gate mutex like every other
+	// r.h write.
+	g.mu.Lock()
 	r.h = nr.h
+	g.mu.Unlock()
 	return nil
 }
 
