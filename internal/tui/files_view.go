@@ -126,8 +126,8 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	switch msg.String() {
-	case "q":
-		return m, tea.Quit // q quits the app, view or not (top-level key)
+	// q is inert here: only the base layout quits on q. esc is the back key;
+	// ctrl+c (handled above) remains the universal quit.
 	case "esc":
 		if p.query != "" { // first esc clears the committed search
 			p.query = ""

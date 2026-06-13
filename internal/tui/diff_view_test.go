@@ -255,7 +255,7 @@ func TestDiffViewKeysScrollAndJump(t *testing.T) {
 	}
 }
 
-func TestDiffViewEscClosesAndQQuits(t *testing.T) {
+func TestDiffViewEscClosesAndQInert(t *testing.T) {
 	m := diffModel()
 	m.diffView = &diffView{}
 	m.diffTag = "status:x"
@@ -265,10 +265,32 @@ func TestDiffViewEscClosesAndQQuits(t *testing.T) {
 		t.Fatal("esc must close the diff view and clear the tag")
 	}
 
+	// q no longer quits from a view — only the base layout quits on q
+	// (esc is the back key; ctrl+c remains the universal quit).
 	m.diffView = &diffView{}
-	_, cmd := m.Update(keyMsg("q"))
-	if cmd == nil {
-		t.Fatal("q must quit") // tea.Quit cmd
+	u, cmd := m.Update(keyMsg("q"))
+	if cmd != nil {
+		t.Fatal("q must not quit from the diff view (inert)")
+	}
+	if u.(Model).diffView == nil {
+		t.Fatal("q must leave the diff view open")
+	}
+}
+
+// esc goes back one layout: a diff opened over the files view returns to that
+// files view (the surface beneath), not all the way to the base layout.
+func TestDiffEscReturnsToFilesViewBeneath(t *testing.T) {
+	m := diffModel()
+	m.filesView = &contentPopup{lines: []contentLine{{text: "x", path: "x"}}}
+	m.diffView = &diffView{}
+	m.diffTag = "commit:abc:x"
+	u, _ := m.Update(keyMsg("esc"))
+	mm := u.(Model)
+	if mm.diffView != nil {
+		t.Fatal("esc must close the diff view")
+	}
+	if mm.filesView == nil {
+		t.Fatal("esc from a diff opened over the files view must return to it, not the base layout")
 	}
 }
 

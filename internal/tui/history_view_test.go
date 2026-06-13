@@ -54,6 +54,20 @@ func TestHistoryEscPops(t *testing.T) {
 	}
 }
 
+// q no longer quits from the history view — only the base layout quits on q.
+func TestHistoryQInert(t *testing.T) {
+	m := Model{width: 100, height: 30}
+	h := histFixture()
+	m = m.pushSurface(h)
+	m, cmd := h.update(m, keyMsg("q"))
+	if cmd != nil {
+		t.Fatal("q must not quit from the history view (inert)")
+	}
+	if m.stackTop() == nil {
+		t.Fatal("q must leave the history surface on the stack")
+	}
+}
+
 func TestStatusHOpensHistory(t *testing.T) {
 	m := Model{width: 100, height: 30, focus: panelStatus, sel: map[panel]int{}}
 	m.status = model.WorkingTreeStatus{Files: []model.FileStatus{{Path: "a.go"}}}

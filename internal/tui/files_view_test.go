@@ -250,6 +250,21 @@ func TestFilesViewEscClearsSearchThenCloses(t *testing.T) {
 	}
 }
 
+// q no longer quits from the files view — only the base layout quits on q.
+func TestFilesViewQInert(t *testing.T) {
+	m := openFilesView(t, filesModel())
+	if m.filesView == nil {
+		t.Fatal("precondition: files view should be open")
+	}
+	u, cmd := m.Update(keyMsg("q"))
+	if cmd != nil {
+		t.Fatal("q must not quit from the files view (inert)")
+	}
+	if u.(Model).filesView == nil {
+		t.Fatal("q must leave the files view open")
+	}
+}
+
 func TestFilesViewToggleClosesOnL(t *testing.T) {
 	m := openFilesView(t, filesModel())
 	m = pressRune(t, m, "l")

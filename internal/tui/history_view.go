@@ -117,7 +117,7 @@ func (h *historyView) render(m Model) string {
 	body := m.historyBodyRows()
 
 	header := truncate("history: "+h.ctx.path, w)
-	hint := truncate("[↑↓] commit  [esc] back  [q] quit", w)
+	hint := truncate("[↑↓] commit  [esc] back", w)
 
 	// Left list. Right pane shown only when wide enough (>=60); else list-only.
 	split := w >= 60
@@ -210,8 +210,8 @@ func (h *historyView) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 	switch msg.String() {
-	case "q":
-		return m, tea.Quit
+	// q is inert here: only the base layout quits on q. esc is the back key;
+	// ctrl+c (handled above) remains the universal quit.
 	case "esc", "h":
 		return m.popSurface(), nil
 	case "down", "j":
