@@ -231,3 +231,22 @@ func TestQueryHoldsReadReservation(t *testing.T) {
 		t.Fatalf("reservation not released after query: %+v", q)
 	}
 }
+
+func TestBlameGatedQuery(t *testing.T) {
+	f := gitexec.NewFakeRunner()
+	f.SetResponse("git blame", gitexec.Result{Stdout: "" +
+		"1111111111111111111111111111111111111111 1 1 1\n" +
+		"author Ada\n" +
+		"author-time 1700000000\n" +
+		"summary only\n" +
+		"filename a.go\n" +
+		"\thello\n"})
+	svc := New(&git.Repo{Runner: f})
+	got, err := svc.Blame(context.Background(), "", "a.go")
+	if err != nil {
+		t.Fatalf("Blame error: %v", err)
+	}
+	if len(got) != 1 || got[0].Content != "hello" || got[0].Author != "Ada" {
+		t.Fatalf("Blame = %+v", got)
+	}
+}
