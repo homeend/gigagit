@@ -630,3 +630,12 @@ func (m Model) wheelStep() int {
 	}
 	return 3
 }
+
+// hscrollStep is the diff scroll-mode horizontal pan distance (columns per
+// ←/→), from [ui] hscroll_step; 8 until config loads.
+func (m Model) hscrollStep() int {
+	if s := m.cfg.UI.HScrollStep; s > 0 {
+		return s
+	}
+	return 8
+}
