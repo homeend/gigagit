@@ -18,6 +18,17 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - `n` / `p` jump to the next / previous change (aliases of `ctrl+↓` / `ctrl+↑`).
 - A diff now opens scrolled to the first change instead of the top.
 
+#### Diff view: intraline emphasis + commit-diff cache
+- Changed lines now show **GitHub-style intraline word emphasis** — the exact
+  words that differ are highlighted within a changed line, not just the whole
+  line.
+- **Commit diffs are cached**: re-opening the same file in a commit issues no
+  further `git show` and skips re-alignment — the diff for an immutable commit
+  is computed once. Working-tree diffs still reflect live edits (never cached).
+- New `internal/cache` package: a generic, injected, two-bound in-memory LRU
+  cache factory (entry-count **and** byte-budget eviction, so it can't eat
+  memory), reusable for future heavy reads. Wired today only for diffs.
+
 #### Domain layer & repo gate
 - New `internal/domain` command layer: both frontends now run engine
   operations through `domain.Execute`, which serializes them per repository
