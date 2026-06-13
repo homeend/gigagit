@@ -30,6 +30,7 @@ const (
 type diffView struct {
 	title      string          // file path, shown in the header
 	context    string          // "HEAD → working tree" or "@ <short-hash> <subject>"
+	rev        string          // commit-ish the NEW side came from; "" = working tree (used by h→history)
 	full       []textdiff.Row  // immutable aligned rows (the comparison result)
 	fullBlocks []int           // immutable change-block starts into full
 	partial    bool            // current display mode (false = full)
@@ -143,7 +144,7 @@ func (m Model) loadStatusDiffCmd(f model.FileStatus) tea.Cmd {
 	root := m.currentWorktree
 	body := m.diffBodyRows()
 	tag := "status:" + f.Path
-	v := &diffView{title: f.Path, context: "HEAD → working tree", partial: m.diffPartial}
+	v := &diffView{title: f.Path, context: "HEAD → working tree", rev: "", partial: m.diffPartial}
 	return func() tea.Msg {
 		var oldB, newB []byte
 		// Old side: absent when the file isn't in HEAD (untracked, or a
@@ -213,7 +214,7 @@ func (m Model) loadCommitDiffCmd(hash string, line contentLine) tea.Cmd {
 	repo := m.repo
 	body := m.diffBodyRows()
 	tag := "commit:" + hash + ":" + line.path
-	v := &diffView{title: line.path, context: "@ " + strings.TrimPrefix(m.filesTitle, "Files "), partial: m.diffPartial}
+	v := &diffView{title: line.path, context: "@ " + strings.TrimPrefix(m.filesTitle, "Files "), rev: hash, partial: m.diffPartial}
 	return func() tea.Msg {
 		var oldB, newB []byte
 		if line.status != "A" {

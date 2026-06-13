@@ -338,7 +338,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.focus == panelStatus && m.canShowFileDiff() {
 				bi, _ := m.backingIndex(panelStatus)
 				f := m.status.Files[bi]
-				m.diffView = &diffView{title: f.Path, context: "HEAD → working tree", loading: true, partial: m.diffPartial}
+				m.diffView = &diffView{title: f.Path, context: "HEAD → working tree", rev: "", loading: true, partial: m.diffPartial}
 				m.diffTag = "status:" + f.Path
 				return m, m.loadStatusDiffCmd(f)
 			}

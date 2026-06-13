@@ -161,6 +161,7 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.diffView = &diffView{
 			title:   l.path,
 			context: "@ " + strings.TrimPrefix(m.filesTitle, "Files "),
+			rev:     m.filesHash,
 			loading: true,
 			partial: m.diffPartial,
 		}
