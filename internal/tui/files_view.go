@@ -162,6 +162,7 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			title:   l.path,
 			context: "@ " + strings.TrimPrefix(m.filesTitle, "Files "),
 			loading: true,
+			partial: m.diffPartial,
 		}
 		m.diffTag = "commit:" + m.filesHash + ":" + l.path
 		return m, m.loadCommitDiffCmd(m.filesHash, l)

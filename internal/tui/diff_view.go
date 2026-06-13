@@ -141,8 +141,9 @@ func (m Model) diffBodyRows() int {
 func (m Model) loadStatusDiffCmd(f model.FileStatus) tea.Cmd {
 	repo := m.repo
 	root := m.currentWorktree
+	body := m.diffBodyRows()
 	tag := "status:" + f.Path
-	v := &diffView{title: f.Path, context: "HEAD → working tree"}
+	v := &diffView{title: f.Path, context: "HEAD → working tree", partial: m.diffPartial}
 	return func() tea.Msg {
 		var oldB, newB []byte
 		// Old side: absent when the file isn't in HEAD (untracked, or a
@@ -179,6 +180,9 @@ func (m Model) loadStatusDiffCmd(f model.FileStatus) tea.Cmd {
 			return diffMsg{tag: tag, view: v}
 		}
 		fillDiff(v, oldB, newB)
+		if len(v.blocks) > 0 {
+			v.jumpTo(v.blocks[0], body)
+		}
 		return diffMsg{tag: tag, view: v}
 	}
 }
@@ -207,8 +211,9 @@ func fillDiff(v *diffView, oldB, newB []byte) {
 // never dereference hash^ — all their files carry status "A".
 func (m Model) loadCommitDiffCmd(hash string, line contentLine) tea.Cmd {
 	repo := m.repo
+	body := m.diffBodyRows()
 	tag := "commit:" + hash + ":" + line.path
-	v := &diffView{title: line.path, context: "@ " + strings.TrimPrefix(m.filesTitle, "Files ")}
+	v := &diffView{title: line.path, context: "@ " + strings.TrimPrefix(m.filesTitle, "Files "), partial: m.diffPartial}
 	return func() tea.Msg {
 		var oldB, newB []byte
 		if line.status != "A" {
@@ -232,6 +237,9 @@ func (m Model) loadCommitDiffCmd(hash string, line contentLine) tea.Cmd {
 			newB = b
 		}
 		fillDiff(v, oldB, newB)
+		if len(v.blocks) > 0 {
+			v.jumpTo(v.blocks[0], body)
+		}
 		return diffMsg{tag: tag, view: v}
 	}
 }
@@ -263,6 +271,23 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		v.nextBlock(m.diffBodyRows())
 	case "ctrl+up":
 		v.prevBlock(m.diffBodyRows())
+	case "n":
+		v.nextBlock(m.diffBodyRows())
+	case "p":
+		v.prevBlock(m.diffBodyRows())
+	case "f":
+		ord := v.currentBlockOrdinal()
+		v.partial = !v.partial
+		v.rebuild()
+		m.diffPartial = v.partial
+		if len(v.blocks) > 0 {
+			if ord >= len(v.blocks) {
+				ord = len(v.blocks) - 1
+			}
+			v.jumpTo(v.blocks[ord], m.diffBodyRows())
+		} else {
+			v.offset = 0
+		}
 	}
 	return m, nil
 }

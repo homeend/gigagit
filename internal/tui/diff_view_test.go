@@ -476,6 +476,153 @@ func TestCommitLoaderRootCommit(t *testing.T) {
 	}
 }
 
+// sameRowsTUI builds n Same rows then marks the given indices Changed.
+func sameRowsTUI(n int, changed ...int) []textdiff.Row {
+	rows := make([]textdiff.Row, n)
+	for i := range rows {
+		rows[i] = textdiff.Row{Kind: textdiff.Same, LeftNo: i + 1, RightNo: i + 1}
+	}
+	for _, c := range changed {
+		rows[c] = textdiff.Row{Kind: textdiff.Changed, Left: "x", Right: "y", LeftNo: c + 1, RightNo: c + 1}
+	}
+	return rows
+}
+
+func TestDiffNPAliasCtrlJumps(t *testing.T) {
+	m := diffModel()
+	m.height = 12 // body = 10
+	rows := sameRowsTUI(40, 20, 30)
+	mk := func() Model {
+		mm := m
+		mm.diffView = diffViewWith(rows, []int{20, 30})
+		mm.diffTag = "status:x"
+		return mm
+	}
+	for _, pair := range [][2]string{{"n", "ctrl+down"}, {"p", "ctrl+up"}} {
+		a := mk()
+		a.diffView.offset = 15
+		b := mk()
+		b.diffView.offset = 15
+		ua, _ := a.Update(keyMsg(pair[0]))
+		ub, _ := b.Update(keyMsg(pair[1]))
+		if ua.(Model).diffView.offset != ub.(Model).diffView.offset {
+			t.Fatalf("%s (%d) != %s (%d)", pair[0], ua.(Model).diffView.offset,
+				pair[1], ub.(Model).diffView.offset)
+		}
+	}
+}
+
+func TestDiffJumpLandsWithContextAbove(t *testing.T) {
+	m := diffModel()
+	m.height = 12
+	m.diffView = diffViewWith(sameRowsTUI(40, 20), []int{20})
+	m.diffTag = "status:x"
+	u, _ := m.Update(keyMsg("n"))
+	if got := u.(Model).diffView.offset; got != 17 { // 20 - diffLead(3)
+		t.Fatalf("offset = %d, want 17 (change with 3 lines above)", got)
+	}
+}
+
+func TestDiffToggleFlipsModeAndSession(t *testing.T) {
+	m := diffModel()
+	m.height = 12
+	m.diffView = diffViewWith(sameRowsTUI(40, 20), []int{20})
+	m.diffTag = "status:x"
+	if m.diffView.partial {
+		t.Fatal("default mode is full")
+	}
+	u, _ := m.Update(keyMsg("f"))
+	mm := u.(Model)
+	if !mm.diffView.partial {
+		t.Fatal("f must switch the open view to partial")
+	}
+	if !mm.diffPartial {
+		t.Fatal("f must remember partial as the session default")
+	}
+	if len(mm.diffView.lines) >= len(mm.diffView.full) {
+		t.Fatal("partial mode must collapse unchanged runs")
+	}
+	u2, _ := mm.Update(keyMsg("f"))
+	if u2.(Model).diffView.partial || u2.(Model).diffPartial {
+		t.Fatal("a second f must switch back to full")
+	}
+}
+
+func TestDiffTogglePreservesBlock(t *testing.T) {
+	m := diffModel()
+	m.height = 12 // body = 10
+	m.diffView = diffViewWith(sameRowsTUI(60, 10, 50), []int{10, 50})
+	m.diffTag = "status:x"
+	u, _ := m.Update(keyMsg("n"))        // first change
+	u, _ = u.(Model).Update(keyMsg("n")) // second change
+	mm := u.(Model)
+	ord := mm.diffView.currentBlockOrdinal()
+	u, _ = mm.Update(keyMsg("f"))
+	v := u.(Model).diffView
+	body := mm.diffBodyRows()
+	target := v.blocks[ord] // the same change, remapped into the new line stream
+	if target < v.offset || target >= v.offset+body {
+		t.Fatalf("toggle lost the focused change: line %d not in view [%d,%d)",
+			target, v.offset, v.offset+body)
+	}
+}
+
+func TestStatusLoaderOpensAtFirstDifference(t *testing.T) {
+	dir, repo := newRepoDir(t)
+	var base, work strings.Builder
+	for i := 0; i < 60; i++ {
+		base.WriteString(itoa(i) + "\n")
+		if i == 40 {
+			work.WriteString("CHANGED\n")
+		} else {
+			work.WriteString(itoa(i) + "\n")
+		}
+	}
+	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte(base.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, dir, "add", "f.txt")
+	gitIn(t, dir, "commit", "-m", "base")
+	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte(work.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := diffModel()
+	m.height = 12
+	m.repo = repo
+	m.currentWorktree = dir
+	msg := m.loadStatusDiffCmd(model.FileStatus{Path: "f.txt", Staged: '.', Unstaged: 'M'})().(diffMsg)
+	if msg.view.err != nil {
+		t.Fatal(msg.view.err)
+	}
+	if msg.view.offset == 0 {
+		t.Fatal("a diff with a change far down must open scrolled to it, not at the top")
+	}
+	if msg.view.offset > msg.view.blocks[0] || msg.view.blocks[0] >= msg.view.offset+m.diffBodyRows() {
+		t.Fatalf("first block %d not in view [%d,%d)", msg.view.blocks[0],
+			msg.view.offset, msg.view.offset+m.diffBodyRows())
+	}
+}
+
+func TestDiffOpenInheritsSessionMode(t *testing.T) {
+	dir, repo := newRepoDir(t)
+	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("a\nb\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, dir, "add", "f.txt")
+	gitIn(t, dir, "commit", "-m", "base")
+	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("a\nB\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := diffModel()
+	m.repo = repo
+	m.currentWorktree = dir
+	m.diffPartial = true
+	msg := m.loadStatusDiffCmd(model.FileStatus{Path: "f.txt", Staged: '.', Unstaged: 'M'})().(diffMsg)
+	if !msg.view.partial {
+		t.Fatal("a new diff must inherit the session's partial mode")
+	}
+}
+
 func TestCommitLoaderMergeCommitUsesFirstParent(t *testing.T) {
 	dir, repo := newRepoDir(t)
 	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("base\n"), 0o644); err != nil {
