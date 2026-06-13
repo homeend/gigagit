@@ -177,6 +177,14 @@ func (s *Service) CurrentBranch(ctx context.Context) (string, error) {
 	return query(ctx, s, "current-branch", s.repo.CurrentBranch)
 }
 
+// FileLog returns up to limit commits touching path at rev, newest first,
+// under a Read reservation, coalesced per (rev, path, limit).
+func (s *Service) FileLog(ctx context.Context, rev, path string, limit int) ([]model.FileCommit, error) {
+	return query(ctx, s, "filelog:"+rev+":"+path+":"+strconv.Itoa(limit), func(ctx context.Context) ([]model.FileCommit, error) {
+		return s.repo.FileLog(ctx, rev, path, limit)
+	})
+}
+
 // GitCommonDir returns the git common dir path, under a Read reservation.
 func (s *Service) GitCommonDir(ctx context.Context) (string, error) {
 	return query(ctx, s, "gitcommondir", s.repo.GitCommonDir)

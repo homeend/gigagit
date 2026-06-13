@@ -814,7 +814,7 @@ func TestDiffOpenInheritsSessionWrap(t *testing.T) {
 		t.Fatal(err)
 	}
 	m := diffModel()
-	m.repo = repo
+	m.svc = domain.New(repo)
 	m.currentWorktree = dir
 	m.diffWrap = true
 	msg := m.loadStatusDiffCmd(model.FileStatus{Path: "f.txt", Staged: '.', Unstaged: 'M'})().(diffMsg)

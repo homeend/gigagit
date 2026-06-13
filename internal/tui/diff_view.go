@@ -228,9 +228,13 @@ func (m Model) diffBodyRows() int {
 }
 
 // diffDiffer returns the Service's diff engine. All code paths that call
-// loadStatusDiffCmd or loadCommitDiffCmd hold a valid svc (set by New or
-// reRoot); tests that use these loaders must wire svc (via footerModel).
+// diffDiffer returns the Service's cached differ, or an uncached one for a
+// Model built without a Service (minimal test fixtures). Production always
+// has a Service via New/reRoot.
 func (m Model) diffDiffer() domain.Differ {
+	if m.svc == nil {
+		return domain.NewDiffer(domain.DifferOptions{Enhanced: true}, nil)
+	}
 	return m.svc.Differ()
 }
 

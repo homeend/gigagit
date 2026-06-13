@@ -50,9 +50,9 @@ type historyDiffMsg struct {
 
 // loadHistoryListCmd fetches the commit list off the UI thread.
 func (m Model) loadHistoryListCmd(ctx navContext, tag string) tea.Cmd {
-	repo := m.repo
+	svc := m.svc
 	return func() tea.Msg {
-		cs, err := repo.FileLog(context.Background(), ctx.rev, ctx.path, historyMaxCommits)
+		cs, err := svc.FileLog(context.Background(), ctx.rev, ctx.path, historyMaxCommits)
 		return historyListMsg{tag: tag, commits: cs, err: err}
 	}
 }
@@ -60,7 +60,7 @@ func (m Model) loadHistoryListCmd(ctx navContext, tag string) tea.Cmd {
 // loadHistoryDiffCmd builds the right-pane diff for fc: the file at fc vs its
 // first parent, addressing the correct (possibly renamed) blob names.
 func (m Model) loadHistoryDiffCmd(fc model.FileCommit, tag string) tea.Cmd {
-	repo := m.repo
+	svc := m.svc
 	differ := m.diffDiffer()
 	body := m.diffBodyRows()
 	v := &diffView{title: fc.Path, context: "@ " + shortHash(fc.Hash) + " " + fc.Subject, rev: fc.Hash, partial: m.diffPartial}
@@ -73,10 +73,10 @@ func (m Model) loadHistoryDiffCmd(fc model.FileCommit, tag string) tea.Cmd {
 		if fc.OldPath != "" {
 			p = fc.OldPath
 		}
-		oldSrc = func(ctx context.Context) ([]byte, error) { return repo.ShowFile(ctx, fc.Hash+"^", p) }
+		oldSrc = func(ctx context.Context) ([]byte, error) { return svc.ShowFile(ctx, fc.Hash+"^", p) }
 	}
 	if fc.Status != "D" {
-		newSrc = func(ctx context.Context) ([]byte, error) { return repo.ShowFile(ctx, fc.Hash, fc.Path) }
+		newSrc = func(ctx context.Context) ([]byte, error) { return svc.ShowFile(ctx, fc.Hash, fc.Path) }
 	}
 	return func() tea.Msg {
 		out, err := differ.Diff(context.Background(), domain.Request{Key: key, Old: oldSrc, New: newSrc})
