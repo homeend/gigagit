@@ -6,6 +6,7 @@ package textdiff
 import (
 	"bytes"
 	"strings"
+	"unicode"
 )
 
 // Kind classifies one aligned row.
@@ -19,13 +20,30 @@ const (
 )
 
 // Row is one display row of the side-by-side view. Line numbers are 1-based;
-// 0 means "no line on that side" (the gap cell of a Del/Add row).
+// 0 means "no line on that side" (the gap cell of a Del/Add row). LeftSpans
+// and RightSpans mark intraline differences; they are populated only on
+// Changed rows under Options.Enhanced, nil otherwise.
 type Row struct {
-	Kind    Kind
-	Left    string
-	Right   string
-	LeftNo  int
-	RightNo int
+	Kind       Kind
+	Left       string
+	Right      string
+	LeftNo     int
+	RightNo    int
+	LeftSpans  []Span
+	RightSpans []Span
+}
+
+// Span is a half-open rune range [Start, End) into a row's raw Left/Right
+// string, marking text that differs from the other side. Rune offsets, not
+// bytes — the renderer maps them to display columns.
+type Span struct {
+	Start, End int
+}
+
+// Options tunes a comparison. The zero value is the plain line-level diff;
+// Enhanced additionally computes intraline word-level spans on Changed rows.
+type Options struct {
+	Enhanced bool
 }
 
 // Result is a full alignment. Blocks holds the row index of the first row of
@@ -131,7 +149,7 @@ func IsBinary(b []byte) bool {
 
 // Compare aligns old and new line-by-line. Compare(nil, x) is a new file
 // (all Add); Compare(x, nil) a deleted one (all Del).
-func Compare(old, newB []byte) Result {
+func Compare(old, newB []byte, opts Options) Result {
 	a, aNL := splitLines(old)
 	b, bNL := splitLines(newB)
 	if len(a) > 0 && len(b) > 0 && aNL != bNL {
@@ -192,6 +210,9 @@ func Compare(old, newB []byte) Result {
 		if rows[i].Kind != Same && (i == 0 || rows[i-1].Kind == Same) {
 			blocks = append(blocks, i)
 		}
+	}
+	if opts.Enhanced {
+		enrich(rows)
 	}
 	return Result{Rows: rows, Blocks: blocks, Truncated: truncated}
 }
@@ -369,4 +390,84 @@ func alignRows(a, b []string, script []editOp, oldNo, newNo int) []Row {
 		p = q
 	}
 	return rows
+}
+
+// enrich fills intraline spans on every Changed row by word-diffing its two
+// sides. Other row kinds are untouched. A myers give-up leaves spans nil — the
+// row still renders, just without emphasis.
+func enrich(rows []Row) {
+	for i := range rows {
+		if rows[i].Kind != Changed {
+			continue
+		}
+		rows[i].LeftSpans, rows[i].RightSpans = wordSpans(rows[i].Left, rows[i].Right)
+	}
+}
+
+// token is a maximal run of word runes, or a maximal run of non-word runes,
+// tagged with its rune offset range [start,end) in the source line.
+type token struct {
+	text       string
+	start, end int
+}
+
+func isWordRune(r rune) bool {
+	return r == '_' || unicode.IsLetter(r) || unicode.IsDigit(r)
+}
+
+func tokenize(s string) []token {
+	var toks []token
+	runes := []rune(s)
+	for i := 0; i < len(runes); {
+		w := isWordRune(runes[i])
+		j := i + 1
+		for j < len(runes) && isWordRune(runes[j]) == w {
+			j++
+		}
+		toks = append(toks, token{text: string(runes[i:j]), start: i, end: j})
+		i = j
+	}
+	return toks
+}
+
+// wordSpans word-diffs left vs right and returns the differing rune ranges on
+// each side, adjacent differing tokens merged into one span.
+func wordSpans(left, right string) (leftSpans, rightSpans []Span) {
+	lt, rt := tokenize(left), tokenize(right)
+	la := make([]string, len(lt))
+	for i, t := range lt {
+		la[i] = t.text
+	}
+	ra := make([]string, len(rt))
+	for i, t := range rt {
+		ra[i] = t.text
+	}
+	script, ok := myers(la, ra)
+	if !ok {
+		return nil, nil
+	}
+	li, ri := 0, 0
+	for _, op := range script {
+		switch op {
+		case opEq:
+			li++
+			ri++
+		case opDel:
+			leftSpans = appendSpan(leftSpans, lt[li].start, lt[li].end)
+			li++
+		case opAdd:
+			rightSpans = appendSpan(rightSpans, rt[ri].start, rt[ri].end)
+			ri++
+		}
+	}
+	return leftSpans, rightSpans
+}
+
+// appendSpan adds [start,end), merging with the previous span when they touch.
+func appendSpan(spans []Span, start, end int) []Span {
+	if n := len(spans); n > 0 && spans[n-1].End == start {
+		spans[n-1].End = end
+		return spans
+	}
+	return append(spans, Span{Start: start, End: end})
 }

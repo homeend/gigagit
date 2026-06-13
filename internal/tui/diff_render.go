@@ -14,7 +14,8 @@ var (
 	diffAddCell = lipgloss.NewStyle().Background(lipgloss.Color("22"))  // dark green
 	diffGapCell = lipgloss.NewStyle().Foreground(lipgloss.Color("240")) // dim · filler
 	diffGutter  = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	diffFold    = lipgloss.NewStyle().Foreground(lipgloss.Color("240")) // dim fold rule
+	diffFold    = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))            // dim fold rule
+	diffEmph    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("231")) // bright fg over the hot cell bg
 )
 
 const diffHint = "[↑↓] scroll  [pgup/pgdn] page  [n/p] next/prev change  [f] toggle partial  [esc] close  [q] quit"
@@ -130,11 +131,11 @@ func (m Model) diffPaneLines(v *diffView, w, body int) []string {
 		}
 		r := ln.Row
 		left := diffCell(r.LeftNo, r.Left, gut, paneW,
-			r.Kind == textdiff.Add, // gap on the left when the line exists only on the right
-			r.Kind == textdiff.Del || r.Kind == textdiff.Changed, diffDelCell)
+			r.Kind == textdiff.Add,
+			r.Kind == textdiff.Del || r.Kind == textdiff.Changed, diffDelCell, r.LeftSpans)
 		right := diffCell(r.RightNo, r.Right, gut, paneW,
 			r.Kind == textdiff.Del,
-			r.Kind == textdiff.Add || r.Kind == textdiff.Changed, diffAddCell)
+			r.Kind == textdiff.Add || r.Kind == textdiff.Changed, diffAddCell, r.RightSpans)
 		out = append(out, left+"│"+right)
 	}
 	return out
@@ -156,8 +157,11 @@ func foldSeparator(n, w int) string {
 	return diffFold.Render(strings.Repeat("─", left) + label + strings.Repeat("─", right))
 }
 
-// diffCell renders one pane cell: gutter + text, or the dim gap filler.
-func diffCell(no int, text string, gut, width int, gap, hot bool, hotStyle lipgloss.Style) string {
+// diffCell renders one pane cell: gutter + text, or the dim gap filler. With
+// no spans (plain mode, non-Changed rows, or enrichment give-up) it is
+// byte-identical to the pre-enrichment renderer; with spans it layers
+// intraline emphasis over the hot cell background.
+func diffCell(no int, text string, gut, width int, gap, hot bool, hotStyle lipgloss.Style, spans []textdiff.Span) string {
 	if gap {
 		return diffGapCell.Render(strings.Repeat("·", width))
 	}
@@ -172,9 +176,119 @@ func diffCell(no int, text string, gut, width int, gap, hot bool, hotStyle lipgl
 	if tw < 1 {
 		tw = 1
 	}
-	bodyTxt := padRight(truncate(sanitizeLine(text), tw), tw)
-	if hot {
-		bodyTxt = hotStyle.Render(bodyTxt)
+	var bodyTxt string
+	if hot && len(spans) > 0 {
+		bodyTxt = hotEmphBody(text, spans, tw, hotStyle)
+	} else {
+		bodyTxt = padRight(truncate(sanitizeLine(text), tw), tw)
+		if hot {
+			bodyTxt = hotStyle.Render(bodyTxt)
+		}
 	}
 	return diffGutter.Render(truncate(num, gut+1)) + bodyTxt
+}
+
+// hotEmphBody renders a Changed cell's text into a tw-column body: sanitized
+// like sanitizeLine, the whole cell carrying hotStyle, with the runes whose
+// raw index falls in a span additionally wearing diffEmph. Truncation mirrors
+// truncate()'s trailing ellipsis.
+func hotEmphBody(text string, spans []textdiff.Span, tw int, hotStyle lipgloss.Style) string {
+	disp, emph := sanitizeSpans(text, spans)
+	if lipgloss.Width(string(disp)) <= tw {
+		body := styledRuns(disp, emph, hotStyle)
+		if pad := tw - lipgloss.Width(string(disp)); pad > 0 {
+			body += hotStyle.Render(strings.Repeat(" ", pad))
+		}
+		return body
+	}
+	if tw == 1 {
+		return hotStyle.Render("…")
+	}
+	w, cut := 0, len(disp)
+	for i, r := range disp {
+		rw := lipgloss.Width(string(r))
+		if w+rw+1 > tw { // reserve one column for the ellipsis
+			cut = i
+			break
+		}
+		w += rw
+	}
+	body := styledRuns(disp[:cut], emph[:cut], hotStyle) + hotStyle.Render("…")
+	// A double-width rune at the cut boundary can leave the body one column
+	// short; pad to tw so the row width matches the plain path exactly.
+	if pad := tw - lipgloss.Width(body); pad > 0 {
+		body += hotStyle.Render(strings.Repeat(" ", pad))
+	}
+	return body
+}
+
+// sanitizeSpans expands text exactly as sanitizeLine and returns the display
+// runes with a parallel mask marking those whose source raw rune is covered by
+// a span. Raw indices are counted over the \r-trimmed text (matching
+// sanitizeLine); span ends are clamped to that length.
+func sanitizeSpans(s string, spans []textdiff.Span) (disp []rune, emph []bool) {
+	s = strings.TrimSuffix(s, "\r")
+	runes := []rune(s)
+	cover := coverMask(len(runes), spans)
+	col := 0
+	for raw, r := range runes {
+		on := cover[raw]
+		switch {
+		case r == '\t':
+			n := 4 - col%4
+			for k := 0; k < n; k++ {
+				disp = append(disp, ' ')
+				emph = append(emph, on)
+			}
+			col += n
+		case r < 0x20 || r == 0x7f:
+			disp = append(disp, '·')
+			emph = append(emph, on)
+			col++
+		default:
+			disp = append(disp, r)
+			emph = append(emph, on)
+			col++
+		}
+	}
+	return disp, emph
+}
+
+// coverMask marks raw rune indices [0,n) covered by any span (ends clamped).
+func coverMask(n int, spans []textdiff.Span) []bool {
+	mask := make([]bool, n)
+	for _, sp := range spans {
+		lo, hi := sp.Start, sp.End
+		if lo < 0 {
+			lo = 0
+		}
+		if hi > n {
+			hi = n
+		}
+		for i := lo; i < hi; i++ {
+			mask[i] = true
+		}
+	}
+	return mask
+}
+
+// styledRuns renders disp grouping consecutive runes by emph flag: emphasized
+// runs wear diffEmph inherited over base (so the cell background shows through),
+// the rest just base.
+func styledRuns(disp []rune, emph []bool, base lipgloss.Style) string {
+	var b strings.Builder
+	for i := 0; i < len(disp); {
+		j := i + 1
+		for j < len(disp) && emph[j] == emph[i] {
+			j++
+		}
+		seg := string(disp[i:j])
+		if emph[i] {
+			b.WriteString(base.Inherit(diffEmph).Render(seg))
+		} else {
+			b.WriteString(base.Render(seg))
+		}
+		i = j
+	}
+	return b.String()
 }

@@ -10,6 +10,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/gigagit/gg/internal/domain"
+	"github.com/gigagit/gg/internal/git"
+	"github.com/gigagit/gg/internal/gitexec"
 	"github.com/gigagit/gg/internal/model"
 	"github.com/gigagit/gg/internal/textdiff"
 )
@@ -677,5 +680,43 @@ func TestCommitLoaderMergeCommitUsesFirstParent(t *testing.T) {
 	}
 	if !sawBase || !sawSide {
 		t.Fatalf("merge diff sides wrong: %+v", msg.view.full)
+	}
+}
+
+func TestCommitDiffSecondOpenServedFromCache(t *testing.T) {
+	dir, repo := newRepoDir(t)
+	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("one\ntwo\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, dir, "add", "f.txt")
+	gitIn(t, dir, "commit", "-m", "base")
+	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("one\nTWO\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, dir, "commit", "-am", "edit")
+	hash := gitOut(t, dir, "rev-parse", "HEAD")
+
+	m := diffModel()
+	m.repo = repo
+	m.svc = domain.New(repo) // a real Service so both opens share one cache
+	line := contentLine{path: "f.txt", status: "M"}
+
+	first := m.loadCommitDiffCmd(hash, line)().(diffMsg)
+	if first.view.err != nil {
+		t.Fatalf("first open: %v", first.view.err)
+	}
+	wantBlocks := len(first.view.blocks)
+
+	// Break git: a bare FakeRunner has no responses configured, so any
+	// ShowFile now errors. If the second open hits the cache, the broken repo
+	// is never consulted and the result still arrives.
+	m.repo = &git.Repo{Runner: gitexec.NewFakeRunner()}
+
+	second := m.loadCommitDiffCmd(hash, line)().(diffMsg)
+	if second.view.err != nil {
+		t.Fatalf("second open should be served from cache, got err: %v", second.view.err)
+	}
+	if len(second.view.blocks) != wantBlocks {
+		t.Fatalf("cached result differs: blocks %d vs %d", len(second.view.blocks), wantBlocks)
 	}
 }

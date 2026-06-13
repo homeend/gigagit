@@ -10,13 +10,10 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/gigagit/gg/internal/domain"
 	"github.com/gigagit/gg/internal/model"
 	"github.com/gigagit/gg/internal/textdiff"
 )
-
-// maxDiffBytes caps each fetched side of a diff; bigger files render as
-// "(file too large)" instead of being buffered into the compare engine.
-const maxDiffBytes = 10 << 20
 
 // diffContext is the equal lines kept on each side of a change in partial
 // mode; diffLead is the context kept above a change a jump lands on.
@@ -134,74 +131,91 @@ func (m Model) diffBodyRows() int {
 	return n
 }
 
+// diffDiffer returns the Service's diff engine, falling back to a fresh one
+// for models built directly in tests (svc nil). The fallback's cache is
+// per-call, so only a shared Service caches across opens — which is exactly
+// the production path.
+func (m Model) diffDiffer() domain.Differ {
+	svc := m.svc
+	if svc == nil {
+		svc = domain.New(m.repo)
+	}
+	return svc.Differ()
+}
+
 // loadStatusDiffCmd fetches both sides of f's working-tree change (HEAD →
 // disk) and compares them off the UI thread. The disk path is rooted at the
 // current worktree: porcelain paths are repo-root-relative and the process
 // cwd may be a subdirectory.
 func (m Model) loadStatusDiffCmd(f model.FileStatus) tea.Cmd {
 	repo := m.repo
+	differ := m.diffDiffer()
 	root := m.currentWorktree
 	body := m.diffBodyRows()
 	tag := "status:" + f.Path
 	v := &diffView{title: f.Path, context: "HEAD → working tree", partial: m.diffPartial}
-	return func() tea.Msg {
-		var oldB, newB []byte
-		// Old side: absent when the file isn't in HEAD (untracked, or a
-		// staged-new 'A' — ShowFile would fail on it). Renames fetch the
-		// old name.
-		if f.Kind != model.KindUntracked && f.Staged != 'A' {
-			p := f.Path
-			if f.OrigPath != "" {
-				p = f.OrigPath
-			}
-			b, err := repo.ShowFile(context.Background(), "HEAD", p)
-			if err != nil {
-				v.err = err
-				return diffMsg{tag: tag, view: v}
-			}
-			oldB = b
+
+	// Old side: absent when the file isn't in HEAD (untracked, or staged-new
+	// 'A'). Renames fetch the old name.
+	var oldSrc domain.ByteSource
+	if f.Kind != model.KindUntracked && f.Staged != 'A' {
+		p := f.Path
+		if f.OrigPath != "" {
+			p = f.OrigPath
 		}
-		// New side: the working file; not-exists means deleted (absorbs the
+		oldSrc = func(ctx context.Context) ([]byte, error) { return repo.ShowFile(ctx, "HEAD", p) }
+	}
+	full := filepath.Join(root, f.Path)
+
+	return func() tea.Msg {
+		// New side: the working file. Stat first to size-guard without reading
+		// a giant file into memory; not-exists means deleted (absorbs the
 		// delete/re-create porcelain combinations and races).
-		full := filepath.Join(root, f.Path)
+		var newSrc domain.ByteSource
 		switch st, err := os.Stat(full); {
-		case err == nil && st.Size() > maxDiffBytes:
+		case err == nil && st.Size() > domain.MaxDiffBytes:
 			v.tooLarge = true
 			return diffMsg{tag: tag, view: v}
 		case err == nil:
-			b, rerr := os.ReadFile(full)
-			if rerr != nil && !errors.Is(rerr, fs.ErrNotExist) {
-				v.err = rerr
-				return diffMsg{tag: tag, view: v}
+			newSrc = func(ctx context.Context) ([]byte, error) {
+				b, rerr := os.ReadFile(full)
+				if rerr != nil && !errors.Is(rerr, fs.ErrNotExist) {
+					return nil, rerr
+				}
+				return b, nil // ErrNotExist ⇒ nil ⇒ deleted
 			}
-			newB = b
 		case !errors.Is(err, fs.ErrNotExist):
 			v.err = err
 			return diffMsg{tag: tag, view: v}
 		}
-		fillDiff(v, oldB, newB)
-		if len(v.blocks) > 0 {
-			v.jumpTo(v.blocks[0], body)
+		// Working-tree diffs are never cached (Key: "").
+		out, err := differ.Diff(context.Background(), domain.Request{Key: "", Old: oldSrc, New: newSrc})
+		if err != nil {
+			v.err = err
+			return diffMsg{tag: tag, view: v}
 		}
+		applyDiff(v, out, body)
 		return diffMsg{tag: tag, view: v}
 	}
 }
 
-// fillDiff runs the size/binary guards and the comparison into v.
-func fillDiff(v *diffView, oldB, newB []byte) {
-	if len(oldB) > maxDiffBytes || len(newB) > maxDiffBytes {
+// applyDiff maps a domain.Diff outcome onto the view: size/binary state, or
+// the aligned rows plus the open-at-first-difference jump.
+func applyDiff(v *diffView, out domain.Diff, body int) {
+	switch {
+	case out.TooLarge:
 		v.tooLarge = true
-		return
-	}
-	if textdiff.IsBinary(oldB) || textdiff.IsBinary(newB) {
+	case out.Binary:
 		v.binary = true
-		return
+	default:
+		v.full = out.Result.Rows
+		v.fullBlocks = out.Result.Blocks
+		v.truncated = out.Result.Truncated
+		v.rebuild()
+		if len(v.blocks) > 0 {
+			v.jumpTo(v.blocks[0], body)
+		}
 	}
-	res := textdiff.Compare(oldB, newB)
-	v.full = res.Rows
-	v.fullBlocks = res.Blocks
-	v.truncated = res.Truncated
-	v.rebuild()
 }
 
 // loadCommitDiffCmd fetches both sides of line's file in commit hash:
@@ -211,35 +225,31 @@ func fillDiff(v *diffView, oldB, newB []byte) {
 // never dereference hash^ — all their files carry status "A".
 func (m Model) loadCommitDiffCmd(hash string, line contentLine) tea.Cmd {
 	repo := m.repo
+	differ := m.diffDiffer()
 	body := m.diffBodyRows()
 	tag := "commit:" + hash + ":" + line.path
 	v := &diffView{title: line.path, context: "@ " + strings.TrimPrefix(m.filesTitle, "Files "), partial: m.diffPartial}
+	// Immutable: parent(hash)→hash for a path always yields the same bytes.
+	key := hash + "^.." + hash + ":" + line.path
+
+	var oldSrc, newSrc domain.ByteSource
+	if line.status != "A" {
+		p := line.path
+		if line.oldPath != "" {
+			p = line.oldPath
+		}
+		oldSrc = func(ctx context.Context) ([]byte, error) { return repo.ShowFile(ctx, hash+"^", p) }
+	}
+	if line.status != "D" {
+		newSrc = func(ctx context.Context) ([]byte, error) { return repo.ShowFile(ctx, hash, line.path) }
+	}
 	return func() tea.Msg {
-		var oldB, newB []byte
-		if line.status != "A" {
-			p := line.path
-			if line.oldPath != "" {
-				p = line.oldPath
-			}
-			b, err := repo.ShowFile(context.Background(), hash+"^", p)
-			if err != nil {
-				v.err = err
-				return diffMsg{tag: tag, view: v}
-			}
-			oldB = b
+		out, err := differ.Diff(context.Background(), domain.Request{Key: key, Old: oldSrc, New: newSrc})
+		if err != nil {
+			v.err = err
+			return diffMsg{tag: tag, view: v}
 		}
-		if line.status != "D" {
-			b, err := repo.ShowFile(context.Background(), hash, line.path)
-			if err != nil {
-				v.err = err
-				return diffMsg{tag: tag, view: v}
-			}
-			newB = b
-		}
-		fillDiff(v, oldB, newB)
-		if len(v.blocks) > 0 {
-			v.jumpTo(v.blocks[0], body)
-		}
+		applyDiff(v, out, body)
 		return diffMsg{tag: tag, view: v}
 	}
 }
