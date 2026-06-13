@@ -29,6 +29,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   cache factory (entry-count **and** byte-budget eviction, so it can't eat
   memory), reusable for future heavy reads. Wired today only for diffs.
 
+#### Diff view: word-wrap toggle
+- `w` in the diff view word-wraps long lines across multiple rows (the two
+  panes stay aligned) instead of truncating them with `…`. Default off,
+  remembered for the session, and the view re-wraps when the terminal resizes.
+
 #### Domain layer & repo gate
 - New `internal/domain` command layer: both frontends now run engine
   operations through `domain.Execute`, which serializes them per repository
