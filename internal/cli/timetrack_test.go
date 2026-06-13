@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gigagit/gg/internal/domain"
 	"github.com/gigagit/gg/internal/engine"
 	"github.com/gigagit/gg/internal/observ"
 )
@@ -37,10 +38,10 @@ func TestRunOperationEmitsOpSpan(t *testing.T) {
 
 	dir := newRepoDir(t)
 	os.WriteFile(filepath.Join(dir, "README.md"), []byte("changed\n"), 0o644)
-	repo := openRepo(dir)
+	svc := domain.Open(dir)
 
 	var prog bytes.Buffer
-	if _, err := runOperation(context.Background(), repo, engine.Commit{Message: "x", All: true}, cliDecider{}, &prog); err != nil {
+	if _, err := runOperation(context.Background(), svc, engine.Commit{Message: "x", All: true}, cliDecider{}, &prog); err != nil {
 		t.Fatalf("runOperation: %v", err)
 	}
 
@@ -68,9 +69,9 @@ func TestRunOperationFailureSpanCarriesError(t *testing.T) {
 	t.Cleanup(func() { observ.SetSpanSink(nil) })
 
 	dir := newRepoDir(t) // clean tree: commit -a has nothing to commit -> error
-	repo := openRepo(dir)
+	svc := domain.Open(dir)
 	var prog bytes.Buffer
-	if _, err := runOperation(context.Background(), repo, engine.Commit{Message: "x", All: true}, cliDecider{}, &prog); err == nil {
+	if _, err := runOperation(context.Background(), svc, engine.Commit{Message: "x", All: true}, cliDecider{}, &prog); err == nil {
 		t.Fatal("expected the empty commit to fail")
 	}
 

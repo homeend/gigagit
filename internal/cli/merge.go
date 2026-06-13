@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/gigagit/gg/internal/domain"
 	"github.com/gigagit/gg/internal/engine"
 )
 
@@ -13,7 +14,7 @@ import (
 // <source>`. Flags precede the positional source branch. --on-conflict
 // pre-answers the merge-conflict fork; with neither flag nor TTY the
 // conflict surfaces as exit 1 with the options on stderr.
-func cmdMerge(repo *repoT, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+func cmdMerge(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("merge", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	into := fs.String("into", "", "target branch (default: the current branch)")
@@ -37,7 +38,7 @@ func cmdMerge(repo *repoT, args []string, stdin io.Reader, stdout, stderr io.Wri
 		return 2
 	}
 	dec := cliDecider{policy: policy, in: stdin, out: stderr, interactive: stdinIsTerminal()}
-	res, err := runOperation(context.Background(), repo,
+	res, err := runOperation(context.Background(), svc,
 		engine.SmartMerge{Source: fs.Arg(0), Target: *into}, dec, stderr)
 	return finish(res, err, stdout, stderr)
 }

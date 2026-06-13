@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gigagit/gg/internal/domain"
 	"github.com/gigagit/gg/internal/engine"
 )
 
@@ -51,10 +52,10 @@ func TestCLIDeciderNonInteractiveUnansweredErrors(t *testing.T) {
 func TestRunOperationCommitsAndStreamsProgress(t *testing.T) {
 	dir := newRepoDir(t)
 	os.WriteFile(filepath.Join(dir, "README.md"), []byte("changed\n"), 0o644)
-	repo := openRepo(dir)
+	svc := domain.Open(dir)
 
 	var prog bytes.Buffer
-	res, err := runOperation(context.Background(), repo, engine.Commit{Message: "second", All: true}, cliDecider{}, &prog)
+	res, err := runOperation(context.Background(), svc, engine.Commit{Message: "second", All: true}, cliDecider{}, &prog)
 	if err != nil {
 		t.Fatalf("runOperation: %v", err)
 	}
