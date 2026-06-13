@@ -1,11 +1,27 @@
 package git
 
 import (
+	"context"
 	"strconv"
 	"strings"
 
+	"github.com/gigagit/gg/internal/gitcmd"
 	"github.com/gigagit/gg/internal/model"
 )
+
+// FileLog returns the commits that touched path, newest first, following the
+// file across renames. rev "" starts from HEAD. One invocation. limit bounds
+// history depth for very large repos.
+func (r *Repo) FileLog(ctx context.Context, rev, path string, limit int) ([]model.FileCommit, error) {
+	b := gitcmd.New("log").
+		ArgIf(rev != "", rev).
+		Arg("--follow", "-M", "--name-status", "--format="+logFormat, "-n", strconv.Itoa(limit), "--", path)
+	res, err := r.Runner.Run(ctx, "git log (file history)", b.ToArgv())
+	if err != nil {
+		return nil, err
+	}
+	return ParseFileLog([]byte(res.Stdout)), nil
+}
 
 // ParseFileLog parses interleaved `git log --name-status --format=<logFormat>`
 // output: a format line (contains \x1f) opens a commit; the following

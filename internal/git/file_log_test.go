@@ -1,6 +1,11 @@
 package git
 
-import "testing"
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func TestParseFileLog(t *testing.T) {
 	// One commit per format line ("%H\x1f%P\x1f%an\x1f%at\x1f%s"), each
@@ -30,5 +35,45 @@ func TestParseFileLog(t *testing.T) {
 	}
 	if got[2].Status != "A" || got[2].Path != "src/old.go" || len(got[2].Parents) != 0 {
 		t.Errorf("root commit wrong: %+v", got[2])
+	}
+}
+
+func TestFileLog(t *testing.T) {
+	dir, runner := newTestRepo(t) // creates repo with initial commit (README.md)
+	repo := &Repo{Runner: runner}
+
+	// Commit 1: add a.go
+	if err := os.WriteFile(filepath.Join(dir, "a.go"), []byte("one\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, dir, "add", "a.go")
+	gitIn(t, dir, "commit", "-m", "add a.go")
+
+	// Commit 2: edit a.go
+	if err := os.WriteFile(filepath.Join(dir, "a.go"), []byte("one\ntwo\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, dir, "add", "a.go")
+	gitIn(t, dir, "commit", "-m", "edit a.go")
+
+	// Commit 3: add b.go — unrelated; must NOT appear in FileLog for a.go
+	if err := os.WriteFile(filepath.Join(dir, "b.go"), []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, dir, "add", "b.go")
+	gitIn(t, dir, "commit", "-m", "add b.go")
+
+	got, err := repo.FileLog(context.Background(), "", "a.go", 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("want 2 commits touching a.go, got %d: %+v", len(got), got)
+	}
+	if got[0].Subject != "edit a.go" || got[1].Subject != "add a.go" {
+		t.Errorf("order/newest-first wrong: %+v", got)
+	}
+	if got[0].Status != "M" || got[1].Status != "A" {
+		t.Errorf("statuses wrong: %+v", got)
 	}
 }
