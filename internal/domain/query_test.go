@@ -61,7 +61,7 @@ func TestSnapshotFansOutAllReads(t *testing.T) {
 }
 
 func TestSnapshotFatalReadErrors(t *testing.T) {
-	for _, name := range []string{"git status", "git for-each-ref", "git log", "git worktree list"} {
+	for _, name := range []string{"git status", "git for-each-ref", "git worktree list"} {
 		f := fakeReads()
 		f.SetError(name, errors.New("kaboom"))
 		if _, err := New(&git.Repo{Runner: f}).Snapshot(context.Background()); err == nil {
@@ -133,6 +133,18 @@ func TestSingleReadsReturnVerbResults(t *testing.T) {
 	wts, err := svc.Worktrees(context.Background())
 	if err != nil || len(wts) != 1 {
 		t.Fatalf("Worktrees: %v %+v", err, wts)
+	}
+}
+
+func TestSnapshotDoesNotReadCommits(t *testing.T) {
+	f := fakeReads()
+	if _, err := New(&git.Repo{Runner: f}).Snapshot(context.Background()); err != nil {
+		t.Fatalf("snapshot: %v", err)
+	}
+	for _, c := range f.Calls {
+		if c.Name == "git log" {
+			t.Fatal("Snapshot must not read commits (the CommitFeed owns them)")
+		}
 	}
 }
 

@@ -44,6 +44,7 @@ func helpContent() []contentLine {
 		r("enter", "side-by-side diff of the file (HEAD → working tree)"),
 		h("Commits panel"),
 		r("l", "show the selected commit's files in the left column"),
+		r("(scroll)", "more commits load automatically as you near the end"),
 		h("Filter mode (/)"),
 		r("enter", "keep the filter and leave input mode"),
 		r("esc", "cancel the filter"),

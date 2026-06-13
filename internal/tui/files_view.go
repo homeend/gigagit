@@ -221,10 +221,14 @@ func (m Model) moveCommitUnderFilesView(delta int) (tea.Model, tea.Cmd) {
 	m.sel[panelCommits] = s
 	bi, ok := m.backingIndex(panelCommits)
 	if !ok || m.commits[bi].Hash == m.filesHash {
-		return m, nil
+		return m, m.maybeLoadMoreCommits() // nil when not needed
 	}
 	m.filesHash = m.commits[bi].Hash
-	return m, m.loadCommitFilesCmd(m.commits[bi])
+	filesCmd := m.loadCommitFilesCmd(m.commits[bi])
+	if more := m.maybeLoadMoreCommits(); more != nil {
+		return m, tea.Batch(filesCmd, more)
+	}
+	return m, filesCmd
 }
 
 // renderFilesView draws the commit files tree as one full-height left-column

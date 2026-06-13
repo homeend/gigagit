@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"strconv"
 	"sync"
 
 	"github.com/gigagit/gg/internal/model"
@@ -11,11 +12,10 @@ import (
 // Snapshot is the git-read half of a TUI load: everything loadCmd needs from
 // git, fetched in parallel under one Read reservation. config.Load and
 // repos.Touch are deliberately NOT here — they are not git reads and stay in
-// the frontend.
+// the frontend. Commits are owned by CommitFeed, not Snapshot.
 type Snapshot struct {
 	Status          model.WorkingTreeStatus
 	Branches        []model.Branch
-	Commits         []model.Commit
 	Worktrees       []model.Worktree
 	CurrentWorktree string // git toplevel; "" if TopLevel failed
 	GitCommonDir    string // "" if it failed
@@ -42,9 +42,9 @@ func query[T any](ctx context.Context, s *Service, key string, fn func(context.C
 	return v.(T), nil
 }
 
-// Snapshot fetches the seven startup reads. Status/Branches/Log/Worktrees are
+// Snapshot fetches the six startup reads. Status/Branches/Worktrees are
 // fatal (the first failure is returned); CommitTimes/TopLevel/GitCommonDir are
-// best-effort (failures leave zero values, exactly as loadCmd behaved).
+// best-effort (failures leave zero values). Commits are owned by CommitFeed.
 func (s *Service) Snapshot(ctx context.Context) (Snapshot, error) {
 	return query(ctx, s, "snapshot", s.loadSnapshot)
 }
@@ -83,16 +83,6 @@ func (s *Service) loadSnapshot(ctx context.Context) (Snapshot, error) {
 		}
 		mu.Lock()
 		snap.Branches = bs
-		mu.Unlock()
-	})
-	run(func() {
-		cs, err := s.repo.Log(ctx, 50)
-		if err != nil {
-			fatal(err)
-			return
-		}
-		mu.Lock()
-		snap.Commits = cs
 		mu.Unlock()
 	})
 	run(func() {
@@ -138,6 +128,15 @@ func (s *Service) loadSnapshot(ctx context.Context) (Snapshot, error) {
 		return Snapshot{}, firstErr
 	}
 	return snap, nil
+}
+
+// logPage is the gated, singleflighted commit-page read the CommitFeed uses.
+// The singleflight key includes skip so different pages don't collapse.
+func (s *Service) logPage(ctx context.Context, limit, skip int) ([]model.Commit, error) {
+	key := "commits:" + strconv.Itoa(limit) + ":" + strconv.Itoa(skip)
+	return query(ctx, s, key, func(ctx context.Context) ([]model.Commit, error) {
+		return s.repo.Log(ctx, limit, skip)
+	})
 }
 
 // Status is a single gated read for the CLI status command.

@@ -54,9 +54,11 @@ type Model struct {
 	diffTag     string    // request key of the wanted diff; gates stale async results
 	diffPartial bool      // session default for new diffs (false = full); the f key toggles it
 
-	svc      *domain.Service    // command layer; m.repo == svc.Repo()
-	opCancel context.CancelFunc // cancels the in-flight op's context; nil when idle
-	loadGen  int                // bumped per superseding load; stale dataLoadedMsg are dropped
+	svc              *domain.Service    // command layer; m.repo == svc.Repo()
+	feed             *domain.CommitFeed // single source of truth for commits
+	commitsExhausted bool               // false → "Commits N+", true → "Commits N"
+	opCancel         context.CancelFunc // cancels the in-flight op's context; nil when idle
+	loadGen          int                // bumped per superseding load; stale dataLoadedMsg are dropped
 
 	running   bool
 	statusMsg string
@@ -86,9 +88,11 @@ const (
 
 // New constructs the initial model for repo.
 func New(repo *git.Repo) Model {
+	svc := domain.New(repo)
 	return Model{
 		repo:      repo,
-		svc:       domain.New(repo),
+		svc:       svc,
+		feed:      svc.CommitFeed(),
 		loading:   true,
 		sel:       map[panel]int{},
 		sortModes: map[panel]sortMode{panelBranches: sortDateDesc},
@@ -139,6 +143,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.filesView.sel = 0
 		m.filesTitle = "Files " + shortHash(msg.hash) + " " + msg.subject
 		return m, nil
+	case commitsPagedMsg:
+		if m.feed != nil && msg.gen == m.feed.Gen() {
+			st := m.feed.Snapshot()
+			m.commits = st.Commits
+			m.commitsExhausted = st.Exhausted
+		}
+		return m, nil
 	case dataLoadedMsg:
 		if msg.gen != m.loadGen {
 			return m, nil // superseded by a newer load
@@ -149,6 +160,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status = msg.status
 			m.branches = msg.branches
 			m.commits = msg.commits
+			m.commitsExhausted = msg.commitsExhausted
+			if msg.commitErr != nil {
+				m.statusMsg = "commits: " + msg.commitErr.Error()
+			}
 			m.worktrees = msg.worktrees
 			m.currentWorktree = msg.currentWorktree
 			m.cfg = msg.cfg
@@ -340,6 +355,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.sel[m.focus] = n - 1
 				}
 			}
+			if m.focus == panelCommits {
+				if cmd := m.maybeLoadMoreCommits(); cmd != nil {
+					return m, cmd
+				}
+			}
 		case "pgup":
 			if m.sel[m.focus] > 0 {
 				m.sel[m.focus] -= m.pageStep()
@@ -409,6 +429,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "down", "j":
 			if m.sel[m.focus] < m.panelLen(m.focus)-1 {
 				m.sel[m.focus]++
+			}
+			if m.focus == panelCommits {
+				if cmd := m.maybeLoadMoreCommits(); cmd != nil {
+					return m, cmd
+				}
 			}
 		}
 	case tea.MouseMsg:
@@ -480,6 +505,25 @@ func (m Model) panelLen(p panel) int {
 	return len(idx)
 }
 
+// maybeLoadMoreCommits returns a cmd to page in more commits when the Commits
+// selection nears the end and no commits filter is active; nil otherwise. The
+// feed owns the "is there more / am I already loading" decision.
+func (m Model) maybeLoadMoreCommits() tea.Cmd {
+	if m.feed == nil {
+		return nil
+	}
+	if m.filterTyping && m.filterPanel == panelCommits {
+		return nil
+	}
+	if m.filterActive(panelCommits) {
+		return nil
+	}
+	if !m.feed.NeedsMore(m.sel[panelCommits]) {
+		return nil
+	}
+	return m.loadMoreCmd()
+}
+
 // reRoot points the model at the repository rooted at path and triggers a full
 // reload. switchTarget records where a shell should follow on exit (written to
 // --cwd-file by cmd/gg). A fresh span ring is used for the new root; the cmd/gg
@@ -487,6 +531,7 @@ func (m Model) panelLen(p panel) int {
 func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.svc = domain.Open(path)
 	m.repo = m.svc.Repo()
+	m.feed = m.svc.CommitFeed()
 	m.switchTarget = path
 	m.loading = true
 	// Drop selections from the old repo so the highlight doesn't land on a
