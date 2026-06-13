@@ -3,11 +3,13 @@ package tui
 import (
 	"path/filepath"
 	"testing"
+
+	"github.com/gigagit/gg/internal/domain"
 )
 
 func TestEnterOnWorktreePanelSwitches(t *testing.T) {
 	dir, repo := newRepoDir(t)
-	m := New(repo)
+	m := New(domain.New(repo))
 	updated, _ := m.Update(m.loadCmd()())
 	m = updated.(Model)
 

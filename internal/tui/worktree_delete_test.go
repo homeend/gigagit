@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/gigagit/gg/internal/domain"
 )
 
 // TestDeleteKeyRemovesWorktreeThroughModal presses `d` on a linked worktree and
@@ -14,7 +16,7 @@ func TestDeleteKeyRemovesWorktreeThroughModal(t *testing.T) {
 	wt := filepath.Join(filepath.Dir(dir), "wt-del")
 	runGit(t, dir, "worktree", "add", "-b", "feature/del", wt, "main")
 
-	m := New(repo)
+	m := New(domain.New(repo))
 	loaded, _ := m.Update(m.loadCmd()())
 	m = loaded.(Model)
 
@@ -82,7 +84,7 @@ func TestSelectionClampAfterWorktreeReload(t *testing.T) {
 	wt := filepath.Join(filepath.Dir(dir), "wt-clamp")
 	runGit(t, dir, "worktree", "add", "-b", "feature/clamp", wt, "main")
 
-	m := New(repo)
+	m := New(domain.New(repo))
 	loaded, _ := m.Update(m.loadCmd()())
 	m = loaded.(Model)
 	if len(m.worktrees) < 2 {

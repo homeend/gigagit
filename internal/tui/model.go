@@ -9,13 +9,11 @@ import (
 	"github.com/gigagit/gg/internal/config"
 	"github.com/gigagit/gg/internal/domain"
 	"github.com/gigagit/gg/internal/engine"
-	"github.com/gigagit/gg/internal/git"
 	"github.com/gigagit/gg/internal/model"
 )
 
 // Model is the root Bubble Tea model.
 type Model struct {
-	repo          *git.Repo
 	width, height int
 
 	loading  bool
@@ -57,7 +55,7 @@ type Model struct {
 
 	stack *viewStack // top-of-everything full-screen surfaces (history, later blame); nil/empty = none
 
-	svc              *domain.Service    // command layer; m.repo == svc.Repo()
+	svc              *domain.Service    // command layer; all git access goes through svc
 	feed             *domain.CommitFeed // single source of truth for commits
 	commitsExhausted bool               // false → "Commits N+", true → "Commits N"
 	opCancel         context.CancelFunc // cancels the in-flight op's context; nil when idle
@@ -89,11 +87,9 @@ const (
 	panelCount
 )
 
-// New constructs the initial model for repo.
-func New(repo *git.Repo) Model {
-	svc := domain.New(repo)
+// New constructs the initial model for svc.
+func New(svc *domain.Service) Model {
 	return Model{
-		repo:      repo,
 		svc:       svc,
 		feed:      svc.CommitFeed(),
 		loading:   true,
@@ -580,7 +576,6 @@ func (m Model) maybeLoadMoreCommits() tea.Cmd {
 // panic dump still references the original repo (acceptable for a debug aid).
 func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.svc = domain.Open(path)
-	m.repo = m.svc.Repo()
 	m.feed = m.svc.CommitFeed()
 	m.switchTarget = path
 	m.loading = true

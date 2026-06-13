@@ -11,7 +11,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/gigagit/gg/internal/domain"
-	"github.com/gigagit/gg/internal/git"
 	"github.com/gigagit/gg/internal/gitexec"
 	"github.com/gigagit/gg/internal/model"
 	"github.com/gigagit/gg/internal/textdiff"
@@ -144,7 +143,7 @@ func TestStatusLoaderModifiedFile(t *testing.T) {
 	}
 
 	m := diffModel()
-	m.repo = repo
+	m.svc = domain.New(repo)
 	m.currentWorktree = dir
 	msg := m.loadStatusDiffCmd(model.FileStatus{Path: "f.txt", Staged: '.', Unstaged: 'M'})().(diffMsg)
 	if msg.view.err != nil {
@@ -164,7 +163,7 @@ func TestStatusLoaderUntrackedIsAllAdded(t *testing.T) {
 		t.Fatal(err)
 	}
 	m := diffModel()
-	m.repo = repo
+	m.svc = domain.New(repo)
 	m.currentWorktree = dir
 	msg := m.loadStatusDiffCmd(model.FileStatus{Path: "u.txt", Kind: model.KindUntracked})().(diffMsg)
 	if msg.view.err != nil {
@@ -188,7 +187,7 @@ func TestStatusLoaderDeletedIsAllDel(t *testing.T) {
 		t.Fatal(err)
 	}
 	m := diffModel()
-	m.repo = repo
+	m.svc = domain.New(repo)
 	m.currentWorktree = dir
 	msg := m.loadStatusDiffCmd(model.FileStatus{Path: "d.txt", Staged: '.', Unstaged: 'D'})().(diffMsg)
 	if msg.view.err != nil {
@@ -319,7 +318,7 @@ func TestDiffViewClosedOnNarrowResize(t *testing.T) {
 func TestReRootClearsDiffView(t *testing.T) {
 	dir, repo := newRepoDir(t)
 	m := diffModel()
-	m.repo = repo
+	m.svc = domain.New(repo)
 	m.diffView = &diffView{}
 	m.diffTag = "status:x"
 	u, _ := m.reRoot(dir)
@@ -434,7 +433,7 @@ func TestCommitLoaderModifiedAndAdded(t *testing.T) {
 	hash := gitOut(t, dir, "rev-parse", "HEAD")
 
 	m := filesViewModel()
-	m.repo = repo
+	m.svc = domain.New(repo)
 
 	// Modified: parent vs commit.
 	msg := m.loadCommitDiffCmd(hash, contentLine{path: "f.txt", status: "M"})().(diffMsg)
@@ -467,7 +466,7 @@ func TestCommitLoaderRootCommit(t *testing.T) {
 		t.Fatal(err)
 	}
 	m := filesViewModel()
-	m.repo = repo
+	m.svc = domain.New(repo)
 	for _, f := range files {
 		if f.Status != "A" {
 			t.Fatalf("root commit file %q has status %q, want A", f.Path, f.Status)
@@ -591,7 +590,7 @@ func TestStatusLoaderOpensAtFirstDifference(t *testing.T) {
 	}
 	m := diffModel()
 	m.height = 12
-	m.repo = repo
+	m.svc = domain.New(repo)
 	m.currentWorktree = dir
 	msg := m.loadStatusDiffCmd(model.FileStatus{Path: "f.txt", Staged: '.', Unstaged: 'M'})().(diffMsg)
 	if msg.view.err != nil {
@@ -617,7 +616,7 @@ func TestDiffOpenInheritsSessionMode(t *testing.T) {
 		t.Fatal(err)
 	}
 	m := diffModel()
-	m.repo = repo
+	m.svc = domain.New(repo)
 	m.currentWorktree = dir
 	m.diffPartial = true
 	msg := m.loadStatusDiffCmd(model.FileStatus{Path: "f.txt", Staged: '.', Unstaged: 'M'})().(diffMsg)
@@ -663,7 +662,7 @@ func TestCommitLoaderMergeCommitUsesFirstParent(t *testing.T) {
 		t.Fatal("merge commit's first-parent diff must list f.txt")
 	}
 	m := filesViewModel()
-	m.repo = repo
+	m.svc = domain.New(repo)
 	msg := m.loadCommitDiffCmd(hash, contentLine{path: "f.txt", status: fEntry.Status})().(diffMsg)
 	if msg.view.err != nil {
 		t.Fatal(msg.view.err)
@@ -697,7 +696,6 @@ func TestCommitDiffSecondOpenServedFromCache(t *testing.T) {
 	hash := gitOut(t, dir, "rev-parse", "HEAD")
 
 	m := diffModel()
-	m.repo = repo
 	m.svc = domain.New(repo) // a real Service so both opens share one cache
 	line := contentLine{path: "f.txt", status: "M"}
 
@@ -709,8 +707,9 @@ func TestCommitDiffSecondOpenServedFromCache(t *testing.T) {
 
 	// Break git: a bare FakeRunner has no responses configured, so any
 	// ShowFile now errors. If the second open hits the cache, the broken repo
-	// is never consulted and the result still arrives.
-	m.repo = &git.Repo{Runner: gitexec.NewFakeRunner()}
+	// is never consulted and the result still arrives. Mutating the runner
+	// on the in-scope repo breaks git while the svc (and its cache) remain.
+	repo.Runner = gitexec.NewFakeRunner()
 
 	second := m.loadCommitDiffCmd(hash, line)().(diffMsg)
 	if second.view.err != nil {

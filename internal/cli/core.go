@@ -12,15 +12,7 @@ import (
 
 	"github.com/gigagit/gg/internal/domain"
 	"github.com/gigagit/gg/internal/engine"
-	"github.com/gigagit/gg/internal/git"
-	"github.com/gigagit/gg/internal/gitexec"
-	"github.com/gigagit/gg/internal/observ"
 )
-
-// openRepo builds a Repo rooted at workdir with an always-on span ring.
-func openRepo(workdir string) *git.Repo {
-	return &git.Repo{Runner: gitexec.NewExecRunner("git", workdir, observ.NewRing(200))}
-}
 
 // cliDecider resolves engine forks from a flag-supplied policy, falling back to
 // an interactive stdin prompt, and erroring when neither can answer.
@@ -70,7 +62,7 @@ func (s *syncWriter) Write(p []byte) (int, error) {
 // repo's gate and emits the op span), printing each Progress step to
 // progress. The op runs in a goroutine so events stream live; decisions are
 // resolved by dec (which may prompt).
-func runOperation(ctx context.Context, repo *git.Repo, op engine.Operation, dec engine.Decider, progress io.Writer) (engine.Result, error) {
+func runOperation(ctx context.Context, svc *domain.Service, op engine.Operation, dec engine.Decider, progress io.Writer) (engine.Result, error) {
 	events := make(chan engine.Event, 32)
 	var (
 		res engine.Result
@@ -78,7 +70,7 @@ func runOperation(ctx context.Context, repo *git.Repo, op engine.Operation, dec 
 	)
 	done := make(chan struct{})
 	go func() {
-		res, err = domain.New(repo).Execute(ctx, op, events, dec)
+		res, err = svc.Execute(ctx, op, events, dec)
 		close(events)
 		close(done)
 	}()

@@ -4,6 +4,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+
+	"github.com/gigagit/gg/internal/domain"
 )
 
 // runGit runs a git command in dir, failing the test on error.
@@ -18,7 +20,7 @@ func runGit(t *testing.T, dir string, args ...string) {
 
 func TestReRootPointsAtNewWorktreeAndReloads(t *testing.T) {
 	dir, repo := newRepoDir(t)
-	m := New(repo)
+	m := New(domain.New(repo))
 	updated, _ := m.Update(m.loadCmd()())
 	m = updated.(Model)
 

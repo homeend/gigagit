@@ -227,16 +227,11 @@ func (m Model) diffBodyRows() int {
 	return n
 }
 
-// diffDiffer returns the Service's diff engine, falling back to a fresh one
-// for models built directly in tests (svc nil). The fallback's cache is
-// per-call, so only a shared Service caches across opens — which is exactly
-// the production path.
+// diffDiffer returns the Service's diff engine. All code paths that call
+// loadStatusDiffCmd or loadCommitDiffCmd hold a valid svc (set by New or
+// reRoot); tests that use these loaders must wire svc (via footerModel).
 func (m Model) diffDiffer() domain.Differ {
-	svc := m.svc
-	if svc == nil {
-		svc = domain.New(m.repo)
-	}
-	return svc.Differ()
+	return m.svc.Differ()
 }
 
 // loadStatusDiffCmd fetches both sides of f's working-tree change (HEAD →
@@ -244,7 +239,7 @@ func (m Model) diffDiffer() domain.Differ {
 // current worktree: porcelain paths are repo-root-relative and the process
 // cwd may be a subdirectory.
 func (m Model) loadStatusDiffCmd(f model.FileStatus) tea.Cmd {
-	repo := m.repo
+	svc := m.svc
 	differ := m.diffDiffer()
 	root := m.currentWorktree
 	body := m.diffBodyRows()
@@ -260,7 +255,7 @@ func (m Model) loadStatusDiffCmd(f model.FileStatus) tea.Cmd {
 		if f.OrigPath != "" {
 			p = f.OrigPath
 		}
-		oldSrc = func(ctx context.Context) ([]byte, error) { return repo.ShowFile(ctx, "HEAD", p) }
+		oldSrc = func(ctx context.Context) ([]byte, error) { return svc.ShowFile(ctx, "HEAD", p) }
 	}
 	full := filepath.Join(root, f.Path)
 
@@ -321,7 +316,7 @@ func applyDiff(v *diffView, out domain.Diff, body int) {
 // match the tree's status letters (merge commits included). Root commits
 // never dereference hash^ — all their files carry status "A".
 func (m Model) loadCommitDiffCmd(hash string, line contentLine) tea.Cmd {
-	repo := m.repo
+	svc := m.svc
 	differ := m.diffDiffer()
 	body := m.diffBodyRows()
 	width, _ := m.overlayDims()
@@ -336,10 +331,10 @@ func (m Model) loadCommitDiffCmd(hash string, line contentLine) tea.Cmd {
 		if line.oldPath != "" {
 			p = line.oldPath
 		}
-		oldSrc = func(ctx context.Context) ([]byte, error) { return repo.ShowFile(ctx, hash+"^", p) }
+		oldSrc = func(ctx context.Context) ([]byte, error) { return svc.ShowFile(ctx, hash+"^", p) }
 	}
 	if line.status != "D" {
-		newSrc = func(ctx context.Context) ([]byte, error) { return repo.ShowFile(ctx, hash, line.path) }
+		newSrc = func(ctx context.Context) ([]byte, error) { return svc.ShowFile(ctx, hash, line.path) }
 	}
 	return func() tea.Msg {
 		out, err := differ.Diff(context.Background(), domain.Request{Key: key, Old: oldSrc, New: newSrc})

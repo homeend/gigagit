@@ -21,26 +21,26 @@ import (
 )
 
 // cmdWorktree dispatches `gg worktree <sub>`.
-func cmdWorktree(repo *repoT, args []string, stdin io.Reader, stdout, stderr io.Writer, cwdFile string) int {
+func cmdWorktree(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr io.Writer, cwdFile string) int {
 	if len(args) == 0 {
 		fmt.Fprintln(stderr, "usage: gg worktree <list|add|remove> [args]")
 		return 2
 	}
 	switch args[0] {
 	case "list":
-		return cmdWorktreeList(repo, stdout, stderr)
+		return cmdWorktreeList(svc, stdout, stderr)
 	case "add":
-		return cmdWorktreeAdd(repo, args[1:], stdin, stdout, stderr, cwdFile)
+		return cmdWorktreeAdd(svc, args[1:], stdin, stdout, stderr, cwdFile)
 	case "remove":
-		return cmdWorktreeRemove(repo, args[1:], stdin, stdout, stderr)
+		return cmdWorktreeRemove(svc, args[1:], stdin, stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "worktree: unknown subcommand %q (use list, add, or remove)\n", args[0])
 		return 2
 	}
 }
 
-func cmdWorktreeList(repo *repoT, stdout, stderr io.Writer) int {
-	wts, err := domain.New(repo).Worktrees(context.Background())
+func cmdWorktreeList(svc *domain.Service, stdout, stderr io.Writer) int {
+	wts, err := svc.Worktrees(context.Background())
 	if err != nil {
 		fmt.Fprintln(stderr, "error:", err)
 		return 1
@@ -55,7 +55,7 @@ func cmdWorktreeList(repo *repoT, stdout, stderr io.Writer) int {
 	return 0
 }
 
-func cmdWorktreeAdd(repo *repoT, args []string, stdin io.Reader, stdout, stderr io.Writer, cwdFile string) int {
+func cmdWorktreeAdd(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr io.Writer, cwdFile string) int {
 	fs := flag.NewFlagSet("worktree add", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	forBranch := fs.String("branch", "", "create the worktree for this existing branch (no new branch)")
@@ -79,7 +79,7 @@ func cmdWorktreeAdd(repo *repoT, args []string, stdin io.Reader, stdout, stderr 
 			startPoint = args[0]
 		}
 		if startPoint == "" {
-			cur, err := repo.CurrentBranch(ctxBg)
+			cur, err := svc.CurrentBranch(ctxBg)
 			if err != nil || cur == "" {
 				fmt.Fprintln(stderr, "worktree add: cannot determine current branch; pass a start-point")
 				return 2
@@ -88,12 +88,12 @@ func cmdWorktreeAdd(repo *repoT, args []string, stdin io.Reader, stdout, stderr 
 		}
 	}
 
-	top, err := repo.TopLevel(ctxBg)
+	top, err := svc.TopLevel(ctxBg)
 	if err != nil {
 		fmt.Fprintln(stderr, "error:", err)
 		return 1
 	}
-	gitCommonDir, err := repo.GitCommonDir(ctxBg)
+	gitCommonDir, err := svc.GitCommonDir(ctxBg)
 	if err != nil {
 		fmt.Fprintln(stderr, "error:", err)
 		return 1
@@ -140,7 +140,7 @@ func cmdWorktreeAdd(repo *repoT, args []string, stdin io.Reader, stdout, stderr 
 	if *forBranch != "" {
 		op = engine.CreateWorktreeForBranch{Branch: branch, Path: path}
 	}
-	res, err := runOperation(ctxBg, repo, op, cliDecider{}, stderr)
+	res, err := runOperation(ctxBg, svc, op, cliDecider{}, stderr)
 	if err != nil {
 		fmt.Fprintln(stderr, "error:", err)
 		return 1
@@ -161,7 +161,7 @@ func cmdWorktreeAdd(repo *repoT, args []string, stdin io.Reader, stdout, stderr 
 // cmdWorktreeRemove implements `gg worktree remove [--with-branch] [--force] <path>`.
 // Flags must precede the path. --with-branch also deletes the branch;
 // --force ignores uncommitted changes and unmerged commits.
-func cmdWorktreeRemove(repo *repoT, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+func cmdWorktreeRemove(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("worktree remove", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	withBranch := fs.Bool("with-branch", false, "also delete the worktree's branch")
@@ -176,7 +176,7 @@ func cmdWorktreeRemove(repo *repoT, args []string, stdin io.Reader, stdout, stde
 	target := fs.Arg(0)
 
 	ctxBg := context.Background()
-	wts, err := domain.New(repo).Worktrees(ctxBg)
+	wts, err := svc.Worktrees(ctxBg)
 	if err != nil {
 		fmt.Fprintln(stderr, "error:", err)
 		return 1
@@ -188,7 +188,7 @@ func cmdWorktreeRemove(repo *repoT, args []string, stdin io.Reader, stdout, stde
 	// process working directory (in-process frontends pass workdir explicitly).
 	fromTop := ""
 	if !filepath.IsAbs(target) {
-		if top, err := repo.TopLevel(ctxBg); err == nil {
+		if top, err := svc.TopLevel(ctxBg); err == nil {
 			fromTop = filepath.Clean(filepath.Join(top, target))
 		}
 	}
@@ -215,7 +215,7 @@ func cmdWorktreeRemove(repo *repoT, args []string, stdin io.Reader, stdout, stde
 	}
 	dec := cliDecider{policy: policy, in: stdin, out: stderr, interactive: stdinIsTerminal()}
 
-	res, err := runOperation(ctxBg, repo,
+	res, err := runOperation(ctxBg, svc,
 		engine.RemoveWorktree{Path: match.Path, Branch: match.Branch}, dec, stderr)
 	return finish(res, err, stdout, stderr)
 }

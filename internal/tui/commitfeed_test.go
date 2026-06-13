@@ -17,8 +17,8 @@ import (
 // pages in more, like keyboard movement does.
 func TestWheelOverCommitsPages(t *testing.T) {
 	m := mouseModel() // markModel + 80x24; its feed is nil
-	m.repo = &git.Repo{Runner: gitexec.NewFakeRunner()}
-	m.feed = domain.New(m.repo).CommitFeed() // 0 commits, not exhausted → NeedsMore true
+	m.svc = domain.New(&git.Repo{Runner: gitexec.NewFakeRunner()})
+	m.feed = m.svc.CommitFeed() // 0 commits, not exhausted → NeedsMore true
 	_, cmd := m.Update(mouseMsg(30, 5, tea.MouseButtonWheelDown))
 	if cmd == nil {
 		t.Fatal("wheel over the commits panel near the end should page in more")
@@ -26,7 +26,7 @@ func TestWheelOverCommitsPages(t *testing.T) {
 }
 
 func feedModel(n int, exhausted bool) Model {
-	m := New(&git.Repo{Runner: gitexec.NewFakeRunner()})
+	m := New(domain.New(&git.Repo{Runner: gitexec.NewFakeRunner()}))
 	m.focus = panelCommits
 	cs := make([]model.Commit, n)
 	for i := range cs {

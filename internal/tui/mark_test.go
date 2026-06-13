@@ -9,6 +9,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/gigagit/gg/internal/domain"
 	"github.com/gigagit/gg/internal/model"
 )
 
@@ -207,7 +208,7 @@ func TestPairPopupEnterRunsSmartMerge(t *testing.T) {
 	run("commit", "-m", "feat change")
 	run("checkout", "main")
 
-	m := New(repo)
+	m := New(domain.New(repo))
 	loaded, _ := m.Update(m.loadCmd()())
 	m = loaded.(Model)
 	m.focus = panelBranches

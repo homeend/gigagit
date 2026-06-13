@@ -69,9 +69,9 @@ type commitFilesMsg struct {
 
 // loadCommitFilesCmd fetches the changed files of commit c off the UI thread.
 func (m Model) loadCommitFilesCmd(c model.Commit) tea.Cmd {
-	repo := m.repo
+	svc := m.svc
 	return func() tea.Msg {
-		files, err := repo.CommitFiles(context.Background(), c.Hash)
+		files, err := svc.CommitFiles(context.Background(), c.Hash)
 		return commitFilesMsg{hash: c.Hash, subject: c.Subject, files: files, err: err}
 	}
 }

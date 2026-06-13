@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gigagit/gg/internal/domain"
 	"github.com/gigagit/gg/internal/engine"
 )
 
@@ -88,7 +89,7 @@ func TestExistingModeEndToEnd(t *testing.T) {
 	dir, repo := newRepoDir(t)
 	runGit(t, dir, "branch", "feature/have")
 
-	m := New(repo)
+	m := New(domain.New(repo))
 	loaded, _ := m.Update(m.loadCmd()())
 	m = loaded.(Model)
 	m.cfg.Worktree.PathTemplate = "../<repo>.worktrees/<branch>"

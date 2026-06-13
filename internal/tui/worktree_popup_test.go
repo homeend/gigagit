@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/gigagit/gg/internal/config"
+	"github.com/gigagit/gg/internal/domain"
 	"github.com/gigagit/gg/internal/engine"
 )
 
@@ -304,7 +305,7 @@ func TestPlainCreateDoesNotSwitch(t *testing.T) {
 
 func TestOpFinishedSwitchesOnPendingSwitch(t *testing.T) {
 	dir, repo := newRepoDir(t)
-	m := New(repo)
+	m := New(domain.New(repo))
 	updated, _ := m.Update(m.loadCmd()())
 	m = updated.(Model)
 

@@ -12,6 +12,7 @@ import (
 	"github.com/gigagit/gg/internal/app"
 	"github.com/gigagit/gg/internal/buildinfo"
 	"github.com/gigagit/gg/internal/cli"
+	"github.com/gigagit/gg/internal/domain"
 	"github.com/gigagit/gg/internal/git"
 	"github.com/gigagit/gg/internal/gitexec"
 	"github.com/gigagit/gg/internal/observ"
@@ -52,7 +53,9 @@ func main() {
 	}
 	// No subcommand: launch the TUI.
 	ring := observ.NewRing(200)
-	repo := &git.Repo{Runner: gitexec.NewExecRunner("git", ".", ring)}
+	// Wrap with LimitRunner so the initial session shares the process-global
+	// subprocess bound — matching domain.Open, which the reRoot path uses.
+	repo := &git.Repo{Runner: gitexec.NewLimitRunner(gitexec.NewExecRunner("git", ".", ring))}
 	defer func() {
 		if r := recover(); r != nil {
 			path := filepath.Join(os.TempDir(), fmt.Sprintf("gg-panic-%d.json", time.Now().Unix()))
@@ -61,7 +64,7 @@ func main() {
 			panic(r)
 		}
 	}()
-	cwd, err := tui.Run(repo)
+	cwd, err := tui.Run(domain.New(repo))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)

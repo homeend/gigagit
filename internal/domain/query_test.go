@@ -148,6 +148,67 @@ func TestSnapshotDoesNotReadCommits(t *testing.T) {
 	}
 }
 
+func TestShowFileGatedQuery(t *testing.T) {
+	f := gitexec.NewFakeRunner()
+	f.SetResponse("git show", gitexec.Result{Stdout: "blob-bytes"})
+	svc := New(&git.Repo{Runner: f})
+	b, err := svc.ShowFile(context.Background(), "HEAD", "a.txt")
+	if err != nil || string(b) != "blob-bytes" {
+		t.Fatalf("ShowFile = %q, %v", b, err)
+	}
+}
+
+func TestCommitFilesGatedQuery(t *testing.T) {
+	f := gitexec.NewFakeRunner()
+	f.SetResponse("git diff-tree", gitexec.Result{Stdout: "M\ta.txt\n"})
+	svc := New(&git.Repo{Runner: f})
+	files, err := svc.CommitFiles(context.Background(), "abc123")
+	if err != nil || len(files) != 1 || files[0].Path != "a.txt" {
+		t.Fatalf("CommitFiles = %+v, %v", files, err)
+	}
+}
+
+func TestTopLevelGatedQuery(t *testing.T) {
+	f := fakeReads() // stage-2 helper; configures "git rev-parse (toplevel)" → /repo
+	svc := New(&git.Repo{Runner: f})
+	top, err := svc.TopLevel(context.Background())
+	if err != nil || top != "/repo" {
+		t.Fatalf("TopLevel = %q, %v", top, err)
+	}
+}
+
+func TestCurrentBranchGatedQuery(t *testing.T) {
+	f := gitexec.NewFakeRunner()
+	f.SetResponse("git symbolic-ref", gitexec.Result{Stdout: "main\n"})
+	svc := New(&git.Repo{Runner: f})
+	b, err := svc.CurrentBranch(context.Background())
+	if err != nil || b != "main" {
+		t.Fatalf("CurrentBranch = %q, %v", b, err)
+	}
+}
+
+func TestGitCommonDirGatedQuery(t *testing.T) {
+	f := gitexec.NewFakeRunner()
+	f.SetResponse("git rev-parse (common-dir)", gitexec.Result{Stdout: "/repo/.git\n"})
+	svc := New(&git.Repo{Runner: f})
+	d, err := svc.GitCommonDir(context.Background())
+	if err != nil || d != "/repo/.git" {
+		t.Fatalf("GitCommonDir = %q, %v", d, err)
+	}
+}
+
+func TestShowFileReleasesReservation(t *testing.T) {
+	f := gitexec.NewFakeRunner()
+	f.SetResponse("git show", gitexec.Result{Stdout: "x"})
+	svc := New(&git.Repo{Runner: f})
+	if _, err := svc.ShowFile(context.Background(), "HEAD", "a.txt"); err != nil {
+		t.Fatal(err)
+	}
+	if q := svc.gateFor(context.Background()).Queue(); len(q) != 0 {
+		t.Fatalf("reservation leaked after ShowFile: %+v", q)
+	}
+}
+
 // TestQueryHoldsReadReservation: query acquires a Read reservation for the
 // duration of fn (observed mid-call via the gate Queue) and releases after.
 func TestQueryHoldsReadReservation(t *testing.T) {

@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gigagit/gg/internal/domain"
 	"github.com/gigagit/gg/internal/model"
 )
 
@@ -108,7 +109,7 @@ func TestActionResolvesThroughSortedView(t *testing.T) {
 	dir, repo := newRepoDir(t)
 	wt := filepath.Join(filepath.Dir(dir), "wt-sorted")
 	runGit(t, dir, "worktree", "add", "-b", "zzz-newest", wt, "main")
-	m := New(repo)
+	m := New(domain.New(repo))
 	u, _ := m.Update(m.loadCmd()())
 	m = u.(Model)
 	m.focus = panelWorktrees
@@ -160,7 +161,7 @@ func TestLayoutOrigins(t *testing.T) {
 
 func TestLoadPopulatesWorktreeHeadTimes(t *testing.T) {
 	_, repo := newRepoDir(t)
-	m := New(repo)
+	m := New(domain.New(repo))
 	u, _ := m.Update(m.loadCmd()())
 	m = u.(Model)
 	if len(m.worktrees) == 0 {

@@ -9,11 +9,8 @@ import (
 
 	"github.com/gigagit/gg/internal/domain"
 	"github.com/gigagit/gg/internal/engine"
-	"github.com/gigagit/gg/internal/git"
 	"github.com/gigagit/gg/internal/repos"
 )
-
-type repoT = git.Repo
 
 // RepoStatePath is the repo-switcher registry location. "" disables recording
 // and yields an empty registry — cmd/gg wires the real path; tests stay
@@ -35,38 +32,38 @@ func Run(workdir string, args []string, stdin io.Reader, stdout, stderr io.Write
 		fmt.Fprintln(stderr, "usage: gg <command> [args]")
 		return 2
 	}
-	repo := openRepo(workdir)
+	svc := domain.Open(workdir)
 	cmd, rest := args[0], args[1:]
 	// Record this repo in the switcher registry (best-effort: errors and
 	// non-repo working directories are ignored). Skip for "repo" subcommands
 	// since they are registry management commands, not git operations, and may
 	// be run from arbitrary directories.
 	if RepoStatePath != "" && cmd != "repo" {
-		if top, err := repo.TopLevel(context.Background()); err == nil {
+		if top, err := svc.TopLevel(context.Background()); err == nil {
 			_ = repos.Touch(RepoStatePath, top, time.Now())
 		}
 	}
 	switch cmd {
 	case "status":
-		return cmdStatus(repo, stdout, stderr)
+		return cmdStatus(svc, stdout, stderr)
 	case "commit":
-		return cmdCommit(repo, rest, stdout, stderr)
+		return cmdCommit(svc, rest, stdout, stderr)
 	case "pull":
-		return cmdPull(repo, rest, stdout, stderr)
+		return cmdPull(svc, rest, stdout, stderr)
 	case "push":
-		return cmdPush(repo, rest, stdout, stderr)
+		return cmdPush(svc, rest, stdout, stderr)
 	case "switch":
-		return cmdSwitch(repo, rest, stdout, stderr)
+		return cmdSwitch(svc, rest, stdout, stderr)
 	case "branch":
-		return cmdBranch(repo, rest, stdin, stdout, stderr)
+		return cmdBranch(svc, rest, stdin, stdout, stderr)
 	case "stash":
-		return cmdStash(repo, rest, stdout, stderr)
+		return cmdStash(svc, rest, stdout, stderr)
 	case "undo":
-		return cmdUndo(repo, rest, stdout, stderr)
+		return cmdUndo(svc, rest, stdout, stderr)
 	case "merge":
-		return cmdMerge(repo, rest, stdin, stdout, stderr)
+		return cmdMerge(svc, rest, stdin, stdout, stderr)
 	case "worktree":
-		return cmdWorktree(repo, rest, stdin, stdout, stderr, cwdFile)
+		return cmdWorktree(svc, rest, stdin, stdout, stderr, cwdFile)
 	case "repo":
 		return cmdRepo(rest, stdout, stderr, cwdFile)
 	case "init":
@@ -88,8 +85,8 @@ var commands = map[string]bool{
 // cmd/gg to its own handler, not by Run.
 func IsCommand(tok string) bool { return commands[tok] }
 
-func cmdStatus(repo *repoT, stdout, stderr io.Writer) int {
-	st, err := domain.New(repo).Status(context.Background())
+func cmdStatus(svc *domain.Service, stdout, stderr io.Writer) int {
+	st, err := svc.Status(context.Background())
 	if err != nil {
 		fmt.Fprintln(stderr, "error:", err)
 		return 1
@@ -116,7 +113,7 @@ func cmdStatus(repo *repoT, stdout, stderr io.Writer) int {
 	return 0
 }
 
-func cmdCommit(repo *repoT, args []string, stdout, stderr io.Writer) int {
+func cmdCommit(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("commit", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	msg := fs.String("m", "", "commit message (required)")
@@ -129,7 +126,7 @@ func cmdCommit(repo *repoT, args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "commit: -m message is required")
 		return 2
 	}
-	res, err := runOperation(context.Background(), repo,
+	res, err := runOperation(context.Background(), svc,
 		engine.Commit{Message: *msg, All: *all}, cliDecider{}, stderr)
 	return finish(res, err, stdout, stderr)
 }

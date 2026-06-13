@@ -3,12 +3,14 @@ package tui
 import (
 	"strings"
 	"testing"
+
+	"github.com/gigagit/gg/internal/domain"
 )
 
 func loadedModel(t *testing.T) Model {
 	t.Helper()
 	repo := newRepo(t)
-	m := New(repo)
+	m := New(domain.New(repo))
 	updated, _ := m.Update(m.loadCmd()())
 	return updated.(Model)
 }

@@ -70,6 +70,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   label shows `Commits N+` until history is exhausted, then `Commits N`. The
   feed is the single source of truth for commits (`Snapshot` no longer reads
   them); `git log` gained a `--skip` offset.
+- Stage 4: `engine.OpDeps.Repo` is now a `GitOps` interface (operations are
+  decoratable and mockable). The TUI and CLI no longer import `internal/git` —
+  the last raw reads (`ShowFile`, `CommitFiles`, `TopLevel`, `CurrentBranch`,
+  `GitCommonDir`) go through gated domain queries, enforced by an import-guard
+  test. Concurrent git subprocesses are bounded (process-global ceiling of 8).
 
 #### Side-by-side diff view
 - TUI: `enter` on a Status-panel file opens a full-screen dual-pane diff

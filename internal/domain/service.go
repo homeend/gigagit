@@ -36,7 +36,7 @@ type Service struct {
 // Open builds a Service rooted at workdir with the standard runner — the
 // one place frontends construct the repo stack. It runs no git command.
 func Open(workdir string) *Service {
-	s := New(&git.Repo{Runner: gitexec.NewExecRunner("git", workdir, observ.NewRing(200))})
+	s := New(&git.Repo{Runner: gitexec.NewLimitRunner(gitexec.NewExecRunner("git", workdir, observ.NewRing(200)))})
 	s.workdir = workdir
 	return s
 }

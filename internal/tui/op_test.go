@@ -11,6 +11,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/gigagit/gg/internal/domain"
 	"github.com/gigagit/gg/internal/engine"
 	"github.com/gigagit/gg/internal/git"
 	"github.com/gigagit/gg/internal/gitexec"
@@ -64,7 +65,7 @@ func (blockingOp) Run(ctx context.Context, _ engine.OpDeps) (engine.Result, erro
 }
 
 func TestQuitCancelsRunningOp(t *testing.T) {
-	m := New(&git.Repo{Runner: gitexec.NewFakeRunner()})
+	m := New(domain.New(&git.Repo{Runner: gitexec.NewFakeRunner()}))
 	m2, _ := m.startOp(blockingOp{})
 	if m2.opCancel == nil {
 		t.Fatal("startOp did not arm opCancel")
@@ -90,7 +91,7 @@ func TestRunCommitOperationFinishesAndClearsRunning(t *testing.T) {
 	dir, repo := newRepoDir(t)
 	os.WriteFile(filepath.Join(dir, "README.md"), []byte("changed\n"), 0o644)
 
-	m := New(repo)
+	m := New(domain.New(repo))
 	loaded, _ := m.Update(m.loadCmd()())
 	m = loaded.(Model)
 

@@ -7,10 +7,11 @@ import (
 	"io"
 	"os"
 
+	"github.com/gigagit/gg/internal/domain"
 	"github.com/gigagit/gg/internal/engine"
 )
 
-func cmdPull(repo *repoT, args []string, stdout, stderr io.Writer) int {
+func cmdPull(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("pull", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	background := fs.Bool("background", false, "update the branch's ref without checking it out")
@@ -35,13 +36,13 @@ func cmdPull(repo *repoT, args []string, stdout, stderr io.Writer) int {
 		policy["non-fast-forward"] = *onConflict
 	}
 	dec := cliDecider{policy: policy, in: os.Stdin, out: stderr, interactive: stdinIsTerminal()}
-	res, err := runOperation(context.Background(), repo,
+	res, err := runOperation(context.Background(), svc,
 		engine.SmartPull{Branch: branch, Intent: intent}, dec, stderr)
 	return finish(res, err, stdout, stderr)
 }
 
-func cmdPush(repo *repoT, args []string, stdout, stderr io.Writer) int {
-	cur, err := repo.CurrentBranch(context.Background())
+func cmdPush(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
+	cur, err := svc.CurrentBranch(context.Background())
 	if err != nil {
 		fmt.Fprintln(stderr, "error:", err)
 		return 1
@@ -50,35 +51,35 @@ func cmdPush(repo *repoT, args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "push: detached HEAD; cannot push")
 		return 1
 	}
-	res, err := runOperation(context.Background(), repo,
+	res, err := runOperation(context.Background(), svc,
 		engine.Push{Remote: "origin", Branch: cur, SetUpstream: true}, cliDecider{}, stderr)
 	return finish(res, err, stdout, stderr)
 }
 
-func cmdSwitch(repo *repoT, args []string, stdout, stderr io.Writer) int {
+func cmdSwitch(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 	if len(args) < 1 || args[0] == "" {
 		fmt.Fprintln(stderr, "switch: a branch name is required")
 		return 2
 	}
-	res, err := runOperation(context.Background(), repo,
+	res, err := runOperation(context.Background(), svc,
 		engine.SmartSwitch{Branch: args[0]}, cliDecider{}, stderr)
 	return finish(res, err, stdout, stderr)
 }
 
-func cmdStash(repo *repoT, args []string, stdout, stderr io.Writer) int {
+func cmdStash(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("stash", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	msg := fs.String("m", "gg stash", "stash message")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	res, err := runOperation(context.Background(), repo,
+	res, err := runOperation(context.Background(), svc,
 		engine.Stash{Message: *msg}, cliDecider{}, stderr)
 	return finish(res, err, stdout, stderr)
 }
 
-func cmdUndo(repo *repoT, args []string, stdout, stderr io.Writer) int {
-	res, err := runOperation(context.Background(), repo,
+func cmdUndo(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
+	res, err := runOperation(context.Background(), svc,
 		engine.UndoLastCommit{}, cliDecider{}, stderr)
 	return finish(res, err, stdout, stderr)
 }
