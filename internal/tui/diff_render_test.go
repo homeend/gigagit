@@ -319,3 +319,23 @@ func TestWrapCellsCarriesEmphMask(t *testing.T) {
 		}
 	}
 }
+
+func TestDiffPaneLinesWrappedRowWidthAndCount(t *testing.T) {
+	rows := []textdiff.Row{
+		{Kind: textdiff.Changed, Left: "alpha beta gamma delta", Right: "alpha beta gamma DELTA", LeftNo: 1, RightNo: 1},
+	}
+	v := diffViewWith(rows, []int{0})
+	v.wrap = true
+	const w = 41 // paneW=20 each → row width 41
+	v.relayout(w)
+	m := footerModel()
+	lines := m.diffPaneLines(v, w, len(v.disp))
+	if len(lines) < 2 {
+		t.Fatalf("the long row should render as ≥2 display rows, got %d", len(lines))
+	}
+	for i, ln := range lines {
+		if lipgloss.Width(ln) != w {
+			t.Fatalf("display row %d width = %d, want %d", i, lipgloss.Width(ln), w)
+		}
+	}
+}

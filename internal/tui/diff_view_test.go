@@ -720,3 +720,63 @@ func TestCommitDiffSecondOpenServedFromCache(t *testing.T) {
 		t.Fatalf("cached result differs: blocks %d vs %d", len(second.view.blocks), wantBlocks)
 	}
 }
+
+func TestRelayoutWrapOffMirrorsLines(t *testing.T) {
+	rows := sameRowsTUI(5, 2)
+	v := diffViewWith(rows, []int{2})
+	v.relayout(0) // width 0 ⇒ wrap-off 1:1
+	if len(v.disp) != len(v.lines) {
+		t.Fatalf("wrap-off disp must mirror lines: %d vs %d", len(v.disp), len(v.lines))
+	}
+	if len(v.dispBlocks) != 1 || v.dispBlocks[0] != v.blocks[0] {
+		t.Fatalf("wrap-off dispBlocks must equal blocks: %v vs %v", v.dispBlocks, v.blocks)
+	}
+	for i, dr := range v.disp {
+		if !dr.first || dr.line != i {
+			t.Fatalf("dRow %d: first=%v line=%d", i, dr.first, dr.line)
+		}
+	}
+}
+
+func TestRelayoutWrapOnExpandsAndRemapsBlocks(t *testing.T) {
+	rows := []textdiff.Row{
+		{Kind: textdiff.Same, Left: "a", Right: "a", LeftNo: 1, RightNo: 1},
+		{Kind: textdiff.Changed, Left: "one two three four", Right: "one two three FOUR", LeftNo: 2, RightNo: 2},
+	}
+	v := diffViewWith(rows, []int{1})
+	v.wrap = true
+	v.relayout(40)
+	if len(v.dispBlocks) != 1 || v.dispBlocks[0] != v.lineStart[1] {
+		t.Fatalf("dispBlocks[0]=%v want lineStart[1]=%d", v.dispBlocks, v.lineStart[1])
+	}
+	h := 0
+	for _, dr := range v.disp {
+		if dr.line == 1 {
+			h++
+		}
+	}
+	if h < 2 {
+		t.Fatalf("the long changed row should wrap to ≥2 display rows, got %d", h)
+	}
+	firsts := 0
+	for _, dr := range v.disp {
+		if dr.line == 1 && dr.first {
+			firsts++
+		}
+	}
+	if firsts != 1 {
+		t.Fatalf("exactly one first-row for the wrapped line, got %d", firsts)
+	}
+}
+
+func TestRelayoutWrapOnGapSideHasNilSegments(t *testing.T) {
+	rows := []textdiff.Row{{Kind: textdiff.Add, Right: "added text here", RightNo: 1}}
+	v := diffViewWith(rows, []int{0})
+	v.wrap = true
+	v.relayout(40)
+	for _, dr := range v.disp {
+		if len(dr.left.disp) != 0 {
+			t.Fatalf("Add row's left side must be empty (gap), got %q", string(dr.left.disp))
+		}
+	}
+}
