@@ -254,6 +254,100 @@ func segCell(no int, seg cellSeg, gut, width int, gap, hot bool, hotStyle lipglo
 	return diffGutter.Render(truncate(num, gut+1)) + body
 }
 
+// scrollCell renders one pane's line through a horizontal window starting at
+// hOffset display columns. At hOffset==0 with a line that fits the pane it
+// delegates to diffCell (byte-identical to truncate at rest). Otherwise it
+// shows the column slice, with ‹ in the first column when hOffset>0 and › in
+// the last when text extends past the window. Emphasis rides in seg.emph.
+func scrollCell(no int, text string, spans []textdiff.Span, hOffset, gut, width int, gap, hot bool, hotStyle lipgloss.Style) string {
+	if gap {
+		return diffGapCell.Render(strings.Repeat("·", width))
+	}
+	if gut > width-2 { // degenerate pane: keep the cell inside its width
+		gut = width - 2
+		if gut < 1 {
+			gut = 1
+		}
+	}
+	tw := width - gut - 1
+	if tw < 1 {
+		tw = 1
+	}
+	disp, emph := sanitizeSpans(text, spans)
+	full := lipgloss.Width(string(disp))
+	if hOffset <= 0 && full <= tw {
+		return diffCell(no, text, gut, width, false, hot, hotStyle, spans)
+	}
+	hasLeft := hOffset > 0
+	hasRight := full > hOffset+tw
+	// Content occupies the window minus any marker columns.
+	contentStart, contentEnd := hOffset, hOffset+tw
+	if hasLeft {
+		contentStart++
+	}
+	if hasRight {
+		contentEnd--
+	}
+	var wdisp []rune
+	var wemph []bool
+	col := 0
+	for i, r := range disp {
+		rw := lipgloss.Width(string(r))
+		if col >= contentStart && col+rw <= contentEnd {
+			wdisp = append(wdisp, r)
+			wemph = append(wemph, emph[i])
+		}
+		col += rw
+	}
+	base := lipgloss.NewStyle()
+	if hot {
+		base = hotStyle
+	}
+	var b strings.Builder
+	if hasLeft {
+		b.WriteString(diffGutter.Render("‹"))
+	}
+	b.WriteString(styledRuns(wdisp, wemph, base))
+	inner := tw
+	if hasLeft {
+		inner--
+	}
+	if hasRight {
+		inner--
+	}
+	if pad := inner - lipgloss.Width(string(wdisp)); pad > 0 {
+		b.WriteString(base.Render(strings.Repeat(" ", pad)))
+	}
+	if hasRight {
+		b.WriteString(diffGutter.Render("›"))
+	}
+	num := fmt.Sprintf("%*d ", gut, no)
+	return diffGutter.Render(truncate(num, gut+1)) + b.String()
+}
+
+// maxCellWidth is the widest single cell (either side, gap sides skipped)
+// across the logical lines — the horizontal extent scroll mode can pan to.
+func maxCellWidth(lines []textdiff.Line) int {
+	max := 0
+	for _, ln := range lines {
+		if ln.Fold > 0 {
+			continue
+		}
+		r := ln.Row
+		if r.Kind != textdiff.Add {
+			if w := lipgloss.Width(sanitizeLine(r.Left)); w > max {
+				max = w
+			}
+		}
+		if r.Kind != textdiff.Del {
+			if w := lipgloss.Width(sanitizeLine(r.Right)); w > max {
+				max = w
+			}
+		}
+	}
+	return max
+}
+
 // foldSeparator renders a fold marker as a centered label on a dim rule
 // spanning the full width.
 func foldSeparator(n, w int) string {

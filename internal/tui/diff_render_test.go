@@ -339,3 +339,58 @@ func TestDiffPaneLinesWrappedRowWidthAndCount(t *testing.T) {
 		}
 	}
 }
+
+func TestScrollCellFitsDelegatesToDiffCell(t *testing.T) {
+	got := scrollCell(3, "hello", nil, 0, 3, 20, false, false, diffDelCell)
+	want := diffCell(3, "hello", 3, 20, false, false, diffDelCell, nil)
+	if got != want {
+		t.Fatalf("fitting scrollCell must equal diffCell:\n got %q\nwant %q", got, want)
+	}
+}
+
+func TestScrollCellWidthAlwaysExact(t *testing.T) {
+	long := strings.Repeat("abcdefghij ", 8) // ~88 cols
+	for _, hOff := range []int{0, 5, 40, 200} {
+		cell := scrollCell(1, long, nil, hOff, 3, 20, false, false, diffDelCell)
+		if w := lipgloss.Width(cell); w != 20 {
+			t.Fatalf("hOffset %d: cell width %d, want 20", hOff, w)
+		}
+	}
+}
+
+func TestScrollCellRightMarkerWhenMore(t *testing.T) {
+	long := strings.Repeat("x", 100)
+	cell := ansi.Strip(scrollCell(1, long, nil, 0, 3, 20, false, false, diffDelCell))
+	if !strings.Contains(cell, "›") {
+		t.Fatalf("a line past the window must show ›: %q", cell)
+	}
+	if strings.Contains(cell, "‹") {
+		t.Fatalf("at hOffset 0 there is nothing to the left: %q", cell)
+	}
+}
+
+func TestScrollCellLeftMarkerWhenScrolled(t *testing.T) {
+	long := strings.Repeat("x", 100)
+	cell := ansi.Strip(scrollCell(1, long, nil, 30, 3, 20, false, false, diffDelCell))
+	if !strings.Contains(cell, "‹") {
+		t.Fatalf("scrolled right, ‹ must show on the left: %q", cell)
+	}
+}
+
+func TestScrollCellGapFiller(t *testing.T) {
+	cell := ansi.Strip(scrollCell(0, "", nil, 0, 3, 20, true, false, diffDelCell))
+	if strings.TrimRight(cell, "·") != "" {
+		t.Fatalf("gap side must be all · filler: %q", cell)
+	}
+}
+
+func TestMaxCellWidthIgnoresGapSides(t *testing.T) {
+	lines := []textdiff.Line{
+		{Row: textdiff.Row{Kind: textdiff.Same, Left: "ab", Right: "ab"}},
+		{Row: textdiff.Row{Kind: textdiff.Add, Right: "longer right side here"}},
+		{Fold: 4},
+	}
+	if got := maxCellWidth(lines); got != lipgloss.Width("longer right side here") {
+		t.Fatalf("maxCellWidth = %d, want %d", got, lipgloss.Width("longer right side here"))
+	}
+}
