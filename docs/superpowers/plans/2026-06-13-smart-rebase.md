@@ -54,7 +54,7 @@ func TestRebaseArgv(t *testing.T) {
 	if err := r.Rebase(context.Background(), "", "main"); err != nil {
 		t.Fatalf("rebase: %v", err)
 	}
-	want := []string{"rebase", "--no-edit", "main"}
+	want := []string{"rebase", "main"}
 	if !reflect.DeepEqual(f.Calls[0].Argv, want) {
 		t.Fatalf("argv = %v, want %v", f.Calls[0].Argv, want)
 	}
@@ -67,7 +67,7 @@ func TestRebaseArgvWithDir(t *testing.T) {
 	if err := r.Rebase(context.Background(), "/wt/x", "main"); err != nil {
 		t.Fatalf("rebase: %v", err)
 	}
-	want := []string{"-C", "/wt/x", "rebase", "--no-edit", "main"}
+	want := []string{"-C", "/wt/x", "rebase", "main"}
 	if !reflect.DeepEqual(f.Calls[0].Argv, want) {
 		t.Fatalf("argv = %v, want %v", f.Calls[0].Argv, want)
 	}
@@ -106,10 +106,10 @@ import (
 )
 
 // Rebase replays the branch checked out at dir ("" = this repo's own
-// worktree) onto onto. --no-edit keeps any auto-generated messages
+// worktree) onto onto. Plain `git rebase <onto>` is non-interactive by
 // non-interactive. Non-interactive replay only (no -i, no --onto form).
 func (r *Repo) Rebase(ctx context.Context, dir, onto string) error {
-	b := gitcmd.New("rebase").Arg("--no-edit", onto)
+	b := gitcmd.New("rebase").Arg(onto)
 	if dir != "" {
 		b = b.Dir(dir)
 	}
@@ -1299,7 +1299,7 @@ Expected: vet+gofmt clean, all unit tests pass, all e2e scenarios pass (includin
 - TUI stub enablement → Task 4. ✓
 - CLI `gg rebase [--branch][--on-conflict]` → Task 5. ✓
 - 4 e2e scenarios (clean, rung-3, conflict keep, conflict abort) → Task 6. ✓
-- Scope guards (no --skip/-i/--onto/native --autostash) → enforced by the verb (`Rebase` only emits `--no-edit <onto>`) and no flags added; documented in spec. ✓
+- Scope guards (no --skip/-i/--onto/native --autostash) → enforced by the verb (`Rebase` only emits `<onto>`) and no flags added; documented in spec. ✓
 - Docs + agentskill version bump → Task 7. ✓
 
 **2. Placeholder scan:** No TBD/TODO; every code step shows complete code; every run step shows the command and expected result. The one conditional (README Step 5) gives an explicit grep-and-decide rule, not a vague "handle it." ✓

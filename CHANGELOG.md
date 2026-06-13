@@ -10,6 +10,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ### Added
 
+#### Rebase (`gg rebase` + the TUI pair-op)
+- `gg rebase [--branch <b>] [--on-conflict=keep|abort] <newbase>` and the TUI
+  Branches mark-and-pair **"Rebase {selected} onto {marked}"** operation replay
+  a branch's commits onto a new base. Worktree-aware: rebases in place, in the
+  worktree that has the branch checked out (you stay put), or autostashes and
+  switches to it. A conflict pauses the rebase — `keep` leaves it for
+  `git rebase --continue` (exit 1), `abort` runs `git rebase --abort` (exit 0).
+
 #### Diff view: long-line modes (scroll / wrap / truncate)
 - The diff view now opens in **horizontal-scroll** mode by default: long lines
   pan with `←`/`→` (`0` resets; `‹`/`›` mark off-screen text), step from the new

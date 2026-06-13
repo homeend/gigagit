@@ -138,7 +138,7 @@ rebaseAt(ctx, deps, dir, branch, onto) (Result, error)
 All take `dir` (`""` = this repo's own worktree) exactly like the merge verbs,
 built with `gitcmd` and run via `r.Runner.Run`.
 
-- `Rebase(ctx, dir, onto string) error` — `git [-C dir] rebase --no-edit <onto>`.
+- `Rebase(ctx, dir, onto string) error` — `git [-C dir] rebase <onto>` (plain; `--no-edit` is a merge-only flag).
   Non-interactive replay of the current branch's commits onto `onto`.
 - `RebaseAbort(ctx, dir string) error` — `git [-C dir] rebase --abort`.
 - `RebaseInProgress(ctx, dir string) (bool, error)` — **exit-code probe**,

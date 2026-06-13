@@ -40,7 +40,7 @@ feature is a worktree-aware **SmartPull** decision tree.
 
 | Package      | Responsibility |
 |--------------|----------------|
-| `engine`     | Operations + the `Event`/`Decider`/`Result` contract. Smart ops: `SmartPull`, `SmartSwitch`, `Commit`, `Push`, `Stash`, `UndoLastCommit`, `CreateWorktree`, `RemoveWorktree`. Ops act on a `GitOps` interface (`*git.Repo` satisfies it). |
+| `engine`     | Operations + the `Event`/`Decider`/`Result` contract. Smart ops: `SmartPull`, `SmartSwitch`, `SmartMerge`, `SmartRebase`, `Commit`, `Push`, `Stash`, `UndoLastCommit`, `CreateWorktree`, `RemoveWorktree`. Ops act on a `GitOps` interface (`*git.Repo` satisfies it). |
 | `domain`     | Frontend-facing command + query layer: `Execute` runs an operation under its repo-gate reservation; `Snapshot`/`Status`/`Worktrees`/`ShowFile`/`CommitFiles`/`TopLevel`/`CurrentBranch`/`GitCommonDir` run reads under a Read reservation, parallel and singleflight-coalesced; `CommitFeed` is the paged commit-history read-model backing the Commits panel. Also hosts the `Differ` (plain/enhanced, plain/cached decorator over lazy byte-sources) serving commit diffs from the cache. Emits the op span. |
 | `repogate`   | Per-repo reservation gate (Read/RefWrite/TreeWrite, writer-preferring FIFO, escalation), process-global registry keyed by git common dir. |
 | `git`        | Thin git verbs on `*git.Repo` (status, branches, worktrees, sync, stash, …). One verb ≈ one git invocation. |
@@ -116,5 +116,4 @@ the CLI surface changed — `internal/agentskill/using-gg.md` (bump
 See `CHANGELOG.md` for what's shipped. Roadmap: workspace group sync (named
 repo groups + parallel background-pull; needs concurrent-op decision routing,
 shared with MCP), then M3 (MCP server + heavy ops: staging, interactive rebase,
-conflict editor, diff, visual graph, sparse-checkout), plus a candidate
-`SmartMerge` operation.
+conflict editor, diff, visual graph, sparse-checkout).
