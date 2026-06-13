@@ -1,10 +1,13 @@
 package tui
 
 import (
+	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -49,6 +52,38 @@ func driveOp(t *testing.T, m Model, cmd tea.Cmd) Model {
 		t.Fatal("operation did not finish")
 	}
 	return m
+}
+
+// blockingOp parks until its context is cancelled — the shape of an op
+// orphaned by the user quitting mid-run.
+type blockingOp struct{}
+
+func (blockingOp) Run(ctx context.Context, _ engine.OpDeps) (engine.Result, error) {
+	<-ctx.Done()
+	return engine.Result{}, ctx.Err()
+}
+
+func TestQuitCancelsRunningOp(t *testing.T) {
+	m := New(&git.Repo{Runner: gitexec.NewFakeRunner()})
+	m2, _ := m.startOp(blockingOp{})
+	if m2.opCancel == nil {
+		t.Fatal("startOp did not arm opCancel")
+	}
+	m2.opCancel() // what run.go does when the program exits mid-op
+	deadline := time.After(5 * time.Second)
+	for {
+		select {
+		case msg := <-m2.opMsgs:
+			if fin, ok := msg.(opFinishedMsg); ok {
+				if !errors.Is(fin.err, context.Canceled) {
+					t.Fatalf("op finished with %v, want context.Canceled", fin.err)
+				}
+				return
+			}
+		case <-deadline:
+			t.Fatal("cancelled op never finished")
+		}
+	}
 }
 
 func TestRunCommitOperationFinishesAndClearsRunning(t *testing.T) {

@@ -2,14 +2,15 @@
 package tui
 
 import (
+	"context"
+
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/gigagit/gg/internal/config"
+	"github.com/gigagit/gg/internal/domain"
 	"github.com/gigagit/gg/internal/engine"
 	"github.com/gigagit/gg/internal/git"
-	"github.com/gigagit/gg/internal/gitexec"
 	"github.com/gigagit/gg/internal/model"
-	"github.com/gigagit/gg/internal/observ"
 )
 
 // Model is the root Bubble Tea model.
@@ -52,6 +53,9 @@ type Model struct {
 	diffView *diffView // full-screen side-by-side diff; nil = closed
 	diffTag  string    // request key of the wanted diff; gates stale async results
 
+	svc      *domain.Service    // command layer; m.repo == svc.Repo()
+	opCancel context.CancelFunc // cancels the in-flight op's context; nil when idle
+
 	running   bool
 	statusMsg string
 	opMsgs    chan tea.Msg
@@ -82,6 +86,7 @@ const (
 func New(repo *git.Repo) Model {
 	return Model{
 		repo:      repo,
+		svc:       domain.New(repo),
 		loading:   true,
 		sel:       map[panel]int{},
 		sortModes: map[panel]sortMode{panelBranches: sortDateDesc},
@@ -417,6 +422,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.modal = &decisionState{req: msg.req, reply: msg.reply}
 		return m, waitForOp(m.opMsgs)
 	case opFinishedMsg:
+		if m.opCancel != nil {
+			m.opCancel() // op already returned; this only frees the ctx
+			m.opCancel = nil
+		}
 		m.running = false
 		m.opMsgs = nil
 		switchTo := ""
@@ -469,7 +478,8 @@ func (m Model) panelLen(p panel) int {
 // --cwd-file by cmd/gg). A fresh span ring is used for the new root; the cmd/gg
 // panic dump still references the original repo (acceptable for a debug aid).
 func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
-	m.repo = &git.Repo{Runner: gitexec.NewExecRunner("git", path, observ.NewRing(200))}
+	m.svc = domain.Open(path)
+	m.repo = m.svc.Repo()
 	m.switchTarget = path
 	m.loading = true
 	// Drop selections from the old repo so the highlight doesn't land on a

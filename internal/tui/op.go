@@ -2,12 +2,11 @@ package tui
 
 import (
 	"context"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/gigagit/gg/internal/domain"
 	"github.com/gigagit/gg/internal/engine"
-	"github.com/gigagit/gg/internal/observ"
 )
 
 // opEventMsg carries one engine event (progress/done/gitline) to the UI.
@@ -50,25 +49,22 @@ func (d uiDecider) Decide(ctx context.Context, req engine.DecisionRequest) (engi
 	}
 }
 
-// startOp launches op in a goroutine, forwarding its events and completion onto
-// a fresh message channel, and returns the command that waits for the next msg.
+// startOp launches op through the domain layer in a goroutine, forwarding
+// its events and completion onto a fresh message channel, and returns the
+// command that waits for the next msg. The op context is cancelled when the
+// program exits (run.go) so an op can never outlive the UI silently.
 func (m Model) startOp(op engine.Operation) (Model, tea.Cmd) {
 	msgs := make(chan tea.Msg, 32)
 	events := make(chan engine.Event, 32)
-	repo := m.repo
+	// svc is nil for models constructed directly (test fixtures); fall back so
+	// those callers continue to work during the transition to domain.New everywhere.
+	svc := m.svc
+	if svc == nil {
+		svc = domain.New(m.repo)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
-		opStart := time.Now()
-		res, err := op.Run(context.Background(), engine.OpDeps{
-			Repo:    repo,
-			Events:  events,
-			Decider: uiDecider{msgs: msgs},
-		})
-		span := observ.Span{Name: "op " + engine.OpName(op), Start: opStart, Duration: time.Since(opStart)}
-		if err != nil {
-			span.ExitCode = 1
-			span.Err = err.Error()
-		}
-		observ.EmitSpan(span)
+		res, err := svc.Execute(ctx, op, events, uiDecider{msgs: msgs})
 		close(events)
 		msgs <- opFinishedMsg{res: res, err: err}
 	}()
@@ -80,6 +76,7 @@ func (m Model) startOp(op engine.Operation) (Model, tea.Cmd) {
 	m.running = true
 	m.statusMsg = "working…"
 	m.opMsgs = msgs
+	m.opCancel = cancel
 	return m, waitForOp(msgs)
 }
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/gigagit/gg/internal/git"
+	"github.com/gigagit/gg/internal/repogate"
 )
 
 // PullIntent expresses what the user wants from a pull of a non-current branch.
@@ -26,6 +27,15 @@ type SmartPull struct {
 }
 
 var _ Operation = SmartPull{}
+
+// LockMode declares the gate reservation SmartPull needs: a background
+// fast-forward moves only refs; every other path may touch the worktree.
+func (op SmartPull) LockMode() repogate.Mode {
+	if op.Intent == PullInBackground {
+		return repogate.RefWrite
+	}
+	return repogate.TreeWrite
+}
 
 func (op SmartPull) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	repo := deps.Repo
@@ -66,6 +76,12 @@ func (op SmartPull) Run(ctx context.Context, deps OpDeps) (Result, error) {
 			return Result{}, derr
 		}
 		if resp.Option == "checkout-and-resolve" {
+			// Held only a RefWrite reservation so far; checkoutPull touches
+			// the worktree. This boundary is safe to escalate across: the
+			// failed FastForwardRef left no partial state.
+			if err := deps.escalate(ctx); err != nil {
+				return Result{}, err
+			}
 			return op.checkoutPull(ctx, deps, remote, target, cur)
 		}
 		return Result{Summary: "aborted: " + target + " not fast-forwardable"}, nil
