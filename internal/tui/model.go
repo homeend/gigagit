@@ -342,6 +342,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.diffTag = "status:" + f.Path
 				return m, m.loadStatusDiffCmd(f)
 			}
+		case "h":
+			if m.focus == panelStatus && m.canShowFileDiff() {
+				bi, _ := m.backingIndex(panelStatus)
+				f := m.status.Files[bi]
+				ctx := navContext{path: f.Path, rev: ""}
+				h := newHistoryView(ctx)
+				m = m.pushSurface(h)
+				return m, m.loadHistoryListCmd(ctx, h.listTag)
+			}
 		case "tab":
 			m = m.rememberLeftFocus()
 			m.focus = (m.focus + 1) % panelCount

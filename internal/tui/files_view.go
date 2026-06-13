@@ -145,6 +145,18 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		p.typing = true
 		p.query = ""
 		p.sel = 0
+	case "h":
+		if !m.filesTreeFocused {
+			return m, nil
+		}
+		vis := p.visible()
+		if p.sel < 0 || p.sel >= len(vis) || vis[p.sel].path == "" {
+			return m, nil
+		}
+		ctx := navContext{path: vis[p.sel].path, rev: m.filesHash}
+		hv := newHistoryView(ctx)
+		m = m.pushSurface(hv)
+		return m, m.loadHistoryListCmd(ctx, hv.listTag)
 	case "enter":
 		if !m.filesTreeFocused {
 			return m, nil

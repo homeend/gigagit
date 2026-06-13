@@ -260,6 +260,11 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.diffView = nil
 		m.diffTag = ""
 		return m, nil
+	case "h":
+		ctx := navContext{path: v.title, rev: v.rev}
+		hv := newHistoryView(ctx)
+		m = m.pushSurface(hv)
+		return m, m.loadHistoryListCmd(ctx, hv.listTag)
 	case "up", "k":
 		v.scroll(-1, m.diffBodyRows())
 	case "down", "j":

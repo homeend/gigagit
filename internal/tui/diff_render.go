@@ -17,7 +17,7 @@ var (
 	diffFold    = lipgloss.NewStyle().Foreground(lipgloss.Color("240")) // dim fold rule
 )
 
-const diffHint = "[↑↓] scroll  [pgup/pgdn] page  [n/p] next/prev change  [f] toggle partial  [esc] close  [q] quit"
+const diffHint = "[↑↓] scroll  [pgup/pgdn] page  [n/p] next/prev change  [f] toggle partial  [h] history  [esc] close  [q] quit"
 
 // sanitizeLine makes raw file content safe to render on one line: tabs
 // expand to a fixed 4-column stop (lipgloss.Width doesn't expand them but
