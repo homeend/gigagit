@@ -256,7 +256,9 @@ view owns the whole screen; the registry footer is not drawn.
 ```
 
 - Line 1: title + context, right-aligned visible-row range `rows a–b/N`.
-- Body: `height - 3` rows. Each row: left pane, `│` separator, right pane;
+- Body: `height - 2` rows (header + hint are the only chrome; the mockup's
+  horizontal rules are illustrative, not rendered). Each row: left pane,
+  `│` separator, right pane;
   panes are `(width-1)/2` wide, each with a dim right-aligned line-number
   gutter (width of the largest line number, min 3) and the line text
   truncated with `…`.
