@@ -40,12 +40,12 @@ feature is a worktree-aware **SmartPull** decision tree.
 
 | Package      | Responsibility |
 |--------------|----------------|
-| `engine`     | Operations + the `Event`/`Decider`/`Result` contract. Smart ops: `SmartPull`, `SmartSwitch`, `Commit`, `Push`, `Stash`, `UndoLastCommit`, `CreateWorktree`, `RemoveWorktree`. |
-| `domain`     | Frontend-facing command + query layer: `Execute` runs an operation under its repo-gate reservation; `Snapshot`/`Status`/`Worktrees` run reads under a Read reservation, parallel and singleflight-coalesced; `CommitFeed` is the paged commit-history read-model backing the Commits panel. Also hosts the `Differ` (plain/enhanced, plain/cached decorator over lazy byte-sources) serving commit diffs from the cache. Emits the op span. |
+| `engine`     | Operations + the `Event`/`Decider`/`Result` contract. Smart ops: `SmartPull`, `SmartSwitch`, `Commit`, `Push`, `Stash`, `UndoLastCommit`, `CreateWorktree`, `RemoveWorktree`. Ops act on a `GitOps` interface (`*git.Repo` satisfies it). |
+| `domain`     | Frontend-facing command + query layer: `Execute` runs an operation under its repo-gate reservation; `Snapshot`/`Status`/`Worktrees`/`ShowFile`/`CommitFiles`/`TopLevel`/`CurrentBranch`/`GitCommonDir` run reads under a Read reservation, parallel and singleflight-coalesced; `CommitFeed` is the paged commit-history read-model backing the Commits panel. Also hosts the `Differ` (plain/enhanced, plain/cached decorator over lazy byte-sources) serving commit diffs from the cache. Emits the op span. |
 | `repogate`   | Per-repo reservation gate (Read/RefWrite/TreeWrite, writer-preferring FIFO, escalation), process-global registry keyed by git common dir. |
 | `git`        | Thin git verbs on `*git.Repo` (status, branches, worktrees, sync, stash, …). One verb ≈ one git invocation. |
 | `gitcmd`     | Fluent argv builder (`New("sub").Arg(...).ArgIf(cond, ...).ToArgv()`). |
-| `gitexec`    | The `Runner` interface (`Run`/`Stream`), the real `ExecRunner`, and `FakeRunner` for tests. |
+| `gitexec`    | The `Runner` interface (`Run`/`Stream`), the real `ExecRunner`, and `FakeRunner` for tests. `LimitRunner` bounds concurrent git subprocesses. |
 | `model`      | Shared plain data types (`Status`, `Branch`, `Worktree`, `Commit`, …). |
 | `tui`        | Bubble Tea Elm-style UI (value-receiver `Model`, panels, modal Decider, async ops). |
 | `cli`        | Scriptable command frontend; `cliDecider` answers forks from a flag policy or stdin. |
@@ -78,6 +78,7 @@ Entry point: `cmd/gg/main.go` — routes `shell-init`/`inspect`/CLI subcommands,
   verb calls.
 - **Decisions are option-lists only** (no free text mid-flight). Frontends map them: TUI modal, CLI policy/stdin, MCP `MapDecider`.
 - **TUI `Model` is a value receiver** with pointer fields (`modal`, `popup`) for state that must persist across the value copy.
+- **`internal/tui` and `internal/cli` never import `internal/git`** — they reach git through `internal/domain` (guarded by `internal/archtest`). `cmd/gg` and `internal/app` are the composition root and may construct concrete git types.
 - **Tests use a real `git`** in a `t.TempDir()` (see `newRepo`/`newTestRepo` helpers) or the `FakeRunner` for argv assertions. Follow TDD.
 - **`main` is the trunk** (not `master`, which is stale). Branch features off `main`; the human merges them.
 
