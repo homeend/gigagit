@@ -49,6 +49,9 @@ type Model struct {
 	filesHash        string        // commit the view wants; gates stale async results
 	filesTreeFocused bool          // true = the tree side owns vertical movement (←/→/tab)
 
+	diffView *diffView // full-screen side-by-side diff; nil = closed
+	diffTag  string    // request key of the wanted diff; gates stale async results
+
 	running   bool
 	statusMsg string
 	opMsgs    chan tea.Msg
@@ -101,6 +104,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.filesTreeFocused = false
 			m.statusMsg = "files view closed: terminal too narrow"
 		}
+		if m.diffView != nil && msg.Width > 0 && msg.Width < 60 {
+			m.diffView = nil
+			m.diffTag = ""
+			m.statusMsg = "diff closed: terminal too narrow"
+		}
+	case diffMsg:
+		if m.diffView == nil || msg.tag != m.diffTag {
+			return m, nil // view closed, or a stale result
+		}
+		m.diffView = msg.view
+		return m, nil
 	case commitFilesMsg:
 		if m.filesView == nil || msg.hash != m.filesHash {
 			return m, nil // view closed, or a stale result from fast movement
@@ -161,6 +175,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.modal = nil
 			}
 			return m, nil
+		}
+		// Routing invariant: the diff view is checked immediately after the
+		// modal here, in the MouseMsg arm, and in render() — the key owner
+		// must be the top visible surface (background ops will rely on it).
+		if m.diffView != nil {
+			return m.updateDiffViewKey(msg)
 		}
 		if m.popup != nil {
 			return m.updatePopupKey(msg)
@@ -278,6 +298,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				wt, _ := m.selectedWorktree()
 				return m.reRoot(wt.Path)
 			}
+			if m.focus == panelStatus && m.canShowFileDiff() {
+				bi, _ := m.backingIndex(panelStatus)
+				f := m.status.Files[bi]
+				m.diffView = &diffView{title: f.Path, context: "HEAD → working tree", loading: true}
+				m.diffTag = "status:" + f.Path
+				return m, m.loadStatusDiffCmd(f)
+			}
 		case "tab":
 			m = m.rememberLeftFocus()
 			m.focus = (m.focus + 1) % panelCount
@@ -375,8 +402,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case tea.MouseMsg:
 		// Mouse support is scoped to the content popup and the files view
+		// Routing invariant: diffView → contentPopup → filesView.
 		// (spec non-goal: no panel clicks/wheel).
-		if m.contentPopup != nil && msg.Action == tea.MouseActionPress {
+		if m.diffView != nil && msg.Action == tea.MouseActionPress {
+			switch msg.Button {
+			case tea.MouseButtonWheelUp:
+				m.diffView.scroll(-contentWheelStep, m.diffBodyRows())
+			case tea.MouseButtonWheelDown:
+				m.diffView.scroll(contentWheelStep, m.diffBodyRows())
+			}
+		} else if m.contentPopup != nil && msg.Action == tea.MouseActionPress {
 			switch msg.Button {
 			case tea.MouseButtonWheelUp:
 				m.contentPopup.move(-contentWheelStep)
@@ -468,6 +503,8 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.filesView = nil // the new repo has a different commit list
 	m.filesHash = ""
 	m.filesTreeFocused = false
+	m.diffView = nil // the new repo invalidates any open diff
+	m.diffTag = ""
 	return m, m.loadCmd()
 }
 

@@ -101,3 +101,16 @@ func (m Model) cursorOnMark() bool {
 	bi, ok := m.backingIndex(m.focus)
 	return ok && m.listFor(m.focus).Key(bi) == m.mark.key
 }
+
+// canShowFileDiff gates enter on Status: the side-by-side diff of the
+// selected file. Conflicted rows are excluded until the conflict editor
+// exists. The width check uses the !(w>0 && w<60) idiom so a model that has
+// not seen a WindowSizeMsg yet (tests) is not refused.
+func (m Model) canShowFileDiff() bool {
+	bi, ok := m.backingIndex(panelStatus)
+	if !ok {
+		return false
+	}
+	f := m.status.Files[bi]
+	return m.opsIdle() && f.Kind != model.KindUnmerged && !(m.width > 0 && m.width < 60)
+}
