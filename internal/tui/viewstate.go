@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/gigagit/gg/internal/model"
@@ -299,8 +300,17 @@ func (m Model) backingIndex(p panel) (int, bool) {
 	return idx[s], true
 }
 
-// panelLabel decorates a panel title with its active sort mode and filter.
+// panelLabel decorates a panel title with commit count (Commits panel only),
+// active sort mode, and filter.
 func (m Model) panelLabel(p panel, base string) string {
+	if p == panelCommits {
+		n := len(m.commits)
+		if m.commitsExhausted {
+			base += " " + strconv.Itoa(n)
+		} else {
+			base += " " + strconv.Itoa(n) + "+"
+		}
+	}
 	if s := m.sortModes[p].String(); s != "" {
 		base += " ·" + s
 	}

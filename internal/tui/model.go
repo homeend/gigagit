@@ -143,6 +143,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.filesView.sel = 0
 		m.filesTitle = "Files " + shortHash(msg.hash) + " " + msg.subject
 		return m, nil
+	case commitsPagedMsg:
+		if m.feed != nil && msg.gen == m.feed.Gen() {
+			st := m.feed.Snapshot()
+			m.commits = st.Commits
+			m.commitsExhausted = st.Exhausted
+		}
+		return m, nil
 	case dataLoadedMsg:
 		if msg.gen != m.loadGen {
 			return m, nil // superseded by a newer load
@@ -348,6 +355,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.sel[m.focus] = n - 1
 				}
 			}
+			if m.focus == panelCommits {
+				if cmd := m.maybeLoadMoreCommits(); cmd != nil {
+					return m, cmd
+				}
+			}
 		case "pgup":
 			if m.sel[m.focus] > 0 {
 				m.sel[m.focus] -= m.pageStep()
@@ -418,6 +430,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.sel[m.focus] < m.panelLen(m.focus)-1 {
 				m.sel[m.focus]++
 			}
+			if m.focus == panelCommits {
+				if cmd := m.maybeLoadMoreCommits(); cmd != nil {
+					return m, cmd
+				}
+			}
 		}
 	case tea.MouseMsg:
 		return m.handleMouse(msg)
@@ -486,6 +503,25 @@ func (m Model) rememberLeftFocus() Model {
 func (m Model) panelLen(p panel) int {
 	_, idx := m.panelView(p)
 	return len(idx)
+}
+
+// maybeLoadMoreCommits returns a cmd to page in more commits when the Commits
+// selection nears the end and no commits filter is active; nil otherwise. The
+// feed owns the "is there more / am I already loading" decision.
+func (m Model) maybeLoadMoreCommits() tea.Cmd {
+	if m.feed == nil {
+		return nil
+	}
+	if m.filterTyping && m.filterPanel == panelCommits {
+		return nil
+	}
+	if m.filterActive(panelCommits) {
+		return nil
+	}
+	if !m.feed.NeedsMore(m.sel[panelCommits]) {
+		return nil
+	}
+	return m.loadMoreCmd()
 }
 
 // reRoot points the model at the repository rooted at path and triggers a full

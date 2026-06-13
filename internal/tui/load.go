@@ -14,6 +14,20 @@ import (
 	"github.com/gigagit/gg/internal/repos"
 )
 
+// commitsPagedMsg signals a commit page load completed; gen ties it to the
+// feed generation that issued it so a reload mid-page is dropped.
+type commitsPagedMsg struct{ gen int }
+
+// loadMoreCmd loads the next commit page off the UI thread.
+func (m Model) loadMoreCmd() tea.Cmd {
+	feed := m.feed
+	gen := feed.Gen()
+	return func() tea.Msg {
+		_, _, _ = feed.LoadMore(context.Background())
+		return commitsPagedMsg{gen: gen}
+	}
+}
+
 // dataLoadedMsg carries a full repo snapshot loaded off the UI thread. gen is
 // the load generation it was issued for; a result whose gen no longer matches
 // the model's loadGen is stale (superseded by a newer load) and dropped.
