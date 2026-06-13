@@ -14,11 +14,24 @@ type Result struct {
 }
 
 // OpDeps is everything an operation needs: the repo to act on, an optional
-// event channel, and an optional Decider for mid-flight forks.
+// event channel, an optional Decider for mid-flight forks, and an optional
+// hook to escalate the operation's gate reservation.
 type OpDeps struct {
 	Repo    *git.Repo
 	Events  chan<- Event
 	Decider Decider
+	// Escalate trades the operation's gate reservation for an exclusive
+	// (TreeWrite) one. Nil (direct engine use, tests) is a no-op. Call it
+	// only at a boundary where the operation holds no partial state.
+	Escalate func(ctx context.Context) error
+}
+
+// escalate is the nil-safe form of Escalate (style of emit/decide).
+func (d OpDeps) escalate(ctx context.Context) error {
+	if d.Escalate == nil {
+		return nil
+	}
+	return d.Escalate(ctx)
 }
 
 // emit sends an event if a channel is configured. A nil channel is a no-op; a

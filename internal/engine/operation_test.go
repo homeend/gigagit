@@ -77,3 +77,12 @@ func TestDecideEmitsDecisionNeededThenErrsWithoutDecider(t *testing.T) {
 		t.Fatal("expected a DecisionNeeded event emitted before erroring")
 	}
 }
+
+// TestOpDepsEscalateNilSafe: direct engine users (tests, future callers)
+// configure no Escalate; the helper must be a successful no-op, matching the
+// nil-channel/nil-decider style of emit/decide.
+func TestOpDepsEscalateNilSafe(t *testing.T) {
+	if err := (OpDeps{}).escalate(context.Background()); err != nil {
+		t.Fatalf("nil escalate = %v, want nil", err)
+	}
+}

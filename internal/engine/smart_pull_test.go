@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"github.com/gigagit/gg/internal/git"
 	"github.com/gigagit/gg/internal/gitexec"
 	"github.com/gigagit/gg/internal/observ"
+	"github.com/gigagit/gg/internal/repogate"
 )
 
 func gitAt(t *testing.T, dir string, args ...string) {
@@ -145,5 +147,57 @@ func TestSmartPullStayStashesAndMovesToTarget(t *testing.T) {
 	dirty, _ := repo.IsDirty(context.Background())
 	if !dirty {
 		t.Fatal("expected dirty change restored on feature")
+	}
+}
+
+func TestSmartPullLockMode(t *testing.T) {
+	if got := (SmartPull{Intent: PullInBackground}).LockMode(); got != repogate.RefWrite {
+		t.Fatalf("background lock mode = %v, want RefWrite", got)
+	}
+	if got := (SmartPull{Intent: PullAndStay}).LockMode(); got != repogate.TreeWrite {
+		t.Fatalf("stay lock mode = %v, want TreeWrite", got)
+	}
+	if got := (SmartPull{}).LockMode(); got != repogate.TreeWrite {
+		t.Fatalf("default lock mode = %v, want TreeWrite", got)
+	}
+}
+
+// TestSmartPullBackgroundEscalatesBeforeCheckout proves the escalation hook
+// fires BEFORE checkoutPull touches the worktree: a failing Escalate must
+// abort the operation with the current branch untouched.
+func TestSmartPullBackgroundEscalatesBeforeCheckout(t *testing.T) {
+	clone, repo := cloneOnMainBehindOrigin(t)
+	root := filepath.Dir(clone)
+	seed := filepath.Join(root, "seed")
+
+	// Make dev diverge so FastForwardRef cannot succeed: local dev has its
+	// own commit, origin/dev advanced separately.
+	gitAt(t, clone, "fetch", "origin")
+	gitAt(t, clone, "branch", "dev", "origin/main")
+	gitAt(t, clone, "switch", "dev")
+	gitAt(t, clone, "commit", "--allow-empty", "-m", "local-dev")
+	gitAt(t, clone, "switch", "main")
+	gitAt(t, seed, "checkout", "-b", "dev")
+	gitAt(t, seed, "commit", "--allow-empty", "-m", "origin-dev")
+	gitAt(t, seed, "push", "-u", "origin", "dev")
+
+	escErr := errors.New("escalation denied")
+	called := false
+	_, err := SmartPull{Branch: "dev", Intent: PullInBackground}.Run(context.Background(), OpDeps{
+		Repo:    repo,
+		Decider: MapDecider{"not-fast-forwardable": "checkout-and-resolve"},
+		Escalate: func(context.Context) error {
+			called = true
+			return escErr
+		},
+	})
+	if !called {
+		t.Fatal("Escalate was never called on the checkout-and-resolve path")
+	}
+	if !errors.Is(err, escErr) {
+		t.Fatalf("err = %v, want the escalation error", err)
+	}
+	if cur, _ := repo.CurrentBranch(context.Background()); cur != "main" {
+		t.Fatalf("current branch = %q, want main (must not checkout before escalation succeeds)", cur)
 	}
 }
