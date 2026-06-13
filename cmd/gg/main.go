@@ -53,7 +53,9 @@ func main() {
 	}
 	// No subcommand: launch the TUI.
 	ring := observ.NewRing(200)
-	repo := &git.Repo{Runner: gitexec.NewExecRunner("git", ".", ring)}
+	// Wrap with LimitRunner so the initial session shares the process-global
+	// subprocess bound — matching domain.Open, which the reRoot path uses.
+	repo := &git.Repo{Runner: gitexec.NewLimitRunner(gitexec.NewExecRunner("git", ".", ring))}
 	defer func() {
 		if r := recover(); r != nil {
 			path := filepath.Join(os.TempDir(), fmt.Sprintf("gg-panic-%d.json", time.Now().Unix()))
