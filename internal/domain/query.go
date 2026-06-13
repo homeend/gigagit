@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"strconv"
 	"sync"
 
 	"github.com/gigagit/gg/internal/model"
@@ -138,6 +139,15 @@ func (s *Service) loadSnapshot(ctx context.Context) (Snapshot, error) {
 		return Snapshot{}, firstErr
 	}
 	return snap, nil
+}
+
+// logPage is the gated, singleflighted commit-page read the CommitFeed uses.
+// The singleflight key includes skip so different pages don't collapse.
+func (s *Service) logPage(ctx context.Context, limit, skip int) ([]model.Commit, error) {
+	key := "commits:" + strconv.Itoa(limit) + ":" + strconv.Itoa(skip)
+	return query(ctx, s, key, func(ctx context.Context) ([]model.Commit, error) {
+		return s.repo.Log(ctx, limit, skip)
+	})
 }
 
 // Status is a single gated read for the CLI status command.
