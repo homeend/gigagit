@@ -825,27 +825,65 @@ func TestDiffOpenInheritsSessionWrap(t *testing.T) {
 }
 
 func TestDiffResizeReanchorsToTopLine(t *testing.T) {
+	// A long line wraps to MANY rows at width 60 and FEW at width 160, so the
+	// re-wrap genuinely moves lineStart[10]. Without re-anchoring, offset would
+	// clamp to a different line — a width where the wrap count is unchanged
+	// would make this test vacuous, so it asserts the layout actually changed.
 	rows := make([]textdiff.Row, 30)
-	wide := "this is a fairly long line that will wrap at a narrow pane width"
+	wide := strings.Repeat("word ", 30) // 150 cols
 	for i := range rows {
 		rows[i] = textdiff.Row{Kind: textdiff.Same, Left: wide, Right: wide, LeftNo: i + 1, RightNo: i + 1}
 	}
 	m := diffModel()
-	m.width, m.height = 80, 24
+	m.width, m.height = 60, 24
 	v := diffViewWith(rows, nil)
 	v.wrap = true
-	v.width = 80
+	v.width = 60
 	v.rebuild()
-	v.offset = v.lineStart[10] // top is logical line 10
+	before := v.lineStart[10]
+	v.offset = before // top is logical line 10
+	dispLenBefore := len(v.disp)
 	m.diffView = v
 	m.diffTag = "status:x"
 
-	u, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 24})
-	mm := u.(Model)
-	if mm.diffView == nil {
+	u, _ := m.Update(tea.WindowSizeMsg{Width: 160, Height: 24})
+	nv := u.(Model).diffView
+	if nv == nil {
 		t.Fatal("a width≥60 resize must not close the diff")
 	}
-	if got := mm.diffView.disp[mm.diffView.offset].line; got != 10 {
+	if len(nv.disp) == dispLenBefore {
+		t.Fatalf("test is vacuous: the layout did not re-wrap (disp len %d at both widths)", dispLenBefore)
+	}
+	if nv.offset == before {
+		t.Fatalf("re-anchor must recompute offset for the new wrap (still %d)", before)
+	}
+	if nv.offset != nv.lineStart[10] {
+		t.Fatalf("offset %d should equal new lineStart[10]=%d", nv.offset, nv.lineStart[10])
+	}
+	if got := nv.disp[nv.offset].line; got != 10 {
 		t.Fatalf("after resize the top line should still be 10, got %d", got)
+	}
+}
+
+func TestDiffNextBlockWhenWrappedLandsOnChangeRow(t *testing.T) {
+	// Two changes among wide wrapping lines: nextBlock must bring the 2nd
+	// change's first display row into view through the wrapped display stream.
+	rows := make([]textdiff.Row, 20)
+	wide := strings.Repeat("word ", 20)
+	for i := range rows {
+		rows[i] = textdiff.Row{Kind: textdiff.Same, Left: wide, Right: wide, LeftNo: i + 1, RightNo: i + 1}
+	}
+	rows[3] = textdiff.Row{Kind: textdiff.Changed, Left: "a", Right: "b", LeftNo: 4, RightNo: 4}
+	rows[15] = textdiff.Row{Kind: textdiff.Changed, Left: "c", Right: "d", LeftNo: 16, RightNo: 16}
+	v := diffViewWith(rows, []int{3, 15})
+	v.wrap = true
+	v.width = 60
+	v.rebuild()
+	body := 10
+	v.jumpTo(v.dispBlocks[0], body) // sitting on the 1st change
+	v.nextBlock(body)
+	target := v.lineStart[15] // the 2nd change's first display row
+	if !(v.offset <= target && target < v.offset+body) {
+		t.Fatalf("nextBlock should bring the 2nd change (row %d) into view [%d,%d)", target, v.offset, v.offset+body)
 	}
 }
