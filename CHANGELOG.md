@@ -22,6 +22,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   "gate wait" spans, and a TUI op's context is now cancelled when the
   program exits. Foundation for concurrent operations (workspace group
   sync, MCP); no behavior change for single operations.
+- Stage 2: the TUI startup load and the CLI's status/worktree reads now run
+  as **domain queries** (`Snapshot`, `Status`, `Worktrees`) under a Read
+  reservation. `Snapshot` fetches the seven startup reads in parallel
+  (collapsing sequential startup latency to the `git status` long pole) and
+  coalesces concurrent identical reads with a singleflight group; a load
+  generation counter drops a stale in-flight snapshot so a superseded load
+  can't paint over a newer one.
 
 #### Side-by-side diff view
 - TUI: `enter` on a Status-panel file opens a full-screen dual-pane diff
