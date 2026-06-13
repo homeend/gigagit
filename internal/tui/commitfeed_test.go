@@ -5,10 +5,25 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/gigagit/gg/internal/domain"
 	"github.com/gigagit/gg/internal/git"
 	"github.com/gigagit/gg/internal/gitexec"
 	"github.com/gigagit/gg/internal/model"
 )
+
+// TestWheelOverCommitsPages: mouse-wheeling the commit list toward the end
+// pages in more, like keyboard movement does.
+func TestWheelOverCommitsPages(t *testing.T) {
+	m := mouseModel() // markModel + 80x24; its feed is nil
+	m.repo = &git.Repo{Runner: gitexec.NewFakeRunner()}
+	m.feed = domain.New(m.repo).CommitFeed() // 0 commits, not exhausted → NeedsMore true
+	_, cmd := m.Update(mouseMsg(30, 5, tea.MouseButtonWheelDown))
+	if cmd == nil {
+		t.Fatal("wheel over the commits panel near the end should page in more")
+	}
+}
 
 func feedModel(n int, exhausted bool) Model {
 	m := New(&git.Repo{Runner: gitexec.NewFakeRunner()})
