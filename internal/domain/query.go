@@ -148,3 +148,26 @@ func (s *Service) Status(ctx context.Context) (model.WorkingTreeStatus, error) {
 func (s *Service) Worktrees(ctx context.Context) ([]model.Worktree, error) {
 	return query(ctx, s, "worktrees", s.repo.Worktrees)
 }
+
+// ShowFile returns the raw blob of path at rev (git show rev:path), under a
+// Read reservation, coalesced per (rev, path).
+func (s *Service) ShowFile(ctx context.Context, rev, path string) ([]byte, error) {
+	return query(ctx, s, "showfile:"+rev+":"+path, func(ctx context.Context) ([]byte, error) {
+		return s.repo.ShowFile(ctx, rev, path)
+	})
+}
+
+// CommitFiles returns the files changed by commit hash, under a Read
+// reservation, coalesced per hash.
+func (s *Service) CommitFiles(ctx context.Context, hash string) ([]model.CommitFile, error) {
+	return query(ctx, s, "commit-files:"+hash, func(ctx context.Context) ([]model.CommitFile, error) {
+		return s.repo.CommitFiles(ctx, hash)
+	})
+}
+
+// TopLevel returns the repo's working-tree root, under a Read reservation.
+func (s *Service) TopLevel(ctx context.Context) (string, error) {
+	return query(ctx, s, "toplevel", func(ctx context.Context) (string, error) {
+		return s.repo.TopLevel(ctx)
+	})
+}
