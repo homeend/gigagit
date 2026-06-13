@@ -206,9 +206,11 @@ func (s *Service) Execute(ctx context.Context, op engine.Operation,
 
 - The gate key (git common dir) is resolved lazily on first `Execute` via
   `repo.GitCommonDir` and cached — `Open` itself runs no git command, so
-  CLI startup pays nothing new. If resolution fails, `Execute` falls back
-  to the workdir as the gate key (sound for everything except cross-
-  worktree races in a broken repo; the verb error will surface anyway).
+  CLI startup pays nothing new. If resolution fails or returns empty,
+  `Execute` falls back to the workdir `Open` recorded, and a `New`-built
+  Service (no workdir) falls back to a per-Service unique key — sound for
+  everything except cross-worktree races in a broken repo, where the verb
+  error surfaces anyway.
 - `LockMode` is an optional interface:
   `interface{ LockMode() repogate.Mode }`. Every existing op defaults to
   TreeWrite. `SmartPull` implements it: `RefWrite` when
@@ -243,7 +245,9 @@ while queued), return the error.
 ## Frontend wiring
 
 **TUI** — `Model` gains `svc *domain.Service` (pointer field, the `m.repo`
-pattern); `m.repo = svc.Repo()` keeps every read call site untouched.
+pattern): `tui.New(repo)` wraps the handed-in repo via `domain.New`, and
+`reRoot` rebuilds via `domain.Open(path)` with `m.repo = m.svc.Repo()`, so
+every read call site stays untouched.
 `startOp` becomes: create `ctx, cancel := context.WithCancel(context.Background())`,
 store `cancel` on the Model (`opCancel context.CancelFunc`, set once per op
 — safe across value copies), and run `svc.Execute(ctx, op, events,
@@ -252,14 +256,19 @@ Execute). `opCancel` is invoked when the program quits while an op runs
 (tea.Quit path) and cleared on `opFinishedMsg`. A user-facing cancel key is
 stage 5, but from stage 1 an op can no longer outlive the UI silently.
 
-**CLI** — `openRepo` is replaced by `openService(workdir) *domain.Service`
-(reads keep using `svc.Repo()`); `runOperation(ctx, repo, …)` becomes
-`runOperation(ctx, svc, …)` and its body shrinks to the event-printing pump
-around `svc.Execute`. The CLI's real, cancellable command ctx flows through
-unchanged.
+**CLI** — `openRepo` and every command signature stay unchanged;
+`runOperation(ctx, repo, …)` keeps its signature and its body shrinks to
+the event-printing pump around `domain.New(repo).Execute(…)`. A fresh
+Service per call is equivalent to a shared one because gates live in the
+process-global registry keyed by common dir — the full
+frontends-hold-a-Service narrowing lands with stage 4. The CLI's real,
+cancellable command ctx flows through unchanged. (Side effect: each CLI op
+now runs one extra `git rev-parse --git-common-dir`; FakeRunner-based CLI
+tests that assert call sequences gain that leading call.)
 
-**`cmd/gg/main.go`** — its repo construction for the TUI goes through
-`domain.Open` as well.
+**`cmd/gg/main.go`** — unchanged: it keeps building the repo with its own
+ring (the panic dump references it); the TUI wraps that repo via
+`domain.New` internally.
 
 ## What stage 1 explicitly does NOT do
 
