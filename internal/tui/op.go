@@ -5,7 +5,6 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/gigagit/gg/internal/domain"
 	"github.com/gigagit/gg/internal/engine"
 )
 
@@ -56,12 +55,7 @@ func (d uiDecider) Decide(ctx context.Context, req engine.DecisionRequest) (engi
 func (m Model) startOp(op engine.Operation) (Model, tea.Cmd) {
 	msgs := make(chan tea.Msg, 32)
 	events := make(chan engine.Event, 32)
-	// svc is nil for models constructed directly (test fixtures); fall back so
-	// those callers continue to work during the transition to domain.New everywhere.
 	svc := m.svc
-	if svc == nil {
-		svc = domain.New(m.repo)
-	}
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
 		res, err := svc.Execute(ctx, op, events, uiDecider{msgs: msgs})

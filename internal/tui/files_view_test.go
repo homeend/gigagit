@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/gigagit/gg/internal/domain"
 	"github.com/gigagit/gg/internal/git"
 	"github.com/gigagit/gg/internal/gitexec"
 	"github.com/gigagit/gg/internal/model"
@@ -87,7 +88,7 @@ func filesModel() Model {
 		Stdout: "M\tinternal/tui/model.go\nA\tCHANGELOG.md\n",
 	})
 	return Model{
-		repo:   &git.Repo{Runner: f},
+		svc:    domain.New(&git.Repo{Runner: f}),
 		width:  80,
 		height: 24,
 		commits: []model.Commit{

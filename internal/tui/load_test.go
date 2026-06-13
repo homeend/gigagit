@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/gigagit/gg/internal/domain"
 	"github.com/gigagit/gg/internal/git"
 	"github.com/gigagit/gg/internal/gitexec"
 	"github.com/gigagit/gg/internal/model"
@@ -34,7 +35,7 @@ func newRepo(t *testing.T) *git.Repo {
 
 func TestLoadCmdReturnsPopulatedData(t *testing.T) {
 	repo := newRepo(t)
-	m := New(repo)
+	m := New(domain.New(repo))
 	msg := m.loadCmd()() // run the command synchronously
 	loaded, ok := msg.(dataLoadedMsg)
 	if !ok {
@@ -56,7 +57,7 @@ func TestLoadCmdReturnsPopulatedData(t *testing.T) {
 
 func TestUpdateAppliesLoadedData(t *testing.T) {
 	repo := newRepo(t)
-	m := New(repo)
+	m := New(domain.New(repo))
 	msg := m.loadCmd()()
 	updated, _ := m.Update(msg)
 	mm := updated.(Model)
@@ -94,7 +95,7 @@ func TestLoadIncludesConfigAndCommonDir(t *testing.T) {
 // TestStaleSnapshotDropped: a dataLoadedMsg from an older generation is
 // ignored, so a superseded in-flight load cannot paint over a newer one.
 func TestStaleSnapshotDropped(t *testing.T) {
-	m := New(&git.Repo{Runner: gitexec.NewFakeRunner()})
+	m := New(domain.New(&git.Repo{Runner: gitexec.NewFakeRunner()}))
 	m.loadGen = 5
 
 	stale, _ := m.Update(dataLoadedMsg{gen: 4, branches: []model.Branch{{Name: "x"}}})

@@ -4,6 +4,7 @@ import (
 	"os/exec"
 	"testing"
 
+	"github.com/gigagit/gg/internal/domain"
 	"github.com/gigagit/gg/internal/git"
 )
 
@@ -17,7 +18,7 @@ func tuiBranchExists(t *testing.T, dir, name string) bool {
 // loadModel builds a Model over dir with panel data loaded.
 func loadModel(t *testing.T, repo *gitRepoT) Model {
 	t.Helper()
-	m := New(repo)
+	m := New(domain.New(repo))
 	loaded, _ := m.Update(m.loadCmd()())
 	return loaded.(Model)
 }

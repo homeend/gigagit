@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/gigagit/gg/internal/agentskill"
+	"github.com/gigagit/gg/internal/domain"
 )
 
 // settingsModel: loaded model whose project dir contains .claude and an
@@ -17,7 +18,7 @@ func settingsModel(t *testing.T) (Model, string) {
 	os.MkdirAll(filepath.Join(dir, ".claude"), 0o755)
 	os.WriteFile(filepath.Join(dir, "AGENTS.md"),
 		[]byte("mine\n\n<!-- gg:using-gg:v0:begin -->\nold\n<!-- gg:using-gg:end -->\n"), 0o644)
-	m := New(repo)
+	m := New(domain.New(repo))
 	u, _ := m.Update(m.loadCmd()())
 	m = u.(Model)
 	return m, dir

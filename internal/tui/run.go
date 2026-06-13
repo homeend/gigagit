@@ -5,16 +5,16 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/gigagit/gg/internal/git"
+	"github.com/gigagit/gg/internal/domain"
 	"github.com/gigagit/gg/internal/repos"
 )
 
-// Run launches the TUI for repo, taking over the alternate screen until the
+// Run launches the TUI for svc, taking over the alternate screen until the
 // user quits. It returns the directory the shell should switch to (the worktree
 // the user switched into during the session, or "" if none) so a wrapper can
 // cd there on exit.
-func Run(repo *git.Repo) (string, error) {
-	m := New(repo)
+func Run(svc *domain.Service) (string, error) {
+	m := New(svc)
 	m.statePath = repos.DefaultStatePath()
 	if home, err := os.UserHomeDir(); err == nil {
 		m.initHomeDir = home

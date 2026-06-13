@@ -6,14 +6,19 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/gigagit/gg/internal/domain"
+	"github.com/gigagit/gg/internal/git"
+	"github.com/gigagit/gg/internal/gitexec"
 	"github.com/gigagit/gg/internal/model"
 )
 
 // footerModel is an idle fixture: Branches focused (zero value), two branches
 // (main is HEAD, selected by default), two worktrees ("/repo" is current,
 // selected by default). Every panel except Status/Commits has rows.
+// svc is wired with a FakeRunner so diffDiffer() is never nil.
 func footerModel() Model {
 	return Model{
+		svc:       domain.New(&git.Repo{Runner: gitexec.NewFakeRunner()}),
 		width:     120,
 		height:    40,
 		sel:       map[panel]int{},
@@ -297,7 +302,7 @@ func TestSwitchAndWorktreeKeysWorkFromAnyPanel(t *testing.T) {
 	// goroutine launched by startOp does not panic when it calls op.Run.
 	repo := newRepo(t)
 	m := footerModel()
-	m.repo = repo
+	m.svc = domain.New(repo)
 	m.sel[panelBranches] = 1 // feat/x selected in Branches
 	m.focus = panelCommits   // but focus is elsewhere
 	u, cmd := m.Update(keyMsg("s"))

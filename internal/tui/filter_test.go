@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/gigagit/gg/internal/domain"
 )
 
 func typeRunes(t *testing.T, m Model, s string) Model {
@@ -22,7 +24,7 @@ func TestSlashFilterLifecycle(t *testing.T) {
 	runGit(t, dir, "branch", "fix-1")
 	runGit(t, dir, "branch", "fix-2")
 	runGit(t, dir, "branch", "feat-x")
-	m := New(repo)
+	m := New(domain.New(repo))
 	u, _ := m.Update(m.loadCmd()())
 	m = u.(Model)
 	m.focus = panelBranches
@@ -96,7 +98,7 @@ func TestFilteredEnterSwitchesToVisibleWorktree(t *testing.T) {
 	wtB := filepath.Join(filepath.Dir(dir), "wt-bbb")
 	runGit(t, dir, "worktree", "add", "-b", "feature/aaa", wtA, "main")
 	runGit(t, dir, "worktree", "add", "-b", "feature/bbb", wtB, "main")
-	m := New(repo)
+	m := New(domain.New(repo))
 	u, _ := m.Update(m.loadCmd()())
 	m = u.(Model)
 	m.focus = panelWorktrees
@@ -121,7 +123,7 @@ func TestFilteredEnterSwitchesToVisibleWorktree(t *testing.T) {
 func TestFilterSurvivesReloadAndMovesBetweenPanels(t *testing.T) {
 	dir, repo := newRepoDir(t)
 	runGit(t, dir, "branch", "fix-1")
-	m := New(repo)
+	m := New(domain.New(repo))
 	u, _ := m.Update(m.loadCmd()())
 	m = u.(Model)
 	m.focus = panelBranches

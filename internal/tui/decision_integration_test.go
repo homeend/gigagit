@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/gigagit/gg/internal/domain"
 	"github.com/gigagit/gg/internal/engine"
 	"github.com/gigagit/gg/internal/git"
 	"github.com/gigagit/gg/internal/gitexec"
@@ -50,7 +51,7 @@ func TestSmartPullDecisionAnsweredThroughModal(t *testing.T) {
 	gitRun(clone, "commit", "-m", "local")
 
 	repo := &git.Repo{Runner: gitexec.NewExecRunner("git", clone, observ.NewRing(50))}
-	m := New(repo)
+	m := New(domain.New(repo))
 	loaded, _ := m.Update(m.loadCmd()())
 	m = loaded.(Model)
 

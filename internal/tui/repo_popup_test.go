@@ -9,6 +9,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/gigagit/gg/internal/domain"
 	"github.com/gigagit/gg/internal/repos"
 )
 
@@ -27,7 +28,7 @@ func seededModel(t *testing.T) (Model, string, string) {
 	if err := repos.Touch(state, otherDir, time.Unix(1000, 0)); err != nil {
 		t.Fatal(err)
 	}
-	m := New(repo)
+	m := New(domain.New(repo))
 	m.statePath = state
 	u, _ := m.Update(m.loadCmd()())
 	m = u.(Model)

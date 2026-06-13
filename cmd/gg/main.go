@@ -12,6 +12,7 @@ import (
 	"github.com/gigagit/gg/internal/app"
 	"github.com/gigagit/gg/internal/buildinfo"
 	"github.com/gigagit/gg/internal/cli"
+	"github.com/gigagit/gg/internal/domain"
 	"github.com/gigagit/gg/internal/git"
 	"github.com/gigagit/gg/internal/gitexec"
 	"github.com/gigagit/gg/internal/observ"
@@ -61,7 +62,7 @@ func main() {
 			panic(r)
 		}
 	}()
-	cwd, err := tui.Run(repo)
+	cwd, err := tui.Run(domain.New(repo))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
