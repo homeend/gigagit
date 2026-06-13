@@ -37,6 +37,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   coalesces concurrent identical reads with a singleflight group; a load
   generation counter drops a stale in-flight snapshot so a superseded load
   can't paint over a newer one.
+- Stage 3: the Commits panel is backed by a domain `CommitFeed` read-model and
+  loads history **on demand** — no more 50-commit cap. Scrolling toward the
+  end pages in more (50 initial, 200 per page) through the gate; the panel
+  label shows `Commits N+` until history is exhausted, then `Commits N`. The
+  feed is the single source of truth for commits (`Snapshot` no longer reads
+  them); `git log` gained a `--skip` offset.
 
 #### Side-by-side diff view
 - TUI: `enter` on a Status-panel file opens a full-screen dual-pane diff
