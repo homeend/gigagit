@@ -351,3 +351,50 @@ func TestCollapseNoBlocksEmpty(t *testing.T) {
 		t.Fatalf("no-change collapse must be empty, got %d lines %d blocks", len(lines), len(blocks))
 	}
 }
+
+func TestCollapseDelOnlyBlockAnchorsWindow(t *testing.T) {
+	// A pure deletion (Del row) must anchor a keep window just like Changed.
+	rows := make([]Row, 20)
+	for i := range rows {
+		rows[i] = Row{Kind: Same, LeftNo: i + 1, RightNo: i + 1}
+	}
+	rows[10] = Row{Kind: Del, Left: "gone", LeftNo: 11}
+	lines, blocks := Collapse(rows, []int{10}, 3)
+	if len(blocks) != 1 {
+		t.Fatalf("blocks = %v, want one", blocks)
+	}
+	if lines[blocks[0]].Fold != 0 || lines[blocks[0]].Row.Kind != Del {
+		t.Fatalf("block line = %+v, want the Del row", lines[blocks[0]])
+	}
+	// Leading + trailing folds around the kept window [7..13].
+	if lines[0].Fold != 7 || lines[len(lines)-1].Fold != 6 {
+		t.Fatalf("folds wrong: first %d last %d", lines[0].Fold, lines[len(lines)-1].Fold)
+	}
+}
+
+func TestCollapseAddOnlyBlockAnchorsWindow(t *testing.T) {
+	rows := make([]Row, 20)
+	for i := range rows {
+		rows[i] = Row{Kind: Same, LeftNo: i + 1, RightNo: i + 1}
+	}
+	rows[10] = Row{Kind: Add, Right: "new", RightNo: 11}
+	lines, blocks := Collapse(rows, []int{10}, 3)
+	if len(blocks) != 1 || lines[blocks[0]].Row.Kind != Add {
+		t.Fatalf("Add row must anchor a block: lines[%v]", blocks)
+	}
+}
+
+func TestCollapseContextExceedsGapRoundTrip(t *testing.T) {
+	// With context ≥ len, Collapse keeps every row and its content matches Expand.
+	rows := sameRows(10, 5)
+	lines, _ := Collapse(rows, []int{5}, len(rows))
+	exp := Expand(rows)
+	if len(lines) != len(exp) {
+		t.Fatalf("len = %d, want %d", len(lines), len(exp))
+	}
+	for i := range lines {
+		if lines[i] != exp[i] {
+			t.Fatalf("line %d = %+v, want %+v", i, lines[i], exp[i])
+		}
+	}
+}
