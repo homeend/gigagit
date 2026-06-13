@@ -21,6 +21,9 @@ func Run(repo *git.Repo) (string, error) {
 	}
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	final, err := p.Run()
+	if fm, ok := final.(Model); ok && fm.opCancel != nil {
+		fm.opCancel()
+	}
 	if err != nil {
 		return "", err
 	}
