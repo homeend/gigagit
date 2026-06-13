@@ -9,8 +9,8 @@ import (
 	"io"
 	"strings"
 	"sync"
-	"time"
 
+	"github.com/gigagit/gg/internal/domain"
 	"github.com/gigagit/gg/internal/engine"
 	"github.com/gigagit/gg/internal/git"
 	"github.com/gigagit/gg/internal/gitexec"
@@ -66,12 +66,11 @@ func (s *syncWriter) Write(p []byte) (int, error) {
 	return s.w.Write(p)
 }
 
-// runOperation runs op, printing each Progress step to progress, and returns the
-// operation result. The op runs in a goroutine so events stream live; decisions
-// are resolved by dec (which may prompt). The whole run is reported to the span
-// sink as one "op <Type>" span.
+// runOperation runs op through the domain layer (which serializes it on the
+// repo's gate and emits the op span), printing each Progress step to
+// progress. The op runs in a goroutine so events stream live; decisions are
+// resolved by dec (which may prompt).
 func runOperation(ctx context.Context, repo *git.Repo, op engine.Operation, dec engine.Decider, progress io.Writer) (engine.Result, error) {
-	opStart := time.Now()
 	events := make(chan engine.Event, 32)
 	var (
 		res engine.Result
@@ -79,7 +78,7 @@ func runOperation(ctx context.Context, repo *git.Repo, op engine.Operation, dec 
 	)
 	done := make(chan struct{})
 	go func() {
-		res, err = op.Run(ctx, engine.OpDeps{Repo: repo, Events: events, Decider: dec})
+		res, err = domain.New(repo).Execute(ctx, op, events, dec)
 		close(events)
 		close(done)
 	}()
@@ -93,11 +92,5 @@ func runOperation(ctx context.Context, repo *git.Repo, op engine.Operation, dec 
 		}
 	}
 	<-done
-	span := observ.Span{Name: "op " + engine.OpName(op), Start: opStart, Duration: time.Since(opStart)}
-	if err != nil {
-		span.ExitCode = 1
-		span.Err = err.Error()
-	}
-	observ.EmitSpan(span)
 	return res, err
 }
