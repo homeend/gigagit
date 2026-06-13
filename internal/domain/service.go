@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gigagit/gg/internal/cache"
 	"github.com/gigagit/gg/internal/engine"
 	"github.com/gigagit/gg/internal/git"
 	"github.com/gigagit/gg/internal/gitexec"
@@ -25,9 +26,11 @@ type Service struct {
 	repo    *git.Repo
 	workdir string // fallback gate key when common-dir resolution fails
 
-	mu     sync.Mutex
-	gate   *repogate.Gate // resolved lazily on first Execute or query
-	flight flightGroup    // coalesces concurrent calls sharing a key
+	mu      sync.Mutex
+	gate    *repogate.Gate // resolved lazily on first Execute or query
+	flight  flightGroup    // coalesces concurrent calls sharing a key
+	factory cache.Factory  // vends the diff (and future) caches
+	differ  Differ         // memoized production diff engine
 }
 
 // Open builds a Service rooted at workdir with the standard runner — the
@@ -40,12 +43,23 @@ func Open(workdir string) *Service {
 
 // New wraps an existing repo (tests, callers with their own runner wiring).
 func New(repo *git.Repo) *Service {
-	return &Service{repo: repo}
+	return &Service{repo: repo, factory: cache.NewFactory(0, 0)}
 }
 
 // Repo exposes the underlying repo for READ verbs. Transitional: stage 2
 // moves frontend reads into domain queries; stage 4 removes this.
 func (s *Service) Repo() *git.Repo { return s.repo }
+
+// Differ returns this Service's diff engine: enhanced (intraline) and cached,
+// over the Service's "diff" cache. Built once, lazily, under the Service lock.
+func (s *Service) Differ() Differ {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.differ == nil {
+		s.differ = NewDiffer(DifferOptions{Enhanced: true, Cached: true}, s.factory.Cache("diff"))
+	}
+	return s.differ
+}
 
 // gateFor resolves (once) the gate for this repo, keyed by the git common
 // dir so all linked worktrees share one gate. A repo whose common dir
