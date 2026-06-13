@@ -67,3 +67,31 @@ func TestStatusHOpensHistory(t *testing.T) {
 		t.Errorf("wrong navContext: %+v", h.ctx)
 	}
 }
+
+func TestFilesViewHOpensHistory(t *testing.T) {
+	m := Model{width: 100, height: 30}
+	m.filesView = &contentPopup{lines: []contentLine{{text: "a.go", path: "a.go"}}}
+	m.filesTreeFocused = true
+	m.filesHash = "abc123"
+	mm, _ := m.updateFilesViewKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("h")})
+	h, ok := mm.(Model).stackTop().(*historyView)
+	if !ok {
+		t.Fatal("h on a files-view row should push a historyView")
+	}
+	if h.ctx.path != "a.go" || h.ctx.rev != "abc123" {
+		t.Errorf("wrong navContext: %+v", h.ctx)
+	}
+}
+
+func TestDiffViewHOpensHistory(t *testing.T) {
+	m := Model{width: 100, height: 30}
+	m.diffView = &diffView{title: "a.go", rev: "abc123"}
+	mm, _ := m.updateDiffViewKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("h")})
+	h, ok := mm.(Model).stackTop().(*historyView)
+	if !ok {
+		t.Fatal("h in the diff view should push a historyView")
+	}
+	if h.ctx.path != "a.go" || h.ctx.rev != "abc123" {
+		t.Errorf("wrong navContext: %+v", h.ctx)
+	}
+}
