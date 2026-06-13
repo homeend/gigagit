@@ -18,7 +18,23 @@ var (
 	diffEmph    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("231")) // bright fg over the hot cell bg
 )
 
-const diffHint = "[↑↓] scroll  [pgup/pgdn] page  [n/p] change  [f] partial  [w] wrap  [h] history  [esc] close  [q] quit"
+// diffHintFor builds the diff-view hint for the current long-line mode. Kept
+// short enough that [esc] close survives truncation at width 100
+// (TestRenderDiffViewPanes). The scroll variant appends the pan keys.
+func diffHintFor(long longMode) string {
+	mode := "scroll"
+	switch long {
+	case longWrap:
+		mode = "wrap"
+	case longTruncate:
+		mode = "trunc"
+	}
+	pan := ""
+	if long == longScroll {
+		pan = "  [←→/0] pan"
+	}
+	return "[↑↓] scroll  [n/p] change  [f] partial  [w] lines:" + mode + pan + "  [h] history  [esc] close  [q] quit"
+}
 
 // cellSeg is one pane's text for one display row: the sanitized display runes
 // and the parallel emphasis mask, already ≤ the pane's text width. A zero
@@ -151,7 +167,7 @@ func (m Model) renderDiffView() string {
 	for len(lines) < h-1 {
 		lines = append(lines, "")
 	}
-	lines = append(lines, truncate(diffHint, w))
+	lines = append(lines, truncate(diffHintFor(v.long), w))
 	return strings.Join(lines, "\n")
 }
 

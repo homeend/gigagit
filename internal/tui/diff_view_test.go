@@ -887,3 +887,48 @@ func TestDiffNextBlockWhenWrappedLandsOnChangeRow(t *testing.T) {
 		t.Fatalf("nextBlock should bring the 2nd change (row %d) into view [%d,%d)", target, v.offset, v.offset+body)
 	}
 }
+
+func TestDiffScrollPanKeys(t *testing.T) {
+	rows := make([]textdiff.Row, 5)
+	wide := strings.Repeat("word ", 40) // 200 cols, far wider than any pane
+	for i := range rows {
+		rows[i] = textdiff.Row{Kind: textdiff.Same, Left: wide, Right: wide, LeftNo: i + 1, RightNo: i + 1}
+	}
+	m := diffModel()
+	m.width, m.height = 80, 24
+	v := diffViewWith(rows, nil) // default long == longScroll
+	v.width = 80
+	v.rebuild()
+	m.diffView = v
+	m.diffTag = "status:x"
+
+	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	v1 := u.(Model).diffView
+	if v1.hOffset != m.hscrollStep() {
+		t.Fatalf("→ should pan by %d, got hOffset %d", m.hscrollStep(), v1.hOffset)
+	}
+	u2, _ := u.(Model).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("0")})
+	if u2.(Model).diffView.hOffset != 0 {
+		t.Fatal("0 must reset hOffset")
+	}
+	u3, _ := u2.(Model).Update(tea.KeyMsg{Type: tea.KeyLeft})
+	if u3.(Model).diffView.hOffset != 0 {
+		t.Fatal("← at column 0 must clamp to 0")
+	}
+}
+
+func TestDiffPanNoOpWhenNotScroll(t *testing.T) {
+	rows := sameRowsTUI(5, 2)
+	m := diffModel()
+	m.width, m.height = 80, 24
+	v := diffViewWith(rows, []int{2})
+	v.long = longWrap
+	v.width = 80
+	v.rebuild()
+	m.diffView = v
+	m.diffTag = "status:x"
+	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	if u.(Model).diffView.hOffset != 0 {
+		t.Fatal("→ must be a no-op outside scroll mode")
+	}
+}

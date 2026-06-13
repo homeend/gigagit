@@ -452,6 +452,20 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		} else {
 			v.offset = 0
 		}
+	case "left":
+		if v.long == longScroll {
+			v.hOffset -= m.hscrollStep()
+			v.clampHOffset()
+		}
+	case "right":
+		if v.long == longScroll {
+			v.hOffset += m.hscrollStep()
+			v.clampHOffset()
+		}
+	case "0":
+		if v.long == longScroll {
+			v.hOffset = 0
+		}
 	}
 	return m, nil
 }

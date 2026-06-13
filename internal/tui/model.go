@@ -129,6 +129,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				w, _ := m.overlayDims()
 				v.relayout(w)
+				v.clampHOffset()
 				if topLine < len(v.lineStart) {
 					v.offset = v.lineStart[topLine]
 				}
