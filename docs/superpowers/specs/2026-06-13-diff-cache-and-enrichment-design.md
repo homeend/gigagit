@@ -54,8 +54,14 @@ Out of scope:
   (commit lists, files-in-commits) but wires only the diff consumer now.
 - Routing diff blob reads through the repogate Read reservation. The lazy
   byte-sources keep today's fetch behaviour (`repo.ShowFile` / `os.ReadFile`)
-  unchanged on a miss; gating diff reads is separate CQRS work.
-- Disk/persistent caching, byte-size eviction, cross-process sharing.
+  unchanged on a miss; gating diff reads is separate CQRS work. **Why this is
+  safe to leave ungated:** cached commit-blob reads (`hash:path`) are reads of
+  immutable git objects — correct regardless of concurrent ref moves.
+  Working-tree reads could race a checkout, but those match today's behaviour
+  and aren't cached. (A maintainer "fixing" this by gating must keep that
+  distinction.)
+- Disk/persistent caching, cross-process sharing. (Memory bounding is **in**
+  scope — see the two-bound LRU below.)
 
 ## Decisions (locked during brainstorming)
 
@@ -65,9 +71,12 @@ Out of scope:
 - **Commit diffs only are cached.** The working-tree diff (HEAD→disk) changes
   on every edit and is hard to invalidate; it always recomputes (cache key
   `""`). It is opened far less often than commit diffs.
-- **In-memory LRU**, entry-count bounded, so it cannot grow unbounded. The
-  upstream `maxDiffBytes` (10 MiB) guard already keeps any single cached
-  result small.
+- **In-memory LRU, two-bound:** evict when **either** a max entry count
+  (1024) **or** a byte budget (64 MiB) is exceeded. Entry-count alone does not
+  bound memory when diffs vary ~1000× in size (1024 × a 20 MiB max-size diff
+  would be GBs); the byte budget is the hard memory ceiling the user asked
+  for. Values report their weight via a `Size() int` method (`Sized`); a value
+  without one weighs 1, so the entry cap still bounds it.
 - **Factory is injected, not a package singleton.** Better for testing (fresh
   cache per test, fake/no-op cache injectable) and consistent with the
   codebase rule: inject by default; go process-global only when correctness
@@ -91,7 +100,9 @@ package cache
 
 // Cache is a concurrency-safe bounded store of computed values. Keys are
 // caller-chosen (usually content hashes). Values are any; callers cast or
-// use the Load helper.
+// use the Load helper. A given cache name must hold ONE value type — Load
+// panics on a type mismatch, so a future "commits" consumer must not reuse
+// the "diff" name.
 type Cache interface {
 	// GetOrLoad returns the value for key, computing it via load on a miss
 	// and storing the result. load runs OUTSIDE the lock, so a concurrent
@@ -107,28 +118,41 @@ type Cache interface {
 	Len() int
 }
 
+// Sized lets a cached value report its approximate heap weight in bytes for
+// the byte budget. A value that does not implement Sized weighs 1 (the cache
+// then bounds it by entry count only).
+type Sized interface {
+	Size() int
+}
+
 // Factory vends named caches. The same name returns the same instance, so
 // independent consumers ("diff", later "commits", "files") each get their
-// own bounded LRU. New names are created lazily at the configured capacity.
+// own bounded LRU. New names are created lazily at the configured bounds.
 type Factory interface {
 	Cache(name string) Cache
 }
 
-// NewFactory builds an in-memory factory. capacity is the per-cache entry
-// cap (LRU eviction once exceeded). capacity <= 0 uses defaultCapacity.
-func NewFactory(capacity int) Factory
+// NewFactory builds an in-memory factory whose caches are two-bound: at most
+// capacity entries AND at most byteBudget total bytes (evict the LRU tail
+// when either is exceeded). Non-positive values use the defaults
+// (defaultCapacity = 1024, defaultByteBudget = 64 MiB).
+func NewFactory(capacity, byteBudget int) Factory
 ```
 
 - **Implementation:** `memFactory` holds `map[string]Cache` under a mutex.
   Each `Cache` is an `lru` — a `container/list` (recency order, MRU front) +
-  `map[string]*list.Element` + its own `sync.Mutex`. `GetOrLoad`:
-  lock→check→unlock; on miss, `load()` outside the lock; lock→store
-  (evicting the LRU tail if over capacity)→unlock. On a store race for the
-  same key, last writer wins; both callers get a correct value.
-- **Capacity:** entry-count. Default `defaultCapacity = 256`. The diff cache
-  is created at the default. (Byte-size bounding is a future refinement; the
-  10 MiB per-entry guard upstream bounds worst case to ~cap × 10 MiB only in
-  a pathological all-huge-diffs session, and realistic diffs are KBs.)
+  `map[string]*list.Element` + its own `sync.Mutex`, tracking total cached
+  bytes. `GetOrLoad`: lock→check→unlock; on miss, `load()` outside the lock;
+  lock→store→unlock. On a store, the value's weight is `Size()` if it
+  implements `Sized`, else 1; the tail is evicted while
+  `len > capacity || bytes > byteBudget` (keeping at least the just-stored
+  entry). Store race on the same key: last writer wins, weight adjusted; both
+  callers get a correct value.
+- **Bounds:** `defaultCapacity = 1024`, `defaultByteBudget = 64 MiB`; the diff
+  cache uses the defaults. `domain.Diff` implements `Size()` (sum of row text
+  bytes + small per-row overhead); the upstream 10 MiB per-side guard caps any
+  single entry at ~20 MiB, so the byte budget holds ~3 worst-case or ~1024
+  typical (KB) diffs — whichever bound bites first.
 - **Typed helper** (avoids casts at call sites, reusable by any consumer):
 
 ```go
@@ -212,6 +236,10 @@ type Diff struct {
 	TooLarge bool
 }
 
+// Size implements cache.Sized: the diff's approximate heap weight (row text on
+// both sides + small per-row overhead) for the cache byte budget.
+func (d Diff) Size() int
+
 // Differ computes an aligned diff, possibly from cache.
 type Differ interface {
 	Diff(ctx context.Context, req Request) (Diff, error)
@@ -274,6 +302,11 @@ domain.New(repo) / domain.Open(workdir)      // unchanged signatures
    `loadCommitDiffCmd` (unchanged shape).
 2. The `tea.Cmd` builds:
    - `key := hash + "^.." + hash + ":" + path` (immutable ⇒ cacheable).
+     **Invariant:** `hash` is a full commit SHA — `m.filesHash` comes from
+     `repo.Log`'s `%H`, never a symbolic ref or short hash. The key's
+     immutability (and thus correctness) depends on this; a future change that
+     passes `HEAD`/a branch name/an abbreviated hash here would cache a stale
+     diff. `<fullsha>^` likewise resolves to a fixed parent object.
    - `old := func(ctx){ return repo.ShowFile(ctx, hash+"^", oldPath) }`
      (nil source when `status == "A"`).
    - `new := func(ctx){ return repo.ShowFile(ctx, hash, path) }`
@@ -290,6 +323,13 @@ domain.New(repo) / domain.Open(workdir)      // unchanged signatures
    `v.fullBlocks = out.Result.Blocks`, `v.rebuild()`, jump to the first
    block; returns `diffMsg`. **Working-tree diffs** (`loadStatusDiffCmd`) do
    the same with `Key: ""` — always recompute (never cached).
+
+> **Shared-slice caveat:** `v.full = out.Result.Rows` aliases the cached
+> slice across every hit. This is safe today — `rebuild`/`Expand`/`Collapse`
+> allocate fresh slices and nothing mutates `Rows` in place — but a future
+> in-place edit of `v.full[i]` would silently corrupt the cache for all later
+> opens. `applyDiff` (and the `Diff` doc) must note this: treat the rows as
+> read-only.
 
 Because `domain.Diff` carries the binary/too-large verdicts, they are cached
 alongside successful results: an immutable commit blob that is binary or

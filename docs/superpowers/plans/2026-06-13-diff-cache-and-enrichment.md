@@ -33,8 +33,16 @@ import (
 	"testing"
 )
 
+// sized is a test value reporting a fixed byte weight via cache.Sized.
+type sized struct {
+	id string
+	n  int
+}
+
+func (s sized) Size() int { return s.n }
+
 func TestGetOrLoadMissThenHit(t *testing.T) {
-	c := NewFactory(0).Cache("t")
+	c := NewFactory(0, 0).Cache("t")
 	calls := 0
 	load := func() (any, error) { calls++; return 42, nil }
 	if v, _ := c.GetOrLoad("k", load); v.(int) != 42 {
@@ -49,7 +57,7 @@ func TestGetOrLoadMissThenHit(t *testing.T) {
 }
 
 func TestGetOrLoadErrorNotStored(t *testing.T) {
-	c := NewFactory(0).Cache("t")
+	c := NewFactory(0, 0).Cache("t")
 	_, err := c.GetOrLoad("k", func() (any, error) { return nil, errors.New("boom") })
 	if err == nil {
 		t.Fatal("want error")
@@ -59,8 +67,8 @@ func TestGetOrLoadErrorNotStored(t *testing.T) {
 	}
 }
 
-func TestEvictsLeastRecentlyUsed(t *testing.T) {
-	c := NewFactory(2).Cache("t")
+func TestEvictsLeastRecentlyUsedByCount(t *testing.T) {
+	c := NewFactory(2, 0).Cache("t") // entry cap 2, default byte budget
 	put := func(k string) { c.GetOrLoad(k, func() (any, error) { return k, nil }) }
 	put("a")
 	put("b")
@@ -80,8 +88,36 @@ func TestEvictsLeastRecentlyUsed(t *testing.T) {
 	}
 }
 
+func TestEvictsOnByteBudget(t *testing.T) {
+	// High entry cap, tight byte budget: weight, not count, drives eviction.
+	c := NewFactory(1000, 100).Cache("t") // 100-byte budget
+	put := func(id string, n int) {
+		c.GetOrLoad(id, func() (any, error) { return sized{id: id, n: n}, nil })
+	}
+	put("a", 60)
+	put("b", 60) // total would be 120 > 100 → evict a (the LRU)
+	if _, ok := c.Get("a"); ok {
+		t.Fatal("a should have been evicted by the byte budget")
+	}
+	if _, ok := c.Get("b"); !ok {
+		t.Fatal("b should be present")
+	}
+}
+
+func TestUnsizedValuesWeighOne(t *testing.T) {
+	// Values without Size() weigh 1, so under a normal byte budget they're
+	// bounded by entry count alone — no spurious byte-budget eviction.
+	c := NewFactory(1000, 0).Cache("t") // default 64 MiB budget
+	for _, k := range []string{"a", "b", "c"} {
+		c.GetOrLoad(k, func() (any, error) { return k, nil })
+	}
+	if c.Len() != 3 {
+		t.Fatalf("unsized values must not be byte-evicted under a normal budget; Len=%d want 3", c.Len())
+	}
+}
+
 func TestFactoryNamesAreIsolated(t *testing.T) {
-	f := NewFactory(0)
+	f := NewFactory(0, 0)
 	if f.Cache("x") != f.Cache("x") {
 		t.Fatal("same name must return the same instance")
 	}
@@ -93,7 +129,7 @@ func TestFactoryNamesAreIsolated(t *testing.T) {
 }
 
 func TestLoadTypedRoundTrip(t *testing.T) {
-	c := NewFactory(0).Cache("t")
+	c := NewFactory(0, 0).Cache("t")
 	v, err := Load[string](c, "k", func() (string, error) { return "hi", nil })
 	if err != nil || v != "hi" {
 		t.Fatalf("got %q, %v", v, err)
@@ -101,7 +137,7 @@ func TestLoadTypedRoundTrip(t *testing.T) {
 }
 
 func TestLoadTypeMismatchPanics(t *testing.T) {
-	c := NewFactory(0).Cache("t")
+	c := NewFactory(0, 0).Cache("t")
 	c.GetOrLoad("k", func() (any, error) { return 7, nil }) // store an int
 	defer func() {
 		if recover() == nil {
@@ -112,7 +148,7 @@ func TestLoadTypeMismatchPanics(t *testing.T) {
 }
 
 func TestConcurrentAccess(t *testing.T) {
-	c := NewFactory(8).Cache("t")
+	c := NewFactory(8, 0).Cache("t")
 	var wg sync.WaitGroup
 	for i := 0; i < 50; i++ {
 		wg.Add(1)
@@ -154,12 +190,17 @@ import (
 	"sync"
 )
 
-// defaultCapacity is the per-cache entry cap used when NewFactory is given a
-// non-positive capacity. Bounding is by entry count: an LRU never grows past
-// it. The upstream diff size guard keeps any single cached value small.
-const defaultCapacity = 256
+// Default per-cache bounds used when NewFactory is given non-positive values.
+// The LRU is two-bound: it evicts when EITHER the entry count or the total
+// byte weight is exceeded. Entry count alone does not bound memory when values
+// vary widely in size; the byte budget is the hard memory ceiling.
+const (
+	defaultCapacity   = 1024
+	defaultByteBudget = 64 << 20 // 64 MiB
+)
 
-// Cache is a concurrency-safe, bounded key→value store.
+// Cache is a concurrency-safe, bounded key→value store. A given cache holds one
+// value type (Load panics on a type mismatch).
 type Cache interface {
 	// GetOrLoad returns the value for key, computing it via load on a miss and
 	// storing the result. load runs OUTSIDE the lock, so two concurrent misses
@@ -173,25 +214,36 @@ type Cache interface {
 	Len() int
 }
 
+// Sized lets a cached value report its approximate heap weight in bytes for the
+// byte budget. A value not implementing Sized weighs 1 (bounded by count only).
+type Sized interface {
+	Size() int
+}
+
 // Factory vends named caches; the same name returns the same instance, so
 // independent consumers each get their own bounded LRU.
 type Factory interface {
 	Cache(name string) Cache
 }
 
-// NewFactory builds an in-memory Factory whose caches each hold up to capacity
-// entries (defaultCapacity when capacity <= 0).
-func NewFactory(capacity int) Factory {
+// NewFactory builds an in-memory Factory whose caches are two-bound: at most
+// capacity entries AND at most byteBudget total bytes. Non-positive values use
+// the defaults (defaultCapacity, defaultByteBudget).
+func NewFactory(capacity, byteBudget int) Factory {
 	if capacity <= 0 {
 		capacity = defaultCapacity
 	}
-	return &memFactory{capacity: capacity, caches: map[string]Cache{}}
+	if byteBudget <= 0 {
+		byteBudget = defaultByteBudget
+	}
+	return &memFactory{capacity: capacity, byteBudget: byteBudget, caches: map[string]Cache{}}
 }
 
 type memFactory struct {
-	capacity int
-	mu       sync.Mutex
-	caches   map[string]Cache
+	capacity   int
+	byteBudget int
+	mu         sync.Mutex
+	caches     map[string]Cache
 }
 
 func (f *memFactory) Cache(name string) Cache {
@@ -199,27 +251,41 @@ func (f *memFactory) Cache(name string) Cache {
 	defer f.mu.Unlock()
 	c, ok := f.caches[name]
 	if !ok {
-		c = newLRU(f.capacity)
+		c = newLRU(f.capacity, f.byteBudget)
 		f.caches[name] = c
 	}
 	return c
 }
 
-// entry is one cached key/value held in the recency list.
+// entry is one cached key/value held in the recency list, with its byte weight.
 type entry struct {
-	key string
-	val any
+	key    string
+	val    any
+	weight int
+}
+
+// weigh reports a value's byte weight: its Size() if it implements Sized, else 1.
+func weigh(val any) int {
+	if s, ok := val.(Sized); ok {
+		if n := s.Size(); n > 0 {
+			return n
+		}
+		return 1
+	}
+	return 1
 }
 
 type lru struct {
-	capacity int
-	mu       sync.Mutex
-	ll       *list.List               // front = most recently used
-	items    map[string]*list.Element // key → element holding *entry
+	capacity   int
+	byteBudget int
+	mu         sync.Mutex
+	ll         *list.List               // front = most recently used
+	items      map[string]*list.Element // key → element holding *entry
+	bytes      int                      // sum of entry weights
 }
 
-func newLRU(capacity int) *lru {
-	return &lru{capacity: capacity, ll: list.New(), items: map[string]*list.Element{}}
+func newLRU(capacity, byteBudget int) *lru {
+	return &lru{capacity: capacity, byteBudget: byteBudget, ll: list.New(), items: map[string]*list.Element{}}
 }
 
 func (c *lru) Get(key string) (any, bool) {
@@ -245,19 +311,34 @@ func (c *lru) GetOrLoad(key string, load func() (any, error)) (any, error) {
 }
 
 func (c *lru) store(key string, val any) {
+	w := weigh(val)
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if el, ok := c.items[key]; ok { // a concurrent miss already stored: refresh
-		el.Value.(*entry).val = val
+		e := el.Value.(*entry)
+		c.bytes += w - e.weight
+		e.val, e.weight = val, w
 		c.ll.MoveToFront(el)
+		c.evict()
 		return
 	}
-	c.items[key] = c.ll.PushFront(&entry{key: key, val: val})
-	for c.ll.Len() > c.capacity { // evict least-recently-used
-		if back := c.ll.Back(); back != nil {
-			c.ll.Remove(back)
-			delete(c.items, back.Value.(*entry).key)
+	c.items[key] = c.ll.PushFront(&entry{key: key, val: val, weight: w})
+	c.bytes += w
+	c.evict()
+}
+
+// evict drops the LRU tail while either bound is exceeded, always keeping at
+// least one entry (so a lone over-budget value is still served).
+func (c *lru) evict() {
+	for c.ll.Len() > 1 && (c.ll.Len() > c.capacity || c.bytes > c.byteBudget) {
+		back := c.ll.Back()
+		if back == nil {
+			return
 		}
+		e := back.Value.(*entry)
+		c.ll.Remove(back)
+		delete(c.items, e.key)
+		c.bytes -= e.weight
 	}
 }
 
@@ -637,6 +718,19 @@ func TestPlainDifferTooLarge(t *testing.T) {
 	}
 }
 
+func TestDiffSizeCountsRowText(t *testing.T) {
+	d := NewDiffer(DifferOptions{}, nil)
+	out, _ := d.Diff(context.Background(), Request{Old: src([]byte("abc\n")), New: src([]byte("abxy\n"))})
+	if out.Size() <= 0 {
+		t.Fatalf("a non-empty diff must report positive Size, got %d", out.Size())
+	}
+	// Binary/too-large outcomes hold no rows → near-zero weight.
+	bin := Diff{Binary: true}
+	if bin.Size() != 0 {
+		t.Fatalf("binary outcome Size = %d, want 0", bin.Size())
+	}
+}
+
 func TestPlainDifferSourceErrorPropagates(t *testing.T) {
 	d := NewDiffer(DifferOptions{}, nil)
 	fail := func(context.Context) ([]byte, error) { return nil, errors.New("boom") }
@@ -646,7 +740,7 @@ func TestPlainDifferSourceErrorPropagates(t *testing.T) {
 }
 
 func TestCachedServesWithoutReinvokingSources(t *testing.T) {
-	c := cache.NewFactory(0).Cache("diff")
+	c := cache.NewFactory(0, 0).Cache("diff")
 	d := NewDiffer(DifferOptions{Enhanced: true, Cached: true}, c)
 	calls := 0
 	counting := func(context.Context) ([]byte, error) { calls++; return []byte("a\n"), nil }
@@ -659,7 +753,7 @@ func TestCachedServesWithoutReinvokingSources(t *testing.T) {
 }
 
 func TestCachedEmptyKeyNeverCaches(t *testing.T) {
-	c := cache.NewFactory(0).Cache("diff")
+	c := cache.NewFactory(0, 0).Cache("diff")
 	d := NewDiffer(DifferOptions{Cached: true}, c)
 	calls := 0
 	counting := func(context.Context) ([]byte, error) { calls++; return []byte("a\n"), nil }
@@ -672,7 +766,7 @@ func TestCachedEmptyKeyNeverCaches(t *testing.T) {
 }
 
 func TestCachedQualityNamespacing(t *testing.T) {
-	c := cache.NewFactory(0).Cache("diff")
+	c := cache.NewFactory(0, 0).Cache("diff")
 	enh := NewDiffer(DifferOptions{Enhanced: true, Cached: true}, c)
 	plain := NewDiffer(DifferOptions{Enhanced: false, Cached: true}, c)
 	calls := 0
@@ -747,6 +841,21 @@ type Diff struct {
 	Result   textdiff.Result // valid unless Binary or TooLarge
 	Binary   bool
 	TooLarge bool
+}
+
+// Size implements cache.Sized: the diff's approximate heap weight in bytes for
+// the cache byte budget — the row text on both sides (the dominant cost) plus
+// a small per-row overhead. Binary/too-large outcomes hold no rows.
+//
+// The cached rows are shared across every cache hit (the loader aliases them
+// into the view); treat them as READ-ONLY — an in-place mutation of a cached
+// Row would corrupt the cache for all later opens.
+func (d Diff) Size() int {
+	n := 0
+	for _, r := range d.Result.Rows {
+		n += len(r.Left) + len(r.Right) + 48 // 48 ≈ Row + slice-header overhead
+	}
+	return n
 }
 
 // Differ computes an aligned diff, possibly from cache.
@@ -834,7 +943,7 @@ c) In `New`, construct the factory:
 
 ```go
 func New(repo *git.Repo) *Service {
-	return &Service{repo: repo, factory: cache.NewFactory(0)}
+	return &Service{repo: repo, factory: cache.NewFactory(0, 0)}
 }
 ```
 
@@ -858,7 +967,7 @@ func (s *Service) Differ() Differ {
 > If any code constructs `&Service{...}` as a struct literal (not via `New`),
 > it would have a nil `factory`. Verify with `grep -rn "Service{" internal/`;
 > the only constructor should be `New`. If a literal exists, route it through
-> `New` or set `factory: cache.NewFactory(0)`.
+> `New` or set `factory: cache.NewFactory(0, 0)`.
 
 - [ ] **Step 5: Run tests to verify they pass**
 
@@ -1136,6 +1245,20 @@ func TestCoverMaskClampsEnds(t *testing.T) {
 		if m[i] != want[i] {
 			t.Fatalf("mask = %v, want %v", m, want)
 		}
+	}
+}
+
+func TestEmphasisActuallyChangesOutput(t *testing.T) {
+	// A cheap check that the emphasis style lands: the same hot cell rendered
+	// with a span differs from the same cell with no span (which takes the
+	// original, byte-identical path).
+	emph := diffCell(1, "foobar", 3, 20, false, true, diffDelCell, []textdiff.Span{{Start: 0, End: 3}})
+	plain := diffCell(1, "foobar", 3, 20, false, true, diffDelCell, nil)
+	if emph == plain {
+		t.Fatal("an emphasized render must differ from the plain hot render")
+	}
+	if lipgloss.Width(emph) != lipgloss.Width(plain) {
+		t.Fatalf("emphasis must not change visible width: %d vs %d", lipgloss.Width(emph), lipgloss.Width(plain))
 	}
 }
 
