@@ -171,3 +171,13 @@ func (s *Service) TopLevel(ctx context.Context) (string, error) {
 		return s.repo.TopLevel(ctx)
 	})
 }
+
+// CurrentBranch returns the checked-out branch name, under a Read reservation.
+func (s *Service) CurrentBranch(ctx context.Context) (string, error) {
+	return query(ctx, s, "current-branch", s.repo.CurrentBranch)
+}
+
+// GitCommonDir returns the git common dir path, under a Read reservation.
+func (s *Service) GitCommonDir(ctx context.Context) (string, error) {
+	return query(ctx, s, "gitcommondir", s.repo.GitCommonDir)
+}

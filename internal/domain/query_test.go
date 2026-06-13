@@ -177,6 +177,26 @@ func TestTopLevelGatedQuery(t *testing.T) {
 	}
 }
 
+func TestCurrentBranchGatedQuery(t *testing.T) {
+	f := gitexec.NewFakeRunner()
+	f.SetResponse("git symbolic-ref", gitexec.Result{Stdout: "main\n"})
+	svc := New(&git.Repo{Runner: f})
+	b, err := svc.CurrentBranch(context.Background())
+	if err != nil || b != "main" {
+		t.Fatalf("CurrentBranch = %q, %v", b, err)
+	}
+}
+
+func TestGitCommonDirGatedQuery(t *testing.T) {
+	f := gitexec.NewFakeRunner()
+	f.SetResponse("git rev-parse (common-dir)", gitexec.Result{Stdout: "/repo/.git\n"})
+	svc := New(&git.Repo{Runner: f})
+	d, err := svc.GitCommonDir(context.Background())
+	if err != nil || d != "/repo/.git" {
+		t.Fatalf("GitCommonDir = %q, %v", d, err)
+	}
+}
+
 func TestShowFileReleasesReservation(t *testing.T) {
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git show", gitexec.Result{Stdout: "x"})
