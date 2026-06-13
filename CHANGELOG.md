@@ -10,6 +10,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ### Added
 
+#### Mouse focus & wheel
+- TUI: left-click focuses the window under the cursor and selects the
+  clicked row (files view included: a tree click moves the tree cursor, a
+  commits click moves the commit selection through the follow-live reload).
+  The mouse wheel scrolls the list under the cursor — focus untouched —
+  stepping by the new `[ui] wheel_step` config entry (default 3,
+  defaults→global→repo overlay). Mouse input is ignored under popups and
+  the decision modal. New project skill `adding-config-entries` documents
+  the config system.
+
 #### Arrow-key window focus
 - TUI: `←`/`→` switch focus horizontally — `→` from a left panel focuses
   Commits, `←` returns to the last-focused left panel. Inside the commit

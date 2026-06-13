@@ -25,6 +25,8 @@ func helpContent() []contentLine {
 		r("/", "filter the focused panel"),
 		r("tab/shift+tab", "cycle panel focus forward / backward"),
 		r("←/→", "focus the left column / the Commits panel"),
+		r("click", "focus the window under the cursor and select the clicked row"),
+		r("wheel", "scroll the list under the cursor ([ui] wheel_step rows; files view: tree or commits)"),
 		r("↑/k ↓/j", "move the selection"),
 		r("pgup/pgdn", "page the selection (25% of the viewport)"),
 		r("esc", "clear the mark, then the active filter"),

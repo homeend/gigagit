@@ -109,3 +109,58 @@ func TestLoadMalformedTOMLErrors(t *testing.T) {
 		t.Fatal("malformed global TOML should error")
 	}
 }
+
+func TestUIWheelStepLayers(t *testing.T) {
+	dir := t.TempDir()
+	missing := filepath.Join(dir, "missing.toml")
+
+	// Default.
+	cfg, err := Load(missing, missing)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.UI.WheelStep != 3 {
+		t.Errorf("default wheel_step = %d, want 3", cfg.UI.WheelStep)
+	}
+
+	// Global only.
+	g := filepath.Join(dir, "global.toml")
+	writeFile(t, g, "[ui]\nwheel_step = 5\n")
+	cfg, err = Load(g, missing)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.UI.WheelStep != 5 {
+		t.Errorf("global wheel_step = %d, want 5", cfg.UI.WheelStep)
+	}
+
+	// Repo wins over global.
+	r := filepath.Join(dir, "repo.toml")
+	writeFile(t, r, "[ui]\nwheel_step = 7\n")
+	cfg, err = Load(g, r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.UI.WheelStep != 7 {
+		t.Errorf("repo wheel_step = %d, want 7", cfg.UI.WheelStep)
+	}
+
+	// Repo only (no global file).
+	cfg, err = Load(missing, r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.UI.WheelStep != 7 {
+		t.Errorf("repo-only wheel_step = %d, want 7", cfg.UI.WheelStep)
+	}
+
+	// Zero and negative are unset: the repo layer cannot reset the global's.
+	writeFile(t, r, "[ui]\nwheel_step = -2\n")
+	cfg, err = Load(g, r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.UI.WheelStep != 5 {
+		t.Errorf("negative wheel_step must be ignored, got %d, want global 5", cfg.UI.WheelStep)
+	}
+}

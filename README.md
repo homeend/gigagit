@@ -51,6 +51,7 @@ panel and selected row right now; `?` opens the full searchable reference.
 | `tab` | move focus between panels |
 | `shift+tab` | move focus backwards |
 | `←`/`→` | focus the left column / the Commits panel (inside the files view: switch between the file tree and the commit list) |
+| mouse | click focuses the window under the cursor and selects the clicked row; the wheel scrolls the hovered list (`[ui] wheel_step` rows per tick) |
 | `j`/`k` or `↑`/`↓` | move selection |
 | `pgup`/`pgdn` | move selection by 25% of the panel viewport |
 | `o` | cycle the focused panel's sort order (name/date, asc/desc) |
@@ -114,6 +115,10 @@ Optional `.gg.toml` in the repo (overlaid on a global config) configures worktre
 branch/path templates with tokens like `<parent-branch>`, `<repo>`,
 `<date:YYYY-MM-DD>`, `<seq:NAME:N>`, and `<user:LABEL>`. Per-repo `<seq>` counters
 live in `<git-common-dir>/gg/state.toml`.
+
+`[ui] wheel_step` sets the mouse-wheel scroll step in rows (default 3);
+like every entry, the repo's `.gg.toml` overrides the global config
+per field.
 
 ## Development
 
