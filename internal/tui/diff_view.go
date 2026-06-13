@@ -22,6 +22,16 @@ const (
 	diffLead    = 3
 )
 
+// longMode is how the diff view shows lines wider than a pane. The zero value
+// (scroll) is the default. w cycles scroll → wrap → truncate → scroll.
+type longMode int
+
+const (
+	longScroll   longMode = iota // horizontal pan (←/→), the default
+	longWrap                     // word-wrap across display rows
+	longTruncate                 // cut with a trailing …
+)
+
 // diffView is the open full-screen side-by-side viewer; nil = closed.
 // Pure scroll (offset) — there is no cursor row.
 type diffView struct {
@@ -31,7 +41,9 @@ type diffView struct {
 	full       []textdiff.Row  // immutable aligned rows (the comparison result)
 	fullBlocks []int           // immutable change-block starts into full
 	partial    bool            // mode: collapse unchanged runs (false = full)
-	wrap       bool            // mode: word-wrap long lines (false = truncate)
+	long       longMode        // mode: how lines wider than a pane are shown (default scroll)
+	hOffset    int             // scroll mode: horizontal pan column (0 = left edge)
+	maxCell    int             // scroll mode: widest cell width (pan clamp); set by relayout
 	width      int             // overlay width at last layout (0 = unset → wrap-off)
 	lines      []textdiff.Line // logical (mode) stream that relayout consumes
 	blocks     []int           // change-block starts into lines
@@ -102,7 +114,7 @@ func (v *diffView) relayout(width int) {
 		switch {
 		case ln.Fold > 0:
 			v.disp = append(v.disp, dRow{line: li, fold: ln.Fold, first: true})
-		case !v.wrap || width <= 0:
+		case v.long != longWrap || width <= 0:
 			v.disp = append(v.disp, dRow{line: li, row: ln.Row, first: true})
 		default:
 			leftSegs := wrapSide(ln.Row.Left, ln.Row.LeftSpans, ln.Row.Kind, false, tw)
@@ -126,7 +138,33 @@ func (v *diffView) relayout(width int) {
 			v.dispBlocks = append(v.dispBlocks, v.lineStart[b])
 		}
 	}
+	if v.long == longScroll {
+		v.maxCell = maxCellWidth(v.lines)
+		v.clampHOffset()
+	}
 	v.scroll(0, 1) // clamp offset into the new range (body-agnostic floor)
+}
+
+// clampHOffset keeps the horizontal pan within [0, maxCell - tw].
+func (v *diffView) clampHOffset() {
+	paneW := (v.width - 1) / 2
+	if paneW < 4 {
+		paneW = 4
+	}
+	tw := paneW - gutterWidth(v.full) - 1
+	if tw < 1 {
+		tw = 1
+	}
+	max := v.maxCell - tw
+	if max < 0 {
+		max = 0
+	}
+	if v.hOffset > max {
+		v.hOffset = max
+	}
+	if v.hOffset < 0 {
+		v.hOffset = 0
+	}
 }
 
 // wrapSide sanitizes+wraps one side of a row into ≤tw segments, or returns nil
@@ -249,7 +287,7 @@ func (m Model) loadStatusDiffCmd(f model.FileStatus) tea.Cmd {
 	body := m.diffBodyRows()
 	width, _ := m.overlayDims()
 	tag := "status:" + f.Path
-	v := &diffView{title: f.Path, context: "HEAD → working tree", rev: "", partial: m.diffPartial, wrap: m.diffWrap, width: width}
+	v := &diffView{title: f.Path, context: "HEAD → working tree", rev: "", partial: m.diffPartial, long: m.diffLong, width: width}
 
 	// Old side: absent when the file isn't in HEAD (untracked, or staged-new
 	// 'A'). Renames fetch the old name.
@@ -325,7 +363,7 @@ func (m Model) loadCommitDiffCmd(hash string, line contentLine) tea.Cmd {
 	body := m.diffBodyRows()
 	width, _ := m.overlayDims()
 	tag := "commit:" + hash + ":" + line.path
-	v := &diffView{title: line.path, context: "@ " + strings.TrimPrefix(m.filesTitle, "Files "), rev: hash, partial: m.diffPartial, wrap: m.diffWrap, width: width}
+	v := &diffView{title: line.path, context: "@ " + strings.TrimPrefix(m.filesTitle, "Files "), rev: hash, partial: m.diffPartial, long: m.diffLong, width: width}
 	// Immutable: parent(hash)→hash for a path always yields the same bytes.
 	key := hash + "^.." + hash + ":" + line.path
 
@@ -402,9 +440,10 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "w":
 		ord := v.currentBlockOrdinal()
-		v.wrap = !v.wrap
+		v.long = (v.long + 1) % 3
+		v.hOffset = 0
 		v.relayout(v.width)
-		m.diffWrap = v.wrap
+		m.diffLong = v.long
 		if len(v.dispBlocks) > 0 {
 			if ord >= len(v.dispBlocks) {
 				ord = len(v.dispBlocks) - 1

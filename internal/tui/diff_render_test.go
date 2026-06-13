@@ -325,7 +325,7 @@ func TestDiffPaneLinesWrappedRowWidthAndCount(t *testing.T) {
 		{Kind: textdiff.Changed, Left: "alpha beta gamma delta", Right: "alpha beta gamma DELTA", LeftNo: 1, RightNo: 1},
 	}
 	v := diffViewWith(rows, []int{0})
-	v.wrap = true
+	v.long = longWrap
 	const w = 41 // paneW=20 each → row width 41
 	v.relayout(w)
 	m := footerModel()

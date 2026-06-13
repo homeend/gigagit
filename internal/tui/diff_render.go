@@ -193,7 +193,23 @@ func (m Model) diffPaneLines(v *diffView, w, body int) []string {
 			continue
 		}
 		r := dr.row
-		if !v.wrap {
+		switch v.long {
+		case longWrap:
+			leftGap := r.Kind == textdiff.Add
+			rightGap := r.Kind == textdiff.Del
+			leftNo, rightNo := 0, 0
+			if dr.first && !leftGap {
+				leftNo = r.LeftNo
+			}
+			if dr.first && !rightGap {
+				rightNo = r.RightNo
+			}
+			left := segCell(leftNo, dr.left, gut, paneW, leftGap,
+				r.Kind == textdiff.Del || r.Kind == textdiff.Changed, diffDelCell)
+			right := segCell(rightNo, dr.right, gut, paneW, rightGap,
+				r.Kind == textdiff.Add || r.Kind == textdiff.Changed, diffAddCell)
+			out = append(out, left+"│"+right)
+		case longTruncate:
 			left := diffCell(r.LeftNo, r.Left, gut, paneW,
 				r.Kind == textdiff.Add,
 				r.Kind == textdiff.Del || r.Kind == textdiff.Changed, diffDelCell, r.LeftSpans)
@@ -201,22 +217,15 @@ func (m Model) diffPaneLines(v *diffView, w, body int) []string {
 				r.Kind == textdiff.Del,
 				r.Kind == textdiff.Add || r.Kind == textdiff.Changed, diffAddCell, r.RightSpans)
 			out = append(out, left+"│"+right)
-			continue
+		default: // longScroll
+			left := scrollCell(r.LeftNo, r.Left, r.LeftSpans, v.hOffset, gut, paneW,
+				r.Kind == textdiff.Add,
+				r.Kind == textdiff.Del || r.Kind == textdiff.Changed, diffDelCell)
+			right := scrollCell(r.RightNo, r.Right, r.RightSpans, v.hOffset, gut, paneW,
+				r.Kind == textdiff.Del,
+				r.Kind == textdiff.Add || r.Kind == textdiff.Changed, diffAddCell)
+			out = append(out, left+"│"+right)
 		}
-		leftGap := r.Kind == textdiff.Add
-		rightGap := r.Kind == textdiff.Del
-		leftNo, rightNo := 0, 0
-		if dr.first && !leftGap {
-			leftNo = r.LeftNo
-		}
-		if dr.first && !rightGap {
-			rightNo = r.RightNo
-		}
-		left := segCell(leftNo, dr.left, gut, paneW, leftGap,
-			r.Kind == textdiff.Del || r.Kind == textdiff.Changed, diffDelCell)
-		right := segCell(rightNo, dr.right, gut, paneW, rightGap,
-			r.Kind == textdiff.Add || r.Kind == textdiff.Changed, diffAddCell)
-		out = append(out, left+"│"+right)
 	}
 	return out
 }
