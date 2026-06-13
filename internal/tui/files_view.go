@@ -37,14 +37,14 @@ func commitFileLines(files []model.CommitFile) []contentLine {
 	for _, f := range sorted {
 		dir := path.Dir(f.Path)
 		if dir == "." {
-			out = append(out, contentLine{text: fileLine(f)})
+			out = append(out, contentLine{text: fileLine(f), path: f.Path, oldPath: f.OldPath, status: f.Status})
 			continue
 		}
 		if dir != lastDir {
 			out = append(out, contentLine{text: dir + "/", heading: true})
 			lastDir = dir
 		}
-		out = append(out, contentLine{text: "  " + fileLine(f)})
+		out = append(out, contentLine{text: "  " + fileLine(f), path: f.Path, oldPath: f.OldPath, status: f.Status})
 	}
 	return out
 }
