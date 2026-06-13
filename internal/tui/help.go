@@ -78,6 +78,7 @@ func helpContent() []contentLine {
 		r("pgup/pgdn", "scroll one screen"),
 		r("n/p", "next / previous change (also ctrl+↓/↑)"),
 		r("f", "toggle full file ↔ changed lines only"),
+		r("w", "wrap long lines on/off"),
 		r("h", "history of this file at the shown revision"),
 		r("esc", "close"),
 		r("q/ctrl+c", "quit"),

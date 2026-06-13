@@ -18,7 +18,61 @@ var (
 	diffEmph    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("231")) // bright fg over the hot cell bg
 )
 
-const diffHint = "[↑↓] scroll  [pgup/pgdn] page  [n/p] next/prev change  [f] toggle partial  [h] history  [esc] close  [q] quit"
+const diffHint = "[↑↓] scroll  [pgup/pgdn] page  [n/p] change  [f] partial  [w] wrap  [h] history  [esc] close  [q] quit"
+
+// cellSeg is one pane's text for one display row: the sanitized display runes
+// and the parallel emphasis mask, already ≤ the pane's text width. A zero
+// cellSeg renders blank.
+type cellSeg struct {
+	disp []rune
+	emph []bool
+}
+
+// wrapCells splits a sanitized (disp, emph) line into segments each ≤ tw
+// display columns. It greedily fills to tw, then breaks after the last space
+// in the segment (word-wrap); a word longer than tw is hard-broken at the fill
+// boundary, and a single rune wider than tw is taken alone (never an empty
+// loop). The emph mask is sliced alongside so emphasis survives a split. An
+// empty input yields one empty segment (so the row still draws a line).
+func wrapCells(disp []rune, emph []bool, tw int) []cellSeg {
+	if tw < 1 {
+		tw = 1
+	}
+	if len(disp) == 0 {
+		return []cellSeg{{}}
+	}
+	var segs []cellSeg
+	start := 0
+	for start < len(disp) {
+		end, width := start, 0
+		for end < len(disp) {
+			rw := lipgloss.Width(string(disp[end]))
+			if width+rw > tw {
+				break
+			}
+			width += rw
+			end++
+		}
+		if end == start { // a single rune wider than tw
+			end = start + 1
+		}
+		brk := end
+		if end < len(disp) { // more to come: prefer a word boundary
+			sp := -1
+			for j := start; j < end; j++ {
+				if disp[j] == ' ' {
+					sp = j
+				}
+			}
+			if sp > start {
+				brk = sp + 1 // keep the space on this segment
+			}
+		}
+		segs = append(segs, cellSeg{disp: disp[start:brk], emph: emph[start:brk]})
+		start = brk
+	}
+	return segs
+}
 
 // sanitizeLine makes raw file content safe to render on one line: tabs
 // expand to a fixed 4-column stop (lipgloss.Width doesn't expand them but
@@ -66,7 +120,7 @@ func (m Model) renderDiffView() string {
 	}
 	head := "diff: " + v.title + "  " + v.context + note
 	rangeStr := ""
-	if n := len(v.lines); n > 0 {
+	if n := len(v.disp); n > 0 {
 		hi := v.offset + body
 		if hi > n {
 			hi = n
@@ -101,15 +155,11 @@ func (m Model) renderDiffView() string {
 	return strings.Join(lines, "\n")
 }
 
-// diffPaneLines renders the visible window of display lines: a row Line as
-// left│right, a fold Line as a full-width dim separator.
-func (m Model) diffPaneLines(v *diffView, w, body int) []string {
-	paneW := (w - 1) / 2
-	if paneW < 4 {
-		paneW = 4
-	}
+// gutterWidth is the line-number column width, derived from the full rows so it
+// is stable across mode/wrap toggles. Minimum 3.
+func gutterWidth(full []textdiff.Row) int {
 	maxNo := 0
-	for _, r := range v.full { // gutter width from the full rows: stable across toggle
+	for _, r := range full {
 		if r.LeftNo > maxNo {
 			maxNo = r.LeftNo
 		}
@@ -117,28 +167,91 @@ func (m Model) diffPaneLines(v *diffView, w, body int) []string {
 			maxNo = r.RightNo
 		}
 	}
-	gut := len(fmt.Sprint(maxNo))
-	if gut < 3 {
-		gut = 3
+	g := len(fmt.Sprint(maxNo))
+	if g < 3 {
+		g = 3
 	}
+	return g
+}
+
+// diffPaneLines renders the visible window of display rows. A fold dRow is a
+// full-width separator. Otherwise: wrap off draws the row via diffCell (raw
+// text, truncated — byte-identical to before); wrap on draws each side's
+// pre-wrapped segment via segCell.
+func (m Model) diffPaneLines(v *diffView, w, body int) []string {
+	paneW := (w - 1) / 2
+	if paneW < 4 {
+		paneW = 4
+	}
+	gut := gutterWidth(v.full)
 
 	out := make([]string, 0, body)
-	for i := v.offset; i < v.offset+body && i < len(v.lines); i++ {
-		ln := v.lines[i]
-		if ln.Fold > 0 {
-			out = append(out, foldSeparator(ln.Fold, w))
+	for i := v.offset; i < v.offset+body && i < len(v.disp); i++ {
+		dr := v.disp[i]
+		if dr.fold > 0 {
+			out = append(out, foldSeparator(dr.fold, w))
 			continue
 		}
-		r := ln.Row
-		left := diffCell(r.LeftNo, r.Left, gut, paneW,
-			r.Kind == textdiff.Add,
-			r.Kind == textdiff.Del || r.Kind == textdiff.Changed, diffDelCell, r.LeftSpans)
-		right := diffCell(r.RightNo, r.Right, gut, paneW,
-			r.Kind == textdiff.Del,
-			r.Kind == textdiff.Add || r.Kind == textdiff.Changed, diffAddCell, r.RightSpans)
+		r := dr.row
+		if !v.wrap {
+			left := diffCell(r.LeftNo, r.Left, gut, paneW,
+				r.Kind == textdiff.Add,
+				r.Kind == textdiff.Del || r.Kind == textdiff.Changed, diffDelCell, r.LeftSpans)
+			right := diffCell(r.RightNo, r.Right, gut, paneW,
+				r.Kind == textdiff.Del,
+				r.Kind == textdiff.Add || r.Kind == textdiff.Changed, diffAddCell, r.RightSpans)
+			out = append(out, left+"│"+right)
+			continue
+		}
+		leftGap := r.Kind == textdiff.Add
+		rightGap := r.Kind == textdiff.Del
+		leftNo, rightNo := 0, 0
+		if dr.first && !leftGap {
+			leftNo = r.LeftNo
+		}
+		if dr.first && !rightGap {
+			rightNo = r.RightNo
+		}
+		left := segCell(leftNo, dr.left, gut, paneW, leftGap,
+			r.Kind == textdiff.Del || r.Kind == textdiff.Changed, diffDelCell)
+		right := segCell(rightNo, dr.right, gut, paneW, rightGap,
+			r.Kind == textdiff.Add || r.Kind == textdiff.Changed, diffAddCell)
 		out = append(out, left+"│"+right)
 	}
 	return out
+}
+
+// segCell renders one pane's pre-wrapped segment into a width-col cell: gutter
+// (number when no>0, blank on a continuation) + the styled, padded body. gap
+// draws the · filler (absent side). hot applies the add/del background;
+// emphasis rides in seg.emph.
+func segCell(no int, seg cellSeg, gut, width int, gap, hot bool, hotStyle lipgloss.Style) string {
+	if gap {
+		return diffGapCell.Render(strings.Repeat("·", width))
+	}
+	if gut > width-2 { // degenerate pane: keep the cell inside its width
+		gut = width - 2
+		if gut < 1 {
+			gut = 1
+		}
+	}
+	num := strings.Repeat(" ", gut+1)
+	if no > 0 {
+		num = fmt.Sprintf("%*d ", gut, no)
+	}
+	tw := width - gut - 1
+	if tw < 1 {
+		tw = 1
+	}
+	base := lipgloss.NewStyle()
+	if hot {
+		base = hotStyle
+	}
+	body := styledRuns(seg.disp, seg.emph, base)
+	if pad := tw - lipgloss.Width(string(seg.disp)); pad > 0 {
+		body += base.Render(strings.Repeat(" ", pad))
+	}
+	return diffGutter.Render(truncate(num, gut+1)) + body
 }
 
 // foldSeparator renders a fold marker as a centered label on a dim rule
