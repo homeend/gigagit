@@ -1,0 +1,30 @@
+name = "rebase: current branch replayed onto a diverged base (linear, clean)"
+
+[input]
+steps = [
+  { write = "base.txt", content = "base\n" },
+  { commit = "base" },
+  { branch = "feat" },
+  { write = "main.txt", content = "m\n" },
+  { commit = "main change" },
+  { switch = "feat" },
+  { write = "feat.txt", content = "f\n" },
+  { commit = "feat change" },
+]
+
+[[run]]
+cmd  = ["rebase", "main"]
+exit = 0
+
+[expect]
+branch      = "feat"
+clean       = true
+in_progress = "none"
+
+[expect.files]
+"feat.txt" = "f\n"
+"main.txt" = "m\n"
+
+[[expect.log]]
+# feat's commit is replayed on top of main's tip: linear history.
+subjects = ["feat change", "main change", "base"]

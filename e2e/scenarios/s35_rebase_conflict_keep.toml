@@ -1,0 +1,24 @@
+name = "rebase: conflict with --on-conflict=keep pauses mid-rebase (exit 1)"
+
+[input]
+steps = [
+  { write = "shared.txt", content = "base\n" },
+  { commit = "base" },
+  { branch = "feat" },
+  { write = "shared.txt", content = "main\n" },
+  { commit = "main change" },
+  { switch = "feat" },
+  { write = "shared.txt", content = "feat\n" },
+  { commit = "feat change" },
+]
+
+[[run]]
+cmd  = ["rebase", "--on-conflict=keep", "main"]
+exit = 1
+
+[expect]
+# HEAD is detached mid-rebase — do NOT assert `branch`.
+in_progress = "rebase"
+
+[expect.status]
+conflicted = ["shared.txt"]

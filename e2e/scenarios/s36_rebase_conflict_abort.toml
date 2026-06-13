@@ -1,0 +1,31 @@
+name = "rebase: conflict with --on-conflict=abort restores feat's tip (exit 0)"
+
+[input]
+steps = [
+  { write = "shared.txt", content = "base\n" },
+  { commit = "base" },
+  { branch = "feat" },
+  { write = "shared.txt", content = "main\n" },
+  { commit = "main change" },
+  { switch = "feat" },
+  { write = "shared.txt", content = "feat\n" },
+  { commit = "feat change" },
+]
+
+[[run]]
+cmd  = ["rebase", "--on-conflict=abort", "main"]
+exit = 0
+
+[expect]
+branch      = "feat"
+clean       = true
+in_progress = "none"
+
+[expect.files]
+# After abort, feat is restored to its own pre-rebase content.
+"shared.txt" = "feat\n"
+
+[[expect.log]]
+# feat's history is untouched: its own commit on top of base; main's commit
+# is NOT here (it only exists on main).
+subjects = ["feat change", "base"]

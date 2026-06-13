@@ -1,0 +1,31 @@
+name = "rebase --branch a non-checked-out branch: switches to it and stays there"
+
+[input]
+steps = [
+  { write = "base.txt", content = "base\n" },
+  { commit = "base" },
+  { branch = "feat" },
+  { write = "main.txt", content = "m\n" },
+  { commit = "main change" },
+  { switch = "feat" },
+  { write = "feat.txt", content = "f\n" },
+  { commit = "feat change" },
+  { switch = "main" },
+]
+
+[[run]]
+cmd  = ["rebase", "--branch", "feat", "main"]
+exit = 0
+
+[expect]
+# Rung 3 switches to feat and ends there.
+branch      = "feat"
+clean       = true
+in_progress = "none"
+
+[expect.files]
+"feat.txt" = "f\n"
+"main.txt" = "m\n"
+
+[[expect.log]]
+subjects = ["feat change", "main change", "base"]
