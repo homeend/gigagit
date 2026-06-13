@@ -193,10 +193,11 @@ func TestCoverMaskClampsEnds(t *testing.T) {
 func TestEmphasisActuallyChangesOutput(t *testing.T) {
 	// Force TrueColor so lipgloss emits ANSI escape codes in the non-TTY test
 	// environment. SetColorProfile is the API lipgloss itself documents for
-	// testing. Restore Ascii (no color) after the test to leave other tests
-	// unaffected.
+	// testing. Capture and restore the prior profile (rather than hardcoding
+	// Ascii) so this is robust under -shuffle or if a test gains t.Parallel().
+	prev := lipgloss.ColorProfile()
 	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(termenv.Ascii)
+	defer lipgloss.SetColorProfile(prev)
 
 	// A cheap check that the emphasis style lands: the same hot cell rendered
 	// with a span differs from the same cell with no span (which takes the

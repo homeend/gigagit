@@ -213,7 +213,13 @@ func hotEmphBody(text string, spans []textdiff.Span, tw int, hotStyle lipgloss.S
 		}
 		w += rw
 	}
-	return styledRuns(disp[:cut], emph[:cut], hotStyle) + hotStyle.Render("…")
+	body := styledRuns(disp[:cut], emph[:cut], hotStyle) + hotStyle.Render("…")
+	// A double-width rune at the cut boundary can leave the body one column
+	// short; pad to tw so the row width matches the plain path exactly.
+	if pad := tw - lipgloss.Width(body); pad > 0 {
+		body += hotStyle.Render(strings.Repeat(" ", pad))
+	}
+	return body
 }
 
 // sanitizeSpans expands text exactly as sanitizeLine and returns the display
