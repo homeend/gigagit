@@ -10,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/gigagit/gg/internal/domain"
+	"github.com/gigagit/gg/internal/engine"
 	"github.com/gigagit/gg/internal/model"
 )
 
@@ -134,18 +135,88 @@ func TestEscClearsMarkBeforeFilter(t *testing.T) {
 	}
 }
 
-func TestPairPopupDisabledRebaseEntry(t *testing.T) {
-	m := markModel()
-	m = pressRune(t, m, "m")
-	m.sel[panelBranches] = 1
-	m = pressRune(t, m, "m") // popup open
-	m = pressRune(t, m, "j") // move to rebase
-	m = pressType(t, m, tea.KeyEnter)
-	if m.pairPopup == nil {
-		t.Fatal("selecting a disabled entry must keep the popup open")
+// The Rebase pair-op builds SmartRebase with the inverted direction: the
+// SELECTED branch is rebased ONTO the MARKED branch.
+func TestRebasePairOpDirection(t *testing.T) {
+	ops := pairOpsFor(panelBranches)
+	var rebase *pairOp
+	for i := range ops {
+		if strings.HasPrefix(ops[i].label("main", "feat"), "Rebase ") {
+			rebase = &ops[i]
+		}
 	}
-	if !strings.Contains(m.statusMsg, "not implemented") {
-		t.Fatalf("statusMsg = %q", m.statusMsg)
+	if rebase == nil || !rebase.enabled || rebase.build == nil {
+		t.Fatal("Rebase pair-op must be enabled with a build func")
+	}
+	if got := rebase.label("main", "feat"); got != "Rebase feat onto main" {
+		t.Fatalf("label = %q, want %q", got, "Rebase feat onto main")
+	}
+	op, ok := rebase.build("main", "feat").(engine.SmartRebase) // marked=main, selected=feat
+	if !ok {
+		t.Fatalf("build returned %T, want engine.SmartRebase", rebase.build("main", "feat"))
+	}
+	if op.Branch != "feat" || op.Onto != "main" {
+		t.Fatalf("SmartRebase = %+v, want {Branch:feat Onto:main}", op)
+	}
+}
+
+// Integration: enter on Rebase dispatches SmartRebase and the rebase really
+// runs (feat replayed onto main; we end on feat).
+func TestPairPopupEnterRunsSmartRebase(t *testing.T) {
+	dir, repo := newRepoDir(t)
+	run := func(args ...string) {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(),
+			"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t",
+			"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	// feat diverges from main with a disjoint file; main advances disjointly.
+	run("checkout", "-b", "feat")
+	os.WriteFile(filepath.Join(dir, "feat.txt"), []byte("f\n"), 0o644)
+	run("add", ".")
+	run("commit", "-m", "feat change")
+	run("checkout", "main")
+	os.WriteFile(filepath.Join(dir, "main.txt"), []byte("m\n"), 0o644)
+	run("add", ".")
+	run("commit", "-m", "main change")
+
+	m := New(domain.New(repo))
+	loaded, _ := m.Update(m.loadCmd()())
+	m = loaded.(Model)
+	m.focus = panelBranches
+
+	_, idx := m.panelView(panelBranches)
+	l := m.listFor(panelBranches)
+	for n, i := range idx {
+		if l.Key(i) == "main" {
+			m.sel[panelBranches] = n
+		}
+	}
+	m = pressRune(t, m, "m") // mark main (the new base)
+	for n, i := range idx {
+		if l.Key(i) == "feat" {
+			m.sel[panelBranches] = n
+		}
+	}
+	m = pressRune(t, m, "m") // popup: Merge is entry 0, Rebase is entry 1
+	if m.pairPopup == nil {
+		t.Fatal("popup expected")
+	}
+	m = pressRune(t, m, "j") // move to the Rebase entry
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+	if m.mark != nil || m.pairPopup != nil {
+		t.Fatal("enter must clear both the popup and the mark")
+	}
+	m = driveOp(t, m, cmd)
+	// feat was rebased onto main → main's commit is now in feat's tree, and we
+	// end on feat (rung 3 switches to it).
+	if _, err := os.Stat(filepath.Join(dir, "main.txt")); err != nil {
+		t.Fatal("rebase did not run: main.txt missing (feat not replayed onto main)")
 	}
 }
 

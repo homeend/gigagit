@@ -39,7 +39,10 @@ func pairOpsFor(p panel) []pairOp {
 		},
 		{
 			label: func(marked, selected string) string { return "Rebase " + selected + " onto " + marked },
-			note:  "not implemented yet",
+			build: func(marked, selected string) engine.Operation {
+				return engine.SmartRebase{Branch: selected, Onto: marked}
+			},
+			enabled: true,
 		},
 	}
 }
