@@ -155,12 +155,14 @@ func TestFooterWorktreesContext(t *testing.T) {
 	}
 }
 
-func TestFooterStatusFocusHasNoContextSegment(t *testing.T) {
-	m := footerModel()
+func TestFooterStatusFocusEmptyHasNoContextSegment(t *testing.T) {
+	// With status rows, Status focus advertises [enter] diff (tested above);
+	// with NO rows there must be no context segment and no stray separator.
+	m := footerModel() // fixture has no status files
 	m.focus = panelStatus
 	f := m.footerLine()
 	if strings.Contains(f, "•") {
-		t.Errorf("Status focus has no context actions, no separator: %q", f)
+		t.Errorf("empty Status focus has no context actions, no separator: %q", f)
 	}
 	if !strings.HasPrefix(f, "[p]ull") {
 		t.Errorf("global tail must lead when there is no context segment: %q", f)
@@ -247,6 +249,45 @@ func TestFooterTruncatedToWidth(t *testing.T) {
 		if w := lipgloss.Width(line); w > 40 {
 			t.Errorf("line %d exceeds width 40 (%d): %q", i, w, line)
 		}
+	}
+}
+
+func TestFooterShowsDiffOnStatusFocus(t *testing.T) {
+	m := diffModel() // focus = panelStatus, selectable rows
+	if !strings.Contains(m.footerLine(), "[enter] diff") {
+		t.Fatalf("footer must advertise enter on Status: %q", m.footerLine())
+	}
+}
+
+func TestFooterHidesDiffOffStatusFocus(t *testing.T) {
+	m := diffModel()
+	m.focus = panelBranches
+	if strings.Contains(m.footerLine(), "[enter] diff") {
+		t.Fatalf("diff advertised off the Status panel: %q", m.footerLine())
+	}
+}
+
+func TestFooterHidesDiffOnConflictedRow(t *testing.T) {
+	m := diffModel()
+	m.sel[panelStatus] = 2 // conflict.txt (KindUnmerged)
+	if strings.Contains(m.footerLine(), "[enter] diff") {
+		t.Fatalf("diff advertised on a conflicted row: %q", m.footerLine())
+	}
+}
+
+func TestFooterHidesDiffWhenNarrow(t *testing.T) {
+	m := diffModel()
+	m.width = 59
+	if strings.Contains(m.footerLine(), "[enter] diff") {
+		t.Fatalf("diff advertised below 60 cols: %q", m.footerLine())
+	}
+}
+
+func TestFooterFilesViewOverrideAdvertisesDiff(t *testing.T) {
+	m := diffModel()
+	m.filesView = &contentPopup{lines: []contentLine{{text: "x", path: "x"}}}
+	if !strings.Contains(m.footerLine(), "[enter] diff") {
+		t.Fatalf("files-view override must advertise enter: %q", m.footerLine())
 	}
 }
 

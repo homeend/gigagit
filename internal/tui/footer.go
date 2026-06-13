@@ -33,6 +33,7 @@ var contextBindings = []footerBinding{
 	}},
 	{"enter", "[enter] switch", func(m Model) bool { return m.focus == panelWorktrees && m.canEnterWorktree() }},
 	{"d", "[d]elete", func(m Model) bool { return m.focus == panelWorktrees && m.canDeleteWorktree() }},
+	{"enter", "[enter] diff", func(m Model) bool { return m.focus == panelStatus && m.canShowFileDiff() }},
 	{"l", "[l] files", func(m Model) bool {
 		// Stricter than the dispatch: the narrow case is a statusMsg no-op
 		// there, so don't advertise it.

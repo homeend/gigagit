@@ -10,6 +10,18 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ### Added
 
+#### Side-by-side diff view
+- TUI: `enter` on a Status-panel file opens a full-screen dual-pane diff
+  (old version left, new right, aligned and highlighted): HEAD → working
+  tree. Untracked files render all-added; deleted files all-removed.
+- `enter` on a file in the commit files view (tree side focused) shows that
+  file's change in the viewed commit (first parent → commit; renames diff
+  old path against new).
+- `↑/↓` scroll, `pgup/pgdn` page, `ctrl+↑/↓` jump between change blocks,
+  mouse wheel scrolls, `esc` closes back to where you were.
+- New pure package `internal/textdiff` (Myers line alignment with size
+  guards) — the comparison engine the M3 conflict editor will reuse.
+
 #### Arrow-key window focus
 - TUI: `←`/`→` switch focus horizontally — `→` from a left panel focuses
   Commits, `←` returns to the last-focused left panel. Inside the commit
