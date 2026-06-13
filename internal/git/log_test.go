@@ -39,7 +39,7 @@ func TestRepoLogReturnsCommits(t *testing.T) {
 	repo := &Repo{Runner: runner}
 	gitIn(t, dir, "commit", "--allow-empty", "-m", "second")
 
-	commits, err := repo.Log(context.Background(), 10)
+	commits, err := repo.Log(context.Background(), 10, 0)
 	if err != nil {
 		t.Fatalf("log: %v", err)
 	}
@@ -142,6 +142,35 @@ func TestCommitFilesArgv(t *testing.T) {
 	}
 	if len(got) != 1 || got[0] != (model.CommitFile{Status: "M", Path: "file.txt"}) {
 		t.Fatalf("files = %+v", got)
+	}
+}
+
+func TestLogSkipArgv(t *testing.T) {
+	f := gitexec.NewFakeRunner()
+	f.SetResponse("git log", gitexec.Result{Stdout: ""})
+	repo := &Repo{Runner: f}
+
+	if _, err := repo.Log(context.Background(), 200, 50); err != nil {
+		t.Fatalf("log: %v", err)
+	}
+	var argv []string
+	for _, c := range f.Calls {
+		if c.Name == "git log" {
+			argv = c.Argv
+		}
+	}
+	if !strings.Contains(strings.Join(argv, " "), "--skip=50") {
+		t.Fatalf("skip>0 should add --skip=50, got: %v", argv)
+	}
+
+	f.Calls = nil
+	if _, err := repo.Log(context.Background(), 50, 0); err != nil {
+		t.Fatalf("log: %v", err)
+	}
+	for _, c := range f.Calls {
+		if c.Name == "git log" && strings.Contains(strings.Join(c.Argv, " "), "--skip") {
+			t.Fatalf("skip==0 must omit --skip, got: %v", c.Argv)
+		}
 	}
 }
 

@@ -12,10 +12,13 @@ import (
 // logFormat separates fields with \x1f (unit separator); one commit per line.
 const logFormat = "%H%x1f%P%x1f%an%x1f%at%x1f%s"
 
-// Log returns up to limit recent commits, newest first.
-func (r *Repo) Log(ctx context.Context, limit int) ([]model.Commit, error) {
+// Log returns up to limit commits reachable from HEAD, newest first, skipping
+// the first skip commits. skip=0 is the head of history (omits --skip).
+func (r *Repo) Log(ctx context.Context, limit, skip int) ([]model.Commit, error) {
 	argv := gitcmd.New("log").
-		Arg("-n", strconv.Itoa(limit), "--format="+logFormat).ToArgv()
+		Arg("-n", strconv.Itoa(limit), "--format="+logFormat).
+		ArgIf(skip > 0, "--skip="+strconv.Itoa(skip)).
+		ToArgv()
 	res, err := r.Runner.Run(ctx, "git log", argv)
 	if err != nil {
 		return nil, err

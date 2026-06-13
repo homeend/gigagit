@@ -86,7 +86,7 @@ func (s *Service) loadSnapshot(ctx context.Context) (Snapshot, error) {
 		mu.Unlock()
 	})
 	run(func() {
-		cs, err := s.repo.Log(ctx, 50)
+		cs, err := s.repo.Log(ctx, 50, 0)
 		if err != nil {
 			fatal(err)
 			return
