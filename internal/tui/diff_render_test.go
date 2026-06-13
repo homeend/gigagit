@@ -325,7 +325,7 @@ func TestDiffPaneLinesWrappedRowWidthAndCount(t *testing.T) {
 		{Kind: textdiff.Changed, Left: "alpha beta gamma delta", Right: "alpha beta gamma DELTA", LeftNo: 1, RightNo: 1},
 	}
 	v := diffViewWith(rows, []int{0})
-	v.wrap = true
+	v.long = longWrap
 	const w = 41 // paneW=20 each → row width 41
 	v.relayout(w)
 	m := footerModel()
@@ -337,5 +337,79 @@ func TestDiffPaneLinesWrappedRowWidthAndCount(t *testing.T) {
 		if lipgloss.Width(ln) != w {
 			t.Fatalf("display row %d width = %d, want %d", i, lipgloss.Width(ln), w)
 		}
+	}
+}
+
+func TestScrollCellFitsDelegatesToDiffCell(t *testing.T) {
+	got := scrollCell(3, "hello", nil, 0, 3, 20, false, false, diffDelCell)
+	want := diffCell(3, "hello", 3, 20, false, false, diffDelCell, nil)
+	if got != want {
+		t.Fatalf("fitting scrollCell must equal diffCell:\n got %q\nwant %q", got, want)
+	}
+}
+
+func TestScrollCellWidthAlwaysExact(t *testing.T) {
+	long := strings.Repeat("abcdefghij ", 8) // ~88 cols
+	for _, hOff := range []int{0, 5, 40, 200} {
+		cell := scrollCell(1, long, nil, hOff, 3, 20, false, false, diffDelCell)
+		if w := lipgloss.Width(cell); w != 20 {
+			t.Fatalf("hOffset %d: cell width %d, want 20", hOff, w)
+		}
+	}
+}
+
+func TestScrollCellRightMarkerWhenMore(t *testing.T) {
+	long := strings.Repeat("x", 100)
+	cell := ansi.Strip(scrollCell(1, long, nil, 0, 3, 20, false, false, diffDelCell))
+	if !strings.Contains(cell, "›") {
+		t.Fatalf("a line past the window must show ›: %q", cell)
+	}
+	if strings.Contains(cell, "‹") {
+		t.Fatalf("at hOffset 0 there is nothing to the left: %q", cell)
+	}
+}
+
+func TestScrollCellLeftMarkerWhenScrolled(t *testing.T) {
+	long := strings.Repeat("x", 100)
+	cell := ansi.Strip(scrollCell(1, long, nil, 30, 3, 20, false, false, diffDelCell))
+	if !strings.Contains(cell, "‹") {
+		t.Fatalf("scrolled right, ‹ must show on the left: %q", cell)
+	}
+}
+
+func TestScrollCellGapFiller(t *testing.T) {
+	cell := ansi.Strip(scrollCell(0, "", nil, 0, 3, 20, true, false, diffDelCell))
+	if strings.TrimRight(cell, "·") != "" {
+		t.Fatalf("gap side must be all · filler: %q", cell)
+	}
+}
+
+func TestMaxCellWidthIgnoresGapSides(t *testing.T) {
+	lines := []textdiff.Line{
+		{Row: textdiff.Row{Kind: textdiff.Same, Left: "ab", Right: "ab"}},
+		{Row: textdiff.Row{Kind: textdiff.Add, Right: "longer right side here"}},
+		{Fold: 4},
+	}
+	if got := maxCellWidth(lines); got != lipgloss.Width("longer right side here") {
+		t.Fatalf("maxCellWidth = %d, want %d", got, lipgloss.Width("longer right side here"))
+	}
+}
+
+func TestScrollModeRenderShowsMarkers(t *testing.T) {
+	long := strings.Repeat("x", 200)
+	rows := []textdiff.Row{{Kind: textdiff.Same, Left: long, Right: long, LeftNo: 1, RightNo: 1}}
+	v := diffViewWith(rows, nil) // default longScroll
+	v.width = 60
+	v.rebuild()
+	m := footerModel()
+	line := ansi.Strip(m.diffPaneLines(v, 60, 1)[0])
+	if !strings.Contains(line, "›") || strings.Contains(line, "‹") {
+		t.Fatalf("scroll@0 should show › and not ‹: %q", line)
+	}
+	v.hOffset = 40
+	v.clampHOffset()
+	line = ansi.Strip(m.diffPaneLines(v, 60, 1)[0])
+	if !strings.Contains(line, "‹") {
+		t.Fatalf("scrolled right, ‹ must appear: %q", line)
 	}
 }

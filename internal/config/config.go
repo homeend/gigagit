@@ -20,7 +20,8 @@ type WorktreeConfig struct {
 
 // UIConfig configures TUI behavior. TOML keys are snake_case.
 type UIConfig struct {
-	WheelStep int `toml:"wheel_step"` // rows per mouse-wheel tick; <=0 = unset
+	WheelStep   int `toml:"wheel_step"`   // rows per mouse-wheel tick; <=0 = unset
+	HScrollStep int `toml:"hscroll_step"` // diff scroll-mode pan columns per ←/→; <=0 = unset
 }
 
 // Config is the merged gigagit configuration.
@@ -36,7 +37,7 @@ func Defaults() Config {
 			PathTemplate:          "../<repo>.worktrees/<branch>",
 			DefaultBranchTemplate: "b/from-<parent-branch>-<random-alpha:4>",
 		},
-		UI: UIConfig{WheelStep: 3},
+		UI: UIConfig{WheelStep: 3, HScrollStep: 8},
 	}
 }
 
@@ -98,6 +99,9 @@ func overlayWorktree(dst *WorktreeConfig, src WorktreeConfig) {
 func overlayUI(dst *UIConfig, src UIConfig) {
 	if src.WheelStep > 0 {
 		dst.WheelStep = src.WheelStep
+	}
+	if src.HScrollStep > 0 {
+		dst.HScrollStep = src.HScrollStep
 	}
 }
 

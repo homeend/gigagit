@@ -164,3 +164,18 @@ func TestUIWheelStepLayers(t *testing.T) {
 		t.Errorf("negative wheel_step must be ignored, got %d, want global 5", cfg.UI.WheelStep)
 	}
 }
+
+func TestHScrollStepDefaultAndOverlay(t *testing.T) {
+	if got := Defaults().UI.HScrollStep; got != 8 {
+		t.Fatalf("default hscroll_step = %d, want 8", got)
+	}
+	dst := Defaults().UI
+	overlayUI(&dst, UIConfig{HScrollStep: 12})
+	if dst.HScrollStep != 12 {
+		t.Fatalf("overlay set hscroll_step = %d, want 12", dst.HScrollStep)
+	}
+	overlayUI(&dst, UIConfig{HScrollStep: 0}) // <=0 is unset, must not clobber
+	if dst.HScrollStep != 12 {
+		t.Fatalf("unset (0) must not overwrite; got %d", dst.HScrollStep)
+	}
+}

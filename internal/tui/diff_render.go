@@ -18,7 +18,23 @@ var (
 	diffEmph    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("231")) // bright fg over the hot cell bg
 )
 
-const diffHint = "[↑↓] scroll  [pgup/pgdn] page  [n/p] change  [f] partial  [w] wrap  [h] history  [esc] close  [q] quit"
+// diffHintFor builds the diff-view hint for the current long-line mode. Kept
+// short enough that [esc] close survives truncation at width 100
+// (TestRenderDiffViewPanes). The scroll variant appends the pan keys.
+func diffHintFor(long longMode) string {
+	mode := "scroll"
+	switch long {
+	case longWrap:
+		mode = "wrap"
+	case longTruncate:
+		mode = "trunc"
+	}
+	pan := ""
+	if long == longScroll {
+		pan = "  [←→/0] pan"
+	}
+	return "[↑↓] scroll  [n/p] change  [f] partial  [w] lines:" + mode + pan + "  [h] history  [esc] close  [q] quit"
+}
 
 // cellSeg is one pane's text for one display row: the sanitized display runes
 // and the parallel emphasis mask, already ≤ the pane's text width. A zero
@@ -151,7 +167,7 @@ func (m Model) renderDiffView() string {
 	for len(lines) < h-1 {
 		lines = append(lines, "")
 	}
-	lines = append(lines, truncate(diffHint, w))
+	lines = append(lines, truncate(diffHintFor(v.long), w))
 	return strings.Join(lines, "\n")
 }
 
@@ -193,7 +209,23 @@ func (m Model) diffPaneLines(v *diffView, w, body int) []string {
 			continue
 		}
 		r := dr.row
-		if !v.wrap {
+		switch v.long {
+		case longWrap:
+			leftGap := r.Kind == textdiff.Add
+			rightGap := r.Kind == textdiff.Del
+			leftNo, rightNo := 0, 0
+			if dr.first && !leftGap {
+				leftNo = r.LeftNo
+			}
+			if dr.first && !rightGap {
+				rightNo = r.RightNo
+			}
+			left := segCell(leftNo, dr.left, gut, paneW, leftGap,
+				r.Kind == textdiff.Del || r.Kind == textdiff.Changed, diffDelCell)
+			right := segCell(rightNo, dr.right, gut, paneW, rightGap,
+				r.Kind == textdiff.Add || r.Kind == textdiff.Changed, diffAddCell)
+			out = append(out, left+"│"+right)
+		case longTruncate:
 			left := diffCell(r.LeftNo, r.Left, gut, paneW,
 				r.Kind == textdiff.Add,
 				r.Kind == textdiff.Del || r.Kind == textdiff.Changed, diffDelCell, r.LeftSpans)
@@ -201,22 +233,15 @@ func (m Model) diffPaneLines(v *diffView, w, body int) []string {
 				r.Kind == textdiff.Del,
 				r.Kind == textdiff.Add || r.Kind == textdiff.Changed, diffAddCell, r.RightSpans)
 			out = append(out, left+"│"+right)
-			continue
+		default: // longScroll
+			left := scrollCell(r.LeftNo, r.Left, r.LeftSpans, v.hOffset, gut, paneW,
+				r.Kind == textdiff.Add,
+				r.Kind == textdiff.Del || r.Kind == textdiff.Changed, diffDelCell)
+			right := scrollCell(r.RightNo, r.Right, r.RightSpans, v.hOffset, gut, paneW,
+				r.Kind == textdiff.Del,
+				r.Kind == textdiff.Add || r.Kind == textdiff.Changed, diffAddCell)
+			out = append(out, left+"│"+right)
 		}
-		leftGap := r.Kind == textdiff.Add
-		rightGap := r.Kind == textdiff.Del
-		leftNo, rightNo := 0, 0
-		if dr.first && !leftGap {
-			leftNo = r.LeftNo
-		}
-		if dr.first && !rightGap {
-			rightNo = r.RightNo
-		}
-		left := segCell(leftNo, dr.left, gut, paneW, leftGap,
-			r.Kind == textdiff.Del || r.Kind == textdiff.Changed, diffDelCell)
-		right := segCell(rightNo, dr.right, gut, paneW, rightGap,
-			r.Kind == textdiff.Add || r.Kind == textdiff.Changed, diffAddCell)
-		out = append(out, left+"│"+right)
 	}
 	return out
 }
@@ -252,6 +277,100 @@ func segCell(no int, seg cellSeg, gut, width int, gap, hot bool, hotStyle lipglo
 		body += base.Render(strings.Repeat(" ", pad))
 	}
 	return diffGutter.Render(truncate(num, gut+1)) + body
+}
+
+// scrollCell renders one pane's line through a horizontal window starting at
+// hOffset display columns. At hOffset==0 with a line that fits the pane it
+// delegates to diffCell (byte-identical to truncate at rest). Otherwise it
+// shows the column slice, with ‹ in the first column when hOffset>0 and › in
+// the last when text extends past the window. Emphasis rides in seg.emph.
+func scrollCell(no int, text string, spans []textdiff.Span, hOffset, gut, width int, gap, hot bool, hotStyle lipgloss.Style) string {
+	if gap {
+		return diffGapCell.Render(strings.Repeat("·", width))
+	}
+	if gut > width-2 { // degenerate pane: keep the cell inside its width
+		gut = width - 2
+		if gut < 1 {
+			gut = 1
+		}
+	}
+	tw := width - gut - 1
+	if tw < 1 {
+		tw = 1
+	}
+	disp, emph := sanitizeSpans(text, spans)
+	full := lipgloss.Width(string(disp))
+	if hOffset <= 0 && full <= tw {
+		return diffCell(no, text, gut, width, false, hot, hotStyle, spans)
+	}
+	hasLeft := hOffset > 0
+	hasRight := full > hOffset+tw
+	// Content occupies the window minus any marker columns.
+	contentStart, contentEnd := hOffset, hOffset+tw
+	if hasLeft {
+		contentStart++
+	}
+	if hasRight {
+		contentEnd--
+	}
+	var wdisp []rune
+	var wemph []bool
+	col := 0
+	for i, r := range disp {
+		rw := lipgloss.Width(string(r))
+		if col >= contentStart && col+rw <= contentEnd {
+			wdisp = append(wdisp, r)
+			wemph = append(wemph, emph[i])
+		}
+		col += rw
+	}
+	base := lipgloss.NewStyle()
+	if hot {
+		base = hotStyle
+	}
+	var b strings.Builder
+	if hasLeft {
+		b.WriteString(diffGutter.Render("‹"))
+	}
+	b.WriteString(styledRuns(wdisp, wemph, base))
+	inner := tw
+	if hasLeft {
+		inner--
+	}
+	if hasRight {
+		inner--
+	}
+	if pad := inner - lipgloss.Width(string(wdisp)); pad > 0 {
+		b.WriteString(base.Render(strings.Repeat(" ", pad)))
+	}
+	if hasRight {
+		b.WriteString(diffGutter.Render("›"))
+	}
+	num := fmt.Sprintf("%*d ", gut, no)
+	return diffGutter.Render(truncate(num, gut+1)) + b.String()
+}
+
+// maxCellWidth is the widest single cell (either side, gap sides skipped)
+// across the logical lines — the horizontal extent scroll mode can pan to.
+func maxCellWidth(lines []textdiff.Line) int {
+	max := 0
+	for _, ln := range lines {
+		if ln.Fold > 0 {
+			continue
+		}
+		r := ln.Row
+		if r.Kind != textdiff.Add {
+			if w := lipgloss.Width(sanitizeLine(r.Left)); w > max {
+				max = w
+			}
+		}
+		if r.Kind != textdiff.Del {
+			if w := lipgloss.Width(sanitizeLine(r.Right)); w > max {
+				max = w
+			}
+		}
+	}
+	return max
 }
 
 // foldSeparator renders a fold marker as a centered label on a dim rule

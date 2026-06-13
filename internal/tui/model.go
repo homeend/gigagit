@@ -51,7 +51,7 @@ type Model struct {
 	diffView    *diffView // full-screen side-by-side diff; nil = closed
 	diffTag     string    // request key of the wanted diff; gates stale async results
 	diffPartial bool      // session default for new diffs (false = full); the f key toggles it
-	diffWrap    bool      // session: word-wrap long lines in the diff view (w toggles)
+	diffLong    longMode  // session: long-line mode for new diffs (0 = scroll); w cycles
 
 	stack *viewStack // top-of-everything full-screen surfaces (history, later blame); nil/empty = none
 
@@ -129,6 +129,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				w, _ := m.overlayDims()
 				v.relayout(w)
+				v.clampHOffset()
 				if topLine < len(v.lineStart) {
 					v.offset = v.lineStart[topLine]
 				}
@@ -364,7 +365,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.focus == panelStatus && m.canShowFileDiff() {
 				bi, _ := m.backingIndex(panelStatus)
 				f := m.status.Files[bi]
-				m.diffView = &diffView{title: f.Path, context: "HEAD → working tree", rev: "", loading: true, partial: m.diffPartial, wrap: m.diffWrap}
+				m.diffView = &diffView{title: f.Path, context: "HEAD → working tree", rev: "", loading: true, partial: m.diffPartial, long: m.diffLong}
 				m.diffTag = "status:" + f.Path
 				return m, m.loadStatusDiffCmd(f)
 			}
@@ -629,4 +630,13 @@ func (m Model) wheelStep() int {
 		return s
 	}
 	return 3
+}
+
+// hscrollStep is the diff scroll-mode horizontal pan distance (columns per
+// ←/→), from [ui] hscroll_step; 8 until config loads.
+func (m Model) hscrollStep() int {
+	if s := m.cfg.UI.HScrollStep; s > 0 {
+		return s
+	}
+	return 8
 }

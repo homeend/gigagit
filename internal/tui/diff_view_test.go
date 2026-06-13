@@ -743,7 +743,7 @@ func TestRelayoutWrapOnExpandsAndRemapsBlocks(t *testing.T) {
 		{Kind: textdiff.Changed, Left: "one two three four", Right: "one two three FOUR", LeftNo: 2, RightNo: 2},
 	}
 	v := diffViewWith(rows, []int{1})
-	v.wrap = true
+	v.long = longWrap
 	v.relayout(40)
 	if len(v.dispBlocks) != 1 || v.dispBlocks[0] != v.lineStart[1] {
 		t.Fatalf("dispBlocks[0]=%v want lineStart[1]=%d", v.dispBlocks, v.lineStart[1])
@@ -771,7 +771,7 @@ func TestRelayoutWrapOnExpandsAndRemapsBlocks(t *testing.T) {
 func TestRelayoutWrapOnGapSideHasNilSegments(t *testing.T) {
 	rows := []textdiff.Row{{Kind: textdiff.Add, Right: "added text here", RightNo: 1}}
 	v := diffViewWith(rows, []int{0})
-	v.wrap = true
+	v.long = longWrap
 	v.relayout(40)
 	for _, dr := range v.disp {
 		if len(dr.left.disp) != 0 {
@@ -780,7 +780,7 @@ func TestRelayoutWrapOnGapSideHasNilSegments(t *testing.T) {
 	}
 }
 
-func TestDiffWToggleFlipsWrapAndSession(t *testing.T) {
+func TestDiffWCyclesLongMode(t *testing.T) {
 	rows := sameRowsTUI(40, 20)
 	m := diffModel()
 	m.width, m.height = 80, 24
@@ -788,22 +788,23 @@ func TestDiffWToggleFlipsWrapAndSession(t *testing.T) {
 	m.diffView.width = 80
 	m.diffView.rebuild()
 	m.diffTag = "status:x"
-
-	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("w")})
-	mm := u.(Model)
-	if !mm.diffView.wrap {
-		t.Fatal("w must turn wrap on")
-	}
-	if !mm.diffWrap {
-		t.Fatal("w must record the session wrap flag")
-	}
-	u2, _ := mm.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("w")})
-	if u2.(Model).diffView.wrap {
-		t.Fatal("a second w must turn wrap off")
+	// default scroll → wrap → truncate → scroll
+	wantSeq := []longMode{longWrap, longTruncate, longScroll}
+	cur := tea.Model(m)
+	for i, want := range wantSeq {
+		u, _ := cur.(Model).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("w")})
+		mm := u.(Model)
+		if mm.diffView.long != want {
+			t.Fatalf("press %d: long = %d, want %d", i+1, mm.diffView.long, want)
+		}
+		if mm.diffLong != want {
+			t.Fatalf("press %d: session diffLong = %d, want %d", i+1, mm.diffLong, want)
+		}
+		cur = mm
 	}
 }
 
-func TestDiffOpenInheritsSessionWrap(t *testing.T) {
+func TestDiffOpenInheritsSessionLongMode(t *testing.T) {
 	dir, repo := newRepoDir(t)
 	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("a\nb\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -816,10 +817,10 @@ func TestDiffOpenInheritsSessionWrap(t *testing.T) {
 	m := diffModel()
 	m.svc = domain.New(repo)
 	m.currentWorktree = dir
-	m.diffWrap = true
+	m.diffLong = longWrap
 	msg := m.loadStatusDiffCmd(model.FileStatus{Path: "f.txt", Staged: '.', Unstaged: 'M'})().(diffMsg)
-	if !msg.view.wrap {
-		t.Fatal("a new diff must inherit the session's wrap mode")
+	if msg.view.long != longWrap {
+		t.Fatal("a new diff must inherit the session's long mode")
 	}
 }
 
@@ -836,7 +837,7 @@ func TestDiffResizeReanchorsToTopLine(t *testing.T) {
 	m := diffModel()
 	m.width, m.height = 60, 24
 	v := diffViewWith(rows, nil)
-	v.wrap = true
+	v.long = longWrap
 	v.width = 60
 	v.rebuild()
 	before := v.lineStart[10]
@@ -875,7 +876,7 @@ func TestDiffNextBlockWhenWrappedLandsOnChangeRow(t *testing.T) {
 	rows[3] = textdiff.Row{Kind: textdiff.Changed, Left: "a", Right: "b", LeftNo: 4, RightNo: 4}
 	rows[15] = textdiff.Row{Kind: textdiff.Changed, Left: "c", Right: "d", LeftNo: 16, RightNo: 16}
 	v := diffViewWith(rows, []int{3, 15})
-	v.wrap = true
+	v.long = longWrap
 	v.width = 60
 	v.rebuild()
 	body := 10
@@ -884,5 +885,74 @@ func TestDiffNextBlockWhenWrappedLandsOnChangeRow(t *testing.T) {
 	target := v.lineStart[15] // the 2nd change's first display row
 	if !(v.offset <= target && target < v.offset+body) {
 		t.Fatalf("nextBlock should bring the 2nd change (row %d) into view [%d,%d)", target, v.offset, v.offset+body)
+	}
+}
+
+func TestDiffScrollPanKeys(t *testing.T) {
+	rows := make([]textdiff.Row, 5)
+	wide := strings.Repeat("word ", 40) // 200 cols, far wider than any pane
+	for i := range rows {
+		rows[i] = textdiff.Row{Kind: textdiff.Same, Left: wide, Right: wide, LeftNo: i + 1, RightNo: i + 1}
+	}
+	m := diffModel()
+	m.width, m.height = 80, 24
+	v := diffViewWith(rows, nil) // default long == longScroll
+	v.width = 80
+	v.rebuild()
+	m.diffView = v
+	m.diffTag = "status:x"
+
+	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	v1 := u.(Model).diffView
+	if v1.hOffset != m.hscrollStep() {
+		t.Fatalf("→ should pan by %d, got hOffset %d", m.hscrollStep(), v1.hOffset)
+	}
+	u2, _ := u.(Model).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("0")})
+	if u2.(Model).diffView.hOffset != 0 {
+		t.Fatal("0 must reset hOffset")
+	}
+	u3, _ := u2.(Model).Update(tea.KeyMsg{Type: tea.KeyLeft})
+	if u3.(Model).diffView.hOffset != 0 {
+		t.Fatal("← at column 0 must clamp to 0")
+	}
+}
+
+func TestDiffPanNoOpWhenNotScroll(t *testing.T) {
+	rows := sameRowsTUI(5, 2)
+	m := diffModel()
+	m.width, m.height = 80, 24
+	v := diffViewWith(rows, []int{2})
+	v.long = longWrap
+	v.width = 80
+	v.rebuild()
+	m.diffView = v
+	m.diffTag = "status:x"
+	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	if u.(Model).diffView.hOffset != 0 {
+		t.Fatal("→ must be a no-op outside scroll mode")
+	}
+}
+
+func TestDiffResizeReclampsHOffset(t *testing.T) {
+	long := strings.Repeat("x", 200)
+	rows := make([]textdiff.Row, 3)
+	for i := range rows {
+		rows[i] = textdiff.Row{Kind: textdiff.Same, Left: long, Right: long, LeftNo: i + 1, RightNo: i + 1}
+	}
+	m := diffModel()
+	m.width, m.height = 60, 24
+	v := diffViewWith(rows, nil) // default scroll
+	v.width = 60
+	v.rebuild()
+	v.hOffset = v.maxCell // overshoot, then clamp to the width-60 max
+	v.clampHOffset()
+	wide := v.hOffset
+	m.diffView = v
+	m.diffTag = "status:x"
+	// Growing width enlarges tw, shrinking the pan ceiling: hOffset must drop.
+	u, _ := m.Update(tea.WindowSizeMsg{Width: 200, Height: 24})
+	nv := u.(Model).diffView
+	if nv.hOffset >= wide {
+		t.Fatalf("growing width should re-clamp hOffset down: %d (was %d)", nv.hOffset, wide)
 	}
 }

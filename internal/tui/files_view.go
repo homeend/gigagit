@@ -176,7 +176,7 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			rev:     m.filesHash,
 			loading: true,
 			partial: m.diffPartial,
-			wrap:    m.diffWrap,
+			long:    m.diffLong,
 		}
 		m.diffTag = "commit:" + m.filesHash + ":" + l.path
 		return m, m.loadCommitDiffCmd(m.filesHash, l)

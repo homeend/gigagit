@@ -10,6 +10,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ### Added
 
+#### Diff view: long-line modes (scroll / wrap / truncate)
+- The diff view now opens in **horizontal-scroll** mode by default: long lines
+  pan with `←`/`→` (`0` resets; `‹`/`›` mark off-screen text), step from the new
+  `[ui] hscroll_step` (default 8). `w` cycles scroll → wrap → truncate; the mode
+  shows in the hint and is remembered for the session.
+
 #### File history view (`h`)
 - Press `h` on a Status-panel file, a files-view tree row, or inside the diff
   view to open a **History** view: the commits that touched the file on the left
