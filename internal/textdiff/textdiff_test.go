@@ -3,6 +3,7 @@ package textdiff
 import (
 	"bytes"
 	"fmt"
+	"slices"
 	"testing"
 	"time"
 )
@@ -16,22 +17,10 @@ func rowsKinds(rows []Row) []Kind {
 	return out
 }
 
-func kindsEqual(a, b []Kind) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
-}
-
 func TestCompareEqualInputs(t *testing.T) {
 	res := Compare([]byte("a\nb\n"), []byte("a\nb\n"))
 	want := []Kind{Same, Same}
-	if !kindsEqual(rowsKinds(res.Rows), want) {
+	if !slices.Equal(rowsKinds(res.Rows), want) {
 		t.Fatalf("kinds = %v, want %v", rowsKinds(res.Rows), want)
 	}
 	if len(res.Blocks) != 0 {
@@ -45,7 +34,7 @@ func TestCompareEqualInputs(t *testing.T) {
 func TestComparePureInsert(t *testing.T) {
 	res := Compare([]byte("a\nc\n"), []byte("a\nb\nc\n"))
 	want := []Kind{Same, Add, Same}
-	if !kindsEqual(rowsKinds(res.Rows), want) {
+	if !slices.Equal(rowsKinds(res.Rows), want) {
 		t.Fatalf("kinds = %v, want %v", rowsKinds(res.Rows), want)
 	}
 	r := res.Rows[1]
@@ -60,7 +49,7 @@ func TestComparePureInsert(t *testing.T) {
 func TestComparePureDelete(t *testing.T) {
 	res := Compare([]byte("a\nb\nc\n"), []byte("a\nc\n"))
 	want := []Kind{Same, Del, Same}
-	if !kindsEqual(rowsKinds(res.Rows), want) {
+	if !slices.Equal(rowsKinds(res.Rows), want) {
 		t.Fatalf("kinds = %v, want %v", rowsKinds(res.Rows), want)
 	}
 	r := res.Rows[1]
@@ -74,7 +63,7 @@ func TestCompareReplaceUnequalRuns(t *testing.T) {
 	// third added line gets an Add row with a left gap.
 	res := Compare([]byte("keep\nx1\nx2\nkeep2\n"), []byte("keep\ny1\ny2\ny3\nkeep2\n"))
 	want := []Kind{Same, Changed, Changed, Add, Same}
-	if !kindsEqual(rowsKinds(res.Rows), want) {
+	if !slices.Equal(rowsKinds(res.Rows), want) {
 		t.Fatalf("kinds = %v, want %v", rowsKinds(res.Rows), want)
 	}
 	if res.Rows[1].Left != "x1" || res.Rows[1].Right != "y1" {
@@ -88,7 +77,7 @@ func TestCompareReplaceUnequalRuns(t *testing.T) {
 func TestCompareMultipleBlocks(t *testing.T) {
 	res := Compare([]byte("a\nb\nc\nd\ne\n"), []byte("a\nB\nc\nd\nE\n"))
 	want := []Kind{Same, Changed, Same, Same, Changed}
-	if !kindsEqual(rowsKinds(res.Rows), want) {
+	if !slices.Equal(rowsKinds(res.Rows), want) {
 		t.Fatalf("kinds = %v, want %v", rowsKinds(res.Rows), want)
 	}
 	if len(res.Blocks) != 2 || res.Blocks[0] != 1 || res.Blocks[1] != 4 {
@@ -98,11 +87,11 @@ func TestCompareMultipleBlocks(t *testing.T) {
 
 func TestCompareEmptySides(t *testing.T) {
 	res := Compare(nil, []byte("a\nb\n"))
-	if !kindsEqual(rowsKinds(res.Rows), []Kind{Add, Add}) {
+	if !slices.Equal(rowsKinds(res.Rows), []Kind{Add, Add}) {
 		t.Fatalf("new file: kinds = %v", rowsKinds(res.Rows))
 	}
 	res = Compare([]byte("a\nb\n"), nil)
-	if !kindsEqual(rowsKinds(res.Rows), []Kind{Del, Del}) {
+	if !slices.Equal(rowsKinds(res.Rows), []Kind{Del, Del}) {
 		t.Fatalf("deleted file: kinds = %v", rowsKinds(res.Rows))
 	}
 	res = Compare(nil, nil)
@@ -220,5 +209,27 @@ func TestIsBinary(t *testing.T) {
 	}
 	if IsBinary(nil) {
 		t.Fatal("empty content must not be binary")
+	}
+}
+
+func TestCompareSingleLineNoNewline(t *testing.T) {
+	res := Compare([]byte("hello"), []byte("world"))
+	if !slices.Equal(rowsKinds(res.Rows), []Kind{Changed}) {
+		t.Fatalf("kinds = %v, want [Changed]", rowsKinds(res.Rows))
+	}
+	if res.Rows[0].Left != "hello" || res.Rows[0].Right != "world" {
+		t.Fatalf("row = %+v", res.Rows[0])
+	}
+}
+
+func TestCompareCRLFLinesPreserved(t *testing.T) {
+	// Lines keep their \r — comparison is raw; display sanitizing is the
+	// TUI's job. Equal CRLF content must compare as Same.
+	res := Compare([]byte("a\r\nb\r\n"), []byte("a\r\nb\r\n"))
+	if !slices.Equal(rowsKinds(res.Rows), []Kind{Same, Same}) {
+		t.Fatalf("kinds = %v, want [Same Same]", rowsKinds(res.Rows))
+	}
+	if res.Rows[0].Left != "a\r" {
+		t.Fatalf("CRLF stripped from line content: %q", res.Rows[0].Left)
 	}
 }

@@ -59,9 +59,9 @@ func IsBinary(b []byte) bool {
 
 // Compare aligns old and new line-by-line. Compare(nil, x) is a new file
 // (all Add); Compare(x, nil) a deleted one (all Del).
-func Compare(old, new []byte) Result {
+func Compare(old, newB []byte) Result {
 	a, aNL := splitLines(old)
-	b, bNL := splitLines(new)
+	b, bNL := splitLines(newB)
 	if len(a) > 0 && len(b) > 0 && aNL != bNL {
 		// Only the final newline differs (or differs among other changes):
 		// keep one extra empty row on the side that HAS the newline, so a
@@ -166,7 +166,9 @@ const (
 
 // myers computes the forward Myers O(ND) edit script from a to b, giving up
 // (ok=false) once the edit distance would exceed maxEditD. Window snapshots
-// (2d+1 ints per round) keep traceback memory bounded by the budget.
+// (2d+1 ints per round) keep traceback memory bounded by the budget — worst
+// case O(maxEditD²) ≈ 30 MB, transient, only when a fully-different middle
+// exhausts the budget.
 func myers(a, b []string) (script []editOp, ok bool) {
 	n, m := len(a), len(b)
 	if n == 0 && m == 0 {
@@ -175,11 +177,6 @@ func myers(a, b []string) (script []editOp, ok bool) {
 	budget := n + m
 	if budget > maxEditD {
 		budget = maxEditD
-	}
-	// Ensure the v array is large enough for the direction-choice reads
-	// (v[offset±1]) even when budget is tiny (e.g. n+m == 1).
-	if budget < 1 {
-		budget = 1
 	}
 	offset := budget
 	v := make([]int, 2*budget+1)
@@ -279,10 +276,7 @@ func alignRows(a, b []string, script []editOp, oldNo, newNo int) []Row {
 			}
 			q++
 		}
-		zip := dels
-		if adds < zip {
-			zip = adds
-		}
+		zip := min(dels, adds)
 		for z := 0; z < zip; z++ {
 			rows = append(rows, Row{Kind: Changed, Left: a[i], Right: b[j], LeftNo: oldNo, RightNo: newNo})
 			i++
