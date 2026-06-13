@@ -19,6 +19,9 @@ A **frontend-agnostic core engine** drives three frontends over thin git verbs:
         TUI (Bubble Tea)   CLI (scriptable)   MCP (future)
                    \            |            /
                     \           |           /
+                     internal/domain  ← commands run via Execute under a
+                                        per-repo reservation (repogate)
+                                |
                       internal/engine  ← operations emit Events,
                                           resolve forks via a Decider
                                 |
@@ -38,6 +41,8 @@ feature is a worktree-aware **SmartPull** decision tree.
 | Package      | Responsibility |
 |--------------|----------------|
 | `engine`     | Operations + the `Event`/`Decider`/`Result` contract. Smart ops: `SmartPull`, `SmartSwitch`, `Commit`, `Push`, `Stash`, `UndoLastCommit`, `CreateWorktree`, `RemoveWorktree`. |
+| `domain`     | Frontend-facing command layer: `Execute` runs an operation under its repo-gate reservation and emits the op span. Queries (snapshot, commit feed) land here in later stages. |
+| `repogate`   | Per-repo reservation gate (Read/RefWrite/TreeWrite, writer-preferring FIFO, escalation), process-global registry keyed by git common dir. |
 | `git`        | Thin git verbs on `*git.Repo` (status, branches, worktrees, sync, stash, …). One verb ≈ one git invocation. |
 | `gitcmd`     | Fluent argv builder (`New("sub").Arg(...).ArgIf(cond, ...).ToArgv()`). |
 | `gitexec`    | The `Runner` interface (`Run`/`Stream`), the real `ExecRunner`, and `FakeRunner` for tests. |
@@ -62,6 +67,10 @@ Entry point: `cmd/gg/main.go` — routes `shell-init`/`inspect`/CLI subcommands,
 
 - **A git verb is one invocation.** Build argv with `gitcmd`, run via `r.Runner.Run`/`.Stream`. Don't shell out directly.
 - **Operations never block on a human.** They `emit` events and `decide` via the `Decider`; the channel send selects on `ctx.Done`.
+- **Frontends run operations via `domain.Execute`**, never by assembling
+  `OpDeps` directly. Ops needing less than exclusive access declare
+  `LockMode()` (see SmartPull's background ref-write); escalation happens
+  only at boundaries with no partial state.
 - **Decisions are option-lists only** (no free text mid-flight). Frontends map them: TUI modal, CLI policy/stdin, MCP `MapDecider`.
 - **TUI `Model` is a value receiver** with pointer fields (`modal`, `popup`) for state that must persist across the value copy.
 - **Tests use a real `git`** in a `t.TempDir()` (see `newRepo`/`newTestRepo` helpers) or the `FakeRunner` for argv assertions. Follow TDD.

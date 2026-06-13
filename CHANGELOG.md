@@ -10,6 +10,19 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ### Added
 
+#### Domain layer & repo gate
+- New `internal/domain` command layer: both frontends now run engine
+  operations through `domain.Execute`, which serializes them per repository
+  on a three-mode reservation gate (`internal/repogate`: Read / RefWrite /
+  TreeWrite, writer-preferring FIFO, keyed by git common dir so linked
+  worktrees share one gate). Reservations are held across user decisions —
+  the exclusion unit is the whole operation, not one git call. Background
+  pulls hold only a ref-write reservation and escalate at a safe boundary
+  when the user chooses checkout-and-resolve. Queued reservations emit
+  "gate wait" spans, and a TUI op's context is now cancelled when the
+  program exits. Foundation for concurrent operations (workspace group
+  sync, MCP); no behavior change for single operations.
+
 #### Mouse focus & wheel
 - TUI: left-click focuses the window under the cursor and selects the
   clicked row (files view included: a tree click moves the tree cursor, a
