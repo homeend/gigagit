@@ -47,7 +47,8 @@ func TestRenderDiffViewStates(t *testing.T) {
 
 func TestRenderDiffViewPanes(t *testing.T) {
 	res := textdiff.Compare([]byte("same\nold line\n"), []byte("same\nnew line\n"))
-	v := &diffView{title: "f.txt", context: "HEAD → working tree", rows: res.Rows, blocks: res.Blocks}
+	v := &diffView{title: "f.txt", context: "HEAD → working tree", full: res.Rows, fullBlocks: res.Blocks}
+	v.rebuild()
 	m := renderModelWithDiff(v)
 	out := ansi.Strip(m.render())
 	lines := strings.Split(out, "\n")
@@ -84,7 +85,8 @@ func TestRenderDiffViewTabsStayInPane(t *testing.T) {
 	// rendered raw — a raw \t would let the terminal push text through the
 	// separator.
 	res := textdiff.Compare([]byte("\tindented\n"), []byte("\tindented changed\n"))
-	v := &diffView{title: "f.go", rows: res.Rows, blocks: res.Blocks}
+	v := &diffView{title: "f.go", full: res.Rows, fullBlocks: res.Blocks}
+	v.rebuild()
 	m := renderModelWithDiff(v)
 	out := m.render()
 	if strings.Contains(out, "\t") {
@@ -94,7 +96,8 @@ func TestRenderDiffViewTabsStayInPane(t *testing.T) {
 
 func TestRenderDiffViewNoContentDifferenceNote(t *testing.T) {
 	res := textdiff.Compare([]byte("a\n"), []byte("a\n"))
-	v := &diffView{title: "f", context: "@ abc1234", rows: res.Rows, blocks: res.Blocks}
+	v := &diffView{title: "f", context: "@ abc1234", full: res.Rows, fullBlocks: res.Blocks}
+	v.rebuild()
 	m := renderModelWithDiff(v)
 	out := ansi.Strip(m.render())
 	if !strings.Contains(out, "(no content difference)") {
@@ -103,7 +106,8 @@ func TestRenderDiffViewNoContentDifferenceNote(t *testing.T) {
 }
 
 func TestRenderDiffViewTruncatedNote(t *testing.T) {
-	v := &diffView{title: "f", truncated: true, rows: []textdiff.Row{{Kind: textdiff.Del, Left: "x", LeftNo: 1}}, blocks: []int{0}}
+	v := &diffView{title: "f", truncated: true, full: []textdiff.Row{{Kind: textdiff.Del, Left: "x", LeftNo: 1}}, fullBlocks: []int{0}}
+	v.rebuild()
 	m := renderModelWithDiff(v)
 	out := ansi.Strip(m.render())
 	if !strings.Contains(out, "alignment skipped") {
@@ -116,10 +120,39 @@ func TestRenderDiffViewScrollWindow(t *testing.T) {
 	for i := range rows {
 		rows[i] = textdiff.Row{Kind: textdiff.Same, Left: "L" + itoa(i), Right: "L" + itoa(i), LeftNo: i + 1, RightNo: i + 1}
 	}
-	v := &diffView{title: "f", rows: rows, offset: 50}
+	v := &diffView{title: "f", full: rows}
+	v.rebuild()
+	v.offset = 50
 	m := renderModelWithDiff(v)
 	out := ansi.Strip(m.render())
 	if !strings.Contains(out, "L50") || strings.Contains(out, "L10 ") {
 		t.Fatalf("offset window not applied:\n%s", out)
+	}
+}
+
+func TestRenderDiffViewPartialShowsFold(t *testing.T) {
+	var oldB, newB strings.Builder
+	for i := 0; i < 40; i++ {
+		if i == 20 {
+			oldB.WriteString("OLD\n")
+			newB.WriteString("NEW\n")
+		} else {
+			oldB.WriteString(itoa(i) + "\n")
+			newB.WriteString(itoa(i) + "\n")
+		}
+	}
+	res := textdiff.Compare([]byte(oldB.String()), []byte(newB.String()))
+	v := &diffView{title: "f", full: res.Rows, fullBlocks: res.Blocks, partial: true}
+	v.rebuild()
+	m := renderModelWithDiff(v)
+	out := ansi.Strip(m.render())
+	if !strings.Contains(out, "unchanged lines") {
+		t.Fatalf("partial mode must render a fold separator:\n%s", out)
+	}
+	v.partial = false
+	v.rebuild()
+	out = ansi.Strip(renderModelWithDiff(v).render())
+	if strings.Contains(out, "unchanged lines") {
+		t.Fatalf("full mode must not fold:\n%s", out)
 	}
 }

@@ -233,3 +233,168 @@ func TestCompareCRLFLinesPreserved(t *testing.T) {
 		t.Fatalf("CRLF stripped from line content: %q", res.Rows[0].Left)
 	}
 }
+
+func TestExpandWrapsRows1to1(t *testing.T) {
+	rows := []Row{{Kind: Same, Left: "a"}, {Kind: Changed, Left: "b", Right: "B"}}
+	lines := Expand(rows)
+	if len(lines) != 2 {
+		t.Fatalf("len = %d, want 2", len(lines))
+	}
+	for i, l := range lines {
+		if l.Fold != 0 || l.Row != rows[i] {
+			t.Fatalf("line %d = %+v, want Row %+v Fold 0", i, l, rows[i])
+		}
+	}
+}
+
+// sameRows builds n Same rows then sets the given indices to Changed.
+func sameRows(n int, changed ...int) []Row {
+	rows := make([]Row, n)
+	for i := range rows {
+		rows[i] = Row{Kind: Same, LeftNo: i + 1, RightNo: i + 1}
+	}
+	for _, c := range changed {
+		rows[c] = Row{Kind: Changed, Left: "x", Right: "y", LeftNo: c + 1, RightNo: c + 1}
+	}
+	return rows
+}
+
+func TestCollapseSingleBlockMidFile(t *testing.T) {
+	// 20 rows, change at 10, context 3 → keep [7..13].
+	rows := sameRows(20, 10)
+	lines, blocks := Collapse(rows, []int{10}, 3)
+	if len(lines) != 9 { // Fold(0..6) + 7 kept rows + Fold(14..19)
+		t.Fatalf("len(lines) = %d, want 9:\n%+v", len(lines), lines)
+	}
+	if lines[0].Fold != 7 {
+		t.Fatalf("leading fold = %d, want 7", lines[0].Fold)
+	}
+	if lines[8].Fold != 6 {
+		t.Fatalf("trailing fold = %d, want 6", lines[8].Fold)
+	}
+	if len(blocks) != 1 || blocks[0] != 4 {
+		t.Fatalf("blocks = %v, want [4]", blocks)
+	}
+	if lines[4].Fold != 0 || lines[4].Row.Kind != Changed {
+		t.Fatalf("block line = %+v, want the Changed row", lines[4])
+	}
+}
+
+func TestCollapseChangeAtStartNoLeadingFold(t *testing.T) {
+	rows := sameRows(20, 0)
+	lines, blocks := Collapse(rows, []int{0}, 3)
+	if lines[0].Fold != 0 || lines[0].Row.Kind != Changed {
+		t.Fatalf("first line must be the change, got %+v", lines[0])
+	}
+	if blocks[0] != 0 {
+		t.Fatalf("blocks = %v, want [0]", blocks)
+	}
+	if last := lines[len(lines)-1]; last.Fold != 16 { // rows 4..19
+		t.Fatalf("trailing fold = %d, want 16", last.Fold)
+	}
+}
+
+func TestCollapseChangeAtEndNoTrailingFold(t *testing.T) {
+	rows := sameRows(20, 19)
+	lines, _ := Collapse(rows, []int{19}, 3)
+	if last := lines[len(lines)-1]; last.Fold != 0 || last.Row.Kind != Changed {
+		t.Fatalf("last line must be the change, got %+v", last)
+	}
+}
+
+func TestCollapseTwoBlocksFarApartFoldBetween(t *testing.T) {
+	// changes at 5 and 15, context 3 → keep [2..8] and [12..18], gap 9..11.
+	rows := sameRows(21, 5, 15)
+	lines, blocks := Collapse(rows, []int{5, 15}, 3)
+	if len(blocks) != 2 {
+		t.Fatalf("blocks = %v, want 2 entries", blocks)
+	}
+	var foldBetween bool
+	for i := blocks[0] + 1; i < blocks[1]; i++ {
+		if lines[i].Fold == 3 {
+			foldBetween = true
+		}
+	}
+	if !foldBetween {
+		t.Fatalf("expected a Fold:3 between the blocks:\n%+v", lines)
+	}
+}
+
+func TestCollapseAdjacentBlocksMerge(t *testing.T) {
+	// changes at 5 and 9, context 3 → windows [2..8] and [6..12] overlap:
+	// no fold between them.
+	rows := sameRows(20, 5, 9)
+	lines, blocks := Collapse(rows, []int{5, 9}, 3)
+	for i := blocks[0]; i <= blocks[1]; i++ {
+		if lines[i].Fold != 0 {
+			t.Fatalf("merged region must have no fold, found one at %d:\n%+v", i, lines)
+		}
+	}
+}
+
+func TestCollapseContextExceedsGapKeepsAll(t *testing.T) {
+	rows := sameRows(10, 5)
+	lines, _ := Collapse(rows, []int{5}, 100)
+	if len(lines) != 10 {
+		t.Fatalf("len = %d, want all 10 rows kept", len(lines))
+	}
+	for _, l := range lines {
+		if l.Fold != 0 {
+			t.Fatalf("no fold expected with huge context:\n%+v", lines)
+		}
+	}
+}
+
+func TestCollapseNoBlocksEmpty(t *testing.T) {
+	lines, blocks := Collapse(sameRows(10), nil, 3)
+	if len(lines) != 0 || len(blocks) != 0 {
+		t.Fatalf("no-change collapse must be empty, got %d lines %d blocks", len(lines), len(blocks))
+	}
+}
+
+func TestCollapseDelOnlyBlockAnchorsWindow(t *testing.T) {
+	// A pure deletion (Del row) must anchor a keep window just like Changed.
+	rows := make([]Row, 20)
+	for i := range rows {
+		rows[i] = Row{Kind: Same, LeftNo: i + 1, RightNo: i + 1}
+	}
+	rows[10] = Row{Kind: Del, Left: "gone", LeftNo: 11}
+	lines, blocks := Collapse(rows, []int{10}, 3)
+	if len(blocks) != 1 {
+		t.Fatalf("blocks = %v, want one", blocks)
+	}
+	if lines[blocks[0]].Fold != 0 || lines[blocks[0]].Row.Kind != Del {
+		t.Fatalf("block line = %+v, want the Del row", lines[blocks[0]])
+	}
+	// Leading + trailing folds around the kept window [7..13].
+	if lines[0].Fold != 7 || lines[len(lines)-1].Fold != 6 {
+		t.Fatalf("folds wrong: first %d last %d", lines[0].Fold, lines[len(lines)-1].Fold)
+	}
+}
+
+func TestCollapseAddOnlyBlockAnchorsWindow(t *testing.T) {
+	rows := make([]Row, 20)
+	for i := range rows {
+		rows[i] = Row{Kind: Same, LeftNo: i + 1, RightNo: i + 1}
+	}
+	rows[10] = Row{Kind: Add, Right: "new", RightNo: 11}
+	lines, blocks := Collapse(rows, []int{10}, 3)
+	if len(blocks) != 1 || lines[blocks[0]].Row.Kind != Add {
+		t.Fatalf("Add row must anchor a block: lines[%v]", blocks)
+	}
+}
+
+func TestCollapseContextExceedsGapRoundTrip(t *testing.T) {
+	// With context ≥ len, Collapse keeps every row and its content matches Expand.
+	rows := sameRows(10, 5)
+	lines, _ := Collapse(rows, []int{5}, len(rows))
+	exp := Expand(rows)
+	if len(lines) != len(exp) {
+		t.Fatalf("len = %d, want %d", len(lines), len(exp))
+	}
+	for i := range lines {
+		if lines[i] != exp[i] {
+			t.Fatalf("line %d = %+v, want %+v", i, lines[i], exp[i])
+		}
+	}
+}

@@ -38,6 +38,78 @@ type Result struct {
 	Truncated bool
 }
 
+// Line is one display line of a diff view: either an aligned Row (Fold == 0)
+// or a fold marker standing in for Fold elided equal rows (Row is zero). The
+// partial (GitHub-style) view is a slice of these; the full view is the rows
+// wrapped 1:1.
+type Line struct {
+	Row  Row
+	Fold int // > 0: this line hides Fold unchanged rows
+}
+
+// Expand wraps every row as a Line 1:1 (the full-file view): no folds.
+func Expand(rows []Row) []Line {
+	lines := make([]Line, len(rows))
+	for i, r := range rows {
+		lines[i] = Line{Row: r}
+	}
+	return lines
+}
+
+// Collapse produces the partial view: every change block plus up to `context`
+// equal rows on each side is kept; each remaining run of equal rows becomes a
+// single fold Line. blocks holds the row index of each change-block start (as
+// in Result.Blocks); the returned blockIdx remaps those starts into the kept
+// Line slice (jump targets). No blocks → empty (the caller shows a "no
+// difference" note). context < 0 is treated as 0.
+func Collapse(rows []Row, blocks []int, context int) (lines []Line, blockIdx []int) {
+	if len(blocks) == 0 {
+		return nil, nil
+	}
+	if context < 0 {
+		context = 0
+	}
+	n := len(rows)
+	keep := make([]bool, n)
+	for i := 0; i < n; i++ {
+		if rows[i].Kind != Same {
+			lo, hi := i-context, i+context
+			if lo < 0 {
+				lo = 0
+			}
+			if hi >= n {
+				hi = n - 1
+			}
+			for j := lo; j <= hi; j++ {
+				keep[j] = true
+			}
+		}
+	}
+	rowLine := make([]int, n) // original row index -> line index (kept rows)
+	for i := range rowLine {
+		rowLine[i] = -1
+	}
+	for i := 0; i < n; {
+		if keep[i] {
+			rowLine[i] = len(lines)
+			lines = append(lines, Line{Row: rows[i]})
+			i++
+			continue
+		}
+		start := i
+		for i < n && !keep[i] {
+			i++
+		}
+		lines = append(lines, Line{Fold: i - start})
+	}
+	for _, b := range blocks {
+		if b >= 0 && b < n && rowLine[b] >= 0 {
+			blockIdx = append(blockIdx, rowLine[b])
+		}
+	}
+	return lines, blockIdx
+}
+
 // The guards run on the TRIMMED middle, so a small change in a huge file
 // still aligns perfectly. maxLines caps the Myers input size; maxEditD caps
 // the edit distance (Myers is O((N+M)·D) — two large fully-different files

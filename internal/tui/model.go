@@ -50,8 +50,9 @@ type Model struct {
 	filesHash        string        // commit the view wants; gates stale async results
 	filesTreeFocused bool          // true = the tree side owns vertical movement (←/→/tab)
 
-	diffView *diffView // full-screen side-by-side diff; nil = closed
-	diffTag  string    // request key of the wanted diff; gates stale async results
+	diffView    *diffView // full-screen side-by-side diff; nil = closed
+	diffTag     string    // request key of the wanted diff; gates stale async results
+	diffPartial bool      // session default for new diffs (false = full); the f key toggles it
 
 	svc      *domain.Service    // command layer; m.repo == svc.Repo()
 	opCancel context.CancelFunc // cancels the in-flight op's context; nil when idle
@@ -306,7 +307,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.focus == panelStatus && m.canShowFileDiff() {
 				bi, _ := m.backingIndex(panelStatus)
 				f := m.status.Files[bi]
-				m.diffView = &diffView{title: f.Path, context: "HEAD → working tree", loading: true}
+				m.diffView = &diffView{title: f.Path, context: "HEAD → working tree", loading: true, partial: m.diffPartial}
 				m.diffTag = "status:" + f.Path
 				return m, m.loadStatusDiffCmd(f)
 			}

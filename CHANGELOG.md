@@ -10,6 +10,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ### Added
 
+#### Diff view: partial mode + change navigation
+- The full-screen diff view gains a **partial mode** (`f` toggles): show only
+  changed lines plus 3 lines of context, collapsing long unchanged runs into a
+  fold marker — GitHub's split-diff style. The choice is remembered for the
+  session.
+- `n` / `p` jump to the next / previous change (aliases of `ctrl+↓` / `ctrl+↑`).
+- A diff now opens scrolled to the first change instead of the top.
+
 #### Domain layer & repo gate
 - New `internal/domain` command layer: both frontends now run engine
   operations through `domain.Execute`, which serializes them per repository
