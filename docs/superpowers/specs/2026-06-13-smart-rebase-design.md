@@ -141,16 +141,19 @@ built with `gitcmd` and run via `r.Runner.Run`.
 - `Rebase(ctx, dir, onto string) error` — `git [-C dir] rebase --no-edit <onto>`.
   Non-interactive replay of the current branch's commits onto `onto`.
 - `RebaseAbort(ctx, dir string) error` — `git [-C dir] rebase --abort`.
-- `RebaseInProgress(ctx, dir string) (bool, error)` — **directory-existence
-  probe**, not a ref probe. `REBASE_HEAD` is unreliable (set only at some
-  conflict stops, version-dependent); the durable signal is the rebase state
-  directory. Resolve the path with
-  `git [-C dir] rev-parse --git-path rebase-merge --git-path rebase-apply`
-  (one invocation, prints both paths), then `os.Stat` each; in-progress iff
-  either directory exists. Empirically verified in this repo's git: a
-  conflicted rebase creates `rebase-merge` (the modern merge backend);
-  `rebase-apply` is the legacy am backend. Resolving the path via `rev-parse`
-  keeps it correct for linked worktrees (rung 2).
+- `RebaseInProgress(ctx, dir string) (bool, error)` — **exit-code probe**,
+  mirroring `MergeInProgress`'s shape. `git [-C dir] rebase
+  --show-current-patch` exits **0** when a rebase is paused on a patch
+  (i.e. stopped on a conflict → in progress) and **128** ("No rebase in
+  progress?") when none. So `err == nil` → `true`; any non-zero exit →
+  `false, nil`. Empirically verified in this repo's git, and honors `-C dir`
+  for the linked-worktree rung. This is preferred over a `REBASE_HEAD` ref
+  probe (unreliable: set only at some stops, version-dependent) and over a
+  `--git-path rebase-merge` + `os.Stat` directory probe (the `--git-path`
+  output is relative to git's cwd, which would need re-resolving against
+  `dir` — the exit-code probe sidesteps that entirely). The op only calls
+  this right after `Rebase` returns an error, so "in progress" cleanly means
+  "stopped on a conflict" and any non-zero means "refused outright."
 
 These three verbs are added to the `engine.GitOps` interface (next to
 `Merge`/`MergeAbort`/`MergeInProgress`); the `var _ GitOps = (*git.Repo)(nil)`
