@@ -182,6 +182,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			h.diff = msg.view
 		}
 		return m, nil
+	case blameMsg:
+		if b, ok := m.stackTop().(*blameView); ok && b.tag == msg.tag {
+			b.loading = false
+			b.err = msg.err
+			b.lines = msg.lines
+			b.blocks = groupBlame(msg.lines)
+			b.sel = 0
+		}
+		return m, nil
 	case dataLoadedMsg:
 		if msg.gen != m.loadGen {
 			return m, nil // superseded by a newer load
