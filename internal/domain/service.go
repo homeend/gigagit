@@ -19,13 +19,15 @@ import (
 	"github.com/gigagit/gg/internal/repogate"
 )
 
-// Service couples one repository with its process-wide gate.
+// Service couples one repository with its process-wide gate and a singleflight
+// group that coalesces concurrent identical queries.
 type Service struct {
 	repo    *git.Repo
 	workdir string // fallback gate key when common-dir resolution fails
 
-	mu   sync.Mutex
-	gate *repogate.Gate // resolved lazily on first Execute
+	mu     sync.Mutex
+	gate   *repogate.Gate // resolved lazily on first Execute or query
+	flight flightGroup    // coalesces concurrent calls sharing a key
 }
 
 // Open builds a Service rooted at workdir with the standard runner — the

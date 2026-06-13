@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 )
 
 // FakeCall records one invocation of the fake runner.
@@ -12,8 +13,10 @@ type FakeCall struct {
 	Argv []string
 }
 
-// FakeRunner is an in-memory Runner for tests.
+// FakeRunner is an in-memory Runner for tests. Run is safe for concurrent
+// use (the domain Snapshot fan-out calls one runner from many goroutines).
 type FakeRunner struct {
+	mu        sync.Mutex
 	responses map[string]Result
 	errs      map[string]error
 	Calls     []FakeCall
@@ -31,11 +34,14 @@ func (f *FakeRunner) SetResponse(name string, r Result) { f.responses[name] = r 
 func (f *FakeRunner) SetError(name string, err error) { f.errs[name] = err }
 
 func (f *FakeRunner) Run(_ context.Context, name string, argv []string) (Result, error) {
+	f.mu.Lock()
 	f.Calls = append(f.Calls, FakeCall{Name: name, Argv: argv})
-	if err := f.errs[name]; err != nil {
-		return f.responses[name], err
-	}
+	err := f.errs[name]
 	r, ok := f.responses[name]
+	f.mu.Unlock()
+	if err != nil {
+		return r, err
+	}
 	if !ok {
 		return Result{}, fmt.Errorf("fake: no response configured for %q", name)
 	}

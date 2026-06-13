@@ -12,8 +12,11 @@ import (
 	"github.com/gigagit/gg/internal/repos"
 )
 
-// dataLoadedMsg carries a full repo snapshot loaded off the UI thread.
+// dataLoadedMsg carries a full repo snapshot loaded off the UI thread. gen is
+// the load generation it was issued for; a result whose gen no longer matches
+// the model's loadGen is stale (superseded by a newer load) and dropped.
 type dataLoadedMsg struct {
+	gen             int
 	status          model.WorkingTreeStatus
 	branches        []model.Branch
 	commits         []model.Commit
@@ -25,62 +28,37 @@ type dataLoadedMsg struct {
 	err             error
 }
 
-// loadCmd loads status, branches, and recent commits as a single snapshot.
+// loadCmd loads the repo snapshot via the domain layer (gated, parallel,
+// coalesced) and, on success, layers in the non-git config + MRU touch. It
+// bakes in the current loadGen so a stale result can be dropped.
 func (m Model) loadCmd() tea.Cmd {
-	repo := m.repo
+	svc := m.svc
 	statePath := m.statePath
+	gen := m.loadGen
 	return func() tea.Msg {
 		ctx := context.Background()
-		var out dataLoadedMsg
-		st, err := repo.Status(ctx)
+		snap, err := svc.Snapshot(ctx)
 		if err != nil {
-			out.err = err
-			return out
+			return dataLoadedMsg{gen: gen, err: err}
 		}
-		out.status = st
-		if out.branches, err = repo.Branches(ctx); err != nil {
-			out.err = err
-			return out
+		out := dataLoadedMsg{
+			gen:             gen,
+			status:          snap.Status,
+			branches:        snap.Branches,
+			commits:         snap.Commits,
+			worktrees:       snap.Worktrees,
+			currentWorktree: snap.CurrentWorktree,
+			gitCommonDir:    snap.GitCommonDir,
+			headTimes:       snap.HeadTimes,
+			cfg:             config.Defaults(),
 		}
-		if out.commits, err = repo.Log(ctx, 50); err != nil {
-			out.err = err
-			return out
-		}
-		if out.worktrees, err = repo.Worktrees(ctx); err != nil {
-			out.err = err
-			return out
-		}
-		// Worktree HEAD commit times power the Worktrees panel's date sort; a
-		// failure is non-fatal (dates read as 0 and date sort keeps backing order).
-		shas := make([]string, 0, len(out.worktrees))
-		for _, w := range out.worktrees {
-			if w.Head != "" {
-				shas = append(shas, w.Head)
-			}
-		}
-		if times, tErr := repo.CommitTimes(ctx, shas); tErr == nil {
-			out.headTimes = times
-		}
-		// TopLevel marks which listed worktree is the current one; a failure here
-		// is non-fatal (the marker just won't show).
-		if top, topErr := repo.TopLevel(ctx); topErr == nil {
-			// Record this repo in the switcher registry (best-effort; "" = off).
-			// Runs on every load, so LastOpened is really "last active here" —
-			// exactly what MRU ordering wants.
-			_ = repos.Touch(statePath, top, time.Now())
-			out.currentWorktree = top
-			// Config: built-in defaults overlaid by the global file then the repo's
-			// committed .gg.toml. Load errors fall back to defaults.
-			if cfg, cfgErr := config.Load(config.DefaultGlobalPath(), filepath.Join(top, ".gg.toml")); cfgErr == nil {
+		// config and the MRU registry are not git reads; do them here, after
+		// the gated snapshot, keyed off the toplevel it reported.
+		if snap.CurrentWorktree != "" {
+			_ = repos.Touch(statePath, snap.CurrentWorktree, time.Now())
+			if cfg, cfgErr := config.Load(config.DefaultGlobalPath(), filepath.Join(snap.CurrentWorktree, ".gg.toml")); cfgErr == nil {
 				out.cfg = cfg
-			} else {
-				out.cfg = config.Defaults()
 			}
-		} else {
-			out.cfg = config.Defaults()
-		}
-		if gcd, gcdErr := repo.GitCommonDir(ctx); gcdErr == nil {
-			out.gitCommonDir = gcd
 		}
 		return out
 	}

@@ -41,7 +41,7 @@ feature is a worktree-aware **SmartPull** decision tree.
 | Package      | Responsibility |
 |--------------|----------------|
 | `engine`     | Operations + the `Event`/`Decider`/`Result` contract. Smart ops: `SmartPull`, `SmartSwitch`, `Commit`, `Push`, `Stash`, `UndoLastCommit`, `CreateWorktree`, `RemoveWorktree`. |
-| `domain`     | Frontend-facing command layer: `Execute` runs an operation under its repo-gate reservation and emits the op span. Queries (snapshot, commit feed) land here in later stages. |
+| `domain`     | Frontend-facing command + query layer: `Execute` runs an operation under its repo-gate reservation; `Snapshot`/`Status`/`Worktrees` run reads under a Read reservation, in parallel and singleflight-coalesced. Emits the op span. |
 | `repogate`   | Per-repo reservation gate (Read/RefWrite/TreeWrite, writer-preferring FIFO, escalation), process-global registry keyed by git common dir. |
 | `git`        | Thin git verbs on `*git.Repo` (status, branches, worktrees, sync, stash, …). One verb ≈ one git invocation. |
 | `gitcmd`     | Fluent argv builder (`New("sub").Arg(...).ArgIf(cond, ...).ToArgv()`). |
@@ -72,6 +72,9 @@ Entry point: `cmd/gg/main.go` — routes `shell-init`/`inspect`/CLI subcommands,
   `OpDeps` directly. Ops needing less than exclusive access declare
   `LockMode()` (see SmartPull's background ref-write); escalation happens
   only at boundaries with no partial state.
+  Frontend reads likewise go through domain queries — `Snapshot` for the TUI
+  startup load, `Status`/`Worktrees` for the CLI — not direct `internal/git`
+  verb calls.
 - **Decisions are option-lists only** (no free text mid-flight). Frontends map them: TUI modal, CLI policy/stdin, MCP `MapDecider`.
 - **TUI `Model` is a value receiver** with pointer fields (`modal`, `popup`) for state that must persist across the value copy.
 - **Tests use a real `git`** in a `t.TempDir()` (see `newRepo`/`newTestRepo` helpers) or the `FakeRunner` for argv assertions. Follow TDD.

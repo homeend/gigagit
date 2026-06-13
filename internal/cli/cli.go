@@ -7,6 +7,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/gigagit/gg/internal/domain"
 	"github.com/gigagit/gg/internal/engine"
 	"github.com/gigagit/gg/internal/git"
 	"github.com/gigagit/gg/internal/repos"
@@ -88,7 +89,7 @@ var commands = map[string]bool{
 func IsCommand(tok string) bool { return commands[tok] }
 
 func cmdStatus(repo *repoT, stdout, stderr io.Writer) int {
-	st, err := repo.Status(context.Background())
+	st, err := domain.New(repo).Status(context.Background())
 	if err != nil {
 		fmt.Fprintln(stderr, "error:", err)
 		return 1

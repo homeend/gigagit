@@ -2,6 +2,7 @@ package gitexec
 
 import (
 	"context"
+	"sync"
 	"testing"
 )
 
@@ -18,6 +19,28 @@ func TestFakeRunnerReturnsConfiguredResult(t *testing.T) {
 	}
 	if len(f.Calls) != 1 || f.Calls[0].Name != "git status" {
 		t.Fatalf("call not recorded: %+v", f.Calls)
+	}
+}
+
+// TestFakeRunnerConcurrent: the Snapshot fan-out calls one Runner from many
+// goroutines, so Run must be safe for concurrent use (run under -race).
+func TestFakeRunnerConcurrent(t *testing.T) {
+	f := NewFakeRunner()
+	f.SetResponse("git x", Result{Stdout: "ok"})
+	const n = 50
+	var wg sync.WaitGroup
+	wg.Add(n)
+	for i := 0; i < n; i++ {
+		go func() {
+			defer wg.Done()
+			if _, err := f.Run(context.Background(), "git x", nil); err != nil {
+				t.Errorf("run: %v", err)
+			}
+		}()
+	}
+	wg.Wait()
+	if len(f.Calls) != n {
+		t.Fatalf("recorded %d calls, want %d", len(f.Calls), n)
 	}
 }
 
