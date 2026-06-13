@@ -45,6 +45,10 @@ type GitOps interface {
 	Merge(ctx context.Context, dir, branch string) error
 	MergeAbort(ctx context.Context, dir string) error
 	MergeInProgress(ctx context.Context, dir string) (bool, error)
+
+	Rebase(ctx context.Context, dir, onto string) error
+	RebaseAbort(ctx context.Context, dir string) error
+	RebaseInProgress(ctx context.Context, dir string) (bool, error)
 }
 
 // Compile-time proof the concrete repo implements the interface; a drift
