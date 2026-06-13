@@ -3,7 +3,6 @@ package domain
 import (
 	"context"
 	"strconv"
-	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -14,23 +13,22 @@ import (
 
 // pagingRunner serves `git log` from a fixed list of `total` commits, honoring
 // -n <limit> and --skip=<n> from argv. Other span names return empty. Safe for
-// concurrent use. If block is non-nil, the FIRST git log blocks on it (after
-// signalling hit) — for the single-flight test.
+// concurrent use. If block is non-nil, the FIRST page read (skip>0) blocks on
+// it (after signalling hit) — for the single-flight test, so the initial load
+// completes normally and the first LoadMore is held in flight.
 type pagingRunner struct {
-	total   int
-	logHits int32
-	block   chan struct{}
-	hit     chan struct{}
+	total    int
+	logHits  int32
+	pageHits int32
+	block    chan struct{}
+	hit      chan struct{}
 }
 
 func (r *pagingRunner) Run(ctx context.Context, name string, argv []string) (gitexec.Result, error) {
 	if name != "git log" {
 		return gitexec.Result{}, nil
 	}
-	if atomic.AddInt32(&r.logHits, 1) == 1 && r.block != nil {
-		close(r.hit)
-		<-r.block
-	}
+	atomic.AddInt32(&r.logHits, 1)
 	limit, skip := 0, 0
 	for i, a := range argv {
 		if a == "-n" && i+1 < len(argv) {
@@ -39,6 +37,10 @@ func (r *pagingRunner) Run(ctx context.Context, name string, argv []string) (git
 		if len(a) > 7 && a[:7] == "--skip=" {
 			skip, _ = strconv.Atoi(a[7:])
 		}
+	}
+	if skip > 0 && r.block != nil && atomic.AddInt32(&r.pageHits, 1) == 1 {
+		close(r.hit)
+		<-r.block
 	}
 	var b []byte
 	for i := skip; i < skip+limit && i < r.total; i++ {
@@ -137,21 +139,24 @@ func TestNeedsMore(t *testing.T) {
 }
 
 func TestLoadMoreSingleFlight(t *testing.T) {
+	// The initial load completes normally (no --skip); the first page read
+	// (--skip>0) parks inside the runner, so the first LoadMore is held in
+	// flight while we prove a second LoadMore no-ops instead of issuing its
+	// own read. Deterministic: nothing races on whether the two overlap.
 	pr := &pagingRunner{total: 500, block: make(chan struct{}), hit: make(chan struct{})}
 	f := New(&git.Repo{Runner: pr}).CommitFeed()
-	go func() { <-pr.hit; close(pr.block) }() // let the initial git log through
 	f.LoadInitial(context.Background())
 
-	before := atomic.LoadInt32(&pr.logHits)
-	var wg sync.WaitGroup
-	for i := 0; i < 2; i++ {
-		wg.Add(1)
-		go func() { defer wg.Done(); f.LoadMore(context.Background()) }()
+	go func() { f.LoadMore(context.Background()) }()
+	<-pr.hit // the first page read is parked; the feed's inFlight is set
+
+	if _, loaded, _ := f.LoadMore(context.Background()); loaded {
+		t.Fatal("a second LoadMore while one is in flight must no-op")
 	}
-	wg.Wait()
-	if after := atomic.LoadInt32(&pr.logHits); after-before > 1 {
-		t.Fatalf("two concurrent LoadMore issued %d git logs, want at most 1", after-before)
+	if got := atomic.LoadInt32(&pr.pageHits); got != 1 {
+		t.Fatalf("page reads issued = %d, want 1 (the second LoadMore must not read)", got)
 	}
+	close(pr.block) // release the parked first page so the goroutine can finish
 }
 
 func TestSnapshotReturnsCopy(t *testing.T) {
