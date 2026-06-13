@@ -33,6 +33,7 @@ var contextBindings = []footerBinding{
 	}},
 	{"enter", "[enter] switch", func(m Model) bool { return m.focus == panelWorktrees && m.canEnterWorktree() }},
 	{"d", "[d]elete", func(m Model) bool { return m.focus == panelWorktrees && m.canDeleteWorktree() }},
+	{"enter", "[enter] diff", func(m Model) bool { return m.focus == panelStatus && m.canShowFileDiff() }},
 	{"l", "[l] files", func(m Model) bool {
 		// Stricter than the dispatch: the narrow case is a statusMsg no-op
 		// there, so don't advertise it.
@@ -68,7 +69,7 @@ func (m Model) footerLine() string {
 	// The files view owns the keyboard while open (action keys are swallowed),
 	// so the registry footer would lie; show the view's own keys instead.
 	if m.filesView != nil {
-		return "files: [←/→ tab] focus  [↑/↓] move  [ctrl+↑/↓] tree  [/] search  [esc/l] close  [q] quit"
+		return "files: [←/→ tab] focus  [↑/↓] move  [ctrl+↑/↓] tree  [enter] diff  [/] search  [esc/l] close  [q] quit"
 	}
 	var ctx, glob []string
 	for _, b := range contextBindings {

@@ -3,7 +3,8 @@ package tui
 import tea "github.com/charmbracelet/bubbletea"
 
 // handleMouse routes all mouse input. Precedence mirrors the key routing:
-// the modal swallows everything; then the help window owns the wheel; under
+// the modal swallows everything; then the full-screen diff view; then
+// the help window owns the wheel; under
 // any other popup mouse input is ignored entirely (centered overlays —
 // hit-testing the background would act on hidden state); then the files
 // view's two sides; then the normal panels. Click-to-focus and wheel are
@@ -21,6 +22,14 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		wheel = m.wheelStep()
 	}
 	if m.modal != nil {
+		return m, nil
+	}
+	// Routing invariant: the diff view comes immediately after the modal,
+	// matching Update's key routing and render().
+	if m.diffView != nil {
+		if wheel != 0 {
+			m.diffView.scroll(wheel, m.diffBodyRows())
+		}
 		return m, nil
 	}
 	if m.contentPopup != nil {

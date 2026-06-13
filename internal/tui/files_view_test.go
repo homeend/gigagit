@@ -22,12 +22,12 @@ func TestCommitFileLinesGroupsByDirectory(t *testing.T) {
 	}
 	got := commitFileLines(files)
 	want := []contentLine{
-		{text: "M  CHANGELOG.md"},
+		{text: "M  CHANGELOG.md", path: "CHANGELOG.md", status: "M"},
 		{text: "internal/engine/", heading: true},
-		{text: "  A  smart_merge.go"},
+		{text: "  A  smart_merge.go", path: "internal/engine/smart_merge.go", status: "A"},
 		{text: "internal/tui/", heading: true},
-		{text: "  A  mark.go"},
-		{text: "  M  model.go"},
+		{text: "  A  mark.go", path: "internal/tui/mark.go", status: "A"},
+		{text: "  M  model.go", path: "internal/tui/model.go", status: "M"},
 	}
 	if len(got) != len(want) {
 		t.Fatalf("lines = %d, want %d: %+v", len(got), len(want), got)
@@ -65,7 +65,7 @@ func TestCommitFileLinesRename(t *testing.T) {
 	got := commitFileLines(files)
 	want := []contentLine{
 		{text: "b/", heading: true},
-		{text: "  R  a/old.go → new.go"},
+		{text: "  R  a/old.go → new.go", path: "b/new.go", oldPath: "a/old.go", status: "R"},
 	}
 	if len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
 		t.Fatalf("lines = %+v, want %+v", got, want)
@@ -586,5 +586,53 @@ func TestTooltipSuppressedWhileTreeFocused(t *testing.T) {
 	m = u.(Model)
 	if _, _, _, ok := m.tooltip(); ok {
 		t.Fatal("tooltip must be suppressed while the tree is focused")
+	}
+}
+
+func TestCommitFileLinesCarryPayload(t *testing.T) {
+	files := []model.CommitFile{
+		{Status: "M", Path: "root.txt"},
+		{Status: "R", Path: "pkg/new.go", OldPath: "pkg/old.go"},
+		{Status: "A", Path: "pkg/added.go"},
+	}
+	lines := commitFileLines(files)
+	byPath := map[string]contentLine{}
+	for _, l := range lines {
+		if l.path != "" {
+			byPath[l.path] = l
+		}
+		if l.heading && (l.path != "" || l.oldPath != "" || l.status != "") {
+			t.Fatalf("heading row must carry no payload: %+v", l)
+		}
+	}
+	if len(byPath) != 3 {
+		t.Fatalf("expected 3 payload rows, got %d", len(byPath))
+	}
+	if l := byPath["root.txt"]; l.status != "M" || l.oldPath != "" {
+		t.Fatalf("root.txt payload wrong: %+v", l)
+	}
+	if l := byPath["pkg/new.go"]; l.status != "R" || l.oldPath != "pkg/old.go" {
+		t.Fatalf("rename payload wrong: %+v", l)
+	}
+	if l := byPath["pkg/added.go"]; l.status != "A" {
+		t.Fatalf("added payload wrong: %+v", l)
+	}
+}
+
+func TestPayloadSurvivesFilter(t *testing.T) {
+	files := []model.CommitFile{
+		{Status: "M", Path: "pkg/match_me.go"},
+		{Status: "M", Path: "pkg/other.go"},
+	}
+	p := &contentPopup{lines: commitFileLines(files), query: "match"}
+	vis := p.visible()
+	var found bool
+	for _, l := range vis {
+		if l.path == "pkg/match_me.go" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("filtered visible() lost the payload row")
 	}
 }

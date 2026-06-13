@@ -11,9 +11,18 @@ import (
 // headers: the filter never matches them, and they survive filtering only
 // while at least one non-heading line beneath them (before the next heading)
 // matches.
+//
+// path/oldPath/status are an optional file payload (the commit files tree):
+// the diff loader reads them straight off the selected VISIBLE line —
+// payload-on-line is the only shape that survives the /-filter, whose
+// visible() returns a reordered subset. Zero-valued for headings and for
+// consumers that don't need them (the help window).
 type contentLine struct {
 	text    string
 	heading bool
+	path    string // file's (new) path
+	oldPath string // set only for renames/copies
+	status  string // model.CommitFile.Status letter ("A","M","D","R","C","T")
 }
 
 // contentPopup is a generic read-only viewer popup: any list of lines with

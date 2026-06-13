@@ -37,14 +37,14 @@ func commitFileLines(files []model.CommitFile) []contentLine {
 	for _, f := range sorted {
 		dir := path.Dir(f.Path)
 		if dir == "." {
-			out = append(out, contentLine{text: fileLine(f)})
+			out = append(out, contentLine{text: fileLine(f), path: f.Path, oldPath: f.OldPath, status: f.Status})
 			continue
 		}
 		if dir != lastDir {
 			out = append(out, contentLine{text: dir + "/", heading: true})
 			lastDir = dir
 		}
-		out = append(out, contentLine{text: "  " + fileLine(f)})
+		out = append(out, contentLine{text: "  " + fileLine(f), path: f.Path, oldPath: f.OldPath, status: f.Status})
 	}
 	return out
 }
@@ -145,6 +145,26 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		p.typing = true
 		p.query = ""
 		p.sel = 0
+	case "enter":
+		if !m.filesTreeFocused {
+			return m, nil
+		}
+		vis := p.visible()
+		if p.sel < 0 || p.sel >= len(vis) || vis[p.sel].path == "" {
+			return m, nil // heading row, placeholder, or empty view
+		}
+		if m.width > 0 && m.width < 60 {
+			m.statusMsg = "terminal too narrow for the diff view"
+			return m, nil
+		}
+		l := vis[p.sel]
+		m.diffView = &diffView{
+			title:   l.path,
+			context: "@ " + strings.TrimPrefix(m.filesTitle, "Files "),
+			loading: true,
+		}
+		m.diffTag = "commit:" + m.filesHash + ":" + l.path
+		return m, m.loadCommitDiffCmd(m.filesHash, l)
 	case "left":
 		m.filesTreeFocused = true
 	case "right":
@@ -257,7 +277,7 @@ func (m Model) renderFilesView(boxW, boxH int) string {
 	for len(lines) < contentH-1 {
 		lines = append(lines, padRight("", innerW))
 	}
-	hint := "[/] search  [esc] close"
+	hint := "[enter] diff  [/] search  [esc] close"
 	if len(vis) > rowsCap {
 		hint = fmt.Sprintf("%d/%d  %s", p.sel+1, len(vis), hint)
 	}

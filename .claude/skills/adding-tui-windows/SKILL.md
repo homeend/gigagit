@@ -86,6 +86,20 @@ between the surviving panel and the view. Async per-row content loads carry
 an identity tag (commit hash) so stale results from fast movement are
 dropped. Clear the view in `reRoot`.
 
+## Full-screen view
+
+The diff view (`enter` on a Status row / files-view tree row) is the template
+for a view that owns the WHOLE screen and every key. Routing invariant: its
+check sits immediately after the decision modal in all three dispatch sites —
+`render()` (short-circuit to `render<X>View()`), `Update`'s key routing, and
+the `MouseMsg` arm — so the key owner is always the top visible surface
+(background ops will rely on this). It draws its own header and hint line;
+the registry footer is not rendered. Close (esc) returns to whatever was
+beneath (main interface or an open in-panel view — leave that state
+untouched). Guard narrow terminals in `WindowSizeMsg` (close + statusMsg),
+clear the view in `reRoot`, and tag async loads for stale-drop like the
+in-panel view.
+
 ## Common mistakes
 
 | Mistake | Fix |
