@@ -1,9 +1,14 @@
 package repogate
 
 import (
+	"bytes"
 	"context"
+	"strings"
+	"sync"
 	"testing"
 	"time"
+
+	"github.com/gigagit/gg/internal/observ"
 )
 
 // tryAcquire attempts an Acquire bounded by a short deadline; ok=false means
@@ -148,4 +153,157 @@ func TestDoubleReleasePanics(t *testing.T) {
 		}
 	}()
 	r.Release()
+}
+
+func TestEscalateJoinsWriterQueue(t *testing.T) {
+	g := &Gate{}
+	r := mustAcquire(t, g, RefWrite, "escalator")
+	order := make(chan string, 2)
+	go func() {
+		w := mustAcquire(t, g, TreeWrite, "earlier-writer")
+		order <- "earlier-writer"
+		w.Release()
+	}()
+	waitQueued(t, g, "earlier-writer")
+	go func() {
+		if err := r.Escalate(context.Background()); err != nil {
+			t.Errorf("escalate: %v", err)
+		}
+		order <- "escalator"
+	}()
+	// Escalate releases first, so the earlier writer must win, then the
+	// escalator re-acquires.
+	if got := <-order; got != "earlier-writer" {
+		t.Fatalf("first grant = %q, want earlier-writer", got)
+	}
+	if got := <-order; got != "escalator" {
+		t.Fatalf("second grant = %q, want escalator", got)
+	}
+	// The escalated reservation is now exclusive.
+	if _, ok := tryAcquire(t, g, Read, "probe"); ok {
+		t.Fatal("read overlapped a TreeWrite escalated reservation")
+	}
+	r.Release() // the same Reservation value remains usable after Escalate
+}
+
+func TestEscalateAlreadyTreeWrite(t *testing.T) {
+	g := &Gate{}
+	r := mustAcquire(t, g, TreeWrite, "w")
+	if err := r.Escalate(context.Background()); err != nil {
+		t.Fatalf("escalate no-op: %v", err)
+	}
+	r.Release()
+}
+
+func TestEscalateCancelled(t *testing.T) {
+	g := &Gate{}
+	r := mustAcquire(t, g, RefWrite, "escalator")
+	blocker := mustAcquire(t, g, Read, "blocker") // keeps TreeWrite ungrantable
+	ctx, cancel := context.WithCancel(context.Background())
+	errc := make(chan error, 1)
+	go func() { errc <- r.Escalate(ctx) }()
+	waitQueued(t, g, "escalator")
+	cancel()
+	if err := <-errc; err != context.Canceled {
+		t.Fatalf("err = %v, want context.Canceled", err)
+	}
+	blocker.Release()
+	// The failed escalation released the original reservation; the gate
+	// must be fully free now.
+	r2 := mustAcquire(t, g, TreeWrite, "after")
+	r2.Release()
+}
+
+func TestReleasedAccessor(t *testing.T) {
+	g := &Gate{}
+	r := mustAcquire(t, g, Read, "r")
+	if r.Released() {
+		t.Fatal("fresh reservation reports released")
+	}
+	r.Release()
+	if !r.Released() {
+		t.Fatal("released reservation reports held")
+	}
+}
+
+func TestQueueSnapshot(t *testing.T) {
+	g := &Gate{}
+	h := mustAcquire(t, g, Read, "holder")
+	go func() { mustAcquire(t, g, TreeWrite, "waiter").Release() }()
+	waitQueued(t, g, "waiter")
+	q := g.Queue()
+	if len(q) != 2 {
+		t.Fatalf("queue len = %d, want 2 (%+v)", len(q), q)
+	}
+	if q[0].Label != "holder" || q[0].Mode != Read || q[0].Waiting {
+		t.Fatalf("q[0] = %+v, want holding Read holder", q[0])
+	}
+	if q[1].Label != "waiter" || q[1].Mode != TreeWrite || !q[1].Waiting {
+		t.Fatalf("q[1] = %+v, want waiting TreeWrite waiter", q[1])
+	}
+	h.Release()
+}
+
+func TestForRegistry(t *testing.T) {
+	a1 := For("/repo-a/.git")
+	a2 := For("/repo-a/.git")
+	b := For("/repo-b/.git")
+	if a1 != a2 {
+		t.Fatal("same key returned different gates")
+	}
+	if a1 == b {
+		t.Fatal("different keys shared a gate")
+	}
+	// The e2e invariant: distinct repos (distinct common dirs) never block
+	// each other, even in one process.
+	ra := mustAcquire(t, a1, TreeWrite, "a")
+	rb := mustAcquire(t, b, TreeWrite, "b")
+	ra.Release()
+	rb.Release()
+}
+
+func TestWaitSpanOnlyWhenWaiting(t *testing.T) {
+	var buf syncBuffer
+	observ.SetSpanSink(&buf)
+	defer observ.SetSpanSink(nil)
+
+	g := &Gate{}
+	r := mustAcquire(t, g, Read, "instant") // no wait → no span
+	r.Release()
+	if s := buf.String(); strings.Contains(s, "gate wait") {
+		t.Fatalf("zero-wait acquire emitted a span: %s", s)
+	}
+
+	h := mustAcquire(t, g, TreeWrite, "holder")
+	done := make(chan struct{})
+	go func() {
+		mustAcquire(t, g, Read, "queued-reader").Release()
+		close(done)
+	}()
+	waitQueued(t, g, "queued-reader")
+	h.Release()
+	<-done
+	s := buf.String()
+	if !strings.Contains(s, "gate wait") || !strings.Contains(s, "queued-reader") || !strings.Contains(s, "read") {
+		t.Fatalf("waited acquire span missing or incomplete: %s", s)
+	}
+}
+
+// syncBuffer is a goroutine-safe bytes.Buffer (spans are emitted from the
+// acquiring goroutine).
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
 }

@@ -11,6 +11,9 @@ package repogate
 import (
 	"context"
 	"sync"
+	"time"
+
+	"github.com/gigagit/gg/internal/observ"
 )
 
 // Mode is the kind of access a reservation grants.
@@ -78,6 +81,7 @@ type Reservation struct {
 // Acquire blocks until the reservation is granted or ctx is cancelled.
 // label names the holder in Queue() and wait spans (e.g. "op SmartPull").
 func (g *Gate) Acquire(ctx context.Context, mode Mode, label string) (*Reservation, error) {
+	start := time.Now()
 	g.mu.Lock()
 	// Immediate grant only when nobody is queued: a non-empty queue means
 	// someone arrived first, and FIFO fairness (which is also the writer
@@ -95,6 +99,12 @@ func (g *Gate) Acquire(ctx context.Context, mode Mode, label string) (*Reservati
 
 	select {
 	case <-w.ready:
+		observ.EmitSpan(observ.Span{
+			Name:     "gate wait",
+			Args:     []string{mode.String(), label},
+			Start:    start,
+			Duration: time.Since(start),
+		})
 		return &Reservation{g: g, h: w.h}, nil
 	case <-ctx.Done():
 		g.mu.Lock()
@@ -180,4 +190,54 @@ func (g *Gate) Queue() []Entry {
 		out = append(out, Entry{Label: w.label, Mode: w.mode, Waiting: true})
 	}
 	return out
+}
+
+// Escalate trades the held reservation for an exclusive (TreeWrite) one: it
+// RELEASES the current reservation and joins the queue — there is no atomic
+// upgrade (the classic deadlock). Callers must therefore only escalate at a
+// boundary where the operation holds no partial state of its own. A
+// reservation that is already TreeWrite returns immediately. On error (ctx
+// cancelled while queued) the reservation is gone — the caller must not
+// Release it.
+func (r *Reservation) Escalate(ctx context.Context) error {
+	if r.h == nil {
+		panic("repogate: escalate after release")
+	}
+	if r.h.mode == TreeWrite {
+		return nil
+	}
+	g, label := r.g, r.h.label
+	r.Release()
+	nr, err := g.Acquire(ctx, TreeWrite, label)
+	if err != nil {
+		return err
+	}
+	r.h = nr.h
+	return nil
+}
+
+// Released reports whether the reservation has ended (also true after a
+// failed Escalate, which releases before re-acquiring).
+func (r *Reservation) Released() bool {
+	r.g.mu.Lock()
+	defer r.g.mu.Unlock()
+	return r.h == nil
+}
+
+var (
+	regMu sync.Mutex
+	gates = map[string]*Gate{}
+)
+
+// For returns the process-wide gate for key (a git common dir), creating it
+// on first use.
+func For(key string) *Gate {
+	regMu.Lock()
+	defer regMu.Unlock()
+	g, ok := gates[key]
+	if !ok {
+		g = &Gate{}
+		gates[key] = g
+	}
+	return g
 }
