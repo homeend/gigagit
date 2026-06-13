@@ -54,6 +54,8 @@ type Model struct {
 	diffTag     string    // request key of the wanted diff; gates stale async results
 	diffPartial bool      // session default for new diffs (false = full); the f key toggles it
 
+	stack *viewStack // top-of-everything full-screen surfaces (history, later blame); nil/empty = none
+
 	svc      *domain.Service    // command layer; m.repo == svc.Repo()
 	opCancel context.CancelFunc // cancels the in-flight op's context; nil when idle
 	loadGen  int                // bumped per superseding load; stale dataLoadedMsg are dropped
