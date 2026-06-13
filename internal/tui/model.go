@@ -54,6 +54,8 @@ type Model struct {
 	diffTag     string    // request key of the wanted diff; gates stale async results
 	diffPartial bool      // session default for new diffs (false = full); the f key toggles it
 
+	stack *viewStack // top-of-everything full-screen surfaces (history, later blame); nil/empty = none
+
 	svc              *domain.Service    // command layer; m.repo == svc.Repo()
 	feed             *domain.CommitFeed // single source of truth for commits
 	commitsExhausted bool               // false → "Commits N+", true → "Commits N"
@@ -150,6 +152,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.commitsExhausted = st.Exhausted
 		}
 		return m, nil
+	case historyListMsg:
+		if h, ok := m.stackTop().(*historyView); ok && h.listTag == msg.tag {
+			h.loading = false
+			h.err = msg.err
+			h.commits = msg.commits
+			h.sel = 0
+			if len(h.commits) > 0 {
+				return m, h.selectCmd(m)
+			}
+		}
+		return m, nil
+	case historyDiffMsg:
+		if h, ok := m.stackTop().(*historyView); ok && h.diffTag == msg.tag {
+			h.diff = msg.view
+		}
+		return m, nil
 	case dataLoadedMsg:
 		if msg.gen != m.loadGen {
 			return m, nil // superseded by a newer load
@@ -200,6 +218,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.modal = nil
 			}
 			return m, nil
+		}
+		if s := m.stackTop(); s != nil {
+			if msg.Type == tea.KeyCtrlC {
+				return m, tea.Quit
+			}
+			return s.update(m, msg)
 		}
 		// Routing invariant: the diff view is checked immediately after the
 		// modal here, in the MouseMsg arm, and in render() — the key owner
@@ -327,9 +351,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.focus == panelStatus && m.canShowFileDiff() {
 				bi, _ := m.backingIndex(panelStatus)
 				f := m.status.Files[bi]
-				m.diffView = &diffView{title: f.Path, context: "HEAD → working tree", loading: true, partial: m.diffPartial}
+				m.diffView = &diffView{title: f.Path, context: "HEAD → working tree", rev: "", loading: true, partial: m.diffPartial}
 				m.diffTag = "status:" + f.Path
 				return m, m.loadStatusDiffCmd(f)
+			}
+		case "h":
+			if m.focus == panelStatus && m.canShowFileDiff() {
+				bi, _ := m.backingIndex(panelStatus)
+				f := m.status.Files[bi]
+				ctx := navContext{path: f.Path, rev: ""}
+				h := newHistoryView(ctx)
+				m = m.pushSurface(h)
+				return m, m.loadHistoryListCmd(ctx, h.listTag)
 			}
 		case "tab":
 			m = m.rememberLeftFocus()
