@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -97,6 +98,114 @@ func (m Model) loadBlameCmd(ctx navContext, tag string) tea.Cmd {
 	}
 }
 
-// render/update implemented in Task 6 — stubs so *blameView satisfies surface.
-func (b *blameView) render(m Model) string                          { return "" }
-func (b *blameView) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) { return m, nil }
+// blameGutterW is the fixed gutter width: shortHash(7) + space + author(12) +
+// space + age(≤6), padded.
+const blameGutterW = 28
+
+func (m Model) blameBodyRows() int {
+	_, h := m.overlayDims()
+	n := h - 2
+	if n < 1 {
+		n = 1
+	}
+	return n
+}
+
+func (b *blameView) render(m Model) string {
+	w, scrH := m.overlayDims()
+	body := m.blameBodyRows()
+
+	header := truncate("blame: "+b.ctx.path+revSuffix(b.ctx.rev), w)
+	hint := truncate("[↑↓] line  [enter] history  [esc/b] back  [q] quit", w)
+
+	gw := blameGutterW
+	if gw > w-10 {
+		gw = w - 10
+	}
+	if gw < 0 {
+		gw = 0
+	}
+	codeW := w - gw - 1
+	if codeW < 1 {
+		codeW = 1
+	}
+
+	now := time.Now()
+	rows := make([]string, len(b.lines))
+	for i, ln := range b.lines {
+		gutter := padRight("", gw)
+		if i == 0 || b.lines[i-1].Hash != ln.Hash {
+			gutter = padRight(truncate(blameGutterText(ln, now), gw), gw)
+		}
+		row := gutter + "│" + truncate(ln.Content, codeW)
+		if i == b.sel {
+			row = selectedRow.Render(padRight(truncate(row, w), w))
+		}
+		rows[i] = row
+	}
+
+	win, _, _ := windowRows(rows, body, b.sel)
+	switch {
+	case b.loading:
+		win = []string{"  (loading…)"}
+	case b.err != nil:
+		win = []string{truncate("  error: "+b.err.Error(), w)}
+	case len(b.lines) == 0:
+		win = []string{"  (empty)"}
+	}
+	for len(win) < body {
+		win = append(win, "")
+	}
+
+	out := header + "\n" + strings.Join(win[:body], "\n") + "\n" + hint
+	return clipToHeight(out, scrH)
+}
+
+// revSuffix annotates the header with the blamed revision, if any.
+func revSuffix(rev string) string {
+	if rev == "" {
+		return ""
+	}
+	return " @ " + shortHash(rev)
+}
+
+// blameGutterText is the per-block remark: hash, author (≤12), compact age.
+func blameGutterText(ln model.BlameLine, now time.Time) string {
+	if ln.Hash == "" {
+		return "(uncommitted)"
+	}
+	author := padRight(truncate(ln.Author, 12), 12)
+	return shortHash(ln.Hash) + " " + author + " " + blameAge(now, time.Unix(ln.Time, 0))
+}
+
+func (b *blameView) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
+	if msg.Type == tea.KeyCtrlC {
+		return m, tea.Quit
+	}
+	switch msg.String() {
+	case "q":
+		return m, tea.Quit
+	case "esc", "b":
+		return m.popSurface(), nil
+	case "down", "j":
+		if b.sel < len(b.lines)-1 {
+			b.sel++
+		}
+		return m, nil
+	case "up", "k":
+		if b.sel > 0 {
+			b.sel--
+		}
+		return m, nil
+	case "enter":
+		blk, ok := blockAt(b.blocks, b.sel)
+		if !ok || blk.hash == "" {
+			return m, nil
+		}
+		ctx := navContext{path: b.ctx.path, rev: blk.hash}
+		hv := newHistoryView(ctx)
+		m = m.pushSurface(hv)
+		return m, m.loadHistoryListCmd(ctx, hv.listTag)
+	}
+	return m, nil
+}

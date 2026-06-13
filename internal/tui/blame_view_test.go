@@ -68,3 +68,87 @@ func TestBlameAge(t *testing.T) {
 		}
 	}
 }
+
+func blameFixture() *blameView {
+	b := &blameView{
+		ctx: navContext{path: "a.go", rev: ""},
+		lines: []model.BlameLine{
+			{Hash: "aaaaaaa", Author: "Ada", Time: 1, LineNo: 1, Content: "package main"},
+			{Hash: "aaaaaaa", Author: "Ada", Time: 1, LineNo: 2, Content: "func main() {}"},
+			{Hash: "", Author: "Not Committed Yet", LineNo: 3, Content: "dirty"},
+		},
+	}
+	b.blocks = groupBlame(b.lines)
+	return b
+}
+
+func TestBlameRenderGutterFirstLineOnly(t *testing.T) {
+	m := Model{width: 100, height: 30}
+	b := blameFixture()
+	out := b.render(m)
+	if !contains(out, "package main") || !contains(out, "func main()") {
+		t.Errorf("blame render missing source lines:\n%s", out)
+	}
+	if !contains(out, "a.go") {
+		t.Errorf("blame header missing path:\n%s", out)
+	}
+	if !contains(out, "Ada") {
+		t.Errorf("gutter missing author on the block's first line:\n%s", out)
+	}
+	if !contains(out, "uncommitted") {
+		t.Errorf("uncommitted block should show an (uncommitted) gutter:\n%s", out)
+	}
+}
+
+func TestBlameDownMovesCursorClamped(t *testing.T) {
+	m := Model{width: 100, height: 30}
+	b := blameFixture()
+	m = m.pushSurface(b)
+	for i := 0; i < 5; i++ {
+		m, _ = b.update(m, keyMsg("j"))
+	}
+	if b.sel != len(b.lines)-1 {
+		t.Fatalf("j should clamp at the last line %d, got %d", len(b.lines)-1, b.sel)
+	}
+}
+
+func TestBlameEnterOnCommitPushesHistory(t *testing.T) {
+	m := Model{width: 100, height: 30}
+	b := blameFixture()
+	m = m.pushSurface(b)
+	b.sel = 0 // a committed block (aaaaaaa)
+	m, cmd := b.update(m, keyMsg("enter"))
+	h, ok := m.stackTop().(*historyView)
+	if !ok {
+		t.Fatal("enter on a committed block should push a historyView")
+	}
+	if h.ctx.path != "a.go" || h.ctx.rev != "aaaaaaa" {
+		t.Errorf("history navContext wrong: %+v", h.ctx)
+	}
+	if cmd == nil {
+		t.Error("pushing history should fire its list-load cmd")
+	}
+}
+
+func TestBlameEnterOnUncommittedIsNoop(t *testing.T) {
+	m := Model{width: 100, height: 30}
+	b := blameFixture()
+	m = m.pushSurface(b)
+	b.sel = 2 // the uncommitted block
+	m, _ = b.update(m, keyMsg("enter"))
+	if _, ok := m.stackTop().(*blameView); !ok {
+		t.Fatal("enter on an uncommitted block should be a no-op (stay on blame)")
+	}
+}
+
+func TestBlameEscAndBPop(t *testing.T) {
+	for _, key := range []string{"esc", "b"} {
+		m := Model{width: 100, height: 30}
+		b := blameFixture()
+		m = m.pushSurface(b)
+		m, _ = b.update(m, keyMsg(key))
+		if m.stackTop() != nil {
+			t.Fatalf("%q should pop the blame surface", key)
+		}
+	}
+}
