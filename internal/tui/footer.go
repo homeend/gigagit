@@ -69,7 +69,7 @@ func (m Model) footerLine() string {
 	// The files view owns the keyboard while open (action keys are swallowed),
 	// so the registry footer would lie; show the view's own keys instead.
 	if m.filesView != nil {
-		return "files: [←/→ tab] focus  [↑/↓] move  [ctrl+↑/↓] tree  [enter] diff  [/] search  [esc/l] close"
+		return "files: [←/→ tab] focus  [↑/↓] move  [ctrl+↑/↓] tree  [enter] diff  [/] search  [h] hist  [b] blame  [esc/l] close"
 	}
 	var ctx, glob []string
 	for _, b := range contextBindings {

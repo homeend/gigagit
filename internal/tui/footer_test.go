@@ -288,11 +288,15 @@ func TestFooterHidesDiffWhenNarrow(t *testing.T) {
 	}
 }
 
-func TestFooterFilesViewOverrideAdvertisesDiff(t *testing.T) {
+func TestFooterFilesViewOverrideAdvertisesTreeActions(t *testing.T) {
 	m := diffModel()
 	m.filesView = &contentPopup{lines: []contentLine{{text: "x", path: "x"}}}
-	if !strings.Contains(m.footerLine(), "[enter] diff") {
-		t.Fatalf("files-view override must advertise enter: %q", m.footerLine())
+	f := m.footerLine()
+	// All three tree-row nav actions must be advertised, including blame (b).
+	for _, want := range []string{"[enter] diff", "[h] hist", "[b] blame"} {
+		if !strings.Contains(f, want) {
+			t.Fatalf("files-view footer must advertise %q: %q", want, f)
+		}
 	}
 }
 
