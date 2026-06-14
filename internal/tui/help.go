@@ -93,6 +93,7 @@ func helpContent() []contentLine {
 		r("ctrl+c", "quit"),
 		h("Blame view (b)"),
 		r("↑/k ↓/j", "move the line cursor"),
+		r("pgup/pgdn", "move the cursor one screen"),
 		r("enter", "file history at the commit under the cursor"),
 		r("esc/b", "back"),
 		r("ctrl+c", "quit"),
