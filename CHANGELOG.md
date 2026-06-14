@@ -19,6 +19,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ### Added
 
+#### Staging (`space` in the Status panel)
+- `space` on a Status-panel file stages it (`git add`), or unstages it
+  (`git restore --staged`) when it is already fully staged; conflicted files
+  are skipped (resolution lands with the conflict feature). The Status panel
+  refreshes on its own without a full reload.
+
 #### Rebase (`gg rebase` + the TUI pair-op)
 - `gg rebase [--branch <b>] [--on-conflict=keep|abort] <newbase>` and the TUI
   Branches mark-and-pair **"Rebase {selected} onto {marked}"** operation replay
