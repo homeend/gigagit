@@ -135,20 +135,30 @@ func (m Model) renderDiffView() string {
 		note = "  (no content difference)"
 	}
 	head := "diff: " + v.title + "  " + v.context + note
-	rangeStr := ""
+	// Right-aligned status: which change is in view (1-based) of how many, then
+	// the visible row range.
+	right := ""
+	if len(v.blocks) > 0 {
+		right = fmt.Sprintf("change %d/%d", v.currentBlockOrdinal()+1, len(v.blocks))
+	}
 	if n := len(v.disp); n > 0 {
 		hi := v.offset + body
 		if hi > n {
 			hi = n
 		}
-		rangeStr = fmt.Sprintf("rows %d–%d/%d", v.offset+1, hi, n)
+		rangeStr := fmt.Sprintf("rows %d–%d/%d", v.offset+1, hi, n)
+		if right != "" {
+			right += "  " + rangeStr
+		} else {
+			right = rangeStr
+		}
 	}
-	avail := w - lipgloss.Width(rangeStr) - 2
+	avail := w - lipgloss.Width(right) - 2
 	if avail < 1 {
 		avail = 1
 	}
 	head = padRight(truncate(head, avail), avail)
-	header := truncate(head+"  "+rangeStr, w)
+	header := truncate(head+"  "+right, w)
 
 	lines := make([]string, 0, h)
 	lines = append(lines, header)

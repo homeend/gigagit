@@ -1,8 +1,11 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/gigagit/gg/internal/model"
 )
@@ -260,5 +263,23 @@ func TestBlamePageDownPageUpClamped(t *testing.T) {
 	}
 	if b.sel != 0 {
 		t.Fatalf("pgup should clamp at line 0, got %d", b.sel)
+	}
+}
+
+func TestBlameRenderRowsFullWidthAndSanitized(t *testing.T) {
+	m := Model{width: 80, height: 12}
+	lines := []model.BlameLine{
+		{Hash: "aaaaaaa", Author: "Ada", LineNo: 1, Content: "\tindented with a tab"},
+		{Hash: "aaaaaaa", Author: "Ada", LineNo: 2, Content: "short"},
+	}
+	b := &blameView{ctx: navContext{path: "a.go"}, lines: lines, blocks: groupBlame(lines)}
+	out := b.render(m)
+	if strings.Contains(out, "\t") {
+		t.Error("blame content must be tab-sanitized; a raw tab leaked into the output")
+	}
+	for _, ln := range strings.Split(out, "\n") {
+		if strings.Contains(ln, "│") && lipgloss.Width(ln) != 80 {
+			t.Errorf("content row not full-width (%d): %q", lipgloss.Width(ln), ln)
+		}
 	}
 }
