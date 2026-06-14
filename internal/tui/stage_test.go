@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -65,6 +66,42 @@ func TestSpaceStagesSelectedFile(t *testing.T) {
 	}
 	if m.running {
 		t.Fatal("running must be cleared after the status refresh")
+	}
+}
+
+func TestSpaceOnConflictedFileIsNoOp(t *testing.T) {
+	dir, repo := newRepoDir(t)
+	// Build a merge conflict on c.txt so it becomes an unmerged Status row.
+	gitInDir(t, dir, "checkout", "-b", "feat")
+	os.WriteFile(filepath.Join(dir, "c.txt"), []byte("feat\n"), 0o644)
+	gitInDir(t, dir, "add", ".")
+	gitInDir(t, dir, "commit", "-m", "feat")
+	gitInDir(t, dir, "checkout", "main")
+	os.WriteFile(filepath.Join(dir, "c.txt"), []byte("main\n"), 0o644)
+	gitInDir(t, dir, "add", ".")
+	gitInDir(t, dir, "commit", "-m", "main")
+	merge := exec.Command("git", "merge", "feat")
+	merge.Dir = dir
+	merge.Env = append(os.Environ(), "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t",
+		"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+	_ = merge.Run() // expected to conflict (non-zero) — that's the point
+
+	m := New(domain.New(repo))
+	loaded, _ := m.Update(m.loadCmd()())
+	m = loaded.(Model)
+	m.focus = panelStatus
+	for i, f := range m.status.Files {
+		if f.Path == "c.txt" {
+			m.sel[panelStatus] = i
+		}
+	}
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeySpace})
+	m = updated.(Model)
+	if cmd != nil {
+		t.Fatal("space on a conflicted file must not dispatch a stage op")
+	}
+	if !strings.Contains(m.statusMsg, "resolve conflicts") {
+		t.Fatalf("statusMsg = %q, want a 'resolve conflicts' hint", m.statusMsg)
 	}
 }
 
