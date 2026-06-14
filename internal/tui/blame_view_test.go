@@ -232,3 +232,33 @@ func TestHistoryBOpensBlameAtSelected(t *testing.T) {
 		t.Error("pushing blame should fire its load cmd")
 	}
 }
+
+func TestBlamePageDownPageUpClamped(t *testing.T) {
+	m := Model{width: 100, height: 12} // small body so a page is a few rows
+	lines := make([]model.BlameLine, 40)
+	for i := range lines {
+		lines[i] = model.BlameLine{Hash: "aaaaaaa", Author: "Ada", LineNo: i + 1, Content: "x"}
+	}
+	b := &blameView{ctx: navContext{path: "a.go"}, lines: lines, blocks: groupBlame(lines)}
+	m = m.pushSurface(b)
+	page := m.blameBodyRows()
+
+	m, _ = b.update(m, keyMsg("pgdown"))
+	if b.sel != page {
+		t.Fatalf("pgdown should move one page (%d), got %d", page, b.sel)
+	}
+	// Page down past the end clamps to the last line.
+	for i := 0; i < 100; i++ {
+		m, _ = b.update(m, keyMsg("pgdown"))
+	}
+	if b.sel != len(lines)-1 {
+		t.Fatalf("pgdown should clamp at last line %d, got %d", len(lines)-1, b.sel)
+	}
+	// Page up past the top clamps to 0.
+	for i := 0; i < 100; i++ {
+		m, _ = b.update(m, keyMsg("pgup"))
+	}
+	if b.sel != 0 {
+		t.Fatalf("pgup should clamp at line 0, got %d", b.sel)
+	}
+}

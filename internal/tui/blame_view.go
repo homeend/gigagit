@@ -116,7 +116,7 @@ func (b *blameView) render(m Model) string {
 	body := m.blameBodyRows()
 
 	header := truncate("blame: "+b.ctx.path+revSuffix(b.ctx.rev), w)
-	hint := truncate("[↑↓] line  [enter] history  [esc/b] back", w)
+	hint := truncate("[↑↓] line  [pgup/pgdn] page  [enter] history  [esc/b] back", w)
 
 	gw := blameGutterW
 	if gw > w-10 {
@@ -195,6 +195,21 @@ func (b *blameView) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case "up", "k":
 		if b.sel > 0 {
 			b.sel--
+		}
+		return m, nil
+	case "pgdown":
+		b.sel += m.blameBodyRows()
+		if b.sel > len(b.lines)-1 {
+			b.sel = len(b.lines) - 1
+		}
+		if b.sel < 0 {
+			b.sel = 0
+		}
+		return m, nil
+	case "pgup":
+		b.sel -= m.blameBodyRows()
+		if b.sel < 0 {
+			b.sel = 0
 		}
 		return m, nil
 	case "enter":
