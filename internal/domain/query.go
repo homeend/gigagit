@@ -185,12 +185,44 @@ func (s *Service) FileLog(ctx context.Context, rev, path string, limit int) ([]m
 	})
 }
 
+// cachedBlame wraps a blame result so it can report its heap weight to the
+// byte-budgeted cache (a bare []model.BlameLine cannot implement Sized).
+type cachedBlame struct{ lines []model.BlameLine }
+
+func (b cachedBlame) Size() int {
+	n := 0
+	for _, l := range b.lines {
+		n += len(l.Hash) + len(l.Author) + len(l.Summary) + len(l.Content) + 64
+	}
+	return n
+}
+
 // Blame returns per-line blame for path at rev under a Read reservation,
-// coalesced per (rev, path).
+// coalesced per (rev, path). Blame at a committed rev is immutable by
+// (rev, path), so it is memoized in the "blame" LRU (a hit skips both the
+// reservation and the git run — git blame is expensive on large repos).
+// Working-tree blame (rev == "") is never cached: the file changes under live
+// edits, exactly as the Differ leaves working-tree diffs uncached.
 func (s *Service) Blame(ctx context.Context, rev, path string) ([]model.BlameLine, error) {
-	return query(ctx, s, "blame:"+rev+":"+path, func(ctx context.Context) ([]model.BlameLine, error) {
-		return s.repo.Blame(ctx, rev, path)
+	load := func() ([]model.BlameLine, error) {
+		return query(ctx, s, "blame:"+rev+":"+path, func(ctx context.Context) ([]model.BlameLine, error) {
+			return s.repo.Blame(ctx, rev, path)
+		})
+	}
+	if rev == "" {
+		return load()
+	}
+	v, err := s.factory.Cache("blame").GetOrLoad("blame:"+rev+":"+path, func() (any, error) {
+		lines, e := load()
+		if e != nil {
+			return nil, e
+		}
+		return cachedBlame{lines}, nil
 	})
+	if err != nil {
+		return nil, err
+	}
+	return v.(cachedBlame).lines, nil
 }
 
 // GitCommonDir returns the git common dir path, under a Read reservation.

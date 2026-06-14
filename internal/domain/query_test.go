@@ -250,3 +250,43 @@ func TestBlameGatedQuery(t *testing.T) {
 		t.Fatalf("Blame = %+v", got)
 	}
 }
+
+func blameRunCount(f *gitexec.FakeRunner, name string) int {
+	n := 0
+	for _, c := range f.Calls {
+		if c.Name == name {
+			n++
+		}
+	}
+	return n
+}
+
+func TestBlameCachesCommittedRevNotWorkingTree(t *testing.T) {
+	f := gitexec.NewFakeRunner()
+	f.SetResponse("git blame", gitexec.Result{Stdout: "" +
+		"1111111111111111111111111111111111111111 1 1 1\n" +
+		"author Ada\nauthor-time 1700000000\nsummary only\nfilename a.go\n\thi\n"})
+	svc := New(&git.Repo{Runner: f})
+
+	// Committed rev is immutable by (rev,path): repeated opens hit the cache,
+	// git blame runs exactly once.
+	for i := 0; i < 3; i++ {
+		if _, err := svc.Blame(context.Background(), "deadbeef", "a.go"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if n := blameRunCount(f, "git blame"); n != 1 {
+		t.Fatalf("committed-rev blame should run git once (cached), ran %d", n)
+	}
+
+	// Working-tree blame (rev "") changes under live edits — never cached.
+	base := blameRunCount(f, "git blame")
+	for i := 0; i < 3; i++ {
+		if _, err := svc.Blame(context.Background(), "", "a.go"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if n := blameRunCount(f, "git blame") - base; n != 3 {
+		t.Fatalf("working-tree blame should run git every call, ran %d", n)
+	}
+}
