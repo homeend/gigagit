@@ -49,6 +49,9 @@ type GitOps interface {
 	Rebase(ctx context.Context, dir, onto string) error
 	RebaseAbort(ctx context.Context, dir string) error
 	RebaseInProgress(ctx context.Context, dir string) (bool, error)
+
+	StagePaths(ctx context.Context, paths []string) error
+	UnstagePaths(ctx context.Context, paths []string) error
 }
 
 // Compile-time proof the concrete repo implements the interface; a drift
