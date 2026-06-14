@@ -8,7 +8,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+### Fixed
+- Blame view: source rows are now tab/control-sanitized and padded to full
+  width, fixing scroll artifacts (stale text and orphaned highlight bars left
+  behind when moving up/down).
+
 ### Changed
+
+#### Diff view change counter
+- The diff view header now shows `change <n>/<total>` — which difference is
+  currently displayed and how many there are in the file.
 
 #### `q` quits only from the home screen
 - Pressing **`q`** now quits the app **only on the base (home) layout**. In the

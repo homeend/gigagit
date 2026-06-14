@@ -137,9 +137,13 @@ func (b *blameView) render(m Model) string {
 		if i == 0 || b.lines[i-1].Hash != ln.Hash {
 			gutter = padRight(truncate(blameGutterText(ln, now), gw), gw)
 		}
-		row := gutter + "│" + truncate(ln.Content, codeW)
+		// Sanitize tabs/control runes (like the diff pane) so indentation maps to
+		// display columns, and pad EVERY row to full width so scrolling never
+		// leaves stale cells from a longer prior line (or a moved highlight).
+		content := truncate(sanitizeLine(ln.Content), codeW)
+		row := padRight(gutter+"│"+content, w)
 		if i == b.sel {
-			row = selectedRow.Render(padRight(truncate(row, w), w))
+			row = selectedRow.Render(row)
 		}
 		rows[i] = row
 	}
