@@ -299,6 +299,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+		if msg.Type == tea.KeySpace {
+			return m.handleStageKey()
+		}
 		switch msg.String() {
 		case "q", "ctrl+c":
 			return m, tea.Quit
@@ -550,8 +553,42 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.loadGen++
 		return m, m.loadCmd()
+
+	case statusRefreshedMsg:
+		m.running = false
+		if msg.err != nil {
+			m.statusMsg = "error: " + msg.err.Error()
+			return m, nil
+		}
+		m.status = msg.status
+		if msg.summary != "" {
+			m.statusMsg = msg.summary
+		}
+		if n := m.panelLen(panelStatus); n > 0 && m.sel[panelStatus] >= n {
+			m.sel[panelStatus] = n - 1
+		}
+		return m, nil
 	}
 	return m, nil
+}
+
+// handleStageKey toggles staging of the selected Status row: stage if the file
+// has any unstaged content (untracked, or an unstaged porcelain byte), else
+// unstage. Conflicted files are a no-op here (mark-resolved is F4).
+func (m Model) handleStageKey() (tea.Model, tea.Cmd) {
+	if !m.canStage() {
+		return m, nil
+	}
+	bi, _ := m.backingIndex(panelStatus)
+	f := m.status.Files[bi]
+	if f.Kind == model.KindUnmerged {
+		m.statusMsg = "resolve conflicts first"
+		return m, nil
+	}
+	hasUnstaged := f.Kind == model.KindUntracked || (f.Unstaged != '.' && f.Unstaged != 0)
+	m.running = true
+	m.statusMsg = "working…"
+	return m, m.stageCmd(engine.Stage{Paths: []string{f.Path}, Unstage: !hasUnstaged})
 }
 
 // rememberLeftFocus records the focused panel as ←'s return target when it

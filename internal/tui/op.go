@@ -6,10 +6,35 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/gigagit/gg/internal/engine"
+	"github.com/gigagit/gg/internal/model"
 )
 
 // opEventMsg carries one engine event (progress/done/gitline) to the UI.
 type opEventMsg struct{ event engine.Event }
+
+// statusRefreshedMsg carries the result of a staging op plus a fresh Status
+// read. It refreshes ONLY the Status panel (not the full snapshot) so repeated
+// staging stays snappy on huge repos.
+type statusRefreshedMsg struct {
+	summary string
+	status  model.WorkingTreeStatus
+	err     error
+}
+
+// stageCmd runs a staging op through the domain layer, then re-reads only the
+// working-tree status. It runs synchronously inside the returned tea.Cmd
+// (staging is fast and has no decisions), yielding a single statusRefreshedMsg.
+func (m Model) stageCmd(op engine.Operation) tea.Cmd {
+	svc := m.svc
+	return func() tea.Msg {
+		res, err := svc.Execute(context.Background(), op, nil, nil)
+		if err != nil {
+			return statusRefreshedMsg{err: err}
+		}
+		st, serr := svc.Status(context.Background())
+		return statusRefreshedMsg{summary: res.Summary, status: st, err: serr}
+	}
+}
 
 // opDecisionMsg asks the UI to resolve a fork; the op goroutine blocks on reply.
 type opDecisionMsg struct {

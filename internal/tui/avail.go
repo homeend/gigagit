@@ -102,6 +102,16 @@ func (m Model) cursorOnMark() bool {
 	return ok && m.listFor(m.focus).Key(bi) == m.mark.key
 }
 
+// canStage reports whether the selected Status row can be staged/unstaged:
+// the Status panel is focused, a row is selected, and no op is running.
+func (m Model) canStage() bool {
+	if m.focus != panelStatus || !m.opsIdle() {
+		return false
+	}
+	_, ok := m.backingIndex(panelStatus)
+	return ok
+}
+
 // canShowFileDiff gates enter on Status: the side-by-side diff of the
 // selected file. Conflicted rows are excluded until the conflict editor
 // exists. The width check uses the !(w>0 && w<60) idiom so a model that has

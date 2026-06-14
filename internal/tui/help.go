@@ -41,6 +41,7 @@ func helpContent() []contentLine {
 		r("enter", "switch into the selected worktree"),
 		r("d", "remove the selected worktree"),
 		h("Status panel"),
+		r("space", "stage / unstage the selected file"),
 		r("enter", "side-by-side diff of the file (HEAD → working tree)"),
 		r("h", "file history: commits that touched it (left) + per-commit diff (right)"),
 		r("b", "blame: who last changed each line, grouped by commit"),
