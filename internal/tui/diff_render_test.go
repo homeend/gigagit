@@ -413,3 +413,14 @@ func TestScrollModeRenderShowsMarkers(t *testing.T) {
 		t.Fatalf("scrolled right, ‹ must appear: %q", line)
 	}
 }
+
+func TestDiffHeaderShowsChangeCount(t *testing.T) {
+	res := textdiff.Compare([]byte("a\nb\nc\n"), []byte("a\nX\nc\n"), textdiff.Options{})
+	v := &diffView{title: "f", context: "ctx", full: res.Rows, fullBlocks: res.Blocks}
+	v.rebuild()
+	m := renderModelWithDiff(v)
+	header := strings.Split(ansi.Strip(m.render()), "\n")[0]
+	if !strings.Contains(header, "change 1/1") {
+		t.Fatalf("diff header should show the change counter, got:\n%s", header)
+	}
+}
