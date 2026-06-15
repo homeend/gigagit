@@ -283,7 +283,7 @@ func TestConflictVerbArgv(t *testing.T) {
 	want := [][]string{
 		{"checkout", "--theirs", "--", "p.txt"},
 		{"checkout-index", "--stage=1", "-f", "--", "p.txt"},
-		{"rm", "--", "p.txt"},
+		{"rm", "-f", "--", "p.txt"},
 	}
 	for i, w := range want {
 		if !reflect.DeepEqual(f.Calls[i].Argv, w) {
@@ -391,7 +391,7 @@ func (r *Repo) CheckoutBaseStage(ctx context.Context, path string) error {
 // RemoveFile removes a path from the working tree and index (resolves a
 // modify/delete conflict toward deletion).
 func (r *Repo) RemoveFile(ctx context.Context, path string) error {
-	_, err := r.Runner.Run(ctx, "git rm", gitcmd.New("rm").Arg("--", path).ToArgv())
+	_, err := r.Runner.Run(ctx, "git rm", gitcmd.New("rm").Arg("-f", "--", path).ToArgv())
 	return err
 }
 
@@ -416,6 +416,11 @@ func (r *Repo) RebaseContinue(ctx context.Context, dir string) error {
 	return err
 }
 ```
+
+> `-f` on `git rm`: a modify/delete conflict's worktree copy differs from the
+> index (one side modified it), and plain `git rm` refuses paths whose worktree
+> content differs from the index ("has local modifications"). `-f` forces it,
+> which is the intended "delete the file" resolution.
 
 - [ ] **Step 4: Add the verbs to GitOps**
 
@@ -787,6 +792,14 @@ func (m Model) renderConflictPopup() string {
 
 // actionHint lists the keys available for the selected file (+ continue/abort).
 func (p *conflictPopup) actionHint() string {
+	// All conflicts resolved: either offer continue/abort (op in progress) or
+	// tell the user to commit (no op — e.g. a stash-pop conflict).
+	if len(p.files) == 0 {
+		if p.inProgress != "" {
+			return strings.Join([]string{"[c] continue " + p.inProgress, "[a] abort"}, "  ")
+		}
+		return "all resolved — commit with c"
+	}
 	var parts []string
 	if p.sel >= 0 && p.sel < len(p.files) {
 		f := p.files[p.sel]
@@ -800,9 +813,7 @@ func (p *conflictPopup) actionHint() string {
 		}
 	}
 	parts = append(parts, "[A] all resolved")
-	if len(p.files) == 0 && p.inProgress != "" {
-		parts = []string{"[c] continue " + p.inProgress, "[a] abort"}
-	} else if p.inProgress != "" {
+	if p.inProgress != "" {
 		parts = append(parts, "[a] abort")
 	}
 	return strings.Join(parts, "  ")
@@ -1157,21 +1168,40 @@ In `model.go`, replace the indirection with two concrete edits.
 
 (a) In `updateConflictPopupKey`, set `m.reopenConflict = true` right before every `m.startOp(...)` (the resolution keys and `A`). Add `reopenConflict bool` to `Model`.
 
-(b) In the `dataLoadedMsg` handler (after `m.status = msg.status`), add:
+(b) In the `dataLoadedMsg` handler, the reopen must **not** early-return: the
+handler runs a selection-clamp loop (and other bookkeeping) after applying the
+new status, and skipping it on a shrinking file list risks a stale/out-of-range
+panel selection. So set the popup but let control fall through to the handler's
+existing return, batching the in-progress probe onto whatever command the
+handler already returns.
+
+Two concrete edits inside the `dataLoadedMsg` handler's `msg.err == nil` branch:
+
+1. Declare a pending command near the top of the branch (after `m.status = msg.status`), defaulting to whatever the handler already returns. The cleanest way that survives the clamp loop: rebuild the popup **early** (right after `m.status = msg.status`) but capture the probe cmd in a local instead of returning, then merge it into the final return.
 
 ```go
+		// reopen the conflict popup after a resolution op, rebuilt from the
+		// freshly-reloaded status so the resolved file drops off the list.
+		var reopenCmd tea.Cmd
 		if m.reopenConflict {
 			m.reopenConflict = false
-			if c := m.status.Conflicts(); len(c) > 0 {
-				m.conflictPopup = &conflictPopup{files: c}
-				return m, m.loadInProgressCmd()
-			}
-			// all resolved: if an op is in progress, keep a tiny popup to offer
-			// continue/abort; otherwise drop it (user commits with c).
-			m.conflictPopup = &conflictPopup{files: nil}
-			return m, m.loadInProgressCmd()
+			// nil files when all resolved: the popup then offers continue/abort
+			// (op in progress) or "commit with c" (no op) via actionHint.
+			m.conflictPopup = &conflictPopup{files: m.status.Conflicts()}
+			reopenCmd = m.loadInProgressCmd()
 		}
 ```
+
+2. At the handler's existing `return m, <cmd>`, batch in `reopenCmd`:
+
+```go
+		return m, tea.Batch(<existing cmd>, reopenCmd)
+```
+
+`tea.Batch` tolerates a `nil` element, so this is safe when `reopenConflict` was
+false. If the handler currently `return m, nil`, use `return m, reopenCmd`. The
+clamp loop and any other post-status bookkeeping between the two edits still run
+unchanged.
 
 (c) Add the `[c]`/`[a]` keys to `updateConflictPopupKey` (before the per-file switch):
 
@@ -1241,6 +1271,7 @@ In `help.go`, add a section:
 
 ```go
 		h("Conflicts (x)"),
+		r("x", "open the conflict resolver (when the repo is conflicted)"),
 		r("↑/↓ j", "move between conflicted files"),
 		r("o/t", "keep ours / theirs (both-modified files)"),
 		r("k/d/b", "keep modified / delete / keep base (modify-delete files)"),
