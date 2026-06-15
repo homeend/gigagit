@@ -39,24 +39,17 @@ func splitMessage(msg string) (title, desc string) {
 	return msg, ""
 }
 
-// updateCommitPopupKey handles one key while the commit popup is open. It
-// swallows every key (no fallthrough): esc cancels, ctrl+c quits, ctrl+s commits.
-func (m Model) updateCommitPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if msg.Type == tea.KeyCtrlC {
-		return m, tea.Quit
-	}
-	p := m.commitPopup
+// applyEditKey applies one key to the popup's title/description fields and
+// reports control outcomes: submit=true on ctrl+s, cancel=true on esc. Editing
+// keys (tab/enter/backspace/space/runes) mutate in place and return false,false.
+// ctrl+c is handled by the caller (it quits the program). Reused by F2's commit
+// popup and the interactive-rebase editor's reword sub-mode.
+func (p *commitPopup) applyEditKey(msg tea.KeyMsg) (submit, cancel bool) {
 	switch msg.Type {
 	case tea.KeyEsc:
-		m.commitPopup = nil
+		return false, true
 	case tea.KeyCtrlS:
-		if strings.TrimSpace(p.title) == "" {
-			m.statusMsg = "title required"
-			return m, nil
-		}
-		op := engine.Commit{Message: p.message(), Amend: p.amend}
-		m.commitPopup = nil
-		return m.startOp(op)
+		return true, false
 	case tea.KeyTab, tea.KeyShiftTab:
 		p.field = (p.field + 1) % 2
 	case tea.KeyEnter:
@@ -87,6 +80,29 @@ func (m Model) updateCommitPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		} else {
 			p.desc += string(msg.Runes)
 		}
+	}
+	return false, false
+}
+
+// updateCommitPopupKey handles one key while the commit popup is open. It
+// swallows every key (no fallthrough): esc cancels, ctrl+c quits, ctrl+s commits.
+func (m Model) updateCommitPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if msg.Type == tea.KeyCtrlC {
+		return m, tea.Quit
+	}
+	p := m.commitPopup
+	submit, cancel := p.applyEditKey(msg)
+	switch {
+	case cancel:
+		m.commitPopup = nil
+	case submit:
+		if strings.TrimSpace(p.title) == "" {
+			m.statusMsg = "title required"
+			return m, nil
+		}
+		op := engine.Commit{Message: p.message(), Amend: p.amend}
+		m.commitPopup = nil
+		return m.startOp(op)
 	}
 	return m, nil
 }
