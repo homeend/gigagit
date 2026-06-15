@@ -82,6 +82,8 @@ type Model struct {
 	lastLeftPanel panel // ←'s return target; zero value = panelBranches
 	sel           map[panel]int
 	sortModes     map[panel]sortMode // per-panel display order (zero value = default)
+	dispModes     map[panel]dispMode // per-panel text display mode (zero value = modeCutoff); z cycles
+	hscroll       map[panel]int      // per-panel horizontal scroll (modeScroll); shift+←/→
 	headTimes     map[string]int64   // worktree HEAD sha -> committer time (date sort)
 
 	filterPanel  panel  // panel the filter is bound to (meaningful only when filterQuery != "" or filterTyping)
@@ -107,6 +109,8 @@ func New(svc *domain.Service) Model {
 		loading:   true,
 		sel:       map[panel]int{},
 		sortModes: map[panel]sortMode{panelBranches: sortDateDesc},
+		dispModes: map[panel]dispMode{},
+		hscroll:   map[panel]int{},
 	}
 }
 
@@ -416,6 +420,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if !m.running && !m.loading {
 				return m.startOp(engine.UndoLastCommit{})
 			}
+		case "z": // cycle the focused panel's text display mode
+			m.dispModes[m.focus] = m.dispModes[m.focus].next()
+			m.hscroll[m.focus] = 0
+			return m, nil
+		case "shift+left":
+			if m.dispModes[m.focus] == modeScroll && m.hscroll[m.focus] > 0 {
+				if m.hscroll[m.focus] -= m.hscrollStep(); m.hscroll[m.focus] < 0 {
+					m.hscroll[m.focus] = 0
+				}
+			}
+			return m, nil
+		case "shift+right":
+			if m.dispModes[m.focus] == modeScroll {
+				m.hscroll[m.focus] += m.hscrollStep()
+			}
+			return m, nil
 		case "w": // worktree for the selected EXISTING branch
 			if m.canOpenWorktreePopup() {
 				if mm, ok := m.openWorktreePopup(true); ok {

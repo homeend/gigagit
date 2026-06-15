@@ -33,7 +33,7 @@ func diffHintFor(long longMode) string {
 	if long == longScroll {
 		pan = "  [←→/0] pan"
 	}
-	return "[↑↓] scroll  [n/p] change  [f] part  [w] lines:" + mode + pan + "  [h] hist  [b] blame  [esc] close"
+	return "[↑↓] scroll  [n/p] change  [f] part  [z] lines:" + mode + pan + "  [h] hist  [b] blame  [esc] close"
 }
 
 // cellSeg is one pane's text for one display row: the sanitized display runes
