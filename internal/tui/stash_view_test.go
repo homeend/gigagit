@@ -43,3 +43,35 @@ func TestStashViewRendersInRightColumn(t *testing.T) {
 		t.Errorf("stash subjects missing:\n%s", out)
 	}
 }
+
+func TestStashViewNavAndClose(t *testing.T) {
+	m := Model{width: 100, height: 30, sel: map[panel]int{}}
+	m.stashView = &stashView{entries: []model.StashEntry{{Ref: "stash@{0}"}, {Ref: "stash@{1}"}}}
+	mm, _ := m.updateStashViewKey(keyMsg("j"))
+	if mm.(Model).stashView.sel != 1 {
+		t.Fatal("j should move stash selection")
+	}
+	mm, _ = mm.(Model).updateStashViewKey(keyMsg("S"))
+	if mm.(Model).stashView != nil {
+		t.Fatal("S should close the stash view")
+	}
+}
+
+func TestStashViewLLoadsFiles(t *testing.T) {
+	m := loadedModel(t)
+	m.stashView = &stashView{entries: []model.StashEntry{{Ref: "stash@{0}", Subject: "On main: WIP"}}}
+	mm, cmd := m.updateStashViewKey(keyMsg("l"))
+	got := mm.(Model)
+	if got.filesView == nil {
+		t.Fatal("l should open the file tree for the stash")
+	}
+	if !got.filesTreeFocused {
+		t.Error("the stash file tree should open focused")
+	}
+	if got.filesStashTag != "stash@{0}" {
+		t.Errorf("filesStashTag = %q", got.filesStashTag)
+	}
+	if cmd == nil {
+		t.Error("l should fire the stash-files load cmd")
+	}
+}

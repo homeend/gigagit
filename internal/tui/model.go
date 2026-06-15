@@ -51,6 +51,7 @@ type Model struct {
 	filesView        *contentPopup // commit files tree replacing the left column; nil = closed
 	filesTitle       string        // "Files <short-hash> <subject>", updated with the content
 	filesHash        string        // commit the view wants; gates stale async results
+	filesStashTag    string        // when the files tree is showing a stash: its ref (gates stash-file loads)
 	filesTreeFocused bool          // true = the tree side owns vertical movement (←/→/tab)
 
 	diffView    *diffView // full-screen side-by-side diff; nil = closed
@@ -285,6 +286,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.filesView != nil {
 			return m.updateFilesViewKey(msg)
+		}
+		if m.stashView != nil {
+			return m.updateStashViewKey(msg)
 		}
 		// Filter-input mode captures every key (the panel label shows the query).
 		if m.filterTyping {
@@ -596,6 +600,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loadGen++
 		return m, m.loadCmd()
 
+	case stashFilesMsg:
+		if m.stashView == nil || m.filesView == nil || msg.tag != m.filesStashTag {
+			return m, nil
+		}
+		if msg.err != nil {
+			m.statusMsg = "error: " + msg.err.Error()
+			return m, nil
+		}
+		m.filesHash = msg.sha
+		m.filesView.lines = msg.lines
+		if m.filesView.sel >= len(msg.lines) {
+			m.filesView.sel = 0
+		}
+		return m, nil
+
 	case stashListMsg:
 		if m.stashView == nil || msg.tag != m.stashView.tag {
 			return m, nil
@@ -698,6 +717,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.fileMarks = nil // likewise drop Status file-marks from the old repo
 	m.stashView = nil // the new repo has its own stashes
 	m.filesView = nil // the new repo has a different commit list
+	m.filesStashTag = ""
 	m.filesHash = ""
 	m.filesTreeFocused = false
 	m.diffView = nil // the new repo invalidates any open diff
