@@ -602,6 +602,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.startOp(engine.SmartSwitch{Branch: chainSwitch})
 		}
 		m.loadGen++
+		if m.stashView != nil {
+			// A stash op (apply/pop/drop) changed the stash list as well as the
+			// working tree — refresh both.
+			m.stashView.loading = true
+			return m, tea.Batch(m.loadCmd(), m.loadStashListCmd(m.stashView.tag))
+		}
 		return m, m.loadCmd()
 
 	case stashFilesMsg:

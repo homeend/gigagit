@@ -3,6 +3,7 @@ package tui
 import (
 	"testing"
 
+	"github.com/gigagit/gg/internal/engine"
 	"github.com/gigagit/gg/internal/model"
 )
 
@@ -73,5 +74,18 @@ func TestStashViewLLoadsFiles(t *testing.T) {
 	}
 	if cmd == nil {
 		t.Error("l should fire the stash-files load cmd")
+	}
+}
+
+func TestStashListRefreshesAfterOp(t *testing.T) {
+	m := loadedModel(t)
+	m.stashView = &stashView{entries: []model.StashEntry{{Ref: "stash@{0}"}}, tag: "stash"}
+	mm, cmd := m.Update(opFinishedMsg{res: engine.Result{Changed: true}})
+	got := mm.(Model)
+	if cmd == nil {
+		t.Fatal("op finishing with the stash window open should refresh the list")
+	}
+	if !got.stashView.loading {
+		t.Error("the stash list should be marked loading during the refresh")
 	}
 }
