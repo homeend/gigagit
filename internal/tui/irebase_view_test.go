@@ -92,6 +92,24 @@ func TestIrebaseEditorReword(t *testing.T) {
 	}
 }
 
+func TestIrebaseLoadedMsgPushesEditor(t *testing.T) {
+	m := Model{width: 80, height: 24}
+	updated, _ := m.Update(irebaseLoadedMsg{branch: "work", onto: "main", commits: edRows()})
+	m = updated.(Model)
+	if _, ok := m.stackTop().(*irebaseEditor); !ok {
+		t.Fatal("irebaseLoadedMsg should push the editor surface")
+	}
+}
+
+func TestIrebaseLoadedEmptyRangeNoOp(t *testing.T) {
+	m := Model{width: 80, height: 24}
+	updated, _ := m.Update(irebaseLoadedMsg{branch: "work", onto: "main", commits: nil})
+	m = updated.(Model)
+	if m.stackTop() != nil {
+		t.Fatal("empty range must not push a surface")
+	}
+}
+
 // key/keyType/keyRunes helpers (reuse if already present in the tui test pkg).
 func key(s string) tea.KeyMsg          { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)} }
 func keyType(t tea.KeyType) tea.KeyMsg { return tea.KeyMsg{Type: t} }

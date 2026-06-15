@@ -119,3 +119,20 @@ func (m Model) startOp(op engine.Operation) (Model, tea.Cmd) {
 func waitForOp(msgs chan tea.Msg) tea.Cmd {
 	return func() tea.Msg { return <-msgs }
 }
+
+// irebaseLoadedMsg carries the range commits for the interactive-rebase editor.
+type irebaseLoadedMsg struct {
+	branch, onto string
+	commits      []model.RangeCommit
+	err          error
+}
+
+// loadIrebaseCmd fetches branch's commits since onto (oldest-first) off the UI
+// thread; the resulting msg opens the editor.
+func (m Model) loadIrebaseCmd(branch, onto string) tea.Cmd {
+	svc := m.svc
+	return func() tea.Msg {
+		cs, err := svc.CommitRange(context.Background(), onto, branch)
+		return irebaseLoadedMsg{branch: branch, onto: onto, commits: cs, err: err}
+	}
+}

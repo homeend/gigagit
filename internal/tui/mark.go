@@ -20,6 +20,9 @@ type pairOp struct {
 	build   func(marked, selected string) engine.Operation // nil when !enabled
 	enabled bool
 	note    string // shown for disabled entries
+	// open, when non-nil, is used instead of build+startOp: the picker calls it
+	// to open a view (e.g. the interactive-rebase editor) for (marked, selected).
+	open func(m Model, marked, selected string) (Model, tea.Cmd)
 }
 
 // pairOpsFor returns panel p's pair-operations. Only Branches has any; the
@@ -43,6 +46,13 @@ func pairOpsFor(p panel) []pairOp {
 				return engine.SmartRebase{Branch: marked, Onto: selected}
 			},
 			enabled: true,
+		},
+		{
+			label:   func(marked, selected string) string { return "Interactive rebase " + marked + " onto " + selected },
+			enabled: true,
+			open: func(m Model, marked, selected string) (Model, tea.Cmd) {
+				return m, m.loadIrebaseCmd(marked, selected)
+			},
 		},
 	}
 }

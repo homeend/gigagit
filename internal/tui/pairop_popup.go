@@ -40,6 +40,9 @@ func (m Model) updatePairPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		marked, selected := p.marked, p.selected
 		m.pairPopup = nil
 		m.mark = nil
+		if op.open != nil {
+			return op.open(m, marked, selected)
+		}
 		return m.startOp(op.build(marked, selected))
 	}
 	return m, nil

@@ -72,8 +72,8 @@ func TestMarkPairOpensPopupOnBranches(t *testing.T) {
 	if m.pairPopup.marked != "main" || m.pairPopup.selected != "feat/a" {
 		t.Fatalf("popup pair = %s + %s", m.pairPopup.marked, m.pairPopup.selected)
 	}
-	if len(m.pairPopup.ops) != 2 {
-		t.Fatalf("branches must register merge + rebase, got %d ops", len(m.pairPopup.ops))
+	if len(m.pairPopup.ops) != 3 {
+		t.Fatalf("branches must register merge + rebase + interactive rebase, got %d ops", len(m.pairPopup.ops))
 	}
 }
 
@@ -157,6 +157,27 @@ func TestRebasePairOpDirection(t *testing.T) {
 	}
 	if op.Branch != "main" || op.Onto != "feat" {
 		t.Fatalf("SmartRebase = %+v, want {Branch:main Onto:feat}", op)
+	}
+}
+
+// The interactive-rebase pair-op opens a view (open hook) rather than building
+// an op, and reads marked-first like the others.
+func TestInteractiveRebasePairOp(t *testing.T) {
+	ops := pairOpsFor(panelBranches)
+	var ir *pairOp
+	for i := range ops {
+		if strings.HasPrefix(ops[i].label("main", "feat"), "Interactive rebase ") {
+			ir = &ops[i]
+		}
+	}
+	if ir == nil || !ir.enabled {
+		t.Fatal("Interactive rebase pair-op must be enabled")
+	}
+	if ir.open == nil || ir.build != nil {
+		t.Fatal("Interactive rebase must use the open hook, not build")
+	}
+	if got := ir.label("main", "feat"); got != "Interactive rebase main onto feat" {
+		t.Fatalf("label = %q", got)
 	}
 }
 

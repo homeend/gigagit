@@ -3,6 +3,7 @@ package tui
 
 import (
 	"context"
+	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -701,6 +702,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.conflictPopup != nil {
 			m.conflictPopup.inProgress = msg.op
 		}
+		return m, nil
+
+	case irebaseLoadedMsg:
+		if msg.err != nil {
+			m.statusMsg = "interactive rebase: " + msg.err.Error()
+			return m, nil
+		}
+		if len(msg.commits) == 0 {
+			m.statusMsg = "interactive rebase: no commits in range"
+			return m, nil
+		}
+		ggBin, err := os.Executable()
+		if err != nil {
+			m.statusMsg = "interactive rebase: " + err.Error()
+			return m, nil
+		}
+		m = m.pushSurface(newIrebaseEditor(msg.branch, msg.onto, msg.commits, ggBin))
 		return m, nil
 	}
 	return m, nil
