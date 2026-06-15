@@ -53,6 +53,34 @@ func TestCKeyNoOpWhenNothingStaged(t *testing.T) {
 	}
 }
 
+// While the popup is open it owns the keyboard: a global key (e.g. "p" = pull)
+// is routed into the focused field, not dispatched as its normal action.
+func TestCommitPopupSwallowsGlobalKeys(t *testing.T) {
+	dir, repo := newRepoDir(t)
+	os.WriteFile(filepath.Join(dir, "n.txt"), []byte("hi\n"), 0o644)
+	gitInDir(t, dir, "add", "n.txt")
+
+	m := New(domain.New(repo))
+	loaded, _ := m.Update(m.loadCmd()())
+	m = loaded.(Model)
+
+	m = pressRune(t, m, "c")
+	if m.commitPopup == nil {
+		t.Fatal("c must open the commit popup")
+	}
+	upd, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("p")})
+	m = upd.(Model)
+	if m.commitPopup == nil {
+		t.Fatal("a global key must not close the popup")
+	}
+	if m.running {
+		t.Fatal("a global key must not start an op while the popup is open")
+	}
+	if m.commitPopup.title != "p" {
+		t.Fatalf("global key should type into the field: title = %q", m.commitPopup.title)
+	}
+}
+
 // gitSubj returns HEAD's subject line in dir.
 func gitSubj(t *testing.T, dir string) string {
 	t.Helper()
