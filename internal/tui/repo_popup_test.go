@@ -175,3 +175,30 @@ func TestAgeString(t *testing.T) {
 		}
 	}
 }
+
+func TestRepoPopupDoesNotWrapLongPath(t *testing.T) {
+	m := Model{width: 80, height: 24}
+	long := "/very/deeply/nested/path/that/is/way/longer/than/the/popup/box/myrepo"
+	m.repoPopup = &repoPopup{
+		entries: []repos.Entry{{Path: long, LastOpened: time.Now()}},
+		now:     time.Now(),
+	}
+	out := m.renderRepoPopup()
+	// No line may exceed the terminal width.
+	for _, line := range strings.Split(out, "\n") {
+		if w := lipgloss.Width(line); w > m.width {
+			t.Errorf("popup line exceeds width (%d): %q", w, line)
+		}
+	}
+	// The long path must occupy exactly ONE line (truncated, not wrapped onto
+	// continuation lines). Only the entry row contains a path separator.
+	slashLines := 0
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, "/") {
+			slashLines++
+		}
+	}
+	if slashLines != 1 {
+		t.Errorf("path rendered across %d lines, want 1 (no wrap):\n%s", slashLines, out)
+	}
+}
