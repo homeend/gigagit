@@ -49,6 +49,7 @@ func helpContent() []contentLine {
 		r("l", "show the selected commit's files in the left column"),
 		r("(scroll)", "more commits load automatically as you near the end"),
 		h("Filter mode (/)"),
+		r("↑/↓ pgup/pgdn", "move the selection through the filtered rows"),
 		r("enter", "keep the filter and leave input mode"),
 		r("esc", "cancel the filter"),
 		r("backspace", "delete; any typed text narrows the list"),

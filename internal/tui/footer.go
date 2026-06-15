@@ -65,7 +65,7 @@ var globalBindings = []footerBinding{
 // everything because that mode captures every key.
 func (m Model) footerLine() string {
 	if m.filterTyping {
-		return "filter: type to search  [enter] keep  [esc] cancel"
+		return "filter: type to search  [↑↓] move  [enter] keep  [esc] cancel"
 	}
 	// The files view owns the keyboard while open (action keys are swallowed),
 	// so the registry footer would lie; show the view's own keys instead.

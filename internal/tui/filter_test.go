@@ -152,6 +152,76 @@ func TestFilterSurvivesReloadAndMovesBetweenPanels(t *testing.T) {
 	}
 }
 
+// Discriminating test: a COMMITTED filter (Enter pressed) already lets arrows
+// navigate the filtered rows. Confirms the reported bug is isolated to the
+// /-input (typing) mode, not the committed path.
+func TestCommittedFilterArrowNavigates(t *testing.T) {
+	dir, repo := newRepoDir(t)
+	runGit(t, dir, "branch", "fix-1")
+	runGit(t, dir, "branch", "fix-2")
+	runGit(t, dir, "branch", "fix-3")
+	m := New(domain.New(repo))
+	u, _ := m.Update(m.loadCmd()())
+	m = u.(Model)
+	m.focus = panelBranches
+	u, _ = m.Update(keyMsg("/"))
+	m = u.(Model)
+	m = typeRunes(t, m, "fix")
+	u, _ = m.Update(keyMsg("enter")) // commit the filter
+	m = u.(Model)
+	if n := m.panelLen(panelBranches); n < 2 {
+		t.Fatalf("need ≥2 filtered rows, got %d", n)
+	}
+	if m.sel[panelBranches] != 0 {
+		t.Fatalf("precondition: sel should start at 0, got %d", m.sel[panelBranches])
+	}
+	u, _ = m.Update(keyMsg("down"))
+	m = u.(Model)
+	if m.sel[panelBranches] != 1 {
+		t.Fatalf("down on a committed filter must move sel to 1, got %d", m.sel[panelBranches])
+	}
+}
+
+// The reported bug: arrows must navigate the filtered rows WHILE still in
+// /-input mode (without first pressing Enter), like the repo-switcher picker.
+func TestFilterTypingArrowNavigates(t *testing.T) {
+	dir, repo := newRepoDir(t)
+	runGit(t, dir, "branch", "fix-1")
+	runGit(t, dir, "branch", "fix-2")
+	runGit(t, dir, "branch", "fix-3")
+	m := New(domain.New(repo))
+	u, _ := m.Update(m.loadCmd()())
+	m = u.(Model)
+	m.focus = panelBranches
+	u, _ = m.Update(keyMsg("/"))
+	m = u.(Model)
+	m = typeRunes(t, m, "fix")
+	if !m.filterTyping {
+		t.Fatal("precondition: should still be in /-input mode")
+	}
+	if n := m.panelLen(panelBranches); n < 2 {
+		t.Fatalf("need ≥2 filtered rows, got %d", n)
+	}
+	u, _ = m.Update(keyMsg("down"))
+	m = u.(Model)
+	if !m.filterTyping {
+		t.Fatal("down must not leave /-input mode")
+	}
+	if m.sel[panelBranches] != 1 {
+		t.Fatalf("down while typing must move sel to 1, got %d", m.sel[panelBranches])
+	}
+	u, _ = m.Update(keyMsg("up"))
+	m = u.(Model)
+	if m.sel[panelBranches] != 0 {
+		t.Fatalf("up while typing must move sel back to 0, got %d", m.sel[panelBranches])
+	}
+	// Narrowing the query still resets the cursor to the top.
+	m = typeRunes(t, m, "-")
+	if m.sel[panelBranches] != 0 {
+		t.Fatalf("narrowing the query should reset sel to 0, got %d", m.sel[panelBranches])
+	}
+}
+
 func TestFilterLabelRendering(t *testing.T) {
 	m := loadedModel(t)
 	m.width, m.height = 100, 30

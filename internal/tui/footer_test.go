@@ -212,7 +212,7 @@ func TestFooterLoadingKeepsReload(t *testing.T) {
 func TestFooterFilterTypingOverride(t *testing.T) {
 	m := footerModel()
 	m.filterTyping = true
-	want := "filter: type to search  [enter] keep  [esc] cancel"
+	want := "filter: type to search  [↑↓] move  [enter] keep  [esc] cancel"
 	if f := m.footerLine(); f != want {
 		t.Errorf("filter-typing footer = %q, want %q", f, want)
 	}

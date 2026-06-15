@@ -9,6 +9,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Fixed
+- Panel filter (`/`): `↑`/`↓` (and `pgup`/`pgdn`) now move the selection through
+  the filtered rows while still typing the query — an incremental picker, like
+  the repo switcher. Previously arrows were ignored until you pressed `enter`,
+  so the cursor appeared stuck on the top match.
 - Blame view: source rows are now tab/control-sanitized and padded to full
   width, fixing scroll artifacts (stale text and orphaned highlight bars left
   behind when moving up/down).

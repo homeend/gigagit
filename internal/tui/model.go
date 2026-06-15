@@ -285,6 +285,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.filterQuery = ""
 			case tea.KeyEnter:
 				m.filterTyping = false // commit: filter stays active
+			// Arrows/pages navigate the filtered rows live (an incremental
+			// picker, like the repo switcher); they stay in /-input mode and do
+			// NOT reset the cursor. Vim j/k are query text here, not motions.
+			case tea.KeyUp:
+				if m.sel[m.filterPanel] > 0 {
+					m.sel[m.filterPanel]--
+				}
+			case tea.KeyDown:
+				if m.sel[m.filterPanel] < m.panelLen(m.filterPanel)-1 {
+					m.sel[m.filterPanel]++
+				}
+			case tea.KeyPgUp:
+				if m.sel[m.filterPanel] -= m.pageStep(); m.sel[m.filterPanel] < 0 {
+					m.sel[m.filterPanel] = 0
+				}
+			case tea.KeyPgDown:
+				m.sel[m.filterPanel] += m.pageStep()
+				if n := m.panelLen(m.filterPanel); m.sel[m.filterPanel] > n-1 {
+					m.sel[m.filterPanel] = n - 1
+				}
 			case tea.KeyBackspace, tea.KeyCtrlH: // some terminals send 0x08 for Backspace
 				if r := []rune(m.filterQuery); len(r) > 0 {
 					m.filterQuery = string(r[:len(r)-1])
