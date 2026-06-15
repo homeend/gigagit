@@ -73,7 +73,26 @@ var (
 	bluredPanel  = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("240")).Padding(0, 1)
 	selectedRow  = lipgloss.NewStyle().Reverse(true)
 	modalStyle   = lipgloss.NewStyle().Border(lipgloss.DoubleBorder()).BorderForeground(lipgloss.Color("11")).Padding(1, 2)
+	// statusErrStyle makes a failure in the status bar stand out (white on red)
+	// instead of reading like an ordinary hint.
+	statusErrStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("15")).Background(lipgloss.Color("1"))
 )
+
+// statusErrorPrefixes are the leading tokens the status-setting sites use when
+// the message reports a failure (built from an error). Render-time styling keys
+// off these so there is no severity flag to keep in sync across call sites; keep
+// this list aligned with the error-setting sites in model.go and the popups.
+var statusErrorPrefixes = []string{"error:", "files:", "commits:", "amend:", "interactive rebase:", "cannot create:"}
+
+// statusIsError reports whether a status message reports a failure.
+func statusIsError(msg string) bool {
+	for _, p := range statusErrorPrefixes {
+		if strings.HasPrefix(msg, p) {
+			return true
+		}
+	}
+	return false
+}
 
 // clipToHeight truncates s to at most h lines (split on "\n"), joining back
 // without a trailing newline. This guards against layout() bodyH floors that
@@ -189,9 +208,10 @@ func (m Model) renderInterface() string {
 
 	header := m.headerLine(g.w)
 	footer := truncate(m.footerLine(), g.w)
-	statusLine := m.statusMsg
+	errMode := statusIsError(m.statusMsg)
+	var notice string
 	if n := len(m.status.Conflicts()); n > 0 {
-		notice := fmt.Sprintf("⚠ %d conflict", n)
+		notice = fmt.Sprintf("⚠ %d conflict", n)
 		if n != 1 {
 			notice += "s"
 		}
@@ -199,24 +219,38 @@ func (m Model) renderInterface() string {
 			notice += " " + src
 		}
 		notice += " — press [x] to resolve"
-		if statusLine != "" {
-			statusLine = notice + " · " + statusLine
-		} else {
-			statusLine = notice
-		}
 	}
+	var markHint string
 	if m.mark != nil && m.markAlive() {
-		hint := "◆ marked: " + m.mark.display
-		if statusLine != "" {
-			statusLine = hint + " · " + statusLine
-		} else {
-			statusLine = hint
+		markHint = "◆ marked: " + m.mark.display
+	}
+	// Assemble the segments. In error mode the message LEADS so truncation can
+	// never hide it behind the persistent conflict/mark hints; otherwise the
+	// hints lead and the transient message trails.
+	var parts []string
+	add := func(s string) {
+		if s != "" {
+			parts = append(parts, s)
 		}
 	}
+	if errMode {
+		add(m.statusMsg)
+		add(notice)
+		add(markHint)
+	} else {
+		add(markHint)
+		add(notice)
+		add(m.statusMsg)
+	}
+	statusLine := strings.Join(parts, " · ")
 	if m.running {
 		statusLine = "⏳ " + statusLine
 	}
 	statusLine = truncate(oneLine(statusLine), g.w)
+	// Style after truncation: truncate slices runes and would corrupt ANSI codes.
+	if errMode {
+		statusLine = statusErrStyle.Render(statusLine)
+	}
 
 	// Narrow terminals: a single commits column (two columns won't fit cleanly).
 	if g.w < 40 {

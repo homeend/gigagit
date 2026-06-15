@@ -43,6 +43,9 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   non-zero and keeps the stash. (agentskill v8)
 
 ### Fixed
+- Status bar: failures (e.g. a stash apply that would overwrite local changes)
+  now render as a bold white-on-red bar instead of the same plain text as the
+  key hints, so an error is no longer easy to miss.
 - Stash file tree: a stash's files are now listed once. A stash commit is a
   merge of its HEAD and index parents, and the old `diff-tree -m --first-parent`
   double-listed a file that differs from both parents; the commit-files query
