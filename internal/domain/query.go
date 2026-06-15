@@ -20,6 +20,7 @@ type Snapshot struct {
 	CurrentWorktree string // git toplevel; "" if TopLevel failed
 	GitCommonDir    string // "" if it failed
 	HeadTimes       map[string]int64
+	Conflict        ConflictState // source of any in-progress conflict (zero if none)
 }
 
 // query runs fn under a Read reservation on s's gate, coalescing concurrent
@@ -127,6 +128,10 @@ func (s *Service) loadSnapshot(ctx context.Context) (Snapshot, error) {
 	if firstErr != nil {
 		return Snapshot{}, firstErr
 	}
+	// Attribute any conflict to the merge/rebase in progress. Serial (after the
+	// parallel reads) because it needs the resolved Status, and cheap because it
+	// short-circuits unless Status actually has unmerged files.
+	snap.Conflict = s.conflictState(ctx, snap.Status)
 	return snap, nil
 }
 
