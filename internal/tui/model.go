@@ -291,7 +291,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.filesView != nil {
 			return m.updateFilesViewKey(msg)
 		}
-		if m.stashView != nil {
+		// The stash list owns the keyboard only while it is the focused (right)
+		// column. When focus has moved to a left panel (← ), keys fall through to
+		// the normal dispatch so the left panels stay navigable with the stash
+		// list visible-but-dimmed on the right.
+		if m.stashView != nil && m.focus == panelCommits {
 			return m.updateStashViewKey(msg)
 		}
 		// Filter-input mode captures every key (the panel label shows the query).
@@ -379,6 +383,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m.startOp(engine.SmartSwitch{Branch: b.Name})
 			}
 		case "S":
+			if m.stashView != nil { // toggle closed (focus is on a left panel here)
+				return m.closeStashView(), nil
+			}
 			if m.opsIdle() {
 				return m.openStashView()
 			}

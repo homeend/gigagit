@@ -162,3 +162,41 @@ func TestStashFollowLiveReloadsTree(t *testing.T) {
 		t.Error("landing on a different stash should fire the follow-live reload")
 	}
 }
+
+func TestStashLeftArrowFocusesPanelsThenRightReturns(t *testing.T) {
+	m := loadedModel(t)
+	m.focus = panelStatus
+	mm, _ := m.Update(keyMsg("S")) // opens; focus → panelCommits, lastLeftPanel=panelStatus
+	m = mm.(Model)
+	// ← from the focused stash list releases focus to the left column.
+	mm, _ = m.updateStashViewKey(keyMsg("left"))
+	m = mm.(Model)
+	if m.focus != panelStatus {
+		t.Fatalf("← should focus the left column (panelStatus), got %v", m.focus)
+	}
+	if m.stashView == nil {
+		t.Fatal("the stash window must stay open while inspecting the left panels")
+	}
+	if !m.panelFocused(panelStatus) {
+		t.Error("the left panel should be bright/focused now")
+	}
+	// While focus is on a left panel, keys go to the normal dispatch (navigable).
+	mm, _ = m.Update(keyMsg("right")) // → returns to the stash list
+	m = mm.(Model)
+	if m.focus != panelCommits {
+		t.Errorf("→ should return focus to the stash list, got %v", m.focus)
+	}
+}
+
+func TestStashOpenSToggleClosesFromLeftPanel(t *testing.T) {
+	m := loadedModel(t)
+	m.focus = panelStatus
+	mm, _ := m.Update(keyMsg("S"))
+	m = mm.(Model)
+	mm, _ = m.updateStashViewKey(keyMsg("left")) // focus → panelStatus
+	m = mm.(Model)
+	mm, _ = m.Update(keyMsg("S")) // normal dispatch: toggle closed
+	if mm.(Model).stashView != nil {
+		t.Fatal("S from a left panel should close the open stash window")
+	}
+}
