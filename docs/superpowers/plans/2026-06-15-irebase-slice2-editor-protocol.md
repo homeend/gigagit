@@ -178,7 +178,9 @@ func TestMessageComposesSquash(t *testing.T) {
 		{Sha: "c", Action: Squash, Orig: "msg C\n"},
 	}}
 	got := p.Message(0)
-	want := "title A\n\nbody A\n\nmsg B\n\nmsg C"
+	// Target message kept verbatim; a blank line; then each squashed commit's
+	// message stacked line-by-line in the body.
+	want := "title A\n\nbody A\n\nmsg B\nmsg C"
 	if got != want {
 		t.Fatalf("Message(0) = %q, want %q", got, want)
 	}
@@ -246,26 +248,31 @@ func (p Plan) Groups() ([]Group, error) {
 }
 
 // Message returns the commit message for the group whose target is at index ti:
-// the target's new message (if reworded) else its original, followed by each
-// squashed commit's original message as a blank-line-separated block.
+// the target's new message (if reworded) else its original, kept verbatim; then,
+// when there are squashed commits, a blank line (git's subject/body separator)
+// followed by each squashed commit's message stacked line-by-line in the body.
 func (p Plan) Message(ti int) string {
 	t := p.Entries[ti]
 	base := t.Orig
 	if t.Action == Reword && t.NewMsg != "" {
 		base = t.NewMsg
 	}
-	parts := []string{strings.TrimRight(base, "\n")}
+	msg := strings.TrimRight(base, "\n")
+	var squashed []string
 	for i := ti + 1; i < len(p.Entries); i++ {
 		switch p.Entries[i].Action {
 		case Squash:
-			parts = append(parts, strings.TrimRight(p.Entries[i].Orig, "\n"))
+			squashed = append(squashed, strings.TrimRight(p.Entries[i].Orig, "\n"))
 		case Drop:
 			continue
 		default:
 			i = len(p.Entries) // next target ends the group
 		}
 	}
-	return strings.Join(parts, "\n\n")
+	if len(squashed) > 0 {
+		msg += "\n\n" + strings.Join(squashed, "\n")
+	}
+	return msg
 }
 ```
 
@@ -373,7 +380,11 @@ func (p Plan) RewriteTodo(ggBin, planPath string) (string, error) {
 
 > `%q` quotes the binary and plan paths so spaces survive git's `sh -c` exec.
 > Paths with embedded double-quotes are not supported (temp paths never have
-> them) — a deliberate v1 limitation.
+> them) — a deliberate v1 limitation. **Windows watch-item:** `os.Executable()`
+> yields a backslash path (`C:\…\gg.exe`); `%q` Go-quoting may not survive git's
+> `sh -c` cleanly. Linux tests won't catch it — verify during the slice-3/4
+> integration (or add a Windows path-quoting test) before claiming
+> cross-platform done.
 
 - [ ] **Step 4: Run to verify it passes**
 
