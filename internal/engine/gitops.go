@@ -56,6 +56,12 @@ type GitOps interface {
 
 	StagePaths(ctx context.Context, paths []string) error
 	UnstagePaths(ctx context.Context, paths []string) error
+
+	CheckoutSide(ctx context.Context, path, side string) error
+	CheckoutBaseStage(ctx context.Context, path string) error
+	RemoveFile(ctx context.Context, path string) error
+	MergeContinue(ctx context.Context, dir string) error
+	RebaseContinue(ctx context.Context, dir string) error
 }
 
 // Compile-time proof the concrete repo implements the interface; a drift
