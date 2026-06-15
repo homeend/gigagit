@@ -1,0 +1,99 @@
+package tui
+
+import (
+	"fmt"
+	"strings"
+
+	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/gigagit/gg/internal/model"
+)
+
+// conflictPopup resolves unmerged files at the whole-file level.
+type conflictPopup struct {
+	files      []model.FileStatus // refreshed from status after each action
+	sel        int
+	inProgress string // "merge"/"rebase"/"" — gates the continue/abort actions
+}
+
+func (m Model) openConflictPopup() (Model, tea.Cmd) {
+	files := m.status.Conflicts()
+	if len(files) == 0 {
+		return m, nil
+	}
+	m.conflictPopup = &conflictPopup{files: files}
+	return m, m.loadInProgressCmd()
+}
+
+func (m Model) renderConflictPopup() string {
+	p := m.conflictPopup
+	var b strings.Builder
+	b.WriteString("Resolve conflicts\n\n")
+	if len(p.files) == 0 {
+		b.WriteString("  (all resolved)\n")
+	}
+	for i, f := range p.files {
+		cursor := "  "
+		if i == p.sel {
+			cursor = "> "
+		}
+		row := fmt.Sprintf("%s%s  — %s", cursor, f.Path, f.ConflictLabel())
+		if i == p.sel {
+			b.WriteString(selectedRow.Render(row) + "\n")
+		} else {
+			b.WriteString(row + "\n")
+		}
+	}
+	b.WriteString("\n" + p.actionHint() + "\n")
+	b.WriteString("[esc] close")
+	w, _ := m.overlayDims()
+	return modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"
+}
+
+// actionHint lists the keys available for the selected file (+ continue/abort).
+func (p *conflictPopup) actionHint() string {
+	// All conflicts resolved: either offer continue/abort (op in progress) or
+	// tell the user to commit (no op — e.g. a stash-pop conflict).
+	if len(p.files) == 0 {
+		if p.inProgress != "" {
+			return strings.Join([]string{"[c] continue " + p.inProgress, "[a] abort"}, "  ")
+		}
+		return "all resolved — commit with c"
+	}
+	var parts []string
+	if p.sel >= 0 && p.sel < len(p.files) {
+		f := p.files[p.sel]
+		if f.ConflictClass() == model.ConflictBothSides {
+			parts = append(parts, "[o] ours", "[t] theirs", "[m] mark resolved")
+		} else {
+			// "keep modified" needs a side with content; both-deleted (DD) has
+			// neither, so only delete / keep base apply there.
+			if f.ConflictHasOurs() || f.ConflictHasTheirs() {
+				parts = append(parts, "[k] keep modified")
+			}
+			parts = append(parts, "[d] delete")
+			if f.ConflictHasBase() {
+				parts = append(parts, "[b] keep base")
+			}
+		}
+	}
+	parts = append(parts, "[A] all resolved")
+	if p.inProgress != "" {
+		parts = append(parts, "[a] abort")
+	}
+	return strings.Join(parts, "  ")
+}
+
+// loadInProgressCmd probes whether a merge/rebase is in progress (Task 7 fills
+// the handler). Stub returns nil until then.
+func (m Model) loadInProgressCmd() tea.Cmd { return nil }
+
+func (m Model) updateConflictPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if msg.Type == tea.KeyCtrlC {
+		return m, tea.Quit
+	}
+	if msg.String() == "esc" {
+		m.conflictPopup = nil
+	}
+	return m, nil
+}

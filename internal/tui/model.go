@@ -49,6 +49,9 @@ type Model struct {
 
 	stashView *stashView // stash list in the right column (over Commits); nil = closed
 
+	conflictPopup  *conflictPopup // whole-file conflict resolver; nil = closed
+	reopenConflict bool           // reopen the conflict popup on the next dataLoadedMsg
+
 	filesView        *contentPopup // commit files tree replacing the left column; nil = closed
 	filesTitle       string        // "Files <short-hash> <subject>", updated with the content
 	filesHash        string        // commit the view wants; gates stale async results
@@ -279,6 +282,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.contentPopup != nil {
 			return m.updateContentPopupKey(msg)
 		}
+		if m.conflictPopup != nil {
+			return m.updateConflictPopupKey(msg)
+		}
 		if m.stashAction != nil {
 			return m.updateStashActionKey(msg)
 		}
@@ -369,6 +375,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "C":
 			if m.canAmend() {
 				return m, m.amendPrefillCmd()
+			}
+		case "x":
+			if m.opsIdle() && len(m.status.Conflicts()) > 0 {
+				return m.openConflictPopup()
 			}
 		case "s":
 			if m.focus == panelStatus && m.opsIdle() {
