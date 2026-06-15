@@ -7,8 +7,8 @@ func TestRewriteTodo(t *testing.T) {
 		{Sha: "aaaaaaa", Action: Pick, Orig: "A"},
 		{Sha: "bbbbbbb", Action: Reword, Orig: "B", NewMsg: "B2"},
 		{Sha: "ccccccc", Action: Squash, Orig: "C"}, // melds into B
-		{Sha: "ddddddd", Action: Drop, Orig: "D"},    // omitted
-		{Sha: "eeeeeee", Action: Pick, Orig: "E"},    // plain pick, no exec
+		{Sha: "ddddddd", Action: Drop, Orig: "D"},   // omitted
+		{Sha: "eeeeeee", Action: Pick, Orig: "E"},   // plain pick, no exec
 	}}
 	got, err := p.RewriteTodo("/usr/bin/gg", "/tmp/plan.json")
 	if err != nil {
