@@ -194,7 +194,7 @@ existing `startOp → opFinishedMsg → loadCmd()` path.
   GIT_EDITOR` reflects a set value).
 - **gg-as-editor (slice 2):** given a plan + a sample git todo file,
   `__rebase-seq` produces the expected rewritten todo (pick/fixup/exec lines,
-  drop omission, reorder); `__rebase-reword` amends HEAD's message from the plan
+  drop omission, reorder); `__rebase-message` amends HEAD's message from the plan
   (real repo).
 - **`internal/engine`:** `FakeRunner` argv+env for the rebase invocation;
   real-repo integration — a 3-commit branch with a plan that rewords one, drops
