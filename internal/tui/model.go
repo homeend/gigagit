@@ -49,8 +49,9 @@ type Model struct {
 
 	stashView *stashView // stash list in the right column (over Commits); nil = closed
 
-	conflictPopup  *conflictPopup // whole-file conflict resolver; nil = closed
-	reopenConflict bool           // reopen the conflict popup on the next dataLoadedMsg
+	conflictPopup  *conflictPopup       // whole-file conflict resolver; nil = closed
+	reopenConflict bool                 // reopen the conflict popup on the next dataLoadedMsg
+	conflict       domain.ConflictState // source of the current conflict (merge/rebase parties), for the notice/popup
 
 	filesView        *contentPopup // commit files tree replacing the left column; nil = closed
 	filesTitle       string        // "Files <short-hash> <subject>", updated with the content
@@ -209,6 +210,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.err = msg.err
 		if msg.err == nil {
 			m.status = msg.status
+			m.conflict = msg.conflict
 			m.branches = msg.branches
 			m.commits = msg.commits
 			m.commitsExhausted = msg.commitsExhausted

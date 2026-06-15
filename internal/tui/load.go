@@ -41,6 +41,7 @@ type dataLoadedMsg struct {
 	cfg             config.Config
 	gitCommonDir    string
 	headTimes       map[string]int64
+	conflict        domain.ConflictState
 	err             error
 
 	commitsExhausted bool
@@ -80,6 +81,7 @@ func (m Model) loadCmd() tea.Cmd {
 			currentWorktree:  snap.CurrentWorktree,
 			gitCommonDir:     snap.GitCommonDir,
 			headTimes:        snap.HeadTimes,
+			conflict:         snap.Conflict,
 			commits:          fs.Commits,
 			commitsExhausted: fs.Exhausted,
 			commitErr:        feedErr,

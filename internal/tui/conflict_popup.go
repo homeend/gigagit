@@ -6,10 +6,14 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/gigagit/gg/internal/engine"
 	"github.com/gigagit/gg/internal/model"
 )
+
+// conflictSrcStyle dims the "merging X into Y" subtitle in the resolve popup.
+var conflictSrcStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 
 // conflictPopup resolves unmerged files at the whole-file level.
 type conflictPopup struct {
@@ -30,7 +34,11 @@ func (m Model) openConflictPopup() (Model, tea.Cmd) {
 func (m Model) renderConflictPopup() string {
 	p := m.conflictPopup
 	var b strings.Builder
-	b.WriteString("Resolve conflicts\n\n")
+	b.WriteString("Resolve conflicts\n")
+	if src := m.conflict.Describe(); src != "" {
+		b.WriteString(conflictSrcStyle.Render(src) + "\n")
+	}
+	b.WriteString("\n")
 	if len(p.files) == 0 {
 		b.WriteString("  (all resolved)\n")
 	}

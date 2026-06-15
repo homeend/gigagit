@@ -76,6 +76,30 @@ func TestStatusBarShowsConflictNotice(t *testing.T) {
 	}
 }
 
+func conflictModelWithSource() Model {
+	m := conflictModel()
+	m.conflict = domain.ConflictState{Op: "merge", Source: "feature", Target: "main"}
+	return m
+}
+
+func TestStatusBarShowsConflictSource(t *testing.T) {
+	m := conflictModelWithSource()
+	out := m.View()
+	if !strings.Contains(out, "merging feature into main") {
+		t.Errorf("status bar should name the source:\n%s", out)
+	}
+}
+
+func TestConflictPopupShowsSourceSubtitle(t *testing.T) {
+	m := conflictModelWithSource()
+	mm, _ := m.Update(keyMsg("x"))
+	m = mm.(Model)
+	out := m.View()
+	if !strings.Contains(out, "merging feature into main") {
+		t.Errorf("popup should show the source subtitle:\n%s", out)
+	}
+}
+
 func TestXOpensConflictPopup(t *testing.T) {
 	m := conflictModel()
 	mm, _ := m.Update(keyMsg("x"))
