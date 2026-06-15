@@ -78,9 +78,11 @@ func (m Model) footerLine() string {
 	if m.filesView != nil {
 		return "files: [←/→ tab] focus  [↑/↓] move  [ctrl+↑/↓] tree  [enter] diff  [/] search  [h] hist  [b] blame  [esc/l] close"
 	}
-	// The stash list owns the keyboard while open (no file tree yet).
-	if m.stashView != nil {
-		return "stash: [↑/↓] move  [l] files  [enter] apply/pop/drop  [esc/S] close"
+	// The stash list owns the keyboard while it is the focused right column
+	// (no file tree yet). When focus has moved to a left panel, fall through to
+	// that panel's normal footer.
+	if m.stashView != nil && m.focus == panelCommits {
+		return "stash: [↑/↓] move  [l] files  [←] panels  [enter] apply/pop/drop  [esc/S] close"
 	}
 	var ctx, glob []string
 	for _, b := range contextBindings {

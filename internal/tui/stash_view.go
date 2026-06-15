@@ -65,6 +65,14 @@ func (m Model) updateStashViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "S", "esc":
 		return m.closeStashView(), nil
+	case "left":
+		// Release focus to the left column (the stash list stays open, dimmed),
+		// so the user can inspect the Status/Branches/Worktrees panels — e.g.
+		// the files an applied/popped stash just changed. → returns here.
+		if m.width <= 0 || m.width >= 40 {
+			m.focus = m.lastLeftPanel
+		}
+		return m, nil
 	case "down", "j":
 		if v.sel < len(v.entries)-1 {
 			v.sel++
@@ -131,9 +139,10 @@ func (m Model) renderStashList(boxW, boxH int) string {
 	case len(v.entries) == 0:
 		rows = []string{"(no stashes)"}
 	}
-	// Focused (bright border, highlighted cursor) unless the file tree owns
-	// focus — mirrors panelFocused(panelCommits) for the commit files view.
-	focused := !(m.filesView != nil && m.filesTreeFocused)
+	// Focused (bright border, highlighted cursor) only when it owns focus:
+	// m.focus is the right column AND the file tree isn't the active side.
+	// Mirrors panelFocused(panelCommits) for the commit files view.
+	focused := m.focus == panelCommits && !(m.filesView != nil && m.filesTreeFocused)
 	return m.renderListBox("Stashes", rows, v.sel, boxW, boxH, focused)
 }
 
