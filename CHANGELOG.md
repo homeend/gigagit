@@ -43,6 +43,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   non-zero and keeps the stash. (agentskill v8)
 
 ### Fixed
+- Diff view: a working copy with CRLF line endings (e.g. a Windows checkout
+  under `core.autocrlf`) no longer shows the whole file as changed. The diff
+  compared `git show` (LF) against the raw on-disk bytes (CRLF), so every line
+  differed by a non-printing carriage return while rendering identically; the
+  line-alignment engine now treats a trailing `\r` as not part of line identity,
+  matching `git diff` and how the rows are drawn.
 - Status bar: failures (e.g. a stash apply that would overwrite local changes)
   now render as a bold white-on-red bar instead of the same plain text as the
   key hints, so an error is no longer easy to miss.

@@ -220,6 +220,14 @@ func Compare(old, newB []byte, opts Options) Result {
 // splitLines splits content into lines, reporting whether it ended with a
 // newline (the phantom empty last line is dropped here; Compare re-adds one
 // row when only one side has the final newline).
+//
+// A trailing carriage return is stripped from each line. textdiff is a
+// display-oriented aligner and the diff view strips \r when rendering, so a
+// non-printing \r is not part of line identity: keeping it would mark lines
+// that render identically as "changed" whenever the two sides have different
+// endings — e.g. git show emits LF while a working copy checked out under
+// core.autocrlf is CRLF, painting the whole file changed though git diff sees
+// nothing.
 func splitLines(b []byte) ([]string, bool) {
 	if len(b) == 0 {
 		return nil, false
@@ -229,7 +237,11 @@ func splitLines(b []byte) ([]string, bool) {
 	if nl {
 		s = s[:len(s)-1]
 	}
-	return strings.Split(s, "\n"), nl
+	lines := strings.Split(s, "\n")
+	for i := range lines {
+		lines[i] = strings.TrimSuffix(lines[i], "\r")
+	}
+	return lines, nl
 }
 
 func commonPrefix(a, b []string) int {
