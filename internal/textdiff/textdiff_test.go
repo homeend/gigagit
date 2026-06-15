@@ -223,15 +223,34 @@ func TestCompareSingleLineNoNewline(t *testing.T) {
 	}
 }
 
-func TestCompareCRLFLinesPreserved(t *testing.T) {
-	// Lines keep their \r — comparison is raw; display sanitizing is the
-	// TUI's job. Equal CRLF content must compare as Same.
+func TestCompareNormalizesCR(t *testing.T) {
+	// A trailing \r is non-printing and stripped at render time, so it is not
+	// part of line identity: CRLF and LF lines with the same text compare Same,
+	// and the stored line content carries no \r.
 	res := Compare([]byte("a\r\nb\r\n"), []byte("a\r\nb\r\n"), Options{})
 	if !slices.Equal(rowsKinds(res.Rows), []Kind{Same, Same}) {
-		t.Fatalf("kinds = %v, want [Same Same]", rowsKinds(res.Rows))
+		t.Fatalf("equal CRLF content: kinds = %v, want [Same Same]", rowsKinds(res.Rows))
 	}
-	if res.Rows[0].Left != "a\r" {
-		t.Fatalf("CRLF stripped from line content: %q", res.Rows[0].Left)
+	if res.Rows[0].Left != "a" {
+		t.Fatalf("line content should be \\r-free: %q", res.Rows[0].Left)
+	}
+}
+
+func TestCompareMixedEndingsSameContent(t *testing.T) {
+	// The real bug: git show emits LF (old) while a working copy under
+	// core.autocrlf is CRLF (new). Same text → no spurious "changed" rows.
+	res := Compare([]byte("a\nb\nc\n"), []byte("a\r\nb\r\nc\r\n"), Options{Enhanced: true})
+	if !slices.Equal(rowsKinds(res.Rows), []Kind{Same, Same, Same}) {
+		t.Fatalf("mixed LF/CRLF same content: kinds = %v, want [Same Same Same]", rowsKinds(res.Rows))
+	}
+}
+
+func TestCompareCRLFKeepsRealChange(t *testing.T) {
+	// Normalizing \r removes noise, not signal: with both sides CRLF, a genuine
+	// content change still shows as the one Changed line, the rest Same.
+	res := Compare([]byte("a\r\nb\r\nc\r\n"), []byte("a\r\nB\r\nc\r\n"), Options{})
+	if !slices.Equal(rowsKinds(res.Rows), []Kind{Same, Changed, Same}) {
+		t.Fatalf("kinds = %v, want [Same Changed Same]", rowsKinds(res.Rows))
 	}
 }
 
