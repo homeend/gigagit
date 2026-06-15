@@ -40,11 +40,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ### Added
 
-#### Commit (`c`)
+#### Commit & amend (`c` / `C`)
 - `c` opens a commit popup with a **title** and a multi-line **description**,
   and commits the staged index. `tab` switches fields, `enter` moves title →
   description (and inserts newlines in the body), `ctrl+s` commits, `esc`
   cancels. Empty title is refused; `c` with nothing staged is a no-op.
+- `C` **amends** the last commit: the same popup opens pre-filled with HEAD's
+  message, so `ctrl+s` rewrites the message and folds in whatever is currently
+  staged (stage with `space`, then `C`). No-op when there is no commit yet.
+- CLI: `gg commit --amend` rewrites the last commit; with no `-m` it reuses the
+  existing message.
 
 #### Staging (`space` in the Status panel)
 - `space` on a Status-panel file stages it (`git add`), or unstages it

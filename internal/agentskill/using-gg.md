@@ -9,7 +9,9 @@ guards against removing the worktree you are standing in.
 ## Commands
 
 - `gg status` — branch, upstream ahead/behind, changed files.
-- `gg commit -m <msg> [-a]` — commit (`-a` also stages tracked modifications).
+- `gg commit -m <msg> [-a] [--amend]` — commit (`-a` also stages tracked
+  modifications; `--amend` rewrites the last commit, reusing its message when
+  `-m` is omitted).
 - `gg pull [<branch>] [--background] [--on-conflict rebase|merge|abort]` —
   smart pull; with `<branch>` + `--background` it fast-forwards that branch's
   ref without checking it out.

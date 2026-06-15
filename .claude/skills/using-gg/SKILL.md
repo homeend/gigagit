@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v6 -->
+<!-- gg:using-gg:v7 -->
 
 # Using gg (gigagit)
 
@@ -16,7 +16,9 @@ guards against removing the worktree you are standing in.
 ## Commands
 
 - `gg status` — branch, upstream ahead/behind, changed files.
-- `gg commit -m <msg> [-a]` — commit (`-a` also stages tracked modifications).
+- `gg commit -m <msg> [-a] [--amend]` — commit (`-a` also stages tracked
+  modifications; `--amend` rewrites the last commit, reusing its message when
+  `-m` is omitted).
 - `gg pull [<branch>] [--background] [--on-conflict rebase|merge|abort]` —
   smart pull; with `<branch>` + `--background` it fast-forwards that branch's
   ref without checking it out.
