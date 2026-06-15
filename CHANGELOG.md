@@ -9,6 +9,15 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+#### Interactive rebase (engine + scriptable CLI)
+- `gg rebase -i --plan <file> <newbase>` drives an interactive rebase from a
+  plan (pick/reword/squash/drop + reorder), executed via git's interactive
+  rebase with gg acting as the sequence editor. Squash composes a combined
+  message (target subject + each squashed commit's message line-by-line). The
+  working tree is preserved across the rebase (stash-wrap); conflicts pause for
+  `git rebase --continue` or `--on-conflict=abort`. (The TUI editor that builds
+  the plan lands next.)
+
 - TUI: a conflicted repo shows a status-bar notice (`⚠ N conflict — press [x]
   to resolve`); `x` opens a resolution popup that resolves each unmerged file at
   the whole-file level — keep ours/theirs/base, keep-modified, delete, or

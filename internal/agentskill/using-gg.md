@@ -38,6 +38,12 @@ guards against removing the worktree you are standing in.
   paused for `git rebase --continue` (exit 1), `--on-conflict=abort` runs
   `git rebase --abort` (exit 0); with neither and no TTY, a conflict exits 1
   with the options on stderr.
+- `gg rebase -i --plan <file> <newbase>` — **interactive** rebase from a plan
+  file (a gg rebase-plan JSON: ordered `{sha, action: pick|reword|squash|drop,
+  orig, new_msg}`); the TUI builds this plan interactively. Squash composes a
+  combined message (target subject + each squashed commit's message
+  line-by-line). The working tree is preserved across the rebase; conflicts
+  answer to `--on-conflict`.
 - `gg stash [-m <msg>] [-u] [-- <paths>...]` — stash the working tree (or only
   the named paths; `-u` includes untracked files).
 - `gg stash list` — list stashes (`stash@{N}: <subject>`, newest first).

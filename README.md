@@ -85,6 +85,7 @@ gg branch create <name> [<start-point>]
 gg branch delete [--force] <name>
 gg merge [--into <target>] [--on-conflict=keep|abort] <source>
 gg rebase [--branch <b>] [--on-conflict=keep|abort] <newbase>
+gg rebase -i --plan <file> <newbase>   # interactive rebase from a plan (pick/reword/squash/drop)
 gg stash [-m msg] [-u] [-- <paths>...]
 gg stash list | apply [<ref>] | pop [<ref>] | drop [<ref>]
 gg undo
