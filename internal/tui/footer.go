@@ -46,6 +46,7 @@ var contextBindings = []footerBinding{
 // (while an op runs everything gated on opsIdle drops out and the footer
 // collapses to tab/help/quit).
 var globalBindings = []footerBinding{
+	{"c", "[c] commit", Model.canCommit},
 	{"p", "[p]ull", Model.opsIdle},
 	{"P", "[P]ush", func(m Model) bool { return m.opsIdle() && m.status.Branch != "" }},
 	{"S", "[S]tash", Model.opsIdle},

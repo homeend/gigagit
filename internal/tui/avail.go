@@ -102,6 +102,11 @@ func (m Model) cursorOnMark() bool {
 	return ok && m.listFor(m.focus).Key(bi) == m.mark.key
 }
 
+// canCommit reports whether there is a staged index to commit and no op is running.
+func (m Model) canCommit() bool {
+	return m.opsIdle() && m.status.Counts().Staged > 0
+}
+
 // canStage reports whether the selected Status row can be staged/unstaged:
 // the Status panel is focused, a row is selected, and no op is running.
 func (m Model) canStage() bool {

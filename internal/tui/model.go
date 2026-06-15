@@ -343,6 +343,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if !m.running && !m.loading && m.status.Branch != "" {
 				return m.startOp(engine.Push{Remote: "origin", Branch: m.status.Branch, SetUpstream: true})
 			}
+		case "c":
+			if m.canCommit() {
+				m.commitPopup = &commitPopup{}
+			}
 		case "s":
 			if m.canSwitchBranch() {
 				b, _ := m.selectedBranch()
