@@ -197,7 +197,7 @@ func (m Model) renderInterface() string {
 	if m.running {
 		statusLine = "⏳ " + statusLine
 	}
-	statusLine = truncate(statusLine, g.w)
+	statusLine = truncate(oneLine(statusLine), g.w)
 
 	// Narrow terminals: a single commits column (two columns won't fit cleanly).
 	if g.w < 40 {
@@ -384,6 +384,14 @@ func windowStart(total, n, sel int) int {
 		start = 0
 	}
 	return start
+}
+
+// oneLine collapses every whitespace run (including the newlines and tabs that
+// git writes to stderr) into a single space, so a multi-line error renders
+// legibly on the one-line status bar instead of breaking the layout or being
+// cut off at the first newline.
+func oneLine(s string) string {
+	return strings.Join(strings.Fields(s), " ")
 }
 
 // truncate shortens s to at most n display columns, adding an ellipsis. Width is
