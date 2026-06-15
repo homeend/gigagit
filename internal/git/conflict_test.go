@@ -160,3 +160,18 @@ func TestRebasePartiesReal(t *testing.T) {
 		t.Errorf("RebaseParties = (%q,%q), want (feature,main)", branch, onto)
 	}
 }
+
+func TestCleanRefName(t *testing.T) {
+	cases := map[string]string{
+		"refs/heads/feature": "feature",
+		"feature~2":          "feature",
+		"feature^0":          "feature",
+		"undefined":          "", // name-rev's no-match sentinel → no attribution
+		"abc1234":            "abc1234",
+	}
+	for in, want := range cases {
+		if got := cleanRefName(in); got != want {
+			t.Errorf("cleanRefName(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
