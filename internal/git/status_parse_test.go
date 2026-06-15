@@ -68,6 +68,28 @@ func TestParseStatusV2UnmergedPathWithSpace(t *testing.T) {
 	}
 }
 
+func TestParseUnmergedCapturesCode(t *testing.T) {
+	// Two unmerged entries: UU (both modified) and DU (deleted by us).
+	data := []byte(
+		"u UU N... 100644 100644 100644 100644 h1 h2 h3 uu.txt\x00" +
+			"u DU N... 100644 000000 000000 100644 h1 h2 h3 md.txt\x00")
+	st, err := ParseStatusV2(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(st.Files) != 2 {
+		t.Fatalf("want 2 files, got %d", len(st.Files))
+	}
+	uu := st.Files[0]
+	if uu.Kind != model.KindUnmerged || uu.Staged != 'U' || uu.Unstaged != 'U' {
+		t.Errorf("uu = %+v, want KindUnmerged U/U", uu)
+	}
+	md := st.Files[1]
+	if md.Kind != model.KindUnmerged || md.Staged != 'D' || md.Unstaged != 'U' {
+		t.Errorf("md = %+v, want KindUnmerged D/U", md)
+	}
+}
+
 func TestParseStatusV2Rename(t *testing.T) {
 	// A "2" entry encodes a rename; with -z the original path is the NEXT token.
 	entries := []string{

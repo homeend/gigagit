@@ -107,7 +107,7 @@ func (m Model) render() string {
 	}
 	_, h := m.overlayDims()
 	bg := clipToHeight(m.renderInterface(), h)
-	if m.popup == nil && m.commitPopup == nil && m.repoPopup == nil && m.settings == nil && m.branchPopup == nil && m.contentPopup == nil && m.pairPopup == nil && m.stashPopup == nil && m.stashAction == nil {
+	if m.popup == nil && m.commitPopup == nil && m.repoPopup == nil && m.settings == nil && m.branchPopup == nil && m.contentPopup == nil && m.pairPopup == nil && m.stashPopup == nil && m.stashAction == nil && m.conflictPopup == nil {
 		if lines, x, y, ok := m.tooltip(); ok {
 			w, h := m.overlayDims()
 			bg = overlayAt(bg, strings.Join(lines, "\n"), x, y, w, h)
@@ -140,6 +140,10 @@ func (m Model) render() string {
 	if m.pairPopup != nil {
 		w, h := m.overlayDims()
 		return overlayCenter(bg, m.renderPairOpPopup(), w, h)
+	}
+	if m.conflictPopup != nil {
+		w, h := m.overlayDims()
+		return overlayCenter(bg, m.renderConflictPopup(), w, h)
 	}
 	if m.stashPopup != nil {
 		w, h := m.overlayDims()
@@ -186,6 +190,18 @@ func (m Model) renderInterface() string {
 	header := m.headerLine(g.w)
 	footer := truncate(m.footerLine(), g.w)
 	statusLine := m.statusMsg
+	if n := len(m.status.Conflicts()); n > 0 {
+		notice := fmt.Sprintf("⚠ %d conflict", n)
+		if n != 1 {
+			notice += "s"
+		}
+		notice += " — press [x] to resolve"
+		if statusLine != "" {
+			statusLine = notice + " · " + statusLine
+		} else {
+			statusLine = notice
+		}
+	}
 	if m.mark != nil && m.markAlive() {
 		hint := "◆ marked: " + m.mark.display
 		if statusLine != "" {
