@@ -241,3 +241,43 @@ func TestCommitFilesStashNoDuplicate(t *testing.T) {
 		t.Fatalf("stash files = %+v, want a single [M README.md]", files)
 	}
 }
+
+// TestCommitFilesMergeFirstParent pins first-parent semantics for a true 3-way
+// merge: each side adds a different file, and the merge lists only what it
+// brought to the mainline (the first-parent diff), not the union of both parents.
+func TestCommitFilesMergeFirstParent(t *testing.T) {
+	dir, runner := newTestRepo(t) // initial commit on main (README.md)
+	repo := &Repo{Runner: runner}
+	gitIn(t, dir, "config", "user.email", "t@t")
+	gitIn(t, dir, "config", "user.name", "t")
+
+	gitIn(t, dir, "checkout", "-b", "feature")
+	if err := os.WriteFile(filepath.Join(dir, "b.txt"), []byte("b\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, dir, "add", "-A")
+	gitIn(t, dir, "commit", "-m", "feature adds b")
+
+	gitIn(t, dir, "checkout", "main")
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, dir, "add", "-A")
+	gitIn(t, dir, "commit", "-m", "main adds a")
+	gitIn(t, dir, "merge", "--no-ff", "-m", "merge", "feature") // a + b in tree, no conflict
+
+	out, err := exec.Command("git", "-C", dir, "rev-parse", "HEAD").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	merge := strings.TrimSpace(string(out))
+	files, err := repo.CommitFiles(context.Background(), merge)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// First parent is main; the merge brought feature's b.txt to it. a.txt was
+	// already on the first-parent side, so it is not part of this merge's diff.
+	if len(files) != 1 || files[0].Status != "A" || files[0].Path != "b.txt" {
+		t.Fatalf("merge files = %+v, want a single [A b.txt] (first-parent only)", files)
+	}
+}
