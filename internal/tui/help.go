@@ -22,6 +22,8 @@ func helpContent() []contentLine {
 		r("R", "repo switcher popup"),
 		r(",", "settings (agent skill install)"),
 		r("o", "cycle the focused panel's sort order"),
+		r("z", "cycle the focused window's text display (cutoff / wrap / scroll)"),
+		r("shift+←/→", "scroll display mode: pan the focused window horizontally"),
 		r("/", "filter the focused panel"),
 		r("tab/shift+tab", "cycle panel focus forward / backward"),
 		r("←/→", "focus the left column / the Commits panel"),
