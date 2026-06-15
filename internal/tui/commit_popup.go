@@ -10,10 +10,12 @@ import (
 
 // commitPopup collects a commit message as a subject (title) plus an optional
 // multi-line body (description), and commits the staged index on ctrl+s.
+// amend=true rewrites the last commit instead of creating a new one.
 type commitPopup struct {
 	title string
 	desc  string
 	field int // 0 = title, 1 = description
+	amend bool
 }
 
 // message assembles the git commit message: subject alone, or subject + blank
@@ -24,6 +26,17 @@ func (p *commitPopup) message() string {
 		return t
 	}
 	return t + "\n\n" + p.desc
+}
+
+// splitMessage parses an existing commit message into (subject, body) for the
+// amend pre-fill: the first line is the subject, the rest (after blank lines)
+// the body.
+func splitMessage(msg string) (title, desc string) {
+	msg = strings.TrimRight(msg, "\n")
+	if i := strings.IndexByte(msg, '\n'); i >= 0 {
+		return msg[:i], strings.TrimLeft(msg[i+1:], "\n")
+	}
+	return msg, ""
 }
 
 // updateCommitPopupKey handles one key while the commit popup is open. It
@@ -41,7 +54,7 @@ func (m Model) updateCommitPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.statusMsg = "title required"
 			return m, nil
 		}
-		op := engine.Commit{Message: p.message()}
+		op := engine.Commit{Message: p.message(), Amend: p.amend}
 		m.commitPopup = nil
 		return m.startOp(op)
 	case tea.KeyTab, tea.KeyShiftTab:
@@ -82,7 +95,11 @@ func (m Model) updateCommitPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m Model) renderCommitPopup() string {
 	p := m.commitPopup
 	var b strings.Builder
-	b.WriteString("Commit\n\n")
+	heading := "Commit"
+	if p.amend {
+		heading = "Amend last commit"
+	}
+	b.WriteString(heading + "\n\n")
 
 	titleCur, descCur := "  ", "  "
 	if p.field == 0 {

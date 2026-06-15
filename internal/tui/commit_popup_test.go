@@ -18,6 +18,16 @@ func TestCommitPopupMessageAssembly(t *testing.T) {
 	}
 }
 
+func TestSplitMessage(t *testing.T) {
+	ti, de := splitMessage("subject\n\nbody one\nbody two\n")
+	if ti != "subject" || de != "body one\nbody two" {
+		t.Fatalf("split = (%q, %q)", ti, de)
+	}
+	if ti, de := splitMessage("only subject"); ti != "only subject" || de != "" {
+		t.Fatalf("single-line split = (%q, %q)", ti, de)
+	}
+}
+
 // applyCommitKey routes a key through updateCommitPopupKey (the popup owns input).
 func applyCommitKey(m Model, k tea.KeyMsg) (Model, tea.Cmd) {
 	updated, cmd := m.updateCommitPopupKey(k)
