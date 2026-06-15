@@ -176,6 +176,10 @@ existing `startOp → opFinishedMsg → loadCmd()` path.
 
 ## Out of scope (later)
 
+- **Pushed-history rewrite warning** — deferred (Slice 3), consistent with F2's
+  deferred pushed-amend warning: `gg push` never force-pushes, so rewriting
+  pushed history simply makes the next push fail visibly. The merge-commit guard
+  IS implemented.
 - **Editing the composed squash message** before running — v1 auto-composes
   (target subject + squashed messages line-by-line); tweaking it is a later
   Reword on the squashed result.
