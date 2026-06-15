@@ -113,3 +113,50 @@ func TestRemoveFileReal(t *testing.T) {
 		}
 	}
 }
+
+func TestMergeHeadNameReal(t *testing.T) {
+	_, r := conflictRepo(t) // merge of feature into main
+	name, err := r.MergeHeadName(context.Background(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if name != "feature" {
+		t.Errorf("MergeHeadName = %q, want feature", name)
+	}
+}
+
+func TestRebasePartiesReal(t *testing.T) {
+	dir := t.TempDir()
+	gitRun := func(args ...string) {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t",
+			"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+		if out, err := cmd.CombinedOutput(); err != nil && args[0] != "rebase" {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	w := func(name, c string) { os.WriteFile(filepath.Join(dir, name), []byte(c), 0o644) }
+	gitRun("init", "-q", "-b", "main")
+	w("f.txt", "base\n")
+	gitRun("add", "-A")
+	gitRun("commit", "-qm", "base")
+	gitRun("checkout", "-q", "-b", "feature")
+	w("f.txt", "theirs\n")
+	gitRun("add", "-A")
+	gitRun("commit", "-qm", "feature")
+	gitRun("checkout", "-q", "main")
+	w("f.txt", "ours\n")
+	gitRun("add", "-A")
+	gitRun("commit", "-qm", "main")
+	gitRun("checkout", "-q", "feature")
+	gitRun("rebase", "main") // conflicts (exit 1) — tolerated above
+	r := &Repo{Runner: gitexec.NewExecRunner("git", dir, observ.NewRing(50))}
+	branch, onto, err := r.RebaseParties(context.Background(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if branch != "feature" || onto != "main" {
+		t.Errorf("RebaseParties = (%q,%q), want (feature,main)", branch, onto)
+	}
+}
