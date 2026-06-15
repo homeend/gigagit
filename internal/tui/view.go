@@ -327,21 +327,24 @@ func (m Model) renderPanel(p panel, label string, rows []string, boxW, boxH int)
 		lines = append(lines, padRight(truncate("  (none)", innerW), innerW))
 	} else {
 		marked := m.markedDisplayIndices(p)
-		win, selInWin, start := windowRows(rows, rowsCap, m.sel[p])
-		for i, row := range win {
-			focused := i == selInWin && m.panelFocused(p)
+		sel := m.sel[p]
+		isFocused := m.panelFocused(p)
+		wr := make([]winRow, len(rows))
+		for i, row := range rows {
 			prefix := "  "
-			if marked[start+i] {
+			var st lipgloss.Style
+			if marked[i] {
 				prefix = "◆ "
-			} else if focused {
+			} else if i == sel && isFocused {
 				prefix = "> "
 			}
-			line := padRight(truncate(prefix+row, innerW), innerW)
-			if focused {
-				line = selectedRow.Render(line)
+			if i == sel && isFocused {
+				st = selectedRow
 			}
-			lines = append(lines, line)
+			wr[i] = winRow{text: prefix + row, style: st}
 		}
+		body := renderWindow(wr, winOpts{w: innerW, h: rowsCap, mode: m.dispModes[p], anchor: sel, hscroll: m.hscroll[p]})
+		lines = append(lines, body...)
 	}
 	for len(lines) < contentH {
 		lines = append(lines, padRight("", innerW))
@@ -356,7 +359,7 @@ func (m Model) renderPanel(p panel, label string, rows []string, boxW, boxH int)
 
 // renderListBox draws a bordered boxW×boxH list that is not backed by a panel
 // (used by the stash window). focused selects the border + highlight styles.
-func (m Model) renderListBox(label string, rows []string, sel, boxW, boxH int, focused bool) string {
+func (m Model) renderListBox(label string, rows []string, sel, boxW, boxH int, focused bool, mode dispMode, hscroll int) string {
 	contentH := boxH - 2
 	if contentH < 1 {
 		contentH = 1
@@ -371,18 +374,18 @@ func (m Model) renderListBox(label string, rows []string, sel, boxW, boxH int, f
 	}
 	lines := []string{padRight(truncate(label, innerW), innerW)}
 	if rowsCap >= 1 && len(rows) > 0 {
-		win, selInWin, _ := windowRows(rows, rowsCap, sel)
-		for i, row := range win {
+		wr := make([]winRow, len(rows))
+		for i, row := range rows {
 			prefix := "  "
-			if i == selInWin && focused {
+			var st lipgloss.Style
+			if i == sel && focused {
 				prefix = "> "
+				st = selectedRow
 			}
-			line := padRight(truncate(prefix+row, innerW), innerW)
-			if i == selInWin && focused {
-				line = selectedRow.Render(line)
-			}
-			lines = append(lines, line)
+			wr[i] = winRow{text: prefix + row, style: st}
 		}
+		body := renderWindow(wr, winOpts{w: innerW, h: rowsCap, mode: mode, anchor: sel, hscroll: hscroll})
+		lines = append(lines, body...)
 	}
 	for len(lines) < contentH {
 		lines = append(lines, padRight("", innerW))

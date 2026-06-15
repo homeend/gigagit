@@ -12,6 +12,8 @@ import (
 type stashView struct {
 	entries []model.StashEntry
 	sel     int
+	mode    dispMode // text display mode; z cycles
+	hscroll int      // modeScroll horizontal offset
 	loading bool
 	err     error
 	tag     string // gates stale loads
@@ -63,6 +65,22 @@ func (m Model) updateStashViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 	switch msg.String() {
+	case "z":
+		v.mode = v.mode.next()
+		v.hscroll = 0
+		return m, nil
+	case "shift+left":
+		if v.mode == modeScroll && v.hscroll > 0 {
+			if v.hscroll -= m.hscrollStep(); v.hscroll < 0 {
+				v.hscroll = 0
+			}
+		}
+		return m, nil
+	case "shift+right":
+		if v.mode == modeScroll {
+			v.hscroll += m.hscrollStep()
+		}
+		return m, nil
 	case "S", "esc":
 		return m.closeStashView(), nil
 	case "left":
@@ -143,7 +161,7 @@ func (m Model) renderStashList(boxW, boxH int) string {
 	// m.focus is the right column AND the file tree isn't the active side.
 	// Mirrors panelFocused(panelCommits) for the commit files view.
 	focused := m.focus == panelCommits && !(m.filesView != nil && m.filesTreeFocused)
-	return m.renderListBox("Stashes", rows, v.sel, boxW, boxH, focused)
+	return m.renderListBox("Stashes", rows, v.sel, boxW, boxH, focused, v.mode, v.hscroll)
 }
 
 // openStashView opens the stash list window in the right column and moves focus
