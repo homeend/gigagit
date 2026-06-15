@@ -2,18 +2,24 @@ package engine
 
 import "context"
 
-// Commit stages (optionally) and commits with a message.
+// Commit stages (optionally) and commits with a message. Amend rewrites the
+// last commit instead of creating a new one.
 type Commit struct {
 	Message string
 	All     bool
+	Amend   bool
 }
 
 func (op Commit) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	deps.emit(ctx, Progress{Step: "committing", Detail: op.Message})
-	if err := deps.Repo.Commit(ctx, op.Message, op.All); err != nil {
+	if err := deps.Repo.Commit(ctx, op.Message, op.All, op.Amend); err != nil {
 		return Result{}, err
 	}
-	res := Result{Summary: "committed", Changed: true}
+	summary := "committed"
+	if op.Amend {
+		summary = "amended"
+	}
+	res := Result{Summary: summary, Changed: true}
 	deps.emit(ctx, Done{Result: res})
 	return res, nil
 }

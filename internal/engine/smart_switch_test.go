@@ -74,7 +74,7 @@ func TestSmartSwitchStashPopConflictPreservesStash(t *testing.T) {
 		t.Fatal(err)
 	}
 	os.WriteFile(filepath.Join(dir, "README.md"), []byte("feature-version\n"), 0o644)
-	if err := repo.Commit(ctx, "feature change", true); err != nil {
+	if err := repo.Commit(ctx, "feature change", true, false); err != nil {
 		t.Fatal(err)
 	}
 	if err := repo.Switch(ctx, "main"); err != nil {

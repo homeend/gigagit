@@ -14,7 +14,7 @@ func TestCommitAllAndCurrentBranch(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("changed\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := repo.Commit(context.Background(), "second", true); err != nil {
+	if err := repo.Commit(context.Background(), "second", true, false); err != nil {
 		t.Fatalf("commit: %v", err)
 	}
 	st, _ := repo.Status(context.Background())
@@ -53,7 +53,7 @@ func TestCreateBranchFromStartPoint(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("v2\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := repo.Commit(context.Background(), "second", true); err != nil {
+	if err := repo.Commit(context.Background(), "second", true, false); err != nil {
 		t.Fatalf("commit: %v", err)
 	}
 

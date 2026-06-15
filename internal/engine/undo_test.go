@@ -12,7 +12,7 @@ func TestUndoLastCommitMovesHeadBackAndStages(t *testing.T) {
 	ctx := context.Background()
 
 	os.WriteFile(filepath.Join(dir, "README.md"), []byte("changed\n"), 0o644)
-	if err := repo.Commit(ctx, "second", true); err != nil {
+	if err := repo.Commit(ctx, "second", true, false); err != nil {
 		t.Fatalf("commit: %v", err)
 	}
 

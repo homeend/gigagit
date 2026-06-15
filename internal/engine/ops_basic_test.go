@@ -76,7 +76,7 @@ func TestStashOpByPath(t *testing.T) {
 	if err := repo.StagePaths(ctx, []string{"other.txt"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := repo.Commit(ctx, "add other", false); err != nil {
+	if err := repo.Commit(ctx, "add other", false, false); err != nil {
 		t.Fatal(err)
 	}
 	os.WriteFile(filepath.Join(dir, "README.md"), []byte("changed-readme\n"), 0o644)
@@ -151,5 +151,26 @@ func TestStashDropRemoves(t *testing.T) {
 	}
 	if list, _ := repo.StashList(ctx); len(list) != 0 {
 		t.Fatal("drop should remove the stash")
+	}
+}
+
+func TestCommitAmend(t *testing.T) {
+	dir, repo := newRepo(t)
+	// newRepo leaves a single "initial" commit. Stage a change and amend it.
+	os.WriteFile(filepath.Join(dir, "f.txt"), []byte("x\n"), 0o644)
+	gitE(t, dir, "add", ".")
+
+	res, err := Commit{Message: "reworded", Amend: true}.Run(context.Background(), OpDeps{Repo: repo})
+	if err != nil {
+		t.Fatalf("amend: %v", err)
+	}
+	if res.Summary != "amended" {
+		t.Fatalf("summary = %q, want amended", res.Summary)
+	}
+	if got := gitOut(t, dir, "log", "-1", "--pretty=%s"); got != "reworded" {
+		t.Fatalf("subject = %q, want reworded", got)
+	}
+	if got := gitOut(t, dir, "rev-list", "--count", "HEAD"); got != "1" {
+		t.Fatalf("commit count = %q, want 1 (amend must not add a commit)", got)
 	}
 }

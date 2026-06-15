@@ -68,7 +68,7 @@ func TestPushPropagatesCommit(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(clone, "f.txt"), []byte("v2\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := repo.Commit(context.Background(), "v2", true); err != nil {
+	if err := repo.Commit(context.Background(), "v2", true, false); err != nil {
 		t.Fatalf("commit: %v", err)
 	}
 	if err := repo.Push(context.Background(), "origin", "main", false); err != nil {

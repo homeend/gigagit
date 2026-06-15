@@ -27,7 +27,8 @@ type GitOps interface {
 	FastForwardRef(ctx context.Context, remote, branch string) error
 	Push(ctx context.Context, remote, branch string, setUpstream bool) error
 	Switch(ctx context.Context, branch string) error
-	Commit(ctx context.Context, message string, all bool) error
+	Commit(ctx context.Context, message string, all, amend bool) error
+	LastCommitMessage(ctx context.Context) (string, error)
 	ResetSoft(ctx context.Context, ref string) error
 
 	StashList(ctx context.Context) ([]string, error)

@@ -8,11 +8,22 @@ import (
 )
 
 // Commit records staged changes. When all is true, modified/deleted tracked
-// files are staged first (commit -a).
-func (r *Repo) Commit(ctx context.Context, message string, all bool) error {
-	argv := gitcmd.New("commit").ArgIf(all, "-a").Arg("-m", message).ToArgv()
+// files are staged first (commit -a). When amend is true, it rewrites the last
+// commit (commit --amend) instead of creating a new one.
+func (r *Repo) Commit(ctx context.Context, message string, all, amend bool) error {
+	argv := gitcmd.New("commit").ArgIf(all, "-a").ArgIf(amend, "--amend").Arg("-m", message).ToArgv()
 	_, err := r.Runner.Run(ctx, "git commit", argv)
 	return err
+}
+
+// LastCommitMessage returns HEAD's full commit message (subject + body).
+func (r *Repo) LastCommitMessage(ctx context.Context) (string, error) {
+	argv := gitcmd.New("log").Arg("-1", "--pretty=%B").ToArgv()
+	res, err := r.Runner.Run(ctx, "git log -1", argv)
+	if err != nil {
+		return "", err
+	}
+	return res.Stdout, nil
 }
 
 // Switch checks out an existing branch.

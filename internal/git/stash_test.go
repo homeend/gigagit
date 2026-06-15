@@ -95,7 +95,7 @@ func TestStashPushByPathRoundTrip(t *testing.T) {
 	if err := repo.StagePaths(ctx, []string{"keep.txt", "stashme.txt"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := repo.Commit(ctx, "baseline", false); err != nil {
+	if err := repo.Commit(ctx, "baseline", false, false); err != nil {
 		t.Fatal(err)
 	}
 	os.WriteFile(filepath.Join(dir, "keep.txt"), []byte("changed-keep\n"), 0o644)
