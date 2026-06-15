@@ -177,9 +177,20 @@ func (r *Repo) StashCommit(ctx context.Context, ref string) (string, error) {
 ```go
 func TestStashPushByPathRoundTrip(t *testing.T) {
 	r := newRepo(t) // existing helper: real git in t.TempDir() with an initial commit
-	writeFile(t, r, "keep.txt", "changed-keep\n") // existing helper used elsewhere in package
-	writeFile(t, r, "stashme.txt", "changed-stash\n")
 	ctx := context.Background()
+	// Both files must be TRACKED before a path-scoped stash without -u: git
+	// stash push -- <untracked> errors ("did not match any file"). So commit a
+	// baseline, then stash a MODIFICATION of one tracked file.
+	writeFile(t, r, "keep.txt", "base\n")
+	writeFile(t, r, "stashme.txt", "base\n")
+	if err := r.AddAll(ctx); err != nil { // or: r.Runner.Run(ctx, "git add", gitcmd.New("add").Arg("-A").ToArgv())
+		t.Fatal(err)
+	}
+	if err := r.Commit(ctx, "baseline", false); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, r, "keep.txt", "changed-keep\n")
+	writeFile(t, r, "stashme.txt", "changed-stash\n")
 	if err := r.StashPush(ctx, "WIP on main", []string{"stashme.txt"}, false); err != nil {
 		t.Fatal(err)
 	}
@@ -242,10 +253,10 @@ In `internal/engine/gitops.go`, replace the three stash lines (currently :33-35)
 
 - [ ] **Step 2: Fix the auto-stash call sites (compile fix)**
 
-`StashPush`/`StashPop` are called by the smart ops. Update each call to the new signatures:
-- `internal/engine/smart_merge.go`, `smart_pull.go`, `smart_rebase.go`, `smart_switch.go`: `StashPush(ctx, "gg-autostash:"+X)` → `StashPush(ctx, "gg-autostash:"+X, nil, true)` (auto-stash takes everything incl. untracked); `StashPop(ctx)` → `StashPop(ctx, "")`.
+`StashPush`/`StashPop` are called by the smart ops. Update each call to the new signatures, **preserving today's behavior exactly**:
+- `internal/engine/smart_merge.go`, `smart_pull.go`, `smart_rebase.go`, `smart_switch.go`: `StashPush(ctx, "gg-autostash:"+X)` → `StashPush(ctx, "gg-autostash:"+X, nil, false)`; `StashPop(ctx)` → `StashPop(ctx, "")`.
 
-Run `go build ./...` and fix exactly the reported call sites — there are 4 push and ~5 pop sites (see spec's "What already exists").
+**Pass `false`, not `true`.** The original `StashPush` had no `-u`, so the auto-stash never included untracked files; passing `true` would silently change four shipped ops (and likely break their tests). `nil` paths = whole tree, matching the old call. Run `go build ./...` and fix exactly the reported call sites — there are 4 push and ~5 pop sites (see spec's "What already exists").
 
 - [ ] **Step 3: Write the failing op tests**
 
@@ -956,38 +967,45 @@ Add to the routing chain (model.go ~:271, alongside the other popups — place b
 
 - [ ] **Step 5: Render the popup**
 
-In `internal/tui/view.go` `render()`, where other popups are overlaid (grep for `m.pairPopup != nil` overlay in `render()`), add a branch rendering `m.renderStashPopup()`. Implement a centered overlay in `stash_popup.go`:
+The popup is composited exactly like the pair-op popup: the render method returns a `modalStyle`-framed body string, and `render()` overlays it via `overlayCenter`. First, wire it in `internal/tui/view.go` `render()` — find the existing pair-op overlay (`if m.pairPopup != nil { w,h := m.overlayDims(); return overlayCenter(bg, m.renderPairOpPopup(), w, h) }`) and add a sibling **before** it (action popup is added in Chunk C):
+
+```go
+	if m.stashPopup != nil {
+		w, h := m.overlayDims()
+		return overlayCenter(bg, m.renderStashPopup(), w, h)
+	}
+```
+
+Then implement the body in `stash_popup.go`, mirroring `renderPairOpPopup` (`internal/tui/pairop_popup.go`) — `modalStyle.Width(popupInnerWidth(w)).Render(body) + "\n"`, with `selectedRow.Render` on the cursor row:
 
 ```go
 func (m Model) renderStashPopup() string {
 	p := m.stashPopup
+	var b strings.Builder
 	nameCursor := ""
 	if p.field == 0 {
 		nameCursor = "▏"
 	}
-	lines := []string{
-		"Stash changes",
-		"",
-		"name: " + p.name + nameCursor,
-		"",
-	}
+	b.WriteString("Stash changes\n\nname: " + p.name + nameCursor + "\n\n")
 	for i, f := range p.files {
 		box := "[ ]"
 		if f.included {
 			box = "[x]"
 		}
-		cursor := "  "
+		row := box + " " + f.path
 		if p.field == 1 && i == p.sel {
-			cursor = "> "
+			b.WriteString(selectedRow.Render("> "+row) + "\n")
+		} else {
+			b.WriteString("  " + row + "\n")
 		}
-		lines = append(lines, cursor+box+" "+f.path)
 	}
-	lines = append(lines, "", "[space] toggle  [tab] name/files  [ctrl+s] stash  [esc] cancel")
-	return overlayBox(m, lines) // use the package's existing centered-overlay helper
+	b.WriteString("\n[space] toggle  [tab] name/files  [ctrl+s] stash  [esc] cancel")
+	w, _ := m.overlayDims()
+	return modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"
 }
 ```
 
-> Use whatever centered-overlay/box helper `view.go` already uses for `pairPopup`/`branchPopup` (grep `render()` for the helper that frames those — e.g. `centerOverlay`, `popupBox`). Match it; do not invent a new framing primitive.
+(`modalStyle`, `popupInnerWidth`, `overlayCenter`, `overlayDims`, `selectedRow` all already exist — see `renderPairOpPopup`. Add `"strings"` to the file's imports.)
 
 - [ ] **Step 6: Run to verify pass**
 
@@ -1230,7 +1248,49 @@ func (m Model) renderStashList(boxW, boxH int) string {
 }
 ```
 
-> `renderListBox`: if `renderPanel` can be reused with a synthetic label + selection, prefer that. `renderPanel` is panel-keyed (`m.sel[p]`, `m.panelFocused(p)`), so it won't fit a non-panel list directly. Add a small sibling helper next to `renderPanel` in `view.go` that takes (label, rows, sel, boxW, boxH, focused) and reuses the same border styles (`focusedPanel`/`bluredPanel`), `windowRows`, `truncate`, `padRight`. The `focused` arg is true when the stash list owns focus (no files view open).
+`renderPanel` is panel-keyed (`m.sel[p]`, `m.panelFocused(p)`) so it can't render a non-panel list directly. Add this sibling helper next to `renderPanel` in `internal/tui/view.go`, reusing the same primitives (`windowRows`, `truncate`, `padRight`, `focusedPanel`/`bluredPanel`, `selectedRow`):
+
+```go
+// renderListBox draws a bordered boxW×boxH list that is not backed by a panel
+// (used by the stash window). focused selects the border + highlight styles.
+func (m Model) renderListBox(label string, rows []string, sel, boxW, boxH int, focused bool) string {
+	contentH := boxH - 2
+	if contentH < 1 {
+		contentH = 1
+	}
+	innerW := boxW - 4
+	if innerW < 1 {
+		innerW = 1
+	}
+	rowsCap := contentH - 1
+	if rowsCap < 0 {
+		rowsCap = 0
+	}
+	lines := []string{padRight(truncate(label, innerW), innerW)}
+	if rowsCap >= 1 && len(rows) > 0 {
+		win, selInWin, _ := windowRows(rows, rowsCap, sel)
+		for i, row := range win {
+			prefix := "  "
+			if i == selInWin && focused {
+				prefix = "> "
+			}
+			line := padRight(truncate(prefix+row, innerW), innerW)
+			if i == selInWin && focused {
+				line = selectedRow.Render(line)
+			}
+			lines = append(lines, line)
+		}
+	}
+	for len(lines) < contentH {
+		lines = append(lines, padRight("", innerW))
+	}
+	style := bluredPanel
+	if focused {
+		style = focusedPanel
+	}
+	return style.Render(strings.Join(lines, "\n"))
+}
+```
 
 In `internal/tui/view.go` `render()`, change the right-column line (:218) to:
 
@@ -1582,23 +1642,28 @@ func (m Model) updateStashActionKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) renderStashActionPopup() string {
 	a := m.stashAction
+	w, _ := m.overlayDims()
+	var b strings.Builder
 	if a.confirming {
-		return overlayBox(m, []string{"Drop " + a.ref + "?", "", a.subject, "", "[y] drop   [n] cancel"})
+		b.WriteString("Drop " + a.ref + "?\n\n" + a.subject + "\n\n[y] drop   [n] cancel")
+		return modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"
 	}
-	lines := []string{"Stash " + a.ref, a.subject, ""}
+	b.WriteString("Stash " + a.ref + "\n" + a.subject + "\n\n")
 	for i, name := range stashActions {
-		cursor := "  "
 		if i == a.sel {
-			cursor = "> "
+			b.WriteString(selectedRow.Render("> "+name) + "\n")
+		} else {
+			b.WriteString("  " + name + "\n")
 		}
-		lines = append(lines, cursor+name)
 	}
-	lines = append(lines, "", "[enter] do  [esc] cancel")
-	return overlayBox(m, lines) // same centered-overlay helper as the stash popup
+	b.WriteString("\n[enter] do  [esc] cancel")
+	return modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"
 }
 ```
 
-Add `stashAction *stashActionPopup` to `Model`. In `internal/tui/stash_view.go`, replace the `enter` no-op:
+(Add `"strings"` to the imports. Same `modalStyle`/`popupInnerWidth`/`selectedRow` pattern as `renderStashPopup`/`renderPairOpPopup`.)
+
+Add `stashAction *stashActionPopup` to `Model`. Wire it into `render()` (`internal/tui/view.go`) as a centered overlay **before** the `stashPopup` branch (so an open action popup composites on top): `if m.stashAction != nil { w, h := m.overlayDims(); return overlayCenter(bg, m.renderStashActionPopup(), w, h) }`. In `internal/tui/stash_view.go`, replace the `enter` no-op:
 
 ```go
 	case "enter":
