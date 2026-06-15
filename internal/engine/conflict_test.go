@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/gigagit/gg/internal/git"
@@ -70,6 +71,39 @@ func TestResolveConflictDelete(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, "md.txt")); !os.IsNotExist(err) {
 		t.Error("md.txt should be deleted")
+	}
+}
+
+func TestContinueOpFinishesMerge(t *testing.T) {
+	_, repo := newConflictRepo(t)
+	ctx := context.Background()
+	ev := func() OpDeps { return OpDeps{Repo: repo, Events: make(chan Event, 16)} }
+	// resolve both conflicts, then continue the merge (exercises the
+	// RunEnv/GIT_EDITOR=true editor-safe --continue path).
+	if _, err := (ResolveConflict{Path: "uu.txt", Action: KeepTheirs}).Run(ctx, ev()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := (ResolveConflict{Path: "md.txt", Action: DeleteFile}).Run(ctx, ev()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := (ContinueOp{}).Run(ctx, ev()); err != nil {
+		t.Fatal(err)
+	}
+	if ok, _ := repo.MergeInProgress(ctx, ""); ok {
+		t.Error("merge should be finished after continue")
+	}
+	st, _ := repo.Status(ctx)
+	if len(st.Conflicts()) != 0 {
+		t.Errorf("continue should leave a clean tree, got %d conflicts", len(st.Conflicts()))
+	}
+	// HEAD is now a merge commit: two parents.
+	out, err := repo.Runner.Run(ctx, "git rev-list parents",
+		[]string{"rev-list", "--parents", "-n", "1", "HEAD"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := len(strings.Fields(out.Stdout)); n != 3 { // commit + 2 parents
+		t.Errorf("HEAD should be a merge commit (self + 2 parents), got %d fields: %q", n, out.Stdout)
 	}
 }
 

@@ -60,7 +60,9 @@ func (p *conflictPopup) actionHint() string {
 		if p.inProgress != "" {
 			return strings.Join([]string{"[c] continue " + p.inProgress, "[a] abort"}, "  ")
 		}
-		return "all resolved — commit with c"
+		// No merge/rebase to continue (e.g. a stash-pop conflict): the resolved
+		// changes are staged, so the user closes the popup and commits with c.
+		return "all resolved — press [esc], then [c] to commit"
 	}
 	var parts []string
 	if p.sel >= 0 && p.sel < len(p.files) {
