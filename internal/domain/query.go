@@ -177,6 +177,11 @@ func (s *Service) CurrentBranch(ctx context.Context) (string, error) {
 	return query(ctx, s, "current-branch", s.repo.CurrentBranch)
 }
 
+// LastCommitMessage returns HEAD's full commit message, under a Read reservation.
+func (s *Service) LastCommitMessage(ctx context.Context) (string, error) {
+	return query(ctx, s, "last-commit-message", s.repo.LastCommitMessage)
+}
+
 // FileLog returns up to limit commits touching path at rev, newest first,
 // under a Read reservation, coalesced per (rev, path, limit).
 func (s *Service) FileLog(ctx context.Context, rev, path string, limit int) ([]model.FileCommit, error) {
