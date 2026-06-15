@@ -1,0 +1,25 @@
+name = "stash by path: stashes only the named file, leaving others dirty"
+
+[input]
+steps = [
+  { write = "a.txt", content = "a1\n" },
+  { write = "b.txt", content = "b1\n" },
+  { commit = "initial" },
+  { write = "a.txt", content = "a2\n" },
+  { write = "b.txt", content = "b2\n" },
+]
+
+[[run]]
+cmd  = ["stash", "-m", "wip", "--", "a.txt"]
+exit = 0
+
+[expect]
+branch  = "main"
+stashes = 1
+
+[expect.files]
+"a.txt" = "a1\n"             # stashed → reverted
+"b.txt" = "b2\n"             # untouched → still dirty
+
+[expect.status]
+unstaged = ["b.txt"]

@@ -1,0 +1,21 @@
+name = "stash apply conflict: aborts (exit 1) when local changes would be overwritten"
+
+[input]
+steps = [
+  { write = "a.txt", content = "v1\n" },
+  { commit = "initial" },
+  { write = "a.txt", content = "v2\n" },
+  { stash = "wip" },                 # reverts a.txt to v1; stash holds v2
+  { write = "a.txt", content = "local\n" },  # re-dirty before applying
+]
+
+[[run]]
+cmd  = ["stash", "apply"]
+exit = 1                             # git refuses: local change would be overwritten
+
+[expect]
+branch  = "main"
+stashes = 1                          # the failed apply keeps the stash
+
+[expect.files]
+"a.txt" = "local\n"                  # unchanged: the apply was aborted, not partial

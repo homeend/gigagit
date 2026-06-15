@@ -27,15 +27,18 @@ func (r *Repo) StashPop(ctx context.Context, ref string) error {
 	return err
 }
 
-// StashApply restores ref into the working tree, keeping the stash.
+// StashApply restores ref (newest when ref is "") into the working tree,
+// keeping the stash.
 func (r *Repo) StashApply(ctx context.Context, ref string) error {
-	_, err := r.Runner.Run(ctx, "git stash apply", gitcmd.New("stash").Arg("apply", ref).ToArgv())
+	b := gitcmd.New("stash").Arg("apply").ArgIf(ref != "", ref)
+	_, err := r.Runner.Run(ctx, "git stash apply", b.ToArgv())
 	return err
 }
 
-// StashDrop deletes ref without applying it.
+// StashDrop deletes ref (newest when ref is "") without applying it.
 func (r *Repo) StashDrop(ctx context.Context, ref string) error {
-	_, err := r.Runner.Run(ctx, "git stash drop", gitcmd.New("stash").Arg("drop", ref).ToArgv())
+	b := gitcmd.New("stash").Arg("drop").ArgIf(ref != "", ref)
+	_, err := r.Runner.Run(ctx, "git stash drop", b.ToArgv())
 	return err
 }
 

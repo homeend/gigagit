@@ -1,0 +1,20 @@
+name = "stash apply: restores the change and keeps the stash"
+
+[input]
+steps = [
+  { write = "a.txt", content = "v1\n" },
+  { commit = "initial" },
+  { write = "a.txt", content = "v2\n" },
+  { stash = "wip" },          # reverts a.txt to v1; stash holds v2
+]
+
+[[run]]
+cmd  = ["stash", "apply"]     # no ref → newest stash
+exit = 0
+
+[expect]
+branch  = "main"
+stashes = 1                   # apply keeps the stash
+
+[expect.files]
+"a.txt" = "v2\n"              # change restored

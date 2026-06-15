@@ -66,15 +66,54 @@ func cmdSwitch(svc *domain.Service, args []string, stdout, stderr io.Writer) int
 	return finish(res, err, stdout, stderr)
 }
 
+// cmdStash dispatches the stash subcommands (list/apply/pop/drop); with no
+// subcommand it pushes a new stash (optionally scoped to paths).
 func cmdStash(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
+	if len(args) > 0 {
+		switch args[0] {
+		case "list":
+			return cmdStashList(svc, stdout, stderr)
+		case "apply":
+			return cmdStashRef(svc, args[1:], func(ref string) engine.Operation { return engine.StashApply{Ref: ref} }, stdout, stderr)
+		case "pop":
+			return cmdStashRef(svc, args[1:], func(ref string) engine.Operation { return engine.StashPop{Ref: ref} }, stdout, stderr)
+		case "drop":
+			return cmdStashRef(svc, args[1:], func(ref string) engine.Operation { return engine.StashDrop{Ref: ref} }, stdout, stderr)
+		}
+	}
 	fs := flag.NewFlagSet("stash", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	msg := fs.String("m", "gg stash", "stash message")
+	untracked := fs.Bool("u", false, "include untracked files")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	res, err := runOperation(context.Background(), svc,
-		engine.Stash{Message: *msg}, cliDecider{}, stderr)
+		engine.Stash{Message: *msg, Paths: fs.Args(), IncludeUntracked: *untracked}, cliDecider{}, stderr)
+	return finish(res, err, stdout, stderr)
+}
+
+// cmdStashList prints the stash entries, newest first.
+func cmdStashList(svc *domain.Service, stdout, stderr io.Writer) int {
+	entries, err := svc.StashList(context.Background())
+	if err != nil {
+		fmt.Fprintln(stderr, "error:", err)
+		return 1
+	}
+	for _, e := range entries {
+		fmt.Fprintf(stdout, "%s: %s\n", e.Ref, e.Subject)
+	}
+	return 0
+}
+
+// cmdStashRef runs a stash op against an optional ref (default: the newest
+// stash). build maps the ref to the engine op.
+func cmdStashRef(svc *domain.Service, args []string, build func(ref string) engine.Operation, stdout, stderr io.Writer) int {
+	ref := ""
+	if len(args) > 0 {
+		ref = args[0]
+	}
+	res, err := runOperation(context.Background(), svc, build(ref), cliDecider{}, stderr)
 	return finish(res, err, stdout, stderr)
 }
 

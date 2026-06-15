@@ -15,6 +15,9 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - TUI: `S` opens a stash list window in the right column; `l` shows the selected
   stash's files in the tree (diff / history `h` / blame `b`, like commit files);
   `enter` opens an action popup to apply, pop, or drop the selected stash.
+- CLI: `gg stash` gains `list`, `apply [<ref>]`, `pop [<ref>]`, `drop [<ref>]`
+  subcommands, plus `-u` and `-- <paths>` on push. A conflicting apply/pop exits
+  non-zero and keeps the stash. (agentskill v8)
 
 ### Fixed
 - Panel filter (`/`): `↑`/`↓` (and `pgup`/`pgdn`) now move the selection through

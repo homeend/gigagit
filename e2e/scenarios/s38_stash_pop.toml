@@ -1,0 +1,20 @@
+name = "stash pop: restores the change and removes the stash"
+
+[input]
+steps = [
+  { write = "a.txt", content = "v1\n" },
+  { commit = "initial" },
+  { write = "a.txt", content = "v2\n" },
+  { stash = "wip" },
+]
+
+[[run]]
+cmd  = ["stash", "pop"]
+exit = 0
+
+[expect]
+branch  = "main"
+stashes = 0                   # pop drops the stash
+
+[expect.files]
+"a.txt" = "v2\n"              # change restored
