@@ -85,22 +85,29 @@ their own unit tests even before the editor is visible.
   todo-file path; `gg __rebase-seq` rewrites the todo to match the plan:
   - **pick** → `pick <sha>`
   - **reword** → `pick <sha>` followed by
-    `exec <gg-bin> __rebase-reword <planpath> <index>`
-  - **squash** → `fixup <sha>` (melds into the previous todo line, keeps that
-    line's message — see the v1 simplification below)
+    `exec <gg-bin> __rebase-message <planpath> <index>`
+  - **squash group** (a target commit + the commits melded into it) →
+    `pick <target>`, then `fixup <each squashed>` (applies their *changes*,
+    discards their individual messages), then one
+    `exec <gg-bin> __rebase-message <planpath> <groupindex>` that applies the
+    composed combined message
   - **drop** → line omitted
   - reorder → todo line order follows the plan order
-- `gg __rebase-reword <planpath> <index>` runs as a rebase `exec` step with the
-  just-applied commit at HEAD; it amends HEAD's message to the plan entry's
-  message via `git commit --amend -F <tempfile>` (message written from the
-  plan). **Only `GIT_SEQUENCE_EDITOR` is needed — no `GIT_EDITOR`**, sidestepping
-  the "which commit is git asking about" problem.
-- Both subcommands are routed in `cmd/gg/main.go` alongside the existing hidden
-  routes; they are not user-facing.
-- **v1 Squash = `fixup`**: melds into the older neighbor and keeps that
-  neighbor's message (the squashed commit's message is dropped). A
-  combined-message squash (interactive message merge) is deferred — it would
-  reintroduce a message editor.
+- `gg __rebase-message <planpath> <index>` runs as a rebase `exec` step with the
+  just-applied (and, for a squash group, already-melded) commit at HEAD; it
+  amends HEAD's message via `git commit --amend -F <tempfile>` (message written
+  from the plan entry). **Only `GIT_SEQUENCE_EDITOR` is needed — no
+  `GIT_EDITOR`**, sidestepping the "which commit is git asking about" problem.
+  The one mechanism powers both Reword (user-typed message) and Squash
+  (gg-composed message).
+- Both subcommands (`__rebase-seq`, `__rebase-message`) are routed in
+  `cmd/gg/main.go` alongside the existing hidden routes; they are not
+  user-facing.
+- **Squash combined message:** because gg holds every commit's message in the
+  plan, it composes the group's message deterministically — the **target
+  (first) commit's subject as the title**, then **each squashed commit's message
+  on its own line in the body** — and stores it as the group's plan message. No
+  message editor is involved.
 
 ### Slice 3 — engine `InteractiveRebase` op
 
@@ -169,7 +176,9 @@ existing `startOp → opFinishedMsg → loadCmd()` path.
 
 ## Out of scope (later)
 
-- **Combined-message squash** (interactive message merge) — v1 uses `fixup`.
+- **Editing the composed squash message** before running — v1 auto-composes
+  (target subject + squashed messages line-by-line); tweaking it is a later
+  Reword on the squashed result.
 - **Merge commits** in the range — refused in v1 (linear only;
   `--rebase-merges` is a later concern).
 - **Edit / break / exec** todo actions beyond pick/reword/squash/drop.
@@ -206,7 +215,7 @@ existing `startOp → opFinishedMsg → loadCmd()` path.
 | Slice | File | Change |
 |---|---|---|
 | 1 | `internal/gitexec/runner.go`, `exec.go`, `fake.go`, `limit.go` (+tests) | per-command env on `Run`/`Stream` |
-| 2 | `internal/rebaseplan/` (new: plan type + serialize + todo rewrite), `cmd/gg/main.go` (hidden routes) (+tests) | plan format + `__rebase-seq` / `__rebase-reword` |
+| 2 | `internal/rebaseplan/` (new: plan type + serialize + todo rewrite + squash-message compose), `cmd/gg/main.go` (hidden routes) (+tests) | plan format + `__rebase-seq` / `__rebase-message` |
 | 3 | `internal/git/rebase.go` (interactive verb + `RebaseContinue`/range helpers), `internal/engine/interactive_rebase.go`, `internal/engine/gitops.go` (+tests) | the op + verbs |
 | 4 | `internal/tui/irebase_view.go` (+test), `internal/tui/mark.go` (3rd pair-op), `internal/tui/model.go`/`view.go`/`footer.go`/`help.go`, `internal/cli/cli.go` (`rebase -i --plan`), `e2e/scenarios/interactive-rebase.toml`, `internal/agentskill/using-gg.md` + `agentskill.go` (bump), `CHANGELOG.md`, `README.md` | editor + CLI + docs |
 
@@ -216,7 +225,9 @@ existing `startOp → opFinishedMsg → loadCmd()` path.
    range `selected..marked`. ✓
 2. Editor display newest-first; `p/s/r/d` actions; `ctrl+↑/↓` reorder;
    `enter`/`esc`/`R`. ✓
-3. Execution via `GIT_SEQUENCE_EDITOR`-only + `exec` reword lines; v1
-   Squash = `fixup`. ✓
+3. Execution via `GIT_SEQUENCE_EDITOR`-only + `exec` message lines (one
+   mechanism for Reword and Squash). Squash composes a combined message:
+   target subject as title, each squashed commit's message line-by-line in the
+   body. ✓
 4. Auto stash-wrap; paused-conflict leaves the stash for manual pop. ✓
 5. Scriptable CLI entry + e2e scenario included. ✓
