@@ -103,7 +103,11 @@ func (m Model) updateStashViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.filesStashTag = e.Ref
 		return m, m.loadStashFilesCmd(e.Ref)
 	case "enter":
-		// stash-action popup — implemented in Chunk C; no-op until then.
+		if v.sel < 0 || v.sel >= len(v.entries) {
+			return m, nil
+		}
+		e := v.entries[v.sel]
+		m.stashAction = &stashActionPopup{ref: e.Ref, subject: e.Subject}
 		return m, nil
 	}
 	return m, nil

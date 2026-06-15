@@ -44,7 +44,8 @@ type Model struct {
 	mark       *markState      // the m-key mark; nil = none (see mark.go)
 	fileMarks  map[string]bool // multi-selected Status file paths (keyed by path)
 	pairPopup  *pairOpPopup    // two-row operation picker; nil = closed
-	stashPopup *stashPopup     // create-stash dialog; nil = closed
+	stashPopup  *stashPopup       // create-stash dialog; nil = closed
+	stashAction *stashActionPopup // apply/pop/drop menu for a stash; nil = closed
 
 	stashView *stashView // stash list in the right column (over Commits); nil = closed
 
@@ -277,6 +278,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.contentPopup != nil {
 			return m.updateContentPopupKey(msg)
+		}
+		if m.stashAction != nil {
+			return m.updateStashActionKey(msg)
 		}
 		if m.stashPopup != nil {
 			return m.updateStashPopupKey(msg)
