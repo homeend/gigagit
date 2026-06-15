@@ -46,6 +46,8 @@ type Model struct {
 	pairPopup  *pairOpPopup    // two-row operation picker; nil = closed
 	stashPopup *stashPopup     // create-stash dialog; nil = closed
 
+	stashView *stashView // stash list in the right column (over Commits); nil = closed
+
 	filesView        *contentPopup // commit files tree replacing the left column; nil = closed
 	filesTitle       string        // "Files <short-hash> <subject>", updated with the content
 	filesHash        string        // commit the view wants; gates stale async results
@@ -365,8 +367,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m.startOp(engine.SmartSwitch{Branch: b.Name})
 			}
 		case "S":
-			if !m.running && !m.loading {
-				return m.startOp(engine.Stash{Message: "gg stash"})
+			if m.opsIdle() {
+				return m.openStashView()
 			}
 		case "u":
 			if !m.running && !m.loading {
@@ -594,6 +596,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loadGen++
 		return m, m.loadCmd()
 
+	case stashListMsg:
+		if m.stashView == nil || msg.tag != m.stashView.tag {
+			return m, nil
+		}
+		m.stashView.loading = false
+		if msg.err != nil {
+			m.stashView.err = msg.err
+			return m, nil
+		}
+		m.stashView.entries = msg.entries
+		if m.stashView.sel >= len(msg.entries) {
+			m.stashView.sel = max(0, len(msg.entries)-1)
+		}
+		return m, nil
+
 	case statusRefreshedMsg:
 		m.running = false
 		if msg.err != nil {
@@ -679,6 +696,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.sel = map[panel]int{}
 	m.mark = nil      // a mark from the old repo must not re-attach by name in the new one
 	m.fileMarks = nil // likewise drop Status file-marks from the old repo
+	m.stashView = nil // the new repo has its own stashes
 	m.filesView = nil // the new repo has a different commit list
 	m.filesHash = ""
 	m.filesTreeFocused = false
