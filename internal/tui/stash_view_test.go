@@ -28,3 +28,18 @@ func TestStashListAppliedToView(t *testing.T) {
 		t.Fatalf("entries not applied: %+v", got.stashView)
 	}
 }
+
+func TestStashViewRendersInRightColumn(t *testing.T) {
+	m := Model{width: 100, height: 30, sel: map[panel]int{}, status: model.WorkingTreeStatus{Branch: "main"}}
+	m.stashView = &stashView{entries: []model.StashEntry{
+		{Ref: "stash@{0}", Subject: "On main: WIP on main"},
+		{Ref: "stash@{1}", Subject: "On feat: sketch"},
+	}}
+	out := m.View()
+	if !contains(out, "Stashes") {
+		t.Errorf("right column should be titled Stashes:\n%s", out)
+	}
+	if !contains(out, "WIP on main") || !contains(out, "sketch") {
+		t.Errorf("stash subjects missing:\n%s", out)
+	}
+}

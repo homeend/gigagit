@@ -223,7 +223,12 @@ func (m Model) renderInterface() string {
 			m.renderPanel(panelStatus, m.panelLabel(panelStatus, "Status"), stRows, g.leftW, g.boxH[panelStatus]),
 		)
 	}
-	right := m.renderPanel(panelCommits, m.panelLabel(panelCommits, "Commits"), cmRows, g.rightW, g.boxH[panelCommits])
+	var right string
+	if m.stashView != nil {
+		right = m.renderStashList(g.rightW, g.boxH[panelCommits])
+	} else {
+		right = m.renderPanel(panelCommits, m.panelLabel(panelCommits, "Commits"), cmRows, g.rightW, g.boxH[panelCommits])
+	}
 	body := lipgloss.JoinHorizontal(lipgloss.Top, left, right)
 
 	return strings.Join([]string{header, body, footer, statusLine}, "\n")
@@ -287,6 +292,46 @@ func (m Model) renderPanel(p panel, label string, rows []string, boxW, boxH int)
 
 	style := bluredPanel
 	if m.panelFocused(p) {
+		style = focusedPanel
+	}
+	return style.Render(strings.Join(lines, "\n"))
+}
+
+// renderListBox draws a bordered boxW×boxH list that is not backed by a panel
+// (used by the stash window). focused selects the border + highlight styles.
+func (m Model) renderListBox(label string, rows []string, sel, boxW, boxH int, focused bool) string {
+	contentH := boxH - 2
+	if contentH < 1 {
+		contentH = 1
+	}
+	innerW := boxW - 4
+	if innerW < 1 {
+		innerW = 1
+	}
+	rowsCap := contentH - 1
+	if rowsCap < 0 {
+		rowsCap = 0
+	}
+	lines := []string{padRight(truncate(label, innerW), innerW)}
+	if rowsCap >= 1 && len(rows) > 0 {
+		win, selInWin, _ := windowRows(rows, rowsCap, sel)
+		for i, row := range win {
+			prefix := "  "
+			if i == selInWin && focused {
+				prefix = "> "
+			}
+			line := padRight(truncate(prefix+row, innerW), innerW)
+			if i == selInWin && focused {
+				line = selectedRow.Render(line)
+			}
+			lines = append(lines, line)
+		}
+	}
+	for len(lines) < contentH {
+		lines = append(lines, padRight("", innerW))
+	}
+	style := bluredPanel
+	if focused {
 		style = focusedPanel
 	}
 	return style.Render(strings.Join(lines, "\n"))
