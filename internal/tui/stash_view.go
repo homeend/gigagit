@@ -64,8 +64,7 @@ func (m Model) updateStashViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	switch msg.String() {
 	case "S", "esc":
-		m.stashView = nil
-		return m, nil
+		return m.closeStashView(), nil
 	case "down", "j":
 		if v.sel < len(v.entries)-1 {
 			v.sel++
@@ -99,7 +98,9 @@ func (m Model) updateStashViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.filesView = &contentPopup{lines: []contentLine{{text: "(loading…)"}}}
 		m.filesTitle = "Files " + e.Ref + " " + e.Subject
 		m.filesHash = "" // set when the SHA resolves
-		m.filesTreeFocused = true
+		// Open with focus on the stash list (follow-live), exactly like the
+		// commit files view; ←/→ move focus to/from the tree.
+		m.filesTreeFocused = false
 		m.filesStashTag = e.Ref
 		return m, m.loadStashFilesCmd(e.Ref)
 	case "enter":
@@ -130,11 +131,51 @@ func (m Model) renderStashList(boxW, boxH int) string {
 	case len(v.entries) == 0:
 		rows = []string{"(no stashes)"}
 	}
-	return m.renderListBox("Stashes", rows, v.sel, boxW, boxH, m.filesView == nil)
+	// Focused (bright border, highlighted cursor) unless the file tree owns
+	// focus — mirrors panelFocused(panelCommits) for the commit files view.
+	focused := !(m.filesView != nil && m.filesTreeFocused)
+	return m.renderListBox("Stashes", rows, v.sel, boxW, boxH, focused)
 }
 
-// openStashView opens (or refreshes) the stash list window.
+// openStashView opens the stash list window in the right column and moves focus
+// there (mirroring the Commits panel): the prior left panel is remembered and
+// dims via panelFocused while m.focus is panelCommits.
 func (m Model) openStashView() (Model, tea.Cmd) {
+	m = m.rememberLeftFocus()
+	m.focus = panelCommits
 	m.stashView = &stashView{loading: true, tag: "stash"}
 	return m, m.loadStashListCmd(m.stashView.tag)
+}
+
+// closeStashView closes the window and restores focus to the left panel that
+// had it before S was pressed.
+func (m Model) closeStashView() Model {
+	m.stashView = nil
+	m.focus = m.lastLeftPanel
+	return m
+}
+
+// moveStashUnderFilesView shifts the stash selection by delta and fires the
+// follow-live reload when it lands on a different stash (the file tree is open).
+// Staleness is keyed on the ref (filesStashTag), since ref→SHA is async.
+func (m Model) moveStashUnderFilesView(delta int) (tea.Model, tea.Cmd) {
+	v := m.stashView
+	s := v.sel + delta
+	if s > len(v.entries)-1 {
+		s = len(v.entries) - 1
+	}
+	if s < 0 {
+		s = 0
+	}
+	if s == v.sel {
+		return m, nil
+	}
+	v.sel = s
+	e := v.entries[s]
+	if e.Ref == m.filesStashTag { // the tree already shows this stash
+		return m, nil
+	}
+	m.filesTitle = "Files " + e.Ref + " " + e.Subject
+	m.filesStashTag = e.Ref
+	return m, m.loadStashFilesCmd(e.Ref)
 }

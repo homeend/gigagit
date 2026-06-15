@@ -171,6 +171,12 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, m.loadBlameCmd(ctx, bv.tag)
 	case "enter":
 		if !m.filesTreeFocused {
+			// List side: for a stash, enter opens the Apply/Pop/Drop popup
+			// (the list's defining verb); for commits it's a no-op.
+			if v := m.stashView; v != nil && v.sel >= 0 && v.sel < len(v.entries) {
+				e := v.entries[v.sel]
+				m.stashAction = &stashActionPopup{ref: e.Ref, subject: e.Subject}
+			}
 			return m, nil
 		}
 		vis := p.visible()
@@ -203,13 +209,13 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			p.move(-1)
 			return m, nil
 		}
-		return m.moveCommitUnderFilesView(-1)
+		return m.moveListUnderFilesView(-1)
 	case "down", "j":
 		if m.filesTreeFocused {
 			p.move(1)
 			return m, nil
 		}
-		return m.moveCommitUnderFilesView(1)
+		return m.moveListUnderFilesView(1)
 	case "ctrl+up": // always the tree, from either side
 		p.move(-1)
 	case "ctrl+down":
@@ -219,15 +225,25 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			p.move(-m.filesPageRows())
 			return m, nil
 		}
-		return m.moveCommitUnderFilesView(-m.pageStep())
+		return m.moveListUnderFilesView(-m.pageStep())
 	case "pgdown":
 		if m.filesTreeFocused {
 			p.move(m.filesPageRows())
 			return m, nil
 		}
-		return m.moveCommitUnderFilesView(m.pageStep())
+		return m.moveListUnderFilesView(m.pageStep())
 	}
 	return m, nil
+}
+
+// moveListUnderFilesView moves the list side (the right column) by delta and
+// fires its follow-live reload: the stash list when the file tree is showing a
+// stash, otherwise the Commits list.
+func (m Model) moveListUnderFilesView(delta int) (tea.Model, tea.Cmd) {
+	if m.stashView != nil {
+		return m.moveStashUnderFilesView(delta)
+	}
+	return m.moveCommitUnderFilesView(delta)
 }
 
 // moveCommitUnderFilesView shifts the Commits selection by delta and fires

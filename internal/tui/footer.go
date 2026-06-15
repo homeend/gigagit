@@ -78,6 +78,10 @@ func (m Model) footerLine() string {
 	if m.filesView != nil {
 		return "files: [←/→ tab] focus  [↑/↓] move  [ctrl+↑/↓] tree  [enter] diff  [/] search  [h] hist  [b] blame  [esc/l] close"
 	}
+	// The stash list owns the keyboard while open (no file tree yet).
+	if m.stashView != nil {
+		return "stash: [↑/↓] move  [l] files  [enter] apply/pop/drop  [esc/S] close"
+	}
 	var ctx, glob []string
 	for _, b := range contextBindings {
 		if b.when(m) {
