@@ -51,11 +51,15 @@ func ParseStatusV2(data []byte) (model.WorkingTreeStatus, error) {
 			}
 		case 'u':
 			fields := strings.SplitN(tok, " ", 11)
-			path := ""
 			if len(fields) >= 11 {
-				path = fields[10]
+				xy := fields[1]
+				st.Files = append(st.Files, model.FileStatus{
+					Path:     fields[10],
+					Staged:   xy[0],
+					Unstaged: xy[1],
+					Kind:     model.KindUnmerged,
+				})
 			}
-			st.Files = append(st.Files, model.FileStatus{Path: path, Kind: model.KindUnmerged})
 		case '?':
 			st.Files = append(st.Files, model.FileStatus{Path: strings.TrimSpace(tok[1:]), Kind: model.KindUntracked})
 		case '!':
