@@ -21,6 +21,12 @@ type FileStatus struct {
 	Kind     FileKind
 }
 
+// StashEntry is one stash list row: its ref (stash@{N}) and human description.
+type StashEntry struct {
+	Ref     string // "stash@{0}"
+	Subject string // text after the ref, e.g. "On main: WIP on main"
+}
+
 // WorkingTreeStatus is a snapshot of the working tree and branch position.
 type WorkingTreeStatus struct {
 	Branch   string
