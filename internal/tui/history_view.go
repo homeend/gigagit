@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/gigagit/gg/internal/domain"
 	"github.com/gigagit/gg/internal/model"
@@ -26,6 +27,8 @@ type historyView struct {
 	ctx     navContext
 	commits []model.FileCommit
 	sel     int
+	mode    dispMode // left list text display mode; z cycles
+	hscroll int      // modeScroll horizontal offset
 	loading bool
 	err     error
 	diff    *diffView // right pane (reuses diffView rendering + guards)
@@ -126,22 +129,24 @@ func (h *historyView) render(m Model) string {
 		listW = (w - 1) / 2
 	}
 
-	rows := make([]string, 0, len(h.commits))
+	wr := make([]winRow, len(h.commits))
 	for i, fc := range h.commits {
-		line := shortHash(fc.Hash) + "  " + fc.Status + "  " + truncate(fc.Subject, listW-16)
+		line := shortHash(fc.Hash) + "  " + fc.Status + "  " + fc.Subject
+		prefix := "  "
+		var st lipgloss.Style
 		if i == h.sel {
-			rows = append(rows, selectedRow.Render(padRight(truncate("> "+line, listW), listW)))
-		} else {
-			rows = append(rows, padRight(truncate("  "+line, listW), listW))
+			prefix = "> "
+			st = selectedRow
 		}
+		wr[i] = winRow{text: prefix + line, style: st}
 	}
-	win, _, _ := windowRows(rows, body, h.sel)
+	win := renderWindow(wr, winOpts{w: listW, h: body, mode: h.mode, anchor: h.sel, hscroll: h.hscroll})
 	if h.loading {
-		win = []string{padRight("  (loading…)", listW)}
+		win = padLines("  (loading…)", listW, body)
 	} else if h.err != nil {
-		win = []string{padRight(truncate("  error: "+h.err.Error(), listW), listW)}
+		win = padLines("  error: "+h.err.Error(), listW, body)
 	} else if len(h.commits) == 0 {
-		win = []string{padRight("  (no history)", listW)}
+		win = padLines("  (no history)", listW, body)
 	}
 	for len(win) < body {
 		win = append(win, padRight("", listW))
@@ -195,6 +200,20 @@ func (h *historyView) renderRightPane(m Model, w, body int) string {
 	return strings.Join(lines[:body], "\n")
 }
 
+// padLines returns a body-high block whose first line is s (truncated to w),
+// the rest blank — the list-pane placeholder for loading/error/empty states.
+func padLines(s string, w, body int) []string {
+	if body < 1 {
+		body = 1
+	}
+	out := make([]string, body)
+	out[0] = padRight(truncate(s, w), w)
+	for i := 1; i < body; i++ {
+		out[i] = padRight("", w)
+	}
+	return out
+}
+
 // padBox renders s as the first line of a w×body block, blank-filled.
 func padBox(s string, w, body int) string {
 	lines := make([]string, body)
@@ -210,6 +229,22 @@ func (h *historyView) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 	switch msg.String() {
+	case "z":
+		h.mode = h.mode.next()
+		h.hscroll = 0
+		return m, nil
+	case "shift+left":
+		if h.mode == modeScroll && h.hscroll > 0 {
+			if h.hscroll -= m.hscrollStep(); h.hscroll < 0 {
+				h.hscroll = 0
+			}
+		}
+		return m, nil
+	case "shift+right":
+		if h.mode == modeScroll {
+			h.hscroll += m.hscrollStep()
+		}
+		return m, nil
 	// q is inert here: only the base layout quits on q. esc is the back key;
 	// ctrl+c (handled above) remains the universal quit.
 	case "esc", "h":

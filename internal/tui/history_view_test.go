@@ -109,3 +109,16 @@ func TestDiffViewHOpensHistory(t *testing.T) {
 		t.Errorf("wrong navContext: %+v", h.ctx)
 	}
 }
+
+func TestHistoryViewWrapMode(t *testing.T) {
+	h := &historyView{
+		ctx:     navContext{path: "x"},
+		commits: []model.FileCommit{{Commit: model.Commit{Hash: "abcdef0", Subject: strings.Repeat("w", 80)}, Status: "M", Path: "x"}},
+		mode:    modeWrap,
+	}
+	m := Model{width: 50, height: 20} // < 60 => list-only, easier to assert
+	out := h.render(m)
+	if strings.Count(out, "w") < 30 {
+		t.Errorf("history wrap mode did not expand the subject:\n%s", out)
+	}
+}

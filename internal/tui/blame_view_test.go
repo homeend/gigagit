@@ -283,3 +283,17 @@ func TestBlameRenderRowsFullWidthAndSanitized(t *testing.T) {
 		}
 	}
 }
+
+func TestBlameViewWrapMode(t *testing.T) {
+	b := &blameView{
+		ctx:   navContext{path: "x"},
+		lines: []model.BlameLine{{Hash: "abcdef0", Author: "a", Content: strings.Repeat("y", 200)}},
+		mode:  modeWrap,
+	}
+	b.blocks = groupBlame(b.lines)
+	m := Model{width: 80, height: 24}
+	out := b.render(m)
+	if strings.Count(out, "y") < 100 {
+		t.Errorf("blame wrap mode did not expand the long code line:\n%s", out)
+	}
+}

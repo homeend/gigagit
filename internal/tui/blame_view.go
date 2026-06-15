@@ -7,6 +7,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/gigagit/gg/internal/model"
 )
@@ -19,6 +20,8 @@ type blameView struct {
 	lines   []model.BlameLine
 	blocks  []blameBlock // grouped runs, recomputed after each load
 	sel     int          // line cursor (index into lines)
+	mode    dispMode     // text display mode; z cycles (applies to the whole gutter│code row)
+	hscroll int          // modeScroll horizontal offset
 	loading bool
 	err     error
 	tag     string // gates stale loads
@@ -125,43 +128,35 @@ func (b *blameView) render(m Model) string {
 	if gw < 0 {
 		gw = 0
 	}
-	codeW := w - gw - 1
-	if codeW < 1 {
-		codeW = 1
-	}
 
 	now := time.Now()
-	rows := make([]string, len(b.lines))
+	wr := make([]winRow, len(b.lines))
 	for i, ln := range b.lines {
 		gutter := padRight("", gw)
 		if i == 0 || b.lines[i-1].Hash != ln.Hash {
 			gutter = padRight(truncate(blameGutterText(ln, now), gw), gw)
 		}
 		// Sanitize tabs/control runes (like the diff pane) so indentation maps to
-		// display columns, and pad EVERY row to full width so scrolling never
-		// leaves stale cells from a longer prior line (or a moved highlight).
-		content := truncate(sanitizeLine(ln.Content), codeW)
-		row := padRight(gutter+"│"+content, w)
+		// display columns. The full row (gutter + code) is the layout unit; the
+		// primitive truncates (cutoff), wraps, or h-scrolls it per b.mode.
+		var st lipgloss.Style
 		if i == b.sel {
-			row = selectedRow.Render(row)
+			st = selectedRow
 		}
-		rows[i] = row
+		wr[i] = winRow{text: gutter + "│" + sanitizeLine(ln.Content), style: st}
 	}
 
-	win, _, _ := windowRows(rows, body, b.sel)
+	win := renderWindow(wr, winOpts{w: w, h: body, mode: b.mode, anchor: b.sel, hscroll: b.hscroll})
 	switch {
 	case b.loading:
-		win = []string{"  (loading…)"}
+		win = padLines("  (loading…)", w, body)
 	case b.err != nil:
-		win = []string{truncate("  error: "+b.err.Error(), w)}
+		win = padLines("  error: "+b.err.Error(), w, body)
 	case len(b.lines) == 0:
-		win = []string{"  (empty)"}
-	}
-	for len(win) < body {
-		win = append(win, "")
+		win = padLines("  (empty)", w, body)
 	}
 
-	out := header + "\n" + strings.Join(win[:body], "\n") + "\n" + hint
+	out := header + "\n" + strings.Join(win, "\n") + "\n" + hint
 	return clipToHeight(out, scrH)
 }
 
@@ -187,6 +182,22 @@ func (b *blameView) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 	switch msg.String() {
+	case "z":
+		b.mode = b.mode.next()
+		b.hscroll = 0
+		return m, nil
+	case "shift+left":
+		if b.mode == modeScroll && b.hscroll > 0 {
+			if b.hscroll -= m.hscrollStep(); b.hscroll < 0 {
+				b.hscroll = 0
+			}
+		}
+		return m, nil
+	case "shift+right":
+		if b.mode == modeScroll {
+			b.hscroll += m.hscrollStep()
+		}
+		return m, nil
 	// q is inert here: only the base layout quits on q. esc is the back key;
 	// ctrl+c (handled above) remains the universal quit.
 	case "esc", "b":
