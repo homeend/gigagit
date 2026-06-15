@@ -42,6 +42,8 @@ func helpContent() []contentLine {
 		r("enter", "switch into the selected worktree"),
 		r("d", "remove the selected worktree"),
 		h("Status panel"),
+		r("m", "mark / unmark a file (multi-select for stashing)"),
+		r("s", "stash changes: popup to name + pick files (ctrl+s confirms)"),
 		r("space", "stage / unstage the selected file"),
 		r("enter", "side-by-side diff of the file (HEAD → working tree)"),
 		r("h", "file history: commits that touched it (left) + per-commit diff (right)"),

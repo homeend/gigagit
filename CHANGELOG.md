@@ -8,6 +8,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+### Added
+- TUI: `m` multi-marks files in the Status panel; `s` opens a stash-create popup
+  (name defaults to `WIP on <branch>`, a checklist of unstaged/untracked files,
+  `ctrl+s` stashes the checked ones).
+
 ### Fixed
 - Panel filter (`/`): `↑`/`↓` (and `pgup`/`pgdn`) now move the selection through
   the filtered rows while still typing the query — an incremental picker, like
