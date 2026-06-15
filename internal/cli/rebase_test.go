@@ -9,6 +9,36 @@ import (
 	"testing"
 )
 
+func TestRebaseInteractiveRequiresPlan(t *testing.T) {
+	dir := newRepoDir(t)
+	var out, errb bytes.Buffer
+	code := Run(dir, []string{"rebase", "-i", "main"}, strings.NewReader(""), &out, &errb, "")
+	if code != 2 {
+		t.Fatalf("exit %d, want 2 (usage)", code)
+	}
+	if !strings.Contains(errb.String(), "--plan") {
+		t.Fatalf("stderr %q should mention --plan", errb.String())
+	}
+}
+
+func TestRebasePlanRequiresInteractive(t *testing.T) {
+	dir := newRepoDir(t)
+	var out, errb bytes.Buffer
+	code := Run(dir, []string{"rebase", "--plan", "/tmp/x.json", "main"}, strings.NewReader(""), &out, &errb, "")
+	if code != 2 {
+		t.Fatalf("exit %d, want 2 (usage)", code)
+	}
+}
+
+func TestRebaseInteractiveBadPlanFile(t *testing.T) {
+	dir := newRepoDir(t)
+	var out, errb bytes.Buffer
+	code := Run(dir, []string{"rebase", "-i", "--plan", "/nonexistent/plan.json", "main"}, strings.NewReader(""), &out, &errb, "")
+	if code != 2 {
+		t.Fatalf("exit %d, want 2 (unreadable plan)", code)
+	}
+}
+
 // rebaseFixture: feat diverges from main with a disjoint file, main advances
 // disjointly; ends on feat (the branch to rebase).
 func rebaseFixture(t *testing.T) string {
