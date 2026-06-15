@@ -32,6 +32,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ### Added
 
+#### Commit (`c`)
+- `c` opens a commit popup with a **title** and a multi-line **description**,
+  and commits the staged index. `tab` switches fields, `enter` moves title →
+  description (and inserts newlines in the body), `ctrl+s` commits, `esc`
+  cancels. Empty title is refused; `c` with nothing staged is a no-op.
+
 #### Staging (`space` in the Status panel)
 - `space` on a Status-panel file stages it (`git add`), or unstages it
   (`git restore --staged`) when it is already fully staged; conflicted files
