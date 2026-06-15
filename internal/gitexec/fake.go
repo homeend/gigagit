@@ -11,6 +11,7 @@ import (
 type FakeCall struct {
 	Name string
 	Argv []string
+	Env  []string
 }
 
 // FakeRunner is an in-memory Runner for tests. Run is safe for concurrent
@@ -33,9 +34,13 @@ func (f *FakeRunner) SetResponse(name string, r Result) { f.responses[name] = r 
 // SetError configures an error returned for a given span name.
 func (f *FakeRunner) SetError(name string, err error) { f.errs[name] = err }
 
-func (f *FakeRunner) Run(_ context.Context, name string, argv []string) (Result, error) {
+func (f *FakeRunner) Run(ctx context.Context, name string, argv []string) (Result, error) {
+	return f.RunEnv(ctx, name, argv, nil)
+}
+
+func (f *FakeRunner) RunEnv(_ context.Context, name string, argv, env []string) (Result, error) {
 	f.mu.Lock()
-	f.Calls = append(f.Calls, FakeCall{Name: name, Argv: argv})
+	f.Calls = append(f.Calls, FakeCall{Name: name, Argv: argv, Env: env})
 	err := f.errs[name]
 	r, ok := f.responses[name]
 	f.mu.Unlock()

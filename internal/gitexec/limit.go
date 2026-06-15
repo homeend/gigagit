@@ -19,9 +19,13 @@ type LimitRunner struct{ inner Runner }
 func NewLimitRunner(inner Runner) Runner { return &LimitRunner{inner: inner} }
 
 func (l *LimitRunner) Run(ctx context.Context, name string, argv []string) (Result, error) {
+	return l.RunEnv(ctx, name, argv, nil)
+}
+
+func (l *LimitRunner) RunEnv(ctx context.Context, name string, argv, env []string) (Result, error) {
 	gitSem <- struct{}{}
 	defer func() { <-gitSem }()
-	return l.inner.Run(ctx, name, argv)
+	return l.inner.RunEnv(ctx, name, argv, env)
 }
 
 func (l *LimitRunner) Stream(ctx context.Context, name string, argv []string, onLine func(string)) (Result, error) {

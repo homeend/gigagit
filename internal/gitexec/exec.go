@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -78,9 +79,16 @@ func asExit(err error, target **exec.ExitError) bool {
 }
 
 func (r *ExecRunner) Run(ctx context.Context, name string, argv []string) (Result, error) {
+	return r.RunEnv(ctx, name, argv, nil)
+}
+
+func (r *ExecRunner) RunEnv(ctx context.Context, name string, argv, env []string) (Result, error) {
 	start := r.now()
 	cmd := exec.CommandContext(ctx, r.gitPath, argv...)
 	cmd.Dir = r.workDir
+	if env != nil {
+		cmd.Env = append(os.Environ(), env...)
+	}
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

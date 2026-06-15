@@ -9,6 +9,34 @@ import (
 	"github.com/gigagit/gg/internal/observ"
 )
 
+func TestExecRunnerRunEnvPassesEnvToSubprocess(t *testing.T) {
+	r := NewExecRunner("git", t.TempDir(), nil)
+	// `git var GIT_EDITOR` prints the editor git would use, which honors the
+	// GIT_EDITOR environment variable. If our env reaches the subprocess, the
+	// output is exactly what we set.
+	res, err := r.RunEnv(context.Background(), "git var", []string{"var", "GIT_EDITOR"},
+		[]string{"GIT_EDITOR=gg-test-editor"})
+	if err != nil {
+		t.Fatalf("RunEnv: %v", err)
+	}
+	if got := strings.TrimSpace(res.Stdout); got != "gg-test-editor" {
+		t.Fatalf("GIT_EDITOR = %q, want gg-test-editor (env did not reach the subprocess)", got)
+	}
+}
+
+func TestExecRunnerRunStillInheritsEnv(t *testing.T) {
+	// Run (nil env) must keep working: it inherits the process environment.
+	t.Setenv("GIT_EDITOR", "inherited-editor")
+	r := NewExecRunner("git", t.TempDir(), nil)
+	res, err := r.Run(context.Background(), "git var", []string{"var", "GIT_EDITOR"})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if got := strings.TrimSpace(res.Stdout); got != "inherited-editor" {
+		t.Fatalf("GIT_EDITOR = %q, want inherited-editor", got)
+	}
+}
+
 func TestExecRunnerRunsGitVersion(t *testing.T) {
 	rec := observ.NewRing(10)
 	r := NewExecRunner("git", ".", rec)

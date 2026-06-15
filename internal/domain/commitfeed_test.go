@@ -24,6 +24,10 @@ type pagingRunner struct {
 	hit      chan struct{}
 }
 
+func (r *pagingRunner) RunEnv(ctx context.Context, name string, argv, env []string) (gitexec.Result, error) {
+	return r.Run(ctx, name, argv)
+}
+
 func (r *pagingRunner) Run(ctx context.Context, name string, argv []string) (gitexec.Result, error) {
 	if name != "git log" {
 		return gitexec.Result{}, nil

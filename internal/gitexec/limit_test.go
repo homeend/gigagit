@@ -27,6 +27,10 @@ func (r *countingRunner) Run(ctx context.Context, name string, argv []string) (R
 	return Result{}, nil
 }
 
+func (r *countingRunner) RunEnv(ctx context.Context, name string, argv, env []string) (Result, error) {
+	return r.Run(ctx, name, argv)
+}
+
 func (r *countingRunner) Stream(ctx context.Context, name string, argv []string, onLine func(string)) (Result, error) {
 	return r.Run(ctx, name, argv)
 }
