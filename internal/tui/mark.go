@@ -55,6 +55,19 @@ func (m Model) handleMarkKey() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	key := m.listFor(m.focus).Key(bi)
+	// Status panel: m toggles a multi-select set of files (for stashing), kept
+	// separate from the single-mark/pair-op machinery used on other panels.
+	if m.focus == panelStatus {
+		if m.fileMarks == nil {
+			m.fileMarks = map[string]bool{}
+		}
+		if m.fileMarks[key] {
+			delete(m.fileMarks, key)
+		} else {
+			m.fileMarks[key] = true
+		}
+		return m, nil
+	}
 	// No mark, a mark in another panel, or a dead mark: (re-)mark here.
 	if m.mark == nil || m.mark.panel != m.focus || !m.markAlive() {
 		m.mark = &markState{panel: m.focus, key: key, display: key}
@@ -71,6 +84,25 @@ func (m Model) handleMarkKey() (tea.Model, tea.Cmd) {
 	}
 	m.pairPopup = &pairOpPopup{marked: m.mark.display, selected: key, ops: ops}
 	return m, nil
+}
+
+// markedDisplayIndices returns the set of display-row indices in panel p that
+// carry a marker: the single mark, plus every Status fileMark.
+func (m Model) markedDisplayIndices(p panel) map[int]bool {
+	out := map[int]bool{}
+	if md := m.markDisplayIndex(p); md >= 0 {
+		out[md] = true
+	}
+	if p == panelStatus && len(m.fileMarks) > 0 {
+		l := m.listFor(p)
+		_, idx := m.panelView(p)
+		for n, i := range idx {
+			if m.fileMarks[l.Key(i)] {
+				out[n] = true
+			}
+		}
+	}
+	return out
 }
 
 // markAlive reports whether the marked row still exists in its panel's

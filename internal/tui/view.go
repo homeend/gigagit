@@ -260,15 +260,12 @@ func (m Model) renderPanel(p panel, label string, rows []string, boxW, boxH int)
 	} else if len(rows) == 0 {
 		lines = append(lines, padRight(truncate("  (none)", innerW), innerW))
 	} else {
+		marked := m.markedDisplayIndices(p)
 		win, selInWin, start := windowRows(rows, rowsCap, m.sel[p])
-		markedInWin := -1
-		if md := m.markDisplayIndex(p); md >= 0 {
-			markedInWin = md - start
-		}
 		for i, row := range win {
 			focused := i == selInWin && m.panelFocused(p)
 			prefix := "  "
-			if i == markedInWin {
+			if marked[start+i] {
 				prefix = "◆ "
 			} else if focused {
 				prefix = "> "

@@ -41,8 +41,9 @@ type Model struct {
 	pendingSwitchBranch string        // branch to SmartSwitch to after a successful op (B = create-and-switch)
 	contentPopup        *contentPopup // generic read-only viewer (help window)
 
-	mark      *markState   // the m-key mark; nil = none (see mark.go)
-	pairPopup *pairOpPopup // two-row operation picker; nil = closed
+	mark      *markState      // the m-key mark; nil = none (see mark.go)
+	fileMarks map[string]bool // multi-selected Status file paths (keyed by path)
+	pairPopup *pairOpPopup    // two-row operation picker; nil = closed
 
 	filesView        *contentPopup // commit files tree replacing the left column; nil = closed
 	filesTitle       string        // "Files <short-hash> <subject>", updated with the content
@@ -666,6 +667,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	// surprising row in the newly-loaded panels.
 	m.sel = map[panel]int{}
 	m.mark = nil      // a mark from the old repo must not re-attach by name in the new one
+	m.fileMarks = nil // likewise drop Status file-marks from the old repo
 	m.filesView = nil // the new repo has a different commit list
 	m.filesHash = ""
 	m.filesTreeFocused = false
