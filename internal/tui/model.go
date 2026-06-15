@@ -29,6 +29,7 @@ type Model struct {
 	gitCommonDir string
 
 	popup               *worktreePopup
+	commitPopup         *commitPopup // commit message dialog (title + description); nil = closed
 	repoPopup           *repoPopup
 	settings            *settingsPopup
 	initHomeDir         string // home dir for agent detection; "" skips home-scoped agents (tests)
@@ -256,6 +257,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.popup != nil {
 			return m.updatePopupKey(msg)
+		}
+		if m.commitPopup != nil {
+			return m.updateCommitPopupKey(msg)
 		}
 		if m.repoPopup != nil {
 			return m.updateRepoPopupKey(msg)
