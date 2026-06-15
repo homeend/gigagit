@@ -107,16 +107,9 @@ func (m Model) updateCommitPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// renderCommitPopup draws the two-field commit dialog.
-func (m Model) renderCommitPopup() string {
-	p := m.commitPopup
+// renderCommitFields draws the title/description fields with the focus cursor.
+func renderCommitFields(p *commitPopup) string {
 	var b strings.Builder
-	heading := "Commit"
-	if p.amend {
-		heading = "Amend last commit"
-	}
-	b.WriteString(heading + "\n\n")
-
 	titleCur, descCur := "  ", "  "
 	if p.field == 0 {
 		titleCur = "> "
@@ -129,7 +122,19 @@ func (m Model) renderCommitPopup() string {
 	for _, l := range descLines[1:] {
 		b.WriteString("             " + l + "\n")
 	}
+	return b.String()
+}
 
+// renderCommitPopup draws the two-field commit dialog.
+func (m Model) renderCommitPopup() string {
+	p := m.commitPopup
+	var b strings.Builder
+	heading := "Commit"
+	if p.amend {
+		heading = "Amend last commit"
+	}
+	b.WriteString(heading + "\n\n")
+	b.WriteString(renderCommitFields(p))
 	b.WriteString("\n[tab] switch field  [enter] newline/next  [ctrl+s] commit  [esc] cancel")
 
 	w, _ := m.overlayDims()
