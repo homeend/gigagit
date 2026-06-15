@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -85,9 +86,18 @@ func (p *conflictPopup) actionHint() string {
 	return strings.Join(parts, "  ")
 }
 
-// loadInProgressCmd probes whether a merge/rebase is in progress (Task 7 fills
-// the handler). Stub returns nil until then.
-func (m Model) loadInProgressCmd() tea.Cmd { return nil }
+// inProgressMsg carries the result of the merge/rebase-in-progress probe.
+type inProgressMsg struct{ op string }
+
+// loadInProgressCmd probes whether a merge/rebase is in progress so the popup
+// can offer continue/abort.
+func (m Model) loadInProgressCmd() tea.Cmd {
+	svc := m.svc
+	return func() tea.Msg {
+		op, _ := svc.InProgressOp(context.Background())
+		return inProgressMsg{op: op}
+	}
+}
 
 // keepModifiedAction maps a modify/delete file to the side that has content.
 func keepModifiedAction(f model.FileStatus) engine.ConflictAction {
@@ -127,6 +137,19 @@ func (m Model) updateConflictPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.conflictPopup = nil
 		m.reopenConflict = true
 		return m.startOp(engine.MarkAllResolved{Paths: paths})
+	case "c":
+		// Continue is allowed only once every conflict is resolved.
+		if p.inProgress != "" && len(p.files) == 0 {
+			m.conflictPopup = nil
+			return m.startOp(engine.ContinueOp{})
+		}
+		return m, nil
+	case "a":
+		if p.inProgress != "" {
+			m.conflictPopup = nil
+			return m.startOp(engine.AbortOp{})
+		}
+		return m, nil
 	}
 	if p.sel < 0 || p.sel >= len(p.files) {
 		return m, nil

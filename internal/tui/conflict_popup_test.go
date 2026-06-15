@@ -138,6 +138,24 @@ func TestConflictPopupModifyDeleteKeys(t *testing.T) {
 	driveOp(t, got, cmd)
 }
 
+func TestConflictPopupReopensAfterResolve(t *testing.T) {
+	m := conflictModel()
+	m.reopenConflict = true
+	// Simulate the post-op reload arriving with one conflict already cleared.
+	one := model.WorkingTreeStatus{Branch: "zzz", Files: []model.FileStatus{
+		{Path: "md.txt", Kind: model.KindUnmerged, Staged: 'D', Unstaged: 'U'},
+	}}
+	mm, cmd := m.Update(dataLoadedMsg{gen: m.loadGen, status: one})
+	got := mm.(Model)
+	if got.conflictPopup == nil || len(got.conflictPopup.files) != 1 {
+		t.Fatalf("popup should reopen with the remaining conflict, got %+v", got.conflictPopup)
+	}
+	if got.reopenConflict {
+		t.Error("reopenConflict should be cleared after reopening")
+	}
+	_ = cmd
+}
+
 func TestConflictPopupOpMapping(t *testing.T) {
 	// keep-modified on a DU file resolves to KeepTheirs (the present side).
 	du := model.FileStatus{Path: "md.txt", Kind: model.KindUnmerged, Staged: 'D', Unstaged: 'U'}
