@@ -2,9 +2,38 @@ package git
 
 import (
 	"context"
+	"strings"
 
 	"github.com/gigagit/gg/internal/gitcmd"
 )
+
+// RebaseInteractive replays the branch at dir ("" = this worktree) onto onto
+// under an interactive rebase, carrying env (e.g. GIT_SEQUENCE_EDITOR) for this
+// one invocation. The todo is driven non-interactively by the editor named in
+// env; no terminal editor opens.
+func (r *Repo) RebaseInteractive(ctx context.Context, dir, onto string, env []string) error {
+	b := gitcmd.New("rebase").Arg("-i").Arg(onto)
+	if dir != "" {
+		b = b.Dir(dir)
+	}
+	_, err := r.Runner.RunEnv(ctx, "git rebase -i", b.ToArgv(), env)
+	return err
+}
+
+// HasMergeCommits reports whether onto..branch contains any merge commits, at
+// dir ("" = this worktree). Interactive rebase v1 refuses such ranges.
+func (r *Repo) HasMergeCommits(ctx context.Context, dir, onto, branch string) (bool, error) {
+	b := gitcmd.New("rev-list").Arg("--merges").Arg("--count").Arg(onto + ".." + branch)
+	if dir != "" {
+		b = b.Dir(dir)
+	}
+	res, err := r.Runner.Run(ctx, "git rev-list --merges", b.ToArgv())
+	if err != nil {
+		return false, err
+	}
+	n := strings.TrimSpace(res.Stdout)
+	return n != "" && n != "0", nil
+}
 
 // Rebase replays the branch checked out at dir ("" = this repo's own
 // worktree) onto onto. Plain `git rebase <onto>` is non-interactive by default

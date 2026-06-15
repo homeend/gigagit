@@ -51,6 +51,8 @@ type GitOps interface {
 	MergeInProgress(ctx context.Context, dir string) (bool, error)
 
 	Rebase(ctx context.Context, dir, onto string) error
+	RebaseInteractive(ctx context.Context, dir, onto string, env []string) error
+	HasMergeCommits(ctx context.Context, dir, onto, branch string) (bool, error)
 	RebaseAbort(ctx context.Context, dir string) error
 	RebaseInProgress(ctx context.Context, dir string) (bool, error)
 

@@ -3,12 +3,68 @@ package git
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"testing"
 
 	"github.com/gigagit/gg/internal/gitexec"
 )
+
+func TestRebaseInteractiveArgvAndEnv(t *testing.T) {
+	f := gitexec.NewFakeRunner()
+	f.SetResponse("git rebase -i", gitexec.Result{})
+	r := &Repo{Runner: f}
+	env := []string{"GIT_SEQUENCE_EDITOR=/usr/bin/gg __rebase-seq /tmp/p.json"}
+	if err := r.RebaseInteractive(context.Background(), "", "main", env); err != nil {
+		t.Fatalf("rebase -i: %v", err)
+	}
+	if want := []string{"rebase", "-i", "main"}; !reflect.DeepEqual(f.Calls[0].Argv, want) {
+		t.Fatalf("argv = %v, want %v", f.Calls[0].Argv, want)
+	}
+	if !reflect.DeepEqual(f.Calls[0].Env, env) {
+		t.Fatalf("env = %v, want %v", f.Calls[0].Env, env)
+	}
+}
+
+// Real-git: --merges counting over a range with and without a merge commit.
+func TestHasMergeCommits(t *testing.T) {
+	dir, runner := newTestRepo(t) // one commit "initial" on main
+	repo := &Repo{Runner: runner}
+	git := func(args ...string) {
+		c := exec.Command("git", append([]string{"-C", dir}, args...)...)
+		c.Env = append(os.Environ(),
+			"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t",
+			"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+		if out, err := c.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	git("checkout", "-b", "feature")
+	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a\n"), 0o644)
+	git("add", ".")
+	git("commit", "-m", "feat a")
+	has, err := repo.HasMergeCommits(context.Background(), "", "main", "feature")
+	if err != nil {
+		t.Fatalf("has-merge: %v", err)
+	}
+	if has {
+		t.Fatal("linear range must report no merge commits")
+	}
+	git("checkout", "-b", "side", "main")
+	os.WriteFile(filepath.Join(dir, "b.txt"), []byte("b\n"), 0o644)
+	git("add", ".")
+	git("commit", "-m", "side b")
+	git("checkout", "feature")
+	git("merge", "--no-ff", "-m", "merge side", "side")
+	has, err = repo.HasMergeCommits(context.Background(), "", "main", "feature")
+	if err != nil {
+		t.Fatalf("has-merge: %v", err)
+	}
+	if !has {
+		t.Fatal("range with a merge commit must report true")
+	}
+}
 
 func TestRebaseArgv(t *testing.T) {
 	f := gitexec.NewFakeRunner()
