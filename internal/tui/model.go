@@ -362,6 +362,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.canCommit() {
 				m.commitPopup = &commitPopup{}
 			}
+		case "C":
+			if m.canAmend() {
+				return m, m.amendPrefillCmd()
+			}
 		case "s":
 			if m.focus == panelStatus && m.opsIdle() {
 				if mm, ok := m.openStashPopup(); ok {
@@ -653,6 +657,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if n := m.panelLen(panelStatus); n > 0 && m.sel[panelStatus] >= n {
 			m.sel[panelStatus] = n - 1
 		}
+		return m, nil
+
+	case amendPrefillMsg:
+		if msg.err != nil {
+			m.statusMsg = "amend: " + msg.err.Error()
+			return m, nil
+		}
+		title, desc := splitMessage(msg.msg)
+		m.commitPopup = &commitPopup{title: title, desc: desc, amend: true}
 		return m, nil
 	}
 	return m, nil

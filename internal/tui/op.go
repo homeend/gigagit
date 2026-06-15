@@ -36,6 +36,22 @@ func (m Model) stageCmd(op engine.Operation) tea.Cmd {
 	}
 }
 
+// amendPrefillMsg carries HEAD's message for the amend popup.
+type amendPrefillMsg struct {
+	msg string
+	err error
+}
+
+// amendPrefillCmd fetches HEAD's message off the UI thread, to pre-fill the
+// amend popup.
+func (m Model) amendPrefillCmd() tea.Cmd {
+	svc := m.svc
+	return func() tea.Msg {
+		s, err := svc.LastCommitMessage(context.Background())
+		return amendPrefillMsg{msg: s, err: err}
+	}
+}
+
 // opDecisionMsg asks the UI to resolve a fork; the op goroutine blocks on reply.
 type opDecisionMsg struct {
 	req   engine.DecisionRequest

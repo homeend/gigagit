@@ -51,6 +51,7 @@ var contextBindings = []footerBinding{
 // collapses to tab/help/quit).
 var globalBindings = []footerBinding{
 	{"c", "[c] commit", Model.canCommit},
+	{"C", "[C] amend", Model.canAmend},
 	{"p", "[p]ull", Model.opsIdle},
 	{"P", "[P]ush", func(m Model) bool { return m.opsIdle() && m.status.Branch != "" }},
 	{"S", "[S]tashes", Model.opsIdle},

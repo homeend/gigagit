@@ -31,6 +31,7 @@ func helpContent() []contentLine {
 		r("pgup/pgdn", "page the selection (25% of the viewport)"),
 		r("esc", "clear the mark, then the active filter"),
 		r("c", "commit the staged index (title + description popup)"),
+		r("C", "amend the last commit (edit message / fold in staged changes)"),
 		r("r", "reload all panels"),
 		r("?", "this help window"),
 		r("q/ctrl+c", "quit"),

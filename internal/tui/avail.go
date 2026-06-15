@@ -107,6 +107,11 @@ func (m Model) canCommit() bool {
 	return m.opsIdle() && m.status.Counts().Staged > 0
 }
 
+// canAmend reports whether HEAD has a commit to amend and no op is running.
+func (m Model) canAmend() bool {
+	return m.opsIdle() && len(m.commits) > 0
+}
+
 // canStage reports whether the selected Status row can be staged/unstaged:
 // the Status panel is focused, a row is selected, and no op is running.
 func (m Model) canStage() bool {

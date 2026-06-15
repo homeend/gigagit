@@ -52,3 +52,66 @@ func TestCKeyNoOpWhenNothingStaged(t *testing.T) {
 		t.Fatal("c must not open the popup when nothing is staged")
 	}
 }
+
+// gitSubj returns HEAD's subject line in dir.
+func gitSubj(t *testing.T, dir string) string {
+	t.Helper()
+	out, _ := exec.Command("git", "-C", dir, "log", "-1", "--pretty=%s").Output()
+	return strings.TrimSpace(string(out))
+}
+
+func TestCapCKeyAmendsLastCommit(t *testing.T) {
+	dir, repo := newRepoDir(t)
+	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a\n"), 0o644)
+	gitInDir(t, dir, "add", "a.txt")
+	gitInDir(t, dir, "commit", "-m", "original")
+	// stage a further change to fold into the amend
+	os.WriteFile(filepath.Join(dir, "b.txt"), []byte("b\n"), 0o644)
+	gitInDir(t, dir, "add", "b.txt")
+
+	countBefore := func() string {
+		out, _ := exec.Command("git", "-C", dir, "rev-list", "--count", "HEAD").Output()
+		return strings.TrimSpace(string(out))
+	}()
+
+	m := New(domain.New(repo))
+	loaded, _ := m.Update(m.loadCmd()())
+	m = loaded.(Model)
+
+	// C dispatches the prefill cmd; run it and feed the resulting msg back.
+	upd, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("C")})
+	m = upd.(Model)
+	if cmd == nil {
+		t.Fatal("C must dispatch the amend prefill cmd")
+	}
+	upd, _ = m.Update(cmd())
+	m = upd.(Model)
+	if m.commitPopup == nil || !m.commitPopup.amend {
+		t.Fatal("amend prefill must open the popup in amend mode")
+	}
+	if m.commitPopup.title != "original" {
+		t.Fatalf("prefill title = %q, want 'original'", m.commitPopup.title)
+	}
+
+	// reword by appending, then commit the amend
+	upd, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(" reworded")})
+	m = upd.(Model)
+	upd, opcmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlS})
+	m = upd.(Model)
+	if m.commitPopup != nil {
+		t.Fatal("ctrl+s must close the popup and start the amend")
+	}
+	m = driveOp(t, m, opcmd)
+
+	if got := gitSubj(t, dir); got != "original reworded" {
+		t.Fatalf("subject = %q, want 'original reworded'", got)
+	}
+	countAfter, _ := exec.Command("git", "-C", dir, "rev-list", "--count", "HEAD").Output()
+	if strings.TrimSpace(string(countAfter)) != countBefore {
+		t.Fatalf("commit count = %q, want %q (amend must not add a commit)", strings.TrimSpace(string(countAfter)), countBefore)
+	}
+	// the staged b.txt folded into the amended commit
+	if err := exec.Command("git", "-C", dir, "cat-file", "-e", "HEAD:b.txt").Run(); err != nil {
+		t.Fatalf("b.txt should be in the amended commit: %v", err)
+	}
+}
