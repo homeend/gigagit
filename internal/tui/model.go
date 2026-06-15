@@ -42,8 +42,9 @@ type Model struct {
 	contentPopup        *contentPopup // generic read-only viewer (help window)
 
 	mark      *markState      // the m-key mark; nil = none (see mark.go)
-	fileMarks map[string]bool // multi-selected Status file paths (keyed by path)
-	pairPopup *pairOpPopup    // two-row operation picker; nil = closed
+	fileMarks  map[string]bool // multi-selected Status file paths (keyed by path)
+	pairPopup  *pairOpPopup    // two-row operation picker; nil = closed
+	stashPopup *stashPopup     // create-stash dialog; nil = closed
 
 	filesView        *contentPopup // commit files tree replacing the left column; nil = closed
 	filesTitle       string        // "Files <short-hash> <subject>", updated with the content
@@ -274,6 +275,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.contentPopup != nil {
 			return m.updateContentPopupKey(msg)
 		}
+		if m.stashPopup != nil {
+			return m.updateStashPopupKey(msg)
+		}
 		if m.pairPopup != nil {
 			return m.updatePairPopupKey(msg)
 		}
@@ -349,6 +353,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.commitPopup = &commitPopup{}
 			}
 		case "s":
+			if m.focus == panelStatus && m.opsIdle() {
+				if mm, ok := m.openStashPopup(); ok {
+					return mm, nil
+				}
+				m.statusMsg = "nothing to stash"
+				return m, nil
+			}
 			if m.canSwitchBranch() {
 				b, _ := m.selectedBranch()
 				return m.startOp(engine.SmartSwitch{Branch: b.Name})
