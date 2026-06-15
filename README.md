@@ -84,7 +84,8 @@ gg branch create <name> [<start-point>]
 gg branch delete [--force] <name>
 gg merge [--into <target>] [--on-conflict=keep|abort] <source>
 gg rebase [--branch <b>] [--on-conflict=keep|abort] <newbase>
-gg stash [-m msg]
+gg stash [-m msg] [-u] [-- <paths>...]
+gg stash list | apply [<ref>] | pop [<ref>] | drop [<ref>]
 gg undo
 gg worktree list
 gg worktree add [<start-point>]

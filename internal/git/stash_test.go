@@ -155,3 +155,18 @@ func TestStashPushListPop(t *testing.T) {
 		t.Fatalf("expected change restored after pop, got %+v", c)
 	}
 }
+
+func TestStashApplyDropNoRefArgv(t *testing.T) {
+	f := gitexec.NewFakeRunner()
+	f.SetResponse("git stash apply", gitexec.Result{})
+	f.SetResponse("git stash drop", gitexec.Result{})
+	r := &Repo{Runner: f}
+	_ = r.StashApply(context.Background(), "")
+	_ = r.StashDrop(context.Background(), "")
+	if want := []string{"stash", "apply"}; !reflect.DeepEqual(f.Calls[0].Argv, want) {
+		t.Fatalf("apply no-ref argv = %v, want %v", f.Calls[0].Argv, want)
+	}
+	if want := []string{"stash", "drop"}; !reflect.DeepEqual(f.Calls[1].Argv, want) {
+		t.Fatalf("drop no-ref argv = %v, want %v", f.Calls[1].Argv, want)
+	}
+}

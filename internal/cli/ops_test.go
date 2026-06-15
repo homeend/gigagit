@@ -125,3 +125,80 @@ func TestPullBackgroundRejectsOnConflict(t *testing.T) {
 		t.Fatalf("expected an --on-conflict error:\n%s", errb)
 	}
 }
+
+func TestStashApplyPopDropCLI(t *testing.T) {
+	dir := newRepoDir(t)
+	os.WriteFile(filepath.Join(dir, "README.md"), []byte("changed\n"), 0o644)
+	if code, _, errb := runCLI(t, dir, "stash", "-m", "wip"); code != 0 {
+		t.Fatalf("stash: %d %s", code, errb)
+	}
+	// apply keeps the stash and restores the change
+	if code, _, errb := runCLI(t, dir, "stash", "apply"); code != 0 {
+		t.Fatalf("apply: %d %s", code, errb)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dir, "README.md")); string(b) != "changed\n" {
+		t.Fatalf("apply did not restore the change: %q", b)
+	}
+	if code, out, _ := runCLI(t, dir, "stash", "list"); code != 0 || !strings.Contains(out, "stash@{0}") {
+		t.Fatalf("list: code=%d out=%q", code, out)
+	}
+	// drop removes it
+	if code, _, errb := runCLI(t, dir, "stash", "drop", "stash@{0}"); code != 0 {
+		t.Fatalf("drop: %d %s", code, errb)
+	}
+	if code, out, _ := runCLI(t, dir, "stash", "list"); code != 0 || strings.TrimSpace(out) != "" {
+		t.Fatalf("stash list should be empty after drop: %q", out)
+	}
+}
+
+func TestStashPopCLI(t *testing.T) {
+	dir := newRepoDir(t)
+	os.WriteFile(filepath.Join(dir, "README.md"), []byte("changed\n"), 0o644)
+	if code, _, _ := runCLI(t, dir, "stash", "-m", "wip"); code != 0 {
+		t.Fatal("stash failed")
+	}
+	if code, _, errb := runCLI(t, dir, "stash", "pop"); code != 0 {
+		t.Fatalf("pop: %d %s", code, errb)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dir, "README.md")); string(b) != "changed\n" {
+		t.Errorf("pop did not restore the change: %q", b)
+	}
+	if code, out, _ := runCLI(t, dir, "stash", "list"); code != 0 || strings.TrimSpace(out) != "" {
+		t.Errorf("pop should remove the stash: %q", out)
+	}
+}
+
+func TestStashApplyConflictCLI(t *testing.T) {
+	dir := newRepoDir(t)
+	os.WriteFile(filepath.Join(dir, "README.md"), []byte("stashed\n"), 0o644)
+	if code, _, _ := runCLI(t, dir, "stash", "-m", "wip"); code != 0 {
+		t.Fatal("stash failed")
+	}
+	os.WriteFile(filepath.Join(dir, "README.md"), []byte("local\n"), 0o644)
+	code, _, errb := runCLI(t, dir, "stash", "apply")
+	if code == 0 {
+		t.Fatal("apply over a conflicting local change must exit non-zero")
+	}
+	if !strings.Contains(errb, "overwritten") {
+		t.Errorf("apply error should explain the conflict, got: %s", errb)
+	}
+}
+
+func TestStashByPathCLI(t *testing.T) {
+	dir := newRepoDir(t)
+	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, "b.txt"), []byte("b\n"), 0o644)
+	gitIn(t, dir, "add", ".")
+	gitIn(t, dir, "commit", "-m", "ab")
+	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a2\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, "b.txt"), []byte("b2\n"), 0o644)
+	if code, _, errb := runCLI(t, dir, "stash", "-m", "wip", "--", "a.txt"); code != 0 {
+		t.Fatalf("stash by path: %d %s", code, errb)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dir, "a.txt")); string(b) != "a\n" {
+		t.Errorf("a.txt should be reverted (stashed): %q", b)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dir, "b.txt")); string(b) != "b2\n" {
+		t.Errorf("b.txt should still be dirty: %q", b)
+	}
+}

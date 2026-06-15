@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v7 -->
+<!-- gg:using-gg:v8 -->
 
 # Using gg (gigagit)
 
@@ -45,7 +45,12 @@ guards against removing the worktree you are standing in.
   paused for `git rebase --continue` (exit 1), `--on-conflict=abort` runs
   `git rebase --abort` (exit 0); with neither and no TTY, a conflict exits 1
   with the options on stderr.
-- `gg stash [-m <msg>]` — stash the working tree.
+- `gg stash [-m <msg>] [-u] [-- <paths>...]` — stash the working tree (or only
+  the named paths; `-u` includes untracked files).
+- `gg stash list` — list stashes (`stash@{N}: <subject>`, newest first).
+- `gg stash apply [<ref>]` / `gg stash pop [<ref>]` / `gg stash drop [<ref>]` —
+  apply (keep), pop (apply + drop), or drop a stash; `<ref>` defaults to the
+  newest. A conflicting apply/pop exits non-zero and keeps the stash.
 - `gg undo` — undo the last commit, keeping its changes (ref-only soft reset).
 - `gg worktree list` / `gg worktree add [<start-point>]` /
   `gg worktree add --branch <name>` /
