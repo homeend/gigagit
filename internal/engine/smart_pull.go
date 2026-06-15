@@ -150,7 +150,7 @@ func (op SmartPull) checkoutPull(ctx context.Context, deps OpDeps, remote, targe
 	stashed := false
 	if dirty {
 		deps.emit(ctx, Progress{Step: "stashing"})
-		if err := repo.StashPush(ctx, "gg-autostash:"+target); err != nil {
+		if err := repo.StashPush(ctx, "gg-autostash:"+target, nil, false); err != nil {
 			return Result{}, err
 		}
 		stashed = true
@@ -159,7 +159,7 @@ func (op SmartPull) checkoutPull(ctx context.Context, deps OpDeps, remote, targe
 	deps.emit(ctx, Progress{Step: "switching", Detail: target})
 	if err := repo.Switch(ctx, target); err != nil {
 		if stashed {
-			_ = repo.StashPop(ctx)
+			_ = repo.StashPop(ctx, "")
 		}
 		return Result{}, err
 	}
@@ -173,7 +173,7 @@ func (op SmartPull) checkoutPull(ctx context.Context, deps OpDeps, remote, targe
 		deps.emit(ctx, Progress{Step: "switching back", Detail: returnTo})
 		if err := repo.Switch(ctx, returnTo); err != nil {
 			if stashed {
-				_ = repo.StashPop(ctx) // restore on target rather than strand the stash
+				_ = repo.StashPop(ctx, "") // restore on target rather than strand the stash
 				stashed = false
 			}
 			return Result{Summary: "pulled " + target + "; could not switch back to " + returnTo + " (changes restored on " + target + ")", Changed: true},
@@ -183,7 +183,7 @@ func (op SmartPull) checkoutPull(ctx context.Context, deps OpDeps, remote, targe
 
 	if stashed {
 		deps.emit(ctx, Progress{Step: "restoring changes"})
-		if err := repo.StashPop(ctx); err != nil {
+		if err := repo.StashPop(ctx, ""); err != nil {
 			deps.emit(ctx, DecisionNeeded{Request: DecisionRequest{
 				ID:      "stash-pop-conflict",
 				Prompt:  "Restoring your changes conflicted",

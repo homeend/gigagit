@@ -74,7 +74,7 @@ func (op SmartRebase) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	stashed := false
 	if dirty {
 		deps.emit(ctx, Progress{Step: "stashing"})
-		if err := deps.Repo.StashPush(ctx, "gg-autostash:"+branch); err != nil {
+		if err := deps.Repo.StashPush(ctx, "gg-autostash:"+branch, nil, false); err != nil {
 			return Result{}, err
 		}
 		stashed = true
@@ -82,7 +82,7 @@ func (op SmartRebase) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	deps.emit(ctx, Progress{Step: "switching", Detail: branch})
 	if err := deps.Repo.Switch(ctx, branch); err != nil {
 		if stashed {
-			_ = deps.Repo.StashPop(ctx) // best-effort restore on the original branch
+			_ = deps.Repo.StashPop(ctx, "") // best-effort restore on the original branch
 		}
 		return Result{}, err
 	}
@@ -98,7 +98,7 @@ func (op SmartRebase) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	}
 	if stashed {
 		deps.emit(ctx, Progress{Step: "restoring changes"})
-		if err := deps.Repo.StashPop(ctx); err != nil {
+		if err := deps.Repo.StashPop(ctx, ""); err != nil {
 			deps.emit(ctx, DecisionNeeded{Request: DecisionRequest{
 				ID:      "stash-pop-conflict",
 				Prompt:  "Restoring your changes conflicted",

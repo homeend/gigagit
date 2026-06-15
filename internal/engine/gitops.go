@@ -31,8 +31,11 @@ type GitOps interface {
 	ResetSoft(ctx context.Context, ref string) error
 
 	StashList(ctx context.Context) ([]string, error)
-	StashPush(ctx context.Context, message string) error
-	StashPop(ctx context.Context) error
+	StashPush(ctx context.Context, message string, paths []string, includeUntracked bool) error
+	StashPop(ctx context.Context, ref string) error
+	StashApply(ctx context.Context, ref string) error
+	StashDrop(ctx context.Context, ref string) error
+	StashCommit(ctx context.Context, ref string) (string, error)
 
 	CheckRefFormatBranch(ctx context.Context, name string) error
 	CreateBranch(ctx context.Context, name, startPoint string) error
