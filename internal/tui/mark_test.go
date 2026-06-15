@@ -135,8 +135,8 @@ func TestEscClearsMarkBeforeFilter(t *testing.T) {
 	}
 }
 
-// The Rebase pair-op builds SmartRebase with the inverted direction: the
-// SELECTED branch is rebased ONTO the MARKED branch.
+// The Rebase pair-op reads marked-first, matching Merge: the MARKED branch is
+// rebased ONTO the SELECTED branch (mark XXX, select YYY → "Rebase XXX onto YYY").
 func TestRebasePairOpDirection(t *testing.T) {
 	ops := pairOpsFor(panelBranches)
 	var rebase *pairOp
@@ -148,15 +148,15 @@ func TestRebasePairOpDirection(t *testing.T) {
 	if rebase == nil || !rebase.enabled || rebase.build == nil {
 		t.Fatal("Rebase pair-op must be enabled with a build func")
 	}
-	if got := rebase.label("main", "feat"); got != "Rebase feat onto main" {
-		t.Fatalf("label = %q, want %q", got, "Rebase feat onto main")
+	if got := rebase.label("main", "feat"); got != "Rebase main onto feat" {
+		t.Fatalf("label = %q, want %q", got, "Rebase main onto feat")
 	}
 	op, ok := rebase.build("main", "feat").(engine.SmartRebase) // marked=main, selected=feat
 	if !ok {
 		t.Fatalf("build returned %T, want engine.SmartRebase", rebase.build("main", "feat"))
 	}
-	if op.Branch != "feat" || op.Onto != "main" {
-		t.Fatalf("SmartRebase = %+v, want {Branch:feat Onto:main}", op)
+	if op.Branch != "main" || op.Onto != "feat" {
+		t.Fatalf("SmartRebase = %+v, want {Branch:main Onto:feat}", op)
 	}
 }
 
@@ -192,13 +192,13 @@ func TestPairPopupEnterRunsSmartRebase(t *testing.T) {
 	_, idx := m.panelView(panelBranches)
 	l := m.listFor(panelBranches)
 	for n, i := range idx {
-		if l.Key(i) == "main" {
+		if l.Key(i) == "feat" {
 			m.sel[panelBranches] = n
 		}
 	}
-	m = pressRune(t, m, "m") // mark main (the new base)
+	m = pressRune(t, m, "m") // mark feat (the branch to rebase)
 	for n, i := range idx {
-		if l.Key(i) == "feat" {
+		if l.Key(i) == "main" {
 			m.sel[panelBranches] = n
 		}
 	}

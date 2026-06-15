@@ -40,7 +40,7 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 #### Rebase (`gg rebase` + the TUI pair-op)
 - `gg rebase [--branch <b>] [--on-conflict=keep|abort] <newbase>` and the TUI
-  Branches mark-and-pair **"Rebase {selected} onto {marked}"** operation replay
+  Branches mark-and-pair **"Rebase {marked} onto {selected}"** operation replay
   a branch's commits onto a new base. Worktree-aware: rebases in place, in the
   worktree that has the branch checked out (you stay put), or autostashes and
   switches to it. A conflict pauses the rebase — `keep` leaves it for
