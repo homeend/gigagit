@@ -110,6 +110,20 @@ func TestIrebaseLoadedEmptyRangeNoOp(t *testing.T) {
 	}
 }
 
+// TestIrebaseEditorReceivesRoutedKeys proves the live routing: a key sent
+// through Model.Update reaches the editor surface on top of the stack (not just
+// direct e.update calls).
+func TestIrebaseEditorReceivesRoutedKeys(t *testing.T) {
+	e := newIrebaseEditor("work", "main", edRows(), "/bin/gg")
+	m := Model{width: 80, height: 24}
+	m = m.pushSurface(e)
+	updated, _ := m.Update(key("d")) // drop the focused (top) row
+	_ = updated.(Model)
+	if e.rows[0].action != rebaseplan.Drop {
+		t.Fatalf("routed key did not reach editor: top action = %q", e.rows[0].action)
+	}
+}
+
 // key/keyType/keyRunes helpers (reuse if already present in the tui test pkg).
 func key(s string) tea.KeyMsg          { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)} }
 func keyType(t tea.KeyType) tea.KeyMsg { return tea.KeyMsg{Type: t} }
