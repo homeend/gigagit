@@ -195,6 +195,14 @@ func (s *Service) FileLog(ctx context.Context, rev, path string, limit int) ([]m
 	})
 }
 
+// CommitRange lists onto..branch oldest-first with full messages, under a Read
+// reservation. Backs the interactive-rebase editor.
+func (s *Service) CommitRange(ctx context.Context, onto, branch string) ([]model.RangeCommit, error) {
+	return query(ctx, s, "commit-range:"+onto+".."+branch, func(c context.Context) ([]model.RangeCommit, error) {
+		return s.repo.LogRangeMessages(c, onto, branch)
+	})
+}
+
 // cachedBlame wraps a blame result so it can report its heap weight to the
 // byte-budgeted cache (a bare []model.BlameLine cannot implement Sized).
 type cachedBlame struct{ lines []model.BlameLine }

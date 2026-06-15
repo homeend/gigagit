@@ -20,6 +20,7 @@ type GitOps interface {
 	TopLevel(ctx context.Context) (string, error)
 	Worktrees(ctx context.Context) ([]model.Worktree, error)
 	WorktreeForBranch(ctx context.Context, branch string) (*model.Worktree, error)
+	LogRangeMessages(ctx context.Context, onto, branch string) ([]model.RangeCommit, error)
 
 	Fetch(ctx context.Context, remote string) error
 	Pull(ctx context.Context, remote, branch string, strategy git.PullStrategy) error
