@@ -84,7 +84,7 @@ func helpContent() []contentLine {
 		h("Stash window (S)"),
 		r("↑/k ↓/j", "move the stash selection"),
 		r("pgup/pgdn", "page the stash list"),
-		r("l", "show the selected stash's files in the tree (diff/h/blame, like commits)"),
+		r("l", "open the file tree for the stash (then ←/→ focus tree/list, like commit files)"),
 		r("enter", "stash actions: apply / pop / drop (drop confirms)"),
 		r("S/esc", "close the stash window"),
 		h("Diff view (enter)"),

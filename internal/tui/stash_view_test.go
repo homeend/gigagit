@@ -9,6 +9,7 @@ import (
 
 func TestCapitalSOpensStashView(t *testing.T) {
 	m := loadedModel(t)
+	m.focus = panelStatus
 	mm, cmd := m.Update(keyMsg("S"))
 	got := mm.(Model)
 	if got.stashView == nil {
@@ -16,6 +17,56 @@ func TestCapitalSOpensStashView(t *testing.T) {
 	}
 	if cmd == nil {
 		t.Error("opening the stash view should fire its load cmd")
+	}
+	if got.focus != panelCommits {
+		t.Error("opening the stash window should move focus to the right column (panelCommits)")
+	}
+	if got.panelFocused(panelStatus) {
+		t.Error("left panels must dim (unfocused) while the stash window is open")
+	}
+}
+
+func TestStashWindowArrowFocusSwitch(t *testing.T) {
+	m := loadedModel(t)
+	m.focus = panelCommits
+	m.stashView = &stashView{entries: []model.StashEntry{{Ref: "stash@{0}", Subject: "WIP"}}}
+	mm, _ := m.updateStashViewKey(keyMsg("l"))
+	m = mm.(Model)
+	if m.filesView == nil || m.filesTreeFocused {
+		t.Fatal("l should open the tree with focus on the stash list (filesTreeFocused=false)")
+	}
+	mm, _ = m.updateFilesViewKey(keyMsg("left"))
+	if !mm.(Model).filesTreeFocused {
+		t.Error("← should focus the file tree")
+	}
+	mm, _ = mm.(Model).updateFilesViewKey(keyMsg("right"))
+	if mm.(Model).filesTreeFocused {
+		t.Error("→ should focus the stash list")
+	}
+}
+
+func TestStashWindowCloseRestoresFocus(t *testing.T) {
+	m := loadedModel(t)
+	m.focus = panelStatus
+	mm, _ := m.Update(keyMsg("S"))
+	mm, _ = mm.(Model).updateStashViewKey(keyMsg("esc"))
+	got := mm.(Model)
+	if got.stashView != nil {
+		t.Fatal("esc should close the stash window")
+	}
+	if got.focus != panelStatus {
+		t.Errorf("closing should restore focus to panelStatus, got %v", got.focus)
+	}
+}
+
+func TestStashListEnterUnderTreeOpensActions(t *testing.T) {
+	m := loadedModel(t)
+	m.stashView = &stashView{entries: []model.StashEntry{{Ref: "stash@{0}", Subject: "WIP"}}}
+	m.filesView = &contentPopup{lines: []contentLine{{text: "a.go", path: "a.go"}}}
+	m.filesTreeFocused = false // focused on the stash list
+	mm, _ := m.updateFilesViewKey(keyMsg("enter"))
+	if mm.(Model).stashAction == nil {
+		t.Fatal("enter on the stash-list side (tree open) should open the action popup")
 	}
 }
 
@@ -66,8 +117,8 @@ func TestStashViewLLoadsFiles(t *testing.T) {
 	if got.filesView == nil {
 		t.Fatal("l should open the file tree for the stash")
 	}
-	if !got.filesTreeFocused {
-		t.Error("the stash file tree should open focused")
+	if got.filesTreeFocused {
+		t.Error("the stash file tree should open with focus on the list (follow-live), like commits")
 	}
 	if got.filesStashTag != "stash@{0}" {
 		t.Errorf("filesStashTag = %q", got.filesStashTag)
@@ -87,5 +138,27 @@ func TestStashListRefreshesAfterOp(t *testing.T) {
 	}
 	if !got.stashView.loading {
 		t.Error("the stash list should be marked loading during the refresh")
+	}
+}
+
+func TestStashFollowLiveReloadsTree(t *testing.T) {
+	m := loadedModel(t)
+	m.stashView = &stashView{
+		entries: []model.StashEntry{{Ref: "stash@{0}", Subject: "a"}, {Ref: "stash@{1}", Subject: "b"}},
+		sel:     0,
+	}
+	m.filesView = &contentPopup{lines: []contentLine{{text: "x"}}}
+	m.filesTreeFocused = false // list side
+	m.filesStashTag = "stash@{0}"
+	mm, cmd := m.updateFilesViewKey(keyMsg("j"))
+	got := mm.(Model)
+	if got.stashView.sel != 1 {
+		t.Fatal("j on the list side should move the stash selection")
+	}
+	if got.filesStashTag != "stash@{1}" {
+		t.Errorf("follow-live should retarget the tree to stash@{1}, got %q", got.filesStashTag)
+	}
+	if cmd == nil {
+		t.Error("landing on a different stash should fire the follow-live reload")
 	}
 }
