@@ -2,9 +2,36 @@ package gitexec
 
 import (
 	"context"
+	"reflect"
 	"sync"
 	"testing"
 )
+
+func TestFakeRunnerRecordsEnv(t *testing.T) {
+	f := NewFakeRunner()
+	f.SetResponse("git rebase", Result{})
+	env := []string{"GIT_SEQUENCE_EDITOR=gg __rebase-seq /tmp/plan.json"}
+	if _, err := f.RunEnv(context.Background(), "git rebase", []string{"rebase", "-i", "base"}, env); err != nil {
+		t.Fatalf("RunEnv: %v", err)
+	}
+	if len(f.Calls) != 1 {
+		t.Fatalf("calls = %d, want 1", len(f.Calls))
+	}
+	if !reflect.DeepEqual(f.Calls[0].Env, env) {
+		t.Fatalf("recorded env = %v, want %v", f.Calls[0].Env, env)
+	}
+}
+
+func TestFakeRunnerRunRecordsNilEnv(t *testing.T) {
+	f := NewFakeRunner()
+	f.SetResponse("git status", Result{})
+	if _, err := f.Run(context.Background(), "git status", []string{"status"}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if f.Calls[0].Env != nil {
+		t.Fatalf("Run should record nil env, got %v", f.Calls[0].Env)
+	}
+}
 
 func TestFakeRunnerReturnsConfiguredResult(t *testing.T) {
 	f := NewFakeRunner()
