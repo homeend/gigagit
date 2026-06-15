@@ -9,6 +9,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- TUI: a conflicted repo shows a status-bar notice (`⚠ N conflict — press [x]
+  to resolve`); `x` opens a resolution popup that resolves each unmerged file at
+  the whole-file level — keep ours/theirs/base, keep-modified, delete, or
+  mark-resolved (the offered keys adapt to the conflict type), plus `A` to mark
+  all resolved and `c`/`a` to continue/abort an in-progress merge or rebase. The
+  popup reopens after each action until the tree is clean. Partial (hunk/line)
+  resolution is a later feature.
 - TUI: `m` multi-marks files in the Status panel; `s` opens a stash-create popup
   (name defaults to `WIP on <branch>`, a checklist of unstaged/untracked files,
   `ctrl+s` stashes the checked ones).
