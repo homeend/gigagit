@@ -3,6 +3,9 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
+	"strconv"
+	"strings"
 
 	"github.com/gigagit/gg/internal/rebaseplan"
 )
@@ -31,4 +34,33 @@ func runRebaseSeq(args []string) error {
 		return err
 	}
 	return os.WriteFile(todoPath, []byte(todo), 0o644)
+}
+
+// runRebaseMessage is the rebase `exec` hook for reword/squash: it amends HEAD's
+// message to the plan's composed message for the target at the given index.
+// args = [planPath, index]. It runs in the rebase working directory (git's cwd
+// for exec steps), so the bare `git commit` targets the right repo.
+func runRebaseMessage(args []string) error {
+	if len(args) != 2 {
+		return fmt.Errorf("__rebase-message: want <plan> <index>, got %v", args)
+	}
+	raw, err := os.ReadFile(args[0])
+	if err != nil {
+		return err
+	}
+	p, err := rebaseplan.Unmarshal(raw)
+	if err != nil {
+		return err
+	}
+	idx, err := strconv.Atoi(args[1])
+	if err != nil {
+		return fmt.Errorf("__rebase-message: bad index %q: %w", args[1], err)
+	}
+	if idx < 0 || idx >= len(p.Entries) {
+		return fmt.Errorf("__rebase-message: index %d out of range", idx)
+	}
+	cmd := exec.Command("git", "commit", "--amend", "-F", "-")
+	cmd.Stdin = strings.NewReader(p.Message(idx))
+	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+	return cmd.Run()
 }

@@ -49,6 +49,13 @@ func main() {
 		}
 		return
 	}
+	if len(args) > 0 && args[0] == "__rebase-message" {
+		if err := runRebaseMessage(args[1:]); err != nil {
+			fmt.Fprintln(os.Stderr, "gg __rebase-message:", err)
+			os.Exit(1)
+		}
+		return
+	}
 	if len(args) > 0 && cli.IsCommand(args[0]) {
 		os.Exit(cli.Run(".", args, os.Stdin, os.Stdout, os.Stderr, cwdFile))
 	}
