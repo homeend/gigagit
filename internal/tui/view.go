@@ -195,6 +195,9 @@ func (m Model) renderInterface() string {
 		if n != 1 {
 			notice += "s"
 		}
+		if src := m.conflict.Describe(); src != "" {
+			notice += " " + src
+		}
 		notice += " — press [x] to resolve"
 		if statusLine != "" {
 			statusLine = notice + " · " + statusLine
