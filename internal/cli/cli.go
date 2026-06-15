@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/gigagit/gg/internal/domain"
@@ -118,18 +119,29 @@ func cmdStatus(svc *domain.Service, stdout, stderr io.Writer) int {
 func cmdCommit(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("commit", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	msg := fs.String("m", "", "commit message (required)")
+	msg := fs.String("m", "", "commit message (required unless --amend)")
 	all := fs.Bool("all", false, "stage modified/deleted tracked files first (-a)")
 	fs.BoolVar(all, "a", false, "alias for --all")
+	amend := fs.Bool("amend", false, "rewrite the last commit instead of creating one")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	if *msg == "" {
-		fmt.Fprintln(stderr, "commit: -m message is required")
-		return 2
+	message := *msg
+	if message == "" {
+		if !*amend {
+			fmt.Fprintln(stderr, "commit: -m message is required")
+			return 2
+		}
+		// --amend with no -m: reuse the existing message.
+		prev, err := svc.LastCommitMessage(context.Background())
+		if err != nil {
+			fmt.Fprintln(stderr, "commit: cannot read last message:", err)
+			return 1
+		}
+		message = strings.TrimRight(prev, "\n")
 	}
 	res, err := runOperation(context.Background(), svc,
-		engine.Commit{Message: *msg, All: *all}, cliDecider{}, stderr)
+		engine.Commit{Message: message, All: *all, Amend: *amend}, cliDecider{}, stderr)
 	return finish(res, err, stdout, stderr)
 }
 
