@@ -43,6 +43,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   non-zero and keeps the stash. (agentskill v8)
 
 ### Fixed
+- Stash file tree: a stash's files are now listed once. A stash commit is a
+  merge of its HEAD and index parents, and the old `diff-tree -m --first-parent`
+  double-listed a file that differs from both parents; the commit-files query
+  now takes the first-parent diff via `git log` (also covers any merge commit).
 - Panel filter (`/`): `↑`/`↓` (and `pgup`/`pgdn`) now move the selection through
   the filtered rows while still typing the query — an incremental picker, like
   the repo switcher. Previously arrows were ignored until you pressed `enter`,

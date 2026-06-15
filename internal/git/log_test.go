@@ -2,7 +2,9 @@ package git
 
 import (
 	"context"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -125,7 +127,7 @@ func TestParseNameStatus(t *testing.T) {
 
 func TestCommitFilesArgv(t *testing.T) {
 	f := gitexec.NewFakeRunner()
-	f.SetResponse("git diff-tree", gitexec.Result{Stdout: "M\tfile.txt\n"})
+	f.SetResponse("git log (commit files)", gitexec.Result{Stdout: "M\tfile.txt\n"})
 	repo := &Repo{Runner: f}
 	got, err := repo.CommitFiles(context.Background(), "abc123")
 	if err != nil {
@@ -135,7 +137,7 @@ func TestCommitFilesArgv(t *testing.T) {
 		t.Fatalf("git calls = %d, want 1", len(f.Calls))
 	}
 	argv := strings.Join(f.Calls[0].Argv, " ")
-	for _, part := range []string{"diff-tree", "-r", "--root", "--no-commit-id", "--name-status", "-M", "--first-parent", "-m", "abc123"} {
+	for _, part := range []string{"log", "-1", "-m", "--first-parent", "--root", "--name-status", "-M", "--format=", "abc123"} {
 		if !strings.Contains(argv, part) {
 			t.Fatalf("argv = %q, missing %q", argv, part)
 		}
@@ -206,5 +208,36 @@ func TestCommitFilesRealRepo(t *testing.T) {
 	}
 	if len(files) != 1 || files[0].Status != "R" || files[0].OldPath != "README.md" || files[0].Path != "DOCS.md" {
 		t.Fatalf("rename commit files = %+v, want [R README.md -> DOCS.md]", files)
+	}
+}
+
+// TestCommitFilesStashNoDuplicate guards the stash file tree: a stash commit is
+// a merge (HEAD + index parents), and a file changed against both parents must
+// be listed once, not once per parent.
+func TestCommitFilesStashNoDuplicate(t *testing.T) {
+	dir, runner := newTestRepo(t) // initial commit contains README.md
+	repo := &Repo{Runner: runner}
+
+	// Modify the tracked file and stash it — the stash commit's tree differs
+	// from both its HEAD and index parents.
+	gitIn(t, dir, "config", "user.email", "t@t")
+	gitIn(t, dir, "config", "user.name", "t")
+	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("changed\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, dir, "stash", "push", "-m", "wip")
+
+	out, err := exec.Command("git", "-C", dir, "rev-parse", "stash@{0}").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stashSHA := strings.TrimSpace(string(out))
+
+	files, err := repo.CommitFiles(context.Background(), stashSHA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 1 || files[0].Path != "README.md" {
+		t.Fatalf("stash files = %+v, want a single [M README.md]", files)
 	}
 }

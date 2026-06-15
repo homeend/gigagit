@@ -81,10 +81,10 @@ func TestCommitFileLinesEmpty(t *testing.T) {
 }
 
 // filesModel returns a model focused on the Commits panel whose FakeRunner
-// answers diff-tree with a two-directory file list.
+// answers the commit-files query with a two-directory file list.
 func filesModel() Model {
 	f := gitexec.NewFakeRunner()
-	f.SetResponse("git diff-tree", gitexec.Result{
+	f.SetResponse("git log (commit files)", gitexec.Result{
 		Stdout: "M\tinternal/tui/model.go\nA\tCHANGELOG.md\n",
 	})
 	return Model{

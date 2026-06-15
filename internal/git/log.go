@@ -53,14 +53,17 @@ func (r *Repo) CommitTimes(ctx context.Context, shas []string) (map[string]int64
 }
 
 // CommitFiles returns the files changed by commit hash, in git's path order.
-// One invocation. --first-parent -m makes merge commits show their diff
-// against the first parent (plain diff-tree prints nothing for merges);
-// --root makes the initial commit list its files.
+// One invocation. `git log -1 -m --first-parent` shows the commit's diff against
+// its first parent only: for a merge that is its mainline diff, and crucially
+// for a stash commit (a merge of HEAD + the index commit) it lists each file
+// once instead of once per parent — `diff-tree -m --first-parent` double-lists a
+// file that differs from both stash parents. --root makes the initial commit
+// list its files; --format= drops the commit header so only the diff remains.
 func (r *Repo) CommitFiles(ctx context.Context, hash string) ([]model.CommitFile, error) {
-	argv := gitcmd.New("diff-tree").
-		Arg("-r", "--root", "--no-commit-id", "--name-status", "-M", "--first-parent", "-m", hash).
+	argv := gitcmd.New("log").
+		Arg("-1", "-m", "--first-parent", "--root", "--name-status", "-M", "--format=", hash).
 		ToArgv()
-	res, err := r.Runner.Run(ctx, "git diff-tree", argv)
+	res, err := r.Runner.Run(ctx, "git log (commit files)", argv)
 	if err != nil {
 		return nil, err
 	}
