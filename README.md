@@ -39,9 +39,9 @@ panel and selected row right now; `?` opens the full searchable reference.
 | Key | Action |
 |-----|--------|
 | `p` / `P` | pull / push |
-| `s` | smart-switch to the selected branch |
+| `s` | on the Branches panel: smart-switch to the selected branch; on the Status panel: open the stash-create popup (name defaults to `WIP on <branch>`, a checklist of unstaged/untracked files, `space` toggles, `ctrl+s` stashes) |
 | `b` | create a branch off the selected one (popup); `B` create **and** switch to it |
-| `S` | stash |
+| `S` | open the stash window (lists all stashes in the right column): `↑`/`↓` move, `l` shows the selected stash's files in the tree (diff / `h` history / `b` blame, like commit files), `esc`/`S` close |
 | `u` | undo last commit (ref-only, soft reset) |
 | `w` | create a worktree **for the selected branch** (popup); `W` worktree on a **new** templated branch. Inside the popup: `w`/`enter` create, `W` create **and** switch |
 | `enter` | on the Worktrees panel: switch into the selected worktree; on the Status panel: full-screen side-by-side diff of the file (HEAD → working tree); on the files-view tree: diff of the file in the viewed commit. Inside the diff: `↑`/`↓` scroll, `pgup`/`pgdn` page, `n`/`p` (or `ctrl+↑`/`ctrl+↓`) jump between changes, `f` toggles full file ↔ changed-lines-only, `w` cycles long-line mode (scroll/wrap/truncate), `←`/`→`/`0` pan in scroll mode, `esc` closes. Changed lines highlight the exact words that differ; commit diffs are cached for instant re-open |

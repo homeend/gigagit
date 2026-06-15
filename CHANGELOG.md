@@ -12,6 +12,8 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - TUI: `m` multi-marks files in the Status panel; `s` opens a stash-create popup
   (name defaults to `WIP on <branch>`, a checklist of unstaged/untracked files,
   `ctrl+s` stashes the checked ones).
+- TUI: `S` opens a stash list window in the right column; `l` shows the selected
+  stash's files in the tree (diff / history `h` / blame `b`, like commit files).
 
 ### Fixed
 - Panel filter (`/`): `↑`/`↓` (and `pgup`/`pgdn`) now move the selection through

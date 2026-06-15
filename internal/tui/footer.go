@@ -53,7 +53,7 @@ var globalBindings = []footerBinding{
 	{"c", "[c] commit", Model.canCommit},
 	{"p", "[p]ull", Model.opsIdle},
 	{"P", "[P]ush", func(m Model) bool { return m.opsIdle() && m.status.Branch != "" }},
-	{"S", "[S]tash", Model.opsIdle},
+	{"S", "[S]tashes", Model.opsIdle},
 	{"u", "[u]ndo", Model.opsIdle},
 	{"o", "[o]rder", Model.opsIdle},
 	{"/", "[/]filter", Model.opsIdle},
