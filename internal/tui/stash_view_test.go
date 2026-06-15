@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/gigagit/gg/internal/engine"
@@ -198,5 +199,25 @@ func TestStashOpenSToggleClosesFromLeftPanel(t *testing.T) {
 	mm, _ = m.Update(keyMsg("S")) // normal dispatch: toggle closed
 	if mm.(Model).stashView != nil {
 		t.Fatal("S from a left panel should close the open stash window")
+	}
+}
+
+func TestOneLineFlattensWhitespace(t *testing.T) {
+	in := "error: changes would be overwritten\n\t8.txt\nPlease commit\nAborting"
+	got := oneLine(in)
+	if got != "error: changes would be overwritten 8.txt Please commit Aborting" {
+		t.Errorf("oneLine = %q", got)
+	}
+}
+
+func TestStatusBarRendersMultilineErrorOnOneLine(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 200, 30
+	m.statusMsg = "error: local changes to 8.txt would be overwritten\nAborting"
+	out := m.View()
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, "overwritten") && !strings.Contains(line, "Aborting") {
+			t.Errorf("status not flattened to one line: %q", line)
+		}
 	}
 }

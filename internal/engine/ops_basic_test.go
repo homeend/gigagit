@@ -174,3 +174,18 @@ func TestCommitAmend(t *testing.T) {
 		t.Fatalf("commit count = %q, want 1 (amend must not add a commit)", got)
 	}
 }
+
+func TestStashApplyConflictReturnsError(t *testing.T) {
+	dir, repo := newRepo(t)
+	ctx := context.Background()
+	os.WriteFile(filepath.Join(dir, "README.md"), []byte("stashed\n"), 0o644)
+	if err := repo.StashPush(ctx, "WIP", nil, false); err != nil {
+		t.Fatal(err)
+	}
+	// Re-dirty the same file so the apply would overwrite local changes.
+	os.WriteFile(filepath.Join(dir, "README.md"), []byte("local-change\n"), 0o644)
+	_, err := (StashApply{Ref: "stash@{0}"}).Run(ctx, OpDeps{Repo: repo, Events: make(chan Event, 16)})
+	if err == nil {
+		t.Fatal("applying a stash over a conflicting local change must return an error, not silent success")
+	}
+}
