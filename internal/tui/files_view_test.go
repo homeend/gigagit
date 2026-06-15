@@ -652,3 +652,15 @@ func TestPayloadSurvivesFilter(t *testing.T) {
 		t.Fatal("filtered visible() lost the payload row")
 	}
 }
+
+func TestFilesViewWrapMode(t *testing.T) {
+	m := New(nil)
+	m.width, m.height = 100, 30
+	p := &contentPopup{lines: []contentLine{{text: strings.Repeat("q", 80), path: "x"}}, mode: modeWrap}
+	m.filesView = p
+	m.filesTitle = "Files"
+	out := m.renderFilesView(20, 12)
+	if strings.Count(out, "q") < 40 {
+		t.Errorf("files view wrap mode did not expand the long row:\n%s", out)
+	}
+}

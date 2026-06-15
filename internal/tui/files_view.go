@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/gigagit/gg/internal/model"
 )
@@ -126,6 +127,22 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	switch msg.String() {
+	case "z":
+		p.mode = p.mode.next()
+		p.hscroll = 0
+		return m, nil
+	case "shift+left":
+		if p.mode == modeScroll && p.hscroll > 0 {
+			if p.hscroll -= m.hscrollStep(); p.hscroll < 0 {
+				p.hscroll = 0
+			}
+		}
+		return m, nil
+	case "shift+right":
+		if p.mode == modeScroll {
+			p.hscroll += m.hscrollStep()
+		}
+		return m, nil
 	// q is inert here: only the base layout quits on q. esc is the back key;
 	// ctrl+c (handled above) remains the universal quit.
 	case "esc":
@@ -300,27 +317,31 @@ func (m Model) renderFilesView(boxW, boxH int) string {
 	}
 
 	vis := p.visible()
-	rows := make([]string, len(vis))
+	wr := make([]winRow, len(vis))
 	for i, l := range vis {
+		prefix := "  "
+		var st lipgloss.Style
 		switch {
 		case i == p.sel:
 			// Cursor highlight wins over heading style so the cursor stays
 			// visible when it rests on a heading row.
-			rows[i] = selectedRow.Render(padRight(truncate("> "+l.text, innerW), innerW))
+			prefix = "> "
+			st = selectedRow
 		case l.heading:
-			rows[i] = titleStyle.Render(padRight(truncate(l.text, innerW), innerW))
-		default:
-			rows[i] = padRight(truncate("  "+l.text, innerW), innerW)
+			prefix = ""
+			st = titleStyle
 		}
+		wr[i] = winRow{text: prefix + l.text, style: st}
 	}
-	win, _, _ := windowRows(rows, rowsCap, p.sel)
 
 	lines := make([]string, 0, contentH)
 	lines = append(lines, padRight(truncate(title, innerW), innerW))
-	if len(win) == 0 {
+	if len(vis) == 0 {
 		lines = append(lines, padRight(truncate("  (no match)", innerW), innerW))
+	} else {
+		win := renderWindow(wr, winOpts{w: innerW, h: rowsCap, mode: p.mode, anchor: p.sel, hscroll: p.hscroll})
+		lines = append(lines, win...)
 	}
-	lines = append(lines, win...)
 	for len(lines) < contentH-1 {
 		lines = append(lines, padRight("", innerW))
 	}
