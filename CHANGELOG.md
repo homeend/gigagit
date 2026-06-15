@@ -13,7 +13,8 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   (name defaults to `WIP on <branch>`, a checklist of unstaged/untracked files,
   `ctrl+s` stashes the checked ones).
 - TUI: `S` opens a stash list window in the right column; `l` shows the selected
-  stash's files in the tree (diff / history `h` / blame `b`, like commit files).
+  stash's files in the tree (diff / history `h` / blame `b`, like commit files);
+  `enter` opens an action popup to apply, pop, or drop the selected stash.
 
 ### Fixed
 - Panel filter (`/`): `↑`/`↓` (and `pgup`/`pgdn`) now move the selection through

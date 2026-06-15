@@ -41,9 +41,9 @@ type Model struct {
 	pendingSwitchBranch string        // branch to SmartSwitch to after a successful op (B = create-and-switch)
 	contentPopup        *contentPopup // generic read-only viewer (help window)
 
-	mark       *markState      // the m-key mark; nil = none (see mark.go)
-	fileMarks  map[string]bool // multi-selected Status file paths (keyed by path)
-	pairPopup  *pairOpPopup    // two-row operation picker; nil = closed
+	mark        *markState        // the m-key mark; nil = none (see mark.go)
+	fileMarks   map[string]bool   // multi-selected Status file paths (keyed by path)
+	pairPopup   *pairOpPopup      // two-row operation picker; nil = closed
 	stashPopup  *stashPopup       // create-stash dialog; nil = closed
 	stashAction *stashActionPopup // apply/pop/drop menu for a stash; nil = closed
 
