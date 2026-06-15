@@ -59,7 +59,10 @@ These are resolved inside each feature's brainstorm, not globally up front.
 
 ## Features
 
-### F1 — Staging surface + index/commit verb foundation
+### F1 — Staging surface + index/commit verb foundation — ✅ DONE (merged)
+- **Shipped as:** an in-place `space`-toggle in the Status panel (not a separate
+  view): verbs `StagePaths`/`UnstagePaths`, `engine.Stage`, status-only refresh,
+  conflicted-row no-op. The index foundation F2/F3/F4 reuse now exists.
 - **Goal:** stage/unstage individual changed files from a dedicated surface;
   lay the index/commit verb foundation the staging cluster shares.
 - **Integration:** new git verbs in `internal/git` (`StagePaths`,
@@ -229,6 +232,35 @@ These are resolved inside each feature's brainstorm, not globally up front.
   `github.com/gigagit/gg` alias.
 - **Blast radius:** high (all imports). **Size:** M.
 
+### F12 — Reword any commit (`n` on the Commits list)
+- **Goal:** `n` on a selected commit in the Commits panel opens the commit
+  message popup pre-filled with that commit's message; confirming changes the
+  message of **any** commit, not just HEAD.
+- **Complexity gradient (the crux):** rewording **HEAD** is trivial
+  (`git commit --amend -m`, i.e. F2's amend). Rewording an **older** commit is
+  **history rewrite** — git has no "reword commit X" primitive, so it must drive
+  an interactive rebase (scripted sequence-editor + message editor). That
+  rewrites every descendant commit's SHA, can stop on conflicts mid-rebase, and
+  fails on a dirty tree / merge commits / already-pushed history. **This is the
+  first concrete slice of M3's interactive-rebase machinery.**
+- **Integration:** `n` key on `panelCommits` (free) → reuse **F2's
+  commit-message popup**, pre-filled via a `LastCommitMessage`-style read
+  generalized to any rev (`git log -1 --pretty=%B <rev>`). Engine path forks:
+  HEAD → `engine.Commit{Amend:true}` (F2); older → a new reword/rebase driver.
+  **Needs new `internal/gitexec` per-command env support** (`GIT_SEQUENCE_EDITOR`
+  / `GIT_EDITOR`) which does not exist today — or a todo-file-driven
+  `rebase --continue` approach.
+- **Approach:** build on F2 (popup + HEAD amend reused verbatim); add the
+  older-commit driver as the new piece. Guard: refuse on a dirty tree, on merge
+  commits in range, and warn on rewriting pushed history.
+- **Depends on:** **F2** (the popup + HEAD-amend path). The older-commit driver
+  is M3-interactive-rebase-class.
+- **Open at brainstorm:** scripted-env vs todo-file rebase driver; how to
+  surface mid-rebase conflicts; pushed-history warning; whether v1 supports
+  only linear (no-merge) ranges.
+- **Blast radius:** medium (Commits-panel key + new engine driver; the env
+  support touches `gitexec`). **Size:** L.
+
 ---
 
 ## Recommended execution sequence
@@ -241,6 +273,9 @@ windows):
 1. **F1** Staging surface + index/commit foundation
 2. **F2** Commit & amend
 3. **F3** Hunk selection
+   - **F12** Reword any commit (`n`) — reuses F2's popup; the HEAD case is cheap,
+     the older-commit case is the first slice of M3 interactive rebase (can be
+     split: ship `n`=reword-HEAD with/after F2, defer arbitrary-commit reword).
 
 **Phase 2 — Differentiators (low-blast, parallel-friendly):**
 4. **F4** Conflict resolution
@@ -257,5 +292,7 @@ windows):
 10. **F9** Keybinding configuration (after F1–F8 keys exist)
 11. **F10** Multilanguage / i18n (last; surface stable)
 
-**Next action when ready:** brainstorm **F1** (staging surface + index/commit
-foundation) — it unblocks F2/F3 and anchors the conflict verbs F4 reuses.
+**Next action when ready:** F1 is done. Brainstorm **F2a** (commit the staged
+index + message popup — see the chunk breakdown in
+`2026-06-15-feature-chunk-decomposition.md`), which turns the shipped F1 staging
+into an end-to-end TUI commit flow.
