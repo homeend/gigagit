@@ -208,9 +208,10 @@ func (m Model) renderInterface() string {
 
 	header := m.headerLine(g.w)
 	footer := truncate(m.footerLine(), g.w)
-	statusLine := m.statusMsg
+	errMode := statusIsError(m.statusMsg)
+	var notice string
 	if n := len(m.status.Conflicts()); n > 0 {
-		notice := fmt.Sprintf("⚠ %d conflict", n)
+		notice = fmt.Sprintf("⚠ %d conflict", n)
 		if n != 1 {
 			notice += "s"
 		}
@@ -218,26 +219,36 @@ func (m Model) renderInterface() string {
 			notice += " " + src
 		}
 		notice += " — press [x] to resolve"
-		if statusLine != "" {
-			statusLine = notice + " · " + statusLine
-		} else {
-			statusLine = notice
-		}
 	}
+	var markHint string
 	if m.mark != nil && m.markAlive() {
-		hint := "◆ marked: " + m.mark.display
-		if statusLine != "" {
-			statusLine = hint + " · " + statusLine
-		} else {
-			statusLine = hint
+		markHint = "◆ marked: " + m.mark.display
+	}
+	// Assemble the segments. In error mode the message LEADS so truncation can
+	// never hide it behind the persistent conflict/mark hints; otherwise the
+	// hints lead and the transient message trails.
+	var parts []string
+	add := func(s string) {
+		if s != "" {
+			parts = append(parts, s)
 		}
 	}
+	if errMode {
+		add(m.statusMsg)
+		add(notice)
+		add(markHint)
+	} else {
+		add(markHint)
+		add(notice)
+		add(m.statusMsg)
+	}
+	statusLine := strings.Join(parts, " · ")
 	if m.running {
 		statusLine = "⏳ " + statusLine
 	}
 	statusLine = truncate(oneLine(statusLine), g.w)
 	// Style after truncation: truncate slices runes and would corrupt ANSI codes.
-	if statusIsError(m.statusMsg) {
+	if errMode {
 		statusLine = statusErrStyle.Render(statusLine)
 	}
 

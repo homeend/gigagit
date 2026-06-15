@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/gigagit/gg/internal/model"
 )
 
 func TestStatusIsError(t *testing.T) {
@@ -57,5 +59,24 @@ func TestStatusNormalLinePreservesText(t *testing.T) {
 	line := ansi.Strip(lastLine(m.View()))
 	if !strings.Contains(line, "resolved foo (kept theirs)") {
 		t.Fatalf("normal status line lost its text: %q", line)
+	}
+}
+
+// TestStatusErrorLeadsConflictNotice guards the stash-apply-conflict workflow:
+// when an error coexists with the conflict notice, the error must lead so a
+// narrow terminal truncates the notice, not the error.
+func TestStatusErrorLeadsConflictNotice(t *testing.T) {
+	m := statusRenderModel()
+	m.width = 50 // narrow enough that the whole line can't fit
+	m.status = model.WorkingTreeStatus{Files: []model.FileStatus{
+		{Path: "timing3.log", Kind: model.KindUnmerged, Staged: 'U', Unstaged: 'U'},
+	}}
+	m.statusMsg = "error: git stash apply failed (exit 1)"
+	line := ansi.Strip(lastLine(m.View()))
+	if !strings.Contains(line, "error:") {
+		t.Fatalf("error must lead the status line, got: %q", line)
+	}
+	if strings.HasPrefix(strings.TrimSpace(line), "⚠") {
+		t.Errorf("conflict notice should not lead while an error is shown: %q", line)
 	}
 }
