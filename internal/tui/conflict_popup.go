@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/gigagit/gg/internal/engine"
 	"github.com/gigagit/gg/internal/model"
 )
 
@@ -88,12 +89,87 @@ func (p *conflictPopup) actionHint() string {
 // the handler). Stub returns nil until then.
 func (m Model) loadInProgressCmd() tea.Cmd { return nil }
 
+// keepModifiedAction maps a modify/delete file to the side that has content.
+func keepModifiedAction(f model.FileStatus) engine.ConflictAction {
+	if f.ConflictHasTheirs() {
+		return engine.KeepTheirs
+	}
+	return engine.KeepOurs
+}
+
 func (m Model) updateConflictPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	p := m.conflictPopup
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
 	}
-	if msg.String() == "esc" {
+	switch msg.String() {
+	case "esc":
 		m.conflictPopup = nil
+		return m, nil
+	case "up":
+		if p.sel > 0 {
+			p.sel--
+		}
+		return m, nil
+	case "down", "j":
+		if p.sel < len(p.files)-1 {
+			p.sel++
+		}
+		return m, nil
+	case "A":
+		var paths []string
+		for _, f := range p.files {
+			paths = append(paths, f.Path)
+		}
+		if len(paths) == 0 {
+			return m, nil
+		}
+		m.conflictPopup = nil
+		m.reopenConflict = true
+		return m.startOp(engine.MarkAllResolved{Paths: paths})
 	}
-	return m, nil
+	if p.sel < 0 || p.sel >= len(p.files) {
+		return m, nil
+	}
+	f := p.files[p.sel]
+	both := f.ConflictClass() == model.ConflictBothSides
+	hasSide := f.ConflictHasOurs() || f.ConflictHasTheirs()
+	var action engine.ConflictAction
+	switch msg.String() {
+	case "o":
+		if !both {
+			return m, nil
+		}
+		action = engine.KeepOurs
+	case "t":
+		if !both {
+			return m, nil
+		}
+		action = engine.KeepTheirs
+	case "m":
+		if !both {
+			return m, nil
+		}
+		action = engine.MarkResolved
+	case "k":
+		if both || !hasSide { // both-deleted (DD) has no side to keep
+			return m, nil
+		}
+		action = keepModifiedAction(f)
+	case "d":
+		if both {
+			return m, nil
+		}
+		action = engine.DeleteFile
+	case "b":
+		if both || !f.ConflictHasBase() {
+			return m, nil
+		}
+		action = engine.KeepBase
+	default:
+		return m, nil
+	}
+	m.conflictPopup = nil // reopened after the refresh (Task 7 re-syncs the list)
+	m.reopenConflict = true
+	return m.startOp(engine.ResolveConflict{Path: f.Path, Action: action})
 }
