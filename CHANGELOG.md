@@ -27,7 +27,8 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 #### TUI window display modes
 - Every list/tree/text window (panels, stash list, files tree, file history,
-  blame, and the repo switcher popup) now shares one rendering primitive with
+  blame) **and every list popup** (repo switcher, help, conflict resolver,
+  settings, pair-op, stash actions) now shares one rendering primitive with
   three switchable text display modes — **cutoff** (default; long rows truncate
   to one line), **wrap** (rows wrap onto multiple lines), and **scroll** (rows
   stay full, panned horizontally). Press **`z`** to cycle the focused window's
