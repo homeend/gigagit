@@ -127,6 +127,22 @@ func (m Model) updateContentPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	switch msg.String() {
+	case "z": // cycle the text display mode (cutoff / wrap / scroll)
+		p.mode = p.mode.next()
+		p.hscroll = 0
+		return m, nil
+	case "shift+left":
+		if p.mode == modeScroll && p.hscroll > 0 {
+			if p.hscroll -= m.hscrollStep(); p.hscroll < 0 {
+				p.hscroll = 0
+			}
+		}
+		return m, nil
+	case "shift+right":
+		if p.mode == modeScroll {
+			p.hscroll += m.hscrollStep()
+		}
+		return m, nil
 	case "q": // close the window, not the app (q quits only at top level)
 		m.contentPopup = nil
 		return m, nil
@@ -187,21 +203,27 @@ func (m Model) renderContentPopup() string {
 	textW := inner - modalStyle.GetHorizontalPadding()
 
 	vis := p.visible()
-	rows := make([]string, len(vis))
+	wr := make([]winRow, len(vis))
 	for i, l := range vis {
 		switch {
 		case i == p.sel:
 			// Cursor highlight wins over heading style: the cursor must remain
 			// visible even when it rests on a heading row.
-			rows[i] = selectedRow.Render(truncate("> "+l.text, textW))
+			wr[i] = winRow{text: "> " + l.text, style: selectedRow}
 		case l.heading:
-			rows[i] = titleStyle.Render(truncate(l.text, textW))
+			wr[i] = winRow{text: l.text, style: titleStyle}
 		default:
-			rows[i] = truncate("  "+l.text, textW)
+			wr[i] = winRow{text: "  " + l.text}
 		}
 	}
 	capRows := m.contentPageRows()
-	win, _, _ := windowRows(rows, capRows, p.sel)
+	// h grows with content up to the page capacity; renderWindow scrolls to keep
+	// p.sel visible once vis overflows. Styling is applied after truncate/wrap.
+	h := len(vis)
+	if h > capRows {
+		h = capRows
+	}
+	win := renderWindow(wr, winOpts{w: textW, h: h, mode: p.mode, anchor: p.sel, hscroll: p.hscroll})
 
 	title := p.title
 	if p.typing {
@@ -211,13 +233,13 @@ func (m Model) renderContentPopup() string {
 	}
 	var b strings.Builder
 	b.WriteString(truncate(title, textW) + "\n\n")
-	if len(win) == 0 {
+	if len(vis) == 0 {
 		b.WriteString("  (no match)\n")
 	}
 	for _, r := range win {
 		b.WriteString(r + "\n")
 	}
-	hint := "[/] search  [q] close"
+	hint := "[/] search  [z] mode  [q] close"
 	if len(vis) > capRows {
 		hint = fmt.Sprintf("%d/%d  %s", p.sel+1, len(vis), hint)
 	}

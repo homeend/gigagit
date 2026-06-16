@@ -19,6 +19,16 @@ func TestStashEnterOpensActions(t *testing.T) {
 	}
 }
 
+func TestStashActionZCyclesMode(t *testing.T) {
+	m := Model{width: 100, height: 30}
+	m.stashAction = &stashActionPopup{ref: "stash@{0}", subject: "WIP"}
+	mm, _ := m.updateStashActionKey(keyMsg("z"))
+	got := mm.(Model)
+	if got.stashAction == nil || got.stashAction.mode != modeWrap {
+		t.Fatalf("z should cycle the stash-action mode to modeWrap; got %+v", got.stashAction)
+	}
+}
+
 func TestStashActionApplyDispatches(t *testing.T) {
 	m := loadedModel(t)
 	m.stashAction = &stashActionPopup{ref: "stash@{0}", sel: 0} // 0 = Apply

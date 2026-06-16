@@ -19,7 +19,9 @@ var conflictSrcStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 type conflictPopup struct {
 	files      []model.FileStatus // refreshed from status after each action
 	sel        int
-	inProgress string // "merge"/"rebase"/"" — gates the continue/abort actions
+	inProgress string   // "merge"/"rebase"/"" — gates the continue/abort actions
+	mode       dispMode // text display mode; z cycles (cutoff default)
+	hscroll    int      // modeScroll horizontal offset
 }
 
 func (m Model) openConflictPopup() (Model, tea.Cmd) {
@@ -33,6 +35,8 @@ func (m Model) openConflictPopup() (Model, tea.Cmd) {
 
 func (m Model) renderConflictPopup() string {
 	p := m.conflictPopup
+	w, _ := m.overlayDims()
+	inner := popupInnerWidth(w)
 	var b strings.Builder
 	b.WriteString("Resolve conflicts\n")
 	if src := m.conflict.Describe(); src != "" {
@@ -41,23 +45,29 @@ func (m Model) renderConflictPopup() string {
 	b.WriteString("\n")
 	if len(p.files) == 0 {
 		b.WriteString("  (all resolved)\n")
-	}
-	for i, f := range p.files {
-		cursor := "  "
-		if i == p.sel {
-			cursor = "> "
+	} else {
+		wr := make([]winRow, len(p.files))
+		for i, f := range p.files {
+			prefix := "  "
+			var st lipgloss.Style
+			if i == p.sel {
+				prefix, st = "> ", selectedRow
+			}
+			wr[i] = winRow{text: fmt.Sprintf("%s%s  — %s", prefix, f.Path, f.ConflictLabel()), style: st}
 		}
-		row := fmt.Sprintf("%s%s  — %s", cursor, f.Path, f.ConflictLabel())
-		if i == p.sel {
-			b.WriteString(selectedRow.Render(row) + "\n")
-		} else {
-			b.WriteString(row + "\n")
+		// Box grows with the file count up to 12 rows; renderWindow then scrolls
+		// to keep p.sel visible. Styling is applied after truncate/wrap.
+		h := len(p.files)
+		if h > 12 {
+			h = 12
+		}
+		for _, line := range renderWindow(wr, winOpts{w: inner, h: h, mode: p.mode, anchor: p.sel, hscroll: p.hscroll}) {
+			b.WriteString(line + "\n")
 		}
 	}
 	b.WriteString("\n" + p.actionHint() + "\n")
-	b.WriteString("[esc] close")
-	w, _ := m.overlayDims()
-	return modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"
+	b.WriteString("[esc] close  [z] mode")
+	return modalStyle.Width(inner).Render(b.String()) + "\n"
 }
 
 // actionHint lists the keys available for the selected file (+ continue/abort).
@@ -123,6 +133,22 @@ func (m Model) updateConflictPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 	switch msg.String() {
+	case "z": // cycle the text display mode (cutoff / wrap / scroll)
+		p.mode = p.mode.next()
+		p.hscroll = 0
+		return m, nil
+	case "shift+left":
+		if p.mode == modeScroll && p.hscroll > 0 {
+			if p.hscroll -= m.hscrollStep(); p.hscroll < 0 {
+				p.hscroll = 0
+			}
+		}
+		return m, nil
+	case "shift+right":
+		if p.mode == modeScroll {
+			p.hscroll += m.hscrollStep()
+		}
+		return m, nil
 	case "esc":
 		m.conflictPopup = nil
 		return m, nil

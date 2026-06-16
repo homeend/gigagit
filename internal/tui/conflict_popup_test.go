@@ -16,6 +16,18 @@ import (
 	"github.com/gigagit/gg/internal/observ"
 )
 
+func TestConflictPopupZCyclesMode(t *testing.T) {
+	m := Model{width: 100, height: 30}
+	m.conflictPopup = &conflictPopup{files: []model.FileStatus{
+		{Path: "a.go", Kind: model.KindUnmerged, Staged: 'U', Unstaged: 'U'},
+	}}
+	u, _ := m.updateConflictPopupKey(keyMsg("z"))
+	mm := u.(Model)
+	if mm.conflictPopup.mode != modeWrap {
+		t.Fatalf("after z, mode = %v, want modeWrap", mm.conflictPopup.mode)
+	}
+}
+
 func conflictModel() Model {
 	m := Model{width: 120, height: 30, focus: panelFiles, sel: map[panel]int{}}
 	m.status = model.WorkingTreeStatus{Branch: "zzz", Files: []model.FileStatus{

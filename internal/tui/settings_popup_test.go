@@ -40,6 +40,17 @@ func TestCommaOpensSettingsMenu(t *testing.T) {
 	}
 }
 
+func TestSettingsPopupZCyclesMode(t *testing.T) {
+	m, _ := settingsModel(t)
+	u, _ := m.Update(keyMsg(","))
+	m = u.(Model)
+	u, _ = m.Update(keyMsg("z"))
+	m = u.(Model)
+	if m.settings == nil || m.settings.mode != modeWrap {
+		t.Fatalf("z should cycle the settings mode to modeWrap; got %+v", m.settings)
+	}
+}
+
 func TestPickerCheckboxDefaults(t *testing.T) {
 	m, _ := settingsModel(t)
 	u, _ := m.Update(keyMsg(","))

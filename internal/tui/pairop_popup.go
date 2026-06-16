@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // pairOpPopup offers a panel's two-argument operations on (marked, selected).
@@ -11,6 +12,8 @@ type pairOpPopup struct {
 	marked, selected string
 	ops              []pairOp
 	sel              int
+	mode             dispMode // text display mode; z cycles (cutoff default)
+	hscroll          int      // modeScroll horizontal offset
 }
 
 // updatePairPopupKey handles one key while the pair-op popup is open. The
@@ -21,6 +24,19 @@ func (m Model) updatePairPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	p := m.pairPopup
 	switch msg.String() {
+	case "z": // cycle the text display mode (cutoff / wrap / scroll)
+		p.mode = p.mode.next()
+		p.hscroll = 0
+	case "shift+left":
+		if p.mode == modeScroll && p.hscroll > 0 {
+			if p.hscroll -= m.hscrollStep(); p.hscroll < 0 {
+				p.hscroll = 0
+			}
+		}
+	case "shift+right":
+		if p.mode == modeScroll {
+			p.hscroll += m.hscrollStep()
+		}
 	case "esc":
 		m.pairPopup = nil // the mark survives: the user may pick another row
 	case "up", "k":
@@ -51,21 +67,24 @@ func (m Model) updatePairPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // renderPairOpPopup draws the operation picker.
 func (m Model) renderPairOpPopup() string {
 	p := m.pairPopup
-	var b strings.Builder
-	b.WriteString(p.marked + " + " + p.selected + "\n\n")
+	w, _ := m.overlayDims()
+	inner := popupInnerWidth(w)
+	wr := make([]winRow, len(p.ops))
 	for i, op := range p.ops {
 		line := op.label(p.marked, p.selected)
 		if !op.enabled {
 			line += "  (" + op.note + ")"
 		}
+		prefix := "  "
+		var st lipgloss.Style
 		if i == p.sel {
-			b.WriteString(selectedRow.Render("> " + line))
-		} else {
-			b.WriteString("  " + line)
+			prefix, st = "> ", selectedRow
 		}
-		b.WriteString("\n")
+		wr[i] = winRow{text: prefix + line, style: st}
 	}
-	b.WriteString("\n[↑/↓] choose  [enter] run  [esc] cancel")
-	w, _ := m.overlayDims()
-	return modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"
+	body := renderWindow(wr, winOpts{w: inner, h: len(p.ops), mode: p.mode, anchor: p.sel, hscroll: p.hscroll})
+	parts := []string{p.marked + " + " + p.selected, ""}
+	parts = append(parts, body...)
+	parts = append(parts, "", "[↑/↓] choose  [enter] run  [z] mode  [esc] cancel")
+	return modalStyle.Width(inner).Render(strings.Join(parts, "\n")) + "\n"
 }
