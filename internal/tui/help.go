@@ -49,7 +49,7 @@ func helpContent() []contentLine {
 		r("space", "stage the selected working-tree file (git add)"),
 		r("s", "stash changes: popup to name + pick files (ctrl+s confirms)"),
 		r("m", "mark / unmark a file (multi-select for stashing)"),
-		r("enter", "side-by-side diff of the file (HEAD → working tree)"),
+		r("enter", "side-by-side diff of the unstaged change (index → working tree)"),
 		r("h", "file history: commits that touched it (left) + per-commit diff (right)"),
 		r("b", "blame: who last changed each line, grouped by commit"),
 		h("Staged panel"),

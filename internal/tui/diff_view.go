@@ -278,9 +278,9 @@ func (m Model) diffDiffer() domain.Differ {
 
 // statusDiffTag / statusDiffContext keep the tag and header label in sync
 // between the enter handler (which pre-builds the loading view) and the
-// loader. The Files panel diffs HEAD → the file on disk; the Staged panel
-// diffs HEAD → the index blob. A partially-staged file appears in both
-// panels, so the tags must differ to gate stale results correctly.
+// loader. The Files panel diffs index → working tree (the unstaged delta); the
+// Staged panel diffs HEAD → index (the staged delta). A partially-staged file
+// appears in both panels, so the tags must differ to gate stale results.
 func statusDiffTag(path string, staged bool) string {
 	if staged {
 		return "staged:" + path
@@ -292,16 +292,18 @@ func statusDiffContext(staged bool) string {
 	if staged {
 		return "HEAD → index (staged)"
 	}
-	return "HEAD → working tree"
+	return "index → working tree"
 }
 
 // loadStatusDiffCmd fetches both sides of f's pending change and compares them
-// off the UI thread. With staged=false (Files panel) the new side is the file
-// on disk (HEAD → working tree); the disk path is rooted at the current
-// worktree because porcelain paths are repo-root-relative and the process cwd
-// may be a subdirectory. With staged=true (Staged panel) the new side is the
-// index blob (`git show :<path>`, HEAD → staged). Both are uncached (Key: "")
-// because the working tree and the index are mutable.
+// off the UI thread. With staged=true (Staged panel) it diffs HEAD → the index
+// blob (`git show :<path>`, the staged delta). With staged=false (Files panel)
+// it diffs the index blob → the file on disk (the UNSTAGED delta, matching the
+// Files panel's status letter): a partially-staged file's staged hunk is
+// excluded here and shows in the Staged panel instead. The disk path is rooted
+// at the current worktree because porcelain paths are repo-root-relative and
+// the process cwd may be a subdirectory. Both are uncached (Key: "") because
+// the working tree and the index are mutable.
 func (m Model) loadStatusDiffCmd(f model.FileStatus, staged bool) tea.Cmd {
 	svc := m.svc
 	differ := m.diffDiffer()
@@ -311,20 +313,18 @@ func (m Model) loadStatusDiffCmd(f model.FileStatus, staged bool) tea.Cmd {
 	tag := statusDiffTag(f.Path, staged)
 	v := &diffView{title: f.Path, context: statusDiffContext(staged), rev: "", partial: m.diffPartial, long: m.diffLong, width: width}
 
-	// Old side: absent when the file isn't in HEAD (untracked, or staged-new
-	// 'A'). Renames fetch the old name.
-	var oldSrc domain.ByteSource
-	if f.Kind != model.KindUntracked && f.Staged != 'A' {
-		p := f.Path
-		if f.OrigPath != "" {
-			p = f.OrigPath
-		}
-		oldSrc = func(ctx context.Context) ([]byte, error) { return svc.ShowFile(ctx, "HEAD", p) }
-	}
-
-	// Staged: new side is the index blob, absent for a staged delete ('D').
-	// Renames are staged under the new name (f.Path).
+	// Staged (HEAD → index): old side is the HEAD blob, absent when the file
+	// isn't in HEAD (untracked, or staged-new 'A'); renames fetch the old name.
+	// New side is the index blob, absent for a staged delete ('D').
 	if staged {
+		var oldSrc domain.ByteSource
+		if f.Kind != model.KindUntracked && f.Staged != 'A' {
+			p := f.Path
+			if f.OrigPath != "" {
+				p = f.OrigPath
+			}
+			oldSrc = func(ctx context.Context) ([]byte, error) { return svc.ShowFile(ctx, "HEAD", p) }
+		}
 		var newSrc domain.ByteSource
 		if f.Staged != 'D' {
 			newSrc = func(ctx context.Context) ([]byte, error) { return svc.ShowFile(ctx, "", f.Path) }
@@ -338,6 +338,14 @@ func (m Model) loadStatusDiffCmd(f model.FileStatus, staged bool) tea.Cmd {
 			applyDiff(v, out, body)
 			return diffMsg{tag: tag, view: v}
 		}
+	}
+
+	// Files (index → working tree): old side is the INDEX blob at the file's
+	// path, absent for an untracked file (no index entry → all-add). New side
+	// is the file on disk (built below).
+	var oldSrc domain.ByteSource
+	if f.Kind != model.KindUntracked {
+		oldSrc = func(ctx context.Context) ([]byte, error) { return svc.ShowFile(ctx, "", f.Path) }
 	}
 
 	full := filepath.Join(root, f.Path)

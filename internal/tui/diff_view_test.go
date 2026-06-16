@@ -270,6 +270,59 @@ func TestStatusLoaderStagedShowsIndexNotWorktree(t *testing.T) {
 	}
 }
 
+// TestStatusLoaderFilesShowsUnstagedNotStaged is the mirror of the staged test:
+// the Files panel diff (staged=false) compares the index blob → the file on
+// disk, so for a partially-staged file it shows ONLY the unstaged delta. The
+// already-staged change is in the index on both sides, so it never appears as a
+// change.
+func TestStatusLoaderFilesShowsUnstagedNotStaged(t *testing.T) {
+	dir, repo := newRepoDir(t)
+	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("one\ntwo\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, dir, "add", "f.txt")
+	gitIn(t, dir, "commit", "-m", "base")
+	// Stage the "TWO" change, then add an unstaged "three" line on disk.
+	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("one\nTWO\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, dir, "add", "f.txt")
+	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("one\nTWO\nthree\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	m := diffModel()
+	m.svc = domain.New(repo)
+	m.currentWorktree = dir
+	msg := m.loadStatusDiffCmd(model.FileStatus{Path: "f.txt", Staged: 'M', Unstaged: 'M'}, false)().(diffMsg)
+	if msg.view.err != nil {
+		t.Fatal(msg.view.err)
+	}
+	if msg.tag != "status:f.txt" {
+		t.Fatalf("tag = %q, want status:f.txt", msg.tag)
+	}
+	if msg.view.context != "index → working tree" {
+		t.Fatalf("context = %q, want index → working tree", msg.view.context)
+	}
+	// The staged TWO change is in the index on both sides, so it must appear
+	// only as an unchanged row — never as a Del/Add/Changed.
+	for _, r := range msg.view.full {
+		if r.Kind != textdiff.Same && strings.Contains(r.Left+r.Right, "TWO") {
+			t.Fatalf("Files diff leaked the staged change as a change: %+v", r)
+		}
+	}
+	// The unstaged "three" addition must be present.
+	var sawThree bool
+	for _, r := range msg.view.full {
+		if r.Kind == textdiff.Add && strings.Contains(r.Right, "three") {
+			sawThree = true
+		}
+	}
+	if !sawThree {
+		t.Fatal("Files diff missing the unstaged three addition")
+	}
+}
+
 func TestDiffMsgStaleTagDropped(t *testing.T) {
 	m := diffModel()
 	m.diffView = &diffView{loading: true}
