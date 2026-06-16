@@ -297,3 +297,50 @@ func TestBlameViewWrapMode(t *testing.T) {
 		t.Errorf("blame wrap mode did not expand the long code line:\n%s", out)
 	}
 }
+
+// In wrap mode the gutter (hash/author/age) is a frozen left column: it shows on
+// the block's first line only, and wrapped continuation lines stay clear of it —
+// the long content must not bleed across the author column.
+func TestBlameWrapFreezesGutter(t *testing.T) {
+	b := &blameView{
+		ctx:   navContext{path: "x"},
+		lines: []model.BlameLine{{Hash: "abcdef0", Author: "Zoe", Time: 1, LineNo: 1, Content: strings.Repeat("y", 200)}},
+		mode:  modeWrap,
+	}
+	b.blocks = groupBlame(b.lines)
+	m := Model{width: 80, height: 24}
+	out := b.render(m)
+	if strings.Count(out, "y") < 100 {
+		t.Fatalf("wrap did not expand the long line:\n%s", out)
+	}
+	// The author rides only the first display line of the block.
+	if n := strings.Count(out, "Zoe"); n != 1 {
+		t.Errorf("author must appear exactly once (frozen gutter), got %d:\n%s", n, out)
+	}
+	// A wrapped continuation line carries content but no gutter, so its gutter
+	// columns must be blank — content may not start at column 0.
+	for _, ln := range strings.Split(out, "\n") {
+		if strings.Count(ln, "y") > 5 && !strings.Contains(ln, "abcdef0") {
+			if !strings.HasPrefix(ln, strings.Repeat(" ", 25)) {
+				t.Errorf("wrapped continuation bled into the gutter column: %q", ln)
+			}
+		}
+	}
+}
+
+// In scroll mode the gutter stays put while only the content pans; panning right
+// must not slide the author column off the left edge.
+func TestBlameScrollFreezesGutter(t *testing.T) {
+	b := &blameView{
+		ctx:   navContext{path: "x"},
+		lines: []model.BlameLine{{Hash: "abcdef0", Author: "Zoe", Time: 1, LineNo: 1, Content: strings.Repeat("y", 200)}},
+		mode:  modeScroll,
+	}
+	b.blocks = groupBlame(b.lines)
+	m := Model{width: 80, height: 24}
+	b.hscroll = 40 // pan the content well to the right
+	out := b.render(m)
+	if !strings.Contains(out, "Zoe") {
+		t.Errorf("scroll mode must keep the gutter author fixed while panning content:\n%s", out)
+	}
+}
