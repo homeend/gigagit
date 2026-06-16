@@ -96,6 +96,49 @@ func TestContentPageRows(t *testing.T) {
 	}
 }
 
+func TestContentPopupZCyclesMode(t *testing.T) {
+	m := contentModel(4)
+	if m.contentPopup.mode != modeCutoff {
+		t.Fatalf("default mode = %v, want modeCutoff", m.contentPopup.mode)
+	}
+	u, _ := m.Update(keyMsg("z"))
+	mm := u.(Model)
+	if mm.contentPopup.mode != modeWrap {
+		t.Fatalf("after z, mode = %v, want modeWrap", mm.contentPopup.mode)
+	}
+}
+
+// In the default cutoff mode the popup renders its rows just as before the
+// renderWindow conversion: the cursor row prefixed, all rows present.
+func TestContentPopupCutoffRendersRows(t *testing.T) {
+	m := contentModel(4)
+	out := ansi.Strip(m.render())
+	if !strings.Contains(out, "> line-00") {
+		t.Fatalf("cursor row missing its prefix:\n%s", out)
+	}
+	for i := 0; i < 4; i++ {
+		if !strings.Contains(out, fmt.Sprintf("line-%02d", i)) {
+			t.Fatalf("line-%02d missing:\n%s", i, out)
+		}
+	}
+}
+
+// z must NOT cycle the mode while the /-search input is capturing keys — it
+// types a literal "z" into the query instead.
+func TestContentPopupZTypesWhileSearching(t *testing.T) {
+	m := contentModel(4)
+	u, _ := m.Update(keyMsg("/"))
+	m = u.(Model)
+	u, _ = m.Update(keyMsg("z"))
+	mm := u.(Model)
+	if mm.contentPopup.mode != modeCutoff {
+		t.Fatalf("z while typing must not change mode; got %v", mm.contentPopup.mode)
+	}
+	if mm.contentPopup.query != "z" {
+		t.Fatalf("z while typing must append to query; query = %q", mm.contentPopup.query)
+	}
+}
+
 func TestContentPopupFitsViewport(t *testing.T) {
 	m := contentModel(5)
 	for i := 0; i < 4; i++ { // cursor to the last line — still no scrolling
