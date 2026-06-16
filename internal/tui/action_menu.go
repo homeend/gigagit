@@ -22,7 +22,9 @@ func availableActions(m Model) []actionRow {
 	var out []actionRow
 	add := func(bs []footerBinding) {
 		for _, b := range bs {
-			if b.id == "" || b.id == "actions" {
+			// Skip navigation (no id), the menu's own entry, and quit — q closes
+			// the menu, so a [q] quit row would be misleading.
+			if b.id == "" || b.id == "actions" || b.id == "quit" {
 				continue
 			}
 			if b.when(m) {
@@ -159,7 +161,8 @@ func (m Model) updateActionMenuKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			a.hscroll += m.hscrollStep()
 		}
 		return m, nil
-	case "esc":
+	case "esc", "q":
+		// Close like every other popup; q must NOT fall through to the quit row.
 		m.actionMenu = nil
 		return m, nil
 	case "/":
@@ -176,10 +179,15 @@ func (m Model) updateActionMenuKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "enter":
 		return m.runVisibleRow(a.sel)
 	}
-	// Direct key: run the visible row whose key matches.
+	// Direct key: run the visible row whose key matches. Space reports its
+	// String() as " ", so normalize it to the registry's "space".
+	pressed := msg.String()
+	if msg.Type == tea.KeySpace {
+		pressed = "space"
+	}
 	vis := a.visible()
 	for i, r := range vis {
-		if r.key == msg.String() {
+		if r.key == pressed {
 			return m.runVisibleRow(i)
 		}
 	}

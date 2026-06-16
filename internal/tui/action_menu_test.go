@@ -1,9 +1,13 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
+
+	"github.com/gigagit/gg/internal/model"
 )
 
 func TestSynthKey(t *testing.T) {
@@ -92,9 +96,52 @@ func TestAvailableActionsExcludesNavAndSelf(t *testing.T) {
 	if ids["actions"] {
 		t.Error("the menu must not list itself (actions)")
 	}
+	if ids["quit"] {
+		t.Error("quit must not be a menu row (q closes the menu)")
+	}
 	for _, nav := range []string{"tab", "ctrl+←/→"} {
 		if ids[nav] {
 			t.Errorf("navigation key %q must not appear as an action", nav)
 		}
+	}
+}
+
+func TestActionMenuQCloses(t *testing.T) {
+	m := footerModel()
+	m.loading = false
+	u, _ := m.Update(keyMsg("."))
+	m = u.(Model)
+	u, cmd := m.Update(keyMsg("q"))
+	mm := u.(Model)
+	if mm.actionMenu != nil {
+		t.Fatal("q must close the menu")
+	}
+	if cmd != nil {
+		t.Fatal("q must close the menu, not quit the app")
+	}
+}
+
+// Space reports String() as " ", so the direct-key match must normalize it;
+// pressing space on the [space] stage row runs (and closes the menu), not no-op.
+func TestActionMenuRunsStageBySpace(t *testing.T) {
+	m := footerModel()
+	m.loading = false
+	m.focus = panelFiles
+	m.status.Files = []model.FileStatus{{Path: "f.txt", Kind: model.KindTracked, Staged: '.', Unstaged: 'M'}}
+	u, _ := m.Update(keyMsg(".")) // menu includes the [space] stage row
+	m = u.(Model)
+	u, _ = m.Update(keyMsg("space"))
+	if u.(Model).actionMenu != nil {
+		t.Fatal("space must match the stage row and close the menu (not no-op)")
+	}
+}
+
+func TestActionMenuRenders(t *testing.T) {
+	m := footerModel()
+	m.loading = false
+	u, _ := m.Update(keyMsg("."))
+	out := ansi.Strip(u.(Model).View())
+	if !strings.Contains(out, "Actions") || !strings.Contains(out, "[p]ull") {
+		t.Fatalf("rendered menu missing header/rows:\n%s", out)
 	}
 }
