@@ -9,6 +9,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Fixed
+- TUI: the hunk picker (conflict resolve / `H` staging) now shows a **column
+  header** labelling which side is `current`/`incoming` (or `index`/`working`),
+  with the active side — the column the cursor edits — highlighted, so the two
+  panes are no longer ambiguous. Its action hint also **wraps** across lines
+  instead of being truncated at the screen edge, so no command is ever cut off.
 - TUI: a status-bar message (notably an error like switching to a branch already
   checked out in another worktree) no longer lingers forever — it now clears on
   the next key interaction when idle, so it reflects the most recent action

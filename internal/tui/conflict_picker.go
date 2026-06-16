@@ -14,7 +14,10 @@ import (
 var (
 	pickerDim   = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 	pickerFocus = lipgloss.NewStyle().Bold(true)
+	pickerLabel = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("245"))
 )
+
+const pickerColSep = " ║ "
 
 // hunkPicker is the shared region/line picker surface. It serves both the
 // conflict resolver (current/incoming, every region must be decided) and hunk
@@ -262,10 +265,20 @@ func (e *hunkPicker) render(m Model) string {
 	if e.requireAll {
 		header = fmt.Sprintf("%s    %d regions · %d left", e.title, len(e.blocks), e.doc.Pending())
 	}
-	hint := fmt.Sprintf("[←/→] side  [shift+←/→] scroll  [z] mode  [↑/↓] line  [space] pick  [c] %s  [i] %s  [C/I] all  [n/p] hunk  [enter] apply  [esc] cancel",
-		e.leftLabel, e.rightLabel)
 
-	bodyH := H - 4 // header, separator, blank, hint
+	// Column header: which physical column is left/right, with the active side
+	// (the one the cursor edits) marked and highlighted.
+	colLabels := e.columnLabels(w)
+
+	// The hint wraps instead of truncating so no command is ever cut off.
+	hintLines := wrapParts([]string{
+		"[←/→] side", "[shift+←/→] scroll", "[z] mode", "[↑/↓] line", "[space] pick",
+		"[c] " + e.leftLabel, "[i] " + e.rightLabel, "[C/I] all", "[n/p] hunk",
+		"[enter] apply", "[esc] cancel",
+	}, w, "  ")
+
+	// header, column labels, blank, hint(N).
+	bodyH := H - 3 - len(hintLines)
 	if bodyH < 1 {
 		bodyH = 1
 	}
@@ -318,11 +331,31 @@ func (e *hunkPicker) render(m Model) string {
 	}
 
 	body := renderTwoCol(rows, twoColOpts{
-		w: w, h: bodyH, sep: " ║ ", mode: e.mode, hscroll: e.hscroll, anchor: anchor,
+		w: w, h: bodyH, sep: pickerColSep, mode: e.mode, hscroll: e.hscroll, anchor: anchor,
 	})
 
-	lines := []string{header, strings.Repeat("─", min(w, 60))}
+	lines := []string{header, colLabels}
 	lines = append(lines, body...)
-	lines = append(lines, "", hint)
+	lines = append(lines, "")
+	lines = append(lines, hintLines...)
 	return strings.Join(lines, "\n")
+}
+
+// columnLabels builds the two-column header row labelling the left/right sides,
+// aligned to the same column split renderTwoCol uses. The active side (the one
+// the cursor edits) is highlighted and gets a ▶ marker.
+func (e *hunkPicker) columnLabels(w int) string {
+	colW := (w - lipgloss.Width(pickerColSep)) / 2
+	if colW < 1 {
+		colW = 1
+	}
+	cell := func(label string, active bool) string {
+		marker, style := "  ", pickerLabel
+		if active {
+			marker, style = "▶ ", selectedRow
+		}
+		return styleCell(style, marker+label, colW)
+	}
+	return cell(e.leftLabel, e.side == hunkpick.Current) +
+		pickerColSep + cell(e.rightLabel, e.side == hunkpick.Incoming)
 }

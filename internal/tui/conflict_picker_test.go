@@ -82,6 +82,52 @@ func TestConflictPickerRendersMarkers(t *testing.T) {
 	}
 }
 
+// The picker must label which physical column is current and which is incoming,
+// on a single header row spanning both columns (the only line carrying both
+// labels and the column separator).
+func TestConflictPickerShowsColumnLabels(t *testing.T) {
+	e := newConflictPicker("f.txt", pickerDoc())
+	m := Model{stack: &viewStack{entries: []surface{e}}, width: 80, height: 24}
+	out := e.render(m)
+	var found bool
+	for _, ln := range strings.Split(out, "\n") {
+		if strings.Contains(ln, "current") && strings.Contains(ln, "incoming") && strings.Contains(ln, "║") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("no column-header row labelling current/incoming:\n%s", out)
+	}
+}
+
+// The active side's label is highlighted so the cursor's column is obvious.
+func TestConflictPickerActiveSideMarked(t *testing.T) {
+	e := newConflictPicker("f.txt", pickerDoc())
+	m := Model{stack: &viewStack{entries: []surface{e}}, width: 80, height: 24}
+	// Current side is active by default → its label carries the focus marker.
+	if !strings.Contains(e.render(m), "▶ current") {
+		t.Fatalf("current side not marked active:\n%s", e.render(m))
+	}
+	m, _ = e.update(m, keyMsg("right")) // → incoming
+	if !strings.Contains(e.render(m), "▶ incoming") {
+		t.Fatalf("incoming side not marked active after →:\n%s", e.render(m))
+	}
+}
+
+// At a narrow width the action hint must wrap, not truncate — the last token
+// stays visible.
+func TestConflictPickerHintWrapsNotTruncated(t *testing.T) {
+	e := newConflictPicker("f.txt", pickerDoc())
+	m := Model{stack: &viewStack{entries: []surface{e}}, width: 40, height: 24}
+	out := e.render(m)
+	for _, tok := range []string{"[c] current", "[i] incoming", "[enter] apply", "[esc] cancel"} {
+		if !strings.Contains(out, tok) {
+			t.Fatalf("hint token %q missing (truncated?):\n%s", tok, out)
+		}
+	}
+}
+
 func TestConflictFileLoadedPushesPicker(t *testing.T) {
 	m := Model{width: 80, height: 24}
 	content := []byte("<<<<<<< HEAD\na\n=======\nb\n>>>>>>> x\n")
