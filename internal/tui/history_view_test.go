@@ -70,7 +70,7 @@ func TestHistoryQInert(t *testing.T) {
 
 func TestStatusHOpensHistory(t *testing.T) {
 	m := Model{width: 100, height: 30, focus: panelFiles, sel: map[panel]int{}}
-	m.status = model.WorkingTreeStatus{Files: []model.FileStatus{{Path: "a.go"}}}
+	m.status = model.WorkingTreeStatus{Files: []model.FileStatus{{Path: "a.go", Unstaged: 'M'}}}
 	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("h")})
 	got := mm.(Model)
 	h, ok := got.stackTop().(*historyView)

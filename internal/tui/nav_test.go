@@ -51,15 +51,15 @@ func TestViewRendersPanelsWithoutPanic(t *testing.T) {
 
 func TestTabCyclesActiveTabStatusCommits(t *testing.T) {
 	m := New(nil)
-	m.width, m.height = 80, 24
-	m.focus = panelBranches // the active tab
+	m.width, m.height = 80, 24 // bodyH 21 >= 12 → Staged visible
+	m.focus = panelBranches    // the active tab
 	var got []panel
 	for i := 0; i < 3; i++ {
 		u, _ := m.Update(keyMsg("tab"))
 		m = u.(Model)
 		got = append(got, m.focus)
 	}
-	want := []panel{panelFiles, panelCommits, panelBranches}
+	want := []panel{panelFiles, panelStaged, panelCommits}
 	for i := range want {
 		if got[i] != want[i] {
 			t.Fatalf("tab walk[%d] = %v, want %v (full: %v)", i, got[i], want[i], got)

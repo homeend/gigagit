@@ -33,16 +33,16 @@ func TestLeftArrowReturnsToLastLeftPanel(t *testing.T) {
 
 func TestLeftArrowAfterTabRemembersLeftPanel(t *testing.T) {
 	m := markModel()
-	m.width, m.height = 80, 24
-	m.focus = panelFiles
-	u, _ := m.Update(keyMsg("tab")) // status -> commits, must record status
+	m.width, m.height = 80, 24 // bodyH 21 >= 12 → Staged visible; order ends [Staged, Commits]
+	m.focus = panelStaged
+	u, _ := m.Update(keyMsg("tab")) // Staged -> Commits, must record Staged
 	m = u.(Model)
 	if m.focus != panelCommits {
 		t.Fatalf("setup: focus = %v, want commits", m.focus)
 	}
 	u, _ = m.Update(keyMsg("left"))
-	if got := u.(Model).focus; got != panelFiles {
-		t.Fatalf("focus = %v, want status (recorded by tab)", got)
+	if got := u.(Model).focus; got != panelStaged {
+		t.Fatalf("focus = %v, want Staged (recorded by tab)", got)
 	}
 }
 

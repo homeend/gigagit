@@ -58,14 +58,26 @@ func (m Model) layout() layoutGeom {
 	}
 	g.leftW, g.rightW = leftW, w-leftW
 
-	// Left column: the Branches/Worktrees tab slot over Status (two boxes). The
-	// inactive tab gets no boxH entry (0 ⇒ hidden everywhere — panelAt/render
-	// skip boxH<=0 — but its per-panel state is untouched).
-	tabH := bodyH / 2
-	g.boxH[m.activeLeftTab] = tabH
-	g.boxH[panelFiles] = bodyH - tabH
-	g.pos[m.activeLeftTab] = point{0, 1}
-	g.pos[panelFiles] = point{0, 1 + tabH}
+	// Left column: the Branches/Worktrees tab slot, Files, and Staged. Each
+	// bordered box needs >=3 rows; a short terminal drops Staged (tab slot over
+	// Files). The inactive tab — and a dropped Staged — get no boxH entry (0 ⇒
+	// hidden everywhere; panelAt/render skip boxH<=0) but keep their state.
+	if bodyH >= 12 {
+		h1 := bodyH / 3
+		h2 := bodyH / 3
+		g.boxH[m.activeLeftTab] = h1
+		g.boxH[panelFiles] = h2
+		g.boxH[panelStaged] = bodyH - h1 - h2
+		g.pos[m.activeLeftTab] = point{0, 1}
+		g.pos[panelFiles] = point{0, 1 + h1}
+		g.pos[panelStaged] = point{0, 1 + h1 + h2}
+	} else {
+		h1 := bodyH / 2
+		g.boxH[m.activeLeftTab] = h1
+		g.boxH[panelFiles] = bodyH - h1
+		g.pos[m.activeLeftTab] = point{0, 1}
+		g.pos[panelFiles] = point{0, 1 + h1}
+	}
 	g.boxH[panelCommits] = bodyH
 	g.pos[panelCommits] = point{leftW, 1}
 	return g
@@ -194,6 +206,33 @@ func (l commitList) Name(i int) string { return l.items[i].Subject }
 func (l commitList) Date(i int) int64  { return l.items[i].UnixTime }
 func (l commitList) Key(i int) string  { return l.items[i].Hash }
 
+// inFilesPanel reports whether f belongs in the Files panel: any working-tree
+// change (Unstaged side), including untracked and conflicts.
+func inFilesPanel(f model.FileStatus) bool {
+	return f.Kind == model.KindUntracked || (f.Unstaged != '.' && f.Unstaged != 0)
+}
+
+// inStagedPanel reports whether f belongs in the Staged panel: an index change.
+// Untracked and unmerged (conflict) entries are excluded.
+func inStagedPanel(f model.FileStatus) bool {
+	if f.Kind == model.KindUntracked || f.Kind == model.KindUnmerged {
+		return false
+	}
+	return f.Staged != '.' && f.Staged != 0 && f.Staged != '?'
+}
+
+// memberOf reports whether backing element i of panel p is shown there. Only the
+// Files/Staged split filters; every other panel shows all of its rows.
+func (m Model) memberOf(p panel, i int) bool {
+	switch p {
+	case panelFiles:
+		return inFilesPanel(m.status.Files[i])
+	case panelStaged:
+		return inStagedPanel(m.status.Files[i])
+	}
+	return true
+}
+
 // listFor builds panel p's panelList from the current model snapshot.
 func (m Model) listFor(p panel) panelList {
 	switch p {
@@ -201,7 +240,10 @@ func (m Model) listFor(p panel) panelList {
 		return branchList{items: m.branches, rows: m.branchRows()}
 	case panelWorktrees:
 		return worktreeList{items: m.worktrees, rows: m.worktreeRows(), times: m.headTimes}
-	case panelFiles:
+	case panelFiles, panelStaged:
+		// Both file panels back onto the FULL status slice; panelView's
+		// membership filter selects each panel's subset, so backingIndex keeps
+		// returning indices into m.status.Files for the action handlers.
 		return statusList{files: m.status.Files, rows: m.statusRows(), root: m.currentWorktree, mtime: map[int]int64{}}
 	case panelCommits:
 		return commitList{items: m.commits, rows: m.commitRows()}
@@ -265,6 +307,9 @@ func (m Model) panelView(p panel) (rows []string, idx []int) {
 	}
 	idx = make([]int, 0, l.Len())
 	for i := 0; i < l.Len(); i++ {
+		if !m.memberOf(p, i) {
+			continue // Files/Staged split: each panel shows only its subset
+		}
 		if q != "" && !strings.Contains(strings.ToLower(l.Row(i)), q) {
 			continue
 		}

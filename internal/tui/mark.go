@@ -65,9 +65,9 @@ func (m Model) handleMarkKey() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	key := m.listFor(m.focus).Key(bi)
-	// Status panel: m toggles a multi-select set of files (for stashing), kept
+	// File panels: m toggles a multi-select set of files (for stashing), kept
 	// separate from the single-mark/pair-op machinery used on other panels.
-	if m.focus == panelFiles {
+	if m.isFilesPanel(m.focus) {
 		if m.fileMarks == nil {
 			m.fileMarks = map[string]bool{}
 		}
@@ -103,7 +103,7 @@ func (m Model) markedDisplayIndices(p panel) map[int]bool {
 	if md := m.markDisplayIndex(p); md >= 0 {
 		out[md] = true
 	}
-	if p == panelFiles && len(m.fileMarks) > 0 {
+	if m.isFilesPanel(p) && len(m.fileMarks) > 0 {
 		l := m.listFor(p)
 		_, idx := m.panelView(p)
 		for n, i := range idx {

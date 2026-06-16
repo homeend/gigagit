@@ -8,9 +8,9 @@ import (
 	"github.com/gigagit/gg/internal/model"
 )
 
-// mouseModel is markModel sized 80x24: leftW=26, two left boxes — the active
-// tab slot (height 10) at y=1 and Status (height 11) at y=11; Commits 26..79
-// full body height.
+// mouseModel is markModel sized 80x24: leftW=26, three left boxes of height 7 —
+// the active tab slot at y=1, Files at y=8, Staged at y=15; Commits 26..79 full
+// body height.
 func mouseModel() Model {
 	m := markModel()
 	m.width, m.height = 80, 24
@@ -24,11 +24,11 @@ func TestPanelAt(t *testing.T) {
 		want panel
 		ok   bool
 	}{
-		{0, 1, panelBranches, true},  // top-left border cell (active tab slot)
+		{0, 1, panelBranches, true},  // top-left border cell (active tab slot, y=1..7)
 		{5, 4, panelBranches, true},  // data area
-		{0, 8, panelBranches, true},  // still inside the tab slot (height 10)
-		{0, 15, panelFiles, true},    // Status box (y=11..21)
-		{25, 21, panelFiles, true},   // bottom-right of the left column
+		{0, 8, panelFiles, true},     // Files box (y=8..14)
+		{0, 15, panelStaged, true},   // Staged box (y=15..21)
+		{25, 21, panelStaged, true},  // bottom-right of the left column
 		{26, 1, panelCommits, true},  // commits left edge
 		{79, 21, panelCommits, true}, // commits bottom-right
 		{5, 0, 0, false},             // header row
@@ -73,9 +73,9 @@ func TestPanelRowAtScrolledPanel(t *testing.T) {
 	for i := 0; i < 30; i++ {
 		m.branches = append(m.branches, model.Branch{Name: string(rune('a'+i%26)) + "-br"})
 	}
-	m.sel[panelBranches] = 20 // tab slot boxH=bodyH/2=10; rowsCap=10-3=7; windowStart(30,7,20)=17
-	if idx, ok := m.panelRowAt(panelBranches, 3); !ok || idx != 17 {
-		t.Fatalf("scrolled row at y=3 = %d,%v, want 17,true (windowStart consistency)", idx, ok)
+	m.sel[panelBranches] = 20 // tab slot boxH=bodyH/3=7; rowsCap=7-3=4; windowStart(30,4,20)=18
+	if idx, ok := m.panelRowAt(panelBranches, 3); !ok || idx != 18 {
+		t.Fatalf("scrolled row at y=3 = %d,%v, want 18,true (windowStart consistency)", idx, ok)
 	}
 }
 

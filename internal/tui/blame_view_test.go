@@ -172,7 +172,7 @@ func TestBlameQInert(t *testing.T) {
 
 func TestStatusBOpensBlame(t *testing.T) {
 	m := Model{width: 100, height: 30, focus: panelFiles, sel: map[panel]int{}}
-	m.status = model.WorkingTreeStatus{Files: []model.FileStatus{{Path: "a.go"}}}
+	m.status = model.WorkingTreeStatus{Files: []model.FileStatus{{Path: "a.go", Unstaged: 'M'}}}
 	mm, _ := m.Update(keyMsg("b"))
 	got := mm.(Model)
 	bv, ok := got.stackTop().(*blameView)
