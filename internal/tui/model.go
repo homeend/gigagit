@@ -510,6 +510,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "shift+tab":
 			m = m.rememberLeftFocus()
 			m.focus = nextInOrder(m.focusOrder(), m.focus, -1)
+		case "ctrl+left", "ctrl+right":
+			// Two tabs, so either direction toggles. Switch and focus it.
+			if m.activeLeftTab == panelBranches {
+				m.activeLeftTab = panelWorktrees
+			} else {
+				m.activeLeftTab = panelBranches
+			}
+			m.focus = m.activeLeftTab
+			m.lastLeftPanel = m.activeLeftTab
+			return m, nil
 		case "right":
 			if m.focus != panelCommits {
 				m = m.rememberLeftFocus()
@@ -519,7 +529,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// No-op when already in the left column, and when the narrow
 			// layout has no left column to focus.
 			if m.focus == panelCommits && (m.width <= 0 || m.width >= 40) {
-				m.focus = m.lastLeftPanel
+				m.focus = m.leftReturnTarget()
 			}
 		case "pgdown":
 			if n := m.panelLen(m.focus); n > 0 {

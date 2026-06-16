@@ -80,3 +80,41 @@ func TestTabNeverFocusesInactiveTab(t *testing.T) {
 		}
 	}
 }
+
+func TestCtrlArrowSwitchesAndFocusesTab(t *testing.T) {
+	m := New(nil)
+	m.width, m.height = 80, 24
+	m.focus = panelBranches
+	if m.activeLeftTab != panelBranches {
+		t.Fatal("default active tab should be Branches")
+	}
+	u, _ := m.Update(keyMsg("ctrl+right"))
+	mm := u.(Model)
+	if mm.activeLeftTab != panelWorktrees {
+		t.Errorf("ctrl+right: active tab = %v, want Worktrees", mm.activeLeftTab)
+	}
+	if mm.focus != panelWorktrees {
+		t.Errorf("ctrl+right: focus = %v, want Worktrees (focus follows the tab)", mm.focus)
+	}
+	u2, _ := mm.Update(keyMsg("ctrl+left"))
+	if u2.(Model).activeLeftTab != panelBranches {
+		t.Error("ctrl+left should switch back to Branches")
+	}
+}
+
+func TestLeftDoesNotFocusHiddenTab(t *testing.T) {
+	m := New(nil)
+	m.width, m.height = 80, 24
+	m.lastLeftPanel = panelBranches
+	// Switch the visible tab to Worktrees, then sit on Commits and go ←.
+	m.activeLeftTab = panelWorktrees
+	m.focus = panelCommits
+	u, _ := m.Update(keyMsg("left"))
+	got := u.(Model).focus
+	if got == panelBranches {
+		t.Fatalf("← focused the hidden Branches tab; want the active tab or Status, got %v", got)
+	}
+	if got != panelWorktrees && got != panelStatus {
+		t.Fatalf("← focus = %v, want the active Worktrees tab or Status", got)
+	}
+}
