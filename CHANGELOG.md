@@ -13,6 +13,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - The Status panel is now two panels: **Files** (working-tree changes —
   unstaged, untracked, and conflicts) and **Staged** (the index). `space` stages
   from Files and unstages from Staged; a partially-staged file shows in both.
+  Each row shows a **single status letter for that panel's own side** (not git's
+  two-byte code): Files shows the working-tree state (a new untracked file → `A`,
+  a conflict → `U`, otherwise `M`/`D`), Staged shows the index state
+  (`A`/`M`/`D`/…). So a partially-staged `MM` file reads `M` in Files and `M` in
+  Staged — each letter describing only that window.
   `enter` on a Files row diffs HEAD → working tree; on a Staged row it diffs
   HEAD → index, so the two panels show the unstaged and staged halves of a
   partially-staged file separately. Each panel header shows its file count. On

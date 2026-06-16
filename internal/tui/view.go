@@ -7,6 +7,8 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/gigagit/gg/internal/model"
 )
 
 // overlayAt composites fg on top of bg with fg's top-left corner at cell
@@ -539,20 +541,38 @@ func (m Model) worktreeRows() []string {
 	return out
 }
 
-func (m Model) statusRows() []string {
+// statusRows builds panel p's file rows. Each file panel shows a SINGLE status
+// letter for its OWN side, not git's two-byte XY — once the panels are split,
+// the other byte is noise. The Files panel shows the working-tree state (a new
+// untracked file → A, a conflict → U, otherwise the unstaged byte M/D); the
+// Staged panel shows the index state (the staged byte A/M/D/R/C/T).
+func (m Model) statusRows(p panel) []string {
 	out := make([]string, 0, len(m.status.Files))
 	for _, f := range m.status.Files {
-		x := f.Staged
-		y := f.Unstaged
-		if x == 0 {
-			x = ' '
-		}
-		if y == 0 {
-			y = ' '
-		}
-		out = append(out, fmt.Sprintf("%c%c %s", x, y, f.Path))
+		out = append(out, fmt.Sprintf("%c %s", fileGlyph(p, f), f.Path))
 	}
 	return out
+}
+
+// fileGlyph returns the single status letter for file f in panel p.
+func fileGlyph(p panel, f model.FileStatus) byte {
+	if p == panelStaged {
+		if f.Staged == 0 {
+			return ' '
+		}
+		return f.Staged // index vs HEAD: A / M / D / R / C / T
+	}
+	// Files panel: working-tree state.
+	switch {
+	case f.Kind == model.KindUntracked:
+		return 'A' // a new file present in the tree, not staged
+	case f.Kind == model.KindUnmerged:
+		return 'U' // conflicted — resolve with x
+	case f.Unstaged == 0:
+		return ' '
+	default:
+		return f.Unstaged // worktree vs index: M / D
+	}
 }
 
 func (m Model) commitRows() []string {

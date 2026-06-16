@@ -244,7 +244,7 @@ func (m Model) listFor(p panel) panelList {
 		// Both file panels back onto the FULL status slice; panelView's
 		// membership filter selects each panel's subset, so backingIndex keeps
 		// returning indices into m.status.Files for the action handlers.
-		return statusList{files: m.status.Files, rows: m.statusRows(), root: m.currentWorktree, mtime: map[int]int64{}}
+		return statusList{files: m.status.Files, rows: m.statusRows(p), root: m.currentWorktree, mtime: map[int]int64{}}
 	case panelCommits:
 		return commitList{items: m.commits, rows: m.commitRows()}
 	}
