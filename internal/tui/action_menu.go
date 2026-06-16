@@ -200,10 +200,11 @@ func (m Model) renderActionMenu() string {
 	a := m.actionMenu
 	w, _ := m.overlayDims()
 	inner := popupInnerWidth(w)
+	textW := popupTextWidth(inner)
 	vis := a.visible()
 	var bodyLines []string
 	if len(vis) == 0 {
-		bodyLines = []string{padRight("  (no match)", inner)}
+		bodyLines = []string{padRight("  (no match)", textW)}
 	} else {
 		wr := make([]winRow, len(vis))
 		for i, r := range vis {
@@ -218,7 +219,7 @@ func (m Model) renderActionMenu() string {
 		if h > 14 {
 			h = 14
 		}
-		bodyLines = renderWindow(wr, winOpts{w: inner, h: h, mode: a.mode, anchor: a.sel, hscroll: a.hscroll})
+		bodyLines = renderWindow(wr, winOpts{w: textW, h: h, mode: a.mode, anchor: a.sel, hscroll: a.hscroll})
 	}
 	header := "Actions"
 	if a.typing {
@@ -229,5 +230,5 @@ func (m Model) renderActionMenu() string {
 	parts := []string{header, ""}
 	parts = append(parts, bodyLines...)
 	parts = append(parts, "", "[key]/[enter] run  [/] filter  [z] mode  [esc] close")
-	return modalStyle.Width(inner).Render(strings.Join(parts, "\n")) + "\n"
+	return popupBox(inner, strings.Join(parts, "\n"))
 }

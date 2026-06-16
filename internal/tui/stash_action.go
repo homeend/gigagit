@@ -84,10 +84,11 @@ func (m Model) renderStashActionPopup() string {
 	a := m.stashAction
 	w, _ := m.overlayDims()
 	inner := popupInnerWidth(w)
+	textW := popupTextWidth(inner)
 	var b strings.Builder
 	if a.confirming {
 		b.WriteString("Drop " + a.ref + "?\n\n" + a.subject + "\n\n[y] drop   [n] cancel")
-		return modalStyle.Width(inner).Render(b.String()) + "\n"
+		return popupBox(inner, b.String())
 	}
 	b.WriteString("Stash " + a.ref + "\n" + a.subject + "\n\n")
 	wr := make([]winRow, len(stashActions))
@@ -99,9 +100,9 @@ func (m Model) renderStashActionPopup() string {
 		}
 		wr[i] = winRow{text: prefix + name, style: st}
 	}
-	for _, line := range renderWindow(wr, winOpts{w: inner, h: len(stashActions), mode: a.mode, anchor: a.sel, hscroll: a.hscroll}) {
+	for _, line := range renderWindow(wr, winOpts{w: textW, h: len(stashActions), mode: a.mode, anchor: a.sel, hscroll: a.hscroll}) {
 		b.WriteString(line + "\n")
 	}
 	b.WriteString("\n[enter] do  [z] mode  [esc] cancel")
-	return modalStyle.Width(inner).Render(b.String()) + "\n"
+	return popupBox(inner, b.String())
 }

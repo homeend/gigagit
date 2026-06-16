@@ -69,6 +69,7 @@ func (m Model) renderPairOpPopup() string {
 	p := m.pairPopup
 	w, _ := m.overlayDims()
 	inner := popupInnerWidth(w)
+	textW := popupTextWidth(inner)
 	wr := make([]winRow, len(p.ops))
 	for i, op := range p.ops {
 		line := op.label(p.marked, p.selected)
@@ -82,9 +83,9 @@ func (m Model) renderPairOpPopup() string {
 		}
 		wr[i] = winRow{text: prefix + line, style: st}
 	}
-	body := renderWindow(wr, winOpts{w: inner, h: len(p.ops), mode: p.mode, anchor: p.sel, hscroll: p.hscroll})
+	body := renderWindow(wr, winOpts{w: textW, h: len(p.ops), mode: p.mode, anchor: p.sel, hscroll: p.hscroll})
 	parts := []string{p.marked + " + " + p.selected, ""}
 	parts = append(parts, body...)
 	parts = append(parts, "", "[↑/↓] choose  [enter] run  [z] mode  [esc] cancel")
-	return modalStyle.Width(inner).Render(strings.Join(parts, "\n")) + "\n"
+	return popupBox(inner, strings.Join(parts, "\n"))
 }
