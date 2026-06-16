@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/gigagit/gg/internal/engine"
 )
@@ -12,8 +13,10 @@ import (
 type stashActionPopup struct {
 	ref        string
 	subject    string
-	sel        int  // 0 Apply, 1 Pop, 2 Drop
-	confirming bool // Drop awaiting y/n
+	sel        int      // 0 Apply, 1 Pop, 2 Drop
+	confirming bool     // Drop awaiting y/n
+	mode       dispMode // text display mode; z cycles (cutoff default)
+	hscroll    int      // modeScroll horizontal offset
 }
 
 var stashActions = []string{"Apply", "Pop", "Drop"}
@@ -34,6 +37,22 @@ func (m Model) updateStashActionKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	switch msg.String() {
+	case "z": // cycle the text display mode (cutoff / wrap / scroll)
+		a.mode = a.mode.next()
+		a.hscroll = 0
+		return m, nil
+	case "shift+left":
+		if a.mode == modeScroll && a.hscroll > 0 {
+			if a.hscroll -= m.hscrollStep(); a.hscroll < 0 {
+				a.hscroll = 0
+			}
+		}
+		return m, nil
+	case "shift+right":
+		if a.mode == modeScroll {
+			a.hscroll += m.hscrollStep()
+		}
+		return m, nil
 	case "esc":
 		m.stashAction = nil
 		return m, nil
@@ -64,19 +83,25 @@ func (m Model) updateStashActionKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m Model) renderStashActionPopup() string {
 	a := m.stashAction
 	w, _ := m.overlayDims()
+	inner := popupInnerWidth(w)
 	var b strings.Builder
 	if a.confirming {
 		b.WriteString("Drop " + a.ref + "?\n\n" + a.subject + "\n\n[y] drop   [n] cancel")
-		return modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"
+		return modalStyle.Width(inner).Render(b.String()) + "\n"
 	}
 	b.WriteString("Stash " + a.ref + "\n" + a.subject + "\n\n")
+	wr := make([]winRow, len(stashActions))
 	for i, name := range stashActions {
+		prefix := "  "
+		var st lipgloss.Style
 		if i == a.sel {
-			b.WriteString(selectedRow.Render("> "+name) + "\n")
-		} else {
-			b.WriteString("  " + name + "\n")
+			prefix, st = "> ", selectedRow
 		}
+		wr[i] = winRow{text: prefix + name, style: st}
 	}
-	b.WriteString("\n[enter] do  [esc] cancel")
-	return modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"
+	for _, line := range renderWindow(wr, winOpts{w: inner, h: len(stashActions), mode: a.mode, anchor: a.sel, hscroll: a.hscroll}) {
+		b.WriteString(line + "\n")
+	}
+	b.WriteString("\n[enter] do  [z] mode  [esc] cancel")
+	return modalStyle.Width(inner).Render(b.String()) + "\n"
 }
