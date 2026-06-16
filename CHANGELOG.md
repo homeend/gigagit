@@ -8,6 +8,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+### Fixed
+- TUI: a status-bar message (notably an error like switching to a branch already
+  checked out in another worktree) no longer lingers forever — it now clears on
+  the next key interaction when idle, so it reflects the most recent action
+  instead of persisting across navigation and reloads.
+
 ### Changed
 - TUI: the decision modal (e.g. "merge … hit conflicts") now renders centered
   over the interface instead of standalone in the top-left corner.

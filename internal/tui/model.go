@@ -256,6 +256,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 	case tea.KeyMsg:
+		// The status line holds a transient message (an op result, an error, a
+		// refusal hint). Clear it as the user moves on to the next interaction,
+		// so a stale error doesn't linger across navigation and reloads; the
+		// handlers below re-set it when they have something fresh to say. Gated
+		// on idle so an in-flight op's "working…" notice survives stray keys.
+		if !m.running {
+			m.statusMsg = ""
+		}
 		if m.modal != nil {
 			switch msg.String() {
 			case "up", "k":
