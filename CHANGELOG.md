@@ -9,6 +9,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- TUI: **hunk/line staging** — press `H` on a file in the Files panel to open a
+  GitKraken-style staging picker (the same surface as the conflict resolver).
+  Per hunk: stage the whole working-tree side (`i`), keep the index side (`c`),
+  or `space` to stage individual lines (in pick order); `C`/`I` apply to all
+  hunks; `enter` stages the selection — the working tree is never modified (only
+  the index). `space` still stages the whole file.
+
 #### TUI action menu (.)
 - **`.`** opens an action menu listing every action available in the current
   context; press the action's key to run it, or `↑`/`↓` + `enter` (`/` filters,
