@@ -16,32 +16,65 @@ var (
 	pickerFocus = lipgloss.NewStyle().Bold(true)
 )
 
-// conflictPicker is the region/line-level conflict resolver surface. Rows show
-// the file top-to-bottom; conflict regions render side-by-side. A 2D cursor
-// (block index, side, line) drives the picks.
-type conflictPicker struct {
-	path   string
+// hunkPicker is the shared region/line picker surface. It serves both the
+// conflict resolver (current/incoming, every region must be decided) and hunk
+// staging (index/working, no gate) — the difference is the injected labels,
+// the requireAll gate, and the apply callback. A 2D cursor (block index, side,
+// line) drives the picks.
+type hunkPicker struct {
+	title      string // header prefix, e.g. "Resolve conflicts: f" / "Stage hunks: f"
+	leftLabel  string // "current" / "index"
+	rightLabel string // "incoming" / "working"
+	requireAll bool   // gate enter on Pending==0 (conflicts) vs apply freely (staging)
+	apply      func(m Model, content []byte) (Model, tea.Cmd)
+
 	doc    *hunkpick.Doc
 	blocks []*hunkpick.Block
-	bi     int           // focused block index into blocks
-	side   hunkpick.Side // focused column
-	line   int           // cursor line within the focused side
+	bi     int
+	side   hunkpick.Side
+	line   int
 }
 
-func newConflictPicker(path string, doc *hunkpick.Doc) *conflictPicker {
-	return &conflictPicker{path: path, doc: doc, blocks: doc.Blocks(), side: hunkpick.Current}
+// newConflictPicker wires the conflict-resolution params.
+func newConflictPicker(path string, doc *hunkpick.Doc) *hunkPicker {
+	return &hunkPicker{
+		title:      "Resolve conflicts: " + path,
+		leftLabel:  "current",
+		rightLabel: "incoming",
+		requireAll: true,
+		apply: func(m Model, content []byte) (Model, tea.Cmd) {
+			m = m.popSurface()
+			m.conflictPopup = nil
+			m.reopenConflict = true
+			return m.startOp(engine.ResolveConflictHunks{Path: path, Content: content})
+		},
+		doc: doc, blocks: doc.Blocks(), side: hunkpick.Current,
+	}
 }
 
-// cur returns the focused block, or nil when there are none.
-func (e *conflictPicker) cur() *hunkpick.Block {
+// newStagePicker wires the hunk-staging params.
+func newStagePicker(path string, doc *hunkpick.Doc) *hunkPicker {
+	return &hunkPicker{
+		title:      "Stage hunks: " + path,
+		leftLabel:  "index",
+		rightLabel: "working",
+		requireAll: false,
+		apply: func(m Model, content []byte) (Model, tea.Cmd) {
+			m = m.popSurface()
+			return m.startOp(engine.StageHunks{Path: path, Content: content})
+		},
+		doc: doc, blocks: doc.Blocks(), side: hunkpick.Current,
+	}
+}
+
+func (e *hunkPicker) cur() *hunkpick.Block {
 	if e.bi < 0 || e.bi >= len(e.blocks) {
 		return nil
 	}
 	return e.blocks[e.bi]
 }
 
-// sideLen is the number of lines on the focused side of the focused block.
-func (e *conflictPicker) sideLen() int {
+func (e *hunkPicker) sideLen() int {
 	b := e.cur()
 	if b == nil {
 		return 0
@@ -52,8 +85,7 @@ func (e *conflictPicker) sideLen() int {
 	return len(b.Current)
 }
 
-// clampLine keeps the cursor within the focused side's line count.
-func (e *conflictPicker) clampLine() {
+func (e *hunkPicker) clampLine() {
 	n := e.sideLen()
 	if e.line >= n {
 		e.line = n - 1
@@ -63,7 +95,7 @@ func (e *conflictPicker) clampLine() {
 	}
 }
 
-func (e *conflictPicker) focusFirstUndecided() {
+func (e *hunkPicker) focusFirstUndecided() {
 	for i, b := range e.blocks {
 		if b.Mode == hunkpick.Undecided {
 			e.bi, e.line, e.side = i, 0, hunkpick.Current
@@ -72,7 +104,7 @@ func (e *conflictPicker) focusFirstUndecided() {
 	}
 }
 
-func (e *conflictPicker) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
+func (e *hunkPicker) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
 	}
@@ -134,31 +166,30 @@ func (e *conflictPicker) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			b.ToggleLine(e.side, e.line)
 		}
 	case "enter":
-		if n := e.doc.Pending(); n > 0 {
-			m.statusMsg = fmt.Sprintf("%d region(s) left to resolve", n)
-			e.focusFirstUndecided()
-			return m, nil
+		if e.requireAll {
+			if n := e.doc.Pending(); n > 0 {
+				m.statusMsg = fmt.Sprintf("%d region(s) left to resolve", n)
+				e.focusFirstUndecided()
+				return m, nil
+			}
 		}
 		out, ok := e.doc.Resolved()
 		if !ok {
-			m.statusMsg = "internal error: unresolved regions"
+			m.statusMsg = "internal error: undecided regions"
 			return m, nil
 		}
-		m = m.popSurface()
-		m.conflictPopup = nil
-		m.reopenConflict = true
-		return m.startOp(engine.ResolveConflictHunks{Path: e.path, Content: out})
+		return e.apply(m, out)
 	}
 	return m, nil
 }
 
-// badge labels a block's current decision.
-func badge(b *hunkpick.Block) string {
+// badge labels a block's current decision using the picker's side labels.
+func (e *hunkPicker) badge(b *hunkpick.Block) string {
 	switch b.Mode {
 	case hunkpick.TakeCurrent:
-		return "✓ current"
+		return "✓ " + e.leftLabel
 	case hunkpick.TakeIncoming:
-		return "✓ incoming"
+		return "✓ " + e.rightLabel
 	case hunkpick.LineByLine:
 		return "line-by-line"
 	default:
@@ -166,14 +197,17 @@ func badge(b *hunkpick.Block) string {
 	}
 }
 
-func (e *conflictPicker) render(m Model) string {
+func (e *hunkPicker) render(m Model) string {
 	w := m.width
 	if w <= 0 {
 		w = 80
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "Resolve conflicts: %s    %d regions · %d left\n",
-		e.path, len(e.blocks), e.doc.Pending())
+	if e.requireAll {
+		fmt.Fprintf(&b, "%s    %d regions · %d left\n", e.title, len(e.blocks), e.doc.Pending())
+	} else {
+		fmt.Fprintf(&b, "%s    %d hunks\n", e.title, len(e.blocks))
+	}
 	b.WriteString(strings.Repeat("─", min(w, 60)) + "\n")
 
 	colW := (w - 5) / 2
@@ -195,7 +229,7 @@ func (e *conflictPicker) render(m Model) string {
 		if focused {
 			marker = "▶ "
 		}
-		header := fmt.Sprintf("%sregion %d/%d — %s", marker, blockNo+1, len(e.blocks), badge(blk))
+		header := fmt.Sprintf("%shunk %d/%d — %s", marker, blockNo+1, len(e.blocks), e.badge(blk))
 		if focused {
 			b.WriteString(pickerFocus.Render(header))
 		} else {
@@ -222,7 +256,8 @@ func (e *conflictPicker) render(m Model) string {
 		}
 		blockNo++
 	}
-	b.WriteString("\n[←/→] side  [↑/↓] line  [space] pick line  [c]urrent [i]ncoming  [C/I] all  [n/p] region  [enter] apply  [esc] cancel")
+	fmt.Fprintf(&b, "\n[←/→] side  [↑/↓] line  [space] pick line  [c] %s  [i] %s  [C/I] all  [n/p] hunk  [enter] apply  [esc] cancel",
+		e.leftLabel, e.rightLabel)
 	return b.String()
 }
 

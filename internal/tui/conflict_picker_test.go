@@ -86,7 +86,7 @@ func TestConflictFileLoadedPushesPicker(t *testing.T) {
 	content := []byte("<<<<<<< HEAD\na\n=======\nb\n>>>>>>> x\n")
 	updated, _ := m.Update(conflictFileLoadedMsg{path: "f.txt", content: content})
 	m = updated.(Model)
-	if _, ok := m.stackTop().(*conflictPicker); !ok {
+	if _, ok := m.stackTop().(*hunkPicker); !ok {
 		t.Fatal("loaded conflict file should push the picker surface")
 	}
 }
@@ -97,5 +97,25 @@ func TestConflictFileLoadedBinaryNoOp(t *testing.T) {
 	m = updated.(Model)
 	if m.stackTop() != nil {
 		t.Fatal("binary file must not push a surface")
+	}
+}
+
+func TestStagePickerNoGateAppliesImmediately(t *testing.T) {
+	d := hunkpick.FromDiff([]byte("a\nb\n"), []byte("a\nB\n"))
+	d.SetAll(hunkpick.TakeCurrent) // default: nothing staged
+	e := newStagePicker("f.txt", d)
+	if e.requireAll {
+		t.Fatal("staging picker must not gate on Pending")
+	}
+	// Resolved with the default = the index content (a no-op stage).
+	out, ok := d.Resolved()
+	if !ok || string(out) != "a\nb\n" {
+		t.Fatalf("default staging resolve = %q ok=%v, want the index", out, ok)
+	}
+	// Take the working side of the one hunk → staging it reproduces the work tree.
+	e.doc.Blocks()[0].Mode = hunkpick.TakeIncoming
+	out, _ = e.doc.Resolved()
+	if string(out) != "a\nB\n" {
+		t.Fatalf("staged = %q, want the working tree", out)
 	}
 }
