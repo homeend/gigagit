@@ -208,6 +208,31 @@ func popupInnerWidth(w int) int {
 	return inner
 }
 
+// popupTextWidth is the usable text width inside a modal frame: inner minus
+// modalStyle's horizontal padding. lipgloss soft-wraps content at this width
+// (not at inner), so popup body/header/hint lines must be laid out / truncated
+// to it — otherwise long lines spill onto ugly continuation lines.
+func popupTextWidth(inner int) int {
+	if tw := inner - modalStyle.GetHorizontalPadding(); tw > 1 {
+		return tw
+	}
+	return 1
+}
+
+// popupBox frames content in the modal style, truncating every line to the
+// frame's text width so nothing wraps. Body lines built via renderWindow at
+// popupTextWidth already fit (truncate is width-aware, so it is a no-op on them
+// and never cuts their styling); plain header/hint/subtitle lines are clamped
+// here. Use this instead of modalStyle.Width(inner).Render for popups.
+func popupBox(inner int, content string) string {
+	tw := popupTextWidth(inner)
+	lines := strings.Split(content, "\n")
+	for i, l := range lines {
+		lines[i] = truncate(l, tw)
+	}
+	return modalStyle.Width(inner).Render(strings.Join(lines, "\n")) + "\n"
+}
+
 // renderInterface draws the header, the panels, and the footer/status, sized to
 // fit the current terminal so the output never exceeds width×height.
 func (m Model) renderInterface() string {

@@ -146,6 +146,7 @@ func (m Model) renderRepoPopup() string {
 	p := m.repoPopup
 	w, _ := m.overlayDims()
 	inner := popupInnerWidth(w)
+	textW := popupTextWidth(inner)
 
 	header := "Switch repository"
 	if p.query != "" {
@@ -155,7 +156,7 @@ func (m Model) renderRepoPopup() string {
 	vis := m.popupVisible()
 	var bodyLines []string
 	if len(vis) == 0 {
-		bodyLines = []string{padRight("  (no match)", inner)}
+		bodyLines = []string{padRight("  (no match)", textW)}
 	} else {
 		wr := make([]winRow, len(vis))
 		for i, e := range vis {
@@ -177,13 +178,13 @@ func (m Model) renderRepoPopup() string {
 		if h > 12 {
 			h = 12
 		}
-		bodyLines = renderWindow(wr, winOpts{w: inner, h: h, mode: p.mode, anchor: p.sel, hscroll: p.hscroll})
+		bodyLines = renderWindow(wr, winOpts{w: textW, h: h, mode: p.mode, anchor: p.sel, hscroll: p.hscroll})
 	}
 
 	parts := []string{header, ""}
 	parts = append(parts, bodyLines...)
-	parts = append(parts, "", "[enter] switch  [ctrl+d] forget  [z] mode  [esc] cancel")
-	return modalStyle.Width(inner).Render(strings.Join(parts, "\n")) + "\n"
+	parts = append(parts, "", "[enter] switch  [ctrl+d] forget  [z] mode  [esc]")
+	return popupBox(inner, strings.Join(parts, "\n"))
 }
 
 // samePathTUI compares two paths after trimming trailing separators; symlink

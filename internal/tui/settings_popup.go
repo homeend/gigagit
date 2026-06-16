@@ -128,6 +128,7 @@ func (m Model) renderSettingsPopup() string {
 	p := m.settings
 	w, _ := m.overlayDims()
 	inner := popupInnerWidth(w)
+	textW := popupTextWidth(inner)
 	var b strings.Builder
 	if !p.picker {
 		b.WriteString("Settings\n\n")
@@ -157,11 +158,11 @@ func (m Model) renderSettingsPopup() string {
 			if h > 12 {
 				h = 12
 			}
-			for _, line := range renderWindow(wr, winOpts{w: inner, h: h, mode: p.mode, anchor: p.sel, hscroll: p.hscroll}) {
+			for _, line := range renderWindow(wr, winOpts{w: textW, h: h, mode: p.mode, anchor: p.sel, hscroll: p.hscroll}) {
 				b.WriteString(line + "\n")
 			}
 		}
 		b.WriteString("\n[space] toggle  [enter] apply  [z] mode  [esc] back")
 	}
-	return modalStyle.Width(inner).Render(strings.TrimRight(b.String(), "\n")) + "\n"
+	return popupBox(inner, strings.TrimRight(b.String(), "\n"))
 }

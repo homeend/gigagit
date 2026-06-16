@@ -37,6 +37,7 @@ func (m Model) renderConflictPopup() string {
 	p := m.conflictPopup
 	w, _ := m.overlayDims()
 	inner := popupInnerWidth(w)
+	textW := popupTextWidth(inner)
 	var b strings.Builder
 	b.WriteString("Resolve conflicts\n")
 	if src := m.conflict.Describe(); src != "" {
@@ -61,13 +62,13 @@ func (m Model) renderConflictPopup() string {
 		if h > 12 {
 			h = 12
 		}
-		for _, line := range renderWindow(wr, winOpts{w: inner, h: h, mode: p.mode, anchor: p.sel, hscroll: p.hscroll}) {
+		for _, line := range renderWindow(wr, winOpts{w: textW, h: h, mode: p.mode, anchor: p.sel, hscroll: p.hscroll}) {
 			b.WriteString(line + "\n")
 		}
 	}
 	b.WriteString("\n" + p.actionHint() + "\n")
 	b.WriteString("[esc] close  [z] mode")
-	return modalStyle.Width(inner).Render(b.String()) + "\n"
+	return popupBox(inner, b.String())
 }
 
 // actionHint lists the keys available for the selected file (+ continue/abort).
