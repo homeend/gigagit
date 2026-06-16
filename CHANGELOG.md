@@ -9,6 +9,15 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- TUI: **conflict hunk picker** — press `enter` on a both-modified file in the
+  `x` conflict resolver to open a GitKraken-style region/line editor. Per
+  conflict region: take the whole **current** or **incoming** side (`c`/`i`),
+  or `space` to pick individual lines from either side (they land in the result
+  in pick order); `C`/`I` take all regions one way; `←/→` switch side, `↑/↓`
+  move the line cursor, `n`/`p` jump regions, `enter` applies once every region
+  is resolved. The whole-file resolver's labels are now **current/incoming**
+  (clearer than ours/theirs, which invert during a rebase).
+
 #### TUI Files / Staged split
 - The Status panel is now two panels: **Files** (working-tree changes —
   unstaged, untracked, and conflicts) and **Staged** (the index). `space` stages
