@@ -18,9 +18,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   a conflict → `U`, otherwise `M`/`D`), Staged shows the index state
   (`A`/`M`/`D`/…). So a partially-staged `MM` file reads `M` in Files and `M` in
   Staged — each letter describing only that window.
-  `enter` on a Files row diffs HEAD → working tree; on a Staged row it diffs
-  HEAD → index, so the two panels show the unstaged and staged halves of a
-  partially-staged file separately. Each panel header shows its file count. On
+  `enter` on a Files row diffs index → working tree (the unstaged delta); on a
+  Staged row it diffs HEAD → index (the staged delta), so the two panels show
+  the unstaged and staged halves of a partially-staged file as disjoint diffs
+  that match each row's status letter. Each panel header shows its file count. On
   a short terminal the Staged panel is dropped (Branches/Worktrees tab over
   Files).
 
