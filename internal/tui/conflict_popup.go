@@ -86,7 +86,7 @@ func (p *conflictPopup) actionHint() string {
 	if p.sel >= 0 && p.sel < len(p.files) {
 		f := p.files[p.sel]
 		if f.ConflictClass() == model.ConflictBothSides {
-			parts = append(parts, "[o] ours", "[t] theirs", "[m] mark resolved")
+			parts = append(parts, "[enter] pick hunks", "[o] current", "[t] incoming", "[m] mark resolved")
 		} else {
 			// "keep modified" needs a side with content; both-deleted (DD) has
 			// neither, so only delete / keep base apply there.
@@ -162,6 +162,16 @@ func (m Model) updateConflictPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			p.sel++
 		}
 		return m, nil
+	case "enter":
+		if p.sel < 0 || p.sel >= len(p.files) {
+			return m, nil
+		}
+		f := p.files[p.sel]
+		if f.ConflictClass() != model.ConflictBothSides {
+			m.statusMsg = "hunk picker: only for files modified on both sides"
+			return m, nil
+		}
+		return m, m.loadConflictFileCmd(f.Path)
 	case "A":
 		var paths []string
 		for _, f := range p.files {

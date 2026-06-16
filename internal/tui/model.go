@@ -10,7 +10,9 @@ import (
 	"github.com/gigagit/gg/internal/config"
 	"github.com/gigagit/gg/internal/domain"
 	"github.com/gigagit/gg/internal/engine"
+	"github.com/gigagit/gg/internal/hunkpick"
 	"github.com/gigagit/gg/internal/model"
+	"github.com/gigagit/gg/internal/textdiff"
 )
 
 // Model is the root Bubble Tea model.
@@ -755,6 +757,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m = m.pushSurface(newIrebaseEditor(msg.branch, msg.onto, msg.commits, ggBin))
+		return m, nil
+
+	case conflictFileLoadedMsg:
+		if msg.err != nil {
+			m.statusMsg = "conflict: " + msg.err.Error()
+			return m, nil
+		}
+		if textdiff.IsBinary(msg.content) {
+			m.statusMsg = "hunk picker: binary file"
+			return m, nil
+		}
+		doc, err := hunkpick.ParseConflict(msg.content)
+		if err != nil {
+			m.statusMsg = "hunk picker: " + err.Error()
+			return m, nil
+		}
+		if len(doc.Blocks()) == 0 {
+			m.statusMsg = "hunk picker: no conflict regions found"
+			return m, nil
+		}
+		m = m.pushSurface(newConflictPicker(msg.path, doc))
 		return m, nil
 	}
 	return m, nil

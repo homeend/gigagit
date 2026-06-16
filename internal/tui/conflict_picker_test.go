@@ -80,3 +80,22 @@ func TestConflictPickerRendersMarkers(t *testing.T) {
 		t.Fatal("render produced nothing")
 	}
 }
+
+func TestConflictFileLoadedPushesPicker(t *testing.T) {
+	m := Model{width: 80, height: 24}
+	content := []byte("<<<<<<< HEAD\na\n=======\nb\n>>>>>>> x\n")
+	updated, _ := m.Update(conflictFileLoadedMsg{path: "f.txt", content: content})
+	m = updated.(Model)
+	if _, ok := m.stackTop().(*conflictPicker); !ok {
+		t.Fatal("loaded conflict file should push the picker surface")
+	}
+}
+
+func TestConflictFileLoadedBinaryNoOp(t *testing.T) {
+	m := Model{width: 80, height: 24}
+	updated, _ := m.Update(conflictFileLoadedMsg{path: "f.bin", content: []byte("\x00\x01\x02")})
+	m = updated.(Model)
+	if m.stackTop() != nil {
+		t.Fatal("binary file must not push a surface")
+	}
+}

@@ -136,3 +136,20 @@ func (m Model) loadIrebaseCmd(branch, onto string) tea.Cmd {
 		return irebaseLoadedMsg{branch: branch, onto: onto, commits: cs, err: err}
 	}
 }
+
+// conflictFileLoadedMsg carries a conflicted file's marker text for the picker.
+type conflictFileLoadedMsg struct {
+	path    string
+	content []byte
+	err     error
+}
+
+// loadConflictFileCmd reads a conflicted file's working-tree bytes off the UI
+// thread; the resulting msg parses + pushes the picker.
+func (m Model) loadConflictFileCmd(path string) tea.Cmd {
+	svc := m.svc
+	return func() tea.Msg {
+		c, err := svc.ConflictedFile(context.Background(), path)
+		return conflictFileLoadedMsg{path: path, content: c, err: err}
+	}
+}
