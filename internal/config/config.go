@@ -20,8 +20,10 @@ type WorktreeConfig struct {
 
 // UIConfig configures TUI behavior. TOML keys are snake_case.
 type UIConfig struct {
-	WheelStep   int `toml:"wheel_step"`   // rows per mouse-wheel tick; <=0 = unset
-	HScrollStep int `toml:"hscroll_step"` // diff scroll-mode pan columns per ←/→; <=0 = unset
+	WheelStep     int      `toml:"wheel_step"`     // rows per mouse-wheel tick; <=0 = unset
+	HScrollStep   int      `toml:"hscroll_step"`   // diff scroll-mode pan columns per ←/→; <=0 = unset
+	FooterActions []string `toml:"footer_actions"` // action ids shown in the footer; empty = all (default)
+	MenuActions   []string `toml:"menu_actions"`   // action ids shown in the . menu; empty = all (default)
 }
 
 // Config is the merged gigagit configuration.
@@ -102,6 +104,12 @@ func overlayUI(dst *UIConfig, src UIConfig) {
 	}
 	if src.HScrollStep > 0 {
 		dst.HScrollStep = src.HScrollStep
+	}
+	if len(src.FooterActions) > 0 {
+		dst.FooterActions = src.FooterActions
+	}
+	if len(src.MenuActions) > 0 {
+		dst.MenuActions = src.MenuActions
 	}
 }
 
