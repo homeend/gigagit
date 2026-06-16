@@ -69,7 +69,7 @@ func gitIn(t *testing.T, dir string, args ...string) {
 // untracked, one conflicted file.
 func diffModel() Model {
 	m := footerModel()
-	m.focus = panelStatus
+	m.focus = panelFiles
 	m.status.Files = []model.FileStatus{
 		{Path: "mod.txt", Staged: '.', Unstaged: 'M'},
 		{Path: "new.txt", Staged: '.', Unstaged: '?', Kind: model.KindUntracked},
@@ -95,7 +95,7 @@ func TestEnterOnStatusOpensLoadingDiff(t *testing.T) {
 
 func TestEnterOnConflictedRowIsNoOp(t *testing.T) {
 	m := diffModel()
-	m.sel[panelStatus] = 2 // conflict.txt
+	m.sel[panelFiles] = 2 // conflict.txt
 	u, cmd := m.Update(keyMsg("enter"))
 	mm := u.(Model)
 	if mm.diffView != nil || cmd != nil {

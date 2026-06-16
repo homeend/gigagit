@@ -164,7 +164,7 @@ func TestFooterStatusFocusEmptyHasNoContextSegment(t *testing.T) {
 	// With status rows, Status focus advertises [enter] diff (tested above);
 	// with NO rows there must be no context segment and no stray separator.
 	m := footerModel() // fixture has no status files
-	m.focus = panelStatus
+	m.focus = panelFiles
 	f := m.footerLine()
 	if strings.Contains(f, "•") {
 		t.Errorf("empty Status focus has no context actions, no separator: %q", f)
@@ -258,7 +258,7 @@ func TestFooterTruncatedToWidth(t *testing.T) {
 }
 
 func TestFooterShowsDiffOnStatusFocus(t *testing.T) {
-	m := diffModel() // focus = panelStatus, selectable rows
+	m := diffModel() // focus = panelFiles, selectable rows
 	if !strings.Contains(m.footerLine(), "[enter] diff") {
 		t.Fatalf("footer must advertise enter on Status: %q", m.footerLine())
 	}
@@ -274,7 +274,7 @@ func TestFooterHidesDiffOffStatusFocus(t *testing.T) {
 
 func TestFooterHidesDiffOnConflictedRow(t *testing.T) {
 	m := diffModel()
-	m.sel[panelStatus] = 2 // conflict.txt (KindUnmerged)
+	m.sel[panelFiles] = 2 // conflict.txt (KindUnmerged)
 	if strings.Contains(m.footerLine(), "[enter] diff") {
 		t.Fatalf("diff advertised on a conflicted row: %q", m.footerLine())
 	}

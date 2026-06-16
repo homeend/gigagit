@@ -7,7 +7,7 @@ import (
 )
 
 func statusModel() Model {
-	m := Model{width: 100, height: 30, focus: panelStatus, sel: map[panel]int{}}
+	m := Model{width: 100, height: 30, focus: panelFiles, sel: map[panel]int{}}
 	m.status = model.WorkingTreeStatus{Branch: "main", Files: []model.FileStatus{
 		{Path: "a.go", Unstaged: 'M'},
 		{Path: "b.go", Unstaged: 'M'},
@@ -17,16 +17,16 @@ func statusModel() Model {
 
 func TestStatusMMultiMarks(t *testing.T) {
 	m := statusModel()
-	m.sel[panelStatus] = 0
+	m.sel[panelFiles] = 0
 	mm, _ := m.handleMarkKey()
 	m = mm.(Model)
-	m.sel[panelStatus] = 1
+	m.sel[panelFiles] = 1
 	mm, _ = m.handleMarkKey()
 	m = mm.(Model)
 	if !m.fileMarks["a.go"] || !m.fileMarks["b.go"] {
 		t.Fatalf("both files should be marked, got %v", m.fileMarks)
 	}
-	m.sel[panelStatus] = 0
+	m.sel[panelFiles] = 0
 	mm, _ = m.handleMarkKey()
 	m = mm.(Model)
 	if m.fileMarks["a.go"] || !m.fileMarks["b.go"] {

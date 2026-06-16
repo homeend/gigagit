@@ -33,12 +33,12 @@ var contextBindings = []footerBinding{
 	}},
 	{"enter", "[enter] switch", func(m Model) bool { return m.focus == panelWorktrees && m.canEnterWorktree() }},
 	{"d", "[d]elete", func(m Model) bool { return m.focus == panelWorktrees && m.canDeleteWorktree() }},
-	{"enter", "[enter] diff", func(m Model) bool { return m.focus == panelStatus && m.canShowFileDiff() }},
+	{"enter", "[enter] diff", func(m Model) bool { return m.focus == panelFiles && m.canShowFileDiff() }},
 	{"space", "[space] stage", Model.canStage},
 	{"s", "[s] stash", func(m Model) bool {
-		return m.focus == panelStatus && m.opsIdle() && len(stashCandidates(m.status)) > 0
+		return m.focus == panelFiles && m.opsIdle() && len(stashCandidates(m.status)) > 0
 	}},
-	{"m", "[m] mark", func(m Model) bool { return m.focus == panelStatus && m.panelLen(panelStatus) > 0 }},
+	{"m", "[m] mark", func(m Model) bool { return m.focus == panelFiles && m.panelLen(panelFiles) > 0 }},
 	{"l", "[l] files", func(m Model) bool {
 		// Stricter than the dispatch: the narrow case is a statusMsg no-op
 		// there, so don't advertise it.

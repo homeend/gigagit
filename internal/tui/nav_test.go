@@ -42,7 +42,7 @@ func TestViewRendersPanelsWithoutPanic(t *testing.T) {
 	if !strings.Contains(out, "main") {
 		t.Fatalf("view should mention branch 'main':\n%s", out)
 	}
-	for _, label := range []string{"Branches", "Status", "Commits"} {
+	for _, label := range []string{"Branches", "Files", "Commits"} {
 		if !strings.Contains(out, label) {
 			t.Fatalf("view missing panel label %q:\n%s", label, out)
 		}
@@ -59,7 +59,7 @@ func TestTabCyclesActiveTabStatusCommits(t *testing.T) {
 		m = u.(Model)
 		got = append(got, m.focus)
 	}
-	want := []panel{panelStatus, panelCommits, panelBranches}
+	want := []panel{panelFiles, panelCommits, panelBranches}
 	for i := range want {
 		if got[i] != want[i] {
 			t.Fatalf("tab walk[%d] = %v, want %v (full: %v)", i, got[i], want[i], got)
@@ -114,7 +114,7 @@ func TestLeftDoesNotFocusHiddenTab(t *testing.T) {
 	if got == panelBranches {
 		t.Fatalf("← focused the hidden Branches tab; want the active tab or Status, got %v", got)
 	}
-	if got != panelWorktrees && got != panelStatus {
+	if got != panelWorktrees && got != panelFiles {
 		t.Fatalf("← focus = %v, want the active Worktrees tab or Status", got)
 	}
 }

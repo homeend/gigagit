@@ -115,10 +115,10 @@ func (m Model) canAmend() bool {
 // canStage reports whether the selected Status row can be staged/unstaged:
 // the Status panel is focused, a row is selected, and no op is running.
 func (m Model) canStage() bool {
-	if m.focus != panelStatus || !m.opsIdle() {
+	if m.focus != panelFiles || !m.opsIdle() {
 		return false
 	}
-	_, ok := m.backingIndex(panelStatus)
+	_, ok := m.backingIndex(panelFiles)
 	return ok
 }
 
@@ -127,7 +127,7 @@ func (m Model) canStage() bool {
 // exists. The width check uses the !(w>0 && w<60) idiom so a model that has
 // not seen a WindowSizeMsg yet (tests) is not refused.
 func (m Model) canShowFileDiff() bool {
-	bi, ok := m.backingIndex(panelStatus)
+	bi, ok := m.backingIndex(panelFiles)
 	if !ok {
 		return false
 	}

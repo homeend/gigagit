@@ -27,8 +27,8 @@ func TestPanelAt(t *testing.T) {
 		{0, 1, panelBranches, true},  // top-left border cell (active tab slot)
 		{5, 4, panelBranches, true},  // data area
 		{0, 8, panelBranches, true},  // still inside the tab slot (height 10)
-		{0, 15, panelStatus, true},   // Status box (y=11..21)
-		{25, 21, panelStatus, true},  // bottom-right of the left column
+		{0, 15, panelFiles, true},    // Status box (y=11..21)
+		{25, 21, panelFiles, true},   // bottom-right of the left column
 		{26, 1, panelCommits, true},  // commits left edge
 		{79, 21, panelCommits, true}, // commits bottom-right
 		{5, 0, 0, false},             // header row

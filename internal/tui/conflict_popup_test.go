@@ -17,7 +17,7 @@ import (
 )
 
 func conflictModel() Model {
-	m := Model{width: 120, height: 30, focus: panelStatus, sel: map[panel]int{}}
+	m := Model{width: 120, height: 30, focus: panelFiles, sel: map[panel]int{}}
 	m.status = model.WorkingTreeStatus{Branch: "zzz", Files: []model.FileStatus{
 		{Path: "uu.txt", Kind: model.KindUnmerged, Staged: 'U', Unstaged: 'U'},
 		{Path: "md.txt", Kind: model.KindUnmerged, Staged: 'D', Unstaged: 'U'},

@@ -22,8 +22,8 @@ func stageTestModel(t *testing.T) (Model, string) {
 	m := New(domain.New(repo))
 	loaded, _ := m.Update(m.loadCmd()())
 	m = loaded.(Model)
-	m.focus = panelStatus
-	m.sel[panelStatus] = 0
+	m.focus = panelFiles
+	m.sel[panelFiles] = 0
 	return m, dir
 }
 
@@ -89,10 +89,10 @@ func TestSpaceOnConflictedFileIsNoOp(t *testing.T) {
 	m := New(domain.New(repo))
 	loaded, _ := m.Update(m.loadCmd()())
 	m = loaded.(Model)
-	m.focus = panelStatus
+	m.focus = panelFiles
 	for i, f := range m.status.Files {
 		if f.Path == "c.txt" {
-			m.sel[panelStatus] = i
+			m.sel[panelFiles] = i
 		}
 	}
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeySpace})
@@ -110,8 +110,8 @@ func TestSpaceUnstagesFullyStagedFile(t *testing.T) {
 	gitInDir(t, dir, "add", "README.md")
 	loaded, _ := m.Update(m.loadCmd()())
 	m = loaded.(Model)
-	m.focus = panelStatus
-	m.sel[panelStatus] = 0
+	m.focus = panelFiles
+	m.sel[panelFiles] = 0
 
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeySpace})
 	m = driveStage(t, updated.(Model), cmd)

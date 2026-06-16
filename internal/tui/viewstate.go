@@ -63,9 +63,9 @@ func (m Model) layout() layoutGeom {
 	// skip boxH<=0 — but its per-panel state is untouched).
 	tabH := bodyH / 2
 	g.boxH[m.activeLeftTab] = tabH
-	g.boxH[panelStatus] = bodyH - tabH
+	g.boxH[panelFiles] = bodyH - tabH
 	g.pos[m.activeLeftTab] = point{0, 1}
-	g.pos[panelStatus] = point{0, 1 + tabH}
+	g.pos[panelFiles] = point{0, 1 + tabH}
 	g.boxH[panelCommits] = bodyH
 	g.pos[panelCommits] = point{leftW, 1}
 	return g
@@ -201,7 +201,7 @@ func (m Model) listFor(p panel) panelList {
 		return branchList{items: m.branches, rows: m.branchRows()}
 	case panelWorktrees:
 		return worktreeList{items: m.worktrees, rows: m.worktreeRows(), times: m.headTimes}
-	case panelStatus:
+	case panelFiles:
 		return statusList{files: m.status.Files, rows: m.statusRows(), root: m.currentWorktree, mtime: map[int]int64{}}
 	case panelCommits:
 		return commitList{items: m.commits, rows: m.commitRows()}

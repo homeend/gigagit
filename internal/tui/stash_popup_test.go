@@ -73,7 +73,7 @@ func TestStashPopupCtrlSStashesRealRepo(t *testing.T) {
 	m := New(domain.New(repo))
 	loaded, _ := m.Update(m.loadCmd()())
 	m = loaded.(Model)
-	m.focus = panelStatus
+	m.focus = panelFiles
 	m.fileMarks = map[string]bool{"a.txt": true}
 
 	m = pressRune(t, m, "s")
@@ -110,7 +110,7 @@ func TestStashPopupEmptySelectionRefuses(t *testing.T) {
 }
 
 func TestSNoCandidatesNoOp(t *testing.T) {
-	m := Model{width: 100, height: 30, focus: panelStatus, sel: map[panel]int{}}
+	m := Model{width: 100, height: 30, focus: panelFiles, sel: map[panel]int{}}
 	m.status = model.WorkingTreeStatus{Branch: "main"} // no files
 	mm, _ := m.Update(keyMsg("s"))
 	if mm.(Model).stashPopup != nil {

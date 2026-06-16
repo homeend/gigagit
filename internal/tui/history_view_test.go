@@ -69,7 +69,7 @@ func TestHistoryQInert(t *testing.T) {
 }
 
 func TestStatusHOpensHistory(t *testing.T) {
-	m := Model{width: 100, height: 30, focus: panelStatus, sel: map[panel]int{}}
+	m := Model{width: 100, height: 30, focus: panelFiles, sel: map[panel]int{}}
 	m.status = model.WorkingTreeStatus{Files: []model.FileStatus{{Path: "a.go"}}}
 	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("h")})
 	got := mm.(Model)

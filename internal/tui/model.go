@@ -97,7 +97,7 @@ type panel int
 const (
 	panelBranches panel = iota
 	panelWorktrees
-	panelStatus
+	panelFiles
 	panelCommits
 	panelCount
 )
@@ -400,7 +400,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m.openConflictPopup()
 			}
 		case "s":
-			if m.focus == panelStatus && m.opsIdle() {
+			if m.focus == panelFiles && m.opsIdle() {
 				if mm, ok := m.openStashPopup(); ok {
 					return mm, nil
 				}
@@ -456,8 +456,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return mm, nil
 				}
 			}
-			if m.focus == panelStatus && m.canShowFileDiff() {
-				bi, _ := m.backingIndex(panelStatus)
+			if m.focus == panelFiles && m.canShowFileDiff() {
+				bi, _ := m.backingIndex(panelFiles)
 				f := m.status.Files[bi]
 				ctx := navContext{path: f.Path, rev: ""}
 				bv := newBlameView(ctx)
@@ -488,16 +488,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				wt, _ := m.selectedWorktree()
 				return m.reRoot(wt.Path)
 			}
-			if m.focus == panelStatus && m.canShowFileDiff() {
-				bi, _ := m.backingIndex(panelStatus)
+			if m.focus == panelFiles && m.canShowFileDiff() {
+				bi, _ := m.backingIndex(panelFiles)
 				f := m.status.Files[bi]
 				m.diffView = &diffView{title: f.Path, context: "HEAD → working tree", rev: "", loading: true, partial: m.diffPartial, long: m.diffLong}
 				m.diffTag = "status:" + f.Path
 				return m, m.loadStatusDiffCmd(f)
 			}
 		case "h":
-			if m.focus == panelStatus && m.canShowFileDiff() {
-				bi, _ := m.backingIndex(panelStatus)
+			if m.focus == panelFiles && m.canShowFileDiff() {
+				bi, _ := m.backingIndex(panelFiles)
 				f := m.status.Files[bi]
 				ctx := navContext{path: f.Path, rev: ""}
 				h := newHistoryView(ctx)
@@ -716,8 +716,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.summary != "" {
 			m.statusMsg = msg.summary
 		}
-		if n := m.panelLen(panelStatus); n > 0 && m.sel[panelStatus] >= n {
-			m.sel[panelStatus] = n - 1
+		if n := m.panelLen(panelFiles); n > 0 && m.sel[panelFiles] >= n {
+			m.sel[panelFiles] = n - 1
 		}
 		return m, nil
 
@@ -763,7 +763,7 @@ func (m Model) handleStageKey() (tea.Model, tea.Cmd) {
 	if !m.canStage() {
 		return m, nil
 	}
-	bi, _ := m.backingIndex(panelStatus)
+	bi, _ := m.backingIndex(panelFiles)
 	f := m.status.Files[bi]
 	if f.Kind == model.KindUnmerged {
 		m.statusMsg = "resolve conflicts first"
@@ -785,10 +785,10 @@ func (m Model) rememberLeftFocus() Model {
 }
 
 // focusOrder is the top-to-bottom sequence of focusable panels: the active
-// Branches/Worktrees tab (the inactive one is not focusable), then Status, then
-// Commits. tab/shift+tab walk this. Stage 3 inserts Files/Staged here.
+// Branches/Worktrees tab (the inactive one is not focusable), then Files (and
+// Staged when it fits), then Commits. tab/shift+tab walk this.
 func (m Model) focusOrder() []panel {
-	return []panel{m.activeLeftTab, panelStatus, panelCommits}
+	return []panel{m.activeLeftTab, panelFiles, panelCommits}
 }
 
 // nextInOrder returns the panel dir steps from cur within order (wrapping). If

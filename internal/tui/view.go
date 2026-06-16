@@ -269,10 +269,10 @@ func (m Model) renderInterface() string {
 		// bar lives in the label line) over Status.
 		active := m.activeLeftTab
 		atRows, _ := m.panelView(active)
-		stRows, _ := m.panelView(panelStatus)
+		stRows, _ := m.panelView(panelFiles)
 		left = lipgloss.JoinVertical(lipgloss.Left,
 			m.renderPanel(active, m.panelLabel(active, tabBarLabel(active)), atRows, g.leftW, g.boxH[active]),
-			m.renderPanel(panelStatus, m.panelLabel(panelStatus, "Status"), stRows, g.leftW, g.boxH[panelStatus]),
+			m.renderPanel(panelFiles, m.panelLabel(panelFiles, "Files"), stRows, g.leftW, g.boxH[panelFiles]),
 		)
 	}
 	var right string
