@@ -62,7 +62,7 @@ func helpContent() []contentLine {
 		r("x", "open the conflict resolver (when the repo is conflicted)"),
 		r("↑/↓ j", "move between conflicted files"),
 		r("enter", "pick hunks: open the region/line picker (both-modified files)"),
-		r("o/t", "keep current / incoming (both-modified files)"),
+		r("o/i", "keep current / incoming (both-modified files)"),
 		r("k/d/b", "keep modified / delete / keep base (modify-delete files)"),
 		r("m", "mark resolved (after editing by hand)"),
 		r("A", "mark all resolved"),

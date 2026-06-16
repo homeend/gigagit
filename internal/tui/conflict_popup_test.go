@@ -140,15 +140,15 @@ func selectConflict(t *testing.T, p *conflictPopup, path string) {
 	t.Fatalf("conflict %q not in popup: %+v", path, p.files)
 }
 
-func TestConflictPopupKeepTheirsDispatches(t *testing.T) {
+func TestConflictPopupKeepIncomingDispatches(t *testing.T) {
 	m := conflictRepoTUI(t)
 	mm, _ := m.Update(keyMsg("x"))
 	m = mm.(Model)
 	selectConflict(t, m.conflictPopup, "uu.txt") // both-sides
-	mm, cmd := m.updateConflictPopupKey(keyMsg("t"))
+	mm, cmd := m.updateConflictPopupKey(keyMsg("i"))
 	got := mm.(Model)
 	if !got.running || cmd == nil {
-		t.Fatal("t should dispatch a ResolveConflict op")
+		t.Fatal("i should dispatch a ResolveConflict op (keep incoming)")
 	}
 	if got.conflictPopup != nil {
 		t.Error("popup should close while the op runs (reopens on refresh)")
