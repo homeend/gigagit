@@ -1,5 +1,18 @@
 # TUI Window Primitive + Grid/Surface Unification (Stage 1a) Implementation Plan
 
+> **Status: IMPLEMENTED (2026-06-16)** on branch `worktree-tui-window-framework`.
+> Full `./test.sh race` (unit + e2e) green.
+>
+> **Execution deviation — display-mode key is `z`, not `w`.** During Task 4 it
+> was found that **both** `w` (existing-branch worktree, `model.go:419`) and `W`
+> (new-branch worktree, `:425`) are taken, so `w` could not be freed. Per user
+> decision the unified display-mode key is **`z`** everywhere (the diff view's
+> long-line cycle was migrated `w`→`z`); both worktree keys are unchanged.
+> Wherever the tasks below say `w`/`W`, read `z` (and "no worktree remap"). The
+> spec is updated to match. Also: the user requested a separate `.` action
+> context-menu feature (config-driven footer vs. menu placement) — captured in
+> the spec as a follow-up, not built here.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Introduce a reusable list/text window primitive with three switchable display modes (cutoff / wrap / scroll, cycled with `w`) and route the base panels, the stash list, the files tree, the history and blame surfaces, and the repo switcher popup through it.

@@ -60,7 +60,7 @@ A stateless render function plus a small mode enum, matching the existing
 `viewstate.go` idiom (helpers read state the caller owns; no hidden state).
 
 ```go
-// dispMode is a window's text display mode, cycled with `w`.
+// dispMode is a window's text display mode, cycled with `z`.
 type dispMode int
 
 const (
@@ -109,10 +109,13 @@ Companion helpers:
 
 ### Display-mode key
 
-`w` cycles the **focused** window's `dispMode`. The diff view keeps its existing
-`w` (same concept, same three modes). To free `w` in the base grid, the existing
-"create worktree for the selected branch" action **moves from `w` to `W`**
-(`model.go:419`, and the worktree popup's confirm key advertises accordingly).
+`z` cycles the **focused** window's `dispMode`, and horizontal scroll
+(`modeScroll`) pans with `shift+←/→`. `z` was chosen after discovery that **both**
+`w` and `W` are already worktree-create actions in the base grid (`model.go:419`
+existing-branch, `:425` new-branch) — so `w` could not be freed without
+relocating two bindings. The diff view's existing long-line cycle **migrates from
+`w` to `z`** (`diff_view.go:446`) so one key means "display mode" everywhere; both
+worktree keys keep their meaning.
 
 ### Truncated-row reveal (tooltip) generalization
 
@@ -130,8 +133,8 @@ while a popup is open. This design:
 
 ## Stage 1 — Window primitive + content unification
 
-**Outcome:** all list/tree/text windows render through `renderWindow`; `w`
-cycles modes everywhere; repo popup no longer wraps; worktree-create is `W`.
+**Outcome:** all list/tree/text windows render through `renderWindow`; `z`
+cycles modes everywhere (diff included); repo popup no longer wraps.
 Diff pane and modal untouched. No layout/geometry change.
 
 Convert these consumers (each keeps its current look because `modeCutoff` ==
@@ -145,12 +148,12 @@ today's behaviour):
 5. All popups that list rows (repo, settings, branch, worktree, conflict,
    content/help, pairop, stash-action) → `renderWindow` for their bodies.
 6. Add `dispModes`/`hscroll` panel maps + popup/surface `dispMode` fields; wire
-   `w` in each focused-window key handler to cycle and re-clamp scroll.
-7. Move worktree-create `w` → `W`.
+   `z` in each focused-window key handler to cycle and re-clamp scroll.
+7. Migrate the diff view's mode key `w` → `z` (both worktree keys unchanged).
 8. Generalize the reveal to the focused popup.
 
-**Docs:** CHANGELOG (modes + `W` remap), README (keys), `help.go` + footer
-(`w` cycle, `W` worktree).
+**Docs:** CHANGELOG (modes + diff key migration), README (keys), `help.go` +
+footer (`z` cycle, `shift+←/→` pan).
 
 ## Stage 2 — Tabbed Branches/Worktrees
 
@@ -214,8 +217,9 @@ Follow TDD; tests precede each conversion.
   wrap boundary); `selectedRowTruncated` boundary at exact width.
 - **Reveal:** repo popup with a path longer than the box → reveal lines present
   for the selected row; not present in `wrap`/`scroll`.
-- **Mode key:** `w` cycles the focused window's mode and is independent per
-  window; `W` now creates the worktree (and `w` no longer does on Branches).
+- **Mode key:** `z` cycles the focused window's mode and is independent per
+  window; the diff view's mode cycle is now `z` too; both worktree keys
+  (`w`/`W`) are unchanged.
 - **Tabs:** Ctrl+←/→ flips `activeLeftTab` and focus; each tab retains its own
   `sel`/sort/filter across switches; focus order walks the computed sequence.
 - **Files/Staged:** a snapshot containing `MM`, `M.`, `.M`, `??`, and a `UU`
@@ -239,9 +243,21 @@ Gate: `./test.sh race` green before each stage merges.
   triple-synced render/key/mouse arms must move together (the routing-invariant
   hazard from the requirements doc). Keep changes local and test the walk.
 
+## Captured follow-up: `.` action context-menu (separate feature)
+
+During the keybinding discussion the user requested a `.` context-menu popup
+that lists every currently-available action (driven by the `avail.go`
+predicates), plus configuration to choose which actions appear in the bottom
+footer bar vs. only in the context menu. This is its **own** feature — it needs
+a config schema (likely `config`/`.gg.toml`) and a new overlay popup — and is
+deliberately **not** part of this window-framework work. It is, however, a
+natural consumer of the window primitive (the menu is a windowed list popup), so
+it is sequenced **after** Stage 1a. To be brainstormed into its own spec/plan.
+
 ## Non-goals / YAGNI
 
 - No declarative "named layouts" registry (the big-bang the user declined).
+- The `.` action context-menu above is captured but out of scope here.
 - No tiling/window-manager generality.
 - No engine/domain/CLI/MCP changes (TUI-only).
 - Diff pane and modal are **not** converted onto the primitive in this effort

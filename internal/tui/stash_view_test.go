@@ -221,3 +221,14 @@ func TestStatusBarRendersMultilineErrorOnOneLine(t *testing.T) {
 		}
 	}
 }
+
+func TestStashListWrapMode(t *testing.T) {
+	m := New(nil)
+	m.width, m.height = 80, 24
+	m.focus = panelCommits
+	m.stashView = &stashView{entries: []model.StashEntry{{Ref: "stash@{0}", Subject: strings.Repeat("z", 60)}}, mode: modeWrap}
+	out := m.renderStashList(20, 6)
+	if strings.Count(out, "z") < 30 {
+		t.Errorf("stash wrap mode did not expand the long subject:\n%s", out)
+	}
+}

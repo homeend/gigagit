@@ -23,7 +23,7 @@ const (
 )
 
 // longMode is how the diff view shows lines wider than a pane. The zero value
-// (scroll) is the default. w cycles scroll → wrap → truncate → scroll.
+// (scroll) is the default. z cycles scroll → wrap → truncate → scroll.
 type longMode int
 
 const (
@@ -443,7 +443,7 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		} else {
 			v.offset = 0
 		}
-	case "w":
+	case "z":
 		ord := v.currentBlockOrdinal()
 		v.long = (v.long + 1) % 3
 		v.hOffset = 0

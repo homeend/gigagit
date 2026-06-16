@@ -146,3 +146,24 @@ func TestTooltipSuppressedByContentPopup(t *testing.T) {
 		t.Fatal("content popup view must not contain the tooltip")
 	}
 }
+
+func TestTooltipSuppressedOutsideCutoffMode(t *testing.T) {
+	m := New(nil)
+	m.width, m.height = 80, 24
+	m.focus = panelBranches
+	m.branches = []model.Branch{{Name: strings.Repeat("x", 80)}}
+	// cutoff (default): the long selected row is truncated -> tooltip appears.
+	if _, _, _, ok := m.tooltip(); !ok {
+		t.Fatal("cutoff mode: expected a reveal tooltip for the truncated row")
+	}
+	// wrap: the row is fully visible across wrapped lines -> no tooltip.
+	m.dispModes[panelBranches] = modeWrap
+	if _, _, _, ok := m.tooltip(); ok {
+		t.Error("wrap mode: tooltip must be suppressed (row already visible)")
+	}
+	// scroll: the user pans to read the row -> no tooltip.
+	m.dispModes[panelBranches] = modeScroll
+	if _, _, _, ok := m.tooltip(); ok {
+		t.Error("scroll mode: tooltip must be suppressed")
+	}
+}

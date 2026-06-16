@@ -58,6 +58,7 @@ var globalBindings = []footerBinding{
 	{"S", "[S]tashes", Model.opsIdle},
 	{"u", "[u]ndo", Model.opsIdle},
 	{"o", "[o]rder", Model.opsIdle},
+	{"z", "[z] view", Model.opsIdle},
 	{"/", "[/]filter", Model.opsIdle},
 	{"R", "[R]epo", Model.opsIdle},
 	{",", "[,] settings", Model.opsIdle},
@@ -77,13 +78,13 @@ func (m Model) footerLine() string {
 	// The files view owns the keyboard while open (action keys are swallowed),
 	// so the registry footer would lie; show the view's own keys instead.
 	if m.filesView != nil {
-		return "files: [←/→ tab] focus  [↑/↓] move  [ctrl+↑/↓] tree  [enter] diff  [/] search  [h] hist  [b] blame  [esc/l] close"
+		return "files: [←/→ tab] focus  [↑/↓] move  [ctrl+↑/↓] tree  [enter] diff  [/] search  [h] hist  [b] blame  [z] view  [esc/l] close"
 	}
 	// The stash list owns the keyboard while it is the focused right column
 	// (no file tree yet). When focus has moved to a left panel, fall through to
 	// that panel's normal footer.
 	if m.stashView != nil && m.focus == panelCommits {
-		return "stash: [↑/↓] move  [l] files  [←] panels  [enter] apply/pop/drop  [esc/S] close"
+		return "stash: [↑/↓] move  [l] files  [z] view  [←] panels  [enter] apply/pop/drop  [esc/S] close"
 	}
 	var ctx, glob []string
 	for _, b := range contextBindings {

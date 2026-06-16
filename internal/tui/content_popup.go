@@ -29,11 +29,13 @@ type contentLine struct {
 // repo-popup-style type-to-filter search and cursor-driven scrolling. The
 // help window is its first consumer.
 type contentPopup struct {
-	title  string
-	lines  []contentLine // full, unfiltered content
-	query  string        // case-insensitive substring over non-heading lines
-	typing bool          // true while /-input mode is capturing keys
-	sel    int           // cursor index into the FILTERED view
+	title   string
+	lines   []contentLine // full, unfiltered content
+	query   string        // case-insensitive substring over non-heading lines
+	typing  bool          // true while /-input mode is capturing keys
+	sel     int           // cursor index into the FILTERED view
+	mode    dispMode      // text display mode; z cycles
+	hscroll int           // modeScroll horizontal offset
 }
 
 func newContentPopup(title string, lines []contentLine) *contentPopup {

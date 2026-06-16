@@ -802,7 +802,7 @@ func TestRelayoutWrapOnGapSideHasNilSegments(t *testing.T) {
 	}
 }
 
-func TestDiffWCyclesLongMode(t *testing.T) {
+func TestDiffZCyclesLongMode(t *testing.T) {
 	rows := sameRowsTUI(40, 20)
 	m := diffModel()
 	m.width, m.height = 80, 24
@@ -814,7 +814,7 @@ func TestDiffWCyclesLongMode(t *testing.T) {
 	wantSeq := []longMode{longWrap, longTruncate, longScroll}
 	cur := tea.Model(m)
 	for i, want := range wantSeq {
-		u, _ := cur.(Model).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("w")})
+		u, _ := cur.(Model).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("z")})
 		mm := u.(Model)
 		if mm.diffView.long != want {
 			t.Fatalf("press %d: long = %d, want %d", i+1, mm.diffView.long, want)

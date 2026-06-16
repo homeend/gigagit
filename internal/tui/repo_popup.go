@@ -6,6 +6,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/gigagit/gg/internal/repos"
 )
@@ -17,6 +18,8 @@ type repoPopup struct {
 	query   string // case-insensitive substring over name+path
 	sel     int    // index into the FILTERED view
 	now     time.Time
+	mode    dispMode // text display mode; z cycles (cutoff default = no wrapping)
+	hscroll int      // modeScroll horizontal offset
 }
 
 // openRepoPopup snapshots the registry. With no known repos it sets a status
@@ -55,6 +58,26 @@ func (m Model) popupVisible() []repos.Entry {
 // everything (no fallthrough to global handlers).
 func (m Model) updateRepoPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	p := m.repoPopup
+	// Display-mode + pan keys take precedence over query typing (z would
+	// otherwise be a literal filter character, matching panels/diff).
+	switch msg.String() {
+	case "z":
+		p.mode = p.mode.next()
+		p.hscroll = 0
+		return m, nil
+	case "shift+left":
+		if p.mode == modeScroll && p.hscroll > 0 {
+			if p.hscroll -= m.hscrollStep(); p.hscroll < 0 {
+				p.hscroll = 0
+			}
+		}
+		return m, nil
+	case "shift+right":
+		if p.mode == modeScroll {
+			p.hscroll += m.hscrollStep()
+		}
+		return m, nil
+	}
 	switch msg.Type {
 	case tea.KeyCtrlC:
 		return m, tea.Quit
@@ -121,33 +144,46 @@ func (m Model) updateRepoPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // renderRepoPopup draws the picker box (composited by render via overlayCenter).
 func (m Model) renderRepoPopup() string {
 	p := m.repoPopup
-	var b strings.Builder
-	b.WriteString("Switch repository")
-	if p.query != "" {
-		b.WriteString("  /" + p.query)
-	}
-	b.WriteString("\n\n")
-	vis := m.popupVisible()
-	if len(vis) == 0 {
-		b.WriteString("  (no match)\n")
-	}
-	for i, e := range vis {
-		marker := "  "
-		if samePathTUI(e.Path, m.currentWorktree) {
-			marker = "● "
-		}
-		cursor := "  "
-		if i == p.sel {
-			cursor = "> "
-		}
-		b.WriteString(fmt.Sprintf("%s%s%s  %s  (%s)\n",
-			cursor, marker, repos.Name(e), e.Path, ageString(p.now, e.LastOpened)))
-	}
-	b.WriteString("\n[enter] switch  [ctrl+d] forget  [esc] cancel")
-
 	w, _ := m.overlayDims()
 	inner := popupInnerWidth(w)
-	return modalStyle.Width(inner).Render(strings.TrimRight(b.String(), "\n")) + "\n"
+
+	header := "Switch repository"
+	if p.query != "" {
+		header += "  /" + p.query
+	}
+
+	vis := m.popupVisible()
+	var bodyLines []string
+	if len(vis) == 0 {
+		bodyLines = []string{padRight("  (no match)", inner)}
+	} else {
+		wr := make([]winRow, len(vis))
+		for i, e := range vis {
+			marker := "  "
+			if samePathTUI(e.Path, m.currentWorktree) {
+				marker = "● "
+			}
+			prefix := "  "
+			var st lipgloss.Style
+			if i == p.sel {
+				prefix = "> "
+				st = selectedRow
+			}
+			row := fmt.Sprintf("%s%s%s  %s  (%s)", prefix, marker, repos.Name(e), e.Path, ageString(p.now, e.LastOpened))
+			wr[i] = winRow{text: row, style: st}
+		}
+		// Cap the visible body; renderWindow scrolls to keep p.sel in view.
+		h := len(vis)
+		if h > 12 {
+			h = 12
+		}
+		bodyLines = renderWindow(wr, winOpts{w: inner, h: h, mode: p.mode, anchor: p.sel, hscroll: p.hscroll})
+	}
+
+	parts := []string{header, ""}
+	parts = append(parts, bodyLines...)
+	parts = append(parts, "", "[enter] switch  [ctrl+d] forget  [z] mode  [esc] cancel")
+	return modalStyle.Width(inner).Render(strings.Join(parts, "\n")) + "\n"
 }
 
 // samePathTUI compares two paths after trimming trailing separators; symlink

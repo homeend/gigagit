@@ -9,6 +9,17 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+#### TUI window display modes
+- Every list/tree/text window (panels, stash list, files tree, file history,
+  blame, and the repo switcher popup) now shares one rendering primitive with
+  three switchable text display modes — **cutoff** (default; long rows truncate
+  to one line), **wrap** (rows wrap onto multiple lines), and **scroll** (rows
+  stay full, panned horizontally). Press **`z`** to cycle the focused window's
+  mode; in scroll mode **`shift+←/→`** pans. Each window remembers its own mode.
+- The diff view's existing long-line cycle moved from `w` to **`z`** so one key
+  means "display mode" everywhere. The two worktree-create keys (`w`
+  existing-branch, `W` new-branch) are unchanged.
+
 #### Interactive rebase (engine + scriptable CLI + TUI editor)
 - `gg rebase -i --plan <file> <newbase>` drives an interactive rebase from a
   plan (pick/reword/squash/drop + reorder), executed via git's interactive
@@ -43,6 +54,9 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   non-zero and keeps the stash. (agentskill v8)
 
 ### Fixed
+- TUI: the repo switcher (`R`) no longer wraps long repository paths onto
+  multiple lines — entries render as clean single lines (cutoff), with `z` to
+  switch to wrap/scroll when you want the full path.
 - Diff view: a working copy with CRLF line endings (e.g. a Windows checkout
   under `core.autocrlf`) no longer shows the whole file as changed. The diff
   compared `git show` (LF) against the raw on-disk bytes (CRLF), so every line
