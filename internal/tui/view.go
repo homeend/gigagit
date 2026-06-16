@@ -115,7 +115,11 @@ func clipToHeight(s string, h int) string {
 // it when one is open. The output never exceeds width×height.
 func (m Model) render() string {
 	if m.modal != nil {
-		return m.renderModal()
+		// Overlay the decision modal centered on the interface, like every other
+		// popup — not standalone in the top-left corner.
+		w, h := m.overlayDims()
+		bg := clipToHeight(m.renderInterface(), h)
+		return overlayCenter(bg, m.renderModal(), w, h)
 	}
 	if s := m.stackTop(); s != nil {
 		_, h := m.overlayDims()
