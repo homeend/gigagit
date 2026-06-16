@@ -80,6 +80,7 @@ type Model struct {
 
 	focus         panel
 	lastLeftPanel panel // ←'s return target; zero value = panelBranches
+	activeLeftTab panel // which of Branches/Worktrees shows in the shared left tab slot; zero value = panelBranches
 	sel           map[panel]int
 	sortModes     map[panel]sortMode // per-panel display order (zero value = default)
 	dispModes     map[panel]dispMode // per-panel text display mode (zero value = modeCutoff); z cycles
@@ -104,13 +105,14 @@ const (
 // New constructs the initial model for svc.
 func New(svc *domain.Service) Model {
 	return Model{
-		svc:       svc,
-		feed:      svc.CommitFeed(),
-		loading:   true,
-		sel:       map[panel]int{},
-		sortModes: map[panel]sortMode{panelBranches: sortDateDesc},
-		dispModes: map[panel]dispMode{},
-		hscroll:   map[panel]int{},
+		svc:           svc,
+		feed:          svc.CommitFeed(),
+		loading:       true,
+		sel:           map[panel]int{},
+		sortModes:     map[panel]sortMode{panelBranches: sortDateDesc},
+		dispModes:     map[panel]dispMode{},
+		hscroll:       map[panel]int{},
+		activeLeftTab: panelBranches,
 	}
 }
 
@@ -504,10 +506,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "tab":
 			m = m.rememberLeftFocus()
-			m.focus = (m.focus + 1) % panelCount
+			m.focus = nextInOrder(m.focusOrder(), m.focus, +1)
 		case "shift+tab":
 			m = m.rememberLeftFocus()
-			m.focus = (m.focus - 1 + panelCount) % panelCount
+			m.focus = nextInOrder(m.focusOrder(), m.focus, -1)
 		case "right":
 			if m.focus != panelCommits {
 				m = m.rememberLeftFocus()
@@ -770,6 +772,37 @@ func (m Model) rememberLeftFocus() Model {
 		m.lastLeftPanel = m.focus
 	}
 	return m
+}
+
+// focusOrder is the top-to-bottom sequence of focusable panels: the active
+// Branches/Worktrees tab (the inactive one is not focusable), then Status, then
+// Commits. tab/shift+tab walk this. Stage 3 inserts Files/Staged here.
+func (m Model) focusOrder() []panel {
+	return []panel{m.activeLeftTab, panelStatus, panelCommits}
+}
+
+// nextInOrder returns the panel dir steps from cur within order (wrapping). If
+// cur is not in order (e.g. focus left on a now-hidden tab), it returns the
+// first entry.
+func nextInOrder(order []panel, cur panel, dir int) panel {
+	for i, p := range order {
+		if p == cur {
+			n := len(order)
+			return order[((i+dir)%n+n)%n]
+		}
+	}
+	return order[0]
+}
+
+// leftReturnTarget is where ← lands: the remembered left panel, except a stale
+// pointer at the now-inactive Branches/Worktrees tab is redirected to the
+// active tab (the one actually visible).
+func (m Model) leftReturnTarget() panel {
+	p := m.lastLeftPanel
+	if (p == panelBranches || p == panelWorktrees) && p != m.activeLeftTab {
+		return m.activeLeftTab
+	}
+	return p
 }
 
 // panelLen returns the number of rows in a panel, for selection clamping.

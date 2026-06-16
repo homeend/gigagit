@@ -48,3 +48,35 @@ func TestViewRendersPanelsWithoutPanic(t *testing.T) {
 		}
 	}
 }
+
+func TestTabCyclesActiveTabStatusCommits(t *testing.T) {
+	m := New(nil)
+	m.width, m.height = 80, 24
+	m.focus = panelBranches // the active tab
+	var got []panel
+	for i := 0; i < 3; i++ {
+		u, _ := m.Update(keyMsg("tab"))
+		m = u.(Model)
+		got = append(got, m.focus)
+	}
+	want := []panel{panelStatus, panelCommits, panelBranches}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("tab walk[%d] = %v, want %v (full: %v)", i, got[i], want[i], got)
+		}
+	}
+}
+
+func TestTabNeverFocusesInactiveTab(t *testing.T) {
+	m := New(nil)
+	m.width, m.height = 80, 24
+	m.activeLeftTab = panelBranches
+	m.focus = panelBranches
+	for i := 0; i < 8; i++ {
+		u, _ := m.Update(keyMsg("tab"))
+		m = u.(Model)
+		if m.focus == panelWorktrees {
+			t.Fatal("tab focused the inactive Worktrees tab")
+		}
+	}
+}
