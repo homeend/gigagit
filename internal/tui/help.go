@@ -13,7 +13,7 @@ func helpContent() []contentLine {
 		h("Global"),
 		r("p", "pull (SmartPull: autostash, ff/rebase decisions)"),
 		r("P", "push the current branch (sets upstream)"),
-		r("s", "switch to the selected branch (SmartSwitch)"),
+		r("s", "switch to the selected branch (SmartSwitch); if it's in another worktree, offers to jump there"),
 		r("S", "open the stash window (list all stashes)"),
 		r("u", "undo the last commit (soft, ref-only)"),
 		r("w", "worktree popup for the selected existing branch"),

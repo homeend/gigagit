@@ -8,6 +8,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+### Added
+- TUI: pressing `s` on a branch that's already checked out in **another
+  worktree** now opens a modal offering to **jump to that worktree** (re-root
+  the UI and `cd` there on exit), instead of failing with git's "already checked
+  out" error. Choosing *cancel* / `esc` does nothing; branches not checked out
+  elsewhere still `SmartSwitch` as before.
+
 ### Fixed
 - TUI: the hunk picker (conflict resolve / `H` staging) now shows a **column
   header** labelling which side is `current`/`incoming` (or `index`/`working`),
