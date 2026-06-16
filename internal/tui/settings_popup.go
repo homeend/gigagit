@@ -132,7 +132,9 @@ func (m Model) renderSettingsPopup() string {
 	if !p.picker {
 		b.WriteString("Settings\n\n")
 		b.WriteString("> " + settingsMenuAgents + "\n")
-		b.WriteString("\n[enter] open  [z] mode  [esc] close")
+		// The menu is a single static line (not a renderWindow list), so z has no
+		// visible effect here — only the picker advertises [z] mode.
+		b.WriteString("\n[enter] open  [esc] close")
 	} else {
 		b.WriteString("Set up agent skills\n\n")
 		if len(p.dets) == 0 {
