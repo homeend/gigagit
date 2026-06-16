@@ -66,22 +66,26 @@ func (m Model) renderConflictPopup() string {
 			b.WriteString(line + "\n")
 		}
 	}
-	b.WriteString("\n" + p.actionHint() + "\n")
-	b.WriteString("[esc] close  [z] mode")
+	// The hint is longer than the box, so wrap it across lines (every key must
+	// stay visible) instead of letting popupBox truncate it.
+	hintParts := append(p.actionHintParts(), "[esc] close", "[z] mode")
+	b.WriteString("\n" + strings.Join(wrapParts(hintParts, textW, "  "), "\n"))
 	return popupBox(inner, b.String())
 }
 
-// actionHint lists the keys available for the selected file (+ continue/abort).
-func (p *conflictPopup) actionHint() string {
+// actionHintParts lists the keys available for the selected file (+ continue/
+// abort) as separate parts, so the renderer can wrap them across lines instead
+// of truncating the (long) hint at the box edge.
+func (p *conflictPopup) actionHintParts() []string {
 	// All conflicts resolved: either offer continue/abort (op in progress) or
 	// tell the user to commit (no op — e.g. a stash-pop conflict).
 	if len(p.files) == 0 {
 		if p.inProgress != "" {
-			return strings.Join([]string{"[c] continue " + p.inProgress, "[a] abort"}, "  ")
+			return []string{"[c] continue " + p.inProgress, "[a] abort"}
 		}
 		// No merge/rebase to continue (e.g. a stash-pop conflict): the resolved
 		// changes are staged, so the user closes the popup and commits with c.
-		return "all resolved — press [esc], then [c] to commit"
+		return []string{"all resolved — press [esc], then [c] to commit"}
 	}
 	var parts []string
 	if p.sel >= 0 && p.sel < len(p.files) {
@@ -104,7 +108,7 @@ func (p *conflictPopup) actionHint() string {
 	if p.inProgress != "" {
 		parts = append(parts, "[a] abort")
 	}
-	return strings.Join(parts, "  ")
+	return parts
 }
 
 // inProgressMsg carries the result of the merge/rebase-in-progress probe.

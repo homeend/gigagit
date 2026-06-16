@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/x/ansi"
+
 	"github.com/gigagit/gg/internal/domain"
 	"github.com/gigagit/gg/internal/engine"
 	"github.com/gigagit/gg/internal/git"
@@ -138,6 +140,22 @@ func selectConflict(t *testing.T, p *conflictPopup, path string) {
 		}
 	}
 	t.Fatalf("conflict %q not in popup: %+v", path, p.files)
+}
+
+// The action hint is longer than the popup box, so it must WRAP across lines
+// (not truncate) — every key must remain visible.
+func TestConflictPopupHintNotTruncated(t *testing.T) {
+	m := Model{width: 80, height: 30}
+	m.conflictPopup = &conflictPopup{
+		files:      []model.FileStatus{{Path: "a.go", Kind: model.KindUnmerged, Staged: 'U', Unstaged: 'U'}},
+		inProgress: "merge",
+	}
+	out := ansi.Strip(m.renderConflictPopup())
+	for _, tok := range []string{"[enter]", "[o]", "[i]", "[m]", "[A]", "[a]", "[esc]", "[z]"} {
+		if !strings.Contains(out, tok) {
+			t.Errorf("hint key %q missing (truncated, not wrapped?):\n%s", tok, out)
+		}
+	}
 }
 
 func TestConflictPopupKeepIncomingDispatches(t *testing.T) {

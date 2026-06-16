@@ -233,6 +233,26 @@ func popupBox(inner int, content string) string {
 	return modalStyle.Width(inner).Render(strings.Join(lines, "\n")) + "\n"
 }
 
+// wrapParts greedily packs sep-joined parts into lines no wider than width, so a
+// hint with more keys than fit on one line wraps onto a few instead of being
+// truncated. A single part wider than width still gets its own line.
+func wrapParts(parts []string, width int, sep string) []string {
+	if len(parts) == 0 {
+		return nil
+	}
+	var lines []string
+	cur := parts[0]
+	for _, p := range parts[1:] {
+		if lipgloss.Width(cur)+lipgloss.Width(sep)+lipgloss.Width(p) <= width {
+			cur += sep + p
+		} else {
+			lines = append(lines, cur)
+			cur = p
+		}
+	}
+	return append(lines, cur)
+}
+
 // renderInterface draws the header, the panels, and the footer/status, sized to
 // fit the current terminal so the output never exceeds width×height.
 func (m Model) renderInterface() string {
