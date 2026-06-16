@@ -93,6 +93,26 @@ func TestEnterOnStatusOpensLoadingDiff(t *testing.T) {
 	}
 }
 
+func TestEnterOnStagedRowOpensStagedDiff(t *testing.T) {
+	m := footerModel()
+	m.status.Files = []model.FileStatus{{Path: "s.txt", Staged: 'M', Unstaged: '.'}}
+	m.focus = panelStaged
+	u, cmd := m.Update(keyMsg("enter"))
+	mm := u.(Model)
+	if mm.diffView == nil || !mm.diffView.loading {
+		t.Fatal("enter on a staged row must open a loading diff view")
+	}
+	if cmd == nil {
+		t.Fatal("enter must return the loader cmd")
+	}
+	if mm.diffTag != "staged:s.txt" {
+		t.Fatalf("diffTag = %q, want staged:s.txt", mm.diffTag)
+	}
+	if mm.diffView.context != "HEAD → index (staged)" {
+		t.Fatalf("context = %q, want HEAD → index (staged)", mm.diffView.context)
+	}
+}
+
 func TestEnterOnConflictedRowIsNoOp(t *testing.T) {
 	m := diffModel()
 	m.sel[panelFiles] = 2 // conflict.txt
@@ -145,7 +165,7 @@ func TestStatusLoaderModifiedFile(t *testing.T) {
 	m := diffModel()
 	m.svc = domain.New(repo)
 	m.currentWorktree = dir
-	msg := m.loadStatusDiffCmd(model.FileStatus{Path: "f.txt", Staged: '.', Unstaged: 'M'})().(diffMsg)
+	msg := m.loadStatusDiffCmd(model.FileStatus{Path: "f.txt", Staged: '.', Unstaged: 'M'}, false)().(diffMsg)
 	if msg.view.err != nil {
 		t.Fatal(msg.view.err)
 	}
@@ -165,7 +185,7 @@ func TestStatusLoaderUntrackedIsAllAdded(t *testing.T) {
 	m := diffModel()
 	m.svc = domain.New(repo)
 	m.currentWorktree = dir
-	msg := m.loadStatusDiffCmd(model.FileStatus{Path: "u.txt", Kind: model.KindUntracked})().(diffMsg)
+	msg := m.loadStatusDiffCmd(model.FileStatus{Path: "u.txt", Kind: model.KindUntracked}, false)().(diffMsg)
 	if msg.view.err != nil {
 		t.Fatal(msg.view.err)
 	}
@@ -189,7 +209,7 @@ func TestStatusLoaderDeletedIsAllDel(t *testing.T) {
 	m := diffModel()
 	m.svc = domain.New(repo)
 	m.currentWorktree = dir
-	msg := m.loadStatusDiffCmd(model.FileStatus{Path: "d.txt", Staged: '.', Unstaged: 'D'})().(diffMsg)
+	msg := m.loadStatusDiffCmd(model.FileStatus{Path: "d.txt", Staged: '.', Unstaged: 'D'}, false)().(diffMsg)
 	if msg.view.err != nil {
 		t.Fatal(msg.view.err)
 	}
@@ -197,6 +217,56 @@ func TestStatusLoaderDeletedIsAllDel(t *testing.T) {
 		if r.Kind != textdiff.Del {
 			t.Fatalf("deleted file must be all-Del, got %+v", r)
 		}
+	}
+}
+
+// TestStatusLoaderStagedShowsIndexNotWorktree proves the Staged panel diff
+// (staged=true) compares HEAD → the index blob, not HEAD → the file on disk:
+// a line modified-then-staged shows, while a further unstaged edit on disk
+// does not. It also pins the staged tag and header label.
+func TestStatusLoaderStagedShowsIndexNotWorktree(t *testing.T) {
+	dir, repo := newRepoDir(t)
+	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("one\ntwo\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, dir, "add", "f.txt")
+	gitIn(t, dir, "commit", "-m", "base")
+	// Stage the "TWO" change, then add an unstaged "three" line on disk.
+	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("one\nTWO\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, dir, "add", "f.txt")
+	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("one\nTWO\nthree\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	m := diffModel()
+	m.svc = domain.New(repo)
+	m.currentWorktree = dir
+	msg := m.loadStatusDiffCmd(model.FileStatus{Path: "f.txt", Staged: 'M', Unstaged: 'M'}, true)().(diffMsg)
+	if msg.view.err != nil {
+		t.Fatal(msg.view.err)
+	}
+	if msg.tag != "staged:f.txt" {
+		t.Fatalf("tag = %q, want staged:f.txt", msg.tag)
+	}
+	if msg.view.context != "HEAD → index (staged)" {
+		t.Fatalf("context = %q, want HEAD → index (staged)", msg.view.context)
+	}
+	for _, r := range msg.view.full {
+		if strings.Contains(r.Right, "three") {
+			t.Fatalf("staged diff leaked the unstaged worktree line: %+v", r)
+		}
+	}
+	// The staged change itself must be present on the new side.
+	var sawTwo bool
+	for _, r := range msg.view.full {
+		if strings.Contains(r.Right, "TWO") {
+			sawTwo = true
+		}
+	}
+	if !sawTwo {
+		t.Fatal("staged diff missing the staged TWO change")
 	}
 }
 
@@ -614,7 +684,7 @@ func TestStatusLoaderOpensAtFirstDifference(t *testing.T) {
 	m.height = 12
 	m.svc = domain.New(repo)
 	m.currentWorktree = dir
-	msg := m.loadStatusDiffCmd(model.FileStatus{Path: "f.txt", Staged: '.', Unstaged: 'M'})().(diffMsg)
+	msg := m.loadStatusDiffCmd(model.FileStatus{Path: "f.txt", Staged: '.', Unstaged: 'M'}, false)().(diffMsg)
 	if msg.view.err != nil {
 		t.Fatal(msg.view.err)
 	}
@@ -641,7 +711,7 @@ func TestDiffOpenInheritsSessionMode(t *testing.T) {
 	m.svc = domain.New(repo)
 	m.currentWorktree = dir
 	m.diffPartial = true
-	msg := m.loadStatusDiffCmd(model.FileStatus{Path: "f.txt", Staged: '.', Unstaged: 'M'})().(diffMsg)
+	msg := m.loadStatusDiffCmd(model.FileStatus{Path: "f.txt", Staged: '.', Unstaged: 'M'}, false)().(diffMsg)
 	if !msg.view.partial {
 		t.Fatal("a new diff must inherit the session's partial mode")
 	}
@@ -840,7 +910,7 @@ func TestDiffOpenInheritsSessionLongMode(t *testing.T) {
 	m.svc = domain.New(repo)
 	m.currentWorktree = dir
 	m.diffLong = longWrap
-	msg := m.loadStatusDiffCmd(model.FileStatus{Path: "f.txt", Staged: '.', Unstaged: 'M'})().(diffMsg)
+	msg := m.loadStatusDiffCmd(model.FileStatus{Path: "f.txt", Staged: '.', Unstaged: 'M'}, false)().(diffMsg)
 	if msg.view.long != longWrap {
 		t.Fatal("a new diff must inherit the session's long mode")
 	}
