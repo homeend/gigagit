@@ -203,10 +203,10 @@ func (s *Service) CommitRange(ctx context.Context, onto, branch string) ([]model
 	})
 }
 
-// ConflictedFile reads the working-tree bytes of a conflicted path (with its
-// merge markers) under a Read reservation. Backs the conflict hunk picker.
-func (s *Service) ConflictedFile(ctx context.Context, path string) ([]byte, error) {
-	return query(ctx, s, "conflicted-file:"+path, func(c context.Context) ([]byte, error) {
+// WorktreeFile reads the working-tree bytes of a path under a Read reservation.
+// Backs the conflict hunk picker (marker text) and hunk staging (the new side).
+func (s *Service) WorktreeFile(ctx context.Context, path string) ([]byte, error) {
+	return query(ctx, s, "worktree-file:"+path, func(c context.Context) ([]byte, error) {
 		return s.repo.ReadWorktreeFile(c, path)
 	})
 }

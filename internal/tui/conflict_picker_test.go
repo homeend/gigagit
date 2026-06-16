@@ -119,3 +119,21 @@ func TestStagePickerNoGateAppliesImmediately(t *testing.T) {
 		t.Fatalf("staged = %q, want the working tree", out)
 	}
 }
+
+func TestStageHunksLoadedPushesPicker(t *testing.T) {
+	m := Model{width: 80, height: 24}
+	updated, _ := m.Update(stageHunksLoadedMsg{path: "f.txt", index: []byte("a\nb\n"), work: []byte("a\nB\n")})
+	m = updated.(Model)
+	if _, ok := m.stackTop().(*hunkPicker); !ok {
+		t.Fatal("stageHunksLoadedMsg should push the hunk picker")
+	}
+}
+
+func TestStageHunksLoadedNoChangeNoOp(t *testing.T) {
+	m := Model{width: 80, height: 24}
+	updated, _ := m.Update(stageHunksLoadedMsg{path: "f.txt", index: []byte("a\n"), work: []byte("a\n")})
+	m = updated.(Model)
+	if m.stackTop() != nil {
+		t.Fatal("no changes → no surface")
+	}
+}

@@ -149,7 +149,31 @@ type conflictFileLoadedMsg struct {
 func (m Model) loadConflictFileCmd(path string) tea.Cmd {
 	svc := m.svc
 	return func() tea.Msg {
-		c, err := svc.ConflictedFile(context.Background(), path)
+		c, err := svc.WorktreeFile(context.Background(), path)
 		return conflictFileLoadedMsg{path: path, content: c, err: err}
+	}
+}
+
+// stageHunksLoadedMsg carries the two sides for the staging picker.
+type stageHunksLoadedMsg struct {
+	path        string
+	index, work []byte
+	err         error
+}
+
+// loadStageHunksCmd reads the index blob and the working-tree bytes off the UI
+// thread; the resulting msg builds the diff and pushes the staging picker.
+func (m Model) loadStageHunksCmd(path string) tea.Cmd {
+	svc := m.svc
+	return func() tea.Msg {
+		idx, err := svc.ShowFile(context.Background(), "", path)
+		if err != nil {
+			return stageHunksLoadedMsg{path: path, err: err}
+		}
+		work, werr := svc.WorktreeFile(context.Background(), path)
+		if werr != nil {
+			return stageHunksLoadedMsg{path: path, err: werr}
+		}
+		return stageHunksLoadedMsg{path: path, index: idx, work: work}
 	}
 }

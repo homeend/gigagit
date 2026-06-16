@@ -36,6 +36,7 @@ var contextBindings = []footerBinding{
 	{"delete-worktree", "d", "[d]elete", func(m Model) bool { return m.focus == panelWorktrees && m.canDeleteWorktree() }},
 	{"file-diff", "enter", "[enter] diff", func(m Model) bool { return m.canShowFileDiff() }},
 	{"stage", "space", "[space] stage", func(m Model) bool { return m.focus == panelFiles && m.canStage() }},
+	{"stage-hunks", "H", "[H] hunks", func(m Model) bool { return m.canStageHunks() }},
 	{"unstage", "space", "[space] unstage", func(m Model) bool { return m.focus == panelStaged && m.canStage() }},
 	{"stash", "s", "[s] stash", func(m Model) bool {
 		return m.focus == panelFiles && m.opsIdle() && len(stashCandidates(m.status)) > 0

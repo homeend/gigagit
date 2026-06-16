@@ -14,6 +14,20 @@ func (m Model) opsIdle() bool {
 	return !m.running && !m.loading
 }
 
+// canStageHunks reports whether the Files panel's selected row is a tracked,
+// non-conflicted file the hunk-staging picker can open.
+func (m Model) canStageHunks() bool {
+	if m.focus != panelFiles || !m.opsIdle() {
+		return false
+	}
+	bi, ok := m.backingIndex(panelFiles)
+	if !ok {
+		return false
+	}
+	f := m.status.Files[bi]
+	return f.Kind != model.KindUntracked && f.Kind != model.KindUnmerged
+}
+
 // selectedBranch resolves the Branches panel selection through the view
 // transforms. ok is false when the visible list is empty.
 func (m Model) selectedBranch() (model.Branch, bool) {

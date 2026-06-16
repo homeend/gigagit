@@ -406,6 +406,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.opsIdle() && len(m.status.Conflicts()) > 0 {
 				return m.openConflictPopup()
 			}
+		case "H":
+			if m.canStageHunks() {
+				bi, _ := m.backingIndex(panelFiles)
+				return m, m.loadStageHunksCmd(m.status.Files[bi].Path)
+			}
 		case "s":
 			if m.focus == panelFiles && m.opsIdle() {
 				if mm, ok := m.openStashPopup(); ok {
@@ -786,6 +791,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m = m.pushSurface(newConflictPicker(msg.path, doc))
+		return m, nil
+
+	case stageHunksLoadedMsg:
+		if msg.err != nil {
+			m.statusMsg = "stage hunks: " + msg.err.Error()
+			return m, nil
+		}
+		if textdiff.IsBinary(msg.index) || textdiff.IsBinary(msg.work) {
+			m.statusMsg = "stage hunks: binary file"
+			return m, nil
+		}
+		doc := hunkpick.FromDiff(msg.index, msg.work)
+		doc.SetAll(hunkpick.TakeCurrent) // default: nothing staged
+		if len(doc.Blocks()) == 0 {
+			m.statusMsg = "stage hunks: nothing to stage"
+			return m, nil
+		}
+		m = m.pushSurface(newStagePicker(msg.path, doc))
 		return m, nil
 	}
 	return m, nil
