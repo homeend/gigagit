@@ -143,6 +143,52 @@ func TestFilesStagedMembership(t *testing.T) {
 	}
 }
 
+// TestFilesStagedGlyphs pins the single-letter status each panel shows for its
+// own side: Files = working-tree state (untracked → A, modified → M, conflict →
+// U), Staged = index state (added → A, modified → M). git's two-byte XY is
+// never shown.
+func TestFilesStagedGlyphs(t *testing.T) {
+	m := New(nil)
+	m.width, m.height = 80, 30
+	m.status.Files = []model.FileStatus{
+		{Path: "untracked.txt", Kind: model.KindUntracked},
+		{Path: "unstaged.go", Kind: model.KindTracked, Staged: '.', Unstaged: 'M'},
+		{Path: "staged.go", Kind: model.KindTracked, Staged: 'A', Unstaged: '.'},
+		{Path: "partial.go", Kind: model.KindTracked, Staged: 'M', Unstaged: 'M'},
+		{Path: "conflict.go", Kind: model.KindUnmerged, Staged: 'U', Unstaged: 'U'},
+	}
+	// Files panel shows the working-tree letter. staged.go has no worktree
+	// change, so it is absent here (membership), not asserted.
+	assertGlyphs(t, m, panelFiles, map[string]string{
+		"untracked.txt": "A untracked.txt",
+		"unstaged.go":   "M unstaged.go",
+		"partial.go":    "M partial.go",
+		"conflict.go":   "U conflict.go",
+	})
+	// Staged panel shows the index letter (the X byte).
+	assertGlyphs(t, m, panelStaged, map[string]string{
+		"staged.go":  "A staged.go",
+		"partial.go": "M partial.go",
+	})
+}
+
+// assertGlyphs checks panel p's rendered rows carry the expected status text
+// for the named files (rows align with panelView's backing indices).
+func assertGlyphs(t *testing.T, m Model, p panel, want map[string]string) {
+	t.Helper()
+	rows, idx := m.panelView(p)
+	for n, i := range idx {
+		path := m.status.Files[i].Path
+		w, ok := want[path]
+		if !ok {
+			continue
+		}
+		if rows[n] != w {
+			t.Errorf("%v row for %s = %q, want %q", p, path, rows[n], w)
+		}
+	}
+}
+
 func pathsOf(t *testing.T, m Model, p panel) []string {
 	t.Helper()
 	_, idx := m.panelView(p)
