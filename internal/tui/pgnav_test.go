@@ -9,15 +9,22 @@ import (
 
 func TestShiftTabCyclesBackwards(t *testing.T) {
 	m := loadedModel(t)
-	m.focus = panelBranches
+	m.focus = panelBranches // the active left tab
+	// shift+tab from the active tab wraps to the bottom of the order (Commits).
 	u, _ := m.Update(keyMsg("shift+tab"))
 	m = u.(Model)
 	if m.focus != panelCommits {
 		t.Fatalf("focus = %v, want panelCommits", m.focus)
 	}
-	for i := 0; i < int(panelCount)-1; i++ {
+	// A full reverse cycle returns to Branches and never visits the inactive
+	// Worktrees tab (focus order is [activeTab, Status, Commits]).
+	order := m.focusOrder()
+	for i := 0; i < len(order)-1; i++ {
 		u, _ = m.Update(keyMsg("shift+tab"))
 		m = u.(Model)
+		if m.focus == panelWorktrees {
+			t.Fatal("reverse cycle visited the inactive Worktrees tab")
+		}
 	}
 	if m.focus != panelBranches {
 		t.Fatalf("full reverse cycle should return to panelBranches, got %v", m.focus)

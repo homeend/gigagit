@@ -224,15 +224,15 @@ func TestFilterTypingArrowNavigates(t *testing.T) {
 
 func TestFilterLabelRendering(t *testing.T) {
 	m := loadedModel(t)
-	m.width, m.height = 100, 30
+	m.width, m.height = 120, 30 // wide enough that the tab-bar label + sort + filter fit
 	m.focus = panelBranches
 	m.sortModes[panelBranches] = sortDateDesc
 	u, _ := m.Update(keyMsg("/"))
 	m = u.(Model)
 	m = typeRunes(t, m, "fi")
 	out := m.View()
-	if !strings.Contains(out, "Branches ·date↓ /fi█") {
-		t.Fatalf("label missing sort+filter+cursor decoration:\n%s", out)
+	if !strings.Contains(out, "[Branches] Worktrees ·date↓ /fi█") {
+		t.Fatalf("label missing tab-bar+sort+filter+cursor decoration:\n%s", out)
 	}
 }
 

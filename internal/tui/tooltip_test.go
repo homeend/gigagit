@@ -19,6 +19,7 @@ func tooltipModel() Model {
 	return Model{
 		width: 80, height: 24,
 		focus:           panelWorktrees,
+		activeLeftTab:   panelWorktrees, // Worktrees must be the active tab to be visible
 		sel:             map[panel]int{panelWorktrees: 1},
 		currentWorktree: "/repo",
 		worktrees: []model.Worktree{
