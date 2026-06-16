@@ -146,13 +146,13 @@ func TestLayoutTabbedLeftColumn(t *testing.T) {
 	if g.boxH[panelBranches] <= 0 {
 		t.Error("active Branches tab box missing")
 	}
-	if g.boxH[panelStatus] <= 0 {
+	if g.boxH[panelFiles] <= 0 {
 		t.Error("Status box missing")
 	}
 	if g.boxH[panelWorktrees] != 0 {
 		t.Errorf("inactive Worktrees tab must be hidden, got boxH %d", g.boxH[panelWorktrees])
 	}
-	if g.pos[panelStatus].y != g.pos[panelBranches].y+g.boxH[panelBranches] {
+	if g.pos[panelFiles].y != g.pos[panelBranches].y+g.boxH[panelBranches] {
 		t.Error("Status is not positioned directly below the tab slot")
 	}
 	m.activeLeftTab = panelWorktrees

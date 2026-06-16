@@ -97,7 +97,8 @@ type panel int
 const (
 	panelBranches panel = iota
 	panelWorktrees
-	panelStatus
+	panelFiles
+	panelStaged
 	panelCommits
 	panelCount
 )
@@ -400,7 +401,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m.openConflictPopup()
 			}
 		case "s":
-			if m.focus == panelStatus && m.opsIdle() {
+			if m.focus == panelFiles && m.opsIdle() {
 				if mm, ok := m.openStashPopup(); ok {
 					return mm, nil
 				}
@@ -456,8 +457,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return mm, nil
 				}
 			}
-			if m.focus == panelStatus && m.canShowFileDiff() {
-				bi, _ := m.backingIndex(panelStatus)
+			if m.canShowFileDiff() {
+				bi, _ := m.backingIndex(m.focus)
 				f := m.status.Files[bi]
 				ctx := navContext{path: f.Path, rev: ""}
 				bv := newBlameView(ctx)
@@ -488,16 +489,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				wt, _ := m.selectedWorktree()
 				return m.reRoot(wt.Path)
 			}
-			if m.focus == panelStatus && m.canShowFileDiff() {
-				bi, _ := m.backingIndex(panelStatus)
+			if m.canShowFileDiff() {
+				bi, _ := m.backingIndex(m.focus)
 				f := m.status.Files[bi]
-				m.diffView = &diffView{title: f.Path, context: "HEAD → working tree", rev: "", loading: true, partial: m.diffPartial, long: m.diffLong}
-				m.diffTag = "status:" + f.Path
-				return m, m.loadStatusDiffCmd(f)
+				staged := m.focus == panelStaged
+				m.diffView = &diffView{title: f.Path, context: statusDiffContext(staged), rev: "", loading: true, partial: m.diffPartial, long: m.diffLong}
+				m.diffTag = statusDiffTag(f.Path, staged)
+				return m, m.loadStatusDiffCmd(f, staged)
 			}
 		case "h":
-			if m.focus == panelStatus && m.canShowFileDiff() {
-				bi, _ := m.backingIndex(panelStatus)
+			if m.canShowFileDiff() {
+				bi, _ := m.backingIndex(m.focus)
 				f := m.status.Files[bi]
 				ctx := navContext{path: f.Path, rev: ""}
 				h := newHistoryView(ctx)
@@ -716,8 +718,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.summary != "" {
 			m.statusMsg = msg.summary
 		}
-		if n := m.panelLen(panelStatus); n > 0 && m.sel[panelStatus] >= n {
-			m.sel[panelStatus] = n - 1
+		for _, p := range []panel{panelFiles, panelStaged} {
+			if n := m.panelLen(p); n > 0 && m.sel[p] >= n {
+				m.sel[p] = n - 1
+			}
 		}
 		return m, nil
 
@@ -763,16 +767,16 @@ func (m Model) handleStageKey() (tea.Model, tea.Cmd) {
 	if !m.canStage() {
 		return m, nil
 	}
-	bi, _ := m.backingIndex(panelStatus)
+	bi, _ := m.backingIndex(m.focus)
 	f := m.status.Files[bi]
 	if f.Kind == model.KindUnmerged {
 		m.statusMsg = "resolve conflicts first"
 		return m, nil
 	}
-	hasUnstaged := f.Kind == model.KindUntracked || (f.Unstaged != '.' && f.Unstaged != 0)
+	// Direction is the panel: Files stages, Staged unstages.
 	m.running = true
 	m.statusMsg = "working…"
-	return m, m.stageCmd(engine.Stage{Paths: []string{f.Path}, Unstage: !hasUnstaged})
+	return m, m.stageCmd(engine.Stage{Paths: []string{f.Path}, Unstage: m.focus == panelStaged})
 }
 
 // rememberLeftFocus records the focused panel as ←'s return target when it
@@ -785,10 +789,14 @@ func (m Model) rememberLeftFocus() Model {
 }
 
 // focusOrder is the top-to-bottom sequence of focusable panels: the active
-// Branches/Worktrees tab (the inactive one is not focusable), then Status, then
-// Commits. tab/shift+tab walk this. Stage 3 inserts Files/Staged here.
+// Branches/Worktrees tab (the inactive one is not focusable), then Files (and
+// Staged when it fits), then Commits. tab/shift+tab walk this.
 func (m Model) focusOrder() []panel {
-	return []panel{m.activeLeftTab, panelStatus, panelCommits}
+	order := []panel{m.activeLeftTab, panelFiles}
+	if m.layout().boxH[panelStaged] > 0 { // Staged is dropped on a short terminal
+		order = append(order, panelStaged)
+	}
+	return append(order, panelCommits)
 }
 
 // nextInOrder returns the panel dir steps from cur within order (wrapping). If
@@ -810,10 +818,16 @@ func nextInOrder(order []panel, cur panel, dir int) panel {
 func (m Model) leftReturnTarget() panel {
 	p := m.lastLeftPanel
 	if (p == panelBranches || p == panelWorktrees) && p != m.activeLeftTab {
-		return m.activeLeftTab
+		p = m.activeLeftTab
+	}
+	if m.layout().boxH[p] <= 0 { // hidden (inactive tab, or Staged on a short terminal)
+		return panelFiles
 	}
 	return p
 }
+
+// isFilesPanel reports whether p is one of the two working-tree file panels.
+func (m Model) isFilesPanel(p panel) bool { return p == panelFiles || p == panelStaged }
 
 // panelLen returns the number of rows in a panel, for selection clamping.
 func (m Model) panelLen(p panel) int {

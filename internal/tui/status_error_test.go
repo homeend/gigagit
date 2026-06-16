@@ -33,7 +33,7 @@ func TestStatusIsError(t *testing.T) {
 }
 
 func statusRenderModel() Model {
-	return Model{width: 120, height: 30, focus: panelStatus, sel: map[panel]int{}}
+	return Model{width: 120, height: 30, focus: panelFiles, sel: map[panel]int{}}
 }
 
 func lastLine(s string) string {

@@ -164,7 +164,7 @@ func TestFooterStatusFocusEmptyHasNoContextSegment(t *testing.T) {
 	// With status rows, Status focus advertises [enter] diff (tested above);
 	// with NO rows there must be no context segment and no stray separator.
 	m := footerModel() // fixture has no status files
-	m.focus = panelStatus
+	m.focus = panelFiles
 	f := m.footerLine()
 	if strings.Contains(f, "•") {
 		t.Errorf("empty Status focus has no context actions, no separator: %q", f)
@@ -258,7 +258,7 @@ func TestFooterTruncatedToWidth(t *testing.T) {
 }
 
 func TestFooterShowsDiffOnStatusFocus(t *testing.T) {
-	m := diffModel() // focus = panelStatus, selectable rows
+	m := diffModel() // focus = panelFiles, selectable rows
 	if !strings.Contains(m.footerLine(), "[enter] diff") {
 		t.Fatalf("footer must advertise enter on Status: %q", m.footerLine())
 	}
@@ -274,7 +274,7 @@ func TestFooterHidesDiffOffStatusFocus(t *testing.T) {
 
 func TestFooterHidesDiffOnConflictedRow(t *testing.T) {
 	m := diffModel()
-	m.sel[panelStatus] = 2 // conflict.txt (KindUnmerged)
+	m.sel[panelFiles] = 2 // conflict.txt (KindUnmerged)
 	if strings.Contains(m.footerLine(), "[enter] diff") {
 		t.Fatalf("diff advertised on a conflicted row: %q", m.footerLine())
 	}
@@ -321,5 +321,24 @@ func TestSwitchAndWorktreeKeysWorkFromAnyPanel(t *testing.T) {
 	u, _ = m.Update(keyMsg("w"))
 	if u.(Model).popup == nil {
 		t.Error("w must open the worktree popup from any panel")
+	}
+}
+
+func TestFooterStageVsUnstage(t *testing.T) {
+	base := func(focus panel) Model {
+		m := New(nil)
+		m.loading = false // opsIdle requires not loading
+		m.width, m.height = 80, 30
+		m.status.Files = []model.FileStatus{
+			{Path: "a.go", Kind: model.KindTracked, Staged: 'M', Unstaged: 'M'},
+		}
+		m.focus = focus
+		return m
+	}
+	if got := base(panelFiles).footerLine(); !strings.Contains(got, "[space] stage") || strings.Contains(got, "unstage") {
+		t.Errorf("Files footer = %q, want [space] stage", got)
+	}
+	if got := base(panelStaged).footerLine(); !strings.Contains(got, "[space] unstage") {
+		t.Errorf("Staged footer = %q, want [space] unstage", got)
 	}
 }

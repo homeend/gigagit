@@ -9,6 +9,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+#### TUI Files / Staged split
+- The Status panel is now two panels: **Files** (working-tree changes —
+  unstaged, untracked, and conflicts) and **Staged** (the index). `space` stages
+  from Files and unstages from Staged; a partially-staged file shows in both.
+  `enter` on a Files row diffs HEAD → working tree; on a Staged row it diffs
+  HEAD → index, so the two panels show the unstaged and staged halves of a
+  partially-staged file separately. Each panel header shows its file count. On
+  a short terminal the Staged panel is dropped (Branches/Worktrees tab over
+  Files).
+
 #### TUI tabbed Branches/Worktrees
 - The Branches and Worktrees panels are now one tabbed left-column slot —
   **`ctrl+←/→`** switches the active tab (and focuses it); each tab keeps its

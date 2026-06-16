@@ -69,13 +69,27 @@ func TestHistoryQInert(t *testing.T) {
 }
 
 func TestStatusHOpensHistory(t *testing.T) {
-	m := Model{width: 100, height: 30, focus: panelStatus, sel: map[panel]int{}}
-	m.status = model.WorkingTreeStatus{Files: []model.FileStatus{{Path: "a.go"}}}
+	m := Model{width: 100, height: 30, focus: panelFiles, sel: map[panel]int{}}
+	m.status = model.WorkingTreeStatus{Files: []model.FileStatus{{Path: "a.go", Unstaged: 'M'}}}
 	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("h")})
 	got := mm.(Model)
 	h, ok := got.stackTop().(*historyView)
 	if !ok {
 		t.Fatal("h on a Status file should push a historyView")
+	}
+	if h.ctx.path != "a.go" || h.ctx.rev != "" {
+		t.Errorf("wrong navContext: %+v", h.ctx)
+	}
+}
+
+func TestStagedHOpensHistory(t *testing.T) {
+	m := Model{width: 100, height: 30, focus: panelStaged, sel: map[panel]int{}}
+	m.status = model.WorkingTreeStatus{Files: []model.FileStatus{{Path: "a.go", Staged: 'M'}}}
+	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("h")})
+	got := mm.(Model)
+	h, ok := got.stackTop().(*historyView)
+	if !ok {
+		t.Fatal("h on a Staged file should push a historyView")
 	}
 	if h.ctx.path != "a.go" || h.ctx.rev != "" {
 		t.Errorf("wrong navContext: %+v", h.ctx)

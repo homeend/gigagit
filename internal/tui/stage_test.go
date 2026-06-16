@@ -10,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/gigagit/gg/internal/domain"
+	"github.com/gigagit/gg/internal/model"
 )
 
 // stageTestModel: a loaded model on a repo with one unstaged modification,
@@ -22,8 +23,8 @@ func stageTestModel(t *testing.T) (Model, string) {
 	m := New(domain.New(repo))
 	loaded, _ := m.Update(m.loadCmd()())
 	m = loaded.(Model)
-	m.focus = panelStatus
-	m.sel[panelStatus] = 0
+	m.focus = panelFiles
+	m.sel[panelFiles] = 0
 	return m, dir
 }
 
@@ -89,10 +90,10 @@ func TestSpaceOnConflictedFileIsNoOp(t *testing.T) {
 	m := New(domain.New(repo))
 	loaded, _ := m.Update(m.loadCmd()())
 	m = loaded.(Model)
-	m.focus = panelStatus
+	m.focus = panelFiles
 	for i, f := range m.status.Files {
 		if f.Path == "c.txt" {
-			m.sel[panelStatus] = i
+			m.sel[panelFiles] = i
 		}
 	}
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeySpace})
@@ -110,8 +111,8 @@ func TestSpaceUnstagesFullyStagedFile(t *testing.T) {
 	gitInDir(t, dir, "add", "README.md")
 	loaded, _ := m.Update(m.loadCmd()())
 	m = loaded.(Model)
-	m.focus = panelStatus
-	m.sel[panelStatus] = 0
+	m.focus = panelStaged // a fully-staged file now lives in the Staged panel
+	m.sel[panelStaged] = 0
 
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeySpace})
 	m = driveStage(t, updated.(Model), cmd)
@@ -120,4 +121,46 @@ func TestSpaceUnstagesFullyStagedFile(t *testing.T) {
 			t.Fatalf("README.md should be unstaged; staged byte = %q", f.Staged)
 		}
 	}
+}
+
+func TestFilesStagedMembership(t *testing.T) {
+	m := New(nil)
+	m.width, m.height = 80, 30
+	m.status.Files = []model.FileStatus{
+		{Path: "untracked.txt", Kind: model.KindUntracked, Staged: '?', Unstaged: '?'},
+		{Path: "unstaged.go", Kind: model.KindTracked, Staged: '.', Unstaged: 'M'},
+		{Path: "staged.go", Kind: model.KindTracked, Staged: 'M', Unstaged: '.'},
+		{Path: "partial.go", Kind: model.KindTracked, Staged: 'M', Unstaged: 'M'},
+		{Path: "conflict.go", Kind: model.KindUnmerged, Staged: 'U', Unstaged: 'U'},
+	}
+	wantFiles := map[string]bool{"untracked.txt": true, "unstaged.go": true, "partial.go": true, "conflict.go": true}
+	wantStaged := map[string]bool{"staged.go": true, "partial.go": true}
+	if got := pathsOf(t, m, panelFiles); !sameSet(got, wantFiles) {
+		t.Errorf("Files panel = %v, want %v", got, wantFiles)
+	}
+	if got := pathsOf(t, m, panelStaged); !sameSet(got, wantStaged) {
+		t.Errorf("Staged panel = %v, want %v", got, wantStaged)
+	}
+}
+
+func pathsOf(t *testing.T, m Model, p panel) []string {
+	t.Helper()
+	_, idx := m.panelView(p)
+	out := make([]string, len(idx))
+	for n, i := range idx {
+		out[n] = m.status.Files[i].Path
+	}
+	return out
+}
+
+func sameSet(got []string, want map[string]bool) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for _, g := range got {
+		if !want[g] {
+			return false
+		}
+	}
+	return true
 }

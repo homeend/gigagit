@@ -135,7 +135,7 @@ func TestLayoutOrigins(t *testing.T) {
 	if _, visible := g.pos[panelWorktrees]; visible {
 		t.Error("inactive Worktrees tab should have no origin")
 	}
-	if got, want := g.pos[panelStatus], (point{0, 1 + g.boxH[panelBranches]}); got != want {
+	if got, want := g.pos[panelFiles], (point{0, 1 + g.boxH[panelBranches]}); got != want {
 		t.Errorf("status origin = %v, want %v", got, want)
 	}
 	if got, want := g.pos[panelCommits], (point{g.leftW, 1}); got != want {

@@ -3,7 +3,7 @@ package tui
 import "testing"
 
 func TestRightArrowFocusesCommitsFromEachLeftPanel(t *testing.T) {
-	for _, p := range []panel{panelBranches, panelWorktrees, panelStatus} {
+	for _, p := range []panel{panelBranches, panelWorktrees, panelFiles} {
 		m := markModel()
 		m.width, m.height = 80, 24
 		m.focus = p
@@ -21,28 +21,28 @@ func TestRightArrowFocusesCommitsFromEachLeftPanel(t *testing.T) {
 func TestLeftArrowReturnsToLastLeftPanel(t *testing.T) {
 	m := markModel()
 	m.width, m.height = 80, 24
-	m.focus = panelStatus
+	m.focus = panelFiles
 	u, _ := m.Update(keyMsg("right"))
 	m = u.(Model)
 	u, _ = m.Update(keyMsg("left"))
 	m = u.(Model)
-	if m.focus != panelStatus {
+	if m.focus != panelFiles {
 		t.Fatalf("focus = %v, want status (the last left panel)", m.focus)
 	}
 }
 
 func TestLeftArrowAfterTabRemembersLeftPanel(t *testing.T) {
 	m := markModel()
-	m.width, m.height = 80, 24
-	m.focus = panelStatus
-	u, _ := m.Update(keyMsg("tab")) // status -> commits, must record status
+	m.width, m.height = 80, 24 // bodyH 21 >= 12 → Staged visible; order ends [Staged, Commits]
+	m.focus = panelStaged
+	u, _ := m.Update(keyMsg("tab")) // Staged -> Commits, must record Staged
 	m = u.(Model)
 	if m.focus != panelCommits {
 		t.Fatalf("setup: focus = %v, want commits", m.focus)
 	}
 	u, _ = m.Update(keyMsg("left"))
-	if got := u.(Model).focus; got != panelStatus {
-		t.Fatalf("focus = %v, want status (recorded by tab)", got)
+	if got := u.(Model).focus; got != panelStaged {
+		t.Fatalf("focus = %v, want Staged (recorded by tab)", got)
 	}
 }
 

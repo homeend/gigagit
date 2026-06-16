@@ -276,18 +276,40 @@ func (m Model) diffDiffer() domain.Differ {
 	return m.svc.Differ()
 }
 
-// loadStatusDiffCmd fetches both sides of f's working-tree change (HEAD →
-// disk) and compares them off the UI thread. The disk path is rooted at the
-// current worktree: porcelain paths are repo-root-relative and the process
-// cwd may be a subdirectory.
-func (m Model) loadStatusDiffCmd(f model.FileStatus) tea.Cmd {
+// statusDiffTag / statusDiffContext keep the tag and header label in sync
+// between the enter handler (which pre-builds the loading view) and the
+// loader. The Files panel diffs HEAD → the file on disk; the Staged panel
+// diffs HEAD → the index blob. A partially-staged file appears in both
+// panels, so the tags must differ to gate stale results correctly.
+func statusDiffTag(path string, staged bool) string {
+	if staged {
+		return "staged:" + path
+	}
+	return "status:" + path
+}
+
+func statusDiffContext(staged bool) string {
+	if staged {
+		return "HEAD → index (staged)"
+	}
+	return "HEAD → working tree"
+}
+
+// loadStatusDiffCmd fetches both sides of f's pending change and compares them
+// off the UI thread. With staged=false (Files panel) the new side is the file
+// on disk (HEAD → working tree); the disk path is rooted at the current
+// worktree because porcelain paths are repo-root-relative and the process cwd
+// may be a subdirectory. With staged=true (Staged panel) the new side is the
+// index blob (`git show :<path>`, HEAD → staged). Both are uncached (Key: "")
+// because the working tree and the index are mutable.
+func (m Model) loadStatusDiffCmd(f model.FileStatus, staged bool) tea.Cmd {
 	svc := m.svc
 	differ := m.diffDiffer()
 	root := m.currentWorktree
 	body := m.diffBodyRows()
 	width, _ := m.overlayDims()
-	tag := "status:" + f.Path
-	v := &diffView{title: f.Path, context: "HEAD → working tree", rev: "", partial: m.diffPartial, long: m.diffLong, width: width}
+	tag := statusDiffTag(f.Path, staged)
+	v := &diffView{title: f.Path, context: statusDiffContext(staged), rev: "", partial: m.diffPartial, long: m.diffLong, width: width}
 
 	// Old side: absent when the file isn't in HEAD (untracked, or staged-new
 	// 'A'). Renames fetch the old name.
@@ -299,6 +321,25 @@ func (m Model) loadStatusDiffCmd(f model.FileStatus) tea.Cmd {
 		}
 		oldSrc = func(ctx context.Context) ([]byte, error) { return svc.ShowFile(ctx, "HEAD", p) }
 	}
+
+	// Staged: new side is the index blob, absent for a staged delete ('D').
+	// Renames are staged under the new name (f.Path).
+	if staged {
+		var newSrc domain.ByteSource
+		if f.Staged != 'D' {
+			newSrc = func(ctx context.Context) ([]byte, error) { return svc.ShowFile(ctx, "", f.Path) }
+		}
+		return func() tea.Msg {
+			out, err := differ.Diff(context.Background(), domain.Request{Key: "", Old: oldSrc, New: newSrc})
+			if err != nil {
+				v.err = err
+				return diffMsg{tag: tag, view: v}
+			}
+			applyDiff(v, out, body)
+			return diffMsg{tag: tag, view: v}
+		}
+	}
+
 	full := filepath.Join(root, f.Path)
 
 	return func() tea.Msg {

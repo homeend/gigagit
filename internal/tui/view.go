@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -266,14 +267,19 @@ func (m Model) renderInterface() string {
 		left = m.renderFilesView(g.leftW, g.bodyH)
 	} else {
 		// The Branches/Worktrees tab slot (active tab shows its content; the tab
-		// bar lives in the label line) over Status.
+		// bar lives in the label line) over Files, then Staged (when it fits).
 		active := m.activeLeftTab
 		atRows, _ := m.panelView(active)
-		stRows, _ := m.panelView(panelStatus)
-		left = lipgloss.JoinVertical(lipgloss.Left,
+		fRows, _ := m.panelView(panelFiles)
+		boxes := []string{
 			m.renderPanel(active, m.panelLabel(active, tabBarLabel(active)), atRows, g.leftW, g.boxH[active]),
-			m.renderPanel(panelStatus, m.panelLabel(panelStatus, "Status"), stRows, g.leftW, g.boxH[panelStatus]),
-		)
+			m.renderPanel(panelFiles, m.filesLabel(panelFiles, "Files"), fRows, g.leftW, g.boxH[panelFiles]),
+		}
+		if g.boxH[panelStaged] > 0 {
+			sRows, _ := m.panelView(panelStaged)
+			boxes = append(boxes, m.renderPanel(panelStaged, m.filesLabel(panelStaged, "Staged"), sRows, g.leftW, g.boxH[panelStaged]))
+		}
+		left = lipgloss.JoinVertical(lipgloss.Left, boxes...)
 	}
 	var right string
 	if m.stashView != nil {
@@ -293,6 +299,12 @@ func (m Model) headerLine(w int) string {
 		rest += fmt.Sprintf(" (↑%d ↓%d)", m.status.Ahead, m.status.Behind)
 	}
 	return titleStyle.Render("gigagit") + truncate(rest, w-7)
+}
+
+// filesLabel decorates a Files/Staged panel label with its visible row count
+// (the at-a-glance "how many staged" signal) plus the shared sort/filter marks.
+func (m Model) filesLabel(p panel, base string) string {
+	return m.panelLabel(p, base+" "+strconv.Itoa(m.panelLen(p)))
 }
 
 // tabBarLabel is the shared left-slot header: both tab names with the active

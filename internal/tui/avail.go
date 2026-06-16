@@ -112,22 +112,27 @@ func (m Model) canAmend() bool {
 	return m.opsIdle() && len(m.commits) > 0
 }
 
-// canStage reports whether the selected Status row can be staged/unstaged:
-// the Status panel is focused, a row is selected, and no op is running.
+// canStage reports whether the selected row in a file panel can be staged
+// (Files) or unstaged (Staged): a file panel is focused, a row is selected, and
+// no op is running.
 func (m Model) canStage() bool {
-	if m.focus != panelStatus || !m.opsIdle() {
+	if !m.isFilesPanel(m.focus) || !m.opsIdle() {
 		return false
 	}
-	_, ok := m.backingIndex(panelStatus)
+	_, ok := m.backingIndex(m.focus)
 	return ok
 }
 
-// canShowFileDiff gates enter on Status: the side-by-side diff of the
-// selected file. Conflicted rows are excluded until the conflict editor
-// exists. The width check uses the !(w>0 && w<60) idiom so a model that has
-// not seen a WindowSizeMsg yet (tests) is not refused.
+// canShowFileDiff gates enter on a file panel: the side-by-side diff of the
+// selected file (Files: HEAD→working tree; Staged: HEAD→index). Conflicted rows
+// are excluded until the conflict editor exists. The width check uses the
+// !(w>0 && w<60) idiom so a model that has not seen a WindowSizeMsg yet (tests)
+// is not refused.
 func (m Model) canShowFileDiff() bool {
-	bi, ok := m.backingIndex(panelStatus)
+	if !m.isFilesPanel(m.focus) {
+		return false
+	}
+	bi, ok := m.backingIndex(m.focus)
 	if !ok {
 		return false
 	}
