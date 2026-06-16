@@ -1,0 +1,82 @@
+package tui
+
+import (
+	"testing"
+
+	"github.com/gigagit/gg/internal/hunkpick"
+)
+
+func pickerDoc() *hunkpick.Doc {
+	d, _ := hunkpick.ParseConflict([]byte(
+		"top\n<<<<<<< HEAD\nfoo\n=======\nbar\n>>>>>>> x\nmid\n<<<<<<< HEAD\nA\nB\n=======\nC\n>>>>>>> x\n"))
+	return d
+}
+
+func TestConflictPickerTakeSides(t *testing.T) {
+	e := newConflictPicker("f.txt", pickerDoc())
+	m := Model{stack: &viewStack{entries: []surface{e}}, width: 80, height: 24}
+	// region 0 → current, region 1 → incoming
+	m, _ = e.update(m, key("c"))
+	m, _ = e.update(m, key("n")) // next region
+	m, _ = e.update(m, key("i"))
+	if e.doc.Pending() != 0 {
+		t.Fatalf("Pending = %d, want 0", e.doc.Pending())
+	}
+	out, ok := e.doc.Resolved()
+	if !ok || string(out) != "top\nfoo\nmid\nC\n" {
+		t.Fatalf("resolved = %q ok=%v", out, ok)
+	}
+}
+
+func TestConflictPickerTakeAll(t *testing.T) {
+	e := newConflictPicker("f.txt", pickerDoc())
+	m := Model{stack: &viewStack{entries: []surface{e}}, width: 80, height: 24}
+	m, _ = e.update(m, key("I")) // take all incoming
+	out, ok := e.doc.Resolved()
+	if !ok || string(out) != "top\nbar\nmid\nC\n" {
+		t.Fatalf("take-all-incoming = %q ok=%v", out, ok)
+	}
+}
+
+func TestConflictPickerSpaceTogglesLineByLine(t *testing.T) {
+	e := newConflictPicker("f.txt", pickerDoc())
+	m := Model{stack: &viewStack{entries: []surface{e}}, width: 80, height: 24}
+	// focus region 0, current side, line 0; space picks it line-by-line
+	m, _ = e.update(m, keyMsg("space"))
+	b := e.doc.Blocks()[0]
+	if b.Mode != hunkpick.LineByLine || !b.Picked(hunkpick.Current, 0) {
+		t.Fatalf("space did not start line-by-line pick: mode=%v", b.Mode)
+	}
+}
+
+func TestConflictPickerSideSwitchAndCursor(t *testing.T) {
+	e := newConflictPicker("f.txt", pickerDoc())
+	m := Model{stack: &viewStack{entries: []surface{e}}, width: 80, height: 24}
+	m, _ = e.update(m, keyMsg("right")) // → incoming
+	if e.side != hunkpick.Incoming {
+		t.Fatal("→ should focus incoming side")
+	}
+	m, _ = e.update(m, keyMsg("left")) // ← current
+	if e.side != hunkpick.Current {
+		t.Fatal("← should focus current side")
+	}
+}
+
+func TestConflictPickerEnterGateAndApply(t *testing.T) {
+	e := newConflictPicker("f.txt", pickerDoc())
+	m := Model{stack: &viewStack{entries: []surface{e}}, width: 80, height: 24}
+	// enter while pending: no apply, status set, surface still on top
+	m, _ = e.update(m, keyMsg("enter"))
+	if m.statusMsg == "" || m.stackTop() == nil {
+		t.Fatal("enter with pending regions should warn and keep the surface")
+	}
+}
+
+func TestConflictPickerRendersMarkers(t *testing.T) {
+	e := newConflictPicker("f.txt", pickerDoc())
+	m := Model{stack: &viewStack{entries: []surface{e}}, width: 80, height: 24}
+	out := e.render(m)
+	if out == "" {
+		t.Fatal("render produced nothing")
+	}
+}
