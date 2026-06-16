@@ -90,3 +90,14 @@ func TestHelpNotOpenedWhileAnotherPopupIsOpen(t *testing.T) {
 		t.Fatal("? must be swallowed by the open popup")
 	}
 }
+
+func TestHelpDocumentsTabSwitch(t *testing.T) {
+	var b strings.Builder
+	for _, l := range helpContent() {
+		b.WriteString(l.text)
+		b.WriteString("\n")
+	}
+	if !strings.Contains(b.String(), "switch the Branches/Worktrees tab") {
+		t.Error("help does not document the ctrl+arrow tab switch")
+	}
+}

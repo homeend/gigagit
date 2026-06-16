@@ -58,6 +58,7 @@ panel and selected row right now; `?` opens the full searchable reference.
 | `tab` | move focus between panels |
 | `shift+tab` | move focus backwards |
 | `←`/`→` | focus the left column / the Commits panel (inside the files view: switch between the file tree and the commit list) |
+| `ctrl+←/→` | switch the shared **Branches / Worktrees** left-column tab (and focus it) — the active tab is shown bracketed in the slot header |
 | mouse | click focuses the window under the cursor and selects the clicked row; the wheel scrolls the hovered list (`[ui] wheel_step` rows per tick) |
 | `j`/`k` or `↑`/`↓` | move selection |
 | `pgup`/`pgdn` | move selection by 25% of the panel viewport |

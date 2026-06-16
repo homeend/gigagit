@@ -9,6 +9,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+#### TUI tabbed Branches/Worktrees
+- The Branches and Worktrees panels are now one tabbed left-column slot —
+  **`ctrl+←/→`** switches the active tab (and focuses it); each tab keeps its
+  own selection, sort, and filter. The active tab is shown in the slot's header
+  (`[Branches] Worktrees` / `Branches [Worktrees]`).
+
 #### TUI window display modes
 - Every list/tree/text window (panels, stash list, files tree, file history,
   blame, and the repo switcher popup) now shares one rendering primitive with
