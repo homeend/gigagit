@@ -23,6 +23,11 @@ func (m Model) tooltip() (lines []string, x, y int, ok bool) {
 	if !m.panelFocused(m.focus) {
 		return nil, 0, 0, false
 	}
+	// The reveal only makes sense in cutoff mode. In wrap the row is already
+	// fully visible across wrapped lines; in scroll the user pans to read it.
+	if m.dispModes[m.focus] != modeCutoff {
+		return nil, 0, 0, false
+	}
 	g := m.layout()
 	p := m.focus
 	boxH := g.boxH[p]
@@ -39,7 +44,7 @@ func (m Model) tooltip() (lines []string, x, y int, ok bool) {
 		boxW = g.rightW
 	}
 	innerW := boxW - 4 // mirrors renderPanel: border (2) + padding (2)
-	if lipgloss.Width("> "+rows[sel]) <= innerW {
+	if !rowTruncated("> "+rows[sel], innerW) {
 		return nil, 0, 0, false // renderPanel shows it in full — nothing to add
 	}
 	rowsCap := boxH - 3 // mirrors renderPanel: borders + label line

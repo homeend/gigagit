@@ -40,3 +40,18 @@ func TestZCyclesFocusedPanelMode(t *testing.T) {
 		t.Errorf("z did not change the mode")
 	}
 }
+
+func TestZIsFilterTextWhileTyping(t *testing.T) {
+	m := New(nil)
+	m.focus = panelBranches
+	m.filterTyping = true
+	m.filterPanel = panelBranches
+	u, _ := m.Update(keyMsg("z"))
+	mm := u.(Model)
+	if mm.filterQuery != "z" {
+		t.Errorf("filterQuery = %q, want \"z\" (z is query text while filtering)", mm.filterQuery)
+	}
+	if mm.dispModes[panelBranches] != modeCutoff {
+		t.Error("z must not cycle the display mode while filter-typing")
+	}
+}
