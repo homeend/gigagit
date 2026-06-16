@@ -101,3 +101,14 @@ func TestHelpDocumentsTabSwitch(t *testing.T) {
 		t.Error("help does not document the ctrl+arrow tab switch")
 	}
 }
+
+func TestHelpDocumentsFilesStaged(t *testing.T) {
+	var b strings.Builder
+	for _, l := range helpContent() {
+		b.WriteString(l.text + "\n")
+	}
+	h := b.String()
+	if !strings.Contains(h, "Files panel") || !strings.Contains(h, "Staged panel") {
+		t.Error("help does not document the Files and Staged panels")
+	}
+}
