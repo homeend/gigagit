@@ -20,6 +20,51 @@ func TestSynthKey(t *testing.T) {
 	}
 }
 
+func TestDotOpensActionMenu(t *testing.T) {
+	m := footerModel()
+	m.loading = false
+	u, _ := m.Update(keyMsg("."))
+	mm := u.(Model)
+	if mm.actionMenu == nil {
+		t.Fatal(". must open the action menu")
+	}
+}
+
+func TestActionMenuRunsPullByKey(t *testing.T) {
+	m := footerModel()
+	m.loading = false
+	u, _ := m.Update(keyMsg(".")) // open
+	m = u.(Model)
+	u, cmd := m.Update(keyMsg("p")) // direct key runs pull
+	mm := u.(Model)
+	if mm.actionMenu != nil {
+		t.Fatal("running an action must close the menu")
+	}
+	if !mm.running || cmd == nil {
+		t.Fatal("p from the menu must start SmartPull")
+	}
+}
+
+func TestActionMenuEscCloses(t *testing.T) {
+	m := footerModel()
+	m.loading = false
+	u, _ := m.Update(keyMsg("."))
+	m = u.(Model)
+	u, _ = m.Update(keyMsg("esc"))
+	if u.(Model).actionMenu != nil {
+		t.Fatal("esc must close the menu")
+	}
+}
+
+func TestDotNoOpUnderPopup(t *testing.T) {
+	m := footerModel()
+	m.repoPopup = &repoPopup{} // a popup owns the keyboard
+	u, _ := m.Update(keyMsg("."))
+	if u.(Model).actionMenu != nil {
+		t.Fatal(". must not open the menu while another popup is open")
+	}
+}
+
 func TestAvailableActionsExcludesNavAndSelf(t *testing.T) {
 	m := footerModel()
 	m.loading = false

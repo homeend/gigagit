@@ -49,6 +49,7 @@ type Model struct {
 	pairPopup   *pairOpPopup      // two-row operation picker; nil = closed
 	stashPopup  *stashPopup       // create-stash dialog; nil = closed
 	stashAction *stashActionPopup // apply/pop/drop menu for a stash; nil = closed
+	actionMenu  *actionMenu       // . action menu (list + run available actions); nil = closed
 
 	stashView *stashView // stash list in the right column (over Commits); nil = closed
 
@@ -291,6 +292,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.commitPopup != nil {
 			return m.updateCommitPopupKey(msg)
+		}
+		if m.actionMenu != nil {
+			return m.updateActionMenuKey(msg)
 		}
 		if m.repoPopup != nil {
 			return m.updateRepoPopupKey(msg)
@@ -579,6 +583,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if !m.running && !m.loading {
 				return m.openSettings(), nil
 			}
+		case ".":
+			// Reaches here only from the base layout (every popup/modal/view
+			// returns earlier); the menu lists whatever is currently available.
+			return m.openActionMenu(), nil
 		case "?":
 			m.contentPopup = newContentPopup("Help — keys", helpContent())
 		case "l":

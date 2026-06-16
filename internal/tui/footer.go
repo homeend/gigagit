@@ -64,6 +64,7 @@ var globalBindings = []footerBinding{
 	{"filter", "/", "[/]filter", Model.opsIdle},
 	{"repo", "R", "[R]epo", Model.opsIdle},
 	{"settings", ",", "[,] settings", Model.opsIdle},
+	{"actions", ".", "[.] actions", Model.opsIdle},
 	{"", "tab", "[tab] focus", func(Model) bool { return true }},
 	{"", "ctrl+←/→", "[ctrl+←/→] tab", Model.opsIdle},
 	{"reload", "r", "[r] reload", func(m Model) bool { return !m.running }},
