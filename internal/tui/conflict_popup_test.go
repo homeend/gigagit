@@ -151,11 +151,24 @@ func TestConflictPopupHintNotTruncated(t *testing.T) {
 		inProgress: "merge",
 	}
 	out := ansi.Strip(m.renderConflictPopup())
-	for _, tok := range []string{"[enter]", "[o]", "[i]", "[m]", "[A]", "[a]", "[esc]", "[z]"} {
+	for _, tok := range []string{"[enter]", "[C]", "[i]", "[m]", "[A]", "[a]", "[esc]", "[z]"} {
 		if !strings.Contains(out, tok) {
 			t.Errorf("hint key %q missing (truncated, not wrapped?):\n%s", tok, out)
 		}
 	}
+}
+
+func TestConflictPopupKeepCurrentDispatches(t *testing.T) {
+	m := conflictRepoTUI(t)
+	mm, _ := m.Update(keyMsg("x"))
+	m = mm.(Model)
+	selectConflict(t, m.conflictPopup, "uu.txt") // both-sides
+	mm, cmd := m.updateConflictPopupKey(keyMsg("C"))
+	got := mm.(Model)
+	if !got.running || cmd == nil {
+		t.Fatal("C should dispatch a ResolveConflict op (keep current)")
+	}
+	driveOp(t, got, cmd)
 }
 
 func TestConflictPopupKeepIncomingDispatches(t *testing.T) {
@@ -179,10 +192,10 @@ func TestConflictPopupModifyDeleteKeys(t *testing.T) {
 	mm, _ := m.Update(keyMsg("x"))
 	m = mm.(Model)
 	selectConflict(t, m.conflictPopup, "md.txt") // modify/delete (DU)
-	// 'o' (ours) is NOT a valid key here; 'k' keep-modified IS.
-	mm, _ = m.updateConflictPopupKey(keyMsg("o"))
+	// 'C' (keep current) is NOT a valid key here; 'k' keep-modified IS.
+	mm, _ = m.updateConflictPopupKey(keyMsg("C"))
 	if mm.(Model).running {
-		t.Error("ours must be inert on a modify/delete file")
+		t.Error("keep-current must be inert on a modify/delete file")
 	}
 	mm, cmd := m.updateConflictPopupKey(keyMsg("k"))
 	got := mm.(Model)

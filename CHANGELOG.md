@@ -9,9 +9,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Changed
-- TUI: in the conflict resolver (`x`), the whole-file "keep incoming" key moved
-  from `t` to **`i`** (current stays `o`), matching the hunk picker's
-  `current`/`incoming` (`c`/`i`) keys.
+- TUI: the decision modal (e.g. "merge … hit conflicts") now renders centered
+  over the interface instead of standalone in the top-left corner.
+- TUI: in the conflict resolver (`x`), the whole-file conflict keys are now
+  **`C`** keep current / **`i`** keep incoming (were `o`/`t`), matching the hunk
+  picker's `current`/`incoming` mnemonic.
 
 ### Added
 - TUI: the hunk picker (conflict resolve / `H` staging) now reads long lines —
