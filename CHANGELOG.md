@@ -8,6 +8,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+### Changed
+- TUI: in the conflict resolver (`x`), the whole-file "keep incoming" key moved
+  from `t` to **`i`** (current stays `o`), matching the hunk picker's
+  `current`/`incoming` (`c`/`i`) keys.
+
 ### Added
 - TUI: the hunk picker (conflict resolve / `H` staging) now reads long lines —
   **`z`** cycles the display mode (**scroll** default → wrap → cutoff) and

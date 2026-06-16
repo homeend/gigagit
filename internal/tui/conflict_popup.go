@@ -87,7 +87,7 @@ func (p *conflictPopup) actionHint() string {
 	if p.sel >= 0 && p.sel < len(p.files) {
 		f := p.files[p.sel]
 		if f.ConflictClass() == model.ConflictBothSides {
-			parts = append(parts, "[enter] pick hunks", "[o] current", "[t] incoming", "[m] mark resolved")
+			parts = append(parts, "[enter] pick hunks", "[o] current", "[i] incoming", "[m] mark resolved")
 		} else {
 			// "keep modified" needs a side with content; both-deleted (DD) has
 			// neither, so only delete / keep base apply there.
@@ -211,7 +211,7 @@ func (m Model) updateConflictPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		action = engine.KeepOurs
-	case "t":
+	case "i":
 		if !both {
 			return m, nil
 		}
