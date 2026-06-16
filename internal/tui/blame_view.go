@@ -136,17 +136,18 @@ func (b *blameView) render(m Model) string {
 		if i == 0 || b.lines[i-1].Hash != ln.Hash {
 			gutter = padRight(truncate(blameGutterText(ln, now), gw), gw)
 		}
-		// Sanitize tabs/control runes (like the diff pane) so indentation maps to
-		// display columns. The full row (gutter + code) is the layout unit; the
-		// primitive truncates (cutoff), wraps, or h-scrolls it per b.mode.
+		// The gutter is a frozen left column (prefix); only the code body
+		// wraps/scrolls per b.mode, so a long line never bleeds across the author
+		// column. Sanitize tabs/control runes (like the diff pane) so indentation
+		// maps to display columns.
 		var st lipgloss.Style
 		if i == b.sel {
 			st = selectedRow
 		}
-		wr[i] = winRow{text: gutter + "│" + sanitizeLine(ln.Content), style: st}
+		wr[i] = winRow{prefix: gutter + "│", text: sanitizeLine(ln.Content), style: st}
 	}
 
-	win := renderWindow(wr, winOpts{w: w, h: body, mode: b.mode, anchor: b.sel, hscroll: b.hscroll})
+	win := renderWindow(wr, winOpts{w: w, h: body, mode: b.mode, anchor: b.sel, hscroll: b.hscroll, prefixW: gw + 1})
 	switch {
 	case b.loading:
 		win = padLines("  (loading…)", w, body)

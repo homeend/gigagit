@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"strings"
+
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -24,9 +26,15 @@ func (d dispMode) next() dispMode { return (d + 1) % dispModeCount }
 // style applied AFTER truncation/wrapping. Callers bake any cursor/mark prefix
 // into text and set style for the selected row (selectedRow) or headings
 // (titleStyle); the primitive never adds prefixes itself.
+//
+// prefix is an optional frozen left column (e.g. a blame gutter): it is shown on
+// the row's first display line and blanked on wrap continuations, and the text
+// wraps/scrolls within the remaining width (winOpts.prefixW) so the gutter never
+// moves. prefix "" (with prefixW 0) is the plain whole-row path.
 type winRow struct {
-	text  string
-	style lipgloss.Style // zero value renders the text unchanged
+	text   string
+	prefix string
+	style  lipgloss.Style // zero value renders the text unchanged
 }
 
 // winOpts is everything renderWindow needs besides the rows. anchor is the
@@ -36,6 +44,7 @@ type winOpts struct {
 	mode    dispMode
 	anchor  int
 	hscroll int // modeScroll horizontal offset (display columns)
+	prefixW int // width of the frozen winRow.prefix column (0 = none)
 }
 
 // renderWindow lays rows out under o and returns exactly o.h display lines,
@@ -50,6 +59,18 @@ func renderWindow(rows []winRow, o winOpts) []string {
 		h = 1
 	}
 
+	// A frozen prefix column (o.prefixW>0) reserves the leftmost columns; the
+	// body wraps/scrolls within the rest, and the prefix shows on a row's first
+	// display line only (blank on wrap continuations) so the gutter never moves.
+	pw := o.prefixW
+	if pw < 0 {
+		pw = 0
+	}
+	if pw > w-1 {
+		pw = w - 1 // always leave at least one column for the body
+	}
+	bodyW := w - pw
+
 	type dline struct {
 		text  string
 		style lipgloss.Style
@@ -60,16 +81,23 @@ func renderWindow(rows []winRow, o winOpts) []string {
 		var segs []string
 		switch o.mode {
 		case modeWrap:
-			segs = wrapWidth(r.text, w, 1<<20) // huge cap => clean full wrap, no ellipsis
+			segs = wrapWidth(r.text, bodyW, 1<<20) // huge cap => clean full wrap, no ellipsis
 		case modeScroll:
-			segs = []string{hslice(r.text, o.hscroll, w)}
+			segs = []string{hslice(r.text, o.hscroll, bodyW)}
 		default:
-			segs = []string{truncate(r.text, w)}
+			segs = []string{truncate(r.text, bodyW)}
 		}
 		if len(segs) == 0 {
 			segs = []string{""}
 		}
-		for _, s := range segs {
+		for si, s := range segs {
+			if pw > 0 {
+				pre := strings.Repeat(" ", pw) // blank gutter on continuations
+				if si == 0 {
+					pre = padRight(truncate(r.prefix, pw), pw)
+				}
+				s = pre + s
+			}
 			dl = append(dl, dline{text: s, style: r.style, row: ri})
 		}
 	}

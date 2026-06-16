@@ -9,6 +9,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Fixed
+- TUI: in the blame view the commit/author/age gutter is now a **frozen left
+  column**: `z` wrap mode wraps only the code body (long lines no longer bleed
+  across the author column), and scroll mode pans the content while the gutter
+  stays put (it used to slide the whole row, sweeping the gutter off-screen).
 - TUI: a status-bar message (notably an error like switching to a branch already
   checked out in another worktree) no longer lingers forever — it now clears on
   the next key interaction when idle, so it reflects the most recent action
