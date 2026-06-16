@@ -63,6 +63,7 @@ type GitOps interface {
 	CheckoutSide(ctx context.Context, path, side string) error
 	CheckoutBaseStage(ctx context.Context, path string) error
 	RemoveFile(ctx context.Context, path string) error
+	WriteWorktreeFile(ctx context.Context, path string, content []byte) error
 	MergeContinue(ctx context.Context, dir string) error
 	RebaseContinue(ctx context.Context, dir string) error
 }

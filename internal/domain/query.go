@@ -203,6 +203,14 @@ func (s *Service) CommitRange(ctx context.Context, onto, branch string) ([]model
 	})
 }
 
+// ConflictedFile reads the working-tree bytes of a conflicted path (with its
+// merge markers) under a Read reservation. Backs the conflict hunk picker.
+func (s *Service) ConflictedFile(ctx context.Context, path string) ([]byte, error) {
+	return query(ctx, s, "conflicted-file:"+path, func(c context.Context) ([]byte, error) {
+		return s.repo.ReadWorktreeFile(c, path)
+	})
+}
+
 // cachedBlame wraps a blame result so it can report its heap weight to the
 // byte-budgeted cache (a bare []model.BlameLine cannot implement Sized).
 type cachedBlame struct{ lines []model.BlameLine }
