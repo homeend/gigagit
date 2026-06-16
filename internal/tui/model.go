@@ -247,7 +247,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Reopen the conflict popup after a resolution op, rebuilt from the
 			// freshly-reloaded status so the resolved file drops off the list.
 			// nil files when all resolved: the popup then offers continue/abort
-			// (op in progress) or "commit with c" (no op) via actionHint. This
+			// (op in progress) or "commit with c" (no op) via actionHintParts. This
 			// runs after the clamp loop above so panel selections stay valid.
 			if m.reopenConflict {
 				m.reopenConflict = false
