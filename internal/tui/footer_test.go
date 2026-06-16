@@ -12,6 +12,27 @@ import (
 	"github.com/gigagit/gg/internal/model"
 )
 
+func TestFooterBindingIDsUniqueAndPresent(t *testing.T) {
+	seen := map[string]string{} // id -> label (first seen)
+	nav := map[string]bool{"tab": true, "shift+tab": true, "ctrl+←/→": true}
+	for _, b := range append(append([]footerBinding{}, contextBindings...), globalBindings...) {
+		if nav[b.key] {
+			if b.id != "" {
+				t.Errorf("navigation key %q must have empty id, got %q", b.key, b.id)
+			}
+			continue
+		}
+		if b.id == "" {
+			t.Errorf("binding %q (%s) is missing an id", b.key, b.label)
+			continue
+		}
+		if prev, ok := seen[b.id]; ok {
+			t.Errorf("duplicate id %q on %q and %q", b.id, prev, b.label)
+		}
+		seen[b.id] = b.label
+	}
+}
+
 // footerModel is an idle fixture: Branches focused (zero value), two branches
 // (main is HEAD, selected by default), two worktrees ("/repo" is current,
 // selected by default). Every panel except Status/Commits has rows.
