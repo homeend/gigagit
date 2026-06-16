@@ -54,6 +54,33 @@ func TestHistoryEscPops(t *testing.T) {
 	}
 }
 
+// Blame from history must use the file's name *at the selected commit*, not the
+// current path. For a commit predating a rename/copy the current name does not
+// exist in that commit's tree, so blaming it would fail (git exit 128).
+func TestHistoryBlameUsesHistoricalPath(t *testing.T) {
+	m := Model{width: 100, height: 30}
+	h := &historyView{
+		ctx: navContext{path: "timing4.log", rev: ""},
+		commits: []model.FileCommit{
+			{Commit: model.Commit{Hash: "aaaaaaa", Subject: "rename"}, Status: "C", OldPath: "timing.log", Path: "timing4.log"},
+			{Commit: model.Commit{Hash: "bbbbbbb", Subject: "add"}, Status: "A", Path: "timing.log"},
+		},
+		sel: 1, // the pre-rename commit, where the file was "timing.log"
+	}
+	m = m.pushSurface(h)
+	m, _ = h.update(m, keyMsg("b"))
+	bv, ok := m.stackTop().(*blameView)
+	if !ok {
+		t.Fatal("b should push a blameView")
+	}
+	if bv.ctx.path != "timing.log" {
+		t.Errorf("blame must use the historical path; got %q want %q", bv.ctx.path, "timing.log")
+	}
+	if bv.ctx.rev != "bbbbbbb" {
+		t.Errorf("blame should target the selected commit; got rev %q", bv.ctx.rev)
+	}
+}
+
 // q no longer quits from the history view — only the base layout quits on q.
 func TestHistoryQInert(t *testing.T) {
 	m := Model{width: 100, height: 30}
