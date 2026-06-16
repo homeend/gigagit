@@ -10,8 +10,8 @@ import "bytes"
 type Side int
 
 const (
-	Current Side = iota // git stage :2: (its "ours")
-	Incoming            // git stage :3: (its "theirs")
+	Current  Side = iota // git stage :2: (its "ours")
+	Incoming             // git stage :3: (its "theirs")
 )
 
 // Mode is how a block resolves.
