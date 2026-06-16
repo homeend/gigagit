@@ -33,6 +33,19 @@ type hunkPicker struct {
 	bi     int
 	side   hunkpick.Side
 	line   int
+
+	mode    dispMode // display mode for candidate lines (default scroll)
+	hscroll int      // modeScroll horizontal offset
+}
+
+const pickerHScrollStep = 8
+
+// cyclePickerMode advances the picker's mode in the requested order
+// scroll → wrap → cutoff → scroll. Given the enum (cutoff=0, wrap=1, scroll=2)
+// that is a decrement; it is intentionally the reverse of dispMode.next() so
+// the scroll default cycles to wrap next.
+func cyclePickerMode(d dispMode) dispMode {
+	return (d + dispModeCount - 1) % dispModeCount
 }
 
 // newConflictPicker wires the conflict-resolution params.
@@ -48,7 +61,7 @@ func newConflictPicker(path string, doc *hunkpick.Doc) *hunkPicker {
 			m.reopenConflict = true
 			return m.startOp(engine.ResolveConflictHunks{Path: path, Content: content})
 		},
-		doc: doc, blocks: doc.Blocks(), side: hunkpick.Current,
+		doc: doc, blocks: doc.Blocks(), side: hunkpick.Current, mode: modeScroll,
 	}
 }
 
@@ -63,7 +76,7 @@ func newStagePicker(path string, doc *hunkpick.Doc) *hunkPicker {
 			m = m.popSurface()
 			return m.startOp(engine.StageHunks{Path: path, Content: content})
 		},
-		doc: doc, blocks: doc.Blocks(), side: hunkpick.Current,
+		doc: doc, blocks: doc.Blocks(), side: hunkpick.Current, mode: modeScroll,
 	}
 }
 
@@ -118,6 +131,19 @@ func (e *hunkPicker) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case "right":
 		e.side = hunkpick.Incoming
 		e.clampLine()
+	case "z":
+		e.mode = cyclePickerMode(e.mode)
+		e.hscroll = 0
+	case "shift+left":
+		if e.mode == modeScroll {
+			if e.hscroll -= pickerHScrollStep; e.hscroll < 0 {
+				e.hscroll = 0
+			}
+		}
+	case "shift+right":
+		if e.mode == modeScroll {
+			e.hscroll += pickerHScrollStep
+		}
 	case "up", "k":
 		if e.line > 0 {
 			e.line--
@@ -197,97 +223,106 @@ func (e *hunkPicker) badge(b *hunkpick.Block) string {
 	}
 }
 
-func (e *hunkPicker) render(m Model) string {
-	w := m.width
-	if w <= 0 {
-		w = 80
-	}
-	var b strings.Builder
-	if e.requireAll {
-		fmt.Fprintf(&b, "%s    %d regions · %d left\n", e.title, len(e.blocks), e.doc.Pending())
-	} else {
-		fmt.Fprintf(&b, "%s    %d hunks\n", e.title, len(e.blocks))
-	}
-	b.WriteString(strings.Repeat("─", min(w, 60)) + "\n")
-
-	colW := (w - 5) / 2
-	if colW < 8 {
-		colW = 8
-	}
-	blockNo := 0
-	for _, it := range e.doc.Items {
-		if it.Block == nil {
-			for _, l := range it.Literal {
-				b.WriteString(pickerDim.Render("  " + truncate(l, w-2)))
-				b.WriteString("\n")
-			}
-			continue
-		}
-		blk := it.Block
-		focused := blockNo == e.bi
-		marker := "  "
-		if focused {
-			marker = "▶ "
-		}
-		header := fmt.Sprintf("%shunk %d/%d — %s", marker, blockNo+1, len(e.blocks), e.badge(blk))
-		if focused {
-			b.WriteString(pickerFocus.Render(header))
-		} else {
-			b.WriteString(pickerDim.Render(header))
-		}
-		b.WriteString("\n")
-		rows := len(blk.Current)
-		if len(blk.Incoming) > rows {
-			rows = len(blk.Incoming)
-		}
-		for r := 0; r < rows; r++ {
-			left := cell(blk, hunkpick.Current, r, focused && e.side == hunkpick.Current && e.line == r, colW)
-			right := cell(blk, hunkpick.Incoming, r, focused && e.side == hunkpick.Incoming && e.line == r, colW)
-			b.WriteString(left + " ║ " + right + "\n")
-		}
-		if blk.Mode == hunkpick.LineByLine {
-			b.WriteString(pickerDim.Render("  result:") + "\n")
-			tmp := &hunkpick.Doc{Items: []hunkpick.Item{{Block: blk}}}
-			if out, ok := tmp.Resolved(); ok {
-				for _, l := range strings.Split(strings.TrimRight(string(out), "\n"), "\n") {
-					b.WriteString("    " + truncate(l, w-4) + "\n")
-				}
-			}
-		}
-		blockNo++
-	}
-	fmt.Fprintf(&b, "\n[←/→] side  [↑/↓] line  [space] pick line  [c] %s  [i] %s  [C/I] all  [n/p] hunk  [enter] apply  [esc] cancel",
-		e.leftLabel, e.rightLabel)
-	return b.String()
-}
-
-// cell renders one candidate line with an optional checkbox (line-by-line) and
-// cursor highlight.
-func cell(blk *hunkpick.Block, side hunkpick.Side, r int, cursor bool, w int) string {
+// pickerCell builds the winCell for one candidate line; r past the side's line
+// count yields a blank cell (the gap when sides differ in length). cursor adds
+// the "> " marker so the gutter width is constant (focused or not).
+func pickerCell(blk *hunkpick.Block, side hunkpick.Side, r int, cursor bool) *winCell {
 	var lines []string
 	if side == hunkpick.Current {
 		lines = blk.Current
 	} else {
 		lines = blk.Incoming
 	}
-	text := ""
-	if r < len(lines) {
-		text = lines[r]
+	if r >= len(lines) {
+		return &winCell{}
 	}
-	box := ""
-	if blk.Mode == hunkpick.LineByLine && r < len(lines) {
+	cur := "  "
+	if cursor {
+		cur = "> "
+	}
+	tick := ""
+	if blk.Mode == hunkpick.LineByLine {
 		if blk.Picked(side, r) {
-			box = "[x] "
+			tick = "[x] "
 		} else {
-			box = "[ ] "
+			tick = "[ ] "
 		}
 	}
-	body := truncate(box+text, w)
+	c := &winCell{gutter: cur + tick, body: lines[r]}
 	if cursor {
-		return selectedRow.Render(padRight("> "+body, w+2))
+		c.style = selectedRow
 	}
-	if r >= len(lines) {
-		return padRight("", w+2)
+	return c
+}
+
+func (e *hunkPicker) render(m Model) string {
+	w, H := m.overlayDims()
+
+	header := fmt.Sprintf("%s    %d hunks", e.title, len(e.blocks))
+	if e.requireAll {
+		header = fmt.Sprintf("%s    %d regions · %d left", e.title, len(e.blocks), e.doc.Pending())
 	}
-	return padRight("  "+body, w+2)
+	hint := fmt.Sprintf("[←/→] side  [shift+←/→] scroll  [z] mode  [↑/↓] line  [space] pick  [c] %s  [i] %s  [C/I] all  [n/p] hunk  [enter] apply  [esc] cancel",
+		e.leftLabel, e.rightLabel)
+
+	bodyH := H - 4 // header, separator, blank, hint
+	if bodyH < 1 {
+		bodyH = 1
+	}
+
+	var rows []colRow
+	anchor := 0
+	blockNo := 0
+	for _, it := range e.doc.Items {
+		if it.Block == nil {
+			for _, l := range it.Literal {
+				rows = append(rows, colRow{full: &winCell{body: "  " + l, style: pickerDim}})
+			}
+			continue
+		}
+		blk := it.Block
+		focused := blockNo == e.bi
+		marker, hstyle := "  ", pickerDim
+		if focused {
+			marker, hstyle = "▶ ", pickerFocus
+		}
+		rows = append(rows, colRow{full: &winCell{
+			body:  fmt.Sprintf("%shunk %d/%d — %s", marker, blockNo+1, len(e.blocks), e.badge(blk)),
+			style: hstyle,
+		}})
+		n := len(blk.Current)
+		if len(blk.Incoming) > n {
+			n = len(blk.Incoming)
+		}
+		for r := 0; r < n; r++ {
+			lCur := focused && e.side == hunkpick.Current && e.line == r
+			rCur := focused && e.side == hunkpick.Incoming && e.line == r
+			if lCur || rCur {
+				anchor = len(rows)
+			}
+			rows = append(rows, colRow{
+				left:  pickerCell(blk, hunkpick.Current, r, lCur),
+				right: pickerCell(blk, hunkpick.Incoming, r, rCur),
+			})
+		}
+		if blk.Mode == hunkpick.LineByLine {
+			rows = append(rows, colRow{full: &winCell{body: "  result:", style: pickerDim}})
+			tmp := &hunkpick.Doc{Items: []hunkpick.Item{{Block: blk}}}
+			if out, ok := tmp.Resolved(); ok {
+				for _, l := range strings.Split(strings.TrimRight(string(out), "\n"), "\n") {
+					rows = append(rows, colRow{full: &winCell{body: "    " + l, style: pickerDim}})
+				}
+			}
+		}
+		blockNo++
+	}
+
+	body := renderTwoCol(rows, twoColOpts{
+		w: w, h: bodyH, sep: " ║ ", mode: e.mode, hscroll: e.hscroll, anchor: anchor,
+	})
+
+	lines := []string{header, strings.Repeat("─", min(w, 60))}
+	lines = append(lines, body...)
+	lines = append(lines, "", hint)
+	return strings.Join(lines, "\n")
 }

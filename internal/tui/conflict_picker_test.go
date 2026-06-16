@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/gigagit/gg/internal/hunkpick"
@@ -136,4 +137,69 @@ func TestStageHunksLoadedNoChangeNoOp(t *testing.T) {
 	if m.stackTop() != nil {
 		t.Fatal("no changes → no surface")
 	}
+}
+
+func TestHunkPickerDefaultsToScroll(t *testing.T) {
+	e := newStagePicker("f.txt", pickerDoc())
+	if e.mode != modeScroll {
+		t.Fatalf("default mode = %v, want modeScroll", e.mode)
+	}
+}
+
+func TestHunkPickerZCyclesScrollWrapCutoff(t *testing.T) {
+	e := newConflictPicker("f.txt", pickerDoc())
+	m := Model{stack: &viewStack{entries: []surface{e}}, width: 80, height: 24}
+	if e.mode != modeScroll {
+		t.Fatalf("start = %v", e.mode)
+	}
+	m, _ = e.update(m, key("z"))
+	if e.mode != modeWrap {
+		t.Fatalf("after 1st z = %v, want wrap", e.mode)
+	}
+	m, _ = e.update(m, key("z"))
+	if e.mode != modeCutoff {
+		t.Fatalf("after 2nd z = %v, want cutoff", e.mode)
+	}
+	m, _ = e.update(m, key("z"))
+	if e.mode != modeScroll {
+		t.Fatalf("after 3rd z = %v, want scroll", e.mode)
+	}
+}
+
+func TestHunkPickerShiftPansOnlyInScroll(t *testing.T) {
+	e := newStagePicker("f.txt", pickerDoc())
+	m := Model{stack: &viewStack{entries: []surface{e}}, width: 80, height: 24}
+	m, _ = e.update(m, keyMsg("shift+right"))
+	if e.hscroll != pickerHScrollStep {
+		t.Fatalf("shift+right in scroll → hscroll=%d, want %d", e.hscroll, pickerHScrollStep)
+	}
+	m, _ = e.update(m, keyMsg("shift+left"))
+	if e.hscroll != 0 {
+		t.Fatalf("shift+left → hscroll=%d, want 0", e.hscroll)
+	}
+	m, _ = e.update(m, keyMsg("shift+right")) // hscroll = step
+	m, _ = e.update(m, key("z"))              // → wrap, hscroll reset
+	if e.hscroll != 0 {
+		t.Fatalf("z must reset hscroll, got %d", e.hscroll)
+	}
+	m, _ = e.update(m, keyMsg("shift+right")) // wrap mode: no-op
+	if e.hscroll != 0 {
+		t.Fatalf("shift+right in wrap must not pan, got %d", e.hscroll)
+	}
+}
+
+func TestHunkPickerRenderFitsHeight(t *testing.T) {
+	e := newConflictPicker("f.txt", pickerDoc())
+	m := Model{stack: &viewStack{entries: []surface{e}}, width: 80, height: 12}
+	out := e.render(m)
+	if got := len(splitLinesTest(out)); got != 12 {
+		t.Fatalf("render produced %d lines, want 12 (the overlay height)", got)
+	}
+}
+
+func splitLinesTest(s string) []string {
+	if s == "" {
+		return nil
+	}
+	return strings.Split(s, "\n")
 }
