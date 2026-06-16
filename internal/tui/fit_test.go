@@ -138,3 +138,40 @@ func TestRenderPanelCutoffStaysOneLine(t *testing.T) {
 		t.Errorf("cutoff mode should truncate, got too many chars:\n%s", out)
 	}
 }
+
+func TestLayoutTabbedLeftColumn(t *testing.T) {
+	m := New(nil)
+	m.width, m.height = 80, 24
+	g := m.layout()
+	if g.boxH[panelBranches] <= 0 {
+		t.Error("active Branches tab box missing")
+	}
+	if g.boxH[panelStatus] <= 0 {
+		t.Error("Status box missing")
+	}
+	if g.boxH[panelWorktrees] != 0 {
+		t.Errorf("inactive Worktrees tab must be hidden, got boxH %d", g.boxH[panelWorktrees])
+	}
+	if g.pos[panelStatus].y != g.pos[panelBranches].y+g.boxH[panelBranches] {
+		t.Error("Status is not positioned directly below the tab slot")
+	}
+	m.activeLeftTab = panelWorktrees
+	g = m.layout()
+	if g.boxH[panelWorktrees] <= 0 || g.boxH[panelBranches] != 0 {
+		t.Error("switching activeLeftTab did not move the visible box")
+	}
+}
+
+func TestRenderShowsActiveTabBar(t *testing.T) {
+	m := New(nil)
+	m.width, m.height = 80, 24
+	out := m.renderInterface()
+	if !strings.Contains(out, "[Branches] Worktrees") {
+		t.Errorf("tab bar (Branches active) missing:\n%s", out)
+	}
+	m.activeLeftTab = panelWorktrees
+	out = m.renderInterface()
+	if !strings.Contains(out, "Branches [Worktrees]") {
+		t.Errorf("tab bar (Worktrees active) missing:\n%s", out)
+	}
+}

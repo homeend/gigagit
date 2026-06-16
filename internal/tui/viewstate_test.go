@@ -125,30 +125,31 @@ func TestActionResolvesThroughSortedView(t *testing.T) {
 }
 
 func TestLayoutOrigins(t *testing.T) {
-	// Wide terminal: three left panels + commits column.
-	m := Model{width: 90, height: 30}
+	// Wide terminal: the active tab slot (Branches by default) over Status, plus
+	// the commits column. The inactive Worktrees tab has no box.
+	m := Model{width: 90, height: 30, activeLeftTab: panelBranches}
 	g := m.layout()
 	if got, want := g.pos[panelBranches], (point{0, 1}); got != want {
-		t.Errorf("branches origin = %v, want %v", got, want)
+		t.Errorf("active-tab origin = %v, want %v", got, want)
 	}
-	if got, want := g.pos[panelWorktrees], (point{0, 1 + g.boxH[panelBranches]}); got != want {
-		t.Errorf("worktrees origin = %v, want %v", got, want)
+	if _, visible := g.pos[panelWorktrees]; visible {
+		t.Error("inactive Worktrees tab should have no origin")
 	}
-	if got, want := g.pos[panelStatus], (point{0, 1 + g.boxH[panelBranches] + g.boxH[panelWorktrees]}); got != want {
+	if got, want := g.pos[panelStatus], (point{0, 1 + g.boxH[panelBranches]}); got != want {
 		t.Errorf("status origin = %v, want %v", got, want)
 	}
 	if got, want := g.pos[panelCommits], (point{g.leftW, 1}); got != want {
 		t.Errorf("commits origin = %v, want %v", got, want)
 	}
 
-	// Short terminal: worktrees hidden, status sits right under branches.
-	m = Model{width: 90, height: 10}
+	// Switching the active tab to Worktrees moves the slot there.
+	m = Model{width: 90, height: 30, activeLeftTab: panelWorktrees}
 	g = m.layout()
-	if _, visible := g.pos[panelWorktrees]; visible {
-		t.Error("worktrees should have no origin when hidden")
+	if got, want := g.pos[panelWorktrees], (point{0, 1}); got != want {
+		t.Errorf("active Worktrees origin = %v, want %v", got, want)
 	}
-	if got, want := g.pos[panelStatus], (point{0, 1 + g.boxH[panelBranches]}); got != want {
-		t.Errorf("short status origin = %v, want %v", got, want)
+	if _, visible := g.pos[panelBranches]; visible {
+		t.Error("inactive Branches tab should have no origin")
 	}
 
 	// Narrow terminal: single commits column at the left edge.

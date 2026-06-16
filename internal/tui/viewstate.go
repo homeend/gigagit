@@ -58,24 +58,14 @@ func (m Model) layout() layoutGeom {
 	}
 	g.leftW, g.rightW = leftW, w-leftW
 
-	if bodyH >= 9 {
-		// Three stacked left panels (each bordered panel needs >=3 rows).
-		h1 := bodyH / 3
-		h2 := bodyH / 3
-		g.boxH[panelBranches] = h1
-		g.boxH[panelWorktrees] = h2
-		g.boxH[panelStatus] = bodyH - h1 - h2
-		g.pos[panelBranches] = point{0, 1}
-		g.pos[panelWorktrees] = point{0, 1 + h1}
-		g.pos[panelStatus] = point{0, 1 + h1 + h2}
-	} else {
-		// Short terminal: Branches over Status only.
-		bh := bodyH / 2
-		g.boxH[panelBranches] = bh
-		g.boxH[panelStatus] = bodyH - bh
-		g.pos[panelBranches] = point{0, 1}
-		g.pos[panelStatus] = point{0, 1 + bh}
-	}
+	// Left column: the Branches/Worktrees tab slot over Status (two boxes). The
+	// inactive tab gets no boxH entry (0 ⇒ hidden everywhere — panelAt/render
+	// skip boxH<=0 — but its per-panel state is untouched).
+	tabH := bodyH / 2
+	g.boxH[m.activeLeftTab] = tabH
+	g.boxH[panelStatus] = bodyH - tabH
+	g.pos[m.activeLeftTab] = point{0, 1}
+	g.pos[panelStatus] = point{0, 1 + tabH}
 	g.boxH[panelCommits] = bodyH
 	g.pos[panelCommits] = point{leftW, 1}
 	return g

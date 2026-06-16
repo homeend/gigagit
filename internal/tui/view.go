@@ -259,24 +259,19 @@ func (m Model) renderInterface() string {
 		return strings.Join([]string{header, body, footer, statusLine}, "\n")
 	}
 
-	brRows, _ := m.panelView(panelBranches)
-	wtRows, _ := m.panelView(panelWorktrees)
-	stRows, _ := m.panelView(panelStatus)
 	cmRows, _ := m.panelView(panelCommits)
 
 	var left string
-	switch {
-	case m.filesView != nil:
+	if m.filesView != nil {
 		left = m.renderFilesView(g.leftW, g.bodyH)
-	case g.boxH[panelWorktrees] > 0:
+	} else {
+		// The Branches/Worktrees tab slot (active tab shows its content; the tab
+		// bar lives in the label line) over Status.
+		active := m.activeLeftTab
+		atRows, _ := m.panelView(active)
+		stRows, _ := m.panelView(panelStatus)
 		left = lipgloss.JoinVertical(lipgloss.Left,
-			m.renderPanel(panelBranches, m.panelLabel(panelBranches, "Branches"), brRows, g.leftW, g.boxH[panelBranches]),
-			m.renderPanel(panelWorktrees, m.panelLabel(panelWorktrees, "Worktrees"), wtRows, g.leftW, g.boxH[panelWorktrees]),
-			m.renderPanel(panelStatus, m.panelLabel(panelStatus, "Status"), stRows, g.leftW, g.boxH[panelStatus]),
-		)
-	default:
-		left = lipgloss.JoinVertical(lipgloss.Left,
-			m.renderPanel(panelBranches, m.panelLabel(panelBranches, "Branches"), brRows, g.leftW, g.boxH[panelBranches]),
+			m.renderPanel(active, m.panelLabel(active, tabBarLabel(active)), atRows, g.leftW, g.boxH[active]),
 			m.renderPanel(panelStatus, m.panelLabel(panelStatus, "Status"), stRows, g.leftW, g.boxH[panelStatus]),
 		)
 	}
@@ -298,6 +293,15 @@ func (m Model) headerLine(w int) string {
 		rest += fmt.Sprintf(" (↑%d ↓%d)", m.status.Ahead, m.status.Behind)
 	}
 	return titleStyle.Render("gigagit") + truncate(rest, w-7)
+}
+
+// tabBarLabel is the shared left-slot header: both tab names with the active
+// one bracketed. Plain ASCII so renderPanel's truncate stays safe.
+func tabBarLabel(active panel) string {
+	if active == panelWorktrees {
+		return "Branches [Worktrees]"
+	}
+	return "[Branches] Worktrees"
 }
 
 // renderPanel draws one bordered panel of fixed size boxW×boxH, windowing rows
