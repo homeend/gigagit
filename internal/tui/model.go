@@ -275,10 +275,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.modal.sel++
 				}
 			case "enter":
-				m.modal.reply <- engine.DecisionResponse{Option: m.modal.req.Options[m.modal.sel]}
+				opt := m.modal.req.Options[m.modal.sel]
+				if r := m.modal.onResolve; r != nil {
+					m.modal = nil
+					return r(m, opt)
+				}
+				m.modal.reply <- engine.DecisionResponse{Option: opt}
 				m.modal = nil
 			case "esc":
-				m.modal.reply <- engine.DecisionResponse{Option: abortOption(m.modal.req.Options)}
+				opt := abortOption(m.modal.req.Options)
+				if r := m.modal.onResolve; r != nil {
+					m.modal = nil
+					return r(m, opt)
+				}
+				m.modal.reply <- engine.DecisionResponse{Option: opt}
 				m.modal = nil
 			}
 			return m, nil
@@ -429,6 +439,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			if m.canSwitchBranch() {
 				b, _ := m.selectedBranch()
+				if wt, ok := m.worktreeForBranch(b.Name); ok {
+					wtPath := wt.Path
+					m.modal = &decisionState{
+						req: engine.DecisionRequest{
+							ID:      "switch-to-worktree",
+							Prompt:  b.Name + " is checked out in another worktree:\n" + wtPath,
+							Options: []string{"go to worktree", "cancel"},
+						},
+						onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {
+							if opt == "go to worktree" {
+								return m.reRoot(wtPath)
+							}
+							return m, nil
+						},
+					}
+					return m, nil
+				}
 				return m.startOp(engine.SmartSwitch{Branch: b.Name})
 			}
 		case "S":

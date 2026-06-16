@@ -343,16 +343,18 @@ func TestFooterFilesViewOverrideAdvertisesTreeActions(t *testing.T) {
 
 func TestSwitchAndWorktreeKeysWorkFromAnyPanel(t *testing.T) {
 	// s: only footer visibility is Branches-scoped; the key acts on the
-	// Branches selection from any focused panel. Use a real repo so the
-	// goroutine launched by startOp does not panic when it calls op.Run.
+	// Branches selection from any focused panel. footerModel()'s fixture has
+	// feat/x checked out in another worktree, so s on it opens the
+	// jump-to-worktree modal — which still proves the key acted on the
+	// Branches selection while focus was elsewhere.
 	repo := newRepo(t)
 	m := footerModel()
 	m.svc = domain.New(repo)
 	m.sel[panelBranches] = 1 // feat/x selected in Branches
 	m.focus = panelCommits   // but focus is elsewhere
-	u, cmd := m.Update(keyMsg("s"))
-	if mm := u.(Model); !mm.running || cmd == nil {
-		t.Error("s must start a switch using the Branches selection from any panel")
+	u, _ := m.Update(keyMsg("s"))
+	if mm := u.(Model); mm.modal == nil || mm.modal.req.ID != "switch-to-worktree" {
+		t.Error("s must act on the Branches selection from any panel (jump-to-worktree modal)")
 	}
 
 	// w: openWorktreePopup also acts on the Branches selection from any panel.

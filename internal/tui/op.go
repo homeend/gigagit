@@ -64,11 +64,15 @@ type opFinishedMsg struct {
 	err error
 }
 
-// decisionState holds an in-flight modal decision (used by the modal in Task 2).
+// decisionState holds an in-flight modal decision. Engine-driven decisions
+// answer over reply; frontend-only decisions (e.g. jump-to-worktree) set
+// onResolve instead — the modal key handler calls it with the live,
+// modal-cleared model and the chosen option, and returns its result.
 type decisionState struct {
-	req   engine.DecisionRequest
-	reply chan engine.DecisionResponse
-	sel   int
+	req       engine.DecisionRequest
+	reply     chan engine.DecisionResponse
+	sel       int
+	onResolve func(m Model, opt string) (tea.Model, tea.Cmd)
 }
 
 // uiDecider bridges engine decisions to the UI over the msgs channel.

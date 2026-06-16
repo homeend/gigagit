@@ -47,6 +47,18 @@ func (m Model) selectedWorktree() (model.Worktree, bool) {
 	return m.worktrees[bi], true
 }
 
+// worktreeForBranch returns a loaded worktree other than the current one that
+// has branch checked out, if any — the case where SmartSwitch would fail
+// because git refuses to check a branch out in two worktrees at once.
+func (m Model) worktreeForBranch(branch string) (model.Worktree, bool) {
+	for _, w := range m.worktrees {
+		if w.Branch == branch && w.Path != m.currentWorktree {
+			return w, true
+		}
+	}
+	return model.Worktree{}, false
+}
+
 // canSwitchBranch gates s: SmartSwitch to the selected branch. Switching to
 // the branch already checked out in this worktree: git refuses, so skip it.
 func (m Model) canSwitchBranch() bool {
