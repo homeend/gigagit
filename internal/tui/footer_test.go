@@ -323,3 +323,22 @@ func TestSwitchAndWorktreeKeysWorkFromAnyPanel(t *testing.T) {
 		t.Error("w must open the worktree popup from any panel")
 	}
 }
+
+func TestFooterStageVsUnstage(t *testing.T) {
+	base := func(focus panel) Model {
+		m := New(nil)
+		m.loading = false // opsIdle requires not loading
+		m.width, m.height = 80, 30
+		m.status.Files = []model.FileStatus{
+			{Path: "a.go", Kind: model.KindTracked, Staged: 'M', Unstaged: 'M'},
+		}
+		m.focus = focus
+		return m
+	}
+	if got := base(panelFiles).footerLine(); !strings.Contains(got, "[space] stage") || strings.Contains(got, "unstage") {
+		t.Errorf("Files footer = %q, want [space] stage", got)
+	}
+	if got := base(panelStaged).footerLine(); !strings.Contains(got, "[space] unstage") {
+		t.Errorf("Staged footer = %q, want [space] unstage", got)
+	}
+}
