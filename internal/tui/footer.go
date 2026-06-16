@@ -9,6 +9,7 @@ import "strings"
 // pgup/pgdn are usable but documented only in the ? help window). A when may
 // therefore be stricter than the Update gate — never looser.
 type footerBinding struct {
+	id    string // stable action id ("" for pure-navigation keys); see the . menu
 	key   string
 	label string
 	when  func(Model) bool
@@ -18,29 +19,29 @@ type footerBinding struct {
 // three m-bindings and two d-bindings have mutually exclusive predicates, so
 // at most one of each key renders at a time.
 var contextBindings = []footerBinding{
-	{"s", "[s]witch", func(m Model) bool { return m.focus == panelBranches && m.canSwitchBranch() }},
-	{"b", "[b]ranch", func(m Model) bool { return m.focus == panelBranches && m.canOpenBranchPopup() }},
-	{"w", "[w]orktree", func(m Model) bool { return m.focus == panelBranches && m.canOpenWorktreePopup() }},
-	{"d", "[d]elete", func(m Model) bool { return m.focus == panelBranches && m.canDeleteBranch() }},
-	{"m", "[m]ark", func(m Model) bool {
+	{"switch", "s", "[s]witch", func(m Model) bool { return m.focus == panelBranches && m.canSwitchBranch() }},
+	{"branch", "b", "[b]ranch", func(m Model) bool { return m.focus == panelBranches && m.canOpenBranchPopup() }},
+	{"worktree", "w", "[w]orktree", func(m Model) bool { return m.focus == panelBranches && m.canOpenWorktreePopup() }},
+	{"delete-branch", "d", "[d]elete", func(m Model) bool { return m.focus == panelBranches && m.canDeleteBranch() }},
+	{"mark", "m", "[m]ark", func(m Model) bool {
 		return m.focus == panelBranches && m.canMark() && !m.markOnFocusedPanel()
 	}},
-	{"m", "[m] unmark", func(m Model) bool {
+	{"unmark", "m", "[m] unmark", func(m Model) bool {
 		return m.focus == panelBranches && m.canMark() && m.markOnFocusedPanel() && m.cursorOnMark()
 	}},
-	{"m", "[m] pair", func(m Model) bool {
+	{"pair", "m", "[m] pair", func(m Model) bool {
 		return m.focus == panelBranches && m.canMark() && m.markOnFocusedPanel() && !m.cursorOnMark()
 	}},
-	{"enter", "[enter] switch", func(m Model) bool { return m.focus == panelWorktrees && m.canEnterWorktree() }},
-	{"d", "[d]elete", func(m Model) bool { return m.focus == panelWorktrees && m.canDeleteWorktree() }},
-	{"enter", "[enter] diff", func(m Model) bool { return m.canShowFileDiff() }},
-	{"space", "[space] stage", func(m Model) bool { return m.focus == panelFiles && m.canStage() }},
-	{"space", "[space] unstage", func(m Model) bool { return m.focus == panelStaged && m.canStage() }},
-	{"s", "[s] stash", func(m Model) bool {
+	{"switch-worktree", "enter", "[enter] switch", func(m Model) bool { return m.focus == panelWorktrees && m.canEnterWorktree() }},
+	{"delete-worktree", "d", "[d]elete", func(m Model) bool { return m.focus == panelWorktrees && m.canDeleteWorktree() }},
+	{"file-diff", "enter", "[enter] diff", func(m Model) bool { return m.canShowFileDiff() }},
+	{"stage", "space", "[space] stage", func(m Model) bool { return m.focus == panelFiles && m.canStage() }},
+	{"unstage", "space", "[space] unstage", func(m Model) bool { return m.focus == panelStaged && m.canStage() }},
+	{"stash", "s", "[s] stash", func(m Model) bool {
 		return m.focus == panelFiles && m.opsIdle() && len(stashCandidates(m.status)) > 0
 	}},
-	{"m", "[m] mark", func(m Model) bool { return m.isFilesPanel(m.focus) && m.panelLen(m.focus) > 0 }},
-	{"l", "[l] files", func(m Model) bool {
+	{"mark-file", "m", "[m] mark", func(m Model) bool { return m.isFilesPanel(m.focus) && m.panelLen(m.focus) > 0 }},
+	{"commit-files", "l", "[l] files", func(m Model) bool {
 		// Stricter than the dispatch: the narrow case is a statusMsg no-op
 		// there, so don't advertise it.
 		return m.focus == panelCommits && m.canShowCommitFiles() && !(m.width > 0 && m.width < 40)
@@ -51,23 +52,24 @@ var contextBindings = []footerBinding{
 // (while an op runs everything gated on opsIdle drops out and the footer
 // collapses to tab/help/quit).
 var globalBindings = []footerBinding{
-	{"x", "[x] resolve", func(m Model) bool { return m.opsIdle() && len(m.status.Conflicts()) > 0 }},
-	{"c", "[c] commit", Model.canCommit},
-	{"C", "[C] amend", Model.canAmend},
-	{"p", "[p]ull", Model.opsIdle},
-	{"P", "[P]ush", func(m Model) bool { return m.opsIdle() && m.status.Branch != "" }},
-	{"S", "[S]tashes", Model.opsIdle},
-	{"u", "[u]ndo", Model.opsIdle},
-	{"o", "[o]rder", Model.opsIdle},
-	{"z", "[z] view", Model.opsIdle},
-	{"/", "[/]filter", Model.opsIdle},
-	{"R", "[R]epo", Model.opsIdle},
-	{",", "[,] settings", Model.opsIdle},
-	{"tab", "[tab] focus", func(Model) bool { return true }},
-	{"ctrl+←/→", "[ctrl+←/→] tab", Model.opsIdle},
-	{"r", "[r] reload", func(m Model) bool { return !m.running }},
-	{"?", "[?] help", func(Model) bool { return true }},
-	{"q", "[q] quit", func(Model) bool { return true }},
+	{"resolve", "x", "[x] resolve", func(m Model) bool { return m.opsIdle() && len(m.status.Conflicts()) > 0 }},
+	{"commit", "c", "[c] commit", Model.canCommit},
+	{"amend", "C", "[C] amend", Model.canAmend},
+	{"pull", "p", "[p]ull", Model.opsIdle},
+	{"push", "P", "[P]ush", func(m Model) bool { return m.opsIdle() && m.status.Branch != "" }},
+	{"stashes", "S", "[S]tashes", Model.opsIdle},
+	{"undo", "u", "[u]ndo", Model.opsIdle},
+	{"order", "o", "[o]rder", Model.opsIdle},
+	{"view", "z", "[z] view", Model.opsIdle},
+	{"filter", "/", "[/]filter", Model.opsIdle},
+	{"repo", "R", "[R]epo", Model.opsIdle},
+	{"settings", ",", "[,] settings", Model.opsIdle},
+	{"actions", ".", "[.] actions", Model.opsIdle},
+	{"", "tab", "[tab] focus", func(Model) bool { return true }},
+	{"", "ctrl+←/→", "[ctrl+←/→] tab", Model.opsIdle},
+	{"reload", "r", "[r] reload", func(m Model) bool { return !m.running }},
+	{"help", "?", "[?] help", func(Model) bool { return true }},
+	{"quit", "q", "[q] quit", func(Model) bool { return true }},
 }
 
 // footerLine builds the context-sensitive footer: panel/row-specific actions,
@@ -88,6 +90,21 @@ func (m Model) footerLine() string {
 	if m.stashView != nil && m.focus == panelCommits {
 		return "stash: [↑/↓] move  [l] files  [z] view  [←] panels  [enter] apply/pop/drop  [esc/S] close"
 	}
+	// A configured footer_actions allowlist replaces the default two-group
+	// layout: show exactly those ids, in list order, among the available ones.
+	// [.] actions always stays so the menu remains discoverable.
+	if ids := m.cfg.UI.FooterActions; len(ids) > 0 {
+		var labels []string
+		for _, id := range ids {
+			if b, ok := bindingByID(id); ok && b.when(m) {
+				labels = append(labels, b.label)
+			}
+		}
+		if b, ok := bindingByID("actions"); ok && b.when(m) {
+			labels = append(labels, b.label)
+		}
+		return strings.Join(labels, " ")
+	}
 	var ctx, glob []string
 	for _, b := range contextBindings {
 		if b.when(m) {
@@ -107,4 +124,20 @@ func (m Model) footerLine() string {
 		groups = append(groups, strings.Join(glob, " "))
 	}
 	return strings.Join(groups, "  •  ")
+}
+
+// bindingByID finds a registry binding by its action id. Ids are unique
+// (TestFooterBindingIDsUniqueAndPresent), so the first match is the only one.
+func bindingByID(id string) (footerBinding, bool) {
+	for _, b := range contextBindings {
+		if b.id == id {
+			return b, true
+		}
+	}
+	for _, b := range globalBindings {
+		if b.id == id {
+			return b, true
+		}
+	}
+	return footerBinding{}, false
 }

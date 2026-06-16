@@ -179,3 +179,20 @@ func TestHScrollStepDefaultAndOverlay(t *testing.T) {
 		t.Fatalf("unset (0) must not overwrite; got %d", dst.HScrollStep)
 	}
 }
+
+func TestOverlayUIActionLists(t *testing.T) {
+	dst := Defaults().UI
+	overlayUI(&dst, UIConfig{FooterActions: []string{"pull", "commit"}, MenuActions: []string{"pull"}})
+	if len(dst.FooterActions) != 2 || dst.FooterActions[0] != "pull" {
+		t.Fatalf("FooterActions = %v, want [pull commit]", dst.FooterActions)
+	}
+	// A non-empty list overrides; an empty/nil list is unset and must not clobber.
+	overlayUI(&dst, UIConfig{FooterActions: []string{"push"}})
+	if len(dst.FooterActions) != 1 || dst.FooterActions[0] != "push" {
+		t.Fatalf("non-empty list must override; got %v", dst.FooterActions)
+	}
+	overlayUI(&dst, UIConfig{}) // empty lists = unset
+	if len(dst.FooterActions) != 1 || len(dst.MenuActions) != 1 {
+		t.Fatalf("empty lists must not clobber; got footer=%v menu=%v", dst.FooterActions, dst.MenuActions)
+	}
+}

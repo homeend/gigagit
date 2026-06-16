@@ -35,6 +35,12 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
+	if m.actionMenu != nil {
+		if wheel != 0 {
+			m.actionMenu.move(wheel)
+		}
+		return m, nil
+	}
 	if m.contentPopup != nil {
 		if wheel != 0 {
 			m.contentPopup.move(wheel)

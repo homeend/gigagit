@@ -66,6 +66,7 @@ panel and selected row right now; `?` opens the full searchable reference.
 | `/` | filter the focused panel (type, then `enter` to keep, `esc` to clear) |
 | `R` | switch repository (popup: type to filter, `enter` to switch, `ctrl+d` to forget) |
 | `,` | settings (set up agent skills) |
+| `.` | open the **action menu**: a popup listing every action available right now; press an action's key to run it, or `↑`/`↓` + `enter`; `/` filters, `z` cycles display mode, `esc` closes |
 | `r` / `q` | reload / quit |
 | `?` | help: searchable list of all key bindings (`/` to search; `↑`/`↓` or `j`/`k`, `ctrl+↑`/`ctrl+↓`, `pgup`/`pgdn`, mouse wheel to scroll; `q` closes) |
 
@@ -131,6 +132,16 @@ live in `<git-common-dir>/gg/state.toml`.
 `[ui] hscroll_step` sets the diff scroll-mode pan step in columns (default 8);
 like every entry, the repo's `.gg.toml` overrides the global config
 per field.
+
+`[ui] footer_actions` and `[ui] menu_actions` are lists of action **ids** that
+choose which actions appear in the footer bar and in the `.` menu respectively;
+each is unset/empty by default (show everything). Ids: `pull push commit amend
+stashes undo order view filter repo settings resolve reload help quit` (globals)
+and `switch branch worktree delete-branch delete-worktree mark unmark pair stage
+unstage file-diff stash mark-file commit-files switch-worktree` (context). For
+example, `footer_actions = ["pull", "commit", "filter"]` shrinks the footer to
+those (plus `[.] actions`), leaving everything else one keypress away in the `.`
+menu.
 
 ## Development
 

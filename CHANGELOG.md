@@ -9,6 +9,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+#### TUI action menu (.)
+- **`.`** opens an action menu listing every action available in the current
+  context; press the action's key to run it, or `↑`/`↓` + `enter` (`/` filters,
+  `z` cycles display mode). New `[ui] footer_actions` and `[ui] menu_actions`
+  config lists (action ids; unset/empty = show all) choose which actions appear
+  in the footer bar versus only in the menu.
+
 - TUI: **conflict hunk picker** — press `enter` on a both-modified file in the
   `x` conflict resolver to open a GitKraken-style region/line editor. Per
   conflict region: take the whole **current** or **incoming** side (`c`/`i`),
