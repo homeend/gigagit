@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/gigagit/gg/internal/agentinit"
 )
@@ -17,6 +18,8 @@ type settingsPopup struct {
 	dets    []agentinit.Detection
 	checked []bool
 	sel     int
+	mode    dispMode // text display mode; z cycles (cutoff default)
+	hscroll int      // modeScroll horizontal offset
 }
 
 const settingsMenuAgents = "Set up agent skills (using-gg)"
@@ -54,6 +57,24 @@ func (m Model) updateSettingsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.settings = nil
+		return m, nil
+	}
+	switch msg.String() { // display-mode keys apply on both screens
+	case "z":
+		p.mode = p.mode.next()
+		p.hscroll = 0
+		return m, nil
+	case "shift+left":
+		if p.mode == modeScroll && p.hscroll > 0 {
+			if p.hscroll -= m.hscrollStep(); p.hscroll < 0 {
+				p.hscroll = 0
+			}
+		}
+		return m, nil
+	case "shift+right":
+		if p.mode == modeScroll {
+			p.hscroll += m.hscrollStep()
+		}
 		return m, nil
 	}
 	if !p.picker {
@@ -105,30 +126,40 @@ func (m Model) updateSettingsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // renderSettingsPopup draws whichever screen is active.
 func (m Model) renderSettingsPopup() string {
 	p := m.settings
+	w, _ := m.overlayDims()
+	inner := popupInnerWidth(w)
 	var b strings.Builder
 	if !p.picker {
 		b.WriteString("Settings\n\n")
 		b.WriteString("> " + settingsMenuAgents + "\n")
-		b.WriteString("\n[enter] open  [esc] close")
+		b.WriteString("\n[enter] open  [z] mode  [esc] close")
 	} else {
 		b.WriteString("Set up agent skills\n\n")
 		if len(p.dets) == 0 {
 			b.WriteString("  no supported agents detected\n")
-		}
-		for i, d := range p.dets {
-			cursor := "  "
-			if i == p.sel {
-				cursor = "> "
+		} else {
+			wr := make([]winRow, len(p.dets))
+			for i, d := range p.dets {
+				prefix := "  "
+				var st lipgloss.Style
+				if i == p.sel {
+					prefix, st = "> ", selectedRow
+				}
+				box := "[ ]"
+				if p.checked[i] {
+					box = "[x]"
+				}
+				wr[i] = winRow{text: fmt.Sprintf("%s%s %s — %s", prefix, box, d.Agent.Label, d.Status), style: st}
 			}
-			box := "[ ]"
-			if p.checked[i] {
-				box = "[x]"
+			h := len(p.dets)
+			if h > 12 {
+				h = 12
 			}
-			b.WriteString(fmt.Sprintf("%s%s %s — %s\n", cursor, box, d.Agent.Label, d.Status))
+			for _, line := range renderWindow(wr, winOpts{w: inner, h: h, mode: p.mode, anchor: p.sel, hscroll: p.hscroll}) {
+				b.WriteString(line + "\n")
+			}
 		}
-		b.WriteString("\n[space] toggle  [enter] apply  [esc] back")
+		b.WriteString("\n[space] toggle  [enter] apply  [z] mode  [esc] back")
 	}
-	w, _ := m.overlayDims()
-	inner := popupInnerWidth(w)
 	return modalStyle.Width(inner).Render(strings.TrimRight(b.String(), "\n")) + "\n"
 }
