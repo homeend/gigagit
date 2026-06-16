@@ -39,7 +39,7 @@ panel and selected row right now; `?` opens the full searchable reference.
 | Key | Action |
 |-----|--------|
 | `p` / `P` | pull / push |
-| `s` | on the Branches panel: smart-switch to the selected branch; on the Files panel: open the stash-create popup (name defaults to `WIP on <branch>`, a checklist of unstaged/untracked files, `space` toggles, `ctrl+s` stashes) |
+| `s` | on the Branches panel: smart-switch to the selected branch (if it's already checked out in another worktree, a modal offers to jump to that worktree instead); on the Files panel: open the stash-create popup (name defaults to `WIP on <branch>`, a checklist of unstaged/untracked files, `space` toggles, `ctrl+s` stashes) |
 | `b` | create a branch off the selected one (popup); `B` create **and** switch to it |
 | `S` | open the stash window (lists all stashes in the right column): `↑`/`↓` move, `l` shows the selected stash's files in the tree (diff / `h` history / `b` blame, like commit files), `enter` opens an action popup (apply / pop / drop, drop confirms), `esc`/`S` close |
 | `u` | undo last commit (ref-only, soft reset) |
