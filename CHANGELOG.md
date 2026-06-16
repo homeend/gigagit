@@ -9,6 +9,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- TUI: the hunk picker (conflict resolve / `H` staging) now reads long lines —
+  **`z`** cycles the display mode (**scroll** default → wrap → cutoff) and
+  **shift+←/→** pans in scroll mode, matching the rest of the app's windows. The
+  picker also scrolls vertically now, so large hunks no longer run off-screen.
 - TUI: **hunk/line staging** — press `H` on a file in the Files panel to open a
   GitKraken-style staging picker (the same surface as the conflict resolver).
   Per hunk: stage the whole working-tree side (`i`), keep the index side (`c`),
