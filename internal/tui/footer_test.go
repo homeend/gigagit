@@ -12,6 +12,26 @@ import (
 	"github.com/gigagit/gg/internal/model"
 )
 
+func TestFooterActionsAllowlistFiltersAndOrders(t *testing.T) {
+	m := footerModel()
+	m.loading = false
+	m.cfg.UI.FooterActions = []string{"repo", "pull"} // order matters
+	line := m.footerLine()
+	ri, pi := strings.Index(line, "[R]epo"), strings.Index(line, "[p]ull")
+	if ri < 0 || pi < 0 {
+		t.Fatalf("allowlisted actions missing: %q", line)
+	}
+	if ri > pi {
+		t.Errorf("order not honored (repo should precede pull): %q", line)
+	}
+	if strings.Contains(line, "[u]ndo") {
+		t.Errorf("non-allowlisted action leaked: %q", line)
+	}
+	if !strings.Contains(line, "[.] actions") {
+		t.Errorf("[.] actions must always stay in the footer: %q", line)
+	}
+}
+
 func TestFooterBindingIDsUniqueAndPresent(t *testing.T) {
 	seen := map[string]string{} // id -> label (first seen)
 	nav := map[string]bool{"tab": true, "shift+tab": true, "ctrl+←/→": true}

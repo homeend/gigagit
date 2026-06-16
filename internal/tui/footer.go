@@ -90,6 +90,21 @@ func (m Model) footerLine() string {
 	if m.stashView != nil && m.focus == panelCommits {
 		return "stash: [↑/↓] move  [l] files  [z] view  [←] panels  [enter] apply/pop/drop  [esc/S] close"
 	}
+	// A configured footer_actions allowlist replaces the default two-group
+	// layout: show exactly those ids, in list order, among the available ones.
+	// [.] actions always stays so the menu remains discoverable.
+	if ids := m.cfg.UI.FooterActions; len(ids) > 0 {
+		var labels []string
+		for _, id := range ids {
+			if b, ok := bindingByID(id); ok && b.when(m) {
+				labels = append(labels, b.label)
+			}
+		}
+		if b, ok := bindingByID("actions"); ok && b.when(m) {
+			labels = append(labels, b.label)
+		}
+		return strings.Join(labels, " ")
+	}
 	var ctx, glob []string
 	for _, b := range contextBindings {
 		if b.when(m) {
@@ -109,4 +124,20 @@ func (m Model) footerLine() string {
 		groups = append(groups, strings.Join(glob, " "))
 	}
 	return strings.Join(groups, "  •  ")
+}
+
+// bindingByID finds a registry binding by its action id. Ids are unique
+// (TestFooterBindingIDsUniqueAndPresent), so the first match is the only one.
+func bindingByID(id string) (footerBinding, bool) {
+	for _, b := range contextBindings {
+		if b.id == id {
+			return b, true
+		}
+	}
+	for _, b := range globalBindings {
+		if b.id == id {
+			return b, true
+		}
+	}
+	return footerBinding{}, false
 }

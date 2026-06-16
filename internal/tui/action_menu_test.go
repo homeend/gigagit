@@ -20,6 +20,20 @@ func TestSynthKey(t *testing.T) {
 	}
 }
 
+func TestMenuActionsAllowlistFiltersAndOrders(t *testing.T) {
+	m := footerModel()
+	m.loading = false
+	m.cfg.UI.MenuActions = []string{"repo", "pull"}
+	mm := m.openActionMenu()
+	got := []string{}
+	for _, r := range mm.actionMenu.rows {
+		got = append(got, r.id)
+	}
+	if len(got) != 2 || got[0] != "repo" || got[1] != "pull" {
+		t.Errorf("menu rows = %v, want [repo pull] in order", got)
+	}
+}
+
 func TestDotOpensActionMenu(t *testing.T) {
 	m := footerModel()
 	m.loading = false
