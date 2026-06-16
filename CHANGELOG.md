@@ -9,6 +9,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Fixed
+- TUI: blaming a commit from a file's history (`b` in the history view) now
+  blames the file under the name it had **at that commit**, following renames
+  and copies. Previously it always passed the file's current name, so blaming a
+  commit that predated a rename failed with `git blame` exit 128 (`fatal: no
+  such path … in <sha>`).
 - TUI: a status-bar message (notably an error like switching to a branch already
   checked out in another worktree) no longer lingers forever — it now clears on
   the next key interaction when idle, so it reflects the most recent action

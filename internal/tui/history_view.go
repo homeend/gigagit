@@ -252,7 +252,14 @@ func (h *historyView) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case "b":
 		if h.sel >= 0 && h.sel < len(h.commits) {
 			fc := h.commits[h.sel]
-			ctx := navContext{path: h.ctx.path, rev: fc.Hash}
+			// Blame the file under the name it had *at this commit* (fc.Path):
+			// across a rename/copy the current name need not exist in the
+			// commit's tree, which would make `git blame` fail (exit 128).
+			path := fc.Path
+			if path == "" {
+				path = h.ctx.path
+			}
+			ctx := navContext{path: path, rev: fc.Hash}
 			bv := newBlameView(ctx)
 			m = m.pushSurface(bv)
 			return m, m.loadBlameCmd(ctx, bv.tag)
