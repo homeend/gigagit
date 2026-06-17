@@ -111,6 +111,20 @@ func clipToHeight(s string, h int) string {
 	return strings.Join(lines[:h], "\n")
 }
 
+// menuBackground is what renders behind the action menu overlay: the topmost
+// content window if one is open (so the menu floats over the diff/history/blame
+// or file tree), else the panel interface (which itself draws the file tree and
+// stash list).
+func (m Model) menuBackground() string {
+	if s := m.stackTop(); s != nil {
+		return s.render(m)
+	}
+	if m.diffView != nil {
+		return m.renderDiffView()
+	}
+	return m.renderInterface()
+}
+
 // render draws the interface, compositing the worktree popup centered on top of
 // it when one is open. The output never exceeds width×height.
 func (m Model) render() string {
@@ -120,6 +134,13 @@ func (m Model) render() string {
 		w, h := m.overlayDims()
 		bg := clipToHeight(m.renderInterface(), h)
 		return overlayCenter(bg, m.renderModal(), w, h)
+	}
+	// The action menu is a modal-like overlay: it draws on top of whatever
+	// content window is open (file tree, diff, history, blame, stash), checked
+	// before those surfaces' own early returns below.
+	if m.actionMenu != nil {
+		w, h := m.overlayDims()
+		return overlayCenter(clipToHeight(m.menuBackground(), h), m.renderActionMenu(), w, h)
 	}
 	if s := m.stackTop(); s != nil {
 		_, h := m.overlayDims()
@@ -133,15 +154,11 @@ func (m Model) render() string {
 	}
 	_, h := m.overlayDims()
 	bg := clipToHeight(m.renderInterface(), h)
-	if m.popup == nil && m.commitPopup == nil && m.repoPopup == nil && m.settings == nil && m.branchPopup == nil && m.contentPopup == nil && m.pairPopup == nil && m.stashPopup == nil && m.stashAction == nil && m.conflictPopup == nil && m.actionMenu == nil {
+	if m.popup == nil && m.commitPopup == nil && m.repoPopup == nil && m.settings == nil && m.branchPopup == nil && m.contentPopup == nil && m.pairPopup == nil && m.stashPopup == nil && m.stashAction == nil && m.conflictPopup == nil {
 		if lines, x, y, ok := m.tooltip(); ok {
 			w, h := m.overlayDims()
 			bg = overlayAt(bg, strings.Join(lines, "\n"), x, y, w, h)
 		}
-	}
-	if m.actionMenu != nil {
-		w, h := m.overlayDims()
-		return overlayCenter(bg, m.renderActionMenu(), w, h)
 	}
 	if m.popup != nil {
 		w, h := m.overlayDims()
