@@ -293,6 +293,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+		// The action menu is a modal-like overlay: once open it owns the
+		// keyboard above every content window. Checked before the surface stack
+		// and the diff view so those windows can open it (with . opt-in) and the
+		// menu then receives the keys instead of the underlying window.
+		if m.actionMenu != nil {
+			return m.updateActionMenuKey(msg)
+		}
 		if s := m.stackTop(); s != nil {
 			if msg.Type == tea.KeyCtrlC {
 				return m, tea.Quit
@@ -310,9 +317,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.commitPopup != nil {
 			return m.updateCommitPopupKey(msg)
-		}
-		if m.actionMenu != nil {
-			return m.updateActionMenuKey(msg)
 		}
 		if m.repoPopup != nil {
 			return m.updateRepoPopupKey(msg)

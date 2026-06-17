@@ -183,6 +183,8 @@ func (b *blameView) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 	switch msg.String() {
+	case ".":
+		return m.openActionMenu(), nil
 	case "z":
 		b.mode = b.mode.next()
 		b.hscroll = 0

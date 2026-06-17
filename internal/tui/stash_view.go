@@ -65,6 +65,8 @@ func (m Model) updateStashViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 	switch msg.String() {
+	case ".":
+		return m.openActionMenu(), nil
 	case "z":
 		v.mode = v.mode.next()
 		v.hscroll = 0

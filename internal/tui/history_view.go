@@ -229,6 +229,8 @@ func (h *historyView) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 	switch msg.String() {
+	case ".":
+		return m.openActionMenu(), nil
 	case "z":
 		h.mode = h.mode.next()
 		h.hscroll = 0

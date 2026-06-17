@@ -127,6 +127,8 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	switch msg.String() {
+	case ".":
+		return m.openActionMenu(), nil
 	case "z":
 		p.mode = p.mode.next()
 		p.hscroll = 0
