@@ -15,27 +15,30 @@ type actionRow struct {
 	label string
 }
 
-// availableActions returns the currently-available actions (context then
-// global, registry order) as menu rows: every binding whose predicate is true,
-// excluding pure navigation (id == "") and the menu's own entry (actions).
+// availableActions returns the currently-available CONTEXT actions as menu
+// rows: row-scoped first, then window-scoped, registry order within each group.
+// Global (whole-app) actions are excluded — they live in the footer tail and
+// have their own hotkeys. Navigation (id == "") is skipped. The dynamic copy
+// rows (contextCopyRows) lead the row group.
 func availableActions(m Model) []actionRow {
-	var out []actionRow
-	add := func(bs []footerBinding) {
-		for _, b := range bs {
-			// Skip navigation (no id), the menu's own entry, and quit — q closes
-			// the menu, so a [q] quit row would be misleading.
-			if b.id == "" || b.id == "actions" || b.id == "quit" {
-				continue
-			}
-			if b.when(m) {
-				out = append(out, actionRow{id: b.id, key: b.key, label: b.label})
-			}
+	var row, window []actionRow
+	for _, b := range contextBindings {
+		if b.id == "" || !b.when(m) {
+			continue
+		}
+		switch b.scope {
+		case scopeRow:
+			row = append(row, actionRow{id: b.id, key: b.key, label: b.label})
+		case scopeWindow:
+			window = append(window, actionRow{id: b.id, key: b.key, label: b.label})
 		}
 	}
-	add(contextBindings)
-	add(globalBindings)
-	return out
+	out := append(m.contextCopyRows(), row...)
+	return append(out, window...)
 }
+
+// contextCopyRows is fleshed out in Task 3; the empty stub keeps Task 2 green.
+func (m Model) contextCopyRows() []actionRow { return nil }
 
 // synthKey reproduces the keypress that runs an action's key, for replay
 // through Update. enter/space are the only non-rune keys any action id carries;

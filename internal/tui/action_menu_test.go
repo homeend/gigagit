@@ -25,16 +25,15 @@ func TestSynthKey(t *testing.T) {
 }
 
 func TestMenuActionsAllowlistFiltersAndOrders(t *testing.T) {
-	m := footerModel()
-	m.loading = false
-	m.cfg.UI.MenuActions = []string{"repo", "pull"}
+	m := filesMenuModel()
+	m.cfg.UI.MenuActions = []string{"file-diff", "stage"}
 	mm := m.openActionMenu()
 	got := []string{}
 	for _, r := range mm.actionMenu.rows {
 		got = append(got, r.id)
 	}
-	if len(got) != 2 || got[0] != "repo" || got[1] != "pull" {
-		t.Errorf("menu rows = %v, want [repo pull] in order", got)
+	if len(got) != 2 || got[0] != "file-diff" || got[1] != "stage" {
+		t.Errorf("menu rows = %v, want [file-diff stage] in order", got)
 	}
 }
 
@@ -45,21 +44,6 @@ func TestDotOpensActionMenu(t *testing.T) {
 	mm := u.(Model)
 	if mm.actionMenu == nil {
 		t.Fatal(". must open the action menu")
-	}
-}
-
-func TestActionMenuRunsPullByKey(t *testing.T) {
-	m := footerModel()
-	m.loading = false
-	u, _ := m.Update(keyMsg(".")) // open
-	m = u.(Model)
-	u, cmd := m.Update(keyMsg("p")) // direct key runs pull
-	mm := u.(Model)
-	if mm.actionMenu != nil {
-		t.Fatal("running an action must close the menu")
-	}
-	if !mm.running || cmd == nil {
-		t.Fatal("p from the menu must start SmartPull")
 	}
 }
 
@@ -83,26 +67,51 @@ func TestDotNoOpUnderPopup(t *testing.T) {
 	}
 }
 
-func TestAvailableActionsExcludesNavAndSelf(t *testing.T) {
+// filesMenuModel is a footerModel focused on the Files panel with one tracked,
+// modified, stashable file selected — exercises the row- and window-scoped
+// context actions (stage/stage-hunks/file-diff/mark-file are row; stash is
+// window).
+func filesMenuModel() Model {
 	m := footerModel()
 	m.loading = false
+	m.focus = panelFiles
+	m.status.Files = []model.FileStatus{{Path: "dir/f.txt", Kind: model.KindTracked, Staged: '.', Unstaged: 'M'}}
+	return m
+}
+
+func TestAvailableActionsExcludesGlobals(t *testing.T) {
+	m := filesMenuModel()
 	ids := map[string]bool{}
 	for _, r := range availableActions(m) {
 		ids[r.id] = true
 	}
-	if !ids["pull"] || !ids["repo"] {
-		t.Errorf("expected global actions present, got %v", ids)
-	}
-	if ids["actions"] {
-		t.Error("the menu must not list itself (actions)")
-	}
-	if ids["quit"] {
-		t.Error("quit must not be a menu row (q closes the menu)")
-	}
-	for _, nav := range []string{"tab", "ctrl+←/→"} {
-		if ids[nav] {
-			t.Errorf("navigation key %q must not appear as an action", nav)
+	for _, g := range []string{"pull", "repo", "commit", "view", "actions", "quit", "help"} {
+		if ids[g] {
+			t.Errorf("global action %q must not appear in the . menu", g)
 		}
+	}
+	if !ids["stage"] {
+		t.Error("expected the row-scoped stage action in the menu")
+	}
+}
+
+func TestAvailableActionsRowBeforeWindow(t *testing.T) {
+	m := filesMenuModel()
+	rows := availableActions(m)
+	stageAt, stashAt := -1, -1
+	for i, r := range rows {
+		switch r.id {
+		case "stage":
+			stageAt = i
+		case "stash":
+			stashAt = i
+		}
+	}
+	if stageAt < 0 || stashAt < 0 {
+		t.Fatalf("want both stage (row) and stash (window) rows, got %v", rows)
+	}
+	if stageAt > stashAt {
+		t.Errorf("row-scoped stage (%d) must precede window-scoped stash (%d)", stageAt, stashAt)
 	}
 }
 
@@ -141,7 +150,7 @@ func TestActionMenuRenders(t *testing.T) {
 	m.loading = false
 	u, _ := m.Update(keyMsg("."))
 	out := ansi.Strip(u.(Model).View())
-	if !strings.Contains(out, "Actions") || !strings.Contains(out, "[p]ull") {
+	if !strings.Contains(out, "Actions") || !strings.Contains(out, "[b]ranch") {
 		t.Fatalf("rendered menu missing header/rows:\n%s", out)
 	}
 }
