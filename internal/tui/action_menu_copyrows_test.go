@@ -134,6 +134,22 @@ func TestContextCopyRowsStashList(t *testing.T) {
 	}
 }
 
+// When a diff view AND a pushed history/blame are both live (open a diff, then
+// h/b), the stack surface is the top visible/key-receiving layer, so the menu
+// must describe it — not the diff underneath. Precedence must match dispatch.
+func TestContextCopyRowsStackBeatsDiffView(t *testing.T) {
+	m := footerModel()
+	m.diffView = &diffView{title: "old/a.go", rev: "aaaa1111"}
+	m = m.pushSurface(newBlameView(navContext{path: "new/b.go", rev: "bbbb2222"}))
+	rows := m.contextCopyRows()
+	if r, _ := findRow(rows, "copy-file-path"); r.copyText != "new/b.go" {
+		t.Errorf("path copyText = %q, want the top (blame) surface's path new/b.go", r.copyText)
+	}
+	if r, _ := findRow(rows, "copy-commit-id"); r.copyText != "bbbb2222" {
+		t.Errorf("commit copyText = %q, want the top (blame) surface's rev bbbb2222", r.copyText)
+	}
+}
+
 func TestAvailableActionsContentWindowCopyOnly(t *testing.T) {
 	// File tree open while focus is still panelCommits: the commit-files [l]
 	// binding is available, but the menu must list ONLY copy rows (replaying l

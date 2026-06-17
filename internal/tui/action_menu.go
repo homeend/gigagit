@@ -54,14 +54,14 @@ func availableActions(m Model) []actionRow {
 // only that window's copy actions. Transient stack editors (interactive-rebase
 // editor, hunk picker) are NOT content windows.
 func (m Model) inContentWindow() bool {
+	switch m.stackTop().(type) {
+	case *historyView, *blameView:
+		return true
+	}
 	if m.diffView != nil || m.filesView != nil {
 		return true
 	}
 	if m.stashView != nil && m.focus == panelCommits {
-		return true
-	}
-	switch m.stackTop().(type) {
-	case *historyView, *blameView:
 		return true
 	}
 	return false
@@ -72,14 +72,17 @@ func (m Model) inContentWindow() bool {
 // open). A navigable content window takes precedence over the panel selection,
 // mirroring the dispatch/render chain. Empty when nothing is copyable.
 func (m Model) contextCopyRows() []actionRow {
-	if v := m.diffView; v != nil {
-		return m.fileCopyRows(v.title, v.rev) // title = path; rev = commit ("" = working tree)
-	}
+	// Precedence mirrors the dispatch/render chain: the stack surface out-ranks
+	// the diff view (open a diff, then h/b, and both are live with the stack
+	// surface on top), which out-ranks the file tree.
 	switch s := m.stackTop().(type) {
 	case *historyView:
 		return m.fileCopyRows(s.ctx.path, s.ctx.rev)
 	case *blameView:
 		return m.fileCopyRows(s.ctx.path, s.ctx.rev)
+	}
+	if v := m.diffView; v != nil {
+		return m.fileCopyRows(v.title, v.rev) // title = path; rev = commit ("" = working tree)
 	}
 	if v := m.filesView; v != nil {
 		var rows []actionRow
