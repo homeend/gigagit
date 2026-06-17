@@ -26,6 +26,13 @@ type actionRow struct {
 // have their own hotkeys. Navigation (id == "") is skipped. The dynamic copy
 // rows (contextCopyRows) lead the row group.
 func availableActions(m Model) []actionRow {
+	// Inside a navigable content window the panel bindings don't apply (and the
+	// still-true commit-files [l] binding would, if listed, replay l and close
+	// the very window the menu was opened from). Offer only that window's copy
+	// actions.
+	if m.inContentWindow() {
+		return m.contextCopyRows()
+	}
 	var row, window []actionRow
 	for _, b := range contextBindings {
 		if b.id == "" || !b.when(m) {
@@ -42,10 +49,57 @@ func availableActions(m Model) []actionRow {
 	return append(out, window...)
 }
 
-// contextCopyRows returns the clipboard copy actions for the current focus and
-// selection, with the copied text captured now (the selection is frozen while
-// the menu is open). Empty when nothing under the cursor is copyable.
+// inContentWindow reports whether a navigable content window owns the keyboard
+// (file tree, stash list, diff, history, blame), so the . menu should offer
+// only that window's copy actions. Transient stack editors (interactive-rebase
+// editor, hunk picker) are NOT content windows.
+func (m Model) inContentWindow() bool {
+	if m.diffView != nil || m.filesView != nil {
+		return true
+	}
+	if m.stashView != nil && m.focus == panelCommits {
+		return true
+	}
+	switch m.stackTop().(type) {
+	case *historyView, *blameView:
+		return true
+	}
+	return false
+}
+
+// contextCopyRows returns the clipboard copy actions for whatever is in view,
+// with the copied text captured now (the selection is frozen while the menu is
+// open). A navigable content window takes precedence over the panel selection,
+// mirroring the dispatch/render chain. Empty when nothing is copyable.
 func (m Model) contextCopyRows() []actionRow {
+	if v := m.diffView; v != nil {
+		return m.fileCopyRows(v.title, v.rev) // title = path; rev = commit ("" = working tree)
+	}
+	switch s := m.stackTop().(type) {
+	case *historyView:
+		return m.fileCopyRows(s.ctx.path, s.ctx.rev)
+	case *blameView:
+		return m.fileCopyRows(s.ctx.path, s.ctx.rev)
+	}
+	if v := m.filesView; v != nil {
+		var rows []actionRow
+		if m.filesTreeFocused {
+			if vis := v.visible(); v.sel >= 0 && v.sel < len(vis) && vis[v.sel].path != "" {
+				rows = append(rows, m.fileCopyPathName(vis[v.sel].path)...)
+			}
+		}
+		if m.filesHash != "" { // a commit's files (a stash file tree has no commit id)
+			rows = append(rows, m.copyRow("copy-commit-id", "Copy commit id", "Copied commit id "+shortHash(m.filesHash), m.filesHash))
+		}
+		return rows
+	}
+	if v := m.stashView; v != nil && m.focus == panelCommits {
+		if v.sel >= 0 && v.sel < len(v.entries) {
+			ref := v.entries[v.sel].Ref
+			return []actionRow{m.copyRow("copy-stash-ref", "Copy stash ref", "Copied stash ref "+ref, ref)}
+		}
+		return nil
+	}
 	switch {
 	case m.focus == panelCommits:
 		if bi, ok := m.backingIndex(panelCommits); ok {
@@ -54,14 +108,28 @@ func (m Model) contextCopyRows() []actionRow {
 		}
 	case m.isFilesPanel(m.focus):
 		if bi, ok := m.backingIndex(m.focus); ok {
-			p := m.status.Files[bi].Path
-			return []actionRow{
-				m.copyRow("copy-file-path", "Copy file path", "Copied path: "+p, p),
-				m.copyRow("copy-file-name", "Copy file name", "Copied file name: "+path.Base(p), path.Base(p)),
-			}
+			return m.fileCopyPathName(m.status.Files[bi].Path)
 		}
 	}
 	return nil
+}
+
+// fileCopyRows returns the path + name copy rows for a file, plus a commit-id
+// row when rev is a real commit (rev == "" means the working tree).
+func (m Model) fileCopyRows(filePath, rev string) []actionRow {
+	rows := m.fileCopyPathName(filePath)
+	if rev != "" {
+		rows = append(rows, m.copyRow("copy-commit-id", "Copy commit id", "Copied commit id "+shortHash(rev), rev))
+	}
+	return rows
+}
+
+// fileCopyPathName returns the path + basename copy rows for a file.
+func (m Model) fileCopyPathName(p string) []actionRow {
+	return []actionRow{
+		m.copyRow("copy-file-path", "Copy file path", "Copied path: "+p, p),
+		m.copyRow("copy-file-name", "Copy file name", "Copied file name: "+path.Base(p), path.Base(p)),
+	}
 }
 
 // copyRow builds a menu-only copy action: its run handler fires the clipboard
