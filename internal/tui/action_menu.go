@@ -231,7 +231,9 @@ func (m Model) updateActionMenuKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	vis := a.visible()
 	for i, r := range vis {
-		if r.key == pressed {
+		// r.key == "" marks a menu-only copy row (no replayable key); never
+		// match it on an empty pressed string.
+		if r.key != "" && r.key == pressed {
 			return m.runVisibleRow(i)
 		}
 	}

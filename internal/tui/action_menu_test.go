@@ -186,6 +186,25 @@ func TestContextCopyRowsFiles(t *testing.T) {
 	}
 }
 
+func TestContextCopyRowsStaged(t *testing.T) {
+	// The Staged panel shares m.status.Files with the Files panel, so the same
+	// copy rows must resolve there.
+	m := footerModel()
+	m.loading = false
+	m.focus = panelStaged
+	m.status.Files = []model.FileStatus{{Path: "dir/g.txt", Kind: model.KindTracked, Staged: 'M', Unstaged: '.'}}
+	rows := m.contextCopyRows()
+	if len(rows) != 2 {
+		t.Fatalf("want path+name copy rows on the Staged panel, got %v", rows)
+	}
+	if rows[0].id != "copy-file-path" || rows[0].copyText != "dir/g.txt" {
+		t.Errorf("row[0] = {%q,%q}, want copy-file-path dir/g.txt", rows[0].id, rows[0].copyText)
+	}
+	if rows[1].id != "copy-file-name" || rows[1].copyText != "g.txt" {
+		t.Errorf("row[1] = {%q,%q}, want copy-file-name g.txt", rows[1].id, rows[1].copyText)
+	}
+}
+
 func TestContextCopyRowsEmpty(t *testing.T) {
 	m := footerModel() // default focus panelBranches: no copy rows defined there
 	m.loading = false
