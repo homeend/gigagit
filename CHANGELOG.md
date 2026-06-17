@@ -60,6 +60,8 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   `z` cycles display mode). New `[ui] footer_actions` and `[ui] menu_actions`
   config lists (action ids; unset/empty = show all) choose which actions appear
   in the footer bar versus only in the menu.
+- TUI `.` action menu: **Copy commit id** (Commits panel), **Copy file path** and **Copy file name** (Files/Staged panels) — written to the clipboard via OSC 52.
+- The `.` action menu now lists only **context actions** (the selected row's actions first, then panel/window actions); whole-app actions are no longer included (they remain in the footer with their own hotkeys). The `[ui] menu_actions` allowlist now selects/orders among context actions only.
 
 - TUI: **conflict hunk picker** — press `enter` on a both-modified file in the
   `x` conflict resolver to open a GitKraken-style region/line editor. Per

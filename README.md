@@ -67,7 +67,7 @@ panel and selected row right now; `?` opens the full searchable reference.
 | `/` | filter the focused panel (type, then `enter` to keep, `esc` to clear) |
 | `R` | switch repository (popup: type to filter, `enter` to switch, `ctrl+d` to forget) |
 | `,` | settings (set up agent skills) |
-| `.` | open the **action menu**: a popup listing every action available right now; press an action's key to run it, or `↑`/`↓` + `enter`; `/` filters, `z` cycles display mode, `esc` closes |
+| `.` | open the **action menu**: lists context actions for the current row and panel (row actions first, then panel/window actions; whole-app actions stay in the footer); press an action's key to run it, or `↑`/`↓` + `enter`; `/` filters, `z` cycles display mode, `esc` closes. Includes **Copy commit id** (Commits panel) and **Copy file path** / **Copy file name** (Files/Staged panels) — copied to the clipboard via OSC 52. |
 | `r` / `q` | reload / quit |
 | `?` | help: searchable list of all key bindings (`/` to search; `↑`/`↓` or `j`/`k`, `ctrl+↑`/`ctrl+↓`, `pgup`/`pgdn`, mouse wheel to scroll; `q` closes) |
 
