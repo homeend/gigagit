@@ -62,6 +62,7 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   in the footer bar versus only in the menu.
 - TUI `.` action menu: **Copy commit id** (Commits panel), **Copy file path** and **Copy file name** (Files/Staged panels) — written to the clipboard via OSC 52.
 - The `.` action menu now lists only **context actions** (the selected row's actions first, then panel/window actions); whole-app actions are no longer included (they remain in the footer with their own hotkeys). The `[ui] menu_actions` allowlist now selects/orders among context actions only.
+- The `.` action menu now opens **inside every navigable window** — the commit/stash file tree, the diff view, file history, and blame — not just the panel layout. In a window it offers that window's copy actions (Copy file path / file name, and Copy commit id where a commit is in view); the stash list adds **Copy stash ref**.
 
 - TUI: **conflict hunk picker** — press `enter` on a both-modified file in the
   `x` conflict resolver to open a GitKraken-style region/line editor. Per
