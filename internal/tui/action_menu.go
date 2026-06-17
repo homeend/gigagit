@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"path"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -8,11 +9,15 @@ import (
 )
 
 // actionRow is one runnable action in the . menu: its stable id, the key that
-// runs it, and the footer-style label.
+// runs it, and the footer-style label. Copy rows instead carry copyText (the
+// value placed on the clipboard, resolved at menu-build time) and a run handler
+// invoked directly rather than by replaying key.
 type actionRow struct {
-	id    string
-	key   string
-	label string
+	id       string
+	key      string
+	label    string
+	copyText string
+	run      func(Model) (tea.Model, tea.Cmd)
 }
 
 // availableActions returns the currently-available CONTEXT actions as menu
@@ -37,8 +42,40 @@ func availableActions(m Model) []actionRow {
 	return append(out, window...)
 }
 
-// contextCopyRows is fleshed out in Task 3; the empty stub keeps Task 2 green.
-func (m Model) contextCopyRows() []actionRow { return nil }
+// contextCopyRows returns the clipboard copy actions for the current focus and
+// selection, with the copied text captured now (the selection is frozen while
+// the menu is open). Empty when nothing under the cursor is copyable.
+func (m Model) contextCopyRows() []actionRow {
+	switch {
+	case m.focus == panelCommits:
+		if bi, ok := m.backingIndex(panelCommits); ok {
+			h := m.commits[bi].Hash
+			return []actionRow{m.copyRow("copy-commit-id", "Copy commit id", "Copied commit id "+shortHash(h), h)}
+		}
+	case m.isFilesPanel(m.focus):
+		if bi, ok := m.backingIndex(m.focus); ok {
+			p := m.status.Files[bi].Path
+			return []actionRow{
+				m.copyRow("copy-file-path", "Copy file path", "Copied path: "+p, p),
+				m.copyRow("copy-file-name", "Copy file name", "Copied file name: "+path.Base(p), path.Base(p)),
+			}
+		}
+	}
+	return nil
+}
+
+// copyRow builds a menu-only copy action: its run handler fires the clipboard
+// command carrying the pre-resolved success message and text.
+func (m Model) copyRow(id, label, okMsg, text string) actionRow {
+	return actionRow{
+		id:       id,
+		label:    label,
+		copyText: text,
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			return m, m.copyToClipboardCmd(okMsg, text)
+		},
+	}
+}
 
 // synthKey reproduces the keypress that runs an action's key, for replay
 // through Update. enter/space are the only non-rune keys any action id carries;
@@ -110,17 +147,21 @@ func (m Model) openActionMenu() Model {
 	return m
 }
 
-// runVisibleRow closes the menu and replays the row's key through Update, which
-// reaches the base-layout handler (the menu is now nil).
+// runVisibleRow closes the menu and either invokes the row's direct handler
+// (copy actions) or replays its key through Update (every other action, which
+// reaches the base-layout handler now that the menu is nil).
 func (m Model) runVisibleRow(sel int) (tea.Model, tea.Cmd) {
 	vis := m.actionMenu.visible()
 	if sel < 0 || sel >= len(vis) {
 		m.actionMenu = nil
 		return m, nil
 	}
-	key := vis[sel].key
+	r := vis[sel]
 	m.actionMenu = nil
-	return m.Update(synthKey(key))
+	if r.run != nil {
+		return r.run(m)
+	}
+	return m.Update(synthKey(r.key))
 }
 
 func (m Model) updateActionMenuKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {

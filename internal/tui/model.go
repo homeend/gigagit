@@ -845,6 +845,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m = m.pushSurface(newStagePicker(msg.path, doc))
 		return m, nil
+
+	case clipboardCopiedMsg:
+		if msg.err != nil {
+			m.statusMsg = "copy failed: " + msg.err.Error()
+		} else {
+			m.statusMsg = msg.ok
+		}
+		return m, nil
 	}
 	return m, nil
 }

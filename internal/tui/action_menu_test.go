@@ -154,3 +154,58 @@ func TestActionMenuRenders(t *testing.T) {
 		t.Fatalf("rendered menu missing header/rows:\n%s", out)
 	}
 }
+
+func TestContextCopyRowsCommits(t *testing.T) {
+	m := footerModel()
+	m.loading = false
+	m.focus = panelCommits
+	m.commits = []model.Commit{{Hash: "0123456789abcdef0123456789abcdef01234567", Subject: "x"}}
+	rows := m.contextCopyRows()
+	if len(rows) != 1 || rows[0].id != "copy-commit-id" {
+		t.Fatalf("want one copy-commit-id row, got %v", rows)
+	}
+	if rows[0].copyText != "0123456789abcdef0123456789abcdef01234567" {
+		t.Errorf("copyText = %q, want the full hash", rows[0].copyText)
+	}
+	if rows[0].run == nil {
+		t.Error("copy row must carry a run handler")
+	}
+}
+
+func TestContextCopyRowsFiles(t *testing.T) {
+	m := filesMenuModel() // Files panel, selected "dir/f.txt"
+	rows := m.contextCopyRows()
+	if len(rows) != 2 {
+		t.Fatalf("want path+name copy rows, got %v", rows)
+	}
+	if rows[0].id != "copy-file-path" || rows[0].copyText != "dir/f.txt" {
+		t.Errorf("row[0] = {%q,%q}, want copy-file-path dir/f.txt", rows[0].id, rows[0].copyText)
+	}
+	if rows[1].id != "copy-file-name" || rows[1].copyText != "f.txt" {
+		t.Errorf("row[1] = {%q,%q}, want copy-file-name f.txt", rows[1].id, rows[1].copyText)
+	}
+}
+
+func TestContextCopyRowsEmpty(t *testing.T) {
+	m := footerModel() // default focus panelBranches: no copy rows defined there
+	m.loading = false
+	if rows := m.contextCopyRows(); len(rows) != 0 {
+		t.Errorf("branches panel yields no copy rows, got %v", rows)
+	}
+}
+
+func TestRunVisibleRowInvokesHandler(t *testing.T) {
+	m := filesMenuModel()
+	m = m.openActionMenu()
+	// The first row is the copy-file-path handler row.
+	if m.actionMenu.rows[0].id != "copy-file-path" {
+		t.Fatalf("expected copy-file-path to lead the menu, got %q", m.actionMenu.rows[0].id)
+	}
+	res, cmd := m.runVisibleRow(0)
+	if res.(Model).actionMenu != nil {
+		t.Error("running a row must close the menu")
+	}
+	if cmd == nil {
+		t.Error("the copy handler must return a clipboard command")
+	}
+}
