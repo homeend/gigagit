@@ -82,50 +82,62 @@ whole feature set**, and most of the work is already done by existing code:
   - Comparing any two refs = resolve both → feed the **existing** `Differ`
     (which already takes two lazy `ByteSource`s). No new diff code.
 
-- `WriteWorktreeFile(ctx, path, data) error` — writes bytes into the working
-  tree as an unstaged change, under a **TreeWrite** reservation (so it cannot
-  race a concurrent checkout). Backed by a new `git.Repo.WriteWorktreeFile`
-  helper that joins `path` onto the worktree top-level and writes atomically
-  (temp + rename), creating parent dirs as needed. This is "copy a file anywhere
-  as unstaged".
+- `engine.WriteFile{Path string, Data []byte}` — a generic engine **Operation**
+  (TreeWrite default) that writes bytes into the working tree as an unstaged
+  change. When `Path` already exists and differs, it emits
+  `DecisionNeeded{Options: [Overwrite, Cancel]}` — resolved by the existing TUI
+  modal Decider / CLI policy Decider (`--force` → Overwrite) — so the
+  overwrite-confirm is a first-class fork, not a hand-rolled sentinel. Backed by
+  a new `WriteWorktreeFile` method on the `engine.GitOps` interface (alongside
+  `RestoreWorktree`/`CleanUntracked`), implemented on `*git.Repo`: joins `Path`
+  onto the worktree top-level, atomic temp+rename, creating parent dirs. This is
+  "copy a file anywhere as unstaged" and is **reused verbatim by Bookmarks
+  paste**. `engine` stays ignorant of `shelf`: the frontend resolves bytes
+  first, then runs the op.
 
-`tui`/`cli` never call `ResolveBytes`/`WriteWorktreeFile` against `git` directly
-— they go through `domain` (archtest-guarded).
+`tui`/`cli` never call `ResolveBytes` against `git` directly, and never import
+`internal/shelf` — they go through `domain` (archtest-guarded; `internal/shelf`
+is added to the tui/cli forbidden-imports list).
 
 ---
 
 ## 2. The store — `shelf.Store` interface (the fixed API)
 
-A new `internal/shelf` package. The **interface is the fixed API** the rest of
-the system depends on; the backing implementation is swappable (a future bbolt
-backend would satisfy the same interface without touching any consumer).
+A new `internal/shelf` package holds the **store** (interface + impl) only. The
+shared plain-data types live in `internal/model` (like `model.StashEntry` /
+`model.Commit`), so frontends render them through their existing `model` import
+and never import `shelf`:
+
+```go
+// internal/model
+type ShelfBucket struct {
+    Name   string
+    Hidden bool // gg-internal; excluded from normal listing
+}
+
+type ShelfEntry struct {
+    ID      string    // stable id, "<source>-<pathslug>-<shorthash>"
+    Bucket  string
+    Source  string    // human-readable origin: "unstaged" | "staged" | "<rev>"
+    Path    string    // origin repo-relative path
+    SHA     string    // content hash (also the blob filename)
+    Size    int64
+    Created time.Time
+}
+```
+
+The **interface is the fixed API** the rest of the system depends on; the
+backing implementation is swappable (a future bbolt backend satisfies the same
+interface without touching any consumer):
 
 ```go
 package shelf
 
-// Bucket is a named collection of entries. The "default" bucket is implicit.
-// Hidden buckets are gg-internal and excluded from normal listing.
-type Bucket struct {
-    Name   string
-    Hidden bool
-}
-
-// Entry is one shelved file: immutable bytes + provenance metadata.
-type Entry struct {
-    ID      string         // stable id, "<source>-<pathslug>-<shorthash>"
-    Bucket  string
-    Source  string         // human-readable origin: "unstaged" | "staged" | "<rev>"
-    Path    string         // origin repo-relative path
-    SHA     string         // content hash (also the blob filename)
-    Size    int64
-    Created time.Time
-}
-
 type Store interface {
-    Put(bucket string, ref model.FileRef, data []byte) (Entry, error)
+    Put(bucket string, ref model.FileRef, data []byte) (model.ShelfEntry, error)
     Get(entryID string) ([]byte, error)
-    List(bucket string, skip, limit int) ([]Entry, error) // paged; exhausted when len < limit
-    Buckets() ([]Bucket, error)                            // few; unpaged
+    List(bucket string, skip, limit int) ([]model.ShelfEntry, error) // paged; exhausted when len < limit
+    Buckets() ([]model.ShelfBucket, error)                           // few; unpaged
     Remove(entryID string) error
 }
 ```
@@ -186,21 +198,24 @@ Shelf operations are **domain commands**, siblings of `StashList`/`StashCommit`
 to route through a `Decider`:
 
 ```go
-func (s *Service) Shelf() ShelfService           // accessor, like Differ()/CommitFeed()
-
-func (s *Service) ShelfAdd(ctx, ref model.FileRef, bucket string) (shelf.Entry, error)
-func (s *Service) ShelfList(ctx, bucket string, skip, limit int) ([]shelf.Entry, error)
-func (s *Service) ShelfBuckets(ctx) ([]shelf.Bucket, error)
-func (s *Service) ShelfRestore(ctx, entryID, dest string, overwrite bool) error
+func (s *Service) ShelfAdd(ctx, ref model.FileRef, bucket string) (model.ShelfEntry, error)
+func (s *Service) ShelfList(ctx, bucket string, skip, limit int) ([]model.ShelfEntry, error)
+func (s *Service) ShelfBuckets(ctx) ([]model.ShelfBucket, error)
+func (s *Service) ShelfBlob(ctx, entryID string) ([]byte, error)
 func (s *Service) ShelfRemove(ctx, entryID string) error
 ```
 
 - `ShelfAdd` resolves the ref's bytes under a **Read** reservation, then
   `Store.Put`. (No git mutation.)
-- `ShelfRestore` reads the blob, then `WriteWorktreeFile(dest)` under a
-  **TreeWrite** reservation. If `dest` exists and differs and `!overwrite` →
-  returns a sentinel `ErrDestExists` the frontends turn into a confirm
-  (TUI modal) or a `--force` hint (CLI exit 2).
+- `ShelfList`/`ShelfBuckets`/`ShelfRemove` are thin store calls (no git, no
+  reservation — local state).
+- `ShelfBlob` returns an entry's stored bytes (a local file read; no
+  reservation). **Restore is not a domain command:** the frontend calls
+  `ShelfBlob` then runs `engine.WriteFile{Path: dest, Data: blob}` through the
+  normal op path (`startOp` / `Execute`), which owns the TreeWrite reservation
+  and routes the Overwrite/Cancel `DecisionNeeded` fork to the frontend's
+  Decider. This keeps `engine` ignorant of `shelf` and reuses the op for
+  Bookmarks paste.
 
 ---
 
@@ -234,10 +249,11 @@ exactly for context actions.
 ### Restore / remove / compare (in the Shelf tab)
 
 - **restore:** opens a path-input popup that starts **empty** (no default path —
-  the user types a destination every time). On confirm, `ShelfRestore(entry,
-  dest, false)`. If it returns `ErrDestExists`, raise an **Overwrite / Cancel**
-  confirm modal (the existing pre-op `decisionState` pattern); Overwrite re-calls
-  with `overwrite=true`. The entry is **kept** after restore.
+  the user types a destination every time). On confirm, fetch bytes with
+  `ShelfBlob(entry)` and `startOp(engine.WriteFile{Path: dest, Data: blob})`.
+  If `dest` exists and differs, the op's `DecisionNeeded` surfaces as the
+  standard **Overwrite / Cancel** modal Decider. The shelf entry is **kept**
+  after restore.
 - **remove:** `ShelfRemove(entry)`, with a confirm modal (destroys the frozen
   copy). A "clear bucket" variant removes all entries in the active bucket.
 - **compare:** `enter` on an entry diffs it (Old) against the current
@@ -283,8 +299,9 @@ bumps to **11**, and `gg init --update` regenerates the dogfood
   TUI status message / CLI exit 2 with the size and cap.
 - **Missing source** (ref resolves to nothing — e.g. path not in that commit):
   resolve returns an error; surfaced as a status message / CLI exit 1.
-- **Restore onto an existing differing file** without consent: `ErrDestExists`
-  → TUI Overwrite/Cancel modal / CLI exit 2 with `--force` hint.
+- **Restore onto an existing differing file:** `engine.WriteFile` emits an
+  Overwrite/Cancel `DecisionNeeded` → TUI modal / CLI policy (`--force` =
+  Overwrite; otherwise Cancel → exit 2 with a `--force` hint).
 - **No state dir** (no home): shelf is disabled with a clear message, mirroring
   `repos.toml`'s posture; the rest of gg is unaffected.
 - **Corrupt/partial index:** atomic temp+rename writes mean a crash leaves the
@@ -298,11 +315,13 @@ bumps to **11**, and `gg init --update` regenerates the dogfood
   reclaims an unreferenced blob but keeps a shared one; atomic-rewrite survives
   a simulated mid-write; hidden buckets excluded from `Buckets()`.
 - **`internal/git`**: `WriteWorktreeFile` writes under the worktree top-level,
-  creates parents, atomic; staged-show reads the index blob. `FakeRunner` argv
-  assertions where a git invocation is involved; real-git temp repo for the
-  worktree write.
+  creates parents, atomic (real-git temp repo).
+- **`internal/engine`**: `WriteFile` writes bytes; on an existing differing dest
+  it emits the Overwrite/Cancel `DecisionNeeded` and honors the Decider's choice
+  (a fake Decider picks each branch).
 - **`internal/domain`**: `ResolveBytes` dispatch per source (`FakeRunner` +
-  a fake store); `ShelfRestore` `ErrDestExists` path; reservation modes.
+  a fake store); `ShelfAdd` round-trips through the store; `ShelfBlob` returns
+  stored bytes.
 - **`internal/tui`**: Shelf tab renders a populated bucket; `.`-menu shows
   "Add to shelf" only where a file is focused; restore popup + Overwrite modal
   flow; help/footer coverage drift guard.
