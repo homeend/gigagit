@@ -73,6 +73,8 @@ func Run(workdir string, args []string, stdin io.Reader, stdout, stderr io.Write
 		return cmdRebase(svc, rest, stdin, stdout, stderr)
 	case "worktree":
 		return cmdWorktree(svc, rest, stdin, stdout, stderr, cwdFile)
+	case "remote":
+		return cmdRemote(svc, rest, stdout, stderr)
 	case "repo":
 		return cmdRepo(rest, stdout, stderr, cwdFile)
 	case "init":

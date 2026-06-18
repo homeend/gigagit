@@ -1,0 +1,24 @@
+name = "remote ls: list remote-tracking branches after a clone"
+
+[input]
+steps = []
+
+[input.origin]
+steps = [
+  { write = "f.txt", content = "v1\n" },
+  { commit = "c1" },
+  { branch = "foo" },
+  { switch = "foo" },
+  { write = "g.txt", content = "foo\n" },
+  { commit = "foo-c2" },
+  { switch = "main" },
+]
+
+[[run]]
+cmd             = ["remote", "ls"]
+exit            = 0
+stdout_contains = ["origin/foo", "origin/main"]
+
+[expect]
+branch = "main"
+clean  = true
