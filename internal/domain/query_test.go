@@ -60,6 +60,29 @@ func TestSnapshotFansOutAllReads(t *testing.T) {
 	}
 }
 
+func TestSnapshotIncludesRemoteBranches(t *testing.T) {
+	f := fakeReads()
+	f.SetResponse("git for-each-ref (remotes)", gitexec.Result{Stdout: "origin/main\x00abc123\x001700000000\n"})
+	snap, err := New(&git.Repo{Runner: f}).Snapshot(context.Background())
+	if err != nil {
+		t.Fatalf("snapshot: %v", err)
+	}
+	if len(snap.RemoteBranches) != 1 || snap.RemoteBranches[0].Name != "origin/main" || snap.RemoteBranches[0].Branch != "main" {
+		t.Fatalf("RemoteBranches = %+v", snap.RemoteBranches)
+	}
+}
+
+func TestSnapshotRemoteBranchesBestEffort(t *testing.T) {
+	f := fakeReads() // "git for-each-ref (remotes)" is unconfigured -> errors
+	snap, err := New(&git.Repo{Runner: f}).Snapshot(context.Background())
+	if err != nil {
+		t.Fatalf("RemoteBranches failure must not fail Snapshot: %v", err)
+	}
+	if len(snap.RemoteBranches) != 0 {
+		t.Fatalf("expected no RemoteBranches on error, got %+v", snap.RemoteBranches)
+	}
+}
+
 func TestSnapshotFatalReadErrors(t *testing.T) {
 	for _, name := range []string{"git status", "git for-each-ref", "git worktree list"} {
 		f := fakeReads()
