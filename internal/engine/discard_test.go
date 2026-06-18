@@ -104,7 +104,7 @@ func TestDiscardPartialFailureReturnsError(t *testing.T) {
 
 // discardFakeRepo exercises Discard's error handling without a real repo.
 type discardFakeRepo struct {
-	GitOps // nil embed: only the two discard verbs are implemented
+	GitOps        // nil embed: only the two discard verbs are implemented
 	restoreCalled bool
 	cleanErr      bool
 }

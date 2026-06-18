@@ -9,6 +9,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- TUI: **discard unstaged changes** on the Files panel. `d` discards the marked
+  files (or, with nothing marked, the cursor row) — reverting tracked edits
+  (keeping any staged hunks) and deleting new untracked files; `D` discards
+  **all** unstaged changes. Both prompt for confirmation first. Conflicted files
+  are excluded from `d`, and `D` refuses while the repo is conflicted.
 - TUI: pressing `s` on a branch that's already checked out in **another
   worktree** now opens a modal offering to **jump to that worktree** (re-root
   the UI and `cd` there on exit), instead of failing with git's "already checked
