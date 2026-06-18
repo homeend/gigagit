@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"strings"
 
 	"github.com/pelletier/go-toml/v2"
 )
@@ -88,9 +89,21 @@ func (s Step) kind() (string, error) {
 
 // Run is one gg CLI invocation and its required exit code.
 type Run struct {
-	Cmd  []string `toml:"cmd"`
-	Cwd  string   `toml:"cwd"` // sandbox-root-relative; default "local"
-	Exit *int     `toml:"exit"`
+	Cmd            []string `toml:"cmd"`
+	Cwd            string   `toml:"cwd"` // sandbox-root-relative; default "local"
+	Exit           *int     `toml:"exit"`
+	StdoutContains []string `toml:"stdout_contains"` // substrings the run's stdout must contain
+}
+
+// MissingStdout returns the StdoutContains substrings absent from out.
+func (r Run) MissingStdout(out string) []string {
+	var miss []string
+	for _, want := range r.StdoutContains {
+		if !strings.Contains(out, want) {
+			miss = append(miss, want)
+		}
+	}
+	return miss
 }
 
 // FileExpect is the normalized form of one file expectation.

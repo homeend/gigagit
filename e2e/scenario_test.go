@@ -168,3 +168,36 @@ subjects = ["literal", { matches = "^Merge" }]
 		t.Fatalf("subject matchers not normalized: %+v", ms)
 	}
 }
+
+func TestRunMissingStdout(t *testing.T) {
+	r := Run{StdoutContains: []string{"origin/foo", "origin/main"}}
+	if miss := r.MissingStdout("origin/foo\norigin/main\n"); len(miss) != 0 {
+		t.Fatalf("all present, got missing %v", miss)
+	}
+	miss := r.MissingStdout("origin/foo\n")
+	if len(miss) != 1 || miss[0] != "origin/main" {
+		t.Fatalf("missing = %v, want [origin/main]", miss)
+	}
+	if m := (Run{}).MissingStdout(""); m != nil {
+		t.Fatalf("no expectations -> nil, got %v", m)
+	}
+}
+
+func TestLoadScenarioParsesStdoutContains(t *testing.T) {
+	path := writeScenario(t, `name = "x"
+[input]
+steps = [{ write = "f.txt", content = "x\n" }, { commit = "c1" }]
+[[run]]
+cmd = ["remote", "ls"]
+exit = 0
+stdout_contains = ["origin/foo"]
+[expect]
+`)
+	sc, err := LoadScenario(path)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if len(sc.Runs) != 1 || len(sc.Runs[0].StdoutContains) != 1 || sc.Runs[0].StdoutContains[0] != "origin/foo" {
+		t.Fatalf("StdoutContains not parsed: %+v", sc.Runs)
+	}
+}

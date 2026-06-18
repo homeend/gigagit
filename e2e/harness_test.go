@@ -24,14 +24,19 @@ func TestScenarios(t *testing.T) {
 			}
 			t.Log(sc.Name) // shown with -v (and on failure): what this scenario verifies
 			sb := buildSandbox(t, sc)
-			var out bytes.Buffer
+			var stdout, stderr bytes.Buffer
 			for i, run := range sc.Runs {
-				out.Reset()
-				code := (CLIRunner{}).Run(sb.dir(run.Cwd), run.Cmd, &out, &out)
+				stdout.Reset()
+				stderr.Reset()
+				code := (CLIRunner{}).Run(sb.dir(run.Cwd), run.Cmd, &stdout, &stderr)
 				if code != *run.Exit {
 					// State past a failed run is unpredictable: stop here.
-					t.Fatalf("run[%d] gg %s: exit %d, want %d\ngg output:\n%s",
-						i, strings.Join(run.Cmd, " "), code, *run.Exit, out.String())
+					t.Fatalf("run[%d] gg %s: exit %d, want %d\nstdout:\n%s\nstderr:\n%s",
+						i, strings.Join(run.Cmd, " "), code, *run.Exit, stdout.String(), stderr.String())
+				}
+				if miss := run.MissingStdout(stdout.String()); len(miss) > 0 {
+					t.Fatalf("run[%d] gg %s: stdout missing %v\nstdout:\n%s",
+						i, strings.Join(run.Cmd, " "), miss, stdout.String())
 				}
 				t.Logf("run[%d] gg %s → exit %d ✓", i, strings.Join(run.Cmd, " "), code)
 			}
