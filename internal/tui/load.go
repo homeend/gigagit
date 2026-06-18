@@ -35,6 +35,7 @@ type dataLoadedMsg struct {
 	gen             int
 	status          model.WorkingTreeStatus
 	branches        []model.Branch
+	remoteBranches  []model.RemoteBranch
 	commits         []model.Commit
 	worktrees       []model.Worktree
 	currentWorktree string
@@ -77,6 +78,7 @@ func (m Model) loadCmd() tea.Cmd {
 			gen:              gen,
 			status:           snap.Status,
 			branches:         snap.Branches,
+			remoteBranches:   snap.RemoteBranches,
 			worktrees:        snap.Worktrees,
 			currentWorktree:  snap.CurrentWorktree,
 			gitCommonDir:     snap.GitCommonDir,
