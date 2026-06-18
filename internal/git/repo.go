@@ -36,6 +36,18 @@ func (r *Repo) Branches(ctx context.Context) ([]model.Branch, error) {
 	return ParseBranches([]byte(res.Stdout))
 }
 
+// RemoteBranches returns remote-tracking branches (refs/remotes), excluding the
+// per-remote HEAD symref.
+func (r *Repo) RemoteBranches(ctx context.Context) ([]model.RemoteBranch, error) {
+	const format = "%(refname:short)%00%(objectname:short)%00%(committerdate:unix)"
+	argv := gitcmd.New("for-each-ref").Arg("--format="+format, "refs/remotes").ToArgv()
+	res, err := r.Runner.Run(ctx, "git for-each-ref (remotes)", argv)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRemoteBranches([]byte(res.Stdout))
+}
+
 // Worktrees returns the repository's worktrees.
 func (r *Repo) Worktrees(ctx context.Context) ([]model.Worktree, error) {
 	argv := gitcmd.New("worktree").Arg("list", "--porcelain").ToArgv()

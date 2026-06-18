@@ -77,6 +77,15 @@ type Branch struct {
 	UnixTime int64 // committer time (unix seconds) of the branch tip; 0 if unknown
 }
 
+// RemoteBranch is one entry from `git for-each-ref refs/remotes`.
+type RemoteBranch struct {
+	Name     string // short ref, e.g. "origin/feature/x"
+	Remote   string // "origin"
+	Branch   string // "feature/x" (Name with the remote prefix removed)
+	Hash     string // short object name
+	UnixTime int64  // committer time (unix seconds); 0 if unknown
+}
+
 // Worktree is one entry from `git worktree list --porcelain`.
 type Worktree struct {
 	Path     string
