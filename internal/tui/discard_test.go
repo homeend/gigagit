@@ -118,6 +118,43 @@ func TestDiscardKeyOpensModal(t *testing.T) {
 	}
 }
 
+// canDiscardAll: refuses on conflicts and on a clean (no unstaged/untracked)
+// panel; true only with real changes and no conflict.
+func TestCanDiscardAllGating(t *testing.T) {
+	// Mixed edit + conflict: D would refuse, so canDiscardAll must be false.
+	m := discardModel([]model.FileStatus{
+		fileStatus("edit.go", model.KindTracked),
+		fileStatus("c.go", model.KindUnmerged),
+	})
+	if m.canDiscardAll() {
+		t.Fatal("canDiscardAll must be false while a conflict exists")
+	}
+	// Clean edit-only panel: true.
+	m.status = model.WorkingTreeStatus{Files: []model.FileStatus{fileStatus("edit.go", model.KindTracked)}}
+	if !m.canDiscardAll() {
+		t.Fatal("canDiscardAll must be true for an edit-only panel")
+	}
+	// Staged-only (no unstaged byte, no untracked): nothing to discard.
+	m.status = model.WorkingTreeStatus{Files: []model.FileStatus{
+		{Path: "staged.go", Kind: model.KindTracked, Staged: 'M', Unstaged: '.'},
+	}}
+	if m.canDiscardAll() {
+		t.Fatal("canDiscardAll must be false when there is nothing unstaged to discard")
+	}
+}
+
+// The footer must NOT advertise [D] when D would refuse (mixed conflict panel),
+// keeping the footer predicate in lockstep with the dispatch gate.
+func TestFooterHidesDiscardAllOnConflict(t *testing.T) {
+	m := discardModel([]model.FileStatus{
+		fileStatus("edit.go", model.KindTracked),
+		fileStatus("c.go", model.KindUnmerged),
+	})
+	if line := m.footerLine(); strings.Contains(line, "[D] discard all") {
+		t.Fatalf("footer must not show [D] while a conflict exists: %q", line)
+	}
+}
+
 // D opens the confirm modal for an all-discard.
 func TestDiscardAllOpensModal(t *testing.T) {
 	m := discardModel([]model.FileStatus{fileStatus("edit.go", model.KindTracked)})

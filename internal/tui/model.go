@@ -563,13 +563,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.focus != panelFiles || !m.opsIdle() {
 				return m, nil
 			}
-			if len(m.status.Conflicts()) > 0 {
-				m.statusMsg = "resolve conflicts before discarding all"
-				return m, nil
-			}
-			c := m.status.Counts()
-			if c.Unstaged == 0 && c.Untracked == 0 {
-				m.statusMsg = "nothing to discard"
+			if !m.canDiscardAll() {
+				// canDiscardAll false here means one of two refusable states;
+				// explain which so the no-op isn't silent.
+				if len(m.status.Conflicts()) > 0 {
+					m.statusMsg = "resolve conflicts before discarding all"
+				} else {
+					m.statusMsg = "nothing to discard"
+				}
 				return m, nil
 			}
 			m.modal = &decisionState{

@@ -180,3 +180,19 @@ func (m Model) canDiscard() bool {
 	}
 	return false
 }
+
+// canDiscardAll gates D on the Files panel: discard the entire working tree. It
+// refuses while any conflict exists (conflicts are the x editor's job) and
+// requires at least one unstaged or untracked change to throw away. Shared by
+// the D dispatch and the footer binding so the footer never advertises D in a
+// state where the handler would refuse (e.g. a panel mixing edits + conflicts).
+func (m Model) canDiscardAll() bool {
+	if m.focus != panelFiles || !m.opsIdle() {
+		return false
+	}
+	if len(m.status.Conflicts()) > 0 {
+		return false
+	}
+	c := m.status.Counts()
+	return c.Unstaged > 0 || c.Untracked > 0
+}
