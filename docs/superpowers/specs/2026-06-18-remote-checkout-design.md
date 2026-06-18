@@ -52,6 +52,15 @@ A branch *ahead* of the remote (local has commits the remote lacks) is therefore
 **not** fast-forwardable and is refused — fast-forwarding would discard those
 commits, which violates "reuse only if it can be fast-forwarded."
 
+### Edge: local-name collision across remotes
+
+`origin/foo` and `upstream/foo` both derive the local name `foo`. The FF-or-refuse
+rule keeps this **safe** either way (no clobber): checking out `upstream/foo`
+when local `foo` already tracks `origin/foo` fast-forwards `foo` to `upstream/foo`
+**only if** that is a fast-forward, else refuses — it does **not** re-point the
+upstream. Documented here so the behavior is expected, not discovered. (Smarter
+multi-remote disambiguation is out of scope for this chunk.)
+
 ### Edge: target local branch is checked out (current branch or another worktree)
 
 Git refuses to update a branch ref that is checked out in any worktree via the
@@ -88,9 +97,19 @@ func (r *Repo) CreateTrackingBranch(ctx context.Context, name, upstream string) 
 // FastForwardToRef fast-forwards a NON-checked-out local branch to a local ref
 // (e.g. a remote-tracking ref) without a checkout or network access. Fails if
 // the update is not a fast-forward, or if <branch> is checked out anywhere.
-//   git fetch --no-write-fetch-head . <source>:<branch>
+// Uses FULLY-QUALIFIED ref names to avoid DWIM ambiguity when multiple remotes
+// carry the same branch name:
+//   git fetch --no-write-fetch-head . refs/remotes/<remote>/<branch>:refs/heads/<branch>
+// The caller passes the source as the fully-qualified remote-tracking ref.
 func (r *Repo) FastForwardToRef(ctx context.Context, branch, source string) error
 ```
+
+**Verified empirically** (throwaway repo, 2026-06-18): the fully-qualified
+refspec fast-forwards a non-checked-out branch (exit 0), rejects a diverged
+branch (`! [rejected] (non-fast-forward)`, exit 1), and refuses a checked-out
+branch (`refusing to fetch into branch … checked out at …`, exit 128). The
+engine maps the FF source to `refs/remotes/<RemoteRef>` and the target to
+`refs/heads/<Local>`.
 
 `LocalBranchExists` and `IsAncestor` return the boolean from the command's exit
 code (exit 1 is *false*, not an error — mirror `CurrentBranch`'s exit-1
