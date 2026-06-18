@@ -2,6 +2,8 @@ package engine
 
 import (
 	"context"
+	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -74,6 +76,23 @@ func TestSmartCheckoutDivergedRefuses(t *testing.T) {
 		Run(context.Background(), OpDeps{Repo: repo, Decider: MapDecider{}})
 	if err == nil {
 		t.Fatal("diverged local foo must refuse")
+	}
+}
+
+func TestSmartCheckoutCheckedOutElsewhereRefuses(t *testing.T) {
+	dir, repo := newRepo(t)
+	gitIn(t, dir, "branch", "foo")
+	gitIn(t, dir, "worktree", "add", filepath.Join(dir, "..", "wt-foo"), "foo")
+	gitIn(t, dir, "update-ref", "refs/remotes/origin/foo", "HEAD")
+	_, err := SmartCheckout{RemoteRef: "origin/foo", Local: "foo", Intent: CheckoutStay}.
+		Run(context.Background(), OpDeps{Repo: repo, Decider: MapDecider{}})
+	if err == nil {
+		t.Fatal("checked-out-elsewhere must refuse")
+	}
+	// The message must name the worktree, proving the WorktreeForBranch guard
+	// fired (not FastForwardToRef's raw git error).
+	if !strings.Contains(err.Error(), "another worktree") {
+		t.Fatalf("error = %q, want the worktree-guard message", err)
 	}
 }
 
