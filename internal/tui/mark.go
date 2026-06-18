@@ -29,6 +29,17 @@ type pairOp struct {
 // labels spell out the direction so marked-vs-selected never carries
 // implicit meaning.
 func pairOpsFor(p panel) []pairOp {
+	if p == panelShelf {
+		return []pairOp{
+			{
+				label:   func(marked, selected string) string { return "Compare " + marked + " ↔ " + selected },
+				enabled: true,
+				open: func(m Model, marked, selected string) (Model, tea.Cmd) {
+					return m.openShelfCompareTwo(marked, selected)
+				},
+			},
+		}
+	}
 	if p != panelBranches {
 		return nil
 	}

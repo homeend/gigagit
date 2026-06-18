@@ -51,6 +51,7 @@ func helpContent() []contentLine {
 		h("Shelf panel"),
 		r("", "frozen, non-git per-file copies (the default bucket); add via the . menu anywhere a file is focused"),
 		r("enter", "diff the shelved copy against the current working-tree file"),
+		r("m", "mark an entry; mark a second to compare the two shelved copies side-by-side"),
 		r(".", "Restore to… (writes the copy to a path you type) / Remove from shelf"),
 		h("Files panel"),
 		r("space", "stage the selected working-tree file (git add)"),

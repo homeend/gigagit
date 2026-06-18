@@ -160,6 +160,56 @@ func shortShelf(e model.ShelfEntry) string {
 	return e.SHA
 }
 
+func (m Model) shelfEntryByID(id string) (model.ShelfEntry, bool) {
+	for _, e := range m.shelfEntries {
+		if e.ID == id {
+			return e, true
+		}
+	}
+	return model.ShelfEntry{}, false
+}
+
+// openShelfCompareTwo diffs two shelved entries (marked = old, selected = new),
+// reached via the m-mark pair-op picker. Both sides resolve from the store.
+func (m Model) openShelfCompareTwo(markedID, selectedID string) (Model, tea.Cmd) {
+	a, okA := m.shelfEntryByID(markedID)
+	b, okB := m.shelfEntryByID(selectedID)
+	if !okA || !okB {
+		return m, nil
+	}
+	title := a.Path
+	if a.Path != b.Path {
+		title = a.Path + " ↔ " + b.Path
+	}
+	width, _ := m.overlayDims()
+	ctx := "shelf #" + shortShelf(a) + " → shelf #" + shortShelf(b)
+	m.diffView = &diffView{title: title, context: ctx, rev: "", loading: true, partial: m.diffPartial, long: m.diffLong, width: width}
+	m.diffTag = "shelf2:" + markedID + ":" + selectedID
+	m.mark = nil // consume the mark
+	return m, m.loadShelfCompareTwoCmd(a, b, title, ctx)
+}
+
+func (m Model) loadShelfCompareTwoCmd(a, b model.ShelfEntry, title, ctx string) tea.Cmd {
+	svc := m.svc
+	differ := m.diffDiffer()
+	body := m.diffBodyRows()
+	tag := "shelf2:" + a.ID + ":" + b.ID
+	v := &diffView{title: title, context: ctx, rev: "", partial: m.diffPartial, long: m.diffLong}
+	v.width, _ = m.overlayDims()
+	aID, bID := a.ID, b.ID
+	return func() tea.Msg {
+		oldSrc := func(ctx context.Context) ([]byte, error) { return svc.ShelfBlob(ctx, aID) }
+		newSrc := func(ctx context.Context) ([]byte, error) { return svc.ShelfBlob(ctx, bID) }
+		out, err := differ.Diff(context.Background(), domain.Request{Key: "", Old: oldSrc, New: newSrc})
+		if err != nil {
+			v.err = err
+			return diffMsg{tag: tag, view: v}
+		}
+		applyDiff(v, out, body)
+		return diffMsg{tag: tag, view: v}
+	}
+}
+
 // loadShelfCompareCmd resolves both sides off the UI thread: the shelf blob
 // (old) and the working-tree file at the entry's origin path (new, nil when
 // absent), then feeds the existing Differ.

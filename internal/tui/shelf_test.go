@@ -109,6 +109,45 @@ func TestShelfCompareOpensDiff(t *testing.T) {
 	}
 }
 
+func TestShelfPairOpCompare(t *testing.T) {
+	if ops := pairOpsFor(panelShelf); len(ops) != 1 || !ops[0].enabled || ops[0].open == nil {
+		t.Fatalf("panelShelf should offer one enabled open-based Compare pair-op, got %+v", ops)
+	}
+}
+
+func TestShelfCompareTwoOpensDiff(t *testing.T) {
+	m := footerModel()
+	m.focus = panelShelf
+	m.shelfEntries = []model.ShelfEntry{
+		{ID: "a", Path: "a.go", SHA: "aaaa1111bbbb"},
+		{ID: "b", Path: "a.go", SHA: "cccc2222dddd"},
+	}
+	m, _ = m.openShelfCompareTwo("a", "b")
+	if m.diffView == nil || m.diffTag != "shelf2:a:b" {
+		t.Fatalf("two-entry compare should open a diff with tag shelf2:a:b, got tag=%q view=%v", m.diffTag, m.diffView)
+	}
+	if m.mark != nil {
+		t.Fatalf("the mark should be consumed after compare")
+	}
+}
+
+func TestShelfMarkThenCompareOpensPicker(t *testing.T) {
+	m := shelfTabModel()
+	m.shelfEntries = append(m.shelfEntries, model.ShelfEntry{ID: "b", Path: "b.go", SHA: "ffff"})
+	// Mark entry 0, move to entry 1, press m again → pair-op picker.
+	u, _ := m.Update(keyMsg("m"))
+	m = u.(Model)
+	if m.mark == nil {
+		t.Fatalf("first m should set a mark")
+	}
+	m.sel[panelShelf] = 1
+	u, _ = m.Update(keyMsg("m"))
+	m = u.(Model)
+	if m.pairPopup == nil {
+		t.Fatalf("second m on another entry should open the pair-op picker")
+	}
+}
+
 func TestShelfTabInCycle(t *testing.T) {
 	m := New(nil)
 	m.width, m.height = 80, 24
