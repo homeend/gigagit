@@ -235,6 +235,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.sel[panelShelf] = 0
 		}
 		return m, nil
+	case shelfAddedMsg:
+		if msg.err != nil {
+			m.statusMsg = "shelf add: " + msg.err.Error()
+		} else {
+			m.statusMsg = "shelved " + msg.entry.Path + " → " + msg.entry.ID
+		}
+		return m, nil
 	case dataLoadedMsg:
 		if msg.gen != m.loadGen {
 			return m, nil // superseded by a newer load
