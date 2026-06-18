@@ -116,6 +116,27 @@ func TestDiscardAllRefusesOnConflict(t *testing.T) {
 	}
 }
 
+// TestDiscardAllFromSubdirCleansRepoWide guards the cwd-anchoring fix: git
+// clean's default traversal is cwd-relative, so `discard --all` invoked from a
+// subdirectory must still delete untracked files at the repo root (the op
+// anchors clean to ":/").
+func TestDiscardAllFromSubdirCleansRepoWide(t *testing.T) {
+	dir := newRepoDir(t)
+	os.WriteFile(filepath.Join(dir, "rootjunk.txt"), []byte("r\n"), 0o644)
+	sub := filepath.Join(dir, "sub")
+	os.MkdirAll(sub, 0o755)
+	os.WriteFile(filepath.Join(sub, "subjunk.txt"), []byte("s\n"), 0o644)
+
+	// Run FROM the subdirectory (workdir = sub).
+	code, _, errb := runCLI(t, sub, "discard", "--all", "-y")
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0 (stderr: %s)", code, errb)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "rootjunk.txt")); !os.IsNotExist(err) {
+		t.Fatalf("root untracked file should be removed when discarding all from a subdir, stat err = %v", err)
+	}
+}
+
 func TestConfirmDiscard(t *testing.T) {
 	var out strings.Builder
 	if !confirmDiscard("? ", strings.NewReader("y\n"), &out) {

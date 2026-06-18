@@ -24,11 +24,13 @@ func (op Discard) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	deps.emit(ctx, Progress{Step: "discarding"})
 
 	restore, remove := op.Restore, op.Remove
-	cleanWholeTree := false
 	if op.All {
+		// ":/" anchors BOTH verbs to the repo root regardless of the runner's
+		// cwd. git clean's default traversal is cwd-relative, so without this an
+		// "all" discard launched from a subdirectory would revert tracked edits
+		// repo-wide but only delete untracked files under that subdirectory.
 		restore = []string{":/"}
-		remove = nil
-		cleanWholeTree = true
+		remove = []string{":/"}
 	}
 
 	// Run both steps even if the first errors, so we never leave a silent
@@ -39,7 +41,7 @@ func (op Discard) Run(ctx context.Context, deps OpDeps) (Result, error) {
 			errs = append(errs, fmt.Errorf("restore: %w", err))
 		}
 	}
-	if cleanWholeTree || len(remove) > 0 {
+	if len(remove) > 0 {
 		if err := deps.Repo.CleanUntracked(ctx, remove); err != nil {
 			errs = append(errs, fmt.Errorf("clean: %w", err))
 		}
