@@ -97,7 +97,7 @@ func TestHelpDocumentsTabSwitch(t *testing.T) {
 		b.WriteString(l.text)
 		b.WriteString("\n")
 	}
-	if !strings.Contains(b.String(), "switch the Branches/Worktrees tab") {
+	if !strings.Contains(b.String(), "cycle the Branches / Remotes / Worktrees tab") {
 		t.Error("help does not document the ctrl+arrow tab switch")
 	}
 }
