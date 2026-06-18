@@ -56,6 +56,8 @@ var contextBindings = []footerBinding{
 		return m.focus == panelFiles && m.opsIdle() && len(stashCandidates(m.status)) > 0
 	}, scopeWindow},
 	{"mark-file", "m", "[m] mark", func(m Model) bool { return m.isFilesPanel(m.focus) && m.panelLen(m.focus) > 0 }, scopeRow},
+	{"discard", "d", "[d]iscard", func(m Model) bool { return m.focus == panelFiles && m.canDiscard() }, scopeRow},
+	{"discard-all", "D", "[D] discard all", func(m Model) bool { return m.focus == panelFiles && m.canDiscard() }, scopeWindow},
 	{"commit-files", "l", "[l] files", func(m Model) bool {
 		// Stricter than the dispatch: the narrow case is a statusMsg no-op
 		// there, so don't advertise it.

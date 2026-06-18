@@ -54,6 +54,8 @@ func helpContent() []contentLine {
 		r("enter", "side-by-side diff of the unstaged change (index → working tree)"),
 		r("h", "file history: commits that touched it (left) + per-commit diff (right)"),
 		r("b", "blame: who last changed each line, grouped by commit"),
+		r("d", "discard the marked files (or the cursor row): revert edits, delete new files (confirm)"),
+		r("D", "discard ALL unstaged changes: revert every edit + delete every new file (confirm)"),
 		h("Staged panel"),
 		r("space", "unstage the selected file (git restore --staged)"),
 		r("enter", "side-by-side diff of the staged change (HEAD → index)"),

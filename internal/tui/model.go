@@ -3,6 +3,7 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -533,7 +534,59 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					b, _ := m.selectedBranch()
 					return m.startOp(engine.DeleteBranch{Name: b.Name})
 				}
+			case panelFiles:
+				if !m.canDiscard() {
+					return m, nil
+				}
+				restore, remove, n := m.discardTargets()
+				if n == 0 {
+					m.statusMsg = "nothing to discard (resolve conflicts first)"
+					return m, nil
+				}
+				m.modal = &decisionState{
+					req: engine.DecisionRequest{
+						ID:      "discard",
+						Prompt:  discardPrompt(restore, remove, n),
+						Options: []string{"Discard", "Cancel"},
+					},
+					onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {
+						if opt == "Discard" {
+							m.fileMarks = nil
+							return m.startOp(engine.Discard{Restore: restore, Remove: remove})
+						}
+						return m, nil
+					},
+				}
+				return m, nil
 			}
+		case "D":
+			if m.focus != panelFiles || !m.opsIdle() {
+				return m, nil
+			}
+			if len(m.status.Conflicts()) > 0 {
+				m.statusMsg = "resolve conflicts before discarding all"
+				return m, nil
+			}
+			c := m.status.Counts()
+			if c.Unstaged == 0 && c.Untracked == 0 {
+				m.statusMsg = "nothing to discard"
+				return m, nil
+			}
+			m.modal = &decisionState{
+				req: engine.DecisionRequest{
+					ID:      "discard-all",
+					Prompt:  "Discard ALL unstaged changes? This cannot be undone.",
+					Options: []string{"Discard", "Cancel"},
+				},
+				onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {
+					if opt == "Discard" {
+						m.fileMarks = nil
+						return m.startOp(engine.Discard{All: true})
+					}
+					return m, nil
+				},
+			}
+			return m, nil
 		case "enter":
 			if m.focus == panelWorktrees && m.canEnterWorktree() {
 				wt, _ := m.selectedWorktree()
@@ -878,6 +931,43 @@ func (m Model) handleStageKey() (tea.Model, tea.Cmd) {
 	m.running = true
 	m.statusMsg = "working…"
 	return m, m.stageCmd(engine.Stage{Paths: []string{f.Path}, Unstage: m.focus == panelStaged})
+}
+
+// discardTargets resolves what d should discard: the marked file set if any,
+// otherwise the cursor row. Conflicted (unmerged) files are dropped. Untracked
+// paths go to Remove (git clean); every other tracked path goes to Restore
+// (git restore --worktree). n is the total number of targeted paths.
+func (m Model) discardTargets() (restore, remove []string, n int) {
+	var files []model.FileStatus
+	if len(m.fileMarks) > 0 {
+		for _, f := range m.status.Files {
+			if m.fileMarks[f.Path] {
+				files = append(files, f)
+			}
+		}
+	} else if bi, ok := m.backingIndex(panelFiles); ok {
+		files = []model.FileStatus{m.status.Files[bi]}
+	}
+	for _, f := range files {
+		switch f.Kind {
+		case model.KindUnmerged:
+			continue
+		case model.KindUntracked:
+			remove = append(remove, f.Path)
+		default:
+			restore = append(restore, f.Path)
+		}
+	}
+	return restore, remove, len(restore) + len(remove)
+}
+
+// discardPrompt is the confirmation text for a targeted (d) discard.
+func discardPrompt(restore, remove []string, n int) string {
+	if n == 1 {
+		all := append(append([]string{}, restore...), remove...)
+		return "Discard changes to " + all[0] + "? This cannot be undone."
+	}
+	return fmt.Sprintf("Discard changes to %d files? This cannot be undone.", n)
 }
 
 // rememberLeftFocus records the focused panel as ←'s return target when it

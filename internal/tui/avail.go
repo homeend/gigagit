@@ -165,3 +165,18 @@ func (m Model) canShowFileDiff() bool {
 	f := m.status.Files[bi]
 	return m.opsIdle() && f.Kind != model.KindUnmerged && !(m.width > 0 && m.width < 60)
 }
+
+// canDiscard gates d/D on the Files panel: at least one discardable
+// (non-conflicted) working-tree row exists and no op is running. Conflicted
+// files are excluded (they are the x editor's job), matching canShowFileDiff.
+func (m Model) canDiscard() bool {
+	if m.focus != panelFiles || !m.opsIdle() {
+		return false
+	}
+	for _, f := range m.status.Files {
+		if f.Kind != model.KindUnmerged {
+			return true
+		}
+	}
+	return false
+}
