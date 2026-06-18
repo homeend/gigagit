@@ -84,12 +84,14 @@ type Model struct {
 
 	focus         panel
 	lastLeftPanel panel // ←'s return target; zero value = panelBranches
-	activeLeftTab panel // which of Branches/Worktrees shows in the shared left tab slot; zero value = panelBranches
-	sel           map[panel]int
-	sortModes     map[panel]sortMode // per-panel display order (zero value = default)
-	dispModes     map[panel]dispMode // per-panel text display mode (zero value = modeCutoff); z cycles
-	hscroll       map[panel]int      // per-panel horizontal scroll (modeScroll); shift+←/→
-	headTimes     map[string]int64   // worktree HEAD sha -> committer time (date sort)
+	activeLeftTab panel // which of Branches/Remotes/Worktrees shows in the shared left tab slot; zero value = panelBranches
+
+	remoteBranches []model.RemoteBranch // refs/remotes; shown by the Remotes tab
+	sel            map[panel]int
+	sortModes      map[panel]sortMode // per-panel display order (zero value = default)
+	dispModes      map[panel]dispMode // per-panel text display mode (zero value = modeCutoff); z cycles
+	hscroll        map[panel]int      // per-panel horizontal scroll (modeScroll); shift+←/→
+	headTimes      map[string]int64   // worktree HEAD sha -> committer time (date sort)
 
 	filterPanel  panel  // panel the filter is bound to (meaningful only when filterQuery != "" or filterTyping)
 	filterQuery  string // case-insensitive substring; "" = no filter
@@ -101,11 +103,16 @@ type panel int
 const (
 	panelBranches panel = iota
 	panelWorktrees
+	panelRemotes
 	panelFiles
 	panelStaged
 	panelCommits
 	panelCount
 )
+
+// leftTabs is the display order of the shared left-slot tabs; the ctrl+←/→
+// cycle walks this list. Enum value order is unrelated to display order.
+var leftTabs = []panel{panelBranches, panelRemotes, panelWorktrees}
 
 // New constructs the initial model for svc.
 func New(svc *domain.Service) Model {
@@ -224,6 +231,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status = msg.status
 			m.conflict = msg.conflict
 			m.branches = msg.branches
+			m.remoteBranches = msg.remoteBranches
 			m.commits = msg.commits
 			m.commitsExhausted = msg.commitsExhausted
 			if msg.commitErr != nil {
@@ -617,12 +625,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m = m.rememberLeftFocus()
 			m.focus = nextInOrder(m.focusOrder(), m.focus, -1)
 		case "ctrl+left", "ctrl+right":
-			// Two tabs, so either direction toggles. Switch and focus it.
-			if m.activeLeftTab == panelBranches {
-				m.activeLeftTab = panelWorktrees
-			} else {
-				m.activeLeftTab = panelBranches
+			// Walk the shared-slot tab order (Branches · Remotes · Worktrees),
+			// wrapping. Switch and focus the now-active tab.
+			cur := 0
+			for i, p := range leftTabs {
+				if p == m.activeLeftTab {
+					cur = i
+					break
+				}
 			}
+			if msg.String() == "ctrl+right" {
+				cur = (cur + 1) % len(leftTabs)
+			} else {
+				cur = (cur - 1 + len(leftTabs)) % len(leftTabs)
+			}
+			m.activeLeftTab = leftTabs[cur]
 			m.focus = m.activeLeftTab
 			m.lastLeftPanel = m.activeLeftTab
 			return m, nil

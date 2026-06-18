@@ -231,7 +231,7 @@ func TestFilterLabelRendering(t *testing.T) {
 	m = u.(Model)
 	m = typeRunes(t, m, "fi")
 	out := m.View()
-	if !strings.Contains(out, "[Branches] Worktrees ·date↓ /fi█") {
+	if !strings.Contains(out, "[Branches] R W ·date↓ /fi█") {
 		t.Fatalf("label missing tab-bar+sort+filter+cursor decoration:\n%s", out)
 	}
 }

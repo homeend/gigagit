@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/gigagit/gg/internal/gitexec"
+	"github.com/gigagit/gg/internal/model"
 	"github.com/gigagit/gg/internal/observ"
 )
 
@@ -83,6 +84,41 @@ func TestBranchesIncludeCommitterDate(t *testing.T) {
 	}
 	if bs[0].UnixTime == 0 {
 		t.Fatalf("expected nonzero UnixTime, got %+v", bs[0])
+	}
+}
+
+func TestRepoRemoteBranches(t *testing.T) {
+	dir, runner := newTestRepo(t)
+	// Fabricate remote-tracking refs plus the default-branch symref.
+	git := func(args ...string) {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	git("update-ref", "refs/remotes/origin/main", "HEAD")
+	git("update-ref", "refs/remotes/origin/feature/x", "HEAD")
+	git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
+
+	repo := &Repo{Runner: runner}
+	rbs, err := repo.RemoteBranches(context.Background())
+	if err != nil {
+		t.Fatalf("RemoteBranches: %v", err)
+	}
+	got := map[string]model.RemoteBranch{}
+	for _, rb := range rbs {
+		got[rb.Name] = rb
+	}
+	if _, ok := got["origin/HEAD"]; ok {
+		t.Fatalf("origin/HEAD symref should be filtered out: %+v", rbs)
+	}
+	main, ok := got["origin/main"]
+	if !ok || main.Remote != "origin" || main.Branch != "main" || main.UnixTime == 0 {
+		t.Fatalf("origin/main = %+v (ok=%v)", main, ok)
+	}
+	if feat, ok := got["origin/feature/x"]; !ok || feat.Branch != "feature/x" {
+		t.Fatalf("origin/feature/x = %+v (ok=%v)", feat, ok)
 	}
 }
 

@@ -166,12 +166,62 @@ func TestRenderShowsActiveTabBar(t *testing.T) {
 	m := New(nil)
 	m.width, m.height = 80, 24
 	out := m.renderInterface()
-	if !strings.Contains(out, "[Branches] Worktrees") {
+	if !strings.Contains(out, "[Branches] R W") {
 		t.Errorf("tab bar (Branches active) missing:\n%s", out)
+	}
+	m.activeLeftTab = panelRemotes
+	out = m.renderInterface()
+	if !strings.Contains(out, "B [Remotes] W") {
+		t.Errorf("tab bar (Remotes active) missing:\n%s", out)
+	}
+	// Populated Remotes tab: the ref list must appear in the panel body.
+	m.remoteBranches = []model.RemoteBranch{{Name: "origin/main", Remote: "origin", Branch: "main"}}
+	out = m.renderInterface()
+	if !strings.Contains(out, "origin/main") {
+		t.Errorf("Remotes tab body missing the ref:\n%s", out)
 	}
 	m.activeLeftTab = panelWorktrees
 	out = m.renderInterface()
-	if !strings.Contains(out, "Branches [Worktrees]") {
+	if !strings.Contains(out, "B R [Worktrees]") {
 		t.Errorf("tab bar (Worktrees active) missing:\n%s", out)
+	}
+}
+
+func TestRemoteRowsContent(t *testing.T) {
+	m := New(nil)
+	m.remoteBranches = []model.RemoteBranch{
+		{Name: "origin/main", Remote: "origin", Branch: "main"},
+		{Name: "origin/feature/x", Remote: "origin", Branch: "feature/x"},
+	}
+	rows := m.remoteRows()
+	if len(rows) != 2 || !strings.Contains(rows[0], "origin/main") || !strings.Contains(rows[1], "origin/feature/x") {
+		t.Fatalf("remoteRows = %#v", rows)
+	}
+}
+
+func TestTabBarLabelThreeWay(t *testing.T) {
+	if got := tabBarLabel(panelRemotes); !strings.Contains(got, "[Remotes]") {
+		t.Fatalf("active Remotes: %q", got)
+	}
+	if got := tabBarLabel(panelBranches); !strings.Contains(got, "[Branches]") || !strings.Contains(got, " R ") {
+		t.Fatalf("active Branches: %q", got)
+	}
+	if got := tabBarLabel(panelWorktrees); !strings.Contains(got, "[Worktrees]") {
+		t.Fatalf("active Worktrees: %q", got)
+	}
+}
+
+func TestBranchRowsBehindIndicator(t *testing.T) {
+	m := New(nil)
+	m.branches = []model.Branch{
+		{Name: "feature", Behind: 3},
+		{Name: "clean", Behind: 0},
+	}
+	rows := m.branchRows()
+	if !strings.Contains(rows[0], "(↓3)") {
+		t.Fatalf("behind row missing indicator: %q", rows[0])
+	}
+	if strings.Contains(rows[1], "↓") {
+		t.Fatalf("clean row should have no indicator: %q", rows[1])
 	}
 }

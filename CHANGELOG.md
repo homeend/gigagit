@@ -14,6 +14,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   through the same engine operation as the TUI's `d`/`D`. Requires `--yes` (or a
   y/N prompt on a terminal); `--all` refuses while the repo is conflicted, and a
   named path must appear in `gg status` (a conflicted path is rejected).
+- TUI: new **Remotes** tab — a third tab in the shared left-column slot
+  (`Branches · Remotes · Worktrees`) listing remote-tracking branches
+  (`refs/remotes`, with the per-remote `HEAD` symref filtered out). `ctrl+←/→`
+  now cycles all three tabs; the active tab is spelled out and bracketed in the
+  slot header while the inactive tabs show as single-letter markers (`B`/`R`/`W`)
+  so all three fit the narrow column. Read-only for now (checkout, commit
+  preview, and fetch/prune land in follow-ups). Local **Branches** rows now show
+  a `(↓N)` indicator when the branch is behind its upstream.
 - TUI: **discard unstaged changes** on the Files panel. `d` discards the marked
   files (or, with nothing marked, the cursor row) — reverting tracked edits
   (keeping any staged hunks) and deleting new untracked files; `D` discards

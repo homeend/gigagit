@@ -90,15 +90,44 @@ func TestCtrlArrowSwitchesAndFocusesTab(t *testing.T) {
 	}
 	u, _ := m.Update(keyMsg("ctrl+right"))
 	mm := u.(Model)
-	if mm.activeLeftTab != panelWorktrees {
-		t.Errorf("ctrl+right: active tab = %v, want Worktrees", mm.activeLeftTab)
+	if mm.activeLeftTab != panelRemotes {
+		t.Errorf("ctrl+right: active tab = %v, want Remotes", mm.activeLeftTab)
 	}
-	if mm.focus != panelWorktrees {
-		t.Errorf("ctrl+right: focus = %v, want Worktrees (focus follows the tab)", mm.focus)
+	if mm.focus != panelRemotes {
+		t.Errorf("ctrl+right: focus = %v, want Remotes (focus follows the tab)", mm.focus)
 	}
 	u2, _ := mm.Update(keyMsg("ctrl+left"))
 	if u2.(Model).activeLeftTab != panelBranches {
 		t.Error("ctrl+left should switch back to Branches")
+	}
+}
+
+func TestCtrlRightCyclesBranchesRemotesWorktrees(t *testing.T) {
+	m := New(nil)
+	m.width, m.height = 80, 24
+	m.focus = panelBranches
+
+	send := func(k string) {
+		u, _ := m.Update(keyMsg(k))
+		m = u.(Model)
+	}
+	// Forward: Branches -> Remotes -> Worktrees -> Branches (wrap).
+	send("ctrl+right")
+	if m.activeLeftTab != panelRemotes || m.focus != panelRemotes {
+		t.Fatalf("1x ctrl+right: tab=%v focus=%v, want Remotes", m.activeLeftTab, m.focus)
+	}
+	send("ctrl+right")
+	if m.activeLeftTab != panelWorktrees {
+		t.Fatalf("2x ctrl+right: tab=%v, want Worktrees", m.activeLeftTab)
+	}
+	send("ctrl+right")
+	if m.activeLeftTab != panelBranches {
+		t.Fatalf("3x ctrl+right: tab=%v, want Branches (wrap)", m.activeLeftTab)
+	}
+	// Backward one step: Branches -> Worktrees (wrap).
+	send("ctrl+left")
+	if m.activeLeftTab != panelWorktrees {
+		t.Fatalf("ctrl+left from Branches: tab=%v, want Worktrees", m.activeLeftTab)
 	}
 }
 

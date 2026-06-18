@@ -16,6 +16,7 @@ import (
 type Snapshot struct {
 	Status          model.WorkingTreeStatus
 	Branches        []model.Branch
+	RemoteBranches  []model.RemoteBranch
 	Worktrees       []model.Worktree
 	CurrentWorktree string // git toplevel; "" if TopLevel failed
 	GitCommonDir    string // "" if it failed
@@ -85,6 +86,15 @@ func (s *Service) loadSnapshot(ctx context.Context) (Snapshot, error) {
 		mu.Lock()
 		snap.Branches = bs
 		mu.Unlock()
+	})
+	run(func() {
+		// RemoteBranches is best-effort: a repo with no remotes (or a failing
+		// for-each-ref) must not block startup.
+		if rbs, err := s.repo.RemoteBranches(ctx); err == nil {
+			mu.Lock()
+			snap.RemoteBranches = rbs
+			mu.Unlock()
+		}
 	})
 	run(func() {
 		// Worktrees is fatal; CommitTimes (best-effort) depends on its result,
