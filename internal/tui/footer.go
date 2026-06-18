@@ -63,6 +63,7 @@ var contextBindings = []footerBinding{
 		// there, so don't advertise it.
 		return m.focus == panelCommits && m.canShowCommitFiles() && !(m.width > 0 && m.width < 40)
 	}, scopeRow},
+	{"shelf-compare", "enter", "[enter] diff", func(m Model) bool { return m.focus == panelShelf && m.canShelfCompare() }, scopeRow},
 }
 
 // globalBindings are the always-relevant tail, still individually predicated

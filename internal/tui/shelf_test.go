@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/gigagit/gg/internal/model"
 )
 
@@ -53,6 +55,57 @@ func TestAddToShelfRowAbsentWhenNoFileFocused(t *testing.T) {
 	}
 	if _, ok := findRow(availableActions(m), "shelf-add"); ok {
 		t.Fatalf("Add to shelf should not appear with no file focused")
+	}
+}
+
+func shelfTabModel() Model {
+	m := footerModel()
+	m.focus = panelShelf
+	m.activeLeftTab = panelShelf
+	m.shelfEntries = []model.ShelfEntry{{ID: "unstaged-a-go-deadbeef", Path: "a.go", Source: "unstaged", SHA: "deadbeefcafe0000"}}
+	m.sel[panelShelf] = 0
+	return m
+}
+
+func TestShelfTabMenuRows(t *testing.T) {
+	m := shelfTabModel()
+	rows := availableActions(m)
+	if _, ok := findRow(rows, "shelf-restore"); !ok {
+		t.Fatalf("Restore to… missing from Shelf-tab menu")
+	}
+	if _, ok := findRow(rows, "shelf-remove"); !ok {
+		t.Fatalf("Remove from shelf missing from Shelf-tab menu")
+	}
+}
+
+func TestShelfRestorePopupRequiresDest(t *testing.T) {
+	m := shelfTabModel()
+	m.shelfRestorePopup = &shelfRestorePopup{entryID: "unstaged-a-go-deadbeef", origin: "a.go"}
+	// Enter with an empty dest is a no-op (popup stays open).
+	u, _ := m.updateShelfRestoreKey(keyMsg("enter"))
+	m = u.(Model)
+	if m.shelfRestorePopup == nil {
+		t.Fatalf("empty dest should keep the popup open")
+	}
+	// Typing builds the destination.
+	for _, r := range "out.txt" {
+		u, _ = m.updateShelfRestoreKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = u.(Model)
+	}
+	if m.shelfRestorePopup.dest != "out.txt" {
+		t.Fatalf("dest = %q, want out.txt", m.shelfRestorePopup.dest)
+	}
+}
+
+func TestShelfCompareOpensDiff(t *testing.T) {
+	m := shelfTabModel()
+	u, _ := m.Update(keyMsg("enter"))
+	m = u.(Model)
+	if m.diffView == nil {
+		t.Fatalf("enter on a shelf entry should open a diff view")
+	}
+	if m.diffTag != "shelf:unstaged-a-go-deadbeef" {
+		t.Fatalf("diffTag = %q, want shelf:<id>", m.diffTag)
 	}
 }
 

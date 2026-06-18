@@ -180,6 +180,10 @@ func (m Model) render() string {
 		w, h := m.overlayDims()
 		return overlayCenter(bg, m.renderBranchPopup(), w, h)
 	}
+	if m.shelfRestorePopup != nil {
+		w, h := m.overlayDims()
+		return overlayCenter(bg, m.renderShelfRestorePopup(), w, h)
+	}
 	if m.contentPopup != nil {
 		w, h := m.overlayDims()
 		return overlayCenter(bg, m.renderContentPopup(), w, h)

@@ -42,8 +42,9 @@ type Model struct {
 	pendingSwitch       bool
 	switchTarget        string
 	branchPopup         *branchPopup
-	pendingSwitchBranch string        // branch to SmartSwitch to after a successful op (B = create-and-switch)
-	contentPopup        *contentPopup // generic read-only viewer (help window)
+	shelfRestorePopup   *shelfRestorePopup // Shelf tab: typed restore destination
+	pendingSwitchBranch string             // branch to SmartSwitch to after a successful op (B = create-and-switch)
+	contentPopup        *contentPopup      // generic read-only viewer (help window)
 
 	mark        *markState        // the m-key mark; nil = none (see mark.go)
 	fileMarks   map[string]bool   // multi-selected Status file paths (keyed by path)
@@ -354,6 +355,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.settings != nil {
 			return m.updateSettingsKey(msg)
 		}
+		if m.shelfRestorePopup != nil {
+			return m.updateShelfRestoreKey(msg)
+		}
 		if m.branchPopup != nil {
 			return m.updateBranchPopupKey(msg)
 		}
@@ -621,6 +625,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.focus == panelWorktrees && m.canEnterWorktree() {
 				wt, _ := m.selectedWorktree()
 				return m.reRoot(wt.Path)
+			}
+			if m.focus == panelShelf && m.canShelfCompare() {
+				return m.openShelfCompare()
 			}
 			if m.canShowFileDiff() {
 				bi, _ := m.backingIndex(m.focus)

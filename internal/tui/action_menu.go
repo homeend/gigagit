@@ -54,6 +54,7 @@ func availableActions(m Model) []actionRow {
 	if r, ok := m.shelfAddRow(); ok {
 		out = append(out, r)
 	}
+	out = append(out, m.shelfTabRows()...)
 	return out
 }
 
