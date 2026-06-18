@@ -165,6 +165,17 @@ func (l remoteBranchList) Name(i int) string { return l.items[i].Name }
 func (l remoteBranchList) Date(i int) int64  { return l.items[i].UnixTime }
 func (l remoteBranchList) Key(i int) string  { return l.items[i].Name }
 
+type shelfList struct {
+	items []model.ShelfEntry
+	rows  []string
+}
+
+func (l shelfList) Len() int          { return len(l.items) }
+func (l shelfList) Row(i int) string  { return l.rows[i] }
+func (l shelfList) Name(i int) string { return l.items[i].Path }
+func (l shelfList) Date(i int) int64  { return l.items[i].Created.Unix() }
+func (l shelfList) Key(i int) string  { return l.items[i].ID }
+
 type worktreeList struct {
 	items []model.Worktree
 	rows  []string
@@ -251,6 +262,8 @@ func (m Model) listFor(p panel) panelList {
 		return branchList{items: m.branches, rows: m.branchRows()}
 	case panelRemotes:
 		return remoteBranchList{items: m.remoteBranches, rows: m.remoteRows()}
+	case panelShelf:
+		return shelfList{items: m.shelfEntries, rows: m.shelfRows()}
 	case panelWorktrees:
 		return worktreeList{items: m.worktrees, rows: m.worktreeRows(), times: m.headTimes}
 	case panelFiles, panelStaged:

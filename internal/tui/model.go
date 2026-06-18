@@ -42,8 +42,9 @@ type Model struct {
 	pendingSwitch       bool
 	switchTarget        string
 	branchPopup         *branchPopup
-	pendingSwitchBranch string        // branch to SmartSwitch to after a successful op (B = create-and-switch)
-	contentPopup        *contentPopup // generic read-only viewer (help window)
+	shelfRestorePopup   *shelfRestorePopup // Shelf tab: typed restore destination
+	pendingSwitchBranch string             // branch to SmartSwitch to after a successful op (B = create-and-switch)
+	contentPopup        *contentPopup      // generic read-only viewer (help window)
 
 	mark        *markState        // the m-key mark; nil = none (see mark.go)
 	fileMarks   map[string]bool   // multi-selected Status file paths (keyed by path)
@@ -87,6 +88,7 @@ type Model struct {
 	activeLeftTab panel // which of Branches/Remotes/Worktrees shows in the shared left tab slot; zero value = panelBranches
 
 	remoteBranches []model.RemoteBranch // refs/remotes; shown by the Remotes tab
+	shelfEntries   []model.ShelfEntry   // default bucket; shown by the Shelf tab
 	sel            map[panel]int
 	sortModes      map[panel]sortMode // per-panel display order (zero value = default)
 	dispModes      map[panel]dispMode // per-panel text display mode (zero value = modeCutoff); z cycles
@@ -107,12 +109,13 @@ const (
 	panelFiles
 	panelStaged
 	panelCommits
+	panelShelf
 	panelCount
 )
 
 // leftTabs is the display order of the shared left-slot tabs; the ctrl+←/→
 // cycle walks this list. Enum value order is unrelated to display order.
-var leftTabs = []panel{panelBranches, panelRemotes, panelWorktrees}
+var leftTabs = []panel{panelBranches, panelRemotes, panelWorktrees, panelShelf}
 
 // New constructs the initial model for svc.
 func New(svc *domain.Service) Model {
@@ -219,6 +222,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			b.lines = msg.lines
 			b.blocks = groupBlame(msg.lines)
 			b.sel = 0
+		}
+		return m, nil
+	case shelfLoadedMsg:
+		// A disabled shelf (no state dir) reports its reason but is not fatal.
+		if msg.err != nil {
+			m.statusMsg = "shelf: " + msg.err.Error()
+			m.shelfEntries = nil
+		} else {
+			m.shelfEntries = msg.entries
+		}
+		if m.sel[panelShelf] >= len(m.shelfEntries) {
+			m.sel[panelShelf] = 0
+		}
+		return m, nil
+	case shelfAddedMsg:
+		if msg.err != nil {
+			m.statusMsg = "shelf add: " + msg.err.Error()
+		} else {
+			m.statusMsg = "shelved " + msg.entry.Path + " → " + msg.entry.ID
 		}
 		return m, nil
 	case dataLoadedMsg:
@@ -332,6 +354,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.settings != nil {
 			return m.updateSettingsKey(msg)
+		}
+		if m.shelfRestorePopup != nil {
+			return m.updateShelfRestoreKey(msg)
 		}
 		if m.branchPopup != nil {
 			return m.updateBranchPopupKey(msg)
@@ -609,6 +634,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				wt, _ := m.selectedWorktree()
 				return m.reRoot(wt.Path)
 			}
+			if m.focus == panelShelf && m.canShelfCompare() {
+				return m.openShelfCompare()
+			}
 			if m.canShowFileDiff() {
 				bi, _ := m.backingIndex(m.focus)
 				f := m.status.Files[bi]
@@ -650,6 +678,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.activeLeftTab = leftTabs[cur]
 			m.focus = m.activeLeftTab
 			m.lastLeftPanel = m.activeLeftTab
+			if m.activeLeftTab == panelShelf {
+				// Lazy-load the shelf the first time (and each time) it is shown.
+				return m, m.loadShelfCmd()
+			}
 			return m, nil
 		case "right":
 			if m.focus != panelCommits {

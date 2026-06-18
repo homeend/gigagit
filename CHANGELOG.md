@@ -9,6 +9,26 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Shelf** — a non-git, per-file content store of frozen, content-addressed
+  copies that survive even permanent deletion of the source (unlike `git
+  stash`). Entries persist per-repo under the machine-local state dir, organized
+  into named buckets (the `default` bucket is implicit). Backed by the new
+  `internal/shelf` store (a fixed `Store` interface over a content-addressed
+  file store) and a shared `model.FileRef` ("a file located somewhere") that
+  domain resolves to bytes — so comparing any two file versions and writing a
+  copy anywhere as unstaged fall out of the existing diff engine plus the new
+  `engine.WriteFile` op.
+  - TUI: a fourth left-column tab **Shelf** (`B·R·W·S`, `ctrl+←/→` cycles it)
+    lists the default bucket. **Add to shelf** is a `.`-menu action available
+    wherever a file is focused (Files → unstaged, Staged → index, a commit's
+    file tree / file history → that commit). On the tab, `enter` diffs a shelved
+    copy against the current working-tree file; the `.` menu offers **Restore
+    to…** (writes the copy to a path you type — a destination is mandatory, with
+    an Overwrite/Cancel confirm) and **Remove from shelf**.
+  - CLI: `gg shelf add [--staged|--rev <commit>] [--bucket <name>] <path>...`,
+    `gg shelf list [--bucket]`, `gg shelf rm <entry>`, and
+    `gg shelf restore [--force] <entry> <dest>` (`<dest>` required; `--force`
+    overwrites an existing differing file, else it refuses).
 - CLI: `gg discard [--yes] (--all | <path>...)` discards unstaged changes —
   reverting tracked edits (staged hunks kept) and deleting untracked files —
   through the same engine operation as the TUI's `d`/`D`. Requires `--yes` (or a

@@ -55,6 +55,15 @@ guards against removing the worktree you are standing in.
   Destructive, so `--yes` is required (or a y/N prompt on a TTY). `--all`
   discards everything unstaged and refuses while the repo is conflicted; named
   paths must appear in `gg status` and a conflicted path is rejected.
+- `gg shelf add [--staged|--rev <commit>] [--bucket <name>] <path>...` /
+  `gg shelf list [--bucket <name>]` / `gg shelf rm <entry>` /
+  `gg shelf restore [--force] <entry> <dest>` — the **shelf**: a non-git,
+  per-file content store of frozen copies that survive even permanent deletion
+  of the source. `add` freezes the unstaged (default), `--staged`, or `--rev`
+  version of each path and prints its entry id. `restore` writes a stored copy
+  to a **required** `<dest>` as an unstaged change (`--force` to overwrite an
+  existing differing file, else it refuses). Entries persist per-repo under the
+  machine-local state dir; the default bucket is implicit.
 - `gg undo` — undo the last commit, keeping its changes (ref-only soft reset).
 - `gg worktree list` / `gg worktree add [<start-point>]` /
   `gg worktree add --branch <name>` /

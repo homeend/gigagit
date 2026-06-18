@@ -1,6 +1,8 @@
 // Package model holds shared git data types used across the engine and frontends.
 package model
 
+import "time"
+
 // FileKind classifies a changed path.
 type FileKind int
 
@@ -109,4 +111,40 @@ type CommitFile struct {
 	Status  string // single letter: A M D R C T (score stripped from R/C)
 	Path    string // new path
 	OldPath string // set only for renames/copies
+}
+
+// FileSource identifies where a FileRef's bytes come from.
+type FileSource int
+
+const (
+	SourceUnstaged FileSource = iota // working-tree file
+	SourceStaged                     // index version
+	SourceCommit                     // file at a commit/branch (Locator = rev)
+	SourceShelf                      // a shelf entry (Locator = entry id)
+)
+
+// FileRef names a file located somewhere resolvable to bytes. It is the shared
+// address behind "compare anything" and "copy a file anywhere as unstaged".
+type FileRef struct {
+	Source  FileSource
+	Locator string // commit rev for SourceCommit; entry id for SourceShelf; "" otherwise
+	Path    string // repo-relative path (origin path for a shelf entry)
+}
+
+// ShelfBucket is a named collection of shelf entries. The "default" bucket is
+// implicit; Hidden buckets are gg-internal and excluded from normal listing.
+type ShelfBucket struct {
+	Name   string
+	Hidden bool
+}
+
+// ShelfEntry is one shelved file: immutable content plus provenance metadata.
+type ShelfEntry struct {
+	ID      string // "<source>-<pathslug>-<shorthash>"
+	Bucket  string
+	Source  string // human-readable origin: "unstaged" | "staged" | "<rev>"
+	Path    string // origin repo-relative path
+	SHA     string // content hash; also the blob filename
+	Size    int64
+	Created time.Time
 }

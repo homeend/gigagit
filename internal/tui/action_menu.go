@@ -31,7 +31,11 @@ func availableActions(m Model) []actionRow {
 	// the very window the menu was opened from). Offer only that window's copy
 	// actions.
 	if m.inContentWindow() {
-		return m.contextCopyRows()
+		rows := m.contextCopyRows()
+		if r, ok := m.shelfAddRow(); ok {
+			rows = append(rows, r)
+		}
+		return rows
 	}
 	var row, window []actionRow
 	for _, b := range contextBindings {
@@ -46,7 +50,12 @@ func availableActions(m Model) []actionRow {
 		}
 	}
 	out := append(m.contextCopyRows(), row...)
-	return append(out, window...)
+	out = append(out, window...)
+	if r, ok := m.shelfAddRow(); ok {
+		out = append(out, r)
+	}
+	out = append(out, m.shelfTabRows()...)
+	return out
 }
 
 // inContentWindow reports whether a navigable content window owns the keyboard

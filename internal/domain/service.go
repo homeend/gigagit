@@ -18,6 +18,7 @@ import (
 	"github.com/gigagit/gg/internal/gitexec"
 	"github.com/gigagit/gg/internal/observ"
 	"github.com/gigagit/gg/internal/repogate"
+	"github.com/gigagit/gg/internal/shelf"
 )
 
 // Service couples one repository with its process-wide gate and a singleflight
@@ -31,6 +32,7 @@ type Service struct {
 	flight  flightGroup    // coalesces concurrent calls sharing a key
 	factory cache.Factory  // vends the diff (and future) caches
 	differ  Differ         // memoized production diff engine
+	shelf   shelf.Store    // lazily resolved; nil disables the shelf
 }
 
 // Open builds a Service rooted at workdir with the standard runner — the

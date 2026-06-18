@@ -20,12 +20,17 @@ func (r *Repo) ReadWorktreeFile(ctx context.Context, path string) ([]byte, error
 
 // WriteWorktreeFile writes content to path (repo-root-relative) in the working
 // tree, truncating an existing file (its mode is preserved by the OS since the
-// file already exists). Used by ResolveConflictHunks to write the assembled
-// resolution before staging.
+// file already exists). Missing parent directories are created, so it can also
+// drop a shelf restore at a brand-new path. Used by ResolveConflictHunks to
+// write the assembled resolution before staging, and by WriteFile.
 func (r *Repo) WriteWorktreeFile(ctx context.Context, path string, content []byte) error {
 	top, err := r.TopLevel(ctx)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(top, filepath.FromSlash(path)), content, 0o644)
+	full := filepath.Join(top, filepath.FromSlash(path))
+	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(full, content, 0o644)
 }

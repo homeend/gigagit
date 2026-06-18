@@ -1,0 +1,31 @@
+name = "shelf add/restore: a shelved file survives losing the working-tree copy"
+
+[input]
+steps = [
+  { write = "README.md", content = "hi\n" },
+  { commit = "initial" },
+  { write = "README.md", content = "v2\n" },   # unstaged edit to shelve
+]
+
+# Shelve the unstaged version. The entry id is deterministic:
+# "<source>-<pathslug>-<sha8>" = unstaged-readme-md-<sha256("v2\n")[:8]>.
+[[run]]
+cmd  = ["shelf", "add", "README.md"]
+exit = 0
+
+# Throw the "v2" edit away entirely — the working tree no longer has it.
+[[run]]
+cmd  = ["discard", "--all", "-y"]
+exit = 0
+
+# Restore the frozen copy from the shelf to a fresh path.
+[[run]]
+cmd  = ["shelf", "restore", "unstaged-readme-md-81db67b6", "restored.txt"]
+exit = 0
+
+[expect]
+branch = "main"
+
+[expect.files]
+"README.md"    = "hi\n"   # the edit was discarded from the working tree
+"restored.txt" = "v2\n"   # yet the shelf still held it
