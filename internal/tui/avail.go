@@ -47,6 +47,23 @@ func (m Model) selectedWorktree() (model.Worktree, bool) {
 	return m.worktrees[bi], true
 }
 
+// selectedRemote resolves the Remotes panel selection through the view
+// transforms. ok is false when the visible list is empty.
+func (m Model) selectedRemote() (model.RemoteBranch, bool) {
+	bi, ok := m.backingIndex(panelRemotes)
+	if !ok {
+		return model.RemoteBranch{}, false
+	}
+	return m.remoteBranches[bi], true
+}
+
+// canCheckoutRemote gates c/s on the Remotes tab: a remote row is selected and
+// no op is running.
+func (m Model) canCheckoutRemote() bool {
+	_, ok := m.selectedRemote()
+	return m.opsIdle() && ok
+}
+
 // worktreeForBranch returns a loaded worktree other than the current one that
 // has branch checked out, if any — the case where SmartSwitch would fail
 // because git refuses to check a branch out in two worktrees at once.

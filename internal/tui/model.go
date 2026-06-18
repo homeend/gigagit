@@ -426,6 +426,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m.startOp(engine.Push{Remote: "origin", Branch: m.status.Branch, SetUpstream: true})
 			}
 		case "c":
+			if m.focus == panelRemotes && m.canCheckoutRemote() {
+				rb, _ := m.selectedRemote()
+				return m.startOp(engine.SmartCheckout{RemoteRef: rb.Name, Local: rb.Branch, Intent: engine.CheckoutStay})
+			}
 			if m.canCommit() {
 				m.commitPopup = &commitPopup{}
 			}
@@ -443,6 +447,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.loadStageHunksCmd(m.status.Files[bi].Path)
 			}
 		case "s":
+			if m.focus == panelRemotes && m.canCheckoutRemote() {
+				rb, _ := m.selectedRemote()
+				return m.startOp(engine.SmartCheckout{RemoteRef: rb.Name, Local: rb.Branch, Intent: engine.CheckoutSwitch})
+			}
 			if m.focus == panelFiles && m.opsIdle() {
 				if mm, ok := m.openStashPopup(); ok {
 					return mm, nil

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/gigagit/gg/internal/domain"
+	"github.com/gigagit/gg/internal/model"
 )
 
 func loadedModel(t *testing.T) Model {
@@ -145,5 +146,44 @@ func TestLeftDoesNotFocusHiddenTab(t *testing.T) {
 	}
 	if got != panelWorktrees && got != panelFiles {
 		t.Fatalf("← focus = %v, want the active Worktrees tab or Status", got)
+	}
+}
+
+func TestCheckoutRemoteRoutesCAndS(t *testing.T) {
+	m := loadedModel(t)
+	m.remoteBranches = []model.RemoteBranch{{Name: "origin/foo", Remote: "origin", Branch: "foo"}}
+	m.focus = panelRemotes
+	m.sel[panelRemotes] = 0
+
+	// c on the Remotes tab starts an op (running=true) and does NOT open the commit popup.
+	u, _ := m.Update(keyMsg("c"))
+	mc := u.(Model)
+	if mc.commitPopup != nil {
+		t.Fatal("c on Remotes must not open the commit popup")
+	}
+	if !mc.running {
+		t.Fatal("c on Remotes should start SmartCheckout (running)")
+	}
+
+	// s on the Remotes tab starts an op too.
+	m2 := loadedModel(t)
+	m2.remoteBranches = []model.RemoteBranch{{Name: "origin/foo", Remote: "origin", Branch: "foo"}}
+	m2.focus = panelRemotes
+	m2.sel[panelRemotes] = 0
+	u2, _ := m2.Update(keyMsg("s"))
+	if !u2.(Model).running {
+		t.Fatal("s on Remotes should start SmartCheckout (running)")
+	}
+}
+
+func TestCanCheckoutRemoteGating(t *testing.T) {
+	m := loadedModel(t)
+	if m.canCheckoutRemote() {
+		t.Fatal("no remote selected -> false")
+	}
+	m.remoteBranches = []model.RemoteBranch{{Name: "origin/foo", Remote: "origin", Branch: "foo"}}
+	m.sel[panelRemotes] = 0
+	if !m.canCheckoutRemote() {
+		t.Fatal("a remote selected + idle -> true")
 	}
 }
