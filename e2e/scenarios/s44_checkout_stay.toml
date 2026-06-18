@@ -1,0 +1,28 @@
+name = "checkout: create a local tracking branch and stay"
+
+[input]
+steps = []
+
+[input.origin]
+steps = [
+  { write = "f.txt", content = "v1\n" },
+  { commit = "c1" },
+  { branch = "foo" },
+  { switch = "foo" },
+  { write = "g.txt", content = "foo\n" },
+  { commit = "foo-c2" },
+  { switch = "main" },
+]
+
+[[run]]
+cmd  = ["checkout", "origin/foo"]
+exit = 0
+
+[expect]
+branch   = "main"
+clean    = true
+branches = ["foo", "main"]
+
+[[expect.log]]
+branch   = "foo"
+subjects = ["foo-c2", "c1"]

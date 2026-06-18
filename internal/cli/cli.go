@@ -55,6 +55,8 @@ func Run(workdir string, args []string, stdin io.Reader, stdout, stderr io.Write
 		return cmdPush(svc, rest, stdout, stderr)
 	case "switch":
 		return cmdSwitch(svc, rest, stdout, stderr)
+	case "checkout":
+		return cmdCheckout(svc, rest, stdout, stderr)
 	case "branch":
 		return cmdBranch(svc, rest, stdin, stdout, stderr)
 	case "stash":

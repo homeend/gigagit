@@ -202,3 +202,62 @@ func TestStashByPathCLI(t *testing.T) {
 		t.Errorf("b.txt should still be dirty: %q", b)
 	}
 }
+
+// cloneWithRemoteFoo builds origin (main + a foo branch ahead) and clones it,
+// returning the clone dir with refs/remotes/origin/foo present, no local foo.
+func cloneWithRemoteFoo(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	origin := filepath.Join(root, "origin.git")
+	seed := filepath.Join(root, "seed")
+	clone := filepath.Join(root, "clone")
+	gitIn(t, root, "init", "--bare", origin)
+	gitIn(t, root, "clone", origin, seed)
+	os.WriteFile(filepath.Join(seed, "f.txt"), []byte("v1\n"), 0o644)
+	gitIn(t, seed, "checkout", "-b", "main")
+	gitIn(t, seed, "add", ".")
+	gitIn(t, seed, "commit", "-m", "c1")
+	gitIn(t, seed, "push", "-u", "origin", "main")
+	gitIn(t, seed, "checkout", "-b", "foo")
+	os.WriteFile(filepath.Join(seed, "g.txt"), []byte("foo\n"), 0o644)
+	gitIn(t, seed, "add", ".")
+	gitIn(t, seed, "commit", "-m", "foo-c2")
+	gitIn(t, seed, "push", "-u", "origin", "foo")
+	gitIn(t, root, "clone", origin, clone)
+	gitIn(t, clone, "checkout", "main")
+	return clone
+}
+
+func TestCheckoutStayCreatesLocalTrackingBranch(t *testing.T) {
+	clone := cloneWithRemoteFoo(t)
+	code, _, errb := runCLI(t, clone, "checkout", "origin/foo")
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0 (stderr: %s)", code, errb)
+	}
+	if cur := strings.TrimSpace(runGit(t, clone, "symbolic-ref", "--short", "HEAD")); cur != "main" {
+		t.Fatalf("HEAD = %q, want main (stay)", cur)
+	}
+	// rev-parse --verify fails the test (via gitIn) if local foo was not created.
+	gitIn(t, clone, "rev-parse", "--verify", "refs/heads/foo")
+}
+
+func TestCheckoutSwitchChecksOutTheBranch(t *testing.T) {
+	clone := cloneWithRemoteFoo(t)
+	code, _, errb := runCLI(t, clone, "checkout", "origin/foo", "-s")
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0 (stderr: %s)", code, errb)
+	}
+	if cur := strings.TrimSpace(runGit(t, clone, "symbolic-ref", "--short", "HEAD")); cur != "foo" {
+		t.Fatalf("HEAD = %q, want foo (switch)", cur)
+	}
+}
+
+func TestCheckoutRequiresRemoteQualifiedRef(t *testing.T) {
+	dir := newRepoDir(t)
+	if code, _, _ := runCLI(t, dir, "checkout"); code == 0 {
+		t.Fatal("checkout without a ref should fail")
+	}
+	if code, _, _ := runCLI(t, dir, "checkout", "foo"); code == 0 {
+		t.Fatal("checkout with a non-qualified ref should fail")
+	}
+}

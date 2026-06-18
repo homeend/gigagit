@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/gigagit/gg/internal/domain"
 	"github.com/gigagit/gg/internal/engine"
@@ -63,6 +64,45 @@ func cmdSwitch(svc *domain.Service, args []string, stdout, stderr io.Writer) int
 	}
 	res, err := runOperation(context.Background(), svc,
 		engine.SmartSwitch{Branch: args[0]}, cliDecider{}, stderr)
+	return finish(res, err, stdout, stderr)
+}
+
+func cmdCheckout(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
+	// Order-independent parse: one optional -s/--switch flag plus the remote ref,
+	// so `checkout origin/foo -s` and `checkout -s origin/foo` both work.
+	doSwitch := false
+	ref := ""
+	for _, a := range args {
+		switch a {
+		case "-s", "--switch":
+			doSwitch = true
+		default:
+			if strings.HasPrefix(a, "-") {
+				fmt.Fprintf(stderr, "checkout: unknown flag %q\n", a)
+				return 2
+			}
+			if ref != "" {
+				fmt.Fprintln(stderr, "checkout: too many arguments (expected one <remote>/<branch>)")
+				return 2
+			}
+			ref = a
+		}
+	}
+	if ref == "" {
+		fmt.Fprintln(stderr, "checkout: a remote branch (e.g. origin/foo) is required")
+		return 2
+	}
+	remote, local, ok := strings.Cut(ref, "/")
+	if !ok || remote == "" || local == "" {
+		fmt.Fprintln(stderr, "checkout: expected <remote>/<branch>, e.g. origin/foo")
+		return 2
+	}
+	intent := engine.CheckoutStay
+	if doSwitch {
+		intent = engine.CheckoutSwitch
+	}
+	res, err := runOperation(context.Background(), svc,
+		engine.SmartCheckout{RemoteRef: ref, Local: local, Intent: intent}, cliDecider{}, stderr)
 	return finish(res, err, stdout, stderr)
 }
 
