@@ -9,6 +9,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- CLI: `gg checkout <remote>/<branch> [-s]` checks out a remote-tracking branch
+  as a local tracking branch — fast-forward-safe via the same `SmartCheckout`
+  engine op as the TUI's Remotes-tab `c`/`s` (reuses an existing local branch
+  only if it fast-forwards; refuses a diverged one); `-s` switches to it. `gg
+  remote ls` lists remote-tracking branches. The e2e harness gained a
+  `stdout_contains` assertion on `[[run]]` steps to cover command output.
 - **Shelf** — a non-git, per-file content store of frozen, content-addressed
   copies that survive even permanent deletion of the source (unlike `git
   stash`). Entries persist per-repo under the machine-local state dir, organized

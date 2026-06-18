@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v11 -->
+<!-- gg:using-gg:v12 -->
 
 # Using gg (gigagit)
 
@@ -25,6 +25,11 @@ guards against removing the worktree you are standing in.
 - `gg push` — push the current branch (sets upstream when missing).
 - `gg switch <branch>` — switch branches, auto-stashing and restoring local
   changes; on a restore conflict the stash is preserved, never dropped.
+- `gg checkout <remote>/<branch> [-s|--switch]` — check out a remote-tracking
+  branch as a local tracking branch (fast-forward-safe: reuses an existing local
+  branch only if it fast-forwards to the remote ref, and refuses a diverged
+  one). `-s` also switches to it.
+- `gg remote ls` — list remote-tracking branches, one `remote/branch` per line.
 - `gg branch create <name> [<start-point>]` — create a branch (no switch);
   start point defaults to HEAD.
 - `gg branch delete [--force] <name>` — delete a branch; refuses the
