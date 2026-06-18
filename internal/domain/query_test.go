@@ -313,3 +313,15 @@ func TestBlameCachesCommittedRevNotWorkingTree(t *testing.T) {
 		t.Fatalf("working-tree blame should run git every call, ran %d", n)
 	}
 }
+
+func TestRemoteBranchesQuery(t *testing.T) {
+	f := fakeReads()
+	f.SetResponse("git for-each-ref (remotes)", gitexec.Result{Stdout: "origin/main\x00abc123\x001700000000\norigin/foo\x00def456\x001700000100\n"})
+	rbs, err := New(&git.Repo{Runner: f}).RemoteBranches(context.Background())
+	if err != nil {
+		t.Fatalf("RemoteBranches: %v", err)
+	}
+	if len(rbs) != 2 || rbs[1].Name != "origin/foo" || rbs[1].Branch != "foo" {
+		t.Fatalf("rbs = %+v", rbs)
+	}
+}

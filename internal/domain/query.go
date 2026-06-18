@@ -164,6 +164,11 @@ func (s *Service) Worktrees(ctx context.Context) ([]model.Worktree, error) {
 	return query(ctx, s, "worktrees", s.repo.Worktrees)
 }
 
+// RemoteBranches lists remote-tracking branches (refs/remotes).
+func (s *Service) RemoteBranches(ctx context.Context) ([]model.RemoteBranch, error) {
+	return query(ctx, s, "remote-branches", s.repo.RemoteBranches)
+}
+
 // ShowFile returns the raw blob of path at rev (git show rev:path), under a
 // Read reservation, coalesced per (rev, path).
 func (s *Service) ShowFile(ctx context.Context, rev, path string) ([]byte, error) {
