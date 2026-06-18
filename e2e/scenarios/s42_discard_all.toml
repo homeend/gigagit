@@ -1,0 +1,20 @@
+name = "discard --all: reverts a tracked edit and removes an untracked file"
+
+[input]
+steps = [
+  { write = "README.md", content = "hi\n" },
+  { commit = "initial" },
+  { write = "README.md", content = "hi\nwip\n" },
+  { write = "scratch.txt", content = "junk\n" },
+]
+
+[[run]]
+cmd  = ["discard", "--all", "-y"]
+exit = 0
+
+[expect]
+branch = "main"
+clean  = true
+
+[expect.files]
+"README.md" = "hi\n"          # the unstaged edit was reverted

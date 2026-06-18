@@ -50,6 +50,11 @@ guards against removing the worktree you are standing in.
 - `gg stash apply [<ref>]` / `gg stash pop [<ref>]` / `gg stash drop [<ref>]` —
   apply (keep), pop (apply + drop), or drop a stash; `<ref>` defaults to the
   newest. A conflicting apply/pop exits non-zero and keeps the stash.
+- `gg discard [--yes|-y] (--all | <path>...)` — throw away unstaged changes:
+  tracked edits are reverted (staged hunks kept), untracked files deleted.
+  Destructive, so `--yes` is required (or a y/N prompt on a TTY). `--all`
+  discards everything unstaged and refuses while the repo is conflicted; named
+  paths must appear in `gg status` and a conflicted path is rejected.
 - `gg undo` — undo the last commit, keeping its changes (ref-only soft reset).
 - `gg worktree list` / `gg worktree add [<start-point>]` /
   `gg worktree add --branch <name>` /

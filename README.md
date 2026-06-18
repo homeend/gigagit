@@ -93,6 +93,7 @@ gg rebase [--branch <b>] [--on-conflict=keep|abort] <newbase>
 gg rebase -i --plan <file> <newbase>   # interactive rebase from a plan (pick/reword/squash/drop)
 gg stash [-m msg] [-u] [-- <paths>...]
 gg stash list | apply [<ref>] | pop [<ref>] | drop [<ref>]
+gg discard --yes (--all | <path>...)   # discard unstaged: revert edits, delete new files (--all refuses on conflict)
 gg undo
 gg worktree list
 gg worktree add [<start-point>]

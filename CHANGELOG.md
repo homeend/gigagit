@@ -9,6 +9,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- CLI: `gg discard [--yes] (--all | <path>...)` discards unstaged changes —
+  reverting tracked edits (staged hunks kept) and deleting untracked files —
+  through the same engine operation as the TUI's `d`/`D`. Requires `--yes` (or a
+  y/N prompt on a terminal); `--all` refuses while the repo is conflicted, and a
+  named path must appear in `gg status` (a conflicted path is rejected).
 - TUI: **discard unstaged changes** on the Files panel. `d` discards the marked
   files (or, with nothing marked, the cursor row) — reverting tracked edits
   (keeping any staged hunks) and deleting new untracked files; `D` discards
