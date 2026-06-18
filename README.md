@@ -60,7 +60,7 @@ panel and selected row right now; `?` opens the full searchable reference.
 | `tab` | move focus between panels |
 | `shift+tab` | move focus backwards |
 | `←`/`→` | focus the left column / the Commits panel (inside the files view: switch between the file tree and the commit list) |
-| `ctrl+←/→` | cycle the shared **Branches / Remotes / Worktrees** left-column tab (and focus it) — the active tab is spelled out and bracketed in the slot header; the others show as single-letter markers (`B`/`R`/`W`). The **Remotes** tab lists remote-tracking branches (`refs/remotes`), read-only for now |
+| `ctrl+←/→` | cycle the shared **Branches / Remotes / Worktrees** left-column tab (and focus it) — the active tab is spelled out and bracketed in the slot header; the others show as single-letter markers (`B`/`R`/`W`). The **Remotes** tab lists remote-tracking branches (`refs/remotes`); on it, `c` checks out the selected remote branch as a local tracking branch (stay) and `s` checks out and switches to it — both fast-forward-safe (a diverged local branch is refused) |
 | mouse | click focuses the window under the cursor and selects the clicked row; the wheel scrolls the hovered list (`[ui] wheel_step` rows per tick) |
 | `j`/`k` or `↑`/`↓` | move selection |
 | `pgup`/`pgdn` | move selection by 25% of the panel viewport |

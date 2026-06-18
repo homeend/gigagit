@@ -19,9 +19,15 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   (`refs/remotes`, with the per-remote `HEAD` symref filtered out). `ctrl+←/→`
   now cycles all three tabs; the active tab is spelled out and bracketed in the
   slot header while the inactive tabs show as single-letter markers (`B`/`R`/`W`)
-  so all three fit the narrow column. Read-only for now (checkout, commit
-  preview, and fetch/prune land in follow-ups). Local **Branches** rows now show
-  a `(↓N)` indicator when the branch is behind its upstream.
+  so all three fit the narrow column. Local **Branches** rows now show a `(↓N)`
+  indicator when the branch is behind its upstream. (Commit preview and
+  fetch/prune land in follow-ups.)
+- TUI: **checkout from the Remotes tab** — `c` materializes the selected
+  remote-tracking branch as a local tracking branch (staying on the current
+  branch); `s` does the same and switches to it. Both are fast-forward-safe: an
+  existing local branch is reused only when it fast-forwards to the remote ref,
+  and a diverged branch is refused (never clobbered). `s` autostashes like a
+  normal switch.
 - TUI: **discard unstaged changes** on the Files panel. `d` discards the marked
   files (or, with nothing marked, the cursor row) — reverting tracked edits
   (keeping any staged hunks) and deleting new untracked files; `D` discards
