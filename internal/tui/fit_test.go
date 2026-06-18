@@ -174,6 +174,12 @@ func TestRenderShowsActiveTabBar(t *testing.T) {
 	if !strings.Contains(out, "B [Remotes] W") {
 		t.Errorf("tab bar (Remotes active) missing:\n%s", out)
 	}
+	// Populated Remotes tab: the ref list must appear in the panel body.
+	m.remoteBranches = []model.RemoteBranch{{Name: "origin/main", Remote: "origin", Branch: "main"}}
+	out = m.renderInterface()
+	if !strings.Contains(out, "origin/main") {
+		t.Errorf("Remotes tab body missing the ref:\n%s", out)
+	}
 	m.activeLeftTab = panelWorktrees
 	out = m.renderInterface()
 	if !strings.Contains(out, "B R [Worktrees]") {
