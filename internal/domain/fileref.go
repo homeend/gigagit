@@ -20,8 +20,7 @@ func (s *Service) ResolveBytes(ctx context.Context, ref model.FileRef) ([]byte, 
 	case model.SourceCommit:
 		return s.ShowFile(ctx, ref.Locator, ref.Path)
 	case model.SourceShelf:
-		// Wired in the shelf-commands task; ShelfBlob lands with the store.
-		return nil, fmt.Errorf("resolve: shelf source not yet wired")
+		return s.ShelfBlob(ctx, ref.Locator)
 	default:
 		return nil, fmt.Errorf("resolve: unknown source %d", ref.Source)
 	}
