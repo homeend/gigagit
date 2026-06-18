@@ -58,6 +58,7 @@ feature is a worktree-aware **SmartPull** decision tree.
 | `textdiff`   | Pure line-alignment engine (Myers + guards) behind the side-by-side diff view; no git/TUI imports. An `Enhanced` option adds word-level intraline spans on changed rows. |
 | `cache`      | Generic injected in-memory LRU cache factory (`Factory.Cache(name) Cache`, `GetOrLoad`/`Load[V]`); two-bound eviction (entry count + byte budget via `Sized`). Keys are caller-chosen hashes. First consumer: the commit-diff cache. |
 | `clipboard`  | Pure OSC 52 clipboard-sequence builder + single-write `Copy`; no TUI/git deps. Used by the TUI `.` menu copy actions. |
+| `shelf`      | Non-git, per-file content store ("the shelf") behind a fixed `Store` interface (default impl: content-addressed blob files + atomic-rewrite TOML index under the XDG state dir, keyed by git common dir); named buckets with an implicit `default` + hidden support; paged `List`. Owned by `domain`; frontends never import it (archtest-guarded). The shared `model.FileRef` (Unstaged/Staged/Commit/Shelf) + `domain.ResolveBytes` + the generic `engine.WriteFile` op give "compare anything" / "copy anywhere as unstaged". |
 | `shellinit`  | `gg shell-init [bash|zsh|fish]` wrappers (cd-on-switch via `--cwd-file`). |
 | `observ`     | Observability: span ring buffer, tracing, redaction, panic dump. |
 | `buildinfo`  | Version/commit injected via `-ldflags` at build. |

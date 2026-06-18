@@ -60,7 +60,8 @@ panel and selected row right now; `?` opens the full searchable reference.
 | `tab` | move focus between panels |
 | `shift+tab` | move focus backwards |
 | `←`/`→` | focus the left column / the Commits panel (inside the files view: switch between the file tree and the commit list) |
-| `ctrl+←/→` | cycle the shared **Branches / Remotes / Worktrees** left-column tab (and focus it) — the active tab is spelled out and bracketed in the slot header; the others show as single-letter markers (`B`/`R`/`W`). The **Remotes** tab lists remote-tracking branches (`refs/remotes`), read-only for now |
+| `ctrl+←/→` | cycle the shared **Branches / Remotes / Worktrees / Shelf** left-column tab (and focus it) — the active tab is spelled out and bracketed in the slot header; the others show as single-letter markers (`B`/`R`/`W`/`S`). The **Remotes** tab lists remote-tracking branches (`refs/remotes`), read-only for now. The **Shelf** tab lists the default bucket of shelved files: `enter` diffs a shelved copy against the working-tree file; the `.` menu offers Restore to… / Remove |
+| `.` (on a file) | **Add to shelf** — wherever a file is focused (Files, Staged, a commit's file tree, file history), the `.` menu can freeze a copy onto the **shelf**: a non-git, per-file store of frozen copies that survive even permanent deletion of the source. Restore them later to any path as an unstaged change |
 | mouse | click focuses the window under the cursor and selects the clicked row; the wheel scrolls the hovered list (`[ui] wheel_step` rows per tick) |
 | `j`/`k` or `↑`/`↓` | move selection |
 | `pgup`/`pgdn` | move selection by 25% of the panel viewport |
@@ -94,6 +95,9 @@ gg rebase -i --plan <file> <newbase>   # interactive rebase from a plan (pick/re
 gg stash [-m msg] [-u] [-- <paths>...]
 gg stash list | apply [<ref>] | pop [<ref>] | drop [<ref>]
 gg discard --yes (--all | <path>...)   # discard unstaged: revert edits, delete new files (--all refuses on conflict)
+gg shelf add [--staged|--rev <commit>] [--bucket <name>] <path>...  # freeze a non-git copy (survives deletion)
+gg shelf list [--bucket <name>] | rm <entry>
+gg shelf restore [--force] <entry> <dest>   # write a shelved copy to <dest> as unstaged (dest required)
 gg undo
 gg worktree list
 gg worktree add [<start-point>]

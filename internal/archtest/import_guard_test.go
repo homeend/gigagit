@@ -6,11 +6,15 @@ import (
 	"testing"
 )
 
-// TestFrontendsDoNotImportGit: internal/tui and internal/cli must reach git
-// only through internal/domain, never by a direct import. cmd/gg and
-// internal/app are the composition root / wiring layer and are exempt.
+// TestFrontendsDoNotImportGit: internal/tui and internal/cli must reach git —
+// and the shelf content store — only through internal/domain, never by a direct
+// import. cmd/gg and internal/app are the composition root / wiring layer and
+// are exempt.
 func TestFrontendsDoNotImportGit(t *testing.T) {
-	const forbidden = "github.com/gigagit/gg/internal/git"
+	forbidden := map[string]string{
+		"github.com/gigagit/gg/internal/git":   "frontends must reach git through internal/domain",
+		"github.com/gigagit/gg/internal/shelf": "frontends must reach the shelf store through internal/domain",
+	}
 	for _, pkg := range []string{
 		"github.com/gigagit/gg/internal/tui",
 		"github.com/gigagit/gg/internal/cli",
@@ -20,8 +24,8 @@ func TestFrontendsDoNotImportGit(t *testing.T) {
 			t.Fatalf("go list %s: %v", pkg, err)
 		}
 		for _, imp := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-			if imp == forbidden {
-				t.Errorf("%s directly imports %s — frontends must reach git through internal/domain", pkg, forbidden)
+			if why, bad := forbidden[imp]; bad {
+				t.Errorf("%s directly imports %s — %s", pkg, imp, why)
 			}
 		}
 	}
