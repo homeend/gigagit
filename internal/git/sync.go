@@ -62,6 +62,17 @@ func (r *Repo) FastForwardRef(ctx context.Context, remote, branch string) error 
 	return err
 }
 
+// FastForwardToRef fast-forwards a NON-checked-out local branch to source (a
+// fully-qualified local ref, e.g. refs/remotes/origin/foo) without a checkout or
+// network access. Fails if the update is not a fast-forward, or if <branch> is
+// checked out in any worktree.
+func (r *Repo) FastForwardToRef(ctx context.Context, branch, source string) error {
+	refspec := source + ":refs/heads/" + branch
+	argv := gitcmd.New("fetch").Arg("--no-write-fetch-head", ".", refspec).ToArgv()
+	_, err := r.Runner.Run(ctx, "git fetch (ff-to-ref)", argv)
+	return err
+}
+
 // Push pushes branch to remote. When setUpstream is true it records the
 // upstream tracking ref (-u).
 func (r *Repo) Push(ctx context.Context, remote, branch string, setUpstream bool) error {

@@ -41,7 +41,11 @@ type GitOps interface {
 
 	CheckRefFormatBranch(ctx context.Context, name string) error
 	CreateBranch(ctx context.Context, name, startPoint string) error
+	CreateTrackingBranch(ctx context.Context, name, upstream string) error
 	DeleteBranch(ctx context.Context, name string, force bool) error
+	LocalBranchExists(ctx context.Context, name string) (bool, error)
+	IsAncestor(ctx context.Context, a, b string) (bool, error)
+	FastForwardToRef(ctx context.Context, branch, source string) error
 
 	AddWorktree(ctx context.Context, path, branch, startPoint string, onLine func(string)) error
 	AddWorktreeForBranch(ctx context.Context, path, branch string, onLine func(string)) error

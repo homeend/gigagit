@@ -3,7 +3,9 @@ package git
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -79,5 +81,66 @@ func TestCurrentBranchDetachedReturnsEmpty(t *testing.T) {
 	}
 	if cur != "" {
 		t.Fatalf("current branch = %q, want empty on detached HEAD", cur)
+	}
+}
+
+// gitExec runs a git command in dir, failing the test on error.
+func gitExec(t *testing.T, dir string, a ...string) string {
+	t.Helper()
+	c := exec.Command("git", a...)
+	c.Dir = dir
+	c.Env = append(os.Environ(),
+		"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t",
+		"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+	out, err := c.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v: %v\n%s", a, err, out)
+	}
+	return string(out)
+}
+
+func TestLocalBranchExists(t *testing.T) {
+	_, runner := newTestRepo(t)
+	repo := &Repo{Runner: runner}
+	if ok, err := repo.LocalBranchExists(context.Background(), "main"); err != nil || !ok {
+		t.Fatalf("main exists: ok=%v err=%v", ok, err)
+	}
+	if ok, err := repo.LocalBranchExists(context.Background(), "nope"); err != nil || ok {
+		t.Fatalf("nope: ok=%v err=%v (want false,nil)", ok, err)
+	}
+}
+
+func TestIsAncestor(t *testing.T) {
+	dir, runner := newTestRepo(t)
+	repo := &Repo{Runner: runner}
+	gitExec(t, dir, "commit", "--allow-empty", "-m", "c2")
+	if ok, err := repo.IsAncestor(context.Background(), "HEAD~1", "HEAD"); err != nil || !ok {
+		t.Fatalf("HEAD~1 ancestor of HEAD: ok=%v err=%v", ok, err)
+	}
+	if ok, err := repo.IsAncestor(context.Background(), "HEAD", "HEAD~1"); err != nil || ok {
+		t.Fatalf("HEAD not ancestor of HEAD~1: ok=%v err=%v (want false,nil)", ok, err)
+	}
+}
+
+// configFakeRemote makes refs/remotes/origin/* genuine remote-tracking branches
+// (a configured remote with a fetch refspec) so `git branch --track` accepts
+// origin/* as a tracking start point — mirroring a real fetched repo.
+func configFakeRemote(t *testing.T, dir string) {
+	t.Helper()
+	gitExec(t, dir, "config", "remote.origin.url", "file://"+dir)
+	gitExec(t, dir, "config", "remote.origin.fetch", "+refs/heads/*:refs/remotes/origin/*")
+}
+
+func TestCreateTrackingBranch(t *testing.T) {
+	dir, runner := newTestRepo(t)
+	repo := &Repo{Runner: runner}
+	configFakeRemote(t, dir)
+	gitExec(t, dir, "update-ref", "refs/remotes/origin/foo", "HEAD")
+	if err := repo.CreateTrackingBranch(context.Background(), "foo", "origin/foo"); err != nil {
+		t.Fatalf("CreateTrackingBranch: %v", err)
+	}
+	up := strings.TrimSpace(gitExec(t, dir, "for-each-ref", "--format=%(upstream:short)", "refs/heads/foo"))
+	if up != "origin/foo" {
+		t.Fatalf("upstream = %q, want origin/foo", up)
 	}
 }

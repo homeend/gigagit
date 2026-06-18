@@ -41,6 +41,41 @@ func (r *Repo) CreateBranch(ctx context.Context, name, startPoint string) error 
 	return err
 }
 
+// LocalBranchExists reports whether refs/heads/<name> exists.
+func (r *Repo) LocalBranchExists(ctx context.Context, name string) (bool, error) {
+	argv := gitcmd.New("show-ref").Arg("--verify", "--quiet", "refs/heads/"+name).ToArgv()
+	res, err := r.Runner.Run(ctx, "git show-ref (branch exists)", argv)
+	if err != nil {
+		if res.ExitCode == 1 {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
+// IsAncestor reports whether commit a is an ancestor of commit b (a fast-forward
+// from a to b is possible). a == b counts as true.
+func (r *Repo) IsAncestor(ctx context.Context, a, b string) (bool, error) {
+	argv := gitcmd.New("merge-base").Arg("--is-ancestor", a, b).ToArgv()
+	res, err := r.Runner.Run(ctx, "git merge-base --is-ancestor", argv)
+	if err != nil {
+		if res.ExitCode == 1 {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
+// CreateTrackingBranch creates refs/heads/<name> at <upstream> with tracking
+// configured, without switching to it.
+func (r *Repo) CreateTrackingBranch(ctx context.Context, name, upstream string) error {
+	argv := gitcmd.New("branch").Arg("--track", name, upstream).ToArgv()
+	_, err := r.Runner.Run(ctx, "git branch --track", argv)
+	return err
+}
+
 // CurrentBranch returns the checked-out branch name, or "" if detached.
 func (r *Repo) CurrentBranch(ctx context.Context) (string, error) {
 	argv := gitcmd.New("symbolic-ref").Arg("--quiet", "--short", "HEAD").ToArgv()

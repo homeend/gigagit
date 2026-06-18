@@ -152,3 +152,30 @@ func TestPullFFOnlyRejectsNonFastForward(t *testing.T) {
 		t.Fatal("expected ff-only pull to fail on diverged history")
 	}
 }
+
+func TestFastForwardToRef(t *testing.T) {
+	dir, runner := newTestRepo(t)
+	repo := &Repo{Runner: runner}
+
+	// origin/foo two commits ahead of a local foo at the base.
+	gitExec(t, dir, "commit", "--allow-empty", "-m", "c2")
+	gitExec(t, dir, "commit", "--allow-empty", "-m", "c3")
+	gitExec(t, dir, "update-ref", "refs/remotes/origin/foo", "HEAD")
+	gitExec(t, dir, "branch", "foo", "HEAD~2")
+
+	if err := repo.FastForwardToRef(context.Background(), "foo", "refs/remotes/origin/foo"); err != nil {
+		t.Fatalf("FastForwardToRef (ff): %v", err)
+	}
+	if ok, _ := repo.IsAncestor(context.Background(), "refs/remotes/origin/foo", "foo"); !ok {
+		t.Fatal("foo was not fast-forwarded to origin/foo")
+	}
+
+	// Diverged: give foo its own commit not on origin/foo's line.
+	gitExec(t, dir, "checkout", "foo")
+	gitExec(t, dir, "commit", "--allow-empty", "-m", "foo-only")
+	gitExec(t, dir, "checkout", "main")
+	gitExec(t, dir, "update-ref", "refs/remotes/origin/foo", "main") // a different tip than foo
+	if err := repo.FastForwardToRef(context.Background(), "foo", "refs/remotes/origin/foo"); err == nil {
+		t.Fatal("FastForwardToRef on a diverged branch should error")
+	}
+}
