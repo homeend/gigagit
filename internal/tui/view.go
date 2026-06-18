@@ -379,13 +379,20 @@ func (m Model) filesLabel(p panel, base string) string {
 	return m.panelLabel(p, base+" "+strconv.Itoa(m.panelLen(p)))
 }
 
-// tabBarLabel is the shared left-slot header: both tab names with the active
-// one bracketed. Plain ASCII so renderPanel's truncate stays safe.
+// tabBarLabel is the shared left-slot header: the active tab spelled out and
+// bracketed, the inactive tabs shown as single-letter markers so all three fit
+// the narrow left column (w/3) even at 80 cols, leaving room for the sort/filter
+// decoration panelLabel appends. Plain ASCII so renderPanel's truncate stays safe.
 func tabBarLabel(active panel) string {
-	if active == panelWorktrees {
-		return "Branches [Worktrees]"
+	mark := func(p panel, full, short string) string {
+		if p == active {
+			return "[" + full + "]"
+		}
+		return short
 	}
-	return "[Branches] Worktrees"
+	return mark(panelBranches, "Branches", "B") + " " +
+		mark(panelRemotes, "Remotes", "R") + " " +
+		mark(panelWorktrees, "Worktrees", "W")
 }
 
 // renderPanel draws one bordered panel of fixed size boxW×boxH, windowing rows
@@ -590,7 +597,19 @@ func (m Model) branchRows() []string {
 		if hasWt[b.Name] {
 			row += " ◫"
 		}
+		if b.Behind > 0 {
+			row += " (↓" + strconv.Itoa(b.Behind) + ")"
+		}
 		out = append(out, row)
+	}
+	return out
+}
+
+// remoteRows builds the Remotes tab rows: one short ref per line.
+func (m Model) remoteRows() []string {
+	out := make([]string, 0, len(m.remoteBranches))
+	for _, rb := range m.remoteBranches {
+		out = append(out, "  "+rb.Name)
 	}
 	return out
 }
