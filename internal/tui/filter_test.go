@@ -224,6 +224,11 @@ func TestFilterTypingArrowNavigates(t *testing.T) {
 
 func TestFilterLabelRendering(t *testing.T) {
 	m := loadedModel(t)
+	// This test asserts the tab-bar/sort/filter label decoration, not worktree
+	// paths. Drop the worktrees so branch rows carry no (random temp) path: the
+	// short "main" row then can't match the query or trigger the truncation
+	// tooltip that would otherwise overlay the very label under assertion.
+	m.worktrees = nil
 	m.width, m.height = 120, 30 // wide enough that the tab-bar label + sort + filter fit
 	m.focus = panelBranches
 	m.sortModes[panelBranches] = sortDateDesc

@@ -39,6 +39,11 @@ func TestDownClampsSelectionInFocusedPanel(t *testing.T) {
 func TestViewRendersPanelsWithoutPanic(t *testing.T) {
 	m := loadedModel(t)
 	m.width, m.height = 100, 30
+	// Focus off Branches: the checked-out branch row now carries its (long)
+	// worktree path, so at Branches focus the truncation tooltip correctly
+	// overlays the "Branches" header. Focusing Commits keeps every panel label
+	// visible for this render smoke check.
+	m.focus = panelCommits
 	out := m.View()
 	if !strings.Contains(out, "main") {
 		t.Fatalf("view should mention branch 'main':\n%s", out)

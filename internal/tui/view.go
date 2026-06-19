@@ -598,19 +598,22 @@ func padRight(s string, n int) string {
 	return s
 }
 
-// worktreeBranchSet returns the set of branch names checked out in a worktree.
-func (m Model) worktreeBranchSet() map[string]bool {
-	set := make(map[string]bool, len(m.worktrees))
+// worktreePathOf returns the path of the worktree that has branch checked out,
+// if any (git allows a branch in at most one worktree). Includes the current
+// worktree.
+func (m Model) worktreePathOf(branch string) (string, bool) {
+	if branch == "" {
+		return "", false
+	}
 	for _, w := range m.worktrees {
-		if w.Branch != "" {
-			set[w.Branch] = true
+		if w.Branch == branch {
+			return w.Path, true
 		}
 	}
-	return set
+	return "", false
 }
 
 func (m Model) branchRows() []string {
-	hasWt := m.worktreeBranchSet()
 	out := make([]string, 0, len(m.branches))
 	for _, b := range m.branches {
 		marker := "  "
@@ -618,11 +621,11 @@ func (m Model) branchRows() []string {
 			marker = "* "
 		}
 		row := marker + b.Name
-		if hasWt[b.Name] {
-			row += " ◫"
-		}
 		if b.Behind > 0 {
 			row += " (↓" + strconv.Itoa(b.Behind) + ")"
+		}
+		if path, ok := m.worktreePathOf(b.Name); ok {
+			row += " (" + path + ")"
 		}
 		out = append(out, row)
 	}

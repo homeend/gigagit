@@ -130,6 +130,9 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   instead of persisting across navigation and reloads.
 
 ### Changed
+- TUI: the Branches panel now shows each worktree-backed branch's **worktree
+  path** in `()` (replacing the `◫` glyph), so you can see where a branch is
+  checked out — including the current worktree.
 - TUI: **Bookmark this file** / **Add to shelf** now work from a working-tree
   blame/history view (`b`/`h` on a working-tree file). `focusedBookmark` derives
   the worktree/branch from the Model for the `rev==""` case instead of bailing
