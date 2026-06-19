@@ -61,7 +61,8 @@ panel and selected row right now; `?` opens the full searchable reference.
 | `shift+tab` | move focus backwards |
 | `←`/`→` | focus the left column / the Commits panel (inside the files view: switch between the file tree and the commit list) |
 | `ctrl+←/→` | cycle the shared **Branches / Remotes / Worktrees / Shelf** left-column tab (and focus it) — the active tab is spelled out and bracketed in the slot header; the others show as single-letter markers (`B`/`R`/`W`/`S`). The **Remotes** tab lists remote-tracking branches (`refs/remotes`); on it, `c` checks out the selected remote branch as a local tracking branch (stay) and `s` checks out and switches to it — both fast-forward-safe (a diverged local branch is refused); `f` fetches all remotes and the `.` menu offers **Prune** (drop tracking refs for branches deleted upstream). The **Shelf** tab lists the default bucket of shelved files: `enter` diffs a shelved copy against the working-tree file; the `.` menu offers Restore to… / Remove |
-| `.` (on a file) | **Add to shelf** — wherever a file is focused (Files, Staged, a commit's file tree, file history), the `.` menu can freeze a copy onto the **shelf**: a non-git, per-file store of frozen copies that survive even permanent deletion of the source. Restore them later to any path as an unstaged change |
+| `.` (on a file) | **Add to shelf** — wherever a file is focused (Files, Staged, a commit's file tree, file history), the `.` menu can freeze a copy onto the **shelf**: a non-git, per-file store of frozen copies that survive even permanent deletion of the source. Restore them later to any path as an unstaged change. The same menu offers **Bookmark this file** — a *live* reference (see `g`) rather than a frozen copy |
+| `g` | **bookmark quick-switcher** — a centered, filterable list of bookmarks (richly-addressed references to files anywhere: a worktree's working/index file, a commit/branch file, a shelf entry). Navigation-first: `↑↓/jk` move, `enter` diffs the bookmark against the current working-tree file, `m`+`m` compares two bookmarks, `p` pastes its contents to a path you type, `x` removes (confirms), `/` filters, `esc` closes. A bookmark to a working file is *live* (reflects later edits); to freeze bytes, use the shelf |
 | mouse | click focuses the window under the cursor and selects the clicked row; the wheel scrolls the hovered list (`[ui] wheel_step` rows per tick) |
 | `j`/`k` or `↑`/`↓` | move selection |
 | `pgup`/`pgdn` | move selection by 25% of the panel viewport |
@@ -100,6 +101,9 @@ gg discard --yes (--all | <path>...)   # discard unstaged: revert edits, delete 
 gg shelf add [--staged|--rev <commit>] [--bucket <name>] <path>...  # freeze a non-git copy (survives deletion)
 gg shelf list [--bucket <name>] | rm <entry>
 gg shelf restore [--force] <entry> <dest>   # write a shelved copy to <dest> as unstaged (dest required)
+gg bookmark add [--rev <commit>] [--staged] [--worktree <path>] <path>...  # a live reference (default: this worktree's working file)
+gg bookmark list | rm <id>
+gg bookmark paste [--force] <id> <dest>   # write the bookmark's CURRENT bytes to <dest> as unstaged (dest required)
 gg undo
 gg worktree list
 gg worktree add [<start-point>]

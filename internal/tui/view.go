@@ -184,6 +184,14 @@ func (m Model) render() string {
 		w, h := m.overlayDims()
 		return overlayCenter(bg, m.renderShelfRestorePopup(), w, h)
 	}
+	if m.bookmarkPopup != nil {
+		w, h := m.overlayDims()
+		return overlayCenter(bg, m.renderBookmarkPopup(), w, h)
+	}
+	if m.bookmarkPastePopup != nil {
+		w, h := m.overlayDims()
+		return overlayCenter(bg, m.renderBookmarkPastePopup(), w, h)
+	}
 	if m.contentPopup != nil {
 		w, h := m.overlayDims()
 		return overlayCenter(bg, m.renderContentPopup(), w, h)

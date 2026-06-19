@@ -1,0 +1,24 @@
+name = "bookmark add/list: a working-tree file is bookmarked and listed"
+
+# The live-pointer paste round-trip (edit-after-bookmark → paste sees the new
+# bytes) is proven deterministically by the CLI unit test
+# TestBookmarkLivePointerRoundTrip; the bookmark's address id embeds the
+# sandbox-specific worktree path, so it cannot be threaded into a later [[run]]
+# here. This scenario proves add + list end-to-end through the real
+# CLI→domain→git→store stack.
+
+[input]
+steps = [
+  { write = "README.md", content = "hi\n" },
+  { commit = "initial" },
+  { write = "README.md", content = "v1\n" },
+]
+
+[[run]]
+cmd  = ["bookmark", "add", "README.md"]
+exit = 0
+
+[[run]]
+cmd            = ["bookmark", "list"]
+exit           = 0
+stdout_contains = ["README.md", "unstaged"]

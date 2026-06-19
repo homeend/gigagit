@@ -12,8 +12,9 @@ import (
 // are exempt.
 func TestFrontendsDoNotImportGit(t *testing.T) {
 	forbidden := map[string]string{
-		"github.com/gigagit/gg/internal/git":   "frontends must reach git through internal/domain",
-		"github.com/gigagit/gg/internal/shelf": "frontends must reach the shelf store through internal/domain",
+		"github.com/gigagit/gg/internal/git":      "frontends must reach git through internal/domain",
+		"github.com/gigagit/gg/internal/shelf":    "frontends must reach the shelf store through internal/domain",
+		"github.com/gigagit/gg/internal/bookmark": "frontends must reach the bookmark store through internal/domain",
 	}
 	for _, pkg := range []string{
 		"github.com/gigagit/gg/internal/tui",

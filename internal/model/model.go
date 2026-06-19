@@ -148,3 +148,46 @@ type ShelfEntry struct {
 	Size    int64
 	Created time.Time
 }
+
+// BookmarkState is where in its git lifecycle a bookmarked file was taken from.
+type BookmarkState int
+
+const (
+	StateCommitted BookmarkState = iota // a commit/branch file (permanent → SHA)
+	StateShelf                          // a shelf entry (permanent → SHA)
+	StateStaged                         // a worktree's index file (live)
+	StateUnstaged                       // a worktree's working file, tracked-modified (live)
+	StateUntracked                      // a worktree's working file, new (live)
+)
+
+// String renders the state word used in a bookmark's display string.
+func (s BookmarkState) String() string {
+	switch s {
+	case StateCommitted:
+		return "commit"
+	case StateShelf:
+		return "shelf"
+	case StateStaged:
+		return "staged"
+	case StateUntracked:
+		return "untracked"
+	default:
+		return "unstaged"
+	}
+}
+
+// Bookmark is a richly-addressed reference to a file. The address fields are the
+// identity and the display; SHA is the content determinator for permanent states
+// (committed/shelf) only — "" means fetch live by the address.
+type Bookmark struct {
+	Worktree string // worktree top-level (staged/unstaged/untracked); "" otherwise
+	Branch   string // branch name when known; "" otherwise
+	Commit   string // commit sha (committed); "" otherwise
+	ShelfID  string // shelf entry id (shelf); "" otherwise
+	Path     string // path within the tree/worktree
+	State    BookmarkState
+	SHA      string // blob checksum; set ⇔ permanent
+	ID       string // derived from the address
+	Label    string // human label; defaults to the display string
+	Created  time.Time
+}
