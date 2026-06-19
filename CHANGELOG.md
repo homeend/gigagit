@@ -100,6 +100,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   elsewhere still `SmartSwitch` as before.
 
 ### Fixed
+- TUI: the bookmark quick-switcher (`g`) is now truly **global** — it opens from
+  every navigable window (the file tree, diff, history, blame, and stash views),
+  not just the base panels. Previously each of those windows swallowed `g`
+  before it reached the switcher. Once open, the popup is rendered and receives
+  keys above whatever window it was launched from.
 - TUI: the hunk picker (conflict resolve / `H` staging) now shows a **column
   header** labelling which side is `current`/`incoming` (or `index`/`working`),
   with the active side — the column the cursor edits — highlighted, so the two

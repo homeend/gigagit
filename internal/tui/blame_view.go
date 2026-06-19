@@ -185,6 +185,8 @@ func (b *blameView) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch msg.String() {
 	case ".":
 		return m.openActionMenu(), nil
+	case "g": // global bookmark quick-switcher
+		return m.openBookmarkSwitcher()
 	case "z":
 		b.mode = b.mode.next()
 		b.hscroll = 0

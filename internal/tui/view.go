@@ -142,6 +142,17 @@ func (m Model) render() string {
 		w, h := m.overlayDims()
 		return overlayCenter(clipToHeight(m.menuBackground(), h), m.renderActionMenu(), w, h)
 	}
+	// The bookmark quick-switcher (and its paste sub-popup) is global: it must
+	// paint over whatever content window is open, so it overlays menuBackground
+	// here, above the surface-stack and diff-view early returns below.
+	if m.bookmarkPastePopup != nil {
+		w, h := m.overlayDims()
+		return overlayCenter(clipToHeight(m.menuBackground(), h), m.renderBookmarkPastePopup(), w, h)
+	}
+	if m.bookmarkPopup != nil {
+		w, h := m.overlayDims()
+		return overlayCenter(clipToHeight(m.menuBackground(), h), m.renderBookmarkPopup(), w, h)
+	}
 	if s := m.stackTop(); s != nil {
 		_, h := m.overlayDims()
 		return clipToHeight(s.render(m), h)
@@ -191,14 +202,6 @@ func (m Model) render() string {
 	if m.shelfRestorePopup != nil {
 		w, h := m.overlayDims()
 		return overlayCenter(bg, m.renderShelfRestorePopup(), w, h)
-	}
-	if m.bookmarkPopup != nil {
-		w, h := m.overlayDims()
-		return overlayCenter(bg, m.renderBookmarkPopup(), w, h)
-	}
-	if m.bookmarkPastePopup != nil {
-		w, h := m.overlayDims()
-		return overlayCenter(bg, m.renderBookmarkPastePopup(), w, h)
 	}
 	if m.contentPopup != nil {
 		w, h := m.overlayDims()

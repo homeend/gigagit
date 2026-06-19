@@ -349,6 +349,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.actionMenu != nil {
 			return m.updateActionMenuKey(msg)
 		}
+		// The bookmark quick-switcher is global: `g` opens it from every
+		// navigable window, so its key owner must sit above the surface stack
+		// and the diff view (mirrors the action menu and render()). The paste
+		// sub-popup replaces it, so it precedes the switcher here.
+		if m.bookmarkPastePopup != nil {
+			return m.updateBookmarkPasteKey(msg)
+		}
+		if m.bookmarkPopup != nil {
+			return m.updateBookmarkPopupKey(msg)
+		}
 		if s := m.stackTop(); s != nil {
 			if msg.Type == tea.KeyCtrlC {
 				return m, tea.Quit
@@ -375,12 +385,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.shelfRestorePopup != nil {
 			return m.updateShelfRestoreKey(msg)
-		}
-		if m.bookmarkPastePopup != nil {
-			return m.updateBookmarkPasteKey(msg)
-		}
-		if m.bookmarkPopup != nil {
-			return m.updateBookmarkPopupKey(msg)
 		}
 		if m.branchPopup != nil {
 			return m.updateBranchPopupKey(msg)
@@ -549,10 +553,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if !m.running && !m.loading {
 				return m.startOp(engine.UndoLastCommit{})
 			}
-		case "g": // open the bookmark quick-switcher
-			if m.opsIdle() && m.bookmarkPopup == nil {
-				return m, m.loadBookmarksCmd()
-			}
+		case "g": // open the bookmark quick-switcher (global; see openBookmarkSwitcher)
+			return m.openBookmarkSwitcher()
 		case "z": // cycle the focused panel's text display mode
 			m.dispModes[m.focus] = m.dispModes[m.focus].next()
 			m.hscroll[m.focus] = 0

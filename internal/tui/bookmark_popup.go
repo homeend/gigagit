@@ -64,6 +64,17 @@ type bookmarksLoadedMsg struct {
 	err   error
 }
 
+// openBookmarkSwitcher opens the global bookmark quick-switcher. It is wired
+// into every navigable window (panels, file tree, diff, history, blame, stash)
+// so `g` works everywhere; once the popup is open its render and key routing
+// are hoisted above the content surfaces (see render() and Update()).
+func (m Model) openBookmarkSwitcher() (Model, tea.Cmd) {
+	if m.opsIdle() && m.bookmarkPopup == nil {
+		return m, m.loadBookmarksCmd()
+	}
+	return m, nil
+}
+
 func (m Model) loadBookmarksCmd() tea.Cmd {
 	svc := m.svc
 	return func() tea.Msg {

@@ -67,6 +67,8 @@ func (m Model) updateStashViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case ".":
 		return m.openActionMenu(), nil
+	case "g": // global bookmark quick-switcher
+		return m.openBookmarkSwitcher()
 	case "z":
 		v.mode = v.mode.next()
 		v.hscroll = 0
