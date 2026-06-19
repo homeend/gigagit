@@ -116,6 +116,8 @@ func (b *Sandbox) runSteps(t *testing.T, steps []Step, defaultDir string) {
 			b.git(t, dir, "commit", "-m", st.Commit)
 		case "branch":
 			b.git(t, dir, "branch", st.Branch)
+		case "branch_delete":
+			b.git(t, dir, "branch", "-D", st.BranchDelete)
 		case "switch":
 			b.git(t, dir, "switch", st.Switch)
 		case "stash":

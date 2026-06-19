@@ -38,6 +38,10 @@ func TestScenarios(t *testing.T) {
 					t.Fatalf("run[%d] gg %s: stdout missing %v\nstdout:\n%s",
 						i, strings.Join(run.Cmd, " "), miss, stdout.String())
 				}
+				if bad := run.PresentExcluded(stdout.String()); len(bad) > 0 {
+					t.Fatalf("run[%d] gg %s: stdout unexpectedly contains %v\nstdout:\n%s",
+						i, strings.Join(run.Cmd, " "), bad, stdout.String())
+				}
 				t.Logf("run[%d] gg %s → exit %d ✓", i, strings.Join(run.Cmd, " "), code)
 			}
 			assertExpect(t, sb, &sc.Expect)

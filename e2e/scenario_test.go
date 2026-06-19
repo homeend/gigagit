@@ -201,3 +201,33 @@ stdout_contains = ["origin/foo"]
 		t.Fatalf("StdoutContains not parsed: %+v", sc.Runs)
 	}
 }
+
+func TestRunPresentExcluded(t *testing.T) {
+	r := Run{StdoutExcludes: []string{"origin/foo"}}
+	if bad := r.PresentExcluded("origin/main\n"); len(bad) != 0 {
+		t.Fatalf("absent -> none, got %v", bad)
+	}
+	bad := r.PresentExcluded("origin/foo\norigin/main\n")
+	if len(bad) != 1 || bad[0] != "origin/foo" {
+		t.Fatalf("present -> reported, got %v", bad)
+	}
+}
+
+func TestLoadScenarioParsesStdoutExcludesAndBranchDelete(t *testing.T) {
+	path := writeScenario(t, `name = "x"
+[input]
+steps = [{ write = "f.txt", content = "x\n" }, { commit = "c1" }, { branch = "foo" }, { branch_delete = "foo" }]
+[[run]]
+cmd = ["remote", "ls"]
+exit = 0
+stdout_excludes = ["origin/foo"]
+[expect]
+`)
+	sc, err := LoadScenario(path)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if len(sc.Runs[0].StdoutExcludes) != 1 || sc.Runs[0].StdoutExcludes[0] != "origin/foo" {
+		t.Fatalf("StdoutExcludes not parsed: %+v", sc.Runs)
+	}
+}

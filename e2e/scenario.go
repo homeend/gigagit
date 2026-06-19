@@ -45,9 +45,10 @@ type Step struct {
 	Branch  string `toml:"branch"`
 	Switch  string `toml:"switch"`
 	// Stash is the stash message; the step runs `git stash push -u -m <msg>`.
-	Stash    string `toml:"stash"`
-	Worktree string `toml:"worktree"` // sandbox-root-relative path; Branch holds the branch
-	Cwd      string `toml:"cwd"`
+	Stash        string `toml:"stash"`
+	Worktree     string `toml:"worktree"`      // sandbox-root-relative path; Branch holds the branch
+	BranchDelete string `toml:"branch_delete"` // `git branch -D <name>` (used to delete an origin branch)
+	Cwd          string `toml:"cwd"`
 }
 
 // kind returns the step's single action name, or an error when the step is
@@ -74,6 +75,9 @@ func (s Step) kind() (string, error) {
 	} else if s.Branch != "" {
 		kinds = append(kinds, "branch") // bare branch creation
 	}
+	if s.BranchDelete != "" {
+		kinds = append(kinds, "branch_delete")
+	}
 	if len(kinds) != 1 {
 		return "", fmt.Errorf("step %+v: want exactly one action, got %v", s, kinds)
 	}
@@ -93,6 +97,7 @@ type Run struct {
 	Cwd            string   `toml:"cwd"` // sandbox-root-relative; default "local"
 	Exit           *int     `toml:"exit"`
 	StdoutContains []string `toml:"stdout_contains"` // substrings the run's stdout must contain
+	StdoutExcludes []string `toml:"stdout_excludes"` // substrings the run's stdout must NOT contain
 }
 
 // MissingStdout returns the StdoutContains substrings absent from out.
@@ -104,6 +109,17 @@ func (r Run) MissingStdout(out string) []string {
 		}
 	}
 	return miss
+}
+
+// PresentExcluded returns the StdoutExcludes substrings that wrongly appear in out.
+func (r Run) PresentExcluded(out string) []string {
+	var present []string
+	for _, bad := range r.StdoutExcludes {
+		if strings.Contains(out, bad) {
+			present = append(present, bad)
+		}
+	}
+	return present
 }
 
 // FileExpect is the normalized form of one file expectation.
