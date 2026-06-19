@@ -50,16 +50,30 @@ func shelfAdd(svc *domain.Service, args []string, stdout, stderr io.Writer) int 
 		fmt.Fprintln(stderr, "usage: gg shelf add [--staged|--rev <commit>] [--bucket <name>] <path>...")
 		return 2
 	}
-	src := model.SourceUnstaged
-	if *staged {
-		src = model.SourceStaged
-	}
-	if *rev != "" {
-		src = model.SourceCommit
+	ctx := context.Background()
+	var worktree, branch string
+	if *rev == "" { // working/index origin: capture worktree + branch for display
+		top, err := svc.TopLevel(ctx)
+		if err != nil {
+			fmt.Fprintln(stderr, "error:", err)
+			return 1
+		}
+		worktree = top
+		if br, err := svc.CurrentBranch(ctx); err == nil {
+			branch = br
+		}
 	}
 	for _, p := range paths {
-		e, err := svc.ShelfAdd(context.Background(),
-			model.FileRef{Source: src, Locator: *rev, Path: p}, *bucket)
+		var addr model.FileAddress
+		switch {
+		case *rev != "":
+			addr = model.FileAddress{State: model.StateCommitted, Commit: *rev, Path: p}
+		case *staged:
+			addr = model.FileAddress{State: model.StateStaged, Worktree: worktree, Branch: branch, Path: p}
+		default:
+			addr = model.FileAddress{State: model.StateUnstaged, Worktree: worktree, Branch: branch, Path: p}
+		}
+		e, err := svc.ShelfAdd(ctx, addr, *bucket)
 		if err != nil {
 			fmt.Fprintln(stderr, "error:", err)
 			return 1
@@ -82,7 +96,7 @@ func shelfList(svc *domain.Service, args []string, stdout, stderr io.Writer) int
 		return 1
 	}
 	for _, e := range es {
-		fmt.Fprintf(stdout, "%s\t%s\t%s\t%dB\n", e.ID, e.Source, e.Path, e.Size)
+		fmt.Fprintf(stdout, "%s\t%s\t%dB\n", e.ID, e.Origin.Display(), e.Size)
 	}
 	return 0
 }

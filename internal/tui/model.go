@@ -244,7 +244,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.statusMsg = "shelf add: " + msg.err.Error()
 		} else {
-			m.statusMsg = "shelved " + msg.entry.Path + " → " + msg.entry.ID
+			m.statusMsg = "shelved " + msg.entry.Origin.Path + " → " + msg.entry.ID
 		}
 		return m, nil
 	case bookmarkAddedMsg:
