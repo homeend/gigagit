@@ -125,6 +125,16 @@ func (m Model) contextCopyRows() []actionRow {
 		if bi, ok := m.backingIndex(m.focus); ok {
 			return m.fileCopyPathName(m.status.Files[bi].Path)
 		}
+	case m.focus == panelBranches:
+		if bi, ok := m.backingIndex(panelBranches); ok {
+			name := m.branches[bi].Name
+			return []actionRow{m.copyRow("copy-branch-name", "Copy branch name", "Copied branch name "+name, name)}
+		}
+	case m.focus == panelRemotes:
+		if bi, ok := m.backingIndex(panelRemotes); ok {
+			name := m.remoteBranches[bi].Name
+			return []actionRow{m.copyRow("copy-branch-name", "Copy branch name", "Copied branch name "+name, name)}
+		}
 	}
 	return nil
 }
