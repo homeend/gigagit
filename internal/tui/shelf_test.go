@@ -48,6 +48,23 @@ func TestAddToShelfRowOnFilesPanel(t *testing.T) {
 	}
 }
 
+func TestShelfAddCaptureFromBlame(t *testing.T) {
+	// Working-tree blame (ctx.rev == "") is not a shelf-capture surface — this
+	// mirrors bookmark capture (focusedBookmark guards rev==""); shelf the
+	// working file from the Files panel instead. Guards against reintroducing a
+	// StateCommitted{Commit:""} address that would resolve to the index blob.
+	m := footerModel().pushSurface(blameFixture()) // ctx.rev == ""
+	if _, ok := m.focusedShelfAddress(); ok {
+		t.Fatalf("working-tree blame should not offer shelf-add")
+	}
+	// A committed blame captures the commit (same bytes the old code shelved).
+	m2 := footerModel().pushSurface(&blameView{ctx: navContext{path: "a.go", rev: "abc1234def"}})
+	a, ok := m2.focusedShelfAddress()
+	if !ok || a.State != model.StateCommitted || a.Commit != "abc1234def" || a.Path != "a.go" {
+		t.Fatalf("committed blame capture = %+v ok=%v", a, ok)
+	}
+}
+
 func TestAddToShelfRowAbsentWhenNoFileFocused(t *testing.T) {
 	m := footerModel()
 	m.focus = panelBranches
