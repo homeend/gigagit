@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Architect-reviewed (2026-06-20).** Incorporated: B1 — `if m.running { return m, nil }` guard on the switcher `update` methods (prevents a second `startOp` while the parent is visible during a write; `TestSwitcherInertWhileRunning`); B2 — `openPickerDiff` keeps `m.shelfPopup = nil` transitionally in Task 3, removed in Task 4; S1 — both bookmark nil sites (lines ~203 AND ~253) + shelf esc (~165) become `popOverlay`; S2 — the shelf-loaded handler preserves its unconditional `shelfEntries` assignment + error branch; S3 — `switcherModel` carries a fake `svc`; S4 — mouse-swallow test; S5 — Task 3 executes as two commits (methods alongside legacy field, then flip+delete+migrate-tests).
+
 **Goal:** Give the popup layer a stack — self-contained popups that own their state, with one orchestrator deciding what's on top, compositing, and key routing — so a child popup returns to its parent on close; and prefill the bookmark paste destination.
 
 **Architecture:** A new `overlayStack` mirrors the existing full-screen `viewStack` (`internal/tui/stack.go`). Each migrated popup struct implements an `overlay` interface (`update(m, msg)` + `render(m, below)`), holds its own state, and lives on the stack — no `Model` field. Dispatch/render/mouse collapse to a single `overlayTop()` check, placed above the full-screen `stackTop` (overlays float over surfaces). `menuBackground()` already renders everything beneath the popup layer and is passed as `below`. Return-to-parent falls out of push/pop: opening a child pushes it over the still-present parent; closing pops back to the parent.
@@ -312,6 +314,10 @@ git commit -m "feat(tui): restoredPath helper for paste-dest prefill"
 
 This is the core task. `bookmarkPopup` and `bookmarkPastePopup` become `overlay`s; their `Model` fields are removed; dispatch/render/mouse gain the `overlayTop()` check; paste returns to the switcher; the paste dest is prefilled; `openPickerDiff` clears overlays.
 
+> **Execute as TWO commits (S5)** — this task is large and the field deletion can't be separated from the test migration, but there is one clean fault line:
+> - **Commit A:** add the overlay methods (`update`/`render`/`selected`/`byID`/`moveSel` on `*bookmarkPopup`/`*bookmarkPastePopup`) *alongside* the still-present legacy field and handlers; add a unit test that drives them via `pushOverlay`. The build stays green (nothing routes to the new methods yet).
+> - **Commit B:** flip routing to `overlayTop()` (Step 4), delete the two fields + dead legacy funcs, and migrate the 4 test files. Field deletion and test migration MUST land together (they won't compile apart).
+
 **Files:**
 - Modify: `internal/tui/bookmark_popup.go`
 - Modify: `internal/tui/model.go` (remove `bookmarkPopup`/`bookmarkPastePopup` fields; dispatch; `bookmarksLoadedMsg`; cheat-sheet gate)
@@ -337,12 +343,25 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/gigagit/gg/internal/domain"
+	"github.com/gigagit/gg/internal/git"
+	"github.com/gigagit/gg/internal/gitexec"
 	"github.com/gigagit/gg/internal/model"
 )
 
 // switcherModel opens the bookmark switcher with one bookmark, on the stack.
+// It carries a FakeRunner-backed svc so the paste flow's BookmarkBytes fetch
+// (bookmark_popup.go) does not nil-panic — pressing `p` runs the real path.
 func switcherModel() Model {
-	m := Model{width: 80, height: 24, sel: map[panel]int{}, sortModes: map[panel]sortMode{}}
+	f := gitexec.NewFakeRunner() // default empty responses are fine for these tests
+	m := Model{
+		svc:       domain.New(&git.Repo{Runner: f}),
+		width:     80,
+		height:    24,
+		sel:       map[panel]int{},
+		sortModes: map[panel]sortMode{},
+	}
 	return m.pushOverlay(newBookmarkPopup([]model.Bookmark{{ID: "b1", Path: "src/app.go"}}))
 }
 
@@ -379,14 +398,43 @@ func TestPasteDestPrefilled(t *testing.T) {
 		t.Fatalf("dest = %q, want the prefilled _RESTORED path", pp.dest)
 	}
 }
-```
 
-Note: `newBookmarkPopup` builds the popup from items (existing). The paste flow needs the bookmark's bytes; in the test the `svc` is nil, so `bookmarkPastePrompt` must read the path for the prefill *before* fetching bytes, and the byte fetch is exercised in existing paste tests with a fake `svc`. If the nil `svc` panics on fetch, give `switcherModel` a `FakeRunner`-backed `svc` (see `filesModel` in `files_view_test.go` for the pattern: `domain.New(&git.Repo{Runner: f})`) and a fake `BookmarkBytes` response. Prefer setting a fake svc so both tests run the real code path.
+// BLOCKER B1 regression: while an op is running the switcher sits visible on
+// the overlay stack but must be INERT — a keypress must not launch a second op.
+func TestSwitcherInertWhileRunning(t *testing.T) {
+	m := switcherModel()
+	m.running = true
+	m.opMsgs = make(chan tea.Msg, 1) // a sentinel we must not clobber
+	before := m.opMsgs
+	u, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("p")})
+	m = u.(Model)
+	if cmd != nil {
+		t.Fatal("a keypress while running must be a no-op (no new op/cmd)")
+	}
+	if m.opMsgs != before {
+		t.Fatal("the running op's channel must not be replaced")
+	}
+	if _, ok := m.overlayTop().(*bookmarkPastePopup); ok {
+		t.Fatal("p must not open the paste popup while running")
+	}
+}
+
+// S4 regression: an open overlay swallows the mouse (no panel hit-test).
+func TestSwitcherSwallowsMouse(t *testing.T) {
+	m := switcherModel()
+	u, cmd := m.Update(tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonLeft, X: 1, Y: 1})
+	if cmd != nil {
+		t.Fatal("mouse over an open switcher must be swallowed")
+	}
+	if m.bookmarkSwitcher() == nil || u.(Model).bookmarkSwitcher() == nil {
+		t.Fatal("the switcher must stay open")
+	}
+}
 
 - [ ] **Step 2: Run to verify they fail**
 
-Run: `go test ./internal/tui/ -run 'TestPasteEscReturnsToSwitcher|TestPasteDestPrefilled' -count=1`
-Expected: FAIL — `p` currently routes to the old field handler (no overlay) / dest empty.
+Run: `go test ./internal/tui/ -run 'TestPasteEscReturnsToSwitcher|TestPasteDestPrefilled|TestSwitcherInertWhileRunning|TestSwitcherSwallowsMouse' -count=1`
+Expected: FAIL — `p` currently routes to the old field handler (no overlay) / dest empty / no running guard.
 
 - [ ] **Step 3: Convert `bookmarkPopup` to an overlay** (`internal/tui/bookmark_popup.go`)
 
@@ -404,8 +452,14 @@ func (p *bookmarkPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
 	}
+	if m.running {
+		return m, nil // BLOCKER B1: inert while an op runs (the switcher stays
+		// visible during the WriteFile op; a keypress must not launch a 2nd op)
+	}
 ```
-The rest of the body is unchanged **except**: every `m.bookmarkPopup = nil` (the esc close, line ~203) becomes `m = m.popOverlay()`; calls to `m.selectedBookmark()` become `p.selected()`; `m.bookmarkMoveSel(±1)` become `p.moveSel(±1)`; `m.bookmarkByID(id)` become `p.byID(id)`; the `?` cheat-sheet case is unchanged (it sets `m.contentPopup`). The compare-mode `enter` and `c`/`m`/`p`/`x` branches keep calling the same `m.openCompareFocusedVsBookmark`, `m.bookmarkRemovePrompt`, `m.bookmarkPastePrompt`, `m.bookmarkMark` (updated below).
+**BLOCKER B1 — the `if m.running { return m, nil }` guard above is mandatory.** Without it, after a paste/restore success the switcher is `overlayTop()`, visible, and `m.running == true`; the next keypress runs this handler unguarded and a second `p`+`enter` calls `startOp` again, clobbering `m.opMsgs`/`m.opCancel` (op.go:115-119) and leaking the first op's cancel. (Legacy code was immune because no popup remained after a successful action and the base handlers are `!m.running`-gated.) Covered by `TestSwitcherInertWhileRunning`.
+
+The rest of the body is unchanged **except**: the **two** in-handler closes `m.bookmarkPopup = nil` — at the esc case (**line ~203**) AND the `c` vs-shelf branch (**line ~253**, S1) — each become `m = m.popOverlay()`; calls to `m.selectedBookmark()` become `p.selected()`; `m.bookmarkMoveSel(±1)` become `p.moveSel(±1)`; `m.bookmarkByID(id)` become `p.byID(id)`; the `?` cheat-sheet case is unchanged (it sets `m.contentPopup`). The compare-mode `enter` and `c`/`m`/`p`/`x` branches keep calling the same `m.openCompareFocusedVsBookmark`, `m.bookmarkRemovePrompt`, `m.bookmarkPastePrompt`, `m.bookmarkMark` (updated below). After removing the field, `grep -n 'm.bookmarkPopup' internal/tui/bookmark_popup.go` must return nothing.
 
 3b. Convert the helpers to methods:
 ```go
@@ -442,9 +496,8 @@ Delete the old `m.selectedBookmark`, `m.bookmarkByID`, `m.bookmarkMoveSel`. Upda
 3c. Add the render method (replaces the old `renderBookmarkPopup` body, now composited over `below`):
 ```go
 func (p *bookmarkPopup) render(m Model, below string) string {
-	_, h := m.overlayDims()
+	w, h := m.overlayDims()
 	box := m.renderBookmarkPopupBox(p) // the existing renderBookmarkPopup body, taking p
-	w, _ := m.overlayDims()
 	return overlayCenter(clipToHeight(below, h), box, w, h)
 }
 ```
@@ -505,10 +558,11 @@ func (p *bookmarkPastePopup) render(m Model, below string) string {
 }
 ```
 
-3g. `bookmarkJump`, `openBookmarkCompareTwo` call `openPickerDiff`. Update `openPickerDiff` (line ~352) to clear overlays instead of niling fields:
+3g. `bookmarkJump`, `openBookmarkCompareTwo` call `openPickerDiff`. Update `openPickerDiff` (line ~352) to clear overlays. **BLOCKER B2:** in THIS task the shelf switcher is still a legacy field whose render (`view.go:165`) sits *above* `diffView`, so a shelf compare launched while `m.shelfPopup` is set would hide the diff. Keep the `m.shelfPopup = nil` line transitionally here; Task 4 deletes it once shelf is an overlay.
 ```go
 func (m Model) openPickerDiff(v *diffView, tag string, load tea.Cmd) (Model, tea.Cmd) {
 	m = m.clearOverlays()
+	m.shelfPopup = nil // TRANSITIONAL (B2): remove in Task 4 when shelf is an overlay
 	m = m.clearStack()
 	m.diffView = v
 	m.diffTag = tag
@@ -709,7 +763,7 @@ Expected: FAIL.
 - [ ] **Step 3: Convert `shelfPopup` to an overlay** (`shelf_popup.go`)
 
 Apply the Task-3 shape:
-- `updateShelfPopupKey` → `(p *shelfPopup) update(m Model, msg tea.KeyMsg)`; drop `p := m.shelfPopup`; esc close `m.shelfPopup = nil` → `m = m.popOverlay()`.
+- `updateShelfPopupKey` → `(p *shelfPopup) update(m Model, msg tea.KeyMsg)`; drop `p := m.shelfPopup`. Add the **B1 running guard** right after the `KeyCtrlC` check: `if m.running { return m, nil }`. The esc close `m.shelfPopup = nil` (**line ~165**, S1) → `m = m.popOverlay()`.
 - `m.popupSelectedShelfEntry()` → `(p *shelfPopup) selected() (model.ShelfEntry, bool)`; `m.shelfPopupMoveSel(±1)` → `p.moveSel(±1)`. Update callers (`shelfPopupMark`, `shelfPopupRemovePrompt`, `shelfCompareAgainstBookmark`, the `p` restore branch) to read `p := m.shelfSwitcher()` with a nil guard.
 - `renderShelfPopup` → split: keep box logic as `func (m Model) renderShelfPopupBox(p *shelfPopup) string` (replace `p := m.shelfPopup` with the param), add `func (p *shelfPopup) render(m Model, below string) string` returning `overlayCenter(clipToHeight(below, h), m.renderShelfPopupBox(p), w, h)`.
 - `openShelfSwitcher` gate: `m.shelfSwitcher() == nil`.
@@ -728,8 +782,9 @@ Apply the Task-3 shape:
 - `model.go` dispatch: delete the transitional `if m.shelfPopup != nil { return m.updateShelfPopupKey(msg) }` and the `if m.shelfRestorePopup != nil { … }` block; the single `if o := m.overlayTop(); o != nil { return o.update(m, msg) }` now covers all four. Cheat-sheet gate → `m.contentPopup != nil && m.overlayTop() != nil`.
 - `view.go`: delete the transitional shelf render block and the `if m.shelfRestorePopup != nil` block; cheat-sheet gate → `m.contentPopup != nil && m.overlayTop() != nil`.
 - `mouse.go`: guard → `if m.overlayTop() != nil { return m, nil }`; cheat-sheet gate → `m.overlayTop() != nil`.
-- The shelf-entries-loaded handler (model.go ~242): push/refresh the shelf overlay (mirror Task 3 Step 4b), preserving compare-mode (`compareShelf`) assignment.
-- Remove the `shelfPopup` and `shelfRestorePopup` fields from `Model` (model.go ~47–48). Delete dead renamed funcs. Fix compile errors.
+- **B2 cleanup:** delete the transitional `m.shelfPopup = nil` line from `openPickerDiff` (added in Task 3 Step 3g) — now that shelf is an overlay, `clearOverlays()` covers it.
+- **The shelf-entries-loaded handler (model.go ~232–249) — S2, be precise.** This handler is NOT a mirror of `bookmarksLoadedMsg`: it ALWAYS sets `m.shelfEntries = msg.entries` (feeding the Shelf tab) and has an error/disabled branch that sets `m.shelfEntries = nil` + `m.pendingCompare = nil`. Preserve both. ONLY inside the existing `if msg.open && msg.err == nil` block, change `m.shelfPopup = newShelfPopup(...)` (+ the `compareShelf` `compareRef`/`compareLabel` assignment) to push the overlay, or refresh in place when `m.shelfSwitcher() != nil` (mirror the bookmark refresh in Task 3 Step 4b: `*existing = *p`). Do NOT touch the unconditional `shelfEntries` assignment or the error branch.
+- Remove the `shelfPopup` and `shelfRestorePopup` fields from `Model` (model.go ~47–48). Delete dead renamed funcs. Fix compile errors. **Precedence note (intentional):** migrating `shelfRestorePopup` moves it from *below* `stackTop`/`diffView`/`popup`/`commitPopup` (its old dispatch slot ~model.go:408) to *above* them via `overlayTop()`. This is harmless-to-better — restore only ever coexists with its switcher (± a surface beneath) and the promotion fixes restore-over-a-pushed-surface; it is not an accidental reorder.
 
 - [ ] **Step 6: Migrate shelf tests + `shelfPopupModel`**
 
