@@ -172,7 +172,7 @@ type shelfList struct {
 
 func (l shelfList) Len() int          { return len(l.items) }
 func (l shelfList) Row(i int) string  { return l.rows[i] }
-func (l shelfList) Name(i int) string { return l.items[i].Path }
+func (l shelfList) Name(i int) string { return l.items[i].Origin.Path }
 func (l shelfList) Date(i int) int64  { return l.items[i].Created.Unix() }
 func (l shelfList) Key(i int) string  { return l.items[i].ID }
 

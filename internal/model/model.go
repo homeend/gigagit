@@ -1,7 +1,11 @@
 // Package model holds shared git data types used across the engine and frontends.
 package model
 
-import "time"
+import (
+	"fmt"
+	"path/filepath"
+	"time"
+)
 
 // FileKind classifies a changed path.
 type FileKind int
@@ -138,30 +142,30 @@ type ShelfBucket struct {
 	Hidden bool
 }
 
-// ShelfEntry is one shelved file: immutable content plus provenance metadata.
+// ShelfEntry is one shelved file: immutable content plus structured provenance.
 type ShelfEntry struct {
-	ID      string // "<source>-<pathslug>-<shorthash>"
+	ID      string // "<source-word>-<pathslug>-<shorthash>"
 	Bucket  string
-	Source  string // human-readable origin: "unstaged" | "staged" | "<rev>"
-	Path    string // origin repo-relative path
-	SHA     string // content hash; also the blob filename
+	Origin  FileAddress // where it was captured from (provenance + display)
+	SHA     string      // content hash; also the blob filename
 	Size    int64
 	Created time.Time
 }
 
-// BookmarkState is where in its git lifecycle a bookmarked file was taken from.
-type BookmarkState int
+// FileState is where in its git lifecycle a referenced file was taken from.
+// Shared by a bookmark's address and a shelf entry's origin.
+type FileState int
 
 const (
-	StateCommitted BookmarkState = iota // a commit/branch file (permanent → SHA)
-	StateShelf                          // a shelf entry (permanent → SHA)
-	StateStaged                         // a worktree's index file (live)
-	StateUnstaged                       // a worktree's working file, tracked-modified (live)
-	StateUntracked                      // a worktree's working file, new (live)
+	StateCommitted FileState = iota // a commit/branch file (permanent → SHA)
+	StateShelf                      // a shelf entry (permanent → SHA)
+	StateStaged                     // a worktree's index file (live)
+	StateUnstaged                   // a worktree's working file, tracked-modified (live)
+	StateUntracked                  // a worktree's working file, new (live)
 )
 
-// String renders the state word used in a bookmark's display string.
-func (s BookmarkState) String() string {
+// String renders the state word used in an address's display string.
+func (s FileState) String() string {
 	switch s {
 	case StateCommitted:
 		return "commit"
@@ -185,9 +189,65 @@ type Bookmark struct {
 	Commit   string // commit sha (committed); "" otherwise
 	ShelfID  string // shelf entry id (shelf); "" otherwise
 	Path     string // path within the tree/worktree
-	State    BookmarkState
+	State    FileState
 	SHA      string // blob checksum; set ⇔ permanent
 	ID       string // derived from the address
 	Label    string // human label; defaults to the display string
 	Created  time.Time
+}
+
+// FileAddress is the shared, structured provenance of a file: the identity AND
+// the human display behind both a bookmark's address and a shelf entry's origin.
+type FileAddress struct {
+	Worktree string // working/index/untracked states; "" otherwise
+	Branch   string // branch name when known
+	Commit   string // commit sha/rev (StateCommitted)
+	ShelfID  string // shelf entry id (StateShelf)
+	Path     string // path within the tree/worktree
+	State    FileState
+}
+
+// Display renders "<container> / <state-or-commit> / <path>".
+func (a FileAddress) Display() string {
+	container := "?"
+	switch a.State {
+	case StateCommitted:
+		container = a.Branch
+		if container == "" {
+			container = "commit"
+		}
+	case StateShelf:
+		container = "shelf"
+	default:
+		container = "wt:" + filepath.Base(a.Worktree)
+	}
+	mid := a.State.String()
+	if a.State == StateCommitted && len(a.Commit) >= 7 {
+		mid = a.Commit[:7]
+	}
+	return fmt.Sprintf("%s / %s / %s", container, mid, a.Path)
+}
+
+// FileRef maps the address to the byte-resolution ref used by ResolveBytes.
+// Byte resolution stays against the service repo; Worktree/Branch are
+// display-only provenance.
+func (a FileAddress) FileRef() FileRef {
+	switch a.State {
+	case StateStaged:
+		return FileRef{Source: SourceStaged, Path: a.Path}
+	case StateCommitted:
+		return FileRef{Source: SourceCommit, Locator: a.Commit, Path: a.Path}
+	case StateShelf:
+		return FileRef{Source: SourceShelf, Locator: a.ShelfID, Path: a.Path}
+	default: // StateUnstaged, StateUntracked
+		return FileRef{Source: SourceUnstaged, Path: a.Path}
+	}
+}
+
+// Address builds the FileAddress a bookmark points at.
+func (b Bookmark) Address() FileAddress {
+	return FileAddress{
+		Worktree: b.Worktree, Branch: b.Branch, Commit: b.Commit,
+		ShelfID: b.ShelfID, Path: b.Path, State: b.State,
+	}
 }

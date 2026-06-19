@@ -10,17 +10,18 @@ import (
 // ErrShelfDisabled means no state directory was resolvable.
 var ErrShelfDisabled = errors.New("shelf: no state directory available")
 
-// ShelfAdd resolves ref's bytes (Read reservation) and stores a frozen copy.
-func (s *Service) ShelfAdd(ctx context.Context, ref model.FileRef, bucket string) (model.ShelfEntry, error) {
+// ShelfAdd resolves addr's bytes (Read reservation) and stores a frozen copy
+// tagged with its structured origin.
+func (s *Service) ShelfAdd(ctx context.Context, addr model.FileAddress, bucket string) (model.ShelfEntry, error) {
 	st := s.shelfStore(ctx)
 	if st == nil {
 		return model.ShelfEntry{}, ErrShelfDisabled
 	}
-	data, err := s.ResolveBytes(ctx, ref)
+	data, err := s.ResolveBytes(ctx, addr.FileRef())
 	if err != nil {
 		return model.ShelfEntry{}, err
 	}
-	return st.Put(bucket, ref, data)
+	return st.Put(bucket, addr, data)
 }
 
 // ShelfList returns one page of a bucket's entries, newest first.
