@@ -112,6 +112,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   instead of persisting across navigation and reloads.
 
 ### Changed
+- TUI: the bookmark switcher popup (`g`) now renders through the windowed list
+  primitive like the repo switcher — `z` cycles cutoff/wrap/scroll, `shift+←/→`
+  pans in scroll mode, the viewport scrolls to keep the selection in view, and
+  long rows no longer wrap uncontrolled.
 - TUI: the decision modal (e.g. "merge … hit conflicts") now renders centered
   over the interface instead of standalone in the top-left corner.
 - TUI: in the conflict resolver (`x`), the whole-file conflict keys are now
