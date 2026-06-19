@@ -120,6 +120,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   instead of persisting across navigation and reloads.
 
 ### Changed
+- Shelf entries now read like bookmarks. Each entry stores a structured
+  **origin** (the shared `model.FileAddress` — worktree/branch/commit/state)
+  captured at shelve-time and renders `<container> / <state-or-commit> / <path>`
+  in the TUI Shelf tab and `gg shelf list`, instead of the terse
+  `[source] path #sha`. `gg shelf add` records the worktree/branch it was taken
+  from. (`BookmarkState` is renamed `model.FileState`, now shared by both.)
 - TUI: the bookmark switcher popup (`g`) now renders through the windowed list
   primitive like the repo switcher — `z` cycles cutoff/wrap/scroll, `shift+←/→`
   pans in scroll mode, the viewport scrolls to keep the selection in view, and
