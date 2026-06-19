@@ -96,14 +96,16 @@ nor cherry-pick by hand.
 
 1. Validate: `Commit` and `NewMsg` non-empty; resolve the current branch.
 2. Resolve whether `Commit` is **HEAD** of the current branch.
-   - **C == HEAD** → reword via the **existing** `Repo.Commit(ctx, NewMsg,
-     all=false, amend=true)` verb (= `git commit --amend -m <NewMsg>`, no `-a`).
-     No rebase. The common case. **Message-only guard:** `--amend` folds any
-     **staged** index into HEAD, so to keep reword message-only the op
-     stash-wraps when the index has staged changes (the same stash approach the
-     rebase path uses), restoring after — making the HEAD and mid-branch paths
-     behave identically w.r.t. a dirty worktree. Unstaged-only changes are
-     untouched by `--amend` and need no stash.
+   - **C == HEAD, clean worktree** → reword via the **existing** `Repo.Commit(ctx,
+     NewMsg, all=false, amend=true)` verb (= `git commit --amend -m <NewMsg>`,
+     no `-a`). No rebase, no stash — the cheap common case (valuable on huge
+     monorepos). Also the path that rewords a **single-commit repo's root**
+     (`--amend` works on the root; rebase can't).
+   - **C == HEAD, dirty worktree** → route through the **rebase path** below
+     (`Onto = C^`). This reuses `InteractiveRebase`'s stash-wrap, which already
+     preserves the staged/unstaged split — strictly safer than amending a dirty
+     index, and avoids re-implementing the staged-restore logic. (Refinement
+     over a naive "amend with a stash guard".)
    - **C != HEAD, has a parent** → build a single-reword
      `rebaseplan.Plan` covering the full `C^..HEAD` range (the target marked
      `Reword` with `NewMsg`, every other entry `Pick` — **the whole range, or
