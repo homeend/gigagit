@@ -9,6 +9,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- CLI/TUI: **fetch + prune** for remote-tracking refs. `gg remote fetch`
+  (`git fetch --all`) updates every remote's tracking refs; `gg remote prune`
+  drops tracking refs for branches deleted upstream. On the TUI Remotes tab, `f`
+  fetches and the `.` menu offers **Prune**. Both refresh the Remotes list and
+  the Branches `(↓N)` behind-counts. (The e2e harness gained a `stdout_excludes`
+  assertion to prove a ref was pruned.)
 - CLI: `gg checkout <remote>/<branch> [-s]` checks out a remote-tracking branch
   as a local tracking branch — fast-forward-safe via the same `SmartCheckout`
   engine op as the TUI's Remotes-tab `c`/`s` (reuses an existing local branch

@@ -88,7 +88,7 @@ gg pull [--background] [--on-conflict rebase|merge|abort]
 gg push
 gg switch <branch>
 gg checkout <remote>/<branch> [-s]   # local tracking branch from a remote ref (ff-safe); -s switches to it
-gg remote ls                         # list remote-tracking branches
+gg remote ls | fetch | prune         # list remote branches / fetch all / prune deleted
 gg branch create <name> [<start-point>]
 gg branch delete [--force] <name>
 gg merge [--into <target>] [--on-conflict=keep|abort] <source>
