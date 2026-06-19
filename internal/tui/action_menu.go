@@ -38,6 +38,9 @@ func availableActions(m Model) []actionRow {
 		if r, ok := m.bookmarkAddRow(); ok {
 			rows = append(rows, r)
 		}
+		if r, ok := m.compareAgainstBookmarkRow(); ok {
+			rows = append(rows, r)
+		}
 		return rows
 	}
 	var row, window []actionRow
@@ -62,6 +65,9 @@ func availableActions(m Model) []actionRow {
 		out = append(out, r)
 	}
 	if r, ok := m.bookmarkAddRow(); ok {
+		out = append(out, r)
+	}
+	if r, ok := m.compareAgainstBookmarkRow(); ok {
 		out = append(out, r)
 	}
 	if r, ok := m.renameBranchRow(); ok {

@@ -77,3 +77,33 @@ func TestCompareModeMutatorsInert(t *testing.T) {
 		}
 	}
 }
+
+func TestCompareRowRunSetsPendingAndLoads(t *testing.T) {
+	m := footerModel()
+	m.diffView = &diffView{title: "a.go", rev: "cafe9999"} // a resolvable focused file
+	row, ok := m.compareAgainstBookmarkRow()
+	if !ok {
+		t.Fatal("compare row must be present when a file is focused")
+	}
+	u, cmd := row.run(m)
+	mm := u.(Model)
+	if mm.pendingCompare == nil || mm.pendingCompare.ref.Path != "a.go" {
+		t.Fatalf("run must set pendingCompare for the focused file, got %+v", mm.pendingCompare)
+	}
+	if cmd == nil {
+		t.Error("run must kick off the bookmark load")
+	}
+}
+
+func TestCompareRowAccompaniesAddRow(t *testing.T) {
+	// Wherever "Bookmark this file" appears, so must "Compare against bookmark".
+	m := footerModel()
+	m = m.pushSurface(newBlameView(navContext{path: "a.go", rev: "abc123"}))
+	got := ids(availableActions(m))
+	if !got["bookmark-add"] {
+		t.Fatal("precondition: bookmark-add expected in blame view")
+	}
+	if !got["bookmark-compare"] {
+		t.Error("bookmark-compare must accompany bookmark-add")
+	}
+}

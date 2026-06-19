@@ -108,3 +108,24 @@ func (m Model) bookmarkAddRow() (actionRow, bool) {
 		},
 	}, true
 }
+
+// compareAgainstBookmarkRow is the menu-only "Compare against bookmark" action,
+// present wherever a single file is focused. The focused file is frozen at build
+// time; running it stashes that ref on the Model and opens the bookmark picker
+// in compare mode.
+func (m Model) compareAgainstBookmarkRow() (actionRow, bool) {
+	b, ok := m.focusedBookmark()
+	if !ok {
+		return actionRow{}, false
+	}
+	ref := bookmarkToFileRef(b)
+	label := bookmarkDisplay(b)
+	return actionRow{
+		id:    "bookmark-compare",
+		label: "Compare against bookmark",
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			m.pendingCompare = &pendingCompare{ref: ref, label: label}
+			return m, m.loadBookmarksCmd()
+		},
+	}, true
+}
