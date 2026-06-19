@@ -9,6 +9,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- TUI: **Compare against bookmark** — the `.` menu on any file reference (file
+  tree, history row, blame, diff, stash files, the Files/Staged/Shelf panels)
+  offers **Bookmark this file** and **Compare against bookmark**: pick a bookmark
+  from the switcher and the focused file is diffed against it. Bookmarking in the
+  history view now targets the **selected commit's** version of the file.
 - **Context ops** — branch + commit. `gg branch rename <old> <new>` renames a
   local branch (`git branch -m`; the TUI Branches panel `.` menu offers **Rename
   branch** + **Copy branch name**, and the Remotes panel **Copy branch name**).
