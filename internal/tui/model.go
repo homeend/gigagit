@@ -374,6 +374,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.shelfRestorePopup != nil {
 			return m.updateShelfRestoreKey(msg)
 		}
+		if m.bookmarkPastePopup != nil {
+			return m.updateBookmarkPasteKey(msg)
+		}
 		if m.bookmarkPopup != nil {
 			return m.updateBookmarkPopupKey(msg)
 		}

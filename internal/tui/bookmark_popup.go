@@ -12,6 +12,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/gigagit/gg/internal/domain"
+	"github.com/gigagit/gg/internal/engine"
 	"github.com/gigagit/gg/internal/model"
 )
 
@@ -164,12 +165,165 @@ func (m Model) updateBookmarkPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // bookmarkPopupRune routes action runes (p/x/m) before falling back to filtering.
-// p/x/m are implemented in the paste/remove/compare task; here they fall through
-// to the filter so the popup is usable.
 func (m Model) bookmarkPopupRune(s string) (tea.Model, tea.Cmd) {
+	switch s {
+	case "x":
+		return m.bookmarkRemovePrompt()
+	case "p":
+		return m.bookmarkPastePrompt()
+	case "m":
+		return m.bookmarkMark()
+	}
 	m.bookmarkPopup.filter += s
 	m.bookmarkPopup.sel = 0
 	return m, nil
+}
+
+// bookmarkRemovePrompt opens a confirm modal; removing a bookmark is cheap to
+// recreate but re-finding the file in a big repo is friction, so we confirm.
+func (m Model) bookmarkRemovePrompt() (tea.Model, tea.Cmd) {
+	b, ok := m.selectedBookmark()
+	if !ok {
+		return m, nil
+	}
+	m.bookmarkPopup = nil
+	m.modal = &decisionState{
+		req: engine.DecisionRequest{
+			ID:      "bookmark-remove",
+			Prompt:  "Remove bookmark " + b.Path + "?",
+			Options: []string{"Remove", "Cancel"},
+		},
+		onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {
+			if opt == "Remove" {
+				return m, m.bookmarkRemoveCmd(b.ID)
+			}
+			return m, nil
+		},
+	}
+	return m, nil
+}
+
+func (m Model) bookmarkRemoveCmd(id string) tea.Cmd {
+	svc := m.svc
+	reopen := m.loadBookmarksCmd()
+	return func() tea.Msg {
+		if err := svc.BookmarkRemove(context.Background(), id); err != nil {
+			return bookmarksLoadedMsg{err: err}
+		}
+		return reopen()
+	}
+}
+
+// bookmarkPastePrompt fetches the bookmark's bytes, then opens the mandatory-dest
+// path popup that runs engine.WriteFile on submit.
+func (m Model) bookmarkPastePrompt() (tea.Model, tea.Cmd) {
+	b, ok := m.selectedBookmark()
+	if !ok {
+		return m, nil
+	}
+	data, err := m.svc.BookmarkBytes(context.Background(), b)
+	if err != nil {
+		m.statusMsg = "bookmark paste: " + err.Error()
+		return m, nil
+	}
+	m.bookmarkPopup = nil
+	m.bookmarkPastePopup = &bookmarkPastePopup{origin: b.Path, data: data}
+	return m, nil
+}
+
+// bookmarkMark records the first compare mark, or compares with it on the second
+// press (a self-contained two-mark, independent of the panel pair-op machinery).
+func (m Model) bookmarkMark() (tea.Model, tea.Cmd) {
+	b, ok := m.selectedBookmark()
+	if !ok {
+		return m, nil
+	}
+	p := m.bookmarkPopup
+	if p.markID == "" || p.markID == b.ID {
+		if p.markID == b.ID {
+			p.markID = "" // toggle off
+		} else {
+			p.markID = b.ID
+		}
+		return m, nil
+	}
+	return m.openBookmarkCompareTwo(p.markID, b.ID)
+}
+
+// openBookmarkCompareTwo diffs two bookmarks (marked = old, selected = new),
+// both resolved via BookmarkBytes.
+func (m Model) openBookmarkCompareTwo(aID, bID string) (Model, tea.Cmd) {
+	a, okA := m.bookmarkByID(aID)
+	b, okB := m.bookmarkByID(bID)
+	if !okA || !okB {
+		return m, nil
+	}
+	m.bookmarkPopup = nil
+	width, _ := m.overlayDims()
+	m.diffView = &diffView{title: a.Path + " ↔ " + b.Path, context: bookmarkDisplay(a) + " → " + bookmarkDisplay(b), loading: true, partial: m.diffPartial, long: m.diffLong, width: width}
+	m.diffTag = "bookmark2:" + aID + ":" + bID
+	return m, m.loadBookmarkCompareTwoCmd(a, b)
+}
+
+func (m Model) loadBookmarkCompareTwoCmd(a, b model.Bookmark) tea.Cmd {
+	svc := m.svc
+	differ := m.diffDiffer()
+	body := m.diffBodyRows()
+	tag := "bookmark2:" + a.ID + ":" + b.ID
+	v := &diffView{title: a.Path + " ↔ " + b.Path, context: bookmarkDisplay(a) + " → " + bookmarkDisplay(b), partial: m.diffPartial, long: m.diffLong}
+	v.width, _ = m.overlayDims()
+	return func() tea.Msg {
+		oldSrc := func(ctx context.Context) ([]byte, error) { return svc.BookmarkBytes(ctx, a) }
+		newSrc := func(ctx context.Context) ([]byte, error) { return svc.BookmarkBytes(ctx, b) }
+		out, err := differ.Diff(context.Background(), domain.Request{Key: "", Old: oldSrc, New: newSrc})
+		if err != nil {
+			v.err = err
+			return diffMsg{tag: tag, view: v}
+		}
+		applyDiff(v, out, body)
+		return diffMsg{tag: tag, view: v}
+	}
+}
+
+// --- paste destination popup ---------------------------------------------
+
+func (m Model) updateBookmarkPasteKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if msg.Type == tea.KeyCtrlC {
+		return m, tea.Quit
+	}
+	p := m.bookmarkPastePopup
+	switch msg.Type {
+	case tea.KeyEsc:
+		m.bookmarkPastePopup = nil
+	case tea.KeyEnter:
+		dest := strings.TrimSpace(p.dest)
+		if dest == "" {
+			return m, nil // a destination is mandatory
+		}
+		data := p.data
+		m.bookmarkPastePopup = nil
+		return m.startOp(engine.WriteFile{Path: dest, Data: data})
+	case tea.KeyBackspace, tea.KeyCtrlH:
+		if r := []rune(p.dest); len(r) > 0 {
+			p.dest = string(r[:len(r)-1])
+		}
+	case tea.KeySpace:
+		p.dest += " "
+	case tea.KeyRunes:
+		p.dest += string(msg.Runes)
+	}
+	return m, nil
+}
+
+func (m Model) renderBookmarkPastePopup() string {
+	p := m.bookmarkPastePopup
+	var b strings.Builder
+	b.WriteString("Paste bookmarked file to a new path\n\n")
+	b.WriteString("from: " + p.origin + "  (resolved now)\n")
+	b.WriteString("dest: " + p.dest + "\n\n")
+	b.WriteString("[type] path  [enter] paste  [esc] cancel")
+	w, _ := m.overlayDims()
+	return modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"
 }
 
 // bookmarkJump opens a diff of the bookmark's bytes vs the current working file.

@@ -1,11 +1,73 @@
 package tui
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/gigagit/gg/internal/model"
 )
+
+func bmPopupModel(items ...model.Bookmark) Model {
+	m := footerModel()
+	m.bookmarkPopup = newBookmarkPopup(items)
+	return m
+}
+
+func TestBookmarkRemoveConfirms(t *testing.T) {
+	m := bmPopupModel(model.Bookmark{ID: "b1", State: model.StateUnstaged, Worktree: "/wt", Path: "a.go"})
+	mm, _ := m.updateBookmarkPopupKey(keyMsg("x"))
+	m = mm.(Model)
+	if m.modal == nil {
+		t.Fatalf("x should open a remove-confirm modal")
+	}
+}
+
+func TestBookmarkPasteOpensPathPopup(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "a.go"), []byte("payload"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := bmPopupModel(model.Bookmark{ID: "b1", State: model.StateUnstaged, Worktree: dir, Path: "a.go"})
+	mm, _ := m.updateBookmarkPopupKey(keyMsg("p"))
+	m = mm.(Model)
+	if m.bookmarkPastePopup == nil {
+		t.Fatalf("p should open the paste path popup")
+	}
+	if string(m.bookmarkPastePopup.data) != "payload" {
+		t.Fatalf("paste popup data = %q, want payload", m.bookmarkPastePopup.data)
+	}
+}
+
+func TestBookmarkCompareTwoOpensDiff(t *testing.T) {
+	m := bmPopupModel(
+		model.Bookmark{ID: "a", State: model.StateUnstaged, Worktree: "/wt", Path: "a.go"},
+		model.Bookmark{ID: "b", State: model.StateUnstaged, Worktree: "/wt", Path: "b.go"},
+	)
+	m, _ = m.openBookmarkCompareTwo("a", "b")
+	if m.diffView == nil || m.diffTag != "bookmark2:a:b" {
+		t.Fatalf("two-bookmark compare should open a diff (tag=%q)", m.diffTag)
+	}
+}
+
+func TestBookmarkMarkThenCompare(t *testing.T) {
+	m := bmPopupModel(
+		model.Bookmark{ID: "a", State: model.StateUnstaged, Worktree: "/wt", Path: "a.go"},
+		model.Bookmark{ID: "b", State: model.StateUnstaged, Worktree: "/wt", Path: "b.go"},
+	)
+	mm, _ := m.updateBookmarkPopupKey(keyMsg("m")) // mark row 0
+	m = mm.(Model)
+	if m.bookmarkPopup == nil || m.bookmarkPopup.markID != "a" {
+		t.Fatalf("first m should mark the cursor bookmark")
+	}
+	m.bookmarkPopup.sel = 1
+	mm, _ = m.updateBookmarkPopupKey(keyMsg("m")) // compare with row 1
+	m = mm.(Model)
+	if m.diffView == nil {
+		t.Fatalf("second m on another row should open the compare diff")
+	}
+}
 
 func TestBookmarkDisplayString(t *testing.T) {
 	got := bookmarkDisplay(model.Bookmark{State: model.StateCommitted, Commit: "a1b2c3d4e5", Path: "src/x.go", Branch: "feat"})
