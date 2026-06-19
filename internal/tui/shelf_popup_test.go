@@ -109,6 +109,34 @@ func TestShelfCompareModeEnterDiffs(t *testing.T) {
 	}
 }
 
+func TestPendingCompareStampsShelfPopup(t *testing.T) {
+	m := footerModel()
+	m.width, m.height = 100, 30
+	m.pendingCompare = &pendingCompare{ref: model.FileRef{Source: model.SourceUnstaged, Path: "f.go"}, label: "wt / unstaged / f.go", target: compareShelf}
+	u, _ := m.Update(shelfLoadedMsg{entries: []model.ShelfEntry{shEntry("a", "x.go")}, open: true})
+	m = u.(Model)
+	if m.shelfPopup == nil || m.shelfPopup.compareRef == nil {
+		t.Fatalf("a shelf-targeted pendingCompare should stamp compareRef onto the new popup")
+	}
+	if m.pendingCompare != nil {
+		t.Fatalf("pendingCompare should be consumed")
+	}
+}
+
+func TestPendingCompareStampsBookmarkPopup(t *testing.T) {
+	m := footerModel()
+	m.width, m.height = 100, 30
+	m.pendingCompare = &pendingCompare{ref: model.FileRef{Source: model.SourceShelf, Locator: "a", Path: "x.go"}, label: "shelf #a", target: compareBookmark}
+	u, _ := m.Update(bookmarksLoadedMsg{items: []model.Bookmark{{ID: "b1", State: model.StateUnstaged, Worktree: "/wt", Path: "y.go"}}})
+	m = u.(Model)
+	if m.bookmarkPopup == nil || m.bookmarkPopup.compareRef == nil {
+		t.Fatalf("a bookmark-targeted pendingCompare should stamp compareRef onto the new popup")
+	}
+	if m.pendingCompare != nil {
+		t.Fatalf("pendingCompare should be consumed")
+	}
+}
+
 func TestShelfPopupMarkThenCompare(t *testing.T) {
 	m := shelfPopModel(shEntry("a", "a.go"), shEntry("b", "b.go"))
 	mm, _ := m.updateShelfPopupKey(keyMsg("m"))

@@ -24,10 +24,10 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	if m.modal != nil {
 		return m, nil
 	}
-	// The global bookmark switcher is a centered overlay above any content
-	// window; like the other popups, swallow mouse rather than hit-test the
-	// hidden background underneath it.
-	if m.bookmarkPopup != nil || m.bookmarkPastePopup != nil {
+	// The global bookmark/shelf switchers are centered overlays above any
+	// content window; like the other popups, swallow mouse rather than hit-test
+	// the hidden background underneath them.
+	if m.bookmarkPopup != nil || m.bookmarkPastePopup != nil || m.shelfPopup != nil {
 		return m, nil
 	}
 	if m.stackTop() != nil {
