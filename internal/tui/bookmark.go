@@ -64,6 +64,22 @@ func (m Model) focusedBookmark() (model.Bookmark, bool) {
 	return model.Bookmark{}, false
 }
 
+// bookmarkToFileRef maps a bookmark's address to a FileRef so the focused
+// (left) compare side resolves via domain.ResolveBytes — by address, with no
+// pre-resolved blob SHA. A committed bookmark's Commit may be a stash commit.
+func bookmarkToFileRef(b model.Bookmark) model.FileRef {
+	switch b.State {
+	case model.StateShelf:
+		return model.FileRef{Source: model.SourceShelf, Locator: b.ShelfID, Path: b.Path}
+	case model.StateStaged:
+		return model.FileRef{Source: model.SourceStaged, Path: b.Path}
+	case model.StateCommitted:
+		return model.FileRef{Source: model.SourceCommit, Locator: b.Commit, Path: b.Path}
+	default: // unstaged / untracked
+		return model.FileRef{Source: model.SourceUnstaged, Path: b.Path}
+	}
+}
+
 type bookmarkAddedMsg struct {
 	bm  model.Bookmark
 	err error

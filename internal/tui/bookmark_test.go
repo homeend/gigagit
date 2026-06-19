@@ -276,3 +276,27 @@ func TestFocusedBookmarkDiffViewWorkingTree(t *testing.T) {
 		t.Fatalf("working-tree diff focusedBookmark = %+v ok=%v; want unstaged a.go", b, ok)
 	}
 }
+
+func TestBookmarkToFileRef(t *testing.T) {
+	cases := []struct {
+		name string
+		in   model.Bookmark
+		want model.FileRef
+	}{
+		{"committed", model.Bookmark{State: model.StateCommitted, Commit: "deadbeef", Path: "a.go"},
+			model.FileRef{Source: model.SourceCommit, Locator: "deadbeef", Path: "a.go"}},
+		{"shelf", model.Bookmark{State: model.StateShelf, ShelfID: "sh1", Path: "b.go"},
+			model.FileRef{Source: model.SourceShelf, Locator: "sh1", Path: "b.go"}},
+		{"staged", model.Bookmark{State: model.StateStaged, Path: "c.go"},
+			model.FileRef{Source: model.SourceStaged, Path: "c.go"}},
+		{"unstaged", model.Bookmark{State: model.StateUnstaged, Path: "d.go"},
+			model.FileRef{Source: model.SourceUnstaged, Path: "d.go"}},
+		{"untracked", model.Bookmark{State: model.StateUntracked, Path: "e.go"},
+			model.FileRef{Source: model.SourceUnstaged, Path: "e.go"}},
+	}
+	for _, c := range cases {
+		if got := bookmarkToFileRef(c.in); got != c.want {
+			t.Errorf("%s: bookmarkToFileRef = %+v, want %+v", c.name, got, c.want)
+		}
+	}
+}
