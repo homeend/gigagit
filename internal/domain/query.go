@@ -210,6 +210,14 @@ func (s *Service) FileLog(ctx context.Context, rev, path string, limit int) ([]m
 	})
 }
 
+// CommitMessage returns rev's full commit message, under a Read reservation.
+// Backs the reword popup's pre-fill.
+func (s *Service) CommitMessage(ctx context.Context, rev string) (string, error) {
+	return query(ctx, s, "commit-message:"+rev, func(c context.Context) (string, error) {
+		return s.repo.CommitMessage(c, rev)
+	})
+}
+
 // CommitRange lists onto..branch oldest-first with full messages, under a Read
 // reservation. Backs the interactive-rebase editor.
 func (s *Service) CommitRange(ctx context.Context, onto, branch string) ([]model.RangeCommit, error) {

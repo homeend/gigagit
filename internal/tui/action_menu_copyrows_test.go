@@ -150,6 +150,27 @@ func TestContextCopyRowsStackBeatsDiffView(t *testing.T) {
 	}
 }
 
+func TestContextCopyRowsBranchName(t *testing.T) {
+	m := footerModel()
+	m.focus = panelBranches // selection defaults to row 0 = "main"
+	rows := m.contextCopyRows()
+	r, ok := findRow(rows, "copy-branch-name")
+	if !ok || r.copyText != "main" {
+		t.Fatalf("branches panel rows = %v, want copy-branch-name=main", rows)
+	}
+}
+
+func TestContextCopyRowsRemoteName(t *testing.T) {
+	m := footerModel()
+	m.focus = panelRemotes
+	m.remoteBranches = []model.RemoteBranch{{Name: "origin/foo", Remote: "origin", Branch: "foo"}}
+	rows := m.contextCopyRows()
+	r, ok := findRow(rows, "copy-branch-name")
+	if !ok || r.copyText != "origin/foo" {
+		t.Fatalf("remotes panel rows = %v, want copy-branch-name=origin/foo", rows)
+	}
+}
+
 func TestAvailableActionsContentWindowCopyOnly(t *testing.T) {
 	// File tree open while focus is still panelCommits: the commit-files [l]
 	// binding is available, but the menu must list ONLY copy rows (replaying l

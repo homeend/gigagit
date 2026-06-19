@@ -19,6 +19,10 @@ guards against removing the worktree you are standing in.
 - `gg commit -m <msg> [-a] [--amend]` — commit (`-a` also stages tracked
   modifications; `--amend` rewrites the last commit, reusing its message when
   `-m` is omitted).
+- `gg commit reword <commit> -m <msg>` — change a commit's message. HEAD is a
+  cheap amend; an older commit replays its branch onto its own parent (in
+  place, later commits preserved). Refuses the repository's root commit and a
+  commit not on the current branch.
 - `gg pull [<branch>] [--background] [--on-conflict rebase|merge|abort]` —
   smart pull; with `<branch>` + `--background` it fast-forwards that branch's
   ref without checking it out.
@@ -34,6 +38,8 @@ guards against removing the worktree you are standing in.
   (`git fetch --all`); `prune` drops tracking refs for branches deleted upstream.
 - `gg branch create <name> [<start-point>]` — create a branch (no switch);
   start point defaults to HEAD.
+- `gg branch rename <old> <new>` — rename a local branch (`git branch -m`);
+  refuses an existing target name.
 - `gg branch delete [--force] <name>` — delete a branch; refuses the
   checked-out branch and branches checked out in a worktree. An unmerged
   branch is a `branch-unmerged` fork (`force-delete`/`keep`): pass `--force`

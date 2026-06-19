@@ -42,6 +42,8 @@ type Model struct {
 	pendingSwitch       bool
 	switchTarget        string
 	branchPopup         *branchPopup
+	renameBranchPopup   *renameBranchPopup
+	rewordPopup         *rewordPopup
 	shelfRestorePopup   *shelfRestorePopup  // Shelf tab: typed restore destination
 	bookmarkPopup       *bookmarkPopup      // bookmark quick-switcher; nil = closed
 	bookmarkPastePopup  *bookmarkPastePopup // bookmark paste: typed destination; nil = closed
@@ -382,6 +384,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.branchPopup != nil {
 			return m.updateBranchPopupKey(msg)
+		}
+		if m.renameBranchPopup != nil {
+			return m.updateRenameBranchPopupKey(msg)
+		}
+		if m.rewordPopup != nil {
+			return m.updateRewordPopupKey(msg)
 		}
 		if m.contentPopup != nil {
 			return m.updateContentPopupKey(msg)

@@ -206,10 +206,11 @@ func TestContextCopyRowsStaged(t *testing.T) {
 }
 
 func TestContextCopyRowsEmpty(t *testing.T) {
-	m := footerModel() // default focus panelBranches: no copy rows defined there
+	m := footerModel()
+	m.focus = panelWorktrees // no copy rows defined for the Worktrees panel
 	m.loading = false
 	if rows := m.contextCopyRows(); len(rows) != 0 {
-		t.Errorf("branches panel yields no copy rows, got %v", rows)
+		t.Errorf("worktrees panel yields no copy rows, got %v", rows)
 	}
 }
 

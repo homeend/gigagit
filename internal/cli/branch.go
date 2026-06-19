@@ -13,18 +13,31 @@ import (
 // cmdBranch dispatches `gg branch <sub>`.
 func cmdBranch(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: gg branch <create|delete> [args]")
+		fmt.Fprintln(stderr, "usage: gg branch <create|rename|delete> [args]")
 		return 2
 	}
 	switch args[0] {
 	case "create":
 		return cmdBranchCreate(svc, args[1:], stdout, stderr)
+	case "rename":
+		return cmdBranchRename(svc, args[1:], stdout, stderr)
 	case "delete":
 		return cmdBranchDelete(svc, args[1:], stdin, stdout, stderr)
 	default:
-		fmt.Fprintf(stderr, "branch: unknown subcommand %q (use create or delete)\n", args[0])
+		fmt.Fprintf(stderr, "branch: unknown subcommand %q (use create, rename, or delete)\n", args[0])
 		return 2
 	}
+}
+
+// cmdBranchRename implements `gg branch rename <old> <new>`.
+func cmdBranchRename(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
+	if len(args) != 2 || args[0] == "" || args[1] == "" {
+		fmt.Fprintln(stderr, "usage: gg branch rename <old> <new>")
+		return 2
+	}
+	res, err := runOperation(context.Background(), svc,
+		engine.RenameBranch{Old: args[0], New: args[1]}, cliDecider{}, stderr)
+	return finish(res, err, stdout, stderr)
 }
 
 // cmdBranchCreate implements `gg branch create <name> [<start-point>]`.

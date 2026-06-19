@@ -128,6 +128,9 @@ func cmdStatus(svc *domain.Service, stdout, stderr io.Writer) int {
 }
 
 func cmdCommit(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
+	if len(args) > 0 && args[0] == "reword" {
+		return cmdCommitReword(svc, args[1:], stdout, stderr)
+	}
 	fs := flag.NewFlagSet("commit", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	msg := fs.String("m", "", "commit message (required unless --amend)")

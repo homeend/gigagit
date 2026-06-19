@@ -33,6 +33,8 @@ type GitOps interface {
 	Switch(ctx context.Context, branch string) error
 	Commit(ctx context.Context, message string, all, amend bool) error
 	LastCommitMessage(ctx context.Context) (string, error)
+	CommitMessage(ctx context.Context, rev string) (string, error)
+	RevParse(ctx context.Context, rev string) (string, error)
 	ResetSoft(ctx context.Context, ref string) error
 
 	StashList(ctx context.Context) ([]string, error)
@@ -44,6 +46,7 @@ type GitOps interface {
 
 	CheckRefFormatBranch(ctx context.Context, name string) error
 	CreateBranch(ctx context.Context, name, startPoint string) error
+	RenameBranch(ctx context.Context, oldName, newName string) error
 	CreateTrackingBranch(ctx context.Context, name, upstream string) error
 	DeleteBranch(ctx context.Context, name string, force bool) error
 	LocalBranchExists(ctx context.Context, name string) (bool, error)

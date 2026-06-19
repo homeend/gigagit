@@ -210,6 +210,16 @@ func TestCurrentBranchGatedQuery(t *testing.T) {
 	}
 }
 
+func TestCommitMessageGatedQuery(t *testing.T) {
+	f := gitexec.NewFakeRunner()
+	f.SetResponse("git log -1 --pretty=%B", gitexec.Result{Stdout: "subject\n\nbody\n"})
+	svc := New(&git.Repo{Runner: f})
+	msg, err := svc.CommitMessage(context.Background(), "HEAD")
+	if err != nil || msg != "subject\n\nbody\n" {
+		t.Fatalf("CommitMessage = %q, %v", msg, err)
+	}
+}
+
 func TestGitCommonDirGatedQuery(t *testing.T) {
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git rev-parse (common-dir)", gitexec.Result{Stdout: "/repo/.git\n"})

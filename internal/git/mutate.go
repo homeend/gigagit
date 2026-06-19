@@ -41,6 +41,15 @@ func (r *Repo) CreateBranch(ctx context.Context, name, startPoint string) error 
 	return err
 }
 
+// RenameBranch renames local branch oldName to newName (git branch -m). git
+// refuses when newName already exists; renaming a branch checked out in another
+// worktree succeeds and updates that worktree's HEAD.
+func (r *Repo) RenameBranch(ctx context.Context, oldName, newName string) error {
+	argv := gitcmd.New("branch").Arg("-m", oldName, newName).ToArgv()
+	_, err := r.Runner.Run(ctx, "git branch -m", argv)
+	return err
+}
+
 // LocalBranchExists reports whether refs/heads/<name> exists.
 func (r *Repo) LocalBranchExists(ctx context.Context, name string) (bool, error) {
 	argv := gitcmd.New("show-ref").Arg("--verify", "--quiet", "refs/heads/"+name).ToArgv()
