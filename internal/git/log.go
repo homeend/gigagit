@@ -19,20 +19,6 @@ type LogScope struct {
 	Branches []string
 }
 
-// Log returns up to limit commits reachable from HEAD, newest first, skipping
-// the first skip commits. skip=0 is the head of history (omits --skip).
-func (r *Repo) Log(ctx context.Context, limit, skip int) ([]model.Commit, error) {
-	argv := gitcmd.New("log").
-		Arg("-n", strconv.Itoa(limit), "--format="+logFormat).
-		ArgIf(skip > 0, "--skip="+strconv.Itoa(skip)).
-		ToArgv()
-	res, err := r.Runner.Run(ctx, "git log", argv)
-	if err != nil {
-		return nil, err
-	}
-	return ParseLog([]byte(res.Stdout))
-}
-
 // LogScoped returns up to limit commits (newest-first, --date-order) reachable
 // from the scope's refs, skipping the first skip. --decorate (bare, short names)
 // forces %D to populate across git versions.

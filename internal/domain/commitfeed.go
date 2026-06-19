@@ -22,17 +22,27 @@ type CommitFeed struct {
 	svc *Service
 
 	mu        sync.Mutex
+	scope     LogScope // refspec for the walk; empty = all local branches
 	commits   []model.Commit
 	hashes    map[string]bool // dedupe set, mirrors commits
 	skip      int             // next --skip offset (advances by raw page length)
 	exhausted bool
-	gen       int  // bumped by LoadInitial; tags pages so stale ones drop
-	inFlight  bool // at most one page request outstanding
+	gen       int                // bumped by LoadInitial; tags pages so stale ones drop
+	inFlight  bool               // at most one page request outstanding
+	cancel    context.CancelFunc // cancels the in-flight load's ctx on supersede
 }
 
 // CommitFeed returns a fresh feed for this Service's repo.
 func (s *Service) CommitFeed() *CommitFeed {
 	return &CommitFeed{svc: s, hashes: map[string]bool{}}
+}
+
+// SetScope sets the refspec for subsequent loads. Callers then LoadInitial to
+// re-walk; the gen bump drops any stale in-flight page.
+func (f *CommitFeed) SetScope(scope LogScope) {
+	f.mu.Lock()
+	f.scope = scope
+	f.mu.Unlock()
 }
 
 // FeedState is an immutable view handed to the frontend.
@@ -79,8 +89,14 @@ func (f *CommitFeed) NeedsMore(sel int) bool {
 // reload primitive: callers re-fill a feed by calling LoadInitial again.
 func (f *CommitFeed) LoadInitial(ctx context.Context) (FeedState, error) {
 	f.mu.Lock()
+	if f.cancel != nil {
+		f.cancel() // stop a superseded in-flight walk, not just drop its result
+	}
+	cctx, cancel := context.WithCancel(ctx)
+	f.cancel = cancel
 	f.gen++
 	gen0 := f.gen
+	scope := f.scope
 	f.commits = nil
 	f.hashes = map[string]bool{}
 	f.skip = 0
@@ -88,16 +104,22 @@ func (f *CommitFeed) LoadInitial(ctx context.Context) (FeedState, error) {
 	f.inFlight = true
 	f.mu.Unlock()
 
-	page, err := f.svc.logPage(ctx, commitInitialPage, 0)
+	page, err := f.svc.logPage(cctx, commitInitialPage, 0, scope)
 
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.inFlight = false
+	if f.gen == gen0 {
+		f.cancel = nil // our load finished current; nothing to cancel
+	}
+	if f.gen != gen0 { // a newer reload raced; drop this page, stamp OUR gen so the
+		// caller's message is droppable (not masquerading as the current gen)
+		st := f.snapshotLocked()
+		st.Gen = gen0
+		return st, nil
+	}
 	if err != nil {
 		return f.snapshotLocked(), err
-	}
-	if f.gen != gen0 { // another LoadInitial raced; drop this page
-		return f.snapshotLocked(), nil
 	}
 	for _, c := range page {
 		if !f.hashes[c.Hash] {
@@ -124,9 +146,10 @@ func (f *CommitFeed) LoadMore(ctx context.Context) (FeedState, bool, error) {
 	f.inFlight = true
 	gen0 := f.gen
 	skip := f.skip
+	scope := f.scope
 	f.mu.Unlock()
 
-	page, err := f.svc.logPage(ctx, commitPageSize, skip)
+	page, err := f.svc.logPage(ctx, commitPageSize, skip, scope)
 
 	f.mu.Lock()
 	defer f.mu.Unlock()

@@ -3,8 +3,10 @@ package domain
 import (
 	"context"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/gigagit/gg/internal/git"
 	"github.com/gigagit/gg/internal/gitexec"
@@ -48,8 +50,9 @@ func (r *pagingRunner) Run(ctx context.Context, name string, argv []string) (git
 	}
 	var b []byte
 	for i := skip; i < skip+limit && i < r.total; i++ {
-		// logFormat = %H%x1f%P%x1f%an%x1f%at%x1f%s ; only Hash matters here.
-		b = append(b, []byte("hash"+strconv.Itoa(i)+"\x1f\x1fauthor\x1f0\x1fsubject "+strconv.Itoa(i)+"\n")...)
+		// logFormat = %H%x1f%P%x1f%an%x1f%at%x1f%s%x1f%D ; only Hash matters here
+		// (trailing empty %D field keeps the 6-field count).
+		b = append(b, []byte("hash"+strconv.Itoa(i)+"\x1f\x1fauthor\x1f0\x1fsubject "+strconv.Itoa(i)+"\x1f\n")...)
 	}
 	return gitexec.Result{Stdout: string(b)}, nil
 }
@@ -174,7 +177,54 @@ func TestSnapshotReturnsCopy(t *testing.T) {
 
 func TestLogPageRuns(t *testing.T) {
 	svc := New(&git.Repo{Runner: &pagingRunner{total: 10}})
-	if _, err := svc.logPage(context.Background(), 50, 0); err != nil {
+	if _, err := svc.logPage(context.Background(), 50, 0, LogScope{}); err != nil {
 		t.Fatalf("logPage: %v", err)
+	}
+}
+
+func TestFeedScopeChangesRefspec(t *testing.T) {
+	f := gitexec.NewFakeRunner()
+	f.SetResponse("git log", gitexec.Result{Stdout: ""})
+	feed := New(&git.Repo{Runner: f}).CommitFeed()
+	feed.SetScope(LogScope{Branches: []string{"feat"}})
+	_, _ = feed.LoadInitial(context.Background())
+	joined := ""
+	for _, c := range f.Calls {
+		if c.Name == "git log" {
+			joined = strings.Join(c.Argv, " ")
+		}
+	}
+	if !strings.Contains(joined, "feat") || strings.Contains(joined, "--branches") {
+		t.Fatalf("solo scope should walk 'feat', not --branches: %q", joined)
+	}
+}
+
+func TestFeedSupersedeCancelsAndStampsGen(t *testing.T) {
+	f := gitexec.NewFakeRunner()
+	started := make(chan context.Context, 1)
+	release := make(chan struct{})
+	f.SetHandler("git log", func(ctx context.Context, argv []string) (gitexec.Result, error) {
+		started <- ctx
+		<-release
+		return gitexec.Result{}, ctx.Err()
+	})
+	feed := New(&git.Repo{Runner: f}).CommitFeed()
+
+	firstDone := make(chan FeedState, 1)
+	go func() { st, _ := feed.LoadInitial(context.Background()); firstDone <- st }()
+	ctx1 := <-started // first load parked in the handler
+
+	// A second LoadInitial supersedes the first; its ctx must be cancelled.
+	go func() { _, _ = feed.LoadInitial(context.Background()) }()
+	select {
+	case <-ctx1.Done():
+	case <-time.After(2 * time.Second):
+		t.Fatal("prior load ctx was not cancelled on supersede")
+	}
+	close(release) // let the parked handlers return
+
+	st := <-firstDone // the superseded load's state must carry the OLDER gen (1)
+	if st.Gen != 1 {
+		t.Fatalf("superseded load should stamp gen0=1, got %d", st.Gen)
 	}
 }

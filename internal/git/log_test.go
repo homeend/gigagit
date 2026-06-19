@@ -119,7 +119,7 @@ func TestRepoLogReturnsCommits(t *testing.T) {
 	repo := &Repo{Runner: runner}
 	gitIn(t, dir, "commit", "--allow-empty", "-m", "second")
 
-	commits, err := repo.Log(context.Background(), 10, 0)
+	commits, err := repo.LogScoped(context.Background(), 10, 0, LogScope{})
 	if err != nil {
 		t.Fatalf("log: %v", err)
 	}
@@ -225,12 +225,12 @@ func TestCommitFilesArgv(t *testing.T) {
 	}
 }
 
-func TestLogSkipArgv(t *testing.T) {
+func TestLogScopedSkipArgv(t *testing.T) {
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git log", gitexec.Result{Stdout: ""})
 	repo := &Repo{Runner: f}
 
-	if _, err := repo.Log(context.Background(), 200, 50); err != nil {
+	if _, err := repo.LogScoped(context.Background(), 200, 50, LogScope{}); err != nil {
 		t.Fatalf("log: %v", err)
 	}
 	var argv []string
@@ -244,7 +244,7 @@ func TestLogSkipArgv(t *testing.T) {
 	}
 
 	f.Calls = nil
-	if _, err := repo.Log(context.Background(), 50, 0); err != nil {
+	if _, err := repo.LogScoped(context.Background(), 50, 0, LogScope{}); err != nil {
 		t.Fatalf("log: %v", err)
 	}
 	for _, c := range f.Calls {

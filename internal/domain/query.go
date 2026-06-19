@@ -3,11 +3,17 @@ package domain
 import (
 	"context"
 	"strconv"
+	"strings"
 	"sync"
 
+	"github.com/gigagit/gg/internal/git"
 	"github.com/gigagit/gg/internal/model"
 	"github.com/gigagit/gg/internal/repogate"
 )
+
+// LogScope re-exports git.LogScope for the commit feed's scope (empty Branches =
+// all local branches).
+type LogScope = git.LogScope
 
 // Snapshot is the git-read half of a TUI load: everything loadCmd needs from
 // git, fetched in parallel under one Read reservation. config.Load and
@@ -146,12 +152,20 @@ func (s *Service) loadSnapshot(ctx context.Context) (Snapshot, error) {
 }
 
 // logPage is the gated, singleflighted commit-page read the CommitFeed uses.
-// The singleflight key includes skip so different pages don't collapse.
-func (s *Service) logPage(ctx context.Context, limit, skip int) ([]model.Commit, error) {
-	key := "commits:" + strconv.Itoa(limit) + ":" + strconv.Itoa(skip)
+// The singleflight key includes the scope and skip so pages/scopes don't collapse.
+func (s *Service) logPage(ctx context.Context, limit, skip int, scope LogScope) ([]model.Commit, error) {
+	key := "commits:" + scopeKey(scope) + ":" + strconv.Itoa(limit) + ":" + strconv.Itoa(skip)
 	return query(ctx, s, key, func(ctx context.Context) ([]model.Commit, error) {
-		return s.repo.Log(ctx, limit, skip)
+		return s.repo.LogScoped(ctx, limit, skip, scope)
 	})
+}
+
+// scopeKey is the stable cache/singleflight discriminator for a scope.
+func scopeKey(scope LogScope) string {
+	if len(scope.Branches) == 0 {
+		return "all"
+	}
+	return strings.Join(scope.Branches, ",")
 }
 
 // Status is a single gated read for the CLI status command.
