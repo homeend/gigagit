@@ -25,7 +25,7 @@ var ErrNotFound = errors.New("shelf: entry not found")
 // Store persists shelved files. Implementations are safe for sequential use by
 // one process; cross-process writes are last-writer-wins (atomic index rewrite).
 type Store interface {
-	Put(bucket string, ref model.FileRef, data []byte) (model.ShelfEntry, error)
+	Put(bucket string, addr model.FileAddress, data []byte) (model.ShelfEntry, error)
 	Get(entryID string) ([]byte, error)
 	List(bucket string, skip, limit int) ([]model.ShelfEntry, error)
 	Buckets() ([]model.ShelfBucket, error)

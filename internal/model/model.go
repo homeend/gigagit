@@ -142,13 +142,12 @@ type ShelfBucket struct {
 	Hidden bool
 }
 
-// ShelfEntry is one shelved file: immutable content plus provenance metadata.
+// ShelfEntry is one shelved file: immutable content plus structured provenance.
 type ShelfEntry struct {
-	ID      string // "<source>-<pathslug>-<shorthash>"
+	ID      string // "<source-word>-<pathslug>-<shorthash>"
 	Bucket  string
-	Source  string // human-readable origin: "unstaged" | "staged" | "<rev>"
-	Path    string // origin repo-relative path
-	SHA     string // content hash; also the blob filename
+	Origin  FileAddress // where it was captured from (provenance + display)
+	SHA     string      // content hash; also the blob filename
 	Size    int64
 	Created time.Time
 }

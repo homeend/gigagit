@@ -91,18 +91,18 @@ func slug(path string) string {
 	return strings.Trim(strings.ToLower(s), "-")
 }
 
-func sourceLabel(ref model.FileRef) string {
-	switch ref.Source {
-	case model.SourceStaged:
+func idSource(a model.FileAddress) string {
+	switch a.State {
+	case model.StateStaged:
 		return "staged"
-	case model.SourceCommit:
-		return ref.Locator
+	case model.StateCommitted:
+		return a.Commit
 	default:
 		return "unstaged"
 	}
 }
 
-func (fs *FileStore) Put(bucket string, ref model.FileRef, data []byte) (model.ShelfEntry, error) {
+func (fs *FileStore) Put(bucket string, addr model.FileAddress, data []byte) (model.ShelfEntry, error) {
 	if len(data) > MaxShelfBytes {
 		return model.ShelfEntry{}, ErrTooLarge
 	}
@@ -132,10 +132,9 @@ func (fs *FileStore) Put(bucket string, ref model.FileRef, data []byte) (model.S
 	}
 
 	e := model.ShelfEntry{
-		ID:      fmt.Sprintf("%s-%s-%s", sourceLabel(ref), slug(ref.Path), sha[:8]),
+		ID:      fmt.Sprintf("%s-%s-%s", idSource(addr), slug(addr.Path), sha[:8]),
 		Bucket:  bucket,
-		Source:  sourceLabel(ref),
-		Path:    ref.Path,
+		Origin:  addr,
 		SHA:     sha,
 		Size:    int64(len(data)),
 		Created: time.Now(),
