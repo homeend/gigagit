@@ -43,8 +43,7 @@ func (m Model) shelfTabRows() []actionRow {
 			id:    "shelf-restore",
 			label: "Restore to…",
 			run: func(m Model) (tea.Model, tea.Cmd) {
-				m.shelfRestorePopup = &shelfRestorePopup{entryID: e.ID, origin: e.Origin.Path}
-				return m, nil
+				return m.openShelfRestore(e)
 			},
 		},
 		{
@@ -140,17 +139,28 @@ func (m Model) renderShelfRestorePopup() string {
 
 // --- compare (entry vs working tree) -------------------------------------
 
-// openShelfCompare opens a diff of the selected entry (old) against the current
-// working-tree version of its origin path (new).
+// openShelfCompare diffs the tab-selected entry vs the working tree.
 func (m Model) openShelfCompare() (Model, tea.Cmd) {
 	e, ok := m.selectedShelfEntry()
 	if !ok {
 		return m, nil
 	}
+	return m.openShelfCompareEntry(e)
+}
+
+// openShelfCompareEntry diffs entry e (old) against the current working-tree
+// file at its origin path (new). Routed through openPickerDiff so it works when
+// invoked from the popup over a stacked surface.
+func (m Model) openShelfCompareEntry(e model.ShelfEntry) (Model, tea.Cmd) {
 	width, _ := m.overlayDims()
-	m.diffView = &diffView{title: e.Origin.Path, context: "shelf #" + shortShelf(e) + " → working tree", rev: "", loading: true, partial: m.diffPartial, long: m.diffLong, width: width}
-	m.diffTag = "shelf:" + e.ID
-	return m, m.loadShelfCompareCmd(e)
+	v := &diffView{title: e.Origin.Path, context: "shelf #" + shortShelf(e) + " → working tree", rev: "", loading: true, partial: m.diffPartial, long: m.diffLong, width: width}
+	return m.openPickerDiff(v, "shelf:"+e.ID, m.loadShelfCompareCmd(e))
+}
+
+// openShelfRestore opens the mandatory-dest restore popup for entry e.
+func (m Model) openShelfRestore(e model.ShelfEntry) (Model, tea.Cmd) {
+	m.shelfRestorePopup = &shelfRestorePopup{entryID: e.ID, origin: e.Origin.Path}
+	return m, nil
 }
 
 func shortShelf(e model.ShelfEntry) string {
@@ -169,24 +179,27 @@ func (m Model) shelfEntryByID(id string) (model.ShelfEntry, bool) {
 	return model.ShelfEntry{}, false
 }
 
-// openShelfCompareTwo diffs two shelved entries (marked = old, selected = new),
-// reached via the m-mark pair-op picker. Both sides resolve from the store.
+// openShelfCompareTwo diffs two shelved entries by id (the pair-op mark path).
 func (m Model) openShelfCompareTwo(markedID, selectedID string) (Model, tea.Cmd) {
 	a, okA := m.shelfEntryByID(markedID)
 	b, okB := m.shelfEntryByID(selectedID)
 	if !okA || !okB {
 		return m, nil
 	}
+	m.mark = nil // consume the mark
+	return m.openShelfCompareTwoEntries(a, b)
+}
+
+// openShelfCompareTwoEntries diffs entries a (old) and b (new).
+func (m Model) openShelfCompareTwoEntries(a, b model.ShelfEntry) (Model, tea.Cmd) {
 	title := a.Origin.Path
 	if a.Origin.Path != b.Origin.Path {
 		title = a.Origin.Path + " ↔ " + b.Origin.Path
 	}
-	width, _ := m.overlayDims()
 	ctx := "shelf #" + shortShelf(a) + " → shelf #" + shortShelf(b)
-	m.diffView = &diffView{title: title, context: ctx, rev: "", loading: true, partial: m.diffPartial, long: m.diffLong, width: width}
-	m.diffTag = "shelf2:" + markedID + ":" + selectedID
-	m.mark = nil // consume the mark
-	return m, m.loadShelfCompareTwoCmd(a, b, title, ctx)
+	width, _ := m.overlayDims()
+	v := &diffView{title: title, context: ctx, rev: "", loading: true, partial: m.diffPartial, long: m.diffLong, width: width}
+	return m.openPickerDiff(v, "shelf2:"+a.ID+":"+b.ID, m.loadShelfCompareTwoCmd(a, b, title, ctx))
 }
 
 func (m Model) loadShelfCompareTwoCmd(a, b model.ShelfEntry, title, ctx string) tea.Cmd {

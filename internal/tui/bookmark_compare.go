@@ -29,7 +29,7 @@ func (m Model) openCompareFocusedVsBookmark(ref model.FileRef, label string, bm 
 		long:    m.diffLong,
 		width:   width,
 	}
-	return m.openBookmarkDiff(v, "cmpbm:"+ref.Path+":"+bm.ID, m.loadCompareFocusedVsBookmarkCmd(ref, label, bm))
+	return m.openPickerDiff(v, "cmpbm:"+ref.Path+":"+bm.ID, m.loadCompareFocusedVsBookmarkCmd(ref, label, bm))
 }
 
 // loadCompareFocusedVsBookmarkCmd resolves the focused side by address

@@ -44,7 +44,8 @@ type Model struct {
 	branchPopup         *branchPopup
 	renameBranchPopup   *renameBranchPopup
 	rewordPopup         *rewordPopup
-	shelfRestorePopup   *shelfRestorePopup  // Shelf tab: typed restore destination
+	shelfRestorePopup   *shelfRestorePopup  // shelf restore: typed destination
+	shelfPopup          *shelfPopup         // shelf quick-switcher (G); nil = closed
 	bookmarkPopup       *bookmarkPopup      // bookmark quick-switcher; nil = closed
 	bookmarkPastePopup  *bookmarkPastePopup // bookmark paste: typed destination; nil = closed
 	pendingCompare      *pendingCompare     // focused file awaiting the compare-mode picker; nil = none
