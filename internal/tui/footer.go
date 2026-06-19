@@ -80,6 +80,7 @@ var globalBindings = []footerBinding{
 	{"stashes", "S", "[S]tashes", Model.opsIdle, scopeGlobal},
 	{"undo", "u", "[u]ndo", Model.opsIdle, scopeGlobal},
 	{"bookmarks", "g", "[g] bookmarks", Model.opsIdle, scopeGlobal},
+	{"shelf", "G", "[G] shelf", Model.opsIdle, scopeGlobal},
 	{"order", "o", "[o]rder", Model.opsIdle, scopeGlobal},
 	{"view", "z", "[z] view", Model.opsIdle, scopeGlobal},
 	{"filter", "/", "[/]filter", Model.opsIdle, scopeGlobal},
