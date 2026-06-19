@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/gigagit/gg/internal/model"
 )
 
@@ -48,6 +50,49 @@ func TestBookmarkCompareTwoOpensDiff(t *testing.T) {
 	m, _ = m.openBookmarkCompareTwo("a", "b")
 	if m.diffView == nil || m.diffTag != "bookmark2:a:b" {
 		t.Fatalf("two-bookmark compare should open a diff (tag=%q)", m.diffTag)
+	}
+}
+
+func TestBookmarkFilterModeTypesNotActs(t *testing.T) {
+	m := bmPopupModel(
+		model.Bookmark{ID: "a", State: model.StateUnstaged, Worktree: "/wt", Path: "app.go"},
+		model.Bookmark{ID: "b", State: model.StateUnstaged, Worktree: "/wt", Path: "readme.md"},
+	)
+	mm, _ := m.updateBookmarkPopupKey(keyMsg("/")) // enter filter mode
+	m = mm.(Model)
+	if !m.bookmarkPopup.filtering {
+		t.Fatalf("/ should enter filter mode")
+	}
+	mm, _ = m.updateBookmarkPopupKey(keyMsg("p")) // a path char, not the paste action
+	m = mm.(Model)
+	if m.bookmarkPastePopup != nil {
+		t.Fatalf("p while filtering must type, not trigger paste")
+	}
+	if m.bookmarkPopup == nil || m.bookmarkPopup.filter != "p" {
+		t.Fatalf("filter should be 'p', got %q", m.bookmarkPopup.filter)
+	}
+}
+
+func TestBookmarkPasteEnterStartsWrite(t *testing.T) {
+	m := footerModel()
+	m.bookmarkPastePopup = &bookmarkPastePopup{origin: "a.go", data: []byte("x")}
+	// Empty dest is a no-op (popup stays open).
+	mm, _ := m.updateBookmarkPasteKey(keyMsg("enter"))
+	m = mm.(Model)
+	if m.bookmarkPastePopup == nil {
+		t.Fatalf("empty dest should keep the popup open")
+	}
+	for _, r := range "out.txt" {
+		mm, _ = m.updateBookmarkPasteKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = mm.(Model)
+	}
+	mm, cmd := m.updateBookmarkPasteKey(keyMsg("enter"))
+	m = mm.(Model)
+	if m.bookmarkPastePopup != nil {
+		t.Fatalf("enter with a dest should close the popup")
+	}
+	if cmd == nil {
+		t.Fatalf("enter with a dest should start the write op")
 	}
 }
 

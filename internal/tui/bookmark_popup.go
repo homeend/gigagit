@@ -19,11 +19,12 @@ import (
 // bookmarkPopup is the centered quick-switcher: a type-to-filter list of the
 // repo's bookmarks.
 type bookmarkPopup struct {
-	items  []model.Bookmark
-	rows   []string // display strings, parallel to items
-	sel    int
-	filter string
-	markID string // first mark for a two-bookmark compare ("" = none)
+	items     []model.Bookmark
+	rows      []string // display strings, parallel to items
+	sel       int
+	filter    string
+	filtering bool   // true while `/` filter sub-mode captures runes
+	markID    string // first mark for a two-bookmark compare ("" = none)
 }
 
 // bookmarkPastePopup collects the (mandatory, no-default) paste destination,
@@ -91,7 +92,7 @@ func (p *bookmarkPopup) visibleIdx() []int {
 func (m Model) renderBookmarkPopup() string {
 	p := m.bookmarkPopup
 	var b strings.Builder
-	b.WriteString("Bookmarks  (type to filter)\n\n")
+	b.WriteString("Bookmarks\n\n")
 	vis := p.visibleIdx()
 	if len(vis) == 0 {
 		b.WriteString("  (none)\n")
@@ -107,10 +108,12 @@ func (m Model) renderBookmarkPopup() string {
 		}
 		b.WriteString(cursor + mark + " " + p.rows[i] + "\n")
 	}
-	if p.filter != "" {
+	if p.filtering {
+		b.WriteString("\nfilter: " + p.filter + "█  [enter] keep  [esc] cancel")
+	} else if p.filter != "" {
 		b.WriteString("\nfilter: " + p.filter)
 	}
-	b.WriteString("\n\n[↑↓] move  [enter] jump  [p] paste  [m] mark/compare  [x] remove  [esc] close")
+	b.WriteString("\n\n[↑↓/jk] move  [enter] jump  [p] paste  [m] mark/compare  [x] remove  [/] filter  [esc] close")
 	w, _ := m.overlayDims()
 	return modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"
 }
@@ -134,49 +137,64 @@ func (m Model) bookmarkByID(id string) (model.Bookmark, bool) {
 	return model.Bookmark{}, false
 }
 
-// updateBookmarkPopupKey handles one key while the switcher is open.
+// updateBookmarkPopupKey handles one key while the switcher is open. The popup
+// is navigation-first (letters are actions, matching every other gg list); `/`
+// enters a filter sub-mode where runes type a query until esc/enter.
 func (m Model) updateBookmarkPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
 	}
 	p := m.bookmarkPopup
+	if p.filtering {
+		switch msg.Type {
+		case tea.KeyEsc:
+			p.filtering, p.filter, p.sel = false, "", 0
+		case tea.KeyEnter:
+			p.filtering = false // keep the filter, leave input mode
+		case tea.KeyBackspace, tea.KeyCtrlH:
+			if r := []rune(p.filter); len(r) > 0 {
+				p.filter = string(r[:len(r)-1])
+				p.sel = 0
+			}
+		case tea.KeyRunes:
+			p.filter += string(msg.Runes)
+			p.sel = 0
+		}
+		return m, nil
+	}
 	switch msg.Type {
 	case tea.KeyEsc:
 		m.bookmarkPopup = nil
 	case tea.KeyEnter:
 		return m.bookmarkJump()
 	case tea.KeyUp:
-		if p.sel > 0 {
-			p.sel--
-		}
+		m.bookmarkMoveSel(-1)
 	case tea.KeyDown:
-		if p.sel < len(p.visibleIdx())-1 {
-			p.sel++
-		}
-	case tea.KeyBackspace, tea.KeyCtrlH:
-		if r := []rune(p.filter); len(r) > 0 {
-			p.filter = string(r[:len(r)-1])
-			p.sel = 0
-		}
+		m.bookmarkMoveSel(1)
 	case tea.KeyRunes:
-		return m.bookmarkPopupRune(msg.String())
+		switch msg.String() {
+		case "/":
+			p.filtering = true
+		case "k":
+			m.bookmarkMoveSel(-1)
+		case "j":
+			m.bookmarkMoveSel(1)
+		case "x":
+			return m.bookmarkRemovePrompt()
+		case "p":
+			return m.bookmarkPastePrompt()
+		case "m":
+			return m.bookmarkMark()
+		}
 	}
 	return m, nil
 }
 
-// bookmarkPopupRune routes action runes (p/x/m) before falling back to filtering.
-func (m Model) bookmarkPopupRune(s string) (tea.Model, tea.Cmd) {
-	switch s {
-	case "x":
-		return m.bookmarkRemovePrompt()
-	case "p":
-		return m.bookmarkPastePrompt()
-	case "m":
-		return m.bookmarkMark()
+func (m Model) bookmarkMoveSel(d int) {
+	p := m.bookmarkPopup
+	if n := p.sel + d; n >= 0 && n < len(p.visibleIdx()) {
+		p.sel = n
 	}
-	m.bookmarkPopup.filter += s
-	m.bookmarkPopup.sel = 0
-	return m, nil
 }
 
 // bookmarkRemovePrompt opens a confirm modal; removing a bookmark is cheap to
