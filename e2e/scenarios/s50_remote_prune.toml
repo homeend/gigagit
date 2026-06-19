@@ -1,0 +1,31 @@
+name = "remote prune: drop tracking refs for upstream-deleted branches"
+
+[input]
+steps = []
+
+[input.origin]
+steps = [
+  { write = "f.txt", content = "v1\n" },
+  { commit = "c1" },
+  { branch = "foo" },
+  { switch = "foo" },
+  { write = "g.txt", content = "foo\n" },
+  { commit = "foo-c2" },
+  { switch = "main" },
+]
+after = [
+  { branch_delete = "foo" },
+]
+
+[[run]]
+cmd  = ["remote", "prune"]
+exit = 0
+[[run]]
+cmd             = ["remote", "ls"]
+exit            = 0
+stdout_contains = ["origin/main"]
+stdout_excludes = ["origin/foo"]
+
+[expect]
+branch = "main"
+clean  = true

@@ -25,3 +25,27 @@ func TestRemoteUnknownSubcommand(t *testing.T) {
 		t.Fatal("unknown remote subcommand should fail")
 	}
 }
+
+func TestRemoteFetchUpdatesTrackingRefs(t *testing.T) {
+	clone := cloneWithRemoteFoo(t)
+	if code, _, errb := runCLI(t, clone, "remote", "fetch"); code != 0 {
+		t.Fatalf("remote fetch exit = %d (stderr: %s)", code, errb)
+	}
+	// foo is checkoutable as a local tracking branch after the fetch.
+	if code, _, errb := runCLI(t, clone, "checkout", "origin/foo"); code != 0 {
+		t.Fatalf("checkout after fetch exit = %d (stderr: %s)", code, errb)
+	}
+}
+
+func TestRemotePruneDropsDeletedRef(t *testing.T) {
+	clone := cloneWithRemoteFoo(t)
+	origin := runGit(t, clone, "config", "--get", "remote.origin.url")
+	runGit(t, origin, "branch", "-D", "foo") // delete foo on the (bare) origin
+	if code, _, errb := runCLI(t, clone, "remote", "prune"); code != 0 {
+		t.Fatalf("remote prune exit = %d (stderr: %s)", code, errb)
+	}
+	_, out, _ := runCLI(t, clone, "remote", "ls")
+	if strings.Contains(out, "origin/foo") {
+		t.Fatalf("origin/foo should be pruned:\n%s", out)
+	}
+}

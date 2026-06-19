@@ -1,0 +1,34 @@
+name = "remote fetch: update tracking refs from all remotes"
+
+[input]
+steps = []
+
+[input.origin]
+steps = [
+  { write = "f.txt", content = "v1\n" },
+  { commit = "c1" },
+  { branch = "foo" },
+  { switch = "foo" },
+  { write = "g.txt", content = "foo\n" },
+  { commit = "foo-c2" },
+  { switch = "main" },
+]
+after = [
+  { switch = "foo" },
+  { write = "g.txt", content = "foo2\n" },
+  { commit = "foo-c3" },
+  { switch = "main" },
+]
+
+[[run]]
+cmd  = ["remote", "fetch"]
+exit = 0
+[[run]]
+cmd  = ["checkout", "origin/foo", "-s"]
+exit = 0
+
+[expect]
+branch = "foo"
+
+[[expect.log]]
+subjects = ["foo-c3", "foo-c2", "c1"]

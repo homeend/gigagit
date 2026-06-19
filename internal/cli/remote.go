@@ -6,15 +6,24 @@ import (
 	"io"
 
 	"github.com/gigagit/gg/internal/domain"
+	"github.com/gigagit/gg/internal/engine"
 )
 
-// cmdRemote dispatches the remote subcommands. Only `ls`/`list` exists today.
+// cmdRemote dispatches the remote subcommands: ls | fetch | prune.
 func cmdRemote(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
-	if len(args) == 0 || args[0] == "ls" || args[0] == "list" {
+	switch {
+	case len(args) == 0 || args[0] == "ls" || args[0] == "list":
 		return cmdRemoteList(svc, stdout, stderr)
+	case args[0] == "fetch":
+		res, err := runOperation(context.Background(), svc, engine.Fetch{}, cliDecider{}, stderr)
+		return finish(res, err, stdout, stderr)
+	case args[0] == "prune":
+		res, err := runOperation(context.Background(), svc, engine.Prune{}, cliDecider{}, stderr)
+		return finish(res, err, stdout, stderr)
+	default:
+		fmt.Fprintf(stderr, "remote: unknown subcommand %q (try: ls, fetch, prune)\n", args[0])
+		return 2
 	}
-	fmt.Fprintf(stderr, "remote: unknown subcommand %q (try: ls)\n", args[0])
-	return 2
 }
 
 // cmdRemoteList prints each remote-tracking branch ("origin/foo"), one per line.
