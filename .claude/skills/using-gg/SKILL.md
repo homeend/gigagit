@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v12 -->
+<!-- gg:using-gg:v13 -->
 
 # Using gg (gigagit)
 
@@ -76,6 +76,16 @@ guards against removing the worktree you are standing in.
   to a **required** `<dest>` as an unstaged change (`--force` to overwrite an
   existing differing file, else it refuses). Entries persist per-repo under the
   machine-local state dir; the default bucket is implicit.
+- `gg bookmark add [--rev <commit>] [--staged] [--worktree <path>] <path>...` /
+  `gg bookmark list` / `gg bookmark rm <id>` /
+  `gg bookmark paste [--force] <id> <dest>` — **bookmarks**: a persistent registry
+  of richly-addressed file references (vs the shelf's frozen copies). `add` stores
+  a live pointer — default = this worktree's working file; `--staged` the index
+  side; `--worktree <path>` another worktree; `--rev <commit>` a committed file
+  (frozen by blob sha). `paste` resolves the bookmark's **current** bytes (live
+  for working/index, the pinned blob for committed) and writes them to a
+  **required** `<dest>` as an unstaged change (`--force` to overwrite). A bookmark
+  to a working file reflects later edits; to freeze bytes, shelf instead.
 - `gg undo` — undo the last commit, keeping its changes (ref-only soft reset).
 - `gg worktree list` / `gg worktree add [<start-point>]` /
   `gg worktree add --branch <name>` /

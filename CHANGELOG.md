@@ -9,6 +9,26 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Bookmarks** — a persistent registry of richly-addressed file references
+  (the live-pointer counterpart to the Shelf's frozen copies). A bookmark stores
+  the full **address** it was taken from (worktree/branch/commit/shelf-id/path +
+  state — its identity *and* its human display) plus a **content determinator**:
+  a blob SHA for permanent content (a committed file, a shelf entry → frozen), or
+  live-by-address for a worktree's working/index file (re-read on access). The
+  address is the identity, not the SHA — a checksum names content, not origin
+  (every empty `.gitignore` collides). Backed by the new `internal/bookmark`
+  store (a fixed `Store` interface over a `bookmarks.toml` record registry) and a
+  `domain.BookmarkBytes` resolver; jump/compare/paste reuse the existing diff
+  engine + `engine.WriteFile`.
+  - TUI: a **quick-switcher popup** (`g`) — a type-to-filter list; `enter` diffs a
+    bookmark against the current working-tree file, `m`+`m` compares two
+    bookmarks, `p` pastes to a typed path, `x` removes (confirms). **Bookmark this
+    file** is a `.`-menu action wherever a file is focused (Files → unstaged,
+    Staged → index, a commit's file tree / history → committed, the Shelf tab →
+    shelf entry).
+  - CLI: `gg bookmark add [--rev <commit>] [--staged] [--worktree <path>] <path>...`,
+    `gg bookmark list`, `gg bookmark rm <id>`, and
+    `gg bookmark paste [--force] <id> <dest>` (`<dest>` required).
 - CLI: `gg checkout <remote>/<branch> [-s]` checks out a remote-tracking branch
   as a local tracking branch — fast-forward-safe via the same `SmartCheckout`
   engine op as the TUI's Remotes-tab `c`/`s` (reuses an existing local branch
