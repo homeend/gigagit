@@ -76,7 +76,8 @@ type Model struct {
 	diffPartial bool      // session default for new diffs (false = full); the f key toggles it
 	diffLong    longMode  // session: long-line mode for new diffs (0 = scroll); w cycles
 
-	stack *viewStack // top-of-everything full-screen surfaces (history, later blame); nil/empty = none
+	stack    *viewStack    // top-of-everything full-screen surfaces (history, later blame); nil/empty = none
+	overlays *overlayStack // top-of-everything centered popups; nil/empty = none
 
 	svc              *domain.Service    // command layer; all git access goes through svc
 	feed             *domain.CommitFeed // single source of truth for commits
