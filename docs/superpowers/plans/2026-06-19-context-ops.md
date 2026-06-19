@@ -133,7 +133,7 @@ git commit -m "feat(tui): . menu Copy branch name on Branches/Remotes panels"
 - Test: `internal/git/mutate_test.go`
 
 **Interfaces:**
-- Produces: `func (r *Repo) RenameBranch(ctx context.Context, old, new string) error` running `git branch -m <old> <new>`.
+- Produces: `func (r *Repo) RenameBranch(ctx context.Context, oldName, newName string) error` running `git branch -m <oldName> <newName>`.
 
 - [ ] **Step 1: Write the failing argv test**
 
@@ -165,8 +165,8 @@ In `mutate.go`, mirroring `CreateBranch` (line ~38):
 // RenameBranch renames local branch old to new (git branch -m). git refuses
 // when new already exists; renaming a branch checked out in another worktree
 // succeeds and updates that worktree's HEAD.
-func (r *Repo) RenameBranch(ctx context.Context, old, new string) error {
-	argv := gitcmd.New("branch").Arg("-m", old, new).ToArgv()
+func (r *Repo) RenameBranch(ctx context.Context, oldName, newName string) error {
+	argv := gitcmd.New("branch").Arg("-m", oldName, newName).ToArgv()
 	_, err := r.Runner.Run(ctx, "git branch -m", argv)
 	return err
 }
@@ -175,7 +175,7 @@ func (r *Repo) RenameBranch(ctx context.Context, old, new string) error {
 Add to the `GitOps` interface in `gitops.go`, next to `CreateBranch`:
 
 ```go
-	RenameBranch(ctx context.Context, old, new string) error
+	RenameBranch(ctx context.Context, oldName, newName string) error
 ```
 
 - [ ] **Step 4: Run tests to verify pass**
@@ -521,13 +521,13 @@ In `action_menu.go` `availableActions`, add a Branches-panel row (mirror how `re
 	}
 ```
 
-Match the actual `actionRow` field names + `run` signature used by existing menu-only rows (grep `remotePruneRow` in `remote_actions.go`). Add a footer entry in `footer.go` (`scopeWindow`, gated on `m.focus == panelBranches`) and a help line in `help.go` under the Branches panel.
+Match the actual `actionRow` field names + `run` signature used by existing menu-only rows (grep `remotePruneRow` in `remote_actions.go`). This is a **menu-only** action (no dedicated key), so — exactly like `remotePruneRow` — **do NOT add a footer entry** (footer entries map to a key, which this row has none). Add only a help line in `help.go` under the Branches panel referencing the `.` menu, e.g. `.  rename branch`.
 
 - [ ] **Step 6: Run + commit**
 
 ```bash
 go test ./internal/tui/
-git add internal/tui/rename_branch_popup.go internal/tui/rename_branch_popup_test.go internal/tui/model.go internal/tui/action_menu.go internal/tui/footer.go internal/tui/help.go
+git add internal/tui/rename_branch_popup.go internal/tui/rename_branch_popup_test.go internal/tui/model.go internal/tui/action_menu.go internal/tui/help.go
 git commit -m "feat(tui): . menu Rename branch + popup on Branches panel"
 ```
 
@@ -678,6 +678,20 @@ func TestRewordNonHeadRootRefused(t *testing.T) {
 		t.Fatalf("want refusal rewording a non-HEAD root commit")
 	}
 }
+
+func TestRewordOffBranchRefused(t *testing.T) {
+	repo, deps := newEngineRepo(t) // current branch has c1
+	gitIn(t, repo.Dir(), "commit", "--allow-empty", "-m", "c2")
+	// A commit on a side branch, not an ancestor of the current branch.
+	gitIn(t, repo.Dir(), "branch", "side")
+	gitIn(t, repo.Dir(), "checkout", "side")
+	gitIn(t, repo.Dir(), "commit", "--allow-empty", "-m", "side-only")
+	side, _ := deps.Repo.RevParse(context.Background(), "HEAD")
+	gitIn(t, repo.Dir(), "checkout", "-") // back to the original branch
+	if _, err := (Reword{Commit: side, NewMsg: "x", GGBin: ggBinForTest(t)}).Run(context.Background(), deps); err == nil {
+		t.Fatalf("want refusal rewording a commit not on the current branch")
+	}
+}
 ```
 
 `ggBinForTest` must return a path to a built `gg` binary that handles `__rebase-seq` — the interactive-rebase engine tests already solve this; reuse their helper (grep `interactive_rebase_test.go` for how it obtains `GGBin`, likely `go build`-ing into `t.TempDir()` once). The HEAD-amend test does NOT need a real GGBin (no rebase), but pass one for uniformity.
@@ -772,13 +786,20 @@ func (op Reword) Run(ctx context.Context, deps OpDeps) (Result, error) {
 		return Result{}, err
 	}
 	entries := make([]rebaseplan.Entry, 0, len(commits))
+	found := false
 	for _, c := range commits { // oldest-first, exactly git todo order
 		e := rebaseplan.Entry{Sha: c.Hash, Action: rebaseplan.Pick, Orig: c.Message}
 		if c.Hash == target {
 			e.Action = rebaseplan.Reword
 			e.NewMsg = op.NewMsg
+			found = true
 		}
 		entries = append(entries, e)
+	}
+	if !found {
+		// target isn't an ancestor of cur — without this guard we'd replay cur
+		// onto an unrelated base and corrupt the branch.
+		return Result{}, fmt.Errorf("reword: commit %s is not on the current branch %s", short(target), cur)
 	}
 	plan := rebaseplan.Plan{Entries: entries}
 
@@ -790,7 +811,8 @@ func (op Reword) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	env := []string{"GIT_SEQUENCE_EDITOR=" + op.GGBin + " __rebase-seq " + planPath}
 
 	deps.emit(ctx, Progress{Step: "rewording", Detail: short(target)})
-	ir := InteractiveRebase{Branch: cur, Onto: parent, Plan: plan, GGBin: op.GGBin}
+	// wrapped reads only Branch/Onto (it never touches Plan — Run writes the file).
+	ir := InteractiveRebase{Branch: cur, Onto: parent, GGBin: op.GGBin}
 	res, _, rerr := ir.wrapped(ctx, deps, "", env)
 	if rerr != nil {
 		return res, rerr
@@ -1058,6 +1080,7 @@ type rewordPopup struct {
 	commit  string
 	popup   commitPopup
 	touched bool // user edited before the async prefill landed
+	loaded  bool // the full message arrived; submit is refused until then
 }
 
 // rewordPrefillMsg carries the fetched full message for commit.
@@ -1091,6 +1114,12 @@ func (m Model) updateRewordPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case cancel:
 		m.rewordPopup = nil
 	case submit:
+		if !rp.loaded {
+			// The full message hasn't arrived yet — submitting now would commit
+			// the subject-only prefill and silently drop the commit body.
+			m.statusMsg = "loading message…"
+			return m, nil
+		}
 		if strings.TrimSpace(rp.popup.title) == "" {
 			m.statusMsg = "title required"
 			return m, nil
@@ -1114,7 +1143,7 @@ func (m Model) renderRewordPopup() string {
 ```
 
 - `m.ggBin()`: if a helper doesn't exist, inline `ggBin, _ := os.Executable()` where the op is built (mirror how `model.go:921` obtains it for the irebase editor — it computes it in the `Update` msg handler). Simplest: capture `ggBin` when opening and store it on `rewordPopup`. Grep `os.Executable` in `model.go` and follow that pattern.
-- In `model.go`: add field `rewordPopup *rewordPopup`; route keys to `updateRewordPopupKey` when non-nil (sibling to `commitPopup` routing); render `renderRewordPopup` in the overlay; handle `rewordPrefillMsg` in `Update` (if `!rp.touched && msg.err == nil`, set `rp.popup.title, rp.popup.desc = splitMessage(msg.msg)`).
+- In `model.go`: add field `rewordPopup *rewordPopup`; route keys to `updateRewordPopupKey` when non-nil (sibling to `commitPopup` routing); render `renderRewordPopup` in the overlay; handle `rewordPrefillMsg` in `Update` — always set `rp.loaded = true` (releases the submit gate even on error, so the user is never trapped), and **only** overwrite the fields when `!rp.touched && msg.err == nil`: `rp.popup.title, rp.popup.desc = splitMessage(msg.msg)`. Guard against a stale message for a since-closed/replaced popup (`rp == nil || rp.commit != msg.commit` → ignore).
 - Opening via the menu row (next step) returns a `tea.Cmd` that calls `svc.CommitMessage` and emits `rewordPrefillMsg`. Mirror how other async domain reads are dispatched in the package (grep for an existing `tea.Cmd` wrapping a `svc.` call).
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -1143,13 +1172,13 @@ In `action_menu.go` `availableActions`, add a Commits-panel row that, on `run`, 
 	}
 ```
 
-Add `fetchRewordPrefill(hash string) tea.Cmd` (returns a `tea.Cmd` that calls `m.svc.CommitMessage` and wraps the result in `rewordPrefillMsg`). Add footer entry (`scopeWindow`, gated `m.focus == panelCommits`) + help line under the Commits panel.
+Add `fetchRewordPrefill(hash string) tea.Cmd` (returns a `tea.Cmd` that calls `m.svc.CommitMessage` and wraps the result in `rewordPrefillMsg`). This is a **menu-only** action — like prune/rename-branch, **no footer entry** (it has no key); add only a help line under the Commits panel referencing `.`, e.g. `.  rename commit`.
 
 - [ ] **Step 6: Run + commit**
 
 ```bash
 go test ./internal/tui/
-git add internal/tui/reword_popup.go internal/tui/reword_popup_test.go internal/tui/model.go internal/tui/action_menu.go internal/tui/footer.go internal/tui/help.go
+git add internal/tui/reword_popup.go internal/tui/reword_popup_test.go internal/tui/model.go internal/tui/action_menu.go internal/tui/help.go
 git commit -m "feat(tui): . menu Rename commit + reword popup on Commits panel"
 ```
 
