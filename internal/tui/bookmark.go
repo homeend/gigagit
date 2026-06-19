@@ -19,8 +19,11 @@ func (m Model) focusedBookmark() (model.Bookmark, bool) {
 		fc := s.commits[s.sel]
 		return model.Bookmark{State: model.StateCommitted, Commit: fc.Hash, Path: fc.Path}, true
 	case *blameView:
-		if s.ctx.path == "" || s.ctx.rev == "" {
+		if s.ctx.path == "" {
 			return model.Bookmark{}, false
+		}
+		if s.ctx.rev == "" { // working-tree blame → the current worktree's working file
+			return model.Bookmark{State: model.StateUnstaged, Worktree: m.currentWorktree, Branch: m.status.Branch, Path: s.ctx.path}, true
 		}
 		return model.Bookmark{State: model.StateCommitted, Commit: s.ctx.rev, Path: s.ctx.path}, true
 	}

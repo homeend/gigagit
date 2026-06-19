@@ -130,6 +130,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   instead of persisting across navigation and reloads.
 
 ### Changed
+- TUI: **Bookmark this file** / **Add to shelf** now work from a working-tree
+  blame/history view (`b`/`h` on a working-tree file). `focusedBookmark` derives
+  the worktree/branch from the Model for the `rev==""` case instead of bailing
+  out — matching the working-tree diff-view capture.
 - Shelf entries now read like bookmarks. Each entry stores a structured
   **origin** (the shared `model.FileAddress` — worktree/branch/commit/state)
   captured at shelve-time and renders `<container> / <state-or-commit> / <path>`

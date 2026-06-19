@@ -277,6 +277,25 @@ func TestFocusedBookmarkDiffViewWorkingTree(t *testing.T) {
 	}
 }
 
+func TestFocusedBookmarkBlameWorkingTree(t *testing.T) {
+	m := footerModel()
+	m.currentWorktree = "/wt"
+	m.status.Branch = "main"
+	m = m.pushSurface(&blameView{ctx: navContext{path: "a.go", rev: ""}}) // working-tree blame
+	b, ok := m.focusedBookmark()
+	if !ok || b.State != model.StateUnstaged || b.Worktree != "/wt" || b.Branch != "main" || b.Path != "a.go" {
+		t.Fatalf("working-tree blame focusedBookmark = %+v ok=%v; want unstaged a.go @ /wt", b, ok)
+	}
+}
+
+func TestFocusedBookmarkBlameCommitted(t *testing.T) {
+	m := footerModel().pushSurface(&blameView{ctx: navContext{path: "a.go", rev: "abc1234def"}})
+	b, ok := m.focusedBookmark()
+	if !ok || b.State != model.StateCommitted || b.Commit != "abc1234def" || b.Path != "a.go" {
+		t.Fatalf("committed blame focusedBookmark = %+v ok=%v; want committed abc1234def a.go", b, ok)
+	}
+}
+
 func TestBookmarkToFileRef(t *testing.T) {
 	cases := []struct {
 		name string
