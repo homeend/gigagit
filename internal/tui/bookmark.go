@@ -13,18 +13,25 @@ import (
 func (m Model) focusedBookmark() (model.Bookmark, bool) {
 	switch s := m.stackTop().(type) {
 	case *historyView:
-		if s.ctx.path == "" || s.ctx.rev == "" {
+		if s.sel < 0 || s.sel >= len(s.commits) {
 			return model.Bookmark{}, false
 		}
-		return model.Bookmark{State: model.StateCommitted, Commit: s.ctx.rev, Path: s.ctx.path}, true
+		fc := s.commits[s.sel]
+		return model.Bookmark{State: model.StateCommitted, Commit: fc.Hash, Path: fc.Path}, true
 	case *blameView:
 		if s.ctx.path == "" || s.ctx.rev == "" {
 			return model.Bookmark{}, false
 		}
 		return model.Bookmark{State: model.StateCommitted, Commit: s.ctx.rev, Path: s.ctx.path}, true
 	}
-	if m.diffView != nil {
-		return model.Bookmark{}, false
+	if v := m.diffView; v != nil {
+		if v.title == "" {
+			return model.Bookmark{}, false
+		}
+		if v.rev != "" {
+			return model.Bookmark{State: model.StateCommitted, Commit: v.rev, Path: v.title}, true
+		}
+		return model.Bookmark{State: model.StateUnstaged, Worktree: m.currentWorktree, Branch: m.status.Branch, Path: v.title}, true
 	}
 	if v := m.filesView; v != nil {
 		if m.filesTreeFocused && m.filesHash != "" {

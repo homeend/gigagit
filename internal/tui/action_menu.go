@@ -101,6 +101,10 @@ func (m Model) contextCopyRows() []actionRow {
 	// surface on top), which out-ranks the file tree.
 	switch s := m.stackTop().(type) {
 	case *historyView:
+		if s.sel >= 0 && s.sel < len(s.commits) {
+			fc := s.commits[s.sel]
+			return m.fileCopyRows(fc.Path, fc.Hash)
+		}
 		return m.fileCopyRows(s.ctx.path, s.ctx.rev)
 	case *blameView:
 		return m.fileCopyRows(s.ctx.path, s.ctx.rev)

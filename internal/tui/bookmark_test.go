@@ -243,3 +243,36 @@ func TestBookmarkPopupZTypesWhileFiltering(t *testing.T) {
 		t.Fatalf("z while filtering should type, filter=%q", m.bookmarkPopup.filter)
 	}
 }
+
+func TestFocusedBookmarkHistoryUsesSelectedRow(t *testing.T) {
+	m := footerModel()
+	h := newHistoryView(navContext{path: "old.go", rev: "starthash"})
+	h.commits = []model.FileCommit{
+		{Commit: model.Commit{Hash: "aaaa1111"}, Path: "old.go"},
+		{Commit: model.Commit{Hash: "bbbb2222"}, Path: "renamed.go"},
+	}
+	h.sel = 1
+	m = m.pushSurface(h)
+	b, ok := m.focusedBookmark()
+	if !ok || b.State != model.StateCommitted || b.Commit != "bbbb2222" || b.Path != "renamed.go" {
+		t.Fatalf("history focusedBookmark = %+v ok=%v; want committed bbbb2222 renamed.go", b, ok)
+	}
+}
+
+func TestFocusedBookmarkDiffViewCommit(t *testing.T) {
+	m := footerModel()
+	m.diffView = &diffView{title: "dir/a.go", rev: "cafe9999"}
+	b, ok := m.focusedBookmark()
+	if !ok || b.State != model.StateCommitted || b.Commit != "cafe9999" || b.Path != "dir/a.go" {
+		t.Fatalf("diff focusedBookmark = %+v ok=%v; want committed cafe9999 dir/a.go", b, ok)
+	}
+}
+
+func TestFocusedBookmarkDiffViewWorkingTree(t *testing.T) {
+	m := footerModel()
+	m.diffView = &diffView{title: "a.go", rev: ""} // working-tree diff
+	b, ok := m.focusedBookmark()
+	if !ok || b.State != model.StateUnstaged || b.Path != "a.go" {
+		t.Fatalf("working-tree diff focusedBookmark = %+v ok=%v; want unstaged a.go", b, ok)
+	}
+}
