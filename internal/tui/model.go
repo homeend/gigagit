@@ -243,6 +243,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMsg = "shelved " + msg.entry.Path + " → " + msg.entry.ID
 		}
 		return m, nil
+	case bookmarkAddedMsg:
+		if msg.err != nil {
+			m.statusMsg = "bookmark: " + msg.err.Error()
+		} else {
+			m.statusMsg = "bookmarked " + msg.bm.Path + " → " + msg.bm.ID
+		}
+		return m, nil
 	case dataLoadedMsg:
 		if msg.gen != m.loadGen {
 			return m, nil // superseded by a newer load
