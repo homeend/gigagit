@@ -9,6 +9,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Context ops** — branch + commit. `gg branch rename <old> <new>` renames a
+  local branch (`git branch -m`; the TUI Branches panel `.` menu offers **Rename
+  branch** + **Copy branch name**, and the Remotes panel **Copy branch name**).
+  `gg commit reword <commit> -m <msg>` changes a commit's message — HEAD is a
+  cheap `git commit --amend`, an older commit replays its branch onto its own
+  parent in place (later commits preserved), and the root / off-branch commits
+  are refused; the TUI Commits panel `.` menu offers **Rename commit** (a popup
+  pre-filled with the full message). Reword reuses the interactive-rebase engine.
 - CLI/TUI: **fetch + prune** for remote-tracking refs. `gg remote fetch`
   (`git fetch --all`) updates every remote's tracking refs; `gg remote prune`
   drops tracking refs for branches deleted upstream. On the TUI Remotes tab, `f`
