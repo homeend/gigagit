@@ -11,27 +11,19 @@ import (
 )
 
 // rewordPopup wraps the shared commit-message editor (commitPopup) with the
-// target commit. Pre-filled from the row Subject immediately; the full message
-// arrives async via rewordPrefillMsg and replaces it if the user hasn't typed.
-// Submit is gated on loaded so a fast ctrl+s can't commit the subject-only
-// prefill and silently drop the commit body.
+// target commit. The full message is fetched synchronously at open time (safe:
+// the menu row is opsIdle-gated, so the Read reservation acquires immediately
+// and a single `git log -1` for an explicit popup-open is imperceptible), so
+// the body can never be dropped by a fast keystroke.
 type rewordPopup struct {
-	commit  string
-	ggBin   string
-	popup   commitPopup
-	touched bool // user edited before the async prefill landed
-	loaded  bool // the full message arrived; submit is refused until then
-}
-
-// rewordPrefillMsg carries the fetched full message for commit.
-type rewordPrefillMsg struct {
 	commit string
-	msg    string
-	err    error
+	ggBin  string
+	popup  commitPopup
 }
 
 // openRewordPopup opens the dialog for the selected Commits-panel row, prefilled
-// from its subject (the full body arrives async). Returns (m, false) when no row.
+// with the commit's full message (falling back to its subject if the read
+// fails). Returns (m, false) when no row is selected.
 func (m Model) openRewordPopup() (Model, bool) {
 	bi, ok := m.backingIndex(panelCommits)
 	if !ok {
@@ -39,18 +31,13 @@ func (m Model) openRewordPopup() (Model, bool) {
 	}
 	c := m.commits[bi]
 	ggBin, _ := os.Executable()
-	t, d := splitMessage(c.Subject)
+	msg := c.Subject
+	if full, err := m.svc.CommitMessage(context.Background(), c.Hash); err == nil && strings.TrimSpace(full) != "" {
+		msg = full
+	}
+	t, d := splitMessage(msg)
 	m.rewordPopup = &rewordPopup{commit: c.Hash, ggBin: ggBin, popup: commitPopup{title: t, desc: d}}
 	return m, true
-}
-
-// fetchRewordPrefill loads the commit's full message off the UI thread.
-func (m Model) fetchRewordPrefill(commit string) tea.Cmd {
-	svc := m.svc
-	return func() tea.Msg {
-		msg, err := svc.CommitMessage(context.Background(), commit)
-		return rewordPrefillMsg{commit: commit, msg: msg, err: err}
-	}
 }
 
 // rewordRow offers Rename commit on the Commits panel (no dedicated key; opens
@@ -59,20 +46,15 @@ func (m Model) rewordRow() (actionRow, bool) {
 	if m.focus != panelCommits || !m.opsIdle() {
 		return actionRow{}, false
 	}
-	bi, ok := m.backingIndex(panelCommits)
-	if !ok {
+	if _, ok := m.backingIndex(panelCommits); !ok {
 		return actionRow{}, false
 	}
-	hash := m.commits[bi].Hash
 	return actionRow{
 		id:    "reword-commit",
 		label: "Rename commit",
 		run: func(m Model) (tea.Model, tea.Cmd) {
-			m, ok := m.openRewordPopup()
-			if !ok {
-				return m, nil
-			}
-			return m, m.fetchRewordPrefill(hash)
+			m, _ = m.openRewordPopup()
+			return m, nil
 		},
 	}, true
 }
@@ -84,17 +66,10 @@ func (m Model) updateRewordPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	rp := m.rewordPopup
 	submit, cancel := rp.popup.applyEditKey(msg)
-	rp.touched = true
 	switch {
 	case cancel:
 		m.rewordPopup = nil
 	case submit:
-		if !rp.loaded {
-			// The full message hasn't arrived yet — submitting now would commit
-			// the subject-only prefill and silently drop the commit body.
-			m.statusMsg = "loading message…"
-			return m, nil
-		}
 		if strings.TrimSpace(rp.popup.title) == "" {
 			m.statusMsg = "title required"
 			return m, nil

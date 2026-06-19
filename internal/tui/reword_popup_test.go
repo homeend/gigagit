@@ -3,8 +3,9 @@ package tui
 import (
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
-
+	"github.com/gigagit/gg/internal/domain"
+	"github.com/gigagit/gg/internal/git"
+	"github.com/gigagit/gg/internal/gitexec"
 	"github.com/gigagit/gg/internal/model"
 )
 
@@ -16,7 +17,9 @@ func rewordModel(t *testing.T) Model {
 	return m
 }
 
-func TestRewordPopupOpensPrefilledFromSubject(t *testing.T) {
+func TestRewordPopupFallsBackToSubject(t *testing.T) {
+	// No git log response wired: the full-message read yields nothing, so the
+	// popup falls back to the row's subject.
 	m := rewordModel(t)
 	m, ok := m.openRewordPopup()
 	if !ok || m.rewordPopup == nil {
@@ -30,29 +33,23 @@ func TestRewordPopupOpensPrefilledFromSubject(t *testing.T) {
 	}
 }
 
-func TestRewordPopupSubmitGatedUntilLoaded(t *testing.T) {
-	m := rewordModel(t)
-	m, _ = m.openRewordPopup()
-	// ctrl+s before the prefill lands must NOT submit (loaded == false).
-	res, cmd := m.updateRewordPopupKey(tea.KeyMsg{Type: tea.KeyCtrlS})
-	if res.(Model).rewordPopup == nil {
-		t.Fatalf("submit should be refused while the full message is still loading")
-	}
-	if cmd != nil {
-		t.Fatalf("no op should start before the message loads")
-	}
-}
+func TestRewordPopupPrefillsFullBody(t *testing.T) {
+	f := gitexec.NewFakeRunner()
+	f.SetResponse("git log -1 --pretty=%B", gitexec.Result{Stdout: "real subject\n\nthe body line\n"})
+	m := footerModel()
+	m.svc = domain.New(&git.Repo{Runner: f})
+	m.focus = panelCommits
+	m.commits = []model.Commit{{Hash: "abc1234def", Subject: "stale subject"}}
 
-func TestRewordPrefillMsgReleasesGate(t *testing.T) {
-	m := rewordModel(t)
-	m, _ = m.openRewordPopup()
-	out, _ := m.Update(rewordPrefillMsg{commit: "abc1234def", msg: "old subject\n\nthe body"})
-	m = out.(Model)
-	if !m.rewordPopup.loaded {
-		t.Fatalf("loaded gate not released after prefill")
+	m, ok := m.openRewordPopup()
+	if !ok {
+		t.Fatalf("popup did not open")
 	}
-	if m.rewordPopup.popup.desc != "the body" {
-		t.Fatalf("body not prefilled: %q", m.rewordPopup.popup.desc)
+	if m.rewordPopup.popup.title != "real subject" {
+		t.Fatalf("title = %q, want the full message's subject", m.rewordPopup.popup.title)
+	}
+	if m.rewordPopup.popup.desc != "the body line" {
+		t.Fatalf("body = %q, want the full message's body (no silent drop)", m.rewordPopup.popup.desc)
 	}
 }
 

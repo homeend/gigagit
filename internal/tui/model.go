@@ -917,17 +917,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case rewordPrefillMsg:
-		rp := m.rewordPopup
-		if rp == nil || rp.commit != msg.commit {
-			return m, nil // popup closed or replaced before the message landed
-		}
-		rp.loaded = true // release the submit gate even on error (never trap the user)
-		if !rp.touched && msg.err == nil {
-			rp.popup.title, rp.popup.desc = splitMessage(msg.msg)
-		}
-		return m, nil
-
 	case irebaseLoadedMsg:
 		if msg.err != nil {
 			m.statusMsg = "interactive rebase: " + msg.err.Error()
