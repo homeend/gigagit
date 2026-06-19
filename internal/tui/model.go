@@ -42,6 +42,7 @@ type Model struct {
 	pendingSwitch       bool
 	switchTarget        string
 	branchPopup         *branchPopup
+	renameBranchPopup   *renameBranchPopup
 	shelfRestorePopup   *shelfRestorePopup // Shelf tab: typed restore destination
 	pendingSwitchBranch string             // branch to SmartSwitch to after a successful op (B = create-and-switch)
 	contentPopup        *contentPopup      // generic read-only viewer (help window)
@@ -360,6 +361,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.branchPopup != nil {
 			return m.updateBranchPopupKey(msg)
+		}
+		if m.renameBranchPopup != nil {
+			return m.updateRenameBranchPopupKey(msg)
 		}
 		if m.contentPopup != nil {
 			return m.updateContentPopupKey(msg)

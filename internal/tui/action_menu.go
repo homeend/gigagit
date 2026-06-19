@@ -58,6 +58,9 @@ func availableActions(m Model) []actionRow {
 	if r, ok := m.remotePruneRow(); ok {
 		out = append(out, r)
 	}
+	if r, ok := m.renameBranchRow(); ok {
+		out = append(out, r)
+	}
 	return out
 }
 

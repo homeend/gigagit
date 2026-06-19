@@ -43,7 +43,7 @@ func helpContent() []contentLine {
 		r("b", "create a branch off the selected one (popup)"),
 		r("B", "create a branch and switch to it"),
 		r("d", "delete the selected branch"),
-		r(".", "copy branch name (.-menu)"),
+		r(".", "rename branch / copy branch name (.-menu)"),
 		h("Remotes panel"),
 		r("c", "checkout: create or fast-forward a local tracking branch (stay on the current branch)"),
 		r("s", "checkout and switch to it — fast-forward-safe; refuses if the local branch has diverged"),
