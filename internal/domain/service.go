@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gigagit/gg/internal/bookmark"
 	"github.com/gigagit/gg/internal/cache"
 	"github.com/gigagit/gg/internal/engine"
 	"github.com/gigagit/gg/internal/git"
@@ -27,12 +28,13 @@ type Service struct {
 	repo    *git.Repo
 	workdir string // fallback gate key when common-dir resolution fails
 
-	mu      sync.Mutex
-	gate    *repogate.Gate // resolved lazily on first Execute or query
-	flight  flightGroup    // coalesces concurrent calls sharing a key
-	factory cache.Factory  // vends the diff (and future) caches
-	differ  Differ         // memoized production diff engine
-	shelf   shelf.Store    // lazily resolved; nil disables the shelf
+	mu       sync.Mutex
+	gate     *repogate.Gate // resolved lazily on first Execute or query
+	flight   flightGroup    // coalesces concurrent calls sharing a key
+	factory  cache.Factory  // vends the diff (and future) caches
+	differ   Differ         // memoized production diff engine
+	shelf    shelf.Store    // lazily resolved; nil disables the shelf
+	bookmark bookmark.Store // lazily resolved; nil disables bookmarks
 }
 
 // Open builds a Service rooted at workdir with the standard runner — the
