@@ -31,14 +31,14 @@ quick-switcher popup + capture menu, and a `gg bookmark` CLI.
 ## Scope of this slice
 
 - TUI **and** CLI ship together.
-- Bookmark sources: a **working-tree file** (captured as `SourceWorktree` so the
-  bookmark records *which* worktree — see §1/§5; this is how "bookmark files in
-  different worktrees" works), a **Commit/branch** file, and a **Shelf** entry (a
-  bookmark captured on the Shelf tab — supported because `FileRef` already has
-  it). The transient `SourceUnstaged`/`SourceStaged` sources (this-worktree
-  working file / index) are **not** bookmark sources: they name no specific
-  worktree, so they make poor persistent pointers; a working-tree file is
-  bookmarked as `SourceWorktree` instead.
+- Bookmark sources, each carrying a concrete worktree path where applicable (§1):
+  a worktree's **working-tree file** (`SourceUnstaged` + worktree path), a
+  worktree's **staged/index file** (`SourceStaged` + worktree path), a
+  **Commit/branch** file (`SourceCommit` + rev), and a **Shelf** entry
+  (`SourceShelf` + id). The worktree path is what makes a working/staged pointer
+  stable and what distinguishes "the same path on a different worktree" — and the
+  working vs staged source is what distinguishes the two contents within one
+  worktree.
 - Capabilities: **jump** (diff the bookmark's live bytes against the current
   working-tree file at its path), **compare** two bookmarks, **paste** a
   bookmark's live bytes to a chosen path, **remove** (with confirm).
@@ -57,37 +57,51 @@ namespace, popup, menu copy. The jump-to-working-tree verb is **paste**.
 
 ---
 
-## 1. `FileRef` extension — `SourceWorktree`
+## 1. `FileRef` extension — worktree-qualified `Unstaged`/`Staged`
 
-Add one source to `model.FileSource`:
+**No new `FileSource` value.** Instead, the existing transient sources gain a
+worktree-qualifying `Locator`:
 
 ```go
 const (
-	SourceUnstaged FileSource = iota // working-tree file (THIS worktree)
-	SourceStaged                     // index version
+	SourceUnstaged FileSource = iota // working-tree file
+	SourceStaged                     // index (staged) version
 	SourceCommit                     // file at a commit/branch (Locator = rev)
 	SourceShelf                      // a shelf entry (Locator = entry id)
-	SourceWorktree                   // another worktree's live file (Locator = worktree path)
 )
+// Locator for Unstaged/Staged: "" = the CURRENT worktree (today's behavior,
+// used by shelf capture + diffs); a worktree top-level path = that specific
+// worktree. Commit -> rev; Shelf -> entry id (unchanged).
 ```
 
-`domain.ResolveBytes` gains a `SourceWorktree` branch that reads the file from
-the *named* worktree's working tree: `os.ReadFile(filepath.Join(Locator, Path))`,
-where `Locator` is the worktree's absolute top-level and `Path` is repo-relative
-(mirroring how `ReadWorktreeFile` joins a top-level). A missing worktree or file
-returns an error → the bookmark **dangles** (§4).
+Why qualify rather than add a `Worktree` source: a file has **two** distinct
+contents inside a worktree — its working-tree bytes and its **index/staged**
+bytes — and they differ for a partially-staged file. A single "worktree" source
+that only reads the working tree would lose the staged side. Qualifying the
+existing `Unstaged` (working) and `Staged` (index) sources with the worktree path
+captures **both** axes and the worktree identity in one move, with no enum
+growth.
 
-Why a working-tree file is `SourceWorktree`, not `SourceUnstaged`: a persistent
-bookmark must name *which* worktree it points into. `SourceUnstaged` means "this
-worktree" and would silently re-point when the user switches worktrees;
-`SourceWorktree(<abs worktree path>, <path>)` is stable and names the target
-unambiguously — which is exactly what makes "bookmark files in different
-worktrees" work (you bookmark a working-tree file from whichever worktree you are
-in, and each bookmark remembers its worktree). The capturing frontend fills
-`Locator` from the current worktree's top-level (`m.currentWorktree` / `TopLevel`).
+`domain.ResolveBytes` changes for `SourceUnstaged`/`SourceStaged`:
 
-`model.FileRef` itself is unchanged in shape (`{Source, Locator, Path}`); only
-the enum grows and the resolver gains a case.
+- `SourceUnstaged`: `Locator == ""` → `WorktreeFile(Path)` (current worktree, as
+  today); else → `os.ReadFile(filepath.Join(Locator, Path))` (that worktree's
+  working file).
+- `SourceStaged`: `Locator == ""` → `ShowFile(ctx, "", Path)` (`git show :path`
+  in the current worktree, as today); else → a new
+  `git -C <Locator> show :Path` read (that worktree's index). The new verb
+  `Repo.ShowFileInDir(ctx, dir, rev, path)` builds `git -C <dir> show <rev>:<path>`
+  (the `-C` global overrides cwd, so it works regardless of the Service's
+  workdir). `SourceStaged` passes `rev == ""` → `:path`.
+
+A persistent bookmark **always sets `Locator` to a concrete worktree path** (the
+frontend fills it from the current worktree's top-level), so a bookmark is
+stable and names its target unambiguously even after the user switches worktrees
+— which is what makes "bookmark files in different worktrees" work, and lets you
+distinguish a worktree's *staged* vs *unstaged* version of the same path. A
+missing worktree/file → resolve error → the bookmark **dangles** (§4).
+
+`model.FileRef` itself is unchanged in shape (`{Source, Locator, Path}`).
 
 ## 2. Store — `internal/bookmark`, a fixed `Store` interface
 
@@ -133,7 +147,7 @@ future backend swappable (the user's "fixed api" preference).
 internal/bookmark  (pure store: interface + toml file impl; NO git, NO tui)
         |
 internal/domain    owns a bookmark.Store (like the shelf.Store); adds commands
-        |          + the SourceWorktree resolve branch in ResolveBytes
+        |          + worktree-Locator handling in ResolveBytes (Unstaged/Staged)
    tui / cli        call domain only (archtest-clean; internal/bookmark added to
                     the frontend forbidden-imports guard)
 ```
@@ -173,14 +187,21 @@ error. This surfaces **on access**:
 ### Capture (everywhere a file is focused)
 
 A **`.`-menu action "Bookmark this file"**, context-scoped exactly like "Add to
-shelf", available wherever a single file is focused — the **Files** panel (→
-`SourceWorktree` with the current worktree's top-level as `Locator`), a **commit's
-file tree** / **file history** (→ `SourceCommit` with that commit's hash), and the
-**Shelf tab** (→ `SourceShelf`). It reuses the same focused-file discipline the
-shelf capture uses, mapping each surface to the right bookmark source. To bookmark
-a file in *another* worktree, switch into that worktree first (the bookmark then
-records *its* top-level, so it still resolves after switching back).
-`BookmarkAdd(ref, "")` → default label `"<source>:<path>"`.
+shelf", available wherever a single file is focused, mapping each surface to the
+right worktree-qualified source:
+
+- **Files** panel → `SourceUnstaged` with the current worktree's top-level as
+  `Locator` (the working-tree bytes of this worktree).
+- **Staged** panel → `SourceStaged` with the current worktree's top-level
+  (the index bytes of this worktree).
+- a **commit's file tree** / **file history** → `SourceCommit` with that commit's
+  hash.
+- the **Shelf tab** → `SourceShelf`.
+
+It reuses the same focused-file discipline the shelf capture uses. To bookmark a
+file in *another* worktree, switch into that worktree first — the bookmark records
+*its* top-level, so it still resolves after switching back. `BookmarkAdd(ref, "")`
+→ default label `"<source>:<path>"`.
 
 ### The switcher popup (opened by a key)
 
@@ -214,11 +235,13 @@ A new `gg bookmark` namespace (dispatch on `args[0]`), registered in **both** th
 `Run` switch **and** the `var commands` map in `cli.go` (the gotcha the shelf/
 discard CLIs documented; an e2e guards it):
 
-- `gg bookmark add [--rev <commit> | --worktree <path>] [--label <l>] <path>...`
-  — stores a pointer per path. Default source is **this worktree**
-  (`SourceWorktree` with the CLI's workdir top-level as `Locator`); `--rev`
-  bookmarks a commit/branch file; `--worktree <path>` bookmarks a file in another
-  worktree explicitly. Prints each id.
+- `gg bookmark add [--rev <commit>] [--staged] [--worktree <path>] [--label <l>] <path>...`
+  — stores a pointer per path. Default is the **working tree of this worktree**
+  (`SourceUnstaged`, `Locator` = the CLI's workdir top-level); `--staged`
+  bookmarks the **index** side (`SourceStaged`) instead; `--worktree <path>`
+  targets another worktree's working/index file; `--rev <commit>` bookmarks a
+  commit/branch file (mutually exclusive with `--staged`/`--worktree`). Prints
+  each id.
 - `gg bookmark list` — prints id, label, source, path (paged internally).
 - `gg bookmark rm <id>` — removes a bookmark.
 - `gg bookmark paste [--force] <id> <dest>` — `<dest>` is a **required** positional;
@@ -244,9 +267,15 @@ bumps to **12**; `gg init --update` regenerates the dogfood SKILL.md.
 - **`internal/bookmark`** (real temp dir): Add/Get/List round-trip; paging
   exhaustion boundary; Remove; atomic-rewrite survives a simulated mid-write;
   missing/corrupt file acts as empty (best-effort, like `repos.toml`).
-- **`internal/domain`**: `ResolveBytes` `SourceWorktree` reads the named
-  worktree's file (real-git temp repo with a linked worktree); `BookmarkAdd`
-  round-trips through a fake store; disabled-store error path.
+- **`internal/git`**: `ShowFileInDir` builds `git -C <dir> show <rev>:<path>` and
+  reads another worktree's index blob (real-git temp repo with a linked worktree;
+  stage a file in the linked worktree, read it back).
+- **`internal/domain`**: `ResolveBytes` for `SourceUnstaged` with a worktree
+  `Locator` reads that worktree's working file, and for `SourceStaged` with a
+  worktree `Locator` reads that worktree's index (real-git temp repo + linked
+  worktree, with working ≠ staged content to prove they differ); `Locator == ""`
+  still hits the current-worktree paths; `BookmarkAdd` round-trips through a fake
+  store; disabled-store error path.
 - **`internal/tui`**: capture menu shows "Bookmark this file" wherever a file is
   focused (incl. the Worktrees tab) and is absent otherwise; the switcher popup
   renders + filters; `enter` opens a diff; the `m`+`m` Compare pair-op opens a
@@ -255,7 +284,8 @@ bumps to **12**; `gg init --update` regenerates the dogfood SKILL.md.
 - **`internal/cli`**: `add`/`list`/`rm`/`paste` unit tests incl. required-dest +
   `--force` gates; both-registries dispatch check.
 - **e2e** (`e2e/scenarios/`): the **pointer-semantics proof** — `bookmark add` a
-  working-tree file at content "v1" (a `SourceWorktree` pointer), **edit it to
+  working-tree file at content "v1" (a worktree-qualified `SourceUnstaged`
+  pointer), **edit it to
   "v2"**, then `bookmark paste <id> <newpath>` and assert the pasted file is
   **"v2"** (live re-read), not "v1". This is the observable inverse of the shelf's
   frozen-copy e2e (where the copy stayed "v1" after the working tree changed).
@@ -263,8 +293,8 @@ bumps to **12**; `gg init --update` regenerates the dogfood SKILL.md.
 ## 9. Docs to update on completion
 
 `CHANGELOG.md` (always), `README.md` (the switcher popup key + `.` capture + the
-`gg bookmark` CLI), `CLAUDE.md` package map (new `bookmark` package; the
-`SourceWorktree` addition), `internal/agentskill/using-gg.md` (+ Version 12 +
+`gg bookmark` CLI), `CLAUDE.md` package map (new `bookmark` package; the worktree-qualified
+`Unstaged`/`Staged` `Locator` + `ShowFileInDir`), `internal/agentskill/using-gg.md` (+ Version 12 +
 `gg init --update`).
 
 ---
@@ -274,8 +304,12 @@ bumps to **12**; `gg init --update` regenerates the dogfood SKILL.md.
 1. Bookmarks are **live pointers** (resolve re-reads the target's current bytes)
    and may **dangle**; to preserve bytes against deletion, shelf instead. Clean
    split from the [[shelf-feature]].
-2. A new **`SourceWorktree`** `FileRef` source (Locator = worktree path) lets a
-   bookmark target another worktree's live working-tree file.
+2. **No new `FileSource`**: the existing `SourceUnstaged` (working) and
+   `SourceStaged` (index) are **qualified with a worktree `Locator`** (`""` =
+   current worktree as today; a worktree path = that worktree). This lets a
+   bookmark target another worktree's file AND distinguish that worktree's staged
+   vs unstaged contents (which differ for a partially-staged file) — a single
+   "worktree" source would have lost the staged side.
 3. **TUI + CLI** ship together.
 4. Bookmarks live in a **keyed popup quick-switcher**, NOT a 5th left tab (avoids
    tab crowding and the `B` letter collision; matches the "switch to a bookmarked
