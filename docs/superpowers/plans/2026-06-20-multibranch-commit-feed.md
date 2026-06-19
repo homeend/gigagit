@@ -68,8 +68,8 @@ func TestLogScopedArgv(t *testing.T) {
 		t.Fatal(err)
 	}
 	all := f.LastArgv()
-	if !containsSeq(all, "--date-order") || !contains(all, "--branches") {
-		t.Fatalf("all-scope argv missing --date-order/--branches: %v", all)
+	if !contains(all, "--date-order") || !contains(all, "--decorate") || !contains(all, "--branches") || !contains(all, "HEAD") {
+		t.Fatalf("all-scope argv missing --date-order/--decorate/--branches/HEAD: %v", all)
 	}
 	if _, err := r.LogScoped(context.Background(), 50, 20, LogScope{Branches: []string{"feat"}}); err != nil {
 		t.Fatal(err)
@@ -144,10 +144,12 @@ type LogScope struct {
 // from the scope's refs, skipping the first skip. Replaces the HEAD-only Log.
 func (r *Repo) LogScoped(ctx context.Context, limit, skip int, scope LogScope) ([]model.Commit, error) {
 	b := gitcmd.New("log").
-		Arg("-n", strconv.Itoa(limit), "--date-order", "--format="+logFormat).
+		Arg("-n", strconv.Itoa(limit), "--date-order", "--decorate", "--format="+logFormat).
 		ArgIf(skip > 0, "--skip="+strconv.Itoa(skip))
 	if len(scope.Branches) == 0 {
-		b = b.Arg("--branches")
+		// All local branches PLUS HEAD, so a detached HEAD's commits still show
+		// (git dedupes HEAD when it's already on a branch).
+		b = b.Arg("--branches", "HEAD")
 	} else {
 		b = b.Arg(scope.Branches...)
 	}
@@ -158,6 +160,10 @@ func (r *Repo) LogScoped(ctx context.Context, limit, skip int, scope LogScope) (
 	return ParseLog([]byte(res.Stdout))
 }
 ```
+
+`--decorate` (bare = short names; **not** `=full`, which would yield
+`refs/heads/main` and break the short-name parser) forces `%D` to populate
+across git versions.
 
 Update `ParseLog`: bump the field guard to `len(f) < 6` and parse the 6th field:
 
@@ -218,7 +224,43 @@ Keep the existing `Log` method as-is for now (Task 2 removes it).
 Run: `go test ./internal/git/ ./internal/model/ 2>&1 | tail -5`
 Expected: PASS (the existing `Log`/`ParseLog` tests must still pass — they now also populate `Refs`; if an existing test builds a 5-field log line, it will skip under the `< 6` guard — update those fixtures to append a trailing `\x1f` empty decoration field).
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Real-git decoration test (proves `%D` actually populates)**
+
+The argv/parse tests use canned stdout; they do NOT prove real `git log` emits
+decorations under our flags. Add a real-git test using the package's repo helper
+(grep `internal/git/*_test.go` for `newRepo`/`newTestRepo`/`t.TempDir` + a commit
+helper, and mirror it):
+
+```go
+func TestLogScopedRealDecorations(t *testing.T) {
+	r := newTestRepo(t) // makes a real repo in t.TempDir(); adjust to the helper's name
+	// one commit on main, a second branch, and a tag (use the helper's commit/branch API)
+	writeCommit(t, r, "a.txt", "1", "first")
+	runGit(t, r, "branch", "feature")
+	runGit(t, r, "tag", "v1")
+	cs, err := r.LogScoped(context.Background(), 10, 0, LogScope{})
+	if err != nil || len(cs) == 0 {
+		t.Fatalf("LogScoped: %v len=%d", err, len(cs))
+	}
+	byName := map[string]model.Ref{}
+	for _, r := range cs[0].Refs {
+		byName[r.Name] = r
+	}
+	if !byName["main"].Head || byName["main"].Kind != model.RefLocal {
+		t.Fatalf("expected main as head local branch, got refs %+v", cs[0].Refs)
+	}
+	if byName["feature"].Kind != model.RefLocal || byName["v1"].Kind != model.RefTag {
+		t.Fatalf("expected feature(local)+v1(tag), got %+v", cs[0].Refs)
+	}
+}
+```
+
+Run: `go test ./internal/git/ -run TestLogScopedRealDecorations -v 2>&1 | tail`
+Expected: PASS — confirms `--decorate`+`%D` yields short-name decorations with
+the `Head` flag. (If `Refs` come back empty, the `--decorate` flag is the fix;
+if names are `refs/heads/main`, you used `=full` — use bare `--decorate`.)
+
+- [ ] **Step 7: Commit**
 
 ```bash
 git add internal/model/model.go internal/git/log.go internal/git/log_test.go
@@ -238,11 +280,29 @@ Thread a scope through `logPage`/`CommitFeed`, migrate to `LogScoped`, and cance
 - Modify: `internal/domain/query.go` (`logPage`)
 - Modify: `internal/domain/commitfeed.go` (scope field, SetScope, cancellation)
 - Modify: `internal/git/log.go` (remove the now-unused `Log`)
+- Modify: `internal/git/log_test.go` (remove/migrate the old `Log` test — it won't compile once `Log` is gone)
+- Modify (maybe): `internal/gitexec/fake.go` (add a blocking per-call handler if the fake lacks one — see Step 1)
 - Test: `internal/domain/commitfeed_test.go`, `internal/domain/query_test.go`
 
 **Interfaces:**
 - Consumes: `git.LogScope`, `(*Repo).LogScoped`.
 - Produces: `domain.LogScope` (alias/own type), `(*CommitFeed).SetScope(scope LogScope)`, `logPage(ctx, limit, skip int, scope LogScope)`.
+
+- [ ] **Step 0: Verify (or add) a blocking fake handler**
+
+Grep `internal/gitexec/fake*.go` for the fake API. The cancel test needs a
+per-call hook that receives the `ctx` and can **block** (the existing
+`SetResponse` returns canned output immediately). If no blocking hook exists, add
+a minimal one:
+
+```go
+// SetHandler registers a per-name callback invoked for matching Run calls; it
+// receives the call ctx and may block (for ctx-cancellation tests).
+func (f *FakeRunner) SetHandler(name string, h func(ctx context.Context, argv []string) (Result, error)) { /* store; Run dispatches to it before falling back to SetResponse */ }
+```
+
+Wire `Run`/`RunEnv` to call a matching handler first. Keep it tiny; run
+`go test ./internal/gitexec/` to confirm nothing breaks.
 
 - [ ] **Step 1: Write the failing scope/cancel tests**
 
@@ -384,9 +444,19 @@ func (f *CommitFeed) LoadInitial(ctx context.Context) (FeedState, error) {
 
 `LoadMore` passes `f.scope` to `logPage` (read it under the lock alongside `skip`). It does NOT manage `f.cancel` (only reloads supersede).
 
+**Gen-stamp on the superseded path (double-reload correctness):** on the
+`if f.gen != gen0` early return, stamp the returned `FeedState.Gen` with **gen0**
+(this load's own generation), not the current `f.gen` — e.g. return
+`FeedState{Commits: …, Exhausted: …, Gen: gen0}` rather than `snapshotLocked()`.
+Then `reloadFeedCmd` tags `commitsReloadedMsg` with `st.Gen` and the handler drops
+it when `st.Gen != feed.Gen()`, so a superseded reload (A) that finishes after a
+newer one (B) reset the feed can't paint A's empty/stale state. Add a test:
+fire two `LoadInitial`s; the first's returned state carries the older gen and is
+droppable.
+
 - [ ] **Step 5: Remove the dead HEAD-only `Log`**
 
-In `internal/git/log.go` delete the `Log` method (now unused — `LogScoped` replaces it). Run `grep -rn '\.Log(' internal | grep -v _test | grep -v LogScoped | grep -v file_log` → expect no matches.
+In `internal/git/log.go` delete the `Log` method (now unused — `LogScoped` replaces it), and in `internal/git/log_test.go` delete/migrate the old `Log`-specific test (e.g. `TestLog`) so the package still compiles — fold any unique assertions into `TestLogScopedArgv`. Run `grep -rn '\.Log(' internal | grep -v _test | grep -v LogScoped | grep -v file_log` → expect no matches, and `grep -rn 'r\.Log(\|\.Log(ctx' internal/git/log_test.go` → none.
 
 - [ ] **Step 6: Run domain + git tests**
 
@@ -561,7 +631,9 @@ func (m Model) reloadFeedCmd() tea.Cmd {
 	return func() tea.Msg {
 		feed.SetScope(scope)
 		st, _ := feed.LoadInitial(context.Background())
-		return commitsReloadedMsg{gen: feed.Gen(), state: st}
+		// st.Gen is THIS load's generation (gen0). The handler drops it when a
+		// newer reload has since bumped feed.Gen() — see the gen-stamp note in Task 2.
+		return commitsReloadedMsg{gen: st.Gen, state: st}
 	}
 }
 
