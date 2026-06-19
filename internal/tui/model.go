@@ -258,6 +258,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case bookmarksLoadedMsg:
 		if msg.err != nil {
 			m.statusMsg = "bookmarks: " + msg.err.Error()
+			m.pendingCompare = nil // don't let stale compare state hijack the next plain `g`
 			return m, nil
 		}
 		m.bookmarkPopup = newBookmarkPopup(msg.items)

@@ -37,3 +37,13 @@ func (m Model) popSurface() Model {
 	}
 	return m
 }
+
+// clearStack removes every surface. Used when a popup hands off to a
+// full-screen diff that must own the screen: the diff view is checked AFTER the
+// stack in render/dispatch/mouse, so a lingering surface would hide it.
+func (m Model) clearStack() Model {
+	if m.stack != nil {
+		m.stack.entries = nil
+	}
+	return m
+}

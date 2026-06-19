@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"errors"
+	"strings"
 	"testing"
 
 	"github.com/gigagit/gg/internal/model"
@@ -92,6 +94,34 @@ func TestCompareRowRunSetsPendingAndLoads(t *testing.T) {
 	}
 	if cmd == nil {
 		t.Error("run must kick off the bookmark load")
+	}
+}
+
+// Launched from a history/blame surface, the compare diff must paint over the
+// surface stack — render checks stackTop before diffView, so the popup→diff
+// handoff has to clear the stack.
+func TestCompareDiffVisibleOverHistorySurface(t *testing.T) {
+	m := footerModel()
+	m = m.pushSurface(newHistoryView(navContext{path: "a.go", rev: "r"}))
+	m.bookmarkPopup = newBookmarkPopup(twoBookmarkItems())
+	ref := model.FileRef{Source: model.SourceCommit, Locator: "x", Path: "a.go"}
+	m.bookmarkPopup.compareRef = &ref
+	u, _ := m.Update(keyMsg("enter"))
+	mm := u.(Model)
+	if mm.stackTop() != nil {
+		t.Error("the history surface must be cleared so the diff owns the screen")
+	}
+	if !strings.Contains(mm.render(), "↔") {
+		t.Fatal("compare diff must be visible over a history/blame surface")
+	}
+}
+
+func TestBookmarksLoadErrorClearsPendingCompare(t *testing.T) {
+	m := footerModel()
+	m.pendingCompare = &pendingCompare{ref: model.FileRef{Path: "a.go"}, label: "x"}
+	u, _ := m.Update(bookmarksLoadedMsg{err: errors.New("boom")})
+	if u.(Model).pendingCompare != nil {
+		t.Error("a failed bookmark load must clear pendingCompare")
 	}
 }
 

@@ -347,11 +347,22 @@ func (m Model) openBookmarkCompareTwo(aID, bID string) (Model, tea.Cmd) {
 	if !okA || !okB {
 		return m, nil
 	}
-	m.bookmarkPopup = nil
 	width, _ := m.overlayDims()
-	m.diffView = &diffView{title: a.Path + " ↔ " + b.Path, context: bookmarkDisplay(a) + " → " + bookmarkDisplay(b), loading: true, partial: m.diffPartial, long: m.diffLong, width: width}
-	m.diffTag = "bookmark2:" + aID + ":" + bID
-	return m, m.loadBookmarkCompareTwoCmd(a, b)
+	v := &diffView{title: a.Path + " ↔ " + b.Path, context: bookmarkDisplay(a) + " → " + bookmarkDisplay(b), loading: true, partial: m.diffPartial, long: m.diffLong, width: width}
+	return m.openBookmarkDiff(v, "bookmark2:"+aID+":"+bID, m.loadBookmarkCompareTwoCmd(a, b))
+}
+
+// openBookmarkDiff hands off from the bookmark popup to a full-screen diff: it
+// closes the popup AND clears the surface stack, so the diff view (checked after
+// the stack in render/dispatch/mouse) owns the screen even when the popup was
+// opened over a history/blame surface. Shared by jump, compare-two, and
+// compare-focused-vs-bookmark.
+func (m Model) openBookmarkDiff(v *diffView, tag string, load tea.Cmd) (Model, tea.Cmd) {
+	m.bookmarkPopup = nil
+	m = m.clearStack()
+	m.diffView = v
+	m.diffTag = tag
+	return m, load
 }
 
 func (m Model) loadBookmarkCompareTwoCmd(a, b model.Bookmark) tea.Cmd {
@@ -421,11 +432,9 @@ func (m Model) bookmarkJump() (tea.Model, tea.Cmd) {
 	if !ok {
 		return m, nil
 	}
-	m.bookmarkPopup = nil
 	width, _ := m.overlayDims()
-	m.diffView = &diffView{title: b.Path, context: bookmarkDisplay(b) + " → working tree", rev: "", loading: true, partial: m.diffPartial, long: m.diffLong, width: width}
-	m.diffTag = "bookmark:" + b.ID
-	return m, m.loadBookmarkCompareCmd(b)
+	v := &diffView{title: b.Path, context: bookmarkDisplay(b) + " → working tree", rev: "", loading: true, partial: m.diffPartial, long: m.diffLong, width: width}
+	return m.openBookmarkDiff(v, "bookmark:"+b.ID, m.loadBookmarkCompareCmd(b))
 }
 
 // loadBookmarkCompareCmd diffs the bookmark's bytes (Old) against the current

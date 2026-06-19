@@ -20,9 +20,8 @@ type pendingCompare struct {
 // openCompareFocusedVsBookmark diffs the focused file (ref, left/old) against a
 // picked bookmark (bm, right/new) in the full-screen diff view.
 func (m Model) openCompareFocusedVsBookmark(ref model.FileRef, label string, bm model.Bookmark) (Model, tea.Cmd) {
-	m.bookmarkPopup = nil
 	width, _ := m.overlayDims()
-	m.diffView = &diffView{
+	v := &diffView{
 		title:   ref.Path + " ↔ " + bm.Path,
 		context: label + " → " + bookmarkDisplay(bm),
 		loading: true,
@@ -30,8 +29,7 @@ func (m Model) openCompareFocusedVsBookmark(ref model.FileRef, label string, bm 
 		long:    m.diffLong,
 		width:   width,
 	}
-	m.diffTag = "cmpbm:" + ref.Path + ":" + bm.ID
-	return m, m.loadCompareFocusedVsBookmarkCmd(ref, label, bm)
+	return m.openBookmarkDiff(v, "cmpbm:"+ref.Path+":"+bm.ID, m.loadCompareFocusedVsBookmarkCmd(ref, label, bm))
 }
 
 // loadCompareFocusedVsBookmarkCmd resolves the focused side by address
