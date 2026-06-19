@@ -3,7 +3,6 @@ package tui
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -42,25 +41,7 @@ type bookmarkPastePopup struct {
 }
 
 // bookmarkDisplay builds "<container> / <commit-or-state> / <path>".
-func bookmarkDisplay(b model.Bookmark) string {
-	container := "?"
-	switch b.State {
-	case model.StateCommitted:
-		container = b.Branch
-		if container == "" {
-			container = "commit"
-		}
-	case model.StateShelf:
-		container = "shelf"
-	default:
-		container = "wt:" + filepath.Base(b.Worktree)
-	}
-	mid := b.State.String()
-	if b.State == model.StateCommitted && len(b.Commit) >= 7 {
-		mid = b.Commit[:7]
-	}
-	return fmt.Sprintf("%s / %s / %s", container, mid, b.Path)
-}
+func bookmarkDisplay(b model.Bookmark) string { return b.Address().Display() }
 
 type bookmarksLoadedMsg struct {
 	items []model.Bookmark

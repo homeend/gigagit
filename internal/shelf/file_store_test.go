@@ -13,21 +13,21 @@ func newStore(t *testing.T) *FileStore {
 	return NewFileStore(t.TempDir())
 }
 
-func ref(path string) model.FileRef {
-	return model.FileRef{Source: model.SourceUnstaged, Path: path}
+func addr(path string) model.FileAddress {
+	return model.FileAddress{State: model.StateUnstaged, Path: path}
 }
 
 func TestPutGetRoundTrip(t *testing.T) {
 	s := newStore(t)
 	data := []byte("hello shelf\n")
-	e, err := s.Put("", ref("a/b.go"), data)
+	e, err := s.Put("", addr("a/b.go"), data)
 	if err != nil {
 		t.Fatalf("Put: %v", err)
 	}
 	if e.Bucket != "default" {
 		t.Errorf("bucket = %q, want default", e.Bucket)
 	}
-	if e.Path != "a/b.go" || e.Size != int64(len(data)) {
+	if e.Origin.Path != "a/b.go" || e.Size != int64(len(data)) {
 		t.Errorf("entry meta wrong: %+v", e)
 	}
 	got, err := s.Get(e.ID)
@@ -42,8 +42,8 @@ func TestPutGetRoundTrip(t *testing.T) {
 func TestPutDedupsIdenticalBytes(t *testing.T) {
 	s := newStore(t)
 	data := []byte("same")
-	e1, _ := s.Put("", ref("x.go"), data)
-	e2, _ := s.Put("", ref("y.go"), data)
+	e1, _ := s.Put("", addr("x.go"), data)
+	e2, _ := s.Put("", addr("y.go"), data)
 	if e1.SHA != e2.SHA {
 		t.Fatalf("identical bytes got different SHAs: %s vs %s", e1.SHA, e2.SHA)
 	}
@@ -55,7 +55,7 @@ func TestPutDedupsIdenticalBytes(t *testing.T) {
 func TestPutRefusesOversize(t *testing.T) {
 	s := newStore(t)
 	big := make([]byte, MaxShelfBytes+1)
-	if _, err := s.Put("", ref("big.bin"), big); err != ErrTooLarge {
+	if _, err := s.Put("", addr("big.bin"), big); err != ErrTooLarge {
 		t.Fatalf("err = %v, want ErrTooLarge", err)
 	}
 }
@@ -63,7 +63,7 @@ func TestPutRefusesOversize(t *testing.T) {
 func TestListPagingAndExhaustion(t *testing.T) {
 	s := newStore(t)
 	for _, p := range []string{"a", "b", "c"} {
-		if _, err := s.Put("", ref(p), []byte(p)); err != nil {
+		if _, err := s.Put("", addr(p), []byte(p)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -83,8 +83,8 @@ func TestListPagingAndExhaustion(t *testing.T) {
 func TestRemoveReclaimsUnreferencedBlobKeepsShared(t *testing.T) {
 	s := newStore(t)
 	shared := []byte("shared")
-	e1, _ := s.Put("", ref("p1"), shared)
-	e2, _ := s.Put("", ref("p2"), shared) // same blob
+	e1, _ := s.Put("", addr("p1"), shared)
+	e2, _ := s.Put("", addr("p2"), shared) // same blob
 	if err := s.Remove(e1.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +101,7 @@ func TestRemoveReclaimsUnreferencedBlobKeepsShared(t *testing.T) {
 
 func TestBucketsListNamed(t *testing.T) {
 	s := newStore(t)
-	s.Put("feature", ref("f.go"), []byte("f"))
+	s.Put("feature", addr("f.go"), []byte("f"))
 	bs, err := s.Buckets()
 	if err != nil {
 		t.Fatal(err)

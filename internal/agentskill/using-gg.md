@@ -76,7 +76,9 @@ guards against removing the worktree you are standing in.
   version of each path and prints its entry id. `restore` writes a stored copy
   to a **required** `<dest>` as an unstaged change (`--force` to overwrite an
   existing differing file, else it refuses). Entries persist per-repo under the
-  machine-local state dir; the default bucket is implicit.
+  machine-local state dir; the default bucket is implicit. `list` shows each
+  entry's id and a bookmark-style origin (`<container> / <state-or-commit> /
+  <path>`).
 - `gg bookmark add [--rev <commit>] [--staged] [--worktree <path>] <path>...` /
   `gg bookmark list` / `gg bookmark rm <id>` /
   `gg bookmark paste [--force] <id> <dest>` — **bookmarks**: a persistent registry

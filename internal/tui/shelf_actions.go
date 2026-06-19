@@ -43,7 +43,7 @@ func (m Model) shelfTabRows() []actionRow {
 			id:    "shelf-restore",
 			label: "Restore to…",
 			run: func(m Model) (tea.Model, tea.Cmd) {
-				m.shelfRestorePopup = &shelfRestorePopup{entryID: e.ID, origin: e.Path}
+				m.shelfRestorePopup = &shelfRestorePopup{entryID: e.ID, origin: e.Origin.Path}
 				return m, nil
 			},
 		},
@@ -54,7 +54,7 @@ func (m Model) shelfTabRows() []actionRow {
 				m.modal = &decisionState{
 					req: engine.DecisionRequest{
 						ID:      "shelf-remove",
-						Prompt:  "Remove " + e.Path + " from the shelf? (the frozen copy is destroyed)",
+						Prompt:  "Remove " + e.Origin.Path + " from the shelf? (the frozen copy is destroyed)",
 						Options: []string{"Remove", "Cancel"},
 					},
 					onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {
@@ -148,7 +148,7 @@ func (m Model) openShelfCompare() (Model, tea.Cmd) {
 		return m, nil
 	}
 	width, _ := m.overlayDims()
-	m.diffView = &diffView{title: e.Path, context: "shelf #" + shortShelf(e) + " → working tree", rev: "", loading: true, partial: m.diffPartial, long: m.diffLong, width: width}
+	m.diffView = &diffView{title: e.Origin.Path, context: "shelf #" + shortShelf(e) + " → working tree", rev: "", loading: true, partial: m.diffPartial, long: m.diffLong, width: width}
 	m.diffTag = "shelf:" + e.ID
 	return m, m.loadShelfCompareCmd(e)
 }
@@ -177,9 +177,9 @@ func (m Model) openShelfCompareTwo(markedID, selectedID string) (Model, tea.Cmd)
 	if !okA || !okB {
 		return m, nil
 	}
-	title := a.Path
-	if a.Path != b.Path {
-		title = a.Path + " ↔ " + b.Path
+	title := a.Origin.Path
+	if a.Origin.Path != b.Origin.Path {
+		title = a.Origin.Path + " ↔ " + b.Origin.Path
 	}
 	width, _ := m.overlayDims()
 	ctx := "shelf #" + shortShelf(a) + " → shelf #" + shortShelf(b)
@@ -219,10 +219,10 @@ func (m Model) loadShelfCompareCmd(e model.ShelfEntry) tea.Cmd {
 	root := m.currentWorktree
 	body := m.diffBodyRows()
 	tag := "shelf:" + e.ID
-	v := &diffView{title: e.Path, context: "shelf #" + shortShelf(e) + " → working tree", rev: "", partial: m.diffPartial, long: m.diffLong}
+	v := &diffView{title: e.Origin.Path, context: "shelf #" + shortShelf(e) + " → working tree", rev: "", partial: m.diffPartial, long: m.diffLong}
 	v.width, _ = m.overlayDims()
 	entryID := e.ID
-	full := filepath.Join(root, e.Path)
+	full := filepath.Join(root, e.Origin.Path)
 
 	return func() tea.Msg {
 		oldSrc := func(ctx context.Context) ([]byte, error) { return svc.ShelfBlob(ctx, entryID) }

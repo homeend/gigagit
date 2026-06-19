@@ -23,11 +23,11 @@ func TestShelfAddAndBlobRoundTrip(t *testing.T) {
 	f.SetResponse("git show", gitexec.Result{Stdout: "commit-bytes\n"})
 
 	e, err := svc.ShelfAdd(context.Background(),
-		model.FileRef{Source: model.SourceCommit, Locator: "abc", Path: "a/b.go"}, "")
+		model.FileAddress{State: model.StateCommitted, Commit: "abc", Path: "a/b.go"}, "")
 	if err != nil {
 		t.Fatalf("ShelfAdd: %v", err)
 	}
-	if e.Bucket != "default" || e.Path != "a/b.go" {
+	if e.Bucket != "default" || e.Origin.Path != "a/b.go" {
 		t.Fatalf("entry = %+v", e)
 	}
 	got, err := svc.ShelfBlob(context.Background(), e.ID)
@@ -44,7 +44,7 @@ func TestShelfListAndRemove(t *testing.T) {
 	f.SetResponse("git show", gitexec.Result{Stdout: "x\n"})
 
 	e, err := svc.ShelfAdd(context.Background(),
-		model.FileRef{Source: model.SourceCommit, Locator: "abc", Path: "p.go"}, "")
+		model.FileAddress{State: model.StateCommitted, Commit: "abc", Path: "p.go"}, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +65,7 @@ func TestResolveBytesShelfSourceReadsStoredBlob(t *testing.T) {
 	svc, f := shelfSvc(t)
 	f.SetResponse("git show", gitexec.Result{Stdout: "frozen\n"})
 	e, err := svc.ShelfAdd(context.Background(),
-		model.FileRef{Source: model.SourceCommit, Locator: "abc", Path: "p.go"}, "")
+		model.FileAddress{State: model.StateCommitted, Commit: "abc", Path: "p.go"}, "")
 	if err != nil {
 		t.Fatal(err)
 	}

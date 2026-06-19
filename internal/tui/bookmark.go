@@ -58,7 +58,7 @@ func (m Model) focusedBookmark() (model.Bookmark, bool) {
 	case panelShelf:
 		if bi, ok := m.backingIndex(panelShelf); ok {
 			e := m.shelfEntries[bi]
-			return model.Bookmark{State: model.StateShelf, ShelfID: e.ID, SHA: e.SHA, Path: e.Path}, true
+			return model.Bookmark{State: model.StateShelf, ShelfID: e.ID, SHA: e.SHA, Path: e.Origin.Path}, true
 		}
 	}
 	return model.Bookmark{}, false
