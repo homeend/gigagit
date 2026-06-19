@@ -16,6 +16,7 @@ func helpContent() []contentLine {
 		r("s", "switch to the selected branch (SmartSwitch); if it's in another worktree, offers to jump there"),
 		r("S", "open the stash window (list all stashes)"),
 		r("u", "undo the last commit (soft, ref-only)"),
+		r("g", "bookmark quick-switcher: jump to / compare / paste a bookmarked file (add via the . menu anywhere a file is focused). In it: type to filter, enter jumps (diffs the bookmark vs the working-tree file), p pastes to a typed path, m marks one then a second to compare, x removes (confirms), esc closes"),
 		r("w", "worktree popup for the selected existing branch"),
 		r("W", "worktree popup on a new templated branch"),
 		r("m", "mark a row; m on a second row opens the pair-op picker"),

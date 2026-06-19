@@ -42,9 +42,11 @@ type Model struct {
 	pendingSwitch       bool
 	switchTarget        string
 	branchPopup         *branchPopup
-	shelfRestorePopup   *shelfRestorePopup // Shelf tab: typed restore destination
-	pendingSwitchBranch string             // branch to SmartSwitch to after a successful op (B = create-and-switch)
-	contentPopup        *contentPopup      // generic read-only viewer (help window)
+	shelfRestorePopup   *shelfRestorePopup  // Shelf tab: typed restore destination
+	bookmarkPopup       *bookmarkPopup      // bookmark quick-switcher; nil = closed
+	bookmarkPastePopup  *bookmarkPastePopup // bookmark paste: typed destination; nil = closed
+	pendingSwitchBranch string              // branch to SmartSwitch to after a successful op (B = create-and-switch)
+	contentPopup        *contentPopup       // generic read-only viewer (help window)
 
 	mark        *markState        // the m-key mark; nil = none (see mark.go)
 	fileMarks   map[string]bool   // multi-selected Status file paths (keyed by path)
@@ -250,6 +252,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMsg = "bookmarked " + msg.bm.Path + " → " + msg.bm.ID
 		}
 		return m, nil
+	case bookmarksLoadedMsg:
+		if msg.err != nil {
+			m.statusMsg = "bookmarks: " + msg.err.Error()
+			return m, nil
+		}
+		m.bookmarkPopup = newBookmarkPopup(msg.items)
+		return m, nil
 	case dataLoadedMsg:
 		if msg.gen != m.loadGen {
 			return m, nil // superseded by a newer load
@@ -364,6 +373,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.shelfRestorePopup != nil {
 			return m.updateShelfRestoreKey(msg)
+		}
+		if m.bookmarkPopup != nil {
+			return m.updateBookmarkPopupKey(msg)
 		}
 		if m.branchPopup != nil {
 			return m.updateBranchPopupKey(msg)
@@ -521,6 +533,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "u":
 			if !m.running && !m.loading {
 				return m.startOp(engine.UndoLastCommit{})
+			}
+		case "g": // open the bookmark quick-switcher
+			if m.opsIdle() && m.bookmarkPopup == nil {
+				return m, m.loadBookmarksCmd()
 			}
 		case "z": // cycle the focused panel's text display mode
 			m.dispModes[m.focus] = m.dispModes[m.focus].next()
