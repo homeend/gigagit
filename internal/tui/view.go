@@ -419,8 +419,7 @@ func tabBarLabel(active panel) string {
 	}
 	return mark(panelBranches, "Branches", "B") + " " +
 		mark(panelRemotes, "Remotes", "R") + " " +
-		mark(panelWorktrees, "Worktrees", "W") + " " +
-		mark(panelShelf, "Shelf", "S")
+		mark(panelWorktrees, "Worktrees", "W")
 }
 
 // renderPanel draws one bordered panel of fixed size boxW×boxH, windowing rows

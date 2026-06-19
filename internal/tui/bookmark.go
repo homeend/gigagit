@@ -58,11 +58,6 @@ func (m Model) focusedBookmark() (model.Bookmark, bool) {
 		if bi, ok := m.backingIndex(panelStaged); ok {
 			return model.Bookmark{State: model.StateStaged, Worktree: m.currentWorktree, Branch: m.status.Branch, Path: m.status.Files[bi].Path}, true
 		}
-	case panelShelf:
-		if bi, ok := m.backingIndex(panelShelf); ok {
-			e := m.shelfEntries[bi]
-			return model.Bookmark{State: model.StateShelf, ShelfID: e.ID, SHA: e.SHA, Path: e.Origin.Path}, true
-		}
 	}
 	return model.Bookmark{}, false
 }

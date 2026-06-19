@@ -15,61 +15,7 @@ import (
 	"github.com/gigagit/gg/internal/model"
 )
 
-// selectedShelfEntry returns the entry under the Shelf-tab cursor.
-func (m Model) selectedShelfEntry() (model.ShelfEntry, bool) {
-	if m.focus != panelShelf {
-		return model.ShelfEntry{}, false
-	}
-	bi, ok := m.backingIndex(panelShelf)
-	if !ok || bi < 0 || bi >= len(m.shelfEntries) {
-		return model.ShelfEntry{}, false
-	}
-	return m.shelfEntries[bi], true
-}
-
-func (m Model) canShelfRestore() bool { _, ok := m.selectedShelfEntry(); return ok }
-func (m Model) canShelfRemove() bool  { _, ok := m.selectedShelfEntry(); return ok }
-func (m Model) canShelfCompare() bool { _, ok := m.selectedShelfEntry(); return ok }
-
-// shelfTabRows are the Shelf-tab . menu actions (restore / remove), present
-// only when a shelf entry is selected.
-func (m Model) shelfTabRows() []actionRow {
-	e, ok := m.selectedShelfEntry()
-	if !ok {
-		return nil
-	}
-	return []actionRow{
-		{
-			id:    "shelf-restore",
-			label: "Restore to…",
-			run: func(m Model) (tea.Model, tea.Cmd) {
-				return m.openShelfRestore(e)
-			},
-		},
-		{
-			id:    "shelf-remove",
-			label: "Remove from shelf",
-			run: func(m Model) (tea.Model, tea.Cmd) {
-				m.modal = &decisionState{
-					req: engine.DecisionRequest{
-						ID:      "shelf-remove",
-						Prompt:  "Remove " + e.Origin.Path + " from the shelf? (the frozen copy is destroyed)",
-						Options: []string{"Remove", "Cancel"},
-					},
-					onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {
-						if opt == "Remove" {
-							return m, m.shelfRemoveCmd(e.ID)
-						}
-						return m, nil
-					},
-				}
-				return m, nil
-			},
-		},
-	}
-}
-
-// shelfRemoveCmd removes an entry then reloads the tab.
+// shelfRemoveCmd removes an entry then reloads + reopens the popup.
 func (m Model) shelfRemoveCmd(entryID string) tea.Cmd {
 	svc := m.svc
 	reload := m.loadShelfCmd(true) // reopen the popup after the remove
@@ -138,15 +84,6 @@ func (m Model) renderShelfRestorePopup() string {
 }
 
 // --- compare (entry vs working tree) -------------------------------------
-
-// openShelfCompare diffs the tab-selected entry vs the working tree.
-func (m Model) openShelfCompare() (Model, tea.Cmd) {
-	e, ok := m.selectedShelfEntry()
-	if !ok {
-		return m, nil
-	}
-	return m.openShelfCompareEntry(e)
-}
 
 // openShelfCompareEntry diffs entry e (old) against the current working-tree
 // file at its origin path (new). Routed through openPickerDiff so it works when

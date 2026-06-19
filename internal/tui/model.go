@@ -115,13 +115,12 @@ const (
 	panelFiles
 	panelStaged
 	panelCommits
-	panelShelf
 	panelCount
 )
 
 // leftTabs is the display order of the shared left-slot tabs; the ctrl+←/→
 // cycle walks this list. Enum value order is unrelated to display order.
-var leftTabs = []panel{panelBranches, panelRemotes, panelWorktrees, panelShelf}
+var leftTabs = []panel{panelBranches, panelRemotes, panelWorktrees}
 
 // New constructs the initial model for svc.
 func New(svc *domain.Service) Model {
@@ -238,9 +237,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.pendingCompare = nil
 		} else {
 			m.shelfEntries = msg.entries
-		}
-		if m.sel[panelShelf] >= len(m.shelfEntries) {
-			m.sel[panelShelf] = 0
 		}
 		if msg.open && msg.err == nil {
 			m.shelfPopup = newShelfPopup(msg.entries)
@@ -696,9 +692,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				wt, _ := m.selectedWorktree()
 				return m.reRoot(wt.Path)
 			}
-			if m.focus == panelShelf && m.canShelfCompare() {
-				return m.openShelfCompare()
-			}
 			if m.canShowFileDiff() {
 				bi, _ := m.backingIndex(m.focus)
 				f := m.status.Files[bi]
@@ -740,10 +733,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.activeLeftTab = leftTabs[cur]
 			m.focus = m.activeLeftTab
 			m.lastLeftPanel = m.activeLeftTab
-			if m.activeLeftTab == panelShelf {
-				// Lazy-load the shelf the first time (and each time) it is shown.
-				return m, m.loadShelfCmd(false)
-			}
 			return m, nil
 		case "right":
 			if m.focus != panelCommits {

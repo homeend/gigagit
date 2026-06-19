@@ -60,7 +60,6 @@ func availableActions(m Model) []actionRow {
 	if r, ok := m.shelfAddRow(); ok {
 		out = append(out, r)
 	}
-	out = append(out, m.shelfTabRows()...)
 	if r, ok := m.remotePruneRow(); ok {
 		out = append(out, r)
 	}

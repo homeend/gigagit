@@ -8,16 +8,6 @@ import (
 	"github.com/gigagit/gg/internal/model"
 )
 
-// shelfRows renders one bookmark-style "<container> / <state> / <path>" line
-// per shelf entry from its stored origin.
-func (m Model) shelfRows() []string {
-	rows := make([]string, len(m.shelfEntries))
-	for i, e := range m.shelfEntries {
-		rows[i] = e.Origin.Display()
-	}
-	return rows
-}
-
 type shelfLoadedMsg struct {
 	entries []model.ShelfEntry
 	err     error
