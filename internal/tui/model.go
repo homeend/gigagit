@@ -43,6 +43,7 @@ type Model struct {
 	switchTarget        string
 	branchPopup         *branchPopup
 	renameBranchPopup   *renameBranchPopup
+	rewordPopup         *rewordPopup
 	shelfRestorePopup   *shelfRestorePopup // Shelf tab: typed restore destination
 	pendingSwitchBranch string             // branch to SmartSwitch to after a successful op (B = create-and-switch)
 	contentPopup        *contentPopup      // generic read-only viewer (help window)
@@ -364,6 +365,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.renameBranchPopup != nil {
 			return m.updateRenameBranchPopupKey(msg)
+		}
+		if m.rewordPopup != nil {
+			return m.updateRewordPopupKey(msg)
 		}
 		if m.contentPopup != nil {
 			return m.updateContentPopupKey(msg)
@@ -910,6 +914,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case inProgressMsg:
 		if m.conflictPopup != nil {
 			m.conflictPopup.inProgress = msg.op
+		}
+		return m, nil
+
+	case rewordPrefillMsg:
+		rp := m.rewordPopup
+		if rp == nil || rp.commit != msg.commit {
+			return m, nil // popup closed or replaced before the message landed
+		}
+		rp.loaded = true // release the submit gate even on error (never trap the user)
+		if !rp.touched && msg.err == nil {
+			rp.popup.title, rp.popup.desc = splitMessage(msg.msg)
 		}
 		return m, nil
 

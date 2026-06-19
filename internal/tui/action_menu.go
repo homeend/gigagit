@@ -61,6 +61,9 @@ func availableActions(m Model) []actionRow {
 	if r, ok := m.renameBranchRow(); ok {
 		out = append(out, r)
 	}
+	if r, ok := m.rewordRow(); ok {
+		out = append(out, r)
+	}
 	return out
 }
 

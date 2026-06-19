@@ -94,6 +94,7 @@ func helpContent() []contentLine {
 		r("esc", "cancel (close without resolving)"),
 		h("Commits panel"),
 		r("l", "show the selected commit's files in the left column"),
+		r(".", "rename commit / copy commit id (.-menu)"),
 		r("(scroll)", "more commits load automatically as you near the end"),
 		h("Filter mode (/)"),
 		r("↑/↓ pgup/pgdn", "move the selection through the filtered rows"),
