@@ -44,6 +44,28 @@ func TestCreateBranchAndSwitch(t *testing.T) {
 	}
 }
 
+func TestRenameBranch(t *testing.T) {
+	_, runner := newTestRepo(t)
+	repo := &Repo{Runner: runner}
+
+	if err := repo.CreateBranch(context.Background(), "old", ""); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if err := repo.RenameBranch(context.Background(), "old", "renamed"); err != nil {
+		t.Fatalf("rename: %v", err)
+	}
+	if ok, _ := repo.LocalBranchExists(context.Background(), "renamed"); !ok {
+		t.Fatalf("renamed branch missing after rename")
+	}
+	if ok, _ := repo.LocalBranchExists(context.Background(), "old"); ok {
+		t.Fatalf("old branch still present after rename")
+	}
+	// git refuses renaming onto an existing branch name.
+	if err := repo.RenameBranch(context.Background(), "renamed", "main"); err == nil {
+		t.Fatalf("want error renaming onto existing branch main")
+	}
+}
+
 func TestCreateBranchFromStartPoint(t *testing.T) {
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
