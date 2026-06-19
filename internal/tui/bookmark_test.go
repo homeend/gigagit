@@ -319,3 +319,18 @@ func TestBookmarkToFileRef(t *testing.T) {
 		}
 	}
 }
+
+func TestBookmarkPopupCAgainstShelf(t *testing.T) {
+	m := bmPopupModel(model.Bookmark{ID: "b1", State: model.StateUnstaged, Worktree: "/wt", Path: "a.go"})
+	mm, cmd := m.updateBookmarkPopupKey(keyMsg("c"))
+	m = mm.(Model)
+	if m.bookmarkPopup != nil {
+		t.Fatalf("c should close the bookmark popup")
+	}
+	if m.pendingCompare == nil || m.pendingCompare.target != compareShelf {
+		t.Fatalf("c should set a shelf-targeted pendingCompare, got %+v", m.pendingCompare)
+	}
+	if cmd == nil {
+		t.Fatalf("c should load the shelf")
+	}
+}

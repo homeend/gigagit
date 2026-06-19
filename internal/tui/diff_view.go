@@ -451,6 +451,8 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.openActionMenu(), nil
 	case "g": // global bookmark quick-switcher
 		return m.openBookmarkSwitcher()
+	case "G": // global shelf quick-switcher
+		return m.openShelfSwitcher()
 	// q is inert here: only the base layout quits on q. esc is the back key;
 	// ctrl+c (handled above) remains the universal quit.
 	case "esc":

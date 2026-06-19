@@ -127,17 +127,13 @@ func TestCtrlRightCyclesBranchesRemotesWorktrees(t *testing.T) {
 		t.Fatalf("2x ctrl+right: tab=%v, want Worktrees", m.activeLeftTab)
 	}
 	send("ctrl+right")
-	if m.activeLeftTab != panelShelf {
-		t.Fatalf("3x ctrl+right: tab=%v, want Shelf", m.activeLeftTab)
-	}
-	send("ctrl+right")
 	if m.activeLeftTab != panelBranches {
-		t.Fatalf("4x ctrl+right: tab=%v, want Branches (wrap)", m.activeLeftTab)
+		t.Fatalf("3x ctrl+right: tab=%v, want Branches (wrap)", m.activeLeftTab)
 	}
-	// Backward one step: Branches -> Shelf (wrap).
+	// Backward one step: Branches -> Worktrees (wrap).
 	send("ctrl+left")
-	if m.activeLeftTab != panelShelf {
-		t.Fatalf("ctrl+left from Branches: tab=%v, want Shelf", m.activeLeftTab)
+	if m.activeLeftTab != panelWorktrees {
+		t.Fatalf("ctrl+left from Branches: tab=%v, want Worktrees", m.activeLeftTab)
 	}
 }
 

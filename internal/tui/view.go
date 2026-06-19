@@ -153,6 +153,10 @@ func (m Model) render() string {
 		w, h := m.overlayDims()
 		return overlayCenter(clipToHeight(m.menuBackground(), h), m.renderBookmarkPopup(), w, h)
 	}
+	if m.shelfPopup != nil {
+		w, h := m.overlayDims()
+		return overlayCenter(clipToHeight(m.menuBackground(), h), m.renderShelfPopup(), w, h)
+	}
 	if s := m.stackTop(); s != nil {
 		_, h := m.overlayDims()
 		return clipToHeight(s.render(m), h)
@@ -415,8 +419,7 @@ func tabBarLabel(active panel) string {
 	}
 	return mark(panelBranches, "Branches", "B") + " " +
 		mark(panelRemotes, "Remotes", "R") + " " +
-		mark(panelWorktrees, "Worktrees", "W") + " " +
-		mark(panelShelf, "Shelf", "S")
+		mark(panelWorktrees, "Worktrees", "W")
 }
 
 // renderPanel draws one bordered panel of fixed size boxW×boxH, windowing rows

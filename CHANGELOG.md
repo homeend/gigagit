@@ -135,6 +135,15 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   instead of persisting across navigation and reloads.
 
 ### Changed
+- TUI: the **shelf is now a global `G` quick-switcher popup** (mirroring the
+  bookmark `g` popup), replacing the Shelf left-column tab. In it: `enter` diffs
+  the entry vs the working-tree file, `p` restores to a typed path, `m`+`m`
+  compares two entries, `x` removes (confirms), `/` filters, `z` cycles display
+  mode. New cross-store compares: the `.` menu on any file offers **Compare
+  against shelf** (alongside Compare against bookmark), and `c` in either popup
+  compares the highlighted item against one picked from the other popup
+  (bookmark↔shelf). The diff handoff (`openPickerDiff`) clears the surface stack
+  so the diff shows even when opened over a history/blame view.
 - TUI: the Branches panel now shows each worktree-backed branch's **worktree
   path** in `()` (replacing the `◫` glyph), so you can see where a branch is
   checked out — including the current worktree.

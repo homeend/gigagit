@@ -15,65 +15,10 @@ import (
 	"github.com/gigagit/gg/internal/model"
 )
 
-// selectedShelfEntry returns the entry under the Shelf-tab cursor.
-func (m Model) selectedShelfEntry() (model.ShelfEntry, bool) {
-	if m.focus != panelShelf {
-		return model.ShelfEntry{}, false
-	}
-	bi, ok := m.backingIndex(panelShelf)
-	if !ok || bi < 0 || bi >= len(m.shelfEntries) {
-		return model.ShelfEntry{}, false
-	}
-	return m.shelfEntries[bi], true
-}
-
-func (m Model) canShelfRestore() bool { _, ok := m.selectedShelfEntry(); return ok }
-func (m Model) canShelfRemove() bool  { _, ok := m.selectedShelfEntry(); return ok }
-func (m Model) canShelfCompare() bool { _, ok := m.selectedShelfEntry(); return ok }
-
-// shelfTabRows are the Shelf-tab . menu actions (restore / remove), present
-// only when a shelf entry is selected.
-func (m Model) shelfTabRows() []actionRow {
-	e, ok := m.selectedShelfEntry()
-	if !ok {
-		return nil
-	}
-	return []actionRow{
-		{
-			id:    "shelf-restore",
-			label: "Restore to…",
-			run: func(m Model) (tea.Model, tea.Cmd) {
-				m.shelfRestorePopup = &shelfRestorePopup{entryID: e.ID, origin: e.Origin.Path}
-				return m, nil
-			},
-		},
-		{
-			id:    "shelf-remove",
-			label: "Remove from shelf",
-			run: func(m Model) (tea.Model, tea.Cmd) {
-				m.modal = &decisionState{
-					req: engine.DecisionRequest{
-						ID:      "shelf-remove",
-						Prompt:  "Remove " + e.Origin.Path + " from the shelf? (the frozen copy is destroyed)",
-						Options: []string{"Remove", "Cancel"},
-					},
-					onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {
-						if opt == "Remove" {
-							return m, m.shelfRemoveCmd(e.ID)
-						}
-						return m, nil
-					},
-				}
-				return m, nil
-			},
-		},
-	}
-}
-
-// shelfRemoveCmd removes an entry then reloads the tab.
+// shelfRemoveCmd removes an entry then reloads + reopens the popup.
 func (m Model) shelfRemoveCmd(entryID string) tea.Cmd {
 	svc := m.svc
-	reload := m.loadShelfCmd()
+	reload := m.loadShelfCmd(true) // reopen the popup after the remove
 	return func() tea.Msg {
 		if err := svc.ShelfRemove(context.Background(), entryID); err != nil {
 			return shelfLoadedMsg{err: err}
@@ -140,17 +85,19 @@ func (m Model) renderShelfRestorePopup() string {
 
 // --- compare (entry vs working tree) -------------------------------------
 
-// openShelfCompare opens a diff of the selected entry (old) against the current
-// working-tree version of its origin path (new).
-func (m Model) openShelfCompare() (Model, tea.Cmd) {
-	e, ok := m.selectedShelfEntry()
-	if !ok {
-		return m, nil
-	}
+// openShelfCompareEntry diffs entry e (old) against the current working-tree
+// file at its origin path (new). Routed through openPickerDiff so it works when
+// invoked from the popup over a stacked surface.
+func (m Model) openShelfCompareEntry(e model.ShelfEntry) (Model, tea.Cmd) {
 	width, _ := m.overlayDims()
-	m.diffView = &diffView{title: e.Origin.Path, context: "shelf #" + shortShelf(e) + " → working tree", rev: "", loading: true, partial: m.diffPartial, long: m.diffLong, width: width}
-	m.diffTag = "shelf:" + e.ID
-	return m, m.loadShelfCompareCmd(e)
+	v := &diffView{title: e.Origin.Path, context: "shelf #" + shortShelf(e) + " → working tree", rev: "", loading: true, partial: m.diffPartial, long: m.diffLong, width: width}
+	return m.openPickerDiff(v, "shelf:"+e.ID, m.loadShelfCompareCmd(e))
+}
+
+// openShelfRestore opens the mandatory-dest restore popup for entry e.
+func (m Model) openShelfRestore(e model.ShelfEntry) (Model, tea.Cmd) {
+	m.shelfRestorePopup = &shelfRestorePopup{entryID: e.ID, origin: e.Origin.Path}
+	return m, nil
 }
 
 func shortShelf(e model.ShelfEntry) string {
@@ -169,24 +116,27 @@ func (m Model) shelfEntryByID(id string) (model.ShelfEntry, bool) {
 	return model.ShelfEntry{}, false
 }
 
-// openShelfCompareTwo diffs two shelved entries (marked = old, selected = new),
-// reached via the m-mark pair-op picker. Both sides resolve from the store.
+// openShelfCompareTwo diffs two shelved entries by id (the pair-op mark path).
 func (m Model) openShelfCompareTwo(markedID, selectedID string) (Model, tea.Cmd) {
 	a, okA := m.shelfEntryByID(markedID)
 	b, okB := m.shelfEntryByID(selectedID)
 	if !okA || !okB {
 		return m, nil
 	}
+	m.mark = nil // consume the mark
+	return m.openShelfCompareTwoEntries(a, b)
+}
+
+// openShelfCompareTwoEntries diffs entries a (old) and b (new).
+func (m Model) openShelfCompareTwoEntries(a, b model.ShelfEntry) (Model, tea.Cmd) {
 	title := a.Origin.Path
 	if a.Origin.Path != b.Origin.Path {
 		title = a.Origin.Path + " ↔ " + b.Origin.Path
 	}
-	width, _ := m.overlayDims()
 	ctx := "shelf #" + shortShelf(a) + " → shelf #" + shortShelf(b)
-	m.diffView = &diffView{title: title, context: ctx, rev: "", loading: true, partial: m.diffPartial, long: m.diffLong, width: width}
-	m.diffTag = "shelf2:" + markedID + ":" + selectedID
-	m.mark = nil // consume the mark
-	return m, m.loadShelfCompareTwoCmd(a, b, title, ctx)
+	width, _ := m.overlayDims()
+	v := &diffView{title: title, context: ctx, rev: "", loading: true, partial: m.diffPartial, long: m.diffLong, width: width}
+	return m.openPickerDiff(v, "shelf2:"+a.ID+":"+b.ID, m.loadShelfCompareTwoCmd(a, b, title, ctx))
 }
 
 func (m Model) loadShelfCompareTwoCmd(a, b model.ShelfEntry, title, ctx string) tea.Cmd {

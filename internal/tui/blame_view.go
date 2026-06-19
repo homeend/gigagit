@@ -187,6 +187,8 @@ func (b *blameView) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m.openActionMenu(), nil
 	case "g": // global bookmark quick-switcher
 		return m.openBookmarkSwitcher()
+	case "G": // global shelf quick-switcher
+		return m.openShelfSwitcher()
 	case "z":
 		b.mode = b.mode.next()
 		b.hscroll = 0

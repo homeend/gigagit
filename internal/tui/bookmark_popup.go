@@ -130,7 +130,7 @@ func (m Model) renderBookmarkPopup() string {
 
 	parts := []string{header, ""}
 	parts = append(parts, bodyLines...)
-	parts = append(parts, "", "[enter] jump  [p] paste  [m] mark/compare  [x] remove  [/] filter  [z] mode  [esc] close")
+	parts = append(parts, "", "[enter] jump  [p] paste  [m] mark/compare  [x] remove  [c] vs shelf  [/] filter  [z] mode  [esc] close")
 	return popupBox(inner, strings.Join(parts, "\n"))
 }
 
@@ -237,6 +237,17 @@ func (m Model) updateBookmarkPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			return m.bookmarkMark()
+		case "c":
+			if p.compareRef != nil {
+				return m, nil
+			}
+			b, ok := m.selectedBookmark()
+			if !ok {
+				return m, nil
+			}
+			m.bookmarkPopup = nil
+			m.pendingCompare = &pendingCompare{ref: bookmarkToFileRef(b), label: bookmarkDisplay(b), target: compareShelf}
+			return m, m.loadShelfCmd(true)
 		}
 	}
 	return m, nil
@@ -330,16 +341,17 @@ func (m Model) openBookmarkCompareTwo(aID, bID string) (Model, tea.Cmd) {
 	}
 	width, _ := m.overlayDims()
 	v := &diffView{title: a.Path + " ↔ " + b.Path, context: bookmarkDisplay(a) + " → " + bookmarkDisplay(b), loading: true, partial: m.diffPartial, long: m.diffLong, width: width}
-	return m.openBookmarkDiff(v, "bookmark2:"+aID+":"+bID, m.loadBookmarkCompareTwoCmd(a, b))
+	return m.openPickerDiff(v, "bookmark2:"+aID+":"+bID, m.loadBookmarkCompareTwoCmd(a, b))
 }
 
-// openBookmarkDiff hands off from the bookmark popup to a full-screen diff: it
-// closes the popup AND clears the surface stack, so the diff view (checked after
-// the stack in render/dispatch/mouse) owns the screen even when the popup was
-// opened over a history/blame surface. Shared by jump, compare-two, and
-// compare-focused-vs-bookmark.
-func (m Model) openBookmarkDiff(v *diffView, tag string, load tea.Cmd) (Model, tea.Cmd) {
+// openPickerDiff hands off from a picker popup (bookmark or shelf) to a
+// full-screen diff: it closes BOTH popups AND clears the surface stack, so the
+// diff view (checked after the stack in render/dispatch/mouse) owns the screen
+// even when the popup was opened over a history/blame surface. Shared by jump,
+// compare-two, and the compare-focused-vs-X paths.
+func (m Model) openPickerDiff(v *diffView, tag string, load tea.Cmd) (Model, tea.Cmd) {
 	m.bookmarkPopup = nil
+	m.shelfPopup = nil
 	m = m.clearStack()
 	m.diffView = v
 	m.diffTag = tag
@@ -415,7 +427,7 @@ func (m Model) bookmarkJump() (tea.Model, tea.Cmd) {
 	}
 	width, _ := m.overlayDims()
 	v := &diffView{title: b.Path, context: bookmarkDisplay(b) + " → working tree", rev: "", loading: true, partial: m.diffPartial, long: m.diffLong, width: width}
-	return m.openBookmarkDiff(v, "bookmark:"+b.ID, m.loadBookmarkCompareCmd(b))
+	return m.openPickerDiff(v, "bookmark:"+b.ID, m.loadBookmarkCompareCmd(b))
 }
 
 // loadBookmarkCompareCmd diffs the bookmark's bytes (Old) against the current

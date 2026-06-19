@@ -8,29 +8,21 @@ import (
 	"github.com/gigagit/gg/internal/model"
 )
 
-// shelfRows renders one bookmark-style "<container> / <state> / <path>" line
-// per shelf entry from its stored origin.
-func (m Model) shelfRows() []string {
-	rows := make([]string, len(m.shelfEntries))
-	for i, e := range m.shelfEntries {
-		rows[i] = e.Origin.Display()
-	}
-	return rows
-}
-
 type shelfLoadedMsg struct {
 	entries []model.ShelfEntry
 	err     error
+	open    bool // true → (re)open the shelf popup; false → silent refresh
 }
 
 // loadShelfCmd loads the default bucket's entries (all of them — the shelf is a
 // local read; the Store API stays paged for a future backend). A disabled shelf
-// (no state dir) yields an empty list, not an error modal.
-func (m Model) loadShelfCmd() tea.Cmd {
+// (no state dir) yields an empty list, not an error modal. open marks loads that
+// should (re)open the popup, so a stray refresh can't pop it open.
+func (m Model) loadShelfCmd(open bool) tea.Cmd {
 	svc := m.svc
 	return func() tea.Msg {
 		es, err := svc.ShelfList(context.Background(), "", 0, 0)
-		return shelfLoadedMsg{entries: es, err: err}
+		return shelfLoadedMsg{entries: es, err: err, open: open}
 	}
 }
 
