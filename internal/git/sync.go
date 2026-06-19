@@ -2,6 +2,7 @@ package git
 
 import (
 	"context"
+	"strings"
 
 	"github.com/gigagit/gg/internal/gitcmd"
 )
@@ -11,6 +12,40 @@ import (
 func (r *Repo) Fetch(ctx context.Context, remote string) error {
 	argv := gitcmd.New("fetch").Arg("--no-write-fetch-head", remote).ToArgv()
 	_, err := r.Runner.Run(ctx, "git fetch", argv)
+	return err
+}
+
+// FetchAll updates tracking refs for every configured remote (no prune).
+func (r *Repo) FetchAll(ctx context.Context) error {
+	argv := gitcmd.New("fetch").Arg("--all", "--no-write-fetch-head").ToArgv()
+	_, err := r.Runner.Run(ctx, "git fetch --all", argv)
+	return err
+}
+
+// RemoteNames lists configured remote names, one per line.
+func (r *Repo) RemoteNames(ctx context.Context) ([]string, error) {
+	argv := gitcmd.New("remote").ToArgv()
+	res, err := r.Runner.Run(ctx, "git remote", argv)
+	if err != nil {
+		return nil, err
+	}
+	var names []string
+	for _, ln := range strings.Split(res.Stdout, "\n") {
+		if s := strings.TrimSpace(ln); s != "" {
+			names = append(names, s)
+		}
+	}
+	return names, nil
+}
+
+// PruneRemotes removes tracking refs for branches deleted on the named remotes,
+// in one invocation. Empty names is a no-op (no error).
+func (r *Repo) PruneRemotes(ctx context.Context, names ...string) error {
+	if len(names) == 0 {
+		return nil
+	}
+	argv := gitcmd.New("remote").Arg("prune").Arg(names...).ToArgv()
+	_, err := r.Runner.Run(ctx, "git remote prune", argv)
 	return err
 }
 

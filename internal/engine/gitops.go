@@ -23,6 +23,9 @@ type GitOps interface {
 	LogRangeMessages(ctx context.Context, onto, branch string) ([]model.RangeCommit, error)
 
 	Fetch(ctx context.Context, remote string) error
+	FetchAll(ctx context.Context) error
+	RemoteNames(ctx context.Context) ([]string, error)
+	PruneRemotes(ctx context.Context, names ...string) error
 	Pull(ctx context.Context, remote, branch string, strategy git.PullStrategy) error
 	PullInWorktree(ctx context.Context, worktreePath, remote, branch string) error
 	FastForwardRef(ctx context.Context, remote, branch string) error

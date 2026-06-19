@@ -179,3 +179,90 @@ func TestFastForwardToRef(t *testing.T) {
 		t.Fatal("FastForwardToRef on a diverged branch should error")
 	}
 }
+
+// gitTry runs a git command in dir and returns its error (non-fatal), for
+// presence/absence checks.
+func gitTry(dir string, args ...string) error {
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	return cmd.Run()
+}
+
+func TestRemoteNames(t *testing.T) {
+	dir, runner := newTestRepo(t)
+	repo := &Repo{Runner: runner}
+	gitIn(t, dir, "remote", "add", "origin", "https://example.invalid/x.git")
+	gitIn(t, dir, "remote", "add", "upstream", "https://example.invalid/y.git")
+	names, err := repo.RemoteNames(context.Background())
+	if err != nil {
+		t.Fatalf("RemoteNames: %v", err)
+	}
+	if len(names) != 2 || names[0] != "origin" || names[1] != "upstream" {
+		t.Fatalf("names = %v, want [origin upstream]", names)
+	}
+}
+
+func TestFetchAllUpdatesTrackingRef(t *testing.T) {
+	root := t.TempDir()
+	origin := filepath.Join(root, "origin.git")
+	seed := filepath.Join(root, "seed")
+	clone := filepath.Join(root, "clone")
+	gitIn(t, root, "init", "--bare", origin)
+	gitIn(t, root, "clone", origin, seed)
+	os.WriteFile(filepath.Join(seed, "f.txt"), []byte("v1\n"), 0o644)
+	gitIn(t, seed, "checkout", "-b", "main")
+	gitIn(t, seed, "add", ".")
+	gitIn(t, seed, "commit", "-m", "c1")
+	gitIn(t, seed, "push", "-u", "origin", "main")
+	gitIn(t, root, "clone", origin, clone)
+	// origin advances main via the seed.
+	os.WriteFile(filepath.Join(seed, "f.txt"), []byte("v2\n"), 0o644)
+	gitIn(t, seed, "add", ".")
+	gitIn(t, seed, "commit", "-m", "c2")
+	gitIn(t, seed, "push", "origin", "main")
+
+	repo := &Repo{Runner: gitexec.NewExecRunner("git", clone, observ.NewRing(50))}
+	if err := repo.FetchAll(context.Background()); err != nil {
+		t.Fatalf("FetchAll: %v", err)
+	}
+	cmd := exec.Command("git", "log", "-1", "--format=%s", "refs/remotes/origin/main")
+	cmd.Dir = clone
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("log: %v\n%s", err, out)
+	}
+	if strings.TrimSpace(string(out)) != "c2" {
+		t.Fatalf("origin/main subject = %q, want c2 (fetch did not update)", strings.TrimSpace(string(out)))
+	}
+}
+
+func TestPruneRemotes(t *testing.T) {
+	root := t.TempDir()
+	origin := filepath.Join(root, "origin.git")
+	seed := filepath.Join(root, "seed")
+	clone := filepath.Join(root, "clone")
+	gitIn(t, root, "init", "--bare", origin)
+	gitIn(t, root, "clone", origin, seed)
+	os.WriteFile(filepath.Join(seed, "f.txt"), []byte("v1\n"), 0o644)
+	gitIn(t, seed, "checkout", "-b", "main")
+	gitIn(t, seed, "add", ".")
+	gitIn(t, seed, "commit", "-m", "c1")
+	gitIn(t, seed, "push", "-u", "origin", "main")
+	gitIn(t, seed, "push", "origin", "main:foo") // create origin/foo
+	gitIn(t, root, "clone", origin, clone)       // clone gets refs/remotes/origin/foo
+	gitIn(t, seed, "push", "origin", "--delete", "foo")
+
+	repo := &Repo{Runner: gitexec.NewExecRunner("git", clone, observ.NewRing(50))}
+	if err := repo.PruneRemotes(context.Background(), "origin"); err != nil {
+		t.Fatalf("PruneRemotes: %v", err)
+	}
+	if gitTry(clone, "rev-parse", "--verify", "refs/remotes/origin/foo") == nil {
+		t.Fatal("origin/foo tracking ref should be pruned")
+	}
+	if gitTry(clone, "rev-parse", "--verify", "refs/remotes/origin/main") != nil {
+		t.Fatal("origin/main (live) should survive prune")
+	}
+	if err := repo.PruneRemotes(context.Background()); err != nil {
+		t.Fatalf("PruneRemotes() with no names should be a no-op: %v", err)
+	}
+}
