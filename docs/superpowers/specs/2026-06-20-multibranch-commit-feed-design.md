@@ -38,6 +38,10 @@ A branch can be **soloed** (show only its commits) and un-soloed — all via the
    later add.
 3. **No global key.** Scope changes happen only through `.` menu actions.
 4. **Multi-branch "selected" mode is deferred** (Phase 3).
+5. **Perf:** keep the existing batching (50→200 paging) and throttling
+   (`LimitRunner` + ≤1 in-flight); add **supersede-cancellation**; rely on git's
+   commit-graph; make `logPage` **cache-ready** but **defer** the page cache
+   (see Performance section).
 
 ## Design
 
@@ -106,6 +110,46 @@ type Ref struct {
   callers then `LoadInitial` to re-walk (gen bump drops stale pages). `LoadInitial`
   / `LoadMore` pass `f.scope` to `logPage`.
 - `Service.CommitFeed()` starts with an empty scope (all branches).
+- **Supersede-cancellation:** the feed stores a `cancel context.CancelFunc` for
+  the in-flight page; `LoadInitial`/`SetScope+reload` calls the prior `cancel`
+  before starting the new load, deriving the new load's ctx from a cancelable
+  child of the caller's ctx. So a scope change doesn't just drop the stale
+  *result* (gen-tag) — it stops the superseded `git log` *work* (important on a
+  giant repo where a `--branches --date-order` walk is non-trivial). The
+  `inFlight` guard still bounds it to ≤1 page request at a time.
+
+## Performance, batching & caching (gigantic repos)
+
+The expensive-to-get-wrong parts are already handled by existing machinery and
+preserved by this design:
+
+- **Batching:** `CommitFeed` pages at `commitInitialPage = 50` then
+  `commitPageSize = 200`, loading more only when the selection nears the end. The
+  first paint stays bounded to `-n 50` regardless of repo size; the load is async
+  (the panel shows partial/loading and fills in).
+- **Throttling:** `gitexec.LimitRunner` caps concurrent git subprocesses
+  process-globally; the feed's `inFlight` flag keeps **≤1 page request** in
+  flight per feed. Scope changes are deliberate `.`-menu actions (not cursor-
+  driven), so they can't flood git. Supersede-cancellation (above) frees a slow
+  walk's process slot immediately.
+- **Order choice:** `--date-order` is the cheap ordering for incremental `-n`
+  paging (a date priority-queue that stops early), unlike `--topo-order` (needs
+  broader in-degree computation). It also matches the GitKraken "by creation
+  time" look.
+- **commit-graph:** modern git automatically uses the on-disk **commit-graph**
+  file (`core.commitGraph`, default on) to accelerate `--date-order` walks and
+  `%D` decoration — the standard big-repo accelerator. gg **relies on** it; it
+  does NOT write it (that's `git gc`/`git maintenance`'s job). No work here.
+
+**Cache-ready, cache deferred (decision):** `logPage`'s scope+skip+limit keying
+is structured so a bounded LRU page cache can slot in later via the existing
+`cache.Factory` (mirrors the blame cache), keyed additionally by a **branch-tips
+token** — a short hash of the already-loaded `model.Branch{Name,Hash}` set, which
+changes whenever any branch tip moves, giving correct-by-construction
+invalidation with no extra git call. Phase 1 does NOT add this cache: the
+in-memory feed already avoids re-fetching within a scope, the first page is
+bounded, and a wrong cache key risks showing stale commit lists. The page cache
+is added only if profiling shows toggling scope is actually painful.
 
 ### TUI (`internal/tui`)
 
@@ -141,7 +185,9 @@ type Ref struct {
   `{Branches:["feat"]}` → `… --date-order feat` (FakeRunner). `ParseLog` parses
   `%D` into `Refs` incl. `HEAD -> main` (RefHead + RefLocal), `tag:`, remote.
 - **domain:** `logPage` threads scope + distinct singleflight keys; `SetScope` +
-  `LoadInitial` re-walks with the new refspec.
+  `LoadInitial` re-walks with the new refspec; a superseding `LoadInitial`
+  **cancels** the prior in-flight load's context (assert the first load's ctx is
+  Done after the second starts).
 - **tui:** `commitRows` renders branch labels + HEAD emphasis; `commits-solo`
   sets/clears scope and triggers a reload; `commits-showall` is absent in all
   mode and present when scoped (both Branches and Commits menus);
