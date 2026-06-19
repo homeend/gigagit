@@ -40,6 +40,33 @@ func TestBranchCreate(t *testing.T) {
 	}
 }
 
+func TestBranchRename(t *testing.T) {
+	dir := newRepoDir(t)
+	gitRun(t, dir, "branch", "old")
+
+	var out, errb bytes.Buffer
+	if code := Run(dir, []string{"branch", "rename", "old", "renamed"}, strings.NewReader(""), &out, &errb, ""); code != 0 {
+		t.Fatalf("exit %d, stderr: %s", code, errb.String())
+	}
+	if !cliBranchExists(t, dir, "renamed") {
+		t.Fatal("branch not renamed")
+	}
+	if cliBranchExists(t, dir, "old") {
+		t.Fatal("old branch still present")
+	}
+	if !strings.Contains(out.String(), "renamed branch old → renamed") {
+		t.Fatalf("stdout: %q", out.String())
+	}
+}
+
+func TestBranchRenameUsage(t *testing.T) {
+	dir := newRepoDir(t)
+	var out, errb bytes.Buffer
+	if code := Run(dir, []string{"branch", "rename", "only-one"}, strings.NewReader(""), &out, &errb, ""); code != 2 {
+		t.Fatalf("want usage exit 2, got %d", code)
+	}
+}
+
 func TestBranchCreateFromStartPoint(t *testing.T) {
 	dir := newRepoDir(t)
 	gitRun(t, dir, "branch", "base")
