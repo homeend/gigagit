@@ -130,7 +130,7 @@ func (m Model) renderBookmarkPopup() string {
 
 	parts := []string{header, ""}
 	parts = append(parts, bodyLines...)
-	parts = append(parts, "", "[enter] jump  [p] paste  [m] mark/compare  [x] remove  [/] filter  [z] mode  [esc] close")
+	parts = append(parts, "", "[enter] jump  [p] paste  [m] mark/compare  [x] remove  [c] vs shelf  [/] filter  [z] mode  [esc] close")
 	return popupBox(inner, strings.Join(parts, "\n"))
 }
 
@@ -237,6 +237,17 @@ func (m Model) updateBookmarkPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			return m.bookmarkMark()
+		case "c":
+			if p.compareRef != nil {
+				return m, nil
+			}
+			b, ok := m.selectedBookmark()
+			if !ok {
+				return m, nil
+			}
+			m.bookmarkPopup = nil
+			m.pendingCompare = &pendingCompare{ref: bookmarkToFileRef(b), label: bookmarkDisplay(b), target: compareShelf}
+			return m, m.loadShelfCmd(true)
 		}
 	}
 	return m, nil

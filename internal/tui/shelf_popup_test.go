@@ -66,6 +66,49 @@ func TestShelfPopupRestoreOpensDest(t *testing.T) {
 	}
 }
 
+func TestCompareAgainstShelfMenuRow(t *testing.T) {
+	m := filesMenuModel()
+	m.currentWorktree = "/wt"
+	r, ok := findRow(availableActions(m), "shelf-compare-against")
+	if !ok {
+		t.Fatalf("Compare against shelf missing on Files panel")
+	}
+	mm, cmd := r.run(m)
+	m = mm.(Model)
+	if m.pendingCompare == nil || m.pendingCompare.target != compareShelf {
+		t.Fatalf("running it should set a shelf-targeted pendingCompare, got %+v", m.pendingCompare)
+	}
+	if cmd == nil {
+		t.Fatalf("it should load the shelf")
+	}
+}
+
+func TestShelfPopupCAgainstBookmark(t *testing.T) {
+	m := shelfPopModel(shEntry("a", "x.go"))
+	mm, cmd := m.updateShelfPopupKey(keyMsg("c"))
+	m = mm.(Model)
+	if m.shelfPopup != nil {
+		t.Fatalf("c should close the shelf popup")
+	}
+	if m.pendingCompare == nil || m.pendingCompare.target != compareBookmark {
+		t.Fatalf("c should set a bookmark-targeted pendingCompare, got %+v", m.pendingCompare)
+	}
+	if cmd == nil {
+		t.Fatalf("c should load bookmarks")
+	}
+}
+
+func TestShelfCompareModeEnterDiffs(t *testing.T) {
+	m := shelfPopModel(shEntry("a", "x.go"))
+	m.shelfPopup.compareRef = &model.FileRef{Source: model.SourceUnstaged, Path: "focused.go"}
+	m.shelfPopup.compareLabel = "wt:wt / unstaged / focused.go"
+	mm, _ := m.updateShelfPopupKey(keyMsg("enter"))
+	m = mm.(Model)
+	if m.diffView == nil || !strings.HasPrefix(m.diffTag, "cmpsh:") {
+		t.Fatalf("enter in compare mode should diff focused vs shelf, tag=%q", m.diffTag)
+	}
+}
+
 func TestShelfPopupMarkThenCompare(t *testing.T) {
 	m := shelfPopModel(shEntry("a", "a.go"), shEntry("b", "b.go"))
 	mm, _ := m.updateShelfPopupKey(keyMsg("m"))

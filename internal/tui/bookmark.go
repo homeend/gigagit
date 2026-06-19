@@ -107,23 +107,48 @@ func (m Model) bookmarkAddRow() (actionRow, bool) {
 	}, true
 }
 
+// focusedCompareRef freezes the focused file as a FileRef + display label, the
+// left ("first pick") side of a compare. Shared by the two compare-against rows.
+func (m Model) focusedCompareRef() (model.FileRef, string, bool) {
+	b, ok := m.focusedBookmark()
+	if !ok {
+		return model.FileRef{}, "", false
+	}
+	return bookmarkToFileRef(b), bookmarkDisplay(b), true
+}
+
 // compareAgainstBookmarkRow is the menu-only "Compare against bookmark" action,
 // present wherever a single file is focused. The focused file is frozen at build
 // time; running it stashes that ref on the Model and opens the bookmark picker
 // in compare mode.
 func (m Model) compareAgainstBookmarkRow() (actionRow, bool) {
-	b, ok := m.focusedBookmark()
+	ref, label, ok := m.focusedCompareRef()
 	if !ok {
 		return actionRow{}, false
 	}
-	ref := bookmarkToFileRef(b)
-	label := bookmarkDisplay(b)
 	return actionRow{
 		id:    "bookmark-compare",
 		label: "Compare against bookmark",
 		run: func(m Model) (tea.Model, tea.Cmd) {
-			m.pendingCompare = &pendingCompare{ref: ref, label: label}
+			m.pendingCompare = &pendingCompare{ref: ref, label: label, target: compareBookmark}
 			return m, m.loadBookmarksCmd()
+		},
+	}, true
+}
+
+// compareAgainstShelfRow is the menu-only "Compare against shelf" action: it
+// opens the shelf picker in compare mode against the focused file.
+func (m Model) compareAgainstShelfRow() (actionRow, bool) {
+	ref, label, ok := m.focusedCompareRef()
+	if !ok {
+		return actionRow{}, false
+	}
+	return actionRow{
+		id:    "shelf-compare-against",
+		label: "Compare against shelf",
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			m.pendingCompare = &pendingCompare{ref: ref, label: label, target: compareShelf}
+			return m, m.loadShelfCmd(true)
 		},
 	}, true
 }

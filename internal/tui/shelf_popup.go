@@ -260,10 +260,15 @@ func (m Model) shelfPopupMark() (tea.Model, tea.Cmd) {
 	return m.openShelfCompareTwoEntries(a, b)
 }
 
-// --- Stage B stubs (filled in the compare-matrix task) -------------------
-
-func (m Model) shelfCompareAgainstBookmark() (tea.Model, tea.Cmd) { return m, nil }
-
-func (m Model) openCompareFocusedVsShelf(ref model.FileRef, label string, e model.ShelfEntry) (Model, tea.Cmd) {
-	return m.openShelfCompareEntry(e) // placeholder; replaced in the compare-matrix task
+// shelfCompareAgainstBookmark: the highlighted entry becomes the left side, then
+// the bookmark popup opens in compare mode to pick the right side.
+func (m Model) shelfCompareAgainstBookmark() (tea.Model, tea.Cmd) {
+	e, ok := m.popupSelectedShelfEntry()
+	if !ok {
+		return m, nil
+	}
+	ref := model.FileRef{Source: model.SourceShelf, Locator: e.ID, Path: e.Origin.Path}
+	m.shelfPopup = nil
+	m.pendingCompare = &pendingCompare{ref: ref, label: "shelf #" + shortShelf(e), target: compareBookmark}
+	return m, m.loadBookmarksCmd()
 }
