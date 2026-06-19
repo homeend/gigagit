@@ -362,6 +362,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.actionMenu != nil {
 			return m.updateActionMenuKey(msg)
 		}
+		// The `?` cheat sheet, when opened over a bookmark/shelf switcher, owns the
+		// keyboard above the picker (which is checked below). Gated on a picker
+		// being open so the base-layout help path (further down) is untouched.
+		if m.contentPopup != nil && (m.bookmarkPopup != nil || m.shelfPopup != nil) {
+			return m.updateContentPopupKey(msg)
+		}
 		// The bookmark quick-switcher is global: `g` opens it from every
 		// navigable window, so its key owner must sit above the surface stack
 		// and the diff view (mirrors the action menu and render()). The paste

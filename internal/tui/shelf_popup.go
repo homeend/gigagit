@@ -107,7 +107,7 @@ func (m Model) renderShelfPopup() string {
 
 	parts := []string{header, ""}
 	parts = append(parts, bodyLines...)
-	parts = append(parts, "", "[enter] diff  [p] restore  [m] mark/compare  [x] remove  [c] vs bookmark  [/] filter  [z] mode  [esc] close")
+	parts = append(parts, "", "[?] keys  [enter] diff  [p] restore  [m] mark/compare  [x] remove  [c] vs bookmark  [/] filter  [z] mode  [esc] close")
 	return popupBox(inner, strings.Join(parts, "\n"))
 }
 
@@ -178,6 +178,11 @@ func (m Model) updateShelfPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.shelfPopupMoveSel(1)
 	case tea.KeyRunes:
 		switch msg.String() {
+		case "?":
+			// Open the compact cheat sheet over the still-open switcher; esc
+			// closes it and returns here (contentPopup's esc just nils itself).
+			m.contentPopup = newContentPopup(shelfSwitcherHelpTitle, shelfSwitcherHelp(p.compareRef != nil))
+			return m, nil
 		case "/":
 			p.filtering = true
 		case "k":

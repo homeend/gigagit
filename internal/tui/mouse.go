@@ -24,6 +24,14 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	if m.modal != nil {
 		return m, nil
 	}
+	// The `?` cheat sheet over a switcher scrolls with the wheel — checked before
+	// the picker guard below, which would otherwise swallow it.
+	if m.contentPopup != nil && (m.bookmarkPopup != nil || m.shelfPopup != nil) {
+		if wheel != 0 {
+			m.contentPopup.move(wheel)
+		}
+		return m, nil
+	}
 	// The global bookmark/shelf switchers are centered overlays above any
 	// content window; like the other popups, swallow mouse rather than hit-test
 	// the hidden background underneath them.

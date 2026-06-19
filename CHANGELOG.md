@@ -9,6 +9,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- TUI: pressing `?` while the bookmark (`g`) or shelf (`G`) quick-switcher is open
+  now shows a **compact cheat sheet** of that switcher's keys, overlaid on the
+  still-open switcher; `esc` closes it and returns you to the switcher with its
+  filter/mark intact. (Other popups still pass `?` through unchanged.)
 - TUI: **Compare against bookmark** — the `.` menu on any file reference (file
   tree, history row, blame, diff, stash files, the Files/Staged/Shelf panels)
   offers **Bookmark this file** and **Compare against bookmark**: pick a bookmark

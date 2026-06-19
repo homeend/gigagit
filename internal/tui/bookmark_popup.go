@@ -130,7 +130,7 @@ func (m Model) renderBookmarkPopup() string {
 
 	parts := []string{header, ""}
 	parts = append(parts, bodyLines...)
-	parts = append(parts, "", "[enter] jump  [p] paste  [m] mark/compare  [x] remove  [c] vs shelf  [/] filter  [z] mode  [esc] close")
+	parts = append(parts, "", "[?] keys  [enter] jump  [p] paste  [m] mark/compare  [x] remove  [c] vs shelf  [/] filter  [z] mode  [esc] close")
 	return popupBox(inner, strings.Join(parts, "\n"))
 }
 
@@ -216,6 +216,11 @@ func (m Model) updateBookmarkPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.bookmarkMoveSel(1)
 	case tea.KeyRunes:
 		switch msg.String() {
+		case "?":
+			// Open the compact cheat sheet over the still-open switcher; esc
+			// closes it and returns here (contentPopup's esc just nils itself).
+			m.contentPopup = newContentPopup(bookmarkSwitcherHelpTitle, bookmarkSwitcherHelp(p.compareRef != nil))
+			return m, nil
 		case "/":
 			p.filtering = true
 		case "k":
