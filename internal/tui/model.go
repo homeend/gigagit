@@ -235,11 +235,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.statusMsg = "shelf: " + msg.err.Error()
 			m.shelfEntries = nil
+			m.pendingCompare = nil
 		} else {
 			m.shelfEntries = msg.entries
 		}
 		if m.sel[panelShelf] >= len(m.shelfEntries) {
 			m.sel[panelShelf] = 0
+		}
+		if msg.open && msg.err == nil {
+			m.shelfPopup = newShelfPopup(msg.entries)
+			if pc := m.pendingCompare; pc != nil && pc.target == compareShelf {
+				m.shelfPopup.compareRef = &pc.ref
+				m.shelfPopup.compareLabel = pc.label
+				m.pendingCompare = nil
+			}
 		}
 		return m, nil
 	case shelfAddedMsg:
@@ -263,7 +272,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.bookmarkPopup = newBookmarkPopup(msg.items)
-		if pc := m.pendingCompare; pc != nil {
+		if pc := m.pendingCompare; pc != nil && pc.target == compareBookmark {
 			m.bookmarkPopup.compareRef = &pc.ref
 			m.bookmarkPopup.compareLabel = pc.label
 			m.pendingCompare = nil
@@ -366,6 +375,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.bookmarkPopup != nil {
 			return m.updateBookmarkPopupKey(msg)
+		}
+		if m.shelfPopup != nil {
+			return m.updateShelfPopupKey(msg)
 		}
 		if s := m.stackTop(); s != nil {
 			if msg.Type == tea.KeyCtrlC {
@@ -563,6 +575,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "g": // open the bookmark quick-switcher (global; see openBookmarkSwitcher)
 			return m.openBookmarkSwitcher()
+		case "G": // open the shelf quick-switcher (global; see openShelfSwitcher)
+			return m.openShelfSwitcher()
 		case "z": // cycle the focused panel's text display mode
 			m.dispModes[m.focus] = m.dispModes[m.focus].next()
 			m.hscroll[m.focus] = 0
@@ -728,7 +742,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.lastLeftPanel = m.activeLeftTab
 			if m.activeLeftTab == panelShelf {
 				// Lazy-load the shelf the first time (and each time) it is shown.
-				return m, m.loadShelfCmd()
+				return m, m.loadShelfCmd(false)
 			}
 			return m, nil
 		case "right":

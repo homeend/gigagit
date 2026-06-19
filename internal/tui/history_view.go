@@ -233,6 +233,8 @@ func (h *historyView) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m.openActionMenu(), nil
 	case "g": // global bookmark quick-switcher
 		return m.openBookmarkSwitcher()
+	case "G": // global shelf quick-switcher
+		return m.openShelfSwitcher()
 	case "z":
 		h.mode = h.mode.next()
 		h.hscroll = 0

@@ -72,7 +72,7 @@ func (m Model) shelfTabRows() []actionRow {
 // shelfRemoveCmd removes an entry then reloads the tab.
 func (m Model) shelfRemoveCmd(entryID string) tea.Cmd {
 	svc := m.svc
-	reload := m.loadShelfCmd()
+	reload := m.loadShelfCmd(true) // reopen the popup after the remove
 	return func() tea.Msg {
 		if err := svc.ShelfRemove(context.Background(), entryID); err != nil {
 			return shelfLoadedMsg{err: err}

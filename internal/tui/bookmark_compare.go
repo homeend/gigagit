@@ -9,12 +9,23 @@ import (
 	"github.com/gigagit/gg/internal/model"
 )
 
+// comparePopupKind selects which picker opens in compare mode for a pending
+// compare (the "first pick" awaits a second from this list).
+type comparePopupKind int
+
+const (
+	compareBookmark comparePopupKind = iota // open the bookmark popup
+	compareShelf                            // open the shelf popup
+)
+
 // pendingCompare carries the focused file (frozen at menu time) across the
-// async bookmark load, so the popup it produces opens in compare mode. It lives
-// on the Model, never on the not-yet-built popup (mirrors the reword-prefill fix).
+// async list load, so the popup it produces opens in compare mode. It lives on
+// the Model, never on the not-yet-built popup (mirrors the reword-prefill fix).
+// target decides which picker (bookmark vs shelf) consumes it.
 type pendingCompare struct {
-	ref   model.FileRef
-	label string
+	ref    model.FileRef
+	label  string
+	target comparePopupKind
 }
 
 // openCompareFocusedVsBookmark diffs the focused file (ref, left/old) against a

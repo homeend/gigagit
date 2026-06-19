@@ -131,6 +131,8 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.openActionMenu(), nil
 	case "g": // global bookmark quick-switcher
 		return m.openBookmarkSwitcher()
+	case "G": // global shelf quick-switcher
+		return m.openShelfSwitcher()
 	case "z":
 		p.mode = p.mode.next()
 		p.hscroll = 0
