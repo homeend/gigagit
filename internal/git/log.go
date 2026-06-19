@@ -10,7 +10,14 @@ import (
 )
 
 // logFormat separates fields with \x1f (unit separator); one commit per line.
-const logFormat = "%H%x1f%P%x1f%an%x1f%at%x1f%s"
+// The trailing %D carries ref decorations ("HEAD -> main, feature, tag: v1").
+const logFormat = "%H%x1f%P%x1f%an%x1f%at%x1f%s%x1f%D"
+
+// LogScope selects which refs the walk covers. Empty Branches → all local
+// branches (plus HEAD); otherwise exactly the listed branch names.
+type LogScope struct {
+	Branches []string
+}
 
 // Log returns up to limit commits reachable from HEAD, newest first, skipping
 // the first skip commits. skip=0 is the head of history (omits --skip).
@@ -20,6 +27,27 @@ func (r *Repo) Log(ctx context.Context, limit, skip int) ([]model.Commit, error)
 		ArgIf(skip > 0, "--skip="+strconv.Itoa(skip)).
 		ToArgv()
 	res, err := r.Runner.Run(ctx, "git log", argv)
+	if err != nil {
+		return nil, err
+	}
+	return ParseLog([]byte(res.Stdout))
+}
+
+// LogScoped returns up to limit commits (newest-first, --date-order) reachable
+// from the scope's refs, skipping the first skip. --decorate (bare, short names)
+// forces %D to populate across git versions.
+func (r *Repo) LogScoped(ctx context.Context, limit, skip int, scope LogScope) ([]model.Commit, error) {
+	b := gitcmd.New("log").
+		Arg("-n", strconv.Itoa(limit), "--date-order", "--decorate", "--format="+logFormat).
+		ArgIf(skip > 0, "--skip="+strconv.Itoa(skip))
+	if len(scope.Branches) == 0 {
+		// All local branches PLUS HEAD, so a detached HEAD's commits still show
+		// (git dedupes HEAD when it is already on a branch).
+		b = b.Arg("--branches", "HEAD")
+	} else {
+		b = b.Arg(scope.Branches...)
+	}
+	res, err := r.Runner.Run(ctx, "git log", b.ToArgv())
 	if err != nil {
 		return nil, err
 	}
@@ -98,13 +126,14 @@ func ParseLog(data []byte) ([]model.Commit, error) {
 			continue
 		}
 		f := strings.Split(line, "\x1f")
-		if len(f) < 5 {
+		if len(f) < 6 {
 			continue
 		}
 		c := model.Commit{
 			Hash:    f[0],
 			Author:  f[2],
 			Subject: f[4],
+			Refs:    parseDecorations(f[5]),
 		}
 		if p := strings.Fields(f[1]); len(p) > 0 {
 			c.Parents = p
@@ -115,4 +144,32 @@ func ParseLog(data []byte) ([]model.Commit, error) {
 		out = append(out, c)
 	}
 	return out, nil
+}
+
+// parseDecorations splits a `%D` value ("HEAD -> main, feature, tag: v1,
+// origin/main") into refs. Empty → nil. The HEAD-pointed branch carries Head=true.
+func parseDecorations(d string) []model.Ref {
+	d = strings.TrimSpace(d)
+	if d == "" {
+		return nil
+	}
+	var refs []model.Ref
+	for _, tok := range strings.Split(d, ", ") {
+		tok = strings.TrimSpace(tok)
+		switch {
+		case tok == "":
+			continue
+		case strings.HasPrefix(tok, "HEAD -> "):
+			refs = append(refs, model.Ref{Name: strings.TrimPrefix(tok, "HEAD -> "), Kind: model.RefLocal, Head: true})
+		case tok == "HEAD":
+			refs = append(refs, model.Ref{Name: "HEAD", Kind: model.RefHead})
+		case strings.HasPrefix(tok, "tag: "):
+			refs = append(refs, model.Ref{Name: strings.TrimPrefix(tok, "tag: "), Kind: model.RefTag})
+		case strings.Contains(tok, "/"): // Phase-1 simplification: slashy ⇒ remote-tracking
+			refs = append(refs, model.Ref{Name: tok, Kind: model.RefRemote})
+		default:
+			refs = append(refs, model.Ref{Name: tok, Kind: model.RefLocal})
+		}
+	}
+	return refs
 }

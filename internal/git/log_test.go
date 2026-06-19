@@ -13,9 +13,10 @@ import (
 )
 
 func TestParseLog(t *testing.T) {
-	// Fields separated by \x1f (unit separator), one commit per line.
-	line1 := "aaa111" + "\x1f" + "" + "\x1f" + "Alice" + "\x1f" + "1700000000" + "\x1f" + "initial"
-	line2 := "bbb222" + "\x1f" + "aaa111" + "\x1f" + "Bob" + "\x1f" + "1700000100" + "\x1f" + "second commit"
+	// Fields separated by \x1f (unit separator), one commit per line. Trailing
+	// field is the %D decoration (empty here).
+	line1 := "aaa111" + "\x1f" + "" + "\x1f" + "Alice" + "\x1f" + "1700000000" + "\x1f" + "initial" + "\x1f" + ""
+	line2 := "bbb222" + "\x1f" + "aaa111" + "\x1f" + "Bob" + "\x1f" + "1700000100" + "\x1f" + "second commit" + "\x1f" + ""
 	raw := []byte(line1 + "\n" + line2 + "\n")
 
 	got, err := ParseLog(raw)
@@ -33,6 +34,83 @@ func TestParseLog(t *testing.T) {
 	}
 	if len(got[1].Parents) != 1 || got[1].Parents[0] != "aaa111" {
 		t.Fatalf("commit1 parents = %v, want [aaa111]", got[1].Parents)
+	}
+}
+
+func TestParseLogDecorations(t *testing.T) {
+	line1 := strings.Join([]string{"h1", "p1", "Ada", "1700000000", "subj one", "HEAD -> main, feature, tag: v1, origin/main"}, "\x1f")
+	line2 := strings.Join([]string{"h2", "", "Bo", "1700000001", "subj two", ""}, "\x1f")
+	cs, err := ParseLog([]byte(line1 + "\n" + line2 + "\n"))
+	if err != nil || len(cs) != 2 {
+		t.Fatalf("parse: %v len=%d", err, len(cs))
+	}
+	if cs[1].Refs != nil {
+		t.Fatalf("undecorated commit should have nil Refs, got %+v", cs[1].Refs)
+	}
+	byName := map[string]model.Ref{}
+	for _, r := range cs[0].Refs {
+		byName[r.Name] = r
+	}
+	if byName["main"].Kind != model.RefLocal || !byName["main"].Head {
+		t.Fatalf("main should be the head local branch: %+v", byName["main"])
+	}
+	if byName["feature"].Kind != model.RefLocal || byName["feature"].Head {
+		t.Fatalf("feature should be a non-head local branch: %+v", byName["feature"])
+	}
+	if byName["v1"].Kind != model.RefTag || byName["origin/main"].Kind != model.RefRemote {
+		t.Fatalf("tag/remote kinds wrong: %+v", cs[0].Refs)
+	}
+}
+
+func logArgvContains(t *testing.T, f *gitexec.FakeRunner, want string) bool {
+	t.Helper()
+	for _, c := range f.Calls {
+		if c.Name == "git log" && strings.Contains(" "+strings.Join(c.Argv, " ")+" ", " "+want+" ") {
+			return true
+		}
+	}
+	return false
+}
+
+func TestLogScopedArgv(t *testing.T) {
+	f := gitexec.NewFakeRunner()
+	f.SetResponse("git log", gitexec.Result{Stdout: ""})
+	r := &Repo{Runner: f}
+	if _, err := r.LogScoped(context.Background(), 50, 0, LogScope{}); err != nil {
+		t.Fatal(err)
+	}
+	for _, w := range []string{"--date-order", "--decorate", "--branches", "HEAD"} {
+		if !logArgvContains(t, f, w) {
+			t.Fatalf("all-scope argv missing %q: %v", w, f.Calls)
+		}
+	}
+	f.Calls = nil
+	if _, err := r.LogScoped(context.Background(), 50, 20, LogScope{Branches: []string{"feat"}}); err != nil {
+		t.Fatal(err)
+	}
+	if !logArgvContains(t, f, "feat") || !logArgvContains(t, f, "--skip=20") || logArgvContains(t, f, "--branches") {
+		t.Fatalf("solo-scope argv wrong: %v", f.Calls)
+	}
+}
+
+func TestLogScopedRealDecorations(t *testing.T) {
+	dir, runner := newTestRepo(t) // one commit on main
+	repo := &Repo{Runner: runner}
+	gitIn(t, dir, "branch", "feature")
+	gitIn(t, dir, "tag", "v1")
+	cs, err := repo.LogScoped(context.Background(), 10, 0, LogScope{})
+	if err != nil || len(cs) == 0 {
+		t.Fatalf("LogScoped: %v len=%d", err, len(cs))
+	}
+	byName := map[string]model.Ref{}
+	for _, r := range cs[0].Refs {
+		byName[r.Name] = r
+	}
+	if !byName["main"].Head || byName["main"].Kind != model.RefLocal {
+		t.Fatalf("expected main as head local branch, got refs %+v", cs[0].Refs)
+	}
+	if byName["feature"].Kind != model.RefLocal || byName["v1"].Kind != model.RefTag {
+		t.Fatalf("expected feature(local)+v1(tag), got %+v", cs[0].Refs)
 	}
 }
 
