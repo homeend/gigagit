@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/gigagit/gg/internal/domain"
 	"github.com/gigagit/gg/internal/engine"
@@ -23,8 +24,10 @@ type bookmarkPopup struct {
 	rows      []string // display strings, parallel to items
 	sel       int
 	filter    string
-	filtering bool   // true while `/` filter sub-mode captures runes
-	markID    string // first mark for a two-bookmark compare ("" = none)
+	filtering bool     // true while `/` filter sub-mode captures runes
+	markID    string   // first mark for a two-bookmark compare ("" = none)
+	mode      dispMode // text display mode; z cycles (cutoff default)
+	hscroll   int      // modeScroll horizontal offset
 }
 
 // bookmarkPastePopup collects the (mandatory, no-default) paste destination,
@@ -91,31 +94,46 @@ func (p *bookmarkPopup) visibleIdx() []int {
 
 func (m Model) renderBookmarkPopup() string {
 	p := m.bookmarkPopup
-	var b strings.Builder
-	b.WriteString("Bookmarks\n\n")
-	vis := p.visibleIdx()
-	if len(vis) == 0 {
-		b.WriteString("  (none)\n")
-	}
-	for n, i := range vis {
-		cursor := "  "
-		if n == p.sel {
-			cursor = "> "
-		}
-		mark := " "
-		if p.items[i].ID == p.markID {
-			mark = "•"
-		}
-		b.WriteString(cursor + mark + " " + p.rows[i] + "\n")
-	}
-	if p.filtering {
-		b.WriteString("\nfilter: " + p.filter + "█  [enter] keep  [esc] cancel")
-	} else if p.filter != "" {
-		b.WriteString("\nfilter: " + p.filter)
-	}
-	b.WriteString("\n\n[↑↓/jk] move  [enter] jump  [p] paste  [m] mark/compare  [x] remove  [/] filter  [esc] close")
 	w, _ := m.overlayDims()
-	return modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"
+	inner := popupInnerWidth(w)
+	textW := popupTextWidth(inner)
+
+	header := "Bookmarks"
+	if p.filtering {
+		header += "  /" + p.filter + "█"
+	} else if p.filter != "" {
+		header += "  /" + p.filter
+	}
+
+	vis := p.visibleIdx()
+	var bodyLines []string
+	if len(vis) == 0 {
+		bodyLines = []string{padRight("  (none)", textW)}
+	} else {
+		wr := make([]winRow, len(vis))
+		for n, i := range vis {
+			prefix := "  "
+			var st lipgloss.Style
+			if n == p.sel {
+				prefix, st = "> ", selectedRow
+			}
+			mark := " "
+			if p.items[i].ID == p.markID {
+				mark = "•"
+			}
+			wr[n] = winRow{text: prefix + mark + " " + p.rows[i], style: st}
+		}
+		h := len(vis)
+		if h > 12 {
+			h = 12
+		}
+		bodyLines = renderWindow(wr, winOpts{w: textW, h: h, mode: p.mode, anchor: p.sel, hscroll: p.hscroll})
+	}
+
+	parts := []string{header, ""}
+	parts = append(parts, bodyLines...)
+	parts = append(parts, "", "[enter] jump  [p] paste  [m] mark/compare  [x] remove  [/] filter  [z] mode  [esc] close")
+	return popupBox(inner, strings.Join(parts, "\n"))
 }
 
 // selectedBookmark returns the bookmark under the popup cursor.
@@ -159,6 +177,26 @@ func (m Model) updateBookmarkPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case tea.KeyRunes:
 			p.filter += string(msg.Runes)
 			p.sel = 0
+		}
+		return m, nil
+	}
+	// Display-mode + pan keys take precedence over the navigation switch and
+	// only act in navigation mode (while filtering they are query characters).
+	switch msg.String() {
+	case "z":
+		p.mode = p.mode.next()
+		p.hscroll = 0
+		return m, nil
+	case "shift+left":
+		if p.mode == modeScroll && p.hscroll > 0 {
+			if p.hscroll -= m.hscrollStep(); p.hscroll < 0 {
+				p.hscroll = 0
+			}
+		}
+		return m, nil
+	case "shift+right":
+		if p.mode == modeScroll {
+			p.hscroll += m.hscrollStep()
 		}
 		return m, nil
 	}

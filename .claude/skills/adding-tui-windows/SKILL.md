@@ -53,6 +53,27 @@ modal selection) MUST live behind a **pointer field** (`popup *worktreePopup`,
 | 4 | Confirm → `m.xPopup = nil` then `return m.startOp(op)`. State needed after the op finishes (e.g. switch-after, seq bumps) goes in Model fields consumed by `opFinishedMsg` (see `pendingSwitch`/`pendingSeqBump`). |
 | 5 | If the popup shows previews of template/random/time values: freeze `seed`/`now` at open so recomputes are deterministic (see `tctx()` in `worktree_popup.go`). |
 
+### List popups (scrollable rows) — use `renderWindow`, not `modalStyle.Width`
+
+Item 3 above (`modalStyle.Width(inner)`) is the rule only for **single-line /
+fixed input or confirm** popups. A popup that shows a **scrollable list of
+rows** (repo switcher, bookmark switcher, action menu, …) MUST render through
+the shared `renderWindow` primitive so it inherits cutoff/wrap/scroll for free.
+Exemplar: `internal/tui/repo_popup.go`. Checklist:
+
+- Give the state struct `mode dispMode` and `hscroll int`.
+- Build one `winRow{text, style}` per visible row; **fold any cursor/mark
+  prefix into `text`** (the primitive adds none) and set `style = selectedRow`
+  on the selected row.
+- Cap the visible height and call `renderWindow(rows, winOpts{w: textW, h: h,
+  mode: p.mode, anchor: p.sel, hscroll: p.hscroll})`; emit via `popupBox(inner,
+  …)`, not `modalStyle.Width(...)`.
+- In the key handler, before the navigation switch, handle `z`
+  (`p.mode = p.mode.next()`, reset `hscroll`) and `shift+←/→` (pan by
+  `m.hscrollStep()`, only in `modeScroll`). Gate these to navigation mode if the
+  popup has a `/` filter sub-mode, so `z` stays a query character while typing.
+- Add `[z] mode` to the popup's footer hint line.
+
 ## Tests
 
 Helpers: `loadedModel(t)`, `newRepoDir(t)`, `keyMsg("x")`, `runGit`, `driveOp`

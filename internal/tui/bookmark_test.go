@@ -1,12 +1,14 @@
 package tui
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/gigagit/gg/internal/model"
 )
@@ -160,5 +162,84 @@ func TestBookmarkRowAbsentWhenNoFile(t *testing.T) {
 	m.focus = panelBranches
 	if _, ok := m.focusedBookmark(); ok {
 		t.Fatalf("no file focused → focusedBookmark should be false")
+	}
+}
+
+func TestBookmarkPopupWindowsLongList(t *testing.T) {
+	var items []model.Bookmark
+	for i := 0; i < 30; i++ {
+		items = append(items, model.Bookmark{
+			ID: fmt.Sprintf("b%02d", i), State: model.StateUnstaged,
+			Worktree: "/wt", Path: fmt.Sprintf("f%02d.go", i),
+		})
+	}
+	m := bmPopupModel(items...)
+	m.width, m.height = 80, 30
+	m.bookmarkPopup.sel = 29 // selection at the bottom
+	out := m.renderBookmarkPopup()
+	if !strings.Contains(out, "f29.go") {
+		t.Fatalf("selected (bottom) row must be visible:\n%s", out)
+	}
+	if strings.Contains(out, "f00.go") {
+		t.Fatalf("top row must scroll out of the capped viewport:\n%s", out)
+	}
+	for _, line := range strings.Split(out, "\n") {
+		if w := lipgloss.Width(line); w > m.width {
+			t.Fatalf("line wider than terminal (%d > %d): %q", w, m.width, line)
+		}
+	}
+}
+
+func TestBookmarkPopupZCyclesMode(t *testing.T) {
+	m := bmPopupModel(model.Bookmark{ID: "a", State: model.StateUnstaged, Worktree: "/wt", Path: "a.go"})
+	m.bookmarkPopup.hscroll = 5
+	mm, _ := m.updateBookmarkPopupKey(keyMsg("z"))
+	m = mm.(Model)
+	if m.bookmarkPopup.mode != modeWrap {
+		t.Fatalf("z should cycle cutoff→wrap, got %v", m.bookmarkPopup.mode)
+	}
+	if m.bookmarkPopup.hscroll != 0 {
+		t.Fatalf("z should reset hscroll, got %d", m.bookmarkPopup.hscroll)
+	}
+	mm, _ = m.updateBookmarkPopupKey(keyMsg("z"))
+	m = mm.(Model)
+	if m.bookmarkPopup.mode != modeScroll {
+		t.Fatalf("second z should reach scroll, got %v", m.bookmarkPopup.mode)
+	}
+}
+
+func TestBookmarkPopupPanOnlyInScroll(t *testing.T) {
+	m := bmPopupModel(model.Bookmark{ID: "a", State: model.StateUnstaged, Worktree: "/wt", Path: "a.go"})
+	// cutoff (default): shift+right is a no-op
+	mm, _ := m.updateBookmarkPopupKey(keyMsg("shift+right"))
+	m = mm.(Model)
+	if m.bookmarkPopup.hscroll != 0 {
+		t.Fatalf("shift+right in cutoff must not pan, got %d", m.bookmarkPopup.hscroll)
+	}
+	// scroll mode: shift+right pans by one step, shift+left clamps at 0
+	m.bookmarkPopup.mode = modeScroll
+	mm, _ = m.updateBookmarkPopupKey(keyMsg("shift+right"))
+	m = mm.(Model)
+	if m.bookmarkPopup.hscroll != m.hscrollStep() {
+		t.Fatalf("shift+right in scroll → hscroll=%d, want %d", m.bookmarkPopup.hscroll, m.hscrollStep())
+	}
+	mm, _ = m.updateBookmarkPopupKey(keyMsg("shift+left"))
+	m = mm.(Model)
+	if m.bookmarkPopup.hscroll != 0 {
+		t.Fatalf("shift+left should clamp to 0, got %d", m.bookmarkPopup.hscroll)
+	}
+}
+
+func TestBookmarkPopupZTypesWhileFiltering(t *testing.T) {
+	m := bmPopupModel(model.Bookmark{ID: "a", State: model.StateUnstaged, Worktree: "/wt", Path: "zebra.go"})
+	mm, _ := m.updateBookmarkPopupKey(keyMsg("/")) // enter filter mode
+	m = mm.(Model)
+	mm, _ = m.updateBookmarkPopupKey(keyMsg("z")) // a query char, not a mode cycle
+	m = mm.(Model)
+	if m.bookmarkPopup.mode != modeCutoff {
+		t.Fatalf("z while filtering must not cycle mode, got %v", m.bookmarkPopup.mode)
+	}
+	if m.bookmarkPopup.filter != "z" {
+		t.Fatalf("z while filtering should type, filter=%q", m.bookmarkPopup.filter)
 	}
 }
