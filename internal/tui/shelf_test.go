@@ -49,19 +49,21 @@ func TestAddToShelfRowOnFilesPanel(t *testing.T) {
 }
 
 func TestShelfAddCaptureFromBlame(t *testing.T) {
-	// Working-tree blame (ctx.rev == "") is not a shelf-capture surface — this
-	// mirrors bookmark capture (focusedBookmark guards rev==""); shelf the
-	// working file from the Files panel instead. Guards against reintroducing a
-	// StateCommitted{Commit:""} address that would resolve to the index blob.
+	// Working-tree blame (ctx.rev == "") captures the current worktree's working
+	// file — the worktree/branch come from the Model (derived ad-hoc), not stored
+	// on the view. Mirrors the working-tree diff-view capture.
 	m := footerModel().pushSurface(blameFixture()) // ctx.rev == ""
-	if _, ok := m.focusedShelfAddress(); ok {
-		t.Fatalf("working-tree blame should not offer shelf-add")
+	m.currentWorktree = "/wt"
+	m.status.Branch = "main"
+	a, ok := m.focusedShelfAddress()
+	if !ok || a.State != model.StateUnstaged || a.Worktree != "/wt" || a.Path != "a.go" {
+		t.Fatalf("working-tree blame capture = %+v ok=%v, want unstaged a.go @ /wt", a, ok)
 	}
-	// A committed blame captures the commit (same bytes the old code shelved).
+	// A committed blame captures the commit.
 	m2 := footerModel().pushSurface(&blameView{ctx: navContext{path: "a.go", rev: "abc1234def"}})
-	a, ok := m2.focusedShelfAddress()
-	if !ok || a.State != model.StateCommitted || a.Commit != "abc1234def" || a.Path != "a.go" {
-		t.Fatalf("committed blame capture = %+v ok=%v", a, ok)
+	c, ok := m2.focusedShelfAddress()
+	if !ok || c.State != model.StateCommitted || c.Commit != "abc1234def" || c.Path != "a.go" {
+		t.Fatalf("committed blame capture = %+v ok=%v", c, ok)
 	}
 }
 
