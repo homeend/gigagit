@@ -163,6 +163,16 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.filesTreeFocused = false
 		return m, nil
 	case "/":
+		// Focus decides the search target. The commit-list side routes to the
+		// base commit filter (which the right column already renders); the tree
+		// side, and the stash list (which has no base filter), filter the tree.
+		if !m.filesTreeFocused && m.stashView == nil {
+			m.filterPanel = panelCommits
+			m.filterQuery = ""
+			m.filterTyping = true
+			m.sel[panelCommits] = 0
+			return m, nil
+		}
 		p.typing = true
 		p.query = ""
 		p.sel = 0
@@ -292,6 +302,19 @@ func (m Model) moveCommitUnderFilesView(delta int) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(filesCmd, more)
 	}
 	return m, filesCmd
+}
+
+// syncFilesViewToSelectedCommit reloads the tree for the currently selected
+// commit when it differs from the one on display. Called when a commit filter
+// commits with the files view open, so the tree follows the narrowed selection
+// without the user having to press j/k.
+func (m Model) syncFilesViewToSelectedCommit() (tea.Model, tea.Cmd) {
+	bi, ok := m.backingIndex(panelCommits)
+	if !ok || m.commits[bi].Hash == m.filesHash {
+		return m, nil
+	}
+	m.filesHash = m.commits[bi].Hash
+	return m, m.loadCommitFilesCmd(m.commits[bi])
 }
 
 // renderFilesView draws the commit files tree as one full-height left-column

@@ -202,6 +202,7 @@ func TestFilesViewDropsStaleResult(t *testing.T) {
 
 func TestFilesViewSearchNarrowsAndKeepsHeading(t *testing.T) {
 	m := openFilesView(t, filesModel())
+	m = pressType(t, m, tea.KeyLeft) // focus the tree so / filters it, not commits
 	m = pressRune(t, m, "/")
 	m = pressRune(t, m, "model")
 	vis := m.filesView.visible()
@@ -217,11 +218,96 @@ func TestFilesViewSearchNarrowsAndKeepsHeading(t *testing.T) {
 	}
 }
 
+// With the commit list focused (the view opens this way), / must filter the
+// COMMITS, not the file tree — routing to the base panel filter.
+func TestFilesViewSlashFiltersCommitsWhenListFocused(t *testing.T) {
+	m := openFilesView(t, filesModel()) // opens commit-list focused
+	m = pressRune(t, m, "/")
+	if !m.filterTyping || m.filterPanel != panelCommits {
+		t.Fatalf("/ on the list side must start the commit filter: typing=%v panel=%v", m.filterTyping, m.filterPanel)
+	}
+	m = pressRune(t, m, "two")
+	if m.filterQuery != "two" {
+		t.Fatalf("filterQuery = %q, want the typed commit query", m.filterQuery)
+	}
+	if m.filesView.query != "" || m.filesView.typing {
+		t.Fatalf("the tree filter must stay untouched: query=%q typing=%v", m.filesView.query, m.filesView.typing)
+	}
+}
+
+// With the tree focused, / must filter the file tree, not the commits.
+func TestFilesViewSlashFiltersTreeWhenTreeFocused(t *testing.T) {
+	m := openFilesView(t, filesModel())
+	u, _ := m.Update(keyMsg("left")) // focus the tree
+	m = u.(Model)
+	m = pressRune(t, m, "/")
+	if !m.filesView.typing {
+		t.Fatal("/ on the tree side must start the tree filter")
+	}
+	m = pressRune(t, m, "model")
+	if m.filesView.query != "model" {
+		t.Fatalf("tree query = %q, want the typed file query", m.filesView.query)
+	}
+	if m.filterTyping || m.filterQuery != "" {
+		t.Fatalf("the commit filter must stay untouched: typing=%v query=%q", m.filterTyping, m.filterQuery)
+	}
+}
+
+// Committing a commit filter (enter) must sync the tree to the now-selected
+// commit so "search commits → see its files" needs no extra keypress.
+func TestFilesViewCommitFilterSyncsTree(t *testing.T) {
+	m := openFilesView(t, filesModel()) // opens on commit 1111111 "one"
+	m = pressRune(t, m, "/")
+	m = pressRune(t, m, "two") // narrows to commit 2222222 "two" at filtered index 0
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+	if m.filterTyping {
+		t.Fatal("enter must commit the filter")
+	}
+	if cmd == nil {
+		t.Fatal("committing a commit filter must fire a tree reload for the selected commit")
+	}
+	if m.filesHash != "2222222bbbb" {
+		t.Fatalf("filesHash = %q, want the filtered commit", m.filesHash)
+	}
+	updated, _ = m.Update(cmd())
+	m = updated.(Model)
+	if m.filesTitle != "Files 2222222 two" {
+		t.Fatalf("title = %q after the sync reload", m.filesTitle)
+	}
+}
+
+// The literal thing the user sees: with the files view open and the commit
+// list focused, typing a commit filter narrows the right column (label + rows)
+// while the left tree is untouched.
+func TestFilesViewCommitFilterRendersInRightColumn(t *testing.T) {
+	m := openFilesView(t, filesModel())
+	m = pressRune(t, m, "/")
+	m = pressRune(t, m, "two")
+	out := ansi.Strip(m.render())
+	if !strings.Contains(out, "/two█") {
+		t.Fatalf("right column must show the commit filter label:\n%s", out)
+	}
+	if !strings.Contains(out, "2222222 two") {
+		t.Fatalf("the commit list must show the match:\n%s", out)
+	}
+	// Commit "one" is filtered out of the list — "1111111 one" survives only as
+	// the (untouched) tree title, so it must appear exactly once.
+	if n := strings.Count(out, "1111111 one"); n != 1 {
+		t.Fatalf("commit \"one\" must drop from the list (count=%d, want 1):\n%s", n, out)
+	}
+	if !strings.Contains(out, "Files 1111111 one") || !strings.Contains(out, "model.go") {
+		t.Fatalf("the file tree must stay put while the commits filter:\n%s", out)
+	}
+}
+
 func TestFilesViewQuerySurvivesCommitChange(t *testing.T) {
 	m := openFilesView(t, filesModel())
+	m = pressType(t, m, tea.KeyLeft) // focus the tree to filter it
 	m = pressRune(t, m, "/")
 	m = pressRune(t, m, "model")
 	m = pressType(t, m, tea.KeyEnter) // commit the search
+	m = pressType(t, m, tea.KeyRight) // back to the commit list to move it
 	m.filesView.sel = 3               // pretend the cursor moved
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
 	m = updated.(Model)
@@ -237,6 +323,7 @@ func TestFilesViewQuerySurvivesCommitChange(t *testing.T) {
 
 func TestFilesViewEscClearsSearchThenCloses(t *testing.T) {
 	m := openFilesView(t, filesModel())
+	m = pressType(t, m, tea.KeyLeft) // focus the tree so / filters it
 	m = pressRune(t, m, "/")
 	m = pressRune(t, m, "mo")
 	m = pressType(t, m, tea.KeyEnter)
@@ -338,6 +425,7 @@ func TestFilesViewRenderReplacesLeftColumn(t *testing.T) {
 
 func TestFilesViewRenderShowsSearchQuery(t *testing.T) {
 	m := openFilesView(t, filesModel())
+	m = pressType(t, m, tea.KeyLeft) // focus the tree so / filters it
 	m = pressRune(t, m, "/")
 	m = pressRune(t, m, "mo")
 	out := m.render()

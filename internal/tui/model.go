@@ -417,17 +417,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.pairPopup != nil {
 			return m.updatePairPopupKey(msg)
 		}
-		if m.filesView != nil {
-			return m.updateFilesViewKey(msg)
-		}
-		// The stash list owns the keyboard only while it is the focused (right)
-		// column. When focus has moved to a left panel (← ), keys fall through to
-		// the normal dispatch so the left panels stay navigable with the stash
-		// list visible-but-dimmed on the right.
-		if m.stashView != nil && m.focus == panelCommits {
-			return m.updateStashViewKey(msg)
-		}
 		// Filter-input mode captures every key (the panel label shows the query).
+		// Hoisted above the files-view and stash routing so a commit filter opened
+		// from the files view's list side keeps receiving keystrokes; the tree's
+		// own filter rides contentPopup.typing (not m.filterTyping), so the two
+		// never collide.
 		if m.filterTyping {
 			switch msg.Type {
 			case tea.KeyCtrlC:
@@ -437,6 +431,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.filterQuery = ""
 			case tea.KeyEnter:
 				m.filterTyping = false // commit: filter stays active
+				// With the files view open over a commit filter, point the tree at
+				// the now-selected commit so "search commits → see its files" needs
+				// no extra keypress.
+				if m.filesView != nil && m.filterPanel == panelCommits {
+					return m.syncFilesViewToSelectedCommit()
+				}
 			// Arrows/pages navigate the filtered rows live (an incremental
 			// picker, like the repo switcher); they stay in /-input mode and do
 			// NOT reset the cursor. Vim j/k are query text here, not motions.
@@ -470,6 +470,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.sel[m.filterPanel] = 0
 			}
 			return m, nil
+		}
+		if m.filesView != nil {
+			return m.updateFilesViewKey(msg)
+		}
+		// The stash list owns the keyboard only while it is the focused (right)
+		// column. When focus has moved to a left panel (← ), keys fall through to
+		// the normal dispatch so the left panels stay navigable with the stash
+		// list visible-but-dimmed on the right.
+		if m.stashView != nil && m.focus == panelCommits {
+			return m.updateStashViewKey(msg)
 		}
 		if msg.Type == tea.KeySpace {
 			return m.handleStageKey()

@@ -105,6 +105,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   elsewhere still `SmartSwitch` as before.
 
 ### Fixed
+- TUI: in the commit files view, `/` now searches the **focused** column. With
+  the commit list focused it filters the commits (it used to always filter the
+  file tree, regardless of focus); with the tree focused it filters the files as
+  before. Committing a commit search (`enter`) reloads the tree for the now-
+  selected commit, so "search commits → see its files" needs no extra keypress.
 - TUI: the bookmark quick-switcher (`g`) is now truly **global** — it opens from
   every navigable window (the file tree, diff, history, blame, and stash views),
   not just the base panels. Previously each of those windows swallowed `g`

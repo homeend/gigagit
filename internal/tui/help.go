@@ -128,7 +128,7 @@ func helpContent() []contentLine {
 		r("↑/k ↓/j", "move on the focused side (commits side reloads the tree)"),
 		r("pgup/pgdn", "page the focused side"),
 		r("ctrl+↑/↓", "scroll the file tree from either side (wheel: 3)"),
-		r("/", "search file paths (enter keeps it, esc cancels)"),
+		r("/", "search the focused side: file paths (tree) or the commit list (commits side); enter keeps it, esc cancels"),
 		r("enter", "diff of the selected file in this commit (tree side)"),
 		r("h", "history of the selected file (tree side)"),
 		r("b", "blame of the selected file (tree side)"),
