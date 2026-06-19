@@ -78,11 +78,12 @@ type Model struct {
 
 	stack *viewStack // top-of-everything full-screen surfaces (history, later blame); nil/empty = none
 
-	svc              *domain.Service    // command layer; all git access goes through svc
-	feed             *domain.CommitFeed // single source of truth for commits
-	commitsExhausted bool               // false → "Commits N+", true → "Commits N"
-	opCancel         context.CancelFunc // cancels the in-flight op's context; nil when idle
-	loadGen          int                // bumped per superseding load; stale dataLoadedMsg are dropped
+	svc                 *domain.Service    // command layer; all git access goes through svc
+	feed                *domain.CommitFeed // single source of truth for commits
+	commitsExhausted    bool               // false → "Commits N+", true → "Commits N"
+	commitScopeBranches []string           // included branches for the feed; empty = all local branches
+	opCancel            context.CancelFunc // cancels the in-flight op's context; nil when idle
+	loadGen             int                // bumped per superseding load; stale dataLoadedMsg are dropped
 
 	running   bool
 	statusMsg string
@@ -202,6 +203,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			st := m.feed.Snapshot()
 			m.commits = st.Commits
 			m.commitsExhausted = st.Exhausted
+		}
+		return m, nil
+	case commitsReloadedMsg:
+		if m.feed == nil || msg.gen != m.feed.Gen() {
+			return m, nil // superseded by a newer reload (gen-stamped at load time)
+		}
+		m.commits = msg.state.Commits
+		m.commitsExhausted = msg.state.Exhausted
+		if m.sel[panelCommits] >= len(m.commits) {
+			m.sel[panelCommits] = 0
 		}
 		return m, nil
 	case historyListMsg:
@@ -1149,6 +1160,18 @@ func (m Model) isFilesPanel(p panel) bool { return p == panelFiles || p == panel
 func (m Model) panelLen(p panel) int {
 	_, idx := m.panelView(p)
 	return len(idx)
+}
+
+// commitScopeLabel describes the Commits feed mode for the panel header.
+func (m Model) commitScopeLabel() string {
+	switch len(m.commitScopeBranches) {
+	case 0:
+		return "all"
+	case 1:
+		return "solo: " + m.commitScopeBranches[0]
+	default:
+		return fmt.Sprintf("%d branches", len(m.commitScopeBranches))
+	}
 }
 
 // maybeLoadMoreCommits returns a cmd to page in more commits when the Commits
