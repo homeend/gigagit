@@ -1,0 +1,16 @@
+name = "commit reword: rewords HEAD's message (amend path), no new commit"
+
+[input]
+steps = [
+  { write = "a.txt", content = "a\n" },
+  { commit = "c1" },
+  { write = "b.txt", content = "b\n" },
+  { commit = "c2" },
+]
+
+[[run]]
+cmd  = ["commit", "reword", "HEAD", "-m", "c2 reworded"]
+exit = 0
+
+[[expect.log]]
+subjects = ["c2 reworded", "c1"]     # message changed; the earlier commit is untouched

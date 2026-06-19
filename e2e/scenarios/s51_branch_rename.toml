@@ -1,0 +1,16 @@
+name = "branch rename: renames a local branch in place, never switches"
+
+[input]
+steps = [
+  { write = "README.md", content = "hello\n" },
+  { commit = "initial" },
+  { branch = "old" },
+]
+
+[[run]]
+cmd  = ["branch", "rename", "old", "renamed"]
+exit = 0
+
+[expect]
+branch   = "main"                    # rename never switches the checked-out branch
+branches = ["main", "renamed"]       # old is gone, renamed is present
