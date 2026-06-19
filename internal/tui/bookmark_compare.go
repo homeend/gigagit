@@ -9,6 +9,14 @@ import (
 	"github.com/gigagit/gg/internal/model"
 )
 
+// pendingCompare carries the focused file (frozen at menu time) across the
+// async bookmark load, so the popup it produces opens in compare mode. It lives
+// on the Model, never on the not-yet-built popup (mirrors the reword-prefill fix).
+type pendingCompare struct {
+	ref   model.FileRef
+	label string
+}
+
 // openCompareFocusedVsBookmark diffs the focused file (ref, left/old) against a
 // picked bookmark (bm, right/new) in the full-screen diff view.
 func (m Model) openCompareFocusedVsBookmark(ref model.FileRef, label string, bm model.Bookmark) (Model, tea.Cmd) {

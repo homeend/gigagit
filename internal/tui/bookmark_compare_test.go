@@ -24,3 +24,56 @@ func TestOpenCompareFocusedVsBookmark(t *testing.T) {
 		t.Error("expected a load command")
 	}
 }
+
+func twoBookmarkItems() []model.Bookmark {
+	return []model.Bookmark{
+		{ID: "b1", State: model.StateCommitted, Commit: "c1", SHA: "s1", Path: "a.go"},
+		{ID: "b2", State: model.StateCommitted, Commit: "c2", SHA: "s2", Path: "b.go"},
+	}
+}
+
+func TestPendingCompareSurvivesLoad(t *testing.T) {
+	m := footerModel()
+	m.pendingCompare = &pendingCompare{ref: model.FileRef{Source: model.SourceCommit, Locator: "x", Path: "a.go"}, label: "commit a.go"}
+	u, _ := m.Update(bookmarksLoadedMsg{items: twoBookmarkItems()})
+	mm := u.(Model)
+	if mm.bookmarkPopup == nil || mm.bookmarkPopup.compareRef == nil {
+		t.Fatal("popup must open in compare mode")
+	}
+	if mm.pendingCompare != nil {
+		t.Error("pendingCompare must be cleared once consumed")
+	}
+}
+
+func TestCompareModeEnterRunsCompare(t *testing.T) {
+	m := footerModel()
+	m.bookmarkPopup = newBookmarkPopup(twoBookmarkItems())
+	ref := model.FileRef{Source: model.SourceCommit, Locator: "x", Path: "a.go"}
+	m.bookmarkPopup.compareRef = &ref
+	m.bookmarkPopup.compareLabel = "commit a.go"
+	u, _ := m.Update(keyMsg("enter"))
+	mm := u.(Model)
+	if mm.diffView == nil {
+		t.Fatal("enter in compare mode must open the comparison diff")
+	}
+	if mm.bookmarkPopup != nil {
+		t.Error("popup should close after launching the compare")
+	}
+}
+
+func TestCompareModeMutatorsInert(t *testing.T) {
+	m := footerModel()
+	m.bookmarkPopup = newBookmarkPopup(twoBookmarkItems())
+	ref := model.FileRef{Source: model.SourceCommit, Locator: "x", Path: "a.go"}
+	m.bookmarkPopup.compareRef = &ref
+	for _, k := range []string{"x", "p", "m"} {
+		u, _ := m.Update(keyMsg(k))
+		mm := u.(Model)
+		if mm.bookmarkPopup == nil || mm.diffView != nil || mm.modal != nil || mm.bookmarkPastePopup != nil {
+			t.Errorf("%q must be inert in compare mode", k)
+		}
+		if mm.bookmarkPopup != nil && mm.bookmarkPopup.markID != "" {
+			t.Errorf("%q must not set a compare mark in compare mode", k)
+		}
+	}
+}

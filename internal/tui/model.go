@@ -47,6 +47,7 @@ type Model struct {
 	shelfRestorePopup   *shelfRestorePopup  // Shelf tab: typed restore destination
 	bookmarkPopup       *bookmarkPopup      // bookmark quick-switcher; nil = closed
 	bookmarkPastePopup  *bookmarkPastePopup // bookmark paste: typed destination; nil = closed
+	pendingCompare      *pendingCompare     // focused file awaiting the compare-mode picker; nil = none
 	pendingSwitchBranch string              // branch to SmartSwitch to after a successful op (B = create-and-switch)
 	contentPopup        *contentPopup       // generic read-only viewer (help window)
 
@@ -260,6 +261,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.bookmarkPopup = newBookmarkPopup(msg.items)
+		if pc := m.pendingCompare; pc != nil {
+			m.bookmarkPopup.compareRef = &pc.ref
+			m.bookmarkPopup.compareLabel = pc.label
+			m.pendingCompare = nil
+		}
 		return m, nil
 	case dataLoadedMsg:
 		if msg.gen != m.loadGen {

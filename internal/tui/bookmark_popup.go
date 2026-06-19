@@ -28,6 +28,9 @@ type bookmarkPopup struct {
 	markID    string   // first mark for a two-bookmark compare ("" = none)
 	mode      dispMode // text display mode; z cycles (cutoff default)
 	hscroll   int      // modeScroll horizontal offset
+
+	compareRef   *model.FileRef // non-nil → compare mode (enter diffs against the highlighted bookmark)
+	compareLabel string         // human label for the focused side, shown in the header
 }
 
 // bookmarkPastePopup collects the (mandatory, no-default) paste destination,
@@ -110,6 +113,9 @@ func (m Model) renderBookmarkPopup() string {
 	textW := popupTextWidth(inner)
 
 	header := "Bookmarks"
+	if p.compareRef != nil {
+		header = "Compare " + p.compareRef.Path + " against:"
+	}
 	if p.filtering {
 		header += "  /" + p.filter + "█"
 	} else if p.filter != "" {
@@ -215,6 +221,13 @@ func (m Model) updateBookmarkPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyEsc:
 		m.bookmarkPopup = nil
 	case tea.KeyEnter:
+		if p.compareRef != nil {
+			b, ok := m.selectedBookmark()
+			if !ok {
+				return m, nil
+			}
+			return m.openCompareFocusedVsBookmark(*p.compareRef, p.compareLabel, b)
+		}
 		return m.bookmarkJump()
 	case tea.KeyUp:
 		m.bookmarkMoveSel(-1)
@@ -229,10 +242,19 @@ func (m Model) updateBookmarkPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "j":
 			m.bookmarkMoveSel(1)
 		case "x":
+			if p.compareRef != nil {
+				return m, nil
+			}
 			return m.bookmarkRemovePrompt()
 		case "p":
+			if p.compareRef != nil {
+				return m, nil
+			}
 			return m.bookmarkPastePrompt()
 		case "m":
+			if p.compareRef != nil {
+				return m, nil
+			}
 			return m.bookmarkMark()
 		}
 	}
