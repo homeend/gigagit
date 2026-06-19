@@ -228,3 +228,17 @@ func TestRunVisibleRowInvokesHandler(t *testing.T) {
 		t.Error("the copy handler must return a clipboard command")
 	}
 }
+
+func TestPruneRowOnRemotesTab(t *testing.T) {
+	m := loadedModel(t)
+	m.focus = panelRemotes
+	found := false
+	for _, r := range availableActions(m) {
+		if r.id == "prune-remotes" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("Remotes tab . menu should offer Prune")
+	}
+}

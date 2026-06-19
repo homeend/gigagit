@@ -446,6 +446,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if !m.running && !m.loading {
 				return m.startOp(engine.SmartPull{Intent: engine.PullAndStay})
 			}
+		case "f":
+			if m.canFetchRemotes() {
+				return m.startOp(engine.Fetch{})
+			}
 		case "P":
 			if !m.running && !m.loading && m.status.Branch != "" {
 				return m.startOp(engine.Push{Remote: "origin", Branch: m.status.Branch, SetUpstream: true})

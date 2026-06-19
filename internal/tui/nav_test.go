@@ -191,3 +191,18 @@ func TestCanCheckoutRemoteGating(t *testing.T) {
 		t.Fatal("a remote selected + idle -> true")
 	}
 }
+
+func TestFetchKeyOnRemotesTabStartsFetch(t *testing.T) {
+	m := loadedModel(t)
+	m.focus = panelRemotes
+	u, _ := m.Update(keyMsg("f"))
+	if !u.(Model).running {
+		t.Fatal("f on the Remotes tab should start Fetch")
+	}
+	m2 := loadedModel(t)
+	m2.focus = panelBranches
+	u2, _ := m2.Update(keyMsg("f"))
+	if u2.(Model).running {
+		t.Fatal("f on the Branches tab must not start Fetch")
+	}
+}

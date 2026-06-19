@@ -46,6 +46,8 @@ func helpContent() []contentLine {
 		h("Remotes panel"),
 		r("c", "checkout: create or fast-forward a local tracking branch (stay on the current branch)"),
 		r("s", "checkout and switch to it — fast-forward-safe; refuses if the local branch has diverged"),
+		r("f", "fetch all remotes (updates tracking refs and the behind-counts)"),
+		r(".", "Prune (.-menu): drop tracking refs for branches deleted upstream"),
 		h("Worktrees panel"),
 		r("enter", "switch into the selected worktree"),
 		r("d", "remove the selected worktree"),
