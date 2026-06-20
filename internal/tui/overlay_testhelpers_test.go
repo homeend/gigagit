@@ -10,3 +10,10 @@ func bookmarkPasteOf(m Model) *bookmarkPastePopup {
 	}
 	return nil
 }
+
+func shelfRestoreOf(m Model) *shelfRestorePopup {
+	if p, ok := m.overlayTop().(*shelfRestorePopup); ok {
+		return p
+	}
+	return nil
+}

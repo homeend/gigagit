@@ -29,7 +29,7 @@ type shelfPopup struct {
 // openShelfSwitcher opens the global shelf quick-switcher (G). Wired into every
 // navigable surface like g; render+routing hoisted above content surfaces.
 func (m Model) openShelfSwitcher() (Model, tea.Cmd) {
-	if m.opsIdle() && m.shelfPopup == nil {
+	if m.opsIdle() && m.shelfSwitcher() == nil {
 		return m, m.loadShelfCmd(true)
 	}
 	return m, nil
@@ -55,8 +55,7 @@ func (p *shelfPopup) visibleIdx() []int {
 	return idx
 }
 
-func (m Model) popupSelectedShelfEntry() (model.ShelfEntry, bool) {
-	p := m.shelfPopup
+func (p *shelfPopup) selected() (model.ShelfEntry, bool) {
 	vis := p.visibleIdx()
 	if p.sel < 0 || p.sel >= len(vis) {
 		return model.ShelfEntry{}, false
@@ -64,8 +63,13 @@ func (m Model) popupSelectedShelfEntry() (model.ShelfEntry, bool) {
 	return p.items[vis[p.sel]], true
 }
 
-func (m Model) renderShelfPopup() string {
-	p := m.shelfPopup
+// render composites the switcher box over `below` (the overlay-stack contract).
+func (p *shelfPopup) render(m Model, below string) string {
+	w, h := m.overlayDims()
+	return overlayCenter(clipToHeight(below, h), m.renderShelfPopupBox(p), w, h)
+}
+
+func (m Model) renderShelfPopupBox(p *shelfPopup) string {
 	w, _ := m.overlayDims()
 	inner := popupInnerWidth(w)
 	textW := popupTextWidth(inner)
@@ -111,20 +115,23 @@ func (m Model) renderShelfPopup() string {
 	return popupBox(inner, strings.Join(parts, "\n"))
 }
 
-func (m Model) shelfPopupMoveSel(d int) {
-	p := m.shelfPopup
+func (p *shelfPopup) moveSel(d int) {
 	if n := p.sel + d; n >= 0 && n < len(p.visibleIdx()) {
 		p.sel = n
 	}
 }
 
-// updateShelfPopupKey handles one key while the shelf switcher is open.
+// update handles one key while the shelf switcher is open (the overlay contract).
 // Navigation-first; `/` enters a filter sub-mode (mirrors bookmarkPopup).
-func (m Model) updateShelfPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (p *shelfPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
 	}
-	p := m.shelfPopup
+	if m.running {
+		// B1: the switcher stays visible during a restore WriteFile op but must be
+		// inert — a keypress here must not launch a second op.
+		return m, nil
+	}
 	if p.filtering {
 		switch msg.Type {
 		case tea.KeyEsc:
@@ -162,9 +169,9 @@ func (m Model) updateShelfPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	switch msg.Type {
 	case tea.KeyEsc:
-		m.shelfPopup = nil
+		m = m.popOverlay()
 	case tea.KeyEnter:
-		e, ok := m.popupSelectedShelfEntry()
+		e, ok := p.selected()
 		if !ok {
 			return m, nil
 		}
@@ -173,9 +180,9 @@ func (m Model) updateShelfPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m.openShelfCompareEntry(e)
 	case tea.KeyUp:
-		m.shelfPopupMoveSel(-1)
+		p.moveSel(-1)
 	case tea.KeyDown:
-		m.shelfPopupMoveSel(1)
+		p.moveSel(1)
 	case tea.KeyRunes:
 		switch msg.String() {
 		case "?":
@@ -186,9 +193,9 @@ func (m Model) updateShelfPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "/":
 			p.filtering = true
 		case "k":
-			m.shelfPopupMoveSel(-1)
+			p.moveSel(-1)
 		case "j":
-			m.shelfPopupMoveSel(1)
+			p.moveSel(1)
 		case "x":
 			if p.compareRef != nil {
 				return m, nil
@@ -198,11 +205,10 @@ func (m Model) updateShelfPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if p.compareRef != nil {
 				return m, nil
 			}
-			e, ok := m.popupSelectedShelfEntry()
+			e, ok := p.selected()
 			if !ok {
 				return m, nil
 			}
-			m.shelfPopup = nil
 			return m.openShelfRestore(e)
 		case "m":
 			if p.compareRef != nil {
@@ -219,12 +225,17 @@ func (m Model) updateShelfPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) shelfPopupRemovePrompt() (tea.Model, tea.Cmd) {
-	e, ok := m.popupSelectedShelfEntry()
+func (m Model) shelfPopupRemovePrompt() (Model, tea.Cmd) {
+	p := m.shelfSwitcher()
+	if p == nil {
+		return m, nil
+	}
+	e, ok := p.selected()
 	if !ok {
 		return m, nil
 	}
-	m.shelfPopup = nil
+	// Leave the switcher on the stack: the modal renders above it; Cancel reveals
+	// it, Remove refreshes it in place via the shelf-loaded reload.
 	m.modal = &decisionState{
 		req: engine.DecisionRequest{
 			ID:      "shelf-remove",
@@ -243,12 +254,15 @@ func (m Model) shelfPopupRemovePrompt() (tea.Model, tea.Cmd) {
 
 // shelfPopupMark records the first mark, or diffs the two entries on the second
 // press on a different entry (mirrors bookmarkMark).
-func (m Model) shelfPopupMark() (tea.Model, tea.Cmd) {
-	e, ok := m.popupSelectedShelfEntry()
+func (m Model) shelfPopupMark() (Model, tea.Cmd) {
+	p := m.shelfSwitcher()
+	if p == nil {
+		return m, nil
+	}
+	e, ok := p.selected()
 	if !ok {
 		return m, nil
 	}
-	p := m.shelfPopup
 	if p.markID == "" || p.markID == e.ID {
 		if p.markID == e.ID {
 			p.markID = ""
@@ -267,13 +281,17 @@ func (m Model) shelfPopupMark() (tea.Model, tea.Cmd) {
 
 // shelfCompareAgainstBookmark: the highlighted entry becomes the left side, then
 // the bookmark popup opens in compare mode to pick the right side.
-func (m Model) shelfCompareAgainstBookmark() (tea.Model, tea.Cmd) {
-	e, ok := m.popupSelectedShelfEntry()
+func (m Model) shelfCompareAgainstBookmark() (Model, tea.Cmd) {
+	p := m.shelfSwitcher()
+	if p == nil {
+		return m, nil
+	}
+	e, ok := p.selected()
 	if !ok {
 		return m, nil
 	}
 	ref := model.FileRef{Source: model.SourceShelf, Locator: e.ID, Path: e.Origin.Path}
-	m.shelfPopup = nil
+	m = m.popOverlay()
 	m.pendingCompare = &pendingCompare{ref: ref, label: "shelf #" + shortShelf(e), target: compareBookmark}
 	return m, m.loadBookmarksCmd()
 }

@@ -379,7 +379,6 @@ func (m Model) openBookmarkCompareTwo(aID, bID string) (Model, tea.Cmd) {
 // compare-two, and the compare-focused-vs-X paths.
 func (m Model) openPickerDiff(v *diffView, tag string, load tea.Cmd) (Model, tea.Cmd) {
 	m = m.clearOverlays()
-	m.shelfPopup = nil // TRANSITIONAL (B2): remove in Task 4 when shelf is an overlay
 	m = m.clearStack()
 	m.diffView = v
 	m.diffTag = tag

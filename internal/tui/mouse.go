@@ -26,16 +26,16 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	}
 	// The `?` cheat sheet over a switcher scrolls with the wheel — checked before
 	// the picker guard below, which would otherwise swallow it.
-	if m.contentPopup != nil && (m.overlayTop() != nil || m.shelfPopup != nil) {
+	if m.contentPopup != nil && m.overlayTop() != nil {
 		if wheel != 0 {
 			m.contentPopup.move(wheel)
 		}
 		return m, nil
 	}
-	// The overlay stack (bookmark switcher + paste) and the legacy shelf switcher
-	// are centered overlays above any content window; like the other popups,
-	// swallow mouse rather than hit-test the hidden background underneath them.
-	if m.overlayTop() != nil || m.shelfPopup != nil {
+	// The overlay stack (switchers + their child popups) is centered above any
+	// content window; like the other popups, swallow mouse rather than hit-test
+	// the hidden background underneath it.
+	if m.overlayTop() != nil {
 		return m, nil
 	}
 	if m.stackTop() != nil {

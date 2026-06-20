@@ -52,19 +52,19 @@ func TestAddToShelfRowAbsentWhenNoFileFocused(t *testing.T) {
 
 func TestShelfRestorePopupRequiresDest(t *testing.T) {
 	m := footerModel()
-	m.shelfRestorePopup = &shelfRestorePopup{entryID: "unstaged-a-go-deadbeef", origin: "a.go"}
+	m = m.pushOverlay(&shelfRestorePopup{entryID: "unstaged-a-go-deadbeef", origin: "a.go"})
 	// Enter with an empty dest is a no-op (popup stays open).
-	u, _ := m.updateShelfRestoreKey(keyMsg("enter"))
+	u, _ := m.Update(keyMsg("enter"))
 	m = u.(Model)
-	if m.shelfRestorePopup == nil {
+	if shelfRestoreOf(m) == nil {
 		t.Fatalf("empty dest should keep the popup open")
 	}
 	// Typing builds the destination.
 	for _, r := range "out.txt" {
-		u, _ = m.updateShelfRestoreKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		u, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
 		m = u.(Model)
 	}
-	if m.shelfRestorePopup.dest != "out.txt" {
-		t.Fatalf("dest = %q, want out.txt", m.shelfRestorePopup.dest)
+	if shelfRestoreOf(m).dest != "out.txt" {
+		t.Fatalf("dest = %q, want out.txt", shelfRestoreOf(m).dest)
 	}
 }

@@ -60,7 +60,7 @@ func bookmarkPopupModel() Model {
 
 func shelfPopupModel() Model {
 	m := Model{width: 80, height: 24, sel: map[panel]int{}, sortModes: map[panel]sortMode{}}
-	m.shelfPopup = newShelfPopup([]model.ShelfEntry{{ID: "s1"}})
+	m = m.pushOverlay(newShelfPopup([]model.ShelfEntry{{ID: "s1"}}))
 	return m
 }
 
@@ -86,7 +86,7 @@ func TestQuestionMarkOpensCheatSheetOverShelfPopup(t *testing.T) {
 	m := shelfPopupModel()
 	u, _ := m.Update(keyMsg("?"))
 	m = u.(Model)
-	if m.contentPopup == nil || m.shelfPopup == nil {
+	if m.contentPopup == nil || m.shelfSwitcher() == nil {
 		t.Fatal("? must open the cheat sheet and keep the shelf switcher open")
 	}
 	if !strings.Contains(m.contentPopup.title, "Shelf") {
@@ -148,7 +148,8 @@ func TestSwitcherFootersAdvertiseQuestionMark(t *testing.T) {
 	if f := bm.renderBookmarkPopupBox(bm.bookmarkSwitcher()); !strings.Contains(f, "[?] keys") {
 		t.Errorf("bookmark switcher footer must advertise [?] keys:\n%s", f)
 	}
-	if f := shelfPopupModel().renderShelfPopup(); !strings.Contains(f, "[?] keys") {
+	sh := shelfPopupModel()
+	if f := sh.renderShelfPopupBox(sh.shelfSwitcher()); !strings.Contains(f, "[?] keys") {
 		t.Errorf("shelf switcher footer must advertise [?] keys:\n%s", f)
 	}
 }

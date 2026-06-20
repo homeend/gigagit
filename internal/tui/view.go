@@ -150,16 +150,12 @@ func (m Model) render() string {
 	// the picker, centered over the same dimmed-panel background it used. Gated on
 	// a picker so the base-layout help path below (over the live panels) is left
 	// untouched.
-	if m.contentPopup != nil && (m.overlayTop() != nil || m.shelfPopup != nil) {
+	if m.contentPopup != nil && m.overlayTop() != nil {
 		w, h := m.overlayDims()
 		return overlayCenter(clipToHeight(m.menuBackground(), h), m.renderContentPopup(), w, h)
 	}
 	if o := m.overlayTop(); o != nil {
 		return o.render(m, m.menuBackground())
-	}
-	if m.shelfPopup != nil {
-		w, h := m.overlayDims()
-		return overlayCenter(clipToHeight(m.menuBackground(), h), m.renderShelfPopup(), w, h)
 	}
 	if s := m.stackTop(); s != nil {
 		_, h := m.overlayDims()
@@ -206,10 +202,6 @@ func (m Model) render() string {
 	if m.rewordPopup != nil {
 		w, h := m.overlayDims()
 		return overlayCenter(bg, m.renderRewordPopup(), w, h)
-	}
-	if m.shelfRestorePopup != nil {
-		w, h := m.overlayDims()
-		return overlayCenter(bg, m.renderShelfRestorePopup(), w, h)
 	}
 	if m.contentPopup != nil {
 		w, h := m.overlayDims()

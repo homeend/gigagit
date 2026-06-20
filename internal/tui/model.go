@@ -44,11 +44,9 @@ type Model struct {
 	branchPopup         *branchPopup
 	renameBranchPopup   *renameBranchPopup
 	rewordPopup         *rewordPopup
-	shelfRestorePopup   *shelfRestorePopup // shelf restore: typed destination
-	shelfPopup          *shelfPopup        // shelf quick-switcher (G); nil = closed
-	pendingCompare      *pendingCompare    // focused file awaiting the compare-mode picker; nil = none
-	pendingSwitchBranch string             // branch to SmartSwitch to after a successful op (B = create-and-switch)
-	contentPopup        *contentPopup      // generic read-only viewer (help window)
+	pendingCompare      *pendingCompare // focused file awaiting the compare-mode picker; nil = none
+	pendingSwitchBranch string          // branch to SmartSwitch to after a successful op (B = create-and-switch)
+	contentPopup        *contentPopup   // generic read-only viewer (help window)
 
 	mark        *markState        // the m-key mark; nil = none (see mark.go)
 	fileMarks   map[string]bool   // multi-selected Status file paths (keyed by path)
@@ -238,11 +236,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.shelfEntries = msg.entries
 		}
 		if msg.open && msg.err == nil {
-			m.shelfPopup = newShelfPopup(msg.entries)
+			p := newShelfPopup(msg.entries)
 			if pc := m.pendingCompare; pc != nil && pc.target == compareShelf {
-				m.shelfPopup.compareRef = &pc.ref
-				m.shelfPopup.compareLabel = pc.label
+				p.compareRef = &pc.ref
+				p.compareLabel = pc.label
 				m.pendingCompare = nil
+			}
+			if existing := m.shelfSwitcher(); existing != nil {
+				*existing = *p // reopen after a remove: refresh the live switcher in place
+			} else {
+				m = m.pushOverlay(p)
 			}
 		}
 		return m, nil
@@ -365,20 +368,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.actionMenu != nil {
 			return m.updateActionMenuKey(msg)
 		}
-		// The `?` cheat sheet, when opened over a bookmark/shelf switcher, owns the
-		// keyboard above the picker (which is checked below). Gated on a picker
-		// being open so the base-layout help path (further down) is untouched.
-		if m.contentPopup != nil && (m.overlayTop() != nil || m.shelfPopup != nil) {
+		// The `?` cheat sheet, when opened over a switcher, owns the keyboard above
+		// the overlay stack (checked below). Gated on an overlay being open so the
+		// base-layout help path (further down) is untouched.
+		if m.contentPopup != nil && m.overlayTop() != nil {
 			return m.updateContentPopupKey(msg)
 		}
 		// The overlay stack (centered popups) is global: its top owns the keyboard
 		// above the surface stack and the diff view (mirrors the action menu and
-		// render()). The bookmark switcher + paste live here; shelf migrates next.
+		// render()). The bookmark + shelf switchers and their child popups live here.
 		if o := m.overlayTop(); o != nil {
 			return o.update(m, msg)
-		}
-		if m.shelfPopup != nil {
-			return m.updateShelfPopupKey(msg)
 		}
 		if s := m.stackTop(); s != nil {
 			if msg.Type == tea.KeyCtrlC {
@@ -403,9 +403,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.settings != nil {
 			return m.updateSettingsKey(msg)
-		}
-		if m.shelfRestorePopup != nil {
-			return m.updateShelfRestoreKey(msg)
 		}
 		if m.branchPopup != nil {
 			return m.updateBranchPopupKey(msg)

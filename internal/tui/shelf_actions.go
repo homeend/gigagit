@@ -36,22 +36,21 @@ type shelfRestorePopup struct {
 	dest    string // typed destination (starts empty)
 }
 
-// updateShelfRestoreKey handles one key while the restore popup is open.
-func (m Model) updateShelfRestoreKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+// update handles one key while the restore popup is open (the overlay contract).
+func (p *shelfRestorePopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
 	}
-	p := m.shelfRestorePopup
 	switch msg.Type {
 	case tea.KeyEsc:
-		m.shelfRestorePopup = nil
+		m = m.popOverlay() // back to the shelf switcher beneath
 	case tea.KeyEnter:
 		dest := strings.TrimSpace(p.dest)
 		if dest == "" {
 			return m, nil // a destination is mandatory
 		}
 		entry := p.entryID
-		m.shelfRestorePopup = nil
+		m = m.popOverlay() // back to the switcher; it stays visible during the write
 		blob, err := m.svc.ShelfBlob(context.Background(), entry)
 		if err != nil {
 			m.statusMsg = "shelf restore: " + err.Error()
@@ -71,16 +70,16 @@ func (m Model) updateShelfRestoreKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// renderShelfRestorePopup draws the restore-destination dialog.
-func (m Model) renderShelfRestorePopup() string {
-	p := m.shelfRestorePopup
+// render draws the restore-destination dialog composited over `below`.
+func (p *shelfRestorePopup) render(m Model, below string) string {
 	var b strings.Builder
 	b.WriteString("Restore shelved file to a new path\n\n")
 	b.WriteString("from: " + p.origin + "  (shelved copy)\n")
 	b.WriteString("dest: " + p.dest + "\n\n")
 	b.WriteString("[type] path  [enter] restore  [esc] cancel")
-	w, _ := m.overlayDims()
-	return modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"
+	w, h := m.overlayDims()
+	box := modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"
+	return overlayCenter(clipToHeight(below, h), box, w, h)
 }
 
 // --- compare (entry vs working tree) -------------------------------------
@@ -94,10 +93,11 @@ func (m Model) openShelfCompareEntry(e model.ShelfEntry) (Model, tea.Cmd) {
 	return m.openPickerDiff(v, "shelf:"+e.ID, m.loadShelfCompareCmd(e))
 }
 
-// openShelfRestore opens the mandatory-dest restore popup for entry e.
+// openShelfRestore pushes the mandatory-dest restore popup for entry e over the
+// shelf switcher (which stays beneath; esc/success returns to it). The dest is
+// deliberately NOT prefilled (unlike bookmark paste).
 func (m Model) openShelfRestore(e model.ShelfEntry) (Model, tea.Cmd) {
-	m.shelfRestorePopup = &shelfRestorePopup{entryID: e.ID, origin: e.Origin.Path}
-	return m, nil
+	return m.pushOverlay(&shelfRestorePopup{entryID: e.ID, origin: e.Origin.Path}), nil
 }
 
 func shortShelf(e model.ShelfEntry) string {
