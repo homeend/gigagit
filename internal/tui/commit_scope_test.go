@@ -368,3 +368,42 @@ func TestDisplayStartShortensSHA(t *testing.T) {
 		t.Fatalf("displayStart(branch) = %q, want unchanged", got)
 	}
 }
+
+func TestCommitCreateWorktreeRowOpensInEdit(t *testing.T) {
+	m := footerModel()
+	if m.sel == nil {
+		m.sel = map[panel]int{}
+	}
+	m.focus = panelCommits
+	full := "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	m.commits = []model.Commit{{Hash: full, Subject: "x"}}
+	m.sel[panelCommits] = 0
+	r, ok := findRow(availableActions(m), "commit-create-worktree")
+	if !ok {
+		t.Fatal("create-worktree row missing on the Commits panel")
+	}
+	mm, _ := r.run(m)
+	m = mm.(Model)
+	p, ok := m.overlayTop().(*worktreePopup)
+	if !ok {
+		t.Fatalf("expected a worktreePopup overlay, got %T", m.overlayTop())
+	}
+	if !p.fromCommit || p.startPoint != full {
+		t.Fatalf("fromCommit=%v startPoint=%q (want true + full hash)", p.fromCommit, p.startPoint)
+	}
+	if p.state != stEdit || p.editBuf != "" {
+		t.Fatalf("should open in branch-edit with an empty buffer; state=%v buf=%q", p.state, p.editBuf)
+	}
+}
+
+func TestWorktreeFromCommitRequiresBranchName(t *testing.T) {
+	m := footerModel()
+	p := &worktreePopup{fromCommit: true, branchOverride: ""} // user typed nothing
+	m, cmd := m.startCreateFromPopup(p, false)
+	if m.statusMsg == "" {
+		t.Fatal("expected a 'branch name required' message")
+	}
+	if cmd != nil {
+		t.Fatal("must not launch the create op without a branch name")
+	}
+}

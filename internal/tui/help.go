@@ -99,7 +99,7 @@ func helpContent() []contentLine {
 		h("Commits panel"),
 		r("", "shows commits from ALL local branches by default, in date order, with branch labels (‹*current›‹branch›) and a single-line commit graph (natural order only; hidden while filtering/sorting); header shows the mode — Commits (all) / Commits (solo: <branch>)"),
 		r("l", "show the selected commit's files in the left column"),
-		r(".", "rename commit / copy commit id / Create branch here / Show all branches when soloed / Show as list|graph (.-menu)"),
+		r(".", "rename commit / copy commit id / Create branch here / Create worktree here / Show all branches when soloed / Show as list|graph (.-menu)"),
 		r("", "Show as list / Show as graph (.-menu): flat ●-gutter list vs the lane graph; lane color marks each commit's line of development"),
 		r("(scroll)", "more commits load automatically as you near the end"),
 		h("Filter mode (/)"),
