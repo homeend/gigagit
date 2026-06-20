@@ -278,7 +278,9 @@ func (m Model) renderInterface() string {
 	footer := truncate(m.footerLine(), g.w)
 	errMode := statusIsError(m.statusMsg)
 	var notice string
-	if n := len(m.status.Conflicts()); n > 0 {
+	// Suppressed while the conflict process is active — it draws its own window
+	// over this background, so a "press [x] to resolve" notice would be wrong.
+	if n := len(m.status.Conflicts()); n > 0 && m.proc == nil {
 		notice = fmt.Sprintf("⚠ %d conflict", n)
 		if n != 1 {
 			notice += "s"

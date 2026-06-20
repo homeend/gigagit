@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/gigagit/gg/internal/domain"
@@ -211,6 +212,62 @@ func TestConflictProcessModifyDeleteKeys(t *testing.T) {
 		t.Error("k (keep modified) should dispatch on a modify/delete file")
 	}
 	driveOp(t, got, cmd)
+}
+
+// driveChain runs the reactive cmd chain (op events, reloads, in-progress
+// probes) until it quiesces, so a full conflict flow can be exercised through
+// real git — unlike driveOp it does not stop when the op finishes, because the
+// release path continues across several more messages.
+func driveChain(t *testing.T, m Model, cmd tea.Cmd) Model {
+	t.Helper()
+	for i := 0; i < 200 && cmd != nil; i++ {
+		msg := cmd()
+		if msg == nil {
+			break
+		}
+		u, next := m.Update(msg)
+		m = u.(Model)
+		cmd = next
+	}
+	return m
+}
+
+// The whole point of the feature wired together: enter → resolve both files →
+// continue → the slot releases. This is the chain (opFinished→finished→reload→
+// refreshed→probe→inProgress) where a routing bug would hide.
+func TestConflictProcessEndToEndResolveContinueReleases(t *testing.T) {
+	m := conflictRepoTUI(t)
+	mm, _ := m.Update(keyMsg("x"))
+	m = mm.(Model)
+
+	// resolve uu.txt (both-sides) — keep ours
+	selectConflictProc(t, m.proc.(*conflictProcess), "uu.txt")
+	mm, cmd := m.Update(keyMsg("C"))
+	m = driveChain(t, mm.(Model), cmd)
+	if m.proc == nil {
+		t.Fatal("md.txt still conflicts — the process must stay active after one resolve")
+	}
+
+	// resolve md.txt (modify/delete) — keep modified
+	selectConflictProc(t, m.proc.(*conflictProcess), "md.txt")
+	mm, cmd = m.Update(keyMsg("k"))
+	m = driveChain(t, mm.(Model), cmd)
+	if m.proc == nil {
+		t.Fatal("all files resolved but not continued — process must stay (offering continue)")
+	}
+	if cp := m.proc.(*conflictProcess); len(cp.files) != 0 || cp.inProgress != "merge" {
+		t.Fatalf("expected all-resolved + merge in progress, got %d files, inProgress=%q", len(cp.files), cp.inProgress)
+	}
+
+	// continue the merge → the repo goes clean → the slot releases
+	mm, cmd = m.Update(keyMsg("c"))
+	m = driveChain(t, mm.(Model), cmd)
+	if m.proc != nil {
+		t.Fatalf("continue must complete the merge and release the slot, got %T", m.proc)
+	}
+	if n := len(m.status.Conflicts()); n != 0 {
+		t.Fatalf("no conflicts should remain after continue, got %d", n)
+	}
 }
 
 func TestConflictKeepModifiedMapping(t *testing.T) {

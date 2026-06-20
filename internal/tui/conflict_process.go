@@ -19,10 +19,11 @@ type confState int
 
 const (
 	confListing   confState = iota // showing the conflicted-file list; awaiting a file + action
-	confPicking                    // handed off to the full-screen line editor (Task 4)
-	confWorking                    // a job is running (Task 3)
-	confReporting                  // a job failed; showing the error (Task 3)
-	confFinishing                  // continue/abort completed; releasing the slot (Task 5)
+	confPicking                    // handed off to the full-screen line editor
+	confWorking                    // a job is running
+	confReporting                  // a job failed; showing the error
+	// The slot is released directly in the inProgressMsg handler once the repo is
+	// clean, so there is no separate "finishing" state.
 )
 
 // conflictProcess resolves an in-progress merge/rebase as a process: it owns the
