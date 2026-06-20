@@ -8,6 +8,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+### Added
+- **Add untracked files to `.gitignore` from the Files panel.** The `.` action
+  menu on an untracked file now offers **Add to .gitignore** (ignores that exact
+  file via an anchored, glob-escaped `/path` line) and **Add extension to
+  .gitignore** (`*.ext`, offered only when the file has an extension). Both
+  append to the repo-root `.gitignore`, skip a pattern that is already present,
+  and leave the change unstaged; the now-ignored file drops out of the panel on
+  refresh. The actions appear only on untracked files, since `.gitignore` has no
+  effect on tracked ones.
+
 ### Changed
 - **Truncated-row reveal now renders inline, on the row itself.** When a
   selected row is too long for its panel, the full-text reveal is drawn over

@@ -63,6 +63,12 @@ func availableActions(m Model) []actionRow {
 	}
 	out := append(m.contextCopyRows(), row...)
 	out = append(out, window...)
+	if r, ok := m.fileIgnoreRow(); ok {
+		out = append(out, r)
+	}
+	if r, ok := m.fileIgnoreExtRow(); ok {
+		out = append(out, r)
+	}
 	if r, ok := m.shelfAddRow(); ok {
 		out = append(out, r)
 	}
