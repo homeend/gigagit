@@ -29,11 +29,15 @@ func tooltipModel() Model {
 	}
 }
 
-func TestTooltipShowsFullRowAboveSelection(t *testing.T) {
+func TestTooltipShowsFullRowInline(t *testing.T) {
 	m := tooltipModel()
+	m.width = 120 // wide enough that the full row fits when overflowing to the screen edge
 	lines, _, y, ok := m.tooltip()
 	if !ok {
 		t.Fatal("want a tooltip for the truncated selected row")
+	}
+	if len(lines) != 1 {
+		t.Fatalf("inline reveal is a single line, got %d", len(lines))
 	}
 	plain := ansi.Strip(strings.Join(lines, "\n"))
 	if !strings.Contains(plain, longPath) {
@@ -42,8 +46,28 @@ func TestTooltipShowsFullRowAboveSelection(t *testing.T) {
 	g := m.layout()
 	_, selInWin, _ := windowRows(mustRows(t, m, panelWorktrees), g.boxH[panelWorktrees]-3, 1)
 	rowY := g.pos[panelWorktrees].y + 2 + selInWin
-	if want := rowY - len(lines); y != want {
-		t.Errorf("tooltip y = %d, want %d (directly above row line %d)", y, want, rowY)
+	if y != rowY {
+		t.Errorf("tooltip y = %d, want %d (on the row's own line)", y, rowY)
+	}
+}
+
+// The filed bug: the FIRST visible row (selInWin == 0) selected and truncated.
+// The old floating strip placed itself at rowY-n, landing on the panel's border
+// (origin.y) and label (origin.y+1) lines — covering the title bar. The inline
+// reveal must land on the row itself (origin.y+2), leaving the bar untouched.
+func TestTooltipOnTopRowKeepsTitleBar(t *testing.T) {
+	m := tooltipModel()
+	m.width = 120
+	m.worktrees[0].Path = longPath // make the top row long…
+	m.sel[panelWorktrees] = 0       // …and selected (selInWin == 0)
+	_, _, y, ok := m.tooltip()
+	if !ok {
+		t.Fatal("want a tooltip for the truncated top row")
+	}
+	origin := m.layout().pos[panelWorktrees]
+	if y != origin.y+2 {
+		t.Fatalf("reveal y = %d, want %d (the row line); it must not touch the border %d or label %d",
+			y, origin.y+2, origin.y, origin.y+1)
 	}
 }
 
@@ -95,29 +119,28 @@ func TestTooltipHiddenOnEmptyPanel(t *testing.T) {
 	}
 }
 
-func TestTooltipWrapsAndCaps(t *testing.T) {
+func TestTooltipOverflowsSingleLineCappedAtScreen(t *testing.T) {
 	m := tooltipModel()
-	m.worktrees[1].Path = strings.Repeat("x", 500) // wider than 3 terminal lines
+	m.worktrees[1].Path = strings.Repeat("x", 500) // wider than the whole screen
 	lines, _, _, ok := m.tooltip()
 	if !ok {
 		t.Fatal("want a tooltip")
 	}
-	if len(lines) != 3 {
-		t.Fatalf("want 3 wrapped lines, got %d", len(lines))
+	if len(lines) != 1 {
+		t.Fatalf("inline reveal stays a single line, got %d", len(lines))
 	}
-	last := ansi.Strip(lines[len(lines)-1])
-	if !strings.HasSuffix(strings.TrimRight(last, " "), "…") {
-		t.Errorf("capped tooltip must end with …, got %q", last)
+	only := ansi.Strip(lines[0])
+	if !strings.HasSuffix(strings.TrimRight(only, " "), "…") {
+		t.Errorf("a reveal too wide for the screen must end with …, got %q", only)
 	}
-	for i, l := range lines {
-		if w := ansi.StringWidth(l); w > m.width {
-			t.Errorf("line %d is %d cols, wider than the terminal (%d)", i, w, m.width)
-		}
+	if w := ansi.StringWidth(lines[0]); w > m.width {
+		t.Errorf("reveal is %d cols, wider than the terminal (%d)", w, m.width)
 	}
 }
 
 func TestTooltipRenderedInView(t *testing.T) {
 	m := tooltipModel()
+	m.width = 120 // the inline reveal overflows to the screen edge; give it room for the full path
 	out := ansi.Strip(m.render())
 	if !strings.Contains(out, longPath) {
 		t.Fatal("rendered view must contain the tooltip's full path")
@@ -150,15 +173,6 @@ func TestWrapWidth(t *testing.T) {
 	capped := wrapWidth(strings.Repeat("a", 10), 3, 2)
 	if len(capped) != 2 || !strings.HasSuffix(capped[1], "…") {
 		t.Fatalf("capped wrap = %q", capped)
-	}
-}
-
-func TestTooltipY(t *testing.T) {
-	if y := tooltipY(5, 2); y != 3 {
-		t.Errorf("tooltipY(5,2) = %d, want 3 (above)", y)
-	}
-	if y := tooltipY(1, 3); y != 2 {
-		t.Errorf("tooltipY(1,3) = %d, want 2 (flips below)", y)
 	}
 }
 

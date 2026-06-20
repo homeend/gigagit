@@ -4,19 +4,18 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// tooltipStyle is the floating strip showing a truncated row's full text.
-// Distinct from selectedRow (reverse video): black on yellow reads as an
+// tooltipStyle highlights the inline full-text reveal drawn over a truncated
+// row. Distinct from selectedRow (reverse video): black on yellow reads as an
 // annotation layered over the UI.
 var tooltipStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("0")).Background(lipgloss.Color("11"))
 
-// tooltipMaxLines caps the strip's height; longer content re-truncates with …
-const tooltipMaxLines = 3
-
-// tooltip returns the styled lines and overlay position of the full-text
-// strip for the focused panel's selected row, when that row is truncated in
-// its panel. ok is false when nothing should be shown. Geometry comes from
-// the same layout()/panelView/windowRows sources the renderer uses, so the
-// two cannot drift.
+// tooltip returns the styled line and overlay position of the full-text reveal
+// for the focused panel's selected row, when that row is truncated in its
+// panel. The reveal is drawn inline on the row's own line and overflows the
+// panel's right border (up to the screen edge), so it never covers the panel's
+// top bar. ok is false when nothing should be shown. Geometry comes from the
+// same layout()/panelView/windowRows sources the renderer uses, so the two
+// cannot drift.
 func (m Model) tooltip() (lines []string, x, y int, ok bool) {
 	// While the files view's tree side is focused, the commits selection is
 	// not the active row — describing it would be misleading.
@@ -65,36 +64,20 @@ func (m Model) tooltip() (lines []string, x, y int, ok bool) {
 	origin := g.pos[p]
 	rowY := origin.y + 2 + selInWin // top border + label line
 
-	raw := wrapWidth(content, g.w, tooltipMaxLines)
-	width := 0
-	for _, l := range raw {
-		if w := lipgloss.Width(l); w > width {
-			width = w
-		}
-	}
 	x = origin.x + 2 // the panel's content edge
-	if x+width > g.w {
-		x = g.w - width
+	avail := g.w - x // room from the content edge to the screen's right edge
+	if avail < 1 {
+		return nil, 0, 0, false
 	}
-	if x < 0 {
-		x = 0
-	}
-	y = tooltipY(rowY, len(raw))
-
-	lines = make([]string, len(raw))
-	for i, l := range raw {
-		lines[i] = tooltipStyle.Render(padRight(l, width))
-	}
+	// Draw the full text inline, on the selected row's own line, overflowing the
+	// panel's right border (clipped only at the screen edge). Replacing the
+	// truncated row in place — rather than floating a strip above it — keeps the
+	// reveal off the panel's top bar, which the old strip covered whenever the
+	// top row was selected. Single line: it spills past the window instead of
+	// wrapping.
+	lines = []string{tooltipStyle.Render(truncate(content, avail))}
+	y = rowY
 	return lines, x, y, true
-}
-
-// tooltipY places an n-line strip directly above the row at rowY, flipping to
-// directly below when there is no room above.
-func tooltipY(rowY, n int) int {
-	if y := rowY - n; y >= 0 {
-		return y
-	}
-	return rowY + 1
 }
 
 // wrapWidth greedily wraps s into display-width-aware lines of at most w
