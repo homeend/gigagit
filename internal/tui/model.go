@@ -60,8 +60,7 @@ type Model struct {
 	diffPartial bool      // session default for new diffs (false = full); the f key toggles it
 	diffLong    longMode  // session: long-line mode for new diffs (0 = scroll); w cycles
 
-	stack    *viewStack    // top-of-everything full-screen surfaces (history, later blame); nil/empty = none
-	overlays *overlayStack // top-of-everything centered popups; nil/empty = none
+	layers *layerStack // top-of-everything window pile: full-screen surfaces + centered popups; nil/empty = none
 
 	svc                 *domain.Service    // command layer; all git access goes through svc
 	feed                *domain.CommitFeed // single source of truth for commits
@@ -207,7 +206,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case historyListMsg:
-		if h, ok := m.stackTop().(*historyView); ok && h.listTag == msg.tag {
+		if h := layerOf[*historyView](m); h != nil && h.listTag == msg.tag {
 			h.loading = false
 			h.err = msg.err
 			h.commits = msg.commits
@@ -218,12 +217,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case historyDiffMsg:
-		if h, ok := m.stackTop().(*historyView); ok && h.diffTag == msg.tag {
+		if h := layerOf[*historyView](m); h != nil && h.diffTag == msg.tag {
 			h.diff = msg.view
 		}
 		return m, nil
 	case blameMsg:
-		if b, ok := m.stackTop().(*blameView); ok && b.tag == msg.tag {
+		if b := layerOf[*blameView](m); b != nil && b.tag == msg.tag {
 			b.loading = false
 			b.err = msg.err
 			b.lines = msg.lines
@@ -378,19 +377,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.actionMenu != nil {
 			return m.updateActionMenuKey(msg)
 		}
-		// The overlay stack (centered popups) is global: its top owns the keyboard
-		// above the surface stack and the diff view (mirrors the action menu and
-		// render()). The bookmark + shelf switchers, their child popups, and the
-		// help / `?` cheat-sheet viewer (a contentPopup pushed over the switcher)
-		// all live here, so esc on the cheat-sheet returns to the switcher beneath.
-		if o := m.overlayTop(); o != nil {
-			return o.update(m, msg)
-		}
-		if s := m.stackTop(); s != nil {
-			if msg.Type == tea.KeyCtrlC {
-				return m, tea.Quit
-			}
-			return s.update(m, msg)
+		// The layer stack (full-screen surfaces + centered popups) is global: its
+		// top owns the keyboard above the diff view (mirrors the action menu and
+		// render()). History/blame/rebase editors and the bookmark/shelf switchers,
+		// their child popups, and the help / `?` cheat-sheet viewer all live here,
+		// so esc on the cheat-sheet returns to the switcher beneath. ctrl+c is not
+		// special-cased: every layer (surfaces and popups) quits on it in its own
+		// update.
+		if l := m.topLayer(); l != nil {
+			return l.update(m, msg)
 		}
 		// Routing invariant: the diff view is checked immediately after the
 		// modal here, in the MouseMsg arm, and in render() — the key owner

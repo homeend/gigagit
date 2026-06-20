@@ -112,18 +112,29 @@ func clipToHeight(s string, h int) string {
 	return strings.Join(lines[:h], "\n")
 }
 
-// menuBackground is what renders behind the action menu overlay: the topmost
-// content window if one is open (so the menu floats over the diff/history/blame
-// or file tree), else the panel interface (which itself draws the file tree and
-// stash list).
-func (m Model) menuBackground() string {
-	if s := m.stackTop(); s != nil {
-		return s.render(m, m.renderInterface())
-	}
+// layerBase is what the layer stack composites over: the open full-screen diff,
+// else the panel interface. Surfaces in the stack ignore it (they own the
+// screen); popups composite their centered box onto it.
+func (m Model) layerBase() string {
 	if m.diffView != nil {
 		return m.renderDiffView()
 	}
 	return m.renderInterface()
+}
+
+// renderLayers folds the layer stack bottom→top over layerBase: each surface
+// replaces the accumulated render, each popup composites its box onto it. An
+// empty stack returns layerBase unchanged (just the diff or the panels). This is
+// also the background the action menu floats over (it replaces the old
+// menuBackground helper).
+func (m Model) renderLayers() string {
+	below := m.layerBase()
+	if m.layers != nil {
+		for _, l := range m.layers.entries {
+			below = l.render(m, below)
+		}
+	}
+	return below
 }
 
 // render draws the interface, compositing the worktree popup centered on top of
@@ -148,26 +159,18 @@ func (m Model) render() string {
 	// before those surfaces' own early returns below.
 	if m.actionMenu != nil {
 		w, h := m.overlayDims()
-		return overlayCenter(clipToHeight(m.menuBackground(), h), m.renderActionMenu(), w, h)
+		return overlayCenter(clipToHeight(m.renderLayers(), h), m.renderActionMenu(), w, h)
 	}
-	// The bookmark quick-switcher (and its paste sub-popup) is global: it must
-	// paint over whatever content window is open, so it overlays menuBackground
-	// here, above the surface-stack and diff-view early returns below.
-	// The help / `?` cheat-sheet viewer is a contentPopup on this stack too: over
-	// a switcher it composites on the dimmed background (menuBackground), and esc
-	// pops back to the switcher; the base help composites over the live panels.
-	if o := m.overlayTop(); o != nil {
-		return o.render(m, m.menuBackground())
-	}
-	if s := m.stackTop(); s != nil {
+	// The layer stack (full-screen surfaces + centered popups) and the diff view
+	// it composites over. renderLayers walks bottom→top: surfaces own the screen,
+	// popups composite their box on top. The bookmark/shelf switchers, their child
+	// popups, and the help / `?` cheat-sheet viewer all live here, so esc on the
+	// cheat-sheet returns to the switcher beneath. With an empty stack but an open
+	// diff, renderLayers is just the diff; with neither, fall through to the
+	// panel/tooltip base below.
+	if (m.layers != nil && len(m.layers.entries) > 0) || m.diffView != nil {
 		_, h := m.overlayDims()
-		return clipToHeight(s.render(m, m.renderInterface()), h)
-	}
-	// Routing invariant: the diff view comes immediately after the modal —
-	// here and in Update's key and mouse arms.
-	if m.diffView != nil {
-		_, h := m.overlayDims()
-		return clipToHeight(m.renderDiffView(), h)
+		return clipToHeight(m.renderLayers(), h)
 	}
 	_, h := m.overlayDims()
 	bg := clipToHeight(m.renderInterface(), h)

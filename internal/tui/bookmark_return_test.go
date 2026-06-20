@@ -115,11 +115,11 @@ func TestSwitcherInertWhileRunning(t *testing.T) {
 func TestRemoveSuccessRefreshesSwitcher(t *testing.T) {
 	m := Model{width: 80, height: 24, sel: map[panel]int{}, sortModes: map[panel]sortMode{}}
 	m = m.pushOverlay(newBookmarkPopup([]model.Bookmark{{ID: "b1", Path: "a.go"}, {ID: "b2", Path: "b.go"}}))
-	depth := len(m.overlays.entries)
+	depth := len(m.layers.entries)
 	u, _ := m.Update(bookmarksLoadedMsg{items: []model.Bookmark{{ID: "b2", Path: "b.go"}}})
 	m = u.(Model)
-	if len(m.overlays.entries) != depth {
-		t.Fatalf("overlay depth = %d, want %d (refresh in place, not push)", len(m.overlays.entries), depth)
+	if len(m.layers.entries) != depth {
+		t.Fatalf("overlay depth = %d, want %d (refresh in place, not push)", len(m.layers.entries), depth)
 	}
 	sw := m.bookmarkSwitcher()
 	if sw == nil || len(sw.items) != 1 || sw.items[0].ID != "b2" {

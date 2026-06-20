@@ -28,18 +28,15 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	if m.proc != nil {
 		return m, nil
 	}
-	// The overlay stack (switchers + their child popups) is centered above any
-	// content window; swallow mouse rather than hit-test the hidden background —
-	// except the help / `?` cheat-sheet viewer (a contentPopup), which scrolls
-	// with the wheel like it did as a standalone popup.
-	if o := m.overlayTop(); o != nil {
-		if cp, ok := o.(*contentPopup); ok && wheel != 0 {
+	// The layer stack (surfaces + centered popups) is above any content window;
+	// surfaces (history/blame) are keyboard-only (v1) and popups swallow mouse
+	// rather than hit-test the hidden background — except the help / `?` cheat-sheet
+	// viewer (a contentPopup), which scrolls with the wheel.
+	if l := m.topLayer(); l != nil {
+		if cp, ok := l.(*contentPopup); ok && wheel != 0 {
 			cp.move(wheel)
 		}
 		return m, nil
-	}
-	if m.stackTop() != nil {
-		return m, nil // history/blame are keyboard-only (v1)
 	}
 	// Routing invariant: the diff view comes immediately after the modal,
 	// matching Update's key routing and render().
