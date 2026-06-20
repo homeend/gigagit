@@ -55,6 +55,27 @@ func TestFileIgnoreExtRowRequiresExtension(t *testing.T) {
 	}
 }
 
+func TestAvailableActionsIncludesIgnoreRows(t *testing.T) {
+	m := ignoreModel([]model.FileStatus{untracked("foo.log")}, 0)
+	var ids []string
+	for _, r := range availableActions(m) {
+		ids = append(ids, r.id)
+	}
+	wantIDs := []string{"ignore-file", "ignore-ext"}
+	for _, want := range wantIDs {
+		found := false
+		for _, id := range ids {
+			if id == want {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("availableActions missing %q; got %v", want, ids)
+		}
+	}
+}
+
 func TestFileIgnoreRowsGating(t *testing.T) {
 	// Tracked file → neither row.
 	tracked := model.FileStatus{Path: "edit.go", Kind: model.KindTracked, Unstaged: 'M'}

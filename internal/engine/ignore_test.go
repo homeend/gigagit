@@ -108,6 +108,26 @@ func TestIgnoreExactRemovesUntrackedFromStatus(t *testing.T) {
 	}
 }
 
+func TestIgnoreNestedPathActuallyIgnored(t *testing.T) {
+	// The dominant monorepo case: a nested untracked file. The anchored "/path"
+	// is correct only because git runs from the repo root, so f.Path is
+	// root-relative — this proves that end-to-end.
+	dir, repo := newRepo(t)
+	os.MkdirAll(filepath.Join(dir, "sub", "dir"), 0o755)
+	os.WriteFile(filepath.Join(dir, "sub", "dir", "out.log"), []byte("x\n"), 0o644)
+
+	if _, err := (Ignore{Path: "sub/dir/out.log"}).Run(context.Background(), OpDeps{Repo: repo}); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	gi, _ := os.ReadFile(filepath.Join(dir, ".gitignore"))
+	if !strings.Contains(string(gi), "/sub/dir/out.log") {
+		t.Fatalf(".gitignore = %q", gi)
+	}
+	if strings.Contains(gitStatus(t, dir), "sub/dir/out.log") {
+		t.Fatalf("nested file not ignored:\n%s", gitStatus(t, dir))
+	}
+}
+
 func TestIgnoreMetacharFilenameActuallyIgnored(t *testing.T) {
 	dir, repo := newRepo(t)
 	os.WriteFile(filepath.Join(dir, "a[1].log"), []byte("x\n"), 0o644)
