@@ -28,6 +28,7 @@ type Model struct {
 	commits  []model.Commit
 
 	worktrees       []model.Worktree
+	tags            []model.Tag // refs/tags; shown by the Tags tab in the middle slot
 	currentWorktree string
 
 	cfg          config.Config
@@ -104,6 +105,7 @@ const (
 	panelFiles
 	panelStaged
 	panelCommits
+	panelTags
 	panelCount
 )
 
@@ -302,6 +304,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.statusMsg = "commits: " + msg.commitErr.Error()
 			}
 			m.worktrees = msg.worktrees
+			m.tags = msg.tags
 			m.currentWorktree = msg.currentWorktree
 			m.cfg = msg.cfg
 			m.gitCommonDir = msg.gitCommonDir
