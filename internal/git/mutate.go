@@ -54,6 +54,12 @@ func (r *Repo) CreateTag(ctx context.Context, name, commit, message string) erro
 	return err
 }
 
+// DeleteTag deletes a tag (git tag -d). git errors if it does not exist.
+func (r *Repo) DeleteTag(ctx context.Context, name string) error {
+	_, err := r.Runner.Run(ctx, "git tag -d", gitcmd.New("tag").Arg("-d", name).ToArgv())
+	return err
+}
+
 // RenameBranch renames local branch oldName to newName (git branch -m). git
 // refuses when newName already exists; renaming a branch checked out in another
 // worktree succeeds and updates that worktree's HEAD.
