@@ -58,25 +58,29 @@ func (m Model) layout() layoutGeom {
 	}
 	g.leftW, g.rightW = leftW, w-leftW
 
-	// Left column: the Branches/Worktrees tab slot, Files, and Staged. Each
-	// bordered box needs >=3 rows; a short terminal drops Staged (tab slot over
-	// Files). The inactive tab — and a dropped Staged — get no boxH entry (0 ⇒
-	// hidden everywhere; panelAt/render skip boxH<=0) but keep their state.
+	// Left column: the Branches/Worktrees tab slot, the middle slot (Files OR
+	// Tags — whichever is active), and Staged. Each bordered box needs >=3 rows;
+	// a short terminal drops Staged. The inactive top tab, the inactive middle
+	// tab, and a dropped Staged get no boxH entry (0 ⇒ hidden everywhere;
+	// panelAt/render skip boxH<=0) but keep their state. Keying the middle box on
+	// m.middleTab() (not always panelFiles) means page steps, windowing, and
+	// mouse hit-testing all resolve to whichever tab is on screen.
+	mid := m.middleTab()
 	if bodyH >= 12 {
 		h1 := bodyH / 3
 		h2 := bodyH / 3
 		g.boxH[m.activeLeftTab] = h1
-		g.boxH[panelFiles] = h2
+		g.boxH[mid] = h2
 		g.boxH[panelStaged] = bodyH - h1 - h2
 		g.pos[m.activeLeftTab] = point{0, 1}
-		g.pos[panelFiles] = point{0, 1 + h1}
+		g.pos[mid] = point{0, 1 + h1}
 		g.pos[panelStaged] = point{0, 1 + h1 + h2}
 	} else {
 		h1 := bodyH / 2
 		g.boxH[m.activeLeftTab] = h1
-		g.boxH[panelFiles] = bodyH - h1
+		g.boxH[mid] = bodyH - h1
 		g.pos[m.activeLeftTab] = point{0, 1}
-		g.pos[panelFiles] = point{0, 1 + h1}
+		g.pos[mid] = point{0, 1 + h1}
 	}
 	g.boxH[panelCommits] = bodyH
 	g.pos[panelCommits] = point{leftW, 1}
