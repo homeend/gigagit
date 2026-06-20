@@ -321,6 +321,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 			}
+			// An active process advances from the freshly-reloaded state (e.g.
+			// the conflict process re-derives its file list after a resolve).
+			if m.proc != nil {
+				return m.proc.refreshed(m)
+			}
 			// Reopen the conflict popup after a resolution op, rebuilt from the
 			// freshly-reloaded status so the resolved file drops off the list.
 			// nil files when all resolved: the popup then offers continue/abort

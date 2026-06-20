@@ -20,9 +20,13 @@ type process interface {
 	// so a process can composite over it (a centered list) or replace it (a
 	// full-screen editor).
 	render(m Model, below string) string
-	// finished is called once when a job this process started returns, so the
-	// process can advance its state machine and start the next job.
+	// finished is called once when a job this process started returns (before
+	// the model is reloaded), so the process can record the outcome.
 	finished(m Model, res engine.Result, err error) (Model, tea.Cmd)
+	// refreshed is called after the model's working-tree status is re-read, so
+	// the process can advance from the fresh state (the job's outcome and the
+	// fresh state arrive in separate messages).
+	refreshed(m Model) (Model, tea.Cmd)
 	// indicator is the status-line text shown while this process is active
 	// (what is running and which keys are live).
 	indicator(m Model) string

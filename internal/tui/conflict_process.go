@@ -34,6 +34,7 @@ type conflictProcess struct {
 	sel        int
 	src        domain.ConflictState // merge/rebase parties, for the header
 	inProgress string               // "merge"/"rebase"/"" — set by the probe (Task 5)
+	errMsg     string               // last failed job's message (confReporting)
 	mode       dispMode             // text display mode; z cycles
 	hscroll    int                  // modeScroll horizontal offset
 }
@@ -56,6 +57,12 @@ func (p *conflictProcess) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch p.st {
 	case confListing:
 		return p.updateListing(m, msg)
+	case confReporting:
+		// Any key acknowledges the error; reload to resync, back to Listing.
+		p.st = confListing
+		return m, m.loadCmd()
+	case confWorking:
+		// Cancel lands in Task 5; otherwise input is ignored while a job runs.
 	}
 	return m, nil
 }
@@ -68,35 +75,121 @@ func (p *conflictProcess) updateListing(m Model, msg tea.KeyMsg) (Model, tea.Cmd
 	case "z":
 		p.mode = p.mode.next()
 		p.hscroll = 0
+		return m, nil
 	case "up", "k":
 		if p.sel > 0 {
 			p.sel--
 		}
+		return m, nil
 	case "down", "j":
 		if p.sel < len(p.files)-1 {
 			p.sel++
 		}
+		return m, nil
+	case "A": // mark every conflicted file resolved
+		var paths []string
+		for _, f := range p.files {
+			paths = append(paths, f.Path)
+		}
+		if len(paths) == 0 {
+			return m, nil
+		}
+		p.st = confWorking
+		return m.startOp(engine.MarkAllResolved{Paths: paths})
 	}
-	// Per-file resolve actions land in Task 3; continue/abort in Task 5.
+	// Per-file resolve actions (continue/abort land in Task 5).
+	if p.sel < 0 || p.sel >= len(p.files) {
+		return m, nil
+	}
+	f := p.files[p.sel]
+	if action, ok := conflictActionFor(f, msg.String()); ok {
+		p.st = confWorking
+		return m.startOp(engine.ResolveConflict{Path: f.Path, Action: action})
+	}
 	return m, nil
+}
+
+// conflictActionFor maps a key to the resolve action for file f, honoring the
+// conflict class. ok=false when the key is not a valid action for f. Pure, so
+// the gating is unit-testable without starting a job.
+func conflictActionFor(f model.FileStatus, key string) (engine.ConflictAction, bool) {
+	both := f.ConflictClass() == model.ConflictBothSides
+	hasSide := f.ConflictHasOurs() || f.ConflictHasTheirs()
+	switch key {
+	case "C":
+		if both {
+			return engine.KeepOurs, true
+		}
+	case "i":
+		if both {
+			return engine.KeepTheirs, true
+		}
+	case "m":
+		if both {
+			return engine.MarkResolved, true
+		}
+	case "k":
+		if !both && hasSide { // a one-sided change to keep (both-deleted has none)
+			return keepModifiedAction(f), true
+		}
+	case "d":
+		if !both {
+			return engine.DeleteFile, true
+		}
+	case "b":
+		if !both && f.ConflictHasBase() {
+			return engine.KeepBase, true
+		}
+	}
+	return 0, false
 }
 
 func (p *conflictProcess) render(m Model, below string) string {
 	w, h := m.overlayDims()
+	bg := clipToHeight(below, h)
 	switch p.st {
 	case confListing:
-		box := conflictListBox(m, p.files, p.sel, p.src, p.inProgress, p.mode, p.hscroll)
-		return overlayCenter(clipToHeight(below, h), box, w, h)
+		return overlayCenter(bg, conflictListBox(m, p.files, p.sel, p.src, p.inProgress, p.mode, p.hscroll), w, h)
+	case confWorking:
+		return overlayCenter(bg, conflictMsgBox(m, "Resolving…"), w, h)
+	case confReporting:
+		return overlayCenter(bg, conflictMsgBox(m, "Resolve failed:\n\n"+p.errMsg+"\n\n[any key] back to the list"), w, h)
 	}
 	return below
 }
 
+// finished records a started job's outcome. On failure it shows the error; on
+// success it reloads so refreshed() can re-derive the list from fresh status.
 func (p *conflictProcess) finished(m Model, res engine.Result, err error) (Model, tea.Cmd) {
-	return m, nil // Task 3 advances the state machine here
+	if err != nil {
+		p.st = confReporting
+		p.errMsg = err.Error()
+		return m, nil
+	}
+	return m, m.loadCmd()
+}
+
+// refreshed re-derives the conflicted-file list from the freshly-reloaded status
+// and returns to Listing. (Task 5: confFinishing + slot release when a
+// continue/abort has cleared every conflict.)
+func (p *conflictProcess) refreshed(m Model) (Model, tea.Cmd) {
+	p.files = m.status.Conflicts()
+	p.src = m.conflict
+	if p.sel >= len(p.files) {
+		p.sel = max(0, len(p.files)-1)
+	}
+	p.st = confListing
+	return m, nil
 }
 
 func (p *conflictProcess) indicator(m Model) string {
 	return "Resolving conflicts — [L]eave"
+}
+
+// conflictMsgBox draws a small centered message box (progress / error).
+func conflictMsgBox(m Model, msg string) string {
+	w, _ := m.overlayDims()
+	return popupBox(popupInnerWidth(w), msg)
 }
 
 // conflictListBox draws the conflicted-file list window (popup-free; the process
@@ -137,11 +230,25 @@ func conflictListBox(m Model, files []model.FileStatus, sel int, src domain.Conf
 	return popupBox(inner, b.String())
 }
 
-// conflictHints lists the live keys for the current selection. Task 3 adds the
-// per-file resolve actions; Task 5 adds continue/abort.
+// conflictHints lists the live keys for the current selection: navigation plus
+// the per-file resolve actions valid for the highlighted file, plus mark-all.
+// (Task 5 adds continue/abort when the list is empty.)
 func conflictHints(files []model.FileStatus, sel int, inProgress string) []string {
 	if len(files) == 0 {
 		return []string{"(all resolved)"}
 	}
-	return []string{"[↑/↓] file"}
+	parts := []string{"[↑/↓] file"}
+	if sel >= 0 && sel < len(files) {
+		f := files[sel]
+		for _, a := range []struct{ key, label string }{
+			{"C", "keep ours"}, {"i", "keep theirs"}, {"m", "mark resolved"},
+			{"k", "keep modified"}, {"d", "delete"}, {"b", "keep base"},
+		} {
+			if _, ok := conflictActionFor(f, a.key); ok {
+				parts = append(parts, "["+a.key+"] "+a.label)
+			}
+		}
+	}
+	parts = append(parts, "[A] resolve all")
+	return parts
 }

@@ -1,9 +1,13 @@
 package tui
 
 import (
+	"errors"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/gigagit/gg/internal/engine"
+	"github.com/gigagit/gg/internal/model"
 )
 
 // conflictModel() (in conflict_popup_test.go) builds a Model whose status holds
@@ -47,5 +51,94 @@ func TestConflictProcessNoStartWithoutConflicts(t *testing.T) {
 	m, _ = startConflictProcess(m)
 	if m.proc != nil {
 		t.Fatal("no conflicts → no process")
+	}
+}
+
+func TestConflictActionForGating(t *testing.T) {
+	uu := model.FileStatus{Path: "uu.txt", Kind: model.KindUnmerged, Staged: 'U', Unstaged: 'U'} // both sides
+	du := model.FileStatus{Path: "md.txt", Kind: model.KindUnmerged, Staged: 'D', Unstaged: 'U'} // one side
+
+	if a, ok := conflictActionFor(uu, "C"); !ok || a != engine.KeepOurs {
+		t.Fatalf("both-sides + C must be KeepOurs, got %v ok=%v", a, ok)
+	}
+	if _, ok := conflictActionFor(uu, "d"); ok {
+		t.Fatal("both-sides + d (delete) must be rejected")
+	}
+	if _, ok := conflictActionFor(uu, "k"); ok {
+		t.Fatal("both-sides + k (keep modified) must be rejected")
+	}
+	if a, ok := conflictActionFor(du, "d"); !ok || a != engine.DeleteFile {
+		t.Fatalf("one-sided + d must be DeleteFile, got %v ok=%v", a, ok)
+	}
+	if _, ok := conflictActionFor(du, "C"); ok {
+		t.Fatal("one-sided + C (keep ours) must be rejected")
+	}
+	if _, ok := conflictActionFor(uu, "x"); ok {
+		t.Fatal("an unrelated key must be rejected")
+	}
+}
+
+func TestConflictProcessFinishedError(t *testing.T) {
+	m := conflictModel()
+	m, _ = startConflictProcess(m)
+	cp := m.proc.(*conflictProcess)
+	cp.st = confWorking
+	m, _ = cp.finished(m, engine.Result{}, errors.New("boom"))
+	if cp.st != confReporting || cp.errMsg != "boom" {
+		t.Fatalf("a failed job must enter Reporting with the message, got st=%d err=%q", cp.st, cp.errMsg)
+	}
+	// any key acks → back to Listing
+	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
+	m = u.(Model)
+	if m.proc.(*conflictProcess).st != confListing {
+		t.Fatal("acknowledging the error must return to Listing")
+	}
+}
+
+func TestConflictProcessOpFinishedRoutesToProcess(t *testing.T) {
+	m := conflictModel()
+	m, _ = startConflictProcess(m)
+	m.proc.(*conflictProcess).st = confWorking
+	u, _ := m.Update(opFinishedMsg{err: errors.New("nope")})
+	m = u.(Model)
+	if m.proc.(*conflictProcess).st != confReporting {
+		t.Fatal("opFinishedMsg must route to the active process's finished()")
+	}
+}
+
+func TestConflictProcessDataLoadedRoutesToRefreshed(t *testing.T) {
+	m := conflictModel()
+	m, _ = startConflictProcess(m)
+	m.proc.(*conflictProcess).st = confWorking
+	// a fresh load with one fewer conflict must route to refreshed() → Listing
+	u, _ := m.Update(dataLoadedMsg{gen: m.loadGen, status: model.WorkingTreeStatus{Files: []model.FileStatus{
+		{Path: "md.txt", Kind: model.KindUnmerged, Staged: 'D', Unstaged: 'U'},
+	}}})
+	m = u.(Model)
+	cp := m.proc.(*conflictProcess)
+	if cp.st != confListing || len(cp.files) != 1 {
+		t.Fatalf("dataLoadedMsg must route to refreshed → Listing with 1 file, got st=%d n=%d", cp.st, len(cp.files))
+	}
+}
+
+func TestConflictProcessRefreshedReLists(t *testing.T) {
+	m := conflictModel() // 2 conflicts
+	m, _ = startConflictProcess(m)
+	cp := m.proc.(*conflictProcess)
+	cp.st = confWorking
+	cp.sel = 1
+	// the resolve removed one file: refresh from a status with a single conflict
+	m.status = model.WorkingTreeStatus{Branch: "zzz", Files: []model.FileStatus{
+		{Path: "md.txt", Kind: model.KindUnmerged, Staged: 'D', Unstaged: 'U'},
+	}}
+	m, _ = cp.refreshed(m)
+	if cp.st != confListing {
+		t.Fatalf("refresh must return to Listing, got %d", cp.st)
+	}
+	if len(cp.files) != 1 {
+		t.Fatalf("refresh must re-derive the shorter list, got %d", len(cp.files))
+	}
+	if cp.sel != 0 {
+		t.Fatalf("sel must clamp into the shorter list, got %d", cp.sel)
 	}
 }
