@@ -336,10 +336,13 @@ func (m Model) renderInterface() string {
 		// bar lives in the label line) over Files, then Staged (when it fits).
 		active := m.activeLeftTab
 		atRows, _ := m.panelView(active)
-		fRows, _ := m.panelView(panelFiles)
+		// The middle slot shows whichever of Files/Tags is active; it reuses the
+		// Files box geometry regardless of which tab is up.
+		mt := m.middleTab()
+		mtRows, _ := m.panelView(mt)
 		boxes := []string{
 			m.renderPanel(active, m.panelLabel(active, tabBarLabel(active)), atRows, nil, g.leftW, g.boxH[active]),
-			m.renderPanel(panelFiles, m.filesLabel(panelFiles, "Files"), fRows, nil, g.leftW, g.boxH[panelFiles]),
+			m.renderPanel(mt, m.panelLabel(mt, filesTabLabel(mt, m.panelLen(panelFiles), m.panelLen(panelTags))), mtRows, nil, g.leftW, g.boxH[panelFiles]),
 		}
 		if g.boxH[panelStaged] > 0 {
 			sRows, _ := m.panelView(panelStaged)
@@ -387,6 +390,17 @@ func tabBarLabel(active panel) string {
 	return mark(panelBranches, "Branches", "B") + " " +
 		mark(panelRemotes, "Remotes", "R") + " " +
 		mark(panelWorktrees, "Worktrees", "W")
+}
+
+// filesTabLabel is the middle-slot header: the active tab spelled out with its
+// row count, the inactive tab shown plainly. Mirrors tabBarLabel for the top slot.
+func filesTabLabel(active panel, filesN, tagsN int) string {
+	files := fmt.Sprintf("Files %d", filesN)
+	tags := fmt.Sprintf("Tags %d", tagsN)
+	if active == panelTags {
+		return files + " [" + tags + "]"
+	}
+	return "[" + files + "] " + tags
 }
 
 // renderPanel draws one bordered panel of fixed size boxW×boxH, windowing rows
