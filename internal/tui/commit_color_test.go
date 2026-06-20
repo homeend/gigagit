@@ -108,3 +108,51 @@ func TestCommitRowsNeverContainAnsi(t *testing.T) {
 		}
 	}
 }
+
+func TestCommitViewModeToggle(t *testing.T) {
+	m := footerModel()
+	m.focus = panelCommits
+	r, ok := findRow(availableActions(m), "commits-viewmode")
+	if !ok {
+		t.Fatal("view-mode toggle missing on Commits panel")
+	}
+	if r.label != "Show as list" {
+		t.Fatalf("graph-mode label = %q, want Show as list", r.label)
+	}
+	mm, _ := r.run(m)
+	m = mm.(Model)
+	if !m.commitListMode {
+		t.Fatal("run should switch to list mode")
+	}
+	r2, _ := findRow(availableActions(m), "commits-viewmode")
+	if r2.label != "Show as graph" {
+		t.Fatalf("list-mode label = %q, want Show as graph", r2.label)
+	}
+}
+
+func TestListModeRowsHaveDotGutterAndColorUnderFilter(t *testing.T) {
+	forceColor(t)
+	m := footerModel()
+	m.focus = panelCommits
+	m.commits = []model.Commit{{Hash: "aaaaaaa", Subject: "x"}, {Hash: "bbbbbbb", Subject: "y"}}
+	m = m.rebuildCommitGraph()
+	m.commitListMode = true
+	rows := m.commitRows()
+	if len(rows) != 2 || !strings.HasPrefix(rows[0], "● ") {
+		t.Fatalf("list rows should start with a ● gutter: %q", rows)
+	}
+	if strings.ContainsRune(rows[0], '\x1b') {
+		t.Fatalf("list rows must stay plain: %q", rows[0])
+	}
+	// List mode colors even when the graph would be suppressed (simulate filter
+	// by asserting commitDecorators returns non-nil while commitGraphOn is false).
+	m.sortModes[panelCommits] = sortDateDesc // non-default → forces commitGraphOn() false
+	decos := m.commitDecorators(rows, []int{0, 1})
+	if decos == nil {
+		t.Fatal("list mode should color regardless of graph suppression")
+	}
+	out := decos[0]("  ● aaaaaaa x", 0, 0)
+	if !strings.Contains(out, "\x1b[") {
+		t.Fatalf("list dot should be colored: %q", out)
+	}
+}

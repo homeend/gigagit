@@ -98,6 +98,26 @@ func without(ss []string, s string) []string {
 	return out
 }
 
+// commitViewModeRow toggles the Commits feed between the lane graph and a flat
+// ●-gutter list. Offered from the Branches or Commits panel.
+func (m Model) commitViewModeRow() (actionRow, bool) {
+	if m.focus != panelBranches && m.focus != panelCommits {
+		return actionRow{}, false
+	}
+	label := "Show as list"
+	if m.commitListMode {
+		label = "Show as graph"
+	}
+	return actionRow{
+		id:    "commits-viewmode",
+		label: label,
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			m.commitListMode = !m.commitListMode
+			return m, nil
+		},
+	}, true
+}
+
 // commitShowAllRow offers "Show all branches" — present only when the feed is
 // scoped — from either the Branches or the Commits panel menu.
 func (m Model) commitShowAllRow() (actionRow, bool) {

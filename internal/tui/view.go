@@ -671,6 +671,17 @@ func fileGlyph(p panel, f model.FileStatus) byte {
 }
 
 func (m Model) commitRows() []string {
+	if m.commitListMode {
+		out := make([]string, 0, len(m.commits))
+		for _, c := range m.commits {
+			h := c.Hash
+			if len(h) > 7 {
+				h = h[:7]
+			}
+			out = append(out, "● "+h+" "+commitRefLabels(c.Refs)+c.Subject)
+		}
+		return out
+	}
 	graph := m.commitGraphOn() && len(m.commitGraphRows) == len(m.commits)
 	out := make([]string, 0, len(m.commits))
 	for i, c := range m.commits {
@@ -702,9 +713,8 @@ func (m Model) commitDecorators(rows []string, idx []int) []rowDecorator {
 	if len(m.commitGraphLanes) != len(m.commits) {
 		return nil
 	}
-	// Graph mode only this task; list mode is added in Task 4.
-	if !m.commitGraphOn() {
-		return nil
+	if !m.commitListMode && !m.commitGraphOn() {
+		return nil // graph mode but graph suppressed → plain rows, no color
 	}
 	decos := make([]rowDecorator, len(rows))
 	for j := range rows {
@@ -716,7 +726,11 @@ func (m Model) commitDecorators(rows []string, idx []int) []rowDecorator {
 			continue
 		}
 		lane := m.commitGraphLanes[ci]
-		decos[j] = commitDotDecorator(2+2*lane, laneColor(lane)) // 2 = renderPanel marker prefix
+		nodeCol := 2 // list mode: ● at row col 0 → text col 2 (marker prefix)
+		if !m.commitListMode {
+			nodeCol = 2 + 2*lane // graph mode: node at graph col 2*lane
+		}
+		decos[j] = commitDotDecorator(nodeCol, laneColor(lane))
 	}
 	return decos
 }

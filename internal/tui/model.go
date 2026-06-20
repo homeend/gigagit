@@ -74,6 +74,7 @@ type Model struct {
 	commitScopeBranches []string           // included branches for the feed; empty = all local branches
 	commitGraphRows     []string           // cached single-line graph cells, parallel to commits; empty = none
 	commitGraphLanes    []int              // cached node lane per commit, parallel to commits
+	commitListMode      bool               // Commits feed rendered as a flat ●-gutter list, not a graph
 	opCancel            context.CancelFunc // cancels the in-flight op's context; nil when idle
 	loadGen             int                // bumped per superseding load; stale dataLoadedMsg are dropped
 
