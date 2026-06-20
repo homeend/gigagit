@@ -16,6 +16,8 @@
 - Tests use the `FakeRunner` feed harness (`gitexec.NewFakeRunner` + `domain.New`) — see `commit_scope_test.go` for the established shape.
 - New menu action stable id: `commits-toggle`.
 - Dynamic label copy, verbatim: `Add to commit view` (branch not in set) / `Remove from commit view` (branch in set).
+- **Do NOT declare a package-level `contains` helper** — `worktree_popup_test.go` already defines `func contains(s, sub string) bool` in `package tui`; a second `contains` redeclares it in the test build. Use stdlib `slices.Contains` for membership reads. Keep the hand-rolled `without` (fresh allocation; `slices.Delete*` would mutate the backing array the value-receiver `Model` still shares with its prior copy).
+- This feature adds **no keybinding** — it is a `.`-menu action like Phase 1's Solo. Advertise it in `help.go` only (no footer keybind hint).
 - Run `./test.sh race` before merge.
 
 ---
@@ -29,7 +31,7 @@
 
 **Interfaces:**
 - Consumes: `Model.commitScopeBranches []string`; `Model.focus`, `panelBranches`; `Model.opsIdle() bool`; `Model.selectedBranch() (model.Branch, bool)`; `Model.reloadFeedCmd() tea.Cmd`; `actionRow{id, label string; run func(Model) (tea.Model, tea.Cmd)}`; test helpers `branchesPanelModel(names ...string) Model` and `findRow([]actionRow, id string) (actionRow, bool)`.
-- Produces: `func (m Model) commitToggleRow() (actionRow, bool)` with id `commits-toggle`; unexported helpers `contains([]string, string) bool` and `without([]string, string) []string`.
+- Produces: `func (m Model) commitToggleRow() (actionRow, bool)` with id `commits-toggle`; unexported helper `without([]string, string) []string`. Membership reads use stdlib `slices.Contains` (no custom `contains`).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -91,7 +93,7 @@ Expected: FAIL — `m.commitToggleRow undefined` / `commits-toggle` row not foun
 
 - [ ] **Step 3: Implement `commitToggleRow` + helpers**
 
-Append to `internal/tui/commit_scope.go` (after `commitShowAllRow`, keeping the existing imports):
+Add `"slices"` to the imports of `internal/tui/commit_scope.go` (the import block currently holds `"context"`, the bubbletea alias `tea`, and `internal/domain`). Then append (after `commitShowAllRow`):
 
 ```go
 // commitToggleRow offers "Add to commit view" / "Remove from commit view" on the
@@ -105,7 +107,7 @@ func (m Model) commitToggleRow() (actionRow, bool) {
 	if !ok {
 		return actionRow{}, false
 	}
-	in := contains(m.commitScopeBranches, b.Name)
+	in := slices.Contains(m.commitScopeBranches, b.Name)
 	label := "Add to commit view"
 	if in {
 		label = "Remove from commit view"
@@ -124,17 +126,10 @@ func (m Model) commitToggleRow() (actionRow, bool) {
 	}, true
 }
 
-func contains(ss []string, s string) bool {
-	for _, x := range ss {
-		if x == s {
-			return true
-		}
-	}
-	return false
-}
-
 // without returns a new slice with the first occurrence of s removed, preserving
-// the order of the remaining elements.
+// the order of the remaining elements. A fresh allocation is deliberate: the
+// value-receiver Model shares its slice backing with the prior copy, so an
+// in-place delete would corrupt it.
 func without(ss []string, s string) []string {
 	out := make([]string, 0, len(ss))
 	for _, x := range ss {
@@ -186,7 +181,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 - Test: `internal/tui/commit_scope_test.go` (add a marker test)
 
 **Interfaces:**
-- Consumes: `Model.branchRows() []string`; `Model.commitScopeBranches`; `contains([]string, string) bool` (from Task 1); `branchesPanelModel(names ...string) Model`.
+- Consumes: `Model.branchRows() []string`; `Model.commitScopeBranches`; stdlib `slices.Contains`; `branchesPanelModel(names ...string) Model`.
 - Produces: no new exported symbols.
 
 - [ ] **Step 1: Write the failing test**
@@ -220,10 +215,10 @@ Expected: FAIL — row `c` unmarked (current code only marks when the set is exa
 
 - [ ] **Step 3: Broaden the marker condition**
 
-In `internal/tui/view.go`, replace the marker condition in `branchRows` (lines 623-625):
+In `internal/tui/view.go`, replace the marker condition in `branchRows` (lines 623-625). Ensure `"slices"` is in the file's import block (add it if absent):
 
 ```go
-		if contains(m.commitScopeBranches, b.Name) {
+		if slices.Contains(m.commitScopeBranches, b.Name) {
 			row += " ◉" // included in the Commits feed scope
 		}
 ```
@@ -319,9 +314,20 @@ Add to the top "Unreleased"/latest section of `CHANGELOG.md`:
   Every branch in the set is marked `◉`.
 ```
 
-- [ ] **Step 4: Advertise in help + footer**
+- [ ] **Step 4: Advertise in help (help.go only — no footer keybind)**
 
-In `internal/tui/help.go`, add a line near the existing Commits-panel / Solo help describing the toggle. In the Commits/Branches context-help footer, add a tight hint (e.g. extend the existing scope hint to mention add/remove). Match the surrounding copy density; keep footer hints short (they truncate to width).
+This action has no keybinding (it lives in the `.` menu, exactly like Phase 1's Solo), so there is **no footer hint** — Solo has none either; mirror that precedent. Update the existing Solo description rows in `internal/tui/help.go` to mention the toggle:
+
+- Line 49 (Branches panel `.`-menu description) — extend it to:
+  ```go
+  r("", "Solo this branch (.-menu): scope the Commits panel to this branch (re-run to un-solo); Add/Remove from commit view builds a multi-branch set; Show all branches clears it"),
+  ```
+- Line 48 (`.` row summary) — append `/ Add to commit view`:
+  ```go
+  r(".", "rename branch / copy branch name / Solo this branch / Add to commit view (.-menu)"),
+  ```
+
+Keep copy density consistent with surrounding rows. No change to footer files.
 
 - [ ] **Step 5: Run the full suite**
 
@@ -349,6 +355,6 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 - Spec testing list (toggle add/remove, remove-last→all, marker, e2e) — Tasks 1-3 map 1:1. ✓
 - Spec "out of scope" (navigation, lane color, header listing) — none implemented. ✓
 
-**Placeholder scan:** No TBD/TODO; every code step shows full code. Step 4 of Task 3 (help/footer) describes file targets and copy intent without a literal diff because the exact help-table row format is local to `help.go` — acceptable: it names the file, the location, and the copy constraint. Flagging it as the one prose step.
+**Placeholder scan:** No TBD/TODO; every code step shows full code, including the help.go rows in Task 3 Step 4 (now literal). No footer change (no keybinding).
 
-**Type consistency:** `contains`/`without` defined in Task 1, consumed in Task 2 — same signatures. `commits-toggle` id consistent across Tasks 1 & 3. `actionRow.run` signature `func(Model) (tea.Model, tea.Cmd)` matches the existing `commitSoloRow`. `commitScopeLabel()` outputs (`all` / `solo: X` / `N branches`) used verbatim in assertions.
+**Type consistency:** `without([]string,string) []string` defined in Task 1, consumed there; membership uses stdlib `slices.Contains` in both Task 1 and Task 2 (no custom `contains`, which would collide with `worktree_popup_test.go`'s `contains(s, sub string)`). `commits-toggle` id consistent across Tasks 1 & 3. `actionRow.run` signature `func(Model) (tea.Model, tea.Cmd)` matches the existing `commitSoloRow`. `commitScopeLabel()` outputs (`all` / `solo: X` / `N branches`) used verbatim in assertions.
