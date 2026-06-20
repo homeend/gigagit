@@ -152,9 +152,13 @@ func (s *Service) loadSnapshot(ctx context.Context) (Snapshot, error) {
 }
 
 // logPage is the gated, singleflighted commit-page read the CommitFeed uses.
-// The singleflight key includes the scope and skip so pages/scopes don't collapse.
-func (s *Service) logPage(ctx context.Context, limit, skip int, scope LogScope) ([]model.Commit, error) {
-	key := "commits:" + scopeKey(scope) + ":" + strconv.Itoa(limit) + ":" + strconv.Itoa(skip)
+// The singleflight key includes the feed generation, scope, and skip. The gen is
+// load-bearing: without it, a reload (C) that reuses a scope still in flight from
+// a just-cancelled load (A) would coalesce onto A and inherit A's context.Canceled
+// — blanking the panel. A distinct gen per load makes that impossible while still
+// coalescing genuine concurrent reads of the same page within one generation.
+func (s *Service) logPage(ctx context.Context, limit, skip int, scope LogScope, gen int) ([]model.Commit, error) {
+	key := "commits:" + scopeKey(scope) + ":" + strconv.Itoa(gen) + ":" + strconv.Itoa(limit) + ":" + strconv.Itoa(skip)
 	return query(ctx, s, key, func(ctx context.Context) ([]model.Commit, error) {
 		return s.repo.LogScoped(ctx, limit, skip, scope)
 	})

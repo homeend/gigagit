@@ -4,6 +4,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gigagit/gg/internal/domain"
+	"github.com/gigagit/gg/internal/git"
+	"github.com/gigagit/gg/internal/gitexec"
 	"github.com/gigagit/gg/internal/model"
 )
 
@@ -61,6 +64,41 @@ func TestCommitShowAllOnCommitsPanel(t *testing.T) {
 	m.commitScopeBranches = []string{"feat"}
 	if _, ok := findRow(availableActions(m), "commits-showall"); !ok {
 		t.Fatalf("Show all should be offered from the Commits panel menu when scoped")
+	}
+}
+
+// TestCommitSoloReloadEndToEnd drives the full chain: the menu row's run handler
+// returns a reload cmd; executing it reloads the (scoped) feed; the resulting
+// commitsReloadedMsg flows back through Update and paints the commits.
+func TestCommitSoloReloadEndToEnd(t *testing.T) {
+	f := gitexec.NewFakeRunner()
+	f.SetResponse("git log", gitexec.Result{Stdout: "h1\x1f\x1fAda\x1f0\x1fsubject\x1fHEAD -> feat\n"})
+	svc := domain.New(&git.Repo{Runner: f})
+	m := branchesPanelModel("feat")
+	m.svc = svc
+	m.feed = svc.CommitFeed()
+
+	r, ok := findRow(availableActions(m), "commits-solo")
+	if !ok {
+		t.Fatal("Solo this branch missing")
+	}
+	mm, cmd := r.run(m)
+	m = mm.(Model)
+	if cmd == nil {
+		t.Fatal("solo should return a reload cmd")
+	}
+	msg := cmd() // executes reloadFeedCmd → feed.LoadInitial against the fake
+	mm, _ = m.Update(msg)
+	m = mm.(Model)
+	if len(m.commits) != 1 || m.commits[0].Hash != "h1" {
+		t.Fatalf("after solo reload, commits = %+v", m.commits)
+	}
+	if m.commitScopeLabel() != "solo: feat" {
+		t.Fatalf("scope label = %q", m.commitScopeLabel())
+	}
+	rows := m.commitRows()
+	if len(rows) != 1 || !strings.Contains(rows[0], "‹*feat›") {
+		t.Fatalf("commit row should carry the head-branch label: %q", rows)
 	}
 }
 

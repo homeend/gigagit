@@ -104,7 +104,7 @@ func (f *CommitFeed) LoadInitial(ctx context.Context) (FeedState, error) {
 	f.inFlight = true
 	f.mu.Unlock()
 
-	page, err := f.svc.logPage(cctx, commitInitialPage, 0, scope)
+	page, err := f.svc.logPage(cctx, commitInitialPage, 0, scope, gen0)
 
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -149,7 +149,7 @@ func (f *CommitFeed) LoadMore(ctx context.Context) (FeedState, bool, error) {
 	scope := f.scope
 	f.mu.Unlock()
 
-	page, err := f.svc.logPage(ctx, commitPageSize, skip, scope)
+	page, err := f.svc.logPage(ctx, commitPageSize, skip, scope, gen0)
 
 	f.mu.Lock()
 	defer f.mu.Unlock()

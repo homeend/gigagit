@@ -177,8 +177,37 @@ func TestSnapshotReturnsCopy(t *testing.T) {
 
 func TestLogPageRuns(t *testing.T) {
 	svc := New(&git.Repo{Runner: &pagingRunner{total: 10}})
-	if _, err := svc.logPage(context.Background(), 50, 0, LogScope{}); err != nil {
+	if _, err := svc.logPage(context.Background(), 50, 0, LogScope{}, 0); err != nil {
 		t.Fatalf("logPage: %v", err)
+	}
+}
+
+// TestReloadDoesNotCoalesceOntoCancelled reproduces the cancellation×singleflight
+// bug: re-toggling to a scope whose just-cancelled load is still in flight must
+// NOT coalesce onto that load's context.Canceled result and blank the panel. The
+// per-load gen in the singleflight key prevents it.
+func TestReloadDoesNotCoalesceOntoCancelled(t *testing.T) {
+	f := gitexec.NewFakeRunner()
+	var calls int32
+	f.SetHandler("git log", func(ctx context.Context, argv []string) (gitexec.Result, error) {
+		if atomic.AddInt32(&calls, 1) == 1 {
+			<-ctx.Done() // first (soon-superseded) load: dies when cancelled
+			return gitexec.Result{}, ctx.Err()
+		}
+		return gitexec.Result{Stdout: "h2\x1f\x1fA\x1f0\x1fs\x1f\n"}, nil // later loads succeed
+	})
+	feed := New(&git.Repo{Runner: f}).CommitFeed()
+	feed.SetScope(LogScope{Branches: []string{"feat"}})
+
+	go func() { _, _ = feed.LoadInitial(context.Background()) }() // A: parks in handler call #1
+	for atomic.LoadInt32(&calls) < 1 {
+		time.Sleep(time.Millisecond)
+	}
+	// C: same scope reload — cancels A and (with the gen in the key) runs its OWN
+	// handler call rather than coalescing onto A's cancelled one.
+	st, _ := feed.LoadInitial(context.Background())
+	if len(st.Commits) != 1 {
+		t.Fatalf("reload over a cancelled in-flight load returned %d commits (coalesced onto cancelled?)", len(st.Commits))
 	}
 }
 
