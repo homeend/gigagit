@@ -18,6 +18,13 @@
 - New `.`-menu action id `commits-viewmode`; labels verbatim `Show as list` (in graph mode) / `Show as graph` (in list mode). No keybinding → advertise in `help.go` only (no footer).
 - TUI `Model` is a value receiver; mutate the copy and return it.
 - Decorator/prefix interaction is out of scope: the decorator assumes the panel uses no frozen `prefix` gutter (the commits panel does not).
+- **Tests that assert color escapes MUST force a color profile** — lipgloss emits no ANSI in the non-TTY test environment. Use the repo's established pattern (`internal/tui/diff_render_test.go:194-200`, `window_test.go:50-51`):
+  ```go
+  prev := lipgloss.ColorProfile()
+  lipgloss.SetColorProfile(termenv.TrueColor)
+  defer lipgloss.SetColorProfile(prev) // or t.Cleanup
+  ```
+  Imports: `"github.com/charmbracelet/lipgloss"`, `"github.com/muesli/termenv"`. Empirically (lipgloss v1.1.0) the color island survives both a subsequent `lipgloss.Style{}.Render` and the panel's border+padding `Render`, so the assembled panel really does emit the color.
 - Run `./test.sh race` before merge.
 
 ---
@@ -30,6 +37,8 @@
 
 **Interfaces:**
 - Produces: `type rowDecorator func(visible string, hscroll, visualLine int) string`; new optional field `winRow.decorate rowDecorator`. `renderWindow` calls it per visual line, after `padRight`, before `style.Render`; passes `hscroll = o.hscroll` only in `modeScroll` (else 0) and `visualLine = ` the segment index.
+
+**`renderWindow` is shared by every panel and popup — this rewrite must be behavior-preserving.** The only changes are: the `rowDecorator` type, the `winRow.decorate` field, the `dline` struct gaining `deco`/`hs`/`si`, and the post-`padRight` decorate call. No other logic moves. The full `internal/tui/` suite (Step 5) is the regression net.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -203,7 +212,16 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 )
+
+// forceColor makes lipgloss emit ANSI in the non-TTY test environment.
+func forceColor(t *testing.T) {
+	t.Helper()
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
+}
 
 func TestLaneColorRecycles(t *testing.T) {
 	if laneColor(0) != lanePalette[0] {
@@ -215,6 +233,7 @@ func TestLaneColorRecycles(t *testing.T) {
 }
 
 func TestCommitDotDecoratorColorsNodeOnlyOnFirstLine(t *testing.T) {
+	forceColor(t)
 	deco := commitDotDecorator(2, lipgloss.Color("40")) // ● at column 2
 	line := "  ● 1234567 subject"
 	out := deco(line, 0, 0)
@@ -326,6 +345,7 @@ Add to `internal/tui/commit_color_test.go`:
 
 ```go
 func TestCommitDecoratorsColorGraphNodeNotSelected(t *testing.T) {
+	forceColor(t)
 	m := footerModel()
 	m.focus = panelCommits
 	m.commits = []model.Commit{{Hash: "aaaaaaa"}, {Hash: "bbbbbbb"}}
@@ -344,9 +364,31 @@ func TestCommitDecoratorsColorGraphNodeNotSelected(t *testing.T) {
 		t.Fatalf("graph node should be colored: %q", out)
 	}
 }
+
+// TestRenderPanelEmitsLaneColor is the end-to-end guard: it proves the color
+// survives the full assembled render path (decorator → style.Render → border
+// box), and that the selected row is NOT colored (reverse wins).
+func TestRenderPanelEmitsLaneColor(t *testing.T) {
+	forceColor(t)
+	m := footerModel()
+	m.focus = panelCommits
+	m.commits = []model.Commit{{Hash: "aaaaaaa", Subject: "x"}, {Hash: "bbbbbbb", Subject: "y"}}
+	m = m.rebuildCommitGraph()
+	m.sel[panelCommits] = 0 // row 0 selected → must NOT be colored
+	rows, idx := m.panelView(panelCommits)
+	decos := m.commitDecorators(rows, idx)
+	out := m.renderPanel(panelCommits, "Commits", rows, decos, 40, 8)
+	// Derive the exact escape lipgloss emits for this color under the active
+	// profile (256 vs truecolor differ), rather than guessing the SGR form.
+	probe := lipgloss.NewStyle().Foreground(laneColor(0)).Render("●")
+	esc := probe[:strings.IndexRune(probe, '●')] // the leading color escape
+	if esc == "" || !strings.Contains(out, esc) {
+		t.Fatalf("assembled panel should emit lane-0 color escape %q:\n%s", esc, out)
+	}
+}
 ```
 
-(`footerModel` and `model.Commit` are already imported by the package's tests; add the `model` import to this test file if needed.)
+(`footerModel` and `model.Commit` are already imported by the package's tests; add the `model` import to this test file if needed. `TestRenderPanelEmitsLaneColor` selects row 0, so the color it finds must come from the non-selected row 1 — proving the selected-row skip and that a non-selected node is colored through the full box render.)
 
 - [ ] **Step 2: Run it to verify it fails**
 
@@ -441,7 +483,7 @@ Update the two commits call sites to compute and pass `decos`:
 		body := m.renderPanel(panelCommits, m.panelLabel(panelCommits, "Commits ("+m.commitScopeLabel()+")"), cmRows, decos, g.w, g.boxH[panelCommits])
 ```
 
-and the right-hand commits panel similarly (line ~352), reusing a freshly computed `cmRows, cmIdx := m.panelView(panelCommits)` + `decos`. Update the other three `renderPanel` calls (active/files/staged, lines ~339-344) to pass `nil` for the new `decos` argument.
+and the right-hand commits panel similarly (line ~352), reusing a freshly computed `cmRows, cmIdx := m.panelView(panelCommits)` + `decos`. Update the other three `renderPanel` calls (active/files/staged, lines ~339-344) to pass `nil` for the new `decos` argument. **Also update the two non-panel-`view.go` callers in `internal/tui/fit_test.go` (lines ~123, ~135)** to pass `nil` — they will otherwise fail to compile.
 
 - [ ] **Step 6: Run the new test + the package**
 
@@ -471,7 +513,7 @@ Expected: PASS (color is render-time only).
 - [ ] **Step 8: Commit**
 
 ```bash
-git add internal/tui/model.go internal/tui/view.go internal/tui/commit_color_test.go
+git add internal/tui/model.go internal/tui/view.go internal/tui/commit_color_test.go internal/tui/fit_test.go
 git commit -m "feat(tui): color the commit graph node dot by lane
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
@@ -519,6 +561,7 @@ func TestCommitViewModeToggle(t *testing.T) {
 }
 
 func TestListModeRowsHaveDotGutterAndColorUnderFilter(t *testing.T) {
+	forceColor(t)
 	m := footerModel()
 	m.focus = panelCommits
 	m.commits = []model.Commit{{Hash: "aaaaaaa", Subject: "x"}, {Hash: "bbbbbbb", Subject: "y"}}
