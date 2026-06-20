@@ -81,3 +81,19 @@ func (m Model) shelfSwitcher() *shelfPopup {
 	}
 	return nil
 }
+
+// overlayOf returns the topmost overlay of concrete type T on the stack, or the
+// zero value (nil for a pointer type) when none is present. Lets production code
+// and tests reach a live popup by type without a dedicated Model field.
+func overlayOf[T overlay](m Model) T {
+	var zero T
+	if m.overlays == nil {
+		return zero
+	}
+	for i := len(m.overlays.entries) - 1; i >= 0; i-- {
+		if p, ok := m.overlays.entries[i].(T); ok {
+			return p
+		}
+	}
+	return zero
+}

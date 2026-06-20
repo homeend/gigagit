@@ -39,3 +39,20 @@ func TestPopOverlayEmptyIsNoOp(t *testing.T) {
 		t.Fatal("pop on empty stack must stay empty")
 	}
 }
+
+func TestOverlayOfReturnsTypedTopOrNil(t *testing.T) {
+	var m Model
+	// empty stack → nil
+	if got := overlayOf[*bookmarkPastePopup](m); got != nil {
+		t.Fatalf("empty stack: want nil, got %v", got)
+	}
+	want := &bookmarkPastePopup{origin: "a.go"}
+	m = m.pushOverlay(want)
+	if got := overlayOf[*bookmarkPastePopup](m); got != want {
+		t.Fatalf("after push: want %p, got %p", want, got)
+	}
+	// a different concrete type is not matched
+	if got := overlayOf[*bookmarkPopup](m); got != nil {
+		t.Fatalf("wrong type: want nil, got %v", got)
+	}
+}
