@@ -61,6 +61,37 @@ func TestCommitFileLinesEmitsEachDirHeadingOnce(t *testing.T) {
 	}
 }
 
+func TestElideLeft(t *testing.T) {
+	if got := elideLeft("abcdef", 10); got != "abcdef" {
+		t.Errorf("fits: got %q, want unchanged", got)
+	}
+	if got := elideLeft("a/b/c/leaf", 6); got != "…/leaf" {
+		t.Errorf("elideLeft = %q, want \"…/leaf\" (keeps the tail)", got)
+	}
+	if got := elideLeft("abc", 1); got != "…" {
+		t.Errorf("n=1: got %q, want \"…\"", got)
+	}
+}
+
+// The real-world bug (repo Feedmill, commit 37db3e4): a leaf directory
+// .../api/v3/ApiObject/ tail-truncated to look identical to its parent
+// .../api/v3/, reading as a bogus duplicate heading. Left-eliding keeps the
+// distinguishing leaf visible.
+func TestFilesViewElidesNestedDirHeadingFromLeft(t *testing.T) {
+	files := []model.CommitFile{
+		{Status: "M", Path: "src/com/netstellar/feedmill/api/v3/ApiChannelNewTest.java"},
+		{Status: "M", Path: "src/com/netstellar/feedmill/api/v3/ApiObject/ObjectRequestParametersDto.java"},
+		{Status: "M", Path: "src/com/netstellar/feedmill/api/v3/ApiObjectNewTest.java"},
+	}
+	m := filesModel()
+	m.width, m.height = 80, 24 // narrow: both headings truncate in the left column
+	m.filesView = &contentPopup{lines: commitFileLines(files), sel: -1, mode: modeCutoff}
+	out := ansi.Strip(m.render())
+	if !strings.Contains(out, "ApiObject/") {
+		t.Fatalf("the nested dir's leaf must stay visible (left-elided), got:\n%s", out)
+	}
+}
+
 func TestCommitFileLinesRename(t *testing.T) {
 	files := []model.CommitFile{{Status: "R", Path: "b/new.go", OldPath: "a/old.go"}}
 	got := commitFileLines(files)

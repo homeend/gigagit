@@ -32,6 +32,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - **The commit files tree reveals its truncated rows too.** A long directory
   heading or file row selected in the files tree (`l`) now reveals its full path
   inline, the same way the panels do — previously the tree had no reveal at all.
+- **Commit files tree — directory headings elide from the left.** A nested
+  directory heading (e.g. `…/api/v3/ApiObject/`) is shortened from the front, so
+  the leaf directory stays visible instead of tail-truncating to look identical
+  to its parent (`…/api/v3/`) and reading as a bogus duplicate row.
 - **Commits panel — the left column shows the branch, not the commit id.** Each
   commit row leads with the branch it belongs to: **bright** when the commit is
   that branch's tip ("the last commit for a given branch"), **grayed** when the

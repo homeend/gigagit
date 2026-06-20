@@ -580,6 +580,29 @@ func truncate(s string, n int) string {
 	return string(r) + "…"
 }
 
+// elideLeft shortens s to at most n display columns by dropping from the FRONT
+// and prefixing a "…", so the meaningful tail stays visible. Used for directory
+// paths, whose leaf (the part that distinguishes nested dirs) is at the end; a
+// plain truncate would cut exactly that off and make sibling/child dirs read as
+// duplicates.
+func elideLeft(s string, n int) string {
+	if n <= 0 {
+		return ""
+	}
+	if lipgloss.Width(s) <= n {
+		return s
+	}
+	if n == 1 {
+		return "…"
+	}
+	// Drop leading runes until the remainder plus the 1-column ellipsis fits.
+	r := []rune(s)
+	for len(r) > 0 && lipgloss.Width(string(r))+1 > n {
+		r = r[1:]
+	}
+	return "…" + string(r)
+}
+
 // padRight right-pads s with spaces to n display columns (no-op if already wider).
 func padRight(s string, n int) string {
 	if w := lipgloss.Width(s); w < n {
