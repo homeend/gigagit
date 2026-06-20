@@ -7,6 +7,7 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/gigagit/gg/internal/domain"
 	"github.com/gigagit/gg/internal/model"
 	"github.com/gigagit/gg/internal/repos"
 )
@@ -49,10 +50,8 @@ func TestRepoPopupNoWrap(t *testing.T) {
 func TestConflictPopupNoWrap(t *testing.T) {
 	m := Model{width: 80, height: 30}
 	render := func(path string) string {
-		m.conflictPopup = &conflictPopup{files: []model.FileStatus{
-			{Path: path, Kind: model.KindUnmerged, Staged: 'U', Unstaged: 'U'},
-		}}
-		return m.renderConflictPopup()
+		files := []model.FileStatus{{Path: path, Kind: model.KindUnmerged, Staged: 'U', Unstaged: 'U'}}
+		return conflictListBox(m, files, 0, domain.ConflictState{}, "", 0, 0)
 	}
 	assertSameHeight(t, "conflict body", render("a.go"), render(strings.Repeat("z", 300)+".go"))
 }

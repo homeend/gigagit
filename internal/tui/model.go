@@ -50,9 +50,7 @@ type Model struct {
 
 	stashView *stashView // stash list in the right column (over Commits); nil = closed
 
-	conflictPopup  *conflictPopup       // whole-file conflict resolver; nil = closed
-	reopenConflict bool                 // reopen the conflict popup on the next dataLoadedMsg
-	conflict       domain.ConflictState // source of the current conflict (merge/rebase parties), for the notice/popup
+	conflict domain.ConflictState // source of the current conflict (merge/rebase parties), for the notice
 
 	filesView        *contentPopup // commit files tree replacing the left column; nil = closed
 	filesTitle       string        // "Files <short-hash> <subject>", updated with the content
@@ -326,16 +324,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.proc != nil {
 				return m.proc.refreshed(m)
 			}
-			// Reopen the conflict popup after a resolution op, rebuilt from the
-			// freshly-reloaded status so the resolved file drops off the list.
-			// nil files when all resolved: the popup then offers continue/abort
-			// (op in progress) or "commit with c" (no op) via actionHintParts. This
-			// runs after the clamp loop above so panel selections stay valid.
-			if m.reopenConflict {
-				m.reopenConflict = false
-				m.conflictPopup = &conflictPopup{files: m.status.Conflicts()}
-				return m, m.loadInProgressCmd()
-			}
+			// Conflicts are surfaced as a non-blocking notice ("press [x] to
+			// resolve"); entering the resolution process is the user's choice (x),
+			// so a lingering conflict never traps the interface.
 		}
 	case tea.KeyMsg:
 		// The status line holds a transient message (an op result, an error, a
@@ -420,9 +411,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.contentPopup != nil {
 			return m.updateContentPopupKey(msg)
-		}
-		if m.conflictPopup != nil {
-			return m.updateConflictPopupKey(msg)
 		}
 		// Filter-input mode captures every key (the panel label shows the query).
 		// Hoisted above the files-view and stash routing so a commit filter opened
@@ -526,7 +514,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "x":
 			if m.opsIdle() && len(m.status.Conflicts()) > 0 {
-				return m.openConflictPopup()
+				return startConflictProcess(m) // enter / resume from the notice
 			}
 		case "H":
 			if m.canStageHunks() {
@@ -964,9 +952,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case inProgressMsg:
-		if m.conflictPopup != nil {
-			m.conflictPopup.inProgress = msg.op
-		}
 		if cp, ok := m.proc.(*conflictProcess); ok {
 			cp.inProgress = msg.op
 			// Fully resolved and no merge/rebase still in progress → done.

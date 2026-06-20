@@ -60,8 +60,6 @@ func newConflictPicker(path string, doc *hunkpick.Doc) *hunkPicker {
 		requireAll: true,
 		apply: func(m Model, content []byte) (Model, tea.Cmd) {
 			m = m.popSurface()
-			m.conflictPopup = nil
-			m.reopenConflict = true
 			return m.startOp(engine.ResolveConflictHunks{Path: path, Content: content})
 		},
 		doc: doc, blocks: doc.Blocks(), side: hunkpick.Current, mode: modeScroll,

@@ -95,14 +95,14 @@ func (p *conflictProcess) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 
 func (p *conflictProcess) updateListing(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch msg.String() {
-	case "L", "esc": // Leave — step out, repo as-is; detection re-offers it later
+	case "L", "esc": // Leave — step out, repo as-is; resume from the notice ([x])
 		m.proc = nil
 		return m, nil
 	case "z":
 		p.mode = p.mode.next()
 		p.hscroll = 0
 		return m, nil
-	case "up", "k":
+	case "up": // not "k": k is the keep-modified action below
 		if p.sel > 0 {
 			p.sel--
 		}
@@ -250,6 +250,30 @@ func conflictMsgBox(m Model, msg string) string {
 	return popupBox(popupInnerWidth(w), msg)
 }
 
+// conflictSrcStyle dims the "merging X into Y" subtitle in the file list.
+var conflictSrcStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+
+// inProgressMsg carries the result of the merge/rebase-in-progress probe.
+type inProgressMsg struct{ op string }
+
+// loadInProgressCmd probes whether a merge/rebase is in progress so the process
+// can offer continue/abort and decide when it is fully done.
+func (m Model) loadInProgressCmd() tea.Cmd {
+	svc := m.svc
+	return func() tea.Msg {
+		op, _ := svc.InProgressOp(context.Background())
+		return inProgressMsg{op: op}
+	}
+}
+
+// keepModifiedAction maps a modify/delete file to the side that has content.
+func keepModifiedAction(f model.FileStatus) engine.ConflictAction {
+	if f.ConflictHasTheirs() {
+		return engine.KeepTheirs
+	}
+	return engine.KeepOurs
+}
+
 // conflictListBox draws the conflicted-file list window (popup-free; the process
 // owns the state). Ported from the old renderConflictPopup so the two can
 // coexist until the popup is removed.
@@ -301,6 +325,9 @@ func conflictHints(files []model.FileStatus, sel int, inProgress string) []strin
 	parts := []string{"[↑/↓] file"}
 	if sel >= 0 && sel < len(files) {
 		f := files[sel]
+		if f.ConflictClass() == model.ConflictBothSides {
+			parts = append(parts, "[enter] line editor")
+		}
 		for _, a := range []struct{ key, label string }{
 			{"C", "keep ours"}, {"i", "keep theirs"}, {"m", "mark resolved"},
 			{"k", "keep modified"}, {"d", "delete"}, {"b", "keep base"},
@@ -311,5 +338,8 @@ func conflictHints(files []model.FileStatus, sel int, inProgress string) []strin
 		}
 	}
 	parts = append(parts, "[A] resolve all")
+	if inProgress != "" {
+		parts = append(parts, "[a] abort")
+	}
 	return parts
 }

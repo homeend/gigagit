@@ -18,24 +18,20 @@ import (
 	"github.com/gigagit/gg/internal/observ"
 )
 
-func TestConflictPopupZCyclesMode(t *testing.T) {
-	m := Model{width: 100, height: 30}
-	m.conflictPopup = &conflictPopup{files: []model.FileStatus{
-		{Path: "a.go", Kind: model.KindUnmerged, Staged: 'U', Unstaged: 'U'},
-	}}
-	u, _ := m.updateConflictPopupKey(keyMsg("z"))
-	mm := u.(Model)
-	if mm.conflictPopup.mode != modeWrap {
-		t.Fatalf("after z, mode = %v, want modeWrap", mm.conflictPopup.mode)
-	}
-}
-
+// conflictModel builds a Model whose status holds two unmerged files (a
+// both-sides UU and a one-sided DU), with no live service.
 func conflictModel() Model {
 	m := Model{width: 120, height: 30, focus: panelFiles, sel: map[panel]int{}}
 	m.status = model.WorkingTreeStatus{Branch: "zzz", Files: []model.FileStatus{
 		{Path: "uu.txt", Kind: model.KindUnmerged, Staged: 'U', Unstaged: 'U'},
 		{Path: "md.txt", Kind: model.KindUnmerged, Staged: 'D', Unstaged: 'U'},
 	}}
+	return m
+}
+
+func conflictModelWithSource() Model {
+	m := conflictModel()
+	m.conflict = domain.ConflictState{Op: "merge", Source: "feature", Target: "main"}
 	return m
 }
 
@@ -82,122 +78,134 @@ func conflictRepoTUI(t *testing.T) Model {
 	return m
 }
 
+// selectConflictProc points the conflict process at the file with the given path.
+func selectConflictProc(t *testing.T, cp *conflictProcess, path string) {
+	t.Helper()
+	for i, f := range cp.files {
+		if f.Path == path {
+			cp.sel = i
+			return
+		}
+	}
+	t.Fatalf("conflict %q not in process: %+v", path, cp.files)
+}
+
+// --- the notice (unchanged: a passive affordance to enter the process) ---
+
 func TestStatusBarShowsConflictNotice(t *testing.T) {
 	m := conflictModel()
 	out := m.View()
 	if !strings.Contains(out, "2 conflicts") || !strings.Contains(out, "[x]") {
-		t.Errorf("status bar should announce conflicts:\n%s", out)
+		t.Errorf("status bar should announce conflicts + the [x] affordance:\n%s", out)
 	}
 }
 
-func conflictModelWithSource() Model {
-	m := conflictModel()
-	m.conflict = domain.ConflictState{Op: "merge", Source: "feature", Target: "main"}
-	return m
-}
-
 func TestStatusBarShowsConflictSource(t *testing.T) {
-	m := conflictModelWithSource()
-	out := m.View()
+	out := conflictModelWithSource().View()
 	if !strings.Contains(out, "merging feature into main") {
 		t.Errorf("status bar should name the source:\n%s", out)
 	}
 }
 
-func TestConflictPopupShowsSourceSubtitle(t *testing.T) {
-	m := conflictModelWithSource()
-	mm, _ := m.Update(keyMsg("x"))
-	m = mm.(Model)
-	out := m.View()
-	if !strings.Contains(out, "merging feature into main") {
-		t.Errorf("popup should show the source subtitle:\n%s", out)
-	}
-}
+// --- entering / leaving the process via x ---
 
-func TestXOpensConflictPopup(t *testing.T) {
+func TestXStartsConflictProcess(t *testing.T) {
 	m := conflictModel()
 	mm, _ := m.Update(keyMsg("x"))
-	if mm.(Model).conflictPopup == nil {
-		t.Fatal("x should open the conflict popup when conflicts exist")
+	if _, ok := mm.(Model).proc.(*conflictProcess); !ok {
+		t.Fatal("x must start the conflict process when conflicts exist")
 	}
 }
 
 func TestXNoOpWithoutConflicts(t *testing.T) {
 	m := Model{width: 120, height: 30, sel: map[panel]int{}}
 	mm, _ := m.Update(keyMsg("x"))
-	if mm.(Model).conflictPopup != nil {
+	if mm.(Model).proc != nil {
 		t.Fatal("x must do nothing when there are no conflicts")
 	}
 }
 
-// selectConflict points the popup at the file with the given path.
-func selectConflict(t *testing.T, p *conflictPopup, path string) {
-	t.Helper()
-	for i, f := range p.files {
-		if f.Path == path {
-			p.sel = i
-			return
-		}
+func TestConflictProcessShowsSourceSubtitle(t *testing.T) {
+	m := conflictModelWithSource()
+	mm, _ := m.Update(keyMsg("x"))
+	out := mm.(Model).View()
+	if !strings.Contains(out, "merging feature into main") {
+		t.Errorf("the conflict process must show the source subtitle:\n%s", out)
 	}
-	t.Fatalf("conflict %q not in popup: %+v", path, p.files)
 }
 
-// The action hint is longer than the popup box, so it must WRAP across lines
-// (not truncate) — every key must remain visible.
-func TestConflictPopupHintNotTruncated(t *testing.T) {
+func TestConflictProcessZCyclesMode(t *testing.T) {
+	m := conflictModel()
+	m, _ = startConflictProcess(m)
+	u, _ := m.Update(keyMsg("z"))
+	m = u.(Model)
+	if m.proc.(*conflictProcess).mode != modeWrap {
+		t.Fatalf("after z, mode = %v, want modeWrap", m.proc.(*conflictProcess).mode)
+	}
+}
+
+// The hint is longer than the box, so it must WRAP across lines (not truncate) —
+// every key must remain visible.
+func TestConflictProcessHintNotTruncated(t *testing.T) {
 	m := Model{width: 80, height: 30}
-	m.conflictPopup = &conflictPopup{
+	cp := &conflictProcess{
+		st:         confListing,
 		files:      []model.FileStatus{{Path: "a.go", Kind: model.KindUnmerged, Staged: 'U', Unstaged: 'U'}},
 		inProgress: "merge",
 	}
-	out := ansi.Strip(m.renderConflictPopup())
-	for _, tok := range []string{"[enter]", "[C]", "[i]", "[m]", "[A]", "[a]", "[esc]", "[z]"} {
+	out := ansi.Strip(cp.render(m, ""))
+	for _, tok := range []string{"[enter]", "[C]", "[i]", "[m]", "[A]", "[a]", "[L]", "[z]"} {
 		if !strings.Contains(out, tok) {
 			t.Errorf("hint key %q missing (truncated, not wrapped?):\n%s", tok, out)
 		}
 	}
 }
 
-func TestConflictPopupKeepCurrentDispatches(t *testing.T) {
+// --- real-git integration: per-file resolve actions actually dispatch ---
+
+func TestConflictProcessKeepCurrentDispatches(t *testing.T) {
 	m := conflictRepoTUI(t)
 	mm, _ := m.Update(keyMsg("x"))
 	m = mm.(Model)
-	selectConflict(t, m.conflictPopup, "uu.txt") // both-sides
-	mm, cmd := m.updateConflictPopupKey(keyMsg("C"))
+	cp := m.proc.(*conflictProcess)
+	selectConflictProc(t, cp, "uu.txt") // both-sides
+	mm, cmd := m.Update(keyMsg("C"))
 	got := mm.(Model)
 	if !got.running || cmd == nil {
 		t.Fatal("C should dispatch a ResolveConflict op (keep current)")
 	}
+	if cp.st != confWorking {
+		t.Fatalf("a resolve must enter Working, got %d", cp.st)
+	}
 	driveOp(t, got, cmd)
 }
 
-func TestConflictPopupKeepIncomingDispatches(t *testing.T) {
+func TestConflictProcessKeepIncomingDispatches(t *testing.T) {
 	m := conflictRepoTUI(t)
 	mm, _ := m.Update(keyMsg("x"))
 	m = mm.(Model)
-	selectConflict(t, m.conflictPopup, "uu.txt") // both-sides
-	mm, cmd := m.updateConflictPopupKey(keyMsg("i"))
+	cp := m.proc.(*conflictProcess)
+	selectConflictProc(t, cp, "uu.txt") // both-sides
+	mm, cmd := m.Update(keyMsg("i"))
 	got := mm.(Model)
 	if !got.running || cmd == nil {
 		t.Fatal("i should dispatch a ResolveConflict op (keep incoming)")
 	}
-	if got.conflictPopup != nil {
-		t.Error("popup should close while the op runs (reopens on refresh)")
-	}
-	driveOp(t, got, cmd) // drain the op so the goroutine finishes cleanly
+	driveOp(t, got, cmd)
 }
 
-func TestConflictPopupModifyDeleteKeys(t *testing.T) {
+func TestConflictProcessModifyDeleteKeys(t *testing.T) {
 	m := conflictRepoTUI(t)
 	mm, _ := m.Update(keyMsg("x"))
 	m = mm.(Model)
-	selectConflict(t, m.conflictPopup, "md.txt") // modify/delete (DU)
-	// 'C' (keep current) is NOT a valid key here; 'k' keep-modified IS.
-	mm, _ = m.updateConflictPopupKey(keyMsg("C"))
+	cp := m.proc.(*conflictProcess)
+	selectConflictProc(t, cp, "md.txt") // modify/delete (DU)
+	// 'C' (keep current) is NOT valid here; 'k' keep-modified IS.
+	mm, _ = m.Update(keyMsg("C"))
 	if mm.(Model).running {
 		t.Error("keep-current must be inert on a modify/delete file")
 	}
-	mm, cmd := m.updateConflictPopupKey(keyMsg("k"))
+	mm, cmd := m.Update(keyMsg("k"))
 	got := mm.(Model)
 	if !got.running || cmd == nil {
 		t.Error("k (keep modified) should dispatch on a modify/delete file")
@@ -205,26 +213,7 @@ func TestConflictPopupModifyDeleteKeys(t *testing.T) {
 	driveOp(t, got, cmd)
 }
 
-func TestConflictPopupReopensAfterResolve(t *testing.T) {
-	m := conflictModel()
-	m.reopenConflict = true
-	// Simulate the post-op reload arriving with one conflict already cleared.
-	one := model.WorkingTreeStatus{Branch: "zzz", Files: []model.FileStatus{
-		{Path: "md.txt", Kind: model.KindUnmerged, Staged: 'D', Unstaged: 'U'},
-	}}
-	mm, cmd := m.Update(dataLoadedMsg{gen: m.loadGen, status: one})
-	got := mm.(Model)
-	if got.conflictPopup == nil || len(got.conflictPopup.files) != 1 {
-		t.Fatalf("popup should reopen with the remaining conflict, got %+v", got.conflictPopup)
-	}
-	if got.reopenConflict {
-		t.Error("reopenConflict should be cleared after reopening")
-	}
-	_ = cmd
-}
-
-func TestConflictPopupOpMapping(t *testing.T) {
-	// keep-modified on a DU file resolves to KeepTheirs (the present side).
+func TestConflictKeepModifiedMapping(t *testing.T) {
 	du := model.FileStatus{Path: "md.txt", Kind: model.KindUnmerged, Staged: 'D', Unstaged: 'U'}
 	if got := keepModifiedAction(du); got != engine.KeepTheirs {
 		t.Errorf("DU keep-modified = %v, want KeepTheirs", got)
