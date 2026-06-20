@@ -97,8 +97,8 @@ func TestCommitSoloReloadEndToEnd(t *testing.T) {
 		t.Fatalf("scope label = %q", m.commitScopeLabel())
 	}
 	rows := m.commitRows()
-	if len(rows) != 1 || !strings.Contains(rows[0], "‹*feat›") {
-		t.Fatalf("commit row should carry the head-branch label: %q", rows)
+	if len(rows) != 1 || !strings.Contains(rows[0], "*feat") {
+		t.Fatalf("commit row should carry the head-branch identity (*feat): %q", rows)
 	}
 }
 
@@ -215,7 +215,7 @@ func TestCommitToggleReloadEndToEnd(t *testing.T) {
 	}
 }
 
-func TestCommitRowsRenderLabels(t *testing.T) {
+func TestCommitRowsRenderIdentityColumn(t *testing.T) {
 	m := footerModel()
 	m.commits = []model.Commit{
 		{Hash: "a1b2c3d4", Subject: "do a thing", Refs: []model.Ref{
@@ -223,17 +223,26 @@ func TestCommitRowsRenderLabels(t *testing.T) {
 			{Name: "feature", Kind: model.RefLocal},
 			{Name: "origin/main", Kind: model.RefRemote},
 		}},
-		{Hash: "ffff0000", Subject: "plain"},
+		{Hash: "ffff0000", Subject: "plain", Source: "dev"},
 	}
 	rows := m.commitRows()
-	if !strings.Contains(rows[0], "a1b2c3d") || !strings.Contains(rows[0], "*main") || !strings.Contains(rows[0], "feature") {
-		t.Fatalf("row0 should show local branch labels with *head: %q", rows[0])
+	// Tip of main(head)+feature: *main in the identity column, feature as a pill.
+	if !strings.Contains(rows[0], "*main") || !strings.Contains(rows[0], "feature") {
+		t.Fatalf("row0 should show *main (column) + feature (pill): %q", rows[0])
+	}
+	// The commit id no longer appears in the row — it moved to the status bar.
+	if strings.Contains(rows[0], "a1b2c3d") {
+		t.Fatalf("commit id must not appear in the row: %q", rows[0])
 	}
 	if strings.Contains(rows[0], "origin/main") {
-		t.Fatalf("remote labels not rendered in Phase 1: %q", rows[0])
+		t.Fatalf("remote labels not rendered: %q", rows[0])
+	}
+	// Lineage row: its Source branch fills the column (grayed at render time); no pills.
+	if !strings.Contains(rows[1], "dev") {
+		t.Fatalf("lineage row should show its Source branch: %q", rows[1])
 	}
 	if strings.Contains(rows[1], "‹") {
-		t.Fatalf("undecorated row should have no labels: %q", rows[1])
+		t.Fatalf("a single-identity row has no pills: %q", rows[1])
 	}
 }
 
@@ -285,19 +294,20 @@ func TestCommitBranchHint(t *testing.T) {
 		m.sel = map[panel]int{}
 	}
 	m.focus = panelCommits
-	m.commits = []model.Commit{{Hash: "aaaaaaa", Subject: "x", Source: "feat"}}
+	m.commits = []model.Commit{{Hash: "aaaaaaabbbb", Subject: "x", Source: "feat"}}
 	m.sel[panelCommits] = 0
-	if got := m.commitBranchHint(); got != "⎇ feat" {
-		t.Fatalf("hint = %q, want ⎇ feat", got)
+	// The status line carries the branch AND the short id (the id left the row).
+	if got := m.commitBranchHint(); got != "⎇ feat · # aaaaaaa" {
+		t.Fatalf("hint = %q, want '⎇ feat · # aaaaaaa'", got)
 	}
 	m.focus = panelBranches // off the commits panel → no hint
 	if got := m.commitBranchHint(); got != "" {
 		t.Fatalf("hint off-panel = %q, want empty", got)
 	}
 	m.focus = panelCommits
-	m.commits[0].Source = "" // no source → no hint
-	if got := m.commitBranchHint(); got != "" {
-		t.Fatalf("hint without source = %q, want empty", got)
+	m.commits[0].Source = "" // no source → just the id remains
+	if got := m.commitBranchHint(); got != "# aaaaaaa" {
+		t.Fatalf("hint without source = %q, want '# aaaaaaa'", got)
 	}
 }
 

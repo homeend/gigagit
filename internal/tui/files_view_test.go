@@ -288,8 +288,10 @@ func TestFilesViewCommitFilterRendersInRightColumn(t *testing.T) {
 	if !strings.Contains(out, "/two█") {
 		t.Fatalf("right column must show the commit filter label:\n%s", out)
 	}
-	if !strings.Contains(out, "2222222 two") {
-		t.Fatalf("the commit list must show the match:\n%s", out)
+	// The commit list shows the match. "two" appears in the filter label (/two█)
+	// AND the matched commit row (the id no longer appears in the row).
+	if strings.Count(out, "two") < 2 {
+		t.Fatalf("the commit list must show the match besides the filter label:\n%s", out)
 	}
 	// Commit "one" is filtered out of the list — "1111111 one" survives only as
 	// the (untouched) tree title, so it must appear exactly once.
@@ -410,7 +412,7 @@ func TestFilesViewRenderReplacesLeftColumn(t *testing.T) {
 		"M  model.go",       // file row with status letter
 		"[/] search",        // hint line
 		"Commits",           // the right panel is still there
-		"2222222 two",       // and still lists commits
+		"two",               // and still lists commits (id-less row)
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("render missing %q:\n%s", want, out)
@@ -662,15 +664,31 @@ func TestFilesViewNarrowResizeResetsTreeFocus(t *testing.T) {
 }
 
 func TestFilesViewFocusIsVisible(t *testing.T) {
+	// The commit row leads with the branch-identity column (blank here — the
+	// fixture commit has no branch/source), not the commit id, so key on the
+	// subject carrying the focus marker.
+	// The two panels render side by side, so split each line on the box border
+	// and inspect only the segment that holds the commit — otherwise the tree's
+	// own ">" cursor on the same physical line gives a false match.
+	selectedCommitMarked := func(out string) bool {
+		for _, ln := range strings.Split(out, "\n") {
+			for _, seg := range strings.Split(ln, "│") {
+				if strings.Contains(seg, "one") && strings.HasPrefix(strings.TrimSpace(seg), ">") {
+					return true
+				}
+			}
+		}
+		return false
+	}
 	m := openFilesView(t, filesModel())
 	out := ansi.Strip(m.render())
-	if !strings.Contains(out, "> 1111111 one") {
+	if !selectedCommitMarked(out) {
 		t.Fatalf("commits focused: the selected commit must carry the > prefix:\n%s", out)
 	}
 	u, _ := m.Update(keyMsg("left"))
 	m = u.(Model)
 	out = ansi.Strip(m.render())
-	if strings.Contains(out, "> 1111111 one") {
+	if selectedCommitMarked(out) {
 		t.Fatalf("tree focused: the commits row must lose the > prefix:\n%s", out)
 	}
 	if !strings.Contains(out, "> ") {

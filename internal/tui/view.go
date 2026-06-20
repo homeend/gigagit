@@ -700,10 +700,11 @@ func fileGlyph(p panel, f model.FileStatus) byte {
 	}
 }
 
-// commitBranchHint returns "⎇ <branch>" for the selected commit when the Commits
-// panel is focused, else "". The branch is the ref the commit was reached from in
-// the feed walk (model.Commit.Source, via `git log --source`/%S). Shown in the
-// status line so the branch is always visible without occluding any commit row.
+// commitBranchHint returns "⎇ <branch> · # <id>" for the selected commit when
+// the Commits panel is focused, else "". The branch is the ref the commit was
+// reached from in the feed walk (model.Commit.Source, via `git log --source`/%S);
+// the short id lives here because the commit list rows show the branch column
+// instead of the id. Shown in the status line, occluding no commit row.
 func (m Model) commitBranchHint() string {
 	if m.focus != panelCommits {
 		return ""
@@ -712,33 +713,43 @@ func (m Model) commitBranchHint() string {
 	if !ok || bi < 0 || bi >= len(m.commits) {
 		return ""
 	}
-	if s := m.commits[bi].Source; s != "" {
-		return "⎇ " + s
+	c := m.commits[bi]
+	var parts []string
+	if c.Source != "" {
+		parts = append(parts, "⎇ "+c.Source)
 	}
-	return ""
-}
-
-func (m Model) commitRows() []string {
-	if m.commitListMode {
-		out := make([]string, 0, len(m.commits))
-		for _, c := range m.commits {
-			h := c.Hash
-			if len(h) > 7 {
-				h = h[:7]
-			}
-			out = append(out, "● "+h+" "+commitRefLabels(c.Refs)+c.Subject)
-		}
-		return out
-	}
-	graph := m.commitGraphOn() && len(m.commitGraphRows) == len(m.commits)
-	out := make([]string, 0, len(m.commits))
-	for i, c := range m.commits {
-		h := c.Hash
+	if h := c.Hash; h != "" { // the commit id moved here from the row
 		if len(h) > 7 {
 			h = h[:7]
 		}
-		row := h + " " + commitRefLabels(c.Refs) + c.Subject
-		if graph {
+		parts = append(parts, "# "+h)
+	}
+	return strings.Join(parts, " · ")
+}
+
+// commitRows builds the Commits-panel display rows. The left column is the
+// branch-identity token (replacing the old 7-char commit id): the branch name,
+// trimmed to commitIdentW. commitFullRows is the same with the UNtrimmed name
+// (the reveal-tooltip source). The commit id itself moved to the status bar.
+func (m Model) commitRows() []string     { return m.commitIdentRows(false) }
+func (m Model) commitFullRows() []string { return m.commitIdentRows(true) }
+
+func (m Model) commitIdentRows(full bool) []string {
+	graph := !m.commitListMode && m.commitGraphOn() && len(m.commitGraphRows) == len(m.commits)
+	out := make([]string, 0, len(m.commits))
+	for i, c := range m.commits {
+		id := commitIdentOf(c)
+		var tok string
+		if full {
+			tok = id.fullToken()
+		} else {
+			tok, _ = id.token()
+		}
+		row := tok + " " + id.pills() + c.Subject
+		switch {
+		case m.commitListMode:
+			row = "● " + row
+		case graph:
 			row = m.commitGraphRows[i] + " " + row
 		}
 		out = append(out, row)
@@ -754,51 +765,73 @@ func (m Model) commitGraphOn() bool {
 	return !m.filterActive(panelCommits) && m.sortModes[panelCommits] == sortDefault
 }
 
-// commitDecorators returns a per-display-row decorator slice (parallel to rows)
-// that colors each commit's '●' node by its lane, or nil when coloring does not
-// apply. idx maps display row → backing commit index (from panelView).
+// commitDecorators returns a per-display-row decorator slice (parallel to rows):
+// it dims the identity column on LINEAGE rows (always, in every mode) and colors
+// each commit's '●' node by its lane (only when lane coloring is active). idx
+// maps display row → backing commit index (from panelView). Columns include the
+// 2-col selection prefix the renderer prepends.
 func (m Model) commitDecorators(rows []string, idx []int) []rowDecorator {
-	if len(m.commitGraphLanes) != len(m.commits) {
+	if len(rows) == 0 {
 		return nil
 	}
-	if !m.commitListMode && !m.commitGraphOn() {
-		return nil // graph mode but graph suppressed → plain rows, no color
-	}
+	laneColorOn := len(m.commitGraphLanes) == len(m.commits) && (m.commitListMode || m.commitGraphOn())
+	graphPrefix := !m.commitListMode && m.commitGraphOn() && len(m.commitGraphRows) == len(m.commits)
 	decos := make([]rowDecorator, len(rows))
 	for j := range rows {
 		ci := j
 		if j < len(idx) {
 			ci = idx[j]
 		}
-		if ci < 0 || ci >= len(m.commitGraphLanes) {
+		if ci < 0 || ci >= len(m.commits) {
 			continue
 		}
-		lane := m.commitGraphLanes[ci]
-		nodeCol := 2 // list mode: ● at row col 0 → text col 2 (marker prefix)
-		if !m.commitListMode {
-			nodeCol = 2 + 2*lane // graph mode: node at graph col 2*lane
+		id := commitIdentOf(m.commits[ci])
+		dim := !id.tip && id.name != "" // gray a lineage row's branch name
+
+		// identStart = the 2-col selection prefix + this row's leading glyphs.
+		identStart := 2
+		if m.commitListMode {
+			identStart += 2 // "● "
+		} else if graphPrefix {
+			identStart += lipgloss.Width(m.commitGraphRows[ci]) + 1
 		}
-		decos[j] = commitDotDecorator(nodeCol, laneColor(lane))
+
+		hasDot := false
+		dotCol := 0
+		var dotColor lipgloss.Color
+		if laneColorOn {
+			lane := m.commitGraphLanes[ci]
+			dotColor = laneColor(lane)
+			if m.commitListMode {
+				dotCol = 2 // ● at content col 0 + 2 prefix
+			} else {
+				dotCol = 2 + 2*lane
+			}
+			hasDot = true
+		}
+		if !dim && !hasDot {
+			continue
+		}
+		decos[j] = commitLineDecorator(hasDot, dotCol, dotColor, dim, identStart, commitIdentW)
 	}
 	return decos
 }
 
-// commitRefLabels renders local-branch pills as a "‹*head›‹branch› " prefix, the
-// current branch (Ref.Head) prefixed with "*". Remote/tag kinds are captured but
-// not rendered in Phase 1. Empty when there are no local labels.
-func commitRefLabels(refs []model.Ref) string {
-	var b strings.Builder
-	for _, r := range refs {
-		if r.Kind != model.RefLocal {
-			continue
+// commitHaystacks is the filter-match text per commit, decoupled from the
+// (trimmed, id-less) display row so searching still works: the FULL commit id +
+// the full branch name(s) + the subject. commitList.Haystack exposes it to
+// panelView, which prefers it over Row(i) for matching.
+func (m Model) commitHaystacks() []string {
+	out := make([]string, len(m.commits))
+	for i, c := range m.commits {
+		id := commitIdentOf(c)
+		names := id.label()
+		for _, e := range id.extra {
+			names += " " + e
 		}
-		if r.Head {
-			b.WriteString("‹*" + r.Name + "› ")
-		} else {
-			b.WriteString("‹" + r.Name + "› ")
-		}
+		out[i] = c.Hash + " " + names + " " + c.Subject
 	}
-	return b.String()
+	return out
 }
 
 func (m Model) renderModal() string {
