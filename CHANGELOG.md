@@ -9,6 +9,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Commits panel — multi-branch selected set.** The `.` menu on a Branches row
+  now offers **Add to commit view** / **Remove from commit view** to scope the
+  Commits feed to a custom set of branches (alongside one-tap Solo and Show all).
+  Every branch in the set is marked `◉`.
 - TUI: the Commits panel now draws a single-line **commit graph** (Unicode
   rounded box-drawing, monochrome) to the left of each commit — lane layout over
   the all-branches date-ordered feed, so forks and merges are visible. Shown only

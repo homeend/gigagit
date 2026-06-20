@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"slices"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -50,6 +51,51 @@ func (m Model) commitSoloRow() (actionRow, bool) {
 			return m, m.reloadFeedCmd()
 		},
 	}, true
+}
+
+// commitToggleRow offers "Add to commit view" / "Remove from commit view" on the
+// Branches panel: add or remove the selected branch from the multi-branch
+// Commits-feed scope. Removing the last branch returns the feed to all branches.
+func (m Model) commitToggleRow() (actionRow, bool) {
+	if m.focus != panelBranches || !m.opsIdle() {
+		return actionRow{}, false
+	}
+	b, ok := m.selectedBranch()
+	if !ok {
+		return actionRow{}, false
+	}
+	in := slices.Contains(m.commitScopeBranches, b.Name)
+	label := "Add to commit view"
+	if in {
+		label = "Remove from commit view"
+	}
+	return actionRow{
+		id:    "commits-toggle",
+		label: label,
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			if in {
+				m.commitScopeBranches = without(m.commitScopeBranches, b.Name)
+			} else {
+				m.commitScopeBranches = append(append([]string(nil), m.commitScopeBranches...), b.Name)
+			}
+			return m, m.reloadFeedCmd()
+		},
+	}, true
+}
+
+// without returns a new slice with the first occurrence of s removed, preserving
+// the order of the remaining elements. A fresh allocation is deliberate: the
+// value-receiver Model shares its slice backing with the prior copy, so an
+// in-place delete would corrupt it.
+func without(ss []string, s string) []string {
+	out := make([]string, 0, len(ss))
+	for _, x := range ss {
+		if x == s {
+			continue
+		}
+		out = append(out, x)
+	}
+	return out
 }
 
 // commitShowAllRow offers "Show all branches" — present only when the feed is
