@@ -44,6 +44,9 @@ func availableActions(m Model) []actionRow {
 		if r, ok := m.compareAgainstShelfRow(); ok {
 			rows = append(rows, r)
 		}
+		if r, ok := m.compareAgainstWorkingDirRow(); ok {
+			rows = append(rows, r)
+		}
 		return rows
 	}
 	var row, window []actionRow
@@ -75,6 +78,9 @@ func availableActions(m Model) []actionRow {
 	if r, ok := m.compareAgainstShelfRow(); ok {
 		out = append(out, r)
 	}
+	if r, ok := m.compareAgainstWorkingDirRow(); ok {
+		out = append(out, r)
+	}
 	if r, ok := m.renameBranchRow(); ok {
 		out = append(out, r)
 	}
@@ -88,6 +94,9 @@ func availableActions(m Model) []actionRow {
 		out = append(out, r)
 	}
 	if r, ok := m.commitShowAllRow(); ok {
+		out = append(out, r)
+	}
+	if r, ok := m.commitViewModeRow(); ok {
 		out = append(out, r)
 	}
 	return out

@@ -22,6 +22,18 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   drawing, and the jobs it runs — the first of a general mechanism.)
 
 ### Added
+- **Compare against working dir.** The `.` menu on any focused commit, staged, or
+  shelf file offers **Compare against working dir** — a direct side-by-side diff of
+  that version against the same path in the working tree (no second pick).
+- **Branches panel — indicators moved to a dynamic left gutter.** The set/solo
+  `◉` and head `*` markers now render in a left gutter (width adapts to how many
+  indicator types are active) so the set marker is no longer truncated in a
+  narrow panel.
+- **Commits panel — lane color + list mode.** Each commit's `●` node is colored
+  by its graph lane (recycled palette, the standard git-client convention). A new
+  `.`-menu toggle **Show as list / Show as graph** renders the feed as a flat
+  `●`-gutter list (no connectors) that keeps its per-commit lane color even when
+  filtered or re-sorted (where the connected graph is suppressed).
 - **Commits panel — multi-branch selected set.** The `.` menu on a Branches row
   now offers **Add to commit view** / **Remove from commit view** to scope the
   Commits feed to a custom set of branches (alongside one-tap Solo and Show all).

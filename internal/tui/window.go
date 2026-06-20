@@ -22,6 +22,12 @@ const (
 // next returns the following mode, wrapping around.
 func (d dispMode) next() dispMode { return (d + 1) % dispModeCount }
 
+// rowDecorator restyles one already-sliced+padded visual line without changing
+// its visible width (e.g. recoloring a single glyph). hscroll is the horizontal
+// offset applied to this line (0 unless modeScroll); visualLine is the segment
+// index (0 = a row's first line, 1+ = wrap continuations).
+type rowDecorator func(visible string, hscroll, visualLine int) string
+
 // winRow is one logical row before layout: raw (unstyled) text plus an optional
 // style applied AFTER truncation/wrapping. Callers bake any cursor/mark prefix
 // into text and set style for the selected row (selectedRow) or headings
@@ -32,9 +38,10 @@ func (d dispMode) next() dispMode { return (d + 1) % dispModeCount }
 // wraps/scrolls within the remaining width (winOpts.prefixW) so the gutter never
 // moves. prefix "" (with prefixW 0) is the plain whole-row path.
 type winRow struct {
-	text   string
-	prefix string
-	style  lipgloss.Style // zero value renders the text unchanged
+	text     string
+	prefix   string
+	style    lipgloss.Style // zero value renders the text unchanged
+	decorate rowDecorator   // optional; applied post-slice, post-pad
 }
 
 // winOpts is everything renderWindow needs besides the rows. anchor is the
@@ -74,16 +81,21 @@ func renderWindow(rows []winRow, o winOpts) []string {
 	type dline struct {
 		text  string
 		style lipgloss.Style
+		deco  rowDecorator
+		hs    int
+		si    int
 		row   int
 	}
 	var dl []dline
 	for ri, r := range rows {
 		var segs []string
+		hs := 0
 		switch o.mode {
 		case modeWrap:
 			segs = wrapWidth(r.text, bodyW, 1<<20) // huge cap => clean full wrap, no ellipsis
 		case modeScroll:
 			segs = []string{hslice(r.text, o.hscroll, bodyW)}
+			hs = o.hscroll
 		default:
 			segs = []string{truncate(r.text, bodyW)}
 		}
@@ -98,7 +110,7 @@ func renderWindow(rows []winRow, o winOpts) []string {
 				}
 				s = pre + s
 			}
-			dl = append(dl, dline{text: s, style: r.style, row: ri})
+			dl = append(dl, dline{text: s, style: r.style, deco: r.decorate, hs: hs, si: si, row: ri})
 		}
 	}
 
@@ -118,7 +130,11 @@ func renderWindow(rows []winRow, o winOpts) []string {
 			out = append(out, padRight("", w))
 			continue
 		}
-		out = append(out, dl[idx].style.Render(padRight(dl[idx].text, w)))
+		line := padRight(dl[idx].text, w)
+		if dl[idx].deco != nil {
+			line = dl[idx].deco(line, dl[idx].hs, dl[idx].si)
+		}
+		out = append(out, dl[idx].style.Render(line))
 	}
 	return out
 }

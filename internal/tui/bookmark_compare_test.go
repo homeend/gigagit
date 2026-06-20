@@ -137,3 +137,38 @@ func TestCompareRowAccompaniesAddRow(t *testing.T) {
 		t.Error("bookmark-compare must accompany bookmark-add")
 	}
 }
+
+func TestCompareAgainstWorkingDirRowOpensDiff(t *testing.T) {
+	m := footerModel()
+	// A focused commit file: the diff view with a rev makes focusedBookmark
+	// yield a committed ref (Path = the diff title).
+	m.diffView = &diffView{title: "a.go", rev: "abc1234"}
+	r, ok := m.compareAgainstWorkingDirRow()
+	if !ok {
+		t.Fatal("row should be present for a focused commit file")
+	}
+	if r.label != "Compare against working dir" {
+		t.Fatalf("label = %q", r.label)
+	}
+	u, cmd := r.run(m)
+	mm := u.(Model)
+	if mm.diffView == nil || mm.diffView.title != "a.go ↔ working" {
+		t.Fatalf("diff view = %+v", mm.diffView)
+	}
+	if mm.diffTag != "cmpwd:a.go" {
+		t.Fatalf("diffTag = %q, want cmpwd:a.go", mm.diffTag)
+	}
+	if cmd == nil {
+		t.Fatal("expected a load command")
+	}
+}
+
+func TestCompareAgainstWorkingDirRowAbsentForWorkingFile(t *testing.T) {
+	m := footerModel()
+	// A working-tree file is focused (diff view with no rev) → comparing it
+	// against the working tree is itself-vs-itself, so the row is gated off.
+	m.diffView = &diffView{title: "a.go"} // rev "" → unstaged source
+	if _, ok := m.compareAgainstWorkingDirRow(); ok {
+		t.Fatal("row should be absent for a working-tree file")
+	}
+}

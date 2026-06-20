@@ -82,3 +82,35 @@ func TestRenderWindowAnchorVisible(t *testing.T) {
 		t.Errorf("anchor row not visible:\n%s", joined)
 	}
 }
+
+func TestRenderWindowDecorateReceivesGeometryAndPreservesWidth(t *testing.T) {
+	var got []struct {
+		hs, vl int
+		w      int
+	}
+	deco := func(visible string, hscroll, visualLine int) string {
+		got = append(got, struct{ hs, vl, w int }{hscroll, visualLine, lipgloss.Width(visible)})
+		return visible // identity: must not change visible width
+	}
+	rows := []winRow{{text: "abcdefghij", decorate: deco}}
+	// cutoff: hscroll 0, single visual line 0, width == w
+	out := renderWindow(rows, winOpts{w: 6, h: 1, mode: modeCutoff})
+	if len(got) != 1 || got[0].hs != 0 || got[0].vl != 0 || got[0].w != 6 {
+		t.Fatalf("cutoff geometry = %+v", got)
+	}
+	if lipgloss.Width(out[0]) != 6 {
+		t.Fatalf("cutoff line width = %d, want 6", lipgloss.Width(out[0]))
+	}
+	// scroll: decorator sees the scroll offset.
+	got = nil
+	renderWindow(rows, winOpts{w: 6, h: 1, mode: modeScroll, hscroll: 3})
+	if len(got) != 1 || got[0].hs != 3 {
+		t.Fatalf("scroll hscroll = %+v, want hs=3", got)
+	}
+	// wrap: a long row yields a continuation line with visualLine 1.
+	got = nil
+	renderWindow(rows, winOpts{w: 6, h: 4, mode: modeWrap})
+	if len(got) < 2 || got[0].vl != 0 || got[1].vl != 1 {
+		t.Fatalf("wrap visualLine sequence = %+v", got)
+	}
+}

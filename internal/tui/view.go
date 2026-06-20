@@ -324,12 +324,14 @@ func (m Model) renderInterface() string {
 
 	// Narrow terminals: a single commits column (two columns won't fit cleanly).
 	if g.w < 40 {
-		cmRows, _ := m.panelView(panelCommits)
-		body := m.renderPanel(panelCommits, m.panelLabel(panelCommits, "Commits ("+m.commitScopeLabel()+")"), cmRows, g.w, g.boxH[panelCommits])
+		cmRows, cmIdx := m.panelView(panelCommits)
+		decos := m.commitDecorators(cmRows, cmIdx)
+		body := m.renderPanel(panelCommits, m.panelLabel(panelCommits, "Commits ("+m.commitScopeLabel()+")"), cmRows, decos, g.w, g.boxH[panelCommits])
 		return strings.Join([]string{header, body, footer, statusLine}, "\n")
 	}
 
-	cmRows, _ := m.panelView(panelCommits)
+	cmRows, cmIdx := m.panelView(panelCommits)
+	cmDecos := m.commitDecorators(cmRows, cmIdx)
 
 	var left string
 	if m.filesView != nil {
@@ -341,12 +343,12 @@ func (m Model) renderInterface() string {
 		atRows, _ := m.panelView(active)
 		fRows, _ := m.panelView(panelFiles)
 		boxes := []string{
-			m.renderPanel(active, m.panelLabel(active, tabBarLabel(active)), atRows, g.leftW, g.boxH[active]),
-			m.renderPanel(panelFiles, m.filesLabel(panelFiles, "Files"), fRows, g.leftW, g.boxH[panelFiles]),
+			m.renderPanel(active, m.panelLabel(active, tabBarLabel(active)), atRows, nil, g.leftW, g.boxH[active]),
+			m.renderPanel(panelFiles, m.filesLabel(panelFiles, "Files"), fRows, nil, g.leftW, g.boxH[panelFiles]),
 		}
 		if g.boxH[panelStaged] > 0 {
 			sRows, _ := m.panelView(panelStaged)
-			boxes = append(boxes, m.renderPanel(panelStaged, m.filesLabel(panelStaged, "Staged"), sRows, g.leftW, g.boxH[panelStaged]))
+			boxes = append(boxes, m.renderPanel(panelStaged, m.filesLabel(panelStaged, "Staged"), sRows, nil, g.leftW, g.boxH[panelStaged]))
 		}
 		left = lipgloss.JoinVertical(lipgloss.Left, boxes...)
 	}
@@ -354,7 +356,7 @@ func (m Model) renderInterface() string {
 	if m.stashView != nil {
 		right = m.renderStashList(g.rightW, g.boxH[panelCommits])
 	} else {
-		right = m.renderPanel(panelCommits, m.panelLabel(panelCommits, "Commits ("+m.commitScopeLabel()+")"), cmRows, g.rightW, g.boxH[panelCommits])
+		right = m.renderPanel(panelCommits, m.panelLabel(panelCommits, "Commits ("+m.commitScopeLabel()+")"), cmRows, cmDecos, g.rightW, g.boxH[panelCommits])
 	}
 	body := lipgloss.JoinHorizontal(lipgloss.Top, left, right)
 
@@ -395,7 +397,7 @@ func tabBarLabel(active panel) string {
 // renderPanel draws one bordered panel of fixed size boxW×boxH, windowing rows
 // around the selection and truncating each to fit. Border (2) + padding (2) are
 // accounted for so the rendered box matches the requested dimensions.
-func (m Model) renderPanel(p panel, label string, rows []string, boxW, boxH int) string {
+func (m Model) renderPanel(p panel, label string, rows []string, decos []rowDecorator, boxW, boxH int) string {
 	contentH := boxH - 2 // top/bottom border
 	if contentH < 1 {
 		contentH = 1
@@ -433,7 +435,13 @@ func (m Model) renderPanel(p panel, label string, rows []string, boxW, boxH int)
 			if i == sel && isFocused {
 				st = selectedRow
 			}
-			wr[i] = winRow{text: prefix + row, style: st}
+			var deco rowDecorator
+			if i != sel || !isFocused {
+				if i < len(decos) {
+					deco = decos[i]
+				}
+			}
+			wr[i] = winRow{text: prefix + row, style: st, decorate: deco}
 		}
 		body := renderWindow(wr, winOpts{w: innerW, h: rowsCap, mode: m.dispModes[p], anchor: sel, hscroll: m.hscroll[p]})
 		lines = append(lines, body...)
@@ -587,16 +595,46 @@ func (m Model) worktreePathOf(branch string) (string, bool) {
 }
 
 func (m Model) branchRows() []string {
+	inScope := func(b model.Branch) bool { return slices.Contains(m.commitScopeBranches, b.Name) }
+	// Ordered left-to-right; each maps a branch to its glyph or ' '. Indicators
+	// live in a left gutter so the set marker is never truncated in a narrow
+	// panel; the gutter width is dynamic (see below).
+	indicators := []func(model.Branch) rune{
+		func(b model.Branch) rune { // set / solo
+			if inScope(b) {
+				return '◉'
+			}
+			return ' '
+		},
+		func(b model.Branch) rune { // head
+			if b.IsHead {
+				return '*'
+			}
+			return ' '
+		},
+	}
+	// A column is in play iff some branch yields a non-space glyph for it.
+	active := make([]bool, len(indicators))
+	for i, ind := range indicators {
+		for _, b := range m.branches {
+			if ind(b) != ' ' {
+				active[i] = true
+				break
+			}
+		}
+	}
 	out := make([]string, 0, len(m.branches))
 	for _, b := range m.branches {
-		marker := "  "
-		if b.IsHead {
-			marker = "* "
+		gutter := make([]rune, 0, len(indicators)+1)
+		for i, ind := range indicators {
+			if active[i] {
+				gutter = append(gutter, ind(b))
+			}
 		}
-		row := marker + b.Name
-		if slices.Contains(m.commitScopeBranches, b.Name) {
-			row += " ◉" // included in the Commits feed scope
+		if len(gutter) > 0 {
+			gutter = append(gutter, ' ') // one separator before the name
 		}
+		row := string(gutter) + b.Name
 		if b.Behind > 0 {
 			row += " (↓" + strconv.Itoa(b.Behind) + ")"
 		}
@@ -668,6 +706,17 @@ func fileGlyph(p panel, f model.FileStatus) byte {
 }
 
 func (m Model) commitRows() []string {
+	if m.commitListMode {
+		out := make([]string, 0, len(m.commits))
+		for _, c := range m.commits {
+			h := c.Hash
+			if len(h) > 7 {
+				h = h[:7]
+			}
+			out = append(out, "● "+h+" "+commitRefLabels(c.Refs)+c.Subject)
+		}
+		return out
+	}
 	graph := m.commitGraphOn() && len(m.commitGraphRows) == len(m.commits)
 	out := make([]string, 0, len(m.commits))
 	for i, c := range m.commits {
@@ -690,6 +739,35 @@ func (m Model) commitRows() []string {
 // haystack).
 func (m Model) commitGraphOn() bool {
 	return !m.filterActive(panelCommits) && m.sortModes[panelCommits] == sortDefault
+}
+
+// commitDecorators returns a per-display-row decorator slice (parallel to rows)
+// that colors each commit's '●' node by its lane, or nil when coloring does not
+// apply. idx maps display row → backing commit index (from panelView).
+func (m Model) commitDecorators(rows []string, idx []int) []rowDecorator {
+	if len(m.commitGraphLanes) != len(m.commits) {
+		return nil
+	}
+	if !m.commitListMode && !m.commitGraphOn() {
+		return nil // graph mode but graph suppressed → plain rows, no color
+	}
+	decos := make([]rowDecorator, len(rows))
+	for j := range rows {
+		ci := j
+		if j < len(idx) {
+			ci = idx[j]
+		}
+		if ci < 0 || ci >= len(m.commitGraphLanes) {
+			continue
+		}
+		lane := m.commitGraphLanes[ci]
+		nodeCol := 2 // list mode: ● at row col 0 → text col 2 (marker prefix)
+		if !m.commitListMode {
+			nodeCol = 2 + 2*lane // graph mode: node at graph col 2*lane
+		}
+		decos[j] = commitDotDecorator(nodeCol, laneColor(lane))
+	}
+	return decos
 }
 
 // commitRefLabels renders local-branch pills as a "‹*head›‹branch› " prefix, the
