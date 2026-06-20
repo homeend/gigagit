@@ -169,7 +169,7 @@ func (m Model) render() string {
 	}
 	_, h := m.overlayDims()
 	bg := clipToHeight(m.renderInterface(), h)
-	if m.popup == nil && m.settings == nil && m.branchPopup == nil && m.renameBranchPopup == nil && m.rewordPopup == nil && m.contentPopup == nil && m.pairPopup == nil && m.stashPopup == nil && m.stashAction == nil && m.conflictPopup == nil {
+	if m.popup == nil && m.branchPopup == nil && m.renameBranchPopup == nil && m.rewordPopup == nil && m.contentPopup == nil && m.pairPopup == nil && m.stashPopup == nil && m.stashAction == nil && m.conflictPopup == nil {
 		if lines, x, y, ok := m.tooltip(); ok {
 			w, h := m.overlayDims()
 			bg = overlayAt(bg, strings.Join(lines, "\n"), x, y, w, h)
@@ -178,10 +178,6 @@ func (m Model) render() string {
 	if m.popup != nil {
 		w, h := m.overlayDims()
 		return overlayCenter(bg, m.renderWorktreePopup(), w, h)
-	}
-	if m.settings != nil {
-		w, h := m.overlayDims()
-		return overlayCenter(bg, m.renderSettingsPopup(), w, h)
 	}
 	if m.branchPopup != nil {
 		w, h := m.overlayDims()

@@ -26,7 +26,7 @@ const settingsMenuAgents = "Set up agent skills (using-gg)"
 
 // openSettings opens the menu screen.
 func (m Model) openSettings() Model {
-	m.settings = &settingsPopup{}
+	m = m.pushOverlay(&settingsPopup{})
 	return m
 }
 
@@ -34,7 +34,7 @@ func (m Model) openSettings() Model {
 // checkbox defaults encode the core rule: already-installed targets start
 // checked (apply = refresh); new targets start unchecked (explicit opt-in).
 func (m Model) openAgentPicker() Model {
-	p := m.settings
+	p := overlayOf[*settingsPopup](m)
 	p.dets = agentinit.Detect(m.currentWorktree, m.initHomeDir)
 	p.checked = make([]bool, len(p.dets))
 	for i, d := range p.dets {
@@ -45,9 +45,8 @@ func (m Model) openAgentPicker() Model {
 	return m
 }
 
-// updateSettingsKey handles all keys while the settings popup is open.
-func (m Model) updateSettingsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	p := m.settings
+// update handles all keys while the settings popup is open.
+func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyCtrlC:
 		return m, tea.Quit
@@ -56,7 +55,7 @@ func (m Model) updateSettingsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			p.picker = false
 			return m, nil
 		}
-		m.settings = nil
+		m = m.popOverlay()
 		return m, nil
 	}
 	switch msg.String() { // display-mode keys apply on both screens
@@ -113,7 +112,7 @@ func (m Model) updateSettingsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				refreshed++
 			}
 		}
-		m.settings = nil
+		m = m.popOverlay()
 		m.statusMsg = fmt.Sprintf("agent skills: %d installed, %d refreshed", installed, refreshed)
 		if failed > 0 {
 			m.statusMsg += fmt.Sprintf(", %d failed", failed)
@@ -123,9 +122,14 @@ func (m Model) updateSettingsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// renderSettingsPopup draws whichever screen is active.
-func (m Model) renderSettingsPopup() string {
-	p := m.settings
+// render composites the popup over the layer beneath.
+func (p *settingsPopup) render(m Model, below string) string {
+	w, h := m.overlayDims()
+	return overlayCenter(clipToHeight(below, h), p.box(m), w, h)
+}
+
+// box draws whichever screen is active (modal box only).
+func (p *settingsPopup) box(m Model) string {
 	w, _ := m.overlayDims()
 	inner := popupInnerWidth(w)
 	textW := popupTextWidth(inner)

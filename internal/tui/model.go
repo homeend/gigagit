@@ -34,7 +34,6 @@ type Model struct {
 	gitCommonDir string
 
 	popup               *worktreePopup
-	settings            *settingsPopup
 	initHomeDir         string // home dir for agent detection; "" skips home-scoped agents (tests)
 	statePath           string // repo-registry location; "" disables recording (tests)
 	pendingSeqBump      []string
@@ -408,9 +407,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.popup != nil {
 			return m.updatePopupKey(msg)
-		}
-		if m.settings != nil {
-			return m.updateSettingsKey(msg)
 		}
 		if m.branchPopup != nil {
 			return m.updateBranchPopupKey(msg)

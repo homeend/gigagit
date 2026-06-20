@@ -28,10 +28,10 @@ func TestCommaOpensSettingsMenu(t *testing.T) {
 	m, _ := settingsModel(t)
 	u, _ := m.Update(keyMsg(","))
 	m = u.(Model)
-	if m.settings == nil {
+	if overlayOf[*settingsPopup](m) == nil {
 		t.Fatal(", should open the settings popup")
 	}
-	if m.settings.picker {
+	if overlayOf[*settingsPopup](m).picker {
 		t.Fatal("should open on the menu screen, not the picker")
 	}
 	out := m.View()
@@ -46,8 +46,9 @@ func TestSettingsPopupZCyclesMode(t *testing.T) {
 	m = u.(Model)
 	u, _ = m.Update(keyMsg("z"))
 	m = u.(Model)
-	if m.settings == nil || m.settings.mode != modeWrap {
-		t.Fatalf("z should cycle the settings mode to modeWrap; got %+v", m.settings)
+	p := overlayOf[*settingsPopup](m)
+	if p == nil || p.mode != modeWrap {
+		t.Fatalf("z should cycle the settings mode to modeWrap; got %+v", p)
 	}
 }
 
@@ -57,13 +58,14 @@ func TestPickerCheckboxDefaults(t *testing.T) {
 	m = u.(Model)
 	u, _ = m.Update(keyMsg("enter")) // menu entry -> picker
 	m = u.(Model)
-	if !m.settings.picker {
+	p := overlayOf[*settingsPopup](m)
+	if p == nil || !p.picker {
 		t.Fatal("enter on the menu entry should open the picker")
 	}
 	// claude-project (.claude, new) unchecked; agents-md (old block) checked.
 	byID := map[string]bool{}
-	for i, d := range m.settings.dets {
-		byID[d.Agent.ID] = m.settings.checked[i]
+	for i, d := range p.dets {
+		byID[d.Agent.ID] = p.checked[i]
 	}
 	if byID["claude-project"] {
 		t.Error("new target must default unchecked")
@@ -80,8 +82,9 @@ func TestPickerToggleAndApply(t *testing.T) {
 	u, _ = m.Update(keyMsg("enter"))
 	m = u.(Model)
 	// Move to the claude-project row and check it.
+	p := overlayOf[*settingsPopup](m)
 	idx := -1
-	for i, d := range m.settings.dets {
+	for i, d := range p.dets {
 		if d.Agent.ID == "claude-project" {
 			idx = i
 		}
@@ -89,15 +92,15 @@ func TestPickerToggleAndApply(t *testing.T) {
 	if idx < 0 {
 		t.Fatal("claude-project not in picker")
 	}
-	m.settings.sel = idx
+	p.sel = idx
 	u, _ = m.Update(keyMsg("space"))
 	m = u.(Model)
-	if !m.settings.checked[idx] {
+	if !overlayOf[*settingsPopup](m).checked[idx] {
 		t.Fatal("space should toggle the checkbox")
 	}
 	u, _ = m.Update(keyMsg("enter")) // apply
 	m = u.(Model)
-	if m.settings != nil {
+	if overlayOf[*settingsPopup](m) != nil {
 		t.Fatal("apply should close the popup")
 	}
 	// claude-project installed AND agents-md refreshed (was checked by default).
@@ -125,12 +128,13 @@ func TestSettingsEscBackThenClose(t *testing.T) {
 	m = u.(Model)
 	u, _ = m.Update(keyMsg("esc")) // picker -> menu
 	m = u.(Model)
-	if m.settings == nil || m.settings.picker {
+	p := overlayOf[*settingsPopup](m)
+	if p == nil || p.picker {
 		t.Fatal("esc in the picker should go back to the menu")
 	}
 	u, _ = m.Update(keyMsg("esc")) // menu -> closed
 	m = u.(Model)
-	if m.settings != nil {
+	if overlayOf[*settingsPopup](m) != nil {
 		t.Fatal("esc on the menu should close the popup")
 	}
 }
@@ -144,7 +148,7 @@ func TestSettingsSwallowsGlobalKeys(t *testing.T) {
 	if m.running {
 		t.Fatal("settings popup leaked a global key")
 	}
-	if m.settings == nil {
+	if overlayOf[*settingsPopup](m) == nil {
 		t.Fatal("popup should still be open")
 	}
 	u, cmd := m.Update(keyMsg("q"))
@@ -152,7 +156,7 @@ func TestSettingsSwallowsGlobalKeys(t *testing.T) {
 	if cmd != nil {
 		t.Fatal("q inside the popup must not emit a command (quit leak)")
 	}
-	if m.settings == nil {
+	if overlayOf[*settingsPopup](m) == nil {
 		t.Fatal("popup should still be open after q")
 	}
 }
