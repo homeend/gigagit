@@ -41,6 +41,19 @@ func (r *Repo) CreateBranch(ctx context.Context, name, startPoint string) error 
 	return err
 }
 
+// CreateTag creates a tag at commit (empty commit = HEAD). A non-empty message
+// makes it annotated (git tag -a -m); otherwise it is lightweight. git refuses
+// an existing tag name.
+func (r *Repo) CreateTag(ctx context.Context, name, commit, message string) error {
+	argv := gitcmd.New("tag").
+		ArgIf(message != "", "-a", "-m", message).
+		Arg(name).
+		ArgIf(commit != "", commit).
+		ToArgv()
+	_, err := r.Runner.Run(ctx, "git tag", argv)
+	return err
+}
+
 // RenameBranch renames local branch oldName to newName (git branch -m). git
 // refuses when newName already exists; renaming a branch checked out in another
 // worktree succeeds and updates that worktree's HEAD.
