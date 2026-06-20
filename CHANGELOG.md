@@ -9,6 +9,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Edit a file in your editor from the Files panel.** The `.` action menu on a
+  Files-panel file now offers **Edit in editor** — it suspends the TUI, opens
+  the file in `$VISUAL`/`$EDITOR` (falling back to `vi` on unix / `notepad` on
+  Windows), and refreshes the working-tree status when the editor exits. Works
+  on any working-tree file (modified, untracked, or conflicted).
 - **Add untracked files to `.gitignore` from the Files panel.** The `.` action
   menu on an untracked file now offers **Add to .gitignore** (ignores that exact
   file via an anchored, glob-escaped `/path` line) and **Add extension to

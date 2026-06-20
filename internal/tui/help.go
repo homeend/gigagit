@@ -76,6 +76,7 @@ func helpContent() []contentLine {
 		r("d", "discard the marked files (or the cursor row): revert edits, delete new files (confirm)"),
 		r("D", "discard ALL unstaged changes: revert every edit + delete every new file (confirm)"),
 		r(".", "on an untracked file: Add to .gitignore (this file, anchored) / Add extension to .gitignore (*.ext) — appends to the repo-root .gitignore"),
+		r(".", "Edit in editor: open the selected file in $VISUAL/$EDITOR (vi/notepad fallback), then refresh"),
 		h("Staged panel"),
 		r("space", "unstage the selected file (git restore --staged)"),
 		r("enter", "side-by-side diff of the staged change (HEAD → index)"),
