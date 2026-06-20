@@ -38,7 +38,6 @@ type Model struct {
 	pendingSeqBump      []string
 	pendingSwitch       bool
 	switchTarget        string
-	rewordPopup         *rewordPopup
 	pendingCompare      *pendingCompare // focused file awaiting the compare-mode picker; nil = none
 	pendingSwitchBranch string          // branch to SmartSwitch to after a successful op (B = create-and-switch)
 	contentPopup        *contentPopup   // generic read-only viewer (help window)
@@ -403,9 +402,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// must be the top visible surface (background ops will rely on it).
 		if m.diffView != nil {
 			return m.updateDiffViewKey(msg)
-		}
-		if m.rewordPopup != nil {
-			return m.updateRewordPopupKey(msg)
 		}
 		if m.contentPopup != nil {
 			return m.updateContentPopupKey(msg)

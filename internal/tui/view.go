@@ -177,15 +177,11 @@ func (m Model) render() string {
 	}
 	_, h := m.overlayDims()
 	bg := clipToHeight(m.renderInterface(), h)
-	if m.rewordPopup == nil && m.contentPopup == nil {
+	if m.contentPopup == nil {
 		if lines, x, y, ok := m.tooltip(); ok {
 			w, h := m.overlayDims()
 			bg = overlayAt(bg, strings.Join(lines, "\n"), x, y, w, h)
 		}
-	}
-	if m.rewordPopup != nil {
-		w, h := m.overlayDims()
-		return overlayCenter(bg, m.renderRewordPopup(), w, h)
 	}
 	if m.contentPopup != nil {
 		w, h := m.overlayDims()

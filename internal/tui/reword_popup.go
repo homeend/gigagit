@@ -36,7 +36,7 @@ func (m Model) openRewordPopup() (Model, bool) {
 		msg = full
 	}
 	t, d := splitMessage(msg)
-	m.rewordPopup = &rewordPopup{commit: c.Hash, ggBin: ggBin, popup: commitPopup{title: t, desc: d}}
+	m = m.pushOverlay(&rewordPopup{commit: c.Hash, ggBin: ggBin, popup: commitPopup{title: t, desc: d}})
 	return m, true
 }
 
@@ -59,34 +59,38 @@ func (m Model) rewordRow() (actionRow, bool) {
 	}, true
 }
 
-// updateRewordPopupKey handles one key while the reword popup is open.
-func (m Model) updateRewordPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+// update handles one key while the reword popup is open.
+func (p *rewordPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
 	}
-	rp := m.rewordPopup
-	submit, cancel := rp.popup.applyEditKey(msg)
+	submit, cancel := p.popup.applyEditKey(msg)
 	switch {
 	case cancel:
-		m.rewordPopup = nil
+		m = m.popOverlay()
 	case submit:
-		if strings.TrimSpace(rp.popup.title) == "" {
+		if strings.TrimSpace(p.popup.title) == "" {
 			m.statusMsg = "title required"
 			return m, nil
 		}
-		op := engine.Reword{Commit: rp.commit, NewMsg: rp.popup.message(), GGBin: rp.ggBin}
-		m.rewordPopup = nil
+		op := engine.Reword{Commit: p.commit, NewMsg: p.popup.message(), GGBin: p.ggBin}
+		m = m.popOverlay()
 		return m.startOp(op)
 	}
 	return m, nil
 }
 
-// renderRewordPopup draws the reword dialog (reuses the commit field renderer).
-func (m Model) renderRewordPopup() string {
-	rp := m.rewordPopup
+// render composites the reword dialog over the layer beneath.
+func (p *rewordPopup) render(m Model, below string) string {
+	w, h := m.overlayDims()
+	return overlayCenter(clipToHeight(below, h), p.box(m), w, h)
+}
+
+// box draws the reword dialog (reuses the commit field renderer).
+func (p *rewordPopup) box(m Model) string {
 	var b strings.Builder
-	b.WriteString("Reword commit " + shortHash(rp.commit) + "\n\n")
-	b.WriteString(renderCommitFields(&rp.popup))
+	b.WriteString("Reword commit " + shortHash(p.commit) + "\n\n")
+	b.WriteString(renderCommitFields(&p.popup))
 	b.WriteString("\n[tab] switch field  [enter] newline/next  [ctrl+s] reword  [esc] cancel")
 	w, _ := m.overlayDims()
 	return modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"

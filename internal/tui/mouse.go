@@ -65,9 +65,6 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	if m.rewordPopup != nil {
-		return m, nil
-	}
 	if m.filesView != nil {
 		return m.mouseInFilesView(msg, wheel)
 	}
