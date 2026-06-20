@@ -108,6 +108,25 @@ type Commit struct {
 	Author   string
 	Subject  string
 	UnixTime int64
+	Refs     []Ref // ref decorations (branch/tag/HEAD); nil when undecorated
+}
+
+// RefKind classifies a ref decoration on a commit.
+type RefKind int
+
+const (
+	RefLocal  RefKind = iota // local branch
+	RefRemote                // remote-tracking branch
+	RefTag
+	RefHead // detached HEAD marker
+)
+
+// Ref is one ref decoration pointing at a commit (from `git log %D`). Head marks
+// the local branch that HEAD currently points at (the current branch).
+type Ref struct {
+	Name string
+	Kind RefKind
+	Head bool
 }
 
 // CommitFile is one changed path within a commit.
