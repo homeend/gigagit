@@ -163,6 +163,83 @@ func TestTooltipOverflowsLeftFromRightPanel(t *testing.T) {
 	}
 }
 
+// treeRevealModel opens the commit files tree (a separate left-column slot) with
+// a long directory heading selected and the tree side focused, so the reveal
+// must show the full path the truncated row hides.
+func treeRevealModel(sel int) Model {
+	m := filesModel() // width 80
+	m.filesTitle = "Files a190f4b changes"
+	m.filesHash = "a190f4b"
+	m.filesView = &contentPopup{
+		lines: []contentLine{
+			{text: "M  jooq-gen.bat"},
+			{text: treeLongDir, heading: true},
+			{text: "  M  AbstractUtils.java", path: "x/AbstractUtils.java"},
+		},
+		sel:  sel,
+		mode: modeCutoff,
+	}
+	m.filesTreeFocused = true
+	return m
+}
+
+const treeLongDir = "src/com/netstellar/feedmill/db/dao/util/"
+
+func TestFilesTreeRevealsTruncatedRow(t *testing.T) {
+	m := treeRevealModel(1) // the long heading
+	lines, x, y, ok := m.tooltip()
+	if !ok {
+		t.Fatal("want a reveal for the truncated tree heading")
+	}
+	plain := ansi.Strip(strings.Join(lines, "\n"))
+	if !strings.Contains(plain, treeLongDir) {
+		t.Fatalf("reveal must show the full dir path, got %q", plain)
+	}
+	if x != 2 {
+		t.Errorf("reveal x = %d, want 2 (the left column's content edge)", x)
+	}
+	if y != 4 { // box top (1) + border + title = 3, plus selInWin (1)
+		t.Errorf("reveal y = %d, want 4 (the heading's own line)", y)
+	}
+}
+
+func TestFilesTreeRevealHiddenWhenRowFits(t *testing.T) {
+	m := treeRevealModel(0) // "M  jooq-gen.bat" fits the column
+	if _, _, _, ok := m.tooltip(); ok {
+		t.Fatal("no reveal when the tree row fits")
+	}
+}
+
+func TestFilesTreeRevealSuppressedWhenListFocused(t *testing.T) {
+	m := treeRevealModel(1)
+	m.filesTreeFocused = false // the commits side owns the selection now
+	// A long commit subject so the commits-side reveal DOES fire — the test then
+	// proves the tree's path is absent regardless of the panel reveal.
+	m.commits = []model.Commit{{Hash: "1111111aaaa",
+		Subject: "one — a deliberately long commit subject to trigger the commits-side reveal"}}
+	lines, _, _, _ := m.tooltip()
+	if strings.Contains(ansi.Strip(strings.Join(lines, "\n")), treeLongDir) {
+		t.Fatal("the tree's path must not be revealed while the list side is focused")
+	}
+}
+
+// The render() path only reaches the reveal overlay on the non-layer/non-diff
+// branch; assert the tree reveal survives the assembled view, not just tooltip().
+func TestFilesTreeRevealRenderedInView(t *testing.T) {
+	m := treeRevealModel(1)
+	if !strings.Contains(ansi.Strip(m.render()), treeLongDir) {
+		t.Fatal("rendered view must composite the tree reveal's full path")
+	}
+}
+
+func TestFilesTreeRevealSuppressedOutsideCutoff(t *testing.T) {
+	m := treeRevealModel(1)
+	m.filesView.mode = modeWrap // the wrapped row is already fully visible
+	if _, _, _, ok := m.tooltip(); ok {
+		t.Fatal("no reveal in wrap mode")
+	}
+}
+
 func TestTooltipHiddenWhenRowFits(t *testing.T) {
 	m := tooltipModel()
 	m.sel[panelWorktrees] = 0 // "* main  /repo" fits comfortably

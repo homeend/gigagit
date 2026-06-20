@@ -17,6 +17,11 @@ var tooltipStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("0")).Backgroun
 // same layout()/panelView/windowRows sources the renderer uses, so the two
 // cannot drift.
 func (m Model) tooltip() (lines []string, x, y int, ok bool) {
+	// The commit files tree is a separate left-column slot (not a panel). When
+	// its side is focused it owns the selection, so reveal its truncated row.
+	if m.filesView != nil && m.filesTreeFocused {
+		return m.filesTreeReveal()
+	}
 	// While the files view's tree side is focused, the commits selection is
 	// not the active row — describing it would be misleading.
 	if !m.panelFocused(m.focus) {
@@ -67,34 +72,83 @@ func (m Model) tooltip() (lines []string, x, y int, ok bool) {
 	if g.w < 1 {
 		return nil, 0, 0, false
 	}
-	// Draw the full text inline, on the selected row's own line — never floating a
-	// strip above it, which covered the panel's top bar when the top row was
-	// selected. The reveal anchors at the panel's content edge and overflows the
-	// panel's right border; but when the row would run off the SCREEN's right edge
-	// (a right-hand panel has little room to its right), it shifts left so the full
-	// text uses the whole screen, spilling over the panels to its left. Only a row
-	// wider than the entire screen is clipped (with …). Single line, never wrapped.
-	x = origin.x + 2 // the panel's content edge
+	line, x := revealLine(content, origin.x+2, innerW, g.w)
+	return []string{line}, x, rowY, true
+}
+
+// revealLine builds the styled inline reveal for a row whose full text is
+// `content`, displayed at column `contentEdge` in a window of inner width
+// `innerW` on a `screenW`-wide screen, and returns the line plus its start
+// column. Shared by the panel reveal and the files-tree reveal so both place
+// identically: draw the full text inline (never a floating strip, which covered
+// the panel's top bar when the top row was selected); fill at least the window's
+// inner width so the selected-row reverse-video highlight beneath never peeks out
+// to its right; overflow the window's right border, and when the row would run
+// off the SCREEN's right edge (a right-hand window has little room to its right)
+// shift left so it spills over whatever sits to its left. Only a row wider than
+// the whole screen is clipped (with …). Single line, never wrapped.
+func revealLine(content string, contentEdge, innerW, screenW int) (line string, x int) {
+	x = contentEdge
 	full := content
-	// The selected row beneath the reveal is drawn in reverse video padded across
-	// the panel's inner width, so a reveal only as wide as a short full-text would
-	// leave that highlight peeking out to its right. Pad the reveal to cover the
-	// whole row (at least the panel's inner width).
 	revealW := lipgloss.Width(full)
 	if revealW < innerW {
 		revealW = innerW
 	}
-	if x+revealW > g.w {
-		x = g.w - revealW // shift left so the reveal's right edge sits at the screen edge
+	if x+revealW > screenW {
+		x = screenW - revealW // shift left so the reveal's right edge sits at the screen edge
 	}
 	if x < 0 {
 		x = 0
-		full = truncate(full, g.w) // wider than the whole screen: clip with …
-		revealW = g.w
+		full = truncate(full, screenW) // wider than the whole screen: clip with …
+		revealW = screenW
 	}
-	lines = []string{tooltipStyle.Render(padRight(full, revealW))}
-	y = rowY
-	return lines, x, y, true
+	return tooltipStyle.Render(padRight(full, revealW)), x
+}
+
+// filesTreeReveal builds the inline reveal for the commit files tree's selected
+// row when it is truncated in the left column. The tree is a separate slot, so
+// its geometry is computed here (mirroring renderFilesView) rather than from the
+// panel layout. Returns ok=false when nothing should be revealed.
+func (m Model) filesTreeReveal() (lines []string, x, y int, ok bool) {
+	p := m.filesView
+	if p == nil {
+		return nil, 0, 0, false
+	}
+	// Reveal only in cutoff mode (wrap shows the row in full; scroll pans to it).
+	if p.mode != modeCutoff {
+		return nil, 0, 0, false
+	}
+	vis := p.visible()
+	if len(vis) == 0 || p.sel < 0 || p.sel >= len(vis) {
+		return nil, 0, 0, false
+	}
+	g := m.layout()
+	if g.w < 1 || g.leftW < 5 {
+		return nil, 0, 0, false
+	}
+	innerW := g.leftW - 4 // mirrors renderFilesView: border (2) + padding (2)
+	content := vis[p.sel].text
+	if !rowTruncated("> "+content, innerW) {
+		return nil, 0, 0, false // the row is shown in full
+	}
+	// Row capacity mirrors renderFilesView: box height − borders (2) − title −
+	// hint, minus one more when the /-search line is showing.
+	rowsCap := g.bodyH - 4
+	if p.searchLine() != "" {
+		rowsCap--
+	}
+	if rowsCap < 1 {
+		rowsCap = 1
+	}
+	selInWin := p.sel - windowStart(len(vis), rowsCap, p.sel)
+	// Screen row: the left column starts at row 1 (header is row 0); inside it the
+	// border + title (+ search line) precede the first data row.
+	rowY := 1 + 2 + selInWin // box top (1) + border + title
+	if p.searchLine() != "" {
+		rowY++
+	}
+	line, x := revealLine(content, 2, innerW, g.w) // left column content edge = 2
+	return []string{line}, x, rowY, true
 }
 
 // wrapWidth greedily wraps s into display-width-aware lines of at most w

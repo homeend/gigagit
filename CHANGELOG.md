@@ -19,6 +19,9 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   out beside it. The old strip covered the panel's title bar whenever the top
   row was selected, which hid the very context it sat in; the inline reveal
   never does.
+- **The commit files tree reveals its truncated rows too.** A long directory
+  heading or file row selected in the files tree (`l`) now reveals its full path
+  inline, the same way the panels do — previously the tree had no reveal at all.
 - **Commits panel — the left column shows the branch, not the commit id.** Each
   commit row leads with the branch it belongs to: **bright** when the commit is
   that branch's tip ("the last commit for a given branch"), **grayed** when the
