@@ -8,6 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/gigagit/gg/internal/commitgraph"
 	"github.com/gigagit/gg/internal/config"
 	"github.com/gigagit/gg/internal/domain"
 	"github.com/gigagit/gg/internal/engine"
@@ -79,6 +80,7 @@ type Model struct {
 	feed                *domain.CommitFeed // single source of truth for commits
 	commitsExhausted    bool               // false → "Commits N+", true → "Commits N"
 	commitScopeBranches []string           // included branches for the feed; empty = all local branches
+	commitGraphRows     []string           // cached single-line graph cells, parallel to commits; empty = none
 	opCancel            context.CancelFunc // cancels the in-flight op's context; nil when idle
 	loadGen             int                // bumped per superseding load; stale dataLoadedMsg are dropped
 
@@ -200,6 +202,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			st := m.feed.Snapshot()
 			m.commits = st.Commits
 			m.commitsExhausted = st.Exhausted
+			m = m.rebuildCommitGraph()
 		}
 		return m, nil
 	case commitsReloadedMsg:
@@ -208,6 +211,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.commits = msg.state.Commits
 		m.commitsExhausted = msg.state.Exhausted
+		m = m.rebuildCommitGraph()
 		if m.sel[panelCommits] >= len(m.commits) {
 			m.sel[panelCommits] = 0
 		}
@@ -304,6 +308,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.remoteBranches = msg.remoteBranches
 			m.commits = msg.commits
 			m.commitsExhausted = msg.commitsExhausted
+			m = m.rebuildCommitGraph()
 			if msg.commitErr != nil {
 				m.statusMsg = "commits: " + msg.commitErr.Error()
 			}
@@ -1168,6 +1173,22 @@ func (m Model) commitScopeLabel() string {
 	default:
 		return fmt.Sprintf("%d branches", len(m.commitScopeBranches))
 	}
+}
+
+// rebuildCommitGraph recomputes the cached single-line graph cells from
+// m.commits. Called whenever m.commits changes (the lane fold needs the whole
+// loaded window, so it can't be a per-render computation).
+func (m Model) rebuildCommitGraph() Model {
+	cs := make([]commitgraph.Commit, len(m.commits))
+	for i, c := range m.commits {
+		cs[i] = commitgraph.Commit{Hash: c.Hash, Parents: c.Parents}
+	}
+	rows, _ := commitgraph.Lay(cs)
+	m.commitGraphRows = make([]string, len(rows))
+	for i, r := range rows {
+		m.commitGraphRows[i] = r.Cells
+	}
+	return m
 }
 
 // maybeLoadMoreCommits returns a cmd to page in more commits when the Commits

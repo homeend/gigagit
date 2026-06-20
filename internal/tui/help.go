@@ -96,7 +96,7 @@ func helpContent() []contentLine {
 		r("enter", "apply when every region is resolved"),
 		r("esc", "cancel (close without resolving)"),
 		h("Commits panel"),
-		r("", "shows commits from ALL local branches by default, in date order, with branch labels (‹*current›‹branch›); header shows the mode — Commits (all) / Commits (solo: <branch>)"),
+		r("", "shows commits from ALL local branches by default, in date order, with branch labels (‹*current›‹branch›) and a single-line commit graph (natural order only; hidden while filtering/sorting); header shows the mode — Commits (all) / Commits (solo: <branch>)"),
 		r("l", "show the selected commit's files in the left column"),
 		r(".", "rename commit / copy commit id / Show all branches when soloed (.-menu)"),
 		r("(scroll)", "more commits load automatically as you near the end"),

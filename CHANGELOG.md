@@ -9,6 +9,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- TUI: the Commits panel now draws a single-line **commit graph** (Unicode
+  rounded box-drawing, monochrome) to the left of each commit — lane layout over
+  the all-branches date-ordered feed, so forks and merges are visible. Shown only
+  in natural feed order; hidden while the Commits panel is filtered (`/`) or
+  re-sorted (`o`), where the topology would be incoherent. Backed by the new pure
+  `internal/commitgraph` engine.
 - TUI: the popup layer now has a stack (`overlayStack`, mirroring the full-screen
   `viewStack`). A child popup opened from the bookmark (`g`) / shelf (`G`)
   switcher — paste, restore, or the remove-confirm — returns to the switcher when
