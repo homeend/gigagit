@@ -69,6 +69,12 @@ guards against removing the worktree you are standing in.
   --continue` (exit 1), `--on-conflict=abort` runs `git revert --abort` (exit 0);
   with neither and no TTY, a conflict exits 1 with the options on stderr.
   Reverting a merge commit is refused (it needs `-m <parent>`, out of scope).
+- `gg reset [--soft|--mixed|--hard] [--force] <commit>` — move the current branch
+  to `<commit>`. `--soft` keeps the changes staged, `--mixed` (the default) keeps
+  them unstaged, `--hard` discards uncommitted tracked changes (untracked files
+  survive; the commits reset past stay recoverable via `git reflog`). If
+  `<commit>` is not on the current branch the reset is refused unless `--force`
+  is given (a non-TTY run lists the options and exits 1).
 - `gg stash [-m <msg>] [-u] [-- <paths>...]` — stash the working tree (or only
   the named paths; `-u` includes untracked files).
 - `gg stash list` — list stashes (`stash@{N}: <subject>`, newest first).

@@ -1,0 +1,23 @@
+name = "reset --soft: branch moves, the change is left staged (exit 0)"
+
+[input]
+steps = [
+  { write = "a.txt", content = "base\n" },
+  { commit = "base" },
+  { write = "b.txt", content = "b\n" },
+  { commit = "add b.txt" },
+]
+
+[[run]]
+cmd  = ["reset", "--soft", "HEAD~1"]
+exit = 0
+
+[expect]
+branch = "main"
+
+[expect.status]
+# soft keeps the index: the undone commit's add stays staged.
+staged = ["b.txt"]
+
+[[expect.log]]
+subjects = ["base"]

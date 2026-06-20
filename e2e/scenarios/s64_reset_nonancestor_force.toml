@@ -1,0 +1,29 @@
+name = "reset --force: a non-ancestor target moves the branch onto it (exit 0)"
+
+[input]
+steps = [
+  { write = "a.txt", content = "base\n" },
+  { commit = "base" },
+  { branch = "side" },
+  { switch = "side" },
+  { write = "s.txt", content = "s\n" },
+  { commit = "side change" },
+  { switch = "main" },
+]
+
+[[run]]
+# --hard so the working tree also moves to side's content (mixed would leave the
+# tree on main, showing s.txt as a staged deletion).
+cmd  = ["reset", "--hard", "--force", "side"]
+exit = 0
+
+[expect]
+branch = "main"
+clean  = true
+
+[expect.files]
+"s.txt" = "s\n"   # main now has side's tree
+
+[[expect.log]]
+# main repointed onto side's tip.
+subjects = ["side change", "base"]
