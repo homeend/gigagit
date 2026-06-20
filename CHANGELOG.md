@@ -56,6 +56,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   drawing, and the jobs it runs — the first of a general mechanism.)
 
 ### Added
+- **Create a tag.** The `.` menu on a commit offers **Create tag here** — a popup
+  takes a name and an optional message (`tab` between fields); an empty message
+  makes a **lightweight** tag, a message makes it **annotated**. Also on the CLI:
+  `gg tag create [-m <msg>] <name> [<commit>]` (commit defaults to HEAD).
 - **Tags (read).** A read-only **Tags** view lives as a tab in the middle (Files)
   window: `ctrl+←/→` switches **Files ⇄ Tags** while that box is focused (the top
   Branches/Remotes/Worktrees slot still cycles when *it* is focused). Each row
