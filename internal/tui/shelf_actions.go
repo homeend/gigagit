@@ -116,17 +116,6 @@ func (m Model) shelfEntryByID(id string) (model.ShelfEntry, bool) {
 	return model.ShelfEntry{}, false
 }
 
-// openShelfCompareTwo diffs two shelved entries by id (the pair-op mark path).
-func (m Model) openShelfCompareTwo(markedID, selectedID string) (Model, tea.Cmd) {
-	a, okA := m.shelfEntryByID(markedID)
-	b, okB := m.shelfEntryByID(selectedID)
-	if !okA || !okB {
-		return m, nil
-	}
-	m.mark = nil // consume the mark
-	return m.openShelfCompareTwoEntries(a, b)
-}
-
 // openShelfCompareTwoEntries diffs entries a (old) and b (new).
 func (m Model) openShelfCompareTwoEntries(a, b model.ShelfEntry) (Model, tea.Cmd) {
 	title := a.Origin.Path
