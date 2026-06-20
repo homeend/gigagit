@@ -39,8 +39,8 @@ func assertOneLine(t *testing.T, rendered, a, b string) {
 func TestRepoPopupNoWrap(t *testing.T) {
 	m := Model{width: 80, height: 30}
 	render := func(path string) string {
-		m.repoPopup = &repoPopup{entries: []repos.Entry{{Path: path, LastOpened: time.Now()}}, now: time.Now()}
-		return m.renderRepoPopup()
+		m = m.pushOverlay(&repoPopup{entries: []repos.Entry{{Path: path, LastOpened: time.Now()}}, now: time.Now()})
+		return overlayOf[*repoPopup](m).box(m)
 	}
 	assertSameHeight(t, "repo body", render("/x"), render(strings.Repeat("z", 300)))
 	assertOneLine(t, render("/x"), "[enter] switch", "[esc]") // the hint stays one line

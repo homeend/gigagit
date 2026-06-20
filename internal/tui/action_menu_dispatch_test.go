@@ -104,7 +104,7 @@ func TestDotInertOverModal(t *testing.T) {
 func TestDotInertOverRepoPopup(t *testing.T) {
 	m := footerModel()
 	m.loading = false
-	m.repoPopup = &repoPopup{}
+	m = m.pushOverlay(&repoPopup{})
 	if pressDot(m).actionMenu != nil {
 		t.Error(". must not open the menu over a popup")
 	}

@@ -60,7 +60,7 @@ func TestActionMenuEscCloses(t *testing.T) {
 
 func TestDotNoOpUnderPopup(t *testing.T) {
 	m := footerModel()
-	m.repoPopup = &repoPopup{} // a popup owns the keyboard
+	m = m.pushOverlay(&repoPopup{}) // a popup owns the keyboard
 	u, _ := m.Update(keyMsg("."))
 	if u.(Model).actionMenu != nil {
 		t.Fatal(". must not open the menu while another popup is open")

@@ -147,7 +147,7 @@ func TestClickIgnoredUnderOverlays(t *testing.T) {
 	overlays := []func(m *Model){
 		func(m *Model) { m.modal = &decisionState{} },
 		func(m *Model) { m.popup = &worktreePopup{} },
-		func(m *Model) { m.repoPopup = &repoPopup{} },
+		func(m *Model) { *m = m.pushOverlay(&repoPopup{}) },
 		func(m *Model) { m.settings = &settingsPopup{} },
 		func(m *Model) { m.branchPopup = &branchPopup{} },
 		func(m *Model) { m.pairPopup = &pairOpPopup{} },

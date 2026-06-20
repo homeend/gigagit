@@ -83,7 +83,7 @@ func TestHelpFooterCoverage(t *testing.T) {
 
 func TestHelpNotOpenedWhileAnotherPopupIsOpen(t *testing.T) {
 	m := Model{width: 80, height: 24}
-	m.repoPopup = &repoPopup{}
+	m = m.pushOverlay(&repoPopup{})
 	u, _ := m.Update(keyMsg("?"))
 	m = u.(Model)
 	if m.contentPopup != nil {

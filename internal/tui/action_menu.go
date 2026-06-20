@@ -366,8 +366,7 @@ func (m Model) updateActionMenuKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// renderActionMenu draws the overlay (composited by render via overlayCenter),
-// mirroring renderRepoPopup.
+// renderActionMenu draws the overlay (composited by render via overlayCenter).
 func (m Model) renderActionMenu() string {
 	a := m.actionMenu
 	w, _ := m.overlayDims()

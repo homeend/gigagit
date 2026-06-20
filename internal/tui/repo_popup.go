@@ -30,16 +30,12 @@ func (m Model) openRepoPopup() (Model, bool) {
 		m.statusMsg = "no known repositories yet (gg records them as you open repos)"
 		return m, false
 	}
-	m.repoPopup = &repoPopup{entries: entries, now: time.Now()}
+	m = m.pushOverlay(&repoPopup{entries: entries, now: time.Now()})
 	return m, true
 }
 
-// popupVisible returns the filtered entries in display order.
-func (m Model) popupVisible() []repos.Entry {
-	p := m.repoPopup
-	if p == nil {
-		return nil
-	}
+// visible returns the filtered entries in display order.
+func (p *repoPopup) visible() []repos.Entry {
 	if p.query == "" {
 		return p.entries
 	}
@@ -54,10 +50,9 @@ func (m Model) popupVisible() []repos.Entry {
 	return out
 }
 
-// updateRepoPopupKey handles all keys while the picker is open. It swallows
+// update handles all keys while the picker is open. It swallows
 // everything (no fallthrough to global handlers).
-func (m Model) updateRepoPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	p := m.repoPopup
+func (p *repoPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	// Display-mode + pan keys take precedence over query typing (z would
 	// otherwise be a literal filter character, matching panels/diff).
 	switch msg.String() {
@@ -82,7 +77,7 @@ func (m Model) updateRepoPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyCtrlC:
 		return m, tea.Quit
 	case tea.KeyEsc:
-		m.repoPopup = nil
+		m = m.popOverlay()
 		return m, nil
 	case tea.KeyUp:
 		if p.sel > 0 {
@@ -90,13 +85,13 @@ func (m Model) updateRepoPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case tea.KeyDown:
-		if p.sel < len(m.popupVisible())-1 {
+		if p.sel < len(p.visible())-1 {
 			p.sel++
 		}
 		return m, nil
 	case tea.KeyEnter:
-		vis := m.popupVisible()
-		m.repoPopup = nil
+		vis := p.visible()
+		m = m.popOverlay()
 		if p.sel < 0 || p.sel >= len(vis) {
 			return m, nil
 		}
@@ -104,9 +99,10 @@ func (m Model) updateRepoPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if samePathTUI(target, m.currentWorktree) {
 			return m, nil // already here
 		}
-		return m.reRoot(target)
+		tm, cmd := m.reRoot(target)
+		return tm.(Model), cmd
 	case tea.KeyCtrlD:
-		vis := m.popupVisible()
+		vis := p.visible()
 		if p.sel < 0 || p.sel >= len(vis) {
 			return m, nil
 		}
@@ -119,7 +115,7 @@ func (m Model) updateRepoPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		p.entries = kept
-		if n := len(m.popupVisible()); p.sel >= n && n > 0 {
+		if n := len(p.visible()); p.sel >= n && n > 0 {
 			p.sel = n - 1
 		}
 		return m, nil
@@ -141,9 +137,14 @@ func (m Model) updateRepoPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// renderRepoPopup draws the picker box (composited by render via overlayCenter).
-func (m Model) renderRepoPopup() string {
-	p := m.repoPopup
+// render composites the picker over the layer beneath.
+func (p *repoPopup) render(m Model, below string) string {
+	w, h := m.overlayDims()
+	return overlayCenter(clipToHeight(below, h), p.box(m), w, h)
+}
+
+// box draws the picker box (modal box only).
+func (p *repoPopup) box(m Model) string {
 	w, _ := m.overlayDims()
 	inner := popupInnerWidth(w)
 	textW := popupTextWidth(inner)
@@ -153,7 +154,7 @@ func (m Model) renderRepoPopup() string {
 		header += "  /" + p.query
 	}
 
-	vis := m.popupVisible()
+	vis := p.visible()
 	var bodyLines []string
 	if len(vis) == 0 {
 		bodyLines = []string{padRight("  (no match)", textW)}

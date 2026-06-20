@@ -112,7 +112,7 @@ func TestTooltipSuppressedByModal(t *testing.T) {
 
 func TestTooltipSuppressedByPopup(t *testing.T) {
 	m := tooltipModel()
-	m.repoPopup = &repoPopup{} // any open popup owns the screen
+	m = m.pushOverlay(&repoPopup{}) // any open popup owns the screen
 	out := ansi.Strip(m.render())
 	if strings.Contains(out, longPath) {
 		t.Fatal("popup view must not contain the tooltip")

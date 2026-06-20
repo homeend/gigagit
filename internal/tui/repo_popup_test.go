@@ -52,16 +52,17 @@ func TestRKeyOpensPopupMRUFirst(t *testing.T) {
 	m, _, otherDir := seededModel(t)
 	u, _ := m.Update(keyMsg("R"))
 	m = u.(Model)
-	if m.repoPopup == nil {
+	p := overlayOf[*repoPopup](m)
+	if p == nil {
 		t.Fatal("R should open the repo popup")
 	}
-	if len(m.repoPopup.entries) != 2 {
-		t.Fatalf("popup entries = %+v", m.repoPopup.entries)
+	if len(p.entries) != 2 {
+		t.Fatalf("popup entries = %+v", p.entries)
 	}
 	resolvedOther, _ := filepath.EvalSymlinks(otherDir)
-	resolvedSecond, _ := filepath.EvalSymlinks(m.repoPopup.entries[1].Path)
+	resolvedSecond, _ := filepath.EvalSymlinks(p.entries[1].Path)
 	if resolvedSecond != resolvedOther {
-		t.Fatalf("second entry = %q, want %q", m.repoPopup.entries[1].Path, otherDir)
+		t.Fatalf("second entry = %q, want %q", p.entries[1].Path, otherDir)
 	}
 }
 
@@ -73,12 +74,13 @@ func TestPopupFilterAndSwitch(t *testing.T) {
 		u, _ = m.Update(keyMsg(string(r)))
 		m = u.(Model)
 	}
-	if got := len(m.popupVisible()); got != 1 {
-		t.Fatalf("filtered visible = %d, want 1 (query %q)", got, m.repoPopup.query)
+	p := overlayOf[*repoPopup](m)
+	if got := len(p.visible()); got != 1 {
+		t.Fatalf("filtered visible = %d, want 1 (query %q)", got, p.query)
 	}
 	u, _ = m.Update(keyMsg("enter"))
 	m = u.(Model)
-	if m.repoPopup != nil {
+	if overlayOf[*repoPopup](m) != nil {
 		t.Fatal("enter should close the popup")
 	}
 	resolvedWant, _ := filepath.EvalSymlinks(otherDir)
@@ -95,7 +97,7 @@ func TestEnterOnCurrentRepoIsNoOp(t *testing.T) {
 	// Selection starts at 0 = MRU head = the current repo.
 	u, _ = m.Update(keyMsg("enter"))
 	m = u.(Model)
-	if m.repoPopup != nil {
+	if overlayOf[*repoPopup](m) != nil {
 		t.Fatal("enter should close the popup")
 	}
 	if m.switchTarget != "" {
@@ -111,8 +113,9 @@ func TestCtrlDRemovesEntry(t *testing.T) {
 	m = u.(Model)
 	u, _ = m.Update(keyMsg("ctrl+d"))
 	m = u.(Model)
-	if len(m.repoPopup.entries) != 1 {
-		t.Fatalf("popup should drop the entry, got %+v", m.repoPopup.entries)
+	p := overlayOf[*repoPopup](m)
+	if len(p.entries) != 1 {
+		t.Fatalf("popup should drop the entry, got %+v", p.entries)
 	}
 	for _, e := range repos.Load(state) {
 		resolvedE, _ := filepath.EvalSymlinks(e.Path)
@@ -132,12 +135,13 @@ func TestPopupEscCancelsAndSwallowsKeys(t *testing.T) {
 	if m.running {
 		t.Fatal("popup leaked a global key")
 	}
-	if m.repoPopup.query != "p" {
-		t.Fatalf("typed key should filter, query = %q", m.repoPopup.query)
+	p := overlayOf[*repoPopup](m)
+	if p.query != "p" {
+		t.Fatalf("typed key should filter, query = %q", p.query)
 	}
 	u, _ = m.Update(keyMsg("esc"))
 	m = u.(Model)
-	if m.repoPopup != nil {
+	if overlayOf[*repoPopup](m) != nil {
 		t.Fatal("esc should close the popup")
 	}
 }
@@ -179,11 +183,12 @@ func TestAgeString(t *testing.T) {
 func TestRepoPopupDoesNotWrapLongPath(t *testing.T) {
 	m := Model{width: 80, height: 24}
 	long := "/very/deeply/nested/path/that/is/way/longer/than/the/popup/box/myrepo"
-	m.repoPopup = &repoPopup{
+	m = m.pushOverlay(&repoPopup{
 		entries: []repos.Entry{{Path: long, LastOpened: time.Now()}},
 		now:     time.Now(),
-	}
-	out := m.renderRepoPopup()
+	})
+	p := overlayOf[*repoPopup](m)
+	out := p.box(m)
 	// No line may exceed the terminal width.
 	for _, line := range strings.Split(out, "\n") {
 		if w := lipgloss.Width(line); w > m.width {
