@@ -88,7 +88,7 @@ func blameFixture() *blameView {
 func TestBlameRenderGutterFirstLineOnly(t *testing.T) {
 	m := Model{width: 100, height: 30}
 	b := blameFixture()
-	out := b.render(m)
+	out := b.render(m, "")
 	if !contains(out, "package main") || !contains(out, "func main()") {
 		t.Errorf("blame render missing source lines:\n%s", out)
 	}
@@ -273,7 +273,7 @@ func TestBlameRenderRowsFullWidthAndSanitized(t *testing.T) {
 		{Hash: "aaaaaaa", Author: "Ada", LineNo: 2, Content: "short"},
 	}
 	b := &blameView{ctx: navContext{path: "a.go"}, lines: lines, blocks: groupBlame(lines)}
-	out := b.render(m)
+	out := b.render(m, "")
 	if strings.Contains(out, "\t") {
 		t.Error("blame content must be tab-sanitized; a raw tab leaked into the output")
 	}
@@ -292,7 +292,7 @@ func TestBlameViewWrapMode(t *testing.T) {
 	}
 	b.blocks = groupBlame(b.lines)
 	m := Model{width: 80, height: 24}
-	out := b.render(m)
+	out := b.render(m, "")
 	if strings.Count(out, "y") < 100 {
 		t.Errorf("blame wrap mode did not expand the long code line:\n%s", out)
 	}
@@ -309,7 +309,7 @@ func TestBlameWrapFreezesGutter(t *testing.T) {
 	}
 	b.blocks = groupBlame(b.lines)
 	m := Model{width: 80, height: 24}
-	out := b.render(m)
+	out := b.render(m, "")
 	if strings.Count(out, "y") < 100 {
 		t.Fatalf("wrap did not expand the long line:\n%s", out)
 	}
@@ -339,7 +339,7 @@ func TestBlameScrollFreezesGutter(t *testing.T) {
 	b.blocks = groupBlame(b.lines)
 	m := Model{width: 80, height: 24}
 	b.hscroll = 40 // pan the content well to the right
-	out := b.render(m)
+	out := b.render(m, "")
 	if !strings.Contains(out, "Zoe") {
 		t.Errorf("scroll mode must keep the gutter author fixed while panning content:\n%s", out)
 	}

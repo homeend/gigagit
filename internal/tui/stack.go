@@ -6,7 +6,7 @@ import tea "github.com/charmbracelet/bubbletea"
 // of the stack owns keyboard input and the whole screen; popping it reveals the
 // surface beneath (or the panel interface), whose state was never torn down.
 type surface interface {
-	render(m Model) string
+	render(m Model, below string) string
 	update(m Model, msg tea.KeyMsg) (Model, tea.Cmd)
 }
 

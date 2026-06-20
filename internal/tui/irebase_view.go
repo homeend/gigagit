@@ -122,7 +122,7 @@ func (e *irebaseEditor) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	return m, nil
 }
 
-func (e *irebaseEditor) render(m Model) string {
+func (e *irebaseEditor) render(m Model, _ string) string {
 	w, h := m.width, m.height
 	if w <= 0 {
 		w = 80

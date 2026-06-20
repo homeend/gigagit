@@ -115,7 +115,7 @@ func (m Model) historyBodyRows() int {
 	return n
 }
 
-func (h *historyView) render(m Model) string {
+func (h *historyView) render(m Model, _ string) string {
 	w, scrH := m.overlayDims()
 	body := m.historyBodyRows()
 

@@ -272,7 +272,7 @@ func pickerCell(blk *hunkpick.Block, side hunkpick.Side, r int, cursor bool) *wi
 	return c
 }
 
-func (e *hunkPicker) render(m Model) string {
+func (e *hunkPicker) render(m Model, _ string) string {
 	w, H := m.overlayDims()
 
 	header := fmt.Sprintf("%s    %d hunks", e.title, len(e.blocks))

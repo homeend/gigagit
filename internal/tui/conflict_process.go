@@ -202,7 +202,7 @@ func (p *conflictProcess) render(m Model, below string) string {
 		return overlayCenter(bg, conflictListBox(m, p.files, p.sel, p.src, p.inProgress, p.mode, p.hscroll), w, h)
 	case confPicking:
 		if p.picker != nil {
-			return p.picker.render(m) // the line editor owns the full screen
+			return p.picker.render(m, below) // the line editor owns the full screen
 		}
 		return below
 	case confWorking:

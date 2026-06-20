@@ -76,7 +76,7 @@ func TestConflictPickerEnterGateAndApply(t *testing.T) {
 func TestConflictPickerRendersMarkers(t *testing.T) {
 	e := newConflictPicker("f.txt", pickerDoc())
 	m := Model{stack: &viewStack{entries: []surface{e}}, width: 80, height: 24}
-	out := e.render(m)
+	out := e.render(m, "")
 	if out == "" {
 		t.Fatal("render produced nothing")
 	}
@@ -88,7 +88,7 @@ func TestConflictPickerRendersMarkers(t *testing.T) {
 func TestConflictPickerShowsColumnLabels(t *testing.T) {
 	e := newConflictPicker("f.txt", pickerDoc())
 	m := Model{stack: &viewStack{entries: []surface{e}}, width: 80, height: 24}
-	out := e.render(m)
+	out := e.render(m, "")
 	var found bool
 	for _, ln := range strings.Split(out, "\n") {
 		if strings.Contains(ln, "current") && strings.Contains(ln, "incoming") && strings.Contains(ln, "║") {
@@ -106,12 +106,12 @@ func TestConflictPickerActiveSideMarked(t *testing.T) {
 	e := newConflictPicker("f.txt", pickerDoc())
 	m := Model{stack: &viewStack{entries: []surface{e}}, width: 80, height: 24}
 	// Current side is active by default → its label carries the focus marker.
-	if !strings.Contains(e.render(m), "▶ current") {
-		t.Fatalf("current side not marked active:\n%s", e.render(m))
+	if !strings.Contains(e.render(m, ""), "▶ current") {
+		t.Fatalf("current side not marked active:\n%s", e.render(m, ""))
 	}
 	m, _ = e.update(m, keyMsg("right")) // → incoming
-	if !strings.Contains(e.render(m), "▶ incoming") {
-		t.Fatalf("incoming side not marked active after →:\n%s", e.render(m))
+	if !strings.Contains(e.render(m, ""), "▶ incoming") {
+		t.Fatalf("incoming side not marked active after →:\n%s", e.render(m, ""))
 	}
 }
 
@@ -120,7 +120,7 @@ func TestConflictPickerActiveSideMarked(t *testing.T) {
 func TestConflictPickerHintWrapsNotTruncated(t *testing.T) {
 	e := newConflictPicker("f.txt", pickerDoc())
 	m := Model{stack: &viewStack{entries: []surface{e}}, width: 40, height: 24}
-	out := e.render(m)
+	out := e.render(m, "")
 	for _, tok := range []string{"[c] current", "[i] incoming", "[enter] apply", "[esc] cancel"} {
 		if !strings.Contains(out, tok) {
 			t.Fatalf("hint token %q missing (truncated?):\n%s", tok, out)
@@ -237,7 +237,7 @@ func TestHunkPickerShiftPansOnlyInScroll(t *testing.T) {
 func TestHunkPickerRenderFitsHeight(t *testing.T) {
 	e := newConflictPicker("f.txt", pickerDoc())
 	m := Model{stack: &viewStack{entries: []surface{e}}, width: 80, height: 12}
-	out := e.render(m)
+	out := e.render(m, "")
 	if got := len(splitLinesTest(out)); got != 12 {
 		t.Fatalf("render produced %d lines, want 12 (the overlay height)", got)
 	}

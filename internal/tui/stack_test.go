@@ -9,7 +9,7 @@ import (
 // fakeSurface records whether it owned the last update.
 type fakeSurface struct{ updated bool }
 
-func (s *fakeSurface) render(m Model) string { return "FAKE" }
+func (s *fakeSurface) render(m Model, _ string) string { return "FAKE" }
 func (s *fakeSurface) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	s.updated = true
 	return m, nil

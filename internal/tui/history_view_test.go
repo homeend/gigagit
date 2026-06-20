@@ -22,7 +22,7 @@ func histFixture() *historyView {
 func TestHistoryRenderListsCommits(t *testing.T) {
 	m := Model{width: 100, height: 30}
 	h := histFixture()
-	out := h.render(m)
+	out := h.render(m, "")
 	if !strings.Contains(out, "edit") || !strings.Contains(out, "add") {
 		t.Errorf("history render missing commit subjects:\n%s", out)
 	}
@@ -158,7 +158,7 @@ func TestHistoryViewWrapMode(t *testing.T) {
 		mode:    modeWrap,
 	}
 	m := Model{width: 50, height: 20} // < 60 => list-only, easier to assert
-	out := h.render(m)
+	out := h.render(m, "")
 	if strings.Count(out, "w") < 30 {
 		t.Errorf("history wrap mode did not expand the subject:\n%s", out)
 	}

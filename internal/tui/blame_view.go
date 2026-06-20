@@ -114,7 +114,7 @@ func (m Model) blameBodyRows() int {
 	return n
 }
 
-func (b *blameView) render(m Model) string {
+func (b *blameView) render(m Model, _ string) string {
 	w, scrH := m.overlayDims()
 	body := m.blameBodyRows()
 

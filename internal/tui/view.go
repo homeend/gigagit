@@ -118,7 +118,7 @@ func clipToHeight(s string, h int) string {
 // stash list).
 func (m Model) menuBackground() string {
 	if s := m.stackTop(); s != nil {
-		return s.render(m)
+		return s.render(m, m.renderInterface())
 	}
 	if m.diffView != nil {
 		return m.renderDiffView()
@@ -161,7 +161,7 @@ func (m Model) render() string {
 	}
 	if s := m.stackTop(); s != nil {
 		_, h := m.overlayDims()
-		return clipToHeight(s.render(m), h)
+		return clipToHeight(s.render(m, m.renderInterface()), h)
 	}
 	// Routing invariant: the diff view comes immediately after the modal —
 	// here and in Update's key and mouse arms.
