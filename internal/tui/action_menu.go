@@ -126,6 +126,9 @@ func availableActions(m Model) []actionRow {
 	if r, ok := m.commitViewModeRow(); ok {
 		out = append(out, r)
 	}
+	if r, ok := m.tagDeleteRow(); ok {
+		out = append(out, r)
+	}
 	return out
 }
 
