@@ -95,6 +95,7 @@ gg checkout <remote>/<branch> [-s]   # local tracking branch from a remote ref (
 gg remote ls | fetch | prune         # list remote branches / fetch all / prune deleted
 gg tag ls                            # list tags (newest first)
 gg tag create [-m <msg>] <name> [<commit>]  # create a tag (annotated with -m, else lightweight)
+gg tag rm <name>                     # delete a tag (alias: delete)
 gg branch create <name> [<start-point>]
 gg branch rename <old> <new>
 gg branch delete [--force] <name>
