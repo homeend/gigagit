@@ -694,15 +694,28 @@ func fileGlyph(p panel, f model.FileStatus) byte {
 }
 
 func (m Model) commitRows() []string {
+	graph := m.commitGraphOn() && len(m.commitGraphRows) == len(m.commits)
 	out := make([]string, 0, len(m.commits))
-	for _, c := range m.commits {
+	for i, c := range m.commits {
 		h := c.Hash
 		if len(h) > 7 {
 			h = h[:7]
 		}
-		out = append(out, h+" "+commitRefLabels(c.Refs)+c.Subject)
+		row := h + " " + commitRefLabels(c.Refs) + c.Subject
+		if graph {
+			row = m.commitGraphRows[i] + " " + row
+		}
+		out = append(out, row)
 	}
 	return out
+}
+
+// commitGraphOn reports whether the graph is coherent to draw: the Commits panel
+// must be in natural feed order (no filter, default sort) so rows are contiguous
+// and the lane topology stays valid (and the glyphs stay out of the filter
+// haystack).
+func (m Model) commitGraphOn() bool {
+	return !m.filterActive(panelCommits) && m.sortModes[panelCommits] == sortDefault
 }
 
 // commitRefLabels renders local-branch pills as a "‹*head›‹branch› " prefix, the
