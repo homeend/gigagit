@@ -87,8 +87,8 @@ func TestShelfPopupCAgainstBookmark(t *testing.T) {
 	m := shelfPopModel(shEntry("a", "x.go"))
 	mm, cmd := m.Update(keyMsg("c"))
 	m = mm.(Model)
-	if m.shelfSwitcher() != nil {
-		t.Fatalf("c should close the shelf popup")
+	if m.shelfSwitcher() == nil {
+		t.Fatalf("c should keep the shelf switcher on the stack (the bookmark picker stacks on top)")
 	}
 	if m.pendingCompare == nil || m.pendingCompare.target != compareBookmark {
 		t.Fatalf("c should set a bookmark-targeted pendingCompare, got %+v", m.pendingCompare)

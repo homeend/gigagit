@@ -126,6 +126,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   elsewhere still `SmartSwitch` as before.
 
 ### Fixed
+- TUI: cross-store **compare** now stacks instead of vanishing. Pressing `c` in
+  the bookmark switcher (compare against a shelf entry) — or `c` in the shelf
+  switcher (compare against a bookmark) — opens the other switcher *on top of*
+  the first, so `esc` in it returns you to the switcher you started from. It
+  used to close the originating switcher before opening the picker, dropping you
+  to nothing on `esc`.
 - TUI: in the commit files view, `/` now searches the **focused** column. With
   the commit list focused it filters the commits (it used to always filter the
   file tree, regardless of focus); with the tree focused it filters the files as

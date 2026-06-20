@@ -258,7 +258,8 @@ func (p *bookmarkPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			if !ok {
 				return m, nil
 			}
-			m = m.popOverlay()
+			// Keep this switcher on the stack: the shelf picker is pushed on top so
+			// esc in it returns here (the diff on a pick clears both via openPickerDiff).
 			m.pendingCompare = &pendingCompare{ref: bookmarkToFileRef(b), label: bookmarkDisplay(b), target: compareShelf}
 			return m, m.loadShelfCmd(true)
 		}
