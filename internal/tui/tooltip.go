@@ -76,15 +76,23 @@ func (m Model) tooltip() (lines []string, x, y int, ok bool) {
 	// wider than the entire screen is clipped (with …). Single line, never wrapped.
 	x = origin.x + 2 // the panel's content edge
 	full := content
-	width := lipgloss.Width(full)
-	if x+width > g.w {
-		x = g.w - width // shift left so the right edge sits at the screen edge
+	// The selected row beneath the reveal is drawn in reverse video padded across
+	// the panel's inner width, so a reveal only as wide as a short full-text would
+	// leave that highlight peeking out to its right. Pad the reveal to cover the
+	// whole row (at least the panel's inner width).
+	revealW := lipgloss.Width(full)
+	if revealW < innerW {
+		revealW = innerW
+	}
+	if x+revealW > g.w {
+		x = g.w - revealW // shift left so the reveal's right edge sits at the screen edge
 	}
 	if x < 0 {
 		x = 0
 		full = truncate(full, g.w) // wider than the whole screen: clip with …
+		revealW = g.w
 	}
-	lines = []string{tooltipStyle.Render(full)}
+	lines = []string{tooltipStyle.Render(padRight(full, revealW))}
 	y = rowY
 	return lines, x, y, true
 }

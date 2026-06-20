@@ -103,6 +103,33 @@ func TestTooltipRevealsTrimmedBranchName(t *testing.T) {
 	}
 }
 
+// The selected row under the reveal is drawn in reverse video padded across the
+// panel's inner width. A reveal only as wide as a short full-text would leave
+// that highlight peeking out to its right (two backgrounds on one line). The
+// reveal must be padded to cover the whole row — at least the panel inner width.
+func TestTooltipFillsSelectedRowHighlight(t *testing.T) {
+	m := footerModel() // width 120; Commits is the right panel
+	m.focus = panelCommits
+	if m.sel == nil {
+		m.sel = map[panel]int{}
+	}
+	// Trimmed-branch reveal whose full text is shorter than the panel's row width.
+	m.commits = []model.Commit{{Hash: "abcdef0", Subject: "added tzName to item metadata",
+		Refs: []model.Ref{{Name: "features/new-data-source-v2", Kind: model.RefLocal}}}}
+	m.sel[panelCommits] = 0
+
+	lines, _, _, ok := m.tooltip()
+	if !ok {
+		t.Fatal("want a tooltip")
+	}
+	g := m.layout()
+	innerW := g.rightW - 4 // mirrors renderPanel: border (2) + padding (2)
+	if w := ansi.StringWidth(lines[0]); w < innerW {
+		t.Errorf("reveal is %d cols, must fill at least the panel inner width %d so the "+
+			"selected-row highlight does not peek out", w, innerW)
+	}
+}
+
 // A right-hand panel (Commits) has little room to its right, so a row wider than
 // that room — but narrower than the whole screen — must overflow LEFT, over the
 // panels to its left, and still show its full text (not clip at the screen's
