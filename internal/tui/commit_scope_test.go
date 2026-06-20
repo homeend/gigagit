@@ -102,6 +102,53 @@ func TestCommitSoloReloadEndToEnd(t *testing.T) {
 	}
 }
 
+func TestCommitToggleAddsBranch(t *testing.T) {
+	m := branchesPanelModel("feat", "main")
+	r, ok := findRow(availableActions(m), "commits-toggle")
+	if !ok {
+		t.Fatalf("toggle action missing on Branches panel")
+	}
+	if r.label != "Add to commit view" {
+		t.Fatalf("label for unselected branch = %q, want Add to commit view", r.label)
+	}
+	mm, _ := r.run(m)
+	m = mm.(Model)
+	if len(m.commitScopeBranches) != 1 || m.commitScopeBranches[0] != "feat" {
+		t.Fatalf("toggle-add should scope to [feat], got %v", m.commitScopeBranches)
+	}
+}
+
+func TestCommitToggleRemovesBranch(t *testing.T) {
+	m := branchesPanelModel("feat", "main")
+	m.commitScopeBranches = []string{"feat", "main"}
+	r, ok := findRow(availableActions(m), "commits-toggle")
+	if !ok {
+		t.Fatalf("toggle action missing")
+	}
+	if r.label != "Remove from commit view" {
+		t.Fatalf("label for selected branch = %q, want Remove from commit view", r.label)
+	}
+	mm, _ := r.run(m)
+	m = mm.(Model)
+	if len(m.commitScopeBranches) != 1 || m.commitScopeBranches[0] != "main" {
+		t.Fatalf("toggle-remove should leave [main], got %v", m.commitScopeBranches)
+	}
+}
+
+func TestCommitToggleRemoveLastReturnsToAll(t *testing.T) {
+	m := branchesPanelModel("feat")
+	m.commitScopeBranches = []string{"feat"}
+	r, _ := findRow(availableActions(m), "commits-toggle")
+	mm, _ := r.run(m)
+	m = mm.(Model)
+	if len(m.commitScopeBranches) != 0 {
+		t.Fatalf("removing the last branch should clear scope, got %v", m.commitScopeBranches)
+	}
+	if m.commitScopeLabel() != "all" {
+		t.Fatalf("empty scope label = %q, want all", m.commitScopeLabel())
+	}
+}
+
 func TestCommitScopeLabel(t *testing.T) {
 	m := footerModel()
 	if m.commitScopeLabel() != "all" {
