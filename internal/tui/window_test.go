@@ -84,7 +84,10 @@ func TestRenderWindowAnchorVisible(t *testing.T) {
 }
 
 func TestRenderWindowDecorateReceivesGeometryAndPreservesWidth(t *testing.T) {
-	var got []struct{ hs, vl int; w int }
+	var got []struct {
+		hs, vl int
+		w      int
+	}
 	deco := func(visible string, hscroll, visualLine int) string {
 		got = append(got, struct{ hs, vl, w int }{hscroll, visualLine, lipgloss.Width(visible)})
 		return visible // identity: must not change visible width
