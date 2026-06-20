@@ -458,3 +458,37 @@ func TestPopupCreateAndSwitchEndToEnd(t *testing.T) {
 		t.Fatalf("created worktree not at switchTarget %q: %v", m.switchTarget, err)
 	}
 }
+
+// TestWorktreeFromCommitCreateOpUsesTypedBranch proves the end-to-end payload:
+// after the user types a branch name in commit mode, createOp emits a
+// CreateWorktree based at the commit with the TYPED (not templated) branch.
+func TestWorktreeFromCommitCreateOpUsesTypedBranch(t *testing.T) {
+	var m Model
+	full := "cccccccccccccccccccccccccccccccccccccccc"
+	p := &worktreePopup{
+		startPoint: full,
+		fromCommit: true,
+		branchTmpl: "b/from-<parent-branch>", // must be bypassed by the typed name
+		pathTmpl:   "../<repo>.worktrees/<branch>",
+		repoName:   "myrepo",
+		inputs:     map[string]string{},
+		state:      stEdit,
+	}
+	for _, ch := range "feat-x" {
+		p.update(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{ch}})
+	}
+	p.update(m, tea.KeyMsg{Type: tea.KeyEnter}) // confirm: stEdit → stAction
+	op, ok := p.createOp().(engine.CreateWorktree)
+	if !ok {
+		t.Fatalf("op = %T, want engine.CreateWorktree", p.createOp())
+	}
+	if op.StartPoint != full {
+		t.Fatalf("StartPoint = %q, want the full commit hash", op.StartPoint)
+	}
+	if op.Branch != "feat-x" {
+		t.Fatalf("Branch = %q, want the typed name 'feat-x' (template bypassed)", op.Branch)
+	}
+	if op.Path != "../myrepo.worktrees/feat-x" {
+		t.Fatalf("Path = %q, want it resolved from the typed branch", op.Path)
+	}
+}

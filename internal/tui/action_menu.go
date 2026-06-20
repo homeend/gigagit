@@ -90,6 +90,9 @@ func availableActions(m Model) []actionRow {
 	if r, ok := m.commitCreateBranchRow(); ok {
 		out = append(out, r)
 	}
+	if r, ok := m.commitCreateWorktreeRow(); ok {
+		out = append(out, r)
+	}
 	if r, ok := m.commitSoloRow(); ok {
 		out = append(out, r)
 	}

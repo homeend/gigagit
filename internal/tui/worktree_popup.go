@@ -25,8 +25,9 @@ const (
 // sources are fixed at open (seed/now) so the preview is stable across keystrokes
 // and the created branch matches what was shown.
 type worktreePopup struct {
-	startPoint string // selected branch = <parent-branch>
+	startPoint string // selected branch = <parent-branch>; a commit SHA in fromCommit mode
 	existing   bool   // checkout the startPoint branch itself; no new branch
+	fromCommit bool   // start point is a commit; the branch name is user-typed (no template)
 	branchTmpl string
 	pathTmpl   string
 	repoName   string
@@ -131,6 +132,38 @@ func (m Model) openWorktreePopup(existing bool) (Model, bool) {
 	return m, true
 }
 
+// openWorktreeFromCommit opens the create-worktree dialog based at a commit. The
+// new branch name is NOT templated — the popup starts in branch-edit mode with an
+// empty buffer so the user types it; create is refused until they do. The path
+// still resolves (from the typed branch). engine.CreateWorktree creates the branch
+// at the commit and the worktree in one step.
+func (m Model) openWorktreeFromCommit(hash string) Model {
+	bt := m.cfg.Worktree.DefaultBranchTemplate
+	pt := m.cfg.Worktree.PathTemplate
+	tm := worktree.Templates{Branch: bt, Path: pt}
+	labels := tm.Labels()
+	seqNames := tm.SeqNames()
+	p := &worktreePopup{
+		startPoint: hash,
+		fromCommit: true,
+		branchTmpl: bt,
+		pathTmpl:   pt,
+		repoName:   worktree.RepoName(m.currentWorktree),
+		labels:     labels,
+		inputs:     map[string]string{},
+		seqNames:   seqNames,
+		seqs:       worktree.PeekSeqs(m.gitCommonDir, seqNames),
+		seed:       rand.Uint64(),
+		now:        time.Now(),
+		state:      stEdit, // user types the branch name immediately (empty editBuf)
+	}
+	for _, l := range labels {
+		p.inputs[l] = ""
+	}
+	p.recompute()
+	return m.pushOverlay(p)
+}
+
 // update handles one key while the popup is open.
 func (p *worktreePopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	// ctrl+c always quits, even from inside the popup, so a user can never be
@@ -216,7 +249,7 @@ func (p *worktreePopup) render(m Model, below string) string {
 // state-specific key hints).
 func (p *worktreePopup) box(m Model) string {
 	var b strings.Builder
-	title := "Create worktree from " + p.startPoint
+	title := "Create worktree from " + displayStart(p.startPoint)
 	if p.existing {
 		title = "Create worktree for " + p.startPoint
 	}
@@ -269,6 +302,10 @@ func (p *worktreePopup) box(m Model) string {
 // closes the popup, and records which <seq> counters to bump on success. A
 // preview error refuses to launch.
 func (m Model) startCreateFromPopup(p *worktreePopup, switchAfter bool) (Model, tea.Cmd) {
+	if p.fromCommit && strings.TrimSpace(p.branchOverride) == "" {
+		m.statusMsg = "branch name required"
+		return m, nil
+	}
 	if p.previewErr != nil {
 		m.statusMsg = "cannot create: " + p.previewErr.Error()
 		return m, nil

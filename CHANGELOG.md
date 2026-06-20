@@ -30,6 +30,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   drawing, and the jobs it runs — the first of a general mechanism.)
 
 ### Added
+- **Create a worktree from a commit.** The `.` menu on a commit offers **Create
+  worktree here** — opens the create-worktree dialog based at that commit; you
+  type the new branch name (it is not templated) and a worktree is created on that
+  branch rooted at the commit.
 - **Create a branch from a commit.** The `.` menu on a commit offers **Create
   branch here** — opens the create-branch dialog with the selected commit as the
   start point. (`gg branch create <name> <start-point>` already does this on the

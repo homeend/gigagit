@@ -170,6 +170,27 @@ func (m Model) commitCreateBranchRow() (actionRow, bool) {
 	}, true
 }
 
+// commitCreateWorktreeRow offers "Create worktree here" on the Commits panel:
+// open the create-worktree dialog based at the selected commit, with a user-typed
+// (non-templated) branch name.
+func (m Model) commitCreateWorktreeRow() (actionRow, bool) {
+	if m.focus != panelCommits || !m.opsIdle() {
+		return actionRow{}, false
+	}
+	bi, ok := m.backingIndex(panelCommits)
+	if !ok {
+		return actionRow{}, false
+	}
+	hash := m.commits[bi].Hash
+	return actionRow{
+		id:    "commit-create-worktree",
+		label: "Create worktree here",
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			return m.openWorktreeFromCommit(hash), nil
+		},
+	}, true
+}
+
 // commitHasLocalRef reports whether commit c is decorated with a local branch ref
 // named name (ignoring remote/tag kinds and the Head flag). A branch ref
 // decorates only its tip, so this identifies the branch's tip commit.
