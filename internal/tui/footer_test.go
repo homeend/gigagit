@@ -362,7 +362,7 @@ func TestSwitchAndWorktreeKeysWorkFromAnyPanel(t *testing.T) {
 	m.sel[panelBranches] = 1
 	m.focus = panelCommits
 	u, _ = m.Update(keyMsg("w"))
-	if u.(Model).popup == nil {
+	if overlayOf[*worktreePopup](u.(Model)) == nil {
 		t.Error("w must open the worktree popup from any panel")
 	}
 }

@@ -23,22 +23,23 @@ func TestWOpensExistingModePopup(t *testing.T) {
 	m := modelWithConfig(t, "b/from-<parent-branch>", "../<repo>.worktrees/<branch>")
 	updated, _ := m.Update(keyMsg("w"))
 	mm := updated.(Model)
-	if mm.popup == nil {
+	p := overlayOf[*worktreePopup](mm)
+	if p == nil {
 		t.Fatal("w should open the worktree popup")
 	}
-	if !mm.popup.existing {
+	if !p.existing {
 		t.Fatal("w must open the popup in existing-branch mode")
 	}
 	// The branch is fixed to the selection — not resolved from the template.
-	if mm.popup.previewBranch != mm.popup.startPoint {
-		t.Fatalf("previewBranch = %q, want the fixed selection %q", mm.popup.previewBranch, mm.popup.startPoint)
+	if p.previewBranch != p.startPoint {
+		t.Fatalf("previewBranch = %q, want the fixed selection %q", p.previewBranch, p.startPoint)
 	}
-	if strings.HasPrefix(mm.popup.previewBranch, "b/from-") {
+	if strings.HasPrefix(p.previewBranch, "b/from-") {
 		t.Fatal("existing mode must not run the branch template")
 	}
 	// Path resolves with <branch> = the fixed branch.
-	if !strings.Contains(mm.popup.previewPath, mm.popup.startPoint) {
-		t.Fatalf("previewPath = %q, want it to contain %q", mm.popup.previewPath, mm.popup.startPoint)
+	if !strings.Contains(p.previewPath, p.startPoint) {
+		t.Fatalf("previewPath = %q, want it to contain %q", p.previewPath, p.startPoint)
 	}
 }
 
@@ -48,11 +49,12 @@ func TestExistingModeIgnoresBranchTemplateUserFields(t *testing.T) {
 	m := modelWithConfig(t, "<user:who>/x", "wt/<branch>")
 	updated, _ := m.Update(keyMsg("w"))
 	mm := updated.(Model)
-	if len(mm.popup.labels) != 0 {
-		t.Fatalf("labels = %v, want none (branch template bypassed, path has no fields)", mm.popup.labels)
+	p := overlayOf[*worktreePopup](mm)
+	if len(p.labels) != 0 {
+		t.Fatalf("labels = %v, want none (branch template bypassed, path has no fields)", p.labels)
 	}
-	if mm.popup.state != stAction {
-		t.Fatalf("state = %v, want stAction with no fields", mm.popup.state)
+	if p.state != stAction {
+		t.Fatalf("state = %v, want stAction with no fields", p.state)
 	}
 }
 
@@ -62,7 +64,7 @@ func TestExistingModeEditKeyInert(t *testing.T) {
 	m = updated.(Model)
 	updated, _ = m.Update(keyMsg("e"))
 	m = updated.(Model)
-	if m.popup.state == stEdit {
+	if overlayOf[*worktreePopup](m).state == stEdit {
 		t.Fatal("e must be inert in existing mode — the branch is the point")
 	}
 }
@@ -72,15 +74,16 @@ func TestExistingModeCreateOpAndSeqs(t *testing.T) {
 	updated, _ := m.Update(keyMsg("w"))
 	m = updated.(Model)
 
-	op, ok := m.popup.createOp().(engine.CreateWorktreeForBranch)
+	p := overlayOf[*worktreePopup](m)
+	op, ok := p.createOp().(engine.CreateWorktreeForBranch)
 	if !ok {
-		t.Fatalf("createOp = %T, want engine.CreateWorktreeForBranch", m.popup.createOp())
+		t.Fatalf("createOp = %T, want engine.CreateWorktreeForBranch", p.createOp())
 	}
-	if op.Branch != m.popup.startPoint || op.Path != m.popup.previewPath {
-		t.Fatalf("op {%q,%q} != {%q,%q}", op.Branch, op.Path, m.popup.startPoint, m.popup.previewPath)
+	if op.Branch != p.startPoint || op.Path != p.previewPath {
+		t.Fatalf("op {%q,%q} != {%q,%q}", op.Branch, op.Path, p.startPoint, p.previewPath)
 	}
 	// Only the PATH template's <seq> names are consumed in existing mode.
-	if got := m.popup.consumedSeqNames(); len(got) != 1 || got[0] != "wt" {
+	if got := p.consumedSeqNames(); len(got) != 1 || got[0] != "wt" {
 		t.Fatalf("consumedSeqNames = %v, want [wt]", got)
 	}
 }
@@ -103,10 +106,11 @@ func TestExistingModeEndToEnd(t *testing.T) {
 
 	updated, _ := m.Update(keyMsg("w"))
 	m = updated.(Model)
-	if m.popup == nil || !m.popup.existing || m.popup.startPoint != "feature/have" {
-		t.Fatalf("popup not in existing mode for feature/have: %+v", m.popup)
+	p := overlayOf[*worktreePopup](m)
+	if p == nil || !p.existing || p.startPoint != "feature/have" {
+		t.Fatalf("popup not in existing mode for feature/have: %+v", p)
 	}
-	wantPath := m.popup.previewPath           // capture before the popup closes
+	wantPath := p.previewPath                 // capture before the popup closes
 	updated, cmd := m.Update(keyMsg("enter")) // create
 	m = updated.(Model)
 	m = driveOp(t, m, cmd)

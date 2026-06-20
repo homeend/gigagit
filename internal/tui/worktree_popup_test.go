@@ -30,16 +30,17 @@ func TestOpenNewBranchPopupOnShiftW(t *testing.T) {
 	m := modelWithConfig(t, "b/from-<parent-branch>", "../<repo>.worktrees/<branch>")
 	updated, _ := m.Update(keyMsg("W"))
 	mm := updated.(Model)
-	if mm.popup == nil {
+	p := overlayOf[*worktreePopup](mm)
+	if p == nil {
 		t.Fatal("pressing w should open the worktree popup")
 	}
-	if mm.popup.startPoint == "" {
+	if p.startPoint == "" {
 		t.Error("popup startPoint (selected branch) should be set")
 	}
-	if mm.popup.state != stAction {
-		t.Errorf("state = %v, want stAction when no user fields", mm.popup.state)
+	if p.state != stAction {
+		t.Errorf("state = %v, want stAction when no user fields", p.state)
 	}
-	if mm.popup.previewBranch == "" {
+	if p.previewBranch == "" {
 		t.Error("preview should be computed on open")
 	}
 }
@@ -53,7 +54,7 @@ func TestPopupSwallowsGlobalKeys(t *testing.T) {
 	if m.running {
 		t.Error("global keys must not fire while the popup is open")
 	}
-	if m.popup == nil {
+	if overlayOf[*worktreePopup](m) == nil {
 		t.Error("popup should still be open after an inert key")
 	}
 }
@@ -63,7 +64,7 @@ func TestPopupEscCancels(t *testing.T) {
 	updated, _ := m.Update(keyMsg("W"))
 	m = updated.(Model)
 	updated, _ = m.Update(keyMsg("esc"))
-	if updated.(Model).popup != nil {
+	if overlayOf[*worktreePopup](updated.(Model)) != nil {
 		t.Error("esc should cancel the popup")
 	}
 }
@@ -72,31 +73,32 @@ func TestPopupInputFieldsAndPreview(t *testing.T) {
 	m := modelWithConfig(t, "<user:user>/fix/<user:issue>", "wt/<branch>")
 	updated, _ := m.Update(keyMsg("W"))
 	m = updated.(Model)
-	if m.popup.state != stInput {
-		t.Fatalf("state = %v, want stInput with user fields", m.popup.state)
+	p := overlayOf[*worktreePopup](m)
+	if p.state != stInput {
+		t.Fatalf("state = %v, want stInput with user fields", p.state)
 	}
-	if len(m.popup.labels) != 2 || m.popup.labels[0] != "user" || m.popup.labels[1] != "issue" {
-		t.Fatalf("labels = %v, want [user issue]", m.popup.labels)
+	if len(p.labels) != 2 || p.labels[0] != "user" || p.labels[1] != "issue" {
+		t.Fatalf("labels = %v, want [user issue]", p.labels)
 	}
 
 	for _, ch := range []string{"a", "l", "i", "c", "e"} {
 		updated, _ = m.Update(keyMsg(ch))
 		m = updated.(Model)
 	}
-	if m.popup.inputs["user"] != "alice" {
-		t.Fatalf("first field = %q, want alice", m.popup.inputs["user"])
+	if overlayOf[*worktreePopup](m).inputs["user"] != "alice" {
+		t.Fatalf("first field = %q, want alice", overlayOf[*worktreePopup](m).inputs["user"])
 	}
 
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
 	m = updated.(Model)
-	if m.popup.inputs["user"] != "alic" {
-		t.Fatalf("after backspace = %q, want alic", m.popup.inputs["user"])
+	if overlayOf[*worktreePopup](m).inputs["user"] != "alic" {
+		t.Fatalf("after backspace = %q, want alic", overlayOf[*worktreePopup](m).inputs["user"])
 	}
 
 	updated, _ = m.Update(keyMsg("tab"))
 	m = updated.(Model)
-	if m.popup.fieldIdx != 1 {
-		t.Fatalf("fieldIdx = %d, want 1 after tab", m.popup.fieldIdx)
+	if overlayOf[*worktreePopup](m).fieldIdx != 1 {
+		t.Fatalf("fieldIdx = %d, want 1 after tab", overlayOf[*worktreePopup](m).fieldIdx)
 	}
 	for _, ch := range []string{"7", "7"} {
 		updated, _ = m.Update(keyMsg(ch))
@@ -104,11 +106,11 @@ func TestPopupInputFieldsAndPreview(t *testing.T) {
 	}
 	updated, _ = m.Update(keyMsg("enter"))
 	m = updated.(Model)
-	if m.popup.state != stAction {
-		t.Fatalf("state = %v, want stAction after last field", m.popup.state)
+	if overlayOf[*worktreePopup](m).state != stAction {
+		t.Fatalf("state = %v, want stAction after last field", overlayOf[*worktreePopup](m).state)
 	}
-	if m.popup.previewBranch != "alic/fix/77" {
-		t.Fatalf("preview branch = %q, want alic/fix/77", m.popup.previewBranch)
+	if overlayOf[*worktreePopup](m).previewBranch != "alic/fix/77" {
+		t.Fatalf("preview branch = %q, want alic/fix/77", overlayOf[*worktreePopup](m).previewBranch)
 	}
 }
 
@@ -118,8 +120,8 @@ func TestPopupBackspaceOnEmptyField(t *testing.T) {
 	m = updated.(Model)
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
 	m = updated.(Model)
-	if m.popup.inputs["id"] != "" {
-		t.Fatalf("field = %q, want empty", m.popup.inputs["id"])
+	if overlayOf[*worktreePopup](m).inputs["id"] != "" {
+		t.Fatalf("field = %q, want empty", overlayOf[*worktreePopup](m).inputs["id"])
 	}
 }
 
@@ -129,8 +131,8 @@ func TestPopupMultiByteRune(t *testing.T) {
 	m = updated.(Model)
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("é")})
 	m = updated.(Model)
-	if m.popup.inputs["id"] != "é" {
-		t.Fatalf("field = %q, want é", m.popup.inputs["id"])
+	if overlayOf[*worktreePopup](m).inputs["id"] != "é" {
+		t.Fatalf("field = %q, want é", overlayOf[*worktreePopup](m).inputs["id"])
 	}
 }
 
@@ -138,20 +140,20 @@ func TestPopupEditMode(t *testing.T) {
 	m := modelWithConfig(t, "b/auto", "../<repo>.worktrees/<branch>")
 	updated, _ := m.Update(keyMsg("W"))
 	m = updated.(Model)
-	if m.popup.previewBranch != "b/auto" {
-		t.Fatalf("preview branch = %q, want b/auto", m.popup.previewBranch)
+	if overlayOf[*worktreePopup](m).previewBranch != "b/auto" {
+		t.Fatalf("preview branch = %q, want b/auto", overlayOf[*worktreePopup](m).previewBranch)
 	}
 
 	updated, _ = m.Update(keyMsg("e"))
 	m = updated.(Model)
-	if m.popup.state != stEdit {
-		t.Fatalf("state = %v, want stEdit", m.popup.state)
+	if overlayOf[*worktreePopup](m).state != stEdit {
+		t.Fatalf("state = %v, want stEdit", overlayOf[*worktreePopup](m).state)
 	}
-	if m.popup.editBuf != "b/auto" {
-		t.Fatalf("editBuf = %q, want b/auto", m.popup.editBuf)
+	if overlayOf[*worktreePopup](m).editBuf != "b/auto" {
+		t.Fatalf("editBuf = %q, want b/auto", overlayOf[*worktreePopup](m).editBuf)
 	}
 
-	for len([]rune(m.popup.editBuf)) > 0 {
+	for len([]rune(overlayOf[*worktreePopup](m).editBuf)) > 0 {
 		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
 		m = updated.(Model)
 	}
@@ -161,14 +163,14 @@ func TestPopupEditMode(t *testing.T) {
 	}
 	updated, _ = m.Update(keyMsg("enter"))
 	m = updated.(Model)
-	if m.popup.state != stAction {
-		t.Fatalf("state = %v, want stAction after enter", m.popup.state)
+	if overlayOf[*worktreePopup](m).state != stAction {
+		t.Fatalf("state = %v, want stAction after enter", overlayOf[*worktreePopup](m).state)
 	}
-	if m.popup.previewBranch != "my/b" {
-		t.Fatalf("preview branch = %q, want my/b", m.popup.previewBranch)
+	if overlayOf[*worktreePopup](m).previewBranch != "my/b" {
+		t.Fatalf("preview branch = %q, want my/b", overlayOf[*worktreePopup](m).previewBranch)
 	}
-	if !contains(m.popup.previewPath, "my-b") {
-		t.Fatalf("preview path = %q, want it to contain my-b", m.popup.previewPath)
+	if !contains(overlayOf[*worktreePopup](m).previewPath, "my-b") {
+		t.Fatalf("preview path = %q, want it to contain my-b", overlayOf[*worktreePopup](m).previewPath)
 	}
 }
 
@@ -182,11 +184,11 @@ func TestPopupEditEscDiscards(t *testing.T) {
 	m = updated.(Model)
 	updated, _ = m.Update(keyMsg("esc"))
 	m = updated.(Model)
-	if m.popup.state != stAction {
-		t.Fatalf("state = %v, want stAction after esc", m.popup.state)
+	if overlayOf[*worktreePopup](m).state != stAction {
+		t.Fatalf("state = %v, want stAction after esc", overlayOf[*worktreePopup](m).state)
 	}
-	if m.popup.previewBranch != "b/auto" {
-		t.Fatalf("preview branch = %q, want b/auto after discard", m.popup.previewBranch)
+	if overlayOf[*worktreePopup](m).previewBranch != "b/auto" {
+		t.Fatalf("preview branch = %q, want b/auto after discard", overlayOf[*worktreePopup](m).previewBranch)
 	}
 }
 
@@ -196,7 +198,7 @@ func TestPopupCreateLaunchesOpAndClearsPopup(t *testing.T) {
 	m = updated.(Model)
 	updated, cmd := m.Update(keyMsg("w")) // create
 	m = updated.(Model)
-	if m.popup != nil {
+	if overlayOf[*worktreePopup](m) != nil {
 		t.Error("popup should close when the create op starts")
 	}
 	if !m.running {
@@ -211,7 +213,7 @@ func TestPopupCreatePreviewErrorBlocks(t *testing.T) {
 	m := modelWithConfig(t, "b-<bogus>", "../<repo>.worktrees/<branch>")
 	updated, _ := m.Update(keyMsg("W"))
 	m = updated.(Model)
-	if m.popup.previewErr == nil {
+	if overlayOf[*worktreePopup](m).previewErr == nil {
 		t.Fatal("expected a preview error for the bad template")
 	}
 	updated, _ = m.Update(keyMsg("w")) // attempt create
@@ -219,7 +221,7 @@ func TestPopupCreatePreviewErrorBlocks(t *testing.T) {
 	if m.running {
 		t.Error("create must not launch when the preview has an error")
 	}
-	if m.popup == nil {
+	if overlayOf[*worktreePopup](m) == nil {
 		t.Error("popup should stay open when create is blocked")
 	}
 }
@@ -263,15 +265,16 @@ func TestRenderWorktreePopupShowsPreview(t *testing.T) {
 	updated, _ := m.Update(keyMsg("W"))
 	m = updated.(Model)
 
+	p := overlayOf[*worktreePopup](m)
 	out := m.View()
-	if !contains(out, m.popup.previewBranch) {
-		t.Errorf("popup view should show the preview branch %q:\n%s", m.popup.previewBranch, out)
+	if !contains(out, p.previewBranch) {
+		t.Errorf("popup view should show the preview branch %q:\n%s", p.previewBranch, out)
 	}
 	if !contains(out, "create") {
 		t.Errorf("popup view should show the action hint:\n%s", out)
 	}
-	if !contains(out, m.popup.startPoint) {
-		t.Errorf("popup view should name the start-point branch %q", m.popup.startPoint)
+	if !contains(out, p.startPoint) {
+		t.Errorf("popup view should name the start-point branch %q", p.startPoint)
 	}
 }
 
@@ -281,7 +284,7 @@ func TestPopupCreateAndSwitchSetsPendingSwitch(t *testing.T) {
 	m = updated.(Model)
 	updated, _ = m.Update(keyMsg("W")) // create AND switch
 	m = updated.(Model)
-	if m.popup != nil {
+	if overlayOf[*worktreePopup](m) != nil {
 		t.Error("popup should close on create-and-switch")
 	}
 	if !m.running {
@@ -339,18 +342,19 @@ func TestCreateOpEqualsPreview(t *testing.T) {
 	m := modelWithConfig(t, "b/auto", "../<repo>.worktrees/<branch>")
 	updated, _ := m.Update(keyMsg("W"))
 	m = updated.(Model)
-	op := m.popup.createOp().(engine.CreateWorktree)
-	if op.Branch != m.popup.previewBranch || op.Path != m.popup.previewPath {
-		t.Fatalf("op {%q,%q} != preview {%q,%q}", op.Branch, op.Path, m.popup.previewBranch, m.popup.previewPath)
+	p := overlayOf[*worktreePopup](m)
+	op := p.createOp().(engine.CreateWorktree)
+	if op.Branch != p.previewBranch || op.Path != p.previewPath {
+		t.Fatalf("op {%q,%q} != preview {%q,%q}", op.Branch, op.Path, p.previewBranch, p.previewPath)
 	}
-	if op.StartPoint != m.popup.startPoint {
-		t.Fatalf("op.StartPoint = %q, want %q", op.StartPoint, m.popup.startPoint)
+	if op.StartPoint != p.startPoint {
+		t.Fatalf("op.StartPoint = %q, want %q", op.StartPoint, p.startPoint)
 	}
 
 	// After a confirmed edit, the op carries the edited branch.
 	updated, _ = m.Update(keyMsg("e"))
 	m = updated.(Model)
-	for len([]rune(m.popup.editBuf)) > 0 {
+	for len([]rune(overlayOf[*worktreePopup](m).editBuf)) > 0 {
 		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
 		m = updated.(Model)
 	}
@@ -360,8 +364,8 @@ func TestCreateOpEqualsPreview(t *testing.T) {
 	}
 	updated, _ = m.Update(keyMsg("enter"))
 	m = updated.(Model)
-	if op := m.popup.createOp().(engine.CreateWorktree); op.Branch != "hf" || op.Branch != m.popup.previewBranch {
-		t.Fatalf("edited op.Branch = %q, want hf (== preview %q)", op.Branch, m.popup.previewBranch)
+	if op := overlayOf[*worktreePopup](m).createOp().(engine.CreateWorktree); op.Branch != "hf" || op.Branch != overlayOf[*worktreePopup](m).previewBranch {
+		t.Fatalf("edited op.Branch = %q, want hf (== preview %q)", op.Branch, overlayOf[*worktreePopup](m).previewBranch)
 	}
 }
 
@@ -372,7 +376,7 @@ func TestConsumedSeqNamesAfterEdit(t *testing.T) {
 	updated, _ := m.Update(keyMsg("W"))
 	m = updated.(Model)
 	// Before any edit: the branch <seq:issue> is consumed.
-	if got := m.popup.consumedSeqNames(); len(got) != 1 || got[0] != "issue" {
+	if got := overlayOf[*worktreePopup](m).consumedSeqNames(); len(got) != 1 || got[0] != "issue" {
 		t.Fatalf("pre-edit consumedSeqNames = %v, want [issue]", got)
 	}
 	// Hand-edit the branch (override); path template has no <seq>, so nothing is consumed.
@@ -382,7 +386,7 @@ func TestConsumedSeqNamesAfterEdit(t *testing.T) {
 	m = updated.(Model)
 	updated, _ = m.Update(keyMsg("enter"))
 	m = updated.(Model)
-	if got := m.popup.consumedSeqNames(); len(got) != 0 {
+	if got := overlayOf[*worktreePopup](m).consumedSeqNames(); len(got) != 0 {
 		t.Fatalf("post-edit consumedSeqNames = %v, want [] (branch <seq> no longer used)", got)
 	}
 }
@@ -393,12 +397,12 @@ func TestConsumedSeqNamesAfterEdit(t *testing.T) {
 func TestPopupOverlaysInterfaceCenteredAndFits(t *testing.T) {
 	m := loadedModel(t)
 	m.width, m.height = 80, 24
-	m.popup = &worktreePopup{
+	m = m.pushOverlay(&worktreePopup{
 		startPoint:    "main",
 		state:         stAction,
 		previewBranch: "feature/some-longish-branch-name",
 		previewPath:   "/home/user/projects/acme-monorepo.worktrees/feature-some-longish-branch-name",
-	}
+	})
 	out := m.View()
 	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
 

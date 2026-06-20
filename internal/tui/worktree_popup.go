@@ -127,23 +127,22 @@ func (m Model) openWorktreePopup(existing bool) (Model, bool) {
 		p.state = stAction
 	}
 	p.recompute()
-	m.popup = p
+	m = m.pushOverlay(p)
 	return m, true
 }
 
-// updatePopupKey handles one key while the popup is open.
-func (m Model) updatePopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+// update handles one key while the popup is open.
+func (p *worktreePopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	// ctrl+c always quits, even from inside the popup, so a user can never be
 	// trapped (Esc also cancels from every state).
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
 	}
-	p := m.popup
 	switch p.state {
 	case stInput:
 		switch msg.Type {
 		case tea.KeyEsc:
-			m.popup = nil
+			m = m.popOverlay()
 		case tea.KeyEnter, tea.KeyTab:
 			p.fieldIdx++
 			if p.fieldIdx >= len(p.labels) {
@@ -190,7 +189,7 @@ func (m Model) updatePopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	default: // stAction
 		switch msg.String() {
 		case "esc":
-			m.popup = nil
+			m = m.popOverlay()
 		case "e":
 			if p.existing {
 				return m, nil // the branch IS the point of existing mode
@@ -199,56 +198,23 @@ func (m Model) updatePopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			p.state = stEdit
 			p.recompute()
 		case "w", "enter":
-			return m.startCreateFromPopup(false)
+			return m.startCreateFromPopup(p, false)
 		case "W":
-			return m.startCreateFromPopup(true)
+			return m.startCreateFromPopup(p, true)
 		}
 		return m, nil
 	}
 }
 
-// startCreateFromPopup launches the CreateWorktree op for the previewed names,
-// closes the popup, and records which <seq> counters to bump on success. A
-// preview error refuses to launch.
-func (m Model) startCreateFromPopup(switchAfter bool) (tea.Model, tea.Cmd) {
-	p := m.popup
-	if p.previewErr != nil {
-		m.statusMsg = "cannot create: " + p.previewErr.Error()
-		return m, nil
-	}
-	m.pendingSeqBump = p.consumedSeqNames()
-	m.pendingSwitch = switchAfter
-	m.popup = nil
-	return m.startOp(p.createOp())
+// render composites the popup box over the layer beneath.
+func (p *worktreePopup) render(m Model, below string) string {
+	w, h := m.overlayDims()
+	return overlayCenter(clipToHeight(below, h), p.box(m), w, h)
 }
 
-// createOp builds the engine operation from the (already-resolved) preview, so
-// the worktree that gets created is exactly what the preview showed.
-func (p *worktreePopup) createOp() engine.Operation {
-	if p.existing {
-		return engine.CreateWorktreeForBranch{Branch: p.previewBranch, Path: p.previewPath}
-	}
-	return engine.CreateWorktree{
-		StartPoint: p.startPoint,
-		Branch:     p.previewBranch,
-		Path:       p.previewPath,
-	}
-}
-
-// consumedSeqNames returns the <seq> counters the created names actually used.
-// In existing mode and after a confirmed hand-edit the branch template is
-// bypassed, so only the path template's <seq> tokens are consumed.
-func (p *worktreePopup) consumedSeqNames() []string {
-	if p.existing || p.branchOverride != "" {
-		return worktree.Templates{Path: p.pathTmpl}.SeqNames()
-	}
-	return p.seqNames
-}
-
-// renderWorktreePopup draws the create-worktree dialog (fields, live preview,
-// and state-specific key hints).
-func (m Model) renderWorktreePopup() string {
-	p := m.popup
+// box draws the create-worktree dialog (fields, live preview, and
+// state-specific key hints).
+func (p *worktreePopup) box(m Model) string {
 	var b strings.Builder
 	title := "Create worktree from " + p.startPoint
 	if p.existing {
@@ -297,4 +263,41 @@ func (m Model) renderWorktreePopup() string {
 	w, _ := m.overlayDims()
 	inner := popupInnerWidth(w)
 	return modalStyle.Width(inner).Render(b.String()) + "\n"
+}
+
+// startCreateFromPopup launches the CreateWorktree op for the previewed names,
+// closes the popup, and records which <seq> counters to bump on success. A
+// preview error refuses to launch.
+func (m Model) startCreateFromPopup(p *worktreePopup, switchAfter bool) (Model, tea.Cmd) {
+	if p.previewErr != nil {
+		m.statusMsg = "cannot create: " + p.previewErr.Error()
+		return m, nil
+	}
+	m.pendingSeqBump = p.consumedSeqNames()
+	m.pendingSwitch = switchAfter
+	m = m.popOverlay()
+	return m.startOp(p.createOp())
+}
+
+// createOp builds the engine operation from the (already-resolved) preview, so
+// the worktree that gets created is exactly what the preview showed.
+func (p *worktreePopup) createOp() engine.Operation {
+	if p.existing {
+		return engine.CreateWorktreeForBranch{Branch: p.previewBranch, Path: p.previewPath}
+	}
+	return engine.CreateWorktree{
+		StartPoint: p.startPoint,
+		Branch:     p.previewBranch,
+		Path:       p.previewPath,
+	}
+}
+
+// consumedSeqNames returns the <seq> counters the created names actually used.
+// In existing mode and after a confirmed hand-edit the branch template is
+// bypassed, so only the path template's <seq> tokens are consumed.
+func (p *worktreePopup) consumedSeqNames() []string {
+	if p.existing || p.branchOverride != "" {
+		return worktree.Templates{Path: p.pathTmpl}.SeqNames()
+	}
+	return p.seqNames
 }

@@ -33,7 +33,6 @@ type Model struct {
 	cfg          config.Config
 	gitCommonDir string
 
-	popup               *worktreePopup
 	initHomeDir         string // home dir for agent detection; "" skips home-scoped agents (tests)
 	statePath           string // repo-registry location; "" disables recording (tests)
 	pendingSeqBump      []string
@@ -45,9 +44,9 @@ type Model struct {
 	pendingSwitchBranch string          // branch to SmartSwitch to after a successful op (B = create-and-switch)
 	contentPopup        *contentPopup   // generic read-only viewer (help window)
 
-	mark        *markState        // the m-key mark; nil = none (see mark.go)
-	fileMarks   map[string]bool   // multi-selected Status file paths (keyed by path)
-	actionMenu *actionMenu // . action menu (list + run available actions); nil = closed
+	mark       *markState      // the m-key mark; nil = none (see mark.go)
+	fileMarks  map[string]bool // multi-selected Status file paths (keyed by path)
+	actionMenu *actionMenu     // . action menu (list + run available actions); nil = closed
 
 	stashView *stashView // stash list in the right column (over Commits); nil = closed
 
@@ -401,10 +400,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.diffView != nil {
 			return m.updateDiffViewKey(msg)
 		}
-		if m.popup != nil {
-			return m.updatePopupKey(msg)
-		}
-
 		if m.renameBranchPopup != nil {
 			return m.updateRenameBranchPopupKey(msg)
 		}
