@@ -91,6 +91,23 @@ func TestSwitcherInertWhileRunning(t *testing.T) {
 	}
 }
 
+// Remove-success refreshes the SAME switcher overlay in place (not a second
+// push), dropping the deleted row.
+func TestRemoveSuccessRefreshesSwitcher(t *testing.T) {
+	m := Model{width: 80, height: 24, sel: map[panel]int{}, sortModes: map[panel]sortMode{}}
+	m = m.pushOverlay(newBookmarkPopup([]model.Bookmark{{ID: "b1", Path: "a.go"}, {ID: "b2", Path: "b.go"}}))
+	depth := len(m.overlays.entries)
+	u, _ := m.Update(bookmarksLoadedMsg{items: []model.Bookmark{{ID: "b2", Path: "b.go"}}})
+	m = u.(Model)
+	if len(m.overlays.entries) != depth {
+		t.Fatalf("overlay depth = %d, want %d (refresh in place, not push)", len(m.overlays.entries), depth)
+	}
+	sw := m.bookmarkSwitcher()
+	if sw == nil || len(sw.items) != 1 || sw.items[0].ID != "b2" {
+		t.Fatalf("switcher must be refreshed to the new list, got %+v", sw)
+	}
+}
+
 // S4 regression: an open overlay swallows the mouse (no panel hit-test).
 func TestSwitcherSwallowsMouse(t *testing.T) {
 	m := switcherModel(t)

@@ -9,6 +9,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- TUI: the popup layer now has a stack (`overlayStack`, mirroring the full-screen
+  `viewStack`). A child popup opened from the bookmark (`g`) / shelf (`G`)
+  switcher — paste, restore, or the remove-confirm — returns to the switcher when
+  closed or after the action succeeds, with the switcher's filter/selection
+  intact. The "Paste bookmarked file to a new path" destination is now prefilled
+  from the bookmark's path with a `_RESTORED` marker (`config.go` →
+  `config_RESTORED.go`; `.gitignore` → `.gitignore_RESTORED`).
 - TUI: pressing `?` while the bookmark (`g`) or shelf (`G`) quick-switcher is open
   now shows a **compact cheat sheet** of that switcher's keys, overlaid on the
   still-open switcher; `esc` closes it and returns you to the switcher with its
