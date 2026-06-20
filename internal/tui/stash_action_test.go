@@ -11,30 +11,32 @@ func TestStashEnterOpensActions(t *testing.T) {
 	m.stashView = &stashView{entries: []model.StashEntry{{Ref: "stash@{0}", Subject: "WIP"}}}
 	mm, _ := m.updateStashViewKey(keyMsg("enter"))
 	got := mm.(Model)
-	if got.stashAction == nil {
+	a := overlayOf[*stashActionPopup](got)
+	if a == nil {
 		t.Fatal("enter should open the stash-action popup")
 	}
-	if got.stashAction.ref != "stash@{0}" {
-		t.Errorf("action popup ref = %q", got.stashAction.ref)
+	if a.ref != "stash@{0}" {
+		t.Errorf("action popup ref = %q", a.ref)
 	}
 }
 
 func TestStashActionZCyclesMode(t *testing.T) {
 	m := Model{width: 100, height: 30}
-	m.stashAction = &stashActionPopup{ref: "stash@{0}", subject: "WIP"}
-	mm, _ := m.updateStashActionKey(keyMsg("z"))
-	got := mm.(Model)
-	if got.stashAction == nil || got.stashAction.mode != modeWrap {
-		t.Fatalf("z should cycle the stash-action mode to modeWrap; got %+v", got.stashAction)
+	a := &stashActionPopup{ref: "stash@{0}", subject: "WIP"}
+	m = m.pushOverlay(a)
+	got, _ := a.update(m, keyMsg("z"))
+	a2 := overlayOf[*stashActionPopup](got)
+	if a2 == nil || a2.mode != modeWrap {
+		t.Fatalf("z should cycle the stash-action mode to modeWrap; got %+v", a2)
 	}
 }
 
 func TestStashActionApplyDispatches(t *testing.T) {
 	m := loadedModel(t)
-	m.stashAction = &stashActionPopup{ref: "stash@{0}", sel: 0} // 0 = Apply
-	mm, cmd := m.updateStashActionKey(keyMsg("enter"))
-	got := mm.(Model)
-	if got.stashAction != nil {
+	a := &stashActionPopup{ref: "stash@{0}", sel: 0} // 0 = Apply
+	m = m.pushOverlay(a)
+	got, cmd := a.update(m, keyMsg("enter"))
+	if overlayOf[*stashActionPopup](got) != nil {
 		t.Error("apply should close the popup")
 	}
 	if !got.running || cmd == nil {
@@ -45,16 +47,16 @@ func TestStashActionApplyDispatches(t *testing.T) {
 
 func TestStashActionDropConfirms(t *testing.T) {
 	m := loadedModel(t)
-	m.stashAction = &stashActionPopup{ref: "stash@{0}", sel: 2} // 2 = Drop
-	mm, _ := m.updateStashActionKey(keyMsg("enter"))
-	got := mm.(Model)
-	if got.stashAction == nil || !got.stashAction.confirming {
+	a := &stashActionPopup{ref: "stash@{0}", sel: 2} // 2 = Drop
+	m = m.pushOverlay(a)
+	got, _ := a.update(m, keyMsg("enter"))
+	a2 := overlayOf[*stashActionPopup](got)
+	if a2 == nil || !a2.confirming {
 		t.Fatal("drop should enter a confirm state, not run immediately")
 	}
-	mm, cmd := got.updateStashActionKey(keyMsg("y"))
-	got = mm.(Model)
-	if got.stashAction != nil || !got.running {
+	got2, cmd := a2.update(got, keyMsg("y"))
+	if overlayOf[*stashActionPopup](got2) != nil || !got2.running {
 		t.Error("y should confirm drop and run the op")
 	}
-	_ = driveOp(t, got, cmd)
+	_ = driveOp(t, got2, cmd)
 }

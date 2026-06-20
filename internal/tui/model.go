@@ -47,8 +47,7 @@ type Model struct {
 
 	mark        *markState        // the m-key mark; nil = none (see mark.go)
 	fileMarks   map[string]bool   // multi-selected Status file paths (keyed by path)
-	stashAction *stashActionPopup // apply/pop/drop menu for a stash; nil = closed
-	actionMenu  *actionMenu       // . action menu (list + run available actions); nil = closed
+	actionMenu *actionMenu // . action menu (list + run available actions); nil = closed
 
 	stashView *stashView // stash list in the right column (over Commits); nil = closed
 
@@ -417,9 +416,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.conflictPopup != nil {
 			return m.updateConflictPopupKey(msg)
-		}
-		if m.stashAction != nil {
-			return m.updateStashActionKey(msg)
 		}
 		// Filter-input mode captures every key (the panel label shows the query).
 		// Hoisted above the files-view and stash routing so a commit filter opened

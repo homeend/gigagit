@@ -208,7 +208,7 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			// (the list's defining verb); for commits it's a no-op.
 			if v := m.stashView; v != nil && v.sel >= 0 && v.sel < len(v.entries) {
 				e := v.entries[v.sel]
-				m.stashAction = &stashActionPopup{ref: e.Ref, subject: e.Subject}
+				m = m.pushOverlay(&stashActionPopup{ref: e.Ref, subject: e.Subject})
 			}
 			return m, nil
 		}

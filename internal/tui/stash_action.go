@@ -21,15 +21,15 @@ type stashActionPopup struct {
 
 var stashActions = []string{"Apply", "Pop", "Drop"}
 
-func (m Model) updateStashActionKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	a := m.stashAction
+// update handles all keys while the stash-action popup is open.
+func (a *stashActionPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
 	}
 	if a.confirming {
 		switch msg.String() {
 		case "y":
-			m.stashAction = nil
+			m = m.popOverlay()
 			return m.startOp(engine.StashDrop{Ref: a.ref})
 		case "n", "esc":
 			a.confirming = false
@@ -54,7 +54,7 @@ func (m Model) updateStashActionKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "esc":
-		m.stashAction = nil
+		m = m.popOverlay()
 		return m, nil
 	case "up", "k":
 		if a.sel > 0 {
@@ -67,10 +67,10 @@ func (m Model) updateStashActionKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "enter":
 		switch a.sel {
 		case 0:
-			m.stashAction = nil
+			m = m.popOverlay()
 			return m.startOp(engine.StashApply{Ref: a.ref})
 		case 1:
-			m.stashAction = nil
+			m = m.popOverlay()
 			return m.startOp(engine.StashPop{Ref: a.ref})
 		case 2:
 			a.confirming = true
@@ -79,9 +79,14 @@ func (m Model) updateStashActionKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// renderStashActionPopup frames the menu like renderPairOpPopup.
-func (m Model) renderStashActionPopup() string {
-	a := m.stashAction
+// render composites the stash-action popup over the layer beneath.
+func (a *stashActionPopup) render(m Model, below string) string {
+	w, h := m.overlayDims()
+	return overlayCenter(clipToHeight(below, h), a.box(m), w, h)
+}
+
+// box draws the stash-action popup box (modal box only).
+func (a *stashActionPopup) box(m Model) string {
 	w, _ := m.overlayDims()
 	inner := popupInnerWidth(w)
 	textW := popupTextWidth(inner)
