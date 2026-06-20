@@ -24,6 +24,9 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   drawing, and the jobs it runs — the first of a general mechanism.)
 
 ### Added
+- **Go to a branch's tip in the commit list.** The `.` menu on a Branches row
+  offers **Go to tip in commits** — it moves the Commits cursor to that branch's
+  tip commit and focuses the Commits panel.
 - **Commits panel — branch in the status line.** When a commit is selected, the
   status line shows `⎇ <branch>` — which branch the commit is from (`git log
   --source`/`%S`, computed in the existing feed walk, no per-hover git call) —
