@@ -64,18 +64,27 @@ func (m Model) tooltip() (lines []string, x, y int, ok bool) {
 	origin := g.pos[p]
 	rowY := origin.y + 2 + selInWin // top border + label line
 
-	x = origin.x + 2 // the panel's content edge
-	avail := g.w - x // room from the content edge to the screen's right edge
-	if avail < 1 {
+	if g.w < 1 {
 		return nil, 0, 0, false
 	}
-	// Draw the full text inline, on the selected row's own line, overflowing the
-	// panel's right border (clipped only at the screen edge). Replacing the
-	// truncated row in place — rather than floating a strip above it — keeps the
-	// reveal off the panel's top bar, which the old strip covered whenever the
-	// top row was selected. Single line: it spills past the window instead of
-	// wrapping.
-	lines = []string{tooltipStyle.Render(truncate(content, avail))}
+	// Draw the full text inline, on the selected row's own line — never floating a
+	// strip above it, which covered the panel's top bar when the top row was
+	// selected. The reveal anchors at the panel's content edge and overflows the
+	// panel's right border; but when the row would run off the SCREEN's right edge
+	// (a right-hand panel has little room to its right), it shifts left so the full
+	// text uses the whole screen, spilling over the panels to its left. Only a row
+	// wider than the entire screen is clipped (with …). Single line, never wrapped.
+	x = origin.x + 2 // the panel's content edge
+	full := content
+	width := lipgloss.Width(full)
+	if x+width > g.w {
+		x = g.w - width // shift left so the right edge sits at the screen edge
+	}
+	if x < 0 {
+		x = 0
+		full = truncate(full, g.w) // wider than the whole screen: clip with …
+	}
+	lines = []string{tooltipStyle.Render(full)}
 	y = rowY
 	return lines, x, y, true
 }

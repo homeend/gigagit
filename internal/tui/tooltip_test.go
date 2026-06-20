@@ -59,7 +59,7 @@ func TestTooltipOnTopRowKeepsTitleBar(t *testing.T) {
 	m := tooltipModel()
 	m.width = 120
 	m.worktrees[0].Path = longPath // make the top row long…
-	m.sel[panelWorktrees] = 0       // …and selected (selInWin == 0)
+	m.sel[panelWorktrees] = 0      // …and selected (selInWin == 0)
 	_, _, y, ok := m.tooltip()
 	if !ok {
 		t.Fatal("want a tooltip for the truncated top row")
@@ -100,6 +100,39 @@ func TestTooltipRevealsTrimmedBranchName(t *testing.T) {
 	plain := ansi.Strip(strings.Join(lines, "\n"))
 	if !strings.Contains(plain, long) {
 		t.Fatalf("tooltip must show the full branch name, got %q", plain)
+	}
+}
+
+// A right-hand panel (Commits) has little room to its right, so a row wider than
+// that room — but narrower than the whole screen — must overflow LEFT, over the
+// panels to its left, and still show its full text (not clip at the screen's
+// right edge). The reveal's start column shifts left of the panel's content edge.
+func TestTooltipOverflowsLeftFromRightPanel(t *testing.T) {
+	m := footerModel() // width 120; Commits is the right panel
+	m.focus = panelCommits
+	if m.sel == nil {
+		m.sel = map[panel]int{}
+	}
+	// A subject wider than the Commits panel's room-to-the-right (~half the
+	// screen) but well within the full 120-col width.
+	subj := "channel api rework: split the v2 source adapter into reader and writer"
+	m.commits = []model.Commit{{Hash: "abcdef0", Subject: subj}}
+	m.sel[panelCommits] = 0
+
+	lines, x, _, ok := m.tooltip()
+	if !ok {
+		t.Fatal("want a tooltip for the truncated commit row")
+	}
+	plain := ansi.Strip(lines[0])
+	if !strings.Contains(plain, subj) {
+		t.Fatalf("reveal must show the full subject (no clip), got %q", plain)
+	}
+	if strings.HasSuffix(strings.TrimRight(plain, " "), "…") {
+		t.Errorf("a row that fits the screen must not be clipped with …, got %q", plain)
+	}
+	contentEdge := m.layout().pos[panelCommits].x + 2
+	if x >= contentEdge {
+		t.Errorf("reveal x = %d, want < content edge %d (shifted left over the panels)", x, contentEdge)
 	}
 }
 

@@ -11,10 +11,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ### Changed
 - **Truncated-row reveal now renders inline, on the row itself.** When a
   selected row is too long for its panel, the full-text reveal is drawn over
-  that row's own line and overflows past the panel's right border (clipped only
-  at the screen edge) instead of floating as a strip above the row. The old
-  strip covered the panel's title bar whenever the top row was selected, which
-  hid the very context it sat in; the inline reveal never does.
+  that row's own line and overflows the panel border to use the whole screen
+  width — spilling right, or **left over the adjacent panels** when the row sits
+  in a right-hand panel with little room to its right — instead of floating as a
+  strip above the row. Only a row wider than the entire screen clips with `…`.
+  The old strip covered the panel's title bar whenever the top row was selected,
+  which hid the very context it sat in; the inline reveal never does.
 - **Commits panel — the left column shows the branch, not the commit id.** Each
   commit row leads with the branch it belongs to: **bright** when the commit is
   that branch's tip ("the last commit for a given branch"), **grayed** when the
