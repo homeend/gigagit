@@ -116,6 +116,53 @@ func TestRevertConflictAbortRestores(t *testing.T) {
 	}
 }
 
+// Reverting a commit whose change is already undone: git refuses with a clean
+// tree (no REVERT_HEAD), so the op returns a legible error and never traps.
+func TestRevertAlreadyUndone(t *testing.T) {
+	dir, repo := newRepo(t)
+	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("x\n"), 0o644)
+	gitE(t, dir, "add", ".")
+	gitE(t, dir, "commit", "-m", "add a")
+	target := gitOut(t, dir, "rev-parse", "HEAD")
+
+	if _, err := (Revert{Commit: target}).Run(context.Background(), OpDeps{Repo: repo}); err != nil {
+		t.Fatalf("first revert: %v", err)
+	}
+	// revert the SAME commit again — the change is already undone
+	_, err := Revert{Commit: target}.Run(context.Background(),
+		OpDeps{Repo: repo, Decider: MapDecider{"revert-conflict": "keep-conflicts"}})
+	if err == nil {
+		t.Fatal("reverting an already-undone commit must return an error")
+	}
+	if in, _ := repo.RevertInProgress(context.Background(), ""); in {
+		t.Fatal("must not leave REVERT_HEAD set (no trap)")
+	}
+}
+
+// The autostash is restored after the abort path (dirty tree + abort).
+func TestRevertAbortRestoresAutostash(t *testing.T) {
+	dir, repo := newRepo(t)
+	target := setupRevertConflict(t, dir)
+	// dirty an unrelated tracked file so autostash kicks in
+	os.WriteFile(filepath.Join(dir, "wip.txt"), []byte("dirty\n"), 0o644)
+	gitE(t, dir, "add", "wip.txt")
+
+	res, err := Revert{Commit: target}.Run(context.Background(),
+		OpDeps{Repo: repo, Decider: MapDecider{"revert-conflict": "abort"}})
+	if err != nil {
+		t.Fatalf("abort path: %v", err)
+	}
+	if res.Changed {
+		t.Fatalf("abort should report no change: %+v", res)
+	}
+	if got, _ := os.ReadFile(filepath.Join(dir, "wip.txt")); string(got) != "dirty\n" {
+		t.Fatalf("autostash not restored after abort: wip.txt = %q", got)
+	}
+	if got, _ := os.ReadFile(filepath.Join(dir, "f.txt")); string(got) != "v3\n" {
+		t.Fatalf("f.txt = %q after abort, want v3", got)
+	}
+}
+
 // Reverting a merge commit without -m is refused outright with a legible error.
 func TestRevertMergeCommitRefused(t *testing.T) {
 	dir, repo := newRepo(t)

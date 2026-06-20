@@ -47,9 +47,11 @@ One invocation each, honoring `dir` ("" = this worktree):
 4. on error, probe `RevertInProgress`:
    - not in progress → refused outright (bad ref, or **a merge commit without
      `-m`**): return git's error verbatim (legible), stash preserved.
-   - in progress with **0 conflicted files** → an empty/redundant revert (the
-     change is already undone): **auto-abort** with a legible error (never trap
-     the resolver), as CherryPick does.
+   - in progress with **0 conflicted files** → a defensive auto-abort guard
+     (mirrors CherryPick). NOTE: empirically `git revert` of an already-undone
+     change **refuses outright** (REVERT_HEAD not set → the not-in-progress
+     branch), so for revert this guard does not fire; it stays as insurance
+     against a git that leaves REVERT_HEAD set with a clean tree.
    - in progress with conflicts → `decide("revert-conflict", keep-conflicts/
      abort)`: keep leaves the tree (error + summary), abort runs `RevertAbort`.
 

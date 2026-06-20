@@ -53,9 +53,12 @@ func (op Revert) Run(ctx context.Context, deps OpDeps) (Result, error) {
 		return Result{}, fmt.Errorf("revert %s: %w", op.Commit, revErr)
 	}
 
-	// In progress but with NO conflicted files = an empty/redundant revert (the
-	// change is already undone). `--continue` would error, so don't offer the
-	// conflict fork: auto-abort to a clean state. Never trap the user.
+	// In progress but with NO conflicted files = an empty/redundant revert.
+	// Defensive: empirically `git revert` of an already-undone change refuses
+	// outright (REVERT_HEAD NOT set → the !inRevert branch above), unlike
+	// cherry-pick which leaves CHERRY_PICK_HEAD set; this guard exists so any
+	// git that DID leave REVERT_HEAD set with a clean tree still can't trap the
+	// resolver (`--continue` would error). Auto-abort to a clean state.
 	if st, sErr := deps.Repo.Status(ctx); sErr == nil && st.Counts().Conflicted == 0 {
 		_ = deps.Repo.RevertAbort(ctx, "")
 		return Result{}, fmt.Errorf("revert %s: nothing to undo (already reverted); aborted", op.Commit)
