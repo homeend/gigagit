@@ -44,13 +44,11 @@ type Model struct {
 	branchPopup         *branchPopup
 	renameBranchPopup   *renameBranchPopup
 	rewordPopup         *rewordPopup
-	shelfRestorePopup   *shelfRestorePopup  // shelf restore: typed destination
-	shelfPopup          *shelfPopup         // shelf quick-switcher (G); nil = closed
-	bookmarkPopup       *bookmarkPopup      // bookmark quick-switcher; nil = closed
-	bookmarkPastePopup  *bookmarkPastePopup // bookmark paste: typed destination; nil = closed
-	pendingCompare      *pendingCompare     // focused file awaiting the compare-mode picker; nil = none
-	pendingSwitchBranch string              // branch to SmartSwitch to after a successful op (B = create-and-switch)
-	contentPopup        *contentPopup       // generic read-only viewer (help window)
+	shelfRestorePopup   *shelfRestorePopup // shelf restore: typed destination
+	shelfPopup          *shelfPopup        // shelf quick-switcher (G); nil = closed
+	pendingCompare      *pendingCompare    // focused file awaiting the compare-mode picker; nil = none
+	pendingSwitchBranch string             // branch to SmartSwitch to after a successful op (B = create-and-switch)
+	contentPopup        *contentPopup      // generic read-only viewer (help window)
 
 	mark        *markState        // the m-key mark; nil = none (see mark.go)
 	fileMarks   map[string]bool   // multi-selected Status file paths (keyed by path)
@@ -268,13 +266,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.pendingCompare = nil // don't let stale compare state hijack the next plain `g`
 			return m, nil
 		}
-		m.bookmarkPopup = newBookmarkPopup(msg.items)
+		p := newBookmarkPopup(msg.items)
 		if pc := m.pendingCompare; pc != nil && pc.target == compareBookmark {
-			m.bookmarkPopup.compareRef = &pc.ref
-			m.bookmarkPopup.compareLabel = pc.label
+			p.compareRef = &pc.ref
+			p.compareLabel = pc.label
 			m.pendingCompare = nil
 		}
-		return m, nil
+		if existing := m.bookmarkSwitcher(); existing != nil {
+			*existing = *p // reopen after a remove: refresh the live switcher in place
+			return m, nil
+		}
+		return m.pushOverlay(p), nil
 	case dataLoadedMsg:
 		if msg.gen != m.loadGen {
 			return m, nil // superseded by a newer load
@@ -366,18 +368,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The `?` cheat sheet, when opened over a bookmark/shelf switcher, owns the
 		// keyboard above the picker (which is checked below). Gated on a picker
 		// being open so the base-layout help path (further down) is untouched.
-		if m.contentPopup != nil && (m.bookmarkPopup != nil || m.shelfPopup != nil) {
+		if m.contentPopup != nil && (m.overlayTop() != nil || m.shelfPopup != nil) {
 			return m.updateContentPopupKey(msg)
 		}
-		// The bookmark quick-switcher is global: `g` opens it from every
-		// navigable window, so its key owner must sit above the surface stack
-		// and the diff view (mirrors the action menu and render()). The paste
-		// sub-popup replaces it, so it precedes the switcher here.
-		if m.bookmarkPastePopup != nil {
-			return m.updateBookmarkPasteKey(msg)
-		}
-		if m.bookmarkPopup != nil {
-			return m.updateBookmarkPopupKey(msg)
+		// The overlay stack (centered popups) is global: its top owns the keyboard
+		// above the surface stack and the diff view (mirrors the action menu and
+		// render()). The bookmark switcher + paste live here; shelf migrates next.
+		if o := m.overlayTop(); o != nil {
+			return o.update(m, msg)
 		}
 		if m.shelfPopup != nil {
 			return m.updateShelfPopupKey(msg)

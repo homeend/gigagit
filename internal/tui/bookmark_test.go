@@ -15,13 +15,13 @@ import (
 
 func bmPopupModel(items ...model.Bookmark) Model {
 	m := footerModel()
-	m.bookmarkPopup = newBookmarkPopup(items)
+	m = m.pushOverlay(newBookmarkPopup(items))
 	return m
 }
 
 func TestBookmarkRemoveConfirms(t *testing.T) {
 	m := bmPopupModel(model.Bookmark{ID: "b1", State: model.StateUnstaged, Worktree: "/wt", Path: "a.go"})
-	mm, _ := m.updateBookmarkPopupKey(keyMsg("x"))
+	mm, _ := m.Update(keyMsg("x"))
 	m = mm.(Model)
 	if m.modal == nil {
 		t.Fatalf("x should open a remove-confirm modal")
@@ -34,13 +34,13 @@ func TestBookmarkPasteOpensPathPopup(t *testing.T) {
 		t.Fatal(err)
 	}
 	m := bmPopupModel(model.Bookmark{ID: "b1", State: model.StateUnstaged, Worktree: dir, Path: "a.go"})
-	mm, _ := m.updateBookmarkPopupKey(keyMsg("p"))
+	mm, _ := m.Update(keyMsg("p"))
 	m = mm.(Model)
-	if m.bookmarkPastePopup == nil {
+	if bookmarkPasteOf(m) == nil {
 		t.Fatalf("p should open the paste path popup")
 	}
-	if string(m.bookmarkPastePopup.data) != "payload" {
-		t.Fatalf("paste popup data = %q, want payload", m.bookmarkPastePopup.data)
+	if string(bookmarkPasteOf(m).data) != "payload" {
+		t.Fatalf("paste popup data = %q, want payload", bookmarkPasteOf(m).data)
 	}
 }
 
@@ -60,37 +60,37 @@ func TestBookmarkFilterModeTypesNotActs(t *testing.T) {
 		model.Bookmark{ID: "a", State: model.StateUnstaged, Worktree: "/wt", Path: "app.go"},
 		model.Bookmark{ID: "b", State: model.StateUnstaged, Worktree: "/wt", Path: "readme.md"},
 	)
-	mm, _ := m.updateBookmarkPopupKey(keyMsg("/")) // enter filter mode
+	mm, _ := m.Update(keyMsg("/")) // enter filter mode
 	m = mm.(Model)
-	if !m.bookmarkPopup.filtering {
+	if !m.bookmarkSwitcher().filtering {
 		t.Fatalf("/ should enter filter mode")
 	}
-	mm, _ = m.updateBookmarkPopupKey(keyMsg("p")) // a path char, not the paste action
+	mm, _ = m.Update(keyMsg("p")) // a path char, not the paste action
 	m = mm.(Model)
-	if m.bookmarkPastePopup != nil {
+	if bookmarkPasteOf(m) != nil {
 		t.Fatalf("p while filtering must type, not trigger paste")
 	}
-	if m.bookmarkPopup == nil || m.bookmarkPopup.filter != "p" {
-		t.Fatalf("filter should be 'p', got %q", m.bookmarkPopup.filter)
+	if m.bookmarkSwitcher() == nil || m.bookmarkSwitcher().filter != "p" {
+		t.Fatalf("filter should be 'p', got %q", m.bookmarkSwitcher().filter)
 	}
 }
 
 func TestBookmarkPasteEnterStartsWrite(t *testing.T) {
 	m := footerModel()
-	m.bookmarkPastePopup = &bookmarkPastePopup{origin: "a.go", data: []byte("x")}
+	m = m.pushOverlay(&bookmarkPastePopup{origin: "a.go", data: []byte("x")})
 	// Empty dest is a no-op (popup stays open).
-	mm, _ := m.updateBookmarkPasteKey(keyMsg("enter"))
+	mm, _ := m.Update(keyMsg("enter"))
 	m = mm.(Model)
-	if m.bookmarkPastePopup == nil {
+	if bookmarkPasteOf(m) == nil {
 		t.Fatalf("empty dest should keep the popup open")
 	}
 	for _, r := range "out.txt" {
-		mm, _ = m.updateBookmarkPasteKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		mm, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
 		m = mm.(Model)
 	}
-	mm, cmd := m.updateBookmarkPasteKey(keyMsg("enter"))
+	mm, cmd := m.Update(keyMsg("enter"))
 	m = mm.(Model)
-	if m.bookmarkPastePopup != nil {
+	if bookmarkPasteOf(m) != nil {
 		t.Fatalf("enter with a dest should close the popup")
 	}
 	if cmd == nil {
@@ -103,13 +103,13 @@ func TestBookmarkMarkThenCompare(t *testing.T) {
 		model.Bookmark{ID: "a", State: model.StateUnstaged, Worktree: "/wt", Path: "a.go"},
 		model.Bookmark{ID: "b", State: model.StateUnstaged, Worktree: "/wt", Path: "b.go"},
 	)
-	mm, _ := m.updateBookmarkPopupKey(keyMsg("m")) // mark row 0
+	mm, _ := m.Update(keyMsg("m")) // mark row 0
 	m = mm.(Model)
-	if m.bookmarkPopup == nil || m.bookmarkPopup.markID != "a" {
+	if m.bookmarkSwitcher() == nil || m.bookmarkSwitcher().markID != "a" {
 		t.Fatalf("first m should mark the cursor bookmark")
 	}
-	m.bookmarkPopup.sel = 1
-	mm, _ = m.updateBookmarkPopupKey(keyMsg("m")) // compare with row 1
+	m.bookmarkSwitcher().sel = 1
+	mm, _ = m.Update(keyMsg("m")) // compare with row 1
 	m = mm.(Model)
 	if m.diffView == nil {
 		t.Fatalf("second m on another row should open the compare diff")
@@ -136,7 +136,7 @@ func TestBookmarkPopupOpenAndRenderFullPath(t *testing.T) {
 		{ID: "b1", State: model.StateUnstaged, Worktree: "/wt", Path: "a/b.go"},
 	}})
 	m = u.(Model)
-	if m.bookmarkPopup == nil {
+	if m.bookmarkSwitcher() == nil {
 		t.Fatal("loaded msg should open the popup")
 	}
 	out := m.View()
@@ -175,8 +175,8 @@ func TestBookmarkPopupWindowsLongList(t *testing.T) {
 	}
 	m := bmPopupModel(items...)
 	m.width, m.height = 80, 30
-	m.bookmarkPopup.sel = 29 // selection at the bottom
-	out := m.renderBookmarkPopup()
+	m.bookmarkSwitcher().sel = 29 // selection at the bottom
+	out := m.renderBookmarkPopupBox(m.bookmarkSwitcher())
 	if !strings.Contains(out, "f29.go") {
 		t.Fatalf("selected (bottom) row must be visible:\n%s", out)
 	}
@@ -192,55 +192,55 @@ func TestBookmarkPopupWindowsLongList(t *testing.T) {
 
 func TestBookmarkPopupZCyclesMode(t *testing.T) {
 	m := bmPopupModel(model.Bookmark{ID: "a", State: model.StateUnstaged, Worktree: "/wt", Path: "a.go"})
-	m.bookmarkPopup.hscroll = 5
-	mm, _ := m.updateBookmarkPopupKey(keyMsg("z"))
+	m.bookmarkSwitcher().hscroll = 5
+	mm, _ := m.Update(keyMsg("z"))
 	m = mm.(Model)
-	if m.bookmarkPopup.mode != modeWrap {
-		t.Fatalf("z should cycle cutoff→wrap, got %v", m.bookmarkPopup.mode)
+	if m.bookmarkSwitcher().mode != modeWrap {
+		t.Fatalf("z should cycle cutoff→wrap, got %v", m.bookmarkSwitcher().mode)
 	}
-	if m.bookmarkPopup.hscroll != 0 {
-		t.Fatalf("z should reset hscroll, got %d", m.bookmarkPopup.hscroll)
+	if m.bookmarkSwitcher().hscroll != 0 {
+		t.Fatalf("z should reset hscroll, got %d", m.bookmarkSwitcher().hscroll)
 	}
-	mm, _ = m.updateBookmarkPopupKey(keyMsg("z"))
+	mm, _ = m.Update(keyMsg("z"))
 	m = mm.(Model)
-	if m.bookmarkPopup.mode != modeScroll {
-		t.Fatalf("second z should reach scroll, got %v", m.bookmarkPopup.mode)
+	if m.bookmarkSwitcher().mode != modeScroll {
+		t.Fatalf("second z should reach scroll, got %v", m.bookmarkSwitcher().mode)
 	}
 }
 
 func TestBookmarkPopupPanOnlyInScroll(t *testing.T) {
 	m := bmPopupModel(model.Bookmark{ID: "a", State: model.StateUnstaged, Worktree: "/wt", Path: "a.go"})
 	// cutoff (default): shift+right is a no-op
-	mm, _ := m.updateBookmarkPopupKey(keyMsg("shift+right"))
+	mm, _ := m.Update(keyMsg("shift+right"))
 	m = mm.(Model)
-	if m.bookmarkPopup.hscroll != 0 {
-		t.Fatalf("shift+right in cutoff must not pan, got %d", m.bookmarkPopup.hscroll)
+	if m.bookmarkSwitcher().hscroll != 0 {
+		t.Fatalf("shift+right in cutoff must not pan, got %d", m.bookmarkSwitcher().hscroll)
 	}
 	// scroll mode: shift+right pans by one step, shift+left clamps at 0
-	m.bookmarkPopup.mode = modeScroll
-	mm, _ = m.updateBookmarkPopupKey(keyMsg("shift+right"))
+	m.bookmarkSwitcher().mode = modeScroll
+	mm, _ = m.Update(keyMsg("shift+right"))
 	m = mm.(Model)
-	if m.bookmarkPopup.hscroll != m.hscrollStep() {
-		t.Fatalf("shift+right in scroll → hscroll=%d, want %d", m.bookmarkPopup.hscroll, m.hscrollStep())
+	if m.bookmarkSwitcher().hscroll != m.hscrollStep() {
+		t.Fatalf("shift+right in scroll → hscroll=%d, want %d", m.bookmarkSwitcher().hscroll, m.hscrollStep())
 	}
-	mm, _ = m.updateBookmarkPopupKey(keyMsg("shift+left"))
+	mm, _ = m.Update(keyMsg("shift+left"))
 	m = mm.(Model)
-	if m.bookmarkPopup.hscroll != 0 {
-		t.Fatalf("shift+left should clamp to 0, got %d", m.bookmarkPopup.hscroll)
+	if m.bookmarkSwitcher().hscroll != 0 {
+		t.Fatalf("shift+left should clamp to 0, got %d", m.bookmarkSwitcher().hscroll)
 	}
 }
 
 func TestBookmarkPopupZTypesWhileFiltering(t *testing.T) {
 	m := bmPopupModel(model.Bookmark{ID: "a", State: model.StateUnstaged, Worktree: "/wt", Path: "zebra.go"})
-	mm, _ := m.updateBookmarkPopupKey(keyMsg("/")) // enter filter mode
+	mm, _ := m.Update(keyMsg("/")) // enter filter mode
 	m = mm.(Model)
-	mm, _ = m.updateBookmarkPopupKey(keyMsg("z")) // a query char, not a mode cycle
+	mm, _ = m.Update(keyMsg("z")) // a query char, not a mode cycle
 	m = mm.(Model)
-	if m.bookmarkPopup.mode != modeCutoff {
-		t.Fatalf("z while filtering must not cycle mode, got %v", m.bookmarkPopup.mode)
+	if m.bookmarkSwitcher().mode != modeCutoff {
+		t.Fatalf("z while filtering must not cycle mode, got %v", m.bookmarkSwitcher().mode)
 	}
-	if m.bookmarkPopup.filter != "z" {
-		t.Fatalf("z while filtering should type, filter=%q", m.bookmarkPopup.filter)
+	if m.bookmarkSwitcher().filter != "z" {
+		t.Fatalf("z while filtering should type, filter=%q", m.bookmarkSwitcher().filter)
 	}
 }
 
@@ -322,9 +322,9 @@ func TestBookmarkToFileRef(t *testing.T) {
 
 func TestBookmarkPopupCAgainstShelf(t *testing.T) {
 	m := bmPopupModel(model.Bookmark{ID: "b1", State: model.StateUnstaged, Worktree: "/wt", Path: "a.go"})
-	mm, cmd := m.updateBookmarkPopupKey(keyMsg("c"))
+	mm, cmd := m.Update(keyMsg("c"))
 	m = mm.(Model)
-	if m.bookmarkPopup != nil {
+	if m.bookmarkSwitcher() != nil {
 		t.Fatalf("c should close the bookmark popup")
 	}
 	if m.pendingCompare == nil || m.pendingCompare.target != compareShelf {

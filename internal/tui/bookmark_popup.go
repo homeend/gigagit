@@ -53,7 +53,7 @@ type bookmarksLoadedMsg struct {
 // so `g` works everywhere; once the popup is open its render and key routing
 // are hoisted above the content surfaces (see render() and Update()).
 func (m Model) openBookmarkSwitcher() (Model, tea.Cmd) {
-	if m.opsIdle() && m.bookmarkPopup == nil {
+	if m.opsIdle() && m.bookmarkSwitcher() == nil {
 		return m, m.loadBookmarksCmd()
 	}
 	return m, nil
@@ -87,8 +87,13 @@ func (p *bookmarkPopup) visibleIdx() []int {
 	return idx
 }
 
-func (m Model) renderBookmarkPopup() string {
-	p := m.bookmarkPopup
+// render composites the switcher box over `below` (the overlay-stack contract).
+func (p *bookmarkPopup) render(m Model, below string) string {
+	w, h := m.overlayDims()
+	return overlayCenter(clipToHeight(below, h), m.renderBookmarkPopupBox(p), w, h)
+}
+
+func (m Model) renderBookmarkPopupBox(p *bookmarkPopup) string {
 	w, _ := m.overlayDims()
 	inner := popupInnerWidth(w)
 	textW := popupTextWidth(inner)
@@ -134,9 +139,8 @@ func (m Model) renderBookmarkPopup() string {
 	return popupBox(inner, strings.Join(parts, "\n"))
 }
 
-// selectedBookmark returns the bookmark under the popup cursor.
-func (m Model) selectedBookmark() (model.Bookmark, bool) {
-	p := m.bookmarkPopup
+// selected returns the bookmark under the popup cursor.
+func (p *bookmarkPopup) selected() (model.Bookmark, bool) {
 	vis := p.visibleIdx()
 	if p.sel < 0 || p.sel >= len(vis) {
 		return model.Bookmark{}, false
@@ -144,8 +148,8 @@ func (m Model) selectedBookmark() (model.Bookmark, bool) {
 	return p.items[vis[p.sel]], true
 }
 
-func (m Model) bookmarkByID(id string) (model.Bookmark, bool) {
-	for _, b := range m.bookmarkPopup.items {
+func (p *bookmarkPopup) byID(id string) (model.Bookmark, bool) {
+	for _, b := range p.items {
 		if b.ID == id {
 			return b, true
 		}
@@ -153,14 +157,18 @@ func (m Model) bookmarkByID(id string) (model.Bookmark, bool) {
 	return model.Bookmark{}, false
 }
 
-// updateBookmarkPopupKey handles one key while the switcher is open. The popup
-// is navigation-first (letters are actions, matching every other gg list); `/`
-// enters a filter sub-mode where runes type a query until esc/enter.
-func (m Model) updateBookmarkPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+// update handles one key while the switcher is open (the overlay contract). The
+// popup is navigation-first (letters are actions, matching every other gg list);
+// `/` enters a filter sub-mode where runes type a query until esc/enter.
+func (p *bookmarkPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
 	}
-	p := m.bookmarkPopup
+	if m.running {
+		// B1: the switcher stays visible during a paste/restore WriteFile op but
+		// must be inert — a keypress here must not launch a second op.
+		return m, nil
+	}
 	if p.filtering {
 		switch msg.Type {
 		case tea.KeyEsc:
@@ -200,10 +208,10 @@ func (m Model) updateBookmarkPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	switch msg.Type {
 	case tea.KeyEsc:
-		m.bookmarkPopup = nil
+		m = m.popOverlay()
 	case tea.KeyEnter:
 		if p.compareRef != nil {
-			b, ok := m.selectedBookmark()
+			b, ok := p.selected()
 			if !ok {
 				return m, nil
 			}
@@ -211,9 +219,9 @@ func (m Model) updateBookmarkPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m.bookmarkJump()
 	case tea.KeyUp:
-		m.bookmarkMoveSel(-1)
+		p.moveSel(-1)
 	case tea.KeyDown:
-		m.bookmarkMoveSel(1)
+		p.moveSel(1)
 	case tea.KeyRunes:
 		switch msg.String() {
 		case "?":
@@ -224,9 +232,9 @@ func (m Model) updateBookmarkPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "/":
 			p.filtering = true
 		case "k":
-			m.bookmarkMoveSel(-1)
+			p.moveSel(-1)
 		case "j":
-			m.bookmarkMoveSel(1)
+			p.moveSel(1)
 		case "x":
 			if p.compareRef != nil {
 				return m, nil
@@ -246,11 +254,11 @@ func (m Model) updateBookmarkPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if p.compareRef != nil {
 				return m, nil
 			}
-			b, ok := m.selectedBookmark()
+			b, ok := p.selected()
 			if !ok {
 				return m, nil
 			}
-			m.bookmarkPopup = nil
+			m = m.popOverlay()
 			m.pendingCompare = &pendingCompare{ref: bookmarkToFileRef(b), label: bookmarkDisplay(b), target: compareShelf}
 			return m, m.loadShelfCmd(true)
 		}
@@ -258,8 +266,7 @@ func (m Model) updateBookmarkPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) bookmarkMoveSel(d int) {
-	p := m.bookmarkPopup
+func (p *bookmarkPopup) moveSel(d int) {
 	if n := p.sel + d; n >= 0 && n < len(p.visibleIdx()) {
 		p.sel = n
 	}
@@ -267,12 +274,18 @@ func (m Model) bookmarkMoveSel(d int) {
 
 // bookmarkRemovePrompt opens a confirm modal; removing a bookmark is cheap to
 // recreate but re-finding the file in a big repo is friction, so we confirm.
-func (m Model) bookmarkRemovePrompt() (tea.Model, tea.Cmd) {
-	b, ok := m.selectedBookmark()
+func (m Model) bookmarkRemovePrompt() (Model, tea.Cmd) {
+	p := m.bookmarkSwitcher()
+	if p == nil {
+		return m, nil
+	}
+	b, ok := p.selected()
 	if !ok {
 		return m, nil
 	}
-	m.bookmarkPopup = nil
+	// Leave the switcher on the overlay stack: the modal renders above it, and on
+	// Cancel the switcher is revealed automatically; on Remove the reload refreshes
+	// it in place (bookmarksLoadedMsg).
 	m.modal = &decisionState{
 		req: engine.DecisionRequest{
 			ID:      "bookmark-remove",
@@ -302,8 +315,12 @@ func (m Model) bookmarkRemoveCmd(id string) tea.Cmd {
 
 // bookmarkPastePrompt fetches the bookmark's bytes, then opens the mandatory-dest
 // path popup that runs engine.WriteFile on submit.
-func (m Model) bookmarkPastePrompt() (tea.Model, tea.Cmd) {
-	b, ok := m.selectedBookmark()
+func (m Model) bookmarkPastePrompt() (Model, tea.Cmd) {
+	p := m.bookmarkSwitcher()
+	if p == nil {
+		return m, nil
+	}
+	b, ok := p.selected()
 	if !ok {
 		return m, nil
 	}
@@ -312,19 +329,21 @@ func (m Model) bookmarkPastePrompt() (tea.Model, tea.Cmd) {
 		m.statusMsg = "bookmark paste: " + err.Error()
 		return m, nil
 	}
-	m.bookmarkPopup = nil
-	m.bookmarkPastePopup = &bookmarkPastePopup{origin: b.Path, data: data}
-	return m, nil
+	// Push over the switcher (which stays beneath); esc/success returns to it.
+	return m.pushOverlay(&bookmarkPastePopup{origin: b.Path, data: data, dest: restoredPath(b.Path)}), nil
 }
 
 // bookmarkMark records the first compare mark, or compares with it on the second
 // press (a self-contained two-mark, independent of the panel pair-op machinery).
-func (m Model) bookmarkMark() (tea.Model, tea.Cmd) {
-	b, ok := m.selectedBookmark()
+func (m Model) bookmarkMark() (Model, tea.Cmd) {
+	p := m.bookmarkSwitcher()
+	if p == nil {
+		return m, nil
+	}
+	b, ok := p.selected()
 	if !ok {
 		return m, nil
 	}
-	p := m.bookmarkPopup
 	if p.markID == "" || p.markID == b.ID {
 		if p.markID == b.ID {
 			p.markID = "" // toggle off
@@ -339,8 +358,12 @@ func (m Model) bookmarkMark() (tea.Model, tea.Cmd) {
 // openBookmarkCompareTwo diffs two bookmarks (marked = old, selected = new),
 // both resolved via BookmarkBytes.
 func (m Model) openBookmarkCompareTwo(aID, bID string) (Model, tea.Cmd) {
-	a, okA := m.bookmarkByID(aID)
-	b, okB := m.bookmarkByID(bID)
+	p := m.bookmarkSwitcher()
+	if p == nil {
+		return m, nil
+	}
+	a, okA := p.byID(aID)
+	b, okB := p.byID(bID)
 	if !okA || !okB {
 		return m, nil
 	}
@@ -355,8 +378,8 @@ func (m Model) openBookmarkCompareTwo(aID, bID string) (Model, tea.Cmd) {
 // even when the popup was opened over a history/blame surface. Shared by jump,
 // compare-two, and the compare-focused-vs-X paths.
 func (m Model) openPickerDiff(v *diffView, tag string, load tea.Cmd) (Model, tea.Cmd) {
-	m.bookmarkPopup = nil
-	m.shelfPopup = nil
+	m = m.clearOverlays()
+	m.shelfPopup = nil // TRANSITIONAL (B2): remove in Task 4 when shelf is an overlay
 	m = m.clearStack()
 	m.diffView = v
 	m.diffTag = tag
@@ -385,21 +408,20 @@ func (m Model) loadBookmarkCompareTwoCmd(a, b model.Bookmark) tea.Cmd {
 
 // --- paste destination popup ---------------------------------------------
 
-func (m Model) updateBookmarkPasteKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (p *bookmarkPastePopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
 	}
-	p := m.bookmarkPastePopup
 	switch msg.Type {
 	case tea.KeyEsc:
-		m.bookmarkPastePopup = nil
+		m = m.popOverlay() // back to the switcher beneath
 	case tea.KeyEnter:
 		dest := strings.TrimSpace(p.dest)
 		if dest == "" {
 			return m, nil // a destination is mandatory
 		}
 		data := p.data
-		m.bookmarkPastePopup = nil
+		m = m.popOverlay() // back to the switcher; it stays visible during the write
 		return m.startOp(engine.WriteFile{Path: dest, Data: data})
 	case tea.KeyBackspace, tea.KeyCtrlH:
 		if r := []rune(p.dest); len(r) > 0 {
@@ -413,20 +435,24 @@ func (m Model) updateBookmarkPasteKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) renderBookmarkPastePopup() string {
-	p := m.bookmarkPastePopup
+func (p *bookmarkPastePopup) render(m Model, below string) string {
 	var b strings.Builder
 	b.WriteString("Paste bookmarked file to a new path\n\n")
 	b.WriteString("from: " + p.origin + "  (resolved now)\n")
 	b.WriteString("dest: " + p.dest + "\n\n")
 	b.WriteString("[type] path  [enter] paste  [esc] cancel")
-	w, _ := m.overlayDims()
-	return modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"
+	w, h := m.overlayDims()
+	box := modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"
+	return overlayCenter(clipToHeight(below, h), box, w, h)
 }
 
 // bookmarkJump opens a diff of the bookmark's bytes vs the current working file.
-func (m Model) bookmarkJump() (tea.Model, tea.Cmd) {
-	b, ok := m.selectedBookmark()
+func (m Model) bookmarkJump() (Model, tea.Cmd) {
+	p := m.bookmarkSwitcher()
+	if p == nil {
+		return m, nil
+	}
+	b, ok := p.selected()
 	if !ok {
 		return m, nil
 	}

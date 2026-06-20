@@ -39,7 +39,7 @@ func TestPendingCompareSurvivesLoad(t *testing.T) {
 	m.pendingCompare = &pendingCompare{ref: model.FileRef{Source: model.SourceCommit, Locator: "x", Path: "a.go"}, label: "commit a.go"}
 	u, _ := m.Update(bookmarksLoadedMsg{items: twoBookmarkItems()})
 	mm := u.(Model)
-	if mm.bookmarkPopup == nil || mm.bookmarkPopup.compareRef == nil {
+	if mm.bookmarkSwitcher() == nil || mm.bookmarkSwitcher().compareRef == nil {
 		t.Fatal("popup must open in compare mode")
 	}
 	if mm.pendingCompare != nil {
@@ -49,32 +49,32 @@ func TestPendingCompareSurvivesLoad(t *testing.T) {
 
 func TestCompareModeEnterRunsCompare(t *testing.T) {
 	m := footerModel()
-	m.bookmarkPopup = newBookmarkPopup(twoBookmarkItems())
+	m = m.pushOverlay(newBookmarkPopup(twoBookmarkItems()))
 	ref := model.FileRef{Source: model.SourceCommit, Locator: "x", Path: "a.go"}
-	m.bookmarkPopup.compareRef = &ref
-	m.bookmarkPopup.compareLabel = "commit a.go"
+	m.bookmarkSwitcher().compareRef = &ref
+	m.bookmarkSwitcher().compareLabel = "commit a.go"
 	u, _ := m.Update(keyMsg("enter"))
 	mm := u.(Model)
 	if mm.diffView == nil {
 		t.Fatal("enter in compare mode must open the comparison diff")
 	}
-	if mm.bookmarkPopup != nil {
+	if mm.bookmarkSwitcher() != nil {
 		t.Error("popup should close after launching the compare")
 	}
 }
 
 func TestCompareModeMutatorsInert(t *testing.T) {
 	m := footerModel()
-	m.bookmarkPopup = newBookmarkPopup(twoBookmarkItems())
+	m = m.pushOverlay(newBookmarkPopup(twoBookmarkItems()))
 	ref := model.FileRef{Source: model.SourceCommit, Locator: "x", Path: "a.go"}
-	m.bookmarkPopup.compareRef = &ref
+	m.bookmarkSwitcher().compareRef = &ref
 	for _, k := range []string{"x", "p", "m"} {
 		u, _ := m.Update(keyMsg(k))
 		mm := u.(Model)
-		if mm.bookmarkPopup == nil || mm.diffView != nil || mm.modal != nil || mm.bookmarkPastePopup != nil {
+		if mm.bookmarkSwitcher() == nil || mm.diffView != nil || mm.modal != nil || bookmarkPasteOf(mm) != nil {
 			t.Errorf("%q must be inert in compare mode", k)
 		}
-		if mm.bookmarkPopup != nil && mm.bookmarkPopup.markID != "" {
+		if mm.bookmarkSwitcher() != nil && mm.bookmarkSwitcher().markID != "" {
 			t.Errorf("%q must not set a compare mark in compare mode", k)
 		}
 	}
@@ -103,9 +103,9 @@ func TestCompareRowRunSetsPendingAndLoads(t *testing.T) {
 func TestCompareDiffVisibleOverHistorySurface(t *testing.T) {
 	m := footerModel()
 	m = m.pushSurface(newHistoryView(navContext{path: "a.go", rev: "r"}))
-	m.bookmarkPopup = newBookmarkPopup(twoBookmarkItems())
+	m = m.pushOverlay(newBookmarkPopup(twoBookmarkItems()))
 	ref := model.FileRef{Source: model.SourceCommit, Locator: "x", Path: "a.go"}
-	m.bookmarkPopup.compareRef = &ref
+	m.bookmarkSwitcher().compareRef = &ref
 	u, _ := m.Update(keyMsg("enter"))
 	mm := u.(Model)
 	if mm.stackTop() != nil {

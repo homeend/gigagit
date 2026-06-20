@@ -129,7 +129,7 @@ func TestPendingCompareStampsBookmarkPopup(t *testing.T) {
 	m.pendingCompare = &pendingCompare{ref: model.FileRef{Source: model.SourceShelf, Locator: "a", Path: "x.go"}, label: "shelf #a", target: compareBookmark}
 	u, _ := m.Update(bookmarksLoadedMsg{items: []model.Bookmark{{ID: "b1", State: model.StateUnstaged, Worktree: "/wt", Path: "y.go"}}})
 	m = u.(Model)
-	if m.bookmarkPopup == nil || m.bookmarkPopup.compareRef == nil {
+	if m.bookmarkSwitcher() == nil || m.bookmarkSwitcher().compareRef == nil {
 		t.Fatalf("a bookmark-targeted pendingCompare should stamp compareRef onto the new popup")
 	}
 	if m.pendingCompare != nil {

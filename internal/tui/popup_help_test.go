@@ -54,7 +54,7 @@ func TestSwitcherHelpCompareModeOmitsInertKeys(t *testing.T) {
 // bookmarkPopupModel returns a model with the bookmark switcher open.
 func bookmarkPopupModel() Model {
 	m := Model{width: 80, height: 24, sel: map[panel]int{}, sortModes: map[panel]sortMode{}}
-	m.bookmarkPopup = newBookmarkPopup([]model.Bookmark{{ID: "b1", Path: "a.go"}})
+	m = m.pushOverlay(newBookmarkPopup([]model.Bookmark{{ID: "b1", Path: "a.go"}}))
 	return m
 }
 
@@ -71,7 +71,7 @@ func TestQuestionMarkOpensCheatSheetOverBookmarkPopup(t *testing.T) {
 	if m.contentPopup == nil {
 		t.Fatal("? must open the cheat sheet")
 	}
-	if m.bookmarkPopup == nil {
+	if m.bookmarkSwitcher() == nil {
 		t.Fatal("the bookmark switcher must stay open under the cheat sheet")
 	}
 	if !strings.Contains(m.contentPopup.title, "Bookmark") {
@@ -105,7 +105,7 @@ func TestCheatSheetCapturesKeysOverPicker(t *testing.T) {
 	if !m.contentPopup.typing {
 		t.Fatal("/ must start the cheat sheet search (keys route to the overlay)")
 	}
-	if m.bookmarkPopup.filtering {
+	if m.bookmarkSwitcher().filtering {
 		t.Fatal("the bookmark filter must not engage while the cheat sheet owns the keys")
 	}
 }
@@ -114,8 +114,8 @@ func TestCheatSheetCapturesKeysOverPicker(t *testing.T) {
 // state intact — the differentiator of the chosen overlay-return behavior.
 func TestCheatSheetEscReturnsToPicker(t *testing.T) {
 	m := bookmarkPopupModel()
-	m.bookmarkPopup.filter = "ab"
-	m.bookmarkPopup.markID = "b1"
+	m.bookmarkSwitcher().filter = "ab"
+	m.bookmarkSwitcher().markID = "b1"
 	u, _ := m.Update(keyMsg("?"))
 	m = u.(Model)
 	u, _ = m.Update(keyMsg("esc"))
@@ -123,11 +123,11 @@ func TestCheatSheetEscReturnsToPicker(t *testing.T) {
 	if m.contentPopup != nil {
 		t.Fatal("esc must close the cheat sheet")
 	}
-	if m.bookmarkPopup == nil {
+	if m.bookmarkSwitcher() == nil {
 		t.Fatal("esc must return to the bookmark switcher, still open")
 	}
-	if m.bookmarkPopup.filter != "ab" || m.bookmarkPopup.markID != "b1" {
-		t.Fatalf("the switcher's filter/mark must survive: filter=%q markID=%q", m.bookmarkPopup.filter, m.bookmarkPopup.markID)
+	if m.bookmarkSwitcher().filter != "ab" || m.bookmarkSwitcher().markID != "b1" {
+		t.Fatalf("the switcher's filter/mark must survive: filter=%q markID=%q", m.bookmarkSwitcher().filter, m.bookmarkSwitcher().markID)
 	}
 }
 
@@ -144,7 +144,8 @@ func TestCheatSheetRendersOverPicker(t *testing.T) {
 
 // Both switchers must advertise the new ? key in their footer hint.
 func TestSwitcherFootersAdvertiseQuestionMark(t *testing.T) {
-	if f := bookmarkPopupModel().renderBookmarkPopup(); !strings.Contains(f, "[?] keys") {
+	bm := bookmarkPopupModel()
+	if f := bm.renderBookmarkPopupBox(bm.bookmarkSwitcher()); !strings.Contains(f, "[?] keys") {
 		t.Errorf("bookmark switcher footer must advertise [?] keys:\n%s", f)
 	}
 	if f := shelfPopupModel().renderShelfPopup(); !strings.Contains(f, "[?] keys") {

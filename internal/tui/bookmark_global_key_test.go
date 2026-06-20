@@ -69,10 +69,10 @@ func TestBookmarkKeyOpensFromBlame(t *testing.T) {
 func TestBookmarkPopupReceivesKeysOverDiffView(t *testing.T) {
 	m := footerModel()
 	m.diffView = &diffView{title: "a.go"}
-	m.bookmarkPopup = twoBookmarks()
+	m = m.pushOverlay(twoBookmarks())
 	u, _ := m.Update(keyMsg("esc"))
 	mm := u.(Model)
-	if mm.bookmarkPopup != nil {
+	if mm.bookmarkSwitcher() != nil {
 		t.Error("esc should close the bookmark popup over a diff view")
 	}
 	if mm.diffView == nil {
@@ -84,7 +84,7 @@ func TestBookmarkPopupReceivesKeysOverDiffView(t *testing.T) {
 func TestBookmarkPopupRendersOverDiffView(t *testing.T) {
 	m := footerModel()
 	m.diffView = &diffView{title: "a.go"}
-	m.bookmarkPopup = twoBookmarks()
+	m = m.pushOverlay(twoBookmarks())
 	if !strings.Contains(m.render(), "Bookmarks") {
 		t.Error("bookmark popup must render over the diff view")
 	}
@@ -92,7 +92,7 @@ func TestBookmarkPopupRendersOverDiffView(t *testing.T) {
 
 func TestBookmarkPopupRendersOverHistory(t *testing.T) {
 	m := footerModel().pushSurface(newHistoryView(navContext{path: "a.go"}))
-	m.bookmarkPopup = twoBookmarks()
+	m = m.pushOverlay(twoBookmarks())
 	if !strings.Contains(m.render(), "Bookmarks") {
 		t.Error("bookmark popup must render over a stack surface")
 	}
