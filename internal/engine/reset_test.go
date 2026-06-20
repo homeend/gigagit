@@ -8,6 +8,39 @@ import (
 	"testing"
 )
 
+// captureDecider records the requests it sees and answers from a fixed map.
+type captureDecider struct {
+	answers map[string]string
+	seen    []DecisionRequest
+}
+
+func (d *captureDecider) Decide(_ context.Context, req DecisionRequest) (DecisionResponse, error) {
+	d.seen = append(d.seen, req)
+	return DecisionResponse{Option: d.answers[req.ID]}, nil
+}
+
+// The reset-mode options must lead with a SAFE mode so the modal's default
+// cursor (index 0) is never the destructive "hard" — enter must not be one
+// keystroke from discarding work.
+func TestResetModeOptionsLeadWithSafe(t *testing.T) {
+	dir, repo, base := resetEngineRepo(t)
+	_ = dir
+	dec := &captureDecider{answers: map[string]string{"reset-mode": "cancel"}}
+	if _, err := (Reset{Commit: base}).Run(context.Background(), OpDeps{Repo: repo, Decider: dec}); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if len(dec.seen) == 0 || dec.seen[0].ID != "reset-mode" {
+		t.Fatalf("first decision = %+v, want reset-mode", dec.seen)
+	}
+	opts := dec.seen[0].Options
+	if len(opts) == 0 || opts[0] == "hard" {
+		t.Fatalf("reset-mode options must not lead with hard: %v", opts)
+	}
+	if opts[0] != "soft" {
+		t.Fatalf("reset-mode options[0] = %q, want soft (safe default)", opts[0])
+	}
+}
+
 func TestResetGuardEmptyCommit(t *testing.T) {
 	_, repo := newRepo(t)
 	_, err := Reset{}.Run(context.Background(), OpDeps{Repo: repo})
