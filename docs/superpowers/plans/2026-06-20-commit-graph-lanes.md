@@ -157,6 +157,83 @@ func TestWidthNormalized(t *testing.T) {
 }
 ```
 
+Add a second, **independent** oracle (same file) — invariants over a DAG built by
+**real git**, not by hand. This catches conceptual fold errors the hand-authored
+canonical strings cannot (they share the author's mental model with the impl).
+Extra imports: `"os"`, `"os/exec"`, `"path/filepath"`.
+
+```go
+func buildRealRepoCommits(t *testing.T) []Commit {
+	t.Helper()
+	dir := t.TempDir()
+	run := func(args ...string) {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(),
+			"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t",
+			"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	w := func(name, content string) {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	run("init", "-b", "main")
+	w("a", "1"); run("add", "-A"); run("commit", "-m", "base")
+	run("checkout", "-b", "feature")
+	w("b", "1"); run("add", "-A"); run("commit", "-m", "feat")
+	run("checkout", "main")
+	w("c", "1"); run("add", "-A"); run("commit", "-m", "main work")
+	run("merge", "--no-ff", "-m", "merge feature", "feature")
+	out, err := exec.Command("git", "-C", dir, "log", "--all", "--date-order", "--format=%H %P").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cs []Commit
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		f := strings.Fields(line)
+		cs = append(cs, Commit{Hash: f[0], Parents: f[1:]})
+	}
+	return cs
+}
+
+func TestLayRealRepoInvariants(t *testing.T) {
+	cs := buildRealRepoCommits(t)
+	rows, _ := Lay(cs)
+	if len(rows) != len(cs) {
+		t.Fatalf("rows %d != commits %d", len(rows), len(cs))
+	}
+	idx := map[string]int{}
+	for i, c := range cs {
+		idx[c.Hash] = i
+	}
+	for i, r := range rows {
+		if strings.Count(r.Cells, "●") != 1 { // exactly one node per row
+			t.Fatalf("row %d %q must have exactly one node", i, r.Cells)
+		}
+		for _, p := range cs[i].Parents { // every parent is a LATER node (date-order)
+			if j, ok := idx[p]; ok && j <= i {
+				t.Fatalf("parent %s of row %d must appear later, got row %d", p[:7], i, j)
+			}
+		}
+	}
+	// At least one row must have a merge/fork (this repo has a --no-ff merge),
+	// proving the layout exercised multi-lane logic, not just a single column.
+	multi := false
+	for _, r := range rows {
+		if strings.ContainsAny(r.Cells, "╮╭╯╰┬┴┼") {
+			multi = true
+		}
+	}
+	if !multi {
+		t.Fatal("a repo with a merge must produce at least one fork/merge glyph")
+	}
+}
+```
+
 - [ ] **Step 2: Run — expect FAIL**
 
 Run: `go test ./internal/commitgraph/ 2>&1 | tail`
@@ -427,7 +504,24 @@ func TestRebuildCommitGraphAligns(t *testing.T) {
 		t.Fatalf("graph rows (%d) must align with commits (%d)", len(m.commitGraphRows), len(m.commits))
 	}
 }
+
+func TestGraphRowFitsNarrowPanel(t *testing.T) {
+	// A graph-prefixed row at a small panel size must still fit (cutoff truncates
+	// the combined graph+subject; box-drawing runes measure as width 1).
+	m := graphModel()
+	m.commits = []model.Commit{{Hash: "c2", Parents: []string{"c1"}, Subject: strings.Repeat("x", 200)}}
+	m = m.rebuildCommitGraph()
+	m.width, m.height = 50, 20
+	out := m.View()
+	for _, line := range strings.Split(out, "\n") {
+		if w := lipgloss.Width(line); w > m.width {
+			t.Fatalf("line wider than panel (%d > %d): %q", w, m.width, line)
+		}
+	}
+}
 ```
+
+(Add `"github.com/charmbracelet/lipgloss"` to this test file's imports.)
 
 - [ ] **Step 2: Run — expect FAIL**
 
@@ -527,12 +621,31 @@ Claude-Session: https://claude.ai/code/session_0151SXf6HykjK298evgdKkro"
 - CLAUDE.md package map: add a `commitgraph` row — "Pure single-line commit-graph lane engine (ordered `{hash,parents}` → per-row Unicode glyph cells); no git/TUI deps. Consumed by the TUI Commits panel (cached in `m.commitGraphRows`, drawn only in natural feed order)."
 - help.go: note that the Commits panel draws a graph in natural order (hidden under filter/sort) — add to the existing Commits-panel help block.
 
-- [ ] **Step 2: Full race gate**
+- [ ] **Step 2: Real-repo eyeball (independent of the unit tests)**
+
+Compare `Lay`'s output for a real repo against git's own graph — the unit tests
+share the author's mental model, so this is the only check that proves the shape
+matches *git*, not what was imagined. Run, in the gg repo (it has real merges):
+
+```bash
+git -C /mnt/t/others/gigagit log --all --date-order --oneline --graph | head -40
+```
+
+Then dump `Lay`'s rendering for the same commits — add a tiny throwaway in a
+scratch `main_test.go`-style snippet OR (simplest) print it from a temporary
+`go test` that loads the repo via `buildRealRepoCommits`-style `git log
+--format=%H %P`, calls `Lay`, and prints `Cells + " " + subject`. Eyeball that
+the node columns, forks, and merges line up with git's `--graph` (same branch
+points and merge joins). Record the comparison in the commit/PR notes; delete the
+scratch. (No assertion — this is a human shape-check; the invariants test already
+guards structure in CI.)
+
+- [ ] **Step 3: Full race gate**
 
 Run: `./test.sh race`
 Expected: vet+gofmt clean, all unit tests pass, e2e green.
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
 git add -A
