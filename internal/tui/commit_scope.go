@@ -241,6 +241,27 @@ func (m Model) commitRevertRow() (actionRow, bool) {
 	}, true
 }
 
+// commitResetRow offers "Reset to this commit" on the Commits panel: move the
+// current branch to the selected commit. The op asks for the mode (soft/mixed/
+// hard) via the modal, and confirms when the target is not on the current branch.
+func (m Model) commitResetRow() (actionRow, bool) {
+	if m.focus != panelCommits || !m.opsIdle() {
+		return actionRow{}, false
+	}
+	bi, ok := m.backingIndex(panelCommits)
+	if !ok {
+		return actionRow{}, false
+	}
+	hash := m.commits[bi].Hash // full SHA → unambiguous
+	return actionRow{
+		id:    "commit-reset",
+		label: "Reset to this commit",
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			return m.startOp(engine.Reset{Commit: hash})
+		},
+	}, true
+}
+
 // commitHasLocalRef reports whether commit c is decorated with a local branch ref
 // named name (ignoring remote/tag kinds and the Head flag). A branch ref
 // decorates only its tip, so this identifies the branch's tip commit.

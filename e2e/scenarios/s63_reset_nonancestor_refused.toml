@@ -1,0 +1,24 @@
+name = "reset: a non-ancestor target without --force is refused on a non-TTY (exit 1)"
+
+[input]
+steps = [
+  { write = "a.txt", content = "base\n" },
+  { commit = "base" },
+  { branch = "side" },
+  { switch = "side" },
+  { write = "s.txt", content = "s\n" },
+  { commit = "side change" },
+  { switch = "main" },
+]
+
+[[run]]
+# side's tip is not on main; without --force and no TTY the confirm refuses.
+cmd  = ["reset", "side"]
+exit = 1
+
+[expect]
+branch = "main"
+
+[[expect.log]]
+# main is untouched — still just its own history.
+subjects = ["base"]

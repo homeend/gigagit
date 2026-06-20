@@ -1,0 +1,26 @@
+name = "reset: no flag defaults to mixed — branch moves, change left unstaged (exit 0)"
+
+[input]
+steps = [
+  { write = "a.txt", content = "base\n" },
+  { commit = "base" },
+  { write = "b.txt", content = "b\n" },
+  { commit = "add b.txt" },
+]
+
+[[run]]
+cmd  = ["reset", "HEAD~1"]
+exit = 0
+
+[expect]
+branch = "main"
+
+[expect.status]
+# the undone commit added b.txt; after a mixed reset it is an untracked file.
+untracked = ["b.txt"]
+
+[expect.files]
+"b.txt" = "b\n"
+
+[[expect.log]]
+subjects = ["base"]

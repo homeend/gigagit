@@ -54,6 +54,15 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   drawing, and the jobs it runs — the first of a general mechanism.)
 
 ### Added
+- **Reset to this commit (soft / mixed / hard).** The `.` menu on a commit
+  offers **Reset to this commit** — moves the current branch to it. A modal asks
+  the mode: **soft** keeps the changes since staged, **mixed** keeps them
+  unstaged (the default), **hard** discards uncommitted tracked changes (untracked
+  files survive; the commits you reset past stay recoverable via `git reflog`).
+  Because the Commits panel spans all branches, resetting to a commit that is
+  **not on the current branch** asks one more confirmation before moving the
+  branch onto it. Also on the CLI: `gg reset [--soft|--mixed|--hard] [--force]
+  <commit>`.
 - **Revert a commit.** The `.` menu on a commit offers **Revert this commit** —
   creates a new commit on the current branch that undoes the selected one. A
   dirty working tree is autostashed and restored. A conflict drops into the

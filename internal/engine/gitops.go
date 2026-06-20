@@ -79,6 +79,8 @@ type GitOps interface {
 	RevertInProgress(ctx context.Context, dir string) (bool, error)
 	RevertHeadSummary(ctx context.Context, dir string) (string, error)
 
+	Reset(ctx context.Context, mode, ref string) error
+
 	StagePaths(ctx context.Context, paths []string) error
 	UnstagePaths(ctx context.Context, paths []string) error
 	RestoreWorktree(ctx context.Context, paths []string) error

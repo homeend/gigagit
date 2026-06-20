@@ -443,6 +443,29 @@ func TestCommitRevertRowGatingAndMergeGuard(t *testing.T) {
 	}
 }
 
+func TestCommitResetRowGating(t *testing.T) {
+	m := footerModel()
+	if m.sel == nil {
+		m.sel = map[panel]int{}
+	}
+	full := "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee0"
+	m.commits = []model.Commit{{Hash: full, Subject: "x"}}
+	m.sel[panelCommits] = 0
+
+	m.focus = panelCommits
+	r, ok := findRow(availableActions(m), "commit-reset")
+	if !ok {
+		t.Fatal("reset row missing on the Commits panel")
+	}
+	if r.label != "Reset to this commit" {
+		t.Fatalf("label = %q", r.label)
+	}
+	m.focus = panelBranches
+	if _, ok := findRow(availableActions(m), "commit-reset"); ok {
+		t.Fatal("reset row must not appear off the Commits panel")
+	}
+}
+
 func TestCommitCreateWorktreeRowOpensInEdit(t *testing.T) {
 	m := footerModel()
 	if m.sel == nil {

@@ -1,0 +1,27 @@
+name = "reset --hard: branch moves, the added file and a dirty edit are discarded (exit 0)"
+
+[input]
+steps = [
+  { write = "a.txt", content = "base\n" },
+  { commit = "base" },
+  { write = "b.txt", content = "b\n" },
+  { commit = "add b.txt" },
+  # a dirty tracked edit that hard will throw away
+  { write = "a.txt", content = "dirty\n" },
+]
+
+[[run]]
+cmd  = ["reset", "--hard", "HEAD~1"]
+exit = 0
+
+[expect]
+branch      = "main"
+clean       = true
+in_progress = "none"
+
+[expect.files]
+"a.txt" = "base\n"          # the dirty edit is gone
+"b.txt" = { absent = true } # the added file is gone
+
+[[expect.log]]
+subjects = ["base"]
