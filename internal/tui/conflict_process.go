@@ -35,6 +35,7 @@ type conflictProcess struct {
 	src        domain.ConflictState // merge/rebase parties, for the header
 	inProgress string               // "merge"/"rebase"/"" — set by the probe (Task 5)
 	errMsg     string               // last failed job's message (confReporting)
+	picker     *hunkPicker          // the line editor, while confPicking (owned here, not on the surface stack)
 	mode       dispMode             // text display mode; z cycles
 	hscroll    int                  // modeScroll horizontal offset
 }
@@ -57,6 +58,17 @@ func (p *conflictProcess) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch p.st {
 	case confListing:
 		return p.updateListing(m, msg)
+	case confPicking:
+		if p.picker == nil {
+			p.st = confListing
+			return m, nil
+		}
+		if msg.String() == "esc" { // leave the editor without applying → back to the list
+			p.picker = nil
+			p.st = confListing
+			return m, nil
+		}
+		return p.picker.update(m, msg) // enter applies via the process-aware apply
 	case confReporting:
 		// Any key acknowledges the error; reload to resync, back to Listing.
 		p.st = confListing
@@ -96,6 +108,17 @@ func (p *conflictProcess) updateListing(m Model, msg tea.KeyMsg) (Model, tea.Cmd
 		}
 		p.st = confWorking
 		return m.startOp(engine.MarkAllResolved{Paths: paths})
+	case "enter": // hand off to the line editor for a both-sides file
+		if p.sel < 0 || p.sel >= len(p.files) {
+			return m, nil
+		}
+		f := p.files[p.sel]
+		if f.ConflictClass() != model.ConflictBothSides {
+			m.statusMsg = "line editor: only for files modified on both sides"
+			return m, nil
+		}
+		p.st = confWorking // loading the file; the picker shows when it arrives
+		return m, m.loadConflictFileCmd(f.Path)
 	}
 	// Per-file resolve actions (continue/abort land in Task 5).
 	if p.sel < 0 || p.sel >= len(p.files) {
@@ -150,6 +173,11 @@ func (p *conflictProcess) render(m Model, below string) string {
 	switch p.st {
 	case confListing:
 		return overlayCenter(bg, conflictListBox(m, p.files, p.sel, p.src, p.inProgress, p.mode, p.hscroll), w, h)
+	case confPicking:
+		if p.picker != nil {
+			return p.picker.render(m) // the line editor owns the full screen
+		}
+		return below
 	case confWorking:
 		return overlayCenter(bg, conflictMsgBox(m, "Resolving…"), w, h)
 	case confReporting:

@@ -121,6 +121,54 @@ func TestConflictProcessDataLoadedRoutesToRefreshed(t *testing.T) {
 	}
 }
 
+func TestConflictProcessEnterLoadsBothSides(t *testing.T) {
+	m := conflictModel()
+	m, _ = startConflictProcess(m)
+	m.proc.(*conflictProcess).sel = 0 // uu.txt — both sides
+	u, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = u.(Model)
+	if m.proc.(*conflictProcess).st != confWorking {
+		t.Fatalf("enter on a both-sides file must load (Working), got %d", m.proc.(*conflictProcess).st)
+	}
+	if cmd == nil {
+		t.Fatal("enter must start the conflict-file load")
+	}
+}
+
+func TestConflictProcessEnterRejectsOneSided(t *testing.T) {
+	m := conflictModel()
+	m, _ = startConflictProcess(m)
+	m.proc.(*conflictProcess).sel = 1 // md.txt — one sided
+	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = u.(Model)
+	if m.proc.(*conflictProcess).st != confListing {
+		t.Fatal("enter on a one-sided file must stay in Listing")
+	}
+}
+
+func TestConflictProcessFileLoadedShowsPickerEscReturns(t *testing.T) {
+	m := conflictModel()
+	m, _ = startConflictProcess(m)
+	m.proc.(*conflictProcess).st = confWorking
+	content := []byte("<<<<<<< ours\nours\n=======\ntheirs\n>>>>>>> theirs\n")
+	u, _ := m.Update(conflictFileLoadedMsg{path: "uu.txt", content: content})
+	m = u.(Model)
+	cp := m.proc.(*conflictProcess)
+	if cp.st != confPicking || cp.picker == nil {
+		t.Fatalf("a loaded conflict file must show the picker (Picking), got st=%d", cp.st)
+	}
+	if m.stackTop() != nil {
+		t.Fatal("the process owns the picker; it must NOT be pushed on the surface stack")
+	}
+	// esc returns to Listing and drops the picker
+	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = u.(Model)
+	cp = m.proc.(*conflictProcess)
+	if cp.st != confListing || cp.picker != nil {
+		t.Fatal("esc in Picking must return to Listing and drop the picker")
+	}
+}
+
 func TestConflictProcessRefreshedReLists(t *testing.T) {
 	m := conflictModel() // 2 conflicts
 	m, _ = startConflictProcess(m)

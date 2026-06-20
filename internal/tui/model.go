@@ -987,21 +987,32 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case conflictFileLoadedMsg:
-		if msg.err != nil {
-			m.statusMsg = "conflict: " + msg.err.Error()
+		// In the conflict process, a load failure must return it to Listing (the
+		// load is not an op, so no opFinishedMsg would otherwise un-stick Working).
+		cp, inProc := m.proc.(*conflictProcess)
+		fail := func(reason string) (tea.Model, tea.Cmd) {
+			m.statusMsg = reason
+			if inProc {
+				cp.st = confListing
+			}
 			return m, nil
 		}
+		if msg.err != nil {
+			return fail("conflict: " + msg.err.Error())
+		}
 		if textdiff.IsBinary(msg.content) {
-			m.statusMsg = "hunk picker: binary file"
-			return m, nil
+			return fail("hunk picker: binary file")
 		}
 		doc, err := hunkpick.ParseConflict(msg.content)
 		if err != nil {
-			m.statusMsg = "hunk picker: " + err.Error()
-			return m, nil
+			return fail("hunk picker: " + err.Error())
 		}
 		if len(doc.Blocks()) == 0 {
-			m.statusMsg = "hunk picker: no conflict regions found"
+			return fail("hunk picker: no conflict regions found")
+		}
+		if inProc {
+			cp.picker = newProcessConflictPicker(msg.path, doc)
+			cp.st = confPicking
 			return m, nil
 		}
 		m = m.pushSurface(newConflictPicker(msg.path, doc))

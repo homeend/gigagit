@@ -68,6 +68,22 @@ func newConflictPicker(path string, doc *hunkpick.Doc) *hunkPicker {
 	}
 }
 
+// newProcessConflictPicker is the conflict picker owned by the conflict process
+// (not the surface stack): on apply it returns the process to Working and starts
+// the resolve job; esc is intercepted by the process, so this picker never pops
+// a surface.
+func newProcessConflictPicker(path string, doc *hunkpick.Doc) *hunkPicker {
+	e := newConflictPicker(path, doc)
+	e.apply = func(m Model, content []byte) (Model, tea.Cmd) {
+		if cp, ok := m.proc.(*conflictProcess); ok {
+			cp.picker = nil
+			cp.st = confWorking
+		}
+		return m.startOp(engine.ResolveConflictHunks{Path: path, Content: content})
+	}
+	return e
+}
+
 // newStagePicker wires the hunk-staging params.
 func newStagePicker(path string, doc *hunkpick.Doc) *hunkPicker {
 	return &hunkPicker{
