@@ -9,6 +9,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Branches panel — indicators moved to a dynamic left gutter.** The set/solo
+  `◉` and head `*` markers now render in a left gutter (width adapts to how many
+  indicator types are active) so the set marker is no longer truncated in a
+  narrow panel.
 - **Commits panel — lane color + list mode.** Each commit's `●` node is colored
   by its graph lane (recycled palette, the standard git-client convention). A new
   `.`-menu toggle **Show as list / Show as graph** renders the feed as a flat
