@@ -102,6 +102,53 @@ func TestCommitSoloReloadEndToEnd(t *testing.T) {
 	}
 }
 
+func TestCommitToggleAddsBranch(t *testing.T) {
+	m := branchesPanelModel("feat", "main")
+	r, ok := findRow(availableActions(m), "commits-toggle")
+	if !ok {
+		t.Fatalf("toggle action missing on Branches panel")
+	}
+	if r.label != "Add to commit view" {
+		t.Fatalf("label for unselected branch = %q, want Add to commit view", r.label)
+	}
+	mm, _ := r.run(m)
+	m = mm.(Model)
+	if len(m.commitScopeBranches) != 1 || m.commitScopeBranches[0] != "feat" {
+		t.Fatalf("toggle-add should scope to [feat], got %v", m.commitScopeBranches)
+	}
+}
+
+func TestCommitToggleRemovesBranch(t *testing.T) {
+	m := branchesPanelModel("feat", "main")
+	m.commitScopeBranches = []string{"feat", "main"}
+	r, ok := findRow(availableActions(m), "commits-toggle")
+	if !ok {
+		t.Fatalf("toggle action missing")
+	}
+	if r.label != "Remove from commit view" {
+		t.Fatalf("label for selected branch = %q, want Remove from commit view", r.label)
+	}
+	mm, _ := r.run(m)
+	m = mm.(Model)
+	if len(m.commitScopeBranches) != 1 || m.commitScopeBranches[0] != "main" {
+		t.Fatalf("toggle-remove should leave [main], got %v", m.commitScopeBranches)
+	}
+}
+
+func TestCommitToggleRemoveLastReturnsToAll(t *testing.T) {
+	m := branchesPanelModel("feat")
+	m.commitScopeBranches = []string{"feat"}
+	r, _ := findRow(availableActions(m), "commits-toggle")
+	mm, _ := r.run(m)
+	m = mm.(Model)
+	if len(m.commitScopeBranches) != 0 {
+		t.Fatalf("removing the last branch should clear scope, got %v", m.commitScopeBranches)
+	}
+	if m.commitScopeLabel() != "all" {
+		t.Fatalf("empty scope label = %q, want all", m.commitScopeLabel())
+	}
+}
+
 func TestCommitScopeLabel(t *testing.T) {
 	m := footerModel()
 	if m.commitScopeLabel() != "all" {
@@ -110,6 +157,61 @@ func TestCommitScopeLabel(t *testing.T) {
 	m.commitScopeBranches = []string{"feat"}
 	if m.commitScopeLabel() != "solo: feat" {
 		t.Fatalf("solo label = %q", m.commitScopeLabel())
+	}
+}
+
+func TestBranchRowsMarkAllScopedBranches(t *testing.T) {
+	m := branchesPanelModel("a", "b", "c")
+	m.commitScopeBranches = []string{"a", "c"}
+	rows := m.branchRows()
+	if len(rows) != 3 {
+		t.Fatalf("want 3 rows, got %d", len(rows))
+	}
+	if !strings.Contains(rows[0], "◉") {
+		t.Fatalf("row a should be marked: %q", rows[0])
+	}
+	if strings.Contains(rows[1], "◉") {
+		t.Fatalf("row b should NOT be marked: %q", rows[1])
+	}
+	if !strings.Contains(rows[2], "◉") {
+		t.Fatalf("row c should be marked: %q", rows[2])
+	}
+}
+
+// TestCommitToggleReloadEndToEnd drives toggle → reload cmd → commitsReloadedMsg
+// → Update, and confirms the multi-branch label paints.
+func TestCommitToggleReloadEndToEnd(t *testing.T) {
+	f := gitexec.NewFakeRunner()
+	f.SetResponse("git log", gitexec.Result{Stdout: "h1\x1f\x1fAda\x1f0\x1fsubject\x1fHEAD -> feat\n"})
+	svc := domain.New(&git.Repo{Runner: f})
+	m := branchesPanelModel("feat", "main")
+	m.svc = svc
+	m.feed = svc.CommitFeed()
+	m.commitScopeBranches = []string{"main"} // pre-existing one-branch set
+
+	r, ok := findRow(availableActions(m), "commits-toggle")
+	if !ok {
+		t.Fatal("toggle row missing")
+	}
+	if r.label != "Add to commit view" {
+		t.Fatalf("feat not in set → label = %q, want Add to commit view", r.label)
+	}
+	mm, cmd := r.run(m)
+	m = mm.(Model)
+	if cmd == nil {
+		t.Fatal("toggle should return a reload cmd")
+	}
+	msg := cmd()
+	mm, _ = m.Update(msg)
+	m = mm.(Model)
+	if len(m.commitScopeBranches) != 2 {
+		t.Fatalf("set should now hold 2 branches, got %v", m.commitScopeBranches)
+	}
+	if m.commitScopeLabel() != "2 branches" {
+		t.Fatalf("scope label = %q, want 2 branches", m.commitScopeLabel())
+	}
+	if len(m.commits) != 1 || m.commits[0].Hash != "h1" {
+		t.Fatalf("after toggle reload, commits = %+v", m.commits)
 	}
 }
 

@@ -84,6 +84,9 @@ func availableActions(m Model) []actionRow {
 	if r, ok := m.commitSoloRow(); ok {
 		out = append(out, r)
 	}
+	if r, ok := m.commitToggleRow(); ok {
+		out = append(out, r)
+	}
 	if r, ok := m.commitShowAllRow(); ok {
 		out = append(out, r)
 	}
