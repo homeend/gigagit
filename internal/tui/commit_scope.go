@@ -171,6 +171,26 @@ func (m Model) commitCreateBranchRow() (actionRow, bool) {
 	}, true
 }
 
+// commitCreateTagRow offers "Create tag here" on the Commits panel: open the
+// create-tag dialog targeting the selected commit (name + optional message).
+func (m Model) commitCreateTagRow() (actionRow, bool) {
+	if m.focus != panelCommits || !m.opsIdle() {
+		return actionRow{}, false
+	}
+	bi, ok := m.backingIndex(panelCommits)
+	if !ok {
+		return actionRow{}, false
+	}
+	hash := m.commits[bi].Hash
+	return actionRow{
+		id:    "commit-create-tag",
+		label: "Create tag here",
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			return m.pushLayer(&tagPopup{commit: hash}), nil
+		},
+	}, true
+}
+
 // commitCreateWorktreeRow offers "Create worktree here" on the Commits panel:
 // open the create-worktree dialog based at the selected commit, with a user-typed
 // (non-templated) branch name.

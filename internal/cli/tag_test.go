@@ -25,3 +25,24 @@ func TestTagUnknownSubcommand(t *testing.T) {
 		t.Fatal("unknown tag subcommand should fail")
 	}
 }
+
+func TestTagCreateLightweightAndAnnotated(t *testing.T) {
+	dir := newRepoDir(t)
+	if code, _, errb := runCLI(t, dir, "tag", "create", "v1.0.0"); code != 0 {
+		t.Fatalf("lightweight create exit %d: %s", code, errb)
+	}
+	if code, _, errb := runCLI(t, dir, "tag", "create", "-m", "rel2", "v2.0.0"); code != 0 {
+		t.Fatalf("annotated create exit %d: %s", code, errb)
+	}
+	_, out, _ := runCLI(t, dir, "tag", "ls")
+	if !strings.Contains(out, "v1.0.0") || !strings.Contains(out, "v2.0.0") {
+		t.Fatalf("created tags not listed:\n%s", out)
+	}
+}
+
+func TestTagCreateRequiresName(t *testing.T) {
+	dir := newRepoDir(t)
+	if code, _, _ := runCLI(t, dir, "tag", "create"); code == 0 {
+		t.Fatal("create with no name must fail")
+	}
+}
