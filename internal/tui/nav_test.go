@@ -163,7 +163,7 @@ func TestCheckoutRemoteRoutesCAndS(t *testing.T) {
 	// c on the Remotes tab starts an op (running=true) and does NOT open the commit popup.
 	u, _ := m.Update(keyMsg("c"))
 	mc := u.(Model)
-	if mc.commitPopup != nil {
+	if overlayOf[*commitPopup](mc) != nil {
 		t.Fatal("c on Remotes must not open the commit popup")
 	}
 	if !mc.running {

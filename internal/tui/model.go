@@ -34,7 +34,6 @@ type Model struct {
 	gitCommonDir string
 
 	popup               *worktreePopup
-	commitPopup         *commitPopup // commit message dialog (title + description); nil = closed
 	repoPopup           *repoPopup
 	settings            *settingsPopup
 	initHomeDir         string // home dir for agent detection; "" skips home-scoped agents (tests)
@@ -411,9 +410,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.popup != nil {
 			return m.updatePopupKey(msg)
 		}
-		if m.commitPopup != nil {
-			return m.updateCommitPopupKey(msg)
-		}
 		if m.repoPopup != nil {
 			return m.updateRepoPopupKey(msg)
 		}
@@ -538,7 +534,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m.startOp(engine.SmartCheckout{RemoteRef: rb.Name, Local: rb.Branch, Intent: engine.CheckoutStay})
 			}
 			if m.canCommit() {
-				m.commitPopup = &commitPopup{}
+				m = m.pushOverlay(&commitPopup{})
 			}
 		case "C":
 			if m.canAmend() {
@@ -975,7 +971,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		title, desc := splitMessage(msg.msg)
-		m.commitPopup = &commitPopup{title: title, desc: desc, amend: true}
+		m = m.pushOverlay(&commitPopup{title: title, desc: desc, amend: true})
 		return m, nil
 
 	case inProgressMsg:

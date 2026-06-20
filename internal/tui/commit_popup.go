@@ -84,27 +84,48 @@ func (p *commitPopup) applyEditKey(msg tea.KeyMsg) (submit, cancel bool) {
 	return false, false
 }
 
-// updateCommitPopupKey handles one key while the commit popup is open. It
-// swallows every key (no fallthrough): esc cancels, ctrl+c quits, ctrl+s commits.
-func (m Model) updateCommitPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+// update handles one key while the commit popup is open. It swallows every key:
+// esc cancels, ctrl+c quits, ctrl+s commits.
+func (p *commitPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
 	}
-	p := m.commitPopup
 	submit, cancel := p.applyEditKey(msg)
 	switch {
 	case cancel:
-		m.commitPopup = nil
+		m = m.popOverlay()
 	case submit:
 		if strings.TrimSpace(p.title) == "" {
 			m.statusMsg = "title required"
 			return m, nil
 		}
 		op := engine.Commit{Message: p.message(), Amend: p.amend}
-		m.commitPopup = nil
+		m = m.popOverlay()
 		return m.startOp(op)
 	}
 	return m, nil
+}
+
+// render composites the commit dialog over the layer beneath.
+func (p *commitPopup) render(m Model, below string) string {
+	w, h := m.overlayDims()
+	return overlayCenter(clipToHeight(below, h), p.box(m), w, h)
+}
+
+// box draws the two-field commit dialog (modal box only).
+func (p *commitPopup) box(m Model) string {
+	var b strings.Builder
+	heading := "Commit"
+	if p.amend {
+		heading = "Amend last commit"
+	}
+	b.WriteString(heading + "\n\n")
+	b.WriteString(renderCommitFields(p))
+	b.WriteString("\n[tab] switch field  [enter] newline/next  [ctrl+s] commit  [esc] cancel")
+
+	w, _ := m.overlayDims()
+	inner := popupInnerWidth(w)
+	return modalStyle.Width(inner).Render(b.String()) + "\n"
 }
 
 // renderCommitFields draws the title/description fields with the focus cursor.
@@ -123,21 +144,4 @@ func renderCommitFields(p *commitPopup) string {
 		b.WriteString("             " + l + "\n")
 	}
 	return b.String()
-}
-
-// renderCommitPopup draws the two-field commit dialog.
-func (m Model) renderCommitPopup() string {
-	p := m.commitPopup
-	var b strings.Builder
-	heading := "Commit"
-	if p.amend {
-		heading = "Amend last commit"
-	}
-	b.WriteString(heading + "\n\n")
-	b.WriteString(renderCommitFields(p))
-	b.WriteString("\n[tab] switch field  [enter] newline/next  [ctrl+s] commit  [esc] cancel")
-
-	w, _ := m.overlayDims()
-	inner := popupInnerWidth(w)
-	return modalStyle.Width(inner).Render(b.String()) + "\n"
 }

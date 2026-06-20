@@ -28,44 +28,47 @@ func TestSplitMessage(t *testing.T) {
 	}
 }
 
-// applyCommitKey routes a key through updateCommitPopupKey (the popup owns input).
-func applyCommitKey(m Model, k tea.KeyMsg) (Model, tea.Cmd) {
-	updated, cmd := m.updateCommitPopupKey(k)
-	return updated.(Model), cmd
-}
-
 func TestCommitPopupTypingAndFieldSwitch(t *testing.T) {
-	m := Model{commitPopup: &commitPopup{}}
-	m, _ = applyCommitKey(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("hi")})
-	if m.commitPopup.title != "hi" {
-		t.Fatalf("title = %q", m.commitPopup.title)
+	m := Model{sel: map[panel]int{}}
+	m = m.pushOverlay(&commitPopup{})
+	tm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("hi")})
+	m = tm.(Model)
+	if overlayOf[*commitPopup](m).title != "hi" {
+		t.Fatalf("title = %q", overlayOf[*commitPopup](m).title)
 	}
-	m, _ = applyCommitKey(m, tea.KeyMsg{Type: tea.KeyEnter}) // title → description
-	if m.commitPopup.field != 1 {
+	tm, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // title → description
+	m = tm.(Model)
+	if overlayOf[*commitPopup](m).field != 1 {
 		t.Fatal("enter in title must move to description")
 	}
-	m, _ = applyCommitKey(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("body")})
-	m, _ = applyCommitKey(m, tea.KeyMsg{Type: tea.KeyEnter}) // newline in description
-	if m.commitPopup.desc != "body\n" {
-		t.Fatalf("desc = %q, want \"body\\n\"", m.commitPopup.desc)
+	tm, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("body")})
+	m = tm.(Model)
+	tm, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // newline in description
+	m = tm.(Model)
+	if overlayOf[*commitPopup](m).desc != "body\n" {
+		t.Fatalf("desc = %q, want \"body\\n\"", overlayOf[*commitPopup](m).desc)
 	}
-	m, _ = applyCommitKey(m, tea.KeyMsg{Type: tea.KeyTab}) // back to title
-	if m.commitPopup.field != 0 {
+	tm, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab}) // back to title
+	m = tm.(Model)
+	if overlayOf[*commitPopup](m).field != 0 {
 		t.Fatal("tab must switch field")
 	}
-	m, _ = applyCommitKey(m, tea.KeyMsg{Type: tea.KeyEsc})
-	if m.commitPopup != nil {
+	tm, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = tm.(Model)
+	if overlayOf[*commitPopup](m) != nil {
 		t.Fatal("esc must close the popup")
 	}
 }
 
 func TestCommitPopupEmptyTitleRefused(t *testing.T) {
-	m := Model{commitPopup: &commitPopup{}}
-	m, cmd := applyCommitKey(m, tea.KeyMsg{Type: tea.KeyCtrlS})
+	m := Model{sel: map[panel]int{}}
+	m = m.pushOverlay(&commitPopup{})
+	tm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlS})
+	m = tm.(Model)
 	if cmd != nil {
 		t.Fatal("ctrl+s with an empty title must not start a commit")
 	}
-	if m.commitPopup == nil {
+	if overlayOf[*commitPopup](m) == nil {
 		t.Fatal("empty-title submit must keep the popup open")
 	}
 }
