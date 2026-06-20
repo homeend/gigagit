@@ -98,6 +98,11 @@ var globalBindings = []footerBinding{
 // a separator, then the predicated global tail. Filter-input mode overrides
 // everything because that mode captures every key.
 func (m Model) footerLine() string {
+	// A process owns the keyboard; the panel footer would advertise keys that do
+	// nothing, so show the process's own indicator instead.
+	if m.proc != nil {
+		return m.proc.indicator(m)
+	}
 	if m.filterTyping {
 		return "filter: type to search  [↑↓] move  [enter] keep  [esc] cancel"
 	}

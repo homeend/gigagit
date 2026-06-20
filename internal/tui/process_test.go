@@ -29,7 +29,7 @@ func (p *stubProcess) finished(m Model, res engine.Result, err error) (Model, te
 	return m, nil
 }
 func (p *stubProcess) refreshed(m Model) (Model, tea.Cmd) { return m, nil }
-func (p *stubProcess) indicator(m Model) string { return "stub running" }
+func (p *stubProcess) indicator(m Model) string           { return "stub running" }
 
 func TestProcessOwnsInputAndRender(t *testing.T) {
 	p := &stubProcess{}

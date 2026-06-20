@@ -8,6 +8,19 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+### Changed
+- **Conflict resolution is now a process, not a pop-up.** While you resolve a
+  merge/rebase, the interface is locked to the resolution flow: it shows the
+  conflicted-file list, hands off to the full-screen line editor for both-modified
+  files, runs each resolve/continue/abort with a progress indicator, and reports
+  failures in place — every other command is inert (no stale key hints) so you
+  can't half-do something mid-resolve. It **always** offers a clean exit: **esc**
+  cancels the in-flight step, **L** leaves the whole flow (the repo is left as-is;
+  resume from the **[x]** notice). The resolver is no longer a window that
+  re-opens itself; it is started/resumed with `x` and survives relaunch into a
+  half-finished rebase. (Internally: a new TUI `process` slot that owns input,
+  drawing, and the jobs it runs — the first of a general mechanism.)
+
 ### Added
 - **Commits panel — multi-branch selected set.** The `.` menu on a Branches row
   now offers **Add to commit view** / **Remove from commit view** to scope the

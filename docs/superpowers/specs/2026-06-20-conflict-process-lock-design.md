@@ -115,9 +115,11 @@ into a half-finished rebase — a real monorepo case.
 Because the process is a **live view onto on-disk state** (not a stateful thing
 that must be finished), leaving is always safe and resumable:
 
-- Detection surfaces a **non-blocking notice** ("conflicts pending — resume").
-  From it the process can be entered (and a fresh conflict may fill the slot
-  immediately).
+- Detection surfaces a **non-blocking notice** ("press [x] to resolve"). The
+  process is **entered by the user** (the `x` key / the notice), not auto-filled
+  on every load — a lingering conflict must never hijack the interface while the
+  user is doing something else (staging, inspecting). This keeps "never trap" as
+  the default: the notice guides, the user chooses when to enter.
 - **Leave** releases the slot back to the notice. It does **not** immediately
   re-grab the slot — that would be the trap we are avoiding. The user walks away
   (another tool, a `gg` command, manual git) and returns; re-entry just
