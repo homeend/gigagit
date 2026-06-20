@@ -83,6 +83,8 @@ func Run(workdir string, args []string, stdin io.Reader, stdout, stderr io.Write
 		return cmdWorktree(svc, rest, stdin, stdout, stderr, cwdFile)
 	case "remote":
 		return cmdRemote(svc, rest, stdout, stderr)
+	case "tag":
+		return cmdTag(svc, rest, stdout, stderr)
 	case "repo":
 		return cmdRepo(rest, stdout, stderr, cwdFile)
 	case "init":
@@ -98,6 +100,7 @@ var commands = map[string]bool{
 	"switch": true, "branch": true, "stash": true, "undo": true, "merge": true, "rebase": true, "worktree": true,
 	"cherry-pick": true, "revert": true, "reset": true,
 	"discard": true, "shelf": true, "bookmark": true,
+	"tag":     true,
 	"inspect": true, "repo": true, "init": true,
 }
 

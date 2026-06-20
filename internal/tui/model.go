@@ -28,6 +28,7 @@ type Model struct {
 	commits  []model.Commit
 
 	worktrees       []model.Worktree
+	tags            []model.Tag // refs/tags; shown by the Tags tab in the middle slot
 	currentWorktree string
 
 	cfg          config.Config
@@ -78,9 +79,10 @@ type Model struct {
 	opMsgs    chan tea.Msg
 	modal     *decisionState
 
-	focus         panel
-	lastLeftPanel panel // ←'s return target; zero value = panelBranches
-	activeLeftTab panel // which of Branches/Remotes/Worktrees shows in the shared left tab slot; zero value = panelBranches
+	focus          panel
+	lastLeftPanel  panel // ←'s return target; zero value = panelBranches
+	activeLeftTab  panel // which of Branches/Remotes/Worktrees shows in the shared left tab slot; zero value = panelBranches
+	activeFilesTab panel // Files or Tags in the middle slot; zero value resolves to panelFiles via middleTab()
 
 	remoteBranches []model.RemoteBranch // refs/remotes; shown by the Remotes tab
 	shelfEntries   []model.ShelfEntry   // default bucket; shown by the Shelf tab
@@ -104,12 +106,16 @@ const (
 	panelFiles
 	panelStaged
 	panelCommits
+	panelTags
 	panelCount
 )
 
 // leftTabs is the display order of the shared left-slot tabs; the ctrl+←/→
 // cycle walks this list. Enum value order is unrelated to display order.
 var leftTabs = []panel{panelBranches, panelRemotes, panelWorktrees}
+
+// filesTabs is the display/cycle order of the middle-slot tabs (the Files box).
+var filesTabs = []panel{panelFiles, panelTags}
 
 // New constructs the initial model for svc.
 func New(svc *domain.Service) Model {
@@ -302,6 +308,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.statusMsg = "commits: " + msg.commitErr.Error()
 			}
 			m.worktrees = msg.worktrees
+			m.tags = msg.tags
 			m.currentWorktree = msg.currentWorktree
 			m.cfg = msg.cfg
 			m.gitCommonDir = msg.gitCommonDir
@@ -665,6 +672,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		case "enter":
+			if m.focus == panelTags {
+				return m.tagJumpToCommit()
+			}
 			if m.focus == panelWorktrees && m.canEnterWorktree() {
 				wt, _ := m.selectedWorktree()
 				return m.reRoot(wt.Path)
@@ -693,21 +703,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m = m.rememberLeftFocus()
 			m.focus = nextInOrder(m.focusOrder(), m.focus, -1)
 		case "ctrl+left", "ctrl+right":
-			// Walk the shared-slot tab order (Branches · Remotes · Worktrees),
-			// wrapping. Switch and focus the now-active tab.
-			cur := 0
-			for i, p := range leftTabs {
-				if p == m.activeLeftTab {
-					cur = i
-					break
-				}
+			// Cycle whichever tab slot currently owns focus: the top refs slot
+			// (Branches · Remotes · Worktrees) or the middle files slot
+			// (Files · Tags). Wraps; focuses the now-active tab.
+			dir := 1
+			if msg.String() == "ctrl+left" {
+				dir = -1
 			}
-			if msg.String() == "ctrl+right" {
-				cur = (cur + 1) % len(leftTabs)
-			} else {
-				cur = (cur - 1 + len(leftTabs)) % len(leftTabs)
+			if m.focus == panelFiles || m.focus == panelTags {
+				m.activeFilesTab = nextInOrder(filesTabs, m.middleTab(), dir)
+				m.focus = m.activeFilesTab
+				return m, nil
 			}
-			m.activeLeftTab = leftTabs[cur]
+			m.activeLeftTab = nextInOrder(leftTabs, m.activeLeftTab, dir)
 			m.focus = m.activeLeftTab
 			m.lastLeftPanel = m.activeLeftTab
 			return m, nil
@@ -1088,8 +1096,16 @@ func (m Model) rememberLeftFocus() Model {
 // focusOrder is the top-to-bottom sequence of focusable panels: the active
 // Branches/Worktrees tab (the inactive one is not focusable), then Files (and
 // Staged when it fits), then Commits. tab/shift+tab walk this.
+// middleTab is the active middle-slot panel, defaulting to Files when unset.
+func (m Model) middleTab() panel {
+	if m.activeFilesTab == panelFiles || m.activeFilesTab == panelTags {
+		return m.activeFilesTab
+	}
+	return panelFiles
+}
+
 func (m Model) focusOrder() []panel {
-	order := []panel{m.activeLeftTab, panelFiles}
+	order := []panel{m.activeLeftTab, m.middleTab()}
 	if m.layout().boxH[panelStaged] > 0 { // Staged is dropped on a short terminal
 		order = append(order, panelStaged)
 	}

@@ -38,6 +38,7 @@ type dataLoadedMsg struct {
 	remoteBranches  []model.RemoteBranch
 	commits         []model.Commit
 	worktrees       []model.Worktree
+	tags            []model.Tag
 	currentWorktree string
 	cfg             config.Config
 	gitCommonDir    string
@@ -80,6 +81,7 @@ func (m Model) loadCmd() tea.Cmd {
 			branches:         snap.Branches,
 			remoteBranches:   snap.RemoteBranches,
 			worktrees:        snap.Worktrees,
+			tags:             snap.Tags,
 			currentWorktree:  snap.CurrentWorktree,
 			gitCommonDir:     snap.GitCommonDir,
 			headTimes:        snap.HeadTimes,

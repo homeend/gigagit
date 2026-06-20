@@ -48,6 +48,8 @@ type Step struct {
 	Stash        string `toml:"stash"`
 	Worktree     string `toml:"worktree"`      // sandbox-root-relative path; Branch holds the branch
 	BranchDelete string `toml:"branch_delete"` // `git branch -D <name>` (used to delete an origin branch)
+	Tag          string `toml:"tag"`           // tag name; lightweight, or annotated when TagMessage is set
+	TagMessage   string `toml:"tag_message"`   // when set, the tag is annotated (`git tag -a -m`)
 	Cwd          string `toml:"cwd"`
 }
 
@@ -78,6 +80,9 @@ func (s Step) kind() (string, error) {
 	if s.BranchDelete != "" {
 		kinds = append(kinds, "branch_delete")
 	}
+	if s.Tag != "" {
+		kinds = append(kinds, "tag")
+	}
 	if len(kinds) != 1 {
 		return "", fmt.Errorf("step %+v: want exactly one action, got %v", s, kinds)
 	}
@@ -87,6 +92,9 @@ func (s Step) kind() (string, error) {
 	}
 	if s.Content != "" && k != "write" {
 		return "", fmt.Errorf("step %+v: content is only valid with write", s)
+	}
+	if s.TagMessage != "" && k != "tag" {
+		return "", fmt.Errorf("step %+v: tag_message is only valid with tag", s)
 	}
 	return k, nil
 }

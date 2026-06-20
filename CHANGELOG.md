@@ -56,6 +56,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   drawing, and the jobs it runs — the first of a general mechanism.)
 
 ### Added
+- **Tags (read).** A read-only **Tags** view lives as a tab in the middle (Files)
+  window: `ctrl+←/→` switches **Files ⇄ Tags** while that box is focused (the top
+  Branches/Remotes/Worktrees slot still cycles when *it* is focused). Each row
+  shows the tag (`●` annotated / `○` lightweight), its short target, and the
+  subject; `enter` jumps the Commits cursor to the tag's target commit. New
+  `gg tag ls` CLI command lists tags newest-first. First stage of staged tag
+  support (create/delete/checkout/push to follow).
 - **Reset to this commit (soft / mixed / hard).** The `.` menu on a commit
   offers **Reset to this commit** — moves the current branch to it. A modal asks
   the mode: **soft** keeps the changes since staged, **mixed** keeps them

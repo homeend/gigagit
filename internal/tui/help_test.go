@@ -97,8 +97,18 @@ func TestHelpDocumentsTabSwitch(t *testing.T) {
 		b.WriteString(l.text)
 		b.WriteString("\n")
 	}
-	if !strings.Contains(b.String(), "cycle the Branches / Remotes / Worktrees / Shelf tab") {
+	if !strings.Contains(b.String(), "cycle the focused tab slot") {
 		t.Error("help does not document the ctrl+arrow tab switch")
+	}
+}
+
+func TestHelpDocumentsTags(t *testing.T) {
+	var b strings.Builder
+	for _, l := range helpContent() {
+		b.WriteString(l.text + "\n")
+	}
+	if !strings.Contains(b.String(), "Tags panel") {
+		t.Error("help does not document the Tags panel")
 	}
 }
 

@@ -57,3 +57,15 @@ func (r *Repo) Worktrees(ctx context.Context) ([]model.Worktree, error) {
 	}
 	return ParseWorktrees([]byte(res.Stdout))
 }
+
+// Tags returns the repository's tags (refs/tags), newest first. The peeled
+// object resolves an annotated tag to its commit.
+func (r *Repo) Tags(ctx context.Context) ([]model.Tag, error) {
+	const format = "%(refname:short)%00%(objecttype)%00%(objectname:short)%00%(*objectname:short)%00%(contents:subject)%00%(creatordate:unix)"
+	argv := gitcmd.New("for-each-ref").Arg("--sort=-creatordate", "--format="+format, "refs/tags").ToArgv()
+	res, err := r.Runner.Run(ctx, "git for-each-ref (tags)", argv)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTags([]byte(res.Stdout))
+}

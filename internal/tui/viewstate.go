@@ -191,6 +191,17 @@ func (l worktreeList) Name(i int) string {
 func (l worktreeList) Date(i int) int64 { return l.times[l.items[i].Head] }
 func (l worktreeList) Key(i int) string { return l.items[i].Path }
 
+type tagList struct {
+	items []model.Tag
+	rows  []string
+}
+
+func (l tagList) Len() int          { return len(l.items) }
+func (l tagList) Row(i int) string  { return l.rows[i] }
+func (l tagList) Name(i int) string { return l.items[i].Name }
+func (l tagList) Date(i int) int64  { return 0 } // no per-tag date in v1; git default order is newest-first
+func (l tagList) Key(i int) string  { return l.items[i].Name }
+
 type statusList struct {
 	files []model.FileStatus
 	rows  []string
@@ -281,6 +292,8 @@ func (m Model) listFor(p panel) panelList {
 		return remoteBranchList{items: m.remoteBranches, rows: m.remoteRows()}
 	case panelWorktrees:
 		return worktreeList{items: m.worktrees, rows: m.worktreeRows(), times: m.headTimes}
+	case panelTags:
+		return tagList{items: m.tags, rows: m.tagRows()}
 	case panelFiles, panelStaged:
 		// Both file panels back onto the FULL status slice; panelView's
 		// membership filter selects each panel's subset, so backingIndex keeps

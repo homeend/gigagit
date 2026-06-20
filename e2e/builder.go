@@ -124,6 +124,12 @@ func (b *Sandbox) runSteps(t *testing.T, steps []Step, defaultDir string) {
 			b.git(t, dir, "stash", "push", "-u", "-m", st.Stash)
 		case "worktree":
 			b.git(t, dir, "worktree", "add", b.dir(st.Worktree), st.Branch)
+		case "tag":
+			if st.TagMessage != "" {
+				b.git(t, dir, "tag", "-a", st.Tag, "-m", st.TagMessage)
+			} else {
+				b.git(t, dir, "tag", st.Tag)
+			}
 		}
 	}
 }

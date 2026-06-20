@@ -92,6 +92,17 @@ type RemoteBranch struct {
 	UnixTime int64  // committer time (unix seconds); 0 if unknown
 }
 
+// Tag is one git tag (refs/tags). Target is the commit the tag resolves to (the
+// peeled commit for an annotated tag, the direct commit for a lightweight one).
+// Subject is the annotated tag's message subject, or — for a lightweight tag —
+// its target commit's subject.
+type Tag struct {
+	Name      string
+	Target    string
+	Annotated bool
+	Subject   string
+}
+
 // Worktree is one entry from `git worktree list --porcelain`.
 type Worktree struct {
 	Path     string

@@ -1,0 +1,18 @@
+name = "tag ls: list lightweight and annotated tags"
+
+[input]
+steps = [
+  { write = "f.txt", content = "v1\n" },
+  { commit = "c1" },
+  { tag = "v1.0.0" },
+  { tag = "v2.0.0", tag_message = "release two" },
+]
+
+[[run]]
+cmd             = ["tag", "ls"]
+exit            = 0
+stdout_contains = ["v1.0.0", "v2.0.0"]
+
+[expect]
+branch = "main"
+clean  = true
