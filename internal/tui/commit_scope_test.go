@@ -294,19 +294,20 @@ func TestCommitBranchHint(t *testing.T) {
 		m.sel = map[panel]int{}
 	}
 	m.focus = panelCommits
-	m.commits = []model.Commit{{Hash: "aaaaaaa", Subject: "x", Source: "feat"}}
+	m.commits = []model.Commit{{Hash: "aaaaaaabbbb", Subject: "x", Source: "feat"}}
 	m.sel[panelCommits] = 0
-	if got := m.commitBranchHint(); got != "⎇ feat" {
-		t.Fatalf("hint = %q, want ⎇ feat", got)
+	// The status line carries the branch AND the short id (the id left the row).
+	if got := m.commitBranchHint(); got != "⎇ feat · # aaaaaaa" {
+		t.Fatalf("hint = %q, want '⎇ feat · # aaaaaaa'", got)
 	}
 	m.focus = panelBranches // off the commits panel → no hint
 	if got := m.commitBranchHint(); got != "" {
 		t.Fatalf("hint off-panel = %q, want empty", got)
 	}
 	m.focus = panelCommits
-	m.commits[0].Source = "" // no source → no hint
-	if got := m.commitBranchHint(); got != "" {
-		t.Fatalf("hint without source = %q, want empty", got)
+	m.commits[0].Source = "" // no source → just the id remains
+	if got := m.commitBranchHint(); got != "# aaaaaaa" {
+		t.Fatalf("hint without source = %q, want '# aaaaaaa'", got)
 	}
 }
 

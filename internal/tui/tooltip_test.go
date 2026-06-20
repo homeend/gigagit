@@ -56,6 +56,29 @@ func mustRows(t *testing.T, m Model, p panel) []string {
 	return rows
 }
 
+// A trimmed branch-name column reveals the full name via the tooltip even when
+// the row otherwise fits (the displayed row carries the … so the plain
+// truncation check alone would miss it).
+func TestTooltipRevealsTrimmedBranchName(t *testing.T) {
+	m := footerModel()
+	m.focus = panelCommits
+	if m.sel == nil {
+		m.sel = map[panel]int{}
+	}
+	long := "b/from-feat-cherry-pick-very-long" // > commitIdentW
+	m.commits = []model.Commit{{Hash: "abcdef0", Subject: "x",
+		Refs: []model.Ref{{Name: long, Kind: model.RefLocal}}}}
+	m.sel[panelCommits] = 0
+	lines, _, _, ok := m.tooltip()
+	if !ok {
+		t.Fatal("a trimmed branch name should reveal a tooltip even if the row fits")
+	}
+	plain := ansi.Strip(strings.Join(lines, "\n"))
+	if !strings.Contains(plain, long) {
+		t.Fatalf("tooltip must show the full branch name, got %q", plain)
+	}
+}
+
 func TestTooltipHiddenWhenRowFits(t *testing.T) {
 	m := tooltipModel()
 	m.sel[panelWorktrees] = 0 // "* main  /repo" fits comfortably

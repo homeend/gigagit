@@ -9,6 +9,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Changed
+- **Commits panel — the left column shows the branch, not the commit id.** Each
+  commit row leads with the branch it belongs to: **bright** when the commit is
+  that branch's tip ("the last commit for a given branch"), **grayed** when the
+  commit is only that branch's lineage. Long names trim with `…` (select the row
+  to reveal the full name in a tooltip). The commit id moves to the **status
+  bar** for the selected commit (`⎇ <branch> · # <id>`); copying the full id is
+  still on the `.` menu. Filtering the list still matches the full commit id and
+  the full branch name even though neither is shown verbatim in the row.
 - Internal: unified the popup overlay stack and the full-screen surface stack
   into **one `layer` stack**. `overlay` + `surface` became one `layer` interface
   (`render(m, below)`), the two stacks merged into one push-ordered pile, and the

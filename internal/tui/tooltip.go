@@ -34,18 +34,28 @@ func (m Model) tooltip() (lines []string, x, y int, ok bool) {
 	if boxH <= 0 {
 		return nil, 0, 0, false
 	}
-	rows, _ := m.panelView(p)
+	rows, idx := m.panelView(p)
 	sel := m.sel[p]
 	if len(rows) == 0 || sel < 0 || sel >= len(rows) {
 		return nil, 0, 0, false
+	}
+	// A panel may supply an UN-elided parallel row (the Commits panel does, for
+	// the trimmed branch-name column). When it differs from the displayed row,
+	// reveal it even if the row otherwise fits; the displayed row still contains
+	// the … so the plain truncation check below would miss it.
+	content := rows[sel]
+	if fr, ok := m.listFor(p).(fullRower); ok && sel < len(idx) {
+		if full := fr.Full(idx[sel]); full != content {
+			content = full
+		}
 	}
 	boxW := g.leftW
 	if p == panelCommits {
 		boxW = g.rightW
 	}
 	innerW := boxW - 4 // mirrors renderPanel: border (2) + padding (2)
-	if !rowTruncated("> "+rows[sel], innerW) {
-		return nil, 0, 0, false // renderPanel shows it in full — nothing to add
+	if content == rows[sel] && !rowTruncated("> "+rows[sel], innerW) {
+		return nil, 0, 0, false // shown in full and nothing extra to reveal
 	}
 	rowsCap := boxH - 3 // mirrors renderPanel: borders + label line
 	if rowsCap < 1 {
@@ -55,7 +65,7 @@ func (m Model) tooltip() (lines []string, x, y int, ok bool) {
 	origin := g.pos[p]
 	rowY := origin.y + 2 + selInWin // top border + label line
 
-	raw := wrapWidth(rows[sel], g.w, tooltipMaxLines)
+	raw := wrapWidth(content, g.w, tooltipMaxLines)
 	width := 0
 	for _, l := range raw {
 		if w := lipgloss.Width(l); w > width {

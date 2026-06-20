@@ -700,10 +700,11 @@ func fileGlyph(p panel, f model.FileStatus) byte {
 	}
 }
 
-// commitBranchHint returns "⎇ <branch>" for the selected commit when the Commits
-// panel is focused, else "". The branch is the ref the commit was reached from in
-// the feed walk (model.Commit.Source, via `git log --source`/%S). Shown in the
-// status line so the branch is always visible without occluding any commit row.
+// commitBranchHint returns "⎇ <branch> · # <id>" for the selected commit when
+// the Commits panel is focused, else "". The branch is the ref the commit was
+// reached from in the feed walk (model.Commit.Source, via `git log --source`/%S);
+// the short id lives here because the commit list rows show the branch column
+// instead of the id. Shown in the status line, occluding no commit row.
 func (m Model) commitBranchHint() string {
 	if m.focus != panelCommits {
 		return ""
@@ -712,10 +713,18 @@ func (m Model) commitBranchHint() string {
 	if !ok || bi < 0 || bi >= len(m.commits) {
 		return ""
 	}
-	if s := m.commits[bi].Source; s != "" {
-		return "⎇ " + s
+	c := m.commits[bi]
+	var parts []string
+	if c.Source != "" {
+		parts = append(parts, "⎇ "+c.Source)
 	}
-	return ""
+	if h := c.Hash; h != "" { // the commit id moved here from the row
+		if len(h) > 7 {
+			h = h[:7]
+		}
+		parts = append(parts, "# "+h)
+	}
+	return strings.Join(parts, " · ")
 }
 
 // commitRows builds the Commits-panel display rows. The left column is the

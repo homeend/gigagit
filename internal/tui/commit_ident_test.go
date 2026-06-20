@@ -72,6 +72,48 @@ func TestCommitIdentTokenPadsShortName(t *testing.T) {
 	}
 }
 
+// The commit list stays searchable by the FULL commit id and the FULL branch
+// name even though neither appears verbatim in the trimmed, id-less row.
+func TestCommitFilterSearchesHiddenHashAndFullName(t *testing.T) {
+	m := footerModel()
+	long := "feature/some-very-long-branch-name" // > commitIdentW → trimmed in the row
+	m.commits = []model.Commit{
+		{Hash: "deadbeefcafe", Subject: "alpha", Refs: []model.Ref{{Name: long, Kind: model.RefLocal}}},
+		{Hash: "0000111122", Subject: "beta"},
+	}
+	m.filterPanel = panelCommits
+
+	m.filterQuery = "deadbeef" // a hash prefix shown in no row
+	if _, idx := m.panelView(panelCommits); len(idx) != 1 || idx[0] != 0 {
+		t.Fatalf("hash-prefix filter idx = %v, want [0]", idx)
+	}
+	m.filterQuery = "very-long-branch" // tail of the trimmed-away branch name
+	if _, idx := m.panelView(panelCommits); len(idx) != 1 || idx[0] != 0 {
+		t.Fatalf("full-name filter idx = %v, want [0]", idx)
+	}
+}
+
+// End-to-end: a lineage row's branch name is dimmed in the assembled panel; a
+// tip row is not.
+func TestRenderPanelDimsLineageName(t *testing.T) {
+	forceColor(t)
+	m := footerModel()
+	m.focus = panelCommits
+	m.commits = []model.Commit{
+		{Hash: "aaaa", Subject: "tip", Refs: []model.Ref{{Name: "main", Kind: model.RefLocal, Head: true}}},
+		{Hash: "bbbb", Subject: "lineage", Source: "main"},
+	}
+	m.sel[panelCommits] = 0 // select the tip → the lineage row (1) gets decorated
+	rows, idx := m.panelView(panelCommits)
+	decos := m.commitDecorators(rows, idx)
+	out := m.renderPanel(panelCommits, "Commits", rows, decos, 40, 8)
+	probe := dimIdentStyle.Render("x")
+	esc := probe[:strings.IndexRune(probe, 'x')] // the leading dim escape
+	if esc == "" || !strings.Contains(out, esc) {
+		t.Fatalf("lineage branch name must be dimmed (escape %q):\n%s", esc, out)
+	}
+}
+
 // The decorator dims the identity range and colors the dot in one pass, width
 // preserved.
 func TestCommitLineDecoratorDimsIdentAndColorsDot(t *testing.T) {
