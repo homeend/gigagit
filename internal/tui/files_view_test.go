@@ -365,7 +365,7 @@ func TestFilesViewSwallowsActionKeys(t *testing.T) {
 	for _, key := range []string{"p", "s", "m", "d", "w", "o", "R", ",", "r", "?"} {
 		updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(key)})
 		mm := updated.(Model)
-		if cmd != nil || mm.running || mm.mark != nil || mm.contentPopup != nil {
+		if cmd != nil || mm.running || mm.mark != nil || overlayOf[*contentPopup](mm) != nil {
 			t.Fatalf("key %q must be swallowed while the view is open", key)
 		}
 	}

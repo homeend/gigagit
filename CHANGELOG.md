@@ -9,6 +9,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Changed
+- Internal: the last three centered pop-ups (the help / `?` cheat-sheet viewer,
+  reword-commit, rename-branch) now live on the unified overlay stack like the
+  rest; the special `?`-cheat-sheet routing collapsed into the one overlay path
+  (the cheat-sheet is simply pushed over the switcher, and esc returns to it).
+  No user-facing change. Only the decision modal and the action menu remain off
+  the stack.
 - **Conflict resolution is now a process, not a pop-up.** While you resolve a
   merge/rebase, the interface is locked to the resolution flow: it shows the
   conflicted-file list, hands off to the full-screen line editor for both-modified

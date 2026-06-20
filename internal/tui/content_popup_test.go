@@ -81,7 +81,7 @@ func TestContentMoveOnEmptyVisible(t *testing.T) {
 // fits and n=30 overflows.
 func contentModel(n int) Model {
 	m := Model{width: 80, height: 24}
-	m.contentPopup = newContentPopup("Test content", contentLines(n))
+	m = m.pushOverlay(newContentPopup("Test content", contentLines(n)))
 	return m
 }
 
@@ -98,13 +98,13 @@ func TestContentPageRows(t *testing.T) {
 
 func TestContentPopupZCyclesMode(t *testing.T) {
 	m := contentModel(4)
-	if m.contentPopup.mode != modeCutoff {
-		t.Fatalf("default mode = %v, want modeCutoff", m.contentPopup.mode)
+	if overlayOf[*contentPopup](m).mode != modeCutoff {
+		t.Fatalf("default mode = %v, want modeCutoff", overlayOf[*contentPopup](m).mode)
 	}
 	u, _ := m.Update(keyMsg("z"))
 	mm := u.(Model)
-	if mm.contentPopup.mode != modeWrap {
-		t.Fatalf("after z, mode = %v, want modeWrap", mm.contentPopup.mode)
+	if overlayOf[*contentPopup](mm).mode != modeWrap {
+		t.Fatalf("after z, mode = %v, want modeWrap", overlayOf[*contentPopup](mm).mode)
 	}
 }
 
@@ -131,11 +131,11 @@ func TestContentPopupZTypesWhileSearching(t *testing.T) {
 	m = u.(Model)
 	u, _ = m.Update(keyMsg("z"))
 	mm := u.(Model)
-	if mm.contentPopup.mode != modeCutoff {
-		t.Fatalf("z while typing must not change mode; got %v", mm.contentPopup.mode)
+	if overlayOf[*contentPopup](mm).mode != modeCutoff {
+		t.Fatalf("z while typing must not change mode; got %v", overlayOf[*contentPopup](mm).mode)
 	}
-	if mm.contentPopup.query != "z" {
-		t.Fatalf("z while typing must append to query; query = %q", mm.contentPopup.query)
+	if overlayOf[*contentPopup](mm).query != "z" {
+		t.Fatalf("z while typing must append to query; query = %q", overlayOf[*contentPopup](mm).query)
 	}
 }
 
@@ -180,7 +180,7 @@ func TestContentPopupOverflowScrolls(t *testing.T) {
 
 func TestContentPopupStepSizes(t *testing.T) {
 	m := contentModel(30)
-	p := m.contentPopup
+	p := overlayOf[*contentPopup](m)
 	u, _ := m.Update(keyMsg("ctrl+down"))
 	m = u.(Model)
 	if p.sel != 5 {
@@ -215,7 +215,7 @@ func TestContentPopupSearchWhileScrolled(t *testing.T) {
 		u, _ = m.Update(keyMsg(string(r)))
 		m = u.(Model)
 	}
-	p := m.contentPopup
+	p := overlayOf[*contentPopup](m)
 	if p.sel != 0 {
 		t.Errorf("query change must reset the cursor: sel = %d, want 0", p.sel)
 	}
@@ -245,20 +245,20 @@ func TestContentPopupEscStages(t *testing.T) {
 		u, _ := m.Update(keyMsg(k))
 		m = u.(Model)
 	}
-	if m.contentPopup == nil || m.contentPopup.query != "x" || m.contentPopup.typing {
-		t.Fatalf("enter must commit the search, got %+v", m.contentPopup)
+	if overlayOf[*contentPopup](m) == nil || overlayOf[*contentPopup](m).query != "x" || overlayOf[*contentPopup](m).typing {
+		t.Fatalf("enter must commit the search, got %+v", overlayOf[*contentPopup](m))
 	}
 	u, _ := m.Update(keyMsg("esc")) // first esc clears the committed search
 	m = u.(Model)
-	if m.contentPopup == nil {
+	if overlayOf[*contentPopup](m) == nil {
 		t.Fatal("first esc must only clear the search")
 	}
-	if m.contentPopup.query != "" {
-		t.Fatalf("query = %q, want empty", m.contentPopup.query)
+	if overlayOf[*contentPopup](m).query != "" {
+		t.Fatalf("query = %q, want empty", overlayOf[*contentPopup](m).query)
 	}
 	u, _ = m.Update(keyMsg("esc")) // second esc closes
 	m = u.(Model)
-	if m.contentPopup != nil {
+	if overlayOf[*contentPopup](m) != nil {
 		t.Fatal("second esc must close the popup")
 	}
 }
@@ -269,11 +269,11 @@ func TestContentPopupEscCancelsSearchInput(t *testing.T) {
 		u, _ := m.Update(keyMsg(k))
 		m = u.(Model)
 	}
-	if m.contentPopup == nil {
+	if overlayOf[*contentPopup](m) == nil {
 		t.Fatal("esc during search input must not close the popup")
 	}
-	if m.contentPopup.typing || m.contentPopup.query != "" {
-		t.Fatalf("esc must cancel input and clear the query, got %+v", m.contentPopup)
+	if overlayOf[*contentPopup](m).typing || overlayOf[*contentPopup](m).query != "" {
+		t.Fatalf("esc must cancel input and clear the query, got %+v", overlayOf[*contentPopup](m))
 	}
 }
 
@@ -281,7 +281,7 @@ func TestContentPopupQCloses(t *testing.T) {
 	m := contentModel(5)
 	u, cmd := m.Update(keyMsg("q"))
 	m = u.(Model)
-	if m.contentPopup != nil {
+	if overlayOf[*contentPopup](m) != nil {
 		t.Fatal("q must close the popup")
 	}
 	if cmd != nil {
@@ -291,7 +291,7 @@ func TestContentPopupQCloses(t *testing.T) {
 
 func TestContentPopupVimKeysScroll(t *testing.T) {
 	m := contentModel(30)
-	p := m.contentPopup
+	p := overlayOf[*contentPopup](m)
 	u, _ := m.Update(keyMsg("j"))
 	m = u.(Model)
 	if p.sel != 1 {
@@ -315,7 +315,7 @@ func TestContentPopupEnterCloses(t *testing.T) {
 	m := contentModel(5)
 	u, _ := m.Update(keyMsg("enter"))
 	m = u.(Model)
-	if m.contentPopup != nil {
+	if overlayOf[*contentPopup](m) != nil {
 		t.Fatal("enter must close the read-only popup")
 	}
 }
@@ -327,8 +327,8 @@ func TestContentPopupSwallowsGlobalKeys(t *testing.T) {
 	if m.running {
 		t.Fatal("p must not start an operation while the popup is open")
 	}
-	if m.contentPopup == nil || m.contentPopup.query != "" {
-		t.Fatalf("p must be inert outside search mode, got %+v", m.contentPopup)
+	if overlayOf[*contentPopup](m) == nil || overlayOf[*contentPopup](m).query != "" {
+		t.Fatalf("p must be inert outside search mode, got %+v", overlayOf[*contentPopup](m))
 	}
 }
 
@@ -374,7 +374,7 @@ func wheelMsg(up bool) tea.MouseMsg {
 
 func TestContentPopupWheelScrolls(t *testing.T) {
 	m := contentModel(30)
-	p := m.contentPopup
+	p := overlayOf[*contentPopup](m)
 	u, _ := m.Update(wheelMsg(false))
 	m = u.(Model)
 	if p.sel != 3 {
@@ -390,7 +390,7 @@ func TestContentPopupWheelScrolls(t *testing.T) {
 func TestMouseIgnoredWithoutContentPopup(t *testing.T) {
 	m := Model{width: 80, height: 24}
 	u, _ := m.Update(wheelMsg(false)) // must not panic or change state
-	if u.(Model).contentPopup != nil {
+	if overlayOf[*contentPopup](u.(Model)) != nil {
 		t.Fatal("mouse must be inert when no content popup is open")
 	}
 }
@@ -401,9 +401,9 @@ func TestMouseIgnoredWithoutContentPopup(t *testing.T) {
 // continuation line. A long row must occupy exactly one rendered line.
 func TestContentPopupRowsNeverWrap(t *testing.T) {
 	m := Model{width: 80, height: 24}
-	m.contentPopup = newContentPopup("T", []contentLine{
+	m = m.pushOverlay(newContentPopup("T", []contentLine{
 		{text: strings.Repeat("a", 200)},
-	})
+	}))
 	out := ansi.Strip(m.render())
 	n := 0
 	for _, line := range strings.Split(out, "\n") {
@@ -426,9 +426,9 @@ func TestContentPopupUsesWideBox(t *testing.T) {
 		}
 	}
 	m := Model{width: 120, height: 24}
-	m.contentPopup = newContentPopup("T", []contentLine{
+	m = m.pushOverlay(newContentPopup("T", []contentLine{
 		{text: strings.Repeat("b", 80)},
-	})
+	}))
 	out := ansi.Strip(m.render())
 	if !strings.Contains(out, strings.Repeat("b", 80)) {
 		t.Fatalf("80-char row must fit untruncated at 120 cols:\n%s", out)

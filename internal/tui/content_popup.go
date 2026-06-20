@@ -96,11 +96,10 @@ func (m Model) contentPageRows() int {
 	return n
 }
 
-// updateContentPopupKey handles all keys while the viewer is open. It swallows
-// everything (no fallthrough to global handlers). Search mirrors the panel
-// filter: / starts input mode, enter keeps the query, esc cancels it.
-func (m Model) updateContentPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	p := m.contentPopup
+// update handles all keys while the viewer is open. It swallows everything (no
+// fallthrough to global handlers). Search mirrors the panel filter: / starts
+// input mode, enter keeps the query, esc cancels it.
+func (p *contentPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
 	}
@@ -144,7 +143,7 @@ func (m Model) updateContentPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "q": // close the window, not the app (q quits only at top level)
-		m.contentPopup = nil
+		m = m.popOverlay()
 		return m, nil
 	case "esc":
 		if p.query != "" { // first esc clears the committed search, second closes
@@ -152,10 +151,10 @@ func (m Model) updateContentPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			p.sel = 0
 			return m, nil
 		}
-		m.contentPopup = nil
+		m = m.popOverlay()
 		return m, nil
 	case "enter":
-		m.contentPopup = nil
+		m = m.popOverlay()
 		return m, nil
 	case "/":
 		p.typing = true
@@ -191,11 +190,15 @@ func contentPopupWidth(w int) int {
 	return inner
 }
 
-// renderContentPopup draws the viewer box (composited by render via
-// overlayCenter). Headings render bold, the cursor row reversed; the window
-// follows the cursor via the same windowRows helper the panels use.
-func (m Model) renderContentPopup() string {
-	p := m.contentPopup
+// render composites the viewer over the layer beneath.
+func (p *contentPopup) render(m Model, below string) string {
+	w, h := m.overlayDims()
+	return overlayCenter(clipToHeight(below, h), p.box(m), w, h)
+}
+
+// box draws the viewer box. Headings render bold, the cursor row reversed; the
+// window follows the cursor via the same windowRows helper the panels use.
+func (p *contentPopup) box(m Model) string {
 	w, _ := m.overlayDims()
 	inner := contentPopupWidth(w)
 	// lipgloss wraps text at Width minus the horizontal padding; truncate to

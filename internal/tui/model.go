@@ -40,7 +40,6 @@ type Model struct {
 	switchTarget        string
 	pendingCompare      *pendingCompare // focused file awaiting the compare-mode picker; nil = none
 	pendingSwitchBranch string          // branch to SmartSwitch to after a successful op (B = create-and-switch)
-	contentPopup        *contentPopup   // generic read-only viewer (help window)
 
 	mark       *markState      // the m-key mark; nil = none (see mark.go)
 	fileMarks  map[string]bool // multi-selected Status file paths (keyed by path)
@@ -379,15 +378,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.actionMenu != nil {
 			return m.updateActionMenuKey(msg)
 		}
-		// The `?` cheat sheet, when opened over a switcher, owns the keyboard above
-		// the overlay stack (checked below). Gated on an overlay being open so the
-		// base-layout help path (further down) is untouched.
-		if m.contentPopup != nil && m.overlayTop() != nil {
-			return m.updateContentPopupKey(msg)
-		}
 		// The overlay stack (centered popups) is global: its top owns the keyboard
 		// above the surface stack and the diff view (mirrors the action menu and
-		// render()). The bookmark + shelf switchers and their child popups live here.
+		// render()). The bookmark + shelf switchers, their child popups, and the
+		// help / `?` cheat-sheet viewer (a contentPopup pushed over the switcher)
+		// all live here, so esc on the cheat-sheet returns to the switcher beneath.
 		if o := m.overlayTop(); o != nil {
 			return o.update(m, msg)
 		}
@@ -402,9 +397,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// must be the top visible surface (background ops will rely on it).
 		if m.diffView != nil {
 			return m.updateDiffViewKey(msg)
-		}
-		if m.contentPopup != nil {
-			return m.updateContentPopupKey(msg)
 		}
 		// Filter-input mode captures every key (the panel label shows the query).
 		// Hoisted above the files-view and stash routing so a commit filter opened
@@ -784,7 +776,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// returns earlier); the menu lists whatever is currently available.
 			return m.openActionMenu(), nil
 		case "?":
-			m.contentPopup = newContentPopup("Help — keys", helpContent())
+			m = m.pushOverlay(newContentPopup("Help — keys", helpContent()))
 		case "l":
 			if m.focus == panelCommits && m.canShowCommitFiles() {
 				if m.width > 0 && m.width < 40 {

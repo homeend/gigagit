@@ -68,16 +68,16 @@ func TestQuestionMarkOpensCheatSheetOverBookmarkPopup(t *testing.T) {
 	m := bookmarkPopupModel()
 	u, _ := m.Update(keyMsg("?"))
 	m = u.(Model)
-	if m.contentPopup == nil {
+	if overlayOf[*contentPopup](m) == nil {
 		t.Fatal("? must open the cheat sheet")
 	}
 	if m.bookmarkSwitcher() == nil {
 		t.Fatal("the bookmark switcher must stay open under the cheat sheet")
 	}
-	if !strings.Contains(m.contentPopup.title, "Bookmark") {
-		t.Fatalf("cheat sheet title = %q, want the bookmark switcher", m.contentPopup.title)
+	if !strings.Contains(overlayOf[*contentPopup](m).title, "Bookmark") {
+		t.Fatalf("cheat sheet title = %q, want the bookmark switcher", overlayOf[*contentPopup](m).title)
 	}
-	if !strings.Contains(helpJoin(m.contentPopup.lines), "paste") {
+	if !strings.Contains(helpJoin(overlayOf[*contentPopup](m).lines), "paste") {
 		t.Fatal("cheat sheet must list the bookmark switcher keys")
 	}
 }
@@ -86,11 +86,11 @@ func TestQuestionMarkOpensCheatSheetOverShelfPopup(t *testing.T) {
 	m := shelfPopupModel()
 	u, _ := m.Update(keyMsg("?"))
 	m = u.(Model)
-	if m.contentPopup == nil || m.shelfSwitcher() == nil {
+	if overlayOf[*contentPopup](m) == nil || m.shelfSwitcher() == nil {
 		t.Fatal("? must open the cheat sheet and keep the shelf switcher open")
 	}
-	if !strings.Contains(m.contentPopup.title, "Shelf") {
-		t.Fatalf("cheat sheet title = %q, want the shelf switcher", m.contentPopup.title)
+	if !strings.Contains(overlayOf[*contentPopup](m).title, "Shelf") {
+		t.Fatalf("cheat sheet title = %q, want the shelf switcher", overlayOf[*contentPopup](m).title)
 	}
 }
 
@@ -102,7 +102,7 @@ func TestCheatSheetCapturesKeysOverPicker(t *testing.T) {
 	m = u.(Model)
 	u, _ = m.Update(keyMsg("/")) // / must start the cheat sheet's search, not the bookmark filter
 	m = u.(Model)
-	if !m.contentPopup.typing {
+	if !overlayOf[*contentPopup](m).typing {
 		t.Fatal("/ must start the cheat sheet search (keys route to the overlay)")
 	}
 	if m.bookmarkSwitcher().filtering {
@@ -120,7 +120,7 @@ func TestCheatSheetEscReturnsToPicker(t *testing.T) {
 	m = u.(Model)
 	u, _ = m.Update(keyMsg("esc"))
 	m = u.(Model)
-	if m.contentPopup != nil {
+	if overlayOf[*contentPopup](m) != nil {
 		t.Fatal("esc must close the cheat sheet")
 	}
 	if m.bookmarkSwitcher() == nil {

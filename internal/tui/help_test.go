@@ -11,7 +11,7 @@ func TestHelpOpensWithQuestionMark(t *testing.T) {
 	m := Model{width: 80, height: 24}
 	u, _ := m.Update(keyMsg("?"))
 	m = u.(Model)
-	if m.contentPopup == nil {
+	if overlayOf[*contentPopup](m) == nil {
 		t.Fatal("? must open the help popup")
 	}
 	out := ansi.Strip(m.render())
@@ -86,7 +86,7 @@ func TestHelpNotOpenedWhileAnotherPopupIsOpen(t *testing.T) {
 	m = m.pushOverlay(&repoPopup{})
 	u, _ := m.Update(keyMsg("?"))
 	m = u.(Model)
-	if m.contentPopup != nil {
+	if overlayOf[*contentPopup](m) != nil {
 		t.Fatal("? must be swallowed by the open popup")
 	}
 }

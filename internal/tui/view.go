@@ -153,15 +153,9 @@ func (m Model) render() string {
 	// The bookmark quick-switcher (and its paste sub-popup) is global: it must
 	// paint over whatever content window is open, so it overlays menuBackground
 	// here, above the surface-stack and diff-view early returns below.
-	//
-	// First, though: the `?` cheat sheet over a bookmark/shelf switcher replaces
-	// the picker, centered over the same dimmed-panel background it used. Gated on
-	// a picker so the base-layout help path below (over the live panels) is left
-	// untouched.
-	if m.contentPopup != nil && m.overlayTop() != nil {
-		w, h := m.overlayDims()
-		return overlayCenter(clipToHeight(m.menuBackground(), h), m.renderContentPopup(), w, h)
-	}
+	// The help / `?` cheat-sheet viewer is a contentPopup on this stack too: over
+	// a switcher it composites on the dimmed background (menuBackground), and esc
+	// pops back to the switcher; the base help composites over the live panels.
 	if o := m.overlayTop(); o != nil {
 		return o.render(m, m.menuBackground())
 	}
@@ -177,15 +171,9 @@ func (m Model) render() string {
 	}
 	_, h := m.overlayDims()
 	bg := clipToHeight(m.renderInterface(), h)
-	if m.contentPopup == nil {
-		if lines, x, y, ok := m.tooltip(); ok {
-			w, h := m.overlayDims()
-			bg = overlayAt(bg, strings.Join(lines, "\n"), x, y, w, h)
-		}
-	}
-	if m.contentPopup != nil {
+	if lines, x, y, ok := m.tooltip(); ok {
 		w, h := m.overlayDims()
-		return overlayCenter(bg, m.renderContentPopup(), w, h)
+		bg = overlayAt(bg, strings.Join(lines, "\n"), x, y, w, h)
 	}
 	return bg
 }

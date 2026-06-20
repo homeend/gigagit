@@ -199,11 +199,11 @@ func TestWheelOutsidePanelsNoOps(t *testing.T) {
 
 func TestHelpWindowKeepsWheelPriority(t *testing.T) {
 	m := mouseModel()
-	m.contentPopup = newContentPopup("Help — keys", helpContent())
+	m = m.pushOverlay(newContentPopup("Help — keys", helpContent()))
 	u, _ := m.Update(mouseMsg(30, 5, tea.MouseButtonWheelDown))
 	mm := u.(Model)
-	if mm.contentPopup.sel != 3 {
-		t.Fatalf("help sel = %d, want 3 (wheel scrolls the help window)", mm.contentPopup.sel)
+	if overlayOf[*contentPopup](mm).sel != 3 {
+		t.Fatalf("help sel = %d, want 3 (wheel scrolls the help window)", overlayOf[*contentPopup](mm).sel)
 	}
 	if mm.sel[panelCommits] != 0 {
 		t.Fatal("the panel under the help window must not scroll")
@@ -301,10 +301,10 @@ func TestClickCommitsFilterTyping(t *testing.T) {
 
 func TestModalOutranksHelpWindowWheel(t *testing.T) {
 	m := mouseModel()
-	m.contentPopup = newContentPopup("Help — keys", helpContent())
+	m = m.pushOverlay(newContentPopup("Help — keys", helpContent()))
 	m.modal = &decisionState{}
 	u, _ := m.Update(mouseMsg(30, 5, tea.MouseButtonWheelDown))
-	if got := u.(Model).contentPopup.sel; got != 0 {
+	if got := overlayOf[*contentPopup](u.(Model)).sel; got != 0 {
 		t.Fatalf("help sel = %d, the modal must swallow the wheel", got)
 	}
 }

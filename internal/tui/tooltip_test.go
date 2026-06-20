@@ -141,7 +141,7 @@ func TestTooltipY(t *testing.T) {
 
 func TestTooltipSuppressedByContentPopup(t *testing.T) {
 	m := tooltipModel()
-	m.contentPopup = newContentPopup("T", contentLines(2))
+	m = m.pushOverlay(newContentPopup("T", contentLines(2)))
 	out := ansi.Strip(m.render())
 	if strings.Contains(out, longPath) {
 		t.Fatal("content popup view must not contain the tooltip")

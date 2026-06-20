@@ -28,18 +28,14 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	if m.proc != nil {
 		return m, nil
 	}
-	// The `?` cheat sheet over a switcher scrolls with the wheel — checked before
-	// the picker guard below, which would otherwise swallow it.
-	if m.contentPopup != nil && m.overlayTop() != nil {
-		if wheel != 0 {
-			m.contentPopup.move(wheel)
-		}
-		return m, nil
-	}
 	// The overlay stack (switchers + their child popups) is centered above any
-	// content window; like the other popups, swallow mouse rather than hit-test
-	// the hidden background underneath it.
-	if m.overlayTop() != nil {
+	// content window; swallow mouse rather than hit-test the hidden background —
+	// except the help / `?` cheat-sheet viewer (a contentPopup), which scrolls
+	// with the wheel like it did as a standalone popup.
+	if o := m.overlayTop(); o != nil {
+		if cp, ok := o.(*contentPopup); ok && wheel != 0 {
+			cp.move(wheel)
+		}
 		return m, nil
 	}
 	if m.stackTop() != nil {
@@ -56,12 +52,6 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	if m.actionMenu != nil {
 		if wheel != 0 {
 			m.actionMenu.move(wheel)
-		}
-		return m, nil
-	}
-	if m.contentPopup != nil {
-		if wheel != 0 {
-			m.contentPopup.move(wheel)
 		}
 		return m, nil
 	}
