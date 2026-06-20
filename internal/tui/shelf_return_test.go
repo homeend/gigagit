@@ -13,6 +13,23 @@ func shelfSwitcherModel() Model {
 	return m.pushOverlay(newShelfPopup([]model.ShelfEntry{{ID: "s1"}}))
 }
 
+// B1 (shelf): while an op runs the shelf switcher is inert — a keypress must not
+// push the restore popup or launch a second op.
+func TestShelfSwitcherInertWhileRunning(t *testing.T) {
+	m := shelfSwitcherModel()
+	m.running = true
+	m.opMsgs = make(chan tea.Msg, 1)
+	before := m.opMsgs
+	u, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("p")})
+	m = u.(Model)
+	if cmd != nil || m.opMsgs != before {
+		t.Fatal("a keypress while running must be a no-op and not replace opMsgs")
+	}
+	if _, ok := m.overlayTop().(*shelfRestorePopup); ok {
+		t.Fatal("p must not open the restore popup while running")
+	}
+}
+
 func TestRestoreEscReturnsToShelfSwitcher(t *testing.T) {
 	m := shelfSwitcherModel()
 	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("p")}) // restore (openShelfRestore pushes)

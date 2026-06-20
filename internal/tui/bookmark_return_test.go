@@ -71,6 +71,25 @@ func TestPasteDestPrefilled(t *testing.T) {
 	}
 }
 
+// Paste success (enter) pops the paste popup and reveals the switcher beneath
+// while the WriteFile op runs.
+func TestPasteSuccessReturnsToSwitcher(t *testing.T) {
+	m := switcherModel(t)
+	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("p")})
+	m = u.(Model)
+	if _, ok := m.overlayTop().(*bookmarkPastePopup); !ok {
+		t.Fatal("precondition: paste popup must be open (dest is prefilled)")
+	}
+	u, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // dest prefilled → writes
+	m = u.(Model)
+	if cmd == nil || !m.running {
+		t.Fatal("enter must launch the WriteFile op")
+	}
+	if m.bookmarkSwitcher() == nil || m.overlayTop() != m.bookmarkSwitcher() {
+		t.Fatal("paste success must return to the switcher (revealed beneath)")
+	}
+}
+
 // BLOCKER B1 regression: while an op is running the switcher sits visible on
 // the overlay stack but must be INERT — a keypress must not launch a second op.
 func TestSwitcherInertWhileRunning(t *testing.T) {

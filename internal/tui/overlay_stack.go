@@ -56,14 +56,13 @@ func (m Model) clearOverlays() Model {
 
 // bookmarkSwitcher returns the topmost bookmark switcher on the overlay stack,
 // or nil when none is open. Lets code and tests reach the live switcher without
-// a Model field. Uses any() as a forward-reference until the popup types
-// implement the overlay interface.
+// a Model field.
 func (m Model) bookmarkSwitcher() *bookmarkPopup {
 	if m.overlays == nil {
 		return nil
 	}
 	for i := len(m.overlays.entries) - 1; i >= 0; i-- {
-		if p, ok := any(m.overlays.entries[i]).(*bookmarkPopup); ok {
+		if p, ok := m.overlays.entries[i].(*bookmarkPopup); ok {
 			return p
 		}
 	}
@@ -71,14 +70,12 @@ func (m Model) bookmarkSwitcher() *bookmarkPopup {
 }
 
 // shelfSwitcher returns the topmost shelf switcher on the overlay stack, else nil.
-// Uses any() as a forward-reference until the popup types implement the overlay
-// interface.
 func (m Model) shelfSwitcher() *shelfPopup {
 	if m.overlays == nil {
 		return nil
 	}
 	for i := len(m.overlays.entries) - 1; i >= 0; i-- {
-		if p, ok := any(m.overlays.entries[i]).(*shelfPopup); ok {
+		if p, ok := m.overlays.entries[i].(*shelfPopup); ok {
 			return p
 		}
 	}
