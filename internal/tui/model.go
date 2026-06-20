@@ -672,6 +672,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		case "enter":
+			if m.focus == panelTags {
+				return m.tagJumpToCommit()
+			}
 			if m.focus == panelWorktrees && m.canEnterWorktree() {
 				wt, _ := m.selectedWorktree()
 				return m.reRoot(wt.Path)
