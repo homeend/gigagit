@@ -12,6 +12,23 @@ import (
 // opEventMsg carries one engine event (progress/done/gitline) to the UI.
 type opEventMsg struct{ event engine.Event }
 
+// editorFinishedMsg signals the external editor exited (path is the edited
+// repo-relative path).
+type editorFinishedMsg struct {
+	path string
+	err  error
+}
+
+// reloadStatusCmd re-reads only the working-tree status off the UI thread,
+// yielding a statusRefreshedMsg (the panels-only refresh).
+func (m Model) reloadStatusCmd(summary string) tea.Cmd {
+	svc := m.svc
+	return func() tea.Msg {
+		st, err := svc.Status(context.Background())
+		return statusRefreshedMsg{summary: summary, status: st, err: err}
+	}
+}
+
 // statusRefreshedMsg carries the result of a staging op plus a fresh Status
 // read. It refreshes ONLY the Status panel (not the full snapshot) so repeated
 // staging stays snappy on huge repos.

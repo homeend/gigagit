@@ -931,6 +931,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case editorFinishedMsg:
+		if msg.err != nil {
+			m.statusMsg = "edit: " + msg.err.Error()
+			return m, m.reloadStatusCmd("")
+		}
+		return m, m.reloadStatusCmd(editedSummary(msg.path))
+
 	case amendPrefillMsg:
 		if msg.err != nil {
 			m.statusMsg = "amend: " + msg.err.Error()
