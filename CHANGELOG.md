@@ -188,6 +188,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   elsewhere still `SmartSwitch` as before.
 
 ### Fixed
+- TUI: the `/`-search input now rides its **own line beneath the title** in the
+  commit files view and in every list pop-up, instead of being appended after the
+  title. A long commit subject used to push the search box off the right edge, so
+  you couldn't see what you were typing; the query now stays visible regardless of
+  title length.
 - TUI: cross-store **compare** now stacks instead of vanishing. Pressing `c` in
   the bookmark switcher (compare against a shelf entry) — or `c` in the shelf
   switcher (compare against a bookmark) — opens the other switcher *on top of*

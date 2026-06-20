@@ -333,16 +333,15 @@ func (m Model) renderFilesView(boxW, boxH int) string {
 	if innerW < 1 {
 		innerW = 1
 	}
+	// The /-search input rides its own line beneath the title (not appended to
+	// it) so a long commit subject can't truncate the query out of view.
+	search := p.searchLine()
 	rowsCap := contentH - 2 // title + hint lines
+	if search != "" {
+		rowsCap-- // the search line claims one more row
+	}
 	if rowsCap < 1 {
 		rowsCap = 1
-	}
-
-	title := m.filesTitle
-	if p.typing {
-		title += " /" + p.query + "█"
-	} else if p.query != "" {
-		title += " /" + p.query
 	}
 
 	vis := p.visible()
@@ -364,7 +363,10 @@ func (m Model) renderFilesView(boxW, boxH int) string {
 	}
 
 	lines := make([]string, 0, contentH)
-	lines = append(lines, padRight(truncate(title, innerW), innerW))
+	lines = append(lines, padRight(truncate(m.filesTitle, innerW), innerW))
+	if search != "" {
+		lines = append(lines, padRight(truncate(search, innerW), innerW))
+	}
 	if len(vis) == 0 {
 		lines = append(lines, padRight(truncate("  (no match)", innerW), innerW))
 	} else {

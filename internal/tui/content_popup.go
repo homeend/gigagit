@@ -190,6 +190,22 @@ func contentPopupWidth(w int) int {
 	return inner
 }
 
+// searchLine is the /-search input shown on its OWN line beneath a title:
+// "/<query>█" while typing, "/<query>" for a committed query, or "" when no
+// search is active. Kept off the title line so a long title (e.g. a long commit
+// subject) can't truncate the query out of view. Shared by every surface that
+// renders a contentPopup search (the popup itself and the files-view tree).
+func (p *contentPopup) searchLine() string {
+	switch {
+	case p.typing:
+		return "/" + p.query + "█"
+	case p.query != "":
+		return "/" + p.query
+	default:
+		return ""
+	}
+}
+
 // render composites the viewer over the layer beneath.
 func (p *contentPopup) render(m Model, below string) string {
 	w, h := m.overlayDims()
@@ -228,14 +244,15 @@ func (p *contentPopup) box(m Model) string {
 	}
 	win := renderWindow(wr, winOpts{w: textW, h: h, mode: p.mode, anchor: p.sel, hscroll: p.hscroll})
 
-	title := p.title
-	if p.typing {
-		title += "  /" + p.query + "█"
-	} else if p.query != "" {
-		title += "  /" + p.query
-	}
 	var b strings.Builder
-	b.WriteString(truncate(title, textW) + "\n\n")
+	// The /-search input rides its own line beneath the title (replacing the
+	// blank separator) so a long title can't truncate the query out of view.
+	b.WriteString(truncate(p.title, textW) + "\n")
+	if s := p.searchLine(); s != "" {
+		b.WriteString(truncate(s, textW) + "\n")
+	} else {
+		b.WriteString("\n")
+	}
 	if len(vis) == 0 {
 		b.WriteString("  (no match)\n")
 	}
