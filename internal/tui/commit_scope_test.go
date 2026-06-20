@@ -278,3 +278,25 @@ func TestBranchRowsSetMarkerIsOnTheLeft(t *testing.T) {
 		t.Fatalf("◉ should precede the name: dot=%d name=%d in %q", dot, name, row)
 	}
 }
+
+func TestCommitBranchHint(t *testing.T) {
+	m := footerModel()
+	if m.sel == nil {
+		m.sel = map[panel]int{}
+	}
+	m.focus = panelCommits
+	m.commits = []model.Commit{{Hash: "aaaaaaa", Subject: "x", Source: "feat"}}
+	m.sel[panelCommits] = 0
+	if got := m.commitBranchHint(); got != "⎇ feat" {
+		t.Fatalf("hint = %q, want ⎇ feat", got)
+	}
+	m.focus = panelBranches // off the commits panel → no hint
+	if got := m.commitBranchHint(); got != "" {
+		t.Fatalf("hint off-panel = %q, want empty", got)
+	}
+	m.focus = panelCommits
+	m.commits[0].Source = "" // no source → no hint
+	if got := m.commitBranchHint(); got != "" {
+		t.Fatalf("hint without source = %q, want empty", got)
+	}
+}

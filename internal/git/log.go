@@ -10,8 +10,9 @@ import (
 )
 
 // logFormat separates fields with \x1f (unit separator); one commit per line.
-// The trailing %D carries ref decorations ("HEAD -> main, feature, tag: v1").
-const logFormat = "%H%x1f%P%x1f%an%x1f%at%x1f%s%x1f%D"
+// %D carries ref decorations ("HEAD -> main, feature, tag: v1"); the trailing %S
+// (needs --source) carries the branch each commit was reached from in the walk.
+const logFormat = "%H%x1f%P%x1f%an%x1f%at%x1f%s%x1f%D%x1f%S"
 
 // LogScope selects which refs the walk covers. Empty Branches → all local
 // branches (plus HEAD); otherwise exactly the listed branch names.
@@ -24,7 +25,7 @@ type LogScope struct {
 // forces %D to populate across git versions.
 func (r *Repo) LogScoped(ctx context.Context, limit, skip int, scope LogScope) ([]model.Commit, error) {
 	b := gitcmd.New("log").
-		Arg("-n", strconv.Itoa(limit), "--date-order", "--decorate", "--format="+logFormat).
+		Arg("-n", strconv.Itoa(limit), "--date-order", "--decorate", "--source", "--format="+logFormat).
 		ArgIf(skip > 0, "--skip="+strconv.Itoa(skip))
 	if len(scope.Branches) == 0 {
 		// All local branches PLUS HEAD, so a detached HEAD's commits still show
@@ -120,6 +121,9 @@ func ParseLog(data []byte) ([]model.Commit, error) {
 			Author:  f[2],
 			Subject: f[4],
 			Refs:    parseDecorations(f[5]),
+		}
+		if len(f) >= 7 { // %S source ref (present once the walk has --source)
+			c.Source = strings.TrimSpace(f[6])
 		}
 		if p := strings.Fields(f[1]); len(p) > 0 {
 			c.Parents = p

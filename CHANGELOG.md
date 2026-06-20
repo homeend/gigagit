@@ -22,6 +22,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   drawing, and the jobs it runs — the first of a general mechanism.)
 
 ### Added
+- **Commits panel — branch in the status line.** When a commit is selected, the
+  status line shows `⎇ <branch>` — which branch the commit is from (`git log
+  --source`/`%S`, computed in the existing feed walk, no per-hover git call) —
+  always visible without occluding any commit row.
 - **Compare against working dir.** The `.` menu on any focused commit, staged, or
   shelf file offers **Compare against working dir** — a direct side-by-side diff of
   that version against the same path in the working tree (no second pick).
