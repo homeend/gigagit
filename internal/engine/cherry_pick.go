@@ -46,9 +46,18 @@ func (op CherryPick) Run(ctx context.Context, deps OpDeps) (Result, error) {
 		return Result{}, fmt.Errorf("cherry-pick %s: %v (state check: %w)", op.Commit, pickErr, stateErr)
 	}
 	if !inPick {
-		// Refused outright (bad ref, empty/redundant commit git rejects before
+		// Refused outright (bad ref, an empty/redundant commit git rejects before
 		// starting): nothing to resolve. The autostash is preserved.
 		return Result{}, fmt.Errorf("cherry-pick %s: %w", op.Commit, pickErr)
+	}
+
+	// In progress but with NO conflicted files = an empty/already-applied commit
+	// (git stops with CHERRY_PICK_HEAD set yet a clean tree). There is nothing to
+	// resolve and `--continue` would error, so don't offer the conflict fork:
+	// auto-abort to a clean state and return a legible error. Never trap the user.
+	if st, sErr := deps.Repo.Status(ctx); sErr == nil && st.Counts().Conflicted == 0 {
+		_ = deps.Repo.CherryPickAbort(ctx, "")
+		return Result{}, fmt.Errorf("cherry-pick %s: nothing to apply (the commit is already on this branch); aborted", op.Commit)
 	}
 
 	choice, derr := deps.decide(ctx, DecisionRequest{

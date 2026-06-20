@@ -125,6 +125,65 @@ func TestCherryPickConflictAbortRestores(t *testing.T) {
 	}
 }
 
+// Cherry-picking a commit already on the branch leaves CHERRY_PICK_HEAD set with
+// a clean tree; the op must auto-abort and return a legible error (never trap).
+func TestCherryPickAlreadyAppliedAutoAborts(t *testing.T) {
+	dir, repo := newRepo(t)
+	gitE(t, dir, "checkout", "-b", "feat")
+	os.WriteFile(filepath.Join(dir, "g.txt"), []byte("g\n"), 0o644)
+	gitE(t, dir, "add", ".")
+	gitE(t, dir, "commit", "-m", "add g")
+	pick := gitOut(t, dir, "rev-parse", "HEAD")
+	gitE(t, dir, "checkout", "main")
+	// apply it once cleanly
+	if _, err := (CherryPick{Commit: pick}).Run(context.Background(), OpDeps{Repo: repo}); err != nil {
+		t.Fatalf("first pick: %v", err)
+	}
+	// apply the SAME commit again → already present
+	_, err := CherryPick{Commit: pick}.Run(context.Background(),
+		OpDeps{Repo: repo, Decider: MapDecider{"cherry-pick-conflict": "keep-conflicts"}})
+	if err == nil || !strings.Contains(err.Error(), "already on this branch") {
+		t.Fatalf("err = %v, want 'already on this branch'", err)
+	}
+	if in, _ := repo.CherryPickInProgress(context.Background(), ""); in {
+		t.Fatal("an already-applied pick must not leave CHERRY_PICK_HEAD set")
+	}
+}
+
+// The autostash is restored after the abort path (dirty tree + abort).
+func TestCherryPickAbortRestoresAutostash(t *testing.T) {
+	dir, repo := newRepo(t)
+	os.WriteFile(filepath.Join(dir, "f.txt"), []byte("base\n"), 0o644)
+	gitE(t, dir, "add", ".")
+	gitE(t, dir, "commit", "-m", "base")
+	gitE(t, dir, "checkout", "-b", "feat")
+	os.WriteFile(filepath.Join(dir, "f.txt"), []byte("feat\n"), 0o644)
+	gitE(t, dir, "commit", "-am", "feat change")
+	pick := gitOut(t, dir, "rev-parse", "HEAD")
+	gitE(t, dir, "checkout", "main")
+	os.WriteFile(filepath.Join(dir, "f.txt"), []byte("main\n"), 0o644)
+	gitE(t, dir, "commit", "-am", "main change")
+
+	// dirty an unrelated tracked file so autostash kicks in
+	os.WriteFile(filepath.Join(dir, "wip.txt"), []byte("dirty\n"), 0o644)
+	gitE(t, dir, "add", "wip.txt") // staged-new so it's part of the stash
+
+	res, err := CherryPick{Commit: pick}.Run(context.Background(),
+		OpDeps{Repo: repo, Decider: MapDecider{"cherry-pick-conflict": "abort"}})
+	if err != nil {
+		t.Fatalf("abort path: %v", err)
+	}
+	if res.Changed {
+		t.Fatalf("abort should report no change: %+v", res)
+	}
+	if got, _ := os.ReadFile(filepath.Join(dir, "wip.txt")); string(got) != "dirty\n" {
+		t.Fatalf("autostash not restored after abort: wip.txt = %q", got)
+	}
+	if got, _ := os.ReadFile(filepath.Join(dir, "f.txt")); string(got) != "main\n" {
+		t.Fatalf("f.txt = %q after abort, want main", got)
+	}
+}
+
 // ContinueOp routes a resolved cherry-pick to `cherry-pick --continue`.
 func TestContinueOpFinishesCherryPick(t *testing.T) {
 	dir, repo := newRepo(t)

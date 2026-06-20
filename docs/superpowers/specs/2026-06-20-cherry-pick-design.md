@@ -82,11 +82,14 @@ still reports "rebase".
 ## Empty / already-applied commit edge
 
 Cherry-picking a commit whose changes are already in HEAD stops with
-`CHERRY_PICK_HEAD` set but **zero** conflicted files. That makes
-`canContinue()` true ("all resolved — [c] continue"), yet `git cherry-pick
---continue` errors on an empty pick. v1 requirement: the error is **legible**
-and **abort works** — the user is never stuck. (No special-case auto-skip in
-v1; surfacing git's own message is acceptable.)
+`CHERRY_PICK_HEAD` set but **zero** conflicted files (verified empirically:
+exit 1, clean tree). Offering the conflict fork here would trap the user — the
+TUI would show "all resolved — [c] continue", yet `git cherry-pick --continue`
+errors on an empty pick, and the resolver won't even open (no files). So the op
+**detects the in-progress-but-no-conflicts case and auto-aborts**, returning a
+legible error ("nothing to apply (the commit is already on this branch);
+aborted"). The decider is never reached; the repo is left clean. Never trap the
+user.
 
 ## TUI (`internal/tui/commit_scope.go`)
 
