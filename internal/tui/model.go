@@ -967,6 +967,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.conflictPopup != nil {
 			m.conflictPopup.inProgress = msg.op
 		}
+		if cp, ok := m.proc.(*conflictProcess); ok {
+			cp.inProgress = msg.op
+			// Fully resolved and no merge/rebase still in progress → done.
+			if len(cp.files) == 0 && msg.op == "" {
+				m.proc = nil
+			}
+		}
 		return m, nil
 
 	case irebaseLoadedMsg:

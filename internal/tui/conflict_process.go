@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -48,8 +50,13 @@ func startConflictProcess(m Model) (Model, tea.Cmd) {
 		return m, nil
 	}
 	m.proc = &conflictProcess{st: confListing, files: files, src: m.conflict}
-	return m, nil
+	return m, m.loadInProgressCmd() // probe merge/rebase so continue/abort can be offered
 }
+
+// canContinue is true when every file is resolved and a merge/rebase is still in
+// progress (so a continue is the next step). canAbort is true whenever one is.
+func (p *conflictProcess) canContinue() bool { return len(p.files) == 0 && p.inProgress != "" }
+func (p *conflictProcess) canAbort() bool    { return p.inProgress != "" }
 
 func (p *conflictProcess) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
@@ -74,7 +81,14 @@ func (p *conflictProcess) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		p.st = confListing
 		return m, m.loadCmd()
 	case confWorking:
-		// Cancel lands in Task 5; otherwise input is ignored while a job runs.
+		// Cancel always offered (never trap the user): stop the in-flight job;
+		// finished(context.Canceled) re-reads and returns to Listing.
+		if msg.String() == "esc" || msg.String() == "ctrl+x" {
+			if m.opCancel != nil {
+				m.opCancel()
+			}
+			return m, nil
+		}
 	}
 	return m, nil
 }
@@ -108,6 +122,18 @@ func (p *conflictProcess) updateListing(m Model, msg tea.KeyMsg) (Model, tea.Cmd
 		}
 		p.st = confWorking
 		return m.startOp(engine.MarkAllResolved{Paths: paths})
+	case "c": // continue the merge/rebase once everything is resolved
+		if p.canContinue() {
+			p.st = confWorking
+			return m.startOp(engine.ContinueOp{})
+		}
+		return m, nil
+	case "a": // abort the merge/rebase
+		if p.canAbort() {
+			p.st = confWorking
+			return m.startOp(engine.AbortOp{})
+		}
+		return m, nil
 	case "enter": // hand off to the line editor for a both-sides file
 		if p.sel < 0 || p.sel >= len(p.files) {
 			return m, nil
@@ -179,7 +205,7 @@ func (p *conflictProcess) render(m Model, below string) string {
 		}
 		return below
 	case confWorking:
-		return overlayCenter(bg, conflictMsgBox(m, "Resolving…"), w, h)
+		return overlayCenter(bg, conflictMsgBox(m, "Working…  [esc] cancel"), w, h)
 	case confReporting:
 		return overlayCenter(bg, conflictMsgBox(m, "Resolve failed:\n\n"+p.errMsg+"\n\n[any key] back to the list"), w, h)
 	}
@@ -190,6 +216,9 @@ func (p *conflictProcess) render(m Model, below string) string {
 // success it reloads so refreshed() can re-derive the list from fresh status.
 func (p *conflictProcess) finished(m Model, res engine.Result, err error) (Model, tea.Cmd) {
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			return m, m.loadCmd() // cancelled — just re-read and return to the list
+		}
 		p.st = confReporting
 		p.errMsg = err.Error()
 		return m, nil
@@ -198,8 +227,9 @@ func (p *conflictProcess) finished(m Model, res engine.Result, err error) (Model
 }
 
 // refreshed re-derives the conflicted-file list from the freshly-reloaded status
-// and returns to Listing. (Task 5: confFinishing + slot release when a
-// continue/abort has cleared every conflict.)
+// and returns to Listing, then re-probes the merge/rebase-in-progress state — the
+// inProgressMsg handler releases the slot when nothing is left (no conflicts and
+// no in-progress op).
 func (p *conflictProcess) refreshed(m Model) (Model, tea.Cmd) {
 	p.files = m.status.Conflicts()
 	p.src = m.conflict
@@ -207,7 +237,7 @@ func (p *conflictProcess) refreshed(m Model) (Model, tea.Cmd) {
 		p.sel = max(0, len(p.files)-1)
 	}
 	p.st = confListing
-	return m, nil
+	return m, m.loadInProgressCmd()
 }
 
 func (p *conflictProcess) indicator(m Model) string {
@@ -263,6 +293,9 @@ func conflictListBox(m Model, files []model.FileStatus, sel int, src domain.Conf
 // (Task 5 adds continue/abort when the list is empty.)
 func conflictHints(files []model.FileStatus, sel int, inProgress string) []string {
 	if len(files) == 0 {
+		if inProgress != "" {
+			return []string{"all resolved", "[c] continue " + inProgress, "[a] abort"}
+		}
 		return []string{"(all resolved)"}
 	}
 	parts := []string{"[↑/↓] file"}

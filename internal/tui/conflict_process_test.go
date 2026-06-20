@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -118,6 +119,74 @@ func TestConflictProcessDataLoadedRoutesToRefreshed(t *testing.T) {
 	cp := m.proc.(*conflictProcess)
 	if cp.st != confListing || len(cp.files) != 1 {
 		t.Fatalf("dataLoadedMsg must route to refreshed → Listing with 1 file, got st=%d n=%d", cp.st, len(cp.files))
+	}
+}
+
+func TestConflictProcessContinueAbortGating(t *testing.T) {
+	cp := &conflictProcess{}
+	// nothing resolved, not in progress
+	if cp.canContinue() || cp.canAbort() {
+		t.Fatal("no in-progress op → neither continue nor abort")
+	}
+	// resolving in progress, files remain
+	cp.inProgress = "merge"
+	cp.files = []model.FileStatus{{Path: "x"}}
+	if cp.canContinue() {
+		t.Fatal("continue must wait until every file is resolved")
+	}
+	if !cp.canAbort() {
+		t.Fatal("abort must be available whenever a merge/rebase is in progress")
+	}
+	// all resolved, still in progress
+	cp.files = nil
+	if !cp.canContinue() {
+		t.Fatal("all resolved + in progress → continue available")
+	}
+}
+
+func TestConflictProcessReleasesWhenDone(t *testing.T) {
+	m := conflictModel()
+	m, _ = startConflictProcess(m)
+	cp := m.proc.(*conflictProcess)
+	cp.files = nil // everything resolved
+
+	// the in-progress probe says the merge/rebase is over → release the slot
+	u, _ := m.Update(inProgressMsg{op: ""})
+	m = u.(Model)
+	if m.proc != nil {
+		t.Fatal("no conflicts + no in-progress op must release the slot")
+	}
+}
+
+func TestConflictProcessStaysWhenResolvedButInProgress(t *testing.T) {
+	m := conflictModel()
+	m, _ = startConflictProcess(m)
+	cp := m.proc.(*conflictProcess)
+	cp.files = nil // resolved, but the merge is still in progress (awaiting continue)
+
+	u, _ := m.Update(inProgressMsg{op: "merge"})
+	m = u.(Model)
+	if m.proc == nil {
+		t.Fatal("resolved-but-in-progress must keep the slot (offering continue)")
+	}
+	if m.proc.(*conflictProcess).inProgress != "merge" {
+		t.Fatal("the probe result must be recorded on the process")
+	}
+}
+
+func TestConflictProcessCancelReturnsToList(t *testing.T) {
+	m := conflictModel()
+	m, _ = startConflictProcess(m)
+	cp := m.proc.(*conflictProcess)
+	cp.st = confWorking
+	// a cancelled job must NOT show an error; it re-reads and returns to the list
+	m2, cmd := cp.finished(m, engine.Result{}, context.Canceled)
+	_ = m2
+	if cp.st == confReporting {
+		t.Fatal("a cancelled job must not be reported as an error")
+	}
+	if cmd == nil {
+		t.Fatal("cancel must trigger a reload to resync state")
 	}
 }
 
