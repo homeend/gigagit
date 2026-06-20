@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/gigagit/gg/internal/model"
 	"github.com/muesli/termenv"
 )
 
@@ -51,5 +52,59 @@ func TestCommitDotDecoratorIgnoresNonNode(t *testing.T) {
 	line := "  X 1234567 subject" // no ● at column 2
 	if got := deco(line, 0, 0); got != line {
 		t.Fatalf("a non-● glyph at nodeCol must not be colored: %q", got)
+	}
+}
+
+func TestCommitDecoratorsColorGraphNodeNotSelected(t *testing.T) {
+	forceColor(t)
+	m := footerModel()
+	m.focus = panelCommits
+	m.commits = []model.Commit{{Hash: "aaaaaaa"}, {Hash: "bbbbbbb"}}
+	m = m.rebuildCommitGraph()
+	if len(m.commitGraphLanes) != 2 {
+		t.Fatalf("rebuildCommitGraph should populate lanes, got %v", m.commitGraphLanes)
+	}
+	rows, idx := m.panelView(panelCommits)
+	decos := m.commitDecorators(rows, idx)
+	if decos == nil {
+		t.Fatal("graph mode should produce decorators")
+	}
+	// A linear graph puts both nodes in lane 0 at graph col 0 → text col 2.
+	out := decos[0]("  ● aaaaaaa", 0, 0)
+	if !strings.Contains(out, "\x1b[") {
+		t.Fatalf("graph node should be colored: %q", out)
+	}
+}
+
+// TestRenderPanelEmitsLaneColor is the end-to-end guard: it proves the color
+// survives the full assembled render path (decorator → style.Render → border
+// box), and that the selected row is NOT colored (reverse wins).
+func TestRenderPanelEmitsLaneColor(t *testing.T) {
+	forceColor(t)
+	m := footerModel()
+	m.focus = panelCommits
+	m.commits = []model.Commit{{Hash: "aaaaaaa", Subject: "x"}, {Hash: "bbbbbbb", Subject: "y"}}
+	m = m.rebuildCommitGraph()
+	m.sel[panelCommits] = 0 // row 0 selected → must NOT be colored
+	rows, idx := m.panelView(panelCommits)
+	decos := m.commitDecorators(rows, idx)
+	out := m.renderPanel(panelCommits, "Commits", rows, decos, 40, 8)
+	// Derive the exact escape lipgloss emits for this color under the active
+	// profile (256 vs truecolor differ), rather than guessing the SGR form.
+	probe := lipgloss.NewStyle().Foreground(laneColor(0)).Render("●")
+	esc := probe[:strings.IndexRune(probe, '●')] // the leading color escape
+	if esc == "" || !strings.Contains(out, esc) {
+		t.Fatalf("assembled panel should emit lane-0 color escape %q:\n%s", esc, out)
+	}
+}
+
+func TestCommitRowsNeverContainAnsi(t *testing.T) {
+	m := footerModel()
+	m.commits = []model.Commit{{Hash: "aaaaaaa", Subject: "x"}, {Hash: "bbbbbbb", Subject: "y"}}
+	m = m.rebuildCommitGraph()
+	for _, row := range m.commitRows() {
+		if strings.ContainsRune(row, '\x1b') {
+			t.Fatalf("commitRows must stay plain (no ANSI): %q", row)
+		}
 	}
 }
