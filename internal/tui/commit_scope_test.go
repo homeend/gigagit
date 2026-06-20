@@ -369,6 +369,32 @@ func TestDisplayStartShortensSHA(t *testing.T) {
 	}
 }
 
+func TestCommitCherryPickRowGating(t *testing.T) {
+	m := footerModel()
+	if m.sel == nil {
+		m.sel = map[panel]int{}
+	}
+	full := "cccccccccccccccccccccccccccccccccccccccc"
+	m.commits = []model.Commit{{Hash: full, Subject: "x"}}
+	m.sel[panelCommits] = 0
+
+	// present on the Commits panel
+	m.focus = panelCommits
+	r, ok := findRow(availableActions(m), "commit-cherry-pick")
+	if !ok {
+		t.Fatal("cherry-pick row missing on the Commits panel")
+	}
+	if r.label != "Cherry-pick here" {
+		t.Fatalf("label = %q", r.label)
+	}
+
+	// absent off the Commits panel
+	m.focus = panelBranches
+	if _, ok := findRow(availableActions(m), "commit-cherry-pick"); ok {
+		t.Fatal("cherry-pick row must not appear off the Commits panel")
+	}
+}
+
 func TestCommitCreateWorktreeRowOpensInEdit(t *testing.T) {
 	m := footerModel()
 	if m.sel == nil {

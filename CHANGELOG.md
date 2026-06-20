@@ -38,6 +38,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   drawing, and the jobs it runs — the first of a general mechanism.)
 
 ### Added
+- **Cherry-pick a commit.** The `.` menu on a commit offers **Cherry-pick
+  here** — applies that commit onto the current branch as a new commit. A dirty
+  working tree is autostashed and restored. A conflict drops into the existing
+  conflict resolver (resolve the files, then continue or abort), the same flow
+  as a merge/rebase conflict. Also on the CLI: `gg cherry-pick
+  [--on-conflict=keep|abort] <commit>`.
 - **Create a worktree from a commit.** The `.` menu on a commit offers **Create
   worktree here** — opens the create-worktree dialog based at that commit; you
   type the new branch name (it is not templated) and a worktree is created on that

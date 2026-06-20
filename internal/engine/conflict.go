@@ -82,7 +82,9 @@ func (op MarkAllResolved) Run(ctx context.Context, deps OpDeps) (Result, error) 
 	return res, nil
 }
 
-// ContinueOp finalizes whichever of merge/rebase is in progress.
+// ContinueOp finalizes whichever of merge/rebase/cherry-pick is in progress.
+// Cherry-pick is probed LAST: a paused rebase pick also sets CHERRY_PICK_HEAD,
+// so rebase must win the dispatch.
 type ContinueOp struct{}
 
 func (op ContinueOp) Run(ctx context.Context, deps OpDeps) (Result, error) {
@@ -99,10 +101,17 @@ func (op ContinueOp) Run(ctx context.Context, deps OpDeps) (Result, error) {
 		}
 		return conflictDone(deps, ctx, "rebase continued")
 	}
-	return Result{}, errors.New("no merge or rebase in progress")
+	if ok, _ := deps.Repo.CherryPickInProgress(ctx, ""); ok {
+		if err := deps.Repo.CherryPickContinue(ctx, ""); err != nil {
+			return Result{}, err
+		}
+		return conflictDone(deps, ctx, "cherry-pick continued")
+	}
+	return Result{}, errors.New("no merge, rebase, or cherry-pick in progress")
 }
 
-// AbortOp aborts whichever of merge/rebase is in progress.
+// AbortOp aborts whichever of merge/rebase/cherry-pick is in progress.
+// Cherry-pick is probed LAST (see ContinueOp).
 type AbortOp struct{}
 
 func (op AbortOp) Run(ctx context.Context, deps OpDeps) (Result, error) {
@@ -119,7 +128,13 @@ func (op AbortOp) Run(ctx context.Context, deps OpDeps) (Result, error) {
 		}
 		return conflictDone(deps, ctx, "rebase aborted")
 	}
-	return Result{}, errors.New("no merge or rebase in progress")
+	if ok, _ := deps.Repo.CherryPickInProgress(ctx, ""); ok {
+		if err := deps.Repo.CherryPickAbort(ctx, ""); err != nil {
+			return Result{}, err
+		}
+		return conflictDone(deps, ctx, "cherry-pick aborted")
+	}
+	return Result{}, errors.New("no merge, rebase, or cherry-pick in progress")
 }
 
 func conflictDone(deps OpDeps, ctx context.Context, summary string) (Result, error) {

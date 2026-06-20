@@ -1,0 +1,29 @@
+name = "cherry-pick: a non-conflicting commit lands on the current branch (exit 0)"
+
+[input]
+steps = [
+  { write = "base.txt", content = "base\n" },
+  { commit = "base" },
+  { branch = "feat" },
+  { switch = "feat" },
+  { write = "pick.txt", content = "picked\n" },
+  { commit = "add pick.txt" },
+  { switch = "main" },
+]
+
+[[run]]
+# cherry-pick the tip of feat onto main
+cmd  = ["cherry-pick", "feat"]
+exit = 0
+
+[expect]
+branch      = "main"
+clean       = true
+in_progress = "none"
+
+[expect.files]
+"pick.txt"  = "picked\n"
+
+[[expect.log]]
+# main now carries feat's commit as a new commit on top of base.
+subjects = ["add pick.txt", "base"]
