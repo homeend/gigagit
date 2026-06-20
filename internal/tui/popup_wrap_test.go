@@ -60,8 +60,8 @@ func TestConflictPopupNoWrap(t *testing.T) {
 func TestPairOpPopupNoWrap(t *testing.T) {
 	m := Model{width: 80, height: 30}
 	render := func(marked string) string {
-		m.pairPopup = &pairOpPopup{marked: marked, selected: "main", ops: pairOpsFor(panelBranches)}
-		return m.renderPairOpPopup()
+		m = m.pushOverlay(&pairOpPopup{marked: marked, selected: "main", ops: pairOpsFor(panelBranches)})
+		return overlayOf[*pairOpPopup](m).box(m)
 	}
 	assertSameHeight(t, "pair-op body", render("feat/x"), render("feat/"+strings.Repeat("z", 300)))
 }

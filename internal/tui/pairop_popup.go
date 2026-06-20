@@ -16,13 +16,12 @@ type pairOpPopup struct {
 	hscroll          int      // modeScroll horizontal offset
 }
 
-// updatePairPopupKey handles one key while the pair-op popup is open. The
+// update handles one key while the pair-op popup is open. The
 // popup swallows every key; ctrl+c still quits.
-func (m Model) updatePairPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (p *pairOpPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
 	}
-	p := m.pairPopup
 	switch msg.String() {
 	case "z": // cycle the text display mode (cutoff / wrap / scroll)
 		p.mode = p.mode.next()
@@ -38,7 +37,7 @@ func (m Model) updatePairPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			p.hscroll += m.hscrollStep()
 		}
 	case "esc":
-		m.pairPopup = nil // the mark survives: the user may pick another row
+		m = m.popOverlay() // the mark survives: the user may pick another row
 	case "up", "k":
 		if p.sel > 0 {
 			p.sel--
@@ -54,7 +53,7 @@ func (m Model) updatePairPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		marked, selected := p.marked, p.selected
-		m.pairPopup = nil
+		m = m.popOverlay()
 		m.mark = nil
 		if op.open != nil {
 			return op.open(m, marked, selected)
@@ -64,9 +63,14 @@ func (m Model) updatePairPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// renderPairOpPopup draws the operation picker.
-func (m Model) renderPairOpPopup() string {
-	p := m.pairPopup
+// render composites the popup box over the layer beneath.
+func (p *pairOpPopup) render(m Model, below string) string {
+	w, h := m.overlayDims()
+	return overlayCenter(clipToHeight(below, h), p.box(m), w, h)
+}
+
+// box draws the operation picker modal box.
+func (p *pairOpPopup) box(m Model) string {
 	w, _ := m.overlayDims()
 	inner := popupInnerWidth(w)
 	textW := popupTextWidth(inner)

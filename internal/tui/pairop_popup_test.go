@@ -9,25 +9,28 @@ import (
 
 func pairModel() Model {
 	m := Model{width: 100, height: 30}
-	m.pairPopup = &pairOpPopup{marked: "feat/x", selected: "main", ops: pairOpsFor(panelBranches)}
+	m = m.pushOverlay(&pairOpPopup{marked: "feat/x", selected: "main", ops: pairOpsFor(panelBranches)})
 	return m
 }
 
 func TestPairOpPopupZCyclesMode(t *testing.T) {
 	m := pairModel()
-	if m.pairPopup.mode != modeCutoff {
-		t.Fatalf("default mode = %v, want modeCutoff", m.pairPopup.mode)
+	p := overlayOf[*pairOpPopup](m)
+	if p.mode != modeCutoff {
+		t.Fatalf("default mode = %v, want modeCutoff", p.mode)
 	}
-	u, _ := m.updatePairPopupKey(keyMsg("z"))
+	u, _ := m.Update(keyMsg("z"))
 	mm := u.(Model)
-	if mm.pairPopup.mode != modeWrap {
-		t.Fatalf("after z, mode = %v, want modeWrap", mm.pairPopup.mode)
+	pp := overlayOf[*pairOpPopup](mm)
+	if pp.mode != modeWrap {
+		t.Fatalf("after z, mode = %v, want modeWrap", pp.mode)
 	}
 }
 
 func TestPairOpPopupRendersOps(t *testing.T) {
 	m := pairModel()
-	out := ansi.Strip(m.renderPairOpPopup())
+	p := overlayOf[*pairOpPopup](m)
+	out := ansi.Strip(p.box(m))
 	if !strings.Contains(out, "feat/x + main") {
 		t.Fatalf("header missing:\n%s", out)
 	}

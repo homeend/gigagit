@@ -62,7 +62,7 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if m.popup != nil ||
-		m.renameBranchPopup != nil || m.rewordPopup != nil || m.pairPopup != nil {
+		m.renameBranchPopup != nil || m.rewordPopup != nil {
 		return m, nil
 	}
 	if m.filesView != nil {
