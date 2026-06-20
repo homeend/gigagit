@@ -67,6 +67,12 @@ type GitOps interface {
 	RebaseAbort(ctx context.Context, dir string) error
 	RebaseInProgress(ctx context.Context, dir string) (bool, error)
 
+	CherryPick(ctx context.Context, dir, commit string) error
+	CherryPickAbort(ctx context.Context, dir string) error
+	CherryPickContinue(ctx context.Context, dir string) error
+	CherryPickInProgress(ctx context.Context, dir string) (bool, error)
+	CherryPickHeadSummary(ctx context.Context, dir string) (string, error)
+
 	StagePaths(ctx context.Context, paths []string) error
 	UnstagePaths(ctx context.Context, paths []string) error
 	RestoreWorktree(ctx context.Context, paths []string) error
