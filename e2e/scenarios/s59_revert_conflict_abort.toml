@@ -1,0 +1,27 @@
+name = "revert: conflict with --on-conflict=abort restores the tree (exit 0)"
+
+[input]
+steps = [
+  { write = "f.txt", content = "base\n" },
+  { commit = "base" },
+  { write = "f.txt", content = "v2\n" },
+  { commit = "to v2" },
+  { write = "f.txt", content = "v3\n" },
+  { commit = "to v3" },
+]
+
+[[run]]
+cmd  = ["revert", "--on-conflict=abort", "HEAD~1"]
+exit = 0
+
+[expect]
+branch      = "main"
+clean       = true
+in_progress = "none"
+
+[expect.files]
+"f.txt" = "v3\n"
+
+[[expect.log]]
+# abort restores the pre-revert tip; no Revert commit added.
+subjects = ["to v3", "to v2", "base"]

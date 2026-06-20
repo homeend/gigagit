@@ -1,0 +1,20 @@
+name = "revert: conflict with --on-conflict=keep leaves it in progress (exit 1)"
+
+[input]
+steps = [
+  { write = "f.txt", content = "base\n" },
+  { commit = "base" },
+  { write = "f.txt", content = "v2\n" },
+  { commit = "to v2" },
+  { write = "f.txt", content = "v3\n" },
+  { commit = "to v3" },
+]
+
+[[run]]
+# revert "to v2" (HEAD~1); it conflicts with "to v3"
+cmd  = ["revert", "--on-conflict=keep", "HEAD~1"]
+exit = 1
+
+[expect]
+branch      = "main"
+in_progress = "revert"
