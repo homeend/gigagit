@@ -590,16 +590,46 @@ func (m Model) worktreePathOf(branch string) (string, bool) {
 }
 
 func (m Model) branchRows() []string {
+	inScope := func(b model.Branch) bool { return slices.Contains(m.commitScopeBranches, b.Name) }
+	// Ordered left-to-right; each maps a branch to its glyph or ' '. Indicators
+	// live in a left gutter so the set marker is never truncated in a narrow
+	// panel; the gutter width is dynamic (see below).
+	indicators := []func(model.Branch) rune{
+		func(b model.Branch) rune { // set / solo
+			if inScope(b) {
+				return '◉'
+			}
+			return ' '
+		},
+		func(b model.Branch) rune { // head
+			if b.IsHead {
+				return '*'
+			}
+			return ' '
+		},
+	}
+	// A column is in play iff some branch yields a non-space glyph for it.
+	active := make([]bool, len(indicators))
+	for i, ind := range indicators {
+		for _, b := range m.branches {
+			if ind(b) != ' ' {
+				active[i] = true
+				break
+			}
+		}
+	}
 	out := make([]string, 0, len(m.branches))
 	for _, b := range m.branches {
-		marker := "  "
-		if b.IsHead {
-			marker = "* "
+		gutter := make([]rune, 0, len(indicators)+1)
+		for i, ind := range indicators {
+			if active[i] {
+				gutter = append(gutter, ind(b))
+			}
 		}
-		row := marker + b.Name
-		if slices.Contains(m.commitScopeBranches, b.Name) {
-			row += " ◉" // included in the Commits feed scope
+		if len(gutter) > 0 {
+			gutter = append(gutter, ' ') // one separator before the name
 		}
+		row := string(gutter) + b.Name
 		if b.Behind > 0 {
 			row += " (↓" + strconv.Itoa(b.Behind) + ")"
 		}

@@ -236,3 +236,45 @@ func TestCommitRowsRenderLabels(t *testing.T) {
 		t.Fatalf("undecorated row should have no labels: %q", rows[1])
 	}
 }
+
+func TestBranchRowsGutterOneColumnWhenNoSet(t *testing.T) {
+	m := branchesPanelModel("main", "feat")
+	m.branches[0].IsHead = true // main is head
+	rows := m.branchRows()
+	// No set active → 1-column gutter (head only), same as before.
+	if !strings.HasPrefix(rows[0], "* main") {
+		t.Fatalf("head row = %q, want '* main' prefix", rows[0])
+	}
+	if !strings.HasPrefix(rows[1], "  feat") {
+		t.Fatalf("non-head row = %q, want '  feat' prefix", rows[1])
+	}
+}
+
+func TestBranchRowsGutterTwoColumnsWhenSetActive(t *testing.T) {
+	m := branchesPanelModel("main", "feat")
+	m.branches[0].IsHead = true
+	m.commitScopeBranches = []string{"feat"} // feat in the set
+	rows := m.branchRows()
+	// Set active → 2-column gutter [set][head] + separator. Names aligned at col 3.
+	if !strings.HasPrefix(rows[0], " * main") { // head, not in set
+		t.Fatalf("main row = %q, want ' * main' prefix", rows[0])
+	}
+	if !strings.HasPrefix(rows[1], "◉  feat") { // in set, not head
+		t.Fatalf("feat row = %q, want '◉  feat' prefix", rows[1])
+	}
+}
+
+func TestBranchRowsSetMarkerIsOnTheLeft(t *testing.T) {
+	m := branchesPanelModel("feat")
+	m.commitScopeBranches = []string{"feat"}
+	row := m.branchRows()[0]
+	// The fix: ◉ precedes the name and the row no longer ENDS with ◉.
+	if strings.HasSuffix(row, "◉") {
+		t.Fatalf("set marker must not be a right-hand suffix: %q", row)
+	}
+	dot := strings.IndexRune(row, '◉')
+	name := strings.Index(row, "feat")
+	if dot < 0 || dot >= name {
+		t.Fatalf("◉ should precede the name: dot=%d name=%d in %q", dot, name, row)
+	}
+}
