@@ -99,6 +99,9 @@ func availableActions(m Model) []actionRow {
 	if r, ok := m.commitRevertRow(); ok {
 		out = append(out, r)
 	}
+	if r, ok := m.commitResetRow(); ok {
+		out = append(out, r)
+	}
 	if r, ok := m.commitSoloRow(); ok {
 		out = append(out, r)
 	}

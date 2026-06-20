@@ -100,7 +100,7 @@ func helpContent() []contentLine {
 		r("", "shows commits from ALL local branches by default, in date order, with a single-line commit graph (natural order only; hidden while filtering/sorting); header shows the mode — Commits (all) / Commits (solo: <branch>)"),
 		r("", "the left column is the branch the commit is on: BRIGHT *current/branch on that branch's tip, grayed otherwise; long names trim with … (select to reveal the full name); the commit id shows in the status bar. Filtering still matches the full id and full branch name"),
 		r("l", "show the selected commit's files in the left column"),
-		r(".", "rename commit / copy commit id / Create branch here / Create worktree here / Cherry-pick here / Revert this commit / Show all branches when soloed / Show as list|graph (.-menu)"),
+		r(".", "rename commit / copy commit id / Create branch here / Create worktree here / Cherry-pick here / Revert this commit / Reset to this commit (soft|mixed|hard) / Show all branches when soloed / Show as list|graph (.-menu)"),
 		r("", "Show as list / Show as graph (.-menu): flat ●-gutter list vs the lane graph; lane color marks each commit's line of development"),
 		r("(scroll)", "more commits load automatically as you near the end"),
 		h("Filter mode (/)"),
