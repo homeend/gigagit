@@ -82,9 +82,9 @@ func (op MarkAllResolved) Run(ctx context.Context, deps OpDeps) (Result, error) 
 	return res, nil
 }
 
-// ContinueOp finalizes whichever of merge/rebase/cherry-pick is in progress.
-// Cherry-pick is probed LAST: a paused rebase pick also sets CHERRY_PICK_HEAD,
-// so rebase must win the dispatch.
+// ContinueOp finalizes whichever of merge/rebase/cherry-pick/revert is in
+// progress. Cherry-pick/revert are probed LAST: a paused rebase pick also sets
+// CHERRY_PICK_HEAD, so rebase must win the dispatch.
 type ContinueOp struct{}
 
 func (op ContinueOp) Run(ctx context.Context, deps OpDeps) (Result, error) {
@@ -107,11 +107,17 @@ func (op ContinueOp) Run(ctx context.Context, deps OpDeps) (Result, error) {
 		}
 		return conflictDone(deps, ctx, "cherry-pick continued")
 	}
-	return Result{}, errors.New("no merge, rebase, or cherry-pick in progress")
+	if ok, _ := deps.Repo.RevertInProgress(ctx, ""); ok {
+		if err := deps.Repo.RevertContinue(ctx, ""); err != nil {
+			return Result{}, err
+		}
+		return conflictDone(deps, ctx, "revert continued")
+	}
+	return Result{}, errors.New("no merge, rebase, cherry-pick, or revert in progress")
 }
 
-// AbortOp aborts whichever of merge/rebase/cherry-pick is in progress.
-// Cherry-pick is probed LAST (see ContinueOp).
+// AbortOp aborts whichever of merge/rebase/cherry-pick/revert is in progress.
+// Cherry-pick/revert are probed LAST (see ContinueOp).
 type AbortOp struct{}
 
 func (op AbortOp) Run(ctx context.Context, deps OpDeps) (Result, error) {
@@ -134,7 +140,13 @@ func (op AbortOp) Run(ctx context.Context, deps OpDeps) (Result, error) {
 		}
 		return conflictDone(deps, ctx, "cherry-pick aborted")
 	}
-	return Result{}, errors.New("no merge, rebase, or cherry-pick in progress")
+	if ok, _ := deps.Repo.RevertInProgress(ctx, ""); ok {
+		if err := deps.Repo.RevertAbort(ctx, ""); err != nil {
+			return Result{}, err
+		}
+		return conflictDone(deps, ctx, "revert aborted")
+	}
+	return Result{}, errors.New("no merge, rebase, cherry-pick, or revert in progress")
 }
 
 func conflictDone(deps OpDeps, ctx context.Context, summary string) (Result, error) {

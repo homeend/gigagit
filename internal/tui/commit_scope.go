@@ -213,6 +213,34 @@ func (m Model) commitCherryPickRow() (actionRow, bool) {
 	}, true
 }
 
+// commitRevertRow offers "Revert this commit" on the Commits panel: create a new
+// commit on the current branch that undoes the selected commit. A conflict drops
+// into the existing conflict resolver. A merge commit is refused with a clean
+// message (reverting a merge needs -m <parent>, out of scope for v1).
+func (m Model) commitRevertRow() (actionRow, bool) {
+	if m.focus != panelCommits || !m.opsIdle() {
+		return actionRow{}, false
+	}
+	bi, ok := m.backingIndex(panelCommits)
+	if !ok {
+		return actionRow{}, false
+	}
+	c := m.commits[bi]
+	hash := c.Hash
+	isMerge := len(c.Parents) > 1
+	return actionRow{
+		id:    "commit-revert",
+		label: "Revert this commit",
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			if isMerge {
+				m.statusMsg = "cannot revert a merge commit (v1)"
+				return m, nil
+			}
+			return m.startOp(engine.Revert{Commit: hash})
+		},
+	}, true
+}
+
 // commitHasLocalRef reports whether commit c is decorated with a local branch ref
 // named name (ignoring remote/tag kinds and the Head flag). A branch ref
 // decorates only its tip, so this identifies the branch's tip commit.

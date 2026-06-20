@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v16 -->
+<!-- gg:using-gg:v17 -->
 
 # Using gg (gigagit)
 
@@ -70,6 +70,12 @@ guards against removing the worktree you are standing in.
   --continue` (exit 1), `--on-conflict=abort` runs `git cherry-pick --abort`
   (exit 0); with neither and no TTY, a conflict exits 1 with the options on
   stderr.
+- `gg revert [--on-conflict=keep|abort] <commit>` — create a new commit on the
+  current branch that undoes `<commit>`. A dirty tree is autostashed and
+  restored. A conflict: `--on-conflict=keep` leaves it paused for `git revert
+  --continue` (exit 1), `--on-conflict=abort` runs `git revert --abort` (exit 0);
+  with neither and no TTY, a conflict exits 1 with the options on stderr.
+  Reverting a merge commit is refused (it needs `-m <parent>`, out of scope).
 - `gg stash [-m <msg>] [-u] [-- <paths>...]` — stash the working tree (or only
   the named paths; `-u` includes untracked files).
 - `gg stash list` — list stashes (`stash@{N}: <subject>`, newest first).

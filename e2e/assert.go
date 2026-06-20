@@ -106,9 +106,10 @@ func checkExpect(sb *Sandbox, exp *Expect) (fails []string) {
 			{"rebase", "rebase-merge"},
 			{"rebase", "rebase-apply"},
 			{"merge", "MERGE_HEAD"},
-			// cherry-pick LAST: a paused rebase pick also leaves CHERRY_PICK_HEAD,
-			// but the rebase-* dirs above win the probe first.
+			// cherry-pick / revert LAST: a paused rebase pick also leaves
+			// CHERRY_PICK_HEAD, but the rebase-* dirs above win the probe first.
 			{"cherry-pick", "CHERRY_PICK_HEAD"},
+			{"revert", "REVERT_HEAD"},
 		}
 		for _, pr := range probes {
 			p, err := gitOut(dir, "rev-parse", "--git-path", pr.probe)

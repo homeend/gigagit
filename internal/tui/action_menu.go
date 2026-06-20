@@ -96,6 +96,9 @@ func availableActions(m Model) []actionRow {
 	if r, ok := m.commitCherryPickRow(); ok {
 		out = append(out, r)
 	}
+	if r, ok := m.commitRevertRow(); ok {
+		out = append(out, r)
+	}
 	if r, ok := m.commitSoloRow(); ok {
 		out = append(out, r)
 	}

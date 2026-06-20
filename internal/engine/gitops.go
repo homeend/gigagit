@@ -73,6 +73,12 @@ type GitOps interface {
 	CherryPickInProgress(ctx context.Context, dir string) (bool, error)
 	CherryPickHeadSummary(ctx context.Context, dir string) (string, error)
 
+	Revert(ctx context.Context, dir, commit string) error
+	RevertAbort(ctx context.Context, dir string) error
+	RevertContinue(ctx context.Context, dir string) error
+	RevertInProgress(ctx context.Context, dir string) (bool, error)
+	RevertHeadSummary(ctx context.Context, dir string) (string, error)
+
 	StagePaths(ctx context.Context, paths []string) error
 	UnstagePaths(ctx context.Context, paths []string) error
 	RestoreWorktree(ctx context.Context, paths []string) error

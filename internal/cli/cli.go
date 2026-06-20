@@ -75,6 +75,8 @@ func Run(workdir string, args []string, stdin io.Reader, stdout, stderr io.Write
 		return cmdRebase(svc, rest, stdin, stdout, stderr)
 	case "cherry-pick":
 		return cmdCherryPick(svc, rest, stdin, stdout, stderr)
+	case "revert":
+		return cmdRevert(svc, rest, stdin, stdout, stderr)
 	case "worktree":
 		return cmdWorktree(svc, rest, stdin, stdout, stderr, cwdFile)
 	case "remote":
@@ -92,8 +94,8 @@ func Run(workdir string, args []string, stdin io.Reader, stdout, stderr io.Write
 var commands = map[string]bool{
 	"status": true, "commit": true, "pull": true, "push": true,
 	"switch": true, "branch": true, "stash": true, "undo": true, "merge": true, "rebase": true, "worktree": true,
-	"cherry-pick": true,
-	"discard":     true, "shelf": true, "bookmark": true,
+	"cherry-pick": true, "revert": true,
+	"discard": true, "shelf": true, "bookmark": true,
 	"inspect": true, "repo": true, "init": true,
 }
 

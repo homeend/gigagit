@@ -46,6 +46,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   drawing, and the jobs it runs — the first of a general mechanism.)
 
 ### Added
+- **Revert a commit.** The `.` menu on a commit offers **Revert this commit** —
+  creates a new commit on the current branch that undoes the selected one. A
+  dirty working tree is autostashed and restored. A conflict drops into the
+  existing conflict resolver (resolve, then continue or abort). Reverting a merge
+  commit is refused (it needs `-m <parent>`, out of scope for v1). Also on the
+  CLI: `gg revert [--on-conflict=keep|abort] <commit>`.
 - **Cherry-pick a commit.** The `.` menu on a commit offers **Cherry-pick
   here** — applies that commit onto the current branch as a new commit. A dirty
   working tree is autostashed and restored. A conflict drops into the existing

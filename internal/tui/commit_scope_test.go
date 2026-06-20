@@ -405,6 +405,44 @@ func TestCommitCherryPickRowGating(t *testing.T) {
 	}
 }
 
+func TestCommitRevertRowGatingAndMergeGuard(t *testing.T) {
+	m := footerModel()
+	if m.sel == nil {
+		m.sel = map[panel]int{}
+	}
+	full := "dddddddddddddddddddddddddddddddddddddddd"
+	m.commits = []model.Commit{{Hash: full, Subject: "x", Parents: []string{"p1"}}}
+	m.sel[panelCommits] = 0
+
+	// present on the Commits panel
+	m.focus = panelCommits
+	r, ok := findRow(availableActions(m), "commit-revert")
+	if !ok {
+		t.Fatal("revert row missing on the Commits panel")
+	}
+	if r.label != "Revert this commit" {
+		t.Fatalf("label = %q", r.label)
+	}
+	// absent off the Commits panel
+	m.focus = panelBranches
+	if _, ok := findRow(availableActions(m), "commit-revert"); ok {
+		t.Fatal("revert row must not appear off the Commits panel")
+	}
+
+	// merge commit (2 parents): the row's run refuses with a clean message and
+	// starts no op (synchronously observable — no startOp goroutine).
+	m.focus = panelCommits
+	m.commits = []model.Commit{{Hash: full, Subject: "merge", Parents: []string{"p1", "p2"}}}
+	r, _ = findRow(availableActions(m), "commit-revert")
+	mm, cmd := r.run(m)
+	if cmd != nil {
+		t.Fatal("reverting a merge commit must not start an op")
+	}
+	if got := mm.(Model).statusMsg; got != "cannot revert a merge commit (v1)" {
+		t.Fatalf("statusMsg = %q, want the merge-guard message", got)
+	}
+}
+
 func TestCommitCreateWorktreeRowOpensInEdit(t *testing.T) {
 	m := footerModel()
 	if m.sel == nil {

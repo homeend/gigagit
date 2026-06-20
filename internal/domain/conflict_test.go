@@ -102,6 +102,23 @@ func cherryPickConflictDir(t *testing.T) string {
 	return dir
 }
 
+// revertConflictDir leaves a paused revert: base→v2→v3 on main, then revert the
+// v2 commit, which conflicts with v3.
+func revertConflictDir(t *testing.T) string {
+	dir := t.TempDir()
+	gitRunDir(t, dir, "", "init", "-q", "-b", "main")
+	writeFile(t, dir, "f.txt", "base\n")
+	gitRunDir(t, dir, "", "add", "-A")
+	gitRunDir(t, dir, "", "commit", "-qm", "base")
+	writeFile(t, dir, "f.txt", "v2\n")
+	gitRunDir(t, dir, "", "commit", "-qam", "to v2")
+	v2 := gitOutDir(t, dir, "rev-parse", "HEAD")
+	writeFile(t, dir, "f.txt", "v3\n")
+	gitRunDir(t, dir, "", "commit", "-qam", "to v3")
+	gitRunDir(t, dir, "revert", "revert", "--no-edit", v2)
+	return dir
+}
+
 func gitOutDir(t *testing.T, dir string, args ...string) string {
 	t.Helper()
 	cmd := exec.Command("git", args...)
@@ -176,6 +193,29 @@ func TestInProgressOpCherryPick(t *testing.T) {
 	op, err := svc.InProgressOp(context.Background())
 	if err != nil || op != "cherry-pick" {
 		t.Fatalf("InProgressOp = (%q, %v), want cherry-pick", op, err)
+	}
+}
+
+func TestConflictStateRevert(t *testing.T) {
+	svc := svcAt(revertConflictDir(t))
+	st, err := svc.repo.Status(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cs := svc.conflictState(context.Background(), st)
+	if cs.Op != "revert" || cs.Source == "" {
+		t.Fatalf("conflictState = %+v, want revert with a source", cs)
+	}
+	if got := cs.Describe(); !strings.HasPrefix(got, "reverting ") {
+		t.Errorf("Describe = %q, want 'reverting …'", got)
+	}
+}
+
+func TestInProgressOpRevert(t *testing.T) {
+	svc := svcAt(revertConflictDir(t))
+	op, err := svc.InProgressOp(context.Background())
+	if err != nil || op != "revert" {
+		t.Fatalf("InProgressOp = (%q, %v), want revert", op, err)
 	}
 }
 

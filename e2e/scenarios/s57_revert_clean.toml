@@ -1,0 +1,25 @@
+name = "revert: undoes a commit's change with a new Revert commit on top (exit 0)"
+
+[input]
+steps = [
+  { write = "base.txt", content = "base\n" },
+  { commit = "base" },
+  { write = "add.txt", content = "added\n" },
+  { commit = "add add.txt" },
+]
+
+[[run]]
+cmd  = ["revert", "HEAD"]
+exit = 0
+
+[expect]
+branch      = "main"
+clean       = true
+in_progress = "none"
+
+[expect.files]
+"add.txt"   = { absent = true }
+"base.txt"  = "base\n"
+
+[[expect.log]]
+subjects = ['Revert "add add.txt"', "add add.txt", "base"]

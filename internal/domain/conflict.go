@@ -10,8 +10,8 @@ import (
 // it. Zero value (Op == "") means no in-progress merge/rebase (e.g. a stash-pop
 // conflict) — there is no source to show.
 type ConflictState struct {
-	Op     string // "merge" | "rebase" | "cherry-pick" | ""
-	Source string // branch being merged / rebased, or the picked commit
+	Op     string // "merge" | "rebase" | "cherry-pick" | "revert" | ""
+	Source string // branch being merged / rebased, or the picked/reverted commit
 	Target string // branch merged-into / rebased-onto
 }
 
@@ -24,6 +24,8 @@ func (c ConflictState) Describe() string {
 		return "rebasing " + c.Source + " onto " + c.Target
 	case c.Op == "cherry-pick" && c.Source != "":
 		return "cherry-picking " + c.Source
+	case c.Op == "revert" && c.Source != "":
+		return "reverting " + c.Source
 	}
 	return ""
 }
@@ -44,17 +46,22 @@ func (s *Service) conflictState(ctx context.Context, st model.WorkingTreeStatus)
 		branch, onto, _ := s.repo.RebaseParties(ctx, "")
 		return ConflictState{Op: "rebase", Source: branch, Target: onto}
 	}
-	// Cherry-pick probed last: a paused rebase pick also sets CHERRY_PICK_HEAD.
+	// Cherry-pick/revert probed last: a paused rebase pick also sets
+	// CHERRY_PICK_HEAD.
 	if ok, err := s.repo.CherryPickInProgress(ctx, ""); err == nil && ok {
 		src, _ := s.repo.CherryPickHeadSummary(ctx, "")
 		return ConflictState{Op: "cherry-pick", Source: src}
 	}
+	if ok, err := s.repo.RevertInProgress(ctx, ""); err == nil && ok {
+		src, _ := s.repo.RevertHeadSummary(ctx, "")
+		return ConflictState{Op: "revert", Source: src}
+	}
 	return ConflictState{}
 }
 
-// InProgressOp reports "merge", "rebase", "cherry-pick", or "" for the current
-// working tree. Cherry-pick is probed LAST (a paused rebase pick also sets
-// CHERRY_PICK_HEAD, so rebase must win).
+// InProgressOp reports "merge", "rebase", "cherry-pick", "revert", or "" for the
+// current working tree. Cherry-pick/revert are probed LAST (a paused rebase pick
+// also sets CHERRY_PICK_HEAD, so rebase must win).
 func (s *Service) InProgressOp(ctx context.Context) (string, error) {
 	return query(ctx, s, "inprogress", func(ctx context.Context) (string, error) {
 		if ok, err := s.repo.MergeInProgress(ctx, ""); err == nil && ok {
@@ -65,6 +72,9 @@ func (s *Service) InProgressOp(ctx context.Context) (string, error) {
 		}
 		if ok, err := s.repo.CherryPickInProgress(ctx, ""); err == nil && ok {
 			return "cherry-pick", nil
+		}
+		if ok, err := s.repo.RevertInProgress(ctx, ""); err == nil && ok {
+			return "revert", nil
 		}
 		return "", nil
 	})
