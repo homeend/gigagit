@@ -58,11 +58,18 @@ func TestRebuildCommitGraphAligns(t *testing.T) {
 }
 
 func TestGraphRowFitsNarrowPanel(t *testing.T) {
-	// A graph-prefixed row at a small panel size must still fit (cutoff truncates
-	// the combined graph+subject; box-drawing runes measure as width 1).
-	m := graphModel()
-	m.commits = []model.Commit{{Hash: "c2", Parents: []string{"c1"}, Subject: strings.Repeat("x", 200)}}
+	// A multi-lane (wide) graph prefix at a small panel size must still fit:
+	// cutoff truncates the combined graph+subject, and box-drawing runes measure
+	// as width 1 to lipgloss.
+	m := footerModel()
+	m.commits = []model.Commit{
+		{Hash: "m", Parents: []string{"a", "b"}, Subject: strings.Repeat("x", 200)}, // merge → 2 lanes
+		{Hash: "a", Parents: []string{"r"}, Subject: "main"},
+		{Hash: "b", Parents: []string{"r"}, Subject: "feat"},
+		{Hash: "r", Subject: "root"},
+	}
 	m = m.rebuildCommitGraph()
+	m.focus = panelCommits
 	m.width, m.height = 50, 20
 	out := m.View()
 	for _, line := range strings.Split(out, "\n") {
