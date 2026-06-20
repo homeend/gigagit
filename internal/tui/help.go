@@ -24,6 +24,7 @@ func helpContent() []contentLine {
 		r("R", "repo switcher popup"),
 		r(",", "settings (agent skill install)"),
 		r(".", "action menu — context actions for the selected row and panel (incl. copy actions)"),
+		r("", "Compare against working dir (.-menu): on any focused commit/staged/shelf file, diffs that version against the same path in the working tree"),
 		r("o", "cycle the focused panel's sort order"),
 		r("z", "cycle the focused window's text display (cutoff / wrap / scroll)"),
 		r("shift+←/→", "scroll display mode: pan the focused window horizontally"),
