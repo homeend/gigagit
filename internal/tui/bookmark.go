@@ -152,3 +152,29 @@ func (m Model) compareAgainstShelfRow() (actionRow, bool) {
 		},
 	}, true
 }
+
+// compareAgainstWorkingDirRow is the menu-only "Compare against working dir"
+// action: it diffs the focused file (commit/staged/shelf source) against the
+// same path in the working tree. The second side is fixed (the working file), so
+// unlike the bookmark/shelf compares there is no picker — it opens the diff
+// directly. Absent when nothing is focused or the focused file is already the
+// working-tree version (comparing it against itself is meaningless).
+func (m Model) compareAgainstWorkingDirRow() (actionRow, bool) {
+	ref, label, ok := m.focusedCompareRef()
+	if !ok || ref.Source == model.SourceUnstaged {
+		return actionRow{}, false
+	}
+	return actionRow{
+		id:    "compare-working-dir",
+		label: "Compare against working dir",
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			right := model.FileRef{Source: model.SourceUnstaged, Path: ref.Path}
+			title := ref.Path + " ↔ working"
+			subtitle := label + " → working dir"
+			tag := "cmpwd:" + ref.Path
+			v := &diffView{title: title, context: subtitle, loading: true, partial: m.diffPartial, long: m.diffLong}
+			v.width, _ = m.overlayDims()
+			return m.openPickerDiff(v, tag, m.loadCompareTwoRefsCmd(ref, right, title, subtitle, tag))
+		},
+	}, true
+}

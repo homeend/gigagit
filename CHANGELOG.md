@@ -9,6 +9,9 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Compare against working dir.** The `.` menu on any focused commit, staged, or
+  shelf file offers **Compare against working dir** — a direct side-by-side diff of
+  that version against the same path in the working tree (no second pick).
 - **Branches panel — indicators moved to a dynamic left gutter.** The set/solo
   `◉` and head `*` markers now render in a left gutter (width adapts to how many
   indicator types are active) so the set marker is no longer truncated in a
