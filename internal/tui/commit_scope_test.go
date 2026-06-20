@@ -160,6 +160,24 @@ func TestCommitScopeLabel(t *testing.T) {
 	}
 }
 
+func TestBranchRowsMarkAllScopedBranches(t *testing.T) {
+	m := branchesPanelModel("a", "b", "c")
+	m.commitScopeBranches = []string{"a", "c"}
+	rows := m.branchRows()
+	if len(rows) != 3 {
+		t.Fatalf("want 3 rows, got %d", len(rows))
+	}
+	if !strings.Contains(rows[0], "◉") {
+		t.Fatalf("row a should be marked: %q", rows[0])
+	}
+	if strings.Contains(rows[1], "◉") {
+		t.Fatalf("row b should NOT be marked: %q", rows[1])
+	}
+	if !strings.Contains(rows[2], "◉") {
+		t.Fatalf("row c should be marked: %q", rows[2])
+	}
+}
+
 func TestCommitRowsRenderLabels(t *testing.T) {
 	m := footerModel()
 	m.commits = []model.Commit{

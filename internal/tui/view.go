@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -620,8 +621,8 @@ func (m Model) branchRows() []string {
 			marker = "* "
 		}
 		row := marker + b.Name
-		if len(m.commitScopeBranches) == 1 && m.commitScopeBranches[0] == b.Name {
-			row += " ◉" // soloed in the Commits feed
+		if slices.Contains(m.commitScopeBranches, b.Name) {
+			row += " ◉" // included in the Commits feed scope
 		}
 		if b.Behind > 0 {
 			row += " (↓" + strconv.Itoa(b.Behind) + ")"
