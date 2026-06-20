@@ -243,3 +243,22 @@ func TestPruneRowOnRemotesTab(t *testing.T) {
 		t.Fatal("Remotes tab . menu should offer Prune")
 	}
 }
+
+func TestActionMenuMoveWraps(t *testing.T) {
+	a := &actionMenu{rows: []actionRow{{id: "a"}, {id: "b"}, {id: "c"}}}
+	a.sel = 0
+	a.move(-1) // up from the first row wraps to the last
+	if a.sel != 2 {
+		t.Fatalf("up from first → %d, want 2 (wrap to last)", a.sel)
+	}
+	a.sel = 2
+	a.move(1) // down from the last row wraps to the first
+	if a.sel != 0 {
+		t.Fatalf("down from last → %d, want 0 (wrap to first)", a.sel)
+	}
+	a.sel = 0
+	a.move(1) // ordinary move still advances
+	if a.sel != 1 {
+		t.Fatalf("down from first → %d, want 1", a.sel)
+	}
+}

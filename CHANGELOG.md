@@ -15,6 +15,8 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   (the cheat-sheet is simply pushed over the switcher, and esc returns to it).
   No user-facing change. Only the decision modal and the action menu remain off
   the stack.
+- **Action menu (`.`) wraps around.** Up-arrow on the first row jumps to the last,
+  and down-arrow on the last jumps to the first.
 - **Conflict resolution is now a process, not a pop-up.** While you resolve a
   merge/rebase, the interface is locked to the resolution flow: it shows the
   conflicted-file list, hands off to the full-screen line editor for both-modified
@@ -28,6 +30,9 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   drawing, and the jobs it runs — the first of a general mechanism.)
 
 ### Added
+- **Go to a branch's tip in the commit list.** The `.` menu on a Branches row
+  offers **Go to tip in commits** — it moves the Commits cursor to that branch's
+  tip commit and focuses the Commits panel.
 - **Commits panel — branch in the status line.** When a commit is selected, the
   status line shows `⎇ <branch>` — which branch the commit is from (`git log
   --source`/`%S`, computed in the existing feed walk, no per-hover git call) —

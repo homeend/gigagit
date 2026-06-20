@@ -300,3 +300,37 @@ func TestCommitBranchHint(t *testing.T) {
 		t.Fatalf("hint without source = %q, want empty", got)
 	}
 }
+
+func TestCommitGotoTipJumpsAndFocuses(t *testing.T) {
+	m := branchesPanelModel("feat", "main") // Branches focused, feat selected
+	m.commits = []model.Commit{
+		{Hash: "b0", Subject: "base"},
+		{Hash: "t1", Subject: "tip", Refs: []model.Ref{{Name: "feat", Kind: model.RefLocal}}},
+	}
+	r, ok := findRow(availableActions(m), "commits-goto-tip")
+	if !ok {
+		t.Fatal("go-to-tip row missing on Branches panel")
+	}
+	mm, _ := r.run(m)
+	m = mm.(Model)
+	if m.focus != panelCommits {
+		t.Fatalf("focus = %v, want panelCommits", m.focus)
+	}
+	if m.sel[panelCommits] != 1 {
+		t.Fatalf("sel[panelCommits] = %d, want 1 (the feat tip)", m.sel[panelCommits])
+	}
+}
+
+func TestCommitGotoTipNotLoadedNotifies(t *testing.T) {
+	m := branchesPanelModel("feat", "main")
+	m.commits = []model.Commit{{Hash: "b0", Subject: "base"}} // no feat tip loaded
+	r, _ := findRow(availableActions(m), "commits-goto-tip")
+	mm, _ := r.run(m)
+	m = mm.(Model)
+	if m.focus != panelBranches {
+		t.Fatalf("focus should stay on Branches, got %v", m.focus)
+	}
+	if m.statusMsg == "" {
+		t.Fatal("expected a 'tip not loaded' status message")
+	}
+}
