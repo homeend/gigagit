@@ -57,6 +57,12 @@ guards against removing the worktree you are standing in.
   combined message (target subject + each squashed commit's message
   line-by-line). The working tree is preserved across the rebase; conflicts
   answer to `--on-conflict`.
+- `gg cherry-pick [--on-conflict=keep|abort] <commit>` — apply `<commit>` onto
+  the current branch as a new commit. A dirty tree is autostashed and restored.
+  A conflict: `--on-conflict=keep` leaves it paused for `git cherry-pick
+  --continue` (exit 1), `--on-conflict=abort` runs `git cherry-pick --abort`
+  (exit 0); with neither and no TTY, a conflict exits 1 with the options on
+  stderr.
 - `gg stash [-m <msg>] [-u] [-- <paths>...]` — stash the working tree (or only
   the named paths; `-u` includes untracked files).
 - `gg stash list` — list stashes (`stash@{N}: <subject>`, newest first).

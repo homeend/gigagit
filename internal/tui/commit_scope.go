@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/gigagit/gg/internal/domain"
+	"github.com/gigagit/gg/internal/engine"
 	"github.com/gigagit/gg/internal/model"
 )
 
@@ -187,6 +188,27 @@ func (m Model) commitCreateWorktreeRow() (actionRow, bool) {
 		label: "Create worktree here",
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			return m.openWorktreeFromCommit(hash), nil
+		},
+	}, true
+}
+
+// commitCherryPickRow offers "Cherry-pick here" on the Commits panel: apply the
+// selected commit onto the current branch as a new commit. A conflict drops into
+// the existing conflict resolver (continue/abort).
+func (m Model) commitCherryPickRow() (actionRow, bool) {
+	if m.focus != panelCommits || !m.opsIdle() {
+		return actionRow{}, false
+	}
+	bi, ok := m.backingIndex(panelCommits)
+	if !ok {
+		return actionRow{}, false
+	}
+	hash := m.commits[bi].Hash // full SHA → unambiguous
+	return actionRow{
+		id:    "commit-cherry-pick",
+		label: "Cherry-pick here",
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			return m.startOp(engine.CherryPick{Commit: hash})
 		},
 	}, true
 }

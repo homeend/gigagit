@@ -194,7 +194,7 @@ type Expect struct {
 	Clean      *bool                    `toml:"clean"`
 	Ahead      *int                     `toml:"ahead"`
 	Behind     *int                     `toml:"behind"`
-	InProgress string                   `toml:"in_progress"` // none|rebase|merge
+	InProgress string                   `toml:"in_progress"` // none|rebase|merge|cherry-pick
 	Stashes    *int                     `toml:"stashes"`
 	Worktrees  []string                 `toml:"worktrees"` // sandbox-root-relative
 	Files      map[string]any           `toml:"files"`
@@ -287,9 +287,9 @@ func (s *Scenario) validate() error {
 
 func (e *Expect) normalize(hasOrigin bool) error {
 	switch e.InProgress {
-	case "", "none", "rebase", "merge":
+	case "", "none", "rebase", "merge", "cherry-pick":
 	default:
-		return fmt.Errorf("in_progress %q: want none, rebase or merge", e.InProgress)
+		return fmt.Errorf("in_progress %q: want none, rebase, merge or cherry-pick", e.InProgress)
 	}
 	if (e.Ahead != nil || e.Behind != nil) && !hasOrigin {
 		return fmt.Errorf("ahead/behind require [input.origin]")

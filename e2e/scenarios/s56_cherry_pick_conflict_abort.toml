@@ -1,0 +1,30 @@
+name = "cherry-pick: conflict with --on-conflict=abort restores the tree (exit 0)"
+
+[input]
+steps = [
+  { write = "shared.txt", content = "base\n" },
+  { commit = "base" },
+  { branch = "feat" },
+  { switch = "feat" },
+  { write = "shared.txt", content = "feat\n" },
+  { commit = "feat change" },
+  { switch = "main" },
+  { write = "shared.txt", content = "main\n" },
+  { commit = "main change" },
+]
+
+[[run]]
+cmd  = ["cherry-pick", "--on-conflict=abort", "feat"]
+exit = 0
+
+[expect]
+branch      = "main"
+clean       = true
+in_progress = "none"
+
+[expect.files]
+"shared.txt" = "main\n"
+
+[[expect.log]]
+# abort restores main; feat's commit is NOT applied.
+subjects = ["main change", "base"]
