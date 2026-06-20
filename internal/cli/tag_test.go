@@ -46,3 +46,22 @@ func TestTagCreateRequiresName(t *testing.T) {
 		t.Fatal("create with no name must fail")
 	}
 }
+
+func TestTagRmDeletes(t *testing.T) {
+	dir := newRepoDir(t)
+	gitRun(t, dir, "tag", "v1.0.0")
+	if code, _, errb := runCLI(t, dir, "tag", "rm", "v1.0.0"); code != 0 {
+		t.Fatalf("rm exit %d: %s", code, errb)
+	}
+	_, out, _ := runCLI(t, dir, "tag", "ls")
+	if strings.Contains(out, "v1.0.0") {
+		t.Fatalf("tag still listed:\n%s", out)
+	}
+}
+
+func TestTagRmRequiresName(t *testing.T) {
+	dir := newRepoDir(t)
+	if code, _, _ := runCLI(t, dir, "tag", "rm"); code == 0 {
+		t.Fatal("rm with no name must fail")
+	}
+}
