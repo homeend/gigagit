@@ -136,6 +136,13 @@ func (m Model) render() string {
 		bg := clipToHeight(m.renderInterface(), h)
 		return overlayCenter(bg, m.renderModal(), w, h)
 	}
+	// A process owns the screen: it draws its current window over the panel
+	// interface (a centered list) or replaces it (a full-screen editor). Sits
+	// just below the modal, above every other window.
+	if m.proc != nil {
+		_, h := m.overlayDims()
+		return clipToHeight(m.proc.render(m, clipToHeight(m.renderInterface(), h)), h)
+	}
 	// The action menu is a modal-like overlay: it draws on top of whatever
 	// content window is open (file tree, diff, history, blame, stash), checked
 	// before those surfaces' own early returns below.

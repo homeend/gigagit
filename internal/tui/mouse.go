@@ -24,6 +24,10 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	if m.modal != nil {
 		return m, nil
 	}
+	// A process owns the keyboard; mouse is swallowed (v1), just below the modal.
+	if m.proc != nil {
+		return m, nil
+	}
 	// The `?` cheat sheet over a switcher scrolls with the wheel — checked before
 	// the picker guard below, which would otherwise swallow it.
 	if m.contentPopup != nil && m.overlayTop() != nil {

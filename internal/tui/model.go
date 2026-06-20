@@ -75,6 +75,7 @@ type Model struct {
 	commitGraphRows     []string           // cached single-line graph cells, parallel to commits; empty = none
 	opCancel            context.CancelFunc // cancels the in-flight op's context; nil when idle
 	loadGen             int                // bumped per superseding load; stale dataLoadedMsg are dropped
+	proc                process            // the single active long-running process; nil = none. IS the interface lock.
 
 	running   bool
 	statusMsg string
@@ -368,6 +369,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.modal = nil
 			}
 			return m, nil
+		}
+		// A process owns the interface entirely: while one is active all input is
+		// its own and every other window/command below is unreachable. Sits just
+		// below the modal (a process's own job may still raise a decision).
+		if m.proc != nil {
+			return m.proc.update(m, msg)
 		}
 		// The action menu is a modal-like overlay: once open it owns the
 		// keyboard above every content window. Checked before the surface stack
@@ -887,6 +894,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// working tree — refresh both.
 			m.stashView.loading = true
 			return m, tea.Batch(m.loadCmd(), m.loadStashListCmd(m.stashView.tag))
+		}
+		// A job an active process started just returned: let the process advance
+		// its state machine (it typically triggers a reload itself).
+		if m.proc != nil {
+			return m.proc.finished(m, msg.res, msg.err)
 		}
 		return m, m.loadCmd()
 
