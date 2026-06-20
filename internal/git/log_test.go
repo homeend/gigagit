@@ -79,7 +79,7 @@ func TestLogScopedArgv(t *testing.T) {
 	if _, err := r.LogScoped(context.Background(), 50, 0, LogScope{}); err != nil {
 		t.Fatal(err)
 	}
-	for _, w := range []string{"--date-order", "--decorate", "--branches", "HEAD"} {
+	for _, w := range []string{"--date-order", "--decorate", "--source", "--branches", "HEAD"} {
 		if !logArgvContains(t, f, w) {
 			t.Fatalf("all-scope argv missing %q: %v", w, f.Calls)
 		}
@@ -111,6 +111,35 @@ func TestLogScopedRealDecorations(t *testing.T) {
 	}
 	if byName["feature"].Kind != model.RefLocal || byName["v1"].Kind != model.RefTag {
 		t.Fatalf("expected feature(local)+v1(tag), got %+v", cs[0].Refs)
+	}
+}
+
+func TestLogScopedRealSource(t *testing.T) {
+	dir, runner := newTestRepo(t) // one commit on main
+	repo := &Repo{Runner: runner}
+	gitIn(t, dir, "checkout", "-b", "feat")
+	gitIn(t, dir, "commit", "--allow-empty", "-m", "feat work")
+	cs, err := repo.LogScoped(context.Background(), 10, 0, LogScope{Branches: []string{"feat"}})
+	if err != nil || len(cs) == 0 {
+		t.Fatalf("LogScoped: %v len=%d", err, len(cs))
+	}
+	// %S (via --source) stamps each commit with the branch it was reached from.
+	if cs[0].Source != "feat" {
+		t.Fatalf("commit Source = %q, want feat (from --source/%%S); refs=%+v", cs[0].Source, cs[0].Refs)
+	}
+}
+
+func TestParseLogSourceOptional(t *testing.T) {
+	// A 7-field line carries the source; a legacy 6-field line leaves it empty.
+	seven := "h1\x1f\x1fAda\x1f0\x1fsubj\x1fHEAD -> main\x1ffeat\n"
+	cs, _ := ParseLog([]byte(seven))
+	if len(cs) != 1 || cs[0].Source != "feat" {
+		t.Fatalf("7-field Source = %+v", cs)
+	}
+	six := "h2\x1f\x1fAda\x1f0\x1fsubj\x1fmain\n"
+	cs2, _ := ParseLog([]byte(six))
+	if len(cs2) != 1 || cs2[0].Source != "" {
+		t.Fatalf("6-field Source should be empty, got %+v", cs2)
 	}
 }
 

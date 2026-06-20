@@ -108,7 +108,8 @@ type Commit struct {
 	Author   string
 	Subject  string
 	UnixTime int64
-	Refs     []Ref // ref decorations (branch/tag/HEAD); nil when undecorated
+	Refs     []Ref  // ref decorations (branch/tag/HEAD); nil when undecorated
+	Source   string // branch the commit was reached from in the walk (%S); "" when unknown
 }
 
 // RefKind classifies a ref decoration on a commit.

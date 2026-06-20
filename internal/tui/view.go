@@ -306,6 +306,7 @@ func (m Model) renderInterface() string {
 		add(markHint)
 		add(notice)
 		add(m.statusMsg)
+		add(m.commitBranchHint())
 	}
 	statusLine := strings.Join(parts, " · ")
 	if m.running {
@@ -698,6 +699,24 @@ func fileGlyph(p panel, f model.FileStatus) byte {
 	default:
 		return f.Unstaged // worktree vs index: M / D
 	}
+}
+
+// commitBranchHint returns "⎇ <branch>" for the selected commit when the Commits
+// panel is focused, else "". The branch is the ref the commit was reached from in
+// the feed walk (model.Commit.Source, via `git log --source`/%S). Shown in the
+// status line so the branch is always visible without occluding any commit row.
+func (m Model) commitBranchHint() string {
+	if m.focus != panelCommits {
+		return ""
+	}
+	bi, ok := m.backingIndex(panelCommits)
+	if !ok || bi < 0 || bi >= len(m.commits) {
+		return ""
+	}
+	if s := m.commits[bi].Source; s != "" {
+		return "⎇ " + s
+	}
+	return ""
 }
 
 func (m Model) commitRows() []string {
