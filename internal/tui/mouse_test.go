@@ -149,7 +149,7 @@ func TestClickIgnoredUnderOverlays(t *testing.T) {
 		func(m *Model) { m.popup = &worktreePopup{} },
 		func(m *Model) { *m = m.pushOverlay(&repoPopup{}) },
 		func(m *Model) { *m = m.pushOverlay(&settingsPopup{}) },
-		func(m *Model) { m.branchPopup = &branchPopup{} },
+		func(m *Model) { *m = m.pushOverlay(&branchPopup{}) },
 		func(m *Model) { m.pairPopup = &pairOpPopup{} },
 	}
 	for i, set := range overlays {

@@ -22,20 +22,19 @@ func (m Model) openBranchPopup(switchAfter bool) (Model, bool) {
 	if !ok {
 		return m, false
 	}
-	m.branchPopup = &branchPopup{startPoint: m.branches[bi].Name, switchAfter: switchAfter}
+	m = m.pushOverlay(&branchPopup{startPoint: m.branches[bi].Name, switchAfter: switchAfter})
 	return m, true
 }
 
-// updateBranchPopupKey handles one key while the popup is open. The popup
-// swallows every key; ctrl+c still quits so the user is never trapped.
-func (m Model) updateBranchPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+// update handles one key while the popup is open. The popup swallows every
+// key; ctrl+c still quits so the user is never trapped.
+func (p *branchPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
 	}
-	p := m.branchPopup
 	switch msg.Type {
 	case tea.KeyEsc:
-		m.branchPopup = nil
+		m = m.popOverlay()
 	case tea.KeyEnter:
 		if p.name == "" {
 			return m, nil
@@ -44,7 +43,7 @@ func (m Model) updateBranchPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if p.switchAfter {
 			m.pendingSwitchBranch = p.name
 		}
-		m.branchPopup = nil
+		m = m.popOverlay()
 		return m.startOp(op)
 	case tea.KeyBackspace, tea.KeyCtrlH:
 		if r := []rune(p.name); len(r) > 0 {
@@ -59,9 +58,14 @@ func (m Model) updateBranchPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// renderBranchPopup draws the create-branch dialog.
-func (m Model) renderBranchPopup() string {
-	p := m.branchPopup
+// render composites the popup box over the layer beneath.
+func (p *branchPopup) render(m Model, below string) string {
+	w, h := m.overlayDims()
+	return overlayCenter(clipToHeight(below, h), p.box(m), w, h)
+}
+
+// box draws the create-branch dialog (modal box only).
+func (p *branchPopup) box(m Model) string {
 	var b strings.Builder
 	title := "Create branch from " + p.startPoint
 	if p.switchAfter {

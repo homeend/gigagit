@@ -39,7 +39,6 @@ type Model struct {
 	pendingSeqBump      []string
 	pendingSwitch       bool
 	switchTarget        string
-	branchPopup         *branchPopup
 	renameBranchPopup   *renameBranchPopup
 	rewordPopup         *rewordPopup
 	pendingCompare      *pendingCompare // focused file awaiting the compare-mode picker; nil = none
@@ -408,9 +407,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.popup != nil {
 			return m.updatePopupKey(msg)
 		}
-		if m.branchPopup != nil {
-			return m.updateBranchPopupKey(msg)
-		}
+
 		if m.renameBranchPopup != nil {
 			return m.updateRenameBranchPopupKey(msg)
 		}

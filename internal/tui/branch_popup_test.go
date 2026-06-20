@@ -31,13 +31,14 @@ func TestBKeyOpensBranchPopupWithSelectedStartPoint(t *testing.T) {
 
 	updated, _ := m.Update(keyMsg("b"))
 	m = updated.(Model)
-	if m.branchPopup == nil {
+	p := overlayOf[*branchPopup](m)
+	if p == nil {
 		t.Fatal("b should open the branch popup")
 	}
-	if m.branchPopup.startPoint != m.branches[0].Name {
-		t.Fatalf("startPoint = %q, want selected branch %q", m.branchPopup.startPoint, m.branches[0].Name)
+	if p.startPoint != m.branches[0].Name {
+		t.Fatalf("startPoint = %q, want selected branch %q", p.startPoint, m.branches[0].Name)
 	}
-	if m.branchPopup.switchAfter {
+	if p.switchAfter {
 		t.Fatal("b must not set switchAfter")
 	}
 }
@@ -49,7 +50,7 @@ func TestBKeyInertOnOtherPanels(t *testing.T) {
 
 	updated, _ := m.Update(keyMsg("b"))
 	m = updated.(Model)
-	if m.branchPopup != nil {
+	if overlayOf[*branchPopup](m) != nil {
 		t.Fatal("b must be inert outside the Branches panel")
 	}
 }
@@ -65,13 +66,17 @@ func TestBranchPopupTypeEnterCreatesBranch(t *testing.T) {
 		u, _ := m.Update(keyMsg(string(r)))
 		m = u.(Model)
 	}
-	if m.branchPopup.name != "feat/new" {
-		t.Fatalf("typed name = %q", m.branchPopup.name)
+	p := overlayOf[*branchPopup](m)
+	if p == nil {
+		t.Fatal("popup should still be open after typing")
+	}
+	if p.name != "feat/new" {
+		t.Fatalf("typed name = %q", p.name)
 	}
 
 	updated, cmd := m.Update(keyMsg("enter"))
 	m = updated.(Model)
-	if m.branchPopup != nil {
+	if overlayOf[*branchPopup](m) != nil {
 		t.Fatal("enter should close the popup")
 	}
 	for i := 0; i < 100 && m.running; i++ {
@@ -96,7 +101,7 @@ func TestBranchPopupEnterOnEmptyNameDoesNothing(t *testing.T) {
 
 	u, _ := m.Update(keyMsg("enter"))
 	m = u.(Model)
-	if m.branchPopup == nil {
+	if overlayOf[*branchPopup](m) == nil {
 		t.Fatal("enter with an empty name must keep the popup open")
 	}
 	if m.running {
@@ -113,7 +118,7 @@ func TestBranchPopupEscClosesWithoutOp(t *testing.T) {
 
 	u, _ := m.Update(keyMsg("esc"))
 	m = u.(Model)
-	if m.branchPopup != nil || m.running {
+	if overlayOf[*branchPopup](m) != nil || m.running {
 		t.Fatal("esc must close the popup without starting an op")
 	}
 }
@@ -125,7 +130,8 @@ func TestShiftBChainsSmartSwitchAfterCreate(t *testing.T) {
 
 	updated, _ := m.Update(keyMsg("B"))
 	m = updated.(Model)
-	if m.branchPopup == nil || !m.branchPopup.switchAfter {
+	p := overlayOf[*branchPopup](m)
+	if p == nil || !p.switchAfter {
 		t.Fatal("B should open the popup with switchAfter set")
 	}
 	for _, r := range "feat/go" {
@@ -163,10 +169,11 @@ func TestBranchPopupSwallowsActionKeys(t *testing.T) {
 
 	u, _ := m.Update(keyMsg("q")) // would quit outside the popup
 	m = u.(Model)
-	if m.branchPopup == nil {
+	p := overlayOf[*branchPopup](m)
+	if p == nil {
 		t.Fatal("popup must swallow ordinary keys")
 	}
-	if m.branchPopup.name != "q" {
-		t.Fatalf("typed rune should land in the name, got %q", m.branchPopup.name)
+	if p.name != "q" {
+		t.Fatalf("typed rune should land in the name, got %q", p.name)
 	}
 }
