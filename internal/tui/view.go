@@ -351,7 +351,7 @@ func (m Model) renderInterface() string {
 	// Narrow terminals: a single commits column (two columns won't fit cleanly).
 	if g.w < 40 {
 		cmRows, _ := m.panelView(panelCommits)
-		body := m.renderPanel(panelCommits, m.panelLabel(panelCommits, "Commits"), cmRows, g.w, g.boxH[panelCommits])
+		body := m.renderPanel(panelCommits, m.panelLabel(panelCommits, "Commits ("+m.commitScopeLabel()+")"), cmRows, g.w, g.boxH[panelCommits])
 		return strings.Join([]string{header, body, footer, statusLine}, "\n")
 	}
 
@@ -380,7 +380,7 @@ func (m Model) renderInterface() string {
 	if m.stashView != nil {
 		right = m.renderStashList(g.rightW, g.boxH[panelCommits])
 	} else {
-		right = m.renderPanel(panelCommits, m.panelLabel(panelCommits, "Commits"), cmRows, g.rightW, g.boxH[panelCommits])
+		right = m.renderPanel(panelCommits, m.panelLabel(panelCommits, "Commits ("+m.commitScopeLabel()+")"), cmRows, g.rightW, g.boxH[panelCommits])
 	}
 	body := lipgloss.JoinHorizontal(lipgloss.Top, left, right)
 
@@ -620,6 +620,9 @@ func (m Model) branchRows() []string {
 			marker = "* "
 		}
 		row := marker + b.Name
+		if len(m.commitScopeBranches) == 1 && m.commitScopeBranches[0] == b.Name {
+			row += " ◉" // soloed in the Commits feed
+		}
 		if b.Behind > 0 {
 			row += " (↓" + strconv.Itoa(b.Behind) + ")"
 		}
@@ -697,9 +700,27 @@ func (m Model) commitRows() []string {
 		if len(h) > 7 {
 			h = h[:7]
 		}
-		out = append(out, h+" "+c.Subject)
+		out = append(out, h+" "+commitRefLabels(c.Refs)+c.Subject)
 	}
 	return out
+}
+
+// commitRefLabels renders local-branch pills as a "‹*head›‹branch› " prefix, the
+// current branch (Ref.Head) prefixed with "*". Remote/tag kinds are captured but
+// not rendered in Phase 1. Empty when there are no local labels.
+func commitRefLabels(refs []model.Ref) string {
+	var b strings.Builder
+	for _, r := range refs {
+		if r.Kind != model.RefLocal {
+			continue
+		}
+		if r.Head {
+			b.WriteString("‹*" + r.Name + "› ")
+		} else {
+			b.WriteString("‹" + r.Name + "› ")
+		}
+	}
+	return b.String()
 }
 
 func (m Model) renderModal() string {

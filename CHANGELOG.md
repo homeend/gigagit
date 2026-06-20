@@ -146,6 +146,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   instead of persisting across navigation and reloads.
 
 ### Changed
+- TUI: the **Commits panel now shows all local branches by default**, in date
+  order, with branch/HEAD labels on commits (‹*current›‹branch›). The `.` menu on
+  the Branches panel offers **Solo this branch** (scope the feed to one branch;
+  re-run to un-solo), and **Show all branches** (from the Branches *or* Commits
+  menu, when scoped) clears it. The panel header shows the mode —
+  `Commits (all)` / `Commits (solo: <branch>)`. The walk is `git log --branches
+  --date-order` (paged), supersede-cancellable on giant repos; commits carry
+  `%D` ref decorations.
 - TUI: the **shelf is now a global `G` quick-switcher popup** (mirroring the
   bookmark `g` popup), replacing the Shelf left-column tab. In it: `enter` diffs
   the entry vs the working-tree file, `p` restores to a typed path, `m`+`m`
