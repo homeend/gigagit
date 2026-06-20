@@ -26,3 +26,14 @@ func (r *Repo) ResetSoft(ctx context.Context, ref string) error {
 	_, err := r.Runner.Run(ctx, "git reset --soft", argv)
 	return err
 }
+
+// Reset moves the current branch to ref with the given mode:
+//   - "soft":  index + working tree kept (the diff since ref stays staged)
+//   - "mixed": index reset, working tree kept (the diff stays unstaged)
+//   - "hard":  index + working tree reset (uncommitted TRACKED changes discarded;
+//     untracked files survive)
+func (r *Repo) Reset(ctx context.Context, mode, ref string) error {
+	argv := gitcmd.New("reset").Arg("--"+mode, ref).ToArgv()
+	_, err := r.Runner.Run(ctx, "git reset --"+mode, argv)
+	return err
+}
