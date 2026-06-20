@@ -155,7 +155,8 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - Internal: migrated the worktree, commit, repo, settings, branch, pair-op,
   stash, and stash-action popups onto the unified overlay stack (no
   user-facing change; commit/stash/stash-action popups now also swallow mouse
-  like the other dialogs).
+  like the other dialogs, and the async amend-prefill now stacks the commit
+  popup on the overlay layer instead of relying on dispatch shadowing).
 - TUI: the **Commits panel now shows all local branches by default**, in date
   order, with branch/HEAD labels on commits (‹*current›‹branch›). The `.` menu on
   the Branches panel offers **Solo this branch** (scope the feed to one branch;
