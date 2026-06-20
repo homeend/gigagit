@@ -31,9 +31,10 @@ Per commit, compute `(name string, tip bool)`:
 - **Neither** (no ref, empty Source — e.g. detached walks): `name = ""`. The
   column is blank (the id is intentionally dropped, per the request).
 
-**Width** is dynamic, capped: `identW = min(16, max(displayed name widths))`,
-floor a small minimum so the column never collapses. Names wider than `identW`
-trim with `…`. The token is left-padded/truncated to `identW` so the subject
+**Width** is **fixed** at `identW = 16` (the user picked "wider ~16"). A fixed
+column avoids reflow jitter as commits page in (a dynamic max-width would shift
+the column and every subject when a longer name loads mid-scroll). Names wider
+than 16 trim with `…`; the token is left-padded/truncated to 16 so the subject
 column stays aligned. This replaces the `h[:7]` token in BOTH graph and list
 mode. The lane glyphs (graph mode) and `● ` (list mode) still precede it.
 
@@ -49,11 +50,17 @@ Following the lane-color constraint (color never in the row string; applied
 post-slice by a `rowDecorator`, proven by an end-to-end `renderPanel` test with
 `termenv.TrueColor` forced):
 
-- **Lineage** rows (`tip == false`, `name != ""`): a decorator **dims** the
-  identity column's rune range (gray foreground, e.g. `"240"`). Width preserved.
+- **Lineage** rows (`tip == false`, `name != ""`): the identity column's rune
+  range is **dimmed** (gray foreground, e.g. `"240"`). Width preserved.
 - **Tip** rows: default (bright) — no extra styling.
-- The existing lane-color `●` decorator still applies; when a row needs both,
-  the two decorators compose into one (chained) `rowDecorator`.
+- The existing lane-color `●` node still colors. Both the dot color and the
+  ident dim are emitted by a **single** `commitLineDecorator` that walks the
+  ORIGINAL runes once and wraps the dot rune + the ident range in their styles
+  in one pass. (Composing two independent decorators by re-indexing
+  `[]rune(visible)` is unsafe: the first one inserts ANSI escapes that shift the
+  second's column math — and a zero-style `Render` can strip inner escapes. One
+  pass over the unstyled string avoids both.) It is hscroll-aware like the
+  current dot decorator.
 
 The dim coloring applies in ALL display states (it is not gated on
 `commitGraphOn()` the way the lane-dot color is), so lineage stays gray under
@@ -62,12 +69,16 @@ filter/sort too.
 ## Tooltip when the name is trimmed
 
 The existing reveal-tooltip fires only when the whole rendered row exceeds the
-panel width; a trimmed identity inside an otherwise-fitting row would not
-trigger it. So `tooltip()` gains a Commits-panel case: when the selected
-commit's identity name is **trimmed** in the column, the tooltip shows the
-**full** branch name (a one-line strip), reusing the same overlay geometry.
-Tracked via a parallel `identFull []string` (full untrimmed name per backing
-commit) computed alongside the rows.
+panel width (`tooltip()` early-returns unless the row `rowTruncated`), so a
+trimmed identity inside an otherwise-fitting row would not trigger it — and even
+when the row IS overall-truncated, the tooltip shows `rows[sel]`, which still
+contains the *trimmed* name. So generalize the reveal: a panel may supply an
+optional parallel **`fullRows []string`**; the tooltip shows `fullRows[sel]`
+whenever it differs from the rendered row (and fires when EITHER the row is
+truncated OR `fullRows[sel] != rows[sel]`). The Commits panel supplies a
+`fullRows` whose identity token is the **untrimmed** branch name (rest of the
+row identical), so the strip reveals the full name. This also fixes the
+both-truncated precedence case in one move.
 
 ## Status bar
 
@@ -77,14 +88,28 @@ The `⎇ <branch>` hint stays (it is the authoritative readout for the selected
 row); the id is appended. (Copying the full id is still available via the
 `.`-menu Copy commit id.)
 
+## Search haystack (don't silently drop hash filtering)
+
+The commit filter matches `panelList.Row(i)` — which is also the display text.
+Two changes to that string would otherwise regress search: the **hash leaves the
+row** (commit-id-prefix filtering would vanish — a capability removal, not a
+degradation) and the **name is trimmed** (filter-by-full-branch-name >16 chars
+would break; the full name used to live in the pill). So **decouple the
+haystack from display**: add an optional `Haystack(i) string` method; `panelView`
+prefers it over `Row(i)` when present. `commitList.Haystack(i)` returns the
+**full hash + full (untrimmed) branch name + subject** (lowercased match as
+today), so both id-prefix and full-branch-name filtering keep working even
+though neither is shown verbatim in the row. Other panels don't implement it →
+unchanged.
+
 ## Single-sourcing
 
-The row STRING contains the plain trimmed identity name + subject (so filtering
-the Commits panel by a branch name works, and the tooltip/width calc see real
-text). Color is the only thing added at render time. The identity name and its
-`tip`/trim flags are computed once into parallel slices
-(`commitIdent`/`identFull`) cached like `commitGraphRows`, so display, the dim
-decorator, and the tooltip share one source and cannot drift.
+The row STRING contains the plain trimmed identity name + subject; color is the
+only thing added at render time (never baked in). The identity name, its `tip`
+flag, the trimmed display token, the untrimmed `fullRows` token, and the
+`Haystack` text are all computed once from `(Refs, Source, Hash, Subject)` in
+one builder, so display, the decorator, the tooltip, and the filter share one
+source and cannot drift.
 
 ## Out of scope (v1)
 
