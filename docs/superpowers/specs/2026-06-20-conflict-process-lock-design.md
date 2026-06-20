@@ -81,11 +81,17 @@ decision, never a window reopening itself. For conflict resolution:
 
 - **Listing** — showing the conflicted-files window; waiting for a file + action.
 - **Picking** — handed off to the full-screen line editor for a both-sides file.
-- **Working** — a job is running; show progress; the only live key is cancel
-  (where cancelling is safe).
+- **Working** — a job is running; show progress; **cancel is always offered**
+  (see "Never trap the user"). Cancel stops the in-flight job, re-reads the real
+  on-disk state, and returns to Listing showing whatever that state now is.
 - **Reporting** — a job failed; show the error; wait for acknowledge; return to
   Listing.
 - **Finishing** — continue/abort succeeded; tear down and release the slot.
+
+In addition to the per-state keys, the process **always offers Leave** — step
+out of the whole flow, leaving the repo exactly as it is (distinct from *abort*,
+which actively unwinds, and *continue*, which completes). Leave releases the slot
+and drops to the notice below.
 
 ### Window orchestration
 
@@ -98,14 +104,36 @@ themselves. This is the orchestration the process exists to provide, and it is
 shaped so future processes (interactive rebase, an interrupted pull) can reuse
 it.
 
-### Lifecycle — start by detection
+### Lifecycle — start by detection, leave without a trap
 
 The process is started by the app **noticing the repo is in a conflicted
 merge/rebase**, not by the merge/rebase job "handing off." The merge/rebase job
 just leaves the repo in that state; the app detects it (as it already detects
-in-progress state today) and fills the slot. This also covers relaunching the
-app into a half-finished rebase — a real monorepo case. The slot is released
-when continue completes the merge/rebase or abort unwinds it.
+in-progress state today) and surfaces it. This also covers relaunching the app
+into a half-finished rebase — a real monorepo case.
+
+Because the process is a **live view onto on-disk state** (not a stateful thing
+that must be finished), leaving is always safe and resumable:
+
+- Detection surfaces a **non-blocking notice** ("conflicts pending — resume").
+  From it the process can be entered (and a fresh conflict may fill the slot
+  immediately).
+- **Leave** releases the slot back to the notice. It does **not** immediately
+  re-grab the slot — that would be the trap we are avoiding. The user walks away
+  (another tool, a `gg` command, manual git) and returns; re-entry just
+  re-detects the now-current on-disk state.
+- The slot is **released for good** (notice cleared) only when continue completes
+  the merge/rebase or abort unwinds it — i.e. when the repo is no longer
+  conflicted.
+
+### Never trap the user
+
+The user can always stop — by walking away or killing the app — so denying a
+clean stop changes nothing except leaving them in an invalid state, frustrated.
+Therefore the process **always provides a clean exit**: Cancel for the in-flight
+job, Leave for the whole flow. What happens to the git state afterward is the
+user's to own (fix by hand or with a `gg` command); the app's guarantee is a
+clean exit, never a lock-in.
 
 ## Conflict resolution as the first process
 
@@ -148,8 +176,12 @@ surfaces the process shows** — they no longer decide when they appear.
   process shows them — never because a window reopened itself.
 - A failed resolve shows the error and returns to the list with a refreshed set,
   with the process still active.
-- Resolving the last file and continuing (or aborting) releases the slot and the
-  panels behave normally again.
+- Resolving the last file and continuing (or aborting) releases the slot *and*
+  clears the notice; the panels behave normally again.
+- **Cancel** during Working stops the in-flight job and returns to Listing with
+  the real refreshed state.
+- **Leave** releases the slot to the non-blocking notice without re-grabbing it;
+  re-entering from the notice resumes against the current on-disk state.
 - Quit always works; blocked commands never perform a partial action.
 
 ## Testing
@@ -164,7 +196,11 @@ surfaces the process shows** — they no longer decide when they appear.
   + continue (Finishing → slot released). Use the existing real-git / fake-runner
   conflict scaffolding.
 - **Error path:** a failed resolve → Reporting → Listing, slot still filled.
-- **Abort** releases the slot.
+- **Cancel** during Working stops the job and returns to Listing with re-read
+  state.
+- **Leave** releases the slot to the notice without re-grabbing it; re-entry from
+  the notice re-detects and resumes.
+- **Abort** releases the slot and clears the notice.
 - **Detection start:** a model already in a conflicted state fills the slot on
   load (covers relaunch into a half-finished rebase).
 - Regression: existing conflict-resolution tests are ported to drive the process
