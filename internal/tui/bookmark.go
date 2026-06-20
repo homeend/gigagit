@@ -11,7 +11,7 @@ import (
 // focusedBookmark builds a Bookmark for the file under focus, mirroring the
 // shelf-capture precedence. The two-sided diff view is excluded.
 func (m Model) focusedBookmark() (model.Bookmark, bool) {
-	switch s := m.stackTop().(type) {
+	switch s := m.topLayer().(type) {
 	case *historyView:
 		if s.sel < 0 || s.sel >= len(s.commits) {
 			return model.Bookmark{}, false

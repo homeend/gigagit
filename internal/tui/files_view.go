@@ -188,7 +188,7 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		ctx := navContext{path: vis[p.sel].path, rev: m.filesHash}
 		hv := newHistoryView(ctx)
-		m = m.pushSurface(hv)
+		m = m.pushLayer(hv)
 		return m, m.loadHistoryListCmd(ctx, hv.listTag)
 	case "b":
 		if !m.filesTreeFocused {
@@ -200,7 +200,7 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		ctx := navContext{path: vis[p.sel].path, rev: m.filesHash}
 		bv := newBlameView(ctx)
-		m = m.pushSurface(bv)
+		m = m.pushLayer(bv)
 		return m, m.loadBlameCmd(ctx, bv.tag)
 	case "enter":
 		if !m.filesTreeFocused {
@@ -208,7 +208,7 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			// (the list's defining verb); for commits it's a no-op.
 			if v := m.stashView; v != nil && v.sel >= 0 && v.sel < len(v.entries) {
 				e := v.entries[v.sel]
-				m = m.pushOverlay(&stashActionPopup{ref: e.Ref, subject: e.Subject})
+				m = m.pushLayer(&stashActionPopup{ref: e.Ref, subject: e.Subject})
 			}
 			return m, nil
 		}

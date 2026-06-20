@@ -24,7 +24,7 @@ func TestShelfAddCaptureFromBlame(t *testing.T) {
 	// Working-tree blame (ctx.rev == "") captures the current worktree's working
 	// file — the worktree/branch come from the Model (derived ad-hoc), not stored
 	// on the view. Mirrors the working-tree diff-view capture.
-	m := footerModel().pushSurface(blameFixture()) // ctx.rev == ""
+	m := footerModel().pushLayer(blameFixture()) // ctx.rev == ""
 	m.currentWorktree = "/wt"
 	m.status.Branch = "main"
 	a, ok := m.focusedShelfAddress()
@@ -32,7 +32,7 @@ func TestShelfAddCaptureFromBlame(t *testing.T) {
 		t.Fatalf("working-tree blame capture = %+v ok=%v, want unstaged a.go @ /wt", a, ok)
 	}
 	// A committed blame captures the commit.
-	m2 := footerModel().pushSurface(&blameView{ctx: navContext{path: "a.go", rev: "abc1234def"}})
+	m2 := footerModel().pushLayer(&blameView{ctx: navContext{path: "a.go", rev: "abc1234def"}})
 	c, ok := m2.focusedShelfAddress()
 	if !ok || c.State != model.StateCommitted || c.Commit != "abc1234def" || c.Path != "a.go" {
 		t.Fatalf("committed blame capture = %+v ok=%v", c, ok)
@@ -52,7 +52,7 @@ func TestAddToShelfRowAbsentWhenNoFileFocused(t *testing.T) {
 
 func TestShelfRestorePopupRequiresDest(t *testing.T) {
 	m := footerModel()
-	m = m.pushOverlay(&shelfRestorePopup{entryID: "unstaged-a-go-deadbeef", origin: "a.go"})
+	m = m.pushLayer(&shelfRestorePopup{entryID: "unstaged-a-go-deadbeef", origin: "a.go"})
 	// Enter with an empty dest is a no-op (popup stays open).
 	u, _ := m.Update(keyMsg("enter"))
 	m = u.(Model)

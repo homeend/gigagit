@@ -5,14 +5,14 @@ package tui
 // the prod accessor; bookmarkPasteOf returns the paste popup when it is on top.
 
 func bookmarkPasteOf(m Model) *bookmarkPastePopup {
-	if p, ok := m.overlayTop().(*bookmarkPastePopup); ok {
+	if p, ok := m.topLayer().(*bookmarkPastePopup); ok {
 		return p
 	}
 	return nil
 }
 
 func shelfRestoreOf(m Model) *shelfRestorePopup {
-	if p, ok := m.overlayTop().(*shelfRestorePopup); ok {
+	if p, ok := m.topLayer().(*shelfRestorePopup); ok {
 		return p
 	}
 	return nil

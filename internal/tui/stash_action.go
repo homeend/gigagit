@@ -29,7 +29,7 @@ func (a *stashActionPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if a.confirming {
 		switch msg.String() {
 		case "y":
-			m = m.popOverlay()
+			m = m.popLayer()
 			return m.startOp(engine.StashDrop{Ref: a.ref})
 		case "n", "esc":
 			a.confirming = false
@@ -54,7 +54,7 @@ func (a *stashActionPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		return m, nil
 	case "esc":
-		m = m.popOverlay()
+		m = m.popLayer()
 		return m, nil
 	case "up", "k":
 		if a.sel > 0 {
@@ -67,10 +67,10 @@ func (a *stashActionPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case "enter":
 		switch a.sel {
 		case 0:
-			m = m.popOverlay()
+			m = m.popLayer()
 			return m.startOp(engine.StashApply{Ref: a.ref})
 		case 1:
-			m = m.popOverlay()
+			m = m.popLayer()
 			return m.startOp(engine.StashPop{Ref: a.ref})
 		case 2:
 			a.confirming = true

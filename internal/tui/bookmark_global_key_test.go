@@ -48,7 +48,7 @@ func TestBookmarkKeyOpensFromStash(t *testing.T) {
 }
 
 func TestBookmarkKeyOpensFromHistory(t *testing.T) {
-	m := footerModel().pushSurface(newHistoryView(navContext{path: "a.go"}))
+	m := footerModel().pushLayer(newHistoryView(navContext{path: "a.go"}))
 	_, cmd := m.Update(keyMsg("g"))
 	if cmd == nil {
 		t.Fatal("g in the history view must open the bookmark switcher, got nil")
@@ -56,7 +56,7 @@ func TestBookmarkKeyOpensFromHistory(t *testing.T) {
 }
 
 func TestBookmarkKeyOpensFromBlame(t *testing.T) {
-	m := footerModel().pushSurface(newBlameView(navContext{path: "a.go"}))
+	m := footerModel().pushLayer(newBlameView(navContext{path: "a.go"}))
 	_, cmd := m.Update(keyMsg("g"))
 	if cmd == nil {
 		t.Fatal("g in the blame view must open the bookmark switcher, got nil")
@@ -69,7 +69,7 @@ func TestBookmarkKeyOpensFromBlame(t *testing.T) {
 func TestBookmarkPopupReceivesKeysOverDiffView(t *testing.T) {
 	m := footerModel()
 	m.diffView = &diffView{title: "a.go"}
-	m = m.pushOverlay(twoBookmarks())
+	m = m.pushLayer(twoBookmarks())
 	u, _ := m.Update(keyMsg("esc"))
 	mm := u.(Model)
 	if mm.bookmarkSwitcher() != nil {
@@ -84,15 +84,15 @@ func TestBookmarkPopupReceivesKeysOverDiffView(t *testing.T) {
 func TestBookmarkPopupRendersOverDiffView(t *testing.T) {
 	m := footerModel()
 	m.diffView = &diffView{title: "a.go"}
-	m = m.pushOverlay(twoBookmarks())
+	m = m.pushLayer(twoBookmarks())
 	if !strings.Contains(m.render(), "Bookmarks") {
 		t.Error("bookmark popup must render over the diff view")
 	}
 }
 
 func TestBookmarkPopupRendersOverHistory(t *testing.T) {
-	m := footerModel().pushSurface(newHistoryView(navContext{path: "a.go"}))
-	m = m.pushOverlay(twoBookmarks())
+	m := footerModel().pushLayer(newHistoryView(navContext{path: "a.go"}))
+	m = m.pushLayer(twoBookmarks())
 	if !strings.Contains(m.render(), "Bookmarks") {
 		t.Error("bookmark popup must render over a stack surface")
 	}

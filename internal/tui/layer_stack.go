@@ -13,10 +13,6 @@ type layer interface {
 	render(m Model, below string) string
 }
 
-// surface and overlay are retained as aliases during migration; Task 3 removes them.
-type surface = layer
-type overlay = layer
-
 type layerStack struct{ entries []layer }
 
 // topLayer returns the active (topmost) layer, or nil when the stack is empty.
@@ -78,16 +74,3 @@ func (m Model) bookmarkSwitcher() *bookmarkPopup { return layerOf[*bookmarkPopup
 
 // shelfSwitcher returns the topmost shelf switcher on the stack, else nil.
 func (m Model) shelfSwitcher() *shelfPopup { return layerOf[*shelfPopup](m) }
-
-// --- migration shims: old overlay/surface names delegating to the one stack.
-// Task 3 renames call sites and deletes these. ---
-
-func (m Model) pushOverlay(o layer) Model { return m.pushLayer(o) }
-func (m Model) pushSurface(s layer) Model { return m.pushLayer(s) }
-func (m Model) popOverlay() Model         { return m.popLayer() }
-func (m Model) popSurface() Model         { return m.popLayer() }
-func (m Model) clearOverlays() Model      { return m.clearLayers() }
-func (m Model) clearStack() Model         { return m.clearLayers() }
-func (m Model) overlayTop() layer         { return m.topLayer() }
-func (m Model) stackTop() layer           { return m.topLayer() }
-func overlayOf[T layer](m Model) T        { return layerOf[T](m) }

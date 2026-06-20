@@ -37,7 +37,7 @@ func (p *pairOpPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			p.hscroll += m.hscrollStep()
 		}
 	case "esc":
-		m = m.popOverlay() // the mark survives: the user may pick another row
+		m = m.popLayer() // the mark survives: the user may pick another row
 	case "up", "k":
 		if p.sel > 0 {
 			p.sel--
@@ -53,7 +53,7 @@ func (p *pairOpPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			return m, nil
 		}
 		marked, selected := p.marked, p.selected
-		m = m.popOverlay()
+		m = m.popLayer()
 		m.mark = nil
 		if op.open != nil {
 			return op.open(m, marked, selected)

@@ -59,7 +59,7 @@ func newConflictPicker(path string, doc *hunkpick.Doc) *hunkPicker {
 		rightLabel: "incoming",
 		requireAll: true,
 		apply: func(m Model, content []byte) (Model, tea.Cmd) {
-			m = m.popSurface()
+			m = m.popLayer()
 			return m.startOp(engine.ResolveConflictHunks{Path: path, Content: content})
 		},
 		doc: doc, blocks: doc.Blocks(), side: hunkpick.Current, mode: modeScroll,
@@ -90,7 +90,7 @@ func newStagePicker(path string, doc *hunkpick.Doc) *hunkPicker {
 		rightLabel: "working",
 		requireAll: false,
 		apply: func(m Model, content []byte) (Model, tea.Cmd) {
-			m = m.popSurface()
+			m = m.popLayer()
 			return m.startOp(engine.StageHunks{Path: path, Content: content})
 		},
 		doc: doc, blocks: doc.Blocks(), side: hunkpick.Current, mode: modeScroll,
@@ -141,7 +141,7 @@ func (e *hunkPicker) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	b := e.cur()
 	switch msg.String() {
 	case "esc":
-		return m.popSurface(), nil
+		return m.popLayer(), nil
 	case "left":
 		e.side = hunkpick.Current
 		e.clampLine()

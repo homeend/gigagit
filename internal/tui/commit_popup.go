@@ -93,14 +93,14 @@ func (p *commitPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	submit, cancel := p.applyEditKey(msg)
 	switch {
 	case cancel:
-		m = m.popOverlay()
+		m = m.popLayer()
 	case submit:
 		if strings.TrimSpace(p.title) == "" {
 			m.statusMsg = "title required"
 			return m, nil
 		}
 		op := engine.Commit{Message: p.message(), Amend: p.amend}
-		m = m.popOverlay()
+		m = m.popLayer()
 		return m.startOp(op)
 	}
 	return m, nil

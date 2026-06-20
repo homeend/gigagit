@@ -11,7 +11,7 @@ func shelfPopModel(entries ...model.ShelfEntry) Model {
 	m := footerModel()
 	m.width, m.height = 100, 30
 	m.shelfEntries = entries
-	m = m.pushOverlay(newShelfPopup(entries))
+	m = m.pushLayer(newShelfPopup(entries))
 	return m
 }
 

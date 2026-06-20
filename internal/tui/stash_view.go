@@ -140,7 +140,7 @@ func (m Model) updateStashViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		e := v.entries[v.sel]
-		m = m.pushOverlay(&stashActionPopup{ref: e.Ref, subject: e.Subject})
+		m = m.pushLayer(&stashActionPopup{ref: e.Ref, subject: e.Subject})
 		return m, nil
 	}
 	return m, nil

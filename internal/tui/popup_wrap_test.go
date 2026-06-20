@@ -40,8 +40,8 @@ func assertOneLine(t *testing.T, rendered, a, b string) {
 func TestRepoPopupNoWrap(t *testing.T) {
 	m := Model{width: 80, height: 30}
 	render := func(path string) string {
-		m = m.pushOverlay(&repoPopup{entries: []repos.Entry{{Path: path, LastOpened: time.Now()}}, now: time.Now()})
-		return overlayOf[*repoPopup](m).box(m)
+		m = m.pushLayer(&repoPopup{entries: []repos.Entry{{Path: path, LastOpened: time.Now()}}, now: time.Now()})
+		return layerOf[*repoPopup](m).box(m)
 	}
 	assertSameHeight(t, "repo body", render("/x"), render(strings.Repeat("z", 300)))
 	assertOneLine(t, render("/x"), "[enter] switch", "[esc]") // the hint stays one line
@@ -59,8 +59,8 @@ func TestConflictPopupNoWrap(t *testing.T) {
 func TestPairOpPopupNoWrap(t *testing.T) {
 	m := Model{width: 80, height: 30}
 	render := func(marked string) string {
-		m = m.pushOverlay(&pairOpPopup{marked: marked, selected: "main", ops: pairOpsFor(panelBranches)})
-		return overlayOf[*pairOpPopup](m).box(m)
+		m = m.pushLayer(&pairOpPopup{marked: marked, selected: "main", ops: pairOpsFor(panelBranches)})
+		return layerOf[*pairOpPopup](m).box(m)
 	}
 	assertSameHeight(t, "pair-op body", render("feat/x"), render("feat/"+strings.Repeat("z", 300)))
 }
@@ -68,8 +68,8 @@ func TestPairOpPopupNoWrap(t *testing.T) {
 func TestStashActionPopupNoWrap(t *testing.T) {
 	m := Model{width: 80, height: 30}
 	render := func(subject string) string {
-		m2 := m.pushOverlay(&stashActionPopup{ref: "stash@{0}", subject: subject})
-		a := overlayOf[*stashActionPopup](m2)
+		m2 := m.pushLayer(&stashActionPopup{ref: "stash@{0}", subject: subject})
+		a := layerOf[*stashActionPopup](m2)
 		return a.box(m2)
 	}
 	assertSameHeight(t, "stash subject", render("WIP"), render(strings.Repeat("z", 300)))

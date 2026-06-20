@@ -226,7 +226,7 @@ func TestConflictProcessFileLoadedShowsPickerEscReturns(t *testing.T) {
 	if cp.st != confPicking || cp.picker == nil {
 		t.Fatalf("a loaded conflict file must show the picker (Picking), got st=%d", cp.st)
 	}
-	if m.stackTop() != nil {
+	if m.topLayer() != nil {
 		t.Fatal("the process owns the picker; it must NOT be pushed on the surface stack")
 	}
 	// esc returns to Listing and drops the picker

@@ -69,7 +69,7 @@ func (m Model) openStashPopup() (Model, bool) {
 	for i := range cand {
 		cand[i].included = !anyMarked || m.fileMarks[cand[i].path]
 	}
-	m = m.pushOverlay(&stashPopup{name: "WIP on " + m.status.Branch, files: cand, field: 1})
+	m = m.pushLayer(&stashPopup{name: "WIP on " + m.status.Branch, files: cand, field: 1})
 	return m, true
 }
 
@@ -81,7 +81,7 @@ func (p *stashPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	}
 	switch msg.String() {
 	case "esc":
-		m = m.popOverlay()
+		m = m.popLayer()
 		return m, nil
 	case "ctrl+s":
 		op, ok := p.op()
@@ -95,7 +95,7 @@ func (p *stashPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		for _, path := range op.Paths { // clear marks we just stashed
 			delete(m.fileMarks, path)
 		}
-		m = m.popOverlay()
+		m = m.popLayer()
 		return m.startOp(op)
 	case "tab", "shift+tab":
 		p.field = 1 - p.field

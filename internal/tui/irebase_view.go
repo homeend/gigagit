@@ -74,7 +74,7 @@ func (e *irebaseEditor) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	}
 	switch msg.String() {
 	case "esc":
-		return m.popSurface(), nil
+		return m.popLayer(), nil
 	case "down", "j":
 		if e.sel < len(e.rows)-1 {
 			e.sel++
@@ -116,7 +116,7 @@ func (e *irebaseEditor) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		e.sel = 0
 	case "enter":
 		op := engine.InteractiveRebase{Branch: e.branch, Onto: e.onto, Plan: e.plan(), GGBin: e.ggBin}
-		m = m.popSurface()
+		m = m.popLayer()
 		return m.startOp(op)
 	}
 	return m, nil

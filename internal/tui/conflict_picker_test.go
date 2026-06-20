@@ -68,7 +68,7 @@ func TestConflictPickerEnterGateAndApply(t *testing.T) {
 	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
 	// enter while pending: no apply, status set, surface still on top
 	m, _ = e.update(m, keyMsg("enter"))
-	if m.statusMsg == "" || m.stackTop() == nil {
+	if m.statusMsg == "" || m.topLayer() == nil {
 		t.Fatal("enter with pending regions should warn and keep the surface")
 	}
 }
@@ -133,7 +133,7 @@ func TestConflictFileLoadedPushesPicker(t *testing.T) {
 	content := []byte("<<<<<<< HEAD\na\n=======\nb\n>>>>>>> x\n")
 	updated, _ := m.Update(conflictFileLoadedMsg{path: "f.txt", content: content})
 	m = updated.(Model)
-	if _, ok := m.stackTop().(*hunkPicker); !ok {
+	if _, ok := m.topLayer().(*hunkPicker); !ok {
 		t.Fatal("loaded conflict file should push the picker surface")
 	}
 }
@@ -142,7 +142,7 @@ func TestConflictFileLoadedBinaryNoOp(t *testing.T) {
 	m := Model{width: 80, height: 24}
 	updated, _ := m.Update(conflictFileLoadedMsg{path: "f.bin", content: []byte("\x00\x01\x02")})
 	m = updated.(Model)
-	if m.stackTop() != nil {
+	if m.topLayer() != nil {
 		t.Fatal("binary file must not push a surface")
 	}
 }
@@ -171,7 +171,7 @@ func TestStageHunksLoadedPushesPicker(t *testing.T) {
 	m := Model{width: 80, height: 24}
 	updated, _ := m.Update(stageHunksLoadedMsg{path: "f.txt", index: []byte("a\nb\n"), work: []byte("a\nB\n")})
 	m = updated.(Model)
-	if _, ok := m.stackTop().(*hunkPicker); !ok {
+	if _, ok := m.topLayer().(*hunkPicker); !ok {
 		t.Fatal("stageHunksLoadedMsg should push the hunk picker")
 	}
 }
@@ -180,7 +180,7 @@ func TestStageHunksLoadedNoChangeNoOp(t *testing.T) {
 	m := Model{width: 80, height: 24}
 	updated, _ := m.Update(stageHunksLoadedMsg{path: "f.txt", index: []byte("a\n"), work: []byte("a\n")})
 	m = updated.(Model)
-	if m.stackTop() != nil {
+	if m.topLayer() != nil {
 		t.Fatal("no changes → no surface")
 	}
 }

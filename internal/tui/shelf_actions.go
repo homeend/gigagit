@@ -43,14 +43,14 @@ func (p *shelfRestorePopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	}
 	switch msg.Type {
 	case tea.KeyEsc:
-		m = m.popOverlay() // back to the shelf switcher beneath
+		m = m.popLayer() // back to the shelf switcher beneath
 	case tea.KeyEnter:
 		dest := strings.TrimSpace(p.dest)
 		if dest == "" {
 			return m, nil // a destination is mandatory
 		}
 		entry := p.entryID
-		m = m.popOverlay() // back to the switcher; it stays visible during the write
+		m = m.popLayer() // back to the switcher; it stays visible during the write
 		blob, err := m.svc.ShelfBlob(context.Background(), entry)
 		if err != nil {
 			m.statusMsg = "shelf restore: " + err.Error()
@@ -97,7 +97,7 @@ func (m Model) openShelfCompareEntry(e model.ShelfEntry) (Model, tea.Cmd) {
 // shelf switcher (which stays beneath; esc/success returns to it). The dest is
 // deliberately NOT prefilled (unlike bookmark paste).
 func (m Model) openShelfRestore(e model.ShelfEntry) (Model, tea.Cmd) {
-	return m.pushOverlay(&shelfRestorePopup{entryID: e.ID, origin: e.Origin.Path}), nil
+	return m.pushLayer(&shelfRestorePopup{entryID: e.ID, origin: e.Origin.Path}), nil
 }
 
 func shortShelf(e model.ShelfEntry) string {

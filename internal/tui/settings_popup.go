@@ -26,7 +26,7 @@ const settingsMenuAgents = "Set up agent skills (using-gg)"
 
 // openSettings opens the menu screen.
 func (m Model) openSettings() Model {
-	m = m.pushOverlay(&settingsPopup{})
+	m = m.pushLayer(&settingsPopup{})
 	return m
 }
 
@@ -34,7 +34,7 @@ func (m Model) openSettings() Model {
 // checkbox defaults encode the core rule: already-installed targets start
 // checked (apply = refresh); new targets start unchecked (explicit opt-in).
 func (m Model) openAgentPicker() Model {
-	p := overlayOf[*settingsPopup](m)
+	p := layerOf[*settingsPopup](m)
 	p.dets = agentinit.Detect(m.currentWorktree, m.initHomeDir)
 	p.checked = make([]bool, len(p.dets))
 	for i, d := range p.dets {
@@ -55,7 +55,7 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			p.picker = false
 			return m, nil
 		}
-		m = m.popOverlay()
+		m = m.popLayer()
 		return m, nil
 	}
 	switch msg.String() { // display-mode keys apply on both screens
@@ -112,7 +112,7 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				refreshed++
 			}
 		}
-		m = m.popOverlay()
+		m = m.popLayer()
 		m.statusMsg = fmt.Sprintf("agent skills: %d installed, %d refreshed", installed, refreshed)
 		if failed > 0 {
 			m.statusMsg += fmt.Sprintf(", %d failed", failed)

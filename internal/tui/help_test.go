@@ -11,7 +11,7 @@ func TestHelpOpensWithQuestionMark(t *testing.T) {
 	m := Model{width: 80, height: 24}
 	u, _ := m.Update(keyMsg("?"))
 	m = u.(Model)
-	if overlayOf[*contentPopup](m) == nil {
+	if layerOf[*contentPopup](m) == nil {
 		t.Fatal("? must open the help popup")
 	}
 	out := ansi.Strip(m.render())
@@ -83,10 +83,10 @@ func TestHelpFooterCoverage(t *testing.T) {
 
 func TestHelpNotOpenedWhileAnotherPopupIsOpen(t *testing.T) {
 	m := Model{width: 80, height: 24}
-	m = m.pushOverlay(&repoPopup{})
+	m = m.pushLayer(&repoPopup{})
 	u, _ := m.Update(keyMsg("?"))
 	m = u.(Model)
-	if overlayOf[*contentPopup](m) != nil {
+	if layerOf[*contentPopup](m) != nil {
 		t.Fatal("? must be swallowed by the open popup")
 	}
 }

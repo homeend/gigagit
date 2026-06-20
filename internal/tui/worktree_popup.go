@@ -128,7 +128,7 @@ func (m Model) openWorktreePopup(existing bool) (Model, bool) {
 		p.state = stAction
 	}
 	p.recompute()
-	m = m.pushOverlay(p)
+	m = m.pushLayer(p)
 	return m, true
 }
 
@@ -161,7 +161,7 @@ func (m Model) openWorktreeFromCommit(hash string) Model {
 		p.inputs[l] = ""
 	}
 	p.recompute()
-	return m.pushOverlay(p)
+	return m.pushLayer(p)
 }
 
 // update handles one key while the popup is open.
@@ -175,7 +175,7 @@ func (p *worktreePopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case stInput:
 		switch msg.Type {
 		case tea.KeyEsc:
-			m = m.popOverlay()
+			m = m.popLayer()
 		case tea.KeyEnter, tea.KeyTab:
 			p.fieldIdx++
 			if p.fieldIdx >= len(p.labels) {
@@ -222,7 +222,7 @@ func (p *worktreePopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	default: // stAction
 		switch msg.String() {
 		case "esc":
-			m = m.popOverlay()
+			m = m.popLayer()
 		case "e":
 			if p.existing {
 				return m, nil // the branch IS the point of existing mode
@@ -312,7 +312,7 @@ func (m Model) startCreateFromPopup(p *worktreePopup, switchAfter bool) (Model, 
 	}
 	m.pendingSeqBump = p.consumedSeqNames()
 	m.pendingSwitch = switchAfter
-	m = m.popOverlay()
+	m = m.popLayer()
 	return m.startOp(p.createOp())
 }
 

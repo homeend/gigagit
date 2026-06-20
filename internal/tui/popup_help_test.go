@@ -54,13 +54,13 @@ func TestSwitcherHelpCompareModeOmitsInertKeys(t *testing.T) {
 // bookmarkPopupModel returns a model with the bookmark switcher open.
 func bookmarkPopupModel() Model {
 	m := Model{width: 80, height: 24, sel: map[panel]int{}, sortModes: map[panel]sortMode{}}
-	m = m.pushOverlay(newBookmarkPopup([]model.Bookmark{{ID: "b1", Path: "a.go"}}))
+	m = m.pushLayer(newBookmarkPopup([]model.Bookmark{{ID: "b1", Path: "a.go"}}))
 	return m
 }
 
 func shelfPopupModel() Model {
 	m := Model{width: 80, height: 24, sel: map[panel]int{}, sortModes: map[panel]sortMode{}}
-	m = m.pushOverlay(newShelfPopup([]model.ShelfEntry{{ID: "s1"}}))
+	m = m.pushLayer(newShelfPopup([]model.ShelfEntry{{ID: "s1"}}))
 	return m
 }
 
@@ -68,16 +68,16 @@ func TestQuestionMarkOpensCheatSheetOverBookmarkPopup(t *testing.T) {
 	m := bookmarkPopupModel()
 	u, _ := m.Update(keyMsg("?"))
 	m = u.(Model)
-	if overlayOf[*contentPopup](m) == nil {
+	if layerOf[*contentPopup](m) == nil {
 		t.Fatal("? must open the cheat sheet")
 	}
 	if m.bookmarkSwitcher() == nil {
 		t.Fatal("the bookmark switcher must stay open under the cheat sheet")
 	}
-	if !strings.Contains(overlayOf[*contentPopup](m).title, "Bookmark") {
-		t.Fatalf("cheat sheet title = %q, want the bookmark switcher", overlayOf[*contentPopup](m).title)
+	if !strings.Contains(layerOf[*contentPopup](m).title, "Bookmark") {
+		t.Fatalf("cheat sheet title = %q, want the bookmark switcher", layerOf[*contentPopup](m).title)
 	}
-	if !strings.Contains(helpJoin(overlayOf[*contentPopup](m).lines), "paste") {
+	if !strings.Contains(helpJoin(layerOf[*contentPopup](m).lines), "paste") {
 		t.Fatal("cheat sheet must list the bookmark switcher keys")
 	}
 }
@@ -86,11 +86,11 @@ func TestQuestionMarkOpensCheatSheetOverShelfPopup(t *testing.T) {
 	m := shelfPopupModel()
 	u, _ := m.Update(keyMsg("?"))
 	m = u.(Model)
-	if overlayOf[*contentPopup](m) == nil || m.shelfSwitcher() == nil {
+	if layerOf[*contentPopup](m) == nil || m.shelfSwitcher() == nil {
 		t.Fatal("? must open the cheat sheet and keep the shelf switcher open")
 	}
-	if !strings.Contains(overlayOf[*contentPopup](m).title, "Shelf") {
-		t.Fatalf("cheat sheet title = %q, want the shelf switcher", overlayOf[*contentPopup](m).title)
+	if !strings.Contains(layerOf[*contentPopup](m).title, "Shelf") {
+		t.Fatalf("cheat sheet title = %q, want the shelf switcher", layerOf[*contentPopup](m).title)
 	}
 }
 
@@ -102,7 +102,7 @@ func TestCheatSheetCapturesKeysOverPicker(t *testing.T) {
 	m = u.(Model)
 	u, _ = m.Update(keyMsg("/")) // / must start the cheat sheet's search, not the bookmark filter
 	m = u.(Model)
-	if !overlayOf[*contentPopup](m).typing {
+	if !layerOf[*contentPopup](m).typing {
 		t.Fatal("/ must start the cheat sheet search (keys route to the overlay)")
 	}
 	if m.bookmarkSwitcher().filtering {
@@ -120,7 +120,7 @@ func TestCheatSheetEscReturnsToPicker(t *testing.T) {
 	m = u.(Model)
 	u, _ = m.Update(keyMsg("esc"))
 	m = u.(Model)
-	if overlayOf[*contentPopup](m) != nil {
+	if layerOf[*contentPopup](m) != nil {
 		t.Fatal("esc must close the cheat sheet")
 	}
 	if m.bookmarkSwitcher() == nil {

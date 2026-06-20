@@ -15,7 +15,7 @@ import (
 
 func bmPopupModel(items ...model.Bookmark) Model {
 	m := footerModel()
-	m = m.pushOverlay(newBookmarkPopup(items))
+	m = m.pushLayer(newBookmarkPopup(items))
 	return m
 }
 
@@ -77,7 +77,7 @@ func TestBookmarkFilterModeTypesNotActs(t *testing.T) {
 
 func TestBookmarkPasteEnterStartsWrite(t *testing.T) {
 	m := footerModel()
-	m = m.pushOverlay(&bookmarkPastePopup{origin: "a.go", data: []byte("x")})
+	m = m.pushLayer(&bookmarkPastePopup{origin: "a.go", data: []byte("x")})
 	// Empty dest is a no-op (popup stays open).
 	mm, _ := m.Update(keyMsg("enter"))
 	m = mm.(Model)
@@ -252,7 +252,7 @@ func TestFocusedBookmarkHistoryUsesSelectedRow(t *testing.T) {
 		{Commit: model.Commit{Hash: "bbbb2222"}, Path: "renamed.go"},
 	}
 	h.sel = 1
-	m = m.pushSurface(h)
+	m = m.pushLayer(h)
 	b, ok := m.focusedBookmark()
 	if !ok || b.State != model.StateCommitted || b.Commit != "bbbb2222" || b.Path != "renamed.go" {
 		t.Fatalf("history focusedBookmark = %+v ok=%v; want committed bbbb2222 renamed.go", b, ok)
@@ -281,7 +281,7 @@ func TestFocusedBookmarkBlameWorkingTree(t *testing.T) {
 	m := footerModel()
 	m.currentWorktree = "/wt"
 	m.status.Branch = "main"
-	m = m.pushSurface(&blameView{ctx: navContext{path: "a.go", rev: ""}}) // working-tree blame
+	m = m.pushLayer(&blameView{ctx: navContext{path: "a.go", rev: ""}}) // working-tree blame
 	b, ok := m.focusedBookmark()
 	if !ok || b.State != model.StateUnstaged || b.Worktree != "/wt" || b.Branch != "main" || b.Path != "a.go" {
 		t.Fatalf("working-tree blame focusedBookmark = %+v ok=%v; want unstaged a.go @ /wt", b, ok)
@@ -289,7 +289,7 @@ func TestFocusedBookmarkBlameWorkingTree(t *testing.T) {
 }
 
 func TestFocusedBookmarkBlameCommitted(t *testing.T) {
-	m := footerModel().pushSurface(&blameView{ctx: navContext{path: "a.go", rev: "abc1234def"}})
+	m := footerModel().pushLayer(&blameView{ctx: navContext{path: "a.go", rev: "abc1234def"}})
 	b, ok := m.focusedBookmark()
 	if !ok || b.State != model.StateCommitted || b.Commit != "abc1234def" || b.Path != "a.go" {
 		t.Fatalf("committed blame focusedBookmark = %+v ok=%v; want committed abc1234def a.go", b, ok)

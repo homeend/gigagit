@@ -34,7 +34,7 @@ func TestHistoryRenderListsCommits(t *testing.T) {
 func TestHistoryDownMovesSelectionAndReloads(t *testing.T) {
 	m := Model{width: 100, height: 30}
 	h := histFixture()
-	m = m.pushSurface(h)
+	m = m.pushLayer(h)
 	_, cmd := h.update(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
 	if h.sel != 1 {
 		t.Fatalf("j should move selection to 1, got %d", h.sel)
@@ -47,9 +47,9 @@ func TestHistoryDownMovesSelectionAndReloads(t *testing.T) {
 func TestHistoryEscPops(t *testing.T) {
 	m := Model{width: 100, height: 30}
 	h := histFixture()
-	m = m.pushSurface(h)
+	m = m.pushLayer(h)
 	m, _ = h.update(m, tea.KeyMsg{Type: tea.KeyEsc})
-	if m.stackTop() != nil {
+	if m.topLayer() != nil {
 		t.Fatal("esc should pop the history surface")
 	}
 }
@@ -67,9 +67,9 @@ func TestHistoryBlameUsesHistoricalPath(t *testing.T) {
 		},
 		sel: 1, // the pre-rename commit, where the file was "timing.log"
 	}
-	m = m.pushSurface(h)
+	m = m.pushLayer(h)
 	m, _ = h.update(m, keyMsg("b"))
-	bv, ok := m.stackTop().(*blameView)
+	bv, ok := m.topLayer().(*blameView)
 	if !ok {
 		t.Fatal("b should push a blameView")
 	}
@@ -85,12 +85,12 @@ func TestHistoryBlameUsesHistoricalPath(t *testing.T) {
 func TestHistoryQInert(t *testing.T) {
 	m := Model{width: 100, height: 30}
 	h := histFixture()
-	m = m.pushSurface(h)
+	m = m.pushLayer(h)
 	m, cmd := h.update(m, keyMsg("q"))
 	if cmd != nil {
 		t.Fatal("q must not quit from the history view (inert)")
 	}
-	if m.stackTop() == nil {
+	if m.topLayer() == nil {
 		t.Fatal("q must leave the history surface on the stack")
 	}
 }
@@ -100,7 +100,7 @@ func TestStatusHOpensHistory(t *testing.T) {
 	m.status = model.WorkingTreeStatus{Files: []model.FileStatus{{Path: "a.go", Unstaged: 'M'}}}
 	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("h")})
 	got := mm.(Model)
-	h, ok := got.stackTop().(*historyView)
+	h, ok := got.topLayer().(*historyView)
 	if !ok {
 		t.Fatal("h on a Status file should push a historyView")
 	}
@@ -114,7 +114,7 @@ func TestStagedHOpensHistory(t *testing.T) {
 	m.status = model.WorkingTreeStatus{Files: []model.FileStatus{{Path: "a.go", Staged: 'M'}}}
 	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("h")})
 	got := mm.(Model)
-	h, ok := got.stackTop().(*historyView)
+	h, ok := got.topLayer().(*historyView)
 	if !ok {
 		t.Fatal("h on a Staged file should push a historyView")
 	}
@@ -129,7 +129,7 @@ func TestFilesViewHOpensHistory(t *testing.T) {
 	m.filesTreeFocused = true
 	m.filesHash = "abc123"
 	mm, _ := m.updateFilesViewKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("h")})
-	h, ok := mm.(Model).stackTop().(*historyView)
+	h, ok := mm.(Model).topLayer().(*historyView)
 	if !ok {
 		t.Fatal("h on a files-view row should push a historyView")
 	}
@@ -142,7 +142,7 @@ func TestDiffViewHOpensHistory(t *testing.T) {
 	m := Model{width: 100, height: 30}
 	m.diffView = &diffView{title: "a.go", rev: "abc123"}
 	mm, _ := m.updateDiffViewKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("h")})
-	h, ok := mm.(Model).stackTop().(*historyView)
+	h, ok := mm.(Model).topLayer().(*historyView)
 	if !ok {
 		t.Fatal("h in the diff view should push a historyView")
 	}

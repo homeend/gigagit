@@ -23,7 +23,7 @@ func TestCKeyCommitsStagedIndex(t *testing.T) {
 	m = loaded.(Model)
 
 	m = pressRune(t, m, "c")
-	if overlayOf[*commitPopup](m) == nil {
+	if layerOf[*commitPopup](m) == nil {
 		t.Fatal("c must open the commit popup when something is staged")
 	}
 	// type a title through the real dispatch (routes to the popup)
@@ -31,7 +31,7 @@ func TestCKeyCommitsStagedIndex(t *testing.T) {
 	m = upd.(Model)
 	upd, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlS})
 	m = upd.(Model)
-	if overlayOf[*commitPopup](m) != nil {
+	if layerOf[*commitPopup](m) != nil {
 		t.Fatal("ctrl+s must close the popup and start the commit")
 	}
 	m = driveOp(t, m, cmd)
@@ -48,7 +48,7 @@ func TestCKeyNoOpWhenNothingStaged(t *testing.T) {
 	loaded, _ := m.Update(m.loadCmd()())
 	m = loaded.(Model)
 	m = pressRune(t, m, "c")
-	if overlayOf[*commitPopup](m) != nil {
+	if layerOf[*commitPopup](m) != nil {
 		t.Fatal("c must not open the popup when nothing is staged")
 	}
 }
@@ -65,19 +65,19 @@ func TestCommitPopupSwallowsGlobalKeys(t *testing.T) {
 	m = loaded.(Model)
 
 	m = pressRune(t, m, "c")
-	if overlayOf[*commitPopup](m) == nil {
+	if layerOf[*commitPopup](m) == nil {
 		t.Fatal("c must open the commit popup")
 	}
 	upd, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("p")})
 	m = upd.(Model)
-	if overlayOf[*commitPopup](m) == nil {
+	if layerOf[*commitPopup](m) == nil {
 		t.Fatal("a global key must not close the popup")
 	}
 	if m.running {
 		t.Fatal("a global key must not start an op while the popup is open")
 	}
-	if overlayOf[*commitPopup](m).title != "p" {
-		t.Fatalf("global key should type into the field: title = %q", overlayOf[*commitPopup](m).title)
+	if layerOf[*commitPopup](m).title != "p" {
+		t.Fatalf("global key should type into the field: title = %q", layerOf[*commitPopup](m).title)
 	}
 }
 
@@ -114,7 +114,7 @@ func TestCapCKeyAmendsLastCommit(t *testing.T) {
 	}
 	upd, _ = m.Update(cmd())
 	m = upd.(Model)
-	p := overlayOf[*commitPopup](m)
+	p := layerOf[*commitPopup](m)
 	if p == nil || !p.amend {
 		t.Fatal("amend prefill must open the popup in amend mode")
 	}
@@ -127,7 +127,7 @@ func TestCapCKeyAmendsLastCommit(t *testing.T) {
 	m = upd.(Model)
 	upd, opcmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlS})
 	m = upd.(Model)
-	if overlayOf[*commitPopup](m) != nil {
+	if layerOf[*commitPopup](m) != nil {
 		t.Fatal("ctrl+s must close the popup and start the amend")
 	}
 	m = driveOp(t, m, opcmd)

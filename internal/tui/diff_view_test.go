@@ -424,7 +424,7 @@ func TestDiffViewSwallowsActionKeys(t *testing.T) {
 	for _, k := range []string{"p", "P", "s", "S", "u", "d", "w", "m", "l", "R", ",", "/", "?", "tab", "enter"} {
 		u, cmd := m.Update(keyMsg(k))
 		mm := u.(Model)
-		if cmd != nil || mm.running || overlayOf[*worktreePopup](mm) != nil || overlayOf[*contentPopup](mm) != nil || mm.filesView != nil || mm.filterTyping || mm.mark != nil {
+		if cmd != nil || mm.running || layerOf[*worktreePopup](mm) != nil || layerOf[*contentPopup](mm) != nil || mm.filesView != nil || mm.filterTyping || mm.mark != nil {
 			t.Fatalf("key %q leaked through the diff view", k)
 		}
 	}

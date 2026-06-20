@@ -208,7 +208,7 @@ func (p *bookmarkPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	}
 	switch msg.Type {
 	case tea.KeyEsc:
-		m = m.popOverlay()
+		m = m.popLayer()
 	case tea.KeyEnter:
 		if p.compareRef != nil {
 			b, ok := p.selected()
@@ -227,7 +227,7 @@ func (p *bookmarkPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		case "?":
 			// Open the compact cheat sheet over the still-open switcher; esc
 			// closes it and returns here (contentPopup's esc just nils itself).
-			m = m.pushOverlay(newContentPopup(bookmarkSwitcherHelpTitle, bookmarkSwitcherHelp(p.compareRef != nil)))
+			m = m.pushLayer(newContentPopup(bookmarkSwitcherHelpTitle, bookmarkSwitcherHelp(p.compareRef != nil)))
 			return m, nil
 		case "/":
 			p.filtering = true
@@ -331,7 +331,7 @@ func (m Model) bookmarkPastePrompt() (Model, tea.Cmd) {
 		return m, nil
 	}
 	// Push over the switcher (which stays beneath); esc/success returns to it.
-	return m.pushOverlay(&bookmarkPastePopup{origin: b.Path, data: data, dest: restoredPath(b.Path)}), nil
+	return m.pushLayer(&bookmarkPastePopup{origin: b.Path, data: data, dest: restoredPath(b.Path)}), nil
 }
 
 // bookmarkMark records the first compare mark, or compares with it on the second
@@ -379,8 +379,8 @@ func (m Model) openBookmarkCompareTwo(aID, bID string) (Model, tea.Cmd) {
 // even when the popup was opened over a history/blame surface. Shared by jump,
 // compare-two, and the compare-focused-vs-X paths.
 func (m Model) openPickerDiff(v *diffView, tag string, load tea.Cmd) (Model, tea.Cmd) {
-	m = m.clearOverlays()
-	m = m.clearStack()
+	m = m.clearLayers()
+	m = m.clearLayers()
 	m.diffView = v
 	m.diffTag = tag
 	return m, load
@@ -414,14 +414,14 @@ func (p *bookmarkPastePopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	}
 	switch msg.Type {
 	case tea.KeyEsc:
-		m = m.popOverlay() // back to the switcher beneath
+		m = m.popLayer() // back to the switcher beneath
 	case tea.KeyEnter:
 		dest := strings.TrimSpace(p.dest)
 		if dest == "" {
 			return m, nil // a destination is mandatory
 		}
 		data := p.data
-		m = m.popOverlay() // back to the switcher; it stays visible during the write
+		m = m.popLayer() // back to the switcher; it stays visible during the write
 		return m.startOp(engine.WriteFile{Path: dest, Data: data})
 	case tea.KeyBackspace, tea.KeyCtrlH:
 		if r := []rune(p.dest); len(r) > 0 {

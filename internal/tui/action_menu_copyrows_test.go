@@ -29,8 +29,8 @@ func TestInContentWindowTrueCases(t *testing.T) {
 		"diffView":  func(m Model) Model { m.diffView = &diffView{title: "a.go"}; return m },
 		"filesView": func(m Model) Model { m.filesView = &contentPopup{}; return m },
 		"stashView": func(m Model) Model { m.stashView = &stashView{}; m.focus = panelCommits; return m },
-		"history":   func(m Model) Model { return m.pushSurface(newHistoryView(navContext{path: "a.go"})) },
-		"blame":     func(m Model) Model { return m.pushSurface(newBlameView(navContext{path: "a.go"})) },
+		"history":   func(m Model) Model { return m.pushLayer(newHistoryView(navContext{path: "a.go"})) },
+		"blame":     func(m Model) Model { return m.pushLayer(newBlameView(navContext{path: "a.go"})) },
 	}
 	for name, setup := range cases {
 		m := setup(footerModel())
@@ -44,11 +44,11 @@ func TestInContentWindowFalseCases(t *testing.T) {
 	if footerModel().inContentWindow() {
 		t.Error("base panel layout: inContentWindow() = true, want false")
 	}
-	ire := footerModel().pushSurface(newIrebaseEditor("feat", "main", nil, "gg"))
+	ire := footerModel().pushLayer(newIrebaseEditor("feat", "main", nil, "gg"))
 	if ire.inContentWindow() {
 		t.Error("irebase editor is a transient editor, not a content window")
 	}
-	hp := footerModel().pushSurface(newStagePicker("f.txt", &hunkpick.Doc{}))
+	hp := footerModel().pushLayer(newStagePicker("f.txt", &hunkpick.Doc{}))
 	if hp.inContentWindow() {
 		t.Error("hunk picker is a transient editor, not a content window")
 	}
@@ -82,7 +82,7 @@ func TestContextCopyRowsDiffViewWorkingTree(t *testing.T) {
 }
 
 func TestContextCopyRowsHistory(t *testing.T) {
-	m := footerModel().pushSurface(newHistoryView(navContext{path: "x/y.go", rev: "abc123"}))
+	m := footerModel().pushLayer(newHistoryView(navContext{path: "x/y.go", rev: "abc123"}))
 	rows := m.contextCopyRows()
 	got := ids(rows)
 	if !got["copy-file-path"] || !got["copy-file-name"] || !got["copy-commit-id"] {
@@ -140,7 +140,7 @@ func TestContextCopyRowsStashList(t *testing.T) {
 func TestContextCopyRowsStackBeatsDiffView(t *testing.T) {
 	m := footerModel()
 	m.diffView = &diffView{title: "old/a.go", rev: "aaaa1111"}
-	m = m.pushSurface(newBlameView(navContext{path: "new/b.go", rev: "bbbb2222"}))
+	m = m.pushLayer(newBlameView(navContext{path: "new/b.go", rev: "bbbb2222"}))
 	rows := m.contextCopyRows()
 	if r, _ := findRow(rows, "copy-file-path"); r.copyText != "new/b.go" {
 		t.Errorf("path copyText = %q, want the top (blame) surface's path new/b.go", r.copyText)

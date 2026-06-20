@@ -21,7 +21,7 @@ func TestMenuRendersOverDiffView(t *testing.T) {
 func TestMenuRendersOverHistory(t *testing.T) {
 	m := footerModel()
 	m.loading = false
-	m = m.pushSurface(newHistoryView(navContext{path: "a.go", rev: "abc"}))
+	m = m.pushLayer(newHistoryView(navContext{path: "a.go", rev: "abc"}))
 	m = m.openActionMenu()
 	out := ansi.Strip(m.View())
 	if !strings.Contains(out, "Actions") {

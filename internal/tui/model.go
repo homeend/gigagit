@@ -249,7 +249,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if existing := m.shelfSwitcher(); existing != nil {
 				*existing = *p // reopen after a remove: refresh the live switcher in place
 			} else {
-				m = m.pushOverlay(p)
+				m = m.pushLayer(p)
 			}
 		}
 		return m, nil
@@ -283,7 +283,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			*existing = *p // reopen after a remove: refresh the live switcher in place
 			return m, nil
 		}
-		return m.pushOverlay(p), nil
+		return m.pushLayer(p), nil
 	case dataLoadedMsg:
 		if msg.gen != m.loadGen {
 			return m, nil // superseded by a newer load
@@ -487,7 +487,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m.startOp(engine.SmartCheckout{RemoteRef: rb.Name, Local: rb.Branch, Intent: engine.CheckoutStay})
 			}
 			if m.canCommit() {
-				m = m.pushOverlay(&commitPopup{})
+				m = m.pushLayer(&commitPopup{})
 			}
 		case "C":
 			if m.canAmend() {
@@ -589,7 +589,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				f := m.status.Files[bi]
 				ctx := navContext{path: f.Path, rev: ""}
 				bv := newBlameView(ctx)
-				m = m.pushSurface(bv)
+				m = m.pushLayer(bv)
 				return m, m.loadBlameCmd(ctx, bv.tag)
 			}
 		case "B":
@@ -683,7 +683,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				f := m.status.Files[bi]
 				ctx := navContext{path: f.Path, rev: ""}
 				h := newHistoryView(ctx)
-				m = m.pushSurface(h)
+				m = m.pushLayer(h)
 				return m, m.loadHistoryListCmd(ctx, h.listTag)
 			}
 		case "tab":
@@ -771,7 +771,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// returns earlier); the menu lists whatever is currently available.
 			return m.openActionMenu(), nil
 		case "?":
-			m = m.pushOverlay(newContentPopup("Help — keys", helpContent()))
+			m = m.pushLayer(newContentPopup("Help — keys", helpContent()))
 		case "l":
 			if m.focus == panelCommits && m.canShowCommitFiles() {
 				if m.width > 0 && m.width < 40 {
@@ -929,7 +929,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		title, desc := splitMessage(msg.msg)
-		m = m.pushOverlay(&commitPopup{title: title, desc: desc, amend: true})
+		m = m.pushLayer(&commitPopup{title: title, desc: desc, amend: true})
 		return m, nil
 
 	case inProgressMsg:
@@ -956,7 +956,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMsg = "interactive rebase: " + err.Error()
 			return m, nil
 		}
-		m = m.pushSurface(newIrebaseEditor(msg.branch, msg.onto, msg.commits, ggBin))
+		m = m.pushLayer(newIrebaseEditor(msg.branch, msg.onto, msg.commits, ggBin))
 		return m, nil
 
 	case conflictFileLoadedMsg:
@@ -988,7 +988,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cp.st = confPicking
 			return m, nil
 		}
-		m = m.pushSurface(newConflictPicker(msg.path, doc))
+		m = m.pushLayer(newConflictPicker(msg.path, doc))
 		return m, nil
 
 	case stageHunksLoadedMsg:
@@ -1006,7 +1006,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMsg = "stage hunks: nothing to stage"
 			return m, nil
 		}
-		m = m.pushSurface(newStagePicker(msg.path, doc))
+		m = m.pushLayer(newStagePicker(msg.path, doc))
 		return m, nil
 
 	case clipboardCopiedMsg:

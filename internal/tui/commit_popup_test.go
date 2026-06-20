@@ -30,45 +30,45 @@ func TestSplitMessage(t *testing.T) {
 
 func TestCommitPopupTypingAndFieldSwitch(t *testing.T) {
 	m := Model{sel: map[panel]int{}}
-	m = m.pushOverlay(&commitPopup{})
+	m = m.pushLayer(&commitPopup{})
 	tm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("hi")})
 	m = tm.(Model)
-	if overlayOf[*commitPopup](m).title != "hi" {
-		t.Fatalf("title = %q", overlayOf[*commitPopup](m).title)
+	if layerOf[*commitPopup](m).title != "hi" {
+		t.Fatalf("title = %q", layerOf[*commitPopup](m).title)
 	}
 	tm, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // title → description
 	m = tm.(Model)
-	if overlayOf[*commitPopup](m).field != 1 {
+	if layerOf[*commitPopup](m).field != 1 {
 		t.Fatal("enter in title must move to description")
 	}
 	tm, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("body")})
 	m = tm.(Model)
 	tm, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // newline in description
 	m = tm.(Model)
-	if overlayOf[*commitPopup](m).desc != "body\n" {
-		t.Fatalf("desc = %q, want \"body\\n\"", overlayOf[*commitPopup](m).desc)
+	if layerOf[*commitPopup](m).desc != "body\n" {
+		t.Fatalf("desc = %q, want \"body\\n\"", layerOf[*commitPopup](m).desc)
 	}
 	tm, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab}) // back to title
 	m = tm.(Model)
-	if overlayOf[*commitPopup](m).field != 0 {
+	if layerOf[*commitPopup](m).field != 0 {
 		t.Fatal("tab must switch field")
 	}
 	tm, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	m = tm.(Model)
-	if overlayOf[*commitPopup](m) != nil {
+	if layerOf[*commitPopup](m) != nil {
 		t.Fatal("esc must close the popup")
 	}
 }
 
 func TestCommitPopupEmptyTitleRefused(t *testing.T) {
 	m := Model{sel: map[panel]int{}}
-	m = m.pushOverlay(&commitPopup{})
+	m = m.pushLayer(&commitPopup{})
 	tm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlS})
 	m = tm.(Model)
 	if cmd != nil {
 		t.Fatal("ctrl+s with an empty title must not start a commit")
 	}
-	if overlayOf[*commitPopup](m) == nil {
+	if layerOf[*commitPopup](m) == nil {
 		t.Fatal("empty-title submit must keep the popup open")
 	}
 }

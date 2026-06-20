@@ -36,7 +36,7 @@ func (m Model) openRewordPopup() (Model, bool) {
 		msg = full
 	}
 	t, d := splitMessage(msg)
-	m = m.pushOverlay(&rewordPopup{commit: c.Hash, ggBin: ggBin, popup: commitPopup{title: t, desc: d}})
+	m = m.pushLayer(&rewordPopup{commit: c.Hash, ggBin: ggBin, popup: commitPopup{title: t, desc: d}})
 	return m, true
 }
 
@@ -67,14 +67,14 @@ func (p *rewordPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	submit, cancel := p.popup.applyEditKey(msg)
 	switch {
 	case cancel:
-		m = m.popOverlay()
+		m = m.popLayer()
 	case submit:
 		if strings.TrimSpace(p.popup.title) == "" {
 			m.statusMsg = "title required"
 			return m, nil
 		}
 		op := engine.Reword{Commit: p.commit, NewMsg: p.popup.message(), GGBin: p.ggBin}
-		m = m.popOverlay()
+		m = m.popLayer()
 		return m.startOp(op)
 	}
 	return m, nil

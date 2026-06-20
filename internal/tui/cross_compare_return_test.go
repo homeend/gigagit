@@ -27,9 +27,9 @@ func TestBookmarkCompareShelfEscReturnsToBookmark(t *testing.T) {
 	// The shelf load completes → the shelf popup is pushed in compare mode.
 	u, _ = m.Update(shelfLoadedMsg{entries: []model.ShelfEntry{{ID: "s1"}}, open: true})
 	m = u.(Model)
-	sp, ok := m.overlayTop().(*shelfPopup)
+	sp, ok := m.topLayer().(*shelfPopup)
 	if !ok {
-		t.Fatalf("shelf load must push the shelf popup on top, got %T", m.overlayTop())
+		t.Fatalf("shelf load must push the shelf popup on top, got %T", m.topLayer())
 	}
 	if sp.compareRef == nil {
 		t.Fatal("the shelf popup must be in compare mode")
@@ -38,8 +38,8 @@ func TestBookmarkCompareShelfEscReturnsToBookmark(t *testing.T) {
 	// esc the shelf popup → back to the bookmark switcher beneath.
 	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	m = u.(Model)
-	if _, ok := m.overlayTop().(*bookmarkPopup); !ok {
-		t.Fatalf("esc in the compare-shelf popup must return to the bookmark switcher, got %T", m.overlayTop())
+	if _, ok := m.topLayer().(*bookmarkPopup); !ok {
+		t.Fatalf("esc in the compare-shelf popup must return to the bookmark switcher, got %T", m.topLayer())
 	}
 }
 
@@ -56,9 +56,9 @@ func TestShelfCompareBookmarkEscReturnsToShelf(t *testing.T) {
 	// The bookmark load completes → the bookmark popup is pushed in compare mode.
 	u, _ = m.Update(bookmarksLoadedMsg{items: []model.Bookmark{{ID: "b1", State: model.StateUnstaged, Path: "x.go"}}})
 	m = u.(Model)
-	bp, ok := m.overlayTop().(*bookmarkPopup)
+	bp, ok := m.topLayer().(*bookmarkPopup)
 	if !ok {
-		t.Fatalf("bookmark load must push the bookmark popup on top, got %T", m.overlayTop())
+		t.Fatalf("bookmark load must push the bookmark popup on top, got %T", m.topLayer())
 	}
 	if bp.compareRef == nil {
 		t.Fatal("the bookmark popup must be in compare mode")
@@ -67,7 +67,7 @@ func TestShelfCompareBookmarkEscReturnsToShelf(t *testing.T) {
 	// esc the bookmark popup → back to the shelf switcher beneath.
 	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	m = u.(Model)
-	if _, ok := m.overlayTop().(*shelfPopup); !ok {
-		t.Fatalf("esc in the compare-bookmark popup must return to the shelf switcher, got %T", m.overlayTop())
+	if _, ok := m.topLayer().(*shelfPopup); !ok {
+		t.Fatalf("esc in the compare-bookmark popup must return to the shelf switcher, got %T", m.topLayer())
 	}
 }

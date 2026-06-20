@@ -9,19 +9,19 @@ import (
 
 func pairModel() Model {
 	m := Model{width: 100, height: 30}
-	m = m.pushOverlay(&pairOpPopup{marked: "feat/x", selected: "main", ops: pairOpsFor(panelBranches)})
+	m = m.pushLayer(&pairOpPopup{marked: "feat/x", selected: "main", ops: pairOpsFor(panelBranches)})
 	return m
 }
 
 func TestPairOpPopupZCyclesMode(t *testing.T) {
 	m := pairModel()
-	p := overlayOf[*pairOpPopup](m)
+	p := layerOf[*pairOpPopup](m)
 	if p.mode != modeCutoff {
 		t.Fatalf("default mode = %v, want modeCutoff", p.mode)
 	}
 	u, _ := m.Update(keyMsg("z"))
 	mm := u.(Model)
-	pp := overlayOf[*pairOpPopup](mm)
+	pp := layerOf[*pairOpPopup](mm)
 	if pp.mode != modeWrap {
 		t.Fatalf("after z, mode = %v, want modeWrap", pp.mode)
 	}
@@ -29,7 +29,7 @@ func TestPairOpPopupZCyclesMode(t *testing.T) {
 
 func TestPairOpPopupRendersOps(t *testing.T) {
 	m := pairModel()
-	p := overlayOf[*pairOpPopup](m)
+	p := layerOf[*pairOpPopup](m)
 	out := ansi.Strip(p.box(m))
 	if !strings.Contains(out, "feat/x + main") {
 		t.Fatalf("header missing:\n%s", out)

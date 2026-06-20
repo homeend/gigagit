@@ -11,7 +11,7 @@ func TestStashEnterOpensActions(t *testing.T) {
 	m.stashView = &stashView{entries: []model.StashEntry{{Ref: "stash@{0}", Subject: "WIP"}}}
 	mm, _ := m.updateStashViewKey(keyMsg("enter"))
 	got := mm.(Model)
-	a := overlayOf[*stashActionPopup](got)
+	a := layerOf[*stashActionPopup](got)
 	if a == nil {
 		t.Fatal("enter should open the stash-action popup")
 	}
@@ -23,9 +23,9 @@ func TestStashEnterOpensActions(t *testing.T) {
 func TestStashActionZCyclesMode(t *testing.T) {
 	m := Model{width: 100, height: 30}
 	a := &stashActionPopup{ref: "stash@{0}", subject: "WIP"}
-	m = m.pushOverlay(a)
+	m = m.pushLayer(a)
 	got, _ := a.update(m, keyMsg("z"))
-	a2 := overlayOf[*stashActionPopup](got)
+	a2 := layerOf[*stashActionPopup](got)
 	if a2 == nil || a2.mode != modeWrap {
 		t.Fatalf("z should cycle the stash-action mode to modeWrap; got %+v", a2)
 	}
@@ -34,9 +34,9 @@ func TestStashActionZCyclesMode(t *testing.T) {
 func TestStashActionApplyDispatches(t *testing.T) {
 	m := loadedModel(t)
 	a := &stashActionPopup{ref: "stash@{0}", sel: 0} // 0 = Apply
-	m = m.pushOverlay(a)
+	m = m.pushLayer(a)
 	got, cmd := a.update(m, keyMsg("enter"))
-	if overlayOf[*stashActionPopup](got) != nil {
+	if layerOf[*stashActionPopup](got) != nil {
 		t.Error("apply should close the popup")
 	}
 	if !got.running || cmd == nil {
@@ -48,14 +48,14 @@ func TestStashActionApplyDispatches(t *testing.T) {
 func TestStashActionDropConfirms(t *testing.T) {
 	m := loadedModel(t)
 	a := &stashActionPopup{ref: "stash@{0}", sel: 2} // 2 = Drop
-	m = m.pushOverlay(a)
+	m = m.pushLayer(a)
 	got, _ := a.update(m, keyMsg("enter"))
-	a2 := overlayOf[*stashActionPopup](got)
+	a2 := layerOf[*stashActionPopup](got)
 	if a2 == nil || !a2.confirming {
 		t.Fatal("drop should enter a confirm state, not run immediately")
 	}
 	got2, cmd := a2.update(got, keyMsg("y"))
-	if overlayOf[*stashActionPopup](got2) != nil || !got2.running {
+	if layerOf[*stashActionPopup](got2) != nil || !got2.running {
 		t.Error("y should confirm drop and run the op")
 	}
 	_ = driveOp(t, got2, cmd)

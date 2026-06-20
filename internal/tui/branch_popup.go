@@ -22,7 +22,7 @@ func (m Model) openBranchPopup(switchAfter bool) (Model, bool) {
 	if !ok {
 		return m, false
 	}
-	m = m.pushOverlay(&branchPopup{startPoint: m.branches[bi].Name, switchAfter: switchAfter})
+	m = m.pushLayer(&branchPopup{startPoint: m.branches[bi].Name, switchAfter: switchAfter})
 	return m, true
 }
 
@@ -34,7 +34,7 @@ func (p *branchPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	}
 	switch msg.Type {
 	case tea.KeyEsc:
-		m = m.popOverlay()
+		m = m.popLayer()
 	case tea.KeyEnter:
 		if p.name == "" {
 			return m, nil
@@ -43,7 +43,7 @@ func (p *branchPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		if p.switchAfter {
 			m.pendingSwitchBranch = p.name
 		}
-		m = m.popOverlay()
+		m = m.popLayer()
 		return m.startOp(op)
 	case tea.KeyBackspace, tea.KeyCtrlH:
 		if r := []rune(p.name); len(r) > 0 {

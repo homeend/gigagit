@@ -116,7 +116,7 @@ func availableActions(m Model) []actionRow {
 // only that window's copy actions. Transient stack editors (interactive-rebase
 // editor, hunk picker) are NOT content windows.
 func (m Model) inContentWindow() bool {
-	switch m.stackTop().(type) {
+	switch m.topLayer().(type) {
 	case *historyView, *blameView:
 		return true
 	}
@@ -137,7 +137,7 @@ func (m Model) contextCopyRows() []actionRow {
 	// Precedence mirrors the dispatch/render chain: the stack surface out-ranks
 	// the diff view (open a diff, then h/b, and both are live with the stack
 	// surface on top), which out-ranks the file tree.
-	switch s := m.stackTop().(type) {
+	switch s := m.topLayer().(type) {
 	case *historyView:
 		if s.sel >= 0 && s.sel < len(s.commits) {
 			fc := s.commits[s.sel]

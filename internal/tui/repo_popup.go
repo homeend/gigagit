@@ -30,7 +30,7 @@ func (m Model) openRepoPopup() (Model, bool) {
 		m.statusMsg = "no known repositories yet (gg records them as you open repos)"
 		return m, false
 	}
-	m = m.pushOverlay(&repoPopup{entries: entries, now: time.Now()})
+	m = m.pushLayer(&repoPopup{entries: entries, now: time.Now()})
 	return m, true
 }
 
@@ -77,7 +77,7 @@ func (p *repoPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case tea.KeyCtrlC:
 		return m, tea.Quit
 	case tea.KeyEsc:
-		m = m.popOverlay()
+		m = m.popLayer()
 		return m, nil
 	case tea.KeyUp:
 		if p.sel > 0 {
@@ -91,7 +91,7 @@ func (p *repoPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, nil
 	case tea.KeyEnter:
 		vis := p.visible()
-		m = m.popOverlay()
+		m = m.popLayer()
 		if p.sel < 0 || p.sel >= len(vis) {
 			return m, nil
 		}

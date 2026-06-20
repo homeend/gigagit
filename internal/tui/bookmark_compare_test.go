@@ -49,7 +49,7 @@ func TestPendingCompareSurvivesLoad(t *testing.T) {
 
 func TestCompareModeEnterRunsCompare(t *testing.T) {
 	m := footerModel()
-	m = m.pushOverlay(newBookmarkPopup(twoBookmarkItems()))
+	m = m.pushLayer(newBookmarkPopup(twoBookmarkItems()))
 	ref := model.FileRef{Source: model.SourceCommit, Locator: "x", Path: "a.go"}
 	m.bookmarkSwitcher().compareRef = &ref
 	m.bookmarkSwitcher().compareLabel = "commit a.go"
@@ -65,7 +65,7 @@ func TestCompareModeEnterRunsCompare(t *testing.T) {
 
 func TestCompareModeMutatorsInert(t *testing.T) {
 	m := footerModel()
-	m = m.pushOverlay(newBookmarkPopup(twoBookmarkItems()))
+	m = m.pushLayer(newBookmarkPopup(twoBookmarkItems()))
 	ref := model.FileRef{Source: model.SourceCommit, Locator: "x", Path: "a.go"}
 	m.bookmarkSwitcher().compareRef = &ref
 	for _, k := range []string{"x", "p", "m"} {
@@ -98,17 +98,17 @@ func TestCompareRowRunSetsPendingAndLoads(t *testing.T) {
 }
 
 // Launched from a history/blame surface, the compare diff must paint over the
-// surface stack — render checks stackTop before diffView, so the popup→diff
-// handoff has to clear the stack.
+// layer stack — the diff is the base the stack walks over, so the popup→diff
+// handoff has to clear the layers first or they'd composite on top of the diff.
 func TestCompareDiffVisibleOverHistorySurface(t *testing.T) {
 	m := footerModel()
-	m = m.pushSurface(newHistoryView(navContext{path: "a.go", rev: "r"}))
-	m = m.pushOverlay(newBookmarkPopup(twoBookmarkItems()))
+	m = m.pushLayer(newHistoryView(navContext{path: "a.go", rev: "r"}))
+	m = m.pushLayer(newBookmarkPopup(twoBookmarkItems()))
 	ref := model.FileRef{Source: model.SourceCommit, Locator: "x", Path: "a.go"}
 	m.bookmarkSwitcher().compareRef = &ref
 	u, _ := m.Update(keyMsg("enter"))
 	mm := u.(Model)
-	if mm.stackTop() != nil {
+	if mm.topLayer() != nil {
 		t.Error("the history surface must be cleared so the diff owns the screen")
 	}
 	if !strings.Contains(mm.render(), "↔") {
@@ -128,7 +128,7 @@ func TestBookmarksLoadErrorClearsPendingCompare(t *testing.T) {
 func TestCompareRowAccompaniesAddRow(t *testing.T) {
 	// Wherever "Bookmark this file" appears, so must "Compare against bookmark".
 	m := footerModel()
-	m = m.pushSurface(newBlameView(navContext{path: "a.go", rev: "abc123"}))
+	m = m.pushLayer(newBlameView(navContext{path: "a.go", rev: "abc123"}))
 	got := ids(availableActions(m))
 	if !got["bookmark-add"] {
 		t.Fatal("precondition: bookmark-add expected in blame view")

@@ -23,7 +23,7 @@ func TestWOpensExistingModePopup(t *testing.T) {
 	m := modelWithConfig(t, "b/from-<parent-branch>", "../<repo>.worktrees/<branch>")
 	updated, _ := m.Update(keyMsg("w"))
 	mm := updated.(Model)
-	p := overlayOf[*worktreePopup](mm)
+	p := layerOf[*worktreePopup](mm)
 	if p == nil {
 		t.Fatal("w should open the worktree popup")
 	}
@@ -49,7 +49,7 @@ func TestExistingModeIgnoresBranchTemplateUserFields(t *testing.T) {
 	m := modelWithConfig(t, "<user:who>/x", "wt/<branch>")
 	updated, _ := m.Update(keyMsg("w"))
 	mm := updated.(Model)
-	p := overlayOf[*worktreePopup](mm)
+	p := layerOf[*worktreePopup](mm)
 	if len(p.labels) != 0 {
 		t.Fatalf("labels = %v, want none (branch template bypassed, path has no fields)", p.labels)
 	}
@@ -64,7 +64,7 @@ func TestExistingModeEditKeyInert(t *testing.T) {
 	m = updated.(Model)
 	updated, _ = m.Update(keyMsg("e"))
 	m = updated.(Model)
-	if overlayOf[*worktreePopup](m).state == stEdit {
+	if layerOf[*worktreePopup](m).state == stEdit {
 		t.Fatal("e must be inert in existing mode — the branch is the point")
 	}
 }
@@ -74,7 +74,7 @@ func TestExistingModeCreateOpAndSeqs(t *testing.T) {
 	updated, _ := m.Update(keyMsg("w"))
 	m = updated.(Model)
 
-	p := overlayOf[*worktreePopup](m)
+	p := layerOf[*worktreePopup](m)
 	op, ok := p.createOp().(engine.CreateWorktreeForBranch)
 	if !ok {
 		t.Fatalf("createOp = %T, want engine.CreateWorktreeForBranch", p.createOp())
@@ -106,7 +106,7 @@ func TestExistingModeEndToEnd(t *testing.T) {
 
 	updated, _ := m.Update(keyMsg("w"))
 	m = updated.(Model)
-	p := overlayOf[*worktreePopup](m)
+	p := layerOf[*worktreePopup](m)
 	if p == nil || !p.existing || p.startPoint != "feature/have" {
 		t.Fatalf("popup not in existing mode for feature/have: %+v", p)
 	}

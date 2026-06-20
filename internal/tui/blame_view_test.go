@@ -106,7 +106,7 @@ func TestBlameRenderGutterFirstLineOnly(t *testing.T) {
 func TestBlameDownMovesCursorClamped(t *testing.T) {
 	m := Model{width: 100, height: 30}
 	b := blameFixture()
-	m = m.pushSurface(b)
+	m = m.pushLayer(b)
 	for i := 0; i < 5; i++ {
 		m, _ = b.update(m, keyMsg("j"))
 	}
@@ -118,10 +118,10 @@ func TestBlameDownMovesCursorClamped(t *testing.T) {
 func TestBlameEnterOnCommitPushesHistory(t *testing.T) {
 	m := Model{width: 100, height: 30}
 	b := blameFixture()
-	m = m.pushSurface(b)
+	m = m.pushLayer(b)
 	b.sel = 0 // a committed block (aaaaaaa)
 	m, cmd := b.update(m, keyMsg("enter"))
-	h, ok := m.stackTop().(*historyView)
+	h, ok := m.topLayer().(*historyView)
 	if !ok {
 		t.Fatal("enter on a committed block should push a historyView")
 	}
@@ -136,10 +136,10 @@ func TestBlameEnterOnCommitPushesHistory(t *testing.T) {
 func TestBlameEnterOnUncommittedIsNoop(t *testing.T) {
 	m := Model{width: 100, height: 30}
 	b := blameFixture()
-	m = m.pushSurface(b)
+	m = m.pushLayer(b)
 	b.sel = 2 // the uncommitted block
 	m, _ = b.update(m, keyMsg("enter"))
-	if _, ok := m.stackTop().(*blameView); !ok {
+	if _, ok := m.topLayer().(*blameView); !ok {
 		t.Fatal("enter on an uncommitted block should be a no-op (stay on blame)")
 	}
 }
@@ -148,9 +148,9 @@ func TestBlameEscAndBPop(t *testing.T) {
 	for _, key := range []string{"esc", "b"} {
 		m := Model{width: 100, height: 30}
 		b := blameFixture()
-		m = m.pushSurface(b)
+		m = m.pushLayer(b)
 		m, _ = b.update(m, keyMsg(key))
-		if m.stackTop() != nil {
+		if m.topLayer() != nil {
 			t.Fatalf("%q should pop the blame surface", key)
 		}
 	}
@@ -160,12 +160,12 @@ func TestBlameEscAndBPop(t *testing.T) {
 func TestBlameQInert(t *testing.T) {
 	m := Model{width: 100, height: 30}
 	b := blameFixture()
-	m = m.pushSurface(b)
+	m = m.pushLayer(b)
 	m, cmd := b.update(m, keyMsg("q"))
 	if cmd != nil {
 		t.Fatal("q must not quit from the blame view (inert)")
 	}
-	if m.stackTop() == nil {
+	if m.topLayer() == nil {
 		t.Fatal("q must leave the blame surface on the stack")
 	}
 }
@@ -175,7 +175,7 @@ func TestStatusBOpensBlame(t *testing.T) {
 	m.status = model.WorkingTreeStatus{Files: []model.FileStatus{{Path: "a.go", Unstaged: 'M'}}}
 	mm, _ := m.Update(keyMsg("b"))
 	got := mm.(Model)
-	bv, ok := got.stackTop().(*blameView)
+	bv, ok := got.topLayer().(*blameView)
 	if !ok {
 		t.Fatal("b on a Status file should push a blameView")
 	}
@@ -190,7 +190,7 @@ func TestFilesViewBOpensBlame(t *testing.T) {
 	m.filesTreeFocused = true
 	m.filesHash = "abc123"
 	mm, _ := m.updateFilesViewKey(keyMsg("b"))
-	bv, ok := mm.(Model).stackTop().(*blameView)
+	bv, ok := mm.(Model).topLayer().(*blameView)
 	if !ok {
 		t.Fatal("b on a files-view row should push a blameView")
 	}
@@ -203,7 +203,7 @@ func TestDiffViewBOpensBlame(t *testing.T) {
 	m := Model{width: 100, height: 30}
 	m.diffView = &diffView{title: "a.go", rev: "abc123"}
 	mm, _ := m.updateDiffViewKey(keyMsg("b"))
-	bv, ok := mm.(Model).stackTop().(*blameView)
+	bv, ok := mm.(Model).topLayer().(*blameView)
 	if !ok {
 		t.Fatal("b in the diff view should push a blameView")
 	}
@@ -222,9 +222,9 @@ func TestHistoryBOpensBlameAtSelected(t *testing.T) {
 		},
 		sel: 1,
 	}
-	m = m.pushSurface(h)
+	m = m.pushLayer(h)
 	m, cmd := h.update(m, keyMsg("b"))
-	bv, ok := m.stackTop().(*blameView)
+	bv, ok := m.topLayer().(*blameView)
 	if !ok {
 		t.Fatal("b in history should push a blameView")
 	}
@@ -243,7 +243,7 @@ func TestBlamePageDownPageUpClamped(t *testing.T) {
 		lines[i] = model.BlameLine{Hash: "aaaaaaa", Author: "Ada", LineNo: i + 1, Content: "x"}
 	}
 	b := &blameView{ctx: navContext{path: "a.go"}, lines: lines, blocks: groupBlame(lines)}
-	m = m.pushSurface(b)
+	m = m.pushLayer(b)
 	page := m.blameBodyRows()
 
 	m, _ = b.update(m, keyMsg("pgdown"))

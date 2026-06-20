@@ -34,7 +34,7 @@ func switcherModel(t *testing.T) Model {
 		sortModes: map[panel]sortMode{},
 	}
 	bm := model.Bookmark{ID: "b1", State: model.StateUnstaged, Worktree: dir, Path: "src/app.go"}
-	return m.pushOverlay(newBookmarkPopup([]model.Bookmark{bm}))
+	return m.pushLayer(newBookmarkPopup([]model.Bookmark{bm}))
 }
 
 func TestPasteEscReturnsToSwitcher(t *testing.T) {
@@ -43,14 +43,14 @@ func TestPasteEscReturnsToSwitcher(t *testing.T) {
 	// open paste (p)
 	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("p")})
 	m = u.(Model)
-	if _, ok := m.overlayTop().(*bookmarkPastePopup); !ok {
+	if _, ok := m.topLayer().(*bookmarkPastePopup); !ok {
 		t.Fatal("p must push the paste popup on top")
 	}
 	// esc the paste popup
 	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	m = u.(Model)
 	sw := m.bookmarkSwitcher()
-	if sw == nil || m.overlayTop() != sw {
+	if sw == nil || m.topLayer() != sw {
 		t.Fatal("esc must return to the bookmark switcher")
 	}
 	if sw.filter != "ap" {
@@ -62,7 +62,7 @@ func TestPasteDestPrefilled(t *testing.T) {
 	m := switcherModel(t)
 	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("p")})
 	m = u.(Model)
-	pp, ok := m.overlayTop().(*bookmarkPastePopup)
+	pp, ok := m.topLayer().(*bookmarkPastePopup)
 	if !ok {
 		t.Fatal("paste popup must be open")
 	}
@@ -77,7 +77,7 @@ func TestPasteSuccessReturnsToSwitcher(t *testing.T) {
 	m := switcherModel(t)
 	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("p")})
 	m = u.(Model)
-	if _, ok := m.overlayTop().(*bookmarkPastePopup); !ok {
+	if _, ok := m.topLayer().(*bookmarkPastePopup); !ok {
 		t.Fatal("precondition: paste popup must be open (dest is prefilled)")
 	}
 	u, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // dest prefilled → writes
@@ -85,7 +85,7 @@ func TestPasteSuccessReturnsToSwitcher(t *testing.T) {
 	if cmd == nil || !m.running {
 		t.Fatal("enter must launch the WriteFile op")
 	}
-	if m.bookmarkSwitcher() == nil || m.overlayTop() != m.bookmarkSwitcher() {
+	if m.bookmarkSwitcher() == nil || m.topLayer() != m.bookmarkSwitcher() {
 		t.Fatal("paste success must return to the switcher (revealed beneath)")
 	}
 }
@@ -105,7 +105,7 @@ func TestSwitcherInertWhileRunning(t *testing.T) {
 	if m.opMsgs != before {
 		t.Fatal("the running op's channel must not be replaced")
 	}
-	if _, ok := m.overlayTop().(*bookmarkPastePopup); ok {
+	if _, ok := m.topLayer().(*bookmarkPastePopup); ok {
 		t.Fatal("p must not open the paste popup while running")
 	}
 }
@@ -114,7 +114,7 @@ func TestSwitcherInertWhileRunning(t *testing.T) {
 // push), dropping the deleted row.
 func TestRemoveSuccessRefreshesSwitcher(t *testing.T) {
 	m := Model{width: 80, height: 24, sel: map[panel]int{}, sortModes: map[panel]sortMode{}}
-	m = m.pushOverlay(newBookmarkPopup([]model.Bookmark{{ID: "b1", Path: "a.go"}, {ID: "b2", Path: "b.go"}}))
+	m = m.pushLayer(newBookmarkPopup([]model.Bookmark{{ID: "b1", Path: "a.go"}, {ID: "b2", Path: "b.go"}}))
 	depth := len(m.layers.entries)
 	u, _ := m.Update(bookmarksLoadedMsg{items: []model.Bookmark{{ID: "b2", Path: "b.go"}}})
 	m = u.(Model)

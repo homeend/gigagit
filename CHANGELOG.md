@@ -9,6 +9,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Changed
+- Internal: unified the popup overlay stack and the full-screen surface stack
+  into **one `layer` stack**. `overlay` + `surface` became one `layer` interface
+  (`render(m, below)`), the two stacks merged into one push-ordered pile, and the
+  three routing sites (dispatch / render / mouse) collapsed their
+  `overlayTop`/`stackTop` pair into a single `topLayer()` check; `render` is now a
+  bottom-up walk over the open diff (else the panels). No user-facing change. Only
+  the decision modal, the conflict process, the action menu, and the full-screen
+  diff remain off the stack.
 - Internal: the last three centered pop-ups (the help / `?` cheat-sheet viewer,
   reword-commit, rename-branch) now live on the unified overlay stack like the
   rest; the special `?`-cheat-sheet routing collapsed into the one overlay path

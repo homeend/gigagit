@@ -56,7 +56,7 @@ func TestMarkMovesAcrossPanels(t *testing.T) {
 	if m.mark == nil || m.mark.panel != panelCommits || m.mark.key != "1111111" {
 		t.Fatalf("mark = %+v, want commit 1111111", m.mark)
 	}
-	if overlayOf[*pairOpPopup](m) != nil {
+	if layerOf[*pairOpPopup](m) != nil {
 		t.Fatal("cross-panel m must move the mark, not open the popup")
 	}
 }
@@ -66,7 +66,7 @@ func TestMarkPairOpensPopupOnBranches(t *testing.T) {
 	m = pressRune(t, m, "m") // mark main
 	m.sel[panelBranches] = 1 // feat/a
 	m = pressRune(t, m, "m")
-	pp := overlayOf[*pairOpPopup](m)
+	pp := layerOf[*pairOpPopup](m)
 	if pp == nil {
 		t.Fatal("expected the pair-op popup")
 	}
@@ -84,7 +84,7 @@ func TestMarkPairNoOpsPanel(t *testing.T) {
 	m = pressRune(t, m, "m")
 	m.sel[panelCommits] = 1
 	m = pressRune(t, m, "m")
-	if overlayOf[*pairOpPopup](m) != nil {
+	if layerOf[*pairOpPopup](m) != nil {
 		t.Fatal("commits panel has no pair ops")
 	}
 	if !strings.Contains(m.statusMsg, "no pair operations") {
@@ -110,7 +110,7 @@ func TestDeadMarkRemarksInsteadOfPairing(t *testing.T) {
 	m.branches = []model.Branch{{Name: "main", IsHead: true}, {Name: "feat/a"}}
 	m.sel[panelBranches] = 0
 	m = pressRune(t, m, "m")
-	if overlayOf[*pairOpPopup](m) != nil {
+	if layerOf[*pairOpPopup](m) != nil {
 		t.Fatal("a dead mark must not open the popup")
 	}
 	if m.mark == nil || m.mark.key != "main" {
@@ -225,13 +225,13 @@ func TestPairPopupEnterRunsSmartRebase(t *testing.T) {
 		}
 	}
 	m = pressRune(t, m, "m") // popup: Merge is entry 0, Rebase is entry 1
-	if overlayOf[*pairOpPopup](m) == nil {
+	if layerOf[*pairOpPopup](m) == nil {
 		t.Fatal("popup expected")
 	}
 	m = pressRune(t, m, "j") // move to the Rebase entry
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = updated.(Model)
-	if m.mark != nil || overlayOf[*pairOpPopup](m) != nil {
+	if m.mark != nil || layerOf[*pairOpPopup](m) != nil {
 		t.Fatal("enter must clear both the popup and the mark")
 	}
 	m = driveOp(t, m, cmd)
@@ -248,7 +248,7 @@ func TestPairPopupEscKeepsMark(t *testing.T) {
 	m.sel[panelBranches] = 1
 	m = pressRune(t, m, "m")
 	m = pressType(t, m, tea.KeyEsc)
-	if overlayOf[*pairOpPopup](m) != nil {
+	if layerOf[*pairOpPopup](m) != nil {
 		t.Fatal("esc must close the popup")
 	}
 	if m.mark == nil {
@@ -321,12 +321,12 @@ func TestPairPopupEnterRunsSmartMerge(t *testing.T) {
 		}
 	}
 	m = pressRune(t, m, "m") // popup: Merge feat into main is the first entry
-	if overlayOf[*pairOpPopup](m) == nil {
+	if layerOf[*pairOpPopup](m) == nil {
 		t.Fatal("popup expected")
 	}
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = updated.(Model)
-	if m.mark != nil || overlayOf[*pairOpPopup](m) != nil {
+	if m.mark != nil || layerOf[*pairOpPopup](m) != nil {
 		t.Fatal("enter must clear both the popup and the mark")
 	}
 	m = driveOp(t, m, cmd)

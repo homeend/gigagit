@@ -39,7 +39,7 @@ func TestProcessOwnsInputAndRender(t *testing.T) {
 	// process, not open anything.
 	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("g")})
 	m = u.(Model)
-	if m.overlayTop() != nil {
+	if m.topLayer() != nil {
 		t.Fatal("no overlay may open while a process owns the slot")
 	}
 	if len(p.keys) != 1 || p.keys[0] != "g" {

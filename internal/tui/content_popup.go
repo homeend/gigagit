@@ -143,7 +143,7 @@ func (p *contentPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		return m, nil
 	case "q": // close the window, not the app (q quits only at top level)
-		m = m.popOverlay()
+		m = m.popLayer()
 		return m, nil
 	case "esc":
 		if p.query != "" { // first esc clears the committed search, second closes
@@ -151,10 +151,10 @@ func (p *contentPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			p.sel = 0
 			return m, nil
 		}
-		m = m.popOverlay()
+		m = m.popLayer()
 		return m, nil
 	case "enter":
-		m = m.popOverlay()
+		m = m.popLayer()
 		return m, nil
 	case "/":
 		p.typing = true

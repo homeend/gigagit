@@ -254,7 +254,7 @@ func (h *historyView) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	// q is inert here: only the base layout quits on q. esc is the back key;
 	// ctrl+c (handled above) remains the universal quit.
 	case "esc", "h":
-		return m.popSurface(), nil
+		return m.popLayer(), nil
 	case "b":
 		if h.sel >= 0 && h.sel < len(h.commits) {
 			fc := h.commits[h.sel]
@@ -267,7 +267,7 @@ func (h *historyView) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			}
 			ctx := navContext{path: path, rev: fc.Hash}
 			bv := newBlameView(ctx)
-			m = m.pushSurface(bv)
+			m = m.pushLayer(bv)
 			return m, m.loadBlameCmd(ctx, bv.tag)
 		}
 	case "down", "j":

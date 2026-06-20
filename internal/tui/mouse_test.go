@@ -146,11 +146,11 @@ func TestClickOutsidePanelsNoOps(t *testing.T) {
 func TestClickIgnoredUnderOverlays(t *testing.T) {
 	overlays := []func(m *Model){
 		func(m *Model) { m.modal = &decisionState{} },
-		func(m *Model) { *m = m.pushOverlay(&worktreePopup{}) },
-		func(m *Model) { *m = m.pushOverlay(&repoPopup{}) },
-		func(m *Model) { *m = m.pushOverlay(&settingsPopup{}) },
-		func(m *Model) { *m = m.pushOverlay(&branchPopup{}) },
-		func(m *Model) { *m = m.pushOverlay(&pairOpPopup{}) },
+		func(m *Model) { *m = m.pushLayer(&worktreePopup{}) },
+		func(m *Model) { *m = m.pushLayer(&repoPopup{}) },
+		func(m *Model) { *m = m.pushLayer(&settingsPopup{}) },
+		func(m *Model) { *m = m.pushLayer(&branchPopup{}) },
+		func(m *Model) { *m = m.pushLayer(&pairOpPopup{}) },
 	}
 	for i, set := range overlays {
 		m := mouseModel()
@@ -199,11 +199,11 @@ func TestWheelOutsidePanelsNoOps(t *testing.T) {
 
 func TestHelpWindowKeepsWheelPriority(t *testing.T) {
 	m := mouseModel()
-	m = m.pushOverlay(newContentPopup("Help — keys", helpContent()))
+	m = m.pushLayer(newContentPopup("Help — keys", helpContent()))
 	u, _ := m.Update(mouseMsg(30, 5, tea.MouseButtonWheelDown))
 	mm := u.(Model)
-	if overlayOf[*contentPopup](mm).sel != 3 {
-		t.Fatalf("help sel = %d, want 3 (wheel scrolls the help window)", overlayOf[*contentPopup](mm).sel)
+	if layerOf[*contentPopup](mm).sel != 3 {
+		t.Fatalf("help sel = %d, want 3 (wheel scrolls the help window)", layerOf[*contentPopup](mm).sel)
 	}
 	if mm.sel[panelCommits] != 0 {
 		t.Fatal("the panel under the help window must not scroll")
@@ -301,10 +301,10 @@ func TestClickCommitsFilterTyping(t *testing.T) {
 
 func TestModalOutranksHelpWindowWheel(t *testing.T) {
 	m := mouseModel()
-	m = m.pushOverlay(newContentPopup("Help — keys", helpContent()))
+	m = m.pushLayer(newContentPopup("Help — keys", helpContent()))
 	m.modal = &decisionState{}
 	u, _ := m.Update(mouseMsg(30, 5, tea.MouseButtonWheelDown))
-	if got := overlayOf[*contentPopup](u.(Model)).sel; got != 0 {
+	if got := layerOf[*contentPopup](u.(Model)).sel; got != 0 {
 		t.Fatalf("help sel = %d, the modal must swallow the wheel", got)
 	}
 }

@@ -164,7 +164,7 @@ func (m Model) commitCreateBranchRow() (actionRow, bool) {
 		id:    "commit-create-branch",
 		label: "Create branch here",
 		run: func(m Model) (tea.Model, tea.Cmd) {
-			m = m.pushOverlay(&branchPopup{startPoint: hash})
+			m = m.pushLayer(&branchPopup{startPoint: hash})
 			return m, nil
 		},
 	}, true

@@ -31,7 +31,7 @@ func TestBKeyOpensBranchPopupWithSelectedStartPoint(t *testing.T) {
 
 	updated, _ := m.Update(keyMsg("b"))
 	m = updated.(Model)
-	p := overlayOf[*branchPopup](m)
+	p := layerOf[*branchPopup](m)
 	if p == nil {
 		t.Fatal("b should open the branch popup")
 	}
@@ -50,7 +50,7 @@ func TestBKeyInertOnOtherPanels(t *testing.T) {
 
 	updated, _ := m.Update(keyMsg("b"))
 	m = updated.(Model)
-	if overlayOf[*branchPopup](m) != nil {
+	if layerOf[*branchPopup](m) != nil {
 		t.Fatal("b must be inert outside the Branches panel")
 	}
 }
@@ -66,7 +66,7 @@ func TestBranchPopupTypeEnterCreatesBranch(t *testing.T) {
 		u, _ := m.Update(keyMsg(string(r)))
 		m = u.(Model)
 	}
-	p := overlayOf[*branchPopup](m)
+	p := layerOf[*branchPopup](m)
 	if p == nil {
 		t.Fatal("popup should still be open after typing")
 	}
@@ -76,7 +76,7 @@ func TestBranchPopupTypeEnterCreatesBranch(t *testing.T) {
 
 	updated, cmd := m.Update(keyMsg("enter"))
 	m = updated.(Model)
-	if overlayOf[*branchPopup](m) != nil {
+	if layerOf[*branchPopup](m) != nil {
 		t.Fatal("enter should close the popup")
 	}
 	for i := 0; i < 100 && m.running; i++ {
@@ -101,7 +101,7 @@ func TestBranchPopupEnterOnEmptyNameDoesNothing(t *testing.T) {
 
 	u, _ := m.Update(keyMsg("enter"))
 	m = u.(Model)
-	if overlayOf[*branchPopup](m) == nil {
+	if layerOf[*branchPopup](m) == nil {
 		t.Fatal("enter with an empty name must keep the popup open")
 	}
 	if m.running {
@@ -118,7 +118,7 @@ func TestBranchPopupEscClosesWithoutOp(t *testing.T) {
 
 	u, _ := m.Update(keyMsg("esc"))
 	m = u.(Model)
-	if overlayOf[*branchPopup](m) != nil || m.running {
+	if layerOf[*branchPopup](m) != nil || m.running {
 		t.Fatal("esc must close the popup without starting an op")
 	}
 }
@@ -130,7 +130,7 @@ func TestShiftBChainsSmartSwitchAfterCreate(t *testing.T) {
 
 	updated, _ := m.Update(keyMsg("B"))
 	m = updated.(Model)
-	p := overlayOf[*branchPopup](m)
+	p := layerOf[*branchPopup](m)
 	if p == nil || !p.switchAfter {
 		t.Fatal("B should open the popup with switchAfter set")
 	}
@@ -169,7 +169,7 @@ func TestBranchPopupSwallowsActionKeys(t *testing.T) {
 
 	u, _ := m.Update(keyMsg("q")) // would quit outside the popup
 	m = u.(Model)
-	p := overlayOf[*branchPopup](m)
+	p := layerOf[*branchPopup](m)
 	if p == nil {
 		t.Fatal("popup must swallow ordinary keys")
 	}

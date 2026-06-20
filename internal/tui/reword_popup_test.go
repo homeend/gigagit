@@ -22,7 +22,7 @@ func TestRewordPopupFallsBackToSubject(t *testing.T) {
 	// popup falls back to the row's subject.
 	m := rewordModel(t)
 	m, ok := m.openRewordPopup()
-	rp := overlayOf[*rewordPopup](m)
+	rp := layerOf[*rewordPopup](m)
 	if !ok || rp == nil {
 		t.Fatalf("popup did not open")
 	}
@@ -46,7 +46,7 @@ func TestRewordPopupPrefillsFullBody(t *testing.T) {
 	if !ok {
 		t.Fatalf("popup did not open")
 	}
-	rp := overlayOf[*rewordPopup](m)
+	rp := layerOf[*rewordPopup](m)
 	if rp.popup.title != "real subject" {
 		t.Fatalf("title = %q, want the full message's subject", rp.popup.title)
 	}

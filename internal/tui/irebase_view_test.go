@@ -96,7 +96,7 @@ func TestIrebaseLoadedMsgPushesEditor(t *testing.T) {
 	m := Model{width: 80, height: 24}
 	updated, _ := m.Update(irebaseLoadedMsg{branch: "work", onto: "main", commits: edRows()})
 	m = updated.(Model)
-	if _, ok := m.stackTop().(*irebaseEditor); !ok {
+	if _, ok := m.topLayer().(*irebaseEditor); !ok {
 		t.Fatal("irebaseLoadedMsg should push the editor surface")
 	}
 }
@@ -105,7 +105,7 @@ func TestIrebaseLoadedEmptyRangeNoOp(t *testing.T) {
 	m := Model{width: 80, height: 24}
 	updated, _ := m.Update(irebaseLoadedMsg{branch: "work", onto: "main", commits: nil})
 	m = updated.(Model)
-	if m.stackTop() != nil {
+	if m.topLayer() != nil {
 		t.Fatal("empty range must not push a surface")
 	}
 }
@@ -116,7 +116,7 @@ func TestIrebaseLoadedEmptyRangeNoOp(t *testing.T) {
 func TestIrebaseEditorReceivesRoutedKeys(t *testing.T) {
 	e := newIrebaseEditor("work", "main", edRows(), "/bin/gg")
 	m := Model{width: 80, height: 24}
-	m = m.pushSurface(e)
+	m = m.pushLayer(e)
 	updated, _ := m.Update(key("d")) // drop the focused (top) row
 	_ = updated.(Model)
 	if e.rows[0].action != rebaseplan.Drop {

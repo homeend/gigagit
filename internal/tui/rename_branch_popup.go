@@ -23,7 +23,7 @@ func (m Model) openRenameBranchPopup() (Model, bool) {
 		return m, false
 	}
 	cur := m.branches[bi].Name
-	m = m.pushOverlay(&renameBranchPopup{old: cur, name: cur})
+	m = m.pushLayer(&renameBranchPopup{old: cur, name: cur})
 	return m, true
 }
 
@@ -55,14 +55,14 @@ func (p *renameBranchPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	}
 	switch msg.Type {
 	case tea.KeyEsc:
-		m = m.popOverlay()
+		m = m.popLayer()
 	case tea.KeyEnter:
 		if p.name == "" || p.name == p.old {
-			m = m.popOverlay()
+			m = m.popLayer()
 			return m, nil
 		}
 		op := engine.RenameBranch{Old: p.old, New: p.name}
-		m = m.popOverlay()
+		m = m.popLayer()
 		return m.startOp(op)
 	case tea.KeyBackspace, tea.KeyCtrlH:
 		if r := []rune(p.name); len(r) > 0 {

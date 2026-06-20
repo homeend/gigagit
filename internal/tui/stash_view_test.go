@@ -66,7 +66,7 @@ func TestStashListEnterUnderTreeOpensActions(t *testing.T) {
 	m.filesView = &contentPopup{lines: []contentLine{{text: "a.go", path: "a.go"}}}
 	m.filesTreeFocused = false // focused on the stash list
 	mm, _ := m.updateFilesViewKey(keyMsg("enter"))
-	if overlayOf[*stashActionPopup](mm.(Model)) == nil {
+	if layerOf[*stashActionPopup](mm.(Model)) == nil {
 		t.Fatal("enter on the stash-list side (tree open) should open the action popup")
 	}
 }

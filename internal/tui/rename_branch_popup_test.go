@@ -13,7 +13,7 @@ func TestRenameBranchPopupOpensPrefilled(t *testing.T) {
 	m.focus = panelBranches
 	m.branches = []model.Branch{{Name: "old"}}
 	m, ok := m.openRenameBranchPopup()
-	rp := overlayOf[*renameBranchPopup](m)
+	rp := layerOf[*renameBranchPopup](m)
 	if !ok || rp == nil {
 		t.Fatalf("popup did not open")
 	}
@@ -40,7 +40,7 @@ func TestRenameBranchPopupEscCancels(t *testing.T) {
 	m.branches = []model.Branch{{Name: "old"}}
 	m, _ = m.openRenameBranchPopup()
 	res, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	if overlayOf[*renameBranchPopup](res.(Model)) != nil {
+	if layerOf[*renameBranchPopup](res.(Model)) != nil {
 		t.Fatalf("esc should close the popup")
 	}
 }

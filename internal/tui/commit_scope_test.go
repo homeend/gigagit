@@ -350,9 +350,9 @@ func TestCommitCreateBranchRowOpensPopup(t *testing.T) {
 	}
 	mm, _ := r.run(m)
 	m = mm.(Model)
-	bp, ok := m.overlayTop().(*branchPopup)
+	bp, ok := m.topLayer().(*branchPopup)
 	if !ok {
-		t.Fatalf("expected a branchPopup overlay, got %T", m.overlayTop())
+		t.Fatalf("expected a branchPopup overlay, got %T", m.topLayer())
 	}
 	if bp.startPoint != full {
 		t.Fatalf("startPoint = %q, want the full hash (unambiguous start-point)", bp.startPoint)
@@ -384,9 +384,9 @@ func TestCommitCreateWorktreeRowOpensInEdit(t *testing.T) {
 	}
 	mm, _ := r.run(m)
 	m = mm.(Model)
-	p, ok := m.overlayTop().(*worktreePopup)
+	p, ok := m.topLayer().(*worktreePopup)
 	if !ok {
-		t.Fatalf("expected a worktreePopup overlay, got %T", m.overlayTop())
+		t.Fatalf("expected a worktreePopup overlay, got %T", m.topLayer())
 	}
 	if !p.fromCommit || p.startPoint != full {
 		t.Fatalf("fromCommit=%v startPoint=%q (want true + full hash)", p.fromCommit, p.startPoint)

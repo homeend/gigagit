@@ -462,12 +462,12 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "h":
 		ctx := navContext{path: v.title, rev: v.rev}
 		hv := newHistoryView(ctx)
-		m = m.pushSurface(hv)
+		m = m.pushLayer(hv)
 		return m, m.loadHistoryListCmd(ctx, hv.listTag)
 	case "b":
 		ctx := navContext{path: v.title, rev: v.rev}
 		bv := newBlameView(ctx)
-		m = m.pushSurface(bv)
+		m = m.pushLayer(bv)
 		return m, m.loadBlameCmd(ctx, bv.tag)
 	case "up", "k":
 		v.scroll(-1, m.diffBodyRows())

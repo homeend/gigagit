@@ -45,7 +45,7 @@ func TestDotOpensMenuFromStashView(t *testing.T) {
 func TestDotOpensMenuFromHistory(t *testing.T) {
 	m := footerModel()
 	m.loading = false
-	m = m.pushSurface(newHistoryView(navContext{path: "a.go", rev: "abc"}))
+	m = m.pushLayer(newHistoryView(navContext{path: "a.go", rev: "abc"}))
 	if pressDot(m).actionMenu == nil {
 		t.Fatal(". must open the action menu from the history view")
 	}
@@ -54,7 +54,7 @@ func TestDotOpensMenuFromHistory(t *testing.T) {
 func TestDotOpensMenuFromBlame(t *testing.T) {
 	m := footerModel()
 	m.loading = false
-	m = m.pushSurface(newBlameView(navContext{path: "a.go", rev: "abc"}))
+	m = m.pushLayer(newBlameView(navContext{path: "a.go", rev: "abc"}))
 	if pressDot(m).actionMenu == nil {
 		t.Fatal(". must open the action menu from the blame view")
 	}
@@ -80,14 +80,14 @@ func TestMenuOwnsKeysOverDiffView(t *testing.T) {
 func TestMenuOwnsKeysOverHistory(t *testing.T) {
 	m := footerModel()
 	m.loading = false
-	m = m.pushSurface(newHistoryView(navContext{path: "a.go", rev: "abc"}))
+	m = m.pushLayer(newHistoryView(navContext{path: "a.go", rev: "abc"}))
 	m = m.openActionMenu()
 	u, _ := m.Update(keyMsg("esc"))
 	mm := u.(Model)
 	if mm.actionMenu != nil {
 		t.Error("esc should close the menu, not be eaten by the history view")
 	}
-	if _, ok := mm.stackTop().(*historyView); !ok {
+	if _, ok := mm.topLayer().(*historyView); !ok {
 		t.Error("the history view must survive closing the menu")
 	}
 }
@@ -104,7 +104,7 @@ func TestDotInertOverModal(t *testing.T) {
 func TestDotInertOverRepoPopup(t *testing.T) {
 	m := footerModel()
 	m.loading = false
-	m = m.pushOverlay(&repoPopup{})
+	m = m.pushLayer(&repoPopup{})
 	if pressDot(m).actionMenu != nil {
 		t.Error(". must not open the menu over a popup")
 	}
@@ -113,7 +113,7 @@ func TestDotInertOverRepoPopup(t *testing.T) {
 func TestDotInertOverIrebaseEditor(t *testing.T) {
 	m := footerModel()
 	m.loading = false
-	m = m.pushSurface(newIrebaseEditor("feat", "main", nil, "gg"))
+	m = m.pushLayer(newIrebaseEditor("feat", "main", nil, "gg"))
 	if pressDot(m).actionMenu != nil {
 		t.Error(". must not open the menu over the interactive-rebase editor")
 	}
@@ -122,7 +122,7 @@ func TestDotInertOverIrebaseEditor(t *testing.T) {
 func TestDotInertOverHunkPicker(t *testing.T) {
 	m := footerModel()
 	m.loading = false
-	m = m.pushSurface(newStagePicker("f.txt", &hunkpick.Doc{}))
+	m = m.pushLayer(newStagePicker("f.txt", &hunkpick.Doc{}))
 	if pressDot(m).actionMenu != nil {
 		t.Error(". must not open the menu over the hunk picker")
 	}

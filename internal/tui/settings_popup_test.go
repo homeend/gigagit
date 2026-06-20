@@ -28,10 +28,10 @@ func TestCommaOpensSettingsMenu(t *testing.T) {
 	m, _ := settingsModel(t)
 	u, _ := m.Update(keyMsg(","))
 	m = u.(Model)
-	if overlayOf[*settingsPopup](m) == nil {
+	if layerOf[*settingsPopup](m) == nil {
 		t.Fatal(", should open the settings popup")
 	}
-	if overlayOf[*settingsPopup](m).picker {
+	if layerOf[*settingsPopup](m).picker {
 		t.Fatal("should open on the menu screen, not the picker")
 	}
 	out := m.View()
@@ -46,7 +46,7 @@ func TestSettingsPopupZCyclesMode(t *testing.T) {
 	m = u.(Model)
 	u, _ = m.Update(keyMsg("z"))
 	m = u.(Model)
-	p := overlayOf[*settingsPopup](m)
+	p := layerOf[*settingsPopup](m)
 	if p == nil || p.mode != modeWrap {
 		t.Fatalf("z should cycle the settings mode to modeWrap; got %+v", p)
 	}
@@ -58,7 +58,7 @@ func TestPickerCheckboxDefaults(t *testing.T) {
 	m = u.(Model)
 	u, _ = m.Update(keyMsg("enter")) // menu entry -> picker
 	m = u.(Model)
-	p := overlayOf[*settingsPopup](m)
+	p := layerOf[*settingsPopup](m)
 	if p == nil || !p.picker {
 		t.Fatal("enter on the menu entry should open the picker")
 	}
@@ -82,7 +82,7 @@ func TestPickerToggleAndApply(t *testing.T) {
 	u, _ = m.Update(keyMsg("enter"))
 	m = u.(Model)
 	// Move to the claude-project row and check it.
-	p := overlayOf[*settingsPopup](m)
+	p := layerOf[*settingsPopup](m)
 	idx := -1
 	for i, d := range p.dets {
 		if d.Agent.ID == "claude-project" {
@@ -95,12 +95,12 @@ func TestPickerToggleAndApply(t *testing.T) {
 	p.sel = idx
 	u, _ = m.Update(keyMsg("space"))
 	m = u.(Model)
-	if !overlayOf[*settingsPopup](m).checked[idx] {
+	if !layerOf[*settingsPopup](m).checked[idx] {
 		t.Fatal("space should toggle the checkbox")
 	}
 	u, _ = m.Update(keyMsg("enter")) // apply
 	m = u.(Model)
-	if overlayOf[*settingsPopup](m) != nil {
+	if layerOf[*settingsPopup](m) != nil {
 		t.Fatal("apply should close the popup")
 	}
 	// claude-project installed AND agents-md refreshed (was checked by default).
@@ -128,13 +128,13 @@ func TestSettingsEscBackThenClose(t *testing.T) {
 	m = u.(Model)
 	u, _ = m.Update(keyMsg("esc")) // picker -> menu
 	m = u.(Model)
-	p := overlayOf[*settingsPopup](m)
+	p := layerOf[*settingsPopup](m)
 	if p == nil || p.picker {
 		t.Fatal("esc in the picker should go back to the menu")
 	}
 	u, _ = m.Update(keyMsg("esc")) // menu -> closed
 	m = u.(Model)
-	if overlayOf[*settingsPopup](m) != nil {
+	if layerOf[*settingsPopup](m) != nil {
 		t.Fatal("esc on the menu should close the popup")
 	}
 }
@@ -148,7 +148,7 @@ func TestSettingsSwallowsGlobalKeys(t *testing.T) {
 	if m.running {
 		t.Fatal("settings popup leaked a global key")
 	}
-	if overlayOf[*settingsPopup](m) == nil {
+	if layerOf[*settingsPopup](m) == nil {
 		t.Fatal("popup should still be open")
 	}
 	u, cmd := m.Update(keyMsg("q"))
@@ -156,7 +156,7 @@ func TestSettingsSwallowsGlobalKeys(t *testing.T) {
 	if cmd != nil {
 		t.Fatal("q inside the popup must not emit a command (quit leak)")
 	}
-	if overlayOf[*settingsPopup](m) == nil {
+	if layerOf[*settingsPopup](m) == nil {
 		t.Fatal("popup should still be open after q")
 	}
 }
