@@ -73,6 +73,8 @@ type Model struct {
 	commitsExhausted    bool               // false → "Commits N+", true → "Commits N"
 	commitScopeBranches []string           // included branches for the feed; empty = all local branches
 	commitGraphRows     []string           // cached single-line graph cells, parallel to commits; empty = none
+	commitGraphLanes    []int              // cached node lane per commit, parallel to commits
+	commitListMode      bool               // Commits feed rendered as a flat ●-gutter list, not a graph
 	opCancel            context.CancelFunc // cancels the in-flight op's context; nil when idle
 	loadGen             int                // bumped per superseding load; stale dataLoadedMsg are dropped
 
@@ -1153,8 +1155,10 @@ func (m Model) rebuildCommitGraph() Model {
 	}
 	rows, _ := commitgraph.Lay(cs)
 	m.commitGraphRows = make([]string, len(rows))
+	m.commitGraphLanes = make([]int, len(rows))
 	for i, r := range rows {
 		m.commitGraphRows[i] = r.Cells
+		m.commitGraphLanes[i] = r.Lane
 	}
 	return m
 }

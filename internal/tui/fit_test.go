@@ -120,7 +120,7 @@ func TestRenderPanelWrapModeExpandsRow(t *testing.T) {
 	m.focus = panelBranches
 	m.dispModes[panelBranches] = modeWrap
 	m.branches = []model.Branch{{Name: strings.Repeat("x", 60)}}
-	out := m.renderPanel(panelBranches, "Branches", m.branchRows(), 20, 6)
+	out := m.renderPanel(panelBranches, "Branches", m.branchRows(), nil, 20, 6)
 	// In wrap mode the 60-char branch name occupies more than one body line.
 	if strings.Count(out, "x") < 30 {
 		t.Errorf("wrap mode did not expand the long row:\n%s", out)
@@ -132,7 +132,7 @@ func TestRenderPanelCutoffStaysOneLine(t *testing.T) {
 	m.width, m.height = 80, 24
 	m.focus = panelBranches
 	m.branches = []model.Branch{{Name: strings.Repeat("x", 60)}}
-	out := m.renderPanel(panelBranches, "Branches", m.branchRows(), 20, 6)
+	out := m.renderPanel(panelBranches, "Branches", m.branchRows(), nil, 20, 6)
 	// Default cutoff: the row is truncated to one line (innerW=16) -> few x's.
 	if strings.Count(out, "x") > 16 {
 		t.Errorf("cutoff mode should truncate, got too many chars:\n%s", out)

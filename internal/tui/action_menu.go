@@ -90,6 +90,9 @@ func availableActions(m Model) []actionRow {
 	if r, ok := m.commitShowAllRow(); ok {
 		out = append(out, r)
 	}
+	if r, ok := m.commitViewModeRow(); ok {
+		out = append(out, r)
+	}
 	return out
 }
 
