@@ -64,12 +64,27 @@ func (p *branchPopup) render(m Model, below string) string {
 	return overlayCenter(clipToHeight(below, h), p.box(m), w, h)
 }
 
+// displayStart shortens a full 40-char hex SHA to 7 chars for display (the op
+// still receives the full, unambiguous start-point). Branch names pass through.
+func displayStart(s string) string {
+	if len(s) != 40 {
+		return s
+	}
+	for _, c := range s {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			return s
+		}
+	}
+	return s[:7]
+}
+
 // box draws the create-branch dialog (modal box only).
 func (p *branchPopup) box(m Model) string {
 	var b strings.Builder
-	title := "Create branch from " + p.startPoint
+	start := displayStart(p.startPoint)
+	title := "Create branch from " + start
 	if p.switchAfter {
-		title = "Create + switch branch from " + p.startPoint
+		title = "Create + switch branch from " + start
 	}
 	b.WriteString(title + "\n\n")
 	b.WriteString("name: " + p.name + "\n\n")

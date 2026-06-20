@@ -30,6 +30,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   drawing, and the jobs it runs — the first of a general mechanism.)
 
 ### Added
+- **Create a branch from a commit.** The `.` menu on a commit offers **Create
+  branch here** — opens the create-branch dialog with the selected commit as the
+  start point. (`gg branch create <name> <start-point>` already does this on the
+  CLI.)
 - **Go to a branch's tip in the commit list.** The `.` menu on a Branches row
   offers **Go to tip in commits** — it moves the Commits cursor to that branch's
   tip commit and focuses the Commits panel.

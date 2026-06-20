@@ -334,3 +334,37 @@ func TestCommitGotoTipNotLoadedNotifies(t *testing.T) {
 		t.Fatal("expected a 'tip not loaded' status message")
 	}
 }
+
+func TestCommitCreateBranchRowOpensPopup(t *testing.T) {
+	m := footerModel()
+	if m.sel == nil {
+		m.sel = map[panel]int{}
+	}
+	m.focus = panelCommits
+	full := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" // 40 hex
+	m.commits = []model.Commit{{Hash: full, Subject: "x"}}
+	m.sel[panelCommits] = 0
+	r, ok := findRow(availableActions(m), "commit-create-branch")
+	if !ok {
+		t.Fatal("create-branch row missing on the Commits panel")
+	}
+	mm, _ := r.run(m)
+	m = mm.(Model)
+	bp, ok := m.overlayTop().(*branchPopup)
+	if !ok {
+		t.Fatalf("expected a branchPopup overlay, got %T", m.overlayTop())
+	}
+	if bp.startPoint != full {
+		t.Fatalf("startPoint = %q, want the full hash (unambiguous start-point)", bp.startPoint)
+	}
+}
+
+func TestDisplayStartShortensSHA(t *testing.T) {
+	full := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	if got := displayStart(full); got != "aaaaaaa" {
+		t.Fatalf("displayStart(sha) = %q, want 7 chars", got)
+	}
+	if got := displayStart("feature/x"); got != "feature/x" {
+		t.Fatalf("displayStart(branch) = %q, want unchanged", got)
+	}
+}
