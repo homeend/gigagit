@@ -253,15 +253,15 @@ func (a *actionMenu) visible() []actionRow {
 	return out
 }
 
+// move advances the selection by d, wrapping around the ends: up from the first
+// row goes to the last, down from the last goes to the first.
 func (a *actionMenu) move(d int) {
 	n := len(a.visible())
-	a.sel += d
-	if a.sel > n-1 {
-		a.sel = n - 1
-	}
-	if a.sel < 0 {
+	if n == 0 {
 		a.sel = 0
+		return
 	}
+	a.sel = ((a.sel+d)%n + n) % n // wrap, handling negative d
 }
 
 // openActionMenu builds the menu from the available actions, narrowed by the

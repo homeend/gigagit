@@ -9,6 +9,8 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Changed
+- **Action menu (`.`) wraps around.** Up-arrow on the first row jumps to the last,
+  and down-arrow on the last jumps to the first.
 - **Conflict resolution is now a process, not a pop-up.** While you resolve a
   merge/rebase, the interface is locked to the resolution flow: it shows the
   conflicted-file list, hands off to the full-screen line editor for both-modified
