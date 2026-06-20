@@ -137,11 +137,20 @@ func (s sortMode) String() string {
 // element i (the existing row builders are 1:1 with their slices).
 type panelList interface {
 	Len() int
-	Row(i int) string  // display text — also the filter-match target
+	Row(i int) string  // display text (also the filter-match target, unless haystacker)
 	Name(i int) string // what "sort by name" means for THIS panel
 	Date(i int) int64  // what "sort by date" means for THIS panel (unix; 0 = unknown)
 	Key(i int) string  // stable identity of backing element i (mark survival)
 }
+
+// haystacker is an optional panelList capability: a search-match string distinct
+// from the displayed Row(i). The Commits panel uses it so the trimmed, id-less
+// row can still be searched by full commit id or full branch name.
+type haystacker interface{ Haystack(i int) string }
+
+// fullRower is an optional panelList capability: a parallel row whose content is
+// fully un-elided, shown by the reveal tooltip when it differs from Row(i).
+type fullRower interface{ Full(i int) string }
 
 type branchList struct {
 	items []model.Branch
@@ -208,7 +217,9 @@ func (l statusList) Date(i int) int64 {
 
 type commitList struct {
 	items []model.Commit
-	rows  []string
+	rows  []string // display rows (trimmed identity token, no commit id)
+	full  []string // parallel rows with the UNtrimmed identity (tooltip reveal)
+	hay   []string // filter haystack: full hash + full branch name + subject
 }
 
 func (l commitList) Len() int          { return len(l.items) }
@@ -216,6 +227,23 @@ func (l commitList) Row(i int) string  { return l.rows[i] }
 func (l commitList) Name(i int) string { return l.items[i].Subject }
 func (l commitList) Date(i int) int64  { return l.items[i].UnixTime }
 func (l commitList) Key(i int) string  { return l.items[i].Hash }
+
+// Haystack decouples the filter-match text from the (trimmed, id-less) display
+// row so id-prefix and full-branch-name searches keep working. Full supplies the
+// untrimmed-identity row the reveal tooltip shows. Guarded against a short slice
+// so a partially-built list never panics.
+func (l commitList) Haystack(i int) string {
+	if i < len(l.hay) {
+		return l.hay[i]
+	}
+	return l.rows[i]
+}
+func (l commitList) Full(i int) string {
+	if i < len(l.full) {
+		return l.full[i]
+	}
+	return l.rows[i]
+}
 
 // inFilesPanel reports whether f belongs in the Files panel: any working-tree
 // change (Unstaged side), including untracked and conflicts.
@@ -259,7 +287,7 @@ func (m Model) listFor(p panel) panelList {
 		// returning indices into m.status.Files for the action handlers.
 		return statusList{files: m.status.Files, rows: m.statusRows(p), root: m.currentWorktree, mtime: map[int]int64{}}
 	case panelCommits:
-		return commitList{items: m.commits, rows: m.commitRows()}
+		return commitList{items: m.commits, rows: m.commitRows(), full: m.commitFullRows(), hay: m.commitHaystacks()}
 	}
 	return commitList{}
 }
@@ -323,8 +351,14 @@ func (m Model) panelView(p panel) (rows []string, idx []int) {
 		if !m.memberOf(p, i) {
 			continue // Files/Staged split: each panel shows only its subset
 		}
-		if q != "" && !strings.Contains(strings.ToLower(l.Row(i)), q) {
-			continue
+		if q != "" {
+			text := l.Row(i)
+			if h, ok := l.(haystacker); ok {
+				text = h.Haystack(i) // search hidden full id + branch name, not the trimmed row
+			}
+			if !strings.Contains(strings.ToLower(text), q) {
+				continue
+			}
 		}
 		idx = append(idx, i)
 	}
