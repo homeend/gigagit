@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v17 -->
+<!-- gg:using-gg:v18 -->
 
 # Using gg (gigagit)
 
@@ -36,6 +36,7 @@ guards against removing the worktree you are standing in.
 - `gg remote ls | fetch | prune` — `ls` lists remote-tracking branches (one
   `remote/branch` per line); `fetch` updates tracking refs for all remotes
   (`git fetch --all`); `prune` drops tracking refs for branches deleted upstream.
+- `gg tag ls` — list tags, newest first (one tag name per line).
 - `gg branch create <name> [<start-point>]` — create a branch (no switch);
   start point defaults to HEAD.
 - `gg branch rename <old> <new>` — rename a local branch (`git branch -m`);
