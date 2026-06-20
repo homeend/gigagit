@@ -10,17 +10,31 @@ import (
 	"github.com/gigagit/gg/internal/engine"
 )
 
-// cmdTag dispatches the tag subcommands: ls | create.
+// cmdTag dispatches the tag subcommands: ls | create | rm.
 func cmdTag(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 	switch {
 	case len(args) == 0 || args[0] == "ls" || args[0] == "list":
 		return cmdTagList(svc, stdout, stderr)
 	case args[0] == "create":
 		return cmdTagCreate(svc, args[1:], stdout, stderr)
+	case args[0] == "rm" || args[0] == "delete":
+		return cmdTagDelete(svc, args[1:], stdout, stderr)
 	default:
-		fmt.Fprintf(stderr, "tag: unknown subcommand %q (try: ls, create)\n", args[0])
+		fmt.Fprintf(stderr, "tag: unknown subcommand %q (try: ls, create, rm)\n", args[0])
 		return 2
 	}
+}
+
+// cmdTagDelete implements `gg tag rm <name>` (alias delete). Typing the command
+// is the confirmation; there is no extra prompt.
+func cmdTagDelete(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
+	if len(args) != 1 || args[0] == "" {
+		fmt.Fprintln(stderr, "usage: gg tag rm <name>")
+		return 2
+	}
+	res, err := runOperation(context.Background(), svc,
+		engine.DeleteTag{Name: args[0]}, cliDecider{}, stderr)
+	return finish(res, err, stdout, stderr)
 }
 
 // cmdTagCreate implements `gg tag create [-m <msg>] <name> [<commit>]` (flags

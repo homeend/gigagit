@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"os/exec"
 	"testing"
 
 	"github.com/gigagit/gg/internal/model"
@@ -38,5 +39,63 @@ func TestEnterOnTagNotLoadedNotices(t *testing.T) {
 	u, _ := m.Update(keyMsg("enter"))
 	if mm := u.(Model); mm.statusMsg == "" {
 		t.Fatal("expected a 'tag target not loaded' notice")
+	}
+}
+
+func TestTagDeleteRowOpensConfirmThenDeletes(t *testing.T) {
+	dir, repo := newRepoDir(t)
+	gitIn(t, dir, "tag", "v1.0.0") // before loadModel so the snapshot loads it
+	m := loadModel(t, repo)
+	m.focus = panelTags
+	m.activeFilesTab = panelTags
+	m.sel[panelTags] = 0
+
+	row, ok := m.tagDeleteRow()
+	if !ok {
+		t.Fatal("delete row must appear on the Tags panel with a selection")
+	}
+	u, _ := row.run(m)
+	m = u.(Model)
+	if m.modal == nil {
+		t.Fatal("delete must open a confirm modal")
+	}
+	um, cmd := m.modal.onResolve(m, "Delete")
+	m = um.(Model)
+	for i := 0; i < 100 && m.running; i++ {
+		uu, next := m.Update(cmd())
+		m = uu.(Model)
+		cmd = next
+	}
+	if exec.Command("git", "-C", dir, "rev-parse", "--verify", "refs/tags/v1.0.0").Run() == nil {
+		t.Fatal("tag should be gone after confirm")
+	}
+}
+
+func TestTagDeleteRowCancelKeepsTag(t *testing.T) {
+	dir, repo := newRepoDir(t)
+	gitIn(t, dir, "tag", "v1.0.0")
+	m := loadModel(t, repo)
+	m.focus = panelTags
+	m.activeFilesTab = panelTags
+	m.sel[panelTags] = 0
+	row, _ := m.tagDeleteRow()
+	u, _ := row.run(m)
+	m = u.(Model)
+	um, _ := m.modal.onResolve(m, "Cancel")
+	m = um.(Model)
+	if m.running {
+		t.Fatal("Cancel must not start a delete")
+	}
+	if exec.Command("git", "-C", dir, "rev-parse", "--verify", "refs/tags/v1.0.0").Run() != nil {
+		t.Fatal("tag must survive Cancel")
+	}
+}
+
+func TestTagDeleteRowInertOffTagsPanel(t *testing.T) {
+	_, repo := newRepoDir(t)
+	m := loadModel(t, repo)
+	m.focus = panelBranches
+	if _, ok := m.tagDeleteRow(); ok {
+		t.Fatal("delete row must be inert off the Tags panel")
 	}
 }

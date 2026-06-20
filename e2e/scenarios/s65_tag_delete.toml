@@ -1,0 +1,21 @@
+name = "tag rm: delete a tag"
+
+[input]
+steps = [
+  { write = "f.txt", content = "v1\n" },
+  { commit = "c1" },
+  { tag = "v1.0.0" },
+]
+
+[[run]]
+cmd  = ["tag", "rm", "v1.0.0"]
+exit = 0
+
+[[run]]
+cmd             = ["tag", "ls"]
+exit            = 0
+stdout_excludes = ["v1.0.0"]
+
+[expect]
+branch = "main"
+clean  = true
