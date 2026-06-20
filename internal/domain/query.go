@@ -24,6 +24,7 @@ type Snapshot struct {
 	Branches        []model.Branch
 	RemoteBranches  []model.RemoteBranch
 	Worktrees       []model.Worktree
+	Tags            []model.Tag
 	CurrentWorktree string // git toplevel; "" if TopLevel failed
 	GitCommonDir    string // "" if it failed
 	HeadTimes       map[string]int64
@@ -99,6 +100,15 @@ func (s *Service) loadSnapshot(ctx context.Context) (Snapshot, error) {
 		if rbs, err := s.repo.RemoteBranches(ctx); err == nil {
 			mu.Lock()
 			snap.RemoteBranches = rbs
+			mu.Unlock()
+		}
+	})
+	run(func() {
+		// Tags is best-effort: a repo with no tags (or a failing for-each-ref)
+		// must not block startup.
+		if tags, err := s.repo.Tags(ctx); err == nil {
+			mu.Lock()
+			snap.Tags = tags
 			mu.Unlock()
 		}
 	})
@@ -185,6 +195,11 @@ func (s *Service) Worktrees(ctx context.Context) ([]model.Worktree, error) {
 // RemoteBranches lists remote-tracking branches (refs/remotes).
 func (s *Service) RemoteBranches(ctx context.Context) ([]model.RemoteBranch, error) {
 	return query(ctx, s, "remote-branches", s.repo.RemoteBranches)
+}
+
+// Tags is a single gated read for the CLI tag commands and the TUI Tags tab.
+func (s *Service) Tags(ctx context.Context) ([]model.Tag, error) {
+	return query(ctx, s, "tags", s.repo.Tags)
 }
 
 // ShowFile returns the raw blob of path at rev (git show rev:path), under a
