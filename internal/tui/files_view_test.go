@@ -434,6 +434,21 @@ func TestFilesViewRenderShowsSearchQuery(t *testing.T) {
 	}
 }
 
+// A commit title longer than the box used to push the /-search input off the
+// right edge so the user couldn't see what they were typing. The search input
+// now rides its own line beneath the title and stays visible.
+func TestFilesViewSearchVisibleBelowLongTitle(t *testing.T) {
+	m := openFilesView(t, filesModel())
+	m = pressType(t, m, tea.KeyLeft) // focus the tree so / filters it
+	m = pressRune(t, m, "/")
+	m = pressRune(t, m, "mo")
+	m.filesTitle = "Files 1111111 " + strings.Repeat("x", 80) // overflows the box
+	out := m.renderFilesView(40, 12)
+	if !strings.Contains(out, "/mo█") {
+		t.Fatalf("search input lost behind the long title:\n%s", out)
+	}
+}
+
 func TestFilesViewRenderFitsTerminal(t *testing.T) {
 	m := openFilesView(t, filesModel())
 	out := m.render()
