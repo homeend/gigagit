@@ -69,20 +69,19 @@ func (m Model) openStashPopup() (Model, bool) {
 	for i := range cand {
 		cand[i].included = !anyMarked || m.fileMarks[cand[i].path]
 	}
-	m.stashPopup = &stashPopup{name: "WIP on " + m.status.Branch, files: cand, field: 1}
+	m = m.pushOverlay(&stashPopup{name: "WIP on " + m.status.Branch, files: cand, field: 1})
 	return m, true
 }
 
-// updateStashPopupKey routes one key while the popup is open. It swallows every
-// key (no fallthrough), per the popup checklist.
-func (m Model) updateStashPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	p := m.stashPopup
+// update handles one key while the popup is open. It swallows every key
+// (no fallthrough), per the popup checklist.
+func (p *stashPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
 	}
 	switch msg.String() {
 	case "esc":
-		m.stashPopup = nil
+		m = m.popOverlay()
 		return m, nil
 	case "ctrl+s":
 		op, ok := p.op()
@@ -96,7 +95,7 @@ func (m Model) updateStashPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		for _, path := range op.Paths { // clear marks we just stashed
 			delete(m.fileMarks, path)
 		}
-		m.stashPopup = nil
+		m = m.popOverlay()
 		return m.startOp(op)
 	case "tab", "shift+tab":
 		p.field = 1 - p.field
@@ -133,9 +132,14 @@ func (m Model) updateStashPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// renderStashPopup frames the popup body like renderPairOpPopup.
-func (m Model) renderStashPopup() string {
-	p := m.stashPopup
+// render composites the stash dialog over the layer beneath.
+func (p *stashPopup) render(m Model, below string) string {
+	w, h := m.overlayDims()
+	return overlayCenter(clipToHeight(below, h), p.box(m), w, h)
+}
+
+// box draws the stash name field and file checklist (modal box only).
+func (p *stashPopup) box(m Model) string {
 	var b strings.Builder
 	nameCursor := ""
 	if p.field == 0 {

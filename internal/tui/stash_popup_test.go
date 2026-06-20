@@ -17,16 +17,17 @@ func TestSOpensStashPopupWithCandidates(t *testing.T) {
 	m := statusModel() // a.go, b.go both unstaged 'M', branch main
 	mm, _ := m.Update(keyMsg("s"))
 	got := mm.(Model)
-	if got.stashPopup == nil {
+	p := overlayOf[*stashPopup](got)
+	if p == nil {
 		t.Fatal("s on Status should open the stash popup")
 	}
-	if got.stashPopup.name != "WIP on main" {
-		t.Errorf("default name = %q, want %q", got.stashPopup.name, "WIP on main")
+	if p.name != "WIP on main" {
+		t.Errorf("default name = %q, want %q", p.name, "WIP on main")
 	}
-	if len(got.stashPopup.files) != 2 {
-		t.Fatalf("want 2 candidate files, got %d", len(got.stashPopup.files))
+	if len(p.files) != 2 {
+		t.Fatalf("want 2 candidate files, got %d", len(p.files))
 	}
-	for _, f := range got.stashPopup.files { // nothing marked → all checked
+	for _, f := range p.files { // nothing marked → all checked
 		if !f.included {
 			t.Errorf("%s should default to included", f.path)
 		}
@@ -37,7 +38,7 @@ func TestStashPopupPrechecksMarks(t *testing.T) {
 	m := statusModel()
 	m.fileMarks = map[string]bool{"a.go": true}
 	mm, _ := m.Update(keyMsg("s"))
-	p := mm.(Model).stashPopup
+	p := overlayOf[*stashPopup](mm.(Model))
 	inc := map[string]bool{}
 	for _, f := range p.files {
 		inc[f.path] = f.included
@@ -77,12 +78,12 @@ func TestStashPopupCtrlSStashesRealRepo(t *testing.T) {
 	m.fileMarks = map[string]bool{"a.txt": true}
 
 	m = pressRune(t, m, "s")
-	if m.stashPopup == nil {
+	if overlayOf[*stashPopup](m) == nil {
 		t.Fatal("s must open the stash popup with a dirty file")
 	}
 	upd, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlS})
 	m = upd.(Model)
-	if m.stashPopup != nil {
+	if overlayOf[*stashPopup](m) != nil {
 		t.Fatal("ctrl+s must close the popup")
 	}
 	if m.fileMarks["a.txt"] {
@@ -100,11 +101,12 @@ func TestStashPopupEmptySelectionRefuses(t *testing.T) {
 	m := statusModel()
 	mm, _ := m.Update(keyMsg("s"))
 	m = mm.(Model)
-	for i := range m.stashPopup.files {
-		m.stashPopup.files[i].included = false
+	p := overlayOf[*stashPopup](m)
+	for i := range p.files {
+		p.files[i].included = false
 	}
-	mm, _ = m.updateStashPopupKey(keyMsg("ctrl+s"))
-	if mm.(Model).stashPopup == nil {
+	tm, _ := m.Update(keyMsg("ctrl+s"))
+	if overlayOf[*stashPopup](tm.(Model)) == nil {
 		t.Fatal("empty selection must not submit/close")
 	}
 }
@@ -113,7 +115,7 @@ func TestSNoCandidatesNoOp(t *testing.T) {
 	m := Model{width: 100, height: 30, focus: panelFiles, sel: map[panel]int{}}
 	m.status = model.WorkingTreeStatus{Branch: "main"} // no files
 	mm, _ := m.Update(keyMsg("s"))
-	if mm.(Model).stashPopup != nil {
+	if overlayOf[*stashPopup](mm.(Model)) != nil {
 		t.Fatal("s with nothing to stash should not open the popup")
 	}
 }
@@ -121,7 +123,9 @@ func TestSNoCandidatesNoOp(t *testing.T) {
 func TestStashPopupRendersFiles(t *testing.T) {
 	m := statusModel()
 	mm, _ := m.Update(keyMsg("s"))
-	out := mm.(Model).renderStashPopup()
+	m = mm.(Model)
+	p := overlayOf[*stashPopup](m)
+	out := p.box(m)
 	if !contains(out, "a.go") || !contains(out, "WIP on main") {
 		t.Errorf("popup should show files + name:\n%s", out)
 	}
