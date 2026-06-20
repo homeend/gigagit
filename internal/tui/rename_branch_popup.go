@@ -23,7 +23,7 @@ func (m Model) openRenameBranchPopup() (Model, bool) {
 		return m, false
 	}
 	cur := m.branches[bi].Name
-	m.renameBranchPopup = &renameBranchPopup{old: cur, name: cur}
+	m = m.pushOverlay(&renameBranchPopup{old: cur, name: cur})
 	return m, true
 }
 
@@ -47,23 +47,22 @@ func (m Model) renameBranchRow() (actionRow, bool) {
 	}, true
 }
 
-// updateRenameBranchPopupKey handles one key while the popup is open. It
-// swallows every key; ctrl+c still quits so the user is never trapped.
-func (m Model) updateRenameBranchPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+// update handles one key while the popup is open. It swallows every key; ctrl+c
+// still quits so the user is never trapped.
+func (p *renameBranchPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
 	}
-	p := m.renameBranchPopup
 	switch msg.Type {
 	case tea.KeyEsc:
-		m.renameBranchPopup = nil
+		m = m.popOverlay()
 	case tea.KeyEnter:
 		if p.name == "" || p.name == p.old {
-			m.renameBranchPopup = nil
+			m = m.popOverlay()
 			return m, nil
 		}
 		op := engine.RenameBranch{Old: p.old, New: p.name}
-		m.renameBranchPopup = nil
+		m = m.popOverlay()
 		return m.startOp(op)
 	case tea.KeyBackspace, tea.KeyCtrlH:
 		if r := []rune(p.name); len(r) > 0 {
@@ -77,9 +76,14 @@ func (m Model) updateRenameBranchPopupKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// renderRenameBranchPopup draws the rename-branch dialog.
-func (m Model) renderRenameBranchPopup() string {
-	p := m.renameBranchPopup
+// render composites the rename-branch dialog over the layer beneath.
+func (p *renameBranchPopup) render(m Model, below string) string {
+	w, h := m.overlayDims()
+	return overlayCenter(clipToHeight(below, h), p.box(m), w, h)
+}
+
+// box draws the rename-branch dialog (modal box only).
+func (p *renameBranchPopup) box(m Model) string {
 	var b strings.Builder
 	b.WriteString("Rename branch " + p.old + "\n\n")
 	b.WriteString("name: " + p.name + "\n\n")

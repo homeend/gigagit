@@ -177,15 +177,11 @@ func (m Model) render() string {
 	}
 	_, h := m.overlayDims()
 	bg := clipToHeight(m.renderInterface(), h)
-	if m.renameBranchPopup == nil && m.rewordPopup == nil && m.contentPopup == nil {
+	if m.rewordPopup == nil && m.contentPopup == nil {
 		if lines, x, y, ok := m.tooltip(); ok {
 			w, h := m.overlayDims()
 			bg = overlayAt(bg, strings.Join(lines, "\n"), x, y, w, h)
 		}
-	}
-	if m.renameBranchPopup != nil {
-		w, h := m.overlayDims()
-		return overlayCenter(bg, m.renderRenameBranchPopup(), w, h)
 	}
 	if m.rewordPopup != nil {
 		w, h := m.overlayDims()
