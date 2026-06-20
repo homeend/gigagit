@@ -336,13 +336,13 @@ func (m Model) renderInterface() string {
 		// bar lives in the label line) over Files, then Staged (when it fits).
 		active := m.activeLeftTab
 		atRows, _ := m.panelView(active)
-		// The middle slot shows whichever of Files/Tags is active; it reuses the
-		// Files box geometry regardless of which tab is up.
+		// The middle slot shows whichever of Files/Tags is active; the layout
+		// gives that tab the box geometry (boxH[mt]).
 		mt := m.middleTab()
 		mtRows, _ := m.panelView(mt)
 		boxes := []string{
 			m.renderPanel(active, m.panelLabel(active, tabBarLabel(active)), atRows, nil, g.leftW, g.boxH[active]),
-			m.renderPanel(mt, m.panelLabel(mt, filesTabLabel(mt, m.panelLen(panelFiles), m.panelLen(panelTags))), mtRows, nil, g.leftW, g.boxH[panelFiles]),
+			m.renderPanel(mt, m.panelLabel(mt, filesTabLabel(mt, m.panelLen(panelFiles), m.panelLen(panelTags))), mtRows, nil, g.leftW, g.boxH[mt]),
 		}
 		if g.boxH[panelStaged] > 0 {
 			sRows, _ := m.panelView(panelStaged)
