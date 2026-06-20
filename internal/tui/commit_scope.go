@@ -148,6 +148,28 @@ func (m Model) commitGotoTipRow() (actionRow, bool) {
 	}, true
 }
 
+// commitCreateBranchRow offers "Create branch here" on the Commits panel: open
+// the create-branch dialog with the selected commit as the start point. The whole
+// create stack (branchPopup → startOp → engine.CreateBranch) already exists.
+func (m Model) commitCreateBranchRow() (actionRow, bool) {
+	if m.focus != panelCommits || !m.opsIdle() {
+		return actionRow{}, false
+	}
+	bi, ok := m.backingIndex(panelCommits)
+	if !ok {
+		return actionRow{}, false
+	}
+	hash := m.commits[bi].Hash // full SHA → unambiguous start-point
+	return actionRow{
+		id:    "commit-create-branch",
+		label: "Create branch here",
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			m = m.pushOverlay(&branchPopup{startPoint: hash})
+			return m, nil
+		},
+	}, true
+}
+
 // commitHasLocalRef reports whether commit c is decorated with a local branch ref
 // named name (ignoring remote/tag kinds and the Head flag). A branch ref
 // decorates only its tip, so this identifies the branch's tip commit.
