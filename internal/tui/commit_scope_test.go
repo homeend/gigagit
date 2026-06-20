@@ -178,6 +178,43 @@ func TestBranchRowsMarkAllScopedBranches(t *testing.T) {
 	}
 }
 
+// TestCommitToggleReloadEndToEnd drives toggle → reload cmd → commitsReloadedMsg
+// → Update, and confirms the multi-branch label paints.
+func TestCommitToggleReloadEndToEnd(t *testing.T) {
+	f := gitexec.NewFakeRunner()
+	f.SetResponse("git log", gitexec.Result{Stdout: "h1\x1f\x1fAda\x1f0\x1fsubject\x1fHEAD -> feat\n"})
+	svc := domain.New(&git.Repo{Runner: f})
+	m := branchesPanelModel("feat", "main")
+	m.svc = svc
+	m.feed = svc.CommitFeed()
+	m.commitScopeBranches = []string{"main"} // pre-existing one-branch set
+
+	r, ok := findRow(availableActions(m), "commits-toggle")
+	if !ok {
+		t.Fatal("toggle row missing")
+	}
+	if r.label != "Add to commit view" {
+		t.Fatalf("feat not in set → label = %q, want Add to commit view", r.label)
+	}
+	mm, cmd := r.run(m)
+	m = mm.(Model)
+	if cmd == nil {
+		t.Fatal("toggle should return a reload cmd")
+	}
+	msg := cmd()
+	mm, _ = m.Update(msg)
+	m = mm.(Model)
+	if len(m.commitScopeBranches) != 2 {
+		t.Fatalf("set should now hold 2 branches, got %v", m.commitScopeBranches)
+	}
+	if m.commitScopeLabel() != "2 branches" {
+		t.Fatalf("scope label = %q, want 2 branches", m.commitScopeLabel())
+	}
+	if len(m.commits) != 1 || m.commits[0].Hash != "h1" {
+		t.Fatalf("after toggle reload, commits = %+v", m.commits)
+	}
+}
+
 func TestCommitRowsRenderLabels(t *testing.T) {
 	m := footerModel()
 	m.commits = []model.Commit{
