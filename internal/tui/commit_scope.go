@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/gigagit/gg/internal/domain"
+	"github.com/gigagit/gg/internal/model"
 )
 
 // commitsReloadedMsg carries a scope-reload's page-0 state. gen is THIS load's
@@ -116,6 +117,47 @@ func (m Model) commitViewModeRow() (actionRow, bool) {
 			return m, nil
 		},
 	}, true
+}
+
+// commitGotoTipRow offers "Go to tip in commits" on the Branches panel: move the
+// Commits cursor to the selected branch's tip commit (the loaded commit decorated
+// with that branch) and focus the Commits panel. Mirrors commitSoloRow's gating.
+func (m Model) commitGotoTipRow() (actionRow, bool) {
+	if m.focus != panelBranches {
+		return actionRow{}, false
+	}
+	b, ok := m.selectedBranch()
+	if !ok {
+		return actionRow{}, false
+	}
+	return actionRow{
+		id:    "commits-goto-tip",
+		label: "Go to tip in commits",
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			_, idx := m.panelView(panelCommits)
+			for di, bi := range idx {
+				if bi >= 0 && bi < len(m.commits) && commitHasLocalRef(m.commits[bi], b.Name) {
+					m.sel[panelCommits] = di
+					m.focus = panelCommits
+					return m, nil
+				}
+			}
+			m.statusMsg = "branch " + b.Name + " tip not in the loaded commits"
+			return m, nil
+		},
+	}, true
+}
+
+// commitHasLocalRef reports whether commit c is decorated with a local branch ref
+// named name (ignoring remote/tag kinds and the Head flag). A branch ref
+// decorates only its tip, so this identifies the branch's tip commit.
+func commitHasLocalRef(c model.Commit, name string) bool {
+	for _, r := range c.Refs {
+		if r.Kind == model.RefLocal && r.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 // commitShowAllRow offers "Show all branches" — present only when the feed is
