@@ -122,19 +122,30 @@ func (m Model) layerBase() string {
 	return m.renderInterface()
 }
 
-// renderLayers folds the layer stack bottom→top over layerBase: each surface
-// replaces the accumulated render, each popup composites its box onto it. An
-// empty stack returns layerBase unchanged (just the diff or the panels). This is
-// also the background the action menu floats over (it replaces the old
-// menuBackground helper).
+// renderLayers draws the layer stack over layerBase. Only the TOP layer is drawn
+// over a backdrop built from the full-screen surfaces beneath it — non-top
+// centered popups are not composited (a child popup replaces its parent visually,
+// exactly as before the overlay/surface stacks merged; the parent stays live on
+// the stack so esc returns to it). A surface backdrop shows through a popup's
+// centered box; surfaces ignore the backdrop and own the screen. An empty stack
+// returns layerBase unchanged. This is also the background the action menu floats
+// over (it replaces the old menuBackground helper).
 func (m Model) renderLayers() string {
 	below := m.layerBase()
-	if m.layers != nil {
-		for _, l := range m.layers.entries {
+	if m.layers == nil || len(m.layers.entries) == 0 {
+		return below
+	}
+	top := len(m.layers.entries) - 1
+	// Surfaces are always below popups (no surface is ever pushed over a live
+	// popup), so folding the full-screen surfaces beneath the top yields the top
+	// surface as the popup's backdrop — or, when the top layer is itself a
+	// surface, the loop is all-surface and the top surface renders full-screen.
+	for i := 0; i < top; i++ {
+		if l := m.layers.entries[i]; isFullScreenLayer(l) {
 			below = l.render(m, below)
 		}
 	}
-	return below
+	return m.layers.entries[top].render(m, below)
 }
 
 // render draws the interface, compositing the worktree popup centered on top of

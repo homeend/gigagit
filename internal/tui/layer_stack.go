@@ -15,6 +15,18 @@ type layer interface {
 
 type layerStack struct{ entries []layer }
 
+// isFullScreenLayer reports whether l owns the whole screen (a surface: history,
+// blame, the rebase/conflict/stage editors) rather than compositing a centered
+// box over a backdrop (a popup). render uses this to build a popup's backdrop
+// from the surfaces beneath it. Keep in sync when adding a full-screen surface.
+func isFullScreenLayer(l layer) bool {
+	switch l.(type) {
+	case *historyView, *blameView, *irebaseEditor, *hunkPicker:
+		return true
+	}
+	return false
+}
+
 // topLayer returns the active (topmost) layer, or nil when the stack is empty.
 func (m Model) topLayer() layer {
 	if m.layers == nil || len(m.layers.entries) == 0 {
