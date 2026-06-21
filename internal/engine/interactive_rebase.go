@@ -46,9 +46,18 @@ func (op InteractiveRebase) Run(ctx context.Context, deps OpDeps) (Result, error
 	for _, b := range branches {
 		have[b.Name] = true
 	}
-	for _, name := range []string{op.Branch, op.Onto} {
-		if !have[name] {
-			return Result{}, fmt.Errorf("interactive rebase: no such branch: %s", name)
+	if !have[op.Branch] {
+		return Result{}, fmt.Errorf("interactive rebase: no such branch: %s", op.Branch)
+	}
+	// Onto may be a branch OR any resolvable commit-ish: the single-commit
+	// move/drop callers base onto a parent revspec like "<sha>~1".
+	if !have[op.Onto] {
+		ok, err := deps.Repo.CommitExists(ctx, op.Onto)
+		if err != nil {
+			return Result{}, err
+		}
+		if !ok {
+			return Result{}, fmt.Errorf("interactive rebase: no such commit: %s", op.Onto)
 		}
 	}
 

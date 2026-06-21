@@ -87,6 +87,45 @@ func TestInteractiveRebaseRewordDropReorder(t *testing.T) {
 	}
 }
 
+func TestInteractiveRebaseOntoCommitSha(t *testing.T) {
+	gg := buildGG(t)
+	dir, repo := threeCommitBranch(t)
+	// Onto a raw commit SHA (wip2's parent = wip1 = work~2): range = [wip2, wip3];
+	// drop wip2. This exercises the relaxed Onto (commit-ish, not a branch).
+	onto := shaOf(t, dir, "work~2")
+	plan := rebaseplan.Plan{Entries: []rebaseplan.Entry{
+		{Sha: shaOf(t, dir, "work~1"), Action: rebaseplan.Drop, Orig: "wip2"},
+		{Sha: shaOf(t, dir, "work"), Action: rebaseplan.Pick, Orig: "wip3"},
+	}}
+	res, err := InteractiveRebase{Branch: "work", Onto: onto, Plan: plan, GGBin: gg}.
+		Run(context.Background(), OpDeps{Repo: repo})
+	if err != nil {
+		t.Fatalf("interactive rebase onto sha: %v", err)
+	}
+	if !res.Changed {
+		t.Fatalf("result = %+v, want Changed", res)
+	}
+	got := subjects(t, dir, "main..work") // newest-first
+	want := []string{"wip3", "wip1"}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("subjects = %v, want %v (wip2 should be dropped)", got, want)
+	}
+}
+
+func TestInteractiveRebaseOntoNoSuchCommit(t *testing.T) {
+	gg := buildGG(t)
+	dir, repo := threeCommitBranch(t)
+	_ = dir
+	plan := rebaseplan.Plan{Entries: []rebaseplan.Entry{
+		{Sha: shaOf(t, dir, "work"), Action: rebaseplan.Pick, Orig: "wip3"},
+	}}
+	_, err := InteractiveRebase{Branch: "work", Onto: "definitely-not-a-ref", Plan: plan, GGBin: gg}.
+		Run(context.Background(), OpDeps{Repo: repo})
+	if err == nil || !strings.Contains(err.Error(), "no such commit") {
+		t.Fatalf("err = %v, want a no-such-commit refusal", err)
+	}
+}
+
 func TestInteractiveRebaseRefusesMergeCommits(t *testing.T) {
 	gg := buildGG(t)
 	dir, repo := newRepo(t)
