@@ -55,6 +55,7 @@ type GitOps interface {
 	DeleteBranch(ctx context.Context, name string, force bool) error
 	LocalBranchExists(ctx context.Context, name string) (bool, error)
 	IsAncestor(ctx context.Context, a, b string) (bool, error)
+	CommitExists(ctx context.Context, ref string) (bool, error)
 	FastForwardToRef(ctx context.Context, branch, source string) error
 
 	AddWorktree(ctx context.Context, path, branch, startPoint string, onLine func(string)) error
