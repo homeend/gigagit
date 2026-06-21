@@ -105,3 +105,61 @@ func TestCommitRowWidthBoundedByWindow(t *testing.T) {
 		t.Errorf("row width %d not bounded by the window", w)
 	}
 }
+
+func TestPanRightAdvancesScrollClamped(t *testing.T) {
+	m := graphWinModel(50, 40, 8, 0)
+	m.cfg.UI.CommitGraphPanStep = 5
+	m = feedKey(m, "shift+right")
+	if m.commitGraphScroll != 5 {
+		t.Fatalf("scroll = %d, want 5", m.commitGraphScroll)
+	}
+	// Pan far right: clamp at planeLanes-cols = 50-8 = 42.
+	for i := 0; i < 20; i++ {
+		m = feedKey(m, "shift+right")
+	}
+	if m.commitGraphScroll != 42 {
+		t.Fatalf("scroll = %d, want clamped to 42", m.commitGraphScroll)
+	}
+}
+
+func TestPanLeftClampsAtZero(t *testing.T) {
+	m := graphWinModel(50, 40, 8, 3)
+	m.cfg.UI.CommitGraphPanStep = 5
+	m = feedKey(m, "shift+left")
+	if m.commitGraphScroll != 0 {
+		t.Fatalf("scroll = %d, want 0", m.commitGraphScroll)
+	}
+}
+
+func TestWidenNarrowAdjustCols(t *testing.T) {
+	m := graphWinModel(50, 40, 8, 0)
+	m.cfg.UI.CommitGraphStep = 4
+	m = feedKey(m, ">")
+	if m.graphCols() != 12 {
+		t.Fatalf("cols = %d, want 12 after widen", m.graphCols())
+	}
+	m = feedKey(m, "<")
+	m = feedKey(m, "<")
+	if m.graphCols() != 4 {
+		t.Fatalf("cols = %d, want 4 after two narrows", m.graphCols())
+	}
+	// Narrow floor = min (2): another narrow must not go below it.
+	m = feedKey(m, "<")
+	if m.graphCols() != 2 {
+		t.Fatalf("cols = %d, want clamped to min 2", m.graphCols())
+	}
+}
+
+func TestGraphWindowMenuRowsPresentWhenActive(t *testing.T) {
+	m := graphWinModel(50, 40, 8, 0)
+	m.focus = panelCommits
+	got := map[string]bool{}
+	for _, r := range availableActions(m) {
+		got[r.id] = true
+	}
+	for _, id := range []string{"graph-widen", "graph-narrow", "graph-pan-left", "graph-pan-right"} {
+		if !got[id] {
+			t.Errorf("menu missing %q when graph active", id)
+		}
+	}
+}

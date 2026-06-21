@@ -100,6 +100,34 @@ func without(ss []string, s string) []string {
 	return out
 }
 
+// graphWindowRows offers the commit-graph window controls in the . menu when the
+// windowed lane graph is active in the Commits panel.
+func (m Model) graphWindowRows() []actionRow {
+	if m.focus != panelCommits || !m.graphActive() {
+		return nil
+	}
+	return []actionRow{
+		{id: "graph-widen", label: "Widen graph", run: func(m Model) (tea.Model, tea.Cmd) {
+			m.commitGraphCols = m.clampCols(m.graphCols() + m.graphStep())
+			m.commitGraphScroll = m.clampScroll(m.commitGraphScroll)
+			return m, nil
+		}},
+		{id: "graph-narrow", label: "Narrow graph", run: func(m Model) (tea.Model, tea.Cmd) {
+			m.commitGraphCols = m.clampCols(m.graphCols() - m.graphStep())
+			m.commitGraphScroll = m.clampScroll(m.commitGraphScroll)
+			return m, nil
+		}},
+		{id: "graph-pan-left", label: "Pan graph left", run: func(m Model) (tea.Model, tea.Cmd) {
+			m.commitGraphScroll = m.clampScroll(m.commitGraphScroll - m.graphPanStep())
+			return m, nil
+		}},
+		{id: "graph-pan-right", label: "Pan graph right", run: func(m Model) (tea.Model, tea.Cmd) {
+			m.commitGraphScroll = m.clampScroll(m.commitGraphScroll + m.graphPanStep())
+			return m, nil
+		}},
+	}
+}
+
 // commitViewModeRow toggles the Commits feed between the lane graph and a flat
 // ●-gutter list. Offered from the Branches or Commits panel.
 func (m Model) commitViewModeRow() (actionRow, bool) {

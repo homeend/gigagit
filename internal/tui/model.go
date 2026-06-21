@@ -565,6 +565,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.hscroll[m.focus] = 0
 			return m, nil
 		case "shift+left":
+			if m.focus == panelCommits && m.graphActive() {
+				m.commitGraphScroll = m.clampScroll(m.commitGraphScroll - m.graphPanStep())
+				return m, nil
+			}
 			if m.dispModes[m.focus] == modeScroll && m.hscroll[m.focus] > 0 {
 				if m.hscroll[m.focus] -= m.hscrollStep(); m.hscroll[m.focus] < 0 {
 					m.hscroll[m.focus] = 0
@@ -572,6 +576,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		case "shift+right":
+			if m.focus == panelCommits && m.graphActive() {
+				m.commitGraphScroll = m.clampScroll(m.commitGraphScroll + m.graphPanStep())
+				return m, nil
+			}
 			if m.dispModes[m.focus] == modeScroll {
 				m.hscroll[m.focus] += m.hscrollStep()
 			}
@@ -758,6 +766,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if n := m.panelLen(m.focus); m.sel[m.focus] >= n && n > 0 {
 					m.sel[m.focus] = n - 1
 				}
+			}
+		case ">":
+			if m.focus == panelCommits && m.graphActive() {
+				m.commitGraphCols = m.clampCols(m.graphCols() + m.graphStep())
+				m.commitGraphScroll = m.clampScroll(m.commitGraphScroll)
+				return m, nil
+			}
+		case "<":
+			if m.focus == panelCommits && m.graphActive() {
+				m.commitGraphCols = m.clampCols(m.graphCols() - m.graphStep())
+				m.commitGraphScroll = m.clampScroll(m.commitGraphScroll)
+				return m, nil
 			}
 		case "/":
 			if !m.running && !m.loading {

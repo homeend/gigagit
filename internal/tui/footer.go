@@ -67,6 +67,9 @@ var contextBindings = []footerBinding{
 		// there, so don't advertise it.
 		return m.focus == panelCommits && m.canShowCommitFiles() && !(m.width > 0 && m.width < 40)
 	}, scopeRow},
+	{"graph-window", "", "[<>] graph [⇧←→] pan [=] center", func(m Model) bool {
+		return m.focus == panelCommits && m.graphActive()
+	}, scopeWindow},
 }
 
 // globalBindings are the always-relevant tail, still individually predicated
