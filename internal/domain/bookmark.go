@@ -20,7 +20,7 @@ func (s *Service) BookmarkAdd(ctx context.Context, b model.Bookmark) (model.Book
 	if st == nil {
 		return model.Bookmark{}, ErrBookmarksDisabled
 	}
-	if b.State == model.StateCommitted && b.SHA == "" {
+	if b.State == model.StateCommitted && b.SHA == "" && b.Path != "" {
 		sha, err := s.repo.BlobSHA(ctx, b.Commit, b.Path)
 		if err != nil {
 			return model.Bookmark{}, err
@@ -61,6 +61,9 @@ func (s *Service) BookmarkRemove(ctx context.Context, id string) error {
 // the blob (cat-file / shelf store); live → the named worktree's index or
 // working file.
 func (s *Service) BookmarkBytes(ctx context.Context, b model.Bookmark) ([]byte, error) {
+	if b.IsCommit() {
+		return nil, errors.New("bookmark: commit bookmark has no file bytes")
+	}
 	switch b.State {
 	case model.StateCommitted:
 		return s.repo.CatFileBlob(ctx, b.SHA)

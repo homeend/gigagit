@@ -98,6 +98,39 @@ func (m Model) bookmarkAddCmd(b model.Bookmark) tea.Cmd {
 	}
 }
 
+// commitBookmarkRow offers "Bookmark this commit" on the Commits panel: persist a
+// path-less pointer to the selected commit in the bookmark registry. Mirrors
+// bookmarkAddRow ("Bookmark this file").
+func (m Model) commitBookmarkRow() (actionRow, bool) {
+	if m.focus != panelCommits || !m.opsIdle() {
+		return actionRow{}, false
+	}
+	bi, ok := m.backingIndex(panelCommits)
+	if !ok {
+		return actionRow{}, false
+	}
+	c := m.commits[bi]
+	b := model.Bookmark{State: model.StateCommitted, Commit: c.Hash, Branch: firstLocalRef(c), Path: ""}
+	return actionRow{
+		id:    "commit-bookmark",
+		label: "Bookmark this commit",
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			return m, m.bookmarkAddCmd(b)
+		},
+	}, true
+}
+
+// firstLocalRef returns the name of the first local-branch ref decorating c, for
+// display sugar on a commit bookmark; "" when the commit is no branch's tip.
+func firstLocalRef(c model.Commit) string {
+	for _, r := range c.Refs {
+		if r.Kind == model.RefLocal {
+			return r.Name
+		}
+	}
+	return ""
+}
+
 // bookmarkAddRow is the menu-only "Bookmark this file" action, present wherever
 // a single file is focused. The resolved address is captured at build time.
 func (m Model) bookmarkAddRow() (actionRow, bool) {

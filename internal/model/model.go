@@ -317,6 +317,9 @@ func (a FileAddress) Display() string {
 	if a.State == StateCommitted && len(a.Commit) >= 7 {
 		mid = a.Commit[:7]
 	}
+	if a.Path == "" {
+		return fmt.Sprintf("%s / %s", container, mid)
+	}
 	return fmt.Sprintf("%s / %s / %s", container, mid, a.Path)
 }
 
@@ -334,6 +337,12 @@ func (a FileAddress) FileRef() FileRef {
 	default: // StateUnstaged, StateUntracked
 		return FileRef{Source: SourceUnstaged, Path: a.Path}
 	}
+}
+
+// IsCommit reports whether the bookmark points at a commit itself (a path-less
+// committed pointer) rather than a file within a commit.
+func (b Bookmark) IsCommit() bool {
+	return b.Path == "" && b.State == StateCommitted
 }
 
 // Address builds the FileAddress a bookmark points at.

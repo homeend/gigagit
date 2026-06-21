@@ -77,3 +77,35 @@ func TestBookmarkListAndRemove(t *testing.T) {
 		t.Fatalf("after remove len = %d", len(list))
 	}
 }
+
+func TestBookmarkAddCommitSkipsBlobSHA(t *testing.T) {
+	svc, f := bmSvc(t) // FakeRunner has NO rev-parse response; calling it would not fill SHA
+	b, err := svc.BookmarkAdd(context.Background(), model.Bookmark{
+		State: model.StateCommitted, Commit: "c0ffee", Path: "",
+	})
+	if err != nil {
+		t.Fatalf("BookmarkAdd(commit): %v", err)
+	}
+	if b.SHA != "" {
+		t.Fatalf("commit bookmark must carry empty SHA, got %q", b.SHA)
+	}
+	if sawArg(f, "git rev-parse", "c0ffee") {
+		t.Fatalf("BlobSHA must not be called for a commit bookmark: %+v", f.Calls)
+	}
+	if b.ID == "" {
+		t.Fatal("no id assigned")
+	}
+}
+
+func TestBookmarkBytesCommitErrors(t *testing.T) {
+	svc, f := bmSvc(t)
+	_, err := svc.BookmarkBytes(context.Background(), model.Bookmark{
+		State: model.StateCommitted, Commit: "c0ffee", Path: "", // commit bookmark
+	})
+	if err == nil {
+		t.Fatal("BookmarkBytes of a commit bookmark must error")
+	}
+	if len(f.Calls) != 0 {
+		t.Fatalf("must not shell out for a commit bookmark: %+v", f.Calls)
+	}
+}

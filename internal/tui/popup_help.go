@@ -29,10 +29,10 @@ func bookmarkSwitcherHelp(compare bool) []contentLine {
 	}
 	return []contentLine{
 		cheatRow("↑/k ↓/j", "move the selection"),
-		cheatRow("enter", "jump: diff the bookmark vs the working-tree file"),
-		cheatRow("p", "paste the bookmarked file to a path you type"),
-		cheatRow("m", "mark one, then a second bookmark to compare the two"),
-		cheatRow("c", "compare the highlighted bookmark against a shelf entry"),
+		cheatRow("enter", "file bookmark: diff vs the working-tree file; commit bookmark: compare it against the selected commit"),
+		cheatRow("p", "paste the bookmarked file to a path you type (file bookmarks only)"),
+		cheatRow("m", "mark one, then a second bookmark to compare the two (file bookmarks only)"),
+		cheatRow("c", "compare the highlighted bookmark against a shelf entry (file bookmarks only)"),
 		cheatRow("x", "remove the bookmark (confirms)"),
 		cheatRow("/", "filter the list (enter keeps, esc cancels)"),
 		cheatRow("z", "cycle text display: cutoff / wrap / scroll"),

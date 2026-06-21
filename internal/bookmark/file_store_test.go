@@ -68,3 +68,42 @@ func TestListPagingAndRemove(t *testing.T) {
 		t.Fatalf("removed Get err = %v, want ErrNotFound", err)
 	}
 }
+
+func TestAddressIDCommitBookmark(t *testing.T) {
+	commit := model.Bookmark{State: model.StateCommitted, Commit: "c0ffee", Path: ""}
+	id1 := AddressID(commit)
+	if id1 == "" || id1 != AddressID(commit) {
+		t.Fatalf("commit bookmark id not stable: %q", id1)
+	}
+	// Distinct from a FILE bookmark at the same commit.
+	file := model.Bookmark{State: model.StateCommitted, Commit: "c0ffee", Path: "a.go"}
+	if AddressID(file) == id1 {
+		t.Fatal("commit and file bookmark at the same commit must have distinct ids")
+	}
+	// Distinct from another commit.
+	other := model.Bookmark{State: model.StateCommitted, Commit: "deadbee", Path: ""}
+	if AddressID(other) == id1 {
+		t.Fatal("different commits must have distinct ids")
+	}
+	// Round-trips through the store.
+	fs := NewFileStore(t.TempDir())
+	stored, err := fs.Add(commit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := fs.List(0, 100)
+	if err != nil || len(got) != 1 || got[0].ID != stored.ID {
+		t.Fatalf("commit bookmark did not round-trip: %+v err %v", got, err)
+	}
+}
+
+func TestAddressIDCommitIgnoresBranch(t *testing.T) {
+	// A commit bookmark's identity is the commit alone; the branch decoration is
+	// volatile display sugar, so bookmarking the same commit when it is a branch
+	// tip vs not must yield ONE row, not two.
+	withBranch := model.Bookmark{State: model.StateCommitted, Commit: "c0ffee", Branch: "feat", Path: ""}
+	noBranch := model.Bookmark{State: model.StateCommitted, Commit: "c0ffee", Branch: "", Path: ""}
+	if AddressID(withBranch) != AddressID(noBranch) {
+		t.Fatal("commit bookmark id must not depend on branch decoration")
+	}
+}

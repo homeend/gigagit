@@ -79,8 +79,14 @@ func slug(s string) string {
 // AddressID derives a stable id from the ADDRESS (not the SHA), so identical
 // content at different places is distinct and the same place is idempotent.
 func AddressID(b model.Bookmark) string {
+	branch := b.Branch
+	if b.IsCommit() {
+		// A commit bookmark's identity is the commit itself; its branch
+		// decoration is volatile display sugar, so the same commit yields one id.
+		branch = ""
+	}
 	key := fmt.Sprintf("%d\x00%s\x00%s\x00%s\x00%s\x00%s",
-		b.State, b.Worktree, b.Branch, b.Commit, b.ShelfID, b.Path)
+		b.State, b.Worktree, branch, b.Commit, b.ShelfID, b.Path)
 	sum := sha256.Sum256([]byte(key))
 	return fmt.Sprintf("%s-%s-%s", b.State.String(), slug(b.Path), hex.EncodeToString(sum[:])[:8])
 }
