@@ -30,6 +30,7 @@ type GitOps interface {
 	PullInWorktree(ctx context.Context, worktreePath, remote, branch string) error
 	FastForwardRef(ctx context.Context, remote, branch string) error
 	Push(ctx context.Context, remote, branch string, setUpstream bool) error
+	PushTag(ctx context.Context, remote, name string) error
 	Switch(ctx context.Context, branch string) error
 	SwitchDetach(ctx context.Context, ref string) error
 	SwitchCreate(ctx context.Context, branch, start string) error
