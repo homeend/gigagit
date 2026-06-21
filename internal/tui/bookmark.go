@@ -109,8 +109,7 @@ func (m Model) commitBookmarkRow() (actionRow, bool) {
 	if !ok {
 		return actionRow{}, false
 	}
-	c := m.commits[bi]
-	b := model.Bookmark{State: model.StateCommitted, Commit: c.Hash, Branch: firstLocalRef(c), Path: ""}
+	b := commitBookmark(m.commits[bi])
 	return actionRow{
 		id:    "commit-bookmark",
 		label: "Bookmark this commit",
@@ -118,6 +117,18 @@ func (m Model) commitBookmarkRow() (actionRow, bool) {
 			return m, m.bookmarkAddCmd(b)
 		},
 	}, true
+}
+
+// commitBookmark builds the path-less bookmark for commit c. The subject rides
+// in Label as the switcher row's title (Label is not part of the identity).
+func commitBookmark(c model.Commit) model.Bookmark {
+	return model.Bookmark{
+		State:  model.StateCommitted,
+		Commit: c.Hash,
+		Branch: firstLocalRef(c),
+		Path:   "",
+		Label:  c.Subject,
+	}
 }
 
 // firstLocalRef returns the name of the first local-branch ref decorating c, for

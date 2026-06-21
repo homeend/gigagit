@@ -7,6 +7,27 @@ import (
 	"github.com/gigagit/gg/internal/model"
 )
 
+func TestCommitBookmarkStoresSubject(t *testing.T) {
+	c := model.Commit{Hash: "a1b2c3d4e5", Subject: "Fix the parser"}
+	b := commitBookmark(c)
+	if !b.IsCommit() || b.Label != "Fix the parser" {
+		t.Fatalf("commit bookmark should store the subject as Label: %+v", b)
+	}
+}
+
+func TestBookmarkDisplayCommitIncludesSubject(t *testing.T) {
+	b := model.Bookmark{State: model.StateCommitted, Commit: "a1b2c3d4e5", Branch: "feat", Path: "", Label: "Fix the parser"}
+	got := bookmarkDisplay(b)
+	if !strings.Contains(got, "feat / a1b2c3d") || !strings.Contains(got, "Fix the parser") {
+		t.Fatalf("commit bookmark display should include sha + subject: %q", got)
+	}
+	// A file bookmark must ignore Label (display unchanged).
+	f := model.Bookmark{State: model.StateCommitted, Commit: "a1b2c3d4e5", Path: "x.go", Label: "ignored"}
+	if strings.Contains(bookmarkDisplay(f), "ignored") {
+		t.Fatalf("file bookmark display must not append Label: %q", bookmarkDisplay(f))
+	}
+}
+
 func TestCommitBookmarkRendersWithoutPath(t *testing.T) {
 	m := loadedModelLinearCommits(t, 2)
 	m.width, m.height = 100, 30
