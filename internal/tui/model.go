@@ -44,9 +44,10 @@ type Model struct {
 	pendingCompare      *pendingCompare // focused file awaiting the compare-mode picker; nil = none
 	pendingSwitchBranch string          // branch to SmartSwitch to after a successful op (B = create-and-switch)
 
-	mark       *markState      // the m-key mark; nil = none (see mark.go)
-	fileMarks  map[string]bool // multi-selected Status file paths (keyed by path)
-	actionMenu *actionMenu     // . action menu (list + run available actions); nil = closed
+	mark             *markState      // the m-key mark; nil = none (see mark.go)
+	fileMarks        map[string]bool // multi-selected Status file paths (keyed by path)
+	commitCompareSet map[string]bool // commits toggled into the ◉ compare selection (keyed by hash)
+	actionMenu       *actionMenu     // . action menu (list + run available actions); nil = closed
 
 	stashView *stashView // stash list in the right column (over Commits); nil = closed
 
