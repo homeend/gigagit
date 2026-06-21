@@ -864,6 +864,7 @@ func (m Model) commitDecorators(rows []string, idx []int) []rowDecorator {
 	laneColorOn := len(m.commitGraphLanes) == len(m.commits) && (m.commitListMode || m.commitGraphOn())
 	graphPrefix := !m.commitListMode && m.commitGraphOn() && len(m.commitGraphRows) == len(m.commits)
 	decos := make([]rowDecorator, len(rows))
+	identW := m.commitIdentWidth() // loop-invariant: compute once, not per row
 	for j := range rows {
 		ci := j
 		if j < len(idx) {
@@ -910,7 +911,7 @@ func (m Model) commitDecorators(rows []string, idx []int) []rowDecorator {
 		if !dim && !hasDot {
 			continue
 		}
-		decos[j] = commitLineDecorator(hasDot, dotCol, dotColor, dim, identStart, m.commitIdentWidth())
+		decos[j] = commitLineDecorator(hasDot, dotCol, dotColor, dim, identStart, identW)
 	}
 	return decos
 }

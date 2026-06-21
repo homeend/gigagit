@@ -37,6 +37,25 @@ func benchModel(n, lanes, cols int) Model {
 	return m
 }
 
+// TestCommitDecoratorsAllocScaleLinear pins the O(n²)→O(n) fix: doubling the
+// feed must not ~quadruple the allocations of building decorators. Pre-fix this
+// fails (≈4× growth); post-fix it is ≈2×.
+func TestCommitDecoratorsAllocScaleLinear(t *testing.T) {
+	measure := func(n int) float64 {
+		m := benchModel(n, 303, 8)
+		rows, idx := m.panelView(panelCommits)
+		return testing.AllocsPerRun(3, func() {
+			_ = m.commitDecorators(rows, idx)
+		})
+	}
+	a := measure(400)
+	b := measure(800)
+	ratio := b / a
+	if ratio > 2.6 { // linear ≈2.0; allow headroom. O(n²) would be ≈4.0.
+		t.Fatalf("decorator allocs grew %.2fx for 2x feed (want ≤2.6x, O(n^2) bug present)", ratio)
+	}
+}
+
 // BenchmarkCommitsRender measures the per-frame Commits render hot path
 // (filter+sort+materialize via panelView, then decorators) across feed sizes
 // and graph widths.
