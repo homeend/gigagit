@@ -39,6 +39,13 @@ func (m Model) focusedBookmark() (model.Bookmark, bool) {
 	if v := m.filesView; v != nil {
 		if m.filesTreeFocused && m.filesHash != "" {
 			if vis := v.visible(); v.sel >= 0 && v.sel < len(vis) && vis[v.sel].path != "" {
+				// A file deleted in this commit (status D) has no content at
+				// commit:hash:path, so it can't be shelved, bookmarked, or
+				// compared — report "no file". The deletion is still viewable
+				// via enter (a plain diff).
+				if vis[v.sel].status == "D" {
+					return model.Bookmark{}, false
+				}
 				return model.Bookmark{State: model.StateCommitted, Commit: m.filesHash, Path: vis[v.sel].path}, true
 			}
 		}

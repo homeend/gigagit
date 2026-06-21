@@ -71,7 +71,7 @@ func (p *shelfPopup) render(m Model, below string) string {
 
 func (m Model) renderShelfPopupBox(p *shelfPopup) string {
 	w, _ := m.overlayDims()
-	inner := popupInnerWidth(w)
+	inner := popupWideInnerWidth(w)
 	textW := popupTextWidth(inner)
 
 	header := "Shelf"
@@ -111,7 +111,12 @@ func (m Model) renderShelfPopupBox(p *shelfPopup) string {
 
 	parts := []string{header, ""}
 	parts = append(parts, bodyLines...)
-	parts = append(parts, "", "[?] keys  [enter] diff  [p] restore  [m] mark/compare  [x] remove  [c] vs bookmark  [/] filter  [z] mode  [esc] close")
+	// Wrap the hint to the text width so [z] mode / [esc] close stay visible even
+	// on a narrow terminal, where a single-line footer would truncate them off
+	// (the reason z went undiscovered).
+	hint := []string{"[?] keys", "[enter] diff", "[p] restore", "[m] mark/compare", "[x] remove", "[c] vs bookmark", "[/] filter", "[z] mode", "[esc] close"}
+	parts = append(parts, "")
+	parts = append(parts, wrapParts(hint, textW, "  ")...)
 	return popupBox(inner, strings.Join(parts, "\n"))
 }
 

@@ -95,7 +95,7 @@ func (p *bookmarkPopup) render(m Model, below string) string {
 
 func (m Model) renderBookmarkPopupBox(p *bookmarkPopup) string {
 	w, _ := m.overlayDims()
-	inner := popupInnerWidth(w)
+	inner := popupWideInnerWidth(w)
 	textW := popupTextWidth(inner)
 
 	header := "Bookmarks"
@@ -135,7 +135,11 @@ func (m Model) renderBookmarkPopupBox(p *bookmarkPopup) string {
 
 	parts := []string{header, ""}
 	parts = append(parts, bodyLines...)
-	parts = append(parts, "", "[?] keys  [enter] jump  [p] paste  [m] mark/compare  [x] remove  [c] vs shelf  [/] filter  [z] mode  [esc] close")
+	// Wrap the hint so [z] mode / [esc] close survive on a narrow terminal,
+	// where a single-line footer would truncate them off (mirrors shelfPopup).
+	hint := []string{"[?] keys", "[enter] jump", "[p] paste", "[m] mark/compare", "[x] remove", "[c] vs shelf", "[/] filter", "[z] mode", "[esc] close"}
+	parts = append(parts, "")
+	parts = append(parts, wrapParts(hint, textW, "  ")...)
 	return popupBox(inner, strings.Join(parts, "\n"))
 }
 
