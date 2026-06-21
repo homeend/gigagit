@@ -9,6 +9,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Move or drop a commit from the Commits panel.** The `.` action menu on a
+  non-merge commit of the **checked-out** branch now offers **Move commit up**
+  (one step newer), **Move commit down** (one step older), and **Drop commit** —
+  each a one-step interactive rebase performed immediately (no editor). The
+  rebase bases onto the commit's parent (`sha~1`) or grandparent (`sha~2`),
+  reuses the existing dirty-worktree stash, and pauses on a conflict for
+  `git rebase --continue`. `engine.InteractiveRebase` now also accepts a
+  commit-ish (not just a branch) as its rebase base.
 - **Rename or delete a branch from its tip commit.** When the selected
   Commits-panel commit is the tip of one or more local branches, the `.` action
   menu now offers **Rename branch ‹name›** (opens the rename dialog) and
