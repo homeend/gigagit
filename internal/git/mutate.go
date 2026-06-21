@@ -33,6 +33,21 @@ func (r *Repo) Switch(ctx context.Context, branch string) error {
 	return err
 }
 
+// SwitchDetach checks out ref with a detached HEAD (git switch --detach).
+func (r *Repo) SwitchDetach(ctx context.Context, ref string) error {
+	argv := gitcmd.New("switch").Arg("--detach", ref).ToArgv()
+	_, err := r.Runner.Run(ctx, "git switch --detach", argv)
+	return err
+}
+
+// SwitchCreate creates branch at start and switches to it in one invocation
+// (git switch -c). Atomic: on failure no branch is left behind.
+func (r *Repo) SwitchCreate(ctx context.Context, branch, start string) error {
+	argv := gitcmd.New("switch").Arg("-c", branch).ArgIf(start != "", start).ToArgv()
+	_, err := r.Runner.Run(ctx, "git switch -c", argv)
+	return err
+}
+
 // CreateBranch creates a new branch without switching to it. An empty
 // startPoint means HEAD.
 func (r *Repo) CreateBranch(ctx context.Context, name, startPoint string) error {
