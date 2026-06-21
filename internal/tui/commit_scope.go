@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"slices"
+	"strconv"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -315,6 +316,146 @@ func orderByFeed(commits []model.Commit, a, b string) (older, newer string) {
 		return a, b
 	}
 	return b, a
+}
+
+// compareSetDisplayIndices returns the display-row indices in panel p that are
+// in the commit compare selection (◉). Empty unless p is the Commits panel and
+// the set is non-empty.
+func (m Model) compareSetDisplayIndices(p panel) map[int]bool {
+	out := map[int]bool{}
+	if p != panelCommits || len(m.commitCompareSet) == 0 {
+		return out
+	}
+	l := m.listFor(p)
+	_, idx := m.panelView(p)
+	for n, i := range idx {
+		if m.commitCompareSet[l.Key(i)] {
+			out[n] = true
+		}
+	}
+	return out
+}
+
+// commitCompareToggleRow adds/removes the selected commit to the ◉ compare
+// selection (the multi-commit analog of marking).
+func (m Model) commitCompareToggleRow() (actionRow, bool) {
+	if m.focus != panelCommits || !m.opsIdle() {
+		return actionRow{}, false
+	}
+	bi, ok := m.backingIndex(panelCommits)
+	if !ok {
+		return actionRow{}, false
+	}
+	hash := m.commits[bi].Hash
+	in := m.commitCompareSet[hash]
+	label := "Add to compare selection"
+	if in {
+		label = "Remove from compare selection"
+	}
+	return actionRow{
+		id:    "commit-compare-toggle",
+		label: label,
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			if m.commitCompareSet == nil {
+				m.commitCompareSet = map[string]bool{}
+			}
+			if in {
+				delete(m.commitCompareSet, hash)
+			} else {
+				m.commitCompareSet[hash] = true
+			}
+			return m, nil
+		},
+	}, true
+}
+
+// commitCompareClearRow clears the ◉ compare selection.
+func (m Model) commitCompareClearRow() (actionRow, bool) {
+	if m.focus != panelCommits || len(m.commitCompareSet) == 0 {
+		return actionRow{}, false
+	}
+	return actionRow{
+		id:    "commit-compare-clear",
+		label: "Clear compare selection",
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			m.commitCompareSet = nil
+			return m, nil
+		},
+	}, true
+}
+
+// compareSelectionEndpoints resolves the ◉ selection into a (left, right)
+// endpoint pair, ordered older→newer by feed position:
+//   - exactly 2  → a tree-to-tree diff of the two commits (GitKraken's exact
+//     2-commit semantic; no ancestry needed).
+//   - 3 or more  → the combined diff of the RANGE: git diff oldest^ newest.
+//     This is a range approximation — exact only on a topological chain — and
+//     is refused when the oldest selected commit is a root (no parent).
+//
+// ok is false (with a note) when fewer than 2 are selected or the root guard
+// trips.
+func (m Model) compareSelectionEndpoints() (left, right model.Endpoint, note string, ok bool) {
+	type sc struct {
+		hash string
+		idx  int
+	}
+	var sel []sc
+	for i := range m.commits {
+		if m.commitCompareSet[m.commits[i].Hash] {
+			sel = append(sel, sc{m.commits[i].Hash, i})
+		}
+	}
+	if len(sel) < 2 {
+		return left, right, "select at least 2 commits to compare", false
+	}
+	// Oldest = largest feed index (newest-first feed); newest = smallest.
+	oldest, newest := sel[0], sel[0]
+	for _, s := range sel {
+		if s.idx > oldest.idx {
+			oldest = s
+		}
+		if s.idx < newest.idx {
+			newest = s
+		}
+	}
+	if len(sel) == 2 {
+		return model.Endpoint{Kind: model.EndpointCommit, Hash: oldest.hash},
+			model.Endpoint{Kind: model.EndpointCommit, Hash: newest.hash}, "", true
+	}
+	// 3+: squash from oldest^. Refuse if oldest is a root commit (no parent).
+	if len(m.commits[oldest.idx].Parents) == 0 {
+		return left, right, "can't squash a range from the root commit", false
+	}
+	return model.Endpoint{Kind: model.EndpointCommit, Hash: oldest.hash + "^"},
+		model.Endpoint{Kind: model.EndpointCommit, Hash: newest.hash}, "", true
+}
+
+// commitCompareSelectionRow offers "Compare selection" when 2+ commits are in
+// the ◉ set. The label is honest about the 3+ range semantic.
+func (m Model) commitCompareSelectionRow() (actionRow, bool) {
+	if m.focus != panelCommits || !m.opsIdle() {
+		return actionRow{}, false
+	}
+	n := len(m.commitCompareSet)
+	if n < 2 {
+		return actionRow{}, false
+	}
+	label := "Compare the 2 selected commits"
+	if n >= 3 {
+		label = "Compare range of " + strconv.Itoa(n) + " commits (combined diff)"
+	}
+	return actionRow{
+		id:    "commit-compare-selection",
+		label: label,
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			left, right, note, ok := m.compareSelectionEndpoints()
+			if !ok {
+				m.statusMsg = note
+				return m, nil
+			}
+			return m.openCompareFiles(left, right)
+		},
+	}, true
 }
 
 // commitCreateWorktreeRow offers "Create worktree here" on the Commits panel:

@@ -442,13 +442,16 @@ func (m Model) renderPanel(p panel, label string, rows []string, decos []rowDeco
 		lines = append(lines, padRight(truncate("  (none)", innerW), innerW))
 	} else {
 		marked := m.markedDisplayIndices(p)
+		cmpSet := m.compareSetDisplayIndices(p)
 		sel := m.sel[p]
 		isFocused := m.panelFocused(p)
 		wr := make([]winRow, len(rows))
 		for i, row := range rows {
 			prefix := "  "
 			var st lipgloss.Style
-			if marked[i] {
+			if cmpSet[i] {
+				prefix = "◉ "
+			} else if marked[i] {
 				prefix = "◆ "
 			} else if i == sel && isFocused {
 				prefix = "> "

@@ -37,6 +37,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - **Compare two commits.** Mark a commit with `m`, move to another, and the
   Commits `.` menu offers *Compare with marked commit* — a whole-tree diff
   between the two (ordered older→newer). Stage 2 of commit comparison.
+- **Compare a selection of commits.** Toggle commits into a `◉` set (Commits
+  `.` menu *Add to compare selection*, or `shift+↑/↓`) and pick *Compare
+  selection*: two commits show the diff between them, three or more show the
+  combined diff of the range (`oldest^..newest`). Stage 4 of commit comparison.
 - **Maximize a left-column panel (`t`).** Pressing `t` while a small
   left-column panel is focused — the Branches/Remotes/Worktrees tab slot, the
   Files/Tags slot, or Staged — grows that panel to fill the whole left column
