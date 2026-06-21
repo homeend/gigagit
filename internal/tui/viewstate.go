@@ -3,6 +3,7 @@ package tui
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -82,6 +83,26 @@ func (m Model) layout() layoutGeom {
 		g.pos[m.activeLeftTab] = point{0, 1}
 		g.pos[mid] = point{0, 1 + h1}
 	}
+	// Maximize: a pinned left panel takes the whole left column; the others hide
+	// (boxH/pos deleted ⇒ boxH==0, which render/hit-test/paging all skip). Driven
+	// off the logical left-panel set so a pin never zeroes a panel reachability
+	// still depends on. Commits geometry is untouched. The Contains guard keeps
+	// the block correct if the pinned panel ever falls out of the visible set
+	// (e.g. a future writer switches the active tab without re-pinning): rather
+	// than match nothing and delete every left box (blank column), fall through
+	// to the normal split.
+	if m.leftMaxed && slices.Contains(m.leftColumnPanels(), m.leftMax) {
+		for _, p := range m.leftColumnPanels() {
+			if p == m.leftMax {
+				g.boxH[p] = bodyH
+				g.pos[p] = point{0, 1}
+			} else {
+				delete(g.boxH, p)
+				delete(g.pos, p)
+			}
+		}
+	}
+
 	g.boxH[panelCommits] = bodyH
 	g.pos[panelCommits] = point{leftW, 1}
 	return g

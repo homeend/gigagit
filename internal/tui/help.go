@@ -27,6 +27,7 @@ func helpContent() []contentLine {
 		r("", "Compare against working dir (.-menu): on any focused commit/staged/shelf file, diffs that version against the same path in the working tree"),
 		r("o", "cycle the focused panel's sort order"),
 		r("z", "cycle the focused window's text display (cutoff / wrap / scroll)"),
+		r("t", "maximize the focused left-column panel to fill the whole left column (t again restores); while maximized, ctrl+←/→ still cycles that slot's tabs"),
 		r("shift+←/→", "scroll display mode: pan the focused window horizontally"),
 		r("/", "filter the focused panel"),
 		r("tab/shift+tab", "cycle panel focus forward / backward"),

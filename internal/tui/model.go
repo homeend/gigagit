@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"slices"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -86,6 +87,8 @@ type Model struct {
 	lastLeftPanel  panel // ←'s return target; zero value = panelBranches
 	activeLeftTab  panel // which of Branches/Remotes/Worktrees shows in the shared left tab slot; zero value = panelBranches
 	activeFilesTab panel // Files or Tags in the middle slot; zero value resolves to panelFiles via middleTab()
+	leftMax        panel // the pinned full-column left panel (valid only when leftMaxed)
+	leftMaxed      bool  // t has maximized leftMax to fill the whole left column
 
 	remoteBranches []model.RemoteBranch // refs/remotes; shown by the Remotes tab
 	shelfEntries   []model.ShelfEntry   // default bucket; shown by the Shelf tab
@@ -564,6 +567,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.dispModes[m.focus] = m.dispModes[m.focus].next()
 			m.hscroll[m.focus] = 0
 			return m, nil
+		case "t": // toggle maximize of the focused left-column panel
+			if m.canMaximizeLeft() {
+				if m.leftMaxed && m.leftMax == m.focus {
+					m.leftMaxed = false
+				} else {
+					m.leftMaxed = true
+					m.leftMax = m.focus
+				}
+			}
+			return m, nil
 		case "shift+left":
 			if m.focus == panelCommits && m.graphActive() {
 				m.commitGraphScroll = m.clampScroll(m.commitGraphScroll - m.graphPanStep())
@@ -721,14 +734,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if msg.String() == "ctrl+left" {
 				dir = -1
 			}
+			// Maximized on Staged: Staged has no tab group, and the un-maximized
+			// top tab is hidden, so cycling would focus an invisible panel. No-op.
+			if m.leftMaxed && m.leftMax == panelStaged {
+				return m, nil
+			}
 			if m.focus == panelFiles || m.focus == panelTags {
 				m.activeFilesTab = nextInOrder(filesTabs, m.middleTab(), dir)
 				m.focus = m.activeFilesTab
+				if m.leftMaxed { // re-pin the newly shown tab so it stays full-height
+					m.leftMax = m.focus
+				}
 				return m, nil
 			}
 			m.activeLeftTab = nextInOrder(leftTabs, m.activeLeftTab, dir)
 			m.focus = m.activeLeftTab
 			m.lastLeftPanel = m.activeLeftTab
+			if m.leftMaxed { // re-pin the newly shown tab so it stays full-height
+				m.leftMax = m.focus
+			}
 			return m, nil
 		case "right":
 			if m.focus != panelCommits {
@@ -1156,9 +1180,46 @@ func (m Model) middleTab() panel {
 	return panelFiles
 }
 
+// leftColumnPanels returns the left-column panels that exist for the current
+// terminal size, independent of any maximize. Staged is present only when the
+// normal split is tall enough to show it (the bodyH>=12 branch in layout). It is
+// the single source of truth for left-panel reachability and render membership,
+// so maximize (which zeroes the non-pinned panels' boxH) can never drop a panel
+// out of the tab cycle or leave a degenerate box on screen.
+func (m Model) leftColumnPanels() []panel {
+	if m.width > 0 && m.width < 40 {
+		return nil // narrow: single Commits column, no left column
+	}
+	ps := []panel{m.activeLeftTab, m.middleTab()}
+	bodyH := m.height - 3
+	if bodyH < 6 {
+		bodyH = 6
+	}
+	if bodyH >= 12 {
+		ps = append(ps, panelStaged)
+	}
+	return ps
+}
+
+// canMaximizeLeft reports whether t can pin the focused panel: focus is a small
+// left-column panel and no full-screen surface owns the left area. The files
+// view replaces the small left panels entirely, so t is inert there; the stash
+// view only takes the right column, so Staged stays maximizable.
+func (m Model) canMaximizeLeft() bool {
+	if m.filesView != nil {
+		return false
+	}
+	return slices.Contains(m.leftColumnPanels(), m.focus)
+}
+
 func (m Model) focusOrder() []panel {
+	// While a left panel is maximized, focus collapses to that panel and Commits
+	// — the other left panels are hidden, so they must not be tab targets.
+	if m.leftMaxed {
+		return []panel{m.leftMax, panelCommits}
+	}
 	order := []panel{m.activeLeftTab, m.middleTab()}
-	if m.layout().boxH[panelStaged] > 0 { // Staged is dropped on a short terminal
+	if slices.Contains(m.leftColumnPanels(), panelStaged) { // dropped on a short terminal
 		order = append(order, panelStaged)
 	}
 	return append(order, panelCommits)
@@ -1181,6 +1242,9 @@ func nextInOrder(order []panel, cur panel, dir int) panel {
 // pointer at the now-inactive Branches/Worktrees tab is redirected to the
 // active tab (the one actually visible).
 func (m Model) leftReturnTarget() panel {
+	if m.leftMaxed { // maximized: the pinned panel is the only left target
+		return m.leftMax
+	}
 	p := m.lastLeftPanel
 	if (p == panelBranches || p == panelWorktrees) && p != m.activeLeftTab {
 		p = m.activeLeftTab

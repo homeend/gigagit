@@ -332,21 +332,18 @@ func (m Model) renderInterface() string {
 	if m.filesView != nil {
 		left = m.renderFilesView(g.leftW, g.bodyH)
 	} else {
-		// The Branches/Worktrees tab slot (active tab shows its content; the tab
-		// bar lives in the label line) over Files, then Staged (when it fits).
-		active := m.activeLeftTab
-		atRows, _ := m.panelView(active)
-		// The middle slot shows whichever of Files/Tags is active; the layout
-		// gives that tab the box geometry (boxH[mt]).
-		mt := m.middleTab()
-		mtRows, _ := m.panelView(mt)
-		boxes := []string{
-			m.renderPanel(active, m.panelLabel(active, tabBarLabel(active)), atRows, nil, g.leftW, g.boxH[active]),
-			m.renderPanel(mt, m.panelLabel(mt, filesTabLabel(mt, m.panelLen(panelFiles), m.panelLen(panelTags))), mtRows, nil, g.leftW, g.boxH[mt]),
-		}
-		if g.boxH[panelStaged] > 0 {
-			sRows, _ := m.panelView(panelStaged)
-			boxes = append(boxes, m.renderPanel(panelStaged, m.filesLabel(panelStaged, "Staged"), sRows, nil, g.leftW, g.boxH[panelStaged]))
+		// The left column: the Branches/Remotes/Worktrees tab slot, the Files/Tags
+		// slot, and Staged. Render the logical left-panel set, skipping any the
+		// layout hides (boxH<=0) — the inactive Staged on a short terminal, or the
+		// non-pinned panels while one is maximized. A maximized panel renders at the
+		// full body height because layout gave it boxH==bodyH.
+		var boxes []string
+		for _, p := range m.leftColumnPanels() {
+			if g.boxH[p] <= 0 {
+				continue
+			}
+			rows, _ := m.panelView(p)
+			boxes = append(boxes, m.renderPanel(p, m.leftPanelLabel(p), rows, nil, g.leftW, g.boxH[p]))
 		}
 		left = lipgloss.JoinVertical(lipgloss.Left, boxes...)
 	}
@@ -374,6 +371,21 @@ func (m Model) headerLine(w int) string {
 // (the at-a-glance "how many staged" signal) plus the shared sort/filter marks.
 func (m Model) filesLabel(p panel, base string) string {
 	return m.panelLabel(p, base+" "+strconv.Itoa(m.panelLen(p)))
+}
+
+// leftPanelLabel is the header for a left-column panel, dispatched by which slot
+// p occupies: the top tab slot shows the tab bar, the middle slot the files tab
+// bar, Staged its count. It single-sources the labels the render loop draws so
+// each box keeps the exact title it had before the loop existed.
+func (m Model) leftPanelLabel(p panel) string {
+	switch p {
+	case panelStaged:
+		return m.filesLabel(panelStaged, "Staged")
+	case panelFiles, panelTags:
+		return m.panelLabel(p, filesTabLabel(p, m.panelLen(panelFiles), m.panelLen(panelTags)))
+	default: // the Branches/Remotes/Worktrees tab slot
+		return m.panelLabel(p, tabBarLabel(p))
+	}
 }
 
 // tabBarLabel is the shared left-slot header: the active tab spelled out and

@@ -70,6 +70,10 @@ var contextBindings = []footerBinding{
 	{"graph-window", "", "[<>] graph [⇧←→] pan [=] center", func(m Model) bool {
 		return m.focus == panelCommits && m.graphActive()
 	}, scopeWindow},
+	{"maximize", "t", "[t] max", func(m Model) bool {
+		// Stricter than the dispatch gate: don't advertise maximizing an empty box.
+		return m.opsIdle() && m.canMaximizeLeft() && m.panelLen(m.focus) > 0
+	}, scopeWindow},
 }
 
 // globalBindings are the always-relevant tail, still individually predicated
