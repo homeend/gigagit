@@ -78,6 +78,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   drawing, and the jobs it runs — the first of a general mechanism.)
 
 ### Added
+- **Check out a tag.** The `.` menu on the **Tags** tab offers **Check out tag** —
+  it asks whether to land on a **detached HEAD** at the tag's commit or to create
+  a **new branch** at the tag (you type the name) and switch to it. Also on the
+  CLI: `gg tag checkout [--branch <name>] <tag>`. Dirty-tree handling is git's
+  native `switch` behavior (it carries non-conflicting changes, else refuses), not
+  an autostash.
 - **Delete a tag.** The `.` menu on the **Tags** tab offers **Delete tag** —
   behind a confirm modal (Cancel always available). Also on the CLI: `gg tag rm
   <name>` (alias `delete`).

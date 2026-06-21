@@ -96,6 +96,7 @@ gg remote ls | fetch | prune         # list remote branches / fetch all / prune 
 gg tag ls                            # list tags (newest first)
 gg tag create [-m <msg>] <name> [<commit>]  # create a tag (annotated with -m, else lightweight)
 gg tag rm <name>                     # delete a tag (alias: delete)
+gg tag checkout [--branch <name>] <tag>  # check out a tag (detached, or onto a new branch)
 gg branch create <name> [<start-point>]
 gg branch rename <old> <new>
 gg branch delete [--force] <name>

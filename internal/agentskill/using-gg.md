@@ -29,10 +29,11 @@ guards against removing the worktree you are standing in.
 - `gg remote ls | fetch | prune` — `ls` lists remote-tracking branches (one
   `remote/branch` per line); `fetch` updates tracking refs for all remotes
   (`git fetch --all`); `prune` drops tracking refs for branches deleted upstream.
-- `gg tag ls | create | rm` — `ls` lists tags newest-first (one name per line);
-  `create [-m <msg>] <name> [<commit>]` creates a tag at `<commit>` (default
-  HEAD): lightweight, or annotated when `-m` is given; `rm <name>` (alias
-  `delete`) deletes a tag.
+- `gg tag ls | create | rm | checkout` — `ls` lists tags newest-first (one name
+  per line); `create [-m <msg>] <name> [<commit>]` creates a tag at `<commit>`
+  (default HEAD): lightweight, or annotated when `-m` is given; `rm <name>`
+  (alias `delete`) deletes a tag; `checkout [--branch <name>] <tag>` checks out a
+  tag — detached, or onto a new branch created at the tag when `--branch` is given.
 - `gg branch create <name> [<start-point>]` — create a branch (no switch);
   start point defaults to HEAD.
 - `gg branch rename <old> <new>` — rename a local branch (`git branch -m`);
