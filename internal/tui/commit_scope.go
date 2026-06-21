@@ -222,6 +222,50 @@ func (m Model) commitCreateTagRow() (actionRow, bool) {
 	}, true
 }
 
+// commitCompareWorktreeRow / commitCompareStagedRow open the files view as a
+// whole-tree comparison of the selected commit against the working tree / the
+// index. No marking needed — the common "what does my working copy look like
+// vs this commit" case.
+func (m Model) commitCompareWorktreeRow() (actionRow, bool) {
+	if m.focus != panelCommits || !m.opsIdle() {
+		return actionRow{}, false
+	}
+	bi, ok := m.backingIndex(panelCommits)
+	if !ok {
+		return actionRow{}, false
+	}
+	hash := m.commits[bi].Hash
+	return actionRow{
+		id:    "commit-compare-worktree",
+		label: "Compare against working tree",
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			return m.openCompareFiles(
+				model.Endpoint{Kind: model.EndpointCommit, Hash: hash},
+				model.Endpoint{Kind: model.EndpointWorkTree})
+		},
+	}, true
+}
+
+func (m Model) commitCompareStagedRow() (actionRow, bool) {
+	if m.focus != panelCommits || !m.opsIdle() {
+		return actionRow{}, false
+	}
+	bi, ok := m.backingIndex(panelCommits)
+	if !ok {
+		return actionRow{}, false
+	}
+	hash := m.commits[bi].Hash
+	return actionRow{
+		id:    "commit-compare-staged",
+		label: "Compare against staged",
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			return m.openCompareFiles(
+				model.Endpoint{Kind: model.EndpointCommit, Hash: hash},
+				model.Endpoint{Kind: model.EndpointIndex})
+		},
+	}, true
+}
+
 // commitCreateWorktreeRow offers "Create worktree here" on the Commits panel:
 // open the create-worktree dialog based at the selected commit, with a user-typed
 // (non-templated) branch name.
