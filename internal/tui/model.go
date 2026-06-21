@@ -80,8 +80,9 @@ type Model struct {
 	commitGraphTried    bool               // the one-time write was already dispatched this session (no re-fire)
 	commitsPaged        bool               // user paged past the first page (suppresses the post-index reload)
 	commitScopeBranches []string           // included branches for the feed; empty = all local branches
-	commitGraphRows     []string           // cached single-line graph cells, parallel to commits; empty = none
-	commitGraphLanes    []int              // cached node lane per commit, parallel to commits
+	commitGraphRows     []string           // cached single-line graph cells, parallel to the unified WIP+commits list; empty = none
+	commitGraphLanes    []int              // cached node lane per unified row, parallel to the unified WIP+commits list
+	wipRows             []wipRow           // 0–2 derived pseudo-rows (Working tree / Staged) shown atop the Commits feed when dirty
 	commitListMode      bool               // Commits feed rendered as a flat ●-gutter list, not a graph
 	commitGraphCols     int                // graph window width in LANES; 0 = use configured default
 	commitGraphScroll   int                // leftmost visible lane (0-based); resets on feed reload
