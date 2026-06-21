@@ -14,13 +14,13 @@ func TestSanitizeSegmentFor(t *testing.T) {
 		{"a:b", "linux", "a:b"}, // colon is valid on linux
 		{"con", "windows", "con_"},
 		{"COM1", "windows", "COM1_"},
-		{"con", "linux", "con"}, // not reserved on linux
+		{"con", "linux", "con"},      // not reserved on linux
 		{"name.", "windows", "name"}, // trailing dot trimmed
 		{"name ", "windows", "name"}, // trailing space trimmed
-		{"...", "windows", "tag"},     // empty after trim → fallback
-		{".", "linux", "tag"},         // "." is the current dir → fallback
-		{"..", "linux", "tag"},        // ".." is the parent dir → fallback
-		{"", "linux", "tag"},          // empty → fallback
+		{"...", "windows", "tag"},    // empty after trim → fallback
+		{".", "linux", "tag"},        // "." is the current dir → fallback
+		{"..", "linux", "tag"},       // ".." is the parent dir → fallback
+		{"", "linux", "tag"},         // empty → fallback
 	}
 	for _, c := range cases {
 		if got := sanitizeSegmentFor(c.in, c.goos); got != c.want {
