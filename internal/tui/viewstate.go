@@ -416,9 +416,15 @@ func (m Model) displayIndices(p panel) (idx []int) {
 			continue // Files/Staged split: each panel shows only its subset
 		}
 		if q != "" {
-			text := l.Row(i)
+			// Prefer the cheap haystack; only fall back to Row(i) for panels that
+			// don't implement haystacker. For commits Row(i) is now full styling
+			// (graph window + identity), so calling it per row here would re-add
+			// O(n) styling on every filtered frame.
+			var text string
 			if h, ok := l.(haystacker); ok {
 				text = h.Haystack(i) // search hidden full id + branch name, not the trimmed row
+			} else {
+				text = l.Row(i)
 			}
 			if !strings.Contains(strings.ToLower(text), q) {
 				continue

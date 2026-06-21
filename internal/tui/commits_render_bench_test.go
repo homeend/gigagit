@@ -75,6 +75,31 @@ func BenchmarkCommitsRender(b *testing.B) {
 	}
 }
 
+// TestFilteredDisplayIndicesSkipsRowStyling guards that filtering a large feed
+// matches via the cheap haystack, never Row(i) (which now styles the graph
+// window). The whole filtered walk must therefore cost LESS than styling every
+// row once; if Row styling leaked back into the filter path it would cost the
+// row styling PLUS the haystack and exceed it.
+func TestFilteredDisplayIndicesSkipsRowStyling(t *testing.T) {
+	const n = 2000
+	m := benchModel(n, 303, 8)
+	m.filterPanel = panelCommits
+	m.filterQuery = "subject" // matches every commit's subject via the haystack
+	l := m.listFor(panelCommits)
+
+	rowStyling := testing.AllocsPerRun(3, func() {
+		for i := 0; i < n; i++ {
+			_ = l.Row(i)
+		}
+	})
+	filtered := testing.AllocsPerRun(3, func() {
+		_ = m.displayIndices(panelCommits)
+	})
+	if filtered >= rowStyling {
+		t.Fatalf("filtered displayIndices allocs=%.0f >= per-row styling allocs=%.0f: Row styling leaked into the filter path", filtered, rowStyling)
+	}
+}
+
 // BenchmarkCommitsRenderFull keeps the pre-windowing measurement (full
 // materialization via panelView) so the O(visible) win stays visible in numbers.
 func BenchmarkCommitsRenderFull(b *testing.B) {
