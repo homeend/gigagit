@@ -261,14 +261,17 @@ func (s *Service) HasCommitGraph(ctx context.Context) (bool, error) {
 	return false, nil
 }
 
-// WriteCommitGraph writes/refreshes the commit-graph cache under a Read
-// reservation (it writes only a cache, never refs or the tree).
+// WriteCommitGraph writes/refreshes the commit-graph cache. It runs WITHOUT a gg
+// reservation: `git commit-graph write` self-locks (its own lockfile) and touches
+// no refs/tree/index, so holding gg's Read gate for the ~26s write would
+// needlessly delay a queued user writer (commit/switch) under the
+// writer-preferring gate.
 func (s *Service) WriteCommitGraph(ctx context.Context) error {
-	return s.reserveRead(ctx, func() error { return s.repo.WriteCommitGraph(ctx) })
+	return s.repo.WriteCommitGraph(ctx)
 }
 ```
 
-> Confirm the Read-reservation primitive name. Inspect how an existing gated read is run (`query(...)` wraps reads with a result; the gate's lower-level reserve call lives in `service.go`/`query.go`). If only `query[T]` exists, use it with a throwaway: `_, err := query(ctx, s, "commit-graph-write:"+strconv.Itoa(int(time.Now().UnixNano())), func(ctx)(struct{},error){ return struct{}{}, s.repo.WriteCommitGraph(ctx) }); return err` — but a unique key avoids singleflight-coalescing a write. Prefer the raw reservation if the gate exposes one.
+> **Verify first (advisor):** confirm `internal/repogate` is writer-preferring such that an in-flight Read reservation delays a queued `RefWrite`/`TreeWrite`. If so, the no-reservation form above is correct — a 26s reserved write would otherwise stall a commit the user fires mid-indexing. (git's own lockfile prevents concurrent commit-graph writes, so we lose nothing by not reserving.) If repogate is NOT writer-preferring and a Read is harmless, either form works; keep the no-reservation one for simplicity.
 
 - [ ] **Step 3b: `Snapshot.HasCommitGraph`** — in `internal/domain/query.go`:
 - Add `HasCommitGraph bool` to the `Snapshot` struct.
@@ -506,7 +509,40 @@ func TestIndexingNoticeRendersInCommitsLabel(t *testing.T) {
 		t.Error("Commits label must show the indexing notice")
 	}
 }
+
+// TestDataLoadedTriggersGraphWriteOnce: under the graph pager with no commit-graph,
+// dataLoadedMsg dispatches the write once + sets the notice; a second identical
+// load does not re-fire.
+func TestDataLoadedTriggersGraphWriteOnce(t *testing.T) {
+	m := loadedModel(t) // default pager = "graph"
+	msg := dataLoadedMsg{gen: m.loadGen, hasCommitGraph: false, cfg: m.cfg}
+	u, cmd := m.Update(msg)
+	mm := u.(Model)
+	if !mm.commitGraphIndexing || cmd == nil {
+		t.Fatal("graph pager + no graph must dispatch the write and show the notice")
+	}
+	if !mm.commitGraphTried {
+		t.Fatal("the once-guard flag must be set")
+	}
+	// second identical load: must not re-fire.
+	u2, cmd2 := mm.Update(dataLoadedMsg{gen: mm.loadGen, hasCommitGraph: false, cfg: mm.cfg})
+	if cmd2 != nil {
+		t.Error("the write must fire at most once per session")
+	}
+	_ = u2
+}
+
+func TestDataLoadedSkipsGraphWriteUnderDateOrderPager(t *testing.T) {
+	t.Setenv("GG_COMMIT_PAGER", "date-order")
+	m := loadedModel(t) // pager = "date-order"
+	u, cmd := m.Update(dataLoadedMsg{gen: m.loadGen, hasCommitGraph: false, cfg: m.cfg})
+	if u.(Model).commitGraphIndexing || cmd != nil {
+		t.Error("legacy pager must not auto-write the commit-graph")
+	}
+}
 ```
+
+> If `loadedModel`'s `dataLoadedMsg` round-trip nil-panics on the bare `msg` (some fields nil), populate the minimum the handler dereferences (it reads `msg.status`/`msg.branches`/… but those tolerate zero values; `msg.commits = nil` just clears the feed). The proc-guard sub-case (`m.proc != nil` ⇒ no fire) is enforced structurally by placement + the `m.proc == nil` condition; add it explicitly only if a trivial `process` stub is available in the test package.
 
 - [ ] **Step 2: Run, verify it fails** — `go test ./internal/tui/ -run 'TestCommitGraph|TestIndexingNotice' -v` → FAIL undefined.
 
@@ -514,6 +550,7 @@ func TestIndexingNoticeRendersInCommitsLabel(t *testing.T) {
 
 ```go
 	commitGraphIndexing bool // one-time background commit-graph write running → title notice
+	commitGraphTried    bool // the one-time write was already dispatched this session (no re-fire)
 	commitsPaged        bool // user paged past the first page (suppresses the post-index reload)
 ```
 
@@ -532,17 +569,25 @@ func (m Model) writeCommitGraphCmd() tea.Cmd {
 }
 ```
 
-- [ ] **Step 3c: `dataLoadedMsg` carries the flag + startup trigger** — in `internal/tui/load.go` add `hasCommitGraph bool` to `dataLoadedMsg` and set `hasCommitGraph: snap.HasCommitGraph` in the `out` literal. In `internal/tui/model.go` `dataLoadedMsg` success block (after `m.cfg`/clamp loop, immediately before the `if m.proc != nil` check):
+- [ ] **Step 3c: `dataLoadedMsg` carries the flag + trigger (guarded, after the proc check)** — in `internal/tui/load.go` add `hasCommitGraph bool` to `dataLoadedMsg` and set `hasCommitGraph: snap.HasCommitGraph` in the `out` literal.
+
+In `internal/tui/model.go` `dataLoadedMsg` success block, place the trigger **after** the `if m.proc != nil { return m.proc.refreshed(m) }` check (so a conflict-process refresh is never bypassed), guarded so it fires **at most once per session** and **not under an active process**:
 
 ```go
-			// First open under the graph pager on a repo without a commit-graph:
-			// write it once in the background; the feed already shows plain-order
-			// commits meanwhile.
-			if !msg.hasCommitGraph && m.feed != nil && m.feed.PagerName() == "graph" {
+			// First open (once per session) under the graph pager on a repo with
+			// no commit-graph: write it once in the background; the feed already
+			// shows plain-order commits meanwhile. Placed after the proc check
+			// (never bypass a conflict refresh) and guarded against re-fire when a
+			// write fails and hasCommitGraph stays false on later refreshes.
+			if !m.commitGraphTried && !msg.hasCommitGraph && m.proc == nil &&
+				m.feed != nil && m.feed.PagerName() == "graph" {
+				m.commitGraphTried = true
 				m.commitGraphIndexing = true
 				return m, m.writeCommitGraphCmd()
 			}
 ```
+
+(Advisor catch: an early-return before the proc check would break conflict resolution mid-session; an unguarded condition would re-dispatch a 26s write on every refresh after a failed write.)
 
 - [ ] **Step 3d: completion handler** — in `internal/tui/model.go` `Update` switch:
 
@@ -638,9 +683,9 @@ Claude-Session: https://claude.ai/code/session_01KdNVc8a85eb3E9VMwxdYZi"
 
 - Lay gate before plain-order reliance → Task 1. ✅
 - `WriteCommitGraph` verb + `LogScoped` toggle → Task 2. ✅
-- `HasCommitGraph` + `Snapshot.HasCommitGraph` → Task 3. ✅
+- `HasCommitGraph` + `Snapshot.HasCommitGraph` → Task 3; **write runs without a gg reservation** (advisor: a 26s Read would stall a queued writer) — verify repogate writer-preference first. ✅
 - `graphPager` order captured once per generation (correctness) + `GG_COMMIT_PAGER` switch + `PagerName` → Task 4 (`TestGraphPagerOrderCapturedOncePerGeneration`, `TestCommitFeedPicksPagerFromEnv`). ✅
-- Background write + notice + conditional reload + non-fatal failure → Task 5. ✅
+- Background write + notice + conditional reload + non-fatal failure → Task 5. Trigger is **guarded once-per-session + placed after the proc check + gated on `m.proc == nil`** (advisor: avoid bypassing conflict refresh / re-firing after a failed write), and **tested** (`TestDataLoadedTriggersGraphWriteOnce`, `…SkipsGraphWriteUnderDateOrderPager`). ✅
 - Docs + real-repo A/B → Task 6. ✅
 - Names consistent: `HasCommitGraph`, `WriteCommitGraph`, `LogScoped(...,dateOrder)`, `logPage(...,dateOrder)`, `graphPager`, `PagerName`, `commitGraphWrittenMsg`, `commitGraphIndexing`, `commitsPaged`, `GG_COMMIT_PAGER`. ✅
 - Adaptation points flagged: Read-reservation primitive (Task 3), `Lay` input type (Task 1), `dataLoadedMsg`/handler exact placement (Task 5).
