@@ -8,7 +8,7 @@ import (
 
 // ParseTags parses `git for-each-ref refs/tags` output formatted as:
 //
-//	%(refname:short)\x00%(objecttype)\x00%(objectname:short)\x00%(*objectname:short)\x00%(contents:subject)\x00%(creatordate:unix)
+//	%(refname:lstrip=2)\x00%(objecttype)\x00%(objectname:short)\x00%(*objectname:short)\x00%(contents:subject)\x00%(creatordate:unix)
 //
 // one ref per line. An annotated tag has objecttype "tag" and a non-empty
 // peeled object (*objectname) — its real commit; a lightweight tag points

@@ -12,7 +12,7 @@ var trackRe = regexp.MustCompile(`ahead (\d+)|behind (\d+)`)
 
 // ParseBranches parses for-each-ref output formatted as:
 //
-//	%(HEAD)\x00%(refname:short)\x00%(upstream:short)\x00%(objectname:short)\x00%(upstream:track)
+//	%(HEAD)\x00%(refname:lstrip=2)\x00%(upstream:short)\x00%(objectname:short)\x00%(upstream:track)
 //
 // one ref per line.
 func ParseBranches(data []byte) ([]model.Branch, error) {

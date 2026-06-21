@@ -9,7 +9,7 @@ import (
 
 // ParseRemoteBranches parses `git for-each-ref refs/remotes` output formatted as:
 //
-//	%(refname:short)\x00%(objectname:short)\x00%(committerdate:unix)
+//	%(refname:lstrip=2)\x00%(objectname:short)\x00%(committerdate:unix)
 //
 // one ref per line. The remote's default symref (listed as the bare remote name,
 // e.g. "origin", or explicitly as "origin/HEAD") is dropped — it is a pointer,
