@@ -30,11 +30,12 @@ type CommitFeed struct {
 	gen       int                // bumped by LoadInitial; tags pages so stale ones drop
 	inFlight  bool               // at most one page request outstanding
 	cancel    context.CancelFunc // cancels the in-flight load's ctx on supersede
+	pager     CommitPager        // page-fetch strategy; default dateOrderPager (legacy)
 }
 
 // CommitFeed returns a fresh feed for this Service's repo.
 func (s *Service) CommitFeed() *CommitFeed {
-	return &CommitFeed{svc: s, hashes: map[string]bool{}}
+	return &CommitFeed{svc: s, hashes: map[string]bool{}, pager: dateOrderPager{svc: s}}
 }
 
 // SetScope sets the refspec for subsequent loads. Callers then LoadInitial to
@@ -104,7 +105,7 @@ func (f *CommitFeed) LoadInitial(ctx context.Context) (FeedState, error) {
 	f.inFlight = true
 	f.mu.Unlock()
 
-	page, err := f.svc.logPage(cctx, commitInitialPage, 0, scope, gen0)
+	page, err := f.pager.Page(cctx, commitInitialPage, 0, gen0, scope)
 
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -149,7 +150,7 @@ func (f *CommitFeed) LoadMore(ctx context.Context) (FeedState, bool, error) {
 	scope := f.scope
 	f.mu.Unlock()
 
-	page, err := f.svc.logPage(ctx, commitPageSize, skip, scope, gen0)
+	page, err := f.pager.Page(ctx, commitPageSize, skip, gen0, scope)
 
 	f.mu.Lock()
 	defer f.mu.Unlock()
