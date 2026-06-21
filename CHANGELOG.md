@@ -19,6 +19,15 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   drift out of it unnoticed (the in-process tests never exercised that gate).
 
 ### Added
+- **Maximize a left-column panel (`t`).** Pressing `t` while a small
+  left-column panel is focused — the Branches/Remotes/Worktrees tab slot, the
+  Files/Tags slot, or Staged — grows that panel to fill the whole left column
+  height, hiding the other two, so more of its content is visible; `t` again
+  restores the normal split. The pin is sticky (like `z`). While maximized,
+  `tab`/`←`/`→` move only between the pinned panel and Commits, and `ctrl+←/→`
+  still cycles within the pinned slot's own tab group, re-pinning the new tab.
+  `t` on the Commits panel, on a narrow terminal, or while the files view is
+  open is a no-op.
 - **Move or drop a commit from the Commits panel.** The `.` action menu on a
   non-merge commit of the **checked-out** branch now offers **Move commit up**
   (one step newer), **Move commit down** (one step older), and **Drop commit** —

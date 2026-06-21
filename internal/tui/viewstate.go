@@ -82,6 +82,22 @@ func (m Model) layout() layoutGeom {
 		g.pos[m.activeLeftTab] = point{0, 1}
 		g.pos[mid] = point{0, 1 + h1}
 	}
+	// Maximize: a pinned left panel takes the whole left column; the others hide
+	// (boxH/pos deleted ⇒ boxH==0, which render/hit-test/paging all skip). Driven
+	// off the logical left-panel set so a pin never zeroes a panel reachability
+	// still depends on. Commits geometry is untouched.
+	if m.leftMaxed {
+		for _, p := range m.leftColumnPanels() {
+			if p == m.leftMax {
+				g.boxH[p] = bodyH
+				g.pos[p] = point{0, 1}
+			} else {
+				delete(g.boxH, p)
+				delete(g.pos, p)
+			}
+		}
+	}
+
 	g.boxH[panelCommits] = bodyH
 	g.pos[panelCommits] = point{leftW, 1}
 	return g
