@@ -207,7 +207,7 @@ func (m Model) commitCreateWorktreeRow() (actionRow, bool) {
 		id:    "commit-create-worktree",
 		label: "Create worktree here",
 		run: func(m Model) (tea.Model, tea.Cmd) {
-			return m.openWorktreeFromCommit(hash), nil
+			return m.openWorktreeAt(hash, ""), nil
 		},
 	}, true
 }
