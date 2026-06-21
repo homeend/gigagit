@@ -24,6 +24,12 @@ type UIConfig struct {
 	HScrollStep   int      `toml:"hscroll_step"`   // diff scroll-mode pan columns per ←/→; <=0 = unset
 	FooterActions []string `toml:"footer_actions"` // action ids shown in the footer; empty = all (default)
 	MenuActions   []string `toml:"menu_actions"`   // action ids shown in the . menu; empty = all (default)
+
+	CommitGraphLanes    int `toml:"commit_graph_lanes"`     // default graph window width in lanes; <=0 = unset
+	CommitGraphMinLanes int `toml:"commit_graph_min_lanes"` // minimum window width (narrow floor); <=0 = unset
+	CommitGraphStep     int `toml:"commit_graph_step"`      // widen/narrow increment in lanes; <=0 = unset
+	CommitGraphPanStep  int `toml:"commit_graph_pan_step"`  // pan increment in lanes; <=0 = derived max(1, cols/2)
+	CommitGraphMaxLanes int `toml:"commit_graph_max_lanes"` // plane cap in lanes; <=0 = unset; clamped to commitgraph.MaxLanes
 }
 
 // Config is the merged gigagit configuration.
@@ -39,7 +45,7 @@ func Defaults() Config {
 			PathTemplate:          "../<repo>.worktrees/<branch>",
 			DefaultBranchTemplate: "b/from-<parent-branch>-<random-alpha:4>",
 		},
-		UI: UIConfig{WheelStep: 3, HScrollStep: 8},
+		UI: UIConfig{WheelStep: 3, HScrollStep: 8, CommitGraphLanes: 8, CommitGraphMinLanes: 2, CommitGraphStep: 4},
 	}
 }
 
@@ -110,6 +116,21 @@ func overlayUI(dst *UIConfig, src UIConfig) {
 	}
 	if len(src.MenuActions) > 0 {
 		dst.MenuActions = src.MenuActions
+	}
+	if src.CommitGraphLanes > 0 {
+		dst.CommitGraphLanes = src.CommitGraphLanes
+	}
+	if src.CommitGraphMinLanes > 0 {
+		dst.CommitGraphMinLanes = src.CommitGraphMinLanes
+	}
+	if src.CommitGraphStep > 0 {
+		dst.CommitGraphStep = src.CommitGraphStep
+	}
+	if src.CommitGraphPanStep > 0 {
+		dst.CommitGraphPanStep = src.CommitGraphPanStep
+	}
+	if src.CommitGraphMaxLanes > 0 {
+		dst.CommitGraphMaxLanes = src.CommitGraphMaxLanes
 	}
 }
 

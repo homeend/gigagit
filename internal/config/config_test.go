@@ -196,3 +196,34 @@ func TestOverlayUIActionLists(t *testing.T) {
 		t.Fatalf("empty lists must not clobber; got footer=%v menu=%v", dst.FooterActions, dst.MenuActions)
 	}
 }
+
+func TestUIDefaultsCommitGraph(t *testing.T) {
+	d := Defaults().UI
+	if d.CommitGraphLanes != 8 || d.CommitGraphMinLanes != 2 || d.CommitGraphStep != 4 {
+		t.Fatalf("defaults = %+v, want lanes 8 / min 2 / step 4", d)
+	}
+}
+
+func TestLoadOverlaysCommitGraphFields(t *testing.T) {
+	dir := t.TempDir()
+	repo := filepath.Join(dir, "repo.toml")
+	if err := os.WriteFile(repo, []byte("[ui]\ncommit_graph_lanes = 20\ncommit_graph_step = 6\ncommit_graph_max_lanes = 100\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load("", repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.UI.CommitGraphLanes != 20 {
+		t.Errorf("lanes = %d, want 20 (repo overrides default)", cfg.UI.CommitGraphLanes)
+	}
+	if cfg.UI.CommitGraphStep != 6 {
+		t.Errorf("step = %d, want 6", cfg.UI.CommitGraphStep)
+	}
+	if cfg.UI.CommitGraphMaxLanes != 100 {
+		t.Errorf("max = %d, want 100", cfg.UI.CommitGraphMaxLanes)
+	}
+	if cfg.UI.CommitGraphMinLanes != 2 {
+		t.Errorf("min = %d, want default 2 (unset field keeps default)", cfg.UI.CommitGraphMinLanes)
+	}
+}

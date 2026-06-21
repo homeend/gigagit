@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -188,5 +189,34 @@ func TestLayRealRepoInvariants(t *testing.T) {
 	}
 	if !multi {
 		t.Fatal("a repo with a merge must produce at least one fork/merge glyph")
+	}
+}
+
+func TestLayClampsPlaneToMaxLanes(t *testing.T) {
+	// One merge commit with far more parents than the ceiling forces a very
+	// wide node row; every parent is a distinct root that frees its lane next.
+	const parents = 400
+	cs := make([]Commit, 0, parents+1)
+	m := Commit{Hash: "M"}
+	for i := 0; i < parents; i++ {
+		p := "p" + strconv.Itoa(i)
+		m.Parents = append(m.Parents, p)
+	}
+	cs = append(cs, m)
+	for i := 0; i < parents; i++ {
+		cs = append(cs, Commit{Hash: "p" + strconv.Itoa(i)})
+	}
+
+	rows, width := Lay(cs)
+	if width != MaxLanes*2 {
+		t.Fatalf("width = %d, want clamped to MaxLanes*2 = %d", width, MaxLanes*2)
+	}
+	for i, r := range rows {
+		if r.Width != width {
+			t.Fatalf("row %d Width = %d, want %d", i, r.Width, width)
+		}
+		if got := len([]rune(r.Cells)); got != width {
+			t.Fatalf("row %d cell runes = %d, want %d", i, got, width)
+		}
 	}
 }

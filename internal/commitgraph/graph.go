@@ -16,6 +16,12 @@ type Row struct {
 	Width int
 }
 
+// MaxLanes is the absolute ceiling on rendered/cached plane width, in lanes.
+// Lane *assignment* is never capped (it is bounded by the data); only the
+// emitted cell string is clamped, to bound memory on pathological histories.
+// A higher value is never reachable — config can only lower the cap.
+const MaxLanes = 320
+
 // Lay folds commits (newest-first) into per-row graph cells. Deterministic.
 func Lay(commits []Commit) ([]Row, int) {
 	rows := make([]Row, 0, len(commits))
@@ -75,10 +81,13 @@ func Lay(commits []Commit) ([]Row, int) {
 		}
 	}
 
+	if maxLanes > MaxLanes {
+		maxLanes = MaxLanes
+	}
 	width := maxLanes * 2
 	for i := range rows {
 		rows[i].Width = width
-		rows[i].Cells = pad(rows[i].Cells, width)
+		rows[i].Cells = fit(rows[i].Cells, width)
 	}
 	return rows, width
 }
@@ -160,8 +169,12 @@ func toSet(xs []int) map[int]bool {
 	return s
 }
 
-func pad(s string, w int) string {
+// fit pads s with spaces up to w runes, or truncates it to w runes.
+func fit(s string, w int) string {
 	r := []rune(s)
+	if len(r) > w {
+		return string(r[:w])
+	}
 	for len(r) < w {
 		r = append(r, ' ')
 	}
