@@ -14,6 +14,7 @@ import (
 	"github.com/gigagit/gg/internal/engine"
 	"github.com/gigagit/gg/internal/hunkpick"
 	"github.com/gigagit/gg/internal/model"
+	"github.com/gigagit/gg/internal/rebaseplan"
 	"github.com/gigagit/gg/internal/textdiff"
 )
 
@@ -973,6 +974,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m = m.pushLayer(newIrebaseEditor(msg.branch, msg.onto, msg.commits, ggBin))
 		return m, nil
+
+	case rebaseRangeLoadedMsg:
+		if msg.err != nil {
+			m.statusMsg = "rebase: " + msg.err.Error()
+			return m, nil
+		}
+		plan, perr := rebaseplan.BuildSingleEdit(msg.commits, msg.target, msg.edit)
+		if perr != nil {
+			m.statusMsg = "rebase: " + perr.Error()
+			return m, nil
+		}
+		ggBin, err := os.Executable()
+		if err != nil {
+			m.statusMsg = "rebase: " + err.Error()
+			return m, nil
+		}
+		return m.startOp(engine.InteractiveRebase{Branch: msg.branch, Onto: msg.onto, Plan: plan, GGBin: ggBin})
 
 	case conflictFileLoadedMsg:
 		// In the conflict process, a load failure must return it to Listing (the

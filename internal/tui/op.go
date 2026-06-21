@@ -7,10 +7,29 @@ import (
 
 	"github.com/gigagit/gg/internal/engine"
 	"github.com/gigagit/gg/internal/model"
+	"github.com/gigagit/gg/internal/rebaseplan"
 )
 
 // opEventMsg carries one engine event (progress/done/gitline) to the UI.
 type opEventMsg struct{ event engine.Event }
+
+// rebaseRangeLoadedMsg carries the commit range for a single-commit move/drop,
+// loaded off the UI thread; the handler builds the plan and runs the rebase.
+type rebaseRangeLoadedMsg struct {
+	branch, onto, target string
+	edit                 rebaseplan.Edit
+	commits              []model.RangeCommit
+	err                  error
+}
+
+// loadRebaseRangeCmd reads onto..branch off the UI thread for a single-commit edit.
+func (m Model) loadRebaseRangeCmd(branch, onto, target string, e rebaseplan.Edit) tea.Cmd {
+	svc := m.svc
+	return func() tea.Msg {
+		cs, err := svc.CommitRange(context.Background(), onto, branch)
+		return rebaseRangeLoadedMsg{branch: branch, onto: onto, target: target, edit: e, commits: cs, err: err}
+	}
+}
 
 // editorFinishedMsg signals the external editor exited (path is the edited
 // repo-relative path).

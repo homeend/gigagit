@@ -97,6 +97,15 @@ func availableActions(m Model) []actionRow {
 		out = append(out, r)
 	}
 	out = append(out, m.commitBranchRows()...)
+	if r, ok := m.commitMoveUpRow(); ok {
+		out = append(out, r)
+	}
+	if r, ok := m.commitMoveDownRow(); ok {
+		out = append(out, r)
+	}
+	if r, ok := m.commitDropRow(); ok {
+		out = append(out, r)
+	}
 	if r, ok := m.commitCreateBranchRow(); ok {
 		out = append(out, r)
 	}
