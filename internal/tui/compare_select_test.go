@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/gigagit/gg/internal/domain"
@@ -189,6 +190,50 @@ func TestCompareSelectionRowAbsentUnderTwo(t *testing.T) {
 	m.commitCompareSet = map[string]bool{m.commits[0].Hash: true}
 	if _, ok := m.commitCompareSelectionRow(); ok {
 		t.Fatal("Compare selection row must be absent with fewer than 2 selected")
+	}
+}
+
+// TestCompareSetMarkerRenders proves the ◉ set marker actually paints on the
+// Commits panel (the special graph-window render path), and that a set row does
+// not eat the cursor indicator on the selected row.
+func TestCompareSetMarkerRenders(t *testing.T) {
+	m := loadedModelLinearCommits(t, 3)
+	m.focus = panelCommits
+	m.width, m.height = 120, 40
+	m.sel[panelCommits] = 0
+	m.commitCompareSet = map[string]bool{m.commits[1].Hash: true} // mark row 1
+
+	rows, idx := m.panelView(panelCommits)
+	decos := m.commitDecorators(rows, idx)
+	out := m.renderPanel(panelCommits, "Commits", rows, decos, 120, 12)
+
+	if !strings.Contains(out, "◉") {
+		t.Fatalf("set marker ◉ did not render on the Commits panel:\n%s", out)
+	}
+	if !strings.Contains(out, "> ") {
+		t.Fatalf("cursor prefix lost — set membership must not eat the selection indicator:\n%s", out)
+	}
+}
+
+// TestCompareSetMarkerBeatsMark proves a commit that is BOTH m-marked and in the
+// compare set renders ◉ (set), never ◆ (mark) — they must stay distinguishable.
+func TestCompareSetMarkerBeatsMark(t *testing.T) {
+	m := loadedModelLinearCommits(t, 3)
+	m.focus = panelCommits
+	m.width, m.height = 120, 40
+	m.sel[panelCommits] = 2 // cursor elsewhere so "> " isn't on the test row
+	m.mark = &markState{panel: panelCommits, key: m.commits[0].Hash, display: m.commits[0].Hash}
+	m.commitCompareSet = map[string]bool{m.commits[0].Hash: true}
+
+	rows, idx := m.panelView(panelCommits)
+	decos := m.commitDecorators(rows, idx)
+	out := m.renderPanel(panelCommits, "Commits", rows, decos, 120, 12)
+
+	if !strings.Contains(out, "◉") {
+		t.Fatalf("set marker ◉ missing:\n%s", out)
+	}
+	if strings.Contains(out, "◆") {
+		t.Fatalf("mark glyph ◆ rendered for a set member — ◉ must take precedence:\n%s", out)
 	}
 }
 
