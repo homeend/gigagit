@@ -167,12 +167,12 @@ menu.
 
 ### Environment
 
-`GG_COMMIT_PAGER` selects the commit-feed loading strategy:
-`graph` (default) writes a commit-graph once in the background on first open
-(showing *(indexing…)* in the Commits title) and lists commits in fast plain
-order until it exists, then switches to `--date-order` — instant startup on huge
-repos. `date-order` is the legacy loader that always uses `git log --date-order`
-(slow on a repo without a commit-graph).
+`GG_COMMIT_PAGER` selects the commit-feed loading strategy: `plain` (default) is
+git's lazy newest-first order, which parses only the page on screen — instant
+startup even on a multi-million-commit repo. `date-order` opts into
+`git log --date-order`, a global topological sort that guarantees a parent never
+appears above its child (perfect graph lanes) at the cost of loading the whole
+history's ordering (slow on a large repo).
 
 ## Development
 

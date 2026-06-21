@@ -76,9 +76,6 @@ type Model struct {
 	feed                *domain.CommitFeed // single source of truth for commits
 	commitsExhausted    bool               // false → "Commits N+", true → "Commits N"
 	commitsLoading      bool               // a feed reload/page is in flight → show the loading glyph in the Commits title
-	commitGraphIndexing bool               // one-time background commit-graph write running → title notice
-	commitGraphTried    bool               // the one-time write was already dispatched this session (no re-fire)
-	commitsPaged        bool               // user paged past the first page (suppresses the post-index reload)
 	commitScopeBranches []string           // included branches for the feed; empty = all local branches
 	commitGraphRows     []string           // cached single-line graph cells, parallel to commits; empty = none
 	commitGraphLanes    []int              // cached node lane per commit, parallel to commits
@@ -238,19 +235,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.commits = st.Commits
 			m.commitsExhausted = st.Exhausted
 			m.commitsLoading = false // this page's load (the latest) finished
-			m.commitsPaged = true    // suppresses the post-index reload (don't yank a deep scroll)
 			m = m.rebuildCommitGraph()
 		}
 		return m, nil
-	case commitGraphWrittenMsg:
-		m.commitGraphIndexing = false
-		if msg.err != nil {
-			return m, nil // non-fatal: the feed keeps using plain order
-		}
-		if !m.commitsPaged { // still near the top — upgrade to --date-order
-			return m.startFeedReload()
-		}
-		return m, nil // scrolled deep: the next natural reload upgrades
 	case commitsReloadedMsg:
 		if m.feed == nil || msg.gen != m.feed.Gen() {
 			return m, nil // superseded by a newer reload (gen-stamped at load time)
@@ -381,17 +368,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// the conflict process re-derives its file list after a resolve).
 			if m.proc != nil {
 				return m.proc.refreshed(m)
-			}
-			// First open (once per session) under the graph pager on a repo with
-			// no commit-graph: write it once in the background; the feed already
-			// shows plain-order commits meanwhile. After the proc check (never
-			// bypass a conflict refresh) and guarded against re-fire when a write
-			// fails and hasCommitGraph stays false on later refreshes.
-			if !m.commitGraphTried && !msg.hasCommitGraph && m.proc == nil &&
-				m.feed != nil && m.feed.PagerName() == "graph" {
-				m.commitGraphTried = true
-				m.commitGraphIndexing = true
-				return m, m.writeCommitGraphCmd()
 			}
 			// Conflicts are surfaced as a non-blocking notice ("press [x] to
 			// resolve"); entering the resolution process is the user's choice (x),

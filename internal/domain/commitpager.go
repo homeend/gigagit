@@ -2,21 +2,35 @@ package domain
 
 import (
 	"context"
-	"sync"
 
 	"github.com/gigagit/gg/internal/model"
 )
 
 // CommitPager fetches one page of commits for a feed generation. Implementations
-// decide ordering and any acceleration (e.g. ensuring a commit-graph). The feed
-// delegates page-fetching here so the loading strategy is swappable.
+// decide log ordering. The feed delegates page-fetching here so the loading
+// strategy is swappable (selected by GG_COMMIT_PAGER).
 type CommitPager interface {
 	Page(ctx context.Context, limit, skip, gen int, scope LogScope) ([]model.Commit, error)
 	Name() string
 }
 
-// dateOrderPager is the legacy strategy: always `git log --date-order`. Slow on
-// a repo without a commit-graph, by design — the A/B baseline (v1).
+// plainPager is the default strategy: git's plain newest-first order, which is
+// lazy — it parses only the page being shown — so it stays instant on a huge
+// repo (~44ms vs ~2.2s for --date-order with a commit-graph; ~21s without). The
+// order is topologically consistent for all practical viewing; only very deep,
+// merge-heavy multi-branch history can produce a rare cosmetic lane stub.
+type plainPager struct{ svc *Service }
+
+func (p plainPager) Page(ctx context.Context, limit, skip, gen int, scope LogScope) ([]model.Commit, error) {
+	return p.svc.logPage(ctx, limit, skip, scope, gen, false)
+}
+
+func (p plainPager) Name() string { return "plain" }
+
+// dateOrderPager uses `git log --date-order`: a global topological sort that
+// guarantees a parent never precedes its child (perfect graph lanes), at the
+// cost of loading the whole history's ordering — slow on a large repo. Opt-in
+// via GG_COMMIT_PAGER=date-order for anyone who wants guaranteed lanes.
 type dateOrderPager struct{ svc *Service }
 
 func (p dateOrderPager) Page(ctx context.Context, limit, skip, gen int, scope LogScope) ([]model.Commit, error) {
@@ -24,30 +38,3 @@ func (p dateOrderPager) Page(ctx context.Context, limit, skip, gen int, scope Lo
 }
 
 func (p dateOrderPager) Name() string { return "date-order" }
-
-// graphPager uses --date-order only when a commit-graph exists (cheap there),
-// else git's plain order (instant). The order is captured ONCE per generation
-// (keyed on gen): all pages of one generation share an order, because the feed
-// pages with --skip and a mid-generation order flip with the same skip would
-// silently drop commits. The only order transition is the next generation
-// (after the background commit-graph write triggers a reload). v2.
-type graphPager struct {
-	svc       *Service
-	mu        sync.Mutex
-	gen       int  // generation whose order is cached (0 = none captured yet)
-	dateOrder bool // cached order for gen
-}
-
-func (p *graphPager) Page(ctx context.Context, limit, skip, gen int, scope LogScope) ([]model.Commit, error) {
-	p.mu.Lock()
-	if gen != p.gen {
-		p.gen = gen
-		has, _ := p.svc.HasCommitGraph(ctx)
-		p.dateOrder = has
-	}
-	do := p.dateOrder
-	p.mu.Unlock()
-	return p.svc.logPage(ctx, limit, skip, scope, gen, do)
-}
-
-func (p *graphPager) Name() string { return "graph" }

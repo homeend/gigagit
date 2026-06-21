@@ -2,24 +2,11 @@ package git
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"slices"
 	"testing"
 
 	"github.com/gigagit/gg/internal/gitexec"
 )
-
-func TestWriteCommitGraph(t *testing.T) {
-	dir, runner := newTestRepo(t)
-	repo := &Repo{Runner: runner}
-	if err := repo.WriteCommitGraph(context.Background()); err != nil {
-		t.Fatalf("WriteCommitGraph: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(dir, ".git", "objects", "info", "commit-graph")); err != nil {
-		t.Fatalf("commit-graph not written: %v", err)
-	}
-}
 
 func TestLogScopedDateOrderFlag(t *testing.T) {
 	f := gitexec.NewFakeRunner()
