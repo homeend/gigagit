@@ -193,3 +193,27 @@ func TestDotColumnAlignsOnScrolledRow(t *testing.T) {
 		t.Fatalf("lane-color escape must immediately precede the node ● (dot mis-aligned):\n%q", out)
 	}
 }
+
+// TestRenderPanelWindowsWideGraph is the end-to-end guard: it proves the
+// windowed graph survives the assembled panelView → renderPanel path (selection
+// prefix + decorators + cutoff truncation) on a WIDE, SCROLLED graph — the case
+// the reported bug hit and the linear-graph lane-color test never exercises.
+func TestRenderPanelWindowsWideGraph(t *testing.T) {
+	forceColor(t)
+	m := graphWinModel(200, 150, 8, 146) // window [146,154): node 150 visible, left ⋯ on
+	rows, idx := m.panelView(panelCommits)
+	decos := m.commitDecorators(rows, idx)
+	out := m.renderPanel(panelCommits, "Commits", rows, decos, 120, 10)
+
+	for _, ln := range strings.Split(out, "\n") {
+		if w := lipgloss.Width(ln); w > 120 {
+			t.Fatalf("rendered line width %d exceeds panel width 120 (graph not windowed): %q", w, ln)
+		}
+	}
+	if !strings.Contains(out, "WINDOWED_SUBJECT") {
+		t.Errorf("subject missing from assembled panel (pushed off-screen):\n%s", out)
+	}
+	if !strings.Contains(out, "⋯") {
+		t.Errorf("overflow ⋯ marker did not survive the assembled render:\n%s", out)
+	}
+}

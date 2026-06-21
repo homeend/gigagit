@@ -113,9 +113,13 @@ commitGraphScroll int // leftmost visible lane (0-based)
   8) at model construction. It **persists** across j/k navigation and feed
   reloads (it is a width preference). Clamped to `[minLanes, min(planeLanes,
   effMax)]`.
-- `commitGraphScroll` **resets to 0** whenever the feed reloads (the lane
-  topology changed; a stale scroll into lane 200 of a different graph is
-  meaningless). It defaults to 0.
+- `commitGraphScroll` is **re-clamped to the new plane** on every feed rebuild
+  (`clampScroll`), defaulting to 0. Paging in older commits is a strict append
+  (newest-first lane assignment leaves existing rows' lanes unchanged), so the
+  horizontal position is preserved across auto-paging; a genuine scope change
+  shrinks the plane and the clamp brings an out-of-range offset back in. (This
+  supersedes an earlier "hard reset to 0" design, which jarred the view back to
+  lane 0 on every downward page load.)
 
 All graph tunables come from config (resolved once at construction, §6):
 `minLanes` (min window width), `step` (widen/narrow increment), `panStep` (pan

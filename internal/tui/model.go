@@ -1227,7 +1227,11 @@ func (m Model) rebuildCommitGraph() Model {
 		m.commitGraphRows[i] = r.Cells
 		m.commitGraphLanes[i] = r.Lane
 	}
-	m.commitGraphScroll = 0 // the lane topology changed; a stale scroll is meaningless
+	// Keep the horizontal scroll valid against the new plane: paging in older
+	// commits is a strict append (newest-first lane assignment leaves existing
+	// rows' lanes unchanged), so preserve the position; a genuine scope change
+	// shrinks the plane and clampScroll brings an out-of-range offset back in.
+	m.commitGraphScroll = m.clampScroll(m.commitGraphScroll)
 	return m
 }
 
