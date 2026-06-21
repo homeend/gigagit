@@ -145,3 +145,15 @@ func (m Model) graphWindow(cells string) (visible string, leftMore, rightMore bo
 	}
 	return string(win), leftMore, rightMore
 }
+
+// snapGraphToSelected scrolls the graph window so the selected commit's node
+// lane is centered-ish in view.
+func (m Model) snapGraphToSelected() Model {
+	bi, ok := m.backingIndex(panelCommits)
+	if !ok || bi < 0 || bi >= len(m.commitGraphLanes) {
+		return m
+	}
+	lane := m.commitGraphLanes[bi]
+	m.commitGraphScroll = m.clampScroll(lane - m.graphCols()/2)
+	return m
+}

@@ -779,6 +779,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.commitGraphScroll = m.clampScroll(m.commitGraphScroll)
 				return m, nil
 			}
+		case "=":
+			if m.focus == panelCommits && m.graphActive() {
+				m = m.snapGraphToSelected()
+				return m, nil
+			}
 		case "/":
 			if !m.running && !m.loading {
 				m.filterPanel = m.focus

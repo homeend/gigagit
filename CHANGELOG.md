@@ -29,7 +29,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   configurable via `[ui] commit_graph_lanes`) instead of the full lane plane, so
   a repo with a deep merge history (e.g. the Linux kernel, ~300 concurrent
   lanes) no longer pushes the commit text off-screen. A `⋯` marker shows lanes
-  beyond each edge of the window.
+  beyond each edge of the window. Controls (Commits panel): `<`/`>` narrow/widen,
+  `shift+←/→` pan, `=` snap to the selected commit's node — all also in the `.`
+  menu. Tunables: `[ui] commit_graph_min_lanes`, `commit_graph_step`,
+  `commit_graph_pan_step`, `commit_graph_max_lanes` (clamped to a 320-lane
+  ceiling).
 - **Edit a file in your editor from the Files panel.** The `.` action menu on a
   Files-panel file now offers **Edit in editor** — it suspends the TUI, opens
   the file in `$VISUAL`/`$EDITOR` (falling back to `vi` on unix / `notepad` on

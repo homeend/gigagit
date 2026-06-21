@@ -125,6 +125,9 @@ func (m Model) graphWindowRows() []actionRow {
 			m.commitGraphScroll = m.clampScroll(m.commitGraphScroll + m.graphPanStep())
 			return m, nil
 		}},
+		{id: "graph-center", label: "Center on selected commit", run: func(m Model) (tea.Model, tea.Cmd) {
+			return m.snapGraphToSelected(), nil
+		}},
 	}
 }
 

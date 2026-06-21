@@ -157,9 +157,39 @@ func TestGraphWindowMenuRowsPresentWhenActive(t *testing.T) {
 	for _, r := range availableActions(m) {
 		got[r.id] = true
 	}
-	for _, id := range []string{"graph-widen", "graph-narrow", "graph-pan-left", "graph-pan-right"} {
+	for _, id := range []string{"graph-widen", "graph-narrow", "graph-pan-left", "graph-pan-right", "graph-center"} {
 		if !got[id] {
 			t.Errorf("menu missing %q when graph active", id)
 		}
+	}
+}
+
+func TestSnapBringsNodeIntoWindow(t *testing.T) {
+	m := graphWinModel(50, 40, 8, 0) // node at lane 40, window at 0
+	m = feedKey(m, "=")
+	cols := m.graphCols()
+	if !(40 >= m.commitGraphScroll && 40 < m.commitGraphScroll+cols) {
+		t.Fatalf("node lane 40 not in window [%d,%d)", m.commitGraphScroll, m.commitGraphScroll+cols)
+	}
+}
+
+// TestDotColumnAlignsOnScrolledRow locks the windowed dot column against ANSI
+// rune-index drift: with a left ⋯ marker present (scroll>0), the lane-color dot
+// must land exactly on the node ●, at column 2 + (lane-scroll)*2.
+func TestDotColumnAlignsOnScrolledRow(t *testing.T) {
+	forceColor(t)
+	m := graphWinModel(50, 40, 8, 36) // window [36,44): node 40 visible, left marker on
+	rows := m.commitIdentRows(false)
+	decos := m.commitDecorators(rows, []int{0})
+	if len(decos) != 1 || decos[0] == nil {
+		t.Fatal("expected one decorator for the single commit row")
+	}
+	// The decorator's input includes the 2-col selection prefix (as the renderer
+	// supplies). The node sits at lane 40, window starts at 36 → dotCol = 10.
+	out := decos[0]("  "+rows[0], 0, 0)
+	esc := lipgloss.NewStyle().Foreground(laneColor(40)).Render("●")
+	esc = esc[:strings.IndexRune(esc, '●')] // leading color escape for this lane
+	if esc == "" || !strings.Contains(out, esc+"●") {
+		t.Fatalf("lane-color escape must immediately precede the node ● (dot mis-aligned):\n%q", out)
 	}
 }
