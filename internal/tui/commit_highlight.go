@@ -23,28 +23,38 @@ func (m Model) commitMatchesHighlight(i int) bool {
 	)
 }
 
-// scanHighlightMatch finds the next matching commit from index `from` stepping by
-// dir (+1 forward/newer→older down the feed, -1 backward), wrapping once over the
-// whole loaded feed. inclusive lets `from` itself match (used by the type-time
-// cursor snap); exclusive starts one step away (used by ctrl+↑/↓ nav). Returns
-// (from, false) when there is no match or the query is empty. Cost is O(distance
-// to the next match), never a full-feed scan unless there is no match.
-func (m Model) scanHighlightMatch(from, dir int, inclusive bool) (int, bool) {
-	n := len(m.commits)
-	if n == 0 || m.highlightQuery == "" {
-		return from, false
+// scanHighlightMatch finds the next matching commit from DISPLAY position
+// `fromDisplay` (the same space as m.sel[panelCommits]) stepping by dir (+1
+// down the visible feed, -1 up), wrapping once. inclusive lets `fromDisplay`
+// itself match (used by the type-time cursor snap); exclusive starts one step
+// away (used by ctrl+↑/↓ nav). Returns a DISPLAY position, or (fromDisplay,
+// false) when there is no match or the query is empty.
+//
+// It scans display positions and maps each through displayIndices to the backing
+// commit before testing — the same display→backing mapping renderPanel/tooltip/
+// backingIndex use — so navigation stays correct under a non-default sort (where
+// display order ≠ feed order). Cost is one O(feed) displayIndices build plus an
+// O(distance-to-match) walk, on a keypress (not per render row).
+func (m Model) scanHighlightMatch(fromDisplay, dir int, inclusive bool) (int, bool) {
+	if m.highlightQuery == "" {
+		return fromDisplay, false
 	}
-	start := from
+	idx := m.displayIndices(panelCommits)
+	n := len(idx)
+	if n == 0 {
+		return fromDisplay, false
+	}
+	start := fromDisplay
 	if !inclusive {
-		start = from + dir
+		start = fromDisplay + dir
 	}
 	for k := 0; k < n; k++ {
-		i := ((start+dir*k)%n + n) % n
-		if m.commitMatchesHighlight(i) {
-			return i, true
+		d := ((start+dir*k)%n + n) % n
+		if m.commitMatchesHighlight(idx[d]) {
+			return d, true
 		}
 	}
-	return from, false
+	return fromDisplay, false
 }
 
 // snapToHighlightMatch moves the Commits cursor to the nearest match at or after

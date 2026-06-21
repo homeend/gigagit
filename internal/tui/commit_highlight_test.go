@@ -178,6 +178,38 @@ func TestHighlightCtrlNavMovesBetweenMatches(t *testing.T) {
 	}
 }
 
+// TestHighlightNavRespectsSortOrder guards the display-vs-backing index trap:
+// m.sel is a DISPLAY position, but the match test indexes the backing feed. Under
+// a non-default sort the two orders differ, so ctrl-nav must map through
+// displayIndices or it lands on the wrong commit.
+//
+// Data is chosen so the orders genuinely diverge: subjects ascend by backing
+// index ("b".."f", then the unique "zzz_target" at backing 5), so sortNameDesc
+// puts the match at DISPLAY position 0 — different from its backing index 5. A
+// backing-space scan would set sel to 5 and land on the wrong row; only a
+// display-space scan lands on the target.
+func TestHighlightNavRespectsSortOrder(t *testing.T) {
+	m := commitsModel(t, 6)
+	subjects := []string{"b", "c", "d", "e", "f", "zzz_target"} // backing 0..5
+	for i := range m.commits {
+		m.commits[i].Subject = subjects[i]
+	}
+	m.sortModes[panelCommits] = sortNameDesc
+	m.highlightQuery = "zzz_target" // matches backing index 5 only
+	m.sel[panelCommits] = 0
+
+	u, _ := m.Update(keyMsg("ctrl+down"))
+	m = u.(Model)
+
+	bi, ok := m.backingIndex(panelCommits)
+	if !ok {
+		t.Fatal("no backing index after ctrl+down")
+	}
+	if got := m.commits[bi].Subject; got != "zzz_target" {
+		t.Fatalf("ctrl+down under sort landed on %q (backing %d), want zzz_target", got, bi)
+	}
+}
+
 func TestHighlightFooterWhileTyping(t *testing.T) {
 	m := commitsModel(t, 3)
 	u, _ := m.Update(keyMsg("@"))
