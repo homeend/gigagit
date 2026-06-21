@@ -15,6 +15,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   count while that walk is in flight, so the panel no longer looks frozen.
 
 ### Fixed
+- **Comparing a commit against the working tree (or staged) no longer leaves the
+  file diff stuck on "(loading…)".** Opening a file from a *Compare against
+  working tree* / *Compare against staged* view showed a correct header (the
+  change counts and row range) but a body frozen on "(loading…)" forever. The
+  compare path reuses the pre-built loading diff view, and nothing cleared its
+  `loading` flag when the result landed (the plain commit-diff path only worked
+  because it builds a fresh view). The diff-result handler now clears `loading`
+  for every path — a result message means the load completed.
 - **Creating a worktree now refreshes the Branches and Worktrees panels
   immediately.** After creating a worktree (and branch) the panels still showed
   the old lists until a manual reload (`r`), which on a huge repo took ages
