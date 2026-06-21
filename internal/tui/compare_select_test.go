@@ -191,3 +191,19 @@ func TestCompareSelectionRowAbsentUnderTwo(t *testing.T) {
 		t.Fatal("Compare selection row must be absent with fewer than 2 selected")
 	}
 }
+
+func TestShiftDownGrowsCompareSelection(t *testing.T) {
+	m := loadedModelLinearCommits(t, 3)
+	m.focus = panelCommits
+	m.sel[panelCommits] = 0
+
+	u, _ := m.Update(keyMsg("shift+down"))
+	mm := u.(Model)
+	// Both the start row and the landed row are in the set.
+	if !mm.commitCompareSet[m.commits[0].Hash] || !mm.commitCompareSet[m.commits[1].Hash] {
+		t.Fatalf("shift+down must add the start and the landed commit: %v", mm.commitCompareSet)
+	}
+	if mm.sel[panelCommits] != 1 {
+		t.Fatalf("cursor must move to row 1, got %d", mm.sel[panelCommits])
+	}
+}

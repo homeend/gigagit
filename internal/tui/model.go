@@ -867,6 +867,29 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.filesTreeFocused = false // always open on the commit list
 				return m, m.loadCommitFilesCmd(c)
 			}
+		case "shift+down", "shift+up":
+			// Grow the ◉ compare selection as a contiguous run: add the current
+			// row and the landed row to the set, then move the cursor.
+			if m.focus != panelCommits || !m.opsIdle() {
+				break
+			}
+			if m.commitCompareSet == nil {
+				m.commitCompareSet = map[string]bool{}
+			}
+			if bi, ok := m.backingIndex(panelCommits); ok {
+				m.commitCompareSet[m.commits[bi].Hash] = true
+			}
+			if msg.String() == "shift+down" {
+				if m.sel[panelCommits] < m.panelLen(panelCommits)-1 {
+					m.sel[panelCommits]++
+				}
+			} else if m.sel[panelCommits] > 0 {
+				m.sel[panelCommits]--
+			}
+			if bi, ok := m.backingIndex(panelCommits); ok {
+				m.commitCompareSet[m.commits[bi].Hash] = true
+			}
+			return m, nil
 		case "m":
 			if m.canMark() {
 				return m.handleMarkKey()
