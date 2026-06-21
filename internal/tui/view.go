@@ -791,15 +791,20 @@ func (m Model) commitFullRows() []string { return m.commitIdentRows(true) }
 // the WHEN-to-reveal decision; this is only WHAT gets drawn.)
 func (m Model) commitTextReveals() []string {
 	out := make([]string, len(m.commits))
-	for i, c := range m.commits {
-		id := commitIdentOf(c)
-		label := id.label()
-		if label != "" {
-			label += " "
-		}
-		out[i] = label + id.pills() + c.Subject
+	for i := range m.commits {
+		out[i] = m.commitTextRevealAt(i)
 	}
 	return out
+}
+
+// commitTextRevealAt is the per-index form of commitTextReveals.
+func (m Model) commitTextRevealAt(i int) string {
+	id := commitIdentOf(m.commits[i])
+	label := id.label()
+	if label != "" {
+		label += " "
+	}
+	return label + id.pills() + m.commits[i].Subject
 }
 
 // commitIdentWidth is the display width of the branch-identity column: the
@@ -820,28 +825,36 @@ func (m Model) commitIdentWidth() int {
 }
 
 func (m Model) commitIdentRows(full bool) []string {
-	graph := !m.commitListMode && m.commitGraphOn() && len(m.commitGraphRows) == len(m.commits)
 	w := m.commitIdentWidth()
-	out := make([]string, 0, len(m.commits))
-	for i, c := range m.commits {
-		id := commitIdentOf(c)
-		var tok string
-		if full {
-			tok = id.fullToken(w)
-		} else {
-			tok, _ = id.token(w)
-		}
-		row := tok + " " + id.pills() + c.Subject
-		switch {
-		case m.commitListMode:
-			row = "● " + row
-		case graph:
-			win, _, _ := m.graphWindow(m.commitGraphRows[i])
-			row = win + " " + row
-		}
-		out = append(out, row)
+	out := make([]string, len(m.commits))
+	for i := range m.commits {
+		out[i] = m.commitIdentRowAt(i, w, full)
 	}
 	return out
+}
+
+// commitIdentRowAt builds one Commits-panel display row: the identity token
+// (trimmed unless full), pills, subject, prefixed by the list-mode dot or the
+// windowed graph cells. w is the shared identity-column width. Single-sourced by
+// both commitIdentRows (all rows) and commitList.Full (one row, lazily).
+func (m Model) commitIdentRowAt(i, w int, full bool) string {
+	c := m.commits[i]
+	id := commitIdentOf(c)
+	var tok string
+	if full {
+		tok = id.fullToken(w)
+	} else {
+		tok, _ = id.token(w)
+	}
+	row := tok + " " + id.pills() + c.Subject
+	switch {
+	case m.commitListMode:
+		row = "● " + row
+	case !m.commitListMode && m.commitGraphOn() && len(m.commitGraphRows) == len(m.commits):
+		win, _, _ := m.graphWindow(m.commitGraphRows[i])
+		row = win + " " + row
+	}
+	return row
 }
 
 // commitGraphOn reports whether the graph is coherent to draw: the Commits panel
@@ -922,15 +935,22 @@ func (m Model) commitDecorators(rows []string, idx []int) []rowDecorator {
 // panelView, which prefers it over Row(i) for matching.
 func (m Model) commitHaystacks() []string {
 	out := make([]string, len(m.commits))
-	for i, c := range m.commits {
-		id := commitIdentOf(c)
-		names := id.label()
-		for _, e := range id.extra {
-			names += " " + e
-		}
-		out[i] = c.Hash + " " + names + " " + c.Subject
+	for i := range m.commits {
+		out[i] = m.commitHaystackAt(i)
 	}
 	return out
+}
+
+// commitHaystackAt is the per-index form of commitHaystacks: full hash + full
+// branch name(s) + subject, for filter matching. No styling.
+func (m Model) commitHaystackAt(i int) string {
+	c := m.commits[i]
+	id := commitIdentOf(c)
+	names := id.label()
+	for _, e := range id.extra {
+		names += " " + e
+	}
+	return c.Hash + " " + names + " " + c.Subject
 }
 
 func (m Model) renderModal() string {

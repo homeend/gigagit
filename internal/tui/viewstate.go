@@ -258,11 +258,10 @@ func (l statusList) Date(i int) int64 {
 }
 
 type commitList struct {
-	items []model.Commit
-	rows  []string // display rows (trimmed identity token, no commit id)
-	full  []string // parallel rows with the UNtrimmed identity (gates WHEN to reveal)
-	text  []string // compact reveal text (branch + subject, no graph/padding): WHAT to reveal
-	hay   []string // filter haystack: full hash + full branch name + subject
+	items  []model.Commit
+	rows   []string // display rows (trimmed identity token, no commit id)
+	m      *Model   // source for lazy per-index full/text/haystack (built on demand, not all-n per frame)
+	identW int      // shared identity-column width, for Full
 }
 
 func (l commitList) Len() int          { return len(l.items) }
@@ -273,29 +272,30 @@ func (l commitList) Key(i int) string  { return l.items[i].Hash }
 
 // Haystack decouples the filter-match text from the (trimmed, id-less) display
 // row so id-prefix and full-branch-name searches keep working. Full supplies the
-// untrimmed-identity row the reveal tooltip shows. Guarded against a short slice
-// so a partially-built list never panics.
+// untrimmed-identity row the reveal tooltip shows. Both are computed per-index on
+// demand (only when a filter is active / the tooltip reads one row) rather than
+// materialized for the whole feed every frame.
 func (l commitList) Haystack(i int) string {
-	if i < len(l.hay) {
-		return l.hay[i]
+	if l.m == nil || i >= len(l.items) {
+		return l.rows[i]
 	}
-	return l.rows[i]
+	return l.m.commitHaystackAt(i)
 }
 func (l commitList) Full(i int) string {
-	if i < len(l.full) {
-		return l.full[i]
+	if l.m == nil || i >= len(l.items) {
+		return l.rows[i]
 	}
-	return l.rows[i]
+	return l.m.commitIdentRowAt(i, l.identW, true)
 }
 
 // TextReveal supplies the compact text-only reveal (branch + subject, no graph
 // glyphs, no fixed-width padding) the tooltip draws once it has decided the row
 // is reveal-worthy. See textRevealer.
 func (l commitList) TextReveal(i int) string {
-	if i < len(l.text) {
-		return l.text[i]
+	if l.m == nil || i >= len(l.items) {
+		return l.rows[i]
 	}
-	return l.rows[i]
+	return l.m.commitTextRevealAt(i)
 }
 
 // inFilesPanel reports whether f belongs in the Files panel: any working-tree
@@ -342,7 +342,7 @@ func (m Model) listFor(p panel) panelList {
 		// returning indices into m.status.Files for the action handlers.
 		return statusList{files: m.status.Files, rows: m.statusRows(p), root: m.currentWorktree, mtime: map[int]int64{}}
 	case panelCommits:
-		return commitList{items: m.commits, rows: m.commitRows(), full: m.commitFullRows(), text: m.commitTextReveals(), hay: m.commitHaystacks()}
+		return commitList{items: m.commits, rows: m.commitRows(), m: &m, identW: m.commitIdentWidth()}
 	}
 	return commitList{}
 }
