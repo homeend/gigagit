@@ -95,6 +95,60 @@ func TestCommitCompareMarkedRowOrdersByFeed(t *testing.T) {
 	}
 }
 
+// TestCommitCompareMarkedRealDiff drives the commit↔commit path end-to-end —
+// the one new runtime path Stage 2 adds: a per-file diff through the *cached*
+// compareDiffKey (commit↔commit yields a non-empty key, unlike the worktree
+// bypass covered in Stage 1). commits[0] ("second") added b.txt over commits[1].
+func TestCommitCompareMarkedRealDiff(t *testing.T) {
+	m := loadedModelTwoCommits(t)
+	m.focus = panelCommits
+	m.mark = &markState{panel: panelCommits, key: m.commits[1].Hash, display: m.commits[1].Hash}
+	m.sel[panelCommits] = 0
+
+	r, ok := m.commitCompareMarkedRow()
+	if !ok {
+		t.Fatal("row must be present")
+	}
+	u, cmd := r.run(m)
+	m = u.(Model)
+
+	// File list: b.txt was added between the two commits.
+	cm, ok := cmd().(compareFilesMsg)
+	if !ok || cm.err != nil {
+		t.Fatalf("compareFilesMsg=%v err=%v", ok, cm.err)
+	}
+	u, _ = m.Update(cm)
+	m = u.(Model)
+	sel := -1
+	for i, l := range m.filesView.lines {
+		if l.path == "b.txt" && l.status == "A" {
+			sel = i
+		}
+	}
+	if sel < 0 {
+		t.Fatalf("b.txt (A) missing from %+v", m.filesView.lines)
+	}
+
+	// Per-file diff: real rows through the cached commit↔commit key.
+	m.filesView.sel = sel
+	m.filesTreeFocused = true
+	u, dcmd := m.Update(keyMsg("enter"))
+	m = u.(Model)
+	if m.diffView == nil || dcmd == nil {
+		t.Fatal("enter did not open + load the diff")
+	}
+	dmsg, ok := dcmd().(diffMsg)
+	if !ok {
+		t.Fatalf("expected diffMsg")
+	}
+	if dmsg.view.err != nil {
+		t.Fatalf("diff err: %v", dmsg.view.err)
+	}
+	if len(dmsg.view.full) == 0 {
+		t.Fatal("commit↔commit diff has no rows — cached-key path not resolving bytes")
+	}
+}
+
 func TestCommitCompareMarkedRowSameCommitAbsent(t *testing.T) {
 	m := loadedModelTwoCommits(t)
 	m.focus = panelCommits
