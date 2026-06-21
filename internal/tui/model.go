@@ -71,6 +71,8 @@ type Model struct {
 	commitGraphRows     []string           // cached single-line graph cells, parallel to commits; empty = none
 	commitGraphLanes    []int              // cached node lane per commit, parallel to commits
 	commitListMode      bool               // Commits feed rendered as a flat ●-gutter list, not a graph
+	commitGraphCols     int                // graph window width in LANES; 0 = use configured default
+	commitGraphScroll   int                // leftmost visible lane (0-based); resets on feed reload
 	opCancel            context.CancelFunc // cancels the in-flight op's context; nil when idle
 	loadGen             int                // bumped per superseding load; stale dataLoadedMsg are dropped
 	proc                process            // the single active long-running process; nil = none. IS the interface lock.
@@ -1200,6 +1202,7 @@ func (m Model) rebuildCommitGraph() Model {
 		m.commitGraphRows[i] = r.Cells
 		m.commitGraphLanes[i] = r.Lane
 	}
+	m.commitGraphScroll = 0 // the lane topology changed; a stale scroll is meaningless
 	return m
 }
 

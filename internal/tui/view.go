@@ -787,7 +787,8 @@ func (m Model) commitIdentRows(full bool) []string {
 		case m.commitListMode:
 			row = "● " + row
 		case graph:
-			row = m.commitGraphRows[i] + " " + row
+			win, _, _ := m.graphWindow(m.commitGraphRows[i])
+			row = win + " " + row
 		}
 		out = append(out, row)
 	}
@@ -825,12 +826,15 @@ func (m Model) commitDecorators(rows []string, idx []int) []rowDecorator {
 		id := commitIdentOf(m.commits[ci])
 		dim := !id.tip && id.name != "" // gray a lineage row's branch name
 
-		// identStart = the 2-col selection prefix + this row's leading glyphs.
+		// identStart = the 2-col selection prefix + this row's leading glyphs. In
+		// graph mode the prefix is the fixed-width window (cols*2) + a trailing
+		// space; the ⋯ edge markers replace columns inside it, so they add no
+		// width. This single value also drives dotCol below (no independent math).
 		identStart := 2
 		if m.commitListMode {
 			identStart += 2 // "● "
 		} else if graphPrefix {
-			identStart += lipgloss.Width(m.commitGraphRows[ci]) + 1
+			identStart += m.graphCols()*2 + 1
 		}
 
 		hasDot := false
@@ -838,13 +842,21 @@ func (m Model) commitDecorators(rows []string, idx []int) []rowDecorator {
 		var dotColor lipgloss.Color
 		if laneColorOn {
 			lane := m.commitGraphLanes[ci]
-			dotColor = laneColor(lane)
 			if m.commitListMode {
 				dotCol = 2 // ● at content col 0 + 2 prefix
+				dotColor = laneColor(lane)
+				hasDot = true
 			} else {
-				dotCol = 2 + 2*lane
+				// Graph mode: the node is drawn only when its lane is inside the
+				// window. Suppress it when it lands exactly on the left ⋯ marker.
+				cols := m.graphCols()
+				scroll := m.commitGraphScroll
+				if lane >= scroll && lane < scroll+cols && !(scroll > 0 && lane == scroll) {
+					dotCol = 2 + (lane-scroll)*2
+					dotColor = laneColor(lane)
+					hasDot = true
+				}
 			}
-			hasDot = true
 		}
 		if !dim && !hasDot {
 			continue

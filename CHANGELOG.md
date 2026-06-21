@@ -24,6 +24,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   each — bringing branch rename/delete to the commit graph, not just the
   Branches panel. Delete is hidden for any branch that is checked out (the
   current branch or one in another worktree), since git refuses those.
+- **Windowed commit graph for deep histories.** The Commits panel now renders a
+  fixed-width horizontal *window* of the commit graph (default 8 lanes,
+  configurable via `[ui] commit_graph_lanes`) instead of the full lane plane, so
+  a repo with a deep merge history (e.g. the Linux kernel, ~300 concurrent
+  lanes) no longer pushes the commit text off-screen. A `⋯` marker shows lanes
+  beyond each edge of the window.
 - **Edit a file in your editor from the Files panel.** The `.` action menu on a
   Files-panel file now offers **Edit in editor** — it suspends the TUI, opens
   the file in `$VISUAL`/`$EDITOR` (falling back to `vi` on unix / `notepad` on
