@@ -52,15 +52,16 @@ type Model struct {
 
 	conflict domain.ConflictState // source of the current conflict (merge/rebase parties), for the notice
 
-	filesView        *contentPopup  // commit files tree replacing the left column; nil = closed
-	filesTitle       string         // "Files <short-hash> <subject>", updated with the content
-	filesHash        string         // commit the view wants; gates stale async results
-	filesCompare     bool           // true = compare mode (filesLeft/Right) vs legacy commit-vs-parent
-	filesLeft        model.Endpoint // compare mode: older side
-	filesRight       model.Endpoint // compare mode: newer side
-	compareTag       string         // gates stale compareFilesMsg results
-	filesStashTag    string         // when the files tree is showing a stash: its ref (gates stash-file loads)
-	filesTreeFocused bool           // true = the tree side owns vertical movement (←/→/tab)
+	filesView         *contentPopup  // commit files tree replacing the left column; nil = closed
+	filesTitle        string         // "Files <short-hash> <subject>", updated with the content
+	filesHash         string         // commit the view wants; gates stale async results
+	filesCompare      bool           // true = compare mode (filesLeft/Right) vs legacy commit-vs-parent
+	filesLeft         model.Endpoint // compare mode: older side
+	filesRight        model.Endpoint // compare mode: newer side
+	compareTag        string         // gates stale compareFilesMsg results
+	filesStashTag     string         // when the files tree is showing a stash: its ref (gates stash-file loads)
+	filesTreeFocused  bool           // true = the tree side owns vertical movement (←/→/tab)
+	filesReadInflight bool           // a per-commit files-view CommitFiles read is outstanding; drop further nav reads until it lands (pure-drop pacing on large repos)
 
 	diffView    *diffView // full-screen side-by-side diff; nil = closed
 	diffTag     string    // request key of the wanted diff; gates stale async results
@@ -188,6 +189,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.diffView = msg.view
 		return m, nil
 	case commitFilesMsg:
+		m.filesReadInflight = false // the outstanding per-commit read has landed; nav may issue again
 		if m.filesView == nil || msg.hash != m.filesHash {
 			return m, nil // view closed, or a stale result from fast movement
 		}
@@ -864,6 +866,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.filesTitle = "Files " + shortHash(c.Hash) + " " + c.Subject
 				m.filesHash = c.Hash
 				m.filesTreeFocused = false // always open on the commit list
+				m.filesReadInflight = true
 				return m, m.loadCommitFilesCmd(c)
 			}
 		case "m":

@@ -332,6 +332,12 @@ func (m Model) moveListUnderFilesView(delta int) (tea.Model, tea.Cmd) {
 // moveCommitUnderFilesView shifts the Commits selection by delta and fires
 // the follow-live reload when it lands on a different commit.
 func (m Model) moveCommitUnderFilesView(delta int) (tea.Model, tea.Cmd) {
+	// Pure-drop: while a per-commit files read is outstanding, ignore the move
+	// entirely so held j/k is paced by read completion instead of queuing a read
+	// per OS key-repeat (the files load is expensive on a large repo).
+	if m.filesReadInflight {
+		return m, nil
+	}
 	n := m.panelLen(panelCommits)
 	s := m.sel[panelCommits] + delta
 	if s > n-1 {
@@ -349,6 +355,7 @@ func (m Model) moveCommitUnderFilesView(delta int) (tea.Model, tea.Cmd) {
 		return m, m.maybeLoadMoreCommits() // nil when not needed
 	}
 	m.filesHash = m.commits[bi].Hash
+	m.filesReadInflight = true
 	filesCmd := m.loadCommitFilesCmd(m.commits[bi])
 	if more := m.maybeLoadMoreCommits(); more != nil {
 		return m, tea.Batch(filesCmd, more)
@@ -366,6 +373,7 @@ func (m Model) syncFilesViewToSelectedCommit() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.filesHash = m.commits[bi].Hash
+	m.filesReadInflight = true
 	return m, m.loadCommitFilesCmd(m.commits[bi])
 }
 
