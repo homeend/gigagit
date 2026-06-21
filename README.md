@@ -97,6 +97,7 @@ gg tag ls                            # list tags (newest first)
 gg tag create [-m <msg>] <name> [<commit>]  # create a tag (annotated with -m, else lightweight)
 gg tag rm <name>                     # delete a tag (alias: delete)
 gg tag checkout [--branch <name>] <tag>  # check out a tag (detached, or onto a new branch)
+gg tag push <name> [<remote>]        # push a tag to a remote (auto when only one)
 gg branch create <name> [<start-point>]
 gg branch rename <old> <new>
 gg branch delete [--force] <name>

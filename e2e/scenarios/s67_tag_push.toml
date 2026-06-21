@@ -1,0 +1,23 @@
+name = "tag push: a local tag lands on origin"
+
+[input]
+steps = [
+  { tag = "v1.0.0" },
+]
+
+[input.origin]
+steps = [
+  { write = "f.txt", content = "v1\n" },
+  { commit = "c1" },
+]
+
+[[run]]
+cmd  = ["tag", "push", "v1.0.0", "origin"]
+exit = 0
+
+[expect]
+branch = "main"
+clean  = true
+
+[expect.origin]
+tags = ["v1.0.0"]
