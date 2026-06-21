@@ -109,7 +109,7 @@ func (m Model) tagJumpToCommit() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	target := m.tags[bi].Target
-	_, idx := m.panelView(panelCommits)
+	idx := m.displayIndices(panelCommits)
 	for di, ci := range idx {
 		if ci >= 0 && ci < len(m.commits) && strings.HasPrefix(m.commits[ci].Hash, target) {
 			m.sel[panelCommits] = di

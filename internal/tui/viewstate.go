@@ -258,44 +258,48 @@ func (l statusList) Date(i int) int64 {
 }
 
 type commitList struct {
-	items []model.Commit
-	rows  []string // display rows (trimmed identity token, no commit id)
-	full  []string // parallel rows with the UNtrimmed identity (gates WHEN to reveal)
-	text  []string // compact reveal text (branch + subject, no graph/padding): WHAT to reveal
-	hay   []string // filter haystack: full hash + full branch name + subject
+	items  []model.Commit
+	m      *Model // source for lazy per-index row/full/text/haystack (built on demand, not all-n per frame)
+	identW int    // shared identity-column width
 }
 
-func (l commitList) Len() int          { return len(l.items) }
-func (l commitList) Row(i int) string  { return l.rows[i] }
+func (l commitList) Len() int { return len(l.items) }
+func (l commitList) Row(i int) string {
+	if l.m == nil {
+		return ""
+	}
+	return l.m.commitIdentRowAt(i, l.identW, false)
+}
 func (l commitList) Name(i int) string { return l.items[i].Subject }
 func (l commitList) Date(i int) int64  { return l.items[i].UnixTime }
 func (l commitList) Key(i int) string  { return l.items[i].Hash }
 
 // Haystack decouples the filter-match text from the (trimmed, id-less) display
 // row so id-prefix and full-branch-name searches keep working. Full supplies the
-// untrimmed-identity row the reveal tooltip shows. Guarded against a short slice
-// so a partially-built list never panics.
+// untrimmed-identity row the reveal tooltip shows. Both are computed per-index on
+// demand (only when a filter is active / the tooltip reads one row) rather than
+// materialized for the whole feed every frame.
 func (l commitList) Haystack(i int) string {
-	if i < len(l.hay) {
-		return l.hay[i]
+	if l.m == nil || i >= len(l.items) {
+		return ""
 	}
-	return l.rows[i]
+	return l.m.commitHaystackAt(i)
 }
 func (l commitList) Full(i int) string {
-	if i < len(l.full) {
-		return l.full[i]
+	if l.m == nil || i >= len(l.items) {
+		return ""
 	}
-	return l.rows[i]
+	return l.m.commitIdentRowAt(i, l.identW, true)
 }
 
 // TextReveal supplies the compact text-only reveal (branch + subject, no graph
 // glyphs, no fixed-width padding) the tooltip draws once it has decided the row
 // is reveal-worthy. See textRevealer.
 func (l commitList) TextReveal(i int) string {
-	if i < len(l.text) {
-		return l.text[i]
+	if l.m == nil || i >= len(l.items) {
+		return ""
 	}
-	return l.rows[i]
+	return l.m.commitTextRevealAt(i)
 }
 
 // inFilesPanel reports whether f belongs in the Files panel: any working-tree
@@ -342,7 +346,7 @@ func (m Model) listFor(p panel) panelList {
 		// returning indices into m.status.Files for the action handlers.
 		return statusList{files: m.status.Files, rows: m.statusRows(p), root: m.currentWorktree, mtime: map[int]int64{}}
 	case panelCommits:
-		return commitList{items: m.commits, rows: m.commitRows(), full: m.commitFullRows(), text: m.commitTextReveals(), hay: m.commitHaystacks()}
+		return commitList{items: m.commits, m: &m, identW: m.commitIdentWidth()}
 	}
 	return commitList{}
 }
@@ -395,7 +399,12 @@ func (m Model) filterActive(p panel) bool {
 // the matching backing indices (display row n shows backing element idx[n]).
 // It is the single source of truth for what a panel shows; selection, paging,
 // clamping, rendering, and action keys all consume it.
-func (m Model) panelView(p panel) (rows []string, idx []int) {
+// displayIndices applies panel p's membership filter, text filter, and sort,
+// returning the backing indices in display order WITHOUT materializing any row
+// strings. panelView builds rows on top of this; idx-only callers use it
+// directly so they never pay for styling — important for the Commits panel,
+// whose Row styling (graph window + identity token) is the per-frame hot cost.
+func (m Model) displayIndices(p panel) (idx []int) {
 	l := m.listFor(p)
 	q := ""
 	if m.filterActive(p) {
@@ -407,9 +416,15 @@ func (m Model) panelView(p panel) (rows []string, idx []int) {
 			continue // Files/Staged split: each panel shows only its subset
 		}
 		if q != "" {
-			text := l.Row(i)
+			// Prefer the cheap haystack; only fall back to Row(i) for panels that
+			// don't implement haystacker. For commits Row(i) is now full styling
+			// (graph window + identity), so calling it per row here would re-add
+			// O(n) styling on every filtered frame.
+			var text string
 			if h, ok := l.(haystacker); ok {
 				text = h.Haystack(i) // search hidden full id + branch name, not the trimmed row
+			} else {
+				text = l.Row(i)
 			}
 			if !strings.Contains(strings.ToLower(text), q) {
 				continue
@@ -418,6 +433,12 @@ func (m Model) panelView(p panel) (rows []string, idx []int) {
 		idx = append(idx, i)
 	}
 	sortIndices(l, m.sortModes[p], idx)
+	return idx
+}
+
+func (m Model) panelView(p panel) (rows []string, idx []int) {
+	idx = m.displayIndices(p)
+	l := m.listFor(p)
 	rows = make([]string, len(idx))
 	for n, i := range idx {
 		rows[n] = l.Row(i)
@@ -429,7 +450,7 @@ func (m Model) panelView(p panel) (rows []string, idx []int) {
 // backing slice, accounting for the view transforms. ok is false when the
 // visible list is empty or the selection is out of range.
 func (m Model) backingIndex(p panel) (int, bool) {
-	_, idx := m.panelView(p)
+	idx := m.displayIndices(p)
 	s := m.sel[p]
 	if s < 0 || s >= len(idx) {
 		return 0, false

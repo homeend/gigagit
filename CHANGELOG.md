@@ -16,6 +16,18 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   commit feed — neither of which a worktree-create changes. The create now does
   a targeted refresh of just the branches and worktrees, so the new rows appear
   right away.
+- **Commits panel navigation is no longer crippled on large repositories.** Each
+  frame was rebuilding the entire loaded commit feed — styling every row and,
+  worse, recomputing the identity-column width once per row inside the decorator
+  loop, making rendering O(commits²) per keystroke (≈1.9 s/frame at 5 000 loaded
+  commits, ≈28 s at 20 000). Holding an arrow or Page-Up then queued a backlog
+  the UI ground through long after the key was released, and widening the graph
+  made it worse. Rendering now styles only the rows actually visible
+  (window-then-style), computes the column width once, and builds the
+  tooltip/filter strings per row on demand instead of for the whole feed — the
+  per-frame cost is ~1.5 ms at 5 000 commits and flat as the feed grows. The
+  commit files view (`l`) also stops issuing a file-list read for every held
+  `j`/`k`; it loads where navigation settles.
 - **Switching to a branch whose name collides with a tag no longer fails.**
   After creating a worktree (and branch) at a tag, the branch and tag share a
   name, and git's `%(refname:short)` disambiguated the branch to

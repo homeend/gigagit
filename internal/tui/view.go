@@ -319,14 +319,12 @@ func (m Model) renderInterface() string {
 
 	// Narrow terminals: a single commits column (two columns won't fit cleanly).
 	if g.w < 40 {
-		cmRows, cmIdx := m.panelView(panelCommits)
-		decos := m.commitDecorators(cmRows, cmIdx)
+		cmRows, _, decos := m.commitBody(g.boxH[panelCommits])
 		body := m.renderPanel(panelCommits, m.panelLabel(panelCommits, "Commits ("+m.commitScopeLabel()+")"), cmRows, decos, g.w, g.boxH[panelCommits])
 		return strings.Join([]string{header, body, footer, statusLine}, "\n")
 	}
 
-	cmRows, cmIdx := m.panelView(panelCommits)
-	cmDecos := m.commitDecorators(cmRows, cmIdx)
+	cmRows, _, cmDecos := m.commitBody(g.boxH[panelCommits])
 
 	var left string
 	if m.filesView != nil {
@@ -786,6 +784,40 @@ func (m Model) commitBranchHint() string {
 func (m Model) commitRows() []string     { return m.commitIdentRows(false) }
 func (m Model) commitFullRows() []string { return m.commitIdentRows(true) }
 
+// commitBody builds the Commits panel rows + decorators for renderPanel. In
+// cutoff/scroll display mode only the rows the window will show are styled;
+// off-window entries are empty strings that occupy the same single display line,
+// so renderPanel's windowing math and visible output are identical to styling
+// every row (O(visible) instead of O(feed) per frame). In wrap mode a row may
+// span several lines, so every row is styled for exactness. The returned slices
+// are full-length, keeping renderPanel's selection/mark indexing unchanged.
+func (m Model) commitBody(boxH int) (rows []string, idx []int, decos []rowDecorator) {
+	idx = m.displayIndices(panelCommits)
+	rows = make([]string, len(idx))
+	rowsCap := boxH - 3 // mirrors renderPanel: borders (2) + label line
+	if rowsCap < 1 {
+		return rows, idx, nil // panel shows the label only; no rows rendered
+	}
+	if m.dispModes[panelCommits] == modeWrap || len(idx) <= rowsCap {
+		w := m.commitIdentWidth()
+		for n, i := range idx {
+			rows[n] = m.commitIdentRowAt(i, w, false)
+		}
+		return rows, idx, m.commitDecorators(rows, idx)
+	}
+	sel := m.sel[panelCommits]
+	start := windowStart(len(idx), rowsCap, sel)
+	end := start + rowsCap
+	if end > len(idx) {
+		end = len(idx)
+	}
+	w := m.commitIdentWidth()
+	for n := start; n < end; n++ {
+		rows[n] = m.commitIdentRowAt(idx[n], w, false)
+	}
+	return rows, idx, m.commitDecoratorsRange(rows, idx, start, end)
+}
+
 // commitTextReveals is the per-commit reveal text the tooltip renders: the full
 // (untrimmed) branch label + any pills + the subject — with NO graph prefix and
 // NO fixed-width identity padding. The graph is positional, so revealing its
@@ -794,15 +826,20 @@ func (m Model) commitFullRows() []string { return m.commitIdentRows(true) }
 // the WHEN-to-reveal decision; this is only WHAT gets drawn.)
 func (m Model) commitTextReveals() []string {
 	out := make([]string, len(m.commits))
-	for i, c := range m.commits {
-		id := commitIdentOf(c)
-		label := id.label()
-		if label != "" {
-			label += " "
-		}
-		out[i] = label + id.pills() + c.Subject
+	for i := range m.commits {
+		out[i] = m.commitTextRevealAt(i)
 	}
 	return out
+}
+
+// commitTextRevealAt is the per-index form of commitTextReveals.
+func (m Model) commitTextRevealAt(i int) string {
+	id := commitIdentOf(m.commits[i])
+	label := id.label()
+	if label != "" {
+		label += " "
+	}
+	return label + id.pills() + m.commits[i].Subject
 }
 
 // commitIdentWidth is the display width of the branch-identity column: the
@@ -823,28 +860,36 @@ func (m Model) commitIdentWidth() int {
 }
 
 func (m Model) commitIdentRows(full bool) []string {
-	graph := !m.commitListMode && m.commitGraphOn() && len(m.commitGraphRows) == len(m.commits)
 	w := m.commitIdentWidth()
-	out := make([]string, 0, len(m.commits))
-	for i, c := range m.commits {
-		id := commitIdentOf(c)
-		var tok string
-		if full {
-			tok = id.fullToken(w)
-		} else {
-			tok, _ = id.token(w)
-		}
-		row := tok + " " + id.pills() + c.Subject
-		switch {
-		case m.commitListMode:
-			row = "● " + row
-		case graph:
-			win, _, _ := m.graphWindow(m.commitGraphRows[i])
-			row = win + " " + row
-		}
-		out = append(out, row)
+	out := make([]string, len(m.commits))
+	for i := range m.commits {
+		out[i] = m.commitIdentRowAt(i, w, full)
 	}
 	return out
+}
+
+// commitIdentRowAt builds one Commits-panel display row: the identity token
+// (trimmed unless full), pills, subject, prefixed by the list-mode dot or the
+// windowed graph cells. w is the shared identity-column width. Single-sourced by
+// both commitIdentRows (all rows) and commitList.Full (one row, lazily).
+func (m Model) commitIdentRowAt(i, w int, full bool) string {
+	c := m.commits[i]
+	id := commitIdentOf(c)
+	var tok string
+	if full {
+		tok = id.fullToken(w)
+	} else {
+		tok, _ = id.token(w)
+	}
+	row := tok + " " + id.pills() + c.Subject
+	switch {
+	case m.commitListMode:
+		row = "● " + row
+	case !m.commitListMode && m.commitGraphOn() && len(m.commitGraphRows) == len(m.commits):
+		win, _, _ := m.graphWindow(m.commitGraphRows[i])
+		row = win + " " + row
+	}
+	return row
 }
 
 // commitGraphOn reports whether the graph is coherent to draw: the Commits panel
@@ -861,13 +906,21 @@ func (m Model) commitGraphOn() bool {
 // maps display row → backing commit index (from panelView). Columns include the
 // 2-col selection prefix the renderer prepends.
 func (m Model) commitDecorators(rows []string, idx []int) []rowDecorator {
+	return m.commitDecoratorsRange(rows, idx, 0, len(rows))
+}
+
+// commitDecoratorsRange builds the per-row decorators for display rows [lo,hi)
+// only, returning a full-length slice (off-window entries stay nil — renderPanel
+// skips a nil decorator). Windowed rendering decorates just the visible rows.
+func (m Model) commitDecoratorsRange(rows []string, idx []int, lo, hi int) []rowDecorator {
 	if len(rows) == 0 {
 		return nil
 	}
 	laneColorOn := len(m.commitGraphLanes) == len(m.commits) && (m.commitListMode || m.commitGraphOn())
 	graphPrefix := !m.commitListMode && m.commitGraphOn() && len(m.commitGraphRows) == len(m.commits)
 	decos := make([]rowDecorator, len(rows))
-	for j := range rows {
+	identW := m.commitIdentWidth() // loop-invariant: compute once, not per row
+	for j := lo; j < hi; j++ {
 		ci := j
 		if j < len(idx) {
 			ci = idx[j]
@@ -913,7 +966,7 @@ func (m Model) commitDecorators(rows []string, idx []int) []rowDecorator {
 		if !dim && !hasDot {
 			continue
 		}
-		decos[j] = commitLineDecorator(hasDot, dotCol, dotColor, dim, identStart, m.commitIdentWidth())
+		decos[j] = commitLineDecorator(hasDot, dotCol, dotColor, dim, identStart, identW)
 	}
 	return decos
 }
@@ -924,15 +977,22 @@ func (m Model) commitDecorators(rows []string, idx []int) []rowDecorator {
 // panelView, which prefers it over Row(i) for matching.
 func (m Model) commitHaystacks() []string {
 	out := make([]string, len(m.commits))
-	for i, c := range m.commits {
-		id := commitIdentOf(c)
-		names := id.label()
-		for _, e := range id.extra {
-			names += " " + e
-		}
-		out[i] = c.Hash + " " + names + " " + c.Subject
+	for i := range m.commits {
+		out[i] = m.commitHaystackAt(i)
 	}
 	return out
+}
+
+// commitHaystackAt is the per-index form of commitHaystacks: full hash + full
+// branch name(s) + subject, for filter matching. No styling.
+func (m Model) commitHaystackAt(i int) string {
+	c := m.commits[i]
+	id := commitIdentOf(c)
+	names := id.label()
+	for _, e := range id.extra {
+		names += " " + e
+	}
+	return c.Hash + " " + names + " " + c.Subject
 }
 
 func (m Model) renderModal() string {
