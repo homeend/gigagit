@@ -21,10 +21,28 @@ func cmdTag(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 		return cmdTagDelete(svc, args[1:], stdout, stderr)
 	case args[0] == "checkout" || args[0] == "co":
 		return cmdTagCheckout(svc, args[1:], stdout, stderr)
+	case args[0] == "push":
+		return cmdTagPush(svc, args[1:], stdout, stderr)
 	default:
-		fmt.Fprintf(stderr, "tag: unknown subcommand %q (try: ls, create, rm, checkout)\n", args[0])
+		fmt.Fprintf(stderr, "tag: unknown subcommand %q (try: ls, create, rm, checkout, push)\n", args[0])
 		return 2
 	}
+}
+
+// cmdTagPush implements `gg tag push <name> [<remote>]`. With no remote and a
+// single configured remote it pushes there; with multiple it errors (specify one).
+func cmdTagPush(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
+	if len(args) < 1 || len(args) > 2 || args[0] == "" {
+		fmt.Fprintln(stderr, "usage: gg tag push <name> [<remote>]")
+		return 2
+	}
+	remote := ""
+	if len(args) == 2 {
+		remote = args[1]
+	}
+	res, err := runOperation(context.Background(), svc,
+		engine.PushTag{Name: args[0], Remote: remote}, cliDecider{}, stderr)
+	return finish(res, err, stdout, stderr)
 }
 
 // cmdTagCheckout implements `gg tag checkout [--branch <name>] <tag>`. With

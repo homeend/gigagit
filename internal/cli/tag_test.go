@@ -91,3 +91,22 @@ func TestTagCheckoutToBranch(t *testing.T) {
 		t.Fatalf("on %q, want rel", out)
 	}
 }
+
+func TestTagPushToOrigin(t *testing.T) {
+	clone := cloneWithRemoteFoo(t)
+	gitRun(t, clone, "tag", "v1.0.0")
+	if code, _, errb := runCLI(t, clone, "tag", "push", "v1.0.0", "origin"); code != 0 {
+		t.Fatalf("push exit %d: %s", code, errb)
+	}
+	out, _ := exec.Command("git", "-C", clone, "ls-remote", "--tags", "origin").Output()
+	if !strings.Contains(string(out), "refs/tags/v1.0.0") {
+		t.Fatalf("tag not pushed:\n%s", out)
+	}
+}
+
+func TestTagPushRequiresName(t *testing.T) {
+	dir := newRepoDir(t)
+	if code, _, _ := runCLI(t, dir, "tag", "push"); code == 0 {
+		t.Fatal("push with no name must fail")
+	}
+}
