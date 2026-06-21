@@ -68,6 +68,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   effect on tracked ones.
 
 ### Changed
+- **Friendly startup errors.** Launching `gg` outside a git repository (or with
+  `git` missing from `PATH`, or a repo git refuses for "dubious ownership") now
+  prints a short, human-readable message — e.g. "this folder is not a git
+  repository. Run gg from inside a git repository, or create one here with `git
+  init`." — instead of the raw `error: git status failed (exit 128): fatal: …`
+  dump. A pre-flight check catches it before the TUI even launches; other git
+  failures fall back to git's own message with the runner noise stripped.
 - **Commits panel — the branch column fits the longest name now.** The
   branch-identity column sizes to the widest branch label currently loaded
   (capped at 16 chars) instead of a fixed 16, so a short common name like

@@ -78,9 +78,17 @@ func main() {
 			panic(r)
 		}
 	}()
-	cwd, err := tui.Run(domain.New(repo))
+	svc := domain.New(repo)
+	// Pre-flight: surface the common "not a git repository" / missing-git case as
+	// a friendly message instead of launching the TUI only for it to fail with a
+	// raw "git status failed (exit 128): fatal: …" dump.
+	if _, err := svc.TopLevel(context.Background()); err != nil {
+		fmt.Fprintln(os.Stderr, friendlyGitError(err))
+		os.Exit(1)
+	}
+	cwd, err := tui.Run(svc)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "error:", err)
+		fmt.Fprintln(os.Stderr, friendlyGitError(err))
 		os.Exit(1)
 	}
 	// Only write the cwd file when the user actually switched worktrees, so a
