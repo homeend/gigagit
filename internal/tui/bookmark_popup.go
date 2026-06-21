@@ -219,7 +219,14 @@ func (p *bookmarkPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			if !ok {
 				return m, nil
 			}
+			if b.IsCommit() {
+				m.statusMsg = "cannot compare a file against a commit bookmark"
+				return m, nil
+			}
 			return m.openCompareFocusedVsBookmark(*p.compareRef, p.compareLabel, b)
+		}
+		if mm, yes := m.commitBookmarkNotice(p); yes { // interim — Task 6 wires the compare
+			return mm, nil
 		}
 		return m.bookmarkJump()
 	case tea.KeyUp:
@@ -248,15 +255,24 @@ func (p *bookmarkPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			if p.compareRef != nil {
 				return m, nil
 			}
+			if mm, yes := m.commitBookmarkNotice(p); yes {
+				return mm, nil
+			}
 			return m.bookmarkPastePrompt()
 		case "m":
 			if p.compareRef != nil {
 				return m, nil
 			}
+			if mm, yes := m.commitBookmarkNotice(p); yes {
+				return mm, nil
+			}
 			return m.bookmarkMark()
 		case "c":
 			if p.compareRef != nil {
 				return m, nil
+			}
+			if mm, yes := m.commitBookmarkNotice(p); yes {
+				return mm, nil
 			}
 			b, ok := p.selected()
 			if !ok {
@@ -448,6 +464,17 @@ func (p *bookmarkPastePopup) render(m Model, below string) string {
 	w, h := m.overlayDims()
 	box := modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"
 	return overlayCenter(clipToHeight(below, h), box, w, h)
+}
+
+// commitBookmarkNotice sets a "not for a commit bookmark" status and reports
+// true when the highlighted bookmark is a commit pointer, so the caller can
+// no-op a file-only key (paste / vs-shelf / mark). File bookmarks pass through.
+func (m Model) commitBookmarkNotice(p *bookmarkPopup) (Model, bool) {
+	if b, ok := p.selected(); ok && b.IsCommit() {
+		m.statusMsg = "not available for a commit bookmark"
+		return m, true
+	}
+	return m, false
 }
 
 // bookmarkJump opens a diff of the bookmark's bytes vs the current working file.
