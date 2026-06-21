@@ -187,6 +187,13 @@ func (s *Service) Status(ctx context.Context) (model.WorkingTreeStatus, error) {
 	return query(ctx, s, "status", s.repo.Status)
 }
 
+// Branches is a single gated read for the local branch list. The TUI uses it
+// for a targeted refresh after a ref-only op (e.g. create-worktree) that does
+// not warrant a full Snapshot (status walk + commit feed) on a huge repo.
+func (s *Service) Branches(ctx context.Context) ([]model.Branch, error) {
+	return query(ctx, s, "branches", s.repo.Branches)
+}
+
 // Worktrees is a single gated read for the CLI worktree commands.
 func (s *Service) Worktrees(ctx context.Context) ([]model.Worktree, error) {
 	return query(ctx, s, "worktrees", s.repo.Worktrees)
