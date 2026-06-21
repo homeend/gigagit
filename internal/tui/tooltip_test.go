@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/gigagit/gg/internal/model"
@@ -375,5 +376,29 @@ func TestCommitRevealIsTextOnlyNoGraph(t *testing.T) {
 	// fixed-width padding gap.
 	if !strings.Contains(plain, "master mfd:") {
 		t.Errorf("reveal should be compact 'branch subject' with no padding gap: %q", plain)
+	}
+}
+
+// The branch-identity column sizes to the widest loaded branch label (capped at
+// commitIdentW), so a short common name like "master" leaves no fixed-width gap.
+func TestCommitIdentColumnFitsToLongestName(t *testing.T) {
+	m := footerModel()
+	m.commits = []model.Commit{
+		{Hash: "aaaaaa0", Subject: "s0", Refs: []model.Ref{{Name: "master", Kind: model.RefLocal}}},
+		{Hash: "bbbbbb0", Subject: "s1", Refs: []model.Ref{{Name: "dev", Kind: model.RefLocal}}},
+	}
+	if w := m.commitIdentWidth(); w != lipgloss.Width("master") {
+		t.Fatalf("ident width = %d, want %d (widest loaded label)", w, lipgloss.Width("master"))
+	}
+	rows := m.commitRows()
+	// "master" row: label padded only to 6 → exactly one space before the subject.
+	if !strings.Contains(rows[0], "master s0") {
+		t.Errorf("short-name row should have no padding gap: %q", rows[0])
+	}
+	// A name longer than the cap still trims and the column caps at commitIdentW.
+	m.commits = append(m.commits, model.Commit{Hash: "cccccc0", Subject: "s2",
+		Refs: []model.Ref{{Name: "b/this-name-is-way-too-long-to-fit", Kind: model.RefLocal}}})
+	if w := m.commitIdentWidth(); w != commitIdentW {
+		t.Fatalf("ident width = %d, want cap %d when a long name is loaded", w, commitIdentW)
 	}
 }

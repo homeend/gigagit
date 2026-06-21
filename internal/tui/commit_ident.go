@@ -68,21 +68,22 @@ func (id commitIdent) label() string {
 	return id.name
 }
 
-// token is the fixed-width (commitIdentW) display token: trimmed with … when the
-// label is too long, else right-padded so subjects stay aligned. trimmed reports
-// whether truncation happened (drives the reveal tooltip).
-func (id commitIdent) token() (text string, trimmed bool) {
+// token is the display token at width w: trimmed with … when the label is too
+// long, else right-padded so subjects stay aligned. trimmed reports whether
+// truncation happened (drives the reveal tooltip). w is the dynamic identity
+// column width (see Model.commitIdentWidth), never more than commitIdentW.
+func (id commitIdent) token(w int) (text string, trimmed bool) {
 	s := id.label()
-	if lipgloss.Width(s) > commitIdentW {
-		return truncate(s, commitIdentW), true
+	if lipgloss.Width(s) > w {
+		return truncate(s, w), true
 	}
-	return padRight(s, commitIdentW), false
+	return padRight(s, w), false
 }
 
-// fullToken is the UNtrimmed label, right-padded to at least commitIdentW. The
-// tooltip shows a row built with this when the display token was trimmed.
-func (id commitIdent) fullToken() string {
-	return padRight(id.label(), commitIdentW)
+// fullToken is the UNtrimmed label, right-padded to width w. The tooltip's
+// WHEN-to-reveal gate compares a row built with this against the trimmed row.
+func (id commitIdent) fullToken(w int) string {
+	return padRight(id.label(), w)
 }
 
 // pills renders additional-branch tips (the multi-tip case) as ‹name› chips; the

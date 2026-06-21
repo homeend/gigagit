@@ -790,16 +790,34 @@ func (m Model) commitTextReveals() []string {
 	return out
 }
 
+// commitIdentWidth is the display width of the branch-identity column: the
+// widest branch label currently loaded, capped at commitIdentW. Sizing to the
+// loaded names (instead of a fixed 16) removes the padding gap for short common
+// names like "master" while still aligning subjects within a feed; a longer name
+// paging in grows the column up to the cap.
+func (m Model) commitIdentWidth() int {
+	w := 0
+	for _, c := range m.commits {
+		if lw := lipgloss.Width(commitIdentOf(c).label()); lw > w {
+			if w = lw; w >= commitIdentW {
+				return commitIdentW
+			}
+		}
+	}
+	return w
+}
+
 func (m Model) commitIdentRows(full bool) []string {
 	graph := !m.commitListMode && m.commitGraphOn() && len(m.commitGraphRows) == len(m.commits)
+	w := m.commitIdentWidth()
 	out := make([]string, 0, len(m.commits))
 	for i, c := range m.commits {
 		id := commitIdentOf(c)
 		var tok string
 		if full {
-			tok = id.fullToken()
+			tok = id.fullToken(w)
 		} else {
-			tok, _ = id.token()
+			tok, _ = id.token(w)
 		}
 		row := tok + " " + id.pills() + c.Subject
 		switch {
@@ -880,7 +898,7 @@ func (m Model) commitDecorators(rows []string, idx []int) []rowDecorator {
 		if !dim && !hasDot {
 			continue
 		}
-		decos[j] = commitLineDecorator(hasDot, dotCol, dotColor, dim, identStart, commitIdentW)
+		decos[j] = commitLineDecorator(hasDot, dotCol, dotColor, dim, identStart, m.commitIdentWidth())
 	}
 	return decos
 }

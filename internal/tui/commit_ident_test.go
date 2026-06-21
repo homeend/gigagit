@@ -46,7 +46,7 @@ func TestCommitIdentOfNoneIsBlank(t *testing.T) {
 
 func TestCommitIdentTokenTrimsLongName(t *testing.T) {
 	id := commitIdent{name: "b/from-feat-cherry-pick-very-long", tip: true}
-	tok, trimmed := id.token()
+	tok, trimmed := id.token(commitIdentW)
 	if !trimmed {
 		t.Fatal("a >16 name must report trimmed")
 	}
@@ -60,7 +60,7 @@ func TestCommitIdentTokenTrimsLongName(t *testing.T) {
 
 func TestCommitIdentTokenPadsShortName(t *testing.T) {
 	id := commitIdent{name: "main", tip: true}
-	tok, trimmed := id.token()
+	tok, trimmed := id.token(commitIdentW)
 	if trimmed {
 		t.Fatal("a short name must not be trimmed")
 	}
