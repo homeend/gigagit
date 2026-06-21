@@ -944,6 +944,13 @@ func (m Model) commitDecoratorsRange(rows []string, idx []int, lo, hi int) []row
 		if ci < 0 || ci >= len(m.commits) {
 			continue
 		}
+		// @-highlight: a non-matching row is dimmed whole; matching rows keep the
+		// normal lane/lineage decoration below. Selection style still wins in
+		// renderPanel, so the cursor row is never dimmed.
+		if m.highlightActive() && m.highlightQuery != "" && !m.commitMatchesHighlight(ci) {
+			decos[j] = dimRowDecorator()
+			continue
+		}
 		id := commitIdentOf(m.commits[ci])
 		dim := !id.tip && id.name != "" // gray a lineage row's branch name
 

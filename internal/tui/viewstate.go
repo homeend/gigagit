@@ -485,6 +485,13 @@ func (m Model) panelLabel(p panel, base string) string {
 	} else if m.filterActive(p) {
 		base += " /" + m.filterQuery
 	}
+	if p == panelCommits {
+		if m.highlightTyping {
+			base += " @" + m.highlightQuery + "█"
+		} else if m.highlightQuery != "" {
+			base += " @" + m.highlightQuery
+		}
+	}
 	return base
 }
 

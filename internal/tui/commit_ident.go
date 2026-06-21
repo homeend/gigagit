@@ -17,6 +17,18 @@ const commitIdentW = 16
 // branch but is not its tip). 240 is a mid-gray in the 256-color cube.
 var dimIdentStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 
+// dimRowStyle grays an entire commit row that does NOT match the active
+// @-highlight query, de-emphasizing it while keeping it visible.
+var dimRowStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+
+// dimRowDecorator dims a whole visible line (all visual lines, including wrap
+// continuations). Width is preserved (a foreground style adds no cells).
+func dimRowDecorator() rowDecorator {
+	return func(visible string, hscroll, visualLine int) string {
+		return dimRowStyle.Render(visible)
+	}
+}
+
 // commitIdent is a commit row's branch-identity readout: the branch the row
 // represents — BRIGHT when this commit is that branch's tip ("the last commit
 // for a given branch"), GRAY when the commit is only that branch's lineage —
