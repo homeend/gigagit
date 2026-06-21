@@ -112,6 +112,9 @@ type Model struct {
 	filterPanel  panel  // panel the filter is bound to (meaningful only when filterQuery != "" or filterTyping)
 	filterQuery  string // case-insensitive substring; "" = no filter
 	filterTyping bool   // true while /-input mode is capturing keys
+
+	highlightQuery  string // Commits-panel @-highlight: case-insensitive substring; "" = no committed query
+	highlightTyping bool   // true while @-input mode is capturing keys
 }
 
 type panel int
@@ -515,6 +518,48 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+		// @-highlight typing captures every key (the panel label shows the query).
+		// Mirrors the filter loop, but: ctrl+↑/↓ jump matches, and a query edit
+		// snaps the cursor to the nearest match instead of resetting it to row 0.
+		if m.highlightTyping {
+			switch msg.Type {
+			case tea.KeyCtrlC:
+				return m, tea.Quit
+			case tea.KeyEsc:
+				m.highlightTyping = false
+				m.highlightQuery = ""
+			case tea.KeyEnter:
+				m.highlightTyping = false // commit: highlight stays active
+			case tea.KeyUp:
+				if m.sel[panelCommits] > 0 {
+					m.sel[panelCommits]--
+				}
+			case tea.KeyDown:
+				if m.sel[panelCommits] < m.panelLen(panelCommits)-1 {
+					m.sel[panelCommits]++
+				}
+			case tea.KeyCtrlUp:
+				if i, ok := m.scanHighlightMatch(m.sel[panelCommits], -1, false); ok {
+					m.sel[panelCommits] = i
+				}
+			case tea.KeyCtrlDown:
+				if i, ok := m.scanHighlightMatch(m.sel[panelCommits], +1, false); ok {
+					m.sel[panelCommits] = i
+				}
+			case tea.KeyBackspace, tea.KeyCtrlH:
+				if r := []rune(m.highlightQuery); len(r) > 0 {
+					m.highlightQuery = string(r[:len(r)-1])
+				}
+				m = m.snapToHighlightMatch()
+			case tea.KeySpace:
+				m.highlightQuery += " "
+				m = m.snapToHighlightMatch()
+			case tea.KeyRunes:
+				m.highlightQuery += string(msg.Runes)
+				m = m.snapToHighlightMatch()
+			}
+			return m, nil
+		}
 		if m.filesView != nil {
 			return m.updateFilesViewKey(msg)
 		}
@@ -865,10 +910,35 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "/":
 			if !m.running && !m.loading {
+				m.highlightTyping = false // mutually exclusive with @-highlight
+				m.highlightQuery = ""
 				m.filterPanel = m.focus
 				m.filterQuery = ""
 				m.filterTyping = true
 				m.sel[m.focus] = 0
+			}
+		case "@":
+			if !m.running && !m.loading && m.focus == panelCommits {
+				m.filterTyping = false // mutually exclusive with the / filter
+				if m.filterPanel == panelCommits {
+					m.filterQuery = ""
+				}
+				m.highlightQuery = ""
+				m.highlightTyping = true
+			}
+		case "ctrl+up":
+			if m.highlightActive() && m.focus == panelCommits {
+				if i, ok := m.scanHighlightMatch(m.sel[panelCommits], -1, false); ok {
+					m.sel[panelCommits] = i
+				}
+				return m, nil
+			}
+		case "ctrl+down":
+			if m.highlightActive() && m.focus == panelCommits {
+				if i, ok := m.scanHighlightMatch(m.sel[panelCommits], +1, false); ok {
+					m.sel[panelCommits] = i
+				}
+				return m, nil
 			}
 		case "R":
 			if !m.running && !m.loading {
@@ -932,6 +1002,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "esc":
 			if m.mark != nil {
 				m.mark = nil
+				return m, nil
+			}
+			// A committed @-highlight clears first (it never reorders/filters, so it
+			// is the lighter state to drop).
+			if m.highlightQuery != "" {
+				m.highlightQuery = ""
 				return m, nil
 			}
 			// filterPanel is intentionally left set — filterActive() gates on a
