@@ -65,3 +65,21 @@ func (m Model) wipRowAt(unified int) (wipRow, bool) {
 	}
 	return wipRow{}, false
 }
+
+// commitSelUnified returns the unified Commits index currently selected (the
+// space the graph caches and commitList span: WIP rows ++ feed), or -1. Use this
+// — not backingIndex (which yields a pure-feed index and refuses wip rows) — to
+// index commitGraphRows/Lanes by the selection.
+func (m Model) commitSelUnified() int {
+	idx := m.displayIndices(panelCommits)
+	s := m.sel[panelCommits]
+	if s < 0 || s >= len(idx) {
+		return -1
+	}
+	return idx[s]
+}
+
+// wipSyntheticHash is a deliberately git-invalid id for a WIP node in the graph
+// layout (it contains a NUL, so it can never be mistaken for a real 40-hex SHA;
+// a leak into a git command fails loudly instead of doing something subtle).
+func wipSyntheticHash(r wipRow) string { return "\x00wip-" + r.label() }

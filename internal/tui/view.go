@@ -841,8 +841,8 @@ func (m Model) commitBody(boxH int) (rows []string, idx []int, decos []rowDecora
 // a gap between a short branch name and the subject. (commitFullRows still drives
 // the WHEN-to-reveal decision; this is only WHAT gets drawn.)
 func (m Model) commitTextReveals() []string {
-	out := make([]string, len(m.commits))
-	for i := range m.commits {
+	out := make([]string, m.commitsTotal())
+	for i := range out {
 		out[i] = m.commitTextRevealAt(i)
 	}
 	return out
@@ -850,12 +850,16 @@ func (m Model) commitTextReveals() []string {
 
 // commitTextRevealAt is the per-index form of commitTextReveals.
 func (m Model) commitTextRevealAt(i int) string {
-	id := commitIdentOf(m.commits[i])
+	if r, ok := m.wipRowAt(i); ok {
+		return r.text()
+	}
+	c := m.commits[i-m.wipCount()]
+	id := commitIdentOf(c)
 	label := id.label()
 	if label != "" {
 		label += " "
 	}
-	return label + id.pills() + m.commits[i].Subject
+	return label + id.pills() + c.Subject
 }
 
 // commitIdentWidth is the display width of the branch-identity column: the
@@ -877,8 +881,8 @@ func (m Model) commitIdentWidth() int {
 
 func (m Model) commitIdentRows(full bool) []string {
 	w := m.commitIdentWidth()
-	out := make([]string, len(m.commits))
-	for i := range m.commits {
+	out := make([]string, m.commitsTotal())
+	for i := range out {
 		out[i] = m.commitIdentRowAt(i, w, full)
 	}
 	return out
@@ -889,7 +893,18 @@ func (m Model) commitIdentRows(full bool) []string {
 // windowed graph cells. w is the shared identity-column width. Single-sourced by
 // both commitIdentRows (all rows) and commitList.Full (one row, lazily).
 func (m Model) commitIdentRowAt(i, w int, full bool) string {
-	c := m.commits[i]
+	if r, ok := m.wipRowAt(i); ok {
+		row := r.text()
+		switch {
+		case m.commitListMode:
+			row = wipNodeGlyph + " " + row
+		case !m.commitListMode && m.commitGraphOn() && len(m.commitGraphRows) == m.commitsTotal():
+			win, _, _ := m.graphWindow(m.commitGraphRows[i])
+			row = win + " " + row
+		}
+		return row
+	}
+	c := m.commits[i-m.wipCount()]
 	id := commitIdentOf(c)
 	var tok string
 	if full {
@@ -901,7 +916,7 @@ func (m Model) commitIdentRowAt(i, w int, full bool) string {
 	switch {
 	case m.commitListMode:
 		row = "● " + row
-	case !m.commitListMode && m.commitGraphOn() && len(m.commitGraphRows) == len(m.commits):
+	case !m.commitListMode && m.commitGraphOn() && len(m.commitGraphRows) == m.commitsTotal():
 		win, _, _ := m.graphWindow(m.commitGraphRows[i])
 		row = win + " " + row
 	}
@@ -932,8 +947,8 @@ func (m Model) commitDecoratorsRange(rows []string, idx []int, lo, hi int) []row
 	if len(rows) == 0 {
 		return nil
 	}
-	laneColorOn := len(m.commitGraphLanes) == len(m.commits) && (m.commitListMode || m.commitGraphOn())
-	graphPrefix := !m.commitListMode && m.commitGraphOn() && len(m.commitGraphRows) == len(m.commits)
+	laneColorOn := len(m.commitGraphLanes) == m.commitsTotal() && (m.commitListMode || m.commitGraphOn())
+	graphPrefix := !m.commitListMode && m.commitGraphOn() && len(m.commitGraphRows) == m.commitsTotal()
 	decos := make([]rowDecorator, len(rows))
 	identW := m.commitIdentWidth() // loop-invariant: compute once, not per row
 	for j := lo; j < hi; j++ {
@@ -941,7 +956,7 @@ func (m Model) commitDecoratorsRange(rows []string, idx []int, lo, hi int) []row
 		if j < len(idx) {
 			ci = idx[j]
 		}
-		if ci < 0 || ci >= len(m.commits) {
+		if ci < 0 || ci >= m.commitsTotal() {
 			continue
 		}
 		// @-highlight: a non-matching row is dimmed whole; matching rows keep the
@@ -951,7 +966,10 @@ func (m Model) commitDecoratorsRange(rows []string, idx []int, lo, hi int) []row
 			decos[j] = dimRowDecorator()
 			continue
 		}
-		id := commitIdentOf(m.commits[ci])
+		if m.isWipRow(ci) {
+			continue // ◇ node lives in the graph cells; no lineage/lane decoration
+		}
+		id := commitIdentOf(m.commits[ci-m.wipCount()])
 		dim := !id.tip && id.name != "" // gray a lineage row's branch name
 
 		// identStart = the 2-col selection prefix + this row's leading glyphs. In
@@ -999,8 +1017,8 @@ func (m Model) commitDecoratorsRange(rows []string, idx []int, lo, hi int) []row
 // the full branch name(s) + the subject. commitList.Haystack exposes it to
 // panelView, which prefers it over Row(i) for matching.
 func (m Model) commitHaystacks() []string {
-	out := make([]string, len(m.commits))
-	for i := range m.commits {
+	out := make([]string, m.commitsTotal())
+	for i := range out {
 		out[i] = m.commitHaystackAt(i)
 	}
 	return out
@@ -1009,7 +1027,10 @@ func (m Model) commitHaystacks() []string {
 // commitHaystackAt is the per-index form of commitHaystacks: full hash + full
 // branch name(s) + subject, for filter matching. No styling.
 func (m Model) commitHaystackAt(i int) string {
-	c := m.commits[i]
+	if r, ok := m.wipRowAt(i); ok {
+		return r.text()
+	}
+	c := m.commits[i-m.wipCount()]
 	id := commitIdentOf(c)
 	names := id.label()
 	for _, e := range id.extra {

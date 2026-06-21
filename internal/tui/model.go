@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -1146,6 +1147,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.sel[p] = n - 1
 			}
 		}
+		// The status change adds/removes WIP pseudo-rows; rebuild the graph so its
+		// plane stays the same length as the unified Commits list, and clamp the
+		// Commits selection if the list shrank (tree went clean).
+		m = m.rebuildCommitGraph()
+		if n := m.commitsTotal(); n > 0 && m.sel[panelCommits] >= n {
+			m.sel[panelCommits] = n - 1
+		}
 		return m, nil
 
 	case refsRefreshedMsg:
@@ -1465,15 +1473,41 @@ func (m Model) commitScopeLabel() string {
 // m.commits. Called whenever m.commits changes (the lane fold needs the whole
 // loaded window, so it can't be a per-render computation).
 func (m Model) rebuildCommitGraph() Model {
-	cs := make([]commitgraph.Commit, len(m.commits))
-	for i, c := range m.commits {
-		cs[i] = commitgraph.Commit{Hash: c.Hash, Parents: c.Parents}
+	// Derive the WIP pseudo-rows from the current status first, so the graph plane
+	// and every unified length (commitsTotal) stay in lock-step with them.
+	m.wipRows = deriveWipRows(m.status)
+	cs := make([]commitgraph.Commit, 0, m.commitsTotal())
+	// Synthetic WIP nodes, chained Working tree → Staged → HEAD. Each parents to
+	// the next wip row, the last to HEAD (m.commits[0]); an empty feed leaves the
+	// last wip node parentless (a root). The hash is git-invalid (NUL) so a leak
+	// would fail loudly.
+	headHash := ""
+	if len(m.commits) > 0 {
+		headHash = m.commits[0].Hash
+	}
+	for i, r := range m.wipRows {
+		parent := headHash
+		if i+1 < len(m.wipRows) {
+			parent = wipSyntheticHash(m.wipRows[i+1])
+		}
+		var parents []string
+		if parent != "" {
+			parents = []string{parent}
+		}
+		cs = append(cs, commitgraph.Commit{Hash: wipSyntheticHash(r), Parents: parents})
+	}
+	for _, c := range m.commits {
+		cs = append(cs, commitgraph.Commit{Hash: c.Hash, Parents: c.Parents})
 	}
 	rows, _ := commitgraph.Lay(cs)
 	m.commitGraphRows = make([]string, len(rows))
 	m.commitGraphLanes = make([]int, len(rows))
 	for i, r := range rows {
-		m.commitGraphRows[i] = r.Cells
+		cells := r.Cells
+		if i < m.wipCount() { // hollow ◇ node for a pseudo-row, not a real ● commit
+			cells = strings.Replace(cells, "●", wipNodeGlyph, 1)
+		}
+		m.commitGraphRows[i] = cells
 		m.commitGraphLanes[i] = r.Lane
 	}
 	// Keep the horizontal scroll valid against the new plane: paging in older

@@ -10,11 +10,12 @@ func (m Model) highlightActive() bool {
 	return m.highlightTyping || m.highlightQuery != ""
 }
 
-// commitMatchesHighlight reports whether commit i matches the current highlight
-// query. An empty query matches nothing (so navigation no-ops and — combined
-// with the dim gate — nothing is dimmed). Reuses the filter haystack.
+// commitMatchesHighlight reports whether the unified Commits row i (a WIP
+// pseudo-row or a commit) matches the current highlight query. An empty query
+// matches nothing (so navigation no-ops and — combined with the dim gate —
+// nothing is dimmed). Reuses the (unified, wip-aware) filter haystack.
 func (m Model) commitMatchesHighlight(i int) bool {
-	if m.highlightQuery == "" || i < 0 || i >= len(m.commits) {
+	if m.highlightQuery == "" || i < 0 || i >= m.commitsTotal() {
 		return false
 	}
 	return strings.Contains(

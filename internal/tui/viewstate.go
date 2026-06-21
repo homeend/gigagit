@@ -263,16 +263,51 @@ type commitList struct {
 	identW int    // shared identity-column width
 }
 
-func (l commitList) Len() int { return len(l.items) }
+// commitList spans the unified Commits space: the WIP pseudo-rows (the first
+// wipCount entries) followed by the real feed. Index methods dispatch on
+// wipRowAt so a wip row never indexes l.items out of range.
+func (l commitList) wip() int {
+	if l.m == nil {
+		return 0
+	}
+	return l.m.wipCount()
+}
+func (l commitList) wipAt(i int) (wipRow, bool) {
+	if l.m == nil {
+		return wipRow{}, false
+	}
+	return l.m.wipRowAt(i)
+}
+func (l commitList) Len() int {
+	if l.m == nil {
+		return len(l.items)
+	}
+	return l.m.commitsTotal()
+}
 func (l commitList) Row(i int) string {
 	if l.m == nil {
 		return ""
 	}
 	return l.m.commitIdentRowAt(i, l.identW, false)
 }
-func (l commitList) Name(i int) string { return l.items[i].Subject }
-func (l commitList) Date(i int) int64  { return l.items[i].UnixTime }
-func (l commitList) Key(i int) string  { return l.items[i].Hash }
+func (l commitList) Name(i int) string {
+	if r, ok := l.wipAt(i); ok {
+		return r.label()
+	}
+	return l.items[i-l.wip()].Subject
+}
+func (l commitList) Date(i int) int64 {
+	if _, ok := l.wipAt(i); ok {
+		return 1<<62 - 1 // wip rows are "newest": sort to the top under date sort
+	}
+	return l.items[i-l.wip()].UnixTime
+}
+func (l commitList) Key(i int) string {
+	if r, ok := l.wipAt(i); ok {
+		return "\x00wip-" + r.label()
+	}
+	return l.items[i-l.wip()].Hash
+}
 
 // Haystack decouples the filter-match text from the (trimmed, id-less) display
 // row so id-prefix and full-branch-name searches keep working. Full supplies the
@@ -280,13 +315,13 @@ func (l commitList) Key(i int) string  { return l.items[i].Hash }
 // demand (only when a filter is active / the tooltip reads one row) rather than
 // materialized for the whole feed every frame.
 func (l commitList) Haystack(i int) string {
-	if l.m == nil || i >= len(l.items) {
+	if l.m == nil || i >= l.Len() {
 		return ""
 	}
 	return l.m.commitHaystackAt(i)
 }
 func (l commitList) Full(i int) string {
-	if l.m == nil || i >= len(l.items) {
+	if l.m == nil || i >= l.Len() {
 		return ""
 	}
 	return l.m.commitIdentRowAt(i, l.identW, true)
@@ -296,7 +331,7 @@ func (l commitList) Full(i int) string {
 // glyphs, no fixed-width padding) the tooltip draws once it has decided the row
 // is reveal-worthy. See textRevealer.
 func (l commitList) TextReveal(i int) string {
-	if l.m == nil || i >= len(l.items) {
+	if l.m == nil || i >= l.Len() {
 		return ""
 	}
 	return l.m.commitTextRevealAt(i)
@@ -455,7 +490,18 @@ func (m Model) backingIndex(p panel) (int, bool) {
 	if s < 0 || s >= len(idx) {
 		return 0, false
 	}
-	return idx[s], true
+	u := idx[s]
+	if p == panelCommits {
+		// The Commits list is unified (WIP pseudo-rows ++ feed). A pseudo-row is
+		// not a real commit, so refuse it (ok=false) — every caller already guards
+		// ok, which makes them all wip-safe. A real commit maps back to the pure
+		// feed by subtracting the wip offset.
+		if m.isWipRow(u) {
+			return 0, false
+		}
+		return u - m.wipCount(), true
+	}
+	return u, true
 }
 
 // commitsLoadingGlyph marks the Commits title while a feed reload or page is in
