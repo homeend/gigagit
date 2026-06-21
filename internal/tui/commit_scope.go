@@ -166,7 +166,7 @@ func (m Model) commitGotoTipRow() (actionRow, bool) {
 		id:    "commits-goto-tip",
 		label: "Go to tip in commits",
 		run: func(m Model) (tea.Model, tea.Cmd) {
-			_, idx := m.panelView(panelCommits)
+			idx := m.displayIndices(panelCommits)
 			for di, bi := range idx {
 				if bi >= 0 && bi < len(m.commits) && commitHasLocalRef(m.commits[bi], b.Name) {
 					m.sel[panelCommits] = di

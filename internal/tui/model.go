@@ -1280,7 +1280,7 @@ func (m Model) isFilesPanel(p panel) bool { return p == panelFiles || p == panel
 
 // panelLen returns the number of rows in a panel, for selection clamping.
 func (m Model) panelLen(p panel) int {
-	_, idx := m.panelView(p)
+	idx := m.displayIndices(p)
 	return len(idx)
 }
 

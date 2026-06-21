@@ -105,7 +105,7 @@ func (m Model) markedDisplayIndices(p panel) map[int]bool {
 	}
 	if m.isFilesPanel(p) && len(m.fileMarks) > 0 {
 		l := m.listFor(p)
-		_, idx := m.panelView(p)
+		idx := m.displayIndices(p)
 		for n, i := range idx {
 			if m.fileMarks[l.Key(i)] {
 				out[n] = true
@@ -137,7 +137,7 @@ func (m Model) markDisplayIndex(p panel) int {
 		return -1
 	}
 	l := m.listFor(p)
-	_, idx := m.panelView(p)
+	idx := m.displayIndices(p)
 	for n, i := range idx {
 		if l.Key(i) == m.mark.key {
 			return n

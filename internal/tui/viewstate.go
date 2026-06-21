@@ -259,13 +259,17 @@ func (l statusList) Date(i int) int64 {
 
 type commitList struct {
 	items  []model.Commit
-	rows   []string // display rows (trimmed identity token, no commit id)
-	m      *Model   // source for lazy per-index full/text/haystack (built on demand, not all-n per frame)
-	identW int      // shared identity-column width, for Full
+	m      *Model // source for lazy per-index row/full/text/haystack (built on demand, not all-n per frame)
+	identW int    // shared identity-column width
 }
 
-func (l commitList) Len() int          { return len(l.items) }
-func (l commitList) Row(i int) string  { return l.rows[i] }
+func (l commitList) Len() int { return len(l.items) }
+func (l commitList) Row(i int) string {
+	if l.m == nil {
+		return ""
+	}
+	return l.m.commitIdentRowAt(i, l.identW, false)
+}
 func (l commitList) Name(i int) string { return l.items[i].Subject }
 func (l commitList) Date(i int) int64  { return l.items[i].UnixTime }
 func (l commitList) Key(i int) string  { return l.items[i].Hash }
@@ -277,13 +281,13 @@ func (l commitList) Key(i int) string  { return l.items[i].Hash }
 // materialized for the whole feed every frame.
 func (l commitList) Haystack(i int) string {
 	if l.m == nil || i >= len(l.items) {
-		return l.rows[i]
+		return ""
 	}
 	return l.m.commitHaystackAt(i)
 }
 func (l commitList) Full(i int) string {
 	if l.m == nil || i >= len(l.items) {
-		return l.rows[i]
+		return ""
 	}
 	return l.m.commitIdentRowAt(i, l.identW, true)
 }
@@ -293,7 +297,7 @@ func (l commitList) Full(i int) string {
 // is reveal-worthy. See textRevealer.
 func (l commitList) TextReveal(i int) string {
 	if l.m == nil || i >= len(l.items) {
-		return l.rows[i]
+		return ""
 	}
 	return l.m.commitTextRevealAt(i)
 }
@@ -342,7 +346,7 @@ func (m Model) listFor(p panel) panelList {
 		// returning indices into m.status.Files for the action handlers.
 		return statusList{files: m.status.Files, rows: m.statusRows(p), root: m.currentWorktree, mtime: map[int]int64{}}
 	case panelCommits:
-		return commitList{items: m.commits, rows: m.commitRows(), m: &m, identW: m.commitIdentWidth()}
+		return commitList{items: m.commits, m: &m, identW: m.commitIdentWidth()}
 	}
 	return commitList{}
 }
@@ -395,7 +399,12 @@ func (m Model) filterActive(p panel) bool {
 // the matching backing indices (display row n shows backing element idx[n]).
 // It is the single source of truth for what a panel shows; selection, paging,
 // clamping, rendering, and action keys all consume it.
-func (m Model) panelView(p panel) (rows []string, idx []int) {
+// displayIndices applies panel p's membership filter, text filter, and sort,
+// returning the backing indices in display order WITHOUT materializing any row
+// strings. panelView builds rows on top of this; idx-only callers use it
+// directly so they never pay for styling — important for the Commits panel,
+// whose Row styling (graph window + identity token) is the per-frame hot cost.
+func (m Model) displayIndices(p panel) (idx []int) {
 	l := m.listFor(p)
 	q := ""
 	if m.filterActive(p) {
@@ -418,6 +427,12 @@ func (m Model) panelView(p panel) (rows []string, idx []int) {
 		idx = append(idx, i)
 	}
 	sortIndices(l, m.sortModes[p], idx)
+	return idx
+}
+
+func (m Model) panelView(p panel) (rows []string, idx []int) {
+	idx = m.displayIndices(p)
+	l := m.listFor(p)
 	rows = make([]string, len(idx))
 	for n, i := range idx {
 		rows[n] = l.Row(i)
@@ -429,7 +444,7 @@ func (m Model) panelView(p panel) (rows []string, idx []int) {
 // backing slice, accounting for the view transforms. ok is false when the
 // visible list is empty or the selection is out of range.
 func (m Model) backingIndex(p panel) (int, bool) {
-	_, idx := m.panelView(p)
+	idx := m.displayIndices(p)
 	s := m.sel[p]
 	if s < 0 || s >= len(idx) {
 		return 0, false

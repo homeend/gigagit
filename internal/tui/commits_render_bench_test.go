@@ -57,19 +57,35 @@ func TestCommitDecoratorsAllocScaleLinear(t *testing.T) {
 }
 
 // BenchmarkCommitsRender measures the per-frame Commits render hot path
-// (filter+sort+materialize via panelView, then decorators) across feed sizes
-// and graph widths.
+// (commitBody: filter+sort indices, then style only the visible window) across
+// feed sizes and graph widths. After window-then-style this is ~flat in n.
 func BenchmarkCommitsRender(b *testing.B) {
+	const boxH = 40 // ~37 visible rows
 	for _, n := range []int{1000, 5000} {
 		for _, cols := range []int{8, 80} {
 			m := benchModel(n, 303, cols)
+			m.sel[panelCommits] = n / 2 // mid-feed: exercises both window edges
 			b.Run(fmt.Sprintf("n=%d/cols=%d", n, cols), func(b *testing.B) {
 				b.ReportAllocs()
 				for i := 0; i < b.N; i++ {
-					rows, idx := m.panelView(panelCommits)
-					_ = m.commitDecorators(rows, idx)
+					_, _, _ = m.commitBody(boxH)
 				}
 			})
 		}
+	}
+}
+
+// BenchmarkCommitsRenderFull keeps the pre-windowing measurement (full
+// materialization via panelView) so the O(visible) win stays visible in numbers.
+func BenchmarkCommitsRenderFull(b *testing.B) {
+	for _, n := range []int{1000, 5000} {
+		m := benchModel(n, 303, 8)
+		b.Run(fmt.Sprintf("n=%d", n), func(b *testing.B) {
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				rows, idx := m.panelView(panelCommits)
+				_ = m.commitDecorators(rows, idx)
+			}
+		})
 	}
 }

@@ -38,17 +38,21 @@ func (m Model) tooltip() (lines []string, x, y int, ok bool) {
 	if boxH <= 0 {
 		return nil, 0, 0, false
 	}
-	rows, idx := m.panelView(p)
+	idx := m.displayIndices(p)
 	sel := m.sel[p]
-	if len(rows) == 0 || sel < 0 || sel >= len(rows) {
+	if len(idx) == 0 || sel < 0 || sel >= len(idx) {
 		return nil, 0, 0, false
 	}
+	// Only the selected row is materialized (the Commits panel styles rows
+	// lazily; fetching all of them here would re-introduce the per-frame cost).
+	l := m.listFor(p)
+	rowSel := l.Row(idx[sel])
 	// A panel may supply an UN-elided parallel row (the Commits panel does, for
 	// the trimmed branch-name column). When it differs from the displayed row,
 	// reveal it even if the row otherwise fits; the displayed row still contains
 	// the … so the plain truncation check below would miss it.
-	content := rows[sel]
-	if fr, ok := m.listFor(p).(fullRower); ok && sel < len(idx) {
+	content := rowSel
+	if fr, ok := l.(fullRower); ok {
 		if full := fr.Full(idx[sel]); full != content {
 			content = full
 		}
@@ -58,14 +62,14 @@ func (m Model) tooltip() (lines []string, x, y int, ok bool) {
 		boxW = g.rightW
 	}
 	innerW := boxW - 4 // mirrors renderPanel: border (2) + padding (2)
-	if content == rows[sel] && !rowTruncated("> "+rows[sel], innerW) {
+	if content == rowSel && !rowTruncated("> "+rowSel, innerW) {
 		return nil, 0, 0, false // shown in full and nothing extra to reveal
 	}
 	rowsCap := boxH - 3 // mirrors renderPanel: borders + label line
 	if rowsCap < 1 {
 		return nil, 0, 0, false
 	}
-	_, selInWin, _ := windowRows(rows, rowsCap, sel)
+	selInWin := sel - windowStart(len(idx), rowsCap, sel)
 	origin := g.pos[p]
 	rowY := origin.y + 2 + selInWin // top border + label line
 
@@ -77,7 +81,7 @@ func (m Model) tooltip() (lines []string, x, y int, ok bool) {
 	// WHAT to draw — the Commits panel does, so its graph lanes and identity
 	// padding don't end up in the reveal strip.
 	reveal := content
-	if tr, ok := m.listFor(p).(textRevealer); ok && sel < len(idx) {
+	if tr, ok := l.(textRevealer); ok {
 		if t := tr.TextReveal(idx[sel]); t != "" {
 			reveal = t
 		}
