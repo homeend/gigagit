@@ -9,6 +9,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Uncommitted work shows in the Commits graph (WIP rows).** When the tree is
+  dirty, the Commits panel shows `◇ Working tree (N)` and/or `◇ Staged (N)` rows
+  chained above HEAD. `l`/`enter` opens their whole-tree diff (working tree vs
+  index, index vs HEAD); commit-only operations are unavailable on them. (Stage 3
+  of the compare-trees arc; the ◉ compare integration lands in a follow-up.)
 - **Faster startup on huge repos (auto commit-graph).** On opening a repo with no
   commit-graph, gg now writes one once in the background (the Commits title shows
   *(indexing…)*) and lists commits in fast plain order meanwhile; once the graph

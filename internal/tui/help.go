@@ -109,6 +109,7 @@ func helpContent() []contentLine {
 		r("", "shows commits from ALL local branches by default, in date order, with a single-line commit graph (natural order only; hidden while filtering/sorting); header shows the mode — Commits (all) / Commits (solo: <branch>)"),
 		r("", "the left column is the branch the commit is on: BRIGHT *current/branch on that branch's tip, grayed otherwise; long names trim with … (select to reveal the full name); the commit id shows in the status bar. Filtering still matches the full id and full branch name"),
 		r("l", "show the selected commit's files in the left column"),
+		r("", "uncommitted work shows as ◇ Working tree / ◇ Staged rows atop the graph (only when dirty); l/enter diffs them (working tree vs index, index vs HEAD); commit-only actions are unavailable on them"),
 		r("@", "highlight search: keep all commits visible, dim non-matches (graph stays); ctrl+↑/↓ jump prev/next match; enter keeps, esc clears"),
 		r(".", "rename commit / copy commit id / Create branch here / Create worktree here / Cherry-pick here / Revert this commit / Reset to this commit (soft|mixed|hard) / Compare against working tree / Compare against staged / Compare with marked commit / Add to compare selection / Compare selection / Show all branches when soloed / Show as list|graph (.-menu)"),
 		r("", "Compare against working tree / Compare against staged (.-menu): open the files view as a whole-tree diff of this commit vs your working copy / the index; enter on a file diffs that path"),
