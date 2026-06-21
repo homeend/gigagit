@@ -3,6 +3,7 @@ package template
 import (
 	"fmt"
 	"math/rand/v2"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -101,9 +102,57 @@ func resolveSeq(rest string, ctx Ctx) (string, error) {
 	return fmt.Sprintf("%0*d", pad, n), nil
 }
 
-// sanitizeSegment makes a branch name safe as a single path segment ('/' -> '-').
+// sanitizeSegment makes a branch name safe as a single path segment for the
+// running OS (see sanitizeSegmentFor).
 func sanitizeSegment(branch string) string {
-	return strings.ReplaceAll(branch, "/", "-")
+	return sanitizeSegmentFor(branch, runtime.GOOS)
+}
+
+// sanitizeSegmentFor makes s safe as a single path segment on goos. Path
+// separators ('/', '\\') and control characters become '-' everywhere; on
+// Windows the additional reserved characters (<>:"|?*) become '-', trailing
+// dots/spaces are trimmed, and reserved device names (CON, PRN, … COM1-9,
+// LPT1-9) get a '_' suffix. A result that would be empty or a directory dot
+// ('.'/'..') falls back to "tag" so the worktree always gets a real leaf dir.
+func sanitizeSegmentFor(s, goos string) string {
+	var b strings.Builder
+	for _, r := range s {
+		switch {
+		case r == '/' || r == '\\' || r < 0x20:
+			b.WriteByte('-')
+		case goos == "windows" && strings.ContainsRune(`<>:"|?*`, r):
+			b.WriteByte('-')
+		default:
+			b.WriteRune(r)
+		}
+	}
+	out := b.String()
+	if goos == "windows" {
+		out = strings.TrimRight(out, ". ")
+		if isWindowsReserved(out) {
+			out += "_"
+		}
+	}
+	if out == "" || out == "." || out == ".." {
+		out = "tag"
+	}
+	return out
+}
+
+// isWindowsReserved reports whether s (case-insensitive) is a Windows reserved
+// device name.
+func isWindowsReserved(s string) bool {
+	up := strings.ToUpper(s)
+	switch up {
+	case "CON", "PRN", "AUX", "NUL":
+		return true
+	}
+	for i := 1; i <= 9; i++ {
+		if up == fmt.Sprintf("COM%d", i) || up == fmt.Sprintf("LPT%d", i) {
+			return true
+		}
+	}
+	return false
 }
 
 const lowerAlpha = "abcdefghijklmnopqrstuvwxyz"
