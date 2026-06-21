@@ -41,6 +41,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   `.` menu *Add to compare selection*, or `shift+↑/↓`) and pick *Compare
   selection*: two commits show the diff between them, three or more show the
   combined diff of the range (`oldest^..newest`). Stage 4 of commit comparison.
+- **`gg compare <left> [<right>]` (CLI).** Print the files that changed between
+  two endpoints — a commit-ish, `@staged`, or `@worktree` (right defaults to the
+  working tree), one `<status>\t<path>` line each. Stage 5 (final) of commit
+  comparison.
 - **Maximize a left-column panel (`t`).** Pressing `t` while a small
   left-column panel is focused — the Branches/Remotes/Worktrees tab slot, the
   Files/Tags slot, or Staged — grows that panel to fill the whole left column
