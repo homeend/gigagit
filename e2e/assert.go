@@ -167,6 +167,14 @@ func checkExpect(sb *Sandbox, exp *Expect) (fails []string) {
 				addf("origin branches: want %v, got %v", sorted(exp.Origin.Branches), sorted(got))
 			}
 		}
+		if exp.Origin.Tags != nil {
+			got, err := gitLines(sb.OriginDir, "for-each-ref", "refs/tags", "--format=%(refname:short)")
+			if err != nil {
+				addf("origin tags: %v", err)
+			} else if !sameSet(got, exp.Origin.Tags) {
+				addf("origin tags: want %v, got %v", sorted(exp.Origin.Tags), sorted(got))
+			}
+		}
 		for _, le := range exp.Origin.Log {
 			checkLog(&fails, "origin", sb.OriginDir, le)
 		}

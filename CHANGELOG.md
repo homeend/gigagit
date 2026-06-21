@@ -93,6 +93,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   drawing, and the jobs it runs — the first of a general mechanism.)
 
 ### Added
+- **Push a tag.** The `.` menu on the **Tags** tab offers **Push tag** — it pushes
+  the tag to a remote, choosing the only configured remote automatically or
+  asking which one when there are several. Also on the CLI: `gg tag push <name>
+  [<remote>]`. This completes tag support (view, create, delete, checkout, push).
 - **Check out a tag.** The `.` menu on the **Tags** tab offers **Check out tag** —
   it asks whether to land on a **detached HEAD** at the tag's commit, create a
   **new branch** at the tag and switch to it, or create a **new worktree** at the

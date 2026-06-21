@@ -192,6 +192,7 @@ type ScopedExpect struct {
 // OriginExpect asserts origin-side refs (never origin's working tree).
 type OriginExpect struct {
 	Branches []string    `toml:"branches"`
+	Tags     []string    `toml:"tags"`
 	Log      []LogExpect `toml:"log"`
 }
 

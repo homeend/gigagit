@@ -142,6 +142,9 @@ func availableActions(m Model) []actionRow {
 	if r, ok := m.tagCheckoutRow(); ok {
 		out = append(out, r)
 	}
+	if r, ok := m.tagPushRow(); ok {
+		out = append(out, r)
+	}
 	if r, ok := m.tagDeleteRow(); ok {
 		out = append(out, r)
 	}

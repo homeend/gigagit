@@ -221,3 +221,18 @@ func TestTagCheckoutWorktreePrefilledAndSanitized(t *testing.T) {
 		t.Fatalf("preview path = %q, want a sanitized leaf release-1.0 (no slash)", p.previewPath)
 	}
 }
+
+func TestTagPushRowGating(t *testing.T) {
+	m := footerModel()
+	m.tags = []model.Tag{{Name: "v1.0.0"}}
+	m.focus = panelBranches
+	if _, ok := m.tagPushRow(); ok {
+		t.Fatal("push row inert off the Tags panel")
+	}
+	m.focus = panelTags
+	m.activeFilesTab = panelTags
+	m.sel[panelTags] = 0
+	if _, ok := m.tagPushRow(); !ok {
+		t.Fatal("push row must appear on the Tags panel")
+	}
+}

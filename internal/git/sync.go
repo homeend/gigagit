@@ -115,3 +115,11 @@ func (r *Repo) Push(ctx context.Context, remote, branch string, setUpstream bool
 	_, err := r.Runner.Run(ctx, "git push", argv)
 	return err
 }
+
+// PushTag pushes a single tag to remote (git push <remote> refs/tags/<name>).
+// The explicit refs/tags/ refspec avoids a branch/tag name ambiguity.
+func (r *Repo) PushTag(ctx context.Context, remote, name string) error {
+	argv := gitcmd.New("push").Arg(remote, "refs/tags/"+name).ToArgv()
+	_, err := r.Runner.Run(ctx, "git push (tag)", argv)
+	return err
+}
