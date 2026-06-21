@@ -132,19 +132,20 @@ func (m Model) openWorktreePopup(existing bool) (Model, bool) {
 	return m, true
 }
 
-// openWorktreeFromCommit opens the create-worktree dialog based at a commit. The
-// new branch name is NOT templated — the popup starts in branch-edit mode with an
-// empty buffer so the user types it; create is refused until they do. The path
-// still resolves (from the typed branch). engine.CreateWorktree creates the branch
-// at the commit and the worktree in one step.
-func (m Model) openWorktreeFromCommit(hash string) Model {
+// openWorktreeAt opens the create-worktree dialog based at startPoint (a commit
+// SHA or a tag/ref). The new branch name is NOT templated — the popup starts in
+// branch-edit mode seeded with prefillBranch ("" = empty, user types it). The
+// path resolves from that branch (sanitized per-OS into a single segment).
+// engine.CreateWorktree creates the branch at startPoint and the worktree in one
+// step.
+func (m Model) openWorktreeAt(startPoint, prefillBranch string) Model {
 	bt := m.cfg.Worktree.DefaultBranchTemplate
 	pt := m.cfg.Worktree.PathTemplate
 	tm := worktree.Templates{Branch: bt, Path: pt}
 	labels := tm.Labels()
 	seqNames := tm.SeqNames()
 	p := &worktreePopup{
-		startPoint: hash,
+		startPoint: startPoint,
 		fromCommit: true,
 		branchTmpl: bt,
 		pathTmpl:   pt,
@@ -155,7 +156,8 @@ func (m Model) openWorktreeFromCommit(hash string) Model {
 		seqs:       worktree.PeekSeqs(m.gitCommonDir, seqNames),
 		seed:       rand.Uint64(),
 		now:        time.Now(),
-		state:      stEdit, // user types the branch name immediately (empty editBuf)
+		state:      stEdit,        // user edits the branch name immediately
+		editBuf:    prefillBranch, // seeded default (e.g. the tag name)
 	}
 	for _, l := range labels {
 		p.inputs[l] = ""

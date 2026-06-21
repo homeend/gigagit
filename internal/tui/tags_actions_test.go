@@ -169,3 +169,55 @@ func TestRenderWithDetachedHead(t *testing.T) {
 		t.Fatal("View() must render with a detached HEAD")
 	}
 }
+
+// "Create branch…" seeds the popup's branch name with the tag name.
+func TestTagCheckoutBranchPrefilledFromTag(t *testing.T) {
+	m := footerModel()
+	m.tags = []model.Tag{{Name: "v1.0.0"}}
+	m.focus = panelTags
+	m.activeFilesTab = panelTags
+	m.sel[panelTags] = 0
+	row, ok := m.tagCheckoutRow()
+	if !ok {
+		t.Fatal("checkout row must appear")
+	}
+	u, _ := row.run(m)
+	m = u.(Model)
+	um, _ := m.modal.onResolve(m, "Create branch…")
+	m = um.(Model)
+	p := layerOf[*tagCheckoutPopup](m)
+	if p == nil || p.name != "v1.0.0" {
+		t.Fatalf("branch popup name = %q, want prefilled v1.0.0", p)
+	}
+}
+
+// "Create worktree…" opens the worktree dialog seeded with the tag name, and the
+// path leaf is the tag name sanitized into a single segment ('/' -> '-').
+func TestTagCheckoutWorktreePrefilledAndSanitized(t *testing.T) {
+	m := modelWithConfig(t, "wt/<parent-branch>", "../<repo>.worktrees/<branch>")
+	m.tags = []model.Tag{{Name: "release/1.0"}}
+	m.focus = panelTags
+	m.activeFilesTab = panelTags
+	m.sel[panelTags] = 0
+	row, ok := m.tagCheckoutRow()
+	if !ok {
+		t.Fatal("checkout row must appear")
+	}
+	u, _ := row.run(m)
+	m = u.(Model)
+	um, _ := m.modal.onResolve(m, "Create worktree…")
+	m = um.(Model)
+	p := layerOf[*worktreePopup](m)
+	if p == nil {
+		t.Fatal("worktree popup must open")
+	}
+	if p.editBuf != "release/1.0" {
+		t.Fatalf("branch seed = %q, want release/1.0", p.editBuf)
+	}
+	if p.startPoint != "release/1.0" {
+		t.Fatalf("startPoint = %q, want the tag", p.startPoint)
+	}
+	if !strings.Contains(p.previewPath, "release-1.0") || strings.Contains(p.previewPath, "release/1.0") {
+		t.Fatalf("preview path = %q, want a sanitized leaf release-1.0 (no slash)", p.previewPath)
+	}
+}

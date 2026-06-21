@@ -27,14 +27,19 @@ func (m Model) tagCheckoutRow() (actionRow, bool) {
 				req: engine.DecisionRequest{
 					ID:      "checkout-tag",
 					Prompt:  "Check out " + name + ":",
-					Options: []string{"Detached", "Create branch…", "Cancel"},
+					Options: []string{"Detached", "Create branch…", "Create worktree…", "Cancel"},
 				},
 				onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {
 					switch opt {
 					case "Detached":
 						return m.startOp(engine.CheckoutTag{Name: name})
 					case "Create branch…":
-						return m.pushLayer(&tagCheckoutPopup{tag: name}), nil
+						// Prefill the branch name with the tag name; the user can edit.
+						return m.pushLayer(&tagCheckoutPopup{tag: name, name: name}), nil
+					case "Create worktree…":
+						// Branch + worktree at the tag; the dialog is seeded with the
+						// tag name (the path derives from it, sanitized per-OS).
+						return m.openWorktreeAt(name, name), nil
 					}
 					return m, nil
 				},
