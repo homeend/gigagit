@@ -83,3 +83,29 @@ func (m Model) commitSelUnified() int {
 // layout (it contains a NUL, so it can never be mistaken for a real 40-hex SHA;
 // a leak into a git command fails loudly instead of doing something subtle).
 func wipSyntheticHash(r wipRow) string { return "\x00wip-" + r.label() }
+
+// wipEndpoints maps a pseudo-row to the compare endpoints of its node-vs-parent
+// diff (left = the node, right = its parent in the chain), reusing the existing
+// compare machinery:
+//   - Staged       → index ↔ HEAD            (the staged diff)
+//   - Working tree → working tree ↔ index    (the unstaged diff), or ↔ HEAD when
+//     nothing is staged (no Staged row to parent to — same files either way).
+func (m Model) wipEndpoints(r wipRow) (left, right model.Endpoint) {
+	head := model.Endpoint{Kind: model.EndpointCommit}
+	if len(m.commits) > 0 {
+		head.Hash = m.commits[0].Hash
+	}
+	if r.kind == wipStaged {
+		return model.Endpoint{Kind: model.EndpointIndex}, head
+	}
+	hasStaged := false
+	for _, w := range m.wipRows {
+		if w.kind == wipStaged {
+			hasStaged = true
+		}
+	}
+	if hasStaged {
+		return model.Endpoint{Kind: model.EndpointWorkTree}, model.Endpoint{Kind: model.EndpointIndex}
+	}
+	return model.Endpoint{Kind: model.EndpointWorkTree}, head
+}

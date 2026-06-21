@@ -775,6 +775,9 @@ func (m Model) commitBranchHint() string {
 	if m.focus != panelCommits {
 		return ""
 	}
+	if r, ok := m.wipRowAt(m.commitSelUnified()); ok { // pseudo-row: no commit id
+		return fmt.Sprintf("%s · %d files", strings.ToLower(r.label()), r.count)
+	}
 	bi, ok := m.backingIndex(panelCommits)
 	if !ok || bi < 0 || bi >= len(m.commits) {
 		return ""

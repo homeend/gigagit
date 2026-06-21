@@ -120,8 +120,14 @@ func (m Model) canEnterWorktree() bool {
 // commit row. The narrow-terminal refusal stays in the dispatch (it keeps
 // an explanatory statusMsg); the footer binding adds it as a stricter check.
 func (m Model) canShowCommitFiles() bool {
+	if !m.opsIdle() {
+		return false
+	}
+	if m.isWipRow(m.commitSelUnified()) {
+		return true // a WIP pseudo-row opens its node-vs-parent compare
+	}
 	_, ok := m.backingIndex(panelCommits)
-	return m.opsIdle() && ok
+	return ok
 }
 
 // canMark gates m: mark/unmark/pair needs a resolvable row in the focused

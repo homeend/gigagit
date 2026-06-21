@@ -805,6 +805,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				wt, _ := m.selectedWorktree()
 				return m.reRoot(wt.Path)
 			}
+			// A WIP pseudo-row opens its node-vs-parent compare (mirrors l).
+			if m.focus == panelCommits && m.canShowCommitFiles() {
+				if r, ok := m.wipRowAt(m.commitSelUnified()); ok {
+					if m.width > 0 && m.width < 40 {
+						m.statusMsg = "terminal too narrow for the files view"
+						return m, nil
+					}
+					left, right := m.wipEndpoints(r)
+					return m.openCompareFiles(left, right)
+				}
+			}
 			if m.canShowFileDiff() {
 				bi, _ := m.backingIndex(m.focus)
 				f := m.status.Files[bi]
@@ -965,7 +976,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.statusMsg = "terminal too narrow for the files view"
 					return m, nil
 				}
-				bi, _ := m.backingIndex(panelCommits)
+				// A pseudo-row opens its node-vs-parent compare instead of a commit's
+				// files (it is not a real commit).
+				if u := m.commitSelUnified(); m.isWipRow(u) {
+					if r, ok := m.wipRowAt(u); ok {
+						left, right := m.wipEndpoints(r)
+						return m.openCompareFiles(left, right)
+					}
+				}
+				bi, ok := m.backingIndex(panelCommits)
+				if !ok {
+					return m, nil
+				}
 				c := m.commits[bi]
 				m.filesView = &contentPopup{lines: []contentLine{{text: "(loading…)"}}}
 				m.filesTitle = "Files " + shortHash(c.Hash) + " " + c.Subject
