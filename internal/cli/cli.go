@@ -97,10 +97,10 @@ func Run(workdir string, args []string, stdin io.Reader, stdout, stderr io.Write
 
 var commands = map[string]bool{
 	"status": true, "commit": true, "pull": true, "push": true,
-	"switch": true, "branch": true, "stash": true, "undo": true, "merge": true, "rebase": true, "worktree": true,
+	"switch": true, "checkout": true, "branch": true, "stash": true, "undo": true, "merge": true, "rebase": true, "worktree": true,
 	"cherry-pick": true, "revert": true, "reset": true,
 	"discard": true, "shelf": true, "bookmark": true,
-	"tag":     true,
+	"remote": true, "tag": true,
 	"inspect": true, "repo": true, "init": true,
 }
 

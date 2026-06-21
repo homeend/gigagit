@@ -2,6 +2,9 @@ package cli
 
 import (
 	"bytes"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
 	"strings"
@@ -79,6 +82,58 @@ func TestNoArgsReturnsUsage(t *testing.T) {
 	if !strings.Contains(errb, "usage") {
 		t.Fatalf("expected usage on stderr:\n%s", errb)
 	}
+}
+
+// TestEverySwitchCaseIsRegistered guards against the recurring drift where a
+// subcommand gains a `case "x":` arm in Run but is forgotten in the commands
+// map — so the real gg binary (which gates CLI vs TUI on IsCommand) prints
+// "unknown command" while in-process tests, which call Run directly, never
+// notice. It parses Run's switch and asserts every case string is a command.
+func TestEverySwitchCaseIsRegistered(t *testing.T) {
+	for _, c := range runSwitchCases(t) {
+		if !IsCommand(c) {
+			t.Errorf("Run handles case %q but it is missing from the commands map "+
+				"(IsCommand returns false → the real gg binary will say %q is unknown)", c, c)
+		}
+	}
+}
+
+// runSwitchCases parses cli.go and returns the string literals of every `case`
+// arm in Run's top-level `switch cmd` statement.
+func runSwitchCases(t *testing.T) []string {
+	t.Helper()
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, "cli.go", nil, 0)
+	if err != nil {
+		t.Fatalf("parse cli.go: %v", err)
+	}
+	var run *ast.FuncDecl
+	for _, d := range f.Decls {
+		if fn, ok := d.(*ast.FuncDecl); ok && fn.Name.Name == "Run" {
+			run = fn
+			break
+		}
+	}
+	if run == nil {
+		t.Fatal("could not find func Run in cli.go")
+	}
+	var cases []string
+	ast.Inspect(run, func(n ast.Node) bool {
+		cc, ok := n.(*ast.CaseClause)
+		if !ok {
+			return true
+		}
+		for _, expr := range cc.List { // nil List = the default arm
+			if lit, ok := expr.(*ast.BasicLit); ok && lit.Kind == token.STRING {
+				cases = append(cases, strings.Trim(lit.Value, `"`))
+			}
+		}
+		return true
+	})
+	if len(cases) == 0 {
+		t.Fatal("no switch cases found in Run — parser change?")
+	}
+	return cases
 }
 
 func TestIsCommand(t *testing.T) {

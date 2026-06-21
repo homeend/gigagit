@@ -8,6 +8,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+### Fixed
+- **`gg remote` and `gg checkout` are recognized by the real binary again.**
+  Both subcommands had working handlers and were dispatched correctly when
+  invoked in-process, but were missing from the CLI command registry that
+  `gg` uses to choose between running a command and launching the TUI — so the
+  installed binary printed `unknown command "remote"` / `"checkout"`. They are
+  now registered. A new guard test parses every `case` arm in the CLI
+  dispatcher and asserts each is in the registry, so a future command can't
+  drift out of it unnoticed (the in-process tests never exercised that gate).
+
 ### Added
 - **Move or drop a commit from the Commits panel.** The `.` action menu on a
   non-merge commit of the **checked-out** branch now offers **Move commit up**
