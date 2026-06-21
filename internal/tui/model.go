@@ -52,11 +52,15 @@ type Model struct {
 
 	conflict domain.ConflictState // source of the current conflict (merge/rebase parties), for the notice
 
-	filesView        *contentPopup // commit files tree replacing the left column; nil = closed
-	filesTitle       string        // "Files <short-hash> <subject>", updated with the content
-	filesHash        string        // commit the view wants; gates stale async results
-	filesStashTag    string        // when the files tree is showing a stash: its ref (gates stash-file loads)
-	filesTreeFocused bool          // true = the tree side owns vertical movement (←/→/tab)
+	filesView        *contentPopup  // commit files tree replacing the left column; nil = closed
+	filesTitle       string         // "Files <short-hash> <subject>", updated with the content
+	filesHash        string         // commit the view wants; gates stale async results
+	filesCompare     bool           // true = compare mode (filesLeft/Right) vs legacy commit-vs-parent
+	filesLeft        model.Endpoint // compare mode: older side
+	filesRight       model.Endpoint // compare mode: newer side
+	compareTag       string         // gates stale compareFilesMsg results
+	filesStashTag    string         // when the files tree is showing a stash: its ref (gates stash-file loads)
+	filesTreeFocused bool           // true = the tree side owns vertical movement (←/→/tab)
 
 	diffView    *diffView // full-screen side-by-side diff; nil = closed
 	diffTag     string    // request key of the wanted diff; gates stale async results
@@ -150,6 +154,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// The narrow layout has no left column; without this the view
 			// would keep capturing keys while invisible.
 			m.filesView = nil
+			m.filesCompare = false
+			m.compareTag = ""
 			m.filesTreeFocused = false
 			m.statusMsg = "files view closed: terminal too narrow"
 		}
@@ -197,6 +203,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.filesView.lines = commitFileLines(msg.files)
 		m.filesView.sel = 0
 		m.filesTitle = "Files " + shortHash(msg.hash) + " " + msg.subject
+		return m, nil
+	case compareFilesMsg:
+		if m.filesView == nil || !m.filesCompare || msg.tag != m.compareTag {
+			return m, nil // stale or closed
+		}
+		if msg.err != nil {
+			m.statusMsg = "compare: " + msg.err.Error()
+			if len(m.filesView.lines) == 1 && m.filesView.lines[0].text == "(loading…)" {
+				m.filesView.lines = []contentLine{{text: "(load failed)"}}
+			}
+			return m, nil
+		}
+		m.filesView.lines = commitFileLines(msg.files)
+		m.filesView.sel = 0
 		return m, nil
 	case commitsPagedMsg:
 		if m.feed != nil && msg.gen == m.feed.Gen() {
@@ -1336,6 +1356,8 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.filesView = nil // the new repo has a different commit list
 	m.filesStashTag = ""
 	m.filesHash = ""
+	m.filesCompare = false
+	m.compareTag = ""
 	m.filesTreeFocused = false
 	m.diffView = nil // the new repo invalidates any open diff
 	m.diffTag = ""

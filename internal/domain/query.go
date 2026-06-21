@@ -218,6 +218,17 @@ func (s *Service) CommitFiles(ctx context.Context, hash string) ([]model.CommitF
 	})
 }
 
+// CompareFiles returns the files that differ between two endpoints (left =
+// older, right = newer), under a Read reservation. The singleflight key
+// includes both endpoints; live endpoints (working tree / index) change
+// underfoot, so callers that need strict freshness should not rely on a long
+// coalesce window.
+func (s *Service) CompareFiles(ctx context.Context, left, right model.Endpoint) ([]model.CommitFile, error) {
+	return query(ctx, s, "compare-files:"+left.CacheTag()+":"+right.CacheTag(), func(ctx context.Context) ([]model.CommitFile, error) {
+		return s.repo.DiffTreeFiles(ctx, left, right)
+	})
+}
+
 // TopLevel returns the repo's working-tree root, under a Read reservation.
 func (s *Service) TopLevel(ctx context.Context) (string, error) {
 	return query(ctx, s, "toplevel", func(ctx context.Context) (string, error) {

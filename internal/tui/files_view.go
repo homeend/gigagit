@@ -77,6 +77,47 @@ func (m Model) loadCommitFilesCmd(c model.Commit) tea.Cmd {
 	}
 }
 
+// compareFilesMsg carries a whole-tree comparison's changed files, tagged so a
+// superseded load (fast re-open) can be dropped.
+type compareFilesMsg struct {
+	tag   string
+	files []model.CommitFile
+	err   error
+}
+
+// openCompareFiles opens the files view in compare mode for the endpoint pair
+// (left = older, right = newer), e.g. a commit vs the working tree. The proven
+// single-commit path is untouched; this is a parallel mode keyed off
+// filesCompare.
+func (m Model) openCompareFiles(left, right model.Endpoint) (Model, tea.Cmd) {
+	m.filesView = &contentPopup{lines: []contentLine{{text: "(loading…)"}}}
+	m.filesTitle = left.Display() + " ↔ " + right.Display()
+	m.filesCompare = true
+	m.filesLeft = left
+	m.filesRight = right
+	// h/b (history/blame) context: prefer a commit side; "" means working tree.
+	switch {
+	case right.Kind == model.EndpointCommit:
+		m.filesHash = right.Hash
+	case left.Kind == model.EndpointCommit:
+		m.filesHash = left.Hash
+	default:
+		m.filesHash = ""
+	}
+	m.compareTag = "cmp:" + left.CacheTag() + ":" + right.CacheTag()
+	m.filesTreeFocused = false
+	return m, m.loadCompareFilesCmd(left, right, m.compareTag)
+}
+
+// loadCompareFilesCmd fetches the changed-file list off the UI thread.
+func (m Model) loadCompareFilesCmd(left, right model.Endpoint, tag string) tea.Cmd {
+	svc := m.svc
+	return func() tea.Msg {
+		files, err := svc.CompareFiles(context.Background(), left, right)
+		return compareFilesMsg{tag: tag, files: files, err: err}
+	}
+}
+
 // shortHash truncates a sha to 7 characters for display.
 func shortHash(h string) string {
 	if len(h) > 7 {
@@ -158,10 +199,14 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.filesView = nil
+		m.filesCompare = false
+		m.compareTag = ""
 		m.filesTreeFocused = false
 		return m, nil
 	case "l":
 		m.filesView = nil
+		m.filesCompare = false
+		m.compareTag = ""
 		m.filesTreeFocused = false
 		return m, nil
 	case "/":
@@ -228,6 +273,11 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			loading: true,
 			partial: m.diffPartial,
 			long:    m.diffLong,
+		}
+		if m.filesCompare {
+			m.diffView.context = m.filesTitle
+			m.diffTag = "cmp:" + m.filesLeft.CacheTag() + ":" + m.filesRight.CacheTag() + ":" + l.path
+			return m, m.loadCompareDiffCmd(m.filesLeft, m.filesRight, l)
 		}
 		m.diffTag = "commit:" + m.filesHash + ":" + l.path
 		return m, m.loadCommitDiffCmd(m.filesHash, l)

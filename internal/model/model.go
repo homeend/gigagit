@@ -166,6 +166,67 @@ type FileRef struct {
 	Path    string // repo-relative path (origin path for a shelf entry)
 }
 
+// EndpointKind names the kind of a comparison Endpoint.
+type EndpointKind int
+
+const (
+	EndpointWorkTree EndpointKind = iota // the working tree (unstaged)
+	EndpointIndex                        // the index (staged)
+	EndpointCommit                       // a commit, by Hash
+)
+
+// Endpoint names one side of a whole-tree comparison.
+type Endpoint struct {
+	Kind EndpointKind
+	Hash string // commit hash when Kind == EndpointCommit; "" otherwise
+}
+
+// Display is the human label for an endpoint.
+func (e Endpoint) Display() string {
+	switch e.Kind {
+	case EndpointWorkTree:
+		return "Working Tree"
+	case EndpointIndex:
+		return "Staged"
+	default:
+		if len(e.Hash) > 7 {
+			return e.Hash[:7]
+		}
+		return e.Hash
+	}
+}
+
+// FileRef maps the endpoint to a resolvable file reference for path.
+func (e Endpoint) FileRef(path string) FileRef {
+	switch e.Kind {
+	case EndpointWorkTree:
+		return FileRef{Source: SourceUnstaged, Path: path}
+	case EndpointIndex:
+		return FileRef{Source: SourceStaged, Path: path}
+	default:
+		return FileRef{Source: SourceCommit, Locator: e.Hash, Path: path}
+	}
+}
+
+// IsLive reports whether the endpoint's content can change on disk (working
+// tree or index) and therefore must never be cached.
+func (e Endpoint) IsLive() bool {
+	return e.Kind == EndpointWorkTree || e.Kind == EndpointIndex
+}
+
+// CacheTag is a stable cache-key fragment for the endpoint (only meaningful
+// when !IsLive()).
+func (e Endpoint) CacheTag() string {
+	switch e.Kind {
+	case EndpointWorkTree:
+		return "worktree"
+	case EndpointIndex:
+		return "index"
+	default:
+		return e.Hash
+	}
+}
+
 // ShelfBucket is a named collection of shelf entries. The "default" bucket is
 // implicit; Hidden buckets are gg-internal and excluded from normal listing.
 type ShelfBucket struct {
