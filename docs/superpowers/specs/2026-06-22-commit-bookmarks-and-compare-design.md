@@ -46,13 +46,21 @@ in-session `m`-mark (not a bookmark — loses cross-session persistence, the poi
   - branch known → `feat / a1b2c3d`
   - no branch → `commit / a1b2c3d`
   - (file addresses unchanged: `container / mid / path`.)
-- `bookmark.AddressID` already hashes the full address; a path-less commit
-  bookmark gets a stable id from its hash with no change. The `slug(b.Path)`
-  fragment becomes empty for commit bookmarks — acceptable (the hash
-  disambiguates); confirm the id stays unique and stable in a test.
-- `BookmarkBytes` (byte resolution) is **never called** for a commit bookmark
-  (its `enter` path compares, it does not resolve a file). No change needed, but
-  document the invariant.
+- `bookmark.AddressID` already hashes the full address (incl. `Commit`); a
+  path-less commit bookmark gets a stable id from its hash with no change. The
+  `slug(b.Path)` fragment becomes empty for commit bookmarks — acceptable (the
+  hash disambiguates); confirm the id stays unique and stable in a test.
+- **`domain.BookmarkAdd` must not freeze a blob SHA for a commit bookmark.** It
+  currently does `repo.BlobSHA(commit, path)` for any `StateCommitted` bookmark
+  with empty `SHA`; for a commit bookmark `Path == ""`, so this would fail. Gate
+  the freeze on `b.Path != ""`. A commit bookmark carries an **empty `SHA`** (the
+  commit hash is its immutable anchor; we deliberately do not set `SHA = Commit`,
+  which would tempt a consumer into `cat-file blob <commit-sha>`).
+- **Central byte-resolution guard.** A commit bookmark has no file bytes, so
+  `domain.BookmarkBytes` must early-return a clear error for it
+  (`if b.IsCommit() { return nil, … }`) instead of `CatFileBlob("")`. This makes
+  every byte-resolution path (TUI jump/paste/compare-two, the CLI) fail cleanly
+  by construction; the per-key TUI guards below are the UX layer on top.
 
 ### 2. Creating a commit bookmark (`internal/tui`)
 
@@ -80,9 +88,19 @@ in-session `m`-mark (not a bookmark — loses cross-session persistence, the poi
 - `x` (remove) works for both kinds (unchanged path; the address id resolves a
   commit bookmark fine).
 - `p` (paste), `c` (vs shelf), `m` (mark/compare) remain **file-only**. On a
-  commit bookmark they are a no-op with a brief status notice
-  (e.g. `"not available for a commit bookmark"`); `m`-marking never pairs a file
-  with a commit bookmark.
+  commit bookmark each is a no-op with a brief status notice (e.g. `"not
+  available for a commit bookmark"`). This is an **enforced guard with a test**,
+  not just an intention: `m` checks the highlighted bookmark's kind before
+  recording/using a mark, so a file and a commit bookmark can never be paired.
+- The switcher is also reachable in **compare mode** (`compareRef != nil`, a file
+  being compared against a picked bookmark). A commit bookmark highlighted there
+  → notice, no-op (can't compare a file against a commit bookmark).
+- **Resolution-path audit (explicit task).** Enumerate every site that resolves a
+  selected bookmark to bytes and confirm each commit bookmark is routed away or
+  guarded: `enter` non-compare (→ compare, not jump), `enter` compare-mode
+  (guard), `p` (guard), `c` (guard), `m` (guard), `x` (id-only, safe), and the
+  central `BookmarkBytes` guard backstopping the CLI. The plan lists these as a
+  checklist.
 - Footer hint unchanged in content; the kind-specific behavior is documented in
   the `?` cheat sheet (one line: "enter on a commit bookmark compares it against
   the selected commit").
@@ -93,7 +111,9 @@ in-session `m`-mark (not a bookmark — loses cross-session persistence, the poi
   the **left/base**, the selected commit is the **right/subject**. This matches
   "compare [selected] against [bookmarked]" and avoids `orderByFeed`, which needs
   both commits in the loaded feed (a bookmark may be outside it). The endpoints
-  carry full hashes, so `CompareFiles` resolves them directly via git.
+  carry full hashes, so `CompareFiles` resolves them directly via git. Additions
+  (`+`) read as present in the selected commit but not the bookmark; this is
+  intentional and must not be "fixed" into age-ordering later.
 - Everything downstream is the existing path: `openCompareFiles` → files view
   compare mode → `enter` on a file diffs that path (`loadCompareDiffCmd`).
 
@@ -128,6 +148,10 @@ g switcher: highlight a commit bookmark, enter
   (branch and no-branch forms); file-address display unchanged.
 - **Store** (`internal/bookmark`): `AddressID` of a commit bookmark is stable and
   distinct from a file bookmark at the same commit; round-trips through the store.
+- **Domain** (`internal/domain`): `BookmarkAdd` of a commit bookmark succeeds
+  **without** calling `BlobSHA`/`cat-file` (a `FakeRunner` that errors on those
+  proves it) and stores an empty `SHA`; `BookmarkBytes` of a commit bookmark
+  returns a clear error and never runs `cat-file blob ""`.
 - **TUI**:
   - `commitBookmarkRow` present on the Commits panel for a real commit, absent
     off-panel/while busy; running it adds a path-less bookmark.
