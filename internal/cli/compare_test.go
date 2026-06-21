@@ -56,6 +56,20 @@ func TestCompareDefaultsToWorktree(t *testing.T) {
 	}
 }
 
+func TestCompareReversePairFriendlyError(t *testing.T) {
+	dir := newCLIRepo(t)
+	code, _, errb := runCLI(t, dir, "compare", "@worktree", "HEAD") // reverse order
+	if code != 2 {
+		t.Fatalf("exit = %d, want 2", code)
+	}
+	if strings.Contains(errb, "DiffTreeFiles") || strings.Contains(errb, "endpoint pair") {
+		t.Fatalf("error leaks internals: %s", errb)
+	}
+	if !strings.Contains(errb, "oldest") {
+		t.Fatalf("expected an ordering hint:\n%s", errb)
+	}
+}
+
 func TestCompareNoArgsUsage(t *testing.T) {
 	dir := newCLIRepo(t)
 	code, _, errb := runCLI(t, dir, "compare")
