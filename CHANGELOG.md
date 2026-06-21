@@ -19,6 +19,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   drift out of it unnoticed (the in-process tests never exercised that gate).
 
 ### Added
+- **Compare a commit against your working tree or staged changes.** In the
+  Commits panel, the `.` menu now offers *Compare against working tree* and
+  *Compare against staged*, opening the files view as a whole-tree diff
+  (commit ↔ working copy / index); `enter` on a file diffs that path. First
+  slice of GitKraken-style commit comparison; closes commit-ops backlog #2b.
 - **Maximize a left-column panel (`t`).** Pressing `t` while a small
   left-column panel is focused — the Branches/Remotes/Worktrees tab slot, the
   Files/Tags slot, or Staged — grows that panel to fill the whole left column
