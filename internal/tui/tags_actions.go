@@ -49,6 +49,24 @@ func (m Model) tagCheckoutRow() (actionRow, bool) {
 	}, true
 }
 
+// tagPushRow offers "Push tag" on the Tags panel. The engine resolves the remote
+// (auto when one is configured, else a modal pick), so the row just starts the op.
+func (m Model) tagPushRow() (actionRow, bool) {
+	if m.focus != panelTags || !m.opsIdle() {
+		return actionRow{}, false
+	}
+	bi, ok := m.backingIndex(panelTags)
+	if !ok || bi < 0 || bi >= len(m.tags) {
+		return actionRow{}, false
+	}
+	name := m.tags[bi].Name
+	return actionRow{
+		id:    "tag-push",
+		label: "Push tag",
+		run:   func(m Model) (tea.Model, tea.Cmd) { return m.startOp(engine.PushTag{Name: name}) },
+	}, true
+}
+
 // tagDeleteRow offers "Delete tag" on the Tags panel: a confirm modal (never-trap
 // Cancel) then the delete op.
 func (m Model) tagDeleteRow() (actionRow, bool) {
