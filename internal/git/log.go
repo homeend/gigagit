@@ -20,12 +20,15 @@ type LogScope struct {
 	Branches []string
 }
 
-// LogScoped returns up to limit commits (newest-first, --date-order) reachable
-// from the scope's refs, skipping the first skip. --decorate (bare, short names)
-// forces %D to populate across git versions.
-func (r *Repo) LogScoped(ctx context.Context, limit, skip int, scope LogScope) ([]model.Commit, error) {
+// LogScoped returns up to limit commits (newest-first; --date-order when
+// dateOrder is set, else git's default order) reachable from the scope's refs,
+// skipping the first skip. --decorate (bare, short names) forces %D to populate
+// across git versions.
+func (r *Repo) LogScoped(ctx context.Context, limit, skip int, scope LogScope, dateOrder bool) ([]model.Commit, error) {
 	b := gitcmd.New("log").
-		Arg("-n", strconv.Itoa(limit), "--date-order", "--decorate", "--source", "--format="+logFormat).
+		Arg("-n", strconv.Itoa(limit)).
+		ArgIf(dateOrder, "--date-order").
+		Arg("--decorate", "--source", "--format="+logFormat).
 		ArgIf(skip > 0, "--skip="+strconv.Itoa(skip))
 	if len(scope.Branches) == 0 {
 		// All local branches PLUS HEAD, so a detached HEAD's commits still show

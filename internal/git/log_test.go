@@ -76,7 +76,7 @@ func TestLogScopedArgv(t *testing.T) {
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git log", gitexec.Result{Stdout: ""})
 	r := &Repo{Runner: f}
-	if _, err := r.LogScoped(context.Background(), 50, 0, LogScope{}); err != nil {
+	if _, err := r.LogScoped(context.Background(), 50, 0, LogScope{}, true); err != nil {
 		t.Fatal(err)
 	}
 	for _, w := range []string{"--date-order", "--decorate", "--source", "--branches", "HEAD"} {
@@ -85,7 +85,7 @@ func TestLogScopedArgv(t *testing.T) {
 		}
 	}
 	f.Calls = nil
-	if _, err := r.LogScoped(context.Background(), 50, 20, LogScope{Branches: []string{"feat"}}); err != nil {
+	if _, err := r.LogScoped(context.Background(), 50, 20, LogScope{Branches: []string{"feat"}}, true); err != nil {
 		t.Fatal(err)
 	}
 	if !logArgvContains(t, f, "feat") || !logArgvContains(t, f, "--skip=20") || logArgvContains(t, f, "--branches") {
@@ -98,7 +98,7 @@ func TestLogScopedRealDecorations(t *testing.T) {
 	repo := &Repo{Runner: runner}
 	gitIn(t, dir, "branch", "feature")
 	gitIn(t, dir, "tag", "v1")
-	cs, err := repo.LogScoped(context.Background(), 10, 0, LogScope{})
+	cs, err := repo.LogScoped(context.Background(), 10, 0, LogScope{}, true)
 	if err != nil || len(cs) == 0 {
 		t.Fatalf("LogScoped: %v len=%d", err, len(cs))
 	}
@@ -119,7 +119,7 @@ func TestLogScopedRealSource(t *testing.T) {
 	repo := &Repo{Runner: runner}
 	gitIn(t, dir, "checkout", "-b", "feat")
 	gitIn(t, dir, "commit", "--allow-empty", "-m", "feat work")
-	cs, err := repo.LogScoped(context.Background(), 10, 0, LogScope{Branches: []string{"feat"}})
+	cs, err := repo.LogScoped(context.Background(), 10, 0, LogScope{Branches: []string{"feat"}}, true)
 	if err != nil || len(cs) == 0 {
 		t.Fatalf("LogScoped: %v len=%d", err, len(cs))
 	}
@@ -148,7 +148,7 @@ func TestRepoLogReturnsCommits(t *testing.T) {
 	repo := &Repo{Runner: runner}
 	gitIn(t, dir, "commit", "--allow-empty", "-m", "second")
 
-	commits, err := repo.LogScoped(context.Background(), 10, 0, LogScope{})
+	commits, err := repo.LogScoped(context.Background(), 10, 0, LogScope{}, true)
 	if err != nil {
 		t.Fatalf("log: %v", err)
 	}
@@ -259,7 +259,7 @@ func TestLogScopedSkipArgv(t *testing.T) {
 	f.SetResponse("git log", gitexec.Result{Stdout: ""})
 	repo := &Repo{Runner: f}
 
-	if _, err := repo.LogScoped(context.Background(), 200, 50, LogScope{}); err != nil {
+	if _, err := repo.LogScoped(context.Background(), 200, 50, LogScope{}, true); err != nil {
 		t.Fatalf("log: %v", err)
 	}
 	var argv []string
@@ -273,7 +273,7 @@ func TestLogScopedSkipArgv(t *testing.T) {
 	}
 
 	f.Calls = nil
-	if _, err := repo.LogScoped(context.Background(), 50, 0, LogScope{}); err != nil {
+	if _, err := repo.LogScoped(context.Background(), 50, 0, LogScope{}, true); err != nil {
 		t.Fatalf("log: %v", err)
 	}
 	for _, c := range f.Calls {

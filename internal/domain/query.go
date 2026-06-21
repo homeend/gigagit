@@ -170,7 +170,7 @@ func (s *Service) loadSnapshot(ctx context.Context) (Snapshot, error) {
 func (s *Service) logPage(ctx context.Context, limit, skip int, scope LogScope, gen int) ([]model.Commit, error) {
 	key := "commits:" + scopeKey(scope) + ":" + strconv.Itoa(gen) + ":" + strconv.Itoa(limit) + ":" + strconv.Itoa(skip)
 	return query(ctx, s, key, func(ctx context.Context) ([]model.Commit, error) {
-		return s.repo.LogScoped(ctx, limit, skip, scope)
+		return s.repo.LogScoped(ctx, limit, skip, scope, true)
 	})
 }
 
