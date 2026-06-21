@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"os"
 	"sync"
 
 	"github.com/gigagit/gg/internal/model"
@@ -35,8 +36,19 @@ type CommitFeed struct {
 
 // CommitFeed returns a fresh feed for this Service's repo.
 func (s *Service) CommitFeed() *CommitFeed {
-	return &CommitFeed{svc: s, hashes: map[string]bool{}, pager: dateOrderPager{svc: s}}
+	// GG_COMMIT_PAGER selects the page strategy (A/B): "graph" (default) writes a
+	// commit-graph + uses plain order until it exists; "date-order" is the legacy
+	// always-`--date-order` loader.
+	var pager CommitPager = &graphPager{svc: s}
+	if os.Getenv("GG_COMMIT_PAGER") == "date-order" {
+		pager = dateOrderPager{svc: s}
+	}
+	return &CommitFeed{svc: s, hashes: map[string]bool{}, pager: pager}
 }
+
+// PagerName reports the active page strategy ("graph" | "date-order"), so the
+// frontend can decide whether to auto-write the commit-graph.
+func (f *CommitFeed) PagerName() string { return f.pager.Name() }
 
 // SetScope sets the refspec for subsequent loads. Callers then LoadInitial to
 // re-walk; the gen bump drops any stale in-flight page.

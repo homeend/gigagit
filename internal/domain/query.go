@@ -169,10 +169,10 @@ func (s *Service) loadSnapshot(ctx context.Context) (Snapshot, error) {
 // a just-cancelled load (A) would coalesce onto A and inherit A's context.Canceled
 // — blanking the panel. A distinct gen per load makes that impossible while still
 // coalescing genuine concurrent reads of the same page within one generation.
-func (s *Service) logPage(ctx context.Context, limit, skip int, scope LogScope, gen int) ([]model.Commit, error) {
-	key := "commits:" + scopeKey(scope) + ":" + strconv.Itoa(gen) + ":" + strconv.Itoa(limit) + ":" + strconv.Itoa(skip)
+func (s *Service) logPage(ctx context.Context, limit, skip int, scope LogScope, gen int, dateOrder bool) ([]model.Commit, error) {
+	key := "commits:" + scopeKey(scope) + ":" + strconv.Itoa(gen) + ":" + strconv.Itoa(limit) + ":" + strconv.Itoa(skip) + ":" + strconv.FormatBool(dateOrder)
 	return query(ctx, s, key, func(ctx context.Context) ([]model.Commit, error) {
-		return s.repo.LogScoped(ctx, limit, skip, scope, true)
+		return s.repo.LogScoped(ctx, limit, skip, scope, dateOrder)
 	})
 }
 
