@@ -41,7 +41,13 @@ type bookmarkPastePopup struct {
 }
 
 // bookmarkDisplay builds "<container> / <commit-or-state> / <path>".
-func bookmarkDisplay(b model.Bookmark) string { return b.Address().Display() }
+func bookmarkDisplay(b model.Bookmark) string {
+	s := b.Address().Display()
+	if b.IsCommit() && b.Label != "" { // a commit bookmark carries its subject as the title
+		s += " — " + b.Label
+	}
+	return s
+}
 
 type bookmarksLoadedMsg struct {
 	items []model.Bookmark
