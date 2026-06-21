@@ -27,6 +27,7 @@ type Snapshot struct {
 	Tags            []model.Tag
 	CurrentWorktree string // git toplevel; "" if TopLevel failed
 	GitCommonDir    string // "" if it failed
+	HasCommitGraph  bool   // a commit-graph cache exists → --date-order is cheap
 	HeadTimes       map[string]int64
 	Conflict        ConflictState // source of any in-progress conflict (zero if none)
 }
@@ -146,6 +147,7 @@ func (s *Service) loadSnapshot(ctx context.Context) (Snapshot, error) {
 		if gcd, err := s.repo.GitCommonDir(ctx); err == nil {
 			mu.Lock()
 			snap.GitCommonDir = gcd
+			snap.HasCommitGraph = commitGraphExists(gcd)
 			mu.Unlock()
 		}
 	})
