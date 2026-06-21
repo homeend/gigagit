@@ -19,6 +19,14 @@ type commitsReloadedMsg struct {
 	state domain.FeedState
 }
 
+// startFeedReload sets the Commits loading indicator and returns the scope
+// reload cmd, so the title shows it is working while the (possibly slow) re-walk
+// runs. The indicator clears when commitsReloadedMsg arrives.
+func (m Model) startFeedReload() (Model, tea.Cmd) {
+	m.commitsLoading = true
+	return m, m.reloadFeedCmd()
+}
+
 // reloadFeedCmd applies the model's scope to the feed and reloads page 0 off the
 // UI thread. SetScope+LoadInitial bumps the feed gen (dropping stale pages) and
 // cancels any superseded in-flight walk.
@@ -51,7 +59,7 @@ func (m Model) commitSoloRow() (actionRow, bool) {
 			} else {
 				m.commitScopeBranches = []string{b.Name}
 			}
-			return m, m.reloadFeedCmd()
+			return m.startFeedReload()
 		},
 	}, true
 }
@@ -81,7 +89,7 @@ func (m Model) commitToggleRow() (actionRow, bool) {
 			} else {
 				m.commitScopeBranches = append(append([]string(nil), m.commitScopeBranches...), b.Name)
 			}
-			return m, m.reloadFeedCmd()
+			return m.startFeedReload()
 		},
 	}, true
 }
@@ -575,7 +583,7 @@ func (m Model) commitShowAllRow() (actionRow, bool) {
 		label: "Show all branches",
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			m.commitScopeBranches = nil
-			return m, m.reloadFeedCmd()
+			return m.startFeedReload()
 		},
 	}, true
 }

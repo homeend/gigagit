@@ -346,11 +346,12 @@ func (m Model) moveCommitUnderFilesView(delta int) (tea.Model, tea.Cmd) {
 	m.sel[panelCommits] = s
 	bi, ok := m.backingIndex(panelCommits)
 	if !ok || m.commits[bi].Hash == m.filesHash {
-		return m, m.maybeLoadMoreCommits() // nil when not needed
+		return m.maybeLoadMoreCommits() // nil cmd when not needed
 	}
 	m.filesHash = m.commits[bi].Hash
 	filesCmd := m.loadCommitFilesCmd(m.commits[bi])
-	if more := m.maybeLoadMoreCommits(); more != nil {
+	m, more := m.maybeLoadMoreCommits()
+	if more != nil {
 		return m, tea.Batch(filesCmd, more)
 	}
 	return m, filesCmd
