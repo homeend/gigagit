@@ -42,7 +42,6 @@ type dataLoadedMsg struct {
 	currentWorktree string
 	cfg             config.Config
 	gitCommonDir    string
-	hasCommitGraph  bool
 	headTimes       map[string]int64
 	conflict        domain.ConflictState
 	err             error
@@ -85,7 +84,6 @@ func (m Model) loadCmd() tea.Cmd {
 			tags:             snap.Tags,
 			currentWorktree:  snap.CurrentWorktree,
 			gitCommonDir:     snap.GitCommonDir,
-			hasCommitGraph:   snap.HasCommitGraph,
 			headTimes:        snap.HeadTimes,
 			conflict:         snap.Conflict,
 			commits:          fs.Commits,

@@ -66,34 +66,22 @@ func TestFeedStillUsesDateOrder(t *testing.T) {
 	}
 }
 
-func TestGraphPagerOrderCapturedOncePerGeneration(t *testing.T) {
+func TestPlainPagerUsesPlainOrder(t *testing.T) {
 	f := gitexec.NewFakeRunner()
-	common := t.TempDir()
-	infoDir := filepath.Join(common, "objects", "info")
-	os.MkdirAll(infoDir, 0o755)
-	f.SetResponse("git rev-parse (common-dir)", gitexec.Result{Stdout: common + "\n"})
-	var argvs [][]string
+	var argv []string
 	f.SetHandler("git log", func(ctx context.Context, a []string) (gitexec.Result, error) {
-		argvs = append(argvs, a)
+		argv = a
 		return gitexec.Result{Stdout: ""}, nil
 	})
-	svc := New(&git.Repo{Runner: f})
-	p := &graphPager{svc: svc}
-
-	// gen 1, no graph yet → plain order.
-	p.Page(context.Background(), 10, 0, 1, LogScope{})
-	// graph appears mid-generation:
-	os.WriteFile(filepath.Join(infoDir, "commit-graph"), []byte("x"), 0o644)
-	// same gen → MUST stay plain (order captured once per generation).
-	p.Page(context.Background(), 10, 10, 1, LogScope{})
-
-	for i, a := range argvs {
-		if slices.Contains(a, "--date-order") {
-			t.Errorf("page %d used --date-order; gen-1 order must stay plain: %v", i, a)
-		}
+	p := plainPager{svc: New(&git.Repo{Runner: f})}
+	if _, err := p.Page(context.Background(), 10, 0, 1, LogScope{}); err != nil {
+		t.Fatal(err)
 	}
-	if p.Name() != "graph" {
-		t.Errorf("Name() = %q, want graph", p.Name())
+	if slices.Contains(argv, "--date-order") {
+		t.Errorf("plain pager must omit --date-order (lazy newest-first): %v", argv)
+	}
+	if p.Name() != "plain" {
+		t.Errorf("Name() = %q, want plain", p.Name())
 	}
 }
 
@@ -104,8 +92,8 @@ func TestCommitFeedPicksPagerFromEnv(t *testing.T) {
 		t.Errorf("env date-order → %q", got)
 	}
 	t.Setenv("GG_COMMIT_PAGER", "")
-	if got := svc.CommitFeed().PagerName(); got != "graph" {
-		t.Errorf("default → %q, want graph", got)
+	if got := svc.CommitFeed().PagerName(); got != "plain" {
+		t.Errorf("default → %q, want plain (the fast, lazy strategy)", got)
 	}
 }
 

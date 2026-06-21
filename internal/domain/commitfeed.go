@@ -36,18 +36,18 @@ type CommitFeed struct {
 
 // CommitFeed returns a fresh feed for this Service's repo.
 func (s *Service) CommitFeed() *CommitFeed {
-	// GG_COMMIT_PAGER selects the page strategy (A/B): "graph" (default) writes a
-	// commit-graph + uses plain order until it exists; "date-order" is the legacy
-	// always-`--date-order` loader.
-	var pager CommitPager = &graphPager{svc: s}
+	// GG_COMMIT_PAGER picks the page strategy. Only "date-order" is special — it
+	// opts into a global topological sort for guaranteed-perfect graph lanes (slow
+	// on a large repo). Every other value (incl. unset and "plain") uses the
+	// default plainPager: git's lazy newest-first order — instant on huge repos.
+	var pager CommitPager = plainPager{svc: s}
 	if os.Getenv("GG_COMMIT_PAGER") == "date-order" {
 		pager = dateOrderPager{svc: s}
 	}
 	return &CommitFeed{svc: s, hashes: map[string]bool{}, pager: pager}
 }
 
-// PagerName reports the active page strategy ("graph" | "date-order"), so the
-// frontend can decide whether to auto-write the commit-graph.
+// PagerName reports the active page strategy ("plain" | "date-order").
 func (f *CommitFeed) PagerName() string { return f.pager.Name() }
 
 // SetScope sets the refspec for subsequent loads. Callers then LoadInitial to
