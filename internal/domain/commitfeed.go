@@ -36,9 +36,10 @@ type CommitFeed struct {
 
 // CommitFeed returns a fresh feed for this Service's repo.
 func (s *Service) CommitFeed() *CommitFeed {
-	// GG_COMMIT_PAGER selects the page strategy: "plain" (default) is git's lazy
-	// newest-first order — instant on huge repos; "date-order" opts into a global
-	// topological sort for guaranteed-perfect graph lanes (slow on a large repo).
+	// GG_COMMIT_PAGER picks the page strategy. Only "date-order" is special — it
+	// opts into a global topological sort for guaranteed-perfect graph lanes (slow
+	// on a large repo). Every other value (incl. unset and "plain") uses the
+	// default plainPager: git's lazy newest-first order — instant on huge repos.
 	var pager CommitPager = plainPager{svc: s}
 	if os.Getenv("GG_COMMIT_PAGER") == "date-order" {
 		pager = dateOrderPager{svc: s}

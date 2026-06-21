@@ -10,9 +10,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ### Added
 - **Instant Commits feed on huge repos (plain-order loading).** The feed now uses
-  git's lazy newest-first order, which parses only the page on screen — first
-  paint of the commit list drops from ~18 s to ~40 ms on a 1.4M-commit repo
-  (`--date-order` was forcing a global topological sort of the whole history).
+  git's lazy newest-first order, which parses only the page on screen — on a
+  1.4M-commit repo the commit walk drops from ~18 s to ~40 ms (`--date-order` was
+  forcing a global topological sort of the whole history). First paint is now
+  bounded by `git status` on the worktree (a separate cost), not the commit walk.
   Plain order is topologically correct for all practical viewing; only very deep,
   merge-heavy multi-branch history can show a rare cosmetic lane stub. Opt into a
   guaranteed-perfect (but slow on big repos) graph with
