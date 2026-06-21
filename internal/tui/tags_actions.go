@@ -8,6 +8,42 @@ import (
 	"github.com/gigagit/gg/internal/engine"
 )
 
+// tagCheckoutRow offers "Check out tag" on the Tags panel: ask detached vs a new
+// branch (never-trap Cancel), then check out.
+func (m Model) tagCheckoutRow() (actionRow, bool) {
+	if m.focus != panelTags || !m.opsIdle() {
+		return actionRow{}, false
+	}
+	bi, ok := m.backingIndex(panelTags)
+	if !ok || bi < 0 || bi >= len(m.tags) {
+		return actionRow{}, false
+	}
+	name := m.tags[bi].Name
+	return actionRow{
+		id:    "tag-checkout",
+		label: "Check out tag",
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			m.modal = &decisionState{
+				req: engine.DecisionRequest{
+					ID:      "checkout-tag",
+					Prompt:  "Check out " + name + ":",
+					Options: []string{"Detached", "Create branch…", "Cancel"},
+				},
+				onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {
+					switch opt {
+					case "Detached":
+						return m.startOp(engine.CheckoutTag{Name: name})
+					case "Create branch…":
+						return m.pushLayer(&tagCheckoutPopup{tag: name}), nil
+					}
+					return m, nil
+				},
+			}
+			return m, nil
+		},
+	}, true
+}
+
 // tagDeleteRow offers "Delete tag" on the Tags panel: a confirm modal (never-trap
 // Cancel) then the delete op.
 func (m Model) tagDeleteRow() (actionRow, bool) {
