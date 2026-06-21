@@ -109,6 +109,9 @@ type Model struct {
 	filterPanel  panel  // panel the filter is bound to (meaningful only when filterQuery != "" or filterTyping)
 	filterQuery  string // case-insensitive substring; "" = no filter
 	filterTyping bool   // true while /-input mode is capturing keys
+
+	highlightQuery  string // Commits-panel @-highlight: case-insensitive substring; "" = no committed query
+	highlightTyping bool   // true while @-input mode is capturing keys
 }
 
 type panel int
