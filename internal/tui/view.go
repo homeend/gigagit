@@ -218,6 +218,22 @@ func popupInnerWidth(w int) int {
 	return inner
 }
 
+// popupWideInnerWidth is the content width for the path-list switcher popups
+// (bookmark/shelf). Their rows are file addresses whose path tail — the part
+// the user cares about — sits at the end, so they scale wider than the standard
+// prose popup (up to 96 columns), capped to the terminal and floored like
+// popupInnerWidth. z still handles paths longer than even this.
+func popupWideInnerWidth(w int) int {
+	inner := 96
+	if max := w - 8; inner > max {
+		inner = max
+	}
+	if inner < 20 {
+		inner = 20
+	}
+	return inner
+}
+
 // popupTextWidth is the usable text width inside a modal frame: inner minus
 // modalStyle's horizontal padding. lipgloss soft-wraps content at this width
 // (not at inner), so popup body/header/hint lines must be laid out / truncated

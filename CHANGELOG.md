@@ -15,6 +15,18 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   count while that walk is in flight, so the panel no longer looks frozen.
 
 ### Fixed
+- **The bookmark (`g`) and shelf (`G`) switchers no longer cut off file paths
+  or hide the `[z] mode` hint.** The popups were fixed at 56 columns, so a long
+  file path (which sits at the end of each row) was truncated, and the footer —
+  including the `[z] mode` toggle that cycles cutoff/wrap/scroll — was itself
+  cut off, leaving the long-text handling undiscoverable. The switchers now
+  widen with the terminal (up to 96 columns) and wrap the footer hint onto
+  multiple lines, so paths fit and every key (incl. `[z] mode`) stays visible at
+  any width.
+- **A file deleted in a commit no longer offers "Add to shelf" / "Bookmark this
+  file" / compare actions in the commit files view.** A `D` (deleted) entry has
+  no content at that commit, so those actions could only fail; they're now
+  withheld for deleted files (the deletion is still viewable with `enter`).
 - **Comparing a commit against the working tree (or staged) no longer leaves the
   file diff stuck on "(loading…)".** Opening a file from a *Compare against
   working tree* / *Compare against staged* view showed a correct header (the
