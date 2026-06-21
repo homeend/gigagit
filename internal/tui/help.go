@@ -108,6 +108,7 @@ func helpContent() []contentLine {
 		r("", "the left column is the branch the commit is on: BRIGHT *current/branch on that branch's tip, grayed otherwise; long names trim with … (select to reveal the full name); the commit id shows in the status bar. Filtering still matches the full id and full branch name"),
 		r("l", "show the selected commit's files in the left column"),
 		r(".", "rename commit / copy commit id / Create branch here / Create worktree here / Cherry-pick here / Revert this commit / Reset to this commit (soft|mixed|hard) / Show all branches when soloed / Show as list|graph (.-menu)"),
+		r("", "on a commit that is a branch's tip: Rename branch <name> / Delete branch <name> (.-menu) — one pair per local tip; delete is hidden for a checked-out branch"),
 		r("", "Show as list / Show as graph (.-menu): flat ●-gutter list vs the lane graph; lane color marks each commit's line of development"),
 		r("(scroll)", "more commits load automatically as you near the end"),
 		h("Filter mode (/)"),

@@ -312,3 +312,49 @@ func (m Model) commitShowAllRow() (actionRow, bool) {
 		},
 	}, true
 }
+
+// commitBranchRows offers Rename/Delete branch on the Commits panel for every
+// local branch whose tip is the selected commit. Rename applies to every local
+// tip (including the current branch); Delete is suppressed for any branch
+// checked out in a worktree (this worktree's HEAD or another), since
+// engine.DeleteBranch refuses those — no point offering a row that can't
+// succeed. Reuses the renameBranchPopup and engine.DeleteBranch backends.
+func (m Model) commitBranchRows() []actionRow {
+	if m.focus != panelCommits || !m.opsIdle() {
+		return nil
+	}
+	bi, ok := m.backingIndex(panelCommits)
+	if !ok {
+		return nil
+	}
+	checkedOut := map[string]bool{}
+	for _, w := range m.worktrees {
+		if w.Branch != "" {
+			checkedOut[w.Branch] = true
+		}
+	}
+	var rows []actionRow
+	for _, r := range m.commits[bi].Refs {
+		if r.Kind != model.RefLocal {
+			continue
+		}
+		name := r.Name
+		rows = append(rows, actionRow{
+			id:    "rename-branch",
+			label: "Rename branch " + name,
+			run: func(m Model) (tea.Model, tea.Cmd) {
+				return m.pushLayer(&renameBranchPopup{old: name, name: name}), nil
+			},
+		})
+		if !r.Head && !checkedOut[name] {
+			rows = append(rows, actionRow{
+				id:    "delete-branch",
+				label: "Delete branch " + name,
+				run: func(m Model) (tea.Model, tea.Cmd) {
+					return m.startOp(engine.DeleteBranch{Name: name})
+				},
+			})
+		}
+	}
+	return rows
+}
