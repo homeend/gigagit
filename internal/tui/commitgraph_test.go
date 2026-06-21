@@ -80,6 +80,18 @@ func TestDataLoadedTriggersGraphWriteOnce(t *testing.T) {
 	_ = u2
 }
 
+// TestDataLoadedSkipsWriteWhenGraphPresent locks the steady state (every launch
+// after the first): graph pager + an existing commit-graph → no write, no notice.
+func TestDataLoadedSkipsWriteWhenGraphPresent(t *testing.T) {
+	m := loadedModel(t) // default pager = "graph"
+	m.commitGraphTried = false
+	m.commitGraphIndexing = false
+	u, cmd := m.Update(dataLoadedMsg{gen: m.loadGen, hasCommitGraph: true, cfg: m.cfg})
+	if u.(Model).commitGraphIndexing || cmd != nil {
+		t.Error("a present commit-graph must not trigger a write or notice")
+	}
+}
+
 func TestDataLoadedSkipsGraphWriteUnderDateOrderPager(t *testing.T) {
 	t.Setenv("GG_COMMIT_PAGER", "date-order")
 	m := loadedModel(t) // pager = "date-order"
