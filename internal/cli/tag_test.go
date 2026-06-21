@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"os/exec"
 	"strings"
 	"testing"
 )
@@ -63,5 +64,30 @@ func TestTagRmRequiresName(t *testing.T) {
 	dir := newRepoDir(t)
 	if code, _, _ := runCLI(t, dir, "tag", "rm"); code == 0 {
 		t.Fatal("rm with no name must fail")
+	}
+}
+
+func TestTagCheckoutDetached(t *testing.T) {
+	dir := newRepoDir(t)
+	gitRun(t, dir, "tag", "v1.0.0")
+	gitRun(t, dir, "commit", "--allow-empty", "-m", "c2")
+	if code, _, errb := runCLI(t, dir, "tag", "checkout", "v1.0.0"); code != 0 {
+		t.Fatalf("checkout exit %d: %s", code, errb)
+	}
+	out, _ := exec.Command("git", "-C", dir, "branch", "--show-current").Output()
+	if strings.TrimSpace(string(out)) != "" {
+		t.Fatalf("expected detached HEAD, on %q", out)
+	}
+}
+
+func TestTagCheckoutToBranch(t *testing.T) {
+	dir := newRepoDir(t)
+	gitRun(t, dir, "tag", "v1.0.0")
+	if code, _, errb := runCLI(t, dir, "tag", "checkout", "--branch", "rel", "v1.0.0"); code != 0 {
+		t.Fatalf("checkout --branch exit %d: %s", code, errb)
+	}
+	out, _ := exec.Command("git", "-C", dir, "branch", "--show-current").Output()
+	if strings.TrimSpace(string(out)) != "rel" {
+		t.Fatalf("on %q, want rel", out)
 	}
 }
