@@ -1,0 +1,23 @@
+name = "compare: changed files between commits and vs the working tree"
+
+[input]
+steps = [
+  { write = "f1.txt", content = "v1\n" },
+  { commit = "c1" },
+  { write = "f2.txt", content = "v2\n" },
+  { commit = "c2" },
+  { write = "f1.txt", content = "dirty\n" },
+]
+
+[[run]]
+cmd             = ["compare", "HEAD~1", "HEAD"]
+exit            = 0
+stdout_contains = ["f2.txt"]
+
+[[run]]
+cmd             = ["compare", "HEAD"]
+exit            = 0
+stdout_contains = ["f1.txt"]
+
+[expect]
+branch = "main"
