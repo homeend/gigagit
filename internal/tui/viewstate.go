@@ -458,6 +458,11 @@ func (m Model) backingIndex(p panel) (int, bool) {
 	return idx[s], true
 }
 
+// commitsLoadingGlyph marks the Commits title while a feed reload or page is in
+// flight — on a huge repo a scope change or paging walk takes seconds, so the
+// title shows it is working rather than appearing frozen.
+const commitsLoadingGlyph = "⏳"
+
 // panelLabel decorates a panel title with commit count (Commits panel only),
 // active sort mode, and filter.
 func (m Model) panelLabel(p panel, base string) string {
@@ -467,6 +472,9 @@ func (m Model) panelLabel(p panel, base string) string {
 			base += " " + strconv.Itoa(n)
 		} else {
 			base += " " + strconv.Itoa(n) + "+"
+		}
+		if m.commitsLoading {
+			base += " " + commitsLoadingGlyph
 		}
 	}
 	if s := m.sortModes[p].String(); s != "" {

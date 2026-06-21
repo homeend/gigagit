@@ -47,6 +47,58 @@ func TestCommitsLabel(t *testing.T) {
 	}
 }
 
+func TestCommitsLabelShowsLoadingIndicator(t *testing.T) {
+	m := feedModel(250, false)
+	if got := m.panelLabel(panelCommits, "Commits"); strings.Contains(got, commitsLoadingGlyph) {
+		t.Fatalf("idle label must not show the loading glyph: %q", got)
+	}
+	m.commitsLoading = true
+	if got := m.panelLabel(panelCommits, "Commits"); !strings.Contains(got, commitsLoadingGlyph) {
+		t.Fatalf("loading label must show %q: %q", commitsLoadingGlyph, got)
+	}
+	// The indicator is the Commits panel's alone.
+	if got := m.panelLabel(panelBranches, "Branches"); strings.Contains(got, commitsLoadingGlyph) {
+		t.Fatalf("non-Commits panel must not show the loading glyph: %q", got)
+	}
+}
+
+func TestPagingSetsCommitsLoading(t *testing.T) {
+	m := feedModel(50, false)
+	m.sel[panelCommits] = 49
+	mm, cmd := m.Update(keyMsg("down"))
+	if cmd == nil {
+		t.Fatal("scrolling near the end should fire a load-more cmd")
+	}
+	if !mm.(Model).commitsLoading {
+		t.Fatal("dispatching a load-more must set commitsLoading for the indicator")
+	}
+}
+
+func TestCommitsPagedClearsLoading(t *testing.T) {
+	m := feedModel(50, false)
+	m.commitsLoading = true
+	mm, _ := m.Update(commitsPagedMsg{gen: m.feed.Gen()})
+	if mm.(Model).commitsLoading {
+		t.Fatal("a completed page load must clear commitsLoading")
+	}
+}
+
+func TestScopeReloadShowsAndClearsLoading(t *testing.T) {
+	m := feedModel(50, true)
+	m2, cmd := m.startFeedReload()
+	if cmd == nil {
+		t.Fatal("startFeedReload must return a reload cmd")
+	}
+	if !m2.commitsLoading {
+		t.Fatal("startFeedReload must set commitsLoading for the indicator")
+	}
+	gen := m2.feed.Gen()
+	mm, _ := m2.Update(commitsReloadedMsg{gen: gen, state: domain.FeedState{Gen: gen}})
+	if mm.(Model).commitsLoading {
+		t.Fatal("a matching-gen commitsReloadedMsg must clear commitsLoading")
+	}
+}
+
 func TestPagingFiresNearEnd(t *testing.T) {
 	// New()'s feed has 0 commits and is not exhausted, so NeedsMore(sel) is
 	// true for any sel within threshold of 0. Pressing down on the Commits

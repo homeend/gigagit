@@ -75,6 +75,7 @@ type Model struct {
 	svc                 *domain.Service    // command layer; all git access goes through svc
 	feed                *domain.CommitFeed // single source of truth for commits
 	commitsExhausted    bool               // false → "Commits N+", true → "Commits N"
+	commitsLoading      bool               // a feed reload/page is in flight → show the loading glyph in the Commits title
 	commitScopeBranches []string           // included branches for the feed; empty = all local branches
 	commitGraphRows     []string           // cached single-line graph cells, parallel to commits; empty = none
 	commitGraphLanes    []int              // cached node lane per commit, parallel to commits
@@ -227,6 +228,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			st := m.feed.Snapshot()
 			m.commits = st.Commits
 			m.commitsExhausted = st.Exhausted
+			m.commitsLoading = false // this page's load (the latest) finished
 			m = m.rebuildCommitGraph()
 		}
 		return m, nil
@@ -236,6 +238,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.commits = msg.state.Commits
 		m.commitsExhausted = msg.state.Exhausted
+		m.commitsLoading = false // the latest scope reload finished
 		m = m.rebuildCommitGraph()
 		if m.sel[panelCommits] >= len(m.commits) {
 			m.sel[panelCommits] = 0
@@ -325,6 +328,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil // superseded by a newer load
 		}
 		m.loading = false
+		m.commitsLoading = false // the full load (which includes the feed) is done
 		m.err = msg.err
 		if msg.err == nil {
 			m.status = msg.status
@@ -797,8 +801,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 			if m.focus == panelCommits {
-				if cmd := m.maybeLoadMoreCommits(); cmd != nil {
-					return m, cmd
+				if mm, cmd := m.maybeLoadMoreCommits(); cmd != nil {
+					return mm, cmd
 				}
 			}
 		case "pgup":
@@ -917,8 +921,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.sel[m.focus]++
 			}
 			if m.focus == panelCommits {
-				if cmd := m.maybeLoadMoreCommits(); cmd != nil {
-					return m, cmd
+				if mm, cmd := m.maybeLoadMoreCommits(); cmd != nil {
+					return mm, cmd
 				}
 			}
 		}
@@ -1376,23 +1380,26 @@ func (m Model) rebuildCommitGraph() Model {
 	return m
 }
 
-// maybeLoadMoreCommits returns a cmd to page in more commits when the Commits
-// selection nears the end and no commits filter is active; nil otherwise. The
-// feed owns the "is there more / am I already loading" decision.
-func (m Model) maybeLoadMoreCommits() tea.Cmd {
+// maybeLoadMoreCommits returns the model plus a cmd to page in more commits when
+// the Commits selection nears the end and no commits filter is active; a nil cmd
+// (and the model unchanged) otherwise. The feed owns the "is there more / am I
+// already loading" decision. When a page is dispatched it sets commitsLoading so
+// the Commits title shows the in-flight indicator until commitsPagedMsg arrives.
+func (m Model) maybeLoadMoreCommits() (Model, tea.Cmd) {
 	if m.feed == nil {
-		return nil
+		return m, nil
 	}
 	if m.filterTyping && m.filterPanel == panelCommits {
-		return nil
+		return m, nil
 	}
 	if m.filterActive(panelCommits) {
-		return nil
+		return m, nil
 	}
 	if !m.feed.NeedsMore(m.sel[panelCommits]) {
-		return nil
+		return m, nil
 	}
-	return m.loadMoreCmd()
+	m.commitsLoading = true
+	return m, m.loadMoreCmd()
 }
 
 // reRoot points the model at the repository rooted at path and triggers a full

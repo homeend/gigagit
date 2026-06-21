@@ -8,6 +8,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+### Added
+- **Commits panel shows a loading indicator (⏳) while the feed is loading.** On
+  a large repo a scope change (Solo / Show all / selection) or paging in older
+  commits can take a few seconds; the Commits title now shows ⏳ next to the
+  count while that walk is in flight, so the panel no longer looks frozen.
+
 ### Fixed
 - **Creating a worktree now refreshes the Branches and Worktrees panels
   immediately.** After creating a worktree (and branch) the panels still showed
