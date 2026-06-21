@@ -266,6 +266,57 @@ func (m Model) commitCompareStagedRow() (actionRow, bool) {
 	}, true
 }
 
+// commitCompareMarkedRow offers "Compare with marked commit" when a commit is
+// marked (m key) on a different row: opens the files view as a commit↔commit
+// whole-tree diff, ordered older→newer by feed position (the feed is
+// newest-first, so a larger m.commits index is the older commit).
+func (m Model) commitCompareMarkedRow() (actionRow, bool) {
+	if m.focus != panelCommits || !m.opsIdle() {
+		return actionRow{}, false
+	}
+	if m.mark == nil || m.mark.panel != panelCommits || !m.markAlive() {
+		return actionRow{}, false
+	}
+	bi, ok := m.backingIndex(panelCommits)
+	if !ok {
+		return actionRow{}, false
+	}
+	sel := m.commits[bi].Hash
+	marked := m.mark.key
+	if sel == marked {
+		return actionRow{}, false
+	}
+	older, newer := orderByFeed(m.commits, marked, sel)
+	return actionRow{
+		id:    "commit-compare-marked",
+		label: "Compare with marked commit (" + shortHash(marked) + ")",
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			return m.openCompareFiles(
+				model.Endpoint{Kind: model.EndpointCommit, Hash: older},
+				model.Endpoint{Kind: model.EndpointCommit, Hash: newer})
+		},
+	}, true
+}
+
+// orderByFeed returns (older, newer) for two hashes by their position in the
+// newest-first commit feed: the hash at the larger index is older. Callers pass
+// only loaded hashes.
+func orderByFeed(commits []model.Commit, a, b string) (older, newer string) {
+	ia, ib := -1, -1
+	for i := range commits {
+		switch commits[i].Hash {
+		case a:
+			ia = i
+		case b:
+			ib = i
+		}
+	}
+	if ia >= ib { // a sits lower in the feed (older) — or b is absent
+		return a, b
+	}
+	return b, a
+}
+
 // commitCreateWorktreeRow offers "Create worktree here" on the Commits panel:
 // open the create-worktree dialog based at the selected commit, with a user-typed
 // (non-templated) branch name.

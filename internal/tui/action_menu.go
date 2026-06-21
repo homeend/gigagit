@@ -121,6 +121,9 @@ func availableActions(m Model) []actionRow {
 	if r, ok := m.commitCompareStagedRow(); ok {
 		out = append(out, r)
 	}
+	if r, ok := m.commitCompareMarkedRow(); ok {
+		out = append(out, r)
+	}
 	if r, ok := m.commitCherryPickRow(); ok {
 		out = append(out, r)
 	}
