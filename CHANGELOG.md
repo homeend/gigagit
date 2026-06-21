@@ -59,6 +59,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   effect on tracked ones.
 
 ### Changed
+- **The Commits-row reveal shows just the text now.** The inline reveal for a
+  truncated commit row drops the graph lanes and the fixed-width identity
+  padding, showing only the readable `branch  subject` — the graph is positional,
+  so revealing its glyphs in a horizontal strip was meaningless, and the padding
+  left an ugly gap between a short branch name and the subject.
 - **Truncated-row reveal now renders inline, on the row itself.** When a
   selected row is too long for its panel, the full-text reveal is drawn over
   that row's own line and overflows the panel border to use the whole screen

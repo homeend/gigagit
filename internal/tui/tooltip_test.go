@@ -141,8 +141,10 @@ func TestTooltipOverflowsLeftFromRightPanel(t *testing.T) {
 		m.sel = map[panel]int{}
 	}
 	// A subject wider than the Commits panel's room-to-the-right (~half the
-	// screen) but well within the full 120-col width.
-	subj := "channel api rework: split the v2 source adapter into reader and writer"
+	// screen) but well within the full 120-col width. (The compact text-only
+	// reveal carries no graph/identity padding, so the subject itself must be
+	// long enough to overflow the right edge and force the leftward shift.)
+	subj := "channel api rework: split the v2 source adapter into separate reader and writer halves cleanly"
 	m.commits = []model.Commit{{Hash: "abcdef0", Subject: subj}}
 	m.sel[panelCommits] = 0
 
@@ -340,5 +342,38 @@ func TestTooltipSuppressedOutsideCutoffMode(t *testing.T) {
 	m.dispModes[panelBranches] = modeScroll
 	if _, _, _, ok := m.tooltip(); ok {
 		t.Error("scroll mode: tooltip must be suppressed")
+	}
+}
+
+// The commit reveal must show only the readable text — the full branch label +
+// subject — with NO graph glyphs and NO fixed-width padding gap. (The graph is
+// positional; revealing its lanes in a horizontal strip is meaningless, and the
+// 16-col identity padding leaves an ugly gap between a short branch and the
+// subject.)
+func TestCommitRevealIsTextOnlyNoGraph(t *testing.T) {
+	m := footerModel()
+	m.focus = panelCommits
+	if m.sel == nil {
+		m.sel = map[panel]int{}
+	}
+	subject := "mfd: MAINTAINERS: Remove a really long subject line that overflows the panel width by quite a lot indeed yes"
+	m.commits = []model.Commit{{Hash: "abcdef0", Subject: subject,
+		Refs: []model.Ref{{Name: "master", Kind: model.RefLocal, Head: true}}}}
+	m = m.rebuildCommitGraph()
+	m.sel[panelCommits] = 0
+	lines, _, _, ok := m.tooltip()
+	if !ok {
+		t.Fatal("expected a reveal for the width-truncated commit row")
+	}
+	plain := ansi.Strip(strings.Join(lines, "\n"))
+	for _, g := range []string{"●", "│", "┼", "╮", "╯", "╭", "╰", "⋯"} {
+		if strings.Contains(plain, g) {
+			t.Errorf("reveal must not contain graph glyph %q: %q", g, plain)
+		}
+	}
+	// Branch label immediately followed by a single space then the subject — no
+	// fixed-width padding gap.
+	if !strings.Contains(plain, "master mfd:") {
+		t.Errorf("reveal should be compact 'branch subject' with no padding gap: %q", plain)
 	}
 }

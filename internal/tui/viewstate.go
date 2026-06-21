@@ -152,6 +152,12 @@ type panelList interface {
 // row can still be searched by full commit id or full branch name.
 type haystacker interface{ Haystack(i int) string }
 
+// textRevealer is an optional panelList capability: a compact text-only reveal
+// string for the tooltip (no positional decoration like the commit graph, no
+// fixed-width padding). When present, the tooltip draws this instead of the raw
+// display row once it has decided the row is reveal-worthy.
+type textRevealer interface{ TextReveal(i int) string }
+
 // fullRower is an optional panelList capability: a parallel row whose content is
 // fully un-elided, shown by the reveal tooltip when it differs from Row(i).
 type fullRower interface{ Full(i int) string }
@@ -233,7 +239,8 @@ func (l statusList) Date(i int) int64 {
 type commitList struct {
 	items []model.Commit
 	rows  []string // display rows (trimmed identity token, no commit id)
-	full  []string // parallel rows with the UNtrimmed identity (tooltip reveal)
+	full  []string // parallel rows with the UNtrimmed identity (gates WHEN to reveal)
+	text  []string // compact reveal text (branch + subject, no graph/padding): WHAT to reveal
 	hay   []string // filter haystack: full hash + full branch name + subject
 }
 
@@ -256,6 +263,16 @@ func (l commitList) Haystack(i int) string {
 func (l commitList) Full(i int) string {
 	if i < len(l.full) {
 		return l.full[i]
+	}
+	return l.rows[i]
+}
+
+// TextReveal supplies the compact text-only reveal (branch + subject, no graph
+// glyphs, no fixed-width padding) the tooltip draws once it has decided the row
+// is reveal-worthy. See textRevealer.
+func (l commitList) TextReveal(i int) string {
+	if i < len(l.text) {
+		return l.text[i]
 	}
 	return l.rows[i]
 }
@@ -304,7 +321,7 @@ func (m Model) listFor(p panel) panelList {
 		// returning indices into m.status.Files for the action handlers.
 		return statusList{files: m.status.Files, rows: m.statusRows(p), root: m.currentWorktree, mtime: map[int]int64{}}
 	case panelCommits:
-		return commitList{items: m.commits, rows: m.commitRows(), full: m.commitFullRows(), hay: m.commitHaystacks()}
+		return commitList{items: m.commits, rows: m.commitRows(), full: m.commitFullRows(), text: m.commitTextReveals(), hay: m.commitHaystacks()}
 	}
 	return commitList{}
 }

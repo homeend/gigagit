@@ -72,7 +72,17 @@ func (m Model) tooltip() (lines []string, x, y int, ok bool) {
 	if g.w < 1 {
 		return nil, 0, 0, false
 	}
-	line, x := revealLine(content, origin.x+2, innerW, g.w)
+	// The decision above (using Full, which carries the graph + padded identity)
+	// settles WHEN to reveal. A panel may offer a compact text-only reveal for
+	// WHAT to draw — the Commits panel does, so its graph lanes and identity
+	// padding don't end up in the reveal strip.
+	reveal := content
+	if tr, ok := m.listFor(p).(textRevealer); ok && sel < len(idx) {
+		if t := tr.TextReveal(idx[sel]); t != "" {
+			reveal = t
+		}
+	}
+	line, x := revealLine(reveal, origin.x+2, innerW, g.w)
 	return []string{line}, x, rowY, true
 }
 

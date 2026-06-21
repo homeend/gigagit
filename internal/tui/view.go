@@ -771,6 +771,25 @@ func (m Model) commitBranchHint() string {
 func (m Model) commitRows() []string     { return m.commitIdentRows(false) }
 func (m Model) commitFullRows() []string { return m.commitIdentRows(true) }
 
+// commitTextReveals is the per-commit reveal text the tooltip renders: the full
+// (untrimmed) branch label + any pills + the subject — with NO graph prefix and
+// NO fixed-width identity padding. The graph is positional, so revealing its
+// lanes in a horizontal strip is meaningless, and the 16-col padding would leave
+// a gap between a short branch name and the subject. (commitFullRows still drives
+// the WHEN-to-reveal decision; this is only WHAT gets drawn.)
+func (m Model) commitTextReveals() []string {
+	out := make([]string, len(m.commits))
+	for i, c := range m.commits {
+		id := commitIdentOf(c)
+		label := id.label()
+		if label != "" {
+			label += " "
+		}
+		out[i] = label + id.pills() + c.Subject
+	}
+	return out
+}
+
 func (m Model) commitIdentRows(full bool) []string {
 	graph := !m.commitListMode && m.commitGraphOn() && len(m.commitGraphRows) == len(m.commits)
 	out := make([]string, 0, len(m.commits))
