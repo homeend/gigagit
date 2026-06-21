@@ -335,3 +335,15 @@ func TestRemoteBranchesQuery(t *testing.T) {
 		t.Fatalf("rbs = %+v", rbs)
 	}
 }
+
+func TestBranchesQuery(t *testing.T) {
+	f := fakeReads()
+	f.SetResponse("git for-each-ref", gitexec.Result{Stdout: "*\x00main\x00\x00abc123\x00\x001700000000\n \x00feature\x00\x00def456\x00\x001700000100\n"})
+	bs, err := New(&git.Repo{Runner: f}).Branches(context.Background())
+	if err != nil {
+		t.Fatalf("Branches: %v", err)
+	}
+	if len(bs) != 2 || bs[0].Name != "main" || !bs[0].IsHead || bs[1].Name != "feature" {
+		t.Fatalf("bs = %+v", bs)
+	}
+}

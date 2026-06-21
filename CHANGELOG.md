@@ -9,6 +9,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Fixed
+- **Creating a worktree now refreshes the Branches and Worktrees panels
+  immediately.** After creating a worktree (and branch) the panels still showed
+  the old lists until a manual reload (`r`), which on a huge repo took ages
+  because it re-walked `git status` over the whole working tree and reloaded the
+  commit feed — neither of which a worktree-create changes. The create now does
+  a targeted refresh of just the branches and worktrees, so the new rows appear
+  right away.
 - **Switching to a branch whose name collides with a tag no longer fails.**
   After creating a worktree (and branch) at a tag, the branch and tag share a
   name, and git's `%(refname:short)` disambiguated the branch to

@@ -43,6 +43,7 @@ type Model struct {
 	switchTarget        string
 	pendingCompare      *pendingCompare // focused file awaiting the compare-mode picker; nil = none
 	pendingSwitchBranch string          // branch to SmartSwitch to after a successful op (B = create-and-switch)
+	pendingRefsReload   bool            // after this op, refresh only branches+worktrees (not a full Snapshot) — set by create-worktree
 
 	mark             *markState      // the m-key mark; nil = none (see mark.go)
 	fileMarks        map[string]bool // multi-selected Status file paths (keyed by path)
@@ -943,6 +944,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.opMsgs = nil
 		switchTo := ""
 		chainSwitch := ""
+		refsReload := false
 		if msg.err != nil {
 			m.statusMsg = "error: " + msg.err.Error()
 		} else {
@@ -956,17 +958,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				switchTo = msg.res.Path
 			}
 			chainSwitch = m.pendingSwitchBranch
+			refsReload = m.pendingRefsReload
 		}
 		m.pendingSeqBump = nil
 		m.pendingSwitch = false
 		m.pendingSwitchBranch = "" // cleared before the chained op starts, so it cannot re-fire
+		m.pendingRefsReload = false
 		if switchTo != "" {
 			return m.reRoot(switchTo)
 		}
 		if chainSwitch != "" {
 			return m.startOp(engine.SmartSwitch{Branch: chainSwitch})
 		}
-		m.loadGen++
+		m.loadGen++ // invalidate any in-flight full load before issuing a refresh
 		if m.stashView != nil {
 			// A stash op (apply/pop/drop) changed the stash list as well as the
 			// working tree — refresh both.
@@ -977,6 +981,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// its state machine (it typically triggers a reload itself).
 		if m.proc != nil {
 			return m.proc.finished(m, msg.res, msg.err)
+		}
+		// A ref-only op (create-worktree) changed only branches+worktrees, not the
+		// working tree or commit history — a targeted refresh shows the new rows
+		// fast instead of paying a full Snapshot's status walk on a huge repo.
+		if refsReload {
+			return m, m.reloadRefsCmd(m.statusMsg)
 		}
 		return m, m.loadCmd()
 
@@ -1023,6 +1033,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		for _, p := range []panel{panelFiles, panelStaged} {
 			if n := m.panelLen(p); n > 0 && m.sel[p] >= n {
 				m.sel[p] = n - 1
+			}
+		}
+		return m, nil
+
+	case refsRefreshedMsg:
+		m.running = false
+		if msg.err != nil {
+			m.statusMsg = "error: " + msg.err.Error()
+			return m, nil
+		}
+		m.branches = msg.branches
+		m.worktrees = msg.worktrees
+		if msg.summary != "" {
+			m.statusMsg = msg.summary
+		}
+		// A removed row (e.g. a deleted worktree) must not leave a selection
+		// pointing past the end of the now-shorter list.
+		for _, p := range []panel{panelBranches, panelWorktrees} {
+			if n := m.panelLen(p); m.sel[p] >= n {
+				m.sel[p] = max(0, n-1)
 			}
 		}
 		return m, nil
