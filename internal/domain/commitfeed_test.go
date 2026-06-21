@@ -177,7 +177,7 @@ func TestSnapshotReturnsCopy(t *testing.T) {
 
 func TestLogPageRuns(t *testing.T) {
 	svc := New(&git.Repo{Runner: &pagingRunner{total: 10}})
-	if _, err := svc.logPage(context.Background(), 50, 0, LogScope{}, 0); err != nil {
+	if _, err := svc.logPage(context.Background(), 50, 0, LogScope{}, 0, true); err != nil {
 		t.Fatalf("logPage: %v", err)
 	}
 }

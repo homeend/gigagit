@@ -27,6 +27,7 @@ type Snapshot struct {
 	Tags            []model.Tag
 	CurrentWorktree string // git toplevel; "" if TopLevel failed
 	GitCommonDir    string // "" if it failed
+	HasCommitGraph  bool   // a commit-graph cache exists → --date-order is cheap
 	HeadTimes       map[string]int64
 	Conflict        ConflictState // source of any in-progress conflict (zero if none)
 }
@@ -146,6 +147,7 @@ func (s *Service) loadSnapshot(ctx context.Context) (Snapshot, error) {
 		if gcd, err := s.repo.GitCommonDir(ctx); err == nil {
 			mu.Lock()
 			snap.GitCommonDir = gcd
+			snap.HasCommitGraph = commitGraphExists(gcd)
 			mu.Unlock()
 		}
 	})
@@ -167,10 +169,10 @@ func (s *Service) loadSnapshot(ctx context.Context) (Snapshot, error) {
 // a just-cancelled load (A) would coalesce onto A and inherit A's context.Canceled
 // — blanking the panel. A distinct gen per load makes that impossible while still
 // coalescing genuine concurrent reads of the same page within one generation.
-func (s *Service) logPage(ctx context.Context, limit, skip int, scope LogScope, gen int) ([]model.Commit, error) {
-	key := "commits:" + scopeKey(scope) + ":" + strconv.Itoa(gen) + ":" + strconv.Itoa(limit) + ":" + strconv.Itoa(skip)
+func (s *Service) logPage(ctx context.Context, limit, skip int, scope LogScope, gen int, dateOrder bool) ([]model.Commit, error) {
+	key := "commits:" + scopeKey(scope) + ":" + strconv.Itoa(gen) + ":" + strconv.Itoa(limit) + ":" + strconv.Itoa(skip) + ":" + strconv.FormatBool(dateOrder)
 	return query(ctx, s, key, func(ctx context.Context) ([]model.Commit, error) {
-		return s.repo.LogScoped(ctx, limit, skip, scope)
+		return s.repo.LogScoped(ctx, limit, skip, scope, dateOrder)
 	})
 }
 

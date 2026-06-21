@@ -115,11 +115,22 @@ When the active strategy is `graphPager` and the commit-graph is missing
 Failure/killed write is **non-fatal** (clear notice, keep plain order; git
 writes atomically so a killed write leaves no corruption).
 
-### The switch
-Config `[ui] commit_pager = "graph" | "date-order"` (string), default `"graph"`.
-`svc.CommitFeed()` reads it and constructs the matching pager. Flipping it and
-relaunching the same repo is the whole A/B. (`date-order` = exactly today's
-behavior = v1; `graph` = v2.)
+### The switch — env var `GG_COMMIT_PAGER`
+`svc.CommitFeed()` reads `GG_COMMIT_PAGER` (`"graph"` default | `"date-order"`)
+and constructs the matching pager. `GG_COMMIT_PAGER=date-order gg` vs `gg` is the
+whole A/B — flip per launch, no file editing.
+
+Why an env var, not TOML config: the Service does not hold config, and the feed
+is constructed (`svc.CommitFeed()`) *before* config is loaded (config arrives
+later via `dataLoadedMsg`). Threading config to the pre-config feed is
+disproportionate for what is a measurement toggle. The TUI learns the active
+strategy from `feed.PagerName()` (so it triggers the background write only under
+`graph`). A persistent `[ui] commit_pager` can be added later once a winner is
+chosen — out of scope for this A/B.
+
+`graph` pager ⇒ auto-write the commit-graph (the improvement, v2); `date-order`
+pager ⇒ legacy, no commit-graph management, always `--date-order` (the baseline,
+v1 — slow on a no-graph repo, by design, so the A/B is honest).
 
 ### Lay-renderer gate (verify before relying on plain order)
 Plain order is a real mode in v2 (every first launch, and whenever the graph is
@@ -137,8 +148,9 @@ single-branch scope.
 - **Stage 2:** verb (`WriteCommitGraph` writes the file; `LogScoped` toggle);
   `HasCommitGraph` false→true; `graphPager` order captured once per generation
   (FakeRunner: common-dir → a temp dir; create the graph file mid-generation and
-  assert `LoadMore` still omits `--date-order`); `Lay` non-topo gate; config
-  default + override; TUI trigger/notice/conditional-reload/non-fatal-failure;
+  assert `LoadMore` still omits `--date-order`); `Lay` non-topo gate;
+  `CommitFeed()` picks the pager from `GG_COMMIT_PAGER` (default graph, override
+  date-order); TUI trigger/notice/conditional-reload/non-fatal-failure;
   `./test.sh race`.
 
 ## Known limitations (note, don't handle)

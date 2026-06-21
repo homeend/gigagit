@@ -85,6 +85,19 @@ type refsRefreshedMsg struct {
 	err       error
 }
 
+// commitGraphWrittenMsg reports the one-time background commit-graph write.
+// err != nil is non-fatal (the feed keeps using plain order).
+type commitGraphWrittenMsg struct{ err error }
+
+// writeCommitGraphCmd runs `git commit-graph write --reachable` off the UI
+// thread so later --date-order walks are fast.
+func (m Model) writeCommitGraphCmd() tea.Cmd {
+	svc := m.svc
+	return func() tea.Msg {
+		return commitGraphWrittenMsg{err: svc.WriteCommitGraph(context.Background())}
+	}
+}
+
 // reloadRefsCmd re-reads only the local branches and worktrees off the UI
 // thread (gated + coalesced via the domain layer), yielding a refsRefreshedMsg.
 func (m Model) reloadRefsCmd(summary string) tea.Cmd {

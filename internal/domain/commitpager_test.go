@@ -49,9 +49,10 @@ func TestFeedLoadsViaPager(t *testing.T) {
 	}
 }
 
-// TestFeedStillUsesDateOrder: the feed's page fetch still passes --date-order
-// (the default dateOrderPager), proving no behavior change.
+// TestFeedStillUsesDateOrder: under the date-order pager the feed's page fetch
+// still passes --date-order.
 func TestFeedStillUsesDateOrder(t *testing.T) {
+	t.Setenv("GG_COMMIT_PAGER", "date-order")
 	f := gitexec.NewFakeRunner()
 	var argv []string
 	f.SetHandler("git log", func(ctx context.Context, a []string) (gitexec.Result, error) {
@@ -62,6 +63,49 @@ func TestFeedStillUsesDateOrder(t *testing.T) {
 	feed.LoadInitial(context.Background())
 	if !slices.Contains(argv, "--date-order") {
 		t.Errorf("feed git log argv missing --date-order: %v", argv)
+	}
+}
+
+func TestGraphPagerOrderCapturedOncePerGeneration(t *testing.T) {
+	f := gitexec.NewFakeRunner()
+	common := t.TempDir()
+	infoDir := filepath.Join(common, "objects", "info")
+	os.MkdirAll(infoDir, 0o755)
+	f.SetResponse("git rev-parse (common-dir)", gitexec.Result{Stdout: common + "\n"})
+	var argvs [][]string
+	f.SetHandler("git log", func(ctx context.Context, a []string) (gitexec.Result, error) {
+		argvs = append(argvs, a)
+		return gitexec.Result{Stdout: ""}, nil
+	})
+	svc := New(&git.Repo{Runner: f})
+	p := &graphPager{svc: svc}
+
+	// gen 1, no graph yet → plain order.
+	p.Page(context.Background(), 10, 0, 1, LogScope{})
+	// graph appears mid-generation:
+	os.WriteFile(filepath.Join(infoDir, "commit-graph"), []byte("x"), 0o644)
+	// same gen → MUST stay plain (order captured once per generation).
+	p.Page(context.Background(), 10, 10, 1, LogScope{})
+
+	for i, a := range argvs {
+		if slices.Contains(a, "--date-order") {
+			t.Errorf("page %d used --date-order; gen-1 order must stay plain: %v", i, a)
+		}
+	}
+	if p.Name() != "graph" {
+		t.Errorf("Name() = %q, want graph", p.Name())
+	}
+}
+
+func TestCommitFeedPicksPagerFromEnv(t *testing.T) {
+	svc := New(&git.Repo{Runner: gitexec.NewFakeRunner()})
+	t.Setenv("GG_COMMIT_PAGER", "date-order")
+	if got := svc.CommitFeed().PagerName(); got != "date-order" {
+		t.Errorf("env date-order → %q", got)
+	}
+	t.Setenv("GG_COMMIT_PAGER", "")
+	if got := svc.CommitFeed().PagerName(); got != "graph" {
+		t.Errorf("default → %q, want graph", got)
 	}
 }
 

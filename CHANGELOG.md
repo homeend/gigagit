@@ -9,6 +9,15 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Faster startup on huge repos (auto commit-graph).** On opening a repo with no
+  commit-graph, gg now writes one once in the background (the Commits title shows
+  *(indexing…)*) and lists commits in fast plain order meanwhile; once the graph
+  exists it uses `--date-order`. On a 1.4M-commit repo this cuts first paint from
+  ~18 s to ~2 s — the commit walk no longer dominates (the remaining floor is
+  `git status` on the worktree, a separate cost). The loading strategy is a
+  swappable seam:
+  set `GG_COMMIT_PAGER=date-order` to force the legacy always-`--date-order`
+  loader (the pre-change behavior).
 - **Commits panel shows a loading indicator (⏳) while the feed is loading.** On
   a large repo a scope change (Solo / Show all / selection) or paging in older
   commits can take a few seconds; the Commits title now shows ⏳ next to the

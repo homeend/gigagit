@@ -165,6 +165,15 @@ example, `footer_actions = ["pull", "commit", "filter"]` shrinks the footer to
 those (plus `[.] actions`), leaving everything else one keypress away in the `.`
 menu.
 
+### Environment
+
+`GG_COMMIT_PAGER` selects the commit-feed loading strategy:
+`graph` (default) writes a commit-graph once in the background on first open
+(showing *(indexing…)* in the Commits title) and lists commits in fast plain
+order until it exists, then switches to `--date-order` — instant startup on huge
+repos. `date-order` is the legacy loader that always uses `git log --date-order`
+(slow on a repo without a commit-graph).
+
 ## Development
 
 ```bash

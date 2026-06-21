@@ -476,6 +476,9 @@ func (m Model) panelLabel(p panel, base string) string {
 		if m.commitsLoading {
 			base += " " + commitsLoadingGlyph
 		}
+		if m.commitGraphIndexing {
+			base += " (indexing…)"
+		}
 	}
 	if s := m.sortModes[p].String(); s != "" {
 		base += " ·" + s
