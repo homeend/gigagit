@@ -9,6 +9,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Fixed
+- **Switching to a branch whose name collides with a tag no longer fails.**
+  After creating a worktree (and branch) at a tag, the branch and tag share a
+  name, and git's `%(refname:short)` disambiguated the branch to
+  `heads/<name>` — which is not a valid `git switch` argument and never matched
+  the worktree, so pressing `s` skipped the "go to worktree?" prompt and died
+  with `fatal: a branch is expected, got 'refs/heads/<name>'`. The branch,
+  tag, and remote listings now use `%(refname:lstrip=2)`, which yields the bare
+  unambiguous name regardless of collisions, restoring both the switch and the
+  worktree prompt. A real-git test creates a branch and tag of the same name
+  and asserts both listings report the bare name.
 - **`gg remote` and `gg checkout` are recognized by the real binary again.**
   Both subcommands had working handlers and were dispatched correctly when
   invoked in-process, but were missing from the CLI command registry that

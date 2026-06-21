@@ -72,6 +72,64 @@ func TestRepoBranches(t *testing.T) {
 	}
 }
 
+// TestBranchTagNameCollisionStaysUnambiguous reproduces the worktree-from-tag
+// bug: when a branch and a tag share a name (e.g. a tag v8.0.0-rc.3 and a branch
+// created at it), git's %(refname:short) disambiguates the names to
+// "heads/v8.0.0-rc.3" / "tags/v8.0.0-rc.3" — forms that break `git switch` and
+// worktree matching. Branches() and Tags() must report the bare branch/tag name.
+func TestBranchTagNameCollisionStaysUnambiguous(t *testing.T) {
+	dir, runner := newTestRepo(t)
+	git := func(args ...string) {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(),
+			"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t",
+			"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	const name = "v8.0.0-rc.3"
+	git("tag", name)            // refs/tags/v8.0.0-rc.3
+	git("branch", name, "HEAD") // refs/heads/v8.0.0-rc.3 — now ambiguous with the tag
+
+	repo := &Repo{Runner: runner}
+
+	bs, err := repo.Branches(context.Background())
+	if err != nil {
+		t.Fatalf("Branches: %v", err)
+	}
+	var found bool
+	for _, b := range bs {
+		if b.Name == "heads/"+name {
+			t.Fatalf("branch name disambiguated to %q, want bare %q", b.Name, name)
+		}
+		if b.Name == name {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("bare branch %q not found in %+v", name, bs)
+	}
+
+	ts, err := repo.Tags(context.Background())
+	if err != nil {
+		t.Fatalf("Tags: %v", err)
+	}
+	found = false
+	for _, tg := range ts {
+		if tg.Name == "tags/"+name {
+			t.Fatalf("tag name disambiguated to %q, want bare %q", tg.Name, name)
+		}
+		if tg.Name == name {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("bare tag %q not found in %+v", name, ts)
+	}
+}
+
 func TestBranchesIncludeCommitterDate(t *testing.T) {
 	_, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
