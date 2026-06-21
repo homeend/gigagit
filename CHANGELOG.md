@@ -9,6 +9,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Highlight search in the Commits panel (`@`).** A second search that
+  complements `/`: instead of filtering the feed, `@` keeps every commit visible,
+  dims non-matching rows, and leaves the commit graph drawn. `ctrl+↑/↓` jump to
+  the previous / next match (wrapping); `enter` keeps the highlight, `esc` clears
+  it. `@` and `/` are mutually exclusive.
 - **Commits panel shows a loading indicator (⏳) while the feed is loading.** On
   a large repo a scope change (Solo / Show all / selection) or paging in older
   commits can take a few seconds; the Commits title now shows ⏳ next to the

@@ -114,6 +114,9 @@ func (m Model) footerLine() string {
 	if m.filterTyping {
 		return "filter: type to search  [↑↓] move  [enter] keep  [esc] cancel"
 	}
+	if m.highlightTyping {
+		return "highlight: type to search  [↑↓] move  [ctrl+↑/↓] prev/next match  [enter] keep  [esc] clear"
+	}
 	// The files view owns the keyboard while open, so the registry footer would
 	// lie; show the view's own keys instead. The commit-list side mirrors the
 	// Commits panel (. menu + graph keys); the tree side is file-scoped.

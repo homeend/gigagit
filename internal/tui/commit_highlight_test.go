@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/gigagit/gg/internal/model"
@@ -174,5 +175,14 @@ func TestHighlightCtrlNavMovesBetweenMatches(t *testing.T) {
 	m = u.(Model)
 	if m.sel[panelCommits] != last {
 		t.Fatalf("ctrl+up wrap => %d, want %d", m.sel[panelCommits], last)
+	}
+}
+
+func TestHighlightFooterWhileTyping(t *testing.T) {
+	m := commitsModel(t, 3)
+	u, _ := m.Update(keyMsg("@"))
+	m = u.(Model)
+	if got := m.footerLine(); !strings.Contains(got, "highlight") {
+		t.Fatalf("footer while @-typing = %q, want it to mention highlight", got)
 	}
 }
