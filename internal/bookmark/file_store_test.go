@@ -96,3 +96,14 @@ func TestAddressIDCommitBookmark(t *testing.T) {
 		t.Fatalf("commit bookmark did not round-trip: %+v err %v", got, err)
 	}
 }
+
+func TestAddressIDCommitIgnoresBranch(t *testing.T) {
+	// A commit bookmark's identity is the commit alone; the branch decoration is
+	// volatile display sugar, so bookmarking the same commit when it is a branch
+	// tip vs not must yield ONE row, not two.
+	withBranch := model.Bookmark{State: model.StateCommitted, Commit: "c0ffee", Branch: "feat", Path: ""}
+	noBranch := model.Bookmark{State: model.StateCommitted, Commit: "c0ffee", Branch: "", Path: ""}
+	if AddressID(withBranch) != AddressID(noBranch) {
+		t.Fatal("commit bookmark id must not depend on branch decoration")
+	}
+}

@@ -1,10 +1,25 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/gigagit/gg/internal/model"
 )
+
+func TestCommitBookmarkRendersWithoutPath(t *testing.T) {
+	m := loadedModelLinearCommits(t, 2)
+	m.width, m.height = 100, 30
+	cb := model.Bookmark{State: model.StateCommitted, Commit: "a1b2c3d4e5", Path: "", ID: "cb1"}
+	m = m.pushLayer(newBookmarkPopup([]model.Bookmark{cb}))
+	out := m.renderBookmarkPopupBox(m.bookmarkSwitcher())
+	if !strings.Contains(out, "commit / a1b2c3d") {
+		t.Fatalf("commit bookmark should render its short sha with no path:\n%s", out)
+	}
+	if strings.Contains(out, "a1b2c3d /") {
+		t.Fatalf("commit bookmark must not render a trailing path separator:\n%s", out)
+	}
+}
 
 func TestCommitBookmarkRowPresentOnCommits(t *testing.T) {
 	m := loadedModelLinearCommits(t, 2)
