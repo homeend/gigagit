@@ -47,6 +47,14 @@ func availableActions(m Model) []actionRow {
 		if r, ok := m.compareAgainstWorkingDirRow(); ok {
 			rows = append(rows, r)
 		}
+		// The commit-list side of a commit files view IS the Commits panel
+		// selection (m.focus stays panelCommits), so offer the full commit/graph
+		// actions there for parity with the panel. These all carry run handlers,
+		// so they execute even though the files view owns the keyboard. The tree
+		// side and a stash file tree (no commit id) stay copy-only.
+		if m.filesView != nil && !m.filesTreeFocused && m.filesHash != "" && m.stashView == nil {
+			rows = m.appendCommitContextRows(rows)
+		}
 		return rows
 	}
 	var row, window []actionRow
@@ -93,6 +101,16 @@ func availableActions(m Model) []actionRow {
 	if r, ok := m.renameBranchRow(); ok {
 		out = append(out, r)
 	}
+	return m.appendCommitContextRows(out)
+}
+
+// appendCommitContextRows appends the commit/tag/graph context actions (reword
+// through the graph window controls) to out. Every row it appends carries a
+// direct run handler — none is key-replayed — so this set is safe to offer even
+// while a window owns the keyboard (e.g. the commit-list side of the files
+// view), where replayed panel keys would be swallowed. Each helper self-gates on
+// focus, so non-applicable rows simply drop out.
+func (m Model) appendCommitContextRows(out []actionRow) []actionRow {
 	if r, ok := m.rewordRow(); ok {
 		out = append(out, r)
 	}
