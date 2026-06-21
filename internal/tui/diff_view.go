@@ -438,6 +438,52 @@ func (m Model) loadCommitDiffCmd(hash string, line contentLine) tea.Cmd {
 	}
 }
 
+// compareDiffKey is the per-file diff cache key for a comparison. It returns ""
+// (cache bypass) whenever either side is a live endpoint (working tree/index),
+// whose bytes change on disk; commit↔commit is immutable and stays cached.
+func compareDiffKey(left, right model.Endpoint, path string) string {
+	if left.IsLive() || right.IsLive() {
+		return ""
+	}
+	return left.CacheTag() + ".." + right.CacheTag() + ":" + path
+}
+
+// loadCompareDiffCmd computes one file's diff between two endpoints. Each side
+// resolves through ResolveBytes (commit / staged / unstaged); an "A" status has
+// no old side, a "D" status no new side. The diff view is already constructed
+// by the caller.
+func (m Model) loadCompareDiffCmd(left, right model.Endpoint, line contentLine) tea.Cmd {
+	svc := m.svc
+	differ := m.diffDiffer()
+	body := m.diffBodyRows()
+	tag := "cmp:" + left.CacheTag() + ":" + right.CacheTag() + ":" + line.path
+	v := m.diffView
+	key := compareDiffKey(left, right, line.path)
+
+	oldP := line.path
+	if line.oldPath != "" {
+		oldP = line.oldPath
+	}
+	var oldSrc, newSrc domain.ByteSource
+	if line.status != "A" {
+		ref := left.FileRef(oldP)
+		oldSrc = func(ctx context.Context) ([]byte, error) { return svc.ResolveBytes(ctx, ref) }
+	}
+	if line.status != "D" {
+		ref := right.FileRef(line.path)
+		newSrc = func(ctx context.Context) ([]byte, error) { return svc.ResolveBytes(ctx, ref) }
+	}
+	return func() tea.Msg {
+		out, err := differ.Diff(context.Background(), domain.Request{Key: key, Old: oldSrc, New: newSrc})
+		if err != nil {
+			v.err = err
+			return diffMsg{tag: tag, view: v}
+		}
+		applyDiff(v, out, body)
+		return diffMsg{tag: tag, view: v}
+	}
+}
+
 // updateDiffViewKey routes keys while the diff view is open: scrolling,
 // change-block jumps, close/quit. Everything else is swallowed — no action
 // key can reach the panels behind a full-screen view.

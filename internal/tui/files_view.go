@@ -274,6 +274,11 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			partial: m.diffPartial,
 			long:    m.diffLong,
 		}
+		if m.filesCompare {
+			m.diffView.context = m.filesTitle
+			m.diffTag = "cmp:" + m.filesLeft.CacheTag() + ":" + m.filesRight.CacheTag() + ":" + l.path
+			return m, m.loadCompareDiffCmd(m.filesLeft, m.filesRight, l)
+		}
 		m.diffTag = "commit:" + m.filesHash + ":" + l.path
 		return m, m.loadCommitDiffCmd(m.filesHash, l)
 	case "left":
