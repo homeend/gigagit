@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v22 -->
+<!-- gg:using-gg:v23 -->
 
 # Using gg (gigagit)
 
@@ -43,6 +43,13 @@ guards against removing the worktree you are standing in.
   checks out a tag — detached, or onto a new branch created at the tag when
   `--branch` is given; `push <name> [<remote>]` pushes a tag to a remote (the
   remote defaults to the only configured one; specify it when there are several).
+- `gg compare <left> [<right>]` — print the files that changed between two
+  endpoints, one `<status>\t<path>` line each (renames: `old -> new`). Each
+  endpoint is a commit-ish (`HEAD`, a branch, `abc123`, `HEAD~2`), `@staged`
+  (the index), or `@worktree` (the working tree); `<right>` defaults to
+  `@worktree`. E.g. `gg compare HEAD` (working tree vs HEAD), `gg compare
+  HEAD~3 HEAD` (what changed across the last 3 commits), `gg compare main
+  @staged` (the index vs `main`).
 - `gg branch create <name> [<start-point>]` — create a branch (no switch);
   start point defaults to HEAD.
 - `gg branch rename <old> <new>` — rename a local branch (`git branch -m`);
