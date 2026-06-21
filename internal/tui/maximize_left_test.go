@@ -87,6 +87,22 @@ func TestLayoutNormalSplitWhenNotMaximized(t *testing.T) {
 	}
 }
 
+// TestLayoutMaximizePinnedNotVisibleFallsBack guards the invariant: if the
+// pinned panel somehow isn't in the visible left set (a future writer switches
+// the active tab without re-pinning), layout must fall back to the normal split
+// rather than delete every left box and blank the column.
+func TestLayoutMaximizePinnedNotVisibleFallsBack(t *testing.T) {
+	m := maxModel()
+	m.leftMaxed = true
+	m.leftMax = panelRemotes // NOT the active top tab (panelBranches)
+	g := m.layout()
+	for _, p := range []panel{panelBranches, panelFiles, panelStaged} {
+		if g.boxH[p] <= 0 {
+			t.Errorf("fallback: %v should be visible in the normal split, boxH=%d", p, g.boxH[p])
+		}
+	}
+}
+
 func TestFocusOrderCollapsesWhenMaximized(t *testing.T) {
 	m := maxModel()
 	m.leftMaxed = true
