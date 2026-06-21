@@ -60,6 +60,7 @@ func helpContent() []contentLine {
 		h("Tags panel"),
 		r("", "a tab in the middle (Files) box — ctrl+←/→ switches Files ⇄ Tags; ● annotated, ○ lightweight"),
 		r("enter", "jump the Commits cursor to the tag's target commit"),
+		r(".", "Check out tag (.-menu): detached HEAD, or a new branch at the tag"),
 		r(".", "Delete tag (.-menu): delete the selected tag after a confirm"),
 		h("Shelf panel"),
 		r("", "frozen, non-git per-file copies (the default bucket); add via the . menu anywhere a file is focused"),
