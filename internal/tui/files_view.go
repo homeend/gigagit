@@ -178,7 +178,31 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		p.mode = p.mode.next()
 		p.hscroll = 0
 		return m, nil
+	// The commit-list side IS the Commits panel selection (m.focus stays
+	// panelCommits), so the graph window keys mirror the base panel exactly
+	// (model.go). Only on the file-tree side do shift+arrows scroll the tree.
+	case ">":
+		if !m.filesTreeFocused && m.graphActive() {
+			m.commitGraphCols = m.clampCols(m.graphCols() + m.graphStep())
+			m.commitGraphScroll = m.clampScroll(m.commitGraphScroll)
+		}
+		return m, nil
+	case "<":
+		if !m.filesTreeFocused && m.graphActive() {
+			m.commitGraphCols = m.clampCols(m.graphCols() - m.graphStep())
+			m.commitGraphScroll = m.clampScroll(m.commitGraphScroll)
+		}
+		return m, nil
+	case "=":
+		if !m.filesTreeFocused && m.graphActive() {
+			m = m.snapGraphToSelected()
+		}
+		return m, nil
 	case "shift+left":
+		if !m.filesTreeFocused && m.graphActive() {
+			m.commitGraphScroll = m.clampScroll(m.commitGraphScroll - m.graphPanStep())
+			return m, nil
+		}
 		if p.mode == modeScroll && p.hscroll > 0 {
 			if p.hscroll -= m.hscrollStep(); p.hscroll < 0 {
 				p.hscroll = 0
@@ -186,6 +210,10 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "shift+right":
+		if !m.filesTreeFocused && m.graphActive() {
+			m.commitGraphScroll = m.clampScroll(m.commitGraphScroll + m.graphPanStep())
+			return m, nil
+		}
 		if p.mode == modeScroll {
 			p.hscroll += m.hscrollStep()
 		}

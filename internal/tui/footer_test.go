@@ -332,11 +332,24 @@ func TestFooterHidesDiffWhenNarrow(t *testing.T) {
 func TestFooterFilesViewOverrideAdvertisesTreeActions(t *testing.T) {
 	m := diffModel()
 	m.filesView = &contentPopup{lines: []contentLine{{text: "x", path: "x"}}}
+	m.filesTreeFocused = true // tree side: file-scoped actions
 	f := m.footerLine()
 	// All three tree-row nav actions must be advertised, including blame (b).
 	for _, want := range []string{"[enter] diff", "[h] hist", "[b] blame"} {
 		if !strings.Contains(f, want) {
-			t.Fatalf("files-view footer must advertise %q: %q", want, f)
+			t.Fatalf("files-view tree-side footer must advertise %q: %q", want, f)
+		}
+	}
+}
+
+func TestFooterFilesViewCommitSideAdvertisesMenuAndGraph(t *testing.T) {
+	m := diffModel()
+	m.filesView = &contentPopup{lines: []contentLine{{text: "x", path: "x"}}}
+	m.filesTreeFocused = false // commit-list side: parity with the Commits panel
+	f := m.footerLine()
+	for _, want := range []string{"[.] actions", "[<>=] graph"} {
+		if !strings.Contains(f, want) {
+			t.Fatalf("files-view commit-side footer must advertise %q: %q", want, f)
 		}
 	}
 }

@@ -114,10 +114,14 @@ func (m Model) footerLine() string {
 	if m.filterTyping {
 		return "filter: type to search  [↑↓] move  [enter] keep  [esc] cancel"
 	}
-	// The files view owns the keyboard while open (action keys are swallowed),
-	// so the registry footer would lie; show the view's own keys instead.
+	// The files view owns the keyboard while open, so the registry footer would
+	// lie; show the view's own keys instead. The commit-list side mirrors the
+	// Commits panel (. menu + graph keys); the tree side is file-scoped.
 	if m.filesView != nil {
-		return "files: [←/→ tab] focus  [↑/↓] move  [ctrl+↑/↓] tree  [enter] diff  [/] search  [h] hist  [b] blame  [z] view  [esc/l] close"
+		if m.filesTreeFocused {
+			return "tree: [←/→ tab] focus  [↑/↓] move  [enter] diff  [/] search  [h] hist  [b] blame  [.] copy  [z] view  [esc/l] close"
+		}
+		return "commits: [←/→ tab] focus  [↑/↓] move  [<>=] graph  [/] search  [.] actions  [ctrl+↑/↓] tree  [esc/l] close"
 	}
 	// The stash list owns the keyboard while it is the focused right column
 	// (no file tree yet). When focus has moved to a left panel, fall through to

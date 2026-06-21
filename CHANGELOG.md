@@ -23,6 +23,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   `loading` flag when the result landed (the plain commit-diff path only worked
   because it builds a fresh view). The diff-result handler now clears `loading`
   for every path — a result message means the load completed.
+- **The commit files view (`l`) no longer hides the commit's context menu and
+  graph keys.** Opening a commit's files with `l` left the commit still
+  selected, but the `.` menu collapsed to copy-only and the commit-graph window
+  keys (`<` / `>` / `=` / `shift+←/→`) stopped working. While focused on the
+  commit-list side, the `.` menu now offers the full Commits-panel actions
+  (cherry-pick, revert, reset, create branch/worktree/tag, compare, scope
+  toggles, …) and the graph keys behave exactly as in the Commits panel. The
+  file-tree side stays file-scoped (copy path/name, history, blame).
 - **Creating a worktree now refreshes the Branches and Worktrees panels
   immediately.** After creating a worktree (and branch) the panels still showed
   the old lists until a manual reload (`r`), which on a huge repo took ages

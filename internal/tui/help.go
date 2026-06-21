@@ -156,6 +156,8 @@ func helpContent() []contentLine {
 		r("enter", "diff of the selected file in this commit (tree side)"),
 		r("h", "history of the selected file (tree side)"),
 		r("b", "blame of the selected file (tree side)"),
+		r(".", "commits side: the full Commits-panel menu (cherry-pick / revert / reset / create branch|worktree|tag / compare / …); tree side: copy path/name"),
+		r("< > = shift+←/→", "commits side: narrow / widen / snap / pan the commit graph window (same as the Commits panel)"),
 		r("esc", "clear the search, then close"),
 		r("l", "close"),
 		h("Stash window (S)"),
