@@ -190,6 +190,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil // view closed, or a stale result
 		}
 		m.diffView = msg.view
+		if m.diffView != nil {
+			m.diffView.loading = false // a diffMsg means the load completed (content or err); never leave the body on "(loading…)"
+		}
 		return m, nil
 	case commitFilesMsg:
 		m.filesReadInflight = false // the outstanding per-commit read has landed; nav may issue again

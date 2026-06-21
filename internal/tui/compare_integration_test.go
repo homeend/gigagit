@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/gigagit/gg/internal/domain"
 	"github.com/gigagit/gg/internal/model"
 )
@@ -113,6 +115,69 @@ func TestCompareCommitVsWorktreeRealDiff(t *testing.T) {
 	v := openCompareDiffOnFile(t, dir, domain.New(repo), head, "README.md")
 	if len(v.full) == 0 {
 		t.Fatal("compare diff has no rows — endpoint bytes were not resolved")
+	}
+}
+
+// TestCompareDiffRendersContentNotLoading drives the FULL compare path through
+// Update (file list → enter → the diffMsg routed through the handler) and
+// renders the screen, proving the body shows real diff content rather than
+// being stuck on "(loading…)". openCompareDiffOnFile reads the diffMsg cmd
+// directly and so cannot catch a handler that fails to clear loading; this
+// renders the assembled view, which is where the original bug was visible.
+func TestCompareDiffRendersContentNotLoading(t *testing.T) {
+	dir, repo := newRepoDir(t)
+	head := headHashTUI(t, dir)
+
+	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("hi\nNEW LINE\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	m := New(domain.New(repo))
+	mm, _ := m.Update(tea.WindowSizeMsg{Width: 160, Height: 40})
+	m = mm.(Model)
+	m.loading = false // past the full-screen startup snapshot overlay
+
+	m, lcmd := m.openCompareFiles(
+		model.Endpoint{Kind: model.EndpointCommit, Hash: head},
+		model.Endpoint{Kind: model.EndpointWorkTree})
+	if lcmd == nil {
+		t.Fatal("openCompareFiles returned no load command")
+	}
+	// Load the changed-file list.
+	u, _ := m.Update(lcmd())
+	m = u.(Model)
+
+	sel := -1
+	for i, l := range m.filesView.lines {
+		if l.path == "README.md" {
+			sel = i
+		}
+	}
+	if sel < 0 {
+		t.Fatalf("README.md not in compared list: %+v", m.filesView.lines)
+	}
+	m.filesView.sel = sel
+	m.filesTreeFocused = true
+
+	// enter opens the loading view and returns the load command.
+	u, dcmd := m.Update(keyMsg("enter"))
+	m = u.(Model)
+	if dcmd == nil {
+		t.Fatal("enter returned no diff load command")
+	}
+	// Route the completed diffMsg through the handler, as the runtime would.
+	u, _ = m.Update(dcmd())
+	m = u.(Model)
+
+	if m.diffView.loading {
+		t.Error("diffView still loading after the diffMsg landed")
+	}
+	out := ansi.Strip(m.View())
+	if strings.Contains(out, "(loading…)") {
+		t.Errorf("rendered compare diff still shows \"(loading…)\":\n%s", out)
+	}
+	if !strings.Contains(out, "NEW LINE") {
+		t.Errorf("rendered compare diff missing the changed content:\n%s", out)
 	}
 }
 
