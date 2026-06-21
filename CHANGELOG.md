@@ -9,6 +9,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Rename or delete a branch from its tip commit.** When the selected
+  Commits-panel commit is the tip of one or more local branches, the `.` action
+  menu now offers **Rename branch ‹name›** (opens the rename dialog) and
+  **Delete branch ‹name›** (with the usual confirm + force-delete prompt) for
+  each — bringing branch rename/delete to the commit graph, not just the
+  Branches panel. Delete is hidden for any branch that is checked out (the
+  current branch or one in another worktree), since git refuses those.
 - **Edit a file in your editor from the Files panel.** The `.` action menu on a
   Files-panel file now offers **Edit in editor** — it suspends the TUI, opens
   the file in `$VISUAL`/`$EDITOR` (falling back to `vi` on unix / `notepad` on
