@@ -141,6 +141,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   count while that walk is in flight, so the panel no longer looks frozen.
 
 ### Fixed
+- **Opening a reflog entry's files now lands on the file tree.** `enter`/`l` on
+  a Reflog row opened the files view on the commit-list side (the Commits feed,
+  not the reflog), so `↑`/`↓` flipped unrelated feed commits instead of walking
+  the entry's files, and the row-reveal tooltip was drawn over the tree. It now
+  opens tree-focused with the commit-list side correctly bound to the Commits
+  panel.
 - **Push/pull no longer freezes when a remote needs credentials.** When a
   remote required authentication and no credential helper was configured, git
   fell back to an interactive terminal prompt (`Username for

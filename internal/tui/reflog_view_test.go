@@ -149,6 +149,24 @@ func TestReflogEnterOpensCommitFilesView(t *testing.T) {
 	}
 }
 
+func TestReflogFilesViewOpensTreeFocusedOnCommits(t *testing.T) {
+	// The reflog files-view's right side is the Commits feed (not the reflog you
+	// came from), so it opens TREE-focused (up/down walks the entry's files, not
+	// the feed) and focus is panelCommits (the commit-list side / tooltip anchor),
+	// never panelReflog — which would mis-place the reveal tooltip over the tree.
+	m := reflogTestModel()
+	m.focus = panelReflog
+	m.sel[panelReflog] = 1
+	nm, _ := m.Update(keyMsg("enter"))
+	m = nm.(Model)
+	if !m.filesTreeFocused {
+		t.Fatal("reflog files-view must open tree-focused so up/down walks the files")
+	}
+	if m.focus != panelCommits {
+		t.Fatalf("focus = %v, want panelCommits (the files-view commit-list side)", m.focus)
+	}
+}
+
 func TestReflogMenuCopyAndBookmark(t *testing.T) {
 	m := reflogTestModel()
 	m.focus = panelReflog
