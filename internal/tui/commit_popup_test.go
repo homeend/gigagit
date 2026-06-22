@@ -7,13 +7,13 @@ import (
 )
 
 func TestCommitPopupMessageAssembly(t *testing.T) {
-	if got := (&commitPopup{title: "subj"}).message(); got != "subj" {
+	if got := (&commitPopup{title: newTextField("subj")}).message(); got != "subj" {
 		t.Fatalf("title-only = %q", got)
 	}
-	if got := (&commitPopup{title: "subj", desc: "body line"}).message(); got != "subj\n\nbody line" {
+	if got := (&commitPopup{title: newTextField("subj"), desc: newTextField("body line")}).message(); got != "subj\n\nbody line" {
 		t.Fatalf("title+body = %q", got)
 	}
-	if got := (&commitPopup{title: "  spaced  "}).message(); got != "spaced" {
+	if got := (&commitPopup{title: newTextField("  spaced  ")}).message(); got != "spaced" {
 		t.Fatalf("title should be trimmed: %q", got)
 	}
 }
@@ -33,8 +33,8 @@ func TestCommitPopupTypingAndFieldSwitch(t *testing.T) {
 	m = m.pushLayer(&commitPopup{})
 	tm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("hi")})
 	m = tm.(Model)
-	if layerOf[*commitPopup](m).title != "hi" {
-		t.Fatalf("title = %q", layerOf[*commitPopup](m).title)
+	if layerOf[*commitPopup](m).title.Value() != "hi" {
+		t.Fatalf("title = %q", layerOf[*commitPopup](m).title.Value())
 	}
 	tm, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // title → description
 	m = tm.(Model)
@@ -45,8 +45,8 @@ func TestCommitPopupTypingAndFieldSwitch(t *testing.T) {
 	m = tm.(Model)
 	tm, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // newline in description
 	m = tm.(Model)
-	if layerOf[*commitPopup](m).desc != "body\n" {
-		t.Fatalf("desc = %q, want \"body\\n\"", layerOf[*commitPopup](m).desc)
+	if layerOf[*commitPopup](m).desc.Value() != "body\n" {
+		t.Fatalf("desc = %q, want \"body\\n\"", layerOf[*commitPopup](m).desc.Value())
 	}
 	tm, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab}) // back to title
 	m = tm.(Model)

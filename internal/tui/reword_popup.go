@@ -36,7 +36,7 @@ func (m Model) openRewordPopup() (Model, bool) {
 		msg = full
 	}
 	t, d := splitMessage(msg)
-	m = m.pushLayer(&rewordPopup{commit: c.Hash, ggBin: ggBin, popup: commitPopup{title: t, desc: d}})
+	m = m.pushLayer(&rewordPopup{commit: c.Hash, ggBin: ggBin, popup: commitPopup{title: newTextField(t), desc: newTextField(d)}})
 	return m, true
 }
 
@@ -69,7 +69,7 @@ func (p *rewordPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case cancel:
 		m = m.popLayer()
 	case submit:
-		if strings.TrimSpace(p.popup.title) == "" {
+		if strings.TrimSpace(p.popup.title.Value()) == "" {
 			m.statusMsg = "title required"
 			return m, nil
 		}

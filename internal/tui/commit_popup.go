@@ -12,8 +12,8 @@ import (
 // multi-line body (description), and commits the staged index on ctrl+s.
 // amend=true rewrites the last commit instead of creating a new one.
 type commitPopup struct {
-	title string
-	desc  string
+	title textfield
+	desc  textfield
 	field int // 0 = title, 1 = description
 	amend bool
 }
@@ -21,11 +21,11 @@ type commitPopup struct {
 // message assembles the git commit message: subject alone, or subject + blank
 // line + body when the body is non-empty.
 func (p *commitPopup) message() string {
-	t := strings.TrimSpace(p.title)
-	if strings.TrimSpace(p.desc) == "" {
+	t := strings.TrimSpace(p.title.Value())
+	if strings.TrimSpace(p.desc.Value()) == "" {
 		return t
 	}
-	return t + "\n\n" + p.desc
+	return t + "\n\n" + p.desc.Value()
 }
 
 // splitMessage parses an existing commit message into (subject, body) for the
@@ -52,34 +52,29 @@ func (p *commitPopup) applyEditKey(msg tea.KeyMsg) (submit, cancel bool) {
 		return true, false
 	case tea.KeyTab, tea.KeyShiftTab:
 		p.field = (p.field + 1) % 2
+		return false, false
 	case tea.KeyEnter:
 		if p.field == 0 {
 			p.field = 1 // title → description
 		} else {
-			p.desc += "\n" // newline within the body
+			p.desc.InsertNewline() // newline within the body
 		}
-	case tea.KeyBackspace:
-		if p.field == 0 {
-			if r := []rune(p.title); len(r) > 0 {
-				p.title = string(r[:len(r)-1])
-			}
-		} else {
-			if r := []rune(p.desc); len(r) > 0 {
-				p.desc = string(r[:len(r)-1])
-			}
+		return false, false
+	case tea.KeyUp:
+		if p.field == 1 {
+			p.desc.Up()
 		}
-	case tea.KeySpace:
-		if p.field == 0 {
-			p.title += " "
-		} else {
-			p.desc += " "
+		return false, false
+	case tea.KeyDown:
+		if p.field == 1 {
+			p.desc.Down()
 		}
-	case tea.KeyRunes:
-		if p.field == 0 {
-			p.title += string(msg.Runes)
-		} else {
-			p.desc += string(msg.Runes)
-		}
+		return false, false
+	}
+	if p.field == 0 {
+		p.title.HandleEditKey(msg)
+	} else {
+		p.desc.HandleEditKey(msg)
 	}
 	return false, false
 }
@@ -95,7 +90,7 @@ func (p *commitPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case cancel:
 		m = m.popLayer()
 	case submit:
-		if strings.TrimSpace(p.title) == "" {
+		if strings.TrimSpace(p.title.Value()) == "" {
 			m.statusMsg = "title required"
 			return m, nil
 		}
@@ -137,8 +132,8 @@ func renderCommitFields(p *commitPopup) string {
 	} else {
 		descCur = "> "
 	}
-	b.WriteString(titleCur + "title:       " + p.title + "\n")
-	descLines := strings.Split(p.desc, "\n")
+	b.WriteString(titleCur + "title:       " + p.title.View(p.field == 0) + "\n")
+	descLines := strings.Split(p.desc.View(p.field == 1), "\n")
 	b.WriteString(descCur + "description: " + descLines[0] + "\n")
 	for _, l := range descLines[1:] {
 		b.WriteString("             " + l + "\n")

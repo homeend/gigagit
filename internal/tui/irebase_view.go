@@ -62,7 +62,7 @@ func (e *irebaseEditor) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		case cancel:
 			e.reword = nil
 		case submit:
-			if strings.TrimSpace(e.reword.title) == "" {
+			if strings.TrimSpace(e.reword.title.Value()) == "" {
 				m.statusMsg = "title required"
 				return m, nil
 			}
@@ -100,7 +100,7 @@ func (e *irebaseEditor) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		if e.rows[e.sel].action == rebaseplan.Reword && e.rows[e.sel].newMsg != "" {
 			t, d = splitMessage(e.rows[e.sel].newMsg)
 		}
-		e.reword = &commitPopup{title: t, desc: d}
+		e.reword = &commitPopup{title: newTextField(t), desc: newTextField(d)}
 	case "ctrl+up":
 		if e.sel > 0 {
 			e.rows[e.sel-1], e.rows[e.sel] = e.rows[e.sel], e.rows[e.sel-1]
