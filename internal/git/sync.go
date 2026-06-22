@@ -123,3 +123,10 @@ func (r *Repo) PushTag(ctx context.Context, remote, name string) error {
 	_, err := r.Runner.Run(ctx, "git push (tag)", argv)
 	return err
 }
+
+// PushDelete deletes branch on remote (git push <remote> --delete <branch>).
+func (r *Repo) PushDelete(ctx context.Context, remote, branch string) error {
+	argv := gitcmd.New("push").Arg(remote, "--delete", branch).ToArgv()
+	_, err := r.Runner.Run(ctx, "git push delete", argv)
+	return err
+}
