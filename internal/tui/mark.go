@@ -60,11 +60,13 @@ func pairOpsFor(p panel) []pairOp {
 // handleMarkKey implements the m-key state machine: mark, toggle off,
 // move across panels, or pair with the marked row (opening the popup).
 func (m Model) handleMarkKey() (tea.Model, tea.Cmd) {
-	bi, ok := m.backingIndex(m.focus)
+	// Key off the unified list index (the space Key lives in), not backingIndex —
+	// for Commits backingIndex is a pure feed index, so Key(backingIndex) would
+	// mis-key once WIP rows shift the list (and refuse a WIP row outright).
+	key, ok := m.selectedKey(m.focus)
 	if !ok {
 		return m, nil
 	}
-	key := m.listFor(m.focus).Key(bi)
 	// File panels: m toggles a multi-select set of files (for stashing), kept
 	// separate from the single-mark/pair-op machinery used on other panels.
 	if m.isFilesPanel(m.focus) {
@@ -78,9 +80,15 @@ func (m Model) handleMarkKey() (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	// No mark, a mark in another panel, or a dead mark: (re-)mark here.
+	// No mark, a mark in another panel, or a dead mark: (re-)mark here. On the
+	// Commits panel the key is a full hash or a WIP sentinel (NUL); show a clean
+	// label in the "◆ marked: …" hint instead.
 	if m.mark == nil || m.mark.panel != m.focus || !m.markAlive() {
-		m.mark = &markState{panel: m.focus, key: key, display: key}
+		display := key
+		if m.focus == panelCommits {
+			display = m.compareKeyLabel(key)
+		}
+		m.mark = &markState{panel: m.focus, key: key, display: display}
 		return m, nil
 	}
 	if m.mark.key == key { // same row: toggle off

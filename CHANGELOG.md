@@ -20,7 +20,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   dirty, the Commits panel shows `◇ Working tree (N)` and/or `◇ Staged (N)` rows
   chained above HEAD. `l`/`enter` opens their whole-tree diff (working tree vs
   index, index vs HEAD); commit-only operations are unavailable on them. (Stage 3
-  of the compare-trees arc; the ◉ compare integration lands in a follow-up.)
+  of the compare-trees arc.)
+- **Compare a commit against your working copy via the WIP rows.** The
+  `◇ Working tree` / `◇ Staged` rows now join the two-row compare flows: mark one
+  (`m`) or add it to the `◉` selection, then *Compare with marked* / *Compare
+  selection* diffs it against a commit (commit ↔ working tree, commit ↔ index, or
+  staged ↔ working tree). A 3+ range stays commits-only. Also fixes marking a
+  commit while the tree was dirty landing on the wrong row.
 - **Instant Commits feed on huge repos (plain-order loading).** The feed now uses
   git's lazy newest-first order, which parses only the page on screen — on a
   1.4M-commit repo the commit walk drops from ~18 s to ~40 ms (`--date-order` was
