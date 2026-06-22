@@ -93,6 +93,8 @@ func Run(workdir string, args []string, stdin io.Reader, stdout, stderr io.Write
 		return cmdRepo(rest, stdout, stderr, cwdFile)
 	case "init":
 		return cmdInit(workdir, rest, stdin, stdout, stderr)
+	case "config":
+		return cmdConfig(workdir, rest, stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "unknown command %q\n", cmd)
 		return 2
@@ -105,7 +107,7 @@ var commands = map[string]bool{
 	"cherry-pick": true, "revert": true, "reset": true, "fast-forward": true,
 	"discard": true, "shelf": true, "bookmark": true,
 	"remote": true, "tag": true, "compare": true,
-	"inspect": true, "repo": true, "init": true,
+	"inspect": true, "repo": true, "init": true, "config": true,
 }
 
 // IsCommand reports whether tok is a gg CLI subcommand (used by cmd/gg to
