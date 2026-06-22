@@ -6,7 +6,7 @@ import "github.com/gigagit/gg/internal/commitgraph"
 // Commits panel (natural order, not list mode, cells cached and aligned).
 func (m Model) graphActive() bool {
 	return !m.commitListMode && m.commitGraphOn() &&
-		len(m.commitGraphRows) == len(m.commits) && len(m.commits) > 0
+		len(m.commitGraphRows) == m.commitsTotal() && m.commitsTotal() > 0
 }
 
 // graphDefaultLanes is the configured startup window width ([ui]
@@ -149,11 +149,11 @@ func (m Model) graphWindow(cells string) (visible string, leftMore, rightMore bo
 // snapGraphToSelected scrolls the graph window so the selected commit's node
 // lane is centered-ish in view.
 func (m Model) snapGraphToSelected() Model {
-	bi, ok := m.backingIndex(panelCommits)
-	if !ok || bi < 0 || bi >= len(m.commitGraphLanes) {
+	u := m.commitSelUnified() // graph caches span the unified WIP+feed space
+	if u < 0 || u >= len(m.commitGraphLanes) {
 		return m
 	}
-	lane := m.commitGraphLanes[bi]
+	lane := m.commitGraphLanes[u]
 	m.commitGraphScroll = m.clampScroll(lane - m.graphCols()/2)
 	return m
 }

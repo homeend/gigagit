@@ -1,12 +1,22 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/gigagit/gg/internal/model"
 )
+
+// wipNodeGlyph marks a pseudo-row's node in the graph/list (hollow ◇, vs a real
+// commit's ●).
+const wipNodeGlyph = "◇"
+
+// text renders a pseudo-row body, e.g. "Working tree (2)" / "Staged (1)".
+func (r wipRow) text() string {
+	return fmt.Sprintf("%s (%d)", r.label(), r.count)
+}
 
 // commitIdentW is the fixed display width of the commit-row identity column
 // (the branch-name column that replaces the old 7-char commit id). Fixed so the

@@ -9,6 +9,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Uncommitted work shows in the Commits graph (WIP rows).** When the tree is
+  dirty, the Commits panel shows `◇ Working tree (N)` and/or `◇ Staged (N)` rows
+  chained above HEAD. `l`/`enter` opens their whole-tree diff (working tree vs
+  index, index vs HEAD); commit-only operations are unavailable on them. (Stage 3
+  of the compare-trees arc; the ◉ compare integration lands in a follow-up.)
 - **Instant Commits feed on huge repos (plain-order loading).** The feed now uses
   git's lazy newest-first order, which parses only the page on screen — on a
   1.4M-commit repo the commit walk drops from ~18 s to ~40 ms (`--date-order` was
