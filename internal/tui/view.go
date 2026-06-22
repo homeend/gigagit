@@ -362,9 +362,12 @@ func (m Model) renderInterface() string {
 		left = lipgloss.JoinVertical(lipgloss.Left, boxes...)
 	}
 	var right string
-	if m.stashView != nil {
+	switch {
+	case m.filesPreview != nil:
+		right = m.renderFilePreview(g.rightW, g.boxH[panelCommits])
+	case m.stashView != nil:
 		right = m.renderStashList(g.rightW, g.boxH[panelCommits])
-	} else {
+	default:
 		right = m.renderPanel(panelCommits, m.panelLabel(panelCommits, "Commits ("+m.commitScopeLabel()+")"), cmRows, cmDecos, g.rightW, g.boxH[panelCommits])
 	}
 	body := lipgloss.JoinHorizontal(lipgloss.Top, left, right)

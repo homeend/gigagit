@@ -66,6 +66,8 @@ type Model struct {
 	filesTreeFocused  bool           // true = the tree side owns vertical movement (←/→/tab)
 	filesReadInflight bool           // a per-commit files-view CommitFiles read is outstanding; drop further nav reads until it lands (pure-drop pacing on large repos)
 	filesAllFiles     bool           // true = full-tree mode (every file at the commit, ls-tree) vs the changed set; toggled by `a`
+	filesPreview      *contentPopup  // full-tree mode: read-only file content shown in the right column (nil = none)
+	filesPreviewTag   string         // <path>@<hash>; gates stale ShowFile results for the preview
 
 	diffView    *diffView // full-screen side-by-side diff; nil = closed
 	diffTag     string    // request key of the wanted diff; gates stale async results
@@ -240,6 +242,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.filesView.lines = msg.lines // pre-built off-thread
 		m.filesView.sel = 0
 		m.filesTitle = "Files " + shortHash(msg.hash) + " (all files) " + msg.subject
+		return m, nil
+	case fileContentMsg:
+		if m.filesPreview == nil || msg.tag != m.filesPreviewTag {
+			return m, nil // preview closed, or a stale load (another file opened)
+		}
+		if msg.err != nil {
+			m.filesPreview.lines = []contentLine{{text: "(load failed: " + msg.err.Error() + ")"}}
+			return m, nil
+		}
+		m.filesPreview.lines = msg.lines
+		m.filesPreview.sel = 0
 		return m, nil
 	case compareFilesMsg:
 		if m.filesView == nil || !m.filesCompare || msg.tag != m.compareTag {
@@ -1037,6 +1050,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.filesHash = c.Hash
 				m.filesTreeFocused = false // always open on the commit list
 				m.filesAllFiles = false    // open in changed-files mode; `a` toggles
+				m.filesPreview = nil
+				m.filesPreviewTag = ""
 				m.filesReadInflight = true
 				return m, m.loadCommitFilesCmd(c)
 			}

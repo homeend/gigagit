@@ -138,6 +138,8 @@ func (m Model) openCompareFiles(left, right model.Endpoint) (Model, tea.Cmd) {
 	m.filesTitle = left.Display() + " ↔ " + right.Display()
 	m.filesCompare = true
 	m.filesAllFiles = false // compare mode is its own thing
+	m.filesPreview = nil
+	m.filesPreviewTag = ""
 	m.filesLeft = left
 	m.filesRight = right
 	// h/b (history/blame) context: prefer a commit side; "" means working tree.
@@ -220,6 +222,11 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "G": // global shelf quick-switcher
 		return m.openShelfSwitcher()
 	case "z":
+		if m.filesPreview != nil && !m.filesTreeFocused { // z cycles the focused preview
+			m.filesPreview.mode = m.filesPreview.mode.next()
+			m.filesPreview.hscroll = 0
+			return m, nil
+		}
 		p.mode = p.mode.next()
 		p.hscroll = 0
 		return m, nil
@@ -228,6 +235,8 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil // only meaningful for a commit files view
 		}
 		m.filesAllFiles = !m.filesAllFiles
+		m.filesPreview = nil // the preview is a full-tree concept
+		m.filesPreviewTag = ""
 		p.lines = []contentLine{{text: "(loading…)"}}
 		p.sel = 0
 		p.query = ""
@@ -237,24 +246,24 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// panelCommits), so the graph window keys mirror the base panel exactly
 	// (model.go). Only on the file-tree side do shift+arrows scroll the tree.
 	case ">":
-		if !m.filesTreeFocused && m.graphActive() {
+		if !m.filesTreeFocused && m.filesPreview == nil && m.graphActive() {
 			m.commitGraphCols = m.clampCols(m.graphCols() + m.graphStep())
 			m.commitGraphScroll = m.clampScroll(m.commitGraphScroll)
 		}
 		return m, nil
 	case "<":
-		if !m.filesTreeFocused && m.graphActive() {
+		if !m.filesTreeFocused && m.filesPreview == nil && m.graphActive() {
 			m.commitGraphCols = m.clampCols(m.graphCols() - m.graphStep())
 			m.commitGraphScroll = m.clampScroll(m.commitGraphScroll)
 		}
 		return m, nil
 	case "=":
-		if !m.filesTreeFocused && m.graphActive() {
+		if !m.filesTreeFocused && m.filesPreview == nil && m.graphActive() {
 			m = m.snapGraphToSelected()
 		}
 		return m, nil
 	case "shift+left":
-		if !m.filesTreeFocused && m.graphActive() {
+		if !m.filesTreeFocused && m.filesPreview == nil && m.graphActive() {
 			m.commitGraphScroll = m.clampScroll(m.commitGraphScroll - m.graphPanStep())
 			return m, nil
 		}
@@ -265,7 +274,7 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "shift+right":
-		if !m.filesTreeFocused && m.graphActive() {
+		if !m.filesTreeFocused && m.filesPreview == nil && m.graphActive() {
 			m.commitGraphScroll = m.clampScroll(m.commitGraphScroll + m.graphPanStep())
 			return m, nil
 		}
@@ -276,6 +285,11 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// q is inert here: only the base layout quits on q. esc is the back key;
 	// ctrl+c (handled above) remains the universal quit.
 	case "esc":
+		if m.filesPreview != nil { // the preview is the topmost surface — close it first
+			m.filesPreview = nil
+			m.filesPreviewTag = ""
+			return m, nil
+		}
 		if p.query != "" { // first esc clears the committed search
 			p.query = ""
 			p.sel = 0
@@ -293,8 +307,13 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.compareTag = ""
 		m.filesTreeFocused = false
 		m.filesAllFiles = false
+		m.filesPreview = nil
+		m.filesPreviewTag = ""
 		return m, nil
 	case "/":
+		if m.filesPreview != nil { // no commit filter while the preview owns the right column
+			return m, nil
+		}
 		// Focus decides the search target. The commit-list side routes to the
 		// base commit filter (which the right column already renders); the tree
 		// side, and the stash list (which has no base filter), filter the tree.
@@ -418,6 +437,12 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // fires its follow-live reload: the stash list when the file tree is showing a
 // stash, otherwise the Commits list.
 func (m Model) moveListUnderFilesView(delta int) (tea.Model, tea.Cmd) {
+	if m.filesPreview != nil {
+		// The preview owns the right column: vertical movement scrolls it instead
+		// of the commit list (so filesHash can't change under a live preview).
+		m.filesPreview.move(delta)
+		return m, nil
+	}
 	if m.stashView != nil {
 		return m.moveStashUnderFilesView(delta)
 	}

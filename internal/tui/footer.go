@@ -121,8 +121,11 @@ func (m Model) footerLine() string {
 	// lie; show the view's own keys instead. The commit-list side mirrors the
 	// Commits panel (. menu + graph keys); the tree side is file-scoped.
 	if m.filesView != nil {
+		if m.filesPreview != nil && !m.filesTreeFocused {
+			return "file: [↑/↓] scroll  [z] view  [←/tab] back to tree  [esc] close preview"
+		}
 		if m.filesTreeFocused {
-			return "tree: [↑/↓] move  [enter] diff  [a] all files  [/] search  [h] hist  [b] blame  [.] copy  [z] view  [esc/l] close"
+			return "tree: [↑/↓] move  [enter] diff  [a] all files  [.] view file/copy  [/] search  [h] hist  [b] blame  [z] view  [esc/l] close"
 		}
 		return "commits: [←/→ tab] focus  [↑/↓] move  [<>=] graph  [a] all files  [/] search  [.] actions  [esc/l] close"
 	}

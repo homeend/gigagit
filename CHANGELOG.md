@@ -15,7 +15,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   (`git ls-tree -r`, which walks tree objects and is cheap even on a huge repo).
   `a` again returns to the changed set; the mode sticks as you move between
   commits. In full-tree mode `enter` diffs the file's version at the commit
-  against your working tree (so untouched files still show something useful).
+  against your working tree (so untouched files still show something useful), and
+  the `.` menu's **View file** shows that file's content at the commit (no diff)
+  in a right-pane preview while the tree stays on the left (`↑/↓` scroll, `z`
+  display mode, `esc` closes the preview, `←` returns to the tree).
 - **Search history.** Enter-confirmed searches are remembered per window — the
   panel `/` filter and the `@` highlight share one ring, while the bookmark (`g`)
   and shelf (`G`) switchers and the files-view tree search each keep their own.
