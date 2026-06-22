@@ -92,6 +92,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   count while that walk is in flight, so the panel no longer looks frozen.
 
 ### Fixed
+- **File-content preview no longer leaks a stray commit tooltip.** While the
+  full-tree *View file* preview owned the right column, the hidden Commits panel
+  behind it still surfaced its selected row's reveal — for a file whose origin
+  commit had a long subject, that wide tooltip shifted left and landed over the
+  file tree. The reveal is now suppressed whenever the preview owns the right
+  column (it's a content pager with no truncated-row reveal of its own).
 - **Diff view: the `change X/N` counter now reaches the last change, and `n`/`p`
   wrap from it.** When the final change(s) sat in the last screenful — or the
   whole diff was shorter than the viewport — they couldn't be scrolled to the
