@@ -73,7 +73,6 @@ type Model struct {
 	filesPreview      *contentPopup  // full-tree mode: read-only file content shown in the right column (nil = none)
 	filesPreviewTag   string         // <path>@<hash>; gates stale ShowFile results for the preview
 
-	diffView    *diffView   // full-screen side-by-side diff; nil = closed
 	diffTag     string      // request key of the wanted diff; gates stale async results
 	diffNav     diffNavKind // which list the open diff was opened from (Home/End file-stepping)
 	diffNotice  string      // transient bottom-left diff-view notice (file arrival / no-file); cleared on the next key
@@ -190,15 +189,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.filesTreeFocused = false
 			m.statusMsg = "files view closed: terminal too narrow"
 		}
-		if m.diffView != nil && msg.Width > 0 {
+		if dv := m.diffLayer(); dv != nil && msg.Width > 0 {
 			if msg.Width < 60 {
-				m.diffView = nil
+				m = m.removeLayer(dv)
 				m.diffTag = ""
 				m.statusMsg = "diff closed: terminal too narrow"
 			} else {
 				// Re-wrap at the new width, keeping the viewport anchored to
 				// the logical line currently at the top.
-				v := m.diffView
+				v := m.diffLayer()
 				topLine := 0
 				if v.offset < len(v.disp) {
 					topLine = v.disp[v.offset].line
@@ -213,13 +212,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 	case diffMsg:
-		if m.diffView == nil || msg.tag != m.diffTag {
-			return m, nil // view closed, or a stale result
+		dv := m.diffLayer()
+		if dv == nil || msg.tag != m.diffTag {
+			return m, nil // closed, or a stale result
 		}
-		m.diffView = msg.view
-		if m.diffView != nil {
-			m.diffView.loading = false // a diffMsg means the load completed (content or err); never leave the body on "(loading…)"
-		}
+		*dv = *msg.view
+		dv.loading = false
 		return m, nil
 	case commitFilesMsg:
 		m.filesReadInflight = false // the outstanding per-commit read has landed; nav may issue again
@@ -490,12 +488,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// update.
 		if l := m.topLayer(); l != nil {
 			return l.update(m, msg)
-		}
-		// Routing invariant: the diff view is checked immediately after the
-		// modal here, in the MouseMsg arm, and in render() — the key owner
-		// must be the top visible surface (background ops will rely on it).
-		if m.diffView != nil {
-			return m.updateDiffViewKey(msg)
 		}
 		// Filter-input mode captures every key (the panel label shows the query).
 		// Hoisted above the files-view and stash routing so a commit filter opened
@@ -1766,7 +1758,9 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.filesCompare = false
 	m.compareTag = ""
 	m.filesTreeFocused = false
-	m.diffView = nil // the new repo invalidates any open diff
+	if dv := m.diffLayer(); dv != nil { // the new repo invalidates any open diff
+		m = m.removeLayer(dv)
+	}
 	m.diffTag = ""
 	m.loadGen++
 	return m, m.loadCmd()

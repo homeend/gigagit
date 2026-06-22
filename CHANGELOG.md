@@ -178,6 +178,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   count while that walk is in flight, so the panel no longer looks frozen.
 
 ### Changed
+- **TUI: the full-screen diff is now a member of the layer stack.** `esc` from a
+  diff opened over history or a bookmark/shelf picker returns to that surface
+  instead of the base layout; the diff's `.` menu and mouse wheel always target
+  the diff. Retires the internal `clearLayers` workaround for diffs.
 - **Editable popup fields now show their editable area.** Every text field in
   the popups (commit/amend title & description, reword, branch/tag/worktree
   names, paste/restore destinations, stash name, …) is drawn on a subtle

@@ -13,11 +13,11 @@ func TestOpenCompareFocusedVsBookmark(t *testing.T) {
 	ref := model.FileRef{Source: model.SourceCommit, Locator: "aaaa1111", Path: "a.go"}
 	bm := model.Bookmark{ID: "bm9", State: model.StateCommitted, Commit: "bbbb2222", SHA: "blob22", Path: "b.go"}
 	u, cmd := m.openCompareFocusedVsBookmark(ref, "commit a.go", bm)
-	if u.diffView == nil {
+	if u.diffLayer() == nil {
 		t.Fatal("openCompareFocusedVsBookmark must open a diff view")
 	}
-	if u.diffView.title != "a.go ↔ b.go" {
-		t.Errorf("diff title = %q, want \"a.go ↔ b.go\"", u.diffView.title)
+	if u.diffLayer().title != "a.go ↔ b.go" {
+		t.Errorf("diff title = %q, want \"a.go ↔ b.go\"", u.diffLayer().title)
 	}
 	if u.diffTag != "cmpbm:a.go:bm9" {
 		t.Errorf("diffTag = %q, want cmpbm:a.go:bm9", u.diffTag)
@@ -55,11 +55,13 @@ func TestCompareModeEnterRunsCompare(t *testing.T) {
 	m.bookmarkSwitcher().compareLabel = "commit a.go"
 	u, _ := m.Update(keyMsg("enter"))
 	mm := u.(Model)
-	if mm.diffView == nil {
+	if mm.diffLayer() == nil {
 		t.Fatal("enter in compare mode must open the comparison diff")
 	}
-	if mm.bookmarkSwitcher() != nil {
-		t.Error("popup should close after launching the compare")
+	// The diff is pushed over the switcher; the switcher sits beneath the diff
+	// on the stack (esc from the diff returns to it). The switcher is still live.
+	if mm.bookmarkSwitcher() == nil {
+		t.Error("the bookmark switcher must remain on the stack beneath the diff")
 	}
 }
 
@@ -71,7 +73,7 @@ func TestCompareModeMutatorsInert(t *testing.T) {
 	for _, k := range []string{"x", "p", "m"} {
 		u, _ := m.Update(keyMsg(k))
 		mm := u.(Model)
-		if mm.bookmarkSwitcher() == nil || mm.diffView != nil || mm.modal != nil || bookmarkPasteOf(mm) != nil {
+		if mm.bookmarkSwitcher() == nil || mm.diffLayer() != nil || mm.modal != nil || bookmarkPasteOf(mm) != nil {
 			t.Errorf("%q must be inert in compare mode", k)
 		}
 		if mm.bookmarkSwitcher() != nil && mm.bookmarkSwitcher().markID != "" {
@@ -82,7 +84,7 @@ func TestCompareModeMutatorsInert(t *testing.T) {
 
 func TestCompareRowRunSetsPendingAndLoads(t *testing.T) {
 	m := footerModel()
-	m.diffView = &diffView{title: "a.go", rev: "cafe9999"} // a resolvable focused file
+	m = m.pushLayer(&diffView{title: "a.go", rev: "cafe9999"}) // a resolvable focused file
 	row, ok := m.compareAgainstBookmarkRow()
 	if !ok {
 		t.Fatal("compare row must be present when a file is focused")
@@ -97,9 +99,9 @@ func TestCompareRowRunSetsPendingAndLoads(t *testing.T) {
 	}
 }
 
-// Launched from a history/blame surface, the compare diff must paint over the
-// layer stack — the diff is the base the stack walks over, so the popup→diff
-// handoff has to clear the layers first or they'd composite on top of the diff.
+// Launched from a history/blame surface, the compare diff is pushed on top
+// of the layer stack (history + popup + diff). The diff is the topmost layer
+// and must be visible; esc returns to the picker, esc again returns to history.
 func TestCompareDiffVisibleOverHistorySurface(t *testing.T) {
 	m := footerModel()
 	m = m.pushLayer(newHistoryView(navContext{path: "a.go", rev: "r"}))
@@ -108,8 +110,8 @@ func TestCompareDiffVisibleOverHistorySurface(t *testing.T) {
 	m.bookmarkSwitcher().compareRef = &ref
 	u, _ := m.Update(keyMsg("enter"))
 	mm := u.(Model)
-	if mm.topLayer() != nil {
-		t.Error("the history surface must be cleared so the diff owns the screen")
+	if mm.diffLayer() == nil {
+		t.Error("the diff must be on the stack so it owns the screen")
 	}
 	if !strings.Contains(mm.render(), "↔") {
 		t.Fatal("compare diff must be visible over a history/blame surface")
@@ -142,7 +144,7 @@ func TestCompareAgainstWorkingDirRowOpensDiff(t *testing.T) {
 	m := footerModel()
 	// A focused commit file: the diff view with a rev makes focusedBookmark
 	// yield a committed ref (Path = the diff title).
-	m.diffView = &diffView{title: "a.go", rev: "abc1234"}
+	m = m.pushLayer(&diffView{title: "a.go", rev: "abc1234"})
 	r, ok := m.compareAgainstWorkingDirRow()
 	if !ok {
 		t.Fatal("row should be present for a focused commit file")
@@ -152,8 +154,8 @@ func TestCompareAgainstWorkingDirRowOpensDiff(t *testing.T) {
 	}
 	u, cmd := r.run(m)
 	mm := u.(Model)
-	if mm.diffView == nil || mm.diffView.title != "a.go ↔ working" {
-		t.Fatalf("diff view = %+v", mm.diffView)
+	if mm.diffLayer() == nil || mm.diffLayer().title != "a.go ↔ working" {
+		t.Fatalf("diff view = %+v", mm.diffLayer())
 	}
 	if mm.diffTag != "cmpwd:a.go" {
 		t.Fatalf("diffTag = %q, want cmpwd:a.go", mm.diffTag)
@@ -167,7 +169,7 @@ func TestCompareAgainstWorkingDirRowAbsentForWorkingFile(t *testing.T) {
 	m := footerModel()
 	// A working-tree file is focused (diff view with no rev) → comparing it
 	// against the working tree is itself-vs-itself, so the row is gated off.
-	m.diffView = &diffView{title: "a.go"} // rev "" → unstaged source
+	m = m.pushLayer(&diffView{title: "a.go"}) // rev "" → unstaged source
 	if _, ok := m.compareAgainstWorkingDirRow(); ok {
 		t.Fatal("row should be absent for a working-tree file")
 	}

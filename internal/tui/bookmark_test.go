@@ -50,7 +50,7 @@ func TestBookmarkCompareTwoOpensDiff(t *testing.T) {
 		model.Bookmark{ID: "b", State: model.StateUnstaged, Worktree: "/wt", Path: "b.go"},
 	)
 	m, _ = m.openBookmarkCompareTwo("a", "b")
-	if m.diffView == nil || m.diffTag != "bookmark2:a:b" {
+	if m.diffLayer() == nil || m.diffTag != "bookmark2:a:b" {
 		t.Fatalf("two-bookmark compare should open a diff (tag=%q)", m.diffTag)
 	}
 }
@@ -111,7 +111,7 @@ func TestBookmarkMarkThenCompare(t *testing.T) {
 	m.bookmarkSwitcher().sel = 1
 	mm, _ = m.Update(keyMsg("m")) // compare with row 1
 	m = mm.(Model)
-	if m.diffView == nil {
+	if m.diffLayer() == nil {
 		t.Fatalf("second m on another row should open the compare diff")
 	}
 }
@@ -261,7 +261,7 @@ func TestFocusedBookmarkHistoryUsesSelectedRow(t *testing.T) {
 
 func TestFocusedBookmarkDiffViewCommit(t *testing.T) {
 	m := footerModel()
-	m.diffView = &diffView{title: "dir/a.go", rev: "cafe9999"}
+	m = m.pushLayer(&diffView{title: "dir/a.go", rev: "cafe9999"})
 	b, ok := m.focusedBookmark()
 	if !ok || b.State != model.StateCommitted || b.Commit != "cafe9999" || b.Path != "dir/a.go" {
 		t.Fatalf("diff focusedBookmark = %+v ok=%v; want committed cafe9999 dir/a.go", b, ok)
@@ -270,7 +270,7 @@ func TestFocusedBookmarkDiffViewCommit(t *testing.T) {
 
 func TestFocusedBookmarkDiffViewWorkingTree(t *testing.T) {
 	m := footerModel()
-	m.diffView = &diffView{title: "a.go", rev: ""} // working-tree diff
+	m = m.pushLayer(&diffView{title: "a.go", rev: ""}) // working-tree diff
 	b, ok := m.focusedBookmark()
 	if !ok || b.State != model.StateUnstaged || b.Path != "a.go" {
 		t.Fatalf("working-tree diff focusedBookmark = %+v ok=%v; want unstaged a.go", b, ok)

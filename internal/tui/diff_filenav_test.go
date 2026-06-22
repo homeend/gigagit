@@ -25,7 +25,7 @@ func treeDiffModel(sel int) Model {
 		{text: "  M c.go", path: "c.go", status: "M"},
 	}, sel: sel}
 	m.diffNav = diffNavTree
-	m.diffView = &diffView{}
+	m = m.pushLayer(&diffView{})
 	m.diffTag = "commit:abc:start"
 	return m
 }
@@ -42,7 +42,7 @@ func statusDiffModelMulti() Model {
 	}
 	m.sel[panelFiles] = 0
 	m.diffNav = diffNavStatus
-	m.diffView = &diffView{}
+	m = m.pushLayer(&diffView{})
 	m.diffTag = "status:a.txt"
 	return m
 }
@@ -71,8 +71,8 @@ func TestDiffEndPrimesThenStepsTree(t *testing.T) {
 
 	u, cmd := m.Update(keyMsg("end")) // first End: prime
 	mm := u.(Model)
-	if mm.diffView.fileArm != fileArmNext {
-		t.Fatalf("first end must prime fileArmNext, got %d", mm.diffView.fileArm)
+	if mm.diffLayer().fileArm != fileArmNext {
+		t.Fatalf("first end must prime fileArmNext, got %d", mm.diffLayer().fileArm)
 	}
 	if mm.filesView.sel != 1 || mm.diffTag != "commit:abc:start" || cmd != nil {
 		t.Fatal("first end must not navigate")
@@ -92,7 +92,7 @@ func TestDiffEndPrimesThenStepsTree(t *testing.T) {
 	if !strings.Contains(mm2.diffNotice, "b.go") {
 		t.Fatalf("arrival notice must name the new file, got %q", mm2.diffNotice)
 	}
-	if mm2.diffView.fileArm != fileArmNone {
+	if mm2.diffLayer().fileArm != fileArmNone {
 		t.Fatal("the freshly opened file must not be pre-armed")
 	}
 }
@@ -103,8 +103,8 @@ func TestDiffHomePrimesThenStepsTree(t *testing.T) {
 
 	u, _ := m.Update(keyMsg("home")) // first Home: prime
 	mm := u.(Model)
-	if mm.diffView.fileArm != fileArmPrev {
-		t.Fatalf("first home must prime fileArmPrev, got %d", mm.diffView.fileArm)
+	if mm.diffLayer().fileArm != fileArmPrev {
+		t.Fatalf("first home must prime fileArmPrev, got %d", mm.diffLayer().fileArm)
 	}
 	if mm.filesView.sel != 2 {
 		t.Fatal("first home must not navigate")
@@ -127,13 +127,13 @@ func TestDiffEndScrollsThenPrimesThenSteps(t *testing.T) {
 	m.height = 12
 	v := diffViewWith(sameRowsTUI(40, 20), []int{20})
 	v.offset = 0 // tall diff, at the top
-	m.diffView = v
+	*m.diffLayer() = *v
 	maxOff := len(v.disp) - m.diffBodyRows()
 
 	u, _ := m.Update(keyMsg("end")) // 1: scroll to bottom
 	mm := u.(Model)
-	if mm.diffView.offset != maxOff || mm.diffView.fileArm != fileArmNone {
-		t.Fatalf("first end scrolls only: offset=%d arm=%d", mm.diffView.offset, mm.diffView.fileArm)
+	if mm.diffLayer().offset != maxOff || mm.diffLayer().fileArm != fileArmNone {
+		t.Fatalf("first end scrolls only: offset=%d arm=%d", mm.diffLayer().offset, mm.diffLayer().fileArm)
 	}
 	if mm.diffTag != "commit:abc:start" {
 		t.Fatal("first end must not change the file")
@@ -141,8 +141,8 @@ func TestDiffEndScrollsThenPrimesThenSteps(t *testing.T) {
 
 	u2, _ := mm.Update(keyMsg("end")) // 2: prime
 	mm2 := u2.(Model)
-	if mm2.diffView.fileArm != fileArmNext || mm2.diffTag != "commit:abc:start" {
-		t.Fatalf("second end primes only: arm=%d tag=%q", mm2.diffView.fileArm, mm2.diffTag)
+	if mm2.diffLayer().fileArm != fileArmNext || mm2.diffTag != "commit:abc:start" {
+		t.Fatalf("second end primes only: arm=%d tag=%q", mm2.diffLayer().fileArm, mm2.diffTag)
 	}
 
 	u3, cmd := mm2.Update(keyMsg("end")) // 3: step
@@ -158,7 +158,7 @@ func TestDiffEndAtLastFileNotice(t *testing.T) {
 	m := treeDiffModel(3) // on c.go (last), empty diff
 	u, cmd := m.Update(keyMsg("end"))
 	mm := u.(Model)
-	if mm.diffView.fileArm != fileArmNone {
+	if mm.diffLayer().fileArm != fileArmNone {
 		t.Fatal("no next file → must not prime")
 	}
 	if mm.filesView.sel != 3 || mm.diffTag != "commit:abc:start" || cmd != nil {
@@ -182,8 +182,8 @@ func TestDiffEndPrimesThenStepsStatus(t *testing.T) {
 	m := statusDiffModelMulti()
 	u, _ := m.Update(keyMsg("end")) // prime
 	mm := u.(Model)
-	if mm.diffView.fileArm != fileArmNext || mm.diffTag != "status:a.txt" {
-		t.Fatalf("first end primes: arm=%d tag=%q", mm.diffView.fileArm, mm.diffTag)
+	if mm.diffLayer().fileArm != fileArmNext || mm.diffTag != "status:a.txt" {
+		t.Fatalf("first end primes: arm=%d tag=%q", mm.diffLayer().fileArm, mm.diffTag)
 	}
 	u2, _ := mm.Update(keyMsg("end")) // step
 	mm2 := u2.(Model)
@@ -205,7 +205,7 @@ func TestDiffStepStatusSkipsUnmerged(t *testing.T) {
 	m.sel[panelFiles] = 0 // a.txt
 	u, _ := m.Update(keyMsg("end"))
 	mm := u.(Model) // prime (peek skips conflict → b.txt)
-	if mm.diffView.fileArm != fileArmNext {
+	if mm.diffLayer().fileArm != fileArmNext {
 		t.Fatal("must prime: a diffable next file exists past the conflict")
 	}
 	u2, _ := mm.Update(keyMsg("end"))
@@ -224,7 +224,7 @@ func TestDiffStepStaged(t *testing.T) {
 	}
 	m.sel[panelStaged] = 0
 	m.diffNav = diffNavStaged
-	m.diffView = &diffView{}
+	m = m.pushLayer(&diffView{})
 	m.diffTag = "staged:a.txt"
 	u, _ := m.Update(keyMsg("end")) // prime
 	u2, _ := u.(Model).Update(keyMsg("end"))
@@ -237,7 +237,7 @@ func TestDiffStepStaged(t *testing.T) {
 func TestDiffFileNavInertWhenNoSource(t *testing.T) {
 	m := footerModel()
 	m.diffNav = diffNavNone
-	m.diffView = &diffView{} // empty: at top and bottom
+	m = m.pushLayer(&diffView{}) // empty: at top and bottom
 	m.diffTag = "bookmark2:x:y"
 	for _, k := range []string{"end", "home"} {
 		u, cmd := m.Update(keyMsg(k))
@@ -245,7 +245,7 @@ func TestDiffFileNavInertWhenNoSource(t *testing.T) {
 		if mm.diffTag != "bookmark2:x:y" || cmd != nil {
 			t.Fatalf("%s with no source list must not navigate", k)
 		}
-		if mm.diffView.fileArm != fileArmNone || mm.diffNotice != "" {
+		if mm.diffLayer().fileArm != fileArmNone || mm.diffNotice != "" {
 			t.Fatalf("%s with no source list must not prime or notice", k)
 		}
 	}
@@ -255,11 +255,11 @@ func TestDiffFileNavInertWhenNoSource(t *testing.T) {
 func TestDiffArmClearedByOtherKey(t *testing.T) {
 	m := treeDiffModel(1)
 	u, _ := m.Update(keyMsg("end")) // prime
-	if u.(Model).diffView.fileArm != fileArmNext {
+	if u.(Model).diffLayer().fileArm != fileArmNext {
 		t.Fatal("setup: end must prime")
 	}
 	u2, _ := u.(Model).Update(keyMsg("j")) // any other key
-	if u2.(Model).diffView.fileArm != fileArmNone {
+	if u2.(Model).diffLayer().fileArm != fileArmNone {
 		t.Fatal("j must cancel the primed file-step")
 	}
 }
@@ -316,12 +316,12 @@ func TestWithDiffFileNoticeRendersCueAndNotice(t *testing.T) {
 		t.Fatalf("idle diff must show no notice overlay:\n%s", out)
 	}
 
-	m.diffView.fileArm = fileArmNext
+	m.diffLayer().fileArm = fileArmNext
 	if out := ansi.Strip(m.withDiffFileNotice(frame)); !strings.Contains(out, "next file") {
 		t.Fatalf("primed diff must show the cue:\n%s", out)
 	}
 
-	m.diffView.fileArm = fileArmNone
+	m.diffLayer().fileArm = fileArmNone
 	m.diffNotice = "▸ b.go"
 	if out := ansi.Strip(m.withDiffFileNotice(frame)); !strings.Contains(out, "b.go") {
 		t.Fatalf("notice must render the file name:\n%s", out)

@@ -30,7 +30,7 @@ func TestBookmarkKeyOpensFromFileTree(t *testing.T) {
 
 func TestBookmarkKeyOpensFromDiffView(t *testing.T) {
 	m := footerModel()
-	m.diffView = &diffView{title: "a.go"}
+	m = m.pushLayer(&diffView{title: "a.go"})
 	_, cmd := m.Update(keyMsg("g"))
 	if cmd == nil {
 		t.Fatal("g in the diff view must open the bookmark switcher, got nil")
@@ -68,14 +68,14 @@ func TestBookmarkKeyOpensFromBlame(t *testing.T) {
 // close the diff and leave the popup orphaned.
 func TestBookmarkPopupReceivesKeysOverDiffView(t *testing.T) {
 	m := footerModel()
-	m.diffView = &diffView{title: "a.go"}
+	m = m.pushLayer(&diffView{title: "a.go"})
 	m = m.pushLayer(twoBookmarks())
 	u, _ := m.Update(keyMsg("esc"))
 	mm := u.(Model)
 	if mm.bookmarkSwitcher() != nil {
 		t.Error("esc should close the bookmark popup over a diff view")
 	}
-	if mm.diffView == nil {
+	if mm.diffLayer() == nil {
 		t.Error("esc should reach the popup, not close the diff view underneath")
 	}
 }
@@ -83,7 +83,7 @@ func TestBookmarkPopupReceivesKeysOverDiffView(t *testing.T) {
 // Render hoist: the popup must paint over the diff view's full-screen render.
 func TestBookmarkPopupRendersOverDiffView(t *testing.T) {
 	m := footerModel()
-	m.diffView = &diffView{title: "a.go"}
+	m = m.pushLayer(&diffView{title: "a.go"})
 	m = m.pushLayer(twoBookmarks())
 	if !strings.Contains(m.render(), "Bookmarks") {
 		t.Error("bookmark popup must render over the diff view")

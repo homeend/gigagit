@@ -27,7 +27,7 @@ func (m Model) focusedBookmark() (model.Bookmark, bool) {
 		}
 		return model.Bookmark{State: model.StateCommitted, Commit: s.ctx.rev, Path: s.ctx.path}, true
 	}
-	if v := m.diffView; v != nil {
+	if v := m.diffLayer(); v != nil {
 		if v.title == "" {
 			return model.Bookmark{}, false
 		}

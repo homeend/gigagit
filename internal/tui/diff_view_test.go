@@ -82,7 +82,7 @@ func TestEnterOnStatusOpensLoadingDiff(t *testing.T) {
 	m := diffModel()
 	u, cmd := m.Update(keyMsg("enter"))
 	mm := u.(Model)
-	if mm.diffView == nil || !mm.diffView.loading {
+	if mm.diffLayer() == nil || !mm.diffLayer().loading {
 		t.Fatal("enter on a status row must open a loading diff view")
 	}
 	if cmd == nil {
@@ -99,7 +99,7 @@ func TestEnterOnStagedRowOpensStagedDiff(t *testing.T) {
 	m.focus = panelStaged
 	u, cmd := m.Update(keyMsg("enter"))
 	mm := u.(Model)
-	if mm.diffView == nil || !mm.diffView.loading {
+	if mm.diffLayer() == nil || !mm.diffLayer().loading {
 		t.Fatal("enter on a staged row must open a loading diff view")
 	}
 	if cmd == nil {
@@ -108,8 +108,8 @@ func TestEnterOnStagedRowOpensStagedDiff(t *testing.T) {
 	if mm.diffTag != "staged:s.txt" {
 		t.Fatalf("diffTag = %q, want staged:s.txt", mm.diffTag)
 	}
-	if mm.diffView.context != "HEAD → index (staged)" {
-		t.Fatalf("context = %q, want HEAD → index (staged)", mm.diffView.context)
+	if mm.diffLayer().context != "HEAD → index (staged)" {
+		t.Fatalf("context = %q, want HEAD → index (staged)", mm.diffLayer().context)
 	}
 }
 
@@ -118,7 +118,7 @@ func TestEnterOnConflictedRowIsNoOp(t *testing.T) {
 	m.sel[panelFiles] = 2 // conflict.txt
 	u, cmd := m.Update(keyMsg("enter"))
 	mm := u.(Model)
-	if mm.diffView != nil || cmd != nil {
+	if mm.diffLayer() != nil || cmd != nil {
 		t.Fatal("enter on a conflicted row must be a no-op until the conflict editor")
 	}
 }
@@ -128,7 +128,7 @@ func TestEnterOnStatusRefusedWhenNarrow(t *testing.T) {
 	m.width = 59
 	u, cmd := m.Update(keyMsg("enter"))
 	mm := u.(Model)
-	if mm.diffView != nil || cmd != nil {
+	if mm.diffLayer() != nil || cmd != nil {
 		t.Fatal("enter below 60 cols must not open the diff view")
 	}
 }
@@ -146,7 +146,7 @@ func TestEnterOnStatusNoOpWhileRunning(t *testing.T) {
 	m.running = true
 	u, cmd := m.Update(keyMsg("enter"))
 	mm := u.(Model)
-	if mm.diffView != nil || cmd != nil {
+	if mm.diffLayer() != nil || cmd != nil {
 		t.Fatal("enter must be a no-op while an op runs")
 	}
 }
@@ -325,18 +325,18 @@ func TestStatusLoaderFilesShowsUnstagedNotStaged(t *testing.T) {
 
 func TestDiffMsgStaleTagDropped(t *testing.T) {
 	m := diffModel()
-	m.diffView = &diffView{loading: true}
+	m = m.pushLayer(&diffView{loading: true})
 	m.diffTag = "status:current.txt"
 	u, _ := m.Update(diffMsg{tag: "status:old.txt", view: &diffView{}})
 	mm := u.(Model)
-	if !mm.diffView.loading {
+	if !mm.diffLayer().loading {
 		t.Fatal("a stale-tagged result must be dropped")
 	}
 	// And when the view is closed entirely:
-	m.diffView = nil
-	m.diffTag = ""
-	u, _ = m.Update(diffMsg{tag: "status:old.txt", view: &diffView{}})
-	if u.(Model).diffView != nil {
+	m2 := diffModel() // fresh model, no diff on stack
+	m2.diffTag = ""
+	u, _ = m2.Update(diffMsg{tag: "status:old.txt", view: &diffView{}})
+	if u.(Model).diffLayer() != nil {
 		t.Fatal("a result after close must be dropped")
 	}
 }
@@ -345,51 +345,53 @@ func TestDiffViewKeysScrollAndJump(t *testing.T) {
 	// Two changes (rows 20, 30) in a 40-row file, body 10; both top-anchorable.
 	mk := func() Model { return openedDiffModel(12, sameRowsTUI(40, 20, 30), []int{20, 30}) }
 
-	if got := mk().diffView.offset; got != 17 { // opens on change 1, diffLead above
+	if got := mk().diffLayer().offset; got != 17 { // opens on change 1, diffLead above
 		t.Fatalf("open: offset = %d, want 17", got)
 	}
-	if u, _ := mk().Update(keyMsg("down")); u.(Model).diffView.offset != 18 {
-		t.Fatalf("down: offset = %d, want 18", u.(Model).diffView.offset)
+	if u, _ := mk().Update(keyMsg("down")); u.(Model).diffLayer().offset != 18 {
+		t.Fatalf("down: offset = %d, want 18", u.(Model).diffLayer().offset)
 	}
 	// ctrl+down steps to the next change (row 30 → offset 27), ctrl+up back.
 	u, _ := mk().Update(keyMsg("ctrl+down"))
-	if v := u.(Model).diffView; v.offset != 27 || v.currentBlockOrdinal() != 1 {
+	if v := u.(Model).diffLayer(); v.offset != 27 || v.currentBlockOrdinal() != 1 {
 		t.Fatalf("ctrl+down: offset = %d ord = %d, want 27 / 1", v.offset, v.currentBlockOrdinal())
 	}
 	u, _ = u.(Model).Update(keyMsg("ctrl+up"))
-	if v := u.(Model).diffView; v.offset != 17 || v.currentBlockOrdinal() != 0 {
+	if v := u.(Model).diffLayer(); v.offset != 17 || v.currentBlockOrdinal() != 0 {
 		t.Fatalf("ctrl+up: offset = %d ord = %d, want 17 / 0", v.offset, v.currentBlockOrdinal())
 	}
 	// Plain scroll keys clamp/scroll regardless of the focus index.
 	p := mk()
-	p.diffView.offset = 0
-	if u, _ := p.Update(keyMsg("pgup")); u.(Model).diffView.offset != 0 {
-		t.Fatalf("pgup at top must clamp to 0, got %d", u.(Model).diffView.offset)
+	p.diffLayer().offset = 0
+	if u, _ := p.Update(keyMsg("pgup")); u.(Model).diffLayer().offset != 0 {
+		t.Fatalf("pgup at top must clamp to 0, got %d", u.(Model).diffLayer().offset)
 	}
-	p.diffView.offset = 0
-	if u, _ := p.Update(keyMsg("pgdown")); u.(Model).diffView.offset != 10 {
-		t.Fatalf("pgdown: offset = %d, want one body page (10)", u.(Model).diffView.offset)
+	p.diffLayer().offset = 0
+	if u, _ := p.Update(keyMsg("pgdown")); u.(Model).diffLayer().offset != 10 {
+		t.Fatalf("pgdown: offset = %d, want one body page (10)", u.(Model).diffLayer().offset)
 	}
 }
 
 func TestDiffViewEscClosesAndQInert(t *testing.T) {
 	m := diffModel()
-	m.diffView = &diffView{}
+	m = m.pushLayer(&diffView{})
 	m.diffTag = "status:x"
 	u, _ := m.Update(keyMsg("esc"))
 	mm := u.(Model)
-	if mm.diffView != nil || mm.diffTag != "" {
+	if mm.diffLayer() != nil || mm.diffTag != "" {
 		t.Fatal("esc must close the diff view and clear the tag")
 	}
 
 	// q no longer quits from a view — only the base layout quits on q
 	// (esc is the back key; ctrl+c remains the universal quit).
-	m.diffView = &diffView{}
-	u, cmd := m.Update(keyMsg("q"))
+	m2 := diffModel()
+	m2 = m2.pushLayer(&diffView{})
+	m2.diffTag = "status:x"
+	u, cmd := m2.Update(keyMsg("q"))
 	if cmd != nil {
 		t.Fatal("q must not quit from the diff view (inert)")
 	}
-	if u.(Model).diffView == nil {
+	if u.(Model).diffLayer() == nil {
 		t.Fatal("q must leave the diff view open")
 	}
 }
@@ -399,11 +401,11 @@ func TestDiffViewEscClosesAndQInert(t *testing.T) {
 func TestDiffEscReturnsToFilesViewBeneath(t *testing.T) {
 	m := diffModel()
 	m.filesView = &contentPopup{lines: []contentLine{{text: "x", path: "x"}}}
-	m.diffView = &diffView{}
+	m = m.pushLayer(&diffView{})
 	m.diffTag = "commit:abc:x"
 	u, _ := m.Update(keyMsg("esc"))
 	mm := u.(Model)
-	if mm.diffView != nil {
+	if mm.diffLayer() != nil {
 		t.Fatal("esc must close the diff view")
 	}
 	if mm.filesView == nil {
@@ -413,7 +415,7 @@ func TestDiffEscReturnsToFilesViewBeneath(t *testing.T) {
 
 func TestDiffViewSwallowsActionKeys(t *testing.T) {
 	m := diffModel()
-	m.diffView = &diffView{}
+	m = m.pushLayer(&diffView{})
 	m.diffTag = "status:x"
 	for _, k := range []string{"p", "P", "s", "S", "u", "d", "w", "m", "l", "R", ",", "/", "?", "tab", "enter"} {
 		u, cmd := m.Update(keyMsg(k))
@@ -428,11 +430,11 @@ func TestDiffViewEscReturnsToFilesView(t *testing.T) {
 	m := diffModel()
 	m.filesView = &contentPopup{lines: []contentLine{{text: "x", path: "x"}}, sel: 0}
 	m.filesTreeFocused = true
-	m.diffView = &diffView{}
+	m = m.pushLayer(&diffView{})
 	m.diffTag = "commit:abc:x"
 	u, _ := m.Update(keyMsg("esc"))
 	mm := u.(Model)
-	if mm.diffView != nil {
+	if mm.diffLayer() != nil {
 		t.Fatal("esc must close the diff")
 	}
 	if mm.filesView == nil || !mm.filesTreeFocused {
@@ -442,11 +444,11 @@ func TestDiffViewEscReturnsToFilesView(t *testing.T) {
 
 func TestDiffViewClosedOnNarrowResize(t *testing.T) {
 	m := diffModel()
-	m.diffView = &diffView{}
+	m = m.pushLayer(&diffView{})
 	m.diffTag = "status:x"
 	u, _ := m.Update(tea.WindowSizeMsg{Width: 50, Height: 24})
 	mm := u.(Model)
-	if mm.diffView != nil || mm.diffTag != "" {
+	if mm.diffLayer() != nil || mm.diffTag != "" {
 		t.Fatal("resize below 60 must close the diff view")
 	}
 	if mm.statusMsg == "" {
@@ -458,11 +460,11 @@ func TestReRootClearsDiffView(t *testing.T) {
 	dir, repo := newRepoDir(t)
 	m := diffModel()
 	m.svc = domain.New(repo)
-	m.diffView = &diffView{}
+	m = m.pushLayer(&diffView{})
 	m.diffTag = "status:x"
 	u, _ := m.reRoot(dir)
 	mm := u.(Model)
-	if mm.diffView != nil || mm.diffTag != "" {
+	if mm.diffLayer() != nil || mm.diffTag != "" {
 		t.Fatal("reRoot must clear the diff view and tag")
 	}
 }
@@ -472,10 +474,10 @@ func TestDiffViewWheelScrolls(t *testing.T) {
 	// Need enough rows that the scroll clamp doesn't fire: body = height-2 = 38,
 	// so we need at least body+wheelStep rows = 41.
 	rows := make([]textdiff.Row, 80)
-	m.diffView = diffViewWith(rows, nil)
+	m = m.pushLayer(diffViewWith(rows, nil))
 	m.diffTag = "status:x"
 	u, _ := m.Update(tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonWheelDown})
-	if got, want := u.(Model).diffView.offset, m.wheelStep(); got != want {
+	if got, want := u.(Model).diffLayer().offset, m.wheelStep(); got != want {
 		t.Fatalf("wheel: offset = %d, want %d", got, want)
 	}
 }
@@ -489,18 +491,18 @@ func TestDiffViewJumpAtMaxScrollIsNoOp(t *testing.T) {
 	}
 	rows[20] = textdiff.Row{Kind: textdiff.Changed}
 	rows[30] = textdiff.Row{Kind: textdiff.Changed}
-	m.diffView = diffViewWith(rows, []int{20, 30})
-	m.diffView.offset = 20
+	m = m.pushLayer(diffViewWith(rows, []int{20, 30}))
+	m.diffLayer().offset = 20
 	m.diffTag = "status:x"
 
 	// 30 clamps to max (25): the jump advances to 25, and a further press
 	// is a clean no-op (the remaining block is already visible).
 	u, _ := m.Update(keyMsg("ctrl+down"))
-	if got := u.(Model).diffView.offset; got != 25 {
+	if got := u.(Model).diffLayer().offset; got != 25 {
 		t.Fatalf("clamped jump: offset = %d, want 25", got)
 	}
 	u, _ = m.Update(keyMsg("ctrl+down"))
-	if got := u.(Model).diffView.offset; got != 25 {
+	if got := u.(Model).diffLayer().offset; got != 25 {
 		t.Fatalf("jump at max scroll must hold position, got %d", got)
 	}
 }
@@ -509,7 +511,7 @@ func TestEnterInTreeOpensCommitDiff(t *testing.T) {
 	m := filesViewModel()
 	u, cmd := m.Update(keyMsg("enter"))
 	mm := u.(Model)
-	if mm.diffView == nil || !mm.diffView.loading || cmd == nil {
+	if mm.diffLayer() == nil || !mm.diffLayer().loading || cmd == nil {
 		t.Fatal("enter on a tree file row must open a loading diff")
 	}
 	if mm.diffTag != "commit:abc1234def:dir/f.go" {
@@ -518,8 +520,8 @@ func TestEnterInTreeOpensCommitDiff(t *testing.T) {
 	if mm.filesView == nil {
 		t.Fatal("the files view must stay open beneath the diff")
 	}
-	if !strings.Contains(mm.diffView.context, "abc1234") {
-		t.Fatalf("context = %q, want the short hash", mm.diffView.context)
+	if !strings.Contains(mm.diffLayer().context, "abc1234") {
+		t.Fatalf("context = %q, want the short hash", mm.diffLayer().context)
 	}
 }
 
@@ -527,7 +529,7 @@ func TestEnterInTreeNoOpOnHeading(t *testing.T) {
 	m := filesViewModel()
 	m.filesView.sel = 0 // the heading row
 	u, cmd := m.Update(keyMsg("enter"))
-	if u.(Model).diffView != nil || cmd != nil {
+	if u.(Model).diffLayer() != nil || cmd != nil {
 		t.Fatal("enter on a heading row must be a no-op")
 	}
 }
@@ -536,7 +538,7 @@ func TestEnterInTreeNoOpOnCommitsSide(t *testing.T) {
 	m := filesViewModel()
 	m.filesTreeFocused = false
 	u, cmd := m.Update(keyMsg("enter"))
-	if u.(Model).diffView != nil || cmd != nil {
+	if u.(Model).diffLayer() != nil || cmd != nil {
 		t.Fatal("enter on the commits side must not open a diff")
 	}
 }
@@ -546,7 +548,7 @@ func TestEnterInTreeNarrowRefusalExplains(t *testing.T) {
 	m.width = 55 // files view open (>=40) but diff needs >=60
 	u, cmd := m.Update(keyMsg("enter"))
 	mm := u.(Model)
-	if mm.diffView != nil || cmd != nil {
+	if mm.diffLayer() != nil || cmd != nil {
 		t.Fatal("enter at 55 cols must not open the diff")
 	}
 	if mm.statusMsg == "" {
@@ -635,20 +637,20 @@ func TestDiffNPAliasCtrlJumps(t *testing.T) {
 	rows := sameRowsTUI(40, 20, 30)
 	mk := func() Model {
 		mm := m
-		mm.diffView = diffViewWith(rows, []int{20, 30})
+		mm = mm.pushLayer(diffViewWith(rows, []int{20, 30}))
 		mm.diffTag = "status:x"
 		return mm
 	}
 	for _, pair := range [][2]string{{"n", "ctrl+down"}, {"p", "ctrl+up"}} {
 		a := mk()
-		a.diffView.offset = 15
+		a.diffLayer().offset = 15
 		b := mk()
-		b.diffView.offset = 15
+		b.diffLayer().offset = 15
 		ua, _ := a.Update(keyMsg(pair[0]))
 		ub, _ := b.Update(keyMsg(pair[1]))
-		if ua.(Model).diffView.offset != ub.(Model).diffView.offset {
-			t.Fatalf("%s (%d) != %s (%d)", pair[0], ua.(Model).diffView.offset,
-				pair[1], ub.(Model).diffView.offset)
+		if ua.(Model).diffLayer().offset != ub.(Model).diffLayer().offset {
+			t.Fatalf("%s (%d) != %s (%d)", pair[0], ua.(Model).diffLayer().offset,
+				pair[1], ub.(Model).diffLayer().offset)
 		}
 	}
 }
@@ -657,7 +659,7 @@ func TestDiffJumpLandsWithContextAbove(t *testing.T) {
 	// Focusing a change anchors it with up to diffLead(3) rows above — exercised
 	// here by the open, which focuses the first change (row 20 → offset 17).
 	m := openedDiffModel(12, sameRowsTUI(40, 20), []int{20})
-	if got := m.diffView.offset; got != 17 { // 20 - diffLead(3)
+	if got := m.diffLayer().offset; got != 17 { // 20 - diffLead(3)
 		t.Fatalf("offset = %d, want 17 (change with 3 lines above)", got)
 	}
 }
@@ -665,24 +667,24 @@ func TestDiffJumpLandsWithContextAbove(t *testing.T) {
 func TestDiffToggleFlipsModeAndSession(t *testing.T) {
 	m := diffModel()
 	m.height = 12
-	m.diffView = diffViewWith(sameRowsTUI(40, 20), []int{20})
+	m = m.pushLayer(diffViewWith(sameRowsTUI(40, 20), []int{20}))
 	m.diffTag = "status:x"
-	if m.diffView.partial {
+	if m.diffLayer().partial {
 		t.Fatal("default mode is full")
 	}
 	u, _ := m.Update(keyMsg("f"))
 	mm := u.(Model)
-	if !mm.diffView.partial {
+	if !mm.diffLayer().partial {
 		t.Fatal("f must switch the open view to partial")
 	}
 	if !mm.diffPartial {
 		t.Fatal("f must remember partial as the session default")
 	}
-	if len(mm.diffView.lines) >= len(mm.diffView.full) {
+	if len(mm.diffLayer().lines) >= len(mm.diffLayer().full) {
 		t.Fatal("partial mode must collapse unchanged runs")
 	}
 	u2, _ := mm.Update(keyMsg("f"))
-	if u2.(Model).diffView.partial || u2.(Model).diffPartial {
+	if u2.(Model).diffLayer().partial || u2.(Model).diffPartial {
 		t.Fatal("a second f must switch back to full")
 	}
 }
@@ -690,14 +692,14 @@ func TestDiffToggleFlipsModeAndSession(t *testing.T) {
 func TestDiffTogglePreservesBlock(t *testing.T) {
 	m := diffModel()
 	m.height = 12 // body = 10
-	m.diffView = diffViewWith(sameRowsTUI(60, 10, 50), []int{10, 50})
+	m = m.pushLayer(diffViewWith(sameRowsTUI(60, 10, 50), []int{10, 50}))
 	m.diffTag = "status:x"
 	u, _ := m.Update(keyMsg("n"))        // first change
 	u, _ = u.(Model).Update(keyMsg("n")) // second change
 	mm := u.(Model)
-	ord := mm.diffView.currentBlockOrdinal()
+	ord := mm.diffLayer().currentBlockOrdinal()
 	u, _ = mm.Update(keyMsg("f"))
-	v := u.(Model).diffView
+	v := u.(Model).diffLayer()
 	body := mm.diffBodyRows()
 	target := v.blocks[ord] // the same change, remapped into the new line stream
 	if target < v.offset || target >= v.offset+body {
@@ -714,7 +716,7 @@ func openedDiffModel(h int, rows []textdiff.Row, blocks []int) Model {
 	m.height = h
 	v := diffViewWith(rows, blocks)
 	v.focusBlock(0, m.diffBodyRows())
-	m.diffView = v
+	m = m.pushLayer(v)
 	m.diffTag = "status:x"
 	return m
 }
@@ -728,42 +730,42 @@ func wrapDiffModel() Model {
 func TestDiffWrapAroundForward(t *testing.T) {
 	m := wrapDiffModel() // opens on the first change (cur 0 of 2)
 	u, _ := m.Update(keyMsg("n"))
-	if got := u.(Model).diffView.currentBlockOrdinal(); got != 1 {
+	if got := u.(Model).diffLayer().currentBlockOrdinal(); got != 1 {
 		t.Fatalf("n must advance to the last change, ordinal = %d want 1", got)
 	}
-	if u.(Model).diffView.wrapArm != wrapNone {
+	if u.(Model).diffLayer().wrapArm != wrapNone {
 		t.Fatal("a move that lands on a change must not prime a wrap")
 	}
-	last := u.(Model).diffView.offset
+	last := u.(Model).diffLayer().offset
 	// First boundary press: no move, primes the wrap.
 	u, _ = u.(Model).Update(keyMsg("n"))
-	if got := u.(Model).diffView.offset; got != last {
+	if got := u.(Model).diffLayer().offset; got != last {
 		t.Fatalf("first n at the last change moved (offset %d → %d)", last, got)
 	}
-	if u.(Model).diffView.wrapArm != wrapToStart {
+	if u.(Model).diffLayer().wrapArm != wrapToStart {
 		t.Fatal("first n at the last change must prime a wrap to the top")
 	}
 	// Second press wraps to the first change.
 	u, _ = u.(Model).Update(keyMsg("n"))
-	if got := u.(Model).diffView.currentBlockOrdinal(); got != 0 {
+	if got := u.(Model).diffLayer().currentBlockOrdinal(); got != 0 {
 		t.Fatalf("second n must wrap to the first change, ordinal = %d", got)
 	}
 }
 
 func TestDiffWrapAroundBackward(t *testing.T) {
 	m := wrapDiffModel() // opens on the first change
-	if m.diffView.currentBlockOrdinal() != 0 {
+	if m.diffLayer().currentBlockOrdinal() != 0 {
 		t.Fatal("setup: expected to open on the first change")
 	}
 	// First p at the first change primes a wrap to the bottom.
 	u, _ := m.Update(keyMsg("p"))
-	if u.(Model).diffView.wrapArm != wrapToEnd {
+	if u.(Model).diffLayer().wrapArm != wrapToEnd {
 		t.Fatal("first p at the first change must prime a wrap to the bottom")
 	}
 	// Second p wraps to the last change.
 	u, _ = u.(Model).Update(keyMsg("p"))
-	last := len(u.(Model).diffView.dispBlocks) - 1
-	if got := u.(Model).diffView.currentBlockOrdinal(); got != last {
+	last := len(u.(Model).diffLayer().dispBlocks) - 1
+	if got := u.(Model).diffLayer().currentBlockOrdinal(); got != last {
 		t.Fatalf("second p must wrap to the last change, ordinal = %d want %d", got, last)
 	}
 }
@@ -772,20 +774,20 @@ func TestDiffWrapDisarmedByOtherKey(t *testing.T) {
 	m := wrapDiffModel()
 	u, _ := m.Update(keyMsg("n"))        // last change (of 2)
 	u, _ = u.(Model).Update(keyMsg("n")) // boundary: primes wrap
-	if u.(Model).diffView.wrapArm != wrapToStart {
+	if u.(Model).diffLayer().wrapArm != wrapToStart {
 		t.Fatal("setup: expected a primed wrap at the last change")
 	}
 	// A scroll between the two n's must cancel the prime.
 	u, _ = u.(Model).Update(keyMsg("j"))
-	if u.(Model).diffView.wrapArm != wrapNone {
+	if u.(Model).diffLayer().wrapArm != wrapNone {
 		t.Fatal("scrolling must disarm the primed wrap")
 	}
 	// The next n re-primes instead of wrapping (cur untouched by the scroll).
 	u, _ = u.(Model).Update(keyMsg("n"))
-	if got := u.(Model).diffView.currentBlockOrdinal(); got == 0 {
+	if got := u.(Model).diffLayer().currentBlockOrdinal(); got == 0 {
 		t.Fatal("n after a disarm wrapped to the first change instead of re-priming")
 	}
-	if u.(Model).diffView.wrapArm != wrapToStart {
+	if u.(Model).diffLayer().wrapArm != wrapToStart {
 		t.Fatal("n at the boundary after a disarm must re-prime the wrap")
 	}
 }
@@ -796,27 +798,27 @@ func TestDiffWrapDisarmedByOtherKey(t *testing.T) {
 // still step all the way to N/N, and only then does the wrap arm.
 func TestDiffCounterReachesLastWhenBottomBunched(t *testing.T) {
 	m := openedDiffModel(12, sameRowsTUI(40, 5, 33, 36, 38), []int{5, 33, 36, 38})
-	n := len(m.diffView.dispBlocks) // 4
+	n := len(m.diffLayer().dispBlocks) // 4
 	u := tea.Model(m)
 	for i := 1; i < n; i++ {
 		u, _ = u.(Model).Update(keyMsg("n"))
-		if got := u.(Model).diffView.currentBlockOrdinal(); got != i {
+		if got := u.(Model).diffLayer().currentBlockOrdinal(); got != i {
 			t.Fatalf("press %d: ordinal = %d, want %d (counter must step one per n)", i, got, i)
 		}
-		if u.(Model).diffView.wrapArm != wrapNone {
+		if u.(Model).diffLayer().wrapArm != wrapNone {
 			t.Fatalf("press %d landed on a change but primed a wrap", i)
 		}
 	}
-	if got := u.(Model).diffView.currentBlockOrdinal(); got != n-1 {
+	if got := u.(Model).diffLayer().currentBlockOrdinal(); got != n-1 {
 		t.Fatalf("never reached the last change: ordinal = %d, want %d", got, n-1)
 	}
 	// Now on the last change: first n primes, second n wraps to the first.
 	u, _ = u.(Model).Update(keyMsg("n"))
-	if u.(Model).diffView.wrapArm != wrapToStart {
+	if u.(Model).diffLayer().wrapArm != wrapToStart {
 		t.Fatal("n on the bottom-bunched last change must prime a wrap")
 	}
 	u, _ = u.(Model).Update(keyMsg("n"))
-	if got := u.(Model).diffView.currentBlockOrdinal(); got != 0 {
+	if got := u.(Model).diffLayer().currentBlockOrdinal(); got != 0 {
 		t.Fatalf("second n must wrap to the first change, ordinal = %d", got)
 	}
 }
@@ -829,12 +831,12 @@ func TestDiffNavResumesFromScrollPosition(t *testing.T) {
 	m := openedDiffModel(12, sameRowsTUI(80, 5, 15, 25, 35, 45), []int{5, 15, 25, 35, 45})
 	u, _ := m.Update(keyMsg("pgdown"))
 	u, _ = u.(Model).Update(keyMsg("pgdown"))
-	scrolled := u.(Model).diffView.currentBlockOrdinal()
+	scrolled := u.(Model).diffLayer().currentBlockOrdinal()
 	if scrolled < 1 {
 		t.Fatalf("two pgdowns should advance the focus past the first change, ordinal = %d", scrolled)
 	}
 	u, _ = u.(Model).Update(keyMsg("n"))
-	if got := u.(Model).diffView.currentBlockOrdinal(); got != scrolled+1 {
+	if got := u.(Model).diffLayer().currentBlockOrdinal(); got != scrolled+1 {
 		t.Fatalf("n after scrolling went to %d, want %d (one past the scrolled position)", got, scrolled+1)
 	}
 }
@@ -845,26 +847,26 @@ func TestDiffNavResumesFromScrollPosition(t *testing.T) {
 // the focus index, not the (immovable) offset.
 func TestDiffNavWhenDiffFitsOnScreen(t *testing.T) {
 	m := openedDiffModel(12, sameRowsTUI(8, 2, 4, 6), []int{2, 4, 6})
-	if m.diffView.offset != 0 {
-		t.Fatalf("setup: a diff this small can't scroll, offset = %d", m.diffView.offset)
+	if m.diffLayer().offset != 0 {
+		t.Fatalf("setup: a diff this small can't scroll, offset = %d", m.diffLayer().offset)
 	}
 	u := tea.Model(m)
 	for i, want := range []int{1, 2} { // step to 2/3 then 3/3
 		u, _ = u.(Model).Update(keyMsg("n"))
-		if got := u.(Model).diffView.currentBlockOrdinal(); got != want {
+		if got := u.(Model).diffLayer().currentBlockOrdinal(); got != want {
 			t.Fatalf("n #%d: ordinal = %d, want %d", i+1, got, want)
 		}
-		if off := u.(Model).diffView.offset; off != 0 {
+		if off := u.(Model).diffLayer().offset; off != 0 {
 			t.Fatalf("n #%d moved the offset (%d) on an unscrollable diff", i+1, off)
 		}
 	}
 	// On the last change: prime, then wrap back to the first.
 	u, _ = u.(Model).Update(keyMsg("n"))
-	if u.(Model).diffView.wrapArm != wrapToStart {
+	if u.(Model).diffLayer().wrapArm != wrapToStart {
 		t.Fatal("n on the last change must prime a wrap even when nothing scrolls")
 	}
 	u, _ = u.(Model).Update(keyMsg("n"))
-	if got := u.(Model).diffView.currentBlockOrdinal(); got != 0 {
+	if got := u.(Model).diffLayer().currentBlockOrdinal(); got != 0 {
 		t.Fatalf("wrap must return to the first change, ordinal = %d", got)
 	}
 }
@@ -1084,9 +1086,9 @@ func TestDiffZCyclesLongMode(t *testing.T) {
 	rows := sameRowsTUI(40, 20)
 	m := diffModel()
 	m.width, m.height = 80, 24
-	m.diffView = diffViewWith(rows, []int{20})
-	m.diffView.width = 80
-	m.diffView.rebuild()
+	m = m.pushLayer(diffViewWith(rows, []int{20}))
+	m.diffLayer().width = 80
+	m.diffLayer().rebuild()
 	m.diffTag = "status:x"
 	// default scroll → wrap → truncate → scroll
 	wantSeq := []longMode{longWrap, longTruncate, longScroll}
@@ -1094,8 +1096,8 @@ func TestDiffZCyclesLongMode(t *testing.T) {
 	for i, want := range wantSeq {
 		u, _ := cur.(Model).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("z")})
 		mm := u.(Model)
-		if mm.diffView.long != want {
-			t.Fatalf("press %d: long = %d, want %d", i+1, mm.diffView.long, want)
+		if mm.diffLayer().long != want {
+			t.Fatalf("press %d: long = %d, want %d", i+1, mm.diffLayer().long, want)
 		}
 		if mm.diffLong != want {
 			t.Fatalf("press %d: session diffLong = %d, want %d", i+1, mm.diffLong, want)
@@ -1143,11 +1145,11 @@ func TestDiffResizeReanchorsToTopLine(t *testing.T) {
 	before := v.lineStart[10]
 	v.offset = before // top is logical line 10
 	dispLenBefore := len(v.disp)
-	m.diffView = v
+	m = m.pushLayer(v)
 	m.diffTag = "status:x"
 
 	u, _ := m.Update(tea.WindowSizeMsg{Width: 160, Height: 24})
-	nv := u.(Model).diffView
+	nv := u.(Model).diffLayer()
 	if nv == nil {
 		t.Fatal("a width≥60 resize must not close the diff")
 	}
@@ -1199,20 +1201,20 @@ func TestDiffScrollPanKeys(t *testing.T) {
 	v := diffViewWith(rows, nil) // default long == longScroll
 	v.width = 80
 	v.rebuild()
-	m.diffView = v
+	m = m.pushLayer(v)
 	m.diffTag = "status:x"
 
 	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyRight})
-	v1 := u.(Model).diffView
+	v1 := u.(Model).diffLayer()
 	if v1.hOffset != m.hscrollStep() {
 		t.Fatalf("→ should pan by %d, got hOffset %d", m.hscrollStep(), v1.hOffset)
 	}
 	u2, _ := u.(Model).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("0")})
-	if u2.(Model).diffView.hOffset != 0 {
+	if u2.(Model).diffLayer().hOffset != 0 {
 		t.Fatal("0 must reset hOffset")
 	}
 	u3, _ := u2.(Model).Update(tea.KeyMsg{Type: tea.KeyLeft})
-	if u3.(Model).diffView.hOffset != 0 {
+	if u3.(Model).diffLayer().hOffset != 0 {
 		t.Fatal("← at column 0 must clamp to 0")
 	}
 }
@@ -1225,10 +1227,10 @@ func TestDiffPanNoOpWhenNotScroll(t *testing.T) {
 	v.long = longWrap
 	v.width = 80
 	v.rebuild()
-	m.diffView = v
+	m = m.pushLayer(v)
 	m.diffTag = "status:x"
 	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyRight})
-	if u.(Model).diffView.hOffset != 0 {
+	if u.(Model).diffLayer().hOffset != 0 {
 		t.Fatal("→ must be a no-op outside scroll mode")
 	}
 }
@@ -1247,11 +1249,11 @@ func TestDiffResizeReclampsHOffset(t *testing.T) {
 	v.hOffset = v.maxCell // overshoot, then clamp to the width-60 max
 	v.clampHOffset()
 	wide := v.hOffset
-	m.diffView = v
+	m = m.pushLayer(v)
 	m.diffTag = "status:x"
 	// Growing width enlarges tw, shrinking the pan ceiling: hOffset must drop.
 	u, _ := m.Update(tea.WindowSizeMsg{Width: 200, Height: 24})
-	nv := u.(Model).diffView
+	nv := u.(Model).diffLayer()
 	if nv.hOffset >= wide {
 		t.Fatalf("growing width should re-clamp hOffset down: %d (was %d)", nv.hOffset, wide)
 	}

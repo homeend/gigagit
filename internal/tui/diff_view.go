@@ -377,7 +377,12 @@ func (m Model) openStatusDiff(f model.FileStatus, staged bool) (tea.Model, tea.C
 	} else {
 		m.diffNav = diffNavStatus
 	}
-	m.diffView = &diffView{title: f.Path, context: statusDiffContext(staged), rev: "", loading: true, partial: m.diffPartial, long: m.diffLong}
+	v := &diffView{title: f.Path, context: statusDiffContext(staged), rev: "", loading: true, partial: m.diffPartial, long: m.diffLong}
+	if dv := m.diffLayer(); dv != nil {
+		*dv = *v // stepping: reuse the entry already on the stack
+	} else {
+		m = m.pushLayer(v)
+	}
 	m.diffTag = statusDiffTag(f.Path, staged)
 	return m, m.loadStatusDiffCmd(f, staged)
 }
@@ -544,7 +549,7 @@ func (m Model) loadCompareDiffCmd(left, right model.Endpoint, line contentLine) 
 	differ := m.diffDiffer()
 	body := m.diffBodyRows()
 	tag := "cmp:" + left.CacheTag() + ":" + right.CacheTag() + ":" + line.path
-	v := m.diffView
+	v := m.diffLayer()
 	key := compareDiffKey(left, right, line.path)
 
 	oldP := line.path
@@ -571,11 +576,25 @@ func (m Model) loadCompareDiffCmd(left, right model.Endpoint, line contentLine) 
 	}
 }
 
+// update lets a diffView live on the layer stack: it delegates to the existing
+// Model-side key handler (which finds this diff via m.diffLayer()) and adapts the
+// tea.Model return to the layer interface's Model.
+func (v *diffView) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
+	nm, cmd := m.updateDiffViewKey(msg)
+	return nm.(Model), cmd
+}
+
+// render draws the full-screen diff. Like the other surfaces it owns the screen
+// and ignores the backdrop.
+func (v *diffView) render(m Model, below string) string {
+	return m.renderDiffView()
+}
+
 // updateDiffViewKey routes keys while the diff view is open: scrolling,
 // change-block jumps, close/quit. Everything else is swallowed — no action
 // key can reach the panels behind a full-screen view.
 func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	v := m.diffView
+	v := m.diffLayer()
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
 	}
@@ -601,7 +620,7 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// q is inert here: only the base layout quits on q. esc is the back key;
 	// ctrl+c (handled above) remains the universal quit.
 	case "esc":
-		m.diffView = nil
+		m = m.popLayer()
 		m.diffTag = ""
 		return m, nil
 	case "h":

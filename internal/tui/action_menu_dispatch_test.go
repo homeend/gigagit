@@ -26,7 +26,7 @@ func TestDotOpensMenuFromFilesView(t *testing.T) {
 func TestDotOpensMenuFromDiffView(t *testing.T) {
 	m := footerModel()
 	m.loading = false
-	m.diffView = &diffView{title: "a.go", rev: "abc123"}
+	m = m.pushLayer(&diffView{title: "a.go", rev: "abc123"})
 	if pressDot(m).actionMenu == nil {
 		t.Fatal(". must open the action menu from the diff view")
 	}
@@ -65,14 +65,14 @@ func TestDotOpensMenuFromBlame(t *testing.T) {
 func TestMenuOwnsKeysOverDiffView(t *testing.T) {
 	m := footerModel()
 	m.loading = false
-	m.diffView = &diffView{title: "a.go", rev: "abc"}
+	m = m.pushLayer(&diffView{title: "a.go", rev: "abc"})
 	m = m.openActionMenu()
 	u, _ := m.Update(keyMsg("esc"))
 	mm := u.(Model)
 	if mm.actionMenu != nil {
 		t.Error("esc should close the menu, not be eaten by the diff view")
 	}
-	if mm.diffView == nil {
+	if mm.diffLayer() == nil {
 		t.Error("the diff view must survive closing the menu")
 	}
 }

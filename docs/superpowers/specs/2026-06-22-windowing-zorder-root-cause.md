@@ -43,12 +43,17 @@ subsystem hard-codes its **own** order for them:
 
 Two concrete contradictions fall straight out of this table:
 
-1. **diffView vs. the layer stack:** render draws `diffView` *in front of* the
-   stack (`view.go:119` before `:182`), but keyboard and mouse route to the
-   **stack first** (`model.go:478` before `:484`; `mouse.go:23` before `:31`). So
-   a diff drawn "on top of" a layer has its keys and wheel stolen by the layer
-   beneath it. This is why a full-screen diff **cannot** sit over the history
-   layer — and why `clearLayers` exists (see below).
+1. **diffView vs. the layer stack:** the diff was rendered as `layerBase` —
+   the **backdrop** the stack walk composites *over* (`view.go` `layerBase`
+   special-case, stack walk at `:182`). So render actually **agreed** with
+   keyboard and mouse routing (stack in front of diff, `model.go:478` before
+   `:484`; `mouse.go:23` before `:31`). The real root cause was not a
+   render/input disagreement but the diff being a base **outside** the stack
+   entirely: opening a diff had to `clearLayers` to evict the stack so that the
+   diff, as the base, became the sole visible surface — discarding the "I came
+   from history" return target. **This is now fixed:** the diff is promoted to a
+   stack layer (`pushLayer`), so z-order, input, and return all agree and
+   `clearLayers` is retired.
 2. **actionMenu vs. the stack:** keyboard puts `actionMenu` **before** the stack
    (`model.go:468` < `:478`); mouse puts the stack **before** `actionMenu`
    (`mouse.go:23` < `:37`). Same two windows, opposite order in two subsystems.

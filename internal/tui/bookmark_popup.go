@@ -428,14 +428,11 @@ func (m Model) openBookmarkCompareTwo(aID, bID string) (Model, tea.Cmd) {
 }
 
 // openPickerDiff hands off from a picker popup (bookmark or shelf) to a
-// full-screen diff: it clears the whole layer stack (the picker and any surface
-// beneath it), so the diff view — the layer-stack base, checked after the stack
-// in render/dispatch/mouse — owns the screen even when the popup was opened over
-// a history/blame surface. Shared by jump, compare-two, and the
-// compare-focused-vs-X paths.
+// full-screen diff: it pushes the diff on top of the stack (the picker sits
+// beneath it, so esc from the diff returns to the picker). Shared by jump,
+// compare-two, and the compare-focused-vs-X paths.
 func (m Model) openPickerDiff(v *diffView, tag string, load tea.Cmd) (Model, tea.Cmd) {
-	m = m.clearLayers()
-	m.diffView = v
+	m = m.pushLayer(v)
 	m.diffTag = tag
 	m.diffNav = diffNavNone // a picker compare has no source file list to step
 	return m, load

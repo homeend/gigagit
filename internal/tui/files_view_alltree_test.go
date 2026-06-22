@@ -93,7 +93,7 @@ func TestFilesViewAllFilesEnterDiffsVsWorkTree(t *testing.T) {
 		}
 	}
 	m, _ = feedFilesView(t, m, "enter")
-	if m.diffView == nil {
+	if m.diffLayer() == nil {
 		t.Fatal("enter in full-tree mode should open a diff")
 	}
 	if !strings.Contains(m.diffTag, "worktree") {

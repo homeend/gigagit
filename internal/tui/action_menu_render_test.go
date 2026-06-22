@@ -10,7 +10,7 @@ import (
 func TestMenuRendersOverDiffView(t *testing.T) {
 	m := footerModel()
 	m.loading = false
-	m.diffView = &diffView{title: "a.go", rev: "abc123"}
+	m = m.pushLayer(&diffView{title: "a.go", rev: "abc123"})
 	m = m.openActionMenu()
 	out := ansi.Strip(m.View())
 	if !strings.Contains(out, "Actions") {

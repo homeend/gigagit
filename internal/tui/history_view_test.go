@@ -140,7 +140,7 @@ func TestFilesViewHOpensHistory(t *testing.T) {
 
 func TestDiffViewHOpensHistory(t *testing.T) {
 	m := Model{width: 100, height: 30}
-	m.diffView = &diffView{title: "a.go", rev: "abc123"}
+	m = m.pushLayer(&diffView{title: "a.go", rev: "abc123"})
 	mm, _ := m.updateDiffViewKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("h")})
 	h, ok := mm.(Model).topLayer().(*historyView)
 	if !ok {

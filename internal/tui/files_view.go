@@ -423,7 +423,7 @@ func (m Model) openDiffForFileLine(l contentLine) (tea.Model, tea.Cmd) {
 	}
 	m.diffNotice = "" // drop any stale notice; the stepper re-posts its arrival notice
 	m.diffNav = diffNavTree
-	m.diffView = &diffView{
+	newV := &diffView{
 		title:   l.path,
 		context: "@ " + strings.TrimPrefix(m.filesTitle, "Files "),
 		rev:     m.filesHash,
@@ -431,18 +431,23 @@ func (m Model) openDiffForFileLine(l contentLine) (tea.Model, tea.Cmd) {
 		partial: m.diffPartial,
 		long:    m.diffLong,
 	}
+	if dv := m.diffLayer(); dv != nil {
+		*dv = *newV // stepping: reuse the entry already on the stack
+	} else {
+		m = m.pushLayer(newV)
+	}
 	if m.filesAllFiles {
 		// Full-tree mode: the file may be unchanged in this commit, so a
 		// parent-diff would be empty. Diff the commit's version against the
 		// working tree instead — useful for any file in the tree.
 		left := model.Endpoint{Kind: model.EndpointCommit, Hash: m.filesHash}
 		right := model.Endpoint{Kind: model.EndpointWorkTree}
-		m.diffView.context = shortHash(m.filesHash) + " ↔ working tree"
+		m.diffLayer().context = shortHash(m.filesHash) + " ↔ working tree"
 		m.diffTag = "cmp:" + left.CacheTag() + ":" + right.CacheTag() + ":" + l.path
 		return m, m.loadCompareDiffCmd(left, right, l)
 	}
 	if m.filesCompare {
-		m.diffView.context = m.filesTitle
+		m.diffLayer().context = m.filesTitle
 		m.diffTag = "cmp:" + m.filesLeft.CacheTag() + ":" + m.filesRight.CacheTag() + ":" + l.path
 		return m, m.loadCompareDiffCmd(m.filesLeft, m.filesRight, l)
 	}

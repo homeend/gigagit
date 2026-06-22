@@ -129,13 +129,10 @@ func clipToHeight(s string, h int) string {
 	return strings.Join(lines[:h], "\n")
 }
 
-// layerBase is what the layer stack composites over: the open full-screen diff,
-// else the panel interface. Surfaces in the stack ignore it (they own the
-// screen); popups composite their centered box onto it.
+// layerBase is what the layer stack composites over: the panel interface.
+// Surfaces in the stack ignore it (they own the screen); popups composite
+// their centered box onto it.
 func (m Model) layerBase() string {
-	if m.diffView != nil {
-		return m.renderDiffView()
-	}
 	return m.renderInterface()
 }
 
@@ -196,7 +193,7 @@ func (m Model) render() string {
 	// cheat-sheet returns to the switcher beneath. With an empty stack but an open
 	// diff, renderLayers is just the diff; with neither, fall through to the
 	// panel/tooltip base below.
-	if (m.layers != nil && len(m.layers.entries) > 0) || m.diffView != nil {
+	if m.layers != nil && len(m.layers.entries) > 0 {
 		_, h := m.overlayDims()
 		return m.withDiffFileNotice(m.withRecall(clipToHeight(m.renderLayers(), h)))
 	}

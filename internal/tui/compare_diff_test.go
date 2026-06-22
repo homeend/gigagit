@@ -27,21 +27,23 @@ func TestCompareDiffCacheKeyRule(t *testing.T) {
 
 // A diffMsg means the load completed, so the handler must clear the view's
 // loading flag for every path. The compare path reuses the pre-built loading
-// view (v := m.diffView), so unless the handler clears it the body stays stuck
+// view (v := m.diffLayer()), so unless the handler clears it the body stays stuck
 // on "(loading…)" forever even though the header shows real counts.
 func TestDiffMsgClearsLoading(t *testing.T) {
 	v := &diffView{loading: true} // pre-built loading view, reused by the loader
-	m := Model{diffView: v, diffTag: "cmp:aaa:worktree:README.md"}
+	m := Model{}
+	m = m.pushLayer(v)
+	m.diffTag = "cmp:aaa:worktree:README.md"
 
 	// the result view is the SAME pointer with content applied but loading still
 	// true (mirrors loadCompareDiffCmd → applyDiff, which never clears loading).
 	u, _ := m.Update(diffMsg{tag: "cmp:aaa:worktree:README.md", view: v})
 	mm := u.(Model)
 
-	if mm.diffView == nil {
+	if mm.diffLayer() == nil {
 		t.Fatal("diffView must survive a matching diffMsg")
 	}
-	if mm.diffView.loading {
+	if mm.diffLayer().loading {
 		t.Error("a completed diffMsg must clear loading; body would stay on \"(loading…)\"")
 	}
 }
@@ -60,7 +62,7 @@ func TestCompareEnterOpensDiff(t *testing.T) {
 
 	u, cmd := m.Update(keyMsg("enter"))
 	mm := u.(Model)
-	if mm.diffView == nil {
+	if mm.diffLayer() == nil {
 		t.Fatal("enter in compare mode must open the diff view")
 	}
 	if !strings.Contains(mm.diffTag, "README.md") {
