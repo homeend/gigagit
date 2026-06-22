@@ -25,6 +25,8 @@ type UIConfig struct {
 	FooterActions []string `toml:"footer_actions"` // action ids shown in the footer; empty = all (default)
 	MenuActions   []string `toml:"menu_actions"`   // action ids shown in the . menu; empty = all (default)
 
+	SearchHistorySize int `toml:"search_history_size"` // entries kept per search-history ring; <=0 = unset (default 20), clamped to searchhist.MaxSize
+
 	CommitGraphLanes    int `toml:"commit_graph_lanes"`     // default graph window width in lanes; <=0 = unset
 	CommitGraphMinLanes int `toml:"commit_graph_min_lanes"` // minimum window width (narrow floor); <=0 = unset
 	CommitGraphStep     int `toml:"commit_graph_step"`      // widen/narrow increment in lanes; <=0 = unset
@@ -116,6 +118,9 @@ func overlayUI(dst *UIConfig, src UIConfig) {
 	}
 	if len(src.MenuActions) > 0 {
 		dst.MenuActions = src.MenuActions
+	}
+	if src.SearchHistorySize > 0 {
+		dst.SearchHistorySize = src.SearchHistorySize
 	}
 	if src.CommitGraphLanes > 0 {
 		dst.CommitGraphLanes = src.CommitGraphLanes
