@@ -64,7 +64,7 @@ func TestShelfRestorePopupRequiresDest(t *testing.T) {
 		u, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
 		m = u.(Model)
 	}
-	if shelfRestoreOf(m).dest != "out.txt" {
-		t.Fatalf("dest = %q, want out.txt", shelfRestoreOf(m).dest)
+	if shelfRestoreOf(m).dest.Value() != "out.txt" {
+		t.Fatalf("dest = %q, want out.txt", shelfRestoreOf(m).dest.Value())
 	}
 }
