@@ -2,12 +2,17 @@ package tui
 
 import (
 	"context"
+	"strconv"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/gigagit/gg/internal/domain"
 )
+
+// recallVisibleRows caps how many history entries the dropdown shows at once.
+const recallVisibleRows = 10
 
 // Search-history ring scopes. The panel filter and @ highlight share scopePanel.
 const (
@@ -30,6 +35,71 @@ func loadSearchHistCmd(svc *domain.Service) tea.Cmd {
 // searchHistorySize is the effective per-ring cap from config (default 20, ≤1000).
 func (m Model) searchHistorySize() int {
 	return domain.EffectiveSearchHistorySize(m.cfg.UI.SearchHistorySize)
+}
+
+// recallBox renders the history dropdown (≤recallVisibleRows rows, highlight,
+// scroll markers). Returns "" when the dropdown is closed or empty.
+func (m Model) recallBox(width int) string {
+	if !m.recallOpen {
+		return ""
+	}
+	ring := m.searchHist[m.recallScope]
+	if len(ring) == 0 {
+		return ""
+	}
+	if width < 12 {
+		width = 12
+	}
+	// Window: keep recallIndex visible, newest-first, at most recallVisibleRows.
+	start := 0
+	if m.recallIndex >= recallVisibleRows {
+		start = m.recallIndex - recallVisibleRows + 1
+	}
+	end := start + recallVisibleRows
+	if end > len(ring) {
+		end = len(ring)
+	}
+
+	var b strings.Builder
+	if start > 0 {
+		b.WriteString("  ↑" + strconv.Itoa(start) + " more\n")
+	}
+	for i := start; i < end; i++ {
+		line := truncate(ring[i], width-2)
+		if i == m.recallIndex {
+			b.WriteString(selectedRow.Render("▸ "+line) + "\n")
+		} else {
+			b.WriteString("  " + line + "\n")
+		}
+	}
+	if end < len(ring) {
+		b.WriteString("  ↓" + strconv.Itoa(len(ring)-end) + " more")
+	}
+	box := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Width(width)
+	return box.Render(strings.TrimRight(b.String(), "\n"))
+}
+
+// withRecall overlays the history dropdown bottom-left over a rendered frame
+// when recall is open. A no-op otherwise. Anchored low so it never hides the
+// search input it accompanies.
+func (m Model) withRecall(frame string) string {
+	if !m.recallOpen {
+		return frame
+	}
+	w, h := m.overlayDims()
+	width := 48
+	if max := w - 4; width > max {
+		width = max
+	}
+	box := m.recallBox(width)
+	if box == "" {
+		return frame
+	}
+	top := h - lipgloss.Height(box) - 1
+	if top < 0 {
+		top = 0
+	}
+	return overlayAt(frame, box, 2, top, w, h)
 }
 
 // recallReset clears recall state (called when a typing mode opens/closes).
