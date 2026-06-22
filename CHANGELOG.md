@@ -9,6 +9,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Wrap-around change navigation in the diff view.** When `n` (next change)
+  reaches the last change — or `p` (previous) reaches the first — the press no
+  longer just stops. A header cue (`↻ n again → top` / `↻ p again → bottom`)
+  appears, and pressing the same key once more wraps to the other end. Any other
+  key cancels the primed wrap, so a single overshoot never jumps you across the
+  file. Also applies to the `ctrl+↓`/`ctrl+↑` aliases.
 - **Mark two rows to compare them.** In the Commits panel, mark one row (`m`) and
   mark a second — gg opens their whole-tree compare directly (the GitKraken
   "select two, see the diff" gesture), instead of the old "no pair operations"

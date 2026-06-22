@@ -56,6 +56,29 @@ type diffView struct {
 	tooLarge   bool
 	loading    bool
 	err        error
+	wrapArm    wrapDir // boundary press primed a wrap-around (see wrapDir); cleared on any other key
+}
+
+// wrapDir records that a change-navigation key hit a boundary and primed a
+// wrap-around: the next same-direction press jumps to the far end. Cleared by
+// any other key (reset at the top of updateDiffViewKey).
+type wrapDir int
+
+const (
+	wrapNone    wrapDir = iota
+	wrapToStart         // at the last change: next n/ctrl+↓ wraps to the first
+	wrapToEnd           // at the first change: next p/ctrl+↑ wraps to the last
+)
+
+// wrapCue is the header prompt shown while a wrap-around is primed ("" = none).
+func wrapCue(d wrapDir) string {
+	switch d {
+	case wrapToStart:
+		return "↻ n again → top"
+	case wrapToEnd:
+		return "↻ p again → bottom"
+	}
+	return ""
 }
 
 // dRow is one display row: a fold marker, or one (possibly continuation) slice
@@ -210,26 +233,29 @@ func (v *diffView) jumpTo(b, body int) {
 	v.scroll(0, body)
 }
 
-// nextBlock jumps to the first change strictly below the current one; no-op
-// past the last. The +diffLead reference neutralizes the lead so the current
-// change isn't re-selected.
-func (v *diffView) nextBlock(body int) {
+// nextBlock jumps to the first change strictly below the current one and
+// reports whether it moved (false = already at/past the last). The +diffLead
+// reference neutralizes the lead so the current change isn't re-selected.
+func (v *diffView) nextBlock(body int) bool {
 	for _, b := range v.dispBlocks {
 		if b > v.offset+diffLead {
 			v.jumpTo(b, body)
-			return
+			return true
 		}
 	}
+	return false
 }
 
-// prevBlock jumps to the first change strictly above the current one.
-func (v *diffView) prevBlock(body int) {
+// prevBlock jumps to the first change strictly above the current one and
+// reports whether it moved (false = already at the first).
+func (v *diffView) prevBlock(body int) bool {
 	for i := len(v.dispBlocks) - 1; i >= 0; i-- {
 		if v.dispBlocks[i] < v.offset+diffLead {
 			v.jumpTo(v.dispBlocks[i], body)
-			return
+			return true
 		}
 	}
+	return false
 }
 
 // currentBlockOrdinal is the index of the change currently in view (for
@@ -492,6 +518,11 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
 	}
+	// A wrap-around is primed by a boundary press and survives only until the
+	// very next key: capture it, then disarm. Any case other than the matching
+	// n/p re-arm leaves it cleared (so scrolling away cancels a primed wrap).
+	armed := v.wrapArm
+	v.wrapArm = wrapNone
 	switch msg.String() {
 	case ".":
 		return m.openActionMenu(), nil
@@ -523,14 +554,22 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		v.scroll(-m.diffBodyRows(), m.diffBodyRows())
 	case "pgdown":
 		v.scroll(m.diffBodyRows(), m.diffBodyRows())
-	case "ctrl+down":
-		v.nextBlock(m.diffBodyRows())
-	case "ctrl+up":
-		v.prevBlock(m.diffBodyRows())
-	case "n":
-		v.nextBlock(m.diffBodyRows())
-	case "p":
-		v.prevBlock(m.diffBodyRows())
+	case "n", "ctrl+down":
+		if !v.nextBlock(m.diffBodyRows()) { // already at the last change
+			if armed == wrapToStart && len(v.dispBlocks) > 0 {
+				v.jumpTo(v.dispBlocks[0], m.diffBodyRows()) // second press wraps to top
+			} else {
+				v.wrapArm = wrapToStart // first press primes the wrap
+			}
+		}
+	case "p", "ctrl+up":
+		if !v.prevBlock(m.diffBodyRows()) { // already at the first change
+			if armed == wrapToEnd && len(v.dispBlocks) > 0 {
+				v.jumpTo(v.dispBlocks[len(v.dispBlocks)-1], m.diffBodyRows()) // wraps to bottom
+			} else {
+				v.wrapArm = wrapToEnd
+			}
+		}
 	case "f":
 		ord := v.currentBlockOrdinal()
 		v.partial = !v.partial
