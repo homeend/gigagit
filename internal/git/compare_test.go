@@ -103,6 +103,34 @@ func TestDiffTreeFilesAllForwardForms(t *testing.T) {
 	}
 }
 
+// TestDiffTreeFilesNonASCIIPath is the compare-view twin of
+// TestCommitFilesNonASCIIPathRoundTrip: DiffTreeFiles shares ParseNameStatus,
+// so a non-ASCII added file must surface as a raw UTF-8 path (not git's quoted
+// "timing \342\200\224 …" form), else the compare diff's ShowFile fails.
+func TestDiffTreeFilesNonASCIIPath(t *testing.T) {
+	dir, runner := newTestRepo(t) // one commit: README.md
+	repo := &Repo{Runner: runner}
+	ctx := context.Background()
+
+	a := revParse(t, dir, "HEAD")
+	const name = "timing — kopia.log" // em-dash U+2014
+	if err := os.WriteFile(filepath.Join(dir, name), []byte("hi\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, dir, "add", "-A")
+	gitRun(t, dir, "commit", "-m", "B")
+	b := revParse(t, dir, "HEAD")
+
+	commit := func(h string) model.Endpoint { return model.Endpoint{Kind: model.EndpointCommit, Hash: h} }
+	got, err := repo.DiffTreeFiles(ctx, commit(a), commit(b))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !setStr(got)["A "+name] {
+		t.Fatalf("A→B = %v, want raw %q added", setStr(got), name)
+	}
+}
+
 func TestUntrackedFiles(t *testing.T) {
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}

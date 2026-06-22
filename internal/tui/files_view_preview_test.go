@@ -23,7 +23,7 @@ func previewModel() Model {
 // can preview a long file (more lines than the window can show).
 func previewModelN(showOut string) Model {
 	f := gitexec.NewFakeRunner()
-	f.SetResponse("git log (commit files)", gitexec.Result{Stdout: "M\tinternal/tui/model.go\n"})
+	f.SetResponse("git log (commit files)", gitexec.Result{Stdout: "M\x00internal/tui/model.go\x00"})
 	f.SetResponse("git ls-tree (tree files)", gitexec.Result{Stdout: "README.md\x00pkg/sub/x.go\x00"})
 	f.SetResponse("git show", gitexec.Result{Stdout: showOut})
 	return Model{

@@ -118,7 +118,7 @@ func TestCompareFilesIncludesUntracked(t *testing.T) {
 
 func TestCompareFilesGatedQuery(t *testing.T) {
 	f := gitexec.NewFakeRunner()
-	f.SetResponse("git diff (compare files)", gitexec.Result{Stdout: "M\tREADME.md\nA\tb.txt\n"})
+	f.SetResponse("git diff (compare files)", gitexec.Result{Stdout: "M\x00README.md\x00A\x00b.txt\x00"})
 	f.SetResponse("git ls-files (untracked)", gitexec.Result{Stdout: ""}) // worktree compare also lists untracked
 	svc := New(&git.Repo{Runner: f})
 

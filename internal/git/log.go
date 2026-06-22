@@ -77,9 +77,12 @@ func (r *Repo) CommitTimes(ctx context.Context, shas []string) (map[string]int64
 // once instead of once per parent — `diff-tree -m --first-parent` double-lists a
 // file that differs from both stash parents. --root makes the initial commit
 // list its files; --format= drops the commit header so only the diff remains.
+// -z makes the output NUL-separated and unquoted, so non-ASCII paths arrive as
+// raw UTF-8 (git otherwise wraps them in quotes with octal escapes, which then
+// breaks `git show <rev>:<path>`).
 func (r *Repo) CommitFiles(ctx context.Context, hash string) ([]model.CommitFile, error) {
 	argv := gitcmd.New("log").
-		Arg("-1", "-m", "--first-parent", "--root", "--name-status", "-M", "--format=", hash).
+		Arg("-1", "-m", "--first-parent", "--root", "--name-status", "-M", "-z", "--format=", hash).
 		ToArgv()
 	res, err := r.Runner.Run(ctx, "git log (commit files)", argv)
 	if err != nil {
@@ -109,22 +112,36 @@ func (r *Repo) TreeFiles(ctx context.Context, commit string) ([]model.CommitFile
 	return out, nil
 }
 
-// ParseNameStatus parses `--name-status` lines: "M\tpath" or, for renames
-// and copies, "R<score>\told\tnew". Blank and malformed lines are skipped;
-// the status letter is the first byte of the status field.
+// ParseNameStatus parses the NUL-separated (`-z`) form of `--name-status`. The
+// stream is a flat sequence of NUL-terminated tokens: a status token followed
+// by one path token (M/A/D/T/U) or, for renames and copies (R/C), two path
+// tokens (old then new). Because `-z` disables git's path quoting, non-ASCII
+// paths arrive verbatim as raw UTF-8. The status letter is the first byte of
+// the status token; empty tokens (e.g. a leading record separator from the
+// empty --format header) are skipped.
 func ParseNameStatus(data []byte) []model.CommitFile {
+	toks := strings.Split(strings.TrimRight(string(data), "\x00"), "\x00")
 	var out []model.CommitFile
-	for _, line := range strings.Split(string(data), "\n") {
-		f := strings.Split(line, "\t")
-		if len(f) < 2 || f[0] == "" || f[1] == "" {
+	for i := 0; i < len(toks); {
+		status := toks[i]
+		i++
+		if status == "" {
 			continue
 		}
-		cf := model.CommitFile{Status: f[0][:1], Path: f[1]}
-		if (cf.Status == "R" || cf.Status == "C") && len(f) >= 3 && f[2] != "" {
-			cf.OldPath = f[1]
-			cf.Path = f[2]
+		letter := status[:1]
+		if letter == "R" || letter == "C" {
+			if i+1 >= len(toks) { // need old + new; malformed tail → stop
+				break
+			}
+			out = append(out, model.CommitFile{Status: letter, OldPath: toks[i], Path: toks[i+1]})
+			i += 2
+			continue
 		}
-		out = append(out, cf)
+		if i >= len(toks) { // need a path; malformed tail → stop
+			break
+		}
+		out = append(out, model.CommitFile{Status: letter, Path: toks[i]})
+		i++
 	}
 	return out
 }
