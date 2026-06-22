@@ -286,44 +286,26 @@ func (m Model) commitCompareMarkedRow() (actionRow, bool) {
 	if m.mark == nil || m.mark.panel != panelCommits || !m.markAlive() {
 		return actionRow{}, false
 	}
-	bi, ok := m.backingIndex(panelCommits)
+	selKey, ok := m.selectedKey(panelCommits)
 	if !ok {
 		return actionRow{}, false
 	}
-	sel := m.commits[bi].Hash
 	marked := m.mark.key
-	if sel == marked {
+	if selKey == marked {
 		return actionRow{}, false
 	}
-	older, newer := orderByFeed(m.commits, marked, sel)
+	// older→newer by rank (higher rank = older); a WIP key resolves to its endpoint.
+	older, newer := marked, selKey
+	if m.compareKeyRank(older) < m.compareKeyRank(newer) {
+		older, newer = newer, older
+	}
 	return actionRow{
 		id:    "commit-compare-marked",
-		label: "Compare with marked commit (" + shortHash(marked) + ")",
+		label: "Compare with marked (" + m.compareKeyLabel(marked) + ")",
 		run: func(m Model) (tea.Model, tea.Cmd) {
-			return m.openCompareFiles(
-				model.Endpoint{Kind: model.EndpointCommit, Hash: older},
-				model.Endpoint{Kind: model.EndpointCommit, Hash: newer})
+			return m.openCompareFiles(m.compareKeyEndpoint(older), m.compareKeyEndpoint(newer))
 		},
 	}, true
-}
-
-// orderByFeed returns (older, newer) for two hashes by their position in the
-// newest-first commit feed: the hash at the larger index is older. Callers pass
-// only loaded hashes.
-func orderByFeed(commits []model.Commit, a, b string) (older, newer string) {
-	ia, ib := -1, -1
-	for i := range commits {
-		switch commits[i].Hash {
-		case a:
-			ia = i
-		case b:
-			ib = i
-		}
-	}
-	if ia >= ib { // a sits lower in the feed (older) — or b is absent
-		return a, b
-	}
-	return b, a
 }
 
 // compareSetDisplayIndices returns the display-row indices in panel p that are
@@ -402,39 +384,66 @@ func (m Model) commitCompareClearRow() (actionRow, bool) {
 // ok is false (with a note) when fewer than 2 are selected or the root guard
 // trips.
 func (m Model) compareSelectionEndpoints() (left, right model.Endpoint, note string, ok bool) {
-	type sc struct {
-		hash string
-		idx  int
+	// Iterate the SET directly (not displayIndices) so the selection is
+	// independent of the active / filter; drop keys whose row no longer exists
+	// (a committed/cleared index leaves a stale "staged" key, etc.).
+	valid := func(key string) bool {
+		switch key {
+		case wipKey(wipRow{kind: wipWorktree}), wipKey(wipRow{kind: wipStaged}):
+			for _, r := range m.wipRows {
+				if wipKey(r) == key {
+					return true
+				}
+			}
+			return false
+		default:
+			for i := range m.commits {
+				if m.commits[i].Hash == key {
+					return true
+				}
+			}
+			return false
+		}
 	}
-	var sel []sc
-	for i := range m.commits {
-		if m.commitCompareSet[m.commits[i].Hash] {
-			sel = append(sel, sc{m.commits[i].Hash, i})
+	type sk struct {
+		key  string
+		rank int
+	}
+	var sel []sk
+	for k := range m.commitCompareSet {
+		if valid(k) {
+			sel = append(sel, sk{k, m.compareKeyRank(k)})
 		}
 	}
 	if len(sel) < 2 {
-		return left, right, "select at least 2 commits to compare", false
+		return left, right, "select at least 2 rows to compare", false
 	}
-	// Oldest = largest feed index (newest-first feed); newest = smallest.
+	// older = max rank, newer = min rank (working tree/staged rank negative = newest).
 	oldest, newest := sel[0], sel[0]
+	hasWip := false
 	for _, s := range sel {
-		if s.idx > oldest.idx {
+		if s.rank < 0 {
+			hasWip = true
+		}
+		if s.rank > oldest.rank {
 			oldest = s
 		}
-		if s.idx < newest.idx {
+		if s.rank < newest.rank {
 			newest = s
 		}
 	}
 	if len(sel) == 2 {
-		return model.Endpoint{Kind: model.EndpointCommit, Hash: oldest.hash},
-			model.Endpoint{Kind: model.EndpointCommit, Hash: newest.hash}, "", true
+		return m.compareKeyEndpoint(oldest.key), m.compareKeyEndpoint(newest.key), "", true
 	}
-	// 3+: squash from oldest^. Refuse if oldest is a root commit (no parent).
-	if len(m.commits[oldest.idx].Parents) == 0 {
+	if hasWip {
+		return left, right, "range compare (3+) is commits-only; remove the working tree / staged row", false
+	}
+	// 3+ commits: squash from oldest^. Refuse if the oldest is a root commit.
+	if oi := oldest.rank; oi >= 0 && oi < len(m.commits) && len(m.commits[oi].Parents) == 0 {
 		return left, right, "can't squash a range from the root commit", false
 	}
-	return model.Endpoint{Kind: model.EndpointCommit, Hash: oldest.hash + "^"},
-		model.Endpoint{Kind: model.EndpointCommit, Hash: newest.hash}, "", true
+	return model.Endpoint{Kind: model.EndpointCommit, Hash: oldest.key + "^"},
+		model.Endpoint{Kind: model.EndpointCommit, Hash: newest.key}, "", true
 }
 
 // commitCompareSelectionRow offers "Compare selection" when 2+ commits are in

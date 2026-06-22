@@ -81,3 +81,85 @@ func TestMarkAndToggleWipRow(t *testing.T) {
 		t.Fatalf("staged sentinel not in compare set: %v", m.commitCompareSet)
 	}
 }
+
+func TestCompareMarkedWipVsCommit(t *testing.T) {
+	m := loadedModelLinearCommits(t, 3)
+	m.focus = panelCommits
+	m.status = dirtyStatus()
+	m.wipRows = deriveWipRows(m.status)
+	m = m.rebuildCommitGraph()
+
+	m.mark = &markState{panel: panelCommits, key: wipKey(wipRow{kind: wipWorktree}), display: "working tree"}
+	m.sel[panelCommits] = m.wipCount() + 1 // second commit from the tip
+
+	r, ok := m.commitCompareMarkedRow()
+	if !ok {
+		t.Fatal("compare-with-marked must be available with a wip mark + commit selection")
+	}
+	u, _ := r.run(m)
+	mm := u.(Model)
+	if mm.filesView == nil {
+		t.Fatal("compare must open the files view")
+	}
+	// Older (commit) → newer (working tree): left=commit, right=working tree.
+	if mm.filesLeft.Kind != model.EndpointCommit || mm.filesRight.Kind != model.EndpointWorkTree {
+		t.Fatalf("endpoints = %v↔%v, want Commit↔WorkTree", mm.filesLeft.Kind, mm.filesRight.Kind)
+	}
+}
+
+func TestCompareSelectionWithWipTwo(t *testing.T) {
+	m := loadedModelLinearCommits(t, 3)
+	m.focus = panelCommits
+	m.status = dirtyStatus()
+	m.wipRows = deriveWipRows(m.status)
+	m = m.rebuildCommitGraph()
+	m.commitCompareSet = map[string]bool{
+		wipKey(wipRow{kind: wipWorktree}): true,
+		wipKey(wipRow{kind: wipStaged}):   true,
+	}
+	left, right, note, ok := m.compareSelectionEndpoints()
+	if !ok {
+		t.Fatalf("two wip rows must compare: %s", note)
+	}
+	if left.Kind != model.EndpointIndex || right.Kind != model.EndpointWorkTree {
+		t.Fatalf("endpoints = %v↔%v, want Index↔WorkTree", left.Kind, right.Kind)
+	}
+}
+
+func TestCompareSelectionRangeRefusesWip(t *testing.T) {
+	m := loadedModelLinearCommits(t, 4)
+	m.status = dirtyStatus()
+	m.wipRows = deriveWipRows(m.status)
+	m = m.rebuildCommitGraph()
+	m.commitCompareSet = map[string]bool{
+		wipKey(wipRow{kind: wipWorktree}): true,
+		m.commits[0].Hash:                 true,
+		m.commits[1].Hash:                 true,
+	}
+	if _, _, _, ok := m.compareSelectionEndpoints(); ok {
+		t.Fatal("a 3+ range containing a wip row must be refused")
+	}
+}
+
+// TestCompareSelectionSurvivesFilter guards against coupling the ◉ selection to
+// the active / filter: two selected commits must still compare even when the
+// filter hides one of them.
+func TestCompareSelectionSurvivesFilter(t *testing.T) {
+	m := loadedModelLinearCommits(t, 4) // subjects c0..c3
+	m.focus = panelCommits
+	m.commitCompareSet = map[string]bool{
+		m.commits[0].Hash: true, // c3 (tip)
+		m.commits[3].Hash: true, // c0 (root)
+	}
+	// Filter so only the tip is visible.
+	m.filterPanel = panelCommits
+	m.filterQuery = m.commits[0].Subject
+
+	left, right, note, ok := m.compareSelectionEndpoints()
+	if !ok {
+		t.Fatalf("selection must survive an active filter: %s", note)
+	}
+	if left.Hash != m.commits[3].Hash || right.Hash != m.commits[0].Hash {
+		t.Fatalf("endpoints = %s↔%s, want root↔tip", left.Hash, right.Hash)
+	}
+}
