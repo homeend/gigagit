@@ -32,7 +32,7 @@ func (m Model) tagCheckoutRow() (actionRow, bool) {
 				onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {
 					switch opt {
 					case "Detached":
-						return m.startOp(engine.CheckoutTag{Name: name})
+						return m.startOp(engine.Checkout{Ref: name})
 					case "Create branch…":
 						// Prefill the branch name with the tag name; the user can edit.
 						return m.pushLayer(&tagCheckoutPopup{tag: name, name: newTextField(name)}), nil

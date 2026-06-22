@@ -25,7 +25,7 @@ func (p *tagCheckoutPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		if p.name.Value() == "" {
 			return m, nil
 		}
-		op := engine.CheckoutTag{Name: p.tag, Branch: p.name.Value()}
+		op := engine.Checkout{Ref: p.tag, Branch: p.name.Value()}
 		m = m.popLayer()
 		return m.startOp(op)
 	case tea.KeySpace:

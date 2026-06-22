@@ -60,7 +60,7 @@ func cmdTagCheckout(svc *domain.Service, args []string, stdout, stderr io.Writer
 		return 2
 	}
 	res, err := runOperation(context.Background(), svc,
-		engine.CheckoutTag{Name: rest[0], Branch: *branch}, cliDecider{}, stderr)
+		engine.Checkout{Ref: rest[0], Branch: *branch}, cliDecider{}, stderr)
 	return finish(res, err, stdout, stderr)
 }
 
