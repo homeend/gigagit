@@ -92,6 +92,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   count while that walk is in flight, so the panel no longer looks frozen.
 
 ### Fixed
+- **Diff view: the `change X/N` counter now reaches the last change, and `n`/`p`
+  wrap from it.** When the final change(s) sat in the last screenful — or the
+  whole diff was shorter than the viewport — they couldn't be scrolled to the
+  top, so the counter capped below `N/N` and `n`/`p` never registered the
+  boundary (the wrap-around never armed). The focused change is now tracked
+  explicitly instead of being inferred from the scroll position, so every change
+  is reachable and counted regardless of where it falls; free-scrolling still
+  resyncs the counter to the change under the viewport.
 - **Comparing against the working tree now shows untracked (new) files.** A
   brand-new, never-added file was missing from *Compare against working tree*,
   the `◇ Working tree` diff, and any compare whose newer side is the working tree

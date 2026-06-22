@@ -42,7 +42,7 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	// matching Update's key routing and render().
 	if m.diffView != nil {
 		if wheel != 0 {
-			m.diffView.scroll(wheel, m.diffBodyRows())
+			m.diffView.scrollBy(wheel, m.diffBodyRows())
 		}
 		return m, nil
 	}

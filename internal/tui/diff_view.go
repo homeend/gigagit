@@ -56,6 +56,7 @@ type diffView struct {
 	tooLarge   bool
 	loading    bool
 	err        error
+	cur        int     // focused change-block index (the "X" in change X/N); set only by n/p/wrap/mode-toggle
 	wrapArm    wrapDir // boundary press primed a wrap-around (see wrapDir); cleared on any other key
 }
 
@@ -224,6 +225,35 @@ func (v *diffView) scroll(delta, body int) {
 	}
 }
 
+// scrollBy free-scrolls the viewport and resyncs the focused change to the new
+// offset — but only when the offset actually moved, so a no-op scroll (e.g. j
+// at the bottom, or any scroll in a diff smaller than the viewport) leaves the
+// n/p focus intact. Used by the scroll keys + wheel; n/p/focusBlock never
+// resync (cur stays authoritative for change navigation).
+func (v *diffView) scrollBy(delta, body int) {
+	before := v.offset
+	v.scroll(delta, body)
+	if v.offset != before {
+		v.cur = v.deriveOrdinal()
+	}
+}
+
+// deriveOrdinal is the change "under" the current scroll offset: the last block
+// at or above the lead line. It's the lower-bound focus after a free scroll;
+// n/p step up from there, so a bottom-bunched last change is still reachable.
+func (v *diffView) deriveOrdinal() int {
+	ord := 0
+	for _, b := range v.dispBlocks {
+		if b <= v.offset+diffLead {
+			ord++
+		}
+	}
+	if ord > 0 {
+		ord--
+	}
+	return ord
+}
+
 // jumpTo positions block-start display row b with up to diffLead rows above it.
 func (v *diffView) jumpTo(b, body int) {
 	v.offset = b - diffLead
@@ -233,42 +263,55 @@ func (v *diffView) jumpTo(b, body int) {
 	v.scroll(0, body)
 }
 
-// nextBlock jumps to the first change strictly below the current one and
-// reports whether it moved (false = already at/past the last). The +diffLead
-// reference neutralizes the lead so the current change isn't re-selected.
+// focusBlock makes change-block index i the focused change (cur) and scrolls
+// it into view. i is clamped to the valid range. cur — not the scroll offset —
+// is the source of truth for "which change am I on", so a change that can't be
+// top-anchored (bunched against EOF, or a diff smaller than the viewport) is
+// still reachable and counted. No-op when there are no changes.
+func (v *diffView) focusBlock(i, body int) {
+	if len(v.dispBlocks) == 0 {
+		return
+	}
+	if i < 0 {
+		i = 0
+	}
+	if i > len(v.dispBlocks)-1 {
+		i = len(v.dispBlocks) - 1
+	}
+	v.cur = i
+	v.jumpTo(v.dispBlocks[i], body)
+}
+
+// nextBlock focuses the next change and reports whether it moved (false =
+// already on the last change, the boundary the wrap arms on). offset may not
+// change — the next change can be off-anchor — but cur always advances.
 func (v *diffView) nextBlock(body int) bool {
-	for _, b := range v.dispBlocks {
-		if b > v.offset+diffLead {
-			v.jumpTo(b, body)
-			return true
-		}
+	if len(v.dispBlocks) == 0 || v.cur >= len(v.dispBlocks)-1 {
+		return false
 	}
-	return false
+	v.focusBlock(v.cur+1, body)
+	return true
 }
 
-// prevBlock jumps to the first change strictly above the current one and
-// reports whether it moved (false = already at the first).
+// prevBlock focuses the previous change and reports whether it moved (false =
+// already on the first change).
 func (v *diffView) prevBlock(body int) bool {
-	for i := len(v.dispBlocks) - 1; i >= 0; i-- {
-		if v.dispBlocks[i] < v.offset+diffLead {
-			v.jumpTo(v.dispBlocks[i], body)
-			return true
-		}
+	if v.cur <= 0 {
+		return false
 	}
-	return false
+	v.focusBlock(v.cur-1, body)
+	return true
 }
 
-// currentBlockOrdinal is the index of the change currently in view (for
-// preserving position across a mode toggle).
+// currentBlockOrdinal is the focused change index (the "X" in change X/N),
+// clamped defensively in case the block set shrank under cur.
 func (v *diffView) currentBlockOrdinal() int {
-	ord := 0
-	for _, b := range v.dispBlocks {
-		if b <= v.offset+diffLead {
-			ord++
-		}
+	ord := v.cur
+	if ord < 0 {
+		ord = 0
 	}
-	if ord > 0 {
-		ord--
+	if n := len(v.dispBlocks); n > 0 && ord > n-1 {
+		ord = n - 1
 	}
 	return ord
 }
@@ -422,7 +465,7 @@ func applyDiff(v *diffView, out domain.Diff, body int) {
 		v.truncated = out.Result.Truncated
 		v.rebuild()
 		if len(v.dispBlocks) > 0 {
-			v.jumpTo(v.dispBlocks[0], body)
+			v.focusBlock(0, body) // open on the first change (cur = 0)
 		}
 	}
 }
@@ -547,25 +590,25 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m = m.pushLayer(bv)
 		return m, m.loadBlameCmd(ctx, bv.tag)
 	case "up", "k":
-		v.scroll(-1, m.diffBodyRows())
+		v.scrollBy(-1, m.diffBodyRows())
 	case "down", "j":
-		v.scroll(1, m.diffBodyRows())
+		v.scrollBy(1, m.diffBodyRows())
 	case "pgup":
-		v.scroll(-m.diffBodyRows(), m.diffBodyRows())
+		v.scrollBy(-m.diffBodyRows(), m.diffBodyRows())
 	case "pgdown":
-		v.scroll(m.diffBodyRows(), m.diffBodyRows())
+		v.scrollBy(m.diffBodyRows(), m.diffBodyRows())
 	case "n", "ctrl+down":
-		if !v.nextBlock(m.diffBodyRows()) { // already at the last change
+		if !v.nextBlock(m.diffBodyRows()) { // already on the last change
 			if armed == wrapToStart && len(v.dispBlocks) > 0 {
-				v.jumpTo(v.dispBlocks[0], m.diffBodyRows()) // second press wraps to top
+				v.focusBlock(0, m.diffBodyRows()) // second press wraps to the first
 			} else {
 				v.wrapArm = wrapToStart // first press primes the wrap
 			}
 		}
 	case "p", "ctrl+up":
-		if !v.prevBlock(m.diffBodyRows()) { // already at the first change
+		if !v.prevBlock(m.diffBodyRows()) { // already on the first change
 			if armed == wrapToEnd && len(v.dispBlocks) > 0 {
-				v.jumpTo(v.dispBlocks[len(v.dispBlocks)-1], m.diffBodyRows()) // wraps to bottom
+				v.focusBlock(len(v.dispBlocks)-1, m.diffBodyRows()) // wraps to the last
 			} else {
 				v.wrapArm = wrapToEnd
 			}
@@ -576,12 +619,9 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		v.rebuild()
 		m.diffPartial = v.partial
 		if len(v.dispBlocks) > 0 {
-			if ord >= len(v.dispBlocks) {
-				ord = len(v.dispBlocks) - 1
-			}
-			v.jumpTo(v.dispBlocks[ord], m.diffBodyRows())
+			v.focusBlock(ord, m.diffBodyRows()) // re-anchor the same change (count is mode-invariant)
 		} else {
-			v.offset = 0
+			v.cur, v.offset = 0, 0
 		}
 	case "z":
 		ord := v.currentBlockOrdinal()
@@ -590,12 +630,9 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		v.relayout(v.width)
 		m.diffLong = v.long
 		if len(v.dispBlocks) > 0 {
-			if ord >= len(v.dispBlocks) {
-				ord = len(v.dispBlocks) - 1
-			}
-			v.jumpTo(v.dispBlocks[ord], m.diffBodyRows())
+			v.focusBlock(ord, m.diffBodyRows())
 		} else {
-			v.offset = 0
+			v.cur, v.offset = 0, 0
 		}
 	case "left":
 		if v.long == longScroll {
