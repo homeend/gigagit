@@ -305,6 +305,43 @@ func TestTooltipSuppressedByPopup(t *testing.T) {
 	}
 }
 
+// In file-preview mode the right column is the preview pager, not the Commits
+// panel. The hidden commit row behind it must not surface its reveal — a long
+// subject that shifts left and lands over the file tree (the reported bug). The
+// pair shares one model and differs only in filesPreview, so a vacuous pass
+// (nothing truncates / degenerate geometry) can't masquerade as a fix.
+func TestTooltipSuppressedByFilePreview(t *testing.T) {
+	base := footerModel() // width 120; Commits is the right panel
+	base.focus = panelCommits
+	if base.sel == nil {
+		base.sel = map[panel]int{}
+	}
+	const subj = "Merge tag 'firewire-updates-7.2' of git://git.kernel.org/pub/scm/linux/kernel/git/ieee1394/linux1394"
+	base.commits = []model.Commit{{Hash: "aff3ca3aaaa", Subject: subj}}
+	base.sel[panelCommits] = 0
+
+	// Precondition: with no preview the long commit row DOES reveal. This proves
+	// the geometry is live and the reveal machinery fires, so the suppressed case
+	// below isolates the guard (not a row that simply never truncates).
+	lines, _, _, ok := base.tooltip()
+	if !ok {
+		t.Fatal("precondition: the long commit row must reveal when no preview is open")
+	}
+	if plain := ansi.Strip(strings.Join(lines, "\n")); !strings.Contains(plain, "firewire-updates") {
+		t.Fatalf("precondition: reveal should show the commit subject, got %q", plain)
+	}
+
+	// Same model, but the file preview now owns the right column (tree NOT focused,
+	// so the tree-path reveal branch is skipped too).
+	m := base
+	m.filesView = &contentPopup{lines: []contentLine{{text: "M  mod_devicetable.h", path: "mod_devicetable.h"}}, mode: modeCutoff}
+	m.filesPreview = &contentPopup{title: "mod_devicetable.h", lines: []contentLine{{text: "..."}}}
+	m.filesTreeFocused = false
+	if _, _, _, ok := m.tooltip(); ok {
+		t.Fatal("the commit reveal must be suppressed while the file preview owns the right column")
+	}
+}
+
 func TestWrapWidth(t *testing.T) {
 	got := wrapWidth("abcdef", 3, 3)
 	if len(got) != 2 || got[0] != "abc" || got[1] != "def" {

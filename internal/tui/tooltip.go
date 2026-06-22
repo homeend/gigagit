@@ -22,6 +22,15 @@ func (m Model) tooltip() (lines []string, x, y int, ok bool) {
 	if m.filesView != nil && m.filesTreeFocused {
 		return m.filesTreeReveal()
 	}
+	// The file preview owns the right column (it replaced the Commits panel) and
+	// is a content pager with no truncated-row reveal of its own. Without this the
+	// panel branch below would surface the hidden commit row's reveal — a long
+	// commit subject that shifts left and lands over the file tree. (Reached only
+	// when the preview, not the tree, is focused; the tree-focused path returned
+	// above.)
+	if m.filesPreview != nil {
+		return nil, 0, 0, false
+	}
 	// While the files view's tree side is focused, the commits selection is
 	// not the active row — describing it would be misleading.
 	if !m.panelFocused(m.focus) {
