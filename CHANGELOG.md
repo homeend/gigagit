@@ -9,6 +9,15 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Search history.** Enter-confirmed searches are remembered per window — the
+  panel `/` filter and the `@` highlight share one ring, while the bookmark (`g`)
+  and shelf (`G`) switchers and the files-view tree search each keep their own.
+  While typing a search, **alt+↓** opens a scrollable dropdown of past phrases
+  (newest first, up to 10 rows with `↑N`/`↓N` scroll markers); **alt+↓/↑** move
+  the highlight and preview it into the query, **enter** accepts, **esc** (or
+  alt+↑ above the newest) restores your draft, and typing resumes live editing.
+  History is stored per-repo; `[ui] search_history_size` sets the per-ring cap
+  (default 20, hard max 1000).
 - **Uncommitted work shows in the Commits graph (WIP rows).** When the tree is
   dirty, the Commits panel shows `◇ Working tree (N)` and/or `◇ Staged (N)` rows
   chained above HEAD. `l`/`enter` opens their whole-tree diff (working tree vs
