@@ -35,15 +35,15 @@ func (c *countWriter) Write(p []byte) (int, error) {
 	return c.buf.Write(p)
 }
 
-func TestCopyWritesSequenceInOneWrite(t *testing.T) {
+func TestWriteOSC52WritesSequenceInOneWrite(t *testing.T) {
 	var w countWriter
-	if err := Copy(&w, "hi"); err != nil {
-		t.Fatalf("Copy: %v", err)
+	if err := writeOSC52(&w, "hi"); err != nil {
+		t.Fatalf("writeOSC52: %v", err)
 	}
 	if w.n != 1 {
-		t.Errorf("Copy made %d Write calls, want exactly 1 (contiguous OSC 52)", w.n)
+		t.Errorf("writeOSC52 made %d Write calls, want exactly 1 (contiguous OSC 52)", w.n)
 	}
 	if got, want := w.buf.String(), Sequence("hi", detectMux()); got != want {
-		t.Errorf("Copy wrote %q, want %q", got, want)
+		t.Errorf("writeOSC52 wrote %q, want %q", got, want)
 	}
 }

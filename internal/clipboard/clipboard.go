@@ -1,6 +1,9 @@
-// Package clipboard writes text to the terminal clipboard using the OSC 52
-// escape sequence. It has no TUI or git dependencies so the sequence bytes are
-// unit-testable; the caller decides which writer (and tty) to emit to.
+// Package clipboard writes text to the system clipboard. It prefers a native
+// OS clipboard command (clip.exe on WSL/Windows, pbcopy on macOS,
+// wl-copy/xclip/xsel on Linux) for local sessions and falls back to the OSC 52
+// terminal escape for remote/SSH sessions or when no native command exists.
+// The OSC 52 sequence builder is pure (no env, no I/O) so the bytes stay
+// unit-testable; it has no TUI or git dependencies.
 package clipboard
 
 import (
@@ -48,13 +51,13 @@ func detectMux() Mux {
 	return NoMux
 }
 
-// Copy writes the OSC 52 clipboard sequence for text to w in a SINGLE write.
-// One write keeps the escape contiguous on the wire: a TUI renderer writing
-// frames to the same tty from another goroutine could otherwise interleave a
-// frame inside a split sequence and make the terminal fail to parse it. The
-// caller is responsible for passing a tty-backed writer (see the TUI's
-// isatty guard).
-func Copy(w io.Writer, text string) error {
+// writeOSC52 writes the OSC 52 clipboard sequence for text to w in a SINGLE
+// write. One write keeps the escape contiguous on the wire: a TUI renderer
+// writing frames to the same tty from another goroutine could otherwise
+// interleave a frame inside a split sequence and make the terminal fail to
+// parse it. The caller is responsible for passing a tty-backed writer (see the
+// TUI's isatty guard).
+func writeOSC52(w io.Writer, text string) error {
 	_, err := io.WriteString(w, Sequence(text, detectMux()))
 	return err
 }

@@ -11,7 +11,7 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ### Added
 - **Copy commit title.** The Commits panel `.`-menu now offers *Copy commit
   title* alongside *Copy commit id*, putting the selected commit's subject line
-  on the clipboard via OSC 52.
+  on the system clipboard.
 - **Wrap-around change navigation in the diff view.** When `n` (next change)
   reaches the last change — or `p` (previous) reaches the first — the press no
   longer just stops. A header cue (`↻ n again → top` / `↻ p again → bottom`)
@@ -92,6 +92,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   count while that walk is in flight, so the panel no longer looks frozen.
 
 ### Fixed
+- **Clipboard copy now works in tmux and WSL.** `.`-menu copy actions
+  previously emitted only the tmux-passthrough-wrapped OSC 52 escape, which
+  tmux silently drops unless `allow-passthrough on` is set — so nothing reached
+  the clipboard under tmux (notably tmux on WSL). gg now prefers a native OS
+  clipboard command — `clip.exe` on WSL/Windows, `pbcopy` on macOS,
+  `wl-copy`/`xclip`/`xsel` on Linux — and falls back to the OSC 52 escape for
+  remote/SSH sessions (where it correctly reaches the local terminal) or when no
+  native command is available. WSL is detected via the kernel osrelease (immune
+  to tmux env propagation) so `clip.exe` wins even when WSLg also exposes
+  `wl-copy`.
 - **File-content preview no longer leaks a stray commit tooltip.** While the
   full-tree *View file* preview owned the right column, the hidden Commits panel
   behind it still surfaced its selected row's reveal — for a file whose origin
