@@ -78,6 +78,7 @@ func (m Model) openReflogFiles() (Model, tea.Cmd) {
 	m.filesView = &contentPopup{lines: []contentLine{{text: "(loading…)"}}}
 	m.filesTitle = "Files " + shortHash(c.Hash) + " " + c.Subject
 	m.filesHash = c.Hash
+	m.filesMode = filesModeChanged
 	// Open on the TREE, not the commit-list side: the right column is the Commits
 	// feed (not the reflog you came from), so flipping it with up/down would be
 	// disorienting — you want to walk this entry's files. focus is the Commits

@@ -59,6 +59,7 @@ type Model struct {
 
 	conflict domain.ConflictState // source of the current conflict (merge/rebase parties), for the notice
 
+	filesMode         filesMode      // authoritative source mode (changed/fullTree/compare/stash)
 	filesView         *contentPopup  // commit files tree replacing the left column; nil = closed
 	filesTitle        string         // "Files <short-hash> <subject>", updated with the content
 	filesHash         string         // commit the view wants; gates stale async results
@@ -1056,6 +1057,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.filesView = &contentPopup{lines: []contentLine{{text: "(loading…)"}}}
 				m.filesTitle = "Files " + shortHash(c.Hash) + " " + c.Subject
 				m.filesHash = c.Hash
+				m.filesMode = filesModeChanged
 				m.filesTreeFocused = false // always open on the commit list
 				m.filesAllFiles = false    // open in changed-files mode; `a` toggles
 				m.filesPreview = nil

@@ -134,6 +134,7 @@ func (m Model) updateStashViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// commit files view; ←/→ move focus to/from the tree.
 		m.filesTreeFocused = false
 		m.filesStashTag = e.Ref
+		m.filesMode = filesModeStash
 		return m, m.loadStashFilesCmd(e.Ref)
 	case "enter":
 		if v.sel < 0 || v.sel >= len(v.entries) {

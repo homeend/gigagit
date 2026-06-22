@@ -13,6 +13,22 @@ import (
 	"github.com/gigagit/gg/internal/model"
 )
 
+// filesMode is the files view's source mode — exactly one is active while the
+// view is open. It is the authoritative discriminator; the inCompareMode/
+// inFullTree helpers read it (legacy filesCompare/filesAllFiles booleans are
+// removed in a later task).
+type filesMode int
+
+const (
+	filesModeChanged  filesMode = iota // a commit's changed files (vs parent)
+	filesModeFullTree                  // every file at the commit (ls-tree); `a` toggle
+	filesModeCompare                   // two endpoints (filesLeft/filesRight)
+	filesModeStash                     // a stash's files (filesStashTag)
+)
+
+func (m Model) inCompareMode() bool { return m.filesMode == filesModeCompare }
+func (m Model) inFullTree() bool    { return m.filesMode == filesModeFullTree }
+
 // commitFileLines renders a commit's changed files as content lines:
 // root-level files first (no heading), then one bold heading per directory
 // (its full path) with the directory's files indented beneath. Exactly one
@@ -137,6 +153,7 @@ func (m Model) openCompareFiles(left, right model.Endpoint) (Model, tea.Cmd) {
 	m.filesView = &contentPopup{lines: []contentLine{{text: "(loading…)"}}}
 	m.filesTitle = left.Display() + " ↔ " + right.Display()
 	m.filesCompare = true
+	m.filesMode = filesModeCompare
 	m.filesAllFiles = false // compare mode is its own thing
 	m.filesPreview = nil
 	m.filesPreviewTag = ""
@@ -237,6 +254,11 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil // only meaningful for a commit files view
 		}
 		m.filesAllFiles = !m.filesAllFiles
+		if m.filesAllFiles {
+			m.filesMode = filesModeFullTree
+		} else {
+			m.filesMode = filesModeChanged
+		}
 		m.filesPreview = nil // the preview is a full-tree concept
 		m.filesPreviewTag = ""
 		p.lines = []contentLine{{text: "(loading…)"}}
