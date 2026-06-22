@@ -72,7 +72,7 @@ panel and selected row right now; `?` opens the full searchable reference.
 | `/` | filter the focused panel (type, then `enter` to keep, `esc` to clear) |
 | `R` | switch repository (popup: type to filter, `enter` to switch, `ctrl+d` to forget) |
 | `,` | settings: **set up agent skills**, or **Identity & profiles** — view/edit the git `user.name`/`user.email` (global vs repo-local, kept distinct) and manage named identity **profiles** (global or per-repo presets); `enter`/`e` prompts *apply to this repo or globally* |
-| `.` | open the **action menu** (works in every navigable window — panels, the file tree, diff, history, blame, stash): lists context actions for what's in view (row actions first, then panel/window actions; whole-app actions stay in the footer); press an action's key to run it, or `↑`/`↓` + `enter`; `/` filters, `z` cycles display mode, `esc` closes. Includes **Copy commit id** / **Copy commit title** (Commits), **Copy file path** / **Copy file name** (and **Copy stash ref** on the stash list) for whatever the active window shows — copied to the system clipboard (native OS clipboard command, with an OSC 52 fallback for remote/SSH sessions) — plus context write actions: **Copy branch name** / **Rename branch** on the Branches panel (Copy branch name on Remotes), and **Rename commit** (reword via a pre-filled message popup) on the Commits panel. |
+| `.` | open the **action menu** (works in every navigable window — panels, the file tree, diff, history, blame, stash): lists context actions for what's in view (row actions first, then panel/window actions; whole-app actions stay in the footer); press an action's key to run it, or `↑`/`↓` + `enter`; `/` filters, `z` cycles display mode, `esc` closes. Includes **Copy commit id** / **Copy commit title** (Commits), **Copy file path** / **Copy file name** (and **Copy stash ref** on the stash list) for whatever the active window shows — copied to the system clipboard (native OS clipboard command, with an OSC 52 fallback for remote/SSH sessions) — plus context write actions: **Copy branch name** / **Rename branch** on the Branches panel (Copy branch name on Remotes), and **Rename commit** (reword via a pre-filled message popup) on the Commits panel. On the Commits panel it also offers **Fast-forward `<branch>` to here** when the selected commit is ahead of the current branch's tip (advance the branch with no merge commit). |
 | `r` / `q` | reload / quit |
 | `?` | help: searchable list of all key bindings (`/` to search; `↑`/`↓` or `j`/`k`, `ctrl+↑`/`ctrl+↓`, `pgup`/`pgdn`, mouse wheel to scroll; `q` closes) |
 
@@ -102,6 +102,7 @@ gg branch create <name> [<start-point>]
 gg branch rename <old> <new>
 gg branch delete [--force] <name>
 gg merge [--into <target>] [--on-conflict=keep|abort] <source>
+gg fast-forward <commit>               # advance the current branch to a descendant commit (no merge commit)
 gg rebase [--branch <b>] [--on-conflict=keep|abort] <newbase>
 gg rebase -i --plan <file> <newbase>   # interactive rebase from a plan (pick/reword/squash/drop)
 gg stash [-m msg] [-u] [-- <paths>...]

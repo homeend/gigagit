@@ -544,6 +544,52 @@ func (m Model) commitRevertRow() (actionRow, bool) {
 	}, true
 }
 
+// commitFastForwardRow offers "Fast-forward <branch> to here" on the Commits
+// panel: advance the current branch to the selected commit when that commit is a
+// descendant of the branch's tip (git merge --ff-only, non-destructive). Gating
+// is computed in-memory from the loaded feed's parent DAG (feedDescendant); when
+// the walk leaves the loaded window the row is still offered and the op's
+// IsAncestor guard decides. Hidden when HEAD is detached.
+func (m Model) commitFastForwardRow() (actionRow, bool) {
+	if m.focus != panelCommits || !m.opsIdle() {
+		return actionRow{}, false
+	}
+	branch := m.status.Branch
+	// Detached HEAD: porcelain v2 reports "(detached)" (and "" defensively).
+	// There is no current branch to fast-forward, so hide the row.
+	if branch == "" || branch == "(detached)" {
+		return actionRow{}, false
+	}
+	bi, ok := m.backingIndex(panelCommits)
+	if !ok {
+		return actionRow{}, false
+	}
+	selHash := m.commits[bi].Hash
+
+	// Find the current branch's tip in the loaded feed (its decorated commit).
+	tipHash := ""
+	for _, c := range m.commits {
+		if commitHasLocalRef(c, branch) {
+			tipHash = c.Hash
+			break
+		}
+	}
+	if tipHash != "" {
+		if descendant, conclusive := feedDescendant(m.commits, selHash, tipHash); conclusive && !descendant {
+			return actionRow{}, false // conclusively not ahead → hide
+		}
+	}
+	// descendant, or inconclusive, or tip not loaded → offer it; the op guards.
+
+	return actionRow{
+		id:    "commit-fast-forward",
+		label: "Fast-forward " + branch + " to here",
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			return m.startOp(engine.FastForward{Commit: selHash})
+		},
+	}, true
+}
+
 // commitResetRow offers "Reset to this commit" on the Commits panel: move the
 // current branch to the selected commit. The op asks for the mode (soft/mixed/
 // hard) via the modal, and confirms when the target is not on the current branch.

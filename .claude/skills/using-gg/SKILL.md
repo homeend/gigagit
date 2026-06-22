@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v23 -->
+<!-- gg:using-gg:v24 -->
 
 # Using gg (gigagit)
 
@@ -96,6 +96,11 @@ guards against removing the worktree you are standing in.
   survive; the commits reset past stay recoverable via `git reflog`). If
   `<commit>` is not on the current branch the reset is refused unless `--force`
   is given (a non-TTY run lists the options and exits 1).
+- `gg fast-forward <commit>` — advance the current branch to `<commit>` when it
+  is a descendant of the branch tip (a fast-forward; no merge commit, like
+  `git merge --ff-only`). Refuses with a non-zero exit if `<commit>` is not
+  strictly ahead. Use it to move a base branch up to a commit on a branch built
+  on top of it.
 - `gg stash [-m <msg>] [-u] [-- <paths>...]` — stash the working tree (or only
   the named paths; `-u` includes untracked files).
 - `gg stash list` — list stashes (`stash@{N}: <subject>`, newest first).

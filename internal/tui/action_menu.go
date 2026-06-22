@@ -209,6 +209,9 @@ func (m Model) appendCommitContextRows(out []actionRow) []actionRow {
 	if r, ok := m.commitRevertRow(); ok {
 		out = append(out, r)
 	}
+	if r, ok := m.commitFastForwardRow(); ok {
+		out = append(out, r)
+	}
 	if r, ok := m.commitResetRow(); ok {
 		out = append(out, r)
 	}

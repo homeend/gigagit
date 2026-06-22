@@ -9,6 +9,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Fast-forward the current branch to a commit.** When another branch is built
+  on top of your current branch, the Commits panel `.` menu now offers
+  **Fast-forward `<branch>` to here** on any commit ahead of your branch's tip —
+  advancing the branch with no merge commit (`git merge --ff-only`). Also
+  available as `gg fast-forward <commit>`. The menu action only appears when the
+  selected commit is actually ahead (decided in-memory from the loaded commit
+  graph, no extra git call), and the operation refuses with a clear message if
+  the target is not a fast-forward.
 - **Git identity & app profiles.** Settings (`,`) → **Identity & profiles**
   shows the current git identity with global, repo-local, and effective values
   kept distinct ("not set — inherits global" reads differently from a real
