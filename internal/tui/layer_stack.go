@@ -21,7 +21,7 @@ type layerStack struct{ entries []layer }
 // from the surfaces beneath it. Keep in sync when adding a full-screen surface.
 func isFullScreenLayer(l layer) bool {
 	switch l.(type) {
-	case *historyView, *blameView, *irebaseEditor, *hunkPicker:
+	case *historyView, *blameView, *irebaseEditor, *hunkPicker, *diffView:
 		return true
 	}
 	return false
