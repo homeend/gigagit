@@ -32,9 +32,9 @@ type worktreePopup struct {
 	pathTmpl   string
 	repoName   string
 
-	labels   []string          // distinct <user:> labels, in order
-	inputs   map[string]string // label -> value
-	fieldIdx int               // focused label (stInput)
+	labels   []string             // distinct <user:> labels, in order
+	inputs   map[string]textfield // label -> value
+	fieldIdx int                  // focused label (stInput)
 
 	seqNames []string       // distinct <seq> names referenced by the templates
 	seqs     map[string]int // peeked counter values (reused for preview + create)
@@ -43,8 +43,8 @@ type worktreePopup struct {
 	now  time.Time // fixes <date>
 
 	state          popupState
-	editBuf        string // stEdit working buffer
-	branchOverride string // a confirmed hand-edited branch name; "" = use the template
+	editBuf        textfield // stEdit working buffer
+	branchOverride string    // a confirmed hand-edited branch name; "" = use the template
 
 	previewBranch string
 	previewPath   string
@@ -70,7 +70,7 @@ func (p *worktreePopup) fixedBranch() string {
 		return p.startPoint
 	}
 	if p.state == stEdit {
-		return p.editBuf
+		return p.editBuf.Value()
 	}
 	return p.branchOverride
 }
@@ -81,7 +81,11 @@ func (p *worktreePopup) fixedBranch() string {
 func (p *worktreePopup) recompute() {
 	fixed := p.fixedBranch()
 	tm := worktree.Templates{Branch: p.branchTmpl, Path: p.pathTmpl}
-	p.previewBranch, p.previewPath, p.previewErr = worktree.Resolve(tm, fixed, p.inputs, p.tctx())
+	vals := make(map[string]string, len(p.inputs))
+	for l, f := range p.inputs {
+		vals[l] = f.Value()
+	}
+	p.previewBranch, p.previewPath, p.previewErr = worktree.Resolve(tm, fixed, vals, p.tctx())
 }
 
 // openWorktreePopup builds a popup for the currently-selected branch. In
@@ -113,14 +117,14 @@ func (m Model) openWorktreePopup(existing bool) (Model, bool) {
 		pathTmpl:   pt,
 		repoName:   worktree.RepoName(m.currentWorktree),
 		labels:     labels,
-		inputs:     map[string]string{},
+		inputs:     map[string]textfield{},
 		seqNames:   seqNames,
 		seqs:       worktree.PeekSeqs(m.gitCommonDir, seqNames),
 		seed:       rand.Uint64(),
 		now:        time.Now(),
 	}
 	for _, l := range labels {
-		p.inputs[l] = ""
+		p.inputs[l] = textfield{}
 	}
 	if len(labels) > 0 {
 		p.state = stInput
@@ -151,16 +155,16 @@ func (m Model) openWorktreeAt(startPoint, prefillBranch string) Model {
 		pathTmpl:   pt,
 		repoName:   worktree.RepoName(m.currentWorktree),
 		labels:     labels,
-		inputs:     map[string]string{},
+		inputs:     map[string]textfield{},
 		seqNames:   seqNames,
 		seqs:       worktree.PeekSeqs(m.gitCommonDir, seqNames),
 		seed:       rand.Uint64(),
 		now:        time.Now(),
-		state:      stEdit,        // user edits the branch name immediately
-		editBuf:    prefillBranch, // seeded default (e.g. the tag name)
+		state:      stEdit,                      // user edits the branch name immediately
+		editBuf:    newTextField(prefillBranch), // seeded default (e.g. the tag name)
 	}
 	for _, l := range labels {
-		p.inputs[l] = ""
+		p.inputs[l] = textfield{}
 	}
 	p.recompute()
 	return m.pushLayer(p)
@@ -185,40 +189,28 @@ func (p *worktreePopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				p.state = stAction
 			}
 			p.recompute()
-		case tea.KeyBackspace:
+		default:
 			lbl := p.labels[p.fieldIdx]
-			if r := []rune(p.inputs[lbl]); len(r) > 0 {
-				p.inputs[lbl] = string(r[:len(r)-1])
+			f := p.inputs[lbl]
+			if f.HandleEditKey(msg) {
+				p.inputs[lbl] = f
+				p.recompute()
 			}
-			p.recompute()
-		case tea.KeyRunes:
-			p.inputs[p.labels[p.fieldIdx]] += string(msg.Runes)
-			p.recompute()
-		case tea.KeySpace:
-			p.inputs[p.labels[p.fieldIdx]] += " "
-			p.recompute()
 		}
 		return m, nil
 	case stEdit:
 		switch msg.Type {
 		case tea.KeyEnter:
-			p.branchOverride = p.editBuf
+			p.branchOverride = p.editBuf.Value()
 			p.state = stAction
 			p.recompute()
 		case tea.KeyEsc:
 			p.state = stAction
 			p.recompute()
-		case tea.KeyBackspace:
-			if r := []rune(p.editBuf); len(r) > 0 {
-				p.editBuf = string(r[:len(r)-1])
+		default:
+			if p.editBuf.HandleEditKey(msg) {
+				p.recompute()
 			}
-			p.recompute()
-		case tea.KeyRunes:
-			p.editBuf += string(msg.Runes)
-			p.recompute()
-		case tea.KeySpace:
-			p.editBuf += " "
-			p.recompute()
 		}
 		return m, nil
 	default: // stAction
@@ -229,7 +221,7 @@ func (p *worktreePopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			if p.existing {
 				return m, nil // the branch IS the point of existing mode
 			}
-			p.editBuf = p.previewBranch
+			p.editBuf = newTextField(p.previewBranch)
 			p.state = stEdit
 			p.recompute()
 		case "w", "enter":
@@ -258,11 +250,13 @@ func (p *worktreePopup) box(m Model) string {
 	b.WriteString(title + "\n\n")
 
 	for i, lbl := range p.labels {
+		focused := p.state == stInput && i == p.fieldIdx
 		cursor := "  "
-		if p.state == stInput && i == p.fieldIdx {
+		if focused {
 			cursor = "> "
 		}
-		b.WriteString(cursor + lbl + ": " + p.inputs[lbl] + "\n")
+		f := p.inputs[lbl]
+		b.WriteString(cursor + lbl + ": " + f.View(focused) + "\n")
 	}
 	if len(p.labels) > 0 {
 		b.WriteString("\n")
@@ -270,7 +264,7 @@ func (p *worktreePopup) box(m Model) string {
 
 	branch := p.previewBranch
 	if p.state == stEdit {
-		branch = p.editBuf
+		branch = p.editBuf.View(true)
 	}
 	b.WriteString("branch: " + branch + "\n")
 	b.WriteString("path:   " + p.previewPath + "\n")

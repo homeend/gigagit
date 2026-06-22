@@ -22,8 +22,9 @@ func newTextField(s string) textfield {
 	return textfield{runes: r, cursor: len(r)}
 }
 
-// Value returns the buffer as a string.
-func (f *textfield) Value() string { return string(f.runes) }
+// Value returns the buffer as a string. Value receiver: read-only and callable
+// on non-addressable values (e.g. a map element like worktreePopup.inputs[l]).
+func (f textfield) Value() string { return string(f.runes) }
 
 // SetValue replaces the buffer and puts the cursor at the end.
 func (f *textfield) SetValue(s string) {
@@ -166,7 +167,8 @@ var cursorCell = lipgloss.NewStyle().Reverse(true)
 // reverse space marks the insertion point so it is always visible. The caller
 // owns surrounding labels and any per-line indentation; for a multi-line buffer
 // the caller may split View(true) on "\n" (the reverse cell never spans lines).
-func (f *textfield) View(focused bool) string {
+// Value receiver: read-only and callable on non-addressable map values.
+func (f textfield) View(focused bool) string {
 	if !focused {
 		return string(f.runes)
 	}

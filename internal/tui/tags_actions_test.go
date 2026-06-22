@@ -211,8 +211,8 @@ func TestTagCheckoutWorktreePrefilledAndSanitized(t *testing.T) {
 	if p == nil {
 		t.Fatal("worktree popup must open")
 	}
-	if p.editBuf != "release/1.0" {
-		t.Fatalf("branch seed = %q, want release/1.0", p.editBuf)
+	if p.editBuf.Value() != "release/1.0" {
+		t.Fatalf("branch seed = %q, want release/1.0", p.editBuf.Value())
 	}
 	if p.startPoint != "release/1.0" {
 		t.Fatalf("startPoint = %q, want the tag", p.startPoint)
