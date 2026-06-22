@@ -9,6 +9,15 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Open any file in your external editor (read-only).** New *Open in external
+  editor* action that materializes a file's content to a throwaway temp file and
+  opens it in `$VISUAL`/`$EDITOR` (the temp keeps the real extension so syntax
+  highlighting works, is marked read-only, and is deleted on exit — no
+  working-tree status reload). Available wherever a file is addressable: the
+  commit files view (`l`, tree side, `.`-menu — the file's content at that
+  commit), and a new `e` key in the bookmark (`g`) and shelf (`G`)
+  quick-switchers. Working-tree files keep their existing live *Edit in editor*.
+  Path-less commit bookmarks (no file content) are skipped.
 - **Copy commit title.** The Commits panel `.`-menu now offers *Copy commit
   title* alongside *Copy commit id*, putting the selected commit's subject line
   on the system clipboard.

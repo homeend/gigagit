@@ -1264,6 +1264,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, m.reloadStatusCmd(editedSummary(msg.path))
 
+	case editorViewMsg:
+		if msg.err != nil {
+			m.statusMsg = "view: " + msg.err.Error()
+			return m, nil
+		}
+		return m, viewExternalCmd(msg.path, msg.name)
+
+	case editorViewFinishedMsg:
+		removeTempFile(msg.path)
+		if msg.err != nil {
+			m.statusMsg = "view: " + msg.err.Error()
+			return m, nil
+		}
+		m.statusMsg = viewedSummary(msg.name)
+		return m, nil
+
 	case amendPrefillMsg:
 		if msg.err != nil {
 			m.statusMsg = "amend: " + msg.err.Error()

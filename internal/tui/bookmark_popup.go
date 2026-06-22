@@ -143,7 +143,7 @@ func (m Model) renderBookmarkPopupBox(p *bookmarkPopup) string {
 	parts = append(parts, bodyLines...)
 	// Wrap the hint so [z] mode / [esc] close survive on a narrow terminal,
 	// where a single-line footer would truncate them off (mirrors shelfPopup).
-	hint := []string{"[?] keys", "[enter] jump", "[p] paste", "[m] mark/compare", "[x] remove", "[c] vs shelf", "[/] filter", "[z] mode", "[esc] close"}
+	hint := []string{"[?] keys", "[enter] jump", "[e] editor", "[p] paste", "[m] mark/compare", "[x] remove", "[c] vs shelf", "[/] filter", "[z] mode", "[esc] close"}
 	parts = append(parts, "")
 	parts = append(parts, wrapParts(hint, textW, "  ")...)
 	return popupBox(inner, strings.Join(parts, "\n"))
@@ -301,6 +301,21 @@ func (p *bookmarkPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			// esc in it returns here (the diff on a pick clears both via openPickerDiff).
 			m.pendingCompare = &pendingCompare{ref: bookmarkToFileRef(b), label: bookmarkDisplay(b), target: compareShelf}
 			return m, m.loadShelfCmd(true)
+		case "e":
+			if p.compareRef != nil {
+				return m, nil
+			}
+			if mm, yes := m.commitBookmarkNotice(p); yes { // a commit pointer has no file content
+				return mm, nil
+			}
+			b, ok := p.selected()
+			if !ok {
+				return m, nil
+			}
+			svc := m.svc
+			return m, m.openInEditorCmd(b.Path, func(ctx context.Context) ([]byte, error) {
+				return svc.BookmarkBytes(ctx, b)
+			})
 		}
 	}
 	return m, nil
