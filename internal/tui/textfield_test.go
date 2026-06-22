@@ -1,10 +1,13 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
+
+// forceColor (TrueColor save/restore) lives in commit_color_test.go.
 
 func TestTextFieldInsertAndValue(t *testing.T) {
 	var f textfield
@@ -165,5 +168,31 @@ func TestTextFieldHandleEditKeyReturnsFalse(t *testing.T) {
 		if f.HandleEditKey(tea.KeyMsg{Type: kt}) {
 			t.Fatalf("HandleEditKey consumed %v, want false", kt)
 		}
+	}
+}
+
+func TestTextFieldViewUnfocusedPlain(t *testing.T) {
+	f := newTextField("abc")
+	if got := f.View(false); got != "abc" {
+		t.Fatalf("unfocused View = %q, want plain 'abc'", got)
+	}
+}
+
+func TestTextFieldViewFocusedCursorAtRune(t *testing.T) {
+	forceColor(t)
+	f := newTextField("ab")
+	f.HandleEditKey(keyMsg("left")) // cursor on 'b'
+	got := f.View(true)
+	if !strings.Contains(got, "\x1b[7mb") {
+		t.Fatalf("focused View = %q, want reverse cell on 'b'", got)
+	}
+}
+
+func TestTextFieldViewFocusedCursorAtEnd(t *testing.T) {
+	forceColor(t)
+	f := newTextField("ab") // cursor at end
+	got := f.View(true)
+	if !strings.HasPrefix(got, "ab") || !strings.Contains(got, "\x1b[7m") {
+		t.Fatalf("focused-at-end View = %q, want 'ab' + reverse block", got)
 	}
 }

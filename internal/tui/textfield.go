@@ -4,6 +4,7 @@ import (
 	"unicode"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // textfield is a cursor-aware editable text buffer shared by the editable
@@ -155,6 +156,28 @@ func (f *textfield) Down() {
 	} else {
 		f.cursor = nextStart + col
 	}
+}
+
+// cursorCell renders the character under the cursor in reverse video.
+var cursorCell = lipgloss.NewStyle().Reverse(true)
+
+// View renders the field's text. Unfocused: plain text. Focused: the rune at
+// the cursor is shown reverse-video; at end-of-buffer (or end-of-line) a
+// reverse space marks the insertion point so it is always visible. The caller
+// owns surrounding labels and any per-line indentation; for a multi-line buffer
+// the caller may split View(true) on "\n" (the reverse cell never spans lines).
+func (f *textfield) View(focused bool) string {
+	if !focused {
+		return string(f.runes)
+	}
+	if f.cursor >= len(f.runes) {
+		return string(f.runes) + cursorCell.Render(" ")
+	}
+	at := f.runes[f.cursor]
+	if at == '\n' {
+		return string(f.runes[:f.cursor]) + cursorCell.Render(" ") + "\n" + string(f.runes[f.cursor+1:])
+	}
+	return string(f.runes[:f.cursor]) + cursorCell.Render(string(at)) + string(f.runes[f.cursor+1:])
 }
 
 // HandleEditKey applies one editing key. Returns true if it consumed the key,
