@@ -132,6 +132,9 @@ func availableActions(m Model) []actionRow {
 	if r, ok := m.reflogResetRow(); ok {
 		out = append(out, r)
 	}
+	if r, ok := m.reflogCheckoutRow(); ok {
+		out = append(out, r)
+	}
 	if r, ok := m.compareAgainstBookmarkRow(); ok {
 		out = append(out, r)
 	}
