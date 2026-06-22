@@ -35,7 +35,7 @@ func (m Model) tagCheckoutRow() (actionRow, bool) {
 						return m.startOp(engine.CheckoutTag{Name: name})
 					case "Create branch…":
 						// Prefill the branch name with the tag name; the user can edit.
-						return m.pushLayer(&tagCheckoutPopup{tag: name, name: name}), nil
+						return m.pushLayer(&tagCheckoutPopup{tag: name, name: newTextField(name)}), nil
 					case "Create worktree…":
 						// Branch + worktree at the tag; the dialog is seeded with the
 						// tag name (the path derives from it, sanitized per-OS).

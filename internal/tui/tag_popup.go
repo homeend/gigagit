@@ -12,8 +12,8 @@ import (
 // lightweight tag; a non-empty one an annotated tag. tab toggles the field.
 type tagPopup struct {
 	commit  string // full SHA the tag points at
-	name    string
-	message string
+	name    textfield
+	message textfield
 	onMsg   bool // false = editing name, true = editing message
 }
 
@@ -28,30 +28,17 @@ func (p *tagPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		p.onMsg = !p.onMsg
 		return m, nil
 	case tea.KeyEnter:
-		if p.name == "" {
+		if p.name.Value() == "" {
 			return m, nil
 		}
-		op := engine.CreateTag{Name: p.name, Commit: p.commit, Message: p.message}
+		op := engine.CreateTag{Name: p.name.Value(), Commit: p.commit, Message: p.message.Value()}
 		m = m.popLayer()
 		return m.startOp(op)
-	case tea.KeyBackspace, tea.KeyCtrlH:
+	default:
 		if p.onMsg {
-			if r := []rune(p.message); len(r) > 0 {
-				p.message = string(r[:len(r)-1])
-			}
-		} else if r := []rune(p.name); len(r) > 0 {
-			p.name = string(r[:len(r)-1])
-		}
-	case tea.KeySpace:
-		// Tag names cannot contain spaces; the annotated message can.
-		if p.onMsg {
-			p.message += " "
-		}
-	case tea.KeyRunes:
-		if p.onMsg {
-			p.message += string(msg.Runes)
-		} else {
-			p.name += string(msg.Runes)
+			p.message.HandleEditKey(msg) // the annotated message allows spaces
+		} else if msg.Type != tea.KeySpace {
+			p.name.HandleEditKey(msg) // tag names cannot contain spaces
 		}
 	}
 	return m, nil
@@ -69,8 +56,8 @@ func (p *tagPopup) box(m Model) string {
 	}
 	var b strings.Builder
 	b.WriteString("Create tag at " + displayStart(p.commit) + "\n\n")
-	b.WriteString(nameMark + "name:    " + p.name + "\n")
-	b.WriteString(msgMark + "message: " + p.message + "  (empty = lightweight)\n\n")
+	b.WriteString(nameMark + "name:    " + p.name.View(!p.onMsg) + "\n")
+	b.WriteString(msgMark + "message: " + p.message.View(p.onMsg) + "  (empty = lightweight)\n\n")
 	b.WriteString("[tab] field  [enter] create  [esc] cancel")
 	w, _ := m.overlayDims()
 	return modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"
