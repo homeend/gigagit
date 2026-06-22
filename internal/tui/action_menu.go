@@ -258,8 +258,11 @@ func (m Model) contextCopyRows() []actionRow {
 	switch {
 	case m.focus == panelCommits:
 		if bi, ok := m.backingIndex(panelCommits); ok {
-			h := m.commits[bi].Hash
-			return []actionRow{m.copyRow("copy-commit-id", "Copy commit id", "Copied commit id "+shortHash(h), h)}
+			c := m.commits[bi]
+			return []actionRow{
+				m.copyRow("copy-commit-id", "Copy commit id", "Copied commit id "+shortHash(c.Hash), c.Hash),
+				m.copyRow("copy-commit-title", "Copy commit title", "Copied commit title", c.Subject),
+			}
 		}
 	case m.isFilesPanel(m.focus):
 		if bi, ok := m.backingIndex(m.focus); ok {

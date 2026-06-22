@@ -206,7 +206,7 @@ func helpContent() []contentLine {
 		r("/", "filter the list by name (enter keeps, esc cancels)"),
 		r("z", "cycle text display: cutoff / wrap / scroll"),
 		r("esc", "close"),
-		r("copy", "Copy commit id (Commits); Copy file path / file name (Files/Staged) — OSC 52"),
+		r("copy", "Copy commit id / commit title (Commits); Copy file path / file name (Files/Staged) — OSC 52"),
 		h("Settings (,)"),
 		r("↑/↓", "move between entries"),
 		r("enter", "open the agent picker / install checked skills"),
