@@ -3,6 +3,7 @@ package git
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/gigagit/gg/internal/gitcmd"
 	"github.com/gigagit/gg/internal/model"
@@ -35,4 +36,23 @@ func (r *Repo) DiffTreeFiles(ctx context.Context, left, right model.Endpoint) ([
 		return nil, err
 	}
 	return ParseNameStatus([]byte(res.Stdout)), nil
+}
+
+// UntrackedFiles returns the repo's untracked, non-ignored files (paths relative
+// to the working-tree root). `git diff` never reports these, so a comparison
+// against the working tree must add them itself. NUL-delimited (`-z`) so paths
+// with spaces or non-ASCII bytes (which git otherwise quotes) come through raw.
+func (r *Repo) UntrackedFiles(ctx context.Context) ([]string, error) {
+	res, err := r.Runner.Run(ctx, "git ls-files (untracked)",
+		gitcmd.New("ls-files").Arg("--others", "--exclude-standard", "-z").ToArgv())
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, p := range strings.Split(res.Stdout, "\x00") {
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out, nil
 }

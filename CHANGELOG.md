@@ -73,6 +73,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   count while that walk is in flight, so the panel no longer looks frozen.
 
 ### Fixed
+- **Comparing against the working tree now shows untracked (new) files.** A
+  brand-new, never-added file was missing from *Compare against working tree*,
+  the `◇ Working tree` diff, and any compare whose newer side is the working tree
+  (also `gg compare … @worktree`), because `git diff` omits untracked files. They
+  now appear as added (`A`) entries — paths with spaces or non-ASCII bytes
+  included (listed via `ls-files -z`).
 - **A whole-tree compare no longer gets discarded by an arrow key.** The compare
   files view (*Compare against working tree / staged*, *Compare with marked*, the
   WIP-row diff) opened with the commit list focused, so pressing up/down moved the
