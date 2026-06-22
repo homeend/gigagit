@@ -290,6 +290,7 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.filesPreview != nil { // the preview is the topmost surface — close it first
 			m.filesPreview = nil
 			m.filesPreviewTag = ""
+			m.filesTreeFocused = true // return to the tree — the source of View file
 			return m, nil
 		}
 		if p.query != "" { // first esc clears the committed search

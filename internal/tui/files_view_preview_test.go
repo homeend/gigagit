@@ -215,6 +215,11 @@ func TestFilePreviewScrollAndClose(t *testing.T) {
 	if m.filesView == nil {
 		t.Fatal("esc on the preview must NOT close the whole files view")
 	}
+	// Closing the preview returns focus to the tree — the source of View file —
+	// not the commit-list side (the preview had stolen focus on open).
+	if !m.filesTreeFocused {
+		t.Fatal("esc on the preview must return focus to the file tree, not the commit list")
+	}
 }
 
 // TestFilePreviewScrollsViewportImmediately pins the pager behavior: because the
