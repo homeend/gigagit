@@ -104,6 +104,20 @@ func (p *contentPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 	if p.typing { // /-input mode captures every key
+		if m.filesView == p { // only the files-view tree search has history recall
+			if nm, nq, handled, commit := m.recallUpdate(scopeFiletree, msg, p.query); handled {
+				m = nm
+				p.query = nq
+				p.sel = 0
+				if commit {
+					p.typing = false
+					return m.recordSearch(scopeFiletree, p.query)
+				}
+				return m, nil
+			} else {
+				m = nm
+			}
+		}
 		switch msg.Type {
 		case tea.KeyEsc:
 			p.typing = false
@@ -163,6 +177,7 @@ func (p *contentPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		p.typing = true
 		p.query = ""
 		p.sel = 0
+		m = m.recallReset()
 	case "up", "k":
 		p.move(-1)
 	case "down", "j":

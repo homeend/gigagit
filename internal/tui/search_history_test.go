@@ -82,6 +82,83 @@ func TestStartupLoadPopulatesRings(t *testing.T) {
 	}
 }
 
+func seedPanelRing(m Model, phrases ...string) Model {
+	m.searchHist = map[string][]string{scopePanel: phrases} // newest-first
+	return m
+}
+
+func TestRecallAltDownOpensNewest(t *testing.T) {
+	m := seedPanelRing(loadedModel(t), "newest", "older", "oldest")
+	m.focus = panelBranches
+	m, _ = upd(t, m, keyMsg("/"))
+	m = typeRunes(t, m, "dr")            // draft "dr"
+	m, _ = upd(t, m, keyMsg("alt+down")) // open on newest
+	if !m.recallOpen || m.filterQuery != "newest" {
+		t.Fatalf("alt+down should open & preview newest; open=%v q=%q", m.recallOpen, m.filterQuery)
+	}
+	m, _ = upd(t, m, keyMsg("alt+down")) // -> older
+	if m.filterQuery != "older" {
+		t.Fatalf("second alt+down -> older, got %q", m.filterQuery)
+	}
+}
+
+func TestRecallAltUpAboveNewestRestoresDraft(t *testing.T) {
+	m := seedPanelRing(loadedModel(t), "newest", "older")
+	m.focus = panelBranches
+	m, _ = upd(t, m, keyMsg("/"))
+	m = typeRunes(t, m, "dr")
+	m, _ = upd(t, m, keyMsg("alt+down")) // open, q="newest"
+	m, _ = upd(t, m, keyMsg("alt+up"))   // above newest -> close + restore draft
+	if m.recallOpen || m.filterQuery != "dr" {
+		t.Fatalf("alt+up above newest restores draft & closes; open=%v q=%q", m.recallOpen, m.filterQuery)
+	}
+}
+
+func TestRecallEscRestoresDraftKeepsTyping(t *testing.T) {
+	m := seedPanelRing(loadedModel(t), "newest")
+	m.focus = panelBranches
+	m, _ = upd(t, m, keyMsg("/"))
+	m = typeRunes(t, m, "dr")
+	m, _ = upd(t, m, keyMsg("alt+down")) // open
+	m, _ = upd(t, m, keyMsg("esc"))      // close, restore draft, STILL typing
+	if m.recallOpen || !m.filterTyping || m.filterQuery != "dr" {
+		t.Fatalf("esc in dropdown: open=%v typing=%v q=%q", m.recallOpen, m.filterTyping, m.filterQuery)
+	}
+}
+
+func TestRecallTypingClosesDropdown(t *testing.T) {
+	m := seedPanelRing(loadedModel(t), "newest")
+	m.focus = panelBranches
+	m, _ = upd(t, m, keyMsg("/"))
+	m, _ = upd(t, m, keyMsg("alt+down")) // open, q="newest"
+	m = typeRunes(t, m, "x")             // typing closes; appends to previewed query
+	if m.recallOpen {
+		t.Fatalf("typing must close the dropdown")
+	}
+	if m.filterQuery != "newestx" {
+		t.Fatalf("typing appends to the previewed query, got %q", m.filterQuery)
+	}
+}
+
+func TestRecallEnterCommitsHighlighted(t *testing.T) {
+	m := withSearchStore(t, seedPanelRing(loadedModel(t), "newest", "older"))
+	m.focus = panelBranches
+	m, _ = upd(t, m, keyMsg("/"))
+	m, _ = upd(t, m, keyMsg("alt+down")) // open -> "newest"
+	m, _ = upd(t, m, keyMsg("alt+down")) // -> "older"
+	m, _ = upd(t, m, keyMsg("enter"))    // accept "older"
+	if m.filterTyping || m.recallOpen {
+		t.Fatalf("enter must commit: typing=%v open=%v", m.filterTyping, m.recallOpen)
+	}
+	if m.filterQuery != "older" {
+		t.Fatalf("committed query = %q, want older", m.filterQuery)
+	}
+	// "older" moves to top of the ring (dedup-to-top on re-commit).
+	if got := m.searchHist[scopePanel]; got[0] != "older" {
+		t.Fatalf("ring after commit = %v, want older newest", got)
+	}
+}
+
 func TestRecordPersistsToStore(t *testing.T) {
 	store := searchhist.NewFileStore(t.TempDir())
 	m := loadedModel(t)

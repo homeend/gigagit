@@ -138,6 +138,17 @@ func (p *shelfPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 	if p.filtering {
+		if nm, nq, handled, commit := m.recallUpdate(scopeShelf, msg, p.filter); handled {
+			m = nm
+			p.filter, p.sel = nq, 0
+			if commit {
+				p.filtering = false
+				return m.recordSearch(scopeShelf, p.filter)
+			}
+			return m, nil
+		} else {
+			m = nm
+		}
 		switch msg.Type {
 		case tea.KeyEsc:
 			p.filtering, p.filter, p.sel = false, "", 0
@@ -198,6 +209,7 @@ func (p *shelfPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			return m, nil
 		case "/":
 			p.filtering = true
+			m = m.recallReset()
 		case "k":
 			p.moveSel(-1)
 		case "j":

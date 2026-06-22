@@ -116,6 +116,11 @@ type Model struct {
 	highlightTyping bool   // true while @-input mode is capturing keys
 
 	searchHist map[string][]string // per-scope search-history rings, newest-first (loaded at startup)
+
+	recallScope string // active recall ring; "" = none
+	recallOpen  bool   // history dropdown visible
+	recallIndex int    // highlight into the ring; 0 = newest (meaningful when recallOpen)
+	recallDraft string // text captured when the dropdown opened (restored on esc/back-out)
 }
 
 type panel int
@@ -455,6 +460,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// own filter rides contentPopup.typing (not m.filterTyping), so the two
 		// never collide.
 		if m.filterTyping {
+			if nm, nq, handled, commit := m.recallUpdate(scopePanel, msg, m.filterQuery); handled {
+				m = nm
+				m.filterQuery = nq
+				m.sel[m.filterPanel] = 0
+				if commit {
+					m.filterTyping = false
+					m, recCmd := m.recordSearch(scopePanel, m.filterQuery)
+					if m.filesView != nil && m.filterPanel == panelCommits {
+						mm, cmd := m.syncFilesViewToSelectedCommit()
+						return mm, tea.Batch(recCmd, cmd)
+					}
+					return m, recCmd
+				}
+				return m, nil
+			} else {
+				m = nm // recall may have closed on a fall-through key
+			}
 			switch msg.Type {
 			case tea.KeyCtrlC:
 				return m, tea.Quit
@@ -510,6 +532,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Mirrors the filter loop, but: ctrl+↑/↓ jump matches, and a query edit
 		// snaps the cursor to the nearest match instead of resetting it to row 0.
 		if m.highlightTyping {
+			if nm, nq, handled, commit := m.recallUpdate(scopePanel, msg, m.highlightQuery); handled {
+				m = nm
+				m.highlightQuery = nq
+				m = m.snapToHighlightMatch()
+				if commit {
+					m.highlightTyping = false
+					m, recCmd := m.recordSearch(scopePanel, m.highlightQuery)
+					return m, recCmd
+				}
+				return m, nil
+			} else {
+				m = nm
+			}
 			switch msg.Type {
 			case tea.KeyCtrlC:
 				return m, tea.Quit
@@ -918,6 +953,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.filterQuery = ""
 				m.filterTyping = true
 				m.sel[m.focus] = 0
+				m = m.recallReset()
 			}
 		case "@":
 			if !m.running && !m.loading && m.focus == panelCommits {
@@ -927,6 +963,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.highlightQuery = ""
 				m.highlightTyping = true
+				m = m.recallReset()
 			}
 		case "ctrl+up":
 			if m.highlightActive() && m.focus == panelCommits {

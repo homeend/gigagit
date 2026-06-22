@@ -32,6 +32,67 @@ func (m Model) searchHistorySize() int {
 	return domain.EffectiveSearchHistorySize(m.cfg.UI.SearchHistorySize)
 }
 
+// recallReset clears recall state (called when a typing mode opens/closes).
+func (m Model) recallReset() Model {
+	m.recallScope = ""
+	m.recallOpen = false
+	m.recallIndex = 0
+	m.recallDraft = ""
+	return m
+}
+
+// recallUpdate processes a key for the search-history dropdown of scope.
+//   - next:     updated model (recall state mutated)
+//   - newQuery: the query string the caller should now display (== curQuery when unchanged)
+//   - handled:  true if the caller must NOT run its normal handling for this key
+//   - commit:   true if Enter accepted an entry (caller runs its commit path on newQuery)
+func (m Model) recallUpdate(scope string, msg tea.KeyMsg, curQuery string) (Model, string, bool, bool) {
+	ring := m.searchHist[scope]
+	altDown := msg.Alt && msg.Type == tea.KeyDown
+	altUp := msg.Alt && msg.Type == tea.KeyUp
+
+	if !m.recallOpen {
+		if altDown && len(ring) > 0 {
+			m.recallScope = scope
+			m.recallOpen = true
+			m.recallIndex = 0
+			m.recallDraft = curQuery
+			return m, ring[0], true, false
+		}
+		return m, curQuery, false, false // not our key
+	}
+
+	// Dropdown is open.
+	switch {
+	case altDown:
+		if m.recallIndex < len(ring)-1 {
+			m.recallIndex++
+		}
+		return m, ring[m.recallIndex], true, false
+	case altUp:
+		if m.recallIndex == 0 {
+			draft := m.recallDraft
+			m = m.recallReset()
+			return m, draft, true, false // above newest -> close + restore draft
+		}
+		m.recallIndex--
+		return m, ring[m.recallIndex], true, false
+	case msg.Type == tea.KeyEnter:
+		phrase := ring[m.recallIndex]
+		m = m.recallReset()
+		return m, phrase, true, true // accept -> caller commits on phrase
+	case msg.Type == tea.KeyEsc:
+		draft := m.recallDraft
+		m = m.recallReset()
+		return m, draft, true, false // close, restore draft, stay typing
+	default:
+		// Any other key (text/backspace/space/plain arrows) closes the dropdown
+		// and falls through to normal handling with the previewed query intact.
+		m = m.recallReset()
+		return m, curQuery, false, false
+	}
+}
+
 // recordSearch updates the in-memory ring (dedup-to-top, trim) and returns a
 // fire-and-forget persist command. Empty/blank phrases are a no-op.
 func (m Model) recordSearch(scope, phrase string) (Model, tea.Cmd) {
