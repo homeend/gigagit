@@ -32,11 +32,30 @@ func availableActions(m Model) []actionRow {
 	// actions.
 	if m.inContentWindow() {
 		rows := m.contextCopyRows()
-		if r, ok := m.viewFileRow(); ok {
-			rows = append(rows, r)
+		// A history/blame surface on top is a single file at a rev, not the files
+		// view underneath it. It owns the "Open in external editor" action
+		// (surfaceExternalRow); the files-view view/open rows and — below — the
+		// whole Commits action set must NOT leak onto it (they act on the hidden
+		// files view: cherry-pick / revert / reset / graph pan in a blame menu).
+		// The bookmark/shelf/compare rows below ARE surface-aware (focusedBookmark
+		// dispatches on the top layer), so they correctly target the history/blame
+		// file and stay.
+		onStackFile := false
+		switch m.topLayer().(type) {
+		case *historyView, *blameView:
+			onStackFile = true
 		}
-		if r, ok := m.openExternalRow(); ok {
-			rows = append(rows, r)
+		if onStackFile {
+			if r, ok := m.surfaceExternalRow(); ok {
+				rows = append(rows, r)
+			}
+		} else {
+			if r, ok := m.viewFileRow(); ok {
+				rows = append(rows, r)
+			}
+			if r, ok := m.openExternalRow(); ok {
+				rows = append(rows, r)
+			}
 		}
 		if r, ok := m.shelfAddRow(); ok {
 			rows = append(rows, r)
@@ -57,8 +76,9 @@ func availableActions(m Model) []actionRow {
 		// selection (m.focus stays panelCommits), so offer the full commit/graph
 		// actions there for parity with the panel. These all carry run handlers,
 		// so they execute even though the files view owns the keyboard. The tree
-		// side and a stash file tree (no commit id) stay copy-only.
-		if m.filesView != nil && !m.filesTreeFocused && m.filesHash != "" && m.stashView == nil {
+		// side and a stash file tree (no commit id) stay copy-only. A history/blame
+		// surface on top is NOT the commit side, so it is excluded (onStackFile).
+		if !onStackFile && m.filesView != nil && !m.filesTreeFocused && m.filesHash != "" && m.stashView == nil {
 			rows = m.appendCommitContextRows(rows)
 		}
 		return rows

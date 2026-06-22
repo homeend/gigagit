@@ -97,3 +97,40 @@ func removeTempFile(path string) {
 
 // viewedSummary is the status-bar message after a successful external view.
 func viewedSummary(name string) string { return "viewed " + filepath.Base(name) }
+
+// surfaceExternalRow builds the "Open in external editor" action for the history
+// or blame surface on top (the file at the selected commit / the blamed file at
+// its rev). Single source of truth for both the `.`-menu row and the `e` key, so
+// the blame working-tree rule (rev=="" → the on-disk file, not the index blob)
+// lives in one place. ok=false when the top layer is neither surface.
+func (m Model) surfaceExternalRow() (actionRow, bool) {
+	row := func(path string, resolve func(context.Context) ([]byte, error)) (actionRow, bool) {
+		return actionRow{
+			id:    "open-external",
+			label: "Open in external editor",
+			run: func(m Model) (tea.Model, tea.Cmd) {
+				return m, m.openInEditorCmd(path, resolve)
+			},
+		}, true
+	}
+	switch s := m.topLayer().(type) {
+	case *historyView:
+		if s.sel < 0 || s.sel >= len(s.commits) {
+			return actionRow{}, false
+		}
+		fc := s.commits[s.sel]
+		path := fc.Path
+		if path == "" {
+			path = s.ctx.path
+		}
+		hash, svc := fc.Hash, m.svc
+		return row(path, func(ctx context.Context) ([]byte, error) { return svc.ShowFile(ctx, hash, path) })
+	case *blameView:
+		path, rev, svc := s.ctx.path, s.ctx.rev, m.svc
+		if rev == "" { // blame of the working-tree file: open the on-disk file, not the index blob
+			return row(path, func(ctx context.Context) ([]byte, error) { return svc.WorktreeFile(ctx, path) })
+		}
+		return row(path, func(ctx context.Context) ([]byte, error) { return svc.ShowFile(ctx, rev, path) })
+	}
+	return actionRow{}, false
+}

@@ -115,6 +115,15 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   count while that walk is in flight, so the panel no longer looks frozen.
 
 ### Fixed
+- **The history/blame `.` menu no longer shows Commits-panel actions.** When the
+  file-history or blame view was opened from the files view's commit-list side,
+  the whole Commits action set (cherry-pick / revert / reset / create
+  worktree·branch·tag / the graph pan·widen controls) leaked into its `.` menu —
+  acting on the hidden files view underneath, not the file you were looking at.
+  Those views now show only their own file actions: copy path/name, bookmark /
+  shelf / compare (which already targeted the right file), and *Open in external
+  editor*. (That last one also makes the editor action reachable from the menu,
+  not just the `e` key.)
 - **Closing the file-content preview returns focus to the file tree.** In the
   full-tree *View file* preview, `esc` closed the preview but left focus on the
   commit-list side (the preview had taken focus on open) — so the cursor was no
