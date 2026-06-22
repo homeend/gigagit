@@ -181,7 +181,7 @@ func (m Model) render() string {
 	// panel/tooltip base below.
 	if (m.layers != nil && len(m.layers.entries) > 0) || m.diffView != nil {
 		_, h := m.overlayDims()
-		return m.withRecall(clipToHeight(m.renderLayers(), h))
+		return m.withDiffFileNotice(m.withRecall(clipToHeight(m.renderLayers(), h)))
 	}
 	_, h := m.overlayDims()
 	bg := clipToHeight(m.renderInterface(), h)

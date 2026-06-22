@@ -72,6 +72,7 @@ type Model struct {
 	diffView    *diffView   // full-screen side-by-side diff; nil = closed
 	diffTag     string      // request key of the wanted diff; gates stale async results
 	diffNav     diffNavKind // which list the open diff was opened from (Home/End file-stepping)
+	diffNotice  string      // transient bottom-left diff-view notice (file arrival / no-file); cleared on the next key
 	diffPartial bool        // session default for new diffs (false = full); the f key toggles it
 	diffLong    longMode    // session: long-line mode for new diffs (0 = scroll); w cycles
 
