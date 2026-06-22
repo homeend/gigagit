@@ -314,21 +314,26 @@ func (v *identityView) render(m Model, below string) string {
 }
 
 func (v *identityView) box(m Model) string {
+	// Wide popup (up to 96 cols) + a wrapped footer: the action hints are longer
+	// than the standard 56-col prose popup, so popupInnerWidth would truncate
+	// them ("actions cut off"). Mirrors the bookmark/shelf switchers.
 	w, _ := m.overlayDims()
-	inner := popupInnerWidth(w)
+	inner := popupWideInnerWidth(w)
 	textW := popupTextWidth(inner)
 
-	var parts []string
+	var body, footer []string
 	switch v.mode {
 	case idEditIdentity:
-		parts = v.editLines()
+		body, footer = v.editLines()
 	case idForm:
-		parts = v.formLines()
+		body, footer = v.formLines()
 	case idApply:
-		parts = v.applyLines()
+		body, footer = v.applyLines()
 	default:
-		parts = v.browseLines(m, textW)
+		body, footer = v.browseLines(m, textW)
 	}
+	parts := append(body, "")
+	parts = append(parts, wrapParts(footer, textW, "  ")...)
 	return popupBox(inner, strings.Join(parts, "\n"))
 }
 
@@ -343,10 +348,10 @@ func identityLine(label, name, email string, set bool, inheritNote string) strin
 	return fmt.Sprintf("  %-9s %s", label, val)
 }
 
-func (v *identityView) browseLines(m Model, textW int) []string {
+func (v *identityView) browseLines(m Model, textW int) (body, footer []string) {
 	parts := []string{"Identity & profiles", ""}
 	if v.loading {
-		return append(parts, "  (loading…)")
+		return append(parts, "  (loading…)"), []string{"[esc]"}
 	}
 	parts = append(parts, "Current identity")
 	parts = append(parts, identityLine("Global", v.id.GlobalName, v.id.GlobalEmail, v.id.GlobalSet, ""))
@@ -381,8 +386,8 @@ func (v *identityView) browseLines(m Model, textW int) []string {
 		}
 		parts = append(parts, renderWindow(wr, winOpts{w: textW, h: h, anchor: v.sel})...)
 	}
-	parts = append(parts, "", "[enter] apply  [e] edit identity  [n] new  [r] rename  [d] delete  [esc]")
-	return parts
+	footer = []string{"[enter] apply", "[e] edit identity", "[n] new", "[r] rename", "[d] delete", "[esc]"}
+	return parts, footer
 }
 
 func (v *identityView) fieldLine(label string, f textfield, focused bool) string {
@@ -393,17 +398,15 @@ func (v *identityView) fieldLine(label string, f textfield, focused bool) string
 	return fmt.Sprintf("%s%-10s %s", cursor, label, f.View(focused))
 }
 
-func (v *identityView) editLines() []string {
+func (v *identityView) editLines() (body, footer []string) {
 	return []string{
 		"Edit identity", "",
 		v.fieldLine("Name", v.fName, v.field == 0),
 		v.fieldLine("Email", v.fEmail, v.field == 1),
-		"",
-		"[↑/↓] field  [enter] choose scope  [esc] back",
-	}
+	}, []string{"[↑/↓] field", "[enter] choose scope", "[esc] back"}
 }
 
-func (v *identityView) formLines() []string {
+func (v *identityView) formLines() (body, footer []string) {
 	title := "New profile"
 	if v.renameFrom != "" {
 		title = "Edit profile"
@@ -422,17 +425,14 @@ func (v *identityView) formLines() []string {
 		v.fieldLine("Git name", v.fName, v.field == 1),
 		v.fieldLine("Git email", v.fEmail, v.field == 2),
 		fmt.Sprintf("%s%-10s %s", scopeCursor, "Scope", scopeVal),
-		"",
-		"[↑/↓] field  [←/→] scope  [enter] save  [esc] back",
-	}
+	}, []string{"[↑/↓] field", "[←/→] scope", "[enter] save", "[esc] back"}
 }
 
-func (v *identityView) applyLines() []string {
+func (v *identityView) applyLines() (body, footer []string) {
 	return []string{
 		"Apply identity", "",
 		fmt.Sprintf("  %s <%s>", v.applyName, v.applyEmail),
 		fmt.Sprintf("  from: %s", v.applyLabel),
-		"",
-		"Apply to:  [r] this repo   [g] globally   [esc] back",
-	}
+		"", "Apply to:",
+	}, []string{"[r] this repo", "[g] globally", "[esc] back"}
 }
