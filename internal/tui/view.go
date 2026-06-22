@@ -396,13 +396,24 @@ func (m Model) filesLabel(p panel, base string) string {
 // each box keeps the exact title it had before the loop existed.
 func (m Model) leftPanelLabel(p panel) string {
 	switch p {
-	case panelStaged:
-		return m.filesLabel(panelStaged, "Staged")
+	case panelStaged, panelReflog:
+		return m.panelLabel(p, bottomTabLabel(p, m.panelLen(panelStaged), m.panelLen(panelReflog)))
 	case panelFiles, panelTags:
 		return m.panelLabel(p, filesTabLabel(p, m.panelLen(panelFiles), m.panelLen(panelTags)))
 	default: // the Branches/Remotes/Worktrees tab slot
 		return m.panelLabel(p, tabBarLabel(p))
 	}
+}
+
+// bottomTabLabel is the bottom-left slot header: the active tab spelled out with
+// its row count, the inactive tab shown plainly. Mirrors filesTabLabel.
+func bottomTabLabel(active panel, stagedN, reflogN int) string {
+	staged := fmt.Sprintf("Staged %d", stagedN)
+	reflog := fmt.Sprintf("Reflog %d", reflogN)
+	if active == panelReflog {
+		return staged + " [" + reflog + "]"
+	}
+	return "[" + staged + "] " + reflog
 }
 
 // tabBarLabel is the shared left-slot header: the active tab spelled out and

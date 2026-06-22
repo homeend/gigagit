@@ -211,7 +211,10 @@ func TestCtrlArrowRepinsMiddleTab(t *testing.T) {
 	}
 }
 
-func TestCtrlArrowNoOpWhenPinnedOnStaged(t *testing.T) {
+func TestCtrlArrowFlipsPinnedBottomTab(t *testing.T) {
+	// The bottom slot is now a tab group (Staged ⇄ Reflog), so ctrl+arrow on a
+	// pinned Staged flips to a maximized Reflog (re-pinning), and back. The top
+	// tab is untouched.
 	m := maxModel()
 	m.focus = panelStaged
 	m.leftMaxed = true
@@ -220,8 +223,15 @@ func TestCtrlArrowNoOpWhenPinnedOnStaged(t *testing.T) {
 
 	u, _ := m.Update(keyMsg("ctrl+right"))
 	m = u.(Model)
+	if m.focus != panelReflog || m.leftMax != panelReflog || m.activeLeftTab != before {
+		t.Fatalf("ctrl+right on pinned Staged must flip to a pinned Reflog: focus=%v leftMax=%v activeLeftTab=%v",
+			m.focus, m.leftMax, m.activeLeftTab)
+	}
+
+	u, _ = m.Update(keyMsg("ctrl+left"))
+	m = u.(Model)
 	if m.focus != panelStaged || m.leftMax != panelStaged || m.activeLeftTab != before {
-		t.Fatalf("ctrl+arrow on pinned Staged must be inert: focus=%v leftMax=%v activeLeftTab=%v",
+		t.Fatalf("ctrl+left must flip back to a pinned Staged: focus=%v leftMax=%v activeLeftTab=%v",
 			m.focus, m.leftMax, m.activeLeftTab)
 	}
 }

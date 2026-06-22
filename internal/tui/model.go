@@ -31,7 +31,8 @@ type Model struct {
 	commits  []model.Commit
 
 	worktrees       []model.Worktree
-	tags            []model.Tag // refs/tags; shown by the Tags tab in the middle slot
+	tags            []model.Tag         // refs/tags; shown by the Tags tab in the middle slot
+	reflog          []model.ReflogEntry // HEAD reflog; shown by the Reflog tab in the bottom slot
 	currentWorktree string
 
 	cfg          config.Config
@@ -98,12 +99,13 @@ type Model struct {
 	opMsgs    chan tea.Msg
 	modal     *decisionState
 
-	focus          panel
-	lastLeftPanel  panel // ←'s return target; zero value = panelBranches
-	activeLeftTab  panel // which of Branches/Remotes/Worktrees shows in the shared left tab slot; zero value = panelBranches
-	activeFilesTab panel // Files or Tags in the middle slot; zero value resolves to panelFiles via middleTab()
-	leftMax        panel // the pinned full-column left panel (valid only when leftMaxed)
-	leftMaxed      bool  // t has maximized leftMax to fill the whole left column
+	focus           panel
+	lastLeftPanel   panel // ←'s return target; zero value = panelBranches
+	activeLeftTab   panel // which of Branches/Remotes/Worktrees shows in the shared left tab slot; zero value = panelBranches
+	activeFilesTab  panel // Files or Tags in the middle slot; zero value resolves to panelFiles via middleTab()
+	activeBottomTab panel // Staged or Reflog in the bottom slot; zero value resolves to panelStaged via bottomTab()
+	leftMax         panel // the pinned full-column left panel (valid only when leftMaxed)
+	leftMaxed       bool  // t has maximized leftMax to fill the whole left column
 
 	remoteBranches []model.RemoteBranch // refs/remotes; shown by the Remotes tab
 	shelfEntries   []model.ShelfEntry   // default bucket; shown by the Shelf tab
@@ -138,6 +140,7 @@ const (
 	panelStaged
 	panelCommits
 	panelTags
+	panelReflog
 	panelCount
 )
 
@@ -147,6 +150,10 @@ var leftTabs = []panel{panelBranches, panelRemotes, panelWorktrees}
 
 // filesTabs is the display/cycle order of the middle-slot tabs (the Files box).
 var filesTabs = []panel{panelFiles, panelTags}
+
+// bottomTabs is the display/cycle order of the bottom-left slot tabs (the Staged
+// box shares its slot with the read-only Reflog viewer).
+var bottomTabs = []panel{panelStaged, panelReflog}
 
 // New constructs the initial model for svc.
 func New(svc *domain.Service) Model {
@@ -395,6 +402,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.worktrees = msg.worktrees
 			m.tags = msg.tags
+			m.reflog = msg.reflog
 			m.currentWorktree = msg.currentWorktree
 			m.cfg = msg.cfg
 			m.gitCommonDir = msg.gitCommonDir
@@ -900,14 +908,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if msg.String() == "ctrl+left" {
 				dir = -1
 			}
-			// Maximized on Staged: Staged has no tab group, and the un-maximized
-			// top tab is hidden, so cycling would focus an invisible panel. No-op.
-			if m.leftMaxed && m.leftMax == panelStaged {
-				return m, nil
-			}
 			if m.focus == panelFiles || m.focus == panelTags {
 				m.activeFilesTab = nextInOrder(filesTabs, m.middleTab(), dir)
 				m.focus = m.activeFilesTab
+				if m.leftMaxed { // re-pin the newly shown tab so it stays full-height
+					m.leftMax = m.focus
+				}
+				return m, nil
+			}
+			if m.focus == panelStaged || m.focus == panelReflog {
+				m.activeBottomTab = nextInOrder(bottomTabs, m.bottomTab(), dir)
+				m.focus = m.activeBottomTab
 				if m.leftMaxed { // re-pin the newly shown tab so it stays full-height
 					m.leftMax = m.focus
 				}
@@ -1469,6 +1480,14 @@ func (m Model) middleTab() panel {
 	return panelFiles
 }
 
+// bottomTab is the active bottom-left slot panel, defaulting to Staged when unset.
+func (m Model) bottomTab() panel {
+	if m.activeBottomTab == panelStaged || m.activeBottomTab == panelReflog {
+		return m.activeBottomTab
+	}
+	return panelStaged
+}
+
 // leftColumnPanels returns the left-column panels that exist for the current
 // terminal size, independent of any maximize. Staged is present only when the
 // normal split is tall enough to show it (the bodyH>=12 branch in layout). It is
@@ -1485,7 +1504,7 @@ func (m Model) leftColumnPanels() []panel {
 		bodyH = 6
 	}
 	if bodyH >= 12 {
-		ps = append(ps, panelStaged)
+		ps = append(ps, m.bottomTab())
 	}
 	return ps
 }
@@ -1508,8 +1527,8 @@ func (m Model) focusOrder() []panel {
 		return []panel{m.leftMax, panelCommits}
 	}
 	order := []panel{m.activeLeftTab, m.middleTab()}
-	if slices.Contains(m.leftColumnPanels(), panelStaged) { // dropped on a short terminal
-		order = append(order, panelStaged)
+	if slices.Contains(m.leftColumnPanels(), m.bottomTab()) { // dropped on a short terminal
+		order = append(order, m.bottomTab())
 	}
 	return append(order, panelCommits)
 }
