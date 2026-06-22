@@ -159,16 +159,21 @@ func TestContextCopyRowsCommits(t *testing.T) {
 	m := footerModel()
 	m.loading = false
 	m.focus = panelCommits
-	m.commits = []model.Commit{{Hash: "0123456789abcdef0123456789abcdef01234567", Subject: "x"}}
+	m.commits = []model.Commit{{Hash: "0123456789abcdef0123456789abcdef01234567", Subject: "feat: do the thing"}}
 	rows := m.contextCopyRows()
-	if len(rows) != 1 || rows[0].id != "copy-commit-id" {
-		t.Fatalf("want one copy-commit-id row, got %v", rows)
+	id, okID := findRow(rows, "copy-commit-id")
+	title, okTitle := findRow(rows, "copy-commit-title")
+	if !okID || !okTitle {
+		t.Fatalf("want copy-commit-id and copy-commit-title rows, got %v", rows)
 	}
-	if rows[0].copyText != "0123456789abcdef0123456789abcdef01234567" {
-		t.Errorf("copyText = %q, want the full hash", rows[0].copyText)
+	if id.copyText != "0123456789abcdef0123456789abcdef01234567" {
+		t.Errorf("commit-id copyText = %q, want the full hash", id.copyText)
 	}
-	if rows[0].run == nil {
-		t.Error("copy row must carry a run handler")
+	if title.copyText != "feat: do the thing" {
+		t.Errorf("commit-title copyText = %q, want the subject", title.copyText)
+	}
+	if id.run == nil || title.run == nil {
+		t.Error("copy rows must carry a run handler")
 	}
 }
 

@@ -9,6 +9,9 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Copy commit title.** The Commits panel `.`-menu now offers *Copy commit
+  title* alongside *Copy commit id*, putting the selected commit's subject line
+  on the clipboard via OSC 52.
 - **Wrap-around change navigation in the diff view.** When `n` (next change)
   reaches the last change — or `p` (previous) reaches the first — the press no
   longer just stops. A header cue (`↻ n again → top` / `↻ p again → bottom`)
