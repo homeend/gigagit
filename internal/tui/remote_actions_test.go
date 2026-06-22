@@ -127,3 +127,31 @@ func TestRemoteWorktreeRowOpensPopup(t *testing.T) {
 		t.Fatalf("expected worktreePopup on top after run; got %T", nm.(Model).topLayer())
 	}
 }
+
+func TestRemoteDeleteRowPresent(t *testing.T) {
+	m := remoteModel()
+	got := ids(availableActions(m))
+	if !got["remote-delete"] {
+		t.Fatalf("expected remote-delete in menu; got %v", got)
+	}
+}
+
+func TestRemoteDeleteRowAbsentWithoutSelection(t *testing.T) {
+	m := remoteModel()
+	m.remoteBranches = nil // empty list → no selection
+	got := ids(availableActions(m))
+	if got["remote-delete"] {
+		t.Fatalf("remote-delete must be absent with no selection; got %v", got)
+	}
+}
+
+func TestRemoteDeleteRowDispatches(t *testing.T) {
+	m := remoteModel()
+	row, ok := m.remoteDeleteRow()
+	if !ok {
+		t.Fatal("remoteDeleteRow not available")
+	}
+	if _, cmd := row.run(m); cmd == nil {
+		t.Fatal("delete row run returned nil cmd")
+	}
+}
