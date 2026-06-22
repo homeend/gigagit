@@ -153,6 +153,15 @@ func (m Model) renderDiffView() string {
 			right = rangeStr
 		}
 	}
+	// Primed wrap-around cue: only when armed, so the unarmed header stays
+	// byte-identical. Leads the status so a narrow terminal keeps the prompt.
+	if cue := wrapCue(v.wrapArm); cue != "" {
+		if right != "" {
+			right = cue + "  " + right
+		} else {
+			right = cue
+		}
+	}
 	avail := w - lipgloss.Width(right) - 2
 	if avail < 1 {
 		avail = 1

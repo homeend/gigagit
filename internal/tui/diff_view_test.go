@@ -714,6 +714,82 @@ func TestDiffTogglePreservesBlock(t *testing.T) {
 	}
 }
 
+// wrapDiffModel opens a diff over a 60-row view with two change blocks (at
+// lines 10 and 50) so n/p can move between them and hit both boundaries.
+func wrapDiffModel() Model {
+	m := diffModel()
+	m.height = 12 // body = 10
+	m.diffView = diffViewWith(sameRowsTUI(60, 10, 50), []int{10, 50})
+	m.diffTag = "status:x"
+	return m
+}
+
+func TestDiffWrapAroundForward(t *testing.T) {
+	m := wrapDiffModel()
+	u, _ := m.Update(keyMsg("n"))        // first change
+	u, _ = u.(Model).Update(keyMsg("n")) // last change
+	last := u.(Model).diffView.offset
+	if u.(Model).diffView.wrapArm != wrapNone {
+		t.Fatal("a move that lands on a change must not prime a wrap")
+	}
+	// First boundary press: no move, primes the wrap.
+	u, _ = u.(Model).Update(keyMsg("n"))
+	if got := u.(Model).diffView.offset; got != last {
+		t.Fatalf("first n at the last change moved (offset %d → %d)", last, got)
+	}
+	if u.(Model).diffView.wrapArm != wrapToStart {
+		t.Fatal("first n at the last change must prime a wrap to the top")
+	}
+	// Second press wraps to the first change.
+	u, _ = u.(Model).Update(keyMsg("n"))
+	if got := u.(Model).diffView.currentBlockOrdinal(); got != 0 {
+		t.Fatalf("second n must wrap to the first change, ordinal = %d", got)
+	}
+}
+
+func TestDiffWrapAroundBackward(t *testing.T) {
+	m := wrapDiffModel()
+	u, _ := m.Update(keyMsg("n")) // land on the first change
+	if u.(Model).diffView.currentBlockOrdinal() != 0 {
+		t.Fatal("setup: expected to be on the first change")
+	}
+	// First p at the first change primes a wrap to the bottom.
+	u, _ = u.(Model).Update(keyMsg("p"))
+	if u.(Model).diffView.wrapArm != wrapToEnd {
+		t.Fatal("first p at the first change must prime a wrap to the bottom")
+	}
+	// Second p wraps to the last change.
+	u, _ = u.(Model).Update(keyMsg("p"))
+	last := len(u.(Model).diffView.dispBlocks) - 1
+	if got := u.(Model).diffView.currentBlockOrdinal(); got != last {
+		t.Fatalf("second p must wrap to the last change, ordinal = %d want %d", got, last)
+	}
+}
+
+func TestDiffWrapDisarmedByOtherKey(t *testing.T) {
+	m := wrapDiffModel()
+	u, _ := m.Update(keyMsg("n"))        // first change
+	u, _ = u.(Model).Update(keyMsg("n")) // last change
+	u, _ = u.(Model).Update(keyMsg("n")) // boundary: primes wrap
+	if u.(Model).diffView.wrapArm != wrapToStart {
+		t.Fatal("setup: expected a primed wrap at the last change")
+	}
+	// A scroll between the two n's must cancel the prime.
+	u, _ = u.(Model).Update(keyMsg("j"))
+	if u.(Model).diffView.wrapArm != wrapNone {
+		t.Fatal("scrolling must disarm the primed wrap")
+	}
+	// The next n re-primes instead of wrapping.
+	before := u.(Model).diffView.offset
+	u, _ = u.(Model).Update(keyMsg("n"))
+	if got := u.(Model).diffView.offset; got != before {
+		t.Fatalf("n after a disarm wrapped (offset %d → %d) instead of re-priming", before, got)
+	}
+	if u.(Model).diffView.wrapArm != wrapToStart {
+		t.Fatal("n at the boundary after a disarm must re-prime the wrap")
+	}
+}
+
 func TestStatusLoaderOpensAtFirstDifference(t *testing.T) {
 	dir, repo := newRepoDir(t)
 	var base, work strings.Builder
