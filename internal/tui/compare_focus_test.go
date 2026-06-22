@@ -50,6 +50,26 @@ func TestCompareModeMoveKeepsComparison(t *testing.T) {
 	}
 }
 
+// The mouse path (wheel/click over the commits region) calls
+// moveCommitUnderFilesView directly, bypassing the keyboard wrapper — it must
+// also be locked out in compare mode, or it discards the comparison.
+func TestCompareModeMouseScrollKeepsComparison(t *testing.T) {
+	m := loadedModelLinearCommits(t, 3)
+	m.focus = panelCommits
+	m, _ = m.openCompareFiles(
+		model.Endpoint{Kind: model.EndpointCommit, Hash: m.commits[1].Hash},
+		model.Endpoint{Kind: model.EndpointWorkTree})
+	tagBefore, hashBefore, selBefore := m.compareTag, m.filesHash, m.sel[panelCommits]
+
+	u, _ := m.moveCommitUnderFilesView(1) // the mouse path
+	mm := u.(Model)
+
+	if !mm.filesCompare || mm.compareTag != tagBefore || mm.filesHash != hashBefore || mm.sel[panelCommits] != selBefore {
+		t.Fatalf("mouse-path move discarded the comparison: compare=%v tag=%q hash=%q sel=%d",
+			mm.filesCompare, mm.compareTag, mm.filesHash, mm.sel[panelCommits])
+	}
+}
+
 // Marking two commit rows opens their whole-tree compare directly (older→newer).
 func TestMarkTwoCommitsOpensCompare(t *testing.T) {
 	m := loadedModelLinearCommits(t, 3) // commits[0]=tip (newer), commits[1] older

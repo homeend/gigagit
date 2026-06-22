@@ -443,11 +443,6 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // fires its follow-live reload: the stash list when the file tree is showing a
 // stash, otherwise the Commits list.
 func (m Model) moveListUnderFilesView(delta int) (tea.Model, tea.Cmd) {
-	if m.filesCompare {
-		// No live commit list in compare mode — never follow-reload (it would
-		// discard the comparison). Defensive: the tree is the only focus here.
-		return m, nil
-	}
 	if m.filesPreview != nil {
 		// The preview owns the right column: vertical movement scrolls it instead
 		// of the commit list (so filesHash can't change under a live preview).
@@ -463,6 +458,13 @@ func (m Model) moveListUnderFilesView(delta int) (tea.Model, tea.Cmd) {
 // moveCommitUnderFilesView shifts the Commits selection by delta and fires
 // the follow-live reload when it lands on a different commit.
 func (m Model) moveCommitUnderFilesView(delta int) (tea.Model, tea.Cmd) {
+	// Compare mode has no live commit list: shifting the selection here would
+	// reassign filesHash and reload a plain commit view, discarding the
+	// comparison. Guard at the chokepoint so keyboard AND mouse (mouse.go calls
+	// this directly) are both locked out.
+	if m.filesCompare {
+		return m, nil
+	}
 	// Pure-drop: while a per-commit files read is outstanding, ignore the move
 	// entirely so held j/k is paced by read completion instead of queuing a read
 	// per OS key-repeat (the files load is expensive on a large repo).
@@ -500,6 +502,9 @@ func (m Model) moveCommitUnderFilesView(delta int) (tea.Model, tea.Cmd) {
 // commits with the files view open, so the tree follows the narrowed selection
 // without the user having to press j/k.
 func (m Model) syncFilesViewToSelectedCommit() (tea.Model, tea.Cmd) {
+	if m.filesCompare {
+		return m, nil // never follow-reload in compare mode (input-agnostic lock)
+	}
 	bi, ok := m.backingIndex(panelCommits)
 	if !ok || m.commits[bi].Hash == m.filesHash {
 		return m, nil
