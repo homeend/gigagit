@@ -63,6 +63,22 @@ func (op SmartPull) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	}
 
 	if op.Intent == PullInBackground {
+		// If the target is checked out in a worktree, git refuses to fetch into its
+		// ref, so the ff-ref path below can't be tried — pull in that worktree
+		// directly instead (no checkout, no switch-back, no spurious
+		// not-fast-forwardable prompt). checkoutPull's worktree branch returns
+		// before any switch, so returnTo is irrelevant. PullInWorktree touches a
+		// tree, so escalate first — nothing partial has happened yet.
+		wt, werr := repo.WorktreeForBranch(ctx, target)
+		if werr != nil {
+			return Result{}, werr
+		}
+		if wt != nil {
+			if err := deps.escalate(ctx); err != nil {
+				return Result{}, err
+			}
+			return op.checkoutPull(ctx, deps, remote, target, "")
+		}
 		deps.emit(ctx, Progress{Step: "fast-forwarding ref", Detail: target})
 		if err := repo.FastForwardRef(ctx, remote, target); err == nil {
 			return Result{Summary: "fast-forwarded " + target, Changed: true}, nil

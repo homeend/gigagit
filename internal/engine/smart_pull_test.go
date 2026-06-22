@@ -126,6 +126,45 @@ func TestSmartPullBackgroundFastForwardsOtherBranch(t *testing.T) {
 	}
 }
 
+// A background pull of a branch checked out in ANOTHER worktree must pull in that
+// worktree directly — no "cannot fast-forward in the background" prompt (git
+// refuses to fetch into a checked-out branch's ref, so the ff-ref path can't be
+// the first thing tried). MapDecider{} errors on any decision, so a prompt fails
+// the test.
+func TestSmartPullBackgroundPullsWorktreeBranchNoPrompt(t *testing.T) {
+	clone, repo := cloneOnMainBehindOrigin(t)
+	root := filepath.Dir(clone)
+	seed := filepath.Join(root, "seed")
+
+	gitAt(t, seed, "checkout", "-b", "dev")
+	gitAt(t, seed, "commit", "--allow-empty", "-m", "dev1")
+	gitAt(t, seed, "push", "-u", "origin", "dev")
+
+	gitAt(t, clone, "fetch", "origin")
+	gitAt(t, clone, "branch", "dev", "origin/dev")
+	wtPath := filepath.Join(root, "wt-dev")
+	gitAt(t, clone, "worktree", "add", wtPath, "dev")
+
+	gitAt(t, seed, "commit", "--allow-empty", "-m", "dev2")
+	gitAt(t, seed, "push", "origin", "dev")
+
+	res, err := SmartPull{Branch: "dev", Intent: PullInBackground}.Run(context.Background(),
+		OpDeps{Repo: repo, Decider: MapDecider{}})
+	if err != nil {
+		t.Fatalf("background pull of a worktree branch must not prompt/err: %v", err)
+	}
+	if !res.Changed {
+		t.Fatalf("res = %+v, want Changed", res)
+	}
+	gitAt(t, clone, "fetch", "origin") // refresh the clone's origin/dev view
+	if revAt(t, wtPath, "HEAD") != revAt(t, clone, "origin/dev") {
+		t.Fatal("dev was not fast-forwarded in its worktree")
+	}
+	if cur, _ := repo.CurrentBranch(context.Background()); cur != "main" {
+		t.Fatalf("current branch = %q, want main (no checkout)", cur)
+	}
+}
+
 func TestSmartPullStayStashesAndMovesToTarget(t *testing.T) {
 	clone, repo := cloneOnMainBehindOrigin(t)
 	gitAt(t, clone, "branch", "feature", "origin/main")
