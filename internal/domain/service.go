@@ -19,6 +19,7 @@ import (
 	"github.com/gigagit/gg/internal/gitexec"
 	"github.com/gigagit/gg/internal/observ"
 	"github.com/gigagit/gg/internal/repogate"
+	"github.com/gigagit/gg/internal/searchhist"
 	"github.com/gigagit/gg/internal/shelf"
 )
 
@@ -28,13 +29,14 @@ type Service struct {
 	repo    *git.Repo
 	workdir string // fallback gate key when common-dir resolution fails
 
-	mu       sync.Mutex
-	gate     *repogate.Gate // resolved lazily on first Execute or query
-	flight   flightGroup    // coalesces concurrent calls sharing a key
-	factory  cache.Factory  // vends the diff (and future) caches
-	differ   Differ         // memoized production diff engine
-	shelf    shelf.Store    // lazily resolved; nil disables the shelf
-	bookmark bookmark.Store // lazily resolved; nil disables bookmarks
+	mu         sync.Mutex
+	gate       *repogate.Gate   // resolved lazily on first Execute or query
+	flight     flightGroup      // coalesces concurrent calls sharing a key
+	factory    cache.Factory    // vends the diff (and future) caches
+	differ     Differ           // memoized production diff engine
+	shelf      shelf.Store      // lazily resolved; nil disables the shelf
+	bookmark   bookmark.Store   // lazily resolved; nil disables bookmarks
+	searchhist searchhist.Store // lazily resolved; nil disables search history
 }
 
 // Open builds a Service rooted at workdir with the standard runner — the
