@@ -9,6 +9,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Mark two rows to compare them.** In the Commits panel, mark one row (`m`) and
+  mark a second — gg opens their whole-tree compare directly (the GitKraken
+  "select two, see the diff" gesture), instead of the old "no pair operations"
+  dead-end. Works for any pair of a commit, the `◇ Working tree` row, or the
+  `◇ Staged` row (ordered older→newer); the `.` menu *Compare with marked* still
+  works too.
 - **See every file at a commit, not just what it changed (`a`).** In the commit
   files view (`l`), pressing `a` toggles between the commit's *changed* files and
   the **full tree** — every file that would exist if you checked the commit out
@@ -67,6 +73,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   count while that walk is in flight, so the panel no longer looks frozen.
 
 ### Fixed
+- **A whole-tree compare no longer gets discarded by an arrow key.** The compare
+  files view (*Compare against working tree / staged*, *Compare with marked*, the
+  WIP-row diff) opened with the commit list focused, so pressing up/down moved the
+  commit selection and reloaded a plain commit view — throwing away the
+  comparison. It now opens with the file tree focused and locks out the
+  (meaningless) commit-list side, so up/down navigates the compared files.
 - **The bookmark (`g`) and shelf (`G`) switchers no longer cut off file paths
   or hide the `[z] mode` hint.** The popups were fixed at 56 columns, so a long
   file path (which sits at the end of each row) was truncated, and the footer —

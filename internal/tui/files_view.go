@@ -152,7 +152,9 @@ func (m Model) openCompareFiles(left, right model.Endpoint) (Model, tea.Cmd) {
 		m.filesHash = ""
 	}
 	m.compareTag = "cmp:" + left.CacheTag() + ":" + right.CacheTag()
-	m.filesTreeFocused = false
+	// Focus the tree: compare mode has no live commit list, and moving the commit
+	// selection would discard the comparison. The focus-switch keys are inert here.
+	m.filesTreeFocused = true
 	return m, m.loadCompareFilesCmd(left, right, m.compareTag)
 }
 
@@ -398,9 +400,13 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "left":
 		m.filesTreeFocused = true
 	case "right":
-		m.filesTreeFocused = false
+		if !m.filesCompare { // compare mode has no commit-list side to focus
+			m.filesTreeFocused = false
+		}
 	case "tab", "shift+tab":
-		m.filesTreeFocused = !m.filesTreeFocused
+		if !m.filesCompare {
+			m.filesTreeFocused = !m.filesTreeFocused
+		}
 	case "up", "k":
 		if m.filesTreeFocused {
 			p.move(-1)
@@ -437,6 +443,11 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // fires its follow-live reload: the stash list when the file tree is showing a
 // stash, otherwise the Commits list.
 func (m Model) moveListUnderFilesView(delta int) (tea.Model, tea.Cmd) {
+	if m.filesCompare {
+		// No live commit list in compare mode — never follow-reload (it would
+		// discard the comparison). Defensive: the tree is the only focus here.
+		return m, nil
+	}
 	if m.filesPreview != nil {
 		// The preview owns the right column: vertical movement scrolls it instead
 		// of the commit list (so filesHash can't change under a live preview).

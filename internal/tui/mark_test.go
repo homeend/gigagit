@@ -78,17 +78,28 @@ func TestMarkPairOpensPopupOnBranches(t *testing.T) {
 	}
 }
 
-func TestMarkPairNoOpsPanel(t *testing.T) {
+// On the Commits panel a second mark opens the whole-tree compare of the two
+// rows directly (no pair-op popup) — the GitKraken "select two, see the diff"
+// gesture. (Other panels without pair ops still show the "no pair operations"
+// notice; see handleMarkKey.)
+func TestMarkTwoCommitsCompares(t *testing.T) {
 	m := markModel()
 	m.focus = panelCommits
 	m = pressRune(t, m, "m")
 	m.sel[panelCommits] = 1
 	m = pressRune(t, m, "m")
 	if layerOf[*pairOpPopup](m) != nil {
-		t.Fatal("commits panel has no pair ops")
+		t.Fatal("commits panel must not open a pair-op popup")
 	}
-	if !strings.Contains(m.statusMsg, "no pair operations") {
-		t.Fatalf("statusMsg = %q", m.statusMsg)
+	if !m.filesCompare || m.filesView == nil {
+		t.Fatal("marking two commits must open the compare files view")
+	}
+	if m.mark != nil {
+		t.Fatal("the pair action must clear the mark")
+	}
+	// older (commits[1]) → newer (commits[0]).
+	if m.filesLeft.Hash != "2222222" || m.filesRight.Hash != "1111111" {
+		t.Fatalf("endpoints = %s↔%s, want older↔newer", m.filesLeft.Hash, m.filesRight.Hash)
 	}
 }
 

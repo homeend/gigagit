@@ -95,6 +95,19 @@ func (m Model) handleMarkKey() (tea.Model, tea.Cmd) {
 		m.mark = nil
 		return m, nil
 	}
+	// Commits panel: a second mark on a different row opens the whole-tree compare
+	// of the two endpoints (a commit, the working tree, or the index), ordered
+	// older→newer — the GitKraken "select two, see the diff" gesture. The `.` menu
+	// "Compare with marked" remains for discoverability.
+	if m.focus == panelCommits {
+		older, newer := m.mark.key, key
+		if m.compareKeyRank(older) < m.compareKeyRank(newer) {
+			older, newer = newer, older
+		}
+		mm, cmd := m.openCompareFiles(m.compareKeyEndpoint(older), m.compareKeyEndpoint(newer))
+		mm.mark = nil // the pair action consumes the mark
+		return mm, cmd
+	}
 	ops := pairOpsFor(m.focus)
 	if len(ops) == 0 {
 		m.statusMsg = "no pair operations for this panel"
