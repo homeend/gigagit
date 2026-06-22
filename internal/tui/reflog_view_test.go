@@ -57,6 +57,24 @@ func TestReflogTabRendersInAssembledLeftColumn(t *testing.T) {
 	}
 }
 
+func TestReflogResetRowAnchorsOnCursor(t *testing.T) {
+	m := reflogTestModel()
+	m.focus = panelReflog
+	m.sel[panelReflog] = 1 // second entry
+	r, ok := m.reflogResetRow()
+	if !ok {
+		t.Fatal("reflog . menu must offer Reset to this entry")
+	}
+	if r.id != "reflog-reset" {
+		t.Fatalf("row id = %q, want reflog-reset", r.id)
+	}
+	// Not offered off the reflog panel.
+	m.focus = panelCommits
+	if _, ok := m.reflogResetRow(); ok {
+		t.Fatal("reset row must not appear off the reflog panel")
+	}
+}
+
 func TestReflogEnterOpensCommitFilesView(t *testing.T) {
 	m := reflogTestModel()
 	m.focus = panelReflog
