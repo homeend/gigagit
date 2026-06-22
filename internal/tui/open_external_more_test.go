@@ -68,6 +68,35 @@ func TestBlameOpenExternalResolvesContent(t *testing.T) {
 	}
 }
 
+// Blame opened on a working-tree file (rev=="") must open the ON-DISK working
+// file — not ShowFile("",path), which is `git show :path` (the index blob) and
+// would swap content (or error for an unstaged file).
+func TestBlameOpenExternalWorkingTreeUsesOnDiskFile(t *testing.T) {
+	dir, repo := newRepoDir(t)
+	if err := os.WriteFile(filepath.Join(dir, "w.go"), []byte("working edit\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := Model{width: 100, height: 30, svc: domain.New(repo)}
+	b := &blameView{ctx: navContext{path: "w.go", rev: ""}} // working-tree blame
+	m = m.pushLayer(b)
+	_, cmd := b.update(m, keyMsg("e"))
+	if cmd == nil {
+		t.Fatal("e should dispatch an open command")
+	}
+	msg, ok := cmd().(editorViewMsg)
+	if !ok {
+		t.Fatalf("want editorViewMsg, got %T", cmd())
+	}
+	if msg.err != nil {
+		t.Fatalf("rev=\"\" blame should resolve the working file, got err: %v", msg.err)
+	}
+	defer removeTempFile(msg.path)
+	data, _ := os.ReadFile(msg.path)
+	if string(data) != "working edit\n" {
+		t.Fatalf("rev=\"\" blame must open the on-disk working file, got %q", data)
+	}
+}
+
 // The Staged panel offers "Open staged version in external editor" — the index
 // blob, not the working file. Off on the Files panel, and off for a staged
 // deletion (no index blob).
