@@ -92,6 +92,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   count while that walk is in flight, so the panel no longer looks frozen.
 
 ### Fixed
+- **Closing the file-content preview returns focus to the file tree.** In the
+  full-tree *View file* preview, `esc` closed the preview but left focus on the
+  commit-list side (the preview had taken focus on open) — so the cursor was no
+  longer on the tree that launched the action. `esc` now restores tree focus.
 - **Clipboard copy now works in tmux and WSL.** `.`-menu copy actions
   previously emitted only the tmux-passthrough-wrapped OSC 52 escape, which
   tmux silently drops unless `allow-passthrough on` is set — so nothing reached
