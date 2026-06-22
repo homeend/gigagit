@@ -9,6 +9,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Editable text fields now have a real cursor.** Every editable popup field —
+  commit title/description, branch name, rename branch, tag name + message,
+  tag-checkout name, stash name, shelf restore destination, and the
+  create-worktree fields — shows a visible cursor and supports full in-place
+  line editing: `←`/`→` to move, `Home`/`End`, insert and delete at the cursor
+  (`Backspace`/`Delete`), word-jumps (`Alt`+`←`/`→` and `Ctrl`+`←`/`→`), and
+  `Ctrl`+`W` to delete the previous word. The commit description edits as a
+  multi-line buffer (`Enter` inserts a newline; `↑`/`↓` move between lines). The
+  quick-switcher *search/filter* inputs are intentionally unchanged. All fields
+  share one small `textfield` component.
 - **Open any file in your external editor (read-only).** New *Open in external
   editor* action that materializes a file's content to a throwaway temp file and
   opens it in `$VISUAL`/`$EDITOR` (the temp keeps the real extension so syntax
