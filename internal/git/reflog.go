@@ -2,10 +2,47 @@ package git
 
 import (
 	"context"
+	"strconv"
 	"strings"
 
 	"github.com/gigagit/gg/internal/gitcmd"
+	"github.com/gigagit/gg/internal/model"
 )
+
+// reflogFmt joins fields with NUL and records with newline. %gs (the reflog
+// subject) is single-line, so newline record splitting is safe.
+const reflogFmt = "%H%x00%h%x00%gd%x00%gs%x00%gr"
+
+// ReflogEntries returns up to limit HEAD reflog entries, newest first. A repo
+// with no reflog yields an empty slice (not an error).
+func (r *Repo) ReflogEntries(ctx context.Context, limit int) ([]model.ReflogEntry, error) {
+	b := gitcmd.New("reflog").Arg("--format=" + reflogFmt)
+	if limit > 0 {
+		b = b.Arg("-n", strconv.Itoa(limit))
+	}
+	res, err := r.Runner.Run(ctx, "git reflog", b.ToArgv())
+	if err != nil {
+		return nil, err
+	}
+	var out []model.ReflogEntry
+	for _, line := range strings.Split(strings.TrimRight(res.Stdout, "\n"), "\n") {
+		if line == "" {
+			continue
+		}
+		f := strings.Split(line, "\x00")
+		if len(f) < 5 {
+			continue
+		}
+		out = append(out, model.ReflogEntry{
+			Hash:      f[0],
+			ShortHash: f[1],
+			Selector:  f[2],
+			Subject:   f[3],
+			Rel:       f[4],
+		})
+	}
+	return out, nil
+}
 
 // LastReflogSubject returns the subject of the most recent HEAD reflog entry,
 // e.g. "commit: add foo" or "checkout: moving from main to dev". Returns "" if

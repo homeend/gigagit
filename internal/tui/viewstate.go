@@ -67,15 +67,16 @@ func (m Model) layout() layoutGeom {
 	// m.middleTab() (not always panelFiles) means page steps, windowing, and
 	// mouse hit-testing all resolve to whichever tab is on screen.
 	mid := m.middleTab()
+	bt := m.bottomTab()
 	if bodyH >= 12 {
 		h1 := bodyH / 3
 		h2 := bodyH / 3
 		g.boxH[m.activeLeftTab] = h1
 		g.boxH[mid] = h2
-		g.boxH[panelStaged] = bodyH - h1 - h2
+		g.boxH[bt] = bodyH - h1 - h2
 		g.pos[m.activeLeftTab] = point{0, 1}
 		g.pos[mid] = point{0, 1 + h1}
-		g.pos[panelStaged] = point{0, 1 + h1 + h2}
+		g.pos[bt] = point{0, 1 + h1 + h2}
 	} else {
 		h1 := bodyH / 2
 		g.boxH[m.activeLeftTab] = h1
@@ -375,6 +376,8 @@ func (m Model) listFor(p panel) panelList {
 		return worktreeList{items: m.worktrees, rows: m.worktreeRows(), times: m.headTimes}
 	case panelTags:
 		return tagList{items: m.tags, rows: m.tagRows()}
+	case panelReflog:
+		return reflogList{items: m.reflog, rows: m.reflogRows()}
 	case panelFiles, panelStaged:
 		// Both file panels back onto the FULL status slice; panelView's
 		// membership filter selects each panel's subset, so backingIndex keeps

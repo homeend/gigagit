@@ -9,6 +9,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Reflog window.** The bottom-left panel is now a tab group: `ctrl+←/→`
+  toggles **Staged ⇄ Reflog**. The Reflog tab lists the HEAD reflog (read-only,
+  newest first, per-worktree, capped by `[ui] reflog_limit` — default 200);
+  `enter`/`l` opens an entry's commit in the files view (works for dangling
+  commits too), and the `.` menu offers *Copy SHA* and *Bookmark this commit*
+  (compare via the `g` switcher).
 - **Editable text fields now have a real cursor.** Every editable popup field —
   commit title/description, branch name, rename branch, tag name + message,
   tag-checkout name, stash name, shelf restore + bookmark paste destinations,

@@ -181,6 +181,21 @@ func TestShowFileGatedQuery(t *testing.T) {
 	}
 }
 
+func TestReflogGatedQuery(t *testing.T) {
+	f := gitexec.NewFakeRunner()
+	f.SetResponse("git reflog", gitexec.Result{
+		Stdout: "1111111111111111111111111111111111111111\x001111111\x00HEAD@{0}\x00checkout: moving from main to dev\x001 minute ago\n",
+	})
+	svc := New(&git.Repo{Runner: f})
+	entries, err := svc.Reflog(context.Background(), 50)
+	if err != nil {
+		t.Fatalf("Reflog: %v", err)
+	}
+	if len(entries) != 1 || entries[0].Selector != "HEAD@{0}" || entries[0].ShortHash != "1111111" {
+		t.Fatalf("Reflog = %+v", entries)
+	}
+}
+
 func TestCommitFilesGatedQuery(t *testing.T) {
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git log (commit files)", gitexec.Result{Stdout: "M\ta.txt\n"})

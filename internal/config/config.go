@@ -27,6 +27,8 @@ type UIConfig struct {
 
 	SearchHistorySize int `toml:"search_history_size"` // entries kept per search-history ring; <=0 = unset (default 20), clamped to searchhist.MaxSize
 
+	ReflogLimit int `toml:"reflog_limit"` // max HEAD reflog entries shown in the Reflog panel; <=0 = unset (default 200)
+
 	CommitGraphLanes    int `toml:"commit_graph_lanes"`     // default graph window width in lanes; <=0 = unset
 	CommitGraphMinLanes int `toml:"commit_graph_min_lanes"` // minimum window width (narrow floor); <=0 = unset
 	CommitGraphStep     int `toml:"commit_graph_step"`      // widen/narrow increment in lanes; <=0 = unset
@@ -121,6 +123,9 @@ func overlayUI(dst *UIConfig, src UIConfig) {
 	}
 	if src.SearchHistorySize > 0 {
 		dst.SearchHistorySize = src.SearchHistorySize
+	}
+	if src.ReflogLimit > 0 {
+		dst.ReflogLimit = src.ReflogLimit
 	}
 	if src.CommitGraphLanes > 0 {
 		dst.CommitGraphLanes = src.CommitGraphLanes

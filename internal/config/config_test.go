@@ -193,6 +193,19 @@ func TestOverlaySearchHistorySize(t *testing.T) {
 	}
 }
 
+func TestOverlayReflogLimit(t *testing.T) {
+	dst := UIConfig{ReflogLimit: 0}
+	overlayUI(&dst, UIConfig{ReflogLimit: 42})
+	if dst.ReflogLimit != 42 {
+		t.Fatalf("ReflogLimit = %d, want 42", dst.ReflogLimit)
+	}
+	// <= 0 in src must not reset a set dst (unset rule).
+	overlayUI(&dst, UIConfig{ReflogLimit: 0})
+	if dst.ReflogLimit != 42 {
+		t.Fatalf("zero src must not reset, got %d", dst.ReflogLimit)
+	}
+}
+
 func TestOverlayUIActionLists(t *testing.T) {
 	dst := Defaults().UI
 	overlayUI(&dst, UIConfig{FooterActions: []string{"pull", "commit"}, MenuActions: []string{"pull"}})

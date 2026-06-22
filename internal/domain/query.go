@@ -25,6 +25,7 @@ type Snapshot struct {
 	RemoteBranches  []model.RemoteBranch
 	Worktrees       []model.Worktree
 	Tags            []model.Tag
+	Reflog          []model.ReflogEntry
 	CurrentWorktree string // git toplevel; "" if TopLevel failed
 	GitCommonDir    string // "" if it failed
 	HeadTimes       map[string]int64
@@ -109,6 +110,16 @@ func (s *Service) loadSnapshot(ctx context.Context) (Snapshot, error) {
 		if tags, err := s.repo.Tags(ctx); err == nil {
 			mu.Lock()
 			snap.Tags = tags
+			mu.Unlock()
+		}
+	})
+	run(func() {
+		// Reflog is best-effort: a repo with no reflog must not block startup.
+		// The startup read uses the default cap; the TUI re-reads with its
+		// configured limit on refresh.
+		if rl, err := s.repo.ReflogEntries(ctx, defaultReflogLimit); err == nil {
+			mu.Lock()
+			snap.Reflog = rl
 			mu.Unlock()
 		}
 	})
@@ -207,6 +218,21 @@ func (s *Service) RemoteBranches(ctx context.Context) ([]model.RemoteBranch, err
 // Tags is a single gated read for the CLI tag commands and the TUI Tags tab.
 func (s *Service) Tags(ctx context.Context) ([]model.Tag, error) {
 	return query(ctx, s, "tags", s.repo.Tags)
+}
+
+// defaultReflogLimit caps the HEAD reflog read when no [ui] reflog_limit is set.
+const defaultReflogLimit = 200
+
+// Reflog returns the HEAD reflog entries (newest first), capped at limit
+// (<=0 ⇒ defaultReflogLimit). Read reservation, singleflighted. The startup
+// Snapshot uses the default; the TUI passes its configured limit on refresh.
+func (s *Service) Reflog(ctx context.Context, limit int) ([]model.ReflogEntry, error) {
+	if limit <= 0 {
+		limit = defaultReflogLimit
+	}
+	return query(ctx, s, "reflog", func(ctx context.Context) ([]model.ReflogEntry, error) {
+		return s.repo.ReflogEntries(ctx, limit)
+	})
 }
 
 // ShowFile returns the raw blob of path at rev (git show rev:path), under a

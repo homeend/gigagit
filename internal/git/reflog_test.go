@@ -8,6 +8,56 @@ import (
 	"testing"
 )
 
+func TestReflogEntriesListsHeadActions(t *testing.T) {
+	dir, runner := newTestRepo(t)
+	repo := &Repo{Runner: runner}
+
+	// Two more HEAD-moving actions on top of the initial commit.
+	if err := os.WriteFile(filepath.Join(dir, "b.txt"), []byte("b\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, dir, "add", ".")
+	gitIn(t, dir, "commit", "-m", "second commit")
+	gitIn(t, dir, "checkout", "-b", "feature")
+
+	entries, err := repo.ReflogEntries(context.Background(), 50)
+	if err != nil {
+		t.Fatalf("reflog entries: %v", err)
+	}
+	if len(entries) < 3 {
+		t.Fatalf("want >=3 entries, got %d: %+v", len(entries), entries)
+	}
+	top := entries[0]
+	if top.Selector != "HEAD@{0}" {
+		t.Fatalf("top selector = %q, want HEAD@{0}", top.Selector)
+	}
+	if len(top.Hash) != 40 {
+		t.Fatalf("top hash = %q, want a full 40-char SHA", top.Hash)
+	}
+	if top.ShortHash == "" || top.Subject == "" {
+		t.Fatalf("top entry missing short hash or subject: %+v", top)
+	}
+	// The most recent action was the checkout.
+	if !strings.Contains(top.Subject, "checkout") {
+		t.Fatalf("top subject = %q, want it to mention checkout", top.Subject)
+	}
+}
+
+func TestReflogEntriesRespectsLimit(t *testing.T) {
+	dir, runner := newTestRepo(t)
+	repo := &Repo{Runner: runner}
+	for i := 0; i < 4; i++ {
+		gitIn(t, dir, "commit", "--allow-empty", "-m", "c")
+	}
+	entries, err := repo.ReflogEntries(context.Background(), 2)
+	if err != nil {
+		t.Fatalf("reflog entries: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("want exactly 2 entries under limit, got %d", len(entries))
+	}
+}
+
 func TestLastReflogSubjectIsCommit(t *testing.T) {
 	_, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
