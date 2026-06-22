@@ -12,11 +12,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - **Squash selected commits.** On the Commits panel, `m` now toggles a commit
   into a selection set (the `◉` markers); the `.` menu then offers **Compare**
   (unchanged) and **Squash N commits**. Squash combines the selected commits
-  into one, concatenating their messages (reword afterward if you like). Stage 1
-  squashes commits that are already adjacent; non-adjacent or off-branch
-  selections are refused with a note (reordering them first is coming next).
-  Conflicts pause for `git rebase --continue`. "Compare with marked" is removed
-  from the Commits panel — the selection set replaces it.
+  into one, concatenating their messages (reword afterward if you like). When the
+  selected commits aren't adjacent, a prompt offers **Reorder & squash** — the
+  skipped in-between commits move to just after the squashed commit. Off-branch
+  selections are refused; conflicts pause for `git rebase --continue`. "Compare
+  with marked" is removed from the Commits panel — the selection set replaces it.
 - **Fast-forward the current branch to a commit.** When another branch is built
   on top of your current branch, the Commits panel `.` menu now offers
   **Fast-forward `<branch>` to here** on any commit ahead of your branch's tip —
