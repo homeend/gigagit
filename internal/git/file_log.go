@@ -13,7 +13,12 @@ import (
 // file across renames. rev "" starts from HEAD. One invocation. limit bounds
 // history depth for very large repos.
 func (r *Repo) FileLog(ctx context.Context, rev, path string, limit int) ([]model.FileCommit, error) {
+	// core.quotepath=false keeps non-ASCII paths raw in the --name-status lines
+	// (git otherwise octal-quotes them), so the parsed Path round-trips through
+	// ShowFile. -z is avoided here: it would mangle the --format/name-status
+	// interleave that ParseFileLog relies on.
 	b := gitcmd.New("log").
+		Config("core.quotepath=false").
 		ArgIf(rev != "", rev).
 		Arg("--follow", "-M", "--name-status", "--format="+logFormat, "-n", strconv.Itoa(limit), "--", path)
 	res, err := r.Runner.Run(ctx, "git log (file history)", b.ToArgv())
