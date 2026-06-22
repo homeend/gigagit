@@ -78,6 +78,20 @@ func asExit(err error, target **exec.ExitError) bool {
 	return false
 }
 
+// gitEnv builds the environment for a git subprocess: the inherited process
+// environment, any caller-supplied vars, then GIT_TERMINAL_PROMPT=0 appended
+// last so it always wins. gg runs inside a TUI that owns the terminal in raw
+// mode, so git must never fall back to an interactive credential/terminal
+// prompt (e.g. "Username for 'https://github.com':") — that opens /dev/tty and
+// blocks the process forever, freezing the UI. With prompting disabled git
+// fails fast with a clear error instead, leaving the UI responsive. Credential
+// helpers and ssh-agent are unaffected.
+func gitEnv(extra []string) []string {
+	env := os.Environ()
+	env = append(env, extra...)
+	return append(env, "GIT_TERMINAL_PROMPT=0")
+}
+
 func (r *ExecRunner) Run(ctx context.Context, name string, argv []string) (Result, error) {
 	return r.RunEnv(ctx, name, argv, nil)
 }
@@ -86,9 +100,7 @@ func (r *ExecRunner) RunEnv(ctx context.Context, name string, argv, env []string
 	start := r.now()
 	cmd := exec.CommandContext(ctx, r.gitPath, argv...)
 	cmd.Dir = r.workDir
-	if env != nil {
-		cmd.Env = append(os.Environ(), env...)
-	}
+	cmd.Env = gitEnv(env)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -112,6 +124,7 @@ func (r *ExecRunner) Stream(ctx context.Context, name string, argv []string, onL
 	start := r.now()
 	cmd := exec.CommandContext(ctx, r.gitPath, argv...)
 	cmd.Dir = r.workDir
+	cmd.Env = gitEnv(nil)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	stdoutPipe, err := cmd.StdoutPipe()

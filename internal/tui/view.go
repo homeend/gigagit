@@ -88,6 +88,23 @@ var (
 // this list aligned with the error-setting sites in model.go and the popups.
 var statusErrorPrefixes = []string{"error:", "files:", "commits:", "amend:", "interactive rebase:", "cannot create:"}
 
+// friendlyOpError turns an operation failure into the status-bar message. gg
+// runs git with GIT_TERMINAL_PROMPT=0 (so a credential prompt can never freeze
+// the TUI), which makes git fail with "could not read Username … terminal
+// prompts disabled" when a remote needs auth and no helper is configured. That
+// raw text reads like a gg bug, so it is rewritten into actionable guidance.
+// Everything else passes through as the cleaned git message.
+func friendlyOpError(err error) string {
+	s := err.Error()
+	low := strings.ToLower(s)
+	if strings.Contains(low, "terminal prompts disabled") ||
+		strings.Contains(low, "could not read username") ||
+		strings.Contains(low, "could not read password") {
+		return "error: remote needs credentials — configure a git credential helper (gg cannot prompt for them)"
+	}
+	return "error: " + s
+}
+
 // statusIsError reports whether a status message reports a failure.
 func statusIsError(msg string) bool {
 	for _, p := range statusErrorPrefixes {

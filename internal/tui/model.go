@@ -1155,7 +1155,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		chainSwitch := ""
 		refsReload := false
 		if msg.err != nil {
-			m.statusMsg = "error: " + msg.err.Error()
+			m.statusMsg = friendlyOpError(msg.err)
 		} else {
 			if msg.res.Summary != "" {
 				m.statusMsg = msg.res.Summary

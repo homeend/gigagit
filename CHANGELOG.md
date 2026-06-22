@@ -136,6 +136,18 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   count while that walk is in flight, so the panel no longer looks frozen.
 
 ### Fixed
+- **Push/pull no longer freezes when a remote needs credentials.** When a
+  remote required authentication and no credential helper was configured, git
+  fell back to an interactive terminal prompt (`Username for
+  'https://github.com':`). Because the TUI owns the terminal in raw mode, that
+  prompt blocked forever and gg appeared hung. Every git subprocess now runs
+  with `GIT_TERMINAL_PROMPT=0`, so git fails fast instead of prompting, and the
+  status bar shows *"remote needs credentials — configure a git credential
+  helper"*. Credential helpers and ssh-agent are unaffected. (This also makes
+  the scriptable `gg` CLI fail fast rather than hang; configure a credential
+  helper for non-interactive auth.) Note: SSH remotes can still hang on a
+  first-time host-key or passphrase prompt — keep the host known and the key
+  loaded in an agent.
 - **Diffing a file with a non-ASCII name no longer fails.** A committed file
   whose path contains a non-ASCII byte (e.g. an em-dash `—`) was listed with
   git's quoted, octal-escaped form (`"timing \342\200\224 kopia.log"`), so the
