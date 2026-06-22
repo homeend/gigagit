@@ -35,6 +35,20 @@ func TestIdentityViewRendersCurrentAndProfiles(t *testing.T) {
 	}
 }
 
+// Regression: the action hints were truncated because the popup capped at 56
+// cols and popupBox truncates (never wraps). They must all render now.
+func TestIdentityViewRendersAllActions(t *testing.T) {
+	for _, w := range []int{120, 60} { // wide (one line) and narrow (wraps)
+		m := Model{width: w, height: 40}
+		out := sampleIdentityView().box(m)
+		for _, want := range []string{"[enter] apply", "[e] edit identity", "[n] new", "[r] rename", "[d] delete", "[esc]"} {
+			if !strings.Contains(out, want) {
+				t.Fatalf("width %d: action %q missing (truncated?):\n%s", w, want, out)
+			}
+		}
+	}
+}
+
 func TestIdentityViewRendersUnsetLocalDistinctly(t *testing.T) {
 	m := Model{width: 100, height: 40}
 	v := sampleIdentityView() // LocalSet false, GlobalSet true
