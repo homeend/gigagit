@@ -885,6 +885,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				f := m.status.Files[bi]
 				return m.openStatusDiff(f, m.focus == panelStaged)
 			}
+			if m.canShowReflogFiles() {
+				return m.openReflogFiles()
+			}
 		case "h":
 			if m.canShowFileDiff() {
 				bi, _ := m.backingIndex(m.focus)
@@ -1064,6 +1067,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.filesPreviewTag = ""
 				m.filesReadInflight = true
 				return m, m.loadCommitFilesCmd(c)
+			}
+			if m.canShowReflogFiles() {
+				return m.openReflogFiles()
 			}
 		case "shift+down", "shift+up":
 			// Grow the ◉ compare selection as a contiguous run: add the current

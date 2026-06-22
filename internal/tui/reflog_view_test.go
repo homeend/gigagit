@@ -33,6 +33,23 @@ func TestReflogListLenAndRows(t *testing.T) {
 	}
 }
 
+func TestReflogEnterOpensCommitFilesView(t *testing.T) {
+	m := reflogTestModel()
+	m.focus = panelReflog
+	m.sel[panelReflog] = 1 // anchor on the SECOND row, not the default 0
+	nm, cmd := m.Update(keyMsg("enter"))
+	m = nm.(Model)
+	if m.filesView == nil {
+		t.Fatal("enter on a reflog row must open the files view")
+	}
+	if m.filesHash != "2222222222222222222222222222222222222222" {
+		t.Fatalf("filesHash = %q, want the SECOND entry's hash (cursor-anchored)", m.filesHash)
+	}
+	if cmd == nil {
+		t.Fatal("expected a files-load command")
+	}
+}
+
 func TestBottomTabTogglesStagedReflog(t *testing.T) {
 	m := reflogTestModel()
 	m.focus = panelStaged

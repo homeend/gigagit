@@ -130,6 +130,19 @@ func (m Model) canShowCommitFiles() bool {
 	return ok
 }
 
+// canShowReflogFiles gates l/enter on a reflog row: a resolvable entry under the
+// cursor and a wide-enough terminal. Anchors on panelReflog selection only.
+func (m Model) canShowReflogFiles() bool {
+	if m.focus != panelReflog || !m.opsIdle() {
+		return false
+	}
+	if m.width > 0 && m.width < 40 {
+		return false
+	}
+	_, ok := m.backingIndex(panelReflog)
+	return ok
+}
+
 // canMark gates m: mark/unmark/pair needs a resolvable row in the focused
 // panel (handleMarkKey re-checks and routes the three sub-cases).
 func (m Model) canMark() bool {
