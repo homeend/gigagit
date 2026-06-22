@@ -318,6 +318,40 @@ func TestCommitFilesRealRepo(t *testing.T) {
 	}
 }
 
+func TestTreeFilesRealRepo(t *testing.T) {
+	dir, runner := newTestRepo(t) // initial commit contains README.md
+	repo := &Repo{Runner: runner}
+
+	// Add a nested file in a second commit; the full tree must list BOTH files
+	// (unlike CommitFiles, which would list only the change).
+	if err := os.MkdirAll(filepath.Join(dir, "pkg", "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "pkg", "sub", "x.go"), []byte("package sub\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, dir, "add", ".")
+	gitIn(t, dir, "commit", "-m", "add nested file")
+
+	out, err := exec.Command("git", "-C", dir, "rev-parse", "HEAD").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	head := strings.TrimSpace(string(out))
+
+	files, err := repo.TreeFiles(context.Background(), head)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for _, f := range files {
+		got[f.Path] = f.Status
+	}
+	if len(files) != 2 || got["README.md"] != "" || got["pkg/sub/x.go"] != "" {
+		t.Fatalf("TreeFiles = %+v, want both files with empty status", files)
+	}
+}
+
 // TestCommitFilesStashNoDuplicate guards the stash file tree: a stash commit is
 // a merge (HEAD + index parents), and a file changed against both parents must
 // be listed once, not once per parent.

@@ -88,6 +88,27 @@ func (r *Repo) CommitFiles(ctx context.Context, hash string) ([]model.CommitFile
 	return ParseNameStatus([]byte(res.Stdout)), nil
 }
 
+// TreeFiles lists every file in commit's tree — the full set that would exist
+// if the commit were checked out — via `ls-tree -r --name-only -z`. It walks
+// tree objects only (no checkout / working-tree stat), so it is cheap even on a
+// huge repo and works for any commit. Each entry has an empty Status (it is the
+// whole tree, not a change set); -z is NUL-separated so unusual paths survive.
+func (r *Repo) TreeFiles(ctx context.Context, commit string) ([]model.CommitFile, error) {
+	argv := gitcmd.New("ls-tree").Arg("-r", "--name-only", "-z", commit).ToArgv()
+	res, err := r.Runner.Run(ctx, "git ls-tree (tree files)", argv)
+	if err != nil {
+		return nil, err
+	}
+	var out []model.CommitFile
+	for _, p := range strings.Split(strings.TrimRight(res.Stdout, "\x00"), "\x00") {
+		if p == "" {
+			continue
+		}
+		out = append(out, model.CommitFile{Path: p})
+	}
+	return out, nil
+}
+
 // ParseNameStatus parses `--name-status` lines: "M\tpath" or, for renames
 // and copies, "R<score>\told\tnew". Blank and malformed lines are skipped;
 // the status letter is the first byte of the status field.

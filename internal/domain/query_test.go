@@ -191,6 +191,19 @@ func TestCommitFilesGatedQuery(t *testing.T) {
 	}
 }
 
+func TestTreeFilesGatedQuery(t *testing.T) {
+	f := gitexec.NewFakeRunner()
+	f.SetResponse("git ls-tree (tree files)", gitexec.Result{Stdout: "README.md\x00pkg/sub/x.go\x00"})
+	svc := New(&git.Repo{Runner: f})
+	files, err := svc.TreeFiles(context.Background(), "abc123")
+	if err != nil || len(files) != 2 || files[0].Path != "README.md" || files[1].Path != "pkg/sub/x.go" {
+		t.Fatalf("TreeFiles = %+v, %v", files, err)
+	}
+	if files[0].Status != "" {
+		t.Fatalf("tree files carry no status, got %q", files[0].Status)
+	}
+}
+
 func TestTopLevelGatedQuery(t *testing.T) {
 	f := fakeReads() // stage-2 helper; configures "git rev-parse (toplevel)" → /repo
 	svc := New(&git.Repo{Runner: f})
