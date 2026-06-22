@@ -11,7 +11,7 @@ import (
 // tagCheckoutPopup collects a new branch name to create at a tag and switch to.
 type tagCheckoutPopup struct {
 	tag  string
-	name string
+	name textfield
 }
 
 func (p *tagCheckoutPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
@@ -22,20 +22,16 @@ func (p *tagCheckoutPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case tea.KeyEsc:
 		return m.popLayer(), nil
 	case tea.KeyEnter:
-		if p.name == "" {
+		if p.name.Value() == "" {
 			return m, nil
 		}
-		op := engine.CheckoutTag{Name: p.tag, Branch: p.name}
+		op := engine.CheckoutTag{Name: p.tag, Branch: p.name.Value()}
 		m = m.popLayer()
 		return m.startOp(op)
-	case tea.KeyBackspace, tea.KeyCtrlH:
-		if r := []rune(p.name); len(r) > 0 {
-			p.name = string(r[:len(r)-1])
-		}
 	case tea.KeySpace:
-		// Branch names cannot contain spaces.
-	case tea.KeyRunes:
-		p.name += string(msg.Runes)
+		// Branch names cannot contain spaces — drop it.
+	default:
+		p.name.HandleEditKey(msg)
 	}
 	return m, nil
 }
@@ -48,7 +44,7 @@ func (p *tagCheckoutPopup) render(m Model, below string) string {
 func (p *tagCheckoutPopup) box(m Model) string {
 	var b strings.Builder
 	b.WriteString("New branch at " + p.tag + "\n\n")
-	b.WriteString("name: " + p.name + "\n\n")
+	b.WriteString("name: " + p.name.View(true) + "\n\n")
 	b.WriteString("[type] name  [enter] checkout  [esc] cancel")
 	w, _ := m.overlayDims()
 	return modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"

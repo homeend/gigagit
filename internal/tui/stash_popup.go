@@ -19,7 +19,7 @@ type stashFileItem struct {
 // stashPopup is the create-stash dialog: a name field plus a checklist of the
 // working tree's unstaged/untracked files.
 type stashPopup struct {
-	name  string
+	name  textfield
 	files []stashFileItem
 	field int // 0 = name, 1 = file list
 	sel   int // cursor in the file list
@@ -39,7 +39,7 @@ func (p *stashPopup) op() (engine.Stash, bool) {
 	if len(paths) == 0 {
 		return engine.Stash{}, false
 	}
-	return engine.Stash{Message: p.name, Paths: paths, IncludeUntracked: untracked}, true
+	return engine.Stash{Message: p.name.Value(), Paths: paths, IncludeUntracked: untracked}, true
 }
 
 // stashCandidates returns the files eligible for stashing: untracked files and
@@ -69,7 +69,7 @@ func (m Model) openStashPopup() (Model, bool) {
 	for i := range cand {
 		cand[i].included = !anyMarked || m.fileMarks[cand[i].path]
 	}
-	m = m.pushLayer(&stashPopup{name: "WIP on " + m.status.Branch, files: cand, field: 1})
+	m = m.pushLayer(&stashPopup{name: newTextField("WIP on " + m.status.Branch), files: cand, field: 1})
 	return m, true
 }
 
@@ -119,16 +119,7 @@ func (p *stashPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 	// name field
-	switch msg.Type {
-	case tea.KeyBackspace, tea.KeyCtrlH:
-		if r := []rune(p.name); len(r) > 0 {
-			p.name = string(r[:len(r)-1])
-		}
-	case tea.KeySpace:
-		p.name += " "
-	case tea.KeyRunes:
-		p.name += string(msg.Runes)
-	}
+	p.name.HandleEditKey(msg)
 	return m, nil
 }
 
@@ -141,11 +132,7 @@ func (p *stashPopup) render(m Model, below string) string {
 // box draws the stash name field and file checklist (modal box only).
 func (p *stashPopup) box(m Model) string {
 	var b strings.Builder
-	nameCursor := ""
-	if p.field == 0 {
-		nameCursor = "▏"
-	}
-	b.WriteString("Stash changes\n\nname: " + p.name + nameCursor + "\n\n")
+	b.WriteString("Stash changes\n\nname: " + p.name.View(p.field == 0) + "\n\n")
 	for i, f := range p.files {
 		box := "[ ]"
 		if f.included {

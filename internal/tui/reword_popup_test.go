@@ -29,8 +29,8 @@ func TestRewordPopupFallsBackToSubject(t *testing.T) {
 	if rp.commit != "abc1234def" {
 		t.Fatalf("target commit = %q", rp.commit)
 	}
-	if rp.popup.title != "old subject" {
-		t.Fatalf("title not prefilled from subject: %q", rp.popup.title)
+	if rp.popup.title.Value() != "old subject" {
+		t.Fatalf("title not prefilled from subject: %q", rp.popup.title.Value())
 	}
 }
 
@@ -47,11 +47,11 @@ func TestRewordPopupPrefillsFullBody(t *testing.T) {
 		t.Fatalf("popup did not open")
 	}
 	rp := layerOf[*rewordPopup](m)
-	if rp.popup.title != "real subject" {
-		t.Fatalf("title = %q, want the full message's subject", rp.popup.title)
+	if rp.popup.title.Value() != "real subject" {
+		t.Fatalf("title = %q, want the full message's subject", rp.popup.title.Value())
 	}
-	if rp.popup.desc != "the body line" {
-		t.Fatalf("body = %q, want the full message's body (no silent drop)", rp.popup.desc)
+	if rp.popup.desc.Value() != "the body line" {
+		t.Fatalf("body = %q, want the full message's body (no silent drop)", rp.popup.desc.Value())
 	}
 }
 

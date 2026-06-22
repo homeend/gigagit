@@ -85,14 +85,14 @@ func TestPopupInputFieldsAndPreview(t *testing.T) {
 		updated, _ = m.Update(keyMsg(ch))
 		m = updated.(Model)
 	}
-	if layerOf[*worktreePopup](m).inputs["user"] != "alice" {
-		t.Fatalf("first field = %q, want alice", layerOf[*worktreePopup](m).inputs["user"])
+	if layerOf[*worktreePopup](m).inputs["user"].Value() != "alice" {
+		t.Fatalf("first field = %q, want alice", layerOf[*worktreePopup](m).inputs["user"].Value())
 	}
 
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
 	m = updated.(Model)
-	if layerOf[*worktreePopup](m).inputs["user"] != "alic" {
-		t.Fatalf("after backspace = %q, want alic", layerOf[*worktreePopup](m).inputs["user"])
+	if layerOf[*worktreePopup](m).inputs["user"].Value() != "alic" {
+		t.Fatalf("after backspace = %q, want alic", layerOf[*worktreePopup](m).inputs["user"].Value())
 	}
 
 	updated, _ = m.Update(keyMsg("tab"))
@@ -120,8 +120,8 @@ func TestPopupBackspaceOnEmptyField(t *testing.T) {
 	m = updated.(Model)
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
 	m = updated.(Model)
-	if layerOf[*worktreePopup](m).inputs["id"] != "" {
-		t.Fatalf("field = %q, want empty", layerOf[*worktreePopup](m).inputs["id"])
+	if layerOf[*worktreePopup](m).inputs["id"].Value() != "" {
+		t.Fatalf("field = %q, want empty", layerOf[*worktreePopup](m).inputs["id"].Value())
 	}
 }
 
@@ -131,8 +131,8 @@ func TestPopupMultiByteRune(t *testing.T) {
 	m = updated.(Model)
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("é")})
 	m = updated.(Model)
-	if layerOf[*worktreePopup](m).inputs["id"] != "é" {
-		t.Fatalf("field = %q, want é", layerOf[*worktreePopup](m).inputs["id"])
+	if layerOf[*worktreePopup](m).inputs["id"].Value() != "é" {
+		t.Fatalf("field = %q, want é", layerOf[*worktreePopup](m).inputs["id"].Value())
 	}
 }
 
@@ -149,11 +149,11 @@ func TestPopupEditMode(t *testing.T) {
 	if layerOf[*worktreePopup](m).state != stEdit {
 		t.Fatalf("state = %v, want stEdit", layerOf[*worktreePopup](m).state)
 	}
-	if layerOf[*worktreePopup](m).editBuf != "b/auto" {
-		t.Fatalf("editBuf = %q, want b/auto", layerOf[*worktreePopup](m).editBuf)
+	if layerOf[*worktreePopup](m).editBuf.Value() != "b/auto" {
+		t.Fatalf("editBuf = %q, want b/auto", layerOf[*worktreePopup](m).editBuf.Value())
 	}
 
-	for len([]rune(layerOf[*worktreePopup](m).editBuf)) > 0 {
+	for len([]rune(layerOf[*worktreePopup](m).editBuf.Value())) > 0 {
 		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
 		m = updated.(Model)
 	}
@@ -354,7 +354,7 @@ func TestCreateOpEqualsPreview(t *testing.T) {
 	// After a confirmed edit, the op carries the edited branch.
 	updated, _ = m.Update(keyMsg("e"))
 	m = updated.(Model)
-	for len([]rune(layerOf[*worktreePopup](m).editBuf)) > 0 {
+	for len([]rune(layerOf[*worktreePopup](m).editBuf.Value())) > 0 {
 		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
 		m = updated.(Model)
 	}
@@ -471,7 +471,7 @@ func TestWorktreeFromCommitCreateOpUsesTypedBranch(t *testing.T) {
 		branchTmpl: "b/from-<parent-branch>", // must be bypassed by the typed name
 		pathTmpl:   "../<repo>.worktrees/<branch>",
 		repoName:   "myrepo",
-		inputs:     map[string]string{},
+		inputs:     map[string]textfield{},
 		state:      stEdit,
 	}
 	for _, ch := range "feat-x" {

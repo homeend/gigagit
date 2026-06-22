@@ -626,7 +626,7 @@ func (m Model) commitBranchRows() []actionRow {
 			id:    "rename-branch",
 			label: "Rename branch " + name,
 			run: func(m Model) (tea.Model, tea.Cmd) {
-				return m.pushLayer(&renameBranchPopup{old: name, name: name}), nil
+				return m.pushLayer(&renameBranchPopup{old: name, name: newTextField(name)}), nil
 			},
 		})
 		if !r.Head && !checkedOut[name] {

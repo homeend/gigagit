@@ -76,8 +76,8 @@ func TestCommitPopupSwallowsGlobalKeys(t *testing.T) {
 	if m.running {
 		t.Fatal("a global key must not start an op while the popup is open")
 	}
-	if layerOf[*commitPopup](m).title != "p" {
-		t.Fatalf("global key should type into the field: title = %q", layerOf[*commitPopup](m).title)
+	if layerOf[*commitPopup](m).title.Value() != "p" {
+		t.Fatalf("global key should type into the field: title = %q", layerOf[*commitPopup](m).title.Value())
 	}
 }
 
@@ -118,8 +118,8 @@ func TestCapCKeyAmendsLastCommit(t *testing.T) {
 	if p == nil || !p.amend {
 		t.Fatal("amend prefill must open the popup in amend mode")
 	}
-	if p.title != "original" {
-		t.Fatalf("prefill title = %q, want 'original'", p.title)
+	if p.title.Value() != "original" {
+		t.Fatalf("prefill title = %q, want 'original'", p.title.Value())
 	}
 
 	// reword by appending, then commit the amend

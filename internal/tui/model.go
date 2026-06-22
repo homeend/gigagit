@@ -1285,7 +1285,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		title, desc := splitMessage(msg.msg)
-		m = m.pushLayer(&commitPopup{title: title, desc: desc, amend: true})
+		m = m.pushLayer(&commitPopup{title: newTextField(title), desc: newTextField(desc), amend: true})
 		return m, nil
 
 	case inProgressMsg:

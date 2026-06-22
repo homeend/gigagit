@@ -70,8 +70,8 @@ func TestBranchPopupTypeEnterCreatesBranch(t *testing.T) {
 	if p == nil {
 		t.Fatal("popup should still be open after typing")
 	}
-	if p.name != "feat/new" {
-		t.Fatalf("typed name = %q", p.name)
+	if p.name.Value() != "feat/new" {
+		t.Fatalf("typed name = %q", p.name.Value())
 	}
 
 	updated, cmd := m.Update(keyMsg("enter"))
@@ -173,7 +173,7 @@ func TestBranchPopupSwallowsActionKeys(t *testing.T) {
 	if p == nil {
 		t.Fatal("popup must swallow ordinary keys")
 	}
-	if p.name != "q" {
-		t.Fatalf("typed rune should land in the name, got %q", p.name)
+	if p.name.Value() != "q" {
+		t.Fatalf("typed rune should land in the name, got %q", p.name.Value())
 	}
 }

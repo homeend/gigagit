@@ -488,8 +488,8 @@ func TestCommitCreateWorktreeRowOpensInEdit(t *testing.T) {
 	if !p.fromCommit || p.startPoint != full {
 		t.Fatalf("fromCommit=%v startPoint=%q (want true + full hash)", p.fromCommit, p.startPoint)
 	}
-	if p.state != stEdit || p.editBuf != "" {
-		t.Fatalf("should open in branch-edit with an empty buffer; state=%v buf=%q", p.state, p.editBuf)
+	if p.state != stEdit || p.editBuf.Value() != "" {
+		t.Fatalf("should open in branch-edit with an empty buffer; state=%v buf=%q", p.state, p.editBuf.Value())
 	}
 }
 

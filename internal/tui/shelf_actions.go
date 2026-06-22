@@ -32,8 +32,8 @@ func (m Model) shelfRemoveCmd(entryID string) tea.Cmd {
 // shelfRestorePopup collects the (mandatory, no-default) restore destination.
 type shelfRestorePopup struct {
 	entryID string
-	origin  string // origin path, shown only as a hint — NOT prefilled
-	dest    string // typed destination (starts empty)
+	origin  string    // origin path, shown only as a hint — NOT prefilled
+	dest    textfield // typed destination (starts empty)
 }
 
 // update handles one key while the restore popup is open (the overlay contract).
@@ -45,7 +45,7 @@ func (p *shelfRestorePopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case tea.KeyEsc:
 		m = m.popLayer() // back to the shelf switcher beneath
 	case tea.KeyEnter:
-		dest := strings.TrimSpace(p.dest)
+		dest := strings.TrimSpace(p.dest.Value())
 		if dest == "" {
 			return m, nil // a destination is mandatory
 		}
@@ -58,14 +58,8 @@ func (p *shelfRestorePopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		// engine.WriteFile owns the Overwrite/Cancel fork via the modal decider.
 		return m.startOp(engine.WriteFile{Path: dest, Data: blob})
-	case tea.KeyBackspace, tea.KeyCtrlH:
-		if r := []rune(p.dest); len(r) > 0 {
-			p.dest = string(r[:len(r)-1])
-		}
-	case tea.KeySpace:
-		p.dest += " "
-	case tea.KeyRunes:
-		p.dest += string(msg.Runes)
+	default:
+		p.dest.HandleEditKey(msg)
 	}
 	return m, nil
 }
@@ -75,7 +69,7 @@ func (p *shelfRestorePopup) render(m Model, below string) string {
 	var b strings.Builder
 	b.WriteString("Restore shelved file to a new path\n\n")
 	b.WriteString("from: " + p.origin + "  (shelved copy)\n")
-	b.WriteString("dest: " + p.dest + "\n\n")
+	b.WriteString("dest: " + p.dest.View(true) + "\n\n")
 	b.WriteString("[type] path  [enter] restore  [esc] cancel")
 	w, h := m.overlayDims()
 	box := modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"
