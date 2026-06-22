@@ -29,6 +29,7 @@ guards against removing the worktree you are standing in.
 - `gg remote ls | fetch | prune` — `ls` lists remote-tracking branches (one
   `remote/branch` per line); `fetch` updates tracking refs for all remotes
   (`git fetch --all`); `prune` drops tracking refs for branches deleted upstream.
+- `gg remote rm <remote>/<branch>` — delete a remote branch (`git push <remote> --delete`).
 - `gg tag ls | create | rm | checkout | push` — `ls` lists tags newest-first
   (one name per line); `create [-m <msg>] <name> [<commit>]` creates a tag at
   `<commit>` (default HEAD): lightweight, or annotated when `-m` is given;
