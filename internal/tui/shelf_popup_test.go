@@ -40,11 +40,12 @@ func TestShelfPopupEnterJumps(t *testing.T) {
 	m := shelfPopModel(shEntry("a", "x.go"))
 	mm, _ := m.Update(keyMsg("enter"))
 	m = mm.(Model)
-	if m.shelfSwitcher() != nil {
-		t.Fatalf("enter should close the popup (jump to diff)")
-	}
-	if m.diffView == nil || m.diffTag != "shelf:a" {
+	if m.diffLayer() == nil || m.diffTag != "shelf:a" {
 		t.Fatalf("enter should open the shelf-vs-worktree diff, tag=%q", m.diffTag)
+	}
+	// The diff is pushed over the switcher; esc from the diff returns to it.
+	if m.shelfSwitcher() == nil {
+		t.Fatalf("the shelf switcher must remain on the stack beneath the diff")
 	}
 }
 
@@ -104,7 +105,7 @@ func TestShelfCompareModeEnterDiffs(t *testing.T) {
 	m.shelfSwitcher().compareLabel = "wt:wt / unstaged / focused.go"
 	mm, _ := m.Update(keyMsg("enter"))
 	m = mm.(Model)
-	if m.diffView == nil || !strings.HasPrefix(m.diffTag, "cmpsh:") {
+	if m.diffLayer() == nil || !strings.HasPrefix(m.diffTag, "cmpsh:") {
 		t.Fatalf("enter in compare mode should diff focused vs shelf, tag=%q", m.diffTag)
 	}
 }
@@ -147,7 +148,7 @@ func TestShelfPopupMarkThenCompare(t *testing.T) {
 	m.shelfSwitcher().sel = 1
 	mm, _ = m.Update(keyMsg("m"))
 	m = mm.(Model)
-	if m.diffView == nil || m.diffTag != "shelf2:a:b" {
+	if m.diffLayer() == nil || m.diffTag != "shelf2:a:b" {
 		t.Fatalf("second m should open the two-entry diff, tag=%q", m.diffTag)
 	}
 }

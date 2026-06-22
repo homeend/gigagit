@@ -126,8 +126,9 @@ func (m Model) withDiffFileNotice(frame string) string {
 	if m.diffLayer() == nil {
 		return frame
 	}
-	if m.layers != nil && len(m.layers.entries) > 0 {
-		return frame // a popup/surface is on top of the diff
+	// If the diff is not the top layer, a popup/surface owns the screen above it.
+	if top := m.topLayer(); top != nil && top != m.diffLayer() {
+		return frame
 	}
 	msg := m.diffNotice
 	if msg == "" {

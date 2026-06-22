@@ -26,7 +26,7 @@ func findRow(rows []actionRow, id string) (actionRow, bool) {
 
 func TestInContentWindowTrueCases(t *testing.T) {
 	cases := map[string]func(Model) Model{
-		"diffView":  func(m Model) Model { m.diffView = &diffView{title: "a.go"}; return m },
+		"diffView":  func(m Model) Model { return m.pushLayer(&diffView{title: "a.go"}) },
 		"filesView": func(m Model) Model { m.filesView = &contentPopup{}; return m },
 		"stashView": func(m Model) Model { m.stashView = &stashView{}; m.focus = panelCommits; return m },
 		"history":   func(m Model) Model { return m.pushLayer(newHistoryView(navContext{path: "a.go"})) },
@@ -56,7 +56,7 @@ func TestInContentWindowFalseCases(t *testing.T) {
 
 func TestContextCopyRowsDiffView(t *testing.T) {
 	m := footerModel()
-	m.diffView = &diffView{title: "dir/b.go", rev: "deadbeefcafe0000"}
+	m = m.pushLayer(&diffView{title: "dir/b.go", rev: "deadbeefcafe0000"})
 	rows := m.contextCopyRows()
 	got := ids(rows)
 	if !got["copy-file-path"] || !got["copy-file-name"] || !got["copy-commit-id"] {
@@ -75,7 +75,7 @@ func TestContextCopyRowsDiffView(t *testing.T) {
 
 func TestContextCopyRowsDiffViewWorkingTree(t *testing.T) {
 	m := footerModel()
-	m.diffView = &diffView{title: "b.go", rev: ""} // working tree: no commit
+	m = m.pushLayer(&diffView{title: "b.go", rev: ""}) // working tree: no commit
 	if got := ids(m.contextCopyRows()); got["copy-commit-id"] {
 		t.Errorf("working-tree diff must not offer copy-commit-id, got %v", got)
 	}
@@ -139,7 +139,7 @@ func TestContextCopyRowsStashList(t *testing.T) {
 // must describe it — not the diff underneath. Precedence must match dispatch.
 func TestContextCopyRowsStackBeatsDiffView(t *testing.T) {
 	m := footerModel()
-	m.diffView = &diffView{title: "old/a.go", rev: "aaaa1111"}
+	m = m.pushLayer(&diffView{title: "old/a.go", rev: "aaaa1111"})
 	m = m.pushLayer(newBlameView(navContext{path: "new/b.go", rev: "bbbb2222"}))
 	rows := m.contextCopyRows()
 	if r, _ := findRow(rows, "copy-file-path"); r.copyText != "new/b.go" {

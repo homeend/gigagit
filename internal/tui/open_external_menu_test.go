@@ -44,7 +44,7 @@ func TestDiffMenuExcludesLeakedFilesViewRows(t *testing.T) {
 		t.Fatal("precondition: the files-view commit side should offer commit ops")
 	}
 	m := base
-	m.diffView = &diffView{title: "a.go", rev: "h0"} // a diff opened over the files view
+	m = m.pushLayer(&diffView{title: "a.go", rev: "h0"}) // a diff opened over the files view
 	got := menuIDs(m)
 	for _, id := range []string{"commit-cherry-pick", "commit-revert", "graph-widen", "view-file", "open-external"} {
 		if got[id] {

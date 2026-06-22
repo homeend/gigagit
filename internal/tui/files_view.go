@@ -423,13 +423,18 @@ func (m Model) openDiffForFileLine(l contentLine) (tea.Model, tea.Cmd) {
 	}
 	m.diffNotice = "" // drop any stale notice; the stepper re-posts its arrival notice
 	m.diffNav = diffNavTree
-	m.diffView = &diffView{
+	newV := &diffView{
 		title:   l.path,
 		context: "@ " + strings.TrimPrefix(m.filesTitle, "Files "),
 		rev:     m.filesHash,
 		loading: true,
 		partial: m.diffPartial,
 		long:    m.diffLong,
+	}
+	if dv := m.diffLayer(); dv != nil {
+		*dv = *newV // stepping: reuse the entry already on the stack
+	} else {
+		m = m.pushLayer(newV)
 	}
 	if m.filesAllFiles {
 		// Full-tree mode: the file may be unchanged in this commit, so a

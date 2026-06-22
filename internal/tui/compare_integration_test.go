@@ -64,7 +64,7 @@ func openCompareDiffOnFile(t *testing.T, repoDir string, repo *domain.Service, h
 
 	u, dcmd := m.Update(keyMsg("enter"))
 	m = u.(Model)
-	if m.diffView == nil || dcmd == nil {
+	if m.diffLayer() == nil || dcmd == nil {
 		t.Fatal("enter did not open + load the diff")
 	}
 	dmsg, ok := dcmd().(diffMsg)
@@ -188,7 +188,7 @@ func TestCompareDiffRendersContentNotLoading(t *testing.T) {
 	u, _ = m.Update(dcmd())
 	m = u.(Model)
 
-	if m.diffView.loading {
+	if m.diffLayer().loading {
 		t.Error("diffView still loading after the diffMsg landed")
 	}
 	out := ansi.Strip(m.View())

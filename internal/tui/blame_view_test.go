@@ -201,7 +201,7 @@ func TestFilesViewBOpensBlame(t *testing.T) {
 
 func TestDiffViewBOpensBlame(t *testing.T) {
 	m := Model{width: 100, height: 30}
-	m.diffView = &diffView{title: "a.go", rev: "abc123"}
+	m = m.pushLayer(&diffView{title: "a.go", rev: "abc123"})
 	mm, _ := m.updateDiffViewKey(keyMsg("b"))
 	bv, ok := mm.(Model).topLayer().(*blameView)
 	if !ok {

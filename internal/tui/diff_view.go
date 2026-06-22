@@ -377,7 +377,12 @@ func (m Model) openStatusDiff(f model.FileStatus, staged bool) (tea.Model, tea.C
 	} else {
 		m.diffNav = diffNavStatus
 	}
-	m.diffView = &diffView{title: f.Path, context: statusDiffContext(staged), rev: "", loading: true, partial: m.diffPartial, long: m.diffLong}
+	v := &diffView{title: f.Path, context: statusDiffContext(staged), rev: "", loading: true, partial: m.diffPartial, long: m.diffLong}
+	if dv := m.diffLayer(); dv != nil {
+		*dv = *v // stepping: reuse the entry already on the stack
+	} else {
+		m = m.pushLayer(v)
+	}
 	m.diffTag = statusDiffTag(f.Path, staged)
 	return m, m.loadStatusDiffCmd(f, staged)
 }
@@ -615,7 +620,7 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// q is inert here: only the base layout quits on q. esc is the back key;
 	// ctrl+c (handled above) remains the universal quit.
 	case "esc":
-		m.diffView = nil
+		m = m.popLayer()
 		m.diffTag = ""
 		return m, nil
 	case "h":

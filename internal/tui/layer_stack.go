@@ -87,6 +87,20 @@ func (m Model) bookmarkSwitcher() *bookmarkPopup { return layerOf[*bookmarkPopup
 // shelfSwitcher returns the topmost shelf switcher on the stack, else nil.
 func (m Model) shelfSwitcher() *shelfPopup { return layerOf[*shelfPopup](m) }
 
-// diffLayer returns the open standalone diff, else nil. (Body flips to
-// layerOf[*diffView] when the diff moves onto the stack in the next task.)
-func (m Model) diffLayer() *diffView { return m.diffView }
+// diffLayer returns the open standalone diff on the layer stack, else nil.
+func (m Model) diffLayer() *diffView { return layerOf[*diffView](m) }
+
+// removeLayer drops the first matching entry wherever it sits (not only the top).
+// Used to close a window that may have a popup above it (e.g. the diff on resize).
+func (m Model) removeLayer(target layer) Model {
+	if m.layers == nil {
+		return m
+	}
+	for i, l := range m.layers.entries {
+		if l == target {
+			m.layers.entries = append(m.layers.entries[:i], m.layers.entries[i+1:]...)
+			break
+		}
+	}
+	return m
+}

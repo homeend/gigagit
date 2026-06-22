@@ -21,7 +21,7 @@ func renderModelWithDiff(v *diffView) Model {
 	m := diffModel()
 	m.width = 100
 	m.height = 20
-	m.diffView = v
+	m = m.pushLayer(v)
 	m.diffTag = "status:x"
 	return m
 }
