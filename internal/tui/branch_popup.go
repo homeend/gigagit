@@ -10,9 +10,9 @@ import (
 
 // branchPopup holds the in-flight create-branch dialog.
 type branchPopup struct {
-	startPoint  string // selected branch the new one is based on
-	name        string // typed branch name
-	switchAfter bool   // B: smart-switch to the branch after creating it
+	startPoint  string    // selected branch the new one is based on
+	name        textfield // typed branch name
+	switchAfter bool      // B: smart-switch to the branch after creating it
 }
 
 // openBranchPopup builds the popup for the currently-selected branch. Returns
@@ -36,24 +36,20 @@ func (p *branchPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case tea.KeyEsc:
 		m = m.popLayer()
 	case tea.KeyEnter:
-		if p.name == "" {
+		if p.name.Value() == "" {
 			return m, nil
 		}
-		op := engine.CreateBranch{Name: p.name, StartPoint: p.startPoint}
+		op := engine.CreateBranch{Name: p.name.Value(), StartPoint: p.startPoint}
 		if p.switchAfter {
-			m.pendingSwitchBranch = p.name
+			m.pendingSwitchBranch = p.name.Value()
 		}
 		m = m.popLayer()
 		return m.startOp(op)
-	case tea.KeyBackspace, tea.KeyCtrlH:
-		if r := []rune(p.name); len(r) > 0 {
-			p.name = string(r[:len(r)-1])
-		}
 	case tea.KeySpace:
-		// Branch names cannot contain spaces; not inserting one avoids a
-		// guaranteed validation error on create.
-	case tea.KeyRunes:
-		p.name += string(msg.Runes)
+		// Branch names cannot contain spaces; dropping it avoids a guaranteed
+		// validation error on create.
+	default:
+		p.name.HandleEditKey(msg)
 	}
 	return m, nil
 }
@@ -87,7 +83,7 @@ func (p *branchPopup) box(m Model) string {
 		title = "Create + switch branch from " + start
 	}
 	b.WriteString(title + "\n\n")
-	b.WriteString("name: " + p.name + "\n\n")
+	b.WriteString("name: " + p.name.View(true) + "\n\n")
 	b.WriteString("[type] name  [enter] create  [esc] cancel")
 	w, _ := m.overlayDims()
 	return modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"

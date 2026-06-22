@@ -17,7 +17,7 @@ func TestRenameBranchPopupOpensPrefilled(t *testing.T) {
 	if !ok || rp == nil {
 		t.Fatalf("popup did not open")
 	}
-	if rp.old != "old" || rp.name != "old" {
+	if rp.old != "old" || rp.name.Value() != "old" {
 		t.Fatalf("want prefilled current name, got %+v", rp)
 	}
 }

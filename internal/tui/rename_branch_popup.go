@@ -11,8 +11,8 @@ import (
 // renameBranchPopup holds the in-flight rename-branch dialog. The text field is
 // pre-filled with the branch's current name.
 type renameBranchPopup struct {
-	old  string // the branch being renamed
-	name string // typed new name
+	old  string    // the branch being renamed
+	name textfield // typed new name
 }
 
 // openRenameBranchPopup opens the dialog for the selected Branches-panel row,
@@ -23,7 +23,7 @@ func (m Model) openRenameBranchPopup() (Model, bool) {
 		return m, false
 	}
 	cur := m.branches[bi].Name
-	m = m.pushLayer(&renameBranchPopup{old: cur, name: cur})
+	m = m.pushLayer(&renameBranchPopup{old: cur, name: newTextField(cur)})
 	return m, true
 }
 
@@ -57,21 +57,17 @@ func (p *renameBranchPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case tea.KeyEsc:
 		m = m.popLayer()
 	case tea.KeyEnter:
-		if p.name == "" || p.name == p.old {
+		if p.name.Value() == "" || p.name.Value() == p.old {
 			m = m.popLayer()
 			return m, nil
 		}
-		op := engine.RenameBranch{Old: p.old, New: p.name}
+		op := engine.RenameBranch{Old: p.old, New: p.name.Value()}
 		m = m.popLayer()
 		return m.startOp(op)
-	case tea.KeyBackspace, tea.KeyCtrlH:
-		if r := []rune(p.name); len(r) > 0 {
-			p.name = string(r[:len(r)-1])
-		}
 	case tea.KeySpace:
-		// branch names cannot contain spaces — ignore
-	case tea.KeyRunes:
-		p.name += string(msg.Runes)
+		// branch names cannot contain spaces — drop it
+	default:
+		p.name.HandleEditKey(msg)
 	}
 	return m, nil
 }
@@ -86,7 +82,7 @@ func (p *renameBranchPopup) render(m Model, below string) string {
 func (p *renameBranchPopup) box(m Model) string {
 	var b strings.Builder
 	b.WriteString("Rename branch " + p.old + "\n\n")
-	b.WriteString("name: " + p.name + "\n\n")
+	b.WriteString("name: " + p.name.View(true) + "\n\n")
 	b.WriteString("[type] name  [enter] rename  [esc] cancel")
 	w, _ := m.overlayDims()
 	return modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"
