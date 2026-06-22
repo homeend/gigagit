@@ -64,6 +64,7 @@ type GitOps interface {
 	RemoveWorktree(ctx context.Context, path string, force bool, onLine func(string)) error
 
 	Merge(ctx context.Context, dir, branch string) error
+	MergeFFOnly(ctx context.Context, dir, commit string) error
 	MergeAbort(ctx context.Context, dir string) error
 	MergeInProgress(ctx context.Context, dir string) (bool, error)
 

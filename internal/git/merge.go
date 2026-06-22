@@ -17,6 +17,18 @@ func (r *Repo) Merge(ctx context.Context, dir, branch string) error {
 	return err
 }
 
+// MergeFFOnly fast-forwards the branch checked out at dir ("" = this repo's own
+// worktree) to commit. --ff-only refuses (non-zero exit) when commit is not a
+// descendant of HEAD; --no-edit keeps it non-interactive. One invocation.
+func (r *Repo) MergeFFOnly(ctx context.Context, dir, commit string) error {
+	b := gitcmd.New("merge").Arg("--ff-only", "--no-edit", commit)
+	if dir != "" {
+		b = b.Dir(dir)
+	}
+	_, err := r.Runner.Run(ctx, "git merge --ff-only", b.ToArgv())
+	return err
+}
+
 // MergeAbort aborts an in-progress merge at dir ("" = this repo's worktree).
 func (r *Repo) MergeAbort(ctx context.Context, dir string) error {
 	b := gitcmd.New("merge").Arg("--abort")
