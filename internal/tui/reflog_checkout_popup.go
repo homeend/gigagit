@@ -8,13 +8,14 @@ import (
 	"github.com/gigagit/gg/internal/engine"
 )
 
-// tagCheckoutPopup collects a new branch name to create at a tag and switch to.
-type tagCheckoutPopup struct {
-	tag  string
+// reflogCheckoutPopup collects a new branch name to create at a reflog entry's
+// commit and switch to. Mirrors tagCheckoutPopup.
+type reflogCheckoutPopup struct {
+	ref  string // full SHA of the reflog entry
 	name textfield
 }
 
-func (p *tagCheckoutPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
+func (p *reflogCheckoutPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
 	}
@@ -25,7 +26,7 @@ func (p *tagCheckoutPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		if p.name.Value() == "" {
 			return m, nil
 		}
-		op := engine.Checkout{Ref: p.tag, Branch: p.name.Value()}
+		op := engine.Checkout{Ref: p.ref, Branch: p.name.Value()}
 		m = m.popLayer()
 		return m.startOp(op)
 	case tea.KeySpace:
@@ -36,14 +37,14 @@ func (p *tagCheckoutPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	return m, nil
 }
 
-func (p *tagCheckoutPopup) render(m Model, below string) string {
+func (p *reflogCheckoutPopup) render(m Model, below string) string {
 	w, h := m.overlayDims()
 	return overlayCenter(clipToHeight(below, h), p.box(m), w, h)
 }
 
-func (p *tagCheckoutPopup) box(m Model) string {
+func (p *reflogCheckoutPopup) box(m Model) string {
 	var b strings.Builder
-	b.WriteString("New branch at " + p.tag + "\n\n")
+	b.WriteString("New branch at " + shortHash(p.ref) + "\n\n")
 	b.WriteString("name: " + p.name.View(true) + "\n\n")
 	b.WriteString("[type] name  [enter] checkout  [esc] cancel")
 	w, _ := m.overlayDims()

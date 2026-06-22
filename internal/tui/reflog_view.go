@@ -3,8 +3,67 @@ package tui
 import (
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/gigagit/gg/internal/engine"
 	"github.com/gigagit/gg/internal/model"
 )
+
+// reflogResetRow offers "Reset to this entry" on the reflog panel: moves the
+// current branch to the entry's commit via engine.Reset (soft/mixed/hard modal +
+// non-ancestor confirm). Anchored on the panelReflog cursor.
+func (m Model) reflogResetRow() (actionRow, bool) {
+	if m.focus != panelReflog || !m.opsIdle() {
+		return actionRow{}, false
+	}
+	bi, ok := m.backingIndex(panelReflog)
+	if !ok {
+		return actionRow{}, false
+	}
+	hash := m.reflog[bi].Hash // full SHA → unambiguous
+	return actionRow{
+		id:    "reflog-reset",
+		label: "Reset to this entry",
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			return m.startOp(engine.Reset{Commit: hash})
+		},
+	}, true
+}
+
+// reflogCheckoutRow offers "Check out this entry…" on the reflog panel: a modal
+// (Detached / Create branch… / Cancel) mirroring the tag-checkout flow, on the
+// panelReflog cursor entry.
+func (m Model) reflogCheckoutRow() (actionRow, bool) {
+	if m.focus != panelReflog || !m.opsIdle() {
+		return actionRow{}, false
+	}
+	bi, ok := m.backingIndex(panelReflog)
+	if !ok {
+		return actionRow{}, false
+	}
+	ref := m.reflog[bi].Hash // full SHA
+	return actionRow{
+		id:    "reflog-checkout",
+		label: "Check out this entry…",
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			m.modal = &decisionState{
+				req: engine.DecisionRequest{
+					ID:      "reflog-checkout",
+					Prompt:  "Check out " + shortHash(ref) + ":",
+					Options: []string{"Detached", "Create branch…", "Cancel"},
+				},
+				onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {
+					switch opt {
+					case "Detached":
+						return m.startOp(engine.Checkout{Ref: ref})
+					case "Create branch…":
+						return m.pushLayer(&reflogCheckoutPopup{ref: ref, name: newTextField("")}), nil
+					}
+					return m, nil
+				},
+			}
+			return m, nil
+		},
+	}, true
+}
 
 // openReflogFiles opens the commit files-view for the reflog row under the
 // cursor, reusing the commit files-view path with a synthesized model.Commit.

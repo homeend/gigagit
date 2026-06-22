@@ -6,11 +6,15 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/gigagit/gg/internal/domain"
+	"github.com/gigagit/gg/internal/git"
+	"github.com/gigagit/gg/internal/gitexec"
 	"github.com/gigagit/gg/internal/model"
 )
 
 func reflogTestModel() Model {
 	return Model{
+		svc:       domain.New(&git.Repo{Runner: gitexec.NewFakeRunner()}),
 		sel:       map[panel]int{},
 		width:     120,
 		height:    40,
@@ -54,6 +58,77 @@ func TestReflogTabRendersInAssembledLeftColumn(t *testing.T) {
 	}
 	if strings.Contains(out, "[Staged") {
 		t.Fatalf("Staged must not be the active bracketed tab when Reflog is active:\n%s", out)
+	}
+}
+
+func TestReflogResetRowAnchorsOnCursor(t *testing.T) {
+	m := reflogTestModel()
+	m.focus = panelReflog
+	m.sel[panelReflog] = 1 // second entry
+	r, ok := m.reflogResetRow()
+	if !ok {
+		t.Fatal("reflog . menu must offer Reset to this entry")
+	}
+	if r.id != "reflog-reset" {
+		t.Fatalf("row id = %q, want reflog-reset", r.id)
+	}
+	// Not offered off the reflog panel.
+	m.focus = panelCommits
+	if _, ok := m.reflogResetRow(); ok {
+		t.Fatal("reset row must not appear off the reflog panel")
+	}
+}
+
+func TestReflogCheckoutRowOpensModal(t *testing.T) {
+	m := reflogTestModel()
+	m.focus = panelReflog
+	m.sel[panelReflog] = 1
+	r, ok := m.reflogCheckoutRow()
+	if !ok || r.id != "reflog-checkout" {
+		t.Fatalf("reflog . menu must offer Check out this entry…, got ok=%v id=%q", ok, r.id)
+	}
+	nm, _ := r.run(m)
+	m = nm.(Model)
+	if m.modal == nil {
+		t.Fatal("Check out must open a decision modal")
+	}
+	opts := m.modal.req.Options
+	if len(opts) == 0 || opts[len(opts)-1] != "Cancel" {
+		t.Fatalf("modal must end with Cancel (never-trap), got %v", opts)
+	}
+}
+
+func TestReflogCheckoutDetachedStartsOp(t *testing.T) {
+	m := reflogTestModel()
+	m.focus = panelReflog
+	m.sel[panelReflog] = 1
+	r, _ := m.reflogCheckoutRow()
+	nm, _ := r.run(m)
+	m = nm.(Model)
+	nm, cmd := m.modal.onResolve(m, "Detached")
+	m = nm.(Model)
+	if cmd == nil {
+		t.Fatal("Detached must start the checkout op")
+	}
+}
+
+func TestReflogCheckoutCreateBranchOpensPopup(t *testing.T) {
+	m := reflogTestModel()
+	m.focus = panelReflog
+	m.sel[panelReflog] = 1
+	r, _ := m.reflogCheckoutRow()
+	nm, _ := r.run(m)
+	m = nm.(Model)
+	nm, _ = m.modal.onResolve(m, "Create branch…")
+	m = nm.(Model)
+	p := layerOf[*reflogCheckoutPopup](m)
+	if p == nil {
+		t.Fatal("Create branch… must push the reflog checkout popup")
+	}
+	// Anchored on the cursor entry (sel=1), not entry 0 — guards the
+	// display-vs-backing trap (would pass at sel=0 without this).
+	if p.ref != "2222222222222222222222222222222222222222" {
+		t.Fatalf("popup must carry the cursor entry's hash, got %q", p.ref)
 	}
 }
 
