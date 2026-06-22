@@ -103,6 +103,37 @@ func TestDiffTreeFilesAllForwardForms(t *testing.T) {
 	}
 }
 
+func TestUntrackedFiles(t *testing.T) {
+	dir, runner := newTestRepo(t)
+	repo := &Repo{Runner: runner}
+	ctx := context.Background()
+
+	// A committed .gitignore so an ignored file is excluded (and .gitignore itself
+	// is tracked, not reported).
+	if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("ignored.log\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, dir, "add", ".gitignore")
+	gitRun(t, dir, "commit", "-m", "ignore")
+
+	// An untracked file with a space + em-dash (like the user's "timing — kopia.log").
+	special := "timing — kopia.log"
+	if err := os.WriteFile(filepath.Join(dir, special), []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "ignored.log"), []byte("nope\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := repo.UntrackedFiles(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0] != special {
+		t.Fatalf("UntrackedFiles = %#v, want exactly [%q] (no ignored.log, exact path)", got, special)
+	}
+}
+
 func TestDiffTreeFilesRejectsReversePair(t *testing.T) {
 	_, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}

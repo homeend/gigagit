@@ -240,7 +240,29 @@ func (s *Service) TreeFiles(ctx context.Context, hash string) ([]model.CommitFil
 // coalesce window.
 func (s *Service) CompareFiles(ctx context.Context, left, right model.Endpoint) ([]model.CommitFile, error) {
 	return query(ctx, s, "compare-files:"+left.CacheTag()+":"+right.CacheTag(), func(ctx context.Context) ([]model.CommitFile, error) {
-		return s.repo.DiffTreeFiles(ctx, left, right)
+		files, err := s.repo.DiffTreeFiles(ctx, left, right)
+		if err != nil {
+			return nil, err
+		}
+		// `git diff` omits untracked files, so a comparison whose newer side is the
+		// working tree would miss brand-new files. Add them as added ("A") entries
+		// (an untracked file is new relative to both a commit and the index).
+		if right.Kind == model.EndpointWorkTree {
+			untracked, err := s.repo.UntrackedFiles(ctx)
+			if err != nil {
+				return nil, err
+			}
+			seen := make(map[string]bool, len(files))
+			for _, f := range files {
+				seen[f.Path] = true
+			}
+			for _, p := range untracked {
+				if !seen[p] {
+					files = append(files, model.CommitFile{Status: "A", Path: p})
+				}
+			}
+		}
+		return files, nil
 	})
 }
 
