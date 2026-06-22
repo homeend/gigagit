@@ -364,6 +364,22 @@ func statusDiffContext(staged bool) string {
 	return "index → working tree"
 }
 
+// openStatusDiff opens the full-screen diff for a Status (staged=false) or
+// Staged (staged=true) panel file and records diffNav so Home/End can step the
+// panel. Shared by the panel enter handler (after canShowFileDiff) and the
+// file-stepper. The width gate lives in canShowFileDiff at the enter boundary;
+// stepping happens at an already-open width, so no re-check here.
+func (m Model) openStatusDiff(f model.FileStatus, staged bool) (tea.Model, tea.Cmd) {
+	if staged {
+		m.diffNav = diffNavStaged
+	} else {
+		m.diffNav = diffNavStatus
+	}
+	m.diffView = &diffView{title: f.Path, context: statusDiffContext(staged), rev: "", loading: true, partial: m.diffPartial, long: m.diffLong}
+	m.diffTag = statusDiffTag(f.Path, staged)
+	return m, m.loadStatusDiffCmd(f, staged)
+}
+
 // loadStatusDiffCmd fetches both sides of f's pending change and compares them
 // off the UI thread. With staged=true (Staged panel) it diffs HEAD → the index
 // blob (`git show :<path>`, the staged delta). With staged=false (Files panel)
@@ -597,6 +613,23 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		v.scrollBy(-m.diffBodyRows(), m.diffBodyRows())
 	case "pgdown":
 		v.scrollBy(m.diffBodyRows(), m.diffBodyRows())
+	case "home":
+		// First press jumps to the top of this file; pressing it again while
+		// already at the top steps to the previous file in the source list.
+		if v.offset > 0 {
+			v.scrollBy(-len(v.disp), m.diffBodyRows())
+		} else {
+			return m.stepDiffFile(-1)
+		}
+	case "end":
+		// First press jumps to the bottom; again while already at the bottom
+		// steps to the next file in the source list.
+		body := m.diffBodyRows()
+		if v.offset < len(v.disp)-body {
+			v.scrollBy(len(v.disp), body)
+		} else {
+			return m.stepDiffFile(1)
+		}
 	case "n", "ctrl+down":
 		if !v.nextBlock(m.diffBodyRows()) { // already on the last change
 			if armed == wrapToStart && len(v.dispBlocks) > 0 {

@@ -69,10 +69,11 @@ type Model struct {
 	filesPreview      *contentPopup  // full-tree mode: read-only file content shown in the right column (nil = none)
 	filesPreviewTag   string         // <path>@<hash>; gates stale ShowFile results for the preview
 
-	diffView    *diffView // full-screen side-by-side diff; nil = closed
-	diffTag     string    // request key of the wanted diff; gates stale async results
-	diffPartial bool      // session default for new diffs (false = full); the f key toggles it
-	diffLong    longMode  // session: long-line mode for new diffs (0 = scroll); w cycles
+	diffView    *diffView   // full-screen side-by-side diff; nil = closed
+	diffTag     string      // request key of the wanted diff; gates stale async results
+	diffNav     diffNavKind // which list the open diff was opened from (Home/End file-stepping)
+	diffPartial bool        // session default for new diffs (false = full); the f key toggles it
+	diffLong    longMode    // session: long-line mode for new diffs (0 = scroll); w cycles
 
 	layers *layerStack // top-of-everything window pile: full-screen surfaces + centered popups; nil/empty = none
 
@@ -873,10 +874,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.canShowFileDiff() {
 				bi, _ := m.backingIndex(m.focus)
 				f := m.status.Files[bi]
-				staged := m.focus == panelStaged
-				m.diffView = &diffView{title: f.Path, context: statusDiffContext(staged), rev: "", loading: true, partial: m.diffPartial, long: m.diffLong}
-				m.diffTag = statusDiffTag(f.Path, staged)
-				return m, m.loadStatusDiffCmd(f, staged)
+				return m.openStatusDiff(f, m.focus == panelStaged)
 			}
 		case "h":
 			if m.canShowFileDiff() {
