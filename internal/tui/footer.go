@@ -122,9 +122,9 @@ func (m Model) footerLine() string {
 	// Commits panel (. menu + graph keys); the tree side is file-scoped.
 	if m.filesView != nil {
 		if m.filesTreeFocused {
-			return "tree: [←/→ tab] focus  [↑/↓] move  [enter] diff  [/] search  [h] hist  [b] blame  [.] copy  [z] view  [esc/l] close"
+			return "tree: [↑/↓] move  [enter] diff  [a] all files  [/] search  [h] hist  [b] blame  [.] copy  [z] view  [esc/l] close"
 		}
-		return "commits: [←/→ tab] focus  [↑/↓] move  [<>=] graph  [/] search  [.] actions  [ctrl+↑/↓] tree  [esc/l] close"
+		return "commits: [←/→ tab] focus  [↑/↓] move  [<>=] graph  [a] all files  [/] search  [.] actions  [esc/l] close"
 	}
 	// The stash list owns the keyboard while it is the focused right column
 	// (no file tree yet). When focus has moved to a left panel, fall through to

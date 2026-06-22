@@ -9,6 +9,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **See every file at a commit, not just what it changed (`a`).** In the commit
+  files view (`l`), pressing `a` toggles between the commit's *changed* files and
+  the **full tree** — every file that would exist if you checked the commit out
+  (`git ls-tree -r`, which walks tree objects and is cheap even on a huge repo).
+  `a` again returns to the changed set; the mode sticks as you move between
+  commits. In full-tree mode `enter` diffs the file's version at the commit
+  against your working tree (so untouched files still show something useful).
 - **Uncommitted work shows in the Commits graph (WIP rows).** When the tree is
   dirty, the Commits panel shows `◇ Working tree (N)` and/or `◇ Staged (N)` rows
   chained above HEAD. `l`/`enter` opens their whole-tree diff (working tree vs

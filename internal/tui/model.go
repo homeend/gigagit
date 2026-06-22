@@ -65,6 +65,7 @@ type Model struct {
 	filesStashTag     string         // when the files tree is showing a stash: its ref (gates stash-file loads)
 	filesTreeFocused  bool           // true = the tree side owns vertical movement (←/→/tab)
 	filesReadInflight bool           // a per-commit files-view CommitFiles read is outstanding; drop further nav reads until it lands (pure-drop pacing on large repos)
+	filesAllFiles     bool           // true = full-tree mode (every file at the commit, ls-tree) vs the changed set; toggled by `a`
 
 	diffView    *diffView // full-screen side-by-side diff; nil = closed
 	diffTag     string    // request key of the wanted diff; gates stale async results
@@ -216,6 +217,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.filesView.lines = commitFileLines(msg.files)
 		m.filesView.sel = 0
 		m.filesTitle = "Files " + shortHash(msg.hash) + " " + msg.subject
+		return m, nil
+	case treeFilesMsg:
+		m.filesReadInflight = false
+		if m.filesView == nil || !m.filesAllFiles || msg.hash != m.filesHash {
+			return m, nil // view closed, switched back to changed files, or stale
+		}
+		if msg.err != nil {
+			m.statusMsg = "files: " + msg.err.Error()
+			if len(m.filesView.lines) == 1 && m.filesView.lines[0].text == "(loading…)" {
+				m.filesView.lines = []contentLine{{text: "(load failed)"}}
+			}
+			return m, nil
+		}
+		m.filesView.lines = msg.lines // pre-built off-thread
+		m.filesView.sel = 0
+		m.filesTitle = "Files " + shortHash(msg.hash) + " (all files) " + msg.subject
 		return m, nil
 	case compareFilesMsg:
 		if m.filesView == nil || !m.filesCompare || msg.tag != m.compareTag {
@@ -969,6 +986,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.filesTitle = "Files " + shortHash(c.Hash) + " " + c.Subject
 				m.filesHash = c.Hash
 				m.filesTreeFocused = false // always open on the commit list
+				m.filesAllFiles = false    // open in changed-files mode; `a` toggles
 				m.filesReadInflight = true
 				return m, m.loadCommitFilesCmd(c)
 			}
