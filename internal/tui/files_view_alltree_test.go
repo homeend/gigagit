@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -117,6 +118,34 @@ func TestFilesViewAllFilesFollowsCommitSelection(t *testing.T) {
 	msg := cmd()
 	if _, ok := msg.(treeFilesMsg); !ok {
 		t.Fatalf("full-tree mode must reload the TREE on move, got %T", msg)
+	}
+}
+
+// TestFilesViewWindowsLargeTreeCorrectly guards the window-then-build render: a
+// huge list must show exactly the window windowStart() picks around the cursor,
+// at the top, middle, and bottom — and nothing far outside it.
+func TestFilesViewWindowsLargeTreeCorrectly(t *testing.T) {
+	var lines []contentLine
+	for i := 0; i < 5000; i++ {
+		p := fmt.Sprintf("dir%04d/file%04d.go", i, i)
+		lines = append(lines, contentLine{text: p, path: p})
+	}
+	m := Model{width: 120, height: 50, filesTreeFocused: true,
+		filesTitle: "Files x (all files)", filesView: &contentPopup{lines: lines}}
+	boxW, boxH := 60, 48
+	rowsCap := (boxH - 2) - 2 // contentH-2 (title+hint), no search line — mirrors renderFilesView
+	for _, sel := range []int{0, 2500, 4999} {
+		m.filesView.sel = sel
+		out := m.renderFilesView(boxW, boxH)
+		start := windowStart(len(lines), rowsCap, sel)
+		for _, want := range []int{start, sel, start + rowsCap - 1} {
+			if !strings.Contains(out, lines[want].text) {
+				t.Fatalf("sel=%d: window row %d (%q) not rendered", sel, want, lines[want].text)
+			}
+		}
+		if strings.Contains(out, lines[1000].text) && (1000 < start || 1000 >= start+rowsCap) {
+			t.Fatalf("sel=%d: row 1000 outside the window [%d,%d) was rendered", sel, start, start+rowsCap)
+		}
 	}
 }
 

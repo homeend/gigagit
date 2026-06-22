@@ -499,12 +499,29 @@ func (m Model) renderFilesView(boxW, boxH int) string {
 	}
 
 	vis := p.visible()
-	wr := make([]winRow, len(vis))
-	for i, l := range vis {
+	// Window-then-build: on a full tree the list is 10^4–10^5 rows, and building a
+	// winRow for every row each frame is O(n) (≈0.5s at 40k rows). For the
+	// 1-line-per-row modes (cutoff/scroll), only the slice the window can show is
+	// built; the math is byte-identical to building all rows (windowStart clamps
+	// the same window either way). Wrap mode has variable row height, so it keeps
+	// the full build (wrapping a 10^5 tree is a deliberate, rare choice).
+	s0, s1, anchor := 0, len(vis), p.sel
+	if p.mode != modeWrap && len(vis) > 2*rowsCap+1 {
+		if s0 = p.sel - rowsCap; s0 < 0 {
+			s0 = 0
+		}
+		if s1 = p.sel + rowsCap + 1; s1 > len(vis) {
+			s1 = len(vis)
+		}
+		anchor = p.sel - s0
+	}
+	window := vis[s0:s1]
+	wr := make([]winRow, len(window))
+	for i, l := range window {
 		prefix := "  "
 		var st lipgloss.Style
 		switch {
-		case i == p.sel:
+		case i == anchor:
 			// Cursor highlight wins over heading style so the cursor stays
 			// visible when it rests on a heading row.
 			prefix = "> "
@@ -533,7 +550,7 @@ func (m Model) renderFilesView(boxW, boxH int) string {
 	if len(vis) == 0 {
 		lines = append(lines, padRight(truncate("  (no match)", innerW), innerW))
 	} else {
-		win := renderWindow(wr, winOpts{w: innerW, h: rowsCap, mode: p.mode, anchor: p.sel, hscroll: p.hscroll})
+		win := renderWindow(wr, winOpts{w: innerW, h: rowsCap, mode: p.mode, anchor: anchor, hscroll: p.hscroll})
 		lines = append(lines, win...)
 	}
 	for len(lines) < contentH-1 {
