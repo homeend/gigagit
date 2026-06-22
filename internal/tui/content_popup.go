@@ -110,7 +110,10 @@ func (p *contentPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			p.query = ""
 			p.sel = 0
 		case tea.KeyEnter:
-			p.typing = false // commit: search stays active
+			p.typing = false      // commit: search stays active
+			if m.filesView == p { // only the files-view tree search has history
+				return m.recordSearch(scopeFiletree, p.query)
+			}
 		case tea.KeyBackspace, tea.KeyCtrlH:
 			if r := []rune(p.query); len(r) > 0 {
 				p.query = string(r[:len(r)-1])

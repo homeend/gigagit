@@ -46,6 +46,10 @@ func keyMsg(s string) tea.KeyMsg {
 		return tea.KeyMsg{Type: tea.KeyCtrlRight}
 	case "space":
 		return tea.KeyMsg{Type: tea.KeySpace}
+	case "alt+down":
+		return tea.KeyMsg{Type: tea.KeyDown, Alt: true}
+	case "alt+up":
+		return tea.KeyMsg{Type: tea.KeyUp, Alt: true}
 	default:
 		return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)}
 	}

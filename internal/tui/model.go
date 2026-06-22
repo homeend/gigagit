@@ -114,6 +114,8 @@ type Model struct {
 
 	highlightQuery  string // Commits-panel @-highlight: case-insensitive substring; "" = no committed query
 	highlightTyping bool   // true while @-input mode is capturing keys
+
+	searchHist map[string][]string // per-scope search-history rings, newest-first (loaded at startup)
 }
 
 type panel int
@@ -151,7 +153,7 @@ func New(svc *domain.Service) Model {
 }
 
 // Init implements tea.Model.
-func (m Model) Init() tea.Cmd { return m.loadCmd() }
+func (m Model) Init() tea.Cmd { return tea.Batch(m.loadCmd(), loadSearchHistCmd(m.svc)) }
 
 // Update implements tea.Model.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -331,6 +333,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m.pushLayer(p), nil
+	case searchHistLoadedMsg:
+		if msg.rings != nil {
+			m.searchHist = msg.rings
+		}
+		return m, nil
 	case dataLoadedMsg:
 		if msg.gen != m.loadGen {
 			return m, nil // superseded by a newer load
@@ -456,12 +463,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.filterQuery = ""
 			case tea.KeyEnter:
 				m.filterTyping = false // commit: filter stays active
+				m, recCmd := m.recordSearch(scopePanel, m.filterQuery)
 				// With the files view open over a commit filter, point the tree at
 				// the now-selected commit so "search commits → see its files" needs
 				// no extra keypress.
 				if m.filesView != nil && m.filterPanel == panelCommits {
-					return m.syncFilesViewToSelectedCommit()
+					mm, cmd := m.syncFilesViewToSelectedCommit()
+					return mm, tea.Batch(recCmd, cmd)
 				}
+				return m, recCmd
 			// Arrows/pages navigate the filtered rows live (an incremental
 			// picker, like the repo switcher); they stay in /-input mode and do
 			// NOT reset the cursor. Vim j/k are query text here, not motions.
@@ -508,6 +518,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.highlightQuery = ""
 			case tea.KeyEnter:
 				m.highlightTyping = false // commit: highlight stays active
+				var recCmd tea.Cmd
+				m, recCmd = m.recordSearch(scopePanel, m.highlightQuery)
+				return m, recCmd
 			case tea.KeyUp:
 				if m.sel[panelCommits] > 0 {
 					m.sel[panelCommits]--
