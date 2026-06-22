@@ -503,7 +503,16 @@ git commit -m "feat(tui): textfield multi-line newline + up/down" -m "Co-Authore
 Append to `internal/tui/textfield_test.go` (force a color profile so the reverse SGR is emitted in the non-TTY test, mirroring the commit-lane-color tests):
 
 ```go
-import "github.com/charmbracelet/lipgloss" // add to the existing import block
+// forceColor flips lipgloss to TrueColor for the duration of the test so the
+// reverse SGR is emitted in the non-TTY test binary, then restores the previous
+// profile. This mirrors internal/tui/commit_color_test.go and diff_render_test.go
+// — a bare SetColorProfile leaks global state into later tests that assert
+// plain output (e.g. window_test.go), so the save/restore is mandatory.
+func forceColor(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
+}
 
 func TestTextFieldViewUnfocusedPlain(t *testing.T) {
 	f := newTextField("abc")
@@ -513,7 +522,7 @@ func TestTextFieldViewUnfocusedPlain(t *testing.T) {
 }
 
 func TestTextFieldViewFocusedCursorAtRune(t *testing.T) {
-	lipgloss.SetColorProfile(termenv.TrueColor) // import "github.com/muesli/termenv"
+	forceColor(t)
 	f := newTextField("ab")
 	f.HandleEditKey(keyMsg(tea.KeyLeft)) // cursor on 'b'
 	got := f.View(true)
@@ -523,7 +532,7 @@ func TestTextFieldViewFocusedCursorAtRune(t *testing.T) {
 }
 
 func TestTextFieldViewFocusedCursorAtEnd(t *testing.T) {
-	lipgloss.SetColorProfile(termenv.TrueColor)
+	forceColor(t)
 	f := newTextField("ab") // cursor at end
 	got := f.View(true)
 	if !strings.HasPrefix(got, "ab") || !strings.Contains(got, "\x1b[7m") {
@@ -532,7 +541,7 @@ func TestTextFieldViewFocusedCursorAtEnd(t *testing.T) {
 }
 ```
 
-Add `"strings"`, `"github.com/charmbracelet/lipgloss"`, and `"github.com/muesli/termenv"` to the test file's import block.
+Add `"strings"`, `"github.com/charmbracelet/lipgloss"`, and `"github.com/muesli/termenv"` to the test file's import block. **Do NOT use a bare `SetColorProfile`** — the save/restore in `forceColor` is required so the global profile flip does not leak into order-dependent tests like `window_test.go` that assert plain output.
 
 - [ ] **Step 2: Run tests, verify they fail**
 
@@ -1284,9 +1293,13 @@ Both constructors: `inputs: map[string]textfield{}` (lines 116, 154). The seeded
 
 `stAction` "e" branch (line 232): `p.editBuf = newTextField(p.previewBranch)`.
 
-`box` (line 265): `b.WriteString(cursor + lbl + ": " + p.inputs[lbl].View(focused) + "\n")` — derive `focused` from whether this row is the active field in `stInput`. Inspect the surrounding loop to pass the right bool (the row is focused when `p.state == stInput && p.labels[p.fieldIdx] == lbl`). Line 273 (`branch = p.editBuf`): `branch = p.editBuf.Value()`, and where the edit buffer is shown render `p.editBuf.View(p.state == stEdit)`.
+`box` (line 265): `b.WriteString(cursor + lbl + ": " + p.inputs[lbl].View(p.state == stInput && p.labels[p.fieldIdx] == lbl) + "\n")`. Line 273 (`branch = p.editBuf`): `branch = p.editBuf.Value()`, and where the edit buffer is shown render `p.editBuf.View(p.state == stEdit)`.
 
-> Read `box` (lines ~252-300) in full before editing; route every `p.inputs[...]` and `p.editBuf` read through `.View(...)` (display) or `.Value()` (logic) and pass the correct `focused` bool so exactly the active field shows the cursor.
+> **This is the one task that must be executed with the file open, not blind.** Read `box` (lines ~252-300) in FULL before editing. The invariant: **exactly one** field shows the cursor at a time. The focused bool is:
+> - input rows: `p.state == stInput && p.labels[p.fieldIdx] == lbl` (true for only the active label),
+> - the edit buffer: `p.state == stEdit`.
+>
+> Route every `p.inputs[...]` / `p.editBuf` read through `.View(focused)` for **display** and `.Value()` for **logic** (e.g. `fixedBranch`, `branchOverride`). After the edit, eyeball that no row shows a cursor while `p.state == stAction`, and that the cursor never appears on two fields simultaneously.
 
 - [ ] **Step 4: Run tests, verify they pass**
 
