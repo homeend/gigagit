@@ -206,14 +206,17 @@ func TestCommitTimesRealRepo(t *testing.T) {
 	}
 }
 
+// ParseNameStatus consumes the NUL-separated (`-z`) form of `--name-status`:
+// a status token, then one path token (M/A/D/T) or two path tokens (R/C). `-z`
+// also disables git's path quoting, so non-ASCII paths arrive as raw UTF-8.
 func TestParseNameStatus(t *testing.T) {
-	raw := []byte("M\tCHANGELOG.md\n" +
-		"A\tinternal/tui/files_view.go\n" +
-		"D\told.txt\n" +
-		"R100\ta/old.go\tb/new.go\n" +
-		"T\tlink\n" +
-		"\n" +
-		"bogus-line-without-tab\n")
+	raw := []byte("M\x00CHANGELOG.md\x00" +
+		"A\x00internal/tui/files_view.go\x00" +
+		"D\x00old.txt\x00" +
+		"R100\x00a/old.go\x00b/new.go\x00" +
+		"T\x00link\x00" +
+		"M\x00timing — kopia.log\x00" + // raw em-dash, not quoted
+		"R077\x00timing4.log\x00timing — kopia.log\x00") // non-ASCII rename target
 	got := ParseNameStatus(raw)
 	want := []model.CommitFile{
 		{Status: "M", Path: "CHANGELOG.md"},
@@ -221,6 +224,8 @@ func TestParseNameStatus(t *testing.T) {
 		{Status: "D", Path: "old.txt"},
 		{Status: "R", Path: "b/new.go", OldPath: "a/old.go"},
 		{Status: "T", Path: "link"},
+		{Status: "M", Path: "timing — kopia.log"},
+		{Status: "R", Path: "timing — kopia.log", OldPath: "timing4.log"},
 	}
 	if len(got) != len(want) {
 		t.Fatalf("files = %d, want %d: %+v", len(got), len(want), got)
@@ -234,7 +239,7 @@ func TestParseNameStatus(t *testing.T) {
 
 func TestCommitFilesArgv(t *testing.T) {
 	f := gitexec.NewFakeRunner()
-	f.SetResponse("git log (commit files)", gitexec.Result{Stdout: "M\tfile.txt\n"})
+	f.SetResponse("git log (commit files)", gitexec.Result{Stdout: "M\x00file.txt\x00"})
 	repo := &Repo{Runner: f}
 	got, err := repo.CommitFiles(context.Background(), "abc123")
 	if err != nil {
@@ -244,7 +249,7 @@ func TestCommitFilesArgv(t *testing.T) {
 		t.Fatalf("git calls = %d, want 1", len(f.Calls))
 	}
 	argv := strings.Join(f.Calls[0].Argv, " ")
-	for _, part := range []string{"log", "-1", "-m", "--first-parent", "--root", "--name-status", "-M", "--format=", "abc123"} {
+	for _, part := range []string{"log", "-1", "-m", "--first-parent", "--root", "--name-status", "-M", "-z", "--format=", "abc123"} {
 		if !strings.Contains(argv, part) {
 			t.Fatalf("argv = %q, missing %q", argv, part)
 		}
@@ -315,6 +320,50 @@ func TestCommitFilesRealRepo(t *testing.T) {
 	}
 	if len(files) != 1 || files[0].Status != "R" || files[0].OldPath != "README.md" || files[0].Path != "DOCS.md" {
 		t.Fatalf("rename commit files = %+v, want [R README.md -> DOCS.md]", files)
+	}
+}
+
+// TestCommitFilesNonASCIIPathRoundTrip reproduces the diff-view failure: a
+// committed file whose name has a non-ASCII byte (em-dash U+2014) was listed
+// with git's quoted, octal-escaped path ("timing \342\200\224 kopia.log"), so
+// the follow-up `git show <rev>:<path>` failed with exit 128. CommitFiles must
+// return the raw UTF-8 path so ShowFile round-trips.
+func TestCommitFilesNonASCIIPathRoundTrip(t *testing.T) {
+	dir, runner := newTestRepo(t)
+	repo := &Repo{Runner: runner}
+
+	const name = "timing — kopia.log" // em-dash U+2014 → \342\200\224 when quoted
+	if err := os.WriteFile(filepath.Join(dir, name), []byte("hello\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, dir, "add", ".")
+	gitIn(t, dir, "commit", "-m", "add non-ascii file")
+	out, err := exec.Command("git", "-C", dir, "rev-parse", "HEAD").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	head := strings.TrimSpace(string(out))
+
+	files, err := repo.CommitFiles(context.Background(), head)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got model.CommitFile
+	for _, f := range files {
+		if f.Status == "A" {
+			got = f
+		}
+	}
+	if got.Path != name {
+		t.Fatalf("CommitFiles path = %q (all: %+v), want raw %q", got.Path, files, name)
+	}
+	// The reported bug: with a quoted path this ShowFile fails with exit 128.
+	data, err := repo.ShowFile(context.Background(), head, got.Path)
+	if err != nil {
+		t.Fatalf("ShowFile(%q) failed (the reported bug): %v", got.Path, err)
+	}
+	if string(data) != "hello\n" {
+		t.Fatalf("content = %q, want \"hello\\n\"", data)
 	}
 }
 

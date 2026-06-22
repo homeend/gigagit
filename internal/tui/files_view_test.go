@@ -116,7 +116,7 @@ func TestCommitFileLinesEmpty(t *testing.T) {
 func filesModel() Model {
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git log (commit files)", gitexec.Result{
-		Stdout: "M\tinternal/tui/model.go\nA\tCHANGELOG.md\n",
+		Stdout: "M\x00internal/tui/model.go\x00A\x00CHANGELOG.md\x00",
 	})
 	return Model{
 		svc:    domain.New(&git.Repo{Runner: f}),

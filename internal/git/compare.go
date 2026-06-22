@@ -13,12 +13,15 @@ import (
 // the older side and right the newer. It supports only the four forward kind
 // pairs the UI ever produces; any other pair is a programming error.
 //
-//	commit A → commit B : git diff --name-status -M A B
-//	commit A → index    : git diff --cached --name-status -M A
-//	commit A → worktree : git diff --name-status -M A
-//	index   → worktree  : git diff --name-status -M
+//	commit A → commit B : git diff --name-status -M -z A B
+//	commit A → index    : git diff --cached --name-status -M -z A
+//	commit A → worktree : git diff --name-status -M -z A
+//	index   → worktree  : git diff --name-status -M -z
+//
+// -z keeps non-ASCII paths raw (NUL-separated, unquoted) so the compare diff's
+// follow-up `git show <rev>:<path>` does not choke on git's quoted form.
 func (r *Repo) DiffTreeFiles(ctx context.Context, left, right model.Endpoint) ([]model.CommitFile, error) {
-	b := gitcmd.New("diff").Arg("--name-status", "-M")
+	b := gitcmd.New("diff").Arg("--name-status", "-M", "-z")
 	switch {
 	case left.Kind == model.EndpointCommit && right.Kind == model.EndpointCommit:
 		b = b.Arg(left.Hash, right.Hash)

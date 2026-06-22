@@ -17,7 +17,7 @@ import (
 // returning a nested file so we can tell the full-tree list from the changed set.
 func allFilesModel() Model {
 	f := gitexec.NewFakeRunner()
-	f.SetResponse("git log (commit files)", gitexec.Result{Stdout: "M\tinternal/tui/model.go\n"})
+	f.SetResponse("git log (commit files)", gitexec.Result{Stdout: "M\x00internal/tui/model.go\x00"})
 	f.SetResponse("git ls-tree (tree files)", gitexec.Result{Stdout: "README.md\x00pkg/sub/x.go\x00internal/tui/model.go\x00"})
 	return Model{
 		svc:    domain.New(&git.Repo{Runner: f}),

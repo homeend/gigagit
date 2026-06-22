@@ -77,3 +77,38 @@ func TestFileLog(t *testing.T) {
 		t.Errorf("statuses wrong: %+v", got)
 	}
 }
+
+// TestFileLogNonASCIIPathRoundTrip guards the file-history view's twin of the
+// CommitFiles bug: a file followed across a rename into a non-ASCII name must
+// surface as a raw UTF-8 path, not git's quoted "timing \342\200\224 …" form,
+// or the history diff's ShowFile(fc.Hash, fc.Path) fails with exit 128.
+func TestFileLogNonASCIIPathRoundTrip(t *testing.T) {
+	dir, runner := newTestRepo(t)
+	repo := &Repo{Runner: runner}
+
+	if err := os.WriteFile(filepath.Join(dir, "orig.log"), []byte("hello\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, dir, "add", "orig.log")
+	gitIn(t, dir, "commit", "-m", "add orig.log")
+
+	const name = "timing — kopia.log" // em-dash U+2014
+	gitIn(t, dir, "mv", "orig.log", name)
+	gitIn(t, dir, "commit", "-m", "rename to non-ascii")
+
+	got, err := repo.FileLog(context.Background(), "", name, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) == 0 {
+		t.Fatalf("expected history for %q", name)
+	}
+	newest := got[0]
+	if newest.Status != "R" || newest.Path != name {
+		t.Fatalf("newest = %+v, want R with raw path %q", newest, name)
+	}
+	// The reported bug, via the history entry point: this must succeed.
+	if _, err := repo.ShowFile(context.Background(), newest.Hash, newest.Path); err != nil {
+		t.Fatalf("ShowFile(%q) failed: %v", newest.Path, err)
+	}
+}

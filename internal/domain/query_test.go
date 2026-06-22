@@ -198,7 +198,7 @@ func TestReflogGatedQuery(t *testing.T) {
 
 func TestCommitFilesGatedQuery(t *testing.T) {
 	f := gitexec.NewFakeRunner()
-	f.SetResponse("git log (commit files)", gitexec.Result{Stdout: "M\ta.txt\n"})
+	f.SetResponse("git log (commit files)", gitexec.Result{Stdout: "M\x00a.txt\x00"})
 	svc := New(&git.Repo{Runner: f})
 	files, err := svc.CommitFiles(context.Background(), "abc123")
 	if err != nil || len(files) != 1 || files[0].Path != "a.txt" {

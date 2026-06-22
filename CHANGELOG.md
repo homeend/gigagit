@@ -136,6 +136,15 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   count while that walk is in flight, so the panel no longer looks frozen.
 
 ### Fixed
+- **Diffing a file with a non-ASCII name no longer fails.** A committed file
+  whose path contains a non-ASCII byte (e.g. an em-dash `—`) was listed with
+  git's quoted, octal-escaped form (`"timing \342\200\224 kopia.log"`), so the
+  follow-up `git show <rev>:<path>` failed with `fatal: path … does not exist`
+  (exit 128) and the diff/preview never opened. Every path producer that feeds
+  `git show` is fixed: commit-file listing (`CommitFiles`) and whole-tree
+  comparison (`DiffTreeFiles`) now use `-z` (NUL-separated, unquoted), and the
+  file-history view (`FileLog`) uses `core.quotepath=false` — so paths arrive as
+  raw UTF-8 throughout, matching the rest of the codebase's path-safe verbs.
 - **The history/blame/diff `.` menu no longer shows Commits-panel actions.** When
   the file-history, blame, or diff view was opened from the files view's
   commit-list side, the files view stayed live underneath and the whole Commits
