@@ -119,7 +119,7 @@ func (b *blameView) render(m Model, _ string) string {
 	body := m.blameBodyRows()
 
 	header := truncate("blame: "+b.ctx.path+revSuffix(b.ctx.rev), w)
-	hint := truncate("[↑↓] line  [pgup/pgdn] page  [enter] history  [esc/b] back", w)
+	hint := truncate("[↑↓] line  [pgup/pgdn] page  [enter] history  [e] editor  [esc/b] back", w)
 
 	gw := blameGutterW
 	if gw > w-10 {
@@ -234,6 +234,13 @@ func (b *blameView) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			b.sel = 0
 		}
 		return m, nil
+	case "e": // open the blamed file (at this rev) in $EDITOR (read-only)
+		path, rev, svc := b.ctx.path, b.ctx.rev, m.svc
+		resolve := func(ctx context.Context) ([]byte, error) { return svc.ShowFile(ctx, rev, path) }
+		if rev == "" { // blame of the working-tree file: open the on-disk file, not the index blob
+			resolve = func(ctx context.Context) ([]byte, error) { return svc.WorktreeFile(ctx, path) }
+		}
+		return m, m.openInEditorCmd(path, resolve)
 	case "enter":
 		blk, ok := blockAt(b.blocks, b.sel)
 		if !ok || blk.hash == "" {

@@ -80,6 +80,9 @@ func availableActions(m Model) []actionRow {
 	if r, ok := m.fileEditRow(); ok {
 		out = append(out, r)
 	}
+	if r, ok := m.stagedOpenExternalRow(); ok {
+		out = append(out, r)
+	}
 	if r, ok := m.fileIgnoreRow(); ok {
 		out = append(out, r)
 	}
