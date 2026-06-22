@@ -165,6 +165,39 @@ func TestSmartPullBackgroundPullsWorktreeBranchNoPrompt(t *testing.T) {
 	}
 }
 
+// A diverged worktree branch must NOT be silently merged: PullInWorktree is
+// ff-only, so a background pull errors and leaves the worktree branch untouched
+// (the user resolves it deliberately, like the same-branch ff-only-then-ask path).
+func TestSmartPullBackgroundWorktreeDivergedErrsNoMerge(t *testing.T) {
+	clone, repo := cloneOnMainBehindOrigin(t)
+	root := filepath.Dir(clone)
+	seed := filepath.Join(root, "seed")
+
+	gitAt(t, seed, "checkout", "-b", "dev")
+	gitAt(t, seed, "commit", "--allow-empty", "-m", "dev1")
+	gitAt(t, seed, "push", "-u", "origin", "dev")
+
+	gitAt(t, clone, "fetch", "origin")
+	gitAt(t, clone, "branch", "dev", "origin/dev")
+	wtPath := filepath.Join(root, "wt-dev")
+	gitAt(t, clone, "worktree", "add", wtPath, "dev")
+
+	// Diverge: a local-only commit in the worktree AND a different commit upstream.
+	gitAt(t, wtPath, "commit", "--allow-empty", "-m", "local-dev")
+	local := revAt(t, wtPath, "HEAD")
+	gitAt(t, seed, "commit", "--allow-empty", "-m", "dev2")
+	gitAt(t, seed, "push", "origin", "dev")
+
+	_, err := SmartPull{Branch: "dev", Intent: PullInBackground}.Run(context.Background(),
+		OpDeps{Repo: repo, Decider: MapDecider{}})
+	if err == nil {
+		t.Fatal("a diverged worktree background pull must error (ff-only), not merge silently")
+	}
+	if revAt(t, wtPath, "HEAD") != local {
+		t.Fatal("diverged worktree branch was moved — ff-only must leave it untouched")
+	}
+}
+
 func TestSmartPullStayStashesAndMovesToTarget(t *testing.T) {
 	clone, repo := cloneOnMainBehindOrigin(t)
 	gitAt(t, clone, "branch", "feature", "origin/main")
