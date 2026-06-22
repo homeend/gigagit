@@ -60,17 +60,14 @@ func (m Model) loadHistoryListCmd(ctx navContext, tag string) tea.Cmd {
 	}
 }
 
-// loadHistoryDiffCmd builds the right-pane diff for fc: the file at fc vs its
-// first parent, addressing the correct (possibly renamed) blob names.
-func (m Model) loadHistoryDiffCmd(fc model.FileCommit, tag string) tea.Cmd {
+// historyDiffSources builds the cache key + byte sources for fc's change (the
+// file at fc vs its first parent, addressing the correct possibly-renamed blob
+// names). Shared by the right-pane and full-screen loaders so the A/D/rename
+// handling can't drift between them.
+func (m Model) historyDiffSources(fc model.FileCommit) (key string, oldSrc, newSrc domain.ByteSource) {
 	svc := m.svc
-	differ := m.diffDiffer()
-	body := m.diffBodyRows()
-	v := &diffView{title: fc.Path, context: "@ " + shortHash(fc.Hash) + " " + fc.Subject, rev: fc.Hash, partial: m.diffPartial}
 	// Immutable: parent(hash)→hash for a path always yields the same bytes.
-	key := fc.Hash + "^.." + fc.Hash + ":" + fc.Path
-
-	var oldSrc, newSrc domain.ByteSource
+	key = fc.Hash + "^.." + fc.Hash + ":" + fc.Path
 	if fc.Status != "A" {
 		p := fc.Path
 		if fc.OldPath != "" {
@@ -81,6 +78,16 @@ func (m Model) loadHistoryDiffCmd(fc model.FileCommit, tag string) tea.Cmd {
 	if fc.Status != "D" {
 		newSrc = func(ctx context.Context) ([]byte, error) { return svc.ShowFile(ctx, fc.Hash, fc.Path) }
 	}
+	return key, oldSrc, newSrc
+}
+
+// loadHistoryDiffCmd builds the right-pane diff for fc: the file at fc vs its
+// first parent, addressing the correct (possibly renamed) blob names.
+func (m Model) loadHistoryDiffCmd(fc model.FileCommit, tag string) tea.Cmd {
+	differ := m.diffDiffer()
+	body := m.diffBodyRows()
+	v := &diffView{title: fc.Path, context: "@ " + shortHash(fc.Hash) + " " + fc.Subject, rev: fc.Hash, partial: m.diffPartial}
+	key, oldSrc, newSrc := m.historyDiffSources(fc)
 	return func() tea.Msg {
 		out, err := differ.Diff(context.Background(), domain.Request{Key: key, Old: oldSrc, New: newSrc})
 		if err != nil {
@@ -89,6 +96,26 @@ func (m Model) loadHistoryDiffCmd(fc model.FileCommit, tag string) tea.Cmd {
 		}
 		applyDiff(v, out, body)
 		return historyDiffMsg{tag: tag, view: v}
+	}
+}
+
+// loadHistoryDiffFullCmd builds the SAME diff as loadHistoryDiffCmd but yields a
+// diffMsg so it lands in the full-screen m.diffView (the diff key is shared, so
+// the right-pane load already warmed the cache). Used by enter.
+func (m Model) loadHistoryDiffFullCmd(fc model.FileCommit, tag string) tea.Cmd {
+	differ := m.diffDiffer()
+	body := m.diffBodyRows()
+	width, _ := m.overlayDims()
+	v := &diffView{title: fc.Path, context: "@ " + shortHash(fc.Hash) + " " + fc.Subject, rev: fc.Hash, partial: m.diffPartial, long: m.diffLong, width: width}
+	key, oldSrc, newSrc := m.historyDiffSources(fc)
+	return func() tea.Msg {
+		out, err := differ.Diff(context.Background(), domain.Request{Key: key, Old: oldSrc, New: newSrc})
+		if err != nil {
+			v.err = err
+			return diffMsg{tag: tag, view: v}
+		}
+		applyDiff(v, out, body)
+		return diffMsg{tag: tag, view: v}
 	}
 }
 
@@ -120,7 +147,7 @@ func (h *historyView) render(m Model, _ string) string {
 	body := m.historyBodyRows()
 
 	header := truncate("history: "+h.ctx.path, w)
-	hint := truncate("[↑↓] commit  [e] editor  [esc] back", w)
+	hint := truncate("[↑↓] commit  [enter] diff  [e] editor  [esc] back", w)
 
 	// Left list. Right pane shown only when wide enough (>=60); else list-only.
 	split := w >= 60
@@ -269,6 +296,20 @@ func (h *historyView) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			bv := newBlameView(ctx)
 			m = m.pushLayer(bv)
 			return m, m.loadBlameCmd(ctx, bv.tag)
+		}
+	case "enter": // open the selected commit's diff full-screen
+		if h.sel >= 0 && h.sel < len(h.commits) {
+			fc := h.commits[h.sel]
+			tag := "histdifffull:" + fc.Hash + ":" + h.ctx.path
+			// openPickerDiff clears the WHOLE layer stack (so the diff owns key
+			// routing — a layer would otherwise intercept keys above it) and promotes
+			// to the full m.diffView surface. esc clears the diff and returns to the
+			// base layout — or the files view, a Model field that survives clearLayers
+			// (so history-from-the-files-view lands back on the tree). A deeper stack
+			// like blame→history is wiped, so esc lands on base, not blame. From the
+			// diff, h reopens history.
+			placeholder := &diffView{title: fc.Path, context: "@ " + shortHash(fc.Hash) + " " + fc.Subject, loading: true, partial: m.diffPartial, long: m.diffLong}
+			return m.openPickerDiff(placeholder, tag, m.loadHistoryDiffFullCmd(fc, tag))
 		}
 	case "e": // open this commit's version of the file in $EDITOR (read-only)
 		if r, ok := m.surfaceExternalRow(); ok {
