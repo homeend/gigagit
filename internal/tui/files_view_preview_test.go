@@ -72,17 +72,60 @@ func TestViewFileRowGating(t *testing.T) {
 	if !hasRow(m, "view-file") {
 		t.Fatal("View file should be offered in full-tree mode on a file (tree side)")
 	}
-	// Changed-files mode: not offered.
+	// Changed-files mode: now ALSO offered (shows the file's content at the commit).
 	cf := m
 	cf.filesAllFiles = false
-	if hasRow(cf, "view-file") {
-		t.Error("View file must not be offered in changed-files mode")
+	if !hasRow(cf, "view-file") {
+		t.Error("View file should be offered in changed-files mode too")
 	}
 	// List side: not offered.
 	ls := m
 	ls.filesTreeFocused = false
 	if hasRow(ls, "view-file") {
 		t.Error("View file must not be offered on the commit-list side")
+	}
+}
+
+// A deleted file has no content at the commit, so View file must not be offered.
+func TestViewFileExcludesDeleted(t *testing.T) {
+	m := fullTreeTreeSide(t)
+	m.filesAllFiles = false
+	m.filesView = &contentPopup{lines: []contentLine{{text: "D  gone.go", path: "gone.go", status: "D"}}}
+	m.filesView.sel = 0
+	if _, ok := m.viewFileRow(); ok {
+		t.Error("View file must not be offered on a deleted (D) row")
+	}
+}
+
+// Compare mode has two endpoints, not a single commit, so View file is skipped.
+func TestViewFileExcludesCompareMode(t *testing.T) {
+	m := fullTreeTreeSide(t)
+	m.filesCompare = true
+	if _, ok := m.viewFileRow(); ok {
+		t.Error("View file must not be offered in compare mode")
+	}
+}
+
+// End-to-end: View file works in the default changed-files view, not just the
+// full tree — it opens the right-column preview with the file's content.
+func TestViewFileChangedModeOpensPreview(t *testing.T) {
+	m := openFilesView(t, previewModel()) // changed-files mode (no `a` toggle)
+	if m.filesAllFiles {
+		t.Fatal("expected changed-files mode")
+	}
+	m.filesTreeFocused = true
+	for i, l := range m.filesView.visible() {
+		if l.path != "" {
+			m.filesView.sel = i
+			break
+		}
+	}
+	m = openPreview(t, m)
+	if m.filesPreview == nil {
+		t.Fatal("View file in changed mode should open the preview")
+	}
+	if body := strings.Join(linesText(m.filesPreview), "\n"); !strings.Contains(body, "alpha") {
+		t.Fatalf("changed-mode preview did not load content:\n%s", body)
 	}
 }
 

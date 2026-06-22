@@ -10,18 +10,24 @@ import (
 	"github.com/gigagit/gg/internal/domain"
 )
 
-// viewFileRow offers "View file" in the full-tree files view: show the selected
-// file's content AT the commit (no diff) in the right column. Only meaningful on
-// the tree side of full-tree mode, on a real file row.
+// viewFileRow offers "View file" in the commit files view: show the selected
+// file's content AT the commit (no diff) in the right column. Available on the
+// tree side of either mode — the full tree or the changed set — on a real file
+// row. Compare mode is skipped (two endpoints, no single commit), and a deleted
+// (D) row is skipped (the file has no content at this commit).
 func (m Model) viewFileRow() (actionRow, bool) {
-	if m.filesView == nil || !m.filesAllFiles || !m.filesTreeFocused {
+	if m.filesView == nil || m.filesCompare || !m.filesTreeFocused {
 		return actionRow{}, false
 	}
 	vis := m.filesView.visible()
-	if m.filesView.sel < 0 || m.filesView.sel >= len(vis) || vis[m.filesView.sel].path == "" {
+	if m.filesView.sel < 0 || m.filesView.sel >= len(vis) {
 		return actionRow{}, false
 	}
-	path, hash := vis[m.filesView.sel].path, m.filesHash
+	l := vis[m.filesView.sel]
+	if l.path == "" || l.status == "D" {
+		return actionRow{}, false
+	}
+	path, hash := l.path, m.filesHash
 	return actionRow{
 		id:    "view-file",
 		label: "View file (content at this commit)",
