@@ -131,8 +131,10 @@ func (p *stashPopup) render(m Model, below string) string {
 
 // box draws the stash name field and file checklist (modal box only).
 func (p *stashPopup) box(m Model) string {
+	w, _ := m.overlayDims()
 	var b strings.Builder
-	b.WriteString("Stash changes\n\nname: " + p.name.View(p.field == 0) + "\n\n")
+	b.WriteString("Stash changes\n\n")
+	b.WriteString(viewField("name: ", p.name, p.field == 0, popupContentWidth(w)) + "\n\n")
 	for i, f := range p.files {
 		box := "[ ]"
 		if f.included {
@@ -146,6 +148,5 @@ func (p *stashPopup) box(m Model) string {
 		}
 	}
 	b.WriteString("\n[space] toggle  [tab] name/files  [ctrl+s] stash  [esc] cancel")
-	w, _ := m.overlayDims()
 	return modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"
 }

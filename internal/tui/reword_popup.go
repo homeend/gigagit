@@ -88,10 +88,10 @@ func (p *rewordPopup) render(m Model, below string) string {
 
 // box draws the reword dialog (reuses the commit field renderer).
 func (p *rewordPopup) box(m Model) string {
+	w, _ := m.overlayDims()
 	var b strings.Builder
 	b.WriteString("Reword commit " + shortHash(p.commit) + "\n\n")
-	b.WriteString(renderCommitFields(&p.popup))
+	b.WriteString(renderCommitFields(&p.popup, popupContentWidth(w)))
 	b.WriteString("\n[tab] switch field  [enter] newline/next  [ctrl+s] reword  [esc] cancel")
-	w, _ := m.overlayDims()
 	return modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"
 }

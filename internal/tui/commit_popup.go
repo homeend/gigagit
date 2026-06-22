@@ -114,29 +114,26 @@ func (p *commitPopup) box(m Model) string {
 	if p.amend {
 		heading = "Amend last commit"
 	}
+	w, _ := m.overlayDims()
 	b.WriteString(heading + "\n\n")
-	b.WriteString(renderCommitFields(p))
+	b.WriteString(renderCommitFields(p, popupContentWidth(w)))
 	b.WriteString("\n[tab] switch field  [enter] newline/next  [ctrl+s] commit  [esc] cancel")
 
-	w, _ := m.overlayDims()
-	inner := popupInnerWidth(w)
-	return modalStyle.Width(inner).Render(b.String()) + "\n"
+	return modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"
 }
 
-// renderCommitFields draws the title/description fields with the focus cursor.
-func renderCommitFields(p *commitPopup) string {
-	var b strings.Builder
+// renderCommitFields draws the title/description fields with the focus cursor,
+// each on a visible editable background filling contentWidth. The description's
+// continuation lines align under its first line (shared viewField indent).
+func renderCommitFields(p *commitPopup, contentWidth int) string {
 	titleCur, descCur := "  ", "  "
 	if p.field == 0 {
 		titleCur = "> "
 	} else {
 		descCur = "> "
 	}
-	b.WriteString(titleCur + "title:       " + p.title.View(p.field == 0) + "\n")
-	descLines := strings.Split(p.desc.View(p.field == 1), "\n")
-	b.WriteString(descCur + "description: " + descLines[0] + "\n")
-	for _, l := range descLines[1:] {
-		b.WriteString("             " + l + "\n")
-	}
+	var b strings.Builder
+	b.WriteString(viewField(titleCur+"title:       ", p.title, p.field == 0, contentWidth) + "\n")
+	b.WriteString(viewField(descCur+"description: ", p.desc, p.field == 1, contentWidth) + "\n")
 	return b.String()
 }

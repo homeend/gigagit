@@ -54,11 +54,13 @@ func (p *tagPopup) box(m Model) string {
 	if p.onMsg {
 		nameMark, msgMark = "  ", "> "
 	}
+	w, _ := m.overlayDims()
+	cw := popupContentWidth(w)
 	var b strings.Builder
 	b.WriteString("Create tag at " + displayStart(p.commit) + "\n\n")
-	b.WriteString(nameMark + "name:    " + p.name.View(!p.onMsg) + "\n")
-	b.WriteString(msgMark + "message: " + p.message.View(p.onMsg) + "  (empty = lightweight)\n\n")
+	b.WriteString(viewField(nameMark+"name:    ", p.name, !p.onMsg, cw) + "\n")
+	b.WriteString(viewField(msgMark+"message: ", p.message, p.onMsg, cw) + "\n")
+	b.WriteString(strings.Repeat(" ", 11) + "(empty message = lightweight tag)\n\n")
 	b.WriteString("[tab] field  [enter] create  [esc] cancel")
-	w, _ := m.overlayDims()
 	return modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"
 }

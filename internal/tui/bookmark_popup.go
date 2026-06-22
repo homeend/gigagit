@@ -485,12 +485,12 @@ func (p *bookmarkPastePopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 }
 
 func (p *bookmarkPastePopup) render(m Model, below string) string {
+	w, h := m.overlayDims()
 	var b strings.Builder
 	b.WriteString("Paste bookmarked file to a new path\n\n")
 	b.WriteString("from: " + p.origin + "  (resolved now)\n")
-	b.WriteString("dest: " + p.dest.View(true) + "\n\n")
+	b.WriteString(viewField("dest: ", p.dest, true, popupContentWidth(w)) + "\n\n")
 	b.WriteString("[type] path  [enter] paste  [esc] cancel")
-	w, h := m.overlayDims()
 	box := modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"
 	return overlayCenter(clipToHeight(below, h), box, w, h)
 }
