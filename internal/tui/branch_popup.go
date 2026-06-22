@@ -83,8 +83,8 @@ func (p *branchPopup) box(m Model) string {
 		title = "Create + switch branch from " + start
 	}
 	b.WriteString(title + "\n\n")
-	b.WriteString("name: " + p.name.View(true) + "\n\n")
-	b.WriteString("[type] name  [enter] create  [esc] cancel")
 	w, _ := m.overlayDims()
+	b.WriteString(viewField("name: ", p.name, true, popupContentWidth(w)) + "\n\n")
+	b.WriteString("[type] name  [enter] create  [esc] cancel")
 	return modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"
 }

@@ -324,9 +324,9 @@ func (v *identityView) box(m Model) string {
 	var body, footer []string
 	switch v.mode {
 	case idEditIdentity:
-		body, footer = v.editLines()
+		body, footer = v.editLines(textW)
 	case idForm:
-		body, footer = v.formLines()
+		body, footer = v.formLines(textW)
 	case idApply:
 		body, footer = v.applyLines()
 	default:
@@ -390,23 +390,23 @@ func (v *identityView) browseLines(m Model, textW int) (body, footer []string) {
 	return parts, footer
 }
 
-func (v *identityView) fieldLine(label string, f textfield, focused bool) string {
+func (v *identityView) fieldLine(label string, f textfield, focused bool, contentWidth int) string {
 	cursor := "  "
 	if focused {
 		cursor = "> "
 	}
-	return fmt.Sprintf("%s%-10s %s", cursor, label, f.View(focused))
+	return viewField(fmt.Sprintf("%s%-10s ", cursor, label), f, focused, contentWidth)
 }
 
-func (v *identityView) editLines() (body, footer []string) {
+func (v *identityView) editLines(textW int) (body, footer []string) {
 	return []string{
 		"Edit identity", "",
-		v.fieldLine("Name", v.fName, v.field == 0),
-		v.fieldLine("Email", v.fEmail, v.field == 1),
+		v.fieldLine("Name", v.fName, v.field == 0, textW),
+		v.fieldLine("Email", v.fEmail, v.field == 1, textW),
 	}, []string{"[↑/↓] field", "[enter] choose scope", "[esc] back"}
 }
 
-func (v *identityView) formLines() (body, footer []string) {
+func (v *identityView) formLines(textW int) (body, footer []string) {
 	title := "New profile"
 	if v.renameFrom != "" {
 		title = "Edit profile"
@@ -421,9 +421,9 @@ func (v *identityView) formLines() (body, footer []string) {
 	}
 	return []string{
 		title, "",
-		v.fieldLine("Name", v.fLabel, v.field == 0),
-		v.fieldLine("Git name", v.fName, v.field == 1),
-		v.fieldLine("Git email", v.fEmail, v.field == 2),
+		v.fieldLine("Name", v.fLabel, v.field == 0, textW),
+		v.fieldLine("Git name", v.fName, v.field == 1, textW),
+		v.fieldLine("Git email", v.fEmail, v.field == 2, textW),
 		fmt.Sprintf("%s%-10s %s", scopeCursor, "Scope", scopeVal),
 	}, []string{"[↑/↓] field", "[←/→] scope", "[enter] save", "[esc] back"}
 }

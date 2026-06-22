@@ -44,8 +44,8 @@ func (p *tagCheckoutPopup) render(m Model, below string) string {
 func (p *tagCheckoutPopup) box(m Model) string {
 	var b strings.Builder
 	b.WriteString("New branch at " + p.tag + "\n\n")
-	b.WriteString("name: " + p.name.View(true) + "\n\n")
-	b.WriteString("[type] name  [enter] checkout  [esc] cancel")
 	w, _ := m.overlayDims()
+	b.WriteString(viewField("name: ", p.name, true, popupContentWidth(w)) + "\n\n")
+	b.WriteString("[type] name  [enter] checkout  [esc] cancel")
 	return modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"
 }

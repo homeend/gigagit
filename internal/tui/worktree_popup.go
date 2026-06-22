@@ -242,6 +242,8 @@ func (p *worktreePopup) render(m Model, below string) string {
 // box draws the create-worktree dialog (fields, live preview, and
 // state-specific key hints).
 func (p *worktreePopup) box(m Model) string {
+	w, _ := m.overlayDims()
+	cw := popupContentWidth(w)
 	var b strings.Builder
 	title := "Create worktree from " + displayStart(p.startPoint)
 	if p.existing {
@@ -256,17 +258,17 @@ func (p *worktreePopup) box(m Model) string {
 			cursor = "> "
 		}
 		f := p.inputs[lbl]
-		b.WriteString(cursor + lbl + ": " + f.View(focused) + "\n")
+		b.WriteString(viewField(cursor+lbl+": ", f, focused, cw) + "\n")
 	}
 	if len(p.labels) > 0 {
 		b.WriteString("\n")
 	}
 
-	branch := p.previewBranch
 	if p.state == stEdit {
-		branch = p.editBuf.View(true)
+		b.WriteString(viewField("branch: ", p.editBuf, true, cw) + "\n")
+	} else {
+		b.WriteString("branch: " + p.previewBranch + "\n")
 	}
-	b.WriteString("branch: " + branch + "\n")
 	b.WriteString("path:   " + p.previewPath + "\n")
 	if p.previewErr != nil {
 		b.WriteString("\n⚠ " + p.previewErr.Error() + "\n")
@@ -289,9 +291,7 @@ func (p *worktreePopup) box(m Model) string {
 	// Fixed, comfortably-wide content width so a long branch/path wraps (full name
 	// stays visible) instead of stretching the box past the terminal edge. Capped
 	// to leave a margin on each side for the centered overlay.
-	w, _ := m.overlayDims()
-	inner := popupInnerWidth(w)
-	return modalStyle.Width(inner).Render(b.String()) + "\n"
+	return modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"
 }
 
 // startCreateFromPopup launches the CreateWorktree op for the previewed names,

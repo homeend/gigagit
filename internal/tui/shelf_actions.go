@@ -66,12 +66,12 @@ func (p *shelfRestorePopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 
 // render draws the restore-destination dialog composited over `below`.
 func (p *shelfRestorePopup) render(m Model, below string) string {
+	w, h := m.overlayDims()
 	var b strings.Builder
 	b.WriteString("Restore shelved file to a new path\n\n")
 	b.WriteString("from: " + p.origin + "  (shelved copy)\n")
-	b.WriteString("dest: " + p.dest.View(true) + "\n\n")
+	b.WriteString(viewField("dest: ", p.dest, true, popupContentWidth(w)) + "\n\n")
 	b.WriteString("[type] path  [enter] restore  [esc] cancel")
-	w, h := m.overlayDims()
 	box := modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"
 	return overlayCenter(clipToHeight(below, h), box, w, h)
 }

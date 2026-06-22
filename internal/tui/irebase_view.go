@@ -153,7 +153,7 @@ func (e *irebaseEditor) render(m Model, _ string) string {
 	}
 	if e.reword != nil {
 		b.WriteString("\nReword:\n")
-		b.WriteString(renderCommitFields(e.reword))
+		b.WriteString(renderCommitFields(e.reword, popupContentWidth(w)))
 		b.WriteString("\n[tab] switch field  [enter] newline/next  [ctrl+s] set  [esc] cancel")
 	} else {
 		b.WriteString("\n[p]ick [r]eword [s]quash [d]rop  [ctrl+↑/↓] move  [enter] start  [R]eset  [esc] cancel")

@@ -170,7 +170,19 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   commits can take a few seconds; the Commits title now shows ⏳ next to the
   count while that walk is in flight, so the panel no longer looks frozen.
 
+### Changed
+- **Editable popup fields now show their editable area.** Every text field in
+  the popups (commit/amend title & description, reword, branch/tag/worktree
+  names, paste/restore destinations, stash name, …) is drawn on a subtle
+  background that fills to the box edge, so you can see the slot — and that it's
+  empty — at a glance. The focus cursor is a light block that stays visible
+  against it.
+
 ### Fixed
+- **Amend/commit description lines now align in one column.** The wrapped/extra
+  lines of a multi-line commit description started two columns to the left of
+  the first line; every value line now begins in the same column as the field's
+  first line.
 - **Opening a reflog entry's files now lands on the file tree.** `enter`/`l` on
   a Reflog row opened the files view on the commit-list side (the Commits feed,
   not the reflog), so `↑`/`↓` flipped unrelated feed commits instead of walking
