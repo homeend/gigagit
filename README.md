@@ -152,6 +152,8 @@ live in `<git-common-dir>/gg/state.toml`.
 
 `[ui] wheel_step` sets the mouse-wheel scroll step in rows (default 3);
 `[ui] hscroll_step` sets the diff scroll-mode pan step in columns (default 8);
+`[ui] search_history_size` sets how many phrases each search-history ring keeps
+(default 20, hard max 1000) — recall them while typing a search with `alt+↑/↓`;
 like every entry, the repo's `.gg.toml` overrides the global config
 per field.
 

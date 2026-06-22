@@ -115,6 +115,13 @@ type Model struct {
 
 	highlightQuery  string // Commits-panel @-highlight: case-insensitive substring; "" = no committed query
 	highlightTyping bool   // true while @-input mode is capturing keys
+
+	searchHist map[string][]string // per-scope search-history rings, newest-first (loaded at startup)
+
+	recallScope string // active recall ring; "" = none
+	recallOpen  bool   // history dropdown visible
+	recallIndex int    // highlight into the ring; 0 = newest (meaningful when recallOpen)
+	recallDraft string // text captured when the dropdown opened (restored on esc/back-out)
 }
 
 type panel int
@@ -152,7 +159,7 @@ func New(svc *domain.Service) Model {
 }
 
 // Init implements tea.Model.
-func (m Model) Init() tea.Cmd { return m.loadCmd() }
+func (m Model) Init() tea.Cmd { return tea.Batch(m.loadCmd(), loadSearchHistCmd(m.svc)) }
 
 // Update implements tea.Model.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -348,6 +355,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m.pushLayer(p), nil
+	case searchHistLoadedMsg:
+		if msg.rings != nil {
+			m.searchHist = msg.rings
+		}
+		return m, nil
 	case dataLoadedMsg:
 		if msg.gen != m.loadGen {
 			return m, nil // superseded by a newer load
@@ -465,6 +477,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// own filter rides contentPopup.typing (not m.filterTyping), so the two
 		// never collide.
 		if m.filterTyping {
+			if nm, nq, handled, commit := m.recallUpdate(scopePanel, msg, m.filterQuery); handled {
+				m = nm
+				m.filterQuery = nq
+				m.sel[m.filterPanel] = 0
+				if commit {
+					m.filterTyping = false
+					m, recCmd := m.recordSearch(scopePanel, m.filterQuery)
+					if m.filesView != nil && m.filterPanel == panelCommits {
+						mm, cmd := m.syncFilesViewToSelectedCommit()
+						return mm, tea.Batch(recCmd, cmd)
+					}
+					return m, recCmd
+				}
+				return m, nil
+			} else {
+				m = nm // recall may have closed on a fall-through key
+			}
 			switch msg.Type {
 			case tea.KeyCtrlC:
 				return m, tea.Quit
@@ -473,12 +502,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.filterQuery = ""
 			case tea.KeyEnter:
 				m.filterTyping = false // commit: filter stays active
+				m, recCmd := m.recordSearch(scopePanel, m.filterQuery)
 				// With the files view open over a commit filter, point the tree at
 				// the now-selected commit so "search commits → see its files" needs
 				// no extra keypress.
 				if m.filesView != nil && m.filterPanel == panelCommits {
-					return m.syncFilesViewToSelectedCommit()
+					mm, cmd := m.syncFilesViewToSelectedCommit()
+					return mm, tea.Batch(recCmd, cmd)
 				}
+				return m, recCmd
 			// Arrows/pages navigate the filtered rows live (an incremental
 			// picker, like the repo switcher); they stay in /-input mode and do
 			// NOT reset the cursor. Vim j/k are query text here, not motions.
@@ -517,6 +549,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Mirrors the filter loop, but: ctrl+↑/↓ jump matches, and a query edit
 		// snaps the cursor to the nearest match instead of resetting it to row 0.
 		if m.highlightTyping {
+			if nm, nq, handled, commit := m.recallUpdate(scopePanel, msg, m.highlightQuery); handled {
+				m = nm
+				m.highlightQuery = nq
+				m = m.snapToHighlightMatch()
+				if commit {
+					m.highlightTyping = false
+					m, recCmd := m.recordSearch(scopePanel, m.highlightQuery)
+					return m, recCmd
+				}
+				return m, nil
+			} else {
+				m = nm
+			}
 			switch msg.Type {
 			case tea.KeyCtrlC:
 				return m, tea.Quit
@@ -525,6 +570,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.highlightQuery = ""
 			case tea.KeyEnter:
 				m.highlightTyping = false // commit: highlight stays active
+				var recCmd tea.Cmd
+				m, recCmd = m.recordSearch(scopePanel, m.highlightQuery)
+				return m, recCmd
 			case tea.KeyUp:
 				if m.sel[panelCommits] > 0 {
 					m.sel[panelCommits]--
@@ -922,6 +970,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.filterQuery = ""
 				m.filterTyping = true
 				m.sel[m.focus] = 0
+				m = m.recallReset()
 			}
 		case "@":
 			if !m.running && !m.loading && m.focus == panelCommits {
@@ -931,6 +980,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.highlightQuery = ""
 				m.highlightTyping = true
+				m = m.recallReset()
 			}
 		case "ctrl+up":
 			if m.highlightActive() && m.focus == panelCommits {

@@ -30,6 +30,7 @@ func helpContent() []contentLine {
 		r("t", "maximize the focused left-column panel to fill the whole left column (t again restores); while maximized, ctrl+←/→ still cycles that slot's tabs"),
 		r("shift+←/→", "scroll display mode: pan the focused window horizontally"),
 		r("/", "filter the focused panel"),
+		r("alt+↑/↓", "recall previous searches (history dropdown) while typing in the / filter, @ highlight, or the bookmark/shelf/files-tree search"),
 		r("tab/shift+tab", "cycle panel focus forward / backward"),
 		r("←/→", "focus the left column / the Commits panel"),
 		r("ctrl+←/→", "cycle the focused tab slot: top (Branches / Remotes / Worktrees) or middle (Files / Tags)"),

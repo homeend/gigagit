@@ -180,6 +180,19 @@ func TestHScrollStepDefaultAndOverlay(t *testing.T) {
 	}
 }
 
+func TestOverlaySearchHistorySize(t *testing.T) {
+	dst := UIConfig{SearchHistorySize: 0}
+	overlayUI(&dst, UIConfig{SearchHistorySize: 50})
+	if dst.SearchHistorySize != 50 {
+		t.Fatalf("SearchHistorySize = %d, want 50", dst.SearchHistorySize)
+	}
+	// <= 0 in src must not reset a set dst (unset rule).
+	overlayUI(&dst, UIConfig{SearchHistorySize: 0})
+	if dst.SearchHistorySize != 50 {
+		t.Fatalf("zero src must not reset, got %d", dst.SearchHistorySize)
+	}
+}
+
 func TestOverlayUIActionLists(t *testing.T) {
 	dst := Defaults().UI
 	overlayUI(&dst, UIConfig{FooterActions: []string{"pull", "commit"}, MenuActions: []string{"pull"}})

@@ -181,7 +181,7 @@ func (m Model) render() string {
 	// panel/tooltip base below.
 	if (m.layers != nil && len(m.layers.entries) > 0) || m.diffView != nil {
 		_, h := m.overlayDims()
-		return clipToHeight(m.renderLayers(), h)
+		return m.withRecall(clipToHeight(m.renderLayers(), h))
 	}
 	_, h := m.overlayDims()
 	bg := clipToHeight(m.renderInterface(), h)
@@ -189,7 +189,7 @@ func (m Model) render() string {
 		w, h := m.overlayDims()
 		bg = overlayAt(bg, strings.Join(lines, "\n"), x, y, w, h)
 	}
-	return bg
+	return m.withRecall(bg)
 }
 
 // overlayDims returns the terminal size for popup compositing, defaulting to

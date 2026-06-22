@@ -180,11 +180,23 @@ func (p *bookmarkPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 	if p.filtering {
+		if nm, nq, handled, commit := m.recallUpdate(scopeBookmark, msg, p.filter); handled {
+			m = nm
+			p.filter, p.sel = nq, 0
+			if commit {
+				p.filtering = false
+				return m.recordSearch(scopeBookmark, p.filter)
+			}
+			return m, nil
+		} else {
+			m = nm
+		}
 		switch msg.Type {
 		case tea.KeyEsc:
 			p.filtering, p.filter, p.sel = false, "", 0
 		case tea.KeyEnter:
 			p.filtering = false // keep the filter, leave input mode
+			return m.recordSearch(scopeBookmark, p.filter)
 		case tea.KeyBackspace, tea.KeyCtrlH:
 			if r := []rune(p.filter); len(r) > 0 {
 				p.filter = string(r[:len(r)-1])
@@ -248,6 +260,7 @@ func (p *bookmarkPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			return m, nil
 		case "/":
 			p.filtering = true
+			m = m.recallReset()
 		case "k":
 			p.moveSel(-1)
 		case "j":

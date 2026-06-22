@@ -301,8 +301,12 @@ func TestFilesViewCommitFilterSyncsTree(t *testing.T) {
 	if m.filesHash != "2222222bbbb" {
 		t.Fatalf("filesHash = %q, want the filtered commit", m.filesHash)
 	}
-	updated, _ = m.Update(cmd())
-	m = updated.(Model)
+	// Committing the filter now also records search history, so the returned
+	// command is a batch (persist + tree reload). Run each sub-command.
+	for _, sub := range batchCmds(cmd) {
+		updated, _ = m.Update(sub())
+		m = updated.(Model)
+	}
 	if m.filesTitle != "Files 2222222 two" {
 		t.Fatalf("title = %q after the sync reload", m.filesTitle)
 	}
