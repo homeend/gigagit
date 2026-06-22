@@ -35,6 +35,9 @@ func availableActions(m Model) []actionRow {
 		if r, ok := m.viewFileRow(); ok {
 			rows = append(rows, r)
 		}
+		if r, ok := m.openExternalRow(); ok {
+			rows = append(rows, r)
+		}
 		if r, ok := m.shelfAddRow(); ok {
 			rows = append(rows, r)
 		}

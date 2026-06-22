@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 
@@ -83,6 +84,62 @@ func TestViewFileRowGating(t *testing.T) {
 	ls.filesTreeFocused = false
 	if hasRow(ls, "view-file") {
 		t.Error("View file must not be offered on the commit-list side")
+	}
+}
+
+// "Open in external editor" mirrors View file's gating: tree side + real file
+// row only; off on the list side, deleted rows, and in compare mode.
+func TestOpenExternalRowGating(t *testing.T) {
+	m := fullTreeTreeSide(t)
+	if !hasRow(m, "open-external") {
+		t.Fatal("Open in external editor should be offered on a file (tree side)")
+	}
+	cf := m
+	cf.filesAllFiles = false
+	if !hasRow(cf, "open-external") {
+		t.Error("Open in external editor should be offered in changed-files mode too")
+	}
+	ls := m
+	ls.filesTreeFocused = false
+	if hasRow(ls, "open-external") {
+		t.Error("Open in external editor must not be offered on the commit-list side")
+	}
+	del := m
+	del.filesView = &contentPopup{lines: []contentLine{{text: "D  gone.go", path: "gone.go", status: "D"}}}
+	del.filesView.sel = 0
+	if _, ok := del.openExternalRow(); ok {
+		t.Error("Open in external editor must not be offered on a deleted (D) row")
+	}
+	cmp := m
+	cmp.filesCompare = true
+	if _, ok := cmp.openExternalRow(); ok {
+		t.Error("Open in external editor must not be offered in compare mode")
+	}
+}
+
+// Running the row resolves the file's content at the commit into the temp file
+// the editorViewMsg carries.
+func TestOpenExternalRowResolvesCommitContent(t *testing.T) {
+	m := fullTreeTreeSide(t)
+	row, ok := m.openExternalRow()
+	if !ok {
+		t.Fatal("expected an open-external row")
+	}
+	_, cmd := row.run(m)
+	if cmd == nil {
+		t.Fatal("running the row should dispatch a resolve/open command")
+	}
+	msg, ok := cmd().(editorViewMsg)
+	if !ok {
+		t.Fatalf("want editorViewMsg, got %T", cmd())
+	}
+	if msg.err != nil {
+		t.Fatal(msg.err)
+	}
+	defer removeTempFile(msg.path)
+	data, _ := os.ReadFile(msg.path)
+	if !strings.Contains(string(data), "alpha") { // previewModel's `git show` content
+		t.Fatalf("temp file should hold the file's content at the commit, got %q", data)
 	}
 }
 

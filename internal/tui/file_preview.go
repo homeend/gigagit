@@ -37,6 +37,34 @@ func (m Model) viewFileRow() (actionRow, bool) {
 	}, true
 }
 
+// openExternalRow offers "Open in external editor" in the commit files view:
+// resolve the selected file's content AT the commit into a read-only temp file
+// and open it in $EDITOR. Same gating as viewFileRow — tree side, a real file
+// row, not compare mode, and not a deleted (D) row.
+func (m Model) openExternalRow() (actionRow, bool) {
+	if m.filesView == nil || m.filesCompare || !m.filesTreeFocused {
+		return actionRow{}, false
+	}
+	vis := m.filesView.visible()
+	if m.filesView.sel < 0 || m.filesView.sel >= len(vis) {
+		return actionRow{}, false
+	}
+	l := vis[m.filesView.sel]
+	if l.path == "" || l.status == "D" {
+		return actionRow{}, false
+	}
+	path, hash, svc := l.path, m.filesHash, m.svc
+	return actionRow{
+		id:    "open-external",
+		label: "Open in external editor",
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			return m, m.openInEditorCmd(path, func(ctx context.Context) ([]byte, error) {
+				return svc.ShowFile(ctx, hash, path)
+			})
+		},
+	}, true
+}
+
 // openFilePreview opens the right-column content preview for path at hash and
 // focuses it so the cursor scrolls the content immediately.
 func (m Model) openFilePreview(hash, path string) (Model, tea.Cmd) {

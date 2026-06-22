@@ -30,6 +30,7 @@ func bookmarkSwitcherHelp(compare bool) []contentLine {
 	return []contentLine{
 		cheatRow("↑/k ↓/j", "move the selection"),
 		cheatRow("enter", "file bookmark: diff vs the working-tree file; commit bookmark: compare it against the selected commit"),
+		cheatRow("e", "open the bookmarked file in your external editor, read-only (file bookmarks only)"),
 		cheatRow("p", "paste the bookmarked file to a path you type (file bookmarks only)"),
 		cheatRow("m", "mark one, then a second bookmark to compare the two (file bookmarks only)"),
 		cheatRow("c", "compare the highlighted bookmark against a shelf entry (file bookmarks only)"),
@@ -54,6 +55,7 @@ func shelfSwitcherHelp(compare bool) []contentLine {
 	return []contentLine{
 		cheatRow("↑/k ↓/j", "move the selection"),
 		cheatRow("enter", "diff the shelved copy vs the working-tree file"),
+		cheatRow("e", "open the shelved copy in your external editor, read-only"),
 		cheatRow("p", "restore the shelved copy to a path you type"),
 		cheatRow("m", "mark one, then a second entry to compare the two"),
 		cheatRow("c", "compare the highlighted entry against a bookmark"),

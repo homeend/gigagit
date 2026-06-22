@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -114,7 +115,7 @@ func (m Model) renderShelfPopupBox(p *shelfPopup) string {
 	// Wrap the hint to the text width so [z] mode / [esc] close stay visible even
 	// on a narrow terminal, where a single-line footer would truncate them off
 	// (the reason z went undiscovered).
-	hint := []string{"[?] keys", "[enter] diff", "[p] restore", "[m] mark/compare", "[x] remove", "[c] vs bookmark", "[/] filter", "[z] mode", "[esc] close"}
+	hint := []string{"[?] keys", "[enter] diff", "[e] editor", "[p] restore", "[m] mark/compare", "[x] remove", "[c] vs bookmark", "[/] filter", "[z] mode", "[esc] close"}
 	parts = append(parts, "")
 	parts = append(parts, wrapParts(hint, textW, "  ")...)
 	return popupBox(inner, strings.Join(parts, "\n"))
@@ -238,6 +239,18 @@ func (p *shelfPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				return m, nil
 			}
 			return m.shelfCompareAgainstBookmark()
+		case "e":
+			if p.compareRef != nil {
+				return m, nil
+			}
+			e, ok := p.selected()
+			if !ok {
+				return m, nil
+			}
+			svc, id, name := m.svc, e.ID, e.Origin.Path
+			return m, m.openInEditorCmd(name, func(ctx context.Context) ([]byte, error) {
+				return svc.ShelfBlob(ctx, id)
+			})
 		}
 	}
 	return m, nil
