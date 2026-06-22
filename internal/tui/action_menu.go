@@ -32,6 +32,9 @@ func availableActions(m Model) []actionRow {
 	// actions.
 	if m.inContentWindow() {
 		rows := m.contextCopyRows()
+		if r, ok := m.viewFileRow(); ok {
+			rows = append(rows, r)
+		}
 		if r, ok := m.shelfAddRow(); ok {
 			rows = append(rows, r)
 		}

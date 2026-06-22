@@ -158,6 +158,7 @@ func helpContent() []contentLine {
 		r("/", "search the focused side: file paths (tree) or the commit list (commits side); enter keeps it, esc cancels"),
 		r("enter", "diff of the selected file (tree side): changed-files mode diffs vs parent; all-files mode diffs vs the working tree"),
 		r("a", "toggle all files: every file in the commit's tree (as if checked out) vs only the files it changed"),
+		r(".", "all-files mode (tree side): View file — show the file's content at this commit (no diff) in the right pane; [↑/↓] scroll, [z] view mode, [esc] close, [←] back to the tree"),
 		r("h", "history of the selected file (tree side)"),
 		r("b", "blame of the selected file (tree side)"),
 		r(".", "commits side: the full Commits-panel menu (cherry-pick / revert / reset / create branch|worktree|tag / compare / …); tree side: copy path/name"),
