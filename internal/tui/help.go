@@ -125,7 +125,7 @@ func helpContent() []contentLine {
 		r("", "Compare against working tree / Compare against staged (.-menu): open the files view as a whole-tree diff of this commit vs your working copy / the index; enter on a file diffs that path"),
 		r("shift+↑/↓", "grow the ◉ compare selection (a contiguous run of commits)"),
 		r("", "Compare selection (.-menu): toggle commits into the ◉ set (m / Add to compare selection / shift+↑↓), then Compare selection — 2 = the diff between them, 3+ = the combined diff of the range (oldest^..newest, refused from a root commit); Clear compare selection empties it"),
-		r("", "Squash N commits (.-menu): with 2+ commits in the ◉ set, combine adjacent selected commits into one (messages concatenated; reword afterward). Non-adjacent / off-branch selections are refused with a note; conflicts pause for `git rebase --continue`"),
+		r("", "Squash N commits (.-menu): with 2+ commits in the ◉ set, combine the selected commits into one (messages concatenated; reword afterward). When they aren't adjacent, a prompt offers Reorder & squash — the skipped in-between commits move to just after the squash. Off-branch selections are refused; conflicts pause for `git rebase --continue`"),
 		r("", "on a commit that is a branch's tip: Rename branch <name> / Delete branch <name> (.-menu) — one pair per local tip; delete is hidden for a checked-out branch"),
 		r("", "on a non-merge commit of the current branch: Move commit up (newer) / Move commit down (older) / Drop commit (.-menu) — one-step interactive rebase; conflicts pause for `git rebase --continue`"),
 		r("", "Show as list / Show as graph (.-menu): flat ●-gutter list vs the lane graph; lane color marks each commit's line of development"),

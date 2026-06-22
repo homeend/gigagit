@@ -3,6 +3,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"slices"
@@ -1389,8 +1390,38 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		plan, perr := rebaseplan.BuildSquash(msg.commits, msg.targets)
+		if errors.Is(perr, rebaseplan.ErrNotAdjacent) {
+			// Non-adjacent: offer to reorder the commits adjacent, then squash.
+			branch, onto := msg.branch, msg.onto
+			commits, targets := msg.commits, msg.targets
+			m.modal = &decisionState{
+				req: engine.DecisionRequest{
+					ID:      "squash-reorder",
+					Prompt:  "Selected commits aren't adjacent. Reorder them adjacent, then squash?",
+					Options: []string{"Reorder & squash", "Cancel"},
+				},
+				onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {
+					if opt != "Reorder & squash" {
+						return m, nil
+					}
+					rp, err := rebaseplan.BuildSquashReorder(commits, targets)
+					if err != nil {
+						m.statusMsg = "squash: " + err.Error()
+						return m, nil
+					}
+					ggBin, err := os.Executable()
+					if err != nil {
+						m.statusMsg = "squash: " + err.Error()
+						return m, nil
+					}
+					m.commitCompareSet = nil
+					return m.startOp(engine.InteractiveRebase{Branch: branch, Onto: onto, Plan: rp, GGBin: ggBin})
+				},
+			}
+			return m, nil
+		}
 		if perr != nil {
-			// Stage 1: adjacency / membership failures refuse with a note.
+			// Membership / too-few failures refuse with a note.
 			m.statusMsg = "squash: " + perr.Error()
 			return m, nil
 		}

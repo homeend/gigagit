@@ -63,3 +63,34 @@ func TestSquashThreeCommitsEndToEnd(t *testing.T) {
 		t.Fatalf("after squash: %v, want %v", got, want)
 	}
 }
+
+// Stage 2: selecting a (oldest) and c (skipping b) reorders b after the squash —
+// result history oldest→newest = (a+c), b, d.
+func TestSquashReorderEndToEnd(t *testing.T) {
+	gg := buildGG(t)
+	dir, repo := fourCommitBranch(t) // main -> a -> b -> c -> d
+	aSha := shaOf(t, dir, "work~3")
+	cSha := shaOf(t, dir, "work~1")
+	onto := aSha + "^"
+	commits, err := repo.LogRangeMessages(context.Background(), onto, "work")
+	if err != nil {
+		t.Fatalf("range: %v", err)
+	}
+	plan, err := rebaseplan.BuildSquashReorder(commits, []string{aSha, cSha})
+	if err != nil {
+		t.Fatalf("BuildSquashReorder: %v", err)
+	}
+	if _, err := (InteractiveRebase{Branch: "work", Onto: onto, Plan: plan, GGBin: gg}).
+		Run(context.Background(), OpDeps{Repo: repo}); err != nil {
+		t.Fatalf("reorder-squash: %v", err)
+	}
+	got := subjects(t, dir, "main..work") // newest-first
+	if want := []string{"d", "b", "a"}; strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("after reorder-squash a+c: %v, want %v", got, want)
+	}
+	// The squashed commit (now work~2) carries both a and c.
+	msg := gitOut(t, dir, "log", "-1", "--format=%B", "work~2")
+	if !strings.Contains(msg, "a") || !strings.Contains(msg, "c") {
+		t.Fatalf("squashed message = %q, want both a and c", msg)
+	}
+}

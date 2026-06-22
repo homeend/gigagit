@@ -49,6 +49,44 @@ func TestMarkOnCommitsTogglesSelectionSet(t *testing.T) {
 	}
 }
 
+func TestSquashNonAdjacentOpensReorderModal(t *testing.T) {
+	m := loadedModelLinearCommits(t, 4) // commits[0..3], newest-first
+	m.focus = panelCommits
+	// Select the newest and the third-newest (a gap at commits[1]).
+	m.commitCompareSet = selectionSet(m.commits[0].Hash, m.commits[2].Hash)
+
+	onto := m.commits[2].Hash + "^"
+	cs, err := m.svc.CommitRange(context.Background(), onto, m.status.Branch)
+	if err != nil {
+		t.Fatalf("CommitRange: %v", err)
+	}
+	u, _ := m.Update(squashRangeLoadedMsg{
+		branch:  m.status.Branch,
+		onto:    onto,
+		targets: []string{m.commits[0].Hash, m.commits[2].Hash},
+		commits: cs,
+	})
+	m = u.(Model)
+	if m.modal == nil {
+		t.Fatal("a non-adjacent squash must open the reorder confirm modal")
+	}
+	opts := m.modal.req.Options
+	if len(opts) == 0 || !strings.Contains(strings.ToLower(opts[0]), "reorder") {
+		t.Fatalf("modal options = %v, want a Reorder option first", opts)
+	}
+
+	// Choosing Cancel is a no-op: no op starts, the selection is left intact.
+	// (This exercises the onResolve closure wiring without firing a live rebase.)
+	cm, cmd := m.modal.onResolve(m, "Cancel")
+	cmModel := cm.(Model)
+	if cmd != nil {
+		t.Fatal("Cancel must not start an operation")
+	}
+	if !cmModel.commitCompareSet[m.commits[0].Hash] || !cmModel.commitCompareSet[m.commits[2].Hash] {
+		t.Fatalf("Cancel must leave the selection intact, got %v", cmModel.commitCompareSet)
+	}
+}
+
 func TestSquashRowVisibleWith2Commits(t *testing.T) {
 	m := loadedModelLinearCommits(t, 3)
 	m.focus = panelCommits
