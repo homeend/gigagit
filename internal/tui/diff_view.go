@@ -56,8 +56,9 @@ type diffView struct {
 	tooLarge   bool
 	loading    bool
 	err        error
-	cur        int     // focused change-block index (the "X" in change X/N); set only by n/p/wrap/mode-toggle
-	wrapArm    wrapDir // boundary press primed a wrap-around (see wrapDir); cleared on any other key
+	cur        int        // focused change-block index (the "X" in change X/N); set only by n/p/wrap/mode-toggle
+	wrapArm    wrapDir    // boundary press primed a wrap-around (see wrapDir); cleared on any other key
+	fileArm    fileArmDir // top/bottom press primed a step to the prev/next file; cleared on any other key
 }
 
 // wrapDir records that a change-navigation key hit a boundary and primed a
@@ -370,6 +371,7 @@ func statusDiffContext(staged bool) string {
 // file-stepper. The width gate lives in canShowFileDiff at the enter boundary;
 // stepping happens at an already-open width, so no re-check here.
 func (m Model) openStatusDiff(f model.FileStatus, staged bool) (tea.Model, tea.Cmd) {
+	m.diffNotice = "" // drop any stale notice; the stepper re-posts its arrival notice
 	if staged {
 		m.diffNav = diffNavStaged
 	} else {
@@ -582,6 +584,13 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// n/p re-arm leaves it cleared (so scrolling away cancels a primed wrap).
 	armed := v.wrapArm
 	v.wrapArm = wrapNone
+	// The file-step arm and the transient bottom-left notice both live exactly
+	// until the next key: capture the arm, then clear both. Any case other than a
+	// matching home/end re-arm leaves them cleared (so any other key cancels a
+	// primed step and dismisses the notice).
+	fileArmed := v.fileArm
+	v.fileArm = fileArmNone
+	m.diffNotice = ""
 	switch msg.String() {
 	case ".":
 		return m.openActionMenu(), nil
@@ -614,21 +623,35 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "pgdown":
 		v.scrollBy(m.diffBodyRows(), m.diffBodyRows())
 	case "home":
-		// First press jumps to the top of this file; pressing it again while
-		// already at the top steps to the previous file in the source list.
+		// First press jumps to the top of this file. At the top, a press primes a
+		// step (bottom-left cue); the next home performs it (with an arrival
+		// notice). No previous file → a "no previous file" notice instead.
 		if v.offset > 0 {
 			v.scrollBy(-len(v.disp), m.diffBodyRows())
-		} else {
-			return m.stepDiffFile(-1)
+		} else if m.diffNav != diffNavNone {
+			switch {
+			case !m.peekDiffFile(-1):
+				m.diffNotice = "▸ no previous file"
+			case fileArmed == fileArmPrev:
+				return m.stepDiffFile(-1)
+			default:
+				v.fileArm = fileArmPrev
+			}
 		}
 	case "end":
-		// First press jumps to the bottom; again while already at the bottom
-		// steps to the next file in the source list.
+		// Mirror of home: first press jumps to the bottom, then prime, then step.
 		body := m.diffBodyRows()
 		if v.offset < len(v.disp)-body {
 			v.scrollBy(len(v.disp), body)
-		} else {
-			return m.stepDiffFile(1)
+		} else if m.diffNav != diffNavNone {
+			switch {
+			case !m.peekDiffFile(1):
+				m.diffNotice = "▸ no next file"
+			case fileArmed == fileArmNext:
+				return m.stepDiffFile(1)
+			default:
+				v.fileArm = fileArmNext
+			}
 		}
 	case "n", "ctrl+down":
 		if !v.nextBlock(m.diffBodyRows()) { // already on the last change

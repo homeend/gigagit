@@ -1,14 +1,17 @@
 package tui
 
 import (
+	"strings"
 	"testing"
+
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/gigagit/gg/internal/model"
 )
 
 // treeDiffModel opens a diff over a files-view tree of three files (a/b/c.go,
 // under one heading), with the tree selection on the row sel indexes and an
-// EMPTY diff (offset 0 — at both top and bottom, so Home/End step files at once).
+// EMPTY diff (offset 0 — at both top and bottom, so the first home/end primes).
 func treeDiffModel(sel int) Model {
 	m := footerModel()
 	m.focus = panelCommits
@@ -61,37 +64,65 @@ func TestNextFileRowSkipsHeadings(t *testing.T) {
 	}
 }
 
-func TestDiffEndAtBottomStepsNextFileTree(t *testing.T) {
-	m := treeDiffModel(1) // on a.go, empty diff (already at the bottom)
-	u, cmd := m.Update(keyMsg("end"))
+// TestDiffEndPrimesThenStepsTree: at the bottom, the first End primes (cue, no
+// nav); the second End steps to the next file with an arrival notice.
+func TestDiffEndPrimesThenStepsTree(t *testing.T) {
+	m := treeDiffModel(1) // on a.go, empty diff (at the bottom)
+
+	u, cmd := m.Update(keyMsg("end")) // first End: prime
 	mm := u.(Model)
+	if mm.diffView.fileArm != fileArmNext {
+		t.Fatalf("first end must prime fileArmNext, got %d", mm.diffView.fileArm)
+	}
+	if mm.filesView.sel != 1 || mm.diffTag != "commit:abc:start" || cmd != nil {
+		t.Fatal("first end must not navigate")
+	}
+	if mm.diffNotice != "" {
+		t.Fatalf("priming shows the cue (from fileArm), not a notice; got %q", mm.diffNotice)
+	}
+
+	u2, cmd2 := mm.Update(keyMsg("end")) // second End: step
+	mm2 := u2.(Model)
+	if mm2.filesView.sel != 2 || mm2.diffTag != "commit:abc:b.go" {
+		t.Fatalf("second end must step to b.go, sel=%d tag=%q", mm2.filesView.sel, mm2.diffTag)
+	}
+	if cmd2 == nil {
+		t.Fatal("stepping must return the loader cmd")
+	}
+	if !strings.Contains(mm2.diffNotice, "b.go") {
+		t.Fatalf("arrival notice must name the new file, got %q", mm2.diffNotice)
+	}
+	if mm2.diffView.fileArm != fileArmNone {
+		t.Fatal("the freshly opened file must not be pre-armed")
+	}
+}
+
+// TestDiffHomePrimesThenStepsTree mirrors End for the previous file.
+func TestDiffHomePrimesThenStepsTree(t *testing.T) {
+	m := treeDiffModel(2) // on b.go, empty diff (at the top)
+
+	u, _ := m.Update(keyMsg("home")) // first Home: prime
+	mm := u.(Model)
+	if mm.diffView.fileArm != fileArmPrev {
+		t.Fatalf("first home must prime fileArmPrev, got %d", mm.diffView.fileArm)
+	}
 	if mm.filesView.sel != 2 {
-		t.Fatalf("end at bottom must select b.go (sel 2), got %d", mm.filesView.sel)
+		t.Fatal("first home must not navigate")
 	}
-	if mm.diffTag != "commit:abc:b.go" {
-		t.Fatalf("diffTag = %q, want commit:abc:b.go", mm.diffTag)
+
+	u2, _ := mm.Update(keyMsg("home")) // second Home: step
+	mm2 := u2.(Model)
+	if mm2.filesView.sel != 1 || mm2.diffTag != "commit:abc:a.go" {
+		t.Fatalf("second home must step to a.go, sel=%d tag=%q", mm2.filesView.sel, mm2.diffTag)
 	}
-	if cmd == nil {
-		t.Fatal("stepping must return the loader cmd")
+	if !strings.Contains(mm2.diffNotice, "a.go") {
+		t.Fatalf("arrival notice must name the new file, got %q", mm2.diffNotice)
 	}
 }
 
-func TestDiffHomeAtTopStepsPrevFileTree(t *testing.T) {
-	m := treeDiffModel(2) // on b.go, empty diff (already at the top)
-	u, cmd := m.Update(keyMsg("home"))
-	mm := u.(Model)
-	if mm.filesView.sel != 1 {
-		t.Fatalf("home at top must select a.go (sel 1), got %d", mm.filesView.sel)
-	}
-	if mm.diffTag != "commit:abc:a.go" {
-		t.Fatalf("diffTag = %q, want commit:abc:a.go", mm.diffTag)
-	}
-	if cmd == nil {
-		t.Fatal("stepping must return the loader cmd")
-	}
-}
-
-func TestDiffEndScrollsToBottomBeforeStepping(t *testing.T) {
+// TestDiffEndScrollsThenPrimesThenSteps: a tall diff at the top needs THREE End
+// presses — scroll to bottom, prime, step.
+func TestDiffEndScrollsThenPrimesThenSteps(t *testing.T) {
 	m := treeDiffModel(1)
 	m.height = 12
 	v := diffViewWith(sameRowsTUI(40, 20), []int{20})
@@ -99,84 +130,72 @@ func TestDiffEndScrollsToBottomBeforeStepping(t *testing.T) {
 	m.diffView = v
 	maxOff := len(v.disp) - m.diffBodyRows()
 
-	u, _ := m.Update(keyMsg("end")) // first end: scroll to the bottom only
+	u, _ := m.Update(keyMsg("end")) // 1: scroll to bottom
 	mm := u.(Model)
-	if mm.diffView.offset != maxOff {
-		t.Fatalf("first end offset = %d, want bottom %d", mm.diffView.offset, maxOff)
+	if mm.diffView.offset != maxOff || mm.diffView.fileArm != fileArmNone {
+		t.Fatalf("first end scrolls only: offset=%d arm=%d", mm.diffView.offset, mm.diffView.fileArm)
 	}
-	if mm.diffTag != "commit:abc:start" || mm.filesView.sel != 1 {
+	if mm.diffTag != "commit:abc:start" {
 		t.Fatal("first end must not change the file")
 	}
 
-	u2, cmd := mm.Update(keyMsg("end")) // second end: now at bottom → next file
+	u2, _ := mm.Update(keyMsg("end")) // 2: prime
 	mm2 := u2.(Model)
-	if mm2.filesView.sel != 2 || mm2.diffTag != "commit:abc:b.go" {
-		t.Fatalf("second end must step to b.go, sel=%d tag=%q", mm2.filesView.sel, mm2.diffTag)
+	if mm2.diffView.fileArm != fileArmNext || mm2.diffTag != "commit:abc:start" {
+		t.Fatalf("second end primes only: arm=%d tag=%q", mm2.diffView.fileArm, mm2.diffTag)
 	}
-	if cmd == nil {
-		t.Fatal("step must return the loader cmd")
+
+	u3, cmd := mm2.Update(keyMsg("end")) // 3: step
+	mm3 := u3.(Model)
+	if mm3.filesView.sel != 2 || mm3.diffTag != "commit:abc:b.go" || cmd == nil {
+		t.Fatalf("third end steps to b.go, sel=%d tag=%q", mm3.filesView.sel, mm3.diffTag)
 	}
 }
 
-func TestDiffHomeScrollsToTopBeforeStepping(t *testing.T) {
-	m := treeDiffModel(2)
-	m.height = 12
-	v := diffViewWith(sameRowsTUI(40, 20), []int{20})
-	m.diffView = v
-	v.offset = len(v.disp) - m.diffBodyRows() // at the bottom
-
-	u, _ := m.Update(keyMsg("home")) // first home: scroll to the top only
-	mm := u.(Model)
-	if mm.diffView.offset != 0 {
-		t.Fatalf("first home must scroll to top, offset = %d", mm.diffView.offset)
-	}
-	if mm.diffTag != "commit:abc:start" || mm.filesView.sel != 2 {
-		t.Fatal("first home must not change the file")
-	}
-
-	u2, _ := mm.Update(keyMsg("home")) // second home: now at top → previous file
-	mm2 := u2.(Model)
-	if mm2.filesView.sel != 1 || mm2.diffTag != "commit:abc:a.go" {
-		t.Fatalf("second home must step to a.go, sel=%d tag=%q", mm2.filesView.sel, mm2.diffTag)
-	}
-}
-
-func TestDiffEndStepClampsAtLastFileTree(t *testing.T) {
+// TestDiffEndAtLastFileNotice: at the bottom of the last file there is nothing
+// to prime — a "no next file" notice shows instead, and nothing navigates.
+func TestDiffEndAtLastFileNotice(t *testing.T) {
 	m := treeDiffModel(3) // on c.go (last), empty diff
 	u, cmd := m.Update(keyMsg("end"))
 	mm := u.(Model)
-	if mm.filesView.sel != 3 || mm.diffTag != "commit:abc:start" {
-		t.Fatalf("end at the last file must be a no-op, sel=%d tag=%q", mm.filesView.sel, mm.diffTag)
+	if mm.diffView.fileArm != fileArmNone {
+		t.Fatal("no next file → must not prime")
 	}
-	if cmd != nil {
-		t.Fatal("no step → no cmd")
+	if mm.filesView.sel != 3 || mm.diffTag != "commit:abc:start" || cmd != nil {
+		t.Fatal("no next file → no navigation")
 	}
-}
-
-func TestDiffEndStepsNextFileStatus(t *testing.T) {
-	m := statusDiffModelMulti()
-	u, cmd := m.Update(keyMsg("end"))
-	mm := u.(Model)
-	if mm.sel[panelFiles] != 1 || mm.diffTag != "status:b.txt" {
-		t.Fatalf("end must step to b.txt, sel=%d tag=%q", mm.sel[panelFiles], mm.diffTag)
-	}
-	if cmd == nil {
-		t.Fatal("step must return the loader cmd")
+	if mm.diffNotice != "▸ no next file" {
+		t.Fatalf("notice = %q, want '▸ no next file'", mm.diffNotice)
 	}
 }
 
-func TestDiffHomeStepsPrevFileStatus(t *testing.T) {
-	m := statusDiffModelMulti()
-	m.sel[panelFiles] = 2 // on c.txt
-	m.diffTag = "status:c.txt"
+func TestDiffHomeAtFirstFileNotice(t *testing.T) {
+	m := treeDiffModel(1) // on a.go (first), empty diff
 	u, _ := m.Update(keyMsg("home"))
 	mm := u.(Model)
-	if mm.sel[panelFiles] != 1 || mm.diffTag != "status:b.txt" {
-		t.Fatalf("home must step to b.txt, sel=%d tag=%q", mm.sel[panelFiles], mm.diffTag)
+	if mm.diffNotice != "▸ no previous file" {
+		t.Fatalf("notice = %q, want '▸ no previous file'", mm.diffNotice)
 	}
 }
 
-func TestDiffStatusStepSkipsUnmerged(t *testing.T) {
+func TestDiffEndPrimesThenStepsStatus(t *testing.T) {
+	m := statusDiffModelMulti()
+	u, _ := m.Update(keyMsg("end")) // prime
+	mm := u.(Model)
+	if mm.diffView.fileArm != fileArmNext || mm.diffTag != "status:a.txt" {
+		t.Fatalf("first end primes: arm=%d tag=%q", mm.diffView.fileArm, mm.diffTag)
+	}
+	u2, _ := mm.Update(keyMsg("end")) // step
+	mm2 := u2.(Model)
+	if mm2.sel[panelFiles] != 1 || mm2.diffTag != "status:b.txt" {
+		t.Fatalf("second end steps to b.txt, sel=%d tag=%q", mm2.sel[panelFiles], mm2.diffTag)
+	}
+	if !strings.Contains(mm2.diffNotice, "b.txt") {
+		t.Fatalf("arrival notice must name b.txt, got %q", mm2.diffNotice)
+	}
+}
+
+func TestDiffStepStatusSkipsUnmerged(t *testing.T) {
 	m := statusDiffModelMulti()
 	m.status.Files = []model.FileStatus{
 		{Path: "a.txt", Unstaged: 'M'},
@@ -185,13 +204,18 @@ func TestDiffStatusStepSkipsUnmerged(t *testing.T) {
 	}
 	m.sel[panelFiles] = 0 // a.txt
 	u, _ := m.Update(keyMsg("end"))
-	mm := u.(Model)
-	if mm.sel[panelFiles] != 2 || mm.diffTag != "status:b.txt" {
-		t.Fatalf("end must skip the conflicted row to b.txt, sel=%d tag=%q", mm.sel[panelFiles], mm.diffTag)
+	mm := u.(Model) // prime (peek skips conflict → b.txt)
+	if mm.diffView.fileArm != fileArmNext {
+		t.Fatal("must prime: a diffable next file exists past the conflict")
+	}
+	u2, _ := mm.Update(keyMsg("end"))
+	mm2 := u2.(Model)
+	if mm2.sel[panelFiles] != 2 || mm2.diffTag != "status:b.txt" {
+		t.Fatalf("must skip the conflicted row to b.txt, sel=%d tag=%q", mm2.sel[panelFiles], mm2.diffTag)
 	}
 }
 
-func TestDiffStagedStepsNextFileStaged(t *testing.T) {
+func TestDiffStepStaged(t *testing.T) {
 	m := footerModel()
 	m.focus = panelStaged
 	m.status.Files = []model.FileStatus{
@@ -202,23 +226,87 @@ func TestDiffStagedStepsNextFileStaged(t *testing.T) {
 	m.diffNav = diffNavStaged
 	m.diffView = &diffView{}
 	m.diffTag = "staged:a.txt"
-	u, _ := m.Update(keyMsg("end"))
-	mm := u.(Model)
+	u, _ := m.Update(keyMsg("end")) // prime
+	u2, _ := u.(Model).Update(keyMsg("end"))
+	mm := u2.(Model)
 	if mm.sel[panelStaged] != 1 || mm.diffTag != "staged:b.txt" {
-		t.Fatalf("end must step to staged b.txt, sel=%d tag=%q", mm.sel[panelStaged], mm.diffTag)
+		t.Fatalf("staged step to b.txt, sel=%d tag=%q", mm.sel[panelStaged], mm.diffTag)
 	}
 }
 
-func TestDiffFileStepInertWhenNoSource(t *testing.T) {
+func TestDiffFileNavInertWhenNoSource(t *testing.T) {
 	m := footerModel()
 	m.diffNav = diffNavNone
 	m.diffView = &diffView{} // empty: at top and bottom
 	m.diffTag = "bookmark2:x:y"
-	if u, cmd := m.Update(keyMsg("end")); u.(Model).diffTag != "bookmark2:x:y" || cmd != nil {
-		t.Fatal("end with no source list must be a no-op")
+	for _, k := range []string{"end", "home"} {
+		u, cmd := m.Update(keyMsg(k))
+		mm := u.(Model)
+		if mm.diffTag != "bookmark2:x:y" || cmd != nil {
+			t.Fatalf("%s with no source list must not navigate", k)
+		}
+		if mm.diffView.fileArm != fileArmNone || mm.diffNotice != "" {
+			t.Fatalf("%s with no source list must not prime or notice", k)
+		}
 	}
-	if u, cmd := m.Update(keyMsg("home")); u.(Model).diffTag != "bookmark2:x:y" || cmd != nil {
-		t.Fatal("home with no source list must be a no-op")
+}
+
+// TestDiffArmClearedByOtherKey: a primed step is cancelled by any other key.
+func TestDiffArmClearedByOtherKey(t *testing.T) {
+	m := treeDiffModel(1)
+	u, _ := m.Update(keyMsg("end")) // prime
+	if u.(Model).diffView.fileArm != fileArmNext {
+		t.Fatal("setup: end must prime")
+	}
+	u2, _ := u.(Model).Update(keyMsg("j")) // any other key
+	if u2.(Model).diffView.fileArm != fileArmNone {
+		t.Fatal("j must cancel the primed file-step")
+	}
+}
+
+// TestDiffNoticeClearedOnNextKey: the arrival notice is transient.
+func TestDiffNoticeClearedOnNextKey(t *testing.T) {
+	m := treeDiffModel(1)
+	u, _ := m.Update(keyMsg("end"))          // prime
+	u2, _ := u.(Model).Update(keyMsg("end")) // step → notice set
+	if !strings.Contains(u2.(Model).diffNotice, "b.go") {
+		t.Fatal("setup: step must post a notice")
+	}
+	u3, _ := u2.(Model).Update(keyMsg("j")) // next key
+	if u3.(Model).diffNotice != "" {
+		t.Fatalf("notice must clear on the next key, got %q", u3.(Model).diffNotice)
+	}
+}
+
+// TestOpenDiffClearsStaleNotice: opening a diff (enter) drops a leftover notice.
+func TestOpenDiffClearsStaleNotice(t *testing.T) {
+	m := filesViewModel()
+	m.diffNotice = "▸ stale.go"
+	u, _ := m.Update(keyMsg("enter"))
+	if u.(Model).diffNotice != "" {
+		t.Fatalf("enter must clear the stale notice, got %q", u.(Model).diffNotice)
+	}
+}
+
+// TestWithDiffFileNoticeRendersCueAndNotice: the bottom-left overlay shows the
+// primed cue and the arrival notice, and is absent when idle.
+func TestWithDiffFileNoticeRendersCueAndNotice(t *testing.T) {
+	m := treeDiffModel(1)
+	frame := m.renderDiffView()
+
+	if out := ansi.Strip(m.withDiffFileNotice(frame)); strings.Contains(out, "next file") || strings.Contains(out, "▸") {
+		t.Fatalf("idle diff must show no notice overlay:\n%s", out)
+	}
+
+	m.diffView.fileArm = fileArmNext
+	if out := ansi.Strip(m.withDiffFileNotice(frame)); !strings.Contains(out, "next file") {
+		t.Fatalf("primed diff must show the cue:\n%s", out)
+	}
+
+	m.diffView.fileArm = fileArmNone
+	m.diffNotice = "▸ b.go"
+	if out := ansi.Strip(m.withDiffFileNotice(frame)); !strings.Contains(out, "b.go") {
+		t.Fatalf("notice must render the file name:\n%s", out)
 	}
 }
 

@@ -421,6 +421,7 @@ func (m Model) openDiffForFileLine(l contentLine) (tea.Model, tea.Cmd) {
 		m.statusMsg = "terminal too narrow for the diff view"
 		return m, nil
 	}
+	m.diffNotice = "" // drop any stale notice; the stepper re-posts its arrival notice
 	m.diffNav = diffNavTree
 	m.diffView = &diffView{
 		title:   l.path,

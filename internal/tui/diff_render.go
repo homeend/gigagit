@@ -116,6 +116,37 @@ func sanitizeLine(s string) string {
 	return b.String()
 }
 
+// withDiffFileNotice overlays the diff view's bottom-left notice — the primed
+// file-step cue, or the transient arrival / no-file message — as a rounded box,
+// mirroring the search-recall dropdown's look and anchor. A no-op when the diff
+// isn't the active surface (a popup/layer on top owns the screen) or there is
+// nothing to show.
+func (m Model) withDiffFileNotice(frame string) string {
+	if m.diffView == nil {
+		return frame
+	}
+	if m.layers != nil && len(m.layers.entries) > 0 {
+		return frame // a popup/surface is on top of the diff
+	}
+	msg := m.diffNotice
+	if msg == "" {
+		msg = fileArmCue(m.diffView.fileArm)
+	}
+	if msg == "" {
+		return frame
+	}
+	w, h := m.overlayDims()
+	if maxW := w - 6; lipgloss.Width(msg) > maxW && maxW > 0 {
+		msg = truncate(msg, maxW)
+	}
+	box := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Render(msg)
+	top := h - lipgloss.Height(box) - 1
+	if top < 0 {
+		top = 0
+	}
+	return overlayAt(frame, box, 2, top, w, h)
+}
+
 // renderDiffView draws the whole screen: header, aligned panes, hint line.
 func (m Model) renderDiffView() string {
 	v := m.diffView
