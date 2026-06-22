@@ -9,6 +9,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Reflog window.** The bottom-left panel is now a tab group: `ctrl+←/→`
+  toggles **Staged ⇄ Reflog**. The Reflog tab lists the HEAD reflog (read-only,
+  newest first, per-worktree, capped by `[ui] reflog_limit` — default 200);
+  `enter`/`l` opens an entry's commit in the files view (works for dangling
+  commits too), and the `.` menu offers *Copy SHA* and *Bookmark this commit*
+  (compare via the `g` switcher).
 - **Open any file in your external editor (read-only).** New *Open in external
   editor* action that materializes a file's content to a throwaway temp file and
   opens it in `$VISUAL`/`$EDITOR` (the temp keeps the real extension so syntax
