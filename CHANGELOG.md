@@ -9,6 +9,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **`gg config init`.** Scaffolds a documented config file (`--repo` for
+  `.gg.toml` at the repo root, `--global` for `~/.config/gg/config.toml`) with
+  every setting commented-out alongside its default and a one-line description.
+  Refuses to overwrite without `--force`.
 - **Squash selected commits.** On the Commits panel, `m` now toggles a commit
   into a selection set (the `◉` markers); the `.` menu then offers **Compare**
   (unchanged) and **Squash N commits**. Squash combines the selected commits

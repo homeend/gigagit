@@ -1,0 +1,75 @@
+package config
+
+import (
+	"fmt"
+	"strconv"
+	"strings"
+)
+
+// settingDoc documents one configuration setting for the generated template
+// (`gg config init`). value is the default rendered into the file: an int or
+// string for a concrete default, or nil when the setting has no honest scalar
+// default (derived, or "empty = all"), in which case it renders comment-only.
+//
+// settingDocs is the SINGLE SOURCE OF TRUTH for the generated config file. When
+// you add a [ui]/[worktree] setting, add its entry here — TestSettingDocsCoverAllFields
+// (config/template_test.go) FAILS until you do.
+type settingDoc struct {
+	section string // "worktree" or "ui"
+	key     string // toml key
+	value   any    // int | string | nil (nil ⇒ comment-only, no "= value")
+	comment string // one-line description; states the default when value is nil
+}
+
+var settingDocs = []settingDoc{
+	{"worktree", "path_template", "../<repo>.worktrees/<branch>", "where gg worktree creates new worktrees (tokens: <repo> <branch> <parent-branch> <date:…> <seq:…>)"},
+	{"worktree", "default_branch_template", "b/from-<parent-branch>-<random-alpha:4>", "auto branch name for a new worktree"},
+	{"worktree", "branch_templates", nil, "extra branch-name templates offered in the worktree popup (default: none)"},
+
+	{"ui", "wheel_step", 3, "mouse-wheel scroll step, in rows"},
+	{"ui", "hscroll_step", 8, "diff scroll-mode horizontal pan step, in columns"},
+	{"ui", "footer_actions", nil, "action ids shown in the footer bar (default: empty = show all)"},
+	{"ui", "menu_actions", nil, "action ids shown in the . menu (default: empty = show all)"},
+	{"ui", "search_history_size", 20, "phrases kept per search-history ring (max 1000)"},
+	{"ui", "reflog_limit", 200, "max HEAD reflog entries the Reflog tab loads"},
+	{"ui", "commit_graph_lanes", 8, "default commit-graph window width, in lanes"},
+	{"ui", "commit_graph_min_lanes", 2, "minimum commit-graph window width (narrow floor)"},
+	{"ui", "commit_graph_step", 4, "commit-graph widen/narrow increment, in lanes"},
+	{"ui", "commit_graph_pan_step", nil, "commit-graph pan increment, in lanes (default: derived, max(1, cols/2))"},
+	{"ui", "commit_graph_max_lanes", 320, "commit-graph plane cap, in lanes (config can only lower the 320 ceiling)"},
+}
+
+// tomlScalar renders a registry value as it appears in TOML.
+func tomlScalar(v any) string {
+	switch t := v.(type) {
+	case int:
+		return strconv.Itoa(t)
+	case string:
+		return `"` + t + `"`
+	}
+	return ""
+}
+
+// Template renders the commented config file: a header, then [worktree] and
+// [ui] sections in settingDocs order. Every line is commented, so writing the
+// file changes nothing until a line is uncommented.
+func Template() string {
+	var b strings.Builder
+	b.WriteString("# gg configuration — every setting with its default.\n")
+	b.WriteString("# Uncomment a line to override the default. Values shown are gg's built-in\n")
+	b.WriteString("# defaults; leaving a line commented keeps tracking the default across versions.\n")
+	for _, section := range []string{"worktree", "ui"} {
+		b.WriteString("\n[" + section + "]\n")
+		for _, d := range settingDocs {
+			if d.section != section {
+				continue
+			}
+			if d.value == nil {
+				fmt.Fprintf(&b, "# %s   # %s\n", d.key, d.comment)
+			} else {
+				fmt.Fprintf(&b, "# %s = %s   # %s\n", d.key, tomlScalar(d.value), d.comment)
+			}
+		}
+	}
+	return b.String()
+}

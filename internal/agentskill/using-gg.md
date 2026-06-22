@@ -137,6 +137,10 @@ guards against removing the worktree you are standing in.
   (MRU); `switch` prints the path of the unique match.
 - `gg inspect` — one-shot repo summary (scriptable health check).
 - `gg init` — install/refresh this skill for detected AI agents.
+- `gg config init (--repo | --global) [--force]` — write a documented config
+  file (every setting commented with its default); `--repo` → `.gg.toml` at the
+  repo root, `--global` → `~/.config/gg/config.toml`. Refuses to overwrite
+  without `--force`.
 - `--time-track <file>` (global; combine with any command) — append one JSON
   span per process start, git subprocess, and operation to `<file>` for
   performance analysis.
