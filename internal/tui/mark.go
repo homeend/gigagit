@@ -80,33 +80,29 @@ func (m Model) handleMarkKey() (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	// No mark, a mark in another panel, or a dead mark: (re-)mark here. On the
-	// Commits panel the key is a full hash or a WIP sentinel (NUL); show a clean
-	// label in the "◆ marked: …" hint instead.
-	if m.mark == nil || m.mark.panel != m.focus || !m.markAlive() {
-		display := key
-		if m.focus == panelCommits {
-			display = m.compareKeyLabel(key)
+	// Commits panel: m toggles membership in the compare selection set (◉). The
+	// `.` menu then drives Compare or Squash on the selection; there is no
+	// single-mark/auto-diff gesture here. A WIP pseudo-row's sentinel key toggles
+	// into the same set.
+	if m.focus == panelCommits {
+		if m.commitCompareSet == nil {
+			m.commitCompareSet = map[string]bool{}
 		}
-		m.mark = &markState{panel: m.focus, key: key, display: display}
+		if m.commitCompareSet[key] {
+			delete(m.commitCompareSet, key)
+		} else {
+			m.commitCompareSet[key] = true
+		}
+		return m, nil
+	}
+	// No mark, a mark in another panel, or a dead mark: (re-)mark here.
+	if m.mark == nil || m.mark.panel != m.focus || !m.markAlive() {
+		m.mark = &markState{panel: m.focus, key: key, display: key}
 		return m, nil
 	}
 	if m.mark.key == key { // same row: toggle off
 		m.mark = nil
 		return m, nil
-	}
-	// Commits panel: a second mark on a different row opens the whole-tree compare
-	// of the two endpoints (a commit, the working tree, or the index), ordered
-	// older→newer — the GitKraken "select two, see the diff" gesture. The `.` menu
-	// "Compare with marked" remains for discoverability.
-	if m.focus == panelCommits {
-		older, newer := m.mark.key, key
-		if m.compareKeyRank(older) < m.compareKeyRank(newer) {
-			older, newer = newer, older
-		}
-		mm, cmd := m.openCompareFiles(m.compareKeyEndpoint(older), m.compareKeyEndpoint(newer))
-		mm.mark = nil // the pair action consumes the mark
-		return mm, cmd
 	}
 	ops := pairOpsFor(m.focus)
 	if len(ops) == 0 {

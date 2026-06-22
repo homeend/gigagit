@@ -32,6 +32,24 @@ func (m Model) loadRebaseRangeCmd(branch, onto, target string, e rebaseplan.Edit
 	}
 }
 
+// squashRangeLoadedMsg carries the onto..branch range for a squash, loaded off
+// the UI thread; the handler builds the squash plan and runs the rebase.
+type squashRangeLoadedMsg struct {
+	branch, onto string
+	targets      []string
+	commits      []model.RangeCommit
+	err          error
+}
+
+// loadSquashRangeCmd reads onto..branch off the UI thread for a squash.
+func (m Model) loadSquashRangeCmd(branch, onto string, targets []string) tea.Cmd {
+	svc := m.svc
+	return func() tea.Msg {
+		cs, err := svc.CommitRange(context.Background(), onto, branch)
+		return squashRangeLoadedMsg{branch: branch, onto: onto, targets: targets, commits: cs, err: err}
+	}
+}
+
 // editorFinishedMsg signals the external editor exited (path is the edited
 // repo-relative path).
 type editorFinishedMsg struct {

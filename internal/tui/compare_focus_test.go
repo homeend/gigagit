@@ -71,22 +71,35 @@ func TestCompareModeMouseScrollKeepsComparison(t *testing.T) {
 }
 
 // Marking two commit rows opens their whole-tree compare directly (older→newer).
-func TestMarkTwoCommitsOpensCompare(t *testing.T) {
+// Marking two commits adds both to the ◉ selection set (no auto-diff); the
+// `.`-menu "Compare selection" then opens the whole-tree diff, ordered
+// older→newer.
+func TestMarkTwoCommitsSelectThenCompare(t *testing.T) {
 	m := loadedModelLinearCommits(t, 3) // commits[0]=tip (newer), commits[1] older
 	m.focus = panelCommits
 
 	m.sel[panelCommits] = 0
-	u, _ := m.Update(keyMsg("m")) // mark the tip
+	u, _ := m.Update(keyMsg("m")) // select the tip
 	m = u.(Model)
 	m.sel[panelCommits] = 1
-	u, _ = m.Update(keyMsg("m")) // mark an older commit → compare
-	mm := u.(Model)
+	u, _ = m.Update(keyMsg("m")) // select an older commit
+	m = u.(Model)
 
-	if mm.filesView == nil || !mm.filesCompare {
-		t.Fatal("marking two commits must open the compare files view")
+	if m.filesView != nil {
+		t.Fatal("marking commits must not auto-open a compare view")
 	}
-	if mm.mark != nil {
-		t.Fatal("the pair action must clear the mark")
+	if !m.commitCompareSet[m.commits[0].Hash] || !m.commitCompareSet[m.commits[1].Hash] {
+		t.Fatalf("both commits must be in the selection set, got %v", m.commitCompareSet)
+	}
+
+	r, ok := m.commitCompareSelectionRow()
+	if !ok {
+		t.Fatal("compare-selection row must be present with 2 commits")
+	}
+	u, _ = r.run(m)
+	mm := u.(Model)
+	if mm.filesView == nil || !mm.filesCompare {
+		t.Fatal("Compare selection must open the compare files view")
 	}
 	// older (commits[1]) → newer (commits[0]).
 	if mm.filesLeft.Hash != m.commits[1].Hash || mm.filesRight.Hash != m.commits[0].Hash {
@@ -94,26 +107,33 @@ func TestMarkTwoCommitsOpensCompare(t *testing.T) {
 	}
 }
 
-// Marking a commit then the Working tree row compares the commit against the
-// working tree (the case the user hit "no pair operations" on).
-func TestMarkCommitThenWorktreeCompares(t *testing.T) {
+// Selecting a commit and the Working tree row, then "Compare selection",
+// compares the commit against the working tree (the case the user hit "no pair
+// operations" on).
+func TestSelectCommitThenWorktreeCompares(t *testing.T) {
 	m := loadedModelLinearCommits(t, 3)
 	m.focus = panelCommits
 	m.status = dirtyStatus()
 	m.wipRows = deriveWipRows(m.status)
 	m = m.rebuildCommitGraph()
 
-	// Mark an old commit (unified index = wipCount + 1).
+	// Select an old commit (unified index = wipCount + 1).
 	m.sel[panelCommits] = m.wipCount() + 1
 	u, _ := m.Update(keyMsg("m"))
 	m = u.(Model)
-	// Move to the Working tree row (unified index 0) and mark → compare.
+	// Select the Working tree row (unified index 0).
 	m.sel[panelCommits] = 0
 	u, _ = m.Update(keyMsg("m"))
-	mm := u.(Model)
+	m = u.(Model)
 
+	r, ok := m.commitCompareSelectionRow()
+	if !ok {
+		t.Fatal("compare-selection row must be present with a commit + wip row")
+	}
+	u, _ = r.run(m)
+	mm := u.(Model)
 	if mm.filesView == nil || !mm.filesCompare {
-		t.Fatal("marking a commit then the working-tree row must open a compare")
+		t.Fatal("Compare selection must open a compare")
 	}
 	// commit (older) → working tree (newer).
 	if mm.filesLeft.Kind != model.EndpointCommit || mm.filesRight.Kind != model.EndpointWorkTree {

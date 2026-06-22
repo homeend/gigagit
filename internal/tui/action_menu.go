@@ -191,9 +191,6 @@ func (m Model) appendCommitContextRows(out []actionRow) []actionRow {
 	if r, ok := m.commitCompareStagedRow(); ok {
 		out = append(out, r)
 	}
-	if r, ok := m.commitCompareMarkedRow(); ok {
-		out = append(out, r)
-	}
 	if r, ok := m.commitCompareToggleRow(); ok {
 		out = append(out, r)
 	}
@@ -201,6 +198,9 @@ func (m Model) appendCommitContextRows(out []actionRow) []actionRow {
 		out = append(out, r)
 	}
 	if r, ok := m.commitCompareSelectionRow(); ok {
+		out = append(out, r)
+	}
+	if r, ok := m.commitSquashRow(); ok {
 		out = append(out, r)
 	}
 	if r, ok := m.commitCherryPickRow(); ok {
