@@ -34,6 +34,22 @@ func TestEscFromPickerDiffReturnsToPicker(t *testing.T) {
 	}
 }
 
+// mouse wheel over a diff that is the top layer scrolls the diff.
+func TestDiffWheelRoutesToTopLayer(t *testing.T) {
+	m := loadedModelLinearCommits(t, 2)
+	v := &diffView{title: "f"}
+	for i := 0; i < 50; i++ { // give it enough display rows to be scrollable
+		v.disp = append(v.disp, dRow{})
+	}
+	m = m.pushLayer(v)
+	before := v.offset
+	nm, _ := m.Update(tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonWheelDown})
+	_ = nm
+	if v.offset == before {
+		t.Fatal("wheel over a diff layer should scroll the diff")
+	}
+}
+
 // diffMsg populates the on-stack diff in place even when it is not the top layer.
 func TestDiffMsgPopulatesInPlaceUnderOverlay(t *testing.T) {
 	m := loadedModelLinearCommits(t, 2)
