@@ -342,39 +342,33 @@ func TestDiffMsgStaleTagDropped(t *testing.T) {
 }
 
 func TestDiffViewKeysScrollAndJump(t *testing.T) {
-	m := diffModel()
-	m.height = 12 // body = 10
-	rows := make([]textdiff.Row, 40)
-	for i := range rows {
-		rows[i] = textdiff.Row{Kind: textdiff.Same}
-	}
-	rows[20] = textdiff.Row{Kind: textdiff.Changed}
-	rows[30] = textdiff.Row{Kind: textdiff.Changed}
-	m.diffView = diffViewWith(rows, []int{20, 30})
-	m.diffTag = "status:x"
+	// Two changes (rows 20, 30) in a 40-row file, body 10; both top-anchorable.
+	mk := func() Model { return openedDiffModel(12, sameRowsTUI(40, 20, 30), []int{20, 30}) }
 
-	u, _ := m.Update(keyMsg("down"))
-	if u.(Model).diffView.offset != 1 {
-		t.Fatalf("down: offset = %d", u.(Model).diffView.offset)
+	if got := mk().diffView.offset; got != 17 { // opens on change 1, diffLead above
+		t.Fatalf("open: offset = %d, want 17", got)
 	}
-	u, _ = m.Update(keyMsg("ctrl+down"))
-	if u.(Model).diffView.offset != 17 {
-		t.Fatalf("ctrl+down: offset = %d, want 17", u.(Model).diffView.offset)
+	if u, _ := mk().Update(keyMsg("down")); u.(Model).diffView.offset != 18 {
+		t.Fatalf("down: offset = %d, want 18", u.(Model).diffView.offset)
 	}
-	m.diffView.offset = 35
-	u, _ = m.Update(keyMsg("ctrl+up"))
-	if u.(Model).diffView.offset != 27 {
-		t.Fatalf("ctrl+up: offset = %d, want 27", u.(Model).diffView.offset)
+	// ctrl+down steps to the next change (row 30 → offset 27), ctrl+up back.
+	u, _ := mk().Update(keyMsg("ctrl+down"))
+	if v := u.(Model).diffView; v.offset != 27 || v.currentBlockOrdinal() != 1 {
+		t.Fatalf("ctrl+down: offset = %d ord = %d, want 27 / 1", v.offset, v.currentBlockOrdinal())
 	}
-	m.diffView.offset = 0
-	u, _ = m.Update(keyMsg("pgup"))
-	if u.(Model).diffView.offset != 0 {
+	u, _ = u.(Model).Update(keyMsg("ctrl+up"))
+	if v := u.(Model).diffView; v.offset != 17 || v.currentBlockOrdinal() != 0 {
+		t.Fatalf("ctrl+up: offset = %d ord = %d, want 17 / 0", v.offset, v.currentBlockOrdinal())
+	}
+	// Plain scroll keys clamp/scroll regardless of the focus index.
+	p := mk()
+	p.diffView.offset = 0
+	if u, _ := p.Update(keyMsg("pgup")); u.(Model).diffView.offset != 0 {
 		t.Fatalf("pgup at top must clamp to 0, got %d", u.(Model).diffView.offset)
 	}
-	m.diffView.offset = 0
-	u, _ = m.Update(keyMsg("pgdown"))
-	if got := u.(Model).diffView.offset; got != 10 {
-		t.Fatalf("pgdown: offset = %d, want one body page (10)", got)
+	p.diffView.offset = 0
+	if u, _ := p.Update(keyMsg("pgdown")); u.(Model).diffView.offset != 10 {
+		t.Fatalf("pgdown: offset = %d, want one body page (10)", u.(Model).diffView.offset)
 	}
 }
 
@@ -660,12 +654,10 @@ func TestDiffNPAliasCtrlJumps(t *testing.T) {
 }
 
 func TestDiffJumpLandsWithContextAbove(t *testing.T) {
-	m := diffModel()
-	m.height = 12
-	m.diffView = diffViewWith(sameRowsTUI(40, 20), []int{20})
-	m.diffTag = "status:x"
-	u, _ := m.Update(keyMsg("n"))
-	if got := u.(Model).diffView.offset; got != 17 { // 20 - diffLead(3)
+	// Focusing a change anchors it with up to diffLead(3) rows above — exercised
+	// here by the open, which focuses the first change (row 20 → offset 17).
+	m := openedDiffModel(12, sameRowsTUI(40, 20), []int{20})
+	if got := m.diffView.offset; got != 17 { // 20 - diffLead(3)
 		t.Fatalf("offset = %d, want 17 (change with 3 lines above)", got)
 	}
 }
@@ -714,24 +706,35 @@ func TestDiffTogglePreservesBlock(t *testing.T) {
 	}
 }
 
-// wrapDiffModel opens a diff over a 60-row view with two change blocks (at
-// lines 10 and 50) so n/p can move between them and hit both boundaries.
-func wrapDiffModel() Model {
+// openedDiffModel builds an open diff (screen height h) over rows with the
+// given block starts, anchored on the first change exactly as applyDiff opens
+// it (cur 0). diffBodyRows == h-2.
+func openedDiffModel(h int, rows []textdiff.Row, blocks []int) Model {
 	m := diffModel()
-	m.height = 12 // body = 10
-	m.diffView = diffViewWith(sameRowsTUI(60, 10, 50), []int{10, 50})
+	m.height = h
+	v := diffViewWith(rows, blocks)
+	v.focusBlock(0, m.diffBodyRows())
+	m.diffView = v
 	m.diffTag = "status:x"
 	return m
 }
 
+// wrapDiffModel opens a diff over a 60-row view with two change blocks (both
+// top-anchorable) so n/p move between them and hit both boundaries.
+func wrapDiffModel() Model {
+	return openedDiffModel(12, sameRowsTUI(60, 10, 50), []int{10, 50}) // body = 10
+}
+
 func TestDiffWrapAroundForward(t *testing.T) {
-	m := wrapDiffModel()
-	u, _ := m.Update(keyMsg("n"))        // first change
-	u, _ = u.(Model).Update(keyMsg("n")) // last change
-	last := u.(Model).diffView.offset
+	m := wrapDiffModel() // opens on the first change (cur 0 of 2)
+	u, _ := m.Update(keyMsg("n"))
+	if got := u.(Model).diffView.currentBlockOrdinal(); got != 1 {
+		t.Fatalf("n must advance to the last change, ordinal = %d want 1", got)
+	}
 	if u.(Model).diffView.wrapArm != wrapNone {
 		t.Fatal("a move that lands on a change must not prime a wrap")
 	}
+	last := u.(Model).diffView.offset
 	// First boundary press: no move, primes the wrap.
 	u, _ = u.(Model).Update(keyMsg("n"))
 	if got := u.(Model).diffView.offset; got != last {
@@ -748,13 +751,12 @@ func TestDiffWrapAroundForward(t *testing.T) {
 }
 
 func TestDiffWrapAroundBackward(t *testing.T) {
-	m := wrapDiffModel()
-	u, _ := m.Update(keyMsg("n")) // land on the first change
-	if u.(Model).diffView.currentBlockOrdinal() != 0 {
-		t.Fatal("setup: expected to be on the first change")
+	m := wrapDiffModel() // opens on the first change
+	if m.diffView.currentBlockOrdinal() != 0 {
+		t.Fatal("setup: expected to open on the first change")
 	}
 	// First p at the first change primes a wrap to the bottom.
-	u, _ = u.(Model).Update(keyMsg("p"))
+	u, _ := m.Update(keyMsg("p"))
 	if u.(Model).diffView.wrapArm != wrapToEnd {
 		t.Fatal("first p at the first change must prime a wrap to the bottom")
 	}
@@ -768,8 +770,7 @@ func TestDiffWrapAroundBackward(t *testing.T) {
 
 func TestDiffWrapDisarmedByOtherKey(t *testing.T) {
 	m := wrapDiffModel()
-	u, _ := m.Update(keyMsg("n"))        // first change
-	u, _ = u.(Model).Update(keyMsg("n")) // last change
+	u, _ := m.Update(keyMsg("n"))        // last change (of 2)
 	u, _ = u.(Model).Update(keyMsg("n")) // boundary: primes wrap
 	if u.(Model).diffView.wrapArm != wrapToStart {
 		t.Fatal("setup: expected a primed wrap at the last change")
@@ -779,14 +780,92 @@ func TestDiffWrapDisarmedByOtherKey(t *testing.T) {
 	if u.(Model).diffView.wrapArm != wrapNone {
 		t.Fatal("scrolling must disarm the primed wrap")
 	}
-	// The next n re-primes instead of wrapping.
-	before := u.(Model).diffView.offset
+	// The next n re-primes instead of wrapping (cur untouched by the scroll).
 	u, _ = u.(Model).Update(keyMsg("n"))
-	if got := u.(Model).diffView.offset; got != before {
-		t.Fatalf("n after a disarm wrapped (offset %d → %d) instead of re-priming", before, got)
+	if got := u.(Model).diffView.currentBlockOrdinal(); got == 0 {
+		t.Fatal("n after a disarm wrapped to the first change instead of re-priming")
 	}
 	if u.(Model).diffView.wrapArm != wrapToStart {
 		t.Fatal("n at the boundary after a disarm must re-prime the wrap")
+	}
+}
+
+// TestDiffCounterReachesLastWhenBottomBunched is the reported bug: the last
+// changes sit in the final viewport (rows 33/36/38 in a 40-row file with a
+// 10-row body, maxOffset 30) so none can be top-anchored. The counter must
+// still step all the way to N/N, and only then does the wrap arm.
+func TestDiffCounterReachesLastWhenBottomBunched(t *testing.T) {
+	m := openedDiffModel(12, sameRowsTUI(40, 5, 33, 36, 38), []int{5, 33, 36, 38})
+	n := len(m.diffView.dispBlocks) // 4
+	u := tea.Model(m)
+	for i := 1; i < n; i++ {
+		u, _ = u.(Model).Update(keyMsg("n"))
+		if got := u.(Model).diffView.currentBlockOrdinal(); got != i {
+			t.Fatalf("press %d: ordinal = %d, want %d (counter must step one per n)", i, got, i)
+		}
+		if u.(Model).diffView.wrapArm != wrapNone {
+			t.Fatalf("press %d landed on a change but primed a wrap", i)
+		}
+	}
+	if got := u.(Model).diffView.currentBlockOrdinal(); got != n-1 {
+		t.Fatalf("never reached the last change: ordinal = %d, want %d", got, n-1)
+	}
+	// Now on the last change: first n primes, second n wraps to the first.
+	u, _ = u.(Model).Update(keyMsg("n"))
+	if u.(Model).diffView.wrapArm != wrapToStart {
+		t.Fatal("n on the bottom-bunched last change must prime a wrap")
+	}
+	u, _ = u.(Model).Update(keyMsg("n"))
+	if got := u.(Model).diffView.currentBlockOrdinal(); got != 0 {
+		t.Fatalf("second n must wrap to the first change, ordinal = %d", got)
+	}
+}
+
+// TestDiffNavResumesFromScrollPosition guards the scroll-then-n flow: after
+// free-scrolling down past the first changes, n must continue from the scrolled
+// position, not jump back up to change 2 off a stale focus index.
+func TestDiffNavResumesFromScrollPosition(t *testing.T) {
+	// 5 changes spread down an 80-row file, body 10.
+	m := openedDiffModel(12, sameRowsTUI(80, 5, 15, 25, 35, 45), []int{5, 15, 25, 35, 45})
+	u, _ := m.Update(keyMsg("pgdown"))
+	u, _ = u.(Model).Update(keyMsg("pgdown"))
+	scrolled := u.(Model).diffView.currentBlockOrdinal()
+	if scrolled < 1 {
+		t.Fatalf("two pgdowns should advance the focus past the first change, ordinal = %d", scrolled)
+	}
+	u, _ = u.(Model).Update(keyMsg("n"))
+	if got := u.(Model).diffView.currentBlockOrdinal(); got != scrolled+1 {
+		t.Fatalf("n after scrolling went to %d, want %d (one past the scrolled position)", got, scrolled+1)
+	}
+}
+
+// TestDiffNavWhenDiffFitsOnScreen pins the case Option A could not handle: the
+// whole diff is shorter than the viewport (8 rows, body 10), so the scroll
+// offset is pinned at 0 forever. Navigation and the counter must still work off
+// the focus index, not the (immovable) offset.
+func TestDiffNavWhenDiffFitsOnScreen(t *testing.T) {
+	m := openedDiffModel(12, sameRowsTUI(8, 2, 4, 6), []int{2, 4, 6})
+	if m.diffView.offset != 0 {
+		t.Fatalf("setup: a diff this small can't scroll, offset = %d", m.diffView.offset)
+	}
+	u := tea.Model(m)
+	for i, want := range []int{1, 2} { // step to 2/3 then 3/3
+		u, _ = u.(Model).Update(keyMsg("n"))
+		if got := u.(Model).diffView.currentBlockOrdinal(); got != want {
+			t.Fatalf("n #%d: ordinal = %d, want %d", i+1, got, want)
+		}
+		if off := u.(Model).diffView.offset; off != 0 {
+			t.Fatalf("n #%d moved the offset (%d) on an unscrollable diff", i+1, off)
+		}
+	}
+	// On the last change: prime, then wrap back to the first.
+	u, _ = u.(Model).Update(keyMsg("n"))
+	if u.(Model).diffView.wrapArm != wrapToStart {
+		t.Fatal("n on the last change must prime a wrap even when nothing scrolls")
+	}
+	u, _ = u.(Model).Update(keyMsg("n"))
+	if got := u.(Model).diffView.currentBlockOrdinal(); got != 0 {
+		t.Fatalf("wrap must return to the first change, ordinal = %d", got)
 	}
 }
 
