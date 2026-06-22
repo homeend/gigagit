@@ -34,6 +34,73 @@ func (m Model) canFetchRemotes() bool {
 	return m.focus == panelRemotes && m.opsIdle()
 }
 
+// remoteCurrentBranch returns the checked-out branch name and whether HEAD is
+// attached. Porcelain reports detached HEAD as "" or "(detached)"; guard both
+// (same dual-guard as the fast-forward feature).
+func (m Model) remoteCurrentBranch() (string, bool) {
+	cur := m.status.Branch
+	if cur == "" || cur == "(detached)" {
+		return "", false
+	}
+	return cur, true
+}
+
+// remoteCreateWorktreeRow offers "Create worktree from <remote branch>" on the
+// Remotes tab, reusing the worktree-from-ref popup seeded with the remote ref
+// as start-point and the de-prefixed branch name as the prefill.
+func (m Model) remoteCreateWorktreeRow() (actionRow, bool) {
+	rb, ok := m.selectedRemote()
+	if !ok || !m.opsIdle() {
+		return actionRow{}, false
+	}
+	return actionRow{
+		id:    "remote-worktree",
+		label: "Create worktree from " + rb.Name,
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			return m.openWorktreeAt(rb.Name, rb.Branch), nil
+		},
+	}, true
+}
+
+// remoteMergeRow offers "Merge <remote branch> into current". SmartMerge with an
+// empty Target defaults to the current branch; conflicts/dirty trees are handled
+// by SmartMerge's own Decider ladder (mapped to the TUI modal). Hidden on
+// detached HEAD. The engine rejects Source==Target, and a remote ref can never
+// equal a local branch name, so no extra equality guard is needed here.
+func (m Model) remoteMergeRow() (actionRow, bool) {
+	rb, ok := m.selectedRemote()
+	if !ok || !m.opsIdle() {
+		return actionRow{}, false
+	}
+	cur, attached := m.remoteCurrentBranch()
+	if !attached {
+		return actionRow{}, false
+	}
+	return actionRow{
+		id:    "remote-merge",
+		label: "Merge " + rb.Name + " into current (" + cur + ")",
+		run:   func(m Model) (tea.Model, tea.Cmd) { return m.startOp(engine.SmartMerge{Source: rb.Name}) },
+	}, true
+}
+
+// remoteRebaseRow offers "Rebase current onto <remote branch>". SmartRebase with
+// an empty Branch defaults to the current branch. Hidden on detached HEAD.
+func (m Model) remoteRebaseRow() (actionRow, bool) {
+	rb, ok := m.selectedRemote()
+	if !ok || !m.opsIdle() {
+		return actionRow{}, false
+	}
+	cur, attached := m.remoteCurrentBranch()
+	if !attached {
+		return actionRow{}, false
+	}
+	return actionRow{
+		id:    "remote-rebase",
+		label: "Rebase current (" + cur + ") onto " + rb.Name,
+		run:   func(m Model) (tea.Model, tea.Cmd) { return m.startOp(engine.SmartRebase{Onto: rb.Name}) },
+	}, true
+}
+
 // remotePruneRow offers Prune on the Remotes tab (no dedicated key).
 func (m Model) remotePruneRow() (actionRow, bool) {
 	if !m.canFetchRemotes() {

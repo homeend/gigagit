@@ -123,6 +123,15 @@ func availableActions(m Model) []actionRow {
 	if r, ok := m.remotePruneRow(); ok {
 		out = append(out, r)
 	}
+	if r, ok := m.remoteCreateWorktreeRow(); ok {
+		out = append(out, r)
+	}
+	if r, ok := m.remoteMergeRow(); ok {
+		out = append(out, r)
+	}
+	if r, ok := m.remoteRebaseRow(); ok {
+		out = append(out, r)
+	}
 	if r, ok := m.bookmarkAddRow(); ok {
 		out = append(out, r)
 	}

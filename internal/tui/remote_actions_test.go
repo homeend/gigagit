@@ -62,3 +62,68 @@ func TestCopyShaRowResolvesFullViaService(t *testing.T) {
 		t.Fatal("expected a copy cmd")
 	}
 }
+
+func remoteModel() Model {
+	m := footerModel()
+	m.focus = panelRemotes
+	m.remoteBranches = []model.RemoteBranch{{Name: "origin/foo", Remote: "origin", Branch: "foo", Hash: "dead111"}}
+	m.svc = domain.New(&git.Repo{Runner: gitexec.NewFakeRunner()})
+	m.status.Branch = "main"
+	return m
+}
+
+func TestRemoteOpRowsPresentWhenAttached(t *testing.T) {
+	m := remoteModel()
+	got := ids(availableActions(m))
+	for _, id := range []string{"remote-worktree", "remote-merge", "remote-rebase"} {
+		if !got[id] {
+			t.Fatalf("expected %s in remote menu; got %v", id, got)
+		}
+	}
+}
+
+func TestRemoteMergeRebaseHiddenOnDetachedHEAD(t *testing.T) {
+	m := remoteModel()
+	m.status.Branch = "" // detached
+	got := ids(availableActions(m))
+	if got["remote-merge"] || got["remote-rebase"] {
+		t.Fatalf("merge/rebase must be hidden on detached HEAD; got %v", got)
+	}
+	if !got["remote-worktree"] {
+		t.Fatalf("worktree-from-remote should still be offered on detached HEAD; got %v", got)
+	}
+}
+
+func TestRemoteMergeRowDispatchesSmartMerge(t *testing.T) {
+	m := remoteModel()
+	row, ok := m.remoteMergeRow()
+	if !ok {
+		t.Fatal("remoteMergeRow not available")
+	}
+	if _, cmd := row.run(m); cmd == nil {
+		t.Fatal("merge row run returned nil cmd")
+	}
+}
+
+func TestRemoteRebaseRowDispatchesSmartRebase(t *testing.T) {
+	m := remoteModel()
+	row, ok := m.remoteRebaseRow()
+	if !ok {
+		t.Fatal("remoteRebaseRow not available")
+	}
+	if _, cmd := row.run(m); cmd == nil {
+		t.Fatal("rebase row run returned nil cmd")
+	}
+}
+
+func TestRemoteWorktreeRowOpensPopup(t *testing.T) {
+	m := remoteModel()
+	row, ok := m.remoteCreateWorktreeRow()
+	if !ok {
+		t.Fatal("remoteCreateWorktreeRow not available")
+	}
+	nm, _ := row.run(m)
+	if _, isWt := nm.(Model).topLayer().(*worktreePopup); !isWt {
+		t.Fatalf("expected worktreePopup on top after run; got %T", nm.(Model).topLayer())
+	}
+}
