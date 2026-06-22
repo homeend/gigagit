@@ -9,6 +9,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **`enter` in the file-history view opens the diff full-screen.** Instead of
+  only the cramped right-pane preview, `enter` on the selected commit promotes
+  its diff to the full diff surface — with the usual `n`/`p` change navigation,
+  scrolling, and `h`/`b` to reopen history/blame. `esc` returns to whatever was
+  beneath the history view.
 - **Open any file in your external editor (read-only).** New *Open in external
   editor* action that materializes a file's content to a throwaway temp file and
   opens it in `$VISUAL`/`$EDITOR` (the temp keeps the real extension so syntax
