@@ -9,6 +9,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Squash selected commits.** On the Commits panel, `m` now toggles a commit
+  into a selection set (the `◉` markers); the `.` menu then offers **Compare**
+  (unchanged) and **Squash N commits**. Squash combines the selected commits
+  into one, concatenating their messages (reword afterward if you like). Stage 1
+  squashes commits that are already adjacent; non-adjacent or off-branch
+  selections are refused with a note (reordering them first is coming next).
+  Conflicts pause for `git rebase --continue`. "Compare with marked" is removed
+  from the Commits panel — the selection set replaces it.
 - **Reflog recovery actions.** The Reflog tab's `.` menu now offers
   **Reset to this entry** (soft/mixed/hard, with a confirm when the entry is off
   the current branch) and **Check out this entry…** (detached HEAD, or create a
