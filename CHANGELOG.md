@@ -9,6 +9,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Reflog recovery actions.** The Reflog tab's `.` menu now offers
+  **Reset to this entry** (soft/mixed/hard, with a confirm when the entry is off
+  the current branch) and **Check out this entry…** (detached HEAD, or create a
+  new branch at it and switch) — the "rescue lost work" half of the reflog,
+  working even on dangling commits.
 - **Reflog window.** The bottom-left panel is now a tab group: `ctrl+←/→`
   toggles **Staged ⇄ Reflog**. The Reflog tab lists the HEAD reflog (read-only,
   newest first, per-worktree, capped by `[ui] reflog_limit` — default 200);
