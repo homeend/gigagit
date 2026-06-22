@@ -24,7 +24,9 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   against your working tree (so untouched files still show something useful), and
   the `.` menu's **View file** shows that file's content at the commit (no diff)
   in a right-pane preview while the tree stays on the left (`↑/↓` scroll, `z`
-  display mode, `esc` closes the preview, `←` returns to the tree).
+  display mode, `esc` closes the preview, `←` returns to the tree). **View file
+  works in the changed-files view too** (any non-deleted file row), not just the
+  full tree.
 - **Search history.** Enter-confirmed searches are remembered per window — the
   panel `/` filter and the `@` highlight share one ring, while the bookmark (`g`)
   and shelf (`G`) switchers and the files-view tree search each keep their own.
@@ -79,6 +81,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   (also `gg compare … @worktree`), because `git diff` omits untracked files. They
   now appear as added (`A`) entries — paths with spaces or non-ASCII bytes
   included (listed via `ls-files -z`).
+- **The file-content preview now scrolls like a pager.** In the full-tree
+  *View file* preview, `↑/↓`/`pgup`/`pgdn` (and the mouse wheel) moved an
+  invisible cursor that the viewport only followed once it reached the middle of
+  the window — so the first half-screen of presses appeared to do nothing. The
+  preview now scrolls the viewport on every press (the top line moves
+  immediately), and wheeling over an open preview scrolls it instead of reloading
+  a commit underneath it.
 - **A whole-tree compare no longer gets discarded by an arrow key.** The compare
   files view (*Compare against working tree / staged*, *Compare with marked*, the
   WIP-row diff) opened with the commit list focused, so pressing up/down moved the

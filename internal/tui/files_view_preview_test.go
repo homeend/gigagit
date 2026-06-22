@@ -1,9 +1,11 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/gigagit/gg/internal/domain"
 	"github.com/gigagit/gg/internal/git"
 	"github.com/gigagit/gg/internal/gitexec"
@@ -13,10 +15,16 @@ import (
 // previewModel mirrors allFilesModel but also answers `git show` so View file can
 // load content.
 func previewModel() Model {
+	return previewModelN("alpha\nbeta\ngamma\n")
+}
+
+// previewModelN is previewModel with caller-supplied `git show` content, so tests
+// can preview a long file (more lines than the window can show).
+func previewModelN(showOut string) Model {
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git log (commit files)", gitexec.Result{Stdout: "M\tinternal/tui/model.go\n"})
 	f.SetResponse("git ls-tree (tree files)", gitexec.Result{Stdout: "README.md\x00pkg/sub/x.go\x00"})
-	f.SetResponse("git show", gitexec.Result{Stdout: "alpha\nbeta\ngamma\n"})
+	f.SetResponse("git show", gitexec.Result{Stdout: showOut})
 	return Model{
 		svc:   domain.New(&git.Repo{Runner: f}),
 		width: 100, height: 30,
@@ -31,7 +39,12 @@ func previewModel() Model {
 // tree, and lands the cursor on a real file row.
 func fullTreeTreeSide(t *testing.T) Model {
 	t.Helper()
-	m := openFilesView(t, previewModel())
+	return fullTreeTreeSideOf(t, previewModel())
+}
+
+func fullTreeTreeSideOf(t *testing.T, base Model) Model {
+	t.Helper()
+	m := openFilesView(t, base)
 	m, cmd := feedFilesView(t, m, "a")
 	updated, _ := m.Update(cmd())
 	m = updated.(Model)
@@ -59,17 +72,60 @@ func TestViewFileRowGating(t *testing.T) {
 	if !hasRow(m, "view-file") {
 		t.Fatal("View file should be offered in full-tree mode on a file (tree side)")
 	}
-	// Changed-files mode: not offered.
+	// Changed-files mode: now ALSO offered (shows the file's content at the commit).
 	cf := m
 	cf.filesAllFiles = false
-	if hasRow(cf, "view-file") {
-		t.Error("View file must not be offered in changed-files mode")
+	if !hasRow(cf, "view-file") {
+		t.Error("View file should be offered in changed-files mode too")
 	}
 	// List side: not offered.
 	ls := m
 	ls.filesTreeFocused = false
 	if hasRow(ls, "view-file") {
 		t.Error("View file must not be offered on the commit-list side")
+	}
+}
+
+// A deleted file has no content at the commit, so View file must not be offered.
+func TestViewFileExcludesDeleted(t *testing.T) {
+	m := fullTreeTreeSide(t)
+	m.filesAllFiles = false
+	m.filesView = &contentPopup{lines: []contentLine{{text: "D  gone.go", path: "gone.go", status: "D"}}}
+	m.filesView.sel = 0
+	if _, ok := m.viewFileRow(); ok {
+		t.Error("View file must not be offered on a deleted (D) row")
+	}
+}
+
+// Compare mode has two endpoints, not a single commit, so View file is skipped.
+func TestViewFileExcludesCompareMode(t *testing.T) {
+	m := fullTreeTreeSide(t)
+	m.filesCompare = true
+	if _, ok := m.viewFileRow(); ok {
+		t.Error("View file must not be offered in compare mode")
+	}
+}
+
+// End-to-end: View file works in the default changed-files view, not just the
+// full tree — it opens the right-column preview with the file's content.
+func TestViewFileChangedModeOpensPreview(t *testing.T) {
+	m := openFilesView(t, previewModel()) // changed-files mode (no `a` toggle)
+	if m.filesAllFiles {
+		t.Fatal("expected changed-files mode")
+	}
+	m.filesTreeFocused = true
+	for i, l := range m.filesView.visible() {
+		if l.path != "" {
+			m.filesView.sel = i
+			break
+		}
+	}
+	m = openPreview(t, m)
+	if m.filesPreview == nil {
+		t.Fatal("View file in changed mode should open the preview")
+	}
+	if body := strings.Join(linesText(m.filesPreview), "\n"); !strings.Contains(body, "alpha") {
+		t.Fatalf("changed-mode preview did not load content:\n%s", body)
 	}
 }
 
@@ -140,7 +196,11 @@ func openPreview(t *testing.T, m Model) Model {
 }
 
 func TestFilePreviewScrollAndClose(t *testing.T) {
-	m := openPreview(t, fullTreeTreeSide(t))
+	var b strings.Builder
+	for i := 0; i < 200; i++ { // longer than the window so the pager can scroll
+		fmt.Fprintf(&b, "LINE%03d\n", i)
+	}
+	m := openPreview(t, fullTreeTreeSideOf(t, previewModelN(b.String())))
 	if m.filesTreeFocused {
 		t.Fatal("preview should be focused after opening")
 	}
@@ -154,6 +214,60 @@ func TestFilePreviewScrollAndClose(t *testing.T) {
 	}
 	if m.filesView == nil {
 		t.Fatal("esc on the preview must NOT close the whole files view")
+	}
+}
+
+// TestFilePreviewScrollsViewportImmediately pins the pager behavior: because the
+// preview has no visible cursor, every ↓ must scroll the viewport by one line —
+// the top line moves off on the very first press (not after the cursor walks to
+// the middle of the window, which is how a centered list would behave).
+func TestFilePreviewScrollsViewportImmediately(t *testing.T) {
+	var b strings.Builder
+	for i := 0; i < 200; i++ {
+		fmt.Fprintf(&b, "LINE%03d\n", i)
+	}
+	m := openPreview(t, fullTreeTreeSideOf(t, previewModelN(b.String())))
+
+	g := m.layout()
+	out := m.renderFilePreview(g.rightW, g.boxH[panelCommits])
+	if !strings.Contains(out, "LINE000") {
+		t.Fatalf("preview should open showing the first line:\n%s", out)
+	}
+
+	m, _ = feedFilesView(t, m, "j") // one ↓
+	out = m.renderFilePreview(g.rightW, g.boxH[panelCommits])
+	if strings.Contains(out, "LINE000") {
+		t.Fatalf("after one ↓ the first line must scroll off the top (pager), got:\n%s", out)
+	}
+	if !strings.Contains(out, "LINE001") {
+		t.Fatalf("after one ↓ LINE001 should be the new top line:\n%s", out)
+	}
+}
+
+// TestFilePreviewMouseWheelScrolls locks the mouse path: wheeling over the right
+// column with a preview open must scroll the preview, not reload a commit under
+// it (keyboard tests don't exercise the mouse dispatch).
+func TestFilePreviewMouseWheelScrolls(t *testing.T) {
+	var b strings.Builder
+	for i := 0; i < 200; i++ {
+		fmt.Fprintf(&b, "LINE%03d\n", i)
+	}
+	m := openPreview(t, fullTreeTreeSideOf(t, previewModelN(b.String())))
+	hashBefore := m.filesHash
+
+	g := m.layout()
+	x := g.leftW + 1 // inside the right column (the preview)
+	u, _ := m.Update(tea.MouseMsg{X: x, Y: 4, Action: tea.MouseActionPress, Button: tea.MouseButtonWheelDown})
+	mm := u.(Model)
+
+	if mm.filesPreview == nil {
+		t.Fatal("wheel must not close the preview")
+	}
+	if mm.filesPreview.sel == 0 {
+		t.Fatal("wheel over the preview should scroll it (sel advanced past 0)")
+	}
+	if mm.filesHash != hashBefore {
+		t.Fatalf("wheel must not reload a commit under the preview: hash %q → %q", hashBefore, mm.filesHash)
 	}
 }
 

@@ -445,8 +445,12 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m Model) moveListUnderFilesView(delta int) (tea.Model, tea.Cmd) {
 	if m.filesPreview != nil {
 		// The preview owns the right column: vertical movement scrolls it instead
-		// of the commit list (so filesHash can't change under a live preview).
-		m.filesPreview.move(delta)
+		// of the commit list (so filesHash can't change under a live preview). It is
+		// a pager — move the top line directly (NOT contentPopup.move, which clamps
+		// to a cursor range and is shared with the tree/help window) so every press,
+		// keyboard or wheel, scrolls the viewport.
+		p := m.filesPreview
+		p.sel = previewClamp(p.sel+delta, len(p.lines), m.filePreviewRowsCap(), p.mode)
 		return m, nil
 	}
 	if m.stashView != nil {
