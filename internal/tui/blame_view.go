@@ -235,12 +235,10 @@ func (b *blameView) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		return m, nil
 	case "e": // open the blamed file (at this rev) in $EDITOR (read-only)
-		path, rev, svc := b.ctx.path, b.ctx.rev, m.svc
-		resolve := func(ctx context.Context) ([]byte, error) { return svc.ShowFile(ctx, rev, path) }
-		if rev == "" { // blame of the working-tree file: open the on-disk file, not the index blob
-			resolve = func(ctx context.Context) ([]byte, error) { return svc.WorktreeFile(ctx, path) }
+		if r, ok := m.surfaceExternalRow(); ok {
+			nm, cmd := r.run(m)
+			return nm.(Model), cmd
 		}
-		return m, m.openInEditorCmd(path, resolve)
 	case "enter":
 		blk, ok := blockAt(b.blocks, b.sel)
 		if !ok || blk.hash == "" {

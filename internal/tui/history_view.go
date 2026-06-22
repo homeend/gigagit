@@ -271,16 +271,9 @@ func (h *historyView) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			return m, m.loadBlameCmd(ctx, bv.tag)
 		}
 	case "e": // open this commit's version of the file in $EDITOR (read-only)
-		if h.sel >= 0 && h.sel < len(h.commits) {
-			fc := h.commits[h.sel]
-			path := fc.Path
-			if path == "" {
-				path = h.ctx.path
-			}
-			hash, svc := fc.Hash, m.svc
-			return m, m.openInEditorCmd(path, func(ctx context.Context) ([]byte, error) {
-				return svc.ShowFile(ctx, hash, path)
-			})
+		if r, ok := m.surfaceExternalRow(); ok {
+			nm, cmd := r.run(m)
+			return nm.(Model), cmd
 		}
 	case "down", "j":
 		if h.sel < len(h.commits)-1 {
