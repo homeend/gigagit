@@ -77,6 +77,50 @@ func (m Model) loadCommitFilesCmd(c model.Commit) tea.Cmd {
 	}
 }
 
+// treeFilesMsg carries the full file tree of commit hash, with the content lines
+// already built (the dir-major sort runs off the UI thread — the tree can be
+// 10^4–10^5 files on a large repo).
+type treeFilesMsg struct {
+	hash    string
+	subject string
+	lines   []contentLine
+	err     error
+}
+
+// loadTreeFilesCmd fetches every file in commit c's tree (ls-tree) AND builds the
+// content lines off the UI thread, so the render thread only assigns the result.
+func (m Model) loadTreeFilesCmd(c model.Commit) tea.Cmd {
+	svc := m.svc
+	return func() tea.Msg {
+		files, err := svc.TreeFiles(context.Background(), c.Hash)
+		if err != nil {
+			return treeFilesMsg{hash: c.Hash, subject: c.Subject, err: err}
+		}
+		return treeFilesMsg{hash: c.Hash, subject: c.Subject, lines: commitFileLines(files)}
+	}
+}
+
+// loadFilesForCmd loads the files-view content for commit c in the active mode:
+// the full tree (every file at the commit) when filesAllFiles, else the changed
+// set. Used wherever the view (re)loads so the mode sticks across navigation.
+func (m Model) loadFilesForCmd(c model.Commit) tea.Cmd {
+	if m.filesAllFiles {
+		return m.loadTreeFilesCmd(c)
+	}
+	return m.loadCommitFilesCmd(c)
+}
+
+// filesViewCommit returns the loaded commit the files view is showing (matched
+// by filesHash); falls back to a hash-only Commit when it is outside the feed.
+func (m Model) filesViewCommit() model.Commit {
+	for i := range m.commits {
+		if m.commits[i].Hash == m.filesHash {
+			return m.commits[i]
+		}
+	}
+	return model.Commit{Hash: m.filesHash}
+}
+
 // compareFilesMsg carries a whole-tree comparison's changed files, tagged so a
 // superseded load (fast re-open) can be dropped.
 type compareFilesMsg struct {
@@ -93,6 +137,7 @@ func (m Model) openCompareFiles(left, right model.Endpoint) (Model, tea.Cmd) {
 	m.filesView = &contentPopup{lines: []contentLine{{text: "(loading…)"}}}
 	m.filesTitle = left.Display() + " ↔ " + right.Display()
 	m.filesCompare = true
+	m.filesAllFiles = false // compare mode is its own thing
 	m.filesLeft = left
 	m.filesRight = right
 	// h/b (history/blame) context: prefer a commit side; "" means working tree.
@@ -178,6 +223,16 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		p.mode = p.mode.next()
 		p.hscroll = 0
 		return m, nil
+	case "a": // toggle full-tree (every file at this commit) vs the changed set
+		if m.stashView != nil || m.filesCompare || m.filesHash == "" {
+			return m, nil // only meaningful for a commit files view
+		}
+		m.filesAllFiles = !m.filesAllFiles
+		p.lines = []contentLine{{text: "(loading…)"}}
+		p.sel = 0
+		p.query = ""
+		m.filesReadInflight = true
+		return m, m.loadFilesForCmd(m.filesViewCommit())
 	// The commit-list side IS the Commits panel selection (m.focus stays
 	// panelCommits), so the graph window keys mirror the base panel exactly
 	// (model.go). Only on the file-tree side do shift+arrows scroll the tree.
@@ -230,12 +285,14 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.filesCompare = false
 		m.compareTag = ""
 		m.filesTreeFocused = false
+		m.filesAllFiles = false
 		return m, nil
 	case "l":
 		m.filesView = nil
 		m.filesCompare = false
 		m.compareTag = ""
 		m.filesTreeFocused = false
+		m.filesAllFiles = false
 		return m, nil
 	case "/":
 		// Focus decides the search target. The commit-list side routes to the
@@ -301,6 +358,16 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			loading: true,
 			partial: m.diffPartial,
 			long:    m.diffLong,
+		}
+		if m.filesAllFiles {
+			// Full-tree mode: the file may be unchanged in this commit, so a
+			// parent-diff would be empty. Diff the commit's version against the
+			// working tree instead — useful for any file in the tree.
+			left := model.Endpoint{Kind: model.EndpointCommit, Hash: m.filesHash}
+			right := model.Endpoint{Kind: model.EndpointWorkTree}
+			m.diffView.context = shortHash(m.filesHash) + " ↔ working tree"
+			m.diffTag = "cmp:" + left.CacheTag() + ":" + right.CacheTag() + ":" + l.path
+			return m, m.loadCompareDiffCmd(left, right, l)
 		}
 		if m.filesCompare {
 			m.diffView.context = m.filesTitle
@@ -384,7 +451,7 @@ func (m Model) moveCommitUnderFilesView(delta int) (tea.Model, tea.Cmd) {
 	}
 	m.filesHash = m.commits[bi].Hash
 	m.filesReadInflight = true
-	filesCmd := m.loadCommitFilesCmd(m.commits[bi])
+	filesCmd := m.loadFilesForCmd(m.commits[bi])
 	m, more := m.maybeLoadMoreCommits()
 	if more != nil {
 		return m, tea.Batch(filesCmd, more)
@@ -403,7 +470,7 @@ func (m Model) syncFilesViewToSelectedCommit() (tea.Model, tea.Cmd) {
 	}
 	m.filesHash = m.commits[bi].Hash
 	m.filesReadInflight = true
-	return m, m.loadCommitFilesCmd(m.commits[bi])
+	return m, m.loadFilesForCmd(m.commits[bi])
 }
 
 // renderFilesView draws the commit files tree as one full-height left-column
@@ -432,12 +499,29 @@ func (m Model) renderFilesView(boxW, boxH int) string {
 	}
 
 	vis := p.visible()
-	wr := make([]winRow, len(vis))
-	for i, l := range vis {
+	// Window-then-build: on a full tree the list is 10^4–10^5 rows, and building a
+	// winRow for every row each frame is O(n) (≈0.5s at 40k rows). For the
+	// 1-line-per-row modes (cutoff/scroll), only the slice the window can show is
+	// built; the math is byte-identical to building all rows (windowStart clamps
+	// the same window either way). Wrap mode has variable row height, so it keeps
+	// the full build (wrapping a 10^5 tree is a deliberate, rare choice).
+	s0, s1, anchor := 0, len(vis), p.sel
+	if p.mode != modeWrap && len(vis) > 2*rowsCap+1 {
+		if s0 = p.sel - rowsCap; s0 < 0 {
+			s0 = 0
+		}
+		if s1 = p.sel + rowsCap + 1; s1 > len(vis) {
+			s1 = len(vis)
+		}
+		anchor = p.sel - s0
+	}
+	window := vis[s0:s1]
+	wr := make([]winRow, len(window))
+	for i, l := range window {
 		prefix := "  "
 		var st lipgloss.Style
 		switch {
-		case i == p.sel:
+		case i == anchor:
 			// Cursor highlight wins over heading style so the cursor stays
 			// visible when it rests on a heading row.
 			prefix = "> "
@@ -466,7 +550,7 @@ func (m Model) renderFilesView(boxW, boxH int) string {
 	if len(vis) == 0 {
 		lines = append(lines, padRight(truncate("  (no match)", innerW), innerW))
 	} else {
-		win := renderWindow(wr, winOpts{w: innerW, h: rowsCap, mode: p.mode, anchor: p.sel, hscroll: p.hscroll})
+		win := renderWindow(wr, winOpts{w: innerW, h: rowsCap, mode: p.mode, anchor: anchor, hscroll: p.hscroll})
 		lines = append(lines, win...)
 	}
 	for len(lines) < contentH-1 {

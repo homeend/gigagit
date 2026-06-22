@@ -225,6 +225,14 @@ func (s *Service) CommitFiles(ctx context.Context, hash string) ([]model.CommitF
 	})
 }
 
+// TreeFiles returns every file in commit hash's tree (the full checked-out file
+// set at that commit), under a Read reservation, coalesced per hash.
+func (s *Service) TreeFiles(ctx context.Context, hash string) ([]model.CommitFile, error) {
+	return query(ctx, s, "tree-files:"+hash, func(ctx context.Context) ([]model.CommitFile, error) {
+		return s.repo.TreeFiles(ctx, hash)
+	})
+}
+
 // CompareFiles returns the files that differ between two endpoints (left =
 // older, right = newer), under a Read reservation. The singleflight key
 // includes both endpoints; live endpoints (working tree / index) change
