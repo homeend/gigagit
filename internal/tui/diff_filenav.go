@@ -148,6 +148,6 @@ func (m Model) stepDiffFileStatus(dir int, staged bool) (tea.Model, tea.Cmd) {
 // returned (the open path cleared diffNotice, dropping any stale value first).
 func withDiffArrival(tm tea.Model, path string) tea.Model {
 	m := tm.(Model)
-	m.diffNotice = "▸ " + path
+	m.diffNotice = "▸ now: " + path
 	return m
 }

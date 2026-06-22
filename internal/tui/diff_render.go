@@ -120,7 +120,8 @@ func sanitizeLine(s string) string {
 // file-step cue, or the transient arrival / no-file message — as a rounded box,
 // mirroring the search-recall dropdown's look and anchor. A no-op when the diff
 // isn't the active surface (a popup/layer on top owns the screen) or there is
-// nothing to show.
+// nothing to show. NOTE: shares the x=2/bottom anchor with withRecall — safe
+// today because recall never opens over the diff; revisit if it ever does.
 func (m Model) withDiffFileNotice(frame string) string {
 	if m.diffView == nil {
 		return frame

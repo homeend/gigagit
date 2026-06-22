@@ -278,6 +278,24 @@ func TestDiffNoticeClearedOnNextKey(t *testing.T) {
 	}
 }
 
+// TestDiffNoticeSurvivesAsyncLoad: the arrival notice must persist across the
+// diffMsg that replaces the loading diffView a moment later (diffNotice is a
+// Model field, not on diffView) — otherwise it would flash and vanish on load.
+func TestDiffNoticeSurvivesAsyncLoad(t *testing.T) {
+	m := treeDiffModel(1)
+	u, _ := m.Update(keyMsg("end"))          // prime
+	u2, _ := u.(Model).Update(keyMsg("end")) // step → loading view + notice
+	mm := u2.(Model)
+	if !strings.Contains(mm.diffNotice, "b.go") {
+		t.Fatal("setup: step must post a notice")
+	}
+	// The loader's result lands, replacing the loading view (tag must match).
+	u3, _ := mm.Update(diffMsg{tag: mm.diffTag, view: &diffView{}})
+	if !strings.Contains(u3.(Model).diffNotice, "b.go") {
+		t.Fatalf("notice must survive the diffMsg load, got %q", u3.(Model).diffNotice)
+	}
+}
+
 // TestOpenDiffClearsStaleNotice: opening a diff (enter) drops a leftover notice.
 func TestOpenDiffClearsStaleNotice(t *testing.T) {
 	m := filesViewModel()
