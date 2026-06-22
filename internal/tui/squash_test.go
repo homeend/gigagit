@@ -74,6 +74,17 @@ func TestSquashNonAdjacentOpensReorderModal(t *testing.T) {
 	if len(opts) == 0 || !strings.Contains(strings.ToLower(opts[0]), "reorder") {
 		t.Fatalf("modal options = %v, want a Reorder option first", opts)
 	}
+
+	// Choosing Cancel is a no-op: no op starts, the selection is left intact.
+	// (This exercises the onResolve closure wiring without firing a live rebase.)
+	cm, cmd := m.modal.onResolve(m, "Cancel")
+	cmModel := cm.(Model)
+	if cmd != nil {
+		t.Fatal("Cancel must not start an operation")
+	}
+	if !cmModel.commitCompareSet[m.commits[0].Hash] || !cmModel.commitCompareSet[m.commits[2].Hash] {
+		t.Fatalf("Cancel must leave the selection intact, got %v", cmModel.commitCompareSet)
+	}
 }
 
 func TestSquashRowVisibleWith2Commits(t *testing.T) {
