@@ -54,10 +54,11 @@ func (m Model) popLayer() Model {
 	return m
 }
 
-// clearLayers removes every layer. Used when a popup hands off to a full-screen
-// diff that must own the screen: the diff view is the render base the stack walks
-// over, so a lingering layer would composite on top and hide nothing — clearing
-// makes the diff the sole visible surface.
+// clearLayers removes every layer. Used when a flow hands off to a surface that
+// must own the screen with no return stack behind it — the identity apply-op
+// (settings → identity) and the bookmark→compare-files view. (The full-screen
+// diff no longer uses this: it is a stack layer and is pushed/popped like any
+// other, preserving the surface it was opened over.)
 func (m Model) clearLayers() Model {
 	if m.layers != nil {
 		m.layers.entries = nil
