@@ -36,27 +36,31 @@
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `internal/git/merge_test.go` (use the existing `newRepoDir`/`gitIn` helpers; check the file's existing helper names and imports — `os/exec` and `path/filepath` are already used elsewhere in the package):
+Append to `internal/git/merge_test.go`. Use the package's real helpers (verified): `newTestRepo(t) (dir string, runner gitexec.Runner)`, wrap with `repo := &Repo{Runner: runner}`; `gitIn(t, dir, ...)` runs git; `revParse(t, dir, ref) string` returns the trimmed SHA. `os`/`path/filepath`/`context` are already imported in the file. The default branch is `main` (the existing `TestMergeConflictDetectAndAbortReal` checks out `main`):
 
 ```go
 func TestMergeFFOnly(t *testing.T) {
-	dir, repo := newRepoDir(t) // initial commit on the default branch
+	dir, runner := newTestRepo(t)
+	repo := &Repo{Runner: runner}
 	ctx := context.Background()
 
-	// main (current) at C0; create feat ahead by one commit, then return to main.
+	// base commit on main, then feat ahead by one commit; return to main.
+	os.WriteFile(filepath.Join(dir, "base.txt"), []byte("base\n"), 0o644)
+	gitIn(t, dir, "add", ".")
+	gitIn(t, dir, "commit", "-m", "base")
 	gitIn(t, dir, "branch", "feat")
-	gitIn(t, dir, "switch", "feat")
+	gitIn(t, dir, "checkout", "feat")
 	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a\n"), 0o644)
-	gitIn(t, dir, "add", "a.txt")
+	gitIn(t, dir, "add", ".")
 	gitIn(t, dir, "commit", "-m", "ahead")
-	featTip := strings.TrimSpace(gitOut(t, dir, "rev-parse", "HEAD"))
-	gitIn(t, dir, "switch", "-")
+	featTip := revParse(t, dir, "HEAD")
+	gitIn(t, dir, "checkout", "main")
 
 	// Fast-forward main to feat's tip.
 	if err := repo.MergeFFOnly(ctx, "", featTip); err != nil {
 		t.Fatalf("MergeFFOnly: %v", err)
 	}
-	if got := strings.TrimSpace(gitOut(t, dir, "rev-parse", "HEAD")); got != featTip {
+	if got := revParse(t, dir, "HEAD"); got != featTip {
 		t.Fatalf("HEAD = %s, want %s (advanced)", got, featTip)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "a.txt")); err != nil {
@@ -64,32 +68,17 @@ func TestMergeFFOnly(t *testing.T) {
 	}
 
 	// A non-descendant target must be refused (divergent commit on a new root).
-	gitIn(t, dir, "switch", "--orphan", "other")
+	gitIn(t, dir, "checkout", "--orphan", "other")
 	os.WriteFile(filepath.Join(dir, "z.txt"), []byte("z\n"), 0o644)
 	gitIn(t, dir, "add", "z.txt")
 	gitIn(t, dir, "commit", "-m", "orphan")
-	other := strings.TrimSpace(gitOut(t, dir, "rev-parse", "HEAD"))
-	gitIn(t, dir, "switch", "feat")
+	other := revParse(t, dir, "HEAD")
+	gitIn(t, dir, "checkout", "feat")
 	if err := repo.MergeFFOnly(ctx, "", other); err == nil {
 		t.Fatal("MergeFFOnly to a non-descendant must error")
 	}
 }
 ```
-
-If `gitOut` does not already exist in the `git` test package, add this helper near the top of `merge_test.go`:
-
-```go
-func gitOut(t *testing.T, dir string, args ...string) string {
-	t.Helper()
-	out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).Output()
-	if err != nil {
-		t.Fatalf("git %v: %v", args, err)
-	}
-	return string(out)
-}
-```
-
-(First grep `internal/git/*_test.go` for an existing `gitOut`/`revParse` helper and reuse it instead of redeclaring.)
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -146,58 +135,57 @@ git commit -m "feat(git): MergeFFOnly verb (git merge --ff-only)" -m "Co-Authore
 
 - [ ] **Step 1: Write the failing test**
 
-Create `internal/engine/fast_forward_test.go`. Mirror the real-git setup used by `reset_test.go` (grep it for the exact repo helper — e.g. `newOpRepo`/`newRepoDir` returning a dir + something satisfying `GitOps`, plus a no-op decider). Use that helper; the shape below assumes a `dir, ops := <helper>(t)` returning a `GitOps` and a `nullDecider`/`autoDecider` already present in the package:
+Create `internal/engine/fast_forward_test.go`. Use the package's real helpers (verified in `reset_test.go`): `newRepo(t) (dir string, repo GitOps)`; `gitE(t, dir, ...)` runs git; `gitOut(t, dir, ...) string` returns the **trimmed** output. `OpDeps` has fields `Repo`, `Events`, `Decider`, `Escalate` — there is no `emit`/`decide` field; `deps.emit` is nil-safe when `Events` is nil and `FastForward` never calls `decide`, so `OpDeps{Repo: repo}` is sufficient. The default branch is `main`. `os`/`path/filepath`/`context` are already imported in the package's tests.
 
 ```go
 func TestFastForwardAdvancesToDescendant(t *testing.T) {
-	dir, ops := newEngineRepo(t) // real repo, current branch = main at C0
+	dir, repo := newRepo(t) // real repo on main with an initial commit
 	ctx := context.Background()
 
-	// feat ahead by one commit; back on main.
-	gitIn(t, dir, "branch", "feat")
-	gitIn(t, dir, "switch", "feat")
-	writeFile(t, dir, "a.txt", "a\n")
-	gitIn(t, dir, "add", "a.txt")
-	gitIn(t, dir, "commit", "-m", "ahead")
-	featTip := revParse(t, dir, "HEAD")
-	gitIn(t, dir, "switch", "-")
+	gitE(t, dir, "branch", "feat")
+	gitE(t, dir, "checkout", "feat")
+	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a\n"), 0o644)
+	gitE(t, dir, "add", ".")
+	gitE(t, dir, "commit", "-m", "ahead")
+	featTip := gitOut(t, dir, "rev-parse", "HEAD")
+	gitE(t, dir, "checkout", "main")
 
-	res, err := FastForward{Commit: featTip}.Run(ctx, OpDeps{Repo: ops, emit: noEmit, decide: noDecide})
+	res, err := FastForward{Commit: featTip}.Run(ctx, OpDeps{Repo: repo})
 	if err != nil {
 		t.Fatalf("FastForward: %v", err)
 	}
 	if !res.Changed {
 		t.Fatal("Changed must be true on a real advance")
 	}
-	if got := revParse(t, dir, "HEAD"); got != featTip {
+	if got := gitOut(t, dir, "rev-parse", "HEAD"); got != featTip {
 		t.Fatalf("HEAD = %s, want %s", got, featTip)
 	}
 }
 
 func TestFastForwardRefusesNonDescendant(t *testing.T) {
-	dir, ops := newEngineRepo(t)
+	dir, repo := newRepo(t)
 	ctx := context.Background()
-	gitIn(t, dir, "switch", "--orphan", "other")
-	writeFile(t, dir, "z.txt", "z\n")
-	gitIn(t, dir, "add", "z.txt")
-	gitIn(t, dir, "commit", "-m", "orphan")
-	other := revParse(t, dir, "HEAD")
-	gitIn(t, dir, "switch", "main")
-	before := revParse(t, dir, "HEAD")
+	gitE(t, dir, "checkout", "--orphan", "other")
+	os.WriteFile(filepath.Join(dir, "z.txt"), []byte("z\n"), 0o644)
+	gitE(t, dir, "add", "z.txt")
+	gitE(t, dir, "commit", "-m", "orphan")
+	other := gitOut(t, dir, "rev-parse", "HEAD")
+	gitE(t, dir, "checkout", "main")
+	before := gitOut(t, dir, "rev-parse", "HEAD")
 
-	if _, err := (FastForward{Commit: other}).Run(ctx, OpDeps{Repo: ops, emit: noEmit, decide: noDecide}); err == nil {
+	if _, err := (FastForward{Commit: other}).Run(ctx, OpDeps{Repo: repo}); err == nil {
 		t.Fatal("non-descendant fast-forward must error")
 	}
-	if revParse(t, dir, "HEAD") != before {
+	if gitOut(t, dir, "rev-parse", "HEAD") != before {
 		t.Fatal("HEAD must not move on a refused fast-forward")
 	}
 }
 
 func TestFastForwardAlreadyUpToDate(t *testing.T) {
-	dir, ops := newEngineRepo(t)
+	dir, repo := newRepo(t)
 	ctx := context.Background()
-	head := revParse(t, dir, "HEAD")
-	res, err := FastForward{Commit: head}.Run(ctx, OpDeps{Repo: ops, emit: noEmit, decide: noDecide})
+	head := gitOut(t, dir, "rev-parse", "HEAD")
+	res, err := FastForward{Commit: head}.Run(ctx, OpDeps{Repo: repo})
 	if err != nil {
 		t.Fatalf("up-to-date FF: %v", err)
 	}
@@ -207,17 +195,17 @@ func TestFastForwardAlreadyUpToDate(t *testing.T) {
 }
 
 func TestFastForwardDetachedHeadErrors(t *testing.T) {
-	dir, ops := newEngineRepo(t)
+	dir, repo := newRepo(t)
 	ctx := context.Background()
-	head := revParse(t, dir, "HEAD")
-	gitIn(t, dir, "switch", "--detach", head)
-	if _, err := (FastForward{Commit: head}).Run(ctx, OpDeps{Repo: ops, emit: noEmit, decide: noDecide}); err == nil {
+	head := gitOut(t, dir, "rev-parse", "HEAD")
+	gitE(t, dir, "checkout", "--detach", head)
+	if _, err := (FastForward{Commit: head}).Run(ctx, OpDeps{Repo: repo}); err == nil {
 		t.Fatal("detached HEAD must error")
 	}
 }
 ```
 
-> Before writing these, open `internal/engine/reset_test.go` and reuse its exact helpers: the repo constructor, `revParse`, `writeFile`/file helper, `gitIn`, and the no-op `emit`/`decide` values (names may be `noEmit`/`noDecide` or inline funcs). Match them — do NOT invent new helper names if equivalents exist.
+> If `newRepo`/`gitE`/`gitOut` differ in the tree, grep `internal/engine/*_test.go` and match the real names — but the signatures above are verified against `reset_test.go`. Note `CurrentBranch` (engine side) uses `git symbolic-ref --quiet`, which returns `""` on detached HEAD, so the op's `branch == ""` guard fires correctly here.
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -559,7 +547,10 @@ func TestFastForwardRowHiddenOnBehindCommit(t *testing.T) {
 
 func TestFastForwardRowHiddenWhenDetached(t *testing.T) {
 	m := ffModel()
-	m.status.Branch = "" // detached
+	// porcelain v2 "# branch.head (detached)" → status.Branch == "(detached)",
+	// NOT "" (that's the engine-side symbolic-ref representation). The TUI guard
+	// must hide on the real value the status parser produces.
+	m.status.Branch = "(detached)"
 	if _, ok := m.commitFastForwardRow(); ok {
 		t.Fatal("row must be hidden when HEAD is detached")
 	}
@@ -600,8 +591,10 @@ func (m Model) commitFastForwardRow() (actionRow, bool) {
 		return actionRow{}, false
 	}
 	branch := m.status.Branch
-	if branch == "" {
-		return actionRow{}, false // detached HEAD: no current branch to move
+	// Detached HEAD: porcelain v2 reports "(detached)" (and "" defensively).
+	// There is no current branch to fast-forward, so hide the row.
+	if branch == "" || branch == "(detached)" {
+		return actionRow{}, false
 	}
 	bi, ok := m.backingIndex(panelCommits)
 	if !ok {
