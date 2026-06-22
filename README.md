@@ -154,6 +154,8 @@ live in `<git-common-dir>/gg/state.toml`.
 `[ui] hscroll_step` sets the diff scroll-mode pan step in columns (default 8);
 `[ui] search_history_size` sets how many phrases each search-history ring keeps
 (default 20, hard max 1000) — recall them while typing a search with `alt+↑/↓`;
+`[ui] reflog_limit` caps how many HEAD reflog entries the Reflog tab loads
+(default 200, no upper clamp; git's own `gc.reflogExpire` is the real ceiling);
 like every entry, the repo's `.gg.toml` overrides the global config
 per field.
 
