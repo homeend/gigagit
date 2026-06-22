@@ -1,10 +1,33 @@
 package tui
 
 import (
+	"context"
+
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/gigagit/gg/internal/engine"
 )
+
+// copyShaRow builds a "Copy commit sha" action that resolves ref to its full
+// 40-char object id on invoke (git rev-parse via domain), NOT at menu-build
+// time — so opening the menu costs no git call. A nil service or a resolve
+// error falls back to fallbackShort (the short hash the row already carries),
+// so the copy always yields a usable value.
+func (m Model) copyShaRow(ref, fallbackShort string) actionRow {
+	return actionRow{
+		id:    "copy-commit-sha",
+		label: "Copy commit sha",
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			full := fallbackShort
+			if m.svc != nil {
+				if s, err := m.svc.RevParse(context.Background(), ref); err == nil && s != "" {
+					full = s
+				}
+			}
+			return m, m.copyToClipboardCmd("Copied commit sha "+shortHash(full), full)
+		},
+	}
+}
 
 // canFetchRemotes gates f (fetch) and the Prune . menu action on the Remotes tab.
 func (m Model) canFetchRemotes() bool {
