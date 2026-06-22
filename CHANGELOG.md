@@ -9,6 +9,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **More Remotes & Branches menu actions.** The `.` menu on the Branches and
+  Remotes panels now offers **Copy commit id** (the short tip hash) and **Copy
+  commit sha** (the full 40-char hash, resolved on demand). The Remotes menu
+  additionally offers **Create worktree from** the remote branch, **Merge** it
+  into the current branch, and **Rebase** the current branch onto it (reusing
+  SmartMerge/SmartRebase; conflicts resolve through the usual modal). Merge and
+  rebase are hidden on a detached HEAD.
 - **`gg config init`.** Scaffolds a documented config file (`--repo` for
   `.gg.toml` at the repo root, `--global` for `~/.config/gg/config.toml`) with
   every setting commented-out alongside its default and a one-line description.

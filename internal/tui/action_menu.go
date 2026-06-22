@@ -123,6 +123,15 @@ func availableActions(m Model) []actionRow {
 	if r, ok := m.remotePruneRow(); ok {
 		out = append(out, r)
 	}
+	if r, ok := m.remoteCreateWorktreeRow(); ok {
+		out = append(out, r)
+	}
+	if r, ok := m.remoteMergeRow(); ok {
+		out = append(out, r)
+	}
+	if r, ok := m.remoteRebaseRow(); ok {
+		out = append(out, r)
+	}
 	if r, ok := m.bookmarkAddRow(); ok {
 		out = append(out, r)
 	}
@@ -323,13 +332,21 @@ func (m Model) contextCopyRows() []actionRow {
 		}
 	case m.focus == panelBranches:
 		if bi, ok := m.backingIndex(panelBranches); ok {
-			name := m.branches[bi].Name
-			return []actionRow{m.copyRow("copy-branch-name", "Copy branch name", "Copied branch name "+name, name)}
+			b := m.branches[bi]
+			return []actionRow{
+				m.copyRow("copy-branch-name", "Copy branch name", "Copied branch name "+b.Name, b.Name),
+				m.copyRow("copy-commit-id", "Copy commit id", "Copied commit id "+shortHash(b.Hash), b.Hash),
+				m.copyShaRow(b.Name, b.Hash),
+			}
 		}
 	case m.focus == panelRemotes:
 		if bi, ok := m.backingIndex(panelRemotes); ok {
-			name := m.remoteBranches[bi].Name
-			return []actionRow{m.copyRow("copy-branch-name", "Copy branch name", "Copied branch name "+name, name)}
+			rb := m.remoteBranches[bi]
+			return []actionRow{
+				m.copyRow("copy-branch-name", "Copy branch name", "Copied branch name "+rb.Name, rb.Name),
+				m.copyRow("copy-commit-id", "Copy commit id", "Copied commit id "+shortHash(rb.Hash), rb.Hash),
+				m.copyShaRow(rb.Name, rb.Hash),
+			}
 		}
 	}
 	return nil

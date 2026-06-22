@@ -304,6 +304,13 @@ func (s *Service) CurrentBranch(ctx context.Context) (string, error) {
 	return query(ctx, s, "current-branch", s.repo.CurrentBranch)
 }
 
+// RevParse resolves rev to a full object id, under a Read reservation.
+func (s *Service) RevParse(ctx context.Context, rev string) (string, error) {
+	return query(ctx, s, "revparse:"+rev, func(ctx context.Context) (string, error) {
+		return s.repo.RevParse(ctx, rev)
+	})
+}
+
 // LastCommitMessage returns HEAD's full commit message, under a Read reservation.
 func (s *Service) LastCommitMessage(ctx context.Context) (string, error) {
 	return query(ctx, s, "last-commit-message", s.repo.LastCommitMessage)
