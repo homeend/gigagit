@@ -1,7 +1,10 @@
 package tui
 
 import (
+	"strings"
 	"testing"
+
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/gigagit/gg/internal/model"
 )
@@ -30,6 +33,27 @@ func TestReflogListLenAndRows(t *testing.T) {
 	}
 	if !contains(rows[0], "1111111") || !contains(rows[0], "checkout") {
 		t.Fatalf("row 0 = %q, want short hash + subject", rows[0])
+	}
+}
+
+func TestReflogTabRendersInAssembledLeftColumn(t *testing.T) {
+	// Render-path coverage: the panel-logic tests run on synthetic data and
+	// never prove the Reflog tab draws in the assembled left column. Toggle the
+	// bottom slot to Reflog and assert a reflog row + the bracketed label survive
+	// the full render.
+	m := maxModel() // width 120, height 40 — bodyH >= 12 so the bottom slot shows
+	m.reflog = reflogTestModel().reflog
+	m.activeBottomTab = panelReflog
+
+	out := ansi.Strip(m.renderInterface())
+	if !strings.Contains(out, "[Reflog") {
+		t.Fatalf("assembled render must show the active [Reflog] tab label:\n%s", out)
+	}
+	if !strings.Contains(out, "checkout: moving") {
+		t.Fatalf("assembled render must show a reflog row subject:\n%s", out)
+	}
+	if strings.Contains(out, "[Staged") {
+		t.Fatalf("Staged must not be the active bracketed tab when Reflog is active:\n%s", out)
 	}
 }
 
