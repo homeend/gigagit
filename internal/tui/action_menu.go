@@ -126,6 +126,9 @@ func availableActions(m Model) []actionRow {
 	if r, ok := m.bookmarkAddRow(); ok {
 		out = append(out, r)
 	}
+	if r, ok := m.reflogBookmarkRow(); ok {
+		out = append(out, r)
+	}
 	if r, ok := m.compareAgainstBookmarkRow(); ok {
 		out = append(out, r)
 	}
@@ -290,6 +293,13 @@ func (m Model) contextCopyRows() []actionRow {
 		return nil
 	}
 	switch {
+	case m.focus == panelReflog:
+		if bi, ok := m.backingIndex(panelReflog); ok {
+			e := m.reflog[bi]
+			return []actionRow{
+				m.copyRow("copy-reflog-sha", "Copy SHA", "Copied SHA "+shortHash(e.Hash), e.Hash),
+			}
+		}
 	case m.focus == panelCommits:
 		if bi, ok := m.backingIndex(panelCommits); ok {
 			c := m.commits[bi]

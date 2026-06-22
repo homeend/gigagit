@@ -119,6 +119,27 @@ func (m Model) commitBookmarkRow() (actionRow, bool) {
 	}, true
 }
 
+// reflogBookmarkRow offers a path-less commit bookmark for the reflog entry
+// under the cursor. Anchored on panelReflog selection only.
+func (m Model) reflogBookmarkRow() (actionRow, bool) {
+	if m.focus != panelReflog || !m.opsIdle() {
+		return actionRow{}, false
+	}
+	bi, ok := m.backingIndex(panelReflog)
+	if !ok {
+		return actionRow{}, false
+	}
+	e := m.reflog[bi]
+	b := commitBookmark(model.Commit{Hash: e.Hash, Subject: e.Subject})
+	return actionRow{
+		id:    "reflog-bookmark",
+		label: "Bookmark this commit",
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			return m, m.bookmarkAddCmd(b)
+		},
+	}, true
+}
+
 // commitBookmark builds the path-less bookmark for commit c. The subject rides
 // in Label as the switcher row's title (Label is not part of the identity).
 func commitBookmark(c model.Commit) model.Bookmark {

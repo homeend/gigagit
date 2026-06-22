@@ -50,6 +50,39 @@ func TestReflogEnterOpensCommitFilesView(t *testing.T) {
 	}
 }
 
+func TestReflogMenuCopyAndBookmark(t *testing.T) {
+	m := reflogTestModel()
+	m.focus = panelReflog
+	m.sel[panelReflog] = 0
+	rows := m.contextCopyRows()
+	var sawCopy bool
+	for _, r := range rows {
+		if r.id == "copy-reflog-sha" {
+			sawCopy = true
+			if r.copyText != "1111111111111111111111111111111111111111" {
+				t.Fatalf("copy text = %q, want the cursor row's full hash", r.copyText)
+			}
+		}
+	}
+	if !sawCopy {
+		t.Fatal("reflog . menu must offer Copy SHA")
+	}
+	if _, ok := m.reflogBookmarkRow(); !ok {
+		t.Fatal("reflog . menu must offer Bookmark this commit")
+	}
+}
+
+func TestReflogMenuNoCommitLeak(t *testing.T) {
+	m := reflogTestModel()
+	m.focus = panelReflog
+	m.sel[panelReflog] = 0
+	// The commit-panel bookmark row is anchored on panelCommits and must NOT
+	// fire while focus is on the reflog panel.
+	if _, ok := m.commitBookmarkRow(); ok {
+		t.Fatal("commit bookmark row leaked into the reflog panel")
+	}
+}
+
 func TestBottomTabTogglesStagedReflog(t *testing.T) {
 	m := reflogTestModel()
 	m.focus = panelStaged
