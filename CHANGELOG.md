@@ -9,6 +9,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **`gg config init`.** Scaffolds a documented config file (`--repo` for
+  `./.gg.toml`, `--global` for `~/.config/gg/config.toml`) with every setting
+  commented-out alongside its default and a one-line description. Refuses to
+  overwrite without `--force`.
 - **Fast-forward the current branch to a commit.** When another branch is built
   on top of your current branch, the Commits panel `.` menu now offers
   **Fast-forward `<branch>` to here** on any commit ahead of your branch's tip —
