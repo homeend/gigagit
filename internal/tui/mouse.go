@@ -112,7 +112,10 @@ func (m Model) mouseInFilesView(msg tea.MouseMsg, wheel int) (tea.Model, tea.Cmd
 	case wheel != 0 && inTree:
 		m.filesView.move(wheel)
 	case wheel != 0 && inCommits:
-		return m.moveCommitUnderFilesView(wheel)
+		// Route through moveListUnderFilesView so the wheel scrolls whatever owns
+		// the right column: a live file preview (pager) or a stash list, falling
+		// back to the commit list — never reloading a commit under an open preview.
+		return m.moveListUnderFilesView(wheel)
 	case msg.Button == tea.MouseButtonLeft && inTree:
 		m.filesTreeFocused = true
 		i := msg.Y - 3 // box top (y=1) + border + title line

@@ -80,6 +80,37 @@ func fileContentLines(data []byte) []contentLine {
 	return out
 }
 
+// filePreviewRowsCap is how many content lines the preview window shows right
+// now; it mirrors renderFilePreview's math (border 2 + title + hint = 4) so the
+// pager clamp in the move handler agrees with what is actually rendered.
+func (m Model) filePreviewRowsCap() int {
+	rowsCap := m.layout().boxH[panelCommits] - 4
+	if rowsCap < 1 {
+		rowsCap = 1
+	}
+	return rowsCap
+}
+
+// previewClamp clamps a pager top-line index to [0, maxTop]. maxTop keeps the
+// last screenful in view (n-rowsCap); wrapped rows have variable height, so wrap
+// mode falls back to "scroll until the last line reaches the top" (n-1).
+func previewClamp(top, n, rowsCap int, mode dispMode) int {
+	maxTop := n - rowsCap
+	if mode == modeWrap {
+		maxTop = n - 1
+	}
+	if maxTop < 0 {
+		maxTop = 0
+	}
+	if top > maxTop {
+		top = maxTop
+	}
+	if top < 0 {
+		top = 0
+	}
+	return top
+}
+
 // renderFilePreview draws the file content as the right column (replacing the
 // Commits panel) while a preview is open. Window-then-build (a file can be large);
 // the border follows focus.
@@ -98,18 +129,17 @@ func (m Model) renderFilePreview(boxW, boxH int) string {
 		rowsCap = 1
 	}
 
+	// The preview is a pager: p.sel is the TOP visible line, not a cursor, so every
+	// ↑/↓ scrolls the viewport by one (there is no on-screen cursor to walk to an
+	// edge first). Top-anchor the window (anchor 0) so renderWindow can't re-center
+	// the slice and re-introduce the dead zone.
 	vis := p.lines
-	s0, s1, anchor := 0, len(vis), p.sel
-	if p.mode != modeWrap && len(vis) > 2*rowsCap+1 {
-		if s0 = p.sel - rowsCap; s0 < 0 {
-			s0 = 0
-		}
-		if s1 = p.sel + rowsCap + 1; s1 > len(vis) {
-			s1 = len(vis)
-		}
-		anchor = p.sel - s0
+	start := previewClamp(p.sel, len(vis), rowsCap, p.mode)
+	end := start + rowsCap
+	if end > len(vis) {
+		end = len(vis)
 	}
-	window := vis[s0:s1]
+	window := vis[start:end]
 	wr := make([]winRow, len(window))
 	for i, l := range window {
 		wr[i] = winRow{text: l.text}
@@ -120,13 +150,13 @@ func (m Model) renderFilePreview(boxW, boxH int) string {
 	if len(vis) == 0 {
 		lines = append(lines, padRight(truncate("  (empty)", innerW), innerW))
 	} else {
-		win := renderWindow(wr, winOpts{w: innerW, h: rowsCap, mode: p.mode, anchor: anchor, hscroll: p.hscroll})
+		win := renderWindow(wr, winOpts{w: innerW, h: rowsCap, mode: p.mode, anchor: 0, hscroll: p.hscroll})
 		lines = append(lines, win...)
 	}
 	for len(lines) < contentH-1 {
 		lines = append(lines, padRight("", innerW))
 	}
-	hint := fmt.Sprintf("%d/%d  [↑/↓] scroll  [z] view  [esc] close", p.sel+1, len(vis))
+	hint := fmt.Sprintf("%d/%d  [↑/↓] scroll  [z] view  [esc] close", start+1, len(vis))
 	lines = append(lines, padRight(truncate(hint, innerW), innerW))
 
 	style := bluredPanel

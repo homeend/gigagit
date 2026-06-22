@@ -79,6 +79,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   (also `gg compare … @worktree`), because `git diff` omits untracked files. They
   now appear as added (`A`) entries — paths with spaces or non-ASCII bytes
   included (listed via `ls-files -z`).
+- **The file-content preview now scrolls like a pager.** In the full-tree
+  *View file* preview, `↑/↓`/`pgup`/`pgdn` (and the mouse wheel) moved an
+  invisible cursor that the viewport only followed once it reached the middle of
+  the window — so the first half-screen of presses appeared to do nothing. The
+  preview now scrolls the viewport on every press (the top line moves
+  immediately), and wheeling over an open preview scrolls it instead of reloading
+  a commit underneath it.
 - **A whole-tree compare no longer gets discarded by an arrow key.** The compare
   files view (*Compare against working tree / staged*, *Compare with marked*, the
   WIP-row diff) opened with the commit list focused, so pressing up/down moved the
