@@ -640,7 +640,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "p":
 			if !m.running && !m.loading {
-				return m.startOp(engine.SmartPull{Intent: engine.PullAndStay})
+				return m.startOp(m.pullForFocus())
 			}
 		case "f":
 			if m.canFetchRemotes() {

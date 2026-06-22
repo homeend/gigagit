@@ -11,7 +11,7 @@ func helpContent() []contentLine {
 	}
 	return []contentLine{
 		h("Global"),
-		r("p", "pull (SmartPull: autostash, ff/rebase decisions)"),
+		r("p", "pull (SmartPull: autostash, ff/rebase decisions). On the Branches panel, a non-current branch pulls in the background (stay here): ff its ref, pull in its worktree, or stash→switch→pull→switch-back"),
 		r("P", "push the current branch (sets upstream)"),
 		r("s", "switch to the selected branch (SmartSwitch); if it's in another worktree, offers to jump there"),
 		r("S", "open the stash window (list all stashes)"),
@@ -48,7 +48,8 @@ func helpContent() []contentLine {
 		r("b", "create a branch off the selected one (popup)"),
 		r("B", "create a branch and switch to it"),
 		r("d", "delete the selected branch"),
-		r(".", "rename branch / copy branch name / Solo this branch / Add to commit view / Go to tip in commits (.-menu)"),
+		r("p", "on a non-current branch: pull it in the background (stay on your branch) — same as the .-menu 'Pull <branch> (stay here)'"),
+		r(".", "rename branch / copy branch name / Pull <branch> (stay here) / Solo this branch / Add to commit view / Go to tip in commits (.-menu)"),
 		r("", "Solo this branch (.-menu): scope the Commits panel to this branch (re-run to un-solo); Add/Remove from commit view builds a multi-branch set; Show all branches clears it; Go to tip in commits jumps the Commits cursor to this branch's tip"),
 		h("Remotes panel"),
 		r("c", "checkout: create or fast-forward a local tracking branch (stay on the current branch)"),

@@ -15,6 +15,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   appears, and pressing the same key once more wraps to the other end. Any other
   key cancels the primed wrap, so a single overshoot never jumps you across the
   file. Also applies to the `ctrl+↓`/`ctrl+↑` aliases.
+- **Pull another branch without leaving yours.** In the Branches panel, `p` on a
+  non-current branch (or the `.`-menu *Pull <branch> (stay here)*) now pulls that
+  branch in the background: it fast-forwards its ref when it can, pulls in the
+  branch's own worktree if it has one, or otherwise stashes → switches → pulls →
+  switches back — so you end up where you started. (This is SmartPull's
+  background intent, previously only reachable via `gg pull <branch> --background`.)
+  Also fixes a misleading "cannot fast-forward" prompt when the target branch
+  lived in a worktree.
 - **Mark two rows to compare them.** In the Commits panel, mark one row (`m`) and
   mark a second — gg opens their whole-tree compare directly (the GitKraken
   "select two, see the diff" gesture), instead of the old "no pair operations"
