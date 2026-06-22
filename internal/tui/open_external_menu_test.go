@@ -33,6 +33,26 @@ func TestBlameMenuExcludesLeakedCommitOps(t *testing.T) {
 	}
 }
 
+// The diff view ranks above the files view as the front surface (it's a Model
+// field, so topLayer() is nil for it). Opening a diff FROM the files-view commit
+// side leaves the files view live underneath, so the same commit ops + the
+// files-view View file / Open in external editor rows must not leak into the
+// diff `.` menu.
+func TestDiffMenuExcludesLeakedFilesViewRows(t *testing.T) {
+	base := filesViewGraphModel(false) // commit side, no diff yet: commit ops show
+	if !menuIDs(base)["commit-cherry-pick"] {
+		t.Fatal("precondition: the files-view commit side should offer commit ops")
+	}
+	m := base
+	m.diffView = &diffView{title: "a.go", rev: "h0"} // a diff opened over the files view
+	got := menuIDs(m)
+	for _, id := range []string{"commit-cherry-pick", "commit-revert", "graph-widen", "view-file", "open-external"} {
+		if got[id] {
+			t.Errorf("diff menu leaked %q from the files view underneath", id)
+		}
+	}
+}
+
 // Same leak for the history surface (the user's first report: "it looks like the
 // commit window menu").
 func TestHistoryMenuExcludesLeakedCommitOps(t *testing.T) {

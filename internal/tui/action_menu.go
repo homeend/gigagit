@@ -45,11 +45,18 @@ func availableActions(m Model) []actionRow {
 		case *historyView, *blameView:
 			onStackFile = true
 		}
+		// The front content surface, in the same precedence contextCopyRows uses:
+		// history/blame layer > diff view (a Model field, so topLayer() is nil for
+		// it) > files view. The files-view view/open rows and the commit-panel
+		// parity block target the files view, so they may ONLY appear when the
+		// files view is genuinely front — never when a diff/history/blame sits over
+		// it (opening a diff or h/b from the files view leaves it live underneath).
+		frontIsFilesView := !onStackFile && m.diffView == nil
 		if onStackFile {
 			if r, ok := m.surfaceExternalRow(); ok {
 				rows = append(rows, r)
 			}
-		} else {
+		} else if frontIsFilesView {
 			if r, ok := m.viewFileRow(); ok {
 				rows = append(rows, r)
 			}
@@ -76,9 +83,10 @@ func availableActions(m Model) []actionRow {
 		// selection (m.focus stays panelCommits), so offer the full commit/graph
 		// actions there for parity with the panel. These all carry run handlers,
 		// so they execute even though the files view owns the keyboard. The tree
-		// side and a stash file tree (no commit id) stay copy-only. A history/blame
-		// surface on top is NOT the commit side, so it is excluded (onStackFile).
-		if !onStackFile && m.filesView != nil && !m.filesTreeFocused && m.filesHash != "" && m.stashView == nil {
+		// side and a stash file tree (no commit id) stay copy-only. Only when the
+		// files view is front (frontIsFilesView) — a diff/history/blame surface on
+		// top is a single file, not the commit side.
+		if frontIsFilesView && m.filesView != nil && !m.filesTreeFocused && m.filesHash != "" && m.stashView == nil {
 			rows = m.appendCommitContextRows(rows)
 		}
 		return rows
