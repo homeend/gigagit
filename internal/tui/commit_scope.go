@@ -177,7 +177,7 @@ func (m Model) commitGotoTipRow() (actionRow, bool) {
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			idx := m.displayIndices(panelCommits)
 			for di, bi := range idx {
-				if bi >= 0 && bi < len(m.commits) && commitHasLocalRef(m.commits[bi], b.Name) {
+				if c, ok := m.commitAtUnified(bi); ok && commitHasLocalRef(c, b.Name) {
 					m.sel[panelCommits] = di
 					m.focus = panelCommits
 					return m, nil

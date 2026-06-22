@@ -64,6 +64,39 @@ func TestWipEnterOpensCompare(t *testing.T) {
 	}
 }
 
+// TestJumpToCommitUnderDirtyTree guards the write-side offset: a hash→row jump
+// (tag-jump / go-to-tip) walks displayIndices, which yields UNIFIED indices.
+// Reading the commit must go through commitAtUnified (offset by wipCount), and
+// the resulting display position must round-trip back through backingIndex to the
+// same commit. A raw m.commits[ci] lookup would land on the wrong row when dirty.
+func TestJumpToCommitUnderDirtyTree(t *testing.T) {
+	m := loadedModelLinearCommits(t, 4)
+	m.focus = panelCommits
+	m.status = dirtyStatus() // 2 wip rows
+	m.wipRows = deriveWipRows(m.status)
+	m = m.rebuildCommitGraph()
+	target := m.commits[2].Hash
+
+	idx := m.displayIndices(panelCommits)
+	found := -1
+	for di, ci := range idx {
+		if c, ok := m.commitAtUnified(ci); ok && c.Hash == target {
+			found = di
+		}
+	}
+	if found < 0 {
+		t.Fatal("target commit not found via commitAtUnified")
+	}
+	if found != 2+m.wipCount() {
+		t.Fatalf("display pos = %d, want %d (commit row offset by wipCount)", found, 2+m.wipCount())
+	}
+	m.sel[panelCommits] = found
+	bi, ok := m.backingIndex(panelCommits)
+	if !ok || m.commits[bi].Hash != target {
+		t.Fatalf("jump did not round-trip: bi=%d ok=%v hash=%q want %q", bi, ok, m.commits[bi].Hash, target)
+	}
+}
+
 func TestWipRowRefusesCommitOps(t *testing.T) {
 	m := loadedModelLinearCommits(t, 3)
 	m.focus = panelCommits

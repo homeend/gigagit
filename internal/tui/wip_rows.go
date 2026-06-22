@@ -79,6 +79,21 @@ func (m Model) commitSelUnified() int {
 	return idx[s]
 }
 
+// commitAtUnified returns the real commit at a unified Commits index (the space
+// displayIndices yields), or false for a WIP pseudo-row / out-of-range index.
+// Use this when walking displayIndices to read a commit — a raw m.commits[u] is
+// off by wipCount once the tree is dirty.
+func (m Model) commitAtUnified(u int) (model.Commit, bool) {
+	if u < 0 || m.isWipRow(u) {
+		return model.Commit{}, false
+	}
+	rc := u - m.wipCount()
+	if rc < 0 || rc >= len(m.commits) {
+		return model.Commit{}, false
+	}
+	return m.commits[rc], true
+}
+
 // wipSyntheticHash is a deliberately git-invalid id for a WIP node in the graph
 // layout (it contains a NUL, so it can never be mistaken for a real 40-hex SHA;
 // a leak into a git command fails loudly instead of doing something subtle).

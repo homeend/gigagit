@@ -111,7 +111,7 @@ func (m Model) tagJumpToCommit() (tea.Model, tea.Cmd) {
 	target := m.tags[bi].Target
 	idx := m.displayIndices(panelCommits)
 	for di, ci := range idx {
-		if ci >= 0 && ci < len(m.commits) && strings.HasPrefix(m.commits[ci].Hash, target) {
+		if c, ok := m.commitAtUnified(ci); ok && strings.HasPrefix(c.Hash, target) {
 			m.sel[panelCommits] = di
 			m.focus = panelCommits
 			return m, nil
