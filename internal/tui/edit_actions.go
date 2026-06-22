@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -59,6 +60,34 @@ func (m Model) fileEditRow() (actionRow, bool) {
 		id:    "edit-file",
 		label: "Edit in editor",
 		run:   func(m Model) (tea.Model, tea.Cmd) { return m, m.editFileCmd(p) },
+	}, true
+}
+
+// stagedOpenExternalRow offers "Open staged version in external editor" on the
+// Staged panel: the index blob (`git show :path`), which differs from the
+// working-tree file the Files panel's live "Edit in editor" opens. A staged
+// deletion has no index blob, so it is skipped.
+func (m Model) stagedOpenExternalRow() (actionRow, bool) {
+	if m.focus != panelStaged || !m.opsIdle() {
+		return actionRow{}, false
+	}
+	bi, ok := m.backingIndex(panelStaged)
+	if !ok {
+		return actionRow{}, false
+	}
+	f := m.status.Files[bi]
+	if f.Staged == 'D' { // staged for deletion: no content at the index
+		return actionRow{}, false
+	}
+	p, svc := f.Path, m.svc
+	return actionRow{
+		id:    "open-external-staged",
+		label: "Open staged version in external editor",
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			return m, m.openInEditorCmd(p, func(ctx context.Context) ([]byte, error) {
+				return svc.ShowFile(ctx, "", p) // `git show :path` = the index blob
+			})
+		},
 	}, true
 }
 

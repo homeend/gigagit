@@ -15,9 +15,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   highlighting works, is marked read-only, and is deleted on exit — no
   working-tree status reload). Available wherever a file is addressable: the
   commit files view (`l`, tree side, `.`-menu — the file's content at that
-  commit), and a new `e` key in the bookmark (`g`) and shelf (`G`)
-  quick-switchers. Working-tree files keep their existing live *Edit in editor*.
-  Path-less commit bookmarks (no file content) are skipped.
+  commit); the file-history (`e`) and blame (`e`) views — that commit's /
+  revision's version; the bookmark (`g`) and shelf (`G`) quick-switchers (`e`);
+  and the Staged panel `.`-menu (*Open staged version…* — the index blob, which
+  differs from the working file). Working-tree files keep their existing live
+  *Edit in editor*. Path-less commit bookmarks and staged deletions (no content)
+  are skipped.
 - **Step between files from inside the diff view.** In the full-screen diff,
   `home` jumps to the top of the current file and — when already at the top —
   steps to the *previous* file; `end` jumps to the bottom and — when already at

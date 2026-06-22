@@ -120,7 +120,7 @@ func (h *historyView) render(m Model, _ string) string {
 	body := m.historyBodyRows()
 
 	header := truncate("history: "+h.ctx.path, w)
-	hint := truncate("[↑↓] commit  [esc] back", w)
+	hint := truncate("[↑↓] commit  [e] editor  [esc] back", w)
 
 	// Left list. Right pane shown only when wide enough (>=60); else list-only.
 	split := w >= 60
@@ -269,6 +269,18 @@ func (h *historyView) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			bv := newBlameView(ctx)
 			m = m.pushLayer(bv)
 			return m, m.loadBlameCmd(ctx, bv.tag)
+		}
+	case "e": // open this commit's version of the file in $EDITOR (read-only)
+		if h.sel >= 0 && h.sel < len(h.commits) {
+			fc := h.commits[h.sel]
+			path := fc.Path
+			if path == "" {
+				path = h.ctx.path
+			}
+			hash, svc := fc.Hash, m.svc
+			return m, m.openInEditorCmd(path, func(ctx context.Context) ([]byte, error) {
+				return svc.ShowFile(ctx, hash, path)
+			})
 		}
 	case "down", "j":
 		if h.sel < len(h.commits)-1 {
