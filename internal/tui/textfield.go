@@ -26,12 +26,6 @@ func newTextField(s string) textfield {
 // on non-addressable values (e.g. a map element like worktreePopup.inputs[l]).
 func (f textfield) Value() string { return string(f.runes) }
 
-// SetValue replaces the buffer and puts the cursor at the end.
-func (f *textfield) SetValue(s string) {
-	f.runes = []rune(s)
-	f.cursor = len(f.runes)
-}
-
 // insert puts rs at the cursor and advances past them.
 func (f *textfield) insert(rs []rune) {
 	out := make([]rune, 0, len(f.runes)+len(rs))

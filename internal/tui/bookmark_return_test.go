@@ -66,8 +66,8 @@ func TestPasteDestPrefilled(t *testing.T) {
 	if !ok {
 		t.Fatal("paste popup must be open")
 	}
-	if pp.dest != "src/app_RESTORED.go" {
-		t.Fatalf("dest = %q, want the prefilled _RESTORED path", pp.dest)
+	if pp.dest.Value() != "src/app_RESTORED.go" {
+		t.Fatalf("dest = %q, want the prefilled _RESTORED path", pp.dest.Value())
 	}
 }
 

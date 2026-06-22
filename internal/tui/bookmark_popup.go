@@ -37,7 +37,7 @@ type bookmarkPopup struct {
 type bookmarkPastePopup struct {
 	origin string
 	data   []byte
-	dest   string
+	dest   textfield
 }
 
 // bookmarkDisplay builds "<container> / <commit-or-state> / <path>".
@@ -385,7 +385,7 @@ func (m Model) bookmarkPastePrompt() (Model, tea.Cmd) {
 		return m, nil
 	}
 	// Push over the switcher (which stays beneath); esc/success returns to it.
-	return m.pushLayer(&bookmarkPastePopup{origin: b.Path, data: data, dest: restoredPath(b.Path)}), nil
+	return m.pushLayer(&bookmarkPastePopup{origin: b.Path, data: data, dest: newTextField(restoredPath(b.Path))}), nil
 }
 
 // bookmarkMark records the first compare mark, or compares with it on the second
@@ -471,21 +471,15 @@ func (p *bookmarkPastePopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case tea.KeyEsc:
 		m = m.popLayer() // back to the switcher beneath
 	case tea.KeyEnter:
-		dest := strings.TrimSpace(p.dest)
+		dest := strings.TrimSpace(p.dest.Value())
 		if dest == "" {
 			return m, nil // a destination is mandatory
 		}
 		data := p.data
 		m = m.popLayer() // back to the switcher; it stays visible during the write
 		return m.startOp(engine.WriteFile{Path: dest, Data: data})
-	case tea.KeyBackspace, tea.KeyCtrlH:
-		if r := []rune(p.dest); len(r) > 0 {
-			p.dest = string(r[:len(r)-1])
-		}
-	case tea.KeySpace:
-		p.dest += " "
-	case tea.KeyRunes:
-		p.dest += string(msg.Runes)
+	default:
+		p.dest.HandleEditKey(msg)
 	}
 	return m, nil
 }
@@ -494,7 +488,7 @@ func (p *bookmarkPastePopup) render(m Model, below string) string {
 	var b strings.Builder
 	b.WriteString("Paste bookmarked file to a new path\n\n")
 	b.WriteString("from: " + p.origin + "  (resolved now)\n")
-	b.WriteString("dest: " + p.dest + "\n\n")
+	b.WriteString("dest: " + p.dest.View(true) + "\n\n")
 	b.WriteString("[type] path  [enter] paste  [esc] cancel")
 	w, h := m.overlayDims()
 	box := modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"

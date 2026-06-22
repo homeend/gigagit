@@ -102,14 +102,6 @@ func TestTextFieldWordRight(t *testing.T) {
 	}
 }
 
-func TestTextFieldSetValue(t *testing.T) {
-	var f textfield
-	f.SetValue("hello")
-	if f.Value() != "hello" || f.cursor != 5 {
-		t.Fatalf("SetValue Value=%q cursor=%d, want hello/5", f.Value(), f.cursor)
-	}
-}
-
 func TestTextFieldNewlineAndHomeEnd(t *testing.T) {
 	var f textfield
 	f.HandleEditKey(keyMsg("ab"))
