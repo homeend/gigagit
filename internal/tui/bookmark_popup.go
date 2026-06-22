@@ -422,6 +422,7 @@ func (m Model) openPickerDiff(v *diffView, tag string, load tea.Cmd) (Model, tea
 	m = m.clearLayers()
 	m.diffView = v
 	m.diffTag = tag
+	m.diffNav = diffNavNone // a picker compare has no source file list to step
 	return m, load
 }
 

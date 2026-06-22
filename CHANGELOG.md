@@ -9,6 +9,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Step between files from inside the diff view.** In the full-screen diff,
+  `home` jumps to the top of the current file and — when already at the top —
+  steps to the *previous* file; `end` jumps to the bottom and — when already at
+  the bottom — steps to the *next* file. Works for diffs opened from the file
+  tree (commit files / full-tree / compare) and from the Status / Staged panels;
+  the tree/panel selection follows, so `esc` lands on the last-viewed file.
+  Conflicted rows (no plain diff) are skipped.
 - **Copy commit title.** The Commits panel `.`-menu now offers *Copy commit
   title* alongside *Copy commit id*, putting the selected commit's subject line
   on the system clipboard.

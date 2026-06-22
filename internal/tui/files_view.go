@@ -368,36 +368,7 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if p.sel < 0 || p.sel >= len(vis) || vis[p.sel].path == "" {
 			return m, nil // heading row, placeholder, or empty view
 		}
-		if m.width > 0 && m.width < 60 {
-			m.statusMsg = "terminal too narrow for the diff view"
-			return m, nil
-		}
-		l := vis[p.sel]
-		m.diffView = &diffView{
-			title:   l.path,
-			context: "@ " + strings.TrimPrefix(m.filesTitle, "Files "),
-			rev:     m.filesHash,
-			loading: true,
-			partial: m.diffPartial,
-			long:    m.diffLong,
-		}
-		if m.filesAllFiles {
-			// Full-tree mode: the file may be unchanged in this commit, so a
-			// parent-diff would be empty. Diff the commit's version against the
-			// working tree instead — useful for any file in the tree.
-			left := model.Endpoint{Kind: model.EndpointCommit, Hash: m.filesHash}
-			right := model.Endpoint{Kind: model.EndpointWorkTree}
-			m.diffView.context = shortHash(m.filesHash) + " ↔ working tree"
-			m.diffTag = "cmp:" + left.CacheTag() + ":" + right.CacheTag() + ":" + l.path
-			return m, m.loadCompareDiffCmd(left, right, l)
-		}
-		if m.filesCompare {
-			m.diffView.context = m.filesTitle
-			m.diffTag = "cmp:" + m.filesLeft.CacheTag() + ":" + m.filesRight.CacheTag() + ":" + l.path
-			return m, m.loadCompareDiffCmd(m.filesLeft, m.filesRight, l)
-		}
-		m.diffTag = "commit:" + m.filesHash + ":" + l.path
-		return m, m.loadCommitDiffCmd(m.filesHash, l)
+		return m.openDiffForFileLine(vis[p.sel])
 	case "left":
 		m.filesTreeFocused = true
 	case "right":
@@ -438,6 +409,44 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.moveListUnderFilesView(m.pageStep())
 	}
 	return m, nil
+}
+
+// openDiffForFileLine opens the full-screen diff for one files-view tree row,
+// in the tree's active mode: full-tree (commit ↔ working tree), compare (the
+// endpoint pair), or the plain commit (parent ↔ commit) diff. Shared by the
+// files-view enter handler and Home/End file-stepping; records diffNav=tree so
+// the stepper knows the source list. Refuses to open below 60 columns.
+func (m Model) openDiffForFileLine(l contentLine) (tea.Model, tea.Cmd) {
+	if m.width > 0 && m.width < 60 {
+		m.statusMsg = "terminal too narrow for the diff view"
+		return m, nil
+	}
+	m.diffNav = diffNavTree
+	m.diffView = &diffView{
+		title:   l.path,
+		context: "@ " + strings.TrimPrefix(m.filesTitle, "Files "),
+		rev:     m.filesHash,
+		loading: true,
+		partial: m.diffPartial,
+		long:    m.diffLong,
+	}
+	if m.filesAllFiles {
+		// Full-tree mode: the file may be unchanged in this commit, so a
+		// parent-diff would be empty. Diff the commit's version against the
+		// working tree instead — useful for any file in the tree.
+		left := model.Endpoint{Kind: model.EndpointCommit, Hash: m.filesHash}
+		right := model.Endpoint{Kind: model.EndpointWorkTree}
+		m.diffView.context = shortHash(m.filesHash) + " ↔ working tree"
+		m.diffTag = "cmp:" + left.CacheTag() + ":" + right.CacheTag() + ":" + l.path
+		return m, m.loadCompareDiffCmd(left, right, l)
+	}
+	if m.filesCompare {
+		m.diffView.context = m.filesTitle
+		m.diffTag = "cmp:" + m.filesLeft.CacheTag() + ":" + m.filesRight.CacheTag() + ":" + l.path
+		return m, m.loadCompareDiffCmd(m.filesLeft, m.filesRight, l)
+	}
+	m.diffTag = "commit:" + m.filesHash + ":" + l.path
+	return m, m.loadCommitDiffCmd(m.filesHash, l)
 }
 
 // moveListUnderFilesView moves the list side (the right column) by delta and
