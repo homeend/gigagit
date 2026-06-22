@@ -18,6 +18,7 @@ import (
 	"github.com/gigagit/gg/internal/git"
 	"github.com/gigagit/gg/internal/gitexec"
 	"github.com/gigagit/gg/internal/observ"
+	"github.com/gigagit/gg/internal/profile"
 	"github.com/gigagit/gg/internal/repogate"
 	"github.com/gigagit/gg/internal/searchhist"
 	"github.com/gigagit/gg/internal/shelf"
@@ -37,6 +38,9 @@ type Service struct {
 	shelf      shelf.Store      // lazily resolved; nil disables the shelf
 	bookmark   bookmark.Store   // lazily resolved; nil disables bookmarks
 	searchhist searchhist.Store // lazily resolved; nil disables search history
+
+	profileGlobal profile.Store // lazily resolved; nil disables profiles
+	profileRepo   profile.Store // lazily resolved; nil disables profiles
 }
 
 // Open builds a Service rooted at workdir with the standard runner — the
