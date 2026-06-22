@@ -107,6 +107,58 @@ func TestTextFieldSetValue(t *testing.T) {
 	}
 }
 
+func TestTextFieldNewlineAndHomeEnd(t *testing.T) {
+	var f textfield
+	f.HandleEditKey(keyMsg("ab"))
+	f.InsertNewline()
+	f.HandleEditKey(keyMsg("cd"))
+	if f.Value() != "ab\ncd" {
+		t.Fatalf("Value = %q, want 'ab\\ncd'", f.Value())
+	}
+	f.HandleEditKey(keyMsg("home")) // start of 2nd line
+	if f.cursor != 3 {
+		t.Fatalf("home cursor = %d, want 3 (start of 2nd line)", f.cursor)
+	}
+	f.HandleEditKey(keyMsg("end")) // end of 2nd line
+	if f.cursor != 5 {
+		t.Fatalf("end cursor = %d, want 5", f.cursor)
+	}
+}
+
+func TestTextFieldUpDown(t *testing.T) {
+	f := newTextField("abcd\nxy") // cursor 7 (end, col 2 on line 2)
+	f.Up()                        // to line 1, col 2 -> index 2
+	if f.cursor != 2 {
+		t.Fatalf("Up cursor = %d, want 2", f.cursor)
+	}
+	f.Down() // back to line 2, col 2 -> index 7
+	if f.cursor != 7 {
+		t.Fatalf("Down cursor = %d, want 7", f.cursor)
+	}
+}
+
+func TestTextFieldUpDownColumnClamp(t *testing.T) {
+	f := newTextField("a\nlongline") // cursor at end of line 2
+	f.Up()                           // line 1 only has 1 col -> clamp to index 1
+	if f.cursor != 1 {
+		t.Fatalf("Up clamp cursor = %d, want 1", f.cursor)
+	}
+}
+
+func TestTextFieldUpOnFirstLineNoOp(t *testing.T) {
+	f := newTextField("abc")
+	f.HandleEditKey(keyMsg("home"))
+	f.Up()
+	if f.cursor != 0 {
+		t.Fatalf("Up on first line cursor = %d, want 0", f.cursor)
+	}
+	f.HandleEditKey(keyMsg("end"))
+	f.Down()
+	if f.cursor != 3 {
+		t.Fatalf("Down on last line cursor = %d, want 3", f.cursor)
+	}
+}
+
 func TestTextFieldHandleEditKeyReturnsFalse(t *testing.T) {
 	var f textfield
 	for _, kt := range []tea.KeyType{tea.KeyEnter, tea.KeyTab, tea.KeyEsc, tea.KeyUp, tea.KeyDown, tea.KeyCtrlS} {

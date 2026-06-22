@@ -119,6 +119,44 @@ func (f *textfield) lineEnd(i int) int {
 func (f *textfield) home() { f.cursor = f.lineStart(f.cursor) }
 func (f *textfield) end()  { f.cursor = f.lineEnd(f.cursor) }
 
+// InsertNewline inserts a line break at the cursor. The popup calls this for
+// the commit description's Enter (single-line fields never call it).
+func (f *textfield) InsertNewline() { f.insert([]rune{'\n'}) }
+
+// Up moves the cursor to the same column on the previous line (best effort,
+// clamped to that line's length). No-op on the first line.
+func (f *textfield) Up() {
+	ls := f.lineStart(f.cursor)
+	if ls == 0 {
+		return
+	}
+	col := f.cursor - ls
+	prevStart := f.lineStart(ls - 1)
+	prevEnd := ls - 1 // index of the '\n' ending the previous line
+	if prevStart+col > prevEnd {
+		f.cursor = prevEnd
+	} else {
+		f.cursor = prevStart + col
+	}
+}
+
+// Down moves the cursor to the same column on the next line (best effort,
+// clamped). No-op on the last line.
+func (f *textfield) Down() {
+	le := f.lineEnd(f.cursor)
+	if le >= len(f.runes) {
+		return
+	}
+	col := f.cursor - f.lineStart(f.cursor)
+	nextStart := le + 1
+	nextEnd := f.lineEnd(nextStart)
+	if nextStart+col > nextEnd {
+		f.cursor = nextEnd
+	} else {
+		f.cursor = nextStart + col
+	}
+}
+
 // HandleEditKey applies one editing key. Returns true if it consumed the key,
 // false for any key the popup must handle itself (Enter, Tab, Esc, Up, Down,
 // Ctrl+S, …). Navigation/submit semantics stay with the popup.
