@@ -13,3 +13,4 @@
 
 # Claude session worktrees (machine-local)
 .claude/worktrees/
+.worktrees/
