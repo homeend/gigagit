@@ -152,7 +152,9 @@ func (m Model) openCompareFiles(left, right model.Endpoint) (Model, tea.Cmd) {
 		m.filesHash = ""
 	}
 	m.compareTag = "cmp:" + left.CacheTag() + ":" + right.CacheTag()
-	m.filesTreeFocused = false
+	// Focus the tree: compare mode has no live commit list, and moving the commit
+	// selection would discard the comparison. The focus-switch keys are inert here.
+	m.filesTreeFocused = true
 	return m, m.loadCompareFilesCmd(left, right, m.compareTag)
 }
 
@@ -398,9 +400,13 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "left":
 		m.filesTreeFocused = true
 	case "right":
-		m.filesTreeFocused = false
+		if !m.filesCompare { // compare mode has no commit-list side to focus
+			m.filesTreeFocused = false
+		}
 	case "tab", "shift+tab":
-		m.filesTreeFocused = !m.filesTreeFocused
+		if !m.filesCompare {
+			m.filesTreeFocused = !m.filesTreeFocused
+		}
 	case "up", "k":
 		if m.filesTreeFocused {
 			p.move(-1)
@@ -452,6 +458,13 @@ func (m Model) moveListUnderFilesView(delta int) (tea.Model, tea.Cmd) {
 // moveCommitUnderFilesView shifts the Commits selection by delta and fires
 // the follow-live reload when it lands on a different commit.
 func (m Model) moveCommitUnderFilesView(delta int) (tea.Model, tea.Cmd) {
+	// Compare mode has no live commit list: shifting the selection here would
+	// reassign filesHash and reload a plain commit view, discarding the
+	// comparison. Guard at the chokepoint so keyboard AND mouse (mouse.go calls
+	// this directly) are both locked out.
+	if m.filesCompare {
+		return m, nil
+	}
 	// Pure-drop: while a per-commit files read is outstanding, ignore the move
 	// entirely so held j/k is paced by read completion instead of queuing a read
 	// per OS key-repeat (the files load is expensive on a large repo).
@@ -489,6 +502,9 @@ func (m Model) moveCommitUnderFilesView(delta int) (tea.Model, tea.Cmd) {
 // commits with the files view open, so the tree follows the narrowed selection
 // without the user having to press j/k.
 func (m Model) syncFilesViewToSelectedCommit() (tea.Model, tea.Cmd) {
+	if m.filesCompare {
+		return m, nil // never follow-reload in compare mode (input-agnostic lock)
+	}
 	bi, ok := m.backingIndex(panelCommits)
 	if !ok || m.commits[bi].Hash == m.filesHash {
 		return m, nil
