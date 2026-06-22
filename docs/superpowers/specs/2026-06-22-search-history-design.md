@@ -41,34 +41,60 @@ the help/blame content. Only the **files-view** instance (`m.filesView`)
 records/recalls under `filetree`. Other `contentPopup` uses do not participate
 (they are not free-text searches the user composes for content).
 
-## Recall behavior (readline-style inline fill)
+## Recall behavior (scrollable dropdown)
 
-While in a search's typing mode, with a non-empty history ring for that scope:
+While in a search's typing mode, with a non-empty history ring for that scope,
+recall presents a **visible dropdown list** of past phrases anchored at the
+search input. It is not a blind inline cycle — the user sees the candidates.
 
-- **Alt+↑** = older, **Alt+↓** = newer.
-- The first **Alt+↑** fills the **newest** ring entry into the query, replacing
-  whatever was there. Subsequent Alt+↑ walk to older entries; Alt+↓ walk back
-  toward newer.
-- **Alt+↓ past the newest** restores the in-progress **draft** (the text the
-  user had typed before they started cycling).
-- Recall is **unfiltered** — it walks the full ring in order, not prefix-matched.
-- **Typing any character** (or backspace/space) exits recall: the cursor resets,
-  and the now-edited query becomes the new draft. A subsequent Alt+↑ starts
-  cycling from the newest again.
-- At the **boundaries** (oldest reached via Alt+↑, or already on the draft via
-  Alt+↓) the keystroke is a no-op.
+- **Alt+↓ opens** the dropdown (when closed), highlighting the **newest** entry.
+  While open, **Alt+↓** moves the highlight down (toward older) and **Alt+↑**
+  moves it up (toward newer).
+- The dropdown shows **at most 10 rows at once**. When the ring holds more than
+  10 entries (up to the 1000 ceiling), the visible window **scrolls** to keep
+  the highlight in view — newest-first, oldest scrolling in from the bottom.
+- The highlighted entry **previews into the query** (the search filters/highlights
+  live against it as the user moves), so navigation is also a preview.
+- **Enter** accepts the highlighted entry: the dropdown closes and the search
+  commits on that phrase (a normal commit → also records it, harmlessly
+  dedup-to-top).
+- **Esc** closes the dropdown **without** accepting and **restores the draft**
+  (the text typed before the dropdown opened). The search stays in typing mode.
+- **Alt+↑ above the newest** (top of the list) closes the dropdown and restores
+  the draft — symmetric with Esc, so you can "back out the way you came in".
+- **Typing any character** (or backspace/space) closes the dropdown and returns
+  to live editing with the current query as the new draft. A later Alt+↓ reopens
+  from the newest.
+- Recall is **unfiltered** — the dropdown lists the full ring in order, not
+  prefix-matched against the draft.
 
 ### Recall cursor state (per typing session)
 
 The recall position is transient TUI state, reset every time a typing mode opens:
 
 - `recallScope` — which ring is active (derived from the open search).
-- `recallIndex` — `-1` = on the draft (not cycling); `0` = newest; `n-1` = oldest.
-- `recallDraft` — the user's typed text captured the moment cycling begins, so
-  Alt+↓ past newest can restore it.
+- `recallOpen` — whether the dropdown is currently shown.
+- `recallIndex` — highlight position into the ring; `0` = newest, `n-1` = oldest.
+  Meaningful only while `recallOpen`.
+- `recallDraft` — the user's typed text captured the moment the dropdown opens,
+  restored on Esc / Alt+↑-past-newest / typing.
 
-These live on the `Model` and are cleared whenever a typing mode is entered or
-committed/cancelled.
+The visible window is derived from `recallIndex` and the 10-row cap at render
+time (no stored offset needed): show rows `[max(0, idx-9) .. ]` clamped so the
+highlight stays visible, capped at 10. These live on the `Model` and are cleared
+whenever a typing mode is entered or committed/cancelled.
+
+### Rendering
+
+A single shared helper renders the dropdown — a small bordered box of up to 10
+rows (highlighted row inverted, a scroll affordance such as `↑N`/`↓N` when the
+window is clipped) — anchored per context:
+
+- `panel` filter / `@` highlight → near the focused panel's filter line.
+- `filetree` → within/below the files-view search line.
+- `bookmark` / `shelf` → inside the centered switcher popup, below its filter row.
+
+The dropdown is drawn only while `recallOpen` and the active typing scope matches.
 
 ## What gets recorded
 
@@ -169,16 +195,25 @@ Archtest guard: `internal/tui` and `internal/cli` must **not** import
 - Hold the rings in memory: `m.searchHist map[string][]string`, populated from
   the Snapshot at startup and updated locally on each record (so Alt-cycling is
   instant and never blocks).
-- Recall cursor fields (`recallScope`/`recallIndex`/`recallDraft`) as above.
+- Recall cursor fields (`recallScope`/`recallOpen`/`recallIndex`/`recallDraft`)
+  as above.
+- A shared dropdown render helper (max 10 visible rows, highlight, scroll
+  affordance) anchored per context (see **Rendering** above).
 - In each search typing loop (`filterTyping`, `highlightTyping`,
   `contentPopup` files-view, bookmark popup, shelf popup — five loops feeding
   four rings):
   - intercept **Alt+↑ / Alt+↓** (`msg.Alt && msg.Type == tea.KeyUp/KeyDown`)
-    **before** the plain Up/Down cases, and apply recall to that scope.
+    **before** the plain Up/Down cases:
+    - Alt+↓: open the dropdown (capturing the draft) if closed, else move the
+      highlight one older; preview the highlighted phrase into the query.
+    - Alt+↑: move the highlight one newer; above the newest, close + restore draft.
+  - while `recallOpen`, **Esc** closes + restores draft (does not cancel the
+    search); **Enter** commits on the highlighted phrase; any text key closes the
+    dropdown and resumes live editing.
   - on **Enter** (commit) with a non-empty query: append to the local ring
     (dedup-to-top, trim) **and** fire an async `RecordSearch` command
     (fire-and-forget, like other side-store writes).
-  - on entering/exiting typing mode: reset the recall cursor.
+  - on entering/exiting typing mode: reset the recall cursor (closed, draft cleared).
 
 No footer/help change is strictly required, but a one-line `?` cheat-sheet /
 help note ("alt+↑/↓ — search history") is in scope as polish.
@@ -191,10 +226,13 @@ help note ("alt+↑/↓ — search history") is in scope as polish.
 - **domain:** `SearchStatePath` → temp dir; `RecordSearch`/`SearchHistory`
   round-trip; size clamp (config 5 → 5; config 5000 → 1000; unset → 20);
   per-repo keying isolates two repos.
-- **TUI:** for each scope — Enter records (esc does not); Alt+↑/↓ cycles and
-  fills the query inline; draft restore on Alt+↓ past newest; typing exits recall;
-  `panel` ring is shared by `/` and `@` but `bookmark` is not. Use
-  `loadedModel`/`newRepoDir` with `SetSearchStore` injection.
+- **TUI:** for each scope — Enter records (esc does not); Alt+↓ opens the
+  dropdown on the newest and previews into the query; Alt+↓/↑ move the highlight;
+  a 12-entry ring shows 10 rows and scrolls to reveal the oldest; Esc / Alt+↑
+  above newest close and restore the draft; typing closes the dropdown; Enter on
+  a highlighted entry commits that phrase; `panel` ring is shared by `/` and `@`
+  but `bookmark` is not. Use `loadedModel`/`newRepoDir` with `SetSearchStore`
+  injection.
 
 ## Out of scope
 
