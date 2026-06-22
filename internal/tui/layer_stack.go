@@ -86,3 +86,7 @@ func (m Model) bookmarkSwitcher() *bookmarkPopup { return layerOf[*bookmarkPopup
 
 // shelfSwitcher returns the topmost shelf switcher on the stack, else nil.
 func (m Model) shelfSwitcher() *shelfPopup { return layerOf[*shelfPopup](m) }
+
+// diffLayer returns the open standalone diff, else nil. (Body flips to
+// layerOf[*diffView] when the diff moves onto the stack in the next task.)
+func (m Model) diffLayer() *diffView { return m.diffView }

@@ -51,7 +51,7 @@ func availableActions(m Model) []actionRow {
 		// parity block target the files view, so they may ONLY appear when the
 		// files view is genuinely front — never when a diff/history/blame sits over
 		// it (opening a diff or h/b from the files view leaves it live underneath).
-		frontIsFilesView := !onStackFile && m.diffView == nil
+		frontIsFilesView := !onStackFile && m.diffLayer() == nil
 		if onStackFile {
 			if r, ok := m.surfaceExternalRow(); ok {
 				rows = append(rows, r)
@@ -252,7 +252,7 @@ func (m Model) inContentWindow() bool {
 	case *historyView, *blameView:
 		return true
 	}
-	if m.diffView != nil || m.filesView != nil {
+	if m.diffLayer() != nil || m.filesView != nil {
 		return true
 	}
 	if m.stashView != nil && m.focus == panelCommits {
@@ -279,7 +279,7 @@ func (m Model) contextCopyRows() []actionRow {
 	case *blameView:
 		return m.fileCopyRows(s.ctx.path, s.ctx.rev)
 	}
-	if v := m.diffView; v != nil {
+	if v := m.diffLayer(); v != nil {
 		return m.fileCopyRows(v.title, v.rev) // title = path; rev = commit ("" = working tree)
 	}
 	if v := m.filesView; v != nil {

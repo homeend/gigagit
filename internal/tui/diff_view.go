@@ -544,7 +544,7 @@ func (m Model) loadCompareDiffCmd(left, right model.Endpoint, line contentLine) 
 	differ := m.diffDiffer()
 	body := m.diffBodyRows()
 	tag := "cmp:" + left.CacheTag() + ":" + right.CacheTag() + ":" + line.path
-	v := m.diffView
+	v := m.diffLayer()
 	key := compareDiffKey(left, right, line.path)
 
 	oldP := line.path
@@ -589,7 +589,7 @@ func (v *diffView) render(m Model, below string) string {
 // change-block jumps, close/quit. Everything else is swallowed — no action
 // key can reach the panels behind a full-screen view.
 func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	v := m.diffView
+	v := m.diffLayer()
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
 	}

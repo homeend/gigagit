@@ -437,12 +437,12 @@ func (m Model) openDiffForFileLine(l contentLine) (tea.Model, tea.Cmd) {
 		// working tree instead — useful for any file in the tree.
 		left := model.Endpoint{Kind: model.EndpointCommit, Hash: m.filesHash}
 		right := model.Endpoint{Kind: model.EndpointWorkTree}
-		m.diffView.context = shortHash(m.filesHash) + " ↔ working tree"
+		m.diffLayer().context = shortHash(m.filesHash) + " ↔ working tree"
 		m.diffTag = "cmp:" + left.CacheTag() + ":" + right.CacheTag() + ":" + l.path
 		return m, m.loadCompareDiffCmd(left, right, l)
 	}
 	if m.filesCompare {
-		m.diffView.context = m.filesTitle
+		m.diffLayer().context = m.filesTitle
 		m.diffTag = "cmp:" + m.filesLeft.CacheTag() + ":" + m.filesRight.CacheTag() + ":" + l.path
 		return m, m.loadCompareDiffCmd(m.filesLeft, m.filesRight, l)
 	}

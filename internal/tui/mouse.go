@@ -40,9 +40,9 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	}
 	// Routing invariant: the diff view comes immediately after the modal,
 	// matching Update's key routing and render().
-	if m.diffView != nil {
+	if m.diffLayer() != nil {
 		if wheel != 0 {
-			m.diffView.scrollBy(wheel, m.diffBodyRows())
+			m.diffLayer().scrollBy(wheel, m.diffBodyRows())
 		}
 		return m, nil
 	}

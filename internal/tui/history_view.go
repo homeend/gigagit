@@ -100,7 +100,7 @@ func (m Model) loadHistoryDiffCmd(fc model.FileCommit, tag string) tea.Cmd {
 }
 
 // loadHistoryDiffFullCmd builds the SAME diff as loadHistoryDiffCmd but yields a
-// diffMsg so it lands in the full-screen m.diffView (the diff key is shared, so
+// diffMsg so it lands in the full-screen standalone diff layer (the diff key is shared, so
 // the right-pane load already warmed the cache). Used by enter.
 func (m Model) loadHistoryDiffFullCmd(fc model.FileCommit, tag string) tea.Cmd {
 	differ := m.diffDiffer()
@@ -303,7 +303,7 @@ func (h *historyView) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			tag := "histdifffull:" + fc.Hash + ":" + h.ctx.path
 			// openPickerDiff clears the WHOLE layer stack (so the diff owns key
 			// routing — a layer would otherwise intercept keys above it) and promotes
-			// to the full m.diffView surface. esc clears the diff and returns to the
+			// to the full standalone diff layer. esc clears the diff and returns to the
 			// base layout — or the files view, a Model field that survives clearLayers
 			// (so history-from-the-files-view lands back on the tree). A deeper stack
 			// like blame→history is wiped, so esc lands on base, not blame. From the

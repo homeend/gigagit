@@ -190,7 +190,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.filesTreeFocused = false
 			m.statusMsg = "files view closed: terminal too narrow"
 		}
-		if m.diffView != nil && msg.Width > 0 {
+		if m.diffLayer() != nil && msg.Width > 0 {
 			if msg.Width < 60 {
 				m.diffView = nil
 				m.diffTag = ""
@@ -198,7 +198,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				// Re-wrap at the new width, keeping the viewport anchored to
 				// the logical line currently at the top.
-				v := m.diffView
+				v := m.diffLayer()
 				topLine := 0
 				if v.offset < len(v.disp) {
 					topLine = v.disp[v.offset].line
@@ -213,12 +213,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 	case diffMsg:
-		if m.diffView == nil || msg.tag != m.diffTag {
+		if m.diffLayer() == nil || msg.tag != m.diffTag {
 			return m, nil // view closed, or a stale result
 		}
 		m.diffView = msg.view
-		if m.diffView != nil {
-			m.diffView.loading = false // a diffMsg means the load completed (content or err); never leave the body on "(loading…)"
+		if m.diffLayer() != nil {
+			m.diffLayer().loading = false // a diffMsg means the load completed (content or err); never leave the body on "(loading…)"
 		}
 		return m, nil
 	case commitFilesMsg:
@@ -494,7 +494,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Routing invariant: the diff view is checked immediately after the
 		// modal here, in the MouseMsg arm, and in render() — the key owner
 		// must be the top visible surface (background ops will rely on it).
-		if m.diffView != nil {
+		if m.diffLayer() != nil {
 			return m.updateDiffViewKey(msg)
 		}
 		// Filter-input mode captures every key (the panel label shows the query).

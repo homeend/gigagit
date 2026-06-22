@@ -123,7 +123,7 @@ func sanitizeLine(s string) string {
 // nothing to show. NOTE: shares the x=2/bottom anchor with withRecall — safe
 // today because recall never opens over the diff; revisit if it ever does.
 func (m Model) withDiffFileNotice(frame string) string {
-	if m.diffView == nil {
+	if m.diffLayer() == nil {
 		return frame
 	}
 	if m.layers != nil && len(m.layers.entries) > 0 {
@@ -131,7 +131,7 @@ func (m Model) withDiffFileNotice(frame string) string {
 	}
 	msg := m.diffNotice
 	if msg == "" {
-		msg = fileArmCue(m.diffView.fileArm)
+		msg = fileArmCue(m.diffLayer().fileArm)
 	}
 	if msg == "" {
 		return frame
@@ -150,7 +150,7 @@ func (m Model) withDiffFileNotice(frame string) string {
 
 // renderDiffView draws the whole screen: header, aligned panes, hint line.
 func (m Model) renderDiffView() string {
-	v := m.diffView
+	v := m.diffLayer()
 	w, h := m.overlayDims()
 	body := h - 2 // header + hint are the only chrome (must match diffBodyRows)
 	if body < 1 {
