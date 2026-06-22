@@ -275,39 +275,6 @@ func (m Model) commitCompareStagedRow() (actionRow, bool) {
 	}, true
 }
 
-// commitCompareMarkedRow offers "Compare with marked commit" when a commit is
-// marked (m key) on a different row: opens the files view as a commit↔commit
-// whole-tree diff, ordered older→newer by feed position (the feed is
-// newest-first, so a larger m.commits index is the older commit).
-func (m Model) commitCompareMarkedRow() (actionRow, bool) {
-	if m.focus != panelCommits || !m.opsIdle() {
-		return actionRow{}, false
-	}
-	if m.mark == nil || m.mark.panel != panelCommits || !m.markAlive() {
-		return actionRow{}, false
-	}
-	selKey, ok := m.selectedKey(panelCommits)
-	if !ok {
-		return actionRow{}, false
-	}
-	marked := m.mark.key
-	if selKey == marked {
-		return actionRow{}, false
-	}
-	// older→newer by rank (higher rank = older); a WIP key resolves to its endpoint.
-	older, newer := marked, selKey
-	if m.compareKeyRank(older) < m.compareKeyRank(newer) {
-		older, newer = newer, older
-	}
-	return actionRow{
-		id:    "commit-compare-marked",
-		label: "Compare with marked (" + m.compareKeyLabel(marked) + ")",
-		run: func(m Model) (tea.Model, tea.Cmd) {
-			return m.openCompareFiles(m.compareKeyEndpoint(older), m.compareKeyEndpoint(newer))
-		},
-	}, true
-}
-
 // compareSetDisplayIndices returns the display-row indices in panel p that are
 // in the commit compare selection (◉). Empty unless p is the Commits panel and
 // the set is non-empty.
@@ -470,6 +437,50 @@ func (m Model) commitCompareSelectionRow() (actionRow, bool) {
 				return m, nil
 			}
 			return m.openCompareFiles(left, right)
+		},
+	}, true
+}
+
+// commitSquashRow offers "Squash N commits" when 2+ commits are in the ◉
+// selection and a branch is checked out. The run validates the selection
+// (commits-only, on the current branch, adjacent) after loading the range; the
+// oldest selected commit (by feed rank) seeds the rebase base onto..HEAD, and
+// rebaseplan.BuildSquash enforces membership + adjacency from the true range.
+func (m Model) commitSquashRow() (actionRow, bool) {
+	if m.focus != panelCommits || !m.opsIdle() || m.status.Branch == "" {
+		return actionRow{}, false
+	}
+	if len(m.commitCompareSet) < 2 {
+		return actionRow{}, false
+	}
+	n := len(m.commitCompareSet)
+	return actionRow{
+		id:    "commit-squash",
+		label: "Squash " + strconv.Itoa(n) + " commits",
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			var targets []string
+			oldest, oldestRank := "", -1
+			for k := range m.commitCompareSet {
+				switch k {
+				case wipKey(wipRow{kind: wipWorktree}), wipKey(wipRow{kind: wipStaged}):
+					m.statusMsg = "squash is commits-only; remove the working tree / staged row"
+					return m, nil
+				}
+				targets = append(targets, k)
+				if r := m.compareKeyRank(k); r > oldestRank {
+					oldest, oldestRank = k, r
+				}
+			}
+			if oldest == "" {
+				m.statusMsg = "select at least 2 commits to squash"
+				return m, nil
+			}
+			// Root guard: the oldest commit needs a parent to rebase onto.
+			if oldestRank >= 0 && oldestRank < len(m.commits) && len(m.commits[oldestRank].Parents) == 0 {
+				m.statusMsg = "can't squash from the root commit"
+				return m, nil
+			}
+			return m, m.loadSquashRangeCmd(m.status.Branch, oldest+"^", targets)
 		},
 	}, true
 }

@@ -1383,6 +1383,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m.startOp(engine.InteractiveRebase{Branch: msg.branch, Onto: msg.onto, Plan: plan, GGBin: ggBin})
 
+	case squashRangeLoadedMsg:
+		if msg.err != nil {
+			m.statusMsg = "squash: " + msg.err.Error()
+			return m, nil
+		}
+		plan, perr := rebaseplan.BuildSquash(msg.commits, msg.targets)
+		if perr != nil {
+			// Stage 1: adjacency / membership failures refuse with a note.
+			m.statusMsg = "squash: " + perr.Error()
+			return m, nil
+		}
+		ggBin, err := os.Executable()
+		if err != nil {
+			m.statusMsg = "squash: " + err.Error()
+			return m, nil
+		}
+		m.commitCompareSet = nil // the squash consumes the selection
+		return m.startOp(engine.InteractiveRebase{Branch: msg.branch, Onto: msg.onto, Plan: plan, GGBin: ggBin})
+
 	case conflictFileLoadedMsg:
 		// In the conflict process, a load failure must return it to Listing (the
 		// load is not an op, so no opFinishedMsg would otherwise un-stick Working).

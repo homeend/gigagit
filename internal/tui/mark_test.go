@@ -48,16 +48,19 @@ func TestMarkToggle(t *testing.T) {
 	}
 }
 
-func TestMarkMovesAcrossPanels(t *testing.T) {
+func TestMarkOnCommitsUsesSelectionSet(t *testing.T) {
 	m := markModel()
-	m = pressRune(t, m, "m") // mark main on branches
+	m = pressRune(t, m, "m") // mark main on branches (single-mark machinery)
 	m.focus = panelCommits
-	m = pressRune(t, m, "m")
-	if m.mark == nil || m.mark.panel != panelCommits || m.mark.key != "1111111" {
-		t.Fatalf("mark = %+v, want commit 1111111", m.mark)
+	m = pressRune(t, m, "m") // commits: toggles the ◉ selection set, not the single mark
+	if !m.commitCompareSet["1111111"] {
+		t.Fatalf("m on commits must add to the selection set, got %v", m.commitCompareSet)
+	}
+	if m.mark == nil || m.mark.panel != panelBranches || m.mark.key != "main" {
+		t.Fatalf("the branch single-mark must be untouched, got %+v", m.mark)
 	}
 	if layerOf[*pairOpPopup](m) != nil {
-		t.Fatal("cross-panel m must move the mark, not open the popup")
+		t.Fatal("commits m must not open the popup")
 	}
 }
 
@@ -78,11 +81,9 @@ func TestMarkPairOpensPopupOnBranches(t *testing.T) {
 	}
 }
 
-// On the Commits panel a second mark opens the whole-tree compare of the two
-// rows directly (no pair-op popup) — the GitKraken "select two, see the diff"
-// gesture. (Other panels without pair ops still show the "no pair operations"
-// notice; see handleMarkKey.)
-func TestMarkTwoCommitsCompares(t *testing.T) {
+// On the Commits panel, m adds rows to the ◉ selection set rather than opening a
+// diff; the `.` menu drives Compare/Squash. No pair-op popup, no auto-diff.
+func TestMarkTwoCommitsSelect(t *testing.T) {
 	m := markModel()
 	m.focus = panelCommits
 	m = pressRune(t, m, "m")
@@ -91,15 +92,11 @@ func TestMarkTwoCommitsCompares(t *testing.T) {
 	if layerOf[*pairOpPopup](m) != nil {
 		t.Fatal("commits panel must not open a pair-op popup")
 	}
-	if !m.filesCompare || m.filesView == nil {
-		t.Fatal("marking two commits must open the compare files view")
+	if m.filesView != nil {
+		t.Fatal("marking commits must not auto-open a compare view")
 	}
-	if m.mark != nil {
-		t.Fatal("the pair action must clear the mark")
-	}
-	// older (commits[1]) → newer (commits[0]).
-	if m.filesLeft.Hash != "2222222" || m.filesRight.Hash != "1111111" {
-		t.Fatalf("endpoints = %s↔%s, want older↔newer", m.filesLeft.Hash, m.filesRight.Hash)
+	if !m.commitCompareSet["1111111"] || !m.commitCompareSet["2222222"] {
+		t.Fatalf("both commits must be in the selection set, got %v", m.commitCompareSet)
 	}
 }
 

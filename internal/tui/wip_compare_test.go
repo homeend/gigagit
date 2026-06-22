@@ -40,14 +40,11 @@ func TestMarkCommitUnderDirtyTreeHitsRightRow(t *testing.T) {
 	m.sel[panelCommits] = m.wipCount()
 	u, _ := m.Update(keyMsg("m"))
 	m = u.(Model)
-	if m.mark == nil {
-		t.Fatal("m must mark the commit row")
+	if !m.commitCompareSet[m.commits[0].Hash] {
+		t.Fatalf("m must add the tip hash %q to the selection set (off-by-wipCount bug), got %v", m.commits[0].Hash, m.commitCompareSet)
 	}
-	if m.mark.key != m.commits[0].Hash {
-		t.Fatalf("mark key = %q, want tip hash %q (off-by-wipCount bug)", m.mark.key, m.commits[0].Hash)
-	}
-	if md := m.markDisplayIndex(panelCommits); md != m.wipCount() {
-		t.Fatalf("mark display row = %d, want %d", md, m.wipCount())
+	if !m.compareSetDisplayIndices(panelCommits)[m.wipCount()] {
+		t.Fatalf("selection marker should render at display row %d", m.wipCount())
 	}
 }
 
@@ -58,15 +55,15 @@ func TestMarkAndToggleWipRow(t *testing.T) {
 	m.wipRows = deriveWipRows(m.status)
 	m = m.rebuildCommitGraph()
 
-	// Mark the Working tree row (unified index 0).
+	// Mark the Working tree row (unified index 0) → into the ◉ set.
 	m.sel[panelCommits] = 0
 	if !m.canMark() {
 		t.Fatal("canMark must allow a wip row")
 	}
 	u, _ := m.Update(keyMsg("m"))
 	m = u.(Model)
-	if m.mark == nil || m.mark.key != wipKey(wipRow{kind: wipWorktree}) {
-		t.Fatalf("mark key = %v, want worktree sentinel", m.mark)
+	if !m.commitCompareSet[wipKey(wipRow{kind: wipWorktree})] {
+		t.Fatalf("m did not add the worktree sentinel to the set: %v", m.commitCompareSet)
 	}
 
 	// Toggle the Staged row (unified index 1) into the ◉ set.
@@ -82,19 +79,20 @@ func TestMarkAndToggleWipRow(t *testing.T) {
 	}
 }
 
-func TestCompareMarkedWipVsCommit(t *testing.T) {
+func TestCompareSelectionWipVsCommit(t *testing.T) {
 	m := loadedModelLinearCommits(t, 3)
 	m.focus = panelCommits
 	m.status = dirtyStatus()
 	m.wipRows = deriveWipRows(m.status)
 	m = m.rebuildCommitGraph()
 
-	m.mark = &markState{panel: panelCommits, key: wipKey(wipRow{kind: wipWorktree}), display: "working tree"}
-	m.sel[panelCommits] = m.wipCount() + 1 // second commit from the tip
-
-	r, ok := m.commitCompareMarkedRow()
+	m.commitCompareSet = map[string]bool{
+		wipKey(wipRow{kind: wipWorktree}): true,
+		m.commits[1].Hash:                 true,
+	}
+	r, ok := m.commitCompareSelectionRow()
 	if !ok {
-		t.Fatal("compare-with-marked must be available with a wip mark + commit selection")
+		t.Fatal("compare selection must be available with a commit + wip row")
 	}
 	u, _ := r.run(m)
 	mm := u.(Model)
