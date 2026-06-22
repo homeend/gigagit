@@ -77,6 +77,25 @@ func openCompareDiffOnFile(t *testing.T, repoDir string, repo *domain.Service, h
 	return dmsg.view
 }
 
+// TestCompareUntrackedFileDiffRenders proves an UNTRACKED file (which `git diff`
+// omits, and which CompareFiles now adds as an "A" row) both appears in the
+// compared list AND resolves to a real diff when opened — the worktree-new-side /
+// nil-old-side path.
+func TestCompareUntrackedFileDiffRenders(t *testing.T) {
+	dir, repo := newRepoDir(t)
+	head := headHashTUI(t, dir)
+
+	untracked := "timing — kopia.log" // space + em-dash, like the reported file
+	if err := os.WriteFile(filepath.Join(dir, untracked), []byte("alpha\nbeta\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	v := openCompareDiffOnFile(t, dir, domain.New(repo), head, untracked)
+	if len(v.full) == 0 {
+		t.Fatal("untracked file compare diff has no rows — its bytes were not resolved")
+	}
+}
+
 // TestCompareCommitVsWorktreeRealDiff drives the whole headline path against a
 // real git repo: a dirtied working tree, the changed-file list, and an actual
 // rendered per-file diff with non-empty rows. (The wiring-only tests cannot
