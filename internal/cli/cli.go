@@ -94,7 +94,7 @@ func Run(workdir string, args []string, stdin io.Reader, stdout, stderr io.Write
 	case "init":
 		return cmdInit(workdir, rest, stdin, stdout, stderr)
 	case "config":
-		return cmdConfig(workdir, rest, stdout, stderr)
+		return cmdConfig(svc, workdir, rest, stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "unknown command %q\n", cmd)
 		return 2

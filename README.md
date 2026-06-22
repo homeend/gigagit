@@ -151,10 +151,11 @@ branch/path templates with tokens like `<parent-branch>`, `<repo>`,
 `<date:YYYY-MM-DD>`, `<seq:NAME:N>`, and `<user:LABEL>`. Per-repo `<seq>` counters
 live in `<git-common-dir>/gg/state.toml`.
 
-Run `gg config init --repo` (writes `./.gg.toml`) or `gg config init --global`
-(writes `~/.config/gg/config.toml`) to scaffold a config file listing every
-setting commented-out with its default and a description — uncomment what you
-want to change. It refuses to overwrite an existing file without `--force`.
+Run `gg config init --repo` (writes `.gg.toml` at the repo root) or `gg config
+init --global` (writes `~/.config/gg/config.toml`) to scaffold a config file
+listing every setting commented-out with its default and a description —
+uncomment what you want to change. It refuses to overwrite an existing file
+without `--force`.
 
 `[ui] wheel_step` sets the mouse-wheel scroll step in rows (default 3);
 `[ui] hscroll_step` sets the diff scroll-mode pan step in columns (default 8);

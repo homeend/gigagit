@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -8,25 +9,26 @@ import (
 	"path/filepath"
 
 	"github.com/gigagit/gg/internal/config"
+	"github.com/gigagit/gg/internal/domain"
 )
 
 // cmdConfig implements `gg config <subcommand>`. Currently only `init`, which
-// scaffolds a fully-commented config file. Pure file I/O — no git, no repo.
-func cmdConfig(workdir string, args []string, stdout, stderr io.Writer) int {
+// scaffolds a fully-commented config file. Pure file I/O — no git writes.
+func cmdConfig(svc *domain.Service, workdir string, args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		fmt.Fprintln(stderr, "usage: gg config init (--repo | --global) [--force]")
 		return 2
 	}
 	switch args[0] {
 	case "init":
-		return cmdConfigInit(workdir, args[1:], stdout, stderr)
+		return cmdConfigInit(svc, workdir, args[1:], stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "unknown config subcommand %q\n", args[0])
 		return 2
 	}
 }
 
-func cmdConfigInit(workdir string, args []string, stdout, stderr io.Writer) int {
+func cmdConfigInit(svc *domain.Service, workdir string, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("config init", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	repo := fs.Bool("repo", false, "write ./.gg.toml for this repository")
@@ -42,7 +44,14 @@ func cmdConfigInit(workdir string, args []string, stdout, stderr io.Writer) int 
 
 	var path string
 	if *repo {
-		path = filepath.Join(workdir, ".gg.toml")
+		// gg reads repo config from the git toplevel, not the cwd — write there so
+		// `gg config init --repo` from a subdirectory isn't a silent no-op. Fall
+		// back to workdir when not inside a repo.
+		root := workdir
+		if top, err := svc.TopLevel(context.Background()); err == nil && top != "" {
+			root = top
+		}
+		path = filepath.Join(root, ".gg.toml")
 	} else {
 		path = config.DefaultGlobalPath()
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
