@@ -350,12 +350,11 @@ func (m Model) commitCompareToggleRow() (actionRow, bool) {
 	if m.focus != panelCommits || !m.opsIdle() {
 		return actionRow{}, false
 	}
-	bi, ok := m.backingIndex(panelCommits)
+	key, ok := m.selectedKey(panelCommits)
 	if !ok {
 		return actionRow{}, false
 	}
-	hash := m.commits[bi].Hash
-	in := m.commitCompareSet[hash]
+	in := m.commitCompareSet[key]
 	label := "Add to compare selection"
 	if in {
 		label = "Remove from compare selection"
@@ -368,9 +367,9 @@ func (m Model) commitCompareToggleRow() (actionRow, bool) {
 				m.commitCompareSet = map[string]bool{}
 			}
 			if in {
-				delete(m.commitCompareSet, hash)
+				delete(m.commitCompareSet, key)
 			} else {
-				m.commitCompareSet[hash] = true
+				m.commitCompareSet[key] = true
 			}
 			return m, nil
 		},

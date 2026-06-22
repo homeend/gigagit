@@ -304,7 +304,7 @@ func (l commitList) Date(i int) int64 {
 }
 func (l commitList) Key(i int) string {
 	if r, ok := l.wipAt(i); ok {
-		return "\x00wip-" + r.label()
+		return wipKey(r)
 	}
 	return l.items[i-l.wip()].Hash
 }

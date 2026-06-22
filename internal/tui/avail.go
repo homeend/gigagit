@@ -133,8 +133,14 @@ func (m Model) canShowCommitFiles() bool {
 // canMark gates m: mark/unmark/pair needs a resolvable row in the focused
 // panel (handleMarkKey re-checks and routes the three sub-cases).
 func (m Model) canMark() bool {
+	if !m.opsIdle() {
+		return false
+	}
+	if m.focus == panelCommits && m.isWipRow(m.commitSelUnified()) {
+		return true // a WIP pseudo-row can be marked for compare
+	}
 	_, ok := m.backingIndex(m.focus)
-	return m.opsIdle() && ok
+	return ok
 }
 
 // markOnFocusedPanel reports a live mark belonging to the focused panel.
@@ -147,8 +153,8 @@ func (m Model) cursorOnMark() bool {
 	if m.mark == nil {
 		return false
 	}
-	bi, ok := m.backingIndex(m.focus)
-	return ok && m.listFor(m.focus).Key(bi) == m.mark.key
+	k, ok := m.selectedKey(m.focus) // list-key space; matches a WIP mark too
+	return ok && k == m.mark.key
 }
 
 // canCommit reports whether there is a staged index to commit and no op is running.

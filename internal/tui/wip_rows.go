@@ -99,6 +99,67 @@ func (m Model) commitAtUnified(u int) (model.Commit, bool) {
 // a leak into a git command fails loudly instead of doing something subtle).
 func wipSyntheticHash(r wipRow) string { return "\x00wip-" + r.label() }
 
+// wipKey is the panelList.Key identity of a pseudo-row: a git-invalid sentinel
+// (NUL) that cannot collide with a commit hash. Single-sourced here and used by
+// commitList.Key, the mark, and the ◉ compare set.
+func wipKey(r wipRow) string { return "\x00wip-" + r.label() }
+
+// selectedKey returns the panelList.Key of panel p's selected row, in the list
+// index space (unified for Commits — the space Key/markAlive/displayIndices use).
+// Use this for identity (mark, ◉ set), NOT backingIndex, which yields a pure
+// feed index for Commits and would mis-key once WIP rows shift the list.
+func (m Model) selectedKey(p panel) (string, bool) {
+	idx := m.displayIndices(p)
+	s := m.sel[p]
+	if s < 0 || s >= len(idx) {
+		return "", false
+	}
+	return m.listFor(p).Key(idx[s]), true
+}
+
+// compareKeyEndpoint maps a mark/◉ key (a commit hash or a WIP sentinel) to the
+// compare endpoint it denotes.
+func (m Model) compareKeyEndpoint(key string) model.Endpoint {
+	switch key {
+	case wipKey(wipRow{kind: wipWorktree}):
+		return model.Endpoint{Kind: model.EndpointWorkTree}
+	case wipKey(wipRow{kind: wipStaged}):
+		return model.Endpoint{Kind: model.EndpointIndex}
+	default:
+		return model.Endpoint{Kind: model.EndpointCommit, Hash: key}
+	}
+}
+
+// compareKeyRank orders keys newest→oldest for older→newer pairing: the working
+// tree is newest (-2), then staged (-1), then commits by feed position (a larger
+// feed index is older). An unknown key sorts oldest.
+func (m Model) compareKeyRank(key string) int {
+	switch key {
+	case wipKey(wipRow{kind: wipWorktree}):
+		return -2
+	case wipKey(wipRow{kind: wipStaged}):
+		return -1
+	}
+	for i := range m.commits {
+		if m.commits[i].Hash == key {
+			return i
+		}
+	}
+	return 1 << 30
+}
+
+// compareKeyLabel is a short human label for a key (menu text / status bar).
+func (m Model) compareKeyLabel(key string) string {
+	switch key {
+	case wipKey(wipRow{kind: wipWorktree}):
+		return "working tree"
+	case wipKey(wipRow{kind: wipStaged}):
+		return "staged"
+	default:
+		return shortHash(key)
+	}
+}
+
 // wipEndpoints maps a pseudo-row to the compare endpoints of its node-vs-parent
 // diff (left = the node, right = its parent in the chain), reusing the existing
 // compare machinery:
