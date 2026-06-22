@@ -123,6 +123,15 @@ type Commit struct {
 	Source   string // branch the commit was reached from in the walk (%S); "" when unknown
 }
 
+// ReflogEntry is one HEAD reflog record (git reflog), newest first.
+type ReflogEntry struct {
+	Selector  string // "HEAD@{0}"
+	Hash      string // full SHA
+	ShortHash string // abbreviated SHA
+	Subject   string // %gs, e.g. "commit: add foo" or "checkout: moving from main to dev"
+	Rel       string // %gr relative date, e.g. "2 hours ago"
+}
+
 // RefKind classifies a ref decoration on a commit.
 type RefKind int
 
