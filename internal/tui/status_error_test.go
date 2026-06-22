@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -8,6 +9,32 @@ import (
 
 	"github.com/gigagit/gg/internal/model"
 )
+
+// With GIT_TERMINAL_PROMPT=0 a push/pull/fetch that needs credentials no longer
+// hangs the TUI — git fails fast. But its raw message ("could not read Username
+// … terminal prompts disabled") reads like a gg defect, so friendlyOpError turns
+// it into actionable guidance while staying an "error:" line (so it styles red).
+func TestFriendlyOpErrorExplainsMissingCredentials(t *testing.T) {
+	raw := errors.New("git push failed (exit 128): fatal: could not read Username for 'https://github.com': terminal prompts disabled")
+	got := friendlyOpError(raw)
+	if !statusIsError(got) {
+		t.Fatalf("friendlyOpError(%q) = %q, want an error: line", raw, got)
+	}
+	if strings.Contains(got, "terminal prompts disabled") {
+		t.Fatalf("friendly message still leaks the raw git noise: %q", got)
+	}
+	if !strings.Contains(strings.ToLower(got), "credential") {
+		t.Fatalf("friendly message should mention credentials: %q", got)
+	}
+}
+
+func TestFriendlyOpErrorPassesThroughOtherFailures(t *testing.T) {
+	raw := errors.New("git push failed (exit 1): ! [rejected] main -> main (non-fast-forward)")
+	got := friendlyOpError(raw)
+	if !strings.Contains(got, "non-fast-forward") {
+		t.Fatalf("unrelated failure should pass through, got: %q", got)
+	}
+}
 
 func TestStatusIsError(t *testing.T) {
 	errs := []string{

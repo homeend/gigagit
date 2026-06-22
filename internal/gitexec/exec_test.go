@@ -37,6 +37,68 @@ func TestExecRunnerRunStillInheritsEnv(t *testing.T) {
 	}
 }
 
+// gtpArgv runs a git alias whose body is `!echo prompt=$GIT_TERMINAL_PROMPT`.
+// A `!`-prefixed alias runs through git's own shell on every platform (git for
+// Windows bundles one), so the printed value is exactly what the git subprocess
+// received in its environment.
+var gtpArgv = []string{"-c", "alias.gtp=!echo prompt=$GIT_TERMINAL_PROMPT", "gtp"}
+
+// A TUI owns the terminal in raw mode; if git ever falls back to an interactive
+// prompt (e.g. "Username for 'https://github.com':" when no credential helper is
+// configured), it opens /dev/tty and blocks forever, freezing gg. Every git
+// subprocess must therefore see GIT_TERMINAL_PROMPT=0 so it fails fast instead.
+func TestExecRunnerDisablesTerminalPrompt(t *testing.T) {
+	r := NewExecRunner("git", t.TempDir(), nil)
+
+	t.Run("Run", func(t *testing.T) {
+		res, err := r.Run(context.Background(), "gtp", gtpArgv)
+		if err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+		if got := strings.TrimSpace(res.Stdout); got != "prompt=0" {
+			t.Fatalf("GIT_TERMINAL_PROMPT in subprocess = %q, want prompt=0", got)
+		}
+	})
+
+	t.Run("RunEnv", func(t *testing.T) {
+		res, err := r.RunEnv(context.Background(), "gtp", gtpArgv, []string{"FOO=bar"})
+		if err != nil {
+			t.Fatalf("RunEnv: %v", err)
+		}
+		if got := strings.TrimSpace(res.Stdout); got != "prompt=0" {
+			t.Fatalf("GIT_TERMINAL_PROMPT in subprocess = %q, want prompt=0", got)
+		}
+	})
+
+	t.Run("Stream", func(t *testing.T) {
+		var lines []string
+		_, err := r.Stream(context.Background(), "gtp", gtpArgv, func(line string) {
+			lines = append(lines, line)
+		})
+		if err != nil {
+			t.Fatalf("Stream: %v", err)
+		}
+		if got := strings.TrimSpace(strings.Join(lines, "\n")); got != "prompt=0" {
+			t.Fatalf("GIT_TERMINAL_PROMPT in subprocess = %q, want prompt=0", got)
+		}
+	})
+}
+
+// The disabled prompt must win even when the surrounding environment explicitly
+// re-enables it: the TUI can never service a prompt it cannot type into.
+func TestExecRunnerForcesTerminalPromptOverInheritedEnv(t *testing.T) {
+	t.Setenv("GIT_TERMINAL_PROMPT", "1")
+	r := NewExecRunner("git", t.TempDir(), nil)
+
+	res, err := r.Run(context.Background(), "gtp", gtpArgv)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if got := strings.TrimSpace(res.Stdout); got != "prompt=0" {
+		t.Fatalf("GIT_TERMINAL_PROMPT in subprocess = %q, want prompt=0 (must override inherited =1)", got)
+	}
+}
+
 func TestExecRunnerRunsGitVersion(t *testing.T) {
 	rec := observ.NewRing(10)
 	r := NewExecRunner("git", ".", rec)
