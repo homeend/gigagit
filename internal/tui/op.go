@@ -112,6 +112,24 @@ func (m Model) reloadRefsCmd(summary string) tea.Cmd {
 	}
 }
 
+// identityRefreshedMsg lands after a SetIdentity op's targeted re-read. A git
+// config write changes no status/refs/commits, so this replaces the full
+// Snapshot — it only refreshes the cached identity and carries the summary.
+type identityRefreshedMsg struct {
+	summary string
+	id      model.Identity
+	err     error
+}
+
+// reloadIdentityCmd re-reads the identity off the UI thread (no Snapshot).
+func (m Model) reloadIdentityCmd(summary string) tea.Cmd {
+	svc := m.svc
+	return func() tea.Msg {
+		id, err := svc.Identity(context.Background())
+		return identityRefreshedMsg{summary: summary, id: id, err: err}
+	}
+}
+
 // amendPrefillMsg carries HEAD's message for the amend popup.
 type amendPrefillMsg struct {
 	msg string

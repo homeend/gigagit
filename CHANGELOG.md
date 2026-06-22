@@ -9,6 +9,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Git identity & app profiles.** Settings (`,`) → **Identity & profiles**
+  shows the current git identity with global, repo-local, and effective values
+  kept distinct ("not set — inherits global" reads differently from a real
+  local value), and a list of named **profiles** — `{name, email}` presets you
+  define, scoped either **global** (every repo) or **this repo only**. `enter`
+  on a profile (or `e` to edit the live identity) prompts **apply to this repo
+  or globally**, then writes git's `user.name`/`user.email`; `n`/`r`/`d` create,
+  rename, and delete profiles. Profiles live in a new writable side-store under
+  the XDG state dir (this is gg's first feature to write git config). CLI
+  (`gg identity` / `gg profile`) is not wired yet.
 - **Reflog recovery actions.** The Reflog tab's `.` menu now offers
   **Reset to this entry** (soft/mixed/hard, with a confirm when the entry is off
   the current branch) and **Check out this entry…** (detached HEAD, or create a

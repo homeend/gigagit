@@ -17,12 +17,19 @@ type settingsPopup struct {
 	picker  bool // false = menu screen, true = agent picker
 	dets    []agentinit.Detection
 	checked []bool
-	sel     int
+	sel     int      // selection within the agent picker list
+	menuSel int      // selection within the top-level menu (independent of sel)
 	mode    dispMode // text display mode; z cycles (cutoff default)
 	hscroll int      // modeScroll horizontal offset
 }
 
-const settingsMenuAgents = "Set up agent skills (using-gg)"
+const (
+	settingsMenuAgents   = "Set up agent skills (using-gg)"
+	settingsMenuIdentity = "Identity & profiles"
+)
+
+// settingsMenu is the top-level menu order.
+var settingsMenu = []string{settingsMenuAgents, settingsMenuIdentity}
 
 // openSettings opens the menu screen.
 func (m Model) openSettings() Model {
@@ -78,10 +85,26 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	}
 	if !p.picker {
 		switch msg.Type {
+		case tea.KeyUp:
+			if p.menuSel > 0 {
+				p.menuSel--
+			}
+			return m, nil
+		case tea.KeyDown:
+			if p.menuSel < len(settingsMenu)-1 {
+				p.menuSel++
+			}
+			return m, nil
 		case tea.KeyEnter:
-			return m.openAgentPicker(), nil
+			switch p.menuSel {
+			case 0:
+				return m.openAgentPicker(), nil
+			case 1:
+				return m.openIdentityView()
+			}
+			return m, nil
 		}
-		return m, nil // single menu entry: up/down are no-ops in v1
+		return m, nil
 	}
 	switch msg.Type {
 	case tea.KeyUp:
@@ -136,10 +159,16 @@ func (p *settingsPopup) box(m Model) string {
 	var b strings.Builder
 	if !p.picker {
 		b.WriteString("Settings\n\n")
-		b.WriteString("> " + settingsMenuAgents + "\n")
-		// The menu is a single static line (not a renderWindow list), so z has no
-		// visible effect here — only the picker advertises [z] mode.
-		b.WriteString("\n[enter] open  [esc] close")
+		for i, label := range settingsMenu {
+			prefix := "  "
+			if i == p.menuSel {
+				prefix = "> "
+			}
+			b.WriteString(prefix + label + "\n")
+		}
+		// A short static menu (not a renderWindow list), so z has no visible
+		// effect here — only the picker advertises [z] mode.
+		b.WriteString("\n[↑/↓] select  [enter] open  [esc] close")
 	} else {
 		b.WriteString("Set up agent skills\n\n")
 		if len(p.dets) == 0 {
