@@ -1,0 +1,27 @@
+name = "fast-forward: current branch advances to a child branch's commit, no merge commit (exit 0)"
+
+[input]
+steps = [
+  { write = "base.txt", content = "base\n" },
+  { commit = "base" },
+  { branch = "feat" },
+  { switch = "feat" },
+  { write = "feat.txt", content = "feat\n" },
+  { commit = "feat change" },
+  { switch = "main" },
+]
+
+[[run]]
+cmd  = ["fast-forward", "feat"]
+exit = 0
+
+[expect]
+branch = "main"
+clean  = true
+
+[expect.files]
+"feat.txt" = "feat\n"   # the worktree advanced to feat's tip
+
+[[expect.log]]
+# Fast-forward: no merge commit, feat's commit is simply on main now.
+subjects = ["feat change", "base"]
