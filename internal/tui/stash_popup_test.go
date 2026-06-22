@@ -21,8 +21,8 @@ func TestSOpensStashPopupWithCandidates(t *testing.T) {
 	if p == nil {
 		t.Fatal("s on Status should open the stash popup")
 	}
-	if p.name != "WIP on main" {
-		t.Errorf("default name = %q, want %q", p.name, "WIP on main")
+	if p.name.Value() != "WIP on main" {
+		t.Errorf("default name = %q, want %q", p.name.Value(), "WIP on main")
 	}
 	if len(p.files) != 2 {
 		t.Fatalf("want 2 candidate files, got %d", len(p.files))
@@ -49,7 +49,7 @@ func TestStashPopupPrechecksMarks(t *testing.T) {
 }
 
 func TestStashPopupOpAssembly(t *testing.T) {
-	p := &stashPopup{name: "WIP on main", files: []stashFileItem{
+	p := &stashPopup{name: newTextField("WIP on main"), files: []stashFileItem{
 		{path: "a.go", included: true, untracked: false},
 		{path: "b.go", included: false},
 		{path: "c.txt", included: true, untracked: true},
