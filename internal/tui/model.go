@@ -38,14 +38,16 @@ type Model struct {
 	cfg          config.Config
 	gitCommonDir string
 
-	initHomeDir         string // home dir for agent detection; "" skips home-scoped agents (tests)
-	statePath           string // repo-registry location; "" disables recording (tests)
-	pendingSeqBump      []string
-	pendingSwitch       bool
-	switchTarget        string
-	pendingCompare      *pendingCompare // focused file awaiting the compare-mode picker; nil = none
-	pendingSwitchBranch string          // branch to SmartSwitch to after a successful op (B = create-and-switch)
-	pendingRefsReload   bool            // after this op, refresh only branches+worktrees (not a full Snapshot) — set by create-worktree
+	initHomeDir           string // home dir for agent detection; "" skips home-scoped agents (tests)
+	statePath             string // repo-registry location; "" disables recording (tests)
+	pendingSeqBump        []string
+	pendingSwitch         bool
+	switchTarget          string
+	pendingCompare        *pendingCompare // focused file awaiting the compare-mode picker; nil = none
+	pendingSwitchBranch   string          // branch to SmartSwitch to after a successful op (B = create-and-switch)
+	pendingRefsReload     bool            // after this op, refresh only branches+worktrees (not a full Snapshot) — set by create-worktree
+	pendingIdentityReload bool            // after this op (SetIdentity), re-read only the identity (not a full Snapshot) — config write changes no status/refs
+	identity              model.Identity  // last-read git user identity (refreshed after SetIdentity); the identityView popup loads its own fresh copy
 
 	mark             *markState      // the m-key mark; nil = none (see mark.go)
 	fileMarks        map[string]bool // multi-selected Status file paths (keyed by path)
@@ -1154,6 +1156,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switchTo := ""
 		chainSwitch := ""
 		refsReload := false
+		idReload := false
 		if msg.err != nil {
 			m.statusMsg = friendlyOpError(msg.err)
 		} else {
@@ -1168,11 +1171,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			chainSwitch = m.pendingSwitchBranch
 			refsReload = m.pendingRefsReload
+			idReload = m.pendingIdentityReload
 		}
 		m.pendingSeqBump = nil
 		m.pendingSwitch = false
 		m.pendingSwitchBranch = "" // cleared before the chained op starts, so it cannot re-fire
 		m.pendingRefsReload = false
+		m.pendingIdentityReload = false
 		if switchTo != "" {
 			return m.reRoot(switchTo)
 		}
@@ -1197,7 +1202,36 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if refsReload {
 			return m, m.reloadRefsCmd(m.statusMsg)
 		}
+		// SetIdentity wrote git config — no status/refs/commits changed, so skip
+		// the full Snapshot and just re-read the identity for next time.
+		if idReload {
+			return m, m.reloadIdentityCmd(m.statusMsg)
+		}
 		return m, m.loadCmd()
+
+	case identityDataMsg:
+		if v := layerOf[*identityView](m); v != nil {
+			v.loading = false
+			if msg.err != nil {
+				m.statusMsg = msg.err.Error()
+			} else {
+				v.id = msg.id
+				v.profiles = msg.profiles
+				if v.sel >= len(v.profiles) {
+					v.sel = 0
+				}
+			}
+		}
+		return m, nil
+
+	case identityRefreshedMsg:
+		if msg.err == nil {
+			m.identity = msg.id
+		}
+		if msg.summary != "" {
+			m.statusMsg = msg.summary
+		}
+		return m, nil
 
 	case stashFilesMsg:
 		if m.stashView == nil || m.filesView == nil || msg.tag != m.filesStashTag {
