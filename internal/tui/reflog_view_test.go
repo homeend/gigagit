@@ -121,8 +121,14 @@ func TestReflogCheckoutCreateBranchOpensPopup(t *testing.T) {
 	m = nm.(Model)
 	nm, _ = m.modal.onResolve(m, "Create branch…")
 	m = nm.(Model)
-	if layerOf[*reflogCheckoutPopup](m) == nil {
+	p := layerOf[*reflogCheckoutPopup](m)
+	if p == nil {
 		t.Fatal("Create branch… must push the reflog checkout popup")
+	}
+	// Anchored on the cursor entry (sel=1), not entry 0 — guards the
+	// display-vs-backing trap (would pass at sel=0 without this).
+	if p.ref != "2222222222222222222222222222222222222222" {
+		t.Fatalf("popup must carry the cursor entry's hash, got %q", p.ref)
 	}
 }
 
