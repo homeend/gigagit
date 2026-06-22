@@ -1,10 +1,54 @@
 package rebaseplan
 
 import (
+	"errors"
+	"strings"
 	"testing"
 
 	"github.com/gigagit/gg/internal/model"
 )
+
+func TestBuildSquashReturnsErrNotAdjacent(t *testing.T) {
+	commits := []model.RangeCommit{rc("a", "A"), rc("b", "B"), rc("c", "C")}
+	_, err := BuildSquash(commits, []string{"a", "c"})
+	if !errors.Is(err, ErrNotAdjacent) {
+		t.Fatalf("err = %v, want ErrNotAdjacent", err)
+	}
+}
+
+func TestBuildSquashReorderPlacement(t *testing.T) {
+	// c1=a, c2=b (skipped), c3=c, c4=d. Select a and c.
+	commits := []model.RangeCommit{rc("a", "A"), rc("b", "B"), rc("c", "C"), rc("d", "D")}
+	p, err := BuildSquashReorder(commits, []string{"a", "c"})
+	if err != nil {
+		t.Fatalf("BuildSquashReorder: %v", err)
+	}
+	var order []string
+	for _, e := range p.Entries {
+		order = append(order, e.Sha+":"+string(e.Action))
+	}
+	want := []string{"a:pick", "c:squash", "b:pick", "d:pick"}
+	if strings.Join(order, " ") != strings.Join(want, " ") {
+		t.Fatalf("plan = %v, want %v", order, want)
+	}
+	if got := p.Message(0); got != "A\n\nC" {
+		t.Fatalf("Message(0) = %q, want %q", got, "A\n\nC")
+	}
+}
+
+func TestBuildSquashReorderTooFew(t *testing.T) {
+	commits := []model.RangeCommit{rc("a", "A"), rc("b", "B")}
+	if _, err := BuildSquashReorder(commits, []string{"a"}); err == nil {
+		t.Fatal("want error for fewer than 2 targets")
+	}
+}
+
+func TestBuildSquashReorderMissingTarget(t *testing.T) {
+	commits := []model.RangeCommit{rc("a", "A"), rc("b", "B")}
+	if _, err := BuildSquashReorder(commits, []string{"a", "z"}); err == nil {
+		t.Fatal("want error for target not in range")
+	}
+}
 
 func squashActions(p Plan) map[string]Action {
 	out := map[string]Action{}
