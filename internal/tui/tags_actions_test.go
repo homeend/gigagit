@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/gigagit/gg/internal/domain"
 	"github.com/gigagit/gg/internal/git"
 	"github.com/gigagit/gg/internal/gitexec"
@@ -363,5 +365,63 @@ func TestTagDeleteRemoteRowDispatches(t *testing.T) {
 	}
 	if _, cmd := row.run(m); cmd == nil {
 		t.Fatal("delete-remote row run returned nil cmd")
+	}
+}
+
+func TestTagAnnotateRowPresent(t *testing.T) {
+	m := footerModel()
+	m.focus = panelTags
+	m.tags = []model.Tag{{Name: "v1.0.0", Target: "abc1234"}}
+	got := ids(availableActions(m))
+	if !got["tag-annotate"] {
+		t.Fatalf("expected tag-annotate; got %v", got)
+	}
+}
+
+func TestAnnotatePopupPrefillsSubject(t *testing.T) {
+	m := footerModel()
+	m.focus = panelTags
+	m.tags = []model.Tag{{Name: "v1.0.0", Target: "abc1234", Annotated: true, Subject: "old message"}}
+	m, ok := m.openAnnotateTagPopup()
+	if !ok {
+		t.Fatal("openAnnotateTagPopup returned false")
+	}
+	p := layerOf[*annotateTagPopup](m)
+	if p == nil || p.message.Value() != "old message" {
+		t.Fatalf("popup message = %+v, want prefilled 'old message'", p)
+	}
+	if p.target != "abc1234" {
+		t.Fatalf("popup target = %q, want abc1234", p.target)
+	}
+}
+
+func TestAnnotatePopupEmptyMessageKeepsOpen(t *testing.T) {
+	m := footerModel()
+	m.focus = panelTags
+	m.tags = []model.Tag{{Name: "v1.0.0", Target: "abc1234"}} // lightweight → blank subject
+	m.svc = domain.New(&git.Repo{Runner: gitexec.NewFakeRunner()})
+	m, _ = m.openAnnotateTagPopup()
+	p := layerOf[*annotateTagPopup](m)
+	if p == nil {
+		t.Fatal("no popup")
+	}
+	um, _ := p.update(m, tea.KeyMsg{Type: tea.KeyEnter})
+	m = um
+	if layerOf[*annotateTagPopup](m) == nil {
+		t.Fatal("empty message must keep the popup open (annotate requires a message)")
+	}
+}
+
+func TestAnnotatePopupSubmitDispatches(t *testing.T) {
+	m := footerModel()
+	m.focus = panelTags
+	m.tags = []model.Tag{{Name: "v1.0.0", Target: "abc1234"}}
+	m.svc = domain.New(&git.Repo{Runner: gitexec.NewFakeRunner()})
+	m, _ = m.openAnnotateTagPopup()
+	p := layerOf[*annotateTagPopup](m)
+	p.message = newTextField("a message")
+	_, cmd := p.update(m, tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("submit with a message must start the op (non-nil cmd)")
 	}
 }

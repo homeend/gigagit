@@ -8,6 +8,28 @@ import (
 	"github.com/gigagit/gg/internal/engine"
 )
 
+// tagAnnotateRow offers "Annotate <tag>" on the Tags panel: open a message
+// popup (prefilled with the tag's subject) that force-recreates the tag as
+// annotated at its current target. Local-only, no confirm.
+func (m Model) tagAnnotateRow() (actionRow, bool) {
+	if m.focus != panelTags || !m.opsIdle() {
+		return actionRow{}, false
+	}
+	bi, ok := m.backingIndex(panelTags)
+	if !ok || bi < 0 || bi >= len(m.tags) {
+		return actionRow{}, false
+	}
+	name := m.tags[bi].Name
+	return actionRow{
+		id:    "tag-annotate",
+		label: "Annotate " + name,
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			m, _ = m.openAnnotateTagPopup()
+			return m, nil
+		},
+	}, true
+}
+
 // tagCheckoutRow offers "Check out tag" on the Tags panel: ask detached vs a new
 // branch (never-trap Cancel), then check out.
 func (m Model) tagCheckoutRow() (actionRow, bool) {

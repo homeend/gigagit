@@ -263,6 +263,9 @@ func (m Model) appendCommitContextRows(out []actionRow) []actionRow {
 	if r, ok := m.tagPushRow(); ok {
 		out = append(out, r)
 	}
+	if r, ok := m.tagAnnotateRow(); ok {
+		out = append(out, r)
+	}
 	out = append(out, m.graphWindowRows()...)
 	if r, ok := m.tagDeleteRow(); ok {
 		out = append(out, r)
