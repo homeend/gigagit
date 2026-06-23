@@ -42,6 +42,18 @@ func TestTagsCopyShaResolvesTarget(t *testing.T) {
 	if _, cmd := row.run(m); cmd == nil {
 		t.Fatal("copy-commit-sha run returned nil cmd")
 	}
+	// The headline correctness point: rev-parse must resolve the tag's TARGET
+	// commit, not the tag name (rev-parse <annotated-tag> would give the tag
+	// object, not the commit).
+	var resolved string
+	for _, c := range fr.Calls {
+		if c.Name == "git rev-parse" {
+			resolved = c.Argv[len(c.Argv)-1]
+		}
+	}
+	if resolved != "abc1234" {
+		t.Fatalf("rev-parse resolved %q, want tag.Target abc1234 (not the tag name)", resolved)
+	}
 }
 
 func TestEnterOnTagJumpsToCommit(t *testing.T) {
