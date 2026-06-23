@@ -36,6 +36,7 @@ type contentPopup struct {
 	sel     int           // cursor index into the FILTERED view
 	mode    dispMode      // text display mode; z cycles
 	hscroll int           // modeScroll horizontal offset
+	footer  string        // optional line above the hint (e.g. commit author · date); "" = none
 }
 
 func newContentPopup(title string, lines []contentLine) *contentPopup {
@@ -281,6 +282,9 @@ func (p *contentPopup) box(m Model) string {
 	}
 	for _, r := range win {
 		b.WriteString(r + "\n")
+	}
+	if p.footer != "" {
+		b.WriteString("  " + truncate(p.footer, textW-2) + "\n")
 	}
 	hint := "[/] search  [z] mode  [q] close"
 	if len(vis) > capRows {
