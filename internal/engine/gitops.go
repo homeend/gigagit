@@ -32,6 +32,7 @@ type GitOps interface {
 	Push(ctx context.Context, remote, branch string, setUpstream bool, force git.PushForce) error
 	PushTag(ctx context.Context, remote, name string) error
 	PushDelete(ctx context.Context, remote, branch string) error
+	PushDeleteTag(ctx context.Context, remote, tag string) error
 	Switch(ctx context.Context, branch string) error
 	SwitchDetach(ctx context.Context, ref string) error
 	SwitchCreate(ctx context.Context, branch, start string) error
