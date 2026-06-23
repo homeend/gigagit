@@ -144,6 +144,25 @@ func (m Model) tagDeleteRow() (actionRow, bool) {
 	}, true
 }
 
+// tagDeleteRemoteRow offers "Delete <tag> from remote" on the Tags panel. The
+// engine resolves the remote (auto/pick) and confirms via the Decider (surfaced
+// as the TUI modal); a single keypress never deletes a remote ref unconfirmed.
+func (m Model) tagDeleteRemoteRow() (actionRow, bool) {
+	if m.focus != panelTags || !m.opsIdle() {
+		return actionRow{}, false
+	}
+	bi, ok := m.backingIndex(panelTags)
+	if !ok || bi < 0 || bi >= len(m.tags) {
+		return actionRow{}, false
+	}
+	name := m.tags[bi].Name
+	return actionRow{
+		id:    "tag-delete-remote",
+		label: "Delete " + name + " from remote",
+		run:   func(m Model) (tea.Model, tea.Cmd) { return m.startOp(engine.DeleteRemoteTag{Tag: name}) },
+	}, true
+}
+
 // tagJumpToCommit moves the Commits cursor to the selected tag's target commit
 // (matched by short-hash prefix) and focuses the Commits panel. A target that
 // isn't in the loaded commit page leaves a notice (never-trap: no-op + explain).
