@@ -9,6 +9,7 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Solo this tag.** The Tags panel `.` menu now offers **Solo this tag** — it scopes the Commits panel to the tag's history (`git log <tag>`: the tag's commit on top, everything in that release below, lazily paged) and focuses the Commits panel, so you can browse a release's commits even on a huge repo where the tag's commit is far outside the loaded window. Clear it with **Show all branches** (or re-run Solo this tag). Same scoping mechanism as "Solo this branch".
 - **Fuzzy file finder.** `F` opens a finder over every tracked file; fuzzy-type a
   path (`fvgo` → `files_view.go`) and `enter` opens a per-file menu: View content,
   Diff, History, Blame, Open in editor, Copy path. Built for tens of thousands of
