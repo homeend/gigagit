@@ -260,6 +260,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.filesPreview.lines = msg.lines
 		m.filesPreview.sel = 0
 		return m, nil
+	case fileContentLayerMsg:
+		cp := layerOf[*contentPopup](m)
+		// Tag-gate: only fill the contentPopup whose title matches this path load.
+		if cp == nil || cp.title != "View "+msg.path {
+			return m, nil // layer closed, or a stale load from a different path
+		}
+		if msg.err != nil {
+			cp.lines = []contentLine{{text: "(load failed: " + msg.err.Error() + ")"}}
+			return m, nil
+		}
+		cp.lines = msg.lines
+		cp.sel = 0
+		return m, nil
 	case compareFilesMsg:
 		if m.filesView == nil || !m.inCompareMode() || msg.tag != m.compareTag {
 			return m, nil // stale or closed
@@ -378,6 +391,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.rings != nil {
 			m.searchHist = msg.rings
 		}
+		return m, nil
+	case lsFilesMsg:
+		p := layerOf[*fileFinderPopup](m)
+		if p == nil {
+			return m, nil // user closed before load returned
+		}
+		if msg.err != nil {
+			m.statusMsg = "file finder: " + msg.err.Error()
+			m = m.popLayer()
+			return m, nil
+		}
+		p.all = msg.paths
+		p.loading = false
+		p.rerank()
 		return m, nil
 	case dataLoadedMsg:
 		if msg.gen != m.loadGen {
@@ -720,6 +747,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.openBookmarkSwitcher()
 		case "G": // open the shelf quick-switcher (global; see openShelfSwitcher)
 			return m.openShelfSwitcher()
+		case "F": // open the fuzzy file finder (global; see openFileFinder)
+			return m.openFileFinder()
 		case "z": // cycle the focused panel's text display mode
 			m.dispModes[m.focus] = m.dispModes[m.focus].next()
 			m.hscroll[m.focus] = 0

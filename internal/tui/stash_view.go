@@ -71,6 +71,8 @@ func (m Model) updateStashViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.openBookmarkSwitcher()
 	case "G": // global shelf quick-switcher
 		return m.openShelfSwitcher()
+	case "F": // global fuzzy file finder
+		return m.openFileFinder()
 	case "z":
 		v.mode = v.mode.next()
 		v.hscroll = 0

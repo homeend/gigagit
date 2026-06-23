@@ -375,3 +375,17 @@ func TestBranchesQuery(t *testing.T) {
 		t.Fatalf("bs = %+v", bs)
 	}
 }
+
+func TestServiceLsFiles(t *testing.T) {
+	_, svc := newRealRepo(t)
+	files, err := svc.LsFiles(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) == 0 {
+		t.Fatal("expected tracked files")
+	}
+	if files[0] != "README.md" {
+		t.Fatalf("expected README.md in files, got %v", files)
+	}
+}

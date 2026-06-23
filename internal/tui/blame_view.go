@@ -189,6 +189,8 @@ func (b *blameView) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m.openBookmarkSwitcher()
 	case "G": // global shelf quick-switcher
 		return m.openShelfSwitcher()
+	case "F": // global fuzzy file finder
+		return m.openFileFinder()
 	case "z":
 		b.mode = b.mode.next()
 		b.hscroll = 0

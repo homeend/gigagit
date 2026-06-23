@@ -316,6 +316,8 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.openBookmarkSwitcher()
 	case "G": // global shelf quick-switcher
 		return m.openShelfSwitcher()
+	case "F": // global fuzzy file finder
+		return m.openFileFinder()
 	case "z":
 		if m.filesPreview != nil && !m.filesTreeFocused { // z cycles the focused preview
 			m.filesPreview.mode = m.filesPreview.mode.next()
