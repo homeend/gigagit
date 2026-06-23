@@ -9,6 +9,7 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Delete a remote branch.** The Remotes panel `.` menu now offers **Delete `<remote>/<branch>`** (with a confirm prompt), and the CLI adds `gg remote rm <remote>/<branch>` — `git push <remote> --delete`. Destructive and outward-facing, so the TUI confirms; the CLI command is the confirmation.
 - **More Remotes & Branches menu actions.** The `.` menu on the Branches and
   Remotes panels now offers **Copy commit id** (the short tip hash) and **Copy
   commit sha** (the full 40-char hash, resolved on demand). The Remotes menu

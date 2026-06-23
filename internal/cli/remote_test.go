@@ -49,3 +49,25 @@ func TestRemotePruneDropsDeletedRef(t *testing.T) {
 		t.Fatalf("origin/foo should be pruned:\n%s", out)
 	}
 }
+
+func TestRemoteRmDeletesBranchOnOrigin(t *testing.T) {
+	clone := cloneWithRemoteFoo(t)
+	origin := runGit(t, clone, "config", "--get", "remote.origin.url")
+	if code, _, errb := runCLI(t, clone, "remote", "rm", "origin/foo"); code != 0 {
+		t.Fatalf("remote rm exit = %d (stderr: %s)", code, errb)
+	}
+	if out := runGit(t, origin, "branch", "--list", "foo"); strings.TrimSpace(out) != "" {
+		t.Fatalf("origin still has foo: %q", out)
+	}
+}
+
+func TestRemoteRmRejectsArgWithoutSlash(t *testing.T) {
+	clone := cloneWithRemoteFoo(t)
+	code, _, errb := runCLI(t, clone, "remote", "rm", "noslash")
+	if code != 2 {
+		t.Fatalf("exit = %d, want 2", code)
+	}
+	if !strings.Contains(errb, "usage") {
+		t.Fatalf("stderr = %q, want a usage message", errb)
+	}
+}

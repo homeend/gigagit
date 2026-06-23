@@ -112,3 +112,20 @@ func (m Model) remotePruneRow() (actionRow, bool) {
 		run:   func(m Model) (tea.Model, tea.Cmd) { return m.startOp(engine.Prune{}) },
 	}, true
 }
+
+// remoteDeleteRow offers "Delete <remote branch>" on the Remotes tab. The
+// engine's Decider confirm (surfaced as the TUI modal) gates the actual delete;
+// a single keypress never deletes a remote ref unconfirmed.
+func (m Model) remoteDeleteRow() (actionRow, bool) {
+	rb, ok := m.selectedRemote()
+	if !ok || !m.opsIdle() {
+		return actionRow{}, false
+	}
+	return actionRow{
+		id:    "remote-delete",
+		label: "Delete " + rb.Name,
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			return m.startOp(engine.DeleteRemoteBranch{Remote: rb.Remote, Branch: rb.Branch})
+		},
+	}, true
+}

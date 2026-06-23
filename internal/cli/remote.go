@@ -4,13 +4,14 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/gigagit/gg/internal/domain"
 	"github.com/gigagit/gg/internal/engine"
 )
 
-// cmdRemote dispatches the remote subcommands: ls | fetch | prune.
-func cmdRemote(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
+// cmdRemote dispatches the remote subcommands: ls | fetch | prune | rm.
+func cmdRemote(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	switch {
 	case len(args) == 0 || args[0] == "ls" || args[0] == "list":
 		return cmdRemoteList(svc, stdout, stderr)
@@ -20,10 +21,31 @@ func cmdRemote(svc *domain.Service, args []string, stdout, stderr io.Writer) int
 	case args[0] == "prune":
 		res, err := runOperation(context.Background(), svc, engine.Prune{}, cliDecider{}, stderr)
 		return finish(res, err, stdout, stderr)
+	case args[0] == "rm" || args[0] == "remove":
+		return cmdRemoteRm(svc, args[1:], stdin, stdout, stderr)
 	default:
-		fmt.Fprintf(stderr, "remote: unknown subcommand %q (try: ls, fetch, prune)\n", args[0])
+		fmt.Fprintf(stderr, "remote: unknown subcommand %q (try: ls, fetch, prune, rm)\n", args[0])
 		return 2
 	}
+}
+
+// cmdRemoteRm implements `gg remote rm <remote>/<branch>` — delete a remote
+// branch. The command is the confirmation: the delete-remote-branch decision is
+// pre-answered. Splits on the FIRST '/' (branch names may contain '/').
+func cmdRemoteRm(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	if len(args) != 1 {
+		fmt.Fprintln(stderr, "usage: gg remote rm <remote>/<branch>")
+		return 2
+	}
+	remote, branch, ok := strings.Cut(args[0], "/")
+	if !ok || remote == "" || branch == "" {
+		fmt.Fprintln(stderr, "usage: gg remote rm <remote>/<branch>")
+		return 2
+	}
+	dec := cliDecider{policy: map[string]string{"delete-remote-branch": "delete"}, in: stdin, out: stderr, interactive: stdinIsTerminal()}
+	res, err := runOperation(context.Background(), svc,
+		engine.DeleteRemoteBranch{Remote: remote, Branch: branch}, dec, stderr)
+	return finish(res, err, stdout, stderr)
 }
 
 // cmdRemoteList prints each remote-tracking branch ("origin/foo"), one per line.

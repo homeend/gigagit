@@ -266,3 +266,53 @@ func TestPruneRemotes(t *testing.T) {
 		t.Fatalf("PruneRemotes() with no names should be a no-op: %v", err)
 	}
 }
+
+// gitOut runs git in dir and returns trimmed stdout.
+func gitOut(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("git %v: %v", args, err)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+func TestPushDeleteArgv(t *testing.T) {
+	f := gitexec.NewFakeRunner()
+	f.SetResponse("git push delete", gitexec.Result{})
+	repo := &Repo{Runner: f}
+	if err := repo.PushDelete(context.Background(), "origin", "feat/x"); err != nil {
+		t.Fatalf("PushDelete: %v", err)
+	}
+	var argv []string
+	for _, c := range f.Calls {
+		if c.Name == "git push delete" {
+			argv = c.Argv
+		}
+	}
+	want := []string{"push", "origin", "--delete", "feat/x"}
+	if len(argv) != len(want) {
+		t.Fatalf("argv = %v, want %v", argv, want)
+	}
+	for i := range want {
+		if argv[i] != want[i] {
+			t.Fatalf("argv = %v, want %v", argv, want)
+		}
+	}
+}
+
+func TestPushDeleteRemovesBranchOnRemote(t *testing.T) {
+	clone, runner := newClonePair(t)
+	repo := &Repo{Runner: runner}
+	// Create a branch and push it to origin, then delete it via PushDelete.
+	gitIn(t, clone, "branch", "doomed", "main")
+	gitIn(t, clone, "push", "origin", "doomed")
+	if err := repo.PushDelete(context.Background(), "origin", "doomed"); err != nil {
+		t.Fatalf("PushDelete: %v", err)
+	}
+	// origin must no longer advertise the branch.
+	if out := gitOut(t, clone, "ls-remote", "--heads", "origin", "doomed"); strings.TrimSpace(out) != "" {
+		t.Fatalf("origin still has doomed branch: %q", out)
+	}
+}

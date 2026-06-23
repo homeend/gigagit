@@ -1,0 +1,19 @@
+name = "remote rm: delete a branch on origin"
+
+[input.origin]
+steps = [
+  { write = "f.txt", content = "v1\n" },
+  { commit = "c1" },
+  { branch = "doomed" },
+]
+
+[[run]]
+cmd  = ["remote", "fetch"]
+exit = 0
+
+[[run]]
+cmd  = ["remote", "rm", "origin/doomed"]
+exit = 0
+
+[expect.origin]
+branches = ["main"]
