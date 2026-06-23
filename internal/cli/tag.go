@@ -23,8 +23,10 @@ func cmdTag(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr 
 		return cmdTagCheckout(svc, args[1:], stdout, stderr)
 	case args[0] == "push":
 		return cmdTagPush(svc, args[1:], stdout, stderr)
+	case args[0] == "annotate":
+		return cmdTagAnnotate(svc, args[1:], stdout, stderr)
 	default:
-		fmt.Fprintf(stderr, "tag: unknown subcommand %q (try: ls, create, rm, checkout, push)\n", args[0])
+		fmt.Fprintf(stderr, "tag: unknown subcommand %q (try: ls, create, rm, checkout, push, annotate)\n", args[0])
 		return 2
 	}
 }
@@ -118,6 +120,34 @@ func cmdTagCreate(svc *domain.Service, args []string, stdout, stderr io.Writer) 
 	}
 	res, err := runOperation(context.Background(), svc,
 		engine.CreateTag{Name: rest[0], Commit: commit, Message: *msg}, cliDecider{}, stderr)
+	return finish(res, err, stdout, stderr)
+}
+
+// cmdTagAnnotate implements `gg tag annotate -m <msg> <name>` — force-recreate
+// the tag as annotated at its current target. Flags precede the name.
+func cmdTagAnnotate(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("tag annotate", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	msg := fs.String("m", "", "annotation message (required)")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if fs.NArg() != 1 || fs.Arg(0) == "" {
+		fmt.Fprintln(stderr, "usage: gg tag annotate -m <message> <name>")
+		return 2
+	}
+	if *msg == "" {
+		fmt.Fprintln(stderr, "tag annotate: -m <message> is required")
+		return 2
+	}
+	name := fs.Arg(0)
+	target, err := svc.RevParse(context.Background(), name+"^{commit}")
+	if err != nil {
+		fmt.Fprintln(stderr, "error:", err)
+		return 1
+	}
+	res, err := runOperation(context.Background(), svc,
+		engine.CreateTag{Name: name, Commit: target, Message: *msg, Force: true}, cliDecider{}, stderr)
 	return finish(res, err, stdout, stderr)
 }
 

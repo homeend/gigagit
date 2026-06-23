@@ -142,3 +142,29 @@ func TestTagRmLocalStillLocalOnly(t *testing.T) {
 		t.Fatal("local rm must not touch the origin tag")
 	}
 }
+
+func TestTagAnnotateMakesAnnotated(t *testing.T) {
+	dir := newRepoDir(t)
+	runGit(t, dir, "tag", "v1.0.0") // lightweight
+	if code, _, errb := runCLI(t, dir, "tag", "annotate", "-m", "release one", "v1.0.0"); code != 0 {
+		t.Fatalf("tag annotate exit = %d (stderr: %s)", code, errb)
+	}
+	if typ := strings.TrimSpace(runGit(t, dir, "cat-file", "-t", "v1.0.0")); typ != "tag" {
+		t.Fatalf("tag type = %q, want tag (annotated)", typ)
+	}
+}
+
+func TestTagAnnotateRequiresMessage(t *testing.T) {
+	dir := newRepoDir(t)
+	runGit(t, dir, "tag", "v1.0.0")
+	if code, _, _ := runCLI(t, dir, "tag", "annotate", "v1.0.0"); code != 2 {
+		t.Fatalf("missing -m exit = %d, want 2", code)
+	}
+}
+
+func TestTagAnnotateUnknownTag(t *testing.T) {
+	dir := newRepoDir(t)
+	if code, _, _ := runCLI(t, dir, "tag", "annotate", "-m", "x", "nope"); code == 0 {
+		t.Fatal("unknown tag must exit non-zero")
+	}
+}
