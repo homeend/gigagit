@@ -162,6 +162,12 @@ func availableActions(m Model) []actionRow {
 	if r, ok := m.renameBranchRow(); ok {
 		out = append(out, r)
 	}
+	if r, ok := m.branchMergeRow(); ok {
+		out = append(out, r)
+	}
+	if r, ok := m.branchRebaseRow(); ok {
+		out = append(out, r)
+	}
 	if r, ok := m.forcePushRow(); ok {
 		out = append(out, r)
 	}
