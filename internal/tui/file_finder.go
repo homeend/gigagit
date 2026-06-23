@@ -7,7 +7,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/gigagit/gg/internal/domain"
 	"github.com/gigagit/gg/internal/fuzzy"
+	"github.com/gigagit/gg/internal/model"
 )
 
 // fileFinderLimit is the maximum number of fuzzy results shown; keeps rank
@@ -103,7 +105,11 @@ func (p *fileFinderPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		return m, nil
 	case tea.KeyEnter:
-		// Task 5 will wire the action menu here.
+		if p.loading || p.sel < 0 || p.sel >= len(p.matches) {
+			return m, nil
+		}
+		path := p.matches[p.sel].S
+		m.actionMenu = &actionMenu{rows: m.fileFinderActionRows(path)}
 		return m, nil
 	case tea.KeyBackspace, tea.KeyCtrlH:
 		if r := []rune(p.query); len(r) > 0 {
@@ -210,5 +216,110 @@ func rangeSlice(start, end int) []int {
 		out[i] = start + i
 	}
 	return out
+}
+
+// fileFinderActionRows returns the per-file action menu rows for path. Each row
+// pops the finder (m = m.popLayer()) before opening the target surface so the
+// finder is gone and the chosen surface is what remains.
+func (m Model) fileFinderActionRows(path string) []actionRow {
+	svc := m.svc
+	return []actionRow{
+		{
+			id:    "ff-view",
+			label: "View content",
+			run: func(m Model) (tea.Model, tea.Cmd) {
+				m = m.popLayer()
+				cp := newContentPopup("View "+path, []contentLine{{text: "(loading…)"}})
+				m = m.pushLayer(cp)
+				return m, m.loadFileContentLayerCmd(path)
+			},
+		},
+		{
+			id:    "ff-diff",
+			label: "Diff (HEAD ↔ working tree)",
+			run: func(m Model) (tea.Model, tea.Cmd) {
+				m = m.popLayer()
+				left := model.Endpoint{Kind: model.EndpointCommit, Hash: "HEAD"}
+				right := model.Endpoint{Kind: model.EndpointWorkTree}
+				v := &diffView{
+					title:   path,
+					context: "HEAD ↔ working tree",
+					loading: true,
+					partial: m.diffPartial,
+					long:    m.diffLong,
+				}
+				m = m.pushLayer(v)
+				m.diffNav = diffNavNone
+				m.diffTag = "cmp:" + left.CacheTag() + ":" + right.CacheTag() + ":" + path
+				return m, m.loadCompareDiffCmd(left, right, contentLine{path: path})
+			},
+		},
+		{
+			id:    "ff-history",
+			label: "History",
+			run: func(m Model) (tea.Model, tea.Cmd) {
+				m = m.popLayer()
+				ctx := navContext{path: path}
+				hv := newHistoryView(ctx)
+				m = m.pushLayer(hv)
+				return m, m.loadHistoryListCmd(ctx, hv.listTag)
+			},
+		},
+		{
+			id:    "ff-blame",
+			label: "Blame",
+			run: func(m Model) (tea.Model, tea.Cmd) {
+				m = m.popLayer()
+				ctx := navContext{path: path}
+				bv := newBlameView(ctx)
+				m = m.pushLayer(bv)
+				return m, m.loadBlameCmd(ctx, bv.tag)
+			},
+		},
+		{
+			id:    "ff-editor",
+			label: "Open in editor",
+			run: func(m Model) (tea.Model, tea.Cmd) {
+				m = m.popLayer()
+				return m, m.openInEditorCmd(path, func(ctx context.Context) ([]byte, error) {
+					return svc.ShowFile(ctx, "HEAD", path)
+				})
+			},
+		},
+		{
+			id:    "ff-copy-path",
+			label: "Copy path",
+			run: func(m Model) (tea.Model, tea.Cmd) {
+				m = m.popLayer()
+				return m, m.copyToClipboardCmd("Copied "+path, path)
+			},
+		},
+	}
+}
+
+// fileContentLayerMsg carries the async result of loadFileContentLayerCmd: the
+// content lines (or error) for the contentPopup pushed onto the layer stack by
+// the "View content" file-finder action. Tagged by path to gate stale loads.
+type fileContentLayerMsg struct {
+	path  string
+	lines []contentLine
+	err   error
+}
+
+// loadFileContentLayerCmd reads path at HEAD off the UI thread and delivers
+// fileContentLayerMsg. Fills the contentPopup layer (title "View <path>"),
+// NOT m.filesPreview (the files-view right column).
+func (m Model) loadFileContentLayerCmd(path string) tea.Cmd {
+	svc := m.svc
+	return func() tea.Msg {
+		data, err := svc.ShowFile(context.Background(), "HEAD", path)
+		if err != nil {
+			return fileContentLayerMsg{path: path, err: err}
+		}
+		if len(data) > domain.MaxDiffBytes {
+			return fileContentLayerMsg{path: path, lines: []contentLine{{text: "(file too large to preview)"}}}
+		}
+		return fileContentLayerMsg{path: path, lines: fileContentLines(data)}
+	}
 }
 

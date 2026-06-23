@@ -260,6 +260,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.filesPreview.lines = msg.lines
 		m.filesPreview.sel = 0
 		return m, nil
+	case fileContentLayerMsg:
+		cp := layerOf[*contentPopup](m)
+		// Tag-gate: only fill the contentPopup whose title matches this path load.
+		if cp == nil || cp.title != "View "+msg.path {
+			return m, nil // layer closed, or a stale load from a different path
+		}
+		if msg.err != nil {
+			cp.lines = []contentLine{{text: "(load failed: " + msg.err.Error() + ")"}}
+			return m, nil
+		}
+		cp.lines = msg.lines
+		cp.sel = 0
+		return m, nil
 	case compareFilesMsg:
 		if m.filesView == nil || !m.inCompareMode() || msg.tag != m.compareTag {
 			return m, nil // stale or closed
