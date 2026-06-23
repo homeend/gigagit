@@ -46,10 +46,16 @@ func (op SmartRebase) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	for _, b := range branches {
 		have[b.Name] = true
 	}
-	for _, name := range []string{branch, op.Onto} {
-		if !have[name] {
-			return Result{}, fmt.Errorf("smart rebase: no such branch: %s", name)
-		}
+	// Branch must be a local branch (it gets rewritten + checked out). Onto may be
+	// a branch OR any resolvable commit-ish — a tag, a remote-tracking ref, a SHA —
+	// (mirrors InteractiveRebase's commit-ish Onto).
+	if !have[branch] {
+		return Result{}, fmt.Errorf("smart rebase: no such branch: %s", branch)
+	}
+	if ok, err := deps.Repo.CommitExists(ctx, op.Onto); err != nil {
+		return Result{}, err
+	} else if !ok {
+		return Result{}, fmt.Errorf("smart rebase: no such commit: %s", op.Onto)
 	}
 
 	// Rung 1: Branch is checked out right here.
