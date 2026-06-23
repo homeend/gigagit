@@ -192,6 +192,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   count while that walk is in flight, so the panel no longer looks frozen.
 
 ### Changed
+- **TUI: every `/` filter now lets you move the selection while you type**, so
+  search feels the same everywhere — like the commit filter always has. In the
+  file finder (`F`), bookmark (`g`) / shelf (`G`) switchers, the file-tree filter,
+  the content viewer, and the `.` action menu, plain `↑/↓` and `pgup/pgdn` move
+  through the filtered rows without leaving the input or resetting the cursor;
+  `enter` still locks the filter and a second `enter` opens; `j`/`k` stay query
+  text. Backed by one shared `filterMotion` contract so the surfaces can't drift
+  apart again. (Also fixes bookmark/shelf paging stopping short of the last row.)
 - **TUI: the `F` fuzzy file finder is now navigation-first, like every other gg
   list.** It opens showing the file list; press `/` to start filtering and type a
   query (so `/` and `z` are literal query characters — fixing the bug where typing

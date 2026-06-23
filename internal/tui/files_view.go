@@ -288,6 +288,11 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 	if p.typing { // /-input mode captures every key (same as the help window)
+		// Arrows/pages move the tree selection live while typing (no cursor reset),
+		// like the commit filter; j/k stay query text.
+		if filterMotion(msg, p.move, m.filesPageRows()) {
+			return m, nil
+		}
 		switch msg.Type {
 		case tea.KeyEsc:
 			p.typing = false

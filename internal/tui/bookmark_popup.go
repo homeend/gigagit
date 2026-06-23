@@ -191,6 +191,11 @@ func (p *bookmarkPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		} else {
 			m = nm
 		}
+		// Arrows/pages move the selection live while typing (no cursor reset),
+		// like the commit filter; j/k stay query text.
+		if filterMotion(msg, p.moveSel, popupFilterPage) {
+			return m, nil
+		}
 		switch msg.Type {
 		case tea.KeyEsc:
 			p.filtering, p.filter, p.sel = false, "", 0
@@ -322,9 +327,14 @@ func (p *bookmarkPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 }
 
 func (p *bookmarkPopup) moveSel(d int) {
-	if n := p.sel + d; n >= 0 && n < len(p.visibleIdx()) {
-		p.sel = n
+	n := p.sel + d
+	if hi := len(p.visibleIdx()) - 1; n > hi {
+		n = hi
 	}
+	if n < 0 {
+		n = 0
+	}
+	p.sel = n
 }
 
 // bookmarkRemovePrompt opens a confirm modal; removing a bookmark is cheap to

@@ -509,6 +509,11 @@ func (m Model) updateActionMenuKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 	if a.typing { // / filter input captures keys
+		// Arrows/pages move the selection live while typing (no cursor reset),
+		// like the commit filter; j/k stay query text.
+		if filterMotion(msg, a.move, popupFilterPage) {
+			return m, nil
+		}
 		switch msg.Type {
 		case tea.KeyEsc:
 			a.typing = false
