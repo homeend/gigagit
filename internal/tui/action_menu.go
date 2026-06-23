@@ -564,6 +564,12 @@ func (m Model) updateActionMenuKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "down", "j":
 		a.move(1)
 		return m, nil
+	case "pgup":
+		a.move(-popupFilterPage)
+		return m, nil
+	case "pgdown":
+		a.move(popupFilterPage)
+		return m, nil
 	case "enter":
 		return m.runVisibleRow(a.sel)
 	}

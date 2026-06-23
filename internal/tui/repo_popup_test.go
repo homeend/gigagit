@@ -70,18 +70,31 @@ func TestPopupFilterAndSwitch(t *testing.T) {
 	m, _, otherDir := seededModel(t)
 	u, _ := m.Update(keyMsg("R"))
 	m = u.(Model)
+	// Navigation-first: press / to start filtering, then type.
+	u, _ = m.Update(keyMsg("/"))
+	m = u.(Model)
 	for _, r := range "zebra" {
 		u, _ = m.Update(keyMsg(string(r)))
 		m = u.(Model)
 	}
 	p := layerOf[*repoPopup](m)
+	if !p.filtering {
+		t.Fatal("/ should enter filter mode")
+	}
 	if got := len(p.visible()); got != 1 {
 		t.Fatalf("filtered visible = %d, want 1 (query %q)", got, p.query)
 	}
+	// First enter locks the filter (leaves input mode, popup stays open).
+	u, _ = m.Update(keyMsg("enter"))
+	m = u.(Model)
+	if p := layerOf[*repoPopup](m); p == nil || p.filtering {
+		t.Fatalf("first enter should lock the filter and keep the popup open; p=%v", p)
+	}
+	// Second enter switches to the single filtered repo.
 	u, _ = m.Update(keyMsg("enter"))
 	m = u.(Model)
 	if layerOf[*repoPopup](m) != nil {
-		t.Fatal("enter should close the popup")
+		t.Fatal("second enter should close the popup")
 	}
 	resolvedWant, _ := filepath.EvalSymlinks(otherDir)
 	resolvedGot, _ := filepath.EvalSymlinks(m.switchTarget)
@@ -135,14 +148,46 @@ func TestPopupEscCancelsAndSwallowsKeys(t *testing.T) {
 	if m.running {
 		t.Fatal("popup leaked a global key")
 	}
+	// Navigation-first: a plain letter is swallowed but does NOT filter (you press
+	// / first). This is also what fixes the z-collision (z cycles mode, not query).
 	p := layerOf[*repoPopup](m)
-	if p.query != "p" {
-		t.Fatalf("typed key should filter, query = %q", p.query)
+	if p.query != "" || p.filtering {
+		t.Fatalf("plain key must not filter; query = %q filtering = %v", p.query, p.filtering)
 	}
 	u, _ = m.Update(keyMsg("esc"))
 	m = u.(Model)
 	if layerOf[*repoPopup](m) != nil {
 		t.Fatal("esc should close the popup")
+	}
+}
+
+// TestRepoPopupSlashFilterAndZNotCollision pins the navigation-first contract for
+// the repo switcher: / enters filter mode where `z` is a literal query character
+// (in nav mode z cycles the display mode), and arrows move the selection while
+// typing — the same model as the finder and bookmark/shelf switchers.
+func TestRepoPopupSlashFilterAndZNotCollision(t *testing.T) {
+	m, _, _ := seededModel(t)
+	u, _ := m.Update(keyMsg("R"))
+	m = u.(Model)
+	// In nav mode, z cycles the display mode (not a query char).
+	p := layerOf[*repoPopup](m)
+	mode0 := p.mode
+	u, _ = m.Update(keyMsg("z"))
+	m = u.(Model)
+	p = layerOf[*repoPopup](m)
+	if p.mode == mode0 || p.query != "" {
+		t.Fatalf("nav-mode z should cycle display mode, not type a query; mode==%v query=%q", p.mode, p.query)
+	}
+	// / then a z-containing query types literally.
+	u, _ = m.Update(keyMsg("/"))
+	m = u.(Model)
+	for _, r := range "zeb" {
+		u, _ = m.Update(keyMsg(string(r)))
+		m = u.(Model)
+	}
+	p = layerOf[*repoPopup](m)
+	if p.query != "zeb" {
+		t.Fatalf("/zeb should type literally in filter mode; query=%q", p.query)
 	}
 }
 
@@ -196,14 +241,15 @@ func TestRepoPopupDoesNotWrapLongPath(t *testing.T) {
 		}
 	}
 	// The long path must occupy exactly ONE line (truncated, not wrapped onto
-	// continuation lines). Only the entry row contains a path separator.
-	slashLines := 0
+	// continuation lines). Match a path-specific token (the header's `/` hint and
+	// the `[/] filter` footer also contain a slash, so a bare "/" over-counts).
+	pathLines := 0
 	for _, line := range strings.Split(out, "\n") {
-		if strings.Contains(line, "/") {
-			slashLines++
+		if strings.Contains(line, "/very") {
+			pathLines++
 		}
 	}
-	if slashLines != 1 {
-		t.Errorf("path rendered across %d lines, want 1 (no wrap):\n%s", slashLines, out)
+	if pathLines != 1 {
+		t.Errorf("path rendered across %d lines, want 1 (no wrap):\n%s", pathLines, out)
 	}
 }

@@ -211,6 +211,10 @@ func (p *shelfPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		p.moveSel(-1)
 	case tea.KeyDown:
 		p.moveSel(1)
+	case tea.KeyPgUp:
+		p.moveSel(-popupFilterPage)
+	case tea.KeyPgDown:
+		p.moveSel(popupFilterPage)
 	case tea.KeyRunes:
 		switch msg.String() {
 		case "?":

@@ -44,7 +44,9 @@ func TestRepoPopupNoWrap(t *testing.T) {
 		return layerOf[*repoPopup](m).box(m)
 	}
 	assertSameHeight(t, "repo body", render("/x"), render(strings.Repeat("z", 300)))
-	assertOneLine(t, render("/x"), "[enter] switch", "[esc]") // the hint stays one line
+	// The hint wraps by whole tokens (like the bookmark/shelf switchers), never
+	// mid-token: the first two stay grouped on one line.
+	assertOneLine(t, render("/x"), "[enter] switch", "[ctrl+d] forget")
 }
 
 func TestConflictPopupNoWrap(t *testing.T) {

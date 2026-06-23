@@ -14,12 +14,25 @@ import (
 // repoPopup is the transient repo-switcher picker opened with R. It holds an
 // MRU snapshot taken at open; ctrl+d edits both the snapshot and the registry.
 type repoPopup struct {
-	entries []repos.Entry
-	query   string // case-insensitive substring over name+path
-	sel     int    // index into the FILTERED view
-	now     time.Time
-	mode    dispMode // text display mode; z cycles (cutoff default = no wrapping)
-	hscroll int      // modeScroll horizontal offset
+	entries   []repos.Entry
+	query     string // case-insensitive substring over name+path
+	filtering bool   // true while `/` filter sub-mode captures runes
+	sel       int    // index into the FILTERED view
+	now       time.Time
+	mode      dispMode // text display mode; z cycles (cutoff default = no wrapping)
+	hscroll   int      // modeScroll horizontal offset
+}
+
+// moveSel moves the cursor by d, clamped to the filtered view.
+func (p *repoPopup) moveSel(d int) {
+	n := p.sel + d
+	if hi := len(p.visible()) - 1; n > hi {
+		n = hi
+	}
+	if n < 0 {
+		n = 0
+	}
+	p.sel = n
 }
 
 // openRepoPopup snapshots the registry. With no known repos it sets a status
@@ -50,11 +63,40 @@ func (p *repoPopup) visible() []repos.Entry {
 	return out
 }
 
-// update handles all keys while the picker is open. It swallows
-// everything (no fallthrough to global handlers).
+// update handles all keys while the picker is open. It swallows everything (no
+// fallthrough to global handlers). Navigation-first, like the finder and the
+// bookmark/shelf switchers: plain keys navigate, `/` enters a filter sub-mode
+// where runes (including `z`) type a query until esc/enter.
 func (p *repoPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
-	// Display-mode + pan keys take precedence over query typing (z would
-	// otherwise be a literal filter character, matching panels/diff).
+	if msg.Type == tea.KeyCtrlC {
+		return m, tea.Quit
+	}
+	if p.filtering {
+		// Arrows/pages move the selection live while typing (no cursor reset),
+		// like the commit filter; j/k stay query text.
+		if filterMotion(msg, p.moveSel, popupFilterPage) {
+			return m, nil
+		}
+		switch msg.Type {
+		case tea.KeyEsc:
+			p.filtering, p.query, p.sel = false, "", 0
+		case tea.KeyEnter:
+			p.filtering = false // commit: keep the filter, leave input mode
+		case tea.KeyBackspace, tea.KeyCtrlH:
+			if r := []rune(p.query); len(r) > 0 {
+				p.query = string(r[:len(r)-1])
+			}
+			p.sel = 0
+		case tea.KeySpace:
+			p.query += " "
+			p.sel = 0
+		case tea.KeyRunes:
+			p.query += string(msg.Runes)
+			p.sel = 0
+		}
+		return m, nil
+	}
+	// Navigation mode. Display-mode + pan keys act here (query chars while filtering).
 	switch msg.String() {
 	case "z":
 		p.mode = p.mode.next()
@@ -74,20 +116,20 @@ func (p *repoPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 	switch msg.Type {
-	case tea.KeyCtrlC:
-		return m, tea.Quit
 	case tea.KeyEsc:
 		m = m.popLayer()
 		return m, nil
 	case tea.KeyUp:
-		if p.sel > 0 {
-			p.sel--
-		}
+		p.moveSel(-1)
 		return m, nil
 	case tea.KeyDown:
-		if p.sel < len(p.visible())-1 {
-			p.sel++
-		}
+		p.moveSel(1)
+		return m, nil
+	case tea.KeyPgUp:
+		p.moveSel(-popupFilterPage)
+		return m, nil
+	case tea.KeyPgDown:
+		p.moveSel(popupFilterPage)
 		return m, nil
 	case tea.KeyEnter:
 		vis := p.visible()
@@ -119,19 +161,15 @@ func (p *repoPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			p.sel = n - 1
 		}
 		return m, nil
-	case tea.KeyBackspace, tea.KeyCtrlH:
-		if r := []rune(p.query); len(r) > 0 {
-			p.query = string(r[:len(r)-1])
-		}
-		p.sel = 0
-		return m, nil
-	case tea.KeySpace:
-		p.query += " "
-		p.sel = 0
-		return m, nil
 	case tea.KeyRunes:
-		p.query += string(msg.Runes)
-		p.sel = 0
+		switch msg.String() {
+		case "/":
+			p.filtering = true
+		case "j":
+			p.moveSel(1)
+		case "k":
+			p.moveSel(-1)
+		}
 		return m, nil
 	}
 	return m, nil
@@ -150,8 +188,13 @@ func (p *repoPopup) box(m Model) string {
 	textW := popupTextWidth(inner)
 
 	header := "Switch repository"
-	if p.query != "" {
+	switch {
+	case p.filtering:
+		header += "  /" + p.query + "█"
+	case p.query != "":
 		header += "  /" + p.query
+	default:
+		header += "   (press / to filter)"
 	}
 
 	vis := p.visible()
@@ -182,9 +225,11 @@ func (p *repoPopup) box(m Model) string {
 		bodyLines = renderWindow(wr, winOpts{w: textW, h: h, mode: p.mode, anchor: p.sel, hscroll: p.hscroll})
 	}
 
+	hint := []string{"[enter] switch", "[ctrl+d] forget", "[/] filter", "[z] mode", "[esc] close"}
 	parts := []string{header, ""}
 	parts = append(parts, bodyLines...)
-	parts = append(parts, "", "[enter] switch  [ctrl+d] forget  [z] mode  [esc]")
+	parts = append(parts, "")
+	parts = append(parts, wrapParts(hint, textW, "  ")...)
 	return popupBox(inner, strings.Join(parts, "\n"))
 }
 

@@ -194,12 +194,20 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ### Changed
 - **TUI: every `/` filter now lets you move the selection while you type**, so
   search feels the same everywhere — like the commit filter always has. In the
-  file finder (`F`), bookmark (`g`) / shelf (`G`) switchers, the file-tree filter,
-  the content viewer, and the `.` action menu, plain `↑/↓` and `pgup/pgdn` move
-  through the filtered rows without leaving the input or resetting the cursor;
-  `enter` still locks the filter and a second `enter` opens; `j`/`k` stay query
-  text. Backed by one shared `filterMotion` contract so the surfaces can't drift
-  apart again. (Also fixes bookmark/shelf paging stopping short of the last row.)
+  file finder (`F`), bookmark (`g`) / shelf (`G`) switchers, the repo switcher
+  (`R`), the file-tree filter, the content viewer, and the `.` action menu, plain
+  `↑/↓` and `pgup/pgdn` move through the filtered rows without leaving the input or
+  resetting the cursor; `enter` still locks the filter and a second `enter` opens;
+  `j`/`k` stay query text. Backed by one shared `filterMotion` contract so the
+  surfaces can't drift apart again. `pgup/pgdn` also now page in plain navigation
+  mode in the switchers/menu. (Also fixes bookmark/shelf paging stopping short of
+  the last row.)
+- **TUI: the `R` repo switcher is now navigation-first too.** It opens showing the
+  repo list; press `/` to filter (so `z` is a literal query character instead of
+  cycling the display mode), `↑↓/jk`/`pgup/pgdn` to move, `enter` to switch — while
+  filtering, the first `enter` locks the filter (same lock-then-act flow as the
+  other switchers) and the next `enter` switches. Brings the last quick-switcher in
+  line with the finder and bookmark/shelf popups.
 - **TUI: the `F` fuzzy file finder is now navigation-first, like every other gg
   list.** It opens showing the file list; press `/` to start filtering and type a
   query (so `/` and `z` are literal query characters — fixing the bug where typing
