@@ -51,7 +51,7 @@ type GitOps interface {
 
 	CheckRefFormatBranch(ctx context.Context, name string) error
 	CreateBranch(ctx context.Context, name, startPoint string) error
-	CreateTag(ctx context.Context, name, commit, message string) error
+	CreateTag(ctx context.Context, name, commit, message string, force bool) error
 	DeleteTag(ctx context.Context, name string) error
 	RenameBranch(ctx context.Context, oldName, newName string) error
 	CreateTrackingBranch(ctx context.Context, name, upstream string) error
