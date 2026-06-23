@@ -64,6 +64,19 @@ func (m Model) canCheckoutRemote() bool {
 	return m.opsIdle() && ok
 }
 
+// selectedRemoteForAction is selectedRemote with the call-site context gate the
+// keyboard/footer paths apply: it resolves ONLY when the Remotes tab is the
+// focused panel and no op is running. The . menu remote-branch rows must use
+// this rather than bare selectedRemote() — which is focus-agnostic (it reads the
+// Remotes panel's stored selection even when another left tab is active), so
+// using it directly leaked those rows onto the Branches/Worktrees tabs.
+func (m Model) selectedRemoteForAction() (model.RemoteBranch, bool) {
+	if m.focus != panelRemotes || !m.opsIdle() {
+		return model.RemoteBranch{}, false
+	}
+	return m.selectedRemote()
+}
+
 // worktreeForBranch returns a loaded worktree other than the current one that
 // has branch checked out, if any — the case where SmartSwitch would fail
 // because git refuses to check a branch out in two worktrees at once.

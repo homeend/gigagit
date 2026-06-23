@@ -49,8 +49,8 @@ func (m Model) remoteCurrentBranch() (string, bool) {
 // Remotes tab, reusing the worktree-from-ref popup seeded with the remote ref
 // as start-point and the de-prefixed branch name as the prefill.
 func (m Model) remoteCreateWorktreeRow() (actionRow, bool) {
-	rb, ok := m.selectedRemote()
-	if !ok || !m.opsIdle() {
+	rb, ok := m.selectedRemoteForAction()
+	if !ok {
 		return actionRow{}, false
 	}
 	return actionRow{
@@ -68,8 +68,8 @@ func (m Model) remoteCreateWorktreeRow() (actionRow, bool) {
 // detached HEAD. The engine rejects Source==Target, and a remote ref can never
 // equal a local branch name, so no extra equality guard is needed here.
 func (m Model) remoteMergeRow() (actionRow, bool) {
-	rb, ok := m.selectedRemote()
-	if !ok || !m.opsIdle() {
+	rb, ok := m.selectedRemoteForAction()
+	if !ok {
 		return actionRow{}, false
 	}
 	cur, attached := m.remoteCurrentBranch()
@@ -86,8 +86,8 @@ func (m Model) remoteMergeRow() (actionRow, bool) {
 // remoteRebaseRow offers "Rebase current onto <remote branch>". SmartRebase with
 // an empty Branch defaults to the current branch. Hidden on detached HEAD.
 func (m Model) remoteRebaseRow() (actionRow, bool) {
-	rb, ok := m.selectedRemote()
-	if !ok || !m.opsIdle() {
+	rb, ok := m.selectedRemoteForAction()
+	if !ok {
 		return actionRow{}, false
 	}
 	cur, attached := m.remoteCurrentBranch()
@@ -117,8 +117,8 @@ func (m Model) remotePruneRow() (actionRow, bool) {
 // engine's Decider confirm (surfaced as the TUI modal) gates the actual delete;
 // a single keypress never deletes a remote ref unconfirmed.
 func (m Model) remoteDeleteRow() (actionRow, bool) {
-	rb, ok := m.selectedRemote()
-	if !ok || !m.opsIdle() {
+	rb, ok := m.selectedRemoteForAction()
+	if !ok {
 		return actionRow{}, false
 	}
 	return actionRow{
