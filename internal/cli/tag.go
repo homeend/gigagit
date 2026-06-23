@@ -10,7 +10,7 @@ import (
 	"github.com/gigagit/gg/internal/engine"
 )
 
-// cmdTag dispatches the tag subcommands: ls | create | rm | checkout.
+// cmdTag dispatches the tag subcommands: ls | create | rm | checkout | push | annotate.
 func cmdTag(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	switch {
 	case len(args) == 0 || args[0] == "ls" || args[0] == "list":
