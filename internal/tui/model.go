@@ -274,6 +274,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cp.lines = msg.lines
 		cp.sel = 0
 		return m, nil
+	case commitMessageMsg:
+		cp := layerOf[*contentPopup](m)
+		// Tag-gate by short hash: only fill the popup this load was started for.
+		if cp == nil || cp.title != commitMessageTitle(msg.short) {
+			return m, nil // layer closed, or a stale load from a different commit
+		}
+		cp.lines = msg.lines
+		cp.sel = 0
+		return m, nil
 	case compareFilesMsg:
 		if m.filesView == nil || !m.inCompareMode() || msg.tag != m.compareTag {
 			return m, nil // stale or closed
@@ -1083,6 +1092,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			if m.canShowReflogFiles() {
 				return m.openReflogFiles()
+			}
+		case "i":
+			if c, ok := m.commitForMessageView(); ok {
+				return m.openCommitMessagePopup(c)
+			}
+		case "I":
+			if c, ok := m.commitForMessageView(); ok {
+				return m.openCommitMessageEditor(c)
 			}
 		case "shift+down", "shift+up":
 			// Grow the ◉ compare selection as a contiguous run: add the current

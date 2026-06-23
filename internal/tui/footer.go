@@ -67,6 +67,10 @@ var contextBindings = []footerBinding{
 		// there, so don't advertise it.
 		return m.focus == panelCommits && m.canShowCommitFiles() && !(m.width > 0 && m.width < 40)
 	}, scopeRow},
+	{"commit-message", "i", "[i] message [I] in editor", func(m Model) bool {
+		_, ok := m.commitForMessageView()
+		return ok
+	}, scopeRow},
 	{"graph-window", "", "[<>] graph [⇧←→] pan [=] center", func(m Model) bool {
 		return m.focus == panelCommits && m.graphActive()
 	}, scopeWindow},

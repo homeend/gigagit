@@ -181,6 +181,12 @@ func availableActions(m Model) []actionRow {
 // view), where replayed panel keys would be swallowed. Each helper self-gates on
 // focus, so non-applicable rows simply drop out.
 func (m Model) appendCommitContextRows(out []actionRow) []actionRow {
+	if r, ok := m.commitViewMessageRow(); ok {
+		out = append(out, r)
+	}
+	if r, ok := m.commitEditMessageRow(); ok {
+		out = append(out, r)
+	}
 	if r, ok := m.rewordRow(); ok {
 		out = append(out, r)
 	}
