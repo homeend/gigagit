@@ -5,8 +5,44 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gigagit/gg/internal/domain"
+	"github.com/gigagit/gg/internal/git"
+	"github.com/gigagit/gg/internal/gitexec"
 	"github.com/gigagit/gg/internal/model"
 )
+
+func TestTagsCopyRows(t *testing.T) {
+	m := footerModel()
+	m.focus = panelTags
+	m.tags = []model.Tag{{Name: "v1.0.0", Target: "abc1234", Annotated: true}}
+	rows := m.contextCopyRows()
+	if r, ok := findRow(rows, "copy-tag-name"); !ok || r.copyText != "v1.0.0" {
+		t.Fatalf("missing copy-tag-name=v1.0.0; rows=%v", rows)
+	}
+	if r, ok := findRow(rows, "copy-commit-id"); !ok || r.copyText != "abc1234" {
+		t.Fatalf("missing copy-commit-id=abc1234; rows=%v", rows)
+	}
+	if _, ok := findRow(rows, "copy-commit-sha"); !ok {
+		t.Fatalf("missing copy-commit-sha; rows=%v", rows)
+	}
+}
+
+func TestTagsCopyShaResolvesTarget(t *testing.T) {
+	fr := gitexec.NewFakeRunner()
+	fr.SetResponse("git rev-parse", gitexec.Result{Stdout: "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\n"})
+	m := footerModel()
+	m.focus = panelTags
+	m.tags = []model.Tag{{Name: "v1.0.0", Target: "abc1234", Annotated: true}}
+	m.svc = domain.New(&git.Repo{Runner: fr})
+	rows := m.contextCopyRows()
+	row, ok := findRow(rows, "copy-commit-sha")
+	if !ok {
+		t.Fatal("missing copy-commit-sha")
+	}
+	if _, cmd := row.run(m); cmd == nil {
+		t.Fatal("copy-commit-sha run returned nil cmd")
+	}
+}
 
 func TestEnterOnTagJumpsToCommit(t *testing.T) {
 	m := footerModel()

@@ -351,6 +351,15 @@ func (m Model) contextCopyRows() []actionRow {
 				m.copyShaRow(rb.Name, rb.Hash),
 			}
 		}
+	case m.focus == panelTags:
+		if bi, ok := m.backingIndex(panelTags); ok && bi >= 0 && bi < len(m.tags) {
+			tg := m.tags[bi]
+			return []actionRow{
+				m.copyRow("copy-tag-name", "Copy tag name", "Copied tag name "+tg.Name, tg.Name),
+				m.copyRow("copy-commit-id", "Copy commit id", "Copied commit id "+shortHash(tg.Target), tg.Target),
+				m.copyShaRow(tg.Target, tg.Target),
+			}
+		}
 	}
 	return nil
 }
