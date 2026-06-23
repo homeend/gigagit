@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v27 -->
+<!-- gg:using-gg:v28 -->
 
 # Using gg (gigagit)
 
@@ -46,7 +46,9 @@ guards against removing the worktree you are standing in.
 - `gg tag ls | create | rm | checkout | push` — `ls` lists tags newest-first
   (one name per line); `create [-m <msg>] <name> [<commit>]` creates a tag at
   `<commit>` (default HEAD): lightweight, or annotated when `-m` is given;
-  `rm <name>` (alias `delete`) deletes a tag; `checkout [--branch <name>] <tag>`
+  `rm <name>` (alias `delete`) deletes a tag locally; `rm --remote <name> [<remote>]`
+  deletes it from the remote (`git push <remote> --delete refs/tags/<name>`; the remote
+  defaults to the only configured one); `checkout [--branch <name>] <tag>`
   checks out a tag — detached, or onto a new branch created at the tag when
   `--branch` is given; `push <name> [<remote>]` pushes a tag to a remote (the
   remote defaults to the only configured one; specify it when there are several).

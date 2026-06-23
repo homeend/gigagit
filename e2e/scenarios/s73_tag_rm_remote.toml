@@ -1,0 +1,15 @@
+name = "tag rm --remote: delete a tag on origin"
+
+[input.origin]
+steps = [
+  { write = "f.txt", content = "v1\n" },
+  { commit = "c1" },
+  { tag = "v1.0.0" },
+]
+
+[[run]]
+cmd  = ["tag", "rm", "--remote", "v1.0.0", "origin"]
+exit = 0
+
+[expect.origin]
+tags = []

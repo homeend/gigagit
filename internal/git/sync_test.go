@@ -353,3 +353,40 @@ func TestPushDeleteRemovesBranchOnRemote(t *testing.T) {
 		t.Fatalf("origin still has doomed branch: %q", out)
 	}
 }
+
+func TestPushDeleteTagArgv(t *testing.T) {
+	f := gitexec.NewFakeRunner()
+	f.SetResponse("git push delete tag", gitexec.Result{})
+	repo := &Repo{Runner: f}
+	if err := repo.PushDeleteTag(context.Background(), "origin", "v1.0.0"); err != nil {
+		t.Fatalf("PushDeleteTag: %v", err)
+	}
+	var argv []string
+	for _, c := range f.Calls {
+		if c.Name == "git push delete tag" {
+			argv = c.Argv
+		}
+	}
+	want := []string{"push", "origin", "--delete", "refs/tags/v1.0.0"}
+	if len(argv) != len(want) {
+		t.Fatalf("argv = %v, want %v", argv, want)
+	}
+	for i := range want {
+		if argv[i] != want[i] {
+			t.Fatalf("argv = %v, want %v", argv, want)
+		}
+	}
+}
+
+func TestPushDeleteTagRemovesTagOnRemote(t *testing.T) {
+	clone, runner := newClonePair(t)
+	repo := &Repo{Runner: runner}
+	gitIn(t, clone, "tag", "v1.0.0")
+	gitIn(t, clone, "push", "origin", "v1.0.0")
+	if err := repo.PushDeleteTag(context.Background(), "origin", "v1.0.0"); err != nil {
+		t.Fatalf("PushDeleteTag: %v", err)
+	}
+	if out := gitOut(t, clone, "ls-remote", "--tags", "origin", "v1.0.0"); strings.TrimSpace(out) != "" {
+		t.Fatalf("origin still has tag v1.0.0: %q", out)
+	}
+}

@@ -267,6 +267,9 @@ func (m Model) appendCommitContextRows(out []actionRow) []actionRow {
 	if r, ok := m.tagDeleteRow(); ok {
 		out = append(out, r)
 	}
+	if r, ok := m.tagDeleteRemoteRow(); ok {
+		out = append(out, r)
+	}
 	return out
 }
 

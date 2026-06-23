@@ -332,3 +332,36 @@ func TestTagRebaseRowDispatches(t *testing.T) {
 		t.Fatal("rebase row run returned nil cmd")
 	}
 }
+
+func TestTagDeleteRemoteRowPresent(t *testing.T) {
+	m := footerModel()
+	m.focus = panelTags
+	m.tags = []model.Tag{{Name: "v1.0.0", Target: "abc1234"}}
+	m.svc = domain.New(&git.Repo{Runner: gitexec.NewFakeRunner()})
+	got := ids(availableActions(m))
+	if !got["tag-delete-remote"] {
+		t.Fatalf("expected tag-delete-remote; got %v", got)
+	}
+}
+
+func TestTagDeleteRemoteRowInertOffTagsPanel(t *testing.T) {
+	m := footerModel()
+	m.focus = panelBranches
+	if _, ok := m.tagDeleteRemoteRow(); ok {
+		t.Fatal("tag-delete-remote must be inert off the Tags panel")
+	}
+}
+
+func TestTagDeleteRemoteRowDispatches(t *testing.T) {
+	m := footerModel()
+	m.focus = panelTags
+	m.tags = []model.Tag{{Name: "v1.0.0", Target: "abc1234"}}
+	m.svc = domain.New(&git.Repo{Runner: gitexec.NewFakeRunner()})
+	row, ok := m.tagDeleteRemoteRow()
+	if !ok {
+		t.Fatal("tagDeleteRemoteRow not available")
+	}
+	if _, cmd := row.run(m); cmd == nil {
+		t.Fatal("delete-remote row run returned nil cmd")
+	}
+}
