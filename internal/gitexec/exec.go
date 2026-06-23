@@ -22,6 +22,7 @@ type ExecRunner struct {
 	workDir  string
 	recorder observ.Recorder
 	now      func() time.Time
+	sshBatch bool
 }
 
 // NewExecRunner returns a runner that invokes gitPath in workDir, recording
@@ -31,6 +32,17 @@ func NewExecRunner(gitPath, workDir string, rec observ.Recorder) *ExecRunner {
 		gitPath = "git"
 	}
 	return &ExecRunner{gitPath: gitPath, workDir: workDir, recorder: rec, now: time.Now}
+}
+
+// WithSSHBatchMode makes every git subprocess force ssh into BatchMode (no
+// interactive prompts) via GIT_SSH_COMMAND, on top of the always-on
+// GIT_TERMINAL_PROMPT=0. The interactive TUI sets it so an ssh host-key or
+// passphrase prompt fails fast instead of opening /dev/tty and freezing the
+// raw-mode UI; the scriptable CLI does NOT (a real terminal can service the
+// prompt). Returns the receiver for chaining at construction.
+func (r *ExecRunner) WithSSHBatchMode() *ExecRunner {
+	r.sshBatch = true
+	return r
 }
 
 func (r *ExecRunner) record(name string, argv []string, exit int, dur time.Duration, start time.Time, runErr error) {
@@ -86,10 +98,29 @@ func asExit(err error, target **exec.ExitError) bool {
 // blocks the process forever, freezing the UI. With prompting disabled git
 // fails fast with a clear error instead, leaving the UI responsive. Credential
 // helpers and ssh-agent are unaffected.
-func gitEnv(extra []string) []string {
+func (r *ExecRunner) gitEnv(extra []string) []string {
 	env := os.Environ()
 	env = append(env, extra...)
-	return append(env, "GIT_TERMINAL_PROMPT=0")
+	env = append(env, "GIT_TERMINAL_PROMPT=0")
+	if r.sshBatch {
+		env = append(env, "GIT_SSH_COMMAND="+sshBatchCommand(os.Getenv("GIT_SSH_COMMAND")))
+	}
+	return env
+}
+
+// sshBatchCommand wraps a base ssh command with BatchMode=yes so ssh never
+// blocks on an interactive prompt: an unknown host key or a passphrase not held
+// by an agent fails fast instead of reading /dev/tty. base is the inherited
+// GIT_SSH_COMMAND (a user's custom ssh wrapper) when set, else plain "ssh", so
+// the user's command is preserved and only the BatchMode option is added. Note:
+// a core.sshCommand set only in git config (not the env) is overridden by the
+// resulting GIT_SSH_COMMAND — acceptable since this is the TUI-only runner.
+func sshBatchCommand(base string) string {
+	base = strings.TrimSpace(base)
+	if base == "" {
+		base = "ssh"
+	}
+	return base + " -o BatchMode=yes"
 }
 
 func (r *ExecRunner) Run(ctx context.Context, name string, argv []string) (Result, error) {
@@ -100,7 +131,7 @@ func (r *ExecRunner) RunEnv(ctx context.Context, name string, argv, env []string
 	start := r.now()
 	cmd := exec.CommandContext(ctx, r.gitPath, argv...)
 	cmd.Dir = r.workDir
-	cmd.Env = gitEnv(env)
+	cmd.Env = r.gitEnv(env)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -124,7 +155,7 @@ func (r *ExecRunner) Stream(ctx context.Context, name string, argv []string, onL
 	start := r.now()
 	cmd := exec.CommandContext(ctx, r.gitPath, argv...)
 	cmd.Dir = r.workDir
-	cmd.Env = gitEnv(nil)
+	cmd.Env = r.gitEnv(nil)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	stdoutPipe, err := cmd.StdoutPipe()

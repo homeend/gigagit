@@ -1730,7 +1730,7 @@ func (m Model) maybeLoadMoreCommits() (Model, tea.Cmd) {
 // --cwd-file by cmd/gg). A fresh span ring is used for the new root; the cmd/gg
 // panic dump still references the original repo (acceptable for a debug aid).
 func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
-	m.svc = domain.Open(path)
+	m.svc = domain.OpenTUI(path)
 	m.feed = m.svc.CommitFeed()
 	m.switchTarget = path
 	m.loading = true

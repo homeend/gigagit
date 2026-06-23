@@ -206,6 +206,7 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   against it.
 
 ### Fixed
+- **SSH remotes no longer freeze the TUI on a host-key or passphrase prompt.** The earlier credential-prompt fix (`GIT_TERMINAL_PROMPT=0`) only covered HTTPS; an unknown ssh host key (`Are you sure you want to continue connecting?`) or a passphrase not held by an agent still read `/dev/tty` and hung the raw-mode UI. The TUI's git runner now also sets `GIT_SSH_COMMAND="ssh -o BatchMode=yes"` (preserving any custom `GIT_SSH_COMMAND` you already set), so ssh fails fast with a clear error (`Host key verification failed` / `Permission denied (publickey)`) instead of blocking. The scriptable CLI is unchanged — a real terminal can still service an ssh prompt.
 - **Remotes menu actions no longer leak onto the Branches/Worktrees tabs.** The
   `.` menu offered remote-branch actions (Create worktree from / Merge / Rebase
   onto / Delete `<remote>/<branch>`) referencing the Remotes panel's stored
