@@ -127,15 +127,9 @@ func (m Model) updateStashViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		e := v.entries[v.sel]
-		m.filesView = &contentPopup{lines: []contentLine{{text: "(loading…)"}}}
-		m.filesTitle = "Files " + e.Ref + " " + e.Subject
-		m.filesHash = "" // set when the SHA resolves
-		// Open with focus on the stash list (follow-live), exactly like the
-		// commit files view; ←/→ move focus to/from the tree.
-		m.filesTreeFocused = false
-		m.filesStashTag = e.Ref
-		m.filesMode = filesModeStash
-		return m, m.loadStashFilesCmd(e.Ref)
+		// Opens with focus on the stash list (follow-live), exactly like the commit
+		// files view; ←/→ move focus to/from the tree.
+		return m.openStashFiles(e.Ref, e.Subject)
 	case "enter":
 		if v.sel < 0 || v.sel >= len(v.entries) {
 			return m, nil

@@ -184,10 +184,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.filesView != nil && msg.Width > 0 && msg.Width < 40 {
 			// The narrow layout has no left column; without this the view
 			// would keep capturing keys while invisible.
-			m.filesView = nil
-			m.filesCompare = false
-			m.compareTag = ""
-			m.filesTreeFocused = false
+			m = m.closeFilesView()
 			m.statusMsg = "files view closed: terminal too narrow"
 		}
 		if dv := m.diffLayer(); dv != nil && msg.Width > 0 {
@@ -1054,16 +1051,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, nil
 				}
 				c := m.commits[bi]
-				m.filesView = &contentPopup{lines: []contentLine{{text: "(loading…)"}}}
-				m.filesTitle = "Files " + shortHash(c.Hash) + " " + c.Subject
-				m.filesHash = c.Hash
-				m.filesMode = filesModeChanged
-				m.filesTreeFocused = false // always open on the commit list
-				m.filesAllFiles = false    // open in changed-files mode; `a` toggles
-				m.filesPreview = nil
-				m.filesPreviewTag = ""
-				m.filesReadInflight = true
-				return m, m.loadCommitFilesCmd(c)
+				return m.openChangedFiles(c) // opens on the commit-list side
 			}
 			if m.canShowReflogFiles() {
 				return m.openReflogFiles()
@@ -1753,13 +1741,8 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.sel = map[panel]int{}
 	m.mark = nil      // a mark from the old repo must not re-attach by name in the new one
 	m.fileMarks = nil // likewise drop Status file-marks from the old repo
-	m.stashView = nil // the new repo has its own stashes
-	m.filesView = nil // the new repo has a different commit list
-	m.filesStashTag = ""
-	m.filesHash = ""
-	m.filesCompare = false
-	m.compareTag = ""
-	m.filesTreeFocused = false
+	m.stashView = nil      // the new repo has its own stashes
+	m = m.closeFilesView() // the new repo has a different commit list
 	if dv := m.diffLayer(); dv != nil { // the new repo invalidates any open diff
 		m = m.removeLayer(dv)
 	}

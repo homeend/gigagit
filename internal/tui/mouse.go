@@ -112,7 +112,7 @@ func (m Model) mouseInFilesView(msg tea.MouseMsg, wheel int) (tea.Model, tea.Cmd
 		// back to the commit list — never reloading a commit under an open preview.
 		return m.moveListUnderFilesView(wheel)
 	case msg.Button == tea.MouseButtonLeft && inTree:
-		m.filesTreeFocused = true
+		m = m.focusTree()
 		i := msg.Y - 3 // box top (y=1) + border + title line
 		if i >= 0 && i < m.filesPageRows() {
 			vis := m.filesView.visible()
@@ -121,7 +121,7 @@ func (m Model) mouseInFilesView(msg tea.MouseMsg, wheel int) (tea.Model, tea.Cmd
 			}
 		}
 	case msg.Button == tea.MouseButtonLeft && inCommits:
-		m.filesTreeFocused = false
+		m = m.focusRight()
 		if idx, ok := m.panelRowAt(panelCommits, msg.Y); ok {
 			return m.moveCommitUnderFilesView(idx - m.sel[panelCommits])
 		}
