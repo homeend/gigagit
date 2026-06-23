@@ -22,13 +22,13 @@ const fileFinderLimit = 200
 // matched rows are capped and the render uses window-then-build (only the
 // visible slice is built into winRows each frame).
 type fileFinderPopup struct {
-	all     []string     // full path list from LsFiles (filled async)
-	loading bool         // true until LsFiles returns
-	query   string       // current filter query typed by the user
+	all     []string      // full path list from LsFiles (filled async)
+	loading bool          // true until LsFiles returns
+	query   string        // current filter query typed by the user
 	matches []fuzzy.Match // ranked subset of all; updated by rerank()
-	sel     int          // cursor index into matches
-	mode    dispMode     // text display mode; z cycles
-	hscroll int          // modeScroll horizontal offset
+	sel     int           // cursor index into matches
+	mode    dispMode      // text display mode; z cycles
+	hscroll int           // modeScroll horizontal offset
 }
 
 // lsFilesMsg is the async result of the LsFiles domain call.
@@ -322,4 +322,3 @@ func (m Model) loadFileContentLayerCmd(path string) tea.Cmd {
 		return fileContentLayerMsg{path: path, lines: fileContentLines(data)}
 	}
 }
-

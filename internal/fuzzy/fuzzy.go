@@ -73,7 +73,7 @@ func (h matchHeap) Less(i, j int) bool {
 	return h[i].S > h[j].S // equal score: larger path is "worse" → root
 }
 func (h matchHeap) Swap(i, j int) { h[i], h[j] = h[j], h[i] }
-func (h *matchHeap) Push(x any)        { *h = append(*h, x.(Match)) }
+func (h *matchHeap) Push(x any)   { *h = append(*h, x.(Match)) }
 func (h *matchHeap) Pop() any {
 	old := *h
 	n := len(old)

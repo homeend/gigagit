@@ -9,6 +9,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Fuzzy file finder.** `F` opens a finder over every tracked file; fuzzy-type a
+  path (`fvgo` → `files_view.go`) and `enter` opens a per-file menu: View content,
+  Diff, History, Blame, Open in editor, Copy path. Built for tens of thousands of
+  files in a monorepo.
 - **Merge / rebase a local branch from the Branches menu.** The Branches panel
   `.` menu now offers **Merge `<branch>` into current** and **Rebase current onto
   `<branch>`** for the selected branch (hidden on the checked-out branch itself and

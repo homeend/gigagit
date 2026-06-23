@@ -19,6 +19,7 @@ func helpContent() []contentLine {
 		r("u", "undo the last commit (soft, ref-only)"),
 		r("g", "bookmark quick-switcher: jump to / compare / paste a bookmarked file (the . menu on any file offers Bookmark this file and Compare against bookmark — pick a bookmark, then diff the focused file against it). In it (navigation-first): ↑↓/jk move, enter jumps (diffs the bookmark vs the working-tree file), e opens the bookmarked file in your external editor (read-only), p pastes to a typed path, m marks one then a second to compare, c compares the highlighted bookmark against a shelf entry, x removes (confirms), / filters, ? shows the key list, esc closes"),
 		r("G", "shelf quick-switcher: the . menu on any file also offers Compare against shelf. In it (navigation-first): ↑↓/jk move, enter diffs the entry vs the working-tree file, e opens the shelved copy in your external editor (read-only), p restores to a typed path, m marks one then a second to compare two entries, c compares the highlighted entry against a bookmark, x removes (confirms), / filters, ? shows the key list, esc closes"),
+		r("F", "fuzzy file finder: opens a picker over every tracked file; type a query (fvgo → files_view.go) to filter by path, ↑↓ to move, enter to open a per-file menu (View content, Diff HEAD↔working tree, History, Blame, Open in editor, Copy path), esc closes"),
 		r("w", "worktree popup for the selected existing branch"),
 		r("W", "worktree popup on a new templated branch"),
 		r("m", "mark a row; m on a second row opens the pair-op picker"),
