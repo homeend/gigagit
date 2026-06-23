@@ -1,0 +1,31 @@
+name = "rebase: a tag is a valid newbase (not just a branch)"
+
+# Regression guard: SmartRebase once required the Onto base to be a LOCAL branch,
+# so `gg rebase <tag>` (and `gg rebase origin/<branch>`) failed with "no such
+# branch". This proves a non-branch ref is a valid newbase end to end.
+
+[input]
+steps = [
+  { write = "base.txt", content = "base\n" },
+  { commit = "base" },
+  { branch = "feat" },
+  { write = "main.txt", content = "m\n" },
+  { commit = "main change" },
+  { tag = "v1.0.0" },
+  { switch = "feat" },
+  { write = "feat.txt", content = "f\n" },
+  { commit = "feat change" },
+]
+
+[[run]]
+cmd  = ["rebase", "v1.0.0"]
+exit = 0
+
+[expect]
+branch      = "feat"
+clean       = true
+in_progress = "none"
+
+[expect.files]
+"feat.txt" = "f\n"
+"main.txt" = "m\n"
