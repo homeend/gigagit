@@ -245,6 +245,12 @@ func (m Model) appendCommitContextRows(out []actionRow) []actionRow {
 	if r, ok := m.tagCheckoutRow(); ok {
 		out = append(out, r)
 	}
+	if r, ok := m.tagMergeRow(); ok {
+		out = append(out, r)
+	}
+	if r, ok := m.tagRebaseRow(); ok {
+		out = append(out, r)
+	}
 	if r, ok := m.tagPushRow(); ok {
 		out = append(out, r)
 	}

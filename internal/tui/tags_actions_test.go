@@ -272,3 +272,51 @@ func TestTagPushRowGating(t *testing.T) {
 		t.Fatal("push row must appear on the Tags panel")
 	}
 }
+
+func tagsMergeModel() Model {
+	m := footerModel()
+	m.focus = panelTags
+	m.tags = []model.Tag{{Name: "v1.0.0", Target: "abc1234"}}
+	m.svc = domain.New(&git.Repo{Runner: gitexec.NewFakeRunner()})
+	m.status.Branch = "main"
+	return m
+}
+
+func TestTagMergeRebaseRowsPresent(t *testing.T) {
+	m := tagsMergeModel()
+	got := ids(availableActions(m))
+	if !got["tag-merge"] || !got["tag-rebase"] {
+		t.Fatalf("expected tag-merge + tag-rebase; got %v", got)
+	}
+}
+
+func TestTagMergeRebaseHiddenOnDetachedHEAD(t *testing.T) {
+	m := tagsMergeModel()
+	m.status.Branch = "" // detached
+	got := ids(availableActions(m))
+	if got["tag-merge"] || got["tag-rebase"] {
+		t.Fatalf("merge/rebase must be hidden on detached HEAD; got %v", got)
+	}
+}
+
+func TestTagMergeRowDispatches(t *testing.T) {
+	m := tagsMergeModel()
+	row, ok := m.tagMergeRow()
+	if !ok {
+		t.Fatal("tagMergeRow not available")
+	}
+	if _, cmd := row.run(m); cmd == nil {
+		t.Fatal("merge row run returned nil cmd")
+	}
+}
+
+func TestTagRebaseRowDispatches(t *testing.T) {
+	m := tagsMergeModel()
+	row, ok := m.tagRebaseRow()
+	if !ok {
+		t.Fatal("tagRebaseRow not available")
+	}
+	if _, cmd := row.run(m); cmd == nil {
+		t.Fatal("rebase row run returned nil cmd")
+	}
+}
