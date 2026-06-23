@@ -392,3 +392,11 @@ func (s *Service) Blame(ctx context.Context, rev, path string) ([]model.BlameLin
 func (s *Service) GitCommonDir(ctx context.Context) (string, error) {
 	return query(ctx, s, "gitcommondir", s.repo.GitCommonDir)
 }
+
+// LsFiles returns every tracked file (paths relative to the working-tree root),
+// under a Read reservation, singleflighted.
+func (s *Service) LsFiles(ctx context.Context) ([]string, error) {
+	return query(ctx, s, "ls-files", func(ctx context.Context) ([]string, error) {
+		return s.repo.LsFiles(ctx)
+	})
+}
