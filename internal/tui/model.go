@@ -1737,10 +1737,10 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	// Drop selections from the old repo so the highlight doesn't land on a
 	// surprising row in the newly-loaded panels.
 	m.sel = map[panel]int{}
-	m.mark = nil      // a mark from the old repo must not re-attach by name in the new one
-	m.fileMarks = nil // likewise drop Status file-marks from the old repo
-	m.stashView = nil      // the new repo has its own stashes
-	m = m.closeFilesView() // the new repo has a different commit list
+	m.mark = nil                        // a mark from the old repo must not re-attach by name in the new one
+	m.fileMarks = nil                   // likewise drop Status file-marks from the old repo
+	m.stashView = nil                   // the new repo has its own stashes
+	m = m.closeFilesView()              // the new repo has a different commit list
 	if dv := m.diffLayer(); dv != nil { // the new repo invalidates any open diff
 		m = m.removeLayer(dv)
 	}

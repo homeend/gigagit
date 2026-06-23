@@ -178,6 +178,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   count while that walk is in flight, so the panel no longer looks frozen.
 
 ### Changed
+- **TUI internals: the commit/compare/stash files view is now a small state
+  machine.** A `filesMode` plus a set of transition methods (the single close
+  chokepoint `closeFilesView`, plus `openChangedFiles`/`openCompareFiles`/
+  `openStashFiles`/`toggleFullTree`/`openPreview`/`closePreview`/focus) are the
+  only mutators of its state, so mode switches can no longer leave stale fields
+  behind. No user-visible change — structurally prevents the class of "half-reset"
+  bugs that the full-tree and file-preview features each hit during development.
 - **TUI: the full-screen diff is now a member of the layer stack.** `esc` from a
   diff opened over history or a bookmark/shelf picker returns to that surface
   instead of the base layout; the diff's `.` menu and mouse wheel always target
