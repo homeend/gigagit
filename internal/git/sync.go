@@ -147,3 +147,12 @@ func (r *Repo) PushDelete(ctx context.Context, remote, branch string) error {
 	_, err := r.Runner.Run(ctx, "git push delete", argv)
 	return err
 }
+
+// PushDeleteTag deletes tag on remote (git push <remote> --delete
+// refs/tags/<tag>). The full refs/tags/ ref disambiguates from a same-named
+// branch.
+func (r *Repo) PushDeleteTag(ctx context.Context, remote, tag string) error {
+	argv := gitcmd.New("push").Arg(remote, "--delete", "refs/tags/"+tag).ToArgv()
+	_, err := r.Runner.Run(ctx, "git push delete tag", argv)
+	return err
+}
