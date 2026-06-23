@@ -80,16 +80,23 @@ func TestEnterOnTagJumpsToCommit(t *testing.T) {
 	}
 }
 
-func TestEnterOnTagNotLoadedNotices(t *testing.T) {
+// When the tag's target commit is NOT in the loaded feed (common in big repos
+// with old release tags), enter opens that commit's files view directly by hash
+// — instead of the old "target not in the loaded commits" dead end.
+func TestEnterOnTagNotLoadedOpensFilesView(t *testing.T) {
 	m := footerModel()
 	m.commits = []model.Commit{{Hash: "1111111aaaa", Subject: "one"}}
-	m.tags = []model.Tag{{Name: "v1", Target: "9999999"}}
+	m.tags = []model.Tag{{Name: "v1", Target: "9999999", Subject: "rel one"}}
 	m.activeFilesTab = panelTags
 	m.focus = panelTags
 	m.sel[panelTags] = 0
 	u, _ := m.Update(keyMsg("enter"))
-	if mm := u.(Model); mm.statusMsg == "" {
-		t.Fatal("expected a 'tag target not loaded' notice")
+	mm := u.(Model)
+	if mm.filesView == nil {
+		t.Fatal("enter on a tag whose target isn't loaded should open the commit's files view")
+	}
+	if mm.filesHash != "9999999" {
+		t.Fatalf("filesHash = %q, want the tag target 9999999", mm.filesHash)
 	}
 }
 
