@@ -192,6 +192,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   count while that walk is in flight, so the panel no longer looks frozen.
 
 ### Changed
+- **TUI: the `F` fuzzy file finder is now navigation-first, like every other gg
+  list.** It opens showing the file list; press `/` to start filtering and type a
+  query (so `/` and `z` are literal query characters — fixing the bug where typing
+  a query containing `z`, e.g. `zdata`, cycled the display mode and showed nothing,
+  and the confusion around a literal `/` in the query). `esc` clears the filter and
+  keeps the finder open; a second `esc` closes it. `pgup`/`pgdn` page the selection,
+  and `alt+↑/↓` recalls previous file searches (shared with the file-tree filter).
 - **TUI internals: the commit/compare/stash files view is now a small state
   machine.** A `filesMode` plus a set of transition methods (the single close
   chokepoint `closeFilesView`, plus `openChangedFiles`/`openCompareFiles`/
