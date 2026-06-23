@@ -9,6 +9,7 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **More Tags menu actions.** The Tags panel `.` menu now offers **Copy tag name**, **Copy commit id** / **Copy commit sha** (the tag's target commit, full SHA resolved on demand), plus one-click **Merge `<tag>` into current** and **Rebase current onto `<tag>`** (reusing SmartMerge/SmartRebase; merge/rebase hidden on a detached HEAD).
 - **Delete a remote branch.** The Remotes panel `.` menu now offers **Delete `<remote>/<branch>`** (with a confirm prompt), and the CLI adds `gg remote rm <remote>/<branch>` — `git push <remote> --delete`. Destructive and outward-facing, so the TUI confirms; the CLI command is the confirmation.
 - **More Remotes & Branches menu actions.** The `.` menu on the Branches and
   Remotes panels now offers **Copy commit id** (the short tip hash) and **Copy
