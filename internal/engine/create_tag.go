@@ -12,6 +12,7 @@ type CreateTag struct {
 	Name    string // required
 	Commit  string // "" = HEAD
 	Message string // "" = lightweight, else annotated
+	Force   bool   // replace existing tag
 }
 
 func (op CreateTag) Run(ctx context.Context, deps OpDeps) (Result, error) {
@@ -24,7 +25,7 @@ func (op CreateTag) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	}
 	deps.emit(ctx, Progress{Step: "creating tag", Detail: detail})
 
-	if err := deps.Repo.CreateTag(ctx, op.Name, op.Commit, op.Message); err != nil {
+	if err := deps.Repo.CreateTag(ctx, op.Name, op.Commit, op.Message, op.Force); err != nil {
 		return Result{}, fmt.Errorf("create tag: %w", err)
 	}
 	kind := "lightweight"

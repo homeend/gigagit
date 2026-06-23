@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v28 -->
+<!-- gg:using-gg:v29 -->
 
 # Using gg (gigagit)
 
@@ -51,7 +51,10 @@ guards against removing the worktree you are standing in.
   defaults to the only configured one); `checkout [--branch <name>] <tag>`
   checks out a tag — detached, or onto a new branch created at the tag when
   `--branch` is given; `push <name> [<remote>]` pushes a tag to a remote (the
-  remote defaults to the only configured one; specify it when there are several).
+  remote defaults to the only configured one; specify it when there are several);
+  `annotate -m <message> <name>` sets or replaces a tag's annotation message —
+  turns a lightweight tag into an annotated one, or updates the message of an
+  existing annotated tag, keeping its target commit unchanged.
 - `gg compare <left> [<right>]` — print the files that changed between two
   endpoints, one `<status>\t<path>` line each (renames: `old -> new`). Each
   endpoint is a commit-ish (`HEAD`, a branch, `abc123`, `HEAD~2`), `@staged`

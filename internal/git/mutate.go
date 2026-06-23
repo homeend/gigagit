@@ -57,11 +57,11 @@ func (r *Repo) CreateBranch(ctx context.Context, name, startPoint string) error 
 }
 
 // CreateTag creates a tag at commit (empty commit = HEAD). A non-empty message
-// makes it annotated (git tag -a -m); otherwise it is lightweight. git refuses
-// an existing tag name.
-func (r *Repo) CreateTag(ctx context.Context, name, commit, message string) error {
+// makes it annotated (git tag -a -m); force (-f) replaces an existing tag.
+func (r *Repo) CreateTag(ctx context.Context, name, commit, message string, force bool) error {
 	argv := gitcmd.New("tag").
 		ArgIf(message != "", "-a", "-m", message).
+		ArgIf(force, "-f").
 		Arg(name).
 		ArgIf(commit != "", commit).
 		ToArgv()

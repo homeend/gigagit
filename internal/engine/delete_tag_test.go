@@ -9,7 +9,7 @@ import (
 
 func TestDeleteTag(t *testing.T) {
 	dir, repo := newRepo(t)
-	if err := repo.CreateTag(context.Background(), "v1.0.0", "", ""); err != nil {
+	if err := repo.CreateTag(context.Background(), "v1.0.0", "", "", false); err != nil {
 		t.Fatal(err)
 	}
 	ch := make(chan Event, 16)

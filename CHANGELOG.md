@@ -9,6 +9,7 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Annotate an existing tag.** The Tags panel `.` menu now offers **Annotate `<tag>`** — a message dialog (prefilled with the tag's current subject) that turns a lightweight tag annotated, or updates an annotated tag's message, keeping its target commit. The CLI adds `gg tag annotate -m <message> <name>`.
 - **Merge / rebase a local branch from the Branches menu.** The Branches panel
   `.` menu now offers **Merge `<branch>` into current** and **Rebase current onto
   `<branch>`** for the selected branch (hidden on the checked-out branch itself and
