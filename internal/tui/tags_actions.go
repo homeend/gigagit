@@ -134,6 +134,34 @@ func (m Model) tagPushRow() (actionRow, bool) {
 	}, true
 }
 
+// tagSoloRow offers "Solo this tag" on the Tags panel: scope the Commits feed to
+// the tag's history (git log <tag>) and focus the Commits panel, or un-solo if it
+// is already the sole scope. Mirrors commitSoloRow — a tag is just a ref to git
+// log, so the existing scope machinery handles it.
+func (m Model) tagSoloRow() (actionRow, bool) {
+	if m.focus != panelTags || !m.opsIdle() {
+		return actionRow{}, false
+	}
+	bi, ok := m.backingIndex(panelTags)
+	if !ok || bi < 0 || bi >= len(m.tags) {
+		return actionRow{}, false
+	}
+	name := m.tags[bi].Name
+	return actionRow{
+		id:    "tag-solo",
+		label: "Solo this tag",
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			if len(m.commitScopeBranches) == 1 && m.commitScopeBranches[0] == name {
+				m.commitScopeBranches = nil // re-solo → un-solo
+			} else {
+				m.commitScopeBranches = []string{name}
+			}
+			m.focus = panelCommits // land on the freshly-scoped list (Tags is mid-column)
+			return m.startFeedReload()
+		},
+	}, true
+}
+
 // tagDeleteRow offers "Delete tag" on the Tags panel: a confirm modal (never-trap
 // Cancel) then the delete op.
 func (m Model) tagDeleteRow() (actionRow, bool) {

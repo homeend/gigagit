@@ -470,3 +470,54 @@ func TestAnnotatePopupSubmitDispatches(t *testing.T) {
 		t.Fatal("submit with a message must start the op (non-nil cmd)")
 	}
 }
+
+func TestTagSoloRowPresent(t *testing.T) {
+	m := footerModel()
+	m.focus = panelTags
+	m.tags = []model.Tag{{Name: "v1.0.0", Target: "abc1234"}}
+	got := ids(availableActions(m))
+	if !got["tag-solo"] {
+		t.Fatalf("expected tag-solo; got %v", got)
+	}
+}
+
+func TestTagSoloRowInertOffTagsPanel(t *testing.T) {
+	m := footerModel()
+	m.focus = panelBranches
+	if _, ok := m.tagSoloRow(); ok {
+		t.Fatal("tag-solo must be inert off the Tags panel")
+	}
+}
+
+func TestTagSoloRowScopesAndFocusesCommits(t *testing.T) {
+	m := footerModel()
+	m.focus = panelTags
+	m.tags = []model.Tag{{Name: "v1.0.0", Target: "abc1234"}}
+	row, ok := m.tagSoloRow()
+	if !ok {
+		t.Fatal("tagSoloRow not available")
+	}
+	u, cmd := row.run(m)
+	mm := u.(Model)
+	if len(mm.commitScopeBranches) != 1 || mm.commitScopeBranches[0] != "v1.0.0" {
+		t.Fatalf("commitScopeBranches = %v, want [v1.0.0]", mm.commitScopeBranches)
+	}
+	if mm.focus != panelCommits {
+		t.Fatalf("focus = %v, want panelCommits", mm.focus)
+	}
+	if cmd == nil {
+		t.Fatal("solo must return a reload cmd")
+	}
+}
+
+func TestTagSoloRowTogglesOff(t *testing.T) {
+	m := footerModel()
+	m.focus = panelTags
+	m.tags = []model.Tag{{Name: "v1.0.0", Target: "abc1234"}}
+	m.commitScopeBranches = []string{"v1.0.0"} // already soloed to this tag
+	row, _ := m.tagSoloRow()
+	u, _ := row.run(m)
+	if mm := u.(Model); len(mm.commitScopeBranches) != 0 {
+		t.Fatalf("re-solo should un-solo; commitScopeBranches = %v", mm.commitScopeBranches)
+	}
+}
