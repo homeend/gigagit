@@ -71,8 +71,45 @@ func TestPushPropagatesCommit(t *testing.T) {
 	if err := repo.Commit(context.Background(), "v2", true, false); err != nil {
 		t.Fatalf("commit: %v", err)
 	}
-	if err := repo.Push(context.Background(), "origin", "main", false); err != nil {
+	if err := repo.Push(context.Background(), "origin", "main", false, PushNoForce); err != nil {
 		t.Fatalf("push: %v", err)
+	}
+}
+
+// TestPushForceOverwritesDivergedRemote rewrites local history so it diverges
+// from origin: a plain push is rejected, --force-with-lease and --force both win.
+func TestPushForceOverwritesDivergedRemote(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		force PushForce
+	}{
+		{"with-lease", PushForceWithLease},
+		{"plain", PushForcePlain},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			clone, runner := newClonePair(t)
+			repo := &Repo{Runner: runner}
+
+			// Rewrite the tip in place (amend) so it no longer fast-forwards origin.
+			if err := os.WriteFile(filepath.Join(clone, "f.txt"), []byte("rewritten\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if err := repo.Commit(context.Background(), "v1 rewritten", true, true); err != nil {
+				t.Fatalf("amend: %v", err)
+			}
+
+			if err := repo.Push(context.Background(), "origin", "main", false, PushNoForce); err == nil {
+				t.Fatal("plain push of diverged history should be rejected")
+			}
+			if err := repo.Push(context.Background(), "origin", "main", false, tc.force); err != nil {
+				t.Fatalf("force push (%s): %v", tc.name, err)
+			}
+
+			origin := filepath.Join(filepath.Dir(clone), "origin.git")
+			if got, want := revParse(t, origin, "main"), revParse(t, clone, "HEAD"); got != want {
+				t.Fatalf("origin main = %s, want %s (local HEAD)", got, want)
+			}
+		})
 	}
 }
 

@@ -1,6 +1,11 @@
 package engine
 
-import "context"
+import (
+	"context"
+	"fmt"
+
+	"github.com/gigagit/gg/internal/git"
+)
 
 // Commit stages (optionally) and commits with a message. Amend rewrites the
 // last commit instead of creating a new one.
@@ -24,16 +29,42 @@ func (op Commit) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	return res, nil
 }
 
-// Push pushes branch to remote, optionally setting upstream.
+// Push pushes branch to remote, optionally setting upstream. When Force is set,
+// the op asks the "push-force" decision (force-with-lease / force / abort) — the
+// modal both lets the user pick a lease-protected or plain force and confirms a
+// history-overwriting push; esc lands on abort. A non-Force push never decides.
 type Push struct {
 	Remote      string
 	Branch      string
 	SetUpstream bool
+	Force       bool
 }
 
 func (op Push) Run(ctx context.Context, deps OpDeps) (Result, error) {
+	force := git.PushNoForce
+	if op.Force {
+		choice, err := deps.decide(ctx, DecisionRequest{
+			ID:      "push-force",
+			Prompt:  "Force-push " + op.Branch + " to " + op.Remote + " (overwrites the remote branch)",
+			Options: []string{"force-with-lease", "force", "abort"},
+		})
+		if err != nil {
+			return Result{}, err
+		}
+		switch choice.Option {
+		case "force-with-lease":
+			force = git.PushForceWithLease
+		case "force":
+			force = git.PushForcePlain
+		case "abort", "":
+			return Result{Summary: "push cancelled", Changed: false}, nil
+		default:
+			return Result{}, fmt.Errorf("push: unknown force mode %q", choice.Option)
+		}
+	}
+
 	deps.emit(ctx, Progress{Step: "pushing", Detail: op.Remote + " " + op.Branch})
-	if err := deps.Repo.Push(ctx, op.Remote, op.Branch, op.SetUpstream); err != nil {
+	if err := deps.Repo.Push(ctx, op.Remote, op.Branch, op.SetUpstream, force); err != nil {
 		return Result{}, err
 	}
 	res := Result{Summary: "pushed", Changed: true}

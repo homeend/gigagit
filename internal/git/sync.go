@@ -108,10 +108,27 @@ func (r *Repo) FastForwardToRef(ctx context.Context, branch, source string) erro
 	return err
 }
 
+// PushForce selects how Push overwrites a diverged remote branch.
+type PushForce int
+
+const (
+	PushNoForce        PushForce = iota // plain push (rejected on non-fast-forward)
+	PushForceWithLease                  // --force-with-lease (refuses if the remote moved)
+	PushForcePlain                      // --force (overwrites unconditionally)
+)
+
 // Push pushes branch to remote. When setUpstream is true it records the
-// upstream tracking ref (-u).
-func (r *Repo) Push(ctx context.Context, remote, branch string, setUpstream bool) error {
-	argv := gitcmd.New("push").ArgIf(setUpstream, "-u").Arg(remote, branch).ToArgv()
+// upstream tracking ref (-u). The force mode chooses how a diverged remote is
+// overwritten: none (default), --force-with-lease (safe), or --force (plain).
+func (r *Repo) Push(ctx context.Context, remote, branch string, setUpstream bool, force PushForce) error {
+	b := gitcmd.New("push").ArgIf(setUpstream, "-u")
+	switch force {
+	case PushForceWithLease:
+		b = b.Arg("--force-with-lease")
+	case PushForcePlain:
+		b = b.Arg("--force")
+	}
+	argv := b.Arg(remote, branch).ToArgv()
 	_, err := r.Runner.Run(ctx, "git push", argv)
 	return err
 }

@@ -52,7 +52,7 @@ func Run(workdir string, args []string, stdin io.Reader, stdout, stderr io.Write
 	case "pull":
 		return cmdPull(svc, rest, stdout, stderr)
 	case "push":
-		return cmdPush(svc, rest, stdout, stderr)
+		return cmdPush(svc, rest, stdin, stdout, stderr)
 	case "switch":
 		return cmdSwitch(svc, rest, stdout, stderr)
 	case "checkout":

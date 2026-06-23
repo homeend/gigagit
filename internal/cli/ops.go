@@ -42,7 +42,23 @@ func cmdPull(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 	return finish(res, err, stdout, stderr)
 }
 
-func cmdPush(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
+// cmdPush implements `gg push [--force | --force-with-lease]`. With no flag it
+// is a plain push. --force-with-lease force-pushes only if the remote has not
+// moved; --force overwrites the remote branch unconditionally (no lease). The
+// flags answer the engine's push-force decision, so a force push never prompts.
+func cmdPush(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("push", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	force := fs.Bool("force", false, "force-push, overwriting the remote branch unconditionally (no lease)")
+	lease := fs.Bool("force-with-lease", false, "force-push only if the remote branch has not moved")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if *force && *lease {
+		fmt.Fprintln(stderr, "push: choose at most one of --force/--force-with-lease")
+		return 2
+	}
+
 	cur, err := svc.CurrentBranch(context.Background())
 	if err != nil {
 		fmt.Fprintln(stderr, "error:", err)
@@ -52,8 +68,17 @@ func cmdPush(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "push: detached HEAD; cannot push")
 		return 1
 	}
+
+	policy := map[string]string{}
+	switch {
+	case *lease:
+		policy["push-force"] = "force-with-lease"
+	case *force:
+		policy["push-force"] = "force"
+	}
+	dec := cliDecider{policy: policy, in: stdin, out: stderr, interactive: stdinIsTerminal()}
 	res, err := runOperation(context.Background(), svc,
-		engine.Push{Remote: "origin", Branch: cur, SetUpstream: true}, cliDecider{}, stderr)
+		engine.Push{Remote: "origin", Branch: cur, SetUpstream: true, Force: *force || *lease}, dec, stderr)
 	return finish(res, err, stdout, stderr)
 }
 
