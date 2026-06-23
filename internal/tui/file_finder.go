@@ -32,9 +32,6 @@ type fileFinderPopup struct {
 	hscroll   int           // modeScroll horizontal offset
 }
 
-// fileFinderPage is the selection jump for pgup/pgdn (roughly the visible window).
-const fileFinderPage = 12
-
 // lsFilesMsg is the async result of the LsFiles domain call.
 type lsFilesMsg struct {
 	paths []string
@@ -114,6 +111,11 @@ func (p *fileFinderPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		} else {
 			m = nm
 		}
+		// Arrows/pages move the selection live while typing (no cursor reset),
+		// like the commit filter; j/k stay query text.
+		if filterMotion(msg, p.moveSel, popupFilterPage) {
+			return m, nil
+		}
 		switch msg.Type {
 		case tea.KeyEsc:
 			p.filtering = false
@@ -163,10 +165,10 @@ func (p *fileFinderPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		p.moveSel(1)
 		return m, nil
 	case tea.KeyPgUp:
-		p.moveSel(-fileFinderPage)
+		p.moveSel(-popupFilterPage)
 		return m, nil
 	case tea.KeyPgDown:
-		p.moveSel(fileFinderPage)
+		p.moveSel(popupFilterPage)
 		return m, nil
 	case tea.KeyEnter:
 		if p.loading || p.sel < 0 || p.sel >= len(p.matches) {

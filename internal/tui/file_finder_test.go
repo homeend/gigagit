@@ -1,8 +1,33 @@
 package tui
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 )
+
+// TestFileFinderPagingScrollsViewport guards the green-unit/broken-render trap:
+// paging in filter mode must scroll what's DRAWN, not just p.sel. With 50 matches
+// in a 16-row window, after paging the selected row must appear in the rendered box.
+func TestFileFinderPagingScrollsViewport(t *testing.T) {
+	m := Model{width: 80, height: 30}
+	p := &fileFinderPopup{filtering: true}
+	for i := 0; i < 50; i++ {
+		p.all = append(p.all, fmt.Sprintf("dir/file%02d.go", i))
+	}
+	p.setQuery("file") // matches all 50, sel=0
+	for i := 0; i < 3; i++ {
+		m, _ = p.update(m, keyMsg("pgdown"))
+	}
+	if p.sel != popupFilterPage*3 {
+		t.Fatalf("3 pgdown should land at sel=%d; got %d", popupFilterPage*3, p.sel)
+	}
+	out := p.box(m)
+	want := fmt.Sprintf("file%02d.go", p.sel)
+	if !strings.Contains(out, want) {
+		t.Fatalf("selected row %q should be visible in the rendered box:\n%s", want, out)
+	}
+}
 
 func TestFileFinderOpensAndLoads(t *testing.T) {
 	m := loadedModel(t)
@@ -155,6 +180,59 @@ func TestFileFinderRecallReranks(t *testing.T) {
 	}
 }
 
+// TestFileFinderArrowsMoveWhileTyping is the user's ask: while typing the filter,
+// ↑↓/pgup/pgdn move the selection through the filtered rows WITHOUT losing the
+// query (exactly like the commit filter).
+func TestFileFinderArrowsMoveWhileTyping(t *testing.T) {
+	m := loadedModel(t)
+	m, _ = m.openFileFinder()
+	nm, _ := m.Update(lsFilesMsg{paths: []string{"a/file1.go", "b/file2.go", "c/file3.go"}})
+	m = nm.(Model)
+	nm, _ = m.Update(keyMsg("/"))
+	m = nm.(Model)
+	for _, r := range "file" { // matches all three
+		nm, _ = m.Update(keyMsg(string(r)))
+		m = nm.(Model)
+	}
+	p := layerOf[*fileFinderPopup](m)
+	if len(p.matches) < 2 || p.sel != 0 {
+		t.Fatalf("setup: want >=2 matches at sel 0; matches=%d sel=%d", len(p.matches), p.sel)
+	}
+	nm, _ = m.Update(keyMsg("down"))
+	m = nm.(Model)
+	p = layerOf[*fileFinderPopup](m)
+	if p.sel != 1 {
+		t.Fatalf("down should move selection while typing; sel=%d", p.sel)
+	}
+	if !p.filtering || p.query != "file" {
+		t.Fatalf("arrow must not leave filter mode or drop the query; filtering=%v query=%q", p.filtering, p.query)
+	}
+	nm, _ = m.Update(keyMsg("up"))
+	m = nm.(Model)
+	if p := layerOf[*fileFinderPopup](m); p.sel != 0 || p.query != "file" {
+		t.Fatalf("up should move back; sel=%d query=%q", p.sel, p.query)
+	}
+}
+
+// TestFileFinderJKAreQueryTextWhileTyping pins that j/k are query characters in
+// filter mode (not motions) — the collision class that started this whole arc.
+func TestFileFinderJKAreQueryTextWhileTyping(t *testing.T) {
+	m := loadedModel(t)
+	m, _ = m.openFileFinder()
+	nm, _ := m.Update(lsFilesMsg{paths: []string{"jk/thing.go", "a/b.go"}})
+	m = nm.(Model)
+	nm, _ = m.Update(keyMsg("/"))
+	m = nm.(Model)
+	for _, r := range "jk" {
+		nm, _ = m.Update(keyMsg(string(r)))
+		m = nm.(Model)
+	}
+	p := layerOf[*fileFinderPopup](m)
+	if p.query != "jk" {
+		t.Fatalf("j/k must type query text in filter mode, got query=%q", p.query)
+	}
+}
+
 // TestFileFinderPageKeys checks pgup/pgdn move the selection by a page, clamped.
 func TestFileFinderPageKeys(t *testing.T) {
 	m := loadedModel(t)
@@ -168,8 +246,8 @@ func TestFileFinderPageKeys(t *testing.T) {
 	nm, _ = m.Update(keyMsg("pgdown"))
 	m = nm.(Model)
 	p := layerOf[*fileFinderPopup](m)
-	if p.sel != fileFinderPage {
-		t.Fatalf("pgdown should move sel by a page; sel=%d want=%d", p.sel, fileFinderPage)
+	if p.sel != popupFilterPage {
+		t.Fatalf("pgdown should move sel by a page; sel=%d want=%d", p.sel, popupFilterPage)
 	}
 	nm, _ = m.Update(keyMsg("pgup"))
 	m = nm.(Model)

@@ -122,9 +122,14 @@ func (m Model) renderShelfPopupBox(p *shelfPopup) string {
 }
 
 func (p *shelfPopup) moveSel(d int) {
-	if n := p.sel + d; n >= 0 && n < len(p.visibleIdx()) {
-		p.sel = n
+	n := p.sel + d
+	if hi := len(p.visibleIdx()) - 1; n > hi {
+		n = hi
 	}
+	if n < 0 {
+		n = 0
+	}
+	p.sel = n
 }
 
 // update handles one key while the shelf switcher is open (the overlay contract).
@@ -149,6 +154,11 @@ func (p *shelfPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			return m, nil
 		} else {
 			m = nm
+		}
+		// Arrows/pages move the selection live while typing (no cursor reset),
+		// like the commit filter; j/k stay query text.
+		if filterMotion(msg, p.moveSel, popupFilterPage) {
+			return m, nil
 		}
 		switch msg.Type {
 		case tea.KeyEsc:
@@ -201,6 +211,10 @@ func (p *shelfPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		p.moveSel(-1)
 	case tea.KeyDown:
 		p.moveSel(1)
+	case tea.KeyPgUp:
+		p.moveSel(-popupFilterPage)
+	case tea.KeyPgDown:
+		p.moveSel(popupFilterPage)
 	case tea.KeyRunes:
 		switch msg.String() {
 		case "?":

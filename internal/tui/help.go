@@ -23,7 +23,7 @@ func helpContent() []contentLine {
 		r("w", "worktree popup for the selected existing branch"),
 		r("W", "worktree popup on a new templated branch"),
 		r("m", "mark a row; m on a second row opens the pair-op picker"),
-		r("R", "repo switcher popup"),
+		r("R", "repo switcher popup (navigation-first: ↑↓/jk/pgup/pgdn move, / filters, enter switches — while filtering, the first enter locks the filter)"),
 		r(",", "settings (agent skill install)"),
 		r(".", "action menu — context actions for the selected row and panel (incl. copy actions)"),
 		r("", "Compare against working dir (.-menu): on any focused commit/staged/shelf file, diffs that version against the same path in the working tree"),

@@ -118,6 +118,11 @@ func (p *contentPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				m = nm
 			}
 		}
+		// Arrows/pages move the selection live while typing (no cursor reset),
+		// like the commit filter; j/k stay query text.
+		if filterMotion(msg, p.move, m.contentPageRows()) {
+			return m, nil
+		}
 		switch msg.Type {
 		case tea.KeyEsc:
 			p.typing = false

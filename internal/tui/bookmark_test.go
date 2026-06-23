@@ -19,6 +19,33 @@ func bmPopupModel(items ...model.Bookmark) Model {
 	return m
 }
 
+// TestBookmarkArrowsMoveWhileTyping proves the shared filter-motion contract
+// reaches the bookmark switcher too: arrows move the selection while typing the
+// `/` filter, without dropping the query (same as the commit filter and finder).
+func TestBookmarkArrowsMoveWhileTyping(t *testing.T) {
+	m := bmPopupModel(
+		model.Bookmark{ID: "b1", State: model.StateUnstaged, Worktree: "/wt", Path: "alpha.go"},
+		model.Bookmark{ID: "b2", State: model.StateUnstaged, Worktree: "/wt", Path: "alpine.go"},
+		model.Bookmark{ID: "b3", State: model.StateUnstaged, Worktree: "/wt", Path: "alto.go"},
+	)
+	mm, _ := m.Update(keyMsg("/"))
+	m = mm.(Model)
+	for _, r := range "al" { // matches all three
+		mm, _ = m.Update(keyMsg(string(r)))
+		m = mm.(Model)
+	}
+	p := layerOf[*bookmarkPopup](m)
+	if !p.filtering || p.filter != "al" || len(p.visibleIdx()) < 2 {
+		t.Fatalf("setup: filtering=%v filter=%q visible=%d", p.filtering, p.filter, len(p.visibleIdx()))
+	}
+	mm, _ = m.Update(keyMsg("down"))
+	m = mm.(Model)
+	p = layerOf[*bookmarkPopup](m)
+	if p.sel != 1 || p.filter != "al" {
+		t.Fatalf("down should move selection while typing; sel=%d filter=%q", p.sel, p.filter)
+	}
+}
+
 func TestBookmarkRemoveConfirms(t *testing.T) {
 	m := bmPopupModel(model.Bookmark{ID: "b1", State: model.StateUnstaged, Worktree: "/wt", Path: "a.go"})
 	mm, _ := m.Update(keyMsg("x"))

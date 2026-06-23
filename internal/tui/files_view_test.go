@@ -92,6 +92,45 @@ func TestFilesViewElidesNestedDirHeadingFromLeft(t *testing.T) {
 	}
 }
 
+// TestFilesViewTreeMovesWhileTyping is the user-named-primary surface: in the
+// file-tree filter, arrows move the TREE selection while typing (not the list/
+// commit side, which uses a Cmd-returning mover), and the query survives.
+func TestFilesViewTreeMovesWhileTyping(t *testing.T) {
+	files := []model.CommitFile{
+		{Status: "M", Path: "a/alpha.go"},
+		{Status: "M", Path: "a/alpine.go"},
+		{Status: "M", Path: "a/alto.go"},
+	}
+	m := filesModel()
+	m.width, m.height = 100, 40
+	m.filesView = &contentPopup{lines: commitFileLines(files), sel: 0, mode: modeCutoff}
+	m.filesTreeFocused = true
+	m.sel[panelCommits] = 0 // list side; must NOT move when we navigate the tree
+
+	// `/` enters the tree filter; type a query that keeps several rows.
+	mm, _ := m.updateFilesViewKey(keyMsg("/"))
+	m = mm.(Model)
+	for _, r := range "al" {
+		mm, _ = m.updateFilesViewKey(keyMsg(string(r)))
+		m = mm.(Model)
+	}
+	if !m.filesView.typing || m.filesView.query != "al" {
+		t.Fatalf("setup: typing=%v query=%q", m.filesView.typing, m.filesView.query)
+	}
+	before := m.filesView.sel
+	mm, _ = m.updateFilesViewKey(keyMsg("down"))
+	m = mm.(Model)
+	if m.filesView.sel == before {
+		t.Fatalf("down should move the tree selection while typing; sel stuck at %d", before)
+	}
+	if !m.filesView.typing || m.filesView.query != "al" {
+		t.Fatalf("arrow must not leave the filter or drop the query; typing=%v query=%q", m.filesView.typing, m.filesView.query)
+	}
+	if m.sel[panelCommits] != 0 {
+		t.Fatalf("the list/commit side must NOT move when navigating the tree; got %d", m.sel[panelCommits])
+	}
+}
+
 func TestCommitFileLinesRename(t *testing.T) {
 	files := []model.CommitFile{{Status: "R", Path: "b/new.go", OldPath: "a/old.go"}}
 	got := commitFileLines(files)
