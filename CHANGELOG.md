@@ -200,6 +200,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   against it.
 
 ### Fixed
+- **Remotes menu actions no longer leak onto the Branches/Worktrees tabs.** The
+  `.` menu offered remote-branch actions (Create worktree from / Merge / Rebase
+  onto / Delete `<remote>/<branch>`) referencing the Remotes panel's stored
+  selection even when another left tab was focused. The rows now require the
+  Remotes tab to be active (matching the keyboard/footer gating).
 - **Amend/commit description lines now align in one column.** The wrapped/extra
   lines of a multi-line commit description started two columns to the left of
   the first line; every value line now begins in the same column as the field's

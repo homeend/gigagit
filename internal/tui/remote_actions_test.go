@@ -155,3 +155,18 @@ func TestRemoteDeleteRowDispatches(t *testing.T) {
 		t.Fatal("delete row run returned nil cmd")
 	}
 }
+
+// The remote-branch rows must NOT leak onto the menu when another left tab
+// (Branches/Worktrees) is focused, even though the Remotes panel still holds a
+// stored selection. Regression for the bug where the . menu offered "Rebase
+// current onto origin/…" while the Branches tab was active.
+func TestRemoteRowsAbsentWhenBranchesTabFocused(t *testing.T) {
+	m := remoteModel() // populates m.remoteBranches + a Remotes selection
+	m.focus = panelBranches
+	got := ids(availableActions(m))
+	for _, id := range []string{"remote-worktree", "remote-merge", "remote-rebase", "remote-delete"} {
+		if got[id] {
+			t.Fatalf("%s must be absent while the Branches tab is focused; got %v", id, got)
+		}
+	}
+}
