@@ -211,6 +211,7 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   against it.
 
 ### Fixed
+- **`enter` on a tag now always opens its commit.** Previously it only moved the Commits cursor to the tag's target *if that commit was already in the loaded feed* — so on a large repo (e.g. babel: 922 tags pointing at old releases, ~50 commits loaded) it almost always dead-ended with "tag … target not in the loaded commits". Now, when the target isn't in the loaded feed, `enter` opens that commit's files view directly by hash (like `enter` on a reflog entry); when it *is* loaded, it still jumps the cursor in the graph.
 - **SSH remotes no longer freeze the TUI on a host-key or passphrase prompt.** The earlier credential-prompt fix (`GIT_TERMINAL_PROMPT=0`) only covered HTTPS; an unknown ssh host key (`Are you sure you want to continue connecting?`) or a passphrase not held by an agent still read `/dev/tty` and hung the raw-mode UI. The TUI's git runner now also sets `GIT_SSH_COMMAND="ssh -o BatchMode=yes"` (preserving any custom `GIT_SSH_COMMAND` you already set), so ssh fails fast with a clear error (`Host key verification failed` / `Permission denied (publickey)`) instead of blocking. The scriptable CLI is unchanged — a real terminal can still service an ssh prompt.
 - **Remotes menu actions no longer leak onto the Branches/Worktrees tabs.** The
   `.` menu offered remote-branch actions (Create worktree from / Merge / Rebase

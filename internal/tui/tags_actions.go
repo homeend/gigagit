@@ -6,6 +6,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/gigagit/gg/internal/engine"
+	"github.com/gigagit/gg/internal/model"
 )
 
 // tagAnnotateRow offers "Annotate <tag>" on the Tags panel: open a message
@@ -193,15 +194,23 @@ func (m Model) tagJumpToCommit() (tea.Model, tea.Cmd) {
 	if !ok || bi < 0 || bi >= len(m.tags) {
 		return m, nil
 	}
-	target := m.tags[bi].Target
+	t := m.tags[bi]
+	// If the target commit is already in the loaded feed, jump the Commits cursor
+	// to it (in-graph context).
 	idx := m.displayIndices(panelCommits)
 	for di, ci := range idx {
-		if c, ok := m.commitAtUnified(ci); ok && strings.HasPrefix(c.Hash, target) {
+		if c, ok := m.commitAtUnified(ci); ok && strings.HasPrefix(c.Hash, t.Target) {
 			m.sel[panelCommits] = di
 			m.focus = panelCommits
 			return m, nil
 		}
 	}
-	m.statusMsg = "tag " + m.tags[bi].Name + " target not in the loaded commits"
-	return m, nil
+	// Otherwise open the target commit's changed-files view directly by hash. In a
+	// big repo (e.g. babel: 922 tags, old releases) the target is almost never in
+	// the loaded page, so paging the whole history to find it would be unbounded —
+	// inspect it by hash instead, exactly like enter on a reflog entry.
+	m, cmd := m.openChangedFiles(model.Commit{Hash: t.Target, Subject: t.Subject})
+	m.focus = panelCommits
+	m = m.focusTree()
+	return m, cmd
 }

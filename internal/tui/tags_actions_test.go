@@ -80,16 +80,61 @@ func TestEnterOnTagJumpsToCommit(t *testing.T) {
 	}
 }
 
-func TestEnterOnTagNotLoadedNotices(t *testing.T) {
+// When the tag's target commit is NOT in the loaded feed (common in big repos
+// with old release tags), enter opens that commit's files view directly by hash
+// — instead of the old "target not in the loaded commits" dead end.
+func TestEnterOnTagNotLoadedOpensFilesView(t *testing.T) {
 	m := footerModel()
 	m.commits = []model.Commit{{Hash: "1111111aaaa", Subject: "one"}}
-	m.tags = []model.Tag{{Name: "v1", Target: "9999999"}}
+	m.tags = []model.Tag{{Name: "v1", Target: "9999999", Subject: "rel one"}}
 	m.activeFilesTab = panelTags
 	m.focus = panelTags
 	m.sel[panelTags] = 0
 	u, _ := m.Update(keyMsg("enter"))
-	if mm := u.(Model); mm.statusMsg == "" {
-		t.Fatal("expected a 'tag target not loaded' notice")
+	mm := u.(Model)
+	if mm.filesView == nil {
+		t.Fatal("enter on a tag whose target isn't loaded should open the commit's files view")
+	}
+	if mm.filesHash != "9999999" {
+		t.Fatalf("filesHash = %q, want the tag target 9999999", mm.filesHash)
+	}
+}
+
+// End-to-end against a real repo: the tag's target is a SHORT sha (as the parser
+// produces) and is NOT in the loaded feed, so enter must open the files view AND
+// the async load must actually land (not hang on "(loading…)") — the short hash
+// must match through loadCommitFilesCmd → commitFilesMsg → filesHash.
+func TestEnterOnTagNotLoadedLoadsCommitFilesEndToEnd(t *testing.T) {
+	_, repo := newRepoDir(t)
+	m := loadModel(t, repo)
+	if len(m.commits) == 0 {
+		t.Fatal("expected at least one commit in the test repo")
+	}
+	head := m.commits[0].Hash
+	// Force the not-loaded branch: empty the feed; tag points at HEAD by SHORT sha.
+	m.commits = nil
+	m.tags = []model.Tag{{Name: "v1", Target: shortHash(head), Subject: "rel"}}
+	m.activeFilesTab = panelTags
+	m.focus = panelTags
+	m.sel[panelTags] = 0
+
+	u, cmd := m.Update(keyMsg("enter"))
+	m = u.(Model)
+	if m.filesView == nil || cmd == nil {
+		t.Fatal("enter should open the files view and return a load cmd")
+	}
+	// Run the async load and feed the result back through Update.
+	u2, _ := m.Update(cmd())
+	m = u2.(Model)
+	if m.filesView == nil {
+		t.Fatal("files view closed after the load landed")
+	}
+	var joined string
+	for _, l := range m.filesView.lines {
+		joined += l.text + "\n"
+	}
+	if strings.Contains(joined, "loading") || strings.TrimSpace(joined) == "" {
+		t.Fatalf("files view did not populate after the short-hash load (still loading/empty): %q", joined)
 	}
 }
 
