@@ -1,0 +1,31 @@
+name = "merge: a tag is a valid merge source (not just a branch)"
+
+# Regression guard: SmartMerge once required the source to be a LOCAL branch, so
+# `gg merge <tag>` (and `gg merge origin/<branch>`) failed with "no such branch".
+# This proves a non-branch ref merges through the full CLI->engine->git stack.
+
+[input]
+steps = [
+  { write = "base.txt", content = "base\n" },
+  { commit = "base" },
+  { branch = "feat" },
+  { switch = "feat" },
+  { write = "feat.txt", content = "feat\n" },
+  { commit = "feat change" },
+  { tag = "v1.0.0" },
+  { switch = "main" },
+  { write = "main.txt", content = "main\n" },
+  { commit = "main change" },
+]
+
+[[run]]
+cmd  = ["merge", "v1.0.0"]
+exit = 0
+
+[expect]
+branch = "main"
+clean  = true
+
+[expect.files]
+"feat.txt" = "feat\n"
+"main.txt" = "main\n"
