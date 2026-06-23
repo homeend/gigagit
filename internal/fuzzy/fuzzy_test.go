@@ -43,6 +43,21 @@ func TestRankEmptyQueryIdentity(t *testing.T) {
 	}
 }
 
+// TestRankBoundedTiebreak verifies that the bounded top-N heap path (limit < matches)
+// produces the same result as a full-sort when scores tie — i.e. h[0] is always the
+// genuine worst element (lowest score, then largest path alphabetically).
+func TestRankBoundedTiebreak(t *testing.T) {
+	// All three match "e" with identical score (single-char basename match).
+	// Full-sort tiebreak = path ascending → top-2 should be [e/a.go, e/m.go].
+	got := Rank("e", []string{"e/m.go", "e/z.go", "e/a.go"}, 2)
+	if len(got) != 2 {
+		t.Fatalf("expected 2 results, got %v", got)
+	}
+	if got[0].S != "e/a.go" || got[1].S != "e/m.go" {
+		t.Fatalf("bounded tiebreak wrong; want [e/a.go, e/m.go], got [%s, %s]", got[0].S, got[1].S)
+	}
+}
+
 func TestRankPerf(t *testing.T) {
 	// Build a synthetic 100k-path slice. Use a query "e" which matches most paths
 	// so that scoring + sorting the full result set is exercised.

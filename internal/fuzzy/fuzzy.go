@@ -59,13 +59,20 @@ func Score(query, candidate string) (int, bool) {
 	return score, true
 }
 
-// matchHeap is a min-heap of Match values ordered by score (ascending), used for
-// bounded top-N selection without sorting the entire match set.
+// matchHeap is a min-heap of Match values where h[0] is always the element
+// that would be evicted first: lowest score, and for equal scores, the
+// lexicographically largest path (since path-asc is the tiebreak, a larger
+// path is the "worst" and should leave first).
 type matchHeap []Match
 
-func (h matchHeap) Len() int           { return len(h) }
-func (h matchHeap) Less(i, j int) bool { return h[i].Score < h[j].Score }
-func (h matchHeap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
+func (h matchHeap) Len() int { return len(h) }
+func (h matchHeap) Less(i, j int) bool {
+	if h[i].Score != h[j].Score {
+		return h[i].Score < h[j].Score // lower score floats to root (evicted first)
+	}
+	return h[i].S > h[j].S // equal score: larger path is "worse" → root
+}
+func (h matchHeap) Swap(i, j int) { h[i], h[j] = h[j], h[i] }
 func (h *matchHeap) Push(x any)        { *h = append(*h, x.(Match)) }
 func (h *matchHeap) Pop() any {
 	old := *h
