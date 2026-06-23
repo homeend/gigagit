@@ -29,7 +29,7 @@ type GitOps interface {
 	Pull(ctx context.Context, remote, branch string, strategy git.PullStrategy) error
 	PullInWorktree(ctx context.Context, worktreePath, remote, branch string) error
 	FastForwardRef(ctx context.Context, remote, branch string) error
-	Push(ctx context.Context, remote, branch string, setUpstream bool) error
+	Push(ctx context.Context, remote, branch string, setUpstream bool, force git.PushForce) error
 	PushTag(ctx context.Context, remote, name string) error
 	PushDelete(ctx context.Context, remote, branch string) error
 	Switch(ctx context.Context, branch string) error

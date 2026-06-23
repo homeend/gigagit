@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v26 -->
+<!-- gg:using-gg:v27 -->
 
 # Using gg (gigagit)
 
@@ -26,7 +26,13 @@ guards against removing the worktree you are standing in.
 - `gg pull [<branch>] [--background] [--on-conflict rebase|merge|abort]` —
   smart pull; with `<branch>` + `--background` it fast-forwards that branch's
   ref without checking it out.
-- `gg push` — push the current branch (sets upstream when missing).
+- `gg push [--force | --force-with-lease]` — push the current branch (sets
+  upstream when missing). With no flag it is a plain push (rejected on a
+  non-fast-forward). `--force-with-lease` force-pushes only if the remote branch
+  has not moved since your last fetch; `--force` overwrites the remote branch
+  unconditionally (no lease). Use one after a rebase/amend/reword rewrites
+  history. The flags answer the `push-force` decision, so a force push never
+  prompts.
 - `gg switch <branch>` — switch branches, auto-stashing and restoring local
   changes; on a restore conflict the stash is preserved, never dropped.
 - `gg checkout <remote>/<branch> [-s|--switch]` — check out a remote-tracking
