@@ -521,3 +521,43 @@ func TestTagSoloRowTogglesOff(t *testing.T) {
 		t.Fatalf("re-solo should un-solo; commitScopeBranches = %v", mm.commitScopeBranches)
 	}
 }
+
+// esc from a files view opened by enter on a tag must return focus to the Tags
+// panel (the source), not leave the user on the Commits panel.
+func TestEscFromTagOpenedFilesReturnsToTags(t *testing.T) {
+	m := footerModel()
+	m.focus = panelTags
+	m.activeFilesTab = panelTags
+	m.tags = []model.Tag{{Name: "v1", Target: "9999999", Subject: "rel"}}
+	m.sel[panelTags] = 0
+	u, _ := m.Update(keyMsg("enter")) // target not in feed → opens files view
+	m = u.(Model)
+	if m.filesView == nil {
+		t.Fatal("enter on a tag should open the files view")
+	}
+	u2, _ := m.Update(keyMsg("esc"))
+	m = u2.(Model)
+	if m.filesView != nil {
+		t.Fatal("esc should close the files view")
+	}
+	if m.focus != panelTags {
+		t.Fatalf("focus = %v after esc, want panelTags (the source panel)", m.focus)
+	}
+}
+
+// Regression: esc from a files view opened from the Commits panel (via l) must
+// stay on the Commits panel — the focus-restore must not change the no-op case.
+func TestEscFromCommitsOpenedFilesStaysOnCommits(t *testing.T) {
+	m := openFilesView(t, filesModel()) // filesModel focuses panelCommits; l opens the view
+	if m.filesView == nil {
+		t.Fatal("files view should be open")
+	}
+	u, _ := m.Update(keyMsg("esc"))
+	m = u.(Model)
+	if m.filesView != nil {
+		t.Fatal("esc should close the files view")
+	}
+	if m.focus != panelCommits {
+		t.Fatalf("focus = %v after esc, want panelCommits (opened from Commits)", m.focus)
+	}
+}
