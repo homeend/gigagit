@@ -9,6 +9,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Merge / rebase a local branch from the Branches menu.** The Branches panel
+  `.` menu now offers **Merge `<branch>` into current** and **Rebase current onto
+  `<branch>`** for the selected branch (hidden on the checked-out branch itself and
+  on a detached HEAD) — the same one-click actions the Remotes and Tags panels
+  already had. Conflicts/dirty trees resolve through the usual modal.
 - **Force push.** After a rebase/amend/reword rewrites history, the current branch can now be force-pushed. On the Branches panel, the `.` menu offers **Force push `<branch>`** for the checked-out branch: a modal lets you pick **force-with-lease** (refuses if the remote moved under you) or **force** (overwrites the remote unconditionally), and `esc` aborts — the choice doubles as the confirmation for this history-overwriting push. The CLI adds `gg push --force` (plain `--force`, no lease) and `gg push --force-with-lease`; with no flag `gg push` stays a plain push. First gg capability to overwrite published remote history.
 - **More Tags menu actions.** The Tags panel `.` menu now offers **Copy tag name**, **Copy commit id** / **Copy commit sha** (the tag's target commit, full SHA resolved on demand), plus one-click **Merge `<tag>` into current** and **Rebase current onto `<tag>`** (reusing SmartMerge/SmartRebase; merge/rebase hidden on a detached HEAD).
 - **Delete a remote branch.** The Remotes panel `.` menu now offers **Delete `<remote>/<branch>`** (with a confirm prompt), and the CLI adds `gg remote rm <remote>/<branch>` — `git push <remote> --delete`. Destructive and outward-facing, so the TUI confirms; the CLI command is the confirmation.
