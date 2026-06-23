@@ -44,9 +44,26 @@ type Service struct {
 }
 
 // Open builds a Service rooted at workdir with the standard runner — the
-// one place frontends construct the repo stack. It runs no git command.
+// one place frontends construct the repo stack. It runs no git command. The
+// scriptable CLI uses this: a real terminal can service an ssh/credential prompt.
 func Open(workdir string) *Service {
-	s := New(&git.Repo{Runner: gitexec.NewLimitRunner(gitexec.NewExecRunner("git", workdir, observ.NewRing(200)))})
+	return openWith(workdir, false)
+}
+
+// OpenTUI is Open for the interactive TUI: its runner forces ssh BatchMode so an
+// ssh host-key/passphrase prompt fails fast instead of hanging the raw-mode UI
+// (mirroring the always-on GIT_TERMINAL_PROMPT=0 for HTTPS). Used by the repo
+// switcher's reRoot; the initial TUI session is wired the same way in cmd/gg.
+func OpenTUI(workdir string) *Service {
+	return openWith(workdir, true)
+}
+
+func openWith(workdir string, sshBatch bool) *Service {
+	er := gitexec.NewExecRunner("git", workdir, observ.NewRing(200))
+	if sshBatch {
+		er = er.WithSSHBatchMode()
+	}
+	s := New(&git.Repo{Runner: gitexec.NewLimitRunner(er)})
 	s.workdir = workdir
 	return s
 }
