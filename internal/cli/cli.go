@@ -86,7 +86,7 @@ func Run(workdir string, args []string, stdin io.Reader, stdout, stderr io.Write
 	case "remote":
 		return cmdRemote(svc, rest, stdin, stdout, stderr)
 	case "tag":
-		return cmdTag(svc, rest, stdout, stderr)
+		return cmdTag(svc, rest, stdin, stdout, stderr)
 	case "compare":
 		return cmdCompare(svc, rest, stdout, stderr)
 	case "repo":

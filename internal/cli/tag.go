@@ -11,14 +11,14 @@ import (
 )
 
 // cmdTag dispatches the tag subcommands: ls | create | rm | checkout.
-func cmdTag(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
+func cmdTag(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	switch {
 	case len(args) == 0 || args[0] == "ls" || args[0] == "list":
 		return cmdTagList(svc, stdout, stderr)
 	case args[0] == "create":
 		return cmdTagCreate(svc, args[1:], stdout, stderr)
 	case args[0] == "rm" || args[0] == "delete":
-		return cmdTagDelete(svc, args[1:], stdout, stderr)
+		return cmdTagDelete(svc, args[1:], stdin, stdout, stderr)
 	case args[0] == "checkout" || args[0] == "co":
 		return cmdTagCheckout(svc, args[1:], stdout, stderr)
 	case args[0] == "push":
@@ -64,15 +64,36 @@ func cmdTagCheckout(svc *domain.Service, args []string, stdout, stderr io.Writer
 	return finish(res, err, stdout, stderr)
 }
 
-// cmdTagDelete implements `gg tag rm <name>` (alias delete). Typing the command
-// is the confirmation; there is no extra prompt.
-func cmdTagDelete(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
-	if len(args) != 1 || args[0] == "" {
-		fmt.Fprintln(stderr, "usage: gg tag rm <name>")
+// cmdTagDelete implements `gg tag rm [--remote] <name> [<remote>]` (alias
+// delete). Default deletes the tag locally (typing the command is the
+// confirmation). --remote deletes it on the remote instead: the remote is the
+// optional second positional, else auto-resolved; the confirm is pre-answered.
+func cmdTagDelete(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("tag rm", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	remote := fs.Bool("remote", false, "delete the tag on the remote (git push --delete) instead of locally")
+	if err := fs.Parse(args); err != nil {
 		return 2
 	}
+	if fs.NArg() < 1 || fs.Arg(0) == "" {
+		fmt.Fprintln(stderr, "usage: gg tag rm [--remote] <name> [<remote>]")
+		return 2
+	}
+	name := fs.Arg(0)
+
+	if !*remote {
+		res, err := runOperation(context.Background(), svc,
+			engine.DeleteTag{Name: name}, cliDecider{}, stderr)
+		return finish(res, err, stdout, stderr)
+	}
+
+	rem := ""
+	if fs.NArg() >= 2 {
+		rem = fs.Arg(1)
+	}
+	dec := cliDecider{policy: map[string]string{"delete-remote-tag": "delete"}, in: stdin, out: stderr, interactive: stdinIsTerminal()}
 	res, err := runOperation(context.Background(), svc,
-		engine.DeleteTag{Name: args[0]}, cliDecider{}, stderr)
+		engine.DeleteRemoteTag{Tag: name, Remote: rem}, dec, stderr)
 	return finish(res, err, stdout, stderr)
 }
 

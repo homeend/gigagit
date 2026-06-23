@@ -110,3 +110,35 @@ func TestTagPushRequiresName(t *testing.T) {
 		t.Fatal("push with no name must fail")
 	}
 }
+
+func TestTagRmRemoteDeletesTagOnOrigin(t *testing.T) {
+	clone := cloneWithRemoteFoo(t)
+	origin := runGit(t, clone, "config", "--get", "remote.origin.url")
+	runGit(t, clone, "tag", "v1.0.0")
+	runGit(t, clone, "push", "origin", "v1.0.0")
+
+	if code, _, errb := runCLI(t, clone, "tag", "rm", "--remote", "v1.0.0", "origin"); code != 0 {
+		t.Fatalf("tag rm --remote exit = %d (stderr: %s)", code, errb)
+	}
+	if out := runGit(t, origin, "tag", "-l", "v1.0.0"); strings.TrimSpace(out) != "" {
+		t.Fatalf("origin still has tag v1.0.0: %q", out)
+	}
+}
+
+func TestTagRmLocalStillLocalOnly(t *testing.T) {
+	clone := cloneWithRemoteFoo(t)
+	origin := runGit(t, clone, "config", "--get", "remote.origin.url")
+	runGit(t, clone, "tag", "v1.0.0")
+	runGit(t, clone, "push", "origin", "v1.0.0")
+
+	if code, _, errb := runCLI(t, clone, "tag", "rm", "v1.0.0"); code != 0 {
+		t.Fatalf("tag rm exit = %d (stderr: %s)", code, errb)
+	}
+	// local gone, origin untouched
+	if out := runGit(t, clone, "tag", "-l", "v1.0.0"); strings.TrimSpace(out) != "" {
+		t.Fatalf("local tag v1.0.0 not deleted: %q", out)
+	}
+	if out := runGit(t, origin, "tag", "-l", "v1.0.0"); strings.TrimSpace(out) == "" {
+		t.Fatal("local rm must not touch the origin tag")
+	}
+}
