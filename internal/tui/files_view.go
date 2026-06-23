@@ -52,6 +52,9 @@ func (m Model) closeFilesView() Model {
 // complete consistent set from a clean slate (clears any prior compare/stash/
 // fullTree/preview state). Opens on the commit-list side (treeFocused=false).
 func (m Model) openChangedFiles(c model.Commit) (Model, tea.Cmd) {
+	if m.filesView == nil { // fresh open: remember the source panel for esc/l to restore
+		m.filesReturnFocus = m.focus
+	}
 	m = m.closeFilesView()
 	m.filesView = &contentPopup{lines: []contentLine{{text: "(loading…)"}}}
 	m.filesTitle = "Files " + shortHash(c.Hash) + " " + c.Subject
@@ -64,6 +67,9 @@ func (m Model) openChangedFiles(c model.Commit) (Model, tea.Cmd) {
 // openStashFiles opens a stash's files (mode=Stash) from a clean slate. Opens on
 // the stash-list side (treeFocused=false), like the commit files view.
 func (m Model) openStashFiles(ref, subject string) (Model, tea.Cmd) {
+	if m.filesView == nil { // fresh open: remember the source panel for esc/l to restore
+		m.filesReturnFocus = m.focus
+	}
 	m = m.closeFilesView()
 	m.filesView = &contentPopup{lines: []contentLine{{text: "(loading…)"}}}
 	m.filesTitle = "Files " + ref + " " + subject
@@ -229,6 +235,9 @@ type compareFilesMsg struct {
 // (left = older, right = newer), e.g. a commit vs the working tree. The proven
 // single-commit path is untouched; this is a parallel mode (filesModeCompare).
 func (m Model) openCompareFiles(left, right model.Endpoint) (Model, tea.Cmd) {
+	if m.filesView == nil { // fresh open: remember the source panel for esc/l to restore
+		m.filesReturnFocus = m.focus
+	}
 	m = m.closeFilesView() // clean slate: clears any prior changed/stash/fullTree/preview state
 	m.filesView = &contentPopup{lines: []contentLine{{text: "(loading…)"}}}
 	m.filesTitle = left.Display() + " ↔ " + right.Display()
@@ -389,10 +398,14 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			p.sel = 0
 			return m, nil
 		}
+		ret := m.filesReturnFocus
 		m = m.closeFilesView()
+		m.focus = ret // return to the panel that opened the view (Tags/Reflog/Commits/…)
 		return m, nil
 	case "l":
+		ret := m.filesReturnFocus
 		m = m.closeFilesView()
+		m.focus = ret
 		return m, nil
 	case "/":
 		if m.filesPreview != nil { // no commit filter while the preview owns the right column

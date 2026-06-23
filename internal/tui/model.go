@@ -67,6 +67,7 @@ type Model struct {
 	filesRight        model.Endpoint // compare mode: newer side
 	compareTag        string         // gates stale compareFilesMsg results
 	filesStashTag     string         // when the files tree is showing a stash: its ref (gates stash-file loads)
+	filesReturnFocus  panel          // panel that opened the files view; esc/l restore focus here (the view itself runs on panelCommits)
 	filesTreeFocused  bool           // true = the tree side owns vertical movement (←/→/tab)
 	filesReadInflight bool           // a per-commit files-view CommitFiles read is outstanding; drop further nav reads until it lands (pure-drop pacing on large repos)
 	filesPreview      *contentPopup  // full-tree mode: read-only file content shown in the right column (nil = none)
