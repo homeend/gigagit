@@ -13,14 +13,12 @@ func TestCloseFilesViewZeroesEverything(t *testing.T) {
 	m.filesView = &contentPopup{}
 	m.filesTitle = "x"
 	m.filesHash = "abc"
-	m.filesCompare = true
 	m.filesLeft = model.Endpoint{Kind: model.EndpointCommit, Hash: "a"}
 	m.filesRight = model.Endpoint{Kind: model.EndpointWorkTree}
 	m.compareTag = "cmp:x"
 	m.filesStashTag = "stash@{0}"
 	m.filesTreeFocused = true
 	m.filesReadInflight = true
-	m.filesAllFiles = true
 	m.filesPreview = &contentPopup{}
 	m.filesPreviewTag = "p@h"
 	m.filesMode = filesModeFullTree
@@ -28,7 +26,7 @@ func TestCloseFilesViewZeroesEverything(t *testing.T) {
 	m = m.closeFilesView()
 
 	if m.filesView != nil || m.filesPreview != nil || m.filesTitle != "" ||
-		m.filesHash != "" || m.filesCompare || m.filesAllFiles || m.compareTag != "" ||
+		m.filesHash != "" || m.inCompareMode() || m.inFullTree() || m.compareTag != "" ||
 		m.filesStashTag != "" || m.filesTreeFocused || m.filesReadInflight ||
 		m.filesPreviewTag != "" || m.filesLeft != (model.Endpoint{}) ||
 		m.filesRight != (model.Endpoint{}) || m.filesMode != filesModeChanged {
@@ -39,7 +37,6 @@ func TestCloseFilesViewZeroesEverything(t *testing.T) {
 // Switching from full-tree-with-preview into compare drops the preview + full-tree.
 func TestOpenCompareDropsPreviewAndFullTree(t *testing.T) {
 	m := loadedModelLinearCommits(t, 2)
-	m.filesAllFiles = true
 	m.filesMode = filesModeFullTree
 	m.filesPreview = &contentPopup{}
 	m.filesPreviewTag = "p@h"
@@ -60,7 +57,6 @@ func TestToggleFullTreeDropsPreview(t *testing.T) {
 	m.filesView = &contentPopup{}
 	m.filesHash = "abc"
 	m.filesMode = filesModeFullTree
-	m.filesAllFiles = true
 	m.filesPreview = &contentPopup{}
 	m.filesPreviewTag = "p@h"
 

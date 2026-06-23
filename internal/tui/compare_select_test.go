@@ -148,7 +148,7 @@ func TestCompareSelectionRowRunsRealSquashDiff(t *testing.T) {
 	}
 	u, cmd := r.run(m)
 	mm := u.(Model)
-	if !mm.filesCompare {
+	if !mm.inCompareMode() {
 		t.Fatal("running must open compare mode")
 	}
 	// Drive the file list: the squash (c1^..c3 = c1,c2,c3) added file1/2/3.

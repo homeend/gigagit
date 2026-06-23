@@ -16,7 +16,7 @@ import (
 // row. Compare mode is skipped (two endpoints, no single commit), and a deleted
 // (D) row is skipped (the file has no content at this commit).
 func (m Model) viewFileRow() (actionRow, bool) {
-	if m.filesView == nil || m.filesCompare || !m.filesTreeFocused {
+	if m.filesView == nil || m.inCompareMode() || !m.filesTreeFocused {
 		return actionRow{}, false
 	}
 	vis := m.filesView.visible()
@@ -42,7 +42,7 @@ func (m Model) viewFileRow() (actionRow, bool) {
 // and open it in $EDITOR. Same gating as viewFileRow — tree side, a real file
 // row, not compare mode, and not a deleted (D) row.
 func (m Model) openExternalRow() (actionRow, bool) {
-	if m.filesView == nil || m.filesCompare || !m.filesTreeFocused {
+	if m.filesView == nil || m.inCompareMode() || !m.filesTreeFocused {
 		return actionRow{}, false
 	}
 	vis := m.filesView.visible()

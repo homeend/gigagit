@@ -38,9 +38,9 @@ func TestCompareModeMoveKeepsComparison(t *testing.T) {
 	u, _ := m.Update(keyMsg("down"))
 	mm := u.(Model)
 
-	if !mm.filesCompare || mm.compareTag != tagBefore || mm.filesHash != hashBefore {
+	if !mm.inCompareMode() || mm.compareTag != tagBefore || mm.filesHash != hashBefore {
 		t.Fatalf("down discarded the comparison: compare=%v tag=%q hash=%q",
-			mm.filesCompare, mm.compareTag, mm.filesHash)
+			mm.inCompareMode(), mm.compareTag, mm.filesHash)
 	}
 	if mm.sel[panelCommits] != selBefore {
 		t.Fatalf("down moved the commit selection (%d→%d) in compare mode", selBefore, mm.sel[panelCommits])
@@ -64,9 +64,9 @@ func TestCompareModeMouseScrollKeepsComparison(t *testing.T) {
 	u, _ := m.moveCommitUnderFilesView(1) // the mouse path
 	mm := u.(Model)
 
-	if !mm.filesCompare || mm.compareTag != tagBefore || mm.filesHash != hashBefore || mm.sel[panelCommits] != selBefore {
+	if !mm.inCompareMode() || mm.compareTag != tagBefore || mm.filesHash != hashBefore || mm.sel[panelCommits] != selBefore {
 		t.Fatalf("mouse-path move discarded the comparison: compare=%v tag=%q hash=%q sel=%d",
-			mm.filesCompare, mm.compareTag, mm.filesHash, mm.sel[panelCommits])
+			mm.inCompareMode(), mm.compareTag, mm.filesHash, mm.sel[panelCommits])
 	}
 }
 
@@ -98,7 +98,7 @@ func TestMarkTwoCommitsSelectThenCompare(t *testing.T) {
 	}
 	u, _ = r.run(m)
 	mm := u.(Model)
-	if mm.filesView == nil || !mm.filesCompare {
+	if mm.filesView == nil || !mm.inCompareMode() {
 		t.Fatal("Compare selection must open the compare files view")
 	}
 	// older (commits[1]) → newer (commits[0]).
@@ -132,7 +132,7 @@ func TestSelectCommitThenWorktreeCompares(t *testing.T) {
 	}
 	u, _ = r.run(m)
 	mm := u.(Model)
-	if mm.filesView == nil || !mm.filesCompare {
+	if mm.filesView == nil || !mm.inCompareMode() {
 		t.Fatal("Compare selection must open a compare")
 	}
 	// commit (older) → working tree (newer).

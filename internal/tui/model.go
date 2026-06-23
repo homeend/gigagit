@@ -63,14 +63,12 @@ type Model struct {
 	filesView         *contentPopup  // commit files tree replacing the left column; nil = closed
 	filesTitle        string         // "Files <short-hash> <subject>", updated with the content
 	filesHash         string         // commit the view wants; gates stale async results
-	filesCompare      bool           // true = compare mode (filesLeft/Right) vs legacy commit-vs-parent
 	filesLeft         model.Endpoint // compare mode: older side
 	filesRight        model.Endpoint // compare mode: newer side
 	compareTag        string         // gates stale compareFilesMsg results
 	filesStashTag     string         // when the files tree is showing a stash: its ref (gates stash-file loads)
 	filesTreeFocused  bool           // true = the tree side owns vertical movement (←/→/tab)
 	filesReadInflight bool           // a per-commit files-view CommitFiles read is outstanding; drop further nav reads until it lands (pure-drop pacing on large repos)
-	filesAllFiles     bool           // true = full-tree mode (every file at the commit, ls-tree) vs the changed set; toggled by `a`
 	filesPreview      *contentPopup  // full-tree mode: read-only file content shown in the right column (nil = none)
 	filesPreviewTag   string         // <path>@<hash>; gates stale ShowFile results for the preview
 
@@ -237,7 +235,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case treeFilesMsg:
 		m.filesReadInflight = false
-		if m.filesView == nil || !m.filesAllFiles || msg.hash != m.filesHash {
+		if m.filesView == nil || !m.inFullTree() || msg.hash != m.filesHash {
 			return m, nil // view closed, switched back to changed files, or stale
 		}
 		if msg.err != nil {
@@ -263,7 +261,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.filesPreview.sel = 0
 		return m, nil
 	case compareFilesMsg:
-		if m.filesView == nil || !m.filesCompare || msg.tag != m.compareTag {
+		if m.filesView == nil || !m.inCompareMode() || msg.tag != m.compareTag {
 			return m, nil // stale or closed
 		}
 		if msg.err != nil {

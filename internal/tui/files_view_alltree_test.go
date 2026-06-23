@@ -41,11 +41,11 @@ func feedFilesView(t *testing.T, m Model, key string) (Model, tea.Cmd) {
 
 func TestFilesViewAToggleLoadsFullTree(t *testing.T) {
 	m := openFilesView(t, allFilesModel()) // changed-files mode
-	if m.filesAllFiles {
+	if m.inFullTree() {
 		t.Fatal("files view should open in changed-files mode")
 	}
 	m, cmd := feedFilesView(t, m, "a")
-	if !m.filesAllFiles {
+	if !m.inFullTree() {
 		t.Fatal("a should switch to full-tree mode")
 	}
 	if cmd == nil {
@@ -68,7 +68,7 @@ func TestFilesViewAToggleBackToChanged(t *testing.T) {
 	updated, _ := m.Update(cmd())
 	m = updated.(Model)
 	m, cmd = feedFilesView(t, m, "a") // → back to changed
-	if m.filesAllFiles {
+	if m.inFullTree() {
 		t.Fatal("second a should return to changed-files mode")
 	}
 	updated, _ = m.Update(cmd())
