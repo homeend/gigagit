@@ -19,7 +19,7 @@ func TestCommitCompareRowsPresentOnCommit(t *testing.T) {
 	// run the worktree row → opens compare mode
 	r, _ := m.commitCompareWorktreeRow()
 	u, cmd := r.run(m)
-	if !u.(Model).filesCompare {
+	if !u.(Model).inCompareMode() {
 		t.Error("running the row must enter compare mode")
 	}
 	if cmd == nil {

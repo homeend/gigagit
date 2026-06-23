@@ -13,6 +13,102 @@ import (
 	"github.com/gigagit/gg/internal/model"
 )
 
+// filesMode is the files view's source mode — exactly one is active while the
+// view is open. It is the authoritative discriminator; the inCompareMode/
+// inFullTree helpers read it (they replaced the old filesCompare/filesAllFiles
+// booleans). It is set only by the transition methods below.
+type filesMode int
+
+const (
+	filesModeChanged  filesMode = iota // a commit's changed files (vs parent)
+	filesModeFullTree                  // every file at the commit (ls-tree); `a` toggle
+	filesModeCompare                   // two endpoints (filesLeft/filesRight)
+	filesModeStash                     // a stash's files (filesStashTag)
+)
+
+func (m Model) inCompareMode() bool { return m.filesMode == filesModeCompare }
+func (m Model) inFullTree() bool    { return m.filesMode == filesModeFullTree }
+
+// closeFilesView closes the view and zeroes the ENTIRE cluster — the single
+// place that defines "no files view is open". Replaces the per-site partial
+// resets (esc, l, narrow-close, repo-switch) that each cleared a different subset.
+func (m Model) closeFilesView() Model {
+	m.filesMode = filesModeChanged
+	m.filesView = nil
+	m.filesTitle = ""
+	m.filesHash = ""
+	m.filesLeft = model.Endpoint{}
+	m.filesRight = model.Endpoint{}
+	m.compareTag = ""
+	m.filesStashTag = ""
+	m.filesTreeFocused = false
+	m.filesReadInflight = false
+	m.filesPreview = nil
+	m.filesPreviewTag = ""
+	return m
+}
+
+// openChangedFiles opens a commit's changed-file list (mode=Changed), setting the
+// complete consistent set from a clean slate (clears any prior compare/stash/
+// fullTree/preview state). Opens on the commit-list side (treeFocused=false).
+func (m Model) openChangedFiles(c model.Commit) (Model, tea.Cmd) {
+	m = m.closeFilesView()
+	m.filesView = &contentPopup{lines: []contentLine{{text: "(loading…)"}}}
+	m.filesTitle = "Files " + shortHash(c.Hash) + " " + c.Subject
+	m.filesHash = c.Hash
+	m.filesMode = filesModeChanged
+	m.filesReadInflight = true
+	return m, m.loadCommitFilesCmd(c)
+}
+
+// openStashFiles opens a stash's files (mode=Stash) from a clean slate. Opens on
+// the stash-list side (treeFocused=false), like the commit files view.
+func (m Model) openStashFiles(ref, subject string) (Model, tea.Cmd) {
+	m = m.closeFilesView()
+	m.filesView = &contentPopup{lines: []contentLine{{text: "(loading…)"}}}
+	m.filesTitle = "Files " + ref + " " + subject
+	m.filesStashTag = ref
+	m.filesMode = filesModeStash
+	return m, m.loadStashFilesCmd(ref)
+}
+
+// toggleFullTree flips between a commit's changed files and its full tree,
+// dropping any open preview and reloading. Caller guards that a commit files
+// view (not stash/compare) is open.
+func (m Model) toggleFullTree() (Model, tea.Cmd) {
+	if m.inFullTree() {
+		m.filesMode = filesModeChanged
+	} else {
+		m.filesMode = filesModeFullTree
+	}
+	m.filesPreview = nil
+	m.filesPreviewTag = ""
+	if p := m.filesView; p != nil {
+		p.lines = []contentLine{{text: "(loading…)"}}
+		p.sel = 0
+		p.query = ""
+	}
+	m.filesReadInflight = true
+	return m, m.loadFilesForCmd(m.filesViewCommit())
+}
+
+// focusTree / focusRight move focus within an open files view. focusRight is
+// inert in compare mode (no commit-list side to focus).
+func (m Model) focusTree() Model { m.filesTreeFocused = true; return m }
+func (m Model) focusRight() Model {
+	if !m.inCompareMode() {
+		m.filesTreeFocused = false
+	}
+	return m
+}
+
+// closePreview drops the right-column file preview and returns focus to the tree.
+func (m Model) closePreview() Model {
+	m.filesPreview = nil
+	m.filesPreviewTag = ""
+	return m.focusTree()
+}
+
 // commitFileLines renders a commit's changed files as content lines:
 // root-level files first (no heading), then one bold heading per directory
 // (its full path) with the directory's files indented beneath. Exactly one
@@ -101,10 +197,10 @@ func (m Model) loadTreeFilesCmd(c model.Commit) tea.Cmd {
 }
 
 // loadFilesForCmd loads the files-view content for commit c in the active mode:
-// the full tree (every file at the commit) when filesAllFiles, else the changed
+// the full tree (every file at the commit) in full-tree mode, else the changed
 // set. Used wherever the view (re)loads so the mode sticks across navigation.
 func (m Model) loadFilesForCmd(c model.Commit) tea.Cmd {
-	if m.filesAllFiles {
+	if m.inFullTree() {
 		return m.loadTreeFilesCmd(c)
 	}
 	return m.loadCommitFilesCmd(c)
@@ -131,15 +227,12 @@ type compareFilesMsg struct {
 
 // openCompareFiles opens the files view in compare mode for the endpoint pair
 // (left = older, right = newer), e.g. a commit vs the working tree. The proven
-// single-commit path is untouched; this is a parallel mode keyed off
-// filesCompare.
+// single-commit path is untouched; this is a parallel mode (filesModeCompare).
 func (m Model) openCompareFiles(left, right model.Endpoint) (Model, tea.Cmd) {
+	m = m.closeFilesView() // clean slate: clears any prior changed/stash/fullTree/preview state
 	m.filesView = &contentPopup{lines: []contentLine{{text: "(loading…)"}}}
 	m.filesTitle = left.Display() + " ↔ " + right.Display()
-	m.filesCompare = true
-	m.filesAllFiles = false // compare mode is its own thing
-	m.filesPreview = nil
-	m.filesPreviewTag = ""
+	m.filesMode = filesModeCompare
 	m.filesLeft = left
 	m.filesRight = right
 	// h/b (history/blame) context: prefer a commit side; "" means working tree.
@@ -233,17 +326,10 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		p.hscroll = 0
 		return m, nil
 	case "a": // toggle full-tree (every file at this commit) vs the changed set
-		if m.stashView != nil || m.filesCompare || m.filesHash == "" {
+		if m.stashView != nil || m.inCompareMode() || m.filesHash == "" {
 			return m, nil // only meaningful for a commit files view
 		}
-		m.filesAllFiles = !m.filesAllFiles
-		m.filesPreview = nil // the preview is a full-tree concept
-		m.filesPreviewTag = ""
-		p.lines = []contentLine{{text: "(loading…)"}}
-		p.sel = 0
-		p.query = ""
-		m.filesReadInflight = true
-		return m, m.loadFilesForCmd(m.filesViewCommit())
+		return m.toggleFullTree()
 	// The commit-list side IS the Commits panel selection (m.focus stays
 	// panelCommits), so the graph window keys mirror the base panel exactly
 	// (model.go). Only on the file-tree side do shift+arrows scroll the tree.
@@ -288,9 +374,7 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// ctrl+c (handled above) remains the universal quit.
 	case "esc":
 		if m.filesPreview != nil { // the preview is the topmost surface — close it first
-			m.filesPreview = nil
-			m.filesPreviewTag = ""
-			m.filesTreeFocused = true // return to the tree — the source of View file
+			m = m.closePreview() // returns focus to the tree (the source of View file)
 			return m, nil
 		}
 		if p.query != "" { // first esc clears the committed search
@@ -298,20 +382,10 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			p.sel = 0
 			return m, nil
 		}
-		m.filesView = nil
-		m.filesCompare = false
-		m.compareTag = ""
-		m.filesTreeFocused = false
-		m.filesAllFiles = false
+		m = m.closeFilesView()
 		return m, nil
 	case "l":
-		m.filesView = nil
-		m.filesCompare = false
-		m.compareTag = ""
-		m.filesTreeFocused = false
-		m.filesAllFiles = false
-		m.filesPreview = nil
-		m.filesPreviewTag = ""
+		m = m.closeFilesView()
 		return m, nil
 	case "/":
 		if m.filesPreview != nil { // no commit filter while the preview owns the right column
@@ -370,14 +444,16 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m.openDiffForFileLine(vis[p.sel])
 	case "left":
-		m.filesTreeFocused = true
+		m = m.focusTree()
 	case "right":
-		if !m.filesCompare { // compare mode has no commit-list side to focus
-			m.filesTreeFocused = false
-		}
+		m = m.focusRight() // inert in compare mode (no commit-list side)
 	case "tab", "shift+tab":
-		if !m.filesCompare {
-			m.filesTreeFocused = !m.filesTreeFocused
+		if !m.inCompareMode() {
+			if m.filesTreeFocused {
+				m = m.focusRight()
+			} else {
+				m = m.focusTree()
+			}
 		}
 	case "up", "k":
 		if m.filesTreeFocused {
@@ -436,7 +512,7 @@ func (m Model) openDiffForFileLine(l contentLine) (tea.Model, tea.Cmd) {
 	} else {
 		m = m.pushLayer(newV)
 	}
-	if m.filesAllFiles {
+	if m.inFullTree() {
 		// Full-tree mode: the file may be unchanged in this commit, so a
 		// parent-diff would be empty. Diff the commit's version against the
 		// working tree instead — useful for any file in the tree.
@@ -446,7 +522,7 @@ func (m Model) openDiffForFileLine(l contentLine) (tea.Model, tea.Cmd) {
 		m.diffTag = "cmp:" + left.CacheTag() + ":" + right.CacheTag() + ":" + l.path
 		return m, m.loadCompareDiffCmd(left, right, l)
 	}
-	if m.filesCompare {
+	if m.inCompareMode() {
 		m.diffLayer().context = m.filesTitle
 		m.diffTag = "cmp:" + m.filesLeft.CacheTag() + ":" + m.filesRight.CacheTag() + ":" + l.path
 		return m, m.loadCompareDiffCmd(m.filesLeft, m.filesRight, l)
@@ -482,7 +558,7 @@ func (m Model) moveCommitUnderFilesView(delta int) (tea.Model, tea.Cmd) {
 	// reassign filesHash and reload a plain commit view, discarding the
 	// comparison. Guard at the chokepoint so keyboard AND mouse (mouse.go calls
 	// this directly) are both locked out.
-	if m.filesCompare {
+	if m.inCompareMode() {
 		return m, nil
 	}
 	// Pure-drop: while a per-commit files read is outstanding, ignore the move
@@ -522,7 +598,7 @@ func (m Model) moveCommitUnderFilesView(delta int) (tea.Model, tea.Cmd) {
 // commits with the files view open, so the tree follows the narrowed selection
 // without the user having to press j/k.
 func (m Model) syncFilesViewToSelectedCommit() (tea.Model, tea.Cmd) {
-	if m.filesCompare {
+	if m.inCompareMode() {
 		return m, nil // never follow-reload in compare mode (input-agnostic lock)
 	}
 	bi, ok := m.backingIndex(panelCommits)

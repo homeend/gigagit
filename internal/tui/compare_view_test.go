@@ -15,7 +15,7 @@ func TestOpenCompareFilesPopulatesView(t *testing.T) {
 	right := model.Endpoint{Kind: model.EndpointWorkTree}
 
 	m2, cmd := m.openCompareFiles(left, right)
-	if !m2.filesCompare || m2.filesView == nil {
+	if !m2.inCompareMode() || m2.filesView == nil {
 		t.Fatal("compare mode + filesView must be set")
 	}
 	if m2.filesTitle != left.Display()+" ↔ "+right.Display() {

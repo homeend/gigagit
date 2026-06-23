@@ -116,7 +116,7 @@ func TestCommitBookmarkEnterComparesVsSelected(t *testing.T) {
 	if m.bookmarkSwitcher() != nil {
 		t.Fatal("enter should close the switcher (cleared layers)")
 	}
-	if !m.filesCompare || m.filesView == nil {
+	if !m.inCompareMode() || m.filesView == nil {
 		t.Fatal("enter on a commit bookmark should open the compare files view")
 	}
 	if m.filesLeft.Hash != base {

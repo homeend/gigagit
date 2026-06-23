@@ -59,17 +59,16 @@ type Model struct {
 
 	conflict domain.ConflictState // source of the current conflict (merge/rebase parties), for the notice
 
+	filesMode         filesMode      // authoritative source mode (changed/fullTree/compare/stash)
 	filesView         *contentPopup  // commit files tree replacing the left column; nil = closed
 	filesTitle        string         // "Files <short-hash> <subject>", updated with the content
 	filesHash         string         // commit the view wants; gates stale async results
-	filesCompare      bool           // true = compare mode (filesLeft/Right) vs legacy commit-vs-parent
 	filesLeft         model.Endpoint // compare mode: older side
 	filesRight        model.Endpoint // compare mode: newer side
 	compareTag        string         // gates stale compareFilesMsg results
 	filesStashTag     string         // when the files tree is showing a stash: its ref (gates stash-file loads)
 	filesTreeFocused  bool           // true = the tree side owns vertical movement (←/→/tab)
 	filesReadInflight bool           // a per-commit files-view CommitFiles read is outstanding; drop further nav reads until it lands (pure-drop pacing on large repos)
-	filesAllFiles     bool           // true = full-tree mode (every file at the commit, ls-tree) vs the changed set; toggled by `a`
 	filesPreview      *contentPopup  // full-tree mode: read-only file content shown in the right column (nil = none)
 	filesPreviewTag   string         // <path>@<hash>; gates stale ShowFile results for the preview
 
@@ -183,10 +182,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.filesView != nil && msg.Width > 0 && msg.Width < 40 {
 			// The narrow layout has no left column; without this the view
 			// would keep capturing keys while invisible.
-			m.filesView = nil
-			m.filesCompare = false
-			m.compareTag = ""
-			m.filesTreeFocused = false
+			m = m.closeFilesView()
 			m.statusMsg = "files view closed: terminal too narrow"
 		}
 		if dv := m.diffLayer(); dv != nil && msg.Width > 0 {
@@ -239,7 +235,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case treeFilesMsg:
 		m.filesReadInflight = false
-		if m.filesView == nil || !m.filesAllFiles || msg.hash != m.filesHash {
+		if m.filesView == nil || !m.inFullTree() || msg.hash != m.filesHash {
 			return m, nil // view closed, switched back to changed files, or stale
 		}
 		if msg.err != nil {
@@ -265,7 +261,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.filesPreview.sel = 0
 		return m, nil
 	case compareFilesMsg:
-		if m.filesView == nil || !m.filesCompare || msg.tag != m.compareTag {
+		if m.filesView == nil || !m.inCompareMode() || msg.tag != m.compareTag {
 			return m, nil // stale or closed
 		}
 		if msg.err != nil {
@@ -1053,15 +1049,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, nil
 				}
 				c := m.commits[bi]
-				m.filesView = &contentPopup{lines: []contentLine{{text: "(loading…)"}}}
-				m.filesTitle = "Files " + shortHash(c.Hash) + " " + c.Subject
-				m.filesHash = c.Hash
-				m.filesTreeFocused = false // always open on the commit list
-				m.filesAllFiles = false    // open in changed-files mode; `a` toggles
-				m.filesPreview = nil
-				m.filesPreviewTag = ""
-				m.filesReadInflight = true
-				return m, m.loadCommitFilesCmd(c)
+				return m.openChangedFiles(c) // opens on the commit-list side
 			}
 			if m.canShowReflogFiles() {
 				return m.openReflogFiles()
@@ -1749,15 +1737,10 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	// Drop selections from the old repo so the highlight doesn't land on a
 	// surprising row in the newly-loaded panels.
 	m.sel = map[panel]int{}
-	m.mark = nil      // a mark from the old repo must not re-attach by name in the new one
-	m.fileMarks = nil // likewise drop Status file-marks from the old repo
-	m.stashView = nil // the new repo has its own stashes
-	m.filesView = nil // the new repo has a different commit list
-	m.filesStashTag = ""
-	m.filesHash = ""
-	m.filesCompare = false
-	m.compareTag = ""
-	m.filesTreeFocused = false
+	m.mark = nil                        // a mark from the old repo must not re-attach by name in the new one
+	m.fileMarks = nil                   // likewise drop Status file-marks from the old repo
+	m.stashView = nil                   // the new repo has its own stashes
+	m = m.closeFilesView()              // the new repo has a different commit list
 	if dv := m.diffLayer(); dv != nil { // the new repo invalidates any open diff
 		m = m.removeLayer(dv)
 	}

@@ -75,7 +75,7 @@ func TestViewFileRowGating(t *testing.T) {
 	}
 	// Changed-files mode: now ALSO offered (shows the file's content at the commit).
 	cf := m
-	cf.filesAllFiles = false
+	cf.filesMode = filesModeChanged
 	if !hasRow(cf, "view-file") {
 		t.Error("View file should be offered in changed-files mode too")
 	}
@@ -95,7 +95,7 @@ func TestOpenExternalRowGating(t *testing.T) {
 		t.Fatal("Open in external editor should be offered on a file (tree side)")
 	}
 	cf := m
-	cf.filesAllFiles = false
+	cf.filesMode = filesModeChanged
 	if !hasRow(cf, "open-external") {
 		t.Error("Open in external editor should be offered in changed-files mode too")
 	}
@@ -111,7 +111,7 @@ func TestOpenExternalRowGating(t *testing.T) {
 		t.Error("Open in external editor must not be offered on a deleted (D) row")
 	}
 	cmp := m
-	cmp.filesCompare = true
+	cmp.filesMode = filesModeCompare
 	if _, ok := cmp.openExternalRow(); ok {
 		t.Error("Open in external editor must not be offered in compare mode")
 	}
@@ -146,7 +146,7 @@ func TestOpenExternalRowResolvesCommitContent(t *testing.T) {
 // A deleted file has no content at the commit, so View file must not be offered.
 func TestViewFileExcludesDeleted(t *testing.T) {
 	m := fullTreeTreeSide(t)
-	m.filesAllFiles = false
+	m.filesMode = filesModeChanged
 	m.filesView = &contentPopup{lines: []contentLine{{text: "D  gone.go", path: "gone.go", status: "D"}}}
 	m.filesView.sel = 0
 	if _, ok := m.viewFileRow(); ok {
@@ -157,7 +157,7 @@ func TestViewFileExcludesDeleted(t *testing.T) {
 // Compare mode has two endpoints, not a single commit, so View file is skipped.
 func TestViewFileExcludesCompareMode(t *testing.T) {
 	m := fullTreeTreeSide(t)
-	m.filesCompare = true
+	m.filesMode = filesModeCompare
 	if _, ok := m.viewFileRow(); ok {
 		t.Error("View file must not be offered in compare mode")
 	}
@@ -167,7 +167,7 @@ func TestViewFileExcludesCompareMode(t *testing.T) {
 // full tree — it opens the right-column preview with the file's content.
 func TestViewFileChangedModeOpensPreview(t *testing.T) {
 	m := openFilesView(t, previewModel()) // changed-files mode (no `a` toggle)
-	if m.filesAllFiles {
+	if m.inFullTree() {
 		t.Fatal("expected changed-files mode")
 	}
 	m.filesTreeFocused = true

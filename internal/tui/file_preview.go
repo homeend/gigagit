@@ -16,7 +16,7 @@ import (
 // row. Compare mode is skipped (two endpoints, no single commit), and a deleted
 // (D) row is skipped (the file has no content at this commit).
 func (m Model) viewFileRow() (actionRow, bool) {
-	if m.filesView == nil || m.filesCompare || !m.filesTreeFocused {
+	if m.filesView == nil || m.inCompareMode() || !m.filesTreeFocused {
 		return actionRow{}, false
 	}
 	vis := m.filesView.visible()
@@ -32,7 +32,7 @@ func (m Model) viewFileRow() (actionRow, bool) {
 		id:    "view-file",
 		label: "View file (content at this commit)",
 		run: func(m Model) (tea.Model, tea.Cmd) {
-			return m.openFilePreview(hash, path)
+			return m.openPreview(hash, path)
 		},
 	}, true
 }
@@ -42,7 +42,7 @@ func (m Model) viewFileRow() (actionRow, bool) {
 // and open it in $EDITOR. Same gating as viewFileRow — tree side, a real file
 // row, not compare mode, and not a deleted (D) row.
 func (m Model) openExternalRow() (actionRow, bool) {
-	if m.filesView == nil || m.filesCompare || !m.filesTreeFocused {
+	if m.filesView == nil || m.inCompareMode() || !m.filesTreeFocused {
 		return actionRow{}, false
 	}
 	vis := m.filesView.visible()
@@ -65,9 +65,10 @@ func (m Model) openExternalRow() (actionRow, bool) {
 	}, true
 }
 
-// openFilePreview opens the right-column content preview for path at hash and
-// focuses it so the cursor scrolls the content immediately.
-func (m Model) openFilePreview(hash, path string) (Model, tea.Cmd) {
+// openPreview opens the right-column content preview for path at hash and
+// focuses it so the cursor scrolls the content immediately. A files-view
+// transition (paired with closePreview).
+func (m Model) openPreview(hash, path string) (Model, tea.Cmd) {
 	m.filesPreview = &contentPopup{title: path, lines: []contentLine{{text: "(loading…)"}}}
 	m.filesPreviewTag = path + "@" + hash
 	m.filesTreeFocused = false // land in the preview to scroll
