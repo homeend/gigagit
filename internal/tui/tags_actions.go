@@ -49,6 +49,50 @@ func (m Model) tagCheckoutRow() (actionRow, bool) {
 	}, true
 }
 
+// tagMergeRow offers "Merge <tag> into current". SmartMerge with an empty Target
+// defaults to the current branch; conflicts/dirty trees are handled by
+// SmartMerge's Decider ladder (mapped to the TUI modal). Hidden on detached HEAD.
+func (m Model) tagMergeRow() (actionRow, bool) {
+	if m.focus != panelTags || !m.opsIdle() {
+		return actionRow{}, false
+	}
+	bi, ok := m.backingIndex(panelTags)
+	if !ok || bi < 0 || bi >= len(m.tags) {
+		return actionRow{}, false
+	}
+	cur, attached := m.remoteCurrentBranch()
+	if !attached {
+		return actionRow{}, false
+	}
+	name := m.tags[bi].Name
+	return actionRow{
+		id:    "tag-merge",
+		label: "Merge " + name + " into current (" + cur + ")",
+		run:   func(m Model) (tea.Model, tea.Cmd) { return m.startOp(engine.SmartMerge{Source: name}) },
+	}, true
+}
+
+// tagRebaseRow offers "Rebase current onto <tag>". Hidden on detached HEAD.
+func (m Model) tagRebaseRow() (actionRow, bool) {
+	if m.focus != panelTags || !m.opsIdle() {
+		return actionRow{}, false
+	}
+	bi, ok := m.backingIndex(panelTags)
+	if !ok || bi < 0 || bi >= len(m.tags) {
+		return actionRow{}, false
+	}
+	cur, attached := m.remoteCurrentBranch()
+	if !attached {
+		return actionRow{}, false
+	}
+	name := m.tags[bi].Name
+	return actionRow{
+		id:    "tag-rebase",
+		label: "Rebase current (" + cur + ") onto " + name,
+		run:   func(m Model) (tea.Model, tea.Cmd) { return m.startOp(engine.SmartRebase{Onto: name}) },
+	}, true
+}
+
 // tagPushRow offers "Push tag" on the Tags panel. The engine resolves the remote
 // (auto when one is configured, else a modal pick), so the row just starts the op.
 func (m Model) tagPushRow() (actionRow, bool) {

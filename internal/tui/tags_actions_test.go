@@ -5,8 +5,56 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gigagit/gg/internal/domain"
+	"github.com/gigagit/gg/internal/git"
+	"github.com/gigagit/gg/internal/gitexec"
 	"github.com/gigagit/gg/internal/model"
 )
+
+func TestTagsCopyRows(t *testing.T) {
+	m := footerModel()
+	m.focus = panelTags
+	m.tags = []model.Tag{{Name: "v1.0.0", Target: "abc1234", Annotated: true}}
+	rows := m.contextCopyRows()
+	if r, ok := findRow(rows, "copy-tag-name"); !ok || r.copyText != "v1.0.0" {
+		t.Fatalf("missing copy-tag-name=v1.0.0; rows=%v", rows)
+	}
+	if r, ok := findRow(rows, "copy-commit-id"); !ok || r.copyText != "abc1234" {
+		t.Fatalf("missing copy-commit-id=abc1234; rows=%v", rows)
+	}
+	if _, ok := findRow(rows, "copy-commit-sha"); !ok {
+		t.Fatalf("missing copy-commit-sha; rows=%v", rows)
+	}
+}
+
+func TestTagsCopyShaResolvesTarget(t *testing.T) {
+	fr := gitexec.NewFakeRunner()
+	fr.SetResponse("git rev-parse", gitexec.Result{Stdout: "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\n"})
+	m := footerModel()
+	m.focus = panelTags
+	m.tags = []model.Tag{{Name: "v1.0.0", Target: "abc1234", Annotated: true}}
+	m.svc = domain.New(&git.Repo{Runner: fr})
+	rows := m.contextCopyRows()
+	row, ok := findRow(rows, "copy-commit-sha")
+	if !ok {
+		t.Fatal("missing copy-commit-sha")
+	}
+	if _, cmd := row.run(m); cmd == nil {
+		t.Fatal("copy-commit-sha run returned nil cmd")
+	}
+	// The headline correctness point: rev-parse must resolve the tag's TARGET
+	// commit, not the tag name (rev-parse <annotated-tag> would give the tag
+	// object, not the commit).
+	var resolved string
+	for _, c := range fr.Calls {
+		if c.Name == "git rev-parse" {
+			resolved = c.Argv[len(c.Argv)-1]
+		}
+	}
+	if resolved != "abc1234" {
+		t.Fatalf("rev-parse resolved %q, want tag.Target abc1234 (not the tag name)", resolved)
+	}
+}
 
 func TestEnterOnTagJumpsToCommit(t *testing.T) {
 	m := footerModel()
@@ -234,5 +282,53 @@ func TestTagPushRowGating(t *testing.T) {
 	m.sel[panelTags] = 0
 	if _, ok := m.tagPushRow(); !ok {
 		t.Fatal("push row must appear on the Tags panel")
+	}
+}
+
+func tagsMergeModel() Model {
+	m := footerModel()
+	m.focus = panelTags
+	m.tags = []model.Tag{{Name: "v1.0.0", Target: "abc1234"}}
+	m.svc = domain.New(&git.Repo{Runner: gitexec.NewFakeRunner()})
+	m.status.Branch = "main"
+	return m
+}
+
+func TestTagMergeRebaseRowsPresent(t *testing.T) {
+	m := tagsMergeModel()
+	got := ids(availableActions(m))
+	if !got["tag-merge"] || !got["tag-rebase"] {
+		t.Fatalf("expected tag-merge + tag-rebase; got %v", got)
+	}
+}
+
+func TestTagMergeRebaseHiddenOnDetachedHEAD(t *testing.T) {
+	m := tagsMergeModel()
+	m.status.Branch = "" // detached
+	got := ids(availableActions(m))
+	if got["tag-merge"] || got["tag-rebase"] {
+		t.Fatalf("merge/rebase must be hidden on detached HEAD; got %v", got)
+	}
+}
+
+func TestTagMergeRowDispatches(t *testing.T) {
+	m := tagsMergeModel()
+	row, ok := m.tagMergeRow()
+	if !ok {
+		t.Fatal("tagMergeRow not available")
+	}
+	if _, cmd := row.run(m); cmd == nil {
+		t.Fatal("merge row run returned nil cmd")
+	}
+}
+
+func TestTagRebaseRowDispatches(t *testing.T) {
+	m := tagsMergeModel()
+	row, ok := m.tagRebaseRow()
+	if !ok {
+		t.Fatal("tagRebaseRow not available")
+	}
+	if _, cmd := row.run(m); cmd == nil {
+		t.Fatal("rebase row run returned nil cmd")
 	}
 }

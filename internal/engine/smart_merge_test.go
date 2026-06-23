@@ -56,7 +56,7 @@ func TestSmartMergeGuards(t *testing.T) {
 	}{
 		{"empty source", SmartMerge{}, "Source is required"},
 		{"same branch", SmartMerge{Source: "main", Target: "main"}, "source and target"},
-		{"missing source", SmartMerge{Source: "nope"}, "no such branch: nope"},
+		{"missing source", SmartMerge{Source: "nope"}, "no such commit: nope"},
 		{"missing target", SmartMerge{Source: "feat", Target: "nope"}, "no such branch: nope"},
 	}
 	for _, tc := range cases {
@@ -208,5 +208,25 @@ func TestSmartMergeConflictUndecidedLeavesMergeState(t *testing.T) {
 	// The decision fires only after the conflict exists: state stays.
 	if gitOut(t, dir, "rev-parse", "-q", "--verify", "MERGE_HEAD") == "" {
 		t.Fatal("expected merge still in progress")
+	}
+}
+
+// A tag (a non-branch ref) is a valid merge Source — git merge <tag> works, and
+// SmartMerge must not reject it as "no such branch". Also covers remote-tracking
+// refs (origin/x), which fail the same local-branch check.
+func TestSmartMergeSourceTag(t *testing.T) {
+	dir, repo := newRepo(t)
+	branchWithCommit(t, dir, "feat", "feat.txt")
+	gitE(t, dir, "tag", "v1", "feat") // tag the feature commit; HEAD stays on main
+
+	res, err := SmartMerge{Source: "v1"}.Run(context.Background(), OpDeps{Repo: repo})
+	if err != nil {
+		t.Fatalf("merge tag v1 into main: %v", err)
+	}
+	if !res.Changed {
+		t.Fatal("expected the merge to change main")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "feat.txt")); err != nil {
+		t.Fatalf("feat.txt missing after merging tag v1: %v", err)
 	}
 }

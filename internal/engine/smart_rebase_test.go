@@ -22,7 +22,7 @@ func TestSmartRebaseGuards(t *testing.T) {
 		{"empty onto", SmartRebase{Branch: "feat"}, "Onto is required"},
 		{"same branch", SmartRebase{Branch: "main", Onto: "main"}, "branch and base"},
 		{"missing branch", SmartRebase{Branch: "nope", Onto: "main"}, "no such branch: nope"},
-		{"missing onto", SmartRebase{Branch: "feat", Onto: "nope"}, "no such branch: nope"},
+		{"missing onto", SmartRebase{Branch: "feat", Onto: "nope"}, "no such commit: nope"},
 	}
 	for _, tc := range cases {
 		_, err := tc.op.Run(context.Background(), OpDeps{Repo: repo})
@@ -199,4 +199,21 @@ func TestSmartRebaseConflictUndecidedLeavesRebaseState(t *testing.T) {
 		t.Fatal("expected rebase still in progress")
 	}
 	_ = dir
+}
+
+// A tag (a non-branch ref) is a valid rebase Onto — like InteractiveRebase,
+// SmartRebase must accept any commit-ish, not only local branches. Also covers
+// remote-tracking refs (origin/x).
+func TestSmartRebaseOntoTag(t *testing.T) {
+	dir, repo := newRepo(t)
+	gitE(t, dir, "tag", "base") // tag main's initial commit
+	os.WriteFile(filepath.Join(dir, "m.txt"), []byte("m\n"), 0o644)
+	gitE(t, dir, "add", ".")
+	gitE(t, dir, "commit", "-m", "main work")
+
+	// Rebasing main onto its ancestor tag is a no-op rebase; the point is that the
+	// tag is ACCEPTED as Onto (no "no such branch" error).
+	if _, err := (SmartRebase{Onto: "base"}).Run(context.Background(), OpDeps{Repo: repo}); err != nil {
+		t.Fatalf("rebase main onto tag base: %v", err)
+	}
 }

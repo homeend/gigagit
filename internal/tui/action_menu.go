@@ -245,6 +245,12 @@ func (m Model) appendCommitContextRows(out []actionRow) []actionRow {
 	if r, ok := m.tagCheckoutRow(); ok {
 		out = append(out, r)
 	}
+	if r, ok := m.tagMergeRow(); ok {
+		out = append(out, r)
+	}
+	if r, ok := m.tagRebaseRow(); ok {
+		out = append(out, r)
+	}
 	if r, ok := m.tagPushRow(); ok {
 		out = append(out, r)
 	}
@@ -349,6 +355,15 @@ func (m Model) contextCopyRows() []actionRow {
 				m.copyRow("copy-branch-name", "Copy branch name", "Copied branch name "+rb.Name, rb.Name),
 				m.copyRow("copy-commit-id", "Copy commit id", "Copied commit id "+shortHash(rb.Hash), rb.Hash),
 				m.copyShaRow(rb.Name, rb.Hash),
+			}
+		}
+	case m.focus == panelTags:
+		if bi, ok := m.backingIndex(panelTags); ok && bi >= 0 && bi < len(m.tags) {
+			tg := m.tags[bi]
+			return []actionRow{
+				m.copyRow("copy-tag-name", "Copy tag name", "Copied tag name "+tg.Name, tg.Name),
+				m.copyRow("copy-commit-id", "Copy commit id", "Copied commit id "+shortHash(tg.Target), tg.Target),
+				m.copyShaRow(tg.Target, tg.Target),
 			}
 		}
 	}

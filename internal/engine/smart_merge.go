@@ -44,10 +44,17 @@ func (op SmartMerge) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	for _, b := range branches {
 		have[b.Name] = true
 	}
-	for _, name := range []string{op.Source, target} {
-		if !have[name] {
-			return Result{}, fmt.Errorf("smart merge: no such branch: %s", name)
-		}
+	// Target must be a local branch (we end up checked out on it). Source may be a
+	// branch OR any resolvable commit-ish — a tag, a remote-tracking ref, a SHA —
+	// since `git merge <source>` accepts any of them (mirrors InteractiveRebase's
+	// commit-ish Onto).
+	if !have[target] {
+		return Result{}, fmt.Errorf("smart merge: no such branch: %s", target)
+	}
+	if ok, err := deps.Repo.CommitExists(ctx, op.Source); err != nil {
+		return Result{}, err
+	} else if !ok {
+		return Result{}, fmt.Errorf("smart merge: no such commit: %s", op.Source)
 	}
 
 	// Rung 1: Target is checked out right here.
