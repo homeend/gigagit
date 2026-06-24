@@ -36,6 +36,22 @@ func TestCommitFilterPopupApplySetsFilter(t *testing.T) {
 	}
 }
 
+func TestCommitFilterPopupCtrlRClearsAllFilters(t *testing.T) {
+	m := loadedModel(t)
+	m.commitFilter = commitFilterFields{Paths: []string{"sub"}, Author: "alice", Grep: "race"}
+	p := newCommitFilterPopup(m.commitFilter)
+	m = m.pushLayer(p)
+	// ctrl+r removes every filter axis at once and closes the popup.
+	m2, _ := m.Update(keyMsg("ctrl+r"))
+	mm := m2.(Model)
+	if mm.commitFilter.filtered() {
+		t.Fatalf("ctrl+r should remove all filters, got %+v", mm.commitFilter)
+	}
+	if _, ok := mm.topLayer().(*commitFilterPopup); ok {
+		t.Fatal("ctrl+r should pop the popup")
+	}
+}
+
 func TestCommitFilterPopupEscCancels(t *testing.T) {
 	m := loadedModel(t)
 	m = m.pushLayer(&commitFilterPopup{})

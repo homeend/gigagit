@@ -52,6 +52,11 @@ func (p *commitFilterPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		m = m.popLayer()
 		m.commitFilter = p.collect()
 		return m.startFeedReload()
+	case "ctrl+r":
+		// Explicitly remove every filter axis at once and restore the full feed.
+		m = m.popLayer()
+		m.commitFilter = commitFilterFields{}
+		return m.startFeedReload()
 	case "tab", "down":
 		p.focus = (p.focus + 1) % cfFieldCount
 		return m, nil
@@ -91,7 +96,7 @@ func (p *commitFilterPopup) render(m Model, below string) string {
 		b.WriteString(viewField(cfLabels[i], p.fields[i], i == p.focus, cw))
 		b.WriteString("\n")
 	}
-	b.WriteString("\n[enter] apply  [tab] next  [esc] cancel")
+	b.WriteString("\n[enter] apply  [tab] next  [ctrl+r] clear all  [esc] cancel")
 	box := modalStyle.Width(inner).Render(b.String()) + "\n"
 	return overlayCenter(clipToHeight(below, h), box, w, h)
 }

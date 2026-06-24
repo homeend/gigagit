@@ -124,7 +124,7 @@ func helpContent() []contentLine {
 		r("", "uncommitted work shows as ◇ Working tree / ◇ Staged rows atop the graph (only when dirty); l/enter diffs them (working tree vs index, index vs HEAD); commit-only actions are unavailable on them"),
 		r("", "the ◇ Working tree / ◇ Staged rows can be added (m) to the ◉ compare selection like commits — Compare selection then diffs a commit against your working copy or index"),
 		r("@", "highlight search: keep all commits visible, dim non-matches (graph stays); ctrl+↑/↓ jump prev/next match; enter keeps, esc clears"),
-		r("\\", "filter commits by path / author / message / date (popup; empty fields clear that axis); graph hides while filtered"),
+		r("\\", "filter commits by path / author / message / date (popup; empty fields clear that axis, ctrl+r clears all); graph hides while filtered"),
 		r("m", "add / remove the selected commit (or ◇ Working tree / ◇ Staged row) to the ◉ compare selection; the . menu then drives Compare selection or Squash"),
 		r(".", "view message / open message in editor / rename commit / copy commit id / Create branch here / Create worktree here / Cherry-pick here / Revert this commit / Reset to this commit (soft|mixed|hard) / Compare against working tree / Compare against staged / Add to compare selection / Compare selection / Squash N commits / Show all branches when soloed / Show as list|graph (.-menu)"),
 		r("", "Compare against working tree / Compare against staged (.-menu): open the files view as a whole-tree diff of this commit vs your working copy / the index; enter on a file diffs that path"),
