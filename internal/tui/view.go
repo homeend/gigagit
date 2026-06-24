@@ -1010,9 +1010,9 @@ func (m Model) commitIdentRowAt(i, w int, full bool) string {
 }
 
 // commitGraphOn reports whether the graph is coherent to draw: the Commits panel
-// must be in natural feed order (no filter, default sort) so rows are contiguous
-// and the lane topology stays valid (and the glyphs stay out of the filter
-// haystack).
+// must be in natural feed order — no in-memory `/` filter, default sort, and no
+// commit-scope path/author/date filter — so rows are contiguous and lane topology
+// stays valid (and glyphs stay out of the filter haystack).
 func (m Model) commitGraphOn() bool {
 	return !m.filterActive(panelCommits) && m.sortModes[panelCommits] == sortDefault &&
 		!m.commitFilter.filtered()

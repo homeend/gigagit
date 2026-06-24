@@ -4,7 +4,6 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
 type cfField int
@@ -99,31 +98,3 @@ func (p *commitFilterPopup) render(m Model, below string) string {
 
 // Ensure commitFilterPopup satisfies the layer interface at compile time.
 var _ layer = (*commitFilterPopup)(nil)
-
-// commitFilterTitle returns a short header annotation for the Commits panel
-// when a filter is active.
-func commitFilterTitle(f commitFilterFields) string {
-	if !f.filtered() {
-		return ""
-	}
-	var parts []string
-	if len(f.Paths) > 0 {
-		parts = append(parts, "path:"+f.Paths[0])
-	}
-	if f.Author != "" {
-		parts = append(parts, "author:"+f.Author)
-	}
-	if f.Grep != "" {
-		parts = append(parts, "msg:"+f.Grep)
-	}
-	if f.Since != "" {
-		parts = append(parts, "since:"+f.Since)
-	}
-	if f.Until != "" {
-		parts = append(parts, "until:"+f.Until)
-	}
-	return strings.Join(parts, " ")
-}
-
-// dimStyle renders text in a muted color for the filter annotation.
-var dimStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
