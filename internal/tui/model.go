@@ -1039,6 +1039,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.highlightTyping = true
 				m = m.recallReset()
 			}
+		case "\\":
+			if !m.running && !m.loading && m.focus == panelCommits {
+				m = m.pushLayer(newCommitFilterPopup(m.commitFilter))
+				return m, nil
+			}
 		case "ctrl+up":
 			if m.highlightActive() && m.focus == panelCommits {
 				if i, ok := m.scanHighlightMatch(m.sel[panelCommits], -1, false); ok {
