@@ -215,7 +215,23 @@ func TestCommitIdentTokenIncludesMarkerPrefix(t *testing.T) {
 		t.Fatalf("token width = %d, want %d", lipgloss.Width(tok), want)
 	}
 }
+
+// Single-marker rows must be the SAME width as two-marker rows, else rows with
+// one marker misalign against rows with two. Pins the left-pack field at 2 cells.
+func TestCommitIdentTokenSingleMarkerWidth(t *testing.T) {
+	for _, id := range []commitIdent{
+		{name: "main", tip: true},       // ■  (local only)
+		{name: "main", remoteTip: true}, // ▲  (remote only)
+	} {
+		tok, _ := id.token(commitIdentW)
+		if want := commitMarkerW + commitIdentW; lipgloss.Width(tok) != want {
+			t.Fatalf("token %q width = %d, want %d", tok, lipgloss.Width(tok), want)
+		}
+	}
+}
 ```
+
+Also update the existing `TestCommitIdentTokenTrimsLongName` in this file: its width assertion `lipgloss.Width(tok) != commitIdentW` must become `!= commitMarkerW+commitIdentW` (the marker prefix now adds `commitMarkerW`). This test constructs `commitIdent` directly, so the A2 Step 9 grep won't surface it — fix it here.
 
 - [ ] **Step 2: Run tests to verify they fail**
 
@@ -687,6 +703,13 @@ Expected: PASS.
 
 The initial `loadCmd` walks the feed in parallel with the snapshot, so the first feed has no upstreams. When the snapshot's branches arrive and there ARE tracked upstreams, a feed reload must be issued exactly once. Append to `internal/tui/commit_scope_test.go`:
 
+Assert the reload-specific signal, NOT merely `cmd != nil` — the `dataLoadedMsg`
+handler may return a non-nil cmd for unrelated reasons, so `cmd != nil` would be a
+false positive. `startFeedReload` sets `m.commitsLoading = true`, so check that.
+Include the negative case (no tracked upstreams ⇒ the single fast initial walk is
+preserved, `commitsLoading` stays false) — that is exactly what the
+`len(feedUpstreams())>0` guard protects.
+
 ```go
 func TestDataLoadedTriggersUpstreamReload(t *testing.T) {
 	m := newTestModelForReload(t) // see note below
@@ -695,9 +718,21 @@ func TestDataLoadedTriggersUpstreamReload(t *testing.T) {
 		branches:       []model.Branch{{Name: "main", IsHead: true, Upstream: "origin/main"}},
 		remoteBranches: []model.RemoteBranch{{Name: "origin/main"}},
 	}
-	_, cmd := m.Update(msg)
-	if cmd == nil {
-		t.Fatal("expected a feed-reload cmd when tracked upstreams exist on initial load")
+	nm, _ := m.Update(msg)
+	if !nm.(Model).commitsLoading {
+		t.Fatal("expected a feed reload (commitsLoading=true) when tracked upstreams exist")
+	}
+}
+
+func TestDataLoadedNoReloadWithoutTrackedUpstreams(t *testing.T) {
+	m := newTestModelForReload(t)
+	msg := dataLoadedMsg{
+		gen:      m.loadGen,
+		branches: []model.Branch{{Name: "main", IsHead: true}}, // no upstream
+	}
+	nm, _ := m.Update(msg)
+	if nm.(Model).commitsLoading {
+		t.Fatal("no tracked upstreams must NOT trigger a reload (preserve the fast initial walk)")
 	}
 }
 ```
@@ -829,4 +864,6 @@ Tell the user the branch binary is at `<worktree>/gg` (absolute path) so they ca
 - **Spec coverage:** row format + marker semantics → A1/A2; "tracked = has a local copy" join → A1 (`tracked` map) + B2 (`feedUpstreams` filter); in-sync/ahead with no feed change → A2; behind/diverged via walking upstreams → B1+B2; always-on → B2 (`feedScope` + startup reload); no numbers / no CLI / commitgraph untouched → not implemented anywhere (by omission); `*` head + dim-lineage preserved → A1 keeps `label()`, A2 keeps dim for `!tip && !remoteTip`.
 - **Glyph width risk:** `■`/`▲` are East-Asian-ambiguous; `TestCommitIdentTokenIncludesMarkerPrefix` asserts the token width is exactly `commitMarkerW+commitIdentW`. If `lipgloss.Width` reports 2 for a glyph in the build environment, swap to a width-1 alternative (e.g. `▪`/`▴`) and keep the test as the guard.
 - **WIP pseudo-rows** (`Working tree`/`Staged`) are intentionally NOT given a marker prefix — they are not branch tips and already render without an identity token.
+- **Soloed-view edge (known, ship as-is):** `trackedUpstreams()` (Stage A marker detection) uses ALL `m.branches`, while `feedUpstreams()` (Stage B scope) is scope-aware. In a soloed view a `▲` can appear for a tracked remote whose branch is out of scope, if its ref happens to decorate a commit already in the walk. The marker is still accurate ("a tracked remote tip is here"); it is only mildly inconsistent with the scope. Acceptable.
+- **README:** glance at whether `README.md` documents the Commits panel; if it lists panel keys/legend, add the `■`/`▲` marker note there too (CLAUDE.md: update README when the user-facing surface changes). The agentskill bump is correctly skipped — no CLI surface changed.
 - **Type consistency:** `commitIdentOf(model.Commit, map[string]string)`, `commitIdent{tip, remoteTip, head, name, extra}`, `commitMarkerW`, `markers()`, `trackedUpstreams()`, `feedUpstreams()`, `feedScope()`, `LogScope{Branches, Upstreams}`, `scopeKey(LogScope)` are used consistently across tasks.
