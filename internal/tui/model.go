@@ -445,7 +445,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status = msg.status
 			m.conflict = msg.conflict
 			m.branches = msg.branches
-			m.remoteBranches = msg.remoteBranches
+			// Float remote branches that have a local counterpart to the top of
+			// the Remotes tab. Sort the slice itself (not just the rows) so the
+			// positional consumers — remoteRows, remoteBranchList, selectedRemote
+			// — all stay consistent.
+			m.remoteBranches = sortRemoteBranchesLocalFirst(msg.remoteBranches, msg.branches)
 			m.commits = msg.commits
 			m.commitsExhausted = msg.commitsExhausted
 			m = m.rebuildCommitGraph()

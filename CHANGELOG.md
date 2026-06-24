@@ -20,6 +20,17 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   re-walking from the top. Eager search: when a `/` filter or `@` highlight query
   isn't among the loaded commits, `ctrl+f` pages history to find it and jumps to
   the first hit (asking before it scans deeper).
+- **Remotes tab: tracked branches float to the top.** Remote branches whose
+  short name matches a local branch (one present in the Branches tab) now sort
+  ahead of the rest in the Remotes tab, so the branches you're actually working
+  with sit at the top. Within each group git's original order is preserved.
+- **Files panel keeps the filename when paths are too long.** In the Files panel
+  (the middle window of the left column), a path wider than the column is now
+  middle-elided (`internal/tu…/view.go`) instead of tail-truncated: the path's
+  beginning and the filename — the parts you actually need — stay visible, and
+  the directories nearest the file are dropped to fill the column. The leading
+  status glyph is preserved. Applies in the default cutoff display mode (`w`
+  still cycles to wrap/scroll for the full path); the Staged panel is unchanged.
 - **Filtered commit log** — `\` on the Commits panel opens a filter popup (path,
   author, message, date range) that narrows the feed via `git log` flags; filters
   compose with branch scope. "Commits touching this" seeds a path filter from the
