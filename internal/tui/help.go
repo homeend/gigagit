@@ -26,6 +26,8 @@ func helpContent() []contentLine {
 		r("R", "repo switcher popup (navigation-first: ↑↓/jk/pgup/pgdn move, / filters, enter switches — while filtering, the first enter locks the filter)"),
 		r(",", "settings (agent skill install)"),
 		r(".", "action menu — context actions for the selected row and panel (incl. copy actions)"),
+		r("ctrl+p", "command palette — generic command launcher (↑↓/jk move, enter runs, esc closes); currently: Show commit"),
+		r("#", "show commit by SHA: type a commit-ish (SHA / ref); enter resolves it and opens that commit's files in the files-view"),
 		r("", "Compare against working dir (.-menu): on any focused commit/staged/shelf file, diffs that version against the same path in the working tree"),
 		r("o", "cycle the focused panel's sort order"),
 		r("z", "cycle the focused window's text display (cutoff / wrap / scroll)"),
