@@ -363,6 +363,16 @@ func (m Model) fileFinderActionRows(path string) []actionRow {
 				return m, m.copyToClipboardCmd("Copied "+path, path)
 			},
 		},
+		{
+			id:    "ff-commits-touching",
+			label: "Commits touching this",
+			run: func(m Model) (tea.Model, tea.Cmd) {
+				m = m.popLayer()
+				m.commitFilter = commitFilterFields{Paths: []string{path}}
+				m.focus = panelCommits
+				return m.startFeedReload()
+			},
+		},
 	}
 }
 
