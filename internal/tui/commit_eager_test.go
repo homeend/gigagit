@@ -148,3 +148,13 @@ func TestEagerPromptCancelStops(t *testing.T) {
 		t.Fatal("cancel should pop the prompt")
 	}
 }
+
+func TestEagerClearedOnExternalReload(t *testing.T) {
+	m := eagerModel(t, []model.Commit{{Hash: "a", Subject: "fix"}})
+	m.eager = eagerSearch{active: true, query: "zzz", budget: 3}
+	// A scope-toggle reload arrives (e.g. user cleared a filter mid eager-search).
+	nm, _ := m.Update(commitsReloadedMsg{gen: m.feed.Gen(), state: m.feed.Snapshot()})
+	if nm.(Model).eager.active {
+		t.Fatal("an external feed reload must abort an in-flight eager search")
+	}
+}

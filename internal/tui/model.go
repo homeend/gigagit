@@ -332,6 +332,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.sel[panelCommits] >= len(m.commits) {
 			m.sel[panelCommits] = 0
 		}
+		if m.eager.active {
+			m.eager = eagerSearch{}
+		}
 		return m, nil
 	case historyListMsg:
 		if h := layerOf[*historyView](m); h != nil && h.listTag == msg.tag {
@@ -456,6 +459,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.cfg = msg.cfg
 			m.gitCommonDir = msg.gitCommonDir
 			m.headTimes = msg.headTimes
+			if m.eager.active {
+				m.eager = eagerSearch{}
+			}
 			// Clamp selections so a row removed since the last load (e.g. a
 			// deleted worktree) can't leave an index pointing past the end.
 			for p := panel(0); p < panelCount; p++ {
