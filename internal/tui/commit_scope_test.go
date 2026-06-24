@@ -523,3 +523,15 @@ func TestFeedScopeFoldsFilterAndBranches(t *testing.T) {
 		t.Fatal("empty filter must not be filtered")
 	}
 }
+
+func TestGraphSuppressedWhenFiltered(t *testing.T) {
+	var m Model
+	// Default: graph allowed (no filter, default sort, in-memory filter off).
+	if !m.commitGraphOn() {
+		t.Fatal("precondition: graph should be on with no filter")
+	}
+	m.commitFilter = commitFilterFields{Grep: "race"}
+	if m.commitGraphOn() {
+		t.Fatal("graph must be suppressed while a commit filter is active")
+	}
+}

@@ -1014,7 +1014,8 @@ func (m Model) commitIdentRowAt(i, w int, full bool) string {
 // and the lane topology stays valid (and the glyphs stay out of the filter
 // haystack).
 func (m Model) commitGraphOn() bool {
-	return !m.filterActive(panelCommits) && m.sortModes[panelCommits] == sortDefault
+	return !m.filterActive(panelCommits) && m.sortModes[panelCommits] == sortDefault &&
+		!m.commitFilter.filtered()
 }
 
 // commitDecorators returns a per-display-row decorator slice (parallel to rows):
