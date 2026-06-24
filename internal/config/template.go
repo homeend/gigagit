@@ -37,6 +37,10 @@ var settingDocs = []settingDoc{
 	{"ui", "commit_graph_step", 4, "commit-graph widen/narrow increment, in lanes"},
 	{"ui", "commit_graph_pan_step", nil, "commit-graph pan increment, in lanes (default: derived, max(1, cols/2))"},
 	{"ui", "commit_graph_max_lanes", 320, "commit-graph plane cap, in lanes (config can only lower the 320 ceiling)"},
+
+	{"ui", "commit_initial_count", 300, "commits loaded on first paint (raise to find more without scrolling)"},
+	{"ui", "commit_batch_size", 300, "commits loaded per later page (scroll to the end, or ctrl+l)"},
+	{"ui", "commit_search_max_pages", 5, "pages eager /-search scans before asking to search deeper"},
 }
 
 // tomlScalar renders a registry value as it appears in TOML.
