@@ -401,7 +401,13 @@ func (m Model) headerLine(w int) string {
 	if m.status.Upstream != "" {
 		rest += fmt.Sprintf(" (↑%d ↓%d)", m.status.Ahead, m.status.Behind)
 	}
-	title := titleStyle.Render("gigagit")
+	// The top-left title is the open repo/worktree's directory name; fall back to
+	// the gigagit brand only when no path is known yet (e.g. before first load).
+	name := pathLeaf(m.currentWorktree)
+	if name == "" {
+		name = "gigagit"
+	}
+	title := titleStyle.Render(name)
 	titleW := lipgloss.Width(title)
 	leftW := titleW + lipgloss.Width(rest)
 
