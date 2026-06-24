@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -502,5 +503,73 @@ func TestWorktreeFromCommitRequiresBranchName(t *testing.T) {
 	}
 	if cmd != nil {
 		t.Fatal("must not launch the create op without a branch name")
+	}
+}
+
+func TestFeedUpstreamsFiltersToExistingRemoteRefs(t *testing.T) {
+	m := Model{
+		branches: []model.Branch{
+			{Name: "main", Upstream: "origin/main"},
+			{Name: "feat", Upstream: "origin/feat"}, // upstream configured but ref gone
+			{Name: "local-only"},                    // no upstream
+		},
+		remoteBranches: []model.RemoteBranch{{Name: "origin/main"}}, // only origin/main exists
+	}
+	got := m.feedUpstreams()
+	if !slices.Equal(got, []string{"origin/main"}) {
+		t.Fatalf("feedUpstreams() = %v, want [origin/main]", got)
+	}
+}
+
+func TestFeedUpstreamsRespectsSoloScope(t *testing.T) {
+	m := Model{
+		commitScopeBranches: []string{"feat"}, // soloed
+		branches: []model.Branch{
+			{Name: "main", Upstream: "origin/main"},
+			{Name: "feat", Upstream: "origin/feat"},
+		},
+		remoteBranches: []model.RemoteBranch{{Name: "origin/main"}, {Name: "origin/feat"}},
+	}
+	got := m.feedUpstreams()
+	if !slices.Equal(got, []string{"origin/feat"}) {
+		t.Fatalf("feedUpstreams() = %v, want only the soloed branch's upstream [origin/feat]", got)
+	}
+}
+
+// newTestModelForReload builds a Model with a real svc+feed (fake runner) for
+// testing the dataLoadedMsg reload path. Mirrors TestCommitSoloReloadEndToEnd.
+func newTestModelForReload(t *testing.T) Model {
+	t.Helper()
+	f := gitexec.NewFakeRunner()
+	f.SetResponse("git log", gitexec.Result{Stdout: "h1\x1f\x1fAda\x1f0\x1fsubject\x1fHEAD -> main\n"})
+	svc := domain.New(&git.Repo{Runner: f})
+	m := branchesPanelModel("main")
+	m.svc = svc
+	m.feed = svc.CommitFeed()
+	return m
+}
+
+func TestDataLoadedTriggersUpstreamReload(t *testing.T) {
+	m := newTestModelForReload(t)
+	msg := dataLoadedMsg{
+		gen:            m.loadGen,
+		branches:       []model.Branch{{Name: "main", IsHead: true, Upstream: "origin/main"}},
+		remoteBranches: []model.RemoteBranch{{Name: "origin/main"}},
+	}
+	nm, _ := m.Update(msg)
+	if !nm.(Model).commitsLoading {
+		t.Fatal("expected a feed reload (commitsLoading=true) when tracked upstreams exist")
+	}
+}
+
+func TestDataLoadedNoReloadWithoutTrackedUpstreams(t *testing.T) {
+	m := newTestModelForReload(t)
+	msg := dataLoadedMsg{
+		gen:      m.loadGen,
+		branches: []model.Branch{{Name: "main", IsHead: true}}, // no upstream
+	}
+	nm, _ := m.Update(msg)
+	if nm.(Model).commitsLoading {
+		t.Fatal("no tracked upstreams must NOT trigger a reload (preserve the fast initial walk)")
 	}
 }

@@ -27,12 +27,45 @@ func (m Model) startFeedReload() (Model, tea.Cmd) {
 	return m, m.reloadFeedCmd()
 }
 
+// feedUpstreams returns the deduped upstream refs of the local branches in the
+// current feed scope (all local branches when the scope is empty), restricted to
+// refs that actually exist as remote-tracking branches — git log errors on a
+// missing ref, so a configured-but-unfetched upstream must be dropped.
+func (m Model) feedUpstreams() []string {
+	exists := make(map[string]bool, len(m.remoteBranches))
+	for _, rb := range m.remoteBranches {
+		exists[rb.Name] = true
+	}
+	inScope := func(name string) bool {
+		return len(m.commitScopeBranches) == 0 || slices.Contains(m.commitScopeBranches, name)
+	}
+	var out []string
+	seen := map[string]bool{}
+	for _, b := range m.branches {
+		if b.Upstream == "" || !inScope(b.Name) || !exists[b.Upstream] || seen[b.Upstream] {
+			continue
+		}
+		seen[b.Upstream] = true
+		out = append(out, b.Upstream)
+	}
+	return out
+}
+
+// feedScope is the LogScope the commit feed should walk: the scoped branches plus
+// their tracked, resolvable upstreams.
+func (m Model) feedScope() domain.LogScope {
+	return domain.LogScope{
+		Branches:  append([]string(nil), m.commitScopeBranches...),
+		Upstreams: m.feedUpstreams(),
+	}
+}
+
 // reloadFeedCmd applies the model's scope to the feed and reloads page 0 off the
 // UI thread. SetScope+LoadInitial bumps the feed gen (dropping stale pages) and
 // cancels any superseded in-flight walk.
 func (m Model) reloadFeedCmd() tea.Cmd {
 	feed := m.feed
-	scope := domain.LogScope{Branches: append([]string(nil), m.commitScopeBranches...)}
+	scope := m.feedScope()
 	return func() tea.Msg {
 		feed.SetScope(scope)
 		st, _ := feed.LoadInitial(context.Background())

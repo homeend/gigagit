@@ -457,6 +457,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.proc != nil {
 				return m.proc.refreshed(m)
 			}
+			// The initial feed walk (loadCmd) ran in parallel with the snapshot,
+			// so it had no upstreams. Now that tracked branches are known, reload
+			// once to walk their remote tips in (so a behind/diverged remote tip
+			// shows). Guard on non-empty so repos with no tracked upstreams keep
+			// the single fast initial walk.
+			if len(m.feedUpstreams()) > 0 {
+				var reload tea.Cmd
+				m, reload = m.startFeedReload()
+				return m, reload
+			}
 			// Conflicts are surfaced as a non-blocking notice ("press [x] to
 			// resolve"); entering the resolution process is the user's choice (x),
 			// so a lingering conflict never traps the interface.
