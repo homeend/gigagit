@@ -940,7 +940,7 @@ func (m Model) commitTextRevealAt(i int) string {
 		return r.text()
 	}
 	c := m.commits[i-m.wipCount()]
-	id := commitIdentOf(c)
+	id := commitIdentOf(c, nil)
 	label := id.label()
 	if label != "" {
 		label += " "
@@ -956,7 +956,7 @@ func (m Model) commitTextRevealAt(i int) string {
 func (m Model) commitIdentWidth() int {
 	w := 0
 	for _, c := range m.commits {
-		if lw := lipgloss.Width(commitIdentOf(c).label()); lw > w {
+		if lw := lipgloss.Width(commitIdentOf(c, nil).label()); lw > w {
 			if w = lw; w >= commitIdentW {
 				return commitIdentW
 			}
@@ -991,7 +991,7 @@ func (m Model) commitIdentRowAt(i, w int, full bool) string {
 		return row
 	}
 	c := m.commits[i-m.wipCount()]
-	id := commitIdentOf(c)
+	id := commitIdentOf(c, nil)
 	var tok string
 	if full {
 		tok = id.fullToken(w)
@@ -1055,7 +1055,7 @@ func (m Model) commitDecoratorsRange(rows []string, idx []int, lo, hi int) []row
 		if m.isWipRow(ci) {
 			continue // ◇ node lives in the graph cells; no lineage/lane decoration
 		}
-		id := commitIdentOf(m.commits[ci-m.wipCount()])
+		id := commitIdentOf(m.commits[ci-m.wipCount()], nil)
 		dim := !id.tip && id.name != "" // gray a lineage row's branch name
 
 		// identStart = the 2-col selection prefix + this row's leading glyphs. In
@@ -1117,7 +1117,7 @@ func (m Model) commitHaystackAt(i int) string {
 		return r.text()
 	}
 	c := m.commits[i-m.wipCount()]
-	id := commitIdentOf(c)
+	id := commitIdentOf(c, nil)
 	names := id.label()
 	for _, e := range id.extra {
 		names += " " + e

@@ -44,22 +44,35 @@ func dimRowDecorator() rowDecorator {
 // for a given branch"), GRAY when the commit is only that branch's lineage —
 // plus any additional branch tips at the same commit (rendered as pills).
 type commitIdent struct {
-	name  string   // branch name (no * marker); "" when the commit has none
-	tip   bool     // this commit is a local branch's tip
-	head  bool     // the chosen branch is the current (HEAD) branch
-	extra []string // additional local-branch tips at this commit (multi-tip)
+	name      string   // branch name (no * marker); "" when the commit has none
+	tip       bool     // this commit is a local branch's tip
+	remoteTip bool     // this commit is the tip of a tracked remote (upstream of a local branch)
+	head      bool     // the chosen branch is the current (HEAD) branch
+	extra     []string // additional local-branch tips at this commit (multi-tip)
 }
 
 // commitIdentOf derives the identity from a commit's local refs (a tip) or, when
 // it decorates none, from its Source branch (lineage; from `git log --source`).
-func commitIdentOf(c model.Commit) commitIdent {
+// tracked maps an upstream short ref ("origin/main") to the local branch that
+// tracks it; a RefRemote in that set marks the row as a tracked remote tip. A
+// nil map disables remote-tip detection.
+func commitIdentOf(c model.Commit, tracked map[string]string) commitIdent {
 	var locals []model.Ref
+	var remoteTipName string // local branch name behind a tracked remote tip here
 	for _, r := range c.Refs {
-		if r.Kind == model.RefLocal {
+		switch r.Kind {
+		case model.RefLocal:
 			locals = append(locals, r)
+		case model.RefRemote:
+			if name, ok := tracked[r.Name]; ok {
+				remoteTipName = name
+			}
 		}
 	}
 	if len(locals) == 0 {
+		if remoteTipName != "" {
+			return commitIdent{name: remoteTipName, remoteTip: true}
+		}
 		return commitIdent{name: c.Source, tip: false}
 	}
 	pick := 0
@@ -69,7 +82,7 @@ func commitIdentOf(c model.Commit) commitIdent {
 			break
 		}
 	}
-	id := commitIdent{name: locals[pick].Name, tip: true, head: locals[pick].Head}
+	id := commitIdent{name: locals[pick].Name, tip: true, head: locals[pick].Head, remoteTip: remoteTipName != ""}
 	for i, r := range locals {
 		if i != pick {
 			id.extra = append(id.extra, r.Name)
