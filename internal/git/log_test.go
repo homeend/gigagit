@@ -445,6 +445,101 @@ func TestCommitFilesStashNoDuplicate(t *testing.T) {
 	}
 }
 
+// writeFile writes content to path (creating parent dirs as needed) for test setup.
+func writeFile(t *testing.T, dir, name, content string) {
+	t.Helper()
+	full := filepath.Join(dir, name)
+	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(full, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// commitAll stages all changes and commits them with the given message,
+// using "Test" as the author name so LogScope{Author: "Test"} matches.
+func commitAll(t *testing.T, dir, msg string) {
+	t.Helper()
+	run := func(args ...string) {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(),
+			"GIT_AUTHOR_NAME=Test", "GIT_AUTHOR_EMAIL=test@test",
+			"GIT_COMMITTER_NAME=Test", "GIT_COMMITTER_EMAIL=test@test")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	run("add", "-A")
+	run("commit", "-m", msg)
+}
+
+// subjects returns the Subject field of each commit for test error messages.
+func subjects(cs []model.Commit) []string {
+	out := make([]string, len(cs))
+	for i, c := range cs {
+		out[i] = c.Subject
+	}
+	return out
+}
+
+func TestLogScopedPathFilter(t *testing.T) {
+	dir, runner := newTestRepo(t)
+	repo := &Repo{Runner: runner}
+	writeFile(t, dir, "a.txt", "1")
+	commitAll(t, dir, "touch a")
+	writeFile(t, dir, "sub/b.txt", "1")
+	commitAll(t, dir, "touch sub/b")
+
+	got, err := repo.LogScoped(context.Background(), 50, 0, LogScope{Paths: []string{"sub"}}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].Subject != "touch sub/b" {
+		t.Fatalf("path filter: want only [touch sub/b], got %v", subjects(got))
+	}
+}
+
+func TestLogScopedAuthorAndGrep(t *testing.T) {
+	dir, runner := newTestRepo(t)
+	repo := &Repo{Runner: runner}
+	writeFile(t, dir, "a.txt", "1")
+	commitAll(t, dir, "fix the race")
+	writeFile(t, dir, "a.txt", "2")
+	commitAll(t, dir, "unrelated change")
+
+	byGrep, err := repo.LogScoped(context.Background(), 50, 0, LogScope{Grep: "RACE"}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(byGrep) != 1 || byGrep[0].Subject != "fix the race" {
+		t.Fatalf("grep -i: want [fix the race], got %v", subjects(byGrep))
+	}
+
+	byAuthor, err := repo.LogScoped(context.Background(), 50, 0, LogScope{Author: "Test"}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(byAuthor) != 2 {
+		t.Fatalf("author filter: want 2 commits, got %d", len(byAuthor))
+	}
+}
+
+func TestLogScopeFilteredPredicate(t *testing.T) {
+	if (LogScope{}).filtered() {
+		t.Fatal("empty scope must not be filtered")
+	}
+	if (LogScope{Branches: []string{"main"}}).filtered() {
+		t.Fatal("branch-only scope must NOT count as filtered (graph stays on)")
+	}
+	for _, s := range []LogScope{{Paths: []string{"x"}}, {Author: "a"}, {Grep: "g"}, {Since: "1 day ago"}, {Until: "now"}} {
+		if !s.filtered() {
+			t.Fatalf("%+v must be filtered", s)
+		}
+	}
+}
+
 // TestCommitFilesMergeFirstParent pins first-parent semantics for a true 3-way
 // merge: each side adds a different file, and the merge lists only what it
 // brought to the mainline (the first-parent diff), not the union of both parents.

@@ -20,6 +20,53 @@ type commitsReloadedMsg struct {
 	state domain.FeedState
 }
 
+// commitFilterFields holds the active non-branch narrowing of the Commits feed.
+type commitFilterFields struct {
+	Paths  []string
+	Author string
+	Grep   string
+	Since  string
+	Until  string
+}
+
+func (f commitFilterFields) filtered() bool {
+	return len(f.Paths) > 0 || f.Author != "" || f.Grep != "" || f.Since != "" || f.Until != ""
+}
+
+// clearFilteringForFocus removes the filtering that belongs to the FOCUSED
+// window only: the `/` filter (if it is bound to this panel), and — on the
+// Commits panel — the `@` highlight and the `\` commit-scope filter. Filtering
+// on other windows is left untouched. It reports whether the commit-scope
+// filter was cleared, so the caller can reload the feed (the `/`/`@` states are
+// display-only and need no git walk).
+func (m Model) clearFilteringForFocus() (Model, bool) {
+	if m.filterPanel == m.focus {
+		m.filterTyping = false
+		m.filterQuery = ""
+	}
+	reload := false
+	if m.focus == panelCommits {
+		m.highlightTyping = false
+		m.highlightQuery = ""
+		reload = m.commitFilter.filtered()
+		m.commitFilter = commitFilterFields{}
+	}
+	return m, reload
+}
+
+// canClearFilters reports whether the FOCUSED window has any filtering to clear
+// (drives the ctrl+r footer hint). Only committed states count — the typing
+// modes capture keys themselves, so ctrl+r can't reach them.
+func (m Model) canClearFilters() bool {
+	if !m.opsIdle() {
+		return false
+	}
+	if m.filterPanel == m.focus && m.filterQuery != "" {
+		return true
+	}
+	return m.focus == panelCommits && (m.highlightQuery != "" || m.commitFilter.filtered())
+}
+
 // startFeedReload sets the Commits loading indicator and returns the scope
 // reload cmd, so the title shows it is working while the (possibly slow) re-walk
 // runs. The indicator clears when commitsReloadedMsg arrives.
@@ -53,21 +100,30 @@ func (m Model) feedUpstreams() []string {
 	return out
 }
 
-// feedScope is the LogScope the commit feed should walk: the scoped branches plus
-// their tracked, resolvable upstreams.
+// feedScope is the LogScope the commit feed should walk: the scoped branches,
+// their tracked resolvable upstreams, and the active path/author/message/date
+// filter. Fresh slices: the value-receiver Model shares slice backings.
 func (m Model) feedScope() domain.LogScope {
 	return domain.LogScope{
 		Branches:  append([]string(nil), m.commitScopeBranches...),
 		Upstreams: m.feedUpstreams(),
+		Paths:     append([]string(nil), m.commitFilter.Paths...),
+		Author:    m.commitFilter.Author,
+		Grep:      m.commitFilter.Grep,
+		Since:     m.commitFilter.Since,
+		Until:     m.commitFilter.Until,
 	}
 }
 
 // feedScopeSig is a stable signature of the scope the feed should walk, used to
-// detect when the desired scope (branches + tracked upstreams) differs from what
-// was last applied, so the feed is reloaded only when it would actually change.
+// detect when the desired scope (branches + tracked upstreams + filter) differs
+// from what was last applied, so the feed is reloaded only when it would
+// actually change.
 func (m Model) feedScopeSig() string {
 	s := m.feedScope()
-	return strings.Join(s.Branches, ",") + "|" + strings.Join(s.Upstreams, ",")
+	return strings.Join(s.Branches, ",") + "|" + strings.Join(s.Upstreams, ",") +
+		"|" + strings.Join(s.Paths, ",") + "|" + s.Author + "|" + s.Grep +
+		"|" + s.Since + "|" + s.Until
 }
 
 // reloadFeedCmd applies the model's scope to the feed and reloads page 0 off the
@@ -675,6 +731,22 @@ func commitHasLocalRef(c model.Commit, name string) bool {
 		}
 	}
 	return false
+}
+
+// commitClearFilterRow offers "Clear filter" on the Commits panel when a
+// path/author/message/date filter is active.
+func (m Model) commitClearFilterRow() (actionRow, bool) {
+	if !m.opsIdle() || m.focus != panelCommits || !m.commitFilter.filtered() {
+		return actionRow{}, false
+	}
+	return actionRow{
+		id:    "commits-clear-filter",
+		label: "Clear filter",
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			m.commitFilter = commitFilterFields{}
+			return m.startFeedReload()
+		},
+	}, true
 }
 
 // commitShowAllRow offers "Show all branches" — present only when the feed is

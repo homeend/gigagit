@@ -2,6 +2,10 @@ package domain
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -11,6 +15,7 @@ import (
 	"github.com/gigagit/gg/internal/git"
 	"github.com/gigagit/gg/internal/gitexec"
 	"github.com/gigagit/gg/internal/model"
+	"github.com/gigagit/gg/internal/observ"
 )
 
 // pagingRunner serves `git log` from a fixed list of `total` commits, honoring
@@ -255,5 +260,87 @@ func TestFeedSupersedeCancelsAndStampsGen(t *testing.T) {
 	st := <-firstDone // the superseded load's state must carry the OLDER gen (1)
 	if st.Gen != 1 {
 		t.Fatalf("superseded load should stamp gen0=1, got %d", st.Gen)
+	}
+}
+
+// TestCommitFeedPagesUnderPathFilter verifies that paging is correct when a
+// path filter is active. git log with --skip applies the skip AFTER filtering,
+// so each page must ask for the right offset into the already-filtered set —
+// no target commits may be dropped or double-counted, and no "other" commits
+// may leak through the filter.
+//
+// 60 target commits forces two pages: page 1 = commitInitialPage (50),
+// page 2 = 10 (exhausted). With 60 "other" commits interleaved, unfiltered
+// history is 120 commits. If --skip incorrectly applied pre-filter, skipping
+// 50 in the unfiltered walk would land around unfiltered position ~50 and
+// lose ~25 target commits; the total assertion catches this.
+func TestCommitFeedPagesUnderPathFilter(t *testing.T) {
+	const nTarget = 60              // must exceed commitInitialPage (50) to force 2 pages
+	t.Setenv("GG_COMMIT_PAGER", "") // pin to plainPager regardless of environment
+
+	dir := t.TempDir()
+	run := func(a ...string) {
+		t.Helper()
+		c := exec.Command("git", a...)
+		c.Dir = dir
+		c.Env = append(os.Environ(),
+			"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t",
+			"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+		if out, err := c.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", a, err, out)
+		}
+	}
+	run("init", "-b", "main")
+	if err := os.MkdirAll(filepath.Join(dir, "target"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "other"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	for i := 0; i < nTarget; i++ {
+		if err := os.WriteFile(filepath.Join(dir, "target", "f.txt"), []byte(fmt.Sprintf("%d\n", i)), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		run("add", ".")
+		run("commit", "-m", fmt.Sprintf("target %d", i))
+
+		if err := os.WriteFile(filepath.Join(dir, "other", "g.txt"), []byte(fmt.Sprintf("%d\n", i)), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		run("add", ".")
+		run("commit", "-m", fmt.Sprintf("other %d", i))
+	}
+
+	svc := New(&git.Repo{Runner: gitexec.NewExecRunner("git", dir, observ.NewRing(50))})
+	feed := svc.CommitFeed()
+	feed.SetScope(LogScope{Paths: []string{"target"}})
+
+	st, err := feed.LoadInitial(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Page until exhausted, collecting the final accumulated state.
+	for !st.Exhausted {
+		var more bool
+		st, more, err = feed.LoadMore(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !more {
+			break
+		}
+	}
+
+	// Every commit in the final accumulated slice must be a target commit.
+	for _, c := range st.Commits {
+		if !strings.HasPrefix(c.Subject, "target ") {
+			t.Fatalf("filtered feed leaked a non-target commit: %q", c.Subject)
+		}
+	}
+	// Exact count: no drops, no double-counts.
+	if len(st.Commits) != nTarget {
+		t.Fatalf("want %d target commits across pages, got %d", nTarget, len(st.Commits))
 	}
 }

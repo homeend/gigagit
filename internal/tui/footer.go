@@ -71,6 +71,9 @@ var contextBindings = []footerBinding{
 		_, ok := m.commitForMessageView()
 		return ok
 	}, scopeRow},
+	{"commit-filter", "\\", `[\] filter`, func(m Model) bool {
+		return m.focus == panelCommits && !(m.width > 0 && m.width < 40)
+	}, scopeWindow},
 	{"graph-window", "", "[<>] graph [⇧←→] pan [=] center", func(m Model) bool {
 		return m.focus == panelCommits && m.graphActive()
 	}, scopeWindow},
@@ -97,6 +100,7 @@ var globalBindings = []footerBinding{
 	{"order", "o", "[o]rder", Model.opsIdle, scopeGlobal},
 	{"view", "z", "[z] view", Model.opsIdle, scopeGlobal},
 	{"filter", "/", "[/]filter", Model.opsIdle, scopeGlobal},
+	{"clear-filters", "ctrl+r", "[ctrl+r] clear filter", Model.canClearFilters, scopeGlobal},
 	{"repo", "R", "[R]epo", Model.opsIdle, scopeGlobal},
 	{"settings", ",", "[,] settings", Model.opsIdle, scopeGlobal},
 	{"actions", ".", "[.] actions", Model.opsIdle, scopeGlobal},

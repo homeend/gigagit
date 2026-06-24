@@ -103,6 +103,96 @@ func TestCommitSoloReloadEndToEnd(t *testing.T) {
 	}
 }
 
+func TestClearFilterRowPresentOnlyWhenFiltered(t *testing.T) {
+	m := loadedModel(t)
+	m.focus = panelCommits
+	if _, ok := m.commitClearFilterRow(); ok {
+		t.Fatal("no clear-filter row when unfiltered")
+	}
+	m.commitFilter = commitFilterFields{Grep: "race"}
+	row, ok := m.commitClearFilterRow()
+	if !ok {
+		t.Fatal("clear-filter row should appear when filtered")
+	}
+	mm, _ := row.run(m)
+	if mm.(Model).commitFilter.filtered() {
+		t.Fatal("running clear-filter must empty the filter")
+	}
+}
+
+func TestCtrlRClearsOnlyFocusedWindow(t *testing.T) {
+	// A `/` filter bound to the Branches panel, plus an @ highlight and a `\`
+	// commit filter on the Commits panel.
+	base := func() Model {
+		m := loadedModel(t)
+		m.filterPanel = panelBranches
+		m.filterQuery = "foo"
+		m.highlightQuery = "bar"
+		m.commitFilter = commitFilterFields{Grep: "baz"}
+		return m
+	}
+
+	// Focused on Commits → clears the @ highlight and the commit filter, but
+	// leaves the Branches `/` filter alone.
+	m := base()
+	m.focus = panelCommits
+	c1, _ := m.Update(keyMsg("ctrl+r"))
+	mm := c1.(Model)
+	if mm.commitFilter.filtered() {
+		t.Error("ctrl+r on Commits should clear the commit filter")
+	}
+	if mm.highlightQuery != "" {
+		t.Error("ctrl+r on Commits should clear the @ highlight")
+	}
+	if mm.filterQuery != "foo" {
+		t.Errorf("ctrl+r on Commits must NOT clear another window's / filter, got %q", mm.filterQuery)
+	}
+	if !mm.commitsLoading {
+		t.Error("clearing an active commit filter should reload the feed")
+	}
+
+	// Focused on Branches → clears only the Branches `/` filter; the Commits
+	// commit filter and @ highlight survive.
+	m = base()
+	m.focus = panelBranches
+	c2, _ := m.Update(keyMsg("ctrl+r"))
+	mm = c2.(Model)
+	if mm.filterQuery != "" {
+		t.Errorf("ctrl+r on Branches should clear its / filter, got %q", mm.filterQuery)
+	}
+	if !mm.commitFilter.filtered() {
+		t.Error("ctrl+r on Branches must NOT clear the Commits commit filter")
+	}
+	if mm.highlightQuery != "bar" {
+		t.Errorf("ctrl+r on Branches must NOT clear the Commits @ highlight, got %q", mm.highlightQuery)
+	}
+	if mm.commitsLoading {
+		t.Error("clearing a non-Commits filter should not reload the feed")
+	}
+}
+
+func TestCanClearFiltersGating(t *testing.T) {
+	m := loadedModel(t)
+	m.focus = panelCommits
+	if m.canClearFilters() {
+		t.Fatal("nothing filtered → no clear hint")
+	}
+	m.highlightQuery = "x"
+	if !m.canClearFilters() {
+		t.Fatal("an active @ highlight on the focused Commits panel should enable the hint")
+	}
+
+	// A `/` filter bound to another window must not enable the hint for the
+	// focused panel.
+	m2 := loadedModel(t)
+	m2.focus = panelCommits
+	m2.filterPanel = panelBranches
+	m2.filterQuery = "y"
+	if m2.canClearFilters() {
+		t.Fatal("another window's / filter must not enable the focused window's clear hint")
+	}
+}
+
 func TestCommitToggleAddsBranch(t *testing.T) {
 	m := branchesPanelModel("feat", "main")
 	r, ok := findRow(availableActions(m), "commits-toggle")
@@ -503,6 +593,130 @@ func TestWorktreeFromCommitRequiresBranchName(t *testing.T) {
 	}
 	if cmd != nil {
 		t.Fatal("must not launch the create op without a branch name")
+	}
+}
+
+func TestFeedScopeFoldsFilterAndBranches(t *testing.T) {
+	var m Model
+	m.commitScopeBranches = []string{"main"}
+	m.commitFilter = commitFilterFields{Paths: []string{"sub"}, Author: "alice", Grep: "race"}
+	s := m.feedScope()
+	if len(s.Branches) != 1 || s.Branches[0] != "main" {
+		t.Fatalf("branches not carried: %+v", s.Branches)
+	}
+	if len(s.Paths) != 1 || s.Paths[0] != "sub" || s.Author != "alice" || s.Grep != "race" {
+		t.Fatalf("filter not folded: %+v", s)
+	}
+	if !m.commitFilter.filtered() {
+		t.Fatal("filtered() should be true")
+	}
+	if (commitFilterFields{}).filtered() {
+		t.Fatal("empty filter must not be filtered")
+	}
+}
+
+func TestCommitScopeLabelShowsFilterChips(t *testing.T) {
+	var m Model
+	m.commitFilter = commitFilterFields{Paths: []string{"sub"}, Grep: "race", Author: "alice"}
+	got := m.commitScopeLabel()
+	for _, want := range []string{"path=sub", "msg=race", "@alice"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("label %q missing chip %q", got, want)
+		}
+	}
+}
+
+func TestCommitScopeLabelPlainWhenUnfiltered(t *testing.T) {
+	var m Model
+	if got := m.commitScopeLabel(); got != "all" {
+		t.Fatalf("unfiltered label should be \"all\", got %q", got)
+	}
+}
+
+func TestGraphSuppressedWhenFiltered(t *testing.T) {
+	var m Model
+	// Default: graph allowed (no filter, default sort, in-memory filter off).
+	if !m.commitGraphOn() {
+		t.Fatal("precondition: graph should be on with no filter")
+	}
+	m.commitFilter = commitFilterFields{Grep: "race"}
+	if m.commitGraphOn() {
+		t.Fatal("graph must be suppressed while a commit filter is active")
+	}
+}
+
+// TestFilesViewRowsExcludeDeletedFile anchors the status == "D" exclusion in
+// viewFileRow and openExternalRow. A deleted file has no content at the commit,
+// so both rows must return ok==false for it. A normal (non-deleted) file must
+// return ok==true so the test cannot pass vacuously.
+func TestFilesViewRowsExcludeDeletedFile(t *testing.T) {
+	m := openFilesView(t, filesModel())
+	m.filesTreeFocused = true
+
+	// Inject a deleted-file line at index 0 and a normal file line at index 1
+	// so we can test both without depending on the fixture's existing status values.
+	deletedLine := contentLine{text: "D  gone.go", path: "gone.go", status: "D"}
+	normalLine := contentLine{text: "M  model.go", path: "internal/tui/model.go", status: "M"}
+	m.filesView.lines = []contentLine{deletedLine, normalLine}
+
+	// --- deleted file: both rows must return ok==false ---
+	m.filesView.sel = 0
+	if _, ok := m.viewFileRow(); ok {
+		t.Error("viewFileRow must return ok==false for a deleted (D) file")
+	}
+	if _, ok := m.openExternalRow(); ok {
+		t.Error("openExternalRow must return ok==false for a deleted (D) file")
+	}
+
+	// --- normal file: both rows must return ok==true (non-vacuous counter-check) ---
+	m.filesView.sel = 1
+	if _, ok := m.viewFileRow(); !ok {
+		t.Error("viewFileRow must return ok==true for a normal (non-deleted) file")
+	}
+	if _, ok := m.openExternalRow(); !ok {
+		t.Error("openExternalRow must return ok==true for a normal (non-deleted) file")
+	}
+}
+
+func TestFilesViewCommitsTouchingSeedsFilter(t *testing.T) {
+	m := openFilesView(t, filesModel())
+	// openFilesView lands on the commit-list side; switch to the tree side so
+	// the guard passes.
+	m.filesTreeFocused = true
+	m.filesView.sel = 0
+	// Find the first visible row that is a real file (non-heading, non-empty path).
+	vis := m.filesView.visible()
+	want := ""
+	for _, l := range vis {
+		if !l.heading && l.path != "" {
+			want = l.path
+			break
+		}
+	}
+	if want == "" {
+		t.Fatal("test fixture has no selectable file rows — fix filesModel()")
+	}
+	// Set sel to that row.
+	for i, l := range vis {
+		if l.path == want {
+			m.filesView.sel = i
+			break
+		}
+	}
+	row, ok := m.commitsTouchingFileRow()
+	if !ok {
+		t.Fatal("commitsTouchingFileRow must be available with a tree-side file selected")
+	}
+	mm, _ := row.run(m)
+	got := mm.(Model)
+	if len(got.commitFilter.Paths) != 1 || got.commitFilter.Paths[0] != want {
+		t.Fatalf("path not seeded correctly: got %v, want [%q]", got.commitFilter.Paths, want)
+	}
+	if got.filesView != nil {
+		t.Fatal("running the row should close the files view")
+	}
+	if got.focus != panelCommits {
+		t.Fatalf("focus should be panelCommits after seeding, got %v", got.focus)
 	}
 }
 

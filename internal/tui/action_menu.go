@@ -60,6 +60,9 @@ func availableActions(m Model) []actionRow {
 			if r, ok := m.viewFileRow(); ok {
 				rows = append(rows, r)
 			}
+			if r, ok := m.commitsTouchingFileRow(); ok {
+				rows = append(rows, r)
+			}
 			if r, ok := m.openExternalRow(); ok {
 				rows = append(rows, r)
 			}
@@ -252,6 +255,9 @@ func (m Model) appendCommitContextRows(out []actionRow) []actionRow {
 		out = append(out, r)
 	}
 	if r, ok := m.commitShowAllRow(); ok {
+		out = append(out, r)
+	}
+	if r, ok := m.commitClearFilterRow(); ok {
 		out = append(out, r)
 	}
 	if r, ok := m.commitViewModeRow(); ok {

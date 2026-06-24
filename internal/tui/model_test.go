@@ -52,6 +52,8 @@ func keyMsg(s string) tea.KeyMsg {
 		return tea.KeyMsg{Type: tea.KeySpace}
 	case "delete":
 		return tea.KeyMsg{Type: tea.KeyDelete}
+	case "ctrl+r":
+		return tea.KeyMsg{Type: tea.KeyCtrlR}
 	case "ctrl+s":
 		return tea.KeyMsg{Type: tea.KeyCtrlS}
 	case "ctrl+w":

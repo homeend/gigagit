@@ -22,7 +22,7 @@ func TestFileFinderEnterOpensActionMenu(t *testing.T) {
 	for _, r := range m.actionMenu.rows {
 		got[r.id] = true
 	}
-	for _, id := range []string{"ff-view", "ff-diff", "ff-history", "ff-blame", "ff-editor", "ff-copy-path"} {
+	for _, id := range []string{"ff-view", "ff-diff", "ff-history", "ff-blame", "ff-editor", "ff-copy-path", "ff-commits-touching"} {
 		if !got[id] {
 			t.Fatalf("missing %s; rows=%v", id, got)
 		}
@@ -113,6 +113,31 @@ func TestFileFinderViewActionOpensContentLayer(t *testing.T) {
 	}
 	if layerOf[*fileFinderPopup](m) != nil {
 		t.Fatal("the finder must be popped when the view action runs")
+	}
+}
+
+func TestFileFinderCommitsTouchingSeedsPathFilter(t *testing.T) {
+	m := loadedModel(t)
+	rows := m.fileFinderActionRows("internal/engine/ops_basic.go")
+	var run func(Model) (tea.Model, tea.Cmd)
+	for _, r := range rows {
+		if r.id == "ff-commits-touching" {
+			run = r.run
+		}
+	}
+	if run == nil {
+		t.Fatal("fuzzy finder missing 'Commits touching this' row")
+	}
+	mm, _ := run(m)
+	got := mm.(Model)
+	if len(got.commitFilter.Paths) != 1 || got.commitFilter.Paths[0] != "internal/engine/ops_basic.go" {
+		t.Fatalf("path not seeded: %+v", got.commitFilter.Paths)
+	}
+	if got.commitFilter.Author != "" || got.commitFilter.Grep != "" {
+		t.Fatal("seeding a path should clear the other axes")
+	}
+	if got.focus != panelCommits {
+		t.Fatal("should focus Commits after seeding")
 	}
 }
 

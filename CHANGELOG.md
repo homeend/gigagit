@@ -9,6 +9,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Filtered commit log** — `\` on the Commits panel opens a filter popup (path,
+  author, message, date range) that narrows the feed via `git log` flags; filters
+  compose with branch scope. "Commits touching this" seeds a path filter from the
+  fuzzy file finder and the files view. The commit-graph hides while a filter is
+  active (the filtered feed is a non-contiguous subset). `ctrl+r` clears the
+  focused window's filtering — its `/` filter, or on the Commits panel the `@`
+  highlight and the `\` commit filter — leaving other windows' filters intact
+  (the "Clear filter" `.`-menu row clears the commit filter alone).
 - **Show any commit by SHA (`#`) + a command palette (`ctrl+p`).** Press `#` to open a small input, type a commit SHA (or any commit-ish ref — `HEAD~3`, a branch, a tag), and `enter` opens that commit's files in the files-view — no need to scroll the Commits feed to find it. An unknown ref shows an inline error and keeps the prompt open. `ctrl+p` opens a generic command palette (a launcher for global commands); for now it holds a single entry, **Show commit**, which runs the same flow.
 - **Commits panel — local/remote tip markers.** Each commit that is the tip of a
   local branch shows `■`, and a commit that is the tip of that branch's tracked

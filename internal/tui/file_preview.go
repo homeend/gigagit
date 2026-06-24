@@ -10,21 +10,34 @@ import (
 	"github.com/gigagit/gg/internal/domain"
 )
 
+// filesViewSelectedLine returns the currently-selected content line in the
+// files-view tree side, guarding all preconditions: view open, not compare
+// mode, tree focused, selection in bounds, non-heading row with a path. Callers
+// apply additional per-action status filters (e.g. skip deleted files for
+// content-opening actions).
+func (m Model) filesViewSelectedLine() (contentLine, bool) {
+	if m.filesView == nil || m.inCompareMode() || !m.filesTreeFocused {
+		return contentLine{}, false
+	}
+	vis := m.filesView.visible()
+	if m.filesView.sel < 0 || m.filesView.sel >= len(vis) {
+		return contentLine{}, false
+	}
+	l := vis[m.filesView.sel]
+	if l.path == "" {
+		return contentLine{}, false
+	}
+	return l, true
+}
+
 // viewFileRow offers "View file" in the commit files view: show the selected
 // file's content AT the commit (no diff) in the right column. Available on the
 // tree side of either mode — the full tree or the changed set — on a real file
 // row. Compare mode is skipped (two endpoints, no single commit), and a deleted
 // (D) row is skipped (the file has no content at this commit).
 func (m Model) viewFileRow() (actionRow, bool) {
-	if m.filesView == nil || m.inCompareMode() || !m.filesTreeFocused {
-		return actionRow{}, false
-	}
-	vis := m.filesView.visible()
-	if m.filesView.sel < 0 || m.filesView.sel >= len(vis) {
-		return actionRow{}, false
-	}
-	l := vis[m.filesView.sel]
-	if l.path == "" || l.status == "D" {
+	l, ok := m.filesViewSelectedLine()
+	if !ok || l.status == "D" {
 		return actionRow{}, false
 	}
 	path, hash := l.path, m.filesHash
@@ -42,15 +55,8 @@ func (m Model) viewFileRow() (actionRow, bool) {
 // and open it in $EDITOR. Same gating as viewFileRow — tree side, a real file
 // row, not compare mode, and not a deleted (D) row.
 func (m Model) openExternalRow() (actionRow, bool) {
-	if m.filesView == nil || m.inCompareMode() || !m.filesTreeFocused {
-		return actionRow{}, false
-	}
-	vis := m.filesView.visible()
-	if m.filesView.sel < 0 || m.filesView.sel >= len(vis) {
-		return actionRow{}, false
-	}
-	l := vis[m.filesView.sel]
-	if l.path == "" || l.status == "D" {
+	l, ok := m.filesViewSelectedLine()
+	if !ok || l.status == "D" {
 		return actionRow{}, false
 	}
 	path, hash, svc := l.path, m.filesHash, m.svc
@@ -61,6 +67,29 @@ func (m Model) openExternalRow() (actionRow, bool) {
 			return m, m.openInEditorCmd(path, func(ctx context.Context) ([]byte, error) {
 				return svc.ShowFile(ctx, hash, path)
 			})
+		},
+	}, true
+}
+
+// commitsTouchingFileRow seeds the Commits feed with a path filter for the
+// files-view selected file, closes the files view, and focuses Commits. Unlike
+// viewFileRow/openExternalRow, deleted (D) rows are intentionally included —
+// the path has history (including the deletion commit) which is exactly what
+// the user wants to browse.
+func (m Model) commitsTouchingFileRow() (actionRow, bool) {
+	l, ok := m.filesViewSelectedLine()
+	if !ok {
+		return actionRow{}, false
+	}
+	filePath := l.path
+	return actionRow{
+		id:    "files-commits-touching",
+		label: "Commits touching this",
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			m = m.closeFilesView()
+			m.commitFilter = commitFilterFields{Paths: []string{filePath}}
+			m.focus = panelCommits
+			return m.startFeedReload()
 		},
 	}, true
 }
