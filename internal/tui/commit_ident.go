@@ -23,6 +23,31 @@ func (r wipRow) text() string {
 // column — and every subject after it — does not reflow as commits page in.
 const commitIdentW = 16
 
+// commitMarkerW is the display width of the tip-marker prefix on a commit
+// identity token: two glyph cells (local ■, remote ▲) plus one separator space.
+const commitMarkerW = 3
+
+const (
+	markerLocal  = "■" // tip of a local branch
+	markerRemote = "▲" // tip of a tracked remote (a local branch's upstream)
+)
+
+// markers is the 2-cell, left-packed marker field for this identity: present
+// markers fill from the left, missing slots are spaces, so the field is always
+// exactly two display cells wide.
+func (id commitIdent) markers() string {
+	switch {
+	case id.tip && id.remoteTip:
+		return markerLocal + markerRemote
+	case id.tip:
+		return markerLocal + " "
+	case id.remoteTip:
+		return markerRemote + " "
+	default:
+		return "  "
+	}
+}
+
 // dimIdentStyle grays a lineage row's branch name (the commit belongs to that
 // branch but is not its tip). 240 is a mid-gray in the 256-color cube.
 var dimIdentStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
@@ -44,22 +69,35 @@ func dimRowDecorator() rowDecorator {
 // for a given branch"), GRAY when the commit is only that branch's lineage —
 // plus any additional branch tips at the same commit (rendered as pills).
 type commitIdent struct {
-	name  string   // branch name (no * marker); "" when the commit has none
-	tip   bool     // this commit is a local branch's tip
-	head  bool     // the chosen branch is the current (HEAD) branch
-	extra []string // additional local-branch tips at this commit (multi-tip)
+	name      string   // branch name (no * marker); "" when the commit has none
+	tip       bool     // this commit is a local branch's tip
+	remoteTip bool     // this commit is the tip of a tracked remote (upstream of a local branch)
+	head      bool     // the chosen branch is the current (HEAD) branch
+	extra     []string // additional local-branch tips at this commit (multi-tip)
 }
 
 // commitIdentOf derives the identity from a commit's local refs (a tip) or, when
 // it decorates none, from its Source branch (lineage; from `git log --source`).
-func commitIdentOf(c model.Commit) commitIdent {
+// tracked maps an upstream short ref ("origin/main") to the local branch that
+// tracks it; a RefRemote in that set marks the row as a tracked remote tip. A
+// nil map disables remote-tip detection.
+func commitIdentOf(c model.Commit, tracked map[string]string) commitIdent {
 	var locals []model.Ref
+	var remoteTipName string // local branch name behind a tracked remote tip here
 	for _, r := range c.Refs {
-		if r.Kind == model.RefLocal {
+		switch r.Kind {
+		case model.RefLocal:
 			locals = append(locals, r)
+		case model.RefRemote:
+			if name, ok := tracked[r.Name]; ok {
+				remoteTipName = name
+			}
 		}
 	}
 	if len(locals) == 0 {
+		if remoteTipName != "" {
+			return commitIdent{name: remoteTipName, remoteTip: true}
+		}
 		return commitIdent{name: c.Source, tip: false}
 	}
 	pick := 0
@@ -69,7 +107,7 @@ func commitIdentOf(c model.Commit) commitIdent {
 			break
 		}
 	}
-	id := commitIdent{name: locals[pick].Name, tip: true, head: locals[pick].Head}
+	id := commitIdent{name: locals[pick].Name, tip: true, head: locals[pick].Head, remoteTip: remoteTipName != ""}
 	for i, r := range locals {
 		if i != pick {
 			id.extra = append(id.extra, r.Name)
@@ -90,22 +128,23 @@ func (id commitIdent) label() string {
 	return id.name
 }
 
-// token is the display token at width w: trimmed with … when the label is too
-// long, else right-padded so subjects stay aligned. trimmed reports whether
-// truncation happened (drives the reveal tooltip). w is the dynamic identity
-// column width (see Model.commitIdentWidth), never more than commitIdentW.
+// token is the display token at width commitMarkerW+w: the marker prefix, a
+// separator space, then the name trimmed with … when too long, else right-padded
+// so subjects stay aligned. trimmed reports whether the NAME was truncated.
 func (id commitIdent) token(w int) (text string, trimmed bool) {
-	s := id.label()
-	if lipgloss.Width(s) > w {
-		return truncate(s, w), true
+	name := id.label()
+	var body string
+	if lipgloss.Width(name) > w {
+		body, trimmed = truncate(name, w), true
+	} else {
+		body = padRight(name, w)
 	}
-	return padRight(s, w), false
+	return id.markers() + " " + body, trimmed
 }
 
-// fullToken is the UNtrimmed label, right-padded to width w. The tooltip's
-// WHEN-to-reveal gate compares a row built with this against the trimmed row.
+// fullToken is the UNtrimmed label with the marker prefix, padded to commitMarkerW+w.
 func (id commitIdent) fullToken(w int) string {
-	return padRight(id.label(), w)
+	return id.markers() + " " + padRight(id.label(), w)
 }
 
 // pills renders additional-branch tips (the multi-tip case) as ‹name› chips; the

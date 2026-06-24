@@ -15,21 +15,26 @@ import (
 const logFormat = "%H%x1f%P%x1f%an%x1f%at%x1f%s%x1f%D%x1f%S"
 
 // LogScope selects and narrows the walk. Branches selects refs (empty → all
-// local branches plus HEAD). Paths/Author/Grep/Since/Until further FILTER the
-// result with native `git log` flags; any of them being set makes the feed a
-// non-contiguous subset of history (path scope also narrows to commits that
-// touched those paths). Branches alone does NOT count as a filter.
+// local branches plus HEAD). Upstreams are extra remote-tracking refs (e.g.
+// "origin/main") appended to the walk so a branch's remote tip shows even when
+// the local branch is behind; callers must only pass upstreams that resolve
+// (git log errors on a missing ref). Paths/Author/Grep/Since/Until further
+// FILTER the result with native `git log` flags; any of them being set makes the
+// feed a non-contiguous subset of history (path scope also narrows to commits
+// that touched those paths). Branches/Upstreams alone do NOT count as a filter.
 type LogScope struct {
-	Branches []string
-	Paths    []string
-	Author   string
-	Grep     string
-	Since    string
-	Until    string
+	Branches  []string
+	Upstreams []string
+	Paths     []string
+	Author    string
+	Grep      string
+	Since     string
+	Until     string
 }
 
 // filtered reports whether any content-narrowing filter is active.
-// Branch scoping alone does not count — it selects refs, not filters history.
+// Ref selection (Branches/Upstreams) alone does not count — it selects refs,
+// not filters history.
 func (s LogScope) filtered() bool {
 	return len(s.Paths) > 0 || s.Author != "" || s.Grep != "" || s.Since != "" || s.Until != ""
 }
@@ -56,6 +61,9 @@ func (r *Repo) LogScoped(ctx context.Context, limit, skip int, scope LogScope, d
 		b = b.Arg("--branches", "HEAD")
 	} else {
 		b = b.Arg(scope.Branches...)
+	}
+	if len(scope.Upstreams) > 0 {
+		b = b.Arg(scope.Upstreams...)
 	}
 	if len(scope.Paths) > 0 {
 		b = b.Arg("--")

@@ -259,6 +259,19 @@ func TestCommitFilesArgv(t *testing.T) {
 	}
 }
 
+func TestLogScopedAppendsUpstreams(t *testing.T) {
+	f := gitexec.NewFakeRunner()
+	f.SetResponse("git log", gitexec.Result{Stdout: ""})
+	r := &Repo{Runner: f}
+	_, _ = r.LogScoped(context.Background(), 10, 0, LogScope{Upstreams: []string{"origin/main"}}, false)
+	if !logArgvContains(t, f, "--branches") || !logArgvContains(t, f, "HEAD") {
+		t.Fatalf("argv = %v, want default --branches HEAD", f.Calls)
+	}
+	if !logArgvContains(t, f, "origin/main") {
+		t.Fatalf("argv = %v, want the upstream ref appended", f.Calls)
+	}
+}
+
 func TestLogScopedSkipArgv(t *testing.T) {
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git log", gitexec.Result{Stdout: ""})

@@ -80,6 +80,9 @@ var (
 	// statusErrStyle makes a failure in the status bar stand out (white on red)
 	// instead of reading like an ordinary hint.
 	statusErrStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("15")).Background(lipgloss.Color("1"))
+	// errorStyle is a plain red foreground for inline popup error lines (e.g. an
+	// unresolved commit-ish in the show-commit popup).
+	errorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
 )
 
 // statusErrorPrefixes are the leading tokens the status-setting sites use when
@@ -940,12 +943,25 @@ func (m Model) commitTextRevealAt(i int) string {
 		return r.text()
 	}
 	c := m.commits[i-m.wipCount()]
-	id := commitIdentOf(c)
+	id := commitIdentOf(c, m.trackedUpstreams())
 	label := id.label()
 	if label != "" {
 		label += " "
 	}
 	return label + id.pills() + c.Subject
+}
+
+// trackedUpstreams maps each local branch's upstream short ref ("origin/main")
+// to the branch name ("main"), for marking tracked remote-branch tips in the
+// commit graph. A branch with no upstream is omitted.
+func (m Model) trackedUpstreams() map[string]string {
+	out := make(map[string]string, len(m.branches))
+	for _, b := range m.branches {
+		if b.Upstream != "" {
+			out[b.Upstream] = b.Name
+		}
+	}
+	return out
 }
 
 // commitIdentWidth is the display width of the branch-identity column: the
@@ -954,9 +970,10 @@ func (m Model) commitTextRevealAt(i int) string {
 // names like "master" while still aligning subjects within a feed; a longer name
 // paging in grows the column up to the cap.
 func (m Model) commitIdentWidth() int {
+	tracked := m.trackedUpstreams()
 	w := 0
 	for _, c := range m.commits {
-		if lw := lipgloss.Width(commitIdentOf(c).label()); lw > w {
+		if lw := lipgloss.Width(commitIdentOf(c, tracked).label()); lw > w {
 			if w = lw; w >= commitIdentW {
 				return commitIdentW
 			}
@@ -991,7 +1008,7 @@ func (m Model) commitIdentRowAt(i, w int, full bool) string {
 		return row
 	}
 	c := m.commits[i-m.wipCount()]
-	id := commitIdentOf(c)
+	id := commitIdentOf(c, m.trackedUpstreams())
 	var tok string
 	if full {
 		tok = id.fullToken(w)
@@ -1038,6 +1055,7 @@ func (m Model) commitDecoratorsRange(rows []string, idx []int, lo, hi int) []row
 	graphPrefix := !m.commitListMode && m.commitGraphOn() && len(m.commitGraphRows) == m.commitsTotal()
 	decos := make([]rowDecorator, len(rows))
 	identW := m.commitIdentWidth() // loop-invariant: compute once, not per row
+	tracked := m.trackedUpstreams()
 	for j := lo; j < hi; j++ {
 		ci := j
 		if j < len(idx) {
@@ -1056,8 +1074,8 @@ func (m Model) commitDecoratorsRange(rows []string, idx []int, lo, hi int) []row
 		if m.isWipRow(ci) {
 			continue // ◇ node lives in the graph cells; no lineage/lane decoration
 		}
-		id := commitIdentOf(m.commits[ci-m.wipCount()])
-		dim := !id.tip && id.name != "" // gray a lineage row's branch name
+		id := commitIdentOf(m.commits[ci-m.wipCount()], tracked)
+		dim := !id.tip && !id.remoteTip && id.name != "" // gray a lineage row's branch name
 
 		// identStart = the 2-col selection prefix + this row's leading glyphs. In
 		// graph mode the prefix is the fixed-width window (cols*2) + a trailing
@@ -1069,6 +1087,7 @@ func (m Model) commitDecoratorsRange(rows []string, idx []int, lo, hi int) []row
 		} else if graphPrefix {
 			identStart += m.graphCols()*2 + 1
 		}
+		identStart += commitMarkerW // skip the ■▲ marker prefix; dim only the name column
 
 		hasDot := false
 		dotCol := 0
@@ -1118,7 +1137,7 @@ func (m Model) commitHaystackAt(i int) string {
 		return r.text()
 	}
 	c := m.commits[i-m.wipCount()]
-	id := commitIdentOf(c)
+	id := commitIdentOf(c, nil) // nil: the filter haystack must not depend on tracked-upstream state
 	names := id.label()
 	for _, e := range id.extra {
 		names += " " + e

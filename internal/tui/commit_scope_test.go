@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -716,5 +717,107 @@ func TestFilesViewCommitsTouchingSeedsFilter(t *testing.T) {
 	}
 	if got.focus != panelCommits {
 		t.Fatalf("focus should be panelCommits after seeding, got %v", got.focus)
+	}
+}
+
+func TestFeedUpstreamsFiltersToExistingRemoteRefs(t *testing.T) {
+	m := Model{
+		branches: []model.Branch{
+			{Name: "main", Upstream: "origin/main"},
+			{Name: "feat", Upstream: "origin/feat"}, // upstream configured but ref gone
+			{Name: "local-only"},                    // no upstream
+		},
+		remoteBranches: []model.RemoteBranch{{Name: "origin/main"}}, // only origin/main exists
+	}
+	got := m.feedUpstreams()
+	if !slices.Equal(got, []string{"origin/main"}) {
+		t.Fatalf("feedUpstreams() = %v, want [origin/main]", got)
+	}
+}
+
+func TestFeedUpstreamsRespectsSoloScope(t *testing.T) {
+	m := Model{
+		commitScopeBranches: []string{"feat"}, // soloed
+		branches: []model.Branch{
+			{Name: "main", Upstream: "origin/main"},
+			{Name: "feat", Upstream: "origin/feat"},
+		},
+		remoteBranches: []model.RemoteBranch{{Name: "origin/main"}, {Name: "origin/feat"}},
+	}
+	got := m.feedUpstreams()
+	if !slices.Equal(got, []string{"origin/feat"}) {
+		t.Fatalf("feedUpstreams() = %v, want only the soloed branch's upstream [origin/feat]", got)
+	}
+}
+
+// newTestModelForReload builds a Model with a real svc+feed (fake runner) for
+// testing the dataLoadedMsg reload path. Mirrors TestCommitSoloReloadEndToEnd.
+func newTestModelForReload(t *testing.T) Model {
+	t.Helper()
+	f := gitexec.NewFakeRunner()
+	f.SetResponse("git log", gitexec.Result{Stdout: "h1\x1f\x1fAda\x1f0\x1fsubject\x1fHEAD -> main\n"})
+	svc := domain.New(&git.Repo{Runner: f})
+	m := branchesPanelModel("main")
+	m.svc = svc
+	m.feed = svc.CommitFeed()
+	return m
+}
+
+func TestDataLoadedTriggersUpstreamReload(t *testing.T) {
+	m := newTestModelForReload(t)
+	msg := dataLoadedMsg{
+		gen:            m.loadGen,
+		branches:       []model.Branch{{Name: "main", IsHead: true, Upstream: "origin/main"}},
+		remoteBranches: []model.RemoteBranch{{Name: "origin/main"}},
+	}
+	nm, _ := m.Update(msg)
+	if !nm.(Model).commitsLoading {
+		t.Fatal("expected a feed reload (commitsLoading=true) when tracked upstreams exist")
+	}
+}
+
+func TestDataLoadedNoReloadWithoutTrackedUpstreams(t *testing.T) {
+	m := newTestModelForReload(t)
+	msg := dataLoadedMsg{
+		gen:      m.loadGen,
+		branches: []model.Branch{{Name: "main", IsHead: true}}, // no upstream
+	}
+	nm, _ := m.Update(msg)
+	if nm.(Model).commitsLoading {
+		t.Fatal("no tracked upstreams must NOT trigger a reload (preserve the fast initial walk)")
+	}
+}
+
+// TestDataLoadedNoRedundantReloadOnSecondLoad proves that a second dataLoadedMsg
+// with the same upstream set does NOT trigger another feed reload. The first
+// delivery fires the reload (scope differs from the zero value); the second must
+// be a no-op because feedScopeApplied already matches feedScopeSig().
+func TestDataLoadedNoRedundantReloadOnSecondLoad(t *testing.T) {
+	m := newTestModelForReload(t)
+	msg := dataLoadedMsg{
+		gen:            m.loadGen,
+		branches:       []model.Branch{{Name: "main", IsHead: true, Upstream: "origin/main"}},
+		remoteBranches: []model.RemoteBranch{{Name: "origin/main"}},
+	}
+
+	// First delivery: scope differs from "" → reload fires.
+	nm, _ := m.Update(msg)
+	m = nm.(Model)
+	if !m.commitsLoading {
+		t.Fatal("first dataLoadedMsg with upstreams should trigger a reload")
+	}
+
+	// Simulate the reload having completed: clear the loading flag and update
+	// loadGen so the next dataLoadedMsg is not dropped.
+	m.commitsLoading = false
+	m.loadGen++
+	msg.gen = m.loadGen
+
+	// Second delivery with the same branches/upstreams: feedScopeApplied already
+	// matches feedScopeSig() → must NOT fire a second reload.
+	nm, _ = m.Update(msg)
+	m = nm.(Model)
+	if m.commitsLoading {
+		t.Fatal("second dataLoadedMsg with the same upstream set must NOT trigger a redundant reload")
 	}
 }

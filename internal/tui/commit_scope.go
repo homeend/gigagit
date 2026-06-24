@@ -4,6 +4,7 @@ import (
 	"context"
 	"slices"
 	"strconv"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -66,25 +67,63 @@ func (m Model) canClearFilters() bool {
 	return m.focus == panelCommits && (m.highlightQuery != "" || m.commitFilter.filtered())
 }
 
-// feedScope builds the LogScope the feed should walk: branch selection plus the
-// active filter. Fresh slices: the value-receiver Model shares slice backings.
-func (m Model) feedScope() domain.LogScope {
-	return domain.LogScope{
-		Branches: append([]string(nil), m.commitScopeBranches...),
-		Paths:    append([]string(nil), m.commitFilter.Paths...),
-		Author:   m.commitFilter.Author,
-		Grep:     m.commitFilter.Grep,
-		Since:    m.commitFilter.Since,
-		Until:    m.commitFilter.Until,
-	}
-}
-
 // startFeedReload sets the Commits loading indicator and returns the scope
 // reload cmd, so the title shows it is working while the (possibly slow) re-walk
 // runs. The indicator clears when commitsReloadedMsg arrives.
 func (m Model) startFeedReload() (Model, tea.Cmd) {
 	m.commitsLoading = true
+	m.feedScopeApplied = m.feedScopeSig()
 	return m, m.reloadFeedCmd()
+}
+
+// feedUpstreams returns the deduped upstream refs of the local branches in the
+// current feed scope (all local branches when the scope is empty), restricted to
+// refs that actually exist as remote-tracking branches — git log errors on a
+// missing ref, so a configured-but-unfetched upstream must be dropped.
+func (m Model) feedUpstreams() []string {
+	exists := make(map[string]bool, len(m.remoteBranches))
+	for _, rb := range m.remoteBranches {
+		exists[rb.Name] = true
+	}
+	inScope := func(name string) bool {
+		return len(m.commitScopeBranches) == 0 || slices.Contains(m.commitScopeBranches, name)
+	}
+	var out []string
+	seen := map[string]bool{}
+	for _, b := range m.branches {
+		if b.Upstream == "" || !inScope(b.Name) || !exists[b.Upstream] || seen[b.Upstream] {
+			continue
+		}
+		seen[b.Upstream] = true
+		out = append(out, b.Upstream)
+	}
+	return out
+}
+
+// feedScope is the LogScope the commit feed should walk: the scoped branches,
+// their tracked resolvable upstreams, and the active path/author/message/date
+// filter. Fresh slices: the value-receiver Model shares slice backings.
+func (m Model) feedScope() domain.LogScope {
+	return domain.LogScope{
+		Branches:  append([]string(nil), m.commitScopeBranches...),
+		Upstreams: m.feedUpstreams(),
+		Paths:     append([]string(nil), m.commitFilter.Paths...),
+		Author:    m.commitFilter.Author,
+		Grep:      m.commitFilter.Grep,
+		Since:     m.commitFilter.Since,
+		Until:     m.commitFilter.Until,
+	}
+}
+
+// feedScopeSig is a stable signature of the scope the feed should walk, used to
+// detect when the desired scope (branches + tracked upstreams + filter) differs
+// from what was last applied, so the feed is reloaded only when it would
+// actually change.
+func (m Model) feedScopeSig() string {
+	s := m.feedScope()
+	return strings.Join(s.Branches, ",") + "|" + strings.Join(s.Upstreams, ",") +
+		"|" + strings.Join(s.Paths, ",") + "|" + s.Author + "|" + s.Grep +
+		"|" + s.Since + "|" + s.Until
 }
 
 // reloadFeedCmd applies the model's scope to the feed and reloads page 0 off the
