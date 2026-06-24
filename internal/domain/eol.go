@@ -26,7 +26,7 @@ func (s *Service) statusFiltered(ctx context.Context) (model.WorkingTreeStatus, 
 // keeps its staged entry. Best-effort: any error leaves status untouched, so a
 // failure never hides a genuine change.
 func (s *Service) dropEOLOnly(ctx context.Context, st model.WorkingTreeStatus) model.WorkingTreeStatus {
-	if s.showEOLOnly {
+	if s.showEOLOnly.Load() {
 		return st
 	}
 	var cands []string

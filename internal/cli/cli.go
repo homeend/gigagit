@@ -34,6 +34,10 @@ func Run(workdir string, args []string, stdin io.Reader, stdout, stderr io.Write
 		return 2
 	}
 	svc := domain.Open(workdir)
+	// The scriptable CLI keeps `gg status` faithful to `git status`: the
+	// EOL-only filter is a TUI Files-panel convenience and the CLI has no config
+	// to disable it, so a script's output must not silently change.
+	svc.SetShowEOLOnlyChanges(true)
 	cmd, rest := args[0], args[1:]
 	// Record this repo in the switcher registry (best-effort: errors and
 	// non-repo working directories are ignored). Skip for "repo" subcommands

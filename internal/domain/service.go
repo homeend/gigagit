@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/homeend/gigagit/internal/bookmark"
@@ -43,17 +44,18 @@ type Service struct {
 	profileRepo   profile.Store // lazily resolved; nil disables profiles
 
 	// showEOLOnly, when false (the default), hides files whose only unstaged
-	// change is line endings (CRLF↔LF) from Status/Snapshot. Set once at
-	// construction time from [ui] show_eol_only_changes (TUI), before any read.
-	showEOLOnly bool
+	// change is line endings (CRLF↔LF) from Status/Snapshot. atomic because the
+	// TUI re-applies it from config inside loadCmd on every reload, which races
+	// op-triggered status refreshes reading it on another goroutine.
+	showEOLOnly atomic.Bool
 }
 
 // SetShowEOLOnlyChanges controls whether a file whose ONLY unstaged change is
 // line endings (CRLF↔LF) is surfaced as modified. The default (false) drops
 // such files from Status/Snapshot as noise; the TUI sets it from [ui]
-// show_eol_only_changes. Call before issuing reads (it is not synchronized).
+// show_eol_only_changes, the CLI keeps it true (raw `git status`).
 func (s *Service) SetShowEOLOnlyChanges(show bool) *Service {
-	s.showEOLOnly = show
+	s.showEOLOnly.Store(show)
 	return s
 }
 

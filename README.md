@@ -180,10 +180,10 @@ without `--force`.
 `ctrl+f` eager search will scan before asking permission to go deeper (default 5);
 `[ui] show_eol_only_changes` (default `false`) controls whether a file whose
 only unstaged change is its line endings (CRLF↔LF) is shown as modified — by
-default such files are hidden from the Files panel, the count badge, and
-`gg status` as noise; set it `true` to surface them (e.g. when deliberately
-renormalizing line endings); like every entry, the repo's `.gg.toml` overrides
-the global config per field.
+default such files are hidden from the Files panel and its count badge as noise;
+set it `true` to surface them (e.g. when deliberately renormalizing line
+endings). The scriptable `gg status` is unaffected (faithful to `git status`).
+Like every entry, the repo's `.gg.toml` overrides the global config per field.
 
 `[ui] footer_actions` and `[ui] menu_actions` are lists of action **ids** that
 choose which actions appear in the footer bar and in the `.` menu respectively;

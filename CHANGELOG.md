@@ -11,11 +11,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ### Added
 - **Files panel ignores line-ending-only changes.** A tracked file whose only
   unstaged difference is its line endings (CRLF↔LF) — common on Windows/WSL — no
-  longer shows up as modified in the Files panel, the count badge, or
-  `gg status`. Detection uses `git diff --ignore-cr-at-eol` (one extra diff,
-  only when there are modified files, scoped to just those paths); a file's
-  staged change, if any, is preserved. Set `[ui] show_eol_only_changes = true`
-  to surface them again (e.g. when you are deliberately renormalizing endings).
+  longer shows up as modified in the Files panel or its count badge. Detection
+  uses `git diff --ignore-cr-at-eol` (one extra diff, only when there are
+  modified files, scoped to just those paths); a file's staged change, if any,
+  is preserved. Set `[ui] show_eol_only_changes = true` to surface them again
+  (e.g. when you are deliberately renormalizing endings). The scriptable
+  `gg status` is unaffected — it stays faithful to `git status`.
 
 ### Fixed
 - **A git command that fails to start now reports the real cause instead of a
