@@ -1005,6 +1005,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.commitsLoading = true
 				return m, m.loadMoreCmd()
 			}
+		case "home":
+			m.sel[m.focus] = 0
+		case "end":
+			if n := m.panelLen(m.focus); n > 0 {
+				m.sel[m.focus] = n - 1
+			}
+			// On Commits, landing at the true end triggers the existing auto-page
+			// path (NeedsMore is satisfied), so End also loads a new batch; press
+			// again to walk deeper. maybeLoadMoreCommits no-ops under a commit filter.
+			if m.focus == panelCommits {
+				if mm, cmd := m.maybeLoadMoreCommits(); cmd != nil {
+					return mm, cmd
+				}
+			}
 		case "pgdown":
 			if n := m.panelLen(m.focus); n > 0 {
 				m.sel[m.focus] += m.pageStep()

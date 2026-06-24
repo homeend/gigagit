@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/gigagit/gg/internal/model"
 )
 
 func keyMsg(s string) tea.KeyMsg {
@@ -117,5 +118,25 @@ func TestCtrlLNoopWhenExhausted(t *testing.T) {
 	nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlL})
 	if cmd != nil || nm.(Model).commitsLoading {
 		t.Fatal("ctrl+l must be a no-op on an exhausted feed")
+	}
+}
+
+func TestHomeEndCommitsNav(t *testing.T) {
+	m := newTestModelForReload(t)
+	m.focus = panelCommits
+	// Give the panel several rows so home/end have somewhere to go.
+	m.commits = []model.Commit{{Hash: "a"}, {Hash: "b"}, {Hash: "c"}}
+	m = m.rebuildCommitGraph()
+	m.sel[panelCommits] = 1
+
+	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyHome})
+	if nm.(Model).sel[panelCommits] != 0 {
+		t.Fatalf("home → sel 0, got %d", nm.(Model).sel[panelCommits])
+	}
+
+	nm2, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnd})
+	want := m.panelLen(panelCommits) - 1
+	if nm2.(Model).sel[panelCommits] != want {
+		t.Fatalf("end → sel %d, got %d", want, nm2.(Model).sel[panelCommits])
 	}
 }
