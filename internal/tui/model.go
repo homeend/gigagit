@@ -1045,11 +1045,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		case "ctrl+r":
-			// Global: clear every active filtering state at once — the `/`
-			// filter, the `@` highlight, and the `\` commit filter.
+			// Clear the FOCUSED window's filtering only — its `/` filter, and on
+			// the Commits panel the `@` highlight and the `\` commit filter.
+			// Filtering on other windows is left untouched.
 			if m.opsIdle() {
 				var reload bool
-				m, reload = m.clearAllFiltering()
+				m, reload = m.clearFilteringForFocus()
 				if reload {
 					return m.startFeedReload()
 				}

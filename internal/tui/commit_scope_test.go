@@ -119,39 +119,76 @@ func TestClearFilterRowPresentOnlyWhenFiltered(t *testing.T) {
 	}
 }
 
-func TestGlobalCtrlRClearsAllFiltering(t *testing.T) {
-	m := loadedModel(t)
+func TestCtrlRClearsOnlyFocusedWindow(t *testing.T) {
+	// A `/` filter bound to the Branches panel, plus an @ highlight and a `\`
+	// commit filter on the Commits panel.
+	base := func() Model {
+		m := loadedModel(t)
+		m.filterPanel = panelBranches
+		m.filterQuery = "foo"
+		m.highlightQuery = "bar"
+		m.commitFilter = commitFilterFields{Grep: "baz"}
+		return m
+	}
+
+	// Focused on Commits → clears the @ highlight and the commit filter, but
+	// leaves the Branches `/` filter alone.
+	m := base()
 	m.focus = panelCommits
-	// All three filtering states active at once.
-	m.filterPanel = panelCommits
-	m.filterQuery = "foo"
-	m.highlightQuery = "bar"
-	m.commitFilter = commitFilterFields{Grep: "baz"}
-	m2, _ := m.Update(keyMsg("ctrl+r"))
-	mm := m2.(Model)
-	if mm.filterQuery != "" {
-		t.Errorf("ctrl+r should clear the / filter, got %q", mm.filterQuery)
+	c1, _ := m.Update(keyMsg("ctrl+r"))
+	mm := c1.(Model)
+	if mm.commitFilter.filtered() {
+		t.Error("ctrl+r on Commits should clear the commit filter")
 	}
 	if mm.highlightQuery != "" {
-		t.Errorf("ctrl+r should clear the @ highlight, got %q", mm.highlightQuery)
+		t.Error("ctrl+r on Commits should clear the @ highlight")
 	}
-	if mm.commitFilter.filtered() {
-		t.Errorf("ctrl+r should clear the commit filter, got %+v", mm.commitFilter)
+	if mm.filterQuery != "foo" {
+		t.Errorf("ctrl+r on Commits must NOT clear another window's / filter, got %q", mm.filterQuery)
 	}
-	// The commit filter was active, so the feed reload must have fired.
 	if !mm.commitsLoading {
 		t.Error("clearing an active commit filter should reload the feed")
+	}
+
+	// Focused on Branches → clears only the Branches `/` filter; the Commits
+	// commit filter and @ highlight survive.
+	m = base()
+	m.focus = panelBranches
+	c2, _ := m.Update(keyMsg("ctrl+r"))
+	mm = c2.(Model)
+	if mm.filterQuery != "" {
+		t.Errorf("ctrl+r on Branches should clear its / filter, got %q", mm.filterQuery)
+	}
+	if !mm.commitFilter.filtered() {
+		t.Error("ctrl+r on Branches must NOT clear the Commits commit filter")
+	}
+	if mm.highlightQuery != "bar" {
+		t.Errorf("ctrl+r on Branches must NOT clear the Commits @ highlight, got %q", mm.highlightQuery)
+	}
+	if mm.commitsLoading {
+		t.Error("clearing a non-Commits filter should not reload the feed")
 	}
 }
 
 func TestCanClearFiltersGating(t *testing.T) {
 	m := loadedModel(t)
+	m.focus = panelCommits
 	if m.canClearFilters() {
 		t.Fatal("nothing filtered → no clear hint")
 	}
 	m.highlightQuery = "x"
 	if !m.canClearFilters() {
-		t.Fatal("an active @ highlight should enable the clear hint")
+		t.Fatal("an active @ highlight on the focused Commits panel should enable the hint")
+	}
+
+	// A `/` filter bound to another window must not enable the hint for the
+	// focused panel.
+	m2 := loadedModel(t)
+	m2.focus = panelCommits
+	m2.filterPanel = panelBranches
+	m2.filterQuery = "y"
+	if m2.canClearFilters() {
+		t.Fatal("another window's / filter must not enable the focused window's clear hint")
 	}
 }
 

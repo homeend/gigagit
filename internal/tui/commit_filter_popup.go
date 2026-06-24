@@ -53,10 +53,11 @@ func (p *commitFilterPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.commitFilter = p.collect()
 		return m.startFeedReload()
 	case "ctrl+r":
-		// Explicitly remove all filtering at once (same as the global ctrl+r):
-		// the `/` filter, the `@` highlight, and this commit filter.
+		// Clear every field — remove the commit filter being edited — and
+		// restore the full feed.
 		m = m.popLayer()
-		m, reload := m.clearAllFiltering()
+		reload := m.commitFilter.filtered()
+		m.commitFilter = commitFilterFields{}
 		if reload {
 			return m.startFeedReload()
 		}

@@ -32,26 +32,38 @@ func (f commitFilterFields) filtered() bool {
 	return len(f.Paths) > 0 || f.Author != "" || f.Grep != "" || f.Since != "" || f.Until != ""
 }
 
-// clearAllFiltering removes every active filtering state in one shot: the
-// in-memory `/` filter, the `@` highlight, and the `\` commit-scope filter. It
-// reports whether the commit-scope filter was active, so the caller can reload
-// the feed (the other two are display-only and need no git walk).
-func (m Model) clearAllFiltering() (Model, bool) {
-	m.filterTyping = false
-	m.filterQuery = ""
-	m.highlightTyping = false
-	m.highlightQuery = ""
-	reload := m.commitFilter.filtered()
-	m.commitFilter = commitFilterFields{}
+// clearFilteringForFocus removes the filtering that belongs to the FOCUSED
+// window only: the `/` filter (if it is bound to this panel), and — on the
+// Commits panel — the `@` highlight and the `\` commit-scope filter. Filtering
+// on other windows is left untouched. It reports whether the commit-scope
+// filter was cleared, so the caller can reload the feed (the `/`/`@` states are
+// display-only and need no git walk).
+func (m Model) clearFilteringForFocus() (Model, bool) {
+	if m.filterPanel == m.focus {
+		m.filterTyping = false
+		m.filterQuery = ""
+	}
+	reload := false
+	if m.focus == panelCommits {
+		m.highlightTyping = false
+		m.highlightQuery = ""
+		reload = m.commitFilter.filtered()
+		m.commitFilter = commitFilterFields{}
+	}
 	return m, reload
 }
 
-// canClearFilters reports whether any filtering is active (drives the global
-// ctrl+r footer hint). Only committed states count — the typing modes capture
-// keys themselves, so the global ctrl+r can't reach them.
+// canClearFilters reports whether the FOCUSED window has any filtering to clear
+// (drives the ctrl+r footer hint). Only committed states count — the typing
+// modes capture keys themselves, so ctrl+r can't reach them.
 func (m Model) canClearFilters() bool {
-	return m.opsIdle() &&
-		(m.filterQuery != "" || m.highlightQuery != "" || m.commitFilter.filtered())
+	if !m.opsIdle() {
+		return false
+	}
+	if m.filterPanel == m.focus && m.filterQuery != "" {
+		return true
+	}
+	return m.focus == panelCommits && (m.highlightQuery != "" || m.commitFilter.filtered())
 }
 
 // feedScope builds the LogScope the feed should walk: branch selection plus the
