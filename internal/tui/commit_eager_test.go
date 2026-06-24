@@ -148,4 +148,3 @@ func TestEagerPromptCancelStops(t *testing.T) {
 		t.Fatal("cancel should pop the prompt")
 	}
 }
-

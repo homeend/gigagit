@@ -9,6 +9,17 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Deeper, on-demand commit loading.** The Commits panel now loads more history
+  before you hit the bottom and lets you reach it directly. New `[ui]` settings
+  set the counts: `commit_initial_count` (first paint, default 300, up from 50),
+  `commit_batch_size` (per later page, default 300), and
+  `commit_search_max_pages` (default 5). `ctrl+l` loads the next batch on demand;
+  **Home**/**End** jump to the top/bottom of any list, and End on Commits also
+  loads the next batch (press again to walk deeper). Applying then clearing a `\`
+  commit filter now restores the commits you had already loaded instead of
+  re-walking from the top. Eager search: when a `/` filter or `@` highlight query
+  isn't among the loaded commits, `ctrl+f` pages history to find it and jumps to
+  the first hit (asking before it scans deeper).
 - **Filtered commit log** — `\` on the Commits panel opens a filter popup (path,
   author, message, date range) that narrows the feed via `git log` flags; filters
   compose with branch scope. "Commits touching this" seeds a path filter from the
