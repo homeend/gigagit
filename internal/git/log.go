@@ -14,10 +14,24 @@ import (
 // (needs --source) carries the branch each commit was reached from in the walk.
 const logFormat = "%H%x1f%P%x1f%an%x1f%at%x1f%s%x1f%D%x1f%S"
 
-// LogScope selects which refs the walk covers. Empty Branches → all local
-// branches (plus HEAD); otherwise exactly the listed branch names.
+// LogScope selects and narrows the walk. Branches selects refs (empty → all
+// local branches plus HEAD). Paths/Author/Grep/Since/Until further FILTER the
+// result with native `git log` flags; any of them being set makes the feed a
+// non-contiguous subset of history (path scope also narrows to commits that
+// touched those paths). Branches alone does NOT count as a filter.
 type LogScope struct {
 	Branches []string
+	Paths    []string
+	Author   string
+	Grep     string
+	Since    string
+	Until    string
+}
+
+// filtered reports whether any content-narrowing filter is active.
+// Branch scoping alone does not count — it selects refs, not filters history.
+func (s LogScope) filtered() bool {
+	return len(s.Paths) > 0 || s.Author != "" || s.Grep != "" || s.Since != "" || s.Until != ""
 }
 
 // LogScoped returns up to limit commits (newest-first; --date-order when
@@ -29,13 +43,23 @@ func (r *Repo) LogScoped(ctx context.Context, limit, skip int, scope LogScope, d
 		Arg("-n", strconv.Itoa(limit)).
 		ArgIf(dateOrder, "--date-order").
 		Arg("--decorate", "--source", "--format="+logFormat).
-		ArgIf(skip > 0, "--skip="+strconv.Itoa(skip))
+		ArgIf(skip > 0, "--skip="+strconv.Itoa(skip)).
+		ArgIf(scope.Author != "", "--author="+scope.Author).
+		ArgIf(scope.Since != "", "--since="+scope.Since).
+		ArgIf(scope.Until != "", "--until="+scope.Until)
+	if scope.Grep != "" {
+		b = b.Arg("--grep="+scope.Grep, "-i")
+	}
 	if len(scope.Branches) == 0 {
 		// All local branches PLUS HEAD, so a detached HEAD's commits still show
 		// (git dedupes HEAD when it is already on a branch).
 		b = b.Arg("--branches", "HEAD")
 	} else {
 		b = b.Arg(scope.Branches...)
+	}
+	if len(scope.Paths) > 0 {
+		b = b.Arg("--")
+		b = b.Arg(scope.Paths...)
 	}
 	res, err := r.Runner.Run(ctx, "git log", b.ToArgv())
 	if err != nil {
