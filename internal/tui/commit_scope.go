@@ -4,6 +4,7 @@ import (
 	"context"
 	"slices"
 	"strconv"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -24,6 +25,7 @@ type commitsReloadedMsg struct {
 // runs. The indicator clears when commitsReloadedMsg arrives.
 func (m Model) startFeedReload() (Model, tea.Cmd) {
 	m.commitsLoading = true
+	m.feedScopeApplied = m.feedScopeSig()
 	return m, m.reloadFeedCmd()
 }
 
@@ -58,6 +60,14 @@ func (m Model) feedScope() domain.LogScope {
 		Branches:  append([]string(nil), m.commitScopeBranches...),
 		Upstreams: m.feedUpstreams(),
 	}
+}
+
+// feedScopeSig is a stable signature of the scope the feed should walk, used to
+// detect when the desired scope (branches + tracked upstreams) differs from what
+// was last applied, so the feed is reloaded only when it would actually change.
+func (m Model) feedScopeSig() string {
+	s := m.feedScope()
+	return strings.Join(s.Branches, ",") + "|" + strings.Join(s.Upstreams, ",")
 }
 
 // reloadFeedCmd applies the model's scope to the feed and reloads page 0 off the

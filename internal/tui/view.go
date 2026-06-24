@@ -1133,7 +1133,7 @@ func (m Model) commitHaystackAt(i int) string {
 		return r.text()
 	}
 	c := m.commits[i-m.wipCount()]
-	id := commitIdentOf(c, nil)
+	id := commitIdentOf(c, nil) // nil: the filter haystack must not depend on tracked-upstream state
 	names := id.label()
 	for _, e := range id.extra {
 		names += " " + e

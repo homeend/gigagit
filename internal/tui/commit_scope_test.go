@@ -573,3 +573,37 @@ func TestDataLoadedNoReloadWithoutTrackedUpstreams(t *testing.T) {
 		t.Fatal("no tracked upstreams must NOT trigger a reload (preserve the fast initial walk)")
 	}
 }
+
+// TestDataLoadedNoRedundantReloadOnSecondLoad proves that a second dataLoadedMsg
+// with the same upstream set does NOT trigger another feed reload. The first
+// delivery fires the reload (scope differs from the zero value); the second must
+// be a no-op because feedScopeApplied already matches feedScopeSig().
+func TestDataLoadedNoRedundantReloadOnSecondLoad(t *testing.T) {
+	m := newTestModelForReload(t)
+	msg := dataLoadedMsg{
+		gen:            m.loadGen,
+		branches:       []model.Branch{{Name: "main", IsHead: true, Upstream: "origin/main"}},
+		remoteBranches: []model.RemoteBranch{{Name: "origin/main"}},
+	}
+
+	// First delivery: scope differs from "" → reload fires.
+	nm, _ := m.Update(msg)
+	m = nm.(Model)
+	if !m.commitsLoading {
+		t.Fatal("first dataLoadedMsg with upstreams should trigger a reload")
+	}
+
+	// Simulate the reload having completed: clear the loading flag and update
+	// loadGen so the next dataLoadedMsg is not dropped.
+	m.commitsLoading = false
+	m.loadGen++
+	msg.gen = m.loadGen
+
+	// Second delivery with the same branches/upstreams: feedScopeApplied already
+	// matches feedScopeSig() → must NOT fire a second reload.
+	nm, _ = m.Update(msg)
+	m = nm.(Model)
+	if m.commitsLoading {
+		t.Fatal("second dataLoadedMsg with the same upstream set must NOT trigger a redundant reload")
+	}
+}
