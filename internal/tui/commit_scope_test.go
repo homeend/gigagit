@@ -571,6 +571,39 @@ func TestGraphSuppressedWhenFiltered(t *testing.T) {
 	}
 }
 
+// TestFilesViewRowsExcludeDeletedFile anchors the status == "D" exclusion in
+// viewFileRow and openExternalRow. A deleted file has no content at the commit,
+// so both rows must return ok==false for it. A normal (non-deleted) file must
+// return ok==true so the test cannot pass vacuously.
+func TestFilesViewRowsExcludeDeletedFile(t *testing.T) {
+	m := openFilesView(t, filesModel())
+	m.filesTreeFocused = true
+
+	// Inject a deleted-file line at index 0 and a normal file line at index 1
+	// so we can test both without depending on the fixture's existing status values.
+	deletedLine := contentLine{text: "D  gone.go", path: "gone.go", status: "D"}
+	normalLine := contentLine{text: "M  model.go", path: "internal/tui/model.go", status: "M"}
+	m.filesView.lines = []contentLine{deletedLine, normalLine}
+
+	// --- deleted file: both rows must return ok==false ---
+	m.filesView.sel = 0
+	if _, ok := m.viewFileRow(); ok {
+		t.Error("viewFileRow must return ok==false for a deleted (D) file")
+	}
+	if _, ok := m.openExternalRow(); ok {
+		t.Error("openExternalRow must return ok==false for a deleted (D) file")
+	}
+
+	// --- normal file: both rows must return ok==true (non-vacuous counter-check) ---
+	m.filesView.sel = 1
+	if _, ok := m.viewFileRow(); !ok {
+		t.Error("viewFileRow must return ok==true for a normal (non-deleted) file")
+	}
+	if _, ok := m.openExternalRow(); !ok {
+		t.Error("openExternalRow must return ok==true for a normal (non-deleted) file")
+	}
+}
+
 func TestFilesViewCommitsTouchingSeedsFilter(t *testing.T) {
 	m := openFilesView(t, filesModel())
 	// openFilesView lands on the commit-list side; switch to the tree side so
