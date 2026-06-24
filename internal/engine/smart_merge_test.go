@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gigagit/gg/internal/git"
+	"github.com/homeend/gigagit/internal/git"
 )
 
 // gitE runs a raw git command in dir (mirrors the run closure in newRepo).

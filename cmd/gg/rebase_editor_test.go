@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gigagit/gg/internal/rebaseplan"
+	"github.com/homeend/gigagit/internal/rebaseplan"
 )
 
 func TestRunRebaseSeqRewritesTodo(t *testing.T) {

@@ -9,9 +9,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/gigagit/gg/internal/domain"
-	"github.com/gigagit/gg/internal/engine"
-	"github.com/gigagit/gg/internal/model"
+	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // cmdDiscard implements `gg discard [--yes] (--all | <path>...)`. It throws away

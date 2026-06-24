@@ -8,7 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/gigagit/gg/internal/domain"
+	"github.com/homeend/gigagit/internal/domain"
 )
 
 // editorViewMsg carries a throwaway temp file written for read-only external

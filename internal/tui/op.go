@@ -6,9 +6,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/gigagit/gg/internal/engine"
-	"github.com/gigagit/gg/internal/model"
-	"github.com/gigagit/gg/internal/rebaseplan"
+	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/rebaseplan"
 )
 
 // opEventMsg carries one engine event (progress/done/gitline) to the UI.

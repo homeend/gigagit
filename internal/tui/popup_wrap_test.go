@@ -7,9 +7,9 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/gigagit/gg/internal/domain"
-	"github.com/gigagit/gg/internal/model"
-	"github.com/gigagit/gg/internal/repos"
+	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/repos"
 )
 
 func popupHeight(s string) int { return len(strings.Split(ansi.Strip(s), "\n")) }

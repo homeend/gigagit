@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/gigagit/gg/internal/domain"
+	"github.com/homeend/gigagit/internal/domain"
 )
 
 // runGit runs a git command in dir, failing the test on error.

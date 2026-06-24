@@ -7,9 +7,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/gigagit/gg/internal/engine"
-	"github.com/gigagit/gg/internal/template"
-	"github.com/gigagit/gg/internal/worktree"
+	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/template"
+	"github.com/homeend/gigagit/internal/worktree"
 )
 
 // popupState is the worktree-create popup's mode.

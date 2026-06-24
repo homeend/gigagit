@@ -10,9 +10,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/gigagit/gg/internal/domain"
-	"github.com/gigagit/gg/internal/model"
-	"github.com/gigagit/gg/internal/textdiff"
+	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/textdiff"
 )
 
 // diffContext is the equal lines kept on each side of a change in partial

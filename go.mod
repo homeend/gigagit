@@ -1,4 +1,4 @@
-module github.com/gigagit/gg
+module github.com/homeend/gigagit
 
 go 1.26
 

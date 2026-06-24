@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gigagit/gg/internal/domain"
-	"github.com/gigagit/gg/internal/engine"
-	"github.com/gigagit/gg/internal/observ"
+	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/observ"
 )
 
 // sinkLines parses every JSON span line the sink captured.

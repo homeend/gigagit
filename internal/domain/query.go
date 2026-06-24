@@ -6,9 +6,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/gigagit/gg/internal/git"
-	"github.com/gigagit/gg/internal/model"
-	"github.com/gigagit/gg/internal/repogate"
+	"github.com/homeend/gigagit/internal/git"
+	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/repogate"
 )
 
 // LogScope re-exports git.LogScope for the commit feed's scope (empty Branches =

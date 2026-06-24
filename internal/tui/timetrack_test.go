@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gigagit/gg/internal/observ"
+	"github.com/homeend/gigagit/internal/observ"
 )
 
 // TestStartOpEmitsOpSpan drives a real op through the TUI plumbing and

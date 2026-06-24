@@ -7,7 +7,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/gigagit/gg/internal/searchhist"
+	"github.com/homeend/gigagit/internal/searchhist"
 )
 
 // SearchStatePath overrides the search-history root dir. "" uses the default XDG

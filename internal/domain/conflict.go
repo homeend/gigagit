@@ -3,7 +3,7 @@ package domain
 import (
 	"context"
 
-	"github.com/gigagit/gg/internal/model"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // ConflictState attributes the current conflict to the operation that produced

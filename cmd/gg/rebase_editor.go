@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gigagit/gg/internal/rebaseplan"
+	"github.com/homeend/gigagit/internal/rebaseplan"
 )
 
 // runRebaseSeq is the GIT_SEQUENCE_EDITOR hook: it reads the gg plan and

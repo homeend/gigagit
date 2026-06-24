@@ -3,8 +3,8 @@ package engine
 import (
 	"context"
 
-	"github.com/gigagit/gg/internal/git"
-	"github.com/gigagit/gg/internal/model"
+	"github.com/homeend/gigagit/internal/git"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // GitOps is the set of git verbs operations use. *git.Repo satisfies it.

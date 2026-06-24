@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/gigagit/gg/internal/git"
+	"github.com/homeend/gigagit/internal/git"
 )
 
 // Commit stages (optionally) and commits with a message. Amend rewrites the

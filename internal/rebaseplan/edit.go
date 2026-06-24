@@ -3,7 +3,7 @@ package rebaseplan
 import (
 	"fmt"
 
-	"github.com/gigagit/gg/internal/model"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // Edit is a single-commit history edit applied to a loaded commit range.

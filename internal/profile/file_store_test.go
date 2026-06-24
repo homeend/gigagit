@@ -3,7 +3,7 @@ package profile
 import (
 	"testing"
 
-	"github.com/gigagit/gg/internal/model"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 func TestFileStoreAddListRemove(t *testing.T) {

@@ -7,8 +7,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/gigagit/gg/internal/engine"
-	"github.com/gigagit/gg/internal/model"
+	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // shelfPopup is the centered shelf quick-switcher (G): a type-to-filter list of

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/gigagit/gg/internal/rebaseplan"
+	"github.com/homeend/gigagit/internal/rebaseplan"
 )
 
 // Reword changes a single commit's message. Rewording the tip with a clean

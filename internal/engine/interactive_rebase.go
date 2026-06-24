@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/gigagit/gg/internal/model"
-	"github.com/gigagit/gg/internal/rebaseplan"
+	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/rebaseplan"
 )
 
 // InteractiveRebase drives `git rebase -i Onto` for Branch through the

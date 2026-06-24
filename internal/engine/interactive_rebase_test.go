@@ -8,15 +8,15 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gigagit/gg/internal/git"
-	"github.com/gigagit/gg/internal/rebaseplan"
+	"github.com/homeend/gigagit/internal/git"
+	"github.com/homeend/gigagit/internal/rebaseplan"
 )
 
 // buildGG builds the gg binary once for use as the rebase sequence editor.
 func buildGG(t *testing.T) string {
 	t.Helper()
 	bin := filepath.Join(t.TempDir(), "gg-test-bin")
-	out, err := exec.Command("go", "build", "-o", bin, "github.com/gigagit/gg/cmd/gg").CombinedOutput()
+	out, err := exec.Command("go", "build", "-o", bin, "github.com/homeend/gigagit/cmd/gg").CombinedOutput()
 	if err != nil {
 		t.Fatalf("build gg: %v\n%s", err, out)
 	}

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gigagit/gg/internal/agentskill"
+	"github.com/homeend/gigagit/internal/agentskill"
 )
 
 // initFixture: a project dir with .claude and AGENTS.md, plus a temp "home"

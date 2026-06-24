@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gigagit/gg/internal/model"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // renderModelWithCommits builds a minimal Model whose Commits panel can render

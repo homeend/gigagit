@@ -5,8 +5,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/gigagit/gg/internal/domain"
-	"github.com/gigagit/gg/internal/repos"
+	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/repos"
 )
 
 // Run launches the TUI for svc, taking over the alternate screen until the

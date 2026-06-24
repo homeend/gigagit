@@ -3,7 +3,7 @@ package tui
 import (
 	"testing"
 
-	"github.com/gigagit/gg/internal/domain"
+	"github.com/homeend/gigagit/internal/domain"
 )
 
 // enter in the history view promotes the selected commit's diff onto the layer

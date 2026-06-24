@@ -21,7 +21,10 @@ only when there's a real decision to make.
 Requires Go 1.26 and a `git` binary on `PATH`.
 
 ```bash
-# from a checkout
+# install the latest from GitHub (binary lands in $GOBIN / $GOPATH/bin as `gg`)
+go install github.com/homeend/gigagit/cmd/gg@latest
+
+# or, from a checkout
 go build ./cmd/gg            # produces ./gg
 # or cross-compile both targets
 ./build.sh all               # ./gg (linux) and ./gg.exe (windows)

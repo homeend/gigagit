@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gigagit/gg/internal/domain"
+	"github.com/homeend/gigagit/internal/domain"
 )
 
 func TestConfigInitRepoWritesTemplate(t *testing.T) {

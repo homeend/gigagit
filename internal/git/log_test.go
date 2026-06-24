@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gigagit/gg/internal/gitexec"
-	"github.com/gigagit/gg/internal/model"
+	"github.com/homeend/gigagit/internal/gitexec"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 func TestParseLog(t *testing.T) {

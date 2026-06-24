@@ -8,8 +8,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/gigagit/gg/internal/domain"
-	"github.com/gigagit/gg/internal/engine"
+	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/engine"
 )
 
 func cmdPull(svc *domain.Service, args []string, stdout, stderr io.Writer) int {

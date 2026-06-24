@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gigagit/gg/internal/template"
+	"github.com/homeend/gigagit/internal/template"
 )
 
 func testCtx() template.Ctx {

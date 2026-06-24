@@ -3,7 +3,7 @@ package domain
 import (
 	"context"
 
-	"github.com/gigagit/gg/internal/model"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // CommitPager fetches one page of commits for a feed generation. Implementations

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gigagit/gg/internal/model"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 func TestParseEndpoint(t *testing.T) {

@@ -3,8 +3,8 @@ package git
 import (
 	"context"
 
-	"github.com/gigagit/gg/internal/gitcmd"
-	"github.com/gigagit/gg/internal/model"
+	"github.com/homeend/gigagit/internal/gitcmd"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // WorktreeForBranch returns the worktree that currently has branch checked out,

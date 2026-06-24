@@ -5,7 +5,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/gigagit/gg/internal/gitexec"
+	"github.com/homeend/gigagit/internal/gitexec"
 )
 
 func TestLsFiles(t *testing.T) {

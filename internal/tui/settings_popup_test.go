@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gigagit/gg/internal/agentskill"
-	"github.com/gigagit/gg/internal/domain"
+	"github.com/homeend/gigagit/internal/agentskill"
+	"github.com/homeend/gigagit/internal/domain"
 )
 
 // settingsModel: loaded model whose project dir contains .claude and an

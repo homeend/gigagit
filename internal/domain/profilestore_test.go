@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/gigagit/gg/internal/model"
-	"github.com/gigagit/gg/internal/profile"
+	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/profile"
 )
 
 func TestProfilesMergeBothScopes(t *testing.T) {

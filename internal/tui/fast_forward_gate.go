@@ -1,6 +1,6 @@
 package tui
 
-import "github.com/gigagit/gg/internal/model"
+import "github.com/homeend/gigagit/internal/model"
 
 // feedDescendant reports whether selHash is a strict descendant of tipHash using
 // ONLY the loaded commit feed's parent pointers (no git call) — the same DAG that

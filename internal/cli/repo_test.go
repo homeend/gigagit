@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gigagit/gg/internal/repos"
+	"github.com/homeend/gigagit/internal/repos"
 )
 
 // withState points the package at a temp registry for one test.

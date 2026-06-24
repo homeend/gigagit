@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gigagit/gg/internal/observ"
+	"github.com/homeend/gigagit/internal/observ"
 )
 
 // tryAcquire attempts an Acquire bounded by a short deadline; ok=false means

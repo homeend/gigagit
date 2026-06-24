@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/gigagit/gg/internal/model"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // ErrShelfDisabled means no state directory was resolvable.

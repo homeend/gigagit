@@ -5,8 +5,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/gigagit/gg/internal/model"
-	"github.com/gigagit/gg/internal/rebaseplan"
+	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/rebaseplan"
 )
 
 // edRows: oldest-first input [c1,c2,c3] → editor shows newest-first [c3,c2,c1].

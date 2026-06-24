@@ -5,7 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/gigagit/gg/internal/textdiff"
+	"github.com/homeend/gigagit/internal/textdiff"
 )
 
 // esc from a picker-opened compare diff returns to the picker beneath it.

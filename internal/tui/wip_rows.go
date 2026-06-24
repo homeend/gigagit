@@ -1,6 +1,6 @@
 package tui
 
-import "github.com/gigagit/gg/internal/model"
+import "github.com/homeend/gigagit/internal/model"
 
 // wipKind distinguishes the two pseudo-rows that represent uncommitted work.
 type wipKind int

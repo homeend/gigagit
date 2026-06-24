@@ -7,7 +7,7 @@ package profile
 import (
 	"errors"
 
-	"github.com/gigagit/gg/internal/model"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // ErrNotFound is returned by Get/Remove for an unknown id.

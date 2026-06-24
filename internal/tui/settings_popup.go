@@ -7,7 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/gigagit/gg/internal/agentinit"
+	"github.com/homeend/gigagit/internal/agentinit"
 )
 
 // settingsPopup is the generic Settings surface opened with `,`. v1 has a

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gigagit/gg/internal/rebaseplan"
+	"github.com/homeend/gigagit/internal/rebaseplan"
 )
 
 func selectionSet(keys ...string) map[string]bool {

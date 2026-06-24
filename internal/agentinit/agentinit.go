@@ -11,7 +11,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/gigagit/gg/internal/agentskill"
+	"github.com/homeend/gigagit/internal/agentskill"
 )
 
 // Mode is how the skill lands in a target file.

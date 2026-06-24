@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/gigagit/gg/internal/gitcmd"
-	"github.com/gigagit/gg/internal/model"
+	"github.com/homeend/gigagit/internal/gitcmd"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // DiffTreeFiles lists the files that differ between two endpoints, with left as

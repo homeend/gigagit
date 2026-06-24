@@ -6,8 +6,8 @@ package worktree
 import (
 	"path/filepath"
 
-	"github.com/gigagit/gg/internal/config"
-	"github.com/gigagit/gg/internal/template"
+	"github.com/homeend/gigagit/internal/config"
+	"github.com/homeend/gigagit/internal/template"
 )
 
 // Templates is the branch + path template pair for worktree creation.

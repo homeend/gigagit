@@ -4,8 +4,8 @@ import (
 	"context"
 	"strings"
 
-	"github.com/gigagit/gg/internal/gitcmd"
-	"github.com/gigagit/gg/internal/model"
+	"github.com/homeend/gigagit/internal/gitcmd"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // LogRangeMessages lists onto..branch oldest-first (git todo order) with each

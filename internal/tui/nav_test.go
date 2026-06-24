@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gigagit/gg/internal/domain"
-	"github.com/gigagit/gg/internal/model"
+	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 func loadedModel(t *testing.T) Model {

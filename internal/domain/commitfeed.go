@@ -5,7 +5,7 @@ import (
 	"os"
 	"sync"
 
-	"github.com/gigagit/gg/internal/model"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // Page sizes (commits). Initial paint stays cheap; later pages are larger

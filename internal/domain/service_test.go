@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gigagit/gg/internal/engine"
-	"github.com/gigagit/gg/internal/git"
-	"github.com/gigagit/gg/internal/gitexec"
-	"github.com/gigagit/gg/internal/observ"
-	"github.com/gigagit/gg/internal/repogate"
+	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/git"
+	"github.com/homeend/gigagit/internal/gitexec"
+	"github.com/homeend/gigagit/internal/observ"
+	"github.com/homeend/gigagit/internal/repogate"
 )
 
 // fakeOp runs body under whatever OpDeps Execute assembled.

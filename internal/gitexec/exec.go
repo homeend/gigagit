@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gigagit/gg/internal/observ"
+	"github.com/homeend/gigagit/internal/observ"
 )
 
 // compile-time assertion that ExecRunner satisfies Runner.

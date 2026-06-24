@@ -7,7 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/mattn/go-isatty"
 
-	"github.com/gigagit/gg/internal/clipboard"
+	"github.com/homeend/gigagit/internal/clipboard"
 )
 
 // clipboardCopiedMsg reports the outcome of a copy action. ok is the success

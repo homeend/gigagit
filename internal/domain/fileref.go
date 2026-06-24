@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/gigagit/gg/internal/model"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // ResolveBytes returns the bytes a FileRef points at, dispatching by source.

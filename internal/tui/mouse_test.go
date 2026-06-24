@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/gigagit/gg/internal/config"
-	"github.com/gigagit/gg/internal/model"
+	"github.com/homeend/gigagit/internal/config"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // mouseModel is markModel sized 80x24: leftW=26, three left boxes of height 7 —

@@ -3,7 +3,7 @@ package bookmark
 import (
 	"testing"
 
-	"github.com/gigagit/gg/internal/model"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 func newStore(t *testing.T) *FileStore { t.Helper(); return NewFileStore(t.TempDir()) }

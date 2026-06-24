@@ -3,7 +3,7 @@
 // all drive the same operation.
 package engine
 
-import "github.com/gigagit/gg/internal/observ"
+import "github.com/homeend/gigagit/internal/observ"
 
 // Event is a tagged union streamed by an operation to its consumer.
 type Event interface{ isEvent() }

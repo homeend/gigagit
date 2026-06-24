@@ -3,8 +3,8 @@ package domain
 import (
 	"context"
 
-	"github.com/gigagit/gg/internal/git"
-	"github.com/gigagit/gg/internal/model"
+	"github.com/homeend/gigagit/internal/git"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // Identity reads the current git user identity, keeping the global and

@@ -12,15 +12,15 @@ import (
 // are exempt.
 func TestFrontendsDoNotImportGit(t *testing.T) {
 	forbidden := map[string]string{
-		"github.com/gigagit/gg/internal/git":        "frontends must reach git through internal/domain",
-		"github.com/gigagit/gg/internal/shelf":      "frontends must reach the shelf store through internal/domain",
-		"github.com/gigagit/gg/internal/bookmark":   "frontends must reach the bookmark store through internal/domain",
-		"github.com/gigagit/gg/internal/searchhist": "frontends must reach the search-history store through internal/domain",
-		"github.com/gigagit/gg/internal/profile":    "frontends must reach the profile store through internal/domain",
+		"github.com/homeend/gigagit/internal/git":        "frontends must reach git through internal/domain",
+		"github.com/homeend/gigagit/internal/shelf":      "frontends must reach the shelf store through internal/domain",
+		"github.com/homeend/gigagit/internal/bookmark":   "frontends must reach the bookmark store through internal/domain",
+		"github.com/homeend/gigagit/internal/searchhist": "frontends must reach the search-history store through internal/domain",
+		"github.com/homeend/gigagit/internal/profile":    "frontends must reach the profile store through internal/domain",
 	}
 	for _, pkg := range []string{
-		"github.com/gigagit/gg/internal/tui",
-		"github.com/gigagit/gg/internal/cli",
+		"github.com/homeend/gigagit/internal/tui",
+		"github.com/homeend/gigagit/internal/cli",
 	} {
 		out, err := exec.Command("go", "list", "-f", `{{join .Imports "\n"}}`, pkg).Output()
 		if err != nil {

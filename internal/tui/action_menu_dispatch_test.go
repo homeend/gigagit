@@ -3,7 +3,7 @@ package tui
 import (
 	"testing"
 
-	"github.com/gigagit/gg/internal/hunkpick"
+	"github.com/homeend/gigagit/internal/hunkpick"
 )
 
 // pressDot opens the menu via the real Update dispatch from a model already set

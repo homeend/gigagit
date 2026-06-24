@@ -9,8 +9,8 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/gigagit/gg/internal/domain"
-	"github.com/gigagit/gg/internal/repos"
+	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/repos"
 )
 
 // seededModel returns a loaded model whose statePath is a temp registry

@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/gigagit/gg/internal/domain"
-	"github.com/gigagit/gg/internal/engine"
+	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/engine"
 )
 
 // cmdTag dispatches the tag subcommands: ls | create | rm | checkout | push | annotate.

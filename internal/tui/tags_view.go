@@ -1,7 +1,7 @@
 package tui
 
 import (
-	"github.com/gigagit/gg/internal/model"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // tagKindMark is the row prefix glyph: ● annotated, ○ lightweight.

@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/gigagit/gg/internal/repogate"
+	"github.com/homeend/gigagit/internal/repogate"
 )
 
 // DeleteRemoteBranch deletes a branch on a remote (git push <remote> --delete

@@ -3,8 +3,8 @@ package tui
 import (
 	"testing"
 
-	"github.com/gigagit/gg/internal/hunkpick"
-	"github.com/gigagit/gg/internal/model"
+	"github.com/homeend/gigagit/internal/hunkpick"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 func ids(rows []actionRow) map[string]bool {

@@ -3,7 +3,7 @@ package git
 import (
 	"context"
 
-	"github.com/gigagit/gg/internal/gitcmd"
+	"github.com/homeend/gigagit/internal/gitcmd"
 )
 
 // RestoreWorktree resets the given paths in the working tree to the index

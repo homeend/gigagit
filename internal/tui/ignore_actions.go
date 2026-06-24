@@ -4,8 +4,8 @@ import (
 	"path"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/gigagit/gg/internal/engine"
-	"github.com/gigagit/gg/internal/model"
+	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // untrackedFile resolves the Files-panel selection when it is an untracked
