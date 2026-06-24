@@ -22,16 +22,18 @@ const (
 type CommitFeed struct {
 	svc *Service
 
-	mu        sync.Mutex
-	scope     LogScope // refspec for the walk; empty = all local branches
-	commits   []model.Commit
-	hashes    map[string]bool // dedupe set, mirrors commits
-	skip      int             // next --skip offset (advances by raw page length)
-	exhausted bool
-	gen       int                // bumped by LoadInitial; tags pages so stale ones drop
-	inFlight  bool               // at most one page request outstanding
-	cancel    context.CancelFunc // cancels the in-flight load's ctx on supersede
-	pager     CommitPager        // page-fetch strategy; default dateOrderPager (legacy)
+	mu           sync.Mutex
+	scope        LogScope // refspec for the walk; empty = all local branches
+	commits      []model.Commit
+	hashes       map[string]bool // dedupe set, mirrors commits
+	skip         int             // next --skip offset (advances by raw page length)
+	exhausted    bool
+	gen          int                // bumped by LoadInitial; tags pages so stale ones drop
+	inFlight     bool               // at most one page request outstanding
+	cancel       context.CancelFunc // cancels the in-flight load's ctx on supersede
+	pager        CommitPager        // page-fetch strategy; default dateOrderPager (legacy)
+	initialPage  int                // configured first-paint size; <=0 → commitInitialPage
+	pageSize     int                // configured later-page size; <=0 → commitPageSize
 }
 
 // CommitFeed returns a fresh feed for this Service's repo.
@@ -56,6 +58,31 @@ func (f *CommitFeed) SetScope(scope LogScope) {
 	f.mu.Lock()
 	f.scope = scope
 	f.mu.Unlock()
+}
+
+// SetPageSizes sets the first-paint and later-page commit counts (0 or negative
+// keeps the built-in fallback). Apply before the next LoadInitial.
+func (f *CommitFeed) SetPageSizes(initial, batch int) {
+	f.mu.Lock()
+	f.initialPage = initial
+	f.pageSize = batch
+	f.mu.Unlock()
+}
+
+// effInitial / effPage resolve the configured size or the constant fallback.
+// Callers hold f.mu.
+func (f *CommitFeed) effInitial() int {
+	if f.initialPage > 0 {
+		return f.initialPage
+	}
+	return commitInitialPage
+}
+
+func (f *CommitFeed) effPage() int {
+	if f.pageSize > 0 {
+		return f.pageSize
+	}
+	return commitPageSize
 }
 
 // FeedState is an immutable view handed to the frontend.
@@ -110,6 +137,7 @@ func (f *CommitFeed) LoadInitial(ctx context.Context) (FeedState, error) {
 	f.gen++
 	gen0 := f.gen
 	scope := f.scope
+	initial := f.effInitial()
 	f.commits = nil
 	f.hashes = map[string]bool{}
 	f.skip = 0
@@ -117,7 +145,7 @@ func (f *CommitFeed) LoadInitial(ctx context.Context) (FeedState, error) {
 	f.inFlight = true
 	f.mu.Unlock()
 
-	page, err := f.pager.Page(cctx, commitInitialPage, 0, gen0, scope)
+	page, err := f.pager.Page(cctx, initial, 0, gen0, scope)
 
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -141,7 +169,7 @@ func (f *CommitFeed) LoadInitial(ctx context.Context) (FeedState, error) {
 		}
 	}
 	f.skip = len(page)
-	f.exhausted = len(page) < commitInitialPage
+	f.exhausted = len(page) < initial
 	return f.snapshotLocked(), nil
 }
 
@@ -160,9 +188,10 @@ func (f *CommitFeed) LoadMore(ctx context.Context) (FeedState, bool, error) {
 	gen0 := f.gen
 	skip := f.skip
 	scope := f.scope
+	size := f.effPage()
 	f.mu.Unlock()
 
-	page, err := f.pager.Page(ctx, commitPageSize, skip, gen0, scope)
+	page, err := f.pager.Page(ctx, size, skip, gen0, scope)
 
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -180,6 +209,6 @@ func (f *CommitFeed) LoadMore(ctx context.Context) (FeedState, bool, error) {
 		}
 	}
 	f.skip += len(page) // advance by raw page length to stay aligned with git's walk
-	f.exhausted = len(page) < commitPageSize
+	f.exhausted = len(page) < size
 	return f.snapshotLocked(), true, nil
 }
