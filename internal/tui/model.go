@@ -85,6 +85,7 @@ type Model struct {
 	feed                *domain.CommitFeed // single source of truth for commits
 	commitsExhausted    bool               // false → "Commits N+", true → "Commits N"
 	commitsLoading      bool               // a feed reload/page is in flight → show the loading glyph in the Commits title
+	feedScopeApplied    string             // signature of the scope last applied to the feed (see feedScopeSig); reload only when the desired scope differs
 	commitScopeBranches []string           // included branches for the feed; empty = all local branches
 	commitGraphRows     []string           // cached single-line graph cells, parallel to the unified WIP+commits list; empty = none
 	commitGraphLanes    []int              // cached node lane per unified row, parallel to the unified WIP+commits list
@@ -464,6 +465,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// the conflict process re-derives its file list after a resolve).
 			if m.proc != nil {
 				return m.proc.refreshed(m)
+			}
+			// The initial feed walk (loadCmd) ran in parallel with the snapshot,
+			// so it had no upstreams. Now that tracked branches are known, reload
+			// once to walk their remote tips in (so a behind/diverged remote tip
+			// shows). Guard on non-empty so repos with no tracked upstreams keep
+			// the single fast initial walk; guard on scope-sig so subsequent
+			// dataLoadedMsg deliveries (after push/pull/resolve/etc.) that carry
+			// the same upstream set don't fire a redundant re-walk of the feed.
+			if len(m.feedUpstreams()) > 0 && m.feedScopeApplied != m.feedScopeSig() {
+				var reload tea.Cmd
+				m, reload = m.startFeedReload()
+				return m, reload
 			}
 			// Conflicts are surfaced as a non-blocking notice ("press [x] to
 			// resolve"); entering the resolution process is the user's choice (x),

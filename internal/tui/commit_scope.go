@@ -4,6 +4,7 @@ import (
 	"context"
 	"slices"
 	"strconv"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -24,7 +25,49 @@ type commitsReloadedMsg struct {
 // runs. The indicator clears when commitsReloadedMsg arrives.
 func (m Model) startFeedReload() (Model, tea.Cmd) {
 	m.commitsLoading = true
+	m.feedScopeApplied = m.feedScopeSig()
 	return m, m.reloadFeedCmd()
+}
+
+// feedUpstreams returns the deduped upstream refs of the local branches in the
+// current feed scope (all local branches when the scope is empty), restricted to
+// refs that actually exist as remote-tracking branches — git log errors on a
+// missing ref, so a configured-but-unfetched upstream must be dropped.
+func (m Model) feedUpstreams() []string {
+	exists := make(map[string]bool, len(m.remoteBranches))
+	for _, rb := range m.remoteBranches {
+		exists[rb.Name] = true
+	}
+	inScope := func(name string) bool {
+		return len(m.commitScopeBranches) == 0 || slices.Contains(m.commitScopeBranches, name)
+	}
+	var out []string
+	seen := map[string]bool{}
+	for _, b := range m.branches {
+		if b.Upstream == "" || !inScope(b.Name) || !exists[b.Upstream] || seen[b.Upstream] {
+			continue
+		}
+		seen[b.Upstream] = true
+		out = append(out, b.Upstream)
+	}
+	return out
+}
+
+// feedScope is the LogScope the commit feed should walk: the scoped branches plus
+// their tracked, resolvable upstreams.
+func (m Model) feedScope() domain.LogScope {
+	return domain.LogScope{
+		Branches:  append([]string(nil), m.commitScopeBranches...),
+		Upstreams: m.feedUpstreams(),
+	}
+}
+
+// feedScopeSig is a stable signature of the scope the feed should walk, used to
+// detect when the desired scope (branches + tracked upstreams) differs from what
+// was last applied, so the feed is reloaded only when it would actually change.
+func (m Model) feedScopeSig() string {
+	s := m.feedScope()
+	return strings.Join(s.Branches, ",") + "|" + strings.Join(s.Upstreams, ",")
 }
 
 // reloadFeedCmd applies the model's scope to the feed and reloads page 0 off the
@@ -32,7 +75,7 @@ func (m Model) startFeedReload() (Model, tea.Cmd) {
 // cancels any superseded in-flight walk.
 func (m Model) reloadFeedCmd() tea.Cmd {
 	feed := m.feed
-	scope := domain.LogScope{Branches: append([]string(nil), m.commitScopeBranches...)}
+	scope := m.feedScope()
 	return func() tea.Msg {
 		feed.SetScope(scope)
 		st, _ := feed.LoadInitial(context.Background())

@@ -14,7 +14,7 @@ func TestCommitIdentOfTipPrefersHead(t *testing.T) {
 		{Name: "feat", Kind: model.RefLocal},
 		{Name: "main", Kind: model.RefLocal, Head: true},
 	}, Source: "feat"}
-	id := commitIdentOf(c)
+	id := commitIdentOf(c, nil)
 	if !id.tip || id.name != "main" || !id.head {
 		t.Fatalf("ident = %+v, want tip main (head)", id)
 	}
@@ -28,7 +28,7 @@ func TestCommitIdentOfTipPrefersHead(t *testing.T) {
 
 func TestCommitIdentOfLineageUsesSource(t *testing.T) {
 	c := model.Commit{Source: "feature/long"} // no refs
-	id := commitIdentOf(c)
+	id := commitIdentOf(c, nil)
 	if id.tip || id.name != "feature/long" || id.head {
 		t.Fatalf("ident = %+v, want lineage feature/long", id)
 	}
@@ -38,7 +38,7 @@ func TestCommitIdentOfLineageUsesSource(t *testing.T) {
 }
 
 func TestCommitIdentOfNoneIsBlank(t *testing.T) {
-	id := commitIdentOf(model.Commit{}) // no refs, no source
+	id := commitIdentOf(model.Commit{}, nil) // no refs, no source
 	if id.name != "" || id.label() != "" {
 		t.Fatalf("ident = %+v, want blank", id)
 	}
@@ -50,8 +50,8 @@ func TestCommitIdentTokenTrimsLongName(t *testing.T) {
 	if !trimmed {
 		t.Fatal("a >16 name must report trimmed")
 	}
-	if lipgloss.Width(tok) != commitIdentW {
-		t.Fatalf("token width = %d, want %d", lipgloss.Width(tok), commitIdentW)
+	if lipgloss.Width(tok) != commitMarkerW+commitIdentW {
+		t.Fatalf("token width = %d, want %d", lipgloss.Width(tok), commitMarkerW+commitIdentW)
 	}
 	if !strings.HasSuffix(tok, "…") {
 		t.Fatalf("trimmed token must end with …: %q", tok)
@@ -64,11 +64,11 @@ func TestCommitIdentTokenPadsShortName(t *testing.T) {
 	if trimmed {
 		t.Fatal("a short name must not be trimmed")
 	}
-	if lipgloss.Width(tok) != commitIdentW {
-		t.Fatalf("token width = %d, want %d (padded)", lipgloss.Width(tok), commitIdentW)
+	if lipgloss.Width(tok) != commitMarkerW+commitIdentW {
+		t.Fatalf("token width = %d, want %d (padded)", lipgloss.Width(tok), commitMarkerW+commitIdentW)
 	}
-	if !strings.HasPrefix(tok, "main") {
-		t.Fatalf("token = %q, want main + padding", tok)
+	if !strings.Contains(tok, "main") {
+		t.Fatalf("token = %q, want main somewhere in token", tok)
 	}
 }
 
@@ -131,5 +131,85 @@ func TestCommitLineDecoratorDimsIdentAndColorsDot(t *testing.T) {
 	// continuation lines untouched
 	if got := deco(visible, 0, 1); got != visible {
 		t.Fatal("decorator must be a no-op on wrap continuation lines")
+	}
+}
+
+func TestCommitIdentOfInSyncTipMarksBoth(t *testing.T) {
+	tracked := map[string]string{"origin/main": "main"}
+	c := model.Commit{Refs: []model.Ref{
+		{Name: "main", Kind: model.RefLocal, Head: true},
+		{Name: "origin/main", Kind: model.RefRemote},
+	}}
+	id := commitIdentOf(c, tracked)
+	if !id.tip || !id.remoteTip || id.name != "main" || !id.head {
+		t.Fatalf("ident = %+v, want local+remote tip main (head)", id)
+	}
+}
+
+func TestCommitIdentOfRemoteOnlyTipUsesBranchName(t *testing.T) {
+	tracked := map[string]string{"origin/main": "main"}
+	// A commit decorated only by the tracked remote ref (local branch is behind).
+	c := model.Commit{Refs: []model.Ref{{Name: "origin/main", Kind: model.RefRemote}}, Source: "main"}
+	id := commitIdentOf(c, tracked)
+	if id.tip || !id.remoteTip || id.name != "main" {
+		t.Fatalf("ident = %+v, want remote-only tip named main", id)
+	}
+}
+
+func TestCommitIdentOfUntrackedRemoteIsNotMarked(t *testing.T) {
+	// origin/feature is not any local branch's upstream → no remote-tip marker.
+	c := model.Commit{Refs: []model.Ref{{Name: "origin/feature", Kind: model.RefRemote}}, Source: "main"}
+	id := commitIdentOf(c, map[string]string{"origin/main": "main"})
+	if id.remoteTip {
+		t.Fatalf("ident = %+v, want no remoteTip for an untracked remote", id)
+	}
+	if id.name != "main" { // falls back to lineage source
+		t.Fatalf("name = %q, want lineage main", id.name)
+	}
+}
+
+func TestCommitIdentMarkers(t *testing.T) {
+	cases := []struct {
+		name string
+		id   commitIdent
+		want string
+	}{
+		{"in sync", commitIdent{tip: true, remoteTip: true}, "■▲"},
+		{"local only", commitIdent{tip: true}, "■ "},
+		{"remote only", commitIdent{remoteTip: true}, "▲ "},
+		{"neither", commitIdent{}, "  "},
+	}
+	for _, tc := range cases {
+		if got := tc.id.markers(); got != tc.want {
+			t.Errorf("%s: markers() = %q, want %q", tc.name, got, tc.want)
+		}
+	}
+}
+
+func TestCommitIdentTokenIncludesMarkerPrefix(t *testing.T) {
+	id := commitIdent{name: "main", tip: true, remoteTip: true}
+	tok, trimmed := id.token(commitIdentW)
+	if trimmed {
+		t.Fatal("a short name must not be trimmed")
+	}
+	if !strings.HasPrefix(tok, "■▲ ") {
+		t.Fatalf("token = %q, want it to start with the marker prefix", tok)
+	}
+	if want := commitMarkerW + commitIdentW; lipgloss.Width(tok) != want {
+		t.Fatalf("token width = %d, want %d", lipgloss.Width(tok), want)
+	}
+}
+
+// Single-marker rows must be the SAME width as two-marker rows, else rows with
+// one marker misalign against rows with two. Pins the left-pack field at 2 cells.
+func TestCommitIdentTokenSingleMarkerWidth(t *testing.T) {
+	for _, id := range []commitIdent{
+		{name: "main", tip: true},       // ■  (local only)
+		{name: "main", remoteTip: true}, // ▲  (remote only)
+	} {
+		tok, _ := id.token(commitIdentW)
+		if want := commitMarkerW + commitIdentW; lipgloss.Width(tok) != want {
+			t.Fatalf("token %q width = %d, want %d", tok, lipgloss.Width(tok), want)
+		}
 	}
 }
