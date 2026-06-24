@@ -125,6 +125,14 @@ func (f *CommitFeed) NeedsMore(sel int) bool {
 	return sel >= len(f.commits)-commitNearEnd
 }
 
+// CanLoadMore reports whether a LoadMore would do work (not exhausted, not
+// already in flight) — independent of cursor position. Drives the ctrl+l key.
+func (f *CommitFeed) CanLoadMore() bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return !f.exhausted && !f.inFlight
+}
+
 // LoadInitial resets the feed (bumps gen, clears) and loads page 0. It is the
 // reload primitive: callers re-fill a feed by calling LoadInitial again.
 func (f *CommitFeed) LoadInitial(ctx context.Context) (FeedState, error) {

@@ -997,6 +997,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.focus == panelCommits && (m.width <= 0 || m.width >= 40) {
 				m.focus = m.leftReturnTarget()
 			}
+		case "ctrl+l":
+			// Load the next batch regardless of cursor position (the auto-page path
+			// only fires near the end). Commits panel only; the feed guards exhausted/
+			// in-flight via CanLoadMore.
+			if m.focus == panelCommits && m.feed != nil && m.feed.CanLoadMore() {
+				m.commitsLoading = true
+				return m, m.loadMoreCmd()
+			}
 		case "pgdown":
 			if n := m.panelLen(m.focus); n > 0 {
 				m.sel[m.focus] += m.pageStep()

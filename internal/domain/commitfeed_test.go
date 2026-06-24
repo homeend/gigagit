@@ -411,3 +411,25 @@ func TestCommitFeedDefaultPageSizeWhenUnset(t *testing.T) {
 		t.Fatalf("unset → fallback -n 50, calls: %v", f.Calls)
 	}
 }
+
+func TestCanLoadMore(t *testing.T) {
+	f := gitexec.NewFakeRunner()
+	feed := New(&git.Repo{Runner: f}).CommitFeed()
+	feed.SetPageSizes(2, 2)
+	// A full first page (2 rows) leaves more to load.
+	f.SetResponse("git log", gitexec.Result{Stdout: logRows(2)})
+	if _, err := feed.LoadInitial(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if !feed.CanLoadMore() {
+		t.Fatal("full page → CanLoadMore true")
+	}
+	// A short next page (1 < 2) exhausts the feed.
+	f.SetResponse("git log", gitexec.Result{Stdout: logRows(1)})
+	if _, _, err := feed.LoadMore(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if feed.CanLoadMore() {
+		t.Fatal("short page → exhausted → CanLoadMore false")
+	}
+}
