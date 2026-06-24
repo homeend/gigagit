@@ -23,6 +23,31 @@ func (r wipRow) text() string {
 // column — and every subject after it — does not reflow as commits page in.
 const commitIdentW = 16
 
+// commitMarkerW is the display width of the tip-marker prefix on a commit
+// identity token: two glyph cells (local ■, remote ▲) plus one separator space.
+const commitMarkerW = 3
+
+const (
+	markerLocal  = "■" // tip of a local branch
+	markerRemote = "▲" // tip of a tracked remote (a local branch's upstream)
+)
+
+// markers is the 2-cell, left-packed marker field for this identity: present
+// markers fill from the left, missing slots are spaces, so the field is always
+// exactly two display cells wide.
+func (id commitIdent) markers() string {
+	switch {
+	case id.tip && id.remoteTip:
+		return markerLocal + markerRemote
+	case id.tip:
+		return markerLocal + " "
+	case id.remoteTip:
+		return markerRemote + " "
+	default:
+		return "  "
+	}
+}
+
 // dimIdentStyle grays a lineage row's branch name (the commit belongs to that
 // branch but is not its tip). 240 is a mid-gray in the 256-color cube.
 var dimIdentStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
@@ -103,22 +128,23 @@ func (id commitIdent) label() string {
 	return id.name
 }
 
-// token is the display token at width w: trimmed with … when the label is too
-// long, else right-padded so subjects stay aligned. trimmed reports whether
-// truncation happened (drives the reveal tooltip). w is the dynamic identity
-// column width (see Model.commitIdentWidth), never more than commitIdentW.
+// token is the display token at width commitMarkerW+w: the marker prefix, a
+// separator space, then the name trimmed with … when too long, else right-padded
+// so subjects stay aligned. trimmed reports whether the NAME was truncated.
 func (id commitIdent) token(w int) (text string, trimmed bool) {
-	s := id.label()
-	if lipgloss.Width(s) > w {
-		return truncate(s, w), true
+	name := id.label()
+	var body string
+	if lipgloss.Width(name) > w {
+		body, trimmed = truncate(name, w), true
+	} else {
+		body = padRight(name, w)
 	}
-	return padRight(s, w), false
+	return id.markers() + " " + body, trimmed
 }
 
-// fullToken is the UNtrimmed label, right-padded to width w. The tooltip's
-// WHEN-to-reveal gate compares a row built with this against the trimmed row.
+// fullToken is the UNtrimmed label with the marker prefix, padded to commitMarkerW+w.
 func (id commitIdent) fullToken(w int) string {
-	return padRight(id.label(), w)
+	return id.markers() + " " + padRight(id.label(), w)
 }
 
 // pills renders additional-branch tips (the multi-tip case) as ‹name› chips; the
