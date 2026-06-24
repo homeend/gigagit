@@ -192,52 +192,66 @@ is about the `\`/solo round-trip only.)
 
 ---
 
-## Part 4 — Eager `/` search across unloaded history
+## Part 4 — Eager search across unloaded history (`/` and `@`)
 
-`/` matches loaded commits only (haystack = full hash + branch name(s) +
-subject). When it finds nothing in the loaded window, an explicit trigger pages
-the feed forward, re-running the match, and jumps to the first hit.
+Both Commits searches match loaded commits only against the same haystack (full
+hash + branch name(s) + subject): `/` filters the panel to matches; `@` highlights
+matches over the full list and steps between them. When either finds nothing in
+the loaded window, an explicit trigger pages the feed forward, re-running the
+match, and jumps to the first hit.
 
-**Trigger key.** `ctrl+f` ("find further"), usable both while typing a `/` query
-and on an already-committed `/` filter, on the Commits panel. (`ctrl+enter` is
-kept as an alias where the terminal reports it distinctly, but is not relied on —
-most terminals collapse it to plain Enter.) Plain Enter keeps its current
-behavior (commit/close the filter).
+**"Go to" semantics (both).** On a hit, the cursor lands on the found commit *in
+the full list* (surrounding history visible), not in a filtered-down view:
+- From `/`: the `/` filter is **cleared** at the start of the eager search (it
+  otherwise hides context), so the cursor lands in the unfiltered list.
+- From `@`: nothing to clear — `@` never filters — so the highlight **persists**
+  and the found commit is shown highlighted.
+
+The engine is source-agnostic: it scans the same haystack and jumps the cursor.
+Only the trigger differs in which query it feeds in (`filterQuery` vs
+`highlightQuery`; the two are mutually exclusive, so at most one is active).
+
+**Trigger key.** `ctrl+f` ("find further") on the Commits panel — usable while
+typing a `/` or `@` query and on an already-committed `/` filter or `@` highlight.
+(`ctrl+enter` is kept as an alias where the terminal reports it distinctly, but is
+not relied on — most terminals collapse it to plain Enter.) Plain Enter keeps its
+current behavior (commit the filter / highlight).
 
 **Behavior.**
-1. Commit the current `/` query (if still typing) and start eager search with a
-   budget of `commits.search_max_pages` pages.
-2. Load one more page (`feed.LoadMore`); after it applies, re-evaluate the `/`
-   match against the now-larger loaded set. On a match → move the Commits
-   selection to the first matching row, focus the panel, stop.
+1. Commit the current query (if still typing) and start eager search with a
+   budget of `commit_search_max_pages` pages. From `/`, clear the filter; from
+   `@`, leave the highlight active.
+2. Load one more page (`feed.LoadMore`); after it applies, re-evaluate the match
+   against the now-larger loaded set. On a match → move the Commits selection to
+   the first matching row, focus the panel, stop.
 3. No match and budget remains and feed not exhausted → load the next page
    (repeat step 2).
 4. Budget exhausted, still no match, feed **not** exhausted → open a confirm
    dialog: *"Searched N commits, no match for '‹q›' — search deeper?"* with
    options **Search ‹max_pages› more** / **Cancel**. Confirm → reset the budget
-   and continue at step 2. Cancel → stop, leave the `/` filter active on the
-   loaded set.
+   and continue at step 2. Cancel → stop, leaving the cursor on the loaded full
+   list (with the `@` highlight still on if that was the source).
 5. Feed exhausted with no match → status notice *"'‹q›' not found in full
    history"*; stop.
 
 **Implementation.** An iterative Bubble Tea command chain, not a blocking loop:
-small `eagerSearch` model state `{query string, panel panel, budget int,
-scanned int, active bool}`. Each `LoadMore` returns its page-applied message; the
-`Update` handler, when `eagerSearch.active`, re-checks the match and either
-dispatches the next page-load, opens the dialog, or finishes. Respects the
-feed's single-flight guard (one page in flight at a time). The ⏳ indicator shows
-while it pages.
+small `eagerSearch` model state `{active bool, query string, budget int}`. Each
+`LoadMore` returns its page-applied message; the `Update` handler, when
+`eagerSearch.active`, re-checks the match and either dispatches the next
+page-load, opens the dialog, or finishes. Respects the feed's single-flight guard
+(one page in flight at a time). The ⏳ indicator shows while it pages.
 
 **Composition.** Eagerly loaded pages stay in the feed and survive a later filter
 toggle via Part 3's cache. The match reuses the existing `commitHaystackAt`
-matcher — no second notion of "matches".
+matcher (the same one `/` and `@` use) — no second notion of "matches".
 
-**Tests (FakeRunner).** Pages served so the match appears on page 3 of a 5-page
-budget → search stops with the selection on the matching row and `commitsLoading`
-cleared. Budget exhausted with no match and feed not exhausted → the dialog
-opens (assert the layer/modal is present). Feed exhausted with no match → status
-notice set, no dialog. A query already matching a loaded commit → no paging
-(eager search is a no-op beyond the existing display filter).
+**Tests (FakeRunner).** Pages served so the match appears after paging → search
+stops with the selection on the matching row and `commitsLoading` cleared. Budget
+exhausted with no match and feed not exhausted → the dialog opens (assert the
+layer is present). Feed exhausted with no match → status notice set, no dialog. A
+query already matching a loaded commit → no paging. Triggering from `@` keeps
+`highlightQuery` set (highlight persists); triggering from `/` clears
+`filterQuery`.
 
 ---
 

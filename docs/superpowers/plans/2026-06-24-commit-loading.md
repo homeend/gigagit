@@ -160,19 +160,27 @@ Add to `internal/domain/commitfeed_test.go` (mirror the FakeRunner argv style of
 ```go
 func TestCommitFeedSetPageSizesArgv(t *testing.T) {
 	f := gitexec.NewFakeRunner()
-	f.SetResponse("git log", gitexec.Result{Stdout: ""})
 	feed := New(&git.Repo{Runner: f}).CommitFeed()
 	feed.SetPageSizes(7, 9)
 
+	// A full first page (7 rows) keeps the feed non-exhausted so LoadMore runs.
+	f.SetResponse("git log", gitexec.Result{Stdout: logRows(7)})
 	if _, err := feed.LoadInitial(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	if !hasLogArg(f, "-n", "7") {
 		t.Fatalf("initial walk should pass -n 7, calls: %v", f.Calls)
 	}
+
+	// Later pages use the batch size.
 	f.Calls = nil
-	// Exhausted=false only if the first page was full; force a non-exhausted feed
-	// by serving a full 7-row page, then LoadMore must use -n 9.
+	f.SetResponse("git log", gitexec.Result{Stdout: logRows(1)})
+	if _, _, err := feed.LoadMore(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if !hasLogArg(f, "-n", "9") {
+		t.Fatalf("later page should pass -n 9 (batch size), calls: %v", f.Calls)
+	}
 }
 
 // hasLogArg reports whether a "git log" call passed the flag/value pair adjacently
@@ -193,7 +201,20 @@ func hasLogArg(f *gitexec.FakeRunner, flag, val string) bool {
 	}
 	return false
 }
+
+// logRows builds n valid newest-first log lines for the default format
+// (%H%x1f%P%x1f%an%x1f%at%x1f%s%x1f%D%x1f%S). Hashes are unique so dedupe keeps all.
+func logRows(n int) string {
+	var b strings.Builder
+	for i := 0; i < n; i++ {
+		h := fmt.Sprintf("h%04d", i)
+		b.WriteString(h + "\x1f\x1fAda\x1f0\x1fsubj\x1f\x1f\n")
+	}
+	return b.String()
+}
 ```
+
+Ensure `commitfeed_test.go` imports `fmt` and `strings`.
 
 (Check whether the pager passes `-n` as `-n 7` or `-n=7`; `internal/git/log.go` uses `.Arg("-n", strconv.Itoa(limit))` → two args `-n` then `7`. The first `hasLogArg` branch matches. Keep both branches for safety.)
 
@@ -477,20 +498,9 @@ func TestCanLoadMore(t *testing.T) {
 		t.Fatal("short page → exhausted → CanLoadMore false")
 	}
 }
-
-// logRows builds n valid newest-first log lines for the default format
-// (%H%x1f%P%x1f%an%x1f%at%x1f%s%x1f%D%x1f%S). Hashes are unique so dedupe keeps all.
-func logRows(n int) string {
-	var b strings.Builder
-	for i := 0; i < n; i++ {
-		h := fmt.Sprintf("h%04d", i)
-		b.WriteString(h + "\x1f\x1fAda\x1f0\x1fsubj\x1f\x1f\n")
-	}
-	return b.String()
-}
 ```
 
-Ensure the test file imports `fmt` and `strings`.
+(`logRows` was added in Task A2's test file — reuse it.)
 
 - [ ] **Step 2: Run to verify it fails**
 
@@ -1218,15 +1228,18 @@ func (m Model) firstCommitMatch(query string) (int, bool) {
 	return 0, false
 }
 
-// startEagerSearch commits query as the active /-filter and begins scanning
-// history for it (up to commitSearchMaxPages pages before asking to go deeper).
+// startEagerSearch begins scanning history for query (up to commitSearchMaxPages
+// pages before asking to go deeper). "Go to" semantics: it CLEARS the /-filter so
+// the cursor lands on the found commit within the full list (with surrounding
+// history), not in a filtered-down view. Reused by the @-highlight trigger too,
+// for which clearing filterQuery is a no-op and highlightQuery is left set (the
+// found commit lands highlighted). The query lives in eager state regardless.
 func (m Model) startEagerSearch(query string) (Model, tea.Cmd) {
 	if query == "" {
 		return m, nil
 	}
 	m.filterTyping = false
-	m.filterPanel = panelCommits
-	m.filterQuery = query
+	m.filterQuery = "" // no sticky filter — land the cursor in the full list
 	m.eager = eagerSearch{active: true, query: query, budget: m.commitSearchMaxPages()}
 	return m.eagerAdvance()
 }
@@ -1315,12 +1328,12 @@ git commit -m "feat(tui): eager /-search engine (page history to the first match
 ## Task D2: Eager-search trigger keys + discoverability
 
 **Files:**
-- Modify: `internal/tui/model.go` (filter-typing switch ~570; main key switch ~1000)
+- Modify: `internal/tui/model.go` (filter-typing switch ~570; highlight-typing switch ~638; main key switch ~1000)
 - Modify: `internal/tui/help.go`, `internal/tui/footer.go`
 - Test: `internal/tui/commit_eager_test.go`
 
 **Interfaces:**
-- Consumes: `m.startEagerSearch` (Task D1), `m.recordSearch(scopePanel, query)` (existing, returns `(Model, tea.Cmd)`).
+- Consumes: `m.startEagerSearch` (Task D1), `m.recordSearch(scopePanel, query)` (existing, returns `(Model, tea.Cmd)`). Triggered from the `/` filter (`filterQuery`) and the `@` highlight (`highlightQuery`).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1353,6 +1366,22 @@ func TestCtrlFWhileTypingCommitsAndSearches(t *testing.T) {
 		t.Fatal("ctrl+f while typing should start eager search")
 	}
 }
+
+func TestCtrlFFromHighlightStartsEager(t *testing.T) {
+	m := eagerModel(t, []model.Commit{{Hash: "a", Subject: "fix"}})
+	m.highlightQuery = "zzz" // committed @-highlight, no loaded match
+	nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlF})
+	got := nm.(Model)
+	if !got.eager.active || cmd == nil {
+		t.Fatalf("ctrl+f should start eager search from @ (active=%v cmd=%v)", got.eager.active, cmd != nil)
+	}
+	if got.highlightQuery != "zzz" {
+		t.Fatal("@-sourced eager search must keep the highlight active")
+	}
+	if got.filterQuery != "" {
+		t.Fatal("@-sourced eager search must not introduce a / filter")
+	}
+}
 ```
 
 - [ ] **Step 2: Run to verify it fails**
@@ -1366,9 +1395,17 @@ In `internal/tui/model.go`, in the main `tea.KeyMsg` switch (with the other Comm
 
 ```go
 		case "ctrl+f":
-			// Eager /-search: scan unloaded history for the active Commits /-filter.
-			if m.focus == panelCommits && m.filterPanel == panelCommits && m.filterQuery != "" {
-				return m.startEagerSearch(m.filterQuery)
+			// Eager search: scan unloaded history for the active Commits search,
+			// whichever is engaged (the / filter or the @ highlight; mutually
+			// exclusive). startEagerSearch clears the / filter (go-to); the @
+			// highlight persists so the found commit shows highlighted.
+			if m.focus == panelCommits {
+				if m.filterPanel == panelCommits && m.filterQuery != "" {
+					return m.startEagerSearch(m.filterQuery)
+				}
+				if m.highlightQuery != "" {
+					return m.startEagerSearch(m.highlightQuery)
+				}
 			}
 ```
 
@@ -1390,6 +1427,22 @@ In the `if m.filterTyping {` block's `switch msg.Type {` (~570), add a case (bef
 
 (`scopePanel` is already in scope in this block — it is used by the surrounding `recallUpdate`/`recordSearch` calls.)
 
+- [ ] **Step 4b: Trigger while typing an `@` highlight query**
+
+In the `if m.highlightTyping {` block's `switch msg.Type {` (~638), add a case (before `tea.KeyEnter`):
+
+```go
+				case tea.KeyCtrlF:
+					m.highlightTyping = false
+					var recCmd tea.Cmd
+					m, recCmd = m.recordSearch(scopePanel, m.highlightQuery)
+					var cmd tea.Cmd
+					m, cmd = m.startEagerSearch(m.highlightQuery)
+					return m, tea.Batch(recCmd, cmd)
+```
+
+(`@` never filters, so `startEagerSearch`'s `filterQuery = ""` is a no-op here and `highlightQuery` is left set — the found commit lands highlighted.)
+
 - [ ] **Step 5: Run to verify pass**
 
 Run: `go test ./internal/tui/ -run 'TestCtrlF' -v`
@@ -1402,7 +1455,7 @@ In `internal/tui/help.go`, under the Commits/Global grouping, add rows (place ne
 ```go
 		r("ctrl+l", "Commits: load the next batch of commits now (without scrolling to the end)"),
 		r("home/end", "jump to the top / bottom of the focused list; End on Commits also loads the next batch"),
-		r("ctrl+f", "Commits: eager /-search — if the / query isn't in the loaded commits, page history to find it (asks before scanning deeper)"),
+		r("ctrl+f", "Commits: eager search — if the active / filter or @ highlight query isn't in the loaded commits, page history to find it and jump to it (asks before scanning deeper)"),
 ```
 
 In `internal/tui/footer.go`, add footer entries mirroring the existing registry rows (`{id, key, label, availability, scope}` — match the exact struct shape at footer.go ~97). Use a Commits-scope availability where the registry supports it; otherwise `Model.opsIdle` like neighbors:
@@ -1587,9 +1640,9 @@ Add under `## [Unreleased]` → `### Added` in `CHANGELOG.md`:
   **Home**/**End** jump to the top/bottom of any list, and End on Commits also
   loads the next batch (press again to walk deeper). Applying then clearing a `\`
   commit filter now restores the commits you had already loaded instead of
-  re-walking from the top. Eager `/`-search: when a `/` query isn't among the
-  loaded commits, `ctrl+f` pages history to find it, jumping to the first hit and
-  asking before it scans deeper.
+  re-walking from the top. Eager search: when a `/` filter or `@` highlight query
+  isn't among the loaded commits, `ctrl+f` pages history to find it and jumps to
+  the first hit (asking before it scans deeper).
 ```
 
 - [ ] **Step 2: README**
