@@ -15,9 +15,13 @@ import (
 const logFormat = "%H%x1f%P%x1f%an%x1f%at%x1f%s%x1f%D%x1f%S"
 
 // LogScope selects which refs the walk covers. Empty Branches → all local
-// branches (plus HEAD); otherwise exactly the listed branch names.
+// branches (plus HEAD); otherwise exactly the listed branch names. Upstreams are
+// extra remote-tracking refs (e.g. "origin/main") appended to the walk so a
+// branch's remote tip shows even when the local branch is behind. Callers must
+// only pass upstreams that resolve (git log errors on a missing ref).
 type LogScope struct {
-	Branches []string
+	Branches  []string
+	Upstreams []string
 }
 
 // LogScoped returns up to limit commits (newest-first; --date-order when
@@ -36,6 +40,9 @@ func (r *Repo) LogScoped(ctx context.Context, limit, skip int, scope LogScope, d
 		b = b.Arg("--branches", "HEAD")
 	} else {
 		b = b.Arg(scope.Branches...)
+	}
+	if len(scope.Upstreams) > 0 {
+		b = b.Arg(scope.Upstreams...)
 	}
 	res, err := r.Runner.Run(ctx, "git log", b.ToArgv())
 	if err != nil {

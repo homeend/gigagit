@@ -187,10 +187,14 @@ func (s *Service) logPage(ctx context.Context, limit, skip int, scope LogScope, 
 
 // scopeKey is the stable cache/singleflight discriminator for a scope.
 func scopeKey(scope LogScope) string {
-	if len(scope.Branches) == 0 {
-		return "all"
+	base := "all"
+	if len(scope.Branches) > 0 {
+		base = strings.Join(scope.Branches, ",")
 	}
-	return strings.Join(scope.Branches, ",")
+	if len(scope.Upstreams) > 0 {
+		base += "|up:" + strings.Join(scope.Upstreams, ",")
+	}
+	return base
 }
 
 // Status is a single gated read for the CLI status command.
