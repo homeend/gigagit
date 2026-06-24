@@ -570,3 +570,45 @@ func TestGraphSuppressedWhenFiltered(t *testing.T) {
 		t.Fatal("graph must be suppressed while a commit filter is active")
 	}
 }
+
+func TestFilesViewCommitsTouchingSeedsFilter(t *testing.T) {
+	m := openFilesView(t, filesModel())
+	// openFilesView lands on the commit-list side; switch to the tree side so
+	// the guard passes.
+	m.filesTreeFocused = true
+	m.filesView.sel = 0
+	// Find the first visible row that is a real file (non-heading, non-empty path).
+	vis := m.filesView.visible()
+	want := ""
+	for _, l := range vis {
+		if !l.heading && l.path != "" {
+			want = l.path
+			break
+		}
+	}
+	if want == "" {
+		t.Fatal("test fixture has no selectable file rows — fix filesModel()")
+	}
+	// Set sel to that row.
+	for i, l := range vis {
+		if l.path == want {
+			m.filesView.sel = i
+			break
+		}
+	}
+	row, ok := m.commitsTouchingFileRow()
+	if !ok {
+		t.Fatal("commitsTouchingFileRow must be available with a tree-side file selected")
+	}
+	mm, _ := row.run(m)
+	got := mm.(Model)
+	if len(got.commitFilter.Paths) != 1 || got.commitFilter.Paths[0] != want {
+		t.Fatalf("path not seeded correctly: got %v, want [%q]", got.commitFilter.Paths, want)
+	}
+	if got.filesView != nil {
+		t.Fatal("running the row should close the files view")
+	}
+	if got.focus != panelCommits {
+		t.Fatalf("focus should be panelCommits after seeding, got %v", got.focus)
+	}
+}
