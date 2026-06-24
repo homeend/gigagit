@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/gigagit/gg/internal/repogate"
+	"github.com/homeend/gigagit/internal/repogate"
 )
 
 // Prune drops tracking refs for branches deleted upstream, across all remotes.

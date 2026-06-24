@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gigagit/gg/internal/model"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // The bookmark quick-switcher is a global action: `g` must open it from every

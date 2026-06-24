@@ -3,7 +3,7 @@ package git
 import (
 	"context"
 
-	"github.com/gigagit/gg/internal/gitcmd"
+	"github.com/homeend/gigagit/internal/gitcmd"
 )
 
 // StagePaths stages the given paths into the index (git add). The "--" guard

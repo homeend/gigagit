@@ -2,7 +2,7 @@ package tui
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/gigagit/gg/internal/rebaseplan"
+	"github.com/homeend/gigagit/internal/rebaseplan"
 )
 
 // commitEditRow offers a single-commit history edit (move/drop) on the

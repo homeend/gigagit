@@ -22,7 +22,7 @@ set "COMMIT="
 for /f "delims=" %%i in ('git rev-parse --short HEAD 2^>nul') do set "COMMIT=%%i"
 if not defined COMMIT set "COMMIT=none"
 
-set "LDFLAGS=-s -w -X github.com/gigagit/gg/internal/buildinfo.Version=!VERSION! -X github.com/gigagit/gg/internal/buildinfo.Commit=!COMMIT!"
+set "LDFLAGS=-s -w -X github.com/homeend/gigagit/internal/buildinfo.Version=!VERSION! -X github.com/homeend/gigagit/internal/buildinfo.Commit=!COMMIT!"
 
 set "TARGET=%~1"
 if "%TARGET%"=="" set "TARGET=windows"

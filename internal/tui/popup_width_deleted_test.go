@@ -6,7 +6,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/gigagit/gg/internal/model"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // longTailPath is wider than the old fixed 56-col popup so cutoff would hide its tail.

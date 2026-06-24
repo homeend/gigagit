@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/gigagit/gg/internal/model"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // eagerModel builds a Commits-focused model with the given loaded commits and a

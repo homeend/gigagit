@@ -9,7 +9,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/gigagit/gg/internal/shelf"
+	"github.com/homeend/gigagit/internal/shelf"
 )
 
 // ShelfStatePath overrides the shelf root directory. "" uses the default XDG

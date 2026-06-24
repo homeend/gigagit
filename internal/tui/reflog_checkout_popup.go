@@ -5,7 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/gigagit/gg/internal/engine"
+	"github.com/homeend/gigagit/internal/engine"
 )
 
 // reflogCheckoutPopup collects a new branch name to create at a reflog entry's

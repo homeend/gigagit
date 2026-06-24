@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/gigagit/gg/internal/model"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 func TestParseStashList(t *testing.T) {

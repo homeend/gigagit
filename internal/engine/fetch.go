@@ -3,7 +3,7 @@ package engine
 import (
 	"context"
 
-	"github.com/gigagit/gg/internal/repogate"
+	"github.com/homeend/gigagit/internal/repogate"
 )
 
 // Fetch updates tracking refs for every configured remote. RefWrite: it changes

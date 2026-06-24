@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/gigagit/gg/internal/model"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 func gitRun(t *testing.T, dir string, args ...string) {

@@ -10,7 +10,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
 
-	"github.com/gigagit/gg/internal/textdiff"
+	"github.com/homeend/gigagit/internal/textdiff"
 )
 
 var errFake = errors.New("boom")

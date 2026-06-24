@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gigagit/gg/internal/agentskill"
+	"github.com/homeend/gigagit/internal/agentskill"
 )
 
 // fixture creates proj+home dirs with the named agent-detect paths present.

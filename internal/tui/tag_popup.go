@@ -5,7 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/gigagit/gg/internal/engine"
+	"github.com/homeend/gigagit/internal/engine"
 )
 
 // tagPopup is the create-tag dialog at a commit. An empty message creates a

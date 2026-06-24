@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/gigagit/gg/internal/gitcmd"
+	"github.com/homeend/gigagit/internal/gitcmd"
 )
 
 // CherryPick applies commit onto the branch checked out at dir ("" = this

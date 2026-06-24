@@ -3,7 +3,7 @@ package tui
 import (
 	"testing"
 
-	"github.com/gigagit/gg/internal/model"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // closeFilesView must zero the entire cluster — no stale field survives.

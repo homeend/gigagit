@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/gigagit/gg/internal/model"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // parseStashList splits each "stash@{N}: <subject>" line into a StashEntry.

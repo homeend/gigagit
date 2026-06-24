@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/gigagit/gg/internal/gitcmd"
+	"github.com/homeend/gigagit/internal/gitcmd"
 )
 
 // StageBlob sets the index entry for path to exactly content, without touching

@@ -3,7 +3,7 @@ package tui
 import (
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/gigagit/gg/internal/engine"
+	"github.com/homeend/gigagit/internal/engine"
 )
 
 // branchMergeRow offers "Merge <branch> into current" on the Branches tab.

@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/gigagit/gg/internal/git"
-	"github.com/gigagit/gg/internal/gitexec"
+	"github.com/homeend/gigagit/internal/git"
+	"github.com/homeend/gigagit/internal/gitexec"
 )
 
 func TestRevParseResolvesFullSHA(t *testing.T) {

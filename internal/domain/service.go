@@ -12,16 +12,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gigagit/gg/internal/bookmark"
-	"github.com/gigagit/gg/internal/cache"
-	"github.com/gigagit/gg/internal/engine"
-	"github.com/gigagit/gg/internal/git"
-	"github.com/gigagit/gg/internal/gitexec"
-	"github.com/gigagit/gg/internal/observ"
-	"github.com/gigagit/gg/internal/profile"
-	"github.com/gigagit/gg/internal/repogate"
-	"github.com/gigagit/gg/internal/searchhist"
-	"github.com/gigagit/gg/internal/shelf"
+	"github.com/homeend/gigagit/internal/bookmark"
+	"github.com/homeend/gigagit/internal/cache"
+	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/git"
+	"github.com/homeend/gigagit/internal/gitexec"
+	"github.com/homeend/gigagit/internal/observ"
+	"github.com/homeend/gigagit/internal/profile"
+	"github.com/homeend/gigagit/internal/repogate"
+	"github.com/homeend/gigagit/internal/searchhist"
+	"github.com/homeend/gigagit/internal/shelf"
 )
 
 // Service couples one repository with its process-wide gate and a singleflight

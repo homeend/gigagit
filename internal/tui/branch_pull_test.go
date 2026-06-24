@@ -3,7 +3,7 @@ package tui
 import (
 	"testing"
 
-	"github.com/gigagit/gg/internal/engine"
+	"github.com/homeend/gigagit/internal/engine"
 )
 
 // markModel() has branches: main (IsHead), feat/a, feat/b; focus = panelBranches.

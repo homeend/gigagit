@@ -3,7 +3,7 @@ package tui
 import (
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/gigagit/gg/internal/engine"
+	"github.com/homeend/gigagit/internal/engine"
 )
 
 // markState identifies a marked row by stable identity (panelList.Key), not

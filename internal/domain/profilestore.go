@@ -7,8 +7,8 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/gigagit/gg/internal/model"
-	"github.com/gigagit/gg/internal/profile"
+	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/profile"
 )
 
 // ProfileStatePath overrides the profile root dir. "" uses the default XDG

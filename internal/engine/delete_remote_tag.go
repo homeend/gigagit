@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/gigagit/gg/internal/repogate"
+	"github.com/homeend/gigagit/internal/repogate"
 )
 
 // DeleteRemoteTag deletes a tag on a remote (git push <remote> --delete

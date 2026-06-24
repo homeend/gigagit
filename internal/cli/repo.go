@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/gigagit/gg/internal/repos"
+	"github.com/homeend/gigagit/internal/repos"
 )
 
 // cmdRepo dispatches `gg repo <list|switch>` — the repo-switcher registry.

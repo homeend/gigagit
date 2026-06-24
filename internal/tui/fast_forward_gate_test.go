@@ -3,7 +3,7 @@ package tui
 import (
 	"testing"
 
-	"github.com/gigagit/gg/internal/model"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // linear C0(t10) <- C1(t20) <- C2(t30), plus a sibling S(t25) off C0.

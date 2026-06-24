@@ -3,7 +3,7 @@ package tui
 import (
 	"testing"
 
-	"github.com/gigagit/gg/internal/model"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // ffModel: current branch "main" tip = C1; child "feat" ahead at C2.

@@ -11,9 +11,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/gigagit/gg/internal/domain"
-	"github.com/gigagit/gg/internal/engine"
-	"github.com/gigagit/gg/internal/model"
+	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // bookmarkPopup is the centered quick-switcher: a type-to-filter list of the

@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gigagit/gg/internal/observ"
+	"github.com/homeend/gigagit/internal/observ"
 )
 
 // Mode is the kind of access a reservation grants.

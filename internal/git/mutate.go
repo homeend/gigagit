@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/gigagit/gg/internal/gitcmd"
+	"github.com/homeend/gigagit/internal/gitcmd"
 )
 
 // Commit records staged changes. When all is true, modified/deleted tracked

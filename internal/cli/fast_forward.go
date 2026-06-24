@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/gigagit/gg/internal/domain"
-	"github.com/gigagit/gg/internal/engine"
+	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/engine"
 )
 
 // cmdFastForward implements `gg fast-forward <commit>`: advance the current

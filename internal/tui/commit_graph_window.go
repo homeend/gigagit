@@ -1,6 +1,6 @@
 package tui
 
-import "github.com/gigagit/gg/internal/commitgraph"
+import "github.com/homeend/gigagit/internal/commitgraph"
 
 // graphActive reports whether the windowed lane graph is currently drawn in the
 // Commits panel (natural order, not list mode, cells cached and aligned).

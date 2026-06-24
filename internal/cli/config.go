@@ -8,8 +8,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/gigagit/gg/internal/config"
-	"github.com/gigagit/gg/internal/domain"
+	"github.com/homeend/gigagit/internal/config"
+	"github.com/homeend/gigagit/internal/domain"
 )
 
 // cmdConfig implements `gg config <subcommand>`. Currently only `init`, which

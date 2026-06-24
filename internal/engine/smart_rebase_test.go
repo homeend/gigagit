@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gigagit/gg/internal/git"
+	"github.com/homeend/gigagit/internal/git"
 )
 
 func TestSmartRebaseGuards(t *testing.T) {

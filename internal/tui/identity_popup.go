@@ -8,8 +8,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/gigagit/gg/internal/engine"
-	"github.com/gigagit/gg/internal/model"
+	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // identityView is the Settings sub-surface for the git user identity and the

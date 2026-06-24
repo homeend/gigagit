@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/gigagit/gg/internal/domain"
-	"github.com/gigagit/gg/internal/engine"
+	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/engine"
 )
 
 // cmdReset implements `gg reset [--soft|--mixed|--hard] [--force] <commit>`. It

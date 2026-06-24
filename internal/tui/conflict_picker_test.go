@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gigagit/gg/internal/hunkpick"
+	"github.com/homeend/gigagit/internal/hunkpick"
 )
 
 func pickerDoc() *hunkpick.Doc {

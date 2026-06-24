@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gigagit/gg/internal/agentinit"
+	"github.com/homeend/gigagit/internal/agentinit"
 )
 
 // cmdInit implements `gg init`: detect AI agents, ask which to set up, and

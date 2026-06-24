@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gigagit/gg/internal/rebaseplan"
+	"github.com/homeend/gigagit/internal/rebaseplan"
 )
 
 // runGit runs git in dir with a frozen identity, failing the test on error.
@@ -28,7 +28,7 @@ func runGit(t *testing.T, dir string, args ...string) string {
 // rebase sequence editor), rewords the oldest commit and drops the middle one.
 func TestRebaseInteractiveCLIEndToEnd(t *testing.T) {
 	ggBin := filepath.Join(t.TempDir(), "gg-test-bin")
-	if out, err := exec.Command("go", "build", "-o", ggBin, "github.com/gigagit/gg/cmd/gg").CombinedOutput(); err != nil {
+	if out, err := exec.Command("go", "build", "-o", ggBin, "github.com/homeend/gigagit/cmd/gg").CombinedOutput(); err != nil {
 		t.Fatalf("build gg: %v\n%s", err, out)
 	}
 

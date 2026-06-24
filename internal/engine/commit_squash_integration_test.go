@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gigagit/gg/internal/git"
-	"github.com/gigagit/gg/internal/rebaseplan"
+	"github.com/homeend/gigagit/internal/git"
+	"github.com/homeend/gigagit/internal/rebaseplan"
 )
 
 // runSquash drives the full squash path the TUI uses: derive Onto = oldest^,

@@ -1,6 +1,6 @@
 package domain
 
-import "github.com/gigagit/gg/internal/searchhist"
+import "github.com/homeend/gigagit/internal/searchhist"
 
 // DefaultSearchHistorySize is the per-ring entry count when config leaves it unset.
 const DefaultSearchHistorySize = 20

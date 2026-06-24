@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/gigagit/gg/internal/model"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // elideFilePath keeps the leading status glyph + space and middle-elides the

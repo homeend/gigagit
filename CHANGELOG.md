@@ -8,6 +8,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+### Changed
+- **Module path is now `github.com/homeend/gigagit`** (was
+  `github.com/gigagit/gg`). The repo is hosted at
+  <https://github.com/homeend/gigagit>, so the tool installs with
+  `go install github.com/homeend/gigagit/cmd/gg@latest` (binary `gg`). No CLI,
+  config, or behaviour change — import paths only.
+
 ### Added
 - **Deeper, on-demand commit loading.** The Commits panel now loads more history
   before you hit the bottom and lets you reach it directly. New `[ui]` settings

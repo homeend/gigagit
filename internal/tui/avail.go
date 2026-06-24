@@ -1,6 +1,6 @@
 package tui
 
-import "github.com/gigagit/gg/internal/model"
+import "github.com/homeend/gigagit/internal/model"
 
 // Availability predicates shared by Update's key dispatch (model.go) and the
 // footer binding registry (footer.go). Sharing them keeps the footer honest:

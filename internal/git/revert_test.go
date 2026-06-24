@@ -8,7 +8,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/gigagit/gg/internal/gitexec"
+	"github.com/homeend/gigagit/internal/gitexec"
 )
 
 func TestRevertArgv(t *testing.T) {

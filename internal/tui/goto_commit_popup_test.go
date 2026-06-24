@@ -6,9 +6,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/gigagit/gg/internal/domain"
-	"github.com/gigagit/gg/internal/git"
-	"github.com/gigagit/gg/internal/gitexec"
+	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/git"
+	"github.com/homeend/gigagit/internal/gitexec"
 )
 
 const gotoFullHash = "1234567890abcdef1234567890abcdef12345678"

@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"io"
 
-	"github.com/gigagit/gg/internal/cli"
+	"github.com/homeend/gigagit/internal/cli"
 )
 
 // Runner executes one gg command against workdir and returns its exit code.

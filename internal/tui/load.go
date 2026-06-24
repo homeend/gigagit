@@ -8,10 +8,10 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/gigagit/gg/internal/config"
-	"github.com/gigagit/gg/internal/domain"
-	"github.com/gigagit/gg/internal/model"
-	"github.com/gigagit/gg/internal/repos"
+	"github.com/homeend/gigagit/internal/config"
+	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/repos"
 )
 
 // commitsPagedMsg signals a commit page load completed; gen ties it to the

@@ -3,7 +3,7 @@ package tui
 import (
 	"testing"
 
-	"github.com/gigagit/gg/internal/model"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 func rebaseOpsModel(parents []string) Model {

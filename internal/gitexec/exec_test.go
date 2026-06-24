@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gigagit/gg/internal/observ"
+	"github.com/homeend/gigagit/internal/observ"
 )
 
 func TestExecRunnerRunEnvPassesEnvToSubprocess(t *testing.T) {

@@ -9,16 +9,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gigagit/gg/internal/app"
-	"github.com/gigagit/gg/internal/buildinfo"
-	"github.com/gigagit/gg/internal/cli"
-	"github.com/gigagit/gg/internal/domain"
-	"github.com/gigagit/gg/internal/git"
-	"github.com/gigagit/gg/internal/gitexec"
-	"github.com/gigagit/gg/internal/observ"
-	"github.com/gigagit/gg/internal/repos"
-	"github.com/gigagit/gg/internal/shellinit"
-	"github.com/gigagit/gg/internal/tui"
+	"github.com/homeend/gigagit/internal/app"
+	"github.com/homeend/gigagit/internal/buildinfo"
+	"github.com/homeend/gigagit/internal/cli"
+	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/git"
+	"github.com/homeend/gigagit/internal/gitexec"
+	"github.com/homeend/gigagit/internal/observ"
+	"github.com/homeend/gigagit/internal/repos"
+	"github.com/homeend/gigagit/internal/shellinit"
+	"github.com/homeend/gigagit/internal/tui"
 )
 
 func main() {

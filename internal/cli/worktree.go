@@ -12,12 +12,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gigagit/gg/internal/config"
-	"github.com/gigagit/gg/internal/domain"
-	"github.com/gigagit/gg/internal/engine"
-	"github.com/gigagit/gg/internal/model"
-	"github.com/gigagit/gg/internal/template"
-	"github.com/gigagit/gg/internal/worktree"
+	"github.com/homeend/gigagit/internal/config"
+	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/template"
+	"github.com/homeend/gigagit/internal/worktree"
 )
 
 // cmdWorktree dispatches `gg worktree <sub>`.

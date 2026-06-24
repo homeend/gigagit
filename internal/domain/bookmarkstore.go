@@ -7,7 +7,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/gigagit/gg/internal/bookmark"
+	"github.com/homeend/gigagit/internal/bookmark"
 )
 
 // BookmarkStatePath overrides the bookmark root dir. "" uses the default XDG

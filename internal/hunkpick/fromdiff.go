@@ -1,6 +1,6 @@
 package hunkpick
 
-import "github.com/gigagit/gg/internal/textdiff"
+import "github.com/homeend/gigagit/internal/textdiff"
 
 // FromDiff builds a Doc from a line diff of two file versions (left = the
 // baseline, e.g. the index; right = the new side, e.g. the working tree).

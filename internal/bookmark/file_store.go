@@ -13,7 +13,7 @@ import (
 
 	"github.com/pelletier/go-toml/v2"
 
-	"github.com/gigagit/gg/internal/model"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // FileStore keeps an atomic-rewrite TOML registry under root/bookmarks.toml.

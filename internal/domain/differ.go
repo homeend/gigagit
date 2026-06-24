@@ -3,8 +3,8 @@ package domain
 import (
 	"context"
 
-	"github.com/gigagit/gg/internal/cache"
-	"github.com/gigagit/gg/internal/textdiff"
+	"github.com/homeend/gigagit/internal/cache"
+	"github.com/homeend/gigagit/internal/textdiff"
 )
 
 // MaxDiffBytes caps each side fed to the comparison engine; a larger side is

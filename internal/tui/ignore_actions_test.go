@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gigagit/gg/internal/model"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // ignoreModel builds an idle, sized model focused on the Files panel with the

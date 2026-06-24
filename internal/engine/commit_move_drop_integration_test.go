@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gigagit/gg/internal/git"
-	"github.com/gigagit/gg/internal/rebaseplan"
+	"github.com/homeend/gigagit/internal/git"
+	"github.com/homeend/gigagit/internal/rebaseplan"
 )
 
 // fourCommitBranch builds main(initial) -> a -> b -> c -> d on "work", each

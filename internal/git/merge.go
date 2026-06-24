@@ -3,7 +3,7 @@ package git
 import (
 	"context"
 
-	"github.com/gigagit/gg/internal/gitcmd"
+	"github.com/homeend/gigagit/internal/gitcmd"
 )
 
 // Merge merges branch into the branch checked out at dir ("" = this repo's

@@ -11,14 +11,14 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/gigagit/gg/internal/commitgraph"
-	"github.com/gigagit/gg/internal/config"
-	"github.com/gigagit/gg/internal/domain"
-	"github.com/gigagit/gg/internal/engine"
-	"github.com/gigagit/gg/internal/hunkpick"
-	"github.com/gigagit/gg/internal/model"
-	"github.com/gigagit/gg/internal/rebaseplan"
-	"github.com/gigagit/gg/internal/textdiff"
+	"github.com/homeend/gigagit/internal/commitgraph"
+	"github.com/homeend/gigagit/internal/config"
+	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/hunkpick"
+	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/rebaseplan"
+	"github.com/homeend/gigagit/internal/textdiff"
 )
 
 // Model is the root Bubble Tea model.

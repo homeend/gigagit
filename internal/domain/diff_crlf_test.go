@@ -8,10 +8,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/gigagit/gg/internal/git"
-	"github.com/gigagit/gg/internal/gitexec"
-	"github.com/gigagit/gg/internal/observ"
-	"github.com/gigagit/gg/internal/textdiff"
+	"github.com/homeend/gigagit/internal/git"
+	"github.com/homeend/gigagit/internal/gitexec"
+	"github.com/homeend/gigagit/internal/observ"
+	"github.com/homeend/gigagit/internal/textdiff"
 )
 
 // TestDiffCRLFWorkingCopyMatchesGit reproduces the real-world whole-file-green

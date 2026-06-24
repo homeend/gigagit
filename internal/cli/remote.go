@@ -6,8 +6,8 @@ import (
 	"io"
 	"strings"
 
-	"github.com/gigagit/gg/internal/domain"
-	"github.com/gigagit/gg/internal/engine"
+	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/engine"
 )
 
 // cmdRemote dispatches the remote subcommands: ls | fetch | prune | rm.

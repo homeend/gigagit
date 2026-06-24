@@ -7,7 +7,7 @@ package shelf
 import (
 	"errors"
 
-	"github.com/gigagit/gg/internal/model"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // MaxShelfBytes caps a single shelved file (mirrors domain.MaxDiffBytes).

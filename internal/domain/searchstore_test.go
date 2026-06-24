@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/gigagit/gg/internal/searchhist"
+	"github.com/homeend/gigagit/internal/searchhist"
 )
 
 func TestRecordSearchAndSearchHistoryAll(t *testing.T) {

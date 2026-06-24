@@ -6,7 +6,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/gigagit/gg/internal/textdiff"
+	"github.com/homeend/gigagit/internal/textdiff"
 )
 
 var (

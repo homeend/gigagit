@@ -3,9 +3,9 @@ package git
 import (
 	"context"
 
-	"github.com/gigagit/gg/internal/gitcmd"
-	"github.com/gigagit/gg/internal/gitexec"
-	"github.com/gigagit/gg/internal/model"
+	"github.com/homeend/gigagit/internal/gitcmd"
+	"github.com/homeend/gigagit/internal/gitexec"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // Repo provides read-only git operations through a Runner.

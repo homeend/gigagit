@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/gigagit/gg/internal/cache"
-	"github.com/gigagit/gg/internal/textdiff"
+	"github.com/homeend/gigagit/internal/cache"
+	"github.com/homeend/gigagit/internal/textdiff"
 )
 
 func src(b []byte) ByteSource {

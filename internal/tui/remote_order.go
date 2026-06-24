@@ -1,6 +1,6 @@
 package tui
 
-import "github.com/gigagit/gg/internal/model"
+import "github.com/homeend/gigagit/internal/model"
 
 // sortRemoteBranchesLocalFirst returns remotes reordered so that a remote branch
 // with a local counterpart (a branch of the same short name present in the

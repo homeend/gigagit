@@ -3,7 +3,7 @@ package git
 import (
 	"strings"
 
-	"github.com/gigagit/gg/internal/model"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // ParseWorktrees parses `git worktree list --porcelain` output. Records are

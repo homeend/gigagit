@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/gigagit/gg/internal/hunkpick"
+	"github.com/homeend/gigagit/internal/hunkpick"
 )
 
 func TestStageHunksStagesContentLeavesWorktree(t *testing.T) {

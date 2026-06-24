@@ -8,7 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/gigagit/gg/internal/domain"
+	"github.com/homeend/gigagit/internal/domain"
 )
 
 // recallVisibleRows caps how many history entries the dropdown shows at once.

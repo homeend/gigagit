@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gigagit/gg/internal/gitexec"
-	"github.com/gigagit/gg/internal/observ"
+	"github.com/homeend/gigagit/internal/gitexec"
+	"github.com/homeend/gigagit/internal/observ"
 )
 
 // gitIn runs a raw git command in dir for test setup.

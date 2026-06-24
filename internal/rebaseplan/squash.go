@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/gigagit/gg/internal/model"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // ErrNotAdjacent is returned by BuildSquash when the selected commits have gaps

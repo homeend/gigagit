@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/gigagit/gg/internal/repogate"
+	"github.com/homeend/gigagit/internal/repogate"
 )
 
 func TestFetchUpdatesAllRemotes(t *testing.T) {

@@ -8,7 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/gigagit/gg/internal/repos"
+	"github.com/homeend/gigagit/internal/repos"
 )
 
 // repoPopup is the transient repo-switcher picker opened with R. It holds an

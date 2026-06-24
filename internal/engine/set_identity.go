@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/gigagit/gg/internal/git"
-	"github.com/gigagit/gg/internal/repogate"
+	"github.com/homeend/gigagit/internal/git"
+	"github.com/homeend/gigagit/internal/repogate"
 )
 
 // SetIdentity writes user.name and user.email to one git config scope. It is

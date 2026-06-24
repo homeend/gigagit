@@ -9,7 +9,7 @@ Guidance for Claude Code (and humans) working in this repo.
 lazygit's fast keyboard TUI, runs cross-platform (Linux/macOS/Windows), and
 shells out to the system `git` binary rather than reimplementing git.
 
-Module: `github.com/gigagit/gg` · Go 1.26.
+Module: `github.com/homeend/gigagit` · Go 1.26.
 
 ## Architecture
 

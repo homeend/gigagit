@@ -6,7 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/gigagit/gg/internal/searchhist"
+	"github.com/homeend/gigagit/internal/searchhist"
 )
 
 // upd drives one key/message through Update and returns the new Model.

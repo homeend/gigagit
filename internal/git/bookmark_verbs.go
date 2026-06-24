@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/gigagit/gg/internal/gitcmd"
+	"github.com/homeend/gigagit/internal/gitcmd"
 )
 
 // CatFileBlob returns a blob's raw bytes by its object id (`git cat-file blob

@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gigagit/gg/internal/domain"
-	"github.com/gigagit/gg/internal/engine"
-	"github.com/gigagit/gg/internal/repos"
+	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/repos"
 )
 
 // RepoStatePath is the repo-switcher registry location. "" disables recording

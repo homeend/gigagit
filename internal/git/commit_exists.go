@@ -3,7 +3,7 @@ package git
 import (
 	"context"
 
-	"github.com/gigagit/gg/internal/gitcmd"
+	"github.com/homeend/gigagit/internal/gitcmd"
 )
 
 // CommitExists reports whether ref resolves to a commit object. ref may be any

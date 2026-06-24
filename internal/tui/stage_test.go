@@ -9,8 +9,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/gigagit/gg/internal/domain"
-	"github.com/gigagit/gg/internal/model"
+	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // stageTestModel: a loaded model on a repo with one unstaged modification,
