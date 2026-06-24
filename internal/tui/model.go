@@ -126,6 +126,8 @@ type Model struct {
 	highlightQuery  string // Commits-panel @-highlight: case-insensitive substring; "" = no committed query
 	highlightTyping bool   // true while @-input mode is capturing keys
 
+	eager eagerSearch // /-search-into-history paging state; eager.active gates the chain
+
 	searchHist map[string][]string // per-scope search-history rings, newest-first (loaded at startup)
 
 	recallScope string // active recall ring; "" = none
@@ -314,6 +316,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.commitsExhausted = st.Exhausted
 			m.commitsLoading = false // this page's load (the latest) finished
 			m = m.rebuildCommitGraph()
+			if m.eager.active {
+				return m.eagerAdvance()
+			}
 		}
 		return m, nil
 	case commitsReloadedMsg:
