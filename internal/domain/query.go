@@ -185,7 +185,9 @@ func (s *Service) logPage(ctx context.Context, limit, skip int, scope LogScope, 
 	})
 }
 
-// scopeKey is the stable cache/singleflight discriminator for a scope.
+// scopeKey is the stable cache/singleflight discriminator for a scope. It folds
+// ref selection (branches + upstreams) AND the content filters, so two scopes
+// that differ only by filter never collide.
 func scopeKey(scope LogScope) string {
 	base := "all"
 	if len(scope.Branches) > 0 {
@@ -193,6 +195,13 @@ func scopeKey(scope LogScope) string {
 	}
 	if len(scope.Upstreams) > 0 {
 		base += "|up:" + strings.Join(scope.Upstreams, ",")
+	}
+	if len(scope.Paths) > 0 || scope.Author != "" || scope.Grep != "" || scope.Since != "" || scope.Until != "" {
+		base += "\x00f:" + strings.Join(scope.Paths, "\x00") +
+			"\x00a:" + scope.Author +
+			"\x00g:" + scope.Grep +
+			"\x00s:" + scope.Since +
+			"\x00u:" + scope.Until
 	}
 	return base
 }

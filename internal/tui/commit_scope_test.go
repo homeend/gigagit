@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"slices"
 	"strings"
 	"testing"
@@ -792,6 +793,39 @@ func TestDataLoadedNoReloadWithoutTrackedUpstreams(t *testing.T) {
 // with the same upstream set does NOT trigger another feed reload. The first
 // delivery fires the reload (scope differs from the zero value); the second must
 // be a no-op because feedScopeApplied already matches feedScopeSig().
+func TestReloadFeedRestoresOnFilterClear(t *testing.T) {
+	f := gitexec.NewFakeRunner()
+	svc := domain.New(&git.Repo{Runner: f})
+	m := branchesPanelModel("main")
+	m.svc = svc
+	m.feed = svc.CommitFeed()
+	m.feed.SetPageSizes(50, 50)
+	m.sel = map[panel]int{}
+
+	f.SetResponse("git log", gitexec.Result{Stdout: "h1\x1f\x1fAda\x1f0\x1fa\x1f\x1f\nh2\x1f\x1fAda\x1f0\x1fb\x1f\x1f\nh3\x1f\x1fAda\x1f0\x1fc\x1f\x1f\n"})
+	m.feed.LoadInitial(context.Background()) // base: 3
+
+	f.SetResponse("git log", gitexec.Result{Stdout: "h1\x1f\x1fAda\x1f0\x1fa\x1f\x1f\n"})
+	m.commitFilter = commitFilterFields{Grep: "a"}
+	m.feed.ApplyScope(context.Background(), m.feedScope()) // filtered: 1
+	calls := len(f.Calls)
+
+	// Clear the filter and run reloadFeedCmd → it must ApplyScope back to base and
+	// restore from cache (no new git log).
+	m.commitFilter = commitFilterFields{}
+	msg := m.reloadFeedCmd()()
+	rm, ok := msg.(commitsReloadedMsg)
+	if !ok {
+		t.Fatalf("want commitsReloadedMsg, got %T", msg)
+	}
+	if len(f.Calls) != calls {
+		t.Fatalf("clear re-walked: calls %d → %d", calls, len(f.Calls))
+	}
+	if len(rm.state.Commits) != 3 {
+		t.Fatalf("restored base = %d, want 3", len(rm.state.Commits))
+	}
+}
+
 func TestDataLoadedNoRedundantReloadOnSecondLoad(t *testing.T) {
 	m := newTestModelForReload(t)
 	msg := dataLoadedMsg{

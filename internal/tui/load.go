@@ -62,6 +62,18 @@ func (m Model) loadCmd() tea.Cmd {
 	gen := m.loadGen
 	return func() tea.Msg {
 		ctx := context.Background()
+		// Resolve config BEFORE the feed's first walk so commit_initial_count
+		// governs the first paint. config.Load needs the repo toplevel; fetch it
+		// up front (cheap; the gated Snapshot reads its own toplevel too).
+		cfg := config.Defaults()
+		top, topErr := svc.TopLevel(ctx)
+		if topErr == nil && top != "" {
+			if c, cfgErr := config.Load(config.DefaultGlobalPath(), filepath.Join(top, ".gg.toml")); cfgErr == nil {
+				cfg = c
+			}
+		}
+		feed.SetPageSizes(cfg.UI.CommitInitialCount, cfg.UI.CommitBatchSize)
+
 		var (
 			snap    domain.Snapshot
 			snapErr error
@@ -91,21 +103,15 @@ func (m Model) loadCmd() tea.Cmd {
 			commits:          fs.Commits,
 			commitsExhausted: fs.Exhausted,
 			commitErr:        feedErr,
-			cfg:              config.Defaults(),
+			cfg:              cfg,
 		}
-		// config and the MRU registry are not git reads; do them here, after
-		// the gated snapshot, keyed off the toplevel it reported.
+		// MRU touch + reflog re-read are not git-status reads; do them after the
+		// gated snapshot, keyed off the toplevel it reported.
 		if snap.CurrentWorktree != "" {
 			_ = repos.Touch(statePath, snap.CurrentWorktree, time.Now())
-			if cfg, cfgErr := config.Load(config.DefaultGlobalPath(), filepath.Join(snap.CurrentWorktree, ".gg.toml")); cfgErr == nil {
-				out.cfg = cfg
-				// The Snapshot reflog uses the domain default cap (config is not
-				// loaded yet at snapshot time); re-read with the configured limit
-				// when one is set so [ui] reflog_limit takes effect.
-				if n := cfg.UI.ReflogLimit; n > 0 {
-					if rl, err := svc.Reflog(ctx, n); err == nil {
-						out.reflog = rl
-					}
+			if n := cfg.UI.ReflogLimit; n > 0 {
+				if rl, err := svc.Reflog(ctx, n); err == nil {
+					out.reflog = rl
 				}
 			}
 		}

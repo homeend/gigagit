@@ -1,9 +1,11 @@
 package tui
 
 import (
+	"context"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/gigagit/gg/internal/model"
 )
 
 func keyMsg(s string) tea.KeyMsg {
@@ -88,5 +90,53 @@ func TestWindowSizeIsRecorded(t *testing.T) {
 	mm := updated.(Model)
 	if mm.width != 120 || mm.height != 40 {
 		t.Fatalf("size = %dx%d, want 120x40", mm.width, mm.height)
+	}
+}
+
+func TestCtrlLForcesLoadOnCommits(t *testing.T) {
+	m := newTestModelForReload(t) // real svc+feed on a FakeRunner (see commit_scope_test.go)
+	m.focus = panelCommits
+	// Fresh feed: exhausted=false, inFlight=false → CanLoadMore true.
+	nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlL})
+	if cmd == nil {
+		t.Fatal("ctrl+l on Commits should dispatch a load")
+	}
+	if !nm.(Model).commitsLoading {
+		t.Fatal("ctrl+l should set commitsLoading")
+	}
+}
+
+func TestCtrlLNoopWhenExhausted(t *testing.T) {
+	m := newTestModelForReload(t)
+	m.focus = panelCommits
+	// Exhaust the feed: a short initial page.
+	m.feed.SetPageSizes(50, 50)
+	if _, err := m.feed.LoadInitial(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	// newTestModelForReload's fake serves a single row → 1 < 50 → exhausted.
+	nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlL})
+	if cmd != nil || nm.(Model).commitsLoading {
+		t.Fatal("ctrl+l must be a no-op on an exhausted feed")
+	}
+}
+
+func TestHomeEndCommitsNav(t *testing.T) {
+	m := newTestModelForReload(t)
+	m.focus = panelCommits
+	// Give the panel several rows so home/end have somewhere to go.
+	m.commits = []model.Commit{{Hash: "a"}, {Hash: "b"}, {Hash: "c"}}
+	m = m.rebuildCommitGraph()
+	m.sel[panelCommits] = 1
+
+	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyHome})
+	if nm.(Model).sel[panelCommits] != 0 {
+		t.Fatalf("home → sel 0, got %d", nm.(Model).sel[panelCommits])
+	}
+
+	nm2, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnd})
+	want := m.panelLen(panelCommits) - 1
+	if nm2.(Model).sel[panelCommits] != want {
+		t.Fatalf("end → sel %d, got %d", want, nm2.(Model).sel[panelCommits])
 	}
 }

@@ -16,22 +16,39 @@ const (
 	commitNearEnd     = 10 // load more when the selection is within this of the end
 )
 
+// cachedScope is a feed accumulation remembered for a scope key, so toggling back
+// to that scope (e.g. clearing a filter) restores instantly with no re-walk.
+type cachedScope struct {
+	commits   []model.Commit
+	hashes    map[string]bool
+	skip      int
+	exhausted bool
+}
+
+// commitScopeCacheCap bounds the cache by ENTRY COUNT (remembered scopes), not
+// bytes — one large base accumulation dominates memory.
+const commitScopeCacheCap = 4
+
 // CommitFeed is the single source of truth for the Commits panel: an
 // incrementally loaded, newest-first view of HEAD history. Goroutine-safe;
 // Snapshot returns a copy so a frontend can render while a page loads.
 type CommitFeed struct {
 	svc *Service
 
-	mu        sync.Mutex
-	scope     LogScope // refspec for the walk; empty = all local branches
-	commits   []model.Commit
-	hashes    map[string]bool // dedupe set, mirrors commits
-	skip      int             // next --skip offset (advances by raw page length)
-	exhausted bool
-	gen       int                // bumped by LoadInitial; tags pages so stale ones drop
-	inFlight  bool               // at most one page request outstanding
-	cancel    context.CancelFunc // cancels the in-flight load's ctx on supersede
-	pager     CommitPager        // page-fetch strategy; default dateOrderPager (legacy)
+	mu          sync.Mutex
+	scope       LogScope // refspec for the walk; empty = all local branches
+	commits     []model.Commit
+	hashes      map[string]bool // dedupe set, mirrors commits
+	skip        int             // next --skip offset (advances by raw page length)
+	exhausted   bool
+	gen         int                    // bumped by LoadInitial; tags pages so stale ones drop
+	inFlight    bool                   // at most one page request outstanding
+	cancel      context.CancelFunc     // cancels the in-flight load's ctx on supersede
+	pager       CommitPager            // page-fetch strategy; default dateOrderPager (legacy)
+	initialPage int                    // configured first-paint size; <=0 → commitInitialPage
+	pageSize    int                    // configured later-page size; <=0 → commitPageSize
+	cache       map[string]cachedScope // scopeKey → remembered accumulation
+	cacheOrder  []string               // LRU order, oldest first
 }
 
 // CommitFeed returns a fresh feed for this Service's repo.
@@ -44,7 +61,7 @@ func (s *Service) CommitFeed() *CommitFeed {
 	if os.Getenv("GG_COMMIT_PAGER") == "date-order" {
 		pager = dateOrderPager{svc: s}
 	}
-	return &CommitFeed{svc: s, hashes: map[string]bool{}, pager: pager}
+	return &CommitFeed{svc: s, hashes: map[string]bool{}, cache: map[string]cachedScope{}, pager: pager}
 }
 
 // PagerName reports the active page strategy ("plain" | "date-order").
@@ -56,6 +73,31 @@ func (f *CommitFeed) SetScope(scope LogScope) {
 	f.mu.Lock()
 	f.scope = scope
 	f.mu.Unlock()
+}
+
+// SetPageSizes sets the first-paint and later-page commit counts (0 or negative
+// keeps the built-in fallback). Apply before the next LoadInitial.
+func (f *CommitFeed) SetPageSizes(initial, batch int) {
+	f.mu.Lock()
+	f.initialPage = initial
+	f.pageSize = batch
+	f.mu.Unlock()
+}
+
+// effInitial / effPage resolve the configured size or the constant fallback.
+// Callers hold f.mu.
+func (f *CommitFeed) effInitial() int {
+	if f.initialPage > 0 {
+		return f.initialPage
+	}
+	return commitInitialPage
+}
+
+func (f *CommitFeed) effPage() int {
+	if f.pageSize > 0 {
+		return f.pageSize
+	}
+	return commitPageSize
 }
 
 // FeedState is an immutable view handed to the frontend.
@@ -98,18 +140,68 @@ func (f *CommitFeed) NeedsMore(sel int) bool {
 	return sel >= len(f.commits)-commitNearEnd
 }
 
-// LoadInitial resets the feed (bumps gen, clears) and loads page 0. It is the
-// reload primitive: callers re-fill a feed by calling LoadInitial again.
+// CanLoadMore reports whether a LoadMore would do work (not exhausted, not
+// already in flight) — independent of cursor position. Drives the ctrl+l key.
+func (f *CommitFeed) CanLoadMore() bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return !f.exhausted && !f.inFlight
+}
+
+// stashCurrentLocked saves the current scope's accumulation under its key.
+// Caller holds f.mu. A no-op when nothing is loaded.
+func (f *CommitFeed) stashCurrentLocked() {
+	if len(f.commits) == 0 {
+		return
+	}
+	key := scopeKey(f.scope)
+	if _, ok := f.cache[key]; !ok {
+		f.cacheOrder = append(f.cacheOrder, key)
+	}
+	hs := make(map[string]bool, len(f.hashes))
+	for h := range f.hashes {
+		hs[h] = true
+	}
+	cp := make([]model.Commit, len(f.commits))
+	copy(cp, f.commits)
+	f.cache[key] = cachedScope{commits: cp, hashes: hs, skip: f.skip, exhausted: f.exhausted}
+	for len(f.cacheOrder) > commitScopeCacheCap {
+		delete(f.cache, f.cacheOrder[0])
+		f.cacheOrder = f.cacheOrder[1:]
+	}
+}
+
+// clearCacheLocked drops every remembered scope (hard-refresh invalidation).
+// Caller holds f.mu.
+func (f *CommitFeed) clearCacheLocked() {
+	f.cache = map[string]cachedScope{}
+	f.cacheOrder = nil
+}
+
+// LoadInitial is the HARD REFRESH: it re-walks the current scope from page 0 and
+// invalidates the entire scope cache, so post-operation reloads never restore a
+// stale accumulation for some other scope. (Scope TOGGLES use ApplyScope.)
 func (f *CommitFeed) LoadInitial(ctx context.Context) (FeedState, error) {
 	f.mu.Lock()
+	f.clearCacheLocked()
+	f.mu.Unlock()
+	return f.loadInitialWalk(ctx)
+}
+
+// loadInitialWalk resets the current scope's accumulation and walks page 0. It is
+// the body shared by LoadInitial and ApplyScope's cache-miss path; it does NOT
+// touch the cache.
+func (f *CommitFeed) loadInitialWalk(ctx context.Context) (FeedState, error) {
+	f.mu.Lock()
 	if f.cancel != nil {
-		f.cancel() // stop a superseded in-flight walk, not just drop its result
+		f.cancel()
 	}
 	cctx, cancel := context.WithCancel(ctx)
 	f.cancel = cancel
 	f.gen++
 	gen0 := f.gen
 	scope := f.scope
+	initial := f.effInitial()
 	f.commits = nil
 	f.hashes = map[string]bool{}
 	f.skip = 0
@@ -117,16 +209,15 @@ func (f *CommitFeed) LoadInitial(ctx context.Context) (FeedState, error) {
 	f.inFlight = true
 	f.mu.Unlock()
 
-	page, err := f.pager.Page(cctx, commitInitialPage, 0, gen0, scope)
+	page, err := f.pager.Page(cctx, initial, 0, gen0, scope)
 
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.inFlight = false
 	if f.gen == gen0 {
-		f.cancel = nil // our load finished current; nothing to cancel
+		f.cancel = nil
 	}
-	if f.gen != gen0 { // a newer reload raced; drop this page, stamp OUR gen so the
-		// caller's message is droppable (not masquerading as the current gen)
+	if f.gen != gen0 {
 		st := f.snapshotLocked()
 		st.Gen = gen0
 		return st, nil
@@ -141,8 +232,40 @@ func (f *CommitFeed) LoadInitial(ctx context.Context) (FeedState, error) {
 		}
 	}
 	f.skip = len(page)
-	f.exhausted = len(page) < commitInitialPage
+	f.exhausted = len(page) < initial
 	return f.snapshotLocked(), nil
+}
+
+// ApplyScope switches the feed to scope. If that scope's accumulation is cached
+// (a prior toggle with no hard refresh since), it is restored with NO git call;
+// otherwise the feed re-walks page 0. The current scope's accumulation is stashed
+// first so toggling back is instant. Scope toggles (filter / solo / show-all /
+// upstreams) call this; LoadInitial remains the cache-clearing hard refresh.
+func (f *CommitFeed) ApplyScope(ctx context.Context, scope LogScope) (FeedState, error) {
+	f.mu.Lock()
+	f.stashCurrentLocked()
+	if cs, ok := f.cache[scopeKey(scope)]; ok {
+		if f.cancel != nil {
+			f.cancel() // a cached restore supersedes any in-flight walk
+		}
+		f.cancel = nil
+		f.gen++
+		f.scope = scope
+		f.commits = append([]model.Commit(nil), cs.commits...)
+		f.hashes = make(map[string]bool, len(cs.hashes))
+		for h := range cs.hashes {
+			f.hashes[h] = true
+		}
+		f.skip = cs.skip
+		f.exhausted = cs.exhausted
+		f.inFlight = false
+		st := f.snapshotLocked()
+		f.mu.Unlock()
+		return st, nil
+	}
+	f.scope = scope
+	f.mu.Unlock()
+	return f.loadInitialWalk(ctx)
 }
 
 // LoadMore loads the next page when warranted. Returns (state, true) when a
@@ -160,9 +283,10 @@ func (f *CommitFeed) LoadMore(ctx context.Context) (FeedState, bool, error) {
 	gen0 := f.gen
 	skip := f.skip
 	scope := f.scope
+	size := f.effPage()
 	f.mu.Unlock()
 
-	page, err := f.pager.Page(ctx, commitPageSize, skip, gen0, scope)
+	page, err := f.pager.Page(ctx, size, skip, gen0, scope)
 
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -180,6 +304,6 @@ func (f *CommitFeed) LoadMore(ctx context.Context) (FeedState, bool, error) {
 		}
 	}
 	f.skip += len(page) // advance by raw page length to stay aligned with git's walk
-	f.exhausted = len(page) < commitPageSize
+	f.exhausted = len(page) < size
 	return f.snapshotLocked(), true, nil
 }

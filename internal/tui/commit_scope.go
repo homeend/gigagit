@@ -126,15 +126,15 @@ func (m Model) feedScopeSig() string {
 		"|" + s.Since + "|" + s.Until
 }
 
-// reloadFeedCmd applies the model's scope to the feed and reloads page 0 off the
-// UI thread. SetScope+LoadInitial bumps the feed gen (dropping stale pages) and
-// cancels any superseded in-flight walk.
+// reloadFeedCmd applies the model's scope to the feed off the UI thread. It uses
+// ApplyScope so toggling a filter/solo back to a previously-walked scope restores
+// the cached accumulation instantly; a genuinely new scope walks page 0. (A hard
+// data refresh goes through loadCmd → feed.LoadInitial, which clears the cache.)
 func (m Model) reloadFeedCmd() tea.Cmd {
 	feed := m.feed
 	scope := m.feedScope()
 	return func() tea.Msg {
-		feed.SetScope(scope)
-		st, _ := feed.LoadInitial(context.Background())
+		st, _ := feed.ApplyScope(context.Background(), scope)
 		return commitsReloadedMsg{gen: st.Gen, state: st}
 	}
 }

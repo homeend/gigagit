@@ -34,6 +34,10 @@ type UIConfig struct {
 	CommitGraphStep     int `toml:"commit_graph_step"`      // widen/narrow increment in lanes; <=0 = unset
 	CommitGraphPanStep  int `toml:"commit_graph_pan_step"`  // pan increment in lanes; <=0 = derived max(1, cols/2)
 	CommitGraphMaxLanes int `toml:"commit_graph_max_lanes"` // plane cap in lanes; <=0 = unset; clamped to commitgraph.MaxLanes
+
+	CommitInitialCount   int `toml:"commit_initial_count"`    // commits walked on first paint; <=0 = unset (default 300)
+	CommitBatchSize      int `toml:"commit_batch_size"`       // commits per later page (scroll / ctrl+l); <=0 = unset (default 300)
+	CommitSearchMaxPages int `toml:"commit_search_max_pages"` // eager /-search page cap before re-prompting; <=0 = unset (default 5)
 }
 
 // Config is the merged gigagit configuration.
@@ -49,7 +53,8 @@ func Defaults() Config {
 			PathTemplate:          "../<repo>.worktrees/<branch>",
 			DefaultBranchTemplate: "b/from-<parent-branch>-<random-alpha:4>",
 		},
-		UI: UIConfig{WheelStep: 3, HScrollStep: 8, CommitGraphLanes: 8, CommitGraphMinLanes: 2, CommitGraphStep: 4},
+		UI: UIConfig{WheelStep: 3, HScrollStep: 8, CommitGraphLanes: 8, CommitGraphMinLanes: 2, CommitGraphStep: 4,
+			CommitInitialCount: 300, CommitBatchSize: 300, CommitSearchMaxPages: 5},
 	}
 }
 
@@ -141,6 +146,15 @@ func overlayUI(dst *UIConfig, src UIConfig) {
 	}
 	if src.CommitGraphMaxLanes > 0 {
 		dst.CommitGraphMaxLanes = src.CommitGraphMaxLanes
+	}
+	if src.CommitInitialCount > 0 {
+		dst.CommitInitialCount = src.CommitInitialCount
+	}
+	if src.CommitBatchSize > 0 {
+		dst.CommitBatchSize = src.CommitBatchSize
+	}
+	if src.CommitSearchMaxPages > 0 {
+		dst.CommitSearchMaxPages = src.CommitSearchMaxPages
 	}
 }
 

@@ -126,6 +126,8 @@ type Model struct {
 	highlightQuery  string // Commits-panel @-highlight: case-insensitive substring; "" = no committed query
 	highlightTyping bool   // true while @-input mode is capturing keys
 
+	eager eagerSearch // /-search-into-history paging state; eager.active gates the chain
+
 	searchHist map[string][]string // per-scope search-history rings, newest-first (loaded at startup)
 
 	recallScope string // active recall ring; "" = none
@@ -314,6 +316,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.commitsExhausted = st.Exhausted
 			m.commitsLoading = false // this page's load (the latest) finished
 			m = m.rebuildCommitGraph()
+			if m.eager.active {
+				return m.eagerAdvance()
+			}
 		}
 		return m, nil
 	case commitsReloadedMsg:
@@ -326,6 +331,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m = m.rebuildCommitGraph()
 		if m.sel[panelCommits] >= len(m.commits) {
 			m.sel[panelCommits] = 0
+		}
+		if m.eager.active {
+			m.eager = eagerSearch{}
 		}
 		return m, nil
 	case historyListMsg:
@@ -455,6 +463,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.cfg = msg.cfg
 			m.gitCommonDir = msg.gitCommonDir
 			m.headTimes = msg.headTimes
+			if m.eager.active {
+				m.eager = eagerSearch{}
+			}
 			// Clamp selections so a row removed since the last load (e.g. a
 			// deleted worktree) can't leave an index pointing past the end.
 			for p := panel(0); p < panelCount; p++ {
@@ -577,6 +588,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case tea.KeyEsc:
 				m.filterTyping = false
 				m.filterQuery = ""
+			case tea.KeyCtrlF:
+				if m.filterPanel == panelCommits {
+					var recCmd tea.Cmd
+					m, recCmd = m.recordSearch(scopePanel, m.filterQuery)
+					var cmd tea.Cmd
+					m, cmd = m.startEagerSearch(m.filterQuery)
+					return m, tea.Batch(recCmd, cmd)
+				}
+				return m, nil
 			case tea.KeyEnter:
 				m.filterTyping = false // commit: filter stays active
 				m, recCmd := m.recordSearch(scopePanel, m.filterQuery)
@@ -645,6 +665,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case tea.KeyEsc:
 				m.highlightTyping = false
 				m.highlightQuery = ""
+			case tea.KeyCtrlF:
+				m.highlightTyping = false
+				var recCmd tea.Cmd
+				m, recCmd = m.recordSearch(scopePanel, m.highlightQuery)
+				var cmd tea.Cmd
+				m, cmd = m.startEagerSearch(m.highlightQuery)
+				return m, tea.Batch(recCmd, cmd)
 			case tea.KeyEnter:
 				m.highlightTyping = false // commit: highlight stays active
 				var recCmd tea.Cmd
@@ -1001,6 +1028,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.focus == panelCommits && (m.width <= 0 || m.width >= 40) {
 				m.focus = m.leftReturnTarget()
 			}
+		case "ctrl+l":
+			// Load the next batch regardless of cursor position (the auto-page path
+			// only fires near the end). Commits panel only; the feed guards exhausted/
+			// in-flight via CanLoadMore.
+			if m.focus == panelCommits && m.feed != nil && m.feed.CanLoadMore() {
+				m.commitsLoading = true
+				return m, m.loadMoreCmd()
+			}
+		case "home":
+			m.sel[m.focus] = 0
+		case "end":
+			if n := m.panelLen(m.focus); n > 0 {
+				m.sel[m.focus] = n - 1
+			}
+			// On Commits, landing at the true end triggers the existing auto-page
+			// path (NeedsMore is satisfied), so End also loads a new batch; press
+			// again to walk deeper. maybeLoadMoreCommits no-ops under a commit filter.
+			if m.focus == panelCommits {
+				if mm, cmd := m.maybeLoadMoreCommits(); cmd != nil {
+					return mm, cmd
+				}
+			}
 		case "pgdown":
 			if n := m.panelLen(m.focus); n > 0 {
 				m.sel[m.focus] += m.pageStep()
@@ -1119,6 +1168,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "#":
 			if m.opsIdle() {
 				return m.openGotoCommitPopup()
+			}
+		case "ctrl+f":
+			// Eager search: scan unloaded history for the active Commits search,
+			// whichever is engaged (the / filter or the @ highlight; mutually
+			// exclusive). startEagerSearch clears the / filter (go-to); the @
+			// highlight persists so the found commit shows highlighted.
+			if m.focus == panelCommits {
+				if m.filterPanel == panelCommits && m.filterQuery != "" {
+					return m.startEagerSearch(m.filterQuery)
+				}
+				if m.highlightQuery != "" {
+					return m.startEagerSearch(m.highlightQuery)
+				}
 			}
 		case "l":
 			if m.focus == panelCommits && m.canShowCommitFiles() {

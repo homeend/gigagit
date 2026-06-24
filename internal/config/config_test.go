@@ -253,3 +253,28 @@ func TestLoadOverlaysCommitGraphFields(t *testing.T) {
 		t.Errorf("min = %d, want default 2 (unset field keeps default)", cfg.UI.CommitGraphMinLanes)
 	}
 }
+
+func TestCommitPageSizeDefaultsAndOverlay(t *testing.T) {
+	// Defaults.
+	d := Defaults().UI
+	if d.CommitInitialCount != 300 || d.CommitBatchSize != 300 || d.CommitSearchMaxPages != 5 {
+		t.Fatalf("defaults = %d/%d/%d, want 300/300/5",
+			d.CommitInitialCount, d.CommitBatchSize, d.CommitSearchMaxPages)
+	}
+	// Repo file overrides; a 0 in a higher layer does NOT reset a lower layer.
+	dir := t.TempDir()
+	repo := filepath.Join(dir, ".gg.toml")
+	if err := os.WriteFile(repo, []byte("[ui]\ncommit_initial_count = 25\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(filepath.Join(dir, "no-global.toml"), repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.UI.CommitInitialCount != 25 {
+		t.Fatalf("initial = %d, want 25 (repo override)", cfg.UI.CommitInitialCount)
+	}
+	if cfg.UI.CommitBatchSize != 300 {
+		t.Fatalf("batch = %d, want 300 (default kept)", cfg.UI.CommitBatchSize)
+	}
+}

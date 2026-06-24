@@ -71,6 +71,9 @@ panel and selected row right now; `?` opens the full searchable reference.
 | `o` | cycle the focused panel's sort order (name/date, asc/desc) |
 | `/` | filter the focused panel (type, then `enter` to keep, `esc` to clear) |
 | `\` | on the Commits panel: open the **commit feed filter** popup — type a path, author, message substring, and/or date range (`since` / `until`, passed verbatim to `git log`) to narrow the commit list; filters compose with any active branch scope; the commit-graph hides while a filter is active; clear via the `.` menu **Clear filter** row or by opening the popup and erasing all fields. "Commits touching this" in the fuzzy file finder (`F`) and in the files view `.` menu seeds the path field automatically |
+| `ctrl+l` | on the Commits panel: load the next batch of history on demand (without waiting to scroll to the bottom) |
+| `Home`/`End` | jump to the top / bottom of any navigable list; **End** on the Commits panel also loads the next history batch — press again to walk deeper |
+| `ctrl+f` | on the Commits panel: **eager search** — when the active `/` filter or `@` highlight query has no match in the already-loaded commits, `ctrl+f` pages history until it finds the first hit and jumps to it; if that would load many more pages gg asks first |
 | `R` | switch repository (popup: type to filter, `enter` to switch, `ctrl+d` to forget) |
 | `,` | settings: **set up agent skills**, or **Identity & profiles** — view/edit the git `user.name`/`user.email` (global vs repo-local, kept distinct) and manage named identity **profiles** (global or per-repo presets); `enter`/`e` prompts *apply to this repo or globally* |
 | `.` | open the **action menu** (works in every navigable window — panels, the file tree, diff, history, blame, stash): lists context actions for what's in view (row actions first, then panel/window actions; whole-app actions stay in the footer); press an action's key to run it, or `↑`/`↓` + `enter`; `/` filters, `z` cycles display mode, `esc` closes. Includes **Copy commit id** / **Copy commit title** (Commits), **Copy file path** / **Copy file name** (and **Copy stash ref** on the stash list) for whatever the active window shows — copied to the system clipboard (native OS clipboard command, with an OSC 52 fallback for remote/SSH sessions) — plus context write actions: **Copy branch name** / **Copy commit id** / **Copy commit sha** / **Rename branch** on the Branches panel (Copy branch name / commit id / commit sha on Remotes too), and **Rename commit** (reword via a pre-filled message popup) on the Commits panel. On the Commits panel it also offers **Fast-forward `<branch>` to here** when the selected commit is ahead of the current branch's tip (advance the branch with no merge commit). |
@@ -166,6 +169,10 @@ without `--force`.
 (default 20, hard max 1000) — recall them while typing a search with `alt+↑/↓`;
 `[ui] reflog_limit` caps how many HEAD reflog entries the Reflog tab loads
 (default 200, no upper clamp; git's own `gc.reflogExpire` is the real ceiling);
+`[ui] commit_initial_count` sets how many commits are loaded on first paint
+(default 300); `[ui] commit_batch_size` sets how many more are loaded per page
+(default 300); `[ui] commit_search_max_pages` sets how many extra pages
+`ctrl+f` eager search will scan before asking permission to go deeper (default 5);
 like every entry, the repo's `.gg.toml` overrides the global config
 per field.
 

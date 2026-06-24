@@ -18,6 +18,36 @@ import (
 	"github.com/gigagit/gg/internal/observ"
 )
 
+// hasLogArg reports whether a "git log" call passed the flag/value pair adjacently
+// (e.g. -n 7) OR the combined "-n=7" form, scanning all recorded calls.
+func hasLogArg(f *gitexec.FakeRunner, flag, val string) bool {
+	for _, c := range f.Calls {
+		if c.Name != "git log" {
+			continue
+		}
+		for i, a := range c.Argv {
+			if a == flag && i+1 < len(c.Argv) && c.Argv[i+1] == val {
+				return true
+			}
+			if a == flag+"="+val {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// logRows builds n valid newest-first log lines for the default format
+// (%H%x1f%P%x1f%an%x1f%at%x1f%s%x1f%D%x1f%S). Hashes are unique so dedupe keeps all.
+func logRows(n int) string {
+	var b strings.Builder
+	for i := 0; i < n; i++ {
+		h := fmt.Sprintf("h%04d", i)
+		b.WriteString(h + "\x1f\x1fAda\x1f0\x1fsubj\x1f\x1f\n")
+	}
+	return b.String()
+}
+
 // pagingRunner serves `git log` from a fixed list of `total` commits, honoring
 // -n <limit> and --skip=<n> from argv. Other span names return empty. Safe for
 // concurrent use. If block is non-nil, the FIRST page read (skip>0) blocks on
@@ -342,5 +372,116 @@ func TestCommitFeedPagesUnderPathFilter(t *testing.T) {
 	// Exact count: no drops, no double-counts.
 	if len(st.Commits) != nTarget {
 		t.Fatalf("want %d target commits across pages, got %d", nTarget, len(st.Commits))
+	}
+}
+
+func TestCommitFeedSetPageSizesArgv(t *testing.T) {
+	f := gitexec.NewFakeRunner()
+	feed := New(&git.Repo{Runner: f}).CommitFeed()
+	feed.SetPageSizes(7, 9)
+
+	// A full first page (7 rows) keeps the feed non-exhausted so LoadMore runs.
+	f.SetResponse("git log", gitexec.Result{Stdout: logRows(7)})
+	if _, err := feed.LoadInitial(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if !hasLogArg(f, "-n", "7") {
+		t.Fatalf("initial walk should pass -n 7, calls: %v", f.Calls)
+	}
+
+	// Later pages use the batch size.
+	f.Calls = nil
+	f.SetResponse("git log", gitexec.Result{Stdout: logRows(1)})
+	if _, _, err := feed.LoadMore(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if !hasLogArg(f, "-n", "9") {
+		t.Fatalf("later page should pass -n 9 (batch size), calls: %v", f.Calls)
+	}
+}
+
+func TestCommitFeedDefaultPageSizeWhenUnset(t *testing.T) {
+	f := gitexec.NewFakeRunner()
+	f.SetResponse("git log", gitexec.Result{Stdout: ""})
+	feed := New(&git.Repo{Runner: f}).CommitFeed() // no SetPageSizes
+	if _, err := feed.LoadInitial(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if !hasLogArg(f, "-n", "50") {
+		t.Fatalf("unset → fallback -n 50, calls: %v", f.Calls)
+	}
+}
+
+func TestApplyScopeRestoresWithoutRewalk(t *testing.T) {
+	f := gitexec.NewFakeRunner()
+	feed := New(&git.Repo{Runner: f}).CommitFeed()
+	feed.SetPageSizes(50, 50)
+
+	f.SetResponse("git log", gitexec.Result{Stdout: logRows(3)}) // base: 3 commits
+	if _, err := feed.LoadInitial(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	f.SetResponse("git log", gitexec.Result{Stdout: logRows(1)}) // filtered: 1 commit
+	if _, err := feed.ApplyScope(context.Background(), LogScope{Grep: "x"}); err != nil {
+		t.Fatal(err)
+	}
+	calls := len(f.Calls)
+	// Clear the filter back to base → must restore from cache, no new git log.
+	st, err := feed.ApplyScope(context.Background(), LogScope{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(f.Calls) != calls {
+		t.Fatalf("restore re-walked: calls %d → %d", calls, len(f.Calls))
+	}
+	if len(st.Commits) != 3 {
+		t.Fatalf("restored base = %d commits, want 3", len(st.Commits))
+	}
+}
+
+func TestLoadInitialInvalidatesCacheAcrossScopes(t *testing.T) {
+	f := gitexec.NewFakeRunner()
+	feed := New(&git.Repo{Runner: f}).CommitFeed()
+	feed.SetPageSizes(50, 50)
+
+	f.SetResponse("git log", gitexec.Result{Stdout: logRows(3)}) // base: 3
+	feed.LoadInitial(context.Background())
+	f.SetResponse("git log", gitexec.Result{Stdout: logRows(1)}) // filtered: 1
+	feed.ApplyScope(context.Background(), LogScope{Grep: "x"})
+
+	// A write happens → post-op hard refresh re-walks the current (filtered) scope
+	// and must clear EVERY cached scope, base included.
+	f.SetResponse("git log", gitexec.Result{Stdout: logRows(4)}) // history grew to 4
+	feed.LoadInitial(context.Background())
+
+	// Clearing the filter must now re-walk the base (cache invalidated) → 4 commits.
+	st, err := feed.ApplyScope(context.Background(), LogScope{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(st.Commits) != 4 {
+		t.Fatalf("base after refresh = %d, want 4 (re-walked, not stale 3)", len(st.Commits))
+	}
+}
+
+func TestCanLoadMore(t *testing.T) {
+	f := gitexec.NewFakeRunner()
+	feed := New(&git.Repo{Runner: f}).CommitFeed()
+	feed.SetPageSizes(2, 2)
+	// A full first page (2 rows) leaves more to load.
+	f.SetResponse("git log", gitexec.Result{Stdout: logRows(2)})
+	if _, err := feed.LoadInitial(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if !feed.CanLoadMore() {
+		t.Fatal("full page → CanLoadMore true")
+	}
+	// A short next page (1 < 2) exhausts the feed.
+	f.SetResponse("git log", gitexec.Result{Stdout: logRows(1)})
+	if _, _, err := feed.LoadMore(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if feed.CanLoadMore() {
+		t.Fatal("short page → exhausted → CanLoadMore false")
 	}
 }
