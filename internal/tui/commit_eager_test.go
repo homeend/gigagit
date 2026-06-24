@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/gigagit/gg/internal/model"
 )
 
@@ -44,6 +45,49 @@ func TestEagerAdvancePagesWhenNoMatch(t *testing.T) {
 	}
 	if nm.eager.budget != 4 {
 		t.Fatalf("budget = %d, want 4 (decremented)", nm.eager.budget)
+	}
+}
+
+func TestCtrlFFromCommittedFilterStartsEager(t *testing.T) {
+	m := eagerModel(t, []model.Commit{{Hash: "a", Subject: "fix"}})
+	m.filterPanel = panelCommits
+	m.filterQuery = "zzz" // committed /-filter, no loaded match
+	nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlF})
+	got := nm.(Model)
+	// No match + fresh feed (CanLoadMore) → eager active and a load dispatched.
+	if !got.eager.active || cmd == nil {
+		t.Fatalf("ctrl+f should start eager search (active=%v cmd=%v)", got.eager.active, cmd != nil)
+	}
+}
+
+func TestCtrlFWhileTypingCommitsAndSearches(t *testing.T) {
+	m := eagerModel(t, []model.Commit{{Hash: "a", Subject: "fix"}})
+	m.filterTyping = true
+	m.filterPanel = panelCommits
+	m.filterQuery = "zzz"
+	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlF})
+	got := nm.(Model)
+	if got.filterTyping {
+		t.Fatal("ctrl+f should commit the /-filter (stop typing)")
+	}
+	if !got.eager.active {
+		t.Fatal("ctrl+f while typing should start eager search")
+	}
+}
+
+func TestCtrlFFromHighlightStartsEager(t *testing.T) {
+	m := eagerModel(t, []model.Commit{{Hash: "a", Subject: "fix"}})
+	m.highlightQuery = "zzz" // committed @-highlight, no loaded match
+	nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlF})
+	got := nm.(Model)
+	if !got.eager.active || cmd == nil {
+		t.Fatalf("ctrl+f should start eager search from @ (active=%v cmd=%v)", got.eager.active, cmd != nil)
+	}
+	if got.highlightQuery != "zzz" {
+		t.Fatal("@-sourced eager search must keep the highlight active")
+	}
+	if got.filterQuery != "" {
+		t.Fatal("@-sourced eager search must not introduce a / filter")
 	}
 }
 

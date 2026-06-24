@@ -578,6 +578,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case tea.KeyEsc:
 				m.filterTyping = false
 				m.filterQuery = ""
+			case tea.KeyCtrlF:
+				if m.filterPanel == panelCommits {
+					var recCmd tea.Cmd
+					m, recCmd = m.recordSearch(scopePanel, m.filterQuery)
+					var cmd tea.Cmd
+					m, cmd = m.startEagerSearch(m.filterQuery)
+					return m, tea.Batch(recCmd, cmd)
+				}
+				return m, nil
 			case tea.KeyEnter:
 				m.filterTyping = false // commit: filter stays active
 				m, recCmd := m.recordSearch(scopePanel, m.filterQuery)
@@ -646,6 +655,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case tea.KeyEsc:
 				m.highlightTyping = false
 				m.highlightQuery = ""
+			case tea.KeyCtrlF:
+				m.highlightTyping = false
+				var recCmd tea.Cmd
+				m, recCmd = m.recordSearch(scopePanel, m.highlightQuery)
+				var cmd tea.Cmd
+				m, cmd = m.startEagerSearch(m.highlightQuery)
+				return m, tea.Batch(recCmd, cmd)
 			case tea.KeyEnter:
 				m.highlightTyping = false // commit: highlight stays active
 				var recCmd tea.Cmd
@@ -1142,6 +1158,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "#":
 			if m.opsIdle() {
 				return m.openGotoCommitPopup()
+			}
+		case "ctrl+f":
+			// Eager search: scan unloaded history for the active Commits search,
+			// whichever is engaged (the / filter or the @ highlight; mutually
+			// exclusive). startEagerSearch clears the / filter (go-to); the @
+			// highlight persists so the found commit shows highlighted.
+			if m.focus == panelCommits {
+				if m.filterPanel == panelCommits && m.filterQuery != "" {
+					return m.startEagerSearch(m.filterQuery)
+				}
+				if m.highlightQuery != "" {
+					return m.startEagerSearch(m.highlightQuery)
+				}
 			}
 		case "l":
 			if m.focus == panelCommits && m.canShowCommitFiles() {

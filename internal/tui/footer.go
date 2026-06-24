@@ -99,6 +99,8 @@ var globalBindings = []footerBinding{
 	{"find", "F", "[F] find file", Model.opsIdle, scopeGlobal},
 	{"order", "o", "[o]rder", Model.opsIdle, scopeGlobal},
 	{"view", "z", "[z] view", Model.opsIdle, scopeGlobal},
+	{"load-batch", "ctrl+l", "[ctrl+l] more", Model.opsIdle, scopeGlobal},
+	{"eager-find", "ctrl+f", "[ctrl+f] find deeper", Model.opsIdle, scopeGlobal},
 	{"filter", "/", "[/]filter", Model.opsIdle, scopeGlobal},
 	{"clear-filters", "ctrl+r", "[ctrl+r] clear filter", Model.canClearFilters, scopeGlobal},
 	{"repo", "R", "[R]epo", Model.opsIdle, scopeGlobal},
