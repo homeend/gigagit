@@ -106,3 +106,26 @@ func TestHeaderLineNoPathWhenTooNarrow(t *testing.T) {
 		t.Fatalf("no room for the path, it should be dropped: %q", plain)
 	}
 }
+
+// The top-left title is the current directory name (the worktree's leaf), not a
+// hard-coded brand, so it tracks whichever repo/worktree is open.
+func TestHeaderLineTitleIsCurrentDirName(t *testing.T) {
+	m := Model{
+		status:          model.WorkingTreeStatus{Branch: "main"},
+		currentWorktree: "/home/me/projects/coolrepo",
+	}
+	plain := ansi.Strip(m.headerLine(80))
+	if !strings.HasPrefix(plain, "coolrepo  branch main") {
+		t.Fatalf("title should be the current dir name: %q", plain)
+	}
+}
+
+// With no path yet (e.g. before the first snapshot loads) the title falls back
+// to the gigagit brand rather than rendering empty.
+func TestHeaderLineTitleFallsBackWhenNoPath(t *testing.T) {
+	m := Model{status: model.WorkingTreeStatus{Branch: "main"}}
+	plain := ansi.Strip(m.headerLine(80))
+	if !strings.HasPrefix(plain, "gigagit  branch main") {
+		t.Fatalf("title should fall back to gigagit when no path: %q", plain)
+	}
+}
