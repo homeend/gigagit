@@ -83,25 +83,42 @@ for each key; `CommitFeed` constructed with injected sizes issues
 
 ---
 
-## Part 2 — `ctrl+l` loads the next batch
+## Part 2 — Manual loading: `ctrl+l`, Home, End
 
-`ctrl+l` is unbound today. Add it as a key handled when the Commits panel is
-focused: force one `LoadMore` regardless of cursor position, instead of waiting
-for the cursor to reach `commitNearEnd` of the end.
+Three keys for moving and loading without scrolling row-by-row. All are bound in
+the main panel key handler (`model.go`, alongside the existing `pgdown`/`pgup`
+cases), none are bound there today.
 
-- No-op (with the existing in-flight/exhausted guards) when the feed is already
-  loading or fully walked.
+**`ctrl+l` — load the next batch.** When the Commits panel is focused, force one
+`LoadMore` regardless of cursor position (instead of waiting for the cursor to
+reach `commitNearEnd` of the end).
+- No-op (existing in-flight/exhausted guards) when already loading or fully walked.
 - Sets the `commitsLoading` ⏳ indicator like the auto-page path.
-- Reuses the existing `feed.LoadMore` + `commitsReloaded`/page-applied message
-  path; the only new thing is an *unconditional* entry point (bypassing
-  `NeedsMore`'s "near end" check, but not its exhausted/in-flight guards).
+- Reuses `feed.LoadMore` + the page-applied message path; the only new thing is an
+  *unconditional* entry point (bypasses `NeedsMore`'s "near end" check, keeps its
+  exhausted/in-flight guards).
 
-**Discoverability.** Advertise in both `help.go` and the footer (per the
-`advertise-features-in-help-and-footer` convention; footer text kept tight).
+**Home — jump to top.** Set the focused panel's selection to row 0 (newest
+commit). General to all panels (it is plain list navigation); no loading.
+
+**End — jump to the bottom and load deeper.** Set the focused panel's selection
+to the last row (`n-1`). On the Commits panel, then run `maybeLoadMoreCommits` —
+exactly the tail of the existing `pgdown` case — so the cursor lands at the end
+*and* a new batch loads; pressing End again walks deeper into history one batch
+at a time. (On other panels End is just "jump to last row".) This satisfies "End
+effectively loads a new batch": with the selection at the true end,
+`NeedsMore(sel)` is true, so the existing auto-page path fires.
+
+**Discoverability.** Advertise `ctrl+l` (and Home/End) in both `help.go` and the
+footer (per the `advertise-features-in-help-and-footer` convention; footer text
+kept tight).
 
 **Tests.** With a non-exhausted feed and the cursor at the top, `ctrl+l` on the
 Commits panel dispatches a load and sets `commitsLoading`; on an exhausted feed
-it is a no-op.
+it is a no-op. `home` sets `sel = 0` from a mid-list position. `end` sets
+`sel = n-1`; on the Commits panel with a non-exhausted feed it also sets
+`commitsLoading` (load fired), and is a pure jump (no load) on an exhausted feed
+or a non-Commits panel.
 
 ---
 
@@ -238,12 +255,13 @@ notice set, no dialog. A query already matching a loaded commit → no paging
   + `overlayUI` guards) + `template.go` docs.
 - `internal/domain` — `CommitFeed` page-size fields + `SetPageSizes`,
   `ApplyScope`, the scope cache, and the `scopeKey` filter-axis fix (+ accessor).
-- `internal/tui` — `ctrl+l` load-more, `ctrl+f` eager search + dialog, wiring
+- `internal/tui` — `ctrl+l` load-more + Home/End nav, `ctrl+f` eager search + dialog, wiring
   `reloadFeedCmd` to `ApplyScope`, `loadCmd` reorder + `SetPageSizes` injection,
   reading the new config, help/footer.
 
 ## Decomposition
 
-One feature, four task groups (A: config+sizes, B: ctrl+l, C: scope cache /
-ApplyScope, D: eager search). B and D depend on nothing beyond A's config read;
-C is independent of B/D. Suitable for subagent-driven execution.
+One feature, four task groups (A: config+sizes, B: ctrl+l + Home/End, C: scope
+cache / ApplyScope incl. the scopeKey fix, D: eager search). B and D depend on
+nothing beyond A's config read; C is independent of B/D. Suitable for
+subagent-driven execution.
