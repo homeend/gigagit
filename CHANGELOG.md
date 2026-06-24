@@ -9,6 +9,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Files panel keeps the filename when paths are too long.** In the Files panel
+  (the middle window of the left column), a path wider than the column is now
+  middle-elided (`internal/tu…/view.go`) instead of tail-truncated: the path's
+  beginning and the filename — the parts you actually need — stay visible, and
+  the directories nearest the file are dropped to fill the column. The leading
+  status glyph is preserved. Applies in the default cutoff display mode (`w`
+  still cycles to wrap/scroll for the full path); the Staged panel is unchanged.
 - **Filtered commit log** — `\` on the Commits panel opens a filter popup (path,
   author, message, date range) that narrows the feed via `git log` flags; filters
   compose with branch scope. "Commits touching this" seeds a path filter from the
