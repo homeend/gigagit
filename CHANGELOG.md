@@ -9,6 +9,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Remotes tab: tracked branches float to the top.** Remote branches whose
+  short name matches a local branch (one present in the Branches tab) now sort
+  ahead of the rest in the Remotes tab, so the branches you're actually working
+  with sit at the top. Within each group git's original order is preserved.
 - **Filtered commit log** — `\` on the Commits panel opens a filter popup (path,
   author, message, date range) that narrows the feed via `git log` flags; filters
   compose with branch scope. "Commits touching this" seeds a path filter from the
