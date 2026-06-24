@@ -92,6 +92,49 @@ func TestLoadIncludesConfigAndCommonDir(t *testing.T) {
 	}
 }
 
+func gitRun(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(),
+		"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
+}
+
+func TestLoadCmdHonorsConfiguredInitialCount(t *testing.T) {
+	dir := t.TempDir()
+	gitRun(t, dir, "init", "-q", "-b", "main")
+	for i := 0; i < 4; i++ {
+		f := filepath.Join(dir, "f")
+		os.WriteFile(f, []byte{byte('a' + i)}, 0o644)
+		gitRun(t, dir, "add", ".")
+		gitRun(t, dir, "commit", "-q", "-m", "c")
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".gg.toml"),
+		[]byte("[ui]\ncommit_initial_count = 2\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	svc := domain.OpenTUI(dir)
+	m := Model{svc: svc, feed: svc.CommitFeed(), sel: map[panel]int{}}
+	msg := m.loadCmd()() // run the load closure synchronously
+	dl, ok := msg.(dataLoadedMsg)
+	if !ok {
+		t.Fatalf("want dataLoadedMsg, got %T", msg)
+	}
+	if dl.err != nil {
+		t.Fatal(dl.err)
+	}
+	if len(dl.commits) != 2 {
+		t.Fatalf("first page = %d commits, want 2 (commit_initial_count)", len(dl.commits))
+	}
+	if dl.cfg.UI.CommitInitialCount != 2 {
+		t.Fatalf("cfg not threaded: initial = %d", dl.cfg.UI.CommitInitialCount)
+	}
+}
+
 // TestStaleSnapshotDropped: a dataLoadedMsg from an older generation is
 // ignored, so a superseded in-flight load cannot paint over a newer one.
 func TestStaleSnapshotDropped(t *testing.T) {
