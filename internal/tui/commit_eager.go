@@ -1,9 +1,11 @@
 package tui
 
 import (
+	"strconv"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // eagerSearch is the state of a /-search that pages unloaded history looking for
@@ -85,12 +87,60 @@ func (m Model) eagerAdvance() (Model, tea.Cmd) {
 	return m, m.loadMoreCmd()
 }
 
-// eagerPrompt is the "search deeper?" dialog (Task D3 implements update/render).
+// eagerPrompt is the "search deeper?" dialog shown when an eager /-search reaches
+// its page cap with no match. enter on "Search N more" resumes with a fresh
+// budget; Cancel/esc stops, leaving the /-filter active on the loaded set.
 type eagerPrompt struct {
 	query   string
 	scanned int
-	sel     int
+	sel     int // 0 = search more, 1 = cancel
 }
 
-func (p *eagerPrompt) update(m Model, _ tea.KeyMsg) (Model, tea.Cmd) { return m.popLayer(), nil }
-func (p *eagerPrompt) render(m Model, below string) string           { return below }
+func (p *eagerPrompt) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
+	if msg.Type == tea.KeyCtrlC {
+		return m, tea.Quit
+	}
+	switch msg.String() {
+	case "esc":
+		return m.popLayer(), nil
+	case "up", "k":
+		p.sel = 0
+	case "down", "j":
+		p.sel = 1
+	case "enter":
+		if p.sel == 1 {
+			return m.popLayer(), nil
+		}
+		m = m.popLayer()
+		m.eager = eagerSearch{active: true, query: p.query, budget: m.commitSearchMaxPages()}
+		return m.eagerAdvance()
+	}
+	return m, nil
+}
+
+func (p *eagerPrompt) render(m Model, below string) string {
+	w, h := m.overlayDims()
+	return overlayCenter(clipToHeight(below, h), p.box(m), w, h)
+}
+
+func (p *eagerPrompt) box(m Model) string {
+	w, _ := m.overlayDims()
+	inner := popupInnerWidth(w)
+	textW := popupTextWidth(inner)
+	parts := []string{
+		"Search deeper?",
+		"",
+		"Searched " + strconv.Itoa(p.scanned) + " commits, no match for \"" + p.query + "\".",
+		"",
+	}
+	opts := []string{"Search " + strconv.Itoa(m.commitSearchMaxPages()) + " more pages", "Cancel"}
+	for i, o := range opts {
+		prefix, st := "  ", lipgloss.NewStyle()
+		if i == p.sel {
+			prefix, st = "> ", selectedRow
+		}
+		parts = append(parts, st.Render(padRight(prefix+o, textW)))
+	}
+	parts = append(parts, "", "[enter] choose  [esc] cancel")
+	return popupBox(inner, strings.Join(parts, "\n"))
+}

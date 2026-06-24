@@ -108,3 +108,44 @@ func TestEagerAdvanceReportsExhausted(t *testing.T) {
 	}
 }
 
+func TestEagerAdvanceOpensPromptAtCap(t *testing.T) {
+	m := eagerModel(t, []model.Commit{{Hash: "a", Subject: "fix"}})
+	// budget exhausted, no match, feed loadable → prompt.
+	m.eager = eagerSearch{active: true, query: "zzz", budget: 0}
+	nm, _ := m.eagerAdvance()
+	got := nm
+	if got.eager.active {
+		t.Fatal("at the cap the search pauses (inactive) pending the dialog")
+	}
+	if _, ok := got.topLayer().(*eagerPrompt); !ok {
+		t.Fatalf("expected an eagerPrompt on top, got %T", got.topLayer())
+	}
+}
+
+func TestEagerPromptSearchMoreResumes(t *testing.T) {
+	m := eagerModel(t, []model.Commit{{Hash: "a", Subject: "fix"}})
+	m = m.pushLayer(&eagerPrompt{query: "zzz", scanned: 1, sel: 0})
+	p := m.topLayer().(*eagerPrompt)
+	nm, cmd := p.update(m, tea.KeyMsg{Type: tea.KeyEnter})
+	got := nm
+	if _, ok := got.topLayer().(*eagerPrompt); ok {
+		t.Fatal("choosing 'search more' should pop the prompt")
+	}
+	if !got.eager.active || cmd == nil {
+		t.Fatal("'search more' should resume eager search with a fresh budget")
+	}
+}
+
+func TestEagerPromptCancelStops(t *testing.T) {
+	m := eagerModel(t, []model.Commit{{Hash: "a", Subject: "fix"}})
+	m = m.pushLayer(&eagerPrompt{query: "zzz", scanned: 1, sel: 1}) // sel 1 = Cancel
+	p := m.topLayer().(*eagerPrompt)
+	nm, _ := p.update(m, tea.KeyMsg{Type: tea.KeyEnter})
+	if nm.eager.active {
+		t.Fatal("cancel must not resume the search")
+	}
+	if _, ok := nm.topLayer().(*eagerPrompt); ok {
+		t.Fatal("cancel should pop the prompt")
+	}
+}
+
