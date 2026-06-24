@@ -254,6 +254,9 @@ func (m Model) appendCommitContextRows(out []actionRow) []actionRow {
 	if r, ok := m.commitShowAllRow(); ok {
 		out = append(out, r)
 	}
+	if r, ok := m.commitClearFilterRow(); ok {
+		out = append(out, r)
+	}
 	if r, ok := m.commitViewModeRow(); ok {
 		out = append(out, r)
 	}

@@ -660,6 +660,22 @@ func commitHasLocalRef(c model.Commit, name string) bool {
 	return false
 }
 
+// commitClearFilterRow offers "Clear filter" on the Commits panel when a
+// path/author/message/date filter is active.
+func (m Model) commitClearFilterRow() (actionRow, bool) {
+	if !m.opsIdle() || m.focus != panelCommits || !m.commitFilter.filtered() {
+		return actionRow{}, false
+	}
+	return actionRow{
+		id:    "commits-clear-filter",
+		label: "Clear filter",
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			m.commitFilter = commitFilterFields{}
+			return m.startFeedReload()
+		},
+	}, true
+}
+
 // commitShowAllRow offers "Show all branches" — present only when the feed is
 // scoped — from either the Branches or the Commits panel menu.
 func (m Model) commitShowAllRow() (actionRow, bool) {

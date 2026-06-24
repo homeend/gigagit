@@ -102,6 +102,23 @@ func TestCommitSoloReloadEndToEnd(t *testing.T) {
 	}
 }
 
+func TestClearFilterRowPresentOnlyWhenFiltered(t *testing.T) {
+	m := loadedModel(t)
+	m.focus = panelCommits
+	if _, ok := m.commitClearFilterRow(); ok {
+		t.Fatal("no clear-filter row when unfiltered")
+	}
+	m.commitFilter = commitFilterFields{Grep: "race"}
+	row, ok := m.commitClearFilterRow()
+	if !ok {
+		t.Fatal("clear-filter row should appear when filtered")
+	}
+	mm, _ := row.run(m)
+	if mm.(Model).commitFilter.filtered() {
+		t.Fatal("running clear-filter must empty the filter")
+	}
+}
+
 func TestCommitToggleAddsBranch(t *testing.T) {
 	m := branchesPanelModel("feat", "main")
 	r, ok := findRow(availableActions(m), "commits-toggle")
