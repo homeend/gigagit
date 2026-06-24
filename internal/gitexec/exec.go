@@ -90,6 +90,20 @@ func asExit(err error, target **exec.ExitError) bool {
 	return false
 }
 
+// runFailure formats the error for a git invocation that returned non-nil
+// without ctx cancellation. When git ran and exited non-zero it prints to
+// stderr, which is the useful message. But when git never produced a normal
+// exit — it failed to start (fork/exec, chdir into a missing dir) or was
+// killed by a signal — exit is -1 and stderr is empty; the only diagnostic is
+// runErr itself. Dropping it (the old behaviour) left users a bare
+// "failed (exit -1): " with nothing to act on, so fall back to runErr then.
+func runFailure(name string, exit int, stderr string, runErr error) error {
+	if msg := strings.TrimSpace(stderr); msg != "" {
+		return fmt.Errorf("%s failed (exit %d): %s", name, exit, msg)
+	}
+	return fmt.Errorf("%s failed (exit %d): %w", name, exit, runErr)
+}
+
 // gitEnv builds the environment for a git subprocess: the inherited process
 // environment, any caller-supplied vars, then GIT_TERMINAL_PROMPT=0 appended
 // last so it always wins. gg runs inside a TUI that owns the terminal in raw
@@ -146,7 +160,7 @@ func (r *ExecRunner) RunEnv(ctx context.Context, name string, argv, env []string
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return res, fmt.Errorf("%s cancelled: %w", name, ctxErr)
 		}
-		return res, fmt.Errorf("%s failed (exit %d): %s", name, exit, strings.TrimSpace(stderr.String()))
+		return res, runFailure(name, exit, stderr.String(), runErr)
 	}
 	return res, nil
 }
@@ -185,7 +199,7 @@ func (r *ExecRunner) Stream(ctx context.Context, name string, argv []string, onL
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return res, fmt.Errorf("%s cancelled: %w", name, ctxErr)
 		}
-		return res, fmt.Errorf("%s failed (exit %d): %s", name, exit, strings.TrimSpace(stderr.String()))
+		return res, runFailure(name, exit, stderr.String(), runErr)
 	}
 	if scanErr != nil {
 		return res, fmt.Errorf("%s: reading output: %w", name, scanErr)

@@ -8,6 +8,15 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+### Fixed
+- **A git command that fails to start now reports the real cause instead of a
+  bare `exit -1`.** When git is killed by a signal or never starts (fork/exec
+  under resource pressure on a huge repo, etc.) it produces no stderr and an
+  exit code of -1; the error previously rendered as an empty `… failed (exit
+  -1): ` with nothing actionable (seen as a transient "error -1" when creating a
+  tag right after a push). The underlying OS error is now preserved in the
+  message so the failure is diagnosable.
+
 ### Changed
 - **Module path is now `github.com/homeend/gigagit`** (was
   `github.com/gigagit/gg`). The repo is hosted at
