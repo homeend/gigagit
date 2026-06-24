@@ -197,9 +197,11 @@ func scopeKey(scope LogScope) string {
 		base += "|up:" + strings.Join(scope.Upstreams, ",")
 	}
 	if len(scope.Paths) > 0 || scope.Author != "" || scope.Grep != "" || scope.Since != "" || scope.Until != "" {
-		base += "|f:" + strings.Join(scope.Paths, ",") +
-			"|a:" + scope.Author + "|g:" + scope.Grep +
-			"|s:" + scope.Since + "|u:" + scope.Until
+		base += "\x00f:" + strings.Join(scope.Paths, "\x00") +
+			"\x00a:" + scope.Author +
+			"\x00g:" + scope.Grep +
+			"\x00s:" + scope.Since +
+			"\x00u:" + scope.Until
 	}
 	return base
 }
