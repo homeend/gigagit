@@ -8,6 +8,15 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+### Added
+- **Files panel ignores line-ending-only changes.** A tracked file whose only
+  unstaged difference is its line endings (CRLF↔LF) — common on Windows/WSL — no
+  longer shows up as modified in the Files panel, the count badge, or
+  `gg status`. Detection uses `git diff --ignore-cr-at-eol` (one extra diff,
+  only when there are modified files, scoped to just those paths); a file's
+  staged change, if any, is preserved. Set `[ui] show_eol_only_changes = true`
+  to surface them again (e.g. when you are deliberately renormalizing endings).
+
 ### Fixed
 - **A git command that fails to start now reports the real cause instead of a
   bare `exit -1`.** When git is killed by a signal or never starts (fork/exec

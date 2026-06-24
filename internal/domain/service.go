@@ -41,6 +41,20 @@ type Service struct {
 
 	profileGlobal profile.Store // lazily resolved; nil disables profiles
 	profileRepo   profile.Store // lazily resolved; nil disables profiles
+
+	// showEOLOnly, when false (the default), hides files whose only unstaged
+	// change is line endings (CRLF↔LF) from Status/Snapshot. Set once at
+	// construction time from [ui] show_eol_only_changes (TUI), before any read.
+	showEOLOnly bool
+}
+
+// SetShowEOLOnlyChanges controls whether a file whose ONLY unstaged change is
+// line endings (CRLF↔LF) is surfaced as modified. The default (false) drops
+// such files from Status/Snapshot as noise; the TUI sets it from [ui]
+// show_eol_only_changes. Call before issuing reads (it is not synchronized).
+func (s *Service) SetShowEOLOnlyChanges(show bool) *Service {
+	s.showEOLOnly = show
+	return s
 }
 
 // Open builds a Service rooted at workdir with the standard runner — the

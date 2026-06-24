@@ -76,7 +76,7 @@ func (s *Service) loadSnapshot(ctx context.Context) (Snapshot, error) {
 	run := func(f func()) { wg.Add(1); go func() { defer wg.Done(); f() }() }
 
 	run(func() {
-		st, err := s.repo.Status(ctx)
+		st, err := s.statusFiltered(ctx)
 		if err != nil {
 			fatal(err)
 			return
@@ -206,9 +206,10 @@ func scopeKey(scope LogScope) string {
 	return base
 }
 
-// Status is a single gated read for the CLI status command.
+// Status is a single gated read for the CLI status command. It runs the
+// EOL-only reconcile (statusFiltered) so the CLI and the TUI agree.
 func (s *Service) Status(ctx context.Context) (model.WorkingTreeStatus, error) {
-	return query(ctx, s, "status", s.repo.Status)
+	return query(ctx, s, "status", s.statusFiltered)
 }
 
 // Branches is a single gated read for the local branch list. The TUI uses it

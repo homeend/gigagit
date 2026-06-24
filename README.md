@@ -178,8 +178,12 @@ without `--force`.
 (default 300); `[ui] commit_batch_size` sets how many more are loaded per page
 (default 300); `[ui] commit_search_max_pages` sets how many extra pages
 `ctrl+f` eager search will scan before asking permission to go deeper (default 5);
-like every entry, the repo's `.gg.toml` overrides the global config
-per field.
+`[ui] show_eol_only_changes` (default `false`) controls whether a file whose
+only unstaged change is its line endings (CRLF↔LF) is shown as modified — by
+default such files are hidden from the Files panel, the count badge, and
+`gg status` as noise; set it `true` to surface them (e.g. when deliberately
+renormalizing line endings); like every entry, the repo's `.gg.toml` overrides
+the global config per field.
 
 `[ui] footer_actions` and `[ui] menu_actions` are lists of action **ids** that
 choose which actions appear in the footer bar and in the `.` menu respectively;

@@ -73,6 +73,9 @@ func (m Model) loadCmd() tea.Cmd {
 			}
 		}
 		feed.SetPageSizes(cfg.UI.CommitInitialCount, cfg.UI.CommitBatchSize)
+		// Apply the EOL-only visibility setting before the Snapshot below reads
+		// status, so the Files panel and count badge honor it from first paint.
+		svc.SetShowEOLOnlyChanges(cfg.UI.ShowEOLOnlyChanges)
 
 		var (
 			snap    domain.Snapshot

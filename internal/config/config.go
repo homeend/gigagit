@@ -38,6 +38,8 @@ type UIConfig struct {
 	CommitInitialCount   int `toml:"commit_initial_count"`    // commits walked on first paint; <=0 = unset (default 300)
 	CommitBatchSize      int `toml:"commit_batch_size"`       // commits per later page (scroll / ctrl+l); <=0 = unset (default 300)
 	CommitSearchMaxPages int `toml:"commit_search_max_pages"` // eager /-search page cap before re-prompting; <=0 = unset (default 5)
+
+	ShowEOLOnlyChanges bool `toml:"show_eol_only_changes"` // surface files whose only unstaged change is line endings (CRLF↔LF); false (default) hides them as noise
 }
 
 // Config is the merged gigagit configuration.
@@ -155,6 +157,11 @@ func overlayUI(dst *UIConfig, src UIConfig) {
 	}
 	if src.CommitSearchMaxPages > 0 {
 		dst.CommitSearchMaxPages = src.CommitSearchMaxPages
+	}
+	// Inverted polarity: the default (false) is the active feature (hide), so
+	// only a true in a higher layer overlays — matching the zero-is-unset rule.
+	if src.ShowEOLOnlyChanges {
+		dst.ShowEOLOnlyChanges = true
 	}
 }
 

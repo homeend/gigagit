@@ -41,6 +41,8 @@ var settingDocs = []settingDoc{
 	{"ui", "commit_initial_count", 300, "commits loaded on first paint (raise to find more without scrolling)"},
 	{"ui", "commit_batch_size", 300, "commits loaded per later page (scroll to the end, or ctrl+l)"},
 	{"ui", "commit_search_max_pages", 5, "pages eager /-search scans before asking to search deeper"},
+
+	{"ui", "show_eol_only_changes", false, "show files whose only unstaged change is line endings (CRLF↔LF); default hides them as noise"},
 }
 
 // tomlScalar renders a registry value as it appears in TOML.
@@ -48,6 +50,8 @@ func tomlScalar(v any) string {
 	switch t := v.(type) {
 	case int:
 		return strconv.Itoa(t)
+	case bool:
+		return strconv.FormatBool(t)
 	case string:
 		return `"` + t + `"`
 	}
