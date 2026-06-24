@@ -389,13 +389,68 @@ func (m Model) renderInterface() string {
 	return strings.Join([]string{header, body, footer, statusLine}, "\n")
 }
 
-// headerLine renders the bold title plus branch info, truncated to width.
+// headerLine renders the bold title plus branch info on the left, and the
+// repository's full path right-aligned on the right. A path too long for the
+// space left between them is middle-elided, always keeping the repo directory
+// name (the path's final segment) visible.
 func (m Model) headerLine(w int) string {
 	rest := "  branch " + m.status.Branch
 	if m.status.Upstream != "" {
 		rest += fmt.Sprintf(" (↑%d ↓%d)", m.status.Ahead, m.status.Behind)
 	}
-	return titleStyle.Render("gigagit") + truncate(rest, w-7)
+	title := titleStyle.Render("gigagit")
+	titleW := lipgloss.Width(title)
+	leftW := titleW + lipgloss.Width(rest)
+
+	const gap = 2 // minimum spaces between the left text and the path
+	const minPath = 4
+	path := m.currentWorktree
+	if path == "" || w <= 0 || leftW+gap+minPath > w {
+		// No path, or no room for a meaningful one: keep the original left line.
+		return title + truncate(rest, w-titleW)
+	}
+	p := elideMiddlePath(path, w-leftW-gap)
+	pad := w - leftW - lipgloss.Width(p)
+	return title + rest + strings.Repeat(" ", pad) + p
+}
+
+// elideMiddlePath shortens a filesystem path to at most n display columns by
+// dropping characters from the MIDDLE and inserting a "…", keeping the path's
+// head and — most importantly — its final segment (the repo directory name)
+// visible. Falls back to a leading ellipsis when even that segment can't fit.
+func elideMiddlePath(s string, n int) string {
+	if n <= 0 {
+		return ""
+	}
+	if lipgloss.Width(s) <= n {
+		return s
+	}
+	if n == 1 {
+		return "…"
+	}
+	leaf := pathLeaf(s)
+	avail := n - 1 // reserve a column for the middle "…"
+	if lipgloss.Width(leaf) >= avail {
+		// Even the dir name doesn't fit beside a head: show the path's tail.
+		return elideLeft(s, n)
+	}
+	head := avail - lipgloss.Width(leaf)
+	r := []rune(s)
+	hi := 0
+	for hi < len(r) && lipgloss.Width(string(r[:hi+1])) <= head {
+		hi++
+	}
+	return string(r[:hi]) + "…" + leaf
+}
+
+// pathLeaf returns the final segment of a path (the directory name), tolerating
+// both / and \ separators and trailing separators.
+func pathLeaf(s string) string {
+	s = strings.TrimRight(s, `/\`)
+	if i := strings.LastIndexAny(s, `/\`); i >= 0 {
+		return s[i+1:]
+	}
+	return s
 }
 
 // filesLabel decorates a Files/Staged panel label with its visible row count
