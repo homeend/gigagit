@@ -80,6 +80,9 @@ var (
 	// statusErrStyle makes a failure in the status bar stand out (white on red)
 	// instead of reading like an ordinary hint.
 	statusErrStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("15")).Background(lipgloss.Color("1"))
+	// errorStyle is a plain red foreground for inline popup error lines (e.g. an
+	// unresolved commit-ish in the show-commit popup).
+	errorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
 )
 
 // statusErrorPrefixes are the leading tokens the status-setting sites use when

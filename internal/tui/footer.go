@@ -100,6 +100,7 @@ var globalBindings = []footerBinding{
 	{"repo", "R", "[R]epo", Model.opsIdle, scopeGlobal},
 	{"settings", ",", "[,] settings", Model.opsIdle, scopeGlobal},
 	{"actions", ".", "[.] actions", Model.opsIdle, scopeGlobal},
+	{"commands", "ctrl+p", "[ctrl+p] commands", Model.opsIdle, scopeGlobal},
 	{"", "tab", "[tab] focus", func(Model) bool { return true }, scopeGlobal},
 	{"", "ctrl+←/→", "[ctrl+←/→] tab", Model.opsIdle, scopeGlobal},
 	{"reload", "r", "[r] reload", func(m Model) bool { return !m.running }, scopeGlobal},

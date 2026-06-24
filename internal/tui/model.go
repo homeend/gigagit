@@ -283,6 +283,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cp.lines = msg.lines
 		cp.sel = 0
 		return m, nil
+	case gotoCommitResolvedMsg:
+		p := layerOf[*gotoCommitPopup](m)
+		// Tag-gate by the submitted text: only act if this popup is still on top
+		// and its input is unchanged (a since-edited field discards a stale resolve).
+		if p == nil || p != m.topLayer() || strings.TrimSpace(p.input.Value()) != msg.rev {
+			return m, nil
+		}
+		return m.resolvedGotoCommit(p, msg)
 	case compareFilesMsg:
 		if m.filesView == nil || !m.inCompareMode() || msg.tag != m.compareTag {
 			return m, nil // stale or closed
@@ -1069,6 +1077,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.openActionMenu(), nil
 		case "?":
 			m = m.pushLayer(newContentPopup("Help — keys", helpContent()))
+		case "ctrl+p":
+			if m.opsIdle() {
+				return m.openCommandPalette()
+			}
+		case "#":
+			if m.opsIdle() {
+				return m.openGotoCommitPopup()
+			}
 		case "l":
 			if m.focus == panelCommits && m.canShowCommitFiles() {
 				if m.width > 0 && m.width < 40 {
