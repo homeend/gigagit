@@ -32,6 +32,28 @@ func (f commitFilterFields) filtered() bool {
 	return len(f.Paths) > 0 || f.Author != "" || f.Grep != "" || f.Since != "" || f.Until != ""
 }
 
+// clearAllFiltering removes every active filtering state in one shot: the
+// in-memory `/` filter, the `@` highlight, and the `\` commit-scope filter. It
+// reports whether the commit-scope filter was active, so the caller can reload
+// the feed (the other two are display-only and need no git walk).
+func (m Model) clearAllFiltering() (Model, bool) {
+	m.filterTyping = false
+	m.filterQuery = ""
+	m.highlightTyping = false
+	m.highlightQuery = ""
+	reload := m.commitFilter.filtered()
+	m.commitFilter = commitFilterFields{}
+	return m, reload
+}
+
+// canClearFilters reports whether any filtering is active (drives the global
+// ctrl+r footer hint). Only committed states count — the typing modes capture
+// keys themselves, so the global ctrl+r can't reach them.
+func (m Model) canClearFilters() bool {
+	return m.opsIdle() &&
+		(m.filterQuery != "" || m.highlightQuery != "" || m.commitFilter.filtered())
+}
+
 // feedScope builds the LogScope the feed should walk: branch selection plus the
 // active filter. Fresh slices: the value-receiver Model shares slice backings.
 func (m Model) feedScope() domain.LogScope {

@@ -119,6 +119,42 @@ func TestClearFilterRowPresentOnlyWhenFiltered(t *testing.T) {
 	}
 }
 
+func TestGlobalCtrlRClearsAllFiltering(t *testing.T) {
+	m := loadedModel(t)
+	m.focus = panelCommits
+	// All three filtering states active at once.
+	m.filterPanel = panelCommits
+	m.filterQuery = "foo"
+	m.highlightQuery = "bar"
+	m.commitFilter = commitFilterFields{Grep: "baz"}
+	m2, _ := m.Update(keyMsg("ctrl+r"))
+	mm := m2.(Model)
+	if mm.filterQuery != "" {
+		t.Errorf("ctrl+r should clear the / filter, got %q", mm.filterQuery)
+	}
+	if mm.highlightQuery != "" {
+		t.Errorf("ctrl+r should clear the @ highlight, got %q", mm.highlightQuery)
+	}
+	if mm.commitFilter.filtered() {
+		t.Errorf("ctrl+r should clear the commit filter, got %+v", mm.commitFilter)
+	}
+	// The commit filter was active, so the feed reload must have fired.
+	if !mm.commitsLoading {
+		t.Error("clearing an active commit filter should reload the feed")
+	}
+}
+
+func TestCanClearFiltersGating(t *testing.T) {
+	m := loadedModel(t)
+	if m.canClearFilters() {
+		t.Fatal("nothing filtered → no clear hint")
+	}
+	m.highlightQuery = "x"
+	if !m.canClearFilters() {
+		t.Fatal("an active @ highlight should enable the clear hint")
+	}
+}
+
 func TestCommitToggleAddsBranch(t *testing.T) {
 	m := branchesPanelModel("feat", "main")
 	r, ok := findRow(availableActions(m), "commits-toggle")

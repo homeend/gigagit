@@ -13,8 +13,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   author, message, date range) that narrows the feed via `git log` flags; filters
   compose with branch scope. "Commits touching this" seeds a path filter from the
   fuzzy file finder and the files view. The commit-graph hides while a filter is
-  active (the filtered feed is a non-contiguous subset). `ctrl+r` in the popup,
-  or a "Clear filter" row, removes all filters and restores the full feed.
+  active (the filtered feed is a non-contiguous subset). A global `ctrl+r`
+  clears all active filtering at once — the `/` filter, the `@` highlight, and
+  the `\` commit filter — restoring the full feed (also works inside the popup;
+  the "Clear filter" `.`-menu row clears the commit filter alone).
 - **Repository path in the top bar.** The header now shows the repository's full path right-aligned on the right (the title + branch stay on the left). When the path is too long for the space between them it is elided in the middle (`…`), always keeping the repo directory name — the path's final segment — visible.
 - **Read a commit's full message.** On the Commits panel, `i` opens the selected commit's full message in a scrollable popup with a `git show`-style metadata header — full hash, author, date, ref decorations (branches/tags), and merge parents — above the subject + body, plus a compact author · date line in the footer. Handy for long descriptions, trailers, and multi-paragraph messages that the one-line subject hides. `I` opens the same message in your external editor (`$EDITOR`, read-only). Both are also in the commit `.` menu as **View message** / **Open message in editor**.
 - **Solo this tag.** The Tags panel `.` menu now offers **Solo this tag** — it scopes the Commits panel to the tag's history (`git log <tag>`: the tag's commit on top, everything in that release below, lazily paged) and focuses the Commits panel, so you can browse a release's commits even on a huge repo where the tag's commit is far outside the loaded window. Clear it with **Show all branches** (or re-run Solo this tag). Same scoping mechanism as "Solo this branch".

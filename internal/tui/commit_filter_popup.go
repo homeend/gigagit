@@ -53,10 +53,14 @@ func (p *commitFilterPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.commitFilter = p.collect()
 		return m.startFeedReload()
 	case "ctrl+r":
-		// Explicitly remove every filter axis at once and restore the full feed.
+		// Explicitly remove all filtering at once (same as the global ctrl+r):
+		// the `/` filter, the `@` highlight, and this commit filter.
 		m = m.popLayer()
-		m.commitFilter = commitFilterFields{}
-		return m.startFeedReload()
+		m, reload := m.clearAllFiltering()
+		if reload {
+			return m.startFeedReload()
+		}
+		return m, nil
 	case "tab", "down":
 		p.focus = (p.focus + 1) % cfFieldCount
 		return m, nil

@@ -100,6 +100,7 @@ var globalBindings = []footerBinding{
 	{"order", "o", "[o]rder", Model.opsIdle, scopeGlobal},
 	{"view", "z", "[z] view", Model.opsIdle, scopeGlobal},
 	{"filter", "/", "[/]filter", Model.opsIdle, scopeGlobal},
+	{"clear-filters", "ctrl+r", "[ctrl+r] clear filters", Model.canClearFilters, scopeGlobal},
 	{"repo", "R", "[R]epo", Model.opsIdle, scopeGlobal},
 	{"settings", ",", "[,] settings", Model.opsIdle, scopeGlobal},
 	{"actions", ".", "[.] actions", Model.opsIdle, scopeGlobal},
