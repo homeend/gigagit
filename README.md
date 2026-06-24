@@ -4,10 +4,12 @@ A fast terminal git client for very large monorepos — GitKraken's one-key smar
 operations with lazygit's keyboard-driven TUI. Cross-platform, shells out to the
 system `git`.
 
-> **Status:** early development. Core engine, smart operations, an interactive
-> TUI, a scriptable CLI, and full worktree management are in place. See
-> [`CHANGELOG.md`](CHANGELOG.md) for details and [`CLAUDE.md`](CLAUDE.md) for the
-> architecture.
+> **Status:** actively developed and ready for daily use. The worktree-aware
+> engine, one-key smart operations (pull / switch / merge / rebase / commit /
+> stash / undo), interactive rebase, conflict resolution, a rich keyboard TUI,
+> and a fully scriptable CLI are all in place. No `1.0` tag has been cut yet, and
+> an MCP server for AI agents is on the roadmap. See [`CHANGELOG.md`](CHANGELOG.md)
+> for the full feature list and [`CLAUDE.md`](CLAUDE.md) for the architecture.
 
 ## Why
 
