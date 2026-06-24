@@ -119,14 +119,16 @@ branches collapse to the same key. Extend it to also fold `Paths` / `Author` /
 distinguish filtered from unfiltered, and it also tightens the existing domain
 read-model singleflight/cache key (today two different filters on the same
 branches share a key, disambiguated only by the generation counter). `scopeKey`
-is unexported; expose a thin accessor (or compute the same key inside the feed)
-so `CommitFeed` can key its cache on it.
+is unexported, but `commitfeed.go` and `query.go` are the same `package domain`,
+so `CommitFeed` calls it directly — no accessor needed.
 
 **Design.**
 - The feed keeps a bounded LRU (default 4 entries) of
   `map[string]cachedScope` keyed by the (now filter-complete) scope key, where
   `cachedScope` holds the accumulated `commits`, the `hashes` dedupe set,
-  `skip`, and `exhausted`.
+  `skip`, and `exhausted`. The bound is by entry *count* (number of remembered
+  scopes), not bytes — one large base accumulation dominates; this caps how many
+  scopes are remembered, it is not a memory budget.
 - New method `ApplyScope(ctx, scope) (FeedState, error)`:
   1. Stash the *current* scope's accumulation into the cache (so the user can
      come back to it).
@@ -136,30 +138,40 @@ so `CommitFeed` can key its cache on it.
   3. Otherwise walk page 0 fresh (today's `LoadInitial` behavior) and cache it.
   Filter / solo / show-all toggles (the TUI `reloadFeedCmd`) call `ApplyScope`.
 - `LoadInitial` remains the **hard refresh** used by startup and post-operation
-  reloads: it always re-walks the current scope and **overwrites** that scope's
-  cache entry, so newly created commits and moved refs still appear after a
-  write. (The distinction: scope *change* → `ApplyScope` may restore from cache;
-  data *refresh* → `LoadInitial` always re-walks.)
+  reloads: it re-walks the current scope and **clears the entire scope cache**
+  (every entry, not just the current one). This is the staleness fix: a write op
+  reloads through `LoadInitial`, so any *other* cached scope (e.g. the base list
+  stashed when a `\` filter was applied) is dropped rather than restored stale
+  later. (The distinction: scope *change* with nothing changed underneath →
+  `ApplyScope` restores from cache; any data *refresh* → `LoadInitial` re-walks
+  and invalidates all cached scopes.)
 
 **Why a cache and not a single snapshot.** A scope-keyed LRU also makes solo /
 show-all toggles instant, not just the `\` filter round-trip, with the same
-mechanism. The bound keeps memory predictable: at ~200 bytes/commit, a 200k-commit
-base accumulation is ~40 MB; four entries cap the worst case and the typical case
-is one large base plus small filtered results.
+mechanism.
 
-**Staleness.** Cached accumulations are only reused for scope *toggles*, which
-happen seconds apart; any write operation routes through the post-op
-`LoadInitial` refresh, which rebuilds the current scope's entry. No background
-invalidation needed.
+**Staleness — the load-bearing rule.** Cached accumulations are reused **only**
+for a scope toggle with no intervening data change. Walk: base S0 cached → apply
+`\` filter S1 → *commit something* → clear filter back to S0. The commit's post-op
+`LoadInitial` cleared the whole cache, so clearing the filter re-walks S0 fresh
+and shows the new commit / moved tips — never the stale pre-commit list. Without
+an intervening op, S0 is restored instantly. No background invalidation needed.
 
 **Note.** `/` search is display-only and already never reset the feed; this part
 fixes the `\`/solo round-trip specifically.
 
-**Tests (real git).** Walk a base scope to N commits; apply a `\` filter
-(narrower set); clear it → the restored feed equals the pre-filter accumulation
-and **no additional `git log` ran** (assert via a counting runner or that `skip`
-is unchanged). A post-op `LoadInitial` on the same scope re-walks and reflects a
-newly added commit (cache overwritten, not served stale).
+**Tests (real git).**
+- *Instant restore:* walk a base scope to N commits; apply a `\` filter (narrower
+  set); clear it → the restored feed equals the pre-filter accumulation and **no
+  additional `git log` ran** (assert via a counting runner or that `skip` is
+  unchanged).
+- *Cross-scope staleness fix (the blocking case):* walk base → apply filter →
+  add a new commit + call `LoadInitial` (the post-op hard refresh) → clear the
+  filter → the base feed now **contains the new commit** (re-walked), proving the
+  whole-cache invalidation, not a stale restore.
+
+(No `/`-search test here — `/` is display-only and never touched the feed; Part 3
+is about the `\`/solo round-trip only.)
 
 ---
 
