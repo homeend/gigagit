@@ -412,6 +412,58 @@ func TestCommitFeedDefaultPageSizeWhenUnset(t *testing.T) {
 	}
 }
 
+func TestApplyScopeRestoresWithoutRewalk(t *testing.T) {
+	f := gitexec.NewFakeRunner()
+	feed := New(&git.Repo{Runner: f}).CommitFeed()
+	feed.SetPageSizes(50, 50)
+
+	f.SetResponse("git log", gitexec.Result{Stdout: logRows(3)}) // base: 3 commits
+	if _, err := feed.LoadInitial(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	f.SetResponse("git log", gitexec.Result{Stdout: logRows(1)}) // filtered: 1 commit
+	if _, err := feed.ApplyScope(context.Background(), LogScope{Grep: "x"}); err != nil {
+		t.Fatal(err)
+	}
+	calls := len(f.Calls)
+	// Clear the filter back to base → must restore from cache, no new git log.
+	st, err := feed.ApplyScope(context.Background(), LogScope{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(f.Calls) != calls {
+		t.Fatalf("restore re-walked: calls %d → %d", calls, len(f.Calls))
+	}
+	if len(st.Commits) != 3 {
+		t.Fatalf("restored base = %d commits, want 3", len(st.Commits))
+	}
+}
+
+func TestLoadInitialInvalidatesCacheAcrossScopes(t *testing.T) {
+	f := gitexec.NewFakeRunner()
+	feed := New(&git.Repo{Runner: f}).CommitFeed()
+	feed.SetPageSizes(50, 50)
+
+	f.SetResponse("git log", gitexec.Result{Stdout: logRows(3)}) // base: 3
+	feed.LoadInitial(context.Background())
+	f.SetResponse("git log", gitexec.Result{Stdout: logRows(1)}) // filtered: 1
+	feed.ApplyScope(context.Background(), LogScope{Grep: "x"})
+
+	// A write happens → post-op hard refresh re-walks the current (filtered) scope
+	// and must clear EVERY cached scope, base included.
+	f.SetResponse("git log", gitexec.Result{Stdout: logRows(4)}) // history grew to 4
+	feed.LoadInitial(context.Background())
+
+	// Clearing the filter must now re-walk the base (cache invalidated) → 4 commits.
+	st, err := feed.ApplyScope(context.Background(), LogScope{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(st.Commits) != 4 {
+		t.Fatalf("base after refresh = %d, want 4 (re-walked, not stale 3)", len(st.Commits))
+	}
+}
+
 func TestCanLoadMore(t *testing.T) {
 	f := gitexec.NewFakeRunner()
 	feed := New(&git.Repo{Runner: f}).CommitFeed()
