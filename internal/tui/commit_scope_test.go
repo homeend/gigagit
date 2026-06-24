@@ -504,3 +504,22 @@ func TestWorktreeFromCommitRequiresBranchName(t *testing.T) {
 		t.Fatal("must not launch the create op without a branch name")
 	}
 }
+
+func TestFeedScopeFoldsFilterAndBranches(t *testing.T) {
+	var m Model
+	m.commitScopeBranches = []string{"main"}
+	m.commitFilter = commitFilterFields{Paths: []string{"sub"}, Author: "alice", Grep: "race"}
+	s := m.feedScope()
+	if len(s.Branches) != 1 || s.Branches[0] != "main" {
+		t.Fatalf("branches not carried: %+v", s.Branches)
+	}
+	if len(s.Paths) != 1 || s.Paths[0] != "sub" || s.Author != "alice" || s.Grep != "race" {
+		t.Fatalf("filter not folded: %+v", s)
+	}
+	if !m.commitFilter.filtered() {
+		t.Fatal("filtered() should be true")
+	}
+	if (commitFilterFields{}).filtered() {
+		t.Fatal("empty filter must not be filtered")
+	}
+}

@@ -19,6 +19,32 @@ type commitsReloadedMsg struct {
 	state domain.FeedState
 }
 
+// commitFilterFields holds the active non-branch narrowing of the Commits feed.
+type commitFilterFields struct {
+	Paths  []string
+	Author string
+	Grep   string
+	Since  string
+	Until  string
+}
+
+func (f commitFilterFields) filtered() bool {
+	return len(f.Paths) > 0 || f.Author != "" || f.Grep != "" || f.Since != "" || f.Until != ""
+}
+
+// feedScope builds the LogScope the feed should walk: branch selection plus the
+// active filter. Fresh slices: the value-receiver Model shares slice backings.
+func (m Model) feedScope() domain.LogScope {
+	return domain.LogScope{
+		Branches: append([]string(nil), m.commitScopeBranches...),
+		Paths:    append([]string(nil), m.commitFilter.Paths...),
+		Author:   m.commitFilter.Author,
+		Grep:     m.commitFilter.Grep,
+		Since:    m.commitFilter.Since,
+		Until:    m.commitFilter.Until,
+	}
+}
+
 // startFeedReload sets the Commits loading indicator and returns the scope
 // reload cmd, so the title shows it is working while the (possibly slow) re-walk
 // runs. The indicator clears when commitsReloadedMsg arrives.
@@ -32,7 +58,7 @@ func (m Model) startFeedReload() (Model, tea.Cmd) {
 // cancels any superseded in-flight walk.
 func (m Model) reloadFeedCmd() tea.Cmd {
 	feed := m.feed
-	scope := domain.LogScope{Branches: append([]string(nil), m.commitScopeBranches...)}
+	scope := m.feedScope()
 	return func() tea.Msg {
 		feed.SetScope(scope)
 		st, _ := feed.LoadInitial(context.Background())

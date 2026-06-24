@@ -86,6 +86,7 @@ type Model struct {
 	commitsExhausted    bool               // false → "Commits N+", true → "Commits N"
 	commitsLoading      bool               // a feed reload/page is in flight → show the loading glyph in the Commits title
 	commitScopeBranches []string           // included branches for the feed; empty = all local branches
+	commitFilter        commitFilterFields // path/author/grep/date narrowing of the feed
 	commitGraphRows     []string           // cached single-line graph cells, parallel to the unified WIP+commits list; empty = none
 	commitGraphLanes    []int              // cached node lane per unified row, parallel to the unified WIP+commits list
 	wipRows             []wipRow           // 0–2 derived pseudo-rows (Working tree / Staged) shown atop the Commits feed when dirty
