@@ -1697,14 +1697,42 @@ func (m Model) panelLen(p panel) int {
 
 // commitScopeLabel describes the Commits feed mode for the panel header.
 func (m Model) commitScopeLabel() string {
+	var base string
 	switch len(m.commitScopeBranches) {
 	case 0:
-		return "all"
+		base = "all"
 	case 1:
-		return "solo: " + m.commitScopeBranches[0]
+		base = "solo: " + m.commitScopeBranches[0]
 	default:
-		return fmt.Sprintf("%d branches", len(m.commitScopeBranches))
+		base = fmt.Sprintf("%d branches", len(m.commitScopeBranches))
 	}
+	chips := m.commitFilterChips()
+	if chips == "" {
+		return base
+	}
+	return base + " · " + chips
+}
+
+// commitFilterChips renders the active filter as compact chips, or "" if none.
+func (m Model) commitFilterChips() string {
+	f := m.commitFilter
+	var parts []string
+	if len(f.Paths) > 0 {
+		parts = append(parts, "path="+f.Paths[0])
+	}
+	if f.Grep != "" {
+		parts = append(parts, "msg="+f.Grep)
+	}
+	if f.Author != "" {
+		parts = append(parts, "@"+f.Author)
+	}
+	if f.Since != "" {
+		parts = append(parts, "since="+f.Since)
+	}
+	if f.Until != "" {
+		parts = append(parts, "until="+f.Until)
+	}
+	return strings.Join(parts, " ")
 }
 
 // rebuildCommitGraph recomputes the cached single-line graph cells from

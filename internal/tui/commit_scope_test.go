@@ -524,6 +524,24 @@ func TestFeedScopeFoldsFilterAndBranches(t *testing.T) {
 	}
 }
 
+func TestCommitScopeLabelShowsFilterChips(t *testing.T) {
+	var m Model
+	m.commitFilter = commitFilterFields{Paths: []string{"sub"}, Grep: "race", Author: "alice"}
+	got := m.commitScopeLabel()
+	for _, want := range []string{"path=sub", "msg=race", "@alice"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("label %q missing chip %q", got, want)
+		}
+	}
+}
+
+func TestCommitScopeLabelPlainWhenUnfiltered(t *testing.T) {
+	var m Model
+	if got := m.commitScopeLabel(); got != "all" {
+		t.Fatalf("unfiltered label should be \"all\", got %q", got)
+	}
+}
+
 func TestGraphSuppressedWhenFiltered(t *testing.T) {
 	var m Model
 	// Default: graph allowed (no filter, default sort, in-memory filter off).
