@@ -3,11 +3,30 @@ package gitexec
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/homeend/gigagit/internal/observ"
 )
+
+// When git fails to even start — here a working directory that does not exist,
+// so fork/exec's chdir fails — cmd.Run returns a non-*exec.ExitError, which
+// surfaces as ExitCode -1 with EMPTY stderr. The error message must still name
+// the underlying cause; a bare "failed (exit -1): " is a dead end for the user
+// (the report behind the "error -1" tag-create failure was exactly this shape).
+func TestRunEnvSurfacesStartFailureCause(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "does-not-exist")
+	r := NewExecRunner("git", missing, nil)
+	_, err := r.Run(context.Background(), "git tag", []string{"tag", "v1"})
+	if err == nil {
+		t.Fatal("expected an error running git in a missing workdir")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "no such file") && !strings.Contains(msg, "does-not-exist") {
+		t.Fatalf("error swallows the start-failure cause: %q", msg)
+	}
+}
 
 func TestExecRunnerRunEnvPassesEnvToSubprocess(t *testing.T) {
 	r := NewExecRunner("git", t.TempDir(), nil)
