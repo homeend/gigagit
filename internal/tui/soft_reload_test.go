@@ -5,6 +5,46 @@ import (
 	"testing"
 )
 
+// r is inert while a load is already in flight: it dispatches no new load
+// (loadGen unchanged) and does not disturb the running reload's flags. This
+// blocks the double-r restart and the stale-flash when r is pressed during a
+// load.
+func TestRBlockedWhileLoading(t *testing.T) {
+	m := loadedModel(t)
+	m.loading = true
+	m.softReload = true // a soft reload is already running
+	gen := m.loadGen
+	updated, cmd := m.Update(keyMsg("r"))
+	mm := updated.(Model)
+	if mm.loadGen != gen {
+		t.Fatalf("r should dispatch no new load while one is in flight: loadGen %d→%d", gen, mm.loadGen)
+	}
+	if cmd != nil {
+		t.Fatal("r should return no command while a load is in flight")
+	}
+	if !mm.softReload || !mm.loading {
+		t.Fatal("r must not disturb the in-flight reload's flags")
+	}
+}
+
+// Pressing r DURING an in-flight repo switch (reRoot: loading=true,
+// softReload=false) must not turn on softReload — otherwise View would
+// soft-render the outgoing repo's stale panels for the rest of the switch.
+func TestRDuringRepoSwitchStaysHard(t *testing.T) {
+	m := loadedModel(t)
+	switched, _ := m.reRoot(m.currentWorktree)
+	m = switched.(Model) // loading=true, softReload=false
+	gen := m.loadGen
+	updated, _ := m.Update(keyMsg("r"))
+	mm := updated.(Model)
+	if mm.softReload {
+		t.Fatal("r during an in-flight repo switch must not enable softReload")
+	}
+	if mm.loadGen != gen {
+		t.Fatalf("r during a switch should dispatch no new load: loadGen %d→%d", gen, mm.loadGen)
+	}
+}
+
 // Pressing r on a loaded model starts a soft reload: loading + softReload set.
 func TestRKeyStartsSoftReload(t *testing.T) {
 	m := loadedModel(t)

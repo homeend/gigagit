@@ -732,7 +732,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "q", "ctrl+c":
 			return m, tea.Quit
 		case "r":
-			if !m.running {
+			// Block r while any load is already in flight (a soft reload OR an
+			// in-flight repo switch): re-triggering would either restart the walk
+			// or soft-render the outgoing repo's stale panels.
+			if !m.running && !m.loading {
 				m.loadGen++
 				m.loading = true
 				m.softReload = true
