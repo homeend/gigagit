@@ -241,10 +241,15 @@ func TestFooterRunningCollapses(t *testing.T) {
 	}
 }
 
-func TestFooterLoadingKeepsReload(t *testing.T) {
+// While a load is in flight the r key is gated (a reload is already running, or
+// a repo switch is mid-flight), so the footer drops the now-inert [r] reload
+// hint. Before the soft-reload feature this was moot — loading blanked the whole
+// screen, so the footer was never rendered during a load; now the footer is
+// visible during a soft reload, so an inert hint would mislead.
+func TestFooterLoadingDropsReload(t *testing.T) {
 	m := footerModel()
 	m.loading = true
-	want := "[tab] focus [r] reload [?] help [q] quit"
+	want := "[tab] focus [?] help [q] quit"
 	if f := m.footerLine(); f != want {
 		t.Errorf("loading footer = %q, want %q", f, want)
 	}
