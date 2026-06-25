@@ -88,6 +88,33 @@ func TestRemoveWorktreeRemovesLinkedTree(t *testing.T) {
 	}
 }
 
+func TestUnlockWorktreeReleasesLock(t *testing.T) {
+	dir, runner := newTestRepo(t)
+	repo := &Repo{Runner: runner}
+
+	wt := filepath.Join(filepath.Dir(dir), "wt-unlock")
+	if err := repo.AddWorktree(context.Background(), wt, "feature/unlock", "main", nil); err != nil {
+		t.Fatalf("AddWorktree: %v", err)
+	}
+	if out, err := exec.Command("git", "-C", dir, "worktree", "lock", wt).CombinedOutput(); err != nil {
+		t.Fatalf("lock: %v\n%s", err, out)
+	}
+	// Locked: even a forced remove is refused.
+	if err := repo.RemoveWorktree(context.Background(), wt, true, nil); err == nil {
+		t.Fatal("removing a locked worktree should fail")
+	}
+	// Unlock, then the forced remove succeeds.
+	if err := repo.UnlockWorktree(context.Background(), wt); err != nil {
+		t.Fatalf("UnlockWorktree: %v", err)
+	}
+	if err := repo.RemoveWorktree(context.Background(), wt, true, nil); err != nil {
+		t.Fatalf("RemoveWorktree after unlock: %v", err)
+	}
+	if _, err := os.Stat(wt); !os.IsNotExist(err) {
+		t.Fatalf("worktree dir still present: %v", err)
+	}
+}
+
 func TestRemoveWorktreeRefusesDirtyUntilForced(t *testing.T) {
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}

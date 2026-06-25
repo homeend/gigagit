@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strings"
 )
 
 // RemoveWorktree removes a linked worktree at Path, optionally deleting its
@@ -55,23 +56,50 @@ func (op RemoveWorktree) Run(ctx context.Context, deps OpDeps) (Result, error) {
 		return Result{Summary: "cancelled", Changed: false}, nil
 	}
 
-	// Step 2: remove the worktree (safe, then reactive force on any failure).
+	// Step 2: remove the worktree (safe, then a reactive decision on failure).
+	// git checks the lock BEFORE dirtiness, so a locked worktree always fails
+	// here with the lock error — branch on it to offer an explicit unlock
+	// instead of the (misleading) "uncommitted changes" force prompt.
 	deps.emit(ctx, Progress{Step: "removing worktree", Detail: op.Path})
 	onLine := func(line string) { deps.emit(ctx, GitLine{Raw: line}) }
 	if err := deps.Repo.RemoveWorktree(ctx, op.Path, false, onLine); err != nil {
-		force, derr := deps.decide(ctx, DecisionRequest{
-			ID:      "worktree-dirty",
-			Prompt:  "Cannot remove " + op.Path + " cleanly (it may have uncommitted changes). Force?",
-			Options: []string{"force", "abort"},
-		})
-		if derr != nil {
-			return Result{}, derr
-		}
-		if force.Option != "force" {
-			return Result{Summary: "cancelled; worktree not removed", Changed: false}, nil
-		}
-		if err := deps.Repo.RemoveWorktree(ctx, op.Path, true, onLine); err != nil {
-			return Result{}, fmt.Errorf("remove worktree (force): %w", err)
+		if isLockedWorktreeErr(err) {
+			// An interrupted `git worktree add` leaves the tree locked with
+			// reason "initializing"; even `remove --force` refuses until it is
+			// unlocked. Make the unlock a deliberate choice — a worktree a user
+			// locked on purpose deserves the same consent.
+			choice, derr := deps.decide(ctx, DecisionRequest{
+				ID:      "worktree-locked",
+				Prompt:  "Worktree " + op.Path + " is locked (an interrupted create leaves it locked). Unlock and remove?",
+				Options: []string{"unlock-and-remove", "abort"},
+			})
+			if derr != nil {
+				return Result{}, derr
+			}
+			if choice.Option != "unlock-and-remove" {
+				return Result{Summary: "cancelled; worktree not removed", Changed: false}, nil
+			}
+			if err := deps.Repo.UnlockWorktree(ctx, op.Path); err != nil {
+				return Result{}, fmt.Errorf("unlock worktree: %w", err)
+			}
+			if err := deps.Repo.RemoveWorktree(ctx, op.Path, true, onLine); err != nil {
+				return Result{}, fmt.Errorf("remove worktree (after unlock): %w", err)
+			}
+		} else {
+			force, derr := deps.decide(ctx, DecisionRequest{
+				ID:      "worktree-dirty",
+				Prompt:  "Cannot remove " + op.Path + " cleanly (it may have uncommitted changes). Force?",
+				Options: []string{"force", "abort"},
+			})
+			if derr != nil {
+				return Result{}, derr
+			}
+			if force.Option != "force" {
+				return Result{Summary: "cancelled; worktree not removed", Changed: false}, nil
+			}
+			if err := deps.Repo.RemoveWorktree(ctx, op.Path, true, onLine); err != nil {
+				return Result{}, fmt.Errorf("remove worktree (force): %w", err)
+			}
 		}
 	}
 
@@ -106,6 +134,12 @@ func (op RemoveWorktree) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	res := Result{Summary: summary, Changed: true}
 	deps.emit(ctx, Done{Result: res})
 	return res, nil
+}
+
+// isLockedWorktreeErr reports whether err is git's refusal to remove a locked
+// worktree ("fatal: cannot remove a locked working tree, lock reason: …").
+func isLockedWorktreeErr(err error) bool {
+	return err != nil && strings.Contains(strings.ToLower(err.Error()), "locked working tree")
 }
 
 // samePath compares two paths after resolving symlinks (git's --show-toplevel

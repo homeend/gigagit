@@ -210,6 +210,97 @@ func TestRemoveWorktreeUnmergedBranchKept(t *testing.T) {
 	}
 }
 
+// worktreeListed reports whether `git worktree list` in dir still mentions path.
+func worktreeListed(t *testing.T, dir, path string) bool {
+	t.Helper()
+	out, err := exec.Command("git", "-C", dir, "worktree", "list", "--porcelain").CombinedOutput()
+	if err != nil {
+		t.Fatalf("worktree list: %v\n%s", err, out)
+	}
+	return strings.Contains(string(out), path)
+}
+
+// TestRemoveWorktreeLockedUnlockAndRemove: a locked worktree (the state an
+// interrupted `git worktree add` leaves — reason "initializing") is removed when
+// the user picks "unlock-and-remove", since plain remove --force refuses a lock.
+func TestRemoveWorktreeLockedUnlockAndRemove(t *testing.T) {
+	dir, repo := newRepo(t)
+	wt := addWorktree(t, dir, "feature/locked", "wt-locked")
+	gitIn(t, dir, "worktree", "lock", wt) // stand in for the "initializing" lock
+
+	res, err := RemoveWorktree{Path: wt, Branch: "feature/locked"}.Run(
+		context.Background(),
+		OpDeps{Repo: repo, Decider: MapDecider{
+			"remove-scope":    "worktree-only",
+			"worktree-locked": "unlock-and-remove",
+		}})
+	if err != nil {
+		t.Fatalf("RemoveWorktree: %v", err)
+	}
+	if !res.Changed {
+		t.Fatalf("result = %+v, want Changed", res)
+	}
+	if _, statErr := os.Stat(wt); !os.IsNotExist(statErr) {
+		t.Fatalf("locked worktree not removed after unlock: %v", statErr)
+	}
+	if worktreeListed(t, dir, wt) {
+		t.Fatal("worktree admin entry should be gone")
+	}
+}
+
+// TestRemoveWorktreeLockedAbortLeavesIt: declining the unlock prompt leaves the
+// locked worktree untouched (no silent force — a deliberate lock is respected).
+func TestRemoveWorktreeLockedAbortLeavesIt(t *testing.T) {
+	dir, repo := newRepo(t)
+	wt := addWorktree(t, dir, "feature/locked2", "wt-locked2")
+	gitIn(t, dir, "worktree", "lock", wt)
+
+	res, err := RemoveWorktree{Path: wt, Branch: "feature/locked2"}.Run(
+		context.Background(),
+		OpDeps{Repo: repo, Decider: MapDecider{
+			"remove-scope":    "worktree-only",
+			"worktree-locked": "abort",
+		}})
+	if err != nil {
+		t.Fatalf("RemoveWorktree: %v", err)
+	}
+	if res.Changed {
+		t.Fatal("aborting the lock prompt should leave the worktree")
+	}
+	if _, statErr := os.Stat(wt); statErr != nil {
+		t.Fatalf("worktree should still exist after abort: %v", statErr)
+	}
+	gitIn(t, dir, "worktree", "unlock", wt) // let t.TempDir cleanup proceed
+}
+
+// TestRemoveWorktreeLockedMissingDir reproduces the exact field scenario: an
+// interrupted create left the worktree locked AND the user manually deleted its
+// directory. unlock + remove --force must still clear the stale admin entry.
+func TestRemoveWorktreeLockedMissingDir(t *testing.T) {
+	dir, repo := newRepo(t)
+	wt := addWorktree(t, dir, "feature/locked3", "wt-locked3")
+	gitIn(t, dir, "worktree", "lock", wt)
+	if err := os.RemoveAll(wt); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := RemoveWorktree{Path: wt, Branch: "feature/locked3"}.Run(
+		context.Background(),
+		OpDeps{Repo: repo, Decider: MapDecider{
+			"remove-scope":    "worktree-only",
+			"worktree-locked": "unlock-and-remove",
+		}})
+	if err != nil {
+		t.Fatalf("RemoveWorktree: %v", err)
+	}
+	if !res.Changed {
+		t.Fatalf("result = %+v, want Changed", res)
+	}
+	if worktreeListed(t, dir, wt) {
+		t.Fatal("stale worktree entry should be gone after unlock+remove")
+	}
+}
+
 func TestRemoveWorktreeDetachedOffersNoBranchOption(t *testing.T) {
 	dir, repo := newRepo(t)
 	wt := filepath.Join(filepath.Dir(dir), "wt-detached")

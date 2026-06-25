@@ -165,7 +165,7 @@ func cmdWorktreeRemove(svc *domain.Service, args []string, stdin io.Reader, stdo
 	fs := flag.NewFlagSet("worktree remove", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	withBranch := fs.Bool("with-branch", false, "also delete the worktree's branch")
-	force := fs.Bool("force", false, "ignore uncommitted changes and unmerged commits")
+	force := fs.Bool("force", false, "ignore uncommitted changes and unmerged commits; unlock a locked worktree")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -212,6 +212,7 @@ func cmdWorktreeRemove(svc *domain.Service, args []string, stdin io.Reader, stdo
 	if *force {
 		policy["worktree-dirty"] = "force"
 		policy["branch-unmerged"] = "force-delete"
+		policy["worktree-locked"] = "unlock-and-remove"
 	}
 	dec := cliDecider{policy: policy, in: stdin, out: stderr, interactive: stdinIsTerminal()}
 

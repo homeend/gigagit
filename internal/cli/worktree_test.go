@@ -200,6 +200,33 @@ func TestWorktreeRemoveDirtyNeedsForce(t *testing.T) {
 	}
 }
 
+func TestWorktreeRemoveLockedNeedsForce(t *testing.T) {
+	dir := newCLIRepo(t)
+	wt := addCLIWorktree(t, dir, "feature/rm-lock", "wt-cli-lock")
+	// Stand in for the "initializing" lock an interrupted `git worktree add`
+	// leaves; even remove --force refuses it until unlocked.
+	if out, err := exec.Command("git", "-C", dir, "worktree", "lock", wt).CombinedOutput(); err != nil {
+		t.Fatalf("lock: %v\n%s", err, out)
+	}
+
+	var out, errb bytes.Buffer
+	// Non-interactive: the worktree-locked decision can't be answered without --force.
+	if code := Run(dir, []string{"worktree", "remove", wt}, strings.NewReader(""), &out, &errb, ""); code == 0 {
+		t.Fatal("locked removal without --force should fail non-interactively")
+	}
+	if _, err := os.Stat(wt); err != nil {
+		t.Fatalf("worktree should still exist: %v", err)
+	}
+
+	var out2, errb2 bytes.Buffer
+	if code := Run(dir, []string{"worktree", "remove", "--force", wt}, strings.NewReader(""), &out2, &errb2, ""); code != 0 {
+		t.Fatalf("forced removal of locked worktree exit = %d, stderr=%s", code, errb2.String())
+	}
+	if _, err := os.Stat(wt); !os.IsNotExist(err) {
+		t.Fatalf("locked worktree not removed after --force: %v", err)
+	}
+}
+
 func TestWorktreeRemoveUnknownPath(t *testing.T) {
 	dir := newCLIRepo(t)
 	var out, errb bytes.Buffer
