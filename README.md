@@ -185,6 +185,16 @@ set it `true` to surface them (e.g. when deliberately renormalizing line
 endings). The scriptable `gg status` is unaffected (faithful to `git status`).
 Like every entry, the repo's `.gg.toml` overrides the global config per field.
 
+`[debug] log_operations` (default `false`) turns on the **operation log**: a
+diagnostic that mirrors every operation and git invocation (argument-redacted) as
+JSON lines to `operations.log` in the gg state dir (`$XDG_STATE_HOME/gg/`, else
+`~/.local/state/gg/`, `%LocalAppData%\gg\` on Windows). It leaves a trace when an
+op hangs or runs slowly. You can also toggle it live from the `,` Settings menu,
+which shows the on/off state and the log's full path; toggling there persists the
+choice to this key in the global config so it survives restarts. (This is the one
+setting gg writes back to the config file at runtime, and only to the global file
+— never a repo's `.gg.toml`.)
+
 `[ui] footer_actions` and `[ui] menu_actions` are lists of action **ids** that
 choose which actions appear in the footer bar and in the `.` menu respectively;
 each is unset/empty by default (show everything). Ids: `pull push commit amend

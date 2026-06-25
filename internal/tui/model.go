@@ -8,6 +8,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -37,6 +38,7 @@ type Model struct {
 	currentWorktree string
 
 	cfg          config.Config
+	opLog        *opLog // operation-log file + span-sink lifecycle; the , Settings toggle
 	gitCommonDir string
 
 	initHomeDir           string // home dir for agent detection; "" skips home-scoped agents (tests)
@@ -99,6 +101,7 @@ type Model struct {
 	proc                process            // the single active long-running process; nil = none. IS the interface lock.
 
 	running   bool
+	opStart   time.Time // when the in-flight op began; the heartbeat reads it for the busy line's elapsed readout
 	statusMsg string
 	opMsgs    chan tea.Msg
 	modal     *decisionState
@@ -172,11 +175,14 @@ func New(svc *domain.Service) Model {
 		dispModes:     map[panel]dispMode{},
 		hscroll:       map[panel]int{},
 		activeLeftTab: panelBranches,
+		opLog:         newOpLog(),
 	}
 }
 
 // Init implements tea.Model.
-func (m Model) Init() tea.Cmd { return tea.Batch(m.loadCmd(), loadSearchHistCmd(m.svc)) }
+func (m Model) Init() tea.Cmd {
+	return tea.Batch(m.loadCmd(), loadSearchHistCmd(m.svc), heartbeatCmd())
+}
 
 // Update implements tea.Model.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -1287,6 +1293,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case opDecisionMsg:
 		m.modal = &decisionState{req: msg.req, reply: msg.reply}
 		return m, waitForOp(m.opMsgs)
+	case heartbeatMsg:
+		// A single perpetual tick (started in Init): re-render so the busy line's
+		// elapsed time advances while an op runs. View only shows it when running,
+		// so an idle tick just repaints identical content (bubbletea diffs frames).
+		return m, heartbeatCmd()
 	case opFinishedMsg:
 		if m.opCancel != nil {
 			m.opCancel() // op already returned; this only frees the ctx

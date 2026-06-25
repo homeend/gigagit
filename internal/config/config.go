@@ -1,6 +1,8 @@
 // Package config loads gigagit's global and per-repo TOML configuration and
 // manages machine-local per-repo state (the <seq> counters). The committed
-// config is read-only at runtime; only the local state file is written.
+// config is read-only at runtime, with one narrow exception: the global file's
+// [debug] log_operations key, which the , Settings menu toggle persists via
+// SetGlobalDebugLogOperations (a non-destructive line edit).
 package config
 
 import (
@@ -42,10 +44,19 @@ type UIConfig struct {
 	ShowEOLOnlyChanges bool `toml:"show_eol_only_changes"` // surface files whose only unstaged change is line endings (CRLF↔LF); false (default) hides them as noise
 }
 
+// DebugConfig configures diagnostic logging. TOML keys are snake_case.
+type DebugConfig struct {
+	// LogOperations mirrors every operation span and git invocation (redacted)
+	// to the operation log file, so a hung or slow op leaves a trace. Default
+	// false (off). Inverted polarity: only a true in a higher layer overlays.
+	LogOperations bool `toml:"log_operations"`
+}
+
 // Config is the merged gigagit configuration.
 type Config struct {
 	Worktree WorktreeConfig `toml:"worktree"`
 	UI       UIConfig       `toml:"ui"`
+	Debug    DebugConfig    `toml:"debug"`
 }
 
 // Defaults returns the built-in configuration used when no files set a field.
@@ -74,6 +85,7 @@ func Load(globalPath, repoPath string) (Config, error) {
 		if ok {
 			overlayWorktree(&cfg.Worktree, layer.Worktree)
 			overlayUI(&cfg.UI, layer.UI)
+			overlayDebug(&cfg.Debug, layer.Debug)
 		}
 	}
 	return cfg, nil
@@ -162,6 +174,15 @@ func overlayUI(dst *UIConfig, src UIConfig) {
 	// only a true in a higher layer overlays — matching the zero-is-unset rule.
 	if src.ShowEOLOnlyChanges {
 		dst.ShowEOLOnlyChanges = true
+	}
+}
+
+// overlayDebug copies each set field of src onto dst. Inverted polarity: the
+// default (false) is "off", so only a true in a higher layer overlays —
+// matching the zero-is-unset rule used elsewhere.
+func overlayDebug(dst *DebugConfig, src DebugConfig) {
+	if src.LogOperations {
+		dst.LogOperations = true
 	}
 }
 

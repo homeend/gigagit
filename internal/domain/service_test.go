@@ -215,6 +215,29 @@ func TestExecuteEmitsOpSpan(t *testing.T) {
 	}
 }
 
+// TestExecuteEmitsStartSpanBeforeRun pins the diagnostic that matters for a hung
+// op: a "started" span must reach the sink BEFORE op.Run runs, so an op that
+// never returns still leaves a trace (the completion span would never be
+// written). Asserted from inside Run, where only the start line can exist yet.
+func TestExecuteEmitsStartSpanBeforeRun(t *testing.T) {
+	var buf syncBuffer
+	observ.SetSpanSink(&buf)
+	defer observ.SetSpanSink(nil)
+
+	svc, _ := svcWithKey("/domain-test-start-span")
+	sawStart := false
+	op := fakeOp{body: func(ctx context.Context, deps engine.OpDeps) (engine.Result, error) {
+		sawStart = strings.Contains(buf.String(), "op fakeOp started")
+		return engine.Result{}, nil
+	}}
+	if _, err := svc.Execute(context.Background(), op, nil, nil); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if !sawStart {
+		t.Fatalf("start span must be written before op.Run; sink at run time lacked it:\n%s", buf.String())
+	}
+}
+
 // syncBuffer is a goroutine-safe bytes.Buffer for span-sink capture.
 type syncBuffer struct {
 	mu  sync.Mutex

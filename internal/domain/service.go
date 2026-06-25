@@ -157,6 +157,11 @@ func (s *Service) Execute(ctx context.Context, op engine.Operation,
 	}()
 
 	opStart := time.Now()
+	// Emit a start marker BEFORE running, so the operation log captures an op that
+	// hangs or runs slowly — the completion span below is only written once Run
+	// returns, which never happens for a stuck op (the case this log exists for).
+	// A started line with no matching completion is exactly the trace wanted.
+	observ.EmitSpan(observ.Span{Name: label + " started", Start: opStart})
 	out, opErr := op.Run(ctx, engine.OpDeps{
 		Repo:     s.repo,
 		Events:   events,

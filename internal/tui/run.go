@@ -1,10 +1,13 @@
 package tui
 
 import (
+	"context"
 	"os"
+	"path/filepath"
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/repos"
 )
@@ -18,6 +21,21 @@ func Run(svc *domain.Service) (string, error) {
 	m.statePath = repos.DefaultStatePath()
 	if home, err := os.UserHomeDir(); err == nil {
 		m.initHomeDir = home
+	}
+	// Honor [debug] log_operations at startup. Wired here — the real entry point
+	// that unit tests bypass (like statePath above) — rather than in loadCmd, so
+	// enabling the operation log never performs a global SetSpanSink side effect
+	// during a test's model load. The , Settings toggle drives it thereafter.
+	cfg := config.Defaults()
+	if top, err := svc.TopLevel(context.Background()); err == nil && top != "" {
+		if c, cerr := config.Load(config.DefaultGlobalPath(), filepath.Join(top, ".gg.toml")); cerr == nil {
+			cfg = c
+		}
+	}
+	if cfg.Debug.LogOperations {
+		if err := m.opLog.enable(); err != nil {
+			m.statusMsg = "operation log: " + err.Error()
+		}
 	}
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	final, err := p.Run()

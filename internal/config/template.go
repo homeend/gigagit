@@ -43,6 +43,8 @@ var settingDocs = []settingDoc{
 	{"ui", "commit_search_max_pages", 5, "pages eager /-search scans before asking to search deeper"},
 
 	{"ui", "show_eol_only_changes", false, "show files whose only unstaged change is line endings (CRLF↔LF); default hides them as noise"},
+
+	{"debug", "log_operations", false, "mirror every op + git invocation (redacted) to the operation log; toggle live from the , Settings menu"},
 }
 
 // tomlScalar renders a registry value as it appears in TOML.
@@ -66,7 +68,7 @@ func Template() string {
 	b.WriteString("# gg configuration — every setting with its default.\n")
 	b.WriteString("# Uncomment a line to override the default. Values shown are gg's built-in\n")
 	b.WriteString("# defaults; leaving a line commented keeps tracking the default across versions.\n")
-	for _, section := range []string{"worktree", "ui"} {
+	for _, section := range []string{"worktree", "ui", "debug"} {
 		b.WriteString("\n[" + section + "]\n")
 		for _, d := range settingDocs {
 			if d.section != section {
