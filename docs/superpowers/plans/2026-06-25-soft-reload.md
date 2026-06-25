@@ -298,6 +298,18 @@ func TestSoftReloadShowsGlyphAndStatus(t *testing.T) {
 	}
 }
 
+// Direct panelLabel test: the per-panel glyph is proven in ISOLATION from the
+// status line (which also emits ⏳), so a broken panelLabel edit can't pass on
+// the status line alone.
+func TestPanelLabelShowsGlyphDuringSoftReload(t *testing.T) {
+	m := loadedModel(t)
+	m.softReload = true
+	got := m.panelLabel(panelBranches, "Branches")
+	if !strings.Contains(got, commitsLoadingGlyph) {
+		t.Fatalf("Branches label should carry the glyph during soft reload: %q", got)
+	}
+}
+
 // Without a soft reload the Branches title carries no glyph (no false positive).
 func TestNoGlyphWhenNotReloading(t *testing.T) {
 	m := loadedModel(t)
@@ -312,7 +324,7 @@ func TestNoGlyphWhenNotReloading(t *testing.T) {
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `go test ./internal/tui/ -run 'SoftReloadShowsGlyph|NoGlyphWhenNot' -v`
+Run: `go test ./internal/tui/ -run 'SoftReloadShowsGlyph|PanelLabelShowsGlyph|NoGlyphWhenNot' -v`
 Expected: `TestSoftReloadShowsGlyphAndStatus` FAILS (no per-panel glyph on Branches, no `reloading…` text). `TestNoGlyphWhenNotReloading` PASSES (locks the idle case).
 
 - [ ] **Step 3: Append the glyph to every panel title during a soft reload**
@@ -334,15 +346,12 @@ func (m Model) panelLabel(p panel, base string) string {
 	}
 ```
 
-Change to:
+Change to (move the Commits count out of the glyph concern, then stamp ONE glyph
+from a unified condition — keeps ordering consistent `Commits 42+ ⏳` /
+`Branches ⏳` and removes the double-glyph guard):
 
 ```go
 func (m Model) panelLabel(p panel, base string) string {
-	// During a soft reload (r) every panel shows the loading glyph; the Commits
-	// panel already stamps it via commitsLoading, so guard against a double glyph.
-	if m.softReload && !(p == panelCommits && m.commitsLoading) {
-		base += " " + commitsLoadingGlyph
-	}
 	if p == panelCommits {
 		n := len(m.commits)
 		if m.commitsExhausted {
@@ -350,9 +359,11 @@ func (m Model) panelLabel(p panel, base string) string {
 		} else {
 			base += " " + strconv.Itoa(n) + "+"
 		}
-		if m.commitsLoading {
-			base += " " + commitsLoadingGlyph
-		}
+	}
+	// Loading glyph: the Commits panel shows it during a feed reload/page
+	// (commitsLoading); a soft reload (r) shows it on every panel.
+	if m.softReload || (p == panelCommits && m.commitsLoading) {
+		base += " " + commitsLoadingGlyph
 	}
 ```
 
@@ -372,7 +383,7 @@ In `internal/tui/view.go`, after the `if m.running { … }` block (currently end
 
 - [ ] **Step 5: Run the tests to verify they pass**
 
-Run: `go test ./internal/tui/ -run 'SoftReloadShowsGlyph|NoGlyphWhenNot' -v`
+Run: `go test ./internal/tui/ -run 'SoftReloadShowsGlyph|PanelLabelShowsGlyph|NoGlyphWhenNot' -v`
 Expected: PASS (both).
 
 - [ ] **Step 6: Run the full tui package + gofmt/vet**
@@ -408,6 +419,11 @@ Add an entry under the current unreleased/top section:
 ```
 
 - [ ] **Step 2: Refresh the `r` help text**
+
+First confirm no test pins the current string:
+
+Run: `grep -rn 'reload all panels' internal/tui/`
+Expected: only `internal/tui/help.go:49`. If a `_test.go` file also matches, update that assertion in the same commit.
 
 In `internal/tui/help.go:49`, update the description so it reflects the soft behavior:
 
