@@ -365,6 +365,13 @@ func (m Model) renderInterface() string {
 			statusLine += " · " + formatElapsed(time.Since(m.opStart))
 		}
 	}
+	if m.softReload && !m.running {
+		if statusLine == "" {
+			statusLine = "⏳ reloading…"
+		} else {
+			statusLine = "⏳ reloading… · " + statusLine
+		}
+	}
 	statusLine = truncate(oneLine(statusLine), g.w)
 	// Style after truncation: truncate slices runes and would corrupt ANSI codes.
 	if errMode {

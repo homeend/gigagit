@@ -103,3 +103,43 @@ func TestReRootIsHardReload(t *testing.T) {
 		t.Fatal("reRoot should keep the blank loading screen")
 	}
 }
+
+// Every panel title carries the ⏳ glyph during a soft reload, and the status
+// line shows "reloading…".
+func TestSoftReloadShowsGlyphAndStatus(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 100, 30
+	m.focus = panelCommits
+	m.loading = true
+	m.softReload = true
+	out := m.View()
+	if !strings.Contains(out, commitsLoadingGlyph) {
+		t.Fatalf("soft reload should show the %q glyph:\n%s", commitsLoadingGlyph, out)
+	}
+	if !strings.Contains(out, "reloading…") {
+		t.Fatalf("soft reload should show a reloading status line:\n%s", out)
+	}
+}
+
+// Direct panelLabel test: the per-panel glyph is proven in ISOLATION from the
+// status line (which also emits ⏳), so a broken panelLabel edit can't pass on
+// the status line alone.
+func TestPanelLabelShowsGlyphDuringSoftReload(t *testing.T) {
+	m := loadedModel(t)
+	m.softReload = true
+	got := m.panelLabel(panelBranches, "Branches")
+	if !strings.Contains(got, commitsLoadingGlyph) {
+		t.Fatalf("Branches label should carry the glyph during soft reload: %q", got)
+	}
+}
+
+// Without a soft reload the Branches title carries no glyph (no false positive).
+func TestNoGlyphWhenNotReloading(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 100, 30
+	m.focus = panelCommits
+	got := m.panelLabel(panelBranches, "Branches")
+	if strings.Contains(got, commitsLoadingGlyph) {
+		t.Fatalf("Branches label should have no glyph when idle: %q", got)
+	}
+}
