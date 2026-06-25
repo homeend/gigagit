@@ -106,6 +106,7 @@ func TestSquashRowVisibleWith2Commits(t *testing.T) {
 func TestSquashRefusesWipInSelection(t *testing.T) {
 	m := loadedModelLinearCommits(t, 3)
 	m.focus = panelCommits
+	m.wipRows = []wipRow{{wipWorktree, 1}} // a live WIP row so its sentinel key is valid
 	m.commitCompareSet = selectionSet(m.commits[0].Hash, wipKey(wipRow{kind: wipWorktree}))
 	row, ok := m.commitSquashRow()
 	if !ok {

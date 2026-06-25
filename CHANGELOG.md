@@ -9,6 +9,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Drop multiple selected commits at once.** With 2+ commits in the Commits
+  panel's `◉` compare selection, the `.` menu now offers **Drop N selected
+  commits** — deleting them all in a single interactive rebase. Unlike squash
+  there is no adjacency requirement; non-contiguous commits can be dropped and
+  the gaps are preserved. (The existing single-cursor **Drop commit** is
+  unchanged.) Working-tree / staged rows and off-branch selections are refused;
+  conflicts pause for `git rebase --continue`.
+
 - **Files panel ignores line-ending-only changes.** A tracked file whose only
   unstaged difference is its line endings (CRLF↔LF) — common on Windows/WSL — no
   longer shows up as modified in the Files panel or its count badge. Detection
@@ -19,6 +27,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   `gg status` is unaffected — it stays faithful to `git status`.
 
 ### Fixed
+- **The commit `◉` selection count no longer over-counts stale rows.** After an
+  operation rewrote history (e.g. a drop/squash rebase), keys for commits that
+  no longer exist lingered in the selection and inflated the `.` menu labels
+  ("Squash N commits" / "Compare range of N commits") — selecting 3 more after a
+  4-commit selection could read "7". The labels and size gates now count only
+  keys that still resolve to a live row.
+
 - **A git command that fails to start now reports the real cause instead of a
   bare `exit -1`.** When git is killed by a signal or never starts (fork/exec
   under resource pressure on a huge repo, etc.) it produces no stderr and an

@@ -59,3 +59,34 @@ func BuildSingleEdit(commits []model.RangeCommit, target string, e Edit) (Plan, 
 	}
 	return Plan{Entries: entries}, nil
 }
+
+// BuildDrop builds the rebase plan that drops every target commit over an
+// oldest-first commit range (git todo order): each target becomes Drop, every
+// other commit keeps Pick with Orig carried from the range message. Unlike
+// squash there is no adjacency requirement — non-contiguous drops are valid
+// git. Errors when no targets are given or a target isn't in the range.
+func BuildDrop(commits []model.RangeCommit, targets []string) (Plan, error) {
+	if len(targets) == 0 {
+		return Plan{}, fmt.Errorf("select at least 1 commit to drop")
+	}
+	isTarget := make(map[string]bool, len(targets))
+	pos := make(map[string]bool, len(commits))
+	for _, c := range commits {
+		pos[c.Hash] = true
+	}
+	for _, t := range targets {
+		if !pos[t] {
+			return Plan{}, fmt.Errorf("commit %s is not on the current branch", t)
+		}
+		isTarget[t] = true
+	}
+	entries := make([]Entry, len(commits))
+	for i, c := range commits {
+		action := Pick
+		if isTarget[c.Hash] {
+			action = Drop
+		}
+		entries[i] = Entry{Sha: c.Hash, Action: action, Orig: c.Message}
+	}
+	return Plan{Entries: entries}, nil
+}

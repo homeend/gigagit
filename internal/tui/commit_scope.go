@@ -449,35 +449,55 @@ func (m Model) commitCompareClearRow() (actionRow, bool) {
 //
 // ok is false (with a note) when fewer than 2 are selected or the root guard
 // trips.
+// compareKeyValid reports whether a ◉-set key still resolves to a live row —
+// an existing commit in the loaded feed, or a present WIP (working tree /
+// staged) sentinel. The set is deliberately stale-tolerant (keys persist
+// across scope/solo changes and history rewrites), so any code that shows a
+// count or gates on the selection size must count only valid keys; otherwise a
+// stale entry (e.g. a commit dropped by a rebase) inflates the count.
+func (m Model) compareKeyValid(key string) bool {
+	switch key {
+	case wipKey(wipRow{kind: wipWorktree}), wipKey(wipRow{kind: wipStaged}):
+		for _, r := range m.wipRows {
+			if wipKey(r) == key {
+				return true
+			}
+		}
+		return false
+	default:
+		for i := range m.commits {
+			if m.commits[i].Hash == key {
+				return true
+			}
+		}
+		return false
+	}
+}
+
+// validCompareKeys returns the ◉-set keys whose row still exists (see
+// compareKeyValid). Use its length — not len(m.commitCompareSet) — for any
+// user-visible count or size gate.
+func (m Model) validCompareKeys() []string {
+	var out []string
+	for k := range m.commitCompareSet {
+		if m.compareKeyValid(k) {
+			out = append(out, k)
+		}
+	}
+	return out
+}
+
 func (m Model) compareSelectionEndpoints() (left, right model.Endpoint, note string, ok bool) {
 	// Iterate the SET directly (not displayIndices) so the selection is
 	// independent of the active / filter; drop keys whose row no longer exists
 	// (a committed/cleared index leaves a stale "staged" key, etc.).
-	valid := func(key string) bool {
-		switch key {
-		case wipKey(wipRow{kind: wipWorktree}), wipKey(wipRow{kind: wipStaged}):
-			for _, r := range m.wipRows {
-				if wipKey(r) == key {
-					return true
-				}
-			}
-			return false
-		default:
-			for i := range m.commits {
-				if m.commits[i].Hash == key {
-					return true
-				}
-			}
-			return false
-		}
-	}
 	type sk struct {
 		key  string
 		rank int
 	}
 	var sel []sk
 	for k := range m.commitCompareSet {
-		if valid(k) {
+		if m.compareKeyValid(k) {
 			sel = append(sel, sk{k, m.compareKeyRank(k)})
 		}
 	}
@@ -518,7 +538,7 @@ func (m Model) commitCompareSelectionRow() (actionRow, bool) {
 	if m.focus != panelCommits || !m.opsIdle() {
 		return actionRow{}, false
 	}
-	n := len(m.commitCompareSet)
+	n := len(m.validCompareKeys())
 	if n < 2 {
 		return actionRow{}, false
 	}
@@ -549,10 +569,10 @@ func (m Model) commitSquashRow() (actionRow, bool) {
 	if m.focus != panelCommits || !m.opsIdle() || m.status.Branch == "" {
 		return actionRow{}, false
 	}
-	if len(m.commitCompareSet) < 2 {
+	n := len(m.validCompareKeys())
+	if n < 2 {
 		return actionRow{}, false
 	}
-	n := len(m.commitCompareSet)
 	return actionRow{
 		id:    "commit-squash",
 		label: "Squash " + strconv.Itoa(n) + " commits",
@@ -580,6 +600,54 @@ func (m Model) commitSquashRow() (actionRow, bool) {
 				return m, nil
 			}
 			return m, m.loadSquashRangeCmd(m.status.Branch, oldest+"^", targets)
+		},
+	}, true
+}
+
+// commitDropSelectionRow offers "Drop N selected commits" when 2+ commits are
+// in the ◉ selection and a branch is checked out — the multi-commit analog of
+// the single-cursor "Drop commit" row. The run validates the selection
+// (commits-only, on the current branch) after loading the range; the oldest
+// selected commit (by feed rank) seeds the rebase base onto..HEAD, and
+// rebaseplan.BuildDrop marks every target Drop (no adjacency requirement).
+func (m Model) commitDropSelectionRow() (actionRow, bool) {
+	if m.focus != panelCommits || !m.opsIdle() || m.status.Branch == "" {
+		return actionRow{}, false
+	}
+	n := len(m.validCompareKeys())
+	if n < 2 {
+		return actionRow{}, false
+	}
+	return actionRow{
+		id:    "commit-drop-selection",
+		label: "Drop " + strconv.Itoa(n) + " selected commits",
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			var targets []string
+			oldest, oldestRank := "", -1
+			for k := range m.commitCompareSet {
+				if !m.compareKeyValid(k) {
+					continue
+				}
+				switch k {
+				case wipKey(wipRow{kind: wipWorktree}), wipKey(wipRow{kind: wipStaged}):
+					m.statusMsg = "drop is commits-only; remove the working tree / staged row"
+					return m, nil
+				}
+				targets = append(targets, k)
+				if r := m.compareKeyRank(k); r > oldestRank {
+					oldest, oldestRank = k, r
+				}
+			}
+			if len(targets) < 2 {
+				m.statusMsg = "select at least 2 commits to drop"
+				return m, nil
+			}
+			// Root guard: the oldest commit needs a parent to rebase onto.
+			if oldestRank >= 0 && oldestRank < len(m.commits) && len(m.commits[oldestRank].Parents) == 0 {
+				m.statusMsg = "can't drop a range that includes the root commit"
+				return m, nil
+			}
+			return m, m.loadDropRangeCmd(m.status.Branch, oldest+"^", targets)
 		},
 	}, true
 }
