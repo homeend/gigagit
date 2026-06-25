@@ -572,10 +572,11 @@ func (m Model) renderPanel(p panel, label string, rows []string, decos []rowDeco
 				}
 			}
 			text := row
-			// Files panel only: left-elide so a too-long path keeps its filename
-			// instead of tail-truncating it off. Cutoff mode only — wrap/scroll
-			// already reveal the whole row, and pre-eliding would corrupt them.
-			if p == panelFiles && m.dispModes[p] == modeCutoff {
+			// File panels (Files + Staged): middle-elide so a too-long path keeps
+			// its filename instead of tail-truncating it off. Cutoff mode only —
+			// wrap/scroll already reveal the whole row, and pre-eliding would
+			// corrupt them.
+			if m.isFilesPanel(p) && m.dispModes[p] == modeCutoff {
 				text = elideFilePath(row, innerW-lipgloss.Width(prefix))
 			}
 			wr[i] = winRow{text: prefix + text, style: st, decorate: deco}

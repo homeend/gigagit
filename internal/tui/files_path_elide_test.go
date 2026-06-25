@@ -78,16 +78,26 @@ func TestFilesPanelMiddleElidesPath(t *testing.T) {
 	}
 }
 
-// Scope guard: the change is Files-only. The Staged panel below keeps the old
-// tail-truncation (basename falls off the right edge at the same narrow width).
-func TestStagedPanelUnaffected(t *testing.T) {
+// The Staged panel (bottom of the left column) middle-elides long paths the
+// same way the Files panel does: the path's beginning and the filename stay;
+// the directories nearest the file are dropped.
+func TestStagedPanelMiddleElidesPath(t *testing.T) {
 	m := New(nil)
 	m.status = model.WorkingTreeStatus{Files: []model.FileStatus{
 		{Path: "internal/tui/some/deep/view.go", Kind: model.KindTracked, Staged: 'M'},
 	}}
 	rows := m.statusRows(panelStaged)
-	out := m.renderPanel(panelStaged, "Staged", rows, nil, 20, 6)
-	if strings.Contains(out, "view.go") {
-		t.Errorf("Staged panel should still tail-truncate (basename dropped); got:\n%s", out)
+	out := m.renderPanel(panelStaged, "Staged", rows, nil, 28, 6)
+	if !strings.Contains(out, "view.go") {
+		t.Errorf("Staged panel must keep the filename; got:\n%s", out)
+	}
+	if !strings.Contains(out, "internal/tu") {
+		t.Errorf("Staged panel must keep the path's beginning; got:\n%s", out)
+	}
+	if !strings.Contains(out, "…/") {
+		t.Errorf("Staged panel must mark the dropped middle with …/; got:\n%s", out)
+	}
+	if strings.Contains(out, "deep") || strings.Contains(out, "some") {
+		t.Errorf("Staged panel should drop the dirs nearest the file; got:\n%s", out)
 	}
 }
