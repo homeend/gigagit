@@ -1670,16 +1670,50 @@ func (m Model) handleStageKey() (tea.Model, tea.Cmd) {
 	if !m.canStage() {
 		return m, nil
 	}
-	bi, _ := m.backingIndex(m.focus)
-	f := m.status.Files[bi]
-	if f.Kind == model.KindUnmerged {
-		m.statusMsg = "resolve conflicts first"
+	paths, hadConflict := m.stageTargets()
+	if len(paths) == 0 {
+		if hadConflict {
+			m.statusMsg = "resolve conflicts first"
+		}
 		return m, nil
 	}
+	// Marks are a transient selection consumed by this op; clear them so they do
+	// not carry over to the panel the files land in.
+	m.fileMarks = nil
 	// Direction is the panel: Files stages, Staged unstages.
 	m.running = true
 	m.statusMsg = "working…"
-	return m, m.stageCmd(engine.Stage{Paths: []string{f.Path}, Unstage: m.focus == panelStaged})
+	return m, m.stageCmd(engine.Stage{Paths: paths, Unstage: m.focus == panelStaged})
+}
+
+// stageTargets resolves what space stages/unstages: the marked file set
+// restricted to the focused panel's members when any marks exist, otherwise the
+// cursor row. Conflicted (unmerged) files are dropped (they must be resolved
+// first); hadConflict reports whether any target was skipped for that reason, so
+// an all-conflict selection can explain its no-op. Like discardTargets, this
+// reads m.status.Files directly so an active text filter never narrows the set.
+func (m Model) stageTargets() (paths []string, hadConflict bool) {
+	if len(m.fileMarks) > 0 {
+		for i, f := range m.status.Files {
+			if !m.fileMarks[f.Path] || !m.memberOf(m.focus, i) {
+				continue
+			}
+			if f.Kind == model.KindUnmerged {
+				hadConflict = true
+				continue
+			}
+			paths = append(paths, f.Path)
+		}
+		return paths, hadConflict
+	}
+	if bi, ok := m.backingIndex(m.focus); ok {
+		f := m.status.Files[bi]
+		if f.Kind == model.KindUnmerged {
+			return nil, true
+		}
+		paths = []string{f.Path}
+	}
+	return paths, hadConflict
 }
 
 // discardTargets resolves what d should discard: the marked file set if any,

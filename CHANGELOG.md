@@ -37,6 +37,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   `gg status` is unaffected — it stays faithful to `git status`.
 
 ### Fixed
+- **`space` now stages every marked file, not just the cursor row.** Marking
+  files with `m` in the Files (or Staged) panel then pressing `space` stages
+  (unstages) all of them in a single `git add` / `git restore --staged`,
+  matching how `d` discards the marked set. The marks are cleared by the op, so
+  the staged files no longer keep their `◆` marker after moving to the Staged
+  panel. With no marks, `space` still acts on the cursor row.
 - **A locked worktree can now be removed.** An interrupted `git worktree add`
   (e.g. quitting gg mid-checkout on a huge repo) leaves the worktree locked with
   reason "initializing", which git refuses to remove even with `--force`. Remove

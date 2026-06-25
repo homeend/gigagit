@@ -70,6 +70,94 @@ func TestSpaceStagesSelectedFile(t *testing.T) {
 	}
 }
 
+// multiStageModel: a loaded model on a repo with three unstaged modifications
+// (a.txt, b.txt, c.txt), focused on the Files panel.
+func multiStageModel(t *testing.T) (Model, string) {
+	t.Helper()
+	dir, repo := newRepoDir(t)
+	for _, name := range []string{"a.txt", "b.txt", "c.txt"} {
+		os.WriteFile(filepath.Join(dir, name), []byte("seed\n"), 0o644)
+	}
+	gitInDir(t, dir, "add", ".")
+	gitInDir(t, dir, "commit", "-m", "seed")
+	for _, name := range []string{"a.txt", "b.txt", "c.txt"} {
+		os.WriteFile(filepath.Join(dir, name), []byte("dirty\n"), 0o644)
+	}
+	m := New(domain.New(repo))
+	loaded, _ := m.Update(m.loadCmd()())
+	m = loaded.(Model)
+	m.focus = panelFiles
+	return m, dir
+}
+
+func stagedByte(m Model, path string) byte {
+	for _, f := range m.status.Files {
+		if f.Path == path {
+			return f.Staged
+		}
+	}
+	return 0
+}
+
+func isStaged(b byte) bool { return b != '.' && b != 0 && b != '?' }
+
+// Marking multiple files in the Files panel and pressing space must stage ALL
+// marked files in one op (not just the cursor row) and clear the marks so they
+// do not carry over to the Staged panel.
+func TestSpaceStagesAllMarkedFiles(t *testing.T) {
+	m, _ := multiStageModel(t)
+	m.fileMarks = map[string]bool{"a.txt": true, "c.txt": true}
+	m.sel[panelFiles] = 0 // cursor is on a.txt; b.txt is unmarked
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeySpace})
+	m = driveStage(t, updated.(Model), cmd)
+
+	if !isStaged(stagedByte(m, "a.txt")) {
+		t.Errorf("a.txt should be staged; staged byte = %q", stagedByte(m, "a.txt"))
+	}
+	if !isStaged(stagedByte(m, "c.txt")) {
+		t.Errorf("c.txt should be staged; staged byte = %q", stagedByte(m, "c.txt"))
+	}
+	if isStaged(stagedByte(m, "b.txt")) {
+		t.Errorf("b.txt was not marked and must not be staged; staged byte = %q", stagedByte(m, "b.txt"))
+	}
+	if len(m.fileMarks) != 0 {
+		t.Errorf("marks must be cleared after staging; fileMarks = %v", m.fileMarks)
+	}
+	// The reported bug: the staged files must not show a mark glyph in the
+	// Staged panel.
+	if marked := m.markedDisplayIndices(panelStaged); len(marked) != 0 {
+		t.Errorf("Staged panel must have no marked rows after staging; got %v", marked)
+	}
+}
+
+// The same gesture in the Staged panel unstages all marked files.
+func TestSpaceUnstagesAllMarkedFiles(t *testing.T) {
+	m, dir := multiStageModel(t)
+	gitInDir(t, dir, "add", ".") // a,b,c all staged now
+	loaded, _ := m.Update(m.loadCmd()())
+	m = loaded.(Model)
+	m.focus = panelStaged
+	m.fileMarks = map[string]bool{"a.txt": true, "c.txt": true}
+	m.sel[panelStaged] = 0
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeySpace})
+	m = driveStage(t, updated.(Model), cmd)
+
+	if isStaged(stagedByte(m, "a.txt")) {
+		t.Errorf("a.txt should be unstaged; staged byte = %q", stagedByte(m, "a.txt"))
+	}
+	if isStaged(stagedByte(m, "c.txt")) {
+		t.Errorf("c.txt should be unstaged; staged byte = %q", stagedByte(m, "c.txt"))
+	}
+	if !isStaged(stagedByte(m, "b.txt")) {
+		t.Errorf("b.txt was not marked and must stay staged; staged byte = %q", stagedByte(m, "b.txt"))
+	}
+	if len(m.fileMarks) != 0 {
+		t.Errorf("marks must be cleared after unstaging; fileMarks = %v", m.fileMarks)
+	}
+}
+
 func TestSpaceOnConflictedFileIsNoOp(t *testing.T) {
 	dir, repo := newRepoDir(t)
 	// Build a merge conflict on c.txt so it becomes an unmerged Status row.
