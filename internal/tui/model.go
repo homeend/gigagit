@@ -1975,8 +1975,8 @@ func (m Model) View() string {
 	if m.modal != nil {
 		return m.render()
 	}
-	if m.loading {
-		return "gigagit (loading…)\n"
+	if m.loading && !m.softReload {
+		return "gigagit (loading…)\n" // startup + repo-switch keep the blank screen
 	}
 	if m.err != nil {
 		return "error: " + m.err.Error() + "\n"

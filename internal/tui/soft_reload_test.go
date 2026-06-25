@@ -1,6 +1,9 @@
 package tui
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // Pressing r on a loaded model starts a soft reload: loading + softReload set.
 func TestRKeyStartsSoftReload(t *testing.T) {
@@ -56,5 +59,47 @@ func TestReRootClearsInFlightSoftReload(t *testing.T) {
 	updated, _ := m.reRoot(m.currentWorktree)
 	if updated.(Model).softReload {
 		t.Fatal("reRoot must clear softReload")
+	}
+}
+
+// During a soft reload the panels stay on screen (no "gigagit (loading…)").
+func TestViewSoftRendersDuringReload(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 100, 30
+	m.focus = panelCommits // keep every panel label visible (see TestViewRendersPanelsWithoutPanic)
+	m.loading = true
+	m.softReload = true
+	out := m.View()
+	if strings.Contains(out, "gigagit (loading…)") {
+		t.Fatalf("soft reload should not blank the screen:\n%s", out)
+	}
+	if !strings.Contains(out, "Branches") || !strings.Contains(out, "Commits") {
+		t.Fatalf("soft reload should keep panels visible:\n%s", out)
+	}
+}
+
+// A hard reload (loading without softReload — startup / reRoot) still blanks.
+func TestViewBlanksForHardReload(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 100, 30
+	m.loading = true
+	m.softReload = false
+	out := m.View()
+	if !strings.Contains(out, "gigagit (loading…)") {
+		t.Fatalf("hard reload should blank to the loading screen, got:\n%s", out)
+	}
+}
+
+// reRoot (repo switch) sets loading WITHOUT softReload, so its View blanks.
+func TestReRootIsHardReload(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 100, 30
+	updated, _ := m.reRoot(m.currentWorktree)
+	mm := updated.(Model)
+	if mm.softReload {
+		t.Fatal("reRoot must not set softReload")
+	}
+	if !strings.Contains(mm.View(), "gigagit (loading…)") {
+		t.Fatal("reRoot should keep the blank loading screen")
 	}
 }
