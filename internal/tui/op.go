@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"sync"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -176,6 +177,16 @@ type opFinishedMsg struct {
 	err error
 }
 
+// heartbeatMsg fires ~once a second while an op runs. Its only job is to wake
+// Update so View re-renders the busy line with a fresh elapsed time; the model
+// stops re-arming it once the op finishes.
+type heartbeatMsg struct{}
+
+// heartbeatCmd schedules the next heartbeat tick.
+func heartbeatCmd() tea.Cmd {
+	return tea.Tick(time.Second, func(time.Time) tea.Msg { return heartbeatMsg{} })
+}
+
 // decisionState holds an in-flight modal decision. Engine-driven decisions
 // answer over reply; frontend-only decisions (e.g. jump-to-worktree) set
 // onResolve instead — the modal key handler calls it with the live,
@@ -225,6 +236,7 @@ func (m Model) startOp(op engine.Operation) (Model, tea.Cmd) {
 		}
 	}()
 	m.running = true
+	m.opStart = time.Now() // the perpetual heartbeat (Init) reads this to show elapsed time
 	m.statusMsg = "working…"
 	m.opMsgs = msgs
 	m.opCancel = cancel

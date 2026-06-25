@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/homeend/gigagit/internal/agentinit"
+	"github.com/homeend/gigagit/internal/config"
 )
 
 // settingsPopup is the generic Settings surface opened with `,`. v1 has a
@@ -26,10 +27,61 @@ type settingsPopup struct {
 const (
 	settingsMenuAgents   = "Set up agent skills (using-gg)"
 	settingsMenuIdentity = "Identity & profiles"
+	settingsMenuOpLog    = "Operation log"
 )
 
 // settingsMenu is the top-level menu order.
-var settingsMenu = []string{settingsMenuAgents, settingsMenuIdentity}
+var settingsMenu = []string{settingsMenuAgents, settingsMenuIdentity, settingsMenuOpLog}
+
+// settingsMenuLabel renders one menu row. The operation-log row is dynamic: it
+// shows the on/off state and the log filename, so the menu both reveals whether
+// logging is enabled and tells the user where to find it.
+func settingsMenuLabel(m Model, i int) string {
+	if settingsMenu[i] == settingsMenuOpLog {
+		path := "(no state dir)"
+		on := false
+		if m.opLog != nil {
+			on = m.opLog.on
+			if m.opLog.path != "" {
+				path = m.opLog.path
+			}
+		}
+		if on {
+			return settingsMenuOpLog + ": on — " + path
+		}
+		return settingsMenuOpLog + ": off (" + path + ")"
+	}
+	return settingsMenu[i]
+}
+
+// toggleOpLog flips the operation log, persisting the choice to the global
+// config so it survives restarts (the user's persist-to-config choice).
+func (m Model) toggleOpLog() Model {
+	if m.opLog == nil {
+		m.opLog = newOpLog()
+	}
+	var err error
+	if m.opLog.on {
+		err = m.opLog.disable()
+	} else {
+		err = m.opLog.enable()
+	}
+	if err != nil {
+		m.statusMsg = "operation log: " + err.Error()
+		return m
+	}
+	m.cfg.Debug.LogOperations = m.opLog.on // keep the in-memory view in sync
+	if perr := config.SetGlobalDebugLogOperations(config.DefaultGlobalPath(), m.opLog.on); perr != nil {
+		m.statusMsg = "operation log toggled but not saved: " + perr.Error()
+		return m
+	}
+	if m.opLog.on {
+		m.statusMsg = "operation log on — " + m.opLog.path
+	} else {
+		m.statusMsg = "operation log off"
+	}
+	return m
+}
 
 // openSettings opens the menu screen.
 func (m Model) openSettings() Model {
@@ -96,11 +148,13 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			}
 			return m, nil
 		case tea.KeyEnter:
-			switch p.menuSel {
-			case 0:
+			switch settingsMenu[p.menuSel] {
+			case settingsMenuAgents:
 				return m.openAgentPicker(), nil
-			case 1:
+			case settingsMenuIdentity:
 				return m.openIdentityView()
+			case settingsMenuOpLog:
+				return m.toggleOpLog(), nil // stays open so the state flip is visible
 			}
 			return m, nil
 		}
@@ -159,16 +213,16 @@ func (p *settingsPopup) box(m Model) string {
 	var b strings.Builder
 	if !p.picker {
 		b.WriteString("Settings\n\n")
-		for i, label := range settingsMenu {
+		for i := range settingsMenu {
 			prefix := "  "
 			if i == p.menuSel {
 				prefix = "> "
 			}
-			b.WriteString(prefix + label + "\n")
+			b.WriteString(prefix + settingsMenuLabel(m, i) + "\n")
 		}
 		// A short static menu (not a renderWindow list), so z has no visible
 		// effect here — only the picker advertises [z] mode.
-		b.WriteString("\n[↑/↓] select  [enter] open  [esc] close")
+		b.WriteString("\n[↑/↓] select  [enter] open/toggle  [esc] close")
 	} else {
 		b.WriteString("Set up agent skills\n\n")
 		if len(p.dets) == 0 {

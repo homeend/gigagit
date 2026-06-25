@@ -9,6 +9,17 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Busy line shows elapsed time.** While an operation runs, the status line's
+  `⏳` indicator now counts up (`⏳ creating worktree… 2m14s`), driven by a
+  once-a-second heartbeat. A long op on a huge repo — e.g. a 20GB `git worktree
+  add` checkout that emits no progress — visibly advances instead of looking
+  frozen.
+- **Operation debug log.** Optional diagnostic log that mirrors every operation
+  and git invocation (redacted) as JSON lines to `operations.log` in the gg
+  state dir, leaving a trace of a hung or slow op. Toggle it live from the `,`
+  Settings menu (which shows the on/off state and the log's full path); the
+  choice persists to the global config's `[debug] log_operations`, so it also
+  survives restarts. Off by default.
 - **Files panel ignores line-ending-only changes.** A tracked file whose only
   unstaged difference is its line endings (CRLF↔LF) — common on Windows/WSL — no
   longer shows up as modified in the Files panel or its count badge. Detection

@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
@@ -296,6 +297,20 @@ func wrapParts(parts []string, width int, sep string) []string {
 	return append(lines, cur)
 }
 
+// formatElapsed renders an op's running duration compactly for the busy line:
+// "5s", "1m30s", "2h03m". Rounded to whole seconds.
+func formatElapsed(d time.Duration) string {
+	d = d.Round(time.Second)
+	switch {
+	case d >= time.Hour:
+		return fmt.Sprintf("%dh%02dm", int(d.Hours()), int(d.Minutes())%60)
+	case d >= time.Minute:
+		return fmt.Sprintf("%dm%02ds", int(d.Minutes()), int(d.Seconds())%60)
+	default:
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	}
+}
+
 // renderInterface draws the header, the panels, and the footer/status, sized to
 // fit the current terminal so the output never exceeds width×height.
 func (m Model) renderInterface() string {
@@ -343,6 +358,12 @@ func (m Model) renderInterface() string {
 	statusLine := strings.Join(parts, " · ")
 	if m.running {
 		statusLine = "⏳ " + statusLine
+		// Append the elapsed time so a long op (a 20GB worktree checkout that
+		// emits no events) visibly advances instead of looking frozen. The
+		// heartbeat tick re-renders this once a second.
+		if !m.opStart.IsZero() {
+			statusLine += " · " + formatElapsed(time.Since(m.opStart))
+		}
 	}
 	statusLine = truncate(oneLine(statusLine), g.w)
 	// Style after truncation: truncate slices runes and would corrupt ANSI codes.
