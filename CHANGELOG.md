@@ -60,6 +60,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   message so the failure is diagnosable.
 
 ### Changed
+- **Readable push-rejection messages.** A rejected push no longer dumps git's
+  raw multi-line stderr into the one-line status bar. The common reasons are
+  rewritten into a single actionable sentence: a **non-fast-forward** rejection
+  → "the remote has commits you don't have; pull (or fetch + rebase) first, or
+  force-push to overwrite"; a `--force-with-lease` **stale-info** refusal → "the
+  remote moved since your last fetch; fetch & review, then retry" (so the lease
+  safety net is explained rather than mistaken for a defect); a server-side
+  **protected-branch / pre-receive hook** rejection gets its own message.
 - **Module path is now `github.com/homeend/gigagit`** (was
   `github.com/gigagit/gg`). The repo is hosted at
   <https://github.com/homeend/gigagit>, so the tool installs with
