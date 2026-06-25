@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v29 -->
+<!-- gg:using-gg:v30 -->
 
 # Using gg (gigagit)
 
@@ -152,6 +152,8 @@ guards against removing the worktree you are standing in.
   `add` resolves branch/path templates from `.gg.toml` and may prompt on stdin
   for `<user:...>` fields; `add --branch` checks out the EXISTING branch in
   the new worktree (no new branch; refuses a branch already checked out).
+  `remove` refuses a dirty or **locked** worktree (an interrupted `add` can
+  leave one locked); `--force` removes a dirty tree and unlocks a locked one.
 - `gg repo list` / `gg repo switch <query>` — the known-repository registry
   (MRU); `switch` prints the path of the unique match.
 - `gg inspect` — one-shot repo summary (scriptable health check).
