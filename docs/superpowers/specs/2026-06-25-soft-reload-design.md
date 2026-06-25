@@ -48,7 +48,23 @@ must keep the blank screen too.
 
 Resolution: a new `softReload bool` flag set **only** by the `r` handler. `View()`
 blanks when `m.loading && !m.softReload` (startup + reRoot) and soft-renders
-otherwise.
+otherwise. `reRoot` explicitly sets `softReload = false` — a repo switch can be
+triggered while a soft reload is in flight (the UI stays live, that's the point),
+and the old repo's panels must stop soft-rendering immediately.
+
+### Flag lifecycle (the double-`r` subtlety)
+
+- **Set true:** only the `r` handler.
+- **Set false:** the **current-generation** `dataLoadedMsg` path (load finished),
+  and `reRoot` (hard reload).
+- **Left untouched on the superseded-gen `dataLoadedMsg` branch.** When two `r`
+  reloads are in flight (`loadGen` bumped twice), the first load's
+  `dataLoadedMsg` arrives with a stale `gen` and is dropped. It must NOT clear
+  `softReload`, or the panels would blank until the second (current) load
+  finishes — reintroducing the flicker. The newer load owns the flag and clears
+  it on its own completion. This never leaves the flag stuck: every load issued
+  by `loadCmd` produces exactly one `dataLoadedMsg`, and the latest generation's
+  message always reaches the current-gen path.
 
 ## Design
 
@@ -57,9 +73,9 @@ Three changes, all in `internal/tui`:
 ### 1. `Model.softReload bool`
 
 New field. The `r` handler sets it alongside `m.loading = true`. Cleared in the
-`dataLoadedMsg` handler next to `m.loading = false`, and on the superseded-load
-early return (so a stale soft reload can't leave the flag stuck). `reRoot` and
-the startup load leave it false.
+current-generation `dataLoadedMsg` path (next to `m.loading = false`) and in
+`reRoot`. **Not** cleared on the superseded-gen early return (see the lifecycle
+note above). The startup load leaves it false (zero value).
 
 `r` handler (model.go:732):
 
@@ -73,8 +89,12 @@ case "r":
     }
 ```
 
-`dataLoadedMsg` handler (model.go:443): clear `m.softReload = false` on both the
-superseded-gen early return and the normal path.
+`dataLoadedMsg` handler (model.go:443): clear `m.softReload = false` on the
+current-gen (normal) path only, next to `m.loading = false`. Leave the
+superseded-gen early return untouched.
+
+`reRoot` (model.go:1949): set `m.softReload = false` alongside its existing
+`m.loading = true`, so a repo switch never soft-renders the outgoing repo.
 
 ### 2. `View()` blanks only for hard reload
 
@@ -140,8 +160,10 @@ Drive-tests through `Update`/`View` (table-style, matching existing tui tests):
 2. `reRoot` still yields the blank `"gigagit (loading…)"` screen
    (`m.softReload` false).
 3. `dataLoadedMsg` for the current `loadGen` clears both `m.loading` and
-   `m.softReload`; a superseded-gen `dataLoadedMsg` also clears `m.softReload`.
-4. Status line shows `reloading…` while `m.softReload`, gone after the load.
+   `m.softReload`; a superseded-gen `dataLoadedMsg` leaves `m.softReload`
+   untouched (the newer in-flight load keeps soft-rendering).
+4. `reRoot` clears `m.softReload` even when a soft reload was in flight.
+5. Status line shows `reloading…` while `m.softReload`, gone after the load.
 
 ## Docs to update on completion
 
