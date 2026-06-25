@@ -80,6 +80,15 @@ func (r *Repo) RemoveWorktree(ctx context.Context, path string, force bool, onLi
 	return err
 }
 
+// UnlockWorktree releases a worktree's lock (`git worktree unlock <path>`). An
+// interrupted `git worktree add` leaves the new worktree locked with reason
+// "initializing", which blocks even `remove --force`; unlocking clears it.
+func (r *Repo) UnlockWorktree(ctx context.Context, path string) error {
+	argv := gitcmd.New("worktree").Arg("unlock", path).ToArgv()
+	_, err := r.Runner.Run(ctx, "git worktree unlock", argv)
+	return err
+}
+
 // DeleteBranch deletes a local branch (`git branch -d|-D <name>`). Without force
 // git refuses to delete a branch that is not fully merged; force uses -D.
 func (r *Repo) DeleteBranch(ctx context.Context, name string, force bool) error {

@@ -37,6 +37,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   `gg status` is unaffected — it stays faithful to `git status`.
 
 ### Fixed
+- **A locked worktree can now be removed.** An interrupted `git worktree add`
+  (e.g. quitting gg mid-checkout on a huge repo) leaves the worktree locked with
+  reason "initializing", which git refuses to remove even with `--force`. Remove
+  now detects the lock and offers an explicit **Unlock and remove** decision
+  (TUI modal; `gg worktree remove --force` answers it non-interactively, also
+  cleaning up a stale entry whose directory was already deleted). A new
+  `git worktree unlock` verb backs it.
 - **The commit `◉` selection count no longer over-counts stale rows.** After an
   operation rewrote history (e.g. a drop/squash rebase), keys for commits that
   no longer exist lingered in the selection and inflated the `.` menu labels
