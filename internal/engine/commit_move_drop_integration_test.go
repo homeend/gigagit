@@ -56,6 +56,30 @@ func TestSingleCommitDrop(t *testing.T) {
 	}
 }
 
+func TestMultiCommitDrop(t *testing.T) {
+	gg := buildGG(t)
+	dir, repo := fourCommitBranch(t)
+	// Drop b and d (non-adjacent) in one rebase. Base onto the oldest target's
+	// parent (b^ == a), the same onto the TUI derives from the oldest selected.
+	onto := shaOf(t, dir, "work~2") + "^" // b's parent
+	commits, err := repo.LogRangeMessages(context.Background(), onto, "work")
+	if err != nil {
+		t.Fatalf("range: %v", err)
+	}
+	b, d := shaOf(t, dir, "work~2"), shaOf(t, dir, "work")
+	plan, err := rebaseplan.BuildDrop(commits, []string{d, b}) // order-independent
+	if err != nil {
+		t.Fatalf("buildDrop: %v", err)
+	}
+	if _, err := (InteractiveRebase{Branch: "work", Onto: onto, Plan: plan, GGBin: gg}).Run(context.Background(), OpDeps{Repo: repo}); err != nil {
+		t.Fatalf("drop: %v", err)
+	}
+	got := subjects(t, dir, "main..work") // newest-first
+	if want := []string{"c", "a"}; strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("after drop b,d: %v, want %v", got, want)
+	}
+}
+
 func TestSingleCommitMoveDown(t *testing.T) {
 	gg := buildGG(t)
 	dir, repo := fourCommitBranch(t)

@@ -1573,6 +1573,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.commitCompareSet = nil // the squash consumes the selection
 		return m.startOp(engine.InteractiveRebase{Branch: msg.branch, Onto: msg.onto, Plan: plan, GGBin: ggBin})
 
+	case dropRangeLoadedMsg:
+		if msg.err != nil {
+			m.statusMsg = "drop: " + msg.err.Error()
+			return m, nil
+		}
+		plan, perr := rebaseplan.BuildDrop(msg.commits, msg.targets)
+		if perr != nil {
+			m.statusMsg = "drop: " + perr.Error()
+			return m, nil
+		}
+		ggBin, err := os.Executable()
+		if err != nil {
+			m.statusMsg = "drop: " + err.Error()
+			return m, nil
+		}
+		m.commitCompareSet = nil // the drop consumes the selection
+		return m.startOp(engine.InteractiveRebase{Branch: msg.branch, Onto: msg.onto, Plan: plan, GGBin: ggBin})
+
 	case conflictFileLoadedMsg:
 		// In the conflict process, a load failure must return it to Listing (the
 		// load is not an op, so no opFinishedMsg would otherwise un-stick Working).

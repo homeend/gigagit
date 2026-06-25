@@ -88,3 +88,37 @@ func TestBuildSingleEdit(t *testing.T) {
 		t.Fatal("move down the oldest should error")
 	}
 }
+
+func TestBuildDrop(t *testing.T) {
+	commits := []model.RangeCommit{rc("a", "a"), rc("b", "b"), rc("c", "c"), rc("d", "d")}
+
+	// Non-adjacent drops are valid: drop b and d, keep a and c.
+	p, err := BuildDrop(commits, []string{"d", "b"}) // order-independent
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := planShas(p); !eqStrs(got, []string{"a", "b(drop)", "c", "d(drop)"}) {
+		t.Fatalf("drop b,d = %v", got)
+	}
+	for _, e := range p.Entries {
+		if e.Orig == "" {
+			t.Fatalf("entry %s missing Orig", e.Sha)
+		}
+	}
+
+	// A single target behaves like BuildSingleEdit(EditDrop).
+	one, err := BuildDrop(commits, []string{"c"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := planShas(one); !eqStrs(got, []string{"a", "b", "c(drop)", "d"}) {
+		t.Fatalf("drop c = %v", got)
+	}
+
+	if _, err := BuildDrop(commits, nil); err == nil {
+		t.Fatal("no targets should error")
+	}
+	if _, err := BuildDrop(commits, []string{"zzz"}); err == nil {
+		t.Fatal("missing target should error")
+	}
+}

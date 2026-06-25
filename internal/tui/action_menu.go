@@ -233,6 +233,9 @@ func (m Model) appendCommitContextRows(out []actionRow) []actionRow {
 	if r, ok := m.commitSquashRow(); ok {
 		out = append(out, r)
 	}
+	if r, ok := m.commitDropSelectionRow(); ok {
+		out = append(out, r)
+	}
 	if r, ok := m.commitCherryPickRow(); ok {
 		out = append(out, r)
 	}

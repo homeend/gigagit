@@ -50,6 +50,24 @@ func (m Model) loadSquashRangeCmd(branch, onto string, targets []string) tea.Cmd
 	}
 }
 
+// dropRangeLoadedMsg carries the onto..branch range for a multi-commit drop,
+// loaded off the UI thread; the handler builds the drop plan and runs the rebase.
+type dropRangeLoadedMsg struct {
+	branch, onto string
+	targets      []string
+	commits      []model.RangeCommit
+	err          error
+}
+
+// loadDropRangeCmd reads onto..branch off the UI thread for a multi-commit drop.
+func (m Model) loadDropRangeCmd(branch, onto string, targets []string) tea.Cmd {
+	svc := m.svc
+	return func() tea.Msg {
+		cs, err := svc.CommitRange(context.Background(), onto, branch)
+		return dropRangeLoadedMsg{branch: branch, onto: onto, targets: targets, commits: cs, err: err}
+	}
+}
+
 // editorFinishedMsg signals the external editor exited (path is the edited
 // repo-relative path).
 type editorFinishedMsg struct {
