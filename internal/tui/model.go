@@ -26,11 +26,12 @@ import (
 type Model struct {
 	width, height int
 
-	loading  bool
-	err      error
-	status   model.WorkingTreeStatus
-	branches []model.Branch
-	commits  []model.Commit
+	loading    bool
+	softReload bool // r reload in flight: render stale panels + ⏳ instead of blanking (reRoot/startup leave it false)
+	err        error
+	status     model.WorkingTreeStatus
+	branches   []model.Branch
+	commits    []model.Commit
 
 	worktrees       []model.Worktree
 	tags            []model.Tag         // refs/tags; shown by the Tags tab in the middle slot
@@ -442,9 +443,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case dataLoadedMsg:
 		if msg.gen != m.loadGen {
-			return m, nil // superseded by a newer load
+			return m, nil // superseded by a newer load (softReload left for the newer load)
 		}
 		m.loading = false
+		m.softReload = false
 		m.commitsLoading = false // the full load (which includes the feed) is done
 		m.err = msg.err
 		if msg.err == nil {
@@ -733,6 +735,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if !m.running {
 				m.loadGen++
 				m.loading = true
+				m.softReload = true
 				return m, m.loadCmd()
 			}
 		case "p":
@@ -1985,6 +1988,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.feed = m.svc.CommitFeed()
 	m.switchTarget = path
 	m.loading = true
+	m.softReload = false // repo switch is a hard reload — never soft-render the outgoing repo
 	// Drop selections from the old repo so the highlight doesn't land on a
 	// surprising row in the newly-loaded panels.
 	m.sel = map[panel]int{}
@@ -2005,8 +2009,8 @@ func (m Model) View() string {
 	if m.modal != nil {
 		return m.render()
 	}
-	if m.loading {
-		return "gigagit (loading…)\n"
+	if m.loading && !m.softReload {
+		return "gigagit (loading…)\n" // startup + repo-switch keep the blank screen
 	}
 	if m.err != nil {
 		return "error: " + m.err.Error() + "\n"

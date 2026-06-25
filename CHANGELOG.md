@@ -9,6 +9,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Soft reload.** Pressing `r` no longer blanks the screen on large repos: the
+  panels stay visible (showing the previous data) with a ⏳ in each panel title
+  and a `reloading…` status line until the fresh data swaps in. Repo switches and
+  initial startup keep the brief `loading…` screen.
 - **Drop multiple selected commits at once.** With 2+ commits in the Commits
   panel's `◉` compare selection, the `.` menu now offers **Drop N selected
   commits** — deleting them all in a single interactive rebase. Unlike squash

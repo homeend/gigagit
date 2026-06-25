@@ -522,9 +522,11 @@ func (m Model) panelLabel(p panel, base string) string {
 		} else {
 			base += " " + strconv.Itoa(n) + "+"
 		}
-		if m.commitsLoading {
-			base += " " + commitsLoadingGlyph
-		}
+	}
+	// Loading glyph: the Commits panel shows it during a feed reload/page
+	// (commitsLoading); a soft reload (r) shows it on every panel.
+	if m.softReload || (p == panelCommits && m.commitsLoading) {
+		base += " " + commitsLoadingGlyph
 	}
 	if s := m.sortModes[p].String(); s != "" {
 		base += " ·" + s

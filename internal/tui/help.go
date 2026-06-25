@@ -46,7 +46,7 @@ func helpContent() []contentLine {
 		r("esc", "clear the mark, then the active filter"),
 		r("c", "commit the staged index (title + description popup)"),
 		r("C", "amend the last commit (edit message / fold in staged changes)"),
-		r("r", "reload all panels"),
+		r("r", "reload all panels (keeps them visible while refreshing)"),
 		r("?", "this help window"),
 		r("q/ctrl+c", "quit"),
 		h("Branches panel"),
