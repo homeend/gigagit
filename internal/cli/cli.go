@@ -73,6 +73,8 @@ func Run(workdir string, args []string, stdin io.Reader, stdout, stderr io.Write
 		return cmdShelf(svc, rest, stdin, stdout, stderr)
 	case "bookmark":
 		return cmdBookmark(svc, rest, stdin, stdout, stderr)
+	case "prefix":
+		return cmdPrefix(svc, rest, stdout, stderr)
 	case "merge":
 		return cmdMerge(svc, rest, stdin, stdout, stderr)
 	case "rebase":
