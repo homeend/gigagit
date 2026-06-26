@@ -9,6 +9,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Smart push recovery.** When a plain push is rejected because the remote has
+  moved ahead, gg no longer dead-ends on an error: from the single push action
+  it offers **rebase onto the remote and push**, **force-push** (routing through
+  the existing force-with-lease / force confirm), or **abort**. In the CLI,
+  `gg push --on-reject=rebase|force|force-with-lease|abort` drives the same
+  recovery; with the flag unset a rejected push fails fast (non-interactive) or
+  prompts (interactive), so a script never silently no-ops.
 - **Drop multiple selected commits at once.** With 2+ commits in the Commits
   panel's `◉` compare selection, the `.` menu now offers **Drop N selected
   commits** — deleting them all in a single interactive rebase. Unlike squash
