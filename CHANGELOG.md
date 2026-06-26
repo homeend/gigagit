@@ -9,6 +9,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Branch prefixes.** A writable two-scope (global + per-repo) registry of
+  reusable, templated branch-name skeletons. Press `ctrl+p` in the create-branch
+  (`b`/`B`) popup, or `p` in the create-worktree popup, to pick one; interactive
+  `<user:…>` labels are collected, the template is resolved, and the result seeds
+  the branch name for you to complete. Prefixes accept the usual gg tokens
+  (`<user:LABEL>`, `<seq:NAME:N>`, `<date:…>`, `<parent-branch>`, `<repo>`,
+  `<random-*>`; `<branch>` is rejected). Manage them in Settings (`,`) → Branch
+  prefixes, or via `gg prefix ls | add [--global] <value> | rm [--global] <value>`.
 - **Copy to working dir.** The `.` menu on a focused non-working file (a stash
   file, an old commit's file, or a staged file) now offers **Copy to working
   dir**, which writes that file's content into the working tree at its own path
