@@ -5,6 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -247,6 +248,31 @@ func (m Model) compareAgainstWorkingDirRow() (actionRow, bool) {
 			v := &diffView{title: title, context: subtitle, loading: true, partial: m.diffPartial, long: m.diffLong}
 			v.width, _ = m.overlayDims()
 			return m.openPickerDiff(v, tag, m.loadCompareTwoRefsCmd(ref, right, title, subtitle, tag))
+		},
+	}, true
+}
+
+// copyToWorkingDirRow is the menu action "Copy to working dir": it writes the
+// focused file's resolved bytes into the working tree at its own path, as an
+// unstaged change. The write-sibling of compareAgainstWorkingDirRow — same
+// focused ref, same guard (absent for a working-tree file or a deletion).
+// engine.WriteFile owns the overwrite-or-cancel fork when a differing working
+// file already exists; identical bytes are a no-op.
+func (m Model) copyToWorkingDirRow() (actionRow, bool) {
+	ref, _, ok := m.focusedCompareRef()
+	if !ok || ref.Source == model.SourceUnstaged {
+		return actionRow{}, false
+	}
+	return actionRow{
+		id:    "copy-working-dir",
+		label: "Copy to working dir",
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			data, err := m.svc.ResolveBytes(context.Background(), ref)
+			if err != nil {
+				m.statusMsg = "copy to working dir: " + err.Error()
+				return m, nil
+			}
+			return m.startOp(engine.WriteFile{Path: ref.Path, Data: data})
 		},
 	}, true
 }
