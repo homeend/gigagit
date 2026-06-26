@@ -51,11 +51,16 @@ func cmdPush(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr
 	fs.SetOutput(stderr)
 	force := fs.Bool("force", false, "force-push, overwriting the remote branch unconditionally (no lease)")
 	lease := fs.Bool("force-with-lease", false, "force-push only if the remote branch has not moved")
+	onReject := fs.String("on-reject", "", "if a plain push is rejected (remote ahead): rebase|force|force-with-lease|abort (default abort)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	if *force && *lease {
 		fmt.Fprintln(stderr, "push: choose at most one of --force/--force-with-lease")
+		return 2
+	}
+	if *onReject != "" && (*force || *lease) {
+		fmt.Fprintln(stderr, "push: --on-reject applies to a plain push, not with --force/--force-with-lease")
 		return 2
 	}
 
@@ -75,11 +80,41 @@ func cmdPush(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr
 		policy["push-force"] = "force-with-lease"
 	case *force:
 		policy["push-force"] = "force"
+	default:
+		rp, perr := pushRejectPolicy(*onReject)
+		if perr != nil {
+			fmt.Fprintln(stderr, perr)
+			return 2
+		}
+		policy = rp
 	}
 	dec := cliDecider{policy: policy, in: stdin, out: stderr, interactive: stdinIsTerminal()}
 	res, err := runOperation(context.Background(), svc,
 		engine.Push{Remote: "origin", Branch: cur, SetUpstream: true, Force: *force || *lease}, dec, stderr)
 	return finish(res, err, stdout, stderr)
+}
+
+// pushRejectPolicy maps the --on-reject flag value to the decision policy for a
+// rejected plain push. An empty value leaves push-rejected unanswered, so a
+// non-interactive push that is rejected fails fast (the decider errors with the
+// flag hint) and an interactive one prompts — neither silently no-ops. The
+// "force" variants also answer the nested push-force decision so the CLI never
+// blocks. An explicit "abort" cancels cleanly (exit 0).
+func pushRejectPolicy(onReject string) (map[string]string, error) {
+	switch onReject {
+	case "":
+		return map[string]string{}, nil
+	case "abort":
+		return map[string]string{"push-rejected": "abort"}, nil
+	case "rebase":
+		return map[string]string{"push-rejected": "rebase"}, nil
+	case "force":
+		return map[string]string{"push-rejected": "force", "push-force": "force"}, nil
+	case "force-with-lease":
+		return map[string]string{"push-rejected": "force", "push-force": "force-with-lease"}, nil
+	default:
+		return nil, fmt.Errorf("push: unknown --on-reject %q (want rebase|force|force-with-lease|abort)", onReject)
+	}
 }
 
 func cmdSwitch(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
