@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/pusherr"
 )
 
 // overlayAt composites fg on top of bg with fg's top-left corner at cell
@@ -115,26 +116,22 @@ func friendlyOpError(err error) string {
 // friendlyPushError rewrites git's multi-line push-rejection stderr into one
 // actionable status line. A push rejection dumps a "! [rejected] … (reason)"
 // line plus a wall of hints — useless in a single-line status bar — so the
-// common reasons are mapped to a short sentence that says what to do next.
-// low is the already-lowercased error text. Order matters: the server-side
+// common reasons are mapped to a short sentence that says what to do next. The
+// signatures are classified by internal/pusherr, the single source of truth
+// shared with the engine's recovery trigger. Order matters: the server-side
 // rejection and the force-with-lease "stale info" cases are distinguished
-// before the generic non-fast-forward case.
+// before the generic non-fast-forward case. The argument is the error text
+// (pusherr lowercases internally, so an already-lowercased value is fine).
+//
+// Messages are kept tight so the remedy survives status-bar truncation on an
+// ~80-col terminal — the action is the whole point of the rewrite.
 func friendlyPushError(low string) (string, bool) {
 	switch {
-	// Messages are kept tight so the remedy survives status-bar truncation on an
-	// ~80-col terminal — the action is the whole point of the rewrite.
-	case strings.Contains(low, "pre-receive hook declined"),
-		strings.Contains(low, "protected branch"),
-		strings.Contains(low, "[remote rejected]"):
+	case pusherr.IsHookRejection(low):
 		return "error: push rejected by the remote (protected branch or server-side hook)", true
-	case strings.Contains(low, "stale info"):
-		// --force-with-lease leases against your remote-tracking ref; "stale
-		// info" means the remote moved since your last fetch, so the lease can't
-		// be verified. Fetching first is the safe path; plain force overwrites.
+	case pusherr.IsStaleInfo(low):
 		return "error: force-with-lease refused — remote moved; fetch & review, then retry", true
-	case strings.Contains(low, "non-fast-forward"),
-		strings.Contains(low, "fetch first"),
-		strings.Contains(low, "tip of your current branch is behind"):
+	case pusherr.IsNonFastForward(low):
 		return "error: push rejected — remote has new commits; pull/rebase first, or force-push", true
 	}
 	return "", false
