@@ -139,9 +139,48 @@ func (op Push) recoverRejected(ctx context.Context, deps OpDeps) (Result, error)
 	}
 }
 
-// rebaseThenPush is implemented in Task 3.
+// rebaseThenPush replays the local commits on top of the remote tip (pull
+// --rebase), then re-pushes once. A rebase conflict forks via the existing
+// rebase-conflict decision: keep-conflicts leaves the tree for `git rebase
+// --continue` (the TUI conflict process picks it up) and returns an error;
+// abort restores the pre-rebase tip. After a clean rebase the branch is ahead,
+// so the re-push fast-forwards. The recovery runs once — a second rejection is
+// surfaced, never re-entered, so the op cannot loop.
 func (op Push) rebaseThenPush(ctx context.Context, deps OpDeps) (Result, error) {
-	return Result{}, fmt.Errorf("push: rebase recovery not yet implemented")
+	deps.emit(ctx, Progress{Step: "pull --rebase", Detail: op.Remote + " " + op.Branch})
+	if rebaseErr := deps.Repo.Pull(ctx, op.Remote, op.Branch, git.PullRebase); rebaseErr != nil {
+		inRebase, stateErr := deps.Repo.RebaseInProgress(ctx, "")
+		if stateErr != nil {
+			return Result{}, fmt.Errorf("push rebase: %v (state check: %w)", rebaseErr, stateErr)
+		}
+		if !inRebase {
+			return Result{}, fmt.Errorf("push rebase: %w", rebaseErr)
+		}
+		choice, derr := deps.decide(ctx, DecisionRequest{
+			ID:      "rebase-conflict",
+			Prompt:  "Rebasing " + op.Branch + " onto " + op.Remote + "/" + op.Branch + " hit conflicts",
+			Options: []string{"keep-conflicts", "abort"},
+		})
+		if derr != nil {
+			return Result{}, derr
+		}
+		if choice.Option == "keep-conflicts" {
+			return Result{Summary: "rebase paused on a conflict (resolve, then `git rebase --continue`, then push)", Changed: true},
+				fmt.Errorf("push rebase conflict: %s", op.Branch)
+		}
+		if err := deps.Repo.RebaseAbort(ctx, ""); err != nil {
+			return Result{}, fmt.Errorf("push rebase: abort failed: %w", err)
+		}
+		return Result{Summary: "push cancelled (rebase aborted)", Changed: false}, nil
+	}
+
+	deps.emit(ctx, Progress{Step: "pushing", Detail: op.Remote + " " + op.Branch})
+	if err := deps.Repo.Push(ctx, op.Remote, op.Branch, op.SetUpstream, git.PushNoForce); err != nil {
+		return Result{}, err // second rejection or other error: surface, no loop
+	}
+	res := Result{Summary: "rebased and pushed", Changed: true}
+	deps.emit(ctx, Done{Result: res})
+	return res, nil
 }
 
 // Stash saves the working-tree changes for Paths (all when empty) to a new stash.
