@@ -69,6 +69,15 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   main repo at `…/repo.worktrees/new-branch` regardless of where you run it.
   `gg worktree remove <relative-path>` resolves against the same main-worktree
   base so the two round-trip.
+- **Worktree creation no longer hangs forever on huge repos.** On a large repo,
+  `git worktree add` (and other streamed git commands) can spawn a long-lived
+  background daemon — fsmonitor, `gc --auto`, `git maintenance` — that inherits
+  the subprocess's stdout pipe and outlives it. The git process itself exited
+  (the worktree was fully written to disk), but the reader looped on stdout until
+  EOF, which the lingering daemon never delivered, so the operation blocked
+  forever and the TUI sat in a permanent loading state. The git runner now sets
+  `Cmd.WaitDelay` and reads stdout concurrently with `Wait`, so a clean exit
+  completes even when a detached child still holds the pipe.
 - **`space` now stages every marked file, not just the cursor row.** Marking
   files with `m` in the Files (or Staged) panel then pressing `space` stages
   (unstages) all of them in a single `git add` / `git restore --staged`,
