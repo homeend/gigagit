@@ -3,8 +3,24 @@ package tui
 import (
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/homeend/gigagit/internal/model"
 )
+
+// 'e' (in-place edit) is intentionally not offered — editing is remove + re-add
+// (spec out-of-scope). A stray 'e' must not open the form (which would, on a
+// changed value/scope, create an orphan duplicate).
+func TestPrefixSettingsNoInPlaceEdit(t *testing.T) {
+	v := &prefixSettingsView{
+		items: []model.Prefix{{ID: "feat", Value: "feat/", Scope: model.ProfileScopeRepo}},
+		mode:  pfBrowse,
+	}
+	v.update(Model{}, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}})
+	if v.mode != pfBrowse {
+		t.Fatalf("'e' opened mode %v; in-place edit must not exist", v.mode)
+	}
+}
 
 func TestPrefixSettingsFormBuildsValidEntry(t *testing.T) {
 	v := &prefixSettingsView{mode: pfForm}

@@ -100,3 +100,25 @@ func containsAllSeq(have, want []string) bool {
 	}
 	return true
 }
+
+// Entry-point reachability: a wrong key constant would pass every behavior test
+// while making the picker unreachable, so assert the keys produce a command.
+func TestBranchPopupCtrlPOpensPicker(t *testing.T) {
+	bp := &branchPopup{startPoint: "main"}
+	m := Model{}
+	m = m.pushLayer(bp)
+	_, cmd := bp.update(m, tea.KeyMsg{Type: tea.KeyCtrlP})
+	if cmd == nil {
+		t.Fatal("ctrl+p in create-branch popup did not open the prefix picker")
+	}
+}
+
+func TestWorktreePopupPOpensPicker(t *testing.T) {
+	p := &worktreePopup{startPoint: "main", branchTmpl: "b/x", pathTmpl: "../<repo>.worktrees/<branch>", state: stAction}
+	m := Model{}
+	m = m.pushLayer(p)
+	_, cmd := p.update(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
+	if cmd == nil {
+		t.Fatal("'p' in worktree stAction did not open the prefix picker")
+	}
+}

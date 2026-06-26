@@ -116,16 +116,6 @@ func (v *prefixSettingsView) updateBrowse(m Model, msg tea.KeyMsg) (Model, tea.C
 		v.field = 0
 		v.mode = pfForm
 		return m, nil
-	case "e":
-		if v.sel < 0 || v.sel >= len(v.items) {
-			return m, nil
-		}
-		p := v.items[v.sel]
-		v.fValue = newTextField(p.Value)
-		v.scope = p.Scope
-		v.field = 0
-		v.mode = pfForm
-		return m, nil
 	case "d":
 		id, scope, ok := v.deleteTarget()
 		if !ok {
@@ -202,7 +192,7 @@ func (v *prefixSettingsView) box(m Model) string {
 			cur = "> "
 		}
 		parts := []string{
-			"Add / edit branch prefix", "",
+			"Add branch prefix", "",
 			viewField(cur+"value: ", v.fValue, v.field == 0, textW),
 			scopeCursor + "scope: " + scopeVal,
 			"",
@@ -240,6 +230,6 @@ func (v *prefixSettingsView) box(m Model) string {
 		}
 		parts = append(parts, renderWindow(wr, winOpts{w: textW, h: h, anchor: v.sel})...)
 	}
-	parts = append(parts, "", "[n] add  [e] edit  [d] delete  [esc] back")
+	parts = append(parts, "", "[n] add  [d] delete  [esc] back")
 	return popupBox(inner, strings.Join(parts, "\n"))
 }
