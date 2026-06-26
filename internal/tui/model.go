@@ -1369,6 +1369,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, m.loadCmd()
 
+	case prefixDataMsg:
+		if v := layerOf[*prefixSettingsView](m); v != nil {
+			v.loading = false
+			if msg.err != nil {
+				m.statusMsg = "prefixes: " + msg.err.Error()
+			} else {
+				v.items = msg.items
+				if v.sel >= len(v.items) {
+					v.sel = len(v.items) - 1
+				}
+				if v.sel < 0 {
+					v.sel = 0
+				}
+			}
+		}
+		return m, nil
+
 	case identityDataMsg:
 		if v := layerOf[*identityView](m); v != nil {
 			v.loading = false
