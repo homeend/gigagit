@@ -10,10 +10,13 @@ import (
 )
 
 // rejectingPushRepo returns a fake whose first "git push" fails non-fast-forward.
+// HEAD reports "main" so a push of "main" (the common case) sees its target as the
+// current branch and the rebase recovery stays on offer.
 func rejectingPushRepo() (*git.Repo, *gitexec.FakeRunner) {
 	f := gitexec.NewFakeRunner()
 	f.SetError("git push", errors.New(
 		"git push failed (exit 1): ! [rejected] main -> main (non-fast-forward)"))
+	f.SetResponse("git symbolic-ref", gitexec.Result{Stdout: "main\n"})
 	return &git.Repo{Runner: f}, f
 }
 
@@ -172,6 +175,86 @@ func TestPushRejectedRebaseConflictAbortRunsRebaseAbort(t *testing.T) {
 	}
 	if !saw {
 		t.Fatal("abort branch must call git rebase --abort")
+	}
+}
+
+// pushRejectedOptions runs a rejected push and returns the option list offered
+// by the push-rejected decision.
+func pushRejectedOptions(t *testing.T, f *gitexec.FakeRunner, branch string) []string {
+	t.Helper()
+	dec := &captureDecider{answers: map[string]string{"push-rejected": "abort"}}
+	if _, err := (Push{Remote: "origin", Branch: branch, SetUpstream: true}).Run(
+		context.Background(), OpDeps{Repo: &git.Repo{Runner: f}, Decider: dec}); err != nil {
+		t.Fatalf("abort is a clean no-op, err=%v", err)
+	}
+	for _, d := range dec.seen {
+		if d.ID == "push-rejected" {
+			return d.Options
+		}
+	}
+	t.Fatal("push-rejected decision was never raised")
+	return nil
+}
+
+// TestPushRejectedNonCurrentBranchOmitsRebase: the rebase recovery rebases the
+// CURRENT HEAD, so it is invalid when the rejected push targets a different
+// branch (the Branches-panel "Push <branch>" action). Such a push must offer
+// force/abort only — never rebase, which would rewrite the wrong branch — and
+// must not run any pull.
+func TestPushRejectedNonCurrentBranchOmitsRebase(t *testing.T) {
+	f := gitexec.NewFakeRunner()
+	f.SetError("git push", errors.New(
+		"git push failed (exit 1): ! [rejected] feature -> feature (non-fast-forward)"))
+	f.SetResponse("git symbolic-ref", gitexec.Result{Stdout: "main\n"}) // HEAD = main, not feature
+	f.SetResponse("git pull", gitexec.Result{})                         // any pull here is a bug
+
+	opts := pushRejectedOptions(t, f, "feature")
+	for _, o := range opts {
+		if o == "rebase" {
+			t.Fatalf("rebase must NOT be offered pushing a non-current branch, opts=%v", opts)
+		}
+	}
+	for _, c := range f.Calls {
+		if c.Name == "git pull" {
+			t.Fatal("no pull may run when pushing a non-current branch")
+		}
+	}
+}
+
+// TestPushRejectedCurrentBranchKeepsRebase pins that the common case (pushing the
+// checked-out branch) still offers rebase, so this guard didn't regress it.
+func TestPushRejectedCurrentBranchKeepsRebase(t *testing.T) {
+	_, f := rejectingPushRepo() // HEAD = main
+	opts := pushRejectedOptions(t, f, "main")
+	saw := false
+	for _, o := range opts {
+		if o == "rebase" {
+			saw = true
+		}
+	}
+	if !saw {
+		t.Fatalf("rebase must stay on offer pushing the current branch, opts=%v", opts)
+	}
+}
+
+// TestPushRejectedNonCurrentBranchRebaseGuarded is defensive: even if a decider
+// answers "rebase" for a non-current branch (off the offered list), the op must
+// refuse rather than rebase the wrong branch.
+func TestPushRejectedNonCurrentBranchRebaseGuarded(t *testing.T) {
+	f := gitexec.NewFakeRunner()
+	f.SetError("git push", errors.New(
+		"git push failed (exit 1): ! [rejected] feature -> feature (non-fast-forward)"))
+	f.SetResponse("git symbolic-ref", gitexec.Result{Stdout: "main\n"})
+	f.SetResponse("git pull", gitexec.Result{})
+	_, err := (Push{Remote: "origin", Branch: "feature", SetUpstream: true}).Run(
+		context.Background(), OpDeps{Repo: &git.Repo{Runner: f}, Decider: MapDecider{"push-rejected": "rebase"}})
+	if err == nil {
+		t.Fatal("rebasing a non-current branch must surface an error, not silently rebase HEAD")
+	}
+	for _, c := range f.Calls {
+		if c.Name == "git pull" {
+			t.Fatal("the guard must prevent any pull --rebase on a non-current branch")
+		}
 	}
 }
 

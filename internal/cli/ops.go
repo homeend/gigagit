@@ -42,10 +42,14 @@ func cmdPull(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 	return finish(res, err, stdout, stderr)
 }
 
-// cmdPush implements `gg push [--force | --force-with-lease]`. With no flag it
-// is a plain push. --force-with-lease force-pushes only if the remote has not
-// moved; --force overwrites the remote branch unconditionally (no lease). The
-// flags answer the engine's push-force decision, so a force push never prompts.
+// cmdPush implements `gg push [--force | --force-with-lease] [<branch>]`. With no
+// positional it pushes the checked-out branch; with a `<branch>` it pushes that
+// local branch by name without checking it out (git pushes any local ref). With
+// no flag it is a plain push. --force-with-lease force-pushes only if the remote
+// has not moved; --force overwrites the remote branch unconditionally (no lease).
+// The flags answer the engine's push-force decision, so a force push never
+// prompts. (--on-reject=rebase only applies to the current branch — the engine
+// refuses to rebase a non-current one, since the rebase would rewrite HEAD.)
 func cmdPush(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("push", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -64,14 +68,27 @@ func cmdPush(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr
 		return 2
 	}
 
-	cur, err := svc.CurrentBranch(context.Background())
-	if err != nil {
-		fmt.Fprintln(stderr, "error:", err)
-		return 1
+	target := ""
+	switch fs.NArg() {
+	case 0:
+		// default: the checked-out branch (resolved below)
+	case 1:
+		target = fs.Arg(0)
+	default:
+		fmt.Fprintln(stderr, "push: too many arguments (usage: gg push [flags] [<branch>])")
+		return 2
 	}
-	if cur == "" {
-		fmt.Fprintln(stderr, "push: detached HEAD; cannot push")
-		return 1
+	if target == "" {
+		cur, err := svc.CurrentBranch(context.Background())
+		if err != nil {
+			fmt.Fprintln(stderr, "error:", err)
+			return 1
+		}
+		if cur == "" {
+			fmt.Fprintln(stderr, "push: detached HEAD; cannot push (name a branch: gg push <branch>)")
+			return 1
+		}
+		target = cur
 	}
 
 	policy := map[string]string{}
@@ -90,7 +107,7 @@ func cmdPush(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr
 	}
 	dec := cliDecider{policy: policy, in: stdin, out: stderr, interactive: stdinIsTerminal()}
 	res, err := runOperation(context.Background(), svc,
-		engine.Push{Remote: "origin", Branch: cur, SetUpstream: true, Force: *force || *lease}, dec, stderr)
+		engine.Push{Remote: "origin", Branch: target, SetUpstream: true, Force: *force || *lease}, dec, stderr)
 	return finish(res, err, stdout, stderr)
 }
 

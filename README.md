@@ -43,7 +43,7 @@ panel and selected row right now; `?` opens the full searchable reference.
 
 | Key | Action |
 |-----|--------|
-| `p` / `P` | pull / push. If a push is **rejected because the remote moved ahead**, a modal offers *rebase onto the remote and push*, *force-push* (chaining the force-with-lease / force confirm), or *abort* (`esc`). To **force-push** directly (after a rebase/amend/reword rewrites history), select the current branch on the Branches panel and choose **Force push `<branch>`** from the `.` menu: a modal offers *force-with-lease* (refuses if the remote moved under you) or *force* (overwrites the remote unconditionally); `esc` aborts |
+| `p` / `P` | pull / push. If a push is **rejected because the remote moved ahead**, a modal offers *rebase onto the remote and push*, *force-push* (chaining the force-with-lease / force confirm), or *abort* (`esc`). `P` pushes the **checked-out** branch; to push a **different** branch, highlight it on the Branches panel and choose **Push `<branch>`** from the `.` menu — it pushes that branch and sets its upstream (works for any local branch, including one never pushed before, without checking it out). To **force-push** directly (after a rebase/amend/reword rewrites history), select the current branch on the Branches panel and choose **Force push `<branch>`** from the `.` menu: a modal offers *force-with-lease* (refuses if the remote moved under you) or *force* (overwrites the remote unconditionally); `esc` aborts |
 | `s` | on the Branches panel: smart-switch to the selected branch (if it's already checked out in another worktree, a modal offers to jump to that worktree instead); on the Files panel: open the stash-create popup (name defaults to `WIP on <branch>`, a checklist of unstaged/untracked files, `space` toggles, `ctrl+s` stashes). Slow working-tree ops (switch, pull, merge, rebase, fast-forward, reset, and remote checkout) ask a `y`/`n` confirmation before running (default **No**); disable with `[ui] disable_slow_op_confirm = true` |
 | `b` | create a branch off the selected one (popup); `B` create **and** switch to it |
 | `S` | open the stash window (lists all stashes in the right column): `↑`/`↓` move, `l` shows the selected stash's files in the tree (diff / `h` history / `b` blame, like commit files), `enter` opens an action popup (apply / pop / drop, drop confirms), `esc`/`S` close |
@@ -98,8 +98,8 @@ gg status
 gg commit -m "msg"            # add -a to stage tracked changes; --amend rewrites the last commit
 gg commit reword <commit> -m "msg"   # change a commit's message (HEAD=amend; older=in-place rebase)
 gg pull [--background] [--on-conflict rebase|merge|abort]
-gg push [--force | --force-with-lease] [--on-reject rebase|force|force-with-lease|abort]
-                                         # plain push; --on-reject recovers a rejected push (default: fail/prompt)
+gg push [--force | --force-with-lease] [--on-reject rebase|force|force-with-lease|abort] [<branch>]
+                                         # push the current branch, or a named one by ref (no checkout); --on-reject recovers a rejected push (default: fail/prompt)
 gg switch <branch>
 gg checkout <remote>/<branch> [-s]   # local tracking branch from a remote ref (ff-safe); -s switches to it
 gg remote ls | fetch | prune         # list remote branches / fetch all / prune deleted

@@ -9,6 +9,15 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Push a selected branch.** The `.` menu on the Branches panel now offers
+  **Push \<branch\>**, which pushes the highlighted branch and sets its upstream
+  (`git push -u origin <branch>`) — for any local branch, current or not,
+  including one that was never pushed before, without first checking it out.
+  Previously the only push was the `P` key, which always pushed the checked-out
+  branch, so a highlighted non-current branch could not be pushed. If the push is
+  rejected because the remote moved ahead, a non-current branch offers only
+  force-push or abort (rebasing would rewrite the wrong branch); the checked-out
+  branch keeps the full rebase / force / abort recovery.
 - **Copy to working dir.** The `.` menu on a focused non-working file (a stash
   file, an old commit's file, or a staged file) now offers **Copy to working
   dir**, which writes that file's content into the working tree at its own path

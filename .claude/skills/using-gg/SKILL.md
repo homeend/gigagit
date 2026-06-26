@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v31 -->
+<!-- gg:using-gg:v33 -->
 
 # Using gg (gigagit)
 
@@ -26,9 +26,11 @@ guards against removing the worktree you are standing in.
 - `gg pull [<branch>] [--background] [--on-conflict rebase|merge|abort]` —
   smart pull; with `<branch>` + `--background` it fast-forwards that branch's
   ref without checking it out.
-- `gg push [--force | --force-with-lease] [--on-reject rebase|force|force-with-lease|abort]`
-  — push the current branch (sets upstream when missing). With no flag it is a
-  plain push. If the remote moved ahead the push is rejected non-fast-forward;
+- `gg push [--force | --force-with-lease] [--on-reject rebase|force|force-with-lease|abort] [<branch>]`
+  — push a branch (sets upstream when missing). With no positional it pushes the
+  current branch; with `<branch>` it pushes that local branch **by name without
+  checking it out** (git pushes any local ref) — handy for a branch never pushed
+  before. With no flag it is a plain push. If the remote moved ahead the push is rejected non-fast-forward;
   `--on-reject` then recovers it non-interactively: `rebase` replays your commits
   onto the remote tip and pushes, `force`/`force-with-lease` overwrite, `abort`
   cancels. With `--on-reject` unset a rejected push **fails** (non-interactive)
@@ -37,7 +39,9 @@ guards against removing the worktree you are standing in.
   `--force` overwrites the remote branch unconditionally (no lease). Use one
   after a rebase/amend/reword rewrites history. The flags answer the
   `push-force` decision, so a force push never prompts; `--on-reject` cannot be
-  combined with `--force`/`--force-with-lease`.
+  combined with `--force`/`--force-with-lease`. `--on-reject=rebase` applies only
+  when pushing the current branch — rebasing rewrites HEAD, so a rejected push of
+  a non-current `<branch>` offers only force/abort.
 - `gg switch <branch>` — switch branches, auto-stashing and restoring local
   changes; on a restore conflict the stash is preserved, never dropped.
 - `gg checkout <remote>/<branch> [-s|--switch]` — check out a remote-tracking

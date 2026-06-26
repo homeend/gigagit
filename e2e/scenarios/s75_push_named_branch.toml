@@ -1,0 +1,34 @@
+name = "push <branch>: pushes a named non-current branch to origin without switching"
+
+[input]
+steps = [
+  { branch = "feature" },              # create feature at HEAD (main), stay on main
+  { switch = "feature" },
+  { write = "g.txt", content = "feat\n" },
+  { commit = "feature work" },
+  { switch = "main" },                 # back to main; feature is now non-current
+]
+
+[input.origin]
+steps = [
+  { write = "a.txt", content = "v1\n" },
+  { commit = "initial" },
+]
+
+# `push feature` pushes the NAMED branch (sets upstream) without checking it out.
+# Before this feature the CLI/TUI could only push the checked-out branch.
+[[run]]
+cmd  = ["push", "feature"]
+exit = 0
+
+[expect]
+branch   = "main"                      # push <branch> never switches
+clean    = true
+branches = ["feature", "main"]
+
+[expect.origin]
+branches = ["feature", "main"]         # feature now exists on origin
+
+[[expect.origin.log]]
+branch   = "feature"
+subjects = ["feature work", "initial"]

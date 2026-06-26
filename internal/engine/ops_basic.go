@@ -112,16 +112,34 @@ func (op Push) push(ctx context.Context, deps OpDeps, force git.PushForce) (Resu
 // onto the remote then re-push, chain the force decision, or abort. esc lands on
 // abort.
 func (op Push) recoverRejected(ctx context.Context, deps OpDeps) (Result, error) {
+	// The rebase recovery rebases the CURRENT HEAD onto the remote tip, so it is
+	// valid only when the rejected push targets the checked-out branch. The
+	// Branches-panel "Push <branch>" action can push a non-current branch; for
+	// that, offer force/abort only — a rebase would rewrite the wrong branch. If
+	// HEAD can't be determined (detached, error), treat it as non-current.
+	allowRebase := false
+	if cur, cerr := deps.Repo.CurrentBranch(ctx); cerr == nil && cur == op.Branch {
+		allowRebase = true
+	}
+	opts := []string{"force", "abort"}
+	prompt := "Remote has new commits on " + op.Branch + " — force-push or abort"
+	if allowRebase {
+		opts = []string{"rebase", "force", "abort"}
+		prompt = "Remote has new commits on " + op.Branch + " — rebase onto them, force-push, or abort"
+	}
 	choice, err := deps.decide(ctx, DecisionRequest{
 		ID:      "push-rejected",
-		Prompt:  "Remote has new commits on " + op.Branch + " — rebase onto them, force-push, or abort",
-		Options: []string{"rebase", "force", "abort"},
+		Prompt:  prompt,
+		Options: opts,
 	})
 	if err != nil {
 		return Result{}, err
 	}
 	switch choice.Option {
 	case "rebase":
+		if !allowRebase {
+			return Result{}, fmt.Errorf("push: cannot rebase %q — it is not the current branch", op.Branch)
+		}
 		return op.rebaseThenPush(ctx, deps)
 	case "force":
 		force, ok, derr := op.decideForce(ctx, deps)
