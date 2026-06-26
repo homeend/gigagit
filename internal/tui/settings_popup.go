@@ -19,11 +19,11 @@ type settingsPopup struct {
 	picker     bool // false = menu screen, true = agent picker
 	errorsView bool // true = session-errors viewer screen
 	dets       []agentinit.Detection
-	checked []bool
-	sel     int      // selection within the agent picker list
-	menuSel int      // selection within the top-level menu (independent of sel)
-	mode    dispMode // text display mode; z cycles (cutoff default)
-	hscroll int      // modeScroll horizontal offset
+	checked    []bool
+	sel        int      // selection within the agent picker list
+	menuSel    int      // selection within the top-level menu (independent of sel)
+	mode       dispMode // text display mode; z cycles (cutoff default)
+	hscroll    int      // modeScroll horizontal offset
 }
 
 const (

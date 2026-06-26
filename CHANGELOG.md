@@ -9,6 +9,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Session error log.** Every git operation that fails (any operation or read
+  query that returns an error to a frontend) is now recorded to an always-on
+  `errors.log` in the gg state dir (beside `operations.log`), and a new
+  **Settings (`,`) → "Session errors"** entry shows the current session's
+  failures in a read-only viewer. Control-flow probes that exit non-zero by
+  design (e.g. `git merge-base --is-ancestor`) and user cancellations are not
+  recorded — only genuine failures.
 - **Push a selected branch.** The `.` menu on the Branches panel now offers
   **Push \<branch\>**, which pushes the highlighted branch and sets its upstream
   (`git push -u origin <branch>`) — for any local branch, current or not,
