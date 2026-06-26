@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/homeend/gigagit/internal/observ"
 )
@@ -115,6 +116,71 @@ func TestExecRunnerForcesTerminalPromptOverInheritedEnv(t *testing.T) {
 	}
 	if got := strings.TrimSpace(res.Stdout); got != "prompt=0" {
 		t.Fatalf("GIT_TERMINAL_PROMPT in subprocess = %q, want prompt=0 (must override inherited =1)", got)
+	}
+}
+
+// A large `git worktree add`/checkout can spawn a long-lived background daemon
+// (fsmonitor, `gc --auto`, `git maintenance`) that INHERITS the subprocess's
+// stdout file descriptor and outlives it. The main git process then exits — the
+// worktree is fully on disk — but the stdout pipe's write end stays open in the
+// daemon, so a reader looping until EOF never returns. Stream must not hang past
+// the main process's exit just because a detached grandchild holds the pipe.
+//
+// Reproduced without git: `sh -c 'echo line; (sleep 30 &); exit 0'` backgrounds
+// a subshell that inherits fd 1, holds the stdout pipe open, then the parent sh
+// exits 0. Pre-fix, Stream blocks in scanner.Scan() for the full sleep.
+func TestStreamDoesNotHangWhenChildHoldsStdout(t *testing.T) {
+	r := NewExecRunner("sh", t.TempDir(), nil)
+	argv := []string{"-c", "echo line; (sleep 30 &) ; exit 0"}
+
+	var lines []string
+	done := make(chan error, 1)
+	go func() {
+		_, err := r.Stream(context.Background(), "leaky", argv, func(line string) {
+			lines = append(lines, line)
+		})
+		done <- err
+	}()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Stream returned an error for a clean exit: %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("Stream hung: a detached child holding the stdout pipe blocked it past process exit")
+	}
+
+	if got := strings.TrimSpace(strings.Join(lines, "\n")); got != "line" {
+		t.Fatalf("captured stdout = %q, want \"line\"", got)
+	}
+}
+
+// Run has the same exposure as Stream: os/exec's internal io.Copy of stdout
+// blocks Wait until EOF, which a detached child holding the pipe never delivers.
+// WaitDelay must force the close so a clean exit completes.
+func TestRunDoesNotHangWhenChildHoldsStdout(t *testing.T) {
+	r := NewExecRunner("sh", t.TempDir(), nil)
+	argv := []string{"-c", "echo line; (sleep 30 &) ; exit 0"}
+
+	done := make(chan error, 1)
+	var res Result
+	go func() {
+		var err error
+		res, err = r.Run(context.Background(), "leaky", argv)
+		done <- err
+	}()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Run returned an error for a clean exit: %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("Run hung: a detached child holding the stdout pipe blocked it past process exit")
+	}
+	if got := strings.TrimSpace(res.Stdout); got != "line" {
+		t.Fatalf("captured stdout = %q, want \"line\"", got)
 	}
 }
 

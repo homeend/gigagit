@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -12,6 +13,13 @@ import (
 
 	"github.com/homeend/gigagit/internal/observ"
 )
+
+// waitDelay bounds how long Wait lingers for the stdout/stderr pipes to close
+// after the git process itself has exited. A large checkout can spawn a
+// long-lived background daemon (fsmonitor, `gc --auto`, `git maintenance`) that
+// inherits the subprocess's stdout fd and outlives it; without this bound the
+// pipe never reaches EOF and a reader blocks forever even though git is done.
+const waitDelay = 2 * time.Second
 
 // compile-time assertion that ExecRunner satisfies Runner.
 var _ Runner = (*ExecRunner)(nil)
@@ -146,6 +154,7 @@ func (r *ExecRunner) RunEnv(ctx context.Context, name string, argv, env []string
 	cmd := exec.CommandContext(ctx, r.gitPath, argv...)
 	cmd.Dir = r.workDir
 	cmd.Env = r.gitEnv(env)
+	cmd.WaitDelay = waitDelay
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -153,9 +162,16 @@ func (r *ExecRunner) RunEnv(ctx context.Context, name string, argv, env []string
 	runErr := cmd.Run()
 	dur := r.now().Sub(start)
 	exit := exitCodeOf(runErr)
+	if cmd.ProcessState != nil {
+		exit = cmd.ProcessState.ExitCode()
+	}
 	r.record(name, argv, exit, dur, start, runErr)
 
 	res := Result{Stdout: stdout.String(), Stderr: stderr.String(), ExitCode: exit, Duration: dur}
+	// A clean exit whose pipes a detached child held open returns ErrWaitDelay.
+	if errors.Is(runErr, exec.ErrWaitDelay) && exit == 0 {
+		return res, nil
+	}
 	if runErr != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return res, fmt.Errorf("%s cancelled: %w", name, ctxErr)
@@ -170,6 +186,7 @@ func (r *ExecRunner) Stream(ctx context.Context, name string, argv []string, onL
 	cmd := exec.CommandContext(ctx, r.gitPath, argv...)
 	cmd.Dir = r.workDir
 	cmd.Env = r.gitEnv(nil)
+	cmd.WaitDelay = waitDelay
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	stdoutPipe, err := cmd.StdoutPipe()
@@ -179,22 +196,44 @@ func (r *ExecRunner) Stream(ctx context.Context, name string, argv []string, onL
 	if err := cmd.Start(); err != nil {
 		return Result{}, err
 	}
+
+	// Read stdout in a goroutine so Wait can run concurrently. With a
+	// scan-then-Wait order, WaitDelay never gets a chance to fire — the scan
+	// blocks before Wait is reached. Running Wait alongside lets it force-close
+	// the pipe once the process has exited (WaitDelay), which ends the scan even
+	// when a detached grandchild is still holding the write end.
 	var all strings.Builder
-	scanner := bufio.NewScanner(stdoutPipe)
-	scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
-	for scanner.Scan() {
-		line := scanner.Text()
-		all.WriteString(line)
-		all.WriteByte('\n')
-		onLine(line)
-	}
-	scanErr := scanner.Err()
+	scanDone := make(chan error, 1)
+	go func() {
+		scanner := bufio.NewScanner(stdoutPipe)
+		scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+		for scanner.Scan() {
+			line := scanner.Text()
+			all.WriteString(line)
+			all.WriteByte('\n')
+			onLine(line)
+		}
+		scanDone <- scanner.Err()
+	}()
+
 	runErr := cmd.Wait()
+	scanErr := <-scanDone // happens-after the goroutine's last write to `all`
 	dur := r.now().Sub(start)
 	exit := exitCodeOf(runErr)
+	if cmd.ProcessState != nil {
+		// On the WaitDelay path runErr is ErrWaitDelay (not an ExitError), but
+		// the process did exit — read its real status from ProcessState.
+		exit = cmd.ProcessState.ExitCode()
+	}
 	r.record(name, argv, exit, dur, start, runErr)
 
 	res := Result{Stdout: all.String(), Stderr: stderr.String(), ExitCode: exit, Duration: dur}
+	// A detached child holding the pipe makes Wait force-close it after
+	// WaitDelay and return ErrWaitDelay even though git exited cleanly. A clean
+	// exit is a success regardless of the lingering pipe.
+	if errors.Is(runErr, exec.ErrWaitDelay) && exit == 0 {
+		return res, nil
+	}
 	if runErr != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return res, fmt.Errorf("%s cancelled: %w", name, ctxErr)
