@@ -43,6 +43,7 @@ var settingDocs = []settingDoc{
 	{"ui", "commit_search_max_pages", 5, "pages eager /-search scans before asking to search deeper"},
 
 	{"ui", "show_eol_only_changes", false, "show files whose only unstaged change is line endings (CRLF↔LF); default hides them as noise"},
+	{"ui", "disable_slow_op_confirm", false, "skip the yes/no confirmation shown before slow working-tree ops (switch, checkout, pull, merge, rebase, fast-forward, reset)"},
 
 	{"debug", "log_operations", false, "mirror every op + git invocation (redacted) to the operation log; toggle live from the , Settings menu"},
 }
