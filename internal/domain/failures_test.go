@@ -3,6 +3,7 @@ package domain_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/homeend/gigagit/internal/domain"
@@ -53,6 +54,21 @@ func TestExecuteFailureRecorded(t *testing.T) {
 	fs := observ.SessionFailures()
 	if len(fs) != 1 || fs[0].Source != "op failOp" {
 		t.Fatalf("want one 'op failOp' failure, got %+v", fs)
+	}
+}
+
+func TestCommitFeedFailureRecorded(t *testing.T) {
+	observ.ResetFailures()
+	s := newFakeService()
+	// A bare fake runner fails the underlying `git log`. The commit walk routes
+	// through the shared query() helper (key "commits:..."), so the failure is
+	// captured there — no separate CommitFeed hook needed.
+	if _, err := s.CommitFeed().LoadInitial(context.Background()); err == nil {
+		t.Fatal("expected LoadInitial to fail against a bare fake runner")
+	}
+	fs := observ.SessionFailures()
+	if len(fs) != 1 || !strings.HasPrefix(fs[0].Source, "query commits") {
+		t.Fatalf("want one 'query commits…' failure, got %+v", fs)
 	}
 }
 
