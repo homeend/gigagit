@@ -110,6 +110,11 @@ func (s *Service) AddPrefix(ctx context.Context, p model.Prefix) (model.Prefix, 
 	return st.Add(p)
 }
 
+// PrefixID returns the stable id derived from a prefix value. Frontends (the
+// CLI) identify a prefix by its value but must not import internal/prefix
+// directly (archtest-guarded), so they route the slugging through here.
+func PrefixID(value string) string { return prefix.PrefixID(value) }
+
 // RemovePrefix removes id from the store matching scope.
 func (s *Service) RemovePrefix(ctx context.Context, scope model.ProfileScope, id string) error {
 	global, repo := s.prefixStores(ctx)

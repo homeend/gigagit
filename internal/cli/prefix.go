@@ -8,7 +8,6 @@ import (
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/model"
-	"github.com/homeend/gigagit/internal/prefix"
 )
 
 // cmdPrefix implements `gg prefix <ls|add|rm> ...`: the writable two-scope
@@ -82,7 +81,7 @@ func prefixRemove(svc *domain.Service, args []string, stdout, stderr io.Writer) 
 		fmt.Fprintln(stderr, "usage: gg prefix rm <value> [--global]")
 		return 2
 	}
-	id := prefix.PrefixID(fs.Arg(0))
+	id := domain.PrefixID(fs.Arg(0))
 	scope := model.ProfileScopeRepo
 	if *global {
 		scope = model.ProfileScopeGlobal
