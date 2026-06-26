@@ -27,11 +27,12 @@ type settingsPopup struct {
 const (
 	settingsMenuAgents   = "Set up agent skills (using-gg)"
 	settingsMenuIdentity = "Identity & profiles"
+	settingsMenuPrefixes = "Branch prefixes"
 	settingsMenuOpLog    = "Operation log"
 )
 
 // settingsMenu is the top-level menu order.
-var settingsMenu = []string{settingsMenuAgents, settingsMenuIdentity, settingsMenuOpLog}
+var settingsMenu = []string{settingsMenuAgents, settingsMenuIdentity, settingsMenuPrefixes, settingsMenuOpLog}
 
 // settingsMenuLabel renders one menu row. The operation-log row is dynamic: it
 // shows the on/off state and the log filename, so the menu both reveals whether
@@ -153,6 +154,8 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				return m.openAgentPicker(), nil
 			case settingsMenuIdentity:
 				return m.openIdentityView()
+			case settingsMenuPrefixes:
+				return m.openPrefixSettings()
 			case settingsMenuOpLog:
 				return m.toggleOpLog(), nil // stays open so the state flip is visible
 			}
