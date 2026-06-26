@@ -9,14 +9,16 @@ import (
 
 	"github.com/homeend/gigagit/internal/agentinit"
 	"github.com/homeend/gigagit/internal/config"
+	"github.com/homeend/gigagit/internal/observ"
 )
 
 // settingsPopup is the generic Settings surface opened with `,`. v1 has a
 // single menu entry (agent-skill setup); the menu/picker split exists so
 // future options have a home.
 type settingsPopup struct {
-	picker  bool // false = menu screen, true = agent picker
-	dets    []agentinit.Detection
+	picker     bool // false = menu screen, true = agent picker
+	errorsView bool // true = session-errors viewer screen
+	dets       []agentinit.Detection
 	checked []bool
 	sel     int      // selection within the agent picker list
 	menuSel int      // selection within the top-level menu (independent of sel)
@@ -29,10 +31,11 @@ const (
 	settingsMenuIdentity = "Identity & profiles"
 	settingsMenuPrefixes = "Branch prefixes"
 	settingsMenuOpLog    = "Operation log"
+	settingsMenuErrors   = "Session errors"
 )
 
 // settingsMenu is the top-level menu order.
-var settingsMenu = []string{settingsMenuAgents, settingsMenuIdentity, settingsMenuPrefixes, settingsMenuOpLog}
+var settingsMenu = []string{settingsMenuAgents, settingsMenuIdentity, settingsMenuPrefixes, settingsMenuOpLog, settingsMenuErrors}
 
 // settingsMenuLabel renders one menu row. The operation-log row is dynamic: it
 // shows the on/off state and the log filename, so the menu both reveals whether
@@ -51,6 +54,17 @@ func settingsMenuLabel(m Model, i int) string {
 			return settingsMenuOpLog + ": on — " + path
 		}
 		return settingsMenuOpLog + ": off (" + path + ")"
+	}
+	if settingsMenu[i] == settingsMenuErrors {
+		path := defaultErrLogPath()
+		if path == "" {
+			path = "(no state dir)"
+		}
+		n := len(observ.SessionFailures())
+		if n == 0 {
+			return settingsMenuErrors + ": none — " + path
+		}
+		return fmt.Sprintf("%s: %d — %s", settingsMenuErrors, n, path)
 	}
 	return settingsMenu[i]
 }
@@ -111,6 +125,10 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case tea.KeyCtrlC:
 		return m, tea.Quit
 	case tea.KeyEsc:
+		if p.errorsView {
+			p.errorsView = false
+			return m, nil
+		}
 		if p.picker {
 			p.picker = false
 			return m, nil
@@ -136,7 +154,7 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	if !p.picker {
+	if !p.picker && !p.errorsView {
 		switch msg.Type {
 		case tea.KeyUp:
 			if p.menuSel > 0 {
@@ -158,8 +176,27 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				return m.openPrefixSettings()
 			case settingsMenuOpLog:
 				return m.toggleOpLog(), nil // stays open so the state flip is visible
+			case settingsMenuErrors:
+				p.errorsView = true
+				p.sel = 0
+				p.hscroll = 0
+				return m, nil
 			}
 			return m, nil
+		}
+		return m, nil
+	}
+	if p.errorsView {
+		fs := observ.SessionFailures()
+		switch msg.Type {
+		case tea.KeyUp:
+			if p.sel > 0 {
+				p.sel--
+			}
+		case tea.KeyDown:
+			if p.sel < len(fs)-1 {
+				p.sel++
+			}
 		}
 		return m, nil
 	}
@@ -214,7 +251,37 @@ func (p *settingsPopup) box(m Model) string {
 	inner := popupInnerWidth(w)
 	textW := popupTextWidth(inner)
 	var b strings.Builder
-	if !p.picker {
+	if p.errorsView {
+		b.WriteString("Session errors\n\n")
+		fs := observ.SessionFailures()
+		if len(fs) == 0 {
+			b.WriteString("  no errors this session\n")
+		} else {
+			wr := make([]winRow, len(fs))
+			for i, e := range fs {
+				prefix := "  "
+				var st lipgloss.Style
+				if i == p.sel {
+					prefix, st = "> ", selectedRow
+				}
+				wr[i] = winRow{
+					text:  fmt.Sprintf("%s%s  %s — %s", prefix, e.Time.Format("15:04:05"), e.Source, e.Detail),
+					style: st,
+				}
+			}
+			h := len(fs)
+			if h > 12 {
+				h = 12
+			}
+			for _, line := range renderWindow(wr, winOpts{w: textW, h: h, mode: p.mode, anchor: p.sel, hscroll: p.hscroll}) {
+				b.WriteString(line + "\n")
+			}
+		}
+		if path := defaultErrLogPath(); path != "" {
+			b.WriteString("\nfull history: " + path + "\n")
+		}
+		b.WriteString("\n[z] mode  [esc] back")
+	} else if !p.picker {
 		b.WriteString("Settings\n\n")
 		for i := range settingsMenu {
 			prefix := "  "
