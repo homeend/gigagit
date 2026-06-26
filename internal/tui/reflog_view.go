@@ -23,7 +23,7 @@ func (m Model) reflogResetRow() (actionRow, bool) {
 		id:    "reflog-reset",
 		label: "Reset to this entry",
 		run: func(m Model) (tea.Model, tea.Cmd) {
-			return m.startOp(engine.Reset{Commit: hash})
+			return m.confirmOp(engine.Reset{Commit: hash}, "Reset to "+shortHash(hash)+"? This moves the current branch ref.")
 		},
 	}, true
 }

@@ -79,7 +79,9 @@ func (m Model) remoteMergeRow() (actionRow, bool) {
 	return actionRow{
 		id:    "remote-merge",
 		label: "Merge " + rb.Name + " into current (" + cur + ")",
-		run:   func(m Model) (tea.Model, tea.Cmd) { return m.startOp(engine.SmartMerge{Source: rb.Name}) },
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			return m.confirmOp(engine.SmartMerge{Source: rb.Name}, "Merge "+rb.Name+" into current branch?")
+		},
 	}, true
 }
 
@@ -97,7 +99,9 @@ func (m Model) remoteRebaseRow() (actionRow, bool) {
 	return actionRow{
 		id:    "remote-rebase",
 		label: "Rebase current (" + cur + ") onto " + rb.Name,
-		run:   func(m Model) (tea.Model, tea.Cmd) { return m.startOp(engine.SmartRebase{Onto: rb.Name}) },
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			return m.confirmOp(engine.SmartRebase{Onto: rb.Name}, "Rebase current branch onto "+rb.Name+"?")
+		},
 	}, true
 }
 

@@ -63,6 +63,7 @@ func TestBranchMergeRebaseHiddenOnDetachedHEAD(t *testing.T) {
 
 func TestBranchMergeRowDispatches(t *testing.T) {
 	m := branchMergeModel()
+	m.cfg.UI.DisableSlowOpConfirm = true // test op wiring, not confirm UX
 	row, ok := m.branchMergeRow()
 	if !ok {
 		t.Fatal("branchMergeRow not available")
@@ -74,6 +75,7 @@ func TestBranchMergeRowDispatches(t *testing.T) {
 
 func TestBranchRebaseRowDispatches(t *testing.T) {
 	m := branchMergeModel()
+	m.cfg.UI.DisableSlowOpConfirm = true // test op wiring, not confirm UX
 	row, ok := m.branchRebaseRow()
 	if !ok {
 		t.Fatal("branchRebaseRow not available")

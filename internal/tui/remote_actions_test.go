@@ -96,6 +96,7 @@ func TestRemoteMergeRebaseHiddenOnDetachedHEAD(t *testing.T) {
 
 func TestRemoteMergeRowDispatchesSmartMerge(t *testing.T) {
 	m := remoteModel()
+	m.cfg.UI.DisableSlowOpConfirm = true // test op wiring, not confirm UX
 	row, ok := m.remoteMergeRow()
 	if !ok {
 		t.Fatal("remoteMergeRow not available")
@@ -107,6 +108,7 @@ func TestRemoteMergeRowDispatchesSmartMerge(t *testing.T) {
 
 func TestRemoteRebaseRowDispatchesSmartRebase(t *testing.T) {
 	m := remoteModel()
+	m.cfg.UI.DisableSlowOpConfirm = true // test op wiring, not confirm UX
 	row, ok := m.remoteRebaseRow()
 	if !ok {
 		t.Fatal("remoteRebaseRow not available")

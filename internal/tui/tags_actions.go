@@ -91,7 +91,9 @@ func (m Model) tagMergeRow() (actionRow, bool) {
 	return actionRow{
 		id:    "tag-merge",
 		label: "Merge " + name + " into current (" + cur + ")",
-		run:   func(m Model) (tea.Model, tea.Cmd) { return m.startOp(engine.SmartMerge{Source: name}) },
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			return m.confirmOp(engine.SmartMerge{Source: name}, "Merge "+name+" into current branch?")
+		},
 	}, true
 }
 
@@ -112,7 +114,9 @@ func (m Model) tagRebaseRow() (actionRow, bool) {
 	return actionRow{
 		id:    "tag-rebase",
 		label: "Rebase current (" + cur + ") onto " + name,
-		run:   func(m Model) (tea.Model, tea.Cmd) { return m.startOp(engine.SmartRebase{Onto: name}) },
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			return m.confirmOp(engine.SmartRebase{Onto: name}, "Rebase current branch onto "+name+"?")
+		},
 	}, true
 }
 

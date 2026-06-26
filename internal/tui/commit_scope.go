@@ -763,7 +763,7 @@ func (m Model) commitFastForwardRow() (actionRow, bool) {
 		id:    "commit-fast-forward",
 		label: "Fast-forward " + branch + " to here",
 		run: func(m Model) (tea.Model, tea.Cmd) {
-			return m.startOp(engine.FastForward{Commit: selHash})
+			return m.confirmOp(engine.FastForward{Commit: selHash}, "Fast-forward to this commit?")
 		},
 	}, true
 }
@@ -784,7 +784,7 @@ func (m Model) commitResetRow() (actionRow, bool) {
 		id:    "commit-reset",
 		label: "Reset to this commit",
 		run: func(m Model) (tea.Model, tea.Cmd) {
-			return m.startOp(engine.Reset{Commit: hash})
+			return m.confirmOp(engine.Reset{Commit: hash}, "Reset to "+shortHash(hash)+"? This moves the current branch ref.")
 		},
 	}, true
 }

@@ -4,6 +4,21 @@ import (
 	"testing"
 )
 
+// TestMergeMenuPopsConfirm: the branch . menu merge row should open the yes/no
+// confirm modal instead of starting the op directly.
+func TestMergeMenuPopsConfirm(t *testing.T) {
+	m := branchMergeModel()
+	row, ok := m.branchMergeRow()
+	if !ok {
+		t.Fatal("branch-merge row should be available")
+	}
+	tm, _ := row.run(m)
+	mm := tm.(Model)
+	if mm.modal == nil || !mm.modal.confirm {
+		t.Fatal("merge menu action should pop the slow-op confirm")
+	}
+}
+
 // TestSwitchKeyPopsConfirm: pressing s on a local branch that is NOT checked
 // out in any other worktree should open the yes/no confirm modal (not start
 // the op immediately).
