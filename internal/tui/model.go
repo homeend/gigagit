@@ -529,7 +529,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m.resolveModal(m.modal.req.Options[m.modal.sel])
 			case "y", "Y":
 				if m.modal.confirm {
-					return m.resolveModal(m.modal.req.Options[0]) // "Yes"
+					return m.resolveModal("Yes")
 				}
 			case "n", "N":
 				if m.modal.confirm {
