@@ -1,0 +1,43 @@
+name = "push: rejected non-fast-forward, --on-reject=rebase recovers and lands on origin"
+
+[input]
+steps = [
+  { write = "local.txt", content = "l\n" },
+  { commit = "local change" },
+]
+
+[input.origin]
+steps = [
+  { write = "a.txt", content = "v1\n" },
+  { commit = "initial" },
+]
+after = [
+  { write = "upstream.txt", content = "u\n" },
+  { commit = "upstream change" },
+]
+
+# Local is diverged: ahead by "local change", behind by "upstream change". A
+# plain push is rejected non-fast-forward; --on-reject=rebase replays the local
+# commit onto the upstream tip (disjoint files → clean) and re-pushes.
+[[run]]
+cmd  = ["push", "--on-reject=rebase"]
+exit = 0
+
+[expect]
+branch      = "main"
+clean       = true
+ahead       = 0                       # the rebased commit was pushed
+behind      = 0
+in_progress = "none"
+
+[expect.files]
+"upstream.txt" = "u\n"
+"local.txt"    = "l\n"
+
+[[expect.log]]
+subjects = ["local change", "upstream change", "initial"]
+
+[expect.origin]
+[[expect.origin.log]]
+branch   = "main"
+subjects = ["local change", "upstream change", "initial"]

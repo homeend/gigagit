@@ -9,6 +9,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Smart push recovery.** When a plain push is rejected because the remote has
+  moved ahead, gg no longer dead-ends on an error: from the single push action
+  it offers **rebase onto the remote and push**, **force-push** (routing through
+  the existing force-with-lease / force confirm), or **abort**. In the CLI,
+  `gg push --on-reject=rebase|force|force-with-lease|abort` drives the same
+  recovery; with the flag unset a rejected push fails fast (non-interactive) or
+  prompts (interactive), so a script never silently no-ops.
 - **Soft reload.** Pressing `r` no longer blanks the screen on large repos: the
   panels stay visible (showing the previous data) with a ⏳ in each panel title
   and a `reloading…` status line until the fresh data swaps in. Repo switches and
@@ -72,6 +79,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   message so the failure is diagnosable.
 
 ### Changed
+- **Readable push-rejection messages.** A rejected push no longer dumps git's
+  raw multi-line stderr into the one-line status bar. The common reasons are
+  rewritten into a single actionable sentence: a **non-fast-forward** rejection
+  → "the remote has commits you don't have; pull (or fetch + rebase) first, or
+  force-push to overwrite"; a `--force-with-lease` **stale-info** refusal → "the
+  remote moved since your last fetch; fetch & review, then retry" (so the lease
+  safety net is explained rather than mistaken for a defect); a server-side
+  **protected-branch / pre-receive hook** rejection gets its own message.
 - **Module path is now `github.com/homeend/gigagit`** (was
   `github.com/gigagit/gg`). The repo is hosted at
   <https://github.com/homeend/gigagit>, so the tool installs with

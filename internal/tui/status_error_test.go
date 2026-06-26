@@ -29,10 +29,70 @@ func TestFriendlyOpErrorExplainsMissingCredentials(t *testing.T) {
 }
 
 func TestFriendlyOpErrorPassesThroughOtherFailures(t *testing.T) {
-	raw := errors.New("git push failed (exit 1): ! [rejected] main -> main (non-fast-forward)")
+	raw := errors.New("git stash apply failed (exit 1): some unrecognised git noise")
 	got := friendlyOpError(raw)
-	if !strings.Contains(got, "non-fast-forward") {
+	if !strings.Contains(got, "some unrecognised git noise") {
 		t.Fatalf("unrelated failure should pass through, got: %q", got)
+	}
+}
+
+// A non-fast-forward rejection (plain push) is git's most common push failure.
+// The raw multi-line stderr ("! [rejected] … (non-fast-forward)" + a wall of
+// hints) is useless in a one-line status bar, so friendlyOpError rewrites it
+// into one actionable sentence — and must not leak the raw "(non-fast-forward)"
+// token or the multi-line hint block.
+func TestFriendlyOpErrorExplainsNonFastForward(t *testing.T) {
+	raw := errors.New("git push failed (exit 1): To ssh://host/repo.git\n " +
+		"! [rejected]        br -> br (non-fast-forward)\n" +
+		"error: failed to push some refs to 'ssh://host/repo.git'\n" +
+		"hint: Updates were rejected because the tip of your current branch is behind")
+	got := friendlyOpError(raw)
+	if !statusIsError(got) {
+		t.Fatalf("want an error: line, got %q", got)
+	}
+	if strings.Contains(got, "\n") {
+		t.Fatalf("status line must be a single line, got %q", got)
+	}
+	if strings.Contains(strings.ToLower(got), "non-fast-forward") || strings.Contains(got, "hint:") {
+		t.Fatalf("friendly message still leaks raw git noise: %q", got)
+	}
+	if !strings.Contains(strings.ToLower(got), "new commits") {
+		t.Fatalf("message should explain the remote is ahead: %q", got)
+	}
+}
+
+// "stale info" is what --force-with-lease reports when the remote moved since
+// the last fetch — the safety net firing, not a defect. The user needs to know
+// it means "fetch first", not raw git jargon.
+func TestFriendlyOpErrorExplainsStaleInfo(t *testing.T) {
+	raw := errors.New("git push failed (exit 1): To ssh://host/repo.git\n " +
+		"! [rejected]        br -> br (stale info)\n" +
+		"error: failed to push some refs to 'ssh://host/repo.git'")
+	got := friendlyOpError(raw)
+	if !statusIsError(got) || strings.Contains(got, "\n") {
+		t.Fatalf("want a single error: line, got %q", got)
+	}
+	low := strings.ToLower(got)
+	if !strings.Contains(low, "force-with-lease") || !strings.Contains(low, "fetch") {
+		t.Fatalf("message should name force-with-lease and steer to fetch: %q", got)
+	}
+	if strings.Contains(low, "stale info") {
+		t.Fatalf("friendly message still leaks the raw '(stale info)' token: %q", got)
+	}
+}
+
+// A server-side rejection (protected branch / pre-receive hook) is not something
+// pull-then-push fixes, so it gets its own message rather than the remote-ahead one.
+func TestFriendlyOpErrorExplainsHookRejection(t *testing.T) {
+	raw := errors.New("git push failed (exit 1): remote: error: GH006: Protected branch update failed\n" +
+		"! [remote rejected] main -> main (pre-receive hook declined)")
+	got := friendlyOpError(raw)
+	if !statusIsError(got) || strings.Contains(got, "\n") {
+		t.Fatalf("want a single error: line, got %q", got)
+	}
+	low := strings.ToLower(got)
+	if !strings.Contains(low, "protected") && !strings.Contains(low, "hook") {
+		t.Fatalf("message should name the server-side rejection: %q", got)
 	}
 }
 

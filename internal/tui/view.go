@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/pusherr"
 )
 
 // overlayAt composites fg on top of bg with fg's top-left corner at cell
@@ -106,7 +107,34 @@ func friendlyOpError(err error) string {
 		strings.Contains(low, "could not read password") {
 		return "error: remote needs credentials — configure a git credential helper (gg cannot prompt for them)"
 	}
+	if msg, ok := friendlyPushError(low); ok {
+		return msg
+	}
 	return "error: " + s
+}
+
+// friendlyPushError rewrites git's multi-line push-rejection stderr into one
+// actionable status line. A push rejection dumps a "! [rejected] … (reason)"
+// line plus a wall of hints — useless in a single-line status bar — so the
+// common reasons are mapped to a short sentence that says what to do next. The
+// signatures are classified by internal/pusherr, the single source of truth
+// shared with the engine's recovery trigger. Order matters: the server-side
+// rejection and the force-with-lease "stale info" cases are distinguished
+// before the generic non-fast-forward case. The argument is the error text
+// (pusherr lowercases internally, so an already-lowercased value is fine).
+//
+// Messages are kept tight so the remedy survives status-bar truncation on an
+// ~80-col terminal — the action is the whole point of the rewrite.
+func friendlyPushError(low string) (string, bool) {
+	switch {
+	case pusherr.IsHookRejection(low):
+		return "error: push rejected by the remote (protected branch or server-side hook)", true
+	case pusherr.IsStaleInfo(low):
+		return "error: force-with-lease refused — remote moved; fetch & review, then retry", true
+	case pusherr.IsNonFastForward(low):
+		return "error: push rejected — remote has new commits; pull/rebase first, or force-push", true
+	}
+	return "", false
 }
 
 // statusIsError reports whether a status message reports a failure.
