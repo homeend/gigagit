@@ -6,11 +6,14 @@
 
 ## Summary
 
-Add a registry of reusable **branch-name prefixes** that a user can select when
-creating a branch or a worktree. A prefix is a short, possibly-templated string
-(e.g. `feat/`, `jdoe/`, `wt/<date:yyyy-MM-dd>/`). Selecting one **populates the
-branch-name field** with the resolved prefix and leaves the cursor at the end so
-the user types the remaining name.
+Add a registry of reusable **branch-name prefixes** (really branch-name
+*skeletons*) that a user can select when creating a branch or a worktree. A
+prefix is a short, possibly-templated string — from a literal `feat/` up to a
+company schema like `john_smith/ISSUE-<user:issue-id>` or
+`john_smith/sandbox-<seq:sandbox_seq:4>`. Selecting one **fills any interactive
+`<user:…>` labels**, **resolves** the template, **populates the branch-name
+field** with the result, and leaves the cursor at the end so the user appends the
+remaining free text (e.g. `_some_text_description`).
 
 Prefixes live in a **writable two-scope store** (global + per-repo) that mirrors
 `internal/profile` exactly. They are **managed in Settings** (add/edit/remove,
@@ -29,7 +32,7 @@ tail.
 
 | Question | Decision |
 |----------|----------|
-| Prefix content | **Template strings** using gg's native `<…>` tokens, **non-interactive subset only** |
+| Prefix content | **Template strings** using gg's native `<…>` tokens — **all tokens including interactive `<user:LABEL>`** (only `<branch>` disallowed) |
 | Storage | **Writable two-scope store** (global + per-repo), mirroring `internal/profile`; **not** `.gg.toml` |
 | Management UI | **Settings sub-screen** (like Identity & profiles); the create-time picker is **select-only** |
 | CLI | **Included now**: `gg prefix ls | add <value> [--global] | rm <value>` |
@@ -37,18 +40,25 @@ tail.
 
 ### Token scope (load-bearing constraint)
 
-A prefix resolves through the existing `internal/template` engine with an
-**empty `inputs` map**. Allowed tokens (all non-interactive):
+A prefix resolves through the existing `internal/template` engine. **All tokens
+are allowed except `<branch>`**:
 
-- `<date:FMT>`, `<parent-branch>`, `<repo>`, `<seq:NAME>`,
-  `<random-alpha:N>`, `<random-num:N>`
+- `<user:LABEL>` — **interactive**; collected at select time (see picker flow).
+  Example: `john_smith/ISSUE-<user:issue-id>`.
+- `<seq:NAME>` and `<seq:NAME:N>` (zero-padded width N). Example:
+  `john_smith/sandbox-<seq:sandbox_seq:4>` → `…sandbox-0007`.
+- `<date:FMT>`, `<parent-branch>`, `<repo>`, `<random-alpha:N>`, `<random-num:N>`.
 
-**Disallowed**: `<user:LABEL>` (free-input) and `<branch>`. Rationale: the whole
-point of a prefix is that *the user types the tail*, so an interactive label
-would be redundant; `<branch>` is path-only and meaningless in a branch name. A
-prefix containing a disallowed token is rejected at **add time** (validation in
-the store/domain layer) and, defensively, fails resolution (empty `inputs` makes
-`<user:>` error) so a bad row can never silently produce a broken name.
+**Disallowed**: `<branch>` — it is path-only / self-referential and the branch
+name doesn't exist yet at create time. A prefix containing `<branch>`, an unknown
+token, or a malformed token is rejected at **add time** (domain validation) so a
+bad row can never reach the create flow.
+
+> Note on token names: gg's engine uses `<user:…>`, `<seq:NAME:N>`,
+> `<random-num:N>` (lowercase). A "numbered counter padded to N" is
+> `<seq:NAME:N>` (the user's `<num:sandbox_seq:4>` notation maps to
+> `<seq:sandbox_seq:4>`). We keep the engine's existing token vocabulary; no new
+> aliases are introduced.
 
 ## Architecture
 
@@ -64,7 +74,7 @@ exactly like profiles/bookmarks/shelf.
                                 |
                          internal/prefix  ← Store interface + file impl
                                               (prefixes.toml, atomic rewrite)
-   resolution: internal/template.Resolve (non-interactive ctx) — reused
+   resolution: internal/template.Resolve (collected inputs + tctx) — reused
 ```
 
 ### 1. `internal/prefix` (new package — mirrors `internal/profile`)
@@ -105,22 +115,35 @@ scope; a prefix's identity is its value, like a bookmark's is its address.)
 - `RemovePrefix(ctx, scope, id) error`.
 - `service.go`: add `prefixGlobal`, `prefixRepo prefix.Store` fields.
 
-Token validation helper (domain): parse `Value` with `template.Resolve(value,
-map[string]string{}, neutralCtx)` where `neutralCtx` supplies `Now`/`Rand`/an
-empty `Seqs` — a successful resolve with empty inputs proves no interactive
-`<user:>` token; additionally scan for `<branch>` and reject. Return a clear
-`invalid prefix: …` error surfaced to both Settings and CLI.
+Token validation helper (domain): well-formedness is proven by a **dry resolve
+with placeholder inputs** — build `inputs` from `template.UserLabels(value)` (each
+label → a placeholder), a neutral `Ctx` (`Now`/`Rand`/`Repo`/`ParentBranch` set,
+`Seqs` = each `template.SeqNames(value)` → 0), then `template.Resolve`. A resolve
+error means an unknown/malformed token → reject. Additionally scan tokens and
+**reject `<branch>`** explicitly (it resolves to empty rather than erroring).
+Return a clear `invalid prefix: …` error surfaced to both Settings and CLI.
 
 ### 4. Resolution at create time (reuse)
 
-Resolution stays in the TUI popups, reusing `template.Resolve` and the popup's
-existing `tctx()` (which already supplies `Now`/`Rand`/`Seqs`/`ParentBranch`/
-`Repo`). The resolved prefix string is inserted into the branch-name buffer.
+Resolution stays in the TUI, reusing `template.Resolve` and the popup's `tctx()`
+(`Now`/`Rand`/`Seqs`/`ParentBranch`/`Repo`). Because a prefix may contain
+interactive `<user:LABEL>` tokens, selecting it runs through a small **fill
+step** (see §5) that collects those labels into an `inputs` map before
+`template.Resolve`. The resolved string is inserted into the branch-name buffer.
 
-**`<seq>` in a prefix**: peeked for the preview, the counter is bumped only on
-actual create. The worktree popup already does this via `pendingSeqBump`; the
-create-branch popup gains the same peek + bump-on-success plumbing. A prefix's
-`<seq>` names are unioned into the consumed-seq set when that prefix is used.
+This "collect a template's `<user>` labels + peek its `<seq>` + resolve" flow is
+the same one the worktree popup already implements (`stInput` → `worktree.Resolve`
++ `PeekSeqs`). It is factored into a small reusable TUI helper
+(`templateFill` — a textfield-per-label collector returning the resolved string)
+consumed by both the prefix picker and the worktree popup, so the logic is not
+duplicated.
+
+**`<seq>` in a prefix**: the prefix's `<seq>` names are peeked (via
+`worktree.PeekSeqs` against the same fixed `seqs` snapshot used for any preview)
+and the counters are bumped only on actual create. The worktree popup already
+does this via `pendingSeqBump`; the create-branch popup gains the same peek +
+bump-on-success plumbing. A used prefix's `<seq>` names are unioned into the
+consumed-seq set.
 
 ### 5. TUI — select-only picker popup
 
@@ -130,15 +153,25 @@ are grouped/tagged **[Global]** / **[Repo]**, each showing the raw template and 
 live-resolved preview (resolved against the opener's ctx). Empty store → a hint
 row pointing at Settings.
 
+**Select → fill → insert.** On `enter` over a prefix row:
+
+1. If the prefix has interactive `<user:LABEL>` tokens
+   (`template.UserLabels(value)` non-empty), push the `templateFill` step: one
+   focused textfield per label (`tab`/`enter` advances, `esc` backs out to the
+   picker). Otherwise skip straight to resolve.
+2. Resolve the prefix with the collected `inputs` + the opener's `tctx()`
+   (peeking the prefix's `<seq>` names).
+3. Insert the resolved string into the branch-name buffer, cursor at end.
+
 Entry points:
 
 - **Create-branch popup** (`branch_popup.go`): new key **`p`** ("use a prefix").
-  On select → resolve → set the `name` field value to the resolved prefix, cursor
-  at end → user continues typing. (This popup gains a `tctx()`/seq-peek helper so
-  templated prefixes resolve; today it has none.)
+  After fill+resolve → set the `name` field value to the resolved string, cursor
+  at end → user continues typing. (This popup gains a `tctx()`/seq-peek helper and
+  the `templateFill` step; today it has none.)
 - **Create-worktree popup** (`worktree_popup.go`): in `stAction`, add
-  **`[p] use a prefix & edit`** next to `[e] edit name`. On select → resolve →
-  enter the existing `stEdit` state with `editBuf` seeded to the resolved prefix
+  **`[p] use a prefix & edit`** next to `[e] edit name`. After fill+resolve →
+  enter the existing `stEdit` state with `editBuf` seeded to the resolved string
   (cursor at end). Reuses the `branchOverride` machinery — **no new edit state**.
   Available in new-branch and `fromCommit` modes; suppressed in `existing` mode
   (no new branch name there), consistent with `[e]`.
@@ -171,10 +204,13 @@ New `internal/cli/prefix.go` with `cmdPrefix`, routed by a `case "prefix"` in
 
 1. User opens create-branch or create-worktree, presses `p`.
 2. Picker loads `domain.Prefixes(ctx)`; user filters/selects a row.
-3. Popup resolves the selected `Value` with its `tctx()` (peeking `<seq>`).
-4. Resolved string lands in the branch-name buffer, cursor at end; user types
-   the tail and creates as normal.
-5. On successful create, used `<seq>` counters (template + prefix) are bumped.
+3. If the prefix has `<user:…>` labels, the `templateFill` step collects them.
+4. Popup resolves the selected `Value` with the collected `inputs` + its
+   `tctx()` (peeking `<seq>`).
+5. Resolved string lands in the branch-name buffer, cursor at end; user appends
+   the free-text tail and creates as normal.
+6. On successful create, used `<seq>` counters (worktree template + prefix) are
+   bumped.
 
 ## Error handling
 
@@ -192,13 +228,16 @@ New `internal/cli/prefix.go` with `cmdPrefix`, routed by a `case "prefix"` in
 - `internal/prefix`: file-store round-trip (add/list/remove, scope tagging,
   atomic rewrite), `PrefixID` slugging — mirror `profile/file_store_test.go`.
 - `internal/domain`: `Prefixes` merge+tag order; `AddPrefix` token validation
-  (accept `<date>`/`<seq>`/`<random>`/`<parent-branch>`/`<repo>`; reject
-  `<user:…>`, `<branch>`, malformed); scope routing — with injected temp stores.
-- `internal/tui`: picker open/filter/select inserts resolved prefix into the
-  field (both popups); worktree `p` seeds `stEdit`; Settings add/edit/remove
-  round-trip through injected stores; `<seq>` peek-vs-bump.
+  (accept `<date>`/`<seq:NAME:N>`/`<random>`/`<parent-branch>`/`<repo>`/
+  `<user:LABEL>`; reject `<branch>`, unknown/malformed tokens); scope routing —
+  with injected temp stores.
+- `internal/tui`: `templateFill` collects `<user>` labels then resolves
+  (table-driven: no-label fast path, multi-label, `<seq:NAME:N>` padding,
+  `<user>` + tail append); picker open/filter/select inserts the resolved string
+  into the field (both popups); worktree `p` seeds `stEdit`; Settings
+  add/edit/remove round-trip through injected stores; `<seq>` peek-vs-bump.
 - `internal/cli`: `gg prefix add/ls/rm` happy paths + `--global` scope +
-  invalid-token rejection (FakeRunner / temp state dir).
+  invalid-token rejection (`<branch>`/malformed) (FakeRunner / temp state dir).
 - e2e: a scenario creating a prefix then a branch/worktree using it (asserts the
   resulting branch name), if the harness can drive the picker (else CLI-only).
 
@@ -220,5 +259,4 @@ New `internal/cli/prefix.go` with `cmdPrefix`, routed by a `case "prefix"` in
 - Worktree path-leaf editing (next spec).
 - Repurposing the unused `config.BranchTemplates` field (left as-is).
 - Editing a prefix's scope in place / renaming (remove + re-add instead).
-- Interactive `<user:LABEL>` tokens in prefixes.
 ```
