@@ -254,6 +254,26 @@ func TestLoadOverlaysCommitGraphFields(t *testing.T) {
 	}
 }
 
+func TestOverlayDisableSlowOpConfirm(t *testing.T) {
+	// Default zero value: confirmation enabled (field false).
+	var def UIConfig
+	if def.DisableSlowOpConfirm {
+		t.Fatal("zero UIConfig should leave slow-op confirm enabled (DisableSlowOpConfirm=false)")
+	}
+	// A true in a higher layer overlays up to disable.
+	dst := UIConfig{}
+	overlayUI(&dst, UIConfig{DisableSlowOpConfirm: true})
+	if !dst.DisableSlowOpConfirm {
+		t.Fatal("overlayUI did not propagate DisableSlowOpConfirm=true")
+	}
+	// A false in a higher layer does NOT clear a true already set (OR-only).
+	dst2 := UIConfig{DisableSlowOpConfirm: true}
+	overlayUI(&dst2, UIConfig{DisableSlowOpConfirm: false})
+	if !dst2.DisableSlowOpConfirm {
+		t.Fatal("overlayUI must not clear an existing true (OR-only semantics)")
+	}
+}
+
 func TestCommitPageSizeDefaultsAndOverlay(t *testing.T) {
 	// Defaults.
 	d := Defaults().UI

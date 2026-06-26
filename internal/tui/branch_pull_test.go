@@ -63,3 +63,18 @@ func TestBackgroundPullRowGating(t *testing.T) {
 		t.Fatal("background-pull row must be Branches-panel only")
 	}
 }
+
+func TestBackgroundPullRowPopsConfirm(t *testing.T) {
+	m := markModel()
+	m.focus = panelBranches
+	m.sel[panelBranches] = 1 // feat/a, non-current
+	row, ok := m.backgroundPullRow()
+	if !ok {
+		t.Fatal("background-pull row should be present on a non-current branch")
+	}
+	tm, _ := row.run(m)
+	mm := tm.(Model)
+	if mm.modal == nil || !mm.modal.confirm {
+		t.Fatal("background-pull menu action should pop the slow-op confirm")
+	}
+}

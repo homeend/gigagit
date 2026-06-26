@@ -24,7 +24,9 @@ func (m Model) branchMergeRow() (actionRow, bool) {
 	return actionRow{
 		id:    "branch-merge",
 		label: "Merge " + b.Name + " into current (" + cur + ")",
-		run:   func(m Model) (tea.Model, tea.Cmd) { return m.startOp(engine.SmartMerge{Source: b.Name}) },
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			return m.confirmOp(engine.SmartMerge{Source: b.Name}, "Merge "+b.Name+" into current branch?")
+		},
 	}, true
 }
 
@@ -43,6 +45,8 @@ func (m Model) branchRebaseRow() (actionRow, bool) {
 	return actionRow{
 		id:    "branch-rebase",
 		label: "Rebase current (" + cur + ") onto " + b.Name,
-		run:   func(m Model) (tea.Model, tea.Cmd) { return m.startOp(engine.SmartRebase{Onto: b.Name}) },
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			return m.confirmOp(engine.SmartRebase{Onto: b.Name}, "Rebase current branch onto "+b.Name+"?")
+		},
 	}, true
 }

@@ -107,6 +107,7 @@ func TestSKeyOnLocalBranchStillSmartSwitches(t *testing.T) {
 	m := loadModel(t, repo)
 	m.focus = panelBranches
 	selectBranchRow(t, &m, "feature/local")
+	m.cfg.UI.DisableSlowOpConfirm = true // test routing (not worktree path), not confirm UX
 
 	u, cmd := m.Update(keyMsg("s"))
 	m = u.(Model)

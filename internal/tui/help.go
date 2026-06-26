@@ -11,10 +11,10 @@ func helpContent() []contentLine {
 	}
 	return []contentLine{
 		h("Global"),
-		r("p", "pull (SmartPull: autostash, ff/rebase decisions). On the Branches panel, a non-current branch pulls in the background (stay here): ff its ref, pull in its worktree, or stash→switch→pull→switch-back"),
+		r("p", "pull (SmartPull: autostash, ff/rebase decisions). On the Branches panel, a non-current branch pulls in the background (stay here): ff its ref, pull in its worktree, or stash→switch→pull→switch-back. Slow ops confirm first (y/n; disable with [ui] disable_slow_op_confirm)."),
 		r("P", "push the current branch (sets upstream)"),
 		r("", "Force push <branch> (.-menu on the Branches panel, current branch): force-push the current branch — a modal offers force-with-lease (refuses if the remote moved under you) or force (overwrites the remote unconditionally); esc aborts"),
-		r("s", "switch to the selected branch (SmartSwitch); if it's in another worktree, offers to jump there"),
+		r("s", "switch to the selected branch (SmartSwitch); if it's in another worktree, offers to jump there. Confirms first (y/n)."),
 		r("S", "open the stash window (list all stashes)"),
 		r("u", "undo the last commit (soft, ref-only)"),
 		r("g", "bookmark quick-switcher: jump to / compare / paste a bookmarked file (the . menu on any file offers Bookmark this file and Compare against bookmark — pick a bookmark, then diff the focused file against it). In it (navigation-first): ↑↓/jk move, enter jumps (diffs the bookmark vs the working-tree file), e opens the bookmarked file in your external editor (read-only), p pastes to a typed path, m marks one then a second to compare, c compares the highlighted bookmark against a shelf entry, x removes (confirms), / filters, ? shows the key list, esc closes"),

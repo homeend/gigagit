@@ -14,6 +14,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   dir**, which writes that file's content into the working tree at its own path
   (with an overwrite prompt if a differing working file already exists). It is
   the write-sibling of **Compare against working dir**.
+- **Confirm slow operations.** The TUI now asks a yes/no confirmation (default
+  **No**; `y`/`n`/`esc`) before slow working-tree operations — switch, remote
+  checkout, pull, merge, rebase, fast-forward, and reset. On by default; opt out
+  with `[ui] disable_slow_op_confirm = true`.
 - **Smart push recovery.** When a plain push is rejected because the remote has
   moved ahead, gg no longer dead-ends on an error: from the single push action
   it offers **rebase onto the remote and push**, **force-push** (routing through

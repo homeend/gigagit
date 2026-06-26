@@ -37,7 +37,7 @@ func (m Model) backgroundPullRow() (actionRow, bool) {
 		id:    "pull-branch-bg",
 		label: "Pull " + name + " (stay here)",
 		run: func(m Model) (tea.Model, tea.Cmd) {
-			return m.startOp(engine.SmartPull{Branch: name, Intent: engine.PullInBackground})
+			return m.confirmOp(engine.SmartPull{Branch: name, Intent: engine.PullInBackground}, "Pull "+name+" (stay here)?")
 		},
 	}, true
 }

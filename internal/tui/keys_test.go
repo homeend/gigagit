@@ -4,6 +4,7 @@ import "testing"
 
 func TestPullKeyStartsOperation(t *testing.T) {
 	m := loadedModel(t)
+	m.cfg.UI.DisableSlowOpConfirm = true // test op routing, not confirm UX
 	updated, cmd := m.Update(keyMsg("p"))
 	mm := updated.(Model)
 	if !mm.running {

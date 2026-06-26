@@ -42,6 +42,12 @@ type UIConfig struct {
 	CommitSearchMaxPages int `toml:"commit_search_max_pages"` // eager /-search page cap before re-prompting; <=0 = unset (default 5)
 
 	ShowEOLOnlyChanges bool `toml:"show_eol_only_changes"` // surface files whose only unstaged change is line endings (CRLF↔LF); false (default) hides them as noise
+
+	// DisableSlowOpConfirm turns OFF the yes/no confirmation shown before slow
+	// working-tree operations (switch, checkout, pull, merge, rebase,
+	// fast-forward, reset). Inverted polarity: default false ⇒ confirmation ON;
+	// only a true in a higher layer overlays (matching the zero-is-unset rule).
+	DisableSlowOpConfirm bool `toml:"disable_slow_op_confirm"`
 }
 
 // DebugConfig configures diagnostic logging. TOML keys are snake_case.
@@ -174,6 +180,9 @@ func overlayUI(dst *UIConfig, src UIConfig) {
 	// only a true in a higher layer overlays — matching the zero-is-unset rule.
 	if src.ShowEOLOnlyChanges {
 		dst.ShowEOLOnlyChanges = true
+	}
+	if src.DisableSlowOpConfirm {
+		dst.DisableSlowOpConfirm = true
 	}
 }
 

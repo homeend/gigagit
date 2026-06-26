@@ -360,6 +360,7 @@ func TestTagMergeRebaseHiddenOnDetachedHEAD(t *testing.T) {
 
 func TestTagMergeRowDispatches(t *testing.T) {
 	m := tagsMergeModel()
+	m.cfg.UI.DisableSlowOpConfirm = true // test op wiring, not confirm UX
 	row, ok := m.tagMergeRow()
 	if !ok {
 		t.Fatal("tagMergeRow not available")
@@ -371,6 +372,7 @@ func TestTagMergeRowDispatches(t *testing.T) {
 
 func TestTagRebaseRowDispatches(t *testing.T) {
 	m := tagsMergeModel()
+	m.cfg.UI.DisableSlowOpConfirm = true // test op wiring, not confirm UX
 	row, ok := m.tagRebaseRow()
 	if !ok {
 		t.Fatal("tagRebaseRow not available")

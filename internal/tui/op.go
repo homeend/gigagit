@@ -213,6 +213,7 @@ type decisionState struct {
 	req       engine.DecisionRequest
 	reply     chan engine.DecisionResponse
 	sel       int
+	confirm   bool // yes/no confirm modal: enables y/n accelerators (frontend-only)
 	onResolve func(m Model, opt string) (tea.Model, tea.Cmd)
 }
 
