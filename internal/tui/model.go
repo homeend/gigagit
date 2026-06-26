@@ -526,21 +526,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.modal.sel++
 				}
 			case "enter":
-				opt := m.modal.req.Options[m.modal.sel]
-				if r := m.modal.onResolve; r != nil {
-					m.modal = nil
-					return r(m, opt)
+				return m.resolveModal(m.modal.req.Options[m.modal.sel])
+			case "y", "Y":
+				if m.modal.confirm {
+					return m.resolveModal(m.modal.req.Options[0]) // "Yes"
 				}
-				m.modal.reply <- engine.DecisionResponse{Option: opt}
-				m.modal = nil
+			case "n", "N":
+				if m.modal.confirm {
+					return m.resolveModal(abortOption(m.modal.req.Options)) // "No"
+				}
 			case "esc":
-				opt := abortOption(m.modal.req.Options)
-				if r := m.modal.onResolve; r != nil {
-					m.modal = nil
-					return r(m, opt)
-				}
-				m.modal.reply <- engine.DecisionResponse{Option: opt}
-				m.modal = nil
+				return m.resolveModal(abortOption(m.modal.req.Options))
 			}
 			return m, nil
 		}
@@ -2034,6 +2030,49 @@ func abortOption(opts []string) string {
 		return opts[len(opts)-1]
 	}
 	return ""
+}
+
+// confirmSlowOps reports whether slow working-tree ops should pop a yes/no
+// confirmation first. On by default; the inverted [ui] disable_slow_op_confirm
+// turns it off. m.cfg is the zero Config only before the first load, where the
+// zero value (false) also yields confirm-on — the desired default.
+func (m Model) confirmSlowOps() bool { return !m.cfg.UI.DisableSlowOpConfirm }
+
+// confirmOp guards a slow working-tree operation behind a yes/no modal whose
+// default (highlighted, and so enter) selection is No. y/Y confirm, n/N/esc
+// cancel. When confirmation is disabled it launches the op directly.
+func (m Model) confirmOp(op engine.Operation, prompt string) (tea.Model, tea.Cmd) {
+	if !m.confirmSlowOps() {
+		return m.startOp(op)
+	}
+	m.modal = &decisionState{
+		req: engine.DecisionRequest{
+			ID:      "confirm-slow-op",
+			Prompt:  prompt,
+			Options: []string{"Yes", "No"},
+		},
+		sel:     1, // default highlight = No
+		confirm: true,
+		onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {
+			if opt == "Yes" {
+				return m.startOp(op)
+			}
+			return m, nil
+		},
+	}
+	return m, nil
+}
+
+// resolveModal answers the active modal with opt, clearing it. Frontend-only
+// decisions go through onResolve; engine-driven ones reply over the channel.
+func (m Model) resolveModal(opt string) (tea.Model, tea.Cmd) {
+	if r := m.modal.onResolve; r != nil {
+		m.modal = nil
+		return r(m, opt)
+	}
+	m.modal.reply <- engine.DecisionResponse{Option: opt}
+	m.modal = nil
+	return m, nil
 }
 
 // wheelStep is the configured rows-per-mouse-wheel-tick ([ui] wheel_step),
