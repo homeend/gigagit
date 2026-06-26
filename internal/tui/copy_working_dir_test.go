@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // On a focused stash file tree (filesHash holds the stash's resolved SHA), the
@@ -20,6 +21,18 @@ func TestCopyToWorkingDirRowPresentOnStashFile(t *testing.T) {
 	m.filesStashTag = "stash@{0}"
 	if _, ok := findRow(availableActions(m), "copy-working-dir"); !ok {
 		t.Fatal("Copy to working dir missing on a stash file")
+	}
+}
+
+// On a focused Staged-panel file (Source = Staged → the index blob), the row is
+// offered — the third documented source besides stash and commit files.
+func TestCopyToWorkingDirRowPresentOnStagedFile(t *testing.T) {
+	m := footerModel()
+	m.loading = false
+	m.focus = panelStaged
+	m.status.Files = []model.FileStatus{{Path: "dir/g.txt", Kind: model.KindTracked, Staged: 'M', Unstaged: '.'}}
+	if _, ok := findRow(availableActions(m), "copy-working-dir"); !ok {
+		t.Fatal("Copy to working dir missing on a staged file")
 	}
 }
 
