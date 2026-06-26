@@ -75,6 +75,47 @@ func TestWorktreeAddCreatesAndPrints(t *testing.T) {
 	}
 }
 
+// TestWorktreeAddFromLinkedWorktreeAnchorsOnMain reproduces the field report:
+// running `gg worktree add` from inside a (nested) linked worktree must place
+// the new worktree beside the MAIN repo using the MAIN repo's <repo> name — not
+// nested under the current worktree with the current worktree's name (which
+// doubled the ".worktrees" segment).
+func TestWorktreeAddFromLinkedWorktreeAnchorsOnMain(t *testing.T) {
+	dir := newCLIRepo(t)
+
+	// A linked worktree nested two levels below main, as in the report.
+	linked := filepath.Join(dir, "nested", "wt-a")
+	c := exec.Command("git", "-C", dir, "worktree", "add", "-b", "feature/a", linked, "main")
+	c.Env = append(os.Environ(),
+		"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t",
+		"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+	if out, err := c.CombinedOutput(); err != nil {
+		t.Fatalf("worktree add: %v\n%s", err, out)
+	}
+	// Config is loaded from the invoking worktree's top level, so place it there.
+	os.WriteFile(filepath.Join(linked, ".gg.toml"),
+		[]byte("[worktree]\ndefault_branch_template = \"wt/<parent-branch>\"\npath_template = \"../<repo>.worktrees/<branch>\"\n"),
+		0o644)
+
+	cwdFile := filepath.Join(t.TempDir(), "cwd")
+	var out, errb bytes.Buffer
+	// Invoke from the linked worktree (first arg = process working dir).
+	code := Run(linked, []string{"worktree", "add", "main"}, strings.NewReader(""), &out, &errb, cwdFile)
+	if code != 0 {
+		t.Fatalf("exit = %d, stderr=%s", code, errb.String())
+	}
+
+	mainBase := filepath.Base(dir)
+	want := filepath.Clean(filepath.Join(filepath.Dir(dir), mainBase+".worktrees", "wt-main"))
+	wrong := filepath.Clean(filepath.Join(linked, "..", "wt-a.worktrees", "wt-main")) // the bug
+	if _, err := os.Stat(filepath.Join(want, "README.md")); err != nil {
+		t.Fatalf("worktree not created beside main at %s: %v\n(the bug would put it at %s)", want, err, wrong)
+	}
+	if got, _ := os.ReadFile(cwdFile); strings.TrimSpace(string(got)) != want {
+		t.Fatalf("cwd-file = %q, want main-anchored %q", strings.TrimSpace(string(got)), want)
+	}
+}
+
 func TestWorktreeAddDefaultsToCurrentBranchNoUserFields(t *testing.T) {
 	dir := newCLIRepo(t)
 	// Default templates (no <user:>), no start-point arg -> uses current branch.
@@ -275,6 +316,35 @@ func TestWorktreeRemoveRepoRelativePath(t *testing.T) {
 	// Branch should be kept (no --with-branch).
 	if exec.Command("git", "-C", dir, "rev-parse", "--verify", "refs/heads/feature/rm5").Run() != nil {
 		t.Fatal("branch should be kept without --with-branch")
+	}
+}
+
+// TestWorktreeRemoveFromLinkedWorktreeAnchorsOnMain is the remove-side mirror of
+// the create fix: a relative target (as a template like
+// "../<repo>.worktrees/<branch>" produces) resolves against the MAIN worktree,
+// so `gg worktree remove <relative>` matches even when run from a *different*
+// linked worktree — keeping create/remove round-tripping.
+func TestWorktreeRemoveFromLinkedWorktreeAnchorsOnMain(t *testing.T) {
+	dir := newCLIRepo(t)
+	mainBase := filepath.Base(dir)
+
+	// The worktree to remove, placed exactly where `gg worktree add` would put it.
+	target := filepath.Join(filepath.Dir(dir), mainBase+".worktrees", "wt-target")
+	gitRun(t, dir, "worktree", "add", "-b", "feature/target", target, "main")
+
+	// A separate nested worktree we invoke gg from.
+	from := filepath.Join(dir, "nested", "wt-from")
+	gitRun(t, dir, "worktree", "add", "-b", "feature/from", from, "main")
+
+	// Main-relative path, resolved against the main worktree despite running from `from`.
+	rel := filepath.Join("..", mainBase+".worktrees", "wt-target")
+	var out, errb bytes.Buffer
+	code := Run(from, []string{"worktree", "remove", rel}, strings.NewReader(""), &out, &errb, "")
+	if code != 0 {
+		t.Fatalf("exit = %d, stderr=%s", code, errb.String())
+	}
+	if _, err := os.Stat(target); !os.IsNotExist(err) {
+		t.Fatalf("target worktree still present after relative remove from linked worktree: %v", err)
 	}
 }
 
