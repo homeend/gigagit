@@ -122,10 +122,19 @@ func cmdWorktreeAdd(svc *domain.Service, args []string, stdin io.Reader, stdout,
 		inputs[label] = strings.TrimRight(line, "\r\n")
 	}
 
+	// The <repo> token and the relative-path base both anchor on the MAIN
+	// worktree (git lists it first), not the current one — otherwise running
+	// from a linked worktree nests the new worktree under it (doubled
+	// ".worktrees"). The engine resolves the relative path the same way.
+	mainTop := top
+	if wts, werr := svc.Worktrees(ctxBg); werr == nil && len(wts) > 0 && wts[0].Path != "" {
+		mainTop = wts[0].Path
+	}
+
 	seqNames := tm.SeqNames()
 	ctx := template.Ctx{
 		ParentBranch: startPoint,
-		Repo:         worktree.RepoName(top),
+		Repo:         worktree.RepoName(mainTop),
 		Seqs:         worktree.PeekSeqs(gitCommonDir, seqNames),
 		Now:          time.Now,
 		Rand:         rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64())),
@@ -182,15 +191,14 @@ func cmdWorktreeRemove(svc *domain.Service, args []string, stdin io.Reader, stdo
 		return 1
 	}
 	absTarget, _ := filepath.Abs(target)
-	// A relative target is also resolved against the repo top level — the same
-	// base CreateWorktree resolves its repo-relative path template against —
-	// so the template-form path (e.g. "../wt/wt-main") works regardless of the
-	// process working directory (in-process frontends pass workdir explicitly).
+	// A relative target is resolved against the MAIN worktree root — the same
+	// base CreateWorktree resolves its repo-relative path template against (git
+	// lists the main worktree first) — so the template-form path
+	// (e.g. "../wt/wt-main") round-trips regardless of the process working
+	// directory or which linked worktree gg runs from.
 	fromTop := ""
-	if !filepath.IsAbs(target) {
-		if top, err := svc.TopLevel(ctxBg); err == nil {
-			fromTop = filepath.Clean(filepath.Join(top, target))
-		}
+	if !filepath.IsAbs(target) && len(wts) > 0 && wts[0].Path != "" {
+		fromTop = filepath.Clean(filepath.Join(wts[0].Path, target))
 	}
 	var match *model.Worktree
 	for i := range wts {

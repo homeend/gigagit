@@ -50,6 +50,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   `gg status` is unaffected — it stays faithful to `git status`.
 
 ### Fixed
+- **Creating a worktree from inside another worktree no longer nests it.**
+  `gg worktree add` (and the TUI popup) now anchor the new worktree on the
+  repository's **main** worktree — both the `<repo>` template token and the
+  relative `../` path base — instead of whichever (linked) worktree gg was
+  invoked from. Previously, running it from a nested worktree produced a doubled
+  `.worktrees` path such as
+  `…/repo.worktrees/feature-x.worktrees/new-branch`; it now lands beside the
+  main repo at `…/repo.worktrees/new-branch` regardless of where you run it.
+  `gg worktree remove <relative-path>` resolves against the same main-worktree
+  base so the two round-trip.
 - **`space` now stages every marked file, not just the cursor row.** Marking
   files with `m` in the Files (or Staged) panel then pressing `space` stages
   (unstages) all of them in a single `git add` / `git restore --staged`,

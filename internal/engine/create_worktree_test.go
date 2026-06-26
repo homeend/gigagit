@@ -6,6 +6,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/homeend/gigagit/internal/git"
+	"github.com/homeend/gigagit/internal/gitexec"
+	"github.com/homeend/gigagit/internal/observ"
 )
 
 // hasProgress reports whether a Progress event was emitted.
@@ -38,6 +42,37 @@ func TestCreateWorktreeRelativePathSucceeds(t *testing.T) {
 	}
 	if !hasProgress(drain(ch)) {
 		t.Error("expected a Progress event")
+	}
+}
+
+// When gg runs from inside a (possibly deeply-nested) linked worktree, a
+// relative Path must still anchor on the MAIN worktree — not the current one —
+// otherwise the new worktree nests under the current worktree (the real bug:
+// a doubled ".worktrees" segment in the resolved path).
+func TestCreateWorktreeRelativePathAnchorsOnMainWorktree(t *testing.T) {
+	dir, repo := newRepo(t)
+
+	// A linked worktree nested two levels below main, mirroring the field report.
+	linkedPath := filepath.Join(dir, "nested", "wt-a")
+	if err := repo.AddWorktree(context.Background(), linkedPath, "feature/a", "main", nil); err != nil {
+		t.Fatalf("AddWorktree: %v", err)
+	}
+	// A repo rooted at the linked worktree — as if the user invoked gg there.
+	linkedRepo := &git.Repo{Runner: gitexec.NewExecRunner("git", linkedPath, observ.NewRing(50))}
+
+	op := CreateWorktree{StartPoint: "main", Branch: "feature/b", Path: "../wt-b"}
+	res, err := op.Run(context.Background(), OpDeps{Repo: linkedRepo})
+	if err != nil {
+		t.Fatalf("CreateWorktree: %v", err)
+	}
+
+	wantMain := filepath.Clean(filepath.Join(dir, "..", "wt-b"))         // main-anchored (correct)
+	wrongNested := filepath.Clean(filepath.Join(linkedPath, "..", "wt-b")) // current-worktree-anchored (the bug)
+	if res.Path != wantMain {
+		t.Fatalf("Result.Path = %q, want main-anchored %q (nested-anchored would be %q)", res.Path, wantMain, wrongNested)
+	}
+	if _, statErr := os.Stat(filepath.Join(wantMain, "README.md")); statErr != nil {
+		t.Fatalf("worktree not created at main-anchored path %s: %v", wantMain, statErr)
 	}
 }
 

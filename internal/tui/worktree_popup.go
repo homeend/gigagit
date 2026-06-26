@@ -92,6 +92,19 @@ func (p *worktreePopup) recompute() {
 // existing mode the popup checks out that branch itself (no new branch): the
 // branch template is bypassed and only the path template's fields/counters
 // apply. Returns (model, false) if there is no branch to act on.
+// mainWorktreeRoot returns the main worktree's root for resolving the <repo>
+// token and the relative-path base (git lists the main worktree first), falling
+// back to the current worktree when the list isn't loaded yet. This must match
+// engine.resolveNewWorktreePath's anchor so the popup preview reflects where the
+// worktree actually lands — anchoring on the current (linked) worktree would
+// double the ".worktrees" segment.
+func (m Model) mainWorktreeRoot() string {
+	if len(m.worktrees) > 0 && m.worktrees[0].Path != "" {
+		return m.worktrees[0].Path
+	}
+	return m.currentWorktree
+}
+
 func (m Model) openWorktreePopup(existing bool) (Model, bool) {
 	if len(m.branches) == 0 {
 		return m, false
@@ -115,7 +128,7 @@ func (m Model) openWorktreePopup(existing bool) (Model, bool) {
 		existing:   existing,
 		branchTmpl: bt,
 		pathTmpl:   pt,
-		repoName:   worktree.RepoName(m.currentWorktree),
+		repoName:   worktree.RepoName(m.mainWorktreeRoot()),
 		labels:     labels,
 		inputs:     map[string]textfield{},
 		seqNames:   seqNames,
@@ -153,7 +166,7 @@ func (m Model) openWorktreeAt(startPoint, prefillBranch string) Model {
 		fromCommit: true,
 		branchTmpl: bt,
 		pathTmpl:   pt,
-		repoName:   worktree.RepoName(m.currentWorktree),
+		repoName:   worktree.RepoName(m.mainWorktreeRoot()),
 		labels:     labels,
 		inputs:     map[string]textfield{},
 		seqNames:   seqNames,
