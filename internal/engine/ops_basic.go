@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/homeend/gigagit/internal/git"
+	"github.com/homeend/gigagit/internal/pusherr"
 )
 
 // Commit stages (optionally) and commits with a message. Amend rewrites the
@@ -32,7 +33,14 @@ func (op Commit) Run(ctx context.Context, deps OpDeps) (Result, error) {
 // Push pushes branch to remote, optionally setting upstream. When Force is set,
 // the op asks the "push-force" decision (force-with-lease / force / abort) — the
 // modal both lets the user pick a lease-protected or plain force and confirms a
-// history-overwriting push; esc lands on abort. A non-Force push never decides.
+// history-overwriting push; esc lands on abort.
+//
+// A non-Force push that the remote rejects for being behind (non-fast-forward)
+// is not a dead-end: the op raises the "push-rejected" decision (rebase / force
+// / abort) and acts on it — rebase replays the local commits onto the remote
+// tip and re-pushes, force chains the push-force confirm, abort is a no-op. esc
+// lands on abort. Any other failure (credentials, hook, network) is returned
+// unchanged.
 type Push struct {
 	Remote      string
 	Branch      string
@@ -41,28 +49,56 @@ type Push struct {
 }
 
 func (op Push) Run(ctx context.Context, deps OpDeps) (Result, error) {
-	force := git.PushNoForce
 	if op.Force {
-		choice, err := deps.decide(ctx, DecisionRequest{
-			ID:      "push-force",
-			Prompt:  "Force-push " + op.Branch + " to " + op.Remote + " (overwrites the remote branch)",
-			Options: []string{"force-with-lease", "force", "abort"},
-		})
+		force, ok, err := op.decideForce(ctx, deps)
 		if err != nil {
 			return Result{}, err
 		}
-		switch choice.Option {
-		case "force-with-lease":
-			force = git.PushForceWithLease
-		case "force":
-			force = git.PushForcePlain
-		case "abort", "":
+		if !ok {
 			return Result{Summary: "push cancelled", Changed: false}, nil
-		default:
-			return Result{}, fmt.Errorf("push: unknown force mode %q", choice.Option)
 		}
+		return op.push(ctx, deps, force)
 	}
 
+	deps.emit(ctx, Progress{Step: "pushing", Detail: op.Remote + " " + op.Branch})
+	err := deps.Repo.Push(ctx, op.Remote, op.Branch, op.SetUpstream, git.PushNoForce)
+	if err == nil {
+		res := Result{Summary: "pushed", Changed: true}
+		deps.emit(ctx, Done{Result: res})
+		return res, nil
+	}
+	if !pusherr.IsNonFastForward(err.Error()) {
+		return Result{}, err // credentials / hook / network: not recoverable here
+	}
+	return op.recoverRejected(ctx, deps)
+}
+
+// decideForce asks the push-force decision and maps it to a force mode. ok=false
+// means the user aborted. The safer lease-protected option leads (index 0) so a
+// modal's default enter never triggers a plain overwrite.
+func (op Push) decideForce(ctx context.Context, deps OpDeps) (git.PushForce, bool, error) {
+	choice, err := deps.decide(ctx, DecisionRequest{
+		ID:      "push-force",
+		Prompt:  "Force-push " + op.Branch + " to " + op.Remote + " (overwrites the remote branch)",
+		Options: []string{"force-with-lease", "force", "abort"},
+	})
+	if err != nil {
+		return git.PushNoForce, false, err
+	}
+	switch choice.Option {
+	case "force-with-lease":
+		return git.PushForceWithLease, true, nil
+	case "force":
+		return git.PushForcePlain, true, nil
+	case "abort", "":
+		return git.PushNoForce, false, nil
+	default:
+		return git.PushNoForce, false, fmt.Errorf("push: unknown force mode %q", choice.Option)
+	}
+}
+
+// push performs the push with the given force mode and emits Done on success.
+func (op Push) push(ctx context.Context, deps OpDeps, force git.PushForce) (Result, error) {
 	deps.emit(ctx, Progress{Step: "pushing", Detail: op.Remote + " " + op.Branch})
 	if err := deps.Repo.Push(ctx, op.Remote, op.Branch, op.SetUpstream, force); err != nil {
 		return Result{}, err
@@ -70,6 +106,42 @@ func (op Push) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	res := Result{Summary: "pushed", Changed: true}
 	deps.emit(ctx, Done{Result: res})
 	return res, nil
+}
+
+// recoverRejected handles a non-fast-forward rejection on a plain push: rebase
+// onto the remote then re-push, chain the force decision, or abort. esc lands on
+// abort.
+func (op Push) recoverRejected(ctx context.Context, deps OpDeps) (Result, error) {
+	choice, err := deps.decide(ctx, DecisionRequest{
+		ID:      "push-rejected",
+		Prompt:  "Remote has new commits on " + op.Branch + " — rebase onto them, force-push, or abort",
+		Options: []string{"rebase", "force", "abort"},
+	})
+	if err != nil {
+		return Result{}, err
+	}
+	switch choice.Option {
+	case "rebase":
+		return op.rebaseThenPush(ctx, deps)
+	case "force":
+		force, ok, derr := op.decideForce(ctx, deps)
+		if derr != nil {
+			return Result{}, derr
+		}
+		if !ok {
+			return Result{Summary: "push cancelled", Changed: false}, nil
+		}
+		return op.push(ctx, deps, force)
+	case "abort", "":
+		return Result{Summary: "push cancelled", Changed: false}, nil
+	default:
+		return Result{}, fmt.Errorf("push: unknown recovery %q", choice.Option)
+	}
+}
+
+// rebaseThenPush is implemented in Task 3.
+func (op Push) rebaseThenPush(ctx context.Context, deps OpDeps) (Result, error) {
+	return Result{}, fmt.Errorf("push: rebase recovery not yet implemented")
 }
 
 // Stash saves the working-tree changes for Paths (all when empty) to a new stash.
