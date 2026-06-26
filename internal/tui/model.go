@@ -422,6 +422,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m.pushLayer(p), nil
+	case prefixesLoadedMsg:
+		if msg.err != nil {
+			m.statusMsg = "prefixes: " + msg.err.Error()
+			return m, nil
+		}
+		return m.pushLayer(newPrefixPicker(msg)), nil
 	case searchHistLoadedMsg:
 		if msg.rings != nil {
 			m.searchHist = msg.rings
