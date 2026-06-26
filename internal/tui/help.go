@@ -28,7 +28,7 @@ func helpContent() []contentLine {
 		r(".", "action menu — context actions for the selected row and panel (incl. copy actions)"),
 		r("ctrl+p", "command palette — generic command launcher (↑↓/jk move, enter runs, esc closes); currently: Show commit"),
 		r("#", "show commit by SHA: type a commit-ish (SHA / ref); enter resolves it and opens that commit's files in the files-view"),
-		r("", "Compare against working dir (.-menu): on any focused commit/staged/shelf file, diffs that version against the same path in the working tree"),
+		r("", "Compare against working dir / Copy to working dir (.-menu): on any focused commit/staged/shelf file, diffs that version against the same path in the working tree (Compare) or writes it into the working tree at its own path (Copy)"),
 		r("o", "cycle the focused panel's sort order"),
 		r("z", "cycle the focused window's text display (cutoff / wrap / scroll)"),
 		r("t", "maximize the focused left-column panel to fill the whole left column (t again restores); while maximized, ctrl+←/→ still cycles that slot's tabs"),
