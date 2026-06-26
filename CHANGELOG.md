@@ -9,6 +9,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Copy to working dir.** The `.` menu on a focused non-working file (a stash
+  file, an old commit's file, or a staged file) now offers **Copy to working
+  dir**, which writes that file's content into the working tree at its own path
+  (with an overwrite prompt if a differing working file already exists). It is
+  the write-sibling of **Compare against working dir**.
 - **Smart push recovery.** When a plain push is rejected because the remote has
   moved ahead, gg no longer dead-ends on an error: from the single push action
   it offers **rebase onto the remote and push**, **force-push** (routing through

@@ -82,6 +82,9 @@ func availableActions(m Model) []actionRow {
 		if r, ok := m.compareAgainstWorkingDirRow(); ok {
 			rows = append(rows, r)
 		}
+		if r, ok := m.copyToWorkingDirRow(); ok {
+			rows = append(rows, r)
+		}
 		// The commit-list side of a commit files view IS the Commits panel
 		// selection (m.focus stays panelCommits), so offer the full commit/graph
 		// actions there for parity with the panel. These all carry run handlers,
@@ -157,6 +160,9 @@ func availableActions(m Model) []actionRow {
 		out = append(out, r)
 	}
 	if r, ok := m.compareAgainstWorkingDirRow(); ok {
+		out = append(out, r)
+	}
+	if r, ok := m.copyToWorkingDirRow(); ok {
 		out = append(out, r)
 	}
 	if r, ok := m.backgroundPullRow(); ok {
