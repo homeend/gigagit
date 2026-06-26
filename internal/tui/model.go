@@ -513,6 +513,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// so a lingering conflict never traps the interface.
 		}
 	case tea.KeyMsg:
+		// Normalize a lone space rune to KeySpace. On Windows, Bubble Tea's input
+		// driver delivers a space keypress as KeyRunes{' '} (see key_windows.go),
+		// whereas Unix normalizes it to KeySpace. Every downstream space handler
+		// (staging, picker toggles, settings, text fields) keys off tea.KeySpace,
+		// so without this the space key is a silent no-op on Windows. Doing it once
+		// here makes both platforms behave identically.
+		if msg.Type == tea.KeyRunes && len(msg.Runes) == 1 && msg.Runes[0] == ' ' {
+			msg.Type = tea.KeySpace
+			msg.Runes = nil
+		}
 		// The status line holds a transient message (an op result, an error, a
 		// refusal hint). Clear it as the user moves on to the next interaction,
 		// so a stale error doesn't linger across navigation and reloads; the

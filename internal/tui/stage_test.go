@@ -70,6 +70,29 @@ func TestSpaceStagesSelectedFile(t *testing.T) {
 	}
 }
 
+// TestSpaceAsRunesStagesSelectedFile is the Windows regression: Bubble Tea's
+// Windows input driver delivers a space keypress as KeyRunes{' '}, not KeySpace
+// (key_windows.go), whereas Unix normalizes it to KeySpace. Staging must work
+// for both forms — before the normalization fix, space did nothing on Windows.
+func TestSpaceAsRunesStagesSelectedFile(t *testing.T) {
+	m, _ := stageTestModel(t)
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	if cmd == nil {
+		t.Fatal("space-as-KeyRunes did not trigger staging (Windows path)")
+	}
+	m = driveStage(t, updated.(Model), cmd)
+
+	var staged byte = '.'
+	for _, f := range m.status.Files {
+		if f.Path == "README.md" {
+			staged = f.Staged
+		}
+	}
+	if staged == '.' || staged == 0 {
+		t.Fatalf("README.md not staged after space-as-KeyRunes; staged byte = %q", staged)
+	}
+}
+
 // multiStageModel: a loaded model on a repo with three unstaged modifications
 // (a.txt, b.txt, c.txt), focused on the Files panel.
 func multiStageModel(t *testing.T) (Model, string) {

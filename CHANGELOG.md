@@ -77,6 +77,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   `gg status` is unaffected — it stays faithful to `git status`.
 
 ### Fixed
+- **Space key now works in the TUI on Windows.** Staging/unstaging a file
+  (`space`), and every other space action (picker toggles, the settings
+  agent-skill checklist, file-finder selection), did nothing on Windows: Bubble
+  Tea's Windows input driver delivers a space keypress as a rune rather than the
+  `KeySpace` event that Unix produces and that gg's handlers keyed off. gg now
+  normalizes a lone space rune to `KeySpace` at the top of key handling, so the
+  space key behaves identically on Windows, Linux, and macOS.
 - **Creating a worktree from inside another worktree no longer nests it.**
   `gg worktree add` (and the TUI popup) now anchor the new worktree on the
   repository's **main** worktree — both the `<repo>` template token and the
