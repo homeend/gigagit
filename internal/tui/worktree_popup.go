@@ -128,11 +128,11 @@ func (m Model) openWorktreePopup(existing bool) (Model, bool) {
 		return m, false
 	}
 	p := &worktreePopup{
-		startPoint: m.branches[bi].Name,
-		existing:   existing,
-		branchTmpl: bt,
-		pathTmpl:   pt,
-		repoName:   worktree.RepoName(m.mainWorktreeRoot()),
+		startPoint:   m.branches[bi].Name,
+		existing:     existing,
+		branchTmpl:   bt,
+		pathTmpl:     pt,
+		repoName:     worktree.RepoName(m.mainWorktreeRoot()),
 		labels:       labels,
 		inputs:       map[string]textfield{},
 		seqNames:     seqNames,
@@ -167,11 +167,11 @@ func (m Model) openWorktreeAt(startPoint, prefillBranch string) Model {
 	labels := tm.Labels()
 	seqNames := tm.SeqNames()
 	p := &worktreePopup{
-		startPoint: startPoint,
-		fromCommit: true,
-		branchTmpl: bt,
-		pathTmpl:   pt,
-		repoName:   worktree.RepoName(m.mainWorktreeRoot()),
+		startPoint:   startPoint,
+		fromCommit:   true,
+		branchTmpl:   bt,
+		pathTmpl:     pt,
+		repoName:     worktree.RepoName(m.mainWorktreeRoot()),
 		labels:       labels,
 		inputs:       map[string]textfield{},
 		seqNames:     seqNames,
