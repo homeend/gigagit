@@ -1,0 +1,36 @@
+name = "push: --on-reject=rebase that conflicts stops in rebase-in-progress, origin untouched"
+
+[input]
+steps = [
+  { write = "shared.txt", content = "local\n" },
+  { commit = "local change" },
+]
+
+[input.origin]
+steps = [
+  { write = "shared.txt", content = "base\n" },
+  { commit = "initial" },
+]
+after = [
+  { write = "shared.txt", content = "upstream\n" },
+  { commit = "upstream change" },
+]
+
+# Both sides edited shared.txt, so the recovery rebase conflicts. --on-reject
+# =rebase answers the nested rebase-conflict fork with keep-conflicts: the push
+# does NOT happen, the rebase is left paused, and the command exits non-zero.
+[[run]]
+cmd  = ["push", "--on-reject=rebase"]
+exit = 1
+
+[expect]
+in_progress = "rebase"
+
+[expect.status]
+conflicted = ["shared.txt"]
+
+# The remote was never updated — it still ends at "upstream change".
+[expect.origin]
+[[expect.origin.log]]
+branch   = "main"
+subjects = ["upstream change", "initial"]
