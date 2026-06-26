@@ -111,7 +111,7 @@ var commands = map[string]bool{
 	"status": true, "commit": true, "pull": true, "push": true,
 	"switch": true, "checkout": true, "branch": true, "stash": true, "undo": true, "merge": true, "rebase": true, "worktree": true,
 	"cherry-pick": true, "revert": true, "reset": true, "fast-forward": true,
-	"discard": true, "shelf": true, "bookmark": true,
+	"discard": true, "shelf": true, "bookmark": true, "prefix": true,
 	"remote": true, "tag": true, "compare": true,
 	"inspect": true, "repo": true, "init": true, "config": true,
 }
