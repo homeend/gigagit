@@ -71,3 +71,32 @@ func TestBranchPopupPrefixSeedsName(t *testing.T) {
 		t.Fatalf("seqNames = %v", bp.prefixSeqNames)
 	}
 }
+
+func TestWorktreePopupPrefixSeedsEdit(t *testing.T) {
+	p := &worktreePopup{startPoint: "main", branchTmpl: "b/<random-alpha:4>", pathTmpl: "../<repo>.worktrees/<branch>", state: stAction}
+	onPick := p.onPrefixPicked()
+	m := Model{}
+	m, _ = onPick(m, "feat/login", []string{"sandbox_seq"})
+	if p.state != stEdit {
+		t.Fatalf("state = %v, want stEdit", p.state)
+	}
+	if p.editBuf.Value() != "feat/login" {
+		t.Fatalf("editBuf = %q", p.editBuf.Value())
+	}
+	if !containsAllSeq(p.consumedSeqNames(), []string{"sandbox_seq"}) {
+		t.Fatalf("consumed = %v", p.consumedSeqNames())
+	}
+}
+
+func containsAllSeq(have, want []string) bool {
+	set := map[string]bool{}
+	for _, h := range have {
+		set[h] = true
+	}
+	for _, w := range want {
+		if !set[w] {
+			return false
+		}
+	}
+	return true
+}
