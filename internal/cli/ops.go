@@ -107,7 +107,11 @@ func pushRejectPolicy(onReject string) (map[string]string, error) {
 	case "abort":
 		return map[string]string{"push-rejected": "abort"}, nil
 	case "rebase":
-		return map[string]string{"push-rejected": "rebase"}, nil
+		// Also answer the nested rebase-conflict fork: a scripted rebase that
+		// conflicts keeps the conflicts (exit non-zero, tree left to resolve),
+		// mirroring `gg merge --on-conflict=keep`. Without this the CLI would
+		// dead-end on an unanswerable decision.
+		return map[string]string{"push-rejected": "rebase", "rebase-conflict": "keep-conflicts"}, nil
 	case "force":
 		return map[string]string{"push-rejected": "force", "push-force": "force"}, nil
 	case "force-with-lease":
