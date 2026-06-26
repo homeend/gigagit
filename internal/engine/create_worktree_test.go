@@ -66,7 +66,7 @@ func TestCreateWorktreeRelativePathAnchorsOnMainWorktree(t *testing.T) {
 		t.Fatalf("CreateWorktree: %v", err)
 	}
 
-	wantMain := filepath.Clean(filepath.Join(dir, "..", "wt-b"))         // main-anchored (correct)
+	wantMain := filepath.Clean(filepath.Join(dir, "..", "wt-b"))           // main-anchored (correct)
 	wrongNested := filepath.Clean(filepath.Join(linkedPath, "..", "wt-b")) // current-worktree-anchored (the bug)
 	if res.Path != wantMain {
 		t.Fatalf("Result.Path = %q, want main-anchored %q (nested-anchored would be %q)", res.Path, wantMain, wrongNested)
