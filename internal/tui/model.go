@@ -739,7 +739,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "p":
 			if !m.running && !m.loading {
-				return m.startOp(m.pullForFocus())
+				return m.confirmOp(m.pullForFocus(), "Pull? This may rewrite the working tree.")
 			}
 		case "f":
 			if m.canFetchRemotes() {
@@ -752,7 +752,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "c":
 			if m.focus == panelRemotes && m.canCheckoutRemote() {
 				rb, _ := m.selectedRemote()
-				return m.startOp(engine.SmartCheckout{RemoteRef: rb.Name, Local: rb.Branch, Intent: engine.CheckoutStay})
+				return m.confirmOp(engine.SmartCheckout{RemoteRef: rb.Name, Local: rb.Branch, Intent: engine.CheckoutStay}, "Check out "+rb.Branch+"?")
 			}
 			if m.canCommit() {
 				m = m.pushLayer(&commitPopup{})
@@ -773,7 +773,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "s":
 			if m.focus == panelRemotes && m.canCheckoutRemote() {
 				rb, _ := m.selectedRemote()
-				return m.startOp(engine.SmartCheckout{RemoteRef: rb.Name, Local: rb.Branch, Intent: engine.CheckoutSwitch})
+				return m.confirmOp(engine.SmartCheckout{RemoteRef: rb.Name, Local: rb.Branch, Intent: engine.CheckoutSwitch}, "Switch to "+rb.Branch+"?")
 			}
 			if m.focus == panelFiles && m.opsIdle() {
 				if mm, ok := m.openStashPopup(); ok {
@@ -801,7 +801,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 					return m, nil
 				}
-				return m.startOp(engine.SmartSwitch{Branch: b.Name})
+				return m.confirmOp(engine.SmartSwitch{Branch: b.Name}, "Switch to "+b.Name+"?")
 			}
 		case "S":
 			if m.stashView != nil { // toggle closed (focus is on a left panel here)

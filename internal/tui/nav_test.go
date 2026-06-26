@@ -160,6 +160,7 @@ func TestCheckoutRemoteRoutesCAndS(t *testing.T) {
 	m.focus = panelRemotes
 	m.sel[panelRemotes] = 0
 
+	m.cfg.UI.DisableSlowOpConfirm = true // test op routing, not confirm UX
 	// c on the Remotes tab starts an op (running=true) and does NOT open the commit popup.
 	u, _ := m.Update(keyMsg("c"))
 	mc := u.(Model)
@@ -175,6 +176,7 @@ func TestCheckoutRemoteRoutesCAndS(t *testing.T) {
 	m2.remoteBranches = []model.RemoteBranch{{Name: "origin/foo", Remote: "origin", Branch: "foo"}}
 	m2.focus = panelRemotes
 	m2.sel[panelRemotes] = 0
+	m2.cfg.UI.DisableSlowOpConfirm = true // test op routing, not confirm UX
 	u2, _ := m2.Update(keyMsg("s"))
 	if !u2.(Model).running {
 		t.Fatal("s on Remotes should start SmartCheckout (running)")
