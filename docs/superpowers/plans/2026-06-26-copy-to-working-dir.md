@@ -96,7 +96,13 @@ func TestCopyToWorkingDirWritesFile(t *testing.T) {
 	gitRun(t, dir, "rm", "a.txt")
 	gitRun(t, dir, "commit", "-m", "drop a") // a.txt now absent from the working tree
 
+	// Load first (matches the working real-op precedent
+	// TestRunCommitOperationFinishesAndClearsRunning, so Execute/repogate has the
+	// gitCommonDir/toplevel it needs). The dataLoadedMsg handler does not touch
+	// filesView/filesHash, so the tree setup below survives the load.
 	m := New(domain.New(repo))
+	loaded, _ := m.Update(m.loadCmd()())
+	m = loaded.(Model)
 	m.filesView = &contentPopup{lines: []contentLine{{text: "a.txt", path: "a.txt"}}}
 	m.filesTreeFocused = true
 	m.filesHash = sha
@@ -144,7 +150,7 @@ func TestCopyToWorkingDirResolveErrorSetsStatus(t *testing.T) {
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `go test ./internal/tui/ -run TestCopyToWorkingDir -v`
-Expected: COMPILE FAIL — `m.copyToWorkingDirRow` is referenced only indirectly (via the menu), so the failure is the assertions failing: the `copy-working-dir` row is not found (`findRow` returns `ok=false`), e.g. `Copy to working dir missing on a stash file`. (No new exported symbol is referenced in the tests, so it compiles; the row simply isn't wired yet.)
+Expected: the code **compiles** (the tests reference no new symbol — they go through `availableActions`/`findRow`). The **3 positive tests FAIL** because the `copy-working-dir` row isn't wired yet (`findRow` → `ok=false`): `TestCopyToWorkingDirRowPresentOnStashFile`, `TestCopyToWorkingDirWritesFile`, `TestCopyToWorkingDirResolveErrorSetsStatus`. The **2 absent-row tests already PASS** (no row exists → correctly absent): `TestCopyToWorkingDirRowAbsentOnWorkingFile`, `TestCopyToWorkingDirRowAbsentOnDeletion`. That split is expected — they lock in the absence guard.
 
 - [ ] **Step 3: Add the `engine` import to `bookmark.go`**
 
