@@ -19,6 +19,7 @@ import (
 	"github.com/homeend/gigagit/internal/git"
 	"github.com/homeend/gigagit/internal/gitexec"
 	"github.com/homeend/gigagit/internal/observ"
+	"github.com/homeend/gigagit/internal/prefix"
 	"github.com/homeend/gigagit/internal/profile"
 	"github.com/homeend/gigagit/internal/repogate"
 	"github.com/homeend/gigagit/internal/searchhist"
@@ -42,6 +43,9 @@ type Service struct {
 
 	profileGlobal profile.Store // lazily resolved; nil disables profiles
 	profileRepo   profile.Store // lazily resolved; nil disables profiles
+
+	prefixGlobal prefix.Store // lazily resolved; nil disables prefixes
+	prefixRepo   prefix.Store // lazily resolved; nil disables prefixes
 
 	// showEOLOnly, when false (the default), hides files whose only unstaged
 	// change is line endings (CRLF↔LF) from Status/Snapshot. atomic because the

@@ -147,6 +147,13 @@ guards against removing the worktree you are standing in.
   for working/index, the pinned blob for committed) and writes them to a
   **required** `<dest>` as an unstaged change (`--force` to overwrite). A bookmark
   to a working file reflects later edits; to freeze bytes, shelf instead.
+- `gg prefix ls` / `gg prefix add [--global] <value>` / `gg prefix rm [--global] <value>`
+  — **branch prefixes**: reusable, templated branch-name skeletons in a two-scope
+  store (repo by default; `--global` for every repo). `<value>` may use gg tokens
+  (`<user:LABEL>`, `<seq:NAME:N>`, `<date:…>`, `<parent-branch>`, `<repo>`,
+  `<random-*>`; `<branch>` is rejected). In the TUI, the create-branch popup
+  (`ctrl+p`) and create-worktree popup (`p`) let you pick one, fill any
+  `<user:…>` labels, and append the rest of the name.
 - `gg undo` — undo the last commit, keeping its changes (ref-only soft reset).
 - `gg worktree list` / `gg worktree add [<start-point>]` /
   `gg worktree add --branch <name>` /

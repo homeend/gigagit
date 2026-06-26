@@ -12,12 +12,21 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - **Push a selected branch.** The `.` menu on the Branches panel now offers
   **Push \<branch\>**, which pushes the highlighted branch and sets its upstream
   (`git push -u origin <branch>`) — for any local branch, current or not,
-  including one that was never pushed before, without first checking it out.
-  Previously the only push was the `P` key, which always pushed the checked-out
-  branch, so a highlighted non-current branch could not be pushed. If the push is
-  rejected because the remote moved ahead, a non-current branch offers only
-  force-push or abort (rebasing would rewrite the wrong branch); the checked-out
-  branch keeps the full rebase / force / abort recovery.
+  including one that was never pushed before, without first checking it out. The
+  CLI gains the matching `gg push [<branch>]` positional. Previously the only
+  push was the `P` key, which always pushed the checked-out branch, so a
+  highlighted non-current branch could not be pushed. If the push is rejected
+  because the remote moved ahead, a non-current branch offers only force-push or
+  abort (rebasing would rewrite the wrong branch); the checked-out branch keeps
+  the full rebase / force / abort recovery.
+- **Branch prefixes.** A writable two-scope (global + per-repo) registry of
+  reusable, templated branch-name skeletons. Press `ctrl+p` in the create-branch
+  (`b`/`B`) popup, or `p` in the create-worktree popup, to pick one; interactive
+  `<user:…>` labels are collected, the template is resolved, and the result seeds
+  the branch name for you to complete. Prefixes accept the usual gg tokens
+  (`<user:LABEL>`, `<seq:NAME:N>`, `<date:…>`, `<parent-branch>`, `<repo>`,
+  `<random-*>`; `<branch>` is rejected). Manage them in Settings (`,`) → Branch
+  prefixes, or via `gg prefix ls | add [--global] <value> | rm [--global] <value>`.
 - **Copy to working dir.** The `.` menu on a focused non-working file (a stash
   file, an old commit's file, or a staged file) now offers **Copy to working
   dir**, which writes that file's content into the working tree at its own path

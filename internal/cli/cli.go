@@ -73,6 +73,8 @@ func Run(workdir string, args []string, stdin io.Reader, stdout, stderr io.Write
 		return cmdShelf(svc, rest, stdin, stdout, stderr)
 	case "bookmark":
 		return cmdBookmark(svc, rest, stdin, stdout, stderr)
+	case "prefix":
+		return cmdPrefix(svc, rest, stdout, stderr)
 	case "merge":
 		return cmdMerge(svc, rest, stdin, stdout, stderr)
 	case "rebase":
@@ -109,7 +111,7 @@ var commands = map[string]bool{
 	"status": true, "commit": true, "pull": true, "push": true,
 	"switch": true, "checkout": true, "branch": true, "stash": true, "undo": true, "merge": true, "rebase": true, "worktree": true,
 	"cherry-pick": true, "revert": true, "reset": true, "fast-forward": true,
-	"discard": true, "shelf": true, "bookmark": true,
+	"discard": true, "shelf": true, "bookmark": true, "prefix": true,
 	"remote": true, "tag": true, "compare": true,
 	"inspect": true, "repo": true, "init": true, "config": true,
 }

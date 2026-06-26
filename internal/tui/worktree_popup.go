@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/template"
 	"github.com/homeend/gigagit/internal/worktree"
@@ -38,6 +39,9 @@ type worktreePopup struct {
 
 	seqNames []string       // distinct <seq> names referenced by the templates
 	seqs     map[string]int // peeked counter values (reused for preview + create)
+
+	gitCommonDir   string   // for peeking a chosen prefix's own <seq> counters
+	prefixSeqNames []string // <seq> counters from a chosen prefix, bumped on create
 
 	seed uint64    // fixes <random> so the preview does not jitter
 	now  time.Time // fixes <date>
@@ -124,17 +128,18 @@ func (m Model) openWorktreePopup(existing bool) (Model, bool) {
 		return m, false
 	}
 	p := &worktreePopup{
-		startPoint: m.branches[bi].Name,
-		existing:   existing,
-		branchTmpl: bt,
-		pathTmpl:   pt,
-		repoName:   worktree.RepoName(m.mainWorktreeRoot()),
-		labels:     labels,
-		inputs:     map[string]textfield{},
-		seqNames:   seqNames,
-		seqs:       worktree.PeekSeqs(m.gitCommonDir, seqNames),
-		seed:       rand.Uint64(),
-		now:        time.Now(),
+		startPoint:   m.branches[bi].Name,
+		existing:     existing,
+		branchTmpl:   bt,
+		pathTmpl:     pt,
+		repoName:     worktree.RepoName(m.mainWorktreeRoot()),
+		labels:       labels,
+		inputs:       map[string]textfield{},
+		seqNames:     seqNames,
+		seqs:         worktree.PeekSeqs(m.gitCommonDir, seqNames),
+		gitCommonDir: m.gitCommonDir,
+		seed:         rand.Uint64(),
+		now:          time.Now(),
 	}
 	for _, l := range labels {
 		p.inputs[l] = textfield{}
@@ -162,19 +167,20 @@ func (m Model) openWorktreeAt(startPoint, prefillBranch string) Model {
 	labels := tm.Labels()
 	seqNames := tm.SeqNames()
 	p := &worktreePopup{
-		startPoint: startPoint,
-		fromCommit: true,
-		branchTmpl: bt,
-		pathTmpl:   pt,
-		repoName:   worktree.RepoName(m.mainWorktreeRoot()),
-		labels:     labels,
-		inputs:     map[string]textfield{},
-		seqNames:   seqNames,
-		seqs:       worktree.PeekSeqs(m.gitCommonDir, seqNames),
-		seed:       rand.Uint64(),
-		now:        time.Now(),
-		state:      stEdit,                      // user edits the branch name immediately
-		editBuf:    newTextField(prefillBranch), // seeded default (e.g. the tag name)
+		startPoint:   startPoint,
+		fromCommit:   true,
+		branchTmpl:   bt,
+		pathTmpl:     pt,
+		repoName:     worktree.RepoName(m.mainWorktreeRoot()),
+		labels:       labels,
+		inputs:       map[string]textfield{},
+		seqNames:     seqNames,
+		seqs:         worktree.PeekSeqs(m.gitCommonDir, seqNames),
+		gitCommonDir: m.gitCommonDir,
+		seed:         rand.Uint64(),
+		now:          time.Now(),
+		state:        stEdit,                      // user edits the branch name immediately
+		editBuf:      newTextField(prefillBranch), // seeded default (e.g. the tag name)
 	}
 	for _, l := range labels {
 		p.inputs[l] = textfield{}
@@ -237,6 +243,11 @@ func (p *worktreePopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			p.editBuf = newTextField(p.previewBranch)
 			p.state = stEdit
 			p.recompute()
+		case "p":
+			if p.existing {
+				return m, nil // existing mode checks out the branch as-is; no new name
+			}
+			return m, m.openPrefixPicker(p.resolvePrefix(), p.onPrefixPicked())
 		case "w", "enter":
 			return m.startCreateFromPopup(p, false)
 		case "W":
@@ -297,7 +308,7 @@ func (p *worktreePopup) box(m Model) string {
 		if p.existing {
 			b.WriteString("[w] create  [W] create & switch  [esc] cancel")
 		} else {
-			b.WriteString("[w] create  [W] create & switch  [e] edit name  [esc] cancel")
+			b.WriteString("[w] create  [W] create & switch  [e] edit name  [p] use a prefix  [esc] cancel")
 		}
 	}
 
@@ -343,10 +354,60 @@ func (p *worktreePopup) createOp() engine.Operation {
 
 // consumedSeqNames returns the <seq> counters the created names actually used.
 // In existing mode and after a confirmed hand-edit the branch template is
-// bypassed, so only the path template's <seq> tokens are consumed.
+// bypassed, so only the path template's <seq> tokens are consumed. A chosen
+// prefix's own <seq> names are always unioned in.
 func (p *worktreePopup) consumedSeqNames() []string {
+	var base []string
 	if p.existing || p.branchOverride != "" {
-		return worktree.Templates{Path: p.pathTmpl}.SeqNames()
+		base = worktree.Templates{Path: p.pathTmpl}.SeqNames()
+	} else {
+		base = p.seqNames
 	}
-	return p.seqNames
+	return appendDistinctAll(base, p.prefixSeqNames)
+}
+
+// resolvePrefix resolves a prefix value against this popup's fixed ctx, peeking
+// any prefix-only <seq> counters into the ctx snapshot so the result is stable.
+func (p *worktreePopup) resolvePrefix() func(string, map[string]string) (string, []string, error) {
+	return func(value string, inputs map[string]string) (string, []string, error) {
+		names := worktree.Templates{Branch: value}.SeqNames()
+		ctx := p.tctx()
+		for _, n := range names {
+			if _, ok := ctx.Seqs[n]; !ok {
+				if ctx.Seqs == nil {
+					ctx.Seqs = map[string]int{}
+				}
+				ctx.Seqs[n] = config.PeekSeq(p.gitCommonDir, n)
+			}
+		}
+		out, err := template.Resolve(value, inputs, ctx)
+		return out, names, err
+	}
+}
+
+// onPrefixPicked seeds stEdit with the resolved prefix so the user appends the
+// tail, and records the prefix's <seq> names for the create-time bump.
+func (p *worktreePopup) onPrefixPicked() func(Model, string, []string) (Model, tea.Cmd) {
+	return func(m Model, resolved string, seqNames []string) (Model, tea.Cmd) {
+		p.editBuf = newTextField(resolved)
+		p.state = stEdit
+		p.prefixSeqNames = seqNames
+		p.recompute()
+		return m.popLayer(), nil
+	}
+}
+
+// appendDistinctAll appends each of extra not already present in dst.
+func appendDistinctAll(dst, extra []string) []string {
+	seen := map[string]bool{}
+	for _, x := range dst {
+		seen[x] = true
+	}
+	for _, x := range extra {
+		if !seen[x] {
+			seen[x] = true
+			dst = append(dst, x)
+		}
+	}
+	return dst
 }
