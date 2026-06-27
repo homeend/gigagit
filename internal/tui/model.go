@@ -112,6 +112,7 @@ type Model struct {
 
 	running   bool
 	opStart   time.Time // when the in-flight op began; the heartbeat reads it for the busy line's elapsed readout
+	opIsFetch bool      // the in-flight op is engine.Fetch → record its duration into the fetch refresh row on completion
 	statusMsg string
 	opMsgs    chan tea.Msg
 	modal     *decisionState
@@ -1482,6 +1483,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.running = false
 		m.opMsgs = nil
+		// A foreground fetch is a single (uncontended) `git fetch`, so its duration
+		// is a representative measurement for the background-fetch row — record it
+		// (success only). It does NOT enable the background fetch task on its own;
+		// that stays opt-in via [refresh] fetch (see effectiveInterval's isFetch gate).
+		if m.opIsFetch {
+			m.opIsFetch = false
+			if msg.err == nil {
+				m = m.recordDuration(fetchItem, time.Since(m.opStart))
+			}
+		}
 		switchTo := ""
 		chainSwitch := ""
 		if msg.err != nil {

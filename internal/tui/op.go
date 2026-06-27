@@ -191,6 +191,7 @@ func (m Model) startOp(op engine.Operation) (Model, tea.Cmd) {
 	m.bgBusy = false
 	m.bgQueue = nil
 	m.pendingSources = opAffectedSources(op)
+	_, m.opIsFetch = op.(engine.Fetch) // a foreground fetch records its duration into the fetch row
 	msgs := make(chan tea.Msg, 32)
 	events := make(chan engine.Event, 32)
 	svc := m.svc

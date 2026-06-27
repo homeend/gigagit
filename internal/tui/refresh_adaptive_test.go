@@ -124,6 +124,43 @@ func TestStartupReadDoesNotRecordDuration(t *testing.T) {
 	}
 }
 
+// The background `git fetch` is network I/O and opt-in: with [refresh] fetch
+// unset (0) the fetch row is OFF, never "pending" and never floor-less
+// auto-started — even once it has a measurement. With fetch configured it
+// behaves like any adaptive item.
+func TestFetchIsConfigGated(t *testing.T) {
+	// fetch unset, no sample → off (not pending).
+	if secs, state := effectiveInterval(config.RefreshConfig{Enabled: true}, fetchItem, 0, false); state != stateOff || secs != 0 {
+		t.Fatalf("fetch unset → off, got %d/%v", secs, state)
+	}
+	// fetch unset, WITH a sample → still off (no floor-less auto-start for network fetch).
+	if secs, state := effectiveInterval(config.RefreshConfig{Enabled: true}, fetchItem, 2*time.Second, true); state != stateOff || secs != 0 {
+		t.Fatalf("fetch unset + sample → off, got %d/%v", secs, state)
+	}
+	// fetch configured, no sample → floor at the configured interval.
+	if secs, state := effectiveInterval(config.RefreshConfig{Enabled: true, Fetch: 60}, fetchItem, 0, false); state != stateAdaptiveFloor || secs != 60 {
+		t.Fatalf("fetch=60, no sample → floor 60, got %d/%v", secs, state)
+	}
+}
+
+// A foreground fetch op records its duration into the fetch row (so the user
+// sees how long fetch takes), without enabling the background fetch task.
+func TestForegroundFetchRecordsDuration(t *testing.T) {
+	m := newTestModel(t)
+	m.running = true
+	m.opIsFetch = true
+	m.opStart = time.Now().Add(-2 * time.Second)
+	nm, _ := m.Update(opFinishedMsg{res: engine.Result{}, err: nil})
+	mm := nm.(Model)
+	got := mm.refreshDur[fetchItem]
+	if len(got) != 1 || got[0] < 2*time.Second || got[0] > 5*time.Second {
+		t.Fatalf("foreground fetch should record ~2s into the fetch row, got %v", got)
+	}
+	if mm.opIsFetch {
+		t.Fatal("opIsFetch must be cleared after the op completes")
+	}
+}
+
 func TestEnqueueDueDedup(t *testing.T) {
 	a := refreshItem{source: srcStatus}
 	b := refreshItem{source: srcBranches}

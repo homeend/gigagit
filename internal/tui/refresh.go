@@ -98,6 +98,13 @@ func meanDuration(samples []time.Duration) time.Duration {
 // used verbatim and base 0 means off.
 func effectiveInterval(cfg config.RefreshConfig, it refreshItem, avg time.Duration, haveSample bool) (int, intervalState) {
 	base := refreshIntervalFor(cfg, it)
+	// The background `git fetch` is network I/O, so it is purely opt-in: it runs
+	// only when [refresh] fetch is set (base > 0). Unlike local source reads it
+	// never floor-less auto-starts from a measurement, and it is never "pending"
+	// (nothing local — a manual r — would ever measure it). base 0 → off.
+	if it.isFetch && base <= 0 {
+		return 0, stateOff
+	}
 	if cfg.DisableAdaptive {
 		if base <= 0 {
 			return 0, stateOff
@@ -141,7 +148,7 @@ func stateLabel(s intervalState) string {
 	case stateAdaptiveFloor:
 		return "adaptive (floor)"
 	case statePending:
-		return "pending (refresh to measure)"
+		return "pending — press r to measure"
 	case stateDisabled:
 		return "disabled (too slow)"
 	}

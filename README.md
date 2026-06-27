@@ -235,7 +235,13 @@ verbatim (a fixed schedule; 0 = off).
 
 Measurements come from manual `r` and the single-lane background reads; the
 **app-start load is deliberately not measured** (it reads everything in parallel,
-so its timings are inflated). Background reads run **one at a time** (FIFO, deduped
+so its timings are inflated). The `fetch` row is special: it is the **periodic
+background `git fetch`** (network), so it is **opt-in only** — it runs solely
+when you set `[refresh] fetch = N`, and shows `off` otherwise (unlike local
+sources, it never auto-starts from a measurement). A `git fetch` you run yourself
+(e.g. from the Remotes menu) refreshes the Remotes panel *and* records its
+duration into the `fetch` row so you can see how long fetch takes, but does not
+turn the background fetch on. Background reads run **one at a time** (FIFO, deduped
 by type) to cap git subprocess pressure; manual `r` stays parallel and is never
 affected. Background reads don't show per-panel spinners or move the cursor, but a
 small `⟳ <source>…` hint appears in the status line while the single background

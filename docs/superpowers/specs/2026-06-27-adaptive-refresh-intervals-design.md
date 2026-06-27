@@ -267,6 +267,12 @@ in-memory `Model`).
   it has become fast.
 - **Single sample noise** — averaging up to 10 samples damps a one-off slow
   read; an early fluke (1–2 samples) self-corrects as the ring fills.
+- **Fetch is opt-in (network).** The `fetch` row is the periodic background
+  `git fetch`. Unlike local source reads it does **not** floor-less auto-start
+  and is never `pending`: with `[refresh] fetch` unset it is `off`. It runs only
+  when `[refresh] fetch = N` is set. A foreground fetch (Remotes menu) records
+  its duration into the fetch row for visibility (and refines the interval when
+  the background fetch is enabled) but never turns the background task on.
 - **Fetch self-disabling** — with `max_read_seconds = 10`, a `git fetch` on a
   huge repo can routinely exceed the cutoff and self-disable. This is the rule
   working as specified, not a bug; the viewer's `disabled (too slow)` state
