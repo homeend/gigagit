@@ -1430,6 +1430,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case opDecisionMsg:
 		m.modal = &decisionState{req: msg.req, reply: msg.reply}
 		return m, waitForOp(m.opMsgs)
+	case bgFetchDoneMsg:
+		// A quiet background fetch completed. On error: swallow silently (the
+		// domain failure seam already logged it). On success: bump the remotes
+		// source gen and fire a silent (manual=false) remotes refresh so the
+		// Remotes panel picks up any new tracking refs.
+		if msg.err != nil {
+			return m, nil
+		}
+		m.srcGen[srcRemotes]++
+		m.srcInflight[srcRemotes] = true
+		ctx := m.bgCtx
+		if ctx == nil || m.bgCancel == nil {
+			ctx = context.Background()
+		}
+		return m, m.readSourceCmd(ctx, srcRemotes, false)
+
 	case heartbeatMsg:
 		// A single perpetual tick (started in Init): re-render so the busy line's
 		// elapsed time advances while an op runs. View only shows it when running,

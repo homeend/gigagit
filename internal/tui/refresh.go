@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/homeend/gigagit/internal/config"
+	"github.com/homeend/gigagit/internal/engine"
 )
 
 // refreshItem is one schedulable background-refresh unit: a source read, or the
@@ -81,7 +82,9 @@ func (m Model) refreshTick(now time.Time) (Model, tea.Cmd) {
 	for _, it := range due {
 		if it.isFetch {
 			m.refreshLastRun[it] = now
-			cmds = append(cmds, m.bgFetchCmd(m.bgCtx)) // Task 7 replaces this stub
+			if cmd := m.bgFetchCmd(m.bgCtx); cmd != nil {
+				cmds = append(cmds, cmd)
+			}
 			continue
 		}
 		if m.srcInflight[it.source] {
@@ -98,8 +101,31 @@ func (m Model) refreshTick(now time.Time) (Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-// bgFetchCmd is a stub for Task 7; replaced when fetch scheduling is implemented.
-func (m Model) bgFetchCmd(ctx context.Context) tea.Cmd { return nil }
+// bgFetchDoneMsg lands when a background fetch finishes. On success the handler
+// fires a silent remotes refresh; on error it is swallowed (already recorded to
+// the session error log by the domain failure seam).
+type bgFetchDoneMsg struct{ err error }
+
+// bgFetchCmd runs `git fetch` quietly — outside the foreground op slot, no
+// m.running, no modal — under the background context. Events are discarded;
+// fetch does not fork so an empty MapDecider (which errors on any unexpected
+// decision) is the correct belt-and-braces decider.
+func (m Model) bgFetchCmd(ctx context.Context) tea.Cmd {
+	if m.svc == nil {
+		return nil
+	}
+	svc := m.svc
+	return func() tea.Msg {
+		events := make(chan engine.Event, 8)
+		go func() {
+			for range events {
+			}
+		}()
+		_, err := svc.Execute(ctx, engine.Fetch{}, events, engine.MapDecider{})
+		close(events)
+		return bgFetchDoneMsg{err: err}
+	}
+}
 
 // dueItems returns the items that should fire now: master enabled, not
 // suppressed, interval > 0, and (now - lastRun) >= interval. An item with no
