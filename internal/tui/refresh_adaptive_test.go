@@ -154,3 +154,19 @@ func TestStartOpClearsLaneAndQueue(t *testing.T) {
 		t.Fatalf("startOp must clear the lane + queue, got busy=%v queue=%v", m2.bgBusy, m2.bgQueue)
 	}
 }
+
+func TestBgRefreshHint(t *testing.T) {
+	m := newTestModel(t)
+	if m.bgRefreshHint() != "" {
+		t.Fatal("idle lane → no hint")
+	}
+	m.bgBusy = true
+	m.bgActiveItem = refreshItem{source: srcBranches}
+	if got := m.bgRefreshHint(); got != "⟳ branches…" {
+		t.Fatalf("want '⟳ branches…', got %q", got)
+	}
+	m.bgActiveItem = fetchItem
+	if got := m.bgRefreshHint(); got != "⟳ fetch…" {
+		t.Fatalf("want '⟳ fetch…', got %q", got)
+	}
+}

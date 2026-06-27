@@ -251,3 +251,16 @@ func dueItems(now time.Time, lastRun map[refreshItem]time.Time, durs map[refresh
 	}
 	return due
 }
+
+// bgRefreshHint is the unobtrusive status-line marker shown while the single
+// background read runs (active-only, no countdown). Empty when the lane is idle.
+func (m Model) bgRefreshHint() string {
+	if !m.bgBusy {
+		return ""
+	}
+	name := "fetch"
+	if !m.bgActiveItem.isFetch {
+		name = sourceNames[m.bgActiveItem.source]
+	}
+	return "⟳ " + name + "…"
+}

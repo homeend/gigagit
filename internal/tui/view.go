@@ -382,6 +382,7 @@ func (m Model) renderInterface() string {
 		add(notice)
 		add(m.statusMsg)
 		add(m.commitBranchHint())
+		add(m.bgRefreshHint())
 	}
 	statusLine := strings.Join(parts, " · ")
 	if m.running {
