@@ -79,13 +79,20 @@ effective interval `max(10, 10×4) = 40s`. If they average 12s → `DISABLED`
 
 ### Single-lane background scheduler
 
-- At most **one** background read is in flight at any time. When multiple items
-  are due, the scheduler runs the **single most-overdue** one, marks the lane
-  busy, and waits for it to complete before picking the next.
+- At most **one** background read is in flight at any time. Due items wait in a
+  **FIFO queue** and drain one at a time; the running item plus the queue is the
+  lane.
+- **Dedup by type.** A given item type is never enqueued while an instance of
+  the same type is already pending in the queue **or** currently running. So if
+  A is queued and then B is queued, neither A nor B can be enqueued again until
+  *both* have executed and left the lane. The queue therefore holds at most one
+  of each type, and no type starves another by re-queuing ahead of it.
+- **FIFO order.** Items run in the order they were enqueued (the order they
+  first became due), not most-overdue-first — A enqueued before B runs before B.
 - **Fetch shares this one lane.** On fetch completion, the handler marks
-  `remotes` as due-now (resets its `lastRun`) and lets the scheduler pick it via
-  the queue — replacing Phase B's direct post-fetch remotes fire (which violated
-  the single-lane invariant).
+  `remotes` as due-now (resets its `lastRun`); `remotes` then enters the queue
+  through the normal dedup path on the next tick — replacing Phase B's direct
+  post-fetch remotes fire (which violated the single-lane invariant).
 - **Manual `r` is untouched** — separate code path, fires all sources in
   parallel, as today.
 
@@ -137,7 +144,8 @@ All changes are confined to `internal/tui` (scheduler + view + settings) and
 - **State (new `Model` fields, all in-memory / session-only):**
   - `refreshDur map[refreshItem][]time.Duration` — the per-item ring of the last
     ≤10 measured durations.
-  - `bgBusy bool` + `bgActiveItem refreshItem` — the single-lane tracker.
+  - `bgQueue []refreshItem` — the FIFO of pending background items.
+  - `bgBusy bool` + `bgActiveItem refreshItem` — the running-item tracker.
   - (existing `refreshLastRun`, `bgCtx`, `bgCancel` stay.)
 
 - **Pure decision functions (table-tested, no `Model`/IO):**
@@ -146,18 +154,28 @@ All changes are confined to `internal/tui` (scheduler + view + settings) and
     haveSample bool) (secs int, state intervalState)` — returns the effective
     seconds and one of `stateOff/stateFixed/stateAdaptive/stateAdaptiveFloor/stateDisabled`.
     Encodes the full rule above.
-  - `nextDueItem(now, lastRun, durs, cfg, suppressed) (refreshItem, bool)` —
-    returns the single most-overdue due item (or false). Replaces the
-    "fire all due in parallel" `dueItems`.
+  - `dueItems(now, lastRun, durs, cfg, suppressed) []refreshItem` — the items
+    whose effective interval has elapsed this tick (per the rule above; `OFF`
+    and `DISABLED` items excluded). Pure.
+  - `enqueueDue(queue []refreshItem, active refreshItem, busy bool, due
+    []refreshItem) []refreshItem` — appends each due item that is not already in
+    `queue` and not the currently-running `active` (when `busy`). This is the
+    dedup-by-type gate. Pure.
 
-- **`refreshTick(now)`** rewritten: if suppressed or `bgBusy` → nothing.
-  Otherwise call `nextDueItem`; if one is returned, run exactly that single
-  read (set `bgBusy`/`bgActiveItem`, bump gen/inflight, stamp `lastRun`).
+- **`refreshTick(now)`** rewritten:
+  1. If suppressed → return (do not even enqueue).
+  2. `queue = enqueueDue(queue, bgActiveItem, bgBusy, dueItems(...))` — add
+     newly-due items, deduped by type.
+  3. If `bgBusy` or `len(queue) == 0` → return (wait / nothing to do).
+  4. Pop the front of `queue` into `bgActiveItem`, set `bgBusy`, bump
+     gen/inflight, stamp `lastRun`, and run that single read.
 
 - **Lane freeing:** the `dataAvailableMsg` handler, when the message is for
   `bgActiveItem`, clears `bgBusy` (even on error/cancel, so `startOp`
-  preemption never strands the lane). `startOp` also resets `bgBusy` when it
-  cancels `bgCancel`.
+  preemption never strands the lane); the next tick drains the next queued item.
+  `startOp` resets `bgBusy` **and clears `bgQueue`** when it cancels `bgCancel`
+  (a user op preempts the whole background lane; still-due items re-enqueue
+  naturally on the next post-op tick).
 
 - **Fetch:** `bgFetchDoneMsg` clears the lane and resets `remotes`' `lastRun`
   to "due now" instead of firing the remotes read directly.
@@ -199,10 +217,17 @@ Pure, table-driven unit tests carry the logic; TUI-level tests cover plumbing.
 - `effectiveInterval` — every state branch: off (cfg 0), fixed (adaptive off),
   no-sample fallback, disabled (avg > cutoff), floor (cfg wins), backed-off
   (factor×avg wins); default cutoff/factor applied when config is 0.
-- `nextDueItem` — picks the single most-overdue; returns false when none due,
-  when suppressed, and respects per-source off/disabled.
-- Single-lane invariant — `refreshTick` returns no command while `bgBusy`;
-  fires exactly one when free.
+- `dueItems` — returns due items per the rule; excludes off/disabled; empty
+  when suppressed.
+- `enqueueDue` — dedup invariant: a type already in the queue, or the
+  currently-running `active` type, is not re-appended; a new type is appended in
+  FIFO order.
+- Single-lane invariant — `refreshTick` runs no read while `bgBusy`; runs
+  exactly one (the queue front) when free.
+- FIFO / fairness — A enqueued before B runs first; once A and B are both
+  queued, A is not re-enqueued or re-run until both have executed and the lane
+  has drained.
+- `startOp` clears `bgQueue` and `bgBusy`; items re-enqueue on the next tick.
 - Lane freeing — `dataAvailableMsg` for the active item clears `bgBusy`,
   including the error/cancel path; `startOp` preemption clears it.
 - Fetch — `bgFetchDoneMsg` clears the lane and marks remotes due (no direct
