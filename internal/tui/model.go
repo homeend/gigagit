@@ -83,32 +83,32 @@ type Model struct {
 
 	layers *layerStack // top-of-everything window pile: full-screen surfaces + centered popups; nil/empty = none
 
-	svc                 *domain.Service           // command layer; all git access goes through svc
-	feed                *domain.CommitFeed        // single source of truth for commits
-	commitsExhausted    bool                      // false → "Commits N+", true → "Commits N"
-	commitsLoading      bool                      // a feed reload/page is in flight → show the loading glyph in the Commits title
-	feedScopeApplied    string                    // signature of the scope last applied to the feed (see feedScopeSig); reload only when the desired scope differs
-	commitScopeBranches []string                  // included branches for the feed; empty = all local branches
-	commitFilter        commitFilterFields        // path/author/grep/date narrowing of the feed
-	commitGraphRows     []string                  // cached single-line graph cells, parallel to the unified WIP+commits list; empty = none
-	commitGraphLanes    []int                     // cached node lane per unified row, parallel to the unified WIP+commits list
-	wipRows             []wipRow                  // 0–2 derived pseudo-rows (Working tree / Staged) shown atop the Commits feed when dirty
-	commitListMode      bool                      // Commits feed rendered as a flat ●-gutter list, not a graph
-	commitGraphCols     int                       // graph window width in LANES; 0 = use configured default
-	commitGraphScroll   int                       // leftmost visible lane (0-based); resets on feed reload
-	opCancel            context.CancelFunc        // cancels the in-flight op's context; nil when idle
-	loadGen             int                       // bumped per superseding load; stale dataLoadedMsg are dropped
-	srcGen              map[sourceKey]int         // per-source generation; stale dataAvailableMsg dropped
-	srcInflight         map[sourceKey]bool        // a read of this source is outstanding (coalescing)
-	srcLoading          map[sourceKey]bool        // a manual read is in flight → consuming panels show ⏳
-	bgCtx               context.Context           // context for in-flight background (auto) reads; cancelled when a user op starts
-	bgCancel            context.CancelFunc        // cancels bgCtx; nil when no background batch is active
-	refreshLastRun      map[refreshItem]time.Time     // last time each scheduled item fired (background scheduler)
+	svc                 *domain.Service                 // command layer; all git access goes through svc
+	feed                *domain.CommitFeed              // single source of truth for commits
+	commitsExhausted    bool                            // false → "Commits N+", true → "Commits N"
+	commitsLoading      bool                            // a feed reload/page is in flight → show the loading glyph in the Commits title
+	feedScopeApplied    string                          // signature of the scope last applied to the feed (see feedScopeSig); reload only when the desired scope differs
+	commitScopeBranches []string                        // included branches for the feed; empty = all local branches
+	commitFilter        commitFilterFields              // path/author/grep/date narrowing of the feed
+	commitGraphRows     []string                        // cached single-line graph cells, parallel to the unified WIP+commits list; empty = none
+	commitGraphLanes    []int                           // cached node lane per unified row, parallel to the unified WIP+commits list
+	wipRows             []wipRow                        // 0–2 derived pseudo-rows (Working tree / Staged) shown atop the Commits feed when dirty
+	commitListMode      bool                            // Commits feed rendered as a flat ●-gutter list, not a graph
+	commitGraphCols     int                             // graph window width in LANES; 0 = use configured default
+	commitGraphScroll   int                             // leftmost visible lane (0-based); resets on feed reload
+	opCancel            context.CancelFunc              // cancels the in-flight op's context; nil when idle
+	loadGen             int                             // bumped per superseding load; stale dataLoadedMsg are dropped
+	srcGen              map[sourceKey]int               // per-source generation; stale dataAvailableMsg dropped
+	srcInflight         map[sourceKey]bool              // a read of this source is outstanding (coalescing)
+	srcLoading          map[sourceKey]bool              // a manual read is in flight → consuming panels show ⏳
+	bgCtx               context.Context                 // context for in-flight background (auto) reads; cancelled when a user op starts
+	bgCancel            context.CancelFunc              // cancels bgCtx; nil when no background batch is active
+	refreshLastRun      map[refreshItem]time.Time       // last time each scheduled item fired (background scheduler)
 	refreshDur          map[refreshItem][]time.Duration // rolling ring (≤10) of measured read durations per item (Phase C)
-	bgQueue             []refreshItem                  // FIFO of pending background reads; one drains per tick
-	bgBusy              bool                           // a background read is in flight (sole lane-occupancy truth)
-	bgActiveItem        refreshItem                    // the running background item — meaningful ONLY when bgBusy
-	proc                process                        // the single active long-running process; nil = none. IS the interface lock.
+	bgQueue             []refreshItem                   // FIFO of pending background reads; one drains per tick
+	bgBusy              bool                            // a background read is in flight (sole lane-occupancy truth)
+	bgActiveItem        refreshItem                     // the running background item — meaningful ONLY when bgBusy
+	proc                process                         // the single active long-running process; nil = none. IS the interface lock.
 
 	running   bool
 	opStart   time.Time // when the in-flight op began; the heartbeat reads it for the busy line's elapsed readout
