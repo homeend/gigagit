@@ -30,6 +30,12 @@ is the scheduler's due-table.
 - **Polling, not watching.** There is no file-watcher infrastructure in the repo;
   cross-platform fsmonitor is a separate future feature. B uses timers.
 - **Off by default, opt-in** via a new `[refresh]` config section.
+- **Global master toggle.** A single `[refresh] enabled` switch gates the whole
+  scheduler; when off, nothing auto-refreshes regardless of per-source intervals.
+  It is also a **runtime toggle** in Settings (a quick pause/resume that does not
+  require zeroing per-source intervals), persisted via a non-destructive config
+  line-edit — the same pattern as the existing operation-log toggle
+  (`config.SetGlobalDebugLogOperations`).
 - **Per-source interval + per-source toggle.** Every source has its own seconds
   interval; `0` = off.
 - **Auto-refresh is silent** — `manual=false`: no spinner, no focus change, no
@@ -69,16 +75,18 @@ just change the comparison delta per item.
 | Unit | Responsibility |
 |------|----------------|
 | `LimitRunner` ctx fix (**#4**, first task) | `gitexec/limit.go` `gitSem <- struct{}{}` becomes a `select` on `ctx.Done()` vs the send, so a blocked git call observes cancellation. Prerequisite for "user op cancels background read." |
-| `[refresh]` config | New `internal/config` section: per-item interval seconds (`status`/`branches`/`remotes`/`worktrees`/`tags`/`reflog`/`feed`/`fetch`), all default `0` (off). Read at startup like the rest of config. |
-| refresh scheduler (TUI) | `internal/tui` — the due-table + the `refreshTick` handler that fires silent reads. Reuses the heartbeat cadence (no new ticker). |
+| `[refresh]` config | New `internal/config` section: a master `enabled` bool (default `true`) plus per-item interval seconds (`status`/`branches`/`remotes`/`worktrees`/`tags`/`reflog`/`feed`/`fetch`), all default `0` (off). With `enabled=true` and all intervals `0`, the feature is still off — `enabled` is the master gate, intervals are the opt-in. Read at startup like the rest of config. |
+| refresh scheduler (TUI) | `internal/tui` — the due-table + the `refreshTick` handler that fires silent reads. The master `enabled` gate short-circuits the whole tick when off. Reuses the heartbeat cadence (no new ticker). |
+| master runtime toggle | A Settings (`,`) action flips `[refresh] enabled` at runtime — instant pause/resume of ALL auto-refresh without zeroing per-source intervals. Persisted via a non-destructive config line-edit (`config.SetGlobal…` mirroring `SetGlobalDebugLogOperations`, the operation-log toggle). The in-memory `m.cfg.Refresh.Enabled` flips immediately so the next tick honors it. |
 | quiet `fetch` task | Run `engine.Fetch` WITHOUT the normal `startOp` (no op slot, no `m.running`, no busy line, no modal); on success refresh the `remotes` source; on failure stay silent (record to the session error log only). The riskiest component; implemented last. |
 | background cancel ctx | Background reads run under a cancellable context the model holds (`bgCancel`); `startOp` cancels it so a user op preempts in-flight background work. |
-| Settings surface | Settings (`,`) shows the active `[refresh]` schedule (which items are on and their intervals), read-only — config is the source of truth. |
+| Settings surface | Settings (`,`) hosts the master runtime toggle (above) and shows the active per-source `[refresh]` schedule (which items are on and their intervals); per-source intervals are config-edited, not runtime-toggled. |
 
 ### Suppression — first-class
 
 A scheduled refresh is skipped (not queued) when ANY of these hold:
 
+- the master toggle is off (`!m.cfg.Refresh.Enabled`) — short-circuits the whole tick,
 - an op is running (`m.running`),
 - a popup / modal / decider / diff layer is open (`m.layers` non-empty or
   `m.modal != nil`),
@@ -119,8 +127,10 @@ it even when focus is **on** the panel being refreshed.
 - No adaptive/measured intervals (Phase C).
 - No event-driven / fsmonitor / inotify watching.
 - No multi-repo / group background-pull (roadmap item).
-- No new runtime config *writing* — `[refresh]` is read at startup; a live
-  per-source runtime toggle is a possible later addition, not in B.
+- The ONLY runtime config *write* is the master `enabled` toggle (a
+  non-destructive line-edit, exactly like the existing operation-log toggle).
+  Per-source intervals stay read-at-startup; a live per-source runtime editor is
+  a possible later addition, not in B.
 
 ## Testing
 
@@ -136,6 +146,9 @@ it even when focus is **on** the panel being refreshed.
 - **Precedence:** starting an op cancels in-flight background reads (with #4).
 - **Quiet fetch:** on success refreshes `remotes` and never sets `m.running` or a
   modal; on failure is silent and logged.
+- **Master toggle:** with `enabled=false`, no item fires even when intervals are
+  set; flipping it back on resumes; the runtime toggle persists via the
+  non-destructive line-edit and flips the in-memory flag immediately.
 - **Config:** `[refresh]` parses; all-zero default means the scheduler fires
   nothing (feature off).
 
