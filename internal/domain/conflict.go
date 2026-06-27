@@ -30,6 +30,15 @@ func (c ConflictState) Describe() string {
 	return ""
 }
 
+// Conflict derives the conflict source (merge/rebase/cherry-pick parties) from a
+// status the caller already read. It is the public face of conflictState, used
+// by the TUI's status source so a per-panel status refresh carries the same
+// conflict attribution the full Snapshot did. Cheap: short-circuits on a clean
+// working tree.
+func (s *Service) Conflict(ctx context.Context, st model.WorkingTreeStatus) ConflictState {
+	return s.conflictState(ctx, st)
+}
+
 // conflictState attributes st's conflicts to a merge/rebase in progress. It runs
 // git probes only when st actually has unmerged files, so clean repos pay
 // nothing. During a rebase HEAD is detached, so the rebase target comes from the
