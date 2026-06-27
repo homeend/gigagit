@@ -127,7 +127,41 @@ func TestSettingsErrorsEmptyState(t *testing.T) {
 	layerOf[*settingsPopup](m).menuSel = errorsMenuIndex(t)
 	u, _ = m.Update(keyMsg("enter"))
 	m = u.(Model)
-	if out := m.View(); !strings.Contains(out, "no errors this session") {
+	out := m.View()
+	if !strings.Contains(out, "no errors this session") {
 		t.Fatalf("empty viewer should show the empty state:\n%s", out)
+	}
+	// Nothing to wrap/scroll with no entries: don't advertise z (the user's
+	// complaint — z was advertised but inert in the empty state).
+	if strings.Contains(out, "[z] mode") {
+		t.Fatalf("empty viewer must not advertise [z] mode:\n%s", out)
+	}
+	if !strings.Contains(out, "[esc] back") {
+		t.Fatalf("empty viewer should still offer [esc] back:\n%s", out)
+	}
+}
+
+// TestSettingsErrorsZHintGatedOnTruncation: [z] mode is advertised only when an
+// entry is too long to fit (so wrap/scroll have something to reveal).
+func TestSettingsErrorsZHintGatedOnTruncation(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	m, _ := settingsModel(t)
+	observ.ResetFailures()
+	// A short error that fits the wide popup on one line -> no [z].
+	observ.NoteFailure("op X", errors.New("short"))
+	u, _ := m.Update(keyMsg(","))
+	m = u.(Model)
+	layerOf[*settingsPopup](m).menuSel = errorsMenuIndex(t)
+	u, _ = m.Update(keyMsg("enter"))
+	m = u.(Model)
+	if out := m.View(); strings.Contains(out, "[z] mode") {
+		t.Fatalf("a short, fully-visible entry must not advertise [z] mode:\n%s", out)
+	}
+
+	// A very long error that overflows even the wide popup -> [z] appears.
+	observ.NoteFailure("op SmartPull",
+		errors.New("git pull failed (exit 1): fatal: "+strings.Repeat("very-long-token-", 12)))
+	if out := m.View(); !strings.Contains(out, "[z] mode") {
+		t.Fatalf("a truncated entry should advertise [z] mode:\n%s", out)
 	}
 }

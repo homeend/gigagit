@@ -249,11 +249,18 @@ func (p *settingsPopup) render(m Model, below string) string {
 func (p *settingsPopup) box(m Model) string {
 	w, _ := m.overlayDims()
 	inner := popupInnerWidth(w)
+	// The errors viewer holds long, path-heavy rows (git stderr, the errors.log
+	// location), so it scales wide like the bookmark/shelf switchers — most
+	// errors and the log path then fit on one line instead of wrapping ugly.
+	if p.errorsView {
+		inner = popupWideInnerWidth(w)
+	}
 	textW := popupTextWidth(inner)
 	var b strings.Builder
 	if p.errorsView {
 		b.WriteString("Session errors\n\n")
 		fs := observ.SessionFailures()
+		anyTrunc := false
 		if len(fs) == 0 {
 			b.WriteString("  no errors this session\n")
 		} else {
@@ -267,6 +274,9 @@ func (p *settingsPopup) box(m Model) string {
 				wr[i] = winRow{
 					text:  fmt.Sprintf("%s%s  %s — %s", prefix, e.Time.Format("15:04:05"), e.Source, e.Detail),
 					style: st,
+				}
+				if rowTruncated(wr[i].text, textW) {
+					anyTrunc = true
 				}
 			}
 			// Height budget: in wrap mode a single long entry expands to several
@@ -302,7 +312,13 @@ func (p *settingsPopup) box(m Model) string {
 				b.WriteString(seg + "\n")
 			}
 		}
-		b.WriteString("\n[z] mode  [esc] back")
+		// Advertise z only when it does something: an entry too long to fit (in
+		// any mode) is what wrap/scroll reveal. Otherwise the hint is a lie.
+		if anyTrunc {
+			b.WriteString("\n[z] mode  [esc] back")
+		} else {
+			b.WriteString("\n[esc] back")
+		}
 	} else if !p.picker {
 		b.WriteString("Settings\n\n")
 		for i := range settingsMenu {
