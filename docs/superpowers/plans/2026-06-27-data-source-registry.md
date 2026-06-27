@@ -420,6 +420,24 @@ func TestDataAvailableAutoLeavesNoSpinner(t *testing.T) {
 		t.Fatal("auto read must never set a spinner")
 	}
 }
+
+// Blocker 2 regression: when branches lands while a srcFeed read is still in
+// flight, the upstream re-walk must be deferred (no startFeedReload cmd) so it
+// cannot write the feed concurrently with the in-flight LoadInitial. Build a
+// model whose feed has tracked upstreams and a stale applied scope so the latch
+// would otherwise fire. (Use a real-repo model with a tracked upstream; confirm
+// the feed/upstream setup against an existing feed test, e.g. TestDataLoadedTriggersUpstreamReload.)
+func TestBranchesDefersFeedRewalkWhileFeedInflight(t *testing.T) {
+	m := newTestModelWithTrackedUpstream(t) // see note above; reuse existing feed test scaffolding
+	m.srcInflight[srcFeed] = true           // a srcFeed read is outstanding
+	if m.maybeFeedUpstreamRewalk() {
+		t.Fatal("re-walk must be deferred while srcFeed is in flight")
+	}
+	m.srcInflight[srcFeed] = false // feed read has now landed
+	if !m.maybeFeedUpstreamRewalk() {
+		t.Fatal("re-walk must fire once the feed read has landed")
+	}
+}
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -440,6 +458,12 @@ Add to `Update`'s type switch in `internal/tui/model.go` (place it right after t
 		if msg.manual {
 			m.srcLoading[msg.source] = false
 		}
+		// m.loading is the legacy "a blocking refresh is in flight" flag still read
+		// by ~10 action guards (avail.go:14 and the !m.running && !m.loading sites in
+		// model.go). Keep it alive as a derived value = any manual source still
+		// loading, so those guards keep working unchanged. (Phase B: auto reads set
+		// no srcLoading, so they correctly never block actions.)
+		m.loading = m.anySourceLoading()
 		if msg.err != nil {
 			// Best-effort sources (remotes/tags/reflog) must not blank the UI on a
 			// transient error; surface it on the status line and keep prior data.
@@ -458,10 +482,11 @@ Add to `Update`'s type switch in `internal/tui/model.go` (place it right after t
 			m.branches = msg.value.([]model.Branch)
 			m.remoteBranches = sortRemoteBranchesLocalFirst(m.remoteBranches, m.branches)
 			m = m.rebuildCommitGraph()
-			// The feed's first walk had no upstreams; once tracked branches are
-			// known, re-walk once so behind/diverged remote tips show. Latched on
-			// scope-sig so repeated branch refreshes don't re-walk redundantly.
-			if len(m.feedUpstreams()) > 0 && m.feedScopeApplied != m.feedScopeSig() {
+			// Upstream re-walk latch. maybeFeedUpstreamRewalk is false while a srcFeed
+			// read is still in flight, so the initial LoadInitial and the scoped
+			// re-walk never write the feed concurrently — when branches lands first,
+			// the re-walk is deferred to srcFeed's arrival (below) instead.
+			if m.maybeFeedUpstreamRewalk() {
 				var reload tea.Cmd
 				m, reload = m.startFeedReload()
 				return m, reload
@@ -482,10 +507,47 @@ Add to `Update`'s type switch in `internal/tui/model.go` (place it right after t
 			m.commitsExhausted = p.exhausted
 			m.commitsLoading = false
 			m = m.rebuildCommitGraph()
+			// The initial feed read just landed; now it is safe to run the upstream
+			// re-walk (if branches already arrived and set the latch). This is the
+			// other half of the startup ordering: exactly one path fires the re-walk,
+			// always after the initial LoadInitial completes — no feed write race.
+			if m.maybeFeedUpstreamRewalk() {
+				var reload tea.Cmd
+				m, reload = m.startFeedReload()
+				return m, reload
+			}
 		case srcIdentity:
 			m.identity = msg.value.(model.Identity)
 		}
 		return m, nil
+```
+
+Add these helpers to `source.go`:
+
+```go
+// anySourceLoading reports whether any source is mid manual-refresh. It backs the
+// derived m.loading flag (the legacy action-blocking gate) and the per-panel
+// spinner targeting.
+func (m Model) anySourceLoading() bool {
+	for _, v := range m.srcLoading {
+		if v {
+			return true
+		}
+	}
+	return false
+}
+
+// maybeFeedUpstreamRewalk reports whether the one-time "re-walk the feed now that
+// tracked upstreams are known" should fire. It is true only when upstreams exist,
+// the applied scope is stale, AND no srcFeed read is in flight — the in-flight
+// guard is what serializes the initial LoadInitial against the scoped re-walk so
+// they never write the feed at once (Blocker 2). Both the srcBranches and srcFeed
+// arrival handlers call it; whichever lands last with the guard clear fires once.
+func (m Model) maybeFeedUpstreamRewalk() bool {
+	return len(m.feedUpstreams()) > 0 &&
+		m.feedScopeApplied != m.feedScopeSig() &&
+		!m.srcInflight[srcFeed]
+}
 ```
 
 Add the small error-labeler near the handler (or in `source.go`):
@@ -654,7 +716,7 @@ In the `dataAvailableMsg` handler (Task 4), wrap each panel-mutating source so s
 			m = m.restorePanelSel(panelBranches, key)
 			m.remoteBranches = sortRemoteBranchesLocalFirst(m.remoteBranches, m.branches)
 			m = m.rebuildCommitGraph()
-			if len(m.feedUpstreams()) > 0 && m.feedScopeApplied != m.feedScopeSig() {
+			if m.maybeFeedUpstreamRewalk() { // see Task 4 — serialized against srcFeed
 				var reload tea.Cmd
 				m, reload = m.startFeedReload()
 				return m, reload
@@ -724,6 +786,22 @@ func TestReloadSourcesManualSetsConsumerSpinners(t *testing.T) {
 		t.Fatal("auto reload must not set srcLoading")
 	}
 }
+
+// Blocker 1 regression: m.loading is the legacy action-blocking gate; a manual
+// reload must set it (so pull/push/etc. guards block during refresh) and the
+// arrival of the last source must clear it.
+func TestManualReloadDrivesLegacyLoadingFlag(t *testing.T) {
+	m := newTestModel(t)
+	m, _ = m.reloadSourcesCmd([]sourceKey{srcTags}, true)
+	if !m.loading {
+		t.Fatal("manual reload must set m.loading (action guards depend on it)")
+	}
+	nm, _ := m.Update(dataAvailableMsg{source: srcTags, gen: m.srcGen[srcTags],
+		value: []model.Tag{{Name: "v1"}}, manual: true})
+	if nm.(Model).loading {
+		t.Fatal("m.loading must clear when the last manual source lands")
+	}
+}
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -741,6 +819,17 @@ Expected: FAIL — `reloadAllCmd undefined`.
 // per-source gen bump means any older in-flight read of the same source is
 // dropped when it lands.
 func (m Model) reloadSourcesCmd(srcs []sourceKey, manual bool) (Model, tea.Cmd) {
+	// Defensive lazy-init: a Model built as a literal in a test (rather than via the
+	// constructor patched in Task 1) would panic on the nil-map writes below.
+	if m.srcGen == nil {
+		m.srcGen = map[sourceKey]int{}
+	}
+	if m.srcInflight == nil {
+		m.srcInflight = map[sourceKey]bool{}
+	}
+	if m.srcLoading == nil {
+		m.srcLoading = map[sourceKey]bool{}
+	}
 	cmds := make([]tea.Cmd, 0, len(srcs))
 	for _, s := range srcs {
 		m.srcGen[s]++
@@ -750,6 +839,8 @@ func (m Model) reloadSourcesCmd(srcs []sourceKey, manual bool) (Model, tea.Cmd) 
 		}
 		cmds = append(cmds, m.readSourceCmd(s, manual))
 	}
+	// Keep the legacy action-blocking flag in sync (see the handler note in Task 4).
+	m.loading = m.anySourceLoading()
 	return m, tea.Batch(cmds...)
 }
 
@@ -1062,7 +1153,8 @@ Expected: PASS.
 - Confirm no remaining references: `rg -n "loadCmd|dataLoadedMsg|reloadRefsCmd|refsRefreshedMsg|reloadIdentityCmd|identityRefreshedMsg" internal/tui` should return only definitions you are about to delete and their tests.
 - Delete `loadCmd` and `dataLoadedMsg` from `load.go`; delete the `case dataLoadedMsg:` block from `model.go`.
 - Delete `reloadRefsCmd`/`refsRefreshedMsg`/`reloadIdentityCmd`/`identityRefreshedMsg` from `op.go` and their `case` handlers from `model.go`.
-- Remove `loading`, `softReload`, `loadGen` fields only after `rg -n "m.loading|m.softReload|m.loadGen" internal/tui` shows no remaining readers; otherwise leave them. (`running` is unrelated — keep it.)
+- **Keep `m.loading`** — it is now a derived flag (set in `reloadSourcesCmd`, recomputed in the `dataAvailableMsg` handler) and is still read by ~10 action guards (`avail.go:14` and the `!m.running && !m.loading` sites in `model.go`). Do NOT delete it. Verify those readers still compile and behave: `rg -n "m.loading" internal/tui` should show the guards plus the two writers above and nothing referencing the deleted `loadCmd` path.
+- Remove `softReload` and `loadGen` only after `rg -n "m.softReload|m.loadGen" internal/tui` shows no remaining readers (both belonged to the retired monolith — `softReload`'s keep-visible behavior is now intrinsic since panels never blank, and `loadGen` is subsumed by per-source `srcGen`). (`running` is unrelated — keep it.)
 - Update/delete tests that referenced the removed symbols (`load_test.go`, any `dataLoadedMsg`/`refsRefreshedMsg` tests). Convert still-relevant assertions to the `dataAvailableMsg` equivalents.
 
 - [ ] **Step 6: Full suite + race + build + fmt/vet**
@@ -1126,6 +1218,11 @@ git commit -m "docs: data-source registry (Phase A) — changelog + package map"
 **Placeholder scan:** No "TBD/TODO". Two illustrative test helpers (`newTestModel*`, `panelTitleHasGlyph`) are flagged with explicit "confirm the real name with `rg`" instructions because the exact helper names live in the existing suite — this is verification guidance, not a content gap.
 
 **Type consistency:** `sourceKey` constants, `dataAvailableMsg` fields, `statusPayload`/`worktreesPayload`/`feedPayload`, `srcGen`/`srcInflight`/`srcLoading`, `pendingSources`, `reloadSourcesCmd`/`reloadAllCmd`/`sourcesOrAll`/`opAffectedSources`/`anySourceInflight`/`panelLoading`/`panelSelKey`/`restorePanelSel`/`rowKeyAt` are used consistently across tasks. `engine.Result` (in Task 7 tests) matches the existing `opFinishedMsg.res` type.
+
+**Behavioral-preservation blockers (found in advisor review, resolved in-plan):**
+1. **Legacy `m.loading` gate** — read by `avail.go:14` and ~10 `!m.running && !m.loading` action sites, not just `r`. Kept alive as a derived flag: set in `reloadSourcesCmd` (Task 6), recomputed in the `dataAvailableMsg` handler (Task 4), explicitly NOT deleted (Task 8). Regression test `TestManualReloadDrivesLegacyLoadingFlag` (Task 6).
+2. **Feed double-writer race on startup** — `srcFeed` (`LoadInitial`) and the `srcBranches`-triggered upstream re-walk fanned out concurrently and wrote `m.commits`/`feed` with incompatible generation schemes. Serialized via `maybeFeedUpstreamRewalk` (Task 4), whose `!m.srcInflight[srcFeed]` guard defers the re-walk to `srcFeed`'s arrival when branches lands first. Regression test `TestBranchesDefersFeedRewalkWhileFeedInflight` (Task 4). On `r` the scope is already latched so the re-walk never fires — no race there.
+3. **Nil-map panic** — `reloadSourcesCmd` lazy-inits the three registry maps so a `Model{}` literal in a test can't panic (Task 6).
 
 **Open verification points the executor must resolve against the live code (each flagged inline):**
 1. Exact test-model helper names (`newTestModel`, `newTestModelWithRepo`, `newTestService`).
