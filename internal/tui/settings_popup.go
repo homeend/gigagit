@@ -269,16 +269,38 @@ func (p *settingsPopup) box(m Model) string {
 					style: st,
 				}
 			}
+			// Height budget: in wrap mode a single long entry expands to several
+			// display lines, so size the viewport to the wrapped line count
+			// (capped to keep the popup on-screen) — not the entry count, which
+			// would leave wrap no vertical room and make z look like a no-op.
+			_, termH := m.overlayDims()
+			capRows := termH - 12
+			if capRows < 3 {
+				capRows = 3
+			}
 			h := len(fs)
-			if h > 12 {
-				h = 12
+			if p.mode == modeWrap {
+				total := 0
+				for _, r := range wr {
+					total += len(wrapWidth(r.text, textW, 1<<20))
+				}
+				h = total
+			}
+			if h > capRows {
+				h = capRows
 			}
 			for _, line := range renderWindow(wr, winOpts{w: textW, h: h, mode: p.mode, anchor: p.sel, hscroll: p.hscroll}) {
 				b.WriteString(line + "\n")
 			}
 		}
+		// Wrap the path so its basename stays visible on a narrow popup; a raw
+		// line would be truncated by popupBox and the user could never see where
+		// errors.log lives.
 		if path := defaultErrLogPath(); path != "" {
-			b.WriteString("\nfull history: " + path + "\n")
+			b.WriteString("\n")
+			for _, seg := range wrapWidth("full history: "+path, textW, 1<<20) {
+				b.WriteString(seg + "\n")
+			}
 		}
 		b.WriteString("\n[z] mode  [esc] back")
 	} else if !p.picker {
