@@ -190,14 +190,12 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if !p.picker && !p.errorsView {
 		switch msg.Type {
 		case tea.KeyUp:
-			if p.menuSel > 0 {
-				p.menuSel--
-			}
+			// Wrap: up on the first option lands on the last.
+			p.menuSel = (p.menuSel - 1 + len(settingsMenu)) % len(settingsMenu)
 			return m, nil
 		case tea.KeyDown:
-			if p.menuSel < len(settingsMenu)-1 {
-				p.menuSel++
-			}
+			// Wrap: down on the last option lands on the first.
+			p.menuSel = (p.menuSel + 1) % len(settingsMenu)
 			return m, nil
 		case tea.KeyEnter:
 			switch settingsMenu[p.menuSel] {
