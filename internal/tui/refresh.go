@@ -64,10 +64,11 @@ const (
 type intervalState int
 
 const (
-	stateOff           intervalState = iota // configured interval 0 → never auto-refresh
+	stateOff           intervalState = iota // adaptive off + configured interval 0 → never auto-refresh
 	stateFixed                              // adaptive off → configured interval verbatim
-	stateAdaptive                           // backoff_factor × avg won (interval lengthened)
-	stateAdaptiveFloor                      // configured floor won (cheap read, or not yet measured)
+	stateAdaptive                           // backoff_factor × avg drives the interval
+	stateAdaptiveFloor                      // configured floor won (cheap read), or floor used pending measurement
+	statePending                            // adaptive on, no configured floor, not yet measured → waits for first read
 	stateDisabled                           // avg > cutoff → auto-refresh disabled (manual only)
 )
 
@@ -85,17 +86,30 @@ func meanDuration(samples []time.Duration) time.Duration {
 
 // effectiveInterval returns an item's effective interval in seconds and the
 // state that produced it. secs is meaningful only for the fixed/adaptive states;
-// stateOff and stateDisabled return 0 (the item does not auto-refresh).
+// stateOff, statePending, and stateDisabled return 0 (the item does not
+// auto-refresh this tick).
+//
+// The configured interval (base) is an OPTIONAL FLOOR. With adaptive on, a
+// source's interval is driven by its measured average (backoff_factor × avg);
+// when no interval is configured (base 0) the source still auto-refreshes once
+// it has a measurement, polling purely at backoff_factor × avg. Before any
+// measurement, a base-0 source is statePending (it starts once a manual r or
+// background read measures it). With adaptive off, the configured interval is
+// used verbatim and base 0 means off.
 func effectiveInterval(cfg config.RefreshConfig, it refreshItem, avg time.Duration, haveSample bool) (int, intervalState) {
 	base := refreshIntervalFor(cfg, it)
-	if base <= 0 {
-		return 0, stateOff
-	}
 	if cfg.DisableAdaptive {
+		if base <= 0 {
+			return 0, stateOff
+		}
 		return base, stateFixed
 	}
+	// adaptive on
 	if !haveSample {
-		return base, stateAdaptiveFloor // adaptive on, not yet measured → run at floor
+		if base > 0 {
+			return base, stateAdaptiveFloor // poll at the configured floor until measured
+		}
+		return 0, statePending // no floor, no data yet → wait for the first read
 	}
 	cutoff := cfg.MaxReadSeconds
 	if cutoff <= 0 {
@@ -110,9 +124,9 @@ func effectiveInterval(cfg config.RefreshConfig, it refreshItem, avg time.Durati
 	}
 	backoff := int(math.Ceil((time.Duration(factor) * avg).Seconds()))
 	if backoff <= base {
-		return base, stateAdaptiveFloor
+		return base, stateAdaptiveFloor // configured floor wins
 	}
-	return backoff, stateAdaptive
+	return backoff, stateAdaptive // base 0 → polls purely at backoff_factor × avg
 }
 
 // stateLabel renders an intervalState for the Refresh rates viewer.
@@ -126,6 +140,8 @@ func stateLabel(s intervalState) string {
 		return "adaptive"
 	case stateAdaptiveFloor:
 		return "adaptive (floor)"
+	case statePending:
+		return "pending (refresh to measure)"
 	case stateDisabled:
 		return "disabled (too slow)"
 	}
@@ -252,7 +268,7 @@ func (m Model) refreshTick(now time.Time) (Model, tea.Cmd) {
 	}
 	m.srcGen[it.source]++
 	m.srcInflight[it.source] = true
-	return m, m.readSourceCmd(m.bgCtx, it.source, false) // manual=false → silent
+	return m, m.readSourceCmd(m.bgCtx, it.source, false, false) // manual=false → silent; startup=false → measured
 }
 
 // bgFetchDoneMsg lands when a background fetch finishes. On success the handler
@@ -286,7 +302,8 @@ func (m Model) bgFetchCmd(ctx context.Context) tea.Cmd {
 }
 
 // dueItems returns the items whose effective interval has elapsed this tick.
-// off/disabled items are excluded. Pure: durs is the per-item duration ring.
+// off/disabled/pending items (effective interval <= 0) are excluded. Pure: durs
+// is the per-item duration ring.
 func dueItems(now time.Time, lastRun map[refreshItem]time.Time, durs map[refreshItem][]time.Duration, cfg config.RefreshConfig, suppressed bool) []refreshItem {
 	if !cfg.Enabled || suppressed {
 		return nil
@@ -294,9 +311,9 @@ func dueItems(now time.Time, lastRun map[refreshItem]time.Time, durs map[refresh
 	var due []refreshItem
 	for _, it := range scheduledItems {
 		avg := meanDuration(durs[it])
-		secs, state := effectiveInterval(cfg, it, avg, len(durs[it]) > 0)
-		if state == stateOff || state == stateDisabled {
-			continue
+		secs, _ := effectiveInterval(cfg, it, avg, len(durs[it]) > 0)
+		if secs <= 0 {
+			continue // off / disabled / pending → not scheduled this tick
 		}
 		last, seen := lastRun[it]
 		if !seen || now.Sub(last) >= time.Duration(secs)*time.Second {

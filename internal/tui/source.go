@@ -50,12 +50,13 @@ var srcConsumers = map[sourceKey][]panel{
 // that issued it (stale gens are dropped); manual=true means a user-initiated
 // read whose spinner must be cleared on arrival (false = silent, Phase B).
 type dataAvailableMsg struct {
-	source sourceKey
-	gen    int
-	value  any
-	manual bool
-	dur    time.Duration // wall-clock of the domain read (Phase C measurement)
-	err    error
+	source  sourceKey
+	gen     int
+	value   any
+	manual  bool
+	startup bool          // part of the app-start fan-out; its duration is NOT measured (parallel/contended)
+	dur     time.Duration // wall-clock of the domain read (Phase C measurement)
+	err     error
 }
 
 // statusPayload carries a working-tree status together with the conflict state
@@ -124,14 +125,14 @@ func sourceErr(s sourceKey, err error) string {
 // for worktrees) is computed here so a per-source refresh is self-contained.
 // ctx is provided by the caller: background reads pass m.bgCtx (cancellable by
 // a starting user op); manual reads pass context.Background() (never cancelled).
-func (m Model) readSourceCmd(ctx context.Context, s sourceKey, manual bool) tea.Cmd {
+func (m Model) readSourceCmd(ctx context.Context, s sourceKey, manual, startup bool) tea.Cmd {
 	svc := m.svc
 	feed := m.feed
 	reflogLimit := m.cfg.UI.ReflogLimit
 	gen := m.srcGen[s]
 	return func() tea.Msg {
 		start := time.Now()
-		out := dataAvailableMsg{source: s, gen: gen, manual: manual}
+		out := dataAvailableMsg{source: s, gen: gen, manual: manual, startup: startup}
 		switch s {
 		case srcStatus:
 			st, err := svc.Status(ctx)
@@ -200,7 +201,7 @@ func (m Model) anySourceInflight() bool {
 // manual, loading), and returns a batch that reads them all concurrently. The
 // per-source gen bump means any older in-flight read of the same source is
 // dropped when it lands.
-func (m Model) reloadSourcesCmd(srcs []sourceKey, manual bool) (Model, tea.Cmd) {
+func (m Model) reloadSourcesCmd(srcs []sourceKey, manual, startup bool) (Model, tea.Cmd) {
 	// Defensive lazy-init: a Model built as a literal in a test (rather than via
 	// the constructor patched in Task 1) would panic on the nil-map writes below.
 	if m.srcGen == nil {
@@ -219,7 +220,7 @@ func (m Model) reloadSourcesCmd(srcs []sourceKey, manual bool) (Model, tea.Cmd) 
 		if manual {
 			m.srcLoading[s] = true
 		}
-		cmds = append(cmds, m.readSourceCmd(context.Background(), s, manual))
+		cmds = append(cmds, m.readSourceCmd(context.Background(), s, manual, startup))
 	}
 	// Keep the legacy action-blocking flag in sync (see the handler note in Task 4).
 	m.loading = m.anySourceLoading()
@@ -241,12 +242,12 @@ func sourcesOrAll(srcs []sourceKey) []sourceKey {
 
 // reloadAllCmd refreshes every source — the registry's "reload everything" (r,
 // and the post-bootstrap startup fan-out).
-func (m Model) reloadAllCmd(manual bool) (Model, tea.Cmd) {
+func (m Model) reloadAllCmd(manual, startup bool) (Model, tea.Cmd) {
 	all := make([]sourceKey, 0, srcCount)
 	for s := sourceKey(0); s < srcCount; s++ {
 		all = append(all, s)
 	}
-	return m.reloadSourcesCmd(all, manual)
+	return m.reloadSourcesCmd(all, manual, startup)
 }
 
 // opAffectedSources returns the sources an operation dirties (nil = all, the

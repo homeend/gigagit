@@ -25,9 +25,18 @@ func TestEffectiveInterval(t *testing.T) {
 	st := refreshItem{source: srcStatus}
 	base := config.RefreshConfig{Enabled: true, Status: 10} // adaptive on (DisableAdaptive false)
 
-	// cfg interval 0 → off.
-	if secs, state := effectiveInterval(config.RefreshConfig{Enabled: true}, st, 0, false); state != stateOff || secs != 0 {
-		t.Fatalf("interval 0 → off, got %d/%v", secs, state)
+	// adaptive OFF + interval 0 → off.
+	offCfg := config.RefreshConfig{Enabled: true, DisableAdaptive: true}
+	if secs, state := effectiveInterval(offCfg, st, 0, false); state != stateOff || secs != 0 {
+		t.Fatalf("adaptive off + interval 0 → off, got %d/%v", secs, state)
+	}
+	// adaptive ON + no configured interval + no sample → pending (waits for first read).
+	if secs, state := effectiveInterval(config.RefreshConfig{Enabled: true}, st, 0, false); state != statePending || secs != 0 {
+		t.Fatalf("adaptive on, no floor, no sample → pending, got %d/%v", secs, state)
+	}
+	// adaptive ON + no configured interval + a sample (4.1s) → polls purely at backoff (41s).
+	if secs, state := effectiveInterval(config.RefreshConfig{Enabled: true}, st, 4100*time.Millisecond, true); state != stateAdaptive || secs != 41 {
+		t.Fatalf("adaptive on, no floor, measured → backoff 41, got %d/%v", secs, state)
 	}
 	// adaptive off → fixed at configured.
 	fixed := base
@@ -87,16 +96,31 @@ func TestDataAvailableRecordsDuration(t *testing.T) {
 	}
 }
 
-func TestManualReadDoesNotRecordDuration(t *testing.T) {
+// A manual r read (startup=false) DOES feed the ring — it is the user's chosen
+// way to seed measurements for the adaptive scheduler.
+func TestManualReadRecordsDuration(t *testing.T) {
 	m := newTestModel(t)
 	m.bgActiveItem = refreshItem{} // lane idle
 	it := refreshItem{source: srcTags}
 	gen := m.srcGen[srcTags]
 	msg := dataAvailableMsg{source: srcTags, gen: gen, value: []model.Tag(nil), dur: 5 * time.Second, manual: true}
 	nm, _ := m.Update(msg)
-	got := nm.(Model).refreshDur[it]
-	if len(got) != 0 {
-		t.Fatalf("manual read must not feed the duration ring, got %v", got)
+	if got := nm.(Model).refreshDur[it]; len(got) != 1 || got[0] != 5*time.Second {
+		t.Fatalf("manual read should feed the duration ring, got %v", got)
+	}
+}
+
+// The app-start fan-out (startup=true) must NOT feed the ring — its parallel,
+// contended durations are unrepresentative.
+func TestStartupReadDoesNotRecordDuration(t *testing.T) {
+	m := newTestModel(t)
+	m.bgActiveItem = refreshItem{} // lane idle
+	it := refreshItem{source: srcTags}
+	gen := m.srcGen[srcTags]
+	msg := dataAvailableMsg{source: srcTags, gen: gen, value: []model.Tag(nil), dur: 5 * time.Second, manual: true, startup: true}
+	nm, _ := m.Update(msg)
+	if got := nm.(Model).refreshDur[it]; len(got) != 0 {
+		t.Fatalf("startup read must not feed the duration ring, got %v", got)
 	}
 }
 

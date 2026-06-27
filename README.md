@@ -222,23 +222,31 @@ max_read_seconds = 10     # source whose avg read exceeds this drops to manual-o
 backoff_factor   = 10     # effective interval = max(configured, factor × avg read)
 ```
 
-Background reads are silent: no spinner, no status-line change, no cursor
-disturbance. The scheduler is suppressed while an operation is running, a
-popup/modal is open, or you are typing a search/filter. A user action immediately
-preempts any in-flight background read. Like the operation log, the `enabled`
-toggle is written only to the global config, never to a repo's `.gg.toml`.
+With **adaptive intervals on** (the default when `enabled = true`) the per-source
+seconds above are **optional**: each source's interval is derived from how long
+its reads actually take — `effective = max(configured, backoff_factor × avg)`. If
+you set no interval for a source (or leave them all out), it still auto-refreshes
+once it has a measurement, polling purely at `backoff_factor × avg`. So enabling
+auto-refresh and pressing `r` once is enough to get every source self-tuning — no
+interval numbers required. A source whose rolling average exceeds
+`max_read_seconds` drops to **manual-only** (a later `r` re-measures it and can
+re-enable it). With `disable_adaptive = true` the per-source seconds are used
+verbatim (a fixed schedule; 0 = off).
 
-When adaptive intervals are active (the default when `enabled = true`), each
-source's background read is timed and the interval backs off automatically: the
-effective interval is `max(configured, backoff_factor × avg)`. A source whose
-rolling average exceeds `max_read_seconds` is dropped to manual-only until the
-process restarts and measurements reset. Background reads run **one at a time**
-(FIFO, deduped by type) to cap git subprocess pressure; manual `r` stays
-parallel and is never affected. A `⟳ <source>…` status hint appears while the
-single background lane is busy. The **Settings (`,`) → "Adaptive intervals"**
-toggle persists `disable_adaptive` to the global config; **"Refresh rates"**
-shows a live per-source table of configured / average / effective interval and
-the current state (`fixed`, `adaptive`, `adaptive (floor)`, `disabled (too slow)`).
+Measurements come from manual `r` and the single-lane background reads; the
+**app-start load is deliberately not measured** (it reads everything in parallel,
+so its timings are inflated). Background reads run **one at a time** (FIFO, deduped
+by type) to cap git subprocess pressure; manual `r` stays parallel and is never
+affected. Background reads don't show per-panel spinners or move the cursor, but a
+small `⟳ <source>…` hint appears in the status line while the single background
+lane is busy. The scheduler is suppressed while an operation is running, a
+popup/modal is open, or you are typing a search/filter, and a user action
+immediately preempts any in-flight background read. The **Settings (`,`) →
+"Adaptive intervals"** toggle persists `disable_adaptive` to the global config
+(like `enabled`, only to the global config, never a repo `.gg.toml`); **"Refresh
+rates"** shows a live per-source table of configured / average / effective
+interval and the current state (`fixed`, `adaptive`, `adaptive (floor)`,
+`pending (refresh to measure)`, `disabled (too slow)`).
 
 `[ui] footer_actions` and `[ui] menu_actions` are lists of action **ids** that
 choose which actions appear in the footer bar and in the `.` menu respectively;

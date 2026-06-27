@@ -247,11 +247,30 @@ in-memory `Model`).
 
 ## Risks / edge cases
 
-- **Disabled source never re-measures on its own** — by design: once `avg >
-  cutoff`, only manual `r` runs and re-measures it (which can re-enable it if it
-  got fast). Documented as intended behavior, surfaced in the viewer.
-- **Single sample noise** — mitigated by averaging up to 10; early on (1–2
-  samples) a fluke can mis-classify, self-corrects as the ring fills.
+- **The app-start fan-out is NOT measured.** The startup load reads all sources
+  in parallel (contending for the git-subprocess semaphore), so its durations are
+  systematically inflated and unrepresentative. Those reads carry a `startup`
+  flag and never feed the ring. **Manual `r` and single-lane background reads DO
+  feed it** — `r` is the user's chosen way to seed measurements.
+- **Adaptive derives the interval from measurements; the configured interval is
+  an optional floor.** With adaptive on, a source polls at
+  `max(configured, backoff_factor × avg)`. If no per-source interval is
+  configured (floor 0), the source still auto-refreshes once measured, polling
+  purely at `backoff_factor × avg`. Before its first measurement a floor-less
+  source is **`pending`** (it begins after the first manual `r` or background
+  read measures it). So enabling auto-refresh and pressing `r` once is enough to
+  make every source self-tune — no per-source interval config required. With
+  adaptive **off**, the configured interval is used verbatim and 0 = off.
+- **Disabled source re-measures via `r`.** A `disabled (too slow)` source is
+  excluded from background reads, so it gets no further background samples; but a
+  manual `r` re-measures it (manual reads feed the ring) and can re-enable it if
+  it has become fast.
+- **Single sample noise** — averaging up to 10 samples damps a one-off slow
+  read; an early fluke (1–2 samples) self-corrects as the ring fills.
+- **Fetch self-disabling** — with `max_read_seconds = 10`, a `git fetch` on a
+  huge repo can routinely exceed the cutoff and self-disable. This is the rule
+  working as specified, not a bug; the viewer's `disabled (too slow)` state
+  makes it legible.
 - **Indicator vs. Phase B silence** — a deliberate, scoped relaxation; only the
   active `⟳` hint, nothing per-panel, no countdown.
 - **Lane starvation** — `nextDueItem`'s most-overdue selection ensures every due

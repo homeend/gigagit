@@ -470,7 +470,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.refreshLastRun[it] = now
 		}
 		var cmd tea.Cmd
-		m, cmd = m.reloadAllCmd(true)
+		m, cmd = m.reloadAllCmd(true, true) // startup=true → these reads do not feed measurements
 		return m, cmd
 	case dataLoadedMsg:
 		if msg.gen != m.loadGen {
@@ -572,9 +572,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// Record the measured read cost for the adaptive scheduler (success only;
 		// a failed/partial read is not a representative duration). Gate on
-		// !msg.manual: manual/startup parallel reads are contended and
-		// unrepresentative — only background (silent) reads feed the rolling ring.
-		if !msg.manual {
+		// !msg.startup: the app-start fan-out reads all sources in parallel
+		// (contended) so its durations are unrepresentative; manual r and
+		// single-lane background reads both feed the rolling ring.
+		if !msg.startup {
 			m = m.recordDuration(refreshItem{source: msg.source}, msg.dur)
 		}
 		switch msg.source {
@@ -889,7 +890,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// loading guard, r races loadCmd during a repo switch.
 			if !m.running && !m.loading && !m.anySourceInflight() {
 				var cmd tea.Cmd
-				m, cmd = m.reloadAllCmd(true)
+				m, cmd = m.reloadAllCmd(true, false) // manual r → measured (startup=false)
 				return m, cmd
 			}
 		case "p":
@@ -1513,7 +1514,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// working tree — refresh status and the stash list.
 			m.stashView.loading = true
 			var cmd tea.Cmd
-			m, cmd = m.reloadSourcesCmd([]sourceKey{srcStatus}, true)
+			m, cmd = m.reloadSourcesCmd([]sourceKey{srcStatus}, true, false)
 			return m, tea.Batch(cmd, m.loadStashListCmd(m.stashView.tag))
 		}
 		// A job an active process started just returned: let the process advance
@@ -1524,7 +1525,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Route op completion through the per-source registry: refresh only the
 		// sources the op dirtied (nil pendingSources = all sources, safe default).
 		var cmd tea.Cmd
-		m, cmd = m.reloadSourcesCmd(sourcesOrAll(srcs), true)
+		m, cmd = m.reloadSourcesCmd(sourcesOrAll(srcs), true, false)
 		return m, cmd
 
 	case prefixDataMsg:
