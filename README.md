@@ -245,7 +245,8 @@ turn the background fetch on. Background reads run **one at a time** (FIFO, dedu
 by type) to cap git subprocess pressure; manual `r` stays parallel and is never
 affected. Background reads don't show per-panel spinners or move the cursor, but a
 small `⟳ <source>…` hint appears in the status line while the single background
-lane is busy. The scheduler is suppressed while an operation is running, a
+lane is busy — except for reads whose rolling average is under 1 s, which are
+suppressed so quick sources don't flicker the status bar. The scheduler is suppressed while an operation is running, a
 popup/modal is open, or you are typing a search/filter, and a user action
 immediately preempts any in-flight background read. The **Settings (`,`) →
 "Adaptive intervals"** toggle persists `disable_adaptive` to the global config

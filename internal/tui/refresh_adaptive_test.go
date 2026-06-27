@@ -260,4 +260,19 @@ func TestBgRefreshHint(t *testing.T) {
 	if got := m.bgRefreshHint(); got != "⟳ fetch…" {
 		t.Fatalf("want '⟳ fetch…', got %q", got)
 	}
+
+	// A known-fast read (avg < 1s) is suppressed to avoid status-bar flicker.
+	fast := refreshItem{source: srcTags}
+	m.bgActiveItem = fast
+	m.refreshDur[fast] = []time.Duration{200 * time.Millisecond, 300 * time.Millisecond}
+	if got := m.bgRefreshHint(); got != "" {
+		t.Fatalf("fast read (avg < 1s) should suppress the hint, got %q", got)
+	}
+	// A slow read (avg >= 1s) still shows the hint.
+	slow := refreshItem{source: srcReflog}
+	m.bgActiveItem = slow
+	m.refreshDur[slow] = []time.Duration{2 * time.Second}
+	if got := m.bgRefreshHint(); got != "⟳ reflog…" {
+		t.Fatalf("slow read (avg >= 1s) should show the hint, got %q", got)
+	}
 }

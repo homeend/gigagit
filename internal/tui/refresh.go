@@ -333,8 +333,15 @@ func dueItems(now time.Time, lastRun map[refreshItem]time.Time, durs map[refresh
 
 // bgRefreshHint is the unobtrusive status-line marker shown while the single
 // background read runs (active-only, no countdown). Empty when the lane is idle.
+// It is also suppressed for known-fast reads (rolling average < 1s) so quick
+// sources don't flicker the status bar — the hint only appears when a read is
+// actually taking a moment. A not-yet-measured read shows the hint (we can't
+// know it's fast, and a slow first read is exactly when the hint helps).
 func (m Model) bgRefreshHint() string {
 	if !m.bgBusy {
+		return ""
+	}
+	if samples := m.refreshDur[m.bgActiveItem]; len(samples) > 0 && meanDuration(samples) < time.Second {
 		return ""
 	}
 	name := "fetch"
