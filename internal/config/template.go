@@ -46,6 +46,16 @@ var settingDocs = []settingDoc{
 	{"ui", "disable_slow_op_confirm", false, "skip the yes/no confirmation shown before slow working-tree ops (switch, checkout, pull, merge, rebase, fast-forward, reset)"},
 
 	{"debug", "log_operations", false, "mirror every op + git invocation (redacted) to the operation log; toggle live from the , Settings menu"},
+
+	{"refresh", "enabled", false, "master switch for background auto-refresh (all sources); default false = feature off"},
+	{"refresh", "status", 0, "seconds between background status reads; 0 = off"},
+	{"refresh", "branches", 0, "seconds between background branch-list refresh; 0 = off"},
+	{"refresh", "remotes", 0, "seconds between background remote-branch refresh; 0 = off"},
+	{"refresh", "worktrees", 0, "seconds between background worktree-list refresh; 0 = off"},
+	{"refresh", "tags", 0, "seconds between background tag-list refresh; 0 = off"},
+	{"refresh", "reflog", 0, "seconds between background reflog refresh; 0 = off"},
+	{"refresh", "feed", 0, "seconds between background commit-feed refresh; 0 = off"},
+	{"refresh", "fetch", 0, "seconds between background `git fetch`; 0 = off"},
 }
 
 // tomlScalar renders a registry value as it appears in TOML.
@@ -69,7 +79,7 @@ func Template() string {
 	b.WriteString("# gg configuration — every setting with its default.\n")
 	b.WriteString("# Uncomment a line to override the default. Values shown are gg's built-in\n")
 	b.WriteString("# defaults; leaving a line commented keeps tracking the default across versions.\n")
-	for _, section := range []string{"worktree", "ui", "debug"} {
+	for _, section := range []string{"worktree", "ui", "debug", "refresh"} {
 		b.WriteString("\n[" + section + "]\n")
 		for _, d := range settingDocs {
 			if d.section != section {
