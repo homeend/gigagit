@@ -49,6 +49,8 @@ Tasks are ordered so the suite stays green throughout: #4 fix → config → sch
 
 Why first: Phase B's "a starting user op cancels in-flight background reads" is impossible while a blocked git call ignores `ctx` (it can't observe the cancel until a slot frees).
 
+Verified (no second prerequisite): `repogate.Acquire` (`internal/repogate/gate.go:83`) already selects on `<-ctx.Done()` (line ~109), so a background read blocked at the *gate* (e.g. behind a user `TreeWrite`) is freed by cancelling `bgCtx`. After this task fixes the *semaphore* layer, preemption works at both layers.
+
 - [ ] **Step 1: Write the failing test**
 
 ```go
@@ -547,7 +549,24 @@ func TestRefreshTickFiresSilentReadAndIsSuppressed(t *testing.T) {
 		t.Fatal("must not fire while an op is running")
 	}
 }
+
+// BLOCKING-bug guard: a silent (auto) read that fails — e.g. context.Canceled
+// because a user op preempted it — must NEVER write the status line. Otherwise
+// the user sees "branches: context canceled" from a refresh they never asked
+// for. (Phase A's handler currently surfaces every err to statusMsg.)
+func TestSilentReadErrorDoesNotTouchStatus(t *testing.T) {
+	m := newTestModel(t)
+	m.statusMsg = "keep me"
+	nm, _ := m.Update(dataAvailableMsg{
+		source: srcBranches, gen: m.srcGen[srcBranches],
+		manual: false, err: context.Canceled,
+	})
+	if got := nm.(Model).statusMsg; got != "keep me" {
+		t.Fatalf("silent read error must not change statusMsg, got %q", got)
+	}
+}
 ```
+(Add `"context"` to the test imports.)
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -563,6 +582,19 @@ In `internal/tui/model.go` `Model` struct:
 	refreshLastRun map[refreshItem]time.Time // last time each scheduled item fired (background scheduler)
 ```
 Initialize `refreshLastRun: map[refreshItem]time.Time{}` in the constructor (alongside `srcGen` etc.).
+
+**Silent-error gate (blocking bug fix).** In Phase A's `dataAvailableMsg` handler (`model.go`), the error branch currently does `m.statusMsg = sourceErr(msg.source, msg.err); return m, nil` for every read. A silent background read that fails (especially `context.Canceled` from op preemption) must NOT touch the status line. Change it to surface the error only for manual reads:
+```go
+		if msg.err != nil {
+			if msg.manual {
+				m.statusMsg = sourceErr(msg.source, msg.err)
+			}
+			return m, nil
+		}
+```
+This is what `TestSilentReadErrorDoesNotTouchStatus` (Step 1) guards.
+
+**Avoid the enable-time burst.** `dueItems` treats an unseen item as due immediately, so without seeding, the first tick after enabling fires *every* enabled source plus fetch at once (including the expensive ones) on a 100GB repo. Seed `refreshLastRun[it] = now` for all `scheduledItems` at startup so the first auto-fire is one interval out. Do this once in `Init`/bootstrap (capture `time.Now()` and populate the map) — and Task 6 repeats the seeding when the master toggle flips on. (One conscious choice; we are NOT also rate-limiting to one item per tick — per-source intervals already stagger steady-state load.)
 
 Refactor Phase A's `readSourceCmd` to take a context (so background reads are cancellable). Change its signature from `func (m Model) readSourceCmd(s sourceKey, manual bool) tea.Cmd` to `func (m Model) readSourceCmd(ctx context.Context, s sourceKey, manual bool) tea.Cmd`, use that `ctx` instead of the internal `context.Background()`, and update its only caller `reloadSourcesCmd` to pass `context.Background()` (manual reads stay uncancellable-by-op, which is correct — a user-initiated refresh shouldn't be cancelled by the next op). Run `rg -n "readSourceCmd\(" internal/tui` to find every caller.
 
@@ -711,6 +743,14 @@ In `internal/tui/settings_popup.go`:
 func (m Model) toggleAutoRefresh() Model {
 	want := !m.cfg.Refresh.Enabled
 	m.cfg.Refresh.Enabled = want // in-memory flip takes effect on the next heartbeat tick
+	if want {
+		// Seed lastRun=now so enabling does not burst every source at once on the
+		// next tick — first auto-fire is one interval out (same as startup seeding).
+		now := time.Now()
+		for _, it := range scheduledItems {
+			m.refreshLastRun[it] = now
+		}
+	}
 	if err := config.SetGlobalRefreshEnabled(config.DefaultGlobalPath(), want); err != nil {
 		m.statusMsg = "auto-refresh toggled but not saved: " + err.Error()
 		return m
@@ -834,9 +874,13 @@ In `internal/tui/model.go` `Update`, handle the result:
 		}
 		m.srcGen[srcRemotes]++
 		m.srcInflight[srcRemotes] = true
-		return m, m.readSourceCmd(m.bgCtx, srcRemotes, false) // silent remotes refresh
+		ctx := m.bgCtx
+		if ctx == nil || m.bgCancel == nil {
+			ctx = context.Background() // bgCtx may have been cancelled by an op between fetch-start and now
+		}
+		return m, m.readSourceCmd(ctx, srcRemotes, false) // silent remotes refresh
 ```
-(If `m.bgCtx` may be nil here, fall back to `context.Background()`.)
+(Requires `"context"` imported in `model.go` — it already is.)
 
 - [ ] **Step 4: Run tests + build**
 
@@ -902,6 +946,12 @@ git commit -m "docs: background auto-refresh (Phase B) — changelog, package ma
 - Fetch carries network/auth risk, off the op slot → Task 7 (no `startOp`, `bgDecider`, swallow errors). ✓
 - Cursor/selection survive silent refresh → inherited from Phase A (selection-by-identity); covered by Phase A tests + Task 5's no-`srcLoading` assertion. ✓
 - Phase C deferred (due-table seam) → not implemented; noted. ✓
+
+**Advisor-review findings (resolved in-plan):**
+1. **Blocking — silent reads must not surface errors.** A cancelled background read (`context.Canceled` from op preemption) would otherwise write `branches: context canceled` to the status line, breaking "silent." Fixed in Task 5 (gate the `dataAvailableMsg` error branch on `msg.manual`); guarded by `TestSilentReadErrorDoesNotTouchStatus`.
+2. **Gating question resolved — `repogate.Acquire` is ctx-aware** (gate.go:109), so preemption works at the gate layer too; no second prerequisite fix. Noted under Task 1.
+3. **Enable-time burst** — seed `refreshLastRun=now` at startup (Task 5) and on toggle-on (Task 6) so enabling doesn't fire every source + fetch at once.
+4. **Post-fetch `bgCtx` reuse** — Task 7 falls back to `context.Background()` if `bgCtx` was cancelled between fetch-start and completion.
 
 **Placeholder scan:** The `bgDecider` interface body and a few test helpers (`newTestModelWithRemote`, the overlay-open predicate `layerActive`) are flagged with explicit "confirm the real name/signature with rg" instructions — these are verification points against live code, not content gaps. No TBD/TODO.
 
