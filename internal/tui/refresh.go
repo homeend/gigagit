@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"time"
 
@@ -112,6 +113,53 @@ func effectiveInterval(cfg config.RefreshConfig, it refreshItem, avg time.Durati
 		return base, stateAdaptiveFloor
 	}
 	return backoff, stateAdaptive
+}
+
+// stateLabel renders an intervalState for the Refresh rates viewer.
+func stateLabel(s intervalState) string {
+	switch s {
+	case stateOff:
+		return "off"
+	case stateFixed:
+		return "fixed"
+	case stateAdaptive:
+		return "adaptive"
+	case stateAdaptiveFloor:
+		return "adaptive (floor)"
+	case stateDisabled:
+		return "disabled (too slow)"
+	}
+	return ""
+}
+
+// refreshRateRows formats one line per scheduled item for the Settings viewer:
+// name · configured · avg (n) · effective · state.
+func (m Model) refreshRateRows() []string {
+	rows := make([]string, 0, len(scheduledItems))
+	for _, it := range scheduledItems {
+		name := "fetch"
+		if !it.isFetch {
+			name = sourceNames[it.source]
+		}
+		samples := m.refreshDur[it]
+		avg := meanDuration(samples)
+		secs, state := effectiveInterval(m.cfg.Refresh, it, avg, len(samples) > 0)
+		cfgSecs := refreshIntervalFor(m.cfg.Refresh, it)
+		cfgStr := "off"
+		if cfgSecs > 0 {
+			cfgStr = fmt.Sprintf("%ds", cfgSecs)
+		}
+		avgStr := "—"
+		if len(samples) > 0 {
+			avgStr = fmt.Sprintf("%.1fs (%d)", avg.Seconds(), len(samples))
+		}
+		effStr := "—"
+		if state == stateFixed || state == stateAdaptive || state == stateAdaptiveFloor {
+			effStr = fmt.Sprintf("%ds", secs)
+		}
+		rows = append(rows, fmt.Sprintf("%-10s  cfg %-5s  avg %-12s  eff %-5s  %s", name, cfgStr, avgStr, effStr, stateLabel(state)))
+	}
+	return rows
 }
 
 // recordDuration appends d to it's rolling ring, dropping the oldest beyond

@@ -19,6 +19,7 @@ import (
 type settingsPopup struct {
 	picker     bool // false = menu screen, true = agent picker
 	errorsView bool // true = session-errors viewer screen
+	ratesView  bool // true = refresh-rates viewer screen
 	dets       []agentinit.Detection
 	checked    []bool
 	sel        int      // selection within the agent picker list
@@ -35,10 +36,11 @@ const (
 	settingsMenuErrors      = "Session errors"
 	settingsMenuAutoRefresh = "Auto-refresh"
 	settingsMenuAdaptive    = "Adaptive intervals"
+	settingsMenuRates       = "Refresh rates"
 )
 
 // settingsMenu is the top-level menu order.
-var settingsMenu = []string{settingsMenuAgents, settingsMenuIdentity, settingsMenuPrefixes, settingsMenuOpLog, settingsMenuErrors, settingsMenuAutoRefresh, settingsMenuAdaptive}
+var settingsMenu = []string{settingsMenuAgents, settingsMenuIdentity, settingsMenuPrefixes, settingsMenuOpLog, settingsMenuErrors, settingsMenuAutoRefresh, settingsMenuAdaptive, settingsMenuRates}
 
 // settingsMenuLabel renders one menu row. The operation-log row is dynamic: it
 // shows the on/off state and the log filename, so the menu both reveals whether
@@ -187,6 +189,10 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			p.errorsView = false
 			return m, nil
 		}
+		if p.ratesView {
+			p.ratesView = false
+			return m, nil
+		}
 		if p.picker {
 			p.picker = false
 			return m, nil
@@ -212,7 +218,7 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	if !p.picker && !p.errorsView {
+	if !p.picker && !p.errorsView && !p.ratesView {
 		switch msg.Type {
 		case tea.KeyUp:
 			if p.menuSel > 0 {
@@ -238,6 +244,11 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				return m.toggleAutoRefresh(), nil // stays open so the state flip is visible
 			case settingsMenuAdaptive:
 				return m.toggleAdaptive(), nil // stays open so the state flip is visible
+			case settingsMenuRates:
+				p.ratesView = true
+				p.sel = 0
+				p.hscroll = 0
+				return m, nil
 			case settingsMenuErrors:
 				p.errorsView = true
 				p.sel = 0
@@ -314,7 +325,7 @@ func (p *settingsPopup) box(m Model) string {
 	// The errors viewer holds long, path-heavy rows (git stderr, the errors.log
 	// location), so it scales wide like the bookmark/shelf switchers — most
 	// errors and the log path then fit on one line instead of wrapping ugly.
-	if p.errorsView {
+	if p.errorsView || p.ratesView {
 		inner = popupWideInnerWidth(w)
 	}
 	textW := popupTextWidth(inner)
@@ -381,6 +392,20 @@ func (p *settingsPopup) box(m Model) string {
 		} else {
 			b.WriteString("\n[esc] back")
 		}
+	} else if p.ratesView {
+		b.WriteString("Refresh rates\n\n")
+		mode := "adaptive"
+		if m.cfg.Refresh.DisableAdaptive {
+			mode = "fixed (adaptive off)"
+		}
+		if !m.cfg.Refresh.Enabled {
+			mode = "auto-refresh off"
+		}
+		b.WriteString("  mode: " + mode + "\n\n")
+		for _, row := range m.refreshRateRows() {
+			b.WriteString("  " + row + "\n")
+		}
+		b.WriteString("\n[esc] back")
 	} else if !p.picker {
 		b.WriteString("Settings\n\n")
 		for i := range settingsMenu {

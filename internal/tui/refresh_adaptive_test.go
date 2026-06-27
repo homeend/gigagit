@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -152,6 +153,22 @@ func TestStartOpClearsLaneAndQueue(t *testing.T) {
 	m2, _ := m.startOp(engine.Fetch{})
 	if m2.bgBusy || len(m2.bgQueue) != 0 || m2.bgCancel != nil {
 		t.Fatalf("startOp must clear the lane + queue, got busy=%v queue=%v", m2.bgBusy, m2.bgQueue)
+	}
+}
+
+func TestRefreshRateRows(t *testing.T) {
+	m := newTestModel(t)
+	m.cfg.Refresh = config.RefreshConfig{Enabled: true, Status: 10, Remotes: 30}
+	// status has samples averaging 4s → adaptive 40s; remotes none → floor.
+	it := refreshItem{source: srcStatus}
+	m.refreshDur[it] = []time.Duration{4 * time.Second, 4 * time.Second}
+	rows := m.refreshRateRows()
+	joined := strings.Join(rows, "\n")
+	if !strings.Contains(joined, "status") || !strings.Contains(joined, "40s") {
+		t.Fatalf("status row should show adaptive 40s, got:\n%s", joined)
+	}
+	if !strings.Contains(joined, "remotes") {
+		t.Fatalf("remotes row missing, got:\n%s", joined)
 	}
 }
 
