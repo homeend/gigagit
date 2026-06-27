@@ -1080,16 +1080,21 @@ git commit -m "feat(tui): route op completion through per-source refresh (defaul
 
 ---
 
-### Task 8: Per-source spinner in titles; retire the old path
+### Task 8: Per-source spinner + keep-visible-on-`r`; remove dead refs-reload commands
 
 **Files:**
-- Modify: `internal/tui/viewstate.go` (per-source spinner in panel titles)
-- Delete from `internal/tui/load.go`: `dataLoadedMsg`, `loadCmd`; keep `loadMoreCmd`/`commitsPagedMsg` (feed paging, unrelated).
-- Modify: `internal/tui/model.go` — delete the `case dataLoadedMsg:` handler and the now-unused `loading`/`softReload`/`loadGen` fields if nothing else reads them (grep first).
-- Delete from `internal/tui/op.go`: `reloadRefsCmd`, `refsRefreshedMsg`, `reloadIdentityCmd`, `identityRefreshedMsg` and their `case` handlers in `model.go`.
+- Modify: `internal/tui/viewstate.go` (per-source spinner in panel titles; replace the `softReload` per-panel glyph)
+- Modify: `internal/tui/view.go` (the blank-screen gate and the "⏳ reloading…" status line)
+- Modify: `internal/tui/model.go` — add a `ready` flag, set it on first data arrival, reset it in `reRoot`; remove the `softReload` field and its uses.
+- Delete from `internal/tui/op.go`: `reloadRefsCmd`, `refsRefreshedMsg`, `reloadIdentityCmd`, `identityRefreshedMsg` and their `case` handlers in `model.go` (dead after Task 7).
+
+**IMPORTANT — do NOT delete `loadCmd`/`dataLoadedMsg`/`loadGen`.** `reRoot` (the repo switcher, `model.go` ~2122) still uses `loadCmd` → `dataLoadedMsg`, and `reRoot`/the `dataLoadedMsg` handler still use `loadGen`. Porting `reRoot` to the registry is deliberately out of scope for Phase A (it is a repo-switch concern, not per-source refresh). So the monolith is reduced to a single remaining caller (`reRoot`); a later phase removes it. This task only removes the refs-reload helpers that Task 7 made dead, plus `softReload`.
+
+**Why the `ready` flag:** Task 6 routed `r` through `reloadAllCmd` which sets `m.loading = true` but not `softReload`. The View's blank gate is `if m.loading && !m.softReload` (view.go) — so `r` currently blanks the whole screen, regressing the soft-reload keep-visible UX. The fix: blank only on the FIRST load (no data yet), keep panels visible on every later refresh. A one-time `m.ready bool` (false until first data arrives, reset in `reRoot`) replaces `softReload` as the blank discriminator.
 
 **Interfaces:**
-- Consumes: `srcLoading`, `srcConsumers`, the existing `commitsLoadingGlyph` and panel-title rendering in `viewstate.go`.
+- Produces: `func (m Model) panelLoading(p panel) bool`; Model field `ready bool`.
+- Consumes: `srcLoading`, `srcConsumers`, `commitsLoadingGlyph`, the panel-title and blank-gate rendering.
 
 - [ ] **Step 1: Write the failing test (spinner targeting)**
 
@@ -1137,23 +1142,65 @@ func (m Model) panelLoading(p panel) bool {
 }
 ```
 
-In the title-building code, append `commitsLoadingGlyph` when `m.panelLoading(p)` (or, for Commits, `m.panelLoading(panelCommits) || m.commitsLoading` to keep feed-paging's existing glyph). Mirror the existing append pattern at line ~529.
+In the title-building code (viewstate.go ~528), replace the `softReload` term with `m.panelLoading(p)`:
+```go
+	// was: if m.softReload || (p == panelCommits && m.commitsLoading) {
+	if m.panelLoading(p) || (p == panelCommits && m.commitsLoading) {
+		base += " " + commitsLoadingGlyph
+	}
+```
 
 - [ ] **Step 4: Run the spinner test**
 
 Run: `cd /mnt/t/others/gigagit/.claude/worktrees/source-registry && go test ./internal/tui/ -run 'TestManualRefreshShowsConsumerSpinner' -v`
 Expected: PASS.
 
-- [ ] **Step 5: Delete the dead old path**
+- [ ] **Step 5: Keep panels visible on `r` (the `ready` flag) — TDD**
 
-- Confirm no remaining references: `rg -n "loadCmd|dataLoadedMsg|reloadRefsCmd|refsRefreshedMsg|reloadIdentityCmd|identityRefreshedMsg" internal/tui` should return only definitions you are about to delete and their tests.
-- Delete `loadCmd` and `dataLoadedMsg` from `load.go`; delete the `case dataLoadedMsg:` block from `model.go`.
-- Delete `reloadRefsCmd`/`refsRefreshedMsg`/`reloadIdentityCmd`/`identityRefreshedMsg` from `op.go` and their `case` handlers from `model.go`.
-- **Keep `m.loading`** — it is now a derived flag (set in `reloadSourcesCmd`, recomputed in the `dataAvailableMsg` handler) and is still read by ~10 action guards (`avail.go:14` and the `!m.running && !m.loading` sites in `model.go`). Do NOT delete it. Verify those readers still compile and behave: `rg -n "m.loading" internal/tui` should show the guards plus the two writers above and nothing referencing the deleted `loadCmd` path.
-- Remove `softReload` and `loadGen` only after `rg -n "m.softReload|m.loadGen" internal/tui` shows no remaining readers (both belonged to the retired monolith — `softReload`'s keep-visible behavior is now intrinsic since panels never blank, and `loadGen` is subsumed by per-source `srcGen`). (`running` is unrelated — keep it.)
-- Update/delete tests that referenced the removed symbols (`load_test.go`, any `dataLoadedMsg`/`refsRefreshedMsg` tests). Convert still-relevant assertions to the `dataAvailableMsg` equivalents.
+First the failing test:
+```go
+// internal/tui/source_test.go (append)
+func TestReloadAfterFirstDataKeepsPanelsVisible(t *testing.T) {
+	m := newTestModel(t)
+	m.width, m.height = 120, 40
+	// Simulate first data having arrived (panels populated, ready set).
+	m.ready = true
+	m.branches = []model.Branch{{Name: "main"}}
+	// A manual reload-all (r) marks sources loading but must NOT blank the screen.
+	m, _ = m.reloadAllCmd(true)
+	out := m.View()
+	if strings.Contains(out, "(loading…)") {
+		t.Fatal("r after first data must keep panels visible, not blank the screen")
+	}
+}
 
-- [ ] **Step 6: Full suite + race + build + fmt/vet**
+func TestInitialLoadBlanksUntilReady(t *testing.T) {
+	m := newTestModel(t)
+	m.width, m.height = 120, 40
+	m.ready = false
+	m, _ = m.reloadAllCmd(true) // startup fan-out, no data yet
+	if !strings.Contains(m.View(), "(loading…)") {
+		t.Fatal("initial load (no data yet) should show the loading screen")
+	}
+}
+```
+(Add `"strings"` to the test imports if not present.)
+
+Then implement:
+- Add Model field `ready bool // true once the first data has arrived; gates the initial blank screen (replaces softReload's role)`.
+- In the `dataAvailableMsg` handler (model.go), set `m.ready = true` right after the stale-gen check (so the first source to land flips it). Also set `m.ready = true` in the `dataLoadedMsg` handler (the reRoot path) where it currently sets `m.softReload = false`.
+- Change the View blank gate (view.go ~2130) from `if m.loading && !m.softReload` to `if m.loading && !m.ready`.
+- In `reRoot` (model.go ~2109) replace `m.softReload = false` with `m.ready = false` (a repo switch blanks until the new repo's first data lands).
+- In the "⏳ reloading…" status-line block (view.go ~396) replace `if m.softReload && !m.running` with `if m.anySourceLoading() && !m.running` (so a manual refresh still shows the reloading hint).
+
+- [ ] **Step 6: Remove `softReload` and the dead refs-reload commands**
+
+- `rg -n "softReload" internal/tui` — after Step 5 the only matches should be the field declaration and the handler line that cleared it; remove the field (`model.go` ~30) and the `m.softReload = false` clear in the `dataLoadedMsg` handler (it's superseded by `m.ready = true`). Update/remove any `*_test.go` asserting `softReload` (e.g. a soft-reload test) to assert `ready`/`panelLoading` instead.
+- Delete `reloadRefsCmd`/`refsRefreshedMsg`/`reloadIdentityCmd`/`identityRefreshedMsg` from `op.go` and their `case` handlers from `model.go` (dead after Task 7). Confirm dead first: `rg -n "reloadRefsCmd|refsRefreshedMsg|reloadIdentityCmd|identityRefreshedMsg" internal/tui` should show only the definitions + their cases (and any tests).
+- **Do NOT delete `loadCmd`/`dataLoadedMsg`/`loadGen`** — `reRoot` still uses them (see the IMPORTANT note above). `rg -n "loadCmd|dataLoadedMsg|loadGen" internal/tui` must still show `reRoot` (and its dataLoadedMsg handler) as live readers.
+- **Keep `m.loading`** — a derived flag still read by ~10 action guards (`avail.go:14` and the `!m.running && !m.loading` sites). Do NOT delete it.
+
+- [ ] **Step 7: Full suite + race + build + fmt/vet**
 
 Run:
 ```bash
@@ -1162,11 +1209,11 @@ gofmt -l internal/ && go vet ./internal/tui/... && go build ./cmd/gg && ./test.s
 ```
 Expected: gofmt prints nothing; vet clean; build clean; `./test.sh` green (unit + e2e). Then `./test.sh race`.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add -A
-git commit -m "refactor(tui): retire monolithic loadCmd/dataLoadedMsg; per-source spinners"
+git commit -m "feat(tui): per-source spinners + keep-visible reload; remove dead refs-reload commands"
 ```
 
 ---
