@@ -99,6 +99,9 @@ type Model struct {
 	commitGraphScroll   int                // leftmost visible lane (0-based); resets on feed reload
 	opCancel            context.CancelFunc // cancels the in-flight op's context; nil when idle
 	loadGen             int                // bumped per superseding load; stale dataLoadedMsg are dropped
+	srcGen              map[sourceKey]int  // per-source generation; stale dataAvailableMsg dropped
+	srcInflight         map[sourceKey]bool // a read of this source is outstanding (coalescing)
+	srcLoading          map[sourceKey]bool // a manual read is in flight → consuming panels show ⏳
 	proc                process            // the single active long-running process; nil = none. IS the interface lock.
 
 	running   bool
@@ -175,6 +178,9 @@ func New(svc *domain.Service) Model {
 		sortModes:     map[panel]sortMode{panelBranches: sortDateDesc},
 		dispModes:     map[panel]dispMode{},
 		hscroll:       map[panel]int{},
+		srcGen:        map[sourceKey]int{},
+		srcInflight:   map[sourceKey]bool{},
+		srcLoading:    map[sourceKey]bool{},
 		activeLeftTab: panelBranches,
 		opLog:         newOpLog(),
 	}
