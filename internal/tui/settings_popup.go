@@ -273,6 +273,19 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		return m, nil
 	}
+	if p.ratesView {
+		switch msg.Type {
+		case tea.KeyUp:
+			if p.sel > 0 {
+				p.sel--
+			}
+		case tea.KeyDown:
+			if p.sel < len(scheduledItems)-1 {
+				p.sel++
+			}
+		}
+		return m, nil
+	}
 	switch msg.Type {
 	case tea.KeyUp:
 		if p.sel > 0 {

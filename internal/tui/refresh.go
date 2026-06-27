@@ -162,7 +162,7 @@ func (m Model) refreshRateRows() []string {
 	return rows
 }
 
-// recordDuration appends d to it's rolling ring, dropping the oldest beyond
+// recordDuration appends d to its rolling ring, dropping the oldest beyond
 // maxDurationSamples. Lazy-inits the map so a literal-built test Model is safe.
 func (m Model) recordDuration(it refreshItem, d time.Duration) Model {
 	if m.refreshDur == nil {
@@ -233,6 +233,12 @@ func (m Model) refreshTick(now time.Time) (Model, tea.Cmd) {
 	// second, superseding background read — that would strand the manual ⏳.
 	// Drop it this tick; it re-enqueues next tick if still due (lastRun unchanged).
 	if !it.isFetch && m.srcInflight[it.source] {
+		return m, nil
+	}
+	// Guard fetch when svc is nil: bgFetchCmd would return nil (no command), but
+	// the lane would already be committed (bgBusy=true, lastRun stamped), stranding
+	// it permanently. Drop it this tick rather than committing an unrunnable fetch.
+	if it.isFetch && m.svc == nil {
 		return m, nil
 	}
 	if m.bgCancel == nil {

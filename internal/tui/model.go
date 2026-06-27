@@ -571,8 +571,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		// Record the measured read cost for the adaptive scheduler (success only;
-		// a failed/partial read is not a representative duration).
-		m = m.recordDuration(refreshItem{source: msg.source}, msg.dur)
+		// a failed/partial read is not a representative duration). Gate on
+		// !msg.manual: manual/startup parallel reads are contended and
+		// unrepresentative — only background (silent) reads feed the rolling ring.
+		if !msg.manual {
+			m = m.recordDuration(refreshItem{source: msg.source}, msg.dur)
+		}
 		switch msg.source {
 		case srcStatus:
 			keyFiles := m.panelSelKey(panelFiles)

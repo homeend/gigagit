@@ -83,7 +83,20 @@ func TestDataAvailableRecordsDuration(t *testing.T) {
 	nm, _ := m.Update(msg)
 	got := nm.(Model).refreshDur[it]
 	if len(got) != 1 || got[0] != 2*time.Second {
-		t.Fatalf("status handler should record dur, got %v", got)
+		t.Fatalf("a source read should record dur, got %v", got)
+	}
+}
+
+func TestManualReadDoesNotRecordDuration(t *testing.T) {
+	m := newTestModel(t)
+	m.bgActiveItem = refreshItem{} // lane idle
+	it := refreshItem{source: srcTags}
+	gen := m.srcGen[srcTags]
+	msg := dataAvailableMsg{source: srcTags, gen: gen, value: []model.Tag(nil), dur: 5 * time.Second, manual: true}
+	nm, _ := m.Update(msg)
+	got := nm.(Model).refreshDur[it]
+	if len(got) != 0 {
+		t.Fatalf("manual read must not feed the duration ring, got %v", got)
 	}
 }
 

@@ -310,9 +310,13 @@ func TestOverlayRefreshAdaptiveFields(t *testing.T) {
 		t.Fatalf("ints should overlay: got %d/%d", dst.MaxReadSeconds, dst.BackoffFactor)
 	}
 	// Zero-is-unset: a zero int in a higher layer must NOT reset a set value.
+	// Also: false (zero) in DisableAdaptive must not reset a lower layer's true.
 	overlayRefresh(&dst, RefreshConfig{MaxReadSeconds: 0, BackoffFactor: 0})
 	if dst.MaxReadSeconds != 15 || dst.BackoffFactor != 8 {
 		t.Fatalf("zero ints must not reset: got %d/%d", dst.MaxReadSeconds, dst.BackoffFactor)
+	}
+	if !dst.DisableAdaptive {
+		t.Fatal("false DisableAdaptive in higher layer must not reset lower layer's true")
 	}
 }
 
