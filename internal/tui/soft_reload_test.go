@@ -27,21 +27,27 @@ func TestRBlockedWhileLoading(t *testing.T) {
 }
 
 // Pressing r DURING an in-flight repo switch (reRoot: loading=true, ready=false)
-// must not fire a new load — anySourceInflight must gate it.
+// must not fire a new load — m.loading must gate it.
 func TestRDuringRepoSwitchStaysHard(t *testing.T) {
 	m := loadedModel(t)
 	switched, _ := m.reRoot(m.currentWorktree)
-	m = switched.(Model) // loading=true, ready=false
+	m = switched.(Model) // loading=true (reRoot sets it), ready=false
 	gen := m.loadGen
-	// Simulate an inflight read so anySourceInflight() blocks r.
-	m.srcInflight[srcStatus] = true
-	updated, _ := m.Update(keyMsg("r"))
+	// reRoot sets m.loading=true; the new !m.loading guard in the r handler
+	// must block r without any artificial srcInflight injection.
+	if !m.loading {
+		t.Fatal("reRoot must set m.loading=true (test precondition)")
+	}
+	updated, cmd := m.Update(keyMsg("r"))
 	mm := updated.(Model)
 	if mm.ready {
 		t.Fatal("r during an in-flight repo switch must not set ready")
 	}
 	if mm.loadGen != gen {
 		t.Fatalf("r during a switch should dispatch no new load: loadGen %d→%d", gen, mm.loadGen)
+	}
+	if cmd != nil {
+		t.Fatal("r during repo switch should return no command")
 	}
 }
 

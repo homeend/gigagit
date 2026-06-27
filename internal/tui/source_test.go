@@ -54,6 +54,15 @@ func TestReadSourceBranchesProducesMsg(t *testing.T) {
 func TestReadSourceStatusCarriesConflict(t *testing.T) {
 	m := newTestModel(t)
 	msg := m.readSourceCmd(srcStatus, false)().(dataAvailableMsg)
+	if msg.source != srcStatus {
+		t.Fatalf("envelope source = %v, want srcStatus", msg.source)
+	}
+	if msg.gen != m.srcGen[srcStatus] {
+		t.Fatalf("envelope gen = %d, want %d", msg.gen, m.srcGen[srcStatus])
+	}
+	if msg.manual {
+		t.Fatal("envelope manual must be false (passed false)")
+	}
 	if _, ok := msg.value.(statusPayload); !ok {
 		t.Fatalf("status value type = %T, want statusPayload", msg.value)
 	}
@@ -62,6 +71,15 @@ func TestReadSourceStatusCarriesConflict(t *testing.T) {
 func TestReadSourceWorktreesCarriesPayload(t *testing.T) {
 	m := newTestModel(t)
 	msg := m.readSourceCmd(srcWorktrees, true)().(dataAvailableMsg)
+	if msg.source != srcWorktrees {
+		t.Fatalf("envelope source = %v, want srcWorktrees", msg.source)
+	}
+	if msg.gen != m.srcGen[srcWorktrees] {
+		t.Fatalf("envelope gen = %d, want %d", msg.gen, m.srcGen[srcWorktrees])
+	}
+	if !msg.manual {
+		t.Fatal("envelope manual must be true (passed true)")
+	}
 	if msg.err != nil {
 		t.Fatalf("unexpected error: %v", msg.err)
 	}
@@ -113,10 +131,23 @@ func TestDataAvailableManualClearsSpinner(t *testing.T) {
 
 func TestDataAvailableAutoLeavesNoSpinner(t *testing.T) {
 	m := newTestModel(t)
+	// Baseline: srcLoading for this source must not be pre-set.
+	// (m.loading starts true from New() — that is the startup hard-load flag,
+	// not a per-source loading indicator; the auto-read arrival clears it via
+	// anySourceLoading() recompute once all manual sources drain.)
+	if m.srcLoading[srcTags] {
+		t.Fatal("test precondition: srcLoading[srcTags] must start false")
+	}
 	nm, _ := m.Update(dataAvailableMsg{source: srcTags, gen: m.srcGen[srcTags],
 		value: []model.Tag{{Name: "v1"}}, manual: false})
-	if nm.(Model).srcLoading[srcTags] {
-		t.Fatal("auto read must never set a spinner")
+	mm := nm.(Model)
+	if mm.srcLoading[srcTags] {
+		t.Fatal("auto read must never set srcLoading")
+	}
+	// m.loading is derived as anySourceLoading(); an auto read never sets
+	// srcLoading for any source, so after the update it must be false.
+	if mm.loading {
+		t.Fatal("auto read must not drive m.loading via srcLoading (action-blocking flag)")
 	}
 }
 
@@ -259,5 +290,119 @@ func TestInitialLoadBlanksUntilReady(t *testing.T) {
 	m, _ = m.reloadAllCmd(true) // startup fan-out, no data yet
 	if !strings.Contains(m.View(), "(loading…)") {
 		t.Fatal("initial load (no data yet) should show the loading screen")
+	}
+}
+
+// TestOpAffectedSources verifies the op→source mapping for the hottest ops.
+// Each checked op must map to exactly the documented sources; unmapped ops
+// must return nil (meaning: refresh all, the safe default).
+func TestOpAffectedSources(t *testing.T) {
+	cases := []struct {
+		op   engine.Operation
+		want []sourceKey // nil = expect nil (all)
+	}{
+		{engine.Commit{}, []sourceKey{srcStatus, srcFeed, srcBranches}},
+		{engine.Push{}, []sourceKey{srcBranches, srcRemotes}},
+		{engine.Fetch{}, []sourceKey{srcRemotes}},
+		{engine.CreateWorktree{}, []sourceKey{srcBranches, srcWorktrees}},
+		{engine.RemoveWorktree{}, []sourceKey{srcBranches, srcWorktrees}},
+		{engine.SetIdentity{}, []sourceKey{srcIdentity}},
+		{engine.SmartMerge{}, []sourceKey{srcStatus, srcFeed, srcBranches}},
+		{engine.SmartRebase{}, []sourceKey{srcStatus, srcFeed, srcBranches}},
+		{engine.Stash{}, nil}, // unmapped → all (safe default)
+	}
+	for _, tc := range cases {
+		got := opAffectedSources(tc.op)
+		if len(got) != len(tc.want) {
+			t.Errorf("opAffectedSources(%T) = %v, want %v", tc.op, got, tc.want)
+			continue
+		}
+		for i := range got {
+			if got[i] != tc.want[i] {
+				t.Errorf("opAffectedSources(%T)[%d] = %v, want %v", tc.op, i, got[i], tc.want[i])
+			}
+		}
+	}
+}
+
+// TestSrcStatusRefreshRebuildsCommitGraph guards Fix #1: a srcStatus-only
+// refresh (e.g. after a stash pop) must call rebuildCommitGraph() so the
+// Commits panel's WIP pseudo-rows stay in sync with the new status.
+func TestSrcStatusRefreshRebuildsCommitGraph(t *testing.T) {
+	m := newTestModel(t)
+	m.width, m.height = 120, 40
+	m.ready = true
+	// Populate commits so commitGraphOn is true and the graph has something
+	// to rebuild. A single commit with no parents produces one graph row.
+	m.commits = []model.Commit{{Hash: "abc1234", Subject: "initial"}}
+	m = m.rebuildCommitGraph()
+	before := len(m.commitGraphRows)
+
+	// Deliver a srcStatus update that adds a dirty file (introduces a WIP row).
+	// FileStatus.Unstaged != '.' makes it show in the Files panel (inFilesPanel).
+	dirty := model.WorkingTreeStatus{
+		Files: []model.FileStatus{{Path: "foo.go", Unstaged: 'M'}},
+	}
+	nm, _ := m.Update(dataAvailableMsg{
+		source: srcStatus,
+		gen:    m.srcGen[srcStatus],
+		value:  statusPayload{status: dirty},
+		manual: true,
+	})
+	mm := nm.(Model)
+
+	// commitsTotal() includes WIP pseudo-rows when the tree is dirty;
+	// rebuildCommitGraph must have run so commitGraphRows has the same length.
+	after := len(mm.commitGraphRows)
+	total := mm.commitsTotal()
+	if after == before {
+		t.Fatalf("srcStatus refresh did not rebuild commit graph: rows stayed at %d (commitsTotal=%d)", after, total)
+	}
+	if after != total {
+		t.Fatalf("commitGraphRows len %d != commitsTotal %d after srcStatus refresh", after, total)
+	}
+}
+
+// TestSrcStatusRestoresFilesPanelSelection guards the panic-prone
+// membership-split path: when files change between staged and unstaged, the
+// selection restore must find the key in the right panel (no out-of-bounds).
+func TestSrcStatusRestoresFilesPanelSelection(t *testing.T) {
+	m := newTestModel(t)
+	m.width, m.height = 120, 40
+	m.ready = true
+
+	// Initial state: one file is modified (unstaged) and one is staged.
+	// Unstaged != '.' → Files panel; Staged != '.' → Staged panel.
+	m.status = model.WorkingTreeStatus{
+		Files: []model.FileStatus{
+			{Path: "a.go", Unstaged: 'M'},
+			{Path: "b.go", Staged: 'A'},
+		},
+	}
+	// Put cursor on the first file in the Files panel.
+	m.sel[panelFiles] = 0
+	m.sel[panelStaged] = 0
+
+	// New status: swap — a.go is now staged, b.go is now modified.
+	newStatus := model.WorkingTreeStatus{
+		Files: []model.FileStatus{
+			{Path: "b.go", Unstaged: 'M'},
+			{Path: "a.go", Staged: 'M'},
+		},
+	}
+	nm, _ := m.Update(dataAvailableMsg{
+		source: srcStatus,
+		gen:    m.srcGen[srcStatus],
+		value:  statusPayload{status: newStatus},
+		manual: true,
+	})
+	mm := nm.(Model)
+	// No panic = selection restore handled the membership-split correctly.
+	// Also assert selections are within bounds.
+	if n := mm.panelLen(panelFiles); mm.sel[panelFiles] >= n && n > 0 {
+		t.Fatalf("panelFiles sel %d out of bounds (len %d)", mm.sel[panelFiles], n)
+	}
+	if n := mm.panelLen(panelStaged); mm.sel[panelStaged] >= n && n > 0 {
+		t.Fatalf("panelStaged sel %d out of bounds (len %d)", mm.sel[panelStaged], n)
 	}
 }

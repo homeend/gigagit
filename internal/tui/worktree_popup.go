@@ -332,11 +332,6 @@ func (m Model) startCreateFromPopup(p *worktreePopup, switchAfter bool) (Model, 
 	}
 	m.pendingSeqBump = p.consumedSeqNames()
 	m.pendingSwitch = switchAfter
-	// When not switching into the new worktree, the only state that changed is
-	// branches+worktrees — request the targeted refresh (not a full Snapshot).
-	if !switchAfter {
-		m.pendingSources = []sourceKey{srcBranches, srcWorktrees}
-	}
 	m = m.popLayer()
 	return m.startOp(p.createOp())
 }

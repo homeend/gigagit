@@ -9,6 +9,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/repos"
 )
@@ -35,7 +36,7 @@ const (
 // the manual-refresh spinner and, in Phase B, to decide which sources a timer
 // polls. srcIdentity feeds the Settings popup, not a left panel, so it is absent.
 var srcConsumers = map[sourceKey][]panel{
-	srcStatus:    {panelFiles, panelStaged},
+	srcStatus:    {panelFiles, panelStaged, panelCommits},
 	srcBranches:  {panelBranches, panelCommits},
 	srcRemotes:   {panelRemotes},
 	srcTags:      {panelTags},
@@ -102,14 +103,17 @@ func (m Model) maybeFeedUpstreamRewalk() bool {
 		!m.srcInflight[srcFeed]
 }
 
+// sourceNames maps each source key to its human-readable name, used for error
+// messages. Package-level to avoid reallocating the literal on every error.
+var sourceNames = map[sourceKey]string{
+	srcStatus: "status", srcBranches: "branches", srcRemotes: "remotes",
+	srcTags: "tags", srcReflog: "reflog", srcWorktrees: "worktrees",
+	srcFeed: "commits", srcIdentity: "identity",
+}
+
 // sourceErr formats a per-source error for display on the status line.
 func sourceErr(s sourceKey, err error) string {
-	name := map[sourceKey]string{
-		srcStatus: "status", srcBranches: "branches", srcRemotes: "remotes",
-		srcTags: "tags", srcReflog: "reflog", srcWorktrees: "worktrees",
-		srcFeed: "commits", srcIdentity: "identity",
-	}[s]
-	return name + ": " + err.Error()
+	return sourceNames[s] + ": " + err.Error()
 }
 
 // readSourceCmd reads one source off the UI thread via the gated domain layer
@@ -237,6 +241,29 @@ func (m Model) reloadAllCmd(manual bool) (Model, tea.Cmd) {
 		all = append(all, s)
 	}
 	return m.reloadSourcesCmd(all, manual)
+}
+
+// opAffectedSources returns the sources an operation dirties (nil = all, the
+// safe default). Centralizes the post-op refresh mapping so the hottest ops
+// (commit, push) refresh only what they changed instead of every source.
+func opAffectedSources(op engine.Operation) []sourceKey {
+	switch op.(type) {
+	case engine.Commit:
+		return []sourceKey{srcStatus, srcFeed, srcBranches}
+	case engine.Push:
+		return []sourceKey{srcBranches, srcRemotes}
+	case engine.Fetch:
+		return []sourceKey{srcRemotes}
+	case engine.CreateWorktree, engine.CreateWorktreeForBranch:
+		return []sourceKey{srcBranches, srcWorktrees}
+	case engine.RemoveWorktree:
+		return []sourceKey{srcBranches, srcWorktrees}
+	case engine.SetIdentity:
+		return []sourceKey{srcIdentity}
+	case engine.SmartMerge, engine.SmartRebase:
+		return []sourceKey{srcStatus, srcFeed, srcBranches}
+	}
+	return nil // unmapped → all sources (safe)
 }
 
 // configReadyMsg carries the loaded config from bootstrapCmd; its handler

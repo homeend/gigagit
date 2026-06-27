@@ -182,6 +182,7 @@ func (d uiDecider) Decide(ctx context.Context, req engine.DecisionRequest) (engi
 // command that waits for the next msg. The op context is cancelled when the
 // program exits (run.go) so an op can never outlive the UI silently.
 func (m Model) startOp(op engine.Operation) (Model, tea.Cmd) {
+	m.pendingSources = opAffectedSources(op)
 	msgs := make(chan tea.Msg, 32)
 	events := make(chan engine.Event, 32)
 	svc := m.svc

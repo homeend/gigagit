@@ -550,11 +550,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			p := msg.value.(statusPayload)
 			m.status = p.status
 			m.conflict = p.conflict
+			m = m.restorePanelSel(panelFiles, keyFiles)
+			m = m.restorePanelSel(panelStaged, keyStaged)
+			// Rebuild the commit graph so WIP pseudo-rows (◇ Working tree/Staged)
+			// stay in sync with the new status, even on the proc path (e.g. after
+			// a stash pop that triggers a status-only refresh mid-conflict process).
+			m = m.rebuildCommitGraph()
+			if n := m.commitsTotal(); n > 0 && m.sel[panelCommits] >= n {
+				m.sel[panelCommits] = n - 1
+			}
 			if m.proc != nil {
 				return m.proc.refreshed(m) // process re-derives from fresh status
 			}
-			m = m.restorePanelSel(panelFiles, keyFiles)
-			m = m.restorePanelSel(panelStaged, keyStaged)
 		case srcBranches:
 			key := m.panelSelKey(panelBranches)
 			m.branches = msg.value.([]model.Branch)
@@ -843,9 +850,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "q", "ctrl+c":
 			return m, tea.Quit
 		case "r":
-			// Block r while any source read is already in flight, to avoid stacking
-			// duplicate reads of the same source.
-			if !m.running && !m.anySourceInflight() {
+			// Block r while a load is in flight (anySourceInflight) OR while a
+			// repo switch is in progress (m.loading, set by reRoot). Without the
+			// loading guard, r races loadCmd during a repo switch.
+			if !m.running && !m.loading && !m.anySourceInflight() {
 				var cmd tea.Cmd
 				m, cmd = m.reloadAllCmd(true)
 				return m, cmd
@@ -1452,7 +1460,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// working tree — refresh status and the stash list.
 			m.stashView.loading = true
 			var cmd tea.Cmd
-			m, cmd = m.reloadSourcesCmd(sourcesOrAll([]sourceKey{srcStatus}), true)
+			m, cmd = m.reloadSourcesCmd([]sourceKey{srcStatus}, true)
 			return m, tea.Batch(cmd, m.loadStashListCmd(m.stashView.tag))
 		}
 		// A job an active process started just returned: let the process advance

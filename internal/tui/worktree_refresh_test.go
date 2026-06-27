@@ -86,8 +86,11 @@ func TestCreateWorktreeRefreshesRefsOnly(t *testing.T) {
 }
 
 // TestCreateAndSwitchUsesFullReRoot pins the switch path (W): the create-and-
-// switch confirm leaves pendingSources nil and arms pendingSwitch, so the
-// op reRoots into the new worktree (full load) instead of the partial refresh.
+// switch confirm arms pendingSwitch so the op reRoots into the new worktree
+// (full load) instead of the partial refresh. pendingSources is now set by
+// startOp via opAffectedSources — it is captured by the opFinishedMsg handler
+// but discarded when reRoot fires (pendingSwitch path wins over the per-source
+// registry), so the switch still results in a full load.
 func TestCreateAndSwitchUsesFullReRoot(t *testing.T) {
 	_, repo := newRepoDir(t)
 	m := New(domain.New(repo))
@@ -97,9 +100,6 @@ func TestCreateAndSwitchUsesFullReRoot(t *testing.T) {
 	p := worktreeCreatePopup("feature-y", filepath.Join(t.TempDir(), "wt2"))
 	m = m.pushLayer(p)
 	m, _ = m.startCreateFromPopup(p, true) // W: create and switch
-	if m.pendingSources != nil {
-		t.Fatal("create-and-switch must not set pendingSources (nil = reRoot, no partial refresh)")
-	}
 	if !m.pendingSwitch {
 		t.Fatal("create-and-switch must arm pendingSwitch for the reRoot")
 	}
