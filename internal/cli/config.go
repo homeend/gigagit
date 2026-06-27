@@ -16,12 +16,14 @@ import (
 // scaffolds a fully-commented config file. Pure file I/O — no git writes.
 func cmdConfig(svc *domain.Service, workdir string, args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: gg config init (--repo | --global) [--force]")
+		fmt.Fprintln(stderr, "usage: gg config (init | populate) (--repo | --global) [--force]")
 		return 2
 	}
 	switch args[0] {
 	case "init":
 		return cmdConfigInit(svc, workdir, args[1:], stdout, stderr)
+	case "populate":
+		return cmdConfigPopulate(svc, workdir, args[1:], stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "unknown config subcommand %q\n", args[0])
 		return 2
@@ -69,5 +71,50 @@ func cmdConfigInit(svc *domain.Service, workdir string, args []string, stdout, s
 		return 1
 	}
 	fmt.Fprintln(stdout, "wrote", path)
+	return 0
+}
+
+// cmdConfigPopulate implements `gg config populate`. It adds every supported
+// setting not already present to the target file as a commented, [populated]-
+// marked line, leaving existing content untouched. Pure file I/O — no git
+// writes (beyond the TopLevel read for --repo).
+func cmdConfigPopulate(svc *domain.Service, workdir string, args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("config populate", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	repo := fs.Bool("repo", false, "top up ./.gg.toml for this repository")
+	global := fs.Bool("global", false, "top up the global config (~/.config/gg/config.toml)")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if *repo == *global { // neither or both
+		fmt.Fprintln(stderr, "config populate: pass exactly one of --repo or --global")
+		return 2
+	}
+
+	var path string
+	if *repo {
+		root := workdir
+		if top, err := svc.TopLevel(context.Background()); err == nil && top != "" {
+			root = top
+		}
+		path = filepath.Join(root, ".gg.toml")
+	} else {
+		path = config.DefaultGlobalPath()
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			fmt.Fprintf(stderr, "config populate: %v\n", err)
+			return 1
+		}
+	}
+
+	added, err := config.PopulateFile(path)
+	if err != nil {
+		fmt.Fprintf(stderr, "config populate: %v\n", err)
+		return 1
+	}
+	if added == 0 {
+		fmt.Fprintln(stdout, path, "already complete")
+	} else {
+		fmt.Fprintf(stdout, "populated %s (%d added)\n", path, added)
+	}
 	return 0
 }
