@@ -121,13 +121,14 @@ func sourceErr(s sourceKey, err error) string {
 // a newer read of the same source is dropped by the handler. Derived data that
 // the old Snapshot computed alongside a read (conflict for status, head-times
 // for worktrees) is computed here so a per-source refresh is self-contained.
-func (m Model) readSourceCmd(s sourceKey, manual bool) tea.Cmd {
+// ctx is provided by the caller: background reads pass m.bgCtx (cancellable by
+// a starting user op); manual reads pass context.Background() (never cancelled).
+func (m Model) readSourceCmd(ctx context.Context, s sourceKey, manual bool) tea.Cmd {
 	svc := m.svc
 	feed := m.feed
 	reflogLimit := m.cfg.UI.ReflogLimit
 	gen := m.srcGen[s]
 	return func() tea.Msg {
-		ctx := context.Background()
 		out := dataAvailableMsg{source: s, gen: gen, manual: manual}
 		switch s {
 		case srcStatus:
@@ -213,7 +214,7 @@ func (m Model) reloadSourcesCmd(srcs []sourceKey, manual bool) (Model, tea.Cmd) 
 		if manual {
 			m.srcLoading[s] = true
 		}
-		cmds = append(cmds, m.readSourceCmd(s, manual))
+		cmds = append(cmds, m.readSourceCmd(context.Background(), s, manual))
 	}
 	// Keep the legacy action-blocking flag in sync (see the handler note in Task 4).
 	m.loading = m.anySourceLoading()

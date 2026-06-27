@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -38,7 +39,7 @@ func TestRegistryMapsInitialized(t *testing.T) {
 
 func TestReadSourceBranchesProducesMsg(t *testing.T) {
 	m := newTestModel(t) // wired to a real temp repo (newRepo(t))
-	msg := m.readSourceCmd(srcBranches, true)()
+	msg := m.readSourceCmd(context.Background(), srcBranches, true)()
 	dm, ok := msg.(dataAvailableMsg)
 	if !ok {
 		t.Fatalf("want dataAvailableMsg, got %T", msg)
@@ -53,7 +54,7 @@ func TestReadSourceBranchesProducesMsg(t *testing.T) {
 
 func TestReadSourceStatusCarriesConflict(t *testing.T) {
 	m := newTestModel(t)
-	msg := m.readSourceCmd(srcStatus, false)().(dataAvailableMsg)
+	msg := m.readSourceCmd(context.Background(), srcStatus, false)().(dataAvailableMsg)
 	if msg.source != srcStatus {
 		t.Fatalf("envelope source = %v, want srcStatus", msg.source)
 	}
@@ -70,7 +71,7 @@ func TestReadSourceStatusCarriesConflict(t *testing.T) {
 
 func TestReadSourceWorktreesCarriesPayload(t *testing.T) {
 	m := newTestModel(t)
-	msg := m.readSourceCmd(srcWorktrees, true)().(dataAvailableMsg)
+	msg := m.readSourceCmd(context.Background(), srcWorktrees, true)().(dataAvailableMsg)
 	if msg.source != srcWorktrees {
 		t.Fatalf("envelope source = %v, want srcWorktrees", msg.source)
 	}

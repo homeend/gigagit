@@ -1,8 +1,10 @@
 package tui
 
 import (
+	"context"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/homeend/gigagit/internal/config"
 )
 
@@ -47,6 +49,57 @@ func refreshIntervalFor(cfg config.RefreshConfig, it refreshItem) int {
 	}
 	return 0
 }
+
+// refreshSuppressed reports whether background auto-refresh must hold off right
+// now: a running op, an open overlay/modal/decider, or active filter/search
+// typing. (Per-source in-flight is handled per item in refreshTick.)
+func (m Model) refreshSuppressed() bool {
+	if m.running || m.loading {
+		return true
+	}
+	if m.modal != nil || m.topLayer() != nil {
+		return true
+	}
+	if m.filterTyping || m.highlightTyping {
+		return true
+	}
+	return false
+}
+
+// refreshTick is called from the heartbeat. It fires silent reads for every due
+// item that is not already in-flight, under a shared cancellable bg context that
+// a starting user op cancels.
+func (m Model) refreshTick(now time.Time) (Model, tea.Cmd) {
+	due := dueItems(now, m.refreshLastRun, m.cfg.Refresh, m.refreshSuppressed())
+	if len(due) == 0 {
+		return m, nil
+	}
+	if m.bgCancel == nil {
+		m.bgCtx, m.bgCancel = context.WithCancel(context.Background())
+	}
+	var cmds []tea.Cmd
+	for _, it := range due {
+		if it.isFetch {
+			m.refreshLastRun[it] = now
+			cmds = append(cmds, m.bgFetchCmd(m.bgCtx)) // Task 7 replaces this stub
+			continue
+		}
+		if m.srcInflight[it.source] {
+			continue // don't stack a second read of a source already loading
+		}
+		m.srcGen[it.source]++
+		m.srcInflight[it.source] = true
+		m.refreshLastRun[it] = now
+		cmds = append(cmds, m.readSourceCmd(m.bgCtx, it.source, false)) // manual=false → silent
+	}
+	if len(cmds) == 0 {
+		return m, nil
+	}
+	return m, tea.Batch(cmds...)
+}
+
+// bgFetchCmd is a stub for Task 7; replaced when fetch scheduling is implemented.
+func (m Model) bgFetchCmd(ctx context.Context) tea.Cmd { return nil }
 
 // dueItems returns the items that should fire now: master enabled, not
 // suppressed, interval > 0, and (now - lastRun) >= interval. An item with no
