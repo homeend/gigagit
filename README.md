@@ -215,6 +215,11 @@ tags      = 120
 reflog    = 120
 feed      = 120    # commit feed
 fetch     = 300    # run `git fetch` every 5 min (network; errors swallowed)
+
+# Adaptive intervals (Phase C) — active whenever enabled = true
+disable_adaptive = false  # true → each source auto-refreshes at its fixed interval
+max_read_seconds = 10     # source whose avg read exceeds this drops to manual-only
+backoff_factor   = 10     # effective interval = max(configured, factor × avg read)
 ```
 
 Background reads are silent: no spinner, no status-line change, no cursor
@@ -222,6 +227,18 @@ disturbance. The scheduler is suppressed while an operation is running, a
 popup/modal is open, or you are typing a search/filter. A user action immediately
 preempts any in-flight background read. Like the operation log, the `enabled`
 toggle is written only to the global config, never to a repo's `.gg.toml`.
+
+When adaptive intervals are active (the default when `enabled = true`), each
+source's background read is timed and the interval backs off automatically: the
+effective interval is `max(configured, backoff_factor × avg)`. A source whose
+rolling average exceeds `max_read_seconds` is dropped to manual-only until the
+process restarts and measurements reset. Background reads run **one at a time**
+(FIFO, deduped by type) to cap git subprocess pressure; manual `r` stays
+parallel and is never affected. A `⟳ <source>…` status hint appears while the
+single background lane is busy. The **Settings (`,`) → "Adaptive intervals"**
+toggle persists `disable_adaptive` to the global config; **"Refresh rates"**
+shows a live per-source table of configured / average / effective interval and
+the current state (`fixed`, `adaptive`, `adaptive (floor)`, `disabled (too slow)`).
 
 `[ui] footer_actions` and `[ui] menu_actions` are lists of action **ids** that
 choose which actions appear in the footer bar and in the `.` menu respectively;
