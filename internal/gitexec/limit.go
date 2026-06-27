@@ -23,13 +23,21 @@ func (l *LimitRunner) Run(ctx context.Context, name string, argv []string) (Resu
 }
 
 func (l *LimitRunner) RunEnv(ctx context.Context, name string, argv, env []string) (Result, error) {
-	gitSem <- struct{}{}
+	select {
+	case gitSem <- struct{}{}:
+	case <-ctx.Done():
+		return Result{}, ctx.Err()
+	}
 	defer func() { <-gitSem }()
 	return l.inner.RunEnv(ctx, name, argv, env)
 }
 
 func (l *LimitRunner) Stream(ctx context.Context, name string, argv []string, onLine func(string)) (Result, error) {
-	gitSem <- struct{}{}
+	select {
+	case gitSem <- struct{}{}:
+	case <-ctx.Done():
+		return Result{}, ctx.Err()
+	}
 	defer func() { <-gitSem }()
 	return l.inner.Stream(ctx, name, argv, onLine)
 }

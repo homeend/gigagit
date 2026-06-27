@@ -21,6 +21,13 @@ func SetGlobalDebugLogOperations(path string, on bool) error {
 	return setScalarLine(path, "debug", "log_operations", strconv.FormatBool(on))
 }
 
+// SetGlobalRefreshEnabled persists `[refresh] enabled` to the global config
+// file (preserving comments), backing the Settings master auto-refresh toggle
+// — the second runtime config writer (see SetGlobalDebugLogOperations).
+func SetGlobalRefreshEnabled(path string, on bool) error {
+	return setScalarLine(path, "refresh", "enabled", strconv.FormatBool(on))
+}
+
 // setScalarLine sets `key = value` under `[section]` in a TOML file via a
 // line-oriented edit so unrelated lines and comments survive. It updates an
 // existing assignment (uncommenting a commented one), inserts the key under an

@@ -298,3 +298,28 @@ func TestCommitPageSizeDefaultsAndOverlay(t *testing.T) {
 		t.Fatalf("batch = %d, want 300 (default kept)", cfg.UI.CommitBatchSize)
 	}
 }
+
+func TestRefreshConfigDefaultsOff(t *testing.T) {
+	c := Defaults()
+	if c.Refresh.Enabled {
+		t.Error("refresh must default disabled")
+	}
+	if c.Refresh.Status != 0 || c.Refresh.Fetch != 0 {
+		t.Error("refresh intervals must default 0 (off)")
+	}
+}
+
+func TestRefreshConfigOverlayAndParse(t *testing.T) {
+	dir := t.TempDir()
+	repo := filepath.Join(dir, ".gg.toml")
+	if err := os.WriteFile(repo, []byte("[refresh]\nenabled = true\nstatus = 30\nfetch = 300\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c, err := Load("", repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !c.Refresh.Enabled || c.Refresh.Status != 30 || c.Refresh.Fetch != 300 {
+		t.Fatalf("parsed/overlaid refresh wrong: %+v", c.Refresh)
+	}
+}

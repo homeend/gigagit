@@ -58,11 +58,27 @@ type DebugConfig struct {
 	LogOperations bool `toml:"log_operations"`
 }
 
+// RefreshConfig configures background auto-refresh (Phase B). All off by
+// default. Enabled is the master gate; each interval is seconds (0 = that
+// source never auto-refreshes). TOML keys snake_case under [refresh].
+type RefreshConfig struct {
+	Enabled   bool `toml:"enabled"` // master switch; default false (whole feature off)
+	Status    int  `toml:"status"`  // seconds between background status reads; 0 = off
+	Branches  int  `toml:"branches"`
+	Remotes   int  `toml:"remotes"`
+	Worktrees int  `toml:"worktrees"`
+	Tags      int  `toml:"tags"`
+	Reflog    int  `toml:"reflog"`
+	Feed      int  `toml:"feed"`
+	Fetch     int  `toml:"fetch"` // seconds between background `git fetch`; 0 = off
+}
+
 // Config is the merged gigagit configuration.
 type Config struct {
 	Worktree WorktreeConfig `toml:"worktree"`
 	UI       UIConfig       `toml:"ui"`
 	Debug    DebugConfig    `toml:"debug"`
+	Refresh  RefreshConfig  `toml:"refresh"`
 }
 
 // Defaults returns the built-in configuration used when no files set a field.
@@ -92,6 +108,7 @@ func Load(globalPath, repoPath string) (Config, error) {
 			overlayWorktree(&cfg.Worktree, layer.Worktree)
 			overlayUI(&cfg.UI, layer.UI)
 			overlayDebug(&cfg.Debug, layer.Debug)
+			overlayRefresh(&cfg.Refresh, layer.Refresh)
 		}
 	}
 	return cfg, nil
@@ -192,6 +209,40 @@ func overlayUI(dst *UIConfig, src UIConfig) {
 func overlayDebug(dst *DebugConfig, src DebugConfig) {
 	if src.LogOperations {
 		dst.LogOperations = true
+	}
+}
+
+// overlayRefresh copies each set field of src onto dst. Intervals use the
+// zero-is-unset rule (0 = unset). Enabled uses inverted polarity: default false
+// is "off", so only a true in a higher layer overlays (a higher layer cannot
+// reset a lower layer's true back to false — matching LogOperations).
+func overlayRefresh(dst *RefreshConfig, src RefreshConfig) {
+	if src.Enabled {
+		dst.Enabled = true
+	}
+	if src.Status > 0 {
+		dst.Status = src.Status
+	}
+	if src.Branches > 0 {
+		dst.Branches = src.Branches
+	}
+	if src.Remotes > 0 {
+		dst.Remotes = src.Remotes
+	}
+	if src.Worktrees > 0 {
+		dst.Worktrees = src.Worktrees
+	}
+	if src.Tags > 0 {
+		dst.Tags = src.Tags
+	}
+	if src.Reflog > 0 {
+		dst.Reflog = src.Reflog
+	}
+	if src.Feed > 0 {
+		dst.Feed = src.Feed
+	}
+	if src.Fetch > 0 {
+		dst.Fetch = src.Fetch
 	}
 }
 

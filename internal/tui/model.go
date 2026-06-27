@@ -83,25 +83,28 @@ type Model struct {
 
 	layers *layerStack // top-of-everything window pile: full-screen surfaces + centered popups; nil/empty = none
 
-	svc                 *domain.Service    // command layer; all git access goes through svc
-	feed                *domain.CommitFeed // single source of truth for commits
-	commitsExhausted    bool               // false → "Commits N+", true → "Commits N"
-	commitsLoading      bool               // a feed reload/page is in flight → show the loading glyph in the Commits title
-	feedScopeApplied    string             // signature of the scope last applied to the feed (see feedScopeSig); reload only when the desired scope differs
-	commitScopeBranches []string           // included branches for the feed; empty = all local branches
-	commitFilter        commitFilterFields // path/author/grep/date narrowing of the feed
-	commitGraphRows     []string           // cached single-line graph cells, parallel to the unified WIP+commits list; empty = none
-	commitGraphLanes    []int              // cached node lane per unified row, parallel to the unified WIP+commits list
-	wipRows             []wipRow           // 0–2 derived pseudo-rows (Working tree / Staged) shown atop the Commits feed when dirty
-	commitListMode      bool               // Commits feed rendered as a flat ●-gutter list, not a graph
-	commitGraphCols     int                // graph window width in LANES; 0 = use configured default
-	commitGraphScroll   int                // leftmost visible lane (0-based); resets on feed reload
-	opCancel            context.CancelFunc // cancels the in-flight op's context; nil when idle
-	loadGen             int                // bumped per superseding load; stale dataLoadedMsg are dropped
-	srcGen              map[sourceKey]int  // per-source generation; stale dataAvailableMsg dropped
-	srcInflight         map[sourceKey]bool // a read of this source is outstanding (coalescing)
-	srcLoading          map[sourceKey]bool // a manual read is in flight → consuming panels show ⏳
-	proc                process            // the single active long-running process; nil = none. IS the interface lock.
+	svc                 *domain.Service           // command layer; all git access goes through svc
+	feed                *domain.CommitFeed        // single source of truth for commits
+	commitsExhausted    bool                      // false → "Commits N+", true → "Commits N"
+	commitsLoading      bool                      // a feed reload/page is in flight → show the loading glyph in the Commits title
+	feedScopeApplied    string                    // signature of the scope last applied to the feed (see feedScopeSig); reload only when the desired scope differs
+	commitScopeBranches []string                  // included branches for the feed; empty = all local branches
+	commitFilter        commitFilterFields        // path/author/grep/date narrowing of the feed
+	commitGraphRows     []string                  // cached single-line graph cells, parallel to the unified WIP+commits list; empty = none
+	commitGraphLanes    []int                     // cached node lane per unified row, parallel to the unified WIP+commits list
+	wipRows             []wipRow                  // 0–2 derived pseudo-rows (Working tree / Staged) shown atop the Commits feed when dirty
+	commitListMode      bool                      // Commits feed rendered as a flat ●-gutter list, not a graph
+	commitGraphCols     int                       // graph window width in LANES; 0 = use configured default
+	commitGraphScroll   int                       // leftmost visible lane (0-based); resets on feed reload
+	opCancel            context.CancelFunc        // cancels the in-flight op's context; nil when idle
+	loadGen             int                       // bumped per superseding load; stale dataLoadedMsg are dropped
+	srcGen              map[sourceKey]int         // per-source generation; stale dataAvailableMsg dropped
+	srcInflight         map[sourceKey]bool        // a read of this source is outstanding (coalescing)
+	srcLoading          map[sourceKey]bool        // a manual read is in flight → consuming panels show ⏳
+	bgCtx               context.Context           // context for in-flight background (auto) reads; cancelled when a user op starts
+	bgCancel            context.CancelFunc        // cancels bgCtx; nil when no background batch is active
+	refreshLastRun      map[refreshItem]time.Time // last time each scheduled item fired (background scheduler)
+	proc                process                   // the single active long-running process; nil = none. IS the interface lock.
 
 	running   bool
 	opStart   time.Time // when the in-flight op began; the heartbeat reads it for the busy line's elapsed readout
@@ -170,18 +173,19 @@ var bottomTabs = []panel{panelStaged, panelReflog}
 // New constructs the initial model for svc.
 func New(svc *domain.Service) Model {
 	return Model{
-		svc:           svc,
-		feed:          svc.CommitFeed(),
-		loading:       true,
-		sel:           map[panel]int{},
-		sortModes:     map[panel]sortMode{panelBranches: sortDateDesc},
-		dispModes:     map[panel]dispMode{},
-		hscroll:       map[panel]int{},
-		srcGen:        map[sourceKey]int{},
-		srcInflight:   map[sourceKey]bool{},
-		srcLoading:    map[sourceKey]bool{},
-		activeLeftTab: panelBranches,
-		opLog:         newOpLog(),
+		svc:            svc,
+		feed:           svc.CommitFeed(),
+		loading:        true,
+		sel:            map[panel]int{},
+		sortModes:      map[panel]sortMode{panelBranches: sortDateDesc},
+		dispModes:      map[panel]dispMode{},
+		hscroll:        map[panel]int{},
+		srcGen:         map[sourceKey]int{},
+		srcInflight:    map[sourceKey]bool{},
+		srcLoading:     map[sourceKey]bool{},
+		refreshLastRun: map[refreshItem]time.Time{},
+		activeLeftTab:  panelBranches,
+		opLog:          newOpLog(),
 	}
 }
 
@@ -454,6 +458,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case configReadyMsg:
 		m.cfg = msg.cfg
+		// Seed refreshLastRun so the first heartbeat tick is one interval out
+		// rather than firing every enabled source immediately (enable-time burst).
+		now := time.Now()
+		for _, it := range scheduledItems {
+			m.refreshLastRun[it] = now
+		}
 		var cmd tea.Cmd
 		m, cmd = m.reloadAllCmd(true)
 		return m, cmd
@@ -539,8 +549,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loading = m.anySourceLoading()
 		if msg.err != nil {
 			// Best-effort sources must not blank the UI on a transient error;
-			// surface it on the status line and keep prior data.
-			m.statusMsg = sourceErr(msg.source, msg.err)
+			// surface it on the status line only for manual reads. Silent
+			// (auto) reads that fail (e.g. context.Canceled from op preemption)
+			// must not overwrite whatever the user last saw.
+			if msg.manual {
+				m.statusMsg = sourceErr(msg.source, msg.err)
+			}
 			return m, nil
 		}
 		switch msg.source {
@@ -1416,11 +1430,42 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case opDecisionMsg:
 		m.modal = &decisionState{req: msg.req, reply: msg.reply}
 		return m, waitForOp(m.opMsgs)
+	case bgFetchDoneMsg:
+		// A quiet background fetch completed. On error: swallow silently (the
+		// domain failure seam already logged it). On success: fire a silent
+		// (manual=false) remotes refresh so the Remotes panel picks up any new
+		// tracking refs.
+		//
+		// Two guards before firing:
+		//  1. bgCancel == nil → a user op already preempted the background batch
+		//     (startOp nils bgCancel); firing under context.Background() would be
+		//     non-cancellable, so skip entirely.
+		//  2. srcInflight[srcRemotes] == true → a remotes read is already in
+		//     flight (possibly a manual one the user triggered). Bumping srcGen
+		//     would make that read land superseded so it early-returns without
+		//     clearing srcLoading, and our silent read (manual=false) never clears
+		//     it either → the Remotes ⏳ spinner would spin forever.
+		if msg.err != nil {
+			return m, nil // silent: the domain failure seam already logged it
+		}
+		if m.bgCancel == nil {
+			return m, nil // user op preempted the background batch; skip
+		}
+		if m.srcInflight[srcRemotes] {
+			return m, nil // a (possibly manual) remotes read is already in flight
+		}
+		m.srcGen[srcRemotes]++
+		m.srcInflight[srcRemotes] = true
+		return m, m.readSourceCmd(m.bgCtx, srcRemotes, false) // bgCtx non-nil when bgCancel non-nil
+
 	case heartbeatMsg:
 		// A single perpetual tick (started in Init): re-render so the busy line's
 		// elapsed time advances while an op runs. View only shows it when running,
 		// so an idle tick just repaints identical content (bubbletea diffs frames).
-		return m, heartbeatCmd()
+		// Also drives the background auto-refresh scheduler.
+		var cmd tea.Cmd
+		m, cmd = m.refreshTick(time.Now())
+		return m, tea.Batch(cmd, heartbeatCmd())
 	case opFinishedMsg:
 		if m.opCancel != nil {
 			m.opCancel() // op already returned; this only frees the ctx

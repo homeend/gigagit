@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -27,15 +28,16 @@ type settingsPopup struct {
 }
 
 const (
-	settingsMenuAgents   = "Set up agent skills (using-gg)"
-	settingsMenuIdentity = "Identity & profiles"
-	settingsMenuPrefixes = "Branch prefixes"
-	settingsMenuOpLog    = "Operation log"
-	settingsMenuErrors   = "Session errors"
+	settingsMenuAgents      = "Set up agent skills (using-gg)"
+	settingsMenuIdentity    = "Identity & profiles"
+	settingsMenuPrefixes    = "Branch prefixes"
+	settingsMenuOpLog       = "Operation log"
+	settingsMenuErrors      = "Session errors"
+	settingsMenuAutoRefresh = "Auto-refresh"
 )
 
 // settingsMenu is the top-level menu order.
-var settingsMenu = []string{settingsMenuAgents, settingsMenuIdentity, settingsMenuPrefixes, settingsMenuOpLog, settingsMenuErrors}
+var settingsMenu = []string{settingsMenuAgents, settingsMenuIdentity, settingsMenuPrefixes, settingsMenuOpLog, settingsMenuErrors, settingsMenuAutoRefresh}
 
 // settingsMenuLabel renders one menu row. The operation-log row is dynamic: it
 // shows the on/off state and the log filename, so the menu both reveals whether
@@ -66,6 +68,12 @@ func settingsMenuLabel(m Model, i int) string {
 		}
 		return fmt.Sprintf("%s: %d — %s", settingsMenuErrors, n, path)
 	}
+	if settingsMenu[i] == settingsMenuAutoRefresh {
+		if m.cfg.Refresh.Enabled {
+			return settingsMenuAutoRefresh + ": on"
+		}
+		return settingsMenuAutoRefresh + ": off"
+	}
 	return settingsMenu[i]
 }
 
@@ -94,6 +102,31 @@ func (m Model) toggleOpLog() Model {
 		m.statusMsg = "operation log on — " + m.opLog.path
 	} else {
 		m.statusMsg = "operation log off"
+	}
+	return m
+}
+
+// toggleAutoRefresh flips the master background-refresh switch, persisting to
+// the global config so it survives restarts (mirrors toggleOpLog).
+func (m Model) toggleAutoRefresh() Model {
+	want := !m.cfg.Refresh.Enabled
+	m.cfg.Refresh.Enabled = want // in-memory flip takes effect on the next heartbeat tick
+	if want {
+		// Seed lastRun=now so enabling does not burst every source at once on the
+		// next tick — first auto-fire is one interval out (same as startup seeding).
+		now := time.Now()
+		for _, it := range scheduledItems {
+			m.refreshLastRun[it] = now
+		}
+	}
+	if err := config.SetGlobalRefreshEnabled(config.DefaultGlobalPath(), want); err != nil {
+		m.statusMsg = "auto-refresh toggled but not saved: " + err.Error()
+		return m
+	}
+	if want {
+		m.statusMsg = "auto-refresh on (per-source intervals from [refresh])"
+	} else {
+		m.statusMsg = "auto-refresh off"
 	}
 	return m
 }
@@ -176,6 +209,8 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				return m.openPrefixSettings()
 			case settingsMenuOpLog:
 				return m.toggleOpLog(), nil // stays open so the state flip is visible
+			case settingsMenuAutoRefresh:
+				return m.toggleAutoRefresh(), nil // stays open so the state flip is visible
 			case settingsMenuErrors:
 				p.errorsView = true
 				p.sel = 0
