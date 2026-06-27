@@ -111,3 +111,49 @@ func TestConfigInitRequiresExactlyOneScope(t *testing.T) {
 		t.Fatal("both --repo and --global must error")
 	}
 }
+
+func TestConfigPopulateRepoTopsUpExisting(t *testing.T) {
+	dir := newRepoDir(t)
+	svc := domain.Open(dir)
+	path := filepath.Join(dir, ".gg.toml")
+	if err := os.WriteFile(path, []byte("[ui]\nwheel_step = 5\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var out, errOut bytes.Buffer
+	if rc := cmdConfig(svc, dir, []string{"populate", "--repo"}, &out, &errOut); rc != 0 {
+		t.Fatalf("rc=%d stderr=%s", rc, errOut.String())
+	}
+	b, _ := os.ReadFile(path)
+	s := string(b)
+	if !strings.Contains(s, "wheel_step = 5") {
+		t.Fatalf("override clobbered:\n%s", s)
+	}
+	if !strings.Contains(s, "[refresh]") || !strings.Contains(s, "[populated]") {
+		t.Fatalf("missing settings not populated:\n%s", s)
+	}
+}
+
+func TestConfigPopulateGlobalUsesXDG(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", home)
+	svc := domain.Open(t.TempDir())
+	var out, errOut bytes.Buffer
+	if rc := cmdConfig(svc, t.TempDir(), []string{"populate", "--global"}, &out, &errOut); rc != 0 {
+		t.Fatalf("rc=%d stderr=%s", rc, errOut.String())
+	}
+	if _, err := os.Stat(filepath.Join(home, "gg", "config.toml")); err != nil {
+		t.Fatalf("global config not written under XDG dir: %v", err)
+	}
+}
+
+func TestConfigPopulateRequiresExactlyOneScope(t *testing.T) {
+	dir := t.TempDir()
+	svc := domain.Open(dir)
+	var out, errOut bytes.Buffer
+	if rc := cmdConfig(svc, dir, []string{"populate"}, &out, &errOut); rc == 0 {
+		t.Fatal("neither --repo nor --global must error")
+	}
+	if rc := cmdConfig(svc, dir, []string{"populate", "--repo", "--global"}, &out, &errOut); rc == 0 {
+		t.Fatal("both --repo and --global must error")
+	}
+}

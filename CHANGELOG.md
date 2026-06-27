@@ -9,6 +9,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- `gg config populate (--repo | --global)` — tops up an existing config file
+  with every supported setting not yet present, added as commented `[populated]`
+  lines; never touches existing overrides; idempotent. Complements
+  `gg config init`.
 - **Background auto-refresh (Phase B).** The TUI can now silently refresh any
   data source in the background on a configurable per-source timer. Everything
   is **off by default** — opt in via the new `[refresh]` config section.
