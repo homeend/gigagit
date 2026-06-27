@@ -77,3 +77,21 @@ func TestDebugOverlayRepoWins(t *testing.T) {
 		t.Fatal("global true should survive an empty repo layer")
 	}
 }
+
+func TestSetGlobalRefreshEnabledRoundTrips(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := SetGlobalRefreshEnabled(path, true); err != nil {
+		t.Fatal(err)
+	}
+	c, err := Load(path, "")
+	if err != nil || !c.Refresh.Enabled {
+		t.Fatalf("enabled not persisted: %+v err=%v", c.Refresh, err)
+	}
+	if err := SetGlobalRefreshEnabled(path, false); err != nil {
+		t.Fatal(err)
+	}
+	c, _ = Load(path, "")
+	if c.Refresh.Enabled {
+		t.Fatal("disabled not persisted")
+	}
+}
