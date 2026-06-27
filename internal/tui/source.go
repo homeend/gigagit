@@ -73,6 +73,41 @@ type feedPayload struct {
 	exhausted bool
 }
 
+// anySourceLoading reports whether any source is mid manual-refresh. It backs
+// the derived m.loading flag (the legacy action-blocking gate) and the
+// per-panel spinner targeting (Task 8).
+func (m Model) anySourceLoading() bool {
+	for _, v := range m.srcLoading {
+		if v {
+			return true
+		}
+	}
+	return false
+}
+
+// maybeFeedUpstreamRewalk reports whether the one-time "re-walk the feed now
+// that tracked upstreams are known" should fire. It is true only when upstreams
+// exist, the applied scope is stale, AND no srcFeed read is in flight. The
+// in-flight guard serializes the initial LoadInitial against the scoped re-walk
+// so they never write the feed concurrently (Blocker 2). Both the srcBranches
+// and srcFeed arrival handlers call it; whichever lands last with the guard
+// clear fires the re-walk exactly once.
+func (m Model) maybeFeedUpstreamRewalk() bool {
+	return len(m.feedUpstreams()) > 0 &&
+		m.feedScopeApplied != m.feedScopeSig() &&
+		!m.srcInflight[srcFeed]
+}
+
+// sourceErr formats a per-source error for display on the status line.
+func sourceErr(s sourceKey, err error) string {
+	name := map[sourceKey]string{
+		srcStatus: "status", srcBranches: "branches", srcRemotes: "remotes",
+		srcTags: "tags", srcReflog: "reflog", srcWorktrees: "worktrees",
+		srcFeed: "commits", srcIdentity: "identity",
+	}[s]
+	return name + ": " + err.Error()
+}
+
 // readSourceCmd reads one source off the UI thread via the gated domain layer
 // and returns a dataAvailableMsg. gen is captured now so a result superseded by
 // a newer read of the same source is dropped by the handler. Derived data that

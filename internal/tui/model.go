@@ -518,6 +518,76 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// resolve"); entering the resolution process is the user's choice (x),
 			// so a lingering conflict never traps the interface.
 		}
+	case dataAvailableMsg:
+		if msg.gen != m.srcGen[msg.source] {
+			return m, nil // superseded by a newer read of this source
+		}
+		m.srcInflight[msg.source] = false
+		if msg.manual {
+			m.srcLoading[msg.source] = false
+		}
+		// m.loading is the legacy "a blocking refresh is in flight" flag still read
+		// by ~10 action guards (avail.go and the !m.running && !m.loading sites in
+		// model.go). Keep it alive as a derived value = any manual source still
+		// loading, so those guards keep working unchanged. (Phase B: auto reads set
+		// no srcLoading, so they correctly never block actions.)
+		m.loading = m.anySourceLoading()
+		if msg.err != nil {
+			// Best-effort sources must not blank the UI on a transient error;
+			// surface it on the status line and keep prior data.
+			m.statusMsg = sourceErr(msg.source, msg.err)
+			return m, nil
+		}
+		switch msg.source {
+		case srcStatus:
+			p := msg.value.(statusPayload)
+			m.status = p.status
+			m.conflict = p.conflict
+			if m.proc != nil {
+				return m.proc.refreshed(m) // process re-derives from fresh status
+			}
+		case srcBranches:
+			m.branches = msg.value.([]model.Branch)
+			m.remoteBranches = sortRemoteBranchesLocalFirst(m.remoteBranches, m.branches)
+			m = m.rebuildCommitGraph()
+			// Upstream re-walk latch. maybeFeedUpstreamRewalk is false while a
+			// srcFeed read is still in flight, so the initial LoadInitial and the
+			// scoped re-walk never write the feed concurrently — when branches
+			// lands first, the re-walk is deferred to srcFeed's arrival instead.
+			if m.maybeFeedUpstreamRewalk() {
+				var reload tea.Cmd
+				m, reload = m.startFeedReload()
+				return m, reload
+			}
+		case srcRemotes:
+			m.remoteBranches = sortRemoteBranchesLocalFirst(msg.value.([]model.RemoteBranch), m.branches)
+		case srcTags:
+			m.tags = msg.value.([]model.Tag)
+		case srcReflog:
+			m.reflog = msg.value.([]model.ReflogEntry)
+		case srcWorktrees:
+			p := msg.value.(worktreesPayload)
+			m.worktrees = p.worktrees
+			m.headTimes = p.headTimes
+		case srcFeed:
+			p := msg.value.(feedPayload)
+			m.commits = p.commits
+			m.commitsExhausted = p.exhausted
+			m.commitsLoading = false
+			m = m.rebuildCommitGraph()
+			// The initial feed read just landed; fire the upstream re-walk now if
+			// branches already arrived and set the latch. This is the other half
+			// of the startup ordering: exactly one path fires the re-walk, always
+			// after the initial LoadInitial completes — no feed write race.
+			if m.maybeFeedUpstreamRewalk() {
+				var reload tea.Cmd
+				m, reload = m.startFeedReload()
+				return m, reload
+			}
+		case srcIdentity:
+			m.identity = msg.value.(model.Identity)
+		}
+		return m, nil
 	case tea.KeyMsg:
 		// Normalize a lone space rune to KeySpace. On Windows, Bubble Tea's input
 		// driver delivers a space keypress as KeyRunes{' '} (see key_windows.go),

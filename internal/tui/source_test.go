@@ -76,3 +76,67 @@ func TestReadSourceWorktreesCarriesPayload(t *testing.T) {
 		t.Fatal("headTimes must be non-nil (may be empty)")
 	}
 }
+
+func TestDataAvailableStaleGenDropped(t *testing.T) {
+	m := newTestModel(t)
+	m.srcGen[srcBranches] = 5
+	old := []model.Branch{{Name: "old"}}
+	m.branches = old
+	nm, _ := m.Update(dataAvailableMsg{source: srcBranches, gen: 4,
+		value: []model.Branch{{Name: "new"}}, manual: true})
+	if got := nm.(Model).branches; len(got) != 1 || got[0].Name != "old" {
+		t.Fatalf("stale gen must be ignored, branches=%+v", got)
+	}
+}
+
+func TestDataAvailableManualClearsSpinner(t *testing.T) {
+	m := newTestModel(t)
+	m.srcLoading[srcBranches] = true
+	m.srcInflight[srcBranches] = true
+	nm, _ := m.Update(dataAvailableMsg{source: srcBranches, gen: m.srcGen[srcBranches],
+		value: []model.Branch{{Name: "x"}}, manual: true})
+	mm := nm.(Model)
+	if mm.srcLoading[srcBranches] || mm.srcInflight[srcBranches] {
+		t.Fatal("manual read must clear srcLoading and srcInflight on arrival")
+	}
+	if len(mm.branches) != 1 || mm.branches[0].Name != "x" {
+		t.Fatalf("value not stored: %+v", mm.branches)
+	}
+	// m.loading is the legacy action-blocking flag, derived as anySourceLoading().
+	// With the last (and only) manual source cleared, it must be false.
+	if mm.loading {
+		t.Fatal("m.loading must clear when the last manual source lands")
+	}
+}
+
+func TestDataAvailableAutoLeavesNoSpinner(t *testing.T) {
+	m := newTestModel(t)
+	nm, _ := m.Update(dataAvailableMsg{source: srcTags, gen: m.srcGen[srcTags],
+		value: []model.Tag{{Name: "v1"}}, manual: false})
+	if nm.(Model).srcLoading[srcTags] {
+		t.Fatal("auto read must never set a spinner")
+	}
+}
+
+// TestBranchesDefersFeedRewalkWhileFeedInflight is a regression test for
+// Blocker 2: the initial LoadInitial (srcFeed) and the upstream-scoped
+// re-walk (triggered by srcBranches arriving) must NOT run concurrently.
+// maybeFeedUpstreamRewalk returns false while srcFeed is in-flight, deferring
+// the re-walk to the srcFeed arrival handler instead.
+func TestBranchesDefersFeedRewalkWhileFeedInflight(t *testing.T) {
+	m := newTestModel(t)
+	// Wire a tracked upstream so feedUpstreams() returns non-empty.
+	m.branches = []model.Branch{{Name: "main", Upstream: "origin/main"}}
+	m.remoteBranches = []model.RemoteBranch{{Name: "origin/main"}}
+	// Mark the scope as stale so maybeFeedUpstreamRewalk would otherwise fire.
+	m.feedScopeApplied = "stale"
+
+	m.srcInflight[srcFeed] = true // a srcFeed read is outstanding
+	if m.maybeFeedUpstreamRewalk() {
+		t.Fatal("re-walk must be deferred while srcFeed is in flight")
+	}
+	m.srcInflight[srcFeed] = false // feed read has now landed
+	if !m.maybeFeedUpstreamRewalk() {
+		t.Fatal("re-walk must fire once the feed read has landed")
+	}
+}
