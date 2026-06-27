@@ -54,6 +54,7 @@ type dataAvailableMsg struct {
 	gen    int
 	value  any
 	manual bool
+	dur    time.Duration // wall-clock of the domain read (Phase C measurement)
 	err    error
 }
 
@@ -129,12 +130,14 @@ func (m Model) readSourceCmd(ctx context.Context, s sourceKey, manual bool) tea.
 	reflogLimit := m.cfg.UI.ReflogLimit
 	gen := m.srcGen[s]
 	return func() tea.Msg {
+		start := time.Now()
 		out := dataAvailableMsg{source: s, gen: gen, manual: manual}
 		switch s {
 		case srcStatus:
 			st, err := svc.Status(ctx)
 			if err != nil {
 				out.err = err
+				out.dur = time.Since(start)
 				return out
 			}
 			out.value = statusPayload{status: st, conflict: svc.Conflict(ctx, st)}
@@ -155,6 +158,7 @@ func (m Model) readSourceCmd(ctx context.Context, s sourceKey, manual bool) tea.
 			wts, err := svc.Worktrees(ctx)
 			if err != nil {
 				out.err = err
+				out.dur = time.Since(start)
 				return out
 			}
 			shas := make([]string, 0, len(wts))
@@ -176,6 +180,7 @@ func (m Model) readSourceCmd(ctx context.Context, s sourceKey, manual bool) tea.
 			id, err := svc.Identity(ctx)
 			out.value, out.err = id, err
 		}
+		out.dur = time.Since(start)
 		return out
 	}
 }

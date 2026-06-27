@@ -103,8 +103,12 @@ type Model struct {
 	srcLoading          map[sourceKey]bool        // a manual read is in flight → consuming panels show ⏳
 	bgCtx               context.Context           // context for in-flight background (auto) reads; cancelled when a user op starts
 	bgCancel            context.CancelFunc        // cancels bgCtx; nil when no background batch is active
-	refreshLastRun      map[refreshItem]time.Time // last time each scheduled item fired (background scheduler)
-	proc                process                   // the single active long-running process; nil = none. IS the interface lock.
+	refreshLastRun      map[refreshItem]time.Time     // last time each scheduled item fired (background scheduler)
+	refreshDur          map[refreshItem][]time.Duration // rolling ring (≤10) of measured read durations per item (Phase C)
+	bgQueue             []refreshItem                  // FIFO of pending background reads; one drains per tick
+	bgBusy              bool                           // a background read is in flight (sole lane-occupancy truth)
+	bgActiveItem        refreshItem                    // the running background item — meaningful ONLY when bgBusy
+	proc                process                        // the single active long-running process; nil = none. IS the interface lock.
 
 	running   bool
 	opStart   time.Time // when the in-flight op began; the heartbeat reads it for the busy line's elapsed readout
@@ -184,6 +188,7 @@ func New(svc *domain.Service) Model {
 		srcInflight:    map[sourceKey]bool{},
 		srcLoading:     map[sourceKey]bool{},
 		refreshLastRun: map[refreshItem]time.Time{},
+		refreshDur:     map[refreshItem][]time.Duration{},
 		activeLeftTab:  panelBranches,
 		opLog:          newOpLog(),
 	}
@@ -557,6 +562,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+		// Record the measured read cost for the adaptive scheduler (success only;
+		// a failed/partial read is not a representative duration).
+		m = m.recordDuration(refreshItem{source: msg.source}, msg.dur)
 		switch msg.source {
 		case srcStatus:
 			keyFiles := m.panelSelKey(panelFiles)
@@ -1445,6 +1453,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		//     would make that read land superseded so it early-returns without
 		//     clearing srcLoading, and our silent read (manual=false) never clears
 		//     it either → the Remotes ⏳ spinner would spin forever.
+		if msg.err == nil {
+			m = m.recordDuration(fetchItem, msg.dur)
+		}
 		if msg.err != nil {
 			return m, nil // silent: the domain failure seam already logged it
 		}

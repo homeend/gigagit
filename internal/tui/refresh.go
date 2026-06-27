@@ -114,6 +114,20 @@ func effectiveInterval(cfg config.RefreshConfig, it refreshItem, avg time.Durati
 	return backoff, stateAdaptive
 }
 
+// recordDuration appends d to it's rolling ring, dropping the oldest beyond
+// maxDurationSamples. Lazy-inits the map so a literal-built test Model is safe.
+func (m Model) recordDuration(it refreshItem, d time.Duration) Model {
+	if m.refreshDur == nil {
+		m.refreshDur = map[refreshItem][]time.Duration{}
+	}
+	ring := append(m.refreshDur[it], d)
+	if len(ring) > maxDurationSamples {
+		ring = ring[len(ring)-maxDurationSamples:]
+	}
+	m.refreshDur[it] = ring
+	return m
+}
+
 // enqueueDue appends each due item that is neither already queued nor the
 // currently-running item (when busy) — the dedup-by-type gate. FIFO order.
 func enqueueDue(queue []refreshItem, active refreshItem, busy bool, due []refreshItem) []refreshItem {
@@ -190,7 +204,10 @@ func (m Model) refreshTick(now time.Time) (Model, tea.Cmd) {
 // bgFetchDoneMsg lands when a background fetch finishes. On success the handler
 // fires a silent remotes refresh; on error it is swallowed (already recorded to
 // the session error log by the domain failure seam).
-type bgFetchDoneMsg struct{ err error }
+type bgFetchDoneMsg struct {
+	dur time.Duration
+	err error
+}
 
 // bgFetchCmd runs `git fetch` quietly — outside the foreground op slot, no
 // m.running, no modal — under the background context. Events are discarded;
@@ -202,6 +219,7 @@ func (m Model) bgFetchCmd(ctx context.Context) tea.Cmd {
 	}
 	svc := m.svc
 	return func() tea.Msg {
+		start := time.Now()
 		events := make(chan engine.Event, 8)
 		go func() {
 			for range events {
@@ -209,7 +227,7 @@ func (m Model) bgFetchCmd(ctx context.Context) tea.Cmd {
 		}()
 		_, err := svc.Execute(ctx, engine.Fetch{}, events, engine.MapDecider{})
 		close(events)
-		return bgFetchDoneMsg{err: err}
+		return bgFetchDoneMsg{dur: time.Since(start), err: err}
 	}
 }
 

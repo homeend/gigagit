@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/homeend/gigagit/internal/config"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 func TestMeanDuration(t *testing.T) {
@@ -51,6 +52,35 @@ func TestEffectiveInterval(t *testing.T) {
 	custom := config.RefreshConfig{Enabled: true, Status: 5, MaxReadSeconds: 20, BackoffFactor: 3}
 	if secs, state := effectiveInterval(custom, st, 12*time.Second, true); state != stateAdaptive || secs != 36 {
 		t.Fatalf("custom factor 3×12s=36, got %d/%v", secs, state)
+	}
+}
+
+func TestRecordDurationCapsAtTen(t *testing.T) {
+	m := Model{refreshDur: map[refreshItem][]time.Duration{}}
+	it := refreshItem{source: srcStatus}
+	for i := 1; i <= 13; i++ {
+		m = m.recordDuration(it, time.Duration(i)*time.Second)
+	}
+	got := m.refreshDur[it]
+	if len(got) != maxDurationSamples {
+		t.Fatalf("ring should cap at %d, got %d", maxDurationSamples, len(got))
+	}
+	// Oldest dropped: the ring holds samples 4s..13s, mean = 8.5s.
+	if mean := meanDuration(got); mean != 8500*time.Millisecond {
+		t.Fatalf("want mean 8.5s of last 10, got %v", mean)
+	}
+}
+
+func TestDataAvailableRecordsDuration(t *testing.T) {
+	m := newTestModel(t)
+	m.bgActiveItem = refreshItem{} // lane idle
+	it := refreshItem{source: srcTags}
+	gen := m.srcGen[srcTags]
+	msg := dataAvailableMsg{source: srcTags, gen: gen, value: []model.Tag(nil), dur: 2 * time.Second}
+	nm, _ := m.Update(msg)
+	got := nm.(Model).refreshDur[it]
+	if len(got) != 1 || got[0] != 2*time.Second {
+		t.Fatalf("status handler should record dur, got %v", got)
 	}
 }
 
