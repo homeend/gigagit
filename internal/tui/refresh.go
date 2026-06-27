@@ -100,8 +100,9 @@ func effectiveInterval(cfg config.RefreshConfig, it refreshItem, avg time.Durati
 	base := refreshIntervalFor(cfg, it)
 	// The background `git fetch` is network I/O, so it is purely opt-in: it runs
 	// only when [refresh] fetch is set (base > 0). Unlike local source reads it
-	// never floor-less auto-starts from a measurement, and it is never "pending"
-	// (nothing local — a manual r — would ever measure it). base 0 → off.
+	// never floor-less auto-starts from a measurement and is never "pending". A
+	// foreground fetch may record a sample (for visibility), but base 0 still
+	// means off — the guard returns before haveSample is consulted.
 	if it.isFetch && base <= 0 {
 		return 0, stateOff
 	}
