@@ -26,12 +26,12 @@ import (
 type Model struct {
 	width, height int
 
-	loading    bool
-	softReload bool // r reload in flight: render stale panels + ⏳ instead of blanking (reRoot/startup leave it false)
-	err        error
-	status     model.WorkingTreeStatus
-	branches   []model.Branch
-	commits    []model.Commit
+	loading  bool
+	ready    bool // true once the first data has arrived; gates the initial blank screen (replaces softReload's role)
+	err      error
+	status   model.WorkingTreeStatus
+	branches []model.Branch
+	commits  []model.Commit
 
 	worktrees       []model.Worktree
 	tags            []model.Tag         // refs/tags; shown by the Tags tab in the middle slot
@@ -42,16 +42,15 @@ type Model struct {
 	opLog        *opLog // operation-log file + span-sink lifecycle; the , Settings toggle
 	gitCommonDir string
 
-	initHomeDir           string // home dir for agent detection; "" skips home-scoped agents (tests)
-	statePath             string // repo-registry location; "" disables recording (tests)
-	pendingSeqBump        []string
-	pendingSwitch         bool
-	switchTarget          string
-	pendingCompare        *pendingCompare // focused file awaiting the compare-mode picker; nil = none
-	pendingSwitchBranch   string          // branch to SmartSwitch to after a successful op (B = create-and-switch)
-	pendingRefsReload     bool            // after this op, refresh only branches+worktrees (not a full Snapshot) — set by create-worktree
-	pendingIdentityReload bool            // after this op (SetIdentity), re-read only the identity (not a full Snapshot) — config write changes no status/refs
-	identity              model.Identity  // last-read git user identity (refreshed after SetIdentity); the identityView popup loads its own fresh copy
+	initHomeDir         string // home dir for agent detection; "" skips home-scoped agents (tests)
+	statePath           string // repo-registry location; "" disables recording (tests)
+	pendingSeqBump      []string
+	pendingSwitch       bool
+	switchTarget        string
+	pendingCompare      *pendingCompare // focused file awaiting the compare-mode picker; nil = none
+	pendingSwitchBranch string          // branch to SmartSwitch to after a successful op (B = create-and-switch)
+	pendingSources      []sourceKey     // sources to refresh after this op; nil = all (set at the startOp call site)
+	identity            model.Identity  // last-read git user identity (refreshed after SetIdentity); the identityView popup loads its own fresh copy
 
 	mark             *markState      // the m-key mark; nil = none (see mark.go)
 	fileMarks        map[string]bool // multi-selected Status file paths (keyed by path)
@@ -99,6 +98,9 @@ type Model struct {
 	commitGraphScroll   int                // leftmost visible lane (0-based); resets on feed reload
 	opCancel            context.CancelFunc // cancels the in-flight op's context; nil when idle
 	loadGen             int                // bumped per superseding load; stale dataLoadedMsg are dropped
+	srcGen              map[sourceKey]int  // per-source generation; stale dataAvailableMsg dropped
+	srcInflight         map[sourceKey]bool // a read of this source is outstanding (coalescing)
+	srcLoading          map[sourceKey]bool // a manual read is in flight → consuming panels show ⏳
 	proc                process            // the single active long-running process; nil = none. IS the interface lock.
 
 	running   bool
@@ -175,6 +177,9 @@ func New(svc *domain.Service) Model {
 		sortModes:     map[panel]sortMode{panelBranches: sortDateDesc},
 		dispModes:     map[panel]dispMode{},
 		hscroll:       map[panel]int{},
+		srcGen:        map[sourceKey]int{},
+		srcInflight:   map[sourceKey]bool{},
+		srcLoading:    map[sourceKey]bool{},
 		activeLeftTab: panelBranches,
 		opLog:         newOpLog(),
 	}
@@ -182,7 +187,7 @@ func New(svc *domain.Service) Model {
 
 // Init implements tea.Model.
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.loadCmd(), loadSearchHistCmd(m.svc), heartbeatCmd())
+	return tea.Batch(m.bootstrapCmd(), loadSearchHistCmd(m.svc), heartbeatCmd())
 }
 
 // Update implements tea.Model.
@@ -447,12 +452,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		p.loading = false
 		p.rerank()
 		return m, nil
+	case configReadyMsg:
+		m.cfg = msg.cfg
+		var cmd tea.Cmd
+		m, cmd = m.reloadAllCmd(true)
+		return m, cmd
 	case dataLoadedMsg:
 		if msg.gen != m.loadGen {
-			return m, nil // superseded by a newer load (softReload left for the newer load)
+			return m, nil // superseded by a newer load
 		}
 		m.loading = false
-		m.softReload = false
+		m.ready = true
 		m.commitsLoading = false // the full load (which includes the feed) is done
 		m.err = msg.err
 		if msg.err == nil {
@@ -512,6 +522,102 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// resolve"); entering the resolution process is the user's choice (x),
 			// so a lingering conflict never traps the interface.
 		}
+	case dataAvailableMsg:
+		if msg.gen != m.srcGen[msg.source] {
+			return m, nil // superseded by a newer read of this source
+		}
+		m.ready = true // first source to land flips the blank-screen gate
+		m.srcInflight[msg.source] = false
+		if msg.manual {
+			m.srcLoading[msg.source] = false
+		}
+		// m.loading is the legacy "a blocking refresh is in flight" flag still read
+		// by ~10 action guards (avail.go and the !m.running && !m.loading sites in
+		// model.go). Keep it alive as a derived value = any manual source still
+		// loading, so those guards keep working unchanged. (Phase B: auto reads set
+		// no srcLoading, so they correctly never block actions.)
+		m.loading = m.anySourceLoading()
+		if msg.err != nil {
+			// Best-effort sources must not blank the UI on a transient error;
+			// surface it on the status line and keep prior data.
+			m.statusMsg = sourceErr(msg.source, msg.err)
+			return m, nil
+		}
+		switch msg.source {
+		case srcStatus:
+			keyFiles := m.panelSelKey(panelFiles)
+			keyStaged := m.panelSelKey(panelStaged)
+			p := msg.value.(statusPayload)
+			m.status = p.status
+			m.conflict = p.conflict
+			m = m.restorePanelSel(panelFiles, keyFiles)
+			m = m.restorePanelSel(panelStaged, keyStaged)
+			// Rebuild the commit graph so WIP pseudo-rows (◇ Working tree/Staged)
+			// stay in sync with the new status, even on the proc path (e.g. after
+			// a stash pop that triggers a status-only refresh mid-conflict process).
+			m = m.rebuildCommitGraph()
+			if n := m.commitsTotal(); n > 0 && m.sel[panelCommits] >= n {
+				m.sel[panelCommits] = n - 1
+			}
+			if m.proc != nil {
+				return m.proc.refreshed(m) // process re-derives from fresh status
+			}
+		case srcBranches:
+			key := m.panelSelKey(panelBranches)
+			m.branches = msg.value.([]model.Branch)
+			m = m.restorePanelSel(panelBranches, key)
+			m.remoteBranches = sortRemoteBranchesLocalFirst(m.remoteBranches, m.branches)
+			m = m.rebuildCommitGraph()
+			// Upstream re-walk latch. maybeFeedUpstreamRewalk is false while a
+			// srcFeed read is still in flight, so the initial LoadInitial and the
+			// scoped re-walk never write the feed concurrently — when branches
+			// lands first, the re-walk is deferred to srcFeed's arrival instead.
+			if m.maybeFeedUpstreamRewalk() {
+				var reload tea.Cmd
+				m, reload = m.startFeedReload()
+				return m, reload
+			}
+		case srcRemotes:
+			key := m.panelSelKey(panelRemotes)
+			m.remoteBranches = sortRemoteBranchesLocalFirst(msg.value.([]model.RemoteBranch), m.branches)
+			m = m.restorePanelSel(panelRemotes, key)
+		case srcTags:
+			key := m.panelSelKey(panelTags)
+			m.tags = msg.value.([]model.Tag)
+			m = m.restorePanelSel(panelTags, key)
+		case srcReflog:
+			key := m.panelSelKey(panelReflog)
+			m.reflog = msg.value.([]model.ReflogEntry)
+			m = m.restorePanelSel(panelReflog, key)
+		case srcWorktrees:
+			keyWT := m.panelSelKey(panelWorktrees)
+			keyBr := m.panelSelKey(panelBranches)
+			p := msg.value.(worktreesPayload)
+			m.worktrees = p.worktrees
+			m.headTimes = p.headTimes
+			m = m.restorePanelSel(panelWorktrees, keyWT)
+			m = m.restorePanelSel(panelBranches, keyBr)
+		case srcFeed:
+			key := m.panelSelKey(panelCommits)
+			p := msg.value.(feedPayload)
+			m.commits = p.commits
+			m.commitsExhausted = p.exhausted
+			m.commitsLoading = false
+			m = m.rebuildCommitGraph()
+			m = m.restorePanelSel(panelCommits, key)
+			// The initial feed read just landed; fire the upstream re-walk now if
+			// branches already arrived and set the latch. This is the other half
+			// of the startup ordering: exactly one path fires the re-walk, always
+			// after the initial LoadInitial completes — no feed write race.
+			if m.maybeFeedUpstreamRewalk() {
+				var reload tea.Cmd
+				m, reload = m.startFeedReload()
+				return m, reload
+			}
+		case srcIdentity:
+			m.identity = msg.value.(model.Identity)
+		}
+		return m, nil
 	case tea.KeyMsg:
 		// Normalize a lone space rune to KeySpace. On Windows, Bubble Tea's input
 		// driver delivers a space keypress as KeyRunes{' '} (see key_windows.go),
@@ -744,14 +850,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "q", "ctrl+c":
 			return m, tea.Quit
 		case "r":
-			// Block r while any load is already in flight (a soft reload OR an
-			// in-flight repo switch): re-triggering would either restart the walk
-			// or soft-render the outgoing repo's stale panels.
-			if !m.running && !m.loading {
-				m.loadGen++
-				m.loading = true
-				m.softReload = true
-				return m, m.loadCmd()
+			// Block r while a load is in flight (anySourceInflight) OR while a
+			// repo switch is in progress (m.loading, set by reRoot). Without the
+			// loading guard, r races loadCmd during a repo switch.
+			if !m.running && !m.loading && !m.anySourceInflight() {
+				var cmd tea.Cmd
+				m, cmd = m.reloadAllCmd(true)
+				return m, cmd
 			}
 		case "p":
 			if !m.running && !m.loading {
@@ -1325,8 +1430,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.opMsgs = nil
 		switchTo := ""
 		chainSwitch := ""
-		refsReload := false
-		idReload := false
 		if msg.err != nil {
 			m.statusMsg = friendlyOpError(msg.err)
 		} else {
@@ -1340,44 +1443,36 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				switchTo = msg.res.Path
 			}
 			chainSwitch = m.pendingSwitchBranch
-			refsReload = m.pendingRefsReload
-			idReload = m.pendingIdentityReload
 		}
 		m.pendingSeqBump = nil
 		m.pendingSwitch = false
 		m.pendingSwitchBranch = "" // cleared before the chained op starts, so it cannot re-fire
-		m.pendingRefsReload = false
-		m.pendingIdentityReload = false
+		srcs := m.pendingSources   // nil = all (safe default for any unmapped op)
+		m.pendingSources = nil
 		if switchTo != "" {
 			return m.reRoot(switchTo)
 		}
 		if chainSwitch != "" {
 			return m.startOp(engine.SmartSwitch{Branch: chainSwitch})
 		}
-		m.loadGen++ // invalidate any in-flight full load before issuing a refresh
 		if m.stashView != nil {
 			// A stash op (apply/pop/drop) changed the stash list as well as the
-			// working tree — refresh both.
+			// working tree — refresh status and the stash list.
 			m.stashView.loading = true
-			return m, tea.Batch(m.loadCmd(), m.loadStashListCmd(m.stashView.tag))
+			var cmd tea.Cmd
+			m, cmd = m.reloadSourcesCmd([]sourceKey{srcStatus}, true)
+			return m, tea.Batch(cmd, m.loadStashListCmd(m.stashView.tag))
 		}
 		// A job an active process started just returned: let the process advance
 		// its state machine (it typically triggers a reload itself).
 		if m.proc != nil {
 			return m.proc.finished(m, msg.res, msg.err)
 		}
-		// A ref-only op (create-worktree) changed only branches+worktrees, not the
-		// working tree or commit history — a targeted refresh shows the new rows
-		// fast instead of paying a full Snapshot's status walk on a huge repo.
-		if refsReload {
-			return m, m.reloadRefsCmd(m.statusMsg)
-		}
-		// SetIdentity wrote git config — no status/refs/commits changed, so skip
-		// the full Snapshot and just re-read the identity for next time.
-		if idReload {
-			return m, m.reloadIdentityCmd(m.statusMsg)
-		}
-		return m, m.loadCmd()
+		// Route op completion through the per-source registry: refresh only the
+		// sources the op dirtied (nil pendingSources = all sources, safe default).
+		var cmd tea.Cmd
+		m, cmd = m.reloadSourcesCmd(sourcesOrAll(srcs), true)
+		return m, cmd
 
 	case prefixDataMsg:
 		if v := layerOf[*prefixSettingsView](m); v != nil {
@@ -1408,15 +1503,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					v.sel = 0
 				}
 			}
-		}
-		return m, nil
-
-	case identityRefreshedMsg:
-		if msg.err == nil {
-			m.identity = msg.id
-		}
-		if msg.summary != "" {
-			m.statusMsg = msg.summary
 		}
 		return m, nil
 
@@ -1471,26 +1557,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m = m.rebuildCommitGraph()
 		if n := m.commitsTotal(); n > 0 && m.sel[panelCommits] >= n {
 			m.sel[panelCommits] = n - 1
-		}
-		return m, nil
-
-	case refsRefreshedMsg:
-		m.running = false
-		if msg.err != nil {
-			m.statusMsg = "error: " + msg.err.Error()
-			return m, nil
-		}
-		m.branches = msg.branches
-		m.worktrees = msg.worktrees
-		if msg.summary != "" {
-			m.statusMsg = msg.summary
-		}
-		// A removed row (e.g. a deleted worktree) must not leave a selection
-		// pointing past the end of the now-shorter list.
-		for _, p := range []panel{panelBranches, panelWorktrees} {
-			if n := m.panelLen(p); m.sel[p] >= n {
-				m.sel[p] = max(0, n-1)
-			}
 		}
 		return m, nil
 
@@ -2020,7 +2086,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.feed = m.svc.CommitFeed()
 	m.switchTarget = path
 	m.loading = true
-	m.softReload = false // repo switch is a hard reload — never soft-render the outgoing repo
+	m.ready = false // repo switch blanks until the new repo's first data lands
 	// Drop selections from the old repo so the highlight doesn't land on a
 	// surprising row in the newly-loaded panels.
 	m.sel = map[panel]int{}
@@ -2041,7 +2107,7 @@ func (m Model) View() string {
 	if m.modal != nil {
 		return m.render()
 	}
-	if m.loading && !m.softReload {
+	if m.loading && !m.ready {
 		return "gigagit (loading…)\n" // startup + repo-switch keep the blank screen
 	}
 	if m.err != nil {

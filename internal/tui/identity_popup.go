@@ -301,7 +301,6 @@ func (v *identityView) updateApply(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		global := msg.String() == "g"
 		op := applyOp(v.applyName, v.applyEmail, global)
 		m = m.clearLayers()
-		m.pendingIdentityReload = true
 		return m.startOp(op)
 	}
 	return m, nil

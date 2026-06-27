@@ -9,6 +9,19 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Per-source async refresh (Phase A).** The TUI now reloads data
+  source-by-source rather than all-at-once: status, branches, remote branches,
+  tags, reflog, worktrees, commit feed, and identity each load independently
+  via their existing `domain` query and emit a `dataAvailableMsg` when ready.
+  After an action, only the sources that operation touched are re-fetched — a
+  commit refreshes only status and the feed; a push refreshes only remote
+  branches. Unmapped operations default to refreshing all sources (safe
+  fallback; never a correctness regression). Manual `r` and startup fan out all
+  sources in parallel with per-panel ⏳ spinners indicating which panels are
+  still loading. Repo-switch (`reRoot`) and the conflict-process flow still use
+  the previous monolithic load; porting those is future work. This is the
+  foundation for Phase B (silent background auto-refresh on per-source timers)
+  and Phase C (adaptive intervals from measured read durations).
 - **Session error log.** Every git operation that fails (any operation or read
   query that returns an error to a frontend) is now recorded to an always-on
   `errors.log` in the gg state dir (beside `operations.log`), and a new

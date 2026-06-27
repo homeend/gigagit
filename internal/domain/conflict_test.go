@@ -246,3 +246,14 @@ func TestSnapshotCarriesConflictSource(t *testing.T) {
 		t.Errorf("snapshot conflict = %+v", snap.Conflict)
 	}
 }
+
+func TestConflictCleanRepoIsZero(t *testing.T) {
+	s := svcAt(cleanDir(t))
+	st, err := s.Status(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := s.Conflict(context.Background(), st); got != (ConflictState{}) {
+		t.Errorf("clean repo conflict = %+v, want zero", got)
+	}
+}

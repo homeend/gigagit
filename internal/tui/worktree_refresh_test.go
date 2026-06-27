@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -41,10 +42,10 @@ func worktreeCreatePopup(branch, path string) *worktreePopup {
 }
 
 // TestCreateWorktreeRefreshesRefsOnly drives the real popup confirm path
-// (startCreateFromPopup) and proves: the non-switch create sets pendingRefsReload
-// (the production wiring), the post-op reload is the targeted branches+worktrees
-// refresh (refsRefreshedMsg) rather than a full Snapshot (dataLoadedMsg), and
-// applying it surfaces the new branch and worktree.
+// (startCreateFromPopup) and proves: the non-switch create sets pendingSources
+// to {srcBranches, srcWorktrees} (the production wiring), the post-op reload is
+// the targeted per-source refresh (dataAvailableMsg) rather than a full Snapshot
+// (dataLoadedMsg), and applying it surfaces the new branch and worktree.
 func TestCreateWorktreeRefreshesRefsOnly(t *testing.T) {
 	_, repo := newRepoDir(t)
 	m := New(domain.New(repo))
@@ -57,25 +58,26 @@ func TestCreateWorktreeRefreshesRefsOnly(t *testing.T) {
 	p := worktreeCreatePopup("feature-x", filepath.Join(t.TempDir(), "wt"))
 	m = m.pushLayer(p)
 	m, cmd := m.startCreateFromPopup(p, false) // w / enter: create without switching
-	if !m.pendingRefsReload {
-		t.Fatal("startCreateFromPopup(_, false) did not set pendingRefsReload")
+	if len(m.pendingSources) != 2 ||
+		m.pendingSources[0] != srcBranches ||
+		m.pendingSources[1] != srcWorktrees {
+		t.Fatalf("startCreateFromPopup(_, false) must set pendingSources={srcBranches,srcWorktrees}, got %v", m.pendingSources)
 	}
 
 	m, post := driveToPostOp(t, m, cmd)
 	if post == nil {
 		t.Fatal("no post-op refresh command")
 	}
+	// post is a tea.Batch of per-source reads; drive each through Update.
 	msg := post()
-	rr, ok := msg.(refsRefreshedMsg)
+	batchMsgs, ok := msg.(tea.BatchMsg)
 	if !ok {
-		t.Fatalf("post-op refresh = %T, want refsRefreshedMsg (partial, not full Snapshot)", msg)
+		t.Fatalf("post-op refresh = %T, want tea.BatchMsg (targeted source batch)", msg)
 	}
-	if rr.err != nil {
-		t.Fatalf("refresh err: %v", rr.err)
+	for _, subCmd := range batchMsgs {
+		updated, _ := m.Update(subCmd())
+		m = updated.(Model)
 	}
-
-	updated, _ := m.Update(rr)
-	m = updated.(Model)
 	if !hasBranch(m.branches, "feature-x") {
 		t.Fatalf("new branch feature-x not in refreshed branches: %+v", m.branches)
 	}
@@ -85,10 +87,13 @@ func TestCreateWorktreeRefreshesRefsOnly(t *testing.T) {
 }
 
 // TestCreateAndSwitchUsesFullReRoot pins the switch path (W): the create-and-
-// switch confirm leaves pendingRefsReload unset and arms pendingSwitch, so the
-// op reRoots into the new worktree (full load) instead of the partial refresh.
+// switch confirm arms pendingSwitch so the op reRoots into the new worktree
+// (full load) instead of the partial refresh. pendingSources is now set by
+// startOp via opAffectedSources — it is captured by the opFinishedMsg handler
+// but discarded when reRoot fires (pendingSwitch path wins over the per-source
+// registry), so the switch still results in a full load.
 func TestCreateAndSwitchUsesFullReRoot(t *testing.T) {
-	_, repo := newRepoDir(t)
+	dir, repo := newRepoDir(t)
 	m := New(domain.New(repo))
 	loaded, _ := m.Update(m.loadCmd()())
 	m = loaded.(Model)
@@ -96,11 +101,15 @@ func TestCreateAndSwitchUsesFullReRoot(t *testing.T) {
 	p := worktreeCreatePopup("feature-y", filepath.Join(t.TempDir(), "wt2"))
 	m = m.pushLayer(p)
 	m, _ = m.startCreateFromPopup(p, true) // W: create and switch
-	if m.pendingRefsReload {
-		t.Fatal("create-and-switch must not request the partial refresh")
-	}
 	if !m.pendingSwitch {
 		t.Fatal("create-and-switch must arm pendingSwitch for the reRoot")
+	}
+	// Prove the outcome: when the op finishes with a path, reRoot fires (full reload).
+	// reRoot sets loading=true, ready=false — not a targeted per-source refresh.
+	updated, _ := m.Update(opFinishedMsg{res: engine.Result{Path: dir}})
+	mm := updated.(Model)
+	if !mm.loading || mm.ready {
+		t.Fatalf("reRoot path: opFinishedMsg with Path must set loading=true ready=false, got loading=%v ready=%v", mm.loading, mm.ready)
 	}
 }
 
