@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -92,7 +93,7 @@ func TestCreateWorktreeRefreshesRefsOnly(t *testing.T) {
 // but discarded when reRoot fires (pendingSwitch path wins over the per-source
 // registry), so the switch still results in a full load.
 func TestCreateAndSwitchUsesFullReRoot(t *testing.T) {
-	_, repo := newRepoDir(t)
+	dir, repo := newRepoDir(t)
 	m := New(domain.New(repo))
 	loaded, _ := m.Update(m.loadCmd()())
 	m = loaded.(Model)
@@ -102,6 +103,13 @@ func TestCreateAndSwitchUsesFullReRoot(t *testing.T) {
 	m, _ = m.startCreateFromPopup(p, true) // W: create and switch
 	if !m.pendingSwitch {
 		t.Fatal("create-and-switch must arm pendingSwitch for the reRoot")
+	}
+	// Prove the outcome: when the op finishes with a path, reRoot fires (full reload).
+	// reRoot sets loading=true, ready=false — not a targeted per-source refresh.
+	updated, _ := m.Update(opFinishedMsg{res: engine.Result{Path: dir}})
+	mm := updated.(Model)
+	if !mm.loading || mm.ready {
+		t.Fatalf("reRoot path: opFinishedMsg with Path must set loading=true ready=false, got loading=%v ready=%v", mm.loading, mm.ready)
 	}
 }
 
