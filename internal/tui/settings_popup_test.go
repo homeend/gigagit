@@ -40,6 +40,29 @@ func TestCommaOpensSettingsMenu(t *testing.T) {
 	}
 }
 
+func TestSettingsMenuWrapsAround(t *testing.T) {
+	m, _ := settingsModel(t)
+	u, _ := m.Update(keyMsg(","))
+	m = u.(Model)
+	p := layerOf[*settingsPopup](m)
+	if p == nil || p.menuSel != 0 {
+		t.Fatalf("menu should open on the first option; got %+v", p)
+	}
+	// up on the first option wraps to the last.
+	u, _ = m.Update(keyMsg("up"))
+	m = u.(Model)
+	last := len(settingsMenu) - 1
+	if got := layerOf[*settingsPopup](m).menuSel; got != last {
+		t.Fatalf("up on first option should wrap to last (%d); got %d", last, got)
+	}
+	// down on the last option wraps back to the first.
+	u, _ = m.Update(keyMsg("down"))
+	m = u.(Model)
+	if got := layerOf[*settingsPopup](m).menuSel; got != 0 {
+		t.Fatalf("down on last option should wrap to first (0); got %d", got)
+	}
+}
+
 func TestSettingsPopupZCyclesMode(t *testing.T) {
 	m, _ := settingsModel(t)
 	u, _ := m.Update(keyMsg(","))
