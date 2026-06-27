@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/homeend/gigagit/internal/domain"
 )
 
@@ -61,10 +63,19 @@ func TestDeleteKeyRemovesWorktreeThroughModal(t *testing.T) {
 	if !answered {
 		t.Fatal("expected a remove-scope decision modal")
 	}
-	// Apply the post-op reload.
+	// Apply the post-op reload. op completion now calls reloadSourcesCmd which
+	// returns a tea.Batch of per-source reads; drive each sub-command through Update.
 	if cmd != nil {
-		u, _ := m.Update(cmd())
-		m = u.(Model)
+		msg := cmd()
+		if batch, ok := msg.(tea.BatchMsg); ok {
+			for _, subCmd := range batch {
+				u, _ := m.Update(subCmd())
+				m = u.(Model)
+			}
+		} else {
+			u, _ := m.Update(msg)
+			m = u.(Model)
+		}
 	}
 	if _, err := os.Stat(wt); !os.IsNotExist(err) {
 		t.Fatalf("worktree dir still present: %v", err)

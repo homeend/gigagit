@@ -216,6 +216,19 @@ func (m Model) reloadSourcesCmd(srcs []sourceKey, manual bool) (Model, tea.Cmd) 
 	return m, tea.Batch(cmds...)
 }
 
+// sourcesOrAll returns srcs, or every source when srcs is nil (the safe default
+// for any op not explicitly mapped — correctness never regresses, only speed).
+func sourcesOrAll(srcs []sourceKey) []sourceKey {
+	if srcs != nil {
+		return srcs
+	}
+	all := make([]sourceKey, 0, srcCount)
+	for s := sourceKey(0); s < srcCount; s++ {
+		all = append(all, s)
+	}
+	return all
+}
+
 // reloadAllCmd refreshes every source — the registry's "reload everything" (r,
 // and the post-bootstrap startup fan-out).
 func (m Model) reloadAllCmd(manual bool) (Model, tea.Cmd) {

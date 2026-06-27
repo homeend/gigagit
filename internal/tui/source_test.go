@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -164,6 +165,33 @@ func TestManualReloadDrivesLegacyLoadingFlag(t *testing.T) {
 		value: []model.Tag{{Name: "v1"}}, manual: true})
 	if nm.(Model).loading {
 		t.Fatal("m.loading must clear when the last manual source lands")
+	}
+}
+
+func TestOpFinishedRefreshesOnlyPendingSources(t *testing.T) {
+	m := newTestModel(t)
+	m.pendingSources = []sourceKey{srcBranches, srcWorktrees}
+	genB, genS := m.srcGen[srcBranches], m.srcGen[srcStatus]
+	nm, _ := m.Update(opFinishedMsg{res: engine.Result{Summary: "done"}})
+	mm := nm.(Model)
+	if mm.srcGen[srcBranches] != genB+1 {
+		t.Error("branches should refresh")
+	}
+	if mm.srcGen[srcStatus] != genS {
+		t.Error("status should NOT refresh for a refs-only op")
+	}
+	if mm.pendingSources != nil {
+		t.Error("pendingSources must reset after consumption")
+	}
+}
+
+func TestOpFinishedDefaultRefreshesAll(t *testing.T) {
+	m := newTestModel(t)
+	m.pendingSources = nil // unmapped op
+	genS := m.srcGen[srcStatus]
+	nm, _ := m.Update(opFinishedMsg{res: engine.Result{Summary: "done"}})
+	if nm.(Model).srcGen[srcStatus] != genS+1 {
+		t.Error("unmapped op must refresh all sources (incl. status)")
 	}
 }
 

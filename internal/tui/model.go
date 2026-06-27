@@ -42,16 +42,15 @@ type Model struct {
 	opLog        *opLog // operation-log file + span-sink lifecycle; the , Settings toggle
 	gitCommonDir string
 
-	initHomeDir           string // home dir for agent detection; "" skips home-scoped agents (tests)
-	statePath             string // repo-registry location; "" disables recording (tests)
-	pendingSeqBump        []string
-	pendingSwitch         bool
-	switchTarget          string
-	pendingCompare        *pendingCompare // focused file awaiting the compare-mode picker; nil = none
-	pendingSwitchBranch   string          // branch to SmartSwitch to after a successful op (B = create-and-switch)
-	pendingRefsReload     bool            // after this op, refresh only branches+worktrees (not a full Snapshot) — set by create-worktree
-	pendingIdentityReload bool            // after this op (SetIdentity), re-read only the identity (not a full Snapshot) — config write changes no status/refs
-	identity              model.Identity  // last-read git user identity (refreshed after SetIdentity); the identityView popup loads its own fresh copy
+	initHomeDir         string // home dir for agent detection; "" skips home-scoped agents (tests)
+	statePath           string // repo-registry location; "" disables recording (tests)
+	pendingSeqBump      []string
+	pendingSwitch       bool
+	switchTarget        string
+	pendingCompare      *pendingCompare // focused file awaiting the compare-mode picker; nil = none
+	pendingSwitchBranch string          // branch to SmartSwitch to after a successful op (B = create-and-switch)
+	pendingSources      []sourceKey     // sources to refresh after this op; nil = all (set at the startOp call site)
+	identity            model.Identity  // last-read git user identity (refreshed after SetIdentity); the identityView popup loads its own fresh copy
 
 	mark             *markState      // the m-key mark; nil = none (see mark.go)
 	fileMarks        map[string]bool // multi-selected Status file paths (keyed by path)
@@ -1422,8 +1421,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.opMsgs = nil
 		switchTo := ""
 		chainSwitch := ""
-		refsReload := false
-		idReload := false
 		if msg.err != nil {
 			m.statusMsg = friendlyOpError(msg.err)
 		} else {
@@ -1437,44 +1434,36 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				switchTo = msg.res.Path
 			}
 			chainSwitch = m.pendingSwitchBranch
-			refsReload = m.pendingRefsReload
-			idReload = m.pendingIdentityReload
 		}
 		m.pendingSeqBump = nil
 		m.pendingSwitch = false
 		m.pendingSwitchBranch = "" // cleared before the chained op starts, so it cannot re-fire
-		m.pendingRefsReload = false
-		m.pendingIdentityReload = false
+		srcs := m.pendingSources   // nil = all (safe default for any unmapped op)
+		m.pendingSources = nil
 		if switchTo != "" {
 			return m.reRoot(switchTo)
 		}
 		if chainSwitch != "" {
 			return m.startOp(engine.SmartSwitch{Branch: chainSwitch})
 		}
-		m.loadGen++ // invalidate any in-flight full load before issuing a refresh
 		if m.stashView != nil {
 			// A stash op (apply/pop/drop) changed the stash list as well as the
-			// working tree — refresh both.
+			// working tree — refresh status and the stash list.
 			m.stashView.loading = true
-			return m, tea.Batch(m.loadCmd(), m.loadStashListCmd(m.stashView.tag))
+			var cmd tea.Cmd
+			m, cmd = m.reloadSourcesCmd(sourcesOrAll([]sourceKey{srcStatus}), true)
+			return m, tea.Batch(cmd, m.loadStashListCmd(m.stashView.tag))
 		}
 		// A job an active process started just returned: let the process advance
 		// its state machine (it typically triggers a reload itself).
 		if m.proc != nil {
 			return m.proc.finished(m, msg.res, msg.err)
 		}
-		// A ref-only op (create-worktree) changed only branches+worktrees, not the
-		// working tree or commit history — a targeted refresh shows the new rows
-		// fast instead of paying a full Snapshot's status walk on a huge repo.
-		if refsReload {
-			return m, m.reloadRefsCmd(m.statusMsg)
-		}
-		// SetIdentity wrote git config — no status/refs/commits changed, so skip
-		// the full Snapshot and just re-read the identity for next time.
-		if idReload {
-			return m, m.reloadIdentityCmd(m.statusMsg)
-		}
-		return m, m.loadCmd()
+		// Route op completion through the per-source registry: refresh only the
+		// sources the op dirtied (nil pendingSources = all sources, safe default).
+		var cmd tea.Cmd
+		m, cmd = m.reloadSourcesCmd(sourcesOrAll(srcs), true)
+		return m, cmd
 
 	case prefixDataMsg:
 		if v := layerOf[*prefixSettingsView](m); v != nil {
