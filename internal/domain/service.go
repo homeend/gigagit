@@ -178,5 +178,6 @@ func (s *Service) Execute(ctx context.Context, op engine.Operation,
 		span.Err = opErr.Error()
 	}
 	observ.EmitSpan(span)
+	observ.NoteFailure(label, opErr)
 	return out, opErr
 }

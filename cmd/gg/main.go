@@ -87,6 +87,10 @@ func main() {
 		fmt.Fprintln(os.Stderr, friendlyGitError(err))
 		os.Exit(1)
 	}
+	if ef, _, eerr := tui.OpenErrorLog(); eerr == nil && ef != nil {
+		observ.SetFailureSink(ef)
+		defer func() { observ.SetFailureSink(nil); _ = ef.Close() }()
+	}
 	cwd, err := tui.Run(svc)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, friendlyGitError(err))

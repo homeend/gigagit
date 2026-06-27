@@ -8,6 +8,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/git"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/observ"
 	"github.com/homeend/gigagit/internal/repogate"
 )
 
@@ -43,7 +44,11 @@ func query[T any](ctx context.Context, s *Service, key string, fn func(context.C
 			return nil, e
 		}
 		defer res.Release()
-		return fn(ctx)
+		out, ferr := fn(ctx)
+		if ferr != nil {
+			observ.NoteFailure("query "+key, ferr)
+		}
+		return out, ferr
 	})
 	if err != nil {
 		var zero T
