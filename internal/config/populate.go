@@ -11,6 +11,10 @@ import (
 // both "key = …" and "# key = …"). For nil-default keys (rendered as
 // "# key   # …" with no "= value"), it performs a bare-key prefix match
 // instead, since lineAssignsKey requires "=" after the key name.
+//
+// Limitation: the bare-key prefix match means a prose comment whose text
+// begins with the key name (e.g. "# branch_templates are disabled") would be
+// treated as "present", suppressing population of that key.
 func linePresent(trimmed string, d settingDoc) bool {
 	if lineAssignsKey(trimmed, d.key) {
 		return true
@@ -22,6 +26,21 @@ func linePresent(trimmed string, d settingDoc) bool {
 	// the key or the key followed by whitespace (no "=").
 	bare := strings.TrimSpace(strings.TrimPrefix(trimmed, "#"))
 	return bare == d.key || strings.HasPrefix(bare, d.key+" ") || strings.HasPrefix(bare, d.key+"\t")
+}
+
+// sectionOrder returns the distinct section names from settingDocs in
+// first-seen order, so settingDocs remains the sole source of truth for
+// both the set and the ordering of config sections.
+func sectionOrder() []string {
+	var order []string
+	seen := map[string]bool{}
+	for _, d := range settingDocs {
+		if !seen[d.section] {
+			seen[d.section] = true
+			order = append(order, d.section)
+		}
+	}
+	return order
 }
 
 // populate returns raw with every settingDocs key not already present added as
@@ -67,7 +86,6 @@ func populate(raw string) string {
 	}
 
 	// Absent docs grouped by section, in settingDocs order.
-	order := []string{"worktree", "ui", "debug", "refresh"}
 	missing := map[string][]string{}
 	for _, d := range settingDocs {
 		if present[d.section][d.key] {
@@ -102,7 +120,7 @@ func populate(raw string) string {
 	}
 
 	// Append brand-new sections in canonical order.
-	for _, sec := range order {
+	for _, sec := range sectionOrder() {
 		body, ok := missing[sec]
 		if !ok {
 			continue

@@ -174,7 +174,7 @@ without `--force`.
 
 Run `gg config populate (--repo | --global)` to top up an existing config file
 with settings added in newer gg versions. Unlike `init`, it never overwrites:
-it only appends the keys you don't have yet, as commented lines marked
+it only inserts the keys you don't have yet, as commented lines marked
 `[populated]`, leaving your existing values and comments intact. Safe to re-run.
 
 `[ui] wheel_step` sets the mouse-wheel scroll step in rows (default 3);
