@@ -139,6 +139,24 @@ func TestSettingsEscBackThenClose(t *testing.T) {
 	}
 }
 
+func TestToggleAutoRefreshFlipsInMemory(t *testing.T) {
+	// Redirect XDG_CONFIG_HOME so toggleAutoRefresh doesn't write the real
+	// user config during tests (DefaultGlobalPath honors XDG_CONFIG_HOME).
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	m := newTestModel(t)
+	if m.cfg.Refresh.Enabled {
+		t.Fatal("precondition: starts disabled")
+	}
+	m = m.toggleAutoRefresh()
+	if !m.cfg.Refresh.Enabled {
+		t.Fatal("toggle should enable in-memory")
+	}
+	m = m.toggleAutoRefresh()
+	if m.cfg.Refresh.Enabled {
+		t.Fatal("toggle should disable in-memory")
+	}
+}
+
 func TestSettingsSwallowsGlobalKeys(t *testing.T) {
 	m, _ := settingsModel(t)
 	u, _ := m.Update(keyMsg(","))
