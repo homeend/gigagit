@@ -540,14 +540,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		switch msg.source {
 		case srcStatus:
+			keyFiles := m.panelSelKey(panelFiles)
+			keyStaged := m.panelSelKey(panelStaged)
 			p := msg.value.(statusPayload)
 			m.status = p.status
 			m.conflict = p.conflict
 			if m.proc != nil {
 				return m.proc.refreshed(m) // process re-derives from fresh status
 			}
+			m = m.restorePanelSel(panelFiles, keyFiles)
+			m = m.restorePanelSel(panelStaged, keyStaged)
 		case srcBranches:
+			key := m.panelSelKey(panelBranches)
 			m.branches = msg.value.([]model.Branch)
+			m = m.restorePanelSel(panelBranches, key)
 			m.remoteBranches = sortRemoteBranchesLocalFirst(m.remoteBranches, m.branches)
 			m = m.rebuildCommitGraph()
 			// Upstream re-walk latch. maybeFeedUpstreamRewalk is false while a
@@ -560,21 +566,33 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, reload
 			}
 		case srcRemotes:
+			key := m.panelSelKey(panelRemotes)
 			m.remoteBranches = sortRemoteBranchesLocalFirst(msg.value.([]model.RemoteBranch), m.branches)
+			m = m.restorePanelSel(panelRemotes, key)
 		case srcTags:
+			key := m.panelSelKey(panelTags)
 			m.tags = msg.value.([]model.Tag)
+			m = m.restorePanelSel(panelTags, key)
 		case srcReflog:
+			key := m.panelSelKey(panelReflog)
 			m.reflog = msg.value.([]model.ReflogEntry)
+			m = m.restorePanelSel(panelReflog, key)
 		case srcWorktrees:
+			keyWT := m.panelSelKey(panelWorktrees)
+			keyBr := m.panelSelKey(panelBranches)
 			p := msg.value.(worktreesPayload)
 			m.worktrees = p.worktrees
 			m.headTimes = p.headTimes
+			m = m.restorePanelSel(panelWorktrees, keyWT)
+			m = m.restorePanelSel(panelBranches, keyBr)
 		case srcFeed:
+			key := m.panelSelKey(panelCommits)
 			p := msg.value.(feedPayload)
 			m.commits = p.commits
 			m.commitsExhausted = p.exhausted
 			m.commitsLoading = false
 			m = m.rebuildCommitGraph()
+			m = m.restorePanelSel(panelCommits, key)
 			// The initial feed read just landed; fire the upstream re-walk now if
 			// branches already arrived and set the latch. This is the other half
 			// of the startup ordering: exactly one path fires the re-walk, always
