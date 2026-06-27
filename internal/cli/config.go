@@ -12,8 +12,8 @@ import (
 	"github.com/homeend/gigagit/internal/domain"
 )
 
-// cmdConfig implements `gg config <subcommand>`. Currently only `init`, which
-// scaffolds a fully-commented config file. Pure file I/O — no git writes.
+// cmdConfig implements `gg config <subcommand>`. Subcommands: `init` (scaffold
+// a commented config) and `populate` (top up an existing one). Pure file I/O — no git writes.
 func cmdConfig(svc *domain.Service, workdir string, args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		fmt.Fprintln(stderr, "usage: gg config (init | populate) (--repo | --global) [--force]")

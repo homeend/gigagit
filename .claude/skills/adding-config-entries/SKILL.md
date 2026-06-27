@@ -50,8 +50,12 @@ committed config is read-only at runtime).
    - CLI: load on demand with
      `config.Load(config.DefaultGlobalPath(), filepath.Join(top, ".gg.toml"))`
      (see `internal/cli/worktree.go`).
-7. **Document**: README's `## Configuration` section.
-8. **e2e**: the harness pins its own `.gg.toml` (worktree templates); touch
+7. **Template registry**: add a `settingDoc` entry in
+   `internal/config/template.go` — the SINGLE registry feeding both
+   `gg config init` and `gg config populate`. `TestSettingDocsCoverAllFields`
+   fails until you do.
+8. **Document**: README's `## Configuration` section.
+9. **e2e**: the harness pins its own `.gg.toml` (worktree templates); touch
    it only if scenarios need the new entry.
 
 ## Worked example: `[ui] wheel_step`

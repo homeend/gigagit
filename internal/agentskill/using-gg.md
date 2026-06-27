@@ -171,6 +171,9 @@ guards against removing the worktree you are standing in.
   file (every setting commented with its default); `--repo` → `.gg.toml` at the
   repo root, `--global` → `~/.config/gg/config.toml`. Refuses to overwrite
   without `--force`.
+- `gg config populate (--repo | --global)` — add any settings missing from an
+  existing config file as commented `[populated]` lines; never overwrites your
+  values; idempotent. Use after upgrading gg to pick up new settings.
 - `--time-track <file>` (global; combine with any command) — append one JSON
   span per process start, git subprocess, and operation to `<file>` for
   performance analysis.
