@@ -512,6 +512,23 @@ func (m Model) backingIndex(p panel) (int, bool) {
 // title shows it is working rather than appearing frozen.
 const commitsLoadingGlyph = "⏳"
 
+// panelLoading reports whether any source feeding p is mid manual-refresh, so
+// the panel's title shows the ⏳ glyph. This is the per-panel generalization of
+// the old softReload flag.
+func (m Model) panelLoading(p panel) bool {
+	for s, panels := range srcConsumers {
+		if !m.srcLoading[s] {
+			continue
+		}
+		for _, cp := range panels {
+			if cp == p {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // panelLabel decorates a panel title with commit count (Commits panel only),
 // active sort mode, and filter.
 func (m Model) panelLabel(p panel, base string) string {
@@ -524,8 +541,9 @@ func (m Model) panelLabel(p panel, base string) string {
 		}
 	}
 	// Loading glyph: the Commits panel shows it during a feed reload/page
-	// (commitsLoading); a soft reload (r) shows it on every panel.
-	if m.softReload || (p == panelCommits && m.commitsLoading) {
+	// (commitsLoading); a manual per-source refresh shows it on each panel
+	// whose data source is mid-flight (panelLoading).
+	if m.panelLoading(p) || (p == panelCommits && m.commitsLoading) {
 		base += " " + commitsLoadingGlyph
 	}
 	if s := m.sortModes[p].String(); s != "" {

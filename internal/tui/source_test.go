@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/homeend/gigagit/internal/domain"
@@ -215,5 +216,48 @@ func TestBranchesDefersFeedRewalkWhileFeedInflight(t *testing.T) {
 	m.srcInflight[srcFeed] = false // feed read has now landed
 	if !m.maybeFeedUpstreamRewalk() {
 		t.Fatal("re-walk must fire once the feed read has landed")
+	}
+}
+
+// TestManualRefreshShowsConsumerSpinner verifies that the Files panel title
+// carries the loading glyph when srcStatus is mid manual-refresh.
+// (Step 1 — TDD RED before panelLoading is wired into panelLabel.)
+func TestManualRefreshShowsConsumerSpinner(t *testing.T) {
+	m := newTestModel(t)
+	m.width, m.height = 120, 40
+	m, _ = m.reloadSourcesCmd([]sourceKey{srcStatus}, true) // Files + Staged consume status
+	// The Files panel title should carry the loading glyph while status is loading.
+	got := m.panelLabel(panelFiles, "Files")
+	if !strings.Contains(got, commitsLoadingGlyph) {
+		t.Fatalf("Files title should show the loading glyph during a manual status refresh: %q", got)
+	}
+}
+
+// TestReloadAfterFirstDataKeepsPanelsVisible verifies that pressing r AFTER
+// first data has arrived keeps panels visible (no blank loading screen).
+// (Step 5 — TDD RED before the ready flag is implemented.)
+func TestReloadAfterFirstDataKeepsPanelsVisible(t *testing.T) {
+	m := newTestModel(t)
+	m.width, m.height = 120, 40
+	// Simulate first data having arrived (panels populated, ready set).
+	m.ready = true
+	m.branches = []model.Branch{{Name: "main"}}
+	// A manual reload-all (r) marks sources loading but must NOT blank the screen.
+	m, _ = m.reloadAllCmd(true)
+	out := m.View()
+	if strings.Contains(out, "(loading…)") {
+		t.Fatal("r after first data must keep panels visible, not blank the screen")
+	}
+}
+
+// TestInitialLoadBlanksUntilReady verifies that before any data has arrived
+// (ready=false) the loading screen is shown.
+func TestInitialLoadBlanksUntilReady(t *testing.T) {
+	m := newTestModel(t)
+	m.width, m.height = 120, 40
+	m.ready = false
+	m, _ = m.reloadAllCmd(true) // startup fan-out, no data yet
+	if !strings.Contains(m.View(), "(loading…)") {
+		t.Fatal("initial load (no data yet) should show the loading screen")
 	}
 }

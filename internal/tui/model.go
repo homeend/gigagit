@@ -26,12 +26,12 @@ import (
 type Model struct {
 	width, height int
 
-	loading    bool
-	softReload bool // r reload in flight: render stale panels + ⏳ instead of blanking (reRoot/startup leave it false)
-	err        error
-	status     model.WorkingTreeStatus
-	branches   []model.Branch
-	commits    []model.Commit
+	loading  bool
+	ready    bool // true once the first data has arrived; gates the initial blank screen (replaces softReload's role)
+	err      error
+	status   model.WorkingTreeStatus
+	branches []model.Branch
+	commits  []model.Commit
 
 	worktrees       []model.Worktree
 	tags            []model.Tag         // refs/tags; shown by the Tags tab in the middle slot
@@ -459,10 +459,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	case dataLoadedMsg:
 		if msg.gen != m.loadGen {
-			return m, nil // superseded by a newer load (softReload left for the newer load)
+			return m, nil // superseded by a newer load
 		}
 		m.loading = false
-		m.softReload = false
+		m.ready = true
 		m.commitsLoading = false // the full load (which includes the feed) is done
 		m.err = msg.err
 		if msg.err == nil {
@@ -526,6 +526,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.gen != m.srcGen[msg.source] {
 			return m, nil // superseded by a newer read of this source
 		}
+		m.ready = true // first source to land flips the blank-screen gate
 		m.srcInflight[msg.source] = false
 		if msg.manual {
 			m.srcLoading[msg.source] = false
@@ -1497,15 +1498,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case identityRefreshedMsg:
-		if msg.err == nil {
-			m.identity = msg.id
-		}
-		if msg.summary != "" {
-			m.statusMsg = msg.summary
-		}
-		return m, nil
-
 	case stashFilesMsg:
 		if m.stashView == nil || m.filesView == nil || msg.tag != m.filesStashTag {
 			return m, nil
@@ -1557,26 +1549,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m = m.rebuildCommitGraph()
 		if n := m.commitsTotal(); n > 0 && m.sel[panelCommits] >= n {
 			m.sel[panelCommits] = n - 1
-		}
-		return m, nil
-
-	case refsRefreshedMsg:
-		m.running = false
-		if msg.err != nil {
-			m.statusMsg = "error: " + msg.err.Error()
-			return m, nil
-		}
-		m.branches = msg.branches
-		m.worktrees = msg.worktrees
-		if msg.summary != "" {
-			m.statusMsg = msg.summary
-		}
-		// A removed row (e.g. a deleted worktree) must not leave a selection
-		// pointing past the end of the now-shorter list.
-		for _, p := range []panel{panelBranches, panelWorktrees} {
-			if n := m.panelLen(p); m.sel[p] >= n {
-				m.sel[p] = max(0, n-1)
-			}
 		}
 		return m, nil
 
@@ -2106,7 +2078,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.feed = m.svc.CommitFeed()
 	m.switchTarget = path
 	m.loading = true
-	m.softReload = false // repo switch is a hard reload — never soft-render the outgoing repo
+	m.ready = false // repo switch blanks until the new repo's first data lands
 	// Drop selections from the old repo so the highlight doesn't land on a
 	// surprising row in the newly-loaded panels.
 	m.sel = map[panel]int{}
@@ -2127,7 +2099,7 @@ func (m Model) View() string {
 	if m.modal != nil {
 		return m.render()
 	}
-	if m.loading && !m.softReload {
+	if m.loading && !m.ready {
 		return "gigagit (loading…)\n" // startup + repo-switch keep the blank screen
 	}
 	if m.err != nil {

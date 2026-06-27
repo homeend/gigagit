@@ -2,7 +2,6 @@ package tui
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -107,63 +106,6 @@ func (m Model) stageCmd(op engine.Operation) tea.Cmd {
 		}
 		st, serr := svc.Status(context.Background())
 		return statusRefreshedMsg{summary: res.Summary, status: st, err: serr}
-	}
-}
-
-// refsRefreshedMsg carries the result of a targeted branches+worktrees refresh
-// (the partial reload after a ref-only op such as create-worktree). It updates
-// only the Branches and Worktrees panels, never the working-tree status or the
-// commit feed — neither of which a worktree-create changes — so the new rows
-// appear fast on a huge repo instead of paying a full Snapshot's status walk.
-type refsRefreshedMsg struct {
-	summary   string
-	branches  []model.Branch
-	worktrees []model.Worktree
-	err       error
-}
-
-// reloadRefsCmd re-reads only the local branches and worktrees off the UI
-// thread (gated + coalesced via the domain layer), yielding a refsRefreshedMsg.
-func (m Model) reloadRefsCmd(summary string) tea.Cmd {
-	svc := m.svc
-	return func() tea.Msg {
-		var (
-			bs   []model.Branch
-			wts  []model.Worktree
-			berr error
-			werr error
-			wg   sync.WaitGroup
-		)
-		ctx := context.Background()
-		wg.Add(2)
-		go func() { defer wg.Done(); bs, berr = svc.Branches(ctx) }()
-		go func() { defer wg.Done(); wts, werr = svc.Worktrees(ctx) }()
-		wg.Wait()
-		if berr != nil {
-			return refsRefreshedMsg{summary: summary, err: berr}
-		}
-		if werr != nil {
-			return refsRefreshedMsg{summary: summary, err: werr}
-		}
-		return refsRefreshedMsg{summary: summary, branches: bs, worktrees: wts}
-	}
-}
-
-// identityRefreshedMsg lands after a SetIdentity op's targeted re-read. A git
-// config write changes no status/refs/commits, so this replaces the full
-// Snapshot — it only refreshes the cached identity and carries the summary.
-type identityRefreshedMsg struct {
-	summary string
-	id      model.Identity
-	err     error
-}
-
-// reloadIdentityCmd re-reads the identity off the UI thread (no Snapshot).
-func (m Model) reloadIdentityCmd(summary string) tea.Cmd {
-	svc := m.svc
-	return func() tea.Msg {
-		id, err := svc.Identity(context.Background())
-		return identityRefreshedMsg{summary: summary, id: id, err: err}
 	}
 }
 

@@ -393,7 +393,7 @@ func (m Model) renderInterface() string {
 			statusLine += " · " + formatElapsed(time.Since(m.opStart))
 		}
 	}
-	if m.softReload && !m.running {
+	if m.anySourceLoading() && !m.running {
 		if statusLine == "" {
 			statusLine = "⏳ reloading…"
 		} else {
