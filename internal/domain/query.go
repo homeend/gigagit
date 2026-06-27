@@ -419,3 +419,13 @@ func (s *Service) LsFiles(ctx context.Context) ([]string, error) {
 		return s.repo.LsFiles(ctx)
 	})
 }
+
+// CommitTimes returns the committer unix-second timestamp for each given SHA,
+// under a Read reservation. Best-effort: the caller may ignore the error (as
+// Snapshot's worktrees arm does). The key incorporates the SHA set so parallel
+// calls for different sets coalesce only when the inputs match.
+func (s *Service) CommitTimes(ctx context.Context, shas []string) (map[string]int64, error) {
+	return query(ctx, s, "commitTimes:"+strings.Join(shas, ","), func(ctx context.Context) (map[string]int64, error) {
+		return s.repo.CommitTimes(ctx, shas)
+	})
+}
