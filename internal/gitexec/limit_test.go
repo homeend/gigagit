@@ -8,6 +8,19 @@ import (
 	"time"
 )
 
+// stubRunner satisfies Runner and always returns zero Result, nil error.
+type stubRunner struct{}
+
+func (stubRunner) Run(ctx context.Context, name string, argv []string) (Result, error) {
+	return Result{}, nil
+}
+func (stubRunner) RunEnv(ctx context.Context, name string, argv, env []string) (Result, error) {
+	return Result{}, nil
+}
+func (stubRunner) Stream(ctx context.Context, name string, argv []string, onLine func(string)) (Result, error) {
+	return Result{}, nil
+}
+
 // countingRunner tracks concurrent Run calls and records the peak.
 type countingRunner struct {
 	cur, peak int32
@@ -51,5 +64,36 @@ func TestLimitRunnerCapsConcurrency(t *testing.T) {
 
 	if peak := atomic.LoadInt32(&inner.peak); peak > gitConcurrency {
 		t.Fatalf("peak concurrency = %d, want <= %d", peak, gitConcurrency)
+	}
+}
+
+// fillSem occupies all gitConcurrency slots so the next acquire must block.
+func fillSem(t *testing.T) (release func()) {
+	t.Helper()
+	for i := 0; i < gitConcurrency; i++ {
+		gitSem <- struct{}{}
+	}
+	return func() {
+		for i := 0; i < gitConcurrency; i++ {
+			<-gitSem
+		}
+	}
+}
+
+func TestLimitRunnerRunCancelsWhileBlocked(t *testing.T) {
+	release := fillSem(t)
+	defer release()
+	lr := &LimitRunner{inner: stubRunner{}}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { _, err := lr.Run(ctx, "git", []string{"status"}); done <- err }()
+	cancel()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("Run must return ctx error when cancelled while blocked on the semaphore")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Run did not observe cancellation while blocked (bug #4 not fixed)")
 	}
 }
