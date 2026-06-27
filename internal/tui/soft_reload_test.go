@@ -5,14 +5,14 @@ import (
 	"testing"
 )
 
-// r is inert while a load is already in flight: it dispatches no new load
-// (loadGen unchanged) and does not disturb the running reload's flags. This
-// blocks the double-r restart and the stale-flash when r is pressed during a
-// load.
+// r is inert while a source read is already in flight: it dispatches no new
+// load and does not disturb the running reload's flags. This blocks the
+// double-r restart and the stale-flash when r is pressed during a load.
 func TestRBlockedWhileLoading(t *testing.T) {
 	m := loadedModel(t)
 	m.loading = true
-	m.softReload = true // a soft reload is already running
+	m.softReload = true             // a soft reload is already running
+	m.srcInflight[srcStatus] = true // new guard: anySourceInflight() must return true
 	gen := m.loadGen
 	updated, cmd := m.Update(keyMsg("r"))
 	mm := updated.(Model)
@@ -27,9 +27,9 @@ func TestRBlockedWhileLoading(t *testing.T) {
 	}
 }
 
-// Pressing r DURING an in-flight repo switch (reRoot: loading=true,
-// softReload=false) must not turn on softReload — otherwise View would
-// soft-render the outgoing repo's stale panels for the rest of the switch.
+// Pressing r DURING an in-flight repo switch (reRoot: loading=true, softReload=false)
+// must not turn on softReload — otherwise View would soft-render the outgoing
+// repo's stale panels for the rest of the switch.
 func TestRDuringRepoSwitchStaysHard(t *testing.T) {
 	m := loadedModel(t)
 	switched, _ := m.reRoot(m.currentWorktree)
@@ -45,16 +45,15 @@ func TestRDuringRepoSwitchStaysHard(t *testing.T) {
 	}
 }
 
-// Pressing r on a loaded model starts a soft reload: loading + softReload set.
+// Pressing r on a loaded model triggers a reload: the legacy m.loading flag
+// is set (action guards depend on it). softReload is no longer set by the
+// registry path — per-source srcLoading entries carry that role.
 func TestRKeyStartsSoftReload(t *testing.T) {
 	m := loadedModel(t)
 	updated, _ := m.Update(keyMsg("r"))
 	mm := updated.(Model)
 	if !mm.loading {
 		t.Fatal("r should set loading")
-	}
-	if !mm.softReload {
-		t.Fatal("r should set softReload")
 	}
 }
 

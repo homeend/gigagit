@@ -118,6 +118,55 @@ func TestDataAvailableAutoLeavesNoSpinner(t *testing.T) {
 	}
 }
 
+func TestReloadAllBumpsEveryGenAndBatches(t *testing.T) {
+	m := newTestModel(t)
+	before := map[sourceKey]int{}
+	for s := sourceKey(0); s < srcCount; s++ {
+		before[s] = m.srcGen[s]
+	}
+	m, cmd := m.reloadAllCmd(true)
+	if cmd == nil {
+		t.Fatal("reloadAllCmd must return a batch command")
+	}
+	for s := sourceKey(0); s < srcCount; s++ {
+		if m.srcGen[s] != before[s]+1 {
+			t.Errorf("source %d gen not bumped", s)
+		}
+		if !m.srcInflight[s] {
+			t.Errorf("source %d not marked in-flight", s)
+		}
+	}
+}
+
+func TestReloadSourcesManualSetsConsumerSpinners(t *testing.T) {
+	m := newTestModel(t)
+	m, _ = m.reloadSourcesCmd([]sourceKey{srcStatus}, true)
+	if !m.srcLoading[srcStatus] {
+		t.Fatal("manual reload must set srcLoading for the source")
+	}
+	m2 := newTestModel(t)
+	m2, _ = m2.reloadSourcesCmd([]sourceKey{srcStatus}, false)
+	if m2.srcLoading[srcStatus] {
+		t.Fatal("auto reload must not set srcLoading")
+	}
+}
+
+// Blocker 1 regression: m.loading is the legacy action-blocking gate; a manual
+// reload must set it (so pull/push/etc. guards block during refresh) and the
+// arrival of the last source must clear it.
+func TestManualReloadDrivesLegacyLoadingFlag(t *testing.T) {
+	m := newTestModel(t)
+	m, _ = m.reloadSourcesCmd([]sourceKey{srcTags}, true)
+	if !m.loading {
+		t.Fatal("manual reload must set m.loading (action guards depend on it)")
+	}
+	nm, _ := m.Update(dataAvailableMsg{source: srcTags, gen: m.srcGen[srcTags],
+		value: []model.Tag{{Name: "v1"}}, manual: true})
+	if nm.(Model).loading {
+		t.Fatal("m.loading must clear when the last manual source lands")
+	}
+}
+
 // TestBranchesDefersFeedRewalkWhileFeedInflight is a regression test for
 // Blocker 2: the initial LoadInitial (srcFeed) and the upstream-scoped
 // re-walk (triggered by srcBranches arriving) must NOT run concurrently.

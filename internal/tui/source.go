@@ -2,11 +2,15 @@ package tui
 
 import (
 	"context"
+	"path/filepath"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/repos"
 )
 
 // sourceKey identifies one independently-refreshable data source. Each maps to a
@@ -168,5 +172,85 @@ func (m Model) readSourceCmd(s sourceKey, manual bool) tea.Cmd {
 			out.value, out.err = id, err
 		}
 		return out
+	}
+}
+
+// anySourceInflight reports whether any source read is currently in flight.
+// Used by the r handler to block duplicate fan-out reads.
+func (m Model) anySourceInflight() bool {
+	for _, v := range m.srcInflight {
+		if v {
+			return true
+		}
+	}
+	return false
+}
+
+// reloadSourcesCmd bumps each source's generation, marks it in-flight (and, if
+// manual, loading), and returns a batch that reads them all concurrently. The
+// per-source gen bump means any older in-flight read of the same source is
+// dropped when it lands.
+func (m Model) reloadSourcesCmd(srcs []sourceKey, manual bool) (Model, tea.Cmd) {
+	// Defensive lazy-init: a Model built as a literal in a test (rather than via
+	// the constructor patched in Task 1) would panic on the nil-map writes below.
+	if m.srcGen == nil {
+		m.srcGen = map[sourceKey]int{}
+	}
+	if m.srcInflight == nil {
+		m.srcInflight = map[sourceKey]bool{}
+	}
+	if m.srcLoading == nil {
+		m.srcLoading = map[sourceKey]bool{}
+	}
+	cmds := make([]tea.Cmd, 0, len(srcs))
+	for _, s := range srcs {
+		m.srcGen[s]++
+		m.srcInflight[s] = true
+		if manual {
+			m.srcLoading[s] = true
+		}
+		cmds = append(cmds, m.readSourceCmd(s, manual))
+	}
+	// Keep the legacy action-blocking flag in sync (see the handler note in Task 4).
+	m.loading = m.anySourceLoading()
+	return m, tea.Batch(cmds...)
+}
+
+// reloadAllCmd refreshes every source — the registry's "reload everything" (r,
+// and the post-bootstrap startup fan-out).
+func (m Model) reloadAllCmd(manual bool) (Model, tea.Cmd) {
+	all := make([]sourceKey, 0, srcCount)
+	for s := sourceKey(0); s < srcCount; s++ {
+		all = append(all, s)
+	}
+	return m.reloadSourcesCmd(all, manual)
+}
+
+// configReadyMsg carries the loaded config from bootstrapCmd; its handler
+// applies it and fans out the first all-source read.
+type configReadyMsg struct{ cfg config.Config }
+
+// bootstrapCmd loads config and applies the settings the first reads depend on
+// (feed page sizes, EOL-only visibility) plus the MRU touch, then emits
+// configReadyMsg. This preserves the ordering loadCmd had: config BEFORE the
+// feed walk and status read.
+func (m Model) bootstrapCmd() tea.Cmd {
+	svc := m.svc
+	feed := m.feed
+	statePath := m.statePath
+	return func() tea.Msg {
+		ctx := context.Background()
+		cfg := config.Defaults()
+		if top, err := svc.TopLevel(ctx); err == nil && top != "" {
+			if c, cerr := config.Load(config.DefaultGlobalPath(), filepath.Join(top, ".gg.toml")); cerr == nil {
+				cfg = c
+			}
+			if statePath != "" {
+				_ = repos.Touch(statePath, top, time.Now())
+			}
+		}
+		feed.SetPageSizes(cfg.UI.CommitInitialCount, cfg.UI.CommitBatchSize)
+		svc.SetShowEOLOnlyChanges(cfg.UI.ShowEOLOnlyChanges)
+		return configReadyMsg{cfg: cfg}
 	}
 }

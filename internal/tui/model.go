@@ -188,7 +188,7 @@ func New(svc *domain.Service) Model {
 
 // Init implements tea.Model.
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.loadCmd(), loadSearchHistCmd(m.svc), heartbeatCmd())
+	return tea.Batch(m.bootstrapCmd(), loadSearchHistCmd(m.svc), heartbeatCmd())
 }
 
 // Update implements tea.Model.
@@ -453,6 +453,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		p.loading = false
 		p.rerank()
 		return m, nil
+	case configReadyMsg:
+		m.cfg = msg.cfg
+		var cmd tea.Cmd
+		m, cmd = m.reloadAllCmd(true)
+		return m, cmd
 	case dataLoadedMsg:
 		if msg.gen != m.loadGen {
 			return m, nil // superseded by a newer load (softReload left for the newer load)
@@ -838,14 +843,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "q", "ctrl+c":
 			return m, tea.Quit
 		case "r":
-			// Block r while any load is already in flight (a soft reload OR an
-			// in-flight repo switch): re-triggering would either restart the walk
-			// or soft-render the outgoing repo's stale panels.
-			if !m.running && !m.loading {
-				m.loadGen++
-				m.loading = true
-				m.softReload = true
-				return m, m.loadCmd()
+			// Block r while any source read is already in flight, to avoid stacking
+			// duplicate reads of the same source.
+			if !m.running && !m.anySourceInflight() {
+				var cmd tea.Cmd
+				m, cmd = m.reloadAllCmd(true)
+				return m, cmd
 			}
 		case "p":
 			if !m.running && !m.loading {
