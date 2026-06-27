@@ -1432,19 +1432,31 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, waitForOp(m.opMsgs)
 	case bgFetchDoneMsg:
 		// A quiet background fetch completed. On error: swallow silently (the
-		// domain failure seam already logged it). On success: bump the remotes
-		// source gen and fire a silent (manual=false) remotes refresh so the
-		// Remotes panel picks up any new tracking refs.
+		// domain failure seam already logged it). On success: fire a silent
+		// (manual=false) remotes refresh so the Remotes panel picks up any new
+		// tracking refs.
+		//
+		// Two guards before firing:
+		//  1. bgCancel == nil → a user op already preempted the background batch
+		//     (startOp nils bgCancel); firing under context.Background() would be
+		//     non-cancellable, so skip entirely.
+		//  2. srcInflight[srcRemotes] == true → a remotes read is already in
+		//     flight (possibly a manual one the user triggered). Bumping srcGen
+		//     would make that read land superseded so it early-returns without
+		//     clearing srcLoading, and our silent read (manual=false) never clears
+		//     it either → the Remotes ⏳ spinner would spin forever.
 		if msg.err != nil {
-			return m, nil
+			return m, nil // silent: the domain failure seam already logged it
+		}
+		if m.bgCancel == nil {
+			return m, nil // user op preempted the background batch; skip
+		}
+		if m.srcInflight[srcRemotes] {
+			return m, nil // a (possibly manual) remotes read is already in flight
 		}
 		m.srcGen[srcRemotes]++
 		m.srcInflight[srcRemotes] = true
-		ctx := m.bgCtx
-		if ctx == nil || m.bgCancel == nil {
-			ctx = context.Background()
-		}
-		return m, m.readSourceCmd(ctx, srcRemotes, false)
+		return m, m.readSourceCmd(m.bgCtx, srcRemotes, false) // bgCtx non-nil when bgCancel non-nil
 
 	case heartbeatMsg:
 		// A single perpetual tick (started in Init): re-render so the busy line's

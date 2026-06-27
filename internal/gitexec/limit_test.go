@@ -2,6 +2,7 @@ package gitexec
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -90,8 +91,8 @@ func TestLimitRunnerRunCancelsWhileBlocked(t *testing.T) {
 	cancel()
 	select {
 	case err := <-done:
-		if err == nil {
-			t.Fatal("Run must return ctx error when cancelled while blocked on the semaphore")
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("Run must return context.Canceled when cancelled while blocked; got %v", err)
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("Run did not observe cancellation while blocked (bug #4 not fixed)")
