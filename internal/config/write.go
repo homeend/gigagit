@@ -28,6 +28,16 @@ func SetGlobalRefreshEnabled(path string, on bool) error {
 	return setScalarLine(path, "refresh", "enabled", strconv.FormatBool(on))
 }
 
+// SetGlobalRefreshDisableAdaptive persists `[refresh] disable_adaptive` to the
+// global config file (preserving comments), backing the Settings "Adaptive
+// intervals" toggle — the third runtime config writer (see
+// SetGlobalDebugLogOperations / SetGlobalRefreshEnabled). Unlike the other two
+// (default-off positives), this backs a default-ON toggle, so it writes the
+// explicit true/false either way.
+func SetGlobalRefreshDisableAdaptive(path string, disable bool) error {
+	return setScalarLine(path, "refresh", "disable_adaptive", strconv.FormatBool(disable))
+}
+
 // setScalarLine sets `key = value` under `[section]` in a TOML file via a
 // line-oriented edit so unrelated lines and comments survive. It updates an
 // existing assignment (uncommenting a commented one), inserts the key under an

@@ -78,6 +78,35 @@ func TestDebugOverlayRepoWins(t *testing.T) {
 	}
 }
 
+func TestSetGlobalRefreshDisableAdaptiveRoundTrips(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte("[refresh]\nenabled = true\nstatus = 30\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetGlobalRefreshDisableAdaptive(path, true); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.Refresh.DisableAdaptive {
+		t.Fatal("disable_adaptive should be true after write")
+	}
+	// Other keys survive the line edit.
+	if !cfg.Refresh.Enabled || cfg.Refresh.Status != 30 {
+		t.Fatalf("unrelated keys clobbered: enabled=%v status=%d", cfg.Refresh.Enabled, cfg.Refresh.Status)
+	}
+	// Flip back to false (a default-on toggle must write both values).
+	if err := SetGlobalRefreshDisableAdaptive(path, false); err != nil {
+		t.Fatal(err)
+	}
+	cfg2, _ := Load(path, "")
+	if cfg2.Refresh.DisableAdaptive {
+		t.Fatal("disable_adaptive should be false after second write")
+	}
+}
+
 func TestSetGlobalRefreshEnabledRoundTrips(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
 	if err := SetGlobalRefreshEnabled(path, true); err != nil {

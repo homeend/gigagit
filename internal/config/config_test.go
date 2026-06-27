@@ -299,6 +299,23 @@ func TestCommitPageSizeDefaultsAndOverlay(t *testing.T) {
 	}
 }
 
+func TestOverlayRefreshAdaptiveFields(t *testing.T) {
+	dst := RefreshConfig{}
+	// Inverted polarity: a true in a higher layer overlays; false leaves dst.
+	overlayRefresh(&dst, RefreshConfig{DisableAdaptive: true, MaxReadSeconds: 15, BackoffFactor: 8})
+	if !dst.DisableAdaptive {
+		t.Fatal("DisableAdaptive true should overlay")
+	}
+	if dst.MaxReadSeconds != 15 || dst.BackoffFactor != 8 {
+		t.Fatalf("ints should overlay: got %d/%d", dst.MaxReadSeconds, dst.BackoffFactor)
+	}
+	// Zero-is-unset: a zero int in a higher layer must NOT reset a set value.
+	overlayRefresh(&dst, RefreshConfig{MaxReadSeconds: 0, BackoffFactor: 0})
+	if dst.MaxReadSeconds != 15 || dst.BackoffFactor != 8 {
+		t.Fatalf("zero ints must not reset: got %d/%d", dst.MaxReadSeconds, dst.BackoffFactor)
+	}
+}
+
 func TestRefreshConfigDefaultsOff(t *testing.T) {
 	c := Defaults()
 	if c.Refresh.Enabled {

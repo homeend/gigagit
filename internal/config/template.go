@@ -56,6 +56,9 @@ var settingDocs = []settingDoc{
 	{"refresh", "reflog", 0, "seconds between background reflog refresh; 0 = off"},
 	{"refresh", "feed", 0, "seconds between background commit-feed refresh; 0 = off"},
 	{"refresh", "fetch", 0, "seconds between background `git fetch`; 0 = off"},
+	{"refresh", "disable_adaptive", false, "turn OFF adaptive intervals (Phase C); default false = adaptive on, each source's interval auto-tunes from its measured read time"},
+	{"refresh", "max_read_seconds", 10, "a source whose average read exceeds this many seconds drops out of auto-refresh (manual r only)"},
+	{"refresh", "backoff_factor", 10, "effective interval = max(configured, this × average read seconds)"},
 }
 
 // tomlScalar renders a registry value as it appears in TOML.
