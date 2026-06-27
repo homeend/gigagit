@@ -195,9 +195,33 @@ JSON lines to `operations.log` in the gg state dir (`$XDG_STATE_HOME/gg/`, else
 `~/.local/state/gg/`, `%LocalAppData%\gg\` on Windows). It leaves a trace when an
 op hangs or runs slowly. You can also toggle it live from the `,` Settings menu,
 which shows the on/off state and the log's full path; toggling there persists the
-choice to this key in the global config so it survives restarts. (This is the one
-setting gg writes back to the config file at runtime, and only to the global file
-— never a repo's `.gg.toml`.)
+choice to this key in the global config so it survives restarts.
+
+The `[refresh]` section configures **background auto-refresh** — entirely off by
+default. `[refresh] enabled` (default `false`) is the master switch; setting it
+`true` (or toggling it live from the `,` Settings menu, which persists the choice)
+activates the scheduler. Individual per-source intervals are seconds between silent
+background reads; 0 (the default for every key) means that source is never
+auto-refreshed:
+
+```toml
+[refresh]
+enabled   = true   # master switch
+status    = 30     # re-read working-tree status every 30 s
+branches  = 60
+remotes   = 60
+worktrees = 60
+tags      = 120
+reflog    = 120
+feed      = 120    # commit feed
+fetch     = 300    # run `git fetch` every 5 min (network; errors swallowed)
+```
+
+Background reads are silent: no spinner, no status-line change, no cursor
+disturbance. The scheduler is suppressed while an operation is running, a
+popup/modal is open, or you are typing a search/filter. A user action immediately
+preempts any in-flight background read. Like the operation log, the `enabled`
+toggle is written only to the global config, never to a repo's `.gg.toml`.
 
 `[ui] footer_actions` and `[ui] menu_actions` are lists of action **ids** that
 choose which actions appear in the footer bar and in the `.` menu respectively;

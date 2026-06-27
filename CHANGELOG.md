@@ -9,6 +9,27 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Background auto-refresh (Phase B).** The TUI can now silently refresh any
+  data source in the background on a configurable per-source timer. Everything
+  is **off by default** — opt in via the new `[refresh]` config section.
+  `[refresh] enabled` (default `false`) is the master switch; each source has
+  its own interval in seconds (`status`, `branches`, `remotes`, `worktrees`,
+  `tags`, `reflog`, `feed`; all default 0 = that source stays manual-only).
+  `[refresh] fetch` (default 0) runs a quiet `git fetch` in the background on
+  its own timer, refreshing remote branches on success and silently swallowing
+  any network/auth error. Background reads are fully **silent** — no spinner,
+  no status-line change, no cursor/selection disturbance (selections survive via
+  identity-based reconciliation from Phase A). Auto-refresh is **suppressed**
+  while an operation is running, a popup/modal/overlay is open, or a
+  filter/search is being typed. A **user operation preempts** any in-flight
+  background read: `startOp` cancels the background context so the git
+  concurrency slots are freed immediately (enabled by fixing `LimitRunner` to
+  honour the context while acquiring the semaphore — bug #4). Background fetch
+  runs off the foreground op slot so it cannot block an interactive op. The
+  master switch can also be toggled live from **Settings (`,`)** — the choice
+  is persisted to `[refresh] enabled` in the global config file so it survives
+  restarts. Phase C (adaptive intervals derived from measured source-read
+  durations) is next.
 - **Per-source async refresh (Phase A).** The TUI now reloads data
   source-by-source rather than all-at-once: status, branches, remote branches,
   tags, reflog, worktrees, commit feed, and identity each load independently
