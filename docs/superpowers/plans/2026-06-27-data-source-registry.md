@@ -323,11 +323,7 @@ func (m Model) readSourceCmd(s sourceKey, manual bool) tea.Cmd {
 			tags, err := svc.Tags(ctx)
 			out.value, out.err = tags, err
 		case srcReflog:
-			limit := reflogLimit
-			if limit <= 0 {
-				limit = 0 // svc.Reflog applies its own default when 0; keep parity with startup
-			}
-			rl, err := svc.Reflog(ctx, limit)
+			rl, err := svc.Reflog(ctx, reflogLimit)
 			out.value, out.err = rl, err
 		case srcWorktrees:
 			wts, err := svc.Worktrees(ctx)
