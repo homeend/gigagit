@@ -1,10 +1,12 @@
 package tui
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"github.com/homeend/gigagit/internal/config"
+	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -102,5 +104,53 @@ func TestEnqueueDueDedup(t *testing.T) {
 	q2 := enqueueDue(nil, a, true, []refreshItem{a, b})
 	if len(q2) != 1 || q2[0] != b {
 		t.Fatalf("active type must be skipped, got %v", q2)
+	}
+}
+
+func TestRefreshTickSingleLane(t *testing.T) {
+	m := newTestModel(t)
+	m.cfg.Refresh = config.RefreshConfig{Enabled: true, Status: 1, Branches: 1}
+	m.loading = false
+	t0 := time.Unix(4_000_000, 0)
+	// First tick: both due, but only ONE fires (lane single-file); the other queues.
+	m2, cmd := m.refreshTick(t0)
+	if cmd == nil || !m2.bgBusy {
+		t.Fatal("first tick should fire one read and mark the lane busy")
+	}
+	if len(m2.bgQueue) != 1 {
+		t.Fatalf("the second due item should be queued, got %v", m2.bgQueue)
+	}
+	// Second tick while busy: nothing new fires.
+	_, cmd2 := m2.refreshTick(t0)
+	if cmd2 != nil {
+		t.Fatal("must not fire a second read while the lane is busy")
+	}
+}
+
+func TestManualRFreesLane(t *testing.T) {
+	// Reproduces the stranding bug: a bg read of branches is in flight; manual r
+	// bumps the gen; the bg message arrives stale and MUST still free the lane.
+	m := newTestModel(t)
+	m.bgBusy = true
+	m.bgActiveItem = refreshItem{source: srcBranches}
+	staleGen := m.srcGen[srcBranches]
+	m.srcGen[srcBranches] = staleGen + 1 // simulate manual r having superseded it
+	msg := dataAvailableMsg{source: srcBranches, gen: staleGen, manual: false, value: []model.Branch(nil)}
+	nm, _ := m.Update(msg)
+	if nm.(Model).bgBusy {
+		t.Fatal("a stale bg read message must still free the lane (stranding bug)")
+	}
+}
+
+func TestStartOpClearsLaneAndQueue(t *testing.T) {
+	m := newTestModel(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	m.bgCtx, m.bgCancel = ctx, cancel
+	m.bgBusy = true
+	m.bgActiveItem = refreshItem{source: srcTags}
+	m.bgQueue = []refreshItem{{source: srcStatus}}
+	m2, _ := m.startOp(engine.Fetch{})
+	if m2.bgBusy || len(m2.bgQueue) != 0 || m2.bgCancel != nil {
+		t.Fatalf("startOp must clear the lane + queue, got busy=%v queue=%v", m2.bgBusy, m2.bgQueue)
 	}
 }

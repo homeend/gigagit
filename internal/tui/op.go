@@ -183,9 +183,13 @@ func (d uiDecider) Decide(ctx context.Context, req engine.DecisionRequest) (engi
 // program exits (run.go) so an op can never outlive the UI silently.
 func (m Model) startOp(op engine.Operation) (Model, tea.Cmd) {
 	if m.bgCancel != nil {
-		m.bgCancel() // preempt in-flight background reads so the user's op gets the git slots
+		m.bgCancel() // preempt in-flight background reads so the user's op gets the slot
 		m.bgCancel = nil
 	}
+	// A user op preempts the entire background lane; still-due items re-enqueue on
+	// the next post-op tick. bgActiveItem is left as-is (meaningless when !bgBusy).
+	m.bgBusy = false
+	m.bgQueue = nil
 	m.pendingSources = opAffectedSources(op)
 	msgs := make(chan tea.Msg, 32)
 	events := make(chan engine.Event, 32)

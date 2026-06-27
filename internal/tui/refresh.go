@@ -167,38 +167,38 @@ func (m Model) refreshSuppressed() bool {
 	return false
 }
 
-// refreshTick is called from the heartbeat. It fires silent reads for every due
-// item that is not already in-flight, under a shared cancellable bg context that
-// a starting user op cancels.
+// refreshTick is called from the heartbeat. It enqueues newly-due items (deduped
+// by type) and, when the single background lane is free, drains exactly one read
+// under a shared cancellable bg context that a starting user op cancels.
 func (m Model) refreshTick(now time.Time) (Model, tea.Cmd) {
-	due := dueItems(now, m.refreshLastRun, m.cfg.Refresh, m.refreshSuppressed())
-	if len(due) == 0 {
+	if m.refreshSuppressed() {
+		return m, nil
+	}
+	due := dueItems(now, m.refreshLastRun, m.refreshDur, m.cfg.Refresh, false)
+	m.bgQueue = enqueueDue(m.bgQueue, m.bgActiveItem, m.bgBusy, due)
+	if m.bgBusy || len(m.bgQueue) == 0 {
+		return m, nil
+	}
+	it := m.bgQueue[0]
+	m.bgQueue = m.bgQueue[1:]
+	// A source whose read is already in flight (e.g. a manual r) must not get a
+	// second, superseding background read — that would strand the manual ⏳.
+	// Drop it this tick; it re-enqueues next tick if still due (lastRun unchanged).
+	if !it.isFetch && m.srcInflight[it.source] {
 		return m, nil
 	}
 	if m.bgCancel == nil {
 		m.bgCtx, m.bgCancel = context.WithCancel(context.Background())
 	}
-	var cmds []tea.Cmd
-	for _, it := range due {
-		if it.isFetch {
-			m.refreshLastRun[it] = now
-			if cmd := m.bgFetchCmd(m.bgCtx); cmd != nil {
-				cmds = append(cmds, cmd)
-			}
-			continue
-		}
-		if m.srcInflight[it.source] {
-			continue // don't stack a second read of a source already loading
-		}
-		m.srcGen[it.source]++
-		m.srcInflight[it.source] = true
-		m.refreshLastRun[it] = now
-		cmds = append(cmds, m.readSourceCmd(m.bgCtx, it.source, false)) // manual=false → silent
+	m.bgBusy = true
+	m.bgActiveItem = it
+	m.refreshLastRun[it] = now
+	if it.isFetch {
+		return m, m.bgFetchCmd(m.bgCtx)
 	}
-	if len(cmds) == 0 {
-		return m, nil
-	}
-	return m, tea.Batch(cmds...)
+	m.srcGen[it.source]++
+	m.srcInflight[it.source] = true
+	return m, m.readSourceCmd(m.bgCtx, it.source, false) // manual=false → silent
 }
 
 // bgFetchDoneMsg lands when a background fetch finishes. On success the handler
@@ -231,17 +231,17 @@ func (m Model) bgFetchCmd(ctx context.Context) tea.Cmd {
 	}
 }
 
-// dueItems returns the items that should fire now: master enabled, not
-// suppressed, interval > 0, and (now - lastRun) >= interval. An item with no
-// lastRun entry is due immediately (first poll after enabling).
-func dueItems(now time.Time, lastRun map[refreshItem]time.Time, cfg config.RefreshConfig, suppressed bool) []refreshItem {
+// dueItems returns the items whose effective interval has elapsed this tick.
+// off/disabled items are excluded. Pure: durs is the per-item duration ring.
+func dueItems(now time.Time, lastRun map[refreshItem]time.Time, durs map[refreshItem][]time.Duration, cfg config.RefreshConfig, suppressed bool) []refreshItem {
 	if !cfg.Enabled || suppressed {
 		return nil
 	}
 	var due []refreshItem
 	for _, it := range scheduledItems {
-		secs := refreshIntervalFor(cfg, it)
-		if secs <= 0 {
+		avg := meanDuration(durs[it])
+		secs, state := effectiveInterval(cfg, it, avg, len(durs[it]) > 0)
+		if state == stateOff || state == stateDisabled {
 			continue
 		}
 		last, seen := lastRun[it]

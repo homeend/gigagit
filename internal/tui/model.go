@@ -538,6 +538,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// so a lingering conflict never traps the interface.
 		}
 	case dataAvailableMsg:
+		// Free the background lane the moment its active read's message arrives —
+		// BEFORE the stale-gen check below, because a manual r bumps srcGen and
+		// would otherwise make this (now-stale) bg message early-return without
+		// clearing bgBusy, deadlocking the lane until restart. Gated on bgBusy
+		// (the sole occupancy truth) + a non-fetch, non-manual match.
+		if m.bgBusy && !m.bgActiveItem.isFetch && !msg.manual && m.bgActiveItem.source == msg.source {
+			m.bgBusy = false
+		}
 		if msg.gen != m.srcGen[msg.source] {
 			return m, nil // superseded by a newer read of this source
 		}
@@ -1439,35 +1447,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.modal = &decisionState{req: msg.req, reply: msg.reply}
 		return m, waitForOp(m.opMsgs)
 	case bgFetchDoneMsg:
-		// A quiet background fetch completed. On error: swallow silently (the
-		// domain failure seam already logged it). On success: fire a silent
-		// (manual=false) remotes refresh so the Remotes panel picks up any new
-		// tracking refs.
-		//
-		// Two guards before firing:
-		//  1. bgCancel == nil → a user op already preempted the background batch
-		//     (startOp nils bgCancel); firing under context.Background() would be
-		//     non-cancellable, so skip entirely.
-		//  2. srcInflight[srcRemotes] == true → a remotes read is already in
-		//     flight (possibly a manual one the user triggered). Bumping srcGen
-		//     would make that read land superseded so it early-returns without
-		//     clearing srcLoading, and our silent read (manual=false) never clears
-		//     it either → the Remotes ⏳ spinner would spin forever.
-		if msg.err == nil {
-			m = m.recordDuration(fetchItem, msg.dur)
+		// Free the lane if fetch was the active background item (fetch completes
+		// via this message, not dataAvailableMsg).
+		if m.bgBusy && m.bgActiveItem.isFetch {
+			m.bgBusy = false
 		}
 		if msg.err != nil {
 			return m, nil // silent: the domain failure seam already logged it
 		}
-		if m.bgCancel == nil {
-			return m, nil // user op preempted the background batch; skip
-		}
-		if m.srcInflight[srcRemotes] {
-			return m, nil // a (possibly manual) remotes read is already in flight
-		}
-		m.srcGen[srcRemotes]++
-		m.srcInflight[srcRemotes] = true
-		return m, m.readSourceCmd(m.bgCtx, srcRemotes, false) // bgCtx non-nil when bgCancel non-nil
+		m = m.recordDuration(fetchItem, msg.dur)
+		// A successful fetch updates remote-tracking refs, so refresh the Remotes
+		// panel regardless of its configured interval — enqueued through the single
+		// lane (deduped), drained on the next tick. Replaces Phase B's direct fire.
+		m.bgQueue = enqueueDue(m.bgQueue, m.bgActiveItem, m.bgBusy, []refreshItem{{source: srcRemotes}})
+		return m, nil
 
 	case heartbeatMsg:
 		// A single perpetual tick (started in Init): re-render so the busy line's
