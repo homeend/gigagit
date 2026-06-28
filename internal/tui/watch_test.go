@@ -29,6 +29,55 @@ func TestEnabledWatchSourcesD2(t *testing.T) {
 	}
 }
 
+func TestWatchAffectedSources(t *testing.T) {
+	has := func(ss []sourceKey, want sourceKey) bool {
+		for _, s := range ss {
+			if s == want {
+				return true
+			}
+		}
+		return false
+	}
+	// A branch ref change must also dirty the commit feed (the Commits panel's
+	// %D decorations / tip markers come from the feed walk).
+	if got := watchAffectedSources(srcBranches); !has(got, srcBranches) || !has(got, srcFeed) {
+		t.Errorf("branches should affect {branches, feed}, got %v", got)
+	}
+	if got := watchAffectedSources(srcRemotes); !has(got, srcRemotes) || !has(got, srcFeed) {
+		t.Errorf("remotes should affect {remotes, feed}, got %v", got)
+	}
+	// Worktree changes dirty the Branches panel (its worktree-path column).
+	if got := watchAffectedSources(srcWorktrees); !has(got, srcWorktrees) || !has(got, srcBranches) {
+		t.Errorf("worktrees should affect {worktrees, branches}, got %v", got)
+	}
+	// Reflog is self-contained.
+	if got := watchAffectedSources(srcReflog); len(got) != 1 || got[0] != srcReflog {
+		t.Errorf("reflog should affect only {reflog}, got %v", got)
+	}
+}
+
+func TestWatchBranchEventAlsoRefreshesFeed(t *testing.T) {
+	m := newTestModel(t)
+	m.cfg.Refresh = config.RefreshConfig{Enabled: true, BranchesWatch: true}
+	m.watchSupported = true
+	m.watchGen = 1
+	m.watcher = &gitwatch.Watcher{}
+	m2, _ := m.Update(watchEventMsg{gen: 1, source: srcBranches})
+	mm := m2.(Model)
+	var sawBranches, sawFeed bool
+	for _, it := range mm.bgQueue {
+		switch it.source {
+		case srcBranches:
+			sawBranches = true
+		case srcFeed:
+			sawFeed = true
+		}
+	}
+	if !sawBranches || !sawFeed {
+		t.Errorf("a branch watch event must enqueue both branches and feed; queue=%v", mm.bgQueue)
+	}
+}
+
 func TestWatchEventEnqueuesWhenActive(t *testing.T) {
 	m := newTestModel(t) // existing helper wired to a real temp repo
 	m.cfg.Refresh = config.RefreshConfig{Enabled: true, WorktreesWatch: true}
