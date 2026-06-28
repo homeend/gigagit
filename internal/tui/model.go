@@ -35,6 +35,7 @@ type Model struct {
 
 	worktrees       []model.Worktree
 	tags            []model.Tag         // refs/tags; shown by the Tags tab in the middle slot
+	remoteTagNames  map[string]bool     // tag names known on the default remote (▲); nil until a lookup runs
 	reflog          []model.ReflogEntry // HEAD reflog; shown by the Reflog tab in the bottom slot
 	currentWorktree string
 
