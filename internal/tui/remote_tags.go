@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -9,13 +10,12 @@ import (
 // remoteTagsMsg carries the result of a remote-tag lookup. manual=true means a
 // user-initiated refresh (errors go to the status line); false means a silent
 // background poll (errors discarded — see queryQuiet's no-record contract).
-// NOTE: a dur time.Duration field will be added in Task 5 for background
-// duration recording. The remoteTagsMsg handler in model.go will also be
-// extended in Task 5 with recordDuration and the bgActiveItem.isRemoteTags
-// lane-free branch.
+// dur is the wall-clock time of the lookup, used by the background lane for
+// rolling duration stats (informational only, never affects scheduling).
 type remoteTagsMsg struct {
 	names  map[string]bool
 	err    error
+	dur    time.Duration
 	manual bool
 }
 
@@ -24,8 +24,9 @@ type remoteTagsMsg struct {
 func (m Model) remoteTagsCmd(ctx context.Context, manual bool) tea.Cmd {
 	svc := m.svc
 	return func() tea.Msg {
+		start := time.Now()
 		names, err := svc.RemoteTags(ctx)
-		return remoteTagsMsg{names: names, err: err, manual: manual}
+		return remoteTagsMsg{names: names, err: err, dur: time.Since(start), manual: manual}
 	}
 }
 

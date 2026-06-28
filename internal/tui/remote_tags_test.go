@@ -41,6 +41,24 @@ func TestOptimisticRemoteTagRemove(t *testing.T) {
 	}
 }
 
+// Background remoteTagsMsg must free the single lane.
+func TestRemoteTagsBackgroundFreesLane(t *testing.T) {
+	m := Model{bgBusy: true, bgActiveItem: remoteTagsItem}
+	u, _ := m.Update(remoteTagsMsg{names: map[string]bool{"v1": true}, manual: false})
+	if u.(Model).bgBusy {
+		t.Fatal("background remoteTagsMsg must free bgBusy")
+	}
+}
+
+// Background error must also free the lane.
+func TestRemoteTagsBackgroundErrorFreesLane(t *testing.T) {
+	m := Model{bgBusy: true, bgActiveItem: remoteTagsItem}
+	u, _ := m.Update(remoteTagsMsg{err: errTestRemote, manual: false})
+	if u.(Model).bgBusy {
+		t.Fatal("background error remoteTagsMsg must also free bgBusy")
+	}
+}
+
 var errTestRemote = errString("boom")
 
 type errString string

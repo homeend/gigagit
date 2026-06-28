@@ -321,6 +321,18 @@ func TestRefreshConfigDefaultsOff(t *testing.T) {
 	}
 }
 
+func TestOverlayRefreshRemoteTags(t *testing.T) {
+	dst := RefreshConfig{}
+	overlayRefresh(&dst, RefreshConfig{RemoteTags: 30})
+	if dst.RemoteTags != 30 {
+		t.Fatalf("RemoteTags should overlay, got %d", dst.RemoteTags)
+	}
+	overlayRefresh(&dst, RefreshConfig{RemoteTags: 0}) // zero-is-unset
+	if dst.RemoteTags != 30 {
+		t.Fatalf("zero must not reset, got %d", dst.RemoteTags)
+	}
+}
+
 func TestRefreshConfigOverlayAndParse(t *testing.T) {
 	dir := t.TempDir()
 	repo := filepath.Join(dir, ".gg.toml")
