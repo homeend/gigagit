@@ -9,6 +9,18 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Auto remote-tag refresh on tag-list changes.** The `▲` tag-pushed-state
+  indicator now auto-refreshes **by default** whenever the Tags panel's contents
+  change: once on app load (when the tag list first populates) and again after any
+  tag add, remove, push, or delete-from-remote (the operation reloads the tag
+  list, which re-enqueues the remote lookup). The refresh uses the same silent
+  single-lane background machinery as the opt-in `[refresh] remote_tags` timer.
+  It is **independent of the `[refresh] enabled` master switch** — the auto-trigger
+  is always active unless explicitly disabled. To disable:
+  - **Settings (`,`) → "Auto remote-tag refresh"** — toggles live and persists to
+    the global config; the label shows the current state.
+  - `[refresh] disable_remote_tags_auto = true` in `.gg.toml` — raw config key;
+    a repo can disable it independently of the global setting.
 - **Tag pushed-state indicator (`▲`).** Tags that exist on the default remote
   (origin if configured, else the first configured remote) now show a trailing
   `▲` in the Tags panel, mirroring the Commits-panel convention (`■`/`▲` for
