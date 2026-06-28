@@ -309,7 +309,10 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				return m, nil
 			}
 		}
-		if msg.String() == "w" {
+		// space and w both toggle the focused row's file-watch checkbox (no-op on a
+		// non-watch-capable row). space arrives as KeySpace (KeyRunes{' '} is
+		// normalized to KeySpace at the top of the key handler, incl. on Windows).
+		if msg.String() == "w" || msg.Type == tea.KeySpace {
 			m2, cmd := m.toggleRefreshWatch(scheduledItems[p.ratesSel])
 			return m2, cmd
 		}
@@ -457,9 +460,14 @@ func (p *settingsPopup) box(m Model) string {
 		if !m.cfg.Refresh.Enabled {
 			b.WriteString("  auto-refresh is OFF — enable it in Settings → Auto-refresh\n\n")
 		}
+		// Column header. "file-watch" labels the [x]/[ ] checkbox column so it is not
+		// an unexplained box; the legend below the table says what it means.
+		b.WriteString(fmt.Sprintf("  %-11s %-11s %-16s %s\n", "window", "file-watch", "refresh", "avg read"))
 		for i, it := range scheduledItems {
 			name := "fetch"
-			if !it.isFetch {
+			if it.isRemoteTags {
+				name = "remote_tags"
+			} else if !it.isFetch {
 				name = sourceNames[it.source]
 			}
 			prefix := "  "
@@ -503,7 +511,7 @@ func (p *settingsPopup) box(m Model) string {
 			// see at a glance which sources support file-watch and whether it is on
 			// (toggle with w). Non-eligible rows (status/fetch/tags/feed) keep a blank
 			// cell so the columns stay aligned.
-			watchBox := "   "
+			watchBox := ""
 			if watchEligible(it) {
 				if watchOn(m.cfg.Refresh, it) {
 					watchBox = "[x]"
@@ -511,12 +519,13 @@ func (p *settingsPopup) box(m Model) string {
 					watchBox = "[ ]"
 				}
 			}
-			b.WriteString(fmt.Sprintf("%s%-10s %s %-16s  avg %s\n", prefix, name, watchBox, valCell, avgStr))
+			b.WriteString(fmt.Sprintf("%s%-11s %-11s %-16s %s\n", prefix, name, watchBox, valCell, avgStr))
 		}
 		if p.ratesEditing {
 			b.WriteString("\n[0-9] edit  [enter] save  [esc] cancel   (0 = off)")
 		} else {
-			b.WriteString("\n[↑/↓] select  [enter] edit  [w] file-watch  [esc] back")
+			b.WriteString("\nfile-watch = auto-detect .git changes instantly (else poll on the interval)")
+			b.WriteString("\n[↑/↓] select  [enter] edit interval  [space]/[w] file-watch  [esc] back")
 		}
 	} else if !p.picker {
 		b.WriteString("Settings\n\n")
