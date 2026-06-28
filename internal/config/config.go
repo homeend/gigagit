@@ -58,9 +58,9 @@ type DebugConfig struct {
 	LogOperations bool `toml:"log_operations"`
 }
 
-// RefreshConfig configures background auto-refresh (Phase B). All off by
-// default. Enabled is the master gate; each interval is seconds (0 = that
-// source never auto-refreshes). TOML keys snake_case under [refresh].
+// RefreshConfig configures background auto-refresh. All off by default.
+// Enabled is the master gate; each interval is seconds (0 = that source never
+// auto-refreshes). TOML keys snake_case under [refresh].
 type RefreshConfig struct {
 	Enabled   bool `toml:"enabled"` // master switch; default false (whole feature off)
 	Status    int  `toml:"status"`  // seconds between background status reads; 0 = off
@@ -73,7 +73,7 @@ type RefreshConfig struct {
 	Fetch     int  `toml:"fetch"` // seconds between background `git fetch`; 0 = off
 
 	// MinSeconds is the floor on any auto-refresh interval: no source polls more
-	// often than this, even when backoff_factor × avg is tiny. 0 = unset → default 10.
+	// often than this, even when a source reads very cheaply. 0 = unset → default 10.
 	MinSeconds int `toml:"min_seconds"`
 }
 

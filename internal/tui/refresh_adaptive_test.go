@@ -88,8 +88,8 @@ func TestDataAvailableRecordsDuration(t *testing.T) {
 	}
 }
 
-// A manual r read (startup=false) DOES feed the ring — it is the user's chosen
-// way to seed measurements for the adaptive scheduler.
+// A manual r read (startup=false) DOES feed the ring — its measured duration
+// is shown in the Refresh rates editor stats alongside background reads.
 func TestManualReadRecordsDuration(t *testing.T) {
 	m := newTestModel(t)
 	m.bgActiveItem = refreshItem{} // lane idle
@@ -305,6 +305,27 @@ func TestRatesEditorEscCancelsEdit(t *testing.T) {
 func updateModel(m Model, msg tea.Msg) (Model, tea.Cmd) {
 	nm, cmd := m.Update(msg)
 	return nm.(Model), cmd
+}
+
+// TestBgFetchDoneIgnoresStaleGen verifies that a bgFetchDoneMsg from a
+// superseded fetch cycle does not clear the live background lane.
+func TestBgFetchDoneIgnoresStaleGen(t *testing.T) {
+	m := newTestModel(t)
+	m.bgBusy = true
+	m.bgActiveItem = fetchItem
+	m.bgFetchGen = 2
+
+	// Stale completion (gen 1) must be ignored — lane stays busy.
+	nm, _ := m.Update(bgFetchDoneMsg{gen: 1, dur: time.Second})
+	if !nm.(Model).bgBusy {
+		t.Fatal("stale bgFetchDoneMsg (gen 1 != bgFetchGen 2) must not clear the live lane")
+	}
+
+	// Current completion (gen 2) must free the lane.
+	nm, _ = nm.(Model).Update(bgFetchDoneMsg{gen: 2, dur: time.Second})
+	if nm.(Model).bgBusy {
+		t.Fatal("current bgFetchDoneMsg (gen 2) must free the lane")
+	}
 }
 
 func TestBgRefreshHint(t *testing.T) {

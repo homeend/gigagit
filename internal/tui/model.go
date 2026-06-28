@@ -109,6 +109,7 @@ type Model struct {
 	bgQueue             []refreshItem                   // FIFO of pending background reads; one drains per tick
 	bgBusy              bool                            // a background read is in flight (sole lane-occupancy truth)
 	bgActiveItem        refreshItem                     // the running background item — meaningful ONLY when bgBusy
+	bgFetchGen          int                             // bumped per fetch launch; stale bgFetchDoneMsg are dropped
 	proc                process                         // the single active long-running process; nil = none. IS the interface lock.
 
 	running   bool
@@ -573,11 +574,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
-		// Record the measured read cost for the adaptive scheduler (success only;
-		// a failed/partial read is not a representative duration). Gate on
-		// !msg.startup: the app-start fan-out reads all sources in parallel
-		// (contended) so its durations are unrepresentative; manual r and
-		// single-lane background reads both feed the rolling ring.
+		// Record the measured read cost as informational stats (shown in the
+		// Refresh rates editor). Success only — a failed/partial read is not a
+		// representative duration. Gate on !msg.startup: the app-start fan-out
+		// reads all sources in parallel (contended) so its durations are
+		// unrepresentative; manual r and single-lane background reads both feed
+		// the rolling ring.
 		if !msg.startup {
 			m = m.recordDuration(refreshItem{source: msg.source}, msg.dur)
 		}
@@ -1455,6 +1457,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.modal = &decisionState{req: msg.req, reply: msg.reply}
 		return m, waitForOp(m.opMsgs)
 	case bgFetchDoneMsg:
+		// Drop stale completions: if a newer fetch was launched (e.g. a user op
+		// preempted the old one and a new cycle started), the old message must not
+		// clear the live lane.
+		if msg.gen != m.bgFetchGen {
+			return m, nil
+		}
 		// Free the lane if fetch was the active background item (fetch completes
 		// via this message, not dataAvailableMsg).
 		if m.bgBusy && m.bgActiveItem.isFetch {
@@ -1488,7 +1496,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// A foreground fetch is a single (uncontended) `git fetch`, so its duration
 		// is a representative measurement for the background-fetch row — record it
 		// (success only). It does NOT enable the background fetch task on its own;
-		// that stays opt-in via [refresh] fetch (see effectiveInterval's isFetch gate).
+		// that stays opt-in via [refresh] fetch (0 = off, the default).
 		if m.opIsFetch {
 			m.opIsFetch = false
 			if msg.err == nil {

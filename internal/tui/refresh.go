@@ -244,7 +244,8 @@ func (m Model) refreshTick(now time.Time) (Model, tea.Cmd) {
 	m.bgActiveItem = it
 	m.refreshLastRun[it] = now
 	if it.isFetch {
-		return m, m.bgFetchCmd(m.bgCtx)
+		m.bgFetchGen++
+		return m, m.bgFetchCmd(m.bgCtx, m.bgFetchGen)
 	}
 	m.srcGen[it.source]++
 	m.srcInflight[it.source] = true
@@ -255,6 +256,7 @@ func (m Model) refreshTick(now time.Time) (Model, tea.Cmd) {
 // fires a silent remotes refresh; on error it is swallowed (already recorded to
 // the session error log by the domain failure seam).
 type bgFetchDoneMsg struct {
+	gen int
 	dur time.Duration
 	err error
 }
@@ -263,7 +265,7 @@ type bgFetchDoneMsg struct {
 // m.running, no modal — under the background context. Events are discarded;
 // fetch does not fork so an empty MapDecider (which errors on any unexpected
 // decision) is the correct belt-and-braces decider.
-func (m Model) bgFetchCmd(ctx context.Context) tea.Cmd {
+func (m Model) bgFetchCmd(ctx context.Context, gen int) tea.Cmd {
 	if m.svc == nil {
 		return nil
 	}
@@ -277,7 +279,7 @@ func (m Model) bgFetchCmd(ctx context.Context) tea.Cmd {
 		}()
 		_, err := svc.Execute(ctx, engine.Fetch{}, events, engine.MapDecider{})
 		close(events)
-		return bgFetchDoneMsg{dur: time.Since(start), err: err}
+		return bgFetchDoneMsg{gen: gen, dur: time.Since(start), err: err}
 	}
 }
 
