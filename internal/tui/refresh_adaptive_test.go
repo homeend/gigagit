@@ -23,58 +23,39 @@ func TestMeanDuration(t *testing.T) {
 	}
 }
 
-func TestEffectiveInterval(t *testing.T) {
+func TestScheduledInterval(t *testing.T) {
 	st := refreshItem{source: srcStatus}
-	base := config.RefreshConfig{Enabled: true, Status: 10} // adaptive on (DisableAdaptive false)
+	// configured 0 → off.
+	if secs, on := scheduledInterval(config.RefreshConfig{Enabled: true}, st); on || secs != 0 {
+		t.Fatalf("interval 0 → off, got %d/%v", secs, on)
+	}
+	// configured below the floor → clamped to min (default 10).
+	if secs, on := scheduledInterval(config.RefreshConfig{Enabled: true, Status: 3}, st); !on || secs != 10 {
+		t.Fatalf("3 → floored to 10, got %d/%v", secs, on)
+	}
+	// configured at/above the floor → passthrough.
+	if secs, on := scheduledInterval(config.RefreshConfig{Enabled: true, Status: 30}, st); !on || secs != 30 {
+		t.Fatalf("30 → 30, got %d/%v", secs, on)
+	}
+	// custom min_seconds honored.
+	if secs, _ := scheduledInterval(config.RefreshConfig{Enabled: true, Status: 3, MinSeconds: 20}, st); secs != 20 {
+		t.Fatalf("min 20 → 20, got %d", secs)
+	}
+}
 
-	// adaptive OFF + interval 0 → off.
-	offCfg := config.RefreshConfig{Enabled: true, DisableAdaptive: true}
-	if secs, state := effectiveInterval(offCfg, st, 0, false); state != stateOff || secs != 0 {
-		t.Fatalf("adaptive off + interval 0 → off, got %d/%v", secs, state)
+func TestRefreshTomlKeyAndSetField(t *testing.T) {
+	// feed's display name is "commits" but its toml key is "feed".
+	if k := refreshTomlKey(refreshItem{source: srcFeed}); k != "feed" {
+		t.Fatalf("feed key = feed, got %q", k)
 	}
-	// adaptive ON + no configured interval + no sample → pending (waits for first read).
-	if secs, state := effectiveInterval(config.RefreshConfig{Enabled: true}, st, 0, false); state != statePending || secs != 0 {
-		t.Fatalf("adaptive on, no floor, no sample → pending, got %d/%v", secs, state)
+	if k := refreshTomlKey(fetchItem); k != "fetch" {
+		t.Fatalf("fetch key = fetch, got %q", k)
 	}
-	// adaptive ON + no configured interval + a sample (4.1s) → polls purely at backoff (41s).
-	if secs, state := effectiveInterval(config.RefreshConfig{Enabled: true}, st, 4100*time.Millisecond, true); state != stateAdaptive || secs != 41 {
-		t.Fatalf("adaptive on, no floor, measured → backoff 41, got %d/%v", secs, state)
-	}
-	// adaptive off → fixed at configured.
-	fixed := base
-	fixed.DisableAdaptive = true
-	if secs, state := effectiveInterval(fixed, st, 4*time.Second, true); state != stateFixed || secs != 10 {
-		t.Fatalf("adaptive off → fixed 10, got %d/%v", secs, state)
-	}
-	// adaptive on, no sample → floor (run at configured pending measurement).
-	if secs, state := effectiveInterval(base, st, 0, false); state != stateAdaptiveFloor || secs != 10 {
-		t.Fatalf("no sample → floor 10, got %d/%v", secs, state)
-	}
-	// adaptive on, cheap read (0.3s) → floor wins (max(10, ceil(3s))=10).
-	if secs, state := effectiveInterval(base, st, 300*time.Millisecond, true); state != stateAdaptiveFloor || secs != 10 {
-		t.Fatalf("cheap → floor 10, got %d/%v", secs, state)
-	}
-	// adaptive on, 4.1s read → backoff 41 (max(10, ceil(41.0))).
-	if secs, state := effectiveInterval(base, st, 4100*time.Millisecond, true); state != stateAdaptive || secs != 41 {
-		t.Fatalf("4.1s → adaptive 41, got %d/%v", secs, state)
-	}
-	// adaptive on, 12s read > cutoff(10) → disabled.
-	if secs, state := effectiveInterval(base, st, 12*time.Second, true); state != stateDisabled || secs != 0 {
-		t.Fatalf("12s → disabled, got %d/%v", secs, state)
-	}
-	// custom cutoff/factor honored.
-	custom := config.RefreshConfig{Enabled: true, Status: 5, MaxReadSeconds: 20, BackoffFactor: 3}
-	if secs, state := effectiveInterval(custom, st, 12*time.Second, true); state != stateAdaptive || secs != 36 {
-		t.Fatalf("custom factor 3×12s=36, got %d/%v", secs, state)
-	}
-	// min_seconds floor: a floor-less source with a sub-second avg would back off
-	// to ~1s, but min_seconds (default 10) clamps it.
-	if secs, state := effectiveInterval(config.RefreshConfig{Enabled: true}, st, 50*time.Millisecond, true); state != stateAdaptive || secs != 10 {
-		t.Fatalf("cheap floor-less should clamp to min 10, got %d/%v", secs, state)
-	}
-	// explicit min_seconds honored.
-	if secs, _ := effectiveInterval(config.RefreshConfig{Enabled: true, MinSeconds: 30}, st, 50*time.Millisecond, true); secs != 30 {
-		t.Fatalf("min_seconds 30 should clamp to 30, got %d", secs)
+	var c config.RefreshConfig
+	setRefreshIntervalField(&c, refreshItem{source: srcRemotes}, 45)
+	setRefreshIntervalField(&c, fetchItem, 90)
+	if c.Remotes != 45 || c.Fetch != 90 {
+		t.Fatalf("set fields: got remotes=%d fetch=%d", c.Remotes, c.Fetch)
 	}
 }
 
@@ -132,25 +113,6 @@ func TestStartupReadDoesNotRecordDuration(t *testing.T) {
 	nm, _ := m.Update(msg)
 	if got := nm.(Model).refreshDur[it]; len(got) != 0 {
 		t.Fatalf("startup read must not feed the duration ring, got %v", got)
-	}
-}
-
-// The background `git fetch` is network I/O and opt-in: with [refresh] fetch
-// unset (0) the fetch row is OFF, never "pending" and never floor-less
-// auto-started — even once it has a measurement. With fetch configured it
-// behaves like any adaptive item.
-func TestFetchIsConfigGated(t *testing.T) {
-	// fetch unset, no sample → off (not pending).
-	if secs, state := effectiveInterval(config.RefreshConfig{Enabled: true}, fetchItem, 0, false); state != stateOff || secs != 0 {
-		t.Fatalf("fetch unset → off, got %d/%v", secs, state)
-	}
-	// fetch unset, WITH a sample → still off (no floor-less auto-start for network fetch).
-	if secs, state := effectiveInterval(config.RefreshConfig{Enabled: true}, fetchItem, 2*time.Second, true); state != stateOff || secs != 0 {
-		t.Fatalf("fetch unset + sample → off, got %d/%v", secs, state)
-	}
-	// fetch configured, no sample → floor at the configured interval.
-	if secs, state := effectiveInterval(config.RefreshConfig{Enabled: true, Fetch: 60}, fetchItem, 0, false); state != stateAdaptiveFloor || secs != 60 {
-		t.Fatalf("fetch=60, no sample → floor 60, got %d/%v", secs, state)
 	}
 }
 
@@ -271,17 +233,16 @@ func TestStartOpClearsLaneAndQueue(t *testing.T) {
 
 func TestRefreshRateRows(t *testing.T) {
 	m := newTestModel(t)
-	m.cfg.Refresh = config.RefreshConfig{Enabled: true, Status: 10, Remotes: 30}
-	// status has samples averaging 4s → adaptive 40s; remotes none → floor.
+	m.cfg.Refresh = config.RefreshConfig{Enabled: true, Status: 30, Remotes: 3}
 	it := refreshItem{source: srcStatus}
-	m.refreshDur[it] = []time.Duration{4 * time.Second, 4 * time.Second}
-	rows := m.refreshRateRows()
-	joined := strings.Join(rows, "\n")
-	if !strings.Contains(joined, "status") || !strings.Contains(joined, "40s") {
-		t.Fatalf("status row should show adaptive 40s, got:\n%s", joined)
+	m.refreshDur[it] = []time.Duration{120 * time.Millisecond, 120 * time.Millisecond}
+	joined := strings.Join(m.refreshRateRows(), "\n")
+	if !strings.Contains(joined, "status") || !strings.Contains(joined, "every 30s") || !strings.Contains(joined, "120ms (2)") {
+		t.Fatalf("status row wrong:\n%s", joined)
 	}
-	if !strings.Contains(joined, "remotes") {
-		t.Fatalf("remotes row missing, got:\n%s", joined)
+	// remotes configured 3 < min 10 → floored, shown with (min).
+	if !strings.Contains(joined, "every 10s (min)") {
+		t.Fatalf("remotes should show floored 10s (min):\n%s", joined)
 	}
 }
 

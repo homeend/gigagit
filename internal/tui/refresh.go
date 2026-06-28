@@ -3,7 +3,6 @@ package tui
 import (
 	"context"
 	"fmt"
-	"math"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -54,23 +53,8 @@ func refreshIntervalFor(cfg config.RefreshConfig, it refreshItem) int {
 }
 
 const (
-	defaultMaxReadSeconds = 10
-	defaultBackoffFactor  = 10
-	defaultMinSeconds     = 10 // floor on any auto-refresh interval (cheap sources don't hammer)
-	maxDurationSamples    = 10 // ring length per item for the rolling average
-)
-
-// intervalState classifies how an item's effective interval was derived (for the
-// "Refresh rates" viewer and the scheduler's skip decision).
-type intervalState int
-
-const (
-	stateOff           intervalState = iota // adaptive off + configured interval 0 → never auto-refresh
-	stateFixed                              // adaptive off → configured interval verbatim
-	stateAdaptive                           // backoff_factor × avg drives the interval
-	stateAdaptiveFloor                      // configured floor won (cheap read), or floor used pending measurement
-	statePending                            // adaptive on, no configured floor, not yet measured → waits for first read
-	stateDisabled                           // avg > cutoff → auto-refresh disabled (manual only)
+	defaultMinSeconds  = 10 // floor on any auto-refresh interval (cheap sources don't hammer)
+	maxDurationSamples = 10 // ring length per item for the rolling average
 )
 
 // meanDuration is the arithmetic mean of samples (0 for an empty slice).
@@ -85,98 +69,77 @@ func meanDuration(samples []time.Duration) time.Duration {
 	return sum / time.Duration(len(samples))
 }
 
-// effectiveInterval returns an item's effective interval in seconds and the
-// state that produced it. secs is meaningful only for the fixed/adaptive states;
-// stateOff, statePending, and stateDisabled return 0 (the item does not
-// auto-refresh this tick).
-//
-// The configured interval (base) is an OPTIONAL FLOOR. With adaptive on, a
-// source's interval is driven by its measured average (backoff_factor × avg);
-// when no interval is configured (base 0) the source still auto-refreshes once
-// it has a measurement, polling purely at backoff_factor × avg. Before any
-// measurement, a base-0 source is statePending (it starts once a manual r or
-// background read measures it). With adaptive off, the configured interval is
-// used verbatim and base 0 means off.
-//
-// The result is floored by [refresh] min_seconds (default 10): no scheduling
-// interval is ever shorter than that, so a very cheap source (sub-second read)
-// doesn't end up polling every ~1s. Off/disabled/pending (secs 0) stay at 0.
-func effectiveInterval(cfg config.RefreshConfig, it refreshItem, avg time.Duration, haveSample bool) (int, intervalState) {
-	secs, state := effectiveIntervalRaw(cfg, it, avg, haveSample)
-	if secs > 0 {
-		min := cfg.MinSeconds
-		if min <= 0 {
-			min = defaultMinSeconds
-		}
-		if secs < min {
-			secs = min
-		}
-	}
-	return secs, state
-}
-
-func effectiveIntervalRaw(cfg config.RefreshConfig, it refreshItem, avg time.Duration, haveSample bool) (int, intervalState) {
+// scheduledInterval returns an item's fixed poll interval in seconds and whether
+// it is scheduled. The configured value is floored at min_seconds (default 10);
+// a configured 0 means off. Measurements never affect this.
+func scheduledInterval(cfg config.RefreshConfig, it refreshItem) (int, bool) {
 	base := refreshIntervalFor(cfg, it)
-	// The background `git fetch` is network I/O, so it is purely opt-in: it runs
-	// only when [refresh] fetch is set (base > 0). Unlike local source reads it
-	// never floor-less auto-starts from a measurement and is never "pending". A
-	// foreground fetch may record a sample (for visibility), but base 0 still
-	// means off — the guard returns before haveSample is consulted.
-	if it.isFetch && base <= 0 {
-		return 0, stateOff
+	if base <= 0 {
+		return 0, false
 	}
-	if cfg.DisableAdaptive {
-		if base <= 0 {
-			return 0, stateOff
-		}
-		return base, stateFixed
+	min := cfg.MinSeconds
+	if min <= 0 {
+		min = defaultMinSeconds
 	}
-	// adaptive on
-	if !haveSample {
-		if base > 0 {
-			return base, stateAdaptiveFloor // poll at the configured floor until measured
-		}
-		return 0, statePending // no floor, no data yet → wait for the first read
+	if base < min {
+		base = min
 	}
-	cutoff := cfg.MaxReadSeconds
-	if cutoff <= 0 {
-		cutoff = defaultMaxReadSeconds
-	}
-	if avg > time.Duration(cutoff)*time.Second {
-		return 0, stateDisabled
-	}
-	factor := cfg.BackoffFactor
-	if factor <= 0 {
-		factor = defaultBackoffFactor
-	}
-	backoff := int(math.Ceil((time.Duration(factor) * avg).Seconds()))
-	if backoff <= base {
-		return base, stateAdaptiveFloor // configured floor wins
-	}
-	return backoff, stateAdaptive // base 0 → polls purely at backoff_factor × avg
+	return base, true
 }
 
-// stateLabel renders an intervalState for the Refresh rates viewer.
-func stateLabel(s intervalState) string {
-	switch s {
-	case stateOff:
-		return "off"
-	case stateFixed:
-		return "fixed"
-	case stateAdaptive:
-		return "adaptive"
-	case stateAdaptiveFloor:
-		return "adaptive (floor)"
-	case statePending:
-		return "pending — press r to measure"
-	case stateDisabled:
-		return "disabled (too slow)"
+// refreshTomlKey is the [refresh] TOML key for an item. Note srcFeed's display
+// name is "commits" but its config key is "feed".
+func refreshTomlKey(it refreshItem) string {
+	if it.isFetch {
+		return "fetch"
+	}
+	switch it.source {
+	case srcStatus:
+		return "status"
+	case srcBranches:
+		return "branches"
+	case srcRemotes:
+		return "remotes"
+	case srcWorktrees:
+		return "worktrees"
+	case srcTags:
+		return "tags"
+	case srcReflog:
+		return "reflog"
+	case srcFeed:
+		return "feed"
 	}
 	return ""
 }
 
-// refreshRateRows formats one line per scheduled item for the Settings viewer:
-// name · configured · avg (n) · effective · state.
+// setRefreshIntervalField writes secs into the RefreshConfig field for an item.
+func setRefreshIntervalField(cfg *config.RefreshConfig, it refreshItem, secs int) {
+	if it.isFetch {
+		cfg.Fetch = secs
+		return
+	}
+	switch it.source {
+	case srcStatus:
+		cfg.Status = secs
+	case srcBranches:
+		cfg.Branches = secs
+	case srcRemotes:
+		cfg.Remotes = secs
+	case srcWorktrees:
+		cfg.Worktrees = secs
+	case srcTags:
+		cfg.Tags = secs
+	case srcReflog:
+		cfg.Reflog = secs
+	case srcFeed:
+		cfg.Feed = secs
+	}
+}
+
+// refreshRateRows formats one line per scheduled item for the Refresh rates
+// editor: name · interval · avg stat. Uses scheduledInterval for the interval
+// (showing the floored value with a (min) marker when the configured value was
+// below min_seconds). avg is informational only.
 func (m Model) refreshRateRows() []string {
 	rows := make([]string, 0, len(scheduledItems))
 	for _, it := range scheduledItems {
@@ -184,27 +147,26 @@ func (m Model) refreshRateRows() []string {
 		if !it.isFetch {
 			name = sourceNames[it.source]
 		}
-		samples := m.refreshDur[it]
-		avg := meanDuration(samples)
-		secs, state := effectiveInterval(m.cfg.Refresh, it, avg, len(samples) > 0)
 		cfgSecs := refreshIntervalFor(m.cfg.Refresh, it)
-		cfgStr := "off"
-		if cfgSecs > 0 {
-			cfgStr = fmt.Sprintf("%ds", cfgSecs)
+		secs, on := scheduledInterval(m.cfg.Refresh, it)
+		intervalStr := "off"
+		if on {
+			intervalStr = fmt.Sprintf("every %ds", secs)
+			if cfgSecs < secs {
+				intervalStr += " (min)"
+			}
 		}
+		samples := m.refreshDur[it]
 		avgStr := "—"
 		if len(samples) > 0 {
+			avg := meanDuration(samples)
 			if avg < time.Second {
 				avgStr = fmt.Sprintf("%dms (%d)", avg.Milliseconds(), len(samples))
 			} else {
 				avgStr = fmt.Sprintf("%.1fs (%d)", avg.Seconds(), len(samples))
 			}
 		}
-		effStr := "—"
-		if state == stateFixed || state == stateAdaptive || state == stateAdaptiveFloor {
-			effStr = fmt.Sprintf("%ds", secs)
-		}
-		rows = append(rows, fmt.Sprintf("%-10s  cfg %-5s  avg %-12s  eff %-5s  %s", name, cfgStr, avgStr, effStr, stateLabel(state)))
+		rows = append(rows, fmt.Sprintf("%-10s  %-16s  avg %s", name, intervalStr, avgStr))
 	}
 	return rows
 }
@@ -269,7 +231,7 @@ func (m Model) refreshTick(now time.Time) (Model, tea.Cmd) {
 	if m.refreshSuppressed() {
 		return m, nil
 	}
-	due := dueItems(now, m.refreshLastRun, m.refreshDur, m.cfg.Refresh, false)
+	due := dueItems(now, m.refreshLastRun, m.cfg.Refresh, false)
 	m.bgQueue = enqueueDue(m.bgQueue, m.bgActiveItem, m.bgBusy, due)
 	if m.bgBusy || len(m.bgQueue) == 0 {
 		return m, nil
@@ -332,19 +294,17 @@ func (m Model) bgFetchCmd(ctx context.Context) tea.Cmd {
 	}
 }
 
-// dueItems returns the items whose effective interval has elapsed this tick.
-// off/disabled/pending items (effective interval <= 0) are excluded. Pure: durs
-// is the per-item duration ring.
-func dueItems(now time.Time, lastRun map[refreshItem]time.Time, durs map[refreshItem][]time.Duration, cfg config.RefreshConfig, suppressed bool) []refreshItem {
+// dueItems returns the items whose fixed interval has elapsed this tick. off
+// items are excluded. Pure.
+func dueItems(now time.Time, lastRun map[refreshItem]time.Time, cfg config.RefreshConfig, suppressed bool) []refreshItem {
 	if !cfg.Enabled || suppressed {
 		return nil
 	}
 	var due []refreshItem
 	for _, it := range scheduledItems {
-		avg := meanDuration(durs[it])
-		secs, _ := effectiveInterval(cfg, it, avg, len(durs[it]) > 0)
-		if secs <= 0 {
-			continue // off / disabled / pending → not scheduled this tick
+		secs, on := scheduledInterval(cfg, it)
+		if !on {
+			continue
 		}
 		last, seen := lastRun[it]
 		if !seen || now.Sub(last) >= time.Duration(secs)*time.Second {
