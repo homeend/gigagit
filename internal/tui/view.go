@@ -540,42 +540,100 @@ func (m Model) leftPanelLabel(p panel) string {
 	}
 }
 
-// bottomTabLabel is the bottom-left slot header: the active tab spelled out with
-// its row count, the inactive tab shown plainly. Mirrors filesTabLabel.
-func bottomTabLabel(active panel, stagedN, reflogN int) string {
-	staged := fmt.Sprintf("Staged %d", stagedN)
-	reflog := fmt.Sprintf("Reflog %d", reflogN)
-	if active == panelReflog {
-		return staged + " [" + reflog + "]"
-	}
-	return "[" + staged + "] " + reflog
+// tabSeg is one clickable tab in a left-column slot header: the panel it
+// activates and the exact text rendered for it (brackets included when active).
+// joinTabSegs renders the header string from a slot's segs while tabSegAt maps a
+// click column back to a tab, so the label and the mouse hit-test share one
+// source of truth and cannot drift (the same SYNC-INVARIANT discipline the
+// commit-decoration row/colorer pair follows).
+type tabSeg struct {
+	p    panel
+	text string
 }
 
-// tabBarLabel is the shared left-slot header: the active tab spelled out and
-// bracketed, the inactive tabs shown as single-letter markers so all three fit
-// the narrow left column (w/3) even at 80 cols, leaving room for the sort/filter
-// decoration panelLabel appends. Plain ASCII so renderPanel's truncate stays safe.
-func tabBarLabel(active panel) string {
+// joinTabSegs renders a slot's header by joining its segment texts with a single
+// space — the exact separator tabSegAt accounts for when walking columns.
+func joinTabSegs(segs []tabSeg) string {
+	parts := make([]string, len(segs))
+	for i, s := range segs {
+		parts[i] = s.text
+	}
+	return strings.Join(parts, " ")
+}
+
+// tabSegAt maps a click column (relative to the header's first cell) back to the
+// tab whose text covers it, mirroring joinTabSegs' single-space separator. ok is
+// false in a separator gap or past the last tab (the sort/filter decoration
+// panelLabel appends), where the click falls through to plain focus.
+func tabSegAt(segs []tabSeg, col int) (panel, bool) {
+	if col < 0 {
+		return 0, false
+	}
+	off := 0
+	for _, s := range segs {
+		w := lipgloss.Width(s.text)
+		if col >= off && col < off+w {
+			return s.p, true
+		}
+		off += w + 1 // the single space joinTabSegs inserts between tabs
+	}
+	return 0, false
+}
+
+// topTabSegs builds the shared top-slot tabs (Branches · Remotes · Worktrees):
+// the active tab spelled out and bracketed, the inactive ones single-letter
+// markers so all three fit the narrow left column (w/3) even at 80 cols, leaving
+// room for the sort/filter decoration panelLabel appends. Plain ASCII so
+// renderPanel's truncate stays safe.
+func topTabSegs(active panel) []tabSeg {
 	mark := func(p panel, full, short string) string {
 		if p == active {
 			return "[" + full + "]"
 		}
 		return short
 	}
-	return mark(panelBranches, "Branches", "B") + " " +
-		mark(panelRemotes, "Remotes", "R") + " " +
-		mark(panelWorktrees, "Worktrees", "W")
+	return []tabSeg{
+		{panelBranches, mark(panelBranches, "Branches", "B")},
+		{panelRemotes, mark(panelRemotes, "Remotes", "R")},
+		{panelWorktrees, mark(panelWorktrees, "Worktrees", "W")},
+	}
 }
 
-// filesTabLabel is the middle-slot header: the active tab spelled out with its
-// row count, the inactive tab shown plainly. Mirrors tabBarLabel for the top slot.
-func filesTabLabel(active panel, filesN, tagsN int) string {
+// filesTabSegs builds the middle-slot tabs (Files · Tags): the active tab spelled
+// out with its row count and bracketed, the inactive tab shown plainly.
+func filesTabSegs(active panel, filesN, tagsN int) []tabSeg {
 	files := fmt.Sprintf("Files %d", filesN)
 	tags := fmt.Sprintf("Tags %d", tagsN)
 	if active == panelTags {
-		return files + " [" + tags + "]"
+		return []tabSeg{{panelFiles, files}, {panelTags, "[" + tags + "]"}}
 	}
-	return "[" + files + "] " + tags
+	return []tabSeg{{panelFiles, "[" + files + "]"}, {panelTags, tags}}
+}
+
+// bottomTabSegs builds the bottom-slot tabs (Staged · Reflog): the active tab
+// spelled out with its row count and bracketed, the inactive tab shown plainly.
+func bottomTabSegs(active panel, stagedN, reflogN int) []tabSeg {
+	staged := fmt.Sprintf("Staged %d", stagedN)
+	reflog := fmt.Sprintf("Reflog %d", reflogN)
+	if active == panelReflog {
+		return []tabSeg{{panelStaged, staged}, {panelReflog, "[" + reflog + "]"}}
+	}
+	return []tabSeg{{panelStaged, "[" + staged + "]"}, {panelReflog, reflog}}
+}
+
+// bottomTabLabel is the bottom-left slot header. See bottomTabSegs.
+func bottomTabLabel(active panel, stagedN, reflogN int) string {
+	return joinTabSegs(bottomTabSegs(active, stagedN, reflogN))
+}
+
+// tabBarLabel is the shared top-slot header. See topTabSegs.
+func tabBarLabel(active panel) string {
+	return joinTabSegs(topTabSegs(active))
+}
+
+// filesTabLabel is the middle-slot header. See filesTabSegs.
+func filesTabLabel(active panel, filesN, tagsN int) string {
+	return joinTabSegs(filesTabSegs(active, filesN, tagsN))
 }
 
 // renderPanel draws one bordered panel of fixed size boxW×boxH, windowing rows

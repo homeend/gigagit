@@ -9,6 +9,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Clickable left-column tabs.** A left-click on a tab name in any left-column
+  slot header now switches to that tab (and focuses it) — the same three slots
+  `ctrl+←/→` cycles: the top **Branches / Remotes / Worktrees** slot (the
+  single-letter `B`/`R`/`W` markers are clickable too), the middle **Files /
+  Tags** box, and the bottom **Staged / Reflog** box. Mouse and keyboard share
+  one activation path, so a maximized column re-pins to the clicked tab exactly
+  as it does when cycled. Clicks off the tab names (a data row, the sort/filter
+  decoration) keep their previous focus/select behaviour. The header string and
+  the click hit-test derive from one shared tab-segment list, so they cannot
+  drift.
 - **Commits-panel ref decorations (tags + multi-tip group).** The Commits panel
   now renders a `git log --decorate`-style decoration group **before the subject**:
   extra local-branch tips appear in default foreground, and tags appear as

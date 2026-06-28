@@ -1178,29 +1178,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if msg.String() == "ctrl+left" {
 				dir = -1
 			}
-			if m.focus == panelFiles || m.focus == panelTags {
-				m.activeFilesTab = nextInOrder(filesTabs, m.middleTab(), dir)
-				m.focus = m.activeFilesTab
-				if m.leftMaxed { // re-pin the newly shown tab so it stays full-height
-					m.leftMax = m.focus
-				}
-				return m, nil
+			switch {
+			case m.focus == panelFiles || m.focus == panelTags:
+				return m.activateTab(nextInOrder(filesTabs, m.middleTab(), dir)), nil
+			case m.focus == panelStaged || m.focus == panelReflog:
+				return m.activateTab(nextInOrder(bottomTabs, m.bottomTab(), dir)), nil
+			default:
+				return m.activateTab(nextInOrder(leftTabs, m.activeLeftTab, dir)), nil
 			}
-			if m.focus == panelStaged || m.focus == panelReflog {
-				m.activeBottomTab = nextInOrder(bottomTabs, m.bottomTab(), dir)
-				m.focus = m.activeBottomTab
-				if m.leftMaxed { // re-pin the newly shown tab so it stays full-height
-					m.leftMax = m.focus
-				}
-				return m, nil
-			}
-			m.activeLeftTab = nextInOrder(leftTabs, m.activeLeftTab, dir)
-			m.focus = m.activeLeftTab
-			m.lastLeftPanel = m.activeLeftTab
-			if m.leftMaxed { // re-pin the newly shown tab so it stays full-height
-				m.leftMax = m.focus
-			}
-			return m, nil
 		case "right":
 			if m.focus != panelCommits {
 				m = m.rememberLeftFocus()
@@ -2028,6 +2013,32 @@ func (m Model) middleTab() panel {
 		return m.activeFilesTab
 	}
 	return panelFiles
+}
+
+// activateTab switches the left-column slot that owns tab p to p and focuses it,
+// re-pinning a maximized column to the now-active tab. It is the single
+// activation path shared by ctrl+←/→ cycling and mouse clicks on the tab bar, so
+// both keep identical bookkeeping (the top slot also updates lastLeftPanel, the
+// ←-return target). A non-tab panel is left unchanged.
+func (m Model) activateTab(p panel) Model {
+	switch p {
+	case panelBranches, panelRemotes, panelWorktrees:
+		m.activeLeftTab = p
+		m.focus = p
+		m.lastLeftPanel = p
+	case panelFiles, panelTags:
+		m.activeFilesTab = p
+		m.focus = p
+	case panelStaged, panelReflog:
+		m.activeBottomTab = p
+		m.focus = p
+	default:
+		return m
+	}
+	if m.leftMaxed { // re-pin the newly shown tab so it stays full-height
+		m.leftMax = m.focus
+	}
+	return m
 }
 
 // bottomTab is the active bottom-left slot panel, defaulting to Staged when unset.

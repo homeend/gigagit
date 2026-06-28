@@ -586,6 +586,49 @@ func (m Model) panelAt(x, y int) (panel, bool) {
 	return 0, false
 }
 
+// tabSegsFor returns the clickable tabs of the left-column slot that p belongs
+// to (top/middle/bottom), built from the slot's currently-active tab so the segs
+// match exactly what renderPanel drew. Returns nil for non-tab panels (Commits).
+// p is always the slot's active tab here — panelAt only ever returns the visible
+// (active) panel of a slot.
+func (m Model) tabSegsFor(p panel) []tabSeg {
+	switch p {
+	case panelBranches, panelRemotes, panelWorktrees:
+		return topTabSegs(m.activeLeftTab)
+	case panelFiles, panelTags:
+		return filesTabSegs(m.middleTab(), m.panelLen(panelFiles), m.panelLen(panelTags))
+	case panelStaged, panelReflog:
+		return bottomTabSegs(m.bottomTab(), m.panelLen(panelStaged), m.panelLen(panelReflog))
+	}
+	return nil
+}
+
+// tabClickAt maps a click on panel p's header (the tab-bar line) to the tab the
+// click landed on. ok is false unless (x, y) is on p's label row and over a tab
+// segment; in every other case the click falls through to plain focus. The label
+// row is pos.y+1 (top border + label line) and the header text begins at pos.x+2
+// (left border + Padding(0,1) left), matching renderPanel and panelRowAt.
+func (m Model) tabClickAt(p panel, x, y int) (panel, bool) {
+	segs := m.tabSegsFor(p)
+	if segs == nil {
+		return 0, false
+	}
+	g := m.layout()
+	pos := g.pos[p]
+	if y != pos.y+1 {
+		return 0, false
+	}
+	col := x - (pos.x + 2)
+	// renderPanel truncates the header to innerW = boxW-4 (border 2 + padding 2),
+	// with boxW = g.leftW at the left-column call site. A tab cut off by that
+	// truncation isn't on screen, so the dead cells past it (padding/border, or a
+	// half-drawn tab) must not be clickable — bound col by the same innerW.
+	if col >= g.leftW-4 {
+		return 0, false
+	}
+	return tabSegAt(segs, col)
+}
+
 // panelRowAt maps screen row y inside panel p to an index into p's display
 // rows (panelView order). ok is false on the border, the label line, and
 // the padding below the last row. Uses the same windowStart the renderer
