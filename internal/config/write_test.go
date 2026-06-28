@@ -124,3 +124,36 @@ func TestSetGlobalRefreshEnabledRoundTrips(t *testing.T) {
 		t.Fatal("disabled not persisted")
 	}
 }
+
+func TestSetRefreshWatchRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".gg.toml")
+	if err := SetRefreshWatch(path, "worktrees", true); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load("", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.Refresh.WorktreesWatch {
+		t.Fatal("worktrees_watch did not round-trip to true")
+	}
+}
+
+func TestSetRefreshWatchPreservesOtherKeys(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".gg.toml")
+	if err := SetRefreshInterval(path, "worktrees", 30); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetRefreshWatch(path, "worktrees", true); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load("", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Refresh.Worktrees != 30 || !cfg.Refresh.WorktreesWatch {
+		t.Fatalf("interval=%d watch=%v; want 30/true", cfg.Refresh.Worktrees, cfg.Refresh.WorktreesWatch)
+	}
+}

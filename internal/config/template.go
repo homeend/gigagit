@@ -57,6 +57,11 @@ var settingDocs = []settingDoc{
 	{"refresh", "feed", 0, "seconds between background commit-feed refresh; 0 = off"},
 	{"refresh", "fetch", 0, "seconds between background `git fetch`; 0 = off"},
 	{"refresh", "min_seconds", 10, "floor on any auto-refresh interval; no source polls more often than this"},
+
+	{"refresh", "worktrees_watch", false, "refresh worktrees on .git file change (off → use interval); ignored on WSL2 9p mounts"},
+	{"refresh", "branches_watch", false, "refresh branches on ref change (Phase D2)"},
+	{"refresh", "reflog_watch", false, "refresh reflog on logs/HEAD change"},
+	{"refresh", "remotes_watch", false, "refresh remotes on ref/FETCH_HEAD change (Phase D2)"},
 }
 
 // tomlScalar renders a registry value as it appears in TOML.

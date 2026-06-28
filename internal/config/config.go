@@ -75,6 +75,14 @@ type RefreshConfig struct {
 	// MinSeconds is the floor on any auto-refresh interval: no source polls more
 	// often than this, even when a source reads very cheaply. 0 = unset → default 10.
 	MinSeconds int `toml:"min_seconds"`
+
+	// Per-source file-watch toggles (Phase D). When true AND the repo's fs
+	// supports inotify (not WSL2 9p drvfs), the source refreshes on .git file
+	// change instead of on its interval; otherwise it falls back to the interval.
+	WorktreesWatch bool `toml:"worktrees_watch"`
+	BranchesWatch  bool `toml:"branches_watch"`
+	ReflogWatch    bool `toml:"reflog_watch"`
+	RemotesWatch   bool `toml:"remotes_watch"`
 }
 
 // Config is the merged gigagit configuration.
@@ -250,6 +258,18 @@ func overlayRefresh(dst *RefreshConfig, src RefreshConfig) {
 	}
 	if src.MinSeconds > 0 {
 		dst.MinSeconds = src.MinSeconds
+	}
+	if src.WorktreesWatch {
+		dst.WorktreesWatch = true
+	}
+	if src.BranchesWatch {
+		dst.BranchesWatch = true
+	}
+	if src.ReflogWatch {
+		dst.ReflogWatch = true
+	}
+	if src.RemotesWatch {
+		dst.RemotesWatch = true
 	}
 }
 

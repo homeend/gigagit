@@ -335,3 +335,15 @@ func TestRefreshConfigOverlayAndParse(t *testing.T) {
 		t.Fatalf("parsed/overlaid refresh wrong: %+v", c.Refresh)
 	}
 }
+
+func TestOverlayRefreshWatchBools(t *testing.T) {
+	base := Defaults()
+	layer := Config{Refresh: RefreshConfig{WorktreesWatch: true, ReflogWatch: true}}
+	overlayRefresh(&base.Refresh, layer.Refresh)
+	if !base.Refresh.WorktreesWatch || !base.Refresh.ReflogWatch {
+		t.Fatal("watch bools should overlay when true")
+	}
+	if base.Refresh.BranchesWatch || base.Refresh.RemotesWatch {
+		t.Fatal("unset watch bools must stay false")
+	}
+}
