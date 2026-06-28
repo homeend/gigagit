@@ -72,6 +72,19 @@ func TestGitCommonDirIsAbsolute(t *testing.T) {
 	}
 }
 
+func TestGitDirIsAbsolute(t *testing.T) {
+	_, runner := newTestRepo(t)
+	repo := &Repo{Runner: runner}
+
+	gd, err := repo.GitDir(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !filepath.IsAbs(gd) {
+		t.Errorf("GitDir = %q, want absolute", gd)
+	}
+}
+
 func TestRemoveWorktreeRemovesLinkedTree(t *testing.T) {
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}

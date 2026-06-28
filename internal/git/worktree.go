@@ -67,6 +67,20 @@ func (r *Repo) GitCommonDir(ctx context.Context) (string, error) {
 	return strings.TrimSpace(res.Stdout), nil
 }
 
+// GitDir returns the absolute path of THIS worktree's git directory
+// (`git rev-parse --path-format=absolute --absolute-git-dir`). For the main
+// worktree this equals GitCommonDir; for a linked worktree it is the
+// per-worktree dir under <common>/worktrees/<name>, which holds this worktree's
+// HEAD and logs/HEAD.
+func (r *Repo) GitDir(ctx context.Context) (string, error) {
+	argv := gitcmd.New("rev-parse").Arg("--path-format=absolute", "--absolute-git-dir").ToArgv()
+	res, err := r.Runner.Run(ctx, "git rev-parse (git-dir)", argv)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(res.Stdout), nil
+}
+
 // RemoveWorktree removes the linked worktree at path
 // (`git worktree remove [--force] <path>`). onLine receives any output lines
 // (nil is allowed; git currently emits none on success). A non-zero exit

@@ -3,6 +3,7 @@ package domain
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -255,6 +256,19 @@ func TestGitCommonDirGatedQuery(t *testing.T) {
 	d, err := svc.GitCommonDir(context.Background())
 	if err != nil || d != "/repo/.git" {
 		t.Fatalf("GitCommonDir = %q, %v", d, err)
+	}
+}
+
+func TestGitDirGatedQuery(t *testing.T) {
+	f := gitexec.NewFakeRunner()
+	f.SetResponse("git rev-parse (git-dir)", gitexec.Result{Stdout: "/repo/.git\n"})
+	svc := New(&git.Repo{Runner: f})
+	gd, err := svc.GitDir(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !filepath.IsAbs(gd) {
+		t.Errorf("GitDir = %q, want absolute", gd)
 	}
 }
 
