@@ -14,3 +14,7 @@
 # Claude session worktrees (machine-local)
 .claude/worktrees/
 .worktrees/
+/operations.log*
+
+# superpowers SDD scratch (ledger, task briefs, review packages)
+.superpowers/
