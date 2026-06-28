@@ -1,8 +1,10 @@
 package gitwatch
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -43,10 +45,7 @@ func New(groups []Group, debounce time.Duration) (*Watcher, error) {
 		done:     make(chan struct{}),
 	}
 	for _, g := range groups {
-		if _, statErr := os.Stat(g.Dir); statErr != nil {
-			continue // dir absent — nothing to watch yet
-		}
-		_ = fsw.Add(g.Dir) // best-effort; a failed add just means no events from it
+		w.addGroup(g)
 	}
 	go w.loop()
 	return w, nil
@@ -81,14 +80,75 @@ func (w *Watcher) loop() {
 func (w *Watcher) handle(ev fsnotify.Event) {
 	base := filepath.Base(ev.Name)
 	dir := filepath.Dir(ev.Name)
+
+	// A new directory under a recursive group must start being watched, and the
+	// create itself is a change for that group's source.
+	if ev.Op&(fsnotify.Create) != 0 {
+		if fi, err := os.Stat(ev.Name); err == nil && fi.IsDir() {
+			for _, g := range w.groups {
+				if g.Recursive && (ev.Name == g.Dir || isUnder(ev.Name, g.Dir)) {
+					_ = w.fsw.Add(ev.Name)
+				}
+			}
+		}
+	}
+
+	// Non-recursive groups: exact dir match.
 	for _, g := range w.groups {
-		if g.Dir != dir {
+		if g.Recursive || g.Dir != dir {
 			continue
 		}
 		for _, s := range g.Match(base) {
 			w.schedule(s)
 		}
 	}
+	// Recursive groups: dir is the group root or a descendant.
+	for _, s := range w.recursiveMatch(dir, base) {
+		w.schedule(s)
+	}
+}
+
+// addGroup adds the watch(es) for one group: just its dir for non-recursive, or
+// the whole existing subtree for recursive groups.
+func (w *Watcher) addGroup(g Group) {
+	if !g.Recursive {
+		if _, err := os.Stat(g.Dir); err == nil {
+			_ = w.fsw.Add(g.Dir)
+		}
+		return
+	}
+	_ = filepath.WalkDir(g.Dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil // skip unreadable entries; missing root is fine
+		}
+		if d.IsDir() {
+			_ = w.fsw.Add(path)
+		}
+		return nil
+	})
+}
+
+// recursiveMatch reports the sources of a recursive group whose tree contains dir.
+func (w *Watcher) recursiveMatch(dir, base string) []Source {
+	var out []Source
+	for _, g := range w.groups {
+		if !g.Recursive {
+			continue
+		}
+		if dir == g.Dir || isUnder(dir, g.Dir) {
+			out = append(out, g.Match(base)...)
+		}
+	}
+	return out
+}
+
+// isUnder reports whether path is the dir parent or a descendant of base.
+func isUnder(path, base string) bool {
+	rel, err := filepath.Rel(base, path)
+	if err != nil {
+		return false
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 // schedule (re)arms the per-source debounce timer; the source is emitted once
