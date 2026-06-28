@@ -65,7 +65,8 @@ func TestRefreshTickFiresSilentReadAndIsSuppressed(t *testing.T) {
 	m.loading = false // simulate post-init: New() starts with loading=true; clear it here
 	t0 := time.Unix(2_000_000, 0)
 
-	// Not suppressed, status unseen → due → fires a silent read (gen bumps, NO srcLoading).
+	// Not suppressed, status unseen → due → fires a silent read via the single-lane
+	// queue (gen bumps, NO srcLoading, lane marked busy).
 	genBefore := m.srcGen[srcStatus]
 	m2, cmd := m.refreshTick(t0)
 	if cmd == nil {
@@ -76,6 +77,12 @@ func TestRefreshTickFiresSilentReadAndIsSuppressed(t *testing.T) {
 	}
 	if m2.srcLoading[srcStatus] {
 		t.Fatal("background (auto) read must NOT set srcLoading (silent)")
+	}
+	if !m2.bgBusy {
+		t.Fatal("lane must be busy after firing a background read")
+	}
+	if m2.bgActiveItem.source != srcStatus {
+		t.Fatalf("bgActiveItem must be srcStatus, got %v", m2.bgActiveItem)
 	}
 
 	// Suppressed (op running) → no fire.
@@ -144,103 +151,34 @@ func TestSilentReadErrorDoesNotTouchStatus(t *testing.T) {
 	}
 }
 
-func TestBgFetchRefreshesRemotesOnSuccessSilently(t *testing.T) {
-	m := newTestModelWithRemote(t)
-
-	// The fetch cmd runs synchronously here (tea.Cmd is just a func).
-	msg := m.bgFetchCmd(context.Background())()
-	done, ok := msg.(bgFetchDoneMsg)
-	if !ok {
-		t.Fatalf("want bgFetchDoneMsg, got %T", msg)
-	}
-	if done.err != nil {
-		t.Fatalf("fetch should succeed against the test remote: %v", done.err)
-	}
-
-	// Simulate the state refreshTick establishes before firing the fetch:
-	// bgCtx and bgCancel must be set so the handler's guard allows the refresh.
-	m.bgCtx, m.bgCancel = context.WithCancel(context.Background())
-
-	// Delivering success must trigger a SILENT remotes refresh:
-	// srcInflight[srcRemotes] set, srcGen bumped — but NOT srcLoading, m.running, or modal.
-	genBefore := m.srcGen[srcRemotes]
-	nm, _ := m.Update(done)
+func TestBgFetchEnqueuesRemotesOnSuccess(t *testing.T) {
+	m := newTestModel(t)
+	m.bgBusy = true
+	m.bgActiveItem = fetchItem
+	nm, _ := m.Update(bgFetchDoneMsg{dur: time.Second})
 	mm := nm.(Model)
-	if mm.running || mm.modal != nil {
-		t.Fatal("background fetch must not enter the foreground op path")
+	if mm.bgBusy {
+		t.Fatal("fetch done must free the lane")
 	}
-	if mm.srcLoading[srcRemotes] {
-		t.Fatal("remotes refresh after bg fetch must be silent (no srcLoading)")
+	found := false
+	for _, it := range mm.bgQueue {
+		if it == (refreshItem{source: srcRemotes}) {
+			found = true
+		}
 	}
-	if mm.srcGen[srcRemotes] != genBefore+1 {
-		t.Fatalf("srcGen[srcRemotes] = %d, want %d", mm.srcGen[srcRemotes], genBefore+1)
-	}
-	if !mm.srcInflight[srcRemotes] {
-		t.Fatal("srcInflight[srcRemotes] must be true while the silent refresh is in flight")
-	}
-
-	// A failed fetch must be swallowed — no status message, no m.running.
-	m2 := newTestModel(t) // no remote → fetch will fail
-	m2.statusMsg = "before"
-	failMsg := bgFetchDoneMsg{err: context.Canceled}
-	nm2, cmd2 := m2.Update(failMsg)
-	mm2 := nm2.(Model)
-	if mm2.running || mm2.modal != nil {
-		t.Fatal("failed bg fetch must not touch foreground op state")
-	}
-	if mm2.statusMsg != "before" {
-		t.Fatalf("failed bg fetch must not change statusMsg, got %q", mm2.statusMsg)
-	}
-	if cmd2 != nil {
-		t.Fatal("failed bg fetch must return nil cmd")
+	if !found {
+		t.Fatal("successful fetch must enqueue a remotes refresh")
 	}
 }
 
-// TestBgFetchDoneSkipsWhenRemotesInflight verifies that the bgFetchDoneMsg
-// handler does NOT supersede an already-in-flight remotes read (Fix #1:
-// silence violation) and does NOT fire when the background batch was preempted
-// by a user op (Fix #2: non-preemptable read).
-func TestBgFetchDoneSkipsWhenRemotesInflight(t *testing.T) {
-	// --- happy path: bgCancel set, remotes not in-flight → fires + bumps gen ---
+func TestRefreshTickSkipsSourceAlreadyInflight(t *testing.T) {
 	m := newTestModel(t)
-	m.bgCtx, m.bgCancel = context.WithCancel(context.Background())
-	genBefore := m.srcGen[srcRemotes]
-	nm, cmd := m.Update(bgFetchDoneMsg{})
-	mm := nm.(Model)
-	if cmd == nil {
-		t.Fatal("happy path: expected a silent remotes refresh command")
-	}
-	if mm.srcGen[srcRemotes] != genBefore+1 {
-		t.Fatalf("happy path: srcGen[srcRemotes] = %d, want %d", mm.srcGen[srcRemotes], genBefore+1)
-	}
-	if !mm.srcInflight[srcRemotes] {
-		t.Fatal("happy path: srcInflight[srcRemotes] must be set while read is in flight")
-	}
-
-	// --- guard #1: remotes already in-flight → no fire, no gen bump, spinner untouched ---
-	m2 := newTestModel(t)
-	m2.bgCtx, m2.bgCancel = context.WithCancel(context.Background())
-	m2.srcInflight[srcRemotes] = true // a read is already in flight
-	m2.srcLoading[srcRemotes] = true  // a manual read's spinner is visible
-	g2 := m2.srcGen[srcRemotes]
-	nm2, cmd2 := m2.Update(bgFetchDoneMsg{})
-	mm2 := nm2.(Model)
-	if cmd2 != nil {
-		t.Fatal("guard #1: must not fire a read when remotes is already in-flight")
-	}
-	if mm2.srcGen[srcRemotes] != g2 {
-		t.Fatalf("guard #1: srcGen must not change when remotes is in-flight, got %d want %d",
-			mm2.srcGen[srcRemotes], g2)
-	}
-	if !mm2.srcLoading[srcRemotes] {
-		t.Fatal("guard #1: must not disturb the manual read's spinner (srcLoading)")
-	}
-
-	// --- guard #2: bgCancel == nil (user op preempted batch) → no fire ---
-	m3 := newTestModel(t)
-	m3.bgCancel = nil // simulate preemption by startOp
-	_, cmd3 := m3.Update(bgFetchDoneMsg{})
-	if cmd3 != nil {
-		t.Fatal("guard #2: must not fire when background batch was preempted (bgCancel == nil)")
+	m.cfg.Refresh = config.RefreshConfig{Enabled: true, Remotes: 1}
+	m.loading = false
+	m.srcInflight[srcRemotes] = true // a manual remotes read is already out
+	m.bgQueue = []refreshItem{{source: srcRemotes}}
+	_, cmd := m.refreshTick(time.Unix(3_000_000, 0))
+	if cmd != nil {
+		t.Fatal("must not fire a bg read for a source already in flight")
 	}
 }

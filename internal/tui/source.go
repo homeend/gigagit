@@ -50,11 +50,13 @@ var srcConsumers = map[sourceKey][]panel{
 // that issued it (stale gens are dropped); manual=true means a user-initiated
 // read whose spinner must be cleared on arrival (false = silent, Phase B).
 type dataAvailableMsg struct {
-	source sourceKey
-	gen    int
-	value  any
-	manual bool
-	err    error
+	source  sourceKey
+	gen     int
+	value   any
+	manual  bool
+	startup bool          // part of the app-start fan-out; its duration is NOT measured (parallel/contended)
+	dur     time.Duration // wall-clock of the domain read (Phase C measurement)
+	err     error
 }
 
 // statusPayload carries a working-tree status together with the conflict state
@@ -123,18 +125,20 @@ func sourceErr(s sourceKey, err error) string {
 // for worktrees) is computed here so a per-source refresh is self-contained.
 // ctx is provided by the caller: background reads pass m.bgCtx (cancellable by
 // a starting user op); manual reads pass context.Background() (never cancelled).
-func (m Model) readSourceCmd(ctx context.Context, s sourceKey, manual bool) tea.Cmd {
+func (m Model) readSourceCmd(ctx context.Context, s sourceKey, manual, startup bool) tea.Cmd {
 	svc := m.svc
 	feed := m.feed
 	reflogLimit := m.cfg.UI.ReflogLimit
 	gen := m.srcGen[s]
 	return func() tea.Msg {
-		out := dataAvailableMsg{source: s, gen: gen, manual: manual}
+		start := time.Now()
+		out := dataAvailableMsg{source: s, gen: gen, manual: manual, startup: startup}
 		switch s {
 		case srcStatus:
 			st, err := svc.Status(ctx)
 			if err != nil {
 				out.err = err
+				out.dur = time.Since(start)
 				return out
 			}
 			out.value = statusPayload{status: st, conflict: svc.Conflict(ctx, st)}
@@ -155,6 +159,7 @@ func (m Model) readSourceCmd(ctx context.Context, s sourceKey, manual bool) tea.
 			wts, err := svc.Worktrees(ctx)
 			if err != nil {
 				out.err = err
+				out.dur = time.Since(start)
 				return out
 			}
 			shas := make([]string, 0, len(wts))
@@ -176,6 +181,7 @@ func (m Model) readSourceCmd(ctx context.Context, s sourceKey, manual bool) tea.
 			id, err := svc.Identity(ctx)
 			out.value, out.err = id, err
 		}
+		out.dur = time.Since(start)
 		return out
 	}
 }
@@ -195,7 +201,7 @@ func (m Model) anySourceInflight() bool {
 // manual, loading), and returns a batch that reads them all concurrently. The
 // per-source gen bump means any older in-flight read of the same source is
 // dropped when it lands.
-func (m Model) reloadSourcesCmd(srcs []sourceKey, manual bool) (Model, tea.Cmd) {
+func (m Model) reloadSourcesCmd(srcs []sourceKey, manual, startup bool) (Model, tea.Cmd) {
 	// Defensive lazy-init: a Model built as a literal in a test (rather than via
 	// the constructor patched in Task 1) would panic on the nil-map writes below.
 	if m.srcGen == nil {
@@ -214,7 +220,7 @@ func (m Model) reloadSourcesCmd(srcs []sourceKey, manual bool) (Model, tea.Cmd) 
 		if manual {
 			m.srcLoading[s] = true
 		}
-		cmds = append(cmds, m.readSourceCmd(context.Background(), s, manual))
+		cmds = append(cmds, m.readSourceCmd(context.Background(), s, manual, startup))
 	}
 	// Keep the legacy action-blocking flag in sync (see the handler note in Task 4).
 	m.loading = m.anySourceLoading()
@@ -236,12 +242,12 @@ func sourcesOrAll(srcs []sourceKey) []sourceKey {
 
 // reloadAllCmd refreshes every source — the registry's "reload everything" (r,
 // and the post-bootstrap startup fan-out).
-func (m Model) reloadAllCmd(manual bool) (Model, tea.Cmd) {
+func (m Model) reloadAllCmd(manual, startup bool) (Model, tea.Cmd) {
 	all := make([]sourceKey, 0, srcCount)
 	for s := sourceKey(0); s < srcCount; s++ {
 		all = append(all, s)
 	}
-	return m.reloadSourcesCmd(all, manual)
+	return m.reloadSourcesCmd(all, manual, startup)
 }
 
 // opAffectedSources returns the sources an operation dirties (nil = all, the
@@ -269,7 +275,10 @@ func opAffectedSources(op engine.Operation) []sourceKey {
 
 // configReadyMsg carries the loaded config from bootstrapCmd; its handler
 // applies it and fans out the first all-source read.
-type configReadyMsg struct{ cfg config.Config }
+type configReadyMsg struct {
+	cfg      config.Config
+	repoTOML string // <repo-top>/.gg.toml, "" if not in a repo
+}
 
 // bootstrapCmd loads config and applies the settings the first reads depend on
 // (feed page sizes, EOL-only visibility) plus the MRU touch, then emits
@@ -282,8 +291,10 @@ func (m Model) bootstrapCmd() tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
 		cfg := config.Defaults()
+		repoTOML := ""
 		if top, err := svc.TopLevel(ctx); err == nil && top != "" {
-			if c, cerr := config.Load(config.DefaultGlobalPath(), filepath.Join(top, ".gg.toml")); cerr == nil {
+			repoTOML = filepath.Join(top, ".gg.toml")
+			if c, cerr := config.Load(config.DefaultGlobalPath(), repoTOML); cerr == nil {
 				cfg = c
 			}
 			if statePath != "" {
@@ -292,6 +303,6 @@ func (m Model) bootstrapCmd() tea.Cmd {
 		}
 		feed.SetPageSizes(cfg.UI.CommitInitialCount, cfg.UI.CommitBatchSize)
 		svc.SetShowEOLOnlyChanges(cfg.UI.ShowEOLOnlyChanges)
-		return configReadyMsg{cfg: cfg}
+		return configReadyMsg{cfg: cfg, repoTOML: repoTOML}
 	}
 }

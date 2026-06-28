@@ -220,13 +220,30 @@ tags      = 120
 reflog    = 120
 feed      = 120    # commit feed
 fetch     = 300    # run `git fetch` every 5 min (network; errors swallowed)
+
+min_seconds = 10   # floor on any interval (no source polls faster than this)
 ```
 
-Background reads are silent: no spinner, no status-line change, no cursor
-disturbance. The scheduler is suppressed while an operation is running, a
-popup/modal is open, or you are typing a search/filter. A user action immediately
-preempts any in-flight background read. Like the operation log, the `enabled`
-toggle is written only to the global config, never to a repo's `.gg.toml`.
+Each per-source value is the poll interval in seconds; 0 (the default) means that
+source never auto-refreshes. Intervals are floored at `min_seconds` (default 10)
+so cheap sources don't hammer the repo. The `fetch` row is opt-in only (network):
+it runs solely when set to a non-zero value; a manual `git fetch` from the Remotes
+menu does not enable it.
+
+Background reads run **one at a time** (FIFO, deduped by type) to cap git
+subprocess pressure; manual `r` stays parallel and is unaffected. A small
+`⟳ <source>…` hint appears in the status line while the single background lane is
+busy — suppressed for reads whose rolling average is under 1 s so quick sources
+don't flicker the status bar. The scheduler is suppressed while an operation is
+running, a popup/modal is open, or you are typing a search/filter, and a user
+action immediately preempts any in-flight background read.
+
+The **Settings (`,`) → "Refresh rates"** entry is an **inline editor**: ↑/↓ selects
+a source row, enter opens a numeric field (type the seconds, enter saves, esc
+cancels, 0 = off). Saving writes `[refresh] <source>` to the **repo `.gg.toml`**
+and takes effect immediately. Read durations (mean of the last 10 reads from manual
+`r` and background reads; app-start load is excluded) are shown in the `avg` column
+as informational stats — they do not affect scheduling.
 
 `[ui] footer_actions` and `[ui] menu_actions` are lists of action **ids** that
 choose which actions appear in the footer bar and in the `.` menu respectively;

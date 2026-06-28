@@ -83,31 +83,38 @@ type Model struct {
 
 	layers *layerStack // top-of-everything window pile: full-screen surfaces + centered popups; nil/empty = none
 
-	svc                 *domain.Service           // command layer; all git access goes through svc
-	feed                *domain.CommitFeed        // single source of truth for commits
-	commitsExhausted    bool                      // false → "Commits N+", true → "Commits N"
-	commitsLoading      bool                      // a feed reload/page is in flight → show the loading glyph in the Commits title
-	feedScopeApplied    string                    // signature of the scope last applied to the feed (see feedScopeSig); reload only when the desired scope differs
-	commitScopeBranches []string                  // included branches for the feed; empty = all local branches
-	commitFilter        commitFilterFields        // path/author/grep/date narrowing of the feed
-	commitGraphRows     []string                  // cached single-line graph cells, parallel to the unified WIP+commits list; empty = none
-	commitGraphLanes    []int                     // cached node lane per unified row, parallel to the unified WIP+commits list
-	wipRows             []wipRow                  // 0–2 derived pseudo-rows (Working tree / Staged) shown atop the Commits feed when dirty
-	commitListMode      bool                      // Commits feed rendered as a flat ●-gutter list, not a graph
-	commitGraphCols     int                       // graph window width in LANES; 0 = use configured default
-	commitGraphScroll   int                       // leftmost visible lane (0-based); resets on feed reload
-	opCancel            context.CancelFunc        // cancels the in-flight op's context; nil when idle
-	loadGen             int                       // bumped per superseding load; stale dataLoadedMsg are dropped
-	srcGen              map[sourceKey]int         // per-source generation; stale dataAvailableMsg dropped
-	srcInflight         map[sourceKey]bool        // a read of this source is outstanding (coalescing)
-	srcLoading          map[sourceKey]bool        // a manual read is in flight → consuming panels show ⏳
-	bgCtx               context.Context           // context for in-flight background (auto) reads; cancelled when a user op starts
-	bgCancel            context.CancelFunc        // cancels bgCtx; nil when no background batch is active
-	refreshLastRun      map[refreshItem]time.Time // last time each scheduled item fired (background scheduler)
-	proc                process                   // the single active long-running process; nil = none. IS the interface lock.
+	svc                 *domain.Service                 // command layer; all git access goes through svc
+	feed                *domain.CommitFeed              // single source of truth for commits
+	commitsExhausted    bool                            // false → "Commits N+", true → "Commits N"
+	commitsLoading      bool                            // a feed reload/page is in flight → show the loading glyph in the Commits title
+	feedScopeApplied    string                          // signature of the scope last applied to the feed (see feedScopeSig); reload only when the desired scope differs
+	commitScopeBranches []string                        // included branches for the feed; empty = all local branches
+	commitFilter        commitFilterFields              // path/author/grep/date narrowing of the feed
+	commitGraphRows     []string                        // cached single-line graph cells, parallel to the unified WIP+commits list; empty = none
+	commitGraphLanes    []int                           // cached node lane per unified row, parallel to the unified WIP+commits list
+	wipRows             []wipRow                        // 0–2 derived pseudo-rows (Working tree / Staged) shown atop the Commits feed when dirty
+	commitListMode      bool                            // Commits feed rendered as a flat ●-gutter list, not a graph
+	commitGraphCols     int                             // graph window width in LANES; 0 = use configured default
+	commitGraphScroll   int                             // leftmost visible lane (0-based); resets on feed reload
+	opCancel            context.CancelFunc              // cancels the in-flight op's context; nil when idle
+	loadGen             int                             // bumped per superseding load; stale dataLoadedMsg are dropped
+	srcGen              map[sourceKey]int               // per-source generation; stale dataAvailableMsg dropped
+	srcInflight         map[sourceKey]bool              // a read of this source is outstanding (coalescing)
+	srcLoading          map[sourceKey]bool              // a manual read is in flight → consuming panels show ⏳
+	repoConfigPath      string                          // <repo-top>/.gg.toml; the refresh-rates editor writes here
+	bgCtx               context.Context                 // context for in-flight background (auto) reads; cancelled when a user op starts
+	bgCancel            context.CancelFunc              // cancels bgCtx; nil when no background batch is active
+	refreshLastRun      map[refreshItem]time.Time       // last time each scheduled item fired (background scheduler)
+	refreshDur          map[refreshItem][]time.Duration // rolling ring (≤10) of measured read durations per item (Phase C)
+	bgQueue             []refreshItem                   // FIFO of pending background reads; one drains per tick
+	bgBusy              bool                            // a background read is in flight (sole lane-occupancy truth)
+	bgActiveItem        refreshItem                     // the running background item — meaningful ONLY when bgBusy
+	bgFetchGen          int                             // bumped per fetch launch; stale bgFetchDoneMsg are dropped
+	proc                process                         // the single active long-running process; nil = none. IS the interface lock.
 
 	running   bool
 	opStart   time.Time // when the in-flight op began; the heartbeat reads it for the busy line's elapsed readout
+	opIsFetch bool      // the in-flight op is engine.Fetch → record its duration into the fetch refresh row on completion
 	statusMsg string
 	opMsgs    chan tea.Msg
 	modal     *decisionState
@@ -184,6 +191,7 @@ func New(svc *domain.Service) Model {
 		srcInflight:    map[sourceKey]bool{},
 		srcLoading:     map[sourceKey]bool{},
 		refreshLastRun: map[refreshItem]time.Time{},
+		refreshDur:     map[refreshItem][]time.Duration{},
 		activeLeftTab:  panelBranches,
 		opLog:          newOpLog(),
 	}
@@ -458,6 +466,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case configReadyMsg:
 		m.cfg = msg.cfg
+		m.repoConfigPath = msg.repoTOML
 		// Seed refreshLastRun so the first heartbeat tick is one interval out
 		// rather than firing every enabled source immediately (enable-time burst).
 		now := time.Now()
@@ -465,7 +474,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.refreshLastRun[it] = now
 		}
 		var cmd tea.Cmd
-		m, cmd = m.reloadAllCmd(true)
+		m, cmd = m.reloadAllCmd(true, true) // startup=true → these reads do not feed measurements
 		return m, cmd
 	case dataLoadedMsg:
 		if msg.gen != m.loadGen {
@@ -533,6 +542,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// so a lingering conflict never traps the interface.
 		}
 	case dataAvailableMsg:
+		// Free the background lane the moment its active read's message arrives —
+		// BEFORE the stale-gen check below, because a manual r bumps srcGen and
+		// would otherwise make this (now-stale) bg message early-return without
+		// clearing bgBusy, deadlocking the lane until restart. Gated on bgBusy
+		// (the sole occupancy truth) + a non-fetch, non-manual match.
+		if m.bgBusy && !m.bgActiveItem.isFetch && !msg.manual && m.bgActiveItem.source == msg.source {
+			m.bgBusy = false
+		}
 		if msg.gen != m.srcGen[msg.source] {
 			return m, nil // superseded by a newer read of this source
 		}
@@ -556,6 +573,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.statusMsg = sourceErr(msg.source, msg.err)
 			}
 			return m, nil
+		}
+		// Record the measured read cost as informational stats (shown in the
+		// Refresh rates editor). Success only — a failed/partial read is not a
+		// representative duration. Gate on !msg.startup: the app-start fan-out
+		// reads all sources in parallel (contended) so its durations are
+		// unrepresentative; manual r and single-lane background reads both feed
+		// the rolling ring.
+		if !msg.startup {
+			m = m.recordDuration(refreshItem{source: msg.source}, msg.dur)
 		}
 		switch msg.source {
 		case srcStatus:
@@ -869,7 +895,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// loading guard, r races loadCmd during a repo switch.
 			if !m.running && !m.loading && !m.anySourceInflight() {
 				var cmd tea.Cmd
-				m, cmd = m.reloadAllCmd(true)
+				m, cmd = m.reloadAllCmd(true, false) // manual r → measured (startup=false)
 				return m, cmd
 			}
 		case "p":
@@ -1431,32 +1457,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.modal = &decisionState{req: msg.req, reply: msg.reply}
 		return m, waitForOp(m.opMsgs)
 	case bgFetchDoneMsg:
-		// A quiet background fetch completed. On error: swallow silently (the
-		// domain failure seam already logged it). On success: fire a silent
-		// (manual=false) remotes refresh so the Remotes panel picks up any new
-		// tracking refs.
-		//
-		// Two guards before firing:
-		//  1. bgCancel == nil → a user op already preempted the background batch
-		//     (startOp nils bgCancel); firing under context.Background() would be
-		//     non-cancellable, so skip entirely.
-		//  2. srcInflight[srcRemotes] == true → a remotes read is already in
-		//     flight (possibly a manual one the user triggered). Bumping srcGen
-		//     would make that read land superseded so it early-returns without
-		//     clearing srcLoading, and our silent read (manual=false) never clears
-		//     it either → the Remotes ⏳ spinner would spin forever.
+		// Drop stale completions: if a newer fetch was launched (e.g. a user op
+		// preempted the old one and a new cycle started), the old message must not
+		// clear the live lane.
+		if msg.gen != m.bgFetchGen {
+			return m, nil
+		}
+		// Free the lane if fetch was the active background item (fetch completes
+		// via this message, not dataAvailableMsg).
+		if m.bgBusy && m.bgActiveItem.isFetch {
+			m.bgBusy = false
+		}
 		if msg.err != nil {
 			return m, nil // silent: the domain failure seam already logged it
 		}
-		if m.bgCancel == nil {
-			return m, nil // user op preempted the background batch; skip
-		}
-		if m.srcInflight[srcRemotes] {
-			return m, nil // a (possibly manual) remotes read is already in flight
-		}
-		m.srcGen[srcRemotes]++
-		m.srcInflight[srcRemotes] = true
-		return m, m.readSourceCmd(m.bgCtx, srcRemotes, false) // bgCtx non-nil when bgCancel non-nil
+		m = m.recordDuration(fetchItem, msg.dur)
+		// A successful fetch updates remote-tracking refs, so refresh the Remotes
+		// panel regardless of its configured interval — enqueued through the single
+		// lane (deduped), drained on the next tick. Replaces Phase B's direct fire.
+		m.bgQueue = enqueueDue(m.bgQueue, m.bgActiveItem, m.bgBusy, []refreshItem{{source: srcRemotes}})
+		return m, nil
 
 	case heartbeatMsg:
 		// A single perpetual tick (started in Init): re-render so the busy line's
@@ -1473,6 +1493,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.running = false
 		m.opMsgs = nil
+		// A foreground fetch is a single (uncontended) `git fetch`, so its duration
+		// is a representative measurement for the background-fetch row — record it
+		// (success only). It does NOT enable the background fetch task on its own;
+		// that stays opt-in via [refresh] fetch (0 = off, the default).
+		if m.opIsFetch {
+			m.opIsFetch = false
+			if msg.err == nil {
+				m = m.recordDuration(fetchItem, time.Since(m.opStart))
+			}
+		}
 		switchTo := ""
 		chainSwitch := ""
 		if msg.err != nil {
@@ -1505,7 +1535,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// working tree — refresh status and the stash list.
 			m.stashView.loading = true
 			var cmd tea.Cmd
-			m, cmd = m.reloadSourcesCmd([]sourceKey{srcStatus}, true)
+			m, cmd = m.reloadSourcesCmd([]sourceKey{srcStatus}, true, false)
 			return m, tea.Batch(cmd, m.loadStashListCmd(m.stashView.tag))
 		}
 		// A job an active process started just returned: let the process advance
@@ -1516,7 +1546,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Route op completion through the per-source registry: refresh only the
 		// sources the op dirtied (nil pendingSources = all sources, safe default).
 		var cmd tea.Cmd
-		m, cmd = m.reloadSourcesCmd(sourcesOrAll(srcs), true)
+		m, cmd = m.reloadSourcesCmd(sourcesOrAll(srcs), true, false)
 		return m, cmd
 
 	case prefixDataMsg:

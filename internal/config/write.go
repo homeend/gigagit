@@ -28,6 +28,13 @@ func SetGlobalRefreshEnabled(path string, on bool) error {
 	return setScalarLine(path, "refresh", "enabled", strconv.FormatBool(on))
 }
 
+// SetRefreshInterval persists `[refresh] <source> = secs` to the given config
+// file (the repo .gg.toml), preserving the rest of the file. Backs the Settings
+// "Refresh rates" inline editor.
+func SetRefreshInterval(path, source string, secs int) error {
+	return setScalarLine(path, "refresh", source, strconv.Itoa(secs))
+}
+
 // setScalarLine sets `key = value` under `[section]` in a TOML file via a
 // line-oriented edit so unrelated lines and comments survive. It updates an
 // existing assignment (uncommenting a commented one), inserts the key under an

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,14 +18,18 @@ import (
 // single menu entry (agent-skill setup); the menu/picker split exists so
 // future options have a home.
 type settingsPopup struct {
-	picker     bool // false = menu screen, true = agent picker
-	errorsView bool // true = session-errors viewer screen
-	dets       []agentinit.Detection
-	checked    []bool
-	sel        int      // selection within the agent picker list
-	menuSel    int      // selection within the top-level menu (independent of sel)
-	mode       dispMode // text display mode; z cycles (cutoff default)
-	hscroll    int      // modeScroll horizontal offset
+	picker       bool      // false = menu screen, true = agent picker
+	errorsView   bool      // true = session-errors viewer screen
+	ratesView    bool      // true = refresh-rates viewer screen
+	ratesSel     int       // selected row in the Refresh rates editor
+	ratesEditing bool      // an interval field is open
+	ratesField   textfield // the inline numeric editor
+	dets         []agentinit.Detection
+	checked      []bool
+	sel          int      // selection within the agent picker list
+	menuSel      int      // selection within the top-level menu (independent of sel)
+	mode         dispMode // text display mode; z cycles (cutoff default)
+	hscroll      int      // modeScroll horizontal offset
 }
 
 const (
@@ -34,10 +39,11 @@ const (
 	settingsMenuOpLog       = "Operation log"
 	settingsMenuErrors      = "Session errors"
 	settingsMenuAutoRefresh = "Auto-refresh"
+	settingsMenuRates       = "Refresh rates"
 )
 
 // settingsMenu is the top-level menu order.
-var settingsMenu = []string{settingsMenuAgents, settingsMenuIdentity, settingsMenuPrefixes, settingsMenuOpLog, settingsMenuErrors, settingsMenuAutoRefresh}
+var settingsMenu = []string{settingsMenuAgents, settingsMenuIdentity, settingsMenuPrefixes, settingsMenuOpLog, settingsMenuErrors, settingsMenuAutoRefresh, settingsMenuRates}
 
 // settingsMenuLabel renders one menu row. The operation-log row is dynamic: it
 // shows the on/off state and the log filename, so the menu both reveals whether
@@ -162,6 +168,14 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			p.errorsView = false
 			return m, nil
 		}
+		if p.ratesView && p.ratesEditing {
+			p.ratesEditing = false
+			return m, nil
+		}
+		if p.ratesView && !p.ratesEditing {
+			p.ratesView = false
+			return m, nil
+		}
 		if p.picker {
 			p.picker = false
 			return m, nil
@@ -187,7 +201,7 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	if !p.picker && !p.errorsView {
+	if !p.picker && !p.errorsView && !p.ratesView {
 		switch msg.Type {
 		case tea.KeyUp:
 			// Wrap: up on the first option lands on the last.
@@ -209,6 +223,13 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				return m.toggleOpLog(), nil // stays open so the state flip is visible
 			case settingsMenuAutoRefresh:
 				return m.toggleAutoRefresh(), nil // stays open so the state flip is visible
+			case settingsMenuRates:
+				p.ratesView = true
+				p.ratesSel = 0
+				p.ratesEditing = false
+				p.sel = 0
+				p.hscroll = 0
+				return m, nil
 			case settingsMenuErrors:
 				p.errorsView = true
 				p.sel = 0
@@ -230,6 +251,55 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			if p.sel < len(fs)-1 {
 				p.sel++
 			}
+		}
+		return m, nil
+	}
+	if p.ratesView {
+		if p.ratesEditing {
+			switch msg.Type {
+			case tea.KeyEnter:
+				secs := 0
+				if v := strings.TrimSpace(p.ratesField.Value()); v != "" {
+					if n, err := strconv.Atoi(v); err == nil {
+						secs = n
+					}
+				}
+				m = m.saveRefreshInterval(scheduledItems[p.ratesSel], secs)
+				p.ratesEditing = false
+				return m, nil
+			case tea.KeyRunes:
+				digits := true
+				for _, r := range msg.Runes {
+					if r < '0' || r > '9' {
+						digits = false
+					}
+				}
+				if digits {
+					(&p.ratesField).insert(msg.Runes)
+				}
+				return m, nil
+			default:
+				(&p.ratesField).HandleEditKey(msg)
+				return m, nil
+			}
+		}
+		switch msg.Type {
+		case tea.KeyUp:
+			if p.ratesSel > 0 {
+				p.ratesSel--
+			}
+		case tea.KeyDown:
+			if p.ratesSel < len(scheduledItems)-1 {
+				p.ratesSel++
+			}
+		case tea.KeyEnter:
+			cur := refreshIntervalFor(m.cfg.Refresh, scheduledItems[p.ratesSel])
+			start := ""
+			if cur > 0 {
+				start = strconv.Itoa(cur)
+			}
+			p.ratesField = newTextField(start)
+			p.ratesEditing = true
 		}
 		return m, nil
 	}
@@ -285,7 +355,7 @@ func (p *settingsPopup) box(m Model) string {
 	// The errors viewer holds long, path-heavy rows (git stderr, the errors.log
 	// location), so it scales wide like the bookmark/shelf switchers — most
 	// errors and the log path then fit on one line instead of wrapping ugly.
-	if p.errorsView {
+	if p.errorsView || p.ratesView {
 		inner = popupWideInnerWidth(w)
 	}
 	textW := popupTextWidth(inner)
@@ -351,6 +421,48 @@ func (p *settingsPopup) box(m Model) string {
 			b.WriteString("\n[z] mode  [esc] back")
 		} else {
 			b.WriteString("\n[esc] back")
+		}
+	} else if p.ratesView {
+		b.WriteString("Refresh rates\n\n")
+		if !m.cfg.Refresh.Enabled {
+			b.WriteString("  auto-refresh is OFF — enable it in Settings → Auto-refresh\n\n")
+		}
+		for i, it := range scheduledItems {
+			name := "fetch"
+			if !it.isFetch {
+				name = sourceNames[it.source]
+			}
+			prefix := "  "
+			if i == p.ratesSel {
+				prefix = "> "
+			}
+			var valCell string
+			if p.ratesEditing && i == p.ratesSel {
+				valCell = p.ratesField.View(true) + "s"
+			} else {
+				secs, on := scheduledInterval(m.cfg.Refresh, it)
+				if on {
+					valCell = fmt.Sprintf("every %ds", secs)
+				} else {
+					valCell = "off"
+				}
+			}
+			// avg stat
+			avgStr := "—"
+			if s := m.refreshDur[it]; len(s) > 0 {
+				avg := meanDuration(s)
+				if avg < time.Second {
+					avgStr = fmt.Sprintf("%dms (%d)", avg.Milliseconds(), len(s))
+				} else {
+					avgStr = fmt.Sprintf("%.1fs (%d)", avg.Seconds(), len(s))
+				}
+			}
+			b.WriteString(fmt.Sprintf("%s%-10s  %-16s  avg %s\n", prefix, name, valCell, avgStr))
+		}
+		if p.ratesEditing {
+			b.WriteString("\n[0-9] edit  [enter] save  [esc] cancel   (0 = off)")
+		} else {
+			b.WriteString("\n[↑/↓] select  [enter] edit  [esc] back")
 		}
 	} else if !p.picker {
 		b.WriteString("Settings\n\n")

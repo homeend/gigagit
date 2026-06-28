@@ -13,6 +13,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   with every supported setting not yet present, added as commented `[populated]`
   lines; never touches existing overrides; idempotent. Complements
   `gg config init`.
+- **Refresh rates editor (Phase C rework).** Background auto-refresh now runs on
+  fixed, user-set per-source intervals (floored at `[refresh] min_seconds`,
+  default 10) over the single-lane queue — the adaptive engine
+  (`disable_adaptive`/`max_read_seconds`/`backoff_factor`) is removed. Settings →
+  "Refresh rates" is now an inline editor: select a source, press enter, type the
+  seconds (0 = off); it writes `[refresh] <source>` to the repo `.gg.toml`. Read
+  durations are still measured and shown there as stats.
 - **Background auto-refresh (Phase B).** The TUI can now silently refresh any
   data source in the background on a configurable per-source timer. Everything
   is **off by default** — opt in via the new `[refresh]` config section.
@@ -32,8 +39,7 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   runs off the foreground op slot so it cannot block an interactive op. The
   master switch can also be toggled live from **Settings (`,`)** — the choice
   is persisted to `[refresh] enabled` in the global config file so it survives
-  restarts. Phase C (adaptive intervals derived from measured source-read
-  durations) is next.
+  restarts. Phase C (background-refresh config editor) followed.
 - **Per-source async refresh (Phase A).** The TUI now reloads data
   source-by-source rather than all-at-once: status, branches, remote branches,
   tags, reflog, worktrees, commit feed, and identity each load independently
@@ -46,7 +52,7 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   still loading. Repo-switch (`reRoot`) and the conflict-process flow still use
   the previous monolithic load; porting those is future work. This is the
   foundation for Phase B (silent background auto-refresh on per-source timers)
-  and Phase C (adaptive intervals from measured read durations).
+  and Phase C (per-source interval config and stats editor).
 - **Session error log.** Every git operation that fails (any operation or read
   query that returns an error to a frontend) is now recorded to an always-on
   `errors.log` in the gg state dir (beside `operations.log`), and a new

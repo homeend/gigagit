@@ -78,6 +78,35 @@ func TestDebugOverlayRepoWins(t *testing.T) {
 	}
 }
 
+func TestSetRefreshIntervalRoundTrips(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".gg.toml")
+	if err := os.WriteFile(path, []byte("[refresh]\nenabled = true\nstatus = 30\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetRefreshInterval(path, "branches", 45); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load("", path) // repo layer
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Refresh.Branches != 45 {
+		t.Fatalf("branches should be 45, got %d", cfg.Refresh.Branches)
+	}
+	// Unrelated keys survive.
+	if !cfg.Refresh.Enabled || cfg.Refresh.Status != 30 {
+		t.Fatalf("unrelated keys clobbered: enabled=%v status=%d", cfg.Refresh.Enabled, cfg.Refresh.Status)
+	}
+	// Update an existing key in place.
+	if err := SetRefreshInterval(path, "status", 0); err != nil {
+		t.Fatal(err)
+	}
+	cfg2, _ := Load("", path)
+	if cfg2.Refresh.Status != 0 {
+		t.Fatalf("status should be 0, got %d", cfg2.Refresh.Status)
+	}
+}
+
 func TestSetGlobalRefreshEnabledRoundTrips(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
 	if err := SetGlobalRefreshEnabled(path, true); err != nil {

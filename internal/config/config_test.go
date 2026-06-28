@@ -299,6 +299,18 @@ func TestCommitPageSizeDefaultsAndOverlay(t *testing.T) {
 	}
 }
 
+func TestOverlayRefreshMinSeconds(t *testing.T) {
+	dst := RefreshConfig{}
+	overlayRefresh(&dst, RefreshConfig{MinSeconds: 20})
+	if dst.MinSeconds != 20 {
+		t.Fatalf("MinSeconds should overlay, got %d", dst.MinSeconds)
+	}
+	overlayRefresh(&dst, RefreshConfig{MinSeconds: 0}) // zero-is-unset
+	if dst.MinSeconds != 20 {
+		t.Fatalf("zero must not reset, got %d", dst.MinSeconds)
+	}
+}
+
 func TestRefreshConfigDefaultsOff(t *testing.T) {
 	c := Defaults()
 	if c.Refresh.Enabled {
