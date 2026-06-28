@@ -68,6 +68,9 @@ otherwise                         → max(cfg, backoff_factor × avg)
 
 - `cutoff` = `[refresh] max_read_seconds`, default **10**.
 - `backoff_factor` = `[refresh] backoff_factor`, default **10**.
+- `min_seconds` = `[refresh] min_seconds`, default **10** — a floor on every
+  scheduled interval, so a very cheap source (sub-second read) doesn't poll every
+  ~1s. The effective interval is `max(min_seconds, max(configured, factor × avg))`.
 - `avg` = arithmetic mean of the **last up-to-10** measured durations for that
   item (a small ring buffer). Fewer than 10 samples → mean of what exists.
 - The configured value is always a **floor**: adaptation only ever *lengthens*

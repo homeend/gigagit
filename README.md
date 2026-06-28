@@ -220,15 +220,17 @@ fetch     = 300    # run `git fetch` every 5 min (network; errors swallowed)
 disable_adaptive = false  # true → each source auto-refreshes at its fixed interval
 max_read_seconds = 10     # source whose avg read exceeds this drops to manual-only
 backoff_factor   = 10     # effective interval = max(configured, factor × avg read)
+min_seconds      = 10     # floor on any auto-refresh interval (cheap sources don't poll faster)
 ```
 
 With **adaptive intervals on** (the default when `enabled = true`) the per-source
 seconds above are **optional**: each source's interval is derived from how long
 its reads actually take — `effective = max(configured, backoff_factor × avg)`. If
 you set no interval for a source (or leave them all out), it still auto-refreshes
-once it has a measurement, polling purely at `backoff_factor × avg`. So enabling
-auto-refresh and pressing `r` once is enough to get every source self-tuning — no
-interval numbers required. A source whose rolling average exceeds
+once it has a measurement, polling purely at `backoff_factor × avg` (but never
+faster than `min_seconds`, default 10, so a very cheap source doesn't poll every
+second). So enabling auto-refresh and pressing `r` once is enough to get every
+source self-tuning — no interval numbers required. A source whose rolling average exceeds
 `max_read_seconds` drops to **manual-only** (a later `r` re-measures it and can
 re-enable it). With `disable_adaptive = true` the per-source seconds are used
 verbatim (a fixed schedule; 0 = off).

@@ -67,6 +67,15 @@ func TestEffectiveInterval(t *testing.T) {
 	if secs, state := effectiveInterval(custom, st, 12*time.Second, true); state != stateAdaptive || secs != 36 {
 		t.Fatalf("custom factor 3×12s=36, got %d/%v", secs, state)
 	}
+	// min_seconds floor: a floor-less source with a sub-second avg would back off
+	// to ~1s, but min_seconds (default 10) clamps it.
+	if secs, state := effectiveInterval(config.RefreshConfig{Enabled: true}, st, 50*time.Millisecond, true); state != stateAdaptive || secs != 10 {
+		t.Fatalf("cheap floor-less should clamp to min 10, got %d/%v", secs, state)
+	}
+	// explicit min_seconds honored.
+	if secs, _ := effectiveInterval(config.RefreshConfig{Enabled: true, MinSeconds: 30}, st, 50*time.Millisecond, true); secs != 30 {
+		t.Fatalf("min_seconds 30 should clamp to 30, got %d", secs)
+	}
 }
 
 func TestRecordDurationCapsAtTen(t *testing.T) {

@@ -56,6 +56,7 @@ func refreshIntervalFor(cfg config.RefreshConfig, it refreshItem) int {
 const (
 	defaultMaxReadSeconds = 10
 	defaultBackoffFactor  = 10
+	defaultMinSeconds     = 10 // floor on any auto-refresh interval (cheap sources don't hammer)
 	maxDurationSamples    = 10 // ring length per item for the rolling average
 )
 
@@ -96,7 +97,25 @@ func meanDuration(samples []time.Duration) time.Duration {
 // measurement, a base-0 source is statePending (it starts once a manual r or
 // background read measures it). With adaptive off, the configured interval is
 // used verbatim and base 0 means off.
+//
+// The result is floored by [refresh] min_seconds (default 10): no scheduling
+// interval is ever shorter than that, so a very cheap source (sub-second read)
+// doesn't end up polling every ~1s. Off/disabled/pending (secs 0) stay at 0.
 func effectiveInterval(cfg config.RefreshConfig, it refreshItem, avg time.Duration, haveSample bool) (int, intervalState) {
+	secs, state := effectiveIntervalRaw(cfg, it, avg, haveSample)
+	if secs > 0 {
+		min := cfg.MinSeconds
+		if min <= 0 {
+			min = defaultMinSeconds
+		}
+		if secs < min {
+			secs = min
+		}
+	}
+	return secs, state
+}
+
+func effectiveIntervalRaw(cfg config.RefreshConfig, it refreshItem, avg time.Duration, haveSample bool) (int, intervalState) {
 	base := refreshIntervalFor(cfg, it)
 	// The background `git fetch` is network I/O, so it is purely opt-in: it runs
 	// only when [refresh] fetch is set (base > 0). Unlike local source reads it
@@ -175,7 +194,11 @@ func (m Model) refreshRateRows() []string {
 		}
 		avgStr := "—"
 		if len(samples) > 0 {
-			avgStr = fmt.Sprintf("%.1fs (%d)", avg.Seconds(), len(samples))
+			if avg < time.Second {
+				avgStr = fmt.Sprintf("%dms (%d)", avg.Milliseconds(), len(samples))
+			} else {
+				avgStr = fmt.Sprintf("%.1fs (%d)", avg.Seconds(), len(samples))
+			}
 		}
 		effStr := "—"
 		if state == stateFixed || state == stateAdaptive || state == stateAdaptiveFloor {

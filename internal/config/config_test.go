@@ -302,18 +302,18 @@ func TestCommitPageSizeDefaultsAndOverlay(t *testing.T) {
 func TestOverlayRefreshAdaptiveFields(t *testing.T) {
 	dst := RefreshConfig{}
 	// Inverted polarity: a true in a higher layer overlays; false leaves dst.
-	overlayRefresh(&dst, RefreshConfig{DisableAdaptive: true, MaxReadSeconds: 15, BackoffFactor: 8})
+	overlayRefresh(&dst, RefreshConfig{DisableAdaptive: true, MaxReadSeconds: 15, BackoffFactor: 8, MinSeconds: 20})
 	if !dst.DisableAdaptive {
 		t.Fatal("DisableAdaptive true should overlay")
 	}
-	if dst.MaxReadSeconds != 15 || dst.BackoffFactor != 8 {
-		t.Fatalf("ints should overlay: got %d/%d", dst.MaxReadSeconds, dst.BackoffFactor)
+	if dst.MaxReadSeconds != 15 || dst.BackoffFactor != 8 || dst.MinSeconds != 20 {
+		t.Fatalf("ints should overlay: got %d/%d/%d", dst.MaxReadSeconds, dst.BackoffFactor, dst.MinSeconds)
 	}
 	// Zero-is-unset: a zero int in a higher layer must NOT reset a set value.
 	// Also: false (zero) in DisableAdaptive must not reset a lower layer's true.
-	overlayRefresh(&dst, RefreshConfig{MaxReadSeconds: 0, BackoffFactor: 0})
-	if dst.MaxReadSeconds != 15 || dst.BackoffFactor != 8 {
-		t.Fatalf("zero ints must not reset: got %d/%d", dst.MaxReadSeconds, dst.BackoffFactor)
+	overlayRefresh(&dst, RefreshConfig{MaxReadSeconds: 0, BackoffFactor: 0, MinSeconds: 0})
+	if dst.MaxReadSeconds != 15 || dst.BackoffFactor != 8 || dst.MinSeconds != 20 {
+		t.Fatalf("zero ints must not reset: got %d/%d/%d", dst.MaxReadSeconds, dst.BackoffFactor, dst.MinSeconds)
 	}
 	if !dst.DisableAdaptive {
 		t.Fatal("false DisableAdaptive in higher layer must not reset lower layer's true")

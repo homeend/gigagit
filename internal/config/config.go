@@ -83,6 +83,9 @@ type RefreshConfig struct {
 	// BackoffFactor multiplies a source's average read duration to derive its
 	// effective interval (floored by the configured value). 0 = unset → default 10.
 	BackoffFactor int `toml:"backoff_factor"`
+	// MinSeconds is the floor on any auto-refresh interval: no source polls more
+	// often than this, even when backoff_factor × avg is tiny. 0 = unset → default 10.
+	MinSeconds int `toml:"min_seconds"`
 }
 
 // Config is the merged gigagit configuration.
@@ -264,6 +267,9 @@ func overlayRefresh(dst *RefreshConfig, src RefreshConfig) {
 	}
 	if src.BackoffFactor > 0 {
 		dst.BackoffFactor = src.BackoffFactor
+	}
+	if src.MinSeconds > 0 {
+		dst.MinSeconds = src.MinSeconds
 	}
 }
 

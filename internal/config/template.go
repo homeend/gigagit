@@ -59,6 +59,7 @@ var settingDocs = []settingDoc{
 	{"refresh", "disable_adaptive", false, "turn OFF adaptive intervals (Phase C); default false = adaptive on, each source's interval auto-tunes from its measured read time"},
 	{"refresh", "max_read_seconds", 10, "a source whose average read exceeds this many seconds drops out of auto-refresh (manual r only)"},
 	{"refresh", "backoff_factor", 10, "effective interval = max(configured, this × average read seconds)"},
+	{"refresh", "min_seconds", 10, "floor on any auto-refresh interval; no source polls more often than this"},
 }
 
 // tomlScalar renders a registry value as it appears in TOML.
