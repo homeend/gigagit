@@ -2,7 +2,7 @@ package tui
 
 import (
 	"context"
-	"strings"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -231,19 +231,54 @@ func TestStartOpClearsLaneAndQueue(t *testing.T) {
 	}
 }
 
-func TestRefreshRateRows(t *testing.T) {
+func TestSaveRefreshIntervalUpdatesAndReseeds(t *testing.T) {
 	m := newTestModel(t)
-	m.cfg.Refresh = config.RefreshConfig{Enabled: true, Status: 30, Remotes: 3}
-	it := refreshItem{source: srcStatus}
-	m.refreshDur[it] = []time.Duration{120 * time.Millisecond, 120 * time.Millisecond}
-	joined := strings.Join(m.refreshRateRows(), "\n")
-	if !strings.Contains(joined, "status") || !strings.Contains(joined, "every 30s") || !strings.Contains(joined, "120ms (2)") {
-		t.Fatalf("status row wrong:\n%s", joined)
+	m.repoConfigPath = filepath.Join(t.TempDir(), ".gg.toml")
+	m.refreshLastRun = map[refreshItem]time.Time{}
+	it := refreshItem{source: srcBranches}
+	m = m.saveRefreshInterval(it, 45)
+	if m.cfg.Refresh.Branches != 45 {
+		t.Fatalf("in-memory cfg not updated, got %d", m.cfg.Refresh.Branches)
 	}
-	// remotes configured 3 < min 10 → floored, shown with (min).
-	if !strings.Contains(joined, "every 10s (min)") {
-		t.Fatalf("remotes should show floored 10s (min):\n%s", joined)
+	if _, seeded := m.refreshLastRun[it]; !seeded {
+		t.Fatal("lastRun must be reseeded so the edit doesn't burst")
 	}
+	cfg, err := config.Load("", m.repoConfigPath)
+	if err != nil || cfg.Refresh.Branches != 45 {
+		t.Fatalf("config file not written: err=%v branches=%d", err, cfg.Refresh.Branches)
+	}
+}
+
+func TestRatesEditorEnterEditSave(t *testing.T) {
+	m := newTestModel(t)
+	m.repoConfigPath = filepath.Join(t.TempDir(), ".gg.toml")
+	m = m.openSettings()
+	p := layerOf[*settingsPopup](m)
+	p.ratesView = true
+	p.ratesSel = 0 // status
+	// enter → open edit field
+	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = nm.(Model)
+	if !p.ratesEditing {
+		t.Fatal("enter should open the edit field")
+	}
+	// type "25"
+	m, _ = updateModel(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("2")})
+	m, _ = updateModel(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("5")})
+	// enter → save
+	m, _ = updateModel(m, tea.KeyMsg{Type: tea.KeyEnter})
+	if p.ratesEditing {
+		t.Fatal("enter should close the edit field")
+	}
+	if got := refreshIntervalFor(m.cfg.Refresh, scheduledItems[0]); got != 25 {
+		t.Fatalf("status interval should be 25, got %d", got)
+	}
+}
+
+// updateModel is a tiny helper to thread Update returns as Model.
+func updateModel(m Model, msg tea.Msg) (Model, tea.Cmd) {
+	nm, cmd := m.Update(msg)
+	return nm.(Model), cmd
 }
 
 func TestBgRefreshHint(t *testing.T) {

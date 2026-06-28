@@ -101,6 +101,7 @@ type Model struct {
 	srcGen              map[sourceKey]int               // per-source generation; stale dataAvailableMsg dropped
 	srcInflight         map[sourceKey]bool              // a read of this source is outstanding (coalescing)
 	srcLoading          map[sourceKey]bool              // a manual read is in flight → consuming panels show ⏳
+	repoConfigPath      string                          // <repo-top>/.gg.toml; the refresh-rates editor writes here
 	bgCtx               context.Context                 // context for in-flight background (auto) reads; cancelled when a user op starts
 	bgCancel            context.CancelFunc              // cancels bgCtx; nil when no background batch is active
 	refreshLastRun      map[refreshItem]time.Time       // last time each scheduled item fired (background scheduler)
@@ -464,6 +465,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case configReadyMsg:
 		m.cfg = msg.cfg
+		m.repoConfigPath = msg.repoTOML
 		// Seed refreshLastRun so the first heartbeat tick is one interval out
 		// rather than firing every enabled source immediately (enable-time burst).
 		now := time.Now()

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,15 +18,18 @@ import (
 // single menu entry (agent-skill setup); the menu/picker split exists so
 // future options have a home.
 type settingsPopup struct {
-	picker     bool // false = menu screen, true = agent picker
-	errorsView bool // true = session-errors viewer screen
-	ratesView  bool // true = refresh-rates viewer screen
-	dets       []agentinit.Detection
-	checked    []bool
-	sel        int      // selection within the agent picker list
-	menuSel    int      // selection within the top-level menu (independent of sel)
-	mode       dispMode // text display mode; z cycles (cutoff default)
-	hscroll    int      // modeScroll horizontal offset
+	picker       bool      // false = menu screen, true = agent picker
+	errorsView   bool      // true = session-errors viewer screen
+	ratesView    bool      // true = refresh-rates viewer screen
+	ratesSel     int       // selected row in the Refresh rates editor
+	ratesEditing bool      // an interval field is open
+	ratesField   textfield // the inline numeric editor
+	dets         []agentinit.Detection
+	checked      []bool
+	sel          int      // selection within the agent picker list
+	menuSel      int      // selection within the top-level menu (independent of sel)
+	mode         dispMode // text display mode; z cycles (cutoff default)
+	hscroll      int      // modeScroll horizontal offset
 }
 
 const (
@@ -164,7 +168,7 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			p.errorsView = false
 			return m, nil
 		}
-		if p.ratesView {
+		if p.ratesView && !p.ratesEditing {
 			p.ratesView = false
 			return m, nil
 		}
@@ -219,6 +223,8 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				return m.toggleAutoRefresh(), nil // stays open so the state flip is visible
 			case settingsMenuRates:
 				p.ratesView = true
+				p.ratesSel = 0
+				p.ratesEditing = false
 				p.sel = 0
 				p.hscroll = 0
 				return m, nil
@@ -247,15 +253,54 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 	if p.ratesView {
+		if p.ratesEditing {
+			switch msg.Type {
+			case tea.KeyEnter:
+				secs := 0
+				if v := strings.TrimSpace(p.ratesField.Value()); v != "" {
+					if n, err := strconv.Atoi(v); err == nil {
+						secs = n
+					}
+				}
+				m = m.saveRefreshInterval(scheduledItems[p.ratesSel], secs)
+				p.ratesEditing = false
+				return m, nil
+			case tea.KeyEsc:
+				p.ratesEditing = false
+				return m, nil
+			case tea.KeyRunes:
+				digits := true
+				for _, r := range msg.Runes {
+					if r < '0' || r > '9' {
+						digits = false
+					}
+				}
+				if digits {
+					(&p.ratesField).insert(msg.Runes)
+				}
+				return m, nil
+			default:
+				(&p.ratesField).HandleEditKey(msg)
+				return m, nil
+			}
+		}
 		switch msg.Type {
 		case tea.KeyUp:
-			if p.sel > 0 {
-				p.sel--
+			if p.ratesSel > 0 {
+				p.ratesSel--
 			}
 		case tea.KeyDown:
-			if p.sel < len(scheduledItems)-1 {
-				p.sel++
+			if p.ratesSel < len(scheduledItems)-1 {
+				p.ratesSel++
 			}
+		case tea.KeyEnter:
+			cur := refreshIntervalFor(m.cfg.Refresh, scheduledItems[p.ratesSel])
+			start := ""
+			if cur > 0 {
+				start = strconv.Itoa(cur)
+			}
+			p.ratesField = newTextField(start)
+			p.ratesEditing = true
 		}
 		return m, nil
 	}
@@ -380,15 +425,46 @@ func (p *settingsPopup) box(m Model) string {
 		}
 	} else if p.ratesView {
 		b.WriteString("Refresh rates\n\n")
-		mode := "on"
 		if !m.cfg.Refresh.Enabled {
-			mode = "off"
+			b.WriteString("  auto-refresh is OFF — enable it in Settings → Auto-refresh\n\n")
 		}
-		b.WriteString("  mode: " + mode + "\n\n")
-		for _, row := range m.refreshRateRows() {
-			b.WriteString("  " + row + "\n")
+		for i, it := range scheduledItems {
+			name := "fetch"
+			if !it.isFetch {
+				name = sourceNames[it.source]
+			}
+			prefix := "  "
+			if i == p.ratesSel {
+				prefix = "> "
+			}
+			var valCell string
+			if p.ratesEditing && i == p.ratesSel {
+				valCell = p.ratesField.View(true) + "s"
+			} else {
+				secs, on := scheduledInterval(m.cfg.Refresh, it)
+				if on {
+					valCell = fmt.Sprintf("every %ds", secs)
+				} else {
+					valCell = "off"
+				}
+			}
+			// avg stat
+			avgStr := "—"
+			if s := m.refreshDur[it]; len(s) > 0 {
+				avg := meanDuration(s)
+				if avg < time.Second {
+					avgStr = fmt.Sprintf("%dms (%d)", avg.Milliseconds(), len(s))
+				} else {
+					avgStr = fmt.Sprintf("%.1fs (%d)", avg.Seconds(), len(s))
+				}
+			}
+			b.WriteString(fmt.Sprintf("%s%-10s  %-16s  avg %s\n", prefix, name, valCell, avgStr))
 		}
-		b.WriteString("\n[esc] back")
+		if p.ratesEditing {
+			b.WriteString("\n[0-9] edit  [enter] save  [esc] cancel   (0 = off)")
+		} else {
+			b.WriteString("\n[↑/↓] select  [enter] edit  [esc] back")
+		}
 	} else if !p.picker {
 		b.WriteString("Settings\n\n")
 		for i := range settingsMenu {

@@ -2,7 +2,6 @@ package tui
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -136,39 +135,27 @@ func setRefreshIntervalField(cfg *config.RefreshConfig, it refreshItem, secs int
 	}
 }
 
-// refreshRateRows formats one line per scheduled item for the Refresh rates
-// editor: name · interval · avg stat. Uses scheduledInterval for the interval
-// (showing the floored value with a (min) marker when the configured value was
-// below min_seconds). avg is informational only.
-func (m Model) refreshRateRows() []string {
-	rows := make([]string, 0, len(scheduledItems))
-	for _, it := range scheduledItems {
-		name := "fetch"
-		if !it.isFetch {
-			name = sourceNames[it.source]
-		}
-		cfgSecs := refreshIntervalFor(m.cfg.Refresh, it)
-		secs, on := scheduledInterval(m.cfg.Refresh, it)
-		intervalStr := "off"
-		if on {
-			intervalStr = fmt.Sprintf("every %ds", secs)
-			if cfgSecs < secs {
-				intervalStr += " (min)"
-			}
-		}
-		samples := m.refreshDur[it]
-		avgStr := "—"
-		if len(samples) > 0 {
-			avg := meanDuration(samples)
-			if avg < time.Second {
-				avgStr = fmt.Sprintf("%dms (%d)", avg.Milliseconds(), len(samples))
-			} else {
-				avgStr = fmt.Sprintf("%.1fs (%d)", avg.Seconds(), len(samples))
-			}
-		}
-		rows = append(rows, fmt.Sprintf("%-10s  %-16s  avg %s", name, intervalStr, avgStr))
+// saveRefreshInterval applies an edited interval: updates the in-memory config
+// (next tick honors it), reseeds the item's lastRun (no enable-burst), and
+// persists [refresh] <key> = secs to the repo .gg.toml. A write error is
+// surfaced on the status line but the in-memory value still applies.
+func (m Model) saveRefreshInterval(it refreshItem, secs int) Model {
+	if secs < 0 {
+		secs = 0
 	}
-	return rows
+	setRefreshIntervalField(&m.cfg.Refresh, it, secs)
+	if m.refreshLastRun == nil {
+		m.refreshLastRun = map[refreshItem]time.Time{}
+	}
+	m.refreshLastRun[it] = time.Now()
+	if m.repoConfigPath == "" {
+		m.statusMsg = "refresh interval set (not saved: no repo config path)"
+		return m
+	}
+	if err := config.SetRefreshInterval(m.repoConfigPath, refreshTomlKey(it), secs); err != nil {
+		m.statusMsg = "refresh interval set but not saved: " + err.Error()
+	}
+	return m
 }
 
 // recordDuration appends d to its rolling ring, dropping the oldest beyond

@@ -275,7 +275,10 @@ func opAffectedSources(op engine.Operation) []sourceKey {
 
 // configReadyMsg carries the loaded config from bootstrapCmd; its handler
 // applies it and fans out the first all-source read.
-type configReadyMsg struct{ cfg config.Config }
+type configReadyMsg struct {
+	cfg      config.Config
+	repoTOML string // <repo-top>/.gg.toml, "" if not in a repo
+}
 
 // bootstrapCmd loads config and applies the settings the first reads depend on
 // (feed page sizes, EOL-only visibility) plus the MRU touch, then emits
@@ -288,8 +291,10 @@ func (m Model) bootstrapCmd() tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
 		cfg := config.Defaults()
+		repoTOML := ""
 		if top, err := svc.TopLevel(ctx); err == nil && top != "" {
-			if c, cerr := config.Load(config.DefaultGlobalPath(), filepath.Join(top, ".gg.toml")); cerr == nil {
+			repoTOML = filepath.Join(top, ".gg.toml")
+			if c, cerr := config.Load(config.DefaultGlobalPath(), repoTOML); cerr == nil {
 				cfg = c
 			}
 			if statePath != "" {
@@ -298,6 +303,6 @@ func (m Model) bootstrapCmd() tea.Cmd {
 		}
 		feed.SetPageSizes(cfg.UI.CommitInitialCount, cfg.UI.CommitBatchSize)
 		svc.SetShowEOLOnlyChanges(cfg.UI.ShowEOLOnlyChanges)
-		return configReadyMsg{cfg: cfg}
+		return configReadyMsg{cfg: cfg, repoTOML: repoTOML}
 	}
 }
