@@ -11,7 +11,8 @@ import (
 
 // Watcher watches a set of planned groups and emits a debounced Source whenever
 // the .git files backing that source change. It is safe to Close once; the
-// events channel is closed on shutdown.
+// events channel is closed by Close() under the mutex (not by loop()), so no
+// timer callback can send after the close.
 type Watcher struct {
 	fsw    *fsnotify.Watcher
 	groups []Group
@@ -55,8 +56,8 @@ func New(groups []Group, debounce time.Duration) (*Watcher, error) {
 func (w *Watcher) Events() <-chan Source { return w.out }
 
 // loop translates fsnotify events into debounced Source emissions.
+// It does NOT close w.out — Close() does that under the mutex.
 func (w *Watcher) loop() {
-	defer close(w.out)
 	for {
 		select {
 		case <-w.done:
@@ -103,14 +104,25 @@ func (w *Watcher) schedule(s Source) {
 	}
 	src := s
 	w.timers[s] = time.AfterFunc(w.debounce, func() {
-		select {
-		case w.out <- src:
-		case <-w.done:
+		// Guard with the mutex: Close() closes w.out under the same mutex, so if
+		// we reach here with closed=false the channel is guaranteed still open.
+		// Use a non-blocking send so we never hold the lock during a channel op;
+		// a dropped duplicate is harmless because debounce coalesces bursts.
+		w.mu.Lock()
+		if !w.closed {
+			select {
+			case w.out <- src:
+			default: // buffer full — drop; the refresh lane deduplicates
+			}
 		}
+		w.mu.Unlock()
 	})
 }
 
 // Close stops watching and closes the events channel. Safe to call once.
+// Ordering under lock: set closed=true → stop timers → close(w.out).
+// Because every timer callback checks w.closed under the same mutex before
+// sending, closing w.out here guarantees no callback can send after the close.
 func (w *Watcher) Close() error {
 	w.mu.Lock()
 	if w.closed {
@@ -121,6 +133,7 @@ func (w *Watcher) Close() error {
 	for _, t := range w.timers {
 		t.Stop()
 	}
+	close(w.out) // safe: w.closed=true seen by all callbacks under this mutex
 	w.mu.Unlock()
 	close(w.done)
 	return w.fsw.Close()
