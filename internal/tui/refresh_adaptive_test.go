@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/model"
@@ -158,6 +160,34 @@ func TestForegroundFetchRecordsDuration(t *testing.T) {
 	}
 	if mm.opIsFetch {
 		t.Fatal("opIsFetch must be cleared after the op completes")
+	}
+}
+
+// End-to-end: a real successful foreground fetch (the `f` key path) driven
+// through startOp → the op message loop → opFinishedMsg must populate the fetch
+// row. Uses a real local bare remote so the fetch actually succeeds.
+func TestForegroundFetchRecordsThroughOpLoop(t *testing.T) {
+	m := newTestModelWithRemote(t)
+	model, c := m.startOp(engine.Fetch{})
+	if !model.opIsFetch {
+		t.Fatal("startOp(engine.Fetch{}) must set opIsFetch")
+	}
+	done := false
+	for i := 0; i < 200 && c != nil; i++ {
+		msg := c()
+		var nm tea.Model
+		nm, c = model.Update(msg)
+		model = nm.(Model)
+		if _, ok := msg.(opFinishedMsg); ok {
+			done = true
+			break
+		}
+	}
+	if !done {
+		t.Fatal("op loop never reached opFinishedMsg")
+	}
+	if got := model.refreshDur[fetchItem]; len(got) != 1 {
+		t.Fatalf("a successful foreground fetch should record into the fetch row, got %v", got)
 	}
 }
 
