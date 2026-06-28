@@ -30,6 +30,12 @@ func (m Model) remoteTagsCmd(ctx context.Context, manual bool) tea.Cmd {
 	}
 }
 
+// autoRemoteTagsEnabled reports whether a tag-window change should auto-trigger
+// a background remote-tag lookup (default on; inverted config flag).
+func (m Model) autoRemoteTagsEnabled() bool {
+	return !m.cfg.Refresh.DisableRemoteTagsAuto
+}
+
 // applyPendingRemoteTag folds a pending optimistic add/remove into the set on op
 // success, then clears the pending fields. Lazy-inits the map for an add.
 func (m Model) applyPendingRemoteTag() Model {
