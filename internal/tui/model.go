@@ -1496,6 +1496,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !msg.manual && m.bgBusy && m.bgActiveItem.isRemoteTags {
 			m.bgBusy = false
 		}
+		// Drop stale results from a previous repo: reRoot bumps loadGen, so any
+		// in-flight remoteTagsCmd that was launched before the switch must not
+		// overwrite the new repo's (empty) remoteTagNames with old-repo names.
+		if msg.gen != m.loadGen {
+			return m, nil
+		}
 		if msg.err != nil {
 			if msg.manual {
 				m.statusMsg = "remote tags: " + msg.err.Error()
