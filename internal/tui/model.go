@@ -1511,7 +1511,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Only enqueue if the source is still watch-active (toggle could have
 		// flipped). Then re-arm the listener.
 		if watchActive(m.cfg.Refresh, m.watchSupported, refreshItem{source: msg.source}) {
-			m.bgQueue = enqueueDue(m.bgQueue, m.bgActiveItem, m.bgBusy, []refreshItem{{source: msg.source}})
+			// busy=false bypasses the active-skip: a watch trigger for the source
+			// currently being read must still queue a fresh follow-up read (the
+			// active read may have started before this change committed). Watch-active
+			// sources have no polling backstop, so a skipped enqueue would be lost.
+			// In-queue dedup (inQueue check in enqueueDue) still prevents duplicates.
+			m.bgQueue = enqueueDue(m.bgQueue, m.bgActiveItem, false, []refreshItem{{source: msg.source}})
 		}
 		return m, watchListenCmd(m.watcher, m.watchGen)
 	case watchClosedMsg:

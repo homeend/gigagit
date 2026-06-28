@@ -304,8 +304,13 @@ func (m Model) refreshTick(now time.Time) (Model, tea.Cmd) {
 	m.bgQueue = m.bgQueue[1:]
 	// A source whose read is already in flight (e.g. a manual r) must not get a
 	// second, superseding background read — that would strand the manual ⏳.
-	// Drop it this tick; it re-enqueues next tick if still due (lastRun unchanged).
+	// Re-enqueue rather than drop: watch-active sources have NO interval backstop
+	// (dueItems skips them), so a dropped trigger would be lost forever.
+	// enqueueDue's in-queue dedup keeps this bounded; it drains once srcInflight
+	// clears. Harmless for timer items — dueItems would re-add them anyway, but
+	// re-enqueuing here keeps latency low when inflight clears before the next tick.
 	if !it.isFetch && m.srcInflight[it.source] {
+		m.bgQueue = enqueueDue(m.bgQueue, m.bgActiveItem, m.bgBusy, []refreshItem{it})
 		return m, nil
 	}
 	// Guard fetch when svc is nil: bgFetchCmd would return nil (no command), but

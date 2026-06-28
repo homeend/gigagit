@@ -252,6 +252,51 @@ func TestToggleRefreshWatchIgnoresIneligible(t *testing.T) {
 	}
 }
 
+// TestWatchTriggerReenqueuedWhileSourceInFlight guards Fix A: when a
+// watch-active source's item is at the head of the bg queue but that source is
+// already in-flight (e.g. a manual r), refreshTick must re-enqueue the item
+// rather than drop it. Watch-active sources have no interval backstop — dueItems
+// skips them — so a dropped trigger would be permanently lost until the next
+// filesystem change or manual r.
+func TestWatchTriggerReenqueuedWhileSourceInFlight(t *testing.T) {
+	m := newTestModel(t)
+	m.cfg.Refresh = config.RefreshConfig{
+		Enabled:        true,
+		WorktreesWatch: true,
+	}
+	m.watchSupported = true
+	m.loading = false
+
+	it := refreshItem{source: srcWorktrees}
+	m.bgQueue = []refreshItem{it}
+	m.srcInflight[srcWorktrees] = true // simulate a manual r in flight
+
+	// refreshTick must NOT fire a second read, but MUST re-enqueue the trigger.
+	m2, cmd := m.refreshTick(time.Now())
+	if cmd != nil {
+		t.Fatal("must not fire a bg read while source is already in flight")
+	}
+	found := false
+	for _, q := range m2.bgQueue {
+		if q == it {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("watch-active source trigger must be re-enqueued, not dropped, when source is inflight")
+	}
+
+	// Once inflight clears the queued item must drain normally (bg read fires).
+	m2.srcInflight[srcWorktrees] = false
+	m3, cmd2 := m2.refreshTick(time.Now())
+	if cmd2 == nil {
+		t.Fatal("expected bg read to fire once inflight cleared")
+	}
+	if !m3.bgBusy {
+		t.Fatal("lane must be busy after draining the queued watch trigger")
+	}
+}
+
 func TestWatchEligibleD2IncludesRefs(t *testing.T) {
 	for _, s := range []sourceKey{srcWorktrees, srcReflog, srcBranches, srcRemotes} {
 		if !watchEligible(refreshItem{source: s}) {
