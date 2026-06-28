@@ -81,6 +81,12 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	// otherwise focus would move while typing kept capturing keys for the
 	// old panel.
 	m.filterTyping = false
+	// A click on the tab-bar line of a left-column slot switches to that tab
+	// (and focuses it), mirroring ctrl+←/→. Off the tabs, the click falls
+	// through to plain focus/selection below.
+	if tp, ok := m.tabClickAt(p, msg.X, msg.Y); ok {
+		return m.activateTab(tp), nil
+	}
 	if p != m.focus {
 		m = m.rememberLeftFocus()
 		m.focus = p
