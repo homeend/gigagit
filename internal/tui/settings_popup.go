@@ -168,6 +168,10 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			p.errorsView = false
 			return m, nil
 		}
+		if p.ratesView && p.ratesEditing {
+			p.ratesEditing = false
+			return m, nil
+		}
 		if p.ratesView && !p.ratesEditing {
 			p.ratesView = false
 			return m, nil
@@ -263,9 +267,6 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 					}
 				}
 				m = m.saveRefreshInterval(scheduledItems[p.ratesSel], secs)
-				p.ratesEditing = false
-				return m, nil
-			case tea.KeyEsc:
 				p.ratesEditing = false
 				return m, nil
 			case tea.KeyRunes:

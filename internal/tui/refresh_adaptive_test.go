@@ -275,6 +275,32 @@ func TestRatesEditorEnterEditSave(t *testing.T) {
 	}
 }
 
+func TestRatesEditorEscCancelsEdit(t *testing.T) {
+	m := newTestModel(t)
+	m = m.openSettings()
+	p := layerOf[*settingsPopup](m)
+	p.ratesView = true
+	p.ratesSel = 0
+
+	// enter → open edit field
+	m, _ = updateModel(m, tea.KeyMsg{Type: tea.KeyEnter})
+	if !p.ratesEditing {
+		t.Fatal("enter should open the edit field")
+	}
+
+	// esc → cancel edit (stay on rates screen, popup still open)
+	m, _ = updateModel(m, tea.KeyMsg{Type: tea.KeyEsc})
+	if p.ratesEditing {
+		t.Fatal("esc should cancel the edit (ratesEditing must be false)")
+	}
+	if !p.ratesView {
+		t.Fatal("esc while editing should stay on rates screen (ratesView must remain true)")
+	}
+	if layerOf[*settingsPopup](m) == nil {
+		t.Fatal("esc while editing must not close the settings popup")
+	}
+}
+
 // updateModel is a tiny helper to thread Update returns as Model.
 func updateModel(m Model, msg tea.Msg) (Model, tea.Cmd) {
 	nm, cmd := m.Update(msg)
