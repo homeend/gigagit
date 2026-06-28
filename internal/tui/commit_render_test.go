@@ -23,7 +23,7 @@ func TestCommitRowShowsBothMarkersWhenInSync(t *testing.T) {
 		Refs:    []model.Ref{{Name: "main", Kind: model.RefLocal, Head: true}, {Name: "origin/main", Kind: model.RefRemote}},
 	}}
 	m := renderModelWithCommits(branches, commits)
-	row := m.commitIdentRowAt(0, m.commitIdentWidth(), false)
+	row := m.commitIdentRowAt(0, m.commitIdentWidth(), false, -1)
 	if !strings.Contains(row, "■▲") {
 		t.Fatalf("row = %q, want both ■▲ markers", row)
 	}
@@ -41,7 +41,7 @@ func TestCommitRowRemoteOnlyTipNamesBranch(t *testing.T) {
 		Source:  "main",
 	}}
 	m := renderModelWithCommits(branches, commits)
-	row := m.commitIdentRowAt(0, m.commitIdentWidth(), false)
+	row := m.commitIdentRowAt(0, m.commitIdentWidth(), false, -1)
 	if !strings.Contains(row, "▲") || strings.Contains(row, "■") {
 		t.Fatalf("row = %q, want only the remote ▲ marker", row)
 	}

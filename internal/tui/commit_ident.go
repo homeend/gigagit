@@ -243,16 +243,6 @@ func commitDecoGroup(id commitIdent, budget int) (string, []decoSpan, bool) {
 	return fmt.Sprintf(" (+%d)", n), nil, true
 }
 
-// pills renders additional-branch tips (the multi-tip case) as ‹name› chips; the
-// primary branch already shows in the identity column. Empty in the common case.
-func (id commitIdent) pills() string {
-	var b strings.Builder
-	for _, n := range id.extra {
-		b.WriteString("‹" + n + "› ")
-	}
-	return b.String()
-}
-
 // commitLineDecorator restyles one visible commit line in a SINGLE pass over its
 // original runes: it colors the lane '●' node (when hasDot) and dims the identity
 // column's rune range (when dim). Doing both in one pass over the unstyled string

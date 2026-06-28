@@ -24,7 +24,7 @@ func TestCommitBodyWindowedMatchesFull(t *testing.T) {
 			full := m.renderPanel(panelCommits, label, fRows, fDecos, 80, boxH)
 
 			// New: only the visible window is styled.
-			wRows, _, wDecos := m.commitBody(boxH)
+			wRows, _, wDecos := m.commitBody(80, boxH)
 			win := m.renderPanel(panelCommits, label, wRows, wDecos, 80, boxH)
 
 			if full != win {

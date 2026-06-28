@@ -68,7 +68,7 @@ func BenchmarkCommitsRender(b *testing.B) {
 			b.Run(fmt.Sprintf("n=%d/cols=%d", n, cols), func(b *testing.B) {
 				b.ReportAllocs()
 				for i := 0; i < b.N; i++ {
-					_, _, _ = m.commitBody(boxH)
+					_, _, _ = m.commitBody(80, boxH)
 				}
 			})
 		}
