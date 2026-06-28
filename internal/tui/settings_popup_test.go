@@ -157,20 +157,6 @@ func TestToggleAutoRefreshFlipsInMemory(t *testing.T) {
 	}
 }
 
-func TestToggleAdaptiveFlipsInMemory(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	m := newTestModel(t)
-	// Default: adaptive ON (DisableAdaptive false). Toggle → off (disable true).
-	m2 := m.toggleAdaptive()
-	if !m2.cfg.Refresh.DisableAdaptive {
-		t.Fatal("first toggle should disable adaptation in memory")
-	}
-	m3 := m2.toggleAdaptive()
-	if m3.cfg.Refresh.DisableAdaptive {
-		t.Fatal("second toggle should re-enable adaptation")
-	}
-}
-
 func TestSettingsSwallowsGlobalKeys(t *testing.T) {
 	m, _ := settingsModel(t)
 	u, _ := m.Update(keyMsg(","))

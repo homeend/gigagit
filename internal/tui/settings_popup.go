@@ -35,12 +35,11 @@ const (
 	settingsMenuOpLog       = "Operation log"
 	settingsMenuErrors      = "Session errors"
 	settingsMenuAutoRefresh = "Auto-refresh"
-	settingsMenuAdaptive    = "Adaptive intervals"
 	settingsMenuRates       = "Refresh rates"
 )
 
 // settingsMenu is the top-level menu order.
-var settingsMenu = []string{settingsMenuAgents, settingsMenuIdentity, settingsMenuPrefixes, settingsMenuOpLog, settingsMenuErrors, settingsMenuAutoRefresh, settingsMenuAdaptive, settingsMenuRates}
+var settingsMenu = []string{settingsMenuAgents, settingsMenuIdentity, settingsMenuPrefixes, settingsMenuOpLog, settingsMenuErrors, settingsMenuAutoRefresh, settingsMenuRates}
 
 // settingsMenuLabel renders one menu row. The operation-log row is dynamic: it
 // shows the on/off state and the log filename, so the menu both reveals whether
@@ -76,12 +75,6 @@ func settingsMenuLabel(m Model, i int) string {
 			return settingsMenuAutoRefresh + ": on"
 		}
 		return settingsMenuAutoRefresh + ": off"
-	}
-	if settingsMenu[i] == settingsMenuAdaptive {
-		if m.cfg.Refresh.DisableAdaptive {
-			return settingsMenuAdaptive + ": off (fixed intervals)"
-		}
-		return settingsMenuAdaptive + ": on"
 	}
 	return settingsMenu[i]
 }
@@ -136,24 +129,6 @@ func (m Model) toggleAutoRefresh() Model {
 		m.statusMsg = "auto-refresh on (per-source intervals from [refresh])"
 	} else {
 		m.statusMsg = "auto-refresh off"
-	}
-	return m
-}
-
-// toggleAdaptive flips the adaptive-interval system, persisting to the global
-// config (mirrors toggleAutoRefresh). DisableAdaptive is the inverted key:
-// false ⇒ adaptation on.
-func (m Model) toggleAdaptive() Model {
-	wantDisable := !m.cfg.Refresh.DisableAdaptive
-	m.cfg.Refresh.DisableAdaptive = wantDisable // next tick honors it
-	if err := config.SetGlobalRefreshDisableAdaptive(config.DefaultGlobalPath(), wantDisable); err != nil {
-		m.statusMsg = "adaptive intervals toggled but not saved: " + err.Error()
-		return m
-	}
-	if wantDisable {
-		m.statusMsg = "adaptive intervals off — using fixed [refresh] intervals"
-	} else {
-		m.statusMsg = "adaptive intervals on — tuning from measured read times"
 	}
 	return m
 }
@@ -242,8 +217,6 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				return m.toggleOpLog(), nil // stays open so the state flip is visible
 			case settingsMenuAutoRefresh:
 				return m.toggleAutoRefresh(), nil // stays open so the state flip is visible
-			case settingsMenuAdaptive:
-				return m.toggleAdaptive(), nil // stays open so the state flip is visible
 			case settingsMenuRates:
 				p.ratesView = true
 				p.sel = 0
@@ -407,12 +380,9 @@ func (p *settingsPopup) box(m Model) string {
 		}
 	} else if p.ratesView {
 		b.WriteString("Refresh rates\n\n")
-		mode := "adaptive"
-		if m.cfg.Refresh.DisableAdaptive {
-			mode = "fixed (adaptive off)"
-		}
+		mode := "on"
 		if !m.cfg.Refresh.Enabled {
-			mode = "auto-refresh off"
+			mode = "off"
 		}
 		b.WriteString("  mode: " + mode + "\n\n")
 		for _, row := range m.refreshRateRows() {
