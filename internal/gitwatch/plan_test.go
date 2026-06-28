@@ -59,10 +59,54 @@ func TestPlanWorktreesWatchesWorktreesDir(t *testing.T) {
 	}
 }
 
-func TestPlanIgnoresUnimplementedSourcesInD1(t *testing.T) {
+func TestPlanEmptyEnabledYieldsNoGroups(t *testing.T) {
+	c := filepath.Join("/repo", ".git")
+	groups := Plan(c, c, []Source{})
+	if len(groups) != 0 {
+		t.Errorf("empty enabled slice must yield no groups, got %v", dirsOf(groups))
+	}
+}
+
+func TestPlanBranchesWatchesRefsHeadsRecursive(t *testing.T) {
+	c := filepath.Join("/repo", ".git")
+	groups := Plan(c, c, []Source{Branches})
+	g := groupFor(t, groups, filepath.Join(c, "refs", "heads"))
+	if !g.Recursive {
+		t.Error("refs/heads group must be recursive")
+	}
+	if !hasSource(g.Match("main"), Branches) {
+		t.Error("a ref under refs/heads should affect Branches")
+	}
+}
+
+func TestPlanPackedRefsAffectsBothWhenEnabled(t *testing.T) {
 	c := filepath.Join("/repo", ".git")
 	groups := Plan(c, c, []Source{Branches, Remotes})
-	if len(groups) != 0 {
-		t.Errorf("D1 Plan must ignore Branches/Remotes, got %v", dirsOf(groups))
+	g := groupFor(t, groups, c) // the commonDir shared group
+	ss := g.Match("packed-refs")
+	if !hasSource(ss, Branches) || !hasSource(ss, Remotes) {
+		t.Errorf("packed-refs should affect both Branches and Remotes, got %v", ss)
+	}
+	if cfg := g.Match("config"); !hasSource(cfg, Remotes) || hasSource(cfg, Branches) {
+		t.Errorf("config should affect Remotes only, got %v", cfg)
+	}
+}
+
+func TestPlanPackedRefsOnlyEnabledSource(t *testing.T) {
+	c := filepath.Join("/repo", ".git")
+	groups := Plan(c, c, []Source{Branches}) // remotes NOT enabled
+	g := groupFor(t, groups, c)
+	if ss := g.Match("packed-refs"); hasSource(ss, Remotes) {
+		t.Errorf("packed-refs must not emit Remotes when remotes disabled, got %v", ss)
+	}
+}
+
+func TestPlanBranchesWatchesHEADOnWorktreeDir(t *testing.T) {
+	c := filepath.Join("/repo", ".git")
+	w := filepath.Join(c, "worktrees", "wt1")
+	groups := Plan(c, w, []Source{Branches})
+	g := groupFor(t, groups, w)
+	if !hasSource(g.Match("HEAD"), Branches) {
+		t.Error("HEAD change should affect Branches (current-branch line)")
 	}
 }
