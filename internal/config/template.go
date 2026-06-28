@@ -58,6 +58,7 @@ var settingDocs = []settingDoc{
 	{"refresh", "fetch", 0, "seconds between background `git fetch`; 0 = off"},
 	{"refresh", "remote_tags", 0, "seconds between background remote-tag (ls-remote) lookups; 0 = off"},
 	{"refresh", "min_seconds", 10, "floor on any auto-refresh interval; no source polls more often than this"},
+	{"refresh", "disable_remote_tags_auto", false, "disable auto remote-tag refresh on tag-list changes (default: on)"},
 }
 
 // tomlScalar renders a registry value as it appears in TOML.

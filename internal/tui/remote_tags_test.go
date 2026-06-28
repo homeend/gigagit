@@ -69,6 +69,42 @@ func TestReRootClearsRemoteTagNames(t *testing.T) {
 	}
 }
 
+// Stale remoteTagsMsg (gen != loadGen) must not overwrite remoteTagNames and
+// must still free the background lane if it was occupied by remoteTagsItem.
+func TestRemoteTagsMsgStaleGenDropped(t *testing.T) {
+	oldNames := map[string]bool{"old": true}
+	m := Model{
+		remoteTagNames: oldNames,
+		bgBusy:         true,
+		bgActiveItem:   remoteTagsItem,
+		loadGen:        2, // current gen after a repo switch
+	}
+	// Send a stale background message with gen=1 (captured before the switch).
+	u, _ := m.Update(remoteTagsMsg{names: map[string]bool{"new": true}, manual: false, gen: 1})
+	got := u.(Model)
+	// Lane must be freed even though the message is stale.
+	if got.bgBusy {
+		t.Fatal("stale remoteTagsMsg must still free bgBusy")
+	}
+	// Names must NOT be overwritten.
+	if got.remoteTagNames["new"] {
+		t.Fatal("stale remoteTagsMsg must not overwrite remoteTagNames with old-repo names")
+	}
+	if !got.remoteTagNames["old"] {
+		t.Fatal("stale remoteTagsMsg must leave existing remoteTagNames unchanged")
+	}
+}
+
+// Current-gen remoteTagsMsg (gen == loadGen) must still apply names normally.
+func TestRemoteTagsMsgCurrentGenApplied(t *testing.T) {
+	m := Model{loadGen: 2}
+	u, _ := m.Update(remoteTagsMsg{names: map[string]bool{"v2": true}, manual: false, gen: 2})
+	got := u.(Model)
+	if !got.remoteTagNames["v2"] {
+		t.Fatal("current-gen remoteTagsMsg must apply names")
+	}
+}
+
 var errTestRemote = errString("boom")
 
 type errString string

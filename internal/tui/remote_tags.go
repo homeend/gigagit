@@ -12,22 +12,33 @@ import (
 // background poll (errors discarded — see queryQuiet's no-record contract).
 // dur is the wall-clock time of the lookup, used by the background lane for
 // rolling duration stats (informational only, never affects scheduling).
+// gen is the loadGen value captured at launch; the handler drops the message
+// if it no longer matches m.loadGen (repo was switched while the read was
+// in flight), mirroring the bgFetchDoneMsg pattern.
 type remoteTagsMsg struct {
 	names  map[string]bool
 	err    error
 	dur    time.Duration
 	manual bool
+	gen    int
 }
 
 // remoteTagsCmd runs the (network) remote-tag lookup off the UI thread. Shared by
 // the manual .-menu action and the background scheduler lane.
 func (m Model) remoteTagsCmd(ctx context.Context, manual bool) tea.Cmd {
 	svc := m.svc
+	gen := m.loadGen // snapshot at launch; handler drops stale results on repo switch
 	return func() tea.Msg {
 		start := time.Now()
 		names, err := svc.RemoteTags(ctx)
-		return remoteTagsMsg{names: names, err: err, dur: time.Since(start), manual: manual}
+		return remoteTagsMsg{names: names, err: err, dur: time.Since(start), manual: manual, gen: gen}
 	}
+}
+
+// autoRemoteTagsEnabled reports whether a tag-window change should auto-trigger
+// a background remote-tag lookup (default on; inverted config flag).
+func (m Model) autoRemoteTagsEnabled() bool {
+	return !m.cfg.Refresh.DisableRemoteTagsAuto
 }
 
 // applyPendingRemoteTag folds a pending optimistic add/remove into the set on op

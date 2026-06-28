@@ -223,6 +223,8 @@ fetch       = 300    # run `git fetch` every 5 min (network; errors swallowed)
 remote_tags = 300    # check which tags exist on the remote every 5 min (network; errors swallowed)
 
 min_seconds = 10     # floor on any interval (no source polls faster than this)
+
+# disable_remote_tags_auto = false  # set true to turn off the default auto-refresh (see below)
 ```
 
 Each per-source value is the poll interval in seconds; 0 (the default) means that
@@ -234,6 +236,13 @@ opt-in only (network): each runs solely when set to a non-zero value. A manual
 row drives the `▲` tag-pushed-state indicator: it runs `git ls-remote --tags` on
 the default remote (origin if present, else the first remote) and updates the `▲`
 markers for every visible tag; comparison is by name only (v1).
+
+The `▲` indicator also **auto-refreshes by default** whenever the tag list
+changes — on app load and after any tag add/remove/push/delete-from-remote — via
+a silent background lookup that is independent of the `[refresh] enabled` master
+switch. To disable it: toggle **Settings (`,`) → "Auto remote-tag refresh"**
+(persists to the global config), or set `[refresh] disable_remote_tags_auto = true`
+in `.gg.toml` (a repo can disable independently of the global setting).
 
 Background reads run **one at a time** (FIFO, deduped by type) to cap git
 subprocess pressure; manual `r` stays parallel and is unaffected. A small

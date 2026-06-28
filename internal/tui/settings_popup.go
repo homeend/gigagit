@@ -39,11 +39,12 @@ const (
 	settingsMenuOpLog       = "Operation log"
 	settingsMenuErrors      = "Session errors"
 	settingsMenuAutoRefresh = "Auto-refresh"
+	settingsMenuRemoteTags  = "Auto remote-tag refresh"
 	settingsMenuRates       = "Refresh rates"
 )
 
 // settingsMenu is the top-level menu order.
-var settingsMenu = []string{settingsMenuAgents, settingsMenuIdentity, settingsMenuPrefixes, settingsMenuOpLog, settingsMenuErrors, settingsMenuAutoRefresh, settingsMenuRates}
+var settingsMenu = []string{settingsMenuAgents, settingsMenuIdentity, settingsMenuPrefixes, settingsMenuOpLog, settingsMenuErrors, settingsMenuAutoRefresh, settingsMenuRemoteTags, settingsMenuRates}
 
 // settingsMenuLabel renders one menu row. The operation-log row is dynamic: it
 // shows the on/off state and the log filename, so the menu both reveals whether
@@ -79,6 +80,12 @@ func settingsMenuLabel(m Model, i int) string {
 			return settingsMenuAutoRefresh + ": on"
 		}
 		return settingsMenuAutoRefresh + ": off"
+	}
+	if settingsMenu[i] == settingsMenuRemoteTags {
+		if m.cfg.Refresh.DisableRemoteTagsAuto {
+			return settingsMenuRemoteTags + ": off"
+		}
+		return settingsMenuRemoteTags + ": on"
 	}
 	return settingsMenu[i]
 }
@@ -133,6 +140,23 @@ func (m Model) toggleAutoRefresh() Model {
 		m.statusMsg = "auto-refresh on (per-source intervals from [refresh])"
 	} else {
 		m.statusMsg = "auto-refresh off"
+	}
+	return m
+}
+
+// toggleAutoRemoteTags flips the auto remote-tag refresh switch (inverted flag),
+// persisting to the global config so it survives restarts (mirrors toggleAutoRefresh).
+func (m Model) toggleAutoRemoteTags() Model {
+	wantDisabled := !m.cfg.Refresh.DisableRemoteTagsAuto
+	m.cfg.Refresh.DisableRemoteTagsAuto = wantDisabled
+	if err := config.SetGlobalDisableRemoteTagsAuto(config.DefaultGlobalPath(), wantDisabled); err != nil {
+		m.statusMsg = "auto remote-tag refresh toggled but not saved: " + err.Error()
+		return m
+	}
+	if wantDisabled {
+		m.statusMsg = "auto remote-tag refresh off"
+	} else {
+		m.statusMsg = "auto remote-tag refresh on"
 	}
 	return m
 }
@@ -223,6 +247,8 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				return m.toggleOpLog(), nil // stays open so the state flip is visible
 			case settingsMenuAutoRefresh:
 				return m.toggleAutoRefresh(), nil // stays open so the state flip is visible
+			case settingsMenuRemoteTags:
+				return m.toggleAutoRemoteTags(), nil // stays open so the flip is visible
 			case settingsMenuRates:
 				p.ratesView = true
 				p.ratesSel = 0

@@ -628,6 +628,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			key := m.panelSelKey(panelTags)
 			m.tags = msg.value.([]model.Tag)
 			m = m.restorePanelSel(panelTags, key)
+			// Auto remote-tag refresh: a tag-window update enqueues a silent background
+			// ls-remote so ▲ markers track local changes (create/delete/push) without a
+			// manual refresh. Routed through the single lane (deduped); independent of
+			// the [refresh] master switch. Skipped when disabled or there are no tags.
+			if m.autoRemoteTagsEnabled() && len(m.tags) > 0 {
+				m.bgQueue = enqueueDue(m.bgQueue, m.bgActiveItem, m.bgBusy, []refreshItem{remoteTagsItem})
+			}
 		case srcReflog:
 			key := m.panelSelKey(panelReflog)
 			m.reflog = msg.value.([]model.ReflogEntry)
@@ -1488,6 +1495,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// error paths must free it or the lane sticks forever).
 		if !msg.manual && m.bgBusy && m.bgActiveItem.isRemoteTags {
 			m.bgBusy = false
+		}
+		// Drop stale results from a previous repo: reRoot bumps loadGen, so any
+		// in-flight remoteTagsCmd that was launched before the switch must not
+		// overwrite the new repo's (empty) remoteTagNames with old-repo names.
+		if msg.gen != m.loadGen {
+			return m, nil
 		}
 		if msg.err != nil {
 			if msg.manual {

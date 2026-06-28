@@ -232,6 +232,23 @@ func TestToggleAutoRefreshFlipsInMemory(t *testing.T) {
 	}
 }
 
+func TestToggleAutoRemoteTagsFlipsInMemory(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir()) // don't write the real user config
+	m := newTestModel(t)
+	// default: enabled (DisableRemoteTagsAuto false)
+	if m.cfg.Refresh.DisableRemoteTagsAuto {
+		t.Fatal("precondition: auto-refresh remote tags on by default")
+	}
+	m = m.toggleAutoRemoteTags()
+	if !m.cfg.Refresh.DisableRemoteTagsAuto {
+		t.Fatal("toggle should disable in-memory")
+	}
+	m = m.toggleAutoRemoteTags()
+	if m.cfg.Refresh.DisableRemoteTagsAuto {
+		t.Fatal("toggle should re-enable in-memory")
+	}
+}
+
 func TestSettingsSwallowsGlobalKeys(t *testing.T) {
 	m, _ := settingsModel(t)
 	u, _ := m.Update(keyMsg(","))

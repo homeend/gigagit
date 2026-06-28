@@ -28,6 +28,13 @@ func SetGlobalRefreshEnabled(path string, on bool) error {
 	return setScalarLine(path, "refresh", "enabled", strconv.FormatBool(on))
 }
 
+// SetGlobalDisableRemoteTagsAuto persists `[refresh] disable_remote_tags_auto`
+// to the global config file (preserving comments), backing the Settings
+// "Auto remote-tag refresh" toggle.
+func SetGlobalDisableRemoteTagsAuto(path string, disabled bool) error {
+	return setScalarLine(path, "refresh", "disable_remote_tags_auto", strconv.FormatBool(disabled))
+}
+
 // SetRefreshInterval persists `[refresh] <source> = secs` to the given config
 // file (the repo .gg.toml), preserving the rest of the file. Backs the Settings
 // "Refresh rates" inline editor.
