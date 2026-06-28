@@ -48,9 +48,58 @@ func (id commitIdent) markers() string {
 	}
 }
 
+// countBadge is the superscript count shown on a multi-tip marker (≥2 local
+// tips): ²–⁹, or ⁺ for ≥10. Empty for <2. Always one display cell when present.
+func countBadge(n int) string {
+	if n < 2 {
+		return ""
+	}
+	const sup = "⁰¹²³⁴⁵⁶⁷⁸⁹"
+	supRunes := []rune(sup)
+	if n >= 10 {
+		return "⁺"
+	}
+	return string(supRunes[n])
+}
+
+// markerField is the fixed 3-cell marker area, laid out as
+// [marker1][marker2-or-badge][separator]. The count badge (≥2 local tips) fills
+// the FILLER cell next to a lone ■ so it reads "■³ "; when BOTH a local and a
+// remote marker are present there is no room, so the badge is dropped (the count
+// still shows via the decoration group / (+N)). Always exactly commitMarkerW (3)
+// display cells.
+func (id commitIdent) markerField() string {
+	badge := countBadge(id.count) // "" when <2
+	switch {
+	case id.tip && id.remoteTip:
+		return markerLocal + markerRemote + " " // "■▲ " — no room for the badge
+	case id.tip:
+		if badge == "" {
+			return markerLocal + "  " // "■  "
+		}
+		return markerLocal + badge + " " // "■³ " — badge in the filler cell
+	case id.remoteTip:
+		return markerRemote + "  " // "▲  "
+	default:
+		return "   " // lineage row
+	}
+}
+
 // dimIdentStyle grays a lineage row's branch name (the commit belongs to that
 // branch but is not its tip). 240 is a mid-gray in the 256-color cube.
 var dimIdentStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+
+// tagDecoStyle colors a tag label (⊙name) in the commit-row decoration group
+// yellow. Must match the tagColorStyle probe used in commit_deco_color_test.go.
+var tagDecoStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("220"))
+
+// coloredSpan marks a rune range (absolute content columns, pre-hscroll, like
+// identStart) to recolor via a specific lipgloss Style in the single-pass
+// commitLineDecorator. Spans must not overlap each other or the dim range.
+type coloredSpan struct {
+	Start, Length int
+	Style         lipgloss.Style
+}
 
 // dimRowStyle grays an entire commit row that does NOT match the active
 // @-highlight query, de-emphasizing it while keeping it visible.
@@ -74,6 +123,8 @@ type commitIdent struct {
 	remoteTip bool     // this commit is the tip of a tracked remote (upstream of a local branch)
 	head      bool     // the chosen branch is the current (HEAD) branch
 	extra     []string // additional local-branch tips at this commit (multi-tip)
+	tags      []string // tag names at this commit (RefTag), rendered in the deco group
+	count     int      // number of local-branch tips at this commit (for the count badge)
 }
 
 // commitIdentOf derives the identity from a commit's local refs (a tip) or, when
@@ -94,11 +145,17 @@ func commitIdentOf(c model.Commit, tracked map[string]string) commitIdent {
 			}
 		}
 	}
+	var tags []string
+	for _, r := range c.Refs {
+		if r.Kind == model.RefTag {
+			tags = append(tags, r.Name)
+		}
+	}
 	if len(locals) == 0 {
 		if remoteTipName != "" {
-			return commitIdent{name: remoteTipName, remoteTip: true}
+			return commitIdent{name: remoteTipName, remoteTip: true, tags: tags}
 		}
-		return commitIdent{name: c.Source, tip: false}
+		return commitIdent{name: c.Source, tip: false, tags: tags}
 	}
 	pick := 0
 	for i, r := range locals {
@@ -113,6 +170,8 @@ func commitIdentOf(c model.Commit, tracked map[string]string) commitIdent {
 			id.extra = append(id.extra, r.Name)
 		}
 	}
+	id.tags = tags
+	id.count = len(locals)
 	return id
 }
 
@@ -139,31 +198,72 @@ func (id commitIdent) token(w int) (text string, trimmed bool) {
 	} else {
 		body = padRight(name, w)
 	}
-	return id.markers() + " " + body, trimmed
+	return id.markerField() + body, trimmed
 }
 
 // fullToken is the UNtrimmed label with the marker prefix, padded to commitMarkerW+w.
 func (id commitIdent) fullToken(w int) string {
-	return id.markers() + " " + padRight(id.label(), w)
+	return id.markerField() + padRight(id.label(), w)
 }
 
-// pills renders additional-branch tips (the multi-tip case) as ‹name› chips; the
-// primary branch already shows in the identity column. Empty in the common case.
-func (id commitIdent) pills() string {
-	var b strings.Builder
-	for _, n := range id.extra {
-		b.WriteString("‹" + n + "› ")
+const tagGlyph = "⊙" // precedes a tag name in the commit-row decoration group
+
+type decoSpan struct{ Offset, Length int }
+
+// commitDecoGroup renders the before-subject decoration group for an identity:
+// " (branch1, branch2, ⊙v1.0.0)" with extra branches first then tags. Returns the
+// group string (with a single leading space, "" when there are no extras/tags),
+// the rune spans of each ⊙tag label (relative to the group string start) for the
+// decorator to color yellow, and whether it collapsed to " (+N)". budget < 0
+// means never collapse (full mode). When the natural group width exceeds budget
+// it collapses to " (+N)" (N = extras+tags) and tagSpans is nil.
+func commitDecoGroup(id commitIdent, budget int) (string, []decoSpan, bool) {
+	n := len(id.extra) + len(id.tags)
+	if n == 0 {
+		return "", nil, false
 	}
-	return b.String()
+	// Build the full group and record tag spans (rune offsets within the string).
+	var b strings.Builder
+	b.WriteString(" (")
+	var spans []decoSpan
+	first := true
+	write := func(s string, isTag bool) {
+		if !first {
+			b.WriteString(", ")
+		}
+		first = false
+		if isTag {
+			start := len([]rune(b.String()))
+			lbl := tagGlyph + s
+			b.WriteString(lbl)
+			spans = append(spans, decoSpan{Offset: start, Length: len([]rune(lbl))})
+		} else {
+			b.WriteString(s)
+		}
+	}
+	for _, br := range id.extra {
+		write(br, false)
+	}
+	for _, tg := range id.tags {
+		write(tg, true)
+	}
+	b.WriteString(")")
+	full := b.String()
+	if budget < 0 || lipgloss.Width(full) <= budget {
+		return full, spans, false
+	}
+	return fmt.Sprintf(" (+%d)", n), nil, true
 }
 
 // commitLineDecorator restyles one visible commit line in a SINGLE pass over its
-// original runes: it colors the lane '●' node (when hasDot) and dims the identity
-// column's rune range (when dim). Doing both in one pass over the unstyled string
-// avoids the ANSI rune-index drift that chaining two decorators would cause. All
-// columns are content columns (the visible line already had hscroll applied, so
-// content col of rune i is i+hscroll). Width is preserved.
-func commitLineDecorator(hasDot bool, dotCol int, dotColor lipgloss.Color, dim bool, identStart, identLen int) rowDecorator {
+// original runes: it dims the identity column (when dim), colors the lane '●'
+// node (when hasDot), and recolors any tag-label spans (colorSpans). Doing all
+// three in one pass over the unstyled string avoids ANSI rune-index drift that
+// chaining decorators would cause. All columns are content columns (pre-hscroll;
+// content col of rune i is i+hscroll). Width is preserved — styles add no cells.
+// colorSpans are absolute content columns (like identStart). They must not
+// overlap the identity dim range or each other.
+func commitLineDecorator(hasDot bool, dotCol int, dotColor lipgloss.Color, dim bool, identStart, identLen int, colorSpans []coloredSpan) rowDecorator {
 	dotStyle := lipgloss.NewStyle().Foreground(dotColor)
 	return func(visible string, hscroll, visualLine int) string {
 		if visualLine != 0 {
@@ -174,6 +274,7 @@ func commitLineDecorator(hasDot bool, dotCol int, dotColor lipgloss.Color, dim b
 		i := 0
 		for i < len(r) {
 			col := i + hscroll
+			// Dim the identity (name) column on lineage rows.
 			if dim && col >= identStart && col < identStart+identLen {
 				j := i
 				for j < len(r) {
@@ -187,6 +288,28 @@ func commitLineDecorator(hasDot bool, dotCol int, dotColor lipgloss.Color, dim b
 				i = j
 				continue
 			}
+			// Color any tag-label spans (yellow ⊙name in the deco group).
+			colored := false
+			for _, cs := range colorSpans {
+				if col >= cs.Start && col < cs.Start+cs.Length {
+					j := i
+					for j < len(r) {
+						c := j + hscroll
+						if c < cs.Start || c >= cs.Start+cs.Length {
+							break
+						}
+						j++
+					}
+					b.WriteString(cs.Style.Render(string(r[i:j])))
+					i = j
+					colored = true
+					break
+				}
+			}
+			if colored {
+				continue
+			}
+			// Color the graph lane node (●).
 			if hasDot && col == dotCol && r[i] == '●' {
 				b.WriteString(dotStyle.Render(string(r[i])))
 				i++

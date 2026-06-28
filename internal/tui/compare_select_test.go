@@ -204,7 +204,7 @@ func TestCompareSetMarkerRenders(t *testing.T) {
 	m.commitCompareSet = map[string]bool{m.commits[1].Hash: true} // mark row 1
 
 	rows, idx := m.panelView(panelCommits)
-	decos := m.commitDecorators(rows, idx)
+	decos := m.commitDecorators(rows, idx, -1)
 	out := m.renderPanel(panelCommits, "Commits", rows, decos, 120, 12)
 
 	if !strings.Contains(out, "◉") {
@@ -226,7 +226,7 @@ func TestCompareSetMarkerBeatsMark(t *testing.T) {
 	m.commitCompareSet = map[string]bool{m.commits[0].Hash: true}
 
 	rows, idx := m.panelView(panelCommits)
-	decos := m.commitDecorators(rows, idx)
+	decos := m.commitDecorators(rows, idx, -1)
 	out := m.renderPanel(panelCommits, "Commits", rows, decos, 120, 12)
 
 	if !strings.Contains(out, "◉") {

@@ -289,7 +289,7 @@ func (l commitList) Row(i int) string {
 	if l.m == nil {
 		return ""
 	}
-	return l.m.commitIdentRowAt(i, l.identW, false)
+	return l.m.commitIdentRowAt(i, l.identW, false, -1)
 }
 func (l commitList) Name(i int) string {
 	if r, ok := l.wipAt(i); ok {
@@ -325,7 +325,7 @@ func (l commitList) Full(i int) string {
 	if l.m == nil || i >= l.Len() {
 		return ""
 	}
-	return l.m.commitIdentRowAt(i, l.identW, true)
+	return l.m.commitIdentRowAt(i, l.identW, true, -1)
 }
 
 // TextReveal supplies the compact text-only reveal (branch + subject, no graph

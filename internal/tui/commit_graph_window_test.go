@@ -180,7 +180,7 @@ func TestDotColumnAlignsOnScrolledRow(t *testing.T) {
 	forceColor(t)
 	m := graphWinModel(50, 40, 8, 36) // window [36,44): node 40 visible, left marker on
 	rows := m.commitIdentRows(false)
-	decos := m.commitDecorators(rows, []int{0})
+	decos := m.commitDecorators(rows, []int{0}, -1)
 	if len(decos) != 1 || decos[0] == nil {
 		t.Fatal("expected one decorator for the single commit row")
 	}
@@ -202,7 +202,7 @@ func TestRenderPanelWindowsWideGraph(t *testing.T) {
 	forceColor(t)
 	m := graphWinModel(200, 150, 8, 146) // window [146,154): node 150 visible, left ⋯ on
 	rows, idx := m.panelView(panelCommits)
-	decos := m.commitDecorators(rows, idx)
+	decos := m.commitDecorators(rows, idx, -1)
 	out := m.renderPanel(panelCommits, "Commits", rows, decos, 120, 10)
 
 	for _, ln := range strings.Split(out, "\n") {

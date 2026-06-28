@@ -9,6 +9,19 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Commits-panel ref decorations (tags + multi-tip group).** The Commits panel
+  now renders a `git log --decorate`-style decoration group **before the subject**:
+  extra local-branch tips appear in default foreground, and tags appear as
+  `⊙<name>` in **yellow** (color 220), including on non-tip lineage rows where the
+  tag actually lives. When ≥2 local branches tip a commit the `■` marker gains a
+  **superscript count badge** (`■²`, `■³`, … `■⁺` for ≥10); the badge is dropped
+  when both `■` and `▲` are shown (no room). When the full group would leave too
+  little room for the subject it collapses to `(+N)` where N = extras + tags. Tags
+  are now searchable via the Commits `/` filter and `@` highlight. The old
+  after-subject `‹name›` pills are removed; all ref info is now in the
+  before-subject group and the marker badge. *v1 note: remote-tracking refs still
+  appear via `▲` only, not inside the group; in wrap mode the group still collapses
+  by panel width.*
 - **File-watch auto-refresh (Phase D):** worktrees, reflog, branches, and remotes
   panels refresh the moment their `.git` files change (fsnotify) instead of on a
   timer. Toggle per source with `w` in Settings → Refresh rates. Disabled

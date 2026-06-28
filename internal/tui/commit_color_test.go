@@ -36,7 +36,7 @@ func TestCommitDecoratorsColorGraphNodeNotSelected(t *testing.T) {
 		t.Fatalf("rebuildCommitGraph should populate lanes, got %v", m.commitGraphLanes)
 	}
 	rows, idx := m.panelView(panelCommits)
-	decos := m.commitDecorators(rows, idx)
+	decos := m.commitDecorators(rows, idx, -1)
 	if decos == nil {
 		t.Fatal("graph mode should produce decorators")
 	}
@@ -58,7 +58,7 @@ func TestRenderPanelEmitsLaneColor(t *testing.T) {
 	m = m.rebuildCommitGraph()
 	m.sel[panelCommits] = 0 // row 0 selected → must NOT be colored
 	rows, idx := m.panelView(panelCommits)
-	decos := m.commitDecorators(rows, idx)
+	decos := m.commitDecorators(rows, idx, -1)
 	out := m.renderPanel(panelCommits, "Commits", rows, decos, 40, 8)
 	// Derive the exact escape lipgloss emits for this color under the active
 	// profile (256 vs truecolor differ), rather than guessing the SGR form.
@@ -118,7 +118,7 @@ func TestListModeRowsHaveDotGutterAndColorUnderFilter(t *testing.T) {
 	// List mode colors even when the graph would be suppressed (simulate filter
 	// by asserting commitDecorators returns non-nil while commitGraphOn is false).
 	m.sortModes[panelCommits] = sortDateDesc // non-default → forces commitGraphOn() false
-	decos := m.commitDecorators(rows, []int{0, 1})
+	decos := m.commitDecorators(rows, []int{0, 1}, -1)
 	if decos == nil {
 		t.Fatal("list mode should color regardless of graph suppression")
 	}

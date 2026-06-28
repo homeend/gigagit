@@ -409,12 +409,12 @@ func (m Model) renderInterface() string {
 
 	// Narrow terminals: a single commits column (two columns won't fit cleanly).
 	if g.w < 40 {
-		cmRows, _, decos := m.commitBody(g.boxH[panelCommits])
+		cmRows, _, decos := m.commitBody(g.w, g.boxH[panelCommits])
 		body := m.renderPanel(panelCommits, m.panelLabel(panelCommits, "Commits ("+m.commitScopeLabel()+")"), cmRows, decos, g.w, g.boxH[panelCommits])
 		return strings.Join([]string{header, body, footer, statusLine}, "\n")
 	}
 
-	cmRows, _, cmDecos := m.commitBody(g.boxH[panelCommits])
+	cmRows, _, cmDecos := m.commitBody(g.rightW, g.boxH[panelCommits])
 
 	var left string
 	if m.filesView != nil {
@@ -1026,19 +1026,20 @@ func (m Model) commitFullRows() []string { return m.commitIdentRows(true) }
 // every row (O(visible) instead of O(feed) per frame). In wrap mode a row may
 // span several lines, so every row is styled for exactness. The returned slices
 // are full-length, keeping renderPanel's selection/mark indexing unchanged.
-func (m Model) commitBody(boxH int) (rows []string, idx []int, decos []rowDecorator) {
+func (m Model) commitBody(boxW, boxH int) (rows []string, idx []int, decos []rowDecorator) {
 	idx = m.displayIndices(panelCommits)
 	rows = make([]string, len(idx))
 	rowsCap := boxH - 3 // mirrors renderPanel: borders (2) + label line
 	if rowsCap < 1 {
 		return rows, idx, nil // panel shows the label only; no rows rendered
 	}
+	w := m.commitIdentWidth()
+	budget := m.commitGroupBudget(boxW, w)
 	if m.dispModes[panelCommits] == modeWrap || len(idx) <= rowsCap {
-		w := m.commitIdentWidth()
 		for n, i := range idx {
-			rows[n] = m.commitIdentRowAt(i, w, false)
+			rows[n] = m.commitIdentRowAt(i, w, false, budget)
 		}
-		return rows, idx, m.commitDecorators(rows, idx)
+		return rows, idx, m.commitDecorators(rows, idx, budget)
 	}
 	sel := m.sel[panelCommits]
 	start := windowStart(len(idx), rowsCap, sel)
@@ -1046,11 +1047,33 @@ func (m Model) commitBody(boxH int) (rows []string, idx []int, decos []rowDecora
 	if end > len(idx) {
 		end = len(idx)
 	}
-	w := m.commitIdentWidth()
 	for n := start; n < end; n++ {
-		rows[n] = m.commitIdentRowAt(idx[n], w, false)
+		rows[n] = m.commitIdentRowAt(idx[n], w, false, budget)
 	}
-	return rows, idx, m.commitDecoratorsRange(rows, idx, start, end)
+	return rows, idx, m.commitDecoratorsRange(rows, idx, start, end, budget)
+}
+
+// commitGroupBudget is the max display width the before-subject decoration
+// group may occupy before collapsing to (+N). It reserves the fixed left
+// columns (the 2-col selection prefix renderPanel prepends, the list/graph
+// prefix, the 3-cell marker, the identity column, and the separating space)
+// plus a minimum subject width out of the panel content width (boxW minus
+// the 2 border columns). A non-positive result is clamped to 0 (collapse
+// everything for extremely narrow panels).
+func (m Model) commitGroupBudget(boxW, identW int) int {
+	const minSubjectW = 12
+	content := boxW - 2 // renderPanel left+right border cells
+	prefix := 2         // 2-col selection prefix renderPanel prepends
+	if m.commitListMode {
+		prefix += 2 // "● "
+	} else if !m.commitListMode && m.commitGraphOn() && len(m.commitGraphRows) == m.commitsTotal() {
+		prefix += m.graphCols()*2 + 1
+	}
+	budget := content - prefix - commitMarkerW - identW - 1 - minSubjectW
+	if budget < 0 {
+		budget = 0
+	}
+	return budget
 }
 
 // commitTextReveals is the per-commit reveal text the tooltip renders: the full
@@ -1074,11 +1097,12 @@ func (m Model) commitTextRevealAt(i int) string {
 	}
 	c := m.commits[i-m.wipCount()]
 	id := commitIdentOf(c, m.trackedUpstreams())
-	label := id.label()
-	if label != "" {
-		label += " "
+	group, _, _ := commitDecoGroup(id, -1)
+	combined := strings.TrimSpace(id.label() + group)
+	if combined == "" {
+		return c.Subject
 	}
-	return label + id.pills() + c.Subject
+	return combined + " " + c.Subject
 }
 
 // trackedUpstreams maps each local branch's upstream short ref ("origin/main")
@@ -1116,16 +1140,19 @@ func (m Model) commitIdentRows(full bool) []string {
 	w := m.commitIdentWidth()
 	out := make([]string, m.commitsTotal())
 	for i := range out {
-		out[i] = m.commitIdentRowAt(i, w, full)
+		out[i] = m.commitIdentRowAt(i, w, full, -1)
 	}
 	return out
 }
 
 // commitIdentRowAt builds one Commits-panel display row: the identity token
-// (trimmed unless full), pills, subject, prefixed by the list-mode dot or the
-// windowed graph cells. w is the shared identity-column width. Single-sourced by
-// both commitIdentRows (all rows) and commitList.Full (one row, lazily).
-func (m Model) commitIdentRowAt(i, w int, full bool) string {
+// (trimmed unless full), the decoration group (extra branches + tags, budgeted),
+// the subject, prefixed by the list-mode dot or the windowed graph cells.
+// w is the shared identity-column width. budget is the max display width for
+// the deco group before collapsing to (+N); budget < 0 means never collapse
+// (used by reveal/measurement paths). Single-sourced by both commitIdentRows
+// (all rows) and commitList.Full (one row, lazily).
+func (m Model) commitIdentRowAt(i, w int, full bool, budget int) string {
 	if r, ok := m.wipRowAt(i); ok {
 		row := r.text()
 		switch {
@@ -1145,7 +1172,8 @@ func (m Model) commitIdentRowAt(i, w int, full bool) string {
 	} else {
 		tok, _ = id.token(w)
 	}
-	row := tok + " " + id.pills() + c.Subject
+	group, _, _ := commitDecoGroup(id, budget)
+	row := tok + group + " " + c.Subject
 	switch {
 	case m.commitListMode:
 		row = "● " + row
@@ -1166,18 +1194,23 @@ func (m Model) commitGraphOn() bool {
 }
 
 // commitDecorators returns a per-display-row decorator slice (parallel to rows):
-// it dims the identity column on LINEAGE rows (always, in every mode) and colors
-// each commit's '●' node by its lane (only when lane coloring is active). idx
-// maps display row → backing commit index (from panelView). Columns include the
-// 2-col selection prefix the renderer prepends.
-func (m Model) commitDecorators(rows []string, idx []int) []rowDecorator {
-	return m.commitDecoratorsRange(rows, idx, 0, len(rows))
+// it dims the identity column on LINEAGE rows, colors each commit's '●' node by
+// its lane, and colors tag-label spans yellow. idx maps display row → backing
+// commit index (from panelView). Columns include the 2-col selection prefix the
+// renderer prepends. budget is the decoration-group collapse budget used when
+// building the rows (must be the same value so the group string and its tag spans
+// are consistent — the SYNC INVARIANT).
+func (m Model) commitDecorators(rows []string, idx []int, budget int) []rowDecorator {
+	return m.commitDecoratorsRange(rows, idx, 0, len(rows), budget)
 }
 
 // commitDecoratorsRange builds the per-row decorators for display rows [lo,hi)
 // only, returning a full-length slice (off-window entries stay nil — renderPanel
 // skips a nil decorator). Windowed rendering decorates just the visible rows.
-func (m Model) commitDecoratorsRange(rows []string, idx []int, lo, hi int) []rowDecorator {
+// budget is the decoration-group collapse budget used when building the row
+// strings; it must be identical to the value commitIdentRowAt used so that
+// commitDecoGroup returns the same string and spans (the SYNC INVARIANT).
+func (m Model) commitDecoratorsRange(rows []string, idx []int, lo, hi int, budget int) []rowDecorator {
 	if len(rows) == 0 {
 		return nil
 	}
@@ -1219,6 +1252,29 @@ func (m Model) commitDecoratorsRange(rows []string, idx []int, lo, hi int) []row
 		}
 		identStart += commitMarkerW // skip the ■▲ marker prefix; dim only the name column
 
+		// Build color spans for ⊙tag labels in the deco group. SYNC INVARIANT:
+		// commitDecoGroup is called with the SAME budget used by commitIdentRowAt
+		// when building the row string — both receive the value commitBody computed
+		// once. Any divergence would color phantom columns (group collapsed in row
+		// but spans computed for full group, or vice versa).
+		var colorSpans []coloredSpan
+		_, tagSpans, _ := commitDecoGroup(id, budget)
+		if len(tagSpans) > 0 {
+			// groupBase: the group string starts immediately after the name column.
+			// tok = markerField(commitMarkerW) + name(identW); identStart already
+			// accounts for selection prefix + mode prefix + commitMarkerW, so the
+			// name column occupies [identStart, identStart+identW) and the group
+			// string starts at identStart+identW.
+			groupBase := identStart + identW
+			for _, s := range tagSpans {
+				colorSpans = append(colorSpans, coloredSpan{
+					Start:  groupBase + s.Offset,
+					Length: s.Length,
+					Style:  tagDecoStyle,
+				})
+			}
+		}
+
 		hasDot := false
 		dotCol := 0
 		var dotColor lipgloss.Color
@@ -1240,10 +1296,10 @@ func (m Model) commitDecoratorsRange(rows []string, idx []int, lo, hi int) []row
 				}
 			}
 		}
-		if !dim && !hasDot {
+		if !dim && !hasDot && len(colorSpans) == 0 {
 			continue
 		}
-		decos[j] = commitLineDecorator(hasDot, dotCol, dotColor, dim, identStart, identW)
+		decos[j] = commitLineDecorator(hasDot, dotCol, dotColor, dim, identStart, identW, colorSpans)
 	}
 	return decos
 }
@@ -1261,7 +1317,7 @@ func (m Model) commitHaystacks() []string {
 }
 
 // commitHaystackAt is the per-index form of commitHaystacks: full hash + full
-// branch name(s) + subject, for filter matching. No styling.
+// branch name(s) + tag name(s) + subject, for filter matching. No styling.
 func (m Model) commitHaystackAt(i int) string {
 	if r, ok := m.wipRowAt(i); ok {
 		return r.text()
@@ -1271,6 +1327,9 @@ func (m Model) commitHaystackAt(i int) string {
 	names := id.label()
 	for _, e := range id.extra {
 		names += " " + e
+	}
+	for _, tg := range id.tags {
+		names += " " + tg
 	}
 	return c.Hash + " " + names + " " + c.Subject
 }
