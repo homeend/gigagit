@@ -9,14 +9,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
-- **Adaptive refresh intervals (Phase C).** Background auto-refresh is now
-  cost-aware: each source's read is timed (mean of the last 10), its interval
-  backs off to `max(configured, backoff_factor × avg)`, and a source whose
-  average exceeds `max_read_seconds` drops to manual-only. Background reads run
-  one at a time (FIFO, deduped by type); manual `r` stays parallel. New
-  `[refresh]` keys `disable_adaptive`/`max_read_seconds`/`backoff_factor`, a
-  `⟳` status hint, and Settings "Adaptive intervals" toggle + "Refresh rates"
-  viewer. Off by default.
+- **Refresh rates editor (Phase C rework).** Background auto-refresh now runs on
+  fixed, user-set per-source intervals (floored at `[refresh] min_seconds`,
+  default 10) over the single-lane queue — the adaptive engine
+  (`disable_adaptive`/`max_read_seconds`/`backoff_factor`) is removed. Settings →
+  "Refresh rates" is now an inline editor: select a source, press enter, type the
+  seconds (0 = off); it writes `[refresh] <source>` to the repo `.gg.toml`. Read
+  durations are still measured and shown there as stats.
 - **Background auto-refresh (Phase B).** The TUI can now silently refresh any
   data source in the background on a configurable per-source timer. Everything
   is **off by default** — opt in via the new `[refresh]` config section.

@@ -216,46 +216,29 @@ reflog    = 120
 feed      = 120    # commit feed
 fetch     = 300    # run `git fetch` every 5 min (network; errors swallowed)
 
-# Adaptive intervals (Phase C) — active whenever enabled = true
-disable_adaptive = false  # true → each source auto-refreshes at its fixed interval
-max_read_seconds = 10     # source whose avg read exceeds this drops to manual-only
-backoff_factor   = 10     # effective interval = max(configured, factor × avg read)
-min_seconds      = 10     # floor on any auto-refresh interval (cheap sources don't poll faster)
+min_seconds = 10   # floor on any interval (no source polls faster than this)
 ```
 
-With **adaptive intervals on** (the default when `enabled = true`) the per-source
-seconds above are **optional**: each source's interval is derived from how long
-its reads actually take — `effective = max(configured, backoff_factor × avg)`. If
-you set no interval for a source (or leave them all out), it still auto-refreshes
-once it has a measurement, polling purely at `backoff_factor × avg` (but never
-faster than `min_seconds`, default 10, so a very cheap source doesn't poll every
-second). So enabling auto-refresh and pressing `r` once is enough to get every
-source self-tuning — no interval numbers required. A source whose rolling average exceeds
-`max_read_seconds` drops to **manual-only** (a later `r` re-measures it and can
-re-enable it). With `disable_adaptive = true` the per-source seconds are used
-verbatim (a fixed schedule; 0 = off).
+Each per-source value is the poll interval in seconds; 0 (the default) means that
+source never auto-refreshes. Intervals are floored at `min_seconds` (default 10)
+so cheap sources don't hammer the repo. The `fetch` row is opt-in only (network):
+it runs solely when set to a non-zero value; a manual `git fetch` from the Remotes
+menu does not enable it.
 
-Measurements come from manual `r` and the single-lane background reads; the
-**app-start load is deliberately not measured** (it reads everything in parallel,
-so its timings are inflated). The `fetch` row is special: it is the **periodic
-background `git fetch`** (network), so it is **opt-in only** — it runs solely
-when you set `[refresh] fetch = N`, and shows `off` otherwise (unlike local
-sources, it never auto-starts from a measurement). A `git fetch` you run yourself
-(e.g. from the Remotes menu) refreshes the Remotes panel *and* records its
-duration into the `fetch` row so you can see how long fetch takes, but does not
-turn the background fetch on. Background reads run **one at a time** (FIFO, deduped
-by type) to cap git subprocess pressure; manual `r` stays parallel and is never
-affected. Background reads don't show per-panel spinners or move the cursor, but a
-small `⟳ <source>…` hint appears in the status line while the single background
-lane is busy — except for reads whose rolling average is under 1 s, which are
-suppressed so quick sources don't flicker the status bar. The scheduler is suppressed while an operation is running, a
-popup/modal is open, or you are typing a search/filter, and a user action
-immediately preempts any in-flight background read. The **Settings (`,`) →
-"Adaptive intervals"** toggle persists `disable_adaptive` to the global config
-(like `enabled`, only to the global config, never a repo `.gg.toml`); **"Refresh
-rates"** shows a live per-source table of configured / average / effective
-interval and the current state (`fixed`, `adaptive`, `adaptive (floor)`,
-`pending (refresh to measure)`, `disabled (too slow)`).
+Background reads run **one at a time** (FIFO, deduped by type) to cap git
+subprocess pressure; manual `r` stays parallel and is unaffected. A small
+`⟳ <source>…` hint appears in the status line while the single background lane is
+busy — suppressed for reads whose rolling average is under 1 s so quick sources
+don't flicker the status bar. The scheduler is suppressed while an operation is
+running, a popup/modal is open, or you are typing a search/filter, and a user
+action immediately preempts any in-flight background read.
+
+The **Settings (`,`) → "Refresh rates"** entry is an **inline editor**: ↑/↓ selects
+a source row, enter opens a numeric field (type the seconds, enter saves, esc
+cancels, 0 = off). Saving writes `[refresh] <source>` to the **repo `.gg.toml`**
+and takes effect immediately. Read durations (mean of the last 10 reads from manual
+`r` and background reads; app-start load is excluded) are shown in the `avg` column
+as informational stats — they do not affect scheduling.
 
 `[ui] footer_actions` and `[ui] menu_actions` are lists of action **ids** that
 choose which actions appear in the footer bar and in the `.` menu respectively;
