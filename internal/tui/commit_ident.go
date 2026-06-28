@@ -194,6 +194,55 @@ func (id commitIdent) fullToken(w int) string {
 	return id.markerField() + padRight(id.label(), w)
 }
 
+const tagGlyph = "⊙" // precedes a tag name in the commit-row decoration group
+
+type decoSpan struct{ Offset, Length int }
+
+// commitDecoGroup renders the before-subject decoration group for an identity:
+// " (branch1, branch2, ⊙v1.0.0)" with extra branches first then tags. Returns the
+// group string (with a single leading space, "" when there are no extras/tags),
+// the rune spans of each ⊙tag label (relative to the group string start) for the
+// decorator to color yellow, and whether it collapsed to " (+N)". budget < 0
+// means never collapse (full mode). When the natural group width exceeds budget
+// it collapses to " (+N)" (N = extras+tags) and tagSpans is nil.
+func commitDecoGroup(id commitIdent, budget int) (string, []decoSpan, bool) {
+	n := len(id.extra) + len(id.tags)
+	if n == 0 {
+		return "", nil, false
+	}
+	// Build the full group and record tag spans (rune offsets within the string).
+	var b strings.Builder
+	b.WriteString(" (")
+	var spans []decoSpan
+	first := true
+	write := func(s string, isTag bool) {
+		if !first {
+			b.WriteString(", ")
+		}
+		first = false
+		if isTag {
+			start := len([]rune(b.String()))
+			lbl := tagGlyph + s
+			b.WriteString(lbl)
+			spans = append(spans, decoSpan{Offset: start, Length: len([]rune(lbl))})
+		} else {
+			b.WriteString(s)
+		}
+	}
+	for _, br := range id.extra {
+		write(br, false)
+	}
+	for _, tg := range id.tags {
+		write(tg, true)
+	}
+	b.WriteString(")")
+	full := b.String()
+	if budget < 0 || lipgloss.Width(full) <= budget {
+		return full, spans, false
+	}
+	return fmt.Sprintf(" (+%d)", n), nil, true
+}
+
 // pills renders additional-branch tips (the multi-tip case) as ‹name› chips; the
 // primary branch already shows in the identity column. Empty in the common case.
 func (id commitIdent) pills() string {
