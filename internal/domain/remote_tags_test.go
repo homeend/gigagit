@@ -104,3 +104,80 @@ func TestRemoteTagsQueryQuietDoesNotRecordFailure(t *testing.T) {
 			beforeCount, afterCount, observ.SessionFailures())
 	}
 }
+
+// TestRemoteTagsFreshNoRemote: no remote configured → empty map, nil error.
+func TestRemoteTagsFreshNoRemote(t *testing.T) {
+	_, svc := newRealRepo(t)
+	got, err := svc.RemoteTagsFresh(context.Background())
+	if err != nil {
+		t.Fatalf("no remote: want nil err, got %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("no remote: want empty map, got %v", got)
+	}
+}
+
+// TestRemoteTagsFreshOriginPushedVsLocalOnly: origin has v1 pushed; v2 is local-only.
+func TestRemoteTagsFreshOriginPushedVsLocalOnly(t *testing.T) {
+	root := t.TempDir()
+	bare := filepath.Join(root, "bare.git")
+	workdir := filepath.Join(root, "work")
+
+	gitInDir(t, root, "init", "--bare", bare)
+	gitInDir(t, root, "clone", bare, workdir)
+	gitInDir(t, workdir, "config", "user.email", "t@t")
+	gitInDir(t, workdir, "config", "user.name", "t")
+
+	if err := os.WriteFile(filepath.Join(workdir, "README.md"), []byte("hello\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitInDir(t, workdir, "checkout", "-b", "main")
+	gitInDir(t, workdir, "add", "README.md")
+	gitInDir(t, workdir, "commit", "-m", "initial")
+	gitInDir(t, workdir, "push", "-u", "origin", "main")
+
+	// Create v1 (lightweight) and push it to origin.
+	gitInDir(t, workdir, "tag", "v1")
+	gitInDir(t, workdir, "push", "origin", "v1")
+
+	// Create v2 locally only — do NOT push.
+	gitInDir(t, workdir, "tag", "v2")
+
+	svc := New(&git.Repo{Runner: gitexec.NewExecRunner("git", workdir, observ.NewRing(50))})
+	got, err := svc.RemoteTagsFresh(context.Background())
+	if err != nil {
+		t.Fatalf("RemoteTagsFresh: %v", err)
+	}
+	if !got["v1"] {
+		t.Errorf("v1 was pushed to origin: want got[\"v1\"]=true, got %v", got)
+	}
+	if got["v2"] {
+		t.Errorf("v2 was not pushed: want got[\"v2\"]=false, got %v", got)
+	}
+}
+
+// TestRemoteTagsFreshDoesNotRecordFailure: RemoteTagsFresh must not call
+// observ.NoteFailure even when the git call fails. Use a bogus remote so
+// ls-remote errors with a real (non-context) git error, then assert
+// SessionFailures count is unchanged — the discriminating test that would fail
+// if the method were incorrectly wired through query() instead.
+func TestRemoteTagsFreshDoesNotRecordFailure(t *testing.T) {
+	dir, svc := newRealRepo(t)
+
+	// Add a remote that points at a nonexistent local path so ls-remote fails fast.
+	gitInDir(t, dir, "remote", "add", "origin", filepath.Join(dir, "nonexistent.git"))
+
+	observ.ResetFailures()
+	beforeCount := len(observ.SessionFailures())
+
+	_, err := svc.RemoteTagsFresh(context.Background())
+	if err == nil {
+		t.Fatal("bogus remote: want non-nil error, got nil")
+	}
+
+	afterCount := len(observ.SessionFailures())
+	if afterCount > beforeCount {
+		t.Fatalf("RemoteTagsFresh must not record to the failure seam: before=%d after=%d failures=%+v",
+			beforeCount, afterCount, observ.SessionFailures())
+	}
+}
