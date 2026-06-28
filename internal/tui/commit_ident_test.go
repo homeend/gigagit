@@ -105,7 +105,7 @@ func TestRenderPanelDimsLineageName(t *testing.T) {
 	}
 	m.sel[panelCommits] = 0 // select the tip → the lineage row (1) gets decorated
 	rows, idx := m.panelView(panelCommits)
-	decos := m.commitDecorators(rows, idx)
+	decos := m.commitDecorators(rows, idx, -1)
 	out := m.renderPanel(panelCommits, "Commits", rows, decos, 40, 8)
 	probe := dimIdentStyle.Render("x")
 	esc := probe[:strings.IndexRune(probe, 'x')] // the leading dim escape
@@ -120,7 +120,7 @@ func TestCommitLineDecoratorDimsIdentAndColorsDot(t *testing.T) {
 	forceColor(t)
 	// visible: "  ● main            subject" — prefix(2) + ●(col2) + space + ident
 	visible := "  ● " + padRight("main", commitIdentW) + " subject"
-	deco := commitLineDecorator(true, 2, laneColor(0), true, 4, commitIdentW)
+	deco := commitLineDecorator(true, 2, laneColor(0), true, 4, commitIdentW, nil)
 	out := deco(visible, 0, 0)
 	if lipgloss.Width(out) != lipgloss.Width(visible) {
 		t.Fatalf("decorator changed width: %d → %d", lipgloss.Width(visible), lipgloss.Width(out))

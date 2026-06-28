@@ -89,6 +89,18 @@ func (id commitIdent) markerField() string {
 // branch but is not its tip). 240 is a mid-gray in the 256-color cube.
 var dimIdentStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 
+// tagDecoStyle colors a tag label (⊙name) in the commit-row decoration group
+// yellow. Must match the tagColorStyle probe used in commit_deco_color_test.go.
+var tagDecoStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("220"))
+
+// coloredSpan marks a rune range (absolute content columns, pre-hscroll, like
+// identStart) to recolor via a specific lipgloss Style in the single-pass
+// commitLineDecorator. Spans must not overlap each other or the dim range.
+type coloredSpan struct {
+	Start, Length int
+	Style         lipgloss.Style
+}
+
 // dimRowStyle grays an entire commit row that does NOT match the active
 // @-highlight query, de-emphasizing it while keeping it visible.
 var dimRowStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
@@ -244,12 +256,14 @@ func commitDecoGroup(id commitIdent, budget int) (string, []decoSpan, bool) {
 }
 
 // commitLineDecorator restyles one visible commit line in a SINGLE pass over its
-// original runes: it colors the lane '●' node (when hasDot) and dims the identity
-// column's rune range (when dim). Doing both in one pass over the unstyled string
-// avoids the ANSI rune-index drift that chaining two decorators would cause. All
-// columns are content columns (the visible line already had hscroll applied, so
-// content col of rune i is i+hscroll). Width is preserved.
-func commitLineDecorator(hasDot bool, dotCol int, dotColor lipgloss.Color, dim bool, identStart, identLen int) rowDecorator {
+// original runes: it dims the identity column (when dim), colors the lane '●'
+// node (when hasDot), and recolors any tag-label spans (colorSpans). Doing all
+// three in one pass over the unstyled string avoids ANSI rune-index drift that
+// chaining decorators would cause. All columns are content columns (pre-hscroll;
+// content col of rune i is i+hscroll). Width is preserved — styles add no cells.
+// colorSpans are absolute content columns (like identStart). They must not
+// overlap the identity dim range or each other.
+func commitLineDecorator(hasDot bool, dotCol int, dotColor lipgloss.Color, dim bool, identStart, identLen int, colorSpans []coloredSpan) rowDecorator {
 	dotStyle := lipgloss.NewStyle().Foreground(dotColor)
 	return func(visible string, hscroll, visualLine int) string {
 		if visualLine != 0 {
@@ -260,6 +274,7 @@ func commitLineDecorator(hasDot bool, dotCol int, dotColor lipgloss.Color, dim b
 		i := 0
 		for i < len(r) {
 			col := i + hscroll
+			// Dim the identity (name) column on lineage rows.
 			if dim && col >= identStart && col < identStart+identLen {
 				j := i
 				for j < len(r) {
@@ -273,6 +288,28 @@ func commitLineDecorator(hasDot bool, dotCol int, dotColor lipgloss.Color, dim b
 				i = j
 				continue
 			}
+			// Color any tag-label spans (yellow ⊙name in the deco group).
+			colored := false
+			for _, cs := range colorSpans {
+				if col >= cs.Start && col < cs.Start+cs.Length {
+					j := i
+					for j < len(r) {
+						c := j + hscroll
+						if c < cs.Start || c >= cs.Start+cs.Length {
+							break
+						}
+						j++
+					}
+					b.WriteString(cs.Style.Render(string(r[i:j])))
+					i = j
+					colored = true
+					break
+				}
+			}
+			if colored {
+				continue
+			}
+			// Color the graph lane node (●).
 			if hasDot && col == dotCol && r[i] == '●' {
 				b.WriteString(dotStyle.Render(string(r[i])))
 				i++

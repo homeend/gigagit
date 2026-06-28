@@ -1039,7 +1039,7 @@ func (m Model) commitBody(boxW, boxH int) (rows []string, idx []int, decos []row
 		for n, i := range idx {
 			rows[n] = m.commitIdentRowAt(i, w, false, budget)
 		}
-		return rows, idx, m.commitDecorators(rows, idx)
+		return rows, idx, m.commitDecorators(rows, idx, budget)
 	}
 	sel := m.sel[panelCommits]
 	start := windowStart(len(idx), rowsCap, sel)
@@ -1050,7 +1050,7 @@ func (m Model) commitBody(boxW, boxH int) (rows []string, idx []int, decos []row
 	for n := start; n < end; n++ {
 		rows[n] = m.commitIdentRowAt(idx[n], w, false, budget)
 	}
-	return rows, idx, m.commitDecoratorsRange(rows, idx, start, end)
+	return rows, idx, m.commitDecoratorsRange(rows, idx, start, end, budget)
 }
 
 // commitGroupBudget is the max display width the before-subject decoration
@@ -1194,18 +1194,23 @@ func (m Model) commitGraphOn() bool {
 }
 
 // commitDecorators returns a per-display-row decorator slice (parallel to rows):
-// it dims the identity column on LINEAGE rows (always, in every mode) and colors
-// each commit's '●' node by its lane (only when lane coloring is active). idx
-// maps display row → backing commit index (from panelView). Columns include the
-// 2-col selection prefix the renderer prepends.
-func (m Model) commitDecorators(rows []string, idx []int) []rowDecorator {
-	return m.commitDecoratorsRange(rows, idx, 0, len(rows))
+// it dims the identity column on LINEAGE rows, colors each commit's '●' node by
+// its lane, and colors tag-label spans yellow. idx maps display row → backing
+// commit index (from panelView). Columns include the 2-col selection prefix the
+// renderer prepends. budget is the decoration-group collapse budget used when
+// building the rows (must be the same value so the group string and its tag spans
+// are consistent — the SYNC INVARIANT).
+func (m Model) commitDecorators(rows []string, idx []int, budget int) []rowDecorator {
+	return m.commitDecoratorsRange(rows, idx, 0, len(rows), budget)
 }
 
 // commitDecoratorsRange builds the per-row decorators for display rows [lo,hi)
 // only, returning a full-length slice (off-window entries stay nil — renderPanel
 // skips a nil decorator). Windowed rendering decorates just the visible rows.
-func (m Model) commitDecoratorsRange(rows []string, idx []int, lo, hi int) []rowDecorator {
+// budget is the decoration-group collapse budget used when building the row
+// strings; it must be identical to the value commitIdentRowAt used so that
+// commitDecoGroup returns the same string and spans (the SYNC INVARIANT).
+func (m Model) commitDecoratorsRange(rows []string, idx []int, lo, hi int, budget int) []rowDecorator {
 	if len(rows) == 0 {
 		return nil
 	}
@@ -1247,6 +1252,29 @@ func (m Model) commitDecoratorsRange(rows []string, idx []int, lo, hi int) []row
 		}
 		identStart += commitMarkerW // skip the ■▲ marker prefix; dim only the name column
 
+		// Build color spans for ⊙tag labels in the deco group. SYNC INVARIANT:
+		// commitDecoGroup is called with the SAME budget used by commitIdentRowAt
+		// when building the row string — both receive the value commitBody computed
+		// once. Any divergence would color phantom columns (group collapsed in row
+		// but spans computed for full group, or vice versa).
+		var colorSpans []coloredSpan
+		_, tagSpans, _ := commitDecoGroup(id, budget)
+		if len(tagSpans) > 0 {
+			// groupBase: the group string starts immediately after the name column.
+			// tok = markerField(commitMarkerW) + name(identW); identStart already
+			// accounts for selection prefix + mode prefix + commitMarkerW, so the
+			// name column occupies [identStart, identStart+identW) and the group
+			// string starts at identStart+identW.
+			groupBase := identStart + identW
+			for _, s := range tagSpans {
+				colorSpans = append(colorSpans, coloredSpan{
+					Start:  groupBase + s.Offset,
+					Length: s.Length,
+					Style:  tagDecoStyle,
+				})
+			}
+		}
+
 		hasDot := false
 		dotCol := 0
 		var dotColor lipgloss.Color
@@ -1268,10 +1296,10 @@ func (m Model) commitDecoratorsRange(rows []string, idx []int, lo, hi int) []row
 				}
 			}
 		}
-		if !dim && !hasDot {
+		if !dim && !hasDot && len(colorSpans) == 0 {
 			continue
 		}
-		decos[j] = commitLineDecorator(hasDot, dotCol, dotColor, dim, identStart, identW)
+		decos[j] = commitLineDecorator(hasDot, dotCol, dotColor, dim, identStart, identW, colorSpans)
 	}
 	return decos
 }

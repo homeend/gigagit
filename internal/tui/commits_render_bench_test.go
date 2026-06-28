@@ -45,7 +45,7 @@ func TestCommitDecoratorsAllocScaleLinear(t *testing.T) {
 		m := benchModel(n, 303, 8)
 		rows, idx := m.panelView(panelCommits)
 		return testing.AllocsPerRun(3, func() {
-			_ = m.commitDecorators(rows, idx)
+			_ = m.commitDecorators(rows, idx, -1)
 		})
 	}
 	a := measure(400)
@@ -109,7 +109,7 @@ func BenchmarkCommitsRenderFull(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
 				rows, idx := m.panelView(panelCommits)
-				_ = m.commitDecorators(rows, idx)
+				_ = m.commitDecorators(rows, idx, -1)
 			}
 		})
 	}

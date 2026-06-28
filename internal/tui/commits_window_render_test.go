@@ -20,7 +20,7 @@ func TestCommitBodyWindowedMatchesFull(t *testing.T) {
 
 			// Reference: full materialization (every row styled).
 			fRows, fIdx := m.panelView(panelCommits)
-			fDecos := m.commitDecorators(fRows, fIdx)
+			fDecos := m.commitDecorators(fRows, fIdx, -1)
 			full := m.renderPanel(panelCommits, label, fRows, fDecos, 80, boxH)
 
 			// New: only the visible window is styled.

@@ -25,7 +25,7 @@ func TestHighlightDecoratorDimsOnlyNonMatches(t *testing.T) {
 	m.sel[panelCommits] = 1    // selected row is excluded from decoration; keep it off row 0
 
 	rows, idx := m.panelView(panelCommits)
-	decos := m.commitDecorators(rows, idx)
+	decos := m.commitDecorators(rows, idx, -1)
 
 	// Matching row 0: nothing to decorate (no lineage, no lane color) → nil.
 	if decos[0] != nil {
@@ -54,7 +54,7 @@ func TestHighlightInertWithoutQuery(t *testing.T) {
 	m.sel[panelCommits] = 0
 
 	rows, idx := m.panelView(panelCommits)
-	decos := m.commitDecorators(rows, idx)
+	decos := m.commitDecorators(rows, idx, -1)
 	for i, d := range decos {
 		if d != nil {
 			t.Fatalf("empty query must dim nothing, row %d decorated", i)
