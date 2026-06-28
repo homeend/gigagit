@@ -390,3 +390,38 @@ func TestPushDeleteTagRemovesTagOnRemote(t *testing.T) {
 		t.Fatalf("origin still has tag v1.0.0: %q", out)
 	}
 }
+
+func TestPushTagsArgv(t *testing.T) {
+	f := gitexec.NewFakeRunner()
+	f.SetResponse("git push (tags)", gitexec.Result{})
+	repo := &Repo{Runner: f}
+	if err := repo.PushTags(context.Background(), "origin", []string{"a", "b"}); err != nil {
+		t.Fatalf("PushTags: %v", err)
+	}
+	var argv []string
+	for _, c := range f.Calls {
+		if c.Name == "git push (tags)" {
+			argv = c.Argv
+		}
+	}
+	want := []string{"push", "origin", "refs/tags/a", "refs/tags/b"}
+	if len(argv) != len(want) {
+		t.Fatalf("argv = %v, want %v", argv, want)
+	}
+	for i := range want {
+		if argv[i] != want[i] {
+			t.Fatalf("argv[%d] = %q, want %q (full: %v)", i, argv[i], want[i], argv)
+		}
+	}
+}
+
+func TestPushTagsEmpty(t *testing.T) {
+	f := gitexec.NewFakeRunner()
+	repo := &Repo{Runner: f}
+	if err := repo.PushTags(context.Background(), "origin", nil); err != nil {
+		t.Fatalf("PushTags(empty) should be nil error: %v", err)
+	}
+	if len(f.Calls) != 0 {
+		t.Fatalf("PushTags(empty) must not invoke runner, got %d calls", len(f.Calls))
+	}
+}

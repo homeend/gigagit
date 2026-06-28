@@ -31,6 +31,7 @@ type GitOps interface {
 	FastForwardRef(ctx context.Context, remote, branch string) error
 	Push(ctx context.Context, remote, branch string, setUpstream bool, force git.PushForce) error
 	PushTag(ctx context.Context, remote, name string) error
+	PushTags(ctx context.Context, remote string, names []string) error
 	PushDelete(ctx context.Context, remote, branch string) error
 	PushDeleteTag(ctx context.Context, remote, tag string) error
 	Switch(ctx context.Context, branch string) error

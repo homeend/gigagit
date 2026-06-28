@@ -95,6 +95,29 @@ func (s *Service) RemoteTags(ctx context.Context) (map[string]bool, error) {
 	})
 }
 
+// RemoteTagsFresh is RemoteTags WITHOUT singleflight coalescing: it always issues
+// its own ls-remote under a Read reservation, so the caller's context (e.g. a 5s
+// timeout) fully governs it — a coalesced follower of the background remote-tags
+// lookup could not be cancelled by its own context. Like RemoteTags it resolves
+// origin-or-first and records NO failure (a timeout/offline must not spam the
+// session error log).
+func (s *Service) RemoteTagsFresh(ctx context.Context) (map[string]bool, error) {
+	res, err := s.gateFor(ctx).Acquire(ctx, repogate.Read, "read remote-tags-fresh")
+	if err != nil {
+		return nil, err
+	}
+	defer res.Release()
+	names, err := s.repo.RemoteNames(ctx)
+	if err != nil {
+		return nil, err
+	}
+	remote := pickDefaultRemote(names)
+	if remote == "" {
+		return map[string]bool{}, nil
+	}
+	return s.repo.RemoteTags(ctx, remote)
+}
+
 // pickDefaultRemote returns "origin" if present, else the first remote, else "".
 func pickDefaultRemote(names []string) string {
 	for _, n := range names {
