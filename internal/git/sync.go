@@ -141,6 +141,20 @@ func (r *Repo) PushTag(ctx context.Context, remote, name string) error {
 	return err
 }
 
+// PushTags pushes the named tags to a remote in one invocation:
+// `git push <remote> refs/tags/<n>…`. Empty names is a no-op.
+func (r *Repo) PushTags(ctx context.Context, remote string, names []string) error {
+	if len(names) == 0 {
+		return nil
+	}
+	b := gitcmd.New("push").Arg(remote)
+	for _, n := range names {
+		b = b.Arg("refs/tags/" + n)
+	}
+	_, err := r.Runner.Run(ctx, "git push (tags)", b.ToArgv())
+	return err
+}
+
 // PushDelete deletes branch on remote (git push <remote> --delete <branch>).
 func (r *Repo) PushDelete(ctx context.Context, remote, branch string) error {
 	argv := gitcmd.New("push").Arg(remote, "--delete", branch).ToArgv()
