@@ -170,6 +170,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   `gg status` is unaffected — it stays faithful to `git status`.
 
 ### Fixed
+- **Flaky `git worktree add`/`remove` failures (`reading output: read |0: file
+  already closed`).** `gitexec.Stream` read stdout with `StdoutPipe()` + a manual
+  reader goroutine running concurrently with `cmd.Wait()`. On a clean exit `Wait()`
+  closes the pipe's read end as part of its own cleanup; if the reader was still
+  blocked (common for commands that emit little/no stdout, like `git worktree add`)
+  it got `os.ErrClosed`, which was surfaced as a command failure — so worktree ops
+  failed intermittently under load. `Stream` now streams stdout through a
+  line-splitting `io.Writer` (`cmd.Stdout = lineWriter`); os/exec runs its own
+  copier and `Wait()` blocks until it drains, so the read can never lose the race
+  to `Wait`'s close. `WaitDelay`'s grandchild-held-pipe handling is preserved.
 - **Space key now works in the TUI on Windows.** Staging/unstaging a file
   (`space`), and every other space action (picker toggles, the settings
   agent-skill checklist, file-finder selection), did nothing on Windows: Bubble

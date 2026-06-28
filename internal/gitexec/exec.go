@@ -1,7 +1,6 @@
 package gitexec
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"errors"
@@ -189,35 +188,21 @@ func (r *ExecRunner) Stream(ctx context.Context, name string, argv []string, onL
 	cmd.WaitDelay = waitDelay
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
-	stdoutPipe, err := cmd.StdoutPipe()
-	if err != nil {
-		return Result{}, err
-	}
+	// Stream stdout through a line-splitting writer rather than StdoutPipe() + a
+	// manual reader goroutine. With a writer, os/exec runs its OWN stdout copier
+	// goroutine and cmd.Wait() blocks until that copier drains — so there is no
+	// race where Wait closes the read end out from under a reader still mid-Read
+	// (the source of the "read |0: file already closed" flake on low-stdout
+	// commands like `git worktree add`). WaitDelay still bounds a detached
+	// grandchild that inherited the pipe: Wait force-closes after the delay and
+	// returns ErrWaitDelay, handled below. This mirrors RunEnv's writer model.
+	lw := &lineWriter{onLine: onLine}
+	cmd.Stdout = lw
 	if err := cmd.Start(); err != nil {
 		return Result{}, err
 	}
-
-	// Read stdout in a goroutine so Wait can run concurrently. With a
-	// scan-then-Wait order, WaitDelay never gets a chance to fire — the scan
-	// blocks before Wait is reached. Running Wait alongside lets it force-close
-	// the pipe once the process has exited (WaitDelay), which ends the scan even
-	// when a detached grandchild is still holding the write end.
-	var all strings.Builder
-	scanDone := make(chan error, 1)
-	go func() {
-		scanner := bufio.NewScanner(stdoutPipe)
-		scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
-		for scanner.Scan() {
-			line := scanner.Text()
-			all.WriteString(line)
-			all.WriteByte('\n')
-			onLine(line)
-		}
-		scanDone <- scanner.Err()
-	}()
-
 	runErr := cmd.Wait()
-	scanErr := <-scanDone // happens-after the goroutine's last write to `all`
+	lw.flush() // emit a final line not terminated by '\n' (matches bufio.ScanLines)
 	dur := r.now().Sub(start)
 	exit := exitCodeOf(runErr)
 	if cmd.ProcessState != nil {
@@ -227,7 +212,7 @@ func (r *ExecRunner) Stream(ctx context.Context, name string, argv []string, onL
 	}
 	r.record(name, argv, exit, dur, start, runErr)
 
-	res := Result{Stdout: all.String(), Stderr: stderr.String(), ExitCode: exit, Duration: dur}
+	res := Result{Stdout: lw.text(), Stderr: stderr.String(), ExitCode: exit, Duration: dur}
 	// A detached child holding the pipe makes Wait force-close it after
 	// WaitDelay and return ErrWaitDelay even though git exited cleanly. A clean
 	// exit is a success regardless of the lingering pipe.
@@ -240,8 +225,53 @@ func (r *ExecRunner) Stream(ctx context.Context, name string, argv []string, onL
 		}
 		return res, runFailure(name, exit, stderr.String(), runErr)
 	}
-	if scanErr != nil {
-		return res, fmt.Errorf("%s: reading output: %w", name, scanErr)
-	}
 	return res, nil
 }
+
+// lineWriter is an io.Writer that splits incoming bytes into lines, invoking
+// onLine for each complete line and accumulating the full text for Result.Stdout.
+// It mirrors bufio.ScanLines: lines split on '\n' and a trailing '\r' is stripped.
+// os/exec writes to it from a single internal copier goroutine, and cmd.Wait()
+// joins that goroutine before Stream calls flush/text, so it needs no locking.
+type lineWriter struct {
+	onLine func(string)
+	buf    []byte          // bytes since the last '\n', not yet a complete line
+	all    strings.Builder // full normalized stdout: each emitted line + '\n'
+}
+
+func (w *lineWriter) Write(p []byte) (int, error) {
+	w.buf = append(w.buf, p...)
+	for {
+		i := bytes.IndexByte(w.buf, '\n')
+		if i < 0 {
+			break
+		}
+		w.emit(w.buf[:i])
+		w.buf = w.buf[i+1:]
+	}
+	return len(p), nil
+}
+
+// flush emits any final line not terminated by '\n' (git output often isn't).
+// Call once after cmd.Wait(), when the copier goroutine has finished.
+func (w *lineWriter) flush() {
+	if len(w.buf) > 0 {
+		w.emit(w.buf)
+		w.buf = nil
+	}
+}
+
+// emit normalizes one line (strips a trailing '\r'), accumulates it, and calls
+// onLine. line is copied into a string before onLine, so the caller never
+// aliases w.buf.
+func (w *lineWriter) emit(line []byte) {
+	line = bytes.TrimSuffix(line, []byte{'\r'})
+	w.all.Write(line)
+	w.all.WriteByte('\n')
+	if w.onLine != nil {
+		w.onLine(string(line))
+	}
+}
+
+// text returns the accumulated normalized stdout. Call after Wait()+flush().
+func (w *lineWriter) text() string { return w.all.String() }
