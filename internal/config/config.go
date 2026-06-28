@@ -72,17 +72,6 @@ type RefreshConfig struct {
 	Feed      int  `toml:"feed"`
 	Fetch     int  `toml:"fetch"` // seconds between background `git fetch`; 0 = off
 
-	// DisableAdaptive turns OFF the adaptive interval system (Phase C). Inverted
-	// polarity: default false ⇒ adaptation ON when refresh is enabled; a true in
-	// a higher layer overlays (matching DisableSlowOpConfirm). When true, each
-	// source auto-refreshes at its fixed configured interval.
-	DisableAdaptive bool `toml:"disable_adaptive"`
-	// MaxReadSeconds is the cutoff: a source whose average read exceeds it drops
-	// out of auto-refresh (manual r only). 0 = unset → default 10.
-	MaxReadSeconds int `toml:"max_read_seconds"`
-	// BackoffFactor multiplies a source's average read duration to derive its
-	// effective interval (floored by the configured value). 0 = unset → default 10.
-	BackoffFactor int `toml:"backoff_factor"`
 	// MinSeconds is the floor on any auto-refresh interval: no source polls more
 	// often than this, even when backoff_factor × avg is tiny. 0 = unset → default 10.
 	MinSeconds int `toml:"min_seconds"`
@@ -258,15 +247,6 @@ func overlayRefresh(dst *RefreshConfig, src RefreshConfig) {
 	}
 	if src.Fetch > 0 {
 		dst.Fetch = src.Fetch
-	}
-	if src.DisableAdaptive {
-		dst.DisableAdaptive = true
-	}
-	if src.MaxReadSeconds > 0 {
-		dst.MaxReadSeconds = src.MaxReadSeconds
-	}
-	if src.BackoffFactor > 0 {
-		dst.BackoffFactor = src.BackoffFactor
 	}
 	if src.MinSeconds > 0 {
 		dst.MinSeconds = src.MinSeconds

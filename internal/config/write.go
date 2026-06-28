@@ -28,14 +28,11 @@ func SetGlobalRefreshEnabled(path string, on bool) error {
 	return setScalarLine(path, "refresh", "enabled", strconv.FormatBool(on))
 }
 
-// SetGlobalRefreshDisableAdaptive persists `[refresh] disable_adaptive` to the
-// global config file (preserving comments), backing the Settings "Adaptive
-// intervals" toggle — the third runtime config writer (see
-// SetGlobalDebugLogOperations / SetGlobalRefreshEnabled). Unlike the other two
-// (default-off positives), this backs a default-ON toggle, so it writes the
-// explicit true/false either way.
-func SetGlobalRefreshDisableAdaptive(path string, disable bool) error {
-	return setScalarLine(path, "refresh", "disable_adaptive", strconv.FormatBool(disable))
+// SetRefreshInterval persists `[refresh] <source> = secs` to the given config
+// file (the repo .gg.toml), preserving the rest of the file. Backs the Settings
+// "Refresh rates" inline editor.
+func SetRefreshInterval(path, source string, secs int) error {
+	return setScalarLine(path, "refresh", source, strconv.Itoa(secs))
 }
 
 // setScalarLine sets `key = value` under `[section]` in a TOML file via a

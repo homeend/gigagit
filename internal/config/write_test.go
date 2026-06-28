@@ -78,32 +78,32 @@ func TestDebugOverlayRepoWins(t *testing.T) {
 	}
 }
 
-func TestSetGlobalRefreshDisableAdaptiveRoundTrips(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "config.toml")
+func TestSetRefreshIntervalRoundTrips(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".gg.toml")
 	if err := os.WriteFile(path, []byte("[refresh]\nenabled = true\nstatus = 30\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := SetGlobalRefreshDisableAdaptive(path, true); err != nil {
+	if err := SetRefreshInterval(path, "branches", 45); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := Load(path, "")
+	cfg, err := Load("", path) // repo layer
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !cfg.Refresh.DisableAdaptive {
-		t.Fatal("disable_adaptive should be true after write")
+	if cfg.Refresh.Branches != 45 {
+		t.Fatalf("branches should be 45, got %d", cfg.Refresh.Branches)
 	}
-	// Other keys survive the line edit.
+	// Unrelated keys survive.
 	if !cfg.Refresh.Enabled || cfg.Refresh.Status != 30 {
 		t.Fatalf("unrelated keys clobbered: enabled=%v status=%d", cfg.Refresh.Enabled, cfg.Refresh.Status)
 	}
-	// Flip back to false (a default-on toggle must write both values).
-	if err := SetGlobalRefreshDisableAdaptive(path, false); err != nil {
+	// Update an existing key in place.
+	if err := SetRefreshInterval(path, "status", 0); err != nil {
 		t.Fatal(err)
 	}
-	cfg2, _ := Load(path, "")
-	if cfg2.Refresh.DisableAdaptive {
-		t.Fatal("disable_adaptive should be false after second write")
+	cfg2, _ := Load("", path)
+	if cfg2.Refresh.Status != 0 {
+		t.Fatalf("status should be 0, got %d", cfg2.Refresh.Status)
 	}
 }
 
