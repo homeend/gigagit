@@ -36,6 +36,8 @@ type Model struct {
 	worktrees       []model.Worktree
 	tags            []model.Tag         // refs/tags; shown by the Tags tab in the middle slot
 	remoteTagNames  map[string]bool     // tag names known on the default remote (▲); nil until a lookup runs
+	pendingRemoteTagSet   string          // tag to add to remoteTagNames on next op success (optimistic push)
+	pendingRemoteTagUnset string          // tag to drop from remoteTagNames on next op success (optimistic delete-remote)
 	reflog          []model.ReflogEntry // HEAD reflog; shown by the Reflog tab in the bottom slot
 	currentWorktree string
 
@@ -1479,6 +1481,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.bgQueue = enqueueDue(m.bgQueue, m.bgActiveItem, m.bgBusy, []refreshItem{{source: srcRemotes}})
 		return m, nil
 
+	case remoteTagsMsg:
+		// Task 5 will extend this handler with the bgActiveItem.isRemoteTags
+		// lane-free branch and duration recording (remoteTagsItem + msg.dur).
+		if msg.err != nil {
+			if msg.manual {
+				m.statusMsg = "remote tags: " + msg.err.Error()
+			}
+			return m, nil // background: silent (queryQuiet did not record it)
+		}
+		m.remoteTagNames = msg.names
+		return m, nil
+
 	case heartbeatMsg:
 		// A single perpetual tick (started in Init): re-render so the busy line's
 		// elapsed time advances while an op runs. View only shows it when running,
@@ -1508,6 +1522,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		chainSwitch := ""
 		if msg.err != nil {
 			m.statusMsg = friendlyOpError(msg.err)
+			m.pendingRemoteTagSet = ""
+			m.pendingRemoteTagUnset = ""
 		} else {
 			if msg.res.Summary != "" {
 				m.statusMsg = msg.res.Summary
@@ -1519,6 +1535,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				switchTo = msg.res.Path
 			}
 			chainSwitch = m.pendingSwitchBranch
+			m = m.applyPendingRemoteTag()
 		}
 		m.pendingSeqBump = nil
 		m.pendingSwitch = false
