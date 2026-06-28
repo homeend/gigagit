@@ -57,6 +57,57 @@ func query[T any](ctx context.Context, s *Service, key string, fn func(context.C
 	return v.(T), nil
 }
 
+// queryQuiet is query without the failure seam: it runs fn under a Read
+// reservation + singleflight but does NOT record errors to observ. Use it for
+// opt-in NETWORK reads (e.g. RemoteTags) where a recurring background failure
+// (offline) would otherwise flood errors.log every interval. The error is still
+// returned so a manual caller can surface it.
+func queryQuiet[T any](ctx context.Context, s *Service, key string, fn func(context.Context) (T, error)) (T, error) {
+	v, err := s.flight.Do(key, func() (any, error) {
+		res, e := s.gateFor(ctx).Acquire(ctx, repogate.Read, "read "+key)
+		if e != nil {
+			return nil, e
+		}
+		defer res.Release()
+		return fn(ctx)
+	})
+	if err != nil {
+		var zero T
+		return zero, err
+	}
+	return v.(T), nil
+}
+
+// RemoteTags returns the set of tag names present on the default remote (origin
+// if configured, else the first remote). NETWORK read; routed through queryQuiet
+// so background polls never spam the failure seam. No remote → empty set, nil.
+func (s *Service) RemoteTags(ctx context.Context) (map[string]bool, error) {
+	return queryQuiet(ctx, s, "remote-tags", func(ctx context.Context) (map[string]bool, error) {
+		names, err := s.repo.RemoteNames(ctx)
+		if err != nil {
+			return nil, err
+		}
+		remote := pickDefaultRemote(names)
+		if remote == "" {
+			return map[string]bool{}, nil
+		}
+		return s.repo.RemoteTags(ctx, remote)
+	})
+}
+
+// pickDefaultRemote returns "origin" if present, else the first remote, else "".
+func pickDefaultRemote(names []string) string {
+	for _, n := range names {
+		if n == "origin" {
+			return "origin"
+		}
+	}
+	if len(names) > 0 {
+		return names[0]
+	}
+	return ""
+}
+
 // Snapshot fetches the six startup reads. Status/Branches/Worktrees are
 // fatal (the first failure is returned); CommitTimes/TopLevel/GitCommonDir are
 // best-effort (failures leave zero values). Commits are owned by CommitFeed.
