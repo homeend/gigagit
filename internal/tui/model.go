@@ -16,6 +16,7 @@ import (
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/gitwatch"
 	"github.com/homeend/gigagit/internal/hunkpick"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/rebaseplan"
@@ -103,6 +104,8 @@ type Model struct {
 	srcLoading          map[sourceKey]bool              // a manual read is in flight → consuming panels show ⏳
 	repoConfigPath      string                          // <repo-top>/.gg.toml; the refresh-rates editor writes here
 	watchSupported      bool                            // gitwatch.Supported(commonDir); false on WSL2 9p → watch sources fall back to polling
+	watcher             *gitwatch.Watcher               // file-watcher; nil when unsupported or no sources enabled
+	watchGen            int                             // bumped per (re)build; stale watch msgs are dropped
 	bgCtx               context.Context                 // context for in-flight background (auto) reads; cancelled when a user op starts
 	bgCancel            context.CancelFunc              // cancels bgCtx; nil when no background batch is active
 	refreshLastRun      map[refreshItem]time.Time       // last time each scheduled item fired (background scheduler)
@@ -476,7 +479,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		var cmd tea.Cmd
 		m, cmd = m.reloadAllCmd(true, true) // startup=true → these reads do not feed measurements
-		return m, cmd
+		m.watchGen++
+		return m, tea.Batch(cmd, m.startWatchCmd(m.watchGen))
 	case dataLoadedMsg:
 		if msg.gen != m.loadGen {
 			return m, nil // superseded by a newer load
@@ -1487,6 +1491,33 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m, cmd = m.refreshTick(time.Now())
 		return m, tea.Batch(cmd, heartbeatCmd())
+	case watchReadyMsg:
+		if msg.gen != m.watchGen {
+			if msg.watcher != nil {
+				_ = msg.watcher.Close() // superseded build; discard
+			}
+			return m, nil
+		}
+		m.watchSupported = msg.supported
+		m.watcher = msg.watcher
+		if m.watcher == nil {
+			return m, nil
+		}
+		return m, watchListenCmd(m.watcher, m.watchGen)
+	case watchEventMsg:
+		if msg.gen != m.watchGen || m.watcher == nil {
+			return m, nil // stale watcher
+		}
+		// Only enqueue if the source is still watch-active (toggle could have
+		// flipped). Then re-arm the listener.
+		if watchActive(m.cfg.Refresh, m.watchSupported, refreshItem{source: msg.source}) {
+			m.bgQueue = enqueueDue(m.bgQueue, m.bgActiveItem, m.bgBusy, []refreshItem{{source: msg.source}})
+		}
+		return m, watchListenCmd(m.watcher, m.watchGen)
+	case watchClosedMsg:
+		// Channel closed (Close called). Nothing to re-arm; a rebuild issues a
+		// fresh listener with a new gen.
+		return m, nil
 	case opFinishedMsg:
 		if m.opCancel != nil {
 			m.opCancel() // op already returned; this only frees the ctx
@@ -2158,6 +2189,12 @@ func (m Model) maybeLoadMoreCommits() (Model, tea.Cmd) {
 // --cwd-file by cmd/gg). A fresh span ring is used for the new root; the cmd/gg
 // panic dump still references the original repo (acceptable for a debug aid).
 func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
+	if m.watcher != nil {
+		_ = m.watcher.Close()
+		m.watcher = nil
+	}
+	m.watchGen++
+	m.watchSupported = false
 	m.svc = domain.OpenTUI(path)
 	m.feed = m.svc.CommitFeed()
 	m.switchTarget = path
@@ -2175,7 +2212,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	}
 	m.diffTag = ""
 	m.loadGen++
-	return m, m.loadCmd()
+	return m, tea.Batch(m.loadCmd(), m.startWatchCmd(m.watchGen))
 }
 
 // View implements tea.Model.
