@@ -9,6 +9,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **File-watch auto-refresh (Phase D1):** worktrees and reflog panels can refresh
+  the moment their `.git` files change (fsnotify) instead of on a timer. Toggle
+  per source with `w` in Settings → Refresh rates. Disabled automatically on
+  WSL2 `/mnt` (9p) mounts, where the source falls back to interval polling. New
+  `internal/gitwatch` package; new `[refresh] *_watch` keys.
 - `gg config populate (--repo | --global)` — tops up an existing config file
   with every supported setting not yet present, added as commented `[populated]`
   lines; never touches existing overrides; idempotent. Complements
