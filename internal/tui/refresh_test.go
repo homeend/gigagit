@@ -21,11 +21,11 @@ func TestDueItemsRespectsIntervalAndMaster(t *testing.T) {
 	last := map[refreshItem]time.Time{{source: srcStatus}: t0}
 
 	// 29s later: not due.
-	if d := dueItems(t0.Add(29*time.Second), last, cfg, false); len(d) != 0 {
+	if d := dueItems(t0.Add(29*time.Second), last, cfg, false, false); len(d) != 0 {
 		t.Fatalf("status should not be due at 29s, got %v", d)
 	}
 	// 31s later: due.
-	d := dueItems(t0.Add(31*time.Second), last, cfg, false)
+	d := dueItems(t0.Add(31*time.Second), last, cfg, false, false)
 	if len(d) != 1 || d[0].source != srcStatus {
 		t.Fatalf("status should be due at 31s, got %v", d)
 	}
@@ -36,15 +36,15 @@ func TestDueItemsRespectsIntervalAndMaster(t *testing.T) {
 		}
 	}
 	// Master off → nothing due.
-	if d := dueItems(t0.Add(31*time.Second), last, cfg, false); len(d) == 1 {
+	if d := dueItems(t0.Add(31*time.Second), last, cfg, false, false); len(d) == 1 {
 		cfgOff := cfg
 		cfgOff.Enabled = false
-		if d2 := dueItems(t0.Add(31*time.Second), last, cfgOff, false); len(d2) != 0 {
+		if d2 := dueItems(t0.Add(31*time.Second), last, cfgOff, false, false); len(d2) != 0 {
 			t.Fatalf("master off must yield nothing, got %v", d2)
 		}
 	}
 	// Suppressed → nothing due.
-	if d := dueItems(t0.Add(31*time.Second), last, cfg, true); len(d) != 0 {
+	if d := dueItems(t0.Add(31*time.Second), last, cfg, false, true); len(d) != 0 {
 		t.Fatalf("suppressed must yield nothing, got %v", d)
 	}
 }
@@ -53,7 +53,7 @@ func TestDueItemsFirstRunWhenUnseen(t *testing.T) {
 	t0 := time.Unix(1_000_000, 0)
 	cfg := config.RefreshConfig{Enabled: true, Status: 30}
 	// No lastRun entry → treat as due immediately (first poll after enable).
-	d := dueItems(t0, map[refreshItem]time.Time{}, cfg, false)
+	d := dueItems(t0, map[refreshItem]time.Time{}, cfg, false, false)
 	if len(d) != 1 || d[0].source != srcStatus {
 		t.Fatalf("unseen item with interval>0 should be due, got %v", d)
 	}
@@ -180,5 +180,51 @@ func TestRefreshTickSkipsSourceAlreadyInflight(t *testing.T) {
 	_, cmd := m.refreshTick(time.Unix(3_000_000, 0))
 	if cmd != nil {
 		t.Fatal("must not fire a bg read for a source already in flight")
+	}
+}
+
+func TestWatchActiveTruthTable(t *testing.T) {
+	cfg := config.RefreshConfig{WorktreesWatch: true, BranchesWatch: true}
+	wt := refreshItem{source: srcWorktrees}
+	br := refreshItem{source: srcBranches}
+	st := refreshItem{source: srcStatus}
+	// worktrees: eligible (D1) + on + supported → active
+	if !watchActive(cfg, true, wt) {
+		t.Error("worktrees watch should be active when on+supported")
+	}
+	// unsupported fs → not active (falls back to polling)
+	if watchActive(cfg, false, wt) {
+		t.Error("worktrees watch must be inactive on unsupported fs")
+	}
+	// branches: NOT eligible in D1 even though branches_watch=true
+	if watchActive(cfg, true, br) {
+		t.Error("branches must not be watch-active in D1 (not yet implemented)")
+	}
+	// status: never eligible
+	if watchActive(cfg, true, st) {
+		t.Error("status is never watch-eligible")
+	}
+}
+
+func TestDueItemsSkipsWatchActive(t *testing.T) {
+	cfg := config.RefreshConfig{Enabled: true, Worktrees: 30, WorktreesWatch: true, MinSeconds: 10}
+	last := map[refreshItem]time.Time{} // nothing seen → everything otherwise due
+	// supported → worktrees is watch-active → must NOT be due via the timer
+	due := dueItems(time.Now(), last, cfg, true, false)
+	for _, it := range due {
+		if it.source == srcWorktrees && !it.isFetch {
+			t.Error("watch-active worktrees must not be polled")
+		}
+	}
+	// unsupported → worktrees falls back to interval polling → IS due
+	due = dueItems(time.Now(), last, cfg, false, false)
+	found := false
+	for _, it := range due {
+		if it.source == srcWorktrees {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("on unsupported fs, watch-on worktrees must poll at its interval")
 	}
 }

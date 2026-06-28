@@ -102,6 +102,7 @@ type Model struct {
 	srcInflight         map[sourceKey]bool              // a read of this source is outstanding (coalescing)
 	srcLoading          map[sourceKey]bool              // a manual read is in flight → consuming panels show ⏳
 	repoConfigPath      string                          // <repo-top>/.gg.toml; the refresh-rates editor writes here
+	watchSupported      bool                            // gitwatch.Supported(commonDir); false on WSL2 9p → watch sources fall back to polling
 	bgCtx               context.Context                 // context for in-flight background (auto) reads; cancelled when a user op starts
 	bgCancel            context.CancelFunc              // cancels bgCtx; nil when no background batch is active
 	refreshLastRun      map[refreshItem]time.Time       // last time each scheduled item fired (background scheduler)

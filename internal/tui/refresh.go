@@ -111,6 +111,43 @@ func refreshTomlKey(it refreshItem) string {
 	return ""
 }
 
+// watchEligible reports whether a file-watcher actually covers this item. Only
+// sources the implemented gitwatch.Plan watches are eligible — so a config that
+// sets a *_watch bool for a not-yet-wired source still polls (never goes stale).
+// D1: worktrees, reflog. (D2 adds branches, remotes.)
+func watchEligible(it refreshItem) bool {
+	if it.isFetch {
+		return false
+	}
+	switch it.source {
+	case srcWorktrees, srcReflog:
+		return true
+	}
+	return false
+}
+
+// watchOn reports the source's [refresh] *_watch config bool.
+func watchOn(cfg config.RefreshConfig, it refreshItem) bool {
+	switch it.source {
+	case srcWorktrees:
+		return cfg.WorktreesWatch
+	case srcBranches:
+		return cfg.BranchesWatch
+	case srcReflog:
+		return cfg.ReflogWatch
+	case srcRemotes:
+		return cfg.RemotesWatch
+	}
+	return false
+}
+
+// watchActive reports whether this source is currently driven by the file
+// watcher (eligible AND toggled on AND the fs supports watching). Watch-active
+// sources are excluded from interval polling — the watcher triggers them.
+func watchActive(cfg config.RefreshConfig, watchSupported bool, it refreshItem) bool {
+	return watchEligible(it) && watchOn(cfg, it) && watchSupported
+}
+
 // setRefreshIntervalField writes secs into the RefreshConfig field for an item.
 func setRefreshIntervalField(cfg *config.RefreshConfig, it refreshItem, secs int) {
 	if it.isFetch {
@@ -218,7 +255,7 @@ func (m Model) refreshTick(now time.Time) (Model, tea.Cmd) {
 	if m.refreshSuppressed() {
 		return m, nil
 	}
-	due := dueItems(now, m.refreshLastRun, m.cfg.Refresh, false)
+	due := dueItems(now, m.refreshLastRun, m.cfg.Refresh, m.watchSupported, false)
 	m.bgQueue = enqueueDue(m.bgQueue, m.bgActiveItem, m.bgBusy, due)
 	if m.bgBusy || len(m.bgQueue) == 0 {
 		return m, nil
@@ -284,13 +321,17 @@ func (m Model) bgFetchCmd(ctx context.Context, gen int) tea.Cmd {
 }
 
 // dueItems returns the items whose fixed interval has elapsed this tick. off
-// items are excluded. Pure.
-func dueItems(now time.Time, lastRun map[refreshItem]time.Time, cfg config.RefreshConfig, suppressed bool) []refreshItem {
+// items are excluded. Watch-active items are skipped — they are driven by the
+// file watcher, not the timer. Pure.
+func dueItems(now time.Time, lastRun map[refreshItem]time.Time, cfg config.RefreshConfig, watchSupported bool, suppressed bool) []refreshItem {
 	if !cfg.Enabled || suppressed {
 		return nil
 	}
 	var due []refreshItem
 	for _, it := range scheduledItems {
+		if watchActive(cfg, watchSupported, it) {
+			continue // driven by the file watcher, not the timer
+		}
 		secs, on := scheduledInterval(cfg, it)
 		if !on {
 			continue
