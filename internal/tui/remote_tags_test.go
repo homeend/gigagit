@@ -59,6 +59,16 @@ func TestRemoteTagsBackgroundErrorFreesLane(t *testing.T) {
 	}
 }
 
+// reRoot must clear remoteTagNames so tag names from the old repo don't
+// bleed into the new one and produce false ▲ markers.
+func TestReRootClearsRemoteTagNames(t *testing.T) {
+	m := Model{remoteTagNames: map[string]bool{"v1.0.0": true, "latest": true}}
+	updated, _ := m.reRoot(t.TempDir())
+	if got := updated.(Model).remoteTagNames; got != nil {
+		t.Fatalf("remoteTagNames = %v after reRoot, want nil", got)
+	}
+}
+
 var errTestRemote = errString("boom")
 
 type errString string

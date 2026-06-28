@@ -2199,6 +2199,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 		m = m.removeLayer(dv)
 	}
 	m.diffTag = ""
+	m.remoteTagNames = nil // tag names from a different repo must not bleed into the new one
 	m.loadGen++
 	return m, m.loadCmd()
 }
