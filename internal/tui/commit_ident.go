@@ -48,6 +48,43 @@ func (id commitIdent) markers() string {
 	}
 }
 
+// countBadge is the superscript count shown on a multi-tip marker (≥2 local
+// tips): ²–⁹, or ⁺ for ≥10. Empty for <2. Always one display cell when present.
+func countBadge(n int) string {
+	if n < 2 {
+		return ""
+	}
+	const sup = "⁰¹²³⁴⁵⁶⁷⁸⁹"
+	supRunes := []rune(sup)
+	if n >= 10 {
+		return "⁺"
+	}
+	return string(supRunes[n])
+}
+
+// markerField is the fixed 3-cell marker area, laid out as
+// [marker1][marker2-or-badge][separator]. The count badge (≥2 local tips) fills
+// the FILLER cell next to a lone ■ so it reads "■³ "; when BOTH a local and a
+// remote marker are present there is no room, so the badge is dropped (the count
+// still shows via the decoration group / (+N)). Always exactly commitMarkerW (3)
+// display cells.
+func (id commitIdent) markerField() string {
+	badge := countBadge(id.count) // "" when <2
+	switch {
+	case id.tip && id.remoteTip:
+		return markerLocal + markerRemote + " " // "■▲ " — no room for the badge
+	case id.tip:
+		if badge == "" {
+			return markerLocal + "  " // "■  "
+		}
+		return markerLocal + badge + " " // "■³ " — badge in the filler cell
+	case id.remoteTip:
+		return markerRemote + "  " // "▲  "
+	default:
+		return "   " // lineage row
+	}
+}
+
 // dimIdentStyle grays a lineage row's branch name (the commit belongs to that
 // branch but is not its tip). 240 is a mid-gray in the 256-color cube.
 var dimIdentStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
@@ -74,6 +111,8 @@ type commitIdent struct {
 	remoteTip bool     // this commit is the tip of a tracked remote (upstream of a local branch)
 	head      bool     // the chosen branch is the current (HEAD) branch
 	extra     []string // additional local-branch tips at this commit (multi-tip)
+	tags      []string // tag names at this commit (RefTag), rendered in the deco group
+	count     int      // number of local-branch tips at this commit (for the count badge)
 }
 
 // commitIdentOf derives the identity from a commit's local refs (a tip) or, when
@@ -94,11 +133,17 @@ func commitIdentOf(c model.Commit, tracked map[string]string) commitIdent {
 			}
 		}
 	}
+	var tags []string
+	for _, r := range c.Refs {
+		if r.Kind == model.RefTag {
+			tags = append(tags, r.Name)
+		}
+	}
 	if len(locals) == 0 {
 		if remoteTipName != "" {
-			return commitIdent{name: remoteTipName, remoteTip: true}
+			return commitIdent{name: remoteTipName, remoteTip: true, tags: tags}
 		}
-		return commitIdent{name: c.Source, tip: false}
+		return commitIdent{name: c.Source, tip: false, tags: tags}
 	}
 	pick := 0
 	for i, r := range locals {
@@ -113,6 +158,8 @@ func commitIdentOf(c model.Commit, tracked map[string]string) commitIdent {
 			id.extra = append(id.extra, r.Name)
 		}
 	}
+	id.tags = tags
+	id.count = len(locals)
 	return id
 }
 
@@ -139,12 +186,12 @@ func (id commitIdent) token(w int) (text string, trimmed bool) {
 	} else {
 		body = padRight(name, w)
 	}
-	return id.markers() + " " + body, trimmed
+	return id.markerField() + body, trimmed
 }
 
 // fullToken is the UNtrimmed label with the marker prefix, padded to commitMarkerW+w.
 func (id commitIdent) fullToken(w int) string {
-	return id.markers() + " " + padRight(id.label(), w)
+	return id.markerField() + padRight(id.label(), w)
 }
 
 // pills renders additional-branch tips (the multi-tip case) as ‹name› chips; the
