@@ -39,6 +39,9 @@ type Model struct {
 	remoteTagNames        map[string]bool     // tag names known on the default remote (▲); nil until a lookup runs
 	pendingRemoteTagSet   string              // tag to add to remoteTagNames on next op success (optimistic push)
 	pendingRemoteTagUnset string              // tag to drop from remoteTagNames on next op success (optimistic delete-remote)
+	pendingPushTags       []string            // tip tags to push after a successful branch Push (chained as PushTags op)
+	pendingRemoteTagAdds  []string            // tags to optimistically add to remoteTagNames on PushTags success
+	pushCheckGen          int                 // generation guard for the async pre-push remote-tag check
 	reflog                []model.ReflogEntry // HEAD reflog; shown by the Reflog tab in the bottom slot
 	currentWorktree       string
 
@@ -923,7 +926,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "P":
 			if !m.running && !m.loading && m.status.Branch != "" {
-				return m.startOp(engine.Push{Remote: "origin", Branch: m.status.Branch, SetUpstream: true})
+				return m.startPush()
 			}
 		case "c":
 			if m.focus == panelRemotes && m.canCheckoutRemote() {
@@ -1564,6 +1567,44 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Channel closed (Close called). Nothing to re-arm; a rebuild issues a
 		// fresh listener with a new gen.
 		return m, nil
+	case pushTagCheckMsg:
+		if msg.gen != m.pushCheckGen {
+			return m, nil // superseded (another P / op / repo switch)
+		}
+		m.statusMsg = ""
+		if msg.err == nil && msg.remoteSet != nil {
+			m.remoteTagNames = msg.remoteSet // free cache refresh
+		}
+		var unpushed []string
+		if msg.err == nil && msg.remoteSet != nil {
+			for _, t := range msg.tipTags {
+				if !msg.remoteSet[t.Name] {
+					unpushed = append(unpushed, t.Name)
+				}
+			}
+		}
+		if len(unpushed) == 0 {
+			return m.startOp(m.pushCurrentOp()) // nothing to offer (or timed out) → just push
+		}
+		m.modal = &decisionState{
+			req: engine.DecisionRequest{
+				ID:      "push-with-tags",
+				Prompt:  "Branch tip has " + pushTagsNoun(unpushed) + " not on the remote. Push too?",
+				Options: []string{"Push branch + tags", "Push branch only", "Cancel"},
+			},
+			onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {
+				switch opt {
+				case "Push branch + tags":
+					m.pendingPushTags = unpushed
+					return m.startOp(m.pushCurrentOp())
+				case "Push branch only":
+					return m.startOp(m.pushCurrentOp())
+				default:
+					return m, nil
+				}
+			},
+		}
+		return m, nil
 	case opFinishedMsg:
 		if m.opCancel != nil {
 			m.opCancel() // op already returned; this only frees the ctx
@@ -1583,10 +1624,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		switchTo := ""
 		chainSwitch := ""
+		var pushTags []string
 		if msg.err != nil {
 			m.statusMsg = friendlyOpError(msg.err)
 			m.pendingRemoteTagSet = ""
 			m.pendingRemoteTagUnset = ""
+			m.pendingRemoteTagAdds = nil
 		} else {
 			if msg.res.Summary != "" {
 				m.statusMsg = msg.res.Summary
@@ -1598,11 +1641,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				switchTo = msg.res.Path
 			}
 			chainSwitch = m.pendingSwitchBranch
+			pushTags = m.pendingPushTags
 			m = m.applyPendingRemoteTag()
 		}
 		m.pendingSeqBump = nil
 		m.pendingSwitch = false
 		m.pendingSwitchBranch = "" // cleared before the chained op starts, so it cannot re-fire
+		m.pendingPushTags = nil    // unconditional; covers both error and success paths
 		srcs := m.pendingSources   // nil = all (safe default for any unmapped op)
 		m.pendingSources = nil
 		if switchTo != "" {
@@ -1610,6 +1655,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if chainSwitch != "" {
 			return m.startOp(engine.SmartSwitch{Branch: chainSwitch})
+		}
+		if len(pushTags) > 0 {
+			m.pendingRemoteTagAdds = pushTags // optimistic: add to remoteTagNames when PushTags succeeds
+			return m.startOp(engine.PushTags{Remote: "origin", Names: pushTags})
 		}
 		if m.stashView != nil {
 			// A stash op (apply/pop/drop) changed the stash list as well as the
