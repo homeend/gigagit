@@ -6,9 +6,61 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/muesli/termenv"
+
 	"github.com/homeend/gigagit/internal/agentskill"
 	"github.com/homeend/gigagit/internal/domain"
 )
+
+// lineWith returns the first rendered line containing substr (substr matched
+// against the ANSI-stripped text), or "" if none.
+func lineWith(out, substr string) string {
+	for _, ln := range strings.Split(out, "\n") {
+		if strings.Contains(ansi.Strip(ln), substr) {
+			return ln
+		}
+	}
+	return ""
+}
+
+// The , menu highlights the selected row with the same graphical style as the
+// . action menu (selectedRow): the selected row carries ANSI styling, others
+// do not.
+func TestSettingsMenuHighlightsSelectedRow(t *testing.T) {
+	// Force a color profile so the reverse-video highlight is actually emitted
+	// (tests run without a TTY, where lipgloss strips styling by default).
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
+
+	m, _ := settingsModel(t)
+	u, _ := m.Update(keyMsg(","))
+	m = u.(Model)
+	out := m.View()
+
+	// selectedRow = Reverse(true), which renders the reverse-video SGR (\x1b[7m).
+	// The frame around the row uses color SGRs, not reverse, so checking for the
+	// reverse code specifically isolates the row highlight from frame styling.
+	const reverse = "\x1b[7m"
+
+	sel := lineWith(out, "Set up agent skills") // settingsMenuAgents, selected (menuSel 0)
+	if sel == "" {
+		t.Fatalf("selected menu row not found:\n%s", ansi.Strip(out))
+	}
+	if !strings.Contains(sel, reverse) {
+		t.Fatalf("selected row must carry the reverse-video highlight; got: %q", sel)
+	}
+
+	other := lineWith(out, "Identity & profiles") // not selected
+	if other == "" {
+		t.Fatalf("unselected menu row not found:\n%s", ansi.Strip(out))
+	}
+	if strings.Contains(other, reverse) {
+		t.Fatalf("unselected row must not be highlighted; got: %q", other)
+	}
+}
 
 // settingsModel: loaded model whose project dir contains .claude and an
 // AGENTS.md that already has an OLD installed block (so defaults differ).

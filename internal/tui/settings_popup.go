@@ -466,15 +466,19 @@ func (p *settingsPopup) box(m Model) string {
 		}
 	} else if !p.picker {
 		b.WriteString("Settings\n\n")
+		wr := make([]winRow, len(settingsMenu))
 		for i := range settingsMenu {
 			prefix := "  "
+			var st lipgloss.Style
 			if i == p.menuSel {
-				prefix = "> "
+				prefix, st = "> ", selectedRow
 			}
-			b.WriteString(prefix + settingsMenuLabel(m, i) + "\n")
+			wr[i] = winRow{text: prefix + settingsMenuLabel(m, i), style: st}
 		}
-		// A short static menu (not a renderWindow list), so z has no visible
-		// effect here — only the picker advertises [z] mode.
+		// Same selected-row highlight as the . action menu (winRow + selectedRow).
+		for _, line := range renderWindow(wr, winOpts{w: textW, h: len(settingsMenu), mode: p.mode, anchor: p.menuSel, hscroll: p.hscroll}) {
+			b.WriteString(line + "\n")
+		}
 		b.WriteString("\n[↑/↓] select  [enter] open/toggle  [esc] close")
 	} else {
 		b.WriteString("Set up agent skills\n\n")
