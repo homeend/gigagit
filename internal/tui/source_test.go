@@ -310,6 +310,8 @@ func TestOpAffectedSources(t *testing.T) {
 		{engine.SetIdentity{}, []sourceKey{srcIdentity}},
 		{engine.SmartMerge{}, []sourceKey{srcStatus, srcFeed, srcBranches}},
 		{engine.SmartRebase{}, []sourceKey{srcStatus, srcFeed, srcBranches}},
+		{engine.DeleteBranch{}, []sourceKey{srcBranches, srcFeed}},
+		{engine.RenameBranch{}, []sourceKey{srcBranches, srcFeed}},
 		{engine.Stash{}, nil}, // unmapped → all (safe default)
 	}
 	for _, tc := range cases {
@@ -321,6 +323,25 @@ func TestOpAffectedSources(t *testing.T) {
 		for i := range got {
 			if got[i] != tc.want[i] {
 				t.Errorf("opAffectedSources(%T)[%d] = %v, want %v", tc.op, i, got[i], tc.want[i])
+			}
+		}
+	}
+}
+
+// TestBranchOpsDoNotRefreshTags pins the fix: a branch delete/rename must not
+// dirty the Tags source, because a tags reload auto-enqueues a background
+// ls-remote (the ▲ pushed-state lookup) — a needless network call for an op
+// that cannot change tags. (Before the mapping, these unmapped ops fell through
+// to nil = all sources, which included tags.)
+func TestBranchOpsDoNotRefreshTags(t *testing.T) {
+	for _, op := range []engine.Operation{engine.DeleteBranch{}, engine.RenameBranch{}} {
+		got := opAffectedSources(op)
+		if got == nil {
+			t.Errorf("opAffectedSources(%T) = nil (all sources) — would refresh tags", op)
+		}
+		for _, s := range got {
+			if s == srcTags {
+				t.Errorf("opAffectedSources(%T) includes srcTags", op)
 			}
 		}
 	}

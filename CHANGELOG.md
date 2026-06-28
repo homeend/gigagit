@@ -205,6 +205,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   `gg status` is unaffected — it stays faithful to `git status`.
 
 ### Fixed
+- **Branch delete/rename triggered a needless remote-tag network lookup.**
+  `engine.DeleteBranch` and `engine.RenameBranch` were not listed in
+  `opAffectedSources`, so they fell through to the conservative "refresh all
+  sources" default. That reloaded the Tags panel, whose arrival auto-enqueues a
+  background `git ls-remote --tags` (the `▲` pushed-state lookup) — a network
+  round-trip on every branch delete/rename even though neither can change tags.
+  Both ops now map to `{branches, feed}` (the feed for the moved `%D` ref
+  decorations and tip markers), so no tags reload and no `ls-remote` fire.
 - **Flaky `git worktree add`/`remove` failures (`reading output: read |0: file
   already closed`).** `gitexec.Stream` read stdout with `StdoutPipe()` + a manual
   reader goroutine running concurrently with `cmd.Wait()`. On a clean exit `Wait()`

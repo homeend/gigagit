@@ -269,6 +269,13 @@ func opAffectedSources(op engine.Operation) []sourceKey {
 		return []sourceKey{srcIdentity}
 	case engine.SmartMerge, engine.SmartRebase:
 		return []sourceKey{srcStatus, srcFeed, srcBranches}
+	case engine.DeleteBranch, engine.RenameBranch:
+		// Branch-only ref change: refresh the Branches panel and the feed (its
+		// %D ref decorations and tip markers move). NOT tags — leaving these
+		// unmapped fell through to "all sources", and the tags reload
+		// auto-triggered a background ls-remote (the ▲ pushed-state lookup) on
+		// every branch delete/rename, a needless network round-trip.
+		return []sourceKey{srcBranches, srcFeed}
 	}
 	return nil // unmapped → all sources (safe)
 }
