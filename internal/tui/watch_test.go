@@ -43,14 +43,18 @@ func TestWatchAffectedSources(t *testing.T) {
 	if got := watchAffectedSources(srcBranches); !has(got, srcBranches) || !has(got, srcFeed) {
 		t.Errorf("branches should affect {branches, feed}, got %v", got)
 	}
-	if got := watchAffectedSources(srcRemotes); !has(got, srcRemotes) || !has(got, srcFeed) {
-		t.Errorf("remotes should affect {remotes, feed}, got %v", got)
+	// A remote ref change (fetch) also dirties the feed (remote refs / ▲ markers)
+	// AND the branch list (model.Branch carries Upstream/Ahead/Behind).
+	if got := watchAffectedSources(srcRemotes); !has(got, srcRemotes) || !has(got, srcFeed) || !has(got, srcBranches) {
+		t.Errorf("remotes should affect {remotes, feed, branches}, got %v", got)
 	}
-	// Worktree changes dirty the Branches panel (its worktree-path column).
-	if got := watchAffectedSources(srcWorktrees); !has(got, srcWorktrees) || !has(got, srcBranches) {
-		t.Errorf("worktrees should affect {worktrees, branches}, got %v", got)
+	// A worktree change dirties the branch list (new branch + worktree-path column)
+	// and the feed (the new branch's decoration when only this watcher fired).
+	if got := watchAffectedSources(srcWorktrees); !has(got, srcWorktrees) || !has(got, srcBranches) || !has(got, srcFeed) {
+		t.Errorf("worktrees should affect {worktrees, branches, feed}, got %v", got)
 	}
-	// Reflog is self-contained.
+	// Reflog is self-contained: HEAD/ref consequences are caught by the branches
+	// watcher (refs/heads + $W/HEAD), so reflog only refreshes the reflog panel.
 	if got := watchAffectedSources(srcReflog); len(got) != 1 || got[0] != srcReflog {
 		t.Errorf("reflog should affect only {reflog}, got %v", got)
 	}

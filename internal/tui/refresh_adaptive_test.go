@@ -275,6 +275,30 @@ func TestRatesEditorEnterEditSave(t *testing.T) {
 	}
 }
 
+func TestRatesEditorSpaceTogglesWatch(t *testing.T) {
+	m := newTestModel(t)
+	m.repoConfigPath = filepath.Join(t.TempDir(), ".gg.toml")
+	m = m.openSettings()
+	p := layerOf[*settingsPopup](m)
+	p.ratesView = true
+	for i, it := range scheduledItems { // select the worktrees row (watch-eligible)
+		if !it.isFetch && !it.isRemoteTags && it.source == srcWorktrees {
+			p.ratesSel = i
+		}
+	}
+	if m.cfg.Refresh.WorktreesWatch {
+		t.Fatal("precondition: worktrees file-watch should start off")
+	}
+	m, _ = updateModel(m, tea.KeyMsg{Type: tea.KeySpace})
+	if !m.cfg.Refresh.WorktreesWatch {
+		t.Fatal("space should toggle worktrees file-watch on")
+	}
+	m, _ = updateModel(m, tea.KeyMsg{Type: tea.KeySpace})
+	if m.cfg.Refresh.WorktreesWatch {
+		t.Fatal("space again should toggle worktrees file-watch back off")
+	}
+}
+
 func TestRatesEditorEscCancelsEdit(t *testing.T) {
 	m := newTestModel(t)
 	m = m.openSettings()

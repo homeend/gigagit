@@ -14,11 +14,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   timer. Toggle per source with `w` in Settings → Refresh rates. Disabled
   automatically on WSL2 `/mnt` (9p) mounts, where the source falls back to
   interval polling. New `internal/gitwatch` package (recursive ref-tree watching
-  for branches/remotes); new `[refresh] *_watch` keys. Watch-capable rows show a
-  `[x]`/`[ ]` checkbox in the Refresh-rates editor. A ref change refreshes its
-  dependent panels too — a branch/remote change also reloads the commit feed so
-  the Commits panel's `%D` decorations and ■/▲ tip markers update, not just the
-  Branches panel.
+  for branches/remotes); new `[refresh] *_watch` keys. The Refresh-rates editor
+  has a labelled **file-watch** column with a `[x]`/`[ ]` checkbox on watch-capable
+  rows (toggle with `space` or `w`). A ref change refreshes its dependent panels,
+  not just the watched one (`watchAffectedSources`): a branch/remote change also
+  reloads the commit feed (Commits panel `%D` decorations + ■/▲ tip markers); a
+  remote change also reloads branches (Upstream/Ahead/Behind); a worktree change
+  also reloads branches (new branch + worktree-path) and the feed.
 - **Auto remote-tag refresh on tag-list changes.** The `▲` tag-pushed-state
   indicator now auto-refreshes **by default** whenever the Tags panel's contents
   change: once on app load (when the tag list first populates) and again after any

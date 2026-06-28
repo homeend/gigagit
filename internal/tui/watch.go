@@ -59,11 +59,26 @@ func watchSourceKey(s gitwatch.Source) sourceKey {
 func watchAffectedSources(primary sourceKey) []sourceKey {
 	switch primary {
 	case srcBranches:
+		// A head ref (or $W/HEAD) moved: branch list + the commit feed's %D
+		// decorations and ■/▲ tip markers.
 		return []sourceKey{srcBranches, srcFeed}
 	case srcRemotes:
-		return []sourceKey{srcRemotes, srcFeed}
+		// A remote-tracking ref moved (e.g. fetch): remote list + feed (remote refs
+		// / ▲ markers) + branches (model.Branch carries Upstream/Ahead/Behind, which
+		// a remote move changes).
+		return []sourceKey{srcRemotes, srcFeed, srcBranches}
 	case srcWorktrees:
-		return []sourceKey{srcWorktrees, srcBranches}
+		// A worktree was added/removed: worktree list + branches (a new branch from
+		// `worktree add -b`, plus the worktree-path column) + feed (that new branch's
+		// decoration, in case branch-watch is off and only this watcher fired).
+		return []sourceKey{srcWorktrees, srcBranches, srcFeed}
+	case srcReflog:
+		// logs/HEAD appended. The reflog panel is the only direct consequence: any
+		// HEAD/ref move that produced the entry is independently caught by the
+		// branches watcher (which watches both refs/heads and $W/HEAD). Working-tree
+		// status after a checkout/reset stays on polling (git status is too
+		// expensive to run on every HEAD move in a huge repo).
+		return []sourceKey{srcReflog}
 	}
 	return []sourceKey{primary}
 }
