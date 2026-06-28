@@ -1641,7 +1641,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				switchTo = msg.res.Path
 			}
 			chainSwitch = m.pendingSwitchBranch
-			pushTags = m.pendingPushTags
+			if msg.res.Changed {
+				pushTags = m.pendingPushTags
+			}
 			m = m.applyPendingRemoteTag()
 		}
 		m.pendingSeqBump = nil
@@ -2310,6 +2312,9 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	}
 	m.diffTag = ""
 	m.remoteTagNames = nil // tag names from a different repo must not bleed into the new one
+	m.pushCheckGen++       // drop any in-flight pre-push tag check from the old repo
+	m.pendingPushTags = nil
+	m.pendingRemoteTagAdds = nil
 	m.loadGen++
 	return m, tea.Batch(m.loadCmd(), m.startWatchCmd(m.watchGen))
 }

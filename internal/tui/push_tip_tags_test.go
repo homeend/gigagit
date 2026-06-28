@@ -284,7 +284,7 @@ func TestOpFinishedChainsPushTags(t *testing.T) {
 	m.running = true
 	m.pendingPushTags = []string{"v1.0.0"}
 
-	u, _ := m.Update(opFinishedMsg{res: engine.Result{Summary: "pushed"}})
+	u, _ := m.Update(opFinishedMsg{res: engine.Result{Summary: "pushed", Changed: true}})
 	got := u.(Model)
 
 	// pendingPushTags must be cleared
@@ -361,6 +361,56 @@ func TestApplyPendingRemoteTagAddsLazyInit(t *testing.T) {
 	}
 }
 
+// ---- Bug-1 regression: aborted/cancelled push must NOT chain tag push ----
+
+// A push that the user aborts returns Result{Changed:false}, nil (err==nil but
+// nothing actually happened). pendingPushTags must be cleared WITHOUT chaining
+// engine.PushTags — otherwise we'd upload tags the user explicitly skipped.
+func TestAbortedPushDoesNotChainTags(t *testing.T) {
+	m := footerModel()
+	m.running = true
+	m.pendingPushTags = []string{"v1.0.0"}
+
+	// Changed:false, err:nil — simulates an aborted/cancelled push.
+	u, _ := m.Update(opFinishedMsg{res: engine.Result{Summary: "push cancelled", Changed: false}})
+	got := u.(Model)
+
+	// pendingPushTags must be cleared
+	if len(got.pendingPushTags) != 0 {
+		t.Fatalf("pendingPushTags = %v after abort, want nil", got.pendingPushTags)
+	}
+	// PushTags must NOT have been chained: running must be false
+	if got.running {
+		t.Fatal("aborted push must NOT chain PushTags (running=true means it did)")
+	}
+	// pendingRemoteTagAdds must remain empty
+	if len(got.pendingRemoteTagAdds) != 0 {
+		t.Fatalf("pendingRemoteTagAdds = %v after abort, want nil", got.pendingRemoteTagAdds)
+	}
+}
+
+// ---- Bug-2 regression: reRoot bumps pushCheckGen and clears push-pending state ----
+
+func TestReRootBumpsCheckGen(t *testing.T) {
+	m := footerModel()
+	m.pushCheckGen = 2
+	m.pendingPushTags = []string{"v1.0.0"}
+	m.pendingRemoteTagAdds = []string{"v1.0.0"}
+
+	updated, _ := m.reRoot(t.TempDir())
+	got := updated.(Model)
+
+	if got.pushCheckGen <= 2 {
+		t.Fatalf("pushCheckGen = %d after reRoot, want > 2 (bumped)", got.pushCheckGen)
+	}
+	if len(got.pendingPushTags) != 0 {
+		t.Fatalf("pendingPushTags = %v after reRoot, want nil", got.pendingPushTags)
+	}
+	if len(got.pendingRemoteTagAdds) != 0 {
+		t.Fatalf("pendingRemoteTagAdds = %v after reRoot, want nil", got.pendingRemoteTagAdds)
+	}
+}
+
 // ---- Optimistic ordering: branch push sets pendingRemoteTagAdds, PushTags success adds them ----
 
 func TestOptimisticOrderingBranchThenTags(t *testing.T) {
@@ -370,7 +420,7 @@ func TestOptimisticOrderingBranchThenTags(t *testing.T) {
 	m.pendingPushTags = []string{"v1.0.0"}
 	m.remoteTagNames = map[string]bool{}
 
-	u, _ := m.Update(opFinishedMsg{res: engine.Result{Summary: "pushed"}})
+	u, _ := m.Update(opFinishedMsg{res: engine.Result{Summary: "pushed", Changed: true}})
 	m = u.(Model)
 
 	// After branch push success, remoteTagNames must NOT yet contain "v1.0.0"
