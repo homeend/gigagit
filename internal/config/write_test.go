@@ -124,3 +124,37 @@ func TestSetGlobalRefreshEnabledRoundTrips(t *testing.T) {
 		t.Fatal("disabled not persisted")
 	}
 }
+
+func TestSetGlobalDisableRemoteTagsAutoRoundTrips(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	// Write an unrelated key first so we can verify it survives.
+	if err := os.WriteFile(path, []byte("[refresh]\nenabled = true\nstatus = 30\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Write true → reload → DisableRemoteTagsAuto should be true.
+	if err := SetGlobalDisableRemoteTagsAuto(path, true); err != nil {
+		t.Fatalf("set true: %v", err)
+	}
+	c, err := Load(path, "")
+	if err != nil {
+		t.Fatalf("load after set true: %v", err)
+	}
+	if !c.Refresh.DisableRemoteTagsAuto {
+		t.Fatal("DisableRemoteTagsAuto=true not persisted")
+	}
+
+	// Unrelated keys must survive the edit.
+	if !c.Refresh.Enabled || c.Refresh.Status != 30 {
+		t.Fatalf("unrelated keys clobbered: enabled=%v status=%d", c.Refresh.Enabled, c.Refresh.Status)
+	}
+
+	// Write false → reload → DisableRemoteTagsAuto should be false.
+	if err := SetGlobalDisableRemoteTagsAuto(path, false); err != nil {
+		t.Fatalf("set false: %v", err)
+	}
+	c, _ = Load(path, "")
+	if c.Refresh.DisableRemoteTagsAuto {
+		t.Fatal("DisableRemoteTagsAuto=false not persisted")
+	}
+}

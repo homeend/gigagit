@@ -76,6 +76,11 @@ type RefreshConfig struct {
 	// MinSeconds is the floor on any auto-refresh interval: no source polls more
 	// often than this, even when a source reads very cheaply. 0 = unset → default 10.
 	MinSeconds int `toml:"min_seconds"`
+
+	// DisableRemoteTagsAuto turns OFF the automatic remote-tag refresh that runs
+	// when the tag list changes (app load + after tag add/remove/push). Inverted
+	// polarity: default false = auto-refresh ON. Independent of Enabled.
+	DisableRemoteTagsAuto bool `toml:"disable_remote_tags_auto"`
 }
 
 // Config is the merged gigagit configuration.
@@ -254,6 +259,9 @@ func overlayRefresh(dst *RefreshConfig, src RefreshConfig) {
 	}
 	if src.MinSeconds > 0 {
 		dst.MinSeconds = src.MinSeconds
+	}
+	if src.DisableRemoteTagsAuto {
+		dst.DisableRemoteTagsAuto = true
 	}
 }
 

@@ -347,3 +347,50 @@ func TestRefreshConfigOverlayAndParse(t *testing.T) {
 		t.Fatalf("parsed/overlaid refresh wrong: %+v", c.Refresh)
 	}
 }
+
+// TestDisableRemoteTagsAutoDefault asserts the zero/default value is false
+// (auto-refresh ON — inverted polarity).
+func TestDisableRemoteTagsAutoDefault(t *testing.T) {
+	if Defaults().Refresh.DisableRemoteTagsAuto {
+		t.Fatal("default must be false (auto remote-tag refresh on)")
+	}
+}
+
+// TestOverlayRefreshDisableRemoteTagsAutoInverted tests the inverted-polarity
+// overlay: a global file with the key set to true propagates, and a missing
+// key in the repo file does NOT reset it back to false.
+func TestOverlayRefreshDisableRemoteTagsAutoInverted(t *testing.T) {
+	dir := t.TempDir()
+	global := filepath.Join(dir, "global.toml")
+	missing := filepath.Join(dir, "missing.toml")
+
+	// default: false (auto on)
+	cfg, err := Load(missing, missing)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Refresh.DisableRemoteTagsAuto {
+		t.Fatal("default must be false (auto remote-tag refresh on)")
+	}
+
+	// global file with disable_remote_tags_auto = true → merged config has it true
+	writeFile(t, global, "[refresh]\ndisable_remote_tags_auto = true\n")
+	cfg, err = Load(global, missing)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.Refresh.DisableRemoteTagsAuto {
+		t.Fatal("global true should propagate to merged config")
+	}
+
+	// repo file with the key absent does NOT reset a true global back to false
+	repo := filepath.Join(dir, "repo.toml")
+	writeFile(t, repo, "[refresh]\nstatus = 30\n")
+	cfg, err = Load(global, repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.Refresh.DisableRemoteTagsAuto {
+		t.Fatal("absent repo key must not reset a true global back to false (OR-only semantics)")
+	}
+}
