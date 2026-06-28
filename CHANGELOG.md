@@ -9,6 +9,18 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **`P` offers to push an unpushed branch-tip tag with the branch.** When the
+  branch's tip commit has one or more local tags not on the remote, `P` first
+  runs a fresh `git ls-remote --tags` with a **5-second timeout** to check
+  which are missing; if the check times out or fails the tag check is skipped
+  and the branch pushes immediately (P never hangs). If unpushed tip tags are
+  found, a modal prompts: *Push branch + tags* (default) / *Push branch only* /
+  *Cancel*. Choosing *Push branch + tags* pushes the branch first (keeping the
+  existing rejected-push recovery — rebase/force/abort), then chains one
+  `git push origin refs/tags/…` call for all the tags in a single invocation;
+  on success the `▲` tag-pushed-state markers update immediately (optimistic).
+  Only the **tip commit's** tags are considered; tags further back in history
+  are unaffected.
 - **Commits-panel ref decorations (tags + multi-tip group).** The Commits panel
   now renders a `git log --decorate`-style decoration group **before the subject**:
   extra local-branch tips appear in default foreground, and tags appear as
