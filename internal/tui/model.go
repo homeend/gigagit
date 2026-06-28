@@ -1552,7 +1552,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// active read may have started before this change committed). Watch-active
 			// sources have no polling backstop, so a skipped enqueue would be lost.
 			// In-queue dedup (inQueue check in enqueueDue) still prevents duplicates.
-			m.bgQueue = enqueueDue(m.bgQueue, m.bgActiveItem, false, []refreshItem{{source: msg.source}})
+			// watchAffectedSources expands the primary source to its consequences (a
+			// branch change also dirties the commit feed, etc.) so dependent panels —
+			// not just the directly-watched one — refresh too.
+			for _, s := range watchAffectedSources(msg.source) {
+				m.bgQueue = enqueueDue(m.bgQueue, m.bgActiveItem, false, []refreshItem{{source: s}})
+			}
 		}
 		return m, watchListenCmd(m.watcher, m.watchGen)
 	case watchClosedMsg:

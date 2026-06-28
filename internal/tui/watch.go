@@ -49,6 +49,25 @@ func watchSourceKey(s gitwatch.Source) sourceKey {
 	return srcStatus // unreachable; status is never watch-eligible
 }
 
+// watchAffectedSources expands a watch trigger's primary source into the full set
+// of sources a change to it dirties — mirroring opAffectedSources for ops. A ref
+// change (branches/remotes) also dirties the commit feed: the Commits panel's
+// %D decorations and ■/▲ tip markers come from the feed walk, so without a feed
+// reload a new branch shows in the Branches panel but not at its commit in the
+// Commits panel. A worktree change also dirties the Branches panel (its
+// worktree-path column). The list always leads with the primary source.
+func watchAffectedSources(primary sourceKey) []sourceKey {
+	switch primary {
+	case srcBranches:
+		return []sourceKey{srcBranches, srcFeed}
+	case srcRemotes:
+		return []sourceKey{srcRemotes, srcFeed}
+	case srcWorktrees:
+		return []sourceKey{srcWorktrees, srcBranches}
+	}
+	return []sourceKey{primary}
+}
+
 // enabledWatchSources returns the gitwatch sources to watch: those that are both
 // watch-eligible (implemented) and toggled on in config.
 func enabledWatchSources(cfg config.RefreshConfig) []gitwatch.Source {

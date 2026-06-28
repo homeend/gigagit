@@ -499,7 +499,19 @@ func (p *settingsPopup) box(m Model) string {
 					avgStr = fmt.Sprintf("%.1fs (%d)", avg.Seconds(), len(s))
 				}
 			}
-			b.WriteString(fmt.Sprintf("%s%-10s  %-16s  avg %s\n", prefix, name, valCell, avgStr))
+			// File-watch checkbox: shown only for watch-capable rows so the user can
+			// see at a glance which sources support file-watch and whether it is on
+			// (toggle with w). Non-eligible rows (status/fetch/tags/feed) keep a blank
+			// cell so the columns stay aligned.
+			watchBox := "   "
+			if watchEligible(it) {
+				if watchOn(m.cfg.Refresh, it) {
+					watchBox = "[x]"
+				} else {
+					watchBox = "[ ]"
+				}
+			}
+			b.WriteString(fmt.Sprintf("%s%-10s %s %-16s  avg %s\n", prefix, name, watchBox, valCell, avgStr))
 		}
 		if p.ratesEditing {
 			b.WriteString("\n[0-9] edit  [enter] save  [esc] cancel   (0 = off)")
