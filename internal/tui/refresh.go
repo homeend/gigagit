@@ -114,13 +114,13 @@ func refreshTomlKey(it refreshItem) string {
 // watchEligible reports whether a file-watcher actually covers this item. Only
 // sources the implemented gitwatch.Plan watches are eligible — so a config that
 // sets a *_watch bool for a not-yet-wired source still polls (never goes stale).
-// D1: worktrees, reflog. (D2 adds branches, remotes.)
+// D1: worktrees, reflog. D2: branches, remotes (recursive ref-tree watching).
 func watchEligible(it refreshItem) bool {
 	if it.isFetch {
 		return false
 	}
 	switch it.source {
-	case srcWorktrees, srcReflog:
+	case srcWorktrees, srcReflog, srcBranches, srcRemotes:
 		return true
 	}
 	return false

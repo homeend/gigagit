@@ -21,12 +21,11 @@ func TestWatchSourceKeyMapping(t *testing.T) {
 	}
 }
 
-func TestEnabledWatchSourcesD1(t *testing.T) {
-	cfg := config.RefreshConfig{WorktreesWatch: true, ReflogWatch: true, BranchesWatch: true}
+func TestEnabledWatchSourcesD2(t *testing.T) {
+	cfg := config.RefreshConfig{WorktreesWatch: true, ReflogWatch: true, BranchesWatch: true, RemotesWatch: true}
 	got := enabledWatchSources(cfg)
-	// D1: worktrees+reflog eligible; branches not yet eligible → excluded.
-	if len(got) != 2 {
-		t.Fatalf("got %v, want exactly worktrees+reflog", got)
+	if len(got) != 4 {
+		t.Fatalf("D2 should enable all four, got %v", got)
 	}
 }
 

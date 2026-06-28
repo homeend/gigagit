@@ -223,9 +223,11 @@ fetch     = 300    # run `git fetch` every 5 min (network; errors swallowed)
 
 min_seconds = 10   # floor on any interval (no source polls faster than this)
 
-# Phase D — file-watch: react to .git changes instead of polling (worktrees + reflog)
+# Phase D — file-watch: react to .git changes instead of polling
 worktrees_watch = false  # true = watch .git/worktrees; falls back to interval on 9p/drvfs
 reflog_watch    = false  # true = watch .git/logs/HEAD
+branches_watch  = false  # true = watch .git/refs/heads (recursive)
+remotes_watch   = false  # true = watch .git/refs/remotes (recursive)
 ```
 
 Each per-source value is the poll interval in seconds; 0 (the default) means that
@@ -234,12 +236,14 @@ so cheap sources don't hammer the repo. The `fetch` row is opt-in only (network)
 it runs solely when set to a non-zero value; a manual `git fetch` from the Remotes
 menu does not enable it.
 
-**File-watch mode** (`worktrees_watch`, `reflog_watch`): when enabled, gg watches
-the relevant `.git` layout paths with fsnotify and triggers a refresh the moment a
-change is detected — no polling delay. On WSL2 `/mnt` (9p/drvfs) mounts fsnotify
-cannot watch Windows filesystem events, so gg automatically falls back to interval
-polling for those sources; the "Refresh rates" editor shows `watch (9p→…)` for a
-watch-enabled source on such a mount.
+**File-watch mode** (`worktrees_watch`, `reflog_watch`, `branches_watch`,
+`remotes_watch`): when enabled, gg watches the relevant `.git` layout paths with
+fsnotify and triggers a refresh the moment a change is detected — no polling delay.
+Branches and remotes use recursive ref-tree watching (`.git/refs/heads`,
+`.git/refs/remotes`). On WSL2 `/mnt` (9p/drvfs) mounts fsnotify cannot watch
+Windows filesystem events, so gg automatically falls back to interval polling for
+those sources; the "Refresh rates" editor shows `watch (9p→…)` for a watch-enabled
+source on such a mount.
 
 Background reads run **one at a time** (FIFO, deduped by type) to cap git
 subprocess pressure; manual `r` stays parallel and is unaffected. A small
@@ -252,7 +256,7 @@ action immediately preempts any in-flight background read.
 The **Settings (`,`) → "Refresh rates"** entry is an **inline editor**: ↑/↓ selects
 a source row, enter opens a numeric field (type the seconds, enter saves, esc
 cancels, 0 = off), and `w` toggles **file-watch mode** for sources that support it
-(worktrees, reflog). Saving writes `[refresh] <source>` (or `[refresh] <source>_watch`)
+(worktrees, reflog, branches, remotes). Saving writes `[refresh] <source>` (or `[refresh] <source>_watch`)
 to the **repo `.gg.toml`** and takes effect immediately. Read durations (mean of the
 last 10 reads from manual `r` and background reads; app-start load is excluded) are
 shown in the `avg` column as informational stats — they do not affect scheduling.

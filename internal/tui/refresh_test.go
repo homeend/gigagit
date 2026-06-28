@@ -196,9 +196,9 @@ func TestWatchActiveTruthTable(t *testing.T) {
 	if watchActive(cfg, false, wt) {
 		t.Error("worktrees watch must be inactive on unsupported fs")
 	}
-	// branches: NOT eligible in D1 even though branches_watch=true
-	if watchActive(cfg, true, br) {
-		t.Error("branches must not be watch-active in D1 (not yet implemented)")
+	// branches: eligible (D2) + on + supported → active
+	if !watchActive(cfg, true, br) {
+		t.Error("branches must be watch-active in D2 when branches_watch=true")
 	}
 	// status: never eligible
 	if watchActive(cfg, true, st) {
@@ -249,5 +249,16 @@ func TestToggleRefreshWatchIgnoresIneligible(t *testing.T) {
 	m2, cmd := m.toggleRefreshWatch(refreshItem{source: srcStatus})
 	if m2.cfg.Refresh != before || cmd != nil {
 		t.Error("status row must not toggle a watch bool")
+	}
+}
+
+func TestWatchEligibleD2IncludesRefs(t *testing.T) {
+	for _, s := range []sourceKey{srcWorktrees, srcReflog, srcBranches, srcRemotes} {
+		if !watchEligible(refreshItem{source: s}) {
+			t.Errorf("%v should be watch-eligible in D2", s)
+		}
+	}
+	if watchEligible(refreshItem{source: srcStatus}) {
+		t.Error("status must never be eligible")
 	}
 }
