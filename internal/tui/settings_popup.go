@@ -283,6 +283,10 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				return m, nil
 			}
 		}
+		if msg.String() == "w" {
+			m2, cmd := m.toggleRefreshWatch(scheduledItems[p.ratesSel])
+			return m2, cmd
+		}
 		switch msg.Type {
 		case tea.KeyUp:
 			if p.ratesSel > 0 {
@@ -439,6 +443,18 @@ func (p *settingsPopup) box(m Model) string {
 			var valCell string
 			if p.ratesEditing && i == p.ratesSel {
 				valCell = p.ratesField.View(true) + "s"
+			} else if watchEligible(it) && watchOn(m.cfg.Refresh, it) {
+				if m.watchSupported {
+					valCell = "watch"
+				} else {
+					// drvfs: watch unavailable → falls back to the interval
+					secs, on := scheduledInterval(m.cfg.Refresh, it)
+					if on {
+						valCell = fmt.Sprintf("watch (9p→%ds)", secs)
+					} else {
+						valCell = "watch (9p→off)"
+					}
+				}
 			} else {
 				secs, on := scheduledInterval(m.cfg.Refresh, it)
 				if on {
@@ -462,7 +478,7 @@ func (p *settingsPopup) box(m Model) string {
 		if p.ratesEditing {
 			b.WriteString("\n[0-9] edit  [enter] save  [esc] cancel   (0 = off)")
 		} else {
-			b.WriteString("\n[↑/↓] select  [enter] edit  [esc] back")
+			b.WriteString("\n[↑/↓] select  [enter] edit  [w] file-watch  [esc] back")
 		}
 	} else if !p.picker {
 		b.WriteString("Settings\n\n")

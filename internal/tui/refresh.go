@@ -172,6 +172,46 @@ func setRefreshIntervalField(cfg *config.RefreshConfig, it refreshItem, secs int
 	}
 }
 
+// setRefreshWatchField writes want into the *_watch field for it.
+func setRefreshWatchField(cfg *config.RefreshConfig, it refreshItem, want bool) {
+	switch it.source {
+	case srcWorktrees:
+		cfg.WorktreesWatch = want
+	case srcBranches:
+		cfg.BranchesWatch = want
+	case srcReflog:
+		cfg.ReflogWatch = want
+	case srcRemotes:
+		cfg.RemotesWatch = want
+	}
+}
+
+// toggleRefreshWatch flips a source's file-watch toggle, persists it to the repo
+// .gg.toml, reseeds its lastRun, and rebuilds the watcher. No-op for a source
+// that is not watch-eligible.
+func (m Model) toggleRefreshWatch(it refreshItem) (Model, tea.Cmd) {
+	if !watchEligible(it) {
+		return m, nil
+	}
+	want := !watchOn(m.cfg.Refresh, it)
+	setRefreshWatchField(&m.cfg.Refresh, it, want)
+	if m.refreshLastRun == nil {
+		m.refreshLastRun = map[refreshItem]time.Time{}
+	}
+	m.refreshLastRun[it] = time.Now()
+	if m.repoConfigPath != "" {
+		if err := config.SetRefreshWatch(m.repoConfigPath, refreshTomlKey(it), want); err != nil {
+			m.statusMsg = "watch toggled but not saved: " + err.Error()
+		}
+	}
+	m.watchGen++
+	if m.watcher != nil {
+		_ = m.watcher.Close()
+		m.watcher = nil
+	}
+	return m, m.startWatchCmd(m.watchGen)
+}
+
 // saveRefreshInterval applies an edited interval: updates the in-memory config
 // (next tick honors it), reseeds the item's lastRun (no enable-burst), and
 // persists [refresh] <key> = secs to the repo .gg.toml. A write error is

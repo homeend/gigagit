@@ -228,3 +228,26 @@ func TestDueItemsSkipsWatchActive(t *testing.T) {
 		t.Error("on unsupported fs, watch-on worktrees must poll at its interval")
 	}
 }
+
+func TestToggleRefreshWatchFlipsEligible(t *testing.T) {
+	m := newTestModel(t)
+	m.repoConfigPath = "" // no write; in-memory flip still applies (matches saveRefreshInterval)
+	m.cfg.Refresh = config.RefreshConfig{}
+	m2, _ := m.toggleRefreshWatch(refreshItem{source: srcWorktrees})
+	if !m2.cfg.Refresh.WorktreesWatch {
+		t.Error("toggle should set WorktreesWatch true")
+	}
+	m3, _ := m2.toggleRefreshWatch(refreshItem{source: srcWorktrees})
+	if m3.cfg.Refresh.WorktreesWatch {
+		t.Error("second toggle should clear WorktreesWatch")
+	}
+}
+
+func TestToggleRefreshWatchIgnoresIneligible(t *testing.T) {
+	m := newTestModel(t)
+	before := m.cfg.Refresh
+	m2, cmd := m.toggleRefreshWatch(refreshItem{source: srcStatus})
+	if m2.cfg.Refresh != before || cmd != nil {
+		t.Error("status row must not toggle a watch bool")
+	}
+}
