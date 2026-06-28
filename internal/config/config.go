@@ -62,15 +62,16 @@ type DebugConfig struct {
 // Enabled is the master gate; each interval is seconds (0 = that source never
 // auto-refreshes). TOML keys snake_case under [refresh].
 type RefreshConfig struct {
-	Enabled   bool `toml:"enabled"` // master switch; default false (whole feature off)
-	Status    int  `toml:"status"`  // seconds between background status reads; 0 = off
-	Branches  int  `toml:"branches"`
-	Remotes   int  `toml:"remotes"`
-	Worktrees int  `toml:"worktrees"`
-	Tags      int  `toml:"tags"`
-	Reflog    int  `toml:"reflog"`
-	Feed      int  `toml:"feed"`
-	Fetch     int  `toml:"fetch"` // seconds between background `git fetch`; 0 = off
+	Enabled    bool `toml:"enabled"` // master switch; default false (whole feature off)
+	Status     int  `toml:"status"`  // seconds between background status reads; 0 = off
+	Branches   int  `toml:"branches"`
+	Remotes    int  `toml:"remotes"`
+	Worktrees  int  `toml:"worktrees"`
+	Tags       int  `toml:"tags"`
+	Reflog     int  `toml:"reflog"`
+	Feed       int  `toml:"feed"`
+	Fetch      int  `toml:"fetch"`       // seconds between background `git fetch`; 0 = off
+	RemoteTags int  `toml:"remote_tags"` // seconds between background remote-tag (ls-remote) lookups; 0 = off
 
 	// MinSeconds is the floor on any auto-refresh interval: no source polls more
 	// often than this, even when a source reads very cheaply. 0 = unset → default 10.
@@ -247,6 +248,9 @@ func overlayRefresh(dst *RefreshConfig, src RefreshConfig) {
 	}
 	if src.Fetch > 0 {
 		dst.Fetch = src.Fetch
+	}
+	if src.RemoteTags > 0 {
+		dst.RemoteTags = src.RemoteTags
 	}
 	if src.MinSeconds > 0 {
 		dst.MinSeconds = src.MinSeconds

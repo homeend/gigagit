@@ -287,6 +287,9 @@ func (m Model) appendCommitContextRows(out []actionRow) []actionRow {
 	if r, ok := m.tagPushRow(); ok {
 		out = append(out, r)
 	}
+	if r, ok := m.tagRefreshRemoteRow(); ok {
+		out = append(out, r)
+	}
 	if r, ok := m.tagAnnotateRow(); ok {
 		out = append(out, r)
 	}

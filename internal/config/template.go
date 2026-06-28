@@ -56,6 +56,7 @@ var settingDocs = []settingDoc{
 	{"refresh", "reflog", 0, "seconds between background reflog refresh; 0 = off"},
 	{"refresh", "feed", 0, "seconds between background commit-feed refresh; 0 = off"},
 	{"refresh", "fetch", 0, "seconds between background `git fetch`; 0 = off"},
+	{"refresh", "remote_tags", 0, "seconds between background remote-tag (ls-remote) lookups; 0 = off"},
 	{"refresh", "min_seconds", 10, "floor on any auto-refresh interval; no source polls more often than this"},
 }
 

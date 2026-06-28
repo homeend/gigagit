@@ -79,3 +79,15 @@ func (r *Repo) Tags(ctx context.Context) ([]model.Tag, error) {
 	}
 	return ParseTags([]byte(res.Stdout))
 }
+
+// RemoteTags returns the set of bare tag names that exist on the named remote,
+// via one `git ls-remote --tags <remote>`. This is a NETWORK call. The "^{}"
+// peeled rows of annotated tags are folded into their base name by the parser.
+func (r *Repo) RemoteTags(ctx context.Context, remote string) (map[string]bool, error) {
+	argv := gitcmd.New("ls-remote").Arg("--tags", remote).ToArgv()
+	res, err := r.Runner.Run(ctx, "git ls-remote (tags)", argv)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRemoteTags([]byte(res.Stdout)), nil
+}

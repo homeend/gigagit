@@ -9,6 +9,24 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Tag pushed-state indicator (`▲`).** Tags that exist on the default remote
+  (origin if configured, else the first configured remote) now show a trailing
+  `▲` in the Tags panel, mirroring the Commits-panel convention (`■`/`▲` for
+  local/remote branch tips). A tag that is local-only — **or that has not been
+  checked yet this session** — renders no marker; the two are deliberately
+  indistinguishable (no false "local-only" claim before a lookup runs). Two
+  opt-in triggers share one lookup command (`git ls-remote --tags`):
+  - **Tags `.`-menu action "Refresh remote status"** — a one-shot lookup that
+    annotates every visible tag; manual network/auth errors surface on the
+    status line.
+  - **`[refresh] remote_tags`** (seconds, default `0` = off) — runs the same
+    lookup silently in the existing single-lane background scheduler, exactly
+    like `[refresh] fetch`; offline/auth failures are discarded silently and
+    never written to `errors.log`.
+  After a successful **Push tag** the tag immediately gains `▲`; after a
+  successful **Delete tag from remote** it loses it (optimistic updates).
+  Comparison is by tag name (v1; no hash-mismatch detection). No new CLI
+  command.
 - `gg config populate (--repo | --global)` — tops up an existing config file
   with every supported setting not yet present, added as commented `[populated]`
   lines; never touches existing overrides; idempotent. Complements

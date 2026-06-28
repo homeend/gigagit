@@ -9,26 +9,35 @@ import (
 	"github.com/homeend/gigagit/internal/engine"
 )
 
-// refreshItem is one schedulable background-refresh unit: a source read, or the
-// synthetic fetch task (isFetch).
+// refreshItem is one schedulable background-refresh unit: a source read, or a
+// synthetic task (isFetch / isRemoteTags). Synthetic items are NOT sourceKeys so
+// the all-source r/reloadAll sweep never triggers them.
 type refreshItem struct {
-	source  sourceKey
-	isFetch bool
+	source       sourceKey
+	isFetch      bool
+	isRemoteTags bool
 }
 
 var fetchItem = refreshItem{isFetch: true}
 
+// remoteTagsItem is the synthetic refresh item for background ls-remote lookups.
+// It is not a sourceKey so the all-source r/reloadAll sweep never triggers it.
+var remoteTagsItem = refreshItem{isRemoteTags: true}
+
 // scheduledItems is the fixed set the scheduler considers each tick: the panel
-// sources plus fetch. (srcIdentity is intentionally excluded — identity changes
-// only via the SetIdentity op, never on its own.)
+// sources plus the two synthetic network items (fetch, remote-tags).
+// (srcIdentity is intentionally excluded — identity changes only via SetIdentity.)
 var scheduledItems = []refreshItem{
 	{source: srcStatus}, {source: srcBranches}, {source: srcRemotes},
 	{source: srcWorktrees}, {source: srcTags}, {source: srcReflog},
-	{source: srcFeed}, fetchItem,
+	{source: srcFeed}, fetchItem, remoteTagsItem,
 }
 
 // refreshIntervalFor returns the configured seconds for it (0 = off).
 func refreshIntervalFor(cfg config.RefreshConfig, it refreshItem) int {
+	if it.isRemoteTags {
+		return cfg.RemoteTags
+	}
 	if it.isFetch {
 		return cfg.Fetch
 	}
@@ -89,6 +98,9 @@ func scheduledInterval(cfg config.RefreshConfig, it refreshItem) (int, bool) {
 // refreshTomlKey is the [refresh] TOML key for an item. Note srcFeed's display
 // name is "commits" but its config key is "feed".
 func refreshTomlKey(it refreshItem) string {
+	if it.isRemoteTags {
+		return "remote_tags"
+	}
 	if it.isFetch {
 		return "fetch"
 	}
@@ -113,6 +125,10 @@ func refreshTomlKey(it refreshItem) string {
 
 // setRefreshIntervalField writes secs into the RefreshConfig field for an item.
 func setRefreshIntervalField(cfg *config.RefreshConfig, it refreshItem, secs int) {
+	if it.isRemoteTags {
+		cfg.RemoteTags = secs
+		return
+	}
 	if it.isFetch {
 		cfg.Fetch = secs
 		return
@@ -228,13 +244,18 @@ func (m Model) refreshTick(now time.Time) (Model, tea.Cmd) {
 	// A source whose read is already in flight (e.g. a manual r) must not get a
 	// second, superseding background read — that would strand the manual ⏳.
 	// Drop it this tick; it re-enqueues next tick if still due (lastRun unchanged).
-	if !it.isFetch && m.srcInflight[it.source] {
+	// Synthetic items (isFetch, isRemoteTags) are excluded: they have no sourceKey
+	// and must not read srcInflight[source-zero] (which is srcStatus).
+	if !it.isFetch && !it.isRemoteTags && m.srcInflight[it.source] {
 		return m, nil
 	}
-	// Guard fetch when svc is nil: bgFetchCmd would return nil (no command), but
+	// Guard network synthetic items when svc is nil: the cmd would return nil but
 	// the lane would already be committed (bgBusy=true, lastRun stamped), stranding
-	// it permanently. Drop it this tick rather than committing an unrunnable fetch.
+	// it permanently. Drop it this tick rather than committing an unrunnable read.
 	if it.isFetch && m.svc == nil {
+		return m, nil
+	}
+	if it.isRemoteTags && m.svc == nil {
 		return m, nil
 	}
 	if m.bgCancel == nil {
@@ -246,6 +267,9 @@ func (m Model) refreshTick(now time.Time) (Model, tea.Cmd) {
 	if it.isFetch {
 		m.bgFetchGen++
 		return m, m.bgFetchCmd(m.bgCtx, m.bgFetchGen)
+	}
+	if it.isRemoteTags {
+		return m, m.remoteTagsCmd(m.bgCtx, false)
 	}
 	m.srcGen[it.source]++
 	m.srcInflight[it.source] = true
@@ -317,7 +341,10 @@ func (m Model) bgRefreshHint() string {
 		return ""
 	}
 	name := "fetch"
-	if !m.bgActiveItem.isFetch {
+	switch {
+	case m.bgActiveItem.isRemoteTags:
+		name = "remote tags"
+	case !m.bgActiveItem.isFetch:
 		name = sourceNames[m.bgActiveItem.source]
 	}
 	return "⟳ " + name + "…"

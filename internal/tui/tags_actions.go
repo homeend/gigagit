@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -134,7 +135,10 @@ func (m Model) tagPushRow() (actionRow, bool) {
 	return actionRow{
 		id:    "tag-push",
 		label: "Push tag",
-		run:   func(m Model) (tea.Model, tea.Cmd) { return m.startOp(engine.PushTag{Name: name}) },
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			m.pendingRemoteTagSet = name
+			return m.startOp(engine.PushTag{Name: name})
+		},
 	}, true
 }
 
@@ -214,7 +218,26 @@ func (m Model) tagDeleteRemoteRow() (actionRow, bool) {
 	return actionRow{
 		id:    "tag-delete-remote",
 		label: "Delete " + name + " from remote",
-		run:   func(m Model) (tea.Model, tea.Cmd) { return m.startOp(engine.DeleteRemoteTag{Tag: name}) },
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			m.pendingRemoteTagUnset = name
+			return m.startOp(engine.DeleteRemoteTag{Tag: name})
+		},
+	}, true
+}
+
+// tagRefreshRemoteRow offers "Refresh remote status" on the Tags panel: run a
+// one-shot ls-remote and annotate every tag with ▲. Available whenever the panel
+// is focused and non-empty; operates on the whole list, not the selected row.
+func (m Model) tagRefreshRemoteRow() (actionRow, bool) {
+	if m.focus != panelTags || !m.opsIdle() || len(m.tags) == 0 {
+		return actionRow{}, false
+	}
+	return actionRow{
+		id:    "tag-refresh-remote",
+		label: "Refresh remote status",
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			return m, m.remoteTagsCmd(context.Background(), true)
+		},
 	}, true
 }
 
