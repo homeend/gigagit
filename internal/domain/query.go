@@ -463,6 +463,11 @@ func (s *Service) GitCommonDir(ctx context.Context) (string, error) {
 	return query(ctx, s, "gitcommondir", s.repo.GitCommonDir)
 }
 
+// GitDir returns this worktree's git dir path, under a Read reservation.
+func (s *Service) GitDir(ctx context.Context) (string, error) {
+	return query(ctx, s, "gitdir", s.repo.GitDir)
+}
+
 // LsFiles returns every tracked file (paths relative to the working-tree root),
 // under a Read reservation, singleflighted.
 func (s *Service) LsFiles(ctx context.Context) ([]string, error) {

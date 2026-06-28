@@ -21,11 +21,11 @@ func TestDueItemsRespectsIntervalAndMaster(t *testing.T) {
 	last := map[refreshItem]time.Time{{source: srcStatus}: t0}
 
 	// 29s later: not due.
-	if d := dueItems(t0.Add(29*time.Second), last, cfg, false); len(d) != 0 {
+	if d := dueItems(t0.Add(29*time.Second), last, cfg, false, false); len(d) != 0 {
 		t.Fatalf("status should not be due at 29s, got %v", d)
 	}
 	// 31s later: due.
-	d := dueItems(t0.Add(31*time.Second), last, cfg, false)
+	d := dueItems(t0.Add(31*time.Second), last, cfg, false, false)
 	if len(d) != 1 || d[0].source != srcStatus {
 		t.Fatalf("status should be due at 31s, got %v", d)
 	}
@@ -36,15 +36,15 @@ func TestDueItemsRespectsIntervalAndMaster(t *testing.T) {
 		}
 	}
 	// Master off → nothing due.
-	if d := dueItems(t0.Add(31*time.Second), last, cfg, false); len(d) == 1 {
+	if d := dueItems(t0.Add(31*time.Second), last, cfg, false, false); len(d) == 1 {
 		cfgOff := cfg
 		cfgOff.Enabled = false
-		if d2 := dueItems(t0.Add(31*time.Second), last, cfgOff, false); len(d2) != 0 {
+		if d2 := dueItems(t0.Add(31*time.Second), last, cfgOff, false, false); len(d2) != 0 {
 			t.Fatalf("master off must yield nothing, got %v", d2)
 		}
 	}
 	// Suppressed → nothing due.
-	if d := dueItems(t0.Add(31*time.Second), last, cfg, true); len(d) != 0 {
+	if d := dueItems(t0.Add(31*time.Second), last, cfg, false, true); len(d) != 0 {
 		t.Fatalf("suppressed must yield nothing, got %v", d)
 	}
 }
@@ -53,7 +53,7 @@ func TestDueItemsFirstRunWhenUnseen(t *testing.T) {
 	t0 := time.Unix(1_000_000, 0)
 	cfg := config.RefreshConfig{Enabled: true, Status: 30}
 	// No lastRun entry → treat as due immediately (first poll after enable).
-	d := dueItems(t0, map[refreshItem]time.Time{}, cfg, false)
+	d := dueItems(t0, map[refreshItem]time.Time{}, cfg, false, false)
 	if len(d) != 1 || d[0].source != srcStatus {
 		t.Fatalf("unseen item with interval>0 should be due, got %v", d)
 	}
@@ -180,5 +180,130 @@ func TestRefreshTickSkipsSourceAlreadyInflight(t *testing.T) {
 	_, cmd := m.refreshTick(time.Unix(3_000_000, 0))
 	if cmd != nil {
 		t.Fatal("must not fire a bg read for a source already in flight")
+	}
+}
+
+func TestWatchActiveTruthTable(t *testing.T) {
+	cfg := config.RefreshConfig{WorktreesWatch: true, BranchesWatch: true}
+	wt := refreshItem{source: srcWorktrees}
+	br := refreshItem{source: srcBranches}
+	st := refreshItem{source: srcStatus}
+	// worktrees: eligible (D1) + on + supported → active
+	if !watchActive(cfg, true, wt) {
+		t.Error("worktrees watch should be active when on+supported")
+	}
+	// unsupported fs → not active (falls back to polling)
+	if watchActive(cfg, false, wt) {
+		t.Error("worktrees watch must be inactive on unsupported fs")
+	}
+	// branches: eligible (D2) + on + supported → active
+	if !watchActive(cfg, true, br) {
+		t.Error("branches must be watch-active in D2 when branches_watch=true")
+	}
+	// status: never eligible
+	if watchActive(cfg, true, st) {
+		t.Error("status is never watch-eligible")
+	}
+}
+
+func TestDueItemsSkipsWatchActive(t *testing.T) {
+	cfg := config.RefreshConfig{Enabled: true, Worktrees: 30, WorktreesWatch: true, MinSeconds: 10}
+	last := map[refreshItem]time.Time{} // nothing seen → everything otherwise due
+	// supported → worktrees is watch-active → must NOT be due via the timer
+	due := dueItems(time.Now(), last, cfg, true, false)
+	for _, it := range due {
+		if it.source == srcWorktrees && !it.isFetch {
+			t.Error("watch-active worktrees must not be polled")
+		}
+	}
+	// unsupported → worktrees falls back to interval polling → IS due
+	due = dueItems(time.Now(), last, cfg, false, false)
+	found := false
+	for _, it := range due {
+		if it.source == srcWorktrees {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("on unsupported fs, watch-on worktrees must poll at its interval")
+	}
+}
+
+func TestToggleRefreshWatchFlipsEligible(t *testing.T) {
+	m := newTestModel(t)
+	m.repoConfigPath = "" // no write; in-memory flip still applies (matches saveRefreshInterval)
+	m.cfg.Refresh = config.RefreshConfig{}
+	m2, _ := m.toggleRefreshWatch(refreshItem{source: srcWorktrees})
+	if !m2.cfg.Refresh.WorktreesWatch {
+		t.Error("toggle should set WorktreesWatch true")
+	}
+	m3, _ := m2.toggleRefreshWatch(refreshItem{source: srcWorktrees})
+	if m3.cfg.Refresh.WorktreesWatch {
+		t.Error("second toggle should clear WorktreesWatch")
+	}
+}
+
+func TestToggleRefreshWatchIgnoresIneligible(t *testing.T) {
+	m := newTestModel(t)
+	before := m.cfg.Refresh
+	m2, cmd := m.toggleRefreshWatch(refreshItem{source: srcStatus})
+	if m2.cfg.Refresh != before || cmd != nil {
+		t.Error("status row must not toggle a watch bool")
+	}
+}
+
+// TestWatchTriggerReenqueuedWhileSourceInFlight guards Fix A: when a
+// watch-active source's item is at the head of the bg queue but that source is
+// already in-flight (e.g. a manual r), refreshTick must re-enqueue the item
+// rather than drop it. Watch-active sources have no interval backstop — dueItems
+// skips them — so a dropped trigger would be permanently lost until the next
+// filesystem change or manual r.
+func TestWatchTriggerReenqueuedWhileSourceInFlight(t *testing.T) {
+	m := newTestModel(t)
+	m.cfg.Refresh = config.RefreshConfig{
+		Enabled:        true,
+		WorktreesWatch: true,
+	}
+	m.watchSupported = true
+	m.loading = false
+
+	it := refreshItem{source: srcWorktrees}
+	m.bgQueue = []refreshItem{it}
+	m.srcInflight[srcWorktrees] = true // simulate a manual r in flight
+
+	// refreshTick must NOT fire a second read, but MUST re-enqueue the trigger.
+	m2, cmd := m.refreshTick(time.Now())
+	if cmd != nil {
+		t.Fatal("must not fire a bg read while source is already in flight")
+	}
+	found := false
+	for _, q := range m2.bgQueue {
+		if q == it {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("watch-active source trigger must be re-enqueued, not dropped, when source is inflight")
+	}
+
+	// Once inflight clears the queued item must drain normally (bg read fires).
+	m2.srcInflight[srcWorktrees] = false
+	m3, cmd2 := m2.refreshTick(time.Now())
+	if cmd2 == nil {
+		t.Fatal("expected bg read to fire once inflight cleared")
+	}
+	if !m3.bgBusy {
+		t.Fatal("lane must be busy after draining the queued watch trigger")
+	}
+}
+
+func TestWatchEligibleD2IncludesRefs(t *testing.T) {
+	for _, s := range []sourceKey{srcWorktrees, srcReflog, srcBranches, srcRemotes} {
+		if !watchEligible(refreshItem{source: s}) {
+			t.Errorf("%v should be watch-eligible in D2", s)
+		}
+	}
+	if watchEligible(refreshItem{source: srcStatus}) {
+		t.Error("status must never be eligible")
 	}
 }

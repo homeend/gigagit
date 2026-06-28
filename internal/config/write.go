@@ -42,6 +42,14 @@ func SetRefreshInterval(path, source string, secs int) error {
 	return setScalarLine(path, "refresh", source, strconv.Itoa(secs))
 }
 
+// SetRefreshWatch persists `[refresh] <source>_watch = <bool>` to the given
+// config file (the repo .gg.toml), preserving the rest of the file. Backs the
+// Refresh-rates editor's per-source file-watch toggle. source is the bare key
+// (e.g. "worktrees"); "_watch" is appended.
+func SetRefreshWatch(path, source string, on bool) error {
+	return setScalarLine(path, "refresh", source+"_watch", strconv.FormatBool(on))
+}
+
 // setScalarLine sets `key = value` under `[section]` in a TOML file via a
 // line-oriented edit so unrelated lines and comments survive. It updates an
 // existing assignment (uncommenting a commented one), inserts the key under an

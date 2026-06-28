@@ -9,6 +9,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **File-watch auto-refresh (Phase D):** worktrees, reflog, branches, and remotes
+  panels refresh the moment their `.git` files change (fsnotify) instead of on a
+  timer. Toggle per source with `w` in Settings → Refresh rates. Disabled
+  automatically on WSL2 `/mnt` (9p) mounts, where the source falls back to
+  interval polling. New `internal/gitwatch` package (recursive ref-tree watching
+  for branches/remotes); new `[refresh] *_watch` keys.
 - **Auto remote-tag refresh on tag-list changes.** The `▲` tag-pushed-state
   indicator now auto-refreshes **by default** whenever the Tags panel's contents
   change: once on app load (when the tag list first populates) and again after any

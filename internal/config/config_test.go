@@ -394,3 +394,15 @@ func TestOverlayRefreshDisableRemoteTagsAutoInverted(t *testing.T) {
 		t.Fatal("absent repo key must not reset a true global back to false (OR-only semantics)")
 	}
 }
+
+func TestOverlayRefreshWatchBools(t *testing.T) {
+	base := Defaults()
+	layer := Config{Refresh: RefreshConfig{WorktreesWatch: true, ReflogWatch: true}}
+	overlayRefresh(&base.Refresh, layer.Refresh)
+	if !base.Refresh.WorktreesWatch || !base.Refresh.ReflogWatch {
+		t.Fatal("watch bools should overlay when true")
+	}
+	if base.Refresh.BranchesWatch || base.Refresh.RemotesWatch {
+		t.Fatal("unset watch bools must stay false")
+	}
+}

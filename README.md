@@ -225,6 +225,12 @@ remote_tags = 300    # check which tags exist on the remote every 5 min (network
 min_seconds = 10     # floor on any interval (no source polls faster than this)
 
 # disable_remote_tags_auto = false  # set true to turn off the default auto-refresh (see below)
+
+# Phase D — file-watch: react to .git changes instead of polling
+worktrees_watch = false  # true = watch .git/worktrees; falls back to interval on 9p/drvfs
+reflog_watch    = false  # true = watch .git/logs/HEAD
+branches_watch  = false  # true = watch .git/refs/heads (recursive)
+remotes_watch   = false  # true = watch .git/refs/remotes (recursive)
 ```
 
 Each per-source value is the poll interval in seconds; 0 (the default) means that
@@ -244,6 +250,15 @@ switch. To disable it: toggle **Settings (`,`) → "Auto remote-tag refresh"**
 (persists to the global config), or set `[refresh] disable_remote_tags_auto = true`
 in `.gg.toml` (a repo can disable independently of the global setting).
 
+**File-watch mode** (`worktrees_watch`, `reflog_watch`, `branches_watch`,
+`remotes_watch`): when enabled, gg watches the relevant `.git` layout paths with
+fsnotify and triggers a refresh the moment a change is detected — no polling delay.
+Branches and remotes use recursive ref-tree watching (`.git/refs/heads`,
+`.git/refs/remotes`). On WSL2 `/mnt` (9p/drvfs) mounts fsnotify cannot watch
+Windows filesystem events, so gg automatically falls back to interval polling for
+those sources; the "Refresh rates" editor shows `watch (9p→…)` for a watch-enabled
+source on such a mount.
+
 Background reads run **one at a time** (FIFO, deduped by type) to cap git
 subprocess pressure; manual `r` stays parallel and is unaffected. A small
 `⟳ <source>…` hint appears in the status line while the single background lane is
@@ -254,10 +269,11 @@ action immediately preempts any in-flight background read.
 
 The **Settings (`,`) → "Refresh rates"** entry is an **inline editor**: ↑/↓ selects
 a source row, enter opens a numeric field (type the seconds, enter saves, esc
-cancels, 0 = off). Saving writes `[refresh] <source>` to the **repo `.gg.toml`**
-and takes effect immediately. Read durations (mean of the last 10 reads from manual
-`r` and background reads; app-start load is excluded) are shown in the `avg` column
-as informational stats — they do not affect scheduling.
+cancels, 0 = off), and `w` toggles **file-watch mode** for sources that support it
+(worktrees, reflog, branches, remotes). Saving writes `[refresh] <source>` (or `[refresh] <source>_watch`)
+to the **repo `.gg.toml`** and takes effect immediately. Read durations (mean of the
+last 10 reads from manual `r` and background reads; app-start load is excluded) are
+shown in the `avg` column as informational stats — they do not affect scheduling.
 
 `[ui] footer_actions` and `[ui] menu_actions` are lists of action **ids** that
 choose which actions appear in the footer bar and in the `.` menu respectively;

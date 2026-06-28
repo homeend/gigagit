@@ -81,6 +81,14 @@ type RefreshConfig struct {
 	// when the tag list changes (app load + after tag add/remove/push). Inverted
 	// polarity: default false = auto-refresh ON. Independent of Enabled.
 	DisableRemoteTagsAuto bool `toml:"disable_remote_tags_auto"`
+
+	// Per-source file-watch toggles (Phase D). When true AND the repo's fs
+	// supports inotify (not WSL2 9p drvfs), the source refreshes on .git file
+	// change instead of on its interval; otherwise it falls back to the interval.
+	WorktreesWatch bool `toml:"worktrees_watch"`
+	BranchesWatch  bool `toml:"branches_watch"`
+	ReflogWatch    bool `toml:"reflog_watch"`
+	RemotesWatch   bool `toml:"remotes_watch"`
 }
 
 // Config is the merged gigagit configuration.
@@ -262,6 +270,18 @@ func overlayRefresh(dst *RefreshConfig, src RefreshConfig) {
 	}
 	if src.DisableRemoteTagsAuto {
 		dst.DisableRemoteTagsAuto = true
+	}
+	if src.WorktreesWatch {
+		dst.WorktreesWatch = true
+	}
+	if src.BranchesWatch {
+		dst.BranchesWatch = true
+	}
+	if src.ReflogWatch {
+		dst.ReflogWatch = true
+	}
+	if src.RemotesWatch {
+		dst.RemotesWatch = true
 	}
 }
 

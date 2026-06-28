@@ -40,8 +40,18 @@ func TestReRootPointsAtNewWorktreeAndReloads(t *testing.T) {
 		t.Fatal("reRoot should return a reload command")
 	}
 	// Apply the reload; the model should now be rooted in the new worktree.
-	updated2, _ := m.Update(cmd())
-	m = updated2.(Model)
+	// reRoot now returns a batch (loadCmd + startWatchCmd); run each sub-cmd and
+	// update the model so both dataLoadedMsg and watchReadyMsg are processed.
+	for _, subcmd := range batchCmds(cmd) {
+		updated2, _ := m.Update(subcmd())
+		m = updated2.(Model)
+	}
+	// Close any watcher opened during the test to avoid goroutine leaks.
+	t.Cleanup(func() {
+		if m.watcher != nil {
+			_ = m.watcher.Close()
+		}
+	})
 	resolvedWant, _ := filepath.EvalSymlinks(wt)
 	resolvedGot, _ := filepath.EvalSymlinks(m.currentWorktree)
 	if resolvedGot != resolvedWant {

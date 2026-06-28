@@ -59,6 +59,11 @@ var settingDocs = []settingDoc{
 	{"refresh", "remote_tags", 0, "seconds between background remote-tag (ls-remote) lookups; 0 = off"},
 	{"refresh", "min_seconds", 10, "floor on any auto-refresh interval; no source polls more often than this"},
 	{"refresh", "disable_remote_tags_auto", false, "disable auto remote-tag refresh on tag-list changes (default: on)"},
+
+	{"refresh", "worktrees_watch", false, "refresh worktrees on .git file change (off → use interval); ignored on WSL2 9p mounts"},
+	{"refresh", "branches_watch", false, "refresh branches on ref change (off → use interval); ignored on WSL2 9p mounts"},
+	{"refresh", "reflog_watch", false, "refresh reflog on logs/HEAD change (off → use interval); ignored on WSL2 9p mounts"},
+	{"refresh", "remotes_watch", false, "refresh remotes on ref/FETCH_HEAD change (off → use interval); ignored on WSL2 9p mounts"},
 }
 
 // tomlScalar renders a registry value as it appears in TOML.

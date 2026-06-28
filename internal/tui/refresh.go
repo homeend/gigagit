@@ -123,6 +123,43 @@ func refreshTomlKey(it refreshItem) string {
 	return ""
 }
 
+// watchEligible reports whether a file-watcher actually covers this item. Only
+// sources the implemented gitwatch.Plan watches are eligible — so a config that
+// sets a *_watch bool for a not-yet-wired source still polls (never goes stale).
+// D1: worktrees, reflog. D2: branches, remotes (recursive ref-tree watching).
+func watchEligible(it refreshItem) bool {
+	if it.isFetch {
+		return false
+	}
+	switch it.source {
+	case srcWorktrees, srcReflog, srcBranches, srcRemotes:
+		return true
+	}
+	return false
+}
+
+// watchOn reports the source's [refresh] *_watch config bool.
+func watchOn(cfg config.RefreshConfig, it refreshItem) bool {
+	switch it.source {
+	case srcWorktrees:
+		return cfg.WorktreesWatch
+	case srcBranches:
+		return cfg.BranchesWatch
+	case srcReflog:
+		return cfg.ReflogWatch
+	case srcRemotes:
+		return cfg.RemotesWatch
+	}
+	return false
+}
+
+// watchActive reports whether this source is currently driven by the file
+// watcher (eligible AND toggled on AND the fs supports watching). Watch-active
+// sources are excluded from interval polling — the watcher triggers them.
+func watchActive(cfg config.RefreshConfig, watchSupported bool, it refreshItem) bool {
+	return watchEligible(it) && watchOn(cfg, it) && watchSupported
+}
+
 // setRefreshIntervalField writes secs into the RefreshConfig field for an item.
 func setRefreshIntervalField(cfg *config.RefreshConfig, it refreshItem, secs int) {
 	if it.isRemoteTags {
@@ -149,6 +186,46 @@ func setRefreshIntervalField(cfg *config.RefreshConfig, it refreshItem, secs int
 	case srcFeed:
 		cfg.Feed = secs
 	}
+}
+
+// setRefreshWatchField writes want into the *_watch field for it.
+func setRefreshWatchField(cfg *config.RefreshConfig, it refreshItem, want bool) {
+	switch it.source {
+	case srcWorktrees:
+		cfg.WorktreesWatch = want
+	case srcBranches:
+		cfg.BranchesWatch = want
+	case srcReflog:
+		cfg.ReflogWatch = want
+	case srcRemotes:
+		cfg.RemotesWatch = want
+	}
+}
+
+// toggleRefreshWatch flips a source's file-watch toggle, persists it to the repo
+// .gg.toml, reseeds its lastRun, and rebuilds the watcher. No-op for a source
+// that is not watch-eligible.
+func (m Model) toggleRefreshWatch(it refreshItem) (Model, tea.Cmd) {
+	if !watchEligible(it) {
+		return m, nil
+	}
+	want := !watchOn(m.cfg.Refresh, it)
+	setRefreshWatchField(&m.cfg.Refresh, it, want)
+	if m.refreshLastRun == nil {
+		m.refreshLastRun = map[refreshItem]time.Time{}
+	}
+	m.refreshLastRun[it] = time.Now()
+	if m.repoConfigPath != "" {
+		if err := config.SetRefreshWatch(m.repoConfigPath, refreshTomlKey(it), want); err != nil {
+			m.statusMsg = "watch toggled but not saved: " + err.Error()
+		}
+	}
+	m.watchGen++
+	if m.watcher != nil {
+		_ = m.watcher.Close()
+		m.watcher = nil
+	}
+	return m, m.startWatchCmd(m.watchGen)
 }
 
 // saveRefreshInterval applies an edited interval: updates the in-memory config
@@ -234,7 +311,7 @@ func (m Model) refreshTick(now time.Time) (Model, tea.Cmd) {
 	if m.refreshSuppressed() {
 		return m, nil
 	}
-	due := dueItems(now, m.refreshLastRun, m.cfg.Refresh, false)
+	due := dueItems(now, m.refreshLastRun, m.cfg.Refresh, m.watchSupported, false)
 	m.bgQueue = enqueueDue(m.bgQueue, m.bgActiveItem, m.bgBusy, due)
 	if m.bgBusy || len(m.bgQueue) == 0 {
 		return m, nil
@@ -243,10 +320,15 @@ func (m Model) refreshTick(now time.Time) (Model, tea.Cmd) {
 	m.bgQueue = m.bgQueue[1:]
 	// A source whose read is already in flight (e.g. a manual r) must not get a
 	// second, superseding background read — that would strand the manual ⏳.
-	// Drop it this tick; it re-enqueues next tick if still due (lastRun unchanged).
+	// Re-enqueue rather than drop: watch-active sources have NO interval backstop
+	// (dueItems skips them), so a dropped trigger would be lost forever.
+	// enqueueDue's in-queue dedup keeps this bounded; it drains once srcInflight
+	// clears. Harmless for timer items — dueItems would re-add them anyway, but
+	// re-enqueuing here keeps latency low when inflight clears before the next tick.
 	// Synthetic items (isFetch, isRemoteTags) are excluded: they have no sourceKey
 	// and must not read srcInflight[source-zero] (which is srcStatus).
 	if !it.isFetch && !it.isRemoteTags && m.srcInflight[it.source] {
+		m.bgQueue = enqueueDue(m.bgQueue, m.bgActiveItem, m.bgBusy, []refreshItem{it})
 		return m, nil
 	}
 	// Guard network synthetic items when svc is nil: the cmd would return nil but
@@ -308,13 +390,17 @@ func (m Model) bgFetchCmd(ctx context.Context, gen int) tea.Cmd {
 }
 
 // dueItems returns the items whose fixed interval has elapsed this tick. off
-// items are excluded. Pure.
-func dueItems(now time.Time, lastRun map[refreshItem]time.Time, cfg config.RefreshConfig, suppressed bool) []refreshItem {
+// items are excluded. Watch-active items are skipped — they are driven by the
+// file watcher, not the timer. Pure.
+func dueItems(now time.Time, lastRun map[refreshItem]time.Time, cfg config.RefreshConfig, watchSupported bool, suppressed bool) []refreshItem {
 	if !cfg.Enabled || suppressed {
 		return nil
 	}
 	var due []refreshItem
 	for _, it := range scheduledItems {
+		if watchActive(cfg, watchSupported, it) {
+			continue // driven by the file watcher, not the timer
+		}
 		secs, on := scheduledInterval(cfg, it)
 		if !on {
 			continue
