@@ -62,9 +62,10 @@ var contextBindings = []footerBinding{
 	{"mark-file", "m", "[m] mark", func(m Model) bool { return m.isFilesPanel(m.focus) && m.panelLen(m.focus) > 0 }, scopeRow},
 	{"discard", "d", "[d]iscard", func(m Model) bool { return m.focus == panelFiles && m.canDiscard() }, scopeRow},
 	{"discard-all", "D", "[D] discard all", func(m Model) bool { return m.focus == panelFiles && m.canDiscardAll() }, scopeWindow},
-	{"commit-files", "l", "[l] files", func(m Model) bool {
+	{"commit-files", "l", "[enter/l] files", func(m Model) bool {
 		// Stricter than the dispatch: the narrow case is a statusMsg no-op
-		// there, so don't advertise it.
+		// there, so don't advertise it. enter drills in (focuses the tree); l
+		// opens the same view on the commit-list side.
 		return m.focus == panelCommits && m.canShowCommitFiles() && !(m.width > 0 && m.width < 40)
 	}, scopeRow},
 	{"commit-message", "i", "[i] message [I] in editor", func(m Model) bool {
@@ -136,10 +137,16 @@ func (m Model) footerLine() string {
 		if m.filesPreview != nil && !m.filesTreeFocused {
 			return "file: [↑/↓] scroll  [z] view  [←/tab] back to tree  [esc] close preview"
 		}
-		if m.filesTreeFocused {
-			return "tree: [↑/↓] move  [enter] diff  [a] all files  [.] view file/copy  [/] search  [h] hist  [b] blame  [z] view  [esc/l] close"
+		// i shows the displayed commit's message — only when canShowFilesViewMessage
+		// holds (same gate as the handler, so the footer never advertises a dead i).
+		msgHint := ""
+		if m.canShowFilesViewMessage() {
+			msgHint = "  [i] msg"
 		}
-		return "commits: [←/→ tab] focus  [↑/↓] move  [<>=] graph  [a] all files  [/] search  [.] actions  [esc/l] close"
+		if m.filesTreeFocused {
+			return "tree: [↑/↓] move  [enter] diff  [a] all files  [.] view file/copy  [/] search  [h] hist  [b] blame  [z] view" + msgHint + "  [esc/l] close"
+		}
+		return "commits: [enter/tab] tree  [↑/↓] move  [<>=] graph  [a] all files  [/] search  [.] actions" + msgHint + "  [esc/l] close"
 	}
 	// The stash list owns the keyboard while it is the focused right column
 	// (no file tree yet). When focus has moved to a left panel, fall through to

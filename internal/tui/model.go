@@ -1139,16 +1139,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				wt, _ := m.selectedWorktree()
 				return m.reRoot(wt.Path)
 			}
-			// A WIP pseudo-row opens its node-vs-parent compare (mirrors l).
+			// On the Commits panel, enter "drills in": it opens the files view AND
+			// lands focus on the tree (l opens the same view on the commit-list
+			// side instead). A WIP pseudo-row opens its node-vs-parent compare.
 			if m.focus == panelCommits && m.canShowCommitFiles() {
-				if r, ok := m.wipRowAt(m.commitSelUnified()); ok {
-					if m.width > 0 && m.width < 40 {
-						m.statusMsg = "terminal too narrow for the files view"
-						return m, nil
-					}
-					left, right := m.wipEndpoints(r)
-					return m.openCompareFiles(left, right)
+				if m.width > 0 && m.width < 40 {
+					m.statusMsg = "terminal too narrow for the files view"
+					return m, nil
 				}
+				if r, ok := m.wipRowAt(m.commitSelUnified()); ok {
+					left, right := m.wipEndpoints(r)
+					mm, cmd := m.openCompareFiles(left, right)
+					return mm.focusTree(), cmd
+				}
+				bi, ok := m.backingIndex(panelCommits)
+				if !ok {
+					return m, nil
+				}
+				mm, cmd := m.openChangedFiles(m.commits[bi])
+				return mm.focusTree(), cmd
 			}
 			if m.canShowFileDiff() {
 				bi, _ := m.backingIndex(m.focus)

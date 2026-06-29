@@ -586,17 +586,17 @@ func TestFilesViewLoadErrorKeepsViewAndSetsStatus(t *testing.T) {
 
 func TestFooterShowsFilesBindingOnCommitsPanel(t *testing.T) {
 	m := filesModel()
-	if f := m.footerLine(); !strings.Contains(f, "[l] files") {
-		t.Fatalf("footer = %q, must advertise [l] files on the commits panel", f)
+	if f := m.footerLine(); !strings.Contains(f, "[enter/l] files") {
+		t.Fatalf("footer = %q, must advertise [enter/l] files on the commits panel", f)
 	}
 	m.focus = panelBranches
-	if f := m.footerLine(); strings.Contains(f, "[l] files") {
-		t.Fatalf("footer = %q, must not advertise [l] files off the commits panel", f)
+	if f := m.footerLine(); strings.Contains(f, "[enter/l] files") {
+		t.Fatalf("footer = %q, must not advertise [enter/l] files off the commits panel", f)
 	}
 	m.focus = panelCommits
 	m.width = 30
-	if f := m.footerLine(); strings.Contains(f, "[l] files") {
-		t.Fatalf("footer = %q, must not advertise [l] files on a narrow terminal", f)
+	if f := m.footerLine(); strings.Contains(f, "[enter/l] files") {
+		t.Fatalf("footer = %q, must not advertise [enter/l] files on a narrow terminal", f)
 	}
 }
 
