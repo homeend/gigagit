@@ -9,6 +9,19 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **`enter` on a commit drills into its files (and focuses the tree).** On the
+  Commits panel, pressing `enter` on a commit now opens the changed-files view
+  *and* moves focus to the file tree — `l` followed by switching to the tree, in
+  one keystroke. `l` is unchanged (it opens the same view on the commit-list
+  side, where ↑/↓ keeps reloading the tree as you move). A WIP pseudo-row
+  (◇ Working tree / ◇ Staged) opens its node-vs-parent compare and likewise
+  lands on the tree. With the files view already open on the commit-list side,
+  `enter` drills the rest of the way in — it moves focus to the file tree.
+- **`i` shows a commit's message even while its files view is open.** Pressing
+  `i` with the files view open now opens the same scrollable commit-message
+  popup as `i` on the Commits panel; the popup layers over the tree and `esc`
+  returns to it. Only meaningful for a real commit files view — it is inert for
+  a stash or compare view (no single commit behind them).
 - **Clickable left-column tabs.** A left-click on a tab name in any left-column
   slot header now switches to that tab (and focuses it) — the same three slots
   `ctrl+←/→` cycles: the top **Branches / Remotes / Worktrees** slot (the

@@ -223,6 +223,16 @@ func (m Model) filesViewCommit() model.Commit {
 	return model.Commit{Hash: m.filesHash}
 }
 
+// canShowFilesViewMessage reports whether i in the files view can show the
+// displayed commit's message: a real single-commit view (not a stash or a
+// compare, which have no single commit behind them), idle, with a resolved
+// hash. The single source of truth shared by the key handler and the footer so
+// they cannot advertise a dead binding.
+func (m Model) canShowFilesViewMessage() bool {
+	return m.filesView != nil && m.opsIdle() &&
+		m.stashView == nil && !m.inCompareMode() && m.filesHash != ""
+}
+
 // compareFilesMsg carries a whole-tree comparison's changed files, tagged so a
 // superseded load (fast re-open) can be dropped.
 type compareFilesMsg struct {
@@ -332,6 +342,15 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.openShelfSwitcher()
 	case "F": // global fuzzy file finder
 		return m.openFileFinder()
+	case "i": // show the displayed commit's message, mirroring the Commits-panel i
+		// Resolve the commit the tree is ACTUALLY showing (filesViewCommit, keyed
+		// by filesHash) — not the Commits-panel cursor: a reflog/tags-opened view
+		// sets focus=panelCommits but displays a different commit. The popup layers
+		// OVER the tree (esc returns to it) — filesView is untouched.
+		if m.canShowFilesViewMessage() {
+			return m.openCommitMessagePopup(m.filesViewCommit())
+		}
+		return m, nil
 	case "z":
 		if m.filesPreview != nil && !m.filesTreeFocused { // z cycles the focused preview
 			m.filesPreview.mode = m.filesPreview.mode.next()
@@ -450,13 +469,17 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, m.loadBlameCmd(ctx, bv.tag)
 	case "enter":
 		if !m.filesTreeFocused {
-			// List side: for a stash, enter opens the Apply/Pop/Drop popup
-			// (the list's defining verb); for commits it's a no-op.
-			if v := m.stashView; v != nil && v.sel >= 0 && v.sel < len(v.entries) {
-				e := v.entries[v.sel]
-				m = m.pushLayer(&stashActionPopup{ref: e.Ref, subject: e.Subject})
+			// List side: for a stash, enter opens the Apply/Pop/Drop popup (the
+			// list's defining verb). For a commit list, enter "drills in" — it
+			// moves focus to the file tree, mirroring enter on the Commits panel.
+			if v := m.stashView; v != nil {
+				if v.sel >= 0 && v.sel < len(v.entries) {
+					e := v.entries[v.sel]
+					m = m.pushLayer(&stashActionPopup{ref: e.Ref, subject: e.Subject})
+				}
+				return m, nil
 			}
-			return m, nil
+			return m.focusTree(), nil
 		}
 		vis := p.visible()
 		if p.sel < 0 || p.sel >= len(vis) || vis[p.sel].path == "" {
