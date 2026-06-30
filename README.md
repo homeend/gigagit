@@ -285,6 +285,23 @@ example, `footer_actions = ["pull", "commit", "filter"]` shrinks the footer to
 those (plus `[.] actions`), leaving everything else one keypress away in the `.`
 menu.
 
+### Post-worktree hook
+
+After `gg` creates a worktree it can run a per-repo shell script — handy for
+copying gitignored files the new worktree won't have. Set it in `.gg.toml`:
+
+```toml
+[worktree]
+post_create_hook = '''
+cp "$GG_MAIN_WORKTREE/.env" .
+make setup
+'''
+```
+
+Runs with `cwd` = the new worktree. Env: `GG_MAIN_WORKTREE` (the main checkout),
+`GG_WORKTREE_PATH`, `GG_BRANCH`, `GG_REPO`. Edit it from Settings (`,`), skip it
+per-create with `h` in the create popup or `gg worktree add --no-hook`.
+
 ### Environment
 
 `GG_COMMIT_PAGER` selects the commit-feed loading strategy: `plain` (default) is

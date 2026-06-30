@@ -163,6 +163,12 @@ guards against removing the worktree you are standing in.
   the new worktree (no new branch; refuses a branch already checked out).
   `remove` refuses a dirty or **locked** worktree (an interrupted `add` can
   leave one locked); `--force` removes a dirty tree and unlocks a locked one.
+  If `[worktree] post_create_hook` is set in `.gg.toml` (a multi-line TOML
+  literal `'''…'''` shell script), `gg worktree add` runs it inside the new
+  worktree after creation with env `GG_MAIN_WORKTREE` (the main checkout,
+  useful as a copy source), `GG_WORKTREE_PATH`, `GG_BRANCH`, and `GG_REPO`;
+  pass `--no-hook` to skip it for a single invocation. Hook output streams to
+  the busy log; a hook failure is reported but does not roll back the worktree.
 - `gg repo list` / `gg repo switch <query>` — the known-repository registry
   (MRU); `switch` prints the path of the unique match.
 - `gg inspect` — one-shot repo summary (scriptable health check).
