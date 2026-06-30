@@ -18,6 +18,10 @@ type WorktreeConfig struct {
 	PathTemplate          string   `toml:"path_template"`
 	DefaultBranchTemplate string   `toml:"default_branch_template"`
 	BranchTemplates       []string `toml:"branch_templates"`
+	// PostCreateHook is a shell script run after a worktree is created (cwd =
+	// the new worktree; env GG_MAIN_WORKTREE/GG_WORKTREE_PATH/GG_BRANCH/GG_REPO).
+	// Stored as a multi-line TOML literal ('''…'''). Empty = disabled.
+	PostCreateHook string `toml:"post_create_hook"`
 }
 
 // UIConfig configures TUI behavior. TOML keys are snake_case.
@@ -162,6 +166,9 @@ func overlayWorktree(dst *WorktreeConfig, src WorktreeConfig) {
 	}
 	if len(src.BranchTemplates) > 0 {
 		dst.BranchTemplates = src.BranchTemplates
+	}
+	if src.PostCreateHook != "" {
+		dst.PostCreateHook = src.PostCreateHook
 	}
 }
 
