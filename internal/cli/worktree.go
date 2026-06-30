@@ -59,6 +59,7 @@ func cmdWorktreeAdd(svc *domain.Service, args []string, stdin io.Reader, stdout,
 	fs := flag.NewFlagSet("worktree add", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	forBranch := fs.String("branch", "", "create the worktree for this existing branch (no new branch)")
+	noHook := fs.Bool("no-hook", false, "skip the configured [worktree] post_create_hook")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -145,9 +146,13 @@ func cmdWorktreeAdd(svc *domain.Service, args []string, stdin io.Reader, stdout,
 		return 1
 	}
 
-	var op engine.Operation = engine.CreateWorktree{StartPoint: startPoint, Branch: branch, Path: path}
+	hook := cfg.Worktree.PostCreateHook
+	if *noHook {
+		hook = ""
+	}
+	var op engine.Operation = engine.CreateWorktree{StartPoint: startPoint, Branch: branch, Path: path, PostCreateHook: hook}
 	if *forBranch != "" {
-		op = engine.CreateWorktreeForBranch{Branch: branch, Path: path}
+		op = engine.CreateWorktreeForBranch{Branch: branch, Path: path, PostCreateHook: hook}
 	}
 	res, err := runOperation(ctxBg, svc, op, cliDecider{}, stderr)
 	if err != nil {
