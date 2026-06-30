@@ -307,13 +307,15 @@ func TestOpenDiffClearsStaleNotice(t *testing.T) {
 }
 
 // TestWithDiffFileNoticeRendersCueAndNotice: the bottom-left overlay shows the
-// primed cue and the arrival notice, and is absent when idle.
+// proactive boundary cue when idle on a boundary, the primed cue while armed,
+// and the transient arrival notice — in that priority order.
 func TestWithDiffFileNoticeRendersCueAndNotice(t *testing.T) {
-	m := treeDiffModel(1)
+	m := treeDiffModel(1) // a.go (a next file exists), empty diff → on the boundary
 	frame := m.renderDiffView()
 
-	if out := ansi.Strip(m.withDiffFileNotice(frame)); strings.Contains(out, "next file") || strings.Contains(out, "▸") {
-		t.Fatalf("idle diff must show no notice overlay:\n%s", out)
+	// Idle on a boundary now advertises the file step proactively.
+	if out := ansi.Strip(m.withDiffFileNotice(frame)); !strings.Contains(out, "next file") {
+		t.Fatalf("idle boundary must show the proactive cue:\n%s", out)
 	}
 
 	m.diffLayer().fileArm = fileArmNext
@@ -325,6 +327,21 @@ func TestWithDiffFileNoticeRendersCueAndNotice(t *testing.T) {
 	m.diffNotice = "▸ b.go"
 	if out := ansi.Strip(m.withDiffFileNotice(frame)); !strings.Contains(out, "b.go") {
 		t.Fatalf("notice must render the file name:\n%s", out)
+	}
+}
+
+// TestWithDiffFileNoticeIdleNoBoundary: with no neighbour file and nothing to
+// wrap (a single-change picker compare), the overlay is absent when idle.
+func TestWithDiffFileNoticeIdleNoBoundary(t *testing.T) {
+	m := footerModel()
+	m.height = 12
+	m.diffNav = diffNavNone
+	v := diffViewWith(sameRowsTUI(60, 10), []int{10}) // one change block
+	m = m.pushLayer(v)
+	m.diffLayer().focusBlock(0, m.diffBodyRows())
+	frame := m.renderDiffView()
+	if out := ansi.Strip(m.withDiffFileNotice(frame)); strings.Contains(out, "▸") {
+		t.Fatalf("idle diff with no boundary gesture must show no overlay:\n%s", out)
 	}
 }
 
