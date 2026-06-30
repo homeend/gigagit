@@ -303,7 +303,7 @@ func TestOpAffectedSources(t *testing.T) {
 		want []sourceKey // nil = expect nil (all)
 	}{
 		{engine.Commit{}, []sourceKey{srcStatus, srcFeed, srcBranches}},
-		{engine.Push{}, []sourceKey{srcBranches, srcRemotes}},
+		{engine.Push{}, []sourceKey{srcBranches, srcRemotes, srcFeed}},
 		{engine.Fetch{}, []sourceKey{srcRemotes}},
 		{engine.CreateWorktree{}, []sourceKey{srcBranches, srcWorktrees}},
 		{engine.RemoveWorktree{}, []sourceKey{srcBranches, srcWorktrees}},
