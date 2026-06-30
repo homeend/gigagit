@@ -41,13 +41,15 @@ func (s LogScope) filtered() bool {
 
 // LogScoped returns up to limit commits (newest-first; --date-order when
 // dateOrder is set, else git's default order) reachable from the scope's refs,
-// skipping the first skip. --decorate (bare, short names) forces %D to populate
-// across git versions.
+// skipping the first skip. --decorate=full forces %D to populate with FULL
+// refnames (refs/heads/…, refs/remotes/…, refs/tags/…) so a local branch whose
+// name contains a slash (e.g. feat/foo) is classified by namespace, not by a
+// fragile "contains /" heuristic that mistakes it for a remote-tracking ref.
 func (r *Repo) LogScoped(ctx context.Context, limit, skip int, scope LogScope, dateOrder bool) ([]model.Commit, error) {
 	b := gitcmd.New("log").
 		Arg("-n", strconv.Itoa(limit)).
 		ArgIf(dateOrder, "--date-order").
-		Arg("--decorate", "--source", "--format="+logFormat).
+		Arg("--decorate=full", "--source", "--format="+logFormat).
 		ArgIf(skip > 0, "--skip="+strconv.Itoa(skip)).
 		ArgIf(scope.Author != "", "--author="+scope.Author).
 		ArgIf(scope.Since != "", "--since="+scope.Since).
@@ -209,8 +211,11 @@ func ParseLog(data []byte) ([]model.Commit, error) {
 	return out, nil
 }
 
-// parseDecorations splits a `%D` value ("HEAD -> main, feature, tag: v1,
-// origin/main") into refs. Empty → nil. The HEAD-pointed branch carries Head=true.
+// parseDecorations splits a full-refname `%D` value (from `--decorate=full`,
+// e.g. "HEAD -> refs/heads/main, tag: refs/tags/v1, refs/remotes/origin/main")
+// into refs. Empty → nil. Classification is by ref namespace, so a slash-named
+// local branch (refs/heads/feat/foo) is correctly RefLocal, not RefRemote. The
+// HEAD-pointed branch carries Head=true.
 func parseDecorations(d string) []model.Ref {
 	d = strings.TrimSpace(d)
 	if d == "" {
@@ -219,19 +224,26 @@ func parseDecorations(d string) []model.Ref {
 	var refs []model.Ref
 	for _, tok := range strings.Split(d, ", ") {
 		tok = strings.TrimSpace(tok)
+		head := false
+		if rest, ok := strings.CutPrefix(tok, "HEAD -> "); ok {
+			head, tok = true, rest
+		}
 		switch {
 		case tok == "":
 			continue
-		case strings.HasPrefix(tok, "HEAD -> "):
-			refs = append(refs, model.Ref{Name: strings.TrimPrefix(tok, "HEAD -> "), Kind: model.RefLocal, Head: true})
-		case tok == "HEAD":
+		case tok == "HEAD": // detached HEAD
 			refs = append(refs, model.Ref{Name: "HEAD", Kind: model.RefHead})
 		case strings.HasPrefix(tok, "tag: "):
-			refs = append(refs, model.Ref{Name: strings.TrimPrefix(tok, "tag: "), Kind: model.RefTag})
-		case strings.Contains(tok, "/"): // Phase-1 simplification: slashy ⇒ remote-tracking
-			refs = append(refs, model.Ref{Name: tok, Kind: model.RefRemote})
+			name := strings.TrimPrefix(strings.TrimPrefix(tok, "tag: "), "refs/tags/")
+			refs = append(refs, model.Ref{Name: name, Kind: model.RefTag})
+		case strings.HasPrefix(tok, "refs/heads/"):
+			refs = append(refs, model.Ref{Name: strings.TrimPrefix(tok, "refs/heads/"), Kind: model.RefLocal, Head: head})
+		case strings.HasPrefix(tok, "refs/remotes/"):
+			refs = append(refs, model.Ref{Name: strings.TrimPrefix(tok, "refs/remotes/"), Kind: model.RefRemote})
 		default:
-			refs = append(refs, model.Ref{Name: tok, Kind: model.RefLocal})
+			// Unknown namespace (refs/stash, refs/notes/…, or a bare name from an
+			// older git ignoring --decorate=full): keep the token, treat as local.
+			refs = append(refs, model.Ref{Name: tok, Kind: model.RefLocal, Head: head})
 		}
 	}
 	return refs

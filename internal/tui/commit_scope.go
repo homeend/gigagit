@@ -260,8 +260,9 @@ func (m Model) commitViewModeRow() (actionRow, bool) {
 }
 
 // commitGotoTipRow offers "Go to tip in commits" on the Branches panel: move the
-// Commits cursor to the selected branch's tip commit (the loaded commit decorated
-// with that branch) and focus the Commits panel. Mirrors commitSoloRow's gating.
+// Commits cursor to the selected branch's tip commit (matched by tip HASH, so it
+// works regardless of how %D decorated the row) and focus the Commits panel.
+// Mirrors commitSoloRow's gating.
 func (m Model) commitGotoTipRow() (actionRow, bool) {
 	if m.focus != panelBranches {
 		return actionRow{}, false
@@ -276,7 +277,10 @@ func (m Model) commitGotoTipRow() (actionRow, bool) {
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			idx := m.displayIndices(panelCommits)
 			for di, bi := range idx {
-				if c, ok := m.commitAtUnified(bi); ok && commitHasLocalRef(c, b.Name) {
+				// Match on the branch's tip HASH, not its decoration name: the
+				// commit feed's %D decorations can be filtered or reclassified, so a
+				// hash compare finds the tip regardless of how it was decorated.
+				if c, ok := m.commitAtUnified(bi); ok && commitIsHash(c, b.Hash) {
 					m.sel[panelCommits] = di
 					m.focus = panelCommits
 					return m, nil
@@ -787,6 +791,14 @@ func (m Model) commitResetRow() (actionRow, bool) {
 			return m.confirmOp(engine.Reset{Commit: hash}, "Reset to "+shortHash(hash)+"? This moves the current branch ref.")
 		},
 	}, true
+}
+
+// commitIsHash reports whether commit c is the one identified by short — a
+// (possibly abbreviated) SHA such as Branch.Hash (%(objectname:short)). c.Hash is
+// the full %H, so a prefix match resolves the abbreviation. Empty short never
+// matches (so an unknown branch tip is "not loaded", not the first commit).
+func commitIsHash(c model.Commit, short string) bool {
+	return short != "" && strings.HasPrefix(c.Hash, short)
 }
 
 // commitHasLocalRef reports whether commit c is decorated with a local branch ref

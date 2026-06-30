@@ -405,9 +405,10 @@ func TestCommitBranchHint(t *testing.T) {
 
 func TestCommitGotoTipJumpsAndFocuses(t *testing.T) {
 	m := branchesPanelModel("feat", "main") // Branches focused, feat selected
+	m.branches[0].Hash = "t1deadbeef"       // feat's tip (short SHA, as for-each-ref gives)
 	m.commits = []model.Commit{
-		{Hash: "b0", Subject: "base"},
-		{Hash: "t1", Subject: "tip", Refs: []model.Ref{{Name: "feat", Kind: model.RefLocal}}},
+		{Hash: "b0aaaaaaaaaa", Subject: "base"},
+		{Hash: "t1deadbeefcafe", Subject: "tip", Refs: []model.Ref{{Name: "feat", Kind: model.RefLocal}}},
 	}
 	r, ok := findRow(availableActions(m), "commits-goto-tip")
 	if !ok {
@@ -423,9 +424,32 @@ func TestCommitGotoTipJumpsAndFocuses(t *testing.T) {
 	}
 }
 
+// TestCommitGotoTipSlashBranchByHash is the regression for the reported bug:
+// a slash-named local branch (feat/x) whose tip commit IS loaded must be found.
+// The match is by tip HASH, so it works even though the commit carries no
+// decoration here (and historically the slash name was misclassified as remote).
+func TestCommitGotoTipSlashBranchByHash(t *testing.T) {
+	m := branchesPanelModel("feat/x", "main")
+	m.branches[0].Hash = "abc1234" // feat/x tip
+	m.commits = []model.Commit{
+		{Hash: "0000000000", Subject: "base"},
+		{Hash: "abc1234def0", Subject: "tip"}, // loaded, undecorated
+	}
+	r, ok := findRow(availableActions(m), "commits-goto-tip")
+	if !ok {
+		t.Fatal("go-to-tip row missing on Branches panel")
+	}
+	mm, _ := r.run(m)
+	m = mm.(Model)
+	if m.focus != panelCommits || m.sel[panelCommits] != 1 {
+		t.Fatalf("slash branch goto-tip: focus=%v sel=%d, want panelCommits/1", m.focus, m.sel[panelCommits])
+	}
+}
+
 func TestCommitGotoTipNotLoadedNotifies(t *testing.T) {
 	m := branchesPanelModel("feat", "main")
-	m.commits = []model.Commit{{Hash: "b0", Subject: "base"}} // no feat tip loaded
+	m.branches[0].Hash = "t1deadbeef"
+	m.commits = []model.Commit{{Hash: "b0aaaaaaaaaa", Subject: "base"}} // no feat tip loaded
 	r, _ := findRow(availableActions(m), "commits-goto-tip")
 	mm, _ := r.run(m)
 	m = mm.(Model)

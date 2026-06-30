@@ -38,7 +38,10 @@ func TestParseLog(t *testing.T) {
 }
 
 func TestParseLogDecorations(t *testing.T) {
-	line1 := strings.Join([]string{"h1", "p1", "Ada", "1700000000", "subj one", "HEAD -> main, feature, tag: v1, origin/main"}, "\x1f")
+	// Full refnames as emitted by --decorate=full. feat/foo is a SLASH-named
+	// local branch: it must classify as RefLocal, not RefRemote.
+	deco := "HEAD -> refs/heads/main, refs/heads/feat/foo, tag: refs/tags/v1, refs/remotes/origin/main"
+	line1 := strings.Join([]string{"h1", "p1", "Ada", "1700000000", "subj one", deco}, "\x1f")
 	line2 := strings.Join([]string{"h2", "", "Bo", "1700000001", "subj two", ""}, "\x1f")
 	cs, err := ParseLog([]byte(line1 + "\n" + line2 + "\n"))
 	if err != nil || len(cs) != 2 {
@@ -54,8 +57,8 @@ func TestParseLogDecorations(t *testing.T) {
 	if byName["main"].Kind != model.RefLocal || !byName["main"].Head {
 		t.Fatalf("main should be the head local branch: %+v", byName["main"])
 	}
-	if byName["feature"].Kind != model.RefLocal || byName["feature"].Head {
-		t.Fatalf("feature should be a non-head local branch: %+v", byName["feature"])
+	if byName["feat/foo"].Kind != model.RefLocal || byName["feat/foo"].Head {
+		t.Fatalf("feat/foo should be a non-head LOCAL branch (slash in name): %+v", byName["feat/foo"])
 	}
 	if byName["v1"].Kind != model.RefTag || byName["origin/main"].Kind != model.RefRemote {
 		t.Fatalf("tag/remote kinds wrong: %+v", cs[0].Refs)
@@ -79,7 +82,7 @@ func TestLogScopedArgv(t *testing.T) {
 	if _, err := r.LogScoped(context.Background(), 50, 0, LogScope{}, true); err != nil {
 		t.Fatal(err)
 	}
-	for _, w := range []string{"--date-order", "--decorate", "--source", "--branches", "HEAD"} {
+	for _, w := range []string{"--date-order", "--decorate=full", "--source", "--branches", "HEAD"} {
 		if !logArgvContains(t, f, w) {
 			t.Fatalf("all-scope argv missing %q: %v", w, f.Calls)
 		}
@@ -97,6 +100,7 @@ func TestLogScopedRealDecorations(t *testing.T) {
 	dir, runner := newTestRepo(t) // one commit on main
 	repo := &Repo{Runner: runner}
 	gitIn(t, dir, "branch", "feature")
+	gitIn(t, dir, "branch", "feat/slashy") // slash-named local branch (regression)
 	gitIn(t, dir, "tag", "v1")
 	cs, err := repo.LogScoped(context.Background(), 10, 0, LogScope{}, true)
 	if err != nil || len(cs) == 0 {
@@ -111,6 +115,9 @@ func TestLogScopedRealDecorations(t *testing.T) {
 	}
 	if byName["feature"].Kind != model.RefLocal || byName["v1"].Kind != model.RefTag {
 		t.Fatalf("expected feature(local)+v1(tag), got %+v", cs[0].Refs)
+	}
+	if byName["feat/slashy"].Kind != model.RefLocal {
+		t.Fatalf("slash-named local branch must be RefLocal, got %+v", cs[0].Refs)
 	}
 }
 
