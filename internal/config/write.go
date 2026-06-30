@@ -50,11 +50,12 @@ func SetRefreshWatch(path, source string, on bool) error {
 	return setScalarLine(path, "refresh", source+"_watch", strconv.FormatBool(on))
 }
 
-// SetWorktreePostCreateHook persists `[worktree] post_create_hook = ”'…”'` to
-// the given config file (the repo .gg.toml) as a TOML multi-line LITERAL string,
-// preserving comments and unrelated lines. A trailing newline in script is
-// trimmed so re-saving a parsed value is idempotent; an empty script removes
-// the key. Backs the Settings "Worktree post-create hook" editor.
+// SetWorktreePostCreateHook persists [worktree] post_create_hook to the given
+// config file (the repo .gg.toml) as a TOML multi-line literal string
+// (triple-single-quote delimited), preserving comments and unrelated lines.
+// A trailing newline in script is trimmed so re-saving a parsed value is
+// idempotent; an empty script removes the key. Backs the Settings “Worktree
+// post-create hook” editor.
 func SetWorktreePostCreateHook(path, script string) error {
 	return setMultilineLiteral(path, "worktree", "post_create_hook", script)
 }
@@ -152,7 +153,8 @@ func opensMultiline(trimmed string) (delim string, opens bool) {
 	return "", false
 }
 
-// setMultilineLiteral sets `key = ”'value”'` under [section] via a
+// setMultilineLiteral sets key to value under [section] using a TOML
+// multi-line literal string (triple-single-quote delimited) via a
 // line-oriented, delimiter-aware edit. An empty value removes the key.
 func setMultilineLiteral(path, section, key, value string) error {
 	if path == "" {

@@ -49,6 +49,24 @@ func TestShellHookRunnerNonZeroExit(t *testing.T) {
 	}
 }
 
+// TestHookLineWriterCRLF verifies that Windows-style CRLF hook output is
+// stripped to clean lines (no trailing \r in the emitted strings).
+func TestHookLineWriterCRLF(t *testing.T) {
+	var got []string
+	lw := &hookLineWriter{onLine: func(line string) { got = append(got, line) }}
+	lw.Write([]byte("a\r\nb\r\n"))
+	lw.flush()
+	want := []string{"a", "b"}
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for i, g := range got {
+		if g != want[i] {
+			t.Errorf("line[%d] = %q, want %q", i, g, want[i])
+		}
+	}
+}
+
 func contains(ss []string, want string) bool {
 	for _, s := range ss {
 		if strings.TrimRight(s, "\r") == want {

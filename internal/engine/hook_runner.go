@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"strings"
 )
 
 // HookSpec is one hook invocation: a working directory, a full environment
@@ -99,13 +100,13 @@ func (w *hookLineWriter) Write(p []byte) (int, error) {
 			w.buf.WriteString(line)
 			break
 		}
-		w.onLine(line[:len(line)-1])
+		w.onLine(strings.TrimSuffix(line[:len(line)-1], "\r"))
 	}
 	return len(p), nil
 }
 
 func (w *hookLineWriter) flush() {
 	if rest := w.buf.String(); rest != "" {
-		w.onLine(rest)
+		w.onLine(strings.TrimSuffix(rest, "\r"))
 	}
 }

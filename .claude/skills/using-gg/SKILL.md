@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v35 -->
+<!-- gg:using-gg:v36 -->
 
 # Using gg (gigagit)
 
@@ -171,11 +171,15 @@ guards against removing the worktree you are standing in.
   `remove` refuses a dirty or **locked** worktree (an interrupted `add` can
   leave one locked); `--force` removes a dirty tree and unlocks a locked one.
   If `[worktree] post_create_hook` is set in `.gg.toml` (a multi-line TOML
-  literal `'''…'''` shell script), `gg worktree add` runs it inside the new
-  worktree after creation with env `GG_MAIN_WORKTREE` (the main checkout,
-  useful as a copy source), `GG_WORKTREE_PATH`, `GG_BRANCH`, and `GG_REPO`;
-  pass `--no-hook` to skip it for a single invocation. Hook output streams to
-  the busy log; a hook failure is reported but does not roll back the worktree.
+  literal `'''…'''` shell script), `gg worktree add` will offer to run it
+  inside the new worktree. The hook requires approval before it runs (the
+  script is shown and you choose run/skip). Pass `--hook` to approve without
+  prompting; pass `--no-hook` to skip without prompting. With neither flag
+  `gg` prompts interactively on stdin and defaults to skip when stdin is not
+  a terminal (piped/scripted invocations never run an unseen script). Env:
+  `GG_MAIN_WORKTREE` (the main checkout, useful as a copy source),
+  `GG_WORKTREE_PATH`, `GG_BRANCH`, `GG_REPO`. Hook output streams to the
+  busy log; a hook failure is reported but does not roll back the worktree.
 - `gg repo list` / `gg repo switch <query>` — the known-repository registry
   (MRU); `switch` prints the path of the unique match.
 - `gg inspect` — one-shot repo summary (scriptable health check).

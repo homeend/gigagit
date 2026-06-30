@@ -151,6 +151,29 @@ fakeable process-runner seam.
   toggle yields an op with/without `PostCreateHook`. Follow existing popup test
   patterns.
 
+## Security / trust
+
+**Accepted boundary:** `.gg.toml` is checked into version control and travels
+on clone. A malicious or accidental hook in a cloned repo could run arbitrary
+shell commands. The design addresses this with a mandatory approval gate.
+
+**The hook never runs silently.** The engine emits a `DecisionRequest`
+(`HookDecisionID = "post_create_hook.run"`, options `["run", "skip"]`)
+showing the script body before executing anything. The safe default — used
+whenever no decider answers — is skip.
+
+- **TUI:** the existing modal renderer shows the script and requires an
+  explicit "run" choice; the create-worktree popup's `[h]` toggle (`runHook
+  bool`, default true) is a pre-skip that suppresses even the prompt.
+- **CLI:** `--hook` answers "run" without prompting; `--no-hook` answers
+  "skip"; with neither flag the CLI prompts on stdin and defaults to "skip"
+  when stdin is not a terminal (piped/scripted invocations never run an
+  unseen script).
+
+This supersedes the earlier "runs automatically with a per-create skip toggle"
+language in the Decisions table; the correct model is "never runs unless
+explicitly approved, with a per-create pre-skip toggle".
+
 ## Out of scope (YAGNI)
 
 - Interactive hooks (TTY/password prompts) — non-interactive streaming only.
