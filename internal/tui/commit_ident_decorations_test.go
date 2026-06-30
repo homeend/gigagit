@@ -37,11 +37,11 @@ func TestMarkerFieldArrangement(t *testing.T) {
 		id   commitIdent
 		want string
 	}{
-		{commitIdent{tip: true, count: 1}, markerLocal + "  "},                              // "■  " single tip, no badge
-		{commitIdent{tip: true, count: 3}, markerLocal + "³ "},                               // "■³ " multi tip, badge in cell 2
+		{commitIdent{tip: true, count: 1}, markerLocal + "  "},                                // "■  " single tip, no badge
+		{commitIdent{tip: true, count: 3}, markerLocal + "³ "},                                // "■³ " multi tip, badge in cell 2
 		{commitIdent{tip: true, remoteTip: true, count: 3}, markerLocal + markerRemote + " "}, // "■▲ " both tips → badge DROPPED (no room)
-		{commitIdent{remoteTip: true, count: 0}, markerRemote + "  "},                        // "▲  " remote only
-		{commitIdent{count: 0}, "   "},                                                       // "   " lineage
+		{commitIdent{remoteTip: true, count: 0}, markerRemote + "  "},                         // "▲  " remote only
+		{commitIdent{count: 0}, "   "},                                                        // "   " lineage
 	}
 	for _, tc := range cases {
 		mf := tc.id.markerField()
