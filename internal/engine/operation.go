@@ -22,6 +22,17 @@ type OpDeps struct {
 	// (TreeWrite) one. Nil (direct engine use, tests) is a no-op. Call it
 	// only at a boundary where the operation holds no partial state.
 	Escalate func(ctx context.Context) error
+	// HookRunner runs a post-create worktree hook. Nil ⇒ ShellHookRunner{}
+	// (production default); engine tests inject a fake.
+	HookRunner HookRunner
+}
+
+// hookRunner is the nil-safe HookRunner (style of emit/escalate).
+func (d OpDeps) hookRunner() HookRunner {
+	if d.HookRunner == nil {
+		return ShellHookRunner{}
+	}
+	return d.HookRunner
 }
 
 // escalate is the nil-safe form of Escalate (style of emit/decide).
