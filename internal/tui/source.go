@@ -285,6 +285,7 @@ func opAffectedSources(op engine.Operation) []sourceKey {
 type configReadyMsg struct {
 	cfg      config.Config
 	repoTOML string // <repo-top>/.gg.toml, "" if not in a repo
+	top      string // git working-tree root (== Snapshot.CurrentWorktree); "" if not in a repo
 }
 
 // bootstrapCmd loads config and applies the settings the first reads depend on
@@ -298,8 +299,9 @@ func (m Model) bootstrapCmd() tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
 		cfg := config.Defaults()
-		repoTOML := ""
+		repoTOML, root := "", ""
 		if top, err := svc.TopLevel(ctx); err == nil && top != "" {
+			root = top
 			repoTOML = filepath.Join(top, ".gg.toml")
 			if c, cerr := config.Load(config.DefaultGlobalPath(), repoTOML); cerr == nil {
 				cfg = c
@@ -310,6 +312,6 @@ func (m Model) bootstrapCmd() tea.Cmd {
 		}
 		feed.SetPageSizes(cfg.UI.CommitInitialCount, cfg.UI.CommitBatchSize)
 		svc.SetShowEOLOnlyChanges(cfg.UI.ShowEOLOnlyChanges)
-		return configReadyMsg{cfg: cfg, repoTOML: repoTOML}
+		return configReadyMsg{cfg: cfg, repoTOML: repoTOML, top: root}
 	}
 }

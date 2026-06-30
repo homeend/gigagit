@@ -92,6 +92,19 @@ func TestHeaderLineMiddleElidesWhenTight(t *testing.T) {
 	}
 }
 
+// The startup path fans out via the per-source registry (configReadyMsg →
+// reloadAll), not the legacy loadCmd whose Snapshot set currentWorktree. Without
+// seeding the path from configReadyMsg.top the header stays blank until the first
+// repo switch (R). Lock in that the handler seeds it.
+func TestConfigReadySeedsCurrentWorktree(t *testing.T) {
+	m := New(nil)
+	const root = "/mnt/t/others/gigagit"
+	got, _ := m.Update(configReadyMsg{top: root})
+	if mm := got.(Model); mm.currentWorktree != root {
+		t.Fatalf("currentWorktree = %q, want %q (header path must show on startup)", mm.currentWorktree, root)
+	}
+}
+
 func TestHeaderLineNoPathWhenTooNarrow(t *testing.T) {
 	m := Model{
 		status:          model.WorkingTreeStatus{Branch: "main"},

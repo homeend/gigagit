@@ -228,6 +228,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   `gg status` is unaffected — it stays faithful to `git status`.
 
 ### Fixed
+- **The repository path in the top-right header now appears on startup**, not
+  only after the first repo switch (`R`). The header renders the open worktree's
+  full path, but only the legacy repo-switch load set the backing
+  `currentWorktree` field; the app-start fan-out (the per-source refresh
+  registry) never did, so the path stayed blank until you switched repos. The
+  startup bootstrap now seeds it from the git working-tree root it already
+  resolves, so the path shows from first paint.
 - **"Go to tip in commits" (and the `■` tip marker) failed for slash-named
   local branches.** The commit feed parsed `%D` decorations with a "name
   contains `/` ⇒ remote-tracking" heuristic, so a local branch like `feat/foo`

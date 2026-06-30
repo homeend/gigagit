@@ -477,6 +477,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case configReadyMsg:
 		m.cfg = msg.cfg
 		m.repoConfigPath = msg.repoTOML
+		// Seed the header's repo path now, on the startup path (which fans out via
+		// the per-source registry and never sets currentWorktree the way the legacy
+		// loadCmd's Snapshot did). Without this the top-right path stays blank until
+		// the first repo switch (R). msg.top is exactly Snapshot.CurrentWorktree.
+		if msg.top != "" {
+			m.currentWorktree = msg.top
+		}
 		// Seed refreshLastRun so the first heartbeat tick is one interval out
 		// rather than firing every enabled source immediately (enable-time burst).
 		now := time.Now()
