@@ -228,6 +228,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   `gg status` is unaffected — it stays faithful to `git status`.
 
 ### Fixed
+- **A failed squash now unmarks the off-branch commits it complained about.**
+  Squashing a ◉ selection that includes a commit not on the current branch
+  (easy to do from the multi-branch commit feed) fails the membership check with
+  `commit <sha> is not on the current branch`. Previously the stray marks stayed
+  set, so retrying hit the same error until you hunted them down by hand. The
+  off-branch commits are now cleared from the selection (the on-branch marks are
+  kept), and the status line reports how many were unmarked.
 - **The repository path in the top-right header now appears on startup**, not
   only after the first repo switch (`R`). The header renders the open worktree's
   full path, but only the legacy repo-switch load set the backing

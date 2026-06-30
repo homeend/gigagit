@@ -608,6 +608,32 @@ func (m Model) commitSquashRow() (actionRow, bool) {
 	}, true
 }
 
+// unmarkOffBranchTargets removes from the ◉ compare selection every target hash
+// that is not present in rangeCommits (the loaded onto..HEAD range — the commits
+// on the current branch), returning the number unmarked. A squash that names
+// commits not on the current branch fails the membership check in
+// rebaseplan.BuildSquash; clearing those marks lets the user retry from a valid
+// (on-branch) selection instead of hunting down the stray rows by hand. The
+// compare set is keyed by commit hash, exactly like rangeCommits/targets, so the
+// membership test mirrors squashTargets'.
+func (m Model) unmarkOffBranchTargets(rangeCommits []model.RangeCommit, targets []string) int {
+	if m.commitCompareSet == nil {
+		return 0
+	}
+	inRange := make(map[string]bool, len(rangeCommits))
+	for _, c := range rangeCommits {
+		inRange[c.Hash] = true
+	}
+	n := 0
+	for _, t := range targets {
+		if !inRange[t] && m.commitCompareSet[t] {
+			delete(m.commitCompareSet, t)
+			n++
+		}
+	}
+	return n
+}
+
 // commitDropSelectionRow offers "Drop N selected commits" when 2+ commits are
 // in the ◉ selection and a branch is checked out — the multi-commit analog of
 // the single-cursor "Drop commit" row. The run validates the selection

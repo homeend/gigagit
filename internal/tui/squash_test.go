@@ -87,6 +87,43 @@ func TestSquashNonAdjacentOpensReorderModal(t *testing.T) {
 	}
 }
 
+// A squash whose selection includes a commit not on the current branch fails
+// the membership check; the off-branch marks are cleared so the user can retry
+// from a valid selection, while the on-branch marks are kept.
+func TestSquashUnmarksOffBranchCommitsOnMembershipError(t *testing.T) {
+	m := loadedModelLinearCommits(t, 3) // newest-first feed: commits[0] newest
+	m.focus = panelCommits
+
+	onBranchNewer, onBranchOlder := m.commits[0].Hash, m.commits[1].Hash
+	const offBranch = "0000000000000000000000000000000000beef00" // not in any range
+	m.commitCompareSet = selectionSet(onBranchNewer, onBranchOlder, offBranch)
+
+	onto := onBranchOlder + "^"
+	cs, err := m.svc.CommitRange(context.Background(), onto, m.status.Branch)
+	if err != nil {
+		t.Fatalf("CommitRange: %v", err)
+	}
+	u, cmd := m.Update(squashRangeLoadedMsg{
+		branch:  m.status.Branch,
+		onto:    onto,
+		targets: []string{onBranchNewer, onBranchOlder, offBranch},
+		commits: cs,
+	})
+	m = u.(Model)
+	if cmd != nil {
+		t.Fatal("a membership failure must not start an operation")
+	}
+	if m.commitCompareSet[offBranch] {
+		t.Fatalf("off-branch commit must be unmarked, got set %v", m.commitCompareSet)
+	}
+	if !m.commitCompareSet[onBranchNewer] || !m.commitCompareSet[onBranchOlder] {
+		t.Fatalf("on-branch marks must be kept, got set %v", m.commitCompareSet)
+	}
+	if !strings.Contains(m.statusMsg, "not on the current branch") {
+		t.Fatalf("statusMsg = %q, want the membership error surfaced", m.statusMsg)
+	}
+}
+
 func TestSquashRowVisibleWith2Commits(t *testing.T) {
 	m := loadedModelLinearCommits(t, 3)
 	m.focus = panelCommits
