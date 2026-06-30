@@ -53,6 +53,8 @@ type worktreePopup struct {
 	previewBranch string
 	previewPath   string
 	previewErr    error
+
+	runHook bool // run the configured post-create hook on create (default true)
 }
 
 // tctx builds a fresh template.Ctx. A new Rand is created from the fixed seed on
@@ -140,6 +142,7 @@ func (m Model) openWorktreePopup(existing bool) (Model, bool) {
 		gitCommonDir: m.gitCommonDir,
 		seed:         rand.Uint64(),
 		now:          time.Now(),
+		runHook:      true,
 	}
 	for _, l := range labels {
 		p.inputs[l] = textfield{}
@@ -181,6 +184,7 @@ func (m Model) openWorktreeAt(startPoint, prefillBranch string) Model {
 		now:          time.Now(),
 		state:        stEdit,                      // user edits the branch name immediately
 		editBuf:      newTextField(prefillBranch), // seeded default (e.g. the tag name)
+		runHook:      true,
 	}
 	for _, l := range labels {
 		p.inputs[l] = textfield{}
@@ -252,6 +256,11 @@ func (p *worktreePopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			return m.startCreateFromPopup(p, false)
 		case "W":
 			return m.startCreateFromPopup(p, true)
+		case "h":
+			if m.cfg.Worktree.PostCreateHook != "" {
+				p.runHook = !p.runHook
+			}
+			return m, nil
 		}
 		return m, nil
 	}
@@ -299,6 +308,13 @@ func (p *worktreePopup) box(m Model) string {
 	}
 
 	b.WriteString("\n")
+	if p.state == stAction && m.cfg.Worktree.PostCreateHook != "" {
+		mark := "[x]"
+		if !p.runHook {
+			mark = "[ ]"
+		}
+		b.WriteString(mark + " run post-create hook  ([h] toggle)\n")
+	}
 	switch p.state {
 	case stInput:
 		b.WriteString("[type] value  [tab/enter] next field  [esc] cancel")
@@ -306,9 +322,17 @@ func (p *worktreePopup) box(m Model) string {
 		b.WriteString("[type] edit name  [enter] done  [esc] discard")
 	default:
 		if p.existing {
-			b.WriteString("[w] create  [W] create & switch  [esc] cancel")
+			hint := "[w] create  [W] create & switch  [esc] cancel"
+			if m.cfg.Worktree.PostCreateHook != "" {
+				hint = "[w] create  [W] create & switch  [h] hook  [esc] cancel"
+			}
+			b.WriteString(hint)
 		} else {
-			b.WriteString("[w] create  [W] create & switch  [e] edit name  [p] use a prefix  [esc] cancel")
+			hint := "[w] create  [W] create & switch  [e] edit name  [p] use a prefix  [esc] cancel"
+			if m.cfg.Worktree.PostCreateHook != "" {
+				hint = "[w] create  [W] create & switch  [e] edit name  [p] use a prefix  [h] hook  [esc] cancel"
+			}
+			b.WriteString(hint)
 		}
 	}
 
@@ -333,19 +357,25 @@ func (m Model) startCreateFromPopup(p *worktreePopup, switchAfter bool) (Model, 
 	m.pendingSeqBump = p.consumedSeqNames()
 	m.pendingSwitch = switchAfter
 	m = m.popLayer()
-	return m.startOp(p.createOp())
+	hook := ""
+	if p.runHook {
+		hook = m.cfg.Worktree.PostCreateHook
+	}
+	return m.startOp(p.createOp(hook))
 }
 
 // createOp builds the engine operation from the (already-resolved) preview, so
-// the worktree that gets created is exactly what the preview showed.
-func (p *worktreePopup) createOp() engine.Operation {
+// the worktree that gets created is exactly what the preview showed. hook is the
+// post-create hook script to pass through ("" = skip).
+func (p *worktreePopup) createOp(hook string) engine.Operation {
 	if p.existing {
-		return engine.CreateWorktreeForBranch{Branch: p.previewBranch, Path: p.previewPath}
+		return engine.CreateWorktreeForBranch{Branch: p.previewBranch, Path: p.previewPath, PostCreateHook: hook}
 	}
 	return engine.CreateWorktree{
-		StartPoint: p.startPoint,
-		Branch:     p.previewBranch,
-		Path:       p.previewPath,
+		StartPoint:     p.startPoint,
+		Branch:         p.previewBranch,
+		Path:           p.previewPath,
+		PostCreateHook: hook,
 	}
 }
 

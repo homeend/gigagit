@@ -75,9 +75,9 @@ func TestExistingModeCreateOpAndSeqs(t *testing.T) {
 	m = updated.(Model)
 
 	p := layerOf[*worktreePopup](m)
-	op, ok := p.createOp().(engine.CreateWorktreeForBranch)
+	op, ok := p.createOp("").(engine.CreateWorktreeForBranch)
 	if !ok {
-		t.Fatalf("createOp = %T, want engine.CreateWorktreeForBranch", p.createOp())
+		t.Fatalf("createOp = %T, want engine.CreateWorktreeForBranch", p.createOp(""))
 	}
 	if op.Branch != p.startPoint || op.Path != p.previewPath {
 		t.Fatalf("op {%q,%q} != {%q,%q}", op.Branch, op.Path, p.startPoint, p.previewPath)

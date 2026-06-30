@@ -191,3 +191,84 @@ func TestSetRefreshWatchPreservesOtherKeys(t *testing.T) {
 		t.Fatalf("interval=%d watch=%v; want 30/true", cfg.Refresh.Worktrees, cfg.Refresh.WorktreesWatch)
 	}
 }
+
+func TestSetWorktreePostCreateHookRoundTrip(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".gg.toml")
+	script := "cp \"$GG_MAIN_WORKTREE/.env\" .\nmake setup\n"
+	if err := SetWorktreePostCreateHook(path, script); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(filepath.Join(t.TempDir(), "no-global.toml"), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Worktree.PostCreateHook != script {
+		t.Fatalf("round-trip = %q, want %q", cfg.Worktree.PostCreateHook, script)
+	}
+}
+
+func TestSetWorktreePostCreateHookReplaceAndRemove(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".gg.toml")
+	if err := SetWorktreePostCreateHook(path, "echo one\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetWorktreePostCreateHook(path, "echo two\n"); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := os.ReadFile(path)
+	if strings.Count(string(raw), "post_create_hook") != 1 {
+		t.Fatalf("expected exactly one hook block, got:\n%s", raw)
+	}
+	if !strings.Contains(string(raw), "echo two") || strings.Contains(string(raw), "echo one") {
+		t.Fatalf("replace failed:\n%s", raw)
+	}
+	if err := SetWorktreePostCreateHook(path, ""); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ = os.ReadFile(path)
+	if strings.Contains(string(raw), "post_create_hook") {
+		t.Fatalf("empty script must remove key:\n%s", raw)
+	}
+}
+
+func TestSetWorktreePostCreateHookIdempotent(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".gg.toml")
+	script := "cp a b\nmake\n"
+	if err := SetWorktreePostCreateHook(path, script); err != nil {
+		t.Fatal(err)
+	}
+	first, _ := os.ReadFile(path)
+	cfg, _ := Load(filepath.Join(t.TempDir(), "ng.toml"), path)
+	if err := SetWorktreePostCreateHook(path, cfg.Worktree.PostCreateHook); err != nil {
+		t.Fatal(err)
+	}
+	second, _ := os.ReadFile(path)
+	if string(first) != string(second) {
+		t.Fatalf("re-save not idempotent:\nfirst:\n%s\nsecond:\n%s", first, second)
+	}
+}
+
+// Regression: a hook whose script contains lines that look like TOML structure
+// ([ … ], key = value, # comment) must not corrupt a subsequent scalar write.
+func TestScalarWriteSurvivesHookBlock(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".gg.toml")
+	script := "[ -d node_modules ] || npm ci\n# set up\nfoo = bar\n"
+	if err := SetWorktreePostCreateHook(path, script); err != nil {
+		t.Fatal(err)
+	}
+	before, _ := os.ReadFile(path)
+	if err := SetRefreshInterval(path, "branches", 30); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(filepath.Join(t.TempDir(), "ng.toml"), path)
+	if err != nil {
+		t.Fatalf("Load after scalar write: %v", err)
+	}
+	if cfg.Worktree.PostCreateHook != script {
+		t.Fatalf("hook corrupted by scalar write: %q", cfg.Worktree.PostCreateHook)
+	}
+	if cfg.Refresh.Branches != 30 {
+		t.Fatalf("branches = %d, want 30", cfg.Refresh.Branches)
+	}
+	_ = before
+}

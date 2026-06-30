@@ -118,3 +118,54 @@ func TestCreateWorktreeForBranchRequiresFields(t *testing.T) {
 		t.Fatalf("want required-fields error, got %v", err)
 	}
 }
+
+func TestCreateWorktreeForBranchRunsHook(t *testing.T) {
+	dir, repo := newRepo(t)
+	gitIn(t, dir, "branch", "hooked/b")
+	wt := filepath.Join(filepath.Dir(dir), "wt-fb-hook")
+	fh := &fakeHookRunner{lines: []string{"setup done"}}
+	res, err := CreateWorktreeForBranch{Branch: "hooked/b", Path: wt, PostCreateHook: "echo hi"}.Run(
+		context.Background(), OpDeps{Repo: repo, HookRunner: fh, Decider: MapDecider{HookDecisionID: "run"}})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !fh.called || fh.spec.Dir != res.Path {
+		t.Fatalf("hook not run in worktree: called=%v dir=%q want=%q", fh.called, fh.spec.Dir, res.Path)
+	}
+	if got := hookEnv(fh.spec, "GG_BRANCH"); got != "hooked/b" {
+		t.Fatalf("GG_BRANCH = %q, want hooked/b", got)
+	}
+}
+
+func TestCreateWorktreeForBranchHookFailureNonFatal(t *testing.T) {
+	dir, repo := newRepo(t)
+	gitIn(t, dir, "branch", "failhook/b")
+	wt := filepath.Join(filepath.Dir(dir), "wt-fb-failhook")
+	fh := &fakeHookRunner{code: 1}
+	res, err := CreateWorktreeForBranch{Branch: "failhook/b", Path: wt, PostCreateHook: "false"}.Run(
+		context.Background(), OpDeps{Repo: repo, HookRunner: fh, Decider: MapDecider{HookDecisionID: "run"}})
+	if err != nil {
+		t.Fatalf("hook failure must not fail the op: %v", err)
+	}
+	if !res.Changed {
+		t.Fatal("worktree should still count as created")
+	}
+	if !strings.Contains(res.Summary, "exit 1") {
+		t.Fatalf("Summary should note hook failure, got %q", res.Summary)
+	}
+}
+
+func TestCreateWorktreeForBranchEmptyHookSkips(t *testing.T) {
+	dir, repo := newRepo(t)
+	gitIn(t, dir, "branch", "nohook/b")
+	wt := filepath.Join(filepath.Dir(dir), "wt-fb-nohook")
+	fh := &fakeHookRunner{}
+	_, err := CreateWorktreeForBranch{Branch: "nohook/b", Path: wt}.Run(
+		context.Background(), OpDeps{Repo: repo, HookRunner: fh})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fh.called {
+		t.Fatal("empty hook must not run")
+	}
+}

@@ -9,6 +9,7 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Post-worktree-create hook**: configure a per-repo shell script (`[worktree] post_create_hook`) that runs inside a newly created worktree — e.g. to copy gitignored files (`.env`, local config) from the main checkout. Available for both the TUI and `gg worktree add`. Edit it in Settings (`,` → "Worktree post-create hook", a wide multi-line editor). **The hook requires approval before it runs** — because `.gg.toml` travels on clone, gg never runs a clone-borne script silently. In the TUI a modal shows the script and asks run/skip; the `[h]` toggle in the create-worktree popup is a pre-skip that suppresses even the prompt. On the CLI: `--hook` runs without prompting, `--no-hook` skips, otherwise gg prompts interactively and skips when stdin is not a terminal. The script runs with `cwd` = the new worktree and env `GG_MAIN_WORKTREE` / `GG_WORKTREE_PATH` / `GG_BRANCH` / `GG_REPO`; output streams into the busy log, and a hook failure is reported without rolling back the worktree.
 - **`N` / `P` step to the next / previous file from the diff boundary.** In the
   diff view (opened from the files tree, the Status panel, or the Staged panel),
   sitting on the **last** change now shows a proactive bottom-left cue

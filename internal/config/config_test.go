@@ -406,3 +406,32 @@ func TestOverlayRefreshWatchBools(t *testing.T) {
 		t.Fatal("unset watch bools must stay false")
 	}
 }
+
+func TestLoadPostCreateHookMultiline(t *testing.T) {
+	dir := t.TempDir()
+	repo := filepath.Join(dir, ".gg.toml")
+	body := "[worktree]\npost_create_hook = '''\ncp \"$GG_MAIN_WORKTREE/.env\" .\nmake setup\n'''\n"
+	if err := os.WriteFile(repo, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(filepath.Join(dir, "none-global.toml"), repo)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	want := "cp \"$GG_MAIN_WORKTREE/.env\" .\nmake setup\n"
+	if cfg.Worktree.PostCreateHook != want {
+		t.Fatalf("PostCreateHook = %q, want %q", cfg.Worktree.PostCreateHook, want)
+	}
+}
+
+func TestOverlayPostCreateHookRepoWins(t *testing.T) {
+	dst := WorktreeConfig{PostCreateHook: "global-hook"}
+	overlayWorktree(&dst, WorktreeConfig{PostCreateHook: "repo-hook"})
+	if dst.PostCreateHook != "repo-hook" {
+		t.Fatalf("overlay = %q, want repo-hook", dst.PostCreateHook)
+	}
+	overlayWorktree(&dst, WorktreeConfig{}) // empty = unset, must not clear
+	if dst.PostCreateHook != "repo-hook" {
+		t.Fatalf("empty src cleared hook: %q", dst.PostCreateHook)
+	}
+}

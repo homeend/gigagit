@@ -50,6 +50,16 @@ func SetRefreshWatch(path, source string, on bool) error {
 	return setScalarLine(path, "refresh", source+"_watch", strconv.FormatBool(on))
 }
 
+// SetWorktreePostCreateHook persists [worktree] post_create_hook to the given
+// config file (the repo .gg.toml) as a TOML multi-line literal string
+// (triple-single-quote delimited), preserving comments and unrelated lines.
+// A trailing newline in script is trimmed so re-saving a parsed value is
+// idempotent; an empty script removes the key. Backs the Settings “Worktree
+// post-create hook” editor.
+func SetWorktreePostCreateHook(path, script string) error {
+	return setMultilineLiteral(path, "worktree", "post_create_hook", script)
+}
+
 // setScalarLine sets `key = value` under `[section]` in a TOML file via a
 // line-oriented edit so unrelated lines and comments survive. It updates an
 // existing assignment (uncommenting a commented one), inserts the key under an
@@ -74,8 +84,15 @@ func setScalarLine(path, section, key, value string) error {
 	if len(raw) > 0 {
 		lines = strings.Split(strings.TrimRight(string(raw), "\n"), "\n")
 	}
+	var skipUntil string
 	for i, ln := range lines {
 		trimmed := strings.TrimSpace(ln)
+		if skipUntil != "" {
+			if strings.Contains(trimmed, skipUntil) {
+				skipUntil = ""
+			}
+			continue
+		}
 		if strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]") {
 			inSection = trimmed == header
 			if inSection {
@@ -87,6 +104,9 @@ func setScalarLine(path, section, key, value string) error {
 			lines[i] = want
 			replacedAt = i
 			break
+		}
+		if d, ok := opensMultiline(trimmed); ok {
+			skipUntil = d
 		}
 	}
 
@@ -116,6 +136,113 @@ func lineAssignsKey(trimmed, key string) bool {
 	}
 	rest := strings.TrimSpace(trimmed[len(key):])
 	return strings.HasPrefix(rest, "=")
+}
+
+// opensMultiline reports whether a trimmed line opens a multi-line TOML string
+// (”'/""") that is NOT closed on the same line, returning the closing
+// delimiter. Used so line-oriented writers skip a multi-line value's interior
+// (a script line like "[ -d x ]" must not be mistaken for a section header).
+func opensMultiline(trimmed string) (delim string, opens bool) {
+	for _, d := range []string{"'''", `"""`} {
+		if i := strings.Index(trimmed, "= "+d); i >= 0 {
+			if !strings.Contains(trimmed[i+len("= "+d):], d) {
+				return d, true
+			}
+		}
+	}
+	return "", false
+}
+
+// setMultilineLiteral sets key to value under [section] using a TOML
+// multi-line literal string (triple-single-quote delimited) via a
+// line-oriented, delimiter-aware edit. An empty value removes the key.
+func setMultilineLiteral(path, section, key, value string) error {
+	if path == "" {
+		return fmt.Errorf("config: no config path; refusing to write")
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	header := "[" + section + "]"
+
+	var lines []string
+	if len(raw) > 0 {
+		lines = strings.Split(strings.TrimRight(string(raw), "\n"), "\n")
+	}
+
+	// Replacement block (empty value ⇒ delete the key). TrimRight so a parsed
+	// value's trailing newline does not accumulate a blank line on re-save.
+	var block []string
+	if strings.TrimSpace(value) != "" {
+		block = append([]string{key + " = '''"}, strings.Split(strings.TrimRight(value, "\n"), "\n")...)
+		block = append(block, "'''")
+	}
+
+	var (
+		inSection bool
+		headerAt  = -1
+		startAt   = -1
+		endAt     = -1
+		skipUntil string
+	)
+	for i := 0; i < len(lines); i++ {
+		trimmed := strings.TrimSpace(lines[i])
+		if skipUntil != "" {
+			if strings.Contains(trimmed, skipUntil) {
+				skipUntil = ""
+			}
+			continue
+		}
+		if strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]") {
+			inSection = trimmed == header
+			if inSection {
+				headerAt = i
+			}
+			continue
+		}
+		if inSection && startAt == -1 && lineAssignsKey(trimmed, key) {
+			startAt = i
+			if d, ok := opensMultiline(trimmed); ok {
+				endAt = len(lines) - 1
+				for j := i + 1; j < len(lines); j++ {
+					if strings.Contains(strings.TrimSpace(lines[j]), d) {
+						endAt = j
+						break
+					}
+				}
+			} else {
+				endAt = i // single-line assignment
+			}
+			continue
+		}
+		if d, ok := opensMultiline(trimmed); ok {
+			skipUntil = d
+		}
+	}
+
+	switch {
+	case startAt >= 0:
+		tail := append([]string{}, lines[endAt+1:]...)
+		lines = append(lines[:startAt], append(block, tail...)...)
+	case headerAt >= 0:
+		if len(block) > 0 {
+			lines = append(lines[:headerAt+1], append(block, lines[headerAt+1:]...)...)
+		}
+	default:
+		if len(block) > 0 {
+			if len(lines) > 0 {
+				lines = append(lines, "")
+			}
+			lines = append(lines, header)
+			lines = append(lines, block...)
+		}
+	}
+
+	if len(lines) == 0 {
+		return atomicWriteFile(path, []byte(""))
+	}
+	return atomicWriteFile(path, []byte(strings.Join(lines, "\n")+"\n"))
 }
 
 // atomicWriteFile writes data to path via a temp file + rename so a concurrent

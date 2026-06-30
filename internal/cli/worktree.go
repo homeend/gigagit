@@ -59,12 +59,19 @@ func cmdWorktreeAdd(svc *domain.Service, args []string, stdin io.Reader, stdout,
 	fs := flag.NewFlagSet("worktree add", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	forBranch := fs.String("branch", "", "create the worktree for this existing branch (no new branch)")
+	noHook := fs.Bool("no-hook", false, "skip the configured [worktree] post_create_hook")
+	runHookFlag := fs.Bool("hook", false, "run the configured [worktree] post_create_hook without prompting")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	args = fs.Args()
 
 	ctxBg := context.Background()
+
+	if *noHook && *runHookFlag {
+		fmt.Fprintln(stderr, "worktree add: --hook and --no-hook are mutually exclusive")
+		return 2
+	}
 
 	if *forBranch != "" && len(args) > 0 {
 		fmt.Fprintln(stderr, "worktree add: --branch and a start-point are mutually exclusive (the branch is the source)")
@@ -145,11 +152,23 @@ func cmdWorktreeAdd(svc *domain.Service, args []string, stdin io.Reader, stdout,
 		return 1
 	}
 
-	var op engine.Operation = engine.CreateWorktree{StartPoint: startPoint, Branch: branch, Path: path}
-	if *forBranch != "" {
-		op = engine.CreateWorktreeForBranch{Branch: branch, Path: path}
+	hook := cfg.Worktree.PostCreateHook
+	policy := map[string]string{}
+	switch {
+	case *noHook:
+		policy[engine.HookDecisionID] = "skip"
+	case *runHookFlag:
+		policy[engine.HookDecisionID] = "run"
+	case !stdinIsTerminal():
+		policy[engine.HookDecisionID] = "skip" // never run an unseen script in a pipeline
 	}
-	res, err := runOperation(ctxBg, svc, op, cliDecider{}, stderr)
+	dec := cliDecider{policy: policy, in: stdin, out: stderr, interactive: stdinIsTerminal()}
+
+	var op engine.Operation = engine.CreateWorktree{StartPoint: startPoint, Branch: branch, Path: path, PostCreateHook: hook}
+	if *forBranch != "" {
+		op = engine.CreateWorktreeForBranch{Branch: branch, Path: path, PostCreateHook: hook}
+	}
+	res, err := runOperation(ctxBg, svc, op, dec, stderr)
 	if err != nil {
 		fmt.Fprintln(stderr, "error:", err)
 		return 1

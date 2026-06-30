@@ -25,6 +25,7 @@ var settingDocs = []settingDoc{
 	{"worktree", "path_template", "../<repo>.worktrees/<branch>", "where gg worktree creates new worktrees (tokens: <repo> <branch> <parent-branch> <date:…> <seq:…>)"},
 	{"worktree", "default_branch_template", "b/from-<parent-branch>-<random-alpha:4>", "auto branch name for a new worktree"},
 	{"worktree", "branch_templates", nil, "extra branch-name templates offered in the worktree popup (default: none)"},
+	{"worktree", "post_create_hook", nil, "shell script run after creating a worktree (cwd=new worktree; env GG_MAIN_WORKTREE/GG_WORKTREE_PATH/GG_BRANCH/GG_REPO); multi-line '''…''' literal; default: none"},
 
 	{"ui", "wheel_step", 3, "mouse-wheel scroll step, in rows"},
 	{"ui", "hscroll_step", 8, "diff scroll-mode horizontal pan step, in columns"},

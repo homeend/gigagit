@@ -343,7 +343,7 @@ func TestCreateOpEqualsPreview(t *testing.T) {
 	updated, _ := m.Update(keyMsg("W"))
 	m = updated.(Model)
 	p := layerOf[*worktreePopup](m)
-	op := p.createOp().(engine.CreateWorktree)
+	op := p.createOp("").(engine.CreateWorktree)
 	if op.Branch != p.previewBranch || op.Path != p.previewPath {
 		t.Fatalf("op {%q,%q} != preview {%q,%q}", op.Branch, op.Path, p.previewBranch, p.previewPath)
 	}
@@ -364,7 +364,7 @@ func TestCreateOpEqualsPreview(t *testing.T) {
 	}
 	updated, _ = m.Update(keyMsg("enter"))
 	m = updated.(Model)
-	if op := layerOf[*worktreePopup](m).createOp().(engine.CreateWorktree); op.Branch != "hf" || op.Branch != layerOf[*worktreePopup](m).previewBranch {
+	if op := layerOf[*worktreePopup](m).createOp("").(engine.CreateWorktree); op.Branch != "hf" || op.Branch != layerOf[*worktreePopup](m).previewBranch {
 		t.Fatalf("edited op.Branch = %q, want hf (== preview %q)", op.Branch, layerOf[*worktreePopup](m).previewBranch)
 	}
 }
@@ -478,9 +478,9 @@ func TestWorktreeFromCommitCreateOpUsesTypedBranch(t *testing.T) {
 		p.update(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{ch}})
 	}
 	p.update(m, tea.KeyMsg{Type: tea.KeyEnter}) // confirm: stEdit → stAction
-	op, ok := p.createOp().(engine.CreateWorktree)
+	op, ok := p.createOp("").(engine.CreateWorktree)
 	if !ok {
-		t.Fatalf("op = %T, want engine.CreateWorktree", p.createOp())
+		t.Fatalf("op = %T, want engine.CreateWorktree", p.createOp(""))
 	}
 	if op.StartPoint != full {
 		t.Fatalf("StartPoint = %q, want the full commit hash", op.StartPoint)
@@ -490,5 +490,36 @@ func TestWorktreeFromCommitCreateOpUsesTypedBranch(t *testing.T) {
 	}
 	if op.Path != "../myrepo.worktrees/feat-x" {
 		t.Fatalf("Path = %q, want it resolved from the typed branch", op.Path)
+	}
+}
+
+func TestWorktreeCreateOpCarriesHookWhenEnabled(t *testing.T) {
+	p := &worktreePopup{previewBranch: "b/x", previewPath: "/tmp/x", runHook: true}
+	op := p.createOp("echo hi")
+	cw, ok := op.(engine.CreateWorktree)
+	if !ok {
+		t.Fatalf("op type = %T", op)
+	}
+	if cw.PostCreateHook != "echo hi" {
+		t.Fatalf("PostCreateHook = %q, want 'echo hi'", cw.PostCreateHook)
+	}
+}
+
+func TestWorktreeCreateOpOmitsHookWhenDisabled(t *testing.T) {
+	p := &worktreePopup{previewBranch: "b/x", previewPath: "/tmp/x", existing: true, runHook: false}
+	op := p.createOp("") // startCreateFromPopup passes "" when runHook is false
+	cwb := op.(engine.CreateWorktreeForBranch)
+	if cwb.PostCreateHook != "" {
+		t.Fatalf("PostCreateHook = %q, want empty", cwb.PostCreateHook)
+	}
+}
+
+func TestWorktreeHKeyTogglesHook(t *testing.T) {
+	m := Model{}
+	m.cfg.Worktree.PostCreateHook = "echo hi"
+	p := &worktreePopup{state: stAction, runHook: true}
+	m, _ = p.update(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
+	if p.runHook {
+		t.Fatal("h should toggle runHook off")
 	}
 }

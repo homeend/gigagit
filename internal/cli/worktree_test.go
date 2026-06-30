@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/homeend/gigagit/internal/config"
 )
 
 // newCLIRepo makes a temp git repo with one commit on main and returns its dir.
@@ -398,5 +400,129 @@ func TestWorktreeAddBranchMissingBranchFails(t *testing.T) {
 	}
 	if !strings.Contains(errb.String(), "no local branch") {
 		t.Fatalf("stderr: %s", errb.String())
+	}
+}
+
+func TestWorktreeAddRunsConfiguredHook(t *testing.T) {
+	dir := newCLIRepo(t)
+	cfgPath := filepath.Join(dir, ".gg.toml")
+	// Static path/branch templates (no <user:> labels → no stdin prompting).
+	if err := os.WriteFile(cfgPath,
+		[]byte("[worktree]\ndefault_branch_template = \"hook-branch\"\npath_template = \"../wt-cli-hook\"\n"),
+		0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.SetWorktreePostCreateHook(cfgPath, "touch hook-ran\n"); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb bytes.Buffer
+	code := Run(dir, []string{"worktree", "add", "--hook", "main"}, strings.NewReader(""), &out, &errb, "")
+	if code != 0 {
+		t.Fatalf("exit %d, stderr: %s", code, errb.String())
+	}
+	marker := filepath.Join(filepath.Dir(dir), "wt-cli-hook", "hook-ran")
+	if _, err := os.Stat(marker); err != nil {
+		t.Fatalf("hook did not run: %v", err)
+	}
+}
+
+func TestWorktreeAddNoHookFlag(t *testing.T) {
+	dir := newCLIRepo(t)
+	cfgPath := filepath.Join(dir, ".gg.toml")
+	if err := os.WriteFile(cfgPath,
+		[]byte("[worktree]\ndefault_branch_template = \"hook-branch\"\npath_template = \"../wt-cli-nohook\"\n"),
+		0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.SetWorktreePostCreateHook(cfgPath, "touch hook-ran\n"); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb bytes.Buffer
+	code := Run(dir, []string{"worktree", "add", "--no-hook", "main"}, strings.NewReader(""), &out, &errb, "")
+	if code != 0 {
+		t.Fatalf("exit %d, stderr: %s", code, errb.String())
+	}
+	marker := filepath.Join(filepath.Dir(dir), "wt-cli-nohook", "hook-ran")
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatal("--no-hook must skip the hook")
+	}
+}
+
+// TestWorktreeAddBranchRunsConfiguredHook covers the --branch path of
+// CreateWorktreeForBranch: the post-create hook must fire when an existing
+// branch is checked out into a new worktree.
+func TestWorktreeAddBranchRunsConfiguredHook(t *testing.T) {
+	dir := newCLIRepo(t)
+	gitRun(t, dir, "branch", "hook-branch")
+	cfgPath := filepath.Join(dir, ".gg.toml")
+	// Static path template (no <user:> labels) to avoid stdin prompting.
+	if err := os.WriteFile(cfgPath,
+		[]byte("[worktree]\npath_template = \"../wt-cli-branch-hook\"\n"),
+		0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.SetWorktreePostCreateHook(cfgPath, "touch hook-ran\n"); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb bytes.Buffer
+	code := Run(dir, []string{"worktree", "add", "--hook", "--branch", "hook-branch"}, strings.NewReader(""), &out, &errb, "")
+	if code != 0 {
+		t.Fatalf("exit %d, stderr: %s", code, errb.String())
+	}
+	marker := filepath.Join(filepath.Dir(dir), "wt-cli-branch-hook", "hook-ran")
+	if _, err := os.Stat(marker); err != nil {
+		t.Fatalf("hook did not run on --branch path: %v", err)
+	}
+}
+
+// TestWorktreeAddBranchNoHookFlag covers --no-hook on the --branch path:
+// the post-create hook must be suppressed.
+func TestWorktreeAddBranchNoHookFlag(t *testing.T) {
+	dir := newCLIRepo(t)
+	gitRun(t, dir, "branch", "hook-branch")
+	cfgPath := filepath.Join(dir, ".gg.toml")
+	if err := os.WriteFile(cfgPath,
+		[]byte("[worktree]\npath_template = \"../wt-cli-branch-nohook\"\n"),
+		0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.SetWorktreePostCreateHook(cfgPath, "touch hook-ran\n"); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb bytes.Buffer
+	code := Run(dir, []string{"worktree", "add", "--branch", "hook-branch", "--no-hook"}, strings.NewReader(""), &out, &errb, "")
+	if code != 0 {
+		t.Fatalf("exit %d, stderr: %s", code, errb.String())
+	}
+	marker := filepath.Join(filepath.Dir(dir), "wt-cli-branch-nohook", "hook-ran")
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatal("--no-hook must skip the hook on the --branch path")
+	}
+}
+
+// TestWorktreeAddHookSkippedNonInteractiveByDefault asserts that a non-interactive
+// invocation (piped/no tty stdin, no --hook/--no-hook flag) skips the configured
+// hook rather than running an unseen script silently in a pipeline.
+func TestWorktreeAddHookSkippedNonInteractiveByDefault(t *testing.T) {
+	dir := newCLIRepo(t)
+	cfgPath := filepath.Join(dir, ".gg.toml")
+	// Static branch/path templates so no <user:> prompting occurs.
+	if err := os.WriteFile(cfgPath,
+		[]byte("[worktree]\ndefault_branch_template = \"hook-skip-branch\"\npath_template = \"../wt-cli-default-skip\"\n"),
+		0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.SetWorktreePostCreateHook(cfgPath, "touch hook-ran\n"); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb bytes.Buffer
+	// No --hook/--no-hook; stdin is non-interactive (empty reader) ⇒ default skip.
+	code := Run(dir, []string{"worktree", "add", "main"}, strings.NewReader(""), &out, &errb, "")
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errb.String())
+	}
+	marker := filepath.Join(filepath.Dir(dir), "wt-cli-default-skip", "hook-ran")
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatal("non-interactive default must skip the hook")
 	}
 }
