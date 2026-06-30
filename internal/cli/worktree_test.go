@@ -447,3 +447,55 @@ func TestWorktreeAddNoHookFlag(t *testing.T) {
 		t.Fatal("--no-hook must skip the hook")
 	}
 }
+
+// TestWorktreeAddBranchRunsConfiguredHook covers the --branch path of
+// CreateWorktreeForBranch: the post-create hook must fire when an existing
+// branch is checked out into a new worktree.
+func TestWorktreeAddBranchRunsConfiguredHook(t *testing.T) {
+	dir := newCLIRepo(t)
+	gitRun(t, dir, "branch", "hook-branch")
+	cfgPath := filepath.Join(dir, ".gg.toml")
+	// Static path template (no <user:> labels) to avoid stdin prompting.
+	if err := os.WriteFile(cfgPath,
+		[]byte("[worktree]\npath_template = \"../wt-cli-branch-hook\"\n"),
+		0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.SetWorktreePostCreateHook(cfgPath, "touch hook-ran\n"); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb bytes.Buffer
+	code := Run(dir, []string{"worktree", "add", "--branch", "hook-branch"}, strings.NewReader(""), &out, &errb, "")
+	if code != 0 {
+		t.Fatalf("exit %d, stderr: %s", code, errb.String())
+	}
+	marker := filepath.Join(filepath.Dir(dir), "wt-cli-branch-hook", "hook-ran")
+	if _, err := os.Stat(marker); err != nil {
+		t.Fatalf("hook did not run on --branch path: %v", err)
+	}
+}
+
+// TestWorktreeAddBranchNoHookFlag covers --no-hook on the --branch path:
+// the post-create hook must be suppressed.
+func TestWorktreeAddBranchNoHookFlag(t *testing.T) {
+	dir := newCLIRepo(t)
+	gitRun(t, dir, "branch", "hook-branch")
+	cfgPath := filepath.Join(dir, ".gg.toml")
+	if err := os.WriteFile(cfgPath,
+		[]byte("[worktree]\npath_template = \"../wt-cli-branch-nohook\"\n"),
+		0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.SetWorktreePostCreateHook(cfgPath, "touch hook-ran\n"); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb bytes.Buffer
+	code := Run(dir, []string{"worktree", "add", "--branch", "hook-branch", "--no-hook"}, strings.NewReader(""), &out, &errb, "")
+	if code != 0 {
+		t.Fatalf("exit %d, stderr: %s", code, errb.String())
+	}
+	marker := filepath.Join(filepath.Dir(dir), "wt-cli-branch-nohook", "hook-ran")
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatal("--no-hook must skip the hook on the --branch path")
+	}
+}
