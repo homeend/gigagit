@@ -1881,8 +1881,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if perr != nil {
-			// Membership / too-few failures refuse with a note.
-			m.statusMsg = "squash: " + perr.Error()
+			// Membership / too-few failures refuse with a note. When the failure is
+			// that some marked commits aren't on the current branch, unmark those
+			// off-branch rows so the user can retry from a valid selection.
+			note := perr.Error()
+			if n := m.unmarkOffBranchTargets(msg.commits, msg.targets); n > 0 {
+				noun := "commit"
+				if n > 1 {
+					noun = "commits"
+				}
+				note = fmt.Sprintf("%s; unmarked %d off-branch %s", note, n, noun)
+			}
+			m.statusMsg = "squash: " + note
 			return m, nil
 		}
 		ggBin, err := os.Executable()
