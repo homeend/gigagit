@@ -125,7 +125,7 @@ func TestCreateWorktreeForBranchRunsHook(t *testing.T) {
 	wt := filepath.Join(filepath.Dir(dir), "wt-fb-hook")
 	fh := &fakeHookRunner{lines: []string{"setup done"}}
 	res, err := CreateWorktreeForBranch{Branch: "hooked/b", Path: wt, PostCreateHook: "echo hi"}.Run(
-		context.Background(), OpDeps{Repo: repo, HookRunner: fh})
+		context.Background(), OpDeps{Repo: repo, HookRunner: fh, Decider: MapDecider{HookDecisionID: "run"}})
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -143,7 +143,7 @@ func TestCreateWorktreeForBranchHookFailureNonFatal(t *testing.T) {
 	wt := filepath.Join(filepath.Dir(dir), "wt-fb-failhook")
 	fh := &fakeHookRunner{code: 1}
 	res, err := CreateWorktreeForBranch{Branch: "failhook/b", Path: wt, PostCreateHook: "false"}.Run(
-		context.Background(), OpDeps{Repo: repo, HookRunner: fh})
+		context.Background(), OpDeps{Repo: repo, HookRunner: fh, Decider: MapDecider{HookDecisionID: "run"}})
 	if err != nil {
 		t.Fatalf("hook failure must not fail the op: %v", err)
 	}

@@ -163,7 +163,7 @@ func TestCreateWorktreeRunsHook(t *testing.T) {
 	fh := &fakeHookRunner{lines: []string{"copied .env"}}
 	ch := make(chan Event, 64)
 	res, err := CreateWorktree{StartPoint: "main", Branch: "f/h", Path: wt, PostCreateHook: "echo hi"}.Run(
-		context.Background(), OpDeps{Repo: repo, Events: ch, HookRunner: fh})
+		context.Background(), OpDeps{Repo: repo, Events: ch, HookRunner: fh, Decider: MapDecider{HookDecisionID: "run"}})
 	close(ch)
 	if err != nil {
 		t.Fatalf("Run: %v", err)
@@ -213,7 +213,7 @@ func TestCreateWorktreeHookFailureNonFatal(t *testing.T) {
 	wt := filepath.Join(filepath.Dir(dir), "wt-failhook")
 	fh := &fakeHookRunner{code: 1}
 	res, err := CreateWorktree{StartPoint: "main", Branch: "f/f", Path: wt, PostCreateHook: "false"}.Run(
-		context.Background(), OpDeps{Repo: repo, HookRunner: fh})
+		context.Background(), OpDeps{Repo: repo, HookRunner: fh, Decider: MapDecider{HookDecisionID: "run"}})
 	if err != nil {
 		t.Fatalf("hook failure must not fail the op: %v", err)
 	}
@@ -222,5 +222,47 @@ func TestCreateWorktreeHookFailureNonFatal(t *testing.T) {
 	}
 	if !strings.Contains(res.Summary, "exit 1") {
 		t.Fatalf("Summary should note hook failure, got %q", res.Summary)
+	}
+}
+
+func TestCreateWorktreeHookSkippedWithoutApproval(t *testing.T) {
+	dir, repo := newRepo(t)
+	wt := filepath.Join(filepath.Dir(dir), "wt-skip")
+	fh := &fakeHookRunner{}
+	ch := make(chan Event, 64)
+	res, err := CreateWorktree{StartPoint: "main", Branch: "f/s", Path: wt, PostCreateHook: "echo hi"}.Run(
+		context.Background(), OpDeps{Repo: repo, Events: ch, HookRunner: fh, Decider: MapDecider{HookDecisionID: "skip"}})
+	close(ch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fh.called {
+		t.Fatal("hook must not run when not approved")
+	}
+	if !res.Changed {
+		t.Fatal("worktree should still be created")
+	}
+	var sawSkip bool
+	for _, e := range drain(ch) {
+		if g, ok := e.(GitLine); ok && g.Raw == "post-create hook skipped" {
+			sawSkip = true
+		}
+	}
+	if !sawSkip {
+		t.Fatal("expected a 'post-create hook skipped' line")
+	}
+}
+
+func TestCreateWorktreeHookSkippedWithNoDecider(t *testing.T) {
+	dir, repo := newRepo(t)
+	wt := filepath.Join(filepath.Dir(dir), "wt-nodecider")
+	fh := &fakeHookRunner{}
+	_, err := CreateWorktree{StartPoint: "main", Branch: "f/nd", Path: wt, PostCreateHook: "echo hi"}.Run(
+		context.Background(), OpDeps{Repo: repo, HookRunner: fh}) // no Decider ⇒ safe skip
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fh.called {
+		t.Fatal("hook must not run when no decider can approve")
 	}
 }
