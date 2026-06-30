@@ -416,7 +416,7 @@ func TestWorktreeAddRunsConfiguredHook(t *testing.T) {
 		t.Fatal(err)
 	}
 	var out, errb bytes.Buffer
-	code := Run(dir, []string{"worktree", "add", "main"}, strings.NewReader(""), &out, &errb, "")
+	code := Run(dir, []string{"worktree", "add", "--hook", "main"}, strings.NewReader(""), &out, &errb, "")
 	if code != 0 {
 		t.Fatalf("exit %d, stderr: %s", code, errb.String())
 	}
@@ -465,7 +465,7 @@ func TestWorktreeAddBranchRunsConfiguredHook(t *testing.T) {
 		t.Fatal(err)
 	}
 	var out, errb bytes.Buffer
-	code := Run(dir, []string{"worktree", "add", "--branch", "hook-branch"}, strings.NewReader(""), &out, &errb, "")
+	code := Run(dir, []string{"worktree", "add", "--hook", "--branch", "hook-branch"}, strings.NewReader(""), &out, &errb, "")
 	if code != 0 {
 		t.Fatalf("exit %d, stderr: %s", code, errb.String())
 	}
@@ -497,5 +497,32 @@ func TestWorktreeAddBranchNoHookFlag(t *testing.T) {
 	marker := filepath.Join(filepath.Dir(dir), "wt-cli-branch-nohook", "hook-ran")
 	if _, err := os.Stat(marker); err == nil {
 		t.Fatal("--no-hook must skip the hook on the --branch path")
+	}
+}
+
+// TestWorktreeAddHookSkippedNonInteractiveByDefault asserts that a non-interactive
+// invocation (piped/no tty stdin, no --hook/--no-hook flag) skips the configured
+// hook rather than running an unseen script silently in a pipeline.
+func TestWorktreeAddHookSkippedNonInteractiveByDefault(t *testing.T) {
+	dir := newCLIRepo(t)
+	cfgPath := filepath.Join(dir, ".gg.toml")
+	// Static branch/path templates so no <user:> prompting occurs.
+	if err := os.WriteFile(cfgPath,
+		[]byte("[worktree]\ndefault_branch_template = \"hook-skip-branch\"\npath_template = \"../wt-cli-default-skip\"\n"),
+		0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.SetWorktreePostCreateHook(cfgPath, "touch hook-ran\n"); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb bytes.Buffer
+	// No --hook/--no-hook; stdin is non-interactive (empty reader) ⇒ default skip.
+	code := Run(dir, []string{"worktree", "add", "main"}, strings.NewReader(""), &out, &errb, "")
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errb.String())
+	}
+	marker := filepath.Join(filepath.Dir(dir), "wt-cli-default-skip", "hook-ran")
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatal("non-interactive default must skip the hook")
 	}
 }
