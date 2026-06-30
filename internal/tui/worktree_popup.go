@@ -322,9 +322,17 @@ func (p *worktreePopup) box(m Model) string {
 		b.WriteString("[type] edit name  [enter] done  [esc] discard")
 	default:
 		if p.existing {
-			b.WriteString("[w] create  [W] create & switch  [h] hook  [esc] cancel")
+			hint := "[w] create  [W] create & switch  [esc] cancel"
+			if m.cfg.Worktree.PostCreateHook != "" {
+				hint = "[w] create  [W] create & switch  [h] hook  [esc] cancel"
+			}
+			b.WriteString(hint)
 		} else {
-			b.WriteString("[w] create  [W] create & switch  [e] edit name  [p] use a prefix  [h] hook  [esc] cancel")
+			hint := "[w] create  [W] create & switch  [e] edit name  [p] use a prefix  [esc] cancel"
+			if m.cfg.Worktree.PostCreateHook != "" {
+				hint = "[w] create  [W] create & switch  [e] edit name  [p] use a prefix  [h] hook  [esc] cancel"
+			}
+			b.WriteString(hint)
 		}
 	}
 
