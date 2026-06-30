@@ -218,6 +218,18 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   `gg status` is unaffected — it stays faithful to `git status`.
 
 ### Fixed
+- **"Go to tip in commits" (and the `■` tip marker) failed for slash-named
+  local branches.** The commit feed parsed `%D` decorations with a "name
+  contains `/` ⇒ remote-tracking" heuristic, so a local branch like `feat/foo`
+  was misclassified as a remote ref. The Branches-panel "Go to tip in commits"
+  action — and `commitIdentOf`'s `■` local-tip marker — both key off ref kind,
+  so any slash-named branch silently didn't work, even when two branches sharing
+  one commit differed only by whether the name had a slash. The feed now runs
+  `git log --decorate=full` and classifies refs by namespace
+  (`refs/heads/` → local, `refs/remotes/` → remote, `refs/tags/` → tag), so a
+  slashed branch name is unambiguous. Additionally, "Go to tip in commits" now
+  matches the branch's tip **hash** rather than its decoration name, so it finds
+  the tip regardless of how (or whether) git decorated that row.
 - **Branch delete/rename triggered a needless remote-tag network lookup.**
   `engine.DeleteBranch` and `engine.RenameBranch` were not listed in
   `opAffectedSources`, so they fell through to the conservative "refresh all
