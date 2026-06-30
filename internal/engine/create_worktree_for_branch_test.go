@@ -118,3 +118,21 @@ func TestCreateWorktreeForBranchRequiresFields(t *testing.T) {
 		t.Fatalf("want required-fields error, got %v", err)
 	}
 }
+
+func TestCreateWorktreeForBranchRunsHook(t *testing.T) {
+	dir, repo := newRepo(t)
+	gitIn(t, dir, "branch", "hooked/b")
+	wt := filepath.Join(filepath.Dir(dir), "wt-fb-hook")
+	fh := &fakeHookRunner{lines: []string{"setup done"}}
+	res, err := CreateWorktreeForBranch{Branch: "hooked/b", Path: wt, PostCreateHook: "echo hi"}.Run(
+		context.Background(), OpDeps{Repo: repo, HookRunner: fh})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !fh.called || fh.spec.Dir != res.Path {
+		t.Fatalf("hook not run in worktree: called=%v dir=%q want=%q", fh.called, fh.spec.Dir, res.Path)
+	}
+	if got := hookEnv(fh.spec, "GG_BRANCH"); got != "hooked/b" {
+		t.Fatalf("GG_BRANCH = %q, want hooked/b", got)
+	}
+}

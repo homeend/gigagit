@@ -9,8 +9,9 @@ import (
 // EXISTING branch (no new branch). A relative Path resolves against the
 // repository root.
 type CreateWorktreeForBranch struct {
-	Branch string
-	Path   string
+	Branch         string
+	Path           string
+	PostCreateHook string // shell script run in the new worktree; "" = none
 }
 
 func (op CreateWorktreeForBranch) Run(ctx context.Context, deps OpDeps) (Result, error) {
@@ -57,7 +58,8 @@ func (op CreateWorktreeForBranch) Run(ctx context.Context, deps OpDeps) (Result,
 		return Result{}, fmt.Errorf("create worktree: %w", err)
 	}
 
-	res := Result{Summary: "worktree created: " + abs, Changed: true, Path: abs}
+	note := runPostCreateHook(ctx, deps, abs, op.Branch, op.PostCreateHook)
+	res := Result{Summary: "worktree created: " + abs + note, Changed: true, Path: abs}
 	deps.emit(ctx, Done{Result: res})
 	return res, nil
 }
