@@ -270,3 +270,22 @@ func TestSettingsSwallowsGlobalKeys(t *testing.T) {
 		t.Fatal("popup should still be open after q")
 	}
 }
+
+func TestSettingsOpensHookEditor(t *testing.T) {
+	m := Model{}
+	m = m.openSettings()
+	sp := layerOf[*settingsPopup](m)
+	if sp == nil {
+		t.Fatal("settings not open")
+	}
+	// Move selection to the hook entry.
+	for i, name := range settingsMenu {
+		if name == settingsMenuHook {
+			sp.menuSel = i
+		}
+	}
+	m, _ = sp.update(m, keyMsg("enter"))
+	if layerOf[*hookEditorPopup](m) == nil {
+		t.Fatal("Enter on hook entry should open the editor")
+	}
+}
