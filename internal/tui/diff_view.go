@@ -690,6 +690,32 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				v.wrapArm = wrapToEnd
 			}
 		}
+	case "N":
+		// From the last change only — the mirror of n's wrap, but stepping files.
+		// Double-press: the first press primes fileArmNext (the same arm End uses),
+		// the second steps to the next file. Inert on any earlier change.
+		if v.onLastBlock() && m.diffNav != diffNavNone {
+			switch {
+			case !m.peekDiffFile(1):
+				m.diffNotice = "▸ no next file"
+			case fileArmed == fileArmNext:
+				return m.stepDiffFile(1)
+			default:
+				v.fileArm = fileArmNext
+			}
+		}
+	case "P":
+		// Mirror of N from the first change: double-press steps to the previous file.
+		if v.onFirstBlock() && m.diffNav != diffNavNone {
+			switch {
+			case !m.peekDiffFile(-1):
+				m.diffNotice = "▸ no previous file"
+			case fileArmed == fileArmPrev:
+				return m.stepDiffFile(-1)
+			default:
+				v.fileArm = fileArmPrev
+			}
+		}
 	case "f":
 		ord := v.currentBlockOrdinal()
 		v.partial = !v.partial

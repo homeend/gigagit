@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"strings"
+
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/model"
@@ -19,27 +21,76 @@ const (
 	diffNavStaged             // the Staged panel (staged changes)
 )
 
-// fileArmDir records that Home/End reached the file's top/bottom and primed a
-// step to the previous/next file: the next same-direction press performs it.
-// Cleared by any other key (reset at the top of updateDiffViewKey), exactly like
-// the n/p change-wrap arm (wrapArm). The cue shows bottom-left.
+// fileArmDir records that a file-step was primed: the next same-direction press
+// performs it. Two gestures share this arm — End/Home at the file's bottom/top,
+// and N/P on the last/first change — since both resolve to the same next/prev
+// file step. Cleared by any other key (reset at the top of updateDiffViewKey),
+// exactly like the n/p change-wrap arm (wrapArm). The cue shows bottom-left.
 type fileArmDir int
 
 const (
 	fileArmNone fileArmDir = iota
-	fileArmNext            // at the bottom: next End → next file
-	fileArmPrev            // at the top: next Home → previous file
+	fileArmNext            // primed: next End/N → next file
+	fileArmPrev            // primed: next Home/P → previous file
 )
 
 // fileArmCue is the bottom-left prompt shown while a file-step is primed.
 func fileArmCue(d fileArmDir) string {
 	switch d {
 	case fileArmNext:
-		return "▸ end again → next file"
+		return "▸ N/end again → next file"
 	case fileArmPrev:
-		return "▸ home again → previous file"
+		return "▸ P/home again → previous file"
 	}
 	return ""
+}
+
+// onLastBlock / onFirstBlock report whether the focused change is the file's
+// last / first — the boundary where N / P step to the next / previous file. A
+// diff with no change blocks (no content difference) counts as both, mirroring
+// how End/Home treat an empty diff as simultaneously at the top and bottom.
+func (v *diffView) onLastBlock() bool {
+	return len(v.dispBlocks) == 0 || v.cur == len(v.dispBlocks)-1
+}
+
+func (v *diffView) onFirstBlock() bool {
+	return len(v.dispBlocks) == 0 || v.cur == 0
+}
+
+// boundaryCue is the proactive bottom-left hint shown while the focused change
+// sits on a boundary: it advertises the wrap (n/p) and file-step (N/P) gestures
+// available there, so the user is prompted simply by being on the last/first
+// change — no priming press needed. "" when off a boundary (mid-file) or when
+// no gesture applies. The wrap segment shows only with >1 change (a wrap target
+// exists); the file segment only when a neighbour file exists (peekDiffFile),
+// so a picker compare (diffNavNone) never advertises a file step.
+func (m Model) boundaryCue() string {
+	v := m.diffLayer()
+	if v == nil {
+		return ""
+	}
+	multi := len(v.dispBlocks) > 1
+	var segs []string
+	if v.onFirstBlock() { // previous-direction gestures
+		if multi {
+			segs = append(segs, "pp → bottom")
+		}
+		if m.peekDiffFile(-1) {
+			segs = append(segs, "PP → prev file")
+		}
+	}
+	if v.onLastBlock() { // next-direction gestures
+		if multi {
+			segs = append(segs, "nn → top")
+		}
+		if m.peekDiffFile(1) {
+			segs = append(segs, "NN → next file")
+		}
+	}
+	if len(segs) == 0 {
+		return ""
+	}
+	return "▸ " + strings.Join(segs, " · ")
 }
 
 // peekDiffFile reports whether a previous (dir<0) / next (dir>0) diffable file

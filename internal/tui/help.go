@@ -201,6 +201,7 @@ func helpContent() []contentLine {
 		r("↑/k ↓/j", "scroll one line"),
 		r("pgup/pgdn", "scroll one screen"),
 		r("n/p", "next / previous change (also ctrl+↓/↑; press again at the end/start to wrap around)"),
+		r("N/P", "from the last / first change, press twice to step to the next / previous file in the list (a bottom-left cue advertises it; a notice names the new file)"),
 		r("home/end", "jump to top / bottom of the file; at the edge a bottom-left cue appears and pressing it again steps to the previous / next file in the list (a notice names the new file)"),
 		r("f", "toggle full file ↔ changed lines only"),
 		r("z", "cycle text display: cutoff / wrap / scroll"),

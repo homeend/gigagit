@@ -135,6 +135,9 @@ func (m Model) withDiffFileNotice(frame string) string {
 		msg = fileArmCue(m.diffLayer().fileArm)
 	}
 	if msg == "" {
+		msg = m.boundaryCue() // proactive: advertise wrap + N/P file-step at a boundary
+	}
+	if msg == "" {
 		return frame
 	}
 	w, h := m.overlayDims()

@@ -9,6 +9,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **`N` / `P` step to the next / previous file from the diff boundary.** In the
+  diff view (opened from the files tree, the Status panel, or the Staged panel),
+  sitting on the **last** change now shows a proactive bottom-left cue
+  `▸ nn → top · NN → next file`; pressing `N` twice steps to the next file in the
+  list (the first press primes, mirroring the existing `n`/`p` wrap double-press).
+  On the **first** change the cue reads `▸ pp → bottom · PP → prev file` and `PP`
+  steps to the previous file. `N`/`P` are boundary-gated (inert on any other
+  change) and share the same prime and arrival notice as `Home`/`End`
+  file-stepping. A single-change file offers both steps; a picker/bookmark
+  compare (no source list) advertises only the wrap.
 - **`enter` on a commit drills into its files (and focuses the tree).** On the
   Commits panel, pressing `enter` on a commit now opens the changed-files view
   *and* moves focus to the file tree — `l` followed by switching to the tree, in
