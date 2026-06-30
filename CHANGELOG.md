@@ -235,6 +235,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   registry) never did, so the path stayed blank until you switched repos. The
   startup bootstrap now seeds it from the git working-tree root it already
   resolves, so the path shows from first paint.
+- **The Commits panel didn't refresh after a push (or force push).** A push
+  moves the remote-tracking ref, which changes the feed's `%D` ref decorations
+  and the `■`/`▲` local/remote tip markers — but `engine.Push` mapped only to
+  the Branches and Remotes panels, so the Commits feed went stale until the next
+  manual `r`, watcher event, or interval refresh. `engine.Push` now also
+  refreshes the feed (`srcFeed`). Tags are deliberately left out: pushing a
+  branch doesn't push tags, and a tags reload would auto-fire a needless
+  background `ls-remote` (the `▲` pushed-state lookup).
 - **"Go to tip in commits" (and the `■` tip marker) failed for slash-named
   local branches.** The commit feed parsed `%D` decorations with a "name
   contains `/` ⇒ remote-tracking" heuristic, so a local branch like `feat/foo`
