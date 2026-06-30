@@ -130,3 +130,97 @@ func TestCreateWorktreeResultCarriesAbsolutePath(t *testing.T) {
 		t.Fatalf("Result.Path = %q, want %q", res.Path, want)
 	}
 }
+
+type fakeHookRunner struct {
+	called bool
+	spec   HookSpec
+	lines  []string
+	code   int
+	err    error
+}
+
+func (h *fakeHookRunner) Run(_ context.Context, spec HookSpec, onLine func(string)) (int, error) {
+	h.called = true
+	h.spec = spec
+	for _, l := range h.lines {
+		onLine(l)
+	}
+	return h.code, h.err
+}
+
+func hookEnv(spec HookSpec, key string) string {
+	for _, kv := range spec.Env {
+		if strings.HasPrefix(kv, key+"=") {
+			return kv[len(key)+1:]
+		}
+	}
+	return ""
+}
+
+func TestCreateWorktreeRunsHook(t *testing.T) {
+	dir, repo := newRepo(t)
+	wt := filepath.Join(filepath.Dir(dir), "wt-hook")
+	fh := &fakeHookRunner{lines: []string{"copied .env"}}
+	ch := make(chan Event, 64)
+	res, err := CreateWorktree{StartPoint: "main", Branch: "f/h", Path: wt, PostCreateHook: "echo hi"}.Run(
+		context.Background(), OpDeps{Repo: repo, Events: ch, HookRunner: fh})
+	close(ch)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !fh.called {
+		t.Fatal("hook not called")
+	}
+	if fh.spec.Dir != res.Path {
+		t.Fatalf("hook Dir = %q, want %q", fh.spec.Dir, res.Path)
+	}
+	if got := hookEnv(fh.spec, "GG_WORKTREE_PATH"); got != res.Path {
+		t.Fatalf("GG_WORKTREE_PATH = %q, want %q", got, res.Path)
+	}
+	if got := hookEnv(fh.spec, "GG_BRANCH"); got != "f/h" {
+		t.Fatalf("GG_BRANCH = %q, want f/h", got)
+	}
+	if hookEnv(fh.spec, "GG_MAIN_WORKTREE") == "" {
+		t.Fatal("GG_MAIN_WORKTREE unset")
+	}
+	var sawLine bool
+	for _, e := range drain(ch) {
+		if g, ok := e.(GitLine); ok && g.Raw == "copied .env" {
+			sawLine = true
+		}
+	}
+	if !sawLine {
+		t.Fatal("hook output not streamed as GitLine")
+	}
+}
+
+func TestCreateWorktreeEmptyHookSkips(t *testing.T) {
+	dir, repo := newRepo(t)
+	wt := filepath.Join(filepath.Dir(dir), "wt-nohook")
+	fh := &fakeHookRunner{}
+	_, err := CreateWorktree{StartPoint: "main", Branch: "f/n", Path: wt}.Run(
+		context.Background(), OpDeps{Repo: repo, HookRunner: fh})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fh.called {
+		t.Fatal("empty hook must not run")
+	}
+}
+
+func TestCreateWorktreeHookFailureNonFatal(t *testing.T) {
+	dir, repo := newRepo(t)
+	wt := filepath.Join(filepath.Dir(dir), "wt-failhook")
+	fh := &fakeHookRunner{code: 1}
+	res, err := CreateWorktree{StartPoint: "main", Branch: "f/f", Path: wt, PostCreateHook: "false"}.Run(
+		context.Background(), OpDeps{Repo: repo, HookRunner: fh})
+	if err != nil {
+		t.Fatalf("hook failure must not fail the op: %v", err)
+	}
+	if !res.Changed {
+		t.Fatal("worktree should still count as created")
+	}
+	if !strings.Contains(res.Summary, "exit 1") {
+		t.Fatalf("Summary should note hook failure, got %q", res.Summary)
+	}
+}

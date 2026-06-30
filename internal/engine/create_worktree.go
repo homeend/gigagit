@@ -12,9 +12,10 @@ import (
 // The fields are fully resolved by the frontend (template resolution and any
 // <user:> input happen there, not here — see spec §3).
 type CreateWorktree struct {
-	StartPoint string
-	Branch     string
-	Path       string
+	StartPoint     string
+	Branch         string
+	Path           string
+	PostCreateHook string // shell script run in the new worktree; "" = none
 }
 
 func (op CreateWorktree) Run(ctx context.Context, deps OpDeps) (Result, error) {
@@ -40,7 +41,8 @@ func (op CreateWorktree) Run(ctx context.Context, deps OpDeps) (Result, error) {
 		return Result{}, fmt.Errorf("create worktree: %w", err)
 	}
 
-	res := Result{Summary: "worktree created: " + abs, Changed: true, Path: abs}
+	note := runPostCreateHook(ctx, deps, abs, op.Branch, op.PostCreateHook)
+	res := Result{Summary: "worktree created: " + abs + note, Changed: true, Path: abs}
 	deps.emit(ctx, Done{Result: res})
 	return res, nil
 }
