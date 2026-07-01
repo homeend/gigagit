@@ -67,6 +67,9 @@ func availableActions(m Model) []actionRow {
 				rows = append(rows, r)
 			}
 		}
+		if r, ok := m.exportFilePatchRow(); ok {
+			rows = append(rows, r)
+		}
 		if r, ok := m.shelfAddRow(); ok {
 			rows = append(rows, r)
 		}
@@ -212,6 +215,9 @@ func (m Model) appendCommitContextRows(out []actionRow) []actionRow {
 		out = append(out, r)
 	}
 	if r, ok := m.commitShelfRow(); ok {
+		out = append(out, r)
+	}
+	if r, ok := m.commitExportPatchRow(); ok {
 		out = append(out, r)
 	}
 	out = append(out, m.commitBranchRows()...)
