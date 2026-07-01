@@ -46,6 +46,32 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   including outside a git repository.
 
 ### Fixed
+- **Architecture-review hardening batch** (whole-codebase review, findings
+  verified against the tree before fixing):
+  - **A paste/restore destination could escape the working tree.**
+    `WriteWorktreeFile` (backing `gg bookmark paste`, `gg shelf restore`, and
+    the TUI paste text fields) resolved its destination with `filepath.Join`,
+    whose `Clean` collapses `../` upward instead of rejecting it — a crafted
+    destination wrote (or read, via `ReadWorktreeFile`) outside the repo. Both
+    now reject any path that resolves outside the working tree; a `../` that
+    still lands inside stays legal.
+  - **Three domain reads ran outside the repo gate.** `Conflict` (hit on every
+    TUI status refresh) probed `MERGE_HEAD`/rebase state files that a
+    concurrent tree-writing op actively mutates, and
+    `BookmarkAdd`/`BookmarkBytes` resolved blobs unguarded. All three now run
+    under the same Read reservation (+ singleflight + failure seam) as every
+    other domain read; a clean status still skips the gate entirely. The
+    layering is now also enforced by a new archtest table
+    (`TestLayeringDAG`) covering the whole package DAG, not just the
+    frontend→git edges.
+  - **A cancelled CLI operation stayed wedged on an interactive decision
+    prompt.** `cliDecider` ignored its context while blocking on stdin,
+    holding the repo-gate reservation until the user typed; the prompt read
+    now unblocks on ctx cancellation (mirroring the TUI decider).
+  - **The initial TUI session duplicated `domain`'s runner wiring inline in
+    `cmd/gg`.** It now goes through `domain.OpenTUIWithRing`, so the
+    LimitRunner/ssh-BatchMode stack is built in exactly one place for both
+    startup and the repo switcher's reRoot.
 - **After switching repos (`R`), per-repo Settings writes landed in the
   previous repo's `.gg.toml`.** The repo switch reloads through the legacy
   load path, which updated the in-memory config but never rebound the
