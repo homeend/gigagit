@@ -15,6 +15,23 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   including outside a git repository.
 
 ### Fixed
+- **Holding `End` (or `PgDn` / `j`) on the Commits panel kept loading pages
+  long after the key was released.** Root cause (profiled at 100k loaded
+  commits): every keystroke's frame cost O(feed) — `commitIdentWidth` ran a
+  `lipgloss.Width` scan over all loaded commits per frame, `displayIndices`
+  refilled an n-int identity index per call, and each landed page re-laid the
+  whole commit graph. A frame took ~160 ms at 100k, ~5× slower than terminal
+  key auto-repeat, so held keys piled up in the tty and the backlog kept
+  pulling pages after release. Fixed by making the whole paging cycle
+  O(page)/O(visible): the commit-graph lane fold is now incremental
+  (`commitgraph.Layer` preserves open-lane state so paging appends rows
+  instead of re-laying history), and the ident width + identity display-index
+  are cached at the `rebuildCommitGraph` chokepoint (same pattern as the
+  Files-panel `filesIdx` fix), invalidated on branches/scope changes. A frame
+  at 100k commits now renders in ~1.9 ms (was 160 ms) and stays flat as the
+  feed grows, so loading tracks the held key and stops on release. The load
+  dispatch also gained a synchronous `commitsLoading` guard closing the
+  back-to-back double-dispatch race (End/PgDn/`j`/`k`, `ctrl+l`, mouse wheel).
 - **Pressing `l` or `enter` on the "Working tree" or "Staged" pseudo-commit
   row (Commits panel) opened the files view with a "compare: DiffTreeFiles:
   unsupported endpoint pair" error, and the view then wedged — only `esc`
