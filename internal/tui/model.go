@@ -27,12 +27,20 @@ import (
 type Model struct {
 	width, height int
 
-	loading  bool
-	ready    bool // true once the first data has arrived; gates the initial blank screen (replaces softReload's role)
-	err      error
-	status   model.WorkingTreeStatus
-	branches []model.Branch
-	commits  []model.Commit
+	loading bool
+	ready   bool // true once the first data has arrived; gates the initial blank screen (replaces softReload's role)
+	err     error
+	status  model.WorkingTreeStatus
+	// filesIdx/stagedIdx are the Files/Staged panel membership splits, derived
+	// from status whenever it is written (see withStatus). They let the unsorted,
+	// unfiltered file-panel displayIndices return in O(1) instead of rescanning
+	// all of status.Files — which, on a 40k-file working tree, was rebuilt many
+	// times per keystroke and made scrolling lag for seconds. Read-only: callers
+	// must not sort/append/reorder the returned slice.
+	filesIdx  []int
+	stagedIdx []int
+	branches  []model.Branch
+	commits   []model.Commit
 
 	worktrees             []model.Worktree
 	tags                  []model.Tag         // refs/tags; shown by the Tags tab in the middle slot
@@ -503,7 +511,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.commitsLoading = false // the full load (which includes the feed) is done
 		m.err = msg.err
 		if msg.err == nil {
-			m.status = msg.status
+			m = m.withStatus(msg.status)
 			m.conflict = msg.conflict
 			m.branches = msg.branches
 			// Float remote branches that have a local counterpart to the top of
@@ -606,7 +614,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			keyFiles := m.panelSelKey(panelFiles)
 			keyStaged := m.panelSelKey(panelStaged)
 			p := msg.value.(statusPayload)
-			m.status = p.status
+			m = m.withStatus(p.status)
 			m.conflict = p.conflict
 			m = m.restorePanelSel(panelFiles, keyFiles)
 			m = m.restorePanelSel(panelStaged, keyStaged)
@@ -1761,7 +1769,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMsg = "error: " + msg.err.Error()
 			return m, nil
 		}
-		m.status = msg.status
+		m = m.withStatus(msg.status)
 		if msg.summary != "" {
 			m.statusMsg = msg.summary
 		}

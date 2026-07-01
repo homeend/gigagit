@@ -387,7 +387,7 @@ func (m Model) compareSetDisplayIndices(p panel) map[int]bool {
 		return out
 	}
 	l := m.listFor(p)
-	_, idx := m.panelView(p)
+	idx := m.displayIndices(p) // idx only; avoid materializing styled rows
 	for n, i := range idx {
 		if m.commitCompareSet[l.Key(i)] {
 			out[n] = true

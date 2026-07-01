@@ -66,6 +66,20 @@ func renderWindow(rows []winRow, o winOpts) []string {
 		h = 1
 	}
 
+	// Fast path for single-line modes (cutoff/scroll): each row occupies exactly
+	// one display line, so the visible slice is deterministic — window to it BEFORE
+	// building any per-row state, making the whole call O(visible) instead of
+	// O(len(rows)). Without this a 40k-row panel rebuilds every row on every frame,
+	// and gg's perpetual 1s heartbeat re-renders the whole UI, so a huge untracked
+	// or commit set pegs the CPU (and, under any extra event traffic, freezes it).
+	// Wrap mode can span one row over several lines, so its windowing needs every
+	// row and keeps the slow path below.
+	if o.mode != modeWrap && len(rows) > h {
+		start := windowStart(len(rows), h, o.anchor)
+		rows = rows[start : start+h]
+		o.anchor -= start
+	}
+
 	// A frozen prefix column (o.prefixW>0) reserves the leftmost columns; the
 	// body wraps/scrolls within the rest, and the prefix shows on a row's first
 	// display line only (blank on wrap continuations) so the gutter never moves.
