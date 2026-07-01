@@ -9,6 +9,17 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Fixed
+- **The whole UI no longer burns CPU (and eventually freezes) on a repo with a
+  huge untracked or commit set.** `renderWindow` — the shared list/panel window
+  primitive behind every panel and popup — used to build a display line for
+  **every** row on **every** frame before discarding all but the visible ~dozen.
+  Combined with gg's perpetual 1-second heartbeat (which re-renders the whole UI
+  even when idle), a 40k-file/36k-commit repo sat pegged at ~20 % CPU with heavy
+  GC churn and locked up under any extra event traffic. In the single-line
+  display modes (cutoff/scroll) each row is exactly one line, so the window is
+  now sliced to the visible rows **before** any per-row work — O(visible) instead
+  of O(total). Idle CPU on the TypeScript repo dropped ~20 % → ~6 %. Wrap mode
+  (multi-line rows) keeps the full pass.
 - **The Files/Staged panels no longer freeze the UI on a repo with a huge
   untracked set** (e.g. a 40k-file `graphify-out/` directory). The left-panel
   render only builds and elides the rows the window will actually show
