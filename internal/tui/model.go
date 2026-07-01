@@ -360,12 +360,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.filesView.sel = 0
 		return m, nil
 	case commitsPagedMsg:
-		pdbg("MSG commitsPagedMsg: gen=%d feedGen=%d match=%v", msg.gen, func() int {
-			if m.feed != nil {
-				return m.feed.Gen()
-			}
-			return -1
-		}(), m.feed != nil && msg.gen == m.feed.Gen())
 		if m.feed != nil && msg.gen == m.feed.Gen() {
 			st := m.feed.Snapshot()
 			m.commits = st.Commits
@@ -380,7 +374,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case commitsReloadedMsg:
-		pdbg("MSG commitsReloadedMsg: gen=%d", msg.gen)
 		if m.feed == nil || msg.gen != m.feed.Gen() {
 			return m, nil // superseded by a newer reload (gen-stamped at load time)
 		}
@@ -1273,9 +1266,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "home":
 			m.sel[m.focus] = 0
 		case "end":
-			if m.focus == panelCommits {
-				pdbg("KEY end: sel=%d panelLen=%d commitsLoading=%v", m.sel[m.focus], m.panelLen(m.focus), m.commitsLoading)
-			}
 			if n := m.panelLen(m.focus); n > 0 {
 				m.sel[m.focus] = n - 1
 			}
@@ -1288,9 +1278,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		case "pgdown":
-			if m.focus == panelCommits {
-				pdbg("KEY pgdown: sel=%d panelLen=%d commitsLoading=%v", m.sel[m.focus], m.panelLen(m.focus), m.commitsLoading)
-			}
 			if n := m.panelLen(m.focus); n > 0 {
 				m.sel[m.focus] += m.pageStep()
 				if m.sel[m.focus] > n-1 {
@@ -1502,9 +1489,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.sel[m.focus]--
 			}
 		case "down", "j":
-			if m.focus == panelCommits {
-				pdbg("KEY down/j: sel=%d panelLen=%d commitsLoading=%v", m.sel[m.focus], m.panelLen(m.focus), m.commitsLoading)
-			}
 			if m.sel[m.focus] < m.panelLen(m.focus)-1 {
 				m.sel[m.focus]++
 			}
@@ -2444,26 +2428,20 @@ func fitGraphCells(s string, w int) string {
 // already loading" decision. When a page is dispatched it sets commitsLoading so
 // the Commits title shows the in-flight indicator until commitsPagedMsg arrives.
 func (m Model) maybeLoadMoreCommits() (Model, tea.Cmd) {
-	// A page (or feed reload) is already in flight. commitsLoading is set
-	// synchronously at dispatch — unlike the feed's async inFlight — so this is
-	// the single chokepoint that (a) closes the double-dispatch race and (b)
-	// paces held-key auto-repeat by completion instead of queuing a load per
-	// keystroke. It clears on the load's completion message (commitsPagedMsg /
-	// commitsReloadedMsg / the full load), so it cannot get stuck. Covers every
-	// caller: End / PgDn / j / k, ctrl+l, and the mouse wheel.
 	if !m.commitPageEligible() {
 		return m, nil
 	}
-	pdbg("maybeLoadMore: DISPATCH sel=%d loaded=%d", m.sel[panelCommits], len(m.commits))
 	m.commitsLoading = true
 	return m, m.loadMoreCmd()
 }
 
 // commitPageEligible reports whether a commit page load would currently do work:
 // no load already in flight, a feed exists, no commit filter is active/typing,
-// and the selection is near the loaded end. Shared by the debounce arm
-// (maybeLoadMoreCommits) and the debounce fire (pageDebounceMsg) so both apply
-// the same gate; state can change between arming and firing.
+// and the selection is near the loaded end. commitsLoading is set synchronously
+// at dispatch — unlike the feed's async inFlight — so this gate also closes the
+// race where two nav keys processed back-to-back both dispatch before the load
+// goroutine has started; it clears on the load's completion message
+// (commitsPagedMsg / commitsReloadedMsg / the full load), so it cannot stick.
 func (m Model) commitPageEligible() bool {
 	if m.commitsLoading || m.feed == nil {
 		return false

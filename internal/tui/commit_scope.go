@@ -71,7 +71,6 @@ func (m Model) canClearFilters() bool {
 // reload cmd, so the title shows it is working while the (possibly slow) re-walk
 // runs. The indicator clears when commitsReloadedMsg arrives.
 func (m Model) startFeedReload() (Model, tea.Cmd) {
-	pdbg("startFeedReload: (scope reload) commitsLoading was %v", m.commitsLoading)
 	m.commitsLoading = true
 	m.feedScopeApplied = m.feedScopeSig()
 	return m, m.reloadFeedCmd()

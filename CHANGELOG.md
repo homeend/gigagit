@@ -16,17 +16,22 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ### Fixed
 - **Holding `End` (or `PgDn` / `j`) on the Commits panel kept loading pages
-  even after the key was released.** The commit feed's single-flight guard
-  (`inFlight`) only prevents *overlapping* loads and is set asynchronously
-  inside the load goroutine, so it neither closed the dispatch race nor
-  stopped the OS key-repeat backlog from re-triggering a page load after each
-  one completed. The load chokepoint (`maybeLoadMoreCommits`) now short-circuits
-  on the synchronous `commitsLoading` flag — set at dispatch, cleared by the
-  load's completion message — so held-key auto-repeat is paced by completion
-  instead of queuing a load per keystroke; `ctrl+l` gained the same guard.
-  Covers every trigger in one place (End/PgDn/`j`/`k`, `ctrl+l`, mouse wheel).
-  The Commits panel is the only paged/lazy view — every other window navigates
-  fully-loaded data with pure synchronous cursor moves, so none needed this.
+  long after the key was released.** Root cause (profiled at 100k loaded
+  commits): every keystroke's frame cost O(feed) — `commitIdentWidth` ran a
+  `lipgloss.Width` scan over all loaded commits per frame, `displayIndices`
+  refilled an n-int identity index per call, and each landed page re-laid the
+  whole commit graph. A frame took ~160 ms at 100k, ~5× slower than terminal
+  key auto-repeat, so held keys piled up in the tty and the backlog kept
+  pulling pages after release. Fixed by making the whole paging cycle
+  O(page)/O(visible): the commit-graph lane fold is now incremental
+  (`commitgraph.Layer` preserves open-lane state so paging appends rows
+  instead of re-laying history), and the ident width + identity display-index
+  are cached at the `rebuildCommitGraph` chokepoint (same pattern as the
+  Files-panel `filesIdx` fix), invalidated on branches/scope changes. A frame
+  at 100k commits now renders in ~1.9 ms (was 160 ms) and stays flat as the
+  feed grows, so loading tracks the held key and stops on release. The load
+  dispatch also gained a synchronous `commitsLoading` guard closing the
+  back-to-back double-dispatch race (End/PgDn/`j`/`k`, `ctrl+l`, mouse wheel).
 - **Pressing `l` or `enter` on the "Working tree" or "Staged" pseudo-commit
   row (Commits panel) opened the files view with a "compare: DiffTreeFiles:
   unsupported endpoint pair" error, and the view then wedged — only `esc`
