@@ -201,6 +201,13 @@ lane stub when commit dates disagree with topology, e.g. right after a squash).
 Cycle it live from the `,` Settings menu ("Commit sort"), which re-walks the feed
 and persists the choice to the repo's `.gg.toml` (per-repo on purpose, so a huge
 monorepo can opt down to `plain`); the `GG_COMMIT_PAGER` env var still overrides.
+`[ui] show_graph` selects how the Commits panel renders on startup: `on` (the
+default when the key is missing; the lane graph) or `off` (the flat `●`-gutter
+list — the same view as the `.` menu's "Show as list"). Toggle it live from the
+`,` Settings menu ("Show graph"), which applies immediately and persists the
+choice to the repo's `.gg.toml`; any explicitly set value is remembered per
+repo. The `.` menu's "Show as list"/"Show as graph" remains a session-only
+flip that doesn't touch the config.
 `[ui] show_eol_only_changes` (default `false`) controls whether a file whose
 only unstaged change is its line endings (CRLF↔LF) is shown as modified — by
 default such files are hidden from the Files panel and its count badge as noise;

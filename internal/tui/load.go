@@ -42,6 +42,7 @@ type dataLoadedMsg struct {
 	reflog          []model.ReflogEntry
 	currentWorktree string
 	cfg             config.Config
+	repoTOML        string // <repo-top>/.gg.toml ("" outside a repo); rebinds repoConfigPath so per-repo Settings writes follow a repo switch
 	gitCommonDir    string
 	headTimes       map[string]int64
 	conflict        domain.ConflictState
@@ -66,9 +67,11 @@ func (m Model) loadCmd() tea.Cmd {
 		// governs the first paint. config.Load needs the repo toplevel; fetch it
 		// up front (cheap; the gated Snapshot reads its own toplevel too).
 		cfg := config.Defaults()
+		repoTOML := ""
 		top, topErr := svc.TopLevel(ctx)
 		if topErr == nil && top != "" {
-			if c, cfgErr := config.Load(config.DefaultGlobalPath(), filepath.Join(top, ".gg.toml")); cfgErr == nil {
+			repoTOML = filepath.Join(top, ".gg.toml")
+			if c, cfgErr := config.Load(config.DefaultGlobalPath(), repoTOML); cfgErr == nil {
 				cfg = c
 			}
 		}
@@ -108,6 +111,7 @@ func (m Model) loadCmd() tea.Cmd {
 			commitsExhausted: fs.Exhausted,
 			commitErr:        feedErr,
 			cfg:              cfg,
+			repoTOML:         repoTOML,
 		}
 		// MRU touch + reflog re-read are not git-status reads; do them after the
 		// gated snapshot, keyed off the toplevel it reported.

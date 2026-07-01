@@ -9,6 +9,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **`[ui] show_graph` — persistent Commits render mode.** A per-repo setting
+  (Settings `,` → "Show graph") choosing how the Commits panel renders on
+  startup: `on` (default when unset; the lane graph) or `off` (the flat
+  `●`-gutter list, exactly what the `.` menu's "Show as list" shows). The
+  Settings toggle applies immediately and persists the choice to the repo's
+  `.gg.toml`; any explicitly set value is remembered. A string key (not a
+  bool) on purpose: the overlay's zero-is-unset rule would make a bool's
+  `false` unwritable over a global `true`, so `"off"`/`"on"` keep the repo
+  layer able to override in both directions. The `.` menu toggle stays
+  session-only. New `config.SetShowGraph` writer (eighth runtime writer).
 - **Export a commit — or a single file's change within a commit — as a git
   patch.** The Commits panel `.` menu offers **"Export commit as patch"**
   (hidden for merge commits); drilling into a commit's file and opening its
@@ -36,6 +46,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   including outside a git repository.
 
 ### Fixed
+- **After switching repos (`R`), per-repo Settings writes landed in the
+  previous repo's `.gg.toml`.** The repo switch reloads through the legacy
+  load path, which updated the in-memory config but never rebound the
+  Settings write target (`repoConfigPath`) — only app startup set it. Every
+  per-repo write after a switch ("Show graph", "Commit sort", "Refresh
+  rates", file-watch toggles, the worktree post-create hook editor) therefore
+  edited the repo you came FROM. The load result now carries the new repo's
+  `.gg.toml` path and rebinds the target alongside the config.
 - **Holding `End` (or `PgDn` / `j`) on the Commits panel kept loading pages
   long after the key was released.** Root cause (profiled at 100k loaded
   commits): every keystroke's frame cost O(feed) — `commitIdentWidth` ran a

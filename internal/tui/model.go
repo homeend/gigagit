@@ -511,6 +511,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case configReadyMsg:
 		m.cfg = msg.cfg
 		m.repoConfigPath = msg.repoTOML
+		// Apply the persisted Commits render mode ([ui] show_graph): "off" starts
+		// in the flat list, exactly like the . menu's "Show as list".
+		m.commitListMode = !m.showGraphConfigured()
 		// Seed the header's repo path now, on the startup path (which fans out via
 		// the per-source registry and never sets currentWorktree the way the legacy
 		// loadCmd's Snapshot did). Without this the top-right path stays blank until
@@ -557,6 +560,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.reflog = msg.reflog
 			m.currentWorktree = msg.currentWorktree
 			m.cfg = msg.cfg
+			// Rebind the per-repo Settings write target on the legacy load path —
+			// configReadyMsg only covers app startup. Without this, every Settings
+			// write after a repo switch ("Show graph", "Commit sort", refresh
+			// rates, the hook editor) landed in the PREVIOUS repo's .gg.toml.
+			m.repoConfigPath = msg.repoTOML
+			// Apply the persisted Commits render mode ([ui] show_graph) on the
+			// legacy load path too (reRoot / repo switch).
+			m.commitListMode = !m.showGraphConfigured()
 			m.gitCommonDir = msg.gitCommonDir
 			m.headTimes = msg.headTimes
 			if m.eager.active {

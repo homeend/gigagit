@@ -43,10 +43,11 @@ const (
 	settingsMenuRemoteTags  = "Auto remote-tag refresh"
 	settingsMenuRates       = "Refresh rates"
 	settingsMenuCommitSort  = "Commit sort"
+	settingsMenuShowGraph   = "Show graph"
 )
 
 // settingsMenu is the top-level menu order.
-var settingsMenu = []string{settingsMenuAgents, settingsMenuIdentity, settingsMenuPrefixes, settingsMenuHook, settingsMenuOpLog, settingsMenuErrors, settingsMenuAutoRefresh, settingsMenuRemoteTags, settingsMenuRates, settingsMenuCommitSort}
+var settingsMenu = []string{settingsMenuAgents, settingsMenuIdentity, settingsMenuPrefixes, settingsMenuHook, settingsMenuOpLog, settingsMenuErrors, settingsMenuAutoRefresh, settingsMenuRemoteTags, settingsMenuRates, settingsMenuCommitSort, settingsMenuShowGraph}
 
 // commitSortModes is the cycle order for the "Commit sort" menu toggle:
 // date-order (default; git --date-order, perfect lanes) → plain (fast, git's
@@ -97,7 +98,41 @@ func settingsMenuLabel(m Model, i int) string {
 	if settingsMenu[i] == settingsMenuCommitSort {
 		return settingsMenuCommitSort + ": " + m.commitSort()
 	}
+	if settingsMenu[i] == settingsMenuShowGraph {
+		if m.showGraphConfigured() {
+			return settingsMenuShowGraph + ": on"
+		}
+		return settingsMenuShowGraph + ": off"
+	}
 	return settingsMenu[i]
+}
+
+// showGraphConfigured resolves [ui] show_graph: anything but an explicit "off"
+// (including unset / pre-load zero config) means the graph is shown.
+func (m Model) showGraphConfigured() bool {
+	return m.cfg.UI.ShowGraph != "off"
+}
+
+// toggleShowGraph flips the Commits panel between the lane graph and the flat
+// list, persisting the choice to the repo .gg.toml so it survives restarts. The
+// off state applies exactly what the . menu's "Show as list" does
+// (commitListMode); an explicit "on" is written too so any set value is
+// remembered per repo.
+func (m Model) toggleShowGraph() Model {
+	next := "off"
+	if !m.showGraphConfigured() {
+		next = "on"
+	}
+	m.cfg.UI.ShowGraph = next
+	m.commitListMode = next == "off"
+	if m.repoConfigPath == "" {
+		m.statusMsg = "show graph → " + next + " (not saved: no repo config path)"
+	} else if err := config.SetShowGraph(m.repoConfigPath, next); err != nil {
+		m.statusMsg = "show graph → " + next + " (not saved: " + err.Error() + ")"
+	} else {
+		m.statusMsg = "show graph: " + next
+	}
+	return m
 }
 
 // commitSort returns the configured commit-sort mode, defaulting to "date-order"
@@ -296,6 +331,8 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				return m.toggleAutoRemoteTags(), nil // stays open so the flip is visible
 			case settingsMenuCommitSort:
 				return m.cycleCommitSort() // stays open; re-walks the feed in the new order
+			case settingsMenuShowGraph:
+				return m.toggleShowGraph(), nil // stays open so the state flip is visible
 			case settingsMenuRates:
 				p.ratesView = true
 				p.ratesSel = 0
