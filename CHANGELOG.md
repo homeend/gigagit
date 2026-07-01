@@ -9,6 +9,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **`[ui] show_graph` — persistent Commits render mode.** A per-repo setting
+  (Settings `,` → "Show graph") choosing how the Commits panel renders on
+  startup: `on` (default when unset; the lane graph) or `off` (the flat
+  `●`-gutter list, exactly what the `.` menu's "Show as list" shows). The
+  Settings toggle applies immediately and persists the choice to the repo's
+  `.gg.toml`; any explicitly set value is remembered. A string key (not a
+  bool) on purpose: the overlay's zero-is-unset rule would make a bool's
+  `false` unwritable over a global `true`, so `"off"`/`"on"` keep the repo
+  layer able to override in both directions. The `.` menu toggle stays
+  session-only. New `config.SetShowGraph` writer (eighth runtime writer).
 - **Export a commit — or a single file's change within a commit — as a git
   patch.** The Commits panel `.` menu offers **"Export commit as patch"**
   (hidden for merge commits); drilling into a commit's file and opening its

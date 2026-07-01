@@ -43,6 +43,14 @@ func SetCommitSort(path, mode string) error {
 	return setScalarLine(path, "ui", "commit_sort", strconv.Quote(mode))
 }
 
+// SetShowGraph persists `[ui] show_graph` to the given config file (the repo
+// .gg.toml), preserving comments, backing the Settings "Show graph" toggle. The
+// value is a quoted string ("on"|"off"). Per-repo on purpose: whether the lane
+// graph or the flat list suits a repo depends on that repo's history shape.
+func SetShowGraph(path, value string) error {
+	return setScalarLine(path, "ui", "show_graph", strconv.Quote(value))
+}
+
 // SetRefreshInterval persists `[refresh] <source> = secs` to the given config
 // file (the repo .gg.toml), preserving the rest of the file. Backs the Settings
 // "Refresh rates" inline editor.

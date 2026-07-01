@@ -56,6 +56,15 @@ type UIConfig struct {
 	// Persisted per-repo (.gg.toml) so a huge repo can opt down to "plain".
 	CommitSort string `toml:"commit_sort"`
 
+	// ShowGraph selects how the Commits panel renders on startup:
+	//   "on"  — the lane graph. THE DEFAULT (used when the key is missing).
+	//   "off" — the flat ●-gutter list (same as the . menu's "Show as list").
+	// A string (not a bool) on purpose: the zero-is-unset overlay rule would make
+	// a bool's `false` indistinguishable from unset, so a repo could never turn
+	// the graph back on over a global off. Empty = unset; resolved to "on".
+	// Persisted per-repo (.gg.toml) by the Settings "Show graph" toggle.
+	ShowGraph string `toml:"show_graph"`
+
 	ShowEOLOnlyChanges bool `toml:"show_eol_only_changes"` // surface files whose only unstaged change is line endings (CRLF↔LF); false (default) hides them as noise
 
 	// DisableSlowOpConfirm turns OFF the yes/no confirmation shown before slow
@@ -122,7 +131,7 @@ func Defaults() Config {
 			DefaultBranchTemplate: "b/from-<parent-branch>-<random-alpha:4>",
 		},
 		UI: UIConfig{WheelStep: 3, HScrollStep: 8, CommitGraphLanes: 8, CommitGraphMinLanes: 2, CommitGraphStep: 4,
-			CommitInitialCount: 300, CommitBatchSize: 300, CommitSearchMaxPages: 5, CommitSort: "date-order"},
+			CommitInitialCount: 300, CommitBatchSize: 300, CommitSearchMaxPages: 5, CommitSort: "date-order", ShowGraph: "on"},
 	}
 }
 
@@ -231,6 +240,9 @@ func overlayUI(dst *UIConfig, src UIConfig) {
 	}
 	if src.CommitSort != "" {
 		dst.CommitSort = src.CommitSort
+	}
+	if src.ShowGraph != "" {
+		dst.ShowGraph = src.ShowGraph
 	}
 	// Inverted polarity: the default (false) is the active feature (hide), so
 	// only a true in a higher layer overlays — matching the zero-is-unset rule.
