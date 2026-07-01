@@ -16,6 +16,14 @@ guards against removing the worktree you are standing in.
   cheap amend; an older commit replays its branch onto its own parent (in
   place, later commits preserved). Refuses the repository's root commit and a
   commit not on the current branch.
+- `gg commit export-patch <commit> [--out <path>] [--force] [-- <file>]` —
+  write a `git am`-able patch (`git format-patch -1 --binary --stdout`) for
+  the whole commit, or with `-- <file>` just that file's change within it.
+  Without `--out` the target defaults to `<parent-of-repo>/<name>.patch`
+  (`<shortsha>.patch`, or `<shortsha>-<basename>.patch` for a file); `--force`
+  overwrites an existing target, otherwise it refuses (exit 2). Refuses a
+  merge commit — `git format-patch -1` on a merge silently emits a different
+  commit's patch instead of erroring.
 - `gg pull [<branch>] [--background] [--on-conflict rebase|merge|reset|abort]` —
   smart pull; with `<branch>` + `--background` it fast-forwards that branch's
   ref without checking it out. On a diverged current branch, `--on-conflict=reset`

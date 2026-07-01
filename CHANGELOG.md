@@ -9,6 +9,27 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Export a commit — or a single file's change within a commit — as a git
+  patch.** The Commits panel `.` menu offers **"Export commit as patch"**
+  (hidden for merge commits); drilling into a commit's file and opening its
+  diff, the diff view's `.` menu offers **"Export this file's diff as
+  patch"** (only for a commit-vs-parent diff — not working-tree or compare
+  diffs). Both open an editable single-line full-path popup pre-filled with
+  `<parent-of-repo>/<shortsha>.patch` (file: `<shortsha>-<basename>.patch`);
+  `enter` writes, `esc` cancels. The patch is `git format-patch -1 --binary
+  --stdout` output — mailbox format, `git am`-able, carrying the commit's
+  author/date/message (`--binary` keeps binary changes appliable). **Merge
+  commits are refused**: `git format-patch -1` on a merge doesn't error, it
+  silently emits a *different* commit's patch, so gg checks the parent count
+  up front and blocks it instead. The default destination is the parent
+  directory of the repo root (e.g. `/a/x/repo` → `/a/x`), anchored on the
+  main worktree even from a linked one. Also scriptable from the CLI: `gg
+  commit export-patch <sha> [--out <path>] [--force] [-- <file>]` — omit
+  `-- <file>` for the whole commit, add it to scope to one file; `--out`
+  overrides the default path; `--force` overwrites an existing target
+  (otherwise it refuses, exit 2). New engine primitive: `engine.ExportFile`
+  — the file-grained sibling of `WriteFile`, and the second op (after
+  `ExportToDir`) that writes outside the working tree.
 - **`gg version`** (also `gg --version` / `gg -v`) prints the build identifier
   — version, commit, and platform — from `internal/buildinfo` and exits. It is
   intercepted in `cmd/gg` before any repo is opened, so it works from anywhere,
