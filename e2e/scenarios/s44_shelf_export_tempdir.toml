@@ -1,0 +1,36 @@
+name = "shelf export: a shelved file is copied into the fixed <repo>.tmp sibling dir"
+
+# The export target is the FIXED sibling of the main worktree: for the e2e
+# sandbox the repo lives at <root>/local, so the temp base is <root>/local.tmp
+# (an absolute path derived from `git worktree list`, independent of the process
+# cwd). A file entry lands under a subdir named after its entry id, preserving
+# its repo-relative path: <root>/local.tmp/<entry-id>/README.md.
+
+[input]
+steps = [
+  { write = "README.md", content = "hi\n" },
+  { commit = "initial" },
+  { write = "README.md", content = "v2\n" },   # unstaged edit to shelve
+]
+
+# Freeze the unstaged version. The entry id is deterministic (same derivation as
+# s43): "<source>-<pathslug>-<sha8>" = unstaged-readme-md-<sha256("v2\n")[:8]>.
+[[run]]
+cmd  = ["shelf", "add", "README.md"]
+exit = 0
+
+# Export it. No --dir → the default fixed temp base <repo>.tmp, subdir = entry id.
+[[run]]
+cmd  = ["shelf", "export", "unstaged-readme-md-81db67b6"]
+exit = 0
+
+[expect]
+branch = "main"
+
+[expect.files]
+# The export writes OUTSIDE the repo, so the working tree is untouched: README.md
+# still carries the unstaged "v2" edit that was shelved.
+"README.md" = "v2\n"
+# The frozen copy landed in the fixed sibling <repo>.tmp/, under a per-entry
+# subdir, with its original repo-relative path preserved.
+"../local.tmp/unstaged-readme-md-81db67b6/README.md" = "v2\n"

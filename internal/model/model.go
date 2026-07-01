@@ -236,6 +236,16 @@ func (e Endpoint) CacheTag() string {
 	}
 }
 
+// ShelfKind distinguishes a shelf entry's blob payload. A file entry's blob is
+// raw file bytes; a commit entry's blob is a tar archive of the commit's
+// changed files (extracted on copy-out). The kind is stored, never inferred.
+type ShelfKind int
+
+const (
+	ShelfKindFile   ShelfKind = iota // blob = raw file bytes (default)
+	ShelfKindCommit                  // blob = tar of the commit's changed files
+)
+
 // ShelfBucket is a named collection of shelf entries. The "default" bucket is
 // implicit; Hidden buckets are gg-internal and excluded from normal listing.
 type ShelfBucket struct {
@@ -247,10 +257,23 @@ type ShelfBucket struct {
 type ShelfEntry struct {
 	ID      string // "<source-word>-<pathslug>-<shorthash>"
 	Bucket  string
+	Kind    ShelfKind   // file (raw bytes) vs commit (tar archive)
 	Origin  FileAddress // where it was captured from (provenance + display)
 	SHA     string      // content hash; also the blob filename
 	Size    int64
 	Created time.Time
+}
+
+// IsCommit reports whether the entry is a shelved commit (tar payload) rather
+// than a single file (raw bytes).
+func (e ShelfEntry) IsCommit() bool { return e.Kind == ShelfKindCommit }
+
+// ExportFile is one file to write during a copy-to-temp-dir export: a
+// repo-relative path plus its bytes. Produced by domain, consumed by
+// engine.ExportToDir.
+type ExportFile struct {
+	RelPath string
+	Data    []byte
 }
 
 // FileState is where in its git lifecycle a referenced file was taken from.

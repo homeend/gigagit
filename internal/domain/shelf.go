@@ -3,6 +3,7 @@ package domain
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/homeend/gigagit/internal/model"
 )
@@ -49,6 +50,30 @@ func (s *Service) ShelfBlob(ctx context.Context, entryID string) ([]byte, error)
 		return nil, ErrShelfDisabled
 	}
 	return st.Get(entryID)
+}
+
+// ShelfAddCommit freezes commit sha's changed files into a durable, path-less
+// ShelfKindCommit entry: it archives just the paths the commit touched (content
+// AT sha) so the entry restores even after the commit leaves git. Content only —
+// no message/author/parents.
+func (s *Service) ShelfAddCommit(ctx context.Context, sha string) (model.ShelfEntry, error) {
+	st := s.shelfStore(ctx)
+	if st == nil {
+		return model.ShelfEntry{}, ErrShelfDisabled
+	}
+	paths, err := s.commitChangedPaths(ctx, sha)
+	if err != nil {
+		return model.ShelfEntry{}, err
+	}
+	if len(paths) == 0 {
+		return model.ShelfEntry{}, fmt.Errorf("shelf: commit %s changes no files", sha)
+	}
+	tar, err := s.archiveFiles(ctx, sha, paths)
+	if err != nil {
+		return model.ShelfEntry{}, err
+	}
+	addr := model.FileAddress{State: model.StateCommitted, Commit: sha, Path: ""}
+	return st.PutCommit("", addr, tar)
 }
 
 // ShelfRemove deletes an entry (and reclaims its blob if unreferenced).

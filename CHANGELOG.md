@@ -51,6 +51,31 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   marker layout is unchanged.
 
 ### Added
+- **Shelf a commit, and copy shelf/bookmark items (including commits) to a
+  temp dir outside the repo.** Two additions to the shelf:
+  - **Shelf this commit** — the Commits and Reflog panels' `.` menu now offers
+    **"Shelf this commit"** alongside "Bookmark this commit": it freezes the
+    selected commit's **changed files** (content only, via `git archive`, no
+    message/author) as one durable shelf entry (`ShelfKind = Commit`), capped
+    at 200MiB. Because the content is stored (not just a commit reference),
+    it survives `git gc` and history rewrites the same way a file shelf entry
+    survives deletion of its source. `gg shelf commit <sha>` does the same
+    from the CLI, printing the new entry's id.
+  - **`[t]` Copy to temp dir** — the shelf (`G`) and bookmark (`g`)
+    quick-switchers gain a `[t]` action that copies the highlighted entry's
+    files to a fixed sibling directory next to the repo: `<repo>.tmp/` (e.g.
+    `/a/x/repo` → `/a/x/repo.tmp`), anchored on the **main** worktree even
+    when run from a linked one. Each entry type gets its own subdirectory
+    name — `commit-<7-char-sha>` for a shelved or bookmarked commit, the
+    entry's id for a shelf file, `bookmark-<label-or-id>` for a bookmarked
+    file — and the destination is shown in an editable popup before writing
+    (prefilled, but you can change it). Writing outside the worktree is new
+    territory for gg's engine (`engine.ExportToDir`, the first op that writes
+    outside the working tree); an existing target directory prompts
+    overwrite/cancel. `[t]` works the same for a commit bookmark (exports its
+    changed-files tree) as for a file bookmark. Also available from the CLI:
+    `gg shelf export [--dir <path>] [--force] <entry-id>` (default target
+    `<repo>.tmp/<name>` when `--dir` is omitted).
 - **Commit sort order (`[ui] commit_sort`)**: choose how the Commits panel and its graph are ordered — `date-order` (the new default; `git --date-order`, a global topological sort so branch **forks always render correctly**) or `plain` (git's lazy newest-first order, much faster on very large repos but the graph can draw a disconnected lane stub when commit dates disagree with topology, e.g. right after a squash). Cycle it live from Settings (`,` → "Commit sort"); it re-walks the feed immediately and saves the choice **per-repo** to `.gg.toml` (so a huge monorepo can opt down to `plain`). Missing key ⇒ `date-order`. `GG_COMMIT_PAGER` still overrides. Fixes the case where a squashed branch's graph looked like it never forked from its base.
 - **Reset a diverged branch to the remote tip, discarding local work.** When a
   pull of the current branch can't fast-forward, the divergence prompt now offers

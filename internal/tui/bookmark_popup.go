@@ -143,7 +143,7 @@ func (m Model) renderBookmarkPopupBox(p *bookmarkPopup) string {
 	parts = append(parts, bodyLines...)
 	// Wrap the hint so [z] mode / [esc] close survive on a narrow terminal,
 	// where a single-line footer would truncate them off (mirrors shelfPopup).
-	hint := []string{"[?] keys", "[enter] jump", "[e] editor", "[p] paste", "[m] mark/compare", "[x] remove", "[c] vs shelf", "[/] filter", "[z] mode", "[esc] close"}
+	hint := []string{"[?] keys", "[enter] jump", "[e] editor", "[p] paste", "[t] temp dir", "[m] mark/compare", "[x] remove", "[c] vs shelf", "[/] filter", "[z] mode", "[esc] close"}
 	parts = append(parts, "")
 	parts = append(parts, wrapParts(hint, textW, "  ")...)
 	return popupBox(inner, strings.Join(parts, "\n"))
@@ -325,6 +325,18 @@ func (p *bookmarkPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			return m, m.openInEditorCmd(b.Path, func(ctx context.Context) ([]byte, error) {
 				return svc.BookmarkBytes(ctx, b)
 			})
+		case "t":
+			if p.compareRef != nil {
+				return m, nil
+			}
+			b, ok := p.selected()
+			if !ok {
+				return m, nil
+			}
+			// No commitBookmarkNotice guard here: exporting a commit pointer is
+			// exactly what ExportBookmark handles — [t] works for both commit and
+			// file bookmarks.
+			return m.startTempExportBookmark(b)
 		}
 	}
 	return m, nil

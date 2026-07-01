@@ -102,47 +102,39 @@ func idSource(a model.FileAddress) string {
 	}
 }
 
-func (fs *FileStore) Put(bucket string, addr model.FileAddress, data []byte) (model.ShelfEntry, error) {
-	if len(data) > MaxShelfBytes {
-		return model.ShelfEntry{}, ErrTooLarge
-	}
-	bucket = normalizeBucket(bucket)
+// writeBlob content-addresses data and stores it under root/blobs/<sha> (atomic,
+// deduplicated). Returns the sha.
+func (fs *FileStore) writeBlob(data []byte) (string, error) {
 	sum := sha256.Sum256(data)
 	sha := hex.EncodeToString(sum[:])
-
 	if err := os.MkdirAll(filepath.Join(fs.root, "blobs"), 0o755); err != nil {
-		return model.ShelfEntry{}, err
+		return "", err
 	}
-	if _, err := os.Stat(fs.blobPath(sha)); err != nil {
-		tmp, err := os.CreateTemp(filepath.Join(fs.root, "blobs"), "blob-*")
-		if err != nil {
-			return model.ShelfEntry{}, err
-		}
-		name := tmp.Name()
-		if _, err := tmp.Write(data); err != nil {
-			tmp.Close()
-			os.Remove(name)
-			return model.ShelfEntry{}, err
-		}
+	if _, err := os.Stat(fs.blobPath(sha)); err == nil {
+		return sha, nil // already present
+	}
+	tmp, err := os.CreateTemp(filepath.Join(fs.root, "blobs"), "blob-*")
+	if err != nil {
+		return "", err
+	}
+	name := tmp.Name()
+	if _, err := tmp.Write(data); err != nil {
 		tmp.Close()
-		if err := os.Rename(name, fs.blobPath(sha)); err != nil {
-			os.Remove(name)
-			return model.ShelfEntry{}, err
-		}
+		os.Remove(name)
+		return "", err
 	}
-
-	e := model.ShelfEntry{
-		ID:      fmt.Sprintf("%s-%s-%s", idSource(addr), slug(addr.Path), sha[:8]),
-		Bucket:  bucket,
-		Origin:  addr,
-		SHA:     sha,
-		Size:    int64(len(data)),
-		Created: time.Now(),
+	tmp.Close()
+	if err := os.Rename(name, fs.blobPath(sha)); err != nil {
+		os.Remove(name)
+		return "", err
 	}
+	return sha, nil
+}
 
+// putEntry appends-or-replaces e in the index (idempotent by ID) and persists.
+func (fs *FileStore) putEntry(e model.ShelfEntry) (model.ShelfEntry, error) {
 	idx := fs.read()
-	fs.ensureBucket(&idx, bucket)
-	// Replace any entry with the same ID (idempotent re-shelf), else append.
+	fs.ensureBucket(&idx, e.Bucket)
 	replaced := false
 	for i := range idx.Entries {
 		if idx.Entries[i].ID == e.ID {
@@ -155,6 +147,52 @@ func (fs *FileStore) Put(bucket string, addr model.FileAddress, data []byte) (mo
 		idx.Entries = append(idx.Entries, e)
 	}
 	return e, fs.write(idx)
+}
+
+func (fs *FileStore) Put(bucket string, addr model.FileAddress, data []byte) (model.ShelfEntry, error) {
+	if len(data) > MaxShelfBytes {
+		return model.ShelfEntry{}, ErrTooLarge
+	}
+	bucket = normalizeBucket(bucket)
+	sha, err := fs.writeBlob(data)
+	if err != nil {
+		return model.ShelfEntry{}, err
+	}
+	return fs.putEntry(model.ShelfEntry{
+		ID:      fmt.Sprintf("%s-%s-%s", idSource(addr), slug(addr.Path), sha[:8]),
+		Bucket:  bucket,
+		Kind:    model.ShelfKindFile,
+		Origin:  addr,
+		SHA:     sha,
+		Size:    int64(len(data)),
+		Created: time.Now(),
+	})
+}
+
+// PutCommit stores a commit's changed-files tar as a durable ShelfKindCommit
+// entry (id: commit-<shortsha>-<blobsha8>).
+func (fs *FileStore) PutCommit(bucket string, addr model.FileAddress, tar []byte) (model.ShelfEntry, error) {
+	if len(tar) > MaxCommitArchiveBytes {
+		return model.ShelfEntry{}, ErrTooLarge
+	}
+	bucket = normalizeBucket(bucket)
+	sha, err := fs.writeBlob(tar)
+	if err != nil {
+		return model.ShelfEntry{}, err
+	}
+	short := addr.Commit
+	if len(short) > 7 {
+		short = short[:7]
+	}
+	return fs.putEntry(model.ShelfEntry{
+		ID:      fmt.Sprintf("commit-%s-%s", short, sha[:8]),
+		Bucket:  bucket,
+		Kind:    model.ShelfKindCommit,
+		Origin:  addr,
+		SHA:     sha,
+		Size:    int64(len(tar)),
+		Created: time.Now(),
+	})
 }
 
 func (fs *FileStore) ensureBucket(idx *index, name string) {

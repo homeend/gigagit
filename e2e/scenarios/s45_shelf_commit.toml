@@ -1,0 +1,30 @@
+name = "shelf commit: freezing a commit's changed files succeeds and leaves the tree untouched"
+
+# `shelf commit <rev>` archives just the files the commit changed (content only)
+# into the shelf as one durable entry. It runs entirely through the CLI → domain
+# (ShelfAddCommit → CommitFiles → ArchiveFiles → PutCommit) and must NOT modify
+# the working tree. We can't assert the exported files here because the entry id
+# (commit-<rev>-<tar-sha8>) is not statically knowable, but exit 0 proves the
+# whole write path integrates, and `clean` proves it never touches the tree.
+
+[input]
+steps = [
+  { write = "README.md", content = "hi\n" },
+  { commit = "initial" },
+  { write = "a.txt", content = "alpha\n" },
+  { commit = "add a" },
+]
+
+# Freeze HEAD's ("add a") changed files. HEAD resolves via git; a.txt is the only
+# changed path, so it is archived and stored. Nothing to abort, no decisions.
+[[run]]
+cmd  = ["shelf", "commit", "HEAD"]
+exit = 0
+
+[expect]
+branch = "main"
+clean  = true   # shelving a commit is a read-only capture; the tree is unchanged
+
+[expect.files]
+"README.md" = "hi\n"
+"a.txt"     = "alpha\n"

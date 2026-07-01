@@ -114,3 +114,34 @@ func TestBucketsListNamed(t *testing.T) {
 		t.Fatalf("buckets %v missing 'feature'", names)
 	}
 }
+
+func TestPutCommitStoresArchiveKind(t *testing.T) {
+	fs := NewFileStore(t.TempDir())
+	tar := []byte("PK-not-really-a-tar-but-bytes")
+	addr := model.FileAddress{State: model.StateCommitted, Commit: "a1b2c3d4e5f6", Path: ""}
+	e, err := fs.PutCommit("", addr, tar)
+	if err != nil {
+		t.Fatalf("PutCommit: %v", err)
+	}
+	if e.Kind != model.ShelfKindCommit {
+		t.Fatalf("Kind = %v, want ShelfKindCommit", e.Kind)
+	}
+	if e.ID != "commit-a1b2c3d-"+e.SHA[:8] {
+		t.Fatalf("ID = %q, want commit-a1b2c3d-<sha8>", e.ID)
+	}
+	got, err := fs.Get(e.ID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if string(got) != string(tar) {
+		t.Fatalf("Get returned %q, want the stored tar", got)
+	}
+	// A plain file Put must report ShelfKindFile.
+	fe, err := fs.Put("", model.FileAddress{State: model.StateUnstaged, Path: "x.txt"}, []byte("hi"))
+	if err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	if fe.Kind != model.ShelfKindFile {
+		t.Fatalf("file Put Kind = %v, want ShelfKindFile", fe.Kind)
+	}
+}

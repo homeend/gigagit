@@ -433,6 +433,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMsg = "shelved " + msg.entry.Origin.Path + " → " + msg.entry.ID
 		}
 		return m, nil
+	case tempExportResolvedMsg:
+		if msg.err != nil {
+			m.statusMsg = "temp export: " + msg.err.Error()
+			return m, nil
+		}
+		p := &tempExportPopup{files: msg.files}
+		p.dest = newTextField(msg.dir)
+		return m.pushLayer(p), nil
 	case bookmarkAddedMsg:
 		if msg.err != nil {
 			m.statusMsg = "bookmark: " + msg.err.Error()
