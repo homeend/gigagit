@@ -124,6 +124,44 @@ func TestShelfCommitThenExport(t *testing.T) {
 	}
 }
 
+func TestShelfExportRefusesExistingWithoutForce(t *testing.T) {
+	dir := shelfRepo(t)
+	if err := os.MkdirAll(filepath.Join(dir, "src"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "src", "a.txt"), []byte("alpha\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, dir, "add", ".")
+	runGit(t, dir, "commit", "-m", "add a")
+	sha := runGit(t, dir, "rev-parse", "HEAD")
+
+	_, out, errb := runCLI(t, dir, "shelf", "commit", sha)
+	fields := strings.Fields(out)
+	if len(fields) == 0 {
+		t.Fatalf("shelf commit printed no output, stderr=%s", errb)
+	}
+	id := fields[len(fields)-1]
+
+	outDir := filepath.Join(t.TempDir(), "out")
+	if err := os.MkdirAll(outDir, 0o755); err != nil {
+		t.Fatal(err)
+	} // pre-exists -> triggers the overwrite/cancel decision
+
+	code, _, _ := runCLI(t, dir, "shelf", "export", "--dir", outDir, id)
+	if code != 2 {
+		t.Fatalf("existing target dir w/o --force should exit 2, got %d", code)
+	}
+	code, _, errb = runCLI(t, dir, "shelf", "export", "--dir", outDir, "--force", id)
+	if code != 0 {
+		t.Fatalf("--force should succeed, got %d: %s", code, errb)
+	}
+	got, err := os.ReadFile(filepath.Join(outDir, "src", "a.txt"))
+	if err != nil || string(got) != "alpha\n" {
+		t.Fatalf("after --force a.txt = %q err=%v, want alpha\\n", got, err)
+	}
+}
+
 func TestShelfExportUnknownEntry(t *testing.T) {
 	dir := shelfRepo(t)
 	code, _, errb := runCLI(t, dir, "shelf", "export", "no-such-id")
