@@ -8,6 +8,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+### Added
+- **`gg version`** (also `gg --version` / `gg -v`) prints the build identifier
+  — version, commit, and platform — from `internal/buildinfo` and exits. It is
+  intercepted in `cmd/gg` before any repo is opened, so it works from anywhere,
+  including outside a git repository.
+
 ### Fixed
 - **Pressing `l` or `enter` on the "Working tree" or "Staged" pseudo-commit
   row (Commits panel) opened the files view with a "compare: DiffTreeFiles:

@@ -34,6 +34,10 @@ func main() {
 			os.Exit(2)
 		}
 	}
+	if len(args) > 0 && isVersionRequest(args[0]) {
+		fmt.Fprintln(os.Stdout, buildinfo.String())
+		return
+	}
 	if len(args) > 0 && args[0] == "shell-init" {
 		runShellInit(args[1:])
 		return
@@ -62,7 +66,7 @@ func main() {
 	// A mistyped/unknown subcommand should error, not silently open the TUI.
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 		fmt.Fprintf(os.Stderr, "gg: unknown command %q\n", args[0])
-		fmt.Fprintln(os.Stderr, "commands: status commit pull push switch checkout branch stash undo discard shelf bookmark merge rebase cherry-pick revert reset worktree remote tag compare repo init inspect (run `gg` with no arguments for the TUI)")
+		fmt.Fprintln(os.Stderr, "commands: status commit pull push switch checkout branch stash undo discard shelf bookmark merge rebase cherry-pick revert reset worktree remote tag compare repo init inspect version (run `gg` with no arguments for the TUI)")
 		os.Exit(2)
 	}
 	// No subcommand: launch the TUI.
@@ -166,6 +170,17 @@ func setupTimeTrack(path string, argv []string) error {
 		Start: time.Now(),
 	})
 	return nil
+}
+
+// isVersionRequest reports whether tok asks for the build version, so cmd/gg can
+// print buildinfo.String() and exit before touching a repo or launching the TUI.
+func isVersionRequest(tok string) bool {
+	switch tok {
+	case "version", "--version", "-v", "-V":
+		return true
+	default:
+		return false
+	}
 }
 
 func runShellInit(args []string) {

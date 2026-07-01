@@ -141,6 +141,7 @@ gg repo list
 gg repo switch <query>
 gg init [--all | --update | --agents <ids> | --list]
 gg inspect [--debug-dump <path>] [--trace]
+gg version                    # (also --version / -v) print build version + commit
 ```
 
 Forks are answered by flags (e.g. `--on-conflict`, `--with-branch`/`--force`);
