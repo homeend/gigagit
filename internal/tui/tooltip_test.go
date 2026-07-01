@@ -262,7 +262,7 @@ func TestTooltipHiddenOnEmptyPanel(t *testing.T) {
 
 func TestTooltipOverflowsSingleLineCappedAtScreen(t *testing.T) {
 	m := tooltipModel()
-	m.worktrees[1].Path = strings.Repeat("x", 500) // wider than the whole screen
+	m.worktrees[1].Path = strings.Repeat("x", 500) // wider than the whole viewport
 	lines, _, _, ok := m.tooltip()
 	if !ok {
 		t.Fatal("want a tooltip")
@@ -271,26 +271,47 @@ func TestTooltipOverflowsSingleLineCappedAtScreen(t *testing.T) {
 		t.Fatalf("inline reveal stays a single line, got %d", len(lines))
 	}
 	only := ansi.Strip(lines[0])
-	if !strings.HasSuffix(strings.TrimRight(only, " "), "…") {
-		t.Errorf("a reveal too wide for the screen must end with …, got %q", only)
+	// Text wider than the whole viewport fills the FULL width and is clipped with
+	// … at the edge: nothing shows underneath, so there is no margin/blank filler
+	// (hence no trailing space either).
+	if !strings.HasSuffix(only, "…") {
+		t.Errorf("an over-wide reveal must end with … at the right edge, got %q", only)
 	}
-	if w := ansi.StringWidth(lines[0]); w > m.width {
-		t.Errorf("reveal is %d cols, wider than the terminal (%d)", w, m.width)
+	if w := ansi.StringWidth(lines[0]); w != m.width {
+		t.Errorf("an over-wide reveal must fill the full viewport width %d, got %d", m.width, w)
 	}
-	// The … must sit a margin short of the right edge, not hug it: the visible
-	// text is trimmed to terminal width − revealClipMargin.
-	text := strings.TrimRight(only, " ")
-	if tw := lipgloss.Width(text); tw > m.width-revealClipMargin {
-		t.Errorf("clipped text is %d cols, want ≤ terminal width − margin (%d)", tw, m.width-revealClipMargin)
+}
+
+// A reveal that overflows its panel but still fits the viewport keeps a blank
+// revealPad margin on BOTH sides of the text (Rule 5/6), so the tooltip text is
+// never flush against the underlying text it overflows onto, and it does NOT fill
+// the whole screen.
+func TestTooltipRevealKeepsMarginsAroundText(t *testing.T) {
+	m := footerModel() // width 120; Commits is the right panel
+	m.focus = panelCommits
+	if m.sel == nil {
+		m.sel = map[panel]int{}
 	}
-	// The highlight must HUG the clipped text — no trailing blank yellow padding it
-	// out to the full screen width. The strip is sized to its text, so the line has
-	// no trailing spaces and is strictly narrower than the terminal.
-	if strings.HasSuffix(only, " ") {
-		t.Errorf("clipped reveal must not trail blank filler to the edge, got %q", only)
+	// Long enough to overflow the Commits panel (~76 inner cols) but well within
+	// the 120-col viewport even with margins.
+	subj := "refactor the channel adapter layer so the v2 reader and writer no longer share mutable state"
+	m.commits = []model.Commit{{Hash: "abcdef0", Subject: subj}}
+	m.sel[panelCommits] = 0
+
+	lines, _, _, ok := m.tooltip()
+	if !ok {
+		t.Fatal("want a tooltip")
 	}
+	only := ansi.Strip(lines[0])
 	if w := ansi.StringWidth(lines[0]); w >= m.width {
-		t.Errorf("clipped reveal is %d cols, must be narrower than the terminal (%d) — sized to its text, not the full screen", w, m.width)
+		t.Fatalf("a subject that fits the viewport must not fill the whole width (got %d, screen %d)", w, m.width)
+	}
+	pad := strings.Repeat(" ", revealPad)
+	if !strings.HasPrefix(only, pad) || !strings.HasSuffix(only, pad) {
+		t.Fatalf("reveal must keep a %d-col blank margin on both sides, got %q", revealPad, only)
+	}
+	if !strings.Contains(only, subj) {
+		t.Fatalf("reveal must show the full subject between the margins, got %q", only)
 	}
 }
 

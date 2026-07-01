@@ -15,17 +15,18 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   including outside a git repository.
 
 ### Fixed
-- **Selecting a Commits-panel row whose subject is longer than the whole
-  terminal made the full-text reveal (the yellow highlight) run right up to the
-  screen edge with no clear truncation marker (the "odd effect").** `revealLine`
-  (`internal/tui/tooltip.go`) clipped a reveal wider than the terminal to the
-  *full* screen width, so the text hugged the right border. It now trims such a
-  reveal to terminal width − 5 and marks it with `…`, so the ellipsis sits clear
-  of the edge and it reads as a truncation rather than a cut-off line; the yellow
-  highlight is sized to the clipped text (not padded to the full screen), so it no
-  longer trails blank yellow to the border. The reveal still overflows left to use
-  the whole terminal width (not just the commit window) whenever the subject fits
-  within the terminal — only a subject longer than the entire terminal is clipped.
+- **The full-text reveal (the yellow highlight) for a truncated selected row is
+  now sized and anchored to the text instead of running edge-to-edge with stray
+  blank padding (the "odd effect").** `revealLine` (`internal/tui/tooltip.go`) was
+  rewritten to a clear geometry: the strip is the text plus a small blank margin
+  on each side (never flush against the text it overflows onto), floored at the
+  panel's inner width so a short reveal still covers the selected-row highlight.
+  It anchors where the original text sits — a right-hand Commits reveal pins its
+  right edge where the text ends and grows left; a left-panel/files-tree reveal
+  pins its left edge where the text starts and grows right — and never exceeds the
+  viewport. Only a subject wider than the whole viewport is clipped: it then fills
+  the full width and is marked with `…` at the edge (no margin, since nothing shows
+  underneath).
 - **Pressing `l` or `enter` on the "Working tree" or "Staged" pseudo-commit
   row (Commits panel) opened the files view with a "compare: DiffTreeFiles:
   unsupported endpoint pair" error, and the view then wedged — only `esc`
