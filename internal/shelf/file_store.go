@@ -171,7 +171,7 @@ func (fs *FileStore) Put(bucket string, addr model.FileAddress, data []byte) (mo
 
 // PutCommit stores a commit's changed-files tar as a durable ShelfKindCommit
 // entry (id: commit-<shortsha>-<blobsha8>).
-func (fs *FileStore) PutCommit(bucket string, addr model.FileAddress, tar []byte) (model.ShelfEntry, error) {
+func (fs *FileStore) PutCommit(bucket string, addr model.FileAddress, tar []byte, label string) (model.ShelfEntry, error) {
 	if len(tar) > MaxCommitArchiveBytes {
 		return model.ShelfEntry{}, ErrTooLarge
 	}
@@ -189,6 +189,7 @@ func (fs *FileStore) PutCommit(bucket string, addr model.FileAddress, tar []byte
 		Bucket:  bucket,
 		Kind:    model.ShelfKindCommit,
 		Origin:  addr,
+		Label:   label,
 		SHA:     sha,
 		Size:    int64(len(tar)),
 		Created: time.Now(),

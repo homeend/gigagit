@@ -110,12 +110,12 @@ func (m Model) commitBookmarkRow() (actionRow, bool) {
 	if !ok {
 		return actionRow{}, false
 	}
-	b := commitBookmark(m.commits[bi])
+	c := m.commits[bi]
 	return actionRow{
 		id:    "commit-bookmark",
 		label: "Bookmark this commit",
 		run: func(m Model) (tea.Model, tea.Cmd) {
-			return m, m.bookmarkAddCmd(b)
+			return m.pushLayer(&commitNamePopup{commit: c, forShelf: false, name: newTextField(c.Subject)}), nil
 		},
 	}, true
 }
@@ -131,25 +131,29 @@ func (m Model) reflogBookmarkRow() (actionRow, bool) {
 		return actionRow{}, false
 	}
 	e := m.reflog[bi]
-	b := commitBookmark(model.Commit{Hash: e.Hash, Subject: e.Subject})
+	c := model.Commit{Hash: e.Hash, Subject: e.Subject}
 	return actionRow{
 		id:    "reflog-bookmark",
 		label: "Bookmark this commit",
 		run: func(m Model) (tea.Model, tea.Cmd) {
-			return m, m.bookmarkAddCmd(b)
+			return m.pushLayer(&commitNamePopup{commit: c, forShelf: false, name: newTextField(c.Subject)}), nil
 		},
 	}, true
 }
 
-// commitBookmark builds the path-less bookmark for commit c. The subject rides
-// in Label as the switcher row's title (Label is not part of the identity).
-func commitBookmark(c model.Commit) model.Bookmark {
+// commitBookmark builds the path-less bookmark for commit c with a human label
+// (falls back to the commit subject when label is empty). The label rides in
+// Label as the switcher row's title (Label is not part of the identity).
+func commitBookmark(c model.Commit, label string) model.Bookmark {
+	if label == "" {
+		label = c.Subject
+	}
 	return model.Bookmark{
 		State:  model.StateCommitted,
 		Commit: c.Hash,
 		Branch: firstLocalRef(c),
 		Path:   "",
-		Label:  c.Subject,
+		Label:  label,
 	}
 }
 

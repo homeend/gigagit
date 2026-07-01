@@ -27,6 +27,16 @@ type shelfPopup struct {
 	compareLabel string
 }
 
+// shelfEntryDisplay is the switcher row text: the address, plus " — <label>"
+// when the entry carries a human name (mirrors bookmarkDisplay).
+func shelfEntryDisplay(e model.ShelfEntry) string {
+	s := e.Origin.Display()
+	if e.Label != "" {
+		s += " — " + e.Label
+	}
+	return s
+}
+
 // openShelfSwitcher opens the global shelf quick-switcher (G). Wired into every
 // navigable surface like g; render+routing hoisted above content surfaces.
 func (m Model) openShelfSwitcher() (Model, tea.Cmd) {
@@ -39,7 +49,7 @@ func (m Model) openShelfSwitcher() (Model, tea.Cmd) {
 func newShelfPopup(items []model.ShelfEntry) *shelfPopup {
 	p := &shelfPopup{items: items}
 	for _, e := range items {
-		p.rows = append(p.rows, e.Origin.Display())
+		p.rows = append(p.rows, shelfEntryDisplay(e))
 	}
 	return p
 }

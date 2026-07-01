@@ -81,7 +81,7 @@ func helpContent() []contentLine {
 		h("Reflog panel"),
 		r("", "a tab in the bottom-left (Staged) box — ctrl+←/→ switches Staged ⇄ Reflog; lists the HEAD reflog (read-only), newest first"),
 		r("enter / l", "open the entry's commit in the files view (changed files vs parent; even for dangling commits)"),
-		r(".", "Copy SHA / Bookmark this commit / Shelf this commit (compare via the g switcher)"),
+		r(".", "Copy SHA / Bookmark this commit / Shelf this commit (name it) (compare via the g switcher)"),
 		r(".", "Reset to this entry (.-menu): move the current branch here (soft/mixed/hard) / Check out this entry (detached or as a new branch you switch to)"),
 		h("Files panel"),
 		r("space", "stage the marked files (or the cursor row) — git add"),

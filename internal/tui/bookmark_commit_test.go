@@ -9,7 +9,7 @@ import (
 
 func TestCommitBookmarkStoresSubject(t *testing.T) {
 	c := model.Commit{Hash: "a1b2c3d4e5", Subject: "Fix the parser"}
-	b := commitBookmark(c)
+	b := commitBookmark(c, "")
 	if !b.IsCommit() || b.Label != "Fix the parser" {
 		t.Fatalf("commit bookmark should store the subject as Label: %+v", b)
 	}

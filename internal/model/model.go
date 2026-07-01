@@ -259,6 +259,7 @@ type ShelfEntry struct {
 	Bucket  string
 	Kind    ShelfKind   // file (raw bytes) vs commit (tar archive)
 	Origin  FileAddress // where it was captured from (provenance + display)
+	Label   string      // human name (commit entries); "" = none. Display-only, not in ID.
 	SHA     string      // content hash; also the blob filename
 	Size    int64
 	Created time.Time

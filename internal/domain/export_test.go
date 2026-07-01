@@ -50,7 +50,7 @@ func TestShelfAddCommitAndExportRoundTrip(t *testing.T) {
 	sha := headHash(t, repoDir)
 	writeCommit(t, repoDir, "src/a.txt", "alpha2\n", "edit a") // move HEAD past sha
 
-	e, err := svc.ShelfAddCommit(ctx, sha)
+	e, err := svc.ShelfAddCommit(ctx, sha, "")
 	if err != nil {
 		t.Fatalf("ShelfAddCommit: %v", err)
 	}

@@ -72,6 +72,18 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   marker layout is unchanged.
 
 ### Added
+- **Name a commit when shelving or bookmarking it.** "Shelf this commit" and
+  "Bookmark this commit" (on both the Commits and Reflog panels' `.` menu) now
+  open a one-line name popup pre-filled with the commit's subject before
+  creating the entry: edit the text, press `ctrl+s` to insert the commit's
+  short sha at the cursor, `enter` to create with that name, or `esc` to
+  cancel. An empty name falls back to the commit subject for a bookmark
+  (matching the previous behavior); for a shelf entry it just leaves the label
+  unset. The name is display-only — captured once at creation time, not part
+  of the entry's identity, and not editable afterward. Named entries show
+  ` — <name>` in `gg shelf list` and in the shelf (`G`) quick-switcher
+  (mirroring how the bookmark switcher already showed its label). From the
+  CLI: `gg shelf commit --name <name> <sha>`.
 - **Shelf a commit, and copy shelf/bookmark items (including commits) to a
   temp dir outside the repo.** Two additions to the shelf:
   - **Shelf this commit** — the Commits and Reflog panels' `.` menu now offers
