@@ -187,6 +187,14 @@ it only inserts the keys you don't have yet, as commented lines marked
 (default 300); `[ui] commit_batch_size` sets how many more are loaded per page
 (default 300); `[ui] commit_search_max_pages` sets how many extra pages
 `ctrl+f` eager search will scan before asking permission to go deeper (default 5);
+`[ui] commit_sort` selects commit ordering for the Commits panel and its graph:
+`date-order` (the default; `git --date-order`, a global topological sort so the
+graph's branch forks always draw correctly) or `plain` (git's lazy newest-first
+order — much faster on very large repos, but the graph can draw a disconnected
+lane stub when commit dates disagree with topology, e.g. right after a squash).
+Cycle it live from the `,` Settings menu ("Commit sort"), which re-walks the feed
+and persists the choice to the repo's `.gg.toml` (per-repo on purpose, so a huge
+monorepo can opt down to `plain`); the `GG_COMMIT_PAGER` env var still overrides.
 `[ui] show_eol_only_changes` (default `false`) controls whether a file whose
 only unstaged change is its line endings (CRLF↔LF) is shown as modified — by
 default such files are hidden from the Files panel and its count badge as noise;

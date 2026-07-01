@@ -45,6 +45,17 @@ type UIConfig struct {
 	CommitBatchSize      int `toml:"commit_batch_size"`       // commits per later page (scroll / ctrl+l); <=0 = unset (default 300)
 	CommitSearchMaxPages int `toml:"commit_search_max_pages"` // eager /-search page cap before re-prompting; <=0 = unset (default 5)
 
+	// CommitSort selects commit ordering for the Commits panel + graph:
+	//   "date-order" — git --date-order: a global topological sort (parent never
+	//                  precedes its child ⇒ perfect graph lanes), slower on very
+	//                  large repos. THE DEFAULT (used when the key is missing).
+	//   "plain"      — git's lazy newest-first order; fastest on huge repos, but
+	//                  the graph can draw a disconnected lane stub when date order
+	//                  disagrees with topology (e.g. after a squash).
+	// Empty = unset (zero-is-unset overlay rule); resolved to the default.
+	// Persisted per-repo (.gg.toml) so a huge repo can opt down to "plain".
+	CommitSort string `toml:"commit_sort"`
+
 	ShowEOLOnlyChanges bool `toml:"show_eol_only_changes"` // surface files whose only unstaged change is line endings (CRLF↔LF); false (default) hides them as noise
 
 	// DisableSlowOpConfirm turns OFF the yes/no confirmation shown before slow
@@ -111,7 +122,7 @@ func Defaults() Config {
 			DefaultBranchTemplate: "b/from-<parent-branch>-<random-alpha:4>",
 		},
 		UI: UIConfig{WheelStep: 3, HScrollStep: 8, CommitGraphLanes: 8, CommitGraphMinLanes: 2, CommitGraphStep: 4,
-			CommitInitialCount: 300, CommitBatchSize: 300, CommitSearchMaxPages: 5},
+			CommitInitialCount: 300, CommitBatchSize: 300, CommitSearchMaxPages: 5, CommitSort: "date-order"},
 	}
 }
 
@@ -217,6 +228,9 @@ func overlayUI(dst *UIConfig, src UIConfig) {
 	}
 	if src.CommitSearchMaxPages > 0 {
 		dst.CommitSearchMaxPages = src.CommitSearchMaxPages
+	}
+	if src.CommitSort != "" {
+		dst.CommitSort = src.CommitSort
 	}
 	// Inverted polarity: the default (false) is the active feature (hide), so
 	// only a true in a higher layer overlays — matching the zero-is-unset rule.

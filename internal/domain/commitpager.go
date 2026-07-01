@@ -38,3 +38,13 @@ func (p dateOrderPager) Page(ctx context.Context, limit, skip, gen int, scope Lo
 }
 
 func (p dateOrderPager) Name() string { return "date-order" }
+
+// pagerForMode maps a commit-sort mode to a page-fetch strategy. "date-order"
+// asks git for a global topological sort (perfect graph lanes); every other mode
+// ("plain", "") uses the fast lazy walk.
+func pagerForMode(svc *Service, mode string) CommitPager {
+	if mode == "date-order" {
+		return dateOrderPager{svc: svc}
+	}
+	return plainPager{svc: svc}
+}

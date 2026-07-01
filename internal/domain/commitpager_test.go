@@ -49,6 +49,53 @@ func TestFeedLoadsViaPager(t *testing.T) {
 	}
 }
 
+// TestSetSortModeSelectsPager: SetSortMode swaps the page strategy so a plain
+// feed can be switched to --date-order at runtime (the Settings toggle path),
+// and back again.
+func TestSetSortModeSelectsPager(t *testing.T) {
+	t.Setenv("GG_COMMIT_PAGER", "") // no env override; the argument governs
+	f := gitexec.NewFakeRunner()
+	var argv []string
+	f.SetHandler("git log", func(ctx context.Context, a []string) (gitexec.Result, error) {
+		argv = a
+		return gitexec.Result{Stdout: ""}, nil
+	})
+	feed := New(&git.Repo{Runner: f}).CommitFeed()
+
+	feed.SetSortMode("date-order")
+	feed.LoadInitial(context.Background())
+	if !slices.Contains(argv, "--date-order") {
+		t.Errorf("after SetSortMode(date-order): argv missing --date-order: %v", argv)
+	}
+	if got := feed.PagerName(); got != "date-order" {
+		t.Errorf("PagerName = %q, want date-order", got)
+	}
+
+	feed.SetSortMode("plain")
+	feed.LoadInitial(context.Background())
+	if slices.Contains(argv, "--date-order") {
+		t.Errorf("after SetSortMode(plain): argv must omit --date-order: %v", argv)
+	}
+}
+
+// TestSetSortModeEnvOverride: GG_COMMIT_PAGER, when set, wins over the argument
+// (the power-user/testing escape hatch).
+func TestSetSortModeEnvOverride(t *testing.T) {
+	t.Setenv("GG_COMMIT_PAGER", "date-order")
+	f := gitexec.NewFakeRunner()
+	var argv []string
+	f.SetHandler("git log", func(ctx context.Context, a []string) (gitexec.Result, error) {
+		argv = a
+		return gitexec.Result{Stdout: ""}, nil
+	})
+	feed := New(&git.Repo{Runner: f}).CommitFeed()
+	feed.SetSortMode("plain") // env override must keep date-order
+	feed.LoadInitial(context.Background())
+	if !slices.Contains(argv, "--date-order") {
+		t.Errorf("env override should keep --date-order despite SetSortMode(plain): %v", argv)
+	}
+}
+
 // TestFeedStillUsesDateOrder: under the date-order pager the feed's page fetch
 // still passes --date-order.
 func TestFeedStillUsesDateOrder(t *testing.T) {

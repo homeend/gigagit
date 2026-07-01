@@ -73,6 +73,7 @@ func (m Model) loadCmd() tea.Cmd {
 			}
 		}
 		feed.SetPageSizes(cfg.UI.CommitInitialCount, cfg.UI.CommitBatchSize)
+		feed.SetSortMode(cfg.UI.CommitSort) // pick plain/date-order walk before the first page
 		// Apply the EOL-only visibility setting before the Snapshot below reads
 		// status, so the Files panel and count badge honor it from first paint.
 		svc.SetShowEOLOnlyChanges(cfg.UI.ShowEOLOnlyChanges)

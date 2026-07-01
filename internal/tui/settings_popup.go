@@ -42,10 +42,16 @@ const (
 	settingsMenuAutoRefresh = "Auto-refresh"
 	settingsMenuRemoteTags  = "Auto remote-tag refresh"
 	settingsMenuRates       = "Refresh rates"
+	settingsMenuCommitSort  = "Commit sort"
 )
 
 // settingsMenu is the top-level menu order.
-var settingsMenu = []string{settingsMenuAgents, settingsMenuIdentity, settingsMenuPrefixes, settingsMenuHook, settingsMenuOpLog, settingsMenuErrors, settingsMenuAutoRefresh, settingsMenuRemoteTags, settingsMenuRates}
+var settingsMenu = []string{settingsMenuAgents, settingsMenuIdentity, settingsMenuPrefixes, settingsMenuHook, settingsMenuOpLog, settingsMenuErrors, settingsMenuAutoRefresh, settingsMenuRemoteTags, settingsMenuRates, settingsMenuCommitSort}
+
+// commitSortModes is the cycle order for the "Commit sort" menu toggle:
+// date-order (default; git --date-order, perfect lanes) → plain (fast, git's
+// lazy order).
+var commitSortModes = []string{"date-order", "plain"}
 
 // settingsMenuLabel renders one menu row. The operation-log row is dynamic: it
 // shows the on/off state and the log filename, so the menu both reveals whether
@@ -88,7 +94,43 @@ func settingsMenuLabel(m Model, i int) string {
 		}
 		return settingsMenuRemoteTags + ": on"
 	}
+	if settingsMenu[i] == settingsMenuCommitSort {
+		return settingsMenuCommitSort + ": " + m.commitSort()
+	}
 	return settingsMenu[i]
+}
+
+// commitSort returns the configured commit-sort mode, defaulting to "date-order"
+// before config loads or when unset.
+func (m Model) commitSort() string {
+	if m.cfg.UI.CommitSort == "" {
+		return "date-order"
+	}
+	return m.cfg.UI.CommitSort
+}
+
+// cycleCommitSort advances the commit-sort mode (date-order ↔ plain), persists
+// it to the repo .gg.toml, swaps the feed's page strategy, and re-walks the feed
+// so the Commits panel + graph redraw in the new order.
+func (m Model) cycleCommitSort() (Model, tea.Cmd) {
+	cur := m.commitSort()
+	next := commitSortModes[0]
+	for i, mode := range commitSortModes {
+		if mode == cur {
+			next = commitSortModes[(i+1)%len(commitSortModes)]
+			break
+		}
+	}
+	m.cfg.UI.CommitSort = next
+	if m.repoConfigPath == "" {
+		m.statusMsg = "commit sort → " + next + " (not saved: no repo config path)"
+	} else if err := config.SetCommitSort(m.repoConfigPath, next); err != nil {
+		m.statusMsg = "commit sort → " + next + " (not saved: " + err.Error() + ")"
+	} else {
+		m.statusMsg = "commit sort: " + next + " — reloading commits…"
+	}
+	m.feed.SetSortMode(next)
+	return m.reloadSourcesCmd([]sourceKey{srcFeed}, true, false)
 }
 
 // toggleOpLog flips the operation log, persisting the choice to the global
@@ -252,6 +294,8 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				return m.toggleAutoRefresh(), nil // stays open so the state flip is visible
 			case settingsMenuRemoteTags:
 				return m.toggleAutoRemoteTags(), nil // stays open so the flip is visible
+			case settingsMenuCommitSort:
+				return m.cycleCommitSort() // stays open; re-walks the feed in the new order
 			case settingsMenuRates:
 				p.ratesView = true
 				p.ratesSel = 0

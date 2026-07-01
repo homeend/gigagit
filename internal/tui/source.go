@@ -315,6 +315,7 @@ func (m Model) bootstrapCmd() tea.Cmd {
 			}
 		}
 		feed.SetPageSizes(cfg.UI.CommitInitialCount, cfg.UI.CommitBatchSize)
+		feed.SetSortMode(cfg.UI.CommitSort)
 		svc.SetShowEOLOnlyChanges(cfg.UI.ShowEOLOnlyChanges)
 		return configReadyMsg{cfg: cfg, repoTOML: repoTOML, top: root}
 	}
