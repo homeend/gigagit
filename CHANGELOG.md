@@ -9,6 +9,18 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Fixed
+- **Pressing `l` or `enter` on the "Working tree" or "Staged" pseudo-commit
+  row (Commits panel) opened the files view with a "compare: DiffTreeFiles:
+  unsupported endpoint pair" error, and the view then wedged — only `esc`
+  could close it (`up`/`down`/`j`/`k` were silent no-ops on the 1-line
+  error popup).** `wipEndpoints` (`internal/tui/wip_rows.go`) built the
+  compare-endpoint pair backwards: `DiffTreeFiles` only implements the four
+  *older → newer* pairs (documented left = older, right = newer), but every
+  WIP-row branch returned *newer, older*, which matches none of them and
+  always errors. Fixed by swapping the return order in all three branches;
+  the pre-existing `wip_rows_diff_test.go` assertions had encoded the same
+  reversed order (introduced together with the WIP-row `l`/`enter` routing
+  in the same commit) and are corrected alongside the fix.
 - **Creating a tag (or anything else typed/pasted into a text field) could
   crash with a cryptic `fork/exec ...git.exe: invalid argument` on Windows.**
   Pasting into a Windows console can synthesize a stray NUL (U+0000) key

@@ -20,11 +20,11 @@ func TestWipSingleSelectOpensCompare(t *testing.T) {
 	if mm.filesView == nil {
 		t.Fatal("l on a wip row must open the compare files view")
 	}
-	if mm.filesLeft.Kind != model.EndpointIndex {
-		t.Fatalf("staged row left endpoint = %v, want EndpointIndex", mm.filesLeft.Kind)
+	if mm.filesLeft.Kind != model.EndpointCommit || mm.filesLeft.Hash != m.commits[0].Hash {
+		t.Fatalf("staged row left endpoint = %+v, want HEAD %s", mm.filesLeft, m.commits[0].Hash)
 	}
-	if mm.filesRight.Kind != model.EndpointCommit || mm.filesRight.Hash != m.commits[0].Hash {
-		t.Fatalf("staged row right endpoint = %+v, want HEAD %s", mm.filesRight, m.commits[0].Hash)
+	if mm.filesRight.Kind != model.EndpointIndex {
+		t.Fatalf("staged row right endpoint = %v, want EndpointIndex", mm.filesRight.Kind)
 	}
 }
 
@@ -41,8 +41,8 @@ func TestWipWorktreeRowComparesAgainstIndex(t *testing.T) {
 	if mm.filesView == nil {
 		t.Fatal("l on the working-tree row must open the compare files view")
 	}
-	if mm.filesLeft.Kind != model.EndpointWorkTree || mm.filesRight.Kind != model.EndpointIndex {
-		t.Fatalf("working-tree row endpoints = %v↔%v, want WorkTree↔Index", mm.filesLeft.Kind, mm.filesRight.Kind)
+	if mm.filesLeft.Kind != model.EndpointIndex || mm.filesRight.Kind != model.EndpointWorkTree {
+		t.Fatalf("working-tree row endpoints = %v↔%v, want Index↔WorkTree", mm.filesLeft.Kind, mm.filesRight.Kind)
 	}
 }
 
@@ -59,8 +59,11 @@ func TestWipEnterOpensCompare(t *testing.T) {
 	if mm.filesView == nil {
 		t.Fatal("enter on a wip row must open the compare files view")
 	}
-	if mm.filesLeft.Kind != model.EndpointIndex {
-		t.Fatalf("staged row left endpoint = %v, want EndpointIndex", mm.filesLeft.Kind)
+	if mm.filesLeft.Kind != model.EndpointCommit || mm.filesLeft.Hash != m.commits[0].Hash {
+		t.Fatalf("staged row left endpoint = %+v, want HEAD %s", mm.filesLeft, m.commits[0].Hash)
+	}
+	if mm.filesRight.Kind != model.EndpointIndex {
+		t.Fatalf("staged row right endpoint = %v, want EndpointIndex", mm.filesRight.Kind)
 	}
 }
 
