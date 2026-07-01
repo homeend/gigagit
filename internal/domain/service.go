@@ -67,19 +67,27 @@ func (s *Service) SetShowEOLOnlyChanges(show bool) *Service {
 // one place frontends construct the repo stack. It runs no git command. The
 // scriptable CLI uses this: a real terminal can service an ssh/credential prompt.
 func Open(workdir string) *Service {
-	return openWith(workdir, false)
+	return openWith(workdir, false, observ.NewRing(200))
 }
 
 // OpenTUI is Open for the interactive TUI: its runner forces ssh BatchMode so an
 // ssh host-key/passphrase prompt fails fast instead of hanging the raw-mode UI
 // (mirroring the always-on GIT_TERMINAL_PROMPT=0 for HTTPS). Used by the repo
-// switcher's reRoot; the initial TUI session is wired the same way in cmd/gg.
+// switcher's reRoot; cmd/gg wires the initial session via OpenTUIWithRing.
 func OpenTUI(workdir string) *Service {
-	return openWith(workdir, true)
+	return openWith(workdir, true, observ.NewRing(200))
 }
 
-func openWith(workdir string, sshBatch bool) *Service {
-	er := gitexec.NewExecRunner("git", workdir, observ.NewRing(200))
+// OpenTUIWithRing is OpenTUI with a caller-supplied span ring: cmd/gg keeps the
+// ring (and, via Repo, the repo) so its panic-dump defer can include the
+// session's git spans. This keeps the runner stack built in exactly one place —
+// any change to the wrapping here reaches both the initial session and reRoot.
+func OpenTUIWithRing(workdir string, ring *observ.Ring) *Service {
+	return openWith(workdir, true, ring)
+}
+
+func openWith(workdir string, sshBatch bool, ring *observ.Ring) *Service {
+	er := gitexec.NewExecRunner("git", workdir, ring)
 	if sshBatch {
 		er = er.WithSSHBatchMode()
 	}
@@ -93,8 +101,9 @@ func New(repo *git.Repo) *Service {
 	return &Service{repo: repo, factory: cache.NewFactory(0, 0)}
 }
 
-// Repo exposes the underlying repo for READ verbs. Transitional: stage 2
-// moves frontend reads into domain queries; stage 4 removes this.
+// Repo exposes the underlying repo to the composition root (cmd/gg's
+// panic-dump defer) and tests. Not for frontends: reads go through domain
+// queries, commands through Execute.
 func (s *Service) Repo() *git.Repo { return s.repo }
 
 // Differ returns this Service's diff engine: enhanced (intraline) and cached,
