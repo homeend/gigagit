@@ -129,7 +129,7 @@ type ReflogEntry struct {
 	Hash      string // full SHA
 	ShortHash string // abbreviated SHA
 	Subject   string // %gs, e.g. "commit: add foo" or "checkout: moving from main to dev"
-	Rel       string // %gr relative date, e.g. "2 hours ago"
+	Rel       string // relative time, e.g. "2 hours ago" (from %gd under --date=relative)
 }
 
 // RefKind classifies a ref decoration on a commit.

@@ -10,13 +10,19 @@ import (
 )
 
 // reflogFmt joins fields with NUL and records with newline. %gs (the reflog
-// subject) is single-line, so newline record splitting is safe.
-const reflogFmt = "%H%x00%h%x00%gd%x00%gs%x00%gr"
+// subject) is single-line, so newline record splitting is safe. Under
+// --date=relative the %gd selector renders as "HEAD@{2 minutes ago}", which is
+// how we recover the entry's relative time — git has no standalone reflog
+// relative-time placeholder (%gr does not exist; it prints literally).
+const reflogFmt = "%H%x00%h%x00%gd%x00%gs"
 
 // ReflogEntries returns up to limit HEAD reflog entries, newest first. A repo
 // with no reflog yields an empty slice (not an error).
 func (r *Repo) ReflogEntries(ctx context.Context, limit int) ([]model.ReflogEntry, error) {
-	b := gitcmd.New("reflog").Arg("--format=" + reflogFmt)
+	// --date=relative turns %gd into the human-readable "HEAD@{2 minutes ago}"
+	// form; we split the relative time back out and rebuild the addressable
+	// numeric selector (HEAD@{N}) from the row index.
+	b := gitcmd.New("reflog").Arg("--date=relative", "--format="+reflogFmt)
 	if limit > 0 {
 		b = b.Arg("-n", strconv.Itoa(limit))
 	}
@@ -30,18 +36,29 @@ func (r *Repo) ReflogEntries(ctx context.Context, limit int) ([]model.ReflogEntr
 			continue
 		}
 		f := strings.Split(line, "\x00")
-		if len(f) < 5 {
+		if len(f) < 4 {
 			continue
 		}
 		out = append(out, model.ReflogEntry{
 			Hash:      f[0],
 			ShortHash: f[1],
-			Selector:  f[2],
+			Selector:  "HEAD@{" + strconv.Itoa(len(out)) + "}",
 			Subject:   f[3],
-			Rel:       f[4],
+			Rel:       reflogRelTime(f[2]),
 		})
 	}
 	return out, nil
+}
+
+// reflogRelTime extracts the bare relative time from a --date=relative selector
+// like "HEAD@{2 minutes ago}" → "2 minutes ago". Anything unexpected is
+// returned unchanged.
+func reflogRelTime(selector string) string {
+	i := strings.IndexByte(selector, '{')
+	if i < 0 {
+		return selector
+	}
+	return strings.TrimSuffix(selector[i+1:], "}")
 }
 
 // LastReflogSubject returns the subject of the most recent HEAD reflog entry,
