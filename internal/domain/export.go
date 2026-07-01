@@ -132,10 +132,7 @@ func (s *Service) ExportBookmark(ctx context.Context, b model.Bookmark) ([]model
 }
 
 func commitDirName(sha string) string {
-	if len(sha) > 7 {
-		sha = sha[:7]
-	}
-	return "commit-" + sha
+	return "commit-" + shortSHA(sha)
 }
 
 func firstNonEmpty(a, b string) string {
