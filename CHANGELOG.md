@@ -46,6 +46,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   including outside a git repository.
 
 ### Fixed
+- **After switching repos (`R`), per-repo Settings writes landed in the
+  previous repo's `.gg.toml`.** The repo switch reloads through the legacy
+  load path, which updated the in-memory config but never rebound the
+  Settings write target (`repoConfigPath`) — only app startup set it. Every
+  per-repo write after a switch ("Show graph", "Commit sort", "Refresh
+  rates", file-watch toggles, the worktree post-create hook editor) therefore
+  edited the repo you came FROM. The load result now carries the new repo's
+  `.gg.toml` path and rebinds the target alongside the config.
 - **Holding `End` (or `PgDn` / `j`) on the Commits panel kept loading pages
   long after the key was released.** Root cause (profiled at 100k loaded
   commits): every keystroke's frame cost O(feed) — `commitIdentWidth` ran a

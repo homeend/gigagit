@@ -560,6 +560,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.reflog = msg.reflog
 			m.currentWorktree = msg.currentWorktree
 			m.cfg = msg.cfg
+			// Rebind the per-repo Settings write target on the legacy load path —
+			// configReadyMsg only covers app startup. Without this, every Settings
+			// write after a repo switch ("Show graph", "Commit sort", refresh
+			// rates, the hook editor) landed in the PREVIOUS repo's .gg.toml.
+			m.repoConfigPath = msg.repoTOML
 			// Apply the persisted Commits render mode ([ui] show_graph) on the
 			// legacy load path too (reRoot / repo switch).
 			m.commitListMode = !m.showGraphConfigured()
