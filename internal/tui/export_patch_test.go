@@ -68,3 +68,72 @@ func TestCommitExportPatchRowInMenu(t *testing.T) {
 		t.Fatal("commit-export-patch must appear in the Commits . menu")
 	}
 }
+
+func TestExportFilePatchRowOnlyForCommitDiff(t *testing.T) {
+	// A commit-vs-parent file diff (rev set, not compare mode) offers the row.
+	// filesModeChanged is the zero value of filesMode ("a commit's changed files
+	// (vs parent)"), so this also matches a bare zero-value Model; set it
+	// explicitly for clarity. (The brief calls this "filesModeCommit", which
+	// does not exist in files_view.go — filesModeChanged is the real name.)
+	m := Model{}
+	m.filesMode = filesModeChanged
+	dv := &diffView{title: "src/foo.go", rev: "abc123"}
+	m = m.pushLayer(dv) // however diffView is installed; see openDiffForFileLine
+	if _, ok := m.exportFilePatchRow(); !ok {
+		t.Fatal("commit file diff should offer Export this file's diff as patch")
+	}
+	// Compare-mode diff (rev set but comparing two endpoints) must NOT offer it.
+	m2 := Model{}
+	m2.filesMode = filesModeCompare
+	dv2 := &diffView{title: "src/foo.go", rev: "abc123"}
+	m2 = m2.pushLayer(dv2)
+	if _, ok := m2.exportFilePatchRow(); ok {
+		t.Fatal("compare-mode diff must not offer file patch export")
+	}
+	// A working-tree diff (rev == "") must NOT offer it.
+	m3 := Model{}
+	dv3 := &diffView{title: "src/foo.go", rev: ""}
+	m3 = m3.pushLayer(dv3)
+	if _, ok := m3.exportFilePatchRow(); ok {
+		t.Fatal("working-tree diff must not offer file patch export")
+	}
+}
+
+// TestExportFilePatchRowHiddenBehindHistorySurface guards against a leak found
+// during review: diff_view.go's "h"/"b" keys push a *historyView/*blameView ON
+// TOP of the diff view without popping it (so the split-pane right side can
+// reuse the diff). m.diffLayer() (layerOf[*diffView]) scans the WHOLE stack
+// top-down and would still find the buried diff, but the diff is no longer the
+// front surface — the same distinction availableActions's onStackFile check
+// makes for the neighboring files-view rows. exportFilePatchRow must key off
+// the literal top of the stack (m.topLayer()), not "a diff exists somewhere."
+func TestExportFilePatchRowHiddenBehindHistorySurface(t *testing.T) {
+	m := Model{}
+	dv := &diffView{title: "src/foo.go", rev: "abc123"}
+	m = m.pushLayer(dv)
+	hv := newHistoryView(navContext{path: "src/foo.go", rev: "abc123"})
+	m = m.pushLayer(hv)
+	if _, ok := m.exportFilePatchRow(); ok {
+		t.Fatal("history surface on top of a diff must not offer file patch export for the buried diff")
+	}
+}
+
+// TestExportFilePatchRowInMenu guards the action_menu.go wiring itself (the
+// row must actually surface through availableActions when a commit-vs-parent
+// diff is front), not just the row helper in isolation. Mirrors
+// TestCommitExportPatchRowInMenu.
+func TestExportFilePatchRowInMenu(t *testing.T) {
+	m := Model{}
+	m.filesMode = filesModeChanged
+	dv := &diffView{title: "src/foo.go", rev: "abc123"}
+	m = m.pushLayer(dv)
+	found := false
+	for _, r := range availableActions(m) {
+		if r.id == "file-export-patch" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("file-export-patch must appear in the diff view . menu")
+	}
+}

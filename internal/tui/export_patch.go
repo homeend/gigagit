@@ -76,6 +76,58 @@ func (p *exportPatchPopup) render(m Model, below string) string {
 	return overlayCenter(clipToHeight(below, h), box, w, h)
 }
 
+// startExportFilePatch resolves a single file's patch within sha off-thread
+// (ExportDefaultDir + FilePatch), then delivers patchResolvedMsg (reused).
+func (m Model) startExportFilePatch(sha, path string) (Model, tea.Cmd) {
+	svc := m.svc
+	return m, func() tea.Msg {
+		ctx := context.Background()
+		data, name, err := svc.FilePatch(ctx, sha, path)
+		if err != nil {
+			return patchResolvedMsg{err: err}
+		}
+		dir, err := svc.ExportDefaultDir(ctx)
+		if err != nil {
+			return patchResolvedMsg{err: err}
+		}
+		return patchResolvedMsg{data: data, defaultPath: filepath.Join(dir, name)}
+	}
+}
+
+// exportFilePatchRow offers "Export this file's diff as patch" inside the diff
+// view, but ONLY when the diff view is the FRONT surface showing a
+// commit-vs-parent file diff: dv.rev is the commit, and NOT compare mode
+// (compare-mode diffs also set dv.rev, but the patch would be commit-vs-parent,
+// not the compared endpoints). A merge dv.rev is caught by the domain guard
+// (surfaced as a status message).
+//
+// Deliberately uses m.topLayer() (the literal top of the stack), NOT
+// m.diffLayer() (layerOf[*diffView], which scans top-down and returns a diff
+// buried under a later push). Pressing h/b on a diff view pushes a
+// *historyView/*blameView ON TOP of it without popping it (diff_view.go's "h"/
+// "b" cases), so diffLayer() still finds the buried diff while a history/blame
+// surface is genuinely front. Using diffLayer() here would leak this row onto
+// that surface's . menu, acting on a diff the user can no longer see — the
+// exact leak availableActions's onStackFile check (action_menu.go) guards
+// against for the neighboring files-view rows.
+func (m Model) exportFilePatchRow() (actionRow, bool) {
+	if !m.opsIdle() {
+		return actionRow{}, false
+	}
+	dv, ok := m.topLayer().(*diffView)
+	if !ok || dv.rev == "" || m.inCompareMode() {
+		return actionRow{}, false
+	}
+	sha, path := dv.rev, dv.title
+	return actionRow{
+		id:    "file-export-patch",
+		label: "Export this file's diff as patch",
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			return m.startExportFilePatch(sha, path)
+		},
+	}, true
+}
+
 // commitExportPatchRow offers "Export commit as patch" on the Commits panel (and
 // the commit-list side of a files view). Pre-hidden for merge commits: their
 // patch would be wrong (domain refuses them, but hiding avoids a dead row).
