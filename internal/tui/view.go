@@ -666,8 +666,35 @@ func (m Model) renderPanel(p panel, label string, rows []string, decos []rowDeco
 		cmpSet := m.compareSetDisplayIndices(p)
 		sel := m.sel[p]
 		isFocused := m.panelFocused(p)
+		// Only the rows the window will actually show need their (potentially
+		// expensive) per-row text built. In cutoff/scroll mode each row is exactly
+		// one display line, so the visible span is [start,end) and off-window rows
+		// collapse to an empty single line — the visible output is identical (the
+		// window is centred on sel just as renderWindow re-derives it) but the work
+		// is O(visible) instead of O(len(rows)). This is what keeps a pathological
+		// untracked set (e.g. a 40k-file graphify-out/, whose ~92-col paths each hit
+		// the O(len²) elideFilePath path) from re-eliding every row every frame and
+		// freezing the UI. Wrap mode can spread one row over many lines, so it must
+		// build every row for the windowing math to stay exact.
+		start, end := 0, len(rows)
+		anchor := sel
+		if m.dispModes[p] != modeWrap && len(rows) > rowsCap {
+			// Clamp the window anchor into range so a stale out-of-range sel (the
+			// file list can shrink under a discard/stage/refresh before nav re-clamps
+			// it) never lands the window on rows we skipped building — which would
+			// blank the panel. renderWindow is handed the same clamped anchor so its
+			// visible span matches the rows we populated.
+			if anchor < 0 {
+				anchor = 0
+			} else if anchor >= len(rows) {
+				anchor = len(rows) - 1
+			}
+			start = windowStart(len(rows), rowsCap, anchor)
+			end = start + rowsCap
+		}
 		wr := make([]winRow, len(rows))
-		for i, row := range rows {
+		for i := start; i < end; i++ {
+			row := rows[i]
 			prefix := "  "
 			var st lipgloss.Style
 			if cmpSet[i] {
@@ -696,7 +723,7 @@ func (m Model) renderPanel(p panel, label string, rows []string, decos []rowDeco
 			}
 			wr[i] = winRow{text: prefix + text, style: st, decorate: deco}
 		}
-		body := renderWindow(wr, winOpts{w: innerW, h: rowsCap, mode: m.dispModes[p], anchor: sel, hscroll: m.hscroll[p]})
+		body := renderWindow(wr, winOpts{w: innerW, h: rowsCap, mode: m.dispModes[p], anchor: anchor, hscroll: m.hscroll[p]})
 		lines = append(lines, body...)
 	}
 	for len(lines) < contentH {

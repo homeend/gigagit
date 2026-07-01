@@ -8,6 +8,18 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+### Fixed
+- **The Files/Staged panels no longer freeze the UI on a repo with a huge
+  untracked set** (e.g. a 40k-file `graphify-out/` directory). The left-panel
+  render only builds and elides the rows the window will actually show
+  (`[start,end)` around the selection) instead of middle-eliding **every** file
+  on **every** frame. Because each long path hit an `O(len²)` width-eliding
+  loop, a 40k-file panel cost ~1.5 s per frame — and Bubble Tea re-renders on
+  every message (startup source fan-out, spinner ticks, keystrokes), so the
+  render queue never drained and the UI locked up. Post-fix the same panel
+  renders in ~40 ms (a ~35× drop; per-row allocations fall 174 → ~1). Wrap mode
+  still builds every row so its multi-line windowing stays exact.
+
 ### Changed
 - **The Commits-panel tip markers are now arrows: `↓` for a local branch's tip
   and `↑` for its tracked-remote tip** (previously `■` and `▲`). A commit that is
