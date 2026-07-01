@@ -1247,7 +1247,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Load the next batch regardless of cursor position (the auto-page path
 			// only fires near the end). Commits panel only; the feed guards exhausted/
 			// in-flight via CanLoadMore.
-			if m.focus == panelCommits && m.feed != nil && m.feed.CanLoadMore() {
+			if m.focus == panelCommits && !m.commitsLoading && m.feed != nil && m.feed.CanLoadMore() {
 				m.commitsLoading = true
 				return m, m.loadMoreCmd()
 			}
@@ -2332,6 +2332,16 @@ func (m Model) rebuildCommitGraph() Model {
 // already loading" decision. When a page is dispatched it sets commitsLoading so
 // the Commits title shows the in-flight indicator until commitsPagedMsg arrives.
 func (m Model) maybeLoadMoreCommits() (Model, tea.Cmd) {
+	// A page (or feed reload) is already in flight. commitsLoading is set
+	// synchronously at dispatch — unlike the feed's async inFlight — so this is
+	// the single chokepoint that (a) closes the double-dispatch race and (b)
+	// paces held-key auto-repeat by completion instead of queuing a load per
+	// keystroke. It clears on the load's completion message (commitsPagedMsg /
+	// commitsReloadedMsg / the full load), so it cannot get stuck. Covers every
+	// caller: End / PgDn / j / k, ctrl+l, and the mouse wheel.
+	if m.commitsLoading {
+		return m, nil
+	}
 	if m.feed == nil {
 		return m, nil
 	}
