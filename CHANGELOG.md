@@ -267,6 +267,18 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   format used `%gr`, which git does not recognize and prints verbatim. The time
   is now read from the reflog selector under `--date=relative`, so each row shows
   its real relative time and the numeric `HEAD@{N}` selector is preserved.
+- **A diverged/ahead `origin/main` (and other tracked remote tips) now shows in
+  the Commits panel on startup, not only after a manual refresh.** The commit
+  feed only walks in a branch's remote tip when its upstream is added to the
+  scope, and that upstream is dropped until the *remote branches* source has
+  loaded (a configured-but-unfetched ref would make `git log` error). The one
+  place that re-walked the feed once the tracked upstreams became known fired on
+  the *branches* and *feed* sources arriving but **not** on the *remotes* source
+  — so whenever remotes was the last of the three to land during the parallel
+  startup fan-out, the upstream re-walk never happened and the remote tip's
+  ahead commits stayed hidden (looking "not loaded") until you pressed `r`. The
+  remotes arrival now re-checks the same latch, so whichever of the three lands
+  last triggers the walk.
 - **A failed squash now unmarks the off-branch commits it complained about.**
   Squashing a ◉ selection that includes a commit not on the current branch
   (easy to do from the multi-branch commit feed) fails the membership check with
