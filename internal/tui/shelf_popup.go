@@ -115,7 +115,7 @@ func (m Model) renderShelfPopupBox(p *shelfPopup) string {
 	// Wrap the hint to the text width so [z] mode / [esc] close stay visible even
 	// on a narrow terminal, where a single-line footer would truncate them off
 	// (the reason z went undiscovered).
-	hint := []string{"[?] keys", "[enter] diff", "[e] editor", "[p] restore", "[m] mark/compare", "[x] remove", "[c] vs bookmark", "[/] filter", "[z] mode", "[esc] close"}
+	hint := []string{"[?] keys", "[enter] diff", "[e] editor", "[p] restore", "[t] temp dir", "[m] mark/compare", "[x] remove", "[c] vs bookmark", "[/] filter", "[z] mode", "[esc] close"}
 	parts = append(parts, "")
 	parts = append(parts, wrapParts(hint, textW, "  ")...)
 	return popupBox(inner, strings.Join(parts, "\n"))
@@ -265,6 +265,15 @@ func (p *shelfPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			return m, m.openInEditorCmd(name, func(ctx context.Context) ([]byte, error) {
 				return svc.ShelfBlob(ctx, id)
 			})
+		case "t":
+			if p.compareRef != nil {
+				return m, nil
+			}
+			e, ok := p.selected()
+			if !ok {
+				return m, nil
+			}
+			return m.startTempExportShelf(e)
 		}
 	}
 	return m, nil
