@@ -42,6 +42,7 @@ var settingDocs = []settingDoc{
 	{"ui", "commit_initial_count", 300, "commits loaded on first paint (raise to find more without scrolling)"},
 	{"ui", "commit_batch_size", 300, "commits loaded per later page (scroll to the end, or ctrl+l)"},
 	{"ui", "commit_search_max_pages", 5, "pages eager /-search scans before asking to search deeper"},
+	{"ui", "commit_sort", "date-order", "commit ordering for the Commits panel + graph: date-order (default; git --date-order, perfect graph lanes) or plain (fastest on huge repos, but the graph can mis-draw forks)"},
 
 	{"ui", "show_eol_only_changes", false, "show files whose only unstaged change is line endings (CRLF↔LF); default hides them as noise"},
 	{"ui", "disable_slow_op_confirm", false, "skip the yes/no confirmation shown before slow working-tree ops (switch, checkout, pull, merge, rebase, fast-forward, reset)"},

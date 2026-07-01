@@ -35,6 +35,14 @@ func SetGlobalDisableRemoteTagsAuto(path string, disabled bool) error {
 	return setScalarLine(path, "refresh", "disable_remote_tags_auto", strconv.FormatBool(disabled))
 }
 
+// SetCommitSort persists `[ui] commit_sort` to the given config file (the repo
+// .gg.toml), preserving comments, backing the Settings "Commit sort" cycle. The
+// value is a quoted string ("plain"|"date-order"). Per-repo on purpose: ordering
+// is a per-repo cost trade-off (a huge repo may want "plain").
+func SetCommitSort(path, mode string) error {
+	return setScalarLine(path, "ui", "commit_sort", strconv.Quote(mode))
+}
+
 // SetRefreshInterval persists `[refresh] <source> = secs` to the given config
 // file (the repo .gg.toml), preserving the rest of the file. Backs the Settings
 // "Refresh rates" inline editor.

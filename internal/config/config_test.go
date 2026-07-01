@@ -110,6 +110,53 @@ func TestLoadMalformedTOMLErrors(t *testing.T) {
 	}
 }
 
+func TestUICommitSortLayers(t *testing.T) {
+	dir := t.TempDir()
+	missing := filepath.Join(dir, "missing.toml")
+
+	// Default (key missing): date-order.
+	cfg, err := Load(missing, missing)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.UI.CommitSort != "date-order" {
+		t.Errorf("default commit_sort = %q, want date-order", cfg.UI.CommitSort)
+	}
+
+	// Repo sets plain (opt down on a big repo).
+	r := filepath.Join(dir, "repo.toml")
+	writeFile(t, r, "[ui]\ncommit_sort = \"plain\"\n")
+	cfg, err = Load(missing, r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.UI.CommitSort != "plain" {
+		t.Errorf("repo commit_sort = %q, want plain", cfg.UI.CommitSort)
+	}
+
+	// Repo wins over global.
+	g := filepath.Join(dir, "global.toml")
+	writeFile(t, g, "[ui]\ncommit_sort = \"date-order\"\n")
+	writeFile(t, r, "[ui]\ncommit_sort = \"plain\"\n")
+	cfg, err = Load(g, r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.UI.CommitSort != "plain" {
+		t.Errorf("repo-over-global commit_sort = %q, want plain", cfg.UI.CommitSort)
+	}
+
+	// Empty string is unset: cannot reset a lower layer to empty (falls back to default).
+	writeFile(t, r, "[ui]\ncommit_sort = \"\"\n")
+	cfg, err = Load(missing, r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.UI.CommitSort != "date-order" {
+		t.Errorf("empty commit_sort must be ignored, got %q, want default date-order", cfg.UI.CommitSort)
+	}
+}
+
 func TestUIWheelStepLayers(t *testing.T) {
 	dir := t.TempDir()
 	missing := filepath.Join(dir, "missing.toml")

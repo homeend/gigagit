@@ -44,7 +44,7 @@ type CommitFeed struct {
 	gen         int                    // bumped by LoadInitial; tags pages so stale ones drop
 	inFlight    bool                   // at most one page request outstanding
 	cancel      context.CancelFunc     // cancels the in-flight load's ctx on supersede
-	pager       CommitPager            // page-fetch strategy; default dateOrderPager (legacy)
+	pager       CommitPager            // page-fetch strategy; default plainPager
 	initialPage int                    // configured first-paint size; <=0 → commitInitialPage
 	pageSize    int                    // configured later-page size; <=0 → commitPageSize
 	cache       map[string]cachedScope // scopeKey → remembered accumulation
@@ -57,15 +57,29 @@ func (s *Service) CommitFeed() *CommitFeed {
 	// opts into a global topological sort for guaranteed-perfect graph lanes (slow
 	// on a large repo). Every other value (incl. unset and "plain") uses the
 	// default plainPager: git's lazy newest-first order — instant on huge repos.
-	var pager CommitPager = plainPager{svc: s}
-	if os.Getenv("GG_COMMIT_PAGER") == "date-order" {
-		pager = dateOrderPager{svc: s}
-	}
-	return &CommitFeed{svc: s, hashes: map[string]bool{}, cache: map[string]cachedScope{}, pager: pager}
+	mode := os.Getenv("GG_COMMIT_PAGER") // legacy opt-in; "" → plain
+	return &CommitFeed{svc: s, hashes: map[string]bool{}, cache: map[string]cachedScope{}, pager: pagerForMode(s, mode)}
 }
 
 // PagerName reports the active page strategy ("plain" | "date-order").
-func (f *CommitFeed) PagerName() string { return f.pager.Name() }
+func (f *CommitFeed) PagerName() string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.pager.Name()
+}
+
+// SetSortMode swaps the page-fetch strategy for the given commit-sort mode
+// ("plain"|"date-order"). Apply before the next LoadInitial. The GG_COMMIT_PAGER
+// env var, when set, overrides the argument (legacy/testing escape hatch), so a
+// power user's env pin always wins over config.
+func (f *CommitFeed) SetSortMode(mode string) {
+	if env := os.Getenv("GG_COMMIT_PAGER"); env != "" {
+		mode = env
+	}
+	f.mu.Lock()
+	f.pager = pagerForMode(f.svc, mode)
+	f.mu.Unlock()
+}
 
 // SetScope sets the refspec for subsequent loads. Callers then LoadInitial to
 // re-walk; the gen bump drops any stale in-flight page.
