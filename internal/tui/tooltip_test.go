@@ -283,6 +283,15 @@ func TestTooltipOverflowsSingleLineCappedAtScreen(t *testing.T) {
 	if tw := lipgloss.Width(text); tw > m.width-revealClipMargin {
 		t.Errorf("clipped text is %d cols, want ≤ terminal width − margin (%d)", tw, m.width-revealClipMargin)
 	}
+	// The highlight must HUG the clipped text — no trailing blank yellow padding it
+	// out to the full screen width. The strip is sized to its text, so the line has
+	// no trailing spaces and is strictly narrower than the terminal.
+	if strings.HasSuffix(only, " ") {
+		t.Errorf("clipped reveal must not trail blank filler to the edge, got %q", only)
+	}
+	if w := ansi.StringWidth(lines[0]); w >= m.width {
+		t.Errorf("clipped reveal is %d cols, must be narrower than the terminal (%d) — sized to its text, not the full screen", w, m.width)
+	}
 }
 
 func TestTooltipRenderedInView(t *testing.T) {

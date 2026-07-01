@@ -117,7 +117,9 @@ const revealClipMargin = 5
 // shift left so it spills over whatever sits to its left — the reveal may use the
 // WHOLE terminal width, not just its own window. Only a row wider than the whole
 // terminal is clipped: it is trimmed to screenW − revealClipMargin and marked with
-// … so the ellipsis clears the right edge. Single line, never wrapped.
+// … so the ellipsis clears the right edge, and the highlight is sized to that
+// clipped text (not padded to the full screen), so the yellow strip hugs the text
+// instead of trailing blank yellow to the border. Single line, never wrapped.
 func revealLine(content string, contentEdge, innerW, screenW int) (line string, x int) {
 	x = contentEdge
 	full := content
@@ -129,15 +131,18 @@ func revealLine(content string, contentEdge, innerW, screenW int) (line string, 
 		x = screenW - revealW // shift left so the reveal's right edge sits at the screen edge
 	}
 	if x < 0 {
-		// Wider than the whole terminal: pin to the left edge and fill it, but trim the
-		// text to screenW − margin with … so the ellipsis clears the right border.
+		// Wider than the whole terminal: pin to the left edge and trim the text to
+		// screenW − margin with … so the ellipsis clears the right border. Size the
+		// highlight to the clipped text itself (no full-width fill) so the yellow
+		// strip hugs the text instead of spanning the whole screen with trailing
+		// blank padding.
 		x = 0
-		revealW = screenW
 		textCap := screenW - revealClipMargin
 		if textCap < 1 {
 			textCap = screenW
 		}
 		full = truncate(full, textCap)
+		revealW = lipgloss.Width(full)
 	}
 	return tooltipStyle.Render(padRight(full, revealW)), x
 }

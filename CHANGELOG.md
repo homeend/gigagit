@@ -21,10 +21,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   (`internal/tui/tooltip.go`) clipped a reveal wider than the terminal to the
   *full* screen width, so the text hugged the right border. It now trims such a
   reveal to terminal width − 5 and marks it with `…`, so the ellipsis sits clear
-  of the edge and it reads as a truncation rather than a cut-off line. The reveal
-  still overflows left to use the whole terminal width (not just the commit
-  window) whenever the subject fits within the terminal — only a subject longer
-  than the entire terminal is clipped.
+  of the edge and it reads as a truncation rather than a cut-off line; the yellow
+  highlight is sized to the clipped text (not padded to the full screen), so it no
+  longer trails blank yellow to the border. The reveal still overflows left to use
+  the whole terminal width (not just the commit window) whenever the subject fits
+  within the terminal — only a subject longer than the entire terminal is clipped.
 - **Pressing `l` or `enter` on the "Working tree" or "Staged" pseudo-commit
   row (Commits panel) opened the files view with a "compare: DiffTreeFiles:
   unsupported endpoint pair" error, and the view then wedged — only `esc`
