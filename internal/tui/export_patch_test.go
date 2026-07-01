@@ -97,6 +97,26 @@ func TestExportFilePatchRowOnlyForCommitDiff(t *testing.T) {
 	if _, ok := m3.exportFilePatchRow(); ok {
 		t.Fatal("working-tree diff must not offer file patch export")
 	}
+	// Full-tree mode ("a" toggle): dv.rev is still set, but the displayed diff
+	// is commit-vs-WORKING-TREE, not commit-vs-parent — must NOT offer it.
+	m4 := Model{}
+	m4.filesMode = filesModeFullTree
+	dv4 := &diffView{title: "src/foo.go", rev: "abc123"}
+	m4 = m4.pushLayer(dv4)
+	if _, ok := m4.exportFilePatchRow(); ok {
+		t.Fatal("full-tree diff must not offer file patch export")
+	}
+	// Stash diff: dv.rev is set, but a stash diff isn't a plain commit-vs-parent
+	// diff either, and offering the row leads to a confusing "merge commit"
+	// refusal — must NOT offer it.
+	m5 := Model{}
+	m5.filesMode = filesModeChanged
+	m5.stashView = &stashView{}
+	dv5 := &diffView{title: "src/foo.go", rev: "abc123"}
+	m5 = m5.pushLayer(dv5)
+	if _, ok := m5.exportFilePatchRow(); ok {
+		t.Fatal("stash diff must not offer file patch export")
+	}
 }
 
 // TestExportFilePatchRowHiddenBehindHistorySurface guards against a leak found

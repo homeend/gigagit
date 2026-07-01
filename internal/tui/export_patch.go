@@ -101,6 +101,14 @@ func (m Model) startExportFilePatch(sha, path string) (Model, tea.Cmd) {
 // not the compared endpoints). A merge dv.rev is caught by the domain guard
 // (surfaced as a status message).
 //
+// Also excluded in full-tree mode (m.inFullTree(), the "a" toggle): there the
+// on-screen diff is commit-vs-WORKING-TREE even though dv.rev is still set to
+// the commit, so a commit-vs-parent patch would silently diverge from what's
+// displayed — violating the "exported patch == displayed diff" invariant.
+// Also excluded for stash diffs (m.stashView != nil): dv.rev there isn't a
+// plain commit-vs-parent diff either, and offering the row just leads to a
+// confusing "merge commit" refusal from the domain guard.
+//
 // Deliberately uses m.topLayer() (the literal top of the stack), NOT
 // m.diffLayer() (layerOf[*diffView], which scans top-down and returns a diff
 // buried under a later push). Pressing h/b on a diff view pushes a
@@ -115,7 +123,7 @@ func (m Model) exportFilePatchRow() (actionRow, bool) {
 		return actionRow{}, false
 	}
 	dv, ok := m.topLayer().(*diffView)
-	if !ok || dv.rev == "" || m.inCompareMode() {
+	if !ok || dv.rev == "" || m.inCompareMode() || m.inFullTree() || m.stashView != nil {
 		return actionRow{}, false
 	}
 	sha, path := dv.rev, dv.title

@@ -23,10 +23,10 @@ func shortSHA(sha string) string {
 // CommitPatch returns the git am-able patch for sha's whole change set plus the
 // default file name (<shortsha>.patch). Refuses a merge commit (ErrMergeCommitPatch).
 func (s *Service) CommitPatch(ctx context.Context, sha string) ([]byte, string, error) {
+	if err := s.refuseMerge(ctx, sha); err != nil {
+		return nil, "", err
+	}
 	data, err := query(ctx, s, "commitpatch:"+sha, func(ctx context.Context) ([]byte, error) {
-		if err := s.refuseMerge(ctx, sha); err != nil {
-			return nil, err
-		}
 		return s.repo.FormatPatch(ctx, sha)
 	})
 	if err != nil {
@@ -38,10 +38,10 @@ func (s *Service) CommitPatch(ctx context.Context, sha string) ([]byte, string, 
 // FilePatch returns the git am-able patch for a single file's change within sha
 // plus the default file name (<shortsha>-<basename>.patch). Refuses a merge.
 func (s *Service) FilePatch(ctx context.Context, sha, path string) ([]byte, string, error) {
+	if err := s.refuseMerge(ctx, sha); err != nil {
+		return nil, "", err
+	}
 	data, err := query(ctx, s, "filepatch:"+sha+":"+path, func(ctx context.Context) ([]byte, error) {
-		if err := s.refuseMerge(ctx, sha); err != nil {
-			return nil, err
-		}
 		return s.repo.FormatPatch(ctx, sha, path)
 	})
 	if err != nil {
@@ -51,8 +51,12 @@ func (s *Service) FilePatch(ctx context.Context, sha, path string) ([]byte, stri
 }
 
 // refuseMerge returns ErrMergeCommitPatch when sha has more than one parent.
+// The parent-count read uses queryQuiet so an expected merge refusal (validation,
+// not an operational failure) never lands in errors.log / the Session-errors viewer.
 func (s *Service) refuseMerge(ctx context.Context, sha string) error {
-	n, err := s.repo.ParentCount(ctx, sha)
+	n, err := queryQuiet(ctx, s, "parentcount:"+sha, func(ctx context.Context) (int, error) {
+		return s.repo.ParentCount(ctx, sha)
+	})
 	if err != nil {
 		return err
 	}

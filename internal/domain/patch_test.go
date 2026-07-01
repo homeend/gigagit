@@ -111,7 +111,19 @@ func TestExportDefaultDirIsParentOfRepo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := filepath.Dir(filepath.Clean(repoDir)); dir != want {
-		t.Fatalf("ExportDefaultDir = %q, want %q (parent of repo)", dir, want)
+	// ExportDefaultDir goes through git, which reports the symlink-RESOLVED
+	// path; repoDir is the raw t.TempDir() path, unresolved. On macOS these
+	// differ (/var vs /private/var), so resolve both sides before comparing
+	// (mirrors internal/cli/repo_test.go).
+	gotR, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantR, err := filepath.EvalSymlinks(filepath.Dir(filepath.Clean(repoDir)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotR != wantR {
+		t.Fatalf("ExportDefaultDir = %q, want %q (parent of repo)", dir, filepath.Dir(filepath.Clean(repoDir)))
 	}
 }
