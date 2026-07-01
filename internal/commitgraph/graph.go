@@ -22,17 +22,42 @@ type Row struct {
 // A higher value is never reachable — config can only lower the cap.
 const MaxLanes = 320
 
-// Lay folds commits (newest-first) into per-row graph cells. Deterministic.
+// Lay folds commits (newest-first) into per-row graph cells, fit to a uniform
+// width. Deterministic. Equivalent to a single Layer.Append over all commits
+// followed by fitting every row to the final width.
 func Lay(commits []Commit) ([]Row, int) {
-	rows := make([]Row, 0, len(commits))
-	var lanes []string // lanes[i] = hash lane i is waiting for ("" = free)
-	maxLanes := 0
+	var l Layer
+	rows := l.Append(commits)
+	width := l.Width()
+	for i := range rows {
+		rows[i].Width = width
+		rows[i].Cells = fit(rows[i].Cells, width)
+	}
+	return rows, width
+}
 
+// Layer lays commits incrementally, preserving the open-lane state across calls
+// so paging in older commits (a strict newest→oldest append) is O(new commits)
+// instead of re-laying the whole history. Rows returned by Append carry their
+// natural (unpadded) Cells and node Lane; the caller pads them to Width() — the
+// running plane width, which grows only when a page introduces more concurrent
+// lanes. The zero value is a ready empty layer.
+type Layer struct {
+	lanes    []string // lanes[i] = hash lane i is waiting for ("" = free)
+	maxLanes int      // widest lane count seen so far (uncapped)
+}
+
+// Append lays commits (continuing newest→oldest from the current state) and
+// returns one Row per commit. Cells is the natural glyph string (2 columns per
+// live lane at that row, before trailing-free compaction), NOT padded to a
+// uniform width; pad with the caller's fit against Width(). Deterministic.
+func (l *Layer) Append(commits []Commit) []Row {
+	rows := make([]Row, 0, len(commits))
 	for _, c := range commits {
 		// 1. node lane = leftmost lane targeting this commit; extras = merging.
 		node := -1
 		var merging []int
-		for i, t := range lanes {
+		for i, t := range l.lanes {
 			if t == c.Hash {
 				if node < 0 {
 					node = i
@@ -42,9 +67,9 @@ func Lay(commits []Commit) ([]Row, int) {
 			}
 		}
 		if node < 0 {
-			node = firstFree(lanes, nil)
-			if node == len(lanes) {
-				lanes = append(lanes, "")
+			node = firstFree(l.lanes, nil)
+			if node == len(l.lanes) {
+				l.lanes = append(l.lanes, "")
 			}
 		}
 		mergeSet := toSet(merging)
@@ -54,42 +79,43 @@ func Lay(commits []Commit) ([]Row, int) {
 		//    glyphs unambiguous). A root frees its lane.
 		var forks []int
 		if len(c.Parents) == 0 {
-			lanes[node] = ""
+			l.lanes[node] = ""
 		} else {
-			lanes[node] = c.Parents[0]
+			l.lanes[node] = c.Parents[0]
 			for _, p := range c.Parents[1:] {
-				f := firstFree(lanes, mergeSet)
-				if f == len(lanes) {
-					lanes = append(lanes, "")
+				f := firstFree(l.lanes, mergeSet)
+				if f == len(l.lanes) {
+					l.lanes = append(l.lanes, "")
 				}
-				lanes[f] = p
+				l.lanes[f] = p
 				forks = append(forks, f)
 			}
 		}
 		for _, mi := range merging { // free the merged-in children's lanes
-			lanes[mi] = ""
+			l.lanes[mi] = ""
 		}
 
 		// 3. render over the current lane count, then compact trailing frees.
-		n := len(lanes)
-		if n > maxLanes {
-			maxLanes = n
+		n := len(l.lanes)
+		if n > l.maxLanes {
+			l.maxLanes = n
 		}
-		rows = append(rows, Row{Cells: renderRow(n, node, merging, forks, lanes), Lane: node})
-		for len(lanes) > 0 && lanes[len(lanes)-1] == "" {
-			lanes = lanes[:len(lanes)-1]
+		rows = append(rows, Row{Cells: renderRow(n, node, merging, forks, l.lanes), Lane: node})
+		for len(l.lanes) > 0 && l.lanes[len(l.lanes)-1] == "" {
+			l.lanes = l.lanes[:len(l.lanes)-1]
 		}
 	}
+	return rows
+}
 
-	if maxLanes > MaxLanes {
-		maxLanes = MaxLanes
+// Width is the current plane width in display columns (2 per lane), clamped to
+// MaxLanes. It only ever grows across Append calls.
+func (l *Layer) Width() int {
+	m := l.maxLanes
+	if m > MaxLanes {
+		m = MaxLanes
 	}
-	width := maxLanes * 2
-	for i := range rows {
-		rows[i].Width = width
-		rows[i].Cells = fit(rows[i].Cells, width)
-	}
-	return rows, width
+	return m * 2
 }
 
 // renderRow draws one commit row across n lanes. Two display columns per lane:

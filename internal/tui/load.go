@@ -23,7 +23,9 @@ func (m Model) loadMoreCmd() tea.Cmd {
 	feed := m.feed
 	gen := feed.Gen()
 	return func() tea.Msg {
-		_, _, _ = feed.LoadMore(context.Background())
+		pdbg("loadMoreCmd: goroutine START gen=%d", gen)
+		_, changed, err := feed.LoadMore(context.Background())
+		pdbg("loadMoreCmd: goroutine END gen=%d changed=%v err=%v", gen, changed, err)
 		return commitsPagedMsg{gen: gen}
 	}
 }

@@ -102,6 +102,14 @@ type Model struct {
 	feed                *domain.CommitFeed              // single source of truth for commits
 	commitsExhausted    bool                            // false → "Commits N+", true → "Commits N"
 	commitsLoading      bool                            // a feed reload/page is in flight → show the loading glyph in the Commits title
+	graphLayer          *commitgraph.Layer              // persistent lane-fold state so paging older commits appends to the graph in O(new) instead of re-laying all (nil = rebuild from scratch)
+	graphLaidReal       int                             // count of real commits already folded into commitGraphRows via graphLayer
+	graphWipLaid        int                             // WIP-row count folded into the current layer; a change forces a full rebuild
+	graphBaseHash       string                          // commits[0].Hash when the layer was seeded; a change (new HEAD / scope) forces a full rebuild
+	graphWidth          int                             // current uniform fit width (display columns) of commitGraphRows
+	commitsIdx          []int                           // cached identity display-index slice for the unfiltered default-sort Commits panel (shared, read-only; valid iff len == commitsTotal); maintained by rebuildCommitGraph
+	identWCache         int                             // cached commitIdentWidth (O(n) lipgloss scan otherwise run per frame); maintained by rebuildCommitGraph
+	identWValid         bool                            // identWCache reflects current commits+branches; false → commitIdentWidth falls back to a full scan
 	feedScopeApplied    string                          // signature of the scope last applied to the feed (see feedScopeSig); reload only when the desired scope differs
 	commitScopeBranches []string                        // included branches for the feed; empty = all local branches
 	commitFilter        commitFilterFields              // path/author/grep/date narrowing of the feed
@@ -352,11 +360,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.filesView.sel = 0
 		return m, nil
 	case commitsPagedMsg:
+		pdbg("MSG commitsPagedMsg: gen=%d feedGen=%d match=%v", msg.gen, func() int {
+			if m.feed != nil {
+				return m.feed.Gen()
+			}
+			return -1
+		}(), m.feed != nil && msg.gen == m.feed.Gen())
 		if m.feed != nil && msg.gen == m.feed.Gen() {
 			st := m.feed.Snapshot()
 			m.commits = st.Commits
 			m.commitsExhausted = st.Exhausted
 			m.commitsLoading = false // this page's load (the latest) finished
+			// The graph rebuild is now incremental (O(new commits)), so it runs
+			// inline without blocking the loop — no held-key backlog builds up.
 			m = m.rebuildCommitGraph()
 			if m.eager.active {
 				return m.eagerAdvance()
@@ -364,6 +380,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case commitsReloadedMsg:
+		pdbg("MSG commitsReloadedMsg: gen=%d", msg.gen)
 		if m.feed == nil || msg.gen != m.feed.Gen() {
 			return m, nil // superseded by a newer reload (gen-stamped at load time)
 		}
@@ -522,6 +539,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m = m.withStatus(msg.status)
 			m.conflict = msg.conflict
 			m.branches = msg.branches
+			m.identWValid = false // tracked upstreams feed the ident width; rescan below
 			// Float remote branches that have a local counterpart to the top of
 			// the Remotes tab. Sort the slice itself (not just the rows) so the
 			// positional consumers — remoteRows, remoteBranchList, selectedRemote
@@ -639,6 +657,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case srcBranches:
 			key := m.panelSelKey(panelBranches)
 			m.branches = msg.value.([]model.Branch)
+			m.identWValid = false // tracked upstreams feed the ident width; rescan in rebuild
 			m = m.restorePanelSel(panelBranches, key)
 			m.remoteBranches = sortRemoteBranchesLocalFirst(m.remoteBranches, m.branches)
 			m = m.rebuildCommitGraph()
@@ -1254,6 +1273,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "home":
 			m.sel[m.focus] = 0
 		case "end":
+			if m.focus == panelCommits {
+				pdbg("KEY end: sel=%d panelLen=%d commitsLoading=%v", m.sel[m.focus], m.panelLen(m.focus), m.commitsLoading)
+			}
 			if n := m.panelLen(m.focus); n > 0 {
 				m.sel[m.focus] = n - 1
 			}
@@ -1266,6 +1288,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		case "pgdown":
+			if m.focus == panelCommits {
+				pdbg("KEY pgdown: sel=%d panelLen=%d commitsLoading=%v", m.sel[m.focus], m.panelLen(m.focus), m.commitsLoading)
+			}
 			if n := m.panelLen(m.focus); n > 0 {
 				m.sel[m.focus] += m.pageStep()
 				if m.sel[m.focus] > n-1 {
@@ -1477,6 +1502,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.sel[m.focus]--
 			}
 		case "down", "j":
+			if m.focus == panelCommits {
+				pdbg("KEY down/j: sel=%d panelLen=%d commitsLoading=%v", m.sel[m.focus], m.panelLen(m.focus), m.commitsLoading)
+			}
 			if m.sel[m.focus] < m.panelLen(m.focus)-1 {
 				m.sel[m.focus]++
 			}
@@ -2277,24 +2305,71 @@ func (m Model) commitFilterChips() string {
 	return strings.Join(parts, " ")
 }
 
-// rebuildCommitGraph recomputes the cached single-line graph cells from
-// m.commits. Called whenever m.commits changes (the lane fold needs the whole
-// loaded window, so it can't be a per-render computation).
+// rebuildCommitGraph refreshes the cached single-line graph cells for m.commits.
+// Paging in older commits is a strict newest→oldest append that leaves the WIP
+// prefix and every existing row's lanes unchanged, so this continues the cached
+// lane fold (graphLayer) and appends only the new rows — O(new commits), not
+// O(total). Any non-append change (new HEAD, scope switch, WIP-count change, or
+// a shorter list) fails the invariant and triggers a full re-lay from scratch.
 func (m Model) rebuildCommitGraph() Model {
 	// Derive the WIP pseudo-rows from the current status first, so the graph plane
 	// and every unified length (commitsTotal) stay in lock-step with them.
 	m.wipRows = deriveWipRows(m.status)
-	cs := make([]commitgraph.Commit, 0, m.commitsTotal())
-	// Synthetic WIP nodes, chained Working tree → Staged → HEAD. Each parents to
-	// the next wip row, the last to HEAD (m.commits[0]); an empty feed leaves the
-	// last wip node parentless (a root). The hash is git-invalid (NUL) so a leak
-	// would fail loudly.
-	headHash := ""
+	wipCount := len(m.wipRows)
+	baseHash := ""
 	if len(m.commits) > 0 {
-		headHash = m.commits[0].Hash
+		baseHash = m.commits[0].Hash
 	}
+
+	// Incremental append fast path.
+	if m.graphLayer != nil && m.graphLaidReal > 0 &&
+		m.graphWipLaid == wipCount && baseHash == m.graphBaseHash &&
+		len(m.commits) >= m.graphLaidReal {
+		if !m.identWValid { // a branches change invalidated the ident-width cache
+			m.identWCache = m.scanCommitIdentWidth(m.commits)
+			m.identWValid = true
+		}
+		if len(m.commits) == m.graphLaidReal {
+			return m.syncCommitsIdx() // nothing new to fold in
+		}
+		newCommits := m.commits[m.graphLaidReal:]
+		// Extend the cached ident width over just the appended page.
+		if m.identWCache < commitIdentW {
+			if w := m.scanCommitIdentWidth(newCommits); w > m.identWCache {
+				m.identWCache = w
+			}
+		}
+		cs := make([]commitgraph.Commit, len(newCommits))
+		for i, c := range newCommits {
+			cs[i] = commitgraph.Commit{Hash: c.Hash, Parents: c.Parents}
+		}
+		rows := m.graphLayer.Append(cs)
+		if w := m.graphLayer.Width(); w > m.graphWidth {
+			// A page widened the plane (rare — lane counts stabilize quickly). Re-fit
+			// the existing rows to the new width so all rows stay uniform.
+			for i := range m.commitGraphRows {
+				m.commitGraphRows[i] = fitGraphCells(m.commitGraphRows[i], w)
+			}
+			m.graphWidth = w
+		}
+		for _, r := range rows {
+			m.commitGraphRows = append(m.commitGraphRows, fitGraphCells(r.Cells, m.graphWidth))
+			m.commitGraphLanes = append(m.commitGraphLanes, r.Lane)
+		}
+		m.graphLaidReal = len(m.commits)
+		m.commitGraphScroll = m.clampScroll(m.commitGraphScroll)
+		return m.syncCommitsIdx()
+	}
+
+	// Full rebuild: seed a fresh layer with the WIP prefix, then all commits.
+	// Synthetic WIP nodes chain Working tree → Staged → HEAD; each parents to the
+	// next wip row, the last to HEAD (m.commits[0]); an empty feed leaves the last
+	// wip node parentless (a root). The hash is git-invalid (NUL) so a leak fails
+	// loudly.
+	layer := &commitgraph.Layer{}
+	cs := make([]commitgraph.Commit, 0, m.commitsTotal())
 	for i, r := range m.wipRows {
-		parent := headHash
+		parent := baseHash
 		if i+1 < len(m.wipRows) {
 			parent = wipSyntheticHash(m.wipRows[i+1])
 		}
@@ -2307,23 +2382,60 @@ func (m Model) rebuildCommitGraph() Model {
 	for _, c := range m.commits {
 		cs = append(cs, commitgraph.Commit{Hash: c.Hash, Parents: c.Parents})
 	}
-	rows, _ := commitgraph.Lay(cs)
+	rows := layer.Append(cs)
+	width := layer.Width()
 	m.commitGraphRows = make([]string, len(rows))
 	m.commitGraphLanes = make([]int, len(rows))
 	for i, r := range rows {
-		cells := r.Cells
-		if i < m.wipCount() { // hollow ◇ node for a pseudo-row, not a real ● commit
+		cells := fitGraphCells(r.Cells, width)
+		if i < wipCount { // hollow ◇ node for a pseudo-row, not a real ● commit
 			cells = strings.Replace(cells, "●", wipNodeGlyph, 1)
 		}
 		m.commitGraphRows[i] = cells
 		m.commitGraphLanes[i] = r.Lane
 	}
-	// Keep the horizontal scroll valid against the new plane: paging in older
-	// commits is a strict append (newest-first lane assignment leaves existing
-	// rows' lanes unchanged), so preserve the position; a genuine scope change
-	// shrinks the plane and clampScroll brings an out-of-range offset back in.
+	m.graphLayer = layer
+	m.graphLaidReal = len(m.commits)
+	m.graphWipLaid = wipCount
+	m.graphBaseHash = baseHash
+	m.graphWidth = width
+	m.identWCache = m.scanCommitIdentWidth(m.commits)
+	m.identWValid = true
 	m.commitGraphScroll = m.clampScroll(m.commitGraphScroll)
+	return m.syncCommitsIdx()
+}
+
+// syncCommitsIdx keeps the cached identity display-index slice for the Commits
+// panel aligned with commitsTotal. Appending identity values into shared backing
+// is safe: earlier holders' lengths are unaffected and the values are identical.
+func (m Model) syncCommitsIdx() Model {
+	total := m.commitsTotal()
+	for len(m.commitsIdx) < total {
+		m.commitsIdx = append(m.commitsIdx, len(m.commitsIdx))
+	}
+	if len(m.commitsIdx) > total {
+		m.commitsIdx = m.commitsIdx[:total]
+	}
 	return m
+}
+
+// fitGraphCells pads s with spaces to w display columns (runes), or truncates it
+// to w. Mirrors the width-fit the commitgraph engine applies uniformly.
+func fitGraphCells(s string, w int) string {
+	r := []rune(s)
+	if len(r) > w {
+		return string(r[:w])
+	}
+	if len(r) == w {
+		return s
+	}
+	var b strings.Builder
+	b.Grow(len(s) + (w - len(r)))
+	b.WriteString(s)
+	for i := len(r); i < w; i++ {
+		b.WriteByte(' ')
+	}
+	return b.String()
 }
 
 // maybeLoadMoreCommits returns the model plus a cmd to page in more commits when
@@ -2339,23 +2451,30 @@ func (m Model) maybeLoadMoreCommits() (Model, tea.Cmd) {
 	// keystroke. It clears on the load's completion message (commitsPagedMsg /
 	// commitsReloadedMsg / the full load), so it cannot get stuck. Covers every
 	// caller: End / PgDn / j / k, ctrl+l, and the mouse wheel.
-	if m.commitsLoading {
+	if !m.commitPageEligible() {
 		return m, nil
 	}
-	if m.feed == nil {
-		return m, nil
-	}
-	if m.filterTyping && m.filterPanel == panelCommits {
-		return m, nil
-	}
-	if m.filterActive(panelCommits) {
-		return m, nil
-	}
-	if !m.feed.NeedsMore(m.sel[panelCommits]) {
-		return m, nil
-	}
+	pdbg("maybeLoadMore: DISPATCH sel=%d loaded=%d", m.sel[panelCommits], len(m.commits))
 	m.commitsLoading = true
 	return m, m.loadMoreCmd()
+}
+
+// commitPageEligible reports whether a commit page load would currently do work:
+// no load already in flight, a feed exists, no commit filter is active/typing,
+// and the selection is near the loaded end. Shared by the debounce arm
+// (maybeLoadMoreCommits) and the debounce fire (pageDebounceMsg) so both apply
+// the same gate; state can change between arming and firing.
+func (m Model) commitPageEligible() bool {
+	if m.commitsLoading || m.feed == nil {
+		return false
+	}
+	if m.filterTyping && m.filterPanel == panelCommits {
+		return false
+	}
+	if m.filterActive(panelCommits) {
+		return false
+	}
+	return m.feed.NeedsMore(m.sel[panelCommits])
 }
 
 // reRoot points the model at the repository rooted at path and triggers a full

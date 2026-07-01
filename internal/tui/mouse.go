@@ -70,6 +70,7 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		// Wheeling the commit list toward the end pages in more, like the
 		// keyboard movement does.
 		if p == panelCommits {
+			pdbg("MOUSE wheel on commits: sel=%d commitsLoading=%v", m.sel[p], m.commitsLoading)
 			return m.maybeLoadMoreCommits()
 		}
 		return m, nil

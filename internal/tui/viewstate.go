@@ -487,6 +487,14 @@ func (m Model) displayIndices(p panel) (idx []int) {
 		if p == panelStaged && m.stagedIdx != nil {
 			return m.stagedIdx
 		}
+		// Commits membership is always-true, so the unfiltered natural order is
+		// the identity permutation — return the cached slice (maintained by
+		// rebuildCommitGraph) instead of refilling an O(n) index per call; this
+		// is on the per-keystroke path of a 100k-commit feed. A stale length
+		// (e.g. a test assigning m.commits directly) falls through and recomputes.
+		if p == panelCommits && m.commitsIdx != nil && len(m.commitsIdx) == m.commitsTotal() {
+			return m.commitsIdx
+		}
 	}
 	l := m.listFor(p)
 	q := ""

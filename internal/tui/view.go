@@ -1211,10 +1211,25 @@ func (m Model) trackedUpstreams() map[string]string {
 // loaded names (instead of a fixed 16) removes the padding gap for short common
 // names like "master" while still aligning subjects within a feed; a longer name
 // paging in grows the column up to the cap.
+// The width is O(n) to compute (a lipgloss scan over every loaded commit), and
+// it is consulted by listFor/commitBody/decorators on every frame — so it is
+// cached (identWCache, maintained by rebuildCommitGraph and invalidated on a
+// branches change) and only scanned as a fallback when the cache is not valid
+// (e.g. a test assigning m.commits directly).
 func (m Model) commitIdentWidth() int {
+	if m.identWValid {
+		return m.identWCache
+	}
+	return m.scanCommitIdentWidth(m.commits)
+}
+
+// scanCommitIdentWidth measures the widest ident label over commits, capped at
+// commitIdentW. The full-feed scan behind the identWCache; also used to extend
+// the cache over just an appended page.
+func (m Model) scanCommitIdentWidth(commits []model.Commit) int {
 	tracked := m.trackedUpstreams()
 	w := 0
-	for _, c := range m.commits {
+	for _, c := range commits {
 		if lw := lipgloss.Width(commitIdentOf(c, tracked).label()); lw > w {
 			if w = lw; w >= commitIdentW {
 				return commitIdentW
