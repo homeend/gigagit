@@ -639,6 +639,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			key := m.panelSelKey(panelRemotes)
 			m.remoteBranches = sortRemoteBranchesLocalFirst(msg.value.([]model.RemoteBranch), m.branches)
 			m = m.restorePanelSel(panelRemotes, key)
+			// feedUpstreams() is gated on m.remoteBranches (a configured upstream is
+			// dropped until it exists as a remote-tracking branch). If remotes is the
+			// LAST of {branches, remotes, feed} to land during the startup fan-out,
+			// the earlier srcBranches/srcFeed latch checks saw an empty upstream set;
+			// fire the re-walk now so a diverged/ahead origin/main tip is walked in
+			// (otherwise it stays hidden until a manual r).
+			if m.maybeFeedUpstreamRewalk() {
+				var reload tea.Cmd
+				m, reload = m.startFeedReload()
+				return m, reload
+			}
 		case srcTags:
 			key := m.panelSelKey(panelTags)
 			m.tags = msg.value.([]model.Tag)

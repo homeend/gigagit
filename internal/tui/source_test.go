@@ -251,6 +251,46 @@ func TestBranchesDefersFeedRewalkWhileFeedInflight(t *testing.T) {
 	}
 }
 
+// TestRemotesArrivalFiresUpstreamRewalk is a regression test for the case where
+// the remote-branches source lands LAST of the three feed-scope dependencies
+// (branches, remotes, feed). feedUpstreams() is gated on m.remoteBranches (a
+// configured upstream is dropped until it exists as a remote-tracking branch),
+// so until remotes loads the initial feed walk has NO upstreams and a
+// diverged/ahead origin/main tip never appears. The srcBranches and srcFeed
+// arrival handlers both re-check the latch; srcRemotes must too, otherwise
+// origin/main stays hidden ("not loaded") until a manual r.
+func TestRemotesArrivalFiresUpstreamRewalk(t *testing.T) {
+	m := newTestModel(t)
+	// Branches and the initial feed have already landed. The feed was walked
+	// WITHOUT upstreams because remotes had not loaded yet (feedUpstreams gated
+	// on m.remoteBranches), so the applied scope carries no upstream.
+	m.branches = []model.Branch{{Name: "main", Upstream: "origin/main"}}
+	m.srcInflight[srcFeed] = false
+	m.feedScopeApplied = m.feedScopeSig()
+
+	// Precondition: with no remotes loaded the upstream is dropped, so there is
+	// nothing to re-walk yet — this is exactly why the earlier srcBranches/
+	// srcFeed latch checks stayed quiet.
+	if got := m.feedUpstreams(); len(got) != 0 {
+		t.Fatalf("precondition: feedUpstreams should be empty before remotes load, got %v", got)
+	}
+
+	// Remotes land last, carrying origin/main.
+	nm, cmd := m.Update(dataAvailableMsg{
+		source: srcRemotes,
+		gen:    m.srcGen[srcRemotes],
+		value:  []model.RemoteBranch{{Name: "origin/main"}},
+	})
+	mm := nm.(Model)
+
+	if cmd == nil {
+		t.Fatal("remotes arrival must fire the upstream re-walk so origin/main is walked in")
+	}
+	if !strings.Contains(mm.feedScopeApplied, "origin/main") {
+		t.Fatalf("re-walk must target the upstream-inclusive scope; feedScopeApplied = %q", mm.feedScopeApplied)
+	}
+}
+
 // TestManualRefreshShowsConsumerSpinner verifies that the Files panel title
 // carries the loading glyph when srcStatus is mid manual-refresh.
 // (Step 1 — TDD RED before panelLoading is wired into panelLabel.)
