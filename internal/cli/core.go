@@ -23,7 +23,7 @@ type cliDecider struct {
 	interactive bool
 }
 
-func (d cliDecider) Decide(_ context.Context, req engine.DecisionRequest) (engine.DecisionResponse, error) {
+func (d cliDecider) Decide(ctx context.Context, req engine.DecisionRequest) (engine.DecisionResponse, error) {
 	if opt, ok := d.policy[req.ID]; ok {
 		return engine.DecisionResponse{Option: opt}, nil
 	}
@@ -33,7 +33,22 @@ func (d cliDecider) Decide(_ context.Context, req engine.DecisionRequest) (engin
 			req.ID, strings.Join(req.Options, ", "))
 	}
 	fmt.Fprintf(d.out, "%s\n  options: %s\n> ", req.Prompt, strings.Join(req.Options, ", "))
-	line, _ := bufio.NewReader(d.in).ReadString('\n')
+	// The blocking stdin read runs in its own goroutine so a cancelled ctx
+	// unblocks the operation (letting Execute release the gate) instead of
+	// waiting on a human who may never answer. The reader goroutine may linger
+	// until a line arrives or stdin closes — acceptable for a CLI process that
+	// exits shortly after; the buffered channel lets it finish either way.
+	lines := make(chan string, 1)
+	go func() {
+		line, _ := bufio.NewReader(d.in).ReadString('\n')
+		lines <- line
+	}()
+	var line string
+	select {
+	case <-ctx.Done():
+		return engine.DecisionResponse{}, ctx.Err()
+	case line = <-lines:
+	}
 	choice := strings.TrimSpace(line)
 	for _, o := range req.Options {
 		if o == choice {

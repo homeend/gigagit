@@ -33,16 +33,33 @@ func (c ConflictState) Describe() string {
 // Conflict derives the conflict source (merge/rebase/cherry-pick parties) from a
 // status the caller already read. It is the public face of conflictState, used
 // by the TUI's status source so a per-panel status refresh carries the same
-// conflict attribution the full Snapshot did. Cheap: short-circuits on a clean
-// working tree.
+// conflict attribution the full Snapshot did. Cheap: a clean working tree
+// returns before touching the gate; with conflicts present the git probes run
+// under their own Read reservation. The reservation is taken HERE, not inside
+// conflictState — the helper's other caller (loadSnapshot) already holds one,
+// and a nested Read can deadlock behind a queued writer under the gate's
+// writer-preferring FIFO.
 func (s *Service) Conflict(ctx context.Context, st model.WorkingTreeStatus) ConflictState {
-	return s.conflictState(ctx, st)
+	if st.Counts().Conflicted == 0 {
+		return ConflictState{}
+	}
+	cs, err := query(ctx, s, "conflict:"+st.Branch, func(ctx context.Context) (ConflictState, error) {
+		return s.conflictState(ctx, st), nil
+	})
+	if err != nil {
+		// Gate acquisition failed (ctx cancelled mid-refresh): no attribution
+		// this round; the next status refresh retries.
+		return ConflictState{}
+	}
+	return cs
 }
 
 // conflictState attributes st's conflicts to a merge/rebase in progress. It runs
 // git probes only when st actually has unmerged files, so clean repos pay
 // nothing. During a rebase HEAD is detached, so the rebase target comes from the
-// rebase state (RebaseParties), not st.Branch.
+// rebase state (RebaseParties), not st.Branch. It assumes the caller holds a
+// Read reservation (Conflict and loadSnapshot both do) — it must not acquire
+// its own.
 func (s *Service) conflictState(ctx context.Context, st model.WorkingTreeStatus) ConflictState {
 	if st.Counts().Conflicted == 0 {
 		return ConflictState{}

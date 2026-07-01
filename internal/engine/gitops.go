@@ -7,9 +7,13 @@ import (
 	"github.com/homeend/gigagit/internal/model"
 )
 
-// GitOps is the set of git verbs operations use. *git.Repo satisfies it.
-// OpDeps.Repo is this interface so operations are decoratable and mockable,
-// and a new verb an op needs becomes a visible addition here.
+// GitOps is the set of git verbs operations use. *git.Repo satisfies it and is
+// the only production implementor. OpDeps.Repo is this interface so the repo
+// is decoratable (LimitRunner-style wrapping composes underneath) and a new
+// verb an op needs becomes a visible addition here. Ops are tested against a
+// real git repo in a t.TempDir() (convention: newTestRepo), not mocks; the
+// rare pure-unit case nil-embeds GitOps and implements only the verbs under
+// test (see writefile_test.go).
 type GitOps interface {
 	Status(ctx context.Context) (model.WorkingTreeStatus, error)
 	Branches(ctx context.Context) ([]model.Branch, error)

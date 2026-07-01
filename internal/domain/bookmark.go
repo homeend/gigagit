@@ -21,7 +21,9 @@ func (s *Service) BookmarkAdd(ctx context.Context, b model.Bookmark) (model.Book
 		return model.Bookmark{}, ErrBookmarksDisabled
 	}
 	if b.State == model.StateCommitted && b.SHA == "" && b.Path != "" {
-		sha, err := s.repo.BlobSHA(ctx, b.Commit, b.Path)
+		sha, err := query(ctx, s, "blobsha:"+b.Commit+":"+b.Path, func(ctx context.Context) (string, error) {
+			return s.repo.BlobSHA(ctx, b.Commit, b.Path)
+		})
 		if err != nil {
 			return model.Bookmark{}, err
 		}
@@ -59,20 +61,29 @@ func (s *Service) BookmarkRemove(ctx context.Context, id string) error {
 
 // BookmarkBytes resolves a bookmark to bytes, routing on state: permanent →
 // the blob (cat-file / shelf store); live → the named worktree's index or
-// working file.
+// working file. Repo-touching paths (git reads AND the live working-file read)
+// run under a Read reservation like every other domain read, so a paste or
+// compare never races a TreeWrite op mid-rewrite; the shelf store is not git
+// state and stays ungated.
 func (s *Service) BookmarkBytes(ctx context.Context, b model.Bookmark) ([]byte, error) {
 	if b.IsCommit() {
 		return nil, errors.New("bookmark: commit bookmark has no file bytes")
 	}
 	switch b.State {
 	case model.StateCommitted:
-		return s.repo.CatFileBlob(ctx, b.SHA)
+		return query(ctx, s, "catfile:"+b.SHA, func(ctx context.Context) ([]byte, error) {
+			return s.repo.CatFileBlob(ctx, b.SHA)
+		})
 	case model.StateShelf:
 		return s.ShelfBlob(ctx, b.ShelfID)
 	case model.StateStaged:
-		return s.repo.ShowFileInDir(ctx, b.Worktree, "", b.Path)
+		return query(ctx, s, "showindir:"+b.Worktree+":"+b.Path, func(ctx context.Context) ([]byte, error) {
+			return s.repo.ShowFileInDir(ctx, b.Worktree, "", b.Path)
+		})
 	case model.StateUnstaged, model.StateUntracked:
-		return os.ReadFile(filepath.Join(b.Worktree, filepath.FromSlash(b.Path)))
+		return query(ctx, s, "bookmarkfile:"+b.Worktree+":"+b.Path, func(ctx context.Context) ([]byte, error) {
+			return os.ReadFile(filepath.Join(b.Worktree, filepath.FromSlash(b.Path)))
+		})
 	default:
 		return nil, errors.New("bookmark: unknown state")
 	}

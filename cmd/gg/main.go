@@ -13,8 +13,6 @@ import (
 	"github.com/homeend/gigagit/internal/buildinfo"
 	"github.com/homeend/gigagit/internal/cli"
 	"github.com/homeend/gigagit/internal/domain"
-	"github.com/homeend/gigagit/internal/git"
-	"github.com/homeend/gigagit/internal/gitexec"
 	"github.com/homeend/gigagit/internal/observ"
 	"github.com/homeend/gigagit/internal/repos"
 	"github.com/homeend/gigagit/internal/shellinit"
@@ -69,12 +67,13 @@ func main() {
 		fmt.Fprintln(os.Stderr, "commands: status commit pull push switch checkout branch stash undo discard shelf bookmark merge rebase cherry-pick revert reset worktree remote tag compare repo init inspect version (run `gg` with no arguments for the TUI)")
 		os.Exit(2)
 	}
-	// No subcommand: launch the TUI.
+	// No subcommand: launch the TUI. The runner stack (LimitRunner + ssh
+	// BatchMode) is built by domain — one construction site shared with the
+	// repo switcher's reRoot (domain.OpenTUI); only the span ring is kept here
+	// so the panic dump below can include the session's git spans.
 	ring := observ.NewRing(200)
-	// Wrap with LimitRunner so the initial session shares the process-global
-	// subprocess bound — matching domain.OpenTUI, which the reRoot path uses.
-	// WithSSHBatchMode so an ssh prompt fails fast instead of freezing the TUI.
-	repo := &git.Repo{Runner: gitexec.NewLimitRunner(gitexec.NewExecRunner("git", ".", ring).WithSSHBatchMode())}
+	svc := domain.OpenTUIWithRing(".", ring)
+	repo := svc.Repo()
 	defer func() {
 		if r := recover(); r != nil {
 			path := filepath.Join(os.TempDir(), fmt.Sprintf("gg-panic-%d.json", time.Now().Unix()))
@@ -83,7 +82,6 @@ func main() {
 			panic(r)
 		}
 	}()
-	svc := domain.New(repo)
 	// Pre-flight: surface the common "not a git repository" / missing-git case as
 	// a friendly message instead of launching the TUI only for it to fail with a
 	// raw "git status failed (exit 128): fatal: …" dump.
