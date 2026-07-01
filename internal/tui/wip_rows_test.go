@@ -59,3 +59,51 @@ func TestWipAccessors(t *testing.T) {
 		t.Fatal("wipRowAt past wip range must be false")
 	}
 }
+
+// TestWipEndpointsOrder verifies wipEndpoints returns (left=older, right=newer)
+// — the ordering DiffTreeFiles requires (internal/git/compare.go's four
+// supported pairs: Commit→Commit, Commit→Index, Commit→WorkTree, Index→
+// WorkTree). A reversed pair falls through to DiffTreeFiles' "unsupported
+// endpoint pair" error, which is the l/enter-on-WIP-row bug.
+func TestWipEndpointsOrder(t *testing.T) {
+	head := model.Endpoint{Kind: model.EndpointCommit, Hash: "h0"}
+
+	cases := []struct {
+		name    string
+		wipRows []wipRow
+		row     wipRow
+		left    model.Endpoint
+		right   model.Endpoint
+	}{
+		{
+			name:    "staged row compares HEAD to index",
+			wipRows: []wipRow{{wipStaged, 1}},
+			row:     wipRow{wipStaged, 1},
+			left:    head,
+			right:   model.Endpoint{Kind: model.EndpointIndex},
+		},
+		{
+			name:    "worktree row with staged present compares index to worktree",
+			wipRows: []wipRow{{wipWorktree, 1}, {wipStaged, 1}},
+			row:     wipRow{wipWorktree, 1},
+			left:    model.Endpoint{Kind: model.EndpointIndex},
+			right:   model.Endpoint{Kind: model.EndpointWorkTree},
+		},
+		{
+			name:    "worktree row with nothing staged compares HEAD to worktree",
+			wipRows: []wipRow{{wipWorktree, 1}},
+			row:     wipRow{wipWorktree, 1},
+			left:    head,
+			right:   model.Endpoint{Kind: model.EndpointWorkTree},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			m := Model{wipRows: c.wipRows, commits: []model.Commit{{Hash: "h0"}}}
+			left, right := m.wipEndpoints(c.row)
+			if left != c.left || right != c.right {
+				t.Fatalf("wipEndpoints(%v) = (%v, %v), want (%v, %v)", c.row, left, right, c.left, c.right)
+			}
+		})
+	}
+}
