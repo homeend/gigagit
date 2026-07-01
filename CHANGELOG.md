@@ -9,6 +9,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Fixed
+- **Copying a short value (tag name, branch name) on WSL no longer pastes as
+  CJK mojibake.** `clip.exe` guesses whether stdin is already UTF-16 using a
+  length-sensitive heuristic, and misdetects short pure-ASCII payloads like a
+  git tag name (`v0.1.9`) as UTF-16, storing them verbatim — pasted back, each
+  ASCII byte pair reads as one CJK-range UTF-16 code unit. A 40-char SHA
+  carries enough signal to be detected correctly, which is why only short
+  copies showed the bug. `internal/clipboard` now encodes stdin to UTF-16LE
+  explicitly for `clip.exe`/`clip`, removing the ambiguity the heuristic acts
+  on; every other native command (`pbcopy`, `wl-copy`, `xclip`, `xsel`)
+  is unaffected.
 - **Scrolling / switching panels no longer lags for seconds on a repo with a
   huge untracked set.** Every keystroke rebuilt the Files/Staged panel's row
   strings and membership indices from scratch — several times over, since

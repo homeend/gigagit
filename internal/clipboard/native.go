@@ -1,6 +1,7 @@
 package clipboard
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -8,6 +9,7 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+	"unicode/utf16"
 )
 
 // ErrUnavailable means no clipboard method succeeded: no native command was
@@ -76,12 +78,34 @@ func preferOSC52(env func(string) string) bool {
 	return env("SSH_TTY") != "" || env("SSH_CONNECTION") != ""
 }
 
+// clipboardStdin returns the bytes to feed the native command's stdin.
+// Windows' clip.exe (invoked as "clip.exe" under WSL or "clip" natively — the
+// same binary either way) guesses whether stdin is already UTF-16 using a
+// length-sensitive heuristic; short pure-ASCII payloads such as a git tag
+// name ("v0.1.9") are frequently misdetected as UTF-16 and stored verbatim,
+// which then reads back as mojibake in the CJK range (each ASCII byte pair
+// reinterpreted as one UTF-16 code unit). A 40-char SHA carries enough
+// signal to be detected correctly, which is why only short copies like tag
+// names show the bug. Encoding explicitly to UTF-16LE removes the ambiguity
+// the heuristic acts on. Every other native command reads UTF-8 as-is.
+func clipboardStdin(cmdName, text string) []byte {
+	if cmdName != "clip.exe" && cmdName != "clip" {
+		return []byte(text)
+	}
+	units := utf16.Encode([]rune(text))
+	buf := make([]byte, 0, len(units)*2)
+	for _, u := range units {
+		buf = append(buf, byte(u), byte(u>>8))
+	}
+	return buf
+}
+
 // runArgv pipes text to the stdin of argv[0] with argv[1:] as arguments. It is
 // a package var so tests can substitute a fake without spawning a process (and
 // without clobbering the developer's real clipboard).
 var runArgv = func(argv []string, text string) error {
 	cmd := exec.Command(argv[0], argv[1:]...)
-	cmd.Stdin = strings.NewReader(text)
+	cmd.Stdin = bytes.NewReader(clipboardStdin(argv[0], text))
 	return cmd.Run()
 }
 

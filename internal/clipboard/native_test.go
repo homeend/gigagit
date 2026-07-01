@@ -1,6 +1,7 @@
 package clipboard
 
 import (
+	"bytes"
 	"errors"
 	"strings"
 	"testing"
@@ -91,6 +92,32 @@ func TestNativeArgv(t *testing.T) {
 				t.Errorf("argv = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+// TestClipboardStdinEncodesUTF16LEForClipExe guards against a real bug:
+// clip.exe's stdin-encoding heuristic misdetects short ASCII payloads (e.g.
+// git tag names) as already being UTF-16 and stores them verbatim, which
+// then pastes as CJK-range mojibake. Verified by piping "v0.1.9" through
+// clip.exe on WSL and reading it back with Get-Clipboard: it came back as
+// "ぶㄮ㤮" — exactly what you get by reinterpreting these UTF-16LE bytes as
+// UTF-8. Encoding to UTF-16LE up front removes the ambiguity.
+func TestClipboardStdinEncodesUTF16LEForClipExe(t *testing.T) {
+	for _, cmdName := range []string{"clip.exe", "clip"} {
+		got := clipboardStdin(cmdName, "v0.1.9")
+		want := []byte{'v', 0, '0', 0, '.', 0, '1', 0, '.', 0, '9', 0}
+		if !bytes.Equal(got, want) {
+			t.Errorf("clipboardStdin(%q) = %v, want %v", cmdName, got, want)
+		}
+	}
+}
+
+func TestClipboardStdinLeavesOtherCommandsAsUTF8(t *testing.T) {
+	for _, cmdName := range []string{"pbcopy", "wl-copy", "xclip", "xsel"} {
+		got := clipboardStdin(cmdName, "v0.1.9 café 🚀")
+		if string(got) != "v0.1.9 café 🚀" {
+			t.Errorf("clipboardStdin(%q) = %q, want unchanged UTF-8 text", cmdName, got)
+		}
 	}
 }
 
