@@ -24,12 +24,12 @@ func (r wipRow) text() string {
 const commitIdentW = 16
 
 // commitMarkerW is the display width of the tip-marker prefix on a commit
-// identity token: two glyph cells (local ■, remote ▲) plus one separator space.
+// identity token: two glyph cells (local ↓, remote ↑) plus one separator space.
 const commitMarkerW = 3
 
 const (
-	markerLocal  = "■" // tip of a local branch
-	markerRemote = "▲" // tip of a tracked remote (a local branch's upstream)
+	markerLocal  = "↓" // tip of a local branch (pull-down)
+	markerRemote = "↑" // tip of a tracked remote — a local branch's upstream (push-up)
 )
 
 // markers is the 2-cell, left-packed marker field for this identity: present
@@ -64,7 +64,7 @@ func countBadge(n int) string {
 
 // markerField is the fixed 3-cell marker area, laid out as
 // [marker1][marker2-or-badge][separator]. The count badge (≥2 local tips) fills
-// the FILLER cell next to a lone ■ so it reads "■³ "; when BOTH a local and a
+// the FILLER cell next to a lone ↓ so it reads "↓³ "; when BOTH a local and a
 // remote marker are present there is no room, so the badge is dropped (the count
 // still shows via the decoration group / (+N)). Always exactly commitMarkerW (3)
 // display cells.
@@ -72,14 +72,14 @@ func (id commitIdent) markerField() string {
 	badge := countBadge(id.count) // "" when <2
 	switch {
 	case id.tip && id.remoteTip:
-		return markerLocal + markerRemote + " " // "■▲ " — no room for the badge
+		return markerLocal + markerRemote + " " // "↓↑ " — no room for the badge
 	case id.tip:
 		if badge == "" {
-			return markerLocal + "  " // "■  "
+			return markerLocal + "  " // "↓  "
 		}
-		return markerLocal + badge + " " // "■³ " — badge in the filler cell
+		return markerLocal + badge + " " // "↓³ " — badge in the filler cell
 	case id.remoteTip:
-		return markerRemote + "  " // "▲  "
+		return markerRemote + "  " // "↑  "
 	default:
 		return "   " // lineage row
 	}

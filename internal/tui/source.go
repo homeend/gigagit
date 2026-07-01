@@ -259,7 +259,7 @@ func opAffectedSources(op engine.Operation) []sourceKey {
 		return []sourceKey{srcStatus, srcFeed, srcBranches}
 	case engine.Push:
 		// A push moves the remote-tracking ref, so the feed's %D decorations
-		// and ■/▲ local/remote tip markers change — refresh it too. NOT tags:
+		// and ↓/↑ local/remote tip markers change — refresh it too. NOT tags:
 		// pushing a branch doesn't push tags, and a tags reload would auto-fire
 		// a background ls-remote (the ▲ pushed-state lookup) for nothing.
 		return []sourceKey{srcBranches, srcRemotes, srcFeed}

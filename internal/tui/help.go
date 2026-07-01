@@ -123,7 +123,7 @@ func helpContent() []contentLine {
 		h("Commits panel"),
 		r("", "shows commits from ALL local branches by default, in date order, with a single-line commit graph (natural order only; hidden while filtering/sorting); header shows the mode — Commits (all) / Commits (solo: <branch>)"),
 		r("", "the left column is the branch the commit is on: BRIGHT *current/branch on that branch's tip, grayed otherwise; long names trim with … (select to reveal the full name); the commit id shows in the status bar. Filtering still matches the full id and full branch name"),
-		r("■ ▲", "in the Commits graph, ■ marks a local branch's tip and ▲ the tip of its tracked remote (both together = local and remote in sync)"),
+		r("↓ ↑", "in the Commits graph, ↓ marks a local branch's tip and ↑ the tip of its tracked remote (both together = local and remote in sync)"),
 		r("l", "show the selected commit's files in the left column (focus stays on the commit list)"),
 		r("enter", "drill into the selected commit's files: open the files view AND move focus to the file tree (l + focus tree)"),
 		r("i", "view the selected commit's full message in a scrollable popup; also works while the files view is open (the popup layers over the tree, esc returns to it)"),

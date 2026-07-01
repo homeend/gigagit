@@ -1308,7 +1308,7 @@ func (m Model) commitDecoratorsRange(rows []string, idx []int, lo, hi int, budge
 		} else if graphPrefix {
 			identStart += m.graphCols()*2 + 1
 		}
-		identStart += commitMarkerW // skip the ■▲ marker prefix; dim only the name column
+		identStart += commitMarkerW // skip the ↓↑ marker prefix; dim only the name column
 
 		// Build color spans for ⊙tag labels in the deco group. SYNC INVARIANT:
 		// commitDecoGroup is called with the SAME budget used by commitIdentRowAt

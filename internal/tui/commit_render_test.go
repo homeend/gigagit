@@ -24,8 +24,8 @@ func TestCommitRowShowsBothMarkersWhenInSync(t *testing.T) {
 	}}
 	m := renderModelWithCommits(branches, commits)
 	row := m.commitIdentRowAt(0, m.commitIdentWidth(), false, -1)
-	if !strings.Contains(row, "■▲") {
-		t.Fatalf("row = %q, want both ■▲ markers", row)
+	if !strings.Contains(row, "↓↑") {
+		t.Fatalf("row = %q, want both ↓↑ markers", row)
 	}
 	if !strings.Contains(row, "*main") {
 		t.Fatalf("row = %q, want *main label", row)
@@ -42,8 +42,8 @@ func TestCommitRowRemoteOnlyTipNamesBranch(t *testing.T) {
 	}}
 	m := renderModelWithCommits(branches, commits)
 	row := m.commitIdentRowAt(0, m.commitIdentWidth(), false, -1)
-	if !strings.Contains(row, "▲") || strings.Contains(row, "■") {
-		t.Fatalf("row = %q, want only the remote ▲ marker", row)
+	if !strings.Contains(row, "↑") || strings.Contains(row, "↓") {
+		t.Fatalf("row = %q, want only the remote ↑ marker", row)
 	}
 	if !strings.Contains(row, "main") {
 		t.Fatalf("row = %q, want the local branch name main", row)
