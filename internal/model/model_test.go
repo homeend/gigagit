@@ -25,3 +25,17 @@ func TestCountsFromStatus(t *testing.T) {
 		t.Errorf("Conflicted = %d, want 1", c.Conflicted)
 	}
 }
+
+func TestShelfEntryKind(t *testing.T) {
+	var e ShelfEntry // zero value
+	if e.Kind != ShelfKindFile {
+		t.Fatalf("zero-value Kind = %v, want ShelfKindFile", e.Kind)
+	}
+	if e.IsCommit() {
+		t.Fatal("zero-value entry must not be IsCommit")
+	}
+	e.Kind = ShelfKindCommit
+	if !e.IsCommit() {
+		t.Fatal("Kind=ShelfKindCommit must be IsCommit")
+	}
+}
