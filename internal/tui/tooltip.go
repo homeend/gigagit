@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"strings"
+
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -99,33 +101,63 @@ func (m Model) tooltip() (lines []string, x, y int, ok bool) {
 	return []string{line}, x, rowY, true
 }
 
+// revealPad is the breathing-room margin (columns of blank highlight) kept on
+// each side of the revealed text whenever the strip is wider than the text, so
+// the tooltip text is never flush against the underlying text it overflows onto.
+// It is dropped only when the text fills (or exceeds) the whole viewport, where
+// nothing shows underneath anyway.
+const revealPad = 2
+
 // revealLine builds the styled inline reveal for a row whose full text is
 // `content`, displayed at column `contentEdge` in a window of inner width
-// `innerW` on a `screenW`-wide screen, and returns the line plus its start
-// column. Shared by the panel reveal and the files-tree reveal so both place
-// identically: draw the full text inline (never a floating strip, which covered
-// the panel's top bar when the top row was selected); fill at least the window's
-// inner width so the selected-row reverse-video highlight beneath never peeks out
-// to its right; overflow the window's right border, and when the row would run
-// off the SCREEN's right edge (a right-hand window has little room to its right)
-// shift left so it spills over whatever sits to its left. Only a row wider than
-// the whole screen is clipped (with …). Single line, never wrapped.
+// `innerW` on a `screenW`-wide viewport, and returns the line plus its start
+// column. Shared by the panel reveal and the files-tree reveal (never a floating
+// strip, which covered the panel's top bar when the top row was selected).
+//
+// Geometry:
+//   - Width is the text plus a revealPad margin on each side, but never narrower
+//     than the window's inner width — so a short trimmed reveal still covers the
+//     selected-row reverse-video highlight beneath (which spans that inner width).
+//   - It is anchored to where the original truncated text sits: if that text ends
+//     at the viewport's right edge (the right-hand Commits panel) the strip's
+//     RIGHT edge pins there and it grows LEFT; otherwise its LEFT edge pins to
+//     where the text starts (left panels / files tree) and it grows RIGHT. Either
+//     way it may spill across neighbouring windows.
+//   - It never exceeds the viewport. When the text itself is wider than the
+//     viewport the strip fills the full width and the text is clipped with … (no
+//     margin — nothing shows underneath); when only the margins don't fit they
+//     are dropped. Single line, never wrapped.
 func revealLine(content string, contentEdge, innerW, screenW int) (line string, x int) {
-	x = contentEdge
-	full := content
-	revealW := lipgloss.Width(full)
+	t := lipgloss.Width(content)
+	visEnd := contentEdge + innerW // column just past where the truncated original text ends
+
+	revealW := t + 2*revealPad
 	if revealW < innerW {
-		revealW = innerW
+		revealW = innerW // floor: cover the selected-row highlight for a short reveal
+	}
+
+	body := strings.Repeat(" ", revealPad) + content // leading margin; padRight adds the trailing one
+	if revealW >= screenW {
+		revealW = screenW
+		if t >= screenW {
+			body = truncate(content, screenW) // text overflows the viewport: fill it, … at the edge, no margin
+		} else {
+			body = content // text fits but the margins don't: drop them
+		}
+	}
+
+	if screenW-visEnd <= contentEdge {
+		x = visEnd - revealW // right-anchored: the strip ends where the original text ends
+	} else {
+		x = contentEdge // left-anchored: the strip starts where the original text starts
 	}
 	if x+revealW > screenW {
-		x = screenW - revealW // shift left so the reveal's right edge sits at the screen edge
+		x = screenW - revealW
 	}
 	if x < 0 {
 		x = 0
-		full = truncate(full, screenW) // wider than the whole screen: clip with …
-		revealW = screenW
 	}
-	return tooltipStyle.Render(padRight(full, revealW)), x
+	return tooltipStyle.Render(padRight(body, revealW)), x
 }
 
 // filesTreeReveal builds the inline reveal for the commit files tree's selected

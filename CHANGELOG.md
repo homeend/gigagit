@@ -71,6 +71,18 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   feed grows, so loading tracks the held key and stops on release. The load
   dispatch also gained a synchronous `commitsLoading` guard closing the
   back-to-back double-dispatch race (End/PgDn/`j`/`k`, `ctrl+l`, mouse wheel).
+- **The full-text reveal (the yellow highlight) for a truncated selected row is
+  now sized and anchored to the text instead of running edge-to-edge with stray
+  blank padding (the "odd effect").** `revealLine` (`internal/tui/tooltip.go`) was
+  rewritten to a clear geometry: the strip is the text plus a small blank margin
+  on each side (never flush against the text it overflows onto), floored at the
+  panel's inner width so a short reveal still covers the selected-row highlight.
+  It anchors where the original text sits — a right-hand Commits reveal pins its
+  right edge where the text ends and grows left; a left-panel/files-tree reveal
+  pins its left edge where the text starts and grows right — and never exceeds the
+  viewport. Only a subject wider than the whole viewport is clipped: it then fills
+  the full width and is marked with `…` at the edge (no margin, since nothing shows
+  underneath).
 - **Pressing `l` or `enter` on the "Working tree" or "Staged" pseudo-commit
   row (Commits panel) opened the files view with a "compare: DiffTreeFiles:
   unsupported endpoint pair" error, and the view then wedged — only `esc`
