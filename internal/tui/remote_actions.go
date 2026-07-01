@@ -105,6 +105,35 @@ func (m Model) remoteRebaseRow() (actionRow, bool) {
 	}, true
 }
 
+// remoteResetRow offers "Reset current (<cur>) to <remote> tip" on the Remotes
+// tab, but ONLY when the selected remote branch is the remote counterpart of the
+// checked-out branch (rb.Branch == cur). git reset moves HEAD's branch, so a hard
+// reset to origin/<cur> only lands on the right branch when <cur> is checked out;
+// offering it for a remote whose local branch is elsewhere would reset the wrong
+// branch. engine.Reset with Mode:"hard" skips the soft/mixed/hard picker and the
+// non-ancestor confirm — so the mustConfirmOp modal below is the ONLY guard before
+// local commits and uncommitted changes are discarded. It uses mustConfirmOp (not
+// confirmOp) so this one-click destructive reset still prompts even when the user
+// has turned off slow-op confirms ([ui] disable_slow_op_confirm).
+func (m Model) remoteResetRow() (actionRow, bool) {
+	rb, ok := m.selectedRemoteForAction()
+	if !ok {
+		return actionRow{}, false
+	}
+	cur, attached := m.remoteCurrentBranch()
+	if !attached || rb.Branch != cur {
+		return actionRow{}, false
+	}
+	return actionRow{
+		id:    "remote-reset",
+		label: "Reset current (" + cur + ") to " + rb.Name + " tip",
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			return m.mustConfirmOp(engine.Reset{Commit: rb.Name, Mode: "hard"},
+				"Reset "+cur+" to "+rb.Name+"? This discards local commits and uncommitted changes.")
+		},
+	}, true
+}
+
 // remotePruneRow offers Prune on the Remotes tab (no dedicated key).
 func (m Model) remotePruneRow() (actionRow, bool) {
 	if !m.canFetchRemotes() {

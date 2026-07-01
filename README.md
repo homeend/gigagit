@@ -97,7 +97,7 @@ Every smart operation is also scriptable:
 gg status
 gg commit -m "msg"            # add -a to stage tracked changes; --amend rewrites the last commit
 gg commit reword <commit> -m "msg"   # change a commit's message (HEAD=amend; older=in-place rebase)
-gg pull [--background] [--on-conflict rebase|merge|abort]
+gg pull [--background] [--on-conflict rebase|merge|reset|abort]   # reset = hard-reset to the remote tip, discarding local work
 gg push [--force | --force-with-lease] [--on-reject rebase|force|force-with-lease|abort] [<branch>]
                                          # push the current branch, or a named one by ref (no checkout); --on-reject recovers a rejected push (default: fail/prompt)
 gg switch <branch>

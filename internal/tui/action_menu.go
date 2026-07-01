@@ -138,6 +138,9 @@ func availableActions(m Model) []actionRow {
 	if r, ok := m.remoteRebaseRow(); ok {
 		out = append(out, r)
 	}
+	if r, ok := m.remoteResetRow(); ok {
+		out = append(out, r)
+	}
 	if r, ok := m.remoteDeleteRow(); ok {
 		out = append(out, r)
 	}
