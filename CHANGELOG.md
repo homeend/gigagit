@@ -9,6 +9,17 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Fixed
+- **Creating a tag (or anything else typed/pasted into a text field) could
+  crash with a cryptic `fork/exec ...git.exe: invalid argument` on Windows.**
+  Pasting into a Windows console can synthesize a stray NUL (U+0000) key
+  event at the end of the paste burst; nothing filtered it out of the field,
+  so it survived into the tag name/message and reached `git tag`'s argv
+  unfiltered (`internal/git/mutate.go`). Go's Windows exec layer rejects any
+  argv item containing a NUL with `syscall.EINVAL`, which surfaces as that
+  opaque error — reproduced via copy-pasting a (correctly-copied, post the
+  clip.exe fix below) tag name into the create-tag popup. `textfield.insert`
+  now drops NUL runes at the field's own input boundary; no legitimate
+  keystroke or paste ever needs one.
 - **Copying a short value (tag name, branch name) on WSL no longer pastes as
   CJK mojibake.** `clip.exe` guesses whether stdin is already UTF-16 using a
   length-sensitive heuristic, and misdetects short pure-ASCII payloads like a

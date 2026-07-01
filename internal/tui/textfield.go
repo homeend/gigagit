@@ -26,14 +26,26 @@ func newTextField(s string) textfield {
 // on non-addressable values (e.g. a map element like worktreePopup.inputs[l]).
 func (f textfield) Value() string { return string(f.runes) }
 
-// insert puts rs at the cursor and advances past them.
+// insert puts rs at the cursor and advances past them. A NUL rune (U+0000)
+// is dropped rather than inserted: pasting into a Windows console can
+// synthesize a stray NUL key event at the end of the burst, and no
+// legitimate keystroke or paste needs a literal NUL. Left unfiltered, one
+// reaching a field whose Value() becomes a git argv item (a tag name or
+// message, say) fails on Windows with the opaque syscall.EINVAL "invalid
+// argument", since Windows command-line strings are NUL-terminated.
 func (f *textfield) insert(rs []rune) {
-	out := make([]rune, 0, len(f.runes)+len(rs))
+	clean := make([]rune, 0, len(rs))
+	for _, r := range rs {
+		if r != 0 {
+			clean = append(clean, r)
+		}
+	}
+	out := make([]rune, 0, len(f.runes)+len(clean))
 	out = append(out, f.runes[:f.cursor]...)
-	out = append(out, rs...)
+	out = append(out, clean...)
 	out = append(out, f.runes[f.cursor:]...)
 	f.runes = out
-	f.cursor += len(rs)
+	f.cursor += len(clean)
 }
 
 func (f *textfield) backspace() {

@@ -20,6 +20,27 @@ func TestTextFieldInsertAndValue(t *testing.T) {
 	}
 }
 
+// TestTextFieldInsertDropsNULRunes guards against a real crash: pasting
+// clipboard text into a Windows console can synthesize a stray NUL
+// (U+0000) key event at the end of the burst. A NUL surviving into a tag
+// name/message reaches git's argv unfiltered (internal/git/mutate.go's
+// CreateTag), and Go's Windows exec layer rejects any arg containing a NUL
+// with syscall.EINVAL — surfacing as the opaque "fork/exec ...: invalid
+// argument" reported after copy-pasting a tag name into the create-tag
+// popup. No legitimate keystroke or paste needs a literal NUL, so it's
+// dropped at the field's own insertion boundary rather than validated
+// downstream.
+func TestTextFieldInsertDropsNULRunes(t *testing.T) {
+	var f textfield
+	f.HandleEditKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v', '0', '.', '1', '.', '9', 0}})
+	if f.Value() != "v0.1.9" {
+		t.Fatalf("Value = %q, want %q (NUL rune must be dropped)", f.Value(), "v0.1.9")
+	}
+	if f.cursor != len([]rune("v0.1.9")) {
+		t.Fatalf("cursor = %d, want %d", f.cursor, len([]rune("v0.1.9")))
+	}
+}
+
 func TestTextFieldInsertMidBuffer(t *testing.T) {
 	f := newTextField("ac")
 	f.HandleEditKey(keyMsg("left")) // cursor: 2 -> 1
