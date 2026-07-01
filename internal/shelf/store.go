@@ -13,6 +13,10 @@ import (
 // MaxShelfBytes caps a single shelved file (mirrors domain.MaxDiffBytes).
 const MaxShelfBytes = 10 << 20
 
+// MaxCommitArchiveBytes caps a shelved commit's changed-files tar. Larger than
+// MaxShelfBytes because a commit may touch many files, but still bounded.
+const MaxCommitArchiveBytes = 200 << 20
+
 // DefaultBucket is the implicit bucket addressed by "" or "default".
 const DefaultBucket = "default"
 
@@ -26,6 +30,7 @@ var ErrNotFound = errors.New("shelf: entry not found")
 // one process; cross-process writes are last-writer-wins (atomic index rewrite).
 type Store interface {
 	Put(bucket string, addr model.FileAddress, data []byte) (model.ShelfEntry, error)
+	PutCommit(bucket string, addr model.FileAddress, tar []byte) (model.ShelfEntry, error)
 	Get(entryID string) ([]byte, error)
 	List(bucket string, skip, limit int) ([]model.ShelfEntry, error)
 	Buckets() ([]model.ShelfBucket, error)
