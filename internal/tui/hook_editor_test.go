@@ -1,11 +1,14 @@
 package tui
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/homeend/gigagit/internal/config"
 )
@@ -70,5 +73,39 @@ func TestHookEditorEscDoesNotSave(t *testing.T) {
 	}
 	if layerOf[*hookEditorPopup](m) != nil {
 		t.Fatal("editor should close on esc")
+	}
+}
+
+// The editor box must never be taller than the terminal, or overlayCenter gives
+// a negative top offset and the bottom (the [ctrl+s] save help line) is clipped
+// off-screen — the "can't see the bottom of the hook editor" bug.
+func TestHookEditorBoxFitsTerminalHeight(t *testing.T) {
+	for _, h := range []int{14, 24, 40} {
+		p := &hookEditorPopup{buf: newTextField("echo one\necho two\necho three")}
+		box := p.box(Model{}, 100, h)
+		if got := lipgloss.Height(box); got > h {
+			t.Fatalf("h=%d: box height %d exceeds terminal — bottom help line would be clipped", h, got)
+		}
+		if !strings.Contains(box, "ctrl+s") {
+			t.Fatalf("h=%d: help line missing from box", h)
+		}
+	}
+}
+
+// A script with far more lines than fit still produces a box within the terminal
+// height (the window scrolls; it must not grow the box past the screen).
+func TestHookEditorBoxFitsWithTallScript(t *testing.T) {
+	var sb strings.Builder
+	for i := 0; i < 300; i++ {
+		fmt.Fprintf(&sb, "echo line %d\n", i)
+	}
+	p := &hookEditorPopup{buf: newTextField(sb.String())}
+	const h = 24
+	box := p.box(Model{}, 100, h)
+	if got := lipgloss.Height(box); got > h {
+		t.Fatalf("tall-script box height %d exceeds terminal height %d", got, h)
+	}
+	if !strings.Contains(box, "ctrl+s") {
+		t.Fatal("help line missing from box with a tall script")
 	}
 }
