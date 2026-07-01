@@ -18,3 +18,4 @@
 
 # superpowers SDD scratch (ledger, task briefs, review packages)
 .superpowers/
+/graphify-out/
