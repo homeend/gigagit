@@ -174,9 +174,9 @@ func TestCommitIdentMarkers(t *testing.T) {
 		id   commitIdent
 		want string
 	}{
-		{"in sync", commitIdent{tip: true, remoteTip: true}, "■▲"},
-		{"local only", commitIdent{tip: true}, "■ "},
-		{"remote only", commitIdent{remoteTip: true}, "▲ "},
+		{"in sync", commitIdent{tip: true, remoteTip: true}, "↓↑"},
+		{"local only", commitIdent{tip: true}, "↓ "},
+		{"remote only", commitIdent{remoteTip: true}, "↑ "},
 		{"neither", commitIdent{}, "  "},
 	}
 	for _, tc := range cases {
@@ -192,7 +192,7 @@ func TestCommitIdentTokenIncludesMarkerPrefix(t *testing.T) {
 	if trimmed {
 		t.Fatal("a short name must not be trimmed")
 	}
-	if !strings.HasPrefix(tok, "■▲ ") {
+	if !strings.HasPrefix(tok, "↓↑ ") {
 		t.Fatalf("token = %q, want it to start with the marker prefix", tok)
 	}
 	if want := commitMarkerW + commitIdentW; lipgloss.Width(tok) != want {
@@ -204,8 +204,8 @@ func TestCommitIdentTokenIncludesMarkerPrefix(t *testing.T) {
 // one marker misalign against rows with two. Pins the left-pack field at 2 cells.
 func TestCommitIdentTokenSingleMarkerWidth(t *testing.T) {
 	for _, id := range []commitIdent{
-		{name: "main", tip: true},       // ■  (local only)
-		{name: "main", remoteTip: true}, // ▲  (remote only)
+		{name: "main", tip: true},       // ↓  (local only)
+		{name: "main", remoteTip: true}, // ↑  (remote only)
 	} {
 		tok, _ := id.token(commitIdentW)
 		if want := commitMarkerW + commitIdentW; lipgloss.Width(tok) != want {

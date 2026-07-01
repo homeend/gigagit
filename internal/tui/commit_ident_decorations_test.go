@@ -31,16 +31,16 @@ func TestCommitIdentOfCapturesTagsAndCount(t *testing.T) {
 
 func TestMarkerFieldArrangement(t *testing.T) {
 	// The 3 cells are [marker1][marker2-or-badge][separator]. The badge fills the
-	// FILLER cell (cell 2) so a single local tip with count>=2 reads "■³ " (NOT
-	// "■ ³" — badge must not displace the separator or glue to the name).
+	// FILLER cell (cell 2) so a single local tip with count>=2 reads "↓³ " (NOT
+	// "↓ ³" — badge must not displace the separator or glue to the name).
 	cases := []struct {
 		id   commitIdent
 		want string
 	}{
-		{commitIdent{tip: true, count: 1}, markerLocal + "  "},                                // "■  " single tip, no badge
-		{commitIdent{tip: true, count: 3}, markerLocal + "³ "},                                // "■³ " multi tip, badge in cell 2
-		{commitIdent{tip: true, remoteTip: true, count: 3}, markerLocal + markerRemote + " "}, // "■▲ " both tips → badge DROPPED (no room)
-		{commitIdent{remoteTip: true, count: 0}, markerRemote + "  "},                         // "▲  " remote only
+		{commitIdent{tip: true, count: 1}, markerLocal + "  "},                                // "↓  " single tip, no badge
+		{commitIdent{tip: true, count: 3}, markerLocal + "³ "},                                // "↓³ " multi tip, badge in cell 2
+		{commitIdent{tip: true, remoteTip: true, count: 3}, markerLocal + markerRemote + " "}, // "↓↑ " both tips → badge DROPPED (no room)
+		{commitIdent{remoteTip: true, count: 0}, markerRemote + "  "},                         // "↑  " remote only
 		{commitIdent{count: 0}, "   "},                                                        // "   " lineage
 	}
 	for _, tc := range cases {

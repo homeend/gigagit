@@ -8,6 +8,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+### Changed
+- **The Commits-panel tip markers are now arrows: `↓` for a local branch's tip
+  and `↑` for its tracked-remote tip** (previously `■` and `▲`). A commit that is
+  both shows `↓↑`. The Tags panel's separate `▲` "pushed to remote" indicator is
+  unchanged. Both glyphs still occupy one terminal cell, so the fixed 3-cell
+  marker layout is unchanged.
+
 ### Added
 - **`N` / `P` step to the next / previous file from the diff boundary.** In the
   diff view (opened from the files tree, the Status panel, or the Staged panel),
