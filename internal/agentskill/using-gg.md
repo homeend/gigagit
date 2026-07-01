@@ -139,12 +139,15 @@ guards against removing the worktree you are standing in.
   machine-local state dir; the default bucket is implicit. `list` shows each
   entry's id and a bookmark-style origin (`<container> / <state-or-commit> /
   <path>`).
-- `gg shelf commit <sha>` — freeze `<sha>`'s **changed files** (content only,
-  via `git archive`; no message/author) as one durable, path-less shelf entry
-  and print its entry id. Unlike a bare git ref, the content is stored, so it
-  survives `git gc` and history rewrites — the same durability guarantee a
-  file entry gets from surviving deletion of its source. Capped at 200MiB of
-  archive data.
+- `gg shelf commit [--name <name>] <sha>` — freeze `<sha>`'s **changed files**
+  (content only, via `git archive`; no message/author) as one durable,
+  path-less shelf entry and print its entry id. Unlike a bare git ref, the
+  content is stored, so it survives `git gc` and history rewrites — the same
+  durability guarantee a file entry gets from surviving deletion of its
+  source. Capped at 200MiB of archive data. `--name` (must come before the
+  `<sha>` positional) attaches a human-readable label, shown after the entry's
+  address in `gg shelf list` (` — <name>`) and the shelf quick-switcher;
+  omitting it leaves the entry unlabeled.
 - `gg shelf export [--dir <path>] [--force] <entry-id>` — write a shelf
   entry's files to a directory **outside** the working tree (flags come
   **before** the positional `<entry-id>`). Without `--dir` the target defaults
