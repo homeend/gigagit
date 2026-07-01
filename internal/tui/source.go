@@ -280,6 +280,8 @@ func opAffectedSources(op engine.Operation) []sourceKey {
 		// auto-triggered a background ls-remote (the ▲ pushed-state lookup) on
 		// every branch delete/rename, a needless network round-trip.
 		return []sourceKey{srcBranches, srcFeed}
+	case engine.ExportFile, engine.ExportToDir:
+		return []sourceKey{} // writes outside the working tree; refresh nothing
 	}
 	return nil // unmapped → all sources (safe)
 }

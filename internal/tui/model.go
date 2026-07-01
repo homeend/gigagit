@@ -441,6 +441,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		p := &tempExportPopup{files: msg.files}
 		p.dest = newTextField(msg.dir)
 		return m.pushLayer(p), nil
+	case patchResolvedMsg:
+		if msg.err != nil {
+			m.statusMsg = "export patch: " + msg.err.Error()
+			return m, nil
+		}
+		p := &exportPatchPopup{data: msg.data}
+		p.dest = newTextField(msg.defaultPath)
+		return m.pushLayer(p), nil
 	case bookmarkAddedMsg:
 		if msg.err != nil {
 			m.statusMsg = "bookmark: " + msg.err.Error()
