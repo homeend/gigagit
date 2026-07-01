@@ -66,3 +66,52 @@ func (m Model) shelfAddRow() (actionRow, bool) {
 		},
 	}, true
 }
+
+// shelfAddCommitCmd freezes commit sha's changed files into the shelf off the
+// UI thread (reuses shelfAddedMsg).
+func (m Model) shelfAddCommitCmd(sha string) tea.Cmd {
+	svc := m.svc
+	return func() tea.Msg {
+		e, err := svc.ShelfAddCommit(context.Background(), sha)
+		return shelfAddedMsg{entry: e, err: err}
+	}
+}
+
+// commitShelfRow offers "Shelf this commit" on the Commits panel — freeze the
+// selected commit's changed files durably. Mirrors commitBookmarkRow.
+func (m Model) commitShelfRow() (actionRow, bool) {
+	if m.focus != panelCommits || !m.opsIdle() {
+		return actionRow{}, false
+	}
+	bi, ok := m.backingIndex(panelCommits)
+	if !ok {
+		return actionRow{}, false
+	}
+	sha := m.commits[bi].Hash
+	return actionRow{
+		id:    "commit-shelf",
+		label: "Shelf this commit",
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			return m, m.shelfAddCommitCmd(sha)
+		},
+	}, true
+}
+
+// reflogShelfRow is the reflog-panel variant of commitShelfRow.
+func (m Model) reflogShelfRow() (actionRow, bool) {
+	if m.focus != panelReflog || !m.opsIdle() {
+		return actionRow{}, false
+	}
+	bi, ok := m.backingIndex(panelReflog)
+	if !ok {
+		return actionRow{}, false
+	}
+	sha := m.reflog[bi].Hash
+	return actionRow{
+		id:    "reflog-shelf",
+		label: "Shelf this commit",
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			return m, m.shelfAddCommitCmd(sha)
+		},
+	}, true
+}
