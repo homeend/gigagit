@@ -99,6 +99,12 @@ func (m Model) tooltip() (lines []string, x, y int, ok bool) {
 	return []string{line}, x, rowY, true
 }
 
+// revealClipMargin trims a reveal that is wider than the whole terminal this many
+// columns short of the right edge, so the trailing … sits clear of the border
+// rather than hugging it (the requested behaviour — a subject longer than the
+// whole viewport is trimmed to terminal width − 5 and marked with …).
+const revealClipMargin = 5
+
 // revealLine builds the styled inline reveal for a row whose full text is
 // `content`, displayed at column `contentEdge` in a window of inner width
 // `innerW` on a `screenW`-wide screen, and returns the line plus its start
@@ -108,8 +114,10 @@ func (m Model) tooltip() (lines []string, x, y int, ok bool) {
 // inner width so the selected-row reverse-video highlight beneath never peeks out
 // to its right; overflow the window's right border, and when the row would run
 // off the SCREEN's right edge (a right-hand window has little room to its right)
-// shift left so it spills over whatever sits to its left. Only a row wider than
-// the whole screen is clipped (with …). Single line, never wrapped.
+// shift left so it spills over whatever sits to its left — the reveal may use the
+// WHOLE terminal width, not just its own window. Only a row wider than the whole
+// terminal is clipped: it is trimmed to screenW − revealClipMargin and marked with
+// … so the ellipsis clears the right edge. Single line, never wrapped.
 func revealLine(content string, contentEdge, innerW, screenW int) (line string, x int) {
 	x = contentEdge
 	full := content
@@ -121,9 +129,15 @@ func revealLine(content string, contentEdge, innerW, screenW int) (line string, 
 		x = screenW - revealW // shift left so the reveal's right edge sits at the screen edge
 	}
 	if x < 0 {
+		// Wider than the whole terminal: pin to the left edge and fill it, but trim the
+		// text to screenW − margin with … so the ellipsis clears the right border.
 		x = 0
-		full = truncate(full, screenW) // wider than the whole screen: clip with …
 		revealW = screenW
+		textCap := screenW - revealClipMargin
+		if textCap < 1 {
+			textCap = screenW
+		}
+		full = truncate(full, textCap)
 	}
 	return tooltipStyle.Render(padRight(full, revealW)), x
 }

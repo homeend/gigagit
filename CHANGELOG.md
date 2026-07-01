@@ -15,6 +15,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   including outside a git repository.
 
 ### Fixed
+- **Selecting a Commits-panel row whose subject is longer than the whole
+  terminal made the full-text reveal (the yellow highlight) run right up to the
+  screen edge with no clear truncation marker (the "odd effect").** `revealLine`
+  (`internal/tui/tooltip.go`) clipped a reveal wider than the terminal to the
+  *full* screen width, so the text hugged the right border. It now trims such a
+  reveal to terminal width − 5 and marks it with `…`, so the ellipsis sits clear
+  of the edge and it reads as a truncation rather than a cut-off line. The reveal
+  still overflows left to use the whole terminal width (not just the commit
+  window) whenever the subject fits within the terminal — only a subject longer
+  than the entire terminal is clipped.
 - **Pressing `l` or `enter` on the "Working tree" or "Staged" pseudo-commit
   row (Commits panel) opened the files view with a "compare: DiffTreeFiles:
   unsupported endpoint pair" error, and the view then wedged — only `esc`

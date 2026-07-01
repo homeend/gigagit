@@ -132,9 +132,10 @@ func TestTooltipFillsSelectedRowHighlight(t *testing.T) {
 }
 
 // A right-hand panel (Commits) has little room to its right, so a row wider than
-// that room — but narrower than the whole screen — must overflow LEFT, over the
-// panels to its left, and still show its full text (not clip at the screen's
-// right edge). The reveal's start column shifts left of the panel's content edge.
+// that room — but narrower than the whole TERMINAL — must overflow LEFT, over the
+// panels to its left, and still show its full text (not clip). The reveal may use
+// the whole terminal width, not just the commit window; its start column shifts
+// left of the panel's content edge.
 func TestTooltipOverflowsLeftFromRightPanel(t *testing.T) {
 	m := footerModel() // width 120; Commits is the right panel
 	m.focus = panelCommits
@@ -158,7 +159,7 @@ func TestTooltipOverflowsLeftFromRightPanel(t *testing.T) {
 		t.Fatalf("reveal must show the full subject (no clip), got %q", plain)
 	}
 	if strings.HasSuffix(strings.TrimRight(plain, " "), "…") {
-		t.Errorf("a row that fits the screen must not be clipped with …, got %q", plain)
+		t.Errorf("a row that fits the terminal must not be clipped with …, got %q", plain)
 	}
 	contentEdge := m.layout().pos[panelCommits].x + 2
 	if x >= contentEdge {
@@ -275,6 +276,12 @@ func TestTooltipOverflowsSingleLineCappedAtScreen(t *testing.T) {
 	}
 	if w := ansi.StringWidth(lines[0]); w > m.width {
 		t.Errorf("reveal is %d cols, wider than the terminal (%d)", w, m.width)
+	}
+	// The … must sit a margin short of the right edge, not hug it: the visible
+	// text is trimmed to terminal width − revealClipMargin.
+	text := strings.TrimRight(only, " ")
+	if tw := lipgloss.Width(text); tw > m.width-revealClipMargin {
+		t.Errorf("clipped text is %d cols, want ≤ terminal width − margin (%d)", tw, m.width-revealClipMargin)
 	}
 }
 
