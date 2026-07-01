@@ -262,6 +262,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   `gg status` is unaffected — it stays faithful to `git status`.
 
 ### Fixed
+- **The Reflog panel no longer shows a literal `(%gr)` after every entry.** The
+  reflog rows meant to end with a relative time (e.g. "2 minutes ago"), but the
+  format used `%gr`, which git does not recognize and prints verbatim. The time
+  is now read from the reflog selector under `--date=relative`, so each row shows
+  its real relative time and the numeric `HEAD@{N}` selector is preserved.
 - **A failed squash now unmarks the off-branch commits it complained about.**
   Squashing a ◉ selection that includes a commit not on the current branch
   (easy to do from the multi-branch commit feed) fails the membership check with

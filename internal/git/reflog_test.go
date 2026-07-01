@@ -37,6 +37,14 @@ func TestReflogEntriesListsHeadActions(t *testing.T) {
 	if top.ShortHash == "" || top.Subject == "" {
 		t.Fatalf("top entry missing short hash or subject: %+v", top)
 	}
+	// Rel is the reflog entry's relative time, e.g. "0 seconds ago". It must be
+	// populated and must not leak an unexpanded git placeholder.
+	if top.Rel == "" || strings.Contains(top.Rel, "%") {
+		t.Fatalf("top rel = %q, want a non-empty relative time with no %% placeholder", top.Rel)
+	}
+	if strings.ContainsAny(top.Rel, "{}") {
+		t.Fatalf("top rel = %q, want the bare relative time without the HEAD@{…} wrapper", top.Rel)
+	}
 	// The most recent action was the checkout.
 	if !strings.Contains(top.Subject, "checkout") {
 		t.Fatalf("top subject = %q, want it to mention checkout", top.Subject)
