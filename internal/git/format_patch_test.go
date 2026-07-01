@@ -41,7 +41,7 @@ func TestParentCountRealRepo(t *testing.T) {
 	// merge commit: 2 parents
 	gitIn(t, dir, "checkout", "-b", "topic", "HEAD~1")
 	gitIn(t, dir, "commit", "--allow-empty", "-m", "topic")
-	gitIn(t, dir, "checkout", "-")           // back to the default branch
+	gitIn(t, dir, "checkout", "-") // back to the default branch
 	gitIn(t, dir, "merge", "--no-ff", "topic", "-m", "merge topic")
 	if n, err := r.ParentCount(context.Background(), "HEAD"); err != nil || n != 2 {
 		t.Fatalf("merge ParentCount = %d, %v; want 2, nil", n, err)
