@@ -68,16 +68,19 @@ func (m Model) shelfAddRow() (actionRow, bool) {
 }
 
 // shelfAddCommitCmd freezes commit sha's changed files into the shelf off the
-// UI thread (reuses shelfAddedMsg).
-func (m Model) shelfAddCommitCmd(sha string) tea.Cmd {
+// UI thread (reuses shelfAddedMsg). label is the human-entered name for the
+// entry (from commitNamePopup); empty is fine — ShelfAddCommit/PutCommit fall
+// back to a default display.
+func (m Model) shelfAddCommitCmd(sha, label string) tea.Cmd {
 	svc := m.svc
 	return func() tea.Msg {
-		e, err := svc.ShelfAddCommit(context.Background(), sha, "")
+		e, err := svc.ShelfAddCommit(context.Background(), sha, label)
 		return shelfAddedMsg{entry: e, err: err}
 	}
 }
 
-// commitShelfRow offers "Shelf this commit" on the Commits panel — freeze the
+// commitShelfRow offers "Shelf this commit" on the Commits panel — opens the
+// shared naming popup, pre-filled with the commit subject, before freezing the
 // selected commit's changed files durably. Mirrors commitBookmarkRow.
 func (m Model) commitShelfRow() (actionRow, bool) {
 	if m.focus != panelCommits || !m.opsIdle() {
@@ -87,12 +90,12 @@ func (m Model) commitShelfRow() (actionRow, bool) {
 	if !ok {
 		return actionRow{}, false
 	}
-	sha := m.commits[bi].Hash
+	c := m.commits[bi]
 	return actionRow{
 		id:    "commit-shelf",
 		label: "Shelf this commit",
 		run: func(m Model) (tea.Model, tea.Cmd) {
-			return m, m.shelfAddCommitCmd(sha)
+			return m.pushLayer(&commitNamePopup{commit: c, forShelf: true, name: newTextField(c.Subject)}), nil
 		},
 	}, true
 }
@@ -106,12 +109,13 @@ func (m Model) reflogShelfRow() (actionRow, bool) {
 	if !ok {
 		return actionRow{}, false
 	}
-	sha := m.reflog[bi].Hash
+	e := m.reflog[bi]
+	c := model.Commit{Hash: e.Hash, Subject: e.Subject}
 	return actionRow{
 		id:    "reflog-shelf",
 		label: "Shelf this commit",
 		run: func(m Model) (tea.Model, tea.Cmd) {
-			return m, m.shelfAddCommitCmd(sha)
+			return m.pushLayer(&commitNamePopup{commit: c, forShelf: true, name: newTextField(c.Subject)}), nil
 		},
 	}, true
 }
