@@ -117,8 +117,8 @@ func (op SmartPull) pullCurrent(ctx context.Context, deps OpDeps, remote, branch
 	}
 	resp, derr := deps.decide(ctx, DecisionRequest{
 		ID:      "non-fast-forward",
-		Prompt:  branch + " has diverged from " + remote,
-		Options: []string{"rebase", "merge", "abort"},
+		Prompt:  branch + " has diverged from " + remote + " (reset discards local commits and changes)",
+		Options: []string{"rebase", "merge", "reset", "abort"},
 	})
 	if derr != nil {
 		return Result{}, derr
@@ -134,6 +134,17 @@ func (op SmartPull) pullCurrent(ctx context.Context, deps OpDeps, remote, branch
 			return Result{}, err
 		}
 		return Result{Summary: "pulled (merged) " + branch, Changed: true}, nil
+	case "reset":
+		// The ff-only pull above failed WITHOUT starting a merge or rebase (that
+		// is the --ff-only guarantee), so there is no in-progress state to abort:
+		// reset --hard alone snaps the branch to the fetched remote tip and
+		// discards local commits + uncommitted changes, as the user asked.
+		remoteTip := remote + "/" + branch
+		deps.emit(ctx, Progress{Step: "resetting (hard)", Detail: remoteTip})
+		if err := deps.Repo.Reset(ctx, "hard", remoteTip); err != nil {
+			return Result{}, err
+		}
+		return Result{Summary: "reset " + branch + " to " + remoteTip + " (local changes discarded)", Changed: true}, nil
 	default:
 		return Result{Summary: "aborted: " + branch + " diverged"}, nil
 	}

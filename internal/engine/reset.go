@@ -13,6 +13,12 @@ import (
 // an unrelated commit. Reset never conflicts, so there is no conflict path.
 type Reset struct {
 	Commit string
+	// Mode, when non-empty ("soft"/"mixed"/"hard"), presets the reset mode and
+	// SKIPS both the reset-mode picker and the non-ancestor confirm: the caller
+	// has already decided and owns the confirmation (e.g. the TUI's confirmOp
+	// before "reset current branch to the remote tip"). Empty Mode keeps the
+	// interactive soft/mixed/hard/cancel decision flow.
+	Mode string
 }
 
 var _ Operation = Reset{}
@@ -22,40 +28,51 @@ func (op Reset) Run(ctx context.Context, deps OpDeps) (Result, error) {
 		return Result{}, fmt.Errorf("reset: Commit is required")
 	}
 
-	modeChoice, err := deps.decide(ctx, DecisionRequest{
-		ID:      "reset-mode",
-		Prompt:  "Reset the current branch to " + op.Commit,
-		Options: []string{"soft", "mixed", "hard", "cancel"},
-	})
-	if err != nil {
-		return Result{}, err
-	}
-	mode := modeChoice.Option
-	switch mode {
-	case "soft", "mixed", "hard":
-		// proceed
-	case "cancel", "":
-		return Result{Summary: "reset cancelled", Changed: false}, nil
-	default:
-		return Result{}, fmt.Errorf("reset: unknown mode %q", mode)
-	}
-
-	// Non-ancestor guard (all modes): the target may be on another branch.
-	anc, err := deps.Repo.IsAncestor(ctx, op.Commit, "HEAD")
-	if err != nil {
-		return Result{}, err
-	}
-	if !anc {
-		confirm, derr := deps.decide(ctx, DecisionRequest{
-			ID:      "reset-confirm",
-			Prompt:  "Commit " + op.Commit + " is not on the current branch; reset will move the branch onto it",
-			Options: []string{"proceed", "cancel"},
+	mode := op.Mode
+	if mode == "" {
+		modeChoice, err := deps.decide(ctx, DecisionRequest{
+			ID:      "reset-mode",
+			Prompt:  "Reset the current branch to " + op.Commit,
+			Options: []string{"soft", "mixed", "hard", "cancel"},
 		})
-		if derr != nil {
-			return Result{}, derr
+		if err != nil {
+			return Result{}, err
 		}
-		if confirm.Option != "proceed" {
+		mode = modeChoice.Option
+		switch mode {
+		case "soft", "mixed", "hard":
+			// proceed
+		case "cancel", "":
 			return Result{Summary: "reset cancelled", Changed: false}, nil
+		default:
+			return Result{}, fmt.Errorf("reset: unknown mode %q", mode)
+		}
+
+		// Non-ancestor guard (interactive path, all modes): the target may be on
+		// another branch. A preset Mode skips this — its caller already confirmed.
+		anc, err := deps.Repo.IsAncestor(ctx, op.Commit, "HEAD")
+		if err != nil {
+			return Result{}, err
+		}
+		if !anc {
+			confirm, derr := deps.decide(ctx, DecisionRequest{
+				ID:      "reset-confirm",
+				Prompt:  "Commit " + op.Commit + " is not on the current branch; reset will move the branch onto it",
+				Options: []string{"proceed", "cancel"},
+			})
+			if derr != nil {
+				return Result{}, derr
+			}
+			if confirm.Option != "proceed" {
+				return Result{Summary: "reset cancelled", Changed: false}, nil
+			}
+		}
+	} else {
+		switch mode {
+		case "soft", "mixed", "hard":
+			// proceed with the caller-supplied mode
+		default:
+			return Result{}, fmt.Errorf("reset: unknown mode %q", mode)
 		}
 	}
 

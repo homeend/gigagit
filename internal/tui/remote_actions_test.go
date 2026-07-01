@@ -158,6 +158,57 @@ func TestRemoteDeleteRowDispatches(t *testing.T) {
 	}
 }
 
+// remote-reset appears only when the selected remote branch is the remote
+// counterpart of the CHECKED-OUT branch (rb.Branch == cur), because git reset
+// moves HEAD's branch. remoteModel() is on "main" with origin/foo selected, so
+// the row is absent there and present once foo is checked out.
+func TestRemoteResetRowGatedToCurrentBranch(t *testing.T) {
+	m := remoteModel() // on "main", origin/foo selected → mismatch
+	if got := ids(availableActions(m)); got["remote-reset"] {
+		t.Fatalf("remote-reset must be absent when the remote is not the current branch; got %v", got)
+	}
+	m.status.Branch = "foo" // now origin/foo IS the current branch's remote
+	if got := ids(availableActions(m)); !got["remote-reset"] {
+		t.Fatalf("remote-reset must appear when the remote matches the current branch; got %v", got)
+	}
+}
+
+func TestRemoteResetRowHiddenOnDetachedHEAD(t *testing.T) {
+	m := remoteModel()
+	m.status.Branch = "" // detached
+	if got := ids(availableActions(m)); got["remote-reset"] {
+		t.Fatalf("remote-reset must be hidden on detached HEAD; got %v", got)
+	}
+}
+
+// The remote reset always prompts — even with slow-op confirms disabled — because
+// it is a one-click hard reset whose engine Mode:"hard" preset suppresses the
+// engine's own reset modals. Running the row opens the confirm modal (no op yet);
+// answering Yes starts the reset.
+func TestRemoteResetRowAlwaysConfirms(t *testing.T) {
+	m := remoteModel()
+	m.status.Branch = "foo"
+	m.cfg.UI.DisableSlowOpConfirm = true // disabled confirms must NOT bypass this reset
+	row, ok := m.remoteResetRow()
+	if !ok {
+		t.Fatal("remoteResetRow not available")
+	}
+	nm, cmd := row.run(m)
+	rm := nm.(Model)
+	if rm.modal == nil || rm.modal.req.ID != "confirm-slow-op" {
+		t.Fatalf("reset must always open a confirm modal even with confirms disabled; modal=%v", rm.modal)
+	}
+	if cmd != nil {
+		t.Fatal("opening the confirm modal must not start the op yet")
+	}
+	if _, cmd2 := rm.resolveModal("Yes"); cmd2 == nil {
+		t.Fatal("confirming Yes must start the reset op")
+	}
+	if _, cmd3 := rm.resolveModal("No"); cmd3 != nil {
+		t.Fatal("answering No must not start any op")
+	}
+}
+
 // The remote-branch rows must NOT leak onto the menu when another left tab
 // (Branches/Worktrees) is focused, even though the Remotes panel still holds a
 // stored selection. Regression for the bug where the . menu offered "Rebase

@@ -16,9 +16,11 @@ guards against removing the worktree you are standing in.
   cheap amend; an older commit replays its branch onto its own parent (in
   place, later commits preserved). Refuses the repository's root commit and a
   commit not on the current branch.
-- `gg pull [<branch>] [--background] [--on-conflict rebase|merge|abort]` —
+- `gg pull [<branch>] [--background] [--on-conflict rebase|merge|reset|abort]` —
   smart pull; with `<branch>` + `--background` it fast-forwards that branch's
-  ref without checking it out.
+  ref without checking it out. On a diverged current branch, `--on-conflict=reset`
+  hard-resets it to the remote tip, discarding local commits and uncommitted
+  changes.
 - `gg push [--force | --force-with-lease] [--on-reject rebase|force|force-with-lease|abort] [<branch>]`
   — push a branch (sets upstream when missing). With no positional it pushes the
   current branch; with `<branch>` it pushes that local branch **by name without

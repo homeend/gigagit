@@ -101,6 +101,36 @@ func TestSmartPullCurrentBranchNonFastForwardRebase(t *testing.T) {
 	}
 }
 
+// Answering the non-fast-forward decision "reset" hard-resets the current branch
+// to the fetched remote tip: the local commit is discarded, the remote content
+// wins, and an uncommitted local edit is thrown away too.
+func TestSmartPullCurrentBranchNonFastForwardReset(t *testing.T) {
+	clone, repo := cloneOnMainBehindOrigin(t)
+	os.WriteFile(filepath.Join(clone, "local.txt"), []byte("local\n"), 0o644)
+	gitAt(t, clone, "add", ".")
+	gitAt(t, clone, "commit", "-m", "local")
+	// An uncommitted edit on top: reset --hard must discard it as well.
+	os.WriteFile(filepath.Join(clone, "f.txt"), []byte("dirty\n"), 0o644)
+
+	res, err := SmartPull{Intent: PullAndStay}.Run(context.Background(),
+		OpDeps{Repo: repo, Decider: MapDecider{"non-fast-forward": "reset"}})
+	if err != nil {
+		t.Fatalf("smart pull (reset): %v", err)
+	}
+	if !res.Changed {
+		t.Fatalf("result = %+v, want Changed", res)
+	}
+	if revAt(t, clone, "main") != revAt(t, clone, "origin/main") {
+		t.Fatal("main was not reset to origin/main")
+	}
+	if _, err := os.Stat(filepath.Join(clone, "local.txt")); err == nil {
+		t.Fatal("local.txt survived reset --hard (local commit not discarded)")
+	}
+	if b, _ := os.ReadFile(filepath.Join(clone, "f.txt")); string(b) != "v2\n" {
+		t.Fatalf("f.txt = %q, want v2 (remote content, dirty edit discarded)", b)
+	}
+}
+
 func TestSmartPullBackgroundFastForwardsOtherBranch(t *testing.T) {
 	clone, repo := cloneOnMainBehindOrigin(t)
 	root := filepath.Dir(clone)

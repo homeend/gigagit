@@ -17,6 +17,19 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ### Added
 - **Commit sort order (`[ui] commit_sort`)**: choose how the Commits panel and its graph are ordered — `date-order` (the new default; `git --date-order`, a global topological sort so branch **forks always render correctly**) or `plain` (git's lazy newest-first order, much faster on very large repos but the graph can draw a disconnected lane stub when commit dates disagree with topology, e.g. right after a squash). Cycle it live from Settings (`,` → "Commit sort"); it re-walks the feed immediately and saves the choice **per-repo** to `.gg.toml` (so a huge monorepo can opt down to `plain`). Missing key ⇒ `date-order`. `GG_COMMIT_PAGER` still overrides. Fixes the case where a squashed branch's graph looked like it never forked from its base.
+- **Reset a diverged branch to the remote tip, discarding local work.** When a
+  pull of the current branch can't fast-forward, the divergence prompt now offers
+  a **`reset`** choice alongside `rebase`/`merge`/`abort`: it hard-resets the
+  branch to the fetched remote tip, throwing away local commits and uncommitted
+  changes (the `--ff-only` pull leaves no in-progress merge, so no abort is
+  needed first). The same is available non-interactively as
+  `gg pull --on-conflict=reset`. Additionally, the Remotes-tab `.` menu now offers
+  **"Reset current (<branch>) to <remote> tip"** when the selected remote branch
+  is the counterpart of the checked-out branch — a one-step way to snap your local
+  branch onto its origin tip. It **always asks for confirmation first**, even when
+  slow-op confirms are disabled (`[ui] disable_slow_op_confirm`), since it is a
+  one-click hard reset. (git `reset` only moves HEAD's branch, so the action is
+  hidden when the remote's local branch isn't the one checked out.)
 - **Post-worktree-create hook**: configure a per-repo shell script (`[worktree] post_create_hook`) that runs inside a newly created worktree — e.g. to copy gitignored files (`.env`, local config) from the main checkout. Available for both the TUI and `gg worktree add`. Edit it in Settings (`,` → "Worktree post-create hook", a wide multi-line editor). **The hook requires approval before it runs** — because `.gg.toml` travels on clone, gg never runs a clone-borne script silently. In the TUI a modal shows the script and asks run/skip; the `[h]` toggle in the create-worktree popup is a pre-skip that suppresses even the prompt. On the CLI: `--hook` runs without prompting, `--no-hook` skips, otherwise gg prompts interactively and skips when stdin is not a terminal. The script runs with `cwd` = the new worktree and env `GG_MAIN_WORKTREE` / `GG_WORKTREE_PATH` / `GG_BRANCH` / `GG_REPO`; output streams into the busy log, and a hook failure is reported without rolling back the worktree.
 - **`N` / `P` step to the next / previous file from the diff boundary.** In the
   diff view (opened from the files tree, the Status panel, or the Staged panel),

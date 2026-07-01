@@ -2398,6 +2398,16 @@ func (m Model) confirmOp(op engine.Operation, prompt string) (tea.Model, tea.Cmd
 	if !m.confirmSlowOps() {
 		return m.startOp(op)
 	}
+	return m.mustConfirmOp(op, prompt)
+}
+
+// mustConfirmOp is confirmOp WITHOUT the [ui] disable_slow_op_confirm bypass: the
+// yes/no modal is always shown. Use for one-key destructive actions that must
+// never fire unprompted even for users who have disabled slow-op confirms — e.g.
+// the Remotes-menu hard reset to a remote tip, whose engine.Reset Mode:"hard"
+// preset also suppresses the engine's own reset modals, leaving this the only
+// gate.
+func (m Model) mustConfirmOp(op engine.Operation, prompt string) (tea.Model, tea.Cmd) {
 	m.modal = &decisionState{
 		req: engine.DecisionRequest{
 			ID:      "confirm-slow-op",

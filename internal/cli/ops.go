@@ -16,7 +16,7 @@ func cmdPull(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("pull", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	background := fs.Bool("background", false, "update the branch's ref without checking it out")
-	onConflict := fs.String("on-conflict", "", "how to resolve divergence: rebase|merge|abort")
+	onConflict := fs.String("on-conflict", "", "how to resolve divergence: rebase|merge|reset|abort (reset = hard-reset to the remote tip, discarding local commits and changes)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}

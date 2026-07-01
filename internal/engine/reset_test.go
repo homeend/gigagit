@@ -156,6 +156,53 @@ func TestResetNonAncestorConfirmCancel(t *testing.T) {
 	}
 }
 
+// A preset Mode ("hard") skips BOTH the reset-mode picker and the non-ancestor
+// confirm: the caller (a frontend that already confirmed) owns the decision. The
+// hard reset still discards tracked edits and reachable commits. Even resetting
+// onto a NON-ancestor commit must not raise reset-confirm.
+func TestResetPresetHardModeSkipsDecisions(t *testing.T) {
+	dir, repo := newRepo(t)
+	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("base\n"), 0o644)
+	gitE(t, dir, "add", ".")
+	gitE(t, dir, "commit", "-m", "base")
+	gitE(t, dir, "checkout", "-b", "feat")
+	os.WriteFile(filepath.Join(dir, "f.txt"), []byte("feat\n"), 0o644)
+	gitE(t, dir, "add", ".")
+	gitE(t, dir, "commit", "-m", "feat change")
+	featTip := gitOut(t, dir, "rev-parse", "HEAD")
+	gitE(t, dir, "checkout", "main")
+	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("dirty\n"), 0o644) // tracked edit to be discarded
+
+	dec := &captureDecider{answers: map[string]string{}}
+	res, err := Reset{Commit: featTip, Mode: "hard"}.Run(context.Background(),
+		OpDeps{Repo: repo, Decider: dec})
+	if err != nil {
+		t.Fatalf("preset hard: %v", err)
+	}
+	if len(dec.seen) != 0 {
+		t.Fatalf("preset Mode must consult no decisions; saw %+v", dec.seen)
+	}
+	if !res.Changed || !strings.Contains(res.Summary, "hard") {
+		t.Fatalf("result = %+v", res)
+	}
+	if gitOut(t, dir, "rev-parse", "HEAD") != featTip {
+		t.Fatal("preset hard reset must move the branch onto the target")
+	}
+	if got, _ := os.ReadFile(filepath.Join(dir, "a.txt")); string(got) != "base\n" {
+		t.Fatalf("a.txt = %q, hard reset should discard the dirty edit", got)
+	}
+}
+
+func TestResetPresetRejectsUnknownMode(t *testing.T) {
+	dir, repo, base := resetEngineRepo(t)
+	_ = dir
+	_, err := Reset{Commit: base, Mode: "bogus"}.Run(context.Background(),
+		OpDeps{Repo: repo, Decider: &captureDecider{answers: map[string]string{}}})
+	if err == nil || !strings.Contains(err.Error(), "unknown mode") {
+		t.Fatalf("err = %v, want 'unknown mode'", err)
+	}
+}
+
 // A backward reset along the current branch (target IS an ancestor) skips the
 // confirm — only the mode decision is consulted.
 func TestResetAncestorSkipsConfirm(t *testing.T) {
