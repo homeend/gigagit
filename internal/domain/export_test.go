@@ -44,6 +44,8 @@ func TestShelfAddCommitAndExportRoundTrip(t *testing.T) {
 	svc.SetShelfStore(shelf.NewFileStore(t.TempDir()))
 	ctx := context.Background()
 
+	initial := headHash(t, repoDir)
+
 	writeCommit(t, repoDir, "src/a.txt", "alpha\n", "add a")
 	sha := headHash(t, repoDir)
 	writeCommit(t, repoDir, "src/a.txt", "alpha2\n", "edit a") // move HEAD past sha
@@ -72,9 +74,24 @@ func TestShelfAddCommitAndExportRoundTrip(t *testing.T) {
 	}
 
 	// Durability: the export reads the stored tar, so gc'ing the commit must not
-	// break it. Prune it out of git, then export again.
+	// break it. First make sha genuinely unreachable: rewind main below it so
+	// neither "add a" nor "edit a" remains reachable from any ref, then expire
+	// the reflog and gc-prune. Without this, sha stays an ancestor of main's
+	// tip and git would never actually collect it, making the "durability"
+	// re-export below pass trivially even if ExportShelfEntry secretly read
+	// from git instead of the stored shelf tar.
+	gitRun(t, repoDir, "update-ref", "refs/heads/main", initial)
+	gitRun(t, repoDir, "checkout", "-f", "main")
 	gitRun(t, repoDir, "reflog", "expire", "--expire=all", "--all")
 	gitRun(t, repoDir, "gc", "--prune=now")
+
+	// Prove the commit object is really gone before trusting the re-export.
+	catFile := exec.Command("git", "cat-file", "-e", sha)
+	catFile.Dir = repoDir
+	if out, err := catFile.CombinedOutput(); err == nil {
+		t.Fatalf("commit %s was not pruned; git cat-file -e succeeded (out=%s) — durability scenario not exercised", sha, out)
+	}
+
 	files2, _, err := svc.ExportShelfEntry(ctx, e)
 	if err != nil {
 		t.Fatalf("ExportShelfEntry after gc: %v", err)
