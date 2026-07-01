@@ -152,3 +152,22 @@ func TestShelfPopupMarkThenCompare(t *testing.T) {
 		t.Fatalf("second m should open the two-entry diff, tag=%q", m.diffTag)
 	}
 }
+
+func TestShelfEntryDisplayLabel(t *testing.T) {
+	labeled := model.ShelfEntry{
+		Kind:   model.ShelfKindCommit,
+		Origin: model.FileAddress{State: model.StateCommitted, Commit: "a1b2c3d4e5"},
+		Label:  "my fix",
+	}
+	got := shelfEntryDisplay(labeled)
+	if !strings.Contains(got, "my fix") || !strings.HasSuffix(got, "— my fix") {
+		t.Fatalf("labeled display = %q, want it to end with '— my fix'", got)
+	}
+	plain := model.ShelfEntry{
+		Kind:   model.ShelfKindCommit,
+		Origin: model.FileAddress{State: model.StateCommitted, Commit: "a1b2c3d4e5"},
+	}
+	if shelfEntryDisplay(plain) != plain.Origin.Display() {
+		t.Fatalf("unlabeled display should equal Origin.Display()")
+	}
+}
