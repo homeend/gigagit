@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -236,13 +237,19 @@ func (l tagList) Key(i int) string  { return l.items[i].Name }
 
 type statusList struct {
 	files []model.FileStatus
-	rows  []string
+	p     panel // Files vs Staged — drives which status byte fileGlyph shows
 	root  string
 	mtime map[int]int64 // dedupes os.Stat within one sort pass; 0 = unknown (sorts last)
 }
 
-func (l statusList) Len() int          { return len(l.files) }
-func (l statusList) Row(i int) string  { return l.rows[i] }
+func (l statusList) Len() int { return len(l.files) }
+
+// Row is built lazily per index (not precomputed for all files in listFor) so the
+// many idx-only callers per keystroke — displayIndices, marks, nav, the mouse
+// hit-test — never materialize 40k strings. Matches the old statusRows format.
+func (l statusList) Row(i int) string {
+	return fmt.Sprintf("%c %s", fileGlyph(l.p, l.files[i]), l.files[i].Path)
+}
 func (l statusList) Name(i int) string { return l.files[i].Path }
 func (l statusList) Key(i int) string  { return l.files[i].Path }
 func (l statusList) Date(i int) int64 {
@@ -365,6 +372,29 @@ func (m Model) memberOf(p panel, i int) bool {
 	return true
 }
 
+// withStatus assigns a new working-tree status and derives the Files/Staged
+// membership splits once (see filesIdx/stagedIdx). ALL writes to m.status must go
+// through here so the derived indices never desync — a stray `m.status = …` would
+// leave the file panels showing the wrong rows.
+func (m Model) withStatus(st model.WorkingTreeStatus) Model {
+	m.status = st
+	m.filesIdx = m.fileMembership(panelFiles)
+	m.stagedIdx = m.fileMembership(panelStaged)
+	return m
+}
+
+// fileMembership returns the backing indices of status.Files that belong to file
+// panel p (the Files/Staged split). Computed once per status write, not per frame.
+func (m Model) fileMembership(p panel) []int {
+	idx := make([]int, 0, len(m.status.Files))
+	for i := range m.status.Files {
+		if m.memberOf(p, i) {
+			idx = append(idx, i)
+		}
+	}
+	return idx
+}
+
 // listFor builds panel p's panelList from the current model snapshot.
 func (m Model) listFor(p panel) panelList {
 	switch p {
@@ -382,7 +412,7 @@ func (m Model) listFor(p panel) panelList {
 		// Both file panels back onto the FULL status slice; panelView's
 		// membership filter selects each panel's subset, so backingIndex keeps
 		// returning indices into m.status.Files for the action handlers.
-		return statusList{files: m.status.Files, rows: m.statusRows(p), root: m.currentWorktree, mtime: map[int]int64{}}
+		return statusList{files: m.status.Files, p: p, root: m.currentWorktree, mtime: map[int]int64{}}
 	case panelCommits:
 		return commitList{items: m.commits, m: &m, identW: m.commitIdentWidth()}
 	}
@@ -443,6 +473,21 @@ func (m Model) filterActive(p panel) bool {
 // directly so they never pay for styling — important for the Commits panel,
 // whose Row styling (graph window + identity token) is the per-frame hot cost.
 func (m Model) displayIndices(p panel) (idx []int) {
+	// Fast path: an unsorted, unfiltered file panel is exactly its precomputed
+	// membership split (derived on every status write). This returns a shared,
+	// read-only slice in O(1) — the file panels' displayIndices is called many
+	// times per keystroke, and rescanning 40k files each time made scrolling lag.
+	// The derived slices are non-nil once withStatus has run (even when empty);
+	// a nil slice means status was set without deriving (e.g. a test assigning
+	// m.status directly), so fall through and recompute for correctness.
+	if m.sortModes[p] == sortDefault && !m.filterActive(p) {
+		if p == panelFiles && m.filesIdx != nil {
+			return m.filesIdx
+		}
+		if p == panelStaged && m.stagedIdx != nil {
+			return m.stagedIdx
+		}
+	}
 	l := m.listFor(p)
 	q := ""
 	if m.filterActive(p) {
@@ -480,6 +525,35 @@ func (m Model) panelView(p panel) (rows []string, idx []int) {
 	rows = make([]string, len(idx))
 	for n, i := range idx {
 		rows[n] = l.Row(i)
+	}
+	return rows, idx
+}
+
+// panelViewWindowed is panelView for the render path: in single-line display
+// modes it materializes only the row strings the panel's window will show
+// (off-window entries stay ""), so a 40k-row panel doesn't build every row every
+// frame. idx stays full-length, keeping selection/mark/hit-test indexing intact,
+// and the window it fills matches the one renderPanel/renderWindow re-derive from
+// the same sel + rowsCap. Wrap mode (multi-line rows) needs every row, so it
+// falls back to the full build. boxH is the panel's outer box height.
+func (m Model) panelViewWindowed(p panel, boxH int) (rows []string, idx []int) {
+	idx = m.displayIndices(p)
+	l := m.listFor(p)
+	rows = make([]string, len(idx))
+	rowsCap := boxH - 3 // mirrors renderPanel: borders (2) + label line
+	if m.dispModes[p] == modeWrap || rowsCap < 1 || len(idx) <= rowsCap {
+		for n, i := range idx {
+			rows[n] = l.Row(i)
+		}
+		return rows, idx
+	}
+	start := windowStart(len(idx), rowsCap, m.sel[p])
+	end := start + rowsCap
+	if end > len(idx) {
+		end = len(idx)
+	}
+	for n := start; n < end; n++ {
+		rows[n] = l.Row(idx[n])
 	}
 	return rows, idx
 }
@@ -640,9 +714,9 @@ func (m Model) panelRowAt(p panel, y int) (int, bool) {
 	if i < 0 || i >= rowsCap {
 		return 0, false
 	}
-	rows, _ := m.panelView(p)
-	idx := windowStart(len(rows), rowsCap, m.sel[p]) + i
-	if idx >= len(rows) {
+	di := m.displayIndices(p) // count only; no need to materialize row strings
+	idx := windowStart(len(di), rowsCap, m.sel[p]) + i
+	if idx >= len(di) {
 		return 0, false
 	}
 	return idx, true

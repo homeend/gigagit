@@ -9,6 +9,18 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Fixed
+- **Scrolling / switching panels no longer lags for seconds on a repo with a
+  huge untracked set.** Every keystroke rebuilt the Files/Staged panel's row
+  strings and membership indices from scratch — several times over, since
+  `displayIndices` (and everything through it: `panelLen`, the labels, the mark
+  overlays, the mouse hit-test) rescanned all of `status.Files` on each call. On
+  a 40k-file tree a single arrow key did millions of allocations. Now the
+  Files/Staged membership split is derived **once when the status is written**
+  (`withStatus`) and returned in O(1); the render builds and elides only the
+  visible window's rows; and the per-frame `[]winRow` buffer is sized to the
+  visible window instead of the full row count (it embeds a `lipgloss.Style`, so
+  a full-length allocation zeroed megabytes per frame). CPU during a fast scroll
+  of the 40k-file panel dropped ~3× and the row work is now O(visible).
 - **The whole UI no longer burns CPU (and eventually freezes) on a repo with a
   huge untracked or commit set.** `renderWindow` — the shared list/panel window
   primitive behind every panel and popup — used to build a display line for

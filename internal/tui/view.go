@@ -430,7 +430,7 @@ func (m Model) renderInterface() string {
 			if g.boxH[p] <= 0 {
 				continue
 			}
-			rows, _ := m.panelView(p)
+			rows, _ := m.panelViewWindowed(p, g.boxH[p])
 			boxes = append(boxes, m.renderPanel(p, m.leftPanelLabel(p), rows, nil, g.leftW, g.boxH[p]))
 		}
 		left = lipgloss.JoinVertical(lipgloss.Left, boxes...)
@@ -692,7 +692,10 @@ func (m Model) renderPanel(p panel, label string, rows []string, decos []rowDeco
 			start = windowStart(len(rows), rowsCap, anchor)
 			end = start + rowsCap
 		}
-		wr := make([]winRow, len(rows))
+		// Size wr to the visible window, not the full row count: winRow embeds a
+		// lipgloss.Style, so a full-length make on a 40k-row panel zeroes megabytes
+		// every frame. renderWindow is handed the anchor rebased into this slice.
+		wr := make([]winRow, 0, end-start)
 		for i := start; i < end; i++ {
 			row := rows[i]
 			prefix := "  "
@@ -721,9 +724,9 @@ func (m Model) renderPanel(p panel, label string, rows []string, decos []rowDeco
 			if m.isFilesPanel(p) && m.dispModes[p] == modeCutoff {
 				text = elideFilePath(row, innerW-lipgloss.Width(prefix))
 			}
-			wr[i] = winRow{text: prefix + text, style: st, decorate: deco}
+			wr = append(wr, winRow{text: prefix + text, style: st, decorate: deco})
 		}
-		body := renderWindow(wr, winOpts{w: innerW, h: rowsCap, mode: m.dispModes[p], anchor: anchor, hscroll: m.hscroll[p]})
+		body := renderWindow(wr, winOpts{w: innerW, h: rowsCap, mode: m.dispModes[p], anchor: anchor - start, hscroll: m.hscroll[p]})
 		lines = append(lines, body...)
 	}
 	for len(lines) < contentH {
