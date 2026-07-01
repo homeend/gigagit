@@ -72,7 +72,7 @@ func (m Model) shelfAddRow() (actionRow, bool) {
 func (m Model) shelfAddCommitCmd(sha string) tea.Cmd {
 	svc := m.svc
 	return func() tea.Msg {
-		e, err := svc.ShelfAddCommit(context.Background(), sha)
+		e, err := svc.ShelfAddCommit(context.Background(), sha, "")
 		return shelfAddedMsg{entry: e, err: err}
 	}
 }

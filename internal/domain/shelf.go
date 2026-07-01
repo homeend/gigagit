@@ -56,7 +56,7 @@ func (s *Service) ShelfBlob(ctx context.Context, entryID string) ([]byte, error)
 // ShelfKindCommit entry: it archives just the paths the commit touched (content
 // AT sha) so the entry restores even after the commit leaves git. Content only —
 // no message/author/parents.
-func (s *Service) ShelfAddCommit(ctx context.Context, sha string) (model.ShelfEntry, error) {
+func (s *Service) ShelfAddCommit(ctx context.Context, sha, label string) (model.ShelfEntry, error) {
 	st := s.shelfStore(ctx)
 	if st == nil {
 		return model.ShelfEntry{}, ErrShelfDisabled
@@ -73,7 +73,7 @@ func (s *Service) ShelfAddCommit(ctx context.Context, sha string) (model.ShelfEn
 		return model.ShelfEntry{}, err
 	}
 	addr := model.FileAddress{State: model.StateCommitted, Commit: sha, Path: ""}
-	return st.PutCommit("", addr, tar)
+	return st.PutCommit("", addr, tar, label)
 }
 
 // ShelfRemove deletes an entry (and reclaims its blob if unreferenced).

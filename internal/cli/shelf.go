@@ -103,7 +103,11 @@ func shelfList(svc *domain.Service, args []string, stdout, stderr io.Writer) int
 		return 1
 	}
 	for _, e := range es {
-		fmt.Fprintf(stdout, "%s\t%s\t%dB\n", e.ID, e.Origin.Display(), e.Size)
+		disp := e.Origin.Display()
+		if e.Label != "" {
+			disp += " — " + e.Label
+		}
+		fmt.Fprintf(stdout, "%s\t%s\t%dB\n", e.ID, disp, e.Size)
 	}
 	return 0
 }
@@ -163,14 +167,15 @@ func shelfRestore(svc *domain.Service, args []string, stdin io.Reader, stdout, s
 func shelfCommit(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("shelf commit", flag.ContinueOnError)
 	fs.SetOutput(stderr)
+	name := fs.String("name", "", "human name for the shelved commit")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	if fs.NArg() != 1 {
-		fmt.Fprintln(stderr, "usage: gg shelf commit <sha>")
+		fmt.Fprintln(stderr, "usage: gg shelf commit [--name <name>] <sha>")
 		return 2
 	}
-	e, err := svc.ShelfAddCommit(context.Background(), fs.Arg(0))
+	e, err := svc.ShelfAddCommit(context.Background(), fs.Arg(0), *name)
 	if err != nil {
 		fmt.Fprintf(stderr, "shelf commit: %v\n", err)
 		return 1

@@ -180,6 +180,28 @@ func TestShelfCommitUsageErrors(t *testing.T) {
 	}
 }
 
+func TestShelfCommitName(t *testing.T) {
+	dir := shelfRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("alpha\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, dir, "add", ".")
+	runGit(t, dir, "commit", "-m", "add a")
+	sha := runGit(t, dir, "rev-parse", "HEAD")
+
+	if code, _, errb := runCLI(t, dir, "shelf", "commit", "--name", "my fix", sha); code != 0 {
+		t.Fatalf("shelf commit --name exit=%d stderr=%s", code, errb)
+	}
+
+	code, out, errb := runCLI(t, dir, "shelf", "list")
+	if code != 0 {
+		t.Fatalf("shelf list exit=%d stderr=%s", code, errb)
+	}
+	if !strings.Contains(out, "my fix") {
+		t.Fatalf("shelf list did not show the label; stdout=%q", out)
+	}
+}
+
 func TestShelfUsageErrors(t *testing.T) {
 	dir := shelfRepo(t)
 	if code, _, _ := runCLI(t, dir, "shelf"); code != 2 {

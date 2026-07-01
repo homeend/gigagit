@@ -13,6 +13,9 @@ func newStore(t *testing.T) *FileStore {
 	return NewFileStore(t.TempDir())
 }
 
+// fsRoot exposes a FileStore's root for reopen-round-trip tests.
+func fsRoot(fs *FileStore) string { return fs.root }
+
 func addr(path string) model.FileAddress {
 	return model.FileAddress{State: model.StateUnstaged, Path: path}
 }
@@ -119,7 +122,7 @@ func TestPutCommitStoresArchiveKind(t *testing.T) {
 	fs := NewFileStore(t.TempDir())
 	tar := []byte("PK-not-really-a-tar-but-bytes")
 	addr := model.FileAddress{State: model.StateCommitted, Commit: "a1b2c3d4e5f6", Path: ""}
-	e, err := fs.PutCommit("", addr, tar)
+	e, err := fs.PutCommit("", addr, tar, "")
 	if err != nil {
 		t.Fatalf("PutCommit: %v", err)
 	}
@@ -143,5 +146,26 @@ func TestPutCommitStoresArchiveKind(t *testing.T) {
 	}
 	if fe.Kind != model.ShelfKindFile {
 		t.Fatalf("file Put Kind = %v, want ShelfKindFile", fe.Kind)
+	}
+}
+
+func TestPutCommitPersistsLabel(t *testing.T) {
+	fs := NewFileStore(t.TempDir())
+	addr := model.FileAddress{State: model.StateCommitted, Commit: "a1b2c3d4e5f6", Path: ""}
+	e, err := fs.PutCommit("", addr, []byte("tarbytes"), "my fix")
+	if err != nil {
+		t.Fatalf("PutCommit: %v", err)
+	}
+	if e.Label != "my fix" {
+		t.Fatalf("Label = %q, want %q", e.Label, "my fix")
+	}
+	// Survives the TOML index round-trip (reopen the store, list).
+	fs2 := NewFileStore(fsRoot(fs))
+	page, err := fs2.List("", 0, 10)
+	if err != nil || len(page) != 1 {
+		t.Fatalf("List: %v (n=%d)", err, len(page))
+	}
+	if page[0].Label != "my fix" {
+		t.Fatalf("reloaded Label = %q, want %q", page[0].Label, "my fix")
 	}
 }
