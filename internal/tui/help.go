@@ -208,7 +208,7 @@ func helpContent() []contentLine {
 		r("← → 0", "scroll mode: pan left / right / reset"),
 		r("h", "history of this file at the shown revision"),
 		r("b", "blame of this file at the shown revision"),
-		r(".", "Export this file's diff as patch"),
+		r(".", "export this file's diff as patch"),
 		r("esc", "close"),
 		r("ctrl+c", "quit"),
 		h("History view (h)"),
