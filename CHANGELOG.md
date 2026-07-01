@@ -15,6 +15,18 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   including outside a git repository.
 
 ### Fixed
+- **Holding `End` (or `PgDn` / `j`) on the Commits panel kept loading pages
+  even after the key was released.** The commit feed's single-flight guard
+  (`inFlight`) only prevents *overlapping* loads and is set asynchronously
+  inside the load goroutine, so it neither closed the dispatch race nor
+  stopped the OS key-repeat backlog from re-triggering a page load after each
+  one completed. The load chokepoint (`maybeLoadMoreCommits`) now short-circuits
+  on the synchronous `commitsLoading` flag — set at dispatch, cleared by the
+  load's completion message — so held-key auto-repeat is paced by completion
+  instead of queuing a load per keystroke; `ctrl+l` gained the same guard.
+  Covers every trigger in one place (End/PgDn/`j`/`k`, `ctrl+l`, mouse wheel).
+  The Commits panel is the only paged/lazy view — every other window navigates
+  fully-loaded data with pure synchronous cursor moves, so none needed this.
 - **Pressing `l` or `enter` on the "Working tree" or "Staged" pseudo-commit
   row (Commits panel) opened the files view with a "compare: DiffTreeFiles:
   unsupported endpoint pair" error, and the view then wedged — only `esc`
