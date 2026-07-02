@@ -97,6 +97,7 @@ type GitOps interface {
 	Reset(ctx context.Context, mode, ref string) error
 
 	ConfigSet(ctx context.Context, scope git.ConfigScope, key, value string) error
+	ConfigUnset(ctx context.Context, scope git.ConfigScope, key string) error
 	CommitGraphWrite(ctx context.Context, onLine func(string)) error
 
 	StagePaths(ctx context.Context, paths []string) error

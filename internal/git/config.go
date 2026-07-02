@@ -60,3 +60,20 @@ func (r *Repo) ConfigSet(ctx context.Context, scope ConfigScope, key, value stri
 	_, err := r.Runner.Run(ctx, "git config", b.ToArgv())
 	return err
 }
+
+// ConfigUnset removes one config key at the given scope (Local or Global
+// only; an Effective/unknown scope falls back to Local). A key that is not
+// set exits 5 — treated as a no-op success (the ConfigGet exit-1 pattern),
+// so unset is idempotent for callers.
+func (r *Repo) ConfigUnset(ctx context.Context, scope ConfigScope, key string) error {
+	f, ok := scope.flag()
+	if !ok {
+		f = "--local"
+	}
+	b := gitcmd.New("config").Arg(f, "--unset", key)
+	res, err := r.Runner.Run(ctx, "git config", b.ToArgv())
+	if err != nil && res.ExitCode == 5 {
+		return nil // key was not set: already in the desired state
+	}
+	return err
+}
