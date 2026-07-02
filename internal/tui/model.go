@@ -58,6 +58,7 @@ type Model struct {
 	noticesUnread          bool                 // blink while true; opening the ! dialog clears it
 	blinkOn                bool                 // current blink phase (style alternation)
 	noticeGen              int                  // stale-drop guard for repoHealthMsg across repo switches
+	blinkGen               int                  // bumped on every blink-tick arm; stale ticks are dropped (single blink lane)
 	noticeSessionDismissed map[string]bool      // "Not now" ids; cleared on reRoot (re-evaluated next load)
 	repoHealth             model.RepoHealth     // last health snapshot (Settings Commit-graph row)
 	repoHealthKnown        bool                 // false until the first repoHealthMsg lands
@@ -286,11 +287,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case repoHealthMsg:
 		return m.applyRepoHealth(msg)
 	case noticeBlinkMsg:
-		if !m.noticesUnread {
-			return m, nil // read: stop re-arming
+		if msg.gen != m.blinkGen || !m.noticesUnread {
+			return m, nil // stale lane or read: stop re-arming
 		}
 		m.blinkOn = !m.blinkOn
-		return m, noticeBlinkCmd()
+		return m, noticeBlinkCmd(msg.gen)
 	case commitFilesMsg:
 		m.filesReadInflight = false // the outstanding per-commit read has landed; nav may issue again
 		if m.filesView == nil || msg.hash != m.filesHash {

@@ -67,13 +67,16 @@ func (m Model) repoHealthCmd(gen int) tea.Cmd {
 	}
 }
 
-// noticeBlinkMsg flips the blink phase while unread notices exist.
-type noticeBlinkMsg struct{}
+// noticeBlinkMsg flips the blink phase while unread notices exist. gen ties
+// the tick to the arm that scheduled it — a stale gen (superseded by a later
+// arm, e.g. across a reRoot or an unread→read→new-notice flip within one
+// 800ms window) is dropped instead of re-arming a second, parallel lane.
+type noticeBlinkMsg struct{ gen int }
 
 // noticeBlinkCmd schedules the next blink flip (~800ms; only re-armed while
 // unread notices exist, so the tick self-stops).
-func noticeBlinkCmd() tea.Cmd {
-	return tea.Tick(800*time.Millisecond, func(time.Time) tea.Msg { return noticeBlinkMsg{} })
+func noticeBlinkCmd(gen int) tea.Cmd {
+	return tea.Tick(800*time.Millisecond, func(time.Time) tea.Msg { return noticeBlinkMsg{gen: gen} })
 }
 
 // applyRepoHealth is the repoHealthMsg Update case: store the snapshot,
@@ -107,7 +110,8 @@ func (m Model) applyRepoHealth(msg repoHealthMsg) (Model, tea.Cmd) {
 	for _, n := range m.notices {
 		if !prev[n.id] {
 			if !m.noticesUnread {
-				cmd = noticeBlinkCmd()
+				m.blinkGen++
+				cmd = noticeBlinkCmd(m.blinkGen)
 			}
 			m.noticesUnread = true
 			m.blinkOn = true

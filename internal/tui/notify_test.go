@@ -1,10 +1,12 @@
 package tui
 
 import (
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/promptstate"
 )
@@ -99,7 +101,7 @@ func TestBlinkTickStopsWhenRead(t *testing.T) {
 		t.Fatal("a fresh unread notice must arm the blink tick")
 	}
 	before := m.blinkOn
-	nm, cmd = m.Update(noticeBlinkMsg{})
+	nm, cmd = m.Update(noticeBlinkMsg{gen: m.blinkGen})
 	m = nm.(Model)
 	if m.blinkOn == before {
 		t.Fatal("blink tick must flip the phase while unread")
@@ -108,7 +110,7 @@ func TestBlinkTickStopsWhenRead(t *testing.T) {
 		t.Fatal("blink must re-arm while unread")
 	}
 	m.noticesUnread = false // what opening the dialog does
-	_, cmd = m.Update(noticeBlinkMsg{})
+	_, cmd = m.Update(noticeBlinkMsg{gen: m.blinkGen})
 	if cmd != nil {
 		t.Fatal("blink must stop re-arming once read")
 	}
@@ -122,5 +124,121 @@ func TestUnreadOnlyOnNewNoticeIds(t *testing.T) {
 	nm, _ = m.Update(repoHealthMsg{gen: m.noticeGen, health: bigRepoHealth()})
 	if nm.(Model).noticesUnread {
 		t.Fatal("a re-read carrying the SAME notice ids must not re-blink")
+	}
+}
+
+// ---- Bug regression: a stale blink-tick lane (superseded arm-gen) must not
+// re-arm even while noticesUnread is still true — otherwise a reRoot (or an
+// unread→read→new-notice flip within one 800ms window) leaves two ticking
+// lanes running forever. ----
+
+func TestStaleBlinkGenDoesNotReArm(t *testing.T) {
+	m, _ := noticeTestModel(t)
+	nm, _ := m.Update(repoHealthMsg{gen: m.noticeGen, health: bigRepoHealth()})
+	m = nm.(Model)
+	if !m.noticesUnread {
+		t.Fatal("setup: expected unread after a fresh notice")
+	}
+	staleGen := m.blinkGen - 1 // the arm-gen from a superseded lane
+
+	before := m.blinkOn
+	nm, cmd := m.Update(noticeBlinkMsg{gen: staleGen})
+	got := nm.(Model)
+	if got.blinkOn != before {
+		t.Fatal("a stale-gen blink tick must not flip the phase")
+	}
+	if cmd != nil {
+		t.Fatal("a stale-gen blink tick must not re-arm")
+	}
+}
+
+// ---- pendingNoticeConfig chain: mirrors push_tip_tags_test.go's
+// pendingPushTags chain tests (TestOpFinishedChainsPushTags /
+// TestOpFinishedErrorClearsPending / TestAbortedPushDoesNotChainTags). ----
+
+func TestOpFinishedChainsNoticeConfig(t *testing.T) {
+	m, _ := noticeTestModel(t)
+	m.running = true
+	m.pendingNoticeConfig = &engine.SetGitConfig{Key: "fetch.writeCommitGraph", Value: "true"}
+
+	u, cmd := m.Update(opFinishedMsg{res: engine.Result{Changed: true}})
+	got := u.(Model)
+
+	if got.pendingNoticeConfig != nil {
+		t.Fatalf("pendingNoticeConfig = %v after success, want nil", got.pendingNoticeConfig)
+	}
+	if !got.running {
+		t.Fatal("the chained SetGitConfig op must have been started (running=true)")
+	}
+	driveOp(t, got, cmd) // drain so the goroutine doesn't leak
+}
+
+func TestOpFinishedErrorClearsNoticeConfig(t *testing.T) {
+	m, _ := noticeTestModel(t)
+	m.running = true
+	m.pendingNoticeConfig = &engine.SetGitConfig{Key: "fetch.writeCommitGraph", Value: "true"}
+
+	u, _ := m.Update(opFinishedMsg{err: errors.New("boom")})
+	got := u.(Model)
+
+	if got.running {
+		t.Fatal("an errored op must not chain (running must be false)")
+	}
+	if got.pendingNoticeConfig != nil {
+		t.Fatalf("pendingNoticeConfig = %v after error, want nil", got.pendingNoticeConfig)
+	}
+}
+
+func TestAbortedOpDoesNotChainNoticeConfig(t *testing.T) {
+	m, _ := noticeTestModel(t)
+	m.running = true
+	m.pendingNoticeConfig = &engine.SetGitConfig{Key: "fetch.writeCommitGraph", Value: "true"}
+
+	// Changed:false, err:nil — simulates an aborted/cancelled op.
+	u, _ := m.Update(opFinishedMsg{res: engine.Result{Changed: false}})
+	got := u.(Model)
+
+	if got.running {
+		t.Fatal("aborted op must NOT chain SetGitConfig (running=true means it did)")
+	}
+	if got.pendingNoticeConfig != nil {
+		t.Fatalf("pendingNoticeConfig = %v after abort, want nil", got.pendingNoticeConfig)
+	}
+}
+
+// ---- reRoot resets notice state and drops stale health: mirrors
+// push_tip_tags_test.go's TestReRootBumpsCheckGen. ----
+
+func TestReRootResetsNoticeStateAndDropsStaleHealth(t *testing.T) {
+	m := footerModel()
+	nm, _ := m.Update(repoHealthMsg{gen: m.noticeGen, health: bigRepoHealth()})
+	m = nm.(Model)
+	if len(m.notices) != 1 {
+		t.Fatalf("setup: notices = %+v, want 1", m.notices)
+	}
+	oldGen := m.noticeGen
+	m.pendingNoticeConfig = &engine.SetGitConfig{Key: "fetch.writeCommitGraph", Value: "true"}
+
+	updated, _ := m.reRoot(t.TempDir())
+	got := updated.(Model)
+
+	if got.notices != nil {
+		t.Fatalf("notices = %+v after reRoot, want nil", got.notices)
+	}
+	if got.noticesUnread {
+		t.Fatal("noticesUnread must be false after reRoot")
+	}
+	if got.pendingNoticeConfig != nil {
+		t.Fatal("pendingNoticeConfig must be cleared after reRoot")
+	}
+	if got.noticeGen <= oldGen {
+		t.Fatalf("noticeGen = %d after reRoot, want > %d (bumped)", got.noticeGen, oldGen)
+	}
+
+	// A stale health result (carrying the OLD gen) arriving after reRoot must
+	// be dropped, not resurrect a notice for the new repo.
+	nm2, _ := got.Update(repoHealthMsg{gen: oldGen, health: bigRepoHealth()})
+	if stale := nm2.(Model).notices; stale != nil {
+		t.Fatalf("stale-gen health after reRoot must be dropped, got %+v", stale)
 	}
 }
