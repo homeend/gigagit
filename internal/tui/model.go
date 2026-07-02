@@ -440,7 +440,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.commits = msg.state.Commits
 		m.commitsExhausted = msg.state.Exhausted
 		m.commitsLoading = false // the latest scope reload finished
-		m = m.rebuildCommitGraph()
+		m = m.graphLayerReset().rebuildCommitGraph()
 		if m.sel[panelCommits] >= len(m.commits) {
 			m.sel[panelCommits] = 0
 		}
@@ -611,7 +611,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.remoteBranches = sortRemoteBranchesLocalFirst(msg.remoteBranches, msg.branches)
 			m.commits = msg.commits
 			m.commitsExhausted = msg.commitsExhausted
-			m = m.rebuildCommitGraph()
+			m = m.graphLayerReset().rebuildCommitGraph()
 			if msg.commitErr != nil {
 				m.statusMsg = "commits: " + msg.commitErr.Error()
 			}
@@ -786,7 +786,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.commits = p.commits
 			m.commitsExhausted = p.exhausted
 			m.commitsLoading = false
-			m = m.rebuildCommitGraph()
+			m = m.graphLayerReset().rebuildCommitGraph()
 			m = m.restorePanelSel(panelCommits, key)
 			// The initial feed read just landed; fire the upstream re-walk now if
 			// branches already arrived and set the latch. This is the other half
@@ -2386,12 +2386,27 @@ func (m Model) commitFilterChips() string {
 	return strings.Join(parts, " ")
 }
 
+// graphLayerReset discards the incremental lane fold so the next
+// rebuildCommitGraph re-lays from scratch. Call it before rebuilding whenever
+// m.commits was REPLACED (a scope reload, a feed re-read, the full load)
+// rather than appended: the append fast path keys on (first hash, length, WIP
+// count) and cannot tell a same-tip, same-length replacement — e.g. soloing
+// the checked-out branch whose own tip is already the newest commit of the
+// all-branches walk — from a plain no-op, so it would keep painting the
+// previous walk's lanes beside the new rows.
+func (m Model) graphLayerReset() Model {
+	m.graphLayer = nil
+	return m
+}
+
 // rebuildCommitGraph refreshes the cached single-line graph cells for m.commits.
 // Paging in older commits is a strict newest→oldest append that leaves the WIP
 // prefix and every existing row's lanes unchanged, so this continues the cached
 // lane fold (graphLayer) and appends only the new rows — O(new commits), not
-// O(total). Any non-append change (new HEAD, scope switch, WIP-count change, or
-// a shorter list) fails the invariant and triggers a full re-lay from scratch.
+// O(total). A detectable non-append change (new HEAD, WIP-count change, or a
+// shorter list) fails the invariant and triggers a full re-lay from scratch; a
+// same-tip, same-length replacement is NOT detectable here, so callers that
+// replace m.commits must graphLayerReset() first (see its doc).
 func (m Model) rebuildCommitGraph() Model {
 	// Derive the WIP pseudo-rows from the current status first, so the graph plane
 	// and every unified length (commitsTotal) stay in lock-step with them.

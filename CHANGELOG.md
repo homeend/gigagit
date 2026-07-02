@@ -78,8 +78,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   including outside a git repository.
 
 ### Fixed
-- **Architecture-review hardening batch** (whole-codebase review, findings
-  verified against the tree before fixing):
+- **Solo view painted the previous scope's lane graph.** Soloing a branch
+  (Branches `.` → "Solo this branch") reloaded the commit rows but could keep
+  the lanes laid for the earlier all-branches walk, drawing phantom forks
+  through what is actually linear history. The incremental graph fast path
+  (built for paging appends) keys on the first commit's hash and the row
+  count, so a scope switch that keeps the same newest commit — soloing the
+  checked-out branch whose own tip is the newest commit — looked like a no-op.
+  Every path that *replaces* the commit rows (scope reload, feed re-read, full
+  load) now discards the incremental lane fold and re-lays from scratch;
+  paging keeps the O(new commits) append.
   - **A paste/restore destination could escape the working tree.**
     `WriteWorktreeFile` (backing `gg bookmark paste`, `gg shelf restore`, and
     the TUI paste text fields) resolved its destination with `filepath.Join`,
