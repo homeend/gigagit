@@ -54,3 +54,33 @@ func TestSetGitConfigRequiresKey(t *testing.T) {
 		t.Fatal("empty key must error")
 	}
 }
+
+func TestSetGitConfigUnsetRemovesKey(t *testing.T) {
+	t.Setenv("GIT_CONFIG_GLOBAL", filepath.Join(t.TempDir(), "gitconfig"))
+	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
+	_, repo := newRepo(t)
+	ctx := context.Background()
+	if err := repo.ConfigSet(ctx, git.ConfigLocal, "fetch.writeCommitGraph", "true"); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := SetGitConfig{Key: "fetch.writeCommitGraph", Unset: true}.Run(ctx, OpDeps{Repo: repo})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if !res.Changed {
+		t.Fatalf("result = %+v, want Changed", res)
+	}
+	if _, set, _ := repo.ConfigGet(ctx, git.ConfigLocal, "fetch.writeCommitGraph"); set {
+		t.Fatal("key still set after Unset op")
+	}
+}
+
+func TestSetGitConfigUnsetMissingKeyIsNoOp(t *testing.T) {
+	t.Setenv("GIT_CONFIG_GLOBAL", filepath.Join(t.TempDir(), "gitconfig"))
+	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
+	_, repo := newRepo(t)
+	if _, err := (SetGitConfig{Key: "fetch.writeCommitGraph", Unset: true}).Run(context.Background(), OpDeps{Repo: repo}); err != nil {
+		t.Fatalf("unsetting a missing key must succeed (verb maps exit 5 to nil), got %v", err)
+	}
+}
