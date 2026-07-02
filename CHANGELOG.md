@@ -14,11 +14,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   Commit sort to `plain` (ordering only matters for graph lanes — plain is
   much faster on big repos); turning it back on offers `date-order` back.
   Options are Yes / Not now / **No — don't ask again**; the last is persisted
-  machine-globally in `<state>/gg/prompts.toml` (named in the popup, delete a
-  line to bring a prompt back). The registry is generic
-  (`internal/tui/related_prompts.go`); the new `internal/promptstate` store
-  also carries per-repo notice dismissals for the upcoming notification
-  center.
+  machine-globally in `<state>/gg/prompts.toml` (named in the popup; remove
+  an id from its array — or delete the file — to bring prompts back). The
+  registry is generic (`internal/tui/related_prompts.go`); the new
+  `internal/promptstate` store also carries per-repo notice dismissals for
+  the upcoming notification center.
 - **`[ui] show_graph` — persistent Commits render mode.** A per-repo setting
   (Settings `,` → "Show graph") choosing how the Commits panel renders on
   startup: `on` (default when unset; the lane graph) or `off` (the flat

@@ -52,9 +52,9 @@ func (p *relatedPromptPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			return rp.apply(m)
 		case 2:
 			if m.promptStore == nil {
-				m.statusMsg = "won't ask again this session (not saved: no state dir)"
+				m.statusMsg = "couldn't save the choice (no state dir) — will ask again"
 			} else if err := m.promptStore.SuppressPrompt(rp.id); err != nil {
-				m.statusMsg = "won't ask again this session (not saved: " + err.Error() + ")"
+				m.statusMsg = "couldn't save the choice — will ask again (" + err.Error() + ")"
 			} else {
 				m.statusMsg = "won't ask again — saved to " + defaultPromptStatePath()
 			}

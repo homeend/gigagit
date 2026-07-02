@@ -66,7 +66,7 @@ store are already generic.
 - Prompts are UX memory, NOT config: no `.gg.toml` key, no `settingDocs`
   entry, no `internal/config` writer.
 - The popup footer names `prompts.toml` — keep it that way (discoverable,
-  resettable by deleting the file or the id line).
+  resettable by deleting the file or removing the id from the array).
 - `internal/promptstate` is TUI-owned (archtest DAG leaf); do NOT move it
   behind `domain` and do NOT let it import anything above itself.
 
