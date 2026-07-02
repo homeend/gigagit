@@ -45,10 +45,11 @@ const (
 	settingsMenuCommitSort  = "Commit sort"
 	settingsMenuShowGraph   = "Show graph"
 	settingsMenuCommitGraph = "Commit-graph"
+	settingsMenuGitConfig   = "Git config explorer"
 )
 
 // settingsMenu is the top-level menu order.
-var settingsMenu = []string{settingsMenuAgents, settingsMenuIdentity, settingsMenuPrefixes, settingsMenuHook, settingsMenuOpLog, settingsMenuErrors, settingsMenuAutoRefresh, settingsMenuRemoteTags, settingsMenuRates, settingsMenuCommitSort, settingsMenuShowGraph, settingsMenuCommitGraph}
+var settingsMenu = []string{settingsMenuAgents, settingsMenuIdentity, settingsMenuPrefixes, settingsMenuHook, settingsMenuOpLog, settingsMenuErrors, settingsMenuAutoRefresh, settingsMenuRemoteTags, settingsMenuRates, settingsMenuCommitSort, settingsMenuShowGraph, settingsMenuCommitGraph, settingsMenuGitConfig}
 
 // commitSortModes is the cycle order for the "Commit sort" menu toggle:
 // date-order (default; git --date-order, perfect lanes) → plain (fast, git's
@@ -109,13 +110,15 @@ func settingsMenuLabel(m Model, i int) string {
 		if !m.repoHealthKnown {
 			return settingsMenuCommitGraph + ": (checking…)"
 		}
+		// The git option is named so the row maps to the config explorer's
+		// fetch.writeCommitGraph line — "auto-refresh" alone is unfindable there.
 		switch {
 		case !m.repoHealth.HasCommitGraph:
-			return settingsMenuCommitGraph + ": missing — enter writes + keeps fresh"
+			return settingsMenuCommitGraph + ": missing — enter writes + sets fetch.writeCommitGraph"
 		case m.repoHealth.WriteCommitGraphValue == "true":
-			return settingsMenuCommitGraph + ": present, auto-refresh on"
+			return settingsMenuCommitGraph + ": present, auto-refresh on (fetch.writeCommitGraph)"
 		default:
-			return settingsMenuCommitGraph + ": present, auto-refresh off — enter writes + keeps fresh"
+			return settingsMenuCommitGraph + ": present, auto-refresh off — enter sets fetch.writeCommitGraph"
 		}
 	}
 	return settingsMenu[i]
@@ -366,6 +369,8 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				}
 				// Same code path as the notice's "write + keep fresh" action.
 				return m.startCommitGraphWriteAndEnable()
+			case settingsMenuGitConfig:
+				return m.openGitConfigExplorer()
 			case settingsMenuRates:
 				p.ratesView = true
 				p.ratesSel = 0

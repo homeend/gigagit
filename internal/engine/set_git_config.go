@@ -19,6 +19,7 @@ type SetGitConfig struct {
 	Key    string
 	Value  string
 	Global bool
+	Unset  bool // remove the key at the chosen scope; Value is ignored
 }
 
 // LockMode: a config write touches neither refs nor the work tree (and a
@@ -34,6 +35,15 @@ func (op SetGitConfig) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	if op.Global {
 		scope = git.ConfigGlobal
 		where = "globally"
+	}
+	if op.Unset {
+		deps.emit(ctx, Progress{Step: "unsetting git config", Detail: op.Key + " " + where})
+		if err := deps.Repo.ConfigUnset(ctx, scope, op.Key); err != nil {
+			return Result{}, fmt.Errorf("unset git config: %s: %w", op.Key, err)
+		}
+		res := Result{Summary: fmt.Sprintf("%s unset %s", op.Key, where), Changed: true}
+		deps.emit(ctx, Done{Result: res})
+		return res, nil
 	}
 	deps.emit(ctx, Progress{Step: "setting git config", Detail: op.Key + " " + where})
 	if err := deps.Repo.ConfigSet(ctx, scope, op.Key, op.Value); err != nil {

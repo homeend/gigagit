@@ -326,6 +326,17 @@ fresh, enable only, *Not now* (asks again next load), or *Never for this
 repo* (remembered in `<state>/gg/prompts.toml`). The Settings (`,`) →
 "Commit-graph" row shows the current state and applies the same fix.
 
+### Git config explorer
+
+Settings (`,`) → **"Git config explorer"** lists every config key git knows
+with what's set where: **key | local | global | default**, unset scopes shown
+as an explicit `(unset)`. Around 64 common keys are curated — they show git's
+real default and a one-line description, and can be edited right there:
+**`l`** sets the repo-local value, **`g`** the global one, **`u`** unsets
+(you pick which set scope); boolean and enum keys offer a picker, the rest a
+text field. Everything else is read-only browsing (use `git config` for
+exotic keys). `/` filters as you type; `esc` closes.
+
 ### Post-worktree hook
 
 After `gg` creates a worktree it can run a per-repo shell script — handy for

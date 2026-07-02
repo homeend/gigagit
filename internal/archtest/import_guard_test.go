@@ -41,6 +41,7 @@ func TestLayeringDAG(t *testing.T) {
 		"engine":      {"domain", "tui", "cli", "app"},
 		"git":         {"engine", "domain", "tui", "cli", "app"},
 		"gitcmd":      {"gitexec", "git", "engine", "domain", "tui", "cli", "app"},
+		"gitconfdocs": {"git", "engine", "domain", "tui", "cli", "app"},
 		"gitexec":     {"gitcmd", "git", "engine", "domain", "tui", "cli", "app"},
 		"model":       {"repogate", "gitcmd", "gitexec", "git", "engine", "domain", "tui", "cli", "app"},
 		"repogate":    {"git", "engine", "domain", "tui", "cli", "app"},
