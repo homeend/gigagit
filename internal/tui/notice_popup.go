@@ -88,6 +88,13 @@ func (p *noticePopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			p.showActions = false
 			return m, nil
 		}
+		if len(n.actions) == 0 {
+			p.showActions = false
+			return m, nil
+		}
+		if p.actSel >= len(n.actions) {
+			p.actSel = len(n.actions) - 1
+		}
 		act := n.actions[p.actSel]
 		m = m.popLayer() // any action closes the dialog
 		return m.applyNoticeAction(*n, act)

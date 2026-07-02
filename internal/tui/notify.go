@@ -143,6 +143,7 @@ func commitGraphNotice(h model.RepoHealth) *notice {
 				run: Model.startCommitGraphWriteAndEnable},
 			{label: "Enable auto-refresh only (graph appears on next fetch/gc)",
 				run: func(m Model) (Model, tea.Cmd) {
+					m.refreshHealthAfterOp = true
 					return m.startOp(engine.SetGitConfig{Key: "fetch.writeCommitGraph", Value: "true"})
 				}},
 			{label: "Not now (ask again next load)"},
@@ -156,6 +157,7 @@ func commitGraphNotice(h model.RepoHealth) *notice {
 // now, then (chained on success in opFinishedMsg) enable auto-refresh.
 func (m Model) startCommitGraphWriteAndEnable() (Model, tea.Cmd) {
 	m.pendingNoticeConfig = &engine.SetGitConfig{Key: "fetch.writeCommitGraph", Value: "true"}
+	m.refreshHealthAfterOp = true
 	return m.startOp(engine.WriteCommitGraph{})
 }
 

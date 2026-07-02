@@ -206,6 +206,45 @@ func TestAbortedOpDoesNotChainNoticeConfig(t *testing.T) {
 	}
 }
 
+// ---- refreshHealthAfterOp: a health re-read after the commit-graph/config
+// fix op (incl. its chain) finishes, so notices and the Settings
+// Commit-graph label reflect the new state instead of inviting a second
+// heavy write. ----
+
+func TestOpFinishedAfterChainRefreshesHealth(t *testing.T) {
+	m, _ := noticeTestModel(t)
+	m.running = true
+	m.refreshHealthAfterOp = true
+	// No pendingNoticeConfig: this is the FINAL op of the chain finishing.
+	nm, cmd := m.Update(opFinishedMsg{res: engine.Result{Changed: true}})
+	m = nm.(Model)
+	if m.refreshHealthAfterOp {
+		t.Fatal("flag must clear once consumed")
+	}
+	if cmd == nil {
+		t.Fatal("a health re-read must be dispatched after the fix op completes")
+	}
+}
+
+func TestChainHopKeepsHealthRefreshArmed(t *testing.T) {
+	m, _ := noticeTestModel(t)
+	m.running = true
+	m.refreshHealthAfterOp = true
+	m.pendingNoticeConfig = &engine.SetGitConfig{Key: "fetch.writeCommitGraph", Value: "true"}
+	nm, cmd := m.Update(opFinishedMsg{res: engine.Result{Changed: true}})
+	m = nm.(Model)
+	if !m.refreshHealthAfterOp {
+		t.Fatal("the first hop must keep the flag armed for the chained op's finish")
+	}
+	if !m.running {
+		t.Fatal("the chained op must have started")
+	}
+	m = driveOp(t, m, cmd)
+	if m.refreshHealthAfterOp {
+		t.Fatal("flag must clear after the chained op finishes")
+	}
+}
+
 // ---- reRoot resets notice state and drops stale health: mirrors
 // push_tip_tags_test.go's TestReRootBumpsCheckGen. ----
 

@@ -282,6 +282,11 @@ func opAffectedSources(op engine.Operation) []sourceKey {
 		return []sourceKey{srcBranches, srcFeed}
 	case engine.ExportFile, engine.ExportToDir:
 		return []sourceKey{} // writes outside the working tree; refresh nothing
+	case engine.WriteCommitGraph, engine.SetGitConfig:
+		// A commit-graph write / config set changes no panel-visible data —
+		// reloading all sources would also fire the srcTags-arrival remote-tags
+		// probe: a needless network call right after fixing a huge repo.
+		return []sourceKey{}
 	}
 	return nil // unmapped → all sources (safe)
 }

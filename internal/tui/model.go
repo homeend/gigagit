@@ -63,6 +63,7 @@ type Model struct {
 	repoHealth             model.RepoHealth     // last health snapshot (Settings Commit-graph row)
 	repoHealthKnown        bool                 // false until the first repoHealthMsg lands
 	pendingNoticeConfig    *engine.SetGitConfig // chained after WriteCommitGraph succeeds
+	refreshHealthAfterOp   bool                 // re-read repo health once the op (incl. its chain) finishes
 
 	cfg          config.Config
 	opLog        *opLog            // operation-log file + span-sink lifecycle; the , Settings toggle
@@ -1752,24 +1753,33 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Chain: the commit-graph write succeeded — now enable auto-refresh.
 			return m.startOp(*noticeCfg)
 		}
+		var healthCmd tea.Cmd
+		if m.refreshHealthAfterOp {
+			// The commit-graph/config op (incl. its chain) is done — re-read
+			// health so the notices and the Settings Commit-graph label reflect
+			// the new state instead of inviting a second heavy write.
+			m.refreshHealthAfterOp = false
+			healthCmd = m.repoHealthCmd(m.noticeGen)
+		}
 		if m.stashView != nil {
 			// A stash op (apply/pop/drop) changed the stash list as well as the
 			// working tree — refresh status and the stash list.
 			m.stashView.loading = true
 			var cmd tea.Cmd
 			m, cmd = m.reloadSourcesCmd([]sourceKey{srcStatus}, true, false)
-			return m, tea.Batch(cmd, m.loadStashListCmd(m.stashView.tag))
+			return m, tea.Batch(healthCmd, cmd, m.loadStashListCmd(m.stashView.tag))
 		}
 		// A job an active process started just returned: let the process advance
 		// its state machine (it typically triggers a reload itself).
 		if m.proc != nil {
-			return m.proc.finished(m, msg.res, msg.err)
+			pm, pcmd := m.proc.finished(m, msg.res, msg.err)
+			return pm, tea.Batch(healthCmd, pcmd)
 		}
 		// Route op completion through the per-source registry: refresh only the
 		// sources the op dirtied (nil pendingSources = all sources, safe default).
 		var cmd tea.Cmd
 		m, cmd = m.reloadSourcesCmd(sourcesOrAll(srcs), true, false)
-		return m, cmd
+		return m, tea.Batch(healthCmd, cmd)
 
 	case prefixDataMsg:
 		if v := layerOf[*prefixSettingsView](m); v != nil {
@@ -2542,6 +2552,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.noticeSessionDismissed = map[string]bool{}
 	m.repoHealthKnown = false
 	m.pendingNoticeConfig = nil
+	m.refreshHealthAfterOp = false
 	m.loadGen++
 	return m, tea.Batch(m.loadCmd(), m.startWatchCmd(m.watchGen), m.repoHealthCmd(m.noticeGen))
 }

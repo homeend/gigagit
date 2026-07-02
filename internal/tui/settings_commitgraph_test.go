@@ -82,8 +82,15 @@ func TestCommitGraphRowNoOpWhenHealthy(t *testing.T) {
 func TestOpenSettingsRefreshesHealth(t *testing.T) {
 	m, _ := noticeTestModel(t)
 	nm, cmd := m.Update(keyMsg(","))
-	_ = nm
 	if cmd == nil {
 		t.Fatal("opening Settings must re-read repo health so the Commit-graph label is fresh")
+	}
+	msg := cmd()
+	hm, ok := msg.(repoHealthMsg)
+	if !ok {
+		t.Fatalf("opening Settings must dispatch a repo-health read, got %T", msg)
+	}
+	if hm.gen != nm.(Model).noticeGen {
+		t.Fatal("the health read must carry the current notice generation")
 	}
 }

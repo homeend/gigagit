@@ -1,6 +1,6 @@
 ---
 name: adding-notifications
-description: Use when adding a repo-health check/notice to gigagit's notification center (the blinking `! N notice` segment + `!` dialog), or when changing notice lifecycle, dismissal, or blink behavior in internal/tui/notify.go.
+description: Use when adding a repo-health check/notice to gigagit's notification center (the blinking `! N notice` segment + `!` dialog), or when changing notice lifecycle, dismissal, or blink behavior in internal/tui/notify.go and notice_popup.go.
 ---
 
 # Adding a notification (health check + notice)
@@ -34,11 +34,14 @@ self-stopping ~800ms tick); `!` opens the dialog. Adding a notice =
      into fixing.
 3. **Register** — in `applyRepoHealth`, add alongside the commit-graph line:
    `if n := <x>Notice(msg.health); n != nil && !dismissed[n.id] && !m.noticeSessionDismissed[n.id] { next = append(next, *n) }`
-4. **Dismissal lifecycle** — free. "Not now" records
-   `m.noticeSessionDismissed[id]` (cleared on reRoot → re-evaluated next
-   load); "Never" persists via `promptstate.Store.DismissNotice(repoKey, id)`.
-   Session-dismissal filtering is what stops a mid-session health re-read
-   (Settings open triggers one) from resurrecting a Not-now'd notice.
+4. **Dismissal lifecycle** — free. `applyNoticeAction` (in `notice_popup.go`)
+   records `m.noticeSessionDismissed[id]` for EVERY action — fixing actions
+   and "Never" too, not just "Not now" — (cleared on reRoot → re-evaluated
+   next load), which is why a failed fix op still hides the notice until the
+   next load. "Never" additionally persists via
+   `promptstate.Store.DismissNotice(repoKey, id)`. Session-dismissal
+   filtering is what stops a mid-session health re-read (Settings open
+   triggers one) from resurrecting a dismissed notice.
 5. **Chaining two ops** — set `m.pendingNoticeConfig = &engine.SetGitConfig{…}`
    before `m.startOp(firstOp)`; the `opFinishedMsg` handler chains it on
    success (`Changed:true`) and clears it unconditionally (the

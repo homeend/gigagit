@@ -387,6 +387,20 @@ func TestBranchOpsDoNotRefreshTags(t *testing.T) {
 	}
 }
 
+// TestConfigOpsAffectNoSources pins Finding 1: a commit-graph write / config
+// set changes no panel-visible data, so they must map to "refresh nothing"
+// rather than fall through to nil (= all sources), which would also fire the
+// srcTags-arrival remote-tags probe — a needless network call right after
+// fixing a huge repo.
+func TestConfigOpsAffectNoSources(t *testing.T) {
+	for _, op := range []engine.Operation{engine.WriteCommitGraph{}, engine.SetGitConfig{Key: "k", Value: "v"}} {
+		srcs := opAffectedSources(op)
+		if srcs == nil || len(srcs) != 0 {
+			t.Fatalf("%T must refresh nothing, got %v", op, srcs)
+		}
+	}
+}
+
 // TestSrcStatusRefreshRebuildsCommitGraph guards Fix #1: a srcStatus-only
 // refresh (e.g. after a stash pop) must call rebuildCommitGraph() so the
 // Commits panel's WIP pseudo-rows stay in sync with the new status.
