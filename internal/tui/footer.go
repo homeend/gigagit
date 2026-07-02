@@ -97,6 +97,7 @@ var globalBindings = []footerBinding{
 	{"undo", "u", "[u]ndo", Model.opsIdle, scopeGlobal},
 	{"bookmarks", "g", "[g] bookmarks", Model.opsIdle, scopeGlobal},
 	{"shelf", "G", "[G] shelf", Model.opsIdle, scopeGlobal},
+	{"notices", "!", "[!] notices", func(m Model) bool { return len(m.notices) > 0 }, scopeGlobal},
 	{"find", "F", "[F] find file", Model.opsIdle, scopeGlobal},
 	{"order", "o", "[o]rder", Model.opsIdle, scopeGlobal},
 	{"view", "z", "[z] view", Model.opsIdle, scopeGlobal},

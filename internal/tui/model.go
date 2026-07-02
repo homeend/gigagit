@@ -1084,6 +1084,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.openBookmarkSwitcher()
 		case "G": // open the shelf quick-switcher (global; see openShelfSwitcher)
 			return m.openShelfSwitcher()
+		case "!": // open the notification center (global; inert while a text field captures — this switch is only reached in navigation mode)
+			return m.openNoticeCenter()
 		case "F": // open the fuzzy file finder (global; see openFileFinder)
 			return m.openFileFinder()
 		case "z": // cycle the focused panel's text display mode
