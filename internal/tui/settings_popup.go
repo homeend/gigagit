@@ -44,10 +44,11 @@ const (
 	settingsMenuRates       = "Refresh rates"
 	settingsMenuCommitSort  = "Commit sort"
 	settingsMenuShowGraph   = "Show graph"
+	settingsMenuCommitGraph = "Commit-graph"
 )
 
 // settingsMenu is the top-level menu order.
-var settingsMenu = []string{settingsMenuAgents, settingsMenuIdentity, settingsMenuPrefixes, settingsMenuHook, settingsMenuOpLog, settingsMenuErrors, settingsMenuAutoRefresh, settingsMenuRemoteTags, settingsMenuRates, settingsMenuCommitSort, settingsMenuShowGraph}
+var settingsMenu = []string{settingsMenuAgents, settingsMenuIdentity, settingsMenuPrefixes, settingsMenuHook, settingsMenuOpLog, settingsMenuErrors, settingsMenuAutoRefresh, settingsMenuRemoteTags, settingsMenuRates, settingsMenuCommitSort, settingsMenuShowGraph, settingsMenuCommitGraph}
 
 // commitSortModes is the cycle order for the "Commit sort" menu toggle:
 // date-order (default; git --date-order, perfect lanes) → plain (fast, git's
@@ -103,6 +104,19 @@ func settingsMenuLabel(m Model, i int) string {
 			return settingsMenuShowGraph + ": on"
 		}
 		return settingsMenuShowGraph + ": off"
+	}
+	if settingsMenu[i] == settingsMenuCommitGraph {
+		if !m.repoHealthKnown {
+			return settingsMenuCommitGraph + ": (checking…)"
+		}
+		switch {
+		case !m.repoHealth.HasCommitGraph:
+			return settingsMenuCommitGraph + ": missing — enter writes + keeps fresh"
+		case m.repoHealth.WriteCommitGraphValue == "true":
+			return settingsMenuCommitGraph + ": present, auto-refresh on"
+		default:
+			return settingsMenuCommitGraph + ": present, auto-refresh off — enter writes + keeps fresh"
+		}
 	}
 	return settingsMenu[i]
 }
@@ -239,10 +253,12 @@ func (m Model) toggleAutoRemoteTags() Model {
 	return m
 }
 
-// openSettings opens the menu screen.
-func (m Model) openSettings() Model {
+// openSettings opens the menu screen and re-reads repo health so the
+// Commit-graph row's label reflects the current state, not a stale snapshot
+// from startup or the last repo switch.
+func (m Model) openSettings() (Model, tea.Cmd) {
 	m = m.pushLayer(&settingsPopup{})
-	return m
+	return m, m.repoHealthCmd(m.noticeGen)
 }
 
 // openAgentPicker populates the picker from a fresh detection pass. The
@@ -336,6 +352,20 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				// A related option may be worth reconsidering now (e.g. commit
 				// sort buys nothing with the graph hidden) — one follow-up, max.
 				return m.maybeRelatedPrompt(settingShowGraph, m.cfg.UI.ShowGraph)
+			case settingsMenuCommitGraph:
+				if !m.repoHealthKnown {
+					m.statusMsg = "still checking the repo — try again in a moment"
+					return m, nil
+				}
+				if m.repoHealth.HasCommitGraph && m.repoHealth.WriteCommitGraphValue == "true" {
+					m.statusMsg = "commit-graph present and auto-refresh already on"
+					return m, nil
+				}
+				if m.running {
+					return m, nil // an op is already in flight
+				}
+				// Same code path as the notice's "write + keep fresh" action.
+				return m.startCommitGraphWriteAndEnable()
 			case settingsMenuRates:
 				p.ratesView = true
 				p.ratesSel = 0

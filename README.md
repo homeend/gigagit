@@ -313,6 +313,19 @@ example, `footer_actions = ["pull", "commit", "filter"]` shrinks the footer to
 those (plus `[.] actions`), leaving everything else one keypress away in the `.`
 menu.
 
+### Notifications
+
+gg checks repo health in the background on every load. When it finds
+something worth fixing, a red **`! N notice`** segment blinks in the status
+bar; press **`!`** to open the notification center, pick a notice, and choose
+an action. The first check targets big repos (≥ 100 MB of packs) without a
+commit-graph file: writing one (`git commit-graph write --reachable`) makes
+ordered commit browsing roughly 10× faster, and enabling
+`fetch.writeCommitGraph` keeps it fresh from then on. Actions: write + keep
+fresh, enable only, *Not now* (asks again next load), or *Never for this
+repo* (remembered in `<state>/gg/prompts.toml`). The Settings (`,`) →
+"Commit-graph" row shows the current state and applies the same fix.
+
 ### Post-worktree hook
 
 After `gg` creates a worktree it can run a per-repo shell script — handy for

@@ -9,6 +9,18 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Notification center.** On repo load gg runs cheap health checks; findings
+  show as a blinking red `! N notice` status segment and a **`!`** dialog.
+  First check: a big repo (packs ≥ 100 MB) with no commit-graph file and
+  `fetch.writeCommitGraph` unset gets "Commit browsing can be ~10× faster in
+  this repo" with one-keystroke fixes — *Write commit-graph now + keep it
+  fresh* (runs `git commit-graph write --reachable`, then sets
+  `fetch.writeCommitGraph=true` locally), *Enable auto-refresh only*, *Not
+  now* (asks again next load), or *Never for this repo* (persisted in
+  `<state>/gg/prompts.toml`). Settings gains a **"Commit-graph"** row showing
+  the same state with the same one-key fix. New engine ops
+  `WriteCommitGraph` + `SetGitConfig` back it (the generic config write that
+  stage 3's explorer will reuse).
 - **Related-option prompts.** Flipping a Settings option can now ask one
   follow-up about a related option: turning "Show graph" off offers to set
   Commit sort to `plain` (ordering only matters for graph lanes — plain is

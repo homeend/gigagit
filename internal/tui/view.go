@@ -376,8 +376,10 @@ func (m Model) renderInterface() string {
 	if errMode {
 		add(m.statusMsg)
 		add(notice)
+		add(m.noticeSegment())
 		add(markHint)
 	} else {
+		add(m.noticeSegment())
 		add(markHint)
 		add(notice)
 		add(m.statusMsg)
