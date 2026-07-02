@@ -9,6 +9,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Git config explorer.** Settings (`,`) → "Git config explorer" opens a
+  searchable, full-height view of every config key git knows (`git help -c`,
+  ~870 keys) with columns key | local | global | default — unset scopes say
+  `(unset)` explicitly. ~64 curated keys (`internal/gitconfdocs`) show git's
+  real default plus a one-line description and edit in place: `l` sets local,
+  `g` sets global, `u` unsets (choosing among set scopes); bools/enums get an
+  option picker, strings/ints a text field. Writes run through the same
+  `engine.SetGitConfig` op as the notification center (now with `Unset`);
+  non-curated keys are read-only. `/` filters as you type, `z` cycles display
+  modes.
 - **Notification center.** On repo load gg runs cheap health checks; findings
   show as a blinking red `! N notice` status segment and a **`!`** dialog.
   First check: a big repo (packs ≥ 100 MB) with no commit-graph file and
