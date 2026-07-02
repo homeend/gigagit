@@ -123,6 +123,13 @@ type Commit struct {
 	Source   string // branch the commit was reached from in the walk (%S); "" when unknown
 }
 
+// LogLine is one terse history row (short sha + subject) — the gg log /
+// gg show header unit.
+type LogLine struct {
+	Hash    string // short sha (%h)
+	Subject string
+}
+
 // ReflogEntry is one HEAD reflog record (git reflog), newest first.
 type ReflogEntry struct {
 	Selector  string // "HEAD@{0}"
