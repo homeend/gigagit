@@ -9,6 +9,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Related-option prompts.** Flipping a Settings option can now ask one
+  follow-up about a related option: turning "Show graph" off offers to set
+  Commit sort to `plain` (ordering only matters for graph lanes — plain is
+  much faster on big repos); turning it back on offers `date-order` back.
+  Options are Yes / Not now / **No — don't ask again**; the last is persisted
+  machine-globally in `<state>/gg/prompts.toml` (named in the popup, delete a
+  line to bring a prompt back). The registry is generic
+  (`internal/tui/related_prompts.go`); the new `internal/promptstate` store
+  also carries per-repo notice dismissals for the upcoming notification
+  center.
 - **`[ui] show_graph` — persistent Commits render mode.** A per-repo setting
   (Settings `,` → "Show graph") choosing how the Commits panel renders on
   startup: `on` (default when unset; the lane graph) or `off` (the flat
