@@ -286,6 +286,12 @@ func opAffectedSources(op engine.Operation) []sourceKey {
 		// A commit-graph write / config set changes no panel-visible data —
 		// reloading all sources would also fire the srcTags-arrival remote-tags
 		// probe: a needless network call right after fixing a huge repo.
+		// Note: the git-config explorer's user.name/user.email writes DO feed
+		// srcIdentity, but the explorer bypasses startOp entirely (it runs
+		// through gitConfigWriteCmd, a stageCmd-style synchronous op-execute,
+		// not this opAffectedSources table) and the identity view re-reads on
+		// open anyway — so this mapping stays refresh-nothing. Revisit if a
+		// config write is ever routed through startOp.
 		return []sourceKey{}
 	}
 	return nil // unmapped → all sources (safe)

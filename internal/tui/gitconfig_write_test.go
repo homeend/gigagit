@@ -75,6 +75,9 @@ func TestExplorerSetLocalBoolWritesConfig(t *testing.T) {
 	isolateGlobalGitConfig(t)
 	m, dir := settingsModel(t)
 	m = openExplorer(t, m)
+	if m.repoHealthKnown {
+		t.Fatal("repoHealthKnown must be false before any write lands (openExplorer's `,` discards its own health cmd)")
+	}
 	m = selectExplorerRow(t, m, "fetch.writeCommitGraph")
 	u, _ := m.Update(keyMsg("l"))
 	m = u.(Model)
@@ -94,6 +97,11 @@ func TestExplorerSetLocalBoolWritesConfig(t *testing.T) {
 	}
 	if p := layerOf[*gitConfigPopup](m); p == nil || p.edit != nil {
 		t.Fatal("after writing, the explorer stays open in browsing mode")
+	}
+	// The write cmd chains a post-write repo-health re-read (Finding 2):
+	// prove it actually landed, not just that the write succeeded.
+	if !m.repoHealthKnown {
+		t.Fatal("repoHealthKnown must be true after the write — the chained health re-read must have applied")
 	}
 }
 

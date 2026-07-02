@@ -3,6 +3,7 @@ package git
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -124,5 +125,31 @@ func TestConfigUnsetRemovesKeyAndToleratesMissing(t *testing.T) {
 	// Unsetting a missing key exits 5 — must be a no-op success.
 	if err := r.ConfigUnset(ctx, ConfigLocal, "core.somekey"); err != nil {
 		t.Fatalf("unset missing key must be a no-op, got %v", err)
+	}
+}
+
+// TestConfigUnsetRemovesAllMultivarValues covers the multivar shape (e.g.
+// safe.directory, added multiple times via `git config --add`). Plain
+// `--unset` exits 5 on a multivar without removing anything — a false
+// "unset" success. ConfigUnset must use `--unset-all` so every value is
+// gone.
+func TestConfigUnsetRemovesAllMultivarValues(t *testing.T) {
+	t.Setenv("GIT_CONFIG_GLOBAL", filepath.Join(t.TempDir(), "gitconfig"))
+	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
+	dir, runner := newTestRepo(t)
+	r := &Repo{Runner: runner}
+	ctx := context.Background()
+	// Two values for one key (git config --add), the safe.directory shape.
+	for _, v := range []string{"/a", "/b"} {
+		cmd := exec.Command("git", "-C", dir, "config", "--local", "--add", "test.multi", v)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git config --add: %v\n%s", err, out)
+		}
+	}
+	if err := r.ConfigUnset(ctx, ConfigLocal, "test.multi"); err != nil {
+		t.Fatalf("unset multivar: %v", err)
+	}
+	if _, set, _ := r.ConfigGet(ctx, ConfigLocal, "test.multi"); set {
+		t.Fatal("multivar key survived unset — --unset-all must remove every value")
 	}
 }

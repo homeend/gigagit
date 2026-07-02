@@ -292,6 +292,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.gen != m.gitConfigGen {
 			return m, nil // stale: reopened or repo-switched since dispatch
 		}
+		// Report the write result even if the popup was already closed (esc)
+		// before this async re-read landed — hoisted above the popup-nil
+		// check below, which only governs the row/loading display.
+		if msg.summary != "" {
+			m.statusMsg = msg.summary
+		}
+		var healthCmd tea.Cmd
+		if msg.health != nil {
+			// The write cmd chained a post-write health re-read; apply it
+			// through the same path a background repoHealthMsg would take,
+			// gen-guarded against the CURRENT notice generation.
+			m, healthCmd = m.applyRepoHealth(repoHealthMsg{gen: m.noticeGen, health: *msg.health})
+		}
 		if p := layerOf[*gitConfigPopup](m); p != nil {
 			wasLoading := p.loading
 			p.loading = false
@@ -299,21 +312,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.statusMsg = "git config explorer: " + friendlyOpError(msg.err)
 				if wasLoading {
 					// The initial load failed: nothing to show — close.
-					return m.popLayer(), nil
+					return m.popLayer(), healthCmd
 				}
 				// A failed write / post-write re-read: keep the popup open
 				// on the stale rows instead of yanking it away.
-				return m, nil
+				return m, healthCmd
 			}
 			p.rows = msg.rows
 			if n := len(p.visible()); p.sel >= n && n > 0 {
 				p.sel = n - 1
 			}
-			if msg.summary != "" {
-				m.statusMsg = msg.summary
-			}
 		}
-		return m, nil
+		return m, healthCmd
 	case noticeBlinkMsg:
 		if msg.gen != m.blinkGen || !m.noticesUnread {
 			return m, nil // stale lane or read: stop re-arming

@@ -47,12 +47,17 @@ type configEdit struct {
 
 // gitConfigRowsMsg carries the merged rows; gen guards repo switches and
 // reopen races. summary is set by the post-write re-read (gitConfigWriteCmd)
-// so the status line reports the op result alongside the fresh rows.
+// so the status line reports the op result alongside the fresh rows. health
+// is the repo-health snapshot chained INSIDE the same write, taken after the
+// write lands — nil when this msg isn't a write result (or the health read
+// itself failed) — so the notice/Settings health state never races the
+// config write it's supposed to observe.
 type gitConfigRowsMsg struct {
 	gen     int
 	rows    []model.GitConfigRow
 	err     error
 	summary string
+	health  *model.RepoHealth
 }
 
 // openGitConfigExplorer pushes the loading popup and reads the rows off the
@@ -330,10 +335,13 @@ func (p *gitConfigPopup) updateEdit(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 }
 
 // editEnter builds the SetGitConfig op from the editor state and dispatches
-// it (write + rows re-read, batched with a repo-health re-read — a config
-// write can change repo health, e.g. unsetting fetch.writeCommitGraph
-// re-arms the commit-graph notice check). The editor closes immediately;
-// the popup shows the refreshed rows when the write's re-read lands.
+// it (write + rows re-read, chained with a repo-health re-read INSIDE the
+// same cmd — a config write can change repo health, e.g. unsetting
+// fetch.writeCommitGraph re-arms the commit-graph notice check). The health
+// read is chained after the write, not run in a separate tea.Batch cmd, so
+// it always observes the post-write config instead of racing it. The editor
+// closes immediately; the popup shows the refreshed rows when the write's
+// re-read lands.
 func (p *gitConfigPopup) editEnter(m Model) (Model, tea.Cmd) {
 	e := p.edit
 	var op engine.SetGitConfig
@@ -357,13 +365,16 @@ func (p *gitConfigPopup) editEnter(m Model) (Model, tea.Cmd) {
 		op = engine.SetGitConfig{Key: e.key, Value: val, Global: e.global}
 	}
 	p.edit = nil
-	return m, tea.Batch(m.gitConfigWriteCmd(op), m.repoHealthCmd(m.noticeGen))
+	return m, m.gitConfigWriteCmd(op)
 }
 
 // gitConfigWriteCmd runs one config write synchronously (the stageCmd
-// pattern — fast + decision-free, no busy-line machinery) and re-reads the
-// rows so the popup refreshes in the same message. It reuses the CURRENT
-// generation: the refresh lands unless the popup was reopened/re-rooted.
+// pattern — fast + decision-free, no busy-line machinery), re-reads the rows
+// so the popup refreshes in the same message, and — now that the write has
+// landed — also re-reads repo health so notices/Settings observe the
+// post-write config instead of a stale snapshot from a concurrent read. It
+// reuses the CURRENT generation: the refresh lands unless the popup was
+// reopened/re-rooted.
 func (m Model) gitConfigWriteCmd(op engine.SetGitConfig) tea.Cmd {
 	svc := m.svc
 	gen := m.gitConfigGen
@@ -373,7 +384,11 @@ func (m Model) gitConfigWriteCmd(op engine.SetGitConfig) tea.Cmd {
 			return gitConfigRowsMsg{gen: gen, err: err}
 		}
 		rows, rerr := svc.GitConfigRows(context.Background())
-		return gitConfigRowsMsg{gen: gen, rows: rows, err: rerr, summary: res.Summary}
+		var health *model.RepoHealth
+		if h, herr := svc.RepoHealth(context.Background()); herr == nil {
+			health = &h
+		}
+		return gitConfigRowsMsg{gen: gen, rows: rows, err: rerr, summary: res.Summary, health: health}
 	}
 }
 
