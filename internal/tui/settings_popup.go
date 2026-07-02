@@ -110,13 +110,15 @@ func settingsMenuLabel(m Model, i int) string {
 		if !m.repoHealthKnown {
 			return settingsMenuCommitGraph + ": (checking…)"
 		}
+		// The git option is named so the row maps to the config explorer's
+		// fetch.writeCommitGraph line — "auto-refresh" alone is unfindable there.
 		switch {
 		case !m.repoHealth.HasCommitGraph:
-			return settingsMenuCommitGraph + ": missing — enter writes + keeps fresh"
+			return settingsMenuCommitGraph + ": missing — enter writes + sets fetch.writeCommitGraph"
 		case m.repoHealth.WriteCommitGraphValue == "true":
-			return settingsMenuCommitGraph + ": present, auto-refresh on"
+			return settingsMenuCommitGraph + ": present, auto-refresh on (fetch.writeCommitGraph)"
 		default:
-			return settingsMenuCommitGraph + ": present, auto-refresh off — enter writes + keeps fresh"
+			return settingsMenuCommitGraph + ": present, auto-refresh off — enter sets fetch.writeCommitGraph"
 		}
 	}
 	return settingsMenu[i]
