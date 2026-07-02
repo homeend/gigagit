@@ -58,6 +58,7 @@ type Model struct {
 	noticesUnread          bool                 // blink while true; opening the ! dialog clears it
 	blinkOn                bool                 // current blink phase (style alternation)
 	noticeGen              int                  // stale-drop guard for repoHealthMsg across repo switches
+	gitConfigGen           int                  // stale-drop guard for explorer row loads
 	blinkGen               int                  // bumped on every blink-tick arm; stale ticks are dropped (single blink lane)
 	noticeSessionDismissed map[string]bool      // "Not now" ids; cleared on reRoot (re-evaluated next load)
 	repoHealth             model.RepoHealth     // last health snapshot (Settings Commit-graph row)
@@ -287,6 +288,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case repoHealthMsg:
 		return m.applyRepoHealth(msg)
+	case gitConfigRowsMsg:
+		if msg.gen != m.gitConfigGen {
+			return m, nil // stale: reopened or repo-switched since dispatch
+		}
+		if p := layerOf[*gitConfigPopup](m); p != nil {
+			p.loading = false
+			if msg.err != nil {
+				m.statusMsg = "git config explorer: " + friendlyOpError(msg.err)
+				return m.popLayer(), nil
+			}
+			p.rows = msg.rows
+			if n := len(p.visible()); p.sel >= n && n > 0 {
+				p.sel = n - 1
+			}
+		}
+		return m, nil
 	case noticeBlinkMsg:
 		if msg.gen != m.blinkGen || !m.noticesUnread {
 			return m, nil // stale lane or read: stop re-arming
@@ -2548,7 +2565,8 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.pendingRemoteTagAdds = nil
 	m.notices = nil
 	m.noticesUnread = false
-	m.noticeGen++ // drop any in-flight health read from the old repo
+	m.noticeGen++    // drop any in-flight health read from the old repo
+	m.gitConfigGen++ // drop any in-flight git-config explorer read from the old repo
 	m.noticeSessionDismissed = map[string]bool{}
 	m.repoHealthKnown = false
 	m.pendingNoticeConfig = nil
