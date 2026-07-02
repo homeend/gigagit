@@ -10,11 +10,18 @@ description: Use when a gigagit feature needs to READ or WRITE a git config opti
 1. **Verbs** (`internal/git/config.go`):
    `ConfigGet(ctx, scope, key) (value string, set bool, err error)` — exit 1
    = unset, not an error; `ConfigSet(ctx, scope, key, value) error`.
+   Also `ConfigUnset(ctx, scope, key) error` — `git config --unset`; exit 5
+   (key absent) is a no-op success, so unset is idempotent. Read-side:
+   `ConfigKeys(ctx)` (the `git help -c` catalog) and `ConfigListScoped(ctx)`
+   (`git config --list --show-scope -z`; local/global only; -z survives
+   multiline values; git lowercases set keys — join against the camelCase
+   catalog case-insensitively).
    Scopes: `git.ConfigLocal` / `git.ConfigGlobal` / `git.ConfigEffective`
    (merged; get-only). One verb = one `git config` invocation.
 2. **The op** (`internal/engine/set_git_config.go`):
-   `engine.SetGitConfig{Key, Value string, Global bool}` — decision-free,
-   `LockMode() = repogate.Read`. **Why an op and not a direct verb call:**
+   `engine.SetGitConfig{Key, Value string, Global, Unset bool}` — decision-free,
+   `LockMode() = repogate.Read`. `Unset: true` removes the key (Value ignored); 
+   one op for set AND unset, per the spec's explicit decision. **Why an op and not a direct verb call:**
    frontends may not import `internal/git` (archtest), and running through
    `domain.Execute` buys the repo-gate reservation, op events (busy line,
    oplog spans), and error surfacing for free. `Global` is a bool, not
@@ -39,9 +46,26 @@ description: Use when a gigagit feature needs to READ or WRITE a git config opti
 - Settings rows (`settings_popup.go`): the "Commit-graph" row calls the SAME
   shared func as the notice action (`startCommitGraphWriteAndEnable`) — one
   code path, two entrances.
-- Stage 3's git-config explorer will add set/unset on curated keys through
-  the same op (extend with `Unset bool` + a `git.ConfigUnset` verb there —
-  do NOT add a second write op).
+- The git-config explorer (Settings → "Git config explorer",
+  `internal/tui/gitconfig_popup.go`): browse every catalog key with
+  local/global/default columns; curated rows (`internal/gitconfdocs`) edit
+  via `l`/`g`/`u` → `gitConfigWriteCmd` → `domain.Execute(SetGitConfig)`
+  (the stageCmd synchronous pattern — config writes are fast and
+  decision-free), then re-read rows + repo health in one message.
+
+## Maintaining the curated table (internal/gitconfdocs)
+
+- One `Doc` per key: `Key` (camelCase, exactly as `git help -c` prints it),
+  `Kind` (bool/enum/string/int — picks the editor), `Default` (git's real
+  default, `"(none)"` when git has none — never gg's opinion), `Desc` (one
+  line), `Options` (enums only).
+- `TestCuratedKeysExistInGitCatalog` is the staleness gate: every curated
+  key must exist in the local `git help -c` (skipped when git is absent).
+  If it fails after a git upgrade, fix or remove the entry — do not skip.
+- Lookup is case-insensitive (`byLower`) because git lowercases set keys.
+- Curated ⇒ writable in the explorer; think before adding keys whose
+  values are dangerous to flip blindly (e.g. `core.fileMode` on the wrong
+  filesystem) — the Desc should carry the caveat.
 
 ## Tests
 
