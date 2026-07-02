@@ -79,3 +79,46 @@ func TestRepoHealthCountsPackBytes(t *testing.T) {
 		t.Fatalf("PackBytes = %d after repack, want > 0", h.PackBytes)
 	}
 }
+
+func TestRepoHealthSeesGlobalScopeConfig(t *testing.T) {
+	t.Setenv("GIT_CONFIG_GLOBAL", filepath.Join(t.TempDir(), "gitconfig"))
+	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
+	_, svc := newRealRepo(t)
+	ctx := context.Background()
+
+	// Set ONLY the global scope; local stays unset — the query's fallback
+	// must still report the option as set (an inherited global "true"
+	// suppresses the commit-graph notice just like a local one).
+	if err := svc.Repo().ConfigSet(ctx, git.ConfigGlobal, "fetch.writeCommitGraph", "true"); err != nil {
+		t.Fatalf("config set: %v", err)
+	}
+
+	h, err := svc.RepoHealth(ctx)
+	if err != nil {
+		t.Fatalf("RepoHealth: %v", err)
+	}
+	if !h.WriteCommitGraphSet || h.WriteCommitGraphValue != "true" {
+		t.Fatalf("global-only config: set=%v value=%q, want true/true", h.WriteCommitGraphSet, h.WriteCommitGraphValue)
+	}
+}
+
+func TestRepoHealthSeesCommitGraphChainDir(t *testing.T) {
+	t.Setenv("GIT_CONFIG_GLOBAL", filepath.Join(t.TempDir(), "gitconfig"))
+	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
+	dir, svc := newRealRepo(t)
+
+	// A split commit-graph lives in a commit-graphs/ chain dir instead of the
+	// single commit-graph file (e.g. written by git maintenance).
+	chain := filepath.Join(dir, ".git", "objects", "info", "commit-graphs")
+	if err := os.MkdirAll(chain, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	h, err := svc.RepoHealth(context.Background())
+	if err != nil {
+		t.Fatalf("RepoHealth: %v", err)
+	}
+	if !h.HasCommitGraph {
+		t.Fatal("a commit-graphs/ chain dir must count as having a commit-graph")
+	}
+}
