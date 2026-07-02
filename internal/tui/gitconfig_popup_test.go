@@ -102,6 +102,52 @@ func TestExplorerShowsCuratedDescription(t *testing.T) {
 	}
 }
 
+// TestExplorerWrapModeUnsetCellsNotCorrupted is a regression test for a bug
+// where configCell/gitConfigDefaultCell baked unsetStyle's ANSI escape into
+// winRow.text BEFORE renderWindow's width-based slicing. wrapWidth measures
+// width rune-by-rune with no escape-sequence awareness, so in wrap mode
+// (`z` once from the default cutoff mode) a line break could land mid-escape,
+// leaving a dangling open sequence on one physical line and the "(unset)"
+// text stranded on the next WITHOUT its dim-color prefix — real, observed
+// corruption (verified empirically against the pre-fix code: an "(unset)"
+// reappearing on a wrap-continuation line with no preceding color escape).
+// The fix decorates post-slice instead, so every "(unset)" in the rendered
+// view must always be immediately preceded by unsetStyle's full escape
+// prefix, never orphaned across a line break.
+func TestExplorerWrapModeUnsetCellsNotCorrupted(t *testing.T) {
+	forceColor(t)
+	m, _ := settingsModel(t)
+	m = openExplorer(t, m)
+
+	// One `z` press cycles modeCutoff -> modeWrap (dispMode.next()).
+	u, _ := m.Update(keyMsg("z"))
+	m = u.(Model)
+	p := layerOf[*gitConfigPopup](m)
+	if p.mode != modeWrap {
+		t.Fatalf("expected wrap mode after one z press, got %v", p.mode)
+	}
+
+	out := m.View()
+	if !strings.Contains(out, "(unset)") {
+		t.Fatalf("wrap-mode view must still contain the literal (unset) text:\n%s", out)
+	}
+
+	// unsetStyle's rendered escape prefix, independent of the content it
+	// wraps (Render's opening SGR sequence depends only on the style).
+	probe := unsetStyle.Render("(unset)")
+	openSeq := probe[:strings.Index(probe, "(")]
+	if openSeq == "" {
+		t.Fatal("unsetStyle produced no escape prefix; forceColor may not have taken effect")
+	}
+
+	total := strings.Count(out, "(unset)")
+	prefixed := strings.Count(out, openSeq+"(unset)")
+	if prefixed != total {
+		t.Fatalf("an \"(unset)\" cell lost its dim-color escape across a wrap line break: only %d of %d occurrences are immediately prefixed by the color escape %q\nview:\n%s",
+			prefixed, total, openSeq, out)
+	}
+}
+
 func TestExplorerSwallowsGlobalKeys(t *testing.T) {
 	m, _ := settingsModel(t)
 	m = openExplorer(t, m)
