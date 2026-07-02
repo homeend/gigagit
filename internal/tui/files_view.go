@@ -680,13 +680,14 @@ func (m Model) renderFilesView(boxW, boxH int) string {
 
 	vis := p.visible()
 	// Window-then-build: on a full tree the list is 10^4–10^5 rows, and building a
-	// winRow for every row each frame is O(n) (≈0.5s at 40k rows). For the
-	// 1-line-per-row modes (cutoff/scroll), only the slice the window can show is
-	// built; the math is byte-identical to building all rows (windowStart clamps
-	// the same window either way). Wrap mode has variable row height, so it keeps
-	// the full build (wrapping a 10^5 tree is a deliberate, rare choice).
+	// winRow for every row each frame is O(n) (≈0.5s at 40k rows). Only the slice
+	// the window can show is built. In cutoff/scroll (one line per row) the math
+	// is byte-identical to building all rows (windowStart clamps the same window
+	// either way); in wrap mode a row is ≥1 lines, so the rowsCap-line window can
+	// never show rows outside [sel-rowsCap, sel+rowsCap] and renderWindow's wrap
+	// windowing re-derives the same span (see its output-identity argument).
 	s0, s1, anchor := 0, len(vis), p.sel
-	if p.mode != modeWrap && len(vis) > 2*rowsCap+1 {
+	if len(vis) > 2*rowsCap+1 {
 		if s0 = p.sel - rowsCap; s0 < 0 {
 			s0 = 0
 		}

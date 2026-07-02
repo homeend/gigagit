@@ -537,26 +537,44 @@ func (m Model) panelView(p panel) (rows []string, idx []int) {
 	return rows, idx
 }
 
-// panelViewWindowed is panelView for the render path: in single-line display
-// modes it materializes only the row strings the panel's window will show
-// (off-window entries stay ""), so a 40k-row panel doesn't build every row every
-// frame. idx stays full-length, keeping selection/mark/hit-test indexing intact,
-// and the window it fills matches the one renderPanel/renderWindow re-derive from
-// the same sel + rowsCap. Wrap mode (multi-line rows) needs every row, so it
-// falls back to the full build. boxH is the panel's outer box height.
+// panelViewWindowed is panelView for the render path: it materializes only the
+// row strings the panel's window can show (off-window entries stay ""), so a
+// 40k-row panel doesn't build every row every frame. idx stays full-length,
+// keeping selection/mark/hit-test indexing intact, and the span it fills
+// matches the one renderPanel/renderWindow re-derive from the same sel +
+// rowsCap: the exact window in cutoff/scroll (one line per row), and
+// [sel-rowsCap, sel+rowsCap] in wrap mode (a row is ≥1 lines, so the window
+// can never show rows further from the anchor than its own height). boxH is
+// the panel's outer box height.
 func (m Model) panelViewWindowed(p panel, boxH int) (rows []string, idx []int) {
 	idx = m.displayIndices(p)
 	l := m.listFor(p)
 	rows = make([]string, len(idx))
 	rowsCap := boxH - 3 // mirrors renderPanel: borders (2) + label line
-	if m.dispModes[p] == modeWrap || rowsCap < 1 || len(idx) <= rowsCap {
+	if rowsCap < 1 || len(idx) <= rowsCap {
 		for n, i := range idx {
 			rows[n] = l.Row(i)
 		}
 		return rows, idx
 	}
-	start := windowStart(len(idx), rowsCap, m.sel[p])
-	end := start + rowsCap
+	sel := m.sel[p]
+	var start, end int
+	if m.dispModes[p] != modeWrap {
+		start = windowStart(len(idx), rowsCap, sel)
+		end = start + rowsCap
+	} else {
+		// Nearest-edge clamp for a stale out-of-range sel, mirroring renderPanel's
+		// anchor clamp so the two spans coincide.
+		if sel < 0 {
+			sel = 0
+		} else if sel >= len(idx) {
+			sel = len(idx) - 1
+		}
+		if start = sel - rowsCap; start < 0 {
+			start = 0
+		}
+		end = sel + rowsCap + 1
+	}
 	if end > len(idx) {
 		end = len(idx)
 	}

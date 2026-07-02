@@ -78,6 +78,19 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   including outside a git repository.
 
 ### Fixed
+- **Wrap mode (`z`) made cursor movement O(feed) per keystroke.** With the
+  Commits panel in wrap display mode on a deeply paged feed (a few thousand
+  commits loaded), every frame rebuilt, decorated, and ANSI-wrapped *every*
+  loaded row just to place the window — ≈47ms per keystroke at 5k commits,
+  ≈84ms at 10k, so movement crawled and key-repeat built a backlog. The
+  "wrap needs every row for exact windowing" assumption was false: every row
+  occupies at least one display line, so an h-line window can never show rows
+  more than h away from the anchor, and slicing to `[anchor-h, anchor+h]`
+  before wrapping is output-identical (pinned by an equivalence test against
+  the full layout for every anchor). All four wrap fallbacks — `renderWindow`,
+  `renderPanel`, `commitBody`, `panelViewWindowed`, plus the files view's
+  copy of the gate — now window before building, making wrap-mode frames
+  ~flat in feed size (≈1.8ms at 10k commits, same as cutoff).
 - **Solo view painted the previous scope's lane graph.** Soloing a branch
   (Branches `.` → "Solo this branch") reloaded the commit rows but could keep
   the lanes laid for the earlier all-branches walk, drawing phantom forks

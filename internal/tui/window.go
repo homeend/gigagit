@@ -66,18 +66,42 @@ func renderWindow(rows []winRow, o winOpts) []string {
 		h = 1
 	}
 
-	// Fast path for single-line modes (cutoff/scroll): each row occupies exactly
-	// one display line, so the visible slice is deterministic — window to it BEFORE
-	// building any per-row state, making the whole call O(visible) instead of
-	// O(len(rows)). Without this a 40k-row panel rebuilds every row on every frame,
-	// and gg's perpetual 1s heartbeat re-renders the whole UI, so a huge untracked
-	// or commit set pegs the CPU (and, under any extra event traffic, freezes it).
-	// Wrap mode can span one row over several lines, so its windowing needs every
-	// row and keeps the slow path below.
-	if o.mode != modeWrap && len(rows) > h {
-		start := windowStart(len(rows), h, o.anchor)
-		rows = rows[start : start+h]
-		o.anchor -= start
+	// Window BEFORE building any per-row state, making the whole call O(visible)
+	// instead of O(len(rows)). Without this a 40k-row panel rebuilds every row on
+	// every frame, and gg's perpetual 1s heartbeat re-renders the whole UI, so a
+	// huge untracked or commit set pegs the CPU (and, under any extra event
+	// traffic, freezes it).
+	if len(rows) > h {
+		if o.mode != modeWrap {
+			// Single-line modes (cutoff/scroll): each row occupies exactly one
+			// display line, so the visible slice is deterministic.
+			start := windowStart(len(rows), h, o.anchor)
+			rows = rows[start : start+h]
+			o.anchor -= start
+		} else {
+			// Wrap mode: a row spans a variable number of lines, but every row is
+			// at least ONE line, so the h-line window anchored on row a can only
+			// ever show rows within h of a. Rows further away contribute only to
+			// the line COUNTS windowStart sees, and its clamps bind only when the
+			// lines on that side of the anchor number fewer than h — which implies
+			// no rows on that side were dropped. Slicing to [a-h, a+h] before
+			// wrapping is therefore output-identical to the full layout
+			// (TestRenderWindowWrapMatchesFullLayout pins this for every anchor).
+			a := o.anchor
+			if a < 0 || a >= len(rows) {
+				a = 0 // mirrors the anchor scan below: no matching row → line 0
+			}
+			lo := a - h
+			if lo < 0 {
+				lo = 0
+			}
+			hi := a + h + 1
+			if hi > len(rows) {
+				hi = len(rows)
+			}
+			rows = rows[lo:hi]
+			o.anchor -= lo
+		}
 	}
 
 	// A frozen prefix column (o.prefixW>0) reserves the leftmost columns; the
