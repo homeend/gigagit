@@ -676,11 +676,15 @@ func (m Model) renderPanel(p panel, label string, rows []string, decos []rowDeco
 		// is O(visible) instead of O(len(rows)). This is what keeps a pathological
 		// untracked set (e.g. a 40k-file graphify-out/, whose ~92-col paths each hit
 		// the O(len²) elideFilePath path) from re-eliding every row every frame and
-		// freezing the UI. Wrap mode can spread one row over many lines, so it must
-		// build every row for the windowing math to stay exact.
+		// freezing the UI. In wrap mode a row spreads over ≥1 lines, so the rowsCap-
+		// line window can never show rows more than rowsCap away from the anchor —
+		// [anchor-rowsCap, anchor+rowsCap] is output-identical to building all rows
+		// (see renderWindow's wrap windowing; the span here must contain the one it
+		// re-derives). commitBody/panelViewWindowed materialize the same wrap span,
+		// so every row that reaches renderWindow is populated.
 		start, end := 0, len(rows)
 		anchor := sel
-		if m.dispModes[p] != modeWrap && len(rows) > rowsCap {
+		if len(rows) > rowsCap {
 			// Clamp the window anchor into range so a stale out-of-range sel (the
 			// file list can shrink under a discard/stage/refresh before nav re-clamps
 			// it) never lands the window on rows we skipped building — which would
@@ -691,8 +695,17 @@ func (m Model) renderPanel(p panel, label string, rows []string, decos []rowDeco
 			} else if anchor >= len(rows) {
 				anchor = len(rows) - 1
 			}
-			start = windowStart(len(rows), rowsCap, anchor)
-			end = start + rowsCap
+			if m.dispModes[p] != modeWrap {
+				start = windowStart(len(rows), rowsCap, anchor)
+				end = start + rowsCap
+			} else {
+				if start = anchor - rowsCap; start < 0 {
+					start = 0
+				}
+				if end = anchor + rowsCap + 1; end > len(rows) {
+					end = len(rows)
+				}
+			}
 		}
 		// Size wr to the visible window, not the full row count: winRow embeds a
 		// lipgloss.Style, so a full-length make on a 40k-row panel zeroes megabytes
@@ -1109,13 +1122,15 @@ func (m Model) commitBranchHint() string {
 func (m Model) commitRows() []string     { return m.commitIdentRows(false) }
 func (m Model) commitFullRows() []string { return m.commitIdentRows(true) }
 
-// commitBody builds the Commits panel rows + decorators for renderPanel. In
-// cutoff/scroll display mode only the rows the window will show are styled;
-// off-window entries are empty strings that occupy the same single display line,
-// so renderPanel's windowing math and visible output are identical to styling
-// every row (O(visible) instead of O(feed) per frame). In wrap mode a row may
-// span several lines, so every row is styled for exactness. The returned slices
-// are full-length, keeping renderPanel's selection/mark indexing unchanged.
+// commitBody builds the Commits panel rows + decorators for renderPanel. Only
+// the rows the window can show are styled; off-window entries are empty strings,
+// so the visible output is identical to styling every row (O(visible) instead
+// of O(feed) per frame). In cutoff/scroll a row is one display line and the
+// span is the exact window; in wrap mode a row spans ≥1 lines, so the window
+// can never show rows more than rowsCap away from the selection — the span is
+// [sel-rowsCap, sel+rowsCap], the same one renderPanel materializes (its wrap
+// windowing must stay within what is built here). The returned slices are
+// full-length, keeping renderPanel's selection/mark indexing unchanged.
 func (m Model) commitBody(boxW, boxH int) (rows []string, idx []int, decos []rowDecorator) {
 	idx = m.displayIndices(panelCommits)
 	rows = make([]string, len(idx))
@@ -1125,15 +1140,30 @@ func (m Model) commitBody(boxW, boxH int) (rows []string, idx []int, decos []row
 	}
 	w := m.commitIdentWidth()
 	budget := m.commitGroupBudget(boxW, w)
-	if m.dispModes[panelCommits] == modeWrap || len(idx) <= rowsCap {
+	if len(idx) <= rowsCap {
 		for n, i := range idx {
 			rows[n] = m.commitIdentRowAt(i, w, false, budget)
 		}
 		return rows, idx, m.commitDecorators(rows, idx, budget)
 	}
 	sel := m.sel[panelCommits]
-	start := windowStart(len(idx), rowsCap, sel)
-	end := start + rowsCap
+	var start, end int
+	if m.dispModes[panelCommits] != modeWrap {
+		start = windowStart(len(idx), rowsCap, sel)
+		end = start + rowsCap
+	} else {
+		// Nearest-edge clamp for a stale out-of-range sel, mirroring renderPanel's
+		// anchor clamp so the two spans coincide.
+		if sel < 0 {
+			sel = 0
+		} else if sel >= len(idx) {
+			sel = len(idx) - 1
+		}
+		if start = sel - rowsCap; start < 0 {
+			start = 0
+		}
+		end = sel + rowsCap + 1
+	}
 	if end > len(idx) {
 		end = len(idx)
 	}
