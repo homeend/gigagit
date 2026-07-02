@@ -293,14 +293,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil // stale: reopened or repo-switched since dispatch
 		}
 		if p := layerOf[*gitConfigPopup](m); p != nil {
+			wasLoading := p.loading
 			p.loading = false
 			if msg.err != nil {
 				m.statusMsg = "git config explorer: " + friendlyOpError(msg.err)
-				return m.popLayer(), nil
+				if wasLoading {
+					// The initial load failed: nothing to show — close.
+					return m.popLayer(), nil
+				}
+				// A failed write / post-write re-read: keep the popup open
+				// on the stale rows instead of yanking it away.
+				return m, nil
 			}
 			p.rows = msg.rows
 			if n := len(p.visible()); p.sel >= n && n > 0 {
 				p.sel = n - 1
+			}
+			if msg.summary != "" {
+				m.statusMsg = msg.summary
 			}
 		}
 		return m, nil

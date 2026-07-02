@@ -140,8 +140,22 @@ func TestExplorerWrapModeUnsetCellsNotCorrupted(t *testing.T) {
 		t.Fatal("unsetStyle produced no escape prefix; forceColor may not have taken effect")
 	}
 
-	total := strings.Count(out, "(unset)")
-	prefixed := strings.Count(out, openSeq+"(unset)")
+	// The SELECTED row deliberately carries no dim decorator (its inner reset
+	// would cancel selectedRow's reverse highlight mid-row — the commits
+	// panel does the same skip), so exclude reverse-video lines from the
+	// count: every "(unset)" on a NON-selected line must keep its prefix.
+	const reverse = "\x1b[7m" // selectedRow = Reverse(true)
+	var total, prefixed int
+	for _, ln := range strings.Split(out, "\n") {
+		if strings.Contains(ln, reverse) {
+			continue
+		}
+		total += strings.Count(ln, "(unset)")
+		prefixed += strings.Count(ln, openSeq+"(unset)")
+	}
+	if total == 0 {
+		t.Fatalf("no \"(unset)\" cells on non-selected rows to check:\n%s", out)
+	}
 	if prefixed != total {
 		t.Fatalf("an \"(unset)\" cell lost its dim-color escape across a wrap line break: only %d of %d occurrences are immediately prefixed by the color escape %q\nview:\n%s",
 			prefixed, total, openSeq, out)

@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/gitconfdocs"
 	"github.com/homeend/gigagit/internal/model"
 )
@@ -16,7 +17,9 @@ import (
 // knows (git help -c), the explicitly-set local/global values, and — for
 // curated keys (internal/gitconfdocs) — the real default and a description.
 // Navigation-first like the repo switcher: / filters (move-while-typing),
-// z cycles display modes, esc closes.
+// z cycles display modes, esc closes. Curated rows edit in place: l/g open
+// a scope editor (option picker or text field per the doc's Kind), u a
+// set-scopes-only unset chooser; non-curated rows stay read-only.
 type gitConfigPopup struct {
 	rows      []model.GitConfigRow
 	loading   bool
@@ -25,14 +28,31 @@ type gitConfigPopup struct {
 	sel       int
 	mode      dispMode
 	hscroll   int
+	edit      *configEdit // in-popup editor state; nil = browsing
+}
+
+// configEdit is the in-popup editor state for one curated key: an option
+// list for bool/enum kinds, a text field for string/int, or the unset-scope
+// chooser. nil edit = browsing.
+type configEdit struct {
+	key      string
+	doc      *gitconfdocs.Doc
+	global   bool
+	unset    bool     // the unset chooser (options built from set scopes)
+	options  []string // option-list editors (incl. unset chooser labels)
+	optSel   int
+	field    textfield // string/int kinds
+	useField bool
 }
 
 // gitConfigRowsMsg carries the merged rows; gen guards repo switches and
-// reopen races.
+// reopen races. summary is set by the post-write re-read (gitConfigWriteCmd)
+// so the status line reports the op result alongside the fresh rows.
 type gitConfigRowsMsg struct {
-	gen  int
-	rows []model.GitConfigRow
-	err  error
+	gen     int
+	rows    []model.GitConfigRow
+	err     error
+	summary string
 }
 
 // openGitConfigExplorer pushes the loading popup and reads the rows off the
@@ -81,10 +101,15 @@ func (p *gitConfigPopup) visible() []model.GitConfigRow {
 // update handles all keys while the explorer is open. It swallows everything
 // (no fallthrough to global handlers), mirroring repoPopup: plain keys
 // navigate, `/` enters a filter sub-mode where runes (including `z`) type a
-// query until esc/enter. (Task 6 adds l/g/u edit keys here.)
+// query until esc/enter, and l/g/u open the in-place editor on curated rows.
+// While the editor is open ALL keys route to it (the filter `/` etc. are
+// inert).
 func (p *gitConfigPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
+	}
+	if p.edit != nil {
+		return p.updateEdit(m, msg)
 	}
 	if p.filtering {
 		// Arrows/pages move the selection live while typing (no cursor reset),
@@ -154,10 +179,202 @@ func (p *gitConfigPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			p.moveSel(1)
 		case "k":
 			p.moveSel(-1)
+		case "l", "g":
+			return p.openSetEditor(m, msg.String() == "g")
+		case "u":
+			return p.openUnsetChooser(m)
 		}
 		return m, nil
 	}
 	return m, nil
+}
+
+// selectedRowData returns the row under the cursor in the filtered view, or
+// false when the view is empty.
+func (p *gitConfigPopup) selectedRowData() (model.GitConfigRow, bool) {
+	vis := p.visible()
+	if p.sel < 0 || p.sel >= len(vis) {
+		return model.GitConfigRow{}, false
+	}
+	return vis[p.sel], true
+}
+
+// readOnlyRefusal is the statusMsg for an edit key on a non-curated row.
+const readOnlyRefusal = "read-only: not a curated key (edit via git config)"
+
+// openSetEditor opens the set editor for the selected curated row at the
+// chosen scope: an option picker for bool/enum kinds (pre-selected on the
+// current scope value when set, else the curated default), a text field for
+// string/int (pre-filled with the current scope value, empty when unset).
+func (p *gitConfigPopup) openSetEditor(m Model, global bool) (Model, tea.Cmd) {
+	row, ok := p.selectedRowData()
+	if !ok {
+		return m, nil
+	}
+	doc := gitconfdocs.Lookup(row.Key)
+	if doc == nil {
+		m.statusMsg = readOnlyRefusal
+		return m, nil
+	}
+	cur, isSet := row.LocalValue, row.LocalSet
+	if global {
+		cur, isSet = row.GlobalValue, row.GlobalSet
+	}
+	if !isSet {
+		cur = ""
+	}
+	e := &configEdit{key: doc.Key, doc: doc, global: global}
+	switch doc.Kind {
+	case gitconfdocs.KindBool:
+		e.options = []string{"true", "false"}
+	case gitconfdocs.KindEnum:
+		e.options = append([]string(nil), doc.Options...)
+	default: // KindString, KindInt
+		e.useField = true
+		e.field = newTextField(cur)
+	}
+	if len(e.options) > 0 {
+		want := doc.Default
+		if isSet {
+			want = cur
+		}
+		for i, o := range e.options {
+			if o == want {
+				e.optSel = i
+				break
+			}
+		}
+	}
+	p.edit = e
+	return m, nil
+}
+
+// Unset chooser labels; editEnter matches on them to pick the scope.
+const (
+	unsetLocalLabel  = "Unset local"
+	unsetGlobalLabel = "Unset global"
+	unsetCancelLabel = "Cancel"
+)
+
+// openUnsetChooser opens the unset chooser for the selected curated row,
+// offering ONLY the scopes that are actually set (plus Cancel). Nothing set
+// → a statusMsg refusal, no chooser.
+func (p *gitConfigPopup) openUnsetChooser(m Model) (Model, tea.Cmd) {
+	row, ok := p.selectedRowData()
+	if !ok {
+		return m, nil
+	}
+	doc := gitconfdocs.Lookup(row.Key)
+	if doc == nil {
+		m.statusMsg = readOnlyRefusal
+		return m, nil
+	}
+	var opts []string
+	if row.LocalSet {
+		opts = append(opts, unsetLocalLabel)
+	}
+	if row.GlobalSet {
+		opts = append(opts, unsetGlobalLabel)
+	}
+	if len(opts) == 0 {
+		m.statusMsg = "nothing to unset"
+		return m, nil
+	}
+	opts = append(opts, unsetCancelLabel)
+	p.edit = &configEdit{key: doc.Key, doc: doc, unset: true, options: opts}
+	return m, nil
+}
+
+// updateEdit routes every key while the editor is open: esc cancels back to
+// browsing, enter saves, up/down (j/k) move an option list's selection, and
+// everything else edits the text field (KindInt filtered to digits plus a
+// leading '-').
+func (p *gitConfigPopup) updateEdit(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
+	e := p.edit
+	switch msg.Type {
+	case tea.KeyEsc:
+		p.edit = nil
+		return m, nil
+	case tea.KeyEnter:
+		return p.editEnter(m)
+	}
+	if e.useField {
+		if e.doc != nil && e.doc.Kind == gitconfdocs.KindInt {
+			switch msg.Type {
+			case tea.KeyRunes:
+				for _, r := range msg.Runes {
+					leadMinus := r == '-' && e.field.cursor == 0 && !strings.HasPrefix(e.field.Value(), "-")
+					if (r >= '0' && r <= '9') || leadMinus {
+						e.field.insert([]rune{r})
+					}
+				}
+				return m, nil
+			case tea.KeySpace:
+				return m, nil // an int never contains a space
+			}
+		}
+		e.field.HandleEditKey(msg)
+		return m, nil
+	}
+	switch msg.String() {
+	case "up", "k":
+		if e.optSel > 0 {
+			e.optSel--
+		}
+	case "down", "j":
+		if e.optSel < len(e.options)-1 {
+			e.optSel++
+		}
+	}
+	return m, nil
+}
+
+// editEnter builds the SetGitConfig op from the editor state and dispatches
+// it (write + rows re-read, batched with a repo-health re-read — a config
+// write can change repo health, e.g. unsetting fetch.writeCommitGraph
+// re-arms the commit-graph notice check). The editor closes immediately;
+// the popup shows the refreshed rows when the write's re-read lands.
+func (p *gitConfigPopup) editEnter(m Model) (Model, tea.Cmd) {
+	e := p.edit
+	var op engine.SetGitConfig
+	if e.unset {
+		switch e.options[e.optSel] {
+		case unsetLocalLabel:
+			op = engine.SetGitConfig{Key: e.key, Unset: true}
+		case unsetGlobalLabel:
+			op = engine.SetGitConfig{Key: e.key, Unset: true, Global: true}
+		default: // Cancel
+			p.edit = nil
+			return m, nil
+		}
+	} else {
+		var val string
+		if e.useField {
+			val = strings.TrimSpace(e.field.Value())
+		} else {
+			val = e.options[e.optSel]
+		}
+		op = engine.SetGitConfig{Key: e.key, Value: val, Global: e.global}
+	}
+	p.edit = nil
+	return m, tea.Batch(m.gitConfigWriteCmd(op), m.repoHealthCmd(m.noticeGen))
+}
+
+// gitConfigWriteCmd runs one config write synchronously (the stageCmd
+// pattern — fast + decision-free, no busy-line machinery) and re-reads the
+// rows so the popup refreshes in the same message. It reuses the CURRENT
+// generation: the refresh lands unless the popup was reopened/re-rooted.
+func (m Model) gitConfigWriteCmd(op engine.SetGitConfig) tea.Cmd {
+	svc := m.svc
+	gen := m.gitConfigGen
+	return func() tea.Msg {
+		res, err := svc.Execute(context.Background(), op, nil, nil)
+		if err != nil {
+			return gitConfigRowsMsg{gen: gen, err: err}
+		}
+		rows, rerr := svc.GitConfigRows(context.Background())
+		return gitConfigRowsMsg{gen: gen, rows: rows, err: rerr, summary: res.Summary}
+	}
 }
 
 // render composites the explorer over the layer beneath.
@@ -225,11 +442,16 @@ func gitConfigRowText(r model.GitConfigRow, keyW, localW, globalW, defaultW int)
 	return key + " " + local + " " + global + " " + def
 }
 
-// box draws the explorer box (modal box only).
+// box draws the explorer box (modal box only). While the in-place editor is
+// open it shows the editor instead of the list.
 func (p *gitConfigPopup) box(m Model) string {
 	w, termH := m.overlayDims()
 	inner := popupWideInnerWidth(w)
 	textW := popupTextWidth(inner)
+
+	if p.edit != nil {
+		return p.editBox(inner, textW)
+	}
 
 	title := "Git config"
 	if p.loading {
@@ -264,9 +486,14 @@ func (p *gitConfigPopup) box(m Model) string {
 				st = selectedRow
 			}
 			wr[i] = winRow{
-				text:     gitConfigRowText(r, keyW, localW, globalW, defaultW),
-				style:    st,
-				decorate: configRowDecorator(r, keyW, localW, globalW),
+				text:  gitConfigRowText(r, keyW, localW, globalW, defaultW),
+				style: st,
+			}
+			// Skip the decorator on the selected row: its inner reset would
+			// cancel selectedRow's reverse highlight mid-row (the commits
+			// panel does the same skip, see view.go's decorator gating).
+			if i != p.sel {
+				wr[i].decorate = configRowDecorator(r, keyW, localW, globalW)
 			}
 		}
 		// Height budget: capped like the session-errors viewer so the popup
@@ -296,13 +523,46 @@ func (p *gitConfigPopup) box(m Model) string {
 		descLines = wrapWidth(descLine, textW, 3)
 	}
 
-	hint := []string{"[/] filter", "[z] mode", "[esc] close"}
+	hint := []string{"[l] set local", "[g] set global", "[u] unset", "[/] filter", "[z] mode", "[esc] close"}
 	parts := []string{title, "", header}
 	parts = append(parts, bodyLines...)
 	parts = append(parts, "")
 	parts = append(parts, descLines...)
 	parts = append(parts, "")
 	parts = append(parts, wrapParts(hint, textW, "  ")...)
+	return popupBox(inner, strings.Join(parts, "\n"))
+}
+
+// editBox draws the in-place editor: the key + scope title, then the option
+// list (selectedRow highlight) or the text field, the curated description,
+// and the save/cancel hint.
+func (p *gitConfigPopup) editBox(inner, textW int) string {
+	e := p.edit
+	scope := "local"
+	if e.global {
+		scope = "global"
+	}
+	title := "Set " + e.key + " (" + scope + ")"
+	if e.unset {
+		title = "Unset " + e.key
+	}
+	parts := []string{title, ""}
+	if e.useField {
+		parts = append(parts, viewField("value: ", e.field, true, textW))
+	} else {
+		for i, opt := range e.options {
+			row := "  " + opt
+			if i == e.optSel {
+				row = selectedRow.Render("> " + opt)
+			}
+			parts = append(parts, row)
+		}
+	}
+	if e.doc != nil && e.doc.Desc != "" {
+		parts = append(parts, "")
+		parts = append(parts, wrapWidth(e.doc.Desc, textW, 3)...)
+	}
+	parts = append(parts, "", "[enter] save  [esc] cancel")
 	return popupBox(inner, strings.Join(parts, "\n"))
 }
 
