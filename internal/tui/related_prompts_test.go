@@ -85,3 +85,18 @@ func TestNilStoreStillPrompts(t *testing.T) {
 		t.Fatal("nil store must not disable prompts")
 	}
 }
+
+func TestPromptFiresOnGraphOffWhenSortUnset(t *testing.T) {
+	// Unset commit_sort resolves to date-order (commitSort()), so switching the
+	// graph OFF must still offer plain — this is the case where reading the raw
+	// cfg field instead of commitSort() would silently kill the prompt.
+	m, _ := promptTestModel(t)
+	m.cfg.UI.CommitSort = ""
+	rp := m.relatedPromptFor(settingShowGraph, "off")
+	if rp == nil {
+		t.Fatal("unset commit_sort resolves to date-order: the plain prompt must fire")
+	}
+	if rp.id != "show_graph_off.commit_sort_plain" {
+		t.Fatalf("prompt id = %q, want show_graph_off.commit_sort_plain", rp.id)
+	}
+}
