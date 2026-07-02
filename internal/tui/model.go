@@ -54,6 +54,15 @@ type Model struct {
 	reflog                []model.ReflogEntry // HEAD reflog; shown by the Reflog tab in the bottom slot
 	currentWorktree       string
 
+	notices                []notice             // session notice list (see notify.go)
+	noticesUnread          bool                 // blink while true; opening the ! dialog clears it
+	blinkOn                bool                 // current blink phase (style alternation)
+	noticeGen              int                  // stale-drop guard for repoHealthMsg across repo switches
+	noticeSessionDismissed map[string]bool      // "Not now" ids; cleared on reRoot (re-evaluated next load)
+	repoHealth             model.RepoHealth     // last health snapshot (Settings Commit-graph row)
+	repoHealthKnown        bool                 // false until the first repoHealthMsg lands
+	pendingNoticeConfig    *engine.SetGitConfig // chained after WriteCommitGraph succeeds
+
 	cfg          config.Config
 	opLog        *opLog            // operation-log file + span-sink lifecycle; the , Settings toggle
 	promptStore  promptstate.Store // related-prompt suppressions; nil = no state dir
@@ -208,27 +217,28 @@ var bottomTabs = []panel{panelStaged, panelReflog}
 // New constructs the initial model for svc.
 func New(svc *domain.Service) Model {
 	return Model{
-		svc:            svc,
-		feed:           svc.CommitFeed(),
-		loading:        true,
-		sel:            map[panel]int{},
-		sortModes:      map[panel]sortMode{panelBranches: sortDateDesc},
-		dispModes:      map[panel]dispMode{},
-		hscroll:        map[panel]int{},
-		srcGen:         map[sourceKey]int{},
-		srcInflight:    map[sourceKey]bool{},
-		srcLoading:     map[sourceKey]bool{},
-		refreshLastRun: map[refreshItem]time.Time{},
-		refreshDur:     map[refreshItem][]time.Duration{},
-		activeLeftTab:  panelBranches,
-		opLog:          newOpLog(),
-		promptStore:    defaultPromptStore(),
+		svc:                    svc,
+		feed:                   svc.CommitFeed(),
+		loading:                true,
+		sel:                    map[panel]int{},
+		sortModes:              map[panel]sortMode{panelBranches: sortDateDesc},
+		dispModes:              map[panel]dispMode{},
+		hscroll:                map[panel]int{},
+		srcGen:                 map[sourceKey]int{},
+		srcInflight:            map[sourceKey]bool{},
+		srcLoading:             map[sourceKey]bool{},
+		refreshLastRun:         map[refreshItem]time.Time{},
+		refreshDur:             map[refreshItem][]time.Duration{},
+		activeLeftTab:          panelBranches,
+		opLog:                  newOpLog(),
+		promptStore:            defaultPromptStore(),
+		noticeSessionDismissed: map[string]bool{},
 	}
 }
 
 // Init implements tea.Model.
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.bootstrapCmd(), loadSearchHistCmd(m.svc), heartbeatCmd())
+	return tea.Batch(m.bootstrapCmd(), loadSearchHistCmd(m.svc), heartbeatCmd(), m.repoHealthCmd(m.noticeGen))
 }
 
 // Update implements tea.Model.
@@ -273,6 +283,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		*dv = *msg.view
 		dv.loading = false
 		return m, nil
+	case repoHealthMsg:
+		return m.applyRepoHealth(msg)
+	case noticeBlinkMsg:
+		if !m.noticesUnread {
+			return m, nil // read: stop re-arming
+		}
+		m.blinkOn = !m.blinkOn
+		return m, noticeBlinkCmd()
 	case commitFilesMsg:
 		m.filesReadInflight = false // the outstanding per-commit read has landed; nav may issue again
 		if m.filesView == nil || msg.hash != m.filesHash {
@@ -1687,6 +1705,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switchTo := ""
 		chainSwitch := ""
 		var pushTags []string
+		var noticeCfg *engine.SetGitConfig
 		if msg.err != nil {
 			m.statusMsg = friendlyOpError(msg.err)
 			m.pendingRemoteTagSet = ""
@@ -1705,14 +1724,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			chainSwitch = m.pendingSwitchBranch
 			if msg.res.Changed {
 				pushTags = m.pendingPushTags
+				noticeCfg = m.pendingNoticeConfig
 			}
 			m = m.applyPendingRemoteTag()
 		}
 		m.pendingSeqBump = nil
 		m.pendingSwitch = false
-		m.pendingSwitchBranch = "" // cleared before the chained op starts, so it cannot re-fire
-		m.pendingPushTags = nil    // unconditional; covers both error and success paths
-		srcs := m.pendingSources   // nil = all (safe default for any unmapped op)
+		m.pendingSwitchBranch = ""  // cleared before the chained op starts, so it cannot re-fire
+		m.pendingPushTags = nil     // unconditional; covers both error and success paths
+		m.pendingNoticeConfig = nil // unconditional; covers both error and success paths
+		srcs := m.pendingSources    // nil = all (safe default for any unmapped op)
 		m.pendingSources = nil
 		if switchTo != "" {
 			return m.reRoot(switchTo)
@@ -1723,6 +1744,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if len(pushTags) > 0 {
 			m.pendingRemoteTagAdds = pushTags // optimistic: add to remoteTagNames when PushTags succeeds
 			return m.startOp(engine.PushTags{Remote: "origin", Names: pushTags})
+		}
+		if noticeCfg != nil {
+			// Chain: the commit-graph write succeeded — now enable auto-refresh.
+			return m.startOp(*noticeCfg)
 		}
 		if m.stashView != nil {
 			// A stash op (apply/pop/drop) changed the stash list as well as the
@@ -2508,8 +2533,14 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.pushCheckGen++       // drop any in-flight pre-push tag check from the old repo
 	m.pendingPushTags = nil
 	m.pendingRemoteTagAdds = nil
+	m.notices = nil
+	m.noticesUnread = false
+	m.noticeGen++ // drop any in-flight health read from the old repo
+	m.noticeSessionDismissed = map[string]bool{}
+	m.repoHealthKnown = false
+	m.pendingNoticeConfig = nil
 	m.loadGen++
-	return m, tea.Batch(m.loadCmd(), m.startWatchCmd(m.watchGen))
+	return m, tea.Batch(m.loadCmd(), m.startWatchCmd(m.watchGen), m.repoHealthCmd(m.noticeGen))
 }
 
 // View implements tea.Model.
