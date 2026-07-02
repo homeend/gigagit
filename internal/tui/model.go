@@ -19,6 +19,7 @@ import (
 	"github.com/homeend/gigagit/internal/gitwatch"
 	"github.com/homeend/gigagit/internal/hunkpick"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/promptstate"
 	"github.com/homeend/gigagit/internal/rebaseplan"
 	"github.com/homeend/gigagit/internal/textdiff"
 )
@@ -54,7 +55,8 @@ type Model struct {
 	currentWorktree       string
 
 	cfg          config.Config
-	opLog        *opLog // operation-log file + span-sink lifecycle; the , Settings toggle
+	opLog        *opLog            // operation-log file + span-sink lifecycle; the , Settings toggle
+	promptStore  promptstate.Store // related-prompt suppressions; nil = no state dir
 	gitCommonDir string
 
 	initHomeDir         string // home dir for agent detection; "" skips home-scoped agents (tests)
@@ -220,6 +222,7 @@ func New(svc *domain.Service) Model {
 		refreshDur:     map[refreshItem][]time.Duration{},
 		activeLeftTab:  panelBranches,
 		opLog:          newOpLog(),
+		promptStore:    defaultPromptStore(),
 	}
 }
 

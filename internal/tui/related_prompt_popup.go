@@ -1,0 +1,98 @@
+package tui
+
+import (
+	"strings"
+
+	tea "github.com/charmbracelet/bubbletea"
+)
+
+// relatedPromptPopup asks the ONE follow-up question a Settings toggle can
+// trigger (see related_prompts.go). It pushes on top of the Settings popup;
+// closing it (any choice, or esc = Not now) returns to Settings with the
+// flipped toggle still visible.
+type relatedPromptPopup struct {
+	prompt *relatedPrompt
+	sel    int // 0 = yes, 1 = not now, 2 = don't ask again
+}
+
+// maybeRelatedPrompt consults the registry after a Settings toggle applied and
+// pushes the follow-up popup when a trigger matches. Call it with the
+// setting's FRESH value (after the toggle mutated cfg).
+func (m Model) maybeRelatedPrompt(setting, newValue string) (Model, tea.Cmd) {
+	rp := m.relatedPromptFor(setting, newValue)
+	if rp == nil {
+		return m, nil
+	}
+	return m.pushLayer(&relatedPromptPopup{prompt: rp}), nil
+}
+
+// options returns the fixed three-choice list, yes-label first.
+func (p *relatedPromptPopup) options() []string {
+	return []string{p.prompt.yesLabel, "Not now", "No — don't ask again"}
+}
+
+func (p *relatedPromptPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
+	n := len(p.options())
+	switch msg.Type {
+	case tea.KeyCtrlC:
+		return m, tea.Quit
+	case tea.KeyEsc: // esc = Not now — never trap, never write
+		return m.popLayer(), nil
+	case tea.KeyUp:
+		p.sel = (p.sel - 1 + n) % n
+		return m, nil
+	case tea.KeyDown:
+		p.sel = (p.sel + 1) % n
+		return m, nil
+	case tea.KeyEnter:
+		sel, rp := p.sel, p.prompt
+		m = m.popLayer()
+		switch sel {
+		case 0:
+			return rp.apply(m)
+		case 2:
+			if m.promptStore == nil {
+				m.statusMsg = "couldn't save the choice (no state dir) — will ask again"
+			} else if err := m.promptStore.SuppressPrompt(rp.id); err != nil {
+				m.statusMsg = "couldn't save the choice — will ask again (" + err.Error() + ")"
+			} else {
+				m.statusMsg = "won't ask again — saved to " + defaultPromptStatePath()
+			}
+		}
+		return m, nil
+	}
+	return m, nil // swallow everything else — no fallthrough to global keys
+}
+
+func (p *relatedPromptPopup) render(m Model, below string) string {
+	w, h := m.overlayDims()
+	textW := popupTextWidth(popupInnerWidth(w))
+	var b strings.Builder
+	b.WriteString("Related option\n\n")
+	for _, line := range wrapWidth(p.prompt.question, textW, 1<<20) {
+		b.WriteString(line + "\n")
+	}
+	b.WriteString("\n")
+	for i, opt := range p.options() {
+		prefix := "  "
+		if i == p.sel {
+			prefix = "> "
+		}
+		row := prefix + opt
+		if i == p.sel {
+			row = selectedRow.Render(row)
+		}
+		b.WriteString(row + "\n")
+	}
+	b.WriteString("\n[↑/↓] select  [enter] choose  [esc] not now")
+	// Name the state file so a persisted "don't ask again" is discoverable
+	// and resettable (delete or edit prompts.toml to bring prompts back).
+	if path := defaultPromptStatePath(); path != "" {
+		b.WriteString("\n")
+		for _, seg := range wrapWidth("don't-ask-again choices: "+path, textW, 1<<20) {
+			b.WriteString(seg + "\n")
+		}
+	}
+	box := modalStyle.Width(popupInnerWidth(w)).Render(strings.TrimRight(b.String(), "\n")) + "\n"
+	return overlayCenter(clipToHeight(below, h), box, w, h)
+}

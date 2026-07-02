@@ -47,6 +47,7 @@ func TestLayeringDAG(t *testing.T) {
 		"domain":      {"tui", "cli", "app"},
 		"gitwatch":    {"git", "engine", "domain", "tui", "cli", "app"},
 		"commitgraph": {"git", "engine", "domain", "tui", "cli", "app"},
+		"promptstate": {"git", "engine", "domain", "tui", "cli", "app"},
 		"textdiff":    {"git", "engine", "domain", "tui", "cli", "app"},
 		"template":    {"git", "engine", "domain", "tui", "cli", "app"},
 	}

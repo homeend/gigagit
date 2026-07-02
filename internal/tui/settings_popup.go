@@ -332,7 +332,10 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			case settingsMenuCommitSort:
 				return m.cycleCommitSort() // stays open; re-walks the feed in the new order
 			case settingsMenuShowGraph:
-				return m.toggleShowGraph(), nil // stays open so the state flip is visible
+				m = m.toggleShowGraph() // stays open so the state flip is visible
+				// A related option may be worth reconsidering now (e.g. commit
+				// sort buys nothing with the graph hidden) — one follow-up, max.
+				return m.maybeRelatedPrompt(settingShowGraph, m.cfg.UI.ShowGraph)
 			case settingsMenuRates:
 				p.ratesView = true
 				p.ratesSel = 0

@@ -208,6 +208,13 @@ list — the same view as the `.` menu's "Show as list"). Toggle it live from th
 choice to the repo's `.gg.toml`; any explicitly set value is remembered per
 repo. The `.` menu's "Show as list"/"Show as graph" remains a session-only
 flip that doesn't touch the config.
+The two settings know about each other: toggling "Show graph" asks (once)
+whether to align "Commit sort" with it — `plain` when the graph goes off
+(ordering only matters for lanes; plain is much faster on big repos),
+`date-order` when it comes back. Answer "No — don't ask again" to silence a
+prompt permanently; those choices live in `<state>/gg/prompts.toml`, which
+the prompt names — remove the id from the array (or delete the file) to get
+prompts back.
 `[ui] show_eol_only_changes` (default `false`) controls whether a file whose
 only unstaged change is its line endings (CRLF↔LF) is shown as modified — by
 default such files are hidden from the Files panel and its count badge as noise;
