@@ -252,7 +252,7 @@ func TestSaveRefreshIntervalUpdatesAndReseeds(t *testing.T) {
 func TestRatesEditorEnterEditSave(t *testing.T) {
 	m := newTestModel(t)
 	m.repoConfigPath = filepath.Join(t.TempDir(), ".gg.toml")
-	m = m.openSettings()
+	m, _ = m.openSettings()
 	p := layerOf[*settingsPopup](m)
 	p.ratesView = true
 	p.ratesSel = 0 // status
@@ -278,7 +278,7 @@ func TestRatesEditorEnterEditSave(t *testing.T) {
 func TestRatesEditorSpaceTogglesWatch(t *testing.T) {
 	m := newTestModel(t)
 	m.repoConfigPath = filepath.Join(t.TempDir(), ".gg.toml")
-	m = m.openSettings()
+	m, _ = m.openSettings()
 	p := layerOf[*settingsPopup](m)
 	p.ratesView = true
 	for i, it := range scheduledItems { // select the worktrees row (watch-eligible)
@@ -301,7 +301,7 @@ func TestRatesEditorSpaceTogglesWatch(t *testing.T) {
 
 func TestRatesEditorEscCancelsEdit(t *testing.T) {
 	m := newTestModel(t)
-	m = m.openSettings()
+	m, _ = m.openSettings()
 	p := layerOf[*settingsPopup](m)
 	p.ratesView = true
 	p.ratesSel = 0

@@ -1423,7 +1423,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case ",":
 			if !m.running && !m.loading {
-				return m.openSettings(), nil
+				return m.openSettings()
 			}
 		case ".":
 			// Reaches here only from the base layout (every popup/modal/view

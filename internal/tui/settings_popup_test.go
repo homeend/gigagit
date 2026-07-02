@@ -273,7 +273,7 @@ func TestSettingsSwallowsGlobalKeys(t *testing.T) {
 
 func TestSettingsOpensHookEditor(t *testing.T) {
 	m := Model{}
-	m = m.openSettings()
+	m, _ = m.openSettings()
 	sp := layerOf[*settingsPopup](m)
 	if sp == nil {
 		t.Fatal("settings not open")
