@@ -20,7 +20,7 @@ description: Use when a gigagit feature needs to READ or WRITE a git config opti
    (merged; get-only). One verb = one `git config` invocation.
 2. **The op** (`internal/engine/set_git_config.go`):
    `engine.SetGitConfig{Key, Value string, Global, Unset bool}` — decision-free,
-   `LockMode() = repogate.Read`. `Unset: true` removes the key (Value ignored); 
+   `LockMode() = repogate.Read`. `Unset: true` removes the key (Value ignored);
    one op for set AND unset, per the spec's explicit decision. **Why an op and not a direct verb call:**
    frontends may not import `internal/git` (archtest), and running through
    `domain.Execute` buys the repo-gate reservation, op events (busy line,
@@ -51,7 +51,8 @@ description: Use when a gigagit feature needs to READ or WRITE a git config opti
   local/global/default columns; curated rows (`internal/gitconfdocs`) edit
   via `l`/`g`/`u` → `gitConfigWriteCmd` → `domain.Execute(SetGitConfig)`
   (the stageCmd synchronous pattern — config writes are fast and
-  decision-free), then re-read rows + repo health in one message.
+  decision-free), then batches a rows re-read with a repo-health re-read
+  (two messages: `gitConfigRowsMsg` + `repoHealthMsg`).
 
 ## Maintaining the curated table (internal/gitconfdocs)
 
