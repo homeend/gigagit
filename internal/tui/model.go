@@ -166,6 +166,8 @@ type Model struct {
 	activeBottomTab panel // Staged or Reflog in the bottom slot; zero value resolves to panelStaged via bottomTab()
 	leftMax         panel // the pinned full-column left panel (valid only when leftMaxed)
 	leftMaxed       bool  // t has maximized leftMax to fill the whole left column
+	fullMax         panel // the pinned fullscreen panel (valid only when fullMaxed)
+	fullMaxed       bool  // T has maximized fullMax to fill the entire body
 
 	remoteBranches []model.RemoteBranch // refs/remotes; shown by the Remotes tab
 	shelfEntries   []model.ShelfEntry   // default bucket; shown by the Shelf tab
@@ -2292,6 +2294,30 @@ func (m Model) canMaximizeLeft() bool {
 		return false
 	}
 	return slices.Contains(m.leftColumnPanels(), m.focus)
+}
+
+// canFullMaximize reports whether T can pin the focused panel fullscreen:
+// focus is a small left-column panel or Commits, and no surface that needs
+// its own column is up (files view owns the left column; stash list and file
+// preview own the right one).
+func (m Model) canFullMaximize() bool {
+	if m.filesView != nil || m.stashView != nil || m.filesPreview != nil {
+		return false
+	}
+	return m.focus == panelCommits || slices.Contains(m.leftColumnPanels(), m.focus)
+}
+
+// fullMaxActive reports whether the T pin is currently driving the layout.
+// Same surface-yield rule as canFullMaximize (the pin is suspended, not
+// cleared, while such a surface is up) plus the stale-pin guard: a pin that
+// fell out of the visible set falls back to the normal split rather than
+// blanking the screen. On a narrow (<40) terminal leftColumnPanels() is
+// empty, so a left-panel pin deactivates itself there too.
+func (m Model) fullMaxActive() bool {
+	if !m.fullMaxed || m.filesView != nil || m.stashView != nil || m.filesPreview != nil {
+		return false
+	}
+	return m.fullMax == panelCommits || slices.Contains(m.leftColumnPanels(), m.fullMax)
 }
 
 func (m Model) focusOrder() []panel {
