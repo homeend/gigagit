@@ -1997,6 +1997,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// this, an op continued/aborted OUTSIDE gg leaves a stale
 				// ⏸-paused notice (and a stale x gate) until the next refresh.
 				m.conflict = domain.ConflictState{}
+				m.resumePromptShown = false // re-arm: a fresh pause must prompt again
 			}
 		}
 		return m, nil

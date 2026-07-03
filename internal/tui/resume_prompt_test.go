@@ -227,3 +227,50 @@ func TestInProgressProbeClearsStaleConflict(t *testing.T) {
 		t.Fatal("stale m.conflict not cleared — phantom ⏸ notice would linger")
 	}
 }
+
+// A stale-clear via the in-progress probe is an Op=="" transition: the spec
+// mandates the one-shot flag re-arms so a FRESH pause prompts again.
+func TestInProgressProbeReArmsResumePrompt(t *testing.T) {
+	m := Model{conflict: domain.ConflictState{Op: "rebase"}, resumePromptShown: true}
+	m, _ = startConflictProcess(m)
+	if m.proc == nil {
+		t.Fatal("precondition: process should open on the stale paused op")
+	}
+	next, _ := m.Update(inProgressMsg{op: ""})
+	m2 := next.(Model)
+	if m2.resumePromptShown {
+		t.Fatal("one-shot flag not re-armed on the probe's Op==\"\" transition — a new pause would never prompt")
+	}
+	// A fresh pause B observed next must prompt.
+	m2.conflict = domain.ConflictState{Op: "merge"}
+	m2 = m2.maybeResumePrompt()
+	if _, ok := m2.topLayer().(*resumePromptPopup); !ok {
+		t.Fatal("new pause after stale-clear did not prompt")
+	}
+}
+
+// The probe reporting a LIVE op must not clear attribution or the flag.
+func TestInProgressProbeKeepsLiveConflict(t *testing.T) {
+	m := Model{conflict: domain.ConflictState{Op: "rebase"}, resumePromptShown: true}
+	m, _ = startConflictProcess(m)
+	next, _ := m.Update(inProgressMsg{op: "rebase"})
+	m2 := next.(Model)
+	if m2.proc == nil {
+		t.Fatal("live op must keep the process open")
+	}
+	if m2.conflict.Op != "rebase" {
+		t.Fatal("live op must not clear m.conflict")
+	}
+}
+
+func TestMaybeResumePromptSkipsWhileActionMenuOpen(t *testing.T) {
+	m := Model{conflict: domain.ConflictState{Op: "rebase"}}
+	m.actionMenu = &actionMenu{rows: []actionRow{{id: "a"}}}
+	m = m.maybeResumePrompt()
+	if m.resumePromptShown {
+		t.Fatal("burned the one-shot flag under an open action menu")
+	}
+	if _, ok := m.topLayer().(*resumePromptPopup); ok {
+		t.Fatal("prompted under the action menu overlay")
+	}
+}

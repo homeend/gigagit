@@ -33,7 +33,7 @@ func (m Model) maybeResumePrompt() Model {
 		return m
 	}
 	if m.resumePromptShown || !m.opsIdle() || m.proc != nil || m.modal != nil ||
-		m.topLayer() != nil || m.stashView != nil || m.filesView != nil {
+		m.actionMenu != nil || m.topLayer() != nil || m.stashView != nil || m.filesView != nil {
 		return m
 	}
 	m.resumePromptShown = true
