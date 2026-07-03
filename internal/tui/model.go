@@ -411,6 +411,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.err != nil {
 			m.statusMsg = "compare: " + msg.err.Error()
+			// A failed compare must be retryable: clear the tag so re-opening the
+			// SAME pair isn't swallowed by the openCompareFiles same-tag guard.
+			m.compareTag = ""
 			if len(m.filesView.lines) == 1 && m.filesView.lines[0].text == "(loading…)" {
 				m.filesView.lines = []contentLine{{text: "(load failed)"}}
 			}
