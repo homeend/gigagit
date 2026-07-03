@@ -105,12 +105,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   including outside a git repository.
 
 ### Fixed
-- **`gg status` printed a blank status pair for untracked/ignored files
-  instead of git's `??`/`!!`.** `ParseStatusV2` left `Staged`/`Unstaged`
-  zero-valued for the untracked/ignored branches of the porcelain-v2 parse,
-  which `cmdStatus`'s '.'-and-zero-are-blank rule then rendered as two
-  spaces; both branches now set `?`/`!` so the CLI output matches `git
-  status`.
+- **`gg status` printed a blank status pair for untracked files instead of
+  git's `??`.** `ParseStatusV2` left `Staged`/`Unstaged` zero-valued for the
+  untracked branch of the porcelain-v2 parse, which `cmdStatus`'s
+  '.'-and-zero-are-blank rule then rendered as two spaces; the untracked
+  branch now sets `?`/`?` so the CLI output matches `git status`. (The
+  ignored branch stays zero-valued: `gg` never runs `git status --ignored`,
+  and setting `!` there would double-count in `model.Counts()`.)
 - **Solo view painted the previous scope's lane graph.** Soloing a branch
   (Branches `.` → "Solo this branch") reloaded the commit rows but could keep
   the lanes laid for the earlier all-branches walk, drawing phantom forks
