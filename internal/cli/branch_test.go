@@ -160,3 +160,39 @@ func TestBranchDeleteCurrentBranchFails(t *testing.T) {
 		t.Fatalf("stderr: %s", errb.String())
 	}
 }
+
+func TestBranchCurrent(t *testing.T) {
+	dir := newRepoDir(t)
+	code, out, errb := runCLI(t, dir, "branch", "current")
+	if code != 0 {
+		t.Fatalf("exit=%d stderr=%s", code, errb)
+	}
+	if out != "main\n" {
+		t.Fatalf("out = %q, want %q", out, "main\n")
+	}
+}
+
+func TestBranchCurrentDetached(t *testing.T) {
+	dir := newRepoDir(t)
+	gitIn(t, dir, "checkout", "--detach", "HEAD")
+	code, out, _ := runCLI(t, dir, "branch", "current")
+	if code != 0 {
+		t.Fatalf("exit=%d", code)
+	}
+	sha := strings.TrimSpace(out)
+	if len(sha) < 7 || len(sha) > 12 || strings.ContainsAny(sha, " \t") {
+		t.Fatalf("detached output should be a short sha, got %q", out)
+	}
+}
+
+func TestBranchLs(t *testing.T) {
+	dir := newRepoDir(t)
+	gitIn(t, dir, "branch", "feat-x")
+	code, out, _ := runCLI(t, dir, "branch", "ls")
+	if code != 0 {
+		t.Fatalf("exit=%d", code)
+	}
+	if !strings.Contains(out, "* main") || !strings.Contains(out, "  feat-x") {
+		t.Fatalf("ls output wrong:\n%s", out)
+	}
+}

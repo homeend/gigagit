@@ -13,7 +13,7 @@ import (
 // cmdBranch dispatches `gg branch <sub>`.
 func cmdBranch(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: gg branch <create|rename|delete> [args]")
+		fmt.Fprintln(stderr, "usage: gg branch <create|rename|delete|current|ls> [args]")
 		return 2
 	}
 	switch args[0] {
@@ -23,8 +23,12 @@ func cmdBranch(svc *domain.Service, args []string, stdin io.Reader, stdout, stde
 		return cmdBranchRename(svc, args[1:], stdout, stderr)
 	case "delete":
 		return cmdBranchDelete(svc, args[1:], stdin, stdout, stderr)
+	case "current":
+		return cmdBranchCurrent(svc, stdout, stderr)
+	case "ls":
+		return cmdBranchLs(svc, stdout, stderr)
 	default:
-		fmt.Fprintf(stderr, "branch: unknown subcommand %q (use create, rename, or delete)\n", args[0])
+		fmt.Fprintf(stderr, "branch: unknown subcommand %q (use create, rename, delete, current, or ls)\n", args[0])
 		return 2
 	}
 }
@@ -77,4 +81,46 @@ func cmdBranchDelete(svc *domain.Service, args []string, stdin io.Reader, stdout
 	res, err := runOperation(context.Background(), svc,
 		engine.DeleteBranch{Name: fs.Arg(0)}, dec, stderr)
 	return finish(res, err, stdout, stderr)
+}
+
+// cmdBranchCurrent implements `gg branch current` — the bare branch name,
+// or HEAD's short sha when detached.
+func cmdBranchCurrent(svc *domain.Service, stdout, stderr io.Writer) int {
+	name, err := svc.CurrentBranch(context.Background())
+	if err != nil {
+		fmt.Fprintln(stderr, "error:", err)
+		return 1
+	}
+	if name == "" { // detached HEAD
+		line, lerr := svc.CommitLine(context.Background(), "HEAD")
+		if lerr != nil {
+			fmt.Fprintln(stderr, "error:", lerr)
+			return 1
+		}
+		name = line.Hash
+	}
+	fmt.Fprintln(stdout, name)
+	return 0
+}
+
+// cmdBranchLs implements `gg branch ls` — one local branch per line,
+// "* " marking HEAD, "↑a ↓b" only when an upstream exists.
+func cmdBranchLs(svc *domain.Service, stdout, stderr io.Writer) int {
+	branches, err := svc.Branches(context.Background())
+	if err != nil {
+		fmt.Fprintln(stderr, "error:", err)
+		return 1
+	}
+	for _, b := range branches {
+		marker := "  "
+		if b.IsHead {
+			marker = "* "
+		}
+		if b.Upstream != "" {
+			fmt.Fprintf(stdout, "%s%s ↑%d ↓%d\n", marker, b.Name, b.Ahead, b.Behind)
+		} else {
+			fmt.Fprintf(stdout, "%s%s\n", marker, b.Name)
+		}
+	}
+	return 0
 }
