@@ -101,6 +101,7 @@ type GitOps interface {
 	CommitGraphWrite(ctx context.Context, onLine func(string)) error
 
 	StagePaths(ctx context.Context, paths []string) error
+	StageAll(ctx context.Context) error
 	UnstagePaths(ctx context.Context, paths []string) error
 	RestoreWorktree(ctx context.Context, paths []string) error
 	CleanUntracked(ctx context.Context, paths []string) error
