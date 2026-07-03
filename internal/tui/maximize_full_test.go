@@ -425,7 +425,17 @@ func TestViewFullscreenCommitsHidesLeftColumn(t *testing.T) {
 	if !strings.Contains(v, "Commits (") {
 		t.Error("fullscreen Commits: Commits box missing")
 	}
-	if strings.Contains(v, "Branches") || strings.Contains(v, "Staged") {
+	if strings.Contains(v, "Branches") {
 		t.Error("fullscreen Commits: left-column labels should not render")
+	}
+	// "Staged" is NOT checked above: it is also a legitimate WIP pseudo-commit
+	// row label drawn INSIDE the Commits panel (wip_rows.go wipRow.label()), so
+	// the substring check would only pass by coincidence of the fixture having
+	// zero staged files. Like the sibling test, a leaked degenerate 0-width
+	// left box truncates its label to "…" before it ever reaches a substring
+	// check anyway. A correctly-rendered fullscreen body draws exactly one box,
+	// so exactly one top-left corner glyph; a leaked left column draws two.
+	if n := strings.Count(v, "╭"); n != 1 {
+		t.Errorf("fullscreen Commits: want exactly 1 box top (╭), found %d (degenerate column)", n)
 	}
 }
