@@ -1,0 +1,25 @@
+name = "cli: gg add stages an untracked file so gg commit can commit it"
+
+[input]
+steps = [
+  { write = "README.md", content = "hello\n" },
+  { commit = "initial" },
+  { write = "brand-new.txt", content = "x\n" },
+]
+
+[[run]]
+cmd  = ["add", "brand-new.txt"]
+exit = 0
+
+[[run]]
+cmd             = ["commit", "-m", "add brand-new"]
+exit            = 0
+stdout_contains = ["committed", "add brand-new"]
+
+[[run]]
+cmd  = ["diff", "--stat"]
+exit = 0
+
+[expect]
+branch = "main"
+clean  = true
