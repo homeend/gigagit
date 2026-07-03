@@ -442,11 +442,13 @@ Replace `commitFilterIndices`' miss path (the `l := ...; idx := ...; sortIndices
 
 ```go
 	l := m.listFor(panelCommits)
-	// sameShape: the memo describes this feed (same wip prefix, same tip,
-	// same sort) with a live query — the precondition for both incremental
-	// rebuilds. Both are pure optimizations: any doubt falls to a full scan,
-	// which is always correct.
-	sameShape := c != nil && c.query != "" && c.wip == wip &&
+	// sameShape: the memo describes this feed (same wip prefix BY CONTENT —
+	// see the Task-1 review fix: a wip row's count is filter-matchable text —
+	// same tip, same sort) with a live query: the precondition for both
+	// incremental rebuilds. Both are pure optimizations: any doubt falls to
+	// a full scan, which is always correct.
+	wip := m.wipCount() // unified-index offset of the first real commit
+	sameShape := c != nil && c.query != "" && slices.Equal(c.wipRows, m.wipRows) &&
 		c.baseHash == baseHash && c.sort == srt
 	var idx []int
 	switch {
@@ -470,10 +472,13 @@ Replace `commitFilterIndices`' miss path (the `l := ...; idx := ...; sortIndices
 		sortIndices(l, srt, idx)
 	}
 	if c != nil {
-		c.query, c.wip, c.feedLen, c.baseHash, c.sort, c.idx = q, wip, feedLen, baseHash, srt, idx
+		c.query, c.feedLen, c.baseHash, c.sort, c.idx = q, feedLen, baseHash, srt, idx
+		c.wipRows = append([]wipRow(nil), m.wipRows...)
 	}
 	return idx
 ```
+
+Note: after the Task-1 review fix, the memo keys on `wipRows []wipRow` (content), not a count — the hit-check and store in the CURRENT `filter_memo.go` already use `slices.Equal(c.wipRows, m.wipRows)` and the copy-on-store above. Keep them exactly as they are; this task only replaces the miss path between the hit-check and the store.
 
 - [ ] **Step 4: Run the new tests — both pass; then the full package**
 

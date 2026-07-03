@@ -57,7 +57,7 @@ filterMemo *commitFilterMemo
 // statusList's shared mtime map).
 type commitFilterMemo struct {
     query    string   // lowercased query idx was built for; "" = invalid
-    wip      int      // wipCount() when built
+    wipRows  []wipRow // wip pseudo-rows when built — keyed by CONTENT, not count
     feedLen  int      // len(m.commits) when built
     baseHash string   // m.commits[0].Hash when built
     sort     sortMode // m.sortModes[panelCommits] when built
@@ -66,13 +66,17 @@ type commitFilterMemo struct {
 ```
 
 `displayIndices(panelCommits)` with `filterActive`: if the memo matches
-`(query, wip, feedLen, baseHash, sort)`, return `memo.idx` in O(1). Otherwise
-compute (see §2), store, return.
+`(query, wipRows, feedLen, baseHash, sort)`, return `memo.idx` in O(1).
+Otherwise compute (see §2), store, return.
 
 **Invalidation** mirrors the commit-graph layer's own invariant exactly:
 
-- query / sort / wipCount / feedLen / baseHash are part of the key — any
-  change misses naturally.
+- query / sort / wipRows / feedLen / baseHash are part of the key — any
+  change misses naturally. The wip term compares the rows' **content**
+  (`slices.Equal`), not their count: a wip row's haystack embeds its
+  dirty-file count ("Working tree (2)"), which a status refresh can change
+  while the row count stays the same — a count-only key served a stale
+  filtered result (caught in the Task-1 review).
 - A **same-tip, same-length replacement** is not detectable from the key (the
   documented `graphLayerReset` hole). `graphLayerReset()` therefore ALSO
   invalidates the memo (sets `query = ""` through the pointer). Every
