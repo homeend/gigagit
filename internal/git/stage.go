@@ -21,3 +21,10 @@ func (r *Repo) UnstagePaths(ctx context.Context, paths []string) error {
 	_, err := r.Runner.Run(ctx, "git restore --staged", b.ToArgv())
 	return err
 }
+
+// StageAll stages every change in the working tree, including untracked
+// files (git add -A).
+func (r *Repo) StageAll(ctx context.Context) error {
+	_, err := r.Runner.Run(ctx, "git add", gitcmd.New("add").Arg("-A").ToArgv())
+	return err
+}

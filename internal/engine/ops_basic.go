@@ -25,6 +25,11 @@ func (op Commit) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	if op.Amend {
 		summary = "amended"
 	}
+	// Best-effort: name the commit we just made. The commit itself
+	// succeeded, so a failed read only costs the sha in the summary.
+	if line, lerr := deps.Repo.CommitLine(ctx, "HEAD"); lerr == nil {
+		summary += " " + line.Hash + " " + line.Subject
+	}
 	res := Result{Summary: summary, Changed: true}
 	deps.emit(ctx, Done{Result: res})
 	return res, nil

@@ -61,7 +61,12 @@ func ParseStatusV2(data []byte) (model.WorkingTreeStatus, error) {
 				})
 			}
 		case '?':
-			st.Files = append(st.Files, model.FileStatus{Path: strings.TrimSpace(tok[1:]), Kind: model.KindUntracked})
+			st.Files = append(st.Files, model.FileStatus{
+				Path:     strings.TrimSpace(tok[1:]),
+				Staged:   '?',
+				Unstaged: '?',
+				Kind:     model.KindUntracked,
+			})
 		case '!':
 			st.Files = append(st.Files, model.FileStatus{Path: strings.TrimSpace(tok[1:]), Kind: model.KindIgnored})
 		}

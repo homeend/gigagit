@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/homeend/gigagit/internal/git"
@@ -164,8 +165,11 @@ func TestCommitAmend(t *testing.T) {
 	if err != nil {
 		t.Fatalf("amend: %v", err)
 	}
-	if res.Summary != "amended" {
-		t.Fatalf("summary = %q, want amended", res.Summary)
+	// Summary should now include sha and subject.
+	sha := strings.TrimSpace(gitOut(t, dir, "rev-parse", "--short", "HEAD"))
+	wantSummary := "amended " + sha + " reworded"
+	if res.Summary != wantSummary {
+		t.Fatalf("summary = %q, want %q", res.Summary, wantSummary)
 	}
 	if got := gitOut(t, dir, "log", "-1", "--pretty=%s"); got != "reworded" {
 		t.Fatalf("subject = %q, want reworded", got)
@@ -187,5 +191,20 @@ func TestStashApplyConflictReturnsError(t *testing.T) {
 	_, err := (StashApply{Ref: "stash@{0}"}).Run(ctx, OpDeps{Repo: repo, Events: make(chan Event, 16)})
 	if err == nil {
 		t.Fatal("applying a stash over a conflicting local change must return an error, not silent success")
+	}
+}
+
+func TestCommitSummaryIncludesSha(t *testing.T) {
+	dir, repo := newRepo(t)
+	os.WriteFile(filepath.Join(dir, "README.md"), []byte("changed\n"), 0o644)
+
+	res, err := Commit{Message: "sha in summary", All: true}.Run(context.Background(), OpDeps{Repo: repo})
+	if err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+	sha := strings.TrimSpace(gitOut(t, dir, "rev-parse", "--short", "HEAD"))
+	want := "committed " + sha + " sha in summary"
+	if res.Summary != want {
+		t.Fatalf("summary = %q, want %q", res.Summary, want)
 	}
 }

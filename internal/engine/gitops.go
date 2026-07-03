@@ -44,6 +44,7 @@ type GitOps interface {
 	Commit(ctx context.Context, message string, all, amend bool) error
 	LastCommitMessage(ctx context.Context) (string, error)
 	CommitMessage(ctx context.Context, rev string) (string, error)
+	CommitLine(ctx context.Context, rev string) (model.LogLine, error)
 	RevParse(ctx context.Context, rev string) (string, error)
 	ResetSoft(ctx context.Context, ref string) error
 
@@ -70,6 +71,7 @@ type GitOps interface {
 	AddWorktreeForBranch(ctx context.Context, path, branch string, onLine func(string)) error
 	RemoveWorktree(ctx context.Context, path string, force bool, onLine func(string)) error
 	UnlockWorktree(ctx context.Context, path string) error
+	PruneWorktrees(ctx context.Context) error
 
 	Merge(ctx context.Context, dir, branch string) error
 	MergeFFOnly(ctx context.Context, dir, commit string) error
@@ -101,6 +103,7 @@ type GitOps interface {
 	CommitGraphWrite(ctx context.Context, onLine func(string)) error
 
 	StagePaths(ctx context.Context, paths []string) error
+	StageAll(ctx context.Context) error
 	UnstagePaths(ctx context.Context, paths []string) error
 	RestoreWorktree(ctx context.Context, paths []string) error
 	CleanUntracked(ctx context.Context, paths []string) error

@@ -1,0 +1,23 @@
+name = "cli: gg log and gg show print terse history and stat"
+
+[input]
+steps = [
+  { write = "a.txt", content = "one\ntwo\n" },
+  { commit = "first commit" },
+  { write = "a.txt", content = "one\ntwo\nthree\n" },
+  { commit = "second commit" },
+]
+
+[[run]]
+cmd             = ["log", "-n", "1"]
+exit            = 0
+stdout_contains = ["second commit"]
+stdout_excludes = ["first commit"]
+
+[[run]]
+cmd             = ["show", "HEAD"]
+exit            = 0
+stdout_contains = ["second commit", "a.txt +1 -0", "1 files +1 -0"]
+
+[expect]
+branch = "main"

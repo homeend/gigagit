@@ -69,10 +69,16 @@ func Run(workdir string, args []string, stdin io.Reader, stdout, stderr io.Write
 		return cmdUndo(svc, rest, stdout, stderr)
 	case "discard":
 		return cmdDiscard(svc, rest, stdin, stdout, stderr)
+	case "add":
+		return cmdAdd(svc, rest, stdout, stderr)
+	case "unstage":
+		return cmdUnstage(svc, rest, stdout, stderr)
 	case "shelf":
 		return cmdShelf(svc, rest, stdin, stdout, stderr)
 	case "bookmark":
 		return cmdBookmark(svc, rest, stdin, stdout, stderr)
+	case "log":
+		return cmdLog(svc, rest, stdout, stderr)
 	case "prefix":
 		return cmdPrefix(svc, rest, stdout, stderr)
 	case "merge":
@@ -95,6 +101,10 @@ func Run(workdir string, args []string, stdin io.Reader, stdout, stderr io.Write
 		return cmdTag(svc, rest, stdin, stdout, stderr)
 	case "compare":
 		return cmdCompare(svc, rest, stdout, stderr)
+	case "diff":
+		return cmdDiff(svc, rest, stdout, stderr)
+	case "show":
+		return cmdShow(svc, rest, stdout, stderr)
 	case "repo":
 		return cmdRepo(rest, stdout, stderr, cwdFile)
 	case "init":
@@ -111,8 +121,8 @@ var commands = map[string]bool{
 	"status": true, "commit": true, "pull": true, "push": true,
 	"switch": true, "checkout": true, "branch": true, "stash": true, "undo": true, "merge": true, "rebase": true, "worktree": true,
 	"cherry-pick": true, "revert": true, "reset": true, "fast-forward": true,
-	"discard": true, "shelf": true, "bookmark": true, "prefix": true,
-	"remote": true, "tag": true, "compare": true,
+	"discard": true, "add": true, "unstage": true, "shelf": true, "bookmark": true, "log": true, "prefix": true,
+	"remote": true, "tag": true, "compare": true, "diff": true, "show": true,
 	"inspect": true, "repo": true, "init": true, "config": true,
 }
 
@@ -138,10 +148,11 @@ func cmdStatus(svc *domain.Service, stdout, stderr io.Writer) int {
 	}
 	for _, f := range st.Files {
 		x, y := f.Staged, f.Unstaged
-		if x == 0 {
+		// git status v2 uses '.' for "no change" (in addition to null byte from uninitialized fields)
+		if x == 0 || x == '.' {
 			x = ' '
 		}
-		if y == 0 {
+		if y == 0 || y == '.' {
 			y = ' '
 		}
 		fmt.Fprintf(stdout, "%c%c %s\n", x, y, f.Path)

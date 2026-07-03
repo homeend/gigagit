@@ -24,6 +24,22 @@ func TestStagePathsArgv(t *testing.T) {
 	}
 }
 
+func TestStageAllArgv(t *testing.T) {
+	f := gitexec.NewFakeRunner()
+	f.SetResponse("git add", gitexec.Result{})
+	r := &Repo{Runner: f}
+	if err := r.StageAll(context.Background()); err != nil {
+		t.Fatalf("stage all: %v", err)
+	}
+	want := []string{"add", "-A"}
+	if !reflect.DeepEqual(f.Calls[0].Argv, want) {
+		t.Fatalf("argv = %v, want %v", f.Calls[0].Argv, want)
+	}
+	if f.Calls[0].Name != "git add" {
+		t.Fatalf("span = %q, want %q", f.Calls[0].Name, "git add")
+	}
+}
+
 func TestUnstagePathsArgv(t *testing.T) {
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git restore --staged", gitexec.Result{})
