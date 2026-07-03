@@ -121,6 +121,52 @@ func TestReRootClearsCommitCompareSet(t *testing.T) {
 	}
 }
 
+// Esc on the focused Commits panel clears ALL ◉ marks in one press (space/m
+// re-mark cheaply; partial unmark is what space is for).
+func TestEscClearsCommitMarksWhenCommitsFocused(t *testing.T) {
+	m := loadedModelLinearCommits(t, 3)
+	m.focus = panelCommits
+	m.commitCompareSet = map[string]bool{m.commits[0].Hash: true, m.commits[1].Hash: true}
+	u, _ := m.Update(keyMsg("esc"))
+	m = u.(Model)
+	if len(m.commitCompareSet) != 0 {
+		t.Fatalf("esc on Commits must clear all ◉ marks, set=%v", m.commitCompareSet)
+	}
+}
+
+// The clear is focus-scoped: esc pressed in another panel leaves the ◉ set.
+func TestEscElsewhereLeavesCommitMarks(t *testing.T) {
+	m := loadedModelLinearCommits(t, 3)
+	m.focus = panelBranches
+	m.commitCompareSet = map[string]bool{m.commits[0].Hash: true}
+	u, _ := m.Update(keyMsg("esc"))
+	m = u.(Model)
+	if !m.commitCompareSet[m.commits[0].Hash] {
+		t.Fatalf("esc outside Commits must not touch the ◉ set, set=%v", m.commitCompareSet)
+	}
+}
+
+// Peel order: ◉ marks clear before a committed @-highlight — one state per press.
+func TestEscPeelsMarksBeforeHighlight(t *testing.T) {
+	m := loadedModelLinearCommits(t, 3)
+	m.focus = panelCommits
+	m.commitCompareSet = map[string]bool{m.commits[0].Hash: true}
+	m.highlightQuery = "c1"
+	u, _ := m.Update(keyMsg("esc"))
+	m = u.(Model)
+	if len(m.commitCompareSet) != 0 {
+		t.Fatalf("first esc must clear the ◉ marks, set=%v", m.commitCompareSet)
+	}
+	if m.highlightQuery == "" {
+		t.Fatal("first esc must leave the highlight for the second press")
+	}
+	u, _ = m.Update(keyMsg("esc"))
+	m = u.(Model)
+	if m.highlightQuery != "" {
+		t.Fatalf("second esc must clear the highlight, got %q", m.highlightQuery)
+	}
+}
+
 // TestFooterAdvertisesSpaceStates pins the two always-true footer hints: mark
 // (unmarked cursor, ≤1 raw mark) and unmark (marked cursor). With 2 marks and
 // an unmarked cursor the outcome depends on mark validity, so no space hint

@@ -1556,6 +1556,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m.handleMarkKey()
 			}
 		case "esc":
+			// The focused panel's selection peels first: on Commits, one esc drops
+			// ALL ◉ compare marks (space/m re-mark cheaply; unmarking one at a time
+			// is what space is for).
+			if m.focus == panelCommits && len(m.commitCompareSet) > 0 {
+				m.commitCompareSet = nil
+				return m, nil
+			}
 			if m.mark != nil {
 				m.mark = nil
 				return m, nil
