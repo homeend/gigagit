@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v42 -->
+<!-- gg:using-gg:v43 -->
 
 # Using gg (gigagit)
 
@@ -16,6 +16,27 @@ guards against removing the worktree you are standing in.
 ## Commands
 
 - `gg status` — branch, upstream ahead/behind, changed files.
+- `gg batch [--keep-going]` — run a script of gg commands from stdin against
+  ONE process (one repo discovery for the whole script). One command per
+  line; blank lines and `#` comments are skipped; a leading `gg ` is
+  tolerated; single/double quotes group words (`commit -m "two words"`) but
+  there are NO pipes, env vars, globs, or redirection. Output framing, one
+  section per command:
+
+      #1 ok status
+      on branch main (origin/main ↑0 ↓0)
+      working tree clean
+      #2 !1 push
+      ! error: push needs a decision (options: rebase, force, abort)
+      #done 1 ok, 1 failed (stopped)
+
+  Header `#<idx> ok|!<exit> <cmdline>` precedes each command's output;
+  stderr lines are prefixed `! `; the `#done` trailer summarizes. Batch
+  stops at the first failure unless `--keep-going`. Sub-commands read an
+  empty stdin — anything needing a decision fails loud with its options
+  instead of hanging, exactly like a single non-interactive run. Exit: 0
+  all ok, 1 any failed, 2 script/usage error. Prefer batch whenever you
+  would otherwise chain 2+ gg calls.
 - `gg log [-n N] [<rev>|<A..B>]` — terse history, newest first: one
   `<short-sha> <subject>` line per commit. Default N=10, rev defaults to
   HEAD; ranges (`main..HEAD`) pass through.

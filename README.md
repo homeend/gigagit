@@ -96,6 +96,7 @@ Every smart operation is also scriptable:
 
 ```bash
 gg status
+gg batch [--keep-going]       # run a script of gg commands from stdin against ONE process; framed #<idx> ok/!<exit> sections + a #done trailer; stops on first failure unless --keep-going
 gg log [-n N] [<rev>|<A..B>]  # terse "<short-sha> <subject>" history, newest first (default -n 10)
 gg diff [--stat|--name-only] [--cached] [<rev>|<A..B>] [-- <paths>...]
                                       # full patch by default; --stat = terse per-file +A -D; --name-only = bare paths

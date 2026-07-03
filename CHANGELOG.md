@@ -9,6 +9,33 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **`gg batch [--keep-going]`.** Runs a script of `gg` commands from stdin
+  against ONE shared process (one repo discovery for the whole script) —
+  much cheaper than spawning `gg` once per command when an agent is chaining
+  several calls. One command per line; blank lines and `#` comments are
+  skipped; a leading `gg ` token is tolerated; single/double quotes group
+  words (`commit -m "two words"`) but there are no pipes, env vars, globs, or
+  redirection — a batch script is not a shell. Each command's output is
+  framed with a header naming its outcome, e.g.:
+  ```
+  #1 ok add new.txt
+  #2 ok commit -m "batch commit"
+  #3 !2 bogus
+  ! unknown command "bogus"
+  #done 2 ok, 1 failed (stopped)
+  ```
+  (`#<idx> ok <cmdline>` or `#<idx> !<exit> <cmdline>`, stdout verbatim,
+  stderr lines prefixed `! `). Batch stops at the first failure unless
+  `--keep-going`; the `#done` trailer notes `(stopped)` when it did.
+  Sub-commands read an empty stdin, so anything needing a decision fails
+  loud with its options instead of hanging — same non-interactive contract
+  as a single `gg` run. Exit codes: 0 all ok, 1 any command failed, 2
+  script/usage error (nothing framed). New internal seams: `runOne`
+  (extracted from `cli.Run`'s dispatch, shared by both single-command and
+  batch execution) and `tokenizeBatchLine` (the quote-aware line splitter).
+  The e2e harness's `[[run]]` gained an optional `stdin` field (multi-line
+  TOML string fed to the command's stdin; empty = prior no-stdin behavior)
+  to exercise it end to end (`s79_cli_batch.toml`).
 - **Agent-facing CLI verbs: `gg log`, `gg diff`, `gg show`, `gg add` /
   `gg unstage`, `gg branch current` / `gg branch ls`, `gg worktree prune`.**
   A batch of terse, scriptable read/write commands aimed at AI agents driving
