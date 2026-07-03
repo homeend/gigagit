@@ -93,3 +93,25 @@ func TestDiffStatBothFlagsRejected(t *testing.T) {
 		t.Fatalf("exit=%d, want 2", code)
 	}
 }
+
+func TestDiffPathsOnlyNoRev(t *testing.T) {
+	dir := newRepoDir(t)
+	os.WriteFile(filepath.Join(dir, "README.md"), []byte("hi\nmore\n"), 0o644)
+	code, out, errb := runCLI(t, dir, "diff", "--stat", "--", "README.md")
+	if code != 0 {
+		t.Fatalf("exit=%d stderr=%s", code, errb)
+	}
+	want := "README.md +1 -0\n1 files +1 -0\n"
+	if out != want {
+		t.Fatalf("got %q, want %q", out, want)
+	}
+}
+
+func TestDiffTwoPathsNoRev(t *testing.T) {
+	dir := newRepoDir(t)
+	os.WriteFile(filepath.Join(dir, "README.md"), []byte("hi\nmore\n"), 0o644)
+	code, _, errb := runCLI(t, dir, "diff", "--", "README.md", "CHANGELOG.md")
+	if code != 0 {
+		t.Fatalf("two paths after -- must be accepted, exit=%d stderr=%s", code, errb)
+	}
+}

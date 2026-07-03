@@ -15,22 +15,26 @@ import (
 // an "N files +A -D" trailer; --name-only prints bare paths. Paths must
 // follow a "--" separator so a rev is never ambiguous with a path.
 func cmdDiff(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
+	head, paths := splitDashDash(args)
 	fs := flag.NewFlagSet("diff", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	stat := fs.Bool("stat", false, "terse per-file change counts")
 	nameOnly := fs.Bool("name-only", false, "changed paths only")
 	cached := fs.Bool("cached", false, "diff the index against HEAD")
-	if err := fs.Parse(args); err != nil {
+	if err := fs.Parse(head); err != nil {
 		return 2
 	}
 	if *stat && *nameOnly {
 		fmt.Fprintln(stderr, "diff: --stat and --name-only are mutually exclusive")
 		return 2
 	}
-	rev, paths, ok := splitRevAndPaths(fs.Args())
-	if !ok {
+	if fs.NArg() > 1 {
 		fmt.Fprintln(stderr, "usage: gg diff [--stat|--name-only] [--cached] [<rev>|<A..B>] [-- <paths>...]")
 		return 2
+	}
+	rev := ""
+	if fs.NArg() == 1 {
+		rev = fs.Arg(0)
 	}
 	spec := model.DiffSpec{Cached: *cached, Rev: rev, Paths: paths}
 	if *stat || *nameOnly {
@@ -57,30 +61,18 @@ func cmdDiff(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-// splitRevAndPaths splits positional args at "--": at most one rev before
-// it, paths after. Without "--", a single arg is a rev and two or more is
-// an error (ambiguous).
-func splitRevAndPaths(args []string) (rev string, paths []string, ok bool) {
+// splitDashDash splits raw args at the first literal "--": everything
+// before it goes to flag parsing (flags plus at most one rev), everything
+// after is paths. The split must happen BEFORE fs.Parse — flag.Parse
+// consumes a leading "--" itself, which would misread the first path as
+// a rev when no rev is given.
+func splitDashDash(args []string) (head, paths []string) {
 	for i, a := range args {
 		if a == "--" {
-			before := args[:i]
-			if len(before) > 1 {
-				return "", nil, false
-			}
-			if len(before) == 1 {
-				rev = before[0]
-			}
-			return rev, args[i+1:], true
+			return args[:i], args[i+1:]
 		}
 	}
-	switch len(args) {
-	case 0:
-		return "", nil, true
-	case 1:
-		return args[0], nil, true
-	default:
-		return "", nil, false
-	}
+	return args, nil
 }
 
 // renderStat prints the terse stat block: "path +A -D" per file ("path bin"
