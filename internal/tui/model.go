@@ -1288,6 +1288,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		case "enter":
+			// Branches: enter = the .-menu "Go to tip in commits" row (shared
+			// code path, so the key and the menu can never drift apart).
+			if m.focus == panelBranches {
+				if r, ok := m.commitGotoTipRow(); ok {
+					return r.run(m)
+				}
+				return m, nil
+			}
 			if m.focus == panelTags {
 				return m.tagJumpToCommit()
 			}

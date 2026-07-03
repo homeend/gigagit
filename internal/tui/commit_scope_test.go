@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/git"
 	"github.com/homeend/gigagit/internal/gitexec"
@@ -921,5 +923,32 @@ func TestDataLoadedNoRedundantReloadOnSecondLoad(t *testing.T) {
 	m = nm.(Model)
 	if m.commitsLoading {
 		t.Fatal("second dataLoadedMsg with the same upstream set must NOT trigger a redundant reload")
+	}
+}
+
+// TestBranchesEnterJumpsToTip: enter on the Branches panel = the .-menu
+// "Go to tip in commits" (same code path, so they cannot drift).
+func TestBranchesEnterJumpsToTip(t *testing.T) {
+	m := branchesPanelModel("feat", "main")
+	m.branches[0].Hash = "t1deadbeef"
+	m.commits = []model.Commit{
+		{Hash: "b0aaaaaaaaaa", Subject: "base"},
+		{Hash: "t1deadbeefcafe", Subject: "tip"},
+	}
+	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = nm.(Model)
+	if m.focus != panelCommits || m.sel[panelCommits] != 1 {
+		t.Fatalf("enter: focus=%v sel=%d, want panelCommits/1", m.focus, m.sel[panelCommits])
+	}
+}
+
+// TestBranchesEnterNoBranchNoOp: enter with nothing selectable must not panic
+// or fall through to another panel's enter behavior.
+func TestBranchesEnterNoBranchNoOp(t *testing.T) {
+	m := branchesPanelModel() // empty Branches list
+	nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = nm.(Model)
+	if m.focus != panelBranches || cmd != nil {
+		t.Fatalf("enter on empty Branches: focus=%v cmd=%v, want no-op", m.focus, cmd != nil)
 	}
 }
