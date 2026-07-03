@@ -82,6 +82,13 @@ func cmdBatch(svc *domain.Service, workdir string, args []string, stdin io.Reade
 			fmt.Fprintf(stdout, "#%d !%d %s\n", i+1, code, ln.echo)
 		}
 		io.Copy(stdout, &section)
+		// Defensive: every current command newline-terminates its last write, so
+		// this is a no-op today. It guards the framing grammar against a future
+		// command whose last write doesn't end in "\n" — without it, the next
+		// line's "#<idx> ..." header would run together with the prior output.
+		if b := section.Bytes(); len(b) > 0 && b[len(b)-1] != '\n' {
+			io.WriteString(stdout, "\n")
+		}
 		if code != 0 && !*keepGoing {
 			if i < len(lines)-1 {
 				stopped = true
