@@ -5,9 +5,28 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/homeend/gigagit/internal/gitexec"
 )
+
+func TestPruneWorktreesArgv(t *testing.T) {
+	f := gitexec.NewFakeRunner()
+	f.SetResponse("git worktree prune", gitexec.Result{})
+	repo := &Repo{Runner: f}
+	if err := repo.PruneWorktrees(context.Background()); err != nil {
+		t.Fatalf("prune: %v", err)
+	}
+	want := []string{"worktree", "prune"}
+	if !reflect.DeepEqual(f.Calls[0].Argv, want) {
+		t.Fatalf("argv = %v, want %v", f.Calls[0].Argv, want)
+	}
+	if f.Calls[0].Name != "git worktree prune" {
+		t.Fatalf("span = %q, want %q", f.Calls[0].Name, "git worktree prune")
+	}
+}
 
 func TestTopLevelReturnsRepoRoot(t *testing.T) {
 	dir, runner := newTestRepo(t)
