@@ -150,3 +150,21 @@ func TestBatchRejectsPositionalArgs(t *testing.T) {
 		t.Fatalf("exit=%d, want 2", code)
 	}
 }
+
+// TestBatchPullNeverBlocks pins the structural contract behind the cmdPull
+// stdin fix: inside a batch script, "pull" must fail loud rather than hang.
+// The real regression (cmdPull reading the terminal's real os.Stdin instead
+// of the caller's reader) can only be observed on a TTY, which this harness
+// doesn't have; what's pinned here is that a batch line running "pull" in a
+// repo with no upstream terminates with a clear, correctly-framed failure
+// instead of blocking forever.
+func TestBatchPullNeverBlocks(t *testing.T) {
+	dir := newRepoDir(t)
+	code, out, _ := runCLIStdin(t, dir, "pull\n", "batch")
+	if code != 1 {
+		t.Fatalf("exit=%d, want 1", code)
+	}
+	if !strings.Contains(out, "#1 !1 pull") {
+		t.Fatalf("pull section missing/misframed:\n%s", out)
+	}
+}

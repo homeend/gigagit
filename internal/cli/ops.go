@@ -12,7 +12,7 @@ import (
 	"github.com/homeend/gigagit/internal/engine"
 )
 
-func cmdPull(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
+func cmdPull(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("pull", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	background := fs.Bool("background", false, "update the branch's ref without checking it out")
@@ -36,7 +36,7 @@ func cmdPull(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 	if *onConflict != "" {
 		policy["non-fast-forward"] = *onConflict
 	}
-	dec := cliDecider{policy: policy, in: os.Stdin, out: stderr, interactive: stdinIsTerminal()}
+	dec := cliDecider{policy: policy, in: stdin, out: stderr, interactive: stdinIsTerminal()}
 	res, err := runOperation(context.Background(), svc,
 		engine.SmartPull{Branch: branch, Intent: intent}, dec, stderr)
 	return finish(res, err, stdout, stderr)

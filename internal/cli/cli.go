@@ -65,7 +65,7 @@ func runOne(svc *domain.Service, workdir, cmd string, rest []string, stdin io.Re
 	case "commit":
 		return cmdCommit(svc, rest, stdout, stderr)
 	case "pull":
-		return cmdPull(svc, rest, stdout, stderr)
+		return cmdPull(svc, rest, stdin, stdout, stderr)
 	case "push":
 		return cmdPush(svc, rest, stdin, stdout, stderr)
 	case "switch":
