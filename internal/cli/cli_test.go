@@ -89,13 +89,8 @@ func TestNoArgsReturnsUsage(t *testing.T) {
 // map — so the real gg binary (which gates CLI vs TUI on IsCommand) prints
 // "unknown command" while in-process tests, which call Run directly, never
 // notice. It parses runOne's switch and asserts every case string is a command.
-// "batch" is exempt since it is only reachable within a batch context (Task 3
-// intercepts "batch" at the Run level before it reaches runOne).
 func TestEverySwitchCaseIsRegistered(t *testing.T) {
 	for _, c := range runSwitchCases(t) {
-		if c == "batch" {
-			continue // exempt: only reachable from batch context
-		}
 		if !IsCommand(c) {
 			t.Errorf("runOne handles case %q but it is missing from the commands map "+
 				"(IsCommand returns false → the real gg binary will say %q is unknown)", c, c)
