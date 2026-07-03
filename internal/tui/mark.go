@@ -81,9 +81,10 @@ func (m Model) handleMarkKey() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	// Commits panel: m toggles membership in the compare selection set (◉). The
-	// `.` menu then drives Compare or Squash on the selection; there is no
-	// single-mark/auto-diff gesture here. A WIP pseudo-row's sentinel key toggles
-	// into the same set.
+	// `.` menu then drives Compare or Squash on the selection; the m key itself
+	// has no auto-diff — space (handleCommitSpaceKey) is the auto-compare fast
+	// path over the same set. A WIP pseudo-row's sentinel key toggles into the
+	// same set.
 	if m.focus == panelCommits {
 		if m.commitCompareSet == nil {
 			m.commitCompareSet = map[string]bool{}

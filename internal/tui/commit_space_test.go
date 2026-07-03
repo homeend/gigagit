@@ -111,6 +111,16 @@ func TestSpaceInertWhileOpRunning(t *testing.T) {
 	}
 }
 
+// reRoot must clear commitCompareSet so ◉ marks from the old repo don't eat
+// the two space slots or skew Unmark-all's count in the new repo.
+func TestReRootClearsCommitCompareSet(t *testing.T) {
+	m := Model{commitCompareSet: map[string]bool{"deadbeef": true, "beadfeed": true}}
+	updated, _ := m.reRoot(t.TempDir())
+	if got := updated.(Model).commitCompareSet; got != nil {
+		t.Fatalf("commitCompareSet = %v after reRoot, want nil", got)
+	}
+}
+
 // TestFooterAdvertisesSpaceStates pins the two always-true footer hints: mark
 // (unmarked cursor, ≤1 raw mark) and unmark (marked cursor). With 2 marks and
 // an unmarked cursor the outcome depends on mark validity, so no space hint

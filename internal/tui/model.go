@@ -2594,6 +2594,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.sel = map[panel]int{}
 	m.mark = nil                        // a mark from the old repo must not re-attach by name in the new one
 	m.fileMarks = nil                   // likewise drop Status file-marks from the old repo
+	m.commitCompareSet = nil            // ◉ marks are repo-scoped: stale keys from the old repo would eat the two space slots and skew Unmark-all counts
 	m.stashView = nil                   // the new repo has its own stashes
 	m = m.closeFilesView()              // the new repo has a different commit list
 	if dv := m.diffLayer(); dv != nil { // the new repo invalidates any open diff
