@@ -196,3 +196,19 @@ func TestBranchLs(t *testing.T) {
 		t.Fatalf("ls output wrong:\n%s", out)
 	}
 }
+
+func TestBranchLsRejectsExtraArgs(t *testing.T) {
+	dir := newRepoDir(t)
+	code, _, errb := runCLI(t, dir, "branch", "ls", "--merged")
+	if code != 2 {
+		t.Fatalf("exit=%d, want 2 (stderr=%s)", code, errb)
+	}
+}
+
+func TestBranchCurrentRejectsExtraArgs(t *testing.T) {
+	dir := newRepoDir(t)
+	code, _, errb := runCLI(t, dir, "branch", "current", "extra")
+	if code != 2 {
+		t.Fatalf("exit=%d, want 2 (stderr=%s)", code, errb)
+	}
+}

@@ -24,8 +24,16 @@ func cmdBranch(svc *domain.Service, args []string, stdin io.Reader, stdout, stde
 	case "delete":
 		return cmdBranchDelete(svc, args[1:], stdin, stdout, stderr)
 	case "current":
+		if len(args) > 1 {
+			fmt.Fprintln(stderr, "usage: gg branch current (no arguments)")
+			return 2
+		}
 		return cmdBranchCurrent(svc, stdout, stderr)
 	case "ls":
+		if len(args) > 1 {
+			fmt.Fprintln(stderr, "usage: gg branch ls (no arguments; no --merged filter yet)")
+			return 2
+		}
 		return cmdBranchLs(svc, stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "branch: unknown subcommand %q (use create, rename, delete, current, or ls)\n", args[0])
