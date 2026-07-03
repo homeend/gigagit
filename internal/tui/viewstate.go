@@ -518,6 +518,13 @@ func (m Model) displayIndices(p panel) (idx []int) {
 			return m.commitsIdx
 		}
 	}
+	// Commits + active filter: the memoized path (see commitFilterMemo). The
+	// unfiltered commitsIdx fast path above cannot serve it, and the generic
+	// scan below is O(feed) per call — fired many times per keypress, that
+	// measured ~5.6s per arrow key at 600k commits.
+	if p == panelCommits && m.filterActive(p) {
+		return m.commitFilterIndices()
+	}
 	l := m.listFor(p)
 	q := ""
 	if m.filterActive(p) {
