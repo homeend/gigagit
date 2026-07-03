@@ -82,6 +82,10 @@ var contextBindings = []footerBinding{
 		// Stricter than the dispatch gate: don't advertise maximizing an empty box.
 		return m.opsIdle() && m.canMaximizeLeft() && m.panelLen(m.focus) > 0
 	}, scopeWindow},
+	{"fullscreen", "T", "[T] full", func(m Model) bool {
+		// Same stricter gate as t: don't advertise fullscreening an empty box.
+		return m.opsIdle() && m.canFullMaximize() && m.panelLen(m.focus) > 0
+	}, scopeWindow},
 }
 
 // globalBindings are the always-relevant tail, still individually predicated

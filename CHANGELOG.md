@@ -37,6 +37,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   The e2e harness's `[[run]]` gained an optional `stdin` field (multi-line
   TOML string fed to the command's stdin; empty = prior no-stdin behavior)
   to exercise it end to end (`s79_cli_batch.toml`).
+- **TUI: `T` fullscreen.** `T` fullscreens the focused panel (any left-column
+  panel or Commits) to fill the whole terminal; `t` still maximizes to the
+  left column only. `esc` or `T` restores the prior layout; `t` (while
+  fullscreen) drops back to column-maximized. Tab switching while fullscreen
+  transfers the pin to the newly shown tab. Deliberate jump-to-Commits actions
+  (solo tag, go-to-tip, commits-touching-file) also transfer an active
+  fullscreen pin to Commits instead of stranding focus. New predicates:
+  `canFullMaximize()`, new Model fields `fullMaxPanel`/`fullMaxGen`.
 - **Agent-facing CLI verbs: `gg log`, `gg diff`, `gg show`, `gg add` /
   `gg unstage`, `gg branch current` / `gg branch ls`, `gg worktree prune`.**
   A batch of terse, scriptable read/write commands aimed at AI agents driving
