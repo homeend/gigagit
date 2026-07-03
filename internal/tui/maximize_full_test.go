@@ -3,6 +3,8 @@ package tui
 import (
 	"slices"
 	"testing"
+
+	"github.com/homeend/gigagit/internal/model"
 )
 
 func TestLayoutFullscreenLeftPanel(t *testing.T) {
@@ -289,6 +291,55 @@ func TestTabSwitchRepinsFullscreen(t *testing.T) {
 	c = c.activateTab(panelWorktrees)
 	if !c.fullMaxed || c.fullMax != panelWorktrees || c.focus != panelWorktrees {
 		t.Fatalf("from Commits: fullMaxed=%v fullMax=%v focus=%v, want Worktrees", c.fullMaxed, c.fullMax, c.focus)
+	}
+}
+
+// A deliberate jump-to-Commits action transfers the fullscreen pin instead of
+// stranding focus on a hidden panel (same rule as activateTab's re-pin).
+func TestFocusCommitsPanelTransfersFullscreenPin(t *testing.T) {
+	m := maxModel()
+	m.focus = panelBranches
+	m = press(t, m, "T")
+	m = m.focusCommitsPanel()
+	if m.focus != panelCommits {
+		t.Fatalf("focus = %v, want Commits", m.focus)
+	}
+	if !m.fullMaxed || m.fullMax != panelCommits {
+		t.Fatalf("fullMaxed=%v fullMax=%v, want pin transferred to Commits", m.fullMaxed, m.fullMax)
+	}
+	// without a pin the helper is a plain focus move
+	n := maxModel()
+	n.focus = panelBranches
+	n = n.focusCommitsPanel()
+	if n.fullMaxed || n.focus != panelCommits {
+		t.Fatalf("no-pin case: fullMaxed=%v focus=%v", n.fullMaxed, n.focus)
+	}
+}
+
+// End-to-end: "Solo this tag" while Tags is the fullscreen pin must transfer
+// the pin to Commits, not strand focus on the hidden Tags panel (the finding
+// from review — file_preview.go/file_finder.go/tags_actions.go/commit_scope.go
+// all wrote m.focus = panelCommits directly, bypassing the pin).
+func TestTagSoloTransfersFullscreenPinEndToEnd(t *testing.T) {
+	m := maxModel()
+	m.activeFilesTab = panelTags
+	m.tags = []model.Tag{{Name: "v1.0.0"}}
+	m.focus = panelTags
+	m = press(t, m, "T")
+	if !m.fullMaxed || m.fullMax != panelTags {
+		t.Fatalf("setup: fullMaxed=%v fullMax=%v, want pinned on Tags", m.fullMaxed, m.fullMax)
+	}
+	row, ok := m.tagSoloRow()
+	if !ok {
+		t.Fatal("tagSoloRow not offered while Tags is focused")
+	}
+	tm, _ := row.run(m)
+	m = tm.(Model)
+	if m.focus != panelCommits {
+		t.Fatalf("focus = %v, want Commits", m.focus)
+	}
+	if !m.fullMaxed || m.fullMax != panelCommits {
+		t.Fatalf("fullMaxed=%v fullMax=%v, want pin transferred to Commits", m.fullMaxed, m.fullMax)
 	}
 }
 

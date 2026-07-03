@@ -2284,6 +2284,19 @@ func (m Model) activateTab(p panel) Model {
 	return m
 }
 
+// focusCommitsPanel routes deliberate "jump to the Commits panel" actions
+// (solo a tag, go to a branch tip, commits touching a file). Plain focus
+// assignment would strand focus on a hidden panel while a T fullscreen pin
+// is active elsewhere, so the pin follows the jump — same re-pin rule as
+// activateTab (Commits is a valid fullscreen target).
+func (m Model) focusCommitsPanel() Model {
+	m.focus = panelCommits
+	if m.fullMaxed {
+		m.fullMax = panelCommits
+	}
+	return m
+}
+
 // bottomTab is the active bottom-left slot panel, defaulting to Staged when unset.
 func (m Model) bottomTab() panel {
 	if m.activeBottomTab == panelStaged || m.activeBottomTab == panelReflog {

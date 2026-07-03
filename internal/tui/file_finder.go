@@ -369,7 +369,7 @@ func (m Model) fileFinderActionRows(path string) []actionRow {
 			run: func(m Model) (tea.Model, tea.Cmd) {
 				m = m.popLayer()
 				m.commitFilter = commitFilterFields{Paths: []string{path}}
-				m.focus = panelCommits
+				m = m.focusCommitsPanel()
 				return m.startFeedReload()
 			},
 		},
