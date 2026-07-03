@@ -245,6 +245,14 @@ type compareFilesMsg struct {
 // (left = older, right = newer), e.g. a commit vs the working tree. The proven
 // single-commit path is untouched; this is a parallel mode (filesModeCompare).
 func (m Model) openCompareFiles(left, right model.Endpoint) (Model, tea.Cmd) {
+	tag := "cmp:" + left.CacheTag() + ":" + right.CacheTag()
+	// Already showing (or loading) this exact comparison: keep it — re-running
+	// the load would only blank and repaint identical content. Each caller
+	// orders its endpoints deterministically, so the same pair from the same
+	// gesture always builds the same tag.
+	if m.filesView != nil && m.inCompareMode() && m.compareTag == tag {
+		return m, nil
+	}
 	if m.filesView == nil { // fresh open: remember the source panel for esc/l to restore
 		m.filesReturnFocus = m.focus
 	}
@@ -263,11 +271,11 @@ func (m Model) openCompareFiles(left, right model.Endpoint) (Model, tea.Cmd) {
 	default:
 		m.filesHash = ""
 	}
-	m.compareTag = "cmp:" + left.CacheTag() + ":" + right.CacheTag()
+	m.compareTag = tag
 	// Focus the tree: compare mode has no live commit list, and moving the commit
 	// selection would discard the comparison. The focus-switch keys are inert here.
 	m.filesTreeFocused = true
-	return m, m.loadCompareFilesCmd(left, right, m.compareTag)
+	return m, m.loadCompareFilesCmd(left, right, tag)
 }
 
 // loadCompareFilesCmd fetches the changed-file list off the UI thread.

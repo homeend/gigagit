@@ -407,9 +407,9 @@ func (m Model) commitCompareToggleRow() (actionRow, bool) {
 		return actionRow{}, false
 	}
 	in := m.commitCompareSet[key]
-	label := "Add to compare selection"
+	label := "Add to compare selection (space)"
 	if in {
-		label = "Remove from compare selection"
+		label = "Unmark commit"
 	}
 	return actionRow{
 		id:    "commit-compare-toggle",
@@ -428,14 +428,26 @@ func (m Model) commitCompareToggleRow() (actionRow, bool) {
 	}, true
 }
 
-// commitCompareClearRow clears the ◉ compare selection.
+// commitCompareClearRow unmarks the ◉ compare selection: "Unmark all commits
+// (N)" with 2+ in the set; with exactly one mark it shows "Unmark the marked
+// commit" ONLY when the cursor is elsewhere — the toggle row's "Unmark
+// commit" covers cursor-on-mark, and without this row a lone off-cursor or
+// stale mark would be menu-unreachable.
 func (m Model) commitCompareClearRow() (actionRow, bool) {
 	if m.focus != panelCommits || len(m.commitCompareSet) == 0 {
 		return actionRow{}, false
 	}
+	label := "Unmark all commits (" + strconv.Itoa(len(m.validCompareKeys())) + ")"
+	if len(m.commitCompareSet) < 2 {
+		key, ok := m.selectedKey(panelCommits)
+		if ok && m.commitCompareSet[key] {
+			return actionRow{}, false
+		}
+		label = "Unmark the marked commit"
+	}
 	return actionRow{
 		id:    "commit-compare-clear",
-		label: "Clear compare selection",
+		label: label,
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			m.commitCompareSet = nil
 			return m, nil

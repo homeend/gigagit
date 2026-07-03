@@ -411,6 +411,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.err != nil {
 			m.statusMsg = "compare: " + msg.err.Error()
+			// A failed compare must be retryable: clear the tag so re-opening the
+			// SAME pair isn't swallowed by the openCompareFiles same-tag guard.
+			m.compareTag = ""
 			if len(m.filesView.lines) == 1 && m.filesView.lines[0].text == "(loading…)" {
 				m.filesView.lines = []contentLine{{text: "(load failed)"}}
 			}
@@ -1027,6 +1030,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateStashViewKey(msg)
 		}
 		if msg.Type == tea.KeySpace {
+			if m.focus == panelCommits {
+				return m.handleCommitSpaceKey()
+			}
 			return m.handleStageKey()
 		}
 		switch msg.String() {
@@ -2588,6 +2594,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.sel = map[panel]int{}
 	m.mark = nil                        // a mark from the old repo must not re-attach by name in the new one
 	m.fileMarks = nil                   // likewise drop Status file-marks from the old repo
+	m.commitCompareSet = nil            // ◉ marks are repo-scoped: stale keys from the old repo would eat the two space slots and skew Unmark-all counts
 	m.stashView = nil                   // the new repo has its own stashes
 	m = m.closeFilesView()              // the new repo has a different commit list
 	if dv := m.diffLayer(); dv != nil { // the new repo invalidates any open diff
