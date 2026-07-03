@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/git"
 	"github.com/homeend/gigagit/internal/gitexec"
 	"github.com/homeend/gigagit/internal/model"
@@ -221,5 +222,56 @@ func TestRemoteRowsAbsentWhenBranchesTabFocused(t *testing.T) {
 		if got[id] {
 			t.Fatalf("%s must be absent while the Branches tab is focused; got %v", id, got)
 		}
+	}
+}
+
+func TestRemoteCheckoutAsRowsPresent(t *testing.T) {
+	m := remoteModel()
+	got := ids(availableActions(m))
+	for _, id := range []string{"remote-checkout-as", "remote-switch-as"} {
+		if !got[id] {
+			t.Fatalf("expected %s in remote menu; got %v", id, got)
+		}
+	}
+}
+
+func TestRemoteCheckoutAsRowsAbsentWhenBranchesTabFocused(t *testing.T) {
+	m := remoteModel()
+	m.focus = panelBranches // Remotes still holds a stored selection — must not leak
+	got := ids(availableActions(m))
+	if got["remote-checkout-as"] || got["remote-switch-as"] {
+		t.Fatalf("checkout-as rows must be absent off the Remotes tab; got %v", got)
+	}
+}
+
+func TestRemoteCheckoutAsRowOpensPrefilledPopup(t *testing.T) {
+	m := remoteModel()
+	row, ok := m.remoteCheckoutAsRow()
+	if !ok {
+		t.Fatal("remoteCheckoutAsRow not available")
+	}
+	nm, _ := row.run(m)
+	p, isPopup := nm.(Model).topLayer().(*checkoutAsPopup)
+	if !isPopup {
+		t.Fatalf("expected checkoutAsPopup on top; got %T", nm.(Model).topLayer())
+	}
+	if p.remoteRef != "origin/foo" || p.name.Value() != "foo" || p.intent != engine.CheckoutStay {
+		t.Fatalf("popup = ref %q prefill %q intent %v, want origin/foo foo stay", p.remoteRef, p.name.Value(), p.intent)
+	}
+}
+
+func TestRemoteSwitchAsRowCarriesSwitchIntent(t *testing.T) {
+	m := remoteModel()
+	row, ok := m.remoteSwitchAsRow()
+	if !ok {
+		t.Fatal("remoteSwitchAsRow not available")
+	}
+	nm, _ := row.run(m)
+	p, isPopup := nm.(Model).topLayer().(*checkoutAsPopup)
+	if !isPopup {
+		t.Fatalf("expected checkoutAsPopup on top; got %T", nm.(Model).topLayer())
+	}
+	if p.intent != engine.CheckoutSwitch {
+		t.Fatalf("intent = %v, want CheckoutSwitch", p.intent)
 	}
 }

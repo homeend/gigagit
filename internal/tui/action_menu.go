@@ -147,6 +147,12 @@ func availableActions(m Model) []actionRow {
 	if r, ok := m.remoteDeleteRow(); ok {
 		out = append(out, r)
 	}
+	if r, ok := m.remoteCheckoutAsRow(); ok {
+		out = append(out, r)
+	}
+	if r, ok := m.remoteSwitchAsRow(); ok {
+		out = append(out, r)
+	}
 	if r, ok := m.bookmarkAddRow(); ok {
 		out = append(out, r)
 	}
