@@ -2,8 +2,6 @@ package engine
 
 import (
 	"context"
-
-	"github.com/homeend/gigagit/internal/repogate"
 )
 
 // PruneWorktrees removes stale $GIT_DIR/worktrees administrative entries
@@ -13,8 +11,6 @@ import (
 type PruneWorktrees struct{}
 
 var _ Operation = PruneWorktrees{}
-
-func (op PruneWorktrees) LockMode() repogate.Mode { return repogate.TreeWrite }
 
 func (op PruneWorktrees) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	deps.emit(ctx, Progress{Step: "pruning worktrees"})
