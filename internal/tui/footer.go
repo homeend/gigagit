@@ -37,6 +37,14 @@ var contextBindings = []footerBinding{
 	{"branch", "b", "[b]ranch", func(m Model) bool { return m.focus == panelBranches && m.canOpenBranchPopup() }, scopeRow},
 	{"worktree", "w", "[w]orktree", func(m Model) bool { return m.focus == panelBranches && m.canOpenWorktreePopup() }, scopeRow},
 	{"delete-branch", "d", "[d]elete", func(m Model) bool { return m.focus == panelBranches && m.canDeleteBranch() }, scopeRow},
+	{"", "enter", "[enter] tip", func(m Model) bool {
+		_, ok := m.selectedBranch()
+		return m.focus == panelBranches && ok
+	}, scopeRow},
+	{"", "ctrl+g", "[ctrl+g] solo+tip", func(m Model) bool {
+		_, ok := m.selectedBranch()
+		return m.focus == panelBranches && m.opsIdle() && ok
+	}, scopeRow},
 	{"mark", "m", "[m]ark", func(m Model) bool {
 		return m.focus == panelBranches && m.canMark() && !m.markOnFocusedPanel()
 	}, scopeRow},
