@@ -103,7 +103,7 @@ func helpContent() []contentLine {
 		r(".", "Open staged version in external editor: open the index blob (the staged copy, distinct from the working file) in $VISUAL/$EDITOR, read-only"),
 		r("m", "mark / unmark a file; h history, b blame (as in Files)"),
 		h("Conflict resolution process (x)"),
-		r("x", "enter / resume the conflict process (when the repo is conflicted)"),
+		r("x", "enter / resume the conflict process (repo conflicted, or a merge/rebase paused after external resolution)"),
 		r("↑/↓ j", "move between conflicted files"),
 		r("enter", "pick hunks: open the line editor (both-modified files)"),
 		r("C/i", "keep current / incoming (both-modified files)"),

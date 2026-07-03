@@ -251,3 +251,12 @@ func (m Model) canDiscardAll() bool {
 	c := m.status.Counts()
 	return c.Unstaged > 0 || c.Untracked > 0
 }
+
+// canEnterConflict gates x (and its footer hint): the conflict process opens
+// when unmerged files exist OR a sequencer op is paused with everything
+// resolved (continue/abort still pending — e.g. resolved outside gg). Shared
+// by the x dispatch and the footer binding so the footer never advertises a
+// state the handler would refuse.
+func (m Model) canEnterConflict() bool {
+	return m.opsIdle() && (len(m.status.Conflicts()) > 0 || m.conflict.Op != "")
+}

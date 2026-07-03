@@ -162,3 +162,49 @@ func TestResumePromptContinueDispatchesOp(t *testing.T) {
 		}
 	}
 }
+
+func TestCanEnterConflictGates(t *testing.T) {
+	if (Model{}).canEnterConflict() {
+		t.Fatal("x available on a clean repo")
+	}
+	paused := Model{conflict: domain.ConflictState{Op: "rebase"}}
+	if !paused.canEnterConflict() {
+		t.Fatal("x unavailable while a rebase is paused with zero conflicts")
+	}
+	conflicted := Model{status: model.WorkingTreeStatus{Files: []model.FileStatus{{Path: "f", Kind: model.KindUnmerged}}}}
+	if !conflicted.canEnterConflict() {
+		t.Fatal("x unavailable while conflicts exist (regression)")
+	}
+	busy := paused
+	busy.running = true
+	if busy.canEnterConflict() {
+		t.Fatal("x must stay opsIdle-gated")
+	}
+}
+
+func TestStartConflictProcessOpensForPausedOpWithZeroFiles(t *testing.T) {
+	m := Model{conflict: domain.ConflictState{Op: "rebase"}}
+	m2, cmd := startConflictProcess(m)
+	if m2.proc == nil {
+		t.Fatal("process did not open for a paused op with zero conflicted files")
+	}
+	if cmd == nil {
+		t.Fatal("expected the in-progress probe cmd")
+	}
+	if m3, _ := startConflictProcess(Model{}); m3.proc != nil {
+		t.Fatal("process opened on a clean repo")
+	}
+}
+
+func TestResolveFooterBindingAdvertisesPausedOp(t *testing.T) {
+	m := Model{conflict: domain.ConflictState{Op: "rebase"}}
+	for _, b := range globalBindings {
+		if b.id == "resolve" {
+			if !b.when(m) {
+				t.Fatal("[x] resolve not advertised while a rebase is paused")
+			}
+			return
+		}
+	}
+	t.Fatal("resolve binding not found in globalBindings")
+}

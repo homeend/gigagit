@@ -1081,7 +1081,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.amendPrefillCmd()
 			}
 		case "x":
-			if m.opsIdle() && len(m.status.Conflicts()) > 0 {
+			if m.canEnterConflict() {
 				return startConflictProcess(m) // enter / resume from the notice
 			}
 		case "H":

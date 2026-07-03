@@ -359,6 +359,14 @@ func (m Model) renderInterface() string {
 			notice += " " + src
 		}
 		notice += " — press [x] to resolve"
+	} else if m.conflict.Op != "" && m.proc == nil {
+		// A sequencer op is paused with nothing left unmerged (resolved
+		// outside gg, or all handled and the process left open-ended).
+		notice = "⏸ " + m.conflict.Op + " paused"
+		if src := m.conflict.Describe(); src != "" {
+			notice += " (" + src + ")"
+		}
+		notice += " — press [x] to continue or abort"
 	}
 	var markHint string
 	if m.mark != nil && m.markAlive() {
