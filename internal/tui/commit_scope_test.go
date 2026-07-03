@@ -446,6 +446,8 @@ func TestCommitGotoTipSlashBranchByHash(t *testing.T) {
 	}
 }
 
+// TestCommitGotoTipNotLoadedNotifies: with no feed to page (nil = cannot load
+// more), the eager fallback reports exhaustion instead of silently stopping.
 func TestCommitGotoTipNotLoadedNotifies(t *testing.T) {
 	m := branchesPanelModel("feat", "main")
 	m.branches[0].Hash = "t1deadbeef"
@@ -456,8 +458,50 @@ func TestCommitGotoTipNotLoadedNotifies(t *testing.T) {
 	if m.focus != panelBranches {
 		t.Fatalf("focus should stay on Branches, got %v", m.focus)
 	}
-	if m.statusMsg == "" {
-		t.Fatal("expected a 'tip not loaded' status message")
+	if !strings.Contains(m.statusMsg, "not found in full history") {
+		t.Fatalf("statusMsg = %q, want the eager 'not found in full history' report", m.statusMsg)
+	}
+}
+
+// TestCommitGotoTipFallsBackToEagerSearch: a tip missing from the loaded page
+// with a loadable feed starts the ctrl+f deep search on the tip hash.
+func TestCommitGotoTipFallsBackToEagerSearch(t *testing.T) {
+	m := newTestModelForReload(t) // Branches focused ("main" selected), real FakeRunner feed
+	m.branches[0].Hash = "t1deadbeef"
+	m.commits = []model.Commit{{Hash: "b0aaaaaaaaaa", Subject: "base"}}
+	r, ok := findRow(availableActions(m), "commits-goto-tip")
+	if !ok {
+		t.Fatal("go-to-tip row missing on Branches panel")
+	}
+	mm, cmd := r.run(m)
+	m = mm.(Model)
+	if !m.eager.active || m.eager.query != "t1deadbeef" {
+		t.Fatalf("eager = %+v, want active search for the tip hash", m.eager)
+	}
+	if !m.commitsLoading || cmd == nil {
+		t.Fatalf("loading=%v cmd=%v, want a page load dispatched", m.commitsLoading, cmd != nil)
+	}
+}
+
+// TestCommitGotoTipFindsFilteredTip: a /-filter hiding an already-loaded tip no
+// longer dead-ends — the eager fallback clears the filter and lands on the tip.
+func TestCommitGotoTipFindsFilteredTip(t *testing.T) {
+	m := branchesPanelModel("feat", "main")
+	m.branches[0].Hash = "t1deadbeef"
+	m.commits = []model.Commit{
+		{Hash: "b0aaaaaaaaaa", Subject: "base"},
+		{Hash: "t1deadbeefcafe", Subject: "tip"},
+	}
+	m.filterPanel = panelCommits
+	m.filterQuery = "zzz" // hides every row from displayIndices
+	r, _ := findRow(availableActions(m), "commits-goto-tip")
+	mm, _ := r.run(m)
+	m = mm.(Model)
+	if m.filterQuery != "" {
+		t.Fatalf("filterQuery = %q, want cleared (go-to semantics)", m.filterQuery)
+	}
+	if m.focus != panelCommits || m.sel[panelCommits] != 1 {
+		t.Fatalf("focus=%v sel=%d, want panelCommits/1", m.focus, m.sel[panelCommits])
 	}
 }
 
