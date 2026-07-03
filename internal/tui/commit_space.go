@@ -23,7 +23,7 @@ func (m Model) handleCommitSpaceKey() (tea.Model, tea.Cmd) {
 	// changes and history rewrites), and a ghost mark must not eat a slot.
 	valid := len(m.validCompareKeys())
 	if valid >= 2 {
-		m.statusMsg = "2 commits already marked — space a marked one to unmark, or . → Unmark all"
+		m.statusMsg = "2 commits already marked — space a marked one to unmark, esc to unmark all"
 		return m, nil
 	}
 	if m.commitCompareSet == nil {
