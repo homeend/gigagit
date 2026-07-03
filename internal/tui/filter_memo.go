@@ -74,6 +74,19 @@ func (m Model) commitFilterScan(l panelList, q string, base []int) []int {
 	return out
 }
 
+// commitFilterScanRange is commitFilterScan over the half-open unified-index
+// range [from, to) — the appended tail after a feed page-in.
+func (m Model) commitFilterScanRange(l panelList, q string, from, to int) []int {
+	match := filterMatchFn(l, q)
+	out := make([]int, 0, 16)
+	for i := from; i < to; i++ {
+		if match(i) {
+			out = append(out, i)
+		}
+	}
+	return out
+}
+
 // commitFilterIndices is displayIndices' Commits+active-filter path: the
 // filtered display-index slice, memoized. A hit is O(1). A miss runs the full
 // scan and stores the result back through the shared memo pointer. The
@@ -92,12 +105,38 @@ func (m Model) commitFilterIndices() []int {
 		return c.idx // hit: O(1), no scan
 	}
 	l := m.listFor(panelCommits)
-	idx := m.commitFilterScan(l, q, nil)
-	sortIndices(l, srt, idx)
+	// sameShape: the memo describes this feed (same wip prefix BY CONTENT —
+	// see the Task-1 review fix: a wip row's count is filter-matchable text —
+	// same tip, same sort) with a live query: the precondition for both
+	// incremental rebuilds. Both are pure optimizations: any doubt falls to
+	// a full scan, which is always correct.
+	wip := m.wipCount() // unified-index offset of the first real commit
+	sameShape := c != nil && c.query != "" && slices.Equal(c.wipRows, m.wipRows) &&
+		c.baseHash == baseHash && c.sort == srt
+	var idx []int
+	switch {
+	case sameShape && c.feedLen == feedLen && strings.HasPrefix(q, c.query):
+		// Narrowing (typing): the old query is a prefix of the new one, so
+		// Contains(h, q) ⇒ Contains(h, c.query) — the new match set is a
+		// subset of the cached one. Rescan only the cached matches:
+		// O(matches) per typed character instead of O(feed). Order is
+		// preserved, so the cached sort survives without re-sorting.
+		idx = m.commitFilterScan(l, q, c.idx)
+	case sameShape && c.query == q && feedLen > c.feedLen:
+		// Append extension (paging): the feed grew under the same tip — the
+		// strict newest→oldest append invariant rebuildCommitGraph's own
+		// fast path keys on. Existing indices are stable; scan only the
+		// appended tail and merge.
+		tailIdx := m.commitFilterScanRange(l, q, wip+c.feedLen, wip+feedLen)
+		idx = append(append(make([]int, 0, len(c.idx)+len(tailIdx)), c.idx...), tailIdx...)
+		sortIndices(l, srt, idx) // no-op under sortDefault; merges the tail otherwise
+	default:
+		idx = m.commitFilterScan(l, q, nil)
+		sortIndices(l, srt, idx)
+	}
 	if c != nil {
-		c.query = q
-		c.wipRows = append([]wipRow(nil), m.wipRows...) // copy: don't let the key alias caller state
-		c.feedLen, c.baseHash, c.sort, c.idx = feedLen, baseHash, srt, idx
+		c.query, c.feedLen, c.baseHash, c.sort, c.idx = q, feedLen, baseHash, srt, idx
+		c.wipRows = append([]wipRow(nil), m.wipRows...)
 	}
 	return idx
 }

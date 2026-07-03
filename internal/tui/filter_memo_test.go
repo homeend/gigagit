@@ -147,3 +147,69 @@ func TestCommitFilterRepeatCallIsO1(t *testing.T) {
 		t.Fatalf("repeated filtered displayIndices allocated %.0f/call (want ~0): memo hit must not rescan the feed", allocs)
 	}
 }
+
+// TestCommitFilterNarrowingScansMatchesOnly pins the typing fast path: with a
+// warm memo, extending the query must rescan only the cached matches, not the
+// whole feed. The fixture holds the match count FIXED (50 "needle" rows)
+// while the feed doubles — the extension's alloc count must stay ~flat.
+// Pre-Task-2 (full rescan per extension) it doubles with the feed.
+func TestCommitFilterNarrowingScansMatchesOnly(t *testing.T) {
+	measure := func(n int) float64 {
+		m := filterMemoModel(n)
+		// Warm the ident-width cache the way production always has it warm by
+		// the time a filter is active (rebuildCommitGraph sets it after the
+		// feed loads). Without this, listFor's identW field recomputes via an
+		// O(n) lipgloss scan on every miss, swamping the O(matches)/O(tail)
+		// signal this test measures — a fixture gap, not a production cost.
+		m.identWValid = true
+		for i := 0; i < 50; i++ { // fixed k=50 matches regardless of n
+			m.commits[i*(n/50)].Subject = fmt.Sprintf("needle row %d", i)
+		}
+		m.filterQuery = "needle"
+		_ = m.displayIndices(panelCommits) // warm: one full scan
+		saved := *m.filterMemo             // the warm "needle" state
+		m.filterQuery = "needle row"       // one typed extension
+		return testing.AllocsPerRun(5, func() {
+			*m.filterMemo = saved // re-arm the narrowing precondition each run
+			_ = m.displayIndices(panelCommits)
+		})
+	}
+	a, b := measure(20_000), measure(40_000)
+	if b > a*1.5+10 {
+		t.Fatalf("query-extension allocs grew %.1fx when the feed doubled (a=%.0f, b=%.0f): narrowing is rescanning the feed", b/a, a, b)
+	}
+}
+
+// TestCommitFilterAppendScansTailOnly pins the paging fast path: growing the
+// feed under a warm memo (the commitsPagedMsg strict-append shape) must
+// rescan only the appended tail. Also cross-checks the result against the
+// oracle, since this path splices cached matches with tail matches.
+func TestCommitFilterAppendScansTailOnly(t *testing.T) {
+	const n, tail = 40_000, 100
+	m := filterMemoModel(n + tail)
+	// See TestCommitFilterNarrowingScansMatchesOnly: warm the ident-width
+	// cache to match production's steady state, else listFor's O(n) identW
+	// recompute (unused by Haystack-based matching) swamps the tail-scan cost
+	// this test measures.
+	m.identWValid = true
+	full := m.commits
+	m.commits = full[:n] // the pre-append feed
+	m.filterQuery = "alpha"
+	_ = m.displayIndices(panelCommits) // warm at feedLen=n
+	saved := *m.filterMemo
+	m.commits = full // paging appended `tail` older commits
+	allocs := testing.AllocsPerRun(5, func() {
+		*m.filterMemo = saved // re-arm the append precondition each run
+		_ = m.displayIndices(panelCommits)
+	})
+	// Tail scan ≈ tail rows × ~5 allocs + one result-copy alloc. A full
+	// rescan is ≥ n allocs (40k+) — orders of magnitude over this bound.
+	if allocs > float64(tail)*10+200 {
+		t.Fatalf("append rescan allocated %.0f (bound %d): paging is rescanning the whole feed, not just the %d-row tail", allocs, tail*10+200, tail)
+	}
+	got := m.displayIndices(panelCommits)
+	want := referenceFilter(m, "alpha")
+	if !idxEqual(got, want) {
+		t.Fatalf("append-extension result diverges from oracle: got %d rows, want %d", len(got), len(want))
+	}
+}
