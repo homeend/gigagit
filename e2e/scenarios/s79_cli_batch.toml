@@ -1,0 +1,32 @@
+name = "batch: one process runs a script; a failure stops it loud"
+
+[input]
+steps = [
+  { write = "README.md", content = "hello\n" },
+  { commit = "initial" },
+  { write = "new.txt", content = "x\n" },
+]
+
+[[run]]
+cmd   = ["batch"]
+stdin = """
+add new.txt
+commit -m "batch commit"
+log -n 1
+bogus
+status
+"""
+exit = 1
+stdout_contains = [
+  "#1 ok add new.txt",
+  "#2 ok commit -m \"batch commit\"",
+  "#3 ok log -n 1",
+  "batch commit",
+  "#4 !2 bogus",
+  "#done 3 ok, 1 failed (stopped)",
+]
+stdout_excludes = ["#5"]
+
+[expect]
+branch = "main"
+clean  = true

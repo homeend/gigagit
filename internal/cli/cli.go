@@ -48,13 +48,24 @@ func Run(workdir string, args []string, stdin io.Reader, stdout, stderr io.Write
 			_ = repos.Touch(RepoStatePath, top, time.Now())
 		}
 	}
+	if cmd == "batch" {
+		return cmdBatch(svc, workdir, rest, stdin, stdout, stderr, cwdFile)
+	}
+	return runOne(svc, workdir, cmd, rest, stdin, stdout, stderr, cwdFile)
+}
+
+// runOne dispatches one already-split command against an open service. It
+// is shared by Run (one command per process) and cmdBatch (a script of
+// commands against one service). stdin is what interactive prompts read;
+// batch passes an empty reader so a command can never block on input.
+func runOne(svc *domain.Service, workdir, cmd string, rest []string, stdin io.Reader, stdout, stderr io.Writer, cwdFile string) int {
 	switch cmd {
 	case "status":
 		return cmdStatus(svc, stdout, stderr)
 	case "commit":
 		return cmdCommit(svc, rest, stdout, stderr)
 	case "pull":
-		return cmdPull(svc, rest, stdout, stderr)
+		return cmdPull(svc, rest, stdin, stdout, stderr)
 	case "push":
 		return cmdPush(svc, rest, stdin, stdout, stderr)
 	case "switch":
@@ -111,6 +122,9 @@ func Run(workdir string, args []string, stdin io.Reader, stdout, stderr io.Write
 		return cmdInit(workdir, rest, stdin, stdout, stderr)
 	case "config":
 		return cmdConfig(svc, workdir, rest, stdout, stderr)
+	case "batch":
+		fmt.Fprintln(stderr, "batch: nested batch is not allowed")
+		return 2
 	default:
 		fmt.Fprintf(stderr, "unknown command %q\n", cmd)
 		return 2
@@ -123,7 +137,7 @@ var commands = map[string]bool{
 	"cherry-pick": true, "revert": true, "reset": true, "fast-forward": true,
 	"discard": true, "add": true, "unstage": true, "shelf": true, "bookmark": true, "log": true, "prefix": true,
 	"remote": true, "tag": true, "compare": true, "diff": true, "show": true,
-	"inspect": true, "repo": true, "init": true, "config": true,
+	"inspect": true, "repo": true, "init": true, "config": true, "batch": true,
 }
 
 // IsCommand reports whether tok is a gg CLI subcommand (used by cmd/gg to
