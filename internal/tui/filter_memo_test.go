@@ -213,3 +213,75 @@ func TestCommitFilterAppendScansTailOnly(t *testing.T) {
 		t.Fatalf("append-extension result diverges from oracle: got %d rows, want %d", len(got), len(want))
 	}
 }
+
+// TestCommitFilterAppendMergesUnderSort pins the append path's re-sort: under
+// a non-default sort the spliced cached+tail indices MUST be re-sorted (the
+// sortIndices call in the append branch — a no-op under sortDefault, which is
+// all the other append tests run). The fixture's subjects sort
+// lexicographically, so a tail match like "subject alpha 300" lands BETWEEN
+// "subject alpha 30" and "subject alpha 31" — the middle of the existing
+// name-asc matches — meaning an un-sorted concatenation (tail matches left at
+// the end) would diverge from the oracle, which sorts everything.
+func TestCommitFilterAppendMergesUnderSort(t *testing.T) {
+	const n, tail = 300, 30
+	m := filterMemoModel(n + tail)
+	m.sortModes[panelCommits] = sortNameAsc
+	full := m.commits
+	m.commits = full[:n] // the pre-append feed
+	m.filterQuery = "alpha"
+	warm := m.displayIndices(panelCommits) // warm the memo under name-asc
+	if len(warm) == 0 {
+		t.Fatal("setup: warm query must match some pre-append rows")
+	}
+	m.commits = full // paging appended rows, ~1/3 of which match "alpha"
+	got := m.displayIndices(panelCommits)
+	want := referenceFilter(m, "alpha")
+	if len(got) <= len(warm) {
+		t.Fatalf("setup: appended tail must add matches (warm %d, got %d)", len(warm), len(got))
+	}
+	if !idxEqual(got, want) {
+		t.Fatalf("append under sortNameAsc diverges from oracle: the merged tail was not re-sorted\ngot  %v\nwant %v", got, want)
+	}
+}
+
+// TestCommitFilterAppendNoTailMatches pins the append path's empty-tail case:
+// when no appended row matches, the result must equal the pre-append match
+// set (and the oracle) — the splice degenerates to a copy of the cached idx.
+func TestCommitFilterAppendNoTailMatches(t *testing.T) {
+	const n, tail = 300, 30
+	m := filterMemoModel(n + tail)
+	full := m.commits
+	for i := n; i < n+tail; i++ {
+		full[i].Subject = fmt.Sprintf("subject zzz %d", i) // tail never matches "alpha"
+	}
+	m.commits = full[:n]
+	m.filterQuery = "alpha"
+	warm := m.displayIndices(panelCommits)
+	m.commits = full
+	got := m.displayIndices(panelCommits)
+	if !idxEqual(got, warm) {
+		t.Fatalf("append with no tail matches changed the result: got %d rows, warm had %d", len(got), len(warm))
+	}
+	if want := referenceFilter(m, "alpha"); !idxEqual(got, want) {
+		t.Fatalf("append with no tail matches diverges from oracle: got %v want %v", got, want)
+	}
+}
+
+// TestCommitFilterNarrowingFromEmpty pins narrowing over an already-empty
+// cached idx: a warm no-match memo extended by more typing must take the
+// narrowing branch over an empty (non-nil) base and return empty, not error.
+func TestCommitFilterNarrowingFromEmpty(t *testing.T) {
+	m := filterMemoModel(300)
+	m.filterQuery = "zzz-no-match"
+	if got := m.displayIndices(panelCommits); len(got) != 0 {
+		t.Fatalf("setup: warm query must match nothing, got %v", got)
+	}
+	m.filterQuery = "zzz-no-match-extended" // narrowing from an empty match set
+	got := m.displayIndices(panelCommits)
+	if len(got) != 0 {
+		t.Fatalf("narrowing from an empty cached idx must stay empty, got %v", got)
+	}
+	if want := referenceFilter(m, m.filterQuery); !idxEqual(got, want) {
+		t.Fatalf("narrowing from empty diverges from oracle: got %v want %v", got, want)
+	}
+}
