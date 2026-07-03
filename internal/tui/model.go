@@ -1345,14 +1345,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m.activateTab(nextInOrder(leftTabs, m.activeLeftTab, dir)), nil
 			}
 		case "right":
-			if m.focus != panelCommits {
+			if m.focus != panelCommits && !m.fullMaxActive() {
 				m = m.rememberLeftFocus()
 				m.focus = panelCommits
 			}
 		case "left":
-			// No-op when already in the left column, and when the narrow
-			// layout has no left column to focus.
-			if m.focus == panelCommits && (m.width <= 0 || m.width >= 40) {
+			// No-op when already in the left column, when the narrow layout has
+			// no left column to focus, and when Commits is fullscreen (the left
+			// column is hidden).
+			if m.focus == panelCommits && (m.width <= 0 || m.width >= 40) && !m.fullMaxActive() {
 				m.focus = m.leftReturnTarget()
 			}
 		case "ctrl+l":
@@ -2277,6 +2278,9 @@ func (m Model) activateTab(p panel) Model {
 	if m.leftMaxed { // re-pin the newly shown tab so it stays full-height
 		m.leftMax = m.focus
 	}
+	if m.fullMaxed { // keep fullscreen on the newly shown tab (incl. from Commits)
+		m.fullMax = m.focus
+	}
 	return m
 }
 
@@ -2345,6 +2349,12 @@ func (m Model) fullMaxActive() bool {
 }
 
 func (m Model) focusOrder() []panel {
+	// While a panel is fullscreen it is the only target — everything else is
+	// hidden. fullMaxActive (not the raw flag) so a stale/yielded pin falls
+	// back to the normal order instead of trapping focus on a hidden panel.
+	if m.fullMaxActive() {
+		return []panel{m.fullMax}
+	}
 	// While a left panel is maximized, focus collapses to that panel and Commits
 	// — the other left panels are hidden, so they must not be tab targets.
 	if m.leftMaxed {
@@ -2374,6 +2384,9 @@ func nextInOrder(order []panel, cur panel, dir int) panel {
 // pointer at the now-inactive Branches/Worktrees tab is redirected to the
 // active tab (the one actually visible).
 func (m Model) leftReturnTarget() panel {
+	if m.fullMaxActive() && m.fullMax != panelCommits { // fullscreen: only left target
+		return m.fullMax
+	}
 	if m.leftMaxed { // maximized: the pinned panel is the only left target
 		return m.leftMax
 	}

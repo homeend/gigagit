@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"slices"
 	"testing"
 )
 
@@ -221,5 +222,90 @@ func TestFullscreenInertInFilesView(t *testing.T) {
 	m = press(t, m, "T")
 	if m.fullMaxed {
 		t.Fatal("T must be inert while the files view owns the screen")
+	}
+}
+
+func TestFocusOrderCollapsesFullscreen(t *testing.T) {
+	m := maxModel()
+	m.focus = panelFiles
+	m = press(t, m, "T")
+	got := m.focusOrder()
+	if len(got) != 1 || got[0] != panelFiles {
+		t.Fatalf("fullscreen focusOrder = %v, want [Files]", got)
+	}
+	// tab cycles nowhere
+	m = press(t, m, "tab")
+	if m.focus != panelFiles {
+		t.Fatalf("tab moved focus to %v, want pinned Files", m.focus)
+	}
+}
+
+// A stale fullscreen pin must not trap focus on a hidden panel: focusOrder
+// falls back to the normal order, mirroring layout's stale-pin fallback.
+func TestFocusOrderStaleFullscreenPinFallsBack(t *testing.T) {
+	m := maxModel()
+	m.fullMaxed = true
+	m.fullMax = panelRemotes // not visible
+	got := m.focusOrder()
+	want := []panel{panelBranches, panelFiles, panelStaged, panelCommits}
+	if !slices.Equal(got, want) {
+		t.Fatalf("stale pin focusOrder = %v, want %v", got, want)
+	}
+}
+
+func TestArrowsStayInsideFullscreen(t *testing.T) {
+	m := maxModel()
+	m.focus = panelFiles
+	m = press(t, m, "T")
+	m = press(t, m, "right")
+	if m.focus != panelFiles {
+		t.Fatalf("→ moved focus to hidden %v", m.focus)
+	}
+
+	c := maxModel()
+	c.focus = panelCommits
+	c = press(t, c, "T")
+	c = press(t, c, "left")
+	if c.focus != panelCommits {
+		t.Fatalf("← moved focus to hidden %v", c.focus)
+	}
+}
+
+// ctrl+→ while fullscreen re-pins fullscreen to the newly shown tab (mirrors
+// the leftMaxed re-pin in activateTab). From Commits the pin transfers to the
+// activated left tab instead of stranding focus on a hidden box.
+func TestTabSwitchRepinsFullscreen(t *testing.T) {
+	m := maxModel()
+	m.focus = panelBranches
+	m = press(t, m, "T")
+	m = m.activateTab(panelWorktrees)
+	if !m.fullMaxed || m.fullMax != panelWorktrees {
+		t.Fatalf("after tab switch: fullMaxed=%v fullMax=%v, want Worktrees pinned", m.fullMaxed, m.fullMax)
+	}
+
+	c := maxModel()
+	c.focus = panelCommits
+	c = press(t, c, "T")
+	c = c.activateTab(panelWorktrees)
+	if !c.fullMaxed || c.fullMax != panelWorktrees || c.focus != panelWorktrees {
+		t.Fatalf("from Commits: fullMaxed=%v fullMax=%v focus=%v, want Worktrees", c.fullMaxed, c.fullMax, c.focus)
+	}
+}
+
+// Regression (found in Task 2 review): before focusOrder was gated on the
+// fullscreen pin, tab could silently drift focus off the pinned panel and a
+// following t would column-pin the WRONG (hidden) panel. The full sequence
+// must land on the panel that was actually on screen.
+func TestLadderTabThenTDropsToPinnedPanel(t *testing.T) {
+	m := maxModel()
+	m.focus = panelFiles
+	m = press(t, m, "T")
+	m = press(t, m, "tab") // must not drift: focusOrder is collapsed
+	m = press(t, m, "t")
+	if m.fullMaxed {
+		t.Fatal("t must drop fullscreen")
+	}
+	if !m.leftMaxed || m.leftMax != panelFiles {
+		t.Fatalf("leftMax=%v, want the on-screen panel Files", m.leftMax)
 	}
 }
