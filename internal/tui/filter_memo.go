@@ -1,6 +1,9 @@
 package tui
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
 
 // commitFilterMemo caches the filtered Commits display-index slice between
 // displayIndices calls. The pointer is shared across Model value copies —
@@ -10,8 +13,14 @@ import "strings"
 // (haystack build + ToLower per row), and the call fires many times per
 // keypress: at 600k commits that measured ~15 scans ≈ 5.6s per arrow key.
 type commitFilterMemo struct {
-	query    string   // lowercased query idx was built for; "" = invalid
-	wip      int      // wipCount() when built
+	query string // lowercased query idx was built for; "" = invalid
+	// wipRows is a copy of m.wipRows when built. Part of the key by CONTENT,
+	// not count — a wip row's dirty-file count is filter-matchable text
+	// (wipRow.text(), e.g. "Working tree (2)"), and it can change (a status
+	// refresh) without the row COUNT changing (still one Working-tree row).
+	// Keying on len(wipRows) alone would miss that and serve a stale
+	// filtered result.
+	wipRows  []wipRow
 	feedLen  int      // len(m.commits) when built
 	baseHash string   // m.commits[0].Hash when built ("" for an empty feed)
 	sort     sortMode // Commits sort mode when built
@@ -24,6 +33,7 @@ type commitFilterMemo struct {
 func (c *commitFilterMemo) invalidate() {
 	if c != nil {
 		c.query = ""
+		c.wipRows = nil
 		c.idx = nil
 	}
 }
@@ -70,7 +80,6 @@ func (m Model) commitFilterScan(l panelList, q string, base []int) []int {
 // returned slice is shared and read-only (the m.commitsIdx contract).
 func (m Model) commitFilterIndices() []int {
 	q := strings.ToLower(m.filterQuery)
-	wip := m.wipCount()
 	feedLen := len(m.commits)
 	baseHash := ""
 	if feedLen > 0 {
@@ -78,7 +87,7 @@ func (m Model) commitFilterIndices() []int {
 	}
 	srt := m.sortModes[panelCommits]
 	c := m.filterMemo
-	if c != nil && c.query != "" && c.query == q && c.wip == wip &&
+	if c != nil && c.query != "" && c.query == q && slices.Equal(c.wipRows, m.wipRows) &&
 		c.feedLen == feedLen && c.baseHash == baseHash && c.sort == srt {
 		return c.idx // hit: O(1), no scan
 	}
@@ -86,7 +95,9 @@ func (m Model) commitFilterIndices() []int {
 	idx := m.commitFilterScan(l, q, nil)
 	sortIndices(l, srt, idx)
 	if c != nil {
-		c.query, c.wip, c.feedLen, c.baseHash, c.sort, c.idx = q, wip, feedLen, baseHash, srt, idx
+		c.query = q
+		c.wipRows = append([]wipRow(nil), m.wipRows...) // copy: don't let the key alias caller state
+		c.feedLen, c.baseHash, c.sort, c.idx = feedLen, baseHash, srt, idx
 	}
 	return idx
 }

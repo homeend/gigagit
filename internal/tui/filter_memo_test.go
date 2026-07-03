@@ -110,6 +110,29 @@ func TestCommitFilterMemoMatchesReference(t *testing.T) {
 	check("case-insensitive")
 }
 
+// TestCommitFilterMemoWipContentChange pins the content-sensitive wip key: a
+// status refresh can change a wip row's dirty-file count without changing
+// the ROW count — "Working tree (2)" → "Working tree (3)" — and that count
+// is filter-matchable text, so the memo must miss and rescan.
+func TestCommitFilterMemoWipContentChange(t *testing.T) {
+	m := filterMemoModel(50)
+	m.wipRows = []wipRow{{wipWorktree, 2}}
+	m.filterQuery = "working tree (2)"
+	got := m.displayIndices(panelCommits)
+	if len(got) != 1 || got[0] != 0 {
+		t.Fatalf("setup: query should match exactly the wip row, got %v", got)
+	}
+	m.wipRows = []wipRow{{wipWorktree, 3}} // same row count, new content
+	got = m.displayIndices(panelCommits)
+	want := referenceFilter(m, m.filterQuery)
+	if !idxEqual(got, want) {
+		t.Fatalf("stale memo after wip content change: got %v want %v", got, want)
+	}
+	if len(got) != 0 {
+		t.Fatalf("query for the old count must no longer match, got %v", got)
+	}
+}
+
 // TestCommitFilterRepeatCallIsO1 pins the fix for the user-visible bug: with
 // an unchanged model, a repeated filtered displayIndices call must be a memo
 // hit that does not rescan the feed. Pre-memo, every call allocated O(feed)
