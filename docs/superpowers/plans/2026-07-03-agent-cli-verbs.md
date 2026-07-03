@@ -904,7 +904,7 @@ git commit -m "feat(cli): gg diff — patch, terse --stat, --name-only"
 - Test: `internal/git/show_verbs_test.go`, `internal/cli/show_test.go`
 
 **Interfaces:**
-- Consumes: Task 1's `CommitLine` (domain), Task 3's `ParseNumstat`, Task 4's `renderStat`.
+- Consumes: Task 1's `CommitLine` (domain), Task 3's `ParseNumstat`, Task 4's `renderStat` and `splitDashDash(args) (head, paths []string)` (NOTE: Task 4's fix replaced the planned `splitRevAndPaths` — the split must run on raw args BEFORE `fs.Parse`, which eats a leading `--`).
 - Produces: `(r *Repo) ShowNumstat(ctx, rev string, paths []string) (string, error)`; `(r *Repo) ShowPatch(ctx, rev string, paths []string) (string, error)`; `(s *Service) ShowStat(ctx, rev string, paths []string) (model.LogLine, []model.DiffStat, error)`; `(s *Service) ShowPatch(ctx, rev string, paths []string) (model.LogLine, string, error)`; CLI `gg show <commit> [--patch] [-- <file>]`.
 
 - [ ] **Step 1: Write the failing tests**
@@ -1136,17 +1136,18 @@ import (
 // "<short-sha> <subject>" header followed by the terse stat block
 // (default) or the full patch (--patch).
 func cmdShow(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
+	head, paths := splitDashDash(args) // BEFORE fs.Parse — flag.Parse eats a leading "--"
 	fs := flag.NewFlagSet("show", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	patch := fs.Bool("patch", false, "print the full patch instead of the stat block")
-	if err := fs.Parse(args); err != nil {
+	if err := fs.Parse(head); err != nil {
 		return 2
 	}
-	rev, paths, ok := splitRevAndPaths(fs.Args())
-	if !ok || rev == "" {
+	if fs.NArg() != 1 || fs.Arg(0) == "" {
 		fmt.Fprintln(stderr, "usage: gg show <commit> [--patch] [-- <file>...]")
 		return 2
 	}
+	rev := fs.Arg(0)
 	ctx := context.Background()
 	if *patch {
 		line, text, err := svc.ShowPatch(ctx, rev, paths)
