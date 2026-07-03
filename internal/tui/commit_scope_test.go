@@ -952,3 +952,71 @@ func TestBranchesEnterNoBranchNoOp(t *testing.T) {
 		t.Fatalf("enter on empty Branches: focus=%v cmd=%v, want no-op", m.focus, cmd != nil)
 	}
 }
+
+// TestCtrlGSoloSetsPendingAndReloads: ctrl+g on Branches solos the branch and
+// remembers its tip for the post-reload jump.
+func TestCtrlGSoloSetsPendingAndReloads(t *testing.T) {
+	m := newTestModelForReload(t) // Branches focused, "main" selected
+	m.branches[0].Hash = "t1deadbeef"
+	nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlG})
+	m = nm.(Model)
+	if len(m.commitScopeBranches) != 1 || m.commitScopeBranches[0] != "main" {
+		t.Fatalf("scope = %v, want [main]", m.commitScopeBranches)
+	}
+	if m.pendingGotoTip != "t1deadbeef" {
+		t.Fatalf("pendingGotoTip = %q, want the tip hash", m.pendingGotoTip)
+	}
+	if !m.commitsLoading || cmd == nil {
+		t.Fatalf("loading=%v cmd=%v, want a scope reload dispatched", m.commitsLoading, cmd != nil)
+	}
+}
+
+// TestReloadedMsgDrainsPendingGotoTip: the scope reload landing finishes the
+// ctrl+g gesture — cursor on the tip, Commits focused, pending cleared.
+func TestReloadedMsgDrainsPendingGotoTip(t *testing.T) {
+	m := newTestModelForReload(t)
+	m.branches[0].Hash = "t1deadbeef"
+	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlG})
+	m = nm.(Model)
+	msg := commitsReloadedMsg{gen: m.feed.Gen(), state: domain.FeedState{Commits: []model.Commit{
+		{Hash: "t1deadbeefcafe", Subject: "tip"},
+		{Hash: "b0aaaaaaaaaa", Subject: "base"},
+	}}}
+	nm, _ = m.Update(msg)
+	m = nm.(Model)
+	if m.pendingGotoTip != "" {
+		t.Fatalf("pendingGotoTip = %q, want drained", m.pendingGotoTip)
+	}
+	if m.focus != panelCommits || m.sel[panelCommits] != 0 {
+		t.Fatalf("focus=%v sel=%d, want panelCommits/0 (the tip row)", m.focus, m.sel[panelCommits])
+	}
+}
+
+// TestCtrlGOnSoloedBranchUnsolos: ctrl+g preserves solo's toggle — a second
+// press un-solos, and the pending jump still chains.
+func TestCtrlGOnSoloedBranchUnsolos(t *testing.T) {
+	m := newTestModelForReload(t)
+	m.branches[0].Hash = "t1deadbeef"
+	m.commitScopeBranches = []string{"main"} // already soloed to the selected branch
+	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlG})
+	m = nm.(Model)
+	if len(m.commitScopeBranches) != 0 {
+		t.Fatalf("scope = %v, want cleared (un-solo)", m.commitScopeBranches)
+	}
+	if m.pendingGotoTip != "t1deadbeef" {
+		t.Fatalf("pendingGotoTip = %q, want the tip hash even on un-solo", m.pendingGotoTip)
+	}
+}
+
+// TestCtrlGBusyNoOp: ctrl+g inherits solo's opsIdle gate — nothing mutates
+// while an operation runs.
+func TestCtrlGBusyNoOp(t *testing.T) {
+	m := newTestModelForReload(t)
+	m.branches[0].Hash = "t1deadbeef"
+	m.running = true // opsIdle() == false
+	nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlG})
+	m = nm.(Model)
+	if len(m.commitScopeBranches) != 0 || m.pendingGotoTip != "" || cmd != nil {
+		t.Fatalf("busy ctrl+g mutated state: scope=%v pending=%q cmd=%v", m.commitScopeBranches, m.pendingGotoTip, cmd != nil)
+	}
+}

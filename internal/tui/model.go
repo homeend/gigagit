@@ -49,6 +49,7 @@ type Model struct {
 	pendingRemoteTagSet   string              // tag to add to remoteTagNames on next op success (optimistic push)
 	pendingRemoteTagUnset string              // tag to drop from remoteTagNames on next op success (optimistic delete-remote)
 	pendingPushTags       []string            // tip tags to push after a successful branch Push (chained as PushTags op)
+	pendingGotoTip        string              // branch tip to jump to once the ctrl+g solo reload lands (drained by commitsReloadedMsg)
 	pendingRemoteTagAdds  []string            // tags to optimistically add to remoteTagNames on PushTags success
 	pushCheckGen          int                 // generation guard for the async pre-push remote-tag check
 	reflog                []model.ReflogEntry // HEAD reflog; shown by the Reflog tab in the bottom slot
@@ -455,6 +456,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.eager.active {
 			m.eager = eagerSearch{}
+		}
+		if tip := m.pendingGotoTip; tip != "" {
+			m.pendingGotoTip = ""
+			nm, cmd := m.gotoCommitByHash(tip)
+			return nm, cmd
 		}
 		return m, nil
 	case historyListMsg:
@@ -1330,6 +1336,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			if m.canShowReflogFiles() {
 				return m.openReflogFiles()
+			}
+		case "ctrl+g":
+			// Solo the selected branch AND land on its tip: run the .-menu
+			// "Solo this branch" row (its toggle semantics included), remembering
+			// the tip so the commitsReloadedMsg handler can finish the jump once
+			// the scope reload lands.
+			if m.focus == panelBranches {
+				if b, ok := m.selectedBranch(); ok {
+					if r, rowOK := m.commitSoloRow(); rowOK { // gates opsIdle
+						m.pendingGotoTip = b.Hash
+						return r.run(m)
+					}
+				}
 			}
 		case "h":
 			if m.canShowFileDiff() {
@@ -2730,6 +2749,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.remoteTagNames = nil // tag names from a different repo must not bleed into the new one
 	m.pushCheckGen++       // drop any in-flight pre-push tag check from the old repo
 	m.pendingPushTags = nil
+	m.pendingGotoTip = "" // a repo switch must not fire a stale tip jump
 	m.pendingRemoteTagAdds = nil
 	m.notices = nil
 	m.noticesUnread = false
