@@ -47,3 +47,43 @@ func (s *Service) DiffPatch(ctx context.Context, spec model.DiffSpec) (string, e
 		return s.repo.DiffPatch(ctx, spec)
 	})
 }
+
+// ShowStat returns rev's header line plus terse per-file stats.
+func (s *Service) ShowStat(ctx context.Context, rev string, paths []string) (model.LogLine, []model.DiffStat, error) {
+	type showStat struct {
+		line  model.LogLine
+		stats []model.DiffStat
+	}
+	v, err := query(ctx, s, "showstat:"+rev+":"+strings.Join(paths, "\x00"), func(ctx context.Context) (showStat, error) {
+		line, err := s.repo.CommitLine(ctx, rev)
+		if err != nil {
+			return showStat{}, err
+		}
+		out, err := s.repo.ShowNumstat(ctx, rev, paths)
+		if err != nil {
+			return showStat{}, err
+		}
+		return showStat{line: line, stats: git.ParseNumstat(out)}, nil
+	})
+	return v.line, v.stats, err
+}
+
+// ShowPatch returns rev's header line plus its full patch text.
+func (s *Service) ShowPatch(ctx context.Context, rev string, paths []string) (model.LogLine, string, error) {
+	type showPatch struct {
+		line  model.LogLine
+		patch string
+	}
+	v, err := query(ctx, s, "showpatch:"+rev+":"+strings.Join(paths, "\x00"), func(ctx context.Context) (showPatch, error) {
+		line, err := s.repo.CommitLine(ctx, rev)
+		if err != nil {
+			return showPatch{}, err
+		}
+		patch, err := s.repo.ShowPatch(ctx, rev, paths)
+		if err != nil {
+			return showPatch{}, err
+		}
+		return showPatch{line: line, patch: patch}, nil
+	})
+	return v.line, v.patch, err
+}
