@@ -54,8 +54,22 @@ func TestConflictRunsUnderReadReservation(t *testing.T) {
 	})
 }
 
+// TestConflictCleanStatusSkipsGate asserts the STEADY-STATE contract: once the
+// git dir is cached, a clean status short-circuits on pure file stats without
+// touching the gate. The very first call on a fresh Service is exempt — it
+// must resolve the git dir (one gated git invocation) per the paused-op stat
+// probe's design (docs/superpowers/specs/2026-07-03-resume-paused-op-design.md),
+// so this test primes that cache before asserting the gate-free path.
 func TestConflictCleanStatusSkipsGate(t *testing.T) {
-	svc := New(&git.Repo{Runner: gitexec.NewFakeRunner()})
+	fake := gitexec.NewFakeRunner()
+	fake.SetResponse("git rev-parse (git-dir)", gitexec.Result{Stdout: t.TempDir() + "\n"})
+	svc := New(&git.Repo{Runner: fake})
+
+	// Prime: resolves and caches the git dir under the gate.
+	if cs := svc.Conflict(context.Background(), model.WorkingTreeStatus{Branch: "main"}); cs != (ConflictState{}) {
+		t.Fatalf("priming Conflict = %+v, want zero", cs)
+	}
+
 	res := holdTreeWrite(t, svc)
 	defer res.Release()
 
@@ -67,7 +81,7 @@ func TestConflictCleanStatusSkipsGate(t *testing.T) {
 			t.Fatalf("clean status Conflict = %+v, want zero", cs)
 		}
 	case <-time.After(2 * time.Second):
-		t.Fatal("Conflict on a clean status blocked on the gate — the no-probe short-circuit must not reserve")
+		t.Fatal("Conflict on a clean status blocked on the gate — the steady-state short-circuit must not reserve")
 	}
 }
 
