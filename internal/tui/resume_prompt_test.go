@@ -208,3 +208,22 @@ func TestResolveFooterBindingAdvertisesPausedOp(t *testing.T) {
 	}
 	t.Fatal("resolve binding not found in globalBindings")
 }
+
+// An op continued/aborted OUTSIDE gg: x opens the process on stale
+// m.conflict, the probe reports nothing in progress, and the release must
+// clear the stale attribution so the ⏸ notice doesn't linger on a clean repo.
+func TestInProgressProbeClearsStaleConflict(t *testing.T) {
+	m := Model{conflict: domain.ConflictState{Op: "rebase"}}
+	m, _ = startConflictProcess(m)
+	if m.proc == nil {
+		t.Fatal("precondition: process should open on the stale paused op")
+	}
+	next, _ := m.Update(inProgressMsg{op: ""})
+	m2 := next.(Model)
+	if m2.proc != nil {
+		t.Fatal("slot not released when probe found nothing in progress")
+	}
+	if m2.conflict.Op != "" {
+		t.Fatal("stale m.conflict not cleared — phantom ⏸ notice would linger")
+	}
+}

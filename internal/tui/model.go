@@ -1993,6 +1993,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Fully resolved and no merge/rebase still in progress → done.
 			if len(cp.files) == 0 && msg.op == "" {
 				m.proc = nil
+				// The probe is fresher truth than the last status read: without
+				// this, an op continued/aborted OUTSIDE gg leaves a stale
+				// ⏸-paused notice (and a stale x gate) until the next refresh.
+				m.conflict = domain.ConflictState{}
 			}
 		}
 		return m, nil
