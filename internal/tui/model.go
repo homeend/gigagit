@@ -1134,11 +1134,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case "t": // toggle maximize of the focused left-column panel
 			if m.canMaximizeLeft() {
-				if m.leftMaxed && m.leftMax == m.focus {
-					m.leftMaxed = false
-				} else {
+				switch {
+				case m.fullMaxed:
+					// Drop one level: fullscreen → column-maximize. Never a
+					// hidden double-toggle of the pin underneath.
+					m.fullMaxed = false
 					m.leftMaxed = true
 					m.leftMax = m.focus
+				case m.leftMaxed && m.leftMax == m.focus:
+					m.leftMaxed = false
+				default:
+					m.leftMaxed = true
+					m.leftMax = m.focus
+				}
+			}
+			return m, nil
+		case "T": // toggle fullscreen of the focused panel (left panel or Commits)
+			if m.canFullMaximize() {
+				if m.fullMaxed && m.fullMax == m.focus {
+					m.fullMaxed = false // back to whatever t-state sits underneath
+				} else {
+					m.fullMaxed = true
+					m.fullMax = m.focus
 				}
 			}
 			return m, nil
@@ -1566,6 +1583,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// non-empty query, so the residue is inert.
 			if m.filterQuery != "" {
 				m.filterQuery = ""
+				return m, nil
+			}
+			// Lowest priority: with nothing lighter to drop, esc exits a T
+			// fullscreen (back to the t-state underneath — never-trap rule).
+			if m.fullMaxed {
+				m.fullMaxed = false
+				return m, nil
 			}
 		case "up", "k":
 			if m.sel[m.focus] > 0 {

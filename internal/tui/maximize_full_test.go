@@ -115,3 +115,111 @@ func TestCanFullMaximize(t *testing.T) {
 		t.Error("filesView active: T must be inert")
 	}
 }
+
+// press dispatches one key and unwraps the model.
+func press(t *testing.T, m Model, key string) Model {
+	t.Helper()
+	u, _ := m.Update(keyMsg(key))
+	return u.(Model)
+}
+
+func TestFullscreenToggleT(t *testing.T) {
+	m := maxModel()
+	m.focus = panelFiles
+
+	m = press(t, m, "T")
+	if !m.fullMaxed || m.fullMax != panelFiles {
+		t.Fatalf("after T: fullMaxed=%v fullMax=%v", m.fullMaxed, m.fullMax)
+	}
+	if m.leftMaxed {
+		t.Fatal("T must not set the t column pin")
+	}
+	m = press(t, m, "T")
+	if m.fullMaxed {
+		t.Fatal("second T must restore")
+	}
+}
+
+func TestFullscreenOnCommits(t *testing.T) {
+	m := maxModel()
+	m.focus = panelCommits
+	m = press(t, m, "T")
+	if !m.fullMaxed || m.fullMax != panelCommits {
+		t.Fatalf("after T on Commits: fullMaxed=%v fullMax=%v", m.fullMaxed, m.fullMax)
+	}
+	// t stays inert on Commits, fullscreen or not.
+	m = press(t, m, "t")
+	if m.leftMaxed || !m.fullMaxed {
+		t.Fatalf("t on fullscreen Commits: leftMaxed=%v fullMaxed=%v, want false/true", m.leftMaxed, m.fullMaxed)
+	}
+}
+
+// t → T → T lands back on column-maximized: the t pin survives underneath.
+func TestLadderColumnThenFullscreenThenBack(t *testing.T) {
+	m := maxModel()
+	m.focus = panelFiles
+	m = press(t, m, "t")
+	m = press(t, m, "T")
+	if !m.fullMaxed || !m.leftMaxed {
+		t.Fatalf("t then T: fullMaxed=%v leftMaxed=%v, want both", m.fullMaxed, m.leftMaxed)
+	}
+	m = press(t, m, "T")
+	if m.fullMaxed || !m.leftMaxed || m.leftMax != panelFiles {
+		t.Fatalf("T again: fullMaxed=%v leftMaxed=%v leftMax=%v, want column-maximized Files", m.fullMaxed, m.leftMaxed, m.leftMax)
+	}
+}
+
+// t while fullscreen drops exactly one level: to column-maximized, never a
+// hidden double-toggle back to normal.
+func TestLadderTDropsFullscreenToColumn(t *testing.T) {
+	m := maxModel()
+	m.focus = panelFiles
+	m = press(t, m, "T")
+	m = press(t, m, "t")
+	if m.fullMaxed {
+		t.Fatal("t while fullscreen must clear the fullscreen pin")
+	}
+	if !m.leftMaxed || m.leftMax != panelFiles {
+		t.Fatalf("t while fullscreen: leftMaxed=%v leftMax=%v, want column pin on Files", m.leftMaxed, m.leftMax)
+	}
+}
+
+func TestEscExitsFullscreen(t *testing.T) {
+	m := maxModel()
+	m.focus = panelFiles
+	m = press(t, m, "T")
+	m = press(t, m, "esc")
+	if m.fullMaxed {
+		t.Fatal("esc must exit fullscreen")
+	}
+}
+
+// esc is the lowest-priority consumer: an active filter clears first and the
+// same press must NOT also drop fullscreen.
+func TestEscPrefersFilterOverFullscreen(t *testing.T) {
+	m := maxModel()
+	m.focus = panelFiles
+	m = press(t, m, "T")
+	m.filterQuery = "x"
+	m = press(t, m, "esc")
+	if m.filterQuery != "" {
+		t.Fatal("esc should clear the filter")
+	}
+	if !m.fullMaxed {
+		t.Fatal("the filter-clearing esc must not also exit fullscreen")
+	}
+	m = press(t, m, "esc")
+	if m.fullMaxed {
+		t.Fatal("second esc exits fullscreen")
+	}
+}
+
+func TestFullscreenInertInFilesView(t *testing.T) {
+	m := maxModel()
+	m.focus = panelFiles
+	m.filesView = &contentPopup{}
+	m = press(t, m, "T")
+	if m.fullMaxed {
+		t.Fatal("T must be inert while the files view owns the screen")
+	}
+}
