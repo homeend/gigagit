@@ -20,16 +20,18 @@ guards against removing the worktree you are standing in.
       on branch main (origin/main ↑0 ↓0)
       working tree clean
       #2 !1 push
-      ! error: push needs a decision (options: rebase, force, abort)
-      #done 1 ok, 1 failed (stopped)
+      ! error: push-rejected needs a decision (options: rebase, force, abort); rerun with the matching flag
+      #done 1 ok, 1 failed
 
   Header `#<idx> ok|!<exit> <cmdline>` precedes each command's output;
   stderr lines are prefixed `! `; the `#done` trailer summarizes. Batch
-  stops at the first failure unless `--keep-going`. Sub-commands read an
-  empty stdin — anything needing a decision fails loud with its options
-  instead of hanging, exactly like a single non-interactive run. Exit: 0
-  all ok, 1 any failed, 2 script/usage error. Prefer batch whenever you
-  would otherwise chain 2+ gg calls.
+  stops at the first failure unless `--keep-going`; the trailer appends
+  `(stopped)` when the stop skipped later lines (not when the failure was
+  the last line). Nested `batch` inside a batch script is rejected.
+  Sub-commands read an empty stdin — anything needing a decision fails
+  loud with its options instead of hanging, exactly like a single
+  non-interactive run. Exit: 0 all ok, 1 any failed, 2 script/usage
+  error. Prefer batch whenever you would otherwise chain 2+ gg calls.
 - `gg log [-n N] [<rev>|<A..B>]` — terse history, newest first: one
   `<short-sha> <subject>` line per commit. Default N=10, rev defaults to
   HEAD; ranges (`main..HEAD`) pass through.

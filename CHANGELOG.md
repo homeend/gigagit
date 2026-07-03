@@ -22,11 +22,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   #2 ok commit -m "batch commit"
   #3 !2 bogus
   ! unknown command "bogus"
-  #done 2 ok, 1 failed (stopped)
+  #done 2 ok, 1 failed
   ```
   (`#<idx> ok <cmdline>` or `#<idx> !<exit> <cmdline>`, stdout verbatim,
   stderr lines prefixed `! `). Batch stops at the first failure unless
-  `--keep-going`; the `#done` trailer notes `(stopped)` when it did.
+  `--keep-going`; the `#done` trailer notes `(stopped)` when the stop
+  skipped later lines (not when the failure was the last line).
   Sub-commands read an empty stdin, so anything needing a decision fails
   loud with its options instead of hanging — same non-interactive contract
   as a single `gg` run. Exit codes: 0 all ok, 1 any command failed, 2
