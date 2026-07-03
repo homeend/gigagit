@@ -2,6 +2,7 @@ package tui
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/homeend/gigagit/internal/model"
@@ -390,5 +391,41 @@ func TestLadderTabThenTDropsToPinnedPanel(t *testing.T) {
 	}
 	if !m.leftMaxed || m.leftMax != panelFiles {
 		t.Fatalf("leftMax=%v, want the on-screen panel Files", m.leftMax)
+	}
+}
+
+// View must not draw a degenerate 0-width column: no Commits box under a
+// left-panel fullscreen, no left boxes (tab labels included) under a Commits
+// fullscreen, and never a panic.
+func TestViewFullscreenLeftPanelHidesCommits(t *testing.T) {
+	m := maxModel()
+	m.focus = panelFiles
+	m = press(t, m, "T")
+	v := m.View()
+	if strings.Contains(v, "Commits (") {
+		t.Error("fullscreen Files: Commits box should not render")
+	}
+	// The "Commits (" substring check above passes even pre-fix: rightW==0
+	// clamps renderPanel's innerW to 1, truncating the label to "…" before it
+	// ever reaches this string. The real, visible bug is a degenerate 0-width
+	// Commits box still drawn beside the fullscreen Files box (a second
+	// bordered sliver: "╭───╮ / │ … │ / ╰───╯"). A correctly-rendered
+	// fullscreen body draws exactly one box, so exactly one top-left corner
+	// glyph; a leaked degenerate column draws two.
+	if n := strings.Count(v, "╭"); n != 1 {
+		t.Errorf("fullscreen Files: want exactly 1 box top (╭), found %d (degenerate column)", n)
+	}
+}
+
+func TestViewFullscreenCommitsHidesLeftColumn(t *testing.T) {
+	m := maxModel()
+	m.focus = panelCommits
+	m = press(t, m, "T")
+	v := m.View()
+	if !strings.Contains(v, "Commits (") {
+		t.Error("fullscreen Commits: Commits box missing")
+	}
+	if strings.Contains(v, "Branches") || strings.Contains(v, "Staged") {
+		t.Error("fullscreen Commits: left-column labels should not render")
 	}
 }
