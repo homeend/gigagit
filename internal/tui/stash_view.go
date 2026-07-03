@@ -178,10 +178,18 @@ func (m Model) openStashView() (Model, tea.Cmd) {
 }
 
 // closeStashView closes the window and restores focus to the left panel that
-// had it before S was pressed.
+// had it before S was pressed. Exception: when the fullscreen pin is on
+// Commits, lastLeftPanel is stale (rememberLeftFocus only records a real
+// left-panel focus, and opening the stash list from a Commits pin never
+// leaves Commits) — restoring it would land focus on a panel the resuming
+// pin immediately hides, so focus goes back to Commits instead.
 func (m Model) closeStashView() Model {
 	m.stashView = nil
-	m.focus = m.lastLeftPanel
+	if m.fullMaxed && m.fullMax == panelCommits {
+		m.focus = panelCommits
+	} else {
+		m.focus = m.lastLeftPanel
+	}
 	return m
 }
 

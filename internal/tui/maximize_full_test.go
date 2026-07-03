@@ -343,6 +343,38 @@ func TestTagSoloTransfersFullscreenPinEndToEnd(t *testing.T) {
 	}
 }
 
+// The pin transfer is only coherent when the pin goes live immediately: a
+// jump fired under a suspending surface must leave the pin alone (the
+// surface's close path restores its own remembered focus, which would
+// otherwise mismatch a rewritten pin).
+func TestFocusCommitsPanelNoTransferWhileYielded(t *testing.T) {
+	m := maxModel()
+	m.focus = panelStaged
+	m = press(t, m, "T") // pin Staged
+	m.stashView = &stashView{}
+	m = m.focusCommitsPanel()
+	if m.focus != panelCommits {
+		t.Fatalf("focus = %v, want Commits", m.focus)
+	}
+	if m.fullMax != panelStaged {
+		t.Fatalf("fullMax = %v, want untouched Staged pin", m.fullMax)
+	}
+}
+
+// Closing the stash list over a Commits fullscreen must land focus back on
+// Commits — lastLeftPanel would strand focus on a panel the resuming pin
+// hides (T on Commits, S, esc = three ordinary keystrokes).
+func TestStashCloseRestoresCommitsPin(t *testing.T) {
+	m := maxModel()
+	m.focus = panelCommits
+	m = press(t, m, "T")
+	m = press(t, m, "S")   // open stash list (suspends the pin)
+	m = press(t, m, "esc") // close it
+	if m.focus != panelCommits || !m.fullMaxed || m.fullMax != panelCommits {
+		t.Fatalf("after S+esc: focus=%v fullMaxed=%v fullMax=%v, want Commits pin live", m.focus, m.fullMaxed, m.fullMax)
+	}
+}
+
 // Regression (found in Task 2 review): before focusOrder was gated on the
 // fullscreen pin, tab could silently drift focus off the pinned panel and a
 // following t would column-pin the WRONG (hidden) panel. The full sequence

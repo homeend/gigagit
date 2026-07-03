@@ -67,7 +67,7 @@ func (m Model) eagerAdvance() (Model, tea.Cmd) {
 	}
 	if d, ok := m.firstCommitMatch(m.eager.query); ok {
 		m.sel[panelCommits] = d
-		m.focus = panelCommits
+		m = m.focusCommitsPanel()
 		m.eager = eagerSearch{}
 		return m, nil
 	}

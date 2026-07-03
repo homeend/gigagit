@@ -2288,10 +2288,13 @@ func (m Model) activateTab(p panel) Model {
 // (solo a tag, go to a branch tip, commits touching a file). Plain focus
 // assignment would strand focus on a hidden panel while a T fullscreen pin
 // is active elsewhere, so the pin follows the jump — same re-pin rule as
-// activateTab (Commits is a valid fullscreen target).
+// activateTab (Commits is a valid fullscreen target). The transfer is
+// skipped while a surface (files view/stash list/file preview) suspends the
+// pin: that surface's own close path restores its own remembered focus, and
+// rewriting the pin now would go live later under a mismatched restore.
 func (m Model) focusCommitsPanel() Model {
 	m.focus = panelCommits
-	if m.fullMaxed {
+	if m.fullMaxed && !m.fullscreenYielded() {
 		m.fullMax = panelCommits
 	}
 	return m
@@ -2337,12 +2340,20 @@ func (m Model) canMaximizeLeft() bool {
 	return slices.Contains(m.leftColumnPanels(), m.focus)
 }
 
+// fullscreenYielded reports whether a surface that needs its own column is
+// up (files view, stash list, file preview). While one is, the T pin is
+// suspended — layout ignores it and focusCommitsPanel must not transfer it,
+// because the surface's close path restores its own remembered focus.
+func (m Model) fullscreenYielded() bool {
+	return m.filesView != nil || m.stashView != nil || m.filesPreview != nil
+}
+
 // canFullMaximize reports whether T can pin the focused panel fullscreen:
 // focus is a small left-column panel or Commits, and no surface that needs
 // its own column is up (files view owns the left column; stash list and file
 // preview own the right one).
 func (m Model) canFullMaximize() bool {
-	if m.filesView != nil || m.stashView != nil || m.filesPreview != nil {
+	if m.fullscreenYielded() {
 		return false
 	}
 	return m.focus == panelCommits || slices.Contains(m.leftColumnPanels(), m.focus)
@@ -2355,7 +2366,7 @@ func (m Model) canFullMaximize() bool {
 // blanking the screen. On a narrow (<40) terminal leftColumnPanels() is
 // empty, so a left-panel pin deactivates itself there too.
 func (m Model) fullMaxActive() bool {
-	if !m.fullMaxed || m.filesView != nil || m.stashView != nil || m.filesPreview != nil {
+	if !m.fullMaxed || m.fullscreenYielded() {
 		return false
 	}
 	return m.fullMax == panelCommits || slices.Contains(m.leftColumnPanels(), m.fullMax)
