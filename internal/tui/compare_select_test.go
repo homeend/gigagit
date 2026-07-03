@@ -68,10 +68,15 @@ func TestCompareSetToggleAndClear(t *testing.T) {
 	if !m.compareSetDisplayIndices(panelCommits)[0] {
 		t.Fatal("display index 0 must be marked")
 	}
-	// Clear row now present; clearing empties the set.
+	// Clear row hides while the cursor sits ON the single mark ("Unmark
+	// commit" covers it); move the cursor away and it appears.
+	if _, ok := m.commitCompareClearRow(); ok {
+		t.Fatal("clear row must hide when the cursor is on the only mark")
+	}
+	m.sel[panelCommits] = 1
 	cr, ok := m.commitCompareClearRow()
 	if !ok {
-		t.Fatal("clear row must appear with a non-empty set")
+		t.Fatal("clear row must appear for an off-cursor mark")
 	}
 	mm, _ = cr.run(m)
 	m = mm.(Model)
@@ -250,5 +255,51 @@ func TestShiftDownGrowsCompareSelection(t *testing.T) {
 	}
 	if mm.sel[panelCommits] != 1 {
 		t.Fatalf("cursor must move to row 1, got %d", mm.sel[panelCommits])
+	}
+}
+
+// TestUnmarkRowsVisibility pins the three .-menu unmark states: cursor-on-mark
+// → "Unmark commit"; ≥2 marks → "Unmark all commits (N)"; exactly one mark
+// with the cursor elsewhere → "Unmark the marked commit".
+func TestUnmarkRowsVisibility(t *testing.T) {
+	m := loadedModelLinearCommits(t, 3)
+	m.focus = panelCommits
+
+	// Cursor on a marked commit → toggle row reads "Unmark commit".
+	m.commitCompareSet = map[string]bool{m.commits[0].Hash: true}
+	m.sel[panelCommits] = 0
+	r, ok := m.commitCompareToggleRow()
+	if !ok || r.label != "Unmark commit" {
+		t.Fatalf("cursor-on-mark toggle row = %q ok=%v, want \"Unmark commit\"", r.label, ok)
+	}
+	// ...and the clear row is hidden (the toggle row covers this state).
+	if _, ok := m.commitCompareClearRow(); ok {
+		t.Fatal("clear row must hide when the single mark is under the cursor")
+	}
+
+	// Cursor elsewhere with the single mark → "Unmark the marked commit".
+	m.sel[panelCommits] = 1
+	cr, ok := m.commitCompareClearRow()
+	if !ok || cr.label != "Unmark the marked commit" {
+		t.Fatalf("single off-cursor mark row = %q ok=%v", cr.label, ok)
+	}
+
+	// Two marks → "Unmark all commits (2)" regardless of the cursor.
+	m.commitCompareSet[m.commits[1].Hash] = true
+	cr, ok = m.commitCompareClearRow()
+	if !ok || cr.label != "Unmark all commits (2)" {
+		t.Fatalf("two-mark row = %q ok=%v, want \"Unmark all commits (2)\"", cr.label, ok)
+	}
+	mm, _ := cr.run(m)
+	if n := len(mm.(Model).commitCompareSet); n != 0 {
+		t.Fatalf("running unmark-all must empty the set, got %d", n)
+	}
+
+	// Unmarked cursor row advertises the space gesture.
+	m.commitCompareSet = nil
+	m.sel[panelCommits] = 0
+	r, ok = m.commitCompareToggleRow()
+	if !ok || r.label != "Add to compare selection (space)" {
+		t.Fatalf("unmarked toggle row = %q ok=%v", r.label, ok)
 	}
 }
