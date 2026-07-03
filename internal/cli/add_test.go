@@ -34,7 +34,6 @@ func TestAddAllFlag(t *testing.T) {
 		t.Fatalf("exit=%d stderr=%s", code, errb)
 	}
 	code, out, _ := runCLI(t, dir, "status")
-	t.Logf("Status output:\n%s", out)
 	if code != 0 || !strings.Contains(out, "A  new.txt") {
 		t.Fatalf("new.txt not staged:\n%s", out)
 	}
