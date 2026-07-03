@@ -15,8 +15,9 @@ guards against removing the worktree you are standing in.
 - `gg diff [--stat|--name-only] [--cached] [<rev>|<A..B>] [-- <paths>...]` —
   working-tree diff (default), index diff (`--cached`), or commit/range
   diff. Default prints the full patch; `--stat` prints `path +A -D` lines
-  plus a `N files +A -D` trailer (`path bin` for binaries); `--name-only`
-  prints bare paths. Paths must follow `--`. An empty diff prints nothing.
+  plus a `N files +A -D` trailer (`path bin` for binaries; renames render as
+  `old => new +A -D`); `--name-only` prints bare paths. Paths must follow
+  `--`. An empty diff prints nothing.
 - `gg show <commit> [--patch] [-- <file>...]` — `<short-sha> <subject>`
   header plus the commit's terse stat block (default) or full patch
   (`--patch`).
