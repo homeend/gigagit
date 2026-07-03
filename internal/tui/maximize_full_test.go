@@ -127,6 +127,21 @@ func press(t *testing.T, m Model, key string) Model {
 	return u.(Model)
 }
 
+// countBoxTops counts rendered box top-left corners — lines that BEGIN with
+// the rounded-border glyph ╭ (immediately after a newline, or at the very
+// start of the view). This is robust against unrelated ╭ occurrences inside
+// box content: the commit-graph's fork glyph (internal/commitgraph/graph.go)
+// also renders as ╭, but only mid-line (after the panel's left border and
+// padding), never as the first byte of a rendered line, so a raw
+// strings.Count(v, "╭") would over-count once a fixture has a forked commit.
+func countBoxTops(v string) int {
+	n := strings.Count(v, "\n╭")
+	if strings.HasPrefix(v, "╭") {
+		n++
+	}
+	return n
+}
+
 func TestFullscreenToggleT(t *testing.T) {
 	m := maxModel()
 	m.focus = panelFiles
@@ -411,8 +426,9 @@ func TestViewFullscreenLeftPanelHidesCommits(t *testing.T) {
 	// Commits box still drawn beside the fullscreen Files box (a second
 	// bordered sliver: "╭───╮ / │ … │ / ╰───╯"). A correctly-rendered
 	// fullscreen body draws exactly one box, so exactly one top-left corner
-	// glyph; a leaked degenerate column draws two.
-	if n := strings.Count(v, "╭"); n != 1 {
+	// glyph; a leaked degenerate column draws two. countBoxTops (not a raw
+	// glyph count) so a forked commit's ╭ in the graph gutter can't collide.
+	if n := countBoxTops(v); n != 1 {
 		t.Errorf("fullscreen Files: want exactly 1 box top (╭), found %d (degenerate column)", n)
 	}
 }
@@ -435,7 +451,48 @@ func TestViewFullscreenCommitsHidesLeftColumn(t *testing.T) {
 	// left box truncates its label to "…" before it ever reaches a substring
 	// check anyway. A correctly-rendered fullscreen body draws exactly one box,
 	// so exactly one top-left corner glyph; a leaked left column draws two.
-	if n := strings.Count(v, "╭"); n != 1 {
+	// countBoxTops (not a raw glyph count) so a forked commit's ╭ in the graph
+	// gutter can't collide with the box-border glyph.
+	if n := countBoxTops(v); n != 1 {
 		t.Errorf("fullscreen Commits: want exactly 1 box top (╭), found %d (degenerate column)", n)
+	}
+}
+
+// The general resume rule: any pin-resume point re-asserts focus == fullMax.
+func TestReconcileFullscreenFocus(t *testing.T) {
+	m := maxModel()
+	m.focus = panelFiles
+	m = press(t, m, "T")
+	m.focus = panelCommits // simulate a surface having moved focus
+	m = m.reconcileFullscreenFocus()
+	if m.focus != panelFiles {
+		t.Fatalf("focus = %v, want re-asserted Files pin", m.focus)
+	}
+}
+
+// Left-panel pin survives a stash excursion even when lastLeftPanel drifts.
+func TestStashCloseRestoresLeftPanelPin(t *testing.T) {
+	m := maxModel()
+	m.focus = panelFiles
+	m = press(t, m, "T")
+	m = press(t, m, "S")
+	m.lastLeftPanel = panelBranches // drift during the excursion
+	m = press(t, m, "esc")
+	if m.focus != panelFiles || !m.fullMaxed || m.fullMax != panelFiles {
+		t.Fatalf("after stash excursion: focus=%v fullMaxed=%v fullMax=%v, want Files pin live", m.focus, m.fullMaxed, m.fullMax)
+	}
+}
+
+// esc must not clear a pin that isn't driving the layout (suspended by a
+// surface) — the user would see nothing happen and lose the pin silently.
+func TestEscIgnoresSuspendedPin(t *testing.T) {
+	m := maxModel()
+	m.focus = panelFiles
+	m = press(t, m, "T")
+	m.stashView = &stashView{} // suspend
+	m.focus = panelFiles
+	m = press(t, m, "esc")
+	if !m.fullMaxed {
+		t.Fatal("esc while suspended must not clear the pin")
 	}
 }

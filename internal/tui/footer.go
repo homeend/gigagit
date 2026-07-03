@@ -84,7 +84,9 @@ var contextBindings = []footerBinding{
 	}, scopeWindow},
 	{"fullscreen", "T", "[T] full", func(m Model) bool {
 		// Same stricter gate as t: don't advertise fullscreening an empty box.
-		return m.opsIdle() && m.canFullMaximize() && m.panelLen(m.focus) > 0
+		// Also gated narrow like the \ filter binding above: below 40 columns
+		// the layout is already single-column, so T has nothing left to add.
+		return m.opsIdle() && m.canFullMaximize() && m.panelLen(m.focus) > 0 && !(m.width > 0 && m.width < 40)
 	}, scopeWindow},
 }
 

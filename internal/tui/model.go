@@ -1588,7 +1588,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			// Lowest priority: with nothing lighter to drop, esc exits a T
 			// fullscreen (back to the t-state underneath — never-trap rule).
-			if m.fullMaxed {
+			// Gated on fullMaxActive (not the raw flag): while a surface (files
+			// view/stash list/file preview) suspends the pin, it isn't driving
+			// the layout, so esc has nothing visible to undo — clearing it here
+			// would silently drop a pin the user never saw leave.
+			if m.fullMaxActive() {
 				m.fullMaxed = false
 				return m, nil
 			}
@@ -2372,6 +2376,21 @@ func (m Model) fullMaxActive() bool {
 	return m.fullMax == panelCommits || slices.Contains(m.leftColumnPanels(), m.fullMax)
 }
 
+// reconcileFullscreenFocus re-asserts the fullscreen invariant (focus ==
+// fullMax) after a suspending surface goes away. Surfaces restore focus
+// from their own memory (filesReturnFocus, lastLeftPanel), which is right
+// for the normal split but can point at a panel the resuming pin hides —
+// e.g. T on Files → S → focus drifts to a different left panel → esc closes
+// the stash list ⇒ without this, fullscreen Files would land focus on a
+// hidden panel. Call this at every point that clears the LAST suspending
+// surface (i.e. where fullMaxActive() can flip from false to true).
+func (m Model) reconcileFullscreenFocus() Model {
+	if m.fullMaxActive() {
+		m.focus = m.fullMax
+	}
+	return m
+}
+
 func (m Model) focusOrder() []panel {
 	// While a panel is fullscreen it is the only target — everything else is
 	// hidden. fullMaxActive (not the raw flag) so a stale/yielded pin falls
@@ -2677,6 +2696,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.fileMarks = nil                   // likewise drop Status file-marks from the old repo
 	m.stashView = nil                   // the new repo has its own stashes
 	m = m.closeFilesView()              // the new repo has a different commit list
+	m = m.reconcileFullscreenFocus()    // a resuming pin must not inherit focus from a surface that just closed
 	if dv := m.diffLayer(); dv != nil { // the new repo invalidates any open diff
 		m = m.removeLayer(dv)
 	}
