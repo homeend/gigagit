@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -166,5 +167,19 @@ func TestBatchPullNeverBlocks(t *testing.T) {
 	}
 	if !strings.Contains(out, "#1 !1 pull") {
 		t.Fatalf("pull section missing/misframed:\n%s", out)
+	}
+}
+
+func TestBatchSectionNewlineGuard(t *testing.T) {
+	// Simulate the cmdBatch copy path with a non-terminated section.
+	var out bytes.Buffer
+	section := bytes.NewBufferString("no trailing newline")
+	needsNL := section.Len() > 0 && section.Bytes()[section.Len()-1] != '\n'
+	io.Copy(&out, section)
+	if needsNL {
+		io.WriteString(&out, "\n")
+	}
+	if got := out.String(); got != "no trailing newline\n" {
+		t.Fatalf("got %q", got)
 	}
 }

@@ -81,12 +81,12 @@ func cmdBatch(svc *domain.Service, workdir string, args []string, stdin io.Reade
 			failed++
 			fmt.Fprintf(stdout, "#%d !%d %s\n", i+1, code, ln.echo)
 		}
+		// Defensive: a future command whose last write lacks a trailing
+		// newline must not let the next header concatenate onto its
+		// output. Check BEFORE io.Copy — the copy drains the buffer.
+		needsNL := section.Len() > 0 && section.Bytes()[section.Len()-1] != '\n'
 		io.Copy(stdout, &section)
-		// Defensive: every current command newline-terminates its last write, so
-		// this is a no-op today. It guards the framing grammar against a future
-		// command whose last write doesn't end in "\n" — without it, the next
-		// line's "#<idx> ..." header would run together with the prior output.
-		if b := section.Bytes(); len(b) > 0 && b[len(b)-1] != '\n' {
+		if needsNL {
 			io.WriteString(stdout, "\n")
 		}
 		if code != 0 && !*keepGoing {
