@@ -88,7 +88,8 @@ type Model struct {
 
 	stashView *stashView // stash list in the right column (over Commits); nil = closed
 
-	conflict domain.ConflictState // source of the current conflict (merge/rebase parties), for the notice
+	conflict          domain.ConflictState // source of the current conflict (merge/rebase parties), for the notice
+	resumePromptShown bool                 // one-shot: the continue/abort prompt fired for the current paused-op instance; re-arms when the state clears (maybeResumePrompt)
 
 	filesMode         filesMode      // authoritative source mode (changed/fullTree/compare/stash)
 	filesView         *contentPopup  // commit files tree replacing the left column; nil = closed
@@ -658,6 +659,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.proc != nil {
 				return m.proc.refreshed(m)
 			}
+			m = m.maybeResumePrompt()
 			// The initial feed walk (loadCmd) ran in parallel with the snapshot,
 			// so it had no upstreams. Now that tracked branches are known, reload
 			// once to walk their remote tips in (so a behind/diverged remote tip
@@ -735,6 +737,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.proc != nil {
 				return m.proc.refreshed(m) // process re-derives from fresh status
 			}
+			m = m.maybeResumePrompt()
 		case srcBranches:
 			key := m.panelSelKey(panelBranches)
 			m.branches = msg.value.([]model.Branch)
@@ -2723,6 +2726,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.pushCheckGen++       // drop any in-flight pre-push tag check from the old repo
 	m.pendingPushTags = nil
 	m.pendingRemoteTagAdds = nil
+	m.resumePromptShown = false // the new repo's paused state (if any) prompts fresh
 	m.notices = nil
 	m.noticesUnread = false
 	m.noticeGen++    // drop any in-flight health read from the old repo
