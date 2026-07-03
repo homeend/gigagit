@@ -4,7 +4,7 @@
 
 **Goal:** Make `/`-filter navigation on the Commits panel O(1) per keypress at any feed size by memoizing the filtered display-index slice (today: ~15 full 600k-commit rescans ≈ 5.6 s per arrow key).
 
-**Architecture:** A `commitFilterMemo` pointer field on `Model` (shared across value copies, single-goroutine — the `statusList.mtime` discipline) caches the filtered index keyed by `(query, wipCount, feedLen, baseHash, sortMode)`. `displayIndices(panelCommits)` returns it in O(1) on a hit. On a miss, two incremental rebuilds — narrowing (query extension rescans only cached matches) and append extension (feed paging rescans only the tail) — fall back to the full scan. Same-tip same-length replacements are undetectable from the key, so `graphLayerReset()` (already called at every replacement site, the established graph-layer invariant) also invalidates the memo.
+**Architecture:** A `commitFilterMemo` pointer field on `Model` (shared across value copies, single-goroutine — the `statusList.mtime` discipline) caches the filtered index keyed by `(query, wipRows content, feedLen, baseHash, sortMode)` (the wip term was widened from a count to row content by the Task-1 review; older code snippets below predate that and are kept as written). `displayIndices(panelCommits)` returns it in O(1) on a hit. On a miss, two incremental rebuilds — narrowing (query extension rescans only cached matches) and append extension (feed paging rescans only the tail) — fall back to the full scan. Same-tip same-length replacements are undetectable from the key, so `graphLayerReset()` (already called at every replacement site, the established graph-layer invariant) also invalidates the memo.
 
 **Tech Stack:** Go 1.26, Bubble Tea TUI, `testing.AllocsPerRun` guards.
 
