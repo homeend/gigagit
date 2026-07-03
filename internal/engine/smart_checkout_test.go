@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -104,5 +105,45 @@ func TestSmartCheckoutCurrentBranchRefuses(t *testing.T) {
 		Run(context.Background(), OpDeps{Repo: repo, Decider: MapDecider{}})
 	if err == nil {
 		t.Fatal("checkout of the current branch must refuse")
+	}
+}
+
+func TestSmartCheckoutDivergedReturnsTypedError(t *testing.T) {
+	dir, repo := newRepo(t)
+	gitIn(t, dir, "branch", "foo")
+	gitIn(t, dir, "commit", "--allow-empty", "-m", "main-only")
+	gitIn(t, dir, "update-ref", "refs/remotes/origin/foo", "HEAD")
+	gitIn(t, dir, "checkout", "foo")
+	gitIn(t, dir, "commit", "--allow-empty", "-m", "foo-only")
+	gitIn(t, dir, "checkout", "main")
+	_, err := SmartCheckout{RemoteRef: "origin/foo", Local: "foo", Intent: CheckoutStay}.
+		Run(context.Background(), OpDeps{Repo: repo, Decider: MapDecider{}})
+	var div CheckoutDivergedError
+	if !errors.As(err, &div) {
+		t.Fatalf("err = %v, want CheckoutDivergedError", err)
+	}
+	if div.Local != "foo" || div.RemoteRef != "origin/foo" {
+		t.Fatalf("fields = %+v, want Local=foo RemoteRef=origin/foo", div)
+	}
+	// The rendered message must stay byte-identical to the legacy fmt.Errorf.
+	if got, want := err.Error(), "foo has diverged from origin/foo; cannot fast-forward"; got != want {
+		t.Fatalf("message = %q, want %q", got, want)
+	}
+}
+
+func TestSmartCheckoutCustomLocalName(t *testing.T) {
+	dir, repo := newRepo(t)
+	configRemote(t, dir)
+	gitIn(t, dir, "update-ref", "refs/remotes/origin/foo", "HEAD")
+	res, err := SmartCheckout{RemoteRef: "origin/foo", Local: "foo2", Intent: CheckoutStay}.
+		Run(context.Background(), OpDeps{Repo: repo, Decider: MapDecider{}})
+	if err != nil {
+		t.Fatalf("checkout as foo2: %v", err)
+	}
+	if !res.Changed {
+		t.Fatalf("result = %+v, want Changed", res)
+	}
+	if ok, _ := repo.LocalBranchExists(context.Background(), "foo2"); !ok {
+		t.Fatal("local foo2 was not created")
 	}
 }

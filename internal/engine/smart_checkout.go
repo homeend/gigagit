@@ -14,6 +14,16 @@ const (
 	CheckoutSwitch                       // s
 )
 
+// CheckoutDivergedError is the typed refusal returned when an existing local
+// branch cannot fast-forward to the remote ref. Frontends detect it with
+// errors.As to offer recovery (check the remote out under a different local
+// name); the rendered message is byte-identical to the old fmt.Errorf.
+type CheckoutDivergedError struct{ Local, RemoteRef string }
+
+func (e CheckoutDivergedError) Error() string {
+	return fmt.Sprintf("%s has diverged from %s; cannot fast-forward", e.Local, e.RemoteRef)
+}
+
 // SmartCheckout materializes a remote-tracking branch as a local tracking
 // branch, fast-forward-safe, optionally switching to it. RemoteRef is the short
 // remote ref ("origin/foo"); Local is the target local name ("foo").
@@ -53,7 +63,7 @@ func (op SmartCheckout) Run(ctx context.Context, deps OpDeps) (Result, error) {
 			return Result{}, err
 		}
 		if !ff {
-			return Result{}, fmt.Errorf("%s has diverged from %s; cannot fast-forward", op.Local, op.RemoteRef)
+			return Result{}, CheckoutDivergedError{Local: op.Local, RemoteRef: op.RemoteRef}
 		}
 		deps.emit(ctx, Progress{Step: "fast-forwarding", Detail: op.Local})
 		if err := deps.Repo.FastForwardToRef(ctx, op.Local, "refs/remotes/"+op.RemoteRef); err != nil {
