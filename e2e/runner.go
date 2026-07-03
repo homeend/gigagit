@@ -1,8 +1,8 @@
 package e2e
 
 import (
-	"bytes"
 	"io"
+	"strings"
 
 	"github.com/homeend/gigagit/internal/cli"
 )
@@ -11,14 +11,15 @@ import (
 // CLIRunner is the v1 implementation; an MCPRunner mapping the same argv onto
 // MCP tool calls is planned for M3 — scenario files stay unchanged.
 type Runner interface {
-	Run(workdir string, argv []string, stdout, stderr io.Writer) int
+	Run(workdir string, argv []string, stdin string, stdout, stderr io.Writer) int
 }
 
 // CLIRunner drives the CLI frontend in-process: the full CLI→engine→real-git
-// stack. stdin is an empty non-TTY reader, so any engine decision a scenario
-// does not pre-answer via flags fails deterministically.
+// stack. stdin is a non-TTY reader over the caller-supplied string ("" = the
+// empty reader), so any engine decision a scenario does not pre-answer via
+// flags (or feed via stdin, e.g. `gg batch`) fails deterministically.
 type CLIRunner struct{}
 
-func (CLIRunner) Run(workdir string, argv []string, stdout, stderr io.Writer) int {
-	return cli.Run(workdir, argv, bytes.NewReader(nil), stdout, stderr, "")
+func (CLIRunner) Run(workdir string, argv []string, stdin string, stdout, stderr io.Writer) int {
+	return cli.Run(workdir, argv, strings.NewReader(stdin), stdout, stderr, "")
 }

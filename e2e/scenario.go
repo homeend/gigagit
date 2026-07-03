@@ -102,7 +102,8 @@ func (s Step) kind() (string, error) {
 // Run is one gg CLI invocation and its required exit code.
 type Run struct {
 	Cmd            []string `toml:"cmd"`
-	Cwd            string   `toml:"cwd"` // sandbox-root-relative; default "local"
+	Cwd            string   `toml:"cwd"`   // sandbox-root-relative; default "local"
+	Stdin          string   `toml:"stdin"` // fed to the command's stdin; "" = empty reader
 	Exit           *int     `toml:"exit"`
 	StdoutContains []string `toml:"stdout_contains"` // substrings the run's stdout must contain
 	StdoutExcludes []string `toml:"stdout_excludes"` // substrings the run's stdout must NOT contain

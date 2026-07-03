@@ -28,7 +28,7 @@ func TestScenarios(t *testing.T) {
 			for i, run := range sc.Runs {
 				stdout.Reset()
 				stderr.Reset()
-				code := (CLIRunner{}).Run(sb.dir(run.Cwd), run.Cmd, &stdout, &stderr)
+				code := (CLIRunner{}).Run(sb.dir(run.Cwd), run.Cmd, run.Stdin, &stdout, &stderr)
 				if code != *run.Exit {
 					// State past a failed run is unpredictable: stop here.
 					t.Fatalf("run[%d] gg %s: exit %d, want %d\nstdout:\n%s\nstderr:\n%s",
