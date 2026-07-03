@@ -49,6 +49,7 @@ type Model struct {
 	pendingRemoteTagSet   string              // tag to add to remoteTagNames on next op success (optimistic push)
 	pendingRemoteTagUnset string              // tag to drop from remoteTagNames on next op success (optimistic delete-remote)
 	pendingPushTags       []string            // tip tags to push after a successful branch Push (chained as PushTags op)
+	pendingCheckout       pendingCheckout     // arms the diverged-checkout recovery modal; zero remoteRef = none
 	pendingRemoteTagAdds  []string            // tags to optimistically add to remoteTagNames on PushTags success
 	pushCheckGen          int                 // generation guard for the async pre-push remote-tag check
 	reflog                []model.ReflogEntry // HEAD reflog; shown by the Reflog tab in the bottom slot
@@ -192,6 +193,18 @@ type Model struct {
 	recallOpen  bool   // history dropdown visible
 	recallIndex int    // highlight into the ring; 0 = newest (meaningful when recallOpen)
 	recallDraft string // text captured when the dropdown opened (restored on esc/back-out)
+}
+
+// pendingCheckout remembers the SmartCheckout the TUI just dispatched so a
+// CheckoutDivergedError at opFinishedMsg can offer "check out as different
+// name…". base seeds the -2/-3 suggestion (the name whose ff just failed).
+// Captured-and-cleared unconditionally at opFinishedMsg and cleared by reRoot
+// (the pendingPushTags pattern). Stale-safe: only SmartCheckout produces the
+// typed error, and every checkout dispatch overwrites this field.
+type pendingCheckout struct {
+	remoteRef string
+	base      string
+	intent    engine.CheckoutIntent
 }
 
 type panel int
