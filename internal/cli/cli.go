@@ -48,6 +48,14 @@ func Run(workdir string, args []string, stdin io.Reader, stdout, stderr io.Write
 			_ = repos.Touch(RepoStatePath, top, time.Now())
 		}
 	}
+	return runOne(svc, workdir, cmd, rest, stdin, stdout, stderr, cwdFile)
+}
+
+// runOne dispatches one already-split command against an open service. It
+// is shared by Run (one command per process) and cmdBatch (a script of
+// commands against one service). stdin is what interactive prompts read;
+// batch passes an empty reader so a command can never block on input.
+func runOne(svc *domain.Service, workdir, cmd string, rest []string, stdin io.Reader, stdout, stderr io.Writer, cwdFile string) int {
 	switch cmd {
 	case "status":
 		return cmdStatus(svc, stdout, stderr)
@@ -111,6 +119,9 @@ func Run(workdir string, args []string, stdin io.Reader, stdout, stderr io.Write
 		return cmdInit(workdir, rest, stdin, stdout, stderr)
 	case "config":
 		return cmdConfig(svc, workdir, rest, stdout, stderr)
+	case "batch":
+		fmt.Fprintln(stderr, "batch: nested batch is not allowed")
+		return 2
 	default:
 		fmt.Fprintf(stderr, "unknown command %q\n", cmd)
 		return 2
