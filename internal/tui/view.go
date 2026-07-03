@@ -416,8 +416,6 @@ func (m Model) renderInterface() string {
 		return strings.Join([]string{header, body, footer, statusLine}, "\n")
 	}
 
-	cmRows, _, cmDecos := m.commitBody(g.rightW, g.boxH[panelCommits])
-
 	var left string
 	if m.filesView != nil {
 		left = m.renderFilesView(g.leftW, g.bodyH)
@@ -439,14 +437,27 @@ func (m Model) renderInterface() string {
 	}
 	var right string
 	switch {
+	case g.boxH[panelCommits] <= 0:
+		// a fullscreen left panel owns the whole body — no right column at all
 	case m.filesPreview != nil:
 		right = m.renderFilePreview(g.rightW, g.boxH[panelCommits])
 	case m.stashView != nil:
 		right = m.renderStashList(g.rightW, g.boxH[panelCommits])
 	default:
+		cmRows, _, cmDecos := m.commitBody(g.rightW, g.boxH[panelCommits])
 		right = m.renderPanel(panelCommits, m.panelLabel(panelCommits, "Commits ("+m.commitScopeLabel()+")"), cmRows, cmDecos, g.rightW, g.boxH[panelCommits])
 	}
-	body := lipgloss.JoinHorizontal(lipgloss.Top, left, right)
+	// One side can be empty (a T fullscreen hides the other column entirely);
+	// join only when both exist so no zero-width block leaks artifacts.
+	var body string
+	switch {
+	case left == "":
+		body = right
+	case right == "":
+		body = left
+	default:
+		body = lipgloss.JoinHorizontal(lipgloss.Top, left, right)
+	}
 
 	return strings.Join([]string{header, body, footer, statusLine}, "\n")
 }

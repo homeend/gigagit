@@ -164,7 +164,7 @@ func (m Model) tagSoloRow() (actionRow, bool) {
 			} else {
 				m.commitScopeBranches = []string{name}
 			}
-			m.focus = panelCommits // land on the freshly-scoped list (Tags is mid-column)
+			m = m.focusCommitsPanel() // land on the freshly-scoped list (Tags is mid-column)
 			return m.startFeedReload()
 		},
 	}, true
@@ -256,7 +256,7 @@ func (m Model) tagJumpToCommit() (tea.Model, tea.Cmd) {
 	for di, ci := range idx {
 		if c, ok := m.commitAtUnified(ci); ok && strings.HasPrefix(c.Hash, t.Target) {
 			m.sel[panelCommits] = di
-			m.focus = panelCommits
+			m = m.focusCommitsPanel()
 			return m, nil
 		}
 	}

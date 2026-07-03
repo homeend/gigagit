@@ -166,6 +166,8 @@ type Model struct {
 	activeBottomTab panel // Staged or Reflog in the bottom slot; zero value resolves to panelStaged via bottomTab()
 	leftMax         panel // the pinned full-column left panel (valid only when leftMaxed)
 	leftMaxed       bool  // t has maximized leftMax to fill the whole left column
+	fullMax         panel // the pinned fullscreen panel (valid only when fullMaxed)
+	fullMaxed       bool  // T has maximized fullMax to fill the entire body
 
 	remoteBranches []model.RemoteBranch // refs/remotes; shown by the Remotes tab
 	shelfEntries   []model.ShelfEntry   // default bucket; shown by the Shelf tab
@@ -250,6 +252,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		// A resize can flip fullMaxActive false→true without any surface
+		// closing (leftColumnPanels empties below 40 columns and refills on
+		// widen), so this is a pin-resume point like reRoot/closeStashView.
+		m = m.reconcileFullscreenFocus()
 		if m.filesView != nil && msg.Width > 0 && msg.Width < 40 {
 			// The narrow layout has no left column; without this the view
 			// would keep capturing keys while invisible.
@@ -1138,11 +1144,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case "t": // toggle maximize of the focused left-column panel
 			if m.canMaximizeLeft() {
-				if m.leftMaxed && m.leftMax == m.focus {
-					m.leftMaxed = false
-				} else {
+				switch {
+				case m.fullMaxed:
+					// Drop one level: fullscreen → column-maximize. Never a
+					// hidden double-toggle of the pin underneath.
+					m.fullMaxed = false
 					m.leftMaxed = true
 					m.leftMax = m.focus
+				case m.leftMaxed && m.leftMax == m.focus:
+					m.leftMaxed = false
+				default:
+					m.leftMaxed = true
+					m.leftMax = m.focus
+				}
+			}
+			return m, nil
+		case "T": // toggle fullscreen of the focused panel (left panel or Commits)
+			if m.canFullMaximize() {
+				if m.fullMaxed && m.fullMax == m.focus {
+					m.fullMaxed = false // back to whatever t-state sits underneath
+				} else {
+					m.fullMaxed = true
+					m.fullMax = m.focus
 				}
 			}
 			return m, nil
@@ -1332,14 +1355,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m.activateTab(nextInOrder(leftTabs, m.activeLeftTab, dir)), nil
 			}
 		case "right":
-			if m.focus != panelCommits {
+			if m.focus != panelCommits && !m.fullMaxActive() {
 				m = m.rememberLeftFocus()
 				m.focus = panelCommits
 			}
 		case "left":
-			// No-op when already in the left column, and when the narrow
-			// layout has no left column to focus.
-			if m.focus == panelCommits && (m.width <= 0 || m.width >= 40) {
+			// No-op when already in the left column, when the narrow layout has
+			// no left column to focus, and when Commits is fullscreen (the left
+			// column is hidden).
+			if m.focus == panelCommits && (m.width <= 0 || m.width >= 40) && !m.fullMaxActive() {
 				m.focus = m.leftReturnTarget()
 			}
 		case "ctrl+l":
@@ -1577,6 +1601,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// non-empty query, so the residue is inert.
 			if m.filterQuery != "" {
 				m.filterQuery = ""
+				return m, nil
+			}
+			// Lowest priority: with nothing lighter to drop, esc exits a T
+			// fullscreen (back to the t-state underneath — never-trap rule).
+			// Gated on fullMaxActive (not the raw flag): while a surface (files
+			// view/stash list/file preview) suspends the pin, it isn't driving
+			// the layout, so esc has nothing visible to undo — clearing it here
+			// would silently drop a pin the user never saw leave.
+			if m.fullMaxActive() {
+				m.fullMaxed = false
+				return m, nil
 			}
 		case "up", "k":
 			if m.sel[m.focus] > 0 {
@@ -2264,6 +2299,25 @@ func (m Model) activateTab(p panel) Model {
 	if m.leftMaxed { // re-pin the newly shown tab so it stays full-height
 		m.leftMax = m.focus
 	}
+	if m.fullMaxed { // keep fullscreen on the newly shown tab (incl. from Commits)
+		m.fullMax = m.focus
+	}
+	return m
+}
+
+// focusCommitsPanel routes deliberate "jump to the Commits panel" actions
+// (solo a tag, go to a branch tip, commits touching a file). Plain focus
+// assignment would strand focus on a hidden panel while a T fullscreen pin
+// is active elsewhere, so the pin follows the jump — same re-pin rule as
+// activateTab (Commits is a valid fullscreen target). The transfer is
+// skipped while a surface (files view/stash list/file preview) suspends the
+// pin: that surface's own close path restores its own remembered focus, and
+// rewriting the pin now would go live later under a mismatched restore.
+func (m Model) focusCommitsPanel() Model {
+	m.focus = panelCommits
+	if m.fullMaxed && !m.fullscreenYielded() {
+		m.fullMax = panelCommits
+	}
 	return m
 }
 
@@ -2307,7 +2361,60 @@ func (m Model) canMaximizeLeft() bool {
 	return slices.Contains(m.leftColumnPanels(), m.focus)
 }
 
+// fullscreenYielded reports whether a surface that needs its own column is
+// up (files view, stash list, file preview). While one is, the T pin is
+// suspended — layout ignores it and focusCommitsPanel must not transfer it,
+// because the surface's close path restores its own remembered focus.
+func (m Model) fullscreenYielded() bool {
+	return m.filesView != nil || m.stashView != nil || m.filesPreview != nil
+}
+
+// canFullMaximize reports whether T can pin the focused panel fullscreen:
+// focus is a small left-column panel or Commits, and no surface that needs
+// its own column is up (files view owns the left column; stash list and file
+// preview own the right one).
+func (m Model) canFullMaximize() bool {
+	if m.fullscreenYielded() {
+		return false
+	}
+	return m.focus == panelCommits || slices.Contains(m.leftColumnPanels(), m.focus)
+}
+
+// fullMaxActive reports whether the T pin is currently driving the layout.
+// Same surface-yield rule as canFullMaximize (the pin is suspended, not
+// cleared, while such a surface is up) plus the stale-pin guard: a pin that
+// fell out of the visible set falls back to the normal split rather than
+// blanking the screen. On a narrow (<40) terminal leftColumnPanels() is
+// empty, so a left-panel pin deactivates itself there too.
+func (m Model) fullMaxActive() bool {
+	if !m.fullMaxed || m.fullscreenYielded() {
+		return false
+	}
+	return m.fullMax == panelCommits || slices.Contains(m.leftColumnPanels(), m.fullMax)
+}
+
+// reconcileFullscreenFocus re-asserts the fullscreen invariant (focus ==
+// fullMax) after a suspending surface goes away. Surfaces restore focus
+// from their own memory (filesReturnFocus, lastLeftPanel), which is right
+// for the normal split but can point at a panel the resuming pin hides —
+// e.g. T on Files → S → focus drifts to a different left panel → esc closes
+// the stash list ⇒ without this, fullscreen Files would land focus on a
+// hidden panel. Call this at every point that clears the LAST suspending
+// surface (i.e. where fullMaxActive() can flip from false to true).
+func (m Model) reconcileFullscreenFocus() Model {
+	if m.fullMaxActive() {
+		m.focus = m.fullMax
+	}
+	return m
+}
+
 func (m Model) focusOrder() []panel {
+	// While a panel is fullscreen it is the only target — everything else is
+	// hidden. fullMaxActive (not the raw flag) so a stale/yielded pin falls
+	// back to the normal order instead of trapping focus on a hidden panel.
+	if m.fullMaxActive() {
+		return []panel{m.fullMax}
+	}
 	// While a left panel is maximized, focus collapses to that panel and Commits
 	// — the other left panels are hidden, so they must not be tab targets.
 	if m.leftMaxed {
@@ -2337,6 +2444,9 @@ func nextInOrder(order []panel, cur panel, dir int) panel {
 // pointer at the now-inactive Branches/Worktrees tab is redirected to the
 // active tab (the one actually visible).
 func (m Model) leftReturnTarget() panel {
+	if m.fullMaxActive() && m.fullMax != panelCommits { // fullscreen: only left target
+		return m.fullMax
+	}
 	if m.leftMaxed { // maximized: the pinned panel is the only left target
 		return m.leftMax
 	}
@@ -2604,6 +2714,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.commitCompareSet = nil            // ◉ marks are repo-scoped: stale keys from the old repo would eat the two space slots and skew Unmark-all counts
 	m.stashView = nil                   // the new repo has its own stashes
 	m = m.closeFilesView()              // the new repo has a different commit list
+	m = m.reconcileFullscreenFocus()    // a resuming pin must not inherit focus from a surface that just closed
 	if dv := m.diffLayer(); dv != nil { // the new repo invalidates any open diff
 		m = m.removeLayer(dv)
 	}

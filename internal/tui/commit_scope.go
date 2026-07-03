@@ -282,7 +282,7 @@ func (m Model) commitGotoTipRow() (actionRow, bool) {
 				// hash compare finds the tip regardless of how it was decorated.
 				if c, ok := m.commitAtUnified(bi); ok && commitIsHash(c, b.Hash) {
 					m.sel[panelCommits] = di
-					m.focus = panelCommits
+					m = m.focusCommitsPanel()
 					return m, nil
 				}
 			}

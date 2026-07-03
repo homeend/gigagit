@@ -88,7 +88,7 @@ func (m Model) commitsTouchingFileRow() (actionRow, bool) {
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			m = m.closeFilesView()
 			m.commitFilter = commitFilterFields{Paths: []string{filePath}}
-			m.focus = panelCommits
+			m = m.focusCommitsPanel()
 			return m.startFeedReload()
 		},
 	}, true

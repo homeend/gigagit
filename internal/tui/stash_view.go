@@ -178,11 +178,16 @@ func (m Model) openStashView() (Model, tea.Cmd) {
 }
 
 // closeStashView closes the window and restores focus to the left panel that
-// had it before S was pressed.
+// had it before S was pressed. reconcileFullscreenFocus then re-asserts the
+// fullscreen invariant: if closing this was the last suspending surface and
+// a T pin resumes, lastLeftPanel may point at a panel the resuming pin hides
+// — e.g. a Commits pin (lastLeftPanel is stale: rememberLeftFocus never
+// records Commits) or a left-panel pin whose lastLeftPanel drifted to a
+// different left panel while the stash list was up.
 func (m Model) closeStashView() Model {
 	m.stashView = nil
 	m.focus = m.lastLeftPanel
-	return m
+	return m.reconcileFullscreenFocus()
 }
 
 // moveStashUnderFilesView shifts the stash selection by delta and fires the
