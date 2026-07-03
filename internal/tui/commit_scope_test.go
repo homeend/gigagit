@@ -507,6 +507,25 @@ func TestCommitGotoTipFindsFilteredTip(t *testing.T) {
 	}
 }
 
+// TestCommitGotoTipPreservesBranchesFilter: entering the eager fallback from a
+// /-filtered Branches list must not clear THAT panel's filter — the go-to
+// semantics only ever clear a Commits-panel filter.
+func TestCommitGotoTipPreservesBranchesFilter(t *testing.T) {
+	m := newTestModelForReload(t)
+	m.branches[0].Hash = "t1deadbeef"
+	m.commits = []model.Commit{{Hash: "b0aaaaaaaaaa", Subject: "base"}} // tip not loaded
+	m.filterPanel = panelBranches
+	m.filterQuery = "ma" // the user narrowed the Branches list
+	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = nm.(Model)
+	if !m.eager.active {
+		t.Fatal("fallback should still start the eager search")
+	}
+	if m.filterPanel != panelBranches || m.filterQuery != "ma" {
+		t.Fatalf("Branches filter clobbered: panel=%v query=%q, want panelBranches/\"ma\"", m.filterPanel, m.filterQuery)
+	}
+}
+
 func TestCommitCreateBranchRowOpensPopup(t *testing.T) {
 	m := footerModel()
 	if m.sel == nil {

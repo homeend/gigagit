@@ -43,17 +43,22 @@ func (m Model) firstCommitMatch(query string) (int, bool) {
 }
 
 // startEagerSearch begins scanning history for query (up to commitSearchMaxPages
-// pages before asking to go deeper). "Go to" semantics: it CLEARS the /-filter so
-// the cursor lands on the found commit within the full list (with surrounding
-// history), not in a filtered-down view. Reused by the @-highlight trigger too,
-// for which clearing filterQuery is a no-op and highlightQuery is left set (the
-// found commit lands highlighted). The query lives in eager state regardless.
+// pages before asking to go deeper). "Go to" semantics: it CLEARS a Commits-panel
+// /-filter so the cursor lands on the found commit within the full list (with
+// surrounding history), not in a filtered-down view. Reused by the @-highlight
+// trigger too, for which clearing filterQuery is a no-op and highlightQuery is
+// left set (the found commit lands highlighted). The query lives in eager state
+// regardless. A filter belonging to ANOTHER panel (e.g. Branches, when the
+// goto-tip fallback starts the search from there) is preserved — "go to"
+// semantics only ever concern the Commits list.
 func (m Model) startEagerSearch(query string) (Model, tea.Cmd) {
 	if query == "" {
 		return m, nil
 	}
-	m.filterTyping = false
-	m.filterQuery = "" // no sticky filter — land the cursor in the full list
+	if m.filterPanel == panelCommits {
+		m.filterTyping = false
+		m.filterQuery = "" // no sticky filter — land the cursor in the full list
+	}
 	m.eager = eagerSearch{active: true, query: query, budget: m.commitSearchMaxPages()}
 	return m.eagerAdvance()
 }
@@ -89,7 +94,7 @@ func (m Model) eagerAdvance() (Model, tea.Cmd) {
 
 // eagerPrompt is the "search deeper?" dialog shown when an eager /-search reaches
 // its page cap with no match. enter on "Search N more" resumes with a fresh
-// budget; Cancel/esc stops, leaving the /-filter active on the loaded set.
+// budget; Cancel/esc stops the scan on the loaded set.
 type eagerPrompt struct {
 	query   string
 	scanned int

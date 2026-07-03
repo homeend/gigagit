@@ -263,7 +263,7 @@ func (m Model) commitViewModeRow() (actionRow, bool) {
 // Commits cursor to the selected branch's tip commit (matched by tip HASH, so it
 // works regardless of how %D decorated the row) and focus the Commits panel.
 // A tip that isn't loaded falls back to the ctrl+f eager deep-search.
-// Mirrors commitSoloRow's gating.
+// Gated only on Branches focus + a selected branch (no opsIdle — navigation).
 func (m Model) commitGotoTipRow() (actionRow, bool) {
 	if m.focus != panelBranches {
 		return actionRow{}, false
