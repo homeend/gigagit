@@ -1,0 +1,43 @@
+name = "checkout --as: materialize a remote branch under a different local name"
+
+[input]
+steps = [
+  { branch = "foo" },
+  { switch = "foo" },
+  { write = "h.txt", content = "local\n" },
+  { commit = "local-divergent" },
+  { switch = "main" },
+]
+
+[input.origin]
+steps = [
+  { write = "f.txt", content = "v1\n" },
+  { commit = "c1" },
+  { branch = "foo" },
+  { switch = "foo" },
+  { write = "g.txt", content = "foo\n" },
+  { commit = "foo-c2" },
+  { switch = "main" },
+]
+
+# Same-name checkout still refuses (diverged local foo)…
+[[run]]
+cmd  = ["checkout", "origin/foo"]
+exit = 1
+
+# …but --as materializes the remote state under a fresh name.
+[[run]]
+cmd  = ["checkout", "origin/foo", "--as", "foo2"]
+exit = 0
+
+[expect]
+branch   = "main"
+branches = ["foo", "foo2", "main"]
+
+[[expect.log]]
+branch   = "foo2"
+subjects = ["foo-c2", "c1"]
+
+[[expect.log]]
+branch   = "foo"
+subjects = ["local-divergent", "c1"]

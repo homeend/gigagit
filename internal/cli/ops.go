@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -149,19 +150,28 @@ func cmdSwitch(svc *domain.Service, args []string, stdout, stderr io.Writer) int
 }
 
 func cmdCheckout(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
-	// Order-independent parse: one optional -s/--switch flag plus the remote ref,
-	// so `checkout origin/foo -s` and `checkout -s origin/foo` both work.
+	// Order-independent parse: -s/--switch, an optional --as <local> (or
+	// --as=<local>), and the remote ref, in any order.
 	doSwitch := false
-	ref := ""
-	for _, a := range args {
-		switch a {
-		case "-s", "--switch":
+	ref, asName := "", ""
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "-s" || a == "--switch":
 			doSwitch = true
-		default:
-			if strings.HasPrefix(a, "-") {
-				fmt.Fprintf(stderr, "checkout: unknown flag %q\n", a)
+		case a == "--as":
+			i++
+			if i >= len(args) {
+				fmt.Fprintln(stderr, "checkout: --as requires a branch name")
 				return 2
 			}
+			asName = args[i]
+		case strings.HasPrefix(a, "--as="):
+			asName = strings.TrimPrefix(a, "--as=")
+		case strings.HasPrefix(a, "-"):
+			fmt.Fprintf(stderr, "checkout: unknown flag %q\n", a)
+			return 2
+		default:
 			if ref != "" {
 				fmt.Fprintln(stderr, "checkout: too many arguments (expected one <remote>/<branch>)")
 				return 2
@@ -178,13 +188,21 @@ func cmdCheckout(svc *domain.Service, args []string, stdout, stderr io.Writer) i
 		fmt.Fprintln(stderr, "checkout: expected <remote>/<branch>, e.g. origin/foo")
 		return 2
 	}
+	if asName != "" {
+		local = asName
+	}
 	intent := engine.CheckoutStay
 	if doSwitch {
 		intent = engine.CheckoutSwitch
 	}
 	res, err := runOperation(context.Background(), svc,
 		engine.SmartCheckout{RemoteRef: ref, Local: local, Intent: intent}, cliDecider{}, stderr)
-	return finish(res, err, stdout, stderr)
+	code := finish(res, err, stdout, stderr)
+	var div engine.CheckoutDivergedError
+	if asName == "" && errors.As(err, &div) {
+		fmt.Fprintln(stderr, "hint: retry with --as <name> to check it out under a different local name")
+	}
+	return code
 }
 
 // cmdStash dispatches the stash subcommands (list/apply/pop/drop); with no
