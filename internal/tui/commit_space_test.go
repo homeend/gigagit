@@ -98,3 +98,15 @@ func TestSpaceTogglesWipRow(t *testing.T) {
 		t.Fatal("commit + WIP pair must open the compare")
 	}
 }
+
+func TestSpaceInertWhileOpRunning(t *testing.T) {
+	m := loadedModelLinearCommits(t, 3)
+	m.focus = panelCommits
+	m.sel[panelCommits] = 0
+	m.running = true // an async op is in flight
+	u, _ := m.Update(keyMsg("space"))
+	m = u.(Model)
+	if len(m.commitCompareSet) != 0 {
+		t.Fatalf("space must not edit the ◉ set mid-op (m's canMark gate), set=%v", m.commitCompareSet)
+	}
+}

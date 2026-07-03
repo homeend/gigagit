@@ -8,6 +8,9 @@ import tea "github.com/charmbracelet/bubbletea"
 // marks, and opens the comparison the moment the second mark lands. WIP
 // pseudo-rows (◇ Working tree / ◇ Staged) participate exactly as with m.
 func (m Model) handleCommitSpaceKey() (tea.Model, tea.Cmd) {
+	if !m.opsIdle() { // match the m key's canMark gate: no set edits mid-op
+		return m, nil
+	}
 	key, ok := m.selectedKey(panelCommits)
 	if !ok {
 		return m, nil

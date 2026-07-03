@@ -51,8 +51,7 @@ endpoint resolution as the `.`-menu row, including its commit↔working-tree /
 commit↔staged support. Marks **persist** after the view opens (matching the
 `.`-menu compare); esc returns to the Commits panel with both ◉ still set.
 
-Like `handleMarkKey`, the toggle itself is not gated on `opsIdle()`; the
-compare open is a read-only files-view load and needs no gate either.
+The handler gates on `m.opsIdle()` like the `m` key's `canMark()` — no set edits or compare opens while an async operation is running.
 
 Windows note: `KeyRunes{' '}` is already normalized to `KeySpace` at the top
 of the key handler, so the new handler keys off `tea.KeySpace` only.
