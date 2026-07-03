@@ -53,6 +53,34 @@ func TestShowRequiresCommit(t *testing.T) {
 	}
 }
 
+func TestShowPatchFlagAfterCommit(t *testing.T) {
+	dir := newRepoDir(t)
+	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("one\n"), 0o644)
+	gitIn(t, dir, "add", "a.txt")
+	gitIn(t, dir, "commit", "-m", "add a")
+
+	code, out, errb := runCLI(t, dir, "show", "HEAD", "--patch")
+	if code != 0 {
+		t.Fatalf("flag after commit must work, exit=%d stderr=%s", code, errb)
+	}
+	if !strings.Contains(out, "+one") {
+		t.Fatalf("patch missing:\n%s", out)
+	}
+}
+
+func TestShowPatchFlagAfterCommitWithPaths(t *testing.T) {
+	dir := newRepoDir(t)
+	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("one\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, "b.txt"), []byte("two\n"), 0o644)
+	gitIn(t, dir, "add", ".")
+	gitIn(t, dir, "commit", "-m", "add both")
+
+	code, out, _ := runCLI(t, dir, "show", "HEAD", "--patch", "--", "a.txt")
+	if code != 0 || strings.Contains(out, "b.txt") || !strings.Contains(out, "+one") {
+		t.Fatalf("scoped patch wrong (exit=%d):\n%s", code, out)
+	}
+}
+
 func TestShowFileScope(t *testing.T) {
 	dir := newRepoDir(t)
 	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("one\n"), 0o644)

@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/model"
@@ -73,6 +74,25 @@ func splitDashDash(args []string) (head, paths []string) {
 		}
 	}
 	return args, nil
+}
+
+// partitionFlags splits args (already past splitDashDash, so no literal "--"
+// remains) into flag-ish args ("-" prefixed) and positionals, preserving
+// relative order within each group. This lets a command accept its flag
+// either before or after its positional (e.g. `gg show HEAD --patch`), which
+// flag.Parse alone can't do — it stops at the first non-flag argument. It is
+// only safe for command flag sets made entirely of bool flags: a bool flag
+// never consumes a following argument as its value, so moving flag-ish
+// tokens out of position can't strand an intended flag value as a positional.
+func partitionFlags(args []string) (flagArgs, posArgs []string) {
+	for _, a := range args {
+		if strings.HasPrefix(a, "-") {
+			flagArgs = append(flagArgs, a)
+		} else {
+			posArgs = append(posArgs, a)
+		}
+	}
+	return flagArgs, posArgs
 }
 
 // renderStat prints the terse stat block: "path +A -D" per file ("path bin"
