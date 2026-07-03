@@ -71,3 +71,13 @@ func TestParseNumstatTruncatedRename(t *testing.T) {
 		}
 	}
 }
+
+func TestParseNumstatTruncatedRenameTrailingNul(t *testing.T) {
+	// Rename record whose new-path field was never written: the trailing
+	// NUL leaves an empty final field. No entry may carry an empty Path.
+	for _, s := range ParseNumstat("1\t0\t\x00old.go\x00") {
+		if s.Path == "" {
+			t.Fatalf("entry with empty path: %+v", s)
+		}
+	}
+}

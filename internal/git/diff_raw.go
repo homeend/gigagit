@@ -64,7 +64,7 @@ func ParseNumstat(out string) []model.DiffStat {
 			st.Deleted, _ = strconv.Atoi(parts[1])
 		}
 		if st.Path == "" { // rename: the next two fields are old, new
-			if i+2 >= len(fields) {
+			if i+2 >= len(fields) || fields[i+1] == "" || fields[i+2] == "" {
 				break
 			}
 			st.OldPath, st.Path = fields[i+1], fields[i+2]
