@@ -69,14 +69,12 @@ var contextBindings = []footerBinding{
 		return m.focus == panelCommits && m.canShowCommitFiles() && !(m.width > 0 && m.width < 40)
 	}, scopeRow},
 	{"", "space", "[space] mark", func(m Model) bool {
-		if m.focus != panelCommits || !m.opsIdle() || len(m.commitCompareSet) != 0 {
-			return false
-		}
-		_, ok := m.selectedKey(panelCommits)
-		return ok
-	}, scopeRow},
-	{"", "space", "[space] compare with marked", func(m Model) bool {
-		if m.focus != panelCommits || !m.opsIdle() || len(m.commitCompareSet) != 1 {
+		// Raw set size ≤ 1 guarantees space will mark (a possible stale key
+		// can't force a refusal); ≥ 2 is ambiguous under stale marks, so the
+		// footer stays silent there — omitting an available key is allowed,
+		// advertising a wrong outcome is not. Raw len keeps this O(1) per
+		// frame (validCompareKeys would scan the loaded feed every render).
+		if m.focus != panelCommits || !m.opsIdle() || len(m.commitCompareSet) > 1 {
 			return false
 		}
 		key, ok := m.selectedKey(panelCommits)
