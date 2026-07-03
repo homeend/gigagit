@@ -77,3 +77,23 @@ func suggestLocalName(branches []model.Branch, base string) string {
 		}
 	}
 }
+
+// checkoutDivergedModal offers recovery after a CheckoutDivergedError: check
+// the remote ref out under a fresh local name (popup pre-filled with the
+// first free base-2/-3… suggestion, so enter never re-collides) or cancel.
+// The intent (stay vs switch) of the failed dispatch carries over.
+func (m Model) checkoutDivergedModal(pc pendingCheckout) *decisionState {
+	return &decisionState{
+		req: engine.DecisionRequest{
+			ID:      "checkout-diverged",
+			Prompt:  pc.base + " has diverged from " + pc.remoteRef + " and cannot fast-forward.",
+			Options: []string{"check out as different name…", "cancel"},
+		},
+		onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {
+			if opt == "check out as different name…" {
+				return m.openCheckoutAsPopup(pc.remoteRef, suggestLocalName(m.branches, pc.base), pc.intent), nil
+			}
+			return m, nil
+		},
+	}
+}
