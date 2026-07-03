@@ -9,6 +9,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Check out a remote branch under a different local name.** The Remotes
+  `.`-menu gains "Check out <remote> as…" and "Switch to <remote> as…" (a name
+  popup pre-filled with the branch name), and `gg checkout` gains `--as
+  <local>`. When a same-name checkout refuses because the local branch has
+  diverged, the TUI now offers "check out as different name…" with a free
+  `-2/-3` suggestion instead of a dead-end error; the CLI prints a `--as` hint.
 - **Space-mark & compare on the Commits panel.** `space` toggles the selected
   commit (or ◇ Working tree / ◇ Staged row) in the ◉ compare selection — the
   same set as `m`, capped at two marks — and the moment the second mark lands

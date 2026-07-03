@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v43 -->
+<!-- gg:using-gg:v44 -->
 
 # Using gg (gigagit)
 
@@ -94,10 +94,11 @@ guards against removing the worktree you are standing in.
   a non-current `<branch>` offers only force/abort.
 - `gg switch <branch>` — switch branches, auto-stashing and restoring local
   changes; on a restore conflict the stash is preserved, never dropped.
-- `gg checkout <remote>/<branch> [-s|--switch]` — check out a remote-tracking
-  branch as a local tracking branch (fast-forward-safe: reuses an existing local
-  branch only if it fast-forwards to the remote ref, and refuses a diverged
-  one). `-s` also switches to it.
+- `gg checkout <remote>/<branch> [-s|--switch] [--as <local>]` — check out a
+  remote-tracking branch as a local tracking branch (fast-forward-safe: reuses
+  an existing local branch only if it fast-forwards to the remote ref, and
+  refuses a diverged one — retry with `--as <name>` to materialize it under a
+  different local name). `-s` also switches to it.
 - `gg remote ls | fetch | prune` — `ls` lists remote-tracking branches (one
   `remote/branch` per line); `fetch` updates tracking refs for all remotes
   (`git fetch --all`); `prune` drops tracking refs for branches deleted upstream.
