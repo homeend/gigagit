@@ -23,7 +23,7 @@ import (
 // cmdWorktree dispatches `gg worktree <sub>`.
 func cmdWorktree(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr io.Writer, cwdFile string) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: gg worktree <list|add|remove> [args]")
+		fmt.Fprintln(stderr, "usage: gg worktree <list|add|remove|prune> [args]")
 		return 2
 	}
 	switch args[0] {
@@ -33,8 +33,11 @@ func cmdWorktree(svc *domain.Service, args []string, stdin io.Reader, stdout, st
 		return cmdWorktreeAdd(svc, args[1:], stdin, stdout, stderr, cwdFile)
 	case "remove":
 		return cmdWorktreeRemove(svc, args[1:], stdin, stdout, stderr)
+	case "prune":
+		res, err := runOperation(context.Background(), svc, engine.PruneWorktrees{}, cliDecider{}, stderr)
+		return finish(res, err, stdout, stderr)
 	default:
-		fmt.Fprintf(stderr, "worktree: unknown subcommand %q (use list, add, or remove)\n", args[0])
+		fmt.Fprintf(stderr, "worktree: unknown subcommand %q (use list, add, remove, or prune)\n", args[0])
 		return 2
 	}
 }

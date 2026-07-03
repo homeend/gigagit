@@ -71,6 +71,7 @@ type GitOps interface {
 	AddWorktreeForBranch(ctx context.Context, path, branch string, onLine func(string)) error
 	RemoveWorktree(ctx context.Context, path string, force bool, onLine func(string)) error
 	UnlockWorktree(ctx context.Context, path string) error
+	PruneWorktrees(ctx context.Context) error
 
 	Merge(ctx context.Context, dir, branch string) error
 	MergeFFOnly(ctx context.Context, dir, commit string) error

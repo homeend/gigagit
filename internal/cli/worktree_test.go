@@ -526,3 +526,15 @@ func TestWorktreeAddHookSkippedNonInteractiveByDefault(t *testing.T) {
 		t.Fatal("non-interactive default must skip the hook")
 	}
 }
+
+func TestWorktreePruneCommand(t *testing.T) {
+	dir := newCLIRepo(t)
+	var out, errb bytes.Buffer
+	code := Run(dir, []string{"worktree", "prune"}, strings.NewReader(""), &out, &errb, "")
+	if code != 0 {
+		t.Fatalf("exit=%d stderr=%s", code, errb.String())
+	}
+	if !strings.Contains(out.String(), "pruned") {
+		t.Fatalf("out = %q", out.String())
+	}
+}

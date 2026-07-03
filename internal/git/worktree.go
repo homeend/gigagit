@@ -103,6 +103,14 @@ func (r *Repo) UnlockWorktree(ctx context.Context, path string) error {
 	return err
 }
 
+// PruneWorktrees drops stale $GIT_DIR/worktrees admin entries left by
+// deleted worktree directories (git worktree prune).
+func (r *Repo) PruneWorktrees(ctx context.Context) error {
+	argv := gitcmd.New("worktree").Arg("prune").ToArgv()
+	_, err := r.Runner.Run(ctx, "git worktree prune", argv)
+	return err
+}
+
 // DeleteBranch deletes a local branch (`git branch -d|-D <name>`). Without force
 // git refuses to delete a branch that is not fully merged; force uses -D.
 func (r *Repo) DeleteBranch(ctx context.Context, name string, force bool) error {
