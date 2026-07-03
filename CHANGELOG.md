@@ -9,6 +9,15 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- Resume a paused rebase/merge after external conflict resolution: when a
+  merge/rebase/cherry-pick/revert is paused and its conflicts were resolved
+  outside gg, the next status refresh (`r`, background, watcher, or startup)
+  shows a one-shot prompt — Continue / Abort / Not now — backed by the
+  existing continue/abort ops. A persistent `⏸ <op> paused` status segment
+  stays visible while the op is paused, and `x` now opens the conflict
+  process even with zero conflicted files (straight into its continue/abort
+  state). Detection is a stat-level probe (cached git dir → pure file
+  stats), so a clean repo still pays zero extra git invocations.
 - **Space-mark & compare on the Commits panel.** `space` toggles the selected
   commit (or ◇ Working tree / ◇ Staged row) in the ◉ compare selection — the
   same set as `m`, capped at two marks — and the moment the second mark lands
