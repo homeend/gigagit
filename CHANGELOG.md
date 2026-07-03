@@ -44,7 +44,7 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   transfers the pin to the newly shown tab. Deliberate jump-to-Commits actions
   (solo tag, go-to-tip, commits-touching-file) also transfer an active
   fullscreen pin to Commits instead of stranding focus. New predicates:
-  `canFullMaximize()`, new Model fields `fullMaxPanel`/`fullMaxGen`.
+  `canFullMaximize()`/`fullMaxActive()`, new Model fields `fullMax`/`fullMaxed`.
 - **Agent-facing CLI verbs: `gg log`, `gg diff`, `gg show`, `gg add` /
   `gg unstage`, `gg branch current` / `gg branch ls`, `gg worktree prune`.**
   A batch of terse, scriptable read/write commands aimed at AI agents driving
