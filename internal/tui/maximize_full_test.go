@@ -425,10 +425,12 @@ func TestViewFullscreenLeftPanelHidesCommits(t *testing.T) {
 	// ever reaches this string. The real, visible bug is a degenerate 0-width
 	// Commits box still drawn beside the fullscreen Files box (a second
 	// bordered sliver: "╭───╮ / │ … │ / ╰───╯"). A correctly-rendered
-	// fullscreen body draws exactly one box, so exactly one top-left corner
-	// glyph; a leaked degenerate column draws two. countBoxTops (not a raw
-	// glyph count) so a forked commit's ╭ in the graph gutter can't collide.
-	if n := countBoxTops(v); n != 1 {
+	// fullscreen body draws exactly one box, so exactly one ╭. A RAW count is
+	// required here: a leaked Commits sliver is joined to the RIGHT of the
+	// full-width Files box, so its ╭ sits mid-line where countBoxTops would
+	// miss it. It is also collision-safe here: no Commits panel renders in
+	// the expected state, so no commit-graph fork glyph can appear.
+	if n := strings.Count(v, "╭"); n != 1 {
 		t.Errorf("fullscreen Files: want exactly 1 box top (╭), found %d (degenerate column)", n)
 	}
 }
