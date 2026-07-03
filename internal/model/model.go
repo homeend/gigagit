@@ -130,6 +130,23 @@ type LogLine struct {
 	Subject string
 }
 
+// DiffSpec addresses a diff: working tree (zero value), the index
+// (Cached), a commit or range (Rev), optionally narrowed to Paths.
+type DiffSpec struct {
+	Cached bool
+	Rev    string // "", a commit-ish, or a range string (A..B / A...B)
+	Paths  []string
+}
+
+// DiffStat is one file's terse change stat (from git --numstat).
+type DiffStat struct {
+	Path    string
+	OldPath string // non-empty for renames; Path is then the new name
+	Added   int
+	Deleted int
+	Binary  bool
+}
+
 // ReflogEntry is one HEAD reflog record (git reflog), newest first.
 type ReflogEntry struct {
 	Selector  string // "HEAD@{0}"
