@@ -30,12 +30,21 @@ exit = 1
 cmd  = ["checkout", "origin/foo", "--as", "foo2"]
 exit = 0
 
+# …and the --as=<name> form works identically.
+[[run]]
+cmd  = ["checkout", "origin/foo", "--as=foo3"]
+exit = 0
+
 [expect]
 branch   = "main"
-branches = ["foo", "foo2", "main"]
+branches = ["foo", "foo2", "foo3", "main"]
 
 [[expect.log]]
 branch   = "foo2"
+subjects = ["foo-c2", "c1"]
+
+[[expect.log]]
+branch   = "foo3"
 subjects = ["foo-c2", "c1"]
 
 [[expect.log]]

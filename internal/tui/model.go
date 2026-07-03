@@ -1817,7 +1817,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.statusMsg = friendlyOpError(msg.err)
 			var div engine.CheckoutDivergedError
-			if pendingCo.remoteRef != "" && errors.As(msg.err, &div) {
+			// Field-match the typed error against the armed pending checkout so a
+			// mismatched-arm dispatch site is structurally unable to show a wrong prompt.
+			if pendingCo.remoteRef != "" && errors.As(msg.err, &div) &&
+				div.RemoteRef == pendingCo.remoteRef && div.Local == pendingCo.base {
 				m.modal = m.checkoutDivergedModal(pendingCo)
 			}
 			m.pendingRemoteTagSet = ""

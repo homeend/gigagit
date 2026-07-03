@@ -168,6 +168,10 @@ func cmdCheckout(svc *domain.Service, args []string, stdout, stderr io.Writer) i
 			asName = args[i]
 		case strings.HasPrefix(a, "--as="):
 			asName = strings.TrimPrefix(a, "--as=")
+			if asName == "" {
+				fmt.Fprintln(stderr, "checkout: --as requires a branch name")
+				return 2
+			}
 		case strings.HasPrefix(a, "-"):
 			fmt.Fprintf(stderr, "checkout: unknown flag %q\n", a)
 			return 2

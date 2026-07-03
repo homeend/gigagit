@@ -150,3 +150,14 @@ func TestRemoteCheckoutKeyArmsPending(t *testing.T) {
 		t.Fatalf("pendingCheckout = %+v, want origin/foo/foo/stay", rm.pendingCheckout)
 	}
 }
+
+func TestRemoteSwitchKeyArmsPending(t *testing.T) {
+	m := remoteModel()
+	m.cfg.UI.DisableSlowOpConfirm = true // dispatch directly; pending arming is what's under test
+	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
+	rm := nm.(Model)
+	if rm.pendingCheckout.remoteRef != "origin/foo" || rm.pendingCheckout.base != "foo" ||
+		rm.pendingCheckout.intent != engine.CheckoutSwitch {
+		t.Fatalf("pendingCheckout = %+v, want origin/foo/foo/switch", rm.pendingCheckout)
+	}
+}

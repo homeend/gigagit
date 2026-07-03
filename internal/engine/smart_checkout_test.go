@@ -146,4 +146,7 @@ func TestSmartCheckoutCustomLocalName(t *testing.T) {
 	if ok, _ := repo.LocalBranchExists(context.Background(), "foo2"); !ok {
 		t.Fatal("local foo2 was not created")
 	}
+	if up := gitOut(t, dir, "rev-parse", "--abbrev-ref", "foo2@{upstream}"); up != "origin/foo" {
+		t.Fatalf("foo2 upstream = %q, want origin/foo", up)
+	}
 }
