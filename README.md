@@ -96,6 +96,12 @@ Every smart operation is also scriptable:
 
 ```bash
 gg status
+gg log [-n N] [<rev>|<A..B>]  # terse "<short-sha> <subject>" history, newest first (default -n 10)
+gg diff [--stat|--name-only] [--cached] [<rev>|<A..B>] [-- <paths>...]
+                                      # full patch by default; --stat = terse per-file +A -D; --name-only = bare paths
+gg show <commit> [--patch] [-- <file>...]   # "<short-sha> <subject>" header + terse stat (default) or full patch
+gg add (-A | <path>...)       # stage paths, or everything incl. untracked with -A
+gg unstage <path>...          # remove paths from the index, keeping working-tree content
 gg commit -m "msg"            # add -a to stage tracked changes; --amend rewrites the last commit
 gg commit reword <commit> -m "msg"   # change a commit's message (HEAD=amend; older=in-place rebase)
 gg commit export-patch <sha> [--out <path>] [--force] [-- <file>]
@@ -113,6 +119,8 @@ gg tag rm [--remote] <name> [<remote>]  # delete a tag locally; --remote pushes 
 gg tag checkout [--branch <name>] <tag>  # check out a tag (detached, or onto a new branch)
 gg tag push <name> [<remote>]        # push a tag to a remote (auto when only one)
 gg tag annotate -m <message> <name>  # set or update a tag's annotation message (turns lightweight → annotated)
+gg branch current               # just the branch name (HEAD's short sha when detached)
+gg branch ls                    # local branches, "* " marks HEAD, "↑a ↓b" when an upstream exists
 gg branch create <name> [<start-point>]
 gg branch rename <old> <new>
 gg branch delete [--force] <name>
@@ -139,6 +147,7 @@ gg worktree list
 gg worktree add [<start-point>]
 gg worktree add --branch <name>
 gg worktree remove [--with-branch] [--force] <path>
+gg worktree prune                     # drop stale worktree administrative entries
 gg repo list
 gg repo switch <query>
 gg init [--all | --update | --agents <ids> | --list]

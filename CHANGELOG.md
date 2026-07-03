@@ -9,6 +9,33 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Agent-facing CLI verbs: `gg log`, `gg diff`, `gg show`, `gg add` /
+  `gg unstage`, `gg branch current` / `gg branch ls`, `gg worktree prune`.**
+  A batch of terse, scriptable read/write commands aimed at AI agents driving
+  `gg` non-interactively. `gg log [-n N] [<rev>|<A..B>]` prints one
+  `<short-sha> <subject>` line per commit, newest first (default `-n 10`, rev
+  defaults to `HEAD`; a range like `main..HEAD` passes through unchanged).
+  `gg diff [--stat|--name-only] [--cached] [<rev>|<A..B>] [-- <paths>...]`
+  diffs the working tree (default), the index (`--cached`), or a commit/range;
+  plain invocation prints the full patch, `--stat` prints `path +A -D` lines
+  plus an `N files +A -D` trailer (`path bin` for binaries), `--name-only`
+  prints bare paths; paths must follow a `--` separator so they're never
+  confused with a rev, and an empty diff prints nothing. `gg show <commit>
+  [--patch] [-- <file>...]` prints a `<short-sha> <subject>` header followed
+  by the terse stat block (default) or the full patch (`--patch`). `gg add
+  (-A | <path>...)` / `gg unstage <path>...` stage (including untracked files
+  via `-A`) or unstage paths — closing the long-standing hole where `gg`
+  had no way to stage a brand-new file before `gg commit`. `gg branch
+  current` prints just the branch name (HEAD's short sha when detached); `gg
+  branch ls` lists local branches, `* ` marking HEAD and `↑a ↓b` when an
+  upstream exists. `gg worktree prune` drops stale worktree administrative
+  entries (`git worktree prune`). `gg commit`'s summary now names the commit
+  it made: `✓ committed <short-sha> <subject>` (`amended ...` for
+  `--amend`). New engine primitives `engine.Stage{All}` and
+  `engine.PruneWorktrees`; new git verbs `LogLines`, `CommitLine`,
+  `DiffNumstat`, `DiffPatch`, `ShowNumstat`, `ShowPatch`, `StageAll`,
+  `PruneWorktrees`; new e2e scenarios `s77` (log/show) and `s78`
+  (add→commit).
 - **Git config explorer.** Settings (`,`) → "Git config explorer" opens a
   searchable, full-height view of every config key git knows (`git help -c`,
   ~870 keys) with columns key | local | global | default — unset scopes say
@@ -78,6 +105,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   including outside a git repository.
 
 ### Fixed
+- **`gg status` printed a blank status pair for untracked/ignored files
+  instead of git's `??`/`!!`.** `ParseStatusV2` left `Staged`/`Unstaged`
+  zero-valued for the untracked/ignored branches of the porcelain-v2 parse,
+  which `cmdStatus`'s '.'-and-zero-are-blank rule then rendered as two
+  spaces; both branches now set `?`/`!` so the CLI output matches `git
+  status`.
 - **Solo view painted the previous scope's lane graph.** Soloing a branch
   (Branches `.` → "Solo this branch") reloaded the commit rows but could keep
   the lanes laid for the earlier all-branches walk, drawing phantom forks

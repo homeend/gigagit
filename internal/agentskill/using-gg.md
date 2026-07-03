@@ -9,9 +9,25 @@ guards against removing the worktree you are standing in.
 ## Commands
 
 - `gg status` — branch, upstream ahead/behind, changed files.
+- `gg log [-n N] [<rev>|<A..B>]` — terse history, newest first: one
+  `<short-sha> <subject>` line per commit. Default N=10, rev defaults to
+  HEAD; ranges (`main..HEAD`) pass through.
+- `gg diff [--stat|--name-only] [--cached] [<rev>|<A..B>] [-- <paths>...]` —
+  working-tree diff (default), index diff (`--cached`), or commit/range
+  diff. Default prints the full patch; `--stat` prints `path +A -D` lines
+  plus a `N files +A -D` trailer (`path bin` for binaries); `--name-only`
+  prints bare paths. Paths must follow `--`. An empty diff prints nothing.
+- `gg show <commit> [--patch] [-- <file>...]` — `<short-sha> <subject>`
+  header plus the commit's terse stat block (default) or full patch
+  (`--patch`).
+- `gg add (-A | <path>...)` / `gg unstage <path>...` — stage paths (or
+  everything incl. untracked with `-A`) / remove paths from the index
+  keeping working-tree content. `gg add` + `gg commit` fully replaces
+  `git add` + `git commit` for new files.
 - `gg commit -m <msg> [-a] [--amend]` — commit (`-a` also stages tracked
   modifications; `--amend` rewrites the last commit, reusing its message when
-  `-m` is omitted).
+  `-m` is omitted). Prints a summary naming the commit it made:
+  `✓ committed <short-sha> <subject>` (`amended ...` for `--amend`).
 - `gg commit reword <commit> -m <msg>` — change a commit's message. HEAD is a
   cheap amend; an older commit replays its branch onto its own parent (in
   place, later commits preserved). Refuses the repository's root commit and a
@@ -74,6 +90,10 @@ guards against removing the worktree you are standing in.
   `@worktree`. E.g. `gg compare HEAD` (working tree vs HEAD), `gg compare
   HEAD~3 HEAD` (what changed across the last 3 commits), `gg compare main
   @staged` (the index vs `main`).
+- `gg branch current` — just the branch name (HEAD's short sha when
+  detached).
+- `gg branch ls` — local branches, `* ` marking HEAD, `↑a ↓b` when an
+  upstream exists.
 - `gg branch create <name> [<start-point>]` — create a branch (no switch);
   start point defaults to HEAD.
 - `gg branch rename <old> <new>` — rename a local branch (`git branch -m`);
@@ -199,6 +219,8 @@ guards against removing the worktree you are standing in.
   `GG_MAIN_WORKTREE` (the main checkout, useful as a copy source),
   `GG_WORKTREE_PATH`, `GG_BRANCH`, `GG_REPO`. Hook output streams to the
   busy log; a hook failure is reported but does not roll back the worktree.
+- `gg worktree prune` — drop stale worktree admin entries left behind by an
+  interrupted or manually-deleted worktree (`git worktree prune`).
 - `gg repo list` / `gg repo switch <query>` — the known-repository registry
   (MRU); `switch` prints the path of the unique match.
 - `gg inspect` — one-shot repo summary (scriptable health check).
