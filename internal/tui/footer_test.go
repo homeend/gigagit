@@ -35,6 +35,7 @@ func TestFooterActionsAllowlistFiltersAndOrders(t *testing.T) {
 func TestFooterBindingIDsUniqueAndPresent(t *testing.T) {
 	seen := map[string]string{} // id -> label (first seen)
 	nav := map[string]bool{"tab": true, "shift+tab": true, "ctrl+←/→": true}
+	multiKeyTypes := map[string]bool{"space": true} // keys that have both empty and non-empty ids
 	for _, b := range append(append([]footerBinding{}, contextBindings...), globalBindings...) {
 		if nav[b.key] {
 			if b.id != "" {
@@ -42,8 +43,11 @@ func TestFooterBindingIDsUniqueAndPresent(t *testing.T) {
 			}
 			continue
 		}
+		// Empty ids are allowed for keys that have mixed usage (e.g., space: stage/unstage on Files, mark on Commits)
 		if b.id == "" {
-			t.Errorf("binding %q (%s) is missing an id", b.key, b.label)
+			if !multiKeyTypes[b.key] {
+				t.Errorf("binding %q (%s) is missing an id", b.key, b.label)
+			}
 			continue
 		}
 		if prev, ok := seen[b.id]; ok {

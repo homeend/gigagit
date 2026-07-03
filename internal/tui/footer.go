@@ -68,6 +68,27 @@ var contextBindings = []footerBinding{
 		// opens the same view on the commit-list side.
 		return m.focus == panelCommits && m.canShowCommitFiles() && !(m.width > 0 && m.width < 40)
 	}, scopeRow},
+	{"", "space", "[space] mark", func(m Model) bool {
+		if m.focus != panelCommits || !m.opsIdle() || len(m.commitCompareSet) != 0 {
+			return false
+		}
+		_, ok := m.selectedKey(panelCommits)
+		return ok
+	}, scopeRow},
+	{"", "space", "[space] compare with marked", func(m Model) bool {
+		if m.focus != panelCommits || !m.opsIdle() || len(m.commitCompareSet) != 1 {
+			return false
+		}
+		key, ok := m.selectedKey(panelCommits)
+		return ok && !m.commitCompareSet[key]
+	}, scopeRow},
+	{"", "space", "[space] unmark", func(m Model) bool {
+		if m.focus != panelCommits || !m.opsIdle() {
+			return false
+		}
+		key, ok := m.selectedKey(panelCommits)
+		return ok && m.commitCompareSet[key]
+	}, scopeRow},
 	{"commit-message", "i", "[i] message [I] in editor", func(m Model) bool {
 		_, ok := m.commitForMessageView()
 		return ok

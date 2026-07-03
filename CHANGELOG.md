@@ -9,6 +9,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Space-mark & compare on the Commits panel.** `space` toggles the selected
+  commit (or ◇ Working tree / ◇ Staged row) in the ◉ compare selection — the
+  same set as `m`, capped at two marks — and the moment the second mark lands
+  the two-commit comparison opens. With two already marked, space refuses with
+  a hint. The `.` menu now reads "Unmark commit" / "Unmark all commits (N)" /
+  "Unmark the marked commit", and re-opening a comparison already on screen
+  keeps it instead of reloading.
 - **`gg batch [--keep-going]`.** Runs a script of `gg` commands from stdin
   against ONE shared process (one repo discovery for the whole script) —
   much cheaper than spawning `gg` once per command when an agent is chaining
