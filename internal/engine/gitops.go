@@ -44,6 +44,7 @@ type GitOps interface {
 	Commit(ctx context.Context, message string, all, amend bool) error
 	LastCommitMessage(ctx context.Context) (string, error)
 	CommitMessage(ctx context.Context, rev string) (string, error)
+	CommitLine(ctx context.Context, rev string) (model.LogLine, error)
 	RevParse(ctx context.Context, rev string) (string, error)
 	ResetSoft(ctx context.Context, ref string) error
 
