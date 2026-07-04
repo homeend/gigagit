@@ -97,3 +97,43 @@ func (m Model) checkoutDivergedModal(pc pendingCheckout) *decisionState {
 		},
 	}
 }
+
+// checkoutCurrentBranchModal replaces the doomed dispatch when c/s targets
+// the remote counterpart of the checked-out branch — updating it is a pull,
+// not a checkout. State-aware: "pull now" is offered only when the selected
+// ref IS the branch's upstream and the branch is behind it (pulling would
+// otherwise be a no-op, or fetch from a different remote than the one
+// selected); "already contains" is only claimed when provable (upstream,
+// not behind). The rename option reuses the checkout-as popup with a free
+// suggestion, keeping the pressed key's stay/switch intent.
+func (m Model) checkoutCurrentBranchModal(rb model.RemoteBranch, intent engine.CheckoutIntent) *decisionState {
+	const rename = "check out as different name…"
+	prompt := m.status.Branch + " is the current branch."
+	opts := []string{rename, "cancel"}
+	if rb.Name == m.status.Upstream {
+		if m.status.Behind > 0 {
+			prompt = fmt.Sprintf("%s is the current branch (behind %s by %d).", m.status.Branch, rb.Name, m.status.Behind)
+			opts = []string{"pull now", rename, "cancel"}
+		} else {
+			prompt = m.status.Branch + " is the current branch and already contains " + rb.Name + " (nothing to pull)."
+		}
+	}
+	return &decisionState{
+		req: engine.DecisionRequest{
+			ID:      "checkout-current-branch",
+			Prompt:  prompt,
+			Options: opts,
+		},
+		onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {
+			switch opt {
+			case "pull now":
+				// The same op the p key runs for the current branch; SmartPull's
+				// own decision ladder handles merge/rebase/dirty trees.
+				return m.startOp(engine.SmartPull{Intent: engine.PullAndStay})
+			case rename:
+				return m.openCheckoutAsPopup(rb.Name, suggestLocalName(m.branches, rb.Branch), intent), nil
+			}
+			return m, nil
+		},
+	}
+}

@@ -1092,6 +1092,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "c":
 			if m.focus == panelRemotes && m.canCheckoutRemote() {
 				rb, _ := m.selectedRemote()
+				if cur, attached := m.remoteCurrentBranch(); attached && rb.Branch == cur {
+					m.modal = m.checkoutCurrentBranchModal(rb, engine.CheckoutStay)
+					return m, nil
+				}
 				// Arm the diverged-recovery hook. Stale-safe if the confirm is
 				// declined: only SmartCheckout yields the typed error, every
 				// checkout dispatch overwrites this, and opFinishedMsg/reRoot clear it.
@@ -1117,6 +1121,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "s":
 			if m.focus == panelRemotes && m.canCheckoutRemote() {
 				rb, _ := m.selectedRemote()
+				if cur, attached := m.remoteCurrentBranch(); attached && rb.Branch == cur {
+					m.modal = m.checkoutCurrentBranchModal(rb, engine.CheckoutSwitch)
+					return m, nil
+				}
 				m.pendingCheckout = pendingCheckout{remoteRef: rb.Name, base: rb.Branch, intent: engine.CheckoutSwitch}
 				return m.confirmOp(engine.SmartCheckout{RemoteRef: rb.Name, Local: rb.Branch, Intent: engine.CheckoutSwitch}, "Switch to "+rb.Branch+"?")
 			}
