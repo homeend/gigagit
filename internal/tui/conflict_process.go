@@ -43,11 +43,14 @@ type conflictProcess struct {
 	hscroll    int                  // modeScroll horizontal offset
 }
 
-// startConflictProcess fills the active-process slot from the current conflicted
-// status. A no-op when nothing is conflicted (the caller stays as it was).
+// startConflictProcess fills the active-process slot from the current
+// conflicted status. A no-op when nothing is conflicted AND no sequencer op
+// is paused (the caller stays as it was). With zero conflicted files and a
+// paused op the process opens straight into its "all resolved — continue/
+// abort" state.
 func startConflictProcess(m Model) (Model, tea.Cmd) {
 	files := m.status.Conflicts()
-	if len(files) == 0 {
+	if len(files) == 0 && m.conflict.Op == "" {
 		return m, nil
 	}
 	m.proc = &conflictProcess{st: confListing, files: files, src: m.conflict}

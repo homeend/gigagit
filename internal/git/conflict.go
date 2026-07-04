@@ -112,3 +112,32 @@ func cleanRefName(s string) string {
 	}
 	return s
 }
+
+// PausedOpIn reports which sequencer operation is paused in the worktree
+// whose git dir is gitDir: "merge", "rebase", "cherry-pick", "revert", or "".
+// Pure file stats — no git invocation — so callers can probe on every status
+// refresh for free. Unlike the *InProgress verbs it is independent of the
+// conflicted-file count, so it also detects an op whose conflicts were
+// resolved outside gg but never continued. Probe order mirrors
+// conflictState/InProgressOp: rebase must win over cherry-pick (a paused
+// rebase pick also sets CHERRY_PICK_HEAD). A rebase-apply dir WITHOUT its
+// "rebasing" marker is git-am, which gg does not model — reported as "".
+func PausedOpIn(gitDir string) string {
+	exists := func(parts ...string) bool {
+		_, err := os.Stat(filepath.Join(append([]string{gitDir}, parts...)...))
+		return err == nil
+	}
+	switch {
+	case exists("MERGE_HEAD"):
+		return "merge"
+	case exists("rebase-merge"):
+		return "rebase"
+	case exists("rebase-apply", "rebasing"):
+		return "rebase"
+	case exists("CHERRY_PICK_HEAD"):
+		return "cherry-pick"
+	case exists("REVERT_HEAD"):
+		return "revert"
+	}
+	return ""
+}

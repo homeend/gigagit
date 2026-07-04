@@ -47,6 +47,13 @@ type Service struct {
 	prefixGlobal prefix.Store // lazily resolved; nil disables prefixes
 	prefixRepo   prefix.Store // lazily resolved; nil disables prefixes
 
+	// gitDirMu guards gitDirPath — this worktree's git dir, resolved once on
+	// first use (a repo's git dir never moves during a session; reRoot builds
+	// a fresh Service). "" = not yet resolved; a failed resolution retries on
+	// the next call. Backs the stat-level paused-op probe in conflictState.
+	gitDirMu   sync.Mutex
+	gitDirPath string
+
 	// showEOLOnly, when false (the default), hides files whose only unstaged
 	// change is line endings (CRLF↔LF) from Status/Snapshot. atomic because the
 	// TUI re-applies it from config inside loadCmd on every reload, which races

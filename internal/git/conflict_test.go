@@ -175,3 +175,59 @@ func TestCleanRefName(t *testing.T) {
 		}
 	}
 }
+
+// PausedOpIn is a pure stat probe over a git dir's sequencer markers; each
+// case fabricates the marker files directly — no git needed.
+func TestPausedOpIn(t *testing.T) {
+	touch := func(t *testing.T, dir string, parts ...string) {
+		t.Helper()
+		p := filepath.Join(append([]string{dir}, parts...)...)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte("x\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mkdir := func(t *testing.T, dir string, name string) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Join(dir, name), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cases := []struct {
+		name  string
+		setup func(t *testing.T, dir string)
+		want  string
+	}{
+		{"clean", func(*testing.T, string) {}, ""},
+		{"merge", func(t *testing.T, d string) { touch(t, d, "MERGE_HEAD") }, "merge"},
+		{"rebase merge backend", func(t *testing.T, d string) { mkdir(t, d, "rebase-merge") }, "rebase"},
+		{"rebase apply backend", func(t *testing.T, d string) {
+			mkdir(t, d, "rebase-apply")
+			touch(t, d, "rebase-apply", "rebasing")
+		}, "rebase"},
+		{"git-am is not modeled", func(t *testing.T, d string) { mkdir(t, d, "rebase-apply") }, ""},
+		{"cherry-pick", func(t *testing.T, d string) { touch(t, d, "CHERRY_PICK_HEAD") }, "cherry-pick"},
+		{"revert", func(t *testing.T, d string) { touch(t, d, "REVERT_HEAD") }, "revert"},
+		{"rebase wins over cherry-pick head", func(t *testing.T, d string) {
+			mkdir(t, d, "rebase-merge")
+			touch(t, d, "CHERRY_PICK_HEAD")
+		}, "rebase"},
+		{"missing git dir", nil, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := filepath.Join(t.TempDir(), "gitdir")
+			if tc.setup != nil {
+				if err := os.MkdirAll(dir, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				tc.setup(t, dir)
+			}
+			if got := PausedOpIn(dir); got != tc.want {
+				t.Errorf("PausedOpIn = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}

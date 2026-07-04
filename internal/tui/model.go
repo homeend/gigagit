@@ -90,7 +90,8 @@ type Model struct {
 
 	stashView *stashView // stash list in the right column (over Commits); nil = closed
 
-	conflict domain.ConflictState // source of the current conflict (merge/rebase parties), for the notice
+	conflict          domain.ConflictState // source of the current conflict (merge/rebase parties), for the notice
+	resumePromptShown bool                 // one-shot: the continue/abort prompt fired for the current paused-op instance; re-arms when the state clears (maybeResumePrompt)
 
 	filesMode         filesMode      // authoritative source mode (changed/fullTree/compare/stash)
 	filesView         *contentPopup  // commit files tree replacing the left column; nil = closed
@@ -679,6 +680,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.proc != nil {
 				return m.proc.refreshed(m)
 			}
+			m = m.maybeResumePrompt()
 			// The initial feed walk (loadCmd) ran in parallel with the snapshot,
 			// so it had no upstreams. Now that tracked branches are known, reload
 			// once to walk their remote tips in (so a behind/diverged remote tip
@@ -756,6 +758,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.proc != nil {
 				return m.proc.refreshed(m) // process re-derives from fresh status
 			}
+			m = m.maybeResumePrompt()
 		case srcBranches:
 			key := m.panelSelKey(panelBranches)
 			m.branches = msg.value.([]model.Branch)
@@ -1103,7 +1106,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.amendPrefillCmd()
 			}
 		case "x":
-			if m.opsIdle() && len(m.status.Conflicts()) > 0 {
+			if m.canEnterConflict() {
 				return startConflictProcess(m) // enter / resume from the notice
 			}
 		case "H":
@@ -2046,6 +2049,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Fully resolved and no merge/rebase still in progress → done.
 			if len(cp.files) == 0 && msg.op == "" {
 				m.proc = nil
+				// The probe is fresher truth than the last status read: without
+				// this, an op continued/aborted OUTSIDE gg leaves a stale
+				// ⏸-paused notice (and a stale x gate) until the next refresh.
+				m.conflict = domain.ConflictState{}
+				m.resumePromptShown = false // re-arm: a fresh pause must prompt again
 			}
 		}
 		return m, nil
@@ -2783,6 +2791,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.pendingGotoTip = ""                 // a repo switch must not fire a stale tip jump
 	m.pendingCheckout = pendingCheckout{} // a diverged checkout from the old repo must not prompt in the new one
 	m.pendingRemoteTagAdds = nil
+	m.resumePromptShown = false // the new repo's paused state (if any) prompts fresh
 	m.notices = nil
 	m.noticesUnread = false
 	m.noticeGen++    // drop any in-flight health read from the old repo

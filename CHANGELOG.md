@@ -17,6 +17,15 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   repo), now sub-millisecond.
 
 ### Added
+- **Resume a paused rebase/merge after external conflict resolution.** When a
+  merge/rebase/cherry-pick/revert is paused and its conflicts were resolved
+  outside gg, the next status refresh (`r`, background, watcher, or startup)
+  shows a one-shot prompt — Continue / Abort / Not now — backed by the
+  existing continue/abort ops. A persistent `⏸ <op> paused` status segment
+  stays visible while the op is paused, and `x` now opens the conflict
+  process even with zero conflicted files (straight into its continue/abort
+  state). Detection is a stat-level probe (cached git dir → pure file
+  stats), so a clean repo still pays zero extra git invocations.
 - **Check out a remote branch under a different local name.** The Remotes
   `.`-menu gains "Check out <remote> as…" and "Switch to <remote> as…" (a name
   popup pre-filled with the branch name), and `gg checkout` gains `--as

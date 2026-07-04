@@ -10,6 +10,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/git"
 	"github.com/homeend/gigagit/internal/gitexec"
+	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/observ"
 )
 
@@ -255,5 +256,85 @@ func TestConflictCleanRepoIsZero(t *testing.T) {
 	}
 	if got := s.Conflict(context.Background(), st); got != (ConflictState{}) {
 		t.Errorf("clean repo conflict = %+v, want zero", got)
+	}
+}
+
+// resolvePause stages a resolution for the f.txt conflict without continuing
+// the paused op — the "resolved outside gg" state the resume prompt detects.
+func resolvePause(t *testing.T, dir string) {
+	t.Helper()
+	writeFile(t, dir, "f.txt", "resolved\n")
+	gitRunDir(t, dir, "", "add", "-A")
+}
+
+func TestConflictDetectsResolvedPausedRebase(t *testing.T) {
+	dir := rebaseConflictDir(t)
+	resolvePause(t, dir)
+	s := svcAt(dir)
+	st, err := s.Status(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := st.Counts().Conflicted; n != 0 {
+		t.Fatalf("Conflicted = %d, want 0 after resolving", n)
+	}
+	cs := s.Conflict(context.Background(), st)
+	if cs.Op != "rebase" {
+		t.Fatalf("Conflict = %+v, want Op=rebase", cs)
+	}
+	if cs.Source != "feature" || cs.Target != "main" {
+		t.Errorf("attribution = %+v, want feature onto main", cs)
+	}
+}
+
+func TestConflictDetectsResolvedPausedMerge(t *testing.T) {
+	dir := mergeConflictDir(t)
+	resolvePause(t, dir)
+	s := svcAt(dir)
+	st, err := s.Status(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cs := s.Conflict(context.Background(), st)
+	if cs.Op != "merge" || cs.Source != "feature" || cs.Target != "main" {
+		t.Fatalf("Conflict = %+v, want {merge feature main}", cs)
+	}
+}
+
+func TestSnapshotCarriesResolvedPausedOp(t *testing.T) {
+	dir := rebaseConflictDir(t)
+	resolvePause(t, dir)
+	snap, err := svcAt(dir).Snapshot(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.Conflict.Op != "rebase" {
+		t.Errorf("snapshot conflict = %+v, want Op=rebase", snap.Conflict)
+	}
+}
+
+// Steady-state clean path: after the first Conflict call caches the git dir,
+// repeated clean-status calls must run ZERO further git invocations — the
+// paused-op probe is pure file stats.
+func TestConflictCleanSteadyStateCachesGitDir(t *testing.T) {
+	fake := gitexec.NewFakeRunner()
+	gitDir := t.TempDir() // stands in for the resolved git dir; no sequencer markers
+	fake.SetResponse("git rev-parse (git-dir)", gitexec.Result{Stdout: gitDir + "\n"})
+	fake.SetResponse("git rev-parse (common-dir)", gitexec.Result{Stdout: gitDir + "\n"})
+	s := New(&git.Repo{Runner: fake})
+	st := model.WorkingTreeStatus{} // clean: zero conflicted files
+	for i := 0; i < 3; i++ {
+		if cs := s.Conflict(context.Background(), st); cs != (ConflictState{}) {
+			t.Fatalf("call %d: clean Conflict = %+v, want zero", i, cs)
+		}
+	}
+	n := 0
+	for _, c := range fake.Calls {
+		if c.Name == "git rev-parse (git-dir)" {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Fatalf("git dir resolved %d times across 3 clean calls, want 1 (cached)", n)
 	}
 }
