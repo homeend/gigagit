@@ -43,11 +43,12 @@ Modal ID `checkout-current-branch`; options are state-aware:
   definition taken by the current branch.
 - **`cancel`** — always last (esc resolves to it via `abortOption`).
 
-Prompt text (two forms):
+Prompt text (three forms — "already contains" is only claimed when provable):
 
 - behind its upstream: `main is the current branch (behind origin/main by N).`
-- otherwise: `main is the current branch and already contains origin/main
-  (nothing to pull).`
+- its upstream, not behind: `main is the current branch and already contains
+  origin/main (nothing to pull).`
+- a non-upstream remote (containment unknown): `main is the current branch.`
 
 The prompt builder + modal constructor live in `checkout_as_popup.go` beside
 `checkoutDivergedModal` (same family of recovery UX); the key handlers only
