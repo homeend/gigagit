@@ -162,3 +162,37 @@ func (m Model) remoteDeleteRow() (actionRow, bool) {
 		},
 	}, true
 }
+
+// remoteCheckoutAsRow offers "Check out <remote> as…" on the Remotes tab: the
+// name popup materializes the remote ref under a user-chosen local name
+// (stay on the current branch). Pre-fills the remote's own branch name.
+func (m Model) remoteCheckoutAsRow() (actionRow, bool) {
+	rb, ok := m.selectedRemoteForAction()
+	if !ok {
+		return actionRow{}, false
+	}
+	return actionRow{
+		id:    "remote-checkout-as",
+		label: "Check out " + rb.Name + " as…",
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			return m.openCheckoutAsPopup(rb.Name, rb.Branch, engine.CheckoutStay), nil
+		},
+	}, true
+}
+
+// remoteSwitchAsRow is remoteCheckoutAsRow with switch intent: create the
+// local branch under the chosen name AND switch to it (SmartSwitch autostash
+// semantics, same as s).
+func (m Model) remoteSwitchAsRow() (actionRow, bool) {
+	rb, ok := m.selectedRemoteForAction()
+	if !ok {
+		return actionRow{}, false
+	}
+	return actionRow{
+		id:    "remote-switch-as",
+		label: "Switch to " + rb.Name + " as…",
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			return m.openCheckoutAsPopup(rb.Name, rb.Branch, engine.CheckoutSwitch), nil
+		},
+	}, true
+}

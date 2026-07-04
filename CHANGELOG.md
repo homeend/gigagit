@@ -17,6 +17,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   repo), now sub-millisecond.
 
 ### Added
+- **Check out a remote branch under a different local name.** The Remotes
+  `.`-menu gains "Check out <remote> as…" and "Switch to <remote> as…" (a name
+  popup pre-filled with the branch name), and `gg checkout` gains `--as
+  <local>`. When a same-name checkout refuses because the local branch has
+  diverged, the TUI now offers "check out as different name…" with a free
+  `-2/-3` suggestion instead of a dead-end error; the CLI prints a `--as` hint.
 - **Branches panel: `enter` jumps to the branch tip, `ctrl+g` solos + jumps.**
   `enter` on a selected branch runs "Go to tip in commits": the Commits cursor
   lands on the branch's tip and the panel focuses. A tip that isn't in the

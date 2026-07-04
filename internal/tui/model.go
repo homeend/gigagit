@@ -50,6 +50,7 @@ type Model struct {
 	pendingRemoteTagUnset string              // tag to drop from remoteTagNames on next op success (optimistic delete-remote)
 	pendingPushTags       []string            // tip tags to push after a successful branch Push (chained as PushTags op)
 	pendingGotoTip        string              // branch tip to jump to once the ctrl+g solo reload lands (drained by commitsReloadedMsg)
+	pendingCheckout       pendingCheckout     // arms the diverged-checkout recovery modal; zero remoteRef = none
 	pendingRemoteTagAdds  []string            // tags to optimistically add to remoteTagNames on PushTags success
 	pushCheckGen          int                 // generation guard for the async pre-push remote-tag check
 	reflog                []model.ReflogEntry // HEAD reflog; shown by the Reflog tab in the bottom slot
@@ -194,6 +195,18 @@ type Model struct {
 	recallOpen  bool   // history dropdown visible
 	recallIndex int    // highlight into the ring; 0 = newest (meaningful when recallOpen)
 	recallDraft string // text captured when the dropdown opened (restored on esc/back-out)
+}
+
+// pendingCheckout remembers the SmartCheckout the TUI just dispatched so a
+// CheckoutDivergedError at opFinishedMsg can offer "check out as different
+// name…". base seeds the -2/-3 suggestion (the name whose ff just failed).
+// Captured-and-cleared unconditionally at opFinishedMsg and cleared by reRoot
+// (the pendingPushTags pattern). Stale-safe: only SmartCheckout produces the
+// typed error, and every checkout dispatch overwrites this field.
+type pendingCheckout struct {
+	remoteRef string
+	base      string
+	intent    engine.CheckoutIntent
 }
 
 type panel int
@@ -1076,6 +1089,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "c":
 			if m.focus == panelRemotes && m.canCheckoutRemote() {
 				rb, _ := m.selectedRemote()
+				// Arm the diverged-recovery hook. Stale-safe if the confirm is
+				// declined: only SmartCheckout yields the typed error, every
+				// checkout dispatch overwrites this, and opFinishedMsg/reRoot clear it.
+				m.pendingCheckout = pendingCheckout{remoteRef: rb.Name, base: rb.Branch, intent: engine.CheckoutStay}
 				return m.confirmOp(engine.SmartCheckout{RemoteRef: rb.Name, Local: rb.Branch, Intent: engine.CheckoutStay}, "Check out "+rb.Branch+"?")
 			}
 			if m.canCommit() {
@@ -1097,6 +1114,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "s":
 			if m.focus == panelRemotes && m.canCheckoutRemote() {
 				rb, _ := m.selectedRemote()
+				m.pendingCheckout = pendingCheckout{remoteRef: rb.Name, base: rb.Branch, intent: engine.CheckoutSwitch}
 				return m.confirmOp(engine.SmartCheckout{RemoteRef: rb.Name, Local: rb.Branch, Intent: engine.CheckoutSwitch}, "Switch to "+rb.Branch+"?")
 			}
 			if m.focus == panelFiles && m.opsIdle() {
@@ -1824,8 +1842,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		chainSwitch := ""
 		var pushTags []string
 		var noticeCfg *engine.SetGitConfig
+		pendingCo := m.pendingCheckout // captured; cleared below whatever happened
 		if msg.err != nil {
 			m.statusMsg = friendlyOpError(msg.err)
+			var div engine.CheckoutDivergedError
+			// Field-match the typed error against the armed pending checkout so a
+			// mismatched-arm dispatch site is structurally unable to show a wrong prompt.
+			if pendingCo.remoteRef != "" && errors.As(msg.err, &div) &&
+				div.RemoteRef == pendingCo.remoteRef && div.Local == pendingCo.base {
+				m.modal = m.checkoutDivergedModal(pendingCo)
+			}
 			m.pendingRemoteTagSet = ""
 			m.pendingRemoteTagUnset = ""
 			m.pendingRemoteTagAdds = nil
@@ -1848,10 +1874,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.pendingSeqBump = nil
 		m.pendingSwitch = false
-		m.pendingSwitchBranch = ""  // cleared before the chained op starts, so it cannot re-fire
-		m.pendingPushTags = nil     // unconditional; covers both error and success paths
-		m.pendingNoticeConfig = nil // unconditional; covers both error and success paths
-		srcs := m.pendingSources    // nil = all (safe default for any unmapped op)
+		m.pendingSwitchBranch = ""            // cleared before the chained op starts, so it cannot re-fire
+		m.pendingPushTags = nil               // unconditional; covers both error and success paths
+		m.pendingNoticeConfig = nil           // unconditional; covers both error and success paths
+		m.pendingCheckout = pendingCheckout{} // unconditional; only a fresh checkout dispatch re-arms it
+		srcs := m.pendingSources              // nil = all (safe default for any unmapped op)
 		m.pendingSources = nil
 		if switchTo != "" {
 			return m.reRoot(switchTo)
@@ -2753,7 +2780,8 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.remoteTagNames = nil // tag names from a different repo must not bleed into the new one
 	m.pushCheckGen++       // drop any in-flight pre-push tag check from the old repo
 	m.pendingPushTags = nil
-	m.pendingGotoTip = "" // a repo switch must not fire a stale tip jump
+	m.pendingGotoTip = ""                 // a repo switch must not fire a stale tip jump
+	m.pendingCheckout = pendingCheckout{} // a diverged checkout from the old repo must not prompt in the new one
 	m.pendingRemoteTagAdds = nil
 	m.notices = nil
 	m.noticesUnread = false
