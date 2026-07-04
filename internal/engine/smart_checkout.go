@@ -24,6 +24,17 @@ func (e CheckoutDivergedError) Error() string {
 	return fmt.Sprintf("%s has diverged from %s; cannot fast-forward", e.Local, e.RemoteRef)
 }
 
+// CheckoutCurrentBranchError is the typed refusal returned when the checkout
+// targets the branch that is already checked out — updating it is a pull, not
+// a checkout. Frontends detect it with errors.As (the TUI normally pre-empts
+// this case at dispatch; this is the stale-status backstop); the rendered
+// message is byte-identical to the old fmt.Errorf.
+type CheckoutCurrentBranchError struct{ Local, RemoteRef string }
+
+func (e CheckoutCurrentBranchError) Error() string {
+	return fmt.Sprintf("%s is the current branch; use pull to update it", e.Local)
+}
+
 // SmartCheckout materializes a remote-tracking branch as a local tracking
 // branch, fast-forward-safe, optionally switching to it. RemoteRef is the short
 // remote ref ("origin/foo"); Local is the target local name ("foo").
@@ -51,7 +62,7 @@ func (op SmartCheckout) Run(ctx context.Context, deps OpDeps) (Result, error) {
 			return Result{}, err
 		}
 		if cur == op.Local {
-			return Result{}, fmt.Errorf("%s is the current branch; use pull to update it", op.Local)
+			return Result{}, CheckoutCurrentBranchError{Local: op.Local, RemoteRef: op.RemoteRef}
 		}
 		if wt, err := deps.Repo.WorktreeForBranch(ctx, op.Local); err != nil {
 			return Result{}, err

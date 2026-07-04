@@ -2,6 +2,7 @@ package tui
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -159,5 +160,108 @@ func TestRemoteSwitchKeyArmsPending(t *testing.T) {
 	if rm.pendingCheckout.remoteRef != "origin/foo" || rm.pendingCheckout.base != "foo" ||
 		rm.pendingCheckout.intent != engine.CheckoutSwitch {
 		t.Fatalf("pendingCheckout = %+v, want origin/foo/foo/switch", rm.pendingCheckout)
+	}
+}
+
+func TestCurrentBranchCheckoutOpensModalWithPull(t *testing.T) {
+	m := remoteModel() // rb = origin/foo
+	m.status.Branch = "foo"
+	m.status.Upstream = "origin/foo"
+	m.status.Behind = 3
+	nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	rm := nm.(Model)
+	if cmd != nil {
+		t.Fatal("opening the modal must not dispatch an op")
+	}
+	if rm.modal == nil || rm.modal.req.ID != "checkout-current-branch" {
+		t.Fatalf("expected checkout-current-branch modal; modal=%+v", rm.modal)
+	}
+	if got := rm.modal.req.Options; len(got) != 3 || got[0] != "pull now" || got[2] != "cancel" {
+		t.Fatalf("options = %v, want [pull now, check out as different name…, cancel]", got)
+	}
+	if !strings.Contains(rm.modal.req.Prompt, "behind origin/foo by 3") {
+		t.Fatalf("prompt = %q, want behind-by-3 wording", rm.modal.req.Prompt)
+	}
+	if rm.pendingCheckout.remoteRef != "" {
+		t.Fatal("the modal path must not arm pendingCheckout")
+	}
+	if _, cmd2 := rm.resolveModal("pull now"); cmd2 == nil {
+		t.Fatal("pull now must dispatch the pull op")
+	}
+}
+
+func TestCurrentBranchModalNoPullWhenNotBehind(t *testing.T) {
+	m := remoteModel()
+	m.status.Branch = "foo"
+	m.status.Upstream = "origin/foo"
+	m.status.Behind = 0
+	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	rm := nm.(Model)
+	if rm.modal == nil || rm.modal.req.ID != "checkout-current-branch" {
+		t.Fatalf("expected checkout-current-branch modal; modal=%+v", rm.modal)
+	}
+	for _, o := range rm.modal.req.Options {
+		if o == "pull now" {
+			t.Fatal("pull now must be absent when the branch is not behind")
+		}
+	}
+	if !strings.Contains(rm.modal.req.Prompt, "already contains origin/foo") {
+		t.Fatalf("prompt = %q, want already-contains wording", rm.modal.req.Prompt)
+	}
+}
+
+func TestCurrentBranchModalNoPullOnNonUpstreamRemote(t *testing.T) {
+	m := remoteModel() // rb = origin/foo …
+	m.status.Branch = "foo"
+	m.status.Upstream = "upstream/foo" // …but foo tracks a DIFFERENT remote
+	m.status.Behind = 5
+	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	rm := nm.(Model)
+	if rm.modal == nil || rm.modal.req.ID != "checkout-current-branch" {
+		t.Fatalf("expected checkout-current-branch modal; modal=%+v", rm.modal)
+	}
+	for _, o := range rm.modal.req.Options {
+		if o == "pull now" {
+			t.Fatal("pull now must be absent when the selected remote is not the upstream")
+		}
+	}
+	if strings.Contains(rm.modal.req.Prompt, "already contains") {
+		t.Fatalf("prompt = %q must not claim containment for a non-upstream remote", rm.modal.req.Prompt)
+	}
+}
+
+func TestCurrentBranchModalRenameOpensPopupWithIntent(t *testing.T) {
+	m := remoteModel()
+	m.branches = []model.Branch{{Name: "foo"}}
+	m.status.Branch = "foo"
+	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}}) // s → switch intent
+	rm := nm.(Model)
+	if rm.modal == nil || rm.modal.req.ID != "checkout-current-branch" {
+		t.Fatalf("expected checkout-current-branch modal; modal=%+v", rm.modal)
+	}
+	nm2, _ := rm.resolveModal("check out as different name…")
+	p, ok := nm2.(Model).topLayer().(*checkoutAsPopup)
+	if !ok {
+		t.Fatalf("expected checkoutAsPopup after rename choice; got %T", nm2.(Model).topLayer())
+	}
+	if got := p.name.Value(); got != "foo-2" {
+		t.Fatalf("prefill = %q, want foo-2", got)
+	}
+	if p.intent != engine.CheckoutSwitch {
+		t.Fatal("s must carry CheckoutSwitch into the popup")
+	}
+}
+
+func TestCurrentBranchModalCancelInert(t *testing.T) {
+	m := remoteModel()
+	m.status.Branch = "foo"
+	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	rm := nm.(Model)
+	nm2, cmd := rm.resolveModal("cancel")
+	if cmd != nil {
+		t.Fatal("cancel must not start an op")
+	}
+	if _, isPopup := nm2.(Model).topLayer().(*checkoutAsPopup); isPopup {
+		t.Fatal("cancel must not open the popup")
 	}
 }

@@ -202,8 +202,11 @@ func cmdCheckout(svc *domain.Service, args []string, stdout, stderr io.Writer) i
 	res, err := runOperation(context.Background(), svc,
 		engine.SmartCheckout{RemoteRef: ref, Local: local, Intent: intent}, cliDecider{}, stderr)
 	code := finish(res, err, stdout, stderr)
+	// Both refusals (diverged, current-branch) are recoverable the same way
+	// non-interactively: materialize the remote under a different local name.
 	var div engine.CheckoutDivergedError
-	if asName == "" && errors.As(err, &div) {
+	var curb engine.CheckoutCurrentBranchError
+	if asName == "" && (errors.As(err, &div) || errors.As(err, &curb)) {
 		fmt.Fprintln(stderr, "hint: retry with --as <name> to check it out under a different local name")
 	}
 	return code
