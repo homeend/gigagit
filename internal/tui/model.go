@@ -122,6 +122,7 @@ type Model struct {
 	graphBaseHash       string                          // commits[0].Hash when the layer was seeded; a change (new HEAD / scope) forces a full rebuild
 	graphWidth          int                             // current uniform fit width (display columns) of commitGraphRows
 	commitsIdx          []int                           // cached identity display-index slice for the unfiltered default-sort Commits panel (shared, read-only; valid iff len == commitsTotal); maintained by rebuildCommitGraph
+	filterMemo          *commitFilterMemo               // memoized filtered Commits index (see filter_memo.go); nil in zero-value test Models = unmemoized
 	identWCache         int                             // cached commitIdentWidth (O(n) lipgloss scan otherwise run per frame); maintained by rebuildCommitGraph
 	identWValid         bool                            // identWCache reflects current commits+branches; false → commitIdentWidth falls back to a full scan
 	feedScopeApplied    string                          // signature of the scope last applied to the feed (see feedScopeSig); reload only when the desired scope differs
@@ -238,6 +239,7 @@ func New(svc *domain.Service) Model {
 		opLog:                  newOpLog(),
 		promptStore:            defaultPromptStore(),
 		noticeSessionDismissed: map[string]bool{},
+		filterMemo:             &commitFilterMemo{},
 	}
 }
 
@@ -2519,6 +2521,7 @@ func (m Model) commitFilterChips() string {
 // previous walk's lanes beside the new rows.
 func (m Model) graphLayerReset() Model {
 	m.graphLayer = nil
+	m.filterMemo.invalidate() // same undetectable same-length-replacement hole as the graph layer
 	return m
 }
 
@@ -2712,6 +2715,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.mark = nil                        // a mark from the old repo must not re-attach by name in the new one
 	m.fileMarks = nil                   // likewise drop Status file-marks from the old repo
 	m.commitCompareSet = nil            // ◉ marks are repo-scoped: stale keys from the old repo would eat the two space slots and skew Unmark-all counts
+	m.filterMemo = &commitFilterMemo{}  // fresh pointer: an in-flight copy from the old repo must not repopulate the new repo's memo
 	m.stashView = nil                   // the new repo has its own stashes
 	m = m.closeFilesView()              // the new repo has a different commit list
 	m = m.reconcileFullscreenFocus()    // a resuming pin must not inherit focus from a surface that just closed

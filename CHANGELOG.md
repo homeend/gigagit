@@ -8,6 +8,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+### Fixed
+- **`/`-filter navigation on the Commits panel is now O(1) per keypress at
+  any feed size.** The filtered display index is memoized
+  (`commitFilterMemo`) and rebuilt incrementally — typing narrows the cached
+  matches, paging scans only the appended tail. Previously every keypress
+  rescanned the whole feed ~15×: ~5.6s per arrow key at 600k commits (linux
+  repo), now sub-millisecond.
+
 ### Added
 - **Space-mark & compare on the Commits panel.** `space` toggles the selected
   commit (or ◇ Working tree / ◇ Staged row) in the ◉ compare selection — the
