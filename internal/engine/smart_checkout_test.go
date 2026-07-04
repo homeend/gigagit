@@ -103,8 +103,16 @@ func TestSmartCheckoutCurrentBranchRefuses(t *testing.T) {
 	gitIn(t, dir, "update-ref", "refs/remotes/origin/foo", "HEAD")
 	_, err := SmartCheckout{RemoteRef: "origin/foo", Local: "foo", Intent: CheckoutStay}.
 		Run(context.Background(), OpDeps{Repo: repo, Decider: MapDecider{}})
-	if err == nil {
-		t.Fatal("checkout of the current branch must refuse")
+	var cur CheckoutCurrentBranchError
+	if !errors.As(err, &cur) {
+		t.Fatalf("err = %v, want CheckoutCurrentBranchError", err)
+	}
+	if cur.Local != "foo" || cur.RemoteRef != "origin/foo" {
+		t.Fatalf("fields = %+v, want Local=foo RemoteRef=origin/foo", cur)
+	}
+	// The rendered message must stay byte-identical to the legacy fmt.Errorf.
+	if got, want := err.Error(), "foo is the current branch; use pull to update it"; got != want {
+		t.Fatalf("message = %q, want %q", got, want)
 	}
 }
 
