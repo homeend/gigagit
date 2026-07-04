@@ -62,7 +62,7 @@ func helpContent() []contentLine {
 		r(".", "rename branch / copy branch name / Pull <branch> (stay here) / Solo this branch / Add to commit view / Go to tip in commits (.-menu)"),
 		r("", "Solo this branch (.-menu): scope the Commits panel to this branch (re-run to un-solo); Add/Remove from commit view builds a multi-branch set; Show all branches clears it; Go to tip in commits jumps the Commits cursor to this branch's tip (enter does the same; both deep-search unloaded history when needed)"),
 		h("Remotes panel"),
-		r("c", "checkout: create or fast-forward a local tracking branch (stay on the current branch)"),
+		r("c", "checkout: create or fast-forward a local tracking branch (stay on the current branch); on the current branch's own remote it prompts instead: pull now (when behind) / check out under a different name"),
 		r("s", "checkout and switch to it — fast-forward-safe; a diverged local branch offers check-out-as-a-different-name"),
 		r(".", "Check out <remote> as… / Switch to <remote> as… (.-menu): materialize the remote branch under a local name you choose"),
 		r("f", "fetch all remotes (updates tracking refs and the behind-counts)"),

@@ -17,6 +17,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   repo), now sub-millisecond.
 
 ### Added
+- **Smart prompt when checking out the current branch's remote.** `c`/`s` on
+  the remote counterpart of the checked-out branch no longer dead-ends with
+  "use pull to update it": a state-aware prompt offers "pull now" (only when
+  the branch is actually behind its upstream), "check out as different
+  name…" (the checkout-as popup with a free `-2/-3` suggestion), or cancel.
+  The CLI's diverged `--as` hint now also fires for the current-branch
+  refusal.
 - **Resume a paused rebase/merge after external conflict resolution.** When a
   merge/rebase/cherry-pick/revert is paused and its conflicts were resolved
   outside gg, the next status refresh (`r`, background, watcher, or startup)
