@@ -262,7 +262,8 @@ func (m Model) commitViewModeRow() (actionRow, bool) {
 // commitGotoTipRow offers "Go to tip in commits" on the Branches panel: move the
 // Commits cursor to the selected branch's tip commit (matched by tip HASH, so it
 // works regardless of how %D decorated the row) and focus the Commits panel.
-// Mirrors commitSoloRow's gating.
+// A tip that isn't loaded falls back to the ctrl+f eager deep-search.
+// Gated only on Branches focus + a selected branch (no opsIdle — navigation).
 func (m Model) commitGotoTipRow() (actionRow, bool) {
 	if m.focus != panelBranches {
 		return actionRow{}, false
@@ -275,21 +276,28 @@ func (m Model) commitGotoTipRow() (actionRow, bool) {
 		id:    "commits-goto-tip",
 		label: "Go to tip in commits",
 		run: func(m Model) (tea.Model, tea.Cmd) {
-			idx := m.displayIndices(panelCommits)
-			for di, bi := range idx {
-				// Match on the branch's tip HASH, not its decoration name: the
-				// commit feed's %D decorations can be filtered or reclassified, so a
-				// hash compare finds the tip regardless of how it was decorated.
-				if c, ok := m.commitAtUnified(bi); ok && commitIsHash(c, b.Hash) {
-					m.sel[panelCommits] = di
-					m = m.focusCommitsPanel()
-					return m, nil
-				}
-			}
-			m.statusMsg = "branch " + b.Name + " tip not in the loaded commits"
-			return m, nil
+			nm, cmd := m.gotoCommitByHash(b.Hash)
+			return nm, cmd
 		},
 	}, true
+}
+
+// gotoCommitByHash moves the Commits cursor to the loaded row matching hash
+// (display-index space; hash compare, not decoration parsing) and focuses the
+// Commits panel. A miss falls back to the ctrl+f eager deep-search — it clears
+// any /-filter ("go to" semantics), pages history under the search budget, and
+// prompts before scanning deeper. Shared by the goto-tip row (enter / .-menu)
+// and the ctrl+g pendingGotoTip drain in the commitsReloadedMsg handler.
+func (m Model) gotoCommitByHash(hash string) (Model, tea.Cmd) {
+	idx := m.displayIndices(panelCommits)
+	for di, bi := range idx {
+		if c, ok := m.commitAtUnified(bi); ok && commitIsHash(c, hash) {
+			m.sel[panelCommits] = di
+			m = m.focusCommitsPanel()
+			return m, nil
+		}
+	}
+	return m.startEagerSearch(hash)
 }
 
 // commitCreateBranchRow offers "Create branch here" on the Commits panel: open

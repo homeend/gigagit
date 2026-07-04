@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/git"
 	"github.com/homeend/gigagit/internal/gitexec"
@@ -446,6 +448,8 @@ func TestCommitGotoTipSlashBranchByHash(t *testing.T) {
 	}
 }
 
+// TestCommitGotoTipNotLoadedNotifies: with no feed to page (nil = cannot load
+// more), the eager fallback reports exhaustion instead of silently stopping.
 func TestCommitGotoTipNotLoadedNotifies(t *testing.T) {
 	m := branchesPanelModel("feat", "main")
 	m.branches[0].Hash = "t1deadbeef"
@@ -456,8 +460,69 @@ func TestCommitGotoTipNotLoadedNotifies(t *testing.T) {
 	if m.focus != panelBranches {
 		t.Fatalf("focus should stay on Branches, got %v", m.focus)
 	}
-	if m.statusMsg == "" {
-		t.Fatal("expected a 'tip not loaded' status message")
+	if !strings.Contains(m.statusMsg, "not found in full history") {
+		t.Fatalf("statusMsg = %q, want the eager 'not found in full history' report", m.statusMsg)
+	}
+}
+
+// TestCommitGotoTipFallsBackToEagerSearch: a tip missing from the loaded page
+// with a loadable feed starts the ctrl+f deep search on the tip hash.
+func TestCommitGotoTipFallsBackToEagerSearch(t *testing.T) {
+	m := newTestModelForReload(t) // Branches focused ("main" selected), real FakeRunner feed
+	m.branches[0].Hash = "t1deadbeef"
+	m.commits = []model.Commit{{Hash: "b0aaaaaaaaaa", Subject: "base"}}
+	r, ok := findRow(availableActions(m), "commits-goto-tip")
+	if !ok {
+		t.Fatal("go-to-tip row missing on Branches panel")
+	}
+	mm, cmd := r.run(m)
+	m = mm.(Model)
+	if !m.eager.active || m.eager.query != "t1deadbeef" {
+		t.Fatalf("eager = %+v, want active search for the tip hash", m.eager)
+	}
+	if !m.commitsLoading || cmd == nil {
+		t.Fatalf("loading=%v cmd=%v, want a page load dispatched", m.commitsLoading, cmd != nil)
+	}
+}
+
+// TestCommitGotoTipFindsFilteredTip: a /-filter hiding an already-loaded tip no
+// longer dead-ends — the eager fallback clears the filter and lands on the tip.
+func TestCommitGotoTipFindsFilteredTip(t *testing.T) {
+	m := branchesPanelModel("feat", "main")
+	m.branches[0].Hash = "t1deadbeef"
+	m.commits = []model.Commit{
+		{Hash: "b0aaaaaaaaaa", Subject: "base"},
+		{Hash: "t1deadbeefcafe", Subject: "tip"},
+	}
+	m.filterPanel = panelCommits
+	m.filterQuery = "zzz" // hides every row from displayIndices
+	r, _ := findRow(availableActions(m), "commits-goto-tip")
+	mm, _ := r.run(m)
+	m = mm.(Model)
+	if m.filterQuery != "" {
+		t.Fatalf("filterQuery = %q, want cleared (go-to semantics)", m.filterQuery)
+	}
+	if m.focus != panelCommits || m.sel[panelCommits] != 1 {
+		t.Fatalf("focus=%v sel=%d, want panelCommits/1", m.focus, m.sel[panelCommits])
+	}
+}
+
+// TestCommitGotoTipPreservesBranchesFilter: entering the eager fallback from a
+// /-filtered Branches list must not clear THAT panel's filter — the go-to
+// semantics only ever clear a Commits-panel filter.
+func TestCommitGotoTipPreservesBranchesFilter(t *testing.T) {
+	m := newTestModelForReload(t)
+	m.branches[0].Hash = "t1deadbeef"
+	m.commits = []model.Commit{{Hash: "b0aaaaaaaaaa", Subject: "base"}} // tip not loaded
+	m.filterPanel = panelBranches
+	m.filterQuery = "ma" // the user narrowed the Branches list
+	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = nm.(Model)
+	if !m.eager.active {
+		t.Fatal("fallback should still start the eager search")
+	}
+	if m.filterPanel != panelBranches || m.filterQuery != "ma" {
+		t.Fatalf("Branches filter clobbered: panel=%v query=%q, want panelBranches/\"ma\"", m.filterPanel, m.filterQuery)
 	}
 }
 
@@ -877,5 +942,100 @@ func TestDataLoadedNoRedundantReloadOnSecondLoad(t *testing.T) {
 	m = nm.(Model)
 	if m.commitsLoading {
 		t.Fatal("second dataLoadedMsg with the same upstream set must NOT trigger a redundant reload")
+	}
+}
+
+// TestBranchesEnterJumpsToTip: enter on the Branches panel = the .-menu
+// "Go to tip in commits" (same code path, so they cannot drift).
+func TestBranchesEnterJumpsToTip(t *testing.T) {
+	m := branchesPanelModel("feat", "main")
+	m.branches[0].Hash = "t1deadbeef"
+	m.commits = []model.Commit{
+		{Hash: "b0aaaaaaaaaa", Subject: "base"},
+		{Hash: "t1deadbeefcafe", Subject: "tip"},
+	}
+	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = nm.(Model)
+	if m.focus != panelCommits || m.sel[panelCommits] != 1 {
+		t.Fatalf("enter: focus=%v sel=%d, want panelCommits/1", m.focus, m.sel[panelCommits])
+	}
+}
+
+// TestBranchesEnterNoBranchNoOp: enter with nothing selectable must not panic
+// or fall through to another panel's enter behavior.
+func TestBranchesEnterNoBranchNoOp(t *testing.T) {
+	m := branchesPanelModel() // empty Branches list
+	nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = nm.(Model)
+	if m.focus != panelBranches || cmd != nil {
+		t.Fatalf("enter on empty Branches: focus=%v cmd=%v, want no-op", m.focus, cmd != nil)
+	}
+}
+
+// TestCtrlGSoloSetsPendingAndReloads: ctrl+g on Branches solos the branch and
+// remembers its tip for the post-reload jump.
+func TestCtrlGSoloSetsPendingAndReloads(t *testing.T) {
+	m := newTestModelForReload(t) // Branches focused, "main" selected
+	m.branches[0].Hash = "t1deadbeef"
+	nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlG})
+	m = nm.(Model)
+	if len(m.commitScopeBranches) != 1 || m.commitScopeBranches[0] != "main" {
+		t.Fatalf("scope = %v, want [main]", m.commitScopeBranches)
+	}
+	if m.pendingGotoTip != "t1deadbeef" {
+		t.Fatalf("pendingGotoTip = %q, want the tip hash", m.pendingGotoTip)
+	}
+	if !m.commitsLoading || cmd == nil {
+		t.Fatalf("loading=%v cmd=%v, want a scope reload dispatched", m.commitsLoading, cmd != nil)
+	}
+}
+
+// TestReloadedMsgDrainsPendingGotoTip: the scope reload landing finishes the
+// ctrl+g gesture — cursor on the tip, Commits focused, pending cleared.
+func TestReloadedMsgDrainsPendingGotoTip(t *testing.T) {
+	m := newTestModelForReload(t)
+	m.branches[0].Hash = "t1deadbeef"
+	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlG})
+	m = nm.(Model)
+	msg := commitsReloadedMsg{gen: m.feed.Gen(), state: domain.FeedState{Commits: []model.Commit{
+		{Hash: "t1deadbeefcafe", Subject: "tip"},
+		{Hash: "b0aaaaaaaaaa", Subject: "base"},
+	}}}
+	nm, _ = m.Update(msg)
+	m = nm.(Model)
+	if m.pendingGotoTip != "" {
+		t.Fatalf("pendingGotoTip = %q, want drained", m.pendingGotoTip)
+	}
+	if m.focus != panelCommits || m.sel[panelCommits] != 0 {
+		t.Fatalf("focus=%v sel=%d, want panelCommits/0 (the tip row)", m.focus, m.sel[panelCommits])
+	}
+}
+
+// TestCtrlGOnSoloedBranchUnsolos: ctrl+g preserves solo's toggle — a second
+// press un-solos, and the pending jump still chains.
+func TestCtrlGOnSoloedBranchUnsolos(t *testing.T) {
+	m := newTestModelForReload(t)
+	m.branches[0].Hash = "t1deadbeef"
+	m.commitScopeBranches = []string{"main"} // already soloed to the selected branch
+	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlG})
+	m = nm.(Model)
+	if len(m.commitScopeBranches) != 0 {
+		t.Fatalf("scope = %v, want cleared (un-solo)", m.commitScopeBranches)
+	}
+	if m.pendingGotoTip != "t1deadbeef" {
+		t.Fatalf("pendingGotoTip = %q, want the tip hash even on un-solo", m.pendingGotoTip)
+	}
+}
+
+// TestCtrlGBusyNoOp: ctrl+g inherits solo's opsIdle gate — nothing mutates
+// while an operation runs.
+func TestCtrlGBusyNoOp(t *testing.T) {
+	m := newTestModelForReload(t)
+	m.branches[0].Hash = "t1deadbeef"
+	m.running = true // opsIdle() == false
+	nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlG})
+	m = nm.(Model)
+	if len(m.commitScopeBranches) != 0 || m.pendingGotoTip != "" || cmd != nil {
+		t.Fatalf("busy ctrl+g mutated state: scope=%v pending=%q cmd=%v", m.commitScopeBranches, m.pendingGotoTip, cmd != nil)
 	}
 }

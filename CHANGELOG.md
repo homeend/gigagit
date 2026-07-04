@@ -17,6 +17,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   repo), now sub-millisecond.
 
 ### Added
+- **Branches panel: `enter` jumps to the branch tip, `ctrl+g` solos + jumps.**
+  `enter` on a selected branch runs "Go to tip in commits": the Commits cursor
+  lands on the branch's tip and the panel focuses. A tip that isn't in the
+  loaded page no longer dead-ends — it falls back to the `ctrl+f` deep search
+  (clears the `/` filter, pages history under the search budget, asks before
+  scanning deeper, reports "not found in full history" on exhaustion); the
+  `.`-menu row gained the same fallback. `ctrl+g` runs "Solo this branch"
+  first (toggle semantics preserved — a second press un-solos) and finishes
+  the tip jump once the scope reload lands. Both keys advertised in the
+  footer (`[enter] tip`, `[ctrl+g] solo+tip`) and `?` help.
 - **Space-mark & compare on the Commits panel.** `space` toggles the selected
   commit (or ◇ Working tree / ◇ Staged row) in the ◉ compare selection — the
   same set as `m`, capped at two marks — and the moment the second mark lands

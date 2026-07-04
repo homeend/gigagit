@@ -35,7 +35,13 @@ func TestFooterActionsAllowlistFiltersAndOrders(t *testing.T) {
 func TestFooterBindingIDsUniqueAndPresent(t *testing.T) {
 	seen := map[string]string{} // id -> label (first seen)
 	nav := map[string]bool{"tab": true, "shift+tab": true, "ctrl+←/→": true}
-	multiKeyTypes := map[string]bool{"space": true} // keys that have both empty and non-empty ids
+	// Keys allowed to carry an empty id: "space" has both empty and non-empty
+	// ids (stage/unstage on Files, mark on Commits); "enter" gains an empty-id
+	// tip-jump row alongside its existing switch-worktree/tag-goto/file-diff
+	// ids; "ctrl+g" is empty-id-only — it duplicates the "." menu's own
+	// "Go to tip in commits" (id commits-goto-tip) and "Solo this branch" rows,
+	// so folding it into the menu under its own id would double them up.
+	multiKeyTypes := map[string]bool{"space": true, "enter": true, "ctrl+g": true}
 	for _, b := range append(append([]footerBinding{}, contextBindings...), globalBindings...) {
 		if nav[b.key] {
 			if b.id != "" {
@@ -239,7 +245,11 @@ func TestFooterMarkStates(t *testing.T) {
 func TestFooterRunningCollapses(t *testing.T) {
 	m := footerModel()
 	m.running = true
-	want := "[tab] focus [?] help [q] quit"
+	// [enter] tip survives: it's pure navigation on the Branches panel (the
+	// fixture's default focus) and its predicate deliberately ignores busy —
+	// see TestBranchesFooterAdvertisesTipKeys. Everything mutating (pull,
+	// push, commit, ...) still drops, which is the invariant this test guards.
+	want := "[enter] tip  •  [tab] focus [?] help [q] quit"
 	if f := m.footerLine(); f != want {
 		t.Errorf("running footer = %q, want %q", f, want)
 	}
@@ -253,7 +263,10 @@ func TestFooterRunningCollapses(t *testing.T) {
 func TestFooterLoadingDropsReload(t *testing.T) {
 	m := footerModel()
 	m.loading = true
-	want := "[tab] focus [?] help [q] quit"
+	// [enter] tip survives: same busy-tolerant navigation exception as
+	// TestFooterRunningCollapses above. [r] reload dropping is what this test
+	// actually guards.
+	want := "[enter] tip  •  [tab] focus [?] help [q] quit"
 	if f := m.footerLine(); f != want {
 		t.Errorf("loading footer = %q, want %q", f, want)
 	}
@@ -405,5 +418,38 @@ func TestFooterStageVsUnstage(t *testing.T) {
 	}
 	if got := base(panelStaged).footerLine(); !strings.Contains(got, "[space] unstage") {
 		t.Errorf("Staged footer = %q, want [space] unstage", got)
+	}
+}
+
+// bindingByLabel finds a context binding by its (unique) rendered label.
+func bindingByLabel(t *testing.T, label string) footerBinding {
+	t.Helper()
+	for _, b := range contextBindings {
+		if b.label == label {
+			return b
+		}
+	}
+	t.Fatalf("binding %q not found in contextBindings", label)
+	return footerBinding{}
+}
+
+// TestBranchesFooterAdvertisesTipKeys: the Branches footer shows the enter and
+// ctrl+g tip-jump keys when a branch is selected. Busy gating is asserted on
+// the predicates directly — while an op runs the footer swaps to the heartbeat
+// line wholesale, so the rendered line can't distinguish per-binding gating.
+func TestBranchesFooterAdvertisesTipKeys(t *testing.T) {
+	m := footerModel()
+	m.loading = false
+	m.focus = panelBranches
+	line := m.footerLine()
+	if !strings.Contains(line, "[enter] tip") || !strings.Contains(line, "[ctrl+g] solo+tip") {
+		t.Fatalf("Branches footer missing tip keys: %q", line)
+	}
+	m.running = true // opsIdle() == false
+	if bindingByLabel(t, "[ctrl+g] solo+tip").when(m) {
+		t.Fatal("ctrl+g predicate must be false while busy (it mutates the feed scope)")
+	}
+	if !bindingByLabel(t, "[enter] tip").when(m) {
+		t.Fatal("enter tip predicate should ignore busy (pure navigation)")
 	}
 }
