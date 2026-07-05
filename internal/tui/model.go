@@ -2028,6 +2028,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, m.reloadStatusCmd(editedSummary(msg.path))
 
+	case toolReadyMsg:
+		if cp, ok := m.proc.(*conflictProcess); ok {
+			return cp.toolReady(m, msg)
+		}
+		return m, nil
+
+	case toolFinishedMsg:
+		if cp, ok := m.proc.(*conflictProcess); ok {
+			return cp.toolFinished(m, msg)
+		}
+		// Process gone (shouldn't happen): still clean up and resync.
+		if msg.script != "" {
+			os.Remove(msg.script)
+		}
+		if msg.pending != nil {
+			for _, f := range msg.pending.cleanup {
+				os.Remove(f)
+			}
+		}
+		return m, m.loadCmd()
+
 	case editorViewMsg:
 		if msg.err != nil {
 			m.statusMsg = "view: " + msg.err.Error()

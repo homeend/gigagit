@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -13,6 +15,7 @@ import (
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/template"
 )
 
 // confState is the conflict-resolution process's state-machine state.
@@ -105,12 +108,12 @@ func (p *conflictProcess) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 	case confToolPick:
 		return p.updateToolPick(m, msg)
-	case confToolFill, confToolApprove, confToolMark:
-		if msg.String() == "esc" {
-			p.st = confListing
-			return m, nil
-		}
-		return m, nil
+	case confToolFill:
+		return p.updateToolFill(m, msg)
+	case confToolApprove:
+		return p.updateToolApprove(m, msg)
+	case confToolMark:
+		return p.updateToolMark(m, msg)
 	}
 	return m, nil
 }
@@ -229,8 +232,7 @@ func conflictActionFor(f model.FileStatus, key string) (engine.ConflictAction, b
 }
 
 // updateToolPick drives the tool picker: ↑/↓ select, enter chooses, esc backs
-// out to the file list. Choosing hands off to the fill/approve flow (Task 7's
-// startToolRun); until then enter is a stub that returns to listing.
+// out to the file list. Choosing hands off to the fill/approve flow.
 func (p *conflictProcess) updateToolPick(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
@@ -245,16 +247,196 @@ func (p *conflictProcess) updateToolPick(m Model, msg tea.KeyMsg) (Model, tea.Cm
 			p.toolSel++
 		}
 	case "enter":
-		return p.startToolRun(m) // Task 7; stub below until then
+		return p.startToolRun(m)
 	}
 	return m, nil
 }
 
-// startToolRun begins the chosen command's fill→approve→execute flow (Task 7).
+// startToolRun resolves the chosen command's context. A command with <user:…>
+// tokens collects them first; a per-file command materializes the quartet
+// asynchronously; everything else goes straight to the approval gate.
 func (p *conflictProcess) startToolRun(m Model) (Model, tea.Cmd) {
-	p.st = confListing
-	m.statusMsg = "tool execution lands in the next task"
+	if p.toolSel < 0 || p.toolSel >= len(p.toolChoices) {
+		return m, nil
+	}
+	tc := p.toolChoices[p.toolSel]
+	fill := newTemplateFill(tc.Command)
+	if fill.needsInput() {
+		p.toolFill = &fill
+		p.st = confToolFill
+		return m, nil
+	}
+	return p.buildToolRun(m, tc, map[string]string{})
+}
+
+// buildToolRun assembles the CmdCtx and pendingToolRun for tc; per-file
+// commands go async through ConflictFileVersions (confWorking meanwhile).
+func (p *conflictProcess) buildToolRun(m Model, tc config.ToolCommand, inputs map[string]string) (Model, tea.Cmd) {
+	ctx := template.CmdCtx{
+		Op: p.src.Op, Source: p.src.Source, Target: p.src.Target,
+		Repo: m.currentWorktree,
+	}
+	for _, f := range p.files {
+		ctx.ConflictedFiles = append(ctx.ConflictedFiles, f.Path)
+	}
+	if !tc.PerFile {
+		resolved, err := template.ResolveCommand(tc.Command, inputs, ctx)
+		if err != nil {
+			p.st = confReporting
+			p.errMsg = err.Error()
+			return m, nil
+		}
+		p.pending = &pendingToolRun{tc: tc, resolved: resolved, env: toolEnv(ctx)}
+		return p.gateOrRun(m)
+	}
+	// Per-file: quartet first (async), then resolve in the toolReadyMsg handler.
+	f := p.files[p.sel]
+	ctx.File = f.Path
+	ctx.Merged = filepath.Join(m.currentWorktree, f.Path)
+	p.st = confWorking
+	svc, hasBase, path := m.svc, f.ConflictHasBase(), f.Path
+	return m, func() tea.Msg {
+		local, base, remote, cleanup, err := svc.ConflictFileVersions(context.Background(), path, hasBase)
+		if err != nil {
+			return toolReadyMsg{err: err}
+		}
+		_ = cleanup // temp paths recorded on the pending run; removed on finish
+		ctx.Local, ctx.Base, ctx.Remote = local, base, remote
+		resolved, rerr := template.ResolveCommand(tc.Command, inputs, ctx)
+		if rerr != nil {
+			os.Remove(local)
+			os.Remove(base)
+			os.Remove(remote)
+			return toolReadyMsg{err: rerr}
+		}
+		return toolReadyMsg{pending: &pendingToolRun{
+			tc: tc, resolved: resolved, env: toolEnv(ctx),
+			cleanup: []string{local, base, remote},
+			file:    path, merged: ctx.Merged,
+		}}
+	}
+}
+
+// gateOrRun applies the first-run approval gate: an already-approved command
+// (per repo, by template hash) runs immediately; otherwise the approval box
+// shows the exact resolved command first.
+func (p *conflictProcess) gateOrRun(m Model) (Model, tea.Cmd) {
+	hash := toolCommandHash(p.pending.tc.Command)
+	if m.promptStore != nil && m.promptStore.ApprovedToolCommands(m.toolRepoKey())[hash] {
+		return p.runPending(m)
+	}
+	p.st = confToolApprove
 	return m, nil
+}
+
+// runPending hands the terminal to the pending command.
+func (p *conflictProcess) runPending(m Model) (Model, tea.Cmd) {
+	pending := p.pending
+	p.pending = nil
+	p.st = confWorking
+	return m, m.execToolCmd(pending)
+}
+
+// updateToolApprove: enter approves (persisted) and runs; esc cancels.
+func (p *conflictProcess) updateToolApprove(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		p.cleanupPending()
+		p.st = confListing
+		return m, nil
+	case "enter":
+		if m.promptStore != nil {
+			_ = m.promptStore.ApproveToolCommand(m.toolRepoKey(), toolCommandHash(p.pending.tc.Command))
+		}
+		return p.runPending(m)
+	}
+	return m, nil
+}
+
+// updateToolFill collects <user:…> values, then proceeds like startToolRun.
+func (p *conflictProcess) updateToolFill(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
+	done, cancel := p.toolFill.handleKey(msg)
+	if cancel {
+		p.toolFill = nil
+		p.st = confListing
+		return m, nil
+	}
+	if done {
+		inputs := p.toolFill.inputs()
+		p.toolFill = nil
+		return p.buildToolRun(m, p.toolChoices[p.toolSel], inputs)
+	}
+	return m, nil
+}
+
+// updateToolMark: the per-file tool changed the file — offer to mark resolved.
+func (p *conflictProcess) updateToolMark(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
+	switch msg.String() {
+	case "y", "enter":
+		path := p.pending.file
+		p.pending = nil
+		p.st = confWorking
+		return m.startOp(engine.ResolveConflict{Path: path, Action: engine.MarkResolved})
+	case "n", "esc":
+		p.pending = nil
+		p.st = confWorking
+		return m, m.loadCmd()
+	}
+	return m, nil
+}
+
+// cleanupPending removes a cancelled run's quartet temp files.
+func (p *conflictProcess) cleanupPending() {
+	if p.pending == nil {
+		return
+	}
+	for _, f := range p.pending.cleanup {
+		os.Remove(f)
+	}
+	p.pending = nil
+}
+
+// toolReady receives the async per-file build.
+func (p *conflictProcess) toolReady(m Model, msg toolReadyMsg) (Model, tea.Cmd) {
+	if msg.err != nil {
+		p.st = confReporting
+		p.errMsg = msg.err.Error()
+		return m, nil
+	}
+	p.pending = msg.pending
+	return p.gateOrRun(m)
+}
+
+// toolFinished receives the handed-over process's exit: clean temps, surface
+// a failure, offer mark-resolved when a per-file run changed its file, and
+// reload so the conflict list re-derives.
+func (p *conflictProcess) toolFinished(m Model, msg toolFinishedMsg) (Model, tea.Cmd) {
+	if msg.script != "" {
+		os.Remove(msg.script)
+	}
+	changed := false
+	if msg.pending != nil && msg.pending.merged != "" {
+		if fi, err := os.Stat(msg.pending.merged); err == nil && fi.ModTime().After(msg.preMtime) {
+			changed = true
+		}
+	}
+	if msg.pending != nil {
+		for _, f := range msg.pending.cleanup {
+			os.Remove(f)
+		}
+	}
+	if msg.err != nil {
+		p.st = confReporting
+		p.errMsg = "tool exited with an error: " + msg.err.Error()
+		return m, nil
+	}
+	if msg.pending != nil && msg.pending.tc.PerFile && changed {
+		p.pending = msg.pending
+		p.st = confToolMark
+		return m, nil
+	}
+	p.st = confWorking
+	return m, m.loadCmd()
 }
 
 func (p *conflictProcess) render(m Model, below string) string {
@@ -274,8 +456,24 @@ func (p *conflictProcess) render(m Model, below string) string {
 		return overlayCenter(bg, conflictMsgBox(m, "Resolve failed:\n\n"+p.errMsg+"\n\n[any key] back to the list"), w, h)
 	case confToolPick:
 		return overlayCenter(bg, conflictToolPickBox(m, p.toolChoices, p.toolSel), w, h)
-	case confToolFill, confToolApprove, confToolMark:
-		return overlayCenter(bg, conflictMsgBox(m, "…"), w, h) // real boxes in Task 7
+	case confToolFill:
+		var b strings.Builder
+		b.WriteString("Tool inputs\n\n")
+		for _, line := range p.toolFill.view(popupContentWidth(w)) {
+			b.WriteString(line + "\n")
+		}
+		b.WriteString("\n[tab/enter] next  [esc] cancel")
+		return overlayCenter(bg, popupBox(popupInnerWidth(w), b.String()), w, h)
+	case confToolApprove:
+		var b strings.Builder
+		b.WriteString("Run this command?  (" + p.pending.tc.Name + ")\n\n")
+		b.WriteString(p.pending.resolved + "\n\n")
+		b.WriteString("Approval is remembered for this repo until the command text changes.\n")
+		b.WriteString("[enter] run  [esc] cancel")
+		return overlayCenter(bg, popupBox(popupInnerWidth(w), b.String()), w, h)
+	case confToolMark:
+		msg := "The tool changed " + p.pending.file + ".\n\nMark it as resolved (git add)?\n\n[y/enter] mark resolved  [n/esc] not now"
+		return overlayCenter(bg, popupBox(popupInnerWidth(w), msg), w, h)
 	}
 	return below
 }
