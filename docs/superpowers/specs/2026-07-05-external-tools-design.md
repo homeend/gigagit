@@ -100,7 +100,10 @@ Selecting a command:
 
 A non-zero exit surfaces the failure in the conflict window's error state;
 nothing is rolled back (the tool may have done useful partial work — the
-status reload shows the truth).
+status reload shows the truth). Exit codes 130/143 (SIGINT/SIGTERM by the
+usual 128+signal convention — e.g. quitting an interactive agent with
+ctrl-C) are the exception: they are treated as a normal quit, not a failure,
+so the conflict window reloads status exactly as it would on a zero exit.
 
 ## Config: the `[tools]` section
 

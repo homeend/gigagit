@@ -3,6 +3,7 @@ package tui
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -142,7 +143,11 @@ func toolContextFile(ctx template.CmdCtx) (string, error) {
 // agent CLI that errors out in under a second) would otherwise have its
 // error text vanish the instant tea.ExecProcess returns and gg repaints the
 // TUI over the terminal — the human never sees why it failed. A zero exit
-// returns immediately with no hold, so the common case stays snappy.
+// returns immediately with no hold, so the common case stays snappy. Exit
+// codes 130/143 (SIGINT/SIGTERM — e.g. ctrl-C out of an interactive agent)
+// are a normal user-initiated quit rather than a failure, so the POSIX
+// wrapper skips the hold for those too (see toolInterruptExit, which mirrors
+// this on the Go side for toolFinished's error classification).
 func toolScript(resolved string) (string, error) {
 	ext := ".sh"
 	if runtime.GOOS == "windows" {
@@ -150,6 +155,9 @@ func toolScript(resolved string) (string, error) {
 	}
 	var body string
 	if runtime.GOOS == "windows" {
+		// Windows ctrl-C semantics differ from POSIX signals (no reliable
+		// 130/143 exit-code convention), so the hold-on-failure block stays
+		// unconditional here; revisit if this becomes a live issue on Windows.
 		body = resolved + "\r\n" +
 			"set RC=%ERRORLEVEL%\r\n" +
 			"if %RC% neq 0 (\r\n" +
@@ -161,7 +169,9 @@ func toolScript(resolved string) (string, error) {
 	} else {
 		body = resolved + "\n" +
 			"rc=$?\n" +
-			"if [ $rc -ne 0 ]; then\n" +
+			// 130/143 = SIGINT/SIGTERM by POSIX convention (128+signal) — the
+			// user quit intentionally, not a tool failure, so don't hold.
+			"if [ $rc -ne 0 ] && [ $rc -ne 130 ] && [ $rc -ne 143 ]; then\n" +
 			"  printf '\\n[gg] tool exited with status %s - press Enter to return to gg\\n' \"$rc\"\n" +
 			"  read -r _ignored\n" +
 			"fi\n" +
@@ -221,6 +231,22 @@ type toolFinishedMsg struct {
 	script   string
 	preMtime time.Time
 	err      error
+}
+
+// toolInterruptExit reports whether err is an *exec.ExitError carrying exit
+// code 130 (SIGINT) or 143 (SIGTERM) — the POSIX 128+signal convention for a
+// shell killed by ctrl-C or a terminate signal. Quitting an interactive
+// agent CLI this way is a normal user-initiated quit, not a tool failure, so
+// toolFinished treats it like a clean exit instead of surfacing an error box.
+// A nil err (errors.As returns false on nil) or a non-exec.ExitError yields
+// false, as does any other non-zero code.
+func toolInterruptExit(err error) bool {
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) {
+		return false
+	}
+	code := exitErr.ExitCode()
+	return code == 130 || code == 143
 }
 
 // execToolCmd suspends the TUI and runs the pending command with the real

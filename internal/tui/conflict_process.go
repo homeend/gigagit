@@ -424,7 +424,10 @@ func (p *conflictProcess) toolReady(m Model, msg toolReadyMsg) (Model, tea.Cmd) 
 
 // toolFinished receives the handed-over process's exit: clean temps, surface
 // a failure, offer mark-resolved when a per-file run changed its file, and
-// reload so the conflict list re-derives.
+// reload so the conflict list re-derives. An interrupt exit (130/143 —
+// e.g. ctrl-C out of an interactive agent) is a normal quit, not a failure:
+// it takes the exact same success path as a zero exit, just with a status
+// hint instead of silence.
 func (p *conflictProcess) toolFinished(m Model, msg toolFinishedMsg) (Model, tea.Cmd) {
 	if msg.script != "" {
 		os.Remove(msg.script)
@@ -441,9 +444,12 @@ func (p *conflictProcess) toolFinished(m Model, msg toolFinishedMsg) (Model, tea
 		}
 	}
 	if msg.err != nil {
-		p.st = confReporting
-		p.errMsg = "tool exited with an error: " + msg.err.Error()
-		return m, nil
+		if !toolInterruptExit(msg.err) {
+			p.st = confReporting
+			p.errMsg = "tool exited with an error: " + msg.err.Error()
+			return m, nil
+		}
+		m.statusMsg = "tool interrupted"
 	}
 	if msg.pending != nil && msg.pending.tc.PerFile && changed {
 		p.pending = msg.pending

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -175,8 +176,8 @@ func TestToolScriptAndExecCmd(t *testing.T) {
 		if !strings.Contains(content, "rc=$?") {
 			t.Errorf("script must capture $? right after the command: %q", content)
 		}
-		if !strings.Contains(content, "if [ $rc -ne 0 ]; then") {
-			t.Errorf("script must hold only on a non-zero exit: %q", content)
+		if !strings.Contains(content, "if [ $rc -ne 0 ] && [ $rc -ne 130 ] && [ $rc -ne 143 ]; then") {
+			t.Errorf("script must hold only on a non-zero, non-interrupt exit: %q", content)
 		}
 		if !strings.Contains(content, "read -r _ignored") {
 			t.Errorf("script must block on a keypress before returning: %q", content)
@@ -247,5 +248,70 @@ func TestToolScriptHoldsOnlyOnFailure(t *testing.T) {
 	}
 	if strings.Contains(string(okOut), "press Enter") {
 		t.Errorf("zero-exit script must not hold: %q", okOut)
+	}
+}
+
+// TestToolScriptDoesNotHoldOnInterruptExit pins the 130/143 carve-out in the
+// POSIX wrapper: a script wrapping a command that exits like a ctrl-C'd
+// shell must propagate the code but NOT print the hold line or block on a
+// keypress (stdin is closed, so a wrongly-held script would hang the test).
+func TestToolScriptDoesNotHoldOnInterruptExit(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX-only: exercises the .sh script via /bin/sh")
+	}
+	for _, code := range []int{130, 143} {
+		script, err := toolScript(fmt.Sprintf("exit %d", code))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer os.Remove(script)
+		cmd := exec.Command("/bin/sh", script)
+		stdinFile, err := os.Open(os.DevNull)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cmd.Stdin = stdinFile
+		out, runErr := cmd.CombinedOutput()
+		stdinFile.Close()
+		var exitErr *exec.ExitError
+		if !errors.As(runErr, &exitErr) {
+			t.Fatalf("code %d: run error = %v, want *exec.ExitError", code, runErr)
+		}
+		if exitErr.ExitCode() != code {
+			t.Errorf("code %d: exit code = %d", code, exitErr.ExitCode())
+		}
+		if strings.Contains(string(out), "press Enter") {
+			t.Errorf("code %d: interrupt exit must not hold: %q", code, out)
+		}
+	}
+}
+
+// TestToolInterruptExit exercises the Go-side classifier with a REAL
+// *exec.ExitError (running `sh -c "exit 130"`), not a fabricated one — Go's
+// exec.ExitError wraps an os.ProcessState that isn't safely constructible by
+// hand, so the only faithful way to get one is to actually run a process.
+func TestToolInterruptExit(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX-only: relies on sh -c exit codes")
+	}
+	exitWith := func(t *testing.T, code int) error {
+		t.Helper()
+		err := exec.Command("sh", "-c", fmt.Sprintf("exit %d", code)).Run()
+		if err == nil {
+			t.Fatalf("exit %d: command unexpectedly succeeded", code)
+		}
+		return err
+	}
+	if !toolInterruptExit(exitWith(t, 130)) {
+		t.Error("exit 130 (SIGINT convention) must be an interrupt exit")
+	}
+	if !toolInterruptExit(exitWith(t, 143)) {
+		t.Error("exit 143 (SIGTERM convention) must be an interrupt exit")
+	}
+	if toolInterruptExit(exitWith(t, 1)) {
+		t.Error("exit 1 must NOT be an interrupt exit")
+	}
+	if toolInterruptExit(nil) {
+		t.Error("nil error must NOT be an interrupt exit")
 	}
 }

@@ -2,7 +2,9 @@ package tui
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -235,5 +237,33 @@ func TestToolMarkResolvedOffer(t *testing.T) {
 	}
 	if cmd == nil {
 		t.Error("unchanged path must reload status")
+	}
+}
+
+// TestToolFinishedInterruptExitIsNotAFailure is the live-feedback regression:
+// quitting an interactive agent with ctrl-C makes the wrapping shell exit
+// 130 (128+SIGINT), which used to be treated as a tool failure (an error box
+// for a completely normal quit). A 130/143 exit must instead take the exact
+// same path as a clean exit — no confReporting, a reload cmd returned, and a
+// status hint instead of silence.
+func TestToolFinishedInterruptExitIsNotAFailure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX-only: relies on sh -c exit codes")
+	}
+	m, p := conflictModelWithTools(t,
+		config.ToolCommand{Category: "conflict", Name: "Agent", Mode: "terminal", Command: "true"})
+	interruptErr := exec.Command("sh", "-c", "exit 130").Run()
+	if interruptErr == nil {
+		t.Fatal("exit 130 command unexpectedly succeeded")
+	}
+	m2, cmd := p.toolFinished(m, toolFinishedMsg{err: interruptErr})
+	if p.st == confReporting {
+		t.Fatalf("interrupt exit must not enter confReporting, errMsg = %q", p.errMsg)
+	}
+	if cmd == nil {
+		t.Error("interrupt exit must still return a reload cmd")
+	}
+	if m2.statusMsg == "" {
+		t.Error("interrupt exit must set a status hint")
 	}
 }
