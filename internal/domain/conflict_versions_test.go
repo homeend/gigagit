@@ -36,9 +36,29 @@ func TestConflictFileVersionsBothSides(t *testing.T) {
 	if string(lb) == string(rb) {
 		t.Error("local and remote sides must differ in a conflict")
 	}
+	// divergedDir (via mergeConflictDir) deterministically gives the
+	// conflicted file "ours\n" on main (stage :2 = local, the merge's HEAD
+	// side), "theirs\n" on feature (stage :3 = remote), and "base\n" at the
+	// merge base (stage :1). Assert exact side identity, not just
+	// non-empty/differ — a :2/:3 swap in ConflictFileVersions would corrupt
+	// every external-mergetool run while still passing a non-empty/differ
+	// check.
+	if got := string(lb); got != "ours\n" {
+		t.Errorf("local (stage :2) = %q, want %q", got, "ours\n")
+	}
+	if got := string(rb); got != "theirs\n" {
+		t.Errorf("remote (stage :3) = %q, want %q", got, "theirs\n")
+	}
 	if conf[0].ConflictHasBase() {
 		if _, err := os.Stat(base); err != nil {
 			t.Errorf("base temp missing: %v", err)
+		}
+		bb, err := os.ReadFile(base)
+		if err != nil {
+			t.Fatalf("read base temp: %v", err)
+		}
+		if got := string(bb); got != "base\n" {
+			t.Errorf("base (stage :1) = %q, want %q", got, "base\n")
 		}
 	}
 	// Temp names keep the real extension for tool syntax highlighting.
