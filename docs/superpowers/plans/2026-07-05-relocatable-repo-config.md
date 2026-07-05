@@ -4,7 +4,7 @@
 
 **Goal:** Add a third config tier — per-repo settings stored in the user config directory (`~/.config/gg/projects/<encoded-repo-path>/config.toml`) instead of the committed `.gg.toml` — plus a Settings action to copy/move the whole per-repo config between the two locations.
 
-**Architecture:** `internal/config` gains a path resolver (`EncodeRepoKey`/`PrivateRepoPath`), a three-tier `Load` (defaults → global → committed → private, private wins via the existing field-level overlay), whole-file relocation writers (`CopyRepoConfig`/`RemoveRepoConfig`), and an active-write-target resolver (`ActiveRepoConfigPath`). The two TUI load paths and the CLI worktree path pass the private path into `Load` and set the per-repo write target to whichever file is active. A new `repoConfigPopup` in the Settings menu drives the copy/move.
+**Architecture:** `internal/config` gains a path resolver (`EncodeRepoKey`/`PrivateRepoPath`), whole-file relocation writers (`CopyRepoConfig`/`RemoveRepoConfig`), and an active-file resolver (`ActiveRepoConfigPath` — the private file if it exists, else committed). `Load` is **unchanged** (2-arg): the two TUI load paths and the CLI worktree path resolve the active path and pass it as `Load`'s `repoPath`, and set the per-repo write target to that same path — one active file is read AND written (pure replace, not layering). A new `repoConfigPopup` in the Settings menu drives the copy/move.
 
 **Tech Stack:** Go 1.26, `github.com/pelletier/go-toml/v2`, Bubble Tea (Elm-style value-receiver `Model`), lipgloss.
 
@@ -16,23 +16,28 @@
 - Field-level overlay rule is unchanged (zero-is-unset / inverted-polarity per field). The private tier reuses `overlayWorktree`/`overlayUI`/`overlayDebug`/`overlayRefresh` verbatim.
 - **Private file path (exact):** `$XDG_CONFIG_HOME/gg/projects/<EncodeRepoKey(mainWorktreePath)>/config.toml`, fallback base `~/.config` when `$XDG_CONFIG_HOME` is empty (identical base logic to `DefaultGlobalPath`).
 - **Key encoding (exact):** `filepath.Clean` then replace every `/`, `\`, `:` with `-`. `/mnt/t/others/gigagit` → `-mnt-t-others-gigagit`; `C:\src\repo` → `C--src-repo`; `""` → `""`.
-- **Precedence (exact):** private overlays committed overlays global. **Active write target:** private file if it exists on disk, else committed `.gg.toml`.
+- **Precedence (exact):** `defaults → global → active repo file`, where the active repo file is the private user-dir file if it exists on disk, else the committed `.gg.toml`. Read path and write target use the SAME active path (`ActiveRepoConfigPath`); two repo files are never layered.
 - **Anchor:** the private file is keyed on the **main** worktree (`Worktrees()[0].Path`), so all linked worktrees share one private config. The committed `.gg.toml` stays anchored on the **current** worktree (`filepath.Join(top, ".gg.toml")`), unchanged.
 - Tests use `t.TempDir()` + the existing `writeFile` helper in `config_test.go`; TUI pure-logic tests need no `*domain.Service` (pass `nil`).
 
 ---
 
-### Task 1: Config path helpers + three-tier `Load`
+### Task 1: Config path helpers (`EncodeRepoKey` / `PrivateRepoPath`)
 
 **Files:**
-- Modify: `internal/config/config.go` (add `strings` import; add `configHome`, `EncodeRepoKey`, `PrivateRepoPath`; refactor `DefaultGlobalPath`; make `Load` variadic)
+- Modify: `internal/config/config.go` (add `strings` import; add `configHome`, `EncodeRepoKey`, `PrivateRepoPath`; refactor `DefaultGlobalPath`)
 - Test: `internal/config/config_test.go`
+
+> **Note:** `Load` is NOT changed. The per-repo tier is read from ONE active file
+> (private if it exists, else committed) — resolved by `ActiveRepoConfigPath`
+> (Task 2) and passed as `Load`'s existing `repoPath` arg (Task 3). There is no
+> layering of two repo files (that would let a committed inverted-polarity key
+> shadow a private "off"; see spec §2).
 
 **Interfaces:**
 - Produces:
   - `func EncodeRepoKey(repoPath string) string`
   - `func PrivateRepoPath(mainWorktreePath string) string`
-  - `func Load(globalPath, repoPath string, overlayPaths ...string) (Config, error)` (was 2-arg; existing 2-arg calls still compile)
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -67,45 +72,12 @@ func TestPrivateRepoPathEmptyAnchor(t *testing.T) {
 		t.Errorf("empty anchor should yield empty path, got %q", got)
 	}
 }
-
-func TestLoadPrivateOverlaysRepo(t *testing.T) {
-	dir := t.TempDir()
-	g := filepath.Join(dir, "global.toml")
-	r := filepath.Join(dir, "repo.toml")
-	p := filepath.Join(dir, "private.toml")
-	writeFile(t, g, "[ui]\ncommit_sort = \"plain\"\nwheel_step = 5\n")
-	writeFile(t, r, "[ui]\ncommit_sort = \"date-order\"\n") // repo overrides global
-	writeFile(t, p, "[ui]\ncommit_sort = \"plain\"\n")      // private overrides repo
-	cfg, err := Load(g, r, p)
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if cfg.UI.CommitSort != "plain" {
-		t.Errorf("private should win: %q", cfg.UI.CommitSort)
-	}
-	if cfg.UI.WheelStep != 5 {
-		t.Errorf("global-only key should survive: %d", cfg.UI.WheelStep)
-	}
-}
-
-func TestLoadEmptyOverlaySkipped(t *testing.T) {
-	dir := t.TempDir()
-	r := filepath.Join(dir, "repo.toml")
-	writeFile(t, r, "[ui]\ncommit_sort = \"plain\"\n")
-	cfg, err := Load(filepath.Join(dir, "nog.toml"), r, "") // empty private path skipped, no error
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if cfg.UI.CommitSort != "plain" {
-		t.Errorf("empty overlay must not clobber: %q", cfg.UI.CommitSort)
-	}
-}
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `cd /mnt/t/others/gigagit/.claude/worktrees/relocatable-repo-config && go test ./internal/config/ -run 'TestEncodeRepoKey|TestPrivateRepoPath|TestLoadPrivateOverlaysRepo|TestLoadEmptyOverlaySkipped' -v`
-Expected: FAIL — `undefined: EncodeRepoKey`, `undefined: PrivateRepoPath`, and `Load` arity errors won't compile.
+Run: `cd /mnt/t/others/gigagit/.claude/worktrees/relocatable-repo-config && go test ./internal/config/ -run 'TestEncodeRepoKey|TestPrivateRepoPath' -v`
+Expected: FAIL — `undefined: EncodeRepoKey`, `undefined: PrivateRepoPath`.
 
 - [ ] **Step 3: Implement**
 
@@ -172,49 +144,20 @@ func PrivateRepoPath(mainWorktreePath string) string {
 }
 ```
 
-Make `Load` variadic and skip empty paths:
-
-```go
-// Load builds the effective Config: built-in defaults, overlaid by the global
-// file, then the repo file, then each overlayPaths entry in order (each higher
-// priority than the last — the private per-repo file is passed here so it wins
-// over the committed repo file). A missing or empty path is skipped (not an
-// error); a present-but-malformed file errors.
-func Load(globalPath, repoPath string, overlayPaths ...string) (Config, error) {
-	cfg := Defaults()
-	for _, path := range append([]string{globalPath, repoPath}, overlayPaths...) {
-		if path == "" {
-			continue
-		}
-		layer, ok, err := decodeFile(path)
-		if err != nil {
-			return Config{}, err
-		}
-		if ok {
-			overlayWorktree(&cfg.Worktree, layer.Worktree)
-			overlayUI(&cfg.UI, layer.UI)
-			overlayDebug(&cfg.Debug, layer.Debug)
-			overlayRefresh(&cfg.Refresh, layer.Refresh)
-		}
-	}
-	return cfg, nil
-}
-```
-
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `go test ./internal/config/ -v`
-Expected: PASS (new tests + all existing config tests, including `TestDefaultGlobalPath*` and the 2-arg `Load` tests).
+Expected: PASS (new tests + all existing config tests unchanged, including the 2-arg `Load` tests and `TestDefaultGlobalPath*`).
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add internal/config/config.go internal/config/config_test.go
-git commit -m "feat(config): private per-repo config path + three-tier Load
+git commit -m "feat(config): private per-repo config path helpers
 
 EncodeRepoKey/PrivateRepoPath resolve a machine-local per-repo config
-under ~/.config/gg/projects/<encoded>/config.toml; Load takes variadic
-overlay paths so the private file overlays the committed .gg.toml.
+under ~/.config/gg/projects/<encoded>/config.toml, keyed on the main
+worktree path (Claude-style readable key).
 
 Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01BSUWe3VPzxFgnqmZKQ9chg"
@@ -370,8 +313,8 @@ Claude-Session: https://claude.ai/code/session_01BSUWe3VPzxFgnqmZKQ9chg"
 - Modify: `internal/cli/worktree.go` (the `config.Load` call ~line 111)
 
 **Interfaces:**
-- Consumes: `config.PrivateRepoPath`, `config.ActiveRepoConfigPath`, `config.Load(global, repo, private)` (Tasks 1–2); `svc.Worktrees(ctx) ([]model.Worktree, error)` (existing; `wts[0].Path` is the main worktree, same anchor `TempExportBase` uses).
-- Produces: `configReadyMsg.repoTOML` / `dataLoadedMsg.repoTOML` now carry the **active per-repo write target** (private if it exists, else committed). Both handlers already do `m.repoConfigPath = msg.repoTOML` — unchanged.
+- Consumes: `config.PrivateRepoPath`, `config.ActiveRepoConfigPath` (Tasks 1–2); the **unchanged** 2-arg `config.Load(global, active)`; `svc.Worktrees(ctx) ([]model.Worktree, error)` (existing; `wts[0].Path` is the main worktree, same anchor `TempExportBase` uses).
+- Produces: `configReadyMsg.repoTOML` / `dataLoadedMsg.repoTOML` now carry the **active per-repo file** (private if it exists, else committed) — used for BOTH the `config.Load` read and `m.repoConfigPath` (write target). Both handlers already do `m.repoConfigPath = msg.repoTOML` — unchanged.
 
 - [ ] **Step 1: Update `bootstrapCmd` (startup path)**
 
@@ -387,12 +330,13 @@ In `internal/tui/source.go`, replace the repo-config block inside `bootstrapCmd`
 			if wts, werr := svc.Worktrees(ctx); werr == nil && len(wts) > 0 && wts[0].Path != "" {
 				privatePath = config.PrivateRepoPath(wts[0].Path)
 			}
-			if c, cerr := config.Load(config.DefaultGlobalPath(), committed, privatePath); cerr == nil {
+			// One active per-repo file: private if it exists, else committed. The
+			// read path and the write target are the SAME path — no layering (a
+			// committed inverted-polarity key must not shadow a private "off").
+			repoTOML = config.ActiveRepoConfigPath(committed, privatePath)
+			if c, cerr := config.Load(config.DefaultGlobalPath(), repoTOML); cerr == nil {
 				cfg = c
 			}
-			// The per-repo write target follows whichever file is active: the
-			// private user-dir file if it exists, else the committed .gg.toml.
-			repoTOML = config.ActiveRepoConfigPath(committed, privatePath)
 			if statePath != "" {
 				_ = repos.Touch(statePath, top, time.Now())
 			}
@@ -419,10 +363,12 @@ In `internal/tui/load.go`, replace the config-resolution block inside `loadCmd`'
 			if wts, werr := svc.Worktrees(ctx); werr == nil && len(wts) > 0 && wts[0].Path != "" {
 				privatePath = config.PrivateRepoPath(wts[0].Path)
 			}
-			if c, cfgErr := config.Load(config.DefaultGlobalPath(), committed, privatePath); cfgErr == nil {
+			// Same active-file resolution as bootstrapCmd: read + write target
+			// are one path, private if present, else committed.
+			repoTOML = config.ActiveRepoConfigPath(committed, privatePath)
+			if c, cfgErr := config.Load(config.DefaultGlobalPath(), repoTOML); cfgErr == nil {
 				cfg = c
 			}
-			repoTOML = config.ActiveRepoConfigPath(committed, privatePath)
 		}
 ```
 
@@ -441,7 +387,8 @@ In `internal/cli/worktree.go`, replace the single `config.Load(...)` call (~line
 	if wts, werr := svc.Worktrees(ctxBg); werr == nil && len(wts) > 0 && wts[0].Path != "" {
 		privatePath = config.PrivateRepoPath(wts[0].Path)
 	}
-	cfg, err := config.Load(config.DefaultGlobalPath(), filepath.Join(top, ".gg.toml"), privatePath)
+	active := config.ActiveRepoConfigPath(filepath.Join(top, ".gg.toml"), privatePath)
+	cfg, err := config.Load(config.DefaultGlobalPath(), active)
 	if err != nil {
 		fmt.Fprintln(stderr, "error: loading config:", err)
 		return 1
@@ -786,7 +733,7 @@ func (p *repoConfigPopup) box(m Model) string {
 	for _, line := range renderWindow(wr, winOpts{w: textW, h: len(p.actions), mode: modeCutoff, anchor: p.sel}) {
 		b.WriteString(line + "\n")
 	}
-	b.WriteString("\nprivate wins over committed; move deletes the source")
+	b.WriteString("\nactive file = private if present; move deletes the source (may dirty a tracked .gg.toml)")
 	b.WriteString("\n[↑/↓] select  [enter] do  [esc] close")
 	return popupBox(inner, strings.TrimRight(b.String(), "\n"))
 }
@@ -854,10 +801,11 @@ Add under the `## [Unreleased]` → `### Added` list (top):
 - **Relocatable per-repo settings.** Per-repo settings can now live in a private
   machine-local file (`~/.config/gg/projects/<encoded-repo-path>/config.toml`)
   instead of the committed `.gg.toml`, so personal preferences on a shared repo
-  are never committed. Precedence is `defaults → global → committed .gg.toml →
-  private` (private wins). Settings → **"Repo settings location"** copies or
-  moves the whole config between the two locations; the per-repo write target
-  follows whichever file is active.
+  are never committed. gg reads ONE active per-repo file — the private file when
+  it exists, else the committed `.gg.toml` — layered over global
+  (`defaults → global → active repo file`); per-repo Settings writes target the
+  same active file. Settings → **"Repo settings location"** copies or moves the
+  whole config between the two locations.
 ```
 
 - [ ] **Step 2: README**
@@ -871,15 +819,22 @@ gg merges configuration field-by-field, later wins:
 
 1. Built-in defaults
 2. Global — `~/.config/gg/config.toml`
-3. Committed repo — `<repo>/.gg.toml` (tracked; shared with everyone who clones)
-4. Private repo — `~/.config/gg/projects/<encoded-repo-path>/config.toml`
-   (machine-local; never committed)
+3. Active per-repo file — **one** file, whichever exists:
+   - `~/.config/gg/projects/<encoded-repo-path>/config.toml` (machine-local
+     private file; used when present), else
+   - `<repo>/.gg.toml` (committed; tracked and shared with everyone who clones)
 
 The private per-repo file lets you keep personal preferences on a shared repo
 without committing them. It is keyed on the repo's main-worktree path, so every
-linked worktree shares one private config. Settings (`,`) → **Repo settings
-location** copies or moves the whole config between the committed and private
-locations. Once a private file exists, per-repo Settings writes target it.
+linked worktree shares one private config, and when it exists it *replaces* the
+committed `.gg.toml` for that repo (per-repo Settings writes also target it).
+Settings (`,`) → **Repo settings location** copies or moves the whole config
+between the committed and private locations.
+
+On a shared repo the committed `.gg.toml` is git-tracked, so prefer **Copy to
+private** — it keeps the committed team baseline in place while your private
+file takes effect. **Move to private** deletes `.gg.toml`, which leaves a pending
+git deletion in a shared repo.
 ```
 
 - [ ] **Step 3: CLAUDE.md**
@@ -887,12 +842,12 @@ locations. Once a private file exists, per-repo Settings writes target it.
 In the `config` package row of the package map, update the two-tier description to three tiers and note the new API. Add this sentence to that row:
 
 ```
-Per-repo config now has TWO possible homes: the committed `<repo>/.gg.toml` and a machine-local private file `PrivateRepoPath(mainWorktree)` = `$XDG_CONFIG_HOME/gg/projects/<EncodeRepoKey(mainWorktree)>/config.toml`; `Load(global, repo, ...overlay)` overlays the private file last (private wins), and `ActiveRepoConfigPath(committed, private)` picks the write target (private if it exists, else committed) so a Settings write after "move to private" doesn't recreate a committed file. `CopyRepoConfig`/`RemoveRepoConfig` back the whole-file copy/move. TUI `repoconfig_popup.go` (Settings "Repo settings location") drives it.
+Per-repo config now has TWO possible homes: the committed `<repo>/.gg.toml` and a machine-local private file `PrivateRepoPath(mainWorktree)` = `$XDG_CONFIG_HOME/gg/projects/<EncodeRepoKey(mainWorktree)>/config.toml` (keyed on the MAIN worktree so all linked worktrees share it). `Load` is unchanged (2-arg): the caller resolves `ActiveRepoConfigPath(committed, private)` — the private file if it exists on disk, else committed — and passes THAT single path as `repoPath`, so gg reads AND writes one active per-repo file (pure replace, not layering — a committed inverted-polarity/zero-is-unset key must never shadow a private "off"). `CopyRepoConfig`/`RemoveRepoConfig` back the whole-file copy/move. TUI `repoconfig_popup.go` (Settings "Repo settings location") drives it.
 ```
 
 - [ ] **Step 4: adding-config-entries skill**
 
-Open `.claude/skills/adding-config-entries/SKILL.md`; wherever it states the overlay is "defaults → global → repo", update it to "defaults → global → committed repo `.gg.toml` → private per-repo (`PrivateRepoPath`)" and note that `Load` now takes variadic overlay paths (the private file is passed last). Keep the change minimal — one sentence in the precedence explanation.
+Open `.claude/skills/adding-config-entries/SKILL.md`; wherever it states the overlay is "defaults → global → repo", update the repo tier to note it is **one active file** — `PrivateRepoPath(mainWorktree)` when it exists on disk, else `<repo>/.gg.toml` (resolved by `config.ActiveRepoConfigPath`). `Load` itself is unchanged (still 2-arg); the caller passes the active path. Keep the change minimal — one or two sentences in the precedence explanation.
 
 - [ ] **Step 5: Full test suite (with race)**
 
@@ -927,6 +882,6 @@ Claude-Session: https://claude.ai/code/session_01BSUWe3VPzxFgnqmZKQ9chg"
 ## Notes for the executor
 
 - **Anchor asymmetry is intentional:** committed `.gg.toml` on the current worktree, private file on the main worktree. Do not "fix" one to match the other.
-- **Do not overload `Load` semantics:** the private path is passed as the variadic 3rd arg; do not add named private-path parameters or a second load function.
+- **`Load` stays 2-arg:** the caller resolves the active path (`ActiveRepoConfigPath`) and passes it as `repoPath`. Do NOT add a private-path parameter, a variadic, or a second load function, and do NOT layer two repo files (a committed inverted-polarity key would shadow a private "off").
 - **The popup closes and full-reloads after any action** — that is what re-resolves the write target and re-applies sort/EOL. Do not try to mutate `m.cfg` in place in the popup instead; the full reload is the correctness guarantee.
 - **`gofmt`** every file before committing (`test.sh` enforces it).

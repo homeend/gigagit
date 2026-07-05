@@ -85,41 +85,40 @@ private file is a machine-level per-repo artifact.
 point only `top` is known, not the main-worktree path. Since a user may set
 those keys in the private file, `loadCmd` resolves the main-worktree path
 **up front** (one extra cheap `svc.Worktrees(ctx)` gated read; fall back to
-`top` if it fails/empty), computes `privateRepoPath`, and passes all three files
-to `config.Load`. So the private overlay governs the first paint too — no
-one-paint sort/page-size discrepancy.
+`top` if it fails/empty), computes `privateRepoPath`, resolves the **active**
+path (`ActiveRepoConfigPath`), and passes that single path to `config.Load` as
+`repoPath`. So the active file governs the first paint too — no one-paint
+sort/page-size discrepancy.
 
-### 2. Precedence — one new tier (layer, not replace)
+### 2. Precedence — the repo tier's file relocates (pure replace, not layer)
 
 ```
-defaults → global → committed .gg.toml → private user-dir      (later wins)
+defaults → global → active repo file      (later wins)
 ```
 
-The private file **overlays** the committed `.gg.toml`, reusing the exact
-field-level overlay already in `Load` (`overlayWorktree`/`overlayUI`/
-`overlayDebug`/`overlayRefresh`, zero-is-unset rule). Consequences:
+The per-repo tier is **one file read at one path** — not two layered files.
+The active path is the **private file if it exists on disk, else the committed
+`.gg.toml`** (`config.ActiveRepoConfigPath`, §3). `config.Load` is **unchanged**
+(still `Load(globalPath, repoPath)`); the caller passes the active path as
+`repoPath`. Global still sits under the active repo file, so "global overridden
+by local" is preserved exactly.
 
-- After a **move** (committed `.gg.toml` deleted) only the private file remains,
-  so layer and pure-replace are identical.
-- After a **copy** (both present) your private overrides win, *and* any key you
-  did **not** set privately still tracks the team's committed `.gg.toml` — you
-  keep receiving the team baseline for everything you did not personally
-  override. This is why layer is chosen over pure-replace.
+**Why replace, not layer.** An earlier draft layered the private file *over* the
+committed one. With whole-file copy/move that is both pointless and buggy:
 
-`config.Load` grows one argument:
+- *Pointless:* `CopyRepoConfig` duplicates **every** key into the private file,
+  so there are no "keys I didn't set privately" left to inherit from the
+  committed baseline — layer's only advantage evaporates.
+- *Buggy:* the overlay uses zero-is-unset / inverted-polarity rules
+  (`overlayRefresh`: `if src.WorktreesWatch { dst = true }`, `if src.Status > 0`).
+  With committed `worktrees_watch = true` copied under a private `false`, the
+  private `false` reads as *unset* and the committed `true` **shadows** it — so
+  toggling that setting off after a copy silently does nothing. Same for every
+  interval (`0` = unset) and inverted-polarity flag.
 
-```go
-func Load(globalPath, repoPath, privateRepoPath string) (Config, error)
-```
-
-Overlay order inside `Load`: `globalPath`, then `repoPath`, then
-`privateRepoPath` (each skipped if the file is absent, as today). The two
-existing callers pass the extra path:
-
-- `internal/tui/load.go` — already computes `repoTOML`; also compute the private
-  path from the snapshot's main-worktree path and pass it.
-- `internal/cli/worktree.go` — passes the private path derived from `top`'s main
-  worktree (or `""` when it cannot be resolved).
+Replace matches the user's own framing — "the importance stays the same, only
+the path differs" — and unifies the read path with the write target (both are
+`ActiveRepoConfigPath`).
 
 ### 3. Active per-repo write target (the subtle part)
 
@@ -137,7 +136,13 @@ feature.
 `<repo>/.gg.toml`.** Resolved once at load and on every repo switch (`reRoot`),
 stored in `m.repoConfigPath` exactly as today. Every existing writer is
 unchanged — they keep writing to `m.repoConfigPath`, which now simply points at
-whichever file is active.
+whichever file is active. The **read** path (§2) resolves the *same*
+`ActiveRepoConfigPath`, so gg reads and writes one active file — never two.
+
+```go
+// private if it exists on disk, else committed; "" private ⇒ committed.
+func ActiveRepoConfigPath(committedPath, privatePath string) string
+```
 
 - `PrivateRepoPath(...)` present on disk ⇒ `m.repoConfigPath` = private path.
 - else ⇒ `m.repoConfigPath` = `<repo>/.gg.toml` (today's behaviour).
@@ -186,6 +191,18 @@ there is no merge — the destination is overwritten wholesale. If the user want
 to preserve a hand-edited destination, that is out of scope (whole-file model,
 as agreed). The action confirms before overwriting a non-empty destination.
 
+**Tracked-`.gg.toml` caveat.** In the target use case the repo is *shared*, so
+`.gg.toml` is git-tracked. `RemoveRepoConfig` is a plain `os.Remove`, so **Move
+to private** leaves a pending git *deletion* in the working tree rather than
+cleanly "removing it from the shared repo" (and a later checkout can restore it).
+For the shared-repo case **Copy to private is the primary flow** — the committed
+file stays as the team baseline, the private file takes effect (replace), and the
+tree stays clean. The popup footer notes that move deletes the source; documenting
+this (README) is in scope, a git-tracked check in the popup is a deferred nicety
+(it needs a `git ls-files` domain probe the popup does not currently make). In
+*this* repo `.gg.toml` is untracked (the session's `?? .gg.toml`), so the smoke
+test won't surface it — the user's shared-repo scenario will.
+
 ### 5. Settings surface (`,` menu → one new row)
 
 A new Settings row, e.g. **"Repo settings location"**, opens a small popup
@@ -225,21 +242,23 @@ one fixed by the show_graph repo-switch fix).
 - `internal/config` unit tests:
   - `EncodeRepoKey` — POSIX and Windows-style inputs, empty input.
   - `PrivateRepoPath` — honours `$XDG_CONFIG_HOME`, empty anchor ⇒ "".
-  - `Load` with three files — private overlays committed overlays global;
-    absent private file is skipped; move-equivalent (no committed) reads private
-    only.
-  - `CopyRepoConfig`/`RemoveRepoConfig` — round-trip bytes identical, atomicity
-    (temp file cleaned), missing-src error, absent-remove is a no-op.
-- TUI: a unit test that after "move to private" `m.repoConfigPath` points at the
-  private path (write-target redirection), and after "move to committed" it
-  points back at `.gg.toml`.
+  - `ActiveRepoConfigPath` — private-absent ⇒ committed; private-present ⇒
+    private; empty private ⇒ committed.
+  - `CopyRepoConfig`/`RemoveRepoConfig` — round-trip bytes identical, parent dir
+    created, missing-src error, absent-remove is a no-op.
+- TUI: pure-logic tests for `repoConfigActions` (which actions given which files
+  exist) and `repoCfgEndpoints` (src/dst/isMove per action). The off-thread
+  write-target redirection is covered by `ActiveRepoConfigPath` + the live smoke
+  test (driving the real popup) — an isolated TUI test of the `svc.Worktrees`
+  stat path is impractical.
 - No e2e scenario required for MVP (TUI-only surface); revisit if a CLI surface
   is added later.
 
 ## Docs to update on completion
 
 - `CHANGELOG.md` (always).
-- `README.md` — document the three-tier precedence and the private per-repo
+- `README.md` — document the config precedence (global under the active repo
+  file) and the private per-repo
   file location.
 - `CLAUDE.md` — the `config` package row: new tier, `PrivateRepoPath`, the
   active-write-target rule.
@@ -256,3 +275,11 @@ one fixed by the show_graph repo-switch fix).
   is orphaned under the old encoded key. Out of scope; the private file is
   cheap and inert. A future `gg config prune-private` could sweep unreadable
   keys.
+- **"Discard private / revert to committed"** — with replace semantics, going
+  back to the committed file while both exist means deleting the private file
+  (not "move to committed", which overwrites the team file with your private
+  version). The four copy/move actions match the user's request; a dedicated
+  discard action is a deferred nicety.
+- **Git-tracked warning in the popup** — warn when "Move to private" would delete
+  a *tracked* `.gg.toml` (needs a `git ls-files` domain probe). Deferred;
+  documented in README for MVP.
