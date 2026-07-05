@@ -991,23 +991,25 @@ func TestCtrlGSoloSetsPendingAndReloads(t *testing.T) {
 }
 
 // TestReloadedMsgDrainsPendingGotoTip: the scope reload landing finishes the
-// ctrl+g gesture — cursor on the tip, Commits focused, pending cleared.
+// ctrl+g gesture — cursor on the tip, Commits focused, pending cleared. The
+// tip sits at a NON-zero index: index 0 is also the sel-clamp default, so
+// only a non-zero landing spot proves the drain targeted the tip hash.
 func TestReloadedMsgDrainsPendingGotoTip(t *testing.T) {
 	m := newTestModelForReload(t)
 	m.branches[0].Hash = "t1deadbeef"
 	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlG})
 	m = nm.(Model)
 	msg := commitsReloadedMsg{gen: m.feed.Gen(), state: domain.FeedState{Commits: []model.Commit{
-		{Hash: "t1deadbeefcafe", Subject: "tip"},
 		{Hash: "b0aaaaaaaaaa", Subject: "base"},
+		{Hash: "t1deadbeefcafe", Subject: "tip"},
 	}}}
 	nm, _ = m.Update(msg)
 	m = nm.(Model)
 	if m.pendingGotoTip != "" {
 		t.Fatalf("pendingGotoTip = %q, want drained", m.pendingGotoTip)
 	}
-	if m.focus != panelCommits || m.sel[panelCommits] != 0 {
-		t.Fatalf("focus=%v sel=%d, want panelCommits/0 (the tip row)", m.focus, m.sel[panelCommits])
+	if m.focus != panelCommits || m.sel[panelCommits] != 1 {
+		t.Fatalf("focus=%v sel=%d, want panelCommits/1 (the tip row)", m.focus, m.sel[panelCommits])
 	}
 }
 
