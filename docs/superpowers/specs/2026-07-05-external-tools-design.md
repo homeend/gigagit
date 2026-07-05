@@ -162,13 +162,15 @@ Supporting a new tool is one `Builtins` entry — the `agentinit` philosophy.
 
 ### Stage-1 default commands (catalog contents)
 
-**Claude Code** — repo-level, `terminal`:
+**Claude Code** — repo-level, `terminal` (values via env expansion + the
+context file; no raw prose substitution):
 
 ```
 claude --permission-mode acceptEdits \
   --allowedTools "Read" "Edit" "Bash(git status)" "Bash(git diff *)" "Bash(git log *)" "Bash(git add *)" \
   --disallowedTools "Bash(git commit *)" "Bash(git merge *)" "Bash(git rebase *)" "Bash(git push *)" \
-  "A git <op> (bringing <source> into <target>) is paused with conflicts in: <conflicted-files>.
+  "A git <env:GG_OP> operation is paused with conflicts in this repository.
+   Read the context file at <env:GG_CONTEXT_FILE> for the operation's parties and the conflicted paths.
    Inspect both sides' history to understand intent, resolve each conflict by editing the files,
    then run git add on each resolved file. Do NOT run git commit or any --continue command --
    stop when everything is staged and summarize what you chose and why."
@@ -176,13 +178,13 @@ claude --permission-mode acceptEdits \
 
 **Junie** — two repo-level `terminal` entries with op filters:
 
-- `Junie (merge)`, `when_op = "merge"`: `junie --merge <source>`
-- `Junie (rebase)`, `when_op = "rebase"`: `junie --rebase <source>`
+- `Junie (merge)`, `when_op = "merge"`: `junie --merge <env:GG_SOURCE>`
+- `Junie (rebase)`, `when_op = "rebase"`: `junie --rebase <env:GG_SOURCE>`
 
 Empirical note (research §8): whether `--merge`/`--rebase` correctly adopt
 an *already-paused* op must be verified against a live Junie during
 implementation; the fallback default is
-`junie --prompt "Resolve the conflicts of the paused git <op> in this repository. Edit and git add the resolved files; do not run git commit or --continue."`.
+`junie --prompt "Resolve the conflicts of the paused git <env:GG_OP> in this repository (see the context file at <env:GG_CONTEXT_FILE>). Edit and git add the resolved files; do not run git commit or --continue."`.
 The verification outcome decides which text ships in `Builtins()`.
 
 **Meld** — `per_file = true`, `terminal`:
@@ -204,17 +206,39 @@ meld --auto-merge --output=<merged> <local> <base> <remote>
 
 A command-context resolver in `internal/template` (new entry point reusing
 `tokenRe`/`UserLabels`). Quoting is **per token kind**: path-valued tokens
-(`<repo>`, `<file>`, `<local>`, `<base>`, `<remote>`, `<merged>`) are
-shell-quoted on substitution (they sit in argv positions and may contain
-spaces); prose-valued tokens (`<op>`, `<source>`, `<target>`,
-`<conflicted-files>`, `<user:…>`) substitute raw — the defaults embed them
-inside prompt strings, where injected quotes would corrupt the text, and git
-refnames cannot contain spaces. The existing `<branch>` path-sanitization
-route is wrong for shell arguments and is not used. Additionally `<bin>` is
-a **generation-time-only** token in catalog templates — the wizard replaces
-it with the detected binary (bare name from PATH, quoted absolute path from
-an extra probe) before writing config; the runtime resolver rejects it with
-a pointed error.
+(`<repo>`, `<file>`, `<local>`, `<base>`, `<remote>`, `<merged>`,
+`<context-file>`) are shell-quoted on substitution (they sit in argv
+positions and may contain spaces); prose-valued tokens (`<op>`, `<source>`,
+`<target>`, `<conflicted-files>`, `<user:…>`) substitute **literally** —
+the resolver never escapes or rewrites their content. The existing
+`<branch>` path-sanitization route is wrong for shell arguments and is not
+used.
+
+**Injection posture (user decision, 2026-07-05):** substituted values are
+not escaped; instead, dynamic content reaches commands through two safe
+channels that need no escaping at all:
+
+1. **The context file** — every conflict-tool run writes a temp file
+   (op, source, target, and the conflicted paths one-per-line, byte-exact —
+   a backtick or `$` in a file name is just a character in a file) and
+   exposes it as `<context-file>` (shell-quoted path token) and
+   `GG_CONTEXT_FILE`. This also scales to long context. Cleaned up after
+   the run like the quartet temps.
+2. **`GG_*` env vars** — shell expansion of a quoted variable is data,
+   never code.
+
+The shipped **default templates use only these two channels plus enum/path
+tokens** — no default substitutes a raw prose value. The prose tokens
+remain available for hand-written commands and are documented with the
+caveat: their content is substituted verbatim into shell text, so use
+`"$GG_*"`/`<context-file>` when values may contain shell metacharacters.
+
+Two **generation-time-only** tokens exist in catalog templates and are
+rejected by the runtime resolver with pointed errors: `<bin>` (replaced by
+the detected binary — bare name from PATH, quoted absolute path from an
+extra probe) and `<env:NAME>` (rendered per-OS at wizard time as `"$NAME"`
+on POSIX or `%NAME%` on Windows, so one catalog template generates a
+correct command on either platform).
 
 | Token | Value (stage 1) |
 |---|---|
@@ -230,9 +254,12 @@ a pointed error.
 Per-file tokens in a repo-level command (or vice-versa-invalid combinations)
 make the block inert at load (validation above). The same values are always
 injected as env — `GG_OP`, `GG_SOURCE`, `GG_TARGET`, `GG_CONFLICTED_FILES`,
-`GG_REPO`, `GG_FILE`, `GG_LOCAL`, `GG_BASE`, `GG_REMOTE`, `GG_MERGED` — so a
-wrapper script needs no placeholders at all (post-create-hook precedent).
-Quartet temp files are deleted after the run (best-effort).
+`GG_REPO`, `GG_FILE`, `GG_LOCAL`, `GG_BASE`, `GG_REMOTE`, `GG_MERGED`,
+`GG_CONTEXT_FILE` — so a wrapper script needs no placeholders at all
+(post-create-hook precedent). The context file's format is line-oriented:
+`op:`/`source:`/`target:` header lines, then `conflicted:` followed by one
+repo-relative path per line (newline-separated — no quoting ambiguity).
+Context file and quartet temp files are deleted after the run (best-effort).
 
 ## Execution plumbing
 
