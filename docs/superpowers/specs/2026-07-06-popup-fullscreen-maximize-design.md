@@ -27,16 +27,18 @@ state plus one shared width resolver. A popup "opts in" by embedding the state,
 honoring it in `render`, and calling the shared toggle helper in its navigation
 branch. Popups that don't opt in are unaffected — `T` is simply inert there.
 
-**Initial opt-in set** (converted in this feature):
+**Initial opt-in set** (converted in this feature). The last column records
+what maximize must change per popup — a fact established by reading each
+popup's `render`/`box` (see "What maximize changes" below):
 
-| Popup | Type | Why |
-|---|---|---|
-| Git config explorer | `gitConfigPopup` | 4-column table; columns already shrink to floors and truncate |
-| Content viewer / `?` cheat-sheet | `contentPopup` | The literal "content too large" case (`?` pushes `newContentPopup`) |
-| Bookmark switcher | `bookmarkPopup` | Long file-address rows |
-| Shelf switcher | `shelfPopup` | Same — path tails get cut |
-| Repo switcher | `repoPopup` | Long repo paths |
-| Fuzzy file finder | `fileFinderPopup` | Long paths, many matches |
+| Popup | Type | Why | Maximize changes |
+|---|---|---|---|
+| Content viewer / `?` cheat-sheet | `contentPopup` | The literal "content too large" case (`?` pushes `newContentPopup`) | width only (rows already `h-7`) |
+| Git config explorer | `gitConfigPopup` | 4-column table; columns already shrink to floors and truncate | width only (rows already `termH-12`) |
+| Bookmark switcher | `bookmarkPopup` | Long file-address rows | width + row cap (fixed 12) |
+| Shelf switcher | `shelfPopup` | Same — path tails get cut | width + row cap (fixed 12) |
+| Repo switcher | `repoPopup` | Long repo paths; uses the narrow 56-col `popupInnerWidth` | width + row cap (fixed 12) |
+| Fuzzy file finder | `fileFinderPopup` | Long paths, many matches | width + row cap (fixed 16) |
 
 Every other popup inherits the mechanism the next time it is touched — that is
 the opt-in bargain. The **external-tools wizard** already renders at
@@ -50,7 +52,6 @@ not a conversion target.
   A popup stripped of its frame loses its title and footer.
 - No new config key, no persistence. `maximized` is transient view state on the
   popup instance; it resets when the popup closes.
-- No height/row-budget work in this feature (see "Width-only" below).
 
 ## Architecture
 
@@ -78,7 +79,7 @@ func (p *popupMax) handleMaxKey(msg tea.KeyMsg) bool {
 A popup opts in by embedding `popupMax`, which gives it `maxed()` and
 `handleMaxKey` for free.
 
-### 2. Shared width resolver
+### 2. Shared resolvers (width + row cap)
 
 ```go
 // popupResolveWidth returns the near-fullscreen inner width when maximized,
@@ -90,15 +91,41 @@ func popupResolveWidth(w int, maximized bool, normal int) int {
 	}
 	return normal
 }
+
+// popupMaxRowCap is the visible-row budget for a maximized list popup whose
+// normal budget is a small fixed constant: terminal height minus box chrome,
+// floored so a tiny terminal still shows a few rows. Mirrors gitConfigPopup's
+// existing capRows (termH - 12).
+func popupMaxRowCap(termH int) int {
+	n := termH - 12
+	if n < 3 {
+		n = 3
+	}
+	return n
+}
 ```
 
-Each opt-in popup changes one line in its `render`/`box`:
+Each opt-in popup changes its width line in `render`/`box`:
 
 ```go
 // before
 inner := popupWideInnerWidth(w)
 // after
 inner := popupResolveWidth(w, p.maximized, popupWideInnerWidth(w))
+```
+
+The four fixed-cap popups additionally lift their row cap when maximized
+(their `render`/`box` currently discards the terminal height with
+`w, _ := m.overlayDims()`, so it must switch to `w, termH := m.overlayDims()`):
+
+```go
+// before
+capRows := 12          // fixed; 16 in fileFinderPopup
+// after
+capRows := 12          // fixed; 16 in fileFinderPopup
+if p.maximized {
+	capRows = popupMaxRowCap(termH)
+}
 ```
 
 ### 3. Key routing — per-popup nav branch, NOT a global intercept
@@ -135,19 +162,26 @@ initial set are always-typing — the fuzzy finder is navigation-first with a
   opt-in popup adds `T full` to its hint line, and `help.go` notes that `T`
   also maximizes popups.
 
-## Width-only (why no height work)
+## What maximize changes (per popup)
 
-All six opt-in popups already derive their box **height** from the terminal:
-they render through `overlayCenter(clipToHeight(below, h), …)`, and their
-visible-row budget scales with `h` (`contentPopup` uses
-`contentPageRows = h - 7`). Their content already fills the available height.
-The dimension that hurts is **width** — truncated columns and clipped path
-tails. So maximize is a width change; the height already scales.
+The dimension that always hurts is **width** — truncated columns and clipped
+path tails — so every opt-in popup widens to `popupFullInnerWidth` when
+maximized. Height is popup-dependent, established by reading each `render`/`box`:
 
-This keeps the shared mechanism minimal: `popupMax` is just a flag + toggle;
-*how* a popup spends the maximized state (width here) is the popup's own choice
-in `render`. A future non-full-height opt-in popup could additionally grow its
-height, but nothing in the initial set needs it.
+- **`contentPopup`** (row budget `contentPageRows = h - 7`) and
+  **`gitConfigPopup`** (row budget `capRows = termH - 12`) already derive their
+  visible-row count from the terminal, so their height already fills. These two
+  are **width-only**.
+- **`bookmarkPopup`**, **`shelfPopup`**, **`repoPopup`** (fixed cap of 12) and
+  **`fileFinderPopup`** (fixed cap of 16) cap their rows at a small constant
+  regardless of terminal height. A full-width-but-12-rows box is not
+  "fullscreen," so these four also **lift their row cap** to `popupMaxRowCap`
+  when maximized.
+
+The shared mechanism stays minimal — `popupMax` is just a flag + toggle; *how*
+a popup spends the maximized state (width, and row cap where the cap is fixed)
+is each popup's own choice in `render`. `popupResolveWidth` and
+`popupMaxRowCap` are the two shared helpers that keep those choices uniform.
 
 ## Edge cases / gotchas
 
@@ -173,8 +207,11 @@ presence:
    normal width.
 2. `handleMaxKey`: `"T"` flips `maximized` and reports consumed; any other key
    leaves it untouched and reports not-consumed.
-3. Per opt-in popup: render normal vs. maximized on a wide terminal; assert
-   `lipgloss.Width(maximizedBox) > lipgloss.Width(normalBox)`.
+3. Per opt-in popup: render normal vs. maximized on a wide, tall terminal;
+   assert `lipgloss.Width(maximizedBox) > lipgloss.Width(normalBox)`. For the
+   four fixed-cap popups (bookmark/shelf/repo/finder), also feed more rows than
+   the fixed cap and assert the maximized box has more body lines than the
+   normal box (the row cap lifted).
 4. Typing-collision: a popup in its filter/text-entry state fed `"T"` inserts
    the character and does **not** maximize.
 5. Exit: `esc` on a maximized popup closes it outright (does not merely
@@ -187,4 +224,3 @@ presence:
 - `ctrl+t` (or query-empty `T`) maximize for always-typing popups, if any are
   added later.
 - Converting the remaining ~24 popups eagerly — left to "as touched."
-- Height maximize for a future non-full-height opt-in popup.
