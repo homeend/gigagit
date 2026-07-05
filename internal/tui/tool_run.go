@@ -32,7 +32,9 @@ func (m Model) toolRepoKey() string {
 }
 
 // toolEnv renders the CmdCtx as GG_* env entries — the no-placeholder path
-// for wrapper scripts (the post-create-hook pattern). All ten are always set.
+// for wrapper scripts (the post-create-hook pattern). All eleven are always
+// set (GG_CONTEXT_FILE is "" when the caller has no context file, e.g. a
+// direct unit-test CmdCtx that never went through toolContextFile).
 func toolEnv(ctx template.CmdCtx) []string {
 	return []string{
 		"GG_OP=" + ctx.Op,
@@ -45,7 +47,39 @@ func toolEnv(ctx template.CmdCtx) []string {
 		"GG_BASE=" + ctx.Base,
 		"GG_REMOTE=" + ctx.Remote,
 		"GG_MERGED=" + ctx.Merged,
+		"GG_CONTEXT_FILE=" + ctx.ContextFile,
 	}
+}
+
+// toolContextFile writes the per-run context file: op/source/target header
+// lines, then the conflicted paths one per line, byte-exact — no quoting or
+// escaping, since a newline-delimited list needs none and this is the
+// channel the injection-posture design uses specifically to avoid needing
+// any (see the design spec's "Placeholders and environment" section).
+// Created for conflict-category runs only, the only category stage 1 has.
+func toolContextFile(ctx template.CmdCtx) (string, error) {
+	var b strings.Builder
+	b.WriteString("op: " + ctx.Op + "\n")
+	b.WriteString("source: " + ctx.Source + "\n")
+	b.WriteString("target: " + ctx.Target + "\n")
+	b.WriteString("conflicted:\n")
+	for _, f := range ctx.ConflictedFiles {
+		b.WriteString(f + "\n")
+	}
+	f, err := os.CreateTemp("", "gg-context-*.txt")
+	if err != nil {
+		return "", err
+	}
+	if _, err := f.WriteString(b.String()); err != nil {
+		f.Close()
+		os.Remove(f.Name())
+		return "", err
+	}
+	if err := f.Close(); err != nil {
+		os.Remove(f.Name())
+		return "", err
+	}
+	return f.Name(), nil
 }
 
 // toolScript writes the resolved command to a temp script (0700) so the shell

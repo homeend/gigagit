@@ -2,6 +2,7 @@ package tui
 
 import (
 	"os"
+	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
@@ -23,15 +24,42 @@ func TestToolCommandHash(t *testing.T) {
 func TestToolEnv(t *testing.T) {
 	env := toolEnv(template.CmdCtx{Op: "merge", Source: "f", Target: "main",
 		Repo: "/r", ConflictedFiles: []string{"a.go", "b.go"},
-		File: "a.go", Local: "/t/l", Base: "/t/b", Remote: "/t/r", Merged: "/r/a.go"})
+		File: "a.go", Local: "/t/l", Base: "/t/b", Remote: "/t/r", Merged: "/r/a.go",
+		ContextFile: "/tmp/gg-context-1.txt"})
 	sort.Strings(env)
 	want := []string{
-		"GG_BASE=/t/b", "GG_CONFLICTED_FILES=a.go b.go", "GG_FILE=a.go",
-		"GG_LOCAL=/t/l", "GG_MERGED=/r/a.go", "GG_OP=merge", "GG_REMOTE=/t/r",
+		"GG_BASE=/t/b", "GG_CONFLICTED_FILES=a.go b.go", "GG_CONTEXT_FILE=/tmp/gg-context-1.txt",
+		"GG_FILE=a.go", "GG_LOCAL=/t/l", "GG_MERGED=/r/a.go", "GG_OP=merge", "GG_REMOTE=/t/r",
 		"GG_REPO=/r", "GG_SOURCE=f", "GG_TARGET=main",
+	}
+	if len(env) != 11 {
+		t.Fatalf("want 11 entries, got %d: %v", len(env), env)
 	}
 	if strings.Join(env, "|") != strings.Join(want, "|") {
 		t.Errorf("env = %v\nwant %v", env, want)
+	}
+}
+
+func TestToolContextFileContent(t *testing.T) {
+	ctx := template.CmdCtx{
+		Op: "merge", Source: "feature", Target: "main",
+		ConflictedFiles: []string{"a$(x) b.go", "c.go"},
+	}
+	path, err := toolContextFile(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(path)
+	if !strings.HasPrefix(filepath.Base(path), "gg-context-") {
+		t.Errorf("path = %q, want a gg-context-* temp file", path)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "op: merge\nsource: feature\ntarget: main\nconflicted:\na$(x) b.go\nc.go\n"
+	if string(data) != want {
+		t.Errorf("context file content = %q\nwant %q", data, want)
 	}
 }
 

@@ -3,6 +3,7 @@ package tui
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -17,25 +18,32 @@ import (
 // NOTE: keyRunes(s) already exists in this package (irebase_view_test.go) —
 // use it, do NOT redeclare it.
 
-// cleanupToolTemp snapshots the gg-tool-* temp scripts already in
-// os.TempDir() and registers a t.Cleanup that removes any new ones. Needed
-// because execToolCmd writes the resolved command to a real temp script
-// (toolScript) SYNCHRONOUSLY when it builds the tea.ExecProcess command —
-// before that command ever runs — so any test that drives the approval
-// state to "enter" leaks a real file even though it never executes the
-// returned tea.Cmd. Call this before the approving keypress.
+// cleanupToolTemp snapshots the gg-tool-* / gg-context-* temp files already
+// in os.TempDir() and registers a t.Cleanup that removes any new ones.
+// Needed because execToolCmd writes the resolved command to a real temp
+// script (toolScript) SYNCHRONOUSLY when it builds the tea.ExecProcess
+// command — before that command ever runs — and buildToolRun writes a real
+// per-run context file (toolContextFile) just as synchronously, on every
+// call — so any test that drives the flow past "t"+enter leaks real files
+// even though it never executes the returned tea.Cmd. Call this before the
+// first keypress that starts a tool run.
 func cleanupToolTemp(t *testing.T) {
 	t.Helper()
-	before, _ := filepath.Glob(filepath.Join(os.TempDir(), "gg-tool-*"))
-	seen := make(map[string]bool, len(before))
-	for _, p := range before {
-		seen[p] = true
+	patterns := []string{"gg-tool-*", "gg-context-*"}
+	seen := map[string]bool{}
+	for _, pat := range patterns {
+		before, _ := filepath.Glob(filepath.Join(os.TempDir(), pat))
+		for _, p := range before {
+			seen[p] = true
+		}
 	}
 	t.Cleanup(func() {
-		after, _ := filepath.Glob(filepath.Join(os.TempDir(), "gg-tool-*"))
-		for _, p := range after {
-			if !seen[p] {
-				os.Remove(p)
+		for _, pat := range patterns {
+			after, _ := filepath.Glob(filepath.Join(os.TempDir(), pat))
+			for _, p := range after {
+				if !seen[p] {
+					os.Remove(p)
+				}
 			}
 		}
 	})
@@ -120,10 +128,26 @@ func TestToolPickEnterResolvesAndAsksApproval(t *testing.T) {
 	if cmd != nil {
 		t.Error("no async work expected for a repo-level command")
 	}
+	// Every run gets a per-run context file; its path rides in pending.cleanup.
+	var ctxFile string
+	for _, f := range p.pending.cleanup {
+		if strings.Contains(filepath.Base(f), "gg-context-") {
+			ctxFile = f
+		}
+	}
+	if ctxFile == "" {
+		t.Fatalf("pending.cleanup = %v, want a gg-context-* file", p.pending.cleanup)
+	}
+	if _, err := os.Stat(ctxFile); err != nil {
+		t.Errorf("context file must exist while pending: %v", err)
+	}
 	// esc cancels without approving.
 	m, _ = p.update(m, tea.KeyMsg{Type: tea.KeyEsc})
 	if p.st != confListing || p.pending != nil {
 		t.Errorf("esc must clear the pending run: st=%v pending=%v", p.st, p.pending)
+	}
+	if _, err := os.Stat(ctxFile); !os.IsNotExist(err) {
+		t.Errorf("esc must remove the context file, stat err = %v", err)
 	}
 }
 
@@ -166,6 +190,7 @@ func TestToolApprovedFastPathSkipsGate(t *testing.T) {
 func TestToolUserFillStepPrecedesApproval(t *testing.T) {
 	m, p := conflictModelWithTools(t,
 		config.ToolCommand{Category: "conflict", Name: "Agent", Mode: "terminal", Command: "agent <user:hint>"})
+	cleanupToolTemp(t) // buildToolRun (after the fill below) eagerly writes a real gg-context-* file
 	m, _ = p.update(m, keyRunes("t"))
 	m, _ = p.update(m, tea.KeyMsg{Type: tea.KeyEnter})
 	if p.st != confToolFill || p.toolFill == nil {

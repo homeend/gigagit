@@ -91,6 +91,13 @@ func TestBuiltinsCatalogInvariants(t *testing.T) {
 			if !strings.Contains(ct.Command, "<bin>") {
 				t.Errorf("%s/%s: command must start from <bin>", tl.ID, ct.Name)
 			}
+			// Injection posture: a default must never substitute a raw prose
+			// value into shell text — only <bin>/<env:...>/path/enum tokens.
+			for _, badTok := range []string{"<op>", "<source>", "<target>", "<conflicted-files>"} {
+				if strings.Contains(ct.Command, badTok) {
+					t.Errorf("%s/%s: raw prose token %s in a default command", tl.ID, ct.Name, badTok)
+				}
+			}
 			key := string(ct.Category) + "\x00" + ct.Name
 			if seen[key] {
 				t.Errorf("duplicate (category,name): %s/%s", ct.Category, ct.Name)
@@ -117,5 +124,19 @@ func TestGenerateCommand(t *testing.T) {
 	}
 	if got := GenerateCommand(ct, `C:\Program Files\Meld\Meld.exe`); got != `"C:\Program Files\Meld\Meld.exe" --auto-merge <local>` {
 		t.Errorf("spaced bin must be double-quoted: got %q", got)
+	}
+}
+
+func TestGenerateCommandForEnvToken(t *testing.T) {
+	ct := CommandTemplate{Command: "<bin> --merge <env:GG_SOURCE>"}
+	if got := GenerateCommandFor(ct, "junie", "linux"); got != `junie --merge "$GG_SOURCE"` {
+		t.Errorf("linux: got %q", got)
+	}
+	if got := GenerateCommandFor(ct, "junie", "windows"); got != `junie --merge %GG_SOURCE%` {
+		t.Errorf("windows: got %q", got)
+	}
+	// <bin> substitution still happens alongside <env:...> rendering.
+	if got := GenerateCommandFor(ct, "junie", "darwin"); got != `junie --merge "$GG_SOURCE"` {
+		t.Errorf("non-windows treated as POSIX: got %q", got)
 	}
 }

@@ -271,6 +271,10 @@ func (p *conflictProcess) startToolRun(m Model) (Model, tea.Cmd) {
 
 // buildToolRun assembles the CmdCtx and pendingToolRun for tc; per-file
 // commands go async through ConflictFileVersions (confWorking meanwhile).
+// Every run gets a per-run context file (op/source/target + conflicted
+// paths, byte-exact — the injection-posture channel for dynamic content
+// that needs no escaping); its path rides in pending.cleanup for removal
+// alongside the run's other temp files.
 func (p *conflictProcess) buildToolRun(m Model, tc config.ToolCommand, inputs map[string]string) (Model, tea.Cmd) {
 	ctx := template.CmdCtx{
 		Op: p.src.Op, Source: p.src.Source, Target: p.src.Target,
@@ -279,14 +283,22 @@ func (p *conflictProcess) buildToolRun(m Model, tc config.ToolCommand, inputs ma
 	for _, f := range p.files {
 		ctx.ConflictedFiles = append(ctx.ConflictedFiles, f.Path)
 	}
+	ctxFile, err := toolContextFile(ctx)
+	if err != nil {
+		p.st = confReporting
+		p.errMsg = err.Error()
+		return m, nil
+	}
+	ctx.ContextFile = ctxFile
 	if !tc.PerFile {
 		resolved, err := template.ResolveCommand(tc.Command, inputs, ctx)
 		if err != nil {
+			os.Remove(ctxFile)
 			p.st = confReporting
 			p.errMsg = err.Error()
 			return m, nil
 		}
-		p.pending = &pendingToolRun{tc: tc, resolved: resolved, env: toolEnv(ctx)}
+		p.pending = &pendingToolRun{tc: tc, resolved: resolved, env: toolEnv(ctx), cleanup: []string{ctxFile}}
 		return p.gateOrRun(m)
 	}
 	// Per-file: quartet first (async), then resolve in the toolReadyMsg handler.
@@ -302,17 +314,19 @@ func (p *conflictProcess) buildToolRun(m Model, tc config.ToolCommand, inputs ma
 	return m, func() tea.Msg {
 		local, base, remote, cleanup, err := svc.ConflictFileVersions(context.Background(), path, hasBase)
 		if err != nil {
+			os.Remove(ctxFile)
 			return toolReadyMsg{err: err}
 		}
 		ctx.Local, ctx.Base, ctx.Remote = local, base, remote
 		resolved, rerr := template.ResolveCommand(tc.Command, inputs, ctx)
 		if rerr != nil {
 			cleanup() // ConflictFileVersions' cleanup removes local/base/remote
+			os.Remove(ctxFile)
 			return toolReadyMsg{err: rerr}
 		}
 		return toolReadyMsg{pending: &pendingToolRun{
 			tc: tc, resolved: resolved, env: toolEnv(ctx),
-			cleanup: []string{local, base, remote}, // paths recorded for the post-run path
+			cleanup: []string{local, base, remote, ctxFile}, // paths recorded for the post-run path
 			file:    path, merged: ctx.Merged,
 		}}
 	}

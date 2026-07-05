@@ -9,6 +9,8 @@ package exttool
 
 import (
 	"os"
+	"regexp"
+	"runtime"
 	"strings"
 )
 
@@ -32,8 +34,11 @@ const (
 )
 
 // CommandTemplate is one catalog default command. Command contains <bin>
-// (replaced at generation time by GenerateCommand) plus runtime tokens
-// resolved by template.ResolveCommand.
+// and may contain <env:NAME> (both replaced at generation time by
+// GenerateCommand/GenerateCommandFor) plus runtime tokens resolved by
+// template.ResolveCommand. Defaults use only <bin>/<env:...>/path/enum
+// tokens for dynamic content — never a raw prose token — per the injection
+// posture in the design spec.
 type CommandTemplate struct {
 	Category Category
 	Name     string // menu label; unique per category across the catalog
@@ -54,10 +59,16 @@ type Tool struct {
 	Commands    []CommandTemplate
 }
 
+// claudeConflictCommand uses only generation-time tokens (<bin>, <env:...>)
+// for its dynamic content — no raw prose token — per the injection-posture
+// amendment: the prompt reads the paused op and the context file (op/
+// source/target/conflicted paths) from GG_* env vars rather than having gg
+// substitute untrusted values into the prompt text itself.
 const claudeConflictCommand = `<bin> --permission-mode acceptEdits \
   --allowedTools "Read" "Edit" "Bash(git status)" "Bash(git diff *)" "Bash(git log *)" "Bash(git add *)" \
   --disallowedTools "Bash(git commit *)" "Bash(git merge *)" "Bash(git rebase *)" "Bash(git push *)" \
-  "A git <op> (bringing <source> into <target>) is paused with conflicts in: <conflicted-files>.
+  "A git <env:GG_OP> operation is paused with conflicts in this repository.
+   Read the context file at <env:GG_CONTEXT_FILE> for the operation's parties and the conflicted paths.
    Inspect both sides' history to understand intent, resolve each conflict by editing the files,
    then run git add on each resolved file. Do NOT run git commit or any --continue command --
    stop when everything is staged and summarize what you chose and why."`
@@ -78,8 +89,8 @@ func Builtins() []Tool {
 				// Empirical note (spec): whether --merge/--rebase adopt an
 				// already-paused op is verified live before merge; the fallback
 				// is a --prompt task (see the spec's Junie entry).
-				{Category: CatConflict, Name: "Junie (merge)", Mode: ModeTerminal, WhenOp: "merge", Command: "<bin> --merge <source>"},
-				{Category: CatConflict, Name: "Junie (rebase)", Mode: ModeTerminal, WhenOp: "rebase", Command: "<bin> --rebase <source>"},
+				{Category: CatConflict, Name: "Junie (merge)", Mode: ModeTerminal, WhenOp: "merge", Command: "<bin> --merge <env:GG_SOURCE>"},
+				{Category: CatConflict, Name: "Junie (rebase)", Mode: ModeTerminal, WhenOp: "rebase", Command: "<bin> --rebase <env:GG_SOURCE>"},
 			},
 		},
 		{
@@ -129,12 +140,38 @@ func Detect(look func(string) (string, error), stat func(string) (os.FileInfo, e
 	return out
 }
 
-// GenerateCommand materializes a template for a detected binary: <bin> is
-// replaced with bin, double-quoted when it contains whitespace (a Windows
-// install path). Runtime tokens pass through untouched.
+// envTokRe matches a generation-time <env:NAME> token in a catalog template.
+// NAME follows shell env-var naming: an uppercase letter/underscore start,
+// then uppercase letters/digits/underscores.
+var envTokRe = regexp.MustCompile(`<env:([A-Z_][A-Z0-9_]*)>`)
+
+// GenerateCommand materializes a template for a detected binary, for the
+// running OS. See GenerateCommandFor for what "materialize" means.
 func GenerateCommand(tmpl CommandTemplate, bin string) string {
+	return GenerateCommandFor(tmpl, bin, runtime.GOOS)
+}
+
+// GenerateCommandFor is GenerateCommand with the OS as a parameter (a test
+// seam for exercising both renderings from one process). <bin> is replaced
+// with bin, double-quoted when it contains whitespace (a Windows install
+// path). Every <env:NAME> generation token becomes a per-OS reference to the
+// GG_* environment variable gg always sets when it runs the command —
+// `"$NAME"` on POSIX, `%NAME%` on Windows — so one catalog template
+// generates a correct command on either platform without gg ever
+// substituting the underlying value (and needing to escape it) itself.
+// Runtime tokens (<op>, <source>, quartet paths, <context-file>, ...) pass
+// through untouched for template.ResolveCommand.
+func GenerateCommandFor(tmpl CommandTemplate, bin, goos string) string {
 	if strings.ContainsAny(bin, " \t") {
 		bin = `"` + bin + `"`
 	}
-	return strings.ReplaceAll(tmpl.Command, "<bin>", bin)
+	out := strings.ReplaceAll(tmpl.Command, "<bin>", bin)
+	out = envTokRe.ReplaceAllStringFunc(out, func(tok string) string {
+		name := envTokRe.FindStringSubmatch(tok)[1]
+		if goos == "windows" {
+			return "%" + name + "%"
+		}
+		return `"$` + name + `"`
+	})
+	return out
 }

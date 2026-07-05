@@ -68,7 +68,7 @@ var settingDocs = []settingDoc{
 	{"refresh", "reflog_watch", false, "refresh reflog on logs/HEAD change (off → use interval); ignored on WSL2 9p mounts"},
 	{"refresh", "remotes_watch", false, "refresh remotes on ref/FETCH_HEAD change (off → use interval); ignored on WSL2 9p mounts"},
 
-	{"tools", "command", nil, "external-tool commands as [[tools.command]] blocks: category (conflict|commit_message|review), name, mode (terminal|capture), per_file, when_op, command (multi-line '''…''' literal; tokens: <op> <source> <target> <conflicted-files> <repo> <file> <local> <base> <remote> <merged> <user:LABEL>); global + repo lists CONCATENATE, repo wins a (category,name) collision; generate defaults via Settings → External tools"},
+	{"tools", "command", nil, "external-tool commands as [[tools.command]] blocks: category (conflict|commit_message|review), name, mode (terminal|capture), per_file, when_op, command (multi-line '''…''' literal; tokens: <op> <source> <target> <conflicted-files> <repo> <file> <local> <base> <remote> <merged> <context-file> <user:LABEL>); global + repo lists CONCATENATE, repo wins a (category,name) collision; generate defaults via Settings → External tools; values substitute literally — prefer \"$GG_*\" env vars or <context-file> when values may contain shell metacharacters"},
 }
 
 // tomlScalar renders a registry value as it appears in TOML.

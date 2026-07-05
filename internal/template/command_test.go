@@ -118,4 +118,39 @@ func TestValidateCommandTokens(t *testing.T) {
 	if err := ValidateCommandTokens(`<bin> x`, false); err == nil || !strings.Contains(err.Error(), "generated") {
 		t.Errorf("<bin> must error mentioning generation, got %v", err)
 	}
+	if err := ValidateCommandTokens(`x <context-file>`, false); err != nil {
+		t.Errorf("<context-file> is a known, non-per-file token: %v", err)
+	}
+	if err := ValidateCommandTokens(`x <env:GG_OP>`, false); err == nil {
+		t.Error("<env:NAME> must error like <bin>")
+	}
+}
+
+func TestResolveCommandContextFile(t *testing.T) {
+	ctx := repoCtx()
+	ctx.ContextFile = "/tmp/gg-context-1 2.txt"
+	got, err := resolveCommandFor(`agent <context-file>`, nil, ctx, "linux")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := `agent '/tmp/gg-context-1 2.txt'`; got != want {
+		t.Errorf("posix: got %q, want %q", got, want)
+	}
+	got, err = resolveCommandFor(`agent <context-file>`, nil, ctx, "windows")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := `agent "/tmp/gg-context-1 2.txt"`; got != want {
+		t.Errorf("windows: got %q, want %q", got, want)
+	}
+	if _, err := resolveCommandFor(`agent <context-file>`, nil, repoCtx(), "linux"); err == nil {
+		t.Error("empty ContextFile must error")
+	}
+}
+
+func TestResolveCommandEnvTokenErrorsAtRuntime(t *testing.T) {
+	_, err := resolveCommandFor(`<bin> --merge <env:GG_OP>`, nil, repoCtx(), "linux")
+	if err == nil || !strings.Contains(err.Error(), "generated") {
+		t.Errorf("<env:NAME> must error mentioning generation, got %v", err)
+	}
 }
