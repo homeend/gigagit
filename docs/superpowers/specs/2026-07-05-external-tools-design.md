@@ -59,8 +59,12 @@ config or the repo `.gg.toml`.
 ### Running a tool on conflicts
 
 In the conflict window (`x`), a new key **`t`** ("tools") opens a picker of
-`category = "conflict"` commands (footer + `?` help advertise it; the key
-is shown only when at least one conflict command is configured):
+`category = "conflict"` commands. The picker, `<user:…>` fill, approval
+preview, and mark-resolved offer are all **conflict-process-owned
+sub-states** (the `hunkPicker` pattern) — the process preempts the layer
+stack for keys, so pushed popup layers would be unreachable while it is
+open. The `[t]` hint appears in the conflict window's own hint line (and
+the `?` help) only when at least one conflict command is configured:
 
 - **Repo-level commands** (`per_file = false`, the agents): always listed
   while an op is paused. Commands with a `when_op` filter are listed only
@@ -87,9 +91,9 @@ Selecting a command:
    the existing resume-paused-op machinery ("all resolved, op still
    paused → Continue/Abort prompt") is the completion oracle.
 
-A non-zero exit shows the exit code in a status message; nothing is rolled
-back (the tool may have done useful partial work — status reload shows the
-truth).
+A non-zero exit surfaces the failure in the conflict window's error state;
+nothing is rolled back (the tool may have done useful partial work — the
+status reload shows the truth).
 
 ## Config: the `[tools]` section
 
@@ -199,8 +203,18 @@ meld --auto-merge --output=<merged> <local> <base> <remote>
 ## Placeholders and environment
 
 A command-context resolver in `internal/template` (new entry point reusing
-`tokenRe`/`UserLabels`; values are **shell-quoted** on substitution — the
-existing `<branch>` path-sanitization route is wrong for shell arguments):
+`tokenRe`/`UserLabels`). Quoting is **per token kind**: path-valued tokens
+(`<repo>`, `<file>`, `<local>`, `<base>`, `<remote>`, `<merged>`) are
+shell-quoted on substitution (they sit in argv positions and may contain
+spaces); prose-valued tokens (`<op>`, `<source>`, `<target>`,
+`<conflicted-files>`, `<user:…>`) substitute raw — the defaults embed them
+inside prompt strings, where injected quotes would corrupt the text, and git
+refnames cannot contain spaces. The existing `<branch>` path-sanitization
+route is wrong for shell arguments and is not used. Additionally `<bin>` is
+a **generation-time-only** token in catalog templates — the wizard replaces
+it with the detected binary (bare name from PATH, quoted absolute path from
+an extra probe) before writing config; the runtime resolver rejects it with
+a pointed error.
 
 | Token | Value (stage 1) |
 |---|---|
