@@ -108,7 +108,12 @@ func cmdWorktreeAdd(svc *domain.Service, args []string, stdin io.Reader, stdout,
 		fmt.Fprintln(stderr, "error:", err)
 		return 1
 	}
-	cfg, err := config.Load(config.DefaultGlobalPath(), filepath.Join(top, ".gg.toml"))
+	privatePath := ""
+	if wts, werr := svc.Worktrees(ctxBg); werr == nil && len(wts) > 0 && wts[0].Path != "" {
+		privatePath = config.PrivateRepoPath(wts[0].Path)
+	}
+	active := config.ActiveRepoConfigPath(filepath.Join(top, ".gg.toml"), privatePath)
+	cfg, err := config.Load(config.DefaultGlobalPath(), active)
 	if err != nil {
 		fmt.Fprintln(stderr, "error: loading config:", err)
 		return 1

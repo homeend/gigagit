@@ -42,7 +42,7 @@ type dataLoadedMsg struct {
 	reflog          []model.ReflogEntry
 	currentWorktree string
 	cfg             config.Config
-	repoTOML        string // <repo-top>/.gg.toml ("" outside a repo); rebinds repoConfigPath so per-repo Settings writes follow a repo switch
+	repoTOML        string // active per-repo write target (private user-dir file if present, else <repo-top>/.gg.toml); rebinds repoConfigPath so per-repo Settings writes follow a repo switch AND a relocation
 	gitCommonDir    string
 	headTimes       map[string]int64
 	conflict        domain.ConflictState
@@ -70,7 +70,14 @@ func (m Model) loadCmd() tea.Cmd {
 		repoTOML := ""
 		top, topErr := svc.TopLevel(ctx)
 		if topErr == nil && top != "" {
-			repoTOML = filepath.Join(top, ".gg.toml")
+			committed := filepath.Join(top, ".gg.toml")
+			privatePath := ""
+			if wts, werr := svc.Worktrees(ctx); werr == nil && len(wts) > 0 && wts[0].Path != "" {
+				privatePath = config.PrivateRepoPath(wts[0].Path)
+			}
+			// Same active-file resolution as bootstrapCmd: read + write target
+			// are one path, private if present, else committed.
+			repoTOML = config.ActiveRepoConfigPath(committed, privatePath)
 			if c, cfgErr := config.Load(config.DefaultGlobalPath(), repoTOML); cfgErr == nil {
 				cfg = c
 			}

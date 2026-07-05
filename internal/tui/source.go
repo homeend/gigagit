@@ -301,7 +301,7 @@ func opAffectedSources(op engine.Operation) []sourceKey {
 // applies it and fans out the first all-source read.
 type configReadyMsg struct {
 	cfg      config.Config
-	repoTOML string // <repo-top>/.gg.toml, "" if not in a repo
+	repoTOML string // active per-repo write target: private user-dir file if present, else <repo-top>/.gg.toml; "" if not in a repo
 	top      string // git working-tree root (== Snapshot.CurrentWorktree); "" if not in a repo
 }
 
@@ -319,7 +319,15 @@ func (m Model) bootstrapCmd() tea.Cmd {
 		repoTOML, root := "", ""
 		if top, err := svc.TopLevel(ctx); err == nil && top != "" {
 			root = top
-			repoTOML = filepath.Join(top, ".gg.toml")
+			committed := filepath.Join(top, ".gg.toml")
+			privatePath := ""
+			if wts, werr := svc.Worktrees(ctx); werr == nil && len(wts) > 0 && wts[0].Path != "" {
+				privatePath = config.PrivateRepoPath(wts[0].Path)
+			}
+			// One active per-repo file: private if it exists, else committed. The
+			// read path and the write target are the SAME path — no layering (a
+			// committed inverted-polarity key must not shadow a private "off").
+			repoTOML = config.ActiveRepoConfigPath(committed, privatePath)
 			if c, cerr := config.Load(config.DefaultGlobalPath(), repoTOML); cerr == nil {
 				cfg = c
 			}

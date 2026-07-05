@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/pelletier/go-toml/v2"
 )
@@ -320,9 +321,10 @@ func overlayRefresh(dst *RefreshConfig, src RefreshConfig) {
 	}
 }
 
-// DefaultGlobalPath returns the global config path, honoring $XDG_CONFIG_HOME
-// and falling back to ~/.config/gg/config.toml.
-func DefaultGlobalPath() string {
+// configHome returns the base config directory: $XDG_CONFIG_HOME, else
+// ~/.config (empty home ⇒ ".config" relative). Shared by DefaultGlobalPath and
+// PrivateRepoPath so the two paths always live under the same root.
+func configHome() string {
 	base := os.Getenv("XDG_CONFIG_HOME")
 	if base == "" {
 		home, err := os.UserHomeDir()
@@ -331,5 +333,41 @@ func DefaultGlobalPath() string {
 		}
 		base = filepath.Join(home, ".config")
 	}
-	return filepath.Join(base, "gg", "config.toml")
+	return base
+}
+
+// DefaultGlobalPath returns the global config path, honoring $XDG_CONFIG_HOME
+// and falling back to ~/.config/gg/config.toml.
+func DefaultGlobalPath() string {
+	return filepath.Join(configHome(), "gg", "config.toml")
+}
+
+// EncodeRepoKey turns an absolute repo path into a filesystem-safe, readable
+// directory name by replacing every path separator and drive colon (/, \, :)
+// with '-'. So /mnt/t/others/gigagit -> -mnt-t-others-gigagit and C:\src\repo
+// -> C--src-repo. Empty in yields empty out (the caller must guard).
+func EncodeRepoKey(repoPath string) string {
+	if repoPath == "" {
+		return ""
+	}
+	cleaned := filepath.Clean(repoPath)
+	return strings.Map(func(r rune) rune {
+		switch r {
+		case '/', '\\', ':':
+			return '-'
+		}
+		return r
+	}, cleaned)
+}
+
+// PrivateRepoPath returns the machine-local per-repo config path for a repo
+// whose MAIN worktree is at mainWorktreePath:
+// $XDG_CONFIG_HOME/gg/projects/<encoded>/config.toml. Returns "" if
+// mainWorktreePath is "" (no anchor ⇒ no private path). Anchored on the main
+// worktree so every linked worktree of a repo shares one private config.
+func PrivateRepoPath(mainWorktreePath string) string {
+	if mainWorktreePath == "" {
+		return ""
+	}
+	return filepath.Join(configHome(), "gg", "projects", EncodeRepoKey(mainWorktreePath), "config.toml")
 }

@@ -194,6 +194,29 @@ with settings added in newer gg versions. Unlike `init`, it never overwrites:
 it only inserts the keys you don't have yet, as commented lines marked
 `[populated]`, leaving your existing values and comments intact. Safe to re-run.
 
+### Config precedence
+
+gg merges configuration field-by-field, later wins:
+
+1. Built-in defaults
+2. Global — `~/.config/gg/config.toml`
+3. Active per-repo file — **one** file, whichever exists:
+   - `~/.config/gg/projects/<encoded-repo-path>/config.toml` (machine-local
+     private file; used when present), else
+   - `<repo>/.gg.toml` (committed; tracked and shared with everyone who clones)
+
+The private per-repo file lets you keep personal preferences on a shared repo
+without committing them. It is keyed on the repo's main-worktree path, so every
+linked worktree shares one private config, and when it exists it *replaces* the
+committed `.gg.toml` for that repo (per-repo Settings writes also target it).
+Settings (`,`) → **Repo settings location** copies or moves the whole config
+between the committed and private locations.
+
+On a shared repo the committed `.gg.toml` is git-tracked, so prefer **Copy to
+private** — it keeps the committed team baseline in place while your private
+file takes effect. **Move to private** deletes `.gg.toml`, which leaves a pending
+git deletion in a shared repo.
+
 `[ui] wheel_step` sets the mouse-wheel scroll step in rows (default 3);
 `[ui] hscroll_step` sets the diff scroll-mode pan step in columns (default 8);
 `[ui] search_history_size` sets how many phrases each search-history ring keeps

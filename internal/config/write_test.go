@@ -231,6 +231,57 @@ func TestSetWorktreePostCreateHookReplaceAndRemove(t *testing.T) {
 	}
 }
 
+func TestCopyRepoConfigRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "a.toml")
+	dst := filepath.Join(dir, "sub", "b.toml") // parent dir must be created
+	writeFile(t, src, "[ui]\ncommit_sort = \"plain\"\n")
+	if err := CopyRepoConfig(src, dst); err != nil {
+		t.Fatalf("CopyRepoConfig: %v", err)
+	}
+	got, err := os.ReadFile(dst)
+	if err != nil {
+		t.Fatalf("read dst: %v", err)
+	}
+	if string(got) != "[ui]\ncommit_sort = \"plain\"\n" {
+		t.Errorf("copy mismatch: %q", got)
+	}
+}
+
+func TestCopyRepoConfigMissingSrc(t *testing.T) {
+	dir := t.TempDir()
+	if err := CopyRepoConfig(filepath.Join(dir, "nope.toml"), filepath.Join(dir, "b.toml")); err == nil {
+		t.Error("expected error copying a missing source")
+	}
+}
+
+func TestRemoveRepoConfigAbsentIsNoop(t *testing.T) {
+	dir := t.TempDir()
+	if err := RemoveRepoConfig(filepath.Join(dir, "nope.toml")); err != nil {
+		t.Errorf("removing an absent file should be a no-op, got %v", err)
+	}
+}
+
+func TestActiveRepoConfigPath(t *testing.T) {
+	dir := t.TempDir()
+	committed := filepath.Join(dir, ".gg.toml")
+	private := filepath.Join(dir, "private.toml")
+	writeFile(t, committed, "")
+	// private absent → committed
+	if got := ActiveRepoConfigPath(committed, private); got != committed {
+		t.Errorf("private absent: want committed %q, got %q", committed, got)
+	}
+	// private present → private
+	writeFile(t, private, "")
+	if got := ActiveRepoConfigPath(committed, private); got != private {
+		t.Errorf("private present: want private %q, got %q", private, got)
+	}
+	// empty private path → committed
+	if got := ActiveRepoConfigPath(committed, ""); got != committed {
+		t.Errorf("empty private: want committed %q, got %q", committed, got)
+	}
+}
+
 func TestSetWorktreePostCreateHookIdempotent(t *testing.T) {
 	path := filepath.Join(t.TempDir(), ".gg.toml")
 	script := "cp a b\nmake\n"

@@ -482,3 +482,32 @@ func TestOverlayPostCreateHookRepoWins(t *testing.T) {
 		t.Fatalf("empty src cleared hook: %q", dst.PostCreateHook)
 	}
 }
+
+func TestEncodeRepoKey(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"/mnt/t/others/gigagit", "-mnt-t-others-gigagit"},
+		{"/mnt/t/others/gigagit/", "-mnt-t-others-gigagit"}, // trailing slash cleaned
+		{`C:\src\repo`, "C--src-repo"},                      // drive colon + backslashes
+		{"", ""},                                            // empty in, empty out
+	}
+	for _, c := range cases {
+		if got := EncodeRepoKey(c.in); got != c.want {
+			t.Errorf("EncodeRepoKey(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+func TestPrivateRepoPathXDG(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", "/xdg")
+	got := PrivateRepoPath("/mnt/t/others/gigagit")
+	want := filepath.Join("/xdg", "gg", "projects", "-mnt-t-others-gigagit", "config.toml")
+	if got != want {
+		t.Errorf("PrivateRepoPath = %q, want %q", got, want)
+	}
+}
+
+func TestPrivateRepoPathEmptyAnchor(t *testing.T) {
+	if got := PrivateRepoPath(""); got != "" {
+		t.Errorf("empty anchor should yield empty path, got %q", got)
+	}
+}
