@@ -236,9 +236,14 @@ caveat: their content is substituted verbatim into shell text, so use
 Two **generation-time-only** tokens exist in catalog templates and are
 rejected by the runtime resolver with pointed errors: `<bin>` (replaced by
 the detected binary — bare name from PATH, quoted absolute path from an
-extra probe) and `<env:NAME>` (rendered per-OS at wizard time as `"$NAME"`
+extra probe) and `<env:NAME>` (rendered per-OS at wizard time as `${NAME}`
 on POSIX or `%NAME%` on Windows, so one catalog template generates a
-correct command on either platform).
+correct command on either platform). The POSIX rendering is deliberately
+`${NAME}` without quotes: it nests inside a template's own double-quoted
+prompt strings as one word (a `"$NAME"` rendering would alternate quotes
+and word-split when the value contains spaces, e.g. a TMPDIR with a space),
+and shell variable expansion is never re-parsed for command substitution,
+so expanded values remain data.
 
 | Token | Value (stage 1) |
 |---|---|
@@ -258,8 +263,12 @@ injected as env — `GG_OP`, `GG_SOURCE`, `GG_TARGET`, `GG_CONFLICTED_FILES`,
 `GG_CONTEXT_FILE` — so a wrapper script needs no placeholders at all
 (post-create-hook precedent). The context file's format is line-oriented:
 `op:`/`source:`/`target:` header lines, then `conflicted:` followed by one
-repo-relative path per line (newline-separated — no quoting ambiguity).
-Context file and quartet temp files are deleted after the run (best-effort).
+repo-relative path per line. A path containing a control character
+(newline/CR — legal in git paths) is written **C-quoted the way git itself
+prints such paths** (`"innocent.go\nFAKE"`), so one entry can never forge
+additional lines; every other path is byte-exact. Header values are safe
+unquoted (git refnames forbid control characters). Context file and
+quartet temp files are deleted after the run (best-effort).
 
 ## Execution plumbing
 
