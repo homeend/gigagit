@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/homeend/gigagit/internal/model"
 )
@@ -172,5 +173,46 @@ func TestExplorerSwallowsGlobalKeys(t *testing.T) {
 	}
 	if len(m.layers.entries) != before || layerOf[*gitConfigPopup](m) == nil {
 		t.Fatal("explorer must swallow global keys")
+	}
+}
+
+func TestGitConfigPopupMaximizeWidens(t *testing.T) {
+	m := Model{}
+	m.width, m.height = 200, 50
+	p := &gitConfigPopup{}
+
+	normal := lipgloss.Width(p.box(m))
+	p.maximized = true
+	maxed := lipgloss.Width(p.box(m))
+	if maxed <= normal {
+		t.Fatalf("maximized width %d must exceed normal %d", maxed, normal)
+	}
+}
+
+func TestGitConfigPopupTKeyDoesNotMaximizeWhileFiltering(t *testing.T) {
+	m := Model{}
+	m.width, m.height = 200, 50
+	p := &gitConfigPopup{filtering: true}
+
+	p.update(m, runeKey("T"))
+	if p.maximized {
+		t.Fatal(`"T" while filtering must not maximize`)
+	}
+	if p.query != "T" {
+		t.Fatalf(`"T" while filtering must be a literal char; query=%q`, p.query)
+	}
+}
+
+func TestGitConfigPopupMaximizeSurvivesRowReload(t *testing.T) {
+	m := Model{}
+	m.width, m.height = 200, 50
+	m = m.pushLayer(&gitConfigPopup{loading: true})
+	p := layerOf[*gitConfigPopup](m)
+	p.maximized = true
+
+	// A post-write row re-read lands on the same instance.
+	mm, _ := m.Update(gitConfigRowsMsg{gen: m.gitConfigGen, rows: nil})
+	if !layerOf[*gitConfigPopup](mm.(Model)).maxed() {
+		t.Fatal("maximized must survive a gitConfigRowsMsg reload")
 	}
 }

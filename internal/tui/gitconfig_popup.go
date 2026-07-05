@@ -21,6 +21,7 @@ import (
 // a scope editor (option picker or text field per the doc's Kind), u a
 // set-scopes-only unset chooser; non-curated rows stay read-only.
 type gitConfigPopup struct {
+	popupMax
 	rows      []model.GitConfigRow
 	loading   bool
 	query     string
@@ -139,6 +140,9 @@ func (p *gitConfigPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			p.query += string(msg.Runes)
 			p.sel = 0
 		}
+		return m, nil
+	}
+	if p.handleMaxKey(msg) { // "T" toggles fullscreen (nav mode only)
 		return m, nil
 	}
 	// Navigation mode. Display-mode + pan keys act here (query chars while filtering).
@@ -461,7 +465,7 @@ func gitConfigRowText(r model.GitConfigRow, keyW, localW, globalW, defaultW int)
 // open it shows the editor instead of the list.
 func (p *gitConfigPopup) box(m Model) string {
 	w, termH := m.overlayDims()
-	inner := popupWideInnerWidth(w)
+	inner := popupResolveWidth(w, p.maximized, popupWideInnerWidth(w))
 	textW := popupTextWidth(inner)
 
 	if p.edit != nil {
@@ -538,7 +542,7 @@ func (p *gitConfigPopup) box(m Model) string {
 		descLines = wrapWidth(descLine, textW, 3)
 	}
 
-	hint := []string{"[l] set local", "[g] set global", "[u] unset", "[/] filter", "[z] mode", "[esc] close"}
+	hint := []string{"[l] set local", "[g] set global", "[u] unset", "[/] filter", "[z] mode", "[T] full", "[esc] close"}
 	parts := []string{title, "", header}
 	parts = append(parts, bodyLines...)
 	parts = append(parts, "")
