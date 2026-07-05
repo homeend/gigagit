@@ -340,9 +340,13 @@ wanted; the MCP future favors having them eventually).
 - e2e: one scenario asserting the wizard-equivalent config write
   (`gg config`-level, since e2e drives the CLI; the TUI picker is unit
   territory).
-- Manual/live checklist before merge: Claude handover on a real conflict;
-  Junie `--merge` paused-op semantics (decides the shipping default);
-  Meld quartet round-trip.
+- Manual/live checklist before merge: Claude handover on a real conflict
+  (must confirm Claude reads the out-of-tree `$GG_CONTEXT_FILE` temp path
+  under `acceptEdits`); Junie `--merge` paused-op semantics (decides the
+  shipping default — a wrong answer is a one-string catalog swap to the
+  `--prompt` fallback); Meld quartet round-trip (save → mark-resolved
+  offer); Windows: the `.bat` + `cmd /C` lane and Meld's `ExtraProbes`
+  detection.
 
 ## Documentation & follow-through
 
