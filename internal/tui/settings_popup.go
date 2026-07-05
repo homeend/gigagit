@@ -546,13 +546,19 @@ func (p *settingsPopup) render(m Model, below string) string {
 
 // box draws whichever screen is active (modal box only).
 func (p *settingsPopup) box(m Model) string {
-	w, _ := m.overlayDims()
+	w, termH := m.overlayDims()
 	inner := popupInnerWidth(w)
 	// The errors viewer holds long, path-heavy rows (git stderr, the errors.log
 	// location), so it scales wide like the bookmark/shelf switchers — most
 	// errors and the log path then fit on one line instead of wrapping ugly.
 	if p.errorsView || p.ratesView {
 		inner = popupWideInnerWidth(w)
+	}
+	// The External-tools wizard goes full-screen (live feedback: the standard
+	// popup was too narrow — the command preview wrapped mid-word and the
+	// background bled around the box's edges). See popupFullInnerWidth.
+	if p.toolsView {
+		inner = popupFullInnerWidth(w)
 	}
 	textW := popupTextWidth(inner)
 	var b strings.Builder
@@ -691,6 +697,12 @@ func (p *settingsPopup) box(m Model) string {
 			b.WriteString("\n[↑/↓] select  [enter] edit interval  [space]/[w] file-watch  [esc] back")
 		}
 	} else if p.toolsView {
+		// hint is computed up front (not just written at the end) because the
+		// command-preview height budget below needs its line count to know how
+		// much room is actually left over.
+		hintParts := []string{"[space] toggle", "[enter] write to global config", "[z] mode", "[esc] back"}
+		hintLines := wrapParts(hintParts, textW, "  ")
+
 		b.WriteString("External tools — detected\n\n")
 		if len(p.toolRows) == 0 {
 			b.WriteString("  no known tools detected on this machine (looked for: claude, junie, meld)\n")
@@ -716,53 +728,78 @@ func (p *settingsPopup) box(m Model) string {
 				}
 				wr[i] = winRow{text: text, style: st, decorate: deco}
 			}
-			h := len(p.toolRows)
-			if h > 12 {
-				h = 12
+			// The catalog is small today, but this keeps the list from ever
+			// blowing the box past the terminal height if it grows later.
+			listCap := termH - 10
+			if listCap < 3 {
+				listCap = 3
 			}
-			for _, line := range renderWindow(wr, winOpts{w: textW, h: h, mode: p.mode, anchor: p.sel, hscroll: p.hscroll}) {
+			h := len(p.toolRows)
+			if h > listCap {
+				h = listCap
+			}
+			bodyLines := renderWindow(wr, winOpts{w: textW, h: h, mode: p.mode, anchor: p.sel, hscroll: p.hscroll})
+			for _, line := range bodyLines {
 				b.WriteString(line + "\n")
 			}
 			// Focused-row preview: the row list alone shows nothing about what
 			// [enter] will actually write (destination file, generated command),
 			// so the user has no way to see what they're consenting to. This
-			// mirrors toolConfiguredSuffixDecorator's dim style and reuses
-			// wrapWidth (the same helper the errors viewer wraps a long path
-			// with) rather than a new wrapping routine; it recomputes on every
-			// frame (GenerateCommand is a cheap string replace — no caching).
+			// mirrors toolConfiguredSuffixDecorator's dim style; it recomputes
+			// on every frame (GenerateCommand is a cheap string replace — no
+			// caching).
 			if p.sel >= 0 && p.sel < len(p.toolRows) {
 				row := p.toolRows[p.sel]
 				b.WriteString("\n")
+				var destLines []string
 				if row.existing {
-					b.WriteString(dimRowStyle.Render("already configured — skipped on apply") + "\n")
+					destLines = []string{"already configured — skipped on apply"}
 				} else {
-					for _, seg := range wrapWidth("writes to: "+config.DefaultGlobalPath(), textW, 1<<20) {
-						b.WriteString(dimRowStyle.Render(seg) + "\n")
-					}
+					destLines = wrapWidth("writes to: "+config.DefaultGlobalPath(), textW, 1<<20)
 				}
-				// wrapWidth alone can't wrap this: it treats a rune as
-				// zero-width when it isn't printable (a bare "\n" measures 0
-				// via lipgloss.Width), so an embedded newline gets absorbed
-				// into a segment instead of starting a new one — a multi-line
-				// catalog command (e.g. the Claude template's backslash
-				// continuations) would render several real terminal lines per
-				// "segment" and blow past the cap. Split on "\n" first, wrap
-				// each raw line on its own, then cap the flattened total.
+				for _, seg := range destLines {
+					b.WriteString(dimRowStyle.Render(seg) + "\n")
+				}
+				// The preview's line cap is computed from the height actually
+				// left over — total terminal height minus everything else in
+				// the box (title+blank, list rows, the blank before this
+				// block, destination lines, the blank before the hint, and the
+				// hint itself) and the modal frame's own chrome — instead of a
+				// hardcoded cap, so a wide/tall terminal shows as much of the
+				// command as truly fits before falling back to "…". Getting
+				// this wrong either clips the footer (overlayCenter silently
+				// drops rows past termH) or under-uses the available space.
+				const modalChrome = 4 // DoubleBorder (2 lines) + vertical Padding(1,2) (2 lines)
+				const margin = 2      // breathing room + popupBox's own trailing blank line
+				used := 2 /* title+blank */ + len(bodyLines) + 1 /* blank before this block */ + len(destLines) + 1 /* blank before hint */ + len(hintLines) + modalChrome + margin
+				previewCap := termH - used
+				if previewCap < 1 {
+					previewCap = 1
+				}
+				// Split on "\n" first (a multi-line catalog command, e.g. the
+				// Claude template's backslash continuations, must not have its
+				// embedded newlines absorbed into one wrapped segment), then
+				// word-wrap each raw line on its own so long flags/tokens
+				// never split mid-word (the live-feedback bug), then cap the
+				// flattened total.
 				cmd := exttool.GenerateCommand(row.tmpl, row.det.Bin)
 				var cmdLines []string
 				for _, ln := range strings.Split(cmd, "\n") {
-					cmdLines = append(cmdLines, wrapWidth(ln, textW, 1<<20)...)
+					cmdLines = append(cmdLines, wrapWords(ln, textW)...)
 				}
-				if len(cmdLines) > 8 {
-					cmdLines = append(append([]string{}, cmdLines[:7]...), "…")
+				if len(cmdLines) > previewCap {
+					keep := previewCap - 1
+					if keep < 0 {
+						keep = 0
+					}
+					cmdLines = append(append([]string{}, cmdLines[:keep]...), "…")
 				}
 				for _, seg := range cmdLines {
 					b.WriteString(dimRowStyle.Render(seg) + "\n")
 				}
 			}
 		}
-		hintParts := []string{"[space] toggle", "[enter] write to global config", "[z] mode", "[esc] back"}
-		b.WriteString("\n" + strings.Join(wrapParts(hintParts, textW, "  "), "\n"))
+		b.WriteString("\n" + strings.Join(hintLines, "\n"))
 	} else if !p.picker {
 		b.WriteString("Settings\n\n")
 		wr := make([]winRow, len(settingsMenu))

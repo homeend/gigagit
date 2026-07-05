@@ -5,6 +5,8 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
+
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/exttool"
 )
@@ -81,6 +83,56 @@ func (m Model) applyToolsWizard(rows []toolWizardRow, checked []bool, globalPath
 // line at the exact rune columns [baseLen, baseLen+suffixLen). Only the
 // row's first visual line is decorated (wrap continuations restart their
 // rune index at 0 — the same caveat configRowDecorator documents).
+// wrapWords greedily word-wraps s into lines of at most w display columns,
+// breaking at spaces so a command's flags/tokens are never split mid-word —
+// the live-feedback bug (wrapWidth's plain column-chunking turned
+// "--allowedTools" into "--allowedToo" / "ls" across two lines). A word wider
+// than w on its own can never fit any line, so it falls back to wrapWidth's
+// hard column-chunking for that one word only. Whitespace runs collapse to a
+// single space (strings.Fields), so a continuation line's leading indent is
+// not preserved — acceptable for a dimmed preview, not the config write
+// itself. An empty input yields no lines (mirrors wrapWidth on "").
+func wrapWords(s string, w int) []string {
+	if w < 1 {
+		w = 1
+	}
+	words := strings.Fields(s)
+	if len(words) == 0 {
+		return nil
+	}
+	var out []string
+	cur := ""
+	for _, word := range words {
+		if lipgloss.Width(word) > w {
+			// No space to break on: hard-chunk the oversized word itself, then
+			// keep accumulating onto its last (short) chunk.
+			if cur != "" {
+				out = append(out, cur)
+				cur = ""
+			}
+			chunks := wrapWidth(word, w, 1<<20)
+			if n := len(chunks); n > 0 {
+				out = append(out, chunks[:n-1]...)
+				cur = chunks[n-1]
+			}
+			continue
+		}
+		switch {
+		case cur == "":
+			cur = word
+		case lipgloss.Width(cur)+1+lipgloss.Width(word) <= w:
+			cur += " " + word
+		default:
+			out = append(out, cur)
+			cur = word
+		}
+	}
+	if cur != "" {
+		out = append(out, cur)
+	}
+	return out
+}
+
 func toolConfiguredSuffixDecorator(baseLen, suffixLen int) rowDecorator {
 	return func(visible string, hscroll, visualLine int) string {
 		if visualLine != 0 || suffixLen <= 0 {

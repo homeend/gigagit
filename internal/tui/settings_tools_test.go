@@ -139,9 +139,14 @@ func TestToolsWizardPreviewShowsDestinationAndCommand(t *testing.T) {
 // (backslash continuations + long flag lines), not the single-line synthetic
 // command used above. wrapWidth alone treats "\n" as a zero-width rune and
 // absorbs it into a segment rather than starting a new rendered line, so a
-// naive single wrapWidth(cmd, textW, 8) call would let this command's many
-// real lines blow past the 8-line cap and push the footer hint (and [esc]
-// back, the user's only way out) off the bottom of the popup.
+// naive single wrapWidth(cmd, textW, hardcodedCap) call would let this
+// command's many real lines blow past a fixed cap and push the footer hint
+// (and [esc] back, the user's only way out) off the bottom of the popup.
+// Since the full-screen rewrite the cap is HEIGHT-derived rather than a
+// hardcoded constant, so this test's job is no longer "count lines <= 8" but
+// "the box never renders more lines than the terminal can show" — the actual
+// invariant that keeps the footer from being clipped by overlayCenter (which
+// silently drops rows past termH).
 func TestToolsWizardPreviewCapsMultilineCommand(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", "/xdg")
 
@@ -169,38 +174,52 @@ func TestToolsWizardPreviewCapsMultilineCommand(t *testing.T) {
 	if !strings.Contains(out, "…") {
 		t.Fatalf("a command this long must show the overflow indicator:\n%s", out)
 	}
-	// out is the fully-framed popup (modalStyle's border + padding around each
-	// content line, e.g. "║  writes to: ...                    ║"), not raw
-	// content — strip the border/fill so line matching and blank-line
-	// detection work on the actual text.
-	contentOf := func(ln string) string {
-		return strings.TrimSpace(strings.Trim(ln, "║╔╗╚╝═"))
-	}
+	// The height-budgeted preview cap exists precisely so the box (border +
+	// padding + every content line) never exceeds the terminal height:
+	// overlayCenter composites by centering on termH and silently drops any
+	// fg row that falls outside it, which would clip the footer with no
+	// visible sign anything was cut.
+	_, termH := m.overlayDims()
 	lines := strings.Split(out, "\n")
-	// At most 8 rendered lines belong to the command preview itself: count
-	// lines strictly between the destination line and the footer hint's
-	// blank-line separator.
-	destIdx, hintIdx := -1, -1
-	for i, ln := range lines {
-		c := contentOf(ln)
-		if strings.HasPrefix(c, "writes to: ") {
-			destIdx = i
+	if len(lines) > termH {
+		t.Fatalf("box rendered %d lines, want <= terminal height %d (would clip the footer):\n%s", len(lines), termH, out)
+	}
+}
+
+// TestToolsWizardWideTerminalAvoidsMidWordWrap guards the full-screen sizing
+// itself: on a wide/tall terminal the wizard must actually USE that width
+// (popupFullInnerWidth is uncapped, unlike the old fixed-56-column popup) so
+// a long flag line renders on ONE line instead of wrapping — let alone
+// wrapping mid-word, the exact live-feedback symptom ("--allowedToo" / "ls").
+func TestToolsWizardWideTerminalAvoidsMidWordWrap(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", "/xdg")
+
+	claude := exttool.Builtins()[0]
+	row := toolWizardRow{det: exttool.Detection{Tool: claude, Bin: "claude"}, tmpl: claude.Commands[0]}
+
+	m := toolCfg()
+	m.width, m.height = 200, 50 // a wide/tall terminal the old 56-col popup ignored
+	p := &settingsPopup{
+		toolsView:   true,
+		toolRows:    []toolWizardRow{row},
+		toolChecked: []bool{true},
+		sel:         0,
+	}
+
+	out := p.box(m)
+
+	cmd := exttool.GenerateCommand(row.tmpl, row.det.Bin)
+	var wantLine string
+	for _, ln := range strings.Split(cmd, "\n") {
+		if strings.Contains(ln, "--allowedTools") {
+			wantLine = strings.TrimSpace(ln) // wrapWords collapses leading indent
+			break
 		}
-		if strings.Contains(c, "[esc] back") {
-			hintIdx = i
-		}
 	}
-	if destIdx == -1 || hintIdx == -1 {
-		t.Fatalf("could not locate destination/hint lines:\n%s", out)
+	if wantLine == "" {
+		t.Fatal("could not find the --allowedTools line in the generated command")
 	}
-	// Walk back from the hint to the blank separator line to find where the
-	// command preview block ends.
-	blankIdx := hintIdx
-	for blankIdx > destIdx && contentOf(lines[blankIdx]) != "" {
-		blankIdx--
-	}
-	cmdLineCount := blankIdx - destIdx - 1
-	if cmdLineCount > 8 {
-		t.Fatalf("command preview rendered %d lines, want <= 8:\n%s", cmdLineCount, out)
+	if !strings.Contains(out, wantLine) {
+		t.Fatalf("expected the --allowedTools line to render on one unwrapped line at full width:\nwant substring: %q\ngot:\n%s", wantLine, out)
 	}
 }
