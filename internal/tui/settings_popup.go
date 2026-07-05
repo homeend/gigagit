@@ -740,8 +740,23 @@ func (p *settingsPopup) box(m Model) string {
 						b.WriteString(dimRowStyle.Render(seg) + "\n")
 					}
 				}
+				// wrapWidth alone can't wrap this: it treats a rune as
+				// zero-width when it isn't printable (a bare "\n" measures 0
+				// via lipgloss.Width), so an embedded newline gets absorbed
+				// into a segment instead of starting a new one — a multi-line
+				// catalog command (e.g. the Claude template's backslash
+				// continuations) would render several real terminal lines per
+				// "segment" and blow past the cap. Split on "\n" first, wrap
+				// each raw line on its own, then cap the flattened total.
 				cmd := exttool.GenerateCommand(row.tmpl, row.det.Bin)
-				for _, seg := range wrapWidth(cmd, textW, 8) {
+				var cmdLines []string
+				for _, ln := range strings.Split(cmd, "\n") {
+					cmdLines = append(cmdLines, wrapWidth(ln, textW, 1<<20)...)
+				}
+				if len(cmdLines) > 8 {
+					cmdLines = append(append([]string{}, cmdLines[:7]...), "…")
+				}
+				for _, seg := range cmdLines {
 					b.WriteString(dimRowStyle.Render(seg) + "\n")
 				}
 			}

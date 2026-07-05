@@ -133,3 +133,74 @@ func TestToolsWizardPreviewShowsDestinationAndCommand(t *testing.T) {
 		t.Fatalf("existing row must not show a destination line:\n%s", out2)
 	}
 }
+
+// TestToolsWizardPreviewCapsMultilineCommand guards the real-world case the
+// live feedback named directly: the Claude catalog command is multi-line
+// (backslash continuations + long flag lines), not the single-line synthetic
+// command used above. wrapWidth alone treats "\n" as a zero-width rune and
+// absorbs it into a segment rather than starting a new rendered line, so a
+// naive single wrapWidth(cmd, textW, 8) call would let this command's many
+// real lines blow past the 8-line cap and push the footer hint (and [esc]
+// back, the user's only way out) off the bottom of the popup.
+func TestToolsWizardPreviewCapsMultilineCommand(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", "/xdg")
+
+	claude := exttool.Builtins()[0] // Claude Code: multi-line conflict command
+	if claude.ID != "claude" {
+		t.Fatalf("expected Builtins()[0] to be claude, got %q", claude.ID)
+	}
+	row := toolWizardRow{
+		det:  exttool.Detection{Tool: claude, Bin: "claude"},
+		tmpl: claude.Commands[0],
+	}
+
+	m := toolCfg()
+	p := &settingsPopup{
+		toolsView:   true,
+		toolRows:    []toolWizardRow{row},
+		toolChecked: []bool{true},
+		sel:         0,
+	}
+
+	out := p.box(m)
+	if !strings.Contains(out, "[esc] back") {
+		t.Fatalf("footer hint (incl. [esc] back) must still be visible when the command preview is long:\n%s", out)
+	}
+	if !strings.Contains(out, "…") {
+		t.Fatalf("a command this long must show the overflow indicator:\n%s", out)
+	}
+	// out is the fully-framed popup (modalStyle's border + padding around each
+	// content line, e.g. "║  writes to: ...                    ║"), not raw
+	// content — strip the border/fill so line matching and blank-line
+	// detection work on the actual text.
+	contentOf := func(ln string) string {
+		return strings.TrimSpace(strings.Trim(ln, "║╔╗╚╝═"))
+	}
+	lines := strings.Split(out, "\n")
+	// At most 8 rendered lines belong to the command preview itself: count
+	// lines strictly between the destination line and the footer hint's
+	// blank-line separator.
+	destIdx, hintIdx := -1, -1
+	for i, ln := range lines {
+		c := contentOf(ln)
+		if strings.HasPrefix(c, "writes to: ") {
+			destIdx = i
+		}
+		if strings.Contains(c, "[esc] back") {
+			hintIdx = i
+		}
+	}
+	if destIdx == -1 || hintIdx == -1 {
+		t.Fatalf("could not locate destination/hint lines:\n%s", out)
+	}
+	// Walk back from the hint to the blank separator line to find where the
+	// command preview block ends.
+	blankIdx := hintIdx
+	for blankIdx > destIdx && contentOf(lines[blankIdx]) != "" {
+		blankIdx--
+	}
+	cmdLineCount := blankIdx - destIdx - 1
+	if cmdLineCount > 8 {
+		t.Fatalf("command preview rendered %d lines, want <= 8:\n%s", cmdLineCount, out)
+	}
+}
