@@ -6,6 +6,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/exttool"
 )
 
 // commitPopup collects a commit message as a subject (title) plus an optional
@@ -32,11 +33,7 @@ func (p *commitPopup) message() string {
 // amend pre-fill: the first line is the subject, the rest (after blank lines)
 // the body.
 func splitMessage(msg string) (title, desc string) {
-	msg = strings.TrimRight(msg, "\n")
-	if i := strings.IndexByte(msg, '\n'); i >= 0 {
-		return msg[:i], strings.TrimLeft(msg[i+1:], "\n")
-	}
-	return msg, ""
+	return exttool.SplitMessage(msg)
 }
 
 // applyEditKey applies one key to the popup's title/description fields and
