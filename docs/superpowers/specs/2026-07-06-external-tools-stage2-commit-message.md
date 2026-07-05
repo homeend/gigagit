@@ -67,12 +67,70 @@ commit popup (ctrl+g)
   → shared approval (first run per repo, promptstate hash)   ← extracted from Stage 1
   → confirm-replace (only if fields non-empty)
   → domain.Execute(engine.GenerateMessage{…})   ← the capture lane (an engine op)
-        headless run via CaptureRunner (stdin=/dev/null, stderr streamed as GitLine,
-        stdout captured, ctx-cancellable)
+        1. build the staged diff (git diff --cached, capped) + recent-subjects
+           header → per-run context file; export as $GG_CONTEXT_FILE
+        2. headless run via CaptureRunner (stdin=/dev/null, stderr streamed as
+           GitLine, stdout captured, ctx-cancellable)
+        3. remove the context file
   → exttool.ParseCaptureMessage(stdout) → {subject, body}
   → gen-guarded fill of the popup's title/desc fields
   → user edits, ctrl+s commits (unchanged)
 ```
+
+## Context provisioning — give the agent the changes upfront, pre-formatted
+
+The agent is handed the staged changes directly rather than left to discover
+them (the user's Stage-1 principle: *"provide content as a file… so the context
+can be long and we needn't care about escaping"*). Self-discovery was measured
+slow and fragile — the probe's self-discovering run took **57 s / 8 turns** and
+hit **3 `permission_denials`** hunting for the diff. Upfront context turns the
+common case into ~1 turn with no git-tool gamble.
+
+gg pre-generates **two tmp artifacts** per run and names both to the agent (an
+agent-appropriate *summary* plus the *raw detail* on demand):
+
+**1. `$GG_CONTEXT_FILE` — a labeled summary the agent reads first.** Pre-formatted,
+not raw plumbing:
+
+```
+# gg — write a commit message for the staged changes.
+# Output ONLY the message (subject, blank line, body). Do not commit or edit files.
+# Full unified diff: <absolute path to the $GG_STAGED_DIFF file>
+
+## Files changed (git diff --cached --stat)
+<git.DiffNumstat rendered as a stat block>
+
+## Recent commit subjects (match this style)
+<git.LogLines, ~20 newest subjects>
+```
+
+The "Full unified diff:" line carries the **resolved absolute path** (not the
+literal `$GG_STAGED_DIFF`, which would not expand inside a file the agent reads
+as text).
+
+**2. `$GG_STAGED_DIFF` — the full unified staged diff** (`git diff --cached` via
+`git.DiffPatch(DiffSpec{Cached:true})`). **Capped** at `MaxDiffBytes` (200 KiB
+for Stage 2; configurability deferred); if the patch exceeds the cap the file
+carries a *"diff truncated at N KiB — inspect specific files with git"* note
+instead of the full body (the stat is already in the summary, so the agent still
+knows every file that changed). The default keeps a **read-only git allowlist**
+precisely so the agent can drill into individual files in the truncated case.
+
+Both artifacts:
+- are **freeform** (labeled text / raw diff bytes) — unlike Stage 1's
+  line-structured conflict context file, they are **not** C-quoted (that would
+  corrupt the diff) and carry **no** line-forgery risk because gg never parses
+  them back; they are opaque content the agent reads;
+- are removed after the run (best-effort, like Stage 1's temp files);
+- (prompt-injection via diff content is the inherent risk any agent reading repo
+  content carries, bounded by the allowlist / permission mode — not by gg
+  escaping, per the Stage-1 posture).
+
+The op sets `GG_CONTEXT_FILE`, `GG_STAGED_DIFF`, `GG_REPO`,
+`GG_TASK=commit_message` in the env; the default commands reference
+`$GG_CONTEXT_FILE` (and, for tools that want raw detail directly,
+`$GG_STAGED_DIFF`). A `format-patch`-style patch is deliberately **not**
+provided — it embeds a commit message header, which is circular for this task.
 
 The capture lane is a **real `engine.Operation`** (not Stage 1's
 `tea.ExecProcess` handover): it runs headless, streams progress, returns
@@ -123,20 +181,25 @@ report-scraping heuristics in Stage 2.
 Add `CommandTemplate`s for `Category = commit_message`, `Mode = capture`.
 Prompt is the **first** argument after `<bin>` (the Stage-1 variadic-flag fix
 applies to every stage). No `<user:…>`, `<op>`, `<source>` tokens — the message
-task is static and the agent self-discovers the staged diff via git.
+task is static; the agent reads the pre-generated context files (below).
+
+The prompts read the pre-generated `$GG_CONTEXT_FILE` / `$GG_STAGED_DIFF`
+(shell-expanded to real paths before the agent sees them). `Read` is on Claude's
+allowlist so it can open those files; the git allowlist stays as a drill-down
+fallback for the truncated-diff case.
 
 **Claude (`capture`)** — default (plain `--output-format json`, split
 `.result`; `--json-schema` is a documented power-user alternative the parser
 also handles via `.structured_output`):
 
 ```
-claude -p "Write a git commit message for the changes currently staged in this repository. First inspect the staged changes with git. Output ONLY the commit message and nothing else: a concise imperative subject line (max ~72 chars), then a blank line, then a short body explaining what changed and why. No preamble, no markdown headings, no code fences. Match the style of recent commits." --output-format json --allowedTools "Bash(git diff *)" "Bash(git log *)" "Bash(git status *)"
+claude -p "Write a git commit message for the staged changes. Read the summary at $GG_CONTEXT_FILE (files changed, recent-commit style) and, for detail, the full diff at $GG_STAGED_DIFF. Output ONLY the commit message and nothing else: a concise imperative subject line (max ~72 chars), a blank line, then a short body explaining what changed and why. No preamble, no markdown headings, no code fences. If the diff file notes it was truncated, inspect specific files with git." --output-format json --allowedTools "Read" "Bash(git diff *)" "Bash(git log *)" "Bash(git show *)" "Bash(git status *)"
 ```
 
 **Junie (`capture`)** — best-effort:
 
 ```
-junie --task "Write a git commit message for the changes currently staged in this repository. Output ONLY the commit message: a concise subject line, a blank line, then a short body. Do not run git commit and do not modify any files." --output-format json --skip-update-check
+junie --task "Write a git commit message for the staged changes. The change summary is at $GG_CONTEXT_FILE and the full diff at $GG_STAGED_DIFF. Output ONLY the commit message: a concise subject line, a blank line, then a short body. Do not run git commit and do not modify any files." --output-format json --skip-update-check
 ```
 
 (`--skip-update-check` — the help lists it "Useful for CI or automation".)
@@ -152,28 +215,43 @@ append-only, never overwrite) is unchanged.
 type GenerateMessage struct {
     Command string   // the resolved shell command line (already token-resolved + approved)
     Dir     string   // working dir (the repo/worktree root)
-    Env     []string // GG_* additions, appended to os.Environ() by the runner
+    Env     []string // extra env from the caller (e.g. GG_TASK); file-path vars are added by the op
 }
 func (op GenerateMessage) Run(ctx context.Context, deps OpDeps) (Result, error)
-func (op GenerateMessage) LockMode() LockMode // = Read (agent only reads git; gg writes nothing)
+func (op GenerateMessage) LockMode() LockMode // = Read (git reads for the diff; gg writes no refs/tree)
 ```
 
-- Runs `op.Command` **headless** through a new `CaptureRunner` seam on
-  `OpDeps` (real: `ShellCaptureRunner`; fake in tests). stdin = `/dev/null`.
-  stdout is captured to a buffer; stderr is streamed line-by-line as `GitLine`
-  events (progress). `exec.CommandContext` so `ctx` cancellation kills the
-  process tree (reuse Stage-1 `WaitDelay` guard).
-- Returns the captured stdout to the caller. **Result contract:** add a single
-  `Captured string` field to `engine.Result` (empty for every other op) — the
-  minimal way to return bytes through `domain.Execute`'s `(Result, error)`.
-- `LockMode Read`: like `ExportToDir`/`WriteCommitGraph`, it touches neither
-  refs nor the working tree from gg's side.
+The op is self-contained (matters for the MCP future): it builds the context,
+runs the agent, captures, cleans up.
+
+1. **Build context** via `deps.Repo` (the git reads that justify `LockMode Read`):
+   `DiffPatch(DiffSpec{Cached:true})` for the full staged diff (capped at
+   `MaxDiffBytes`), `DiffNumstat(DiffSpec{Cached:true})` for the stat, and
+   `LogLines(~20)` for recent subjects. Write the full diff to a temp
+   `$GG_STAGED_DIFF` file and the labeled summary to a temp `$GG_CONTEXT_FILE`
+   (format in *Context provisioning*). Add `GG_CONTEXT_FILE`, `GG_STAGED_DIFF`,
+   `GG_REPO` to the env (alongside the caller's `GG_TASK`).
+2. **Run `op.Command` headless** through a new `CaptureRunner` seam on `OpDeps`
+   (real: `ShellCaptureRunner`; fake in tests). stdin = `/dev/null`; stdout
+   captured to a buffer; stderr streamed line-by-line as `GitLine` events.
+   `exec.CommandContext` so `ctx` cancellation kills the process tree (reuse the
+   Stage-1 `WaitDelay` guard). The shell expands `$GG_CONTEXT_FILE` /
+   `$GG_STAGED_DIFF` in the command at run time (env channel — never re-resolved,
+   the Stage-1 `${NAME}` posture).
+3. **Return** the captured stdout. **Result contract:** add a single `Captured
+   string` field to `engine.Result` (empty for every other op) — the minimal way
+   to return bytes through `domain.Execute`'s `(Result, error)`. Remove the temp
+   files (best-effort) on the way out.
+
 - **No approval decision inside the op** — approval is handled TUI-side by the
   shared promptstate-hash flow (below), identical to Stage-1 conflict tools, so
   the op just runs an already-approved command. (This is the Stage-1 tool
   posture, not the post-create-hook's in-op `HookDecisionID`; chosen for
   consistency with the conflict lane and the "approve once per repo per
   template" memory.)
+- If nothing is staged the diff is empty; the TUI's nothing-staged guard means
+  the op is not reached in that case, but the op still tolerates an empty diff
+  (writes an empty-diff summary rather than erroring).
 
 ```go
 type CaptureRunner interface {
@@ -250,9 +328,12 @@ category = "commit_message"
 name     = "Claude"
 mode     = "capture"
 command  = '''
-claude -p "Write a git commit message for the staged changes. Output ONLY the message: a concise subject line, a blank line, then a short body. No preamble." --output-format json --allowedTools "Bash(git diff *)" "Bash(git log *)" "Bash(git status *)"
+claude -p "Write a git commit message for the staged changes. Read the summary at $GG_CONTEXT_FILE and, for detail, the full diff at $GG_STAGED_DIFF. Output ONLY the message: a concise subject line, a blank line, then a short body. No preamble." --output-format json --allowedTools "Read" "Bash(git diff *)" "Bash(git log *)" "Bash(git status *)"
 '''
 ```
+
+(`$GG_CONTEXT_FILE` / `$GG_STAGED_DIFF` are written literally in the `'''…'''`
+TOML literal — no escaping; the shell expands them at run time.)
 
 `mode = "capture"` is now a **live** mode (Stage 1 treated it as inert with a
 "not supported yet" note; that note is removed for `commit_message`). Validation
@@ -282,9 +363,14 @@ Nothing ever auto-commits; `ctrl+s` (the user) remains the only commit trigger.
   `is_error:true`; Junie report `.result`; top-level `subject`; garbage /
   non-JSON; empty. Assert subject/body/err for each. Fixtures drawn from the
   live probe outputs recorded in this spec.
-- **Engine** (`internal/engine`, `FakeCaptureRunner`): success returns
-  `Result.Captured`; non-zero exit → error; `ctx` cancel → cancellation;
-  stderr lines surfaced as `GitLine`; `LockMode()==Read`.
+- **Engine** (`internal/engine`, `FakeCaptureRunner` capturing the env + cwd it
+  is handed): success returns `Result.Captured`; non-zero exit → error; `ctx`
+  cancel → cancellation; stderr lines surfaced as `GitLine`; `LockMode()==Read`.
+  **Context build** (real git in a `t.TempDir` repo with a staged change): the
+  `$GG_CONTEXT_FILE` the runner receives exists and contains the stat + recent
+  subjects; `$GG_STAGED_DIFF` exists and contains the patch; an over-`MaxDiffBytes`
+  diff yields a truncation note (stat retained); an empty staged set is tolerated;
+  both temp files are gone after `Run` returns.
 - **TUI** (`internal/tui`): `ctrl+g` with zero tools / nothing staged = no-op +
   hint; gen-guard drops a stale completion; confirm-replace path; success fills
   subject/body; `esc` cancels. Inject a temp `promptstate` store (the
@@ -307,8 +393,8 @@ Nothing ever auto-commits; `ctrl+s` (the user) remains the only commit trigger.
 | Surface | Change |
 |---|---|
 | `internal/exttool` | `commit_message` templates (Claude, Junie) + `ParseCaptureMessage` |
-| `internal/engine` | `GenerateMessage` capture op + `CaptureRunner` seam + `Result.Captured` |
-| `internal/domain` | expose the capture op; staged-changes predicate (reused counts) |
+| `internal/engine` | `GenerateMessage` capture op (builds the diff+summary context artifacts, runs headless, captures) + `CaptureRunner` seam + `Result.Captured` |
+| `internal/domain` | expose the capture op (wires `ShellCaptureRunner`); staged-changes predicate (reused counts) |
 | `internal/tui/commit_popup.go` | `ctrl+g` generate: resolve → approve → confirm → run → gen-guarded fill; spinner/cancel |
 | `internal/tui` (approval) | extract shared `toolApprovalPopup` (conflict + commit lanes) |
 | Config template | `commit_message` worked example; `capture` mode now live |
