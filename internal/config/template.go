@@ -67,6 +67,8 @@ var settingDocs = []settingDoc{
 	{"refresh", "branches_watch", false, "refresh branches on ref change (off → use interval); ignored on WSL2 9p mounts"},
 	{"refresh", "reflog_watch", false, "refresh reflog on logs/HEAD change (off → use interval); ignored on WSL2 9p mounts"},
 	{"refresh", "remotes_watch", false, "refresh remotes on ref/FETCH_HEAD change (off → use interval); ignored on WSL2 9p mounts"},
+
+	{"tools", "command", nil, "external-tool commands as [[tools.command]] blocks: category (conflict|commit_message|review), name, mode (terminal|capture), per_file, when_op, command (multi-line '''…''' literal; tokens: <op> <source> <target> <conflicted-files> <repo> <file> <local> <base> <remote> <merged> <user:LABEL>); global + repo lists CONCATENATE, repo wins a (category,name) collision; generate defaults via Settings → External tools"},
 }
 
 // tomlScalar renders a registry value as it appears in TOML.
@@ -90,7 +92,7 @@ func Template() string {
 	b.WriteString("# gg configuration — every setting with its default.\n")
 	b.WriteString("# Uncomment a line to override the default. Values shown are gg's built-in\n")
 	b.WriteString("# defaults; leaving a line commented keeps tracking the default across versions.\n")
-	for _, section := range []string{"worktree", "ui", "debug", "refresh"} {
+	for _, section := range []string{"worktree", "ui", "debug", "refresh", "tools"} {
 		b.WriteString("\n[" + section + "]\n")
 		for _, d := range settingDocs {
 			if d.section != section {

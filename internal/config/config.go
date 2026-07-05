@@ -121,6 +121,7 @@ type Config struct {
 	UI       UIConfig       `toml:"ui"`
 	Debug    DebugConfig    `toml:"debug"`
 	Refresh  RefreshConfig  `toml:"refresh"`
+	Tools    ToolsConfig    `toml:"tools"`
 }
 
 // Defaults returns the built-in configuration used when no files set a field.
@@ -151,6 +152,7 @@ func Load(globalPath, repoPath string) (Config, error) {
 			overlayUI(&cfg.UI, layer.UI)
 			overlayDebug(&cfg.Debug, layer.Debug)
 			overlayRefresh(&cfg.Refresh, layer.Refresh)
+			overlayTools(&cfg.Tools, layer.Tools)
 		}
 	}
 	return cfg, nil
