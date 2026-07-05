@@ -112,8 +112,10 @@ final review before merge.
 engine→TUI→CLI wiring checklist for a new operation/command;
 `adding-tui-windows` — panel vs popup vs modal taxonomy and wiring;
 `writing-e2e-scenarios` — schema + operation contracts for authoring
-`e2e/scenarios/*.toml`. Use them whenever adding a feature, TUI surface, or
-e2e scenario.
+`e2e/scenarios/*.toml`; `adding-external-tools` — the checklist for adding
+a new agent/tool to the `exttool` catalog pool (verify against the real
+binary, template rules, OptIn variants). Use them whenever adding a
+feature, TUI surface, e2e scenario, or external tool.
 
 **After each completed stage/feature, update the project docs:**
 `CHANGELOG.md` (always), `README.md` (if user-facing surface changed), this
