@@ -284,3 +284,39 @@ func atomicWriteFile(path string, data []byte) error {
 	}
 	return os.Rename(tmpName, path)
 }
+
+// CopyRepoConfig copies the whole config file src → dst, creating dst's parent
+// directories and writing atomically (temp file + rename, via atomicWriteFile).
+// A missing src is an error the caller surfaces ("nothing to move"). Because the
+// committed .gg.toml and the private file share the exact schema, this is a
+// verbatim byte copy — no merge.
+func CopyRepoConfig(src, dst string) error {
+	data, err := os.ReadFile(src)
+	if err != nil {
+		return err
+	}
+	return atomicWriteFile(dst, data)
+}
+
+// RemoveRepoConfig deletes path. An absent path is not an error, so a move
+// (copy + remove-source) is idempotent.
+func RemoveRepoConfig(path string) error {
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
+// ActiveRepoConfigPath resolves the active per-repo write target: the private
+// user-dir file when it exists on disk, else the committed path. An empty
+// privatePath (no main-worktree anchor) always yields committedPath. This is the
+// rule that keeps a Settings toggle after "move to private" from recreating a
+// committed .gg.toml.
+func ActiveRepoConfigPath(committedPath, privatePath string) string {
+	if privatePath != "" {
+		if _, err := os.Stat(privatePath); err == nil {
+			return privatePath
+		}
+	}
+	return committedPath
+}
