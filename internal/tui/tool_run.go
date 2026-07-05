@@ -136,16 +136,42 @@ func toolContextFile(ctx template.CmdCtx) (string, error) {
 // toolScript writes the resolved command to a temp script (0700) so the shell
 // owns all quoting semantics — the same trick ShellHookRunner uses; a raw
 // `sh -c`/`cmd /C` argv would re-open quoting problems on Windows.
+//
+// The script wraps the command so a NON-ZERO exit holds the terminal until
+// Enter, then propagates the real exit code: a fast-failing tool (e.g. an
+// agent CLI that errors out in under a second) would otherwise have its
+// error text vanish the instant tea.ExecProcess returns and gg repaints the
+// TUI over the terminal — the human never sees why it failed. A zero exit
+// returns immediately with no hold, so the common case stays snappy.
 func toolScript(resolved string) (string, error) {
 	ext := ".sh"
 	if runtime.GOOS == "windows" {
 		ext = ".bat"
 	}
+	var body string
+	if runtime.GOOS == "windows" {
+		body = resolved + "\r\n" +
+			"set RC=%ERRORLEVEL%\r\n" +
+			"if %RC% neq 0 (\r\n" +
+			"  echo.\r\n" +
+			"  echo [gg] tool exited with an error - press any key to return to gg\r\n" +
+			"  pause >nul\r\n" +
+			")\r\n" +
+			"exit /b %RC%\r\n"
+	} else {
+		body = resolved + "\n" +
+			"rc=$?\n" +
+			"if [ $rc -ne 0 ]; then\n" +
+			"  printf '\\n[gg] tool exited with status %s - press Enter to return to gg\\n' \"$rc\"\n" +
+			"  read -r _ignored\n" +
+			"fi\n" +
+			"exit $rc\n"
+	}
 	f, err := os.CreateTemp("", "gg-tool-*"+ext)
 	if err != nil {
 		return "", err
 	}
-	if _, err := f.WriteString(resolved + "\n"); err != nil {
+	if _, err := f.WriteString(body); err != nil {
 		f.Close()
 		os.Remove(f.Name())
 		return "", err

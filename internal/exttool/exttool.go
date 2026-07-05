@@ -98,6 +98,23 @@ const claudeConflictCommand = `<bin> ` + claudeConflictPrompt + ` \
 // after <bin> (same ordering contract as claudeConflictCommand).
 const claudeConflictYoloCommand = `<bin> ` + claudeConflictPrompt + ` --dangerously-skip-permissions`
 
+// junieConflictPrompt is the double-quoted conflict-resolution prompt shared
+// by both Junie conflict templates. Same shape and injection posture as
+// claudeConflictPrompt (generation-time <env:...> tokens only), but shipped
+// via --prompt rather than a positional task argument — see junieConflictCommand.
+const junieConflictPrompt = `"A git <env:GG_OP> operation is paused with conflicts in this repository. Read the context file at <env:GG_CONTEXT_FILE> for the operation's parties and the conflicted paths. Resolve each conflict by editing the files, then run git add on each resolved file. Do NOT run git commit or any --continue command - stop when everything is staged and summarize what you chose."`
+
+// junieConflictCommand is the default Junie template: --prompt starts Junie's
+// normal interactive mode with the prompt pre-submitted (see Builtins' doc
+// comment for why the catalog abandoned --merge/--rebase).
+const junieConflictCommand = `<bin> --prompt ` + junieConflictPrompt
+
+// junieConflictYoloCommand is the OptIn yolo variant: same prompt, with
+// --brave appended to turn on Junie's Brave Mode (auto-approve, interactive
+// only — and gg always runs conflict commands under terminal handover, i.e.
+// exactly Junie's interactive mode).
+const junieConflictYoloCommand = junieConflictCommand + ` --brave`
+
 // Builtins is the hardcoded catalog. Stage 1 ships conflict templates only;
 // commit_message/review defaults land with their stages (recorded in the spec).
 func Builtins() []Tool {
@@ -110,20 +127,25 @@ func Builtins() []Tool {
 			},
 		},
 		{
+			// Empirical note, dated 2026-07-05: the spec's original
+			// --merge/--rebase templates do not exist on the real,
+			// installed standalone CLI (Junie 26.6.8 (1892.26)) despite web
+			// docs suggesting them — `junie --help` lists no --merge/--rebase
+			// flags at all, only --task/--prompt/--plan/--session-id
+			// /--resume/--brave/--review. A live run of
+			// `junie --merge <ref>` failed immediately: exit 1,
+			// "Junie failed with the message: Failed to build
+			// 'issue.md.junie_standalone'". Per the spec's pre-authorized
+			// fallback ("The verification outcome decides which text ships
+			// in Builtins()"), both conflict templates below use --prompt
+			// instead — `junie --help`: "--prompt=<text>  Start interactive
+			// mode with an initial prompt already submitted", which fits
+			// gg's terminal-handover model exactly (Junie runs interactively,
+			// with the conflict prompt pre-submitted, in the real terminal).
 			ID: "junie", Label: "JetBrains Junie", Bins: []string{"junie"},
 			Commands: []CommandTemplate{
-				// Empirical note (spec): whether --merge/--rebase adopt an
-				// already-paused op is verified live before merge; the fallback
-				// is a --prompt task (see the spec's Junie entry).
-				{Category: CatConflict, Name: "Junie (merge)", Mode: ModeTerminal, WhenOp: "merge", Command: "<bin> --merge <env:GG_SOURCE>"},
-				{Category: CatConflict, Name: "Junie (rebase)", Mode: ModeTerminal, WhenOp: "rebase", Command: "<bin> --rebase <env:GG_SOURCE>"},
-				// Yolo variants: --brave verified against the live CLI on
-				// 2026-07-05 (Junie 26.6.8 (1892.26)); `junie --help` lists
-				// `--brave  Turns on Brave Mode (interactive only)` — and gg
-				// runs these commands under terminal handover
-				// (tea.ExecProcess), i.e. exactly Junie's interactive mode.
-				{Category: CatConflict, Name: "Junie merge (yolo)", Mode: ModeTerminal, WhenOp: "merge", OptIn: true, Command: "<bin> --merge <env:GG_SOURCE> --brave"},
-				{Category: CatConflict, Name: "Junie rebase (yolo)", Mode: ModeTerminal, WhenOp: "rebase", OptIn: true, Command: "<bin> --rebase <env:GG_SOURCE> --brave"},
+				{Category: CatConflict, Name: "Junie", Mode: ModeTerminal, Command: junieConflictCommand},
+				{Category: CatConflict, Name: "Junie (yolo)", Mode: ModeTerminal, OptIn: true, Command: junieConflictYoloCommand},
 			},
 		},
 		{

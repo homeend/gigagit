@@ -89,7 +89,14 @@ Selecting a command:
    resolved?"** (→ existing `MarkResolved` action). Repo-level agent runs
    need nothing extra: agents are instructed to edit + `git add` only, and
    the existing resume-paused-op machinery ("all resolved, op still
-   paused → Continue/Abort prompt") is the completion oracle.
+   paused → Continue/Abort prompt") is the completion oracle. The wrapper
+   script (`toolScript`) holds the terminal on a **non-zero exit only**:
+   after the resolved command, it prints
+   `[gg] tool exited with status <rc> - press Enter to return to gg`
+   and blocks on a keypress before exiting with the real code — a
+   fast-failing tool's error text would otherwise vanish the instant
+   `tea.ExecProcess` returns and gg repaints over it. A zero exit returns
+   straight away with no hold.
 
 A non-zero exit surfaces the failure in the conflict window's error state;
 nothing is rolled back (the tool may have done useful partial work — the
@@ -136,7 +143,7 @@ type Mode string     // terminal | capture
 
 type CommandTemplate struct {
     Category Category
-    Name     string // e.g. "Claude", "Junie (merge)"
+    Name     string // e.g. "Claude", "Junie"
     Mode     Mode
     PerFile  bool
     WhenOp   string // "" = any paused op
@@ -181,16 +188,25 @@ claude "A git <env:GG_OP> operation is paused with conflicts in this repository.
   --disallowedTools "Bash(git commit *)" "Bash(git merge *)" "Bash(git rebase *)" "Bash(git push *)"
 ```
 
-**Junie** — two repo-level `terminal` entries with op filters:
+**Junie** — one repo-level `terminal` entry, no `when_op` filter (any paused op):
 
-- `Junie (merge)`, `when_op = "merge"`: `junie --merge <env:GG_SOURCE>`
-- `Junie (rebase)`, `when_op = "rebase"`: `junie --rebase <env:GG_SOURCE>`
+```
+junie --prompt "A git <env:GG_OP> operation is paused with conflicts in this repository. Read the context file at <env:GG_CONTEXT_FILE> for the operation's parties and the conflicted paths. Resolve each conflict by editing the files, then run git add on each resolved file. Do NOT run git commit or any --continue command - stop when everything is staged and summarize what you chose."
+```
 
-Empirical note (research §8): whether `--merge`/`--rebase` correctly adopt
-an *already-paused* op must be verified against a live Junie during
-implementation; the fallback default is
-`junie --prompt "Resolve the conflicts of the paused git <env:GG_OP> in this repository (see the context file at <env:GG_CONTEXT_FILE>). Edit and git add the resolved files; do not run git commit or --continue."`.
-The verification outcome decides which text ships in `Builtins()`.
+Empirical note (research §8), resolved 2026-07-05: `--merge`/`--rebase`
+**do not exist** on the real, installed standalone Junie CLI (26.6.8
+(1892.26)) despite web docs suggesting them — `junie --help` lists no
+`--merge`/`--rebase` flags at all, only
+`--task`/`--prompt`/`--plan`/`--session-id`/`--resume`/`--brave`/`--review`.
+A live run of `junie --merge <ref>` against a repo with a paused merge
+failed immediately (exit 1): `Junie failed with the message: Failed to
+build 'issue.md.junie_standalone'`. Per this section's pre-authorized
+fallback, `Builtins()` ships the `--prompt` form: `junie --help` describes
+`--prompt=<text>` as "Start interactive mode with an initial prompt already
+submitted" — which fits gg's terminal-handover model exactly (Junie runs
+its normal interactive session, with the conflict prompt pre-submitted, in
+the real terminal gg hands over via `tea.ExecProcess`).
 
 **Meld** — `per_file = true`, `terminal`:
 
@@ -209,10 +225,8 @@ command-line parameter:
   keeps its do-NOT-commit clause as guidance, and stays the FIRST argument
   after the binary (the same variadic-flag ordering contract as the base
   template).
-- `Junie merge (yolo)`, `when_op = "merge"`, `opt_in = true`:
-  `junie --merge <env:GG_SOURCE> --brave`
-- `Junie rebase (yolo)`, `when_op = "rebase"`, `opt_in = true`:
-  `junie --rebase <env:GG_SOURCE> --brave`
+- `Junie (yolo)`, `opt_in = true`: the same `--prompt "..."` command with
+  `--brave` appended.
 
   Empirically verified 2026-07-05 against Junie 26.6.8 (1892.26):
   `junie --help` lists `--brave  Turns on Brave Mode (interactive only)` —
@@ -381,11 +395,11 @@ wanted; the MCP future favors having them eventually).
   territory).
 - Manual/live checklist before merge: Claude handover on a real conflict
   (must confirm Claude reads the out-of-tree `$GG_CONTEXT_FILE` temp path
-  under `acceptEdits`); Junie `--merge` paused-op semantics (decides the
-  shipping default — a wrong answer is a one-string catalog swap to the
-  `--prompt` fallback); Meld quartet round-trip (save → mark-resolved
-  offer); Windows: the `.bat` + `cmd /C` lane and Meld's `ExtraProbes`
-  detection.
+  under `acceptEdits`); Junie `--merge` paused-op semantics — **resolved
+  2026-07-05**: the real CLI has no `--merge`/`--rebase` at all, so
+  `Builtins()` ships the `--prompt` fallback (see the Junie entry above);
+  Meld quartet round-trip (save → mark-resolved offer); Windows: the `.bat`
+  + `cmd /C` lane and Meld's `ExtraProbes` detection.
 
 ## Documentation & follow-through
 

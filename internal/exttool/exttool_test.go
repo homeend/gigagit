@@ -174,27 +174,29 @@ func TestClaudeYoloTemplate(t *testing.T) {
 	}
 }
 
-// TestJunieYoloTemplates pins the Junie opt-in variants: --brave appended to
-// the same --merge/--rebase invocations, gated by the same when_op filters.
-// (--brave verified against Junie 26.6.8 on 2026-07-05: "Turns on Brave Mode
-// (interactive only)" — gg's terminal handover IS Junie's interactive mode.)
+// TestJunieYoloTemplates pins the Junie opt-in variant: --brave appended to
+// the same --prompt invocation, no when_op filter (Junie has no --merge/
+// --rebase to gate on real installs — see Builtins' doc comment).
+// (--brave verified against a live Junie CLI on 2026-07-05: "Turns on Brave
+// Mode (interactive only)" — gg's terminal handover IS Junie's interactive
+// mode.)
 func TestJunieYoloTemplates(t *testing.T) {
-	for _, tc := range []struct {
-		name, whenOp, want string
-	}{
-		{"Junie merge (yolo)", "merge", "<bin> --merge <env:GG_SOURCE> --brave"},
-		{"Junie rebase (yolo)", "rebase", "<bin> --rebase <env:GG_SOURCE> --brave"},
-	} {
-		ct := findTemplate(t, CatConflict, tc.name)
-		if !ct.OptIn {
-			t.Errorf("%s must be OptIn", tc.name)
-		}
-		if ct.WhenOp != tc.whenOp {
-			t.Errorf("%s WhenOp = %q, want %q", tc.name, ct.WhenOp, tc.whenOp)
-		}
-		if ct.Command != tc.want {
-			t.Errorf("%s Command = %q, want %q", tc.name, ct.Command, tc.want)
-		}
+	ct := findTemplate(t, CatConflict, "Junie (yolo)")
+	if !ct.OptIn {
+		t.Error("Junie (yolo) must be OptIn (wizard-unchecked by default)")
+	}
+	if ct.WhenOp != "" {
+		t.Errorf("Junie (yolo) WhenOp = %q, want \"\" (any paused op)", ct.WhenOp)
+	}
+	if !strings.HasSuffix(ct.Command, " --brave") {
+		t.Errorf("Junie (yolo) Command = %q, want it to end with --brave", ct.Command)
+	}
+	base := findTemplate(t, CatConflict, "Junie")
+	if want := base.Command + " --brave"; ct.Command != want {
+		t.Errorf("Junie (yolo) Command = %q, want %q", ct.Command, want)
+	}
+	if !strings.Contains(ct.Command, "--prompt") {
+		t.Errorf("Junie (yolo) Command = %q, want it to use --prompt", ct.Command)
 	}
 }
 
