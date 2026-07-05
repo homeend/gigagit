@@ -11,6 +11,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/agentinit"
 	"github.com/homeend/gigagit/internal/config"
+	"github.com/homeend/gigagit/internal/exttool"
 	"github.com/homeend/gigagit/internal/observ"
 )
 
@@ -722,8 +723,31 @@ func (p *settingsPopup) box(m Model) string {
 			for _, line := range renderWindow(wr, winOpts{w: textW, h: h, mode: p.mode, anchor: p.sel, hscroll: p.hscroll}) {
 				b.WriteString(line + "\n")
 			}
+			// Focused-row preview: the row list alone shows nothing about what
+			// [enter] will actually write (destination file, generated command),
+			// so the user has no way to see what they're consenting to. This
+			// mirrors toolConfiguredSuffixDecorator's dim style and reuses
+			// wrapWidth (the same helper the errors viewer wraps a long path
+			// with) rather than a new wrapping routine; it recomputes on every
+			// frame (GenerateCommand is a cheap string replace — no caching).
+			if p.sel >= 0 && p.sel < len(p.toolRows) {
+				row := p.toolRows[p.sel]
+				b.WriteString("\n")
+				if row.existing {
+					b.WriteString(dimRowStyle.Render("already configured — skipped on apply") + "\n")
+				} else {
+					for _, seg := range wrapWidth("writes to: "+config.DefaultGlobalPath(), textW, 1<<20) {
+						b.WriteString(dimRowStyle.Render(seg) + "\n")
+					}
+				}
+				cmd := exttool.GenerateCommand(row.tmpl, row.det.Bin)
+				for _, seg := range wrapWidth(cmd, textW, 8) {
+					b.WriteString(dimRowStyle.Render(seg) + "\n")
+				}
+			}
 		}
-		b.WriteString("\n[space] toggle  [enter] write to global config  [esc] back")
+		hintParts := []string{"[space] toggle", "[enter] write to global config", "[z] mode", "[esc] back"}
+		b.WriteString("\n" + strings.Join(wrapParts(hintParts, textW, "  "), "\n"))
 	} else if !p.picker {
 		b.WriteString("Settings\n\n")
 		wr := make([]winRow, len(settingsMenu))

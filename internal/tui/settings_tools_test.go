@@ -79,3 +79,57 @@ func TestApplyToolsWizardUncheckedSkipped(t *testing.T) {
 		t.Errorf("wrote %d rows, want 0", n)
 	}
 }
+
+// TestToolsWizardPreviewShowsDestinationAndCommand guards the live user
+// feedback fix: the wizard must show what [enter] will actually write
+// (destination file + generated command) for the SELECTED row, not just a
+// bare "[x] Tool — conflict: Name" list.
+func TestToolsWizardPreviewShowsDestinationAndCommand(t *testing.T) {
+	// A short, deterministic global-config path so the destination line never
+	// wraps across lines in the (narrow, fixed-width) wizard popup regardless
+	// of the machine's real $HOME length.
+	t.Setenv("XDG_CONFIG_HOME", "/xdg")
+
+	fake := toolWizardRow{
+		det: exttool.Detection{
+			Tool: exttool.Tool{ID: "fake", Label: "Fake Tool", Bins: []string{"faketool"}},
+			Bin:  "faketool",
+		},
+		tmpl: exttool.CommandTemplate{
+			Category: exttool.CatConflict, Name: "Fake", Mode: exttool.ModeTerminal,
+			Command: "<bin> --resolve",
+		},
+	}
+	existingRow := fake
+	existingRow.tmpl.Name = "FakeExisting"
+	existingRow.existing = true
+
+	m := toolCfg()
+	p := &settingsPopup{
+		toolsView:   true,
+		toolRows:    []toolWizardRow{fake, existingRow},
+		toolChecked: []bool{true, true},
+		sel:         0,
+	}
+
+	out := p.box(m)
+	wantDest := "writes to: " + config.DefaultGlobalPath()
+	if !strings.Contains(out, wantDest) {
+		t.Fatalf("expected destination line %q in:\n%s", wantDest, out)
+	}
+	wantCmd := exttool.GenerateCommand(fake.tmpl, fake.det.Bin) // "faketool --resolve"
+	if !strings.Contains(out, wantCmd) {
+		t.Fatalf("expected generated command %q in:\n%s", wantCmd, out)
+	}
+
+	// Selecting the existing row swaps the destination line for the
+	// skipped-on-apply notice — an existing row is never rewritten.
+	p.sel = 1
+	out2 := p.box(m)
+	if !strings.Contains(out2, "already configured — skipped on apply") {
+		t.Fatalf("expected skipped-on-apply line for the existing row:\n%s", out2)
+	}
+	if strings.Contains(out2, wantDest) {
+		t.Fatalf("existing row must not show a destination line:\n%s", out2)
+	}
+}
