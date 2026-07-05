@@ -263,12 +263,15 @@ injected as env — `GG_OP`, `GG_SOURCE`, `GG_TARGET`, `GG_CONFLICTED_FILES`,
 `GG_CONTEXT_FILE` — so a wrapper script needs no placeholders at all
 (post-create-hook precedent). The context file's format is line-oriented:
 `op:`/`source:`/`target:` header lines, then `conflicted:` followed by one
-repo-relative path per line. A path containing a control character
-(newline/CR — legal in git paths) is written **C-quoted the way git itself
-prints such paths** (`"innocent.go\nFAKE"`), so one entry can never forge
-additional lines; every other path is byte-exact. Header values are safe
-unquoted (git refnames forbid control characters). Context file and
-quartet temp files are deleted after the run (best-effort).
+repo-relative path per line. A value containing a control character
+(newline/CR — legal in git paths, and possible in a cherry-pick/revert
+Source/Target sourced from a commit subject via git `%s`, which collapses
+an embedded `\n` but leaves `\r` untouched) is written **C-quoted the way
+git itself prints such paths** (`"innocent.go\nFAKE"`), so one entry can
+never forge additional lines; every other value is byte-exact. The same
+C-quoting applies to the header values, not just the conflicted-paths list,
+for consistency. Context file and quartet temp files are deleted after the
+run (best-effort).
 
 ## Execution plumbing
 

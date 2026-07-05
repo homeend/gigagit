@@ -87,6 +87,32 @@ func TestToolContextFileContentControlCharPath(t *testing.T) {
 	}
 }
 
+// TestToolContextFileContentControlCharSource guards the header values, not
+// just the conflicted-paths list: Source for a cherry-pick/revert comes from
+// a commit subject via git %s, which collapses an embedded \n to a space but
+// leaves a raw \r untouched. An unquoted \r in the "source:" line would still
+// be inconsistent with the file's control-character hardening, so it must
+// come out C-quoted like a conflicted path would.
+func TestToolContextFileContentControlCharSource(t *testing.T) {
+	ctx := template.CmdCtx{
+		Op: "cherry-pick", Source: "abc1234 fix\rthing", Target: "",
+		ConflictedFiles: []string{"c.go"},
+	}
+	path, err := toolContextFile(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(path)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "op: cherry-pick\nsource: \"abc1234 fix\\rthing\"\ntarget: \nconflicted:\nc.go\n"
+	if string(data) != want {
+		t.Errorf("context file content = %q\nwant %q", data, want)
+	}
+}
+
 func TestCQuotePath(t *testing.T) {
 	cases := []struct {
 		name string

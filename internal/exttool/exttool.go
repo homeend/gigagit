@@ -3,7 +3,7 @@
 // later stages), plus their detection. Supporting a new tool is a code change
 // (one Builtins entry), never a runtime definition — the agentinit philosophy.
 // The catalog's command TEMPLATES never execute directly: the Settings wizard
-// materializes them as editable [[tools.command] ] blocks in the gg config, and
+// materializes them as editable [[tools.command]] blocks in the gg config, and
 // only config content runs.
 package exttool
 

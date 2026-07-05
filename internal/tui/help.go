@@ -113,6 +113,7 @@ func helpContent() []contentLine {
 		r("k/d/b", "keep modified / delete / keep base (modify-delete files)"),
 		r("m", "mark resolved (after editing by hand)"),
 		r("A", "mark all resolved"),
+		r("t", "run external tool (Claude/Junie/Meld…) configured for conflict resolution — Settings (,) → External tools"),
 		r("c/a", "continue / abort the merge or rebase (once resolved)"),
 		r("z", "cycle text display: cutoff / wrap / scroll"),
 		r("L/esc", "leave the process (resume later with x); esc in a running step cancels it"),

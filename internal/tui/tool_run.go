@@ -99,18 +99,20 @@ func cQuotePath(p string) string {
 }
 
 // toolContextFile writes the per-run context file: op/source/target header
-// lines, then the conflicted paths one per line. A path is byte-exact
+// lines, then the conflicted paths one per line. Every value is byte-exact
 // unless it contains a control character (newline/CR are legal in git
-// paths), in which case it is C-quoted via cQuotePath so one entry can
-// never forge additional lines (see the design spec's "Placeholders and
-// environment" section). Header values are safe unquoted — git refnames
-// forbid control characters. Created for conflict-category runs only, the
-// only category stage 1 has.
+// paths, and Source/Target for cherry-pick/revert come from a commit
+// subject via git %s — %s collapses an embedded \n to a space, so no line
+// forgery there, but a raw \r would still land unquoted), in which case it
+// is C-quoted via cQuotePath so one entry can never forge additional lines
+// or otherwise corrupt the header (see the design spec's "Placeholders and
+// environment" section). Created for conflict-category runs only, the only
+// category stage 1 has.
 func toolContextFile(ctx template.CmdCtx) (string, error) {
 	var b strings.Builder
-	b.WriteString("op: " + ctx.Op + "\n")
-	b.WriteString("source: " + ctx.Source + "\n")
-	b.WriteString("target: " + ctx.Target + "\n")
+	b.WriteString("op: " + cQuotePath(ctx.Op) + "\n")
+	b.WriteString("source: " + cQuotePath(ctx.Source) + "\n")
+	b.WriteString("target: " + cQuotePath(ctx.Target) + "\n")
 	b.WriteString("conflicted:\n")
 	for _, f := range ctx.ConflictedFiles {
 		b.WriteString(cQuotePath(f) + "\n")
