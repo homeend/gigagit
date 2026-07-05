@@ -17,6 +17,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   repo), now sub-millisecond.
 
 ### Added
+- **Relocatable per-repo settings.** Per-repo settings can now live in a private
+  machine-local file (`~/.config/gg/projects/<encoded-repo-path>/config.toml`)
+  instead of the committed `.gg.toml`, so personal preferences on a shared repo
+  are never committed. gg reads ONE active per-repo file — the private file when
+  it exists, else the committed `.gg.toml` — layered over global
+  (`defaults → global → active repo file`); per-repo Settings writes target the
+  same active file. Settings → **"Repo settings location"** copies or moves the
+  whole config between the two locations.
 - **Smart prompt when checking out the current branch's remote.** `c`/`s` on
   the remote counterpart of the checked-out branch no longer dead-ends with
   "use pull to update it": a state-aware prompt offers "pull now" (only when

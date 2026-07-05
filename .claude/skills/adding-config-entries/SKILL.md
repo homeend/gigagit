@@ -11,8 +11,12 @@ field** (not per file):
 1. **Built-in defaults** — `Defaults()` in `internal/config/config.go`.
 2. **Global file** — `$XDG_CONFIG_HOME/gg/config.toml`, falling back to
    `~/.config/gg/config.toml` (`DefaultGlobalPath()`).
-3. **Repo file** — `<repo-top>/.gg.toml`, committed to the repository.
-   Repo wins.
+3. **Repo file** — **one active file**, resolved by
+   `config.ActiveRepoConfigPath(committed, private)`: the machine-local
+   private file (`config.PrivateRepoPath(mainWorktree)`) if it exists on
+   disk, else the committed `<repo-top>/.gg.toml`. Repo wins. `Load` itself
+   is unchanged (still 2-arg) — the caller resolves the active path and
+   passes it as `repoPath`.
 
 A missing file is skipped; a present-but-malformed file is an error.
 
@@ -48,7 +52,7 @@ committed config is read-only at runtime).
      is the ZERO value before the first load — guard with a fallback
      helper (see `Model.wheelStep()` in `internal/tui/model.go`).
    - CLI: load on demand with
-     `config.Load(config.DefaultGlobalPath(), filepath.Join(top, ".gg.toml"))`
+     `config.Load(config.DefaultGlobalPath(), config.ActiveRepoConfigPath(filepath.Join(top, ".gg.toml"), config.PrivateRepoPath(mainWorktree)))`
      (see `internal/cli/worktree.go`).
 7. **Template registry**: add a `settingDoc` entry in
    `internal/config/template.go` — the SINGLE registry feeding both
