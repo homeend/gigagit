@@ -71,6 +71,7 @@ type Model struct {
 	cfg          config.Config
 	opLog        *opLog            // operation-log file + span-sink lifecycle; the , Settings toggle
 	promptStore  promptstate.Store // related-prompt suppressions; nil = no state dir
+	toolNoted    map[string]bool   // tool-config blocks already failure-noted this session (Key())
 	gitCommonDir string
 
 	initHomeDir         string // home dir for agent detection; "" skips home-scoped agents (tests)
@@ -253,6 +254,7 @@ func New(svc *domain.Service) Model {
 		activeLeftTab:          panelBranches,
 		opLog:                  newOpLog(),
 		promptStore:            defaultPromptStore(),
+		toolNoted:              map[string]bool{},
 		noticeSessionDismissed: map[string]bool{},
 		filterMemo:             &commitFilterMemo{},
 	}

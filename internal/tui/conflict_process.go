@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/model"
@@ -24,6 +25,10 @@ const (
 	confReporting                  // a job failed; showing the error
 	// The slot is released directly in the inProgressMsg handler once the repo is
 	// clean, so there is no separate "finishing" state.
+	confToolPick    // choosing an external tool command ([t])
+	confToolFill    // collecting <user:…> values for the chosen command
+	confToolApprove // first-run approval: showing the resolved command
+	confToolMark    // per-file run changed the file: offer mark-resolved
 )
 
 // conflictProcess resolves an in-progress merge/rebase as a process: it owns the
@@ -41,6 +46,11 @@ type conflictProcess struct {
 	picker     *hunkPicker          // the line editor, while confPicking (owned here, not on the surface stack)
 	mode       dispMode             // text display mode; z cycles
 	hscroll    int                  // modeScroll horizontal offset
+
+	toolChoices []config.ToolCommand // picker rows while confToolPick
+	toolSel     int
+	toolFill    *templateFill   // <user:…> collection while confToolFill
+	pending     *pendingToolRun // resolved run while confToolApprove/executing (Task 7)
 }
 
 // startConflictProcess fills the active-process slot from the current
@@ -93,6 +103,14 @@ func (p *conflictProcess) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+	case confToolPick:
+		return p.updateToolPick(m, msg)
+	case confToolFill, confToolApprove, confToolMark:
+		if msg.String() == "esc" {
+			p.st = confListing
+			return m, nil
+		}
+		return m, nil
 	}
 	return m, nil
 }
@@ -149,6 +167,19 @@ func (p *conflictProcess) updateListing(m Model, msg tea.KeyMsg) (Model, tea.Cmd
 		}
 		p.st = confWorking // loading the file; the picker shows when it arrives
 		return m, m.loadConflictFileCmd(f.Path)
+	case "t": // run an external tool on the conflicts
+		var focused *model.FileStatus
+		if p.sel >= 0 && p.sel < len(p.files) {
+			focused = &p.files[p.sel]
+		}
+		choices := conflictToolChoices(m.toolCommands("conflict"), p.src.Op, focused)
+		if len(choices) == 0 {
+			m.statusMsg = "no external tools configured — Settings (,) → External tools"
+			return m, nil
+		}
+		p.toolChoices, p.toolSel = choices, 0
+		p.st = confToolPick
+		return m, nil
 	}
 	// Per-file resolve actions (continue/abort land in Task 5).
 	if p.sel < 0 || p.sel >= len(p.files) {
@@ -197,6 +228,35 @@ func conflictActionFor(f model.FileStatus, key string) (engine.ConflictAction, b
 	return 0, false
 }
 
+// updateToolPick drives the tool picker: ↑/↓ select, enter chooses, esc backs
+// out to the file list. Choosing hands off to the fill/approve flow (Task 7's
+// startToolRun); until then enter is a stub that returns to listing.
+func (p *conflictProcess) updateToolPick(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		p.st = confListing
+		return m, nil
+	case "up", "k":
+		if p.toolSel > 0 {
+			p.toolSel--
+		}
+	case "down", "j":
+		if p.toolSel < len(p.toolChoices)-1 {
+			p.toolSel++
+		}
+	case "enter":
+		return p.startToolRun(m) // Task 7; stub below until then
+	}
+	return m, nil
+}
+
+// startToolRun begins the chosen command's fill→approve→execute flow (Task 7).
+func (p *conflictProcess) startToolRun(m Model) (Model, tea.Cmd) {
+	p.st = confListing
+	m.statusMsg = "tool execution lands in the next task"
+	return m, nil
+}
+
 func (p *conflictProcess) render(m Model, below string) string {
 	w, h := m.overlayDims()
 	bg := clipToHeight(below, h)
@@ -212,6 +272,10 @@ func (p *conflictProcess) render(m Model, below string) string {
 		return overlayCenter(bg, conflictMsgBox(m, "Working…  [esc] cancel"), w, h)
 	case confReporting:
 		return overlayCenter(bg, conflictMsgBox(m, "Resolve failed:\n\n"+p.errMsg+"\n\n[any key] back to the list"), w, h)
+	case confToolPick:
+		return overlayCenter(bg, conflictToolPickBox(m, p.toolChoices, p.toolSel), w, h)
+	case confToolFill, confToolApprove, confToolMark:
+		return overlayCenter(bg, conflictMsgBox(m, "…"), w, h) // real boxes in Task 7
 	}
 	return below
 }
@@ -252,6 +316,10 @@ func (p *conflictProcess) indicator(m Model) string {
 		return "Resolving conflicts · working…  [esc] cancel"
 	case confReporting:
 		return "Resolving conflicts · error — [any key] back to the list"
+	case confToolPick:
+		return "Resolving conflicts · choose a tool  [↑/↓] select  [enter] run  [esc] back"
+	case confToolFill, confToolApprove, confToolMark:
+		return "Resolving conflicts · tool run…  [esc] back"
 	default: // confListing
 		if len(p.files) == 0 {
 			if p.inProgress != "" {
@@ -326,15 +394,17 @@ func conflictListBox(m Model, files []model.FileStatus, sel int, src domain.Conf
 			b.WriteString(line + "\n")
 		}
 	}
-	hintParts := append(conflictHints(files, sel, inProgress), "[L] leave", "[z] mode")
+	hintParts := append(conflictHints(files, sel, inProgress, len(m.toolCommands("conflict"))), "[L] leave", "[z] mode")
 	b.WriteString("\n" + strings.Join(wrapParts(hintParts, textW, "  "), "\n"))
 	return popupBox(inner, b.String())
 }
 
 // conflictHints lists the live keys for the current selection: navigation plus
 // the per-file resolve actions valid for the highlighted file, plus mark-all.
+// nTools gates advertising [t] tools — a config with zero usable conflict
+// commands must not dangle a dead-end key in the footer.
 // (Task 5 adds continue/abort when the list is empty.)
-func conflictHints(files []model.FileStatus, sel int, inProgress string) []string {
+func conflictHints(files []model.FileStatus, sel int, inProgress string, nTools int) []string {
 	if len(files) == 0 {
 		if inProgress != "" {
 			return []string{"all resolved", "[c] continue " + inProgress, "[a] abort"}
@@ -356,9 +426,35 @@ func conflictHints(files []model.FileStatus, sel int, inProgress string) []strin
 			}
 		}
 	}
+	if nTools > 0 {
+		parts = append(parts, "[t] tools")
+	}
 	parts = append(parts, "[A] resolve all")
 	if inProgress != "" {
 		parts = append(parts, "[a] abort")
 	}
 	return parts
+}
+
+// conflictToolPickBox draws the external-tool picker: one row per command,
+// the command's first line dimmed beneath the selection hints.
+func conflictToolPickBox(m Model, choices []config.ToolCommand, sel int) string {
+	w, _ := m.overlayDims()
+	inner := popupInnerWidth(w)
+	textW := popupTextWidth(inner)
+	var b strings.Builder
+	b.WriteString("Run external tool\n\n")
+	for i, tc := range choices {
+		prefix, st := "  ", lipgloss.NewStyle()
+		if i == sel {
+			prefix, st = "> ", selectedRow
+		}
+		label := tc.Name
+		if tc.PerFile {
+			label += "  (this file)"
+		}
+		b.WriteString(st.Render(truncate(prefix+label, textW)) + "\n")
+	}
+	b.WriteString("\n[↑/↓] select  [enter] run  [esc] back")
+	return popupBox(inner, b.String())
 }
