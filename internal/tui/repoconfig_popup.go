@@ -172,15 +172,26 @@ func (p *repoConfigPopup) run(m Model, act repoCfgAction) (Model, tea.Cmd) {
 		m.statusMsg = "repo settings: " + err.Error()
 		return m, nil
 	}
+	m.statusMsg = "repo settings: " + repoCfgActionLabel(act) + " done"
 	if isMove {
 		if err := config.RemoveRepoConfig(src); err != nil {
 			m.statusMsg = "repo settings: copied but source not removed: " + err.Error()
-			m = m.popLayer()
-			m.loadGen++
-			return m, m.loadCmd()
 		}
 	}
-	m.statusMsg = "repo settings: " + repoCfgActionLabel(act) + " done"
+	// The op is now fully complete (copy landed, and — for a move — the remove
+	// was attempted). Rebind the write target SYNCHRONOUSLY here, before the
+	// (async) reload lands. This must run AFTER the remove attempt:
+	// ActiveRepoConfigPath re-stats the filesystem, and a move-to-committed only resolves to
+	// committed once the private source is actually gone (computing it right
+	// after the copy, while the source still exists, would wrongly resolve back
+	// to the source). Without this rebind, m.repoConfigPath keeps pointing at the
+	// pre-relocation file for the whole reload window; any per-repo Settings
+	// write in that window (Show graph, Commit sort, a refresh rate, the hook)
+	// would go to the stale path — after a move-to-private that's the
+	// just-deleted committed file, which setScalarLine tolerantly recreates
+	// (os.IsNotExist is not an error), silently reintroducing the file the user
+	// just relocated away from.
+	m.repoConfigPath = config.ActiveRepoConfigPath(p.committedPath, p.privatePath)
 	m = m.popLayer()
 	m.loadGen++
 	return m, m.loadCmd()
