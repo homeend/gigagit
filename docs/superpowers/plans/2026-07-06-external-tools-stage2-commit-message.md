@@ -354,10 +354,13 @@ func (ShellCaptureRunner) Capture(ctx context.Context, spec CaptureSpec, onLine 
   `func (GenerateMessage) Run(...) (Result, error)`; `LockMode()==repogate.Read`;
   `const MaxDiffBytes = 200 << 10`. Returns `Result.Captured` = agent stdout.
 
-- [ ] **Step 1: Ensure `GitOps` declares the verbs.** Grep the `GitOps` interface
-  (`grep -rn 'DiffPatch\|type GitOps' internal/engine/`). If `DiffPatch`,
-  `DiffNumstat`, `LogLines` are not already methods on `GitOps`, add their exact
-  signatures (they exist on `*git.Repo`, which satisfies `GitOps`):
+- [ ] **Step 1: Ensure `GitOps` declares the verbs.** Grep
+  (`grep -rn 'GitOps' internal/engine/`). First confirm `*git.Repo` is the ONLY
+  implementer — if any engine test uses a hand-written `GitOps` fake/mock, widening
+  the interface breaks its compilation (almost certainly safe: engine tests use a
+  real repo + `FakeRunner` at the gitexec layer, but confirm before widening). If
+  `DiffPatch`, `DiffNumstat`, `LogLines` are not already methods on `GitOps`, add
+  their exact signatures (they exist on `*git.Repo`, which satisfies `GitOps`):
   `DiffPatch(context.Context, model.DiffSpec) (string, error)`,
   `DiffNumstat(context.Context, model.DiffSpec) (string, error)`,
   `LogLines(context.Context, string, int) ([]model.LogLine, error)`.
@@ -682,7 +685,18 @@ case + a `genCancel` field), and the `capture`-inert guard site.
 - Produces: `func (m Model) startGenerate(p *commitPopup) (Model, tea.Cmd)`;
   `func (m Model) genMessageCmd(command string, gen int, ctx context.Context) tea.Cmd`;
   `type genMessageMsg struct{ gen int; subject, body string; err error }`;
-  `func (m Model) applyGeneratedMessage(msg genMessageMsg) Model`.
+  `func (m Model) applyGeneratedMessage(msg genMessageMsg) Model`;
+  `func (m Model) escGenerate(p *commitPopup) Model` (the esc-cancel branch).
+
+**Implementer notes:**
+- `svc.Execute` holds the repo's **Read** reservation for the op's *entire* run —
+  i.e. the full 30–60 s agent runtime, not just the context-build. Read is shared
+  (concurrent background reads are fine) and the user is parked in the popup, so
+  this is low-harm; but the writer-preferring gate means a write op attempted
+  during generation queues until it finishes. Acceptable for Stage 2 — a known
+  property, not a bug to fix.
+- Keep `ctrl+g` in `commitPopup.update`, never in `applyEditKey` (reword/irebase
+  share `applyEditKey`; generate must not leak into a message-only reword).
 
 - [ ] **Step 1: Make `capture` live for `commit_message`.** Grep the Stage-1
   inert-treatment (`grep -rn 'capture' internal/tui/tools.go internal/tui/*.go |
@@ -723,7 +737,23 @@ func TestGenerateNoOpGuards(t *testing.T) {
 	if cmd != nil || p.generating { t.Fatal("nothing-staged must no-op") }
 	if m2.statusMsg == "" { t.Fatal("want a hint") }
 }
+
+func TestGenerateEscCancelDropsLateResult(t *testing.T) {
+	m := commitGenTestModel(t)
+	p := &commitPopup{} ; m = m.pushLayer(p)
+	m, _ = m.startGenerate(p)
+	gen := p.genGen
+	m = m.escGenerate(p)                    // the esc-while-generating handler
+	if p.generating { t.Fatal("esc must stop generating") }
+	// A result from the cancelled run (with the old gen + a killed error) is DROPPED
+	// silently — no spurious statusMsg, no field change.
+	m = m.applyGeneratedMessage(genMessageMsg{gen: gen, err: errKilled})
+	if m.statusMsg != "" { t.Fatalf("cancel must not surface an error: %q", m.statusMsg) }
+	if p.title.Value() != "" { t.Fatal("fields must be untouched") }
+}
 ```
+
+(Factor the esc branch into `escGenerate(p)` so the test can call it directly.)
 
 - [ ] **Step 3: Implement** (`commit_generate.go`):
 
@@ -813,10 +843,19 @@ func (m Model) applyGeneratedMessage(msg genMessageMsg) Model {
 ```
 
 - [ ] **Step 4: Wire keys + msg + spinner.**
-  - `commit_popup.go` `update`: at the top, before `applyEditKey`:
+  - `commit_popup.go` `update` — **in `update`, NOT `applyEditKey`** (reword/irebase
+    reuse `applyEditKey` and have no staged index; generate must not leak there).
+    At the top, before `applyEditKey`:
     `if msg.Type == tea.KeyCtrlG && !p.generating { return m.startGenerate(p) }`
-    and `if p.generating { if msg.Type == tea.KeyEsc { if m.genCancel != nil { m.genCancel() }; p.generating = false; return m, nil }; return m, nil }`
-    (swallow other keys while generating).
+    and, while generating, route esc to `escGenerate` and swallow the rest:
+    `if p.generating { if msg.Type == tea.KeyEsc { return m.escGenerate(p), nil }; return m, nil }`.
+    `escGenerate(p)` cancels the run ctx, clears `genCancel`, **bumps `p.genGen`**,
+    and clears `p.generating`. The `genGen` bump is essential: a ctx-killed
+    subprocess returns from `svc.Execute` as `*exec.ExitError` ("signal: killed"),
+    NOT `context.Canceled`, so the gen-guard in `applyGeneratedMessage` is what
+    drops the late error result — do NOT rely on `errors.Is(err, context.Canceled)`.
+    Without the bump, every deliberate esc shows a spurious
+    `"generate: signal: killed"` statusMsg (the regression `TestGenerateEscCancelDropsLateResult` covers).
   - `commit_popup.go` `box`: when `p.generating`, render a status line
     `⟳ generating message… ([esc] to cancel)`; add `[ctrl+g] generate` to the hint line.
   - `model.go` `Update`: add `case genMessageMsg: return m.applyGeneratedMessage(msg), nil`.
