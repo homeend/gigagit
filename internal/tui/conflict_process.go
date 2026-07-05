@@ -293,6 +293,10 @@ func (p *conflictProcess) buildToolRun(m Model, tc config.ToolCommand, inputs ma
 	f := p.files[p.sel]
 	ctx.File = f.Path
 	ctx.Merged = filepath.Join(m.currentWorktree, f.Path)
+	// confWorking's hint reads "esc cancel", but this async quartet build has
+	// no m.opCancel wiring (a raw tea.Cmd, not an engine op) — it is a known
+	// sub-second, non-cancellable window. Not worth building cancellation
+	// machinery for.
 	p.st = confWorking
 	svc, hasBase, path := m.svc, f.ConflictHasBase(), f.Path
 	return m, func() tea.Msg {
@@ -300,18 +304,15 @@ func (p *conflictProcess) buildToolRun(m Model, tc config.ToolCommand, inputs ma
 		if err != nil {
 			return toolReadyMsg{err: err}
 		}
-		_ = cleanup // temp paths recorded on the pending run; removed on finish
 		ctx.Local, ctx.Base, ctx.Remote = local, base, remote
 		resolved, rerr := template.ResolveCommand(tc.Command, inputs, ctx)
 		if rerr != nil {
-			os.Remove(local)
-			os.Remove(base)
-			os.Remove(remote)
+			cleanup() // ConflictFileVersions' cleanup removes local/base/remote
 			return toolReadyMsg{err: rerr}
 		}
 		return toolReadyMsg{pending: &pendingToolRun{
 			tc: tc, resolved: resolved, env: toolEnv(ctx),
-			cleanup: []string{local, base, remote},
+			cleanup: []string{local, base, remote}, // paths recorded for the post-run path
 			file:    path, merged: ctx.Merged,
 		}}
 	}

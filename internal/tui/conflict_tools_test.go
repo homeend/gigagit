@@ -17,6 +17,30 @@ import (
 // NOTE: keyRunes(s) already exists in this package (irebase_view_test.go) —
 // use it, do NOT redeclare it.
 
+// cleanupToolTemp snapshots the gg-tool-* temp scripts already in
+// os.TempDir() and registers a t.Cleanup that removes any new ones. Needed
+// because execToolCmd writes the resolved command to a real temp script
+// (toolScript) SYNCHRONOUSLY when it builds the tea.ExecProcess command —
+// before that command ever runs — so any test that drives the approval
+// state to "enter" leaks a real file even though it never executes the
+// returned tea.Cmd. Call this before the approving keypress.
+func cleanupToolTemp(t *testing.T) {
+	t.Helper()
+	before, _ := filepath.Glob(filepath.Join(os.TempDir(), "gg-tool-*"))
+	seen := make(map[string]bool, len(before))
+	for _, p := range before {
+		seen[p] = true
+	}
+	t.Cleanup(func() {
+		after, _ := filepath.Glob(filepath.Join(os.TempDir(), "gg-tool-*"))
+		for _, p := range after {
+			if !seen[p] {
+				os.Remove(p)
+			}
+		}
+	})
+}
+
 func conflictModelWithTools(t *testing.T, cmds ...config.ToolCommand) (Model, *conflictProcess) {
 	t.Helper()
 	m := toolCfg(cmds...)
@@ -106,11 +130,35 @@ func TestToolPickEnterResolvesAndAsksApproval(t *testing.T) {
 func TestToolApproveEnterReturnsExecCmd(t *testing.T) {
 	m, p := conflictModelWithTools(t,
 		config.ToolCommand{Category: "conflict", Name: "Agent", Mode: "terminal", Command: "true"})
+	cleanupToolTemp(t) // the approve-enter below eagerly writes a real gg-tool-* script
 	m, _ = p.update(m, keyRunes("t"))
 	m, _ = p.update(m, tea.KeyMsg{Type: tea.KeyEnter}) // → approve
 	m, cmd := p.update(m, tea.KeyMsg{Type: tea.KeyEnter})
 	if cmd == nil {
 		t.Fatal("approving must return the ExecProcess command")
+	}
+	_ = m
+}
+
+// TestToolApprovedFastPathSkipsGate covers gateOrRun's already-approved
+// branch: a command pre-approved for this repo key must skip confToolApprove
+// entirely and go straight to the exec cmd (runPending). The unapproved path
+// (→ confToolApprove) is already covered by
+// TestToolPickEnterResolvesAndAsksApproval.
+func TestToolApprovedFastPathSkipsGate(t *testing.T) {
+	tc := config.ToolCommand{Category: "conflict", Name: "Agent", Mode: "terminal", Command: "true"}
+	m, p := conflictModelWithTools(t, tc)
+	cleanupToolTemp(t) // the approved fast path below eagerly writes a real gg-tool-* script
+	if err := m.promptStore.ApproveToolCommand(m.toolRepoKey(), toolCommandHash(tc.Command)); err != nil {
+		t.Fatal(err)
+	}
+	m, _ = p.update(m, keyRunes("t"))
+	m, cmd := p.update(m, tea.KeyMsg{Type: tea.KeyEnter})
+	if p.st == confToolApprove {
+		t.Fatalf("pre-approved command must skip the gate, got state %v", p.st)
+	}
+	if cmd == nil {
+		t.Fatal("approved fast path must return the exec cmd")
 	}
 	_ = m
 }
