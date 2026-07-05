@@ -163,17 +163,22 @@ Supporting a new tool is one `Builtins` entry — the `agentinit` philosophy.
 ### Stage-1 default commands (catalog contents)
 
 **Claude Code** — repo-level, `terminal` (values via env expansion + the
-context file; no raw prose substitution):
+context file; no raw prose substitution). The double-quoted prompt is the
+FIRST argument after `claude`, with `--allowedTools`/`--disallowedTools`
+following it — not the other way around — because those two flags are
+variadic and greedily consume every following argument until the next
+recognized flag, so a trailing prompt would be eaten word-by-word as deny
+rules and Claude would launch with no prompt at all:
 
 ```
-claude --permission-mode acceptEdits \
-  --allowedTools "Read" "Edit" "Bash(git status)" "Bash(git diff *)" "Bash(git log *)" "Bash(git add *)" \
-  --disallowedTools "Bash(git commit *)" "Bash(git merge *)" "Bash(git rebase *)" "Bash(git push *)" \
-  "A git <env:GG_OP> operation is paused with conflicts in this repository.
+claude "A git <env:GG_OP> operation is paused with conflicts in this repository.
    Read the context file at <env:GG_CONTEXT_FILE> for the operation's parties and the conflicted paths.
    Inspect both sides' history to understand intent, resolve each conflict by editing the files,
    then run git add on each resolved file. Do NOT run git commit or any --continue command --
-   stop when everything is staged and summarize what you chose and why."
+   stop when everything is staged and summarize what you chose and why." \
+  --permission-mode acceptEdits \
+  --allowedTools "Read" "Edit" "Bash(git status)" "Bash(git diff *)" "Bash(git log *)" "Bash(git add *)" \
+  --disallowedTools "Bash(git commit *)" "Bash(git merge *)" "Bash(git rebase *)" "Bash(git push *)"
 ```
 
 **Junie** — two repo-level `terminal` entries with op filters:

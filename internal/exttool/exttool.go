@@ -64,14 +64,22 @@ type Tool struct {
 // amendment: the prompt reads the paused op and the context file (op/
 // source/target/conflicted paths) from GG_* env vars rather than having gg
 // substitute untrusted values into the prompt text itself.
-const claudeConflictCommand = `<bin> --permission-mode acceptEdits \
-  --allowedTools "Read" "Edit" "Bash(git status)" "Bash(git diff *)" "Bash(git log *)" "Bash(git add *)" \
-  --disallowedTools "Bash(git commit *)" "Bash(git merge *)" "Bash(git rebase *)" "Bash(git push *)" \
-  "A git <env:GG_OP> operation is paused with conflicts in this repository.
+//
+// The double-quoted prompt is the FIRST argument after <bin>, with
+// --allowedTools/--disallowedTools following it — NOT the other way around.
+// Claude's --allowedTools/--disallowedTools are variadic: they greedily
+// consume every following argument until the next recognized flag, so a
+// trailing prompt placed after --disallowedTools gets eaten word-by-word as
+// deny rules (surfacing as "Permission deny rule ... matches no known tool")
+// and Claude launches with no prompt at all.
+const claudeConflictCommand = `<bin> "A git <env:GG_OP> operation is paused with conflicts in this repository.
    Read the context file at <env:GG_CONTEXT_FILE> for the operation's parties and the conflicted paths.
    Inspect both sides' history to understand intent, resolve each conflict by editing the files,
    then run git add on each resolved file. Do NOT run git commit or any --continue command --
-   stop when everything is staged and summarize what you chose and why."`
+   stop when everything is staged and summarize what you chose and why." \
+  --permission-mode acceptEdits \
+  --allowedTools "Read" "Edit" "Bash(git status)" "Bash(git diff *)" "Bash(git log *)" "Bash(git add *)" \
+  --disallowedTools "Bash(git commit *)" "Bash(git merge *)" "Bash(git rebase *)" "Bash(git push *)"`
 
 // Builtins is the hardcoded catalog. Stage 1 ships conflict templates only;
 // commit_message/review defaults land with their stages (recorded in the spec).
