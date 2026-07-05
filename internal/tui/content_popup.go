@@ -29,6 +29,7 @@ type contentLine struct {
 // repo-popup-style type-to-filter search and cursor-driven scrolling. The
 // help window is its first consumer.
 type contentPopup struct {
+	popupMax
 	title   string
 	lines   []contentLine // full, unfiltered content
 	query   string        // case-insensitive substring over non-heading lines
@@ -148,6 +149,9 @@ func (p *contentPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		return m, nil
 	}
+	if p.handleMaxKey(msg) { // "T" toggles fullscreen (nav mode only; typing returns above)
+		return m, nil
+	}
 	switch msg.String() {
 	case "z": // cycle the text display mode (cutoff / wrap / scroll)
 		p.mode = p.mode.next()
@@ -240,7 +244,7 @@ func (p *contentPopup) render(m Model, below string) string {
 // window follows the cursor via the same windowRows helper the panels use.
 func (p *contentPopup) box(m Model) string {
 	w, _ := m.overlayDims()
-	inner := contentPopupWidth(w)
+	inner := popupResolveWidth(w, p.maximized, contentPopupWidth(w))
 	// lipgloss wraps text at Width minus the horizontal padding; truncate to
 	// that true text width so a full-width row can never spill onto a wrap line.
 	textW := inner - modalStyle.GetHorizontalPadding()
@@ -286,7 +290,7 @@ func (p *contentPopup) box(m Model) string {
 	if p.footer != "" {
 		b.WriteString("  " + truncate(p.footer, textW-2) + "\n")
 	}
-	hint := "[/] search  [z] mode  [q] close"
+	hint := "[/] search  [z] mode  [T] full  [q] close"
 	if len(vis) > capRows {
 		hint = fmt.Sprintf("%d/%d  %s", p.sel+1, len(vis), hint)
 	}
