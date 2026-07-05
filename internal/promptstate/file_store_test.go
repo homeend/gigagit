@@ -87,6 +87,30 @@ func TestRecordKindsCoexistInOneFile(t *testing.T) {
 	}
 }
 
+func TestApproveToolCommand(t *testing.T) {
+	fs := NewFileStore(filepath.Join(t.TempDir(), "prompts.toml"))
+	if fs.ApprovedToolCommands("/repo/a")["abc123"] {
+		t.Fatal("empty store must not approve")
+	}
+	if err := fs.ApproveToolCommand("/repo/a", "abc123"); err != nil {
+		t.Fatal(err)
+	}
+	if err := fs.ApproveToolCommand("/repo/a", "abc123"); err != nil { // idempotent
+		t.Fatal(err)
+	}
+	if !fs.ApprovedToolCommands("/repo/a")["abc123"] {
+		t.Error("approval not persisted")
+	}
+	if fs.ApprovedToolCommands("/repo/b")["abc123"] {
+		t.Error("approval leaked across repos")
+	}
+	// Survives reopen (it's on disk).
+	fs2 := NewFileStore(fs.path)
+	if !fs2.ApprovedToolCommands("/repo/a")["abc123"] {
+		t.Error("approval lost on reload")
+	}
+}
+
 func TestCorruptFileTreatedAsEmpty(t *testing.T) {
 	st := tempStore(t)
 	if err := os.WriteFile(st.path, []byte("not [ toml"), 0o644); err != nil {

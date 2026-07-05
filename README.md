@@ -371,6 +371,43 @@ suppresses even the prompt. On the CLI: pass `--hook` to approve without
 prompting, `--no-hook` to skip, or omit both to be asked interactively (`gg`
 skips automatically when stdin is not a terminal).
 
+### External tools
+
+Settings (`,`) → **"External tools…"** probes PATH (plus a few known install
+locations) for supported agents/mergetools — currently Claude Code, Junie,
+and Meld — and lets you check off which ones to write as default commands
+into the **global** config (`~/.config/gg/config.toml`); rows already
+configured are shown checked and skipped, so the wizard never overwrites an
+edited command. Manual commands use the same shape, in either the global
+config or the repo `.gg.toml`.
+
+In the conflict window (`x`), press **`t`** (shown only when at least one
+`conflict` command is configured) to pick one: repo-level agent commands
+(Claude Code, Junie) are always listed while an op is paused, get a per-run
+temp **context file** — the paused op, source, target, and the conflicted
+paths, one per line — exposed as `<context-file>`/`GG_CONTEXT_FILE` plus ten
+more `GG_*` env vars, and hand over the terminal. Per-file commands (Meld)
+are listed when the focused file is a both-sides conflict and get the
+**LOCAL/BASE/REMOTE/MERGED** quartet; if the merged file changes, gg offers
+to mark it resolved. The first run of each command shows the fully resolved
+text for approval — Run / Cancel — remembered per repo until the command
+text changes.
+
+```toml
+[[tools.command]]
+category = "conflict"
+name     = "Meld"
+mode     = "terminal"
+per_file = true
+command  = "meld --auto-merge --output=<merged> <local> <base> <remote>"
+```
+
+Tokens for hand-written commands: `<repo>` `<file>` `<local>` `<base>`
+`<remote>` `<merged>` `<context-file>` (shell-quoted, path-valued) and
+`<op>` `<source>` `<target>` `<conflicted-files>` `<user:LABEL>` (substituted
+literally — prefer `"$GG_*"`/`<context-file>` when a value might carry shell
+metacharacters).
+
 ### Environment
 
 `GG_COMMIT_PAGER` selects the commit-feed loading strategy: `plain` (default) is

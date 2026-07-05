@@ -11,6 +11,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/agentinit"
 	"github.com/homeend/gigagit/internal/config"
+	"github.com/homeend/gigagit/internal/exttool"
 	"github.com/homeend/gigagit/internal/observ"
 )
 
@@ -26,6 +27,9 @@ type settingsPopup struct {
 	ratesField   textfield // the inline numeric editor
 	dets         []agentinit.Detection
 	checked      []bool
+	toolsView    bool            // true = external-tools wizard screen
+	toolRows     []toolWizardRow // detected tool × catalog command rows
+	toolChecked  []bool
 	sel          int      // selection within the agent picker list
 	menuSel      int      // selection within the top-level menu (independent of sel)
 	mode         dispMode // text display mode; z cycles (cutoff default)
@@ -34,6 +38,7 @@ type settingsPopup struct {
 
 const (
 	settingsMenuAgents      = "Set up agent skills (using-gg)"
+	settingsMenuTools       = "External tools"
 	settingsMenuIdentity    = "Identity & profiles"
 	settingsMenuPrefixes    = "Branch prefixes"
 	settingsMenuHook        = "Worktree post-create hook"
@@ -49,7 +54,7 @@ const (
 )
 
 // settingsMenu is the top-level menu order.
-var settingsMenu = []string{settingsMenuAgents, settingsMenuIdentity, settingsMenuPrefixes, settingsMenuHook, settingsMenuOpLog, settingsMenuErrors, settingsMenuAutoRefresh, settingsMenuRemoteTags, settingsMenuRates, settingsMenuCommitSort, settingsMenuShowGraph, settingsMenuCommitGraph, settingsMenuGitConfig}
+var settingsMenu = []string{settingsMenuAgents, settingsMenuTools, settingsMenuIdentity, settingsMenuPrefixes, settingsMenuHook, settingsMenuOpLog, settingsMenuErrors, settingsMenuAutoRefresh, settingsMenuRemoteTags, settingsMenuRates, settingsMenuCommitSort, settingsMenuShowGraph, settingsMenuCommitGraph, settingsMenuGitConfig}
 
 // commitSortModes is the cycle order for the "Commit sort" menu toggle:
 // date-order (default; git --date-order, perfect lanes) → plain (fast, git's
@@ -301,6 +306,10 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			p.picker = false
 			return m, nil
 		}
+		if p.toolsView {
+			p.toolsView = false
+			return m, nil
+		}
 		m = m.popLayer()
 		return m, nil
 	}
@@ -322,7 +331,7 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	if !p.picker && !p.errorsView && !p.ratesView {
+	if !p.picker && !p.errorsView && !p.ratesView && !p.toolsView {
 		switch msg.Type {
 		case tea.KeyUp:
 			// Wrap: up on the first option lands on the last.
@@ -336,6 +345,8 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			switch settingsMenu[p.menuSel] {
 			case settingsMenuAgents:
 				return m.openAgentPicker(), nil
+			case settingsMenuTools:
+				return m.openToolsWizard(), nil
 			case settingsMenuIdentity:
 				return m.openIdentityView()
 			case settingsMenuPrefixes:
@@ -458,6 +469,36 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		return m, nil
 	}
+	if p.toolsView {
+		switch msg.Type {
+		case tea.KeyUp:
+			if p.sel > 0 {
+				p.sel--
+			}
+		case tea.KeyDown:
+			if p.sel < len(p.toolRows)-1 {
+				p.sel++
+			}
+		case tea.KeySpace:
+			if p.sel >= 0 && p.sel < len(p.toolChecked) {
+				p.toolChecked[p.sel] = !p.toolChecked[p.sel]
+			}
+		case tea.KeyEnter:
+			m2, n, err := m.applyToolsWizard(p.toolRows, p.toolChecked, config.DefaultGlobalPath())
+			p.toolsView = false
+			if err != nil {
+				m2.statusMsg = "external tools: " + err.Error()
+				return m2, nil
+			}
+			if n == 0 {
+				m2.statusMsg = "external tools: nothing to write (already configured or unchecked)"
+				return m2, nil
+			}
+			m2.statusMsg = fmt.Sprintf("external tools: %d command(s) written to %s", n, config.DefaultGlobalPath())
+			return m2, nil
+		}
+		return m, nil
+	}
 	switch msg.Type {
 	case tea.KeyUp:
 		if p.sel > 0 {
@@ -505,13 +546,19 @@ func (p *settingsPopup) render(m Model, below string) string {
 
 // box draws whichever screen is active (modal box only).
 func (p *settingsPopup) box(m Model) string {
-	w, _ := m.overlayDims()
+	w, termH := m.overlayDims()
 	inner := popupInnerWidth(w)
 	// The errors viewer holds long, path-heavy rows (git stderr, the errors.log
 	// location), so it scales wide like the bookmark/shelf switchers — most
 	// errors and the log path then fit on one line instead of wrapping ugly.
 	if p.errorsView || p.ratesView {
 		inner = popupWideInnerWidth(w)
+	}
+	// The External-tools wizard goes full-screen (live feedback: the standard
+	// popup was too narrow — the command preview wrapped mid-word and the
+	// background bled around the box's edges). See popupFullInnerWidth.
+	if p.toolsView {
+		inner = popupFullInnerWidth(w)
 	}
 	textW := popupTextWidth(inner)
 	var b strings.Builder
@@ -649,6 +696,110 @@ func (p *settingsPopup) box(m Model) string {
 			b.WriteString("\nfile-watch = auto-detect .git changes instantly (else poll on the interval)")
 			b.WriteString("\n[↑/↓] select  [enter] edit interval  [space]/[w] file-watch  [esc] back")
 		}
+	} else if p.toolsView {
+		// hint is computed up front (not just written at the end) because the
+		// command-preview height budget below needs its line count to know how
+		// much room is actually left over.
+		hintParts := []string{"[space] toggle", "[enter] write to global config", "[z] mode", "[esc] back"}
+		hintLines := wrapParts(hintParts, textW, "  ")
+
+		b.WriteString("External tools — detected\n\n")
+		if len(p.toolRows) == 0 {
+			b.WriteString("  no known tools detected on this machine (looked for: claude, junie, meld)\n")
+		} else {
+			wr := make([]winRow, len(p.toolRows))
+			for i, row := range p.toolRows {
+				prefix := "  "
+				var st lipgloss.Style
+				if i == p.sel {
+					prefix, st = "> ", selectedRow
+				}
+				box := "[ ]"
+				if p.toolChecked[i] {
+					box = "[x]"
+				}
+				base := fmt.Sprintf("%s%s %s — %s: %s", prefix, box, row.det.Tool.Label, row.tmpl.Category, row.tmpl.Name)
+				text, suffix := base, ""
+				var deco rowDecorator
+				if row.existing {
+					suffix = " (configured)"
+					text = base + suffix
+					deco = toolConfiguredSuffixDecorator(len([]rune(base)), len([]rune(suffix)))
+				}
+				wr[i] = winRow{text: text, style: st, decorate: deco}
+			}
+			// The catalog is small today, but this keeps the list from ever
+			// blowing the box past the terminal height if it grows later.
+			listCap := termH - 10
+			if listCap < 3 {
+				listCap = 3
+			}
+			h := len(p.toolRows)
+			if h > listCap {
+				h = listCap
+			}
+			bodyLines := renderWindow(wr, winOpts{w: textW, h: h, mode: p.mode, anchor: p.sel, hscroll: p.hscroll})
+			for _, line := range bodyLines {
+				b.WriteString(line + "\n")
+			}
+			// Focused-row preview: the row list alone shows nothing about what
+			// [enter] will actually write (destination file, generated command),
+			// so the user has no way to see what they're consenting to. This
+			// mirrors toolConfiguredSuffixDecorator's dim style; it recomputes
+			// on every frame (GenerateCommand is a cheap string replace — no
+			// caching).
+			if p.sel >= 0 && p.sel < len(p.toolRows) {
+				row := p.toolRows[p.sel]
+				b.WriteString("\n")
+				var destLines []string
+				if row.existing {
+					destLines = []string{"already configured — skipped on apply"}
+				} else {
+					destLines = wrapWidth("writes to: "+config.DefaultGlobalPath(), textW, 1<<20)
+				}
+				for _, seg := range destLines {
+					b.WriteString(dimRowStyle.Render(seg) + "\n")
+				}
+				// The preview's line cap is computed from the height actually
+				// left over — total terminal height minus everything else in
+				// the box (title+blank, list rows, the blank before this
+				// block, destination lines, the blank before the hint, and the
+				// hint itself) and the modal frame's own chrome — instead of a
+				// hardcoded cap, so a wide/tall terminal shows as much of the
+				// command as truly fits before falling back to "…". Getting
+				// this wrong either clips the footer (overlayCenter silently
+				// drops rows past termH) or under-uses the available space.
+				const modalChrome = 4 // DoubleBorder (2 lines) + vertical Padding(1,2) (2 lines)
+				const margin = 2      // breathing room + popupBox's own trailing blank line
+				used := 2 /* title+blank */ + len(bodyLines) + 1 /* blank before this block */ + len(destLines) + 1 /* blank before hint */ + len(hintLines) + modalChrome + margin
+				previewCap := termH - used
+				if previewCap < 1 {
+					previewCap = 1
+				}
+				// Split on "\n" first (a multi-line catalog command, e.g. the
+				// Claude template's backslash continuations, must not have its
+				// embedded newlines absorbed into one wrapped segment), then
+				// word-wrap each raw line on its own so long flags/tokens
+				// never split mid-word (the live-feedback bug), then cap the
+				// flattened total.
+				cmd := exttool.GenerateCommand(row.tmpl, row.det.Bin)
+				var cmdLines []string
+				for _, ln := range strings.Split(cmd, "\n") {
+					cmdLines = append(cmdLines, wrapWords(ln, textW)...)
+				}
+				if len(cmdLines) > previewCap {
+					keep := previewCap - 1
+					if keep < 0 {
+						keep = 0
+					}
+					cmdLines = append(append([]string{}, cmdLines[:keep]...), "…")
+				}
+				for _, seg := range cmdLines {
+					b.WriteString(dimRowStyle.Render(seg) + "\n")
+				}
+			}
+		}
+		b.WriteString("\n" + strings.Join(hintLines, "\n"))
 	} else if !p.picker {
 		b.WriteString("Settings\n\n")
 		wr := make([]winRow, len(settingsMenu))

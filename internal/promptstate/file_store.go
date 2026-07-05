@@ -18,12 +18,13 @@ func NewFileStore(path string) *FileStore { return &FileStore{path: path} }
 type records struct {
 	SuppressedPrompts []string            `toml:"suppressed_prompts"`
 	DismissedNotices  map[string][]string `toml:"dismissed_notices"`
+	ApprovedTools     map[string][]string `toml:"approved_tools"`
 }
 
 // read loads the file; a missing or malformed file reads as empty (UX memory
 // is best-effort — never block the TUI on it).
 func (fs *FileStore) read() records {
-	empty := records{DismissedNotices: map[string][]string{}}
+	empty := records{DismissedNotices: map[string][]string{}, ApprovedTools: map[string][]string{}}
 	data, err := os.ReadFile(fs.path)
 	if err != nil {
 		return empty
@@ -34,6 +35,9 @@ func (fs *FileStore) read() records {
 	}
 	if r.DismissedNotices == nil {
 		r.DismissedNotices = map[string][]string{}
+	}
+	if r.ApprovedTools == nil {
+		r.ApprovedTools = map[string][]string{}
 	}
 	return r
 }
@@ -65,6 +69,21 @@ func (fs *FileStore) DismissNotice(repoKey, id string) error {
 		return nil
 	}
 	r.DismissedNotices[repoKey] = append(r.DismissedNotices[repoKey], id)
+	return fs.write(r)
+}
+
+// ApprovedToolCommands returns the tool-command hashes approved for repoKey.
+func (fs *FileStore) ApprovedToolCommands(repoKey string) map[string]bool {
+	return toSet(fs.read().ApprovedTools[repoKey])
+}
+
+// ApproveToolCommand records a per-repo tool-command approval (idempotent) and persists.
+func (fs *FileStore) ApproveToolCommand(repoKey, hash string) error {
+	r := fs.read()
+	if toSet(r.ApprovedTools[repoKey])[hash] {
+		return nil
+	}
+	r.ApprovedTools[repoKey] = append(r.ApprovedTools[repoKey], hash)
 	return fs.write(r)
 }
 

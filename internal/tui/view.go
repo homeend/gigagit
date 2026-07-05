@@ -280,6 +280,21 @@ func popupWideInnerWidth(w int) int {
 	return inner
 }
 
+// popupFullInnerWidth is the content width for a screen that wants nearly the
+// entire terminal (the External-tools wizard, live feedback: the fixed
+// popupInnerWidth left the box narrow enough that a long shell command wrapped
+// mid-word and the background bled visibly around the box's edges). Unlike
+// popupWideInnerWidth's 96-column cap, there is no upper bound here — only the
+// same margin/floor so the box never touches the screen edges or collapses on
+// a tiny terminal.
+func popupFullInnerWidth(w int) int {
+	inner := w - 8
+	if inner < 20 {
+		inner = 20
+	}
+	return inner
+}
+
 // popupTextWidth is the usable text width inside a modal frame: inner minus
 // modalStyle's horizontal padding. lipgloss soft-wraps content at this width
 // (not at inner), so popup body/header/hint lines must be laid out / truncated

@@ -31,6 +31,7 @@ func TestSettingDocsCoverAllFields(t *testing.T) {
 	check("ui", reflect.TypeOf(UIConfig{}))
 	check("debug", reflect.TypeOf(DebugConfig{}))
 	check("refresh", reflect.TypeOf(RefreshConfig{}))
+	check("tools", reflect.TypeOf(ToolsConfig{}))
 }
 
 // For settings whose default lives in Defaults(), the registry value must match

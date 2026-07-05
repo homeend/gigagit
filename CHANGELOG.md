@@ -17,6 +17,24 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   repo), now sub-millisecond.
 
 ### Added
+- **External tools (stage 1: conflicts).** Run a configured agent or
+  mergetool on a paused merge/rebase/cherry-pick/revert from the conflict
+  window (`t`): repo-level agents (Claude Code, Junie) get a per-run temp
+  context file (op/source/target header plus the conflicted paths,
+  C-quoted against control-byte forgery) exposed as `<context-file>` and
+  `GG_CONTEXT_FILE`, plus ten more `GG_*` env vars, and hand over the
+  terminal; per-file tools (Meld) get the LOCAL/BASE/REMOTE/MERGED quartet
+  and an after-run mark-resolved offer. Commands live in
+  `[[tools.command]]` config blocks (global+repo lists concatenate, repo
+  wins name collisions); catalog defaults are built from generation-time
+  `<env:NAME>` tokens (rendered `${NAME}`/`%NAME%` per OS) and the context
+  file/env channels only — no default template substitutes a raw prose
+  value. Settings → "External tools" detects installed tools and writes
+  editable defaults to the global config; the first run of each command
+  shows it for approval (remembered per repo until the text changes). Each
+  agent also ships an opt-in yolo variant — Claude via
+  `--dangerously-skip-permissions`, Junie via `--brave` — shown unchecked
+  in the wizard by default (first-run approval still applies).
 - **Smart prompt when checking out the current branch's remote.** `c`/`s` on
   the remote counterpart of the checked-out branch no longer dead-ends with
   "use pull to update it": a state-aware prompt offers "pull now" (only when
