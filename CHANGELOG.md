@@ -31,7 +31,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   file/env channels only — no default template substitutes a raw prose
   value. Settings → "External tools" detects installed tools and writes
   editable defaults to the global config; the first run of each command
-  shows it for approval (remembered per repo until the text changes).
+  shows it for approval (remembered per repo until the text changes). Each
+  agent also ships an opt-in yolo variant — Claude via
+  `--dangerously-skip-permissions`, Junie via `--brave` — shown unchecked
+  in the wizard by default (first-run approval still applies).
 - **Smart prompt when checking out the current branch's remote.** `c`/`s` on
   the remote counterpart of the checked-out branch no longer dead-ends with
   "use pull to update it": a state-aware prompt offers "pull now" (only when

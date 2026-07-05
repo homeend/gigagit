@@ -20,8 +20,9 @@ type toolWizardRow struct {
 }
 
 // openToolsWizard detects installed catalog tools and builds the wizard rows.
-// New rows default checked (opening the wizard signals intent to add);
-// existing rows show checked but are always skipped on apply.
+// New rows default checked (opening the wizard signals intent to add) except
+// OptIn templates, which start unchecked; existing rows show checked but are
+// always skipped on apply.
 func (m Model) openToolsWizard() Model {
 	p := layerOf[*settingsPopup](m)
 	have := map[string]bool{}
@@ -35,13 +36,23 @@ func (m Model) openToolsWizard() Model {
 			p.toolRows = append(p.toolRows, toolWizardRow{det: det, tmpl: ct, existing: have[key]})
 		}
 	}
-	p.toolChecked = make([]bool, len(p.toolRows))
-	for i := range p.toolChecked {
-		p.toolChecked[i] = true
-	}
+	p.toolChecked = defaultToolChecked(p.toolRows)
 	p.sel = 0
 	p.toolsView = true
 	return m
+}
+
+// defaultToolChecked computes the wizard's initial checkbox states: a new
+// row defaults checked, EXCEPT an OptIn template (an aggressive
+// yolo/auto-approve variant) which starts unchecked so adding it is an
+// explicit opt-in. An existing row stays checked as before — it is skipped
+// on apply regardless.
+func defaultToolChecked(rows []toolWizardRow) []bool {
+	checked := make([]bool, len(rows))
+	for i, row := range rows {
+		checked[i] = row.existing || !row.tmpl.OptIn
+	}
+	return checked
 }
 
 // applyToolsWizard appends the checked, not-yet-configured rows to the config

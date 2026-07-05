@@ -45,7 +45,12 @@ type CommandTemplate struct {
 	Mode     Mode
 	PerFile  bool   // true = runs once per conflicted file (mergetools)
 	WhenOp   string // "" = any paused op; else merge|rebase|cherry-pick|revert
-	Command  string
+	// OptIn marks an aggressive variant (a yolo/auto-approve mode that
+	// bypasses the agent's own permission prompts): the Settings wizard
+	// shows OptIn rows UNCHECKED by default so adding one is an explicit
+	// opt-in; everything else defaults checked.
+	OptIn   bool
+	Command string
 }
 
 // Tool is one catalog entry. Bins are candidate binary names probed via
@@ -59,11 +64,19 @@ type Tool struct {
 	Commands    []CommandTemplate
 }
 
-// claudeConflictCommand uses only generation-time tokens (<bin>, <env:...>)
-// for its dynamic content — no raw prose token — per the injection-posture
-// amendment: the prompt reads the paused op and the context file (op/
-// source/target/conflicted paths) from GG_* env vars rather than having gg
-// substitute untrusted values into the prompt text itself.
+// claudeConflictPrompt is the double-quoted conflict-resolution prompt shared
+// by both Claude conflict templates. It uses only generation-time tokens
+// (<env:...>) for its dynamic content — no raw prose token — per the
+// injection-posture amendment: the prompt reads the paused op and the context
+// file (op/source/target/conflicted paths) from GG_* env vars rather than
+// having gg substitute untrusted values into the prompt text itself.
+const claudeConflictPrompt = `"A git <env:GG_OP> operation is paused with conflicts in this repository.
+   Read the context file at <env:GG_CONTEXT_FILE> for the operation's parties and the conflicted paths.
+   Inspect both sides' history to understand intent, resolve each conflict by editing the files,
+   then run git add on each resolved file. Do NOT run git commit or any --continue command --
+   stop when everything is staged and summarize what you chose and why."`
+
+// claudeConflictCommand is the default (permission-gated) Claude template.
 //
 // The double-quoted prompt is the FIRST argument after <bin>, with
 // --allowedTools/--disallowedTools following it — NOT the other way around.
@@ -72,14 +85,18 @@ type Tool struct {
 // trailing prompt placed after --disallowedTools gets eaten word-by-word as
 // deny rules (surfacing as "Permission deny rule ... matches no known tool")
 // and Claude launches with no prompt at all.
-const claudeConflictCommand = `<bin> "A git <env:GG_OP> operation is paused with conflicts in this repository.
-   Read the context file at <env:GG_CONTEXT_FILE> for the operation's parties and the conflicted paths.
-   Inspect both sides' history to understand intent, resolve each conflict by editing the files,
-   then run git add on each resolved file. Do NOT run git commit or any --continue command --
-   stop when everything is staged and summarize what you chose and why." \
+const claudeConflictCommand = `<bin> ` + claudeConflictPrompt + ` \
   --permission-mode acceptEdits \
   --allowedTools "Read" "Edit" "Bash(git status)" "Bash(git diff *)" "Bash(git log *)" "Bash(git add *)" \
   --disallowedTools "Bash(git commit *)" "Bash(git merge *)" "Bash(git rebase *)" "Bash(git push *)"`
+
+// claudeConflictYoloCommand is the OptIn yolo variant: same prompt (its
+// do-NOT-commit clause stays as guidance), but --dangerously-skip-permissions
+// bypasses Claude's permission evaluation entirely — so no
+// --allowedTools/--disallowedTools flags: bypass mode never consults them and
+// listing them would be dead weight. The prompt stays the FIRST argument
+// after <bin> (same ordering contract as claudeConflictCommand).
+const claudeConflictYoloCommand = `<bin> ` + claudeConflictPrompt + ` --dangerously-skip-permissions`
 
 // Builtins is the hardcoded catalog. Stage 1 ships conflict templates only;
 // commit_message/review defaults land with their stages (recorded in the spec).
@@ -89,6 +106,7 @@ func Builtins() []Tool {
 			ID: "claude", Label: "Claude Code", Bins: []string{"claude"},
 			Commands: []CommandTemplate{
 				{Category: CatConflict, Name: "Claude", Mode: ModeTerminal, Command: claudeConflictCommand},
+				{Category: CatConflict, Name: "Claude (yolo)", Mode: ModeTerminal, OptIn: true, Command: claudeConflictYoloCommand},
 			},
 		},
 		{
@@ -99,6 +117,13 @@ func Builtins() []Tool {
 				// is a --prompt task (see the spec's Junie entry).
 				{Category: CatConflict, Name: "Junie (merge)", Mode: ModeTerminal, WhenOp: "merge", Command: "<bin> --merge <env:GG_SOURCE>"},
 				{Category: CatConflict, Name: "Junie (rebase)", Mode: ModeTerminal, WhenOp: "rebase", Command: "<bin> --rebase <env:GG_SOURCE>"},
+				// Yolo variants: --brave verified against the live CLI on
+				// 2026-07-05 (Junie 26.6.8 (1892.26)); `junie --help` lists
+				// `--brave  Turns on Brave Mode (interactive only)` — and gg
+				// runs these commands under terminal handover
+				// (tea.ExecProcess), i.e. exactly Junie's interactive mode.
+				{Category: CatConflict, Name: "Junie merge (yolo)", Mode: ModeTerminal, WhenOp: "merge", OptIn: true, Command: "<bin> --merge <env:GG_SOURCE> --brave"},
+				{Category: CatConflict, Name: "Junie rebase (yolo)", Mode: ModeTerminal, WhenOp: "rebase", OptIn: true, Command: "<bin> --rebase <env:GG_SOURCE> --brave"},
 			},
 		},
 		{

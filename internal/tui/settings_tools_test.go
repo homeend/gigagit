@@ -23,6 +23,69 @@ func wizardRows(existing map[string]bool) []toolWizardRow {
 	return rows
 }
 
+// TestDefaultToolCheckedOptInUnchecked pins the wizard's initial checkbox
+// states: an OptIn template (an aggressive yolo variant) starts UNCHECKED so
+// adding it is an explicit opt-in; a plain new row stays checked; an existing
+// row shows checked as before (skipped on apply regardless).
+func TestDefaultToolCheckedOptInUnchecked(t *testing.T) {
+	det := exttool.Detection{
+		Tool: exttool.Tool{ID: "fake", Label: "Fake Tool", Bins: []string{"faketool"}},
+		Bin:  "faketool",
+	}
+	plain := toolWizardRow{det: det, tmpl: exttool.CommandTemplate{
+		Category: exttool.CatConflict, Name: "Fake", Mode: exttool.ModeTerminal, Command: "<bin> --resolve",
+	}}
+	optIn := toolWizardRow{det: det, tmpl: exttool.CommandTemplate{
+		Category: exttool.CatConflict, Name: "Fake (yolo)", Mode: exttool.ModeTerminal, OptIn: true, Command: "<bin> --resolve --yolo",
+	}}
+	existingOptIn := optIn
+	existingOptIn.tmpl.Name = "FakeExisting (yolo)"
+	existingOptIn.existing = true
+
+	rows := []toolWizardRow{plain, optIn, existingOptIn}
+	got := defaultToolChecked(rows)
+	want := []bool{true, false, true}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("checked[%d] (%s) = %v, want %v", i, rows[i].tmpl.Name, got[i], want[i])
+		}
+	}
+
+	// And the rendered list reflects it: the OptIn row draws [ ], the plain
+	// row [x].
+	m := toolCfg()
+	p := &settingsPopup{toolsView: true, toolRows: rows, toolChecked: got, sel: 0}
+	out := p.box(m)
+	if !strings.Contains(out, "[x] Fake Tool — conflict: Fake") {
+		t.Errorf("plain row must render checked:\n%s", out)
+	}
+	if !strings.Contains(out, "[ ] Fake Tool — conflict: Fake (yolo)") {
+		t.Errorf("OptIn row must render unchecked:\n%s", out)
+	}
+}
+
+// TestOpenToolsWizardCatalogOptInDefaults exercises the real catalog through
+// defaultToolChecked (openToolsWizard's row shape): every yolo variant lands
+// unchecked, every base template checked.
+func TestOpenToolsWizardCatalogOptInDefaults(t *testing.T) {
+	rows := wizardRows(nil)
+	checked := defaultToolChecked(rows)
+	sawOptIn := false
+	for i, row := range rows {
+		if row.tmpl.OptIn {
+			sawOptIn = true
+			if checked[i] {
+				t.Errorf("OptIn row %s must default unchecked", row.tmpl.Name)
+			}
+		} else if !checked[i] {
+			t.Errorf("non-OptIn row %s must default checked", row.tmpl.Name)
+		}
+	}
+	if !sawOptIn {
+		t.Fatal("catalog has no OptIn template — the yolo variants are gone?")
+	}
+}
+
 func TestApplyToolsWizardWritesMissingOnly(t *testing.T) {
 	m := toolCfg() // empty tools config
 	path := filepath.Join(t.TempDir(), "config.toml")

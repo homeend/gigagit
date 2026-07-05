@@ -198,6 +198,40 @@ The verification outcome decides which text ships in `Builtins()`.
 meld --auto-merge --output=<merged> <local> <base> <remote>
 ```
 
+**Yolo variants (opt-in)** — each agent additionally ships an
+auto-approve/yolo alternative, but only where the agent exposes it as a
+command-line parameter:
+
+- `Claude (yolo)`, `opt_in = true`:
+  `claude "<same prompt>" --dangerously-skip-permissions` — no
+  `--allowedTools`/`--disallowedTools`: bypass mode skips permission
+  evaluation entirely, so listing them would be dead weight. The prompt
+  keeps its do-NOT-commit clause as guidance, and stays the FIRST argument
+  after the binary (the same variadic-flag ordering contract as the base
+  template).
+- `Junie merge (yolo)`, `when_op = "merge"`, `opt_in = true`:
+  `junie --merge <env:GG_SOURCE> --brave`
+- `Junie rebase (yolo)`, `when_op = "rebase"`, `opt_in = true`:
+  `junie --rebase <env:GG_SOURCE> --brave`
+
+  Empirically verified 2026-07-05 against Junie 26.6.8 (1892.26):
+  `junie --help` lists `--brave  Turns on Brave Mode (interactive only)` —
+  and gg runs conflict commands under terminal handover
+  (`tea.ExecProcess`), which is exactly Junie's interactive mode.
+
+Meld is not an agent and gets no variant (`--auto-merge` already is its
+automation).
+
+*Posture:* yolo variants are explicit opt-in — the catalog marks them
+`OptIn` and the Settings wizard shows them **unchecked** by default (every
+other row defaults checked), so one lands in config only by deliberate
+choice. The first-run approval popup still applies like any other command.
+Note the elevated prompt-injection exposure: an agent that both reads repo
+content (conflicted files, history, the context file) and skips its own
+permission prompts will execute whatever the model decides, including
+actions steered by hostile text inside the repo — the do-NOT-commit clause
+in the prompt is guidance, not enforcement, in this mode.
+
 ### Stage 2–3 defaults (recorded here, shipped later)
 
 - `commit_message` / Claude (`capture`):
