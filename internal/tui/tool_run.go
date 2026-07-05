@@ -3,6 +3,7 @@ package tui
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"os"
 	"os/exec"
 	"runtime"
@@ -51,12 +52,60 @@ func toolEnv(ctx template.CmdCtx) []string {
 	}
 }
 
+// cQuotePath renders p the way git prints a path containing control
+// characters: double-quoted, with \n \r \t \" \\ as their usual C escapes
+// and every other control byte (< 0x20) as a \NNN octal escape. A path with
+// no control bytes is returned byte-exact and unquoted — quoting is applied
+// only when needed, so an ordinary path (including one with a backtick or a
+// dollar sign or non-ASCII bytes) never changes shape. Byte-wise, not
+// rune-wise: a git path is a byte string, and UTF-8 continuation/lead bytes
+// are always >= 0x80, so they can never be mistaken for a control byte.
+func cQuotePath(p string) string {
+	needsQuote := false
+	for i := 0; i < len(p); i++ {
+		if p[i] < 0x20 {
+			needsQuote = true
+			break
+		}
+	}
+	if !needsQuote {
+		return p
+	}
+	var b strings.Builder
+	b.WriteByte('"')
+	for i := 0; i < len(p); i++ {
+		c := p[i]
+		switch c {
+		case '\n':
+			b.WriteString(`\n`)
+		case '\r':
+			b.WriteString(`\r`)
+		case '\t':
+			b.WriteString(`\t`)
+		case '"':
+			b.WriteString(`\"`)
+		case '\\':
+			b.WriteString(`\\`)
+		default:
+			if c < 0x20 {
+				fmt.Fprintf(&b, `\%03o`, c)
+			} else {
+				b.WriteByte(c)
+			}
+		}
+	}
+	b.WriteByte('"')
+	return b.String()
+}
+
 // toolContextFile writes the per-run context file: op/source/target header
-// lines, then the conflicted paths one per line, byte-exact — no quoting or
-// escaping, since a newline-delimited list needs none and this is the
-// channel the injection-posture design uses specifically to avoid needing
-// any (see the design spec's "Placeholders and environment" section).
-// Created for conflict-category runs only, the only category stage 1 has.
+// lines, then the conflicted paths one per line. A path is byte-exact
+// unless it contains a control character (newline/CR are legal in git
+// paths), in which case it is C-quoted via cQuotePath so one entry can
+// never forge additional lines (see the design spec's "Placeholders and
+// environment" section). Header values are safe unquoted — git refnames
+// forbid control characters. Created for conflict-category runs only, the
+// only category stage 1 has.
 func toolContextFile(ctx template.CmdCtx) (string, error) {
 	var b strings.Builder
 	b.WriteString("op: " + ctx.Op + "\n")
@@ -64,7 +113,7 @@ func toolContextFile(ctx template.CmdCtx) (string, error) {
 	b.WriteString("target: " + ctx.Target + "\n")
 	b.WriteString("conflicted:\n")
 	for _, f := range ctx.ConflictedFiles {
-		b.WriteString(f + "\n")
+		b.WriteString(cQuotePath(f) + "\n")
 	}
 	f, err := os.CreateTemp("", "gg-context-*.txt")
 	if err != nil {

@@ -154,7 +154,7 @@ func TestToolPickEnterResolvesAndAsksApproval(t *testing.T) {
 func TestToolApproveEnterReturnsExecCmd(t *testing.T) {
 	m, p := conflictModelWithTools(t,
 		config.ToolCommand{Category: "conflict", Name: "Agent", Mode: "terminal", Command: "true"})
-	cleanupToolTemp(t) // the approve-enter below eagerly writes a real gg-tool-* script
+	cleanupToolTemp(t) // the approve-enter below eagerly writes a real gg-context-* file and a gg-tool-* script
 	m, _ = p.update(m, keyRunes("t"))
 	m, _ = p.update(m, tea.KeyMsg{Type: tea.KeyEnter}) // → approve
 	m, cmd := p.update(m, tea.KeyMsg{Type: tea.KeyEnter})
@@ -172,7 +172,7 @@ func TestToolApproveEnterReturnsExecCmd(t *testing.T) {
 func TestToolApprovedFastPathSkipsGate(t *testing.T) {
 	tc := config.ToolCommand{Category: "conflict", Name: "Agent", Mode: "terminal", Command: "true"}
 	m, p := conflictModelWithTools(t, tc)
-	cleanupToolTemp(t) // the approved fast path below eagerly writes a real gg-tool-* script
+	cleanupToolTemp(t) // the approved fast path below eagerly writes a real gg-context-* file and a gg-tool-* script
 	if err := m.promptStore.ApproveToolCommand(m.toolRepoKey(), toolCommandHash(tc.Command)); err != nil {
 		t.Fatal(err)
 	}
@@ -190,7 +190,7 @@ func TestToolApprovedFastPathSkipsGate(t *testing.T) {
 func TestToolUserFillStepPrecedesApproval(t *testing.T) {
 	m, p := conflictModelWithTools(t,
 		config.ToolCommand{Category: "conflict", Name: "Agent", Mode: "terminal", Command: "agent <user:hint>"})
-	cleanupToolTemp(t) // buildToolRun (after the fill below) eagerly writes a real gg-context-* file
+	cleanupToolTemp(t) // buildToolRun (after the fill below) eagerly writes a real gg-context-* file (and, once approved, a gg-tool-* script)
 	m, _ = p.update(m, keyRunes("t"))
 	m, _ = p.update(m, tea.KeyMsg{Type: tea.KeyEnter})
 	if p.st != confToolFill || p.toolFill == nil {

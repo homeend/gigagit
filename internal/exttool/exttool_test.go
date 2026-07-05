@@ -129,14 +129,29 @@ func TestGenerateCommand(t *testing.T) {
 
 func TestGenerateCommandForEnvToken(t *testing.T) {
 	ct := CommandTemplate{Command: "<bin> --merge <env:GG_SOURCE>"}
-	if got := GenerateCommandFor(ct, "junie", "linux"); got != `junie --merge "$GG_SOURCE"` {
+	if got := GenerateCommandFor(ct, "junie", "linux"); got != `junie --merge ${GG_SOURCE}` {
 		t.Errorf("linux: got %q", got)
 	}
 	if got := GenerateCommandFor(ct, "junie", "windows"); got != `junie --merge %GG_SOURCE%` {
 		t.Errorf("windows: got %q", got)
 	}
 	// <bin> substitution still happens alongside <env:...> rendering.
-	if got := GenerateCommandFor(ct, "junie", "darwin"); got != `junie --merge "$GG_SOURCE"` {
+	if got := GenerateCommandFor(ct, "junie", "darwin"); got != `junie --merge ${GG_SOURCE}` {
 		t.Errorf("non-windows treated as POSIX: got %q", got)
+	}
+}
+
+// TestGenerateCommandForEnvTokenNestsInDoubleQuotedPrompt is the hardening
+// regression: ${NAME} must survive as ONE word inside a template's own
+// double-quoted prompt string, even when the underlying value contains a
+// space — the reason the spec mandates ${NAME} over "$NAME" (which would
+// close the prompt's quote early and re-open a second one, splitting the
+// value into two argv words at the space).
+func TestGenerateCommandForEnvTokenNestsInDoubleQuotedPrompt(t *testing.T) {
+	ct := CommandTemplate{Command: `<bin> "Read the file at <env:GG_CONTEXT_FILE> and summarize it."`}
+	got := GenerateCommandFor(ct, "claude", "linux")
+	want := `claude "Read the file at ${GG_CONTEXT_FILE} and summarize it."`
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
 	}
 }

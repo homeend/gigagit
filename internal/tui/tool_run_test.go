@@ -63,6 +63,54 @@ func TestToolContextFileContent(t *testing.T) {
 	}
 }
 
+// TestToolContextFileContentControlCharPath is the CRITICAL-finding
+// regression: a conflicted path containing a newline (legal in a git tree)
+// must not be written byte-exact — that would forge an extra line under
+// "conflicted:". It must instead render C-quoted on a single line.
+func TestToolContextFileContentControlCharPath(t *testing.T) {
+	ctx := template.CmdCtx{
+		Op: "merge", Source: "feature", Target: "main",
+		ConflictedFiles: []string{"innocent.go\nFAKE", "c.go"},
+	}
+	path, err := toolContextFile(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(path)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "op: merge\nsource: feature\ntarget: main\nconflicted:\n\"innocent.go\\nFAKE\"\nc.go\n"
+	if string(data) != want {
+		t.Errorf("context file content = %q\nwant %q", data, want)
+	}
+}
+
+func TestCQuotePath(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"plain path unquoted", "a/b.go", "a/b.go"},
+		{"shell metacharacters stay byte-exact", "a$(x) b.go", "a$(x) b.go"},
+		{"newline forces C-quoting", "innocent.go\nFAKE", `"innocent.go\nFAKE"`},
+		{"carriage return", "a\rb", `"a\rb"`},
+		{"tab", "a\tb", `"a\tb"`},
+		{"embedded quote and backslash", "a\"b\\c\n", `"a\"b\\c\n"`},
+		{"other control byte uses octal", "a\x01b", `"a\001b"`},
+		{"empty path unquoted", "", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := cQuotePath(c.in); got != c.want {
+				t.Errorf("cQuotePath(%q) = %q, want %q", c.in, got, c.want)
+			}
+		})
+	}
+}
+
 func TestToolScriptAndExecCmd(t *testing.T) {
 	script, err := toolScript("echo hello")
 	if err != nil {

@@ -156,11 +156,16 @@ func GenerateCommand(tmpl CommandTemplate, bin string) string {
 // with bin, double-quoted when it contains whitespace (a Windows install
 // path). Every <env:NAME> generation token becomes a per-OS reference to the
 // GG_* environment variable gg always sets when it runs the command —
-// `"$NAME"` on POSIX, `%NAME%` on Windows — so one catalog template
+// `${NAME}` on POSIX, `%NAME%` on Windows — so one catalog template
 // generates a correct command on either platform without gg ever
-// substituting the underlying value (and needing to escape it) itself.
-// Runtime tokens (<op>, <source>, quartet paths, <context-file>, ...) pass
-// through untouched for template.ResolveCommand.
+// substituting the underlying value (and needing to escape it) itself. The
+// POSIX rendering is deliberately unquoted `${NAME}`, not `"$NAME"`: it
+// nests inside a template's own double-quoted prompt strings as one word,
+// where `"$NAME"` would alternate quotes and word-split the value when it
+// contains spaces (e.g. a TMPDIR with a space); shell variable expansion is
+// never re-parsed for command substitution, so the expanded value remains
+// data either way. Runtime tokens (<op>, <source>, quartet paths,
+// <context-file>, ...) pass through untouched for template.ResolveCommand.
 func GenerateCommandFor(tmpl CommandTemplate, bin, goos string) string {
 	if strings.ContainsAny(bin, " \t") {
 		bin = `"` + bin + `"`
@@ -171,7 +176,7 @@ func GenerateCommandFor(tmpl CommandTemplate, bin, goos string) string {
 		if goos == "windows" {
 			return "%" + name + "%"
 		}
-		return `"$` + name + `"`
+		return "${" + name + "}"
 	})
 	return out
 }

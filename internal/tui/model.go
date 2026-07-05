@@ -2032,6 +2032,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if cp, ok := m.proc.(*conflictProcess); ok {
 			return cp.toolReady(m, msg)
 		}
+		// Process gone (shouldn't happen): still clean up, same as the
+		// sibling toolFinishedMsg branch below (msg.pending.cleanup now
+		// includes the context file).
+		if msg.pending != nil {
+			for _, f := range msg.pending.cleanup {
+				os.Remove(f)
+			}
+		}
 		return m, nil
 
 	case toolFinishedMsg:
