@@ -280,10 +280,10 @@ run (best-effort).
   is the sanctioned `os/exec` exception; no repo mutation happens through
   gg, so no engine op / repogate reservation is taken (same standing as
   `$EDITOR`). The quartet materialization is a **domain read query**
-  (`domain.ConflictFileVersions(ctx, path) (local, base, remote string, err)`
-  — creates the temp files under a Read reservation using a new
-  `git.StageBlobBytes`-style verb over `git show :N:<path>`, reusing
-  `internal/git/stage_blob.go` helpers where they fit).
+  (`domain.ConflictFileVersions(ctx, path, hasBase) (local, base, remote
+  string, cleanup func(), err error)` — creates the temp files under a Read
+  reservation via the existing `git show :N:<path>` verb (`ShowFile`);
+  `cleanup` removes the trio after the tool exits).
 - **Approval memory:** `promptstate` gains per-repo approved-command hashes
   (`ApproveToolCommand(repoKey, hash)` / `ToolCommandApproved`), stored in
   the existing `prompts.toml` (new table), atomic-rewrite as today.
