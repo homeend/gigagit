@@ -15,6 +15,8 @@ func TestParseCaptureMessage(t *testing.T) {
 		{"top_level_subject", `{"subject":"Direct","body":"B"}`, "Direct", "B", false},
 		{"garbage_nonjson", "just text here", "just text here", "", false},
 		{"empty", "   \n  ", "", "", true},
+		{"empty_result", `{"type":"result","is_error":false,"result":""}`, "", "", true},
+		{"malformed_json", "{not valid json", "{not valid json", "", false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

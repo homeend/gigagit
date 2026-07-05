@@ -11,10 +11,10 @@ import (
 var ErrEmptyMessage = errors.New("exttool: empty commit message from tool")
 
 type captureEnvelope struct {
-	IsError          bool   `json:"is_error"`
-	Result           string `json:"result"`
-	Subject          string `json:"subject"` // defensive: some tools may emit top-level
-	Body             string `json:"body"`
+	IsError          bool    `json:"is_error"`
+	Result           *string `json:"result"`
+	Subject          string  `json:"subject"` // defensive: some tools may emit top-level subject/body
+	Body             string  `json:"body"`
 	StructuredOutput *struct {
 		Subject string `json:"subject"`
 		Body    string `json:"body"`
@@ -33,9 +33,11 @@ func ParseCaptureMessage(stdout []byte) (subject, body string, err error) {
 		if json.Unmarshal(t, &env) == nil {
 			switch {
 			case env.IsError:
-				msg := strings.TrimSpace(env.Result)
-				if msg == "" {
-					msg = "tool reported an error"
+				msg := "tool reported an error"
+				if env.Result != nil {
+					if trimmed := strings.TrimSpace(*env.Result); trimmed != "" {
+						msg = trimmed
+					}
 				}
 				return "", "", errors.New(msg)
 			case env.StructuredOutput != nil && strings.TrimSpace(env.StructuredOutput.Subject) != "":
@@ -43,15 +45,18 @@ func ParseCaptureMessage(stdout []byte) (subject, body string, err error) {
 					strings.TrimSpace(env.StructuredOutput.Body), nil
 			case strings.TrimSpace(env.Subject) != "":
 				return strings.TrimSpace(env.Subject), strings.TrimSpace(env.Body), nil
-			case env.Result != "":
-				subject, body = SplitMessage(strings.TrimSpace(env.Result))
+			case env.Result != nil:
+				text := strings.TrimSpace(*env.Result)
+				subject, body = SplitMessage(text)
 				if subject == "" {
 					return "", "", ErrEmptyMessage
 				}
 				return subject, body, nil
 			}
 		}
-		// JSON-looking but unrecognized: fall through to raw-text handling.
+		// JSON-looking but unrecognized (no matching case above, e.g. no "result"
+		// key at all) or malformed JSON that failed to unmarshal: fall through to
+		// raw-text handling and treat the input verbatim as the message.
 	}
 	subject, body = SplitMessage(string(t))
 	if subject == "" {
