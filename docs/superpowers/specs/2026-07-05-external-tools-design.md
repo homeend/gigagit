@@ -98,12 +98,26 @@ Selecting a command:
    `tea.ExecProcess` returns and gg repaints over it. A zero exit returns
    straight away with no hold.
 
-A non-zero exit surfaces the failure in the conflict window's error state;
-nothing is rolled back (the tool may have done useful partial work — the
-status reload shows the truth). Exit codes 130/143 (SIGINT/SIGTERM by the
-usual 128+signal convention — e.g. quitting an interactive agent with
-ctrl-C) are the exception: they are treated as a normal quit, not a failure,
-so the conflict window reloads status exactly as it would on a zero exit.
+A non-zero exit surfaces the failure in the conflict window's error state
+(prefixed with the tool's name, e.g. `Junie: exit status 7`, so the box
+identifies which command ran); nothing is rolled back (the tool may have
+done useful partial work — the status reload shows the truth). Exit codes
+130/143 (SIGINT/SIGTERM by the usual 128+signal convention — a shell that
+SURVIVED the signal and propagated the code) are the exception: they are
+treated as a normal quit, not a failure, so the conflict window reloads
+status exactly as it would on a zero exit. The more common ctrl-C shape is a
+**signal death**, not a 128+code exit: ctrl-C delivers SIGINT to the whole
+foreground process group, so the wrapping shell is usually killed BY the
+signal rather than surviving to propagate a code. Go reports that as an
+`*exec.ExitError` with `ExitCode() == -1` and `Error() == "signal:
+interrupt"`, which the 130/143 check alone never catches — `toolInterruptExit`
+also unwraps `exitErr.Sys().(syscall.WaitStatus)` and treats a
+`Signaled()` process killed by `SIGINT`/`SIGTERM` the same as the 128+code
+case (a no-op on Windows, where `WaitStatus.Signaled()` is hardcoded false).
+Every run — clean, interrupted, or failed — also writes one line to the
+operation log (`[debug] log_operations`) via `observ.EmitSpan`: the tool
+name, its disposition (`ok` / `interrupted (treated as quit)` / the raw exit
+error), and how long it held the terminal.
 
 ## Config: the `[tools]` section
 

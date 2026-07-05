@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
@@ -10,7 +11,10 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/homeend/gigagit/internal/config"
+	"github.com/homeend/gigagit/internal/observ"
 	"github.com/homeend/gigagit/internal/template"
 )
 
@@ -313,5 +317,93 @@ func TestToolInterruptExit(t *testing.T) {
 	}
 	if toolInterruptExit(nil) {
 		t.Error("nil error must NOT be an interrupt exit")
+	}
+}
+
+// TestToolInterruptExitSignalDeath is the live-feedback regression: ctrl-C
+// delivers SIGINT to the whole foreground process group, so the wrapping
+// shell itself is usually killed BY the signal rather than surviving to
+// propagate exit code 130 — Go reports that as an *exec.ExitError whose
+// ExitCode() is -1 and whose Error() text is "signal: interrupt", which
+// TestToolInterruptExit's code-based cases never exercise. This runs a REAL
+// self-interrupting shell (`kill -INT $$`) to get a faithful signal-death
+// os.ProcessState, the same rationale as the code-based cases above.
+func TestToolInterruptExitSignalDeath(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX-only: relies on a real SIGINT process death")
+	}
+	sigErr := exec.Command("sh", "-c", "kill -INT $$").Run()
+	if sigErr == nil {
+		t.Fatal("kill -INT $$ command unexpectedly succeeded")
+	}
+	var exitErr *exec.ExitError
+	if !errors.As(sigErr, &exitErr) || exitErr.ExitCode() != -1 {
+		t.Fatalf("sigErr = %v, want a signal-death *exec.ExitError (ExitCode -1)", sigErr)
+	}
+	if !toolInterruptExit(sigErr) {
+		t.Errorf("signal-killed shell (%v) must be an interrupt exit", sigErr)
+	}
+}
+
+// TestToolDisposition pins the three shapes a run's exit can render as in
+// the operation log: a clean exit, an interrupt-quit (folded to the friendly
+// label regardless of whether it arrived as a 128+code exit or a raw signal
+// death), and a genuine non-interrupt failure (the raw Go error text).
+func TestToolDisposition(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX-only: relies on sh -c exit codes")
+	}
+	if got := toolDisposition(nil); got != "ok" {
+		t.Errorf("nil err disposition = %q, want %q", got, "ok")
+	}
+	interruptErr := exec.Command("sh", "-c", "exit 130").Run()
+	if got := toolDisposition(interruptErr); got != "interrupted (treated as quit)" {
+		t.Errorf("130-exit disposition = %q, want %q", got, "interrupted (treated as quit)")
+	}
+	sigErr := exec.Command("sh", "-c", "kill -INT $$").Run()
+	if got := toolDisposition(sigErr); got != "interrupted (treated as quit)" {
+		t.Errorf("signal-death disposition = %q, want %q", got, "interrupted (treated as quit)")
+	}
+	failErr := exec.Command("sh", "-c", "exit 7").Run()
+	if got := toolDisposition(failErr); got != "exit status 7" {
+		t.Errorf("failure disposition = %q, want %q", got, "exit status 7")
+	}
+}
+
+// TestLogToolExit drives the operation-log write end to end through the real
+// observ sink (the same seam oplog.enable() wires to operations.log): one
+// JSON line per call, carrying the tool name and disposition, and NOTHING
+// when no sink is set (the `[debug] log_operations = false` default, so this
+// never touches disk for users who haven't opted in).
+func TestLogToolExit(t *testing.T) {
+	t.Cleanup(func() { observ.SetSpanSink(nil) })
+
+	// No sink set: must be a silent no-op, not a panic on a nil pending.
+	observ.SetSpanSink(nil)
+	logToolExit(toolFinishedMsg{})
+
+	var buf bytes.Buffer
+	observ.SetSpanSink(&buf)
+	pending := &pendingToolRun{tc: config.ToolCommand{Name: "Junie"}}
+	logToolExit(toolFinishedMsg{pending: pending, start: time.Now().Add(-2 * time.Second)})
+	line := buf.String()
+	if !strings.Contains(line, `"name":"tool Junie"`) {
+		t.Errorf("log line missing tool name: %s", line)
+	}
+	if !strings.Contains(line, "disposition=ok") {
+		t.Errorf("log line missing ok disposition: %s", line)
+	}
+
+	buf.Reset()
+	if runtime.GOOS != "windows" {
+		failErr := exec.Command("sh", "-c", "exit 7").Run()
+		logToolExit(toolFinishedMsg{pending: pending, start: time.Now(), err: failErr})
+		line = buf.String()
+		if !strings.Contains(line, "disposition=exit status 7") {
+			t.Errorf("log line missing failure disposition: %s", line)
+		}
+		if !strings.Contains(line, `"exit_code":7`) {
+			t.Errorf("log line missing exit code: %s", line)
+		}
 	}
 }

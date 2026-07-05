@@ -9,10 +9,12 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+	"syscall"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/observ"
 	"github.com/homeend/gigagit/internal/template"
 )
 
@@ -230,32 +232,112 @@ type toolFinishedMsg struct {
 	pending  *pendingToolRun
 	script   string
 	preMtime time.Time
+	start    time.Time // when the process was handed the terminal (execToolCmd)
 	err      error
 }
 
-// toolInterruptExit reports whether err is an *exec.ExitError carrying exit
-// code 130 (SIGINT) or 143 (SIGTERM) — the POSIX 128+signal convention for a
-// shell killed by ctrl-C or a terminate signal. Quitting an interactive
-// agent CLI this way is a normal user-initiated quit, not a tool failure, so
-// toolFinished treats it like a clean exit instead of surfacing an error box.
-// A nil err (errors.As returns false on nil) or a non-exec.ExitError yields
-// false, as does any other non-zero code.
+// toolInterruptExit reports whether err represents a user-initiated
+// ctrl-C/terminate quit rather than a tool failure. Two shapes qualify:
+//
+//  1. An *exec.ExitError carrying exit code 130 (SIGINT) or 143 (SIGTERM) —
+//     the POSIX 128+signal convention for a shell that SURVIVED the signal
+//     and propagated the code (see toolScript's wrapper).
+//  2. An *exec.ExitError whose process was itself killed BY the signal — the
+//     common ctrl-C case, since ctrl-C delivers SIGINT to the whole
+//     foreground process group, including the wrapper shell. Go reports this
+//     as a signal death (ExitCode() == -1, err.Error() == "signal:
+//     interrupt"), not a 128+signal exit code, so case 1 alone never catches
+//     it. exitErr.Sys().(syscall.WaitStatus) exposes Signaled()/Signal() on
+//     every GOOS — Windows' WaitStatus.Signaled() is hardcoded false (no
+//     POSIX signal-death concept there), so this branch is simply inert on
+//     Windows rather than needing a build tag.
+//
+// Quitting an interactive agent CLI either way is a normal user-initiated
+// quit, not a tool failure, so toolFinished treats it like a clean exit
+// instead of surfacing an error box. A nil err (errors.As returns false on
+// nil) or a non-exec.ExitError yields false, as does any other exit code or
+// signal (e.g. SIGKILL, a crash).
 func toolInterruptExit(err error) bool {
 	var exitErr *exec.ExitError
 	if !errors.As(err, &exitErr) {
 		return false
 	}
-	code := exitErr.ExitCode()
-	return code == 130 || code == 143
+	if code := exitErr.ExitCode(); code == 130 || code == 143 {
+		return true
+	}
+	if ws, ok := exitErr.Sys().(syscall.WaitStatus); ok && ws.Signaled() {
+		switch ws.Signal() {
+		case syscall.SIGINT, syscall.SIGTERM:
+			return true
+		}
+	}
+	return false
+}
+
+// toolDisposition renders the outcome of a tool run for the operation log:
+// "ok" for a clean exit, the friendly label for an interrupt-quit (see
+// toolInterruptExit), else the raw error text — Go renders that as "exit
+// status N" for a propagated code or "signal: <name>" for a signal death
+// toolInterruptExit didn't classify as a quit (e.g. SIGKILL).
+func toolDisposition(err error) string {
+	if err == nil {
+		return "ok"
+	}
+	if toolInterruptExit(err) {
+		return "interrupted (treated as quit)"
+	}
+	return err.Error()
+}
+
+// toolExitName returns the configured tool name for a finished run (e.g.
+// "Junie", "Meld"), or a generic fallback if pending is unexpectedly nil.
+func toolExitName(pending *pendingToolRun) string {
+	if pending == nil || pending.tc.Name == "" {
+		return "tool"
+	}
+	return pending.tc.Name
+}
+
+// logToolExit records exactly one operation-log line per tool run: the
+// command name, its disposition (ok / an interrupt-quit / the raw exit
+// error), and how long it held the terminal. observ.EmitSpan is a no-op
+// unless `[debug] log_operations` has wired a sink (oplog.enable), so this
+// costs nothing in the common case — the same always-on-but-gated channel
+// domain.Execute uses to log every engine-op span, success or failure alike.
+// Called on EVERY toolFinishedMsg (ok, interrupted, or a genuine failure) so
+// a user auditing operations.log can see how a tool actually ended, not just
+// the failures already surfaced in the error box / errors.log.
+func logToolExit(msg toolFinishedMsg) {
+	var dur time.Duration
+	if !msg.start.IsZero() {
+		dur = time.Since(msg.start)
+	}
+	span := observ.Span{
+		Name:     "tool " + toolExitName(msg.pending),
+		Args:     []string{"disposition=" + toolDisposition(msg.err)},
+		Start:    msg.start,
+		Duration: dur,
+	}
+	if msg.err != nil {
+		span.Err = msg.err.Error()
+		var exitErr *exec.ExitError
+		if errors.As(msg.err, &exitErr) {
+			span.ExitCode = exitErr.ExitCode()
+		} else {
+			span.ExitCode = -1
+		}
+	}
+	observ.EmitSpan(span)
 }
 
 // execToolCmd suspends the TUI and runs the pending command with the real
 // terminal (the editor-handover precedent). preMtime snapshots the per-file
 // target so the return path can offer mark-resolved only on a real change.
 func (m Model) execToolCmd(pending *pendingToolRun) tea.Cmd {
+	start := time.Now()
 	script, err := toolScript(pending.resolved)
 	if err != nil {
-		return func() tea.Msg { return toolFinishedMsg{pending: pending, err: err} }
+		return func() tea.Msg { return toolFinishedMsg{pending: pending, start: start, err: err} }
 	}
 	var preMtime time.Time
 	if pending.merged != "" {
@@ -265,6 +347,6 @@ func (m Model) execToolCmd(pending *pendingToolRun) tea.Cmd {
 	}
 	cmd := toolExecCmd(script, m.currentWorktree, pending.env)
 	return tea.ExecProcess(cmd, func(err error) tea.Msg {
-		return toolFinishedMsg{pending: pending, script: script, preMtime: preMtime, err: err}
+		return toolFinishedMsg{pending: pending, script: script, preMtime: preMtime, start: start, err: err}
 	})
 }

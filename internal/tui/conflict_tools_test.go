@@ -267,3 +267,60 @@ func TestToolFinishedInterruptExitIsNotAFailure(t *testing.T) {
 		t.Error("interrupt exit must set a status hint")
 	}
 }
+
+// TestToolFinishedSignalDeathIsNotAFailure covers the case the screenshot
+// that prompted this fix actually hit: ctrl-C delivers SIGINT to the whole
+// foreground process group, so the wrapping `sh` is usually killed BY the
+// signal rather than surviving to propagate exit code 130. Go reports that
+// as an *exec.ExitError with ExitCode() == -1 and Error() == "signal:
+// interrupt" — the 130/143 code check alone never catches it, and before
+// this fix toolFinished surfaced "Resolve failed: tool exited with an
+// error: signal: interrupt" for a completely normal quit.
+func TestToolFinishedSignalDeathIsNotAFailure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX-only: relies on a real SIGINT process death")
+	}
+	m, p := conflictModelWithTools(t,
+		config.ToolCommand{Category: "conflict", Name: "Agent", Mode: "terminal", Command: "true"})
+	sigErr := exec.Command("sh", "-c", "kill -INT $$").Run()
+	if sigErr == nil {
+		t.Fatal("kill -INT $$ command unexpectedly succeeded")
+	}
+	m2, cmd := p.toolFinished(m, toolFinishedMsg{err: sigErr})
+	if p.st == confReporting {
+		t.Fatalf("signal-death interrupt must not enter confReporting, errMsg = %q", p.errMsg)
+	}
+	if cmd == nil {
+		t.Error("signal-death interrupt must still return a reload cmd")
+	}
+	if !strings.Contains(m2.statusMsg, "interrupted") {
+		t.Errorf("statusMsg = %q, want it to mention %q", m2.statusMsg, "interrupted")
+	}
+}
+
+// TestToolFinishedErrorNamesTheTool is the FIX-3 regression: a genuine
+// (non-interrupt) failure's error box must identify which command ran —
+// "Junie: exit status 7", not the old bare "tool exited with an error: exit
+// status 7" — so a screenshot or log line is actionable on its own.
+func TestToolFinishedErrorNamesTheTool(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX-only: relies on sh -c exit codes")
+	}
+	m, p := conflictModelWithTools(t,
+		config.ToolCommand{Category: "conflict", Name: "Junie", Mode: "terminal", Command: "false"})
+	failErr := exec.Command("sh", "-c", "exit 7").Run()
+	if failErr == nil {
+		t.Fatal("exit 7 command unexpectedly succeeded")
+	}
+	pending := &pendingToolRun{tc: config.ToolCommand{Name: "Junie"}}
+	_, _ = p.toolFinished(m, toolFinishedMsg{pending: pending, err: failErr})
+	if p.st != confReporting {
+		t.Fatalf("genuine failure must enter confReporting, got %v", p.st)
+	}
+	if !strings.HasPrefix(p.errMsg, "Junie: ") {
+		t.Errorf("errMsg = %q, want it prefixed with the tool name", p.errMsg)
+	}
+	if strings.Contains(p.errMsg, "tool exited with an error") {
+		t.Errorf("errMsg = %q, must not use the old generic phrasing", p.errMsg)
+	}
+}
