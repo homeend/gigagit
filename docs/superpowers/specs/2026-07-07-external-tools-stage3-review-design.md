@@ -140,19 +140,26 @@ New `review` templates in `exttool.Builtins()`. Exact commands are
 **verified against the real binaries during implementation** (the Stage-1/2
 lesson — the spec's recorded defaults are a starting point, not gospel):
 
-- **Claude** — the anchor, `capture` mode. Seed:
-  `claude -p "/code-review <range>" --output-format json`. Verify `/code-review`
-  runs headless under `-p` and that `.result` is the report; adjust flags
-  (`--permission-mode`, `--allowedTools "Bash(git *)" "Read"`) as the probe
-  shows. For the uncommitted target, `<range>` is absent and the prompt points
-  the agent at `$GG_REVIEW_DIFF`.
-- **Junie** — probe `junie --review "…" --output-format json` (optionally
-  `--json-output-file`). **If it emits a capturable report** → Junie ships as
-  `capture` (report → viewer, uniform with Claude). **If not** → Junie ships as
-  `terminal` (interactive `--review`, terminal handover like the conflict lane,
-  **no** report viewer — the run just hands over the terminal). The design
-  supports either; the probe outcome is recorded in the spec/commit and in
-  `internal/exttool`'s catalog comment (as the Stage-1 Junie note did).
+Both ship as **`capture`** mode (verified against the real binaries, 2026-07-07):
+
+- **Claude** — `capture`, stdout `.result` is a clean markdown report; Claude
+  runs its own git analysis from `<range>`. **Verified command:**
+  `claude -p "/code-review <range>" --output-format json --permission-mode acceptEdits --allowedTools "Read" "Bash(git diff *)" "Bash(git log *)" "Bash(git show *)" "Bash(git status *)"`.
+  `/code-review HEAD~1..HEAD` ran headless under `-p` and produced a
+  severity-structured review that caught a planted divide-by-zero. For the
+  uncommitted target `<range>` is empty (`/code-review` with no arg reviews the
+  working tree); `$GG_REVIEW_DIFF` is always also provided as the reliable
+  fallback.
+- **Junie** — `capture` via the **task-agent + `$GG_MESSAGE_FILE` file channel**
+  (the Stage-2 mechanism, reused exactly). Junie's `--review` flag reviews only
+  *uncommitted working changes* (it reports "no changes to review" on a clean
+  tree), so it can't take a range; instead we feed it the diff. **Verified
+  command:**
+  `junie --task "<prompt: review the diff at ${GG_REVIEW_DIFF} (range <range>); write the review into ${GG_MESSAGE_FILE} (absolute path outside the repository); do not modify files or commit>" --output-format json --skip-update-check`.
+  Junie wrote a real Critical/Medium review to `$GG_MESSAGE_FILE`; its stdout
+  `.result` is a meta-report, so the file-channel-wins rule applies (identical
+  to the commit-message lane). The `internal/exttool` catalog comment records
+  this (as the Stage-1 Junie note did).
 
 Templates use generation-time `<bin>`/`<env:…>` tokens only; dynamic content
 reaches the agent through `<range>` + the `$GG_*` file channels — never a raw
