@@ -146,14 +146,14 @@ func TestFullscreenToggleT(t *testing.T) {
 	m := maxModel()
 	m.focus = panelFiles
 
-	m = press(t, m, "T")
+	m = press(t, m, "ctrl+t")
 	if !m.fullMaxed || m.fullMax != panelFiles {
 		t.Fatalf("after T: fullMaxed=%v fullMax=%v", m.fullMaxed, m.fullMax)
 	}
 	if m.leftMaxed {
 		t.Fatal("T must not set the t column pin")
 	}
-	m = press(t, m, "T")
+	m = press(t, m, "ctrl+t")
 	if m.fullMaxed {
 		t.Fatal("second T must restore")
 	}
@@ -162,7 +162,7 @@ func TestFullscreenToggleT(t *testing.T) {
 func TestFullscreenOnCommits(t *testing.T) {
 	m := maxModel()
 	m.focus = panelCommits
-	m = press(t, m, "T")
+	m = press(t, m, "ctrl+t")
 	if !m.fullMaxed || m.fullMax != panelCommits {
 		t.Fatalf("after T on Commits: fullMaxed=%v fullMax=%v", m.fullMaxed, m.fullMax)
 	}
@@ -178,11 +178,11 @@ func TestLadderColumnThenFullscreenThenBack(t *testing.T) {
 	m := maxModel()
 	m.focus = panelFiles
 	m = press(t, m, "t")
-	m = press(t, m, "T")
+	m = press(t, m, "ctrl+t")
 	if !m.fullMaxed || !m.leftMaxed {
 		t.Fatalf("t then T: fullMaxed=%v leftMaxed=%v, want both", m.fullMaxed, m.leftMaxed)
 	}
-	m = press(t, m, "T")
+	m = press(t, m, "ctrl+t")
 	if m.fullMaxed || !m.leftMaxed || m.leftMax != panelFiles {
 		t.Fatalf("T again: fullMaxed=%v leftMaxed=%v leftMax=%v, want column-maximized Files", m.fullMaxed, m.leftMaxed, m.leftMax)
 	}
@@ -193,7 +193,7 @@ func TestLadderColumnThenFullscreenThenBack(t *testing.T) {
 func TestLadderTDropsFullscreenToColumn(t *testing.T) {
 	m := maxModel()
 	m.focus = panelFiles
-	m = press(t, m, "T")
+	m = press(t, m, "ctrl+t")
 	m = press(t, m, "t")
 	if m.fullMaxed {
 		t.Fatal("t while fullscreen must clear the fullscreen pin")
@@ -206,7 +206,7 @@ func TestLadderTDropsFullscreenToColumn(t *testing.T) {
 func TestEscExitsFullscreen(t *testing.T) {
 	m := maxModel()
 	m.focus = panelFiles
-	m = press(t, m, "T")
+	m = press(t, m, "ctrl+t")
 	m = press(t, m, "esc")
 	if m.fullMaxed {
 		t.Fatal("esc must exit fullscreen")
@@ -218,7 +218,7 @@ func TestEscExitsFullscreen(t *testing.T) {
 func TestEscPrefersFilterOverFullscreen(t *testing.T) {
 	m := maxModel()
 	m.focus = panelFiles
-	m = press(t, m, "T")
+	m = press(t, m, "ctrl+t")
 	m.filterQuery = "x"
 	m = press(t, m, "esc")
 	if m.filterQuery != "" {
@@ -237,7 +237,7 @@ func TestFullscreenInertInFilesView(t *testing.T) {
 	m := maxModel()
 	m.focus = panelFiles
 	m.filesView = &contentPopup{}
-	m = press(t, m, "T")
+	m = press(t, m, "ctrl+t")
 	if m.fullMaxed {
 		t.Fatal("T must be inert while the files view owns the screen")
 	}
@@ -246,7 +246,7 @@ func TestFullscreenInertInFilesView(t *testing.T) {
 func TestFocusOrderCollapsesFullscreen(t *testing.T) {
 	m := maxModel()
 	m.focus = panelFiles
-	m = press(t, m, "T")
+	m = press(t, m, "ctrl+t")
 	got := m.focusOrder()
 	if len(got) != 1 || got[0] != panelFiles {
 		t.Fatalf("fullscreen focusOrder = %v, want [Files]", got)
@@ -274,7 +274,7 @@ func TestFocusOrderStaleFullscreenPinFallsBack(t *testing.T) {
 func TestArrowsStayInsideFullscreen(t *testing.T) {
 	m := maxModel()
 	m.focus = panelFiles
-	m = press(t, m, "T")
+	m = press(t, m, "ctrl+t")
 	m = press(t, m, "right")
 	if m.focus != panelFiles {
 		t.Fatalf("→ moved focus to hidden %v", m.focus)
@@ -282,7 +282,7 @@ func TestArrowsStayInsideFullscreen(t *testing.T) {
 
 	c := maxModel()
 	c.focus = panelCommits
-	c = press(t, c, "T")
+	c = press(t, c, "ctrl+t")
 	c = press(t, c, "left")
 	if c.focus != panelCommits {
 		t.Fatalf("← moved focus to hidden %v", c.focus)
@@ -295,7 +295,7 @@ func TestArrowsStayInsideFullscreen(t *testing.T) {
 func TestTabSwitchRepinsFullscreen(t *testing.T) {
 	m := maxModel()
 	m.focus = panelBranches
-	m = press(t, m, "T")
+	m = press(t, m, "ctrl+t")
 	m = m.activateTab(panelWorktrees)
 	if !m.fullMaxed || m.fullMax != panelWorktrees {
 		t.Fatalf("after tab switch: fullMaxed=%v fullMax=%v, want Worktrees pinned", m.fullMaxed, m.fullMax)
@@ -303,7 +303,7 @@ func TestTabSwitchRepinsFullscreen(t *testing.T) {
 
 	c := maxModel()
 	c.focus = panelCommits
-	c = press(t, c, "T")
+	c = press(t, c, "ctrl+t")
 	c = c.activateTab(panelWorktrees)
 	if !c.fullMaxed || c.fullMax != panelWorktrees || c.focus != panelWorktrees {
 		t.Fatalf("from Commits: fullMaxed=%v fullMax=%v focus=%v, want Worktrees", c.fullMaxed, c.fullMax, c.focus)
@@ -315,7 +315,7 @@ func TestTabSwitchRepinsFullscreen(t *testing.T) {
 func TestFocusCommitsPanelTransfersFullscreenPin(t *testing.T) {
 	m := maxModel()
 	m.focus = panelBranches
-	m = press(t, m, "T")
+	m = press(t, m, "ctrl+t")
 	m = m.focusCommitsPanel()
 	if m.focus != panelCommits {
 		t.Fatalf("focus = %v, want Commits", m.focus)
@@ -341,7 +341,7 @@ func TestTagSoloTransfersFullscreenPinEndToEnd(t *testing.T) {
 	m.activeFilesTab = panelTags
 	m.tags = []model.Tag{{Name: "v1.0.0"}}
 	m.focus = panelTags
-	m = press(t, m, "T")
+	m = press(t, m, "ctrl+t")
 	if !m.fullMaxed || m.fullMax != panelTags {
 		t.Fatalf("setup: fullMaxed=%v fullMax=%v, want pinned on Tags", m.fullMaxed, m.fullMax)
 	}
@@ -366,7 +366,7 @@ func TestTagSoloTransfersFullscreenPinEndToEnd(t *testing.T) {
 func TestFocusCommitsPanelNoTransferWhileYielded(t *testing.T) {
 	m := maxModel()
 	m.focus = panelStaged
-	m = press(t, m, "T") // pin Staged
+	m = press(t, m, "ctrl+t") // pin Staged
 	m.stashView = &stashView{}
 	m = m.focusCommitsPanel()
 	if m.focus != panelCommits {
@@ -383,7 +383,7 @@ func TestFocusCommitsPanelNoTransferWhileYielded(t *testing.T) {
 func TestStashCloseRestoresCommitsPin(t *testing.T) {
 	m := maxModel()
 	m.focus = panelCommits
-	m = press(t, m, "T")
+	m = press(t, m, "ctrl+t")
 	m = press(t, m, "S")   // open stash list (suspends the pin)
 	m = press(t, m, "esc") // close it
 	if m.focus != panelCommits || !m.fullMaxed || m.fullMax != panelCommits {
@@ -398,7 +398,7 @@ func TestStashCloseRestoresCommitsPin(t *testing.T) {
 func TestLadderTabThenTDropsToPinnedPanel(t *testing.T) {
 	m := maxModel()
 	m.focus = panelFiles
-	m = press(t, m, "T")
+	m = press(t, m, "ctrl+t")
 	m = press(t, m, "tab") // must not drift: focusOrder is collapsed
 	m = press(t, m, "t")
 	if m.fullMaxed {
@@ -415,7 +415,7 @@ func TestLadderTabThenTDropsToPinnedPanel(t *testing.T) {
 func TestViewFullscreenLeftPanelHidesCommits(t *testing.T) {
 	m := maxModel()
 	m.focus = panelFiles
-	m = press(t, m, "T")
+	m = press(t, m, "ctrl+t")
 	v := m.View()
 	if strings.Contains(v, "Commits (") {
 		t.Error("fullscreen Files: Commits box should not render")
@@ -438,7 +438,7 @@ func TestViewFullscreenLeftPanelHidesCommits(t *testing.T) {
 func TestViewFullscreenCommitsHidesLeftColumn(t *testing.T) {
 	m := maxModel()
 	m.focus = panelCommits
-	m = press(t, m, "T")
+	m = press(t, m, "ctrl+t")
 	v := m.View()
 	if !strings.Contains(v, "Commits (") {
 		t.Error("fullscreen Commits: Commits box missing")
@@ -464,7 +464,7 @@ func TestViewFullscreenCommitsHidesLeftColumn(t *testing.T) {
 func TestReconcileFullscreenFocus(t *testing.T) {
 	m := maxModel()
 	m.focus = panelFiles
-	m = press(t, m, "T")
+	m = press(t, m, "ctrl+t")
 	m.focus = panelCommits // simulate a surface having moved focus
 	m = m.reconcileFullscreenFocus()
 	if m.focus != panelFiles {
@@ -476,7 +476,7 @@ func TestReconcileFullscreenFocus(t *testing.T) {
 func TestStashCloseRestoresLeftPanelPin(t *testing.T) {
 	m := maxModel()
 	m.focus = panelFiles
-	m = press(t, m, "T")
+	m = press(t, m, "ctrl+t")
 	m = press(t, m, "S")
 	m.lastLeftPanel = panelBranches // drift during the excursion
 	m = press(t, m, "esc")
@@ -490,7 +490,7 @@ func TestStashCloseRestoresLeftPanelPin(t *testing.T) {
 func TestEscIgnoresSuspendedPin(t *testing.T) {
 	m := maxModel()
 	m.focus = panelFiles
-	m = press(t, m, "T")
+	m = press(t, m, "ctrl+t")
 	m.stashView = &stashView{} // suspend
 	m.focus = panelFiles
 	m = press(t, m, "esc")

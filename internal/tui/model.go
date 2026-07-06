@@ -1207,7 +1207,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 			return m, nil
-		case "T": // toggle fullscreen of the focused panel (left panel or Commits)
+		case "ctrl+t": // toggle fullscreen of the focused panel (left panel or Commits)
 			if m.canFullMaximize() {
 				if m.fullMaxed && m.fullMax == m.focus {
 					m.fullMaxed = false // back to whatever t-state sits underneath
