@@ -21,10 +21,12 @@ type captureEnvelope struct {
 	} `json:"structured_output"`
 }
 
-// ParseCaptureMessage interprets an agent's captured stdout as a commit message
+// ParseCaptureMessage interprets an agent's captured output as a commit message
 // (subject + body), format-agnostic across the shapes gg's catalog tools emit:
 // Claude plain text; Claude --output-format json (.result); Claude --json-schema
-// (.structured_output); Junie --output-format json (.result, report-wrapped);
+// (.structured_output); the raw message text a task-agent writes to
+// $GG_MESSAGE_FILE (e.g. Junie — the engine reads that file and prefers it over
+// stdout, so what reaches here is a clean message, not Junie's stdout report);
 // and non-JSON fallbacks. A tool-reported error (is_error) is returned as err.
 func ParseCaptureMessage(stdout []byte) (subject, body string, err error) {
 	t := bytes.TrimSpace(stdout)

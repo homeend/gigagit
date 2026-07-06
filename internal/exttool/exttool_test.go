@@ -293,4 +293,19 @@ func TestBuiltinsCommitMessageTemplates(t *testing.T) {
 	if strings.Index(gen, "--allowedTools") < strings.Index(gen, `"`) {
 		t.Fatal("allowedTools before prompt")
 	}
+
+	// Junie is a task-agent: it returns the message by WRITING it to
+	// $GG_MESSAGE_FILE (the engine reads that file and prefers it over stdout),
+	// not by printing it, so its template must reference GG_MESSAGE_FILE. The
+	// prompt is the first arg after `--task`, with the input context files too.
+	gj := GenerateCommandFor(*junie, "junie", "linux")
+	if !strings.HasPrefix(gj, `junie --task "`) {
+		t.Fatalf("junie prompt not first after --task: %q", gj)
+	}
+	if !strings.Contains(gj, "${GG_MESSAGE_FILE}") {
+		t.Fatalf("junie commit template must write to GG_MESSAGE_FILE: %q", gj)
+	}
+	if !strings.Contains(gj, "${GG_CONTEXT_FILE}") || !strings.Contains(gj, "${GG_STAGED_DIFF}") {
+		t.Fatalf("junie missing input env refs: %q", gj)
+	}
 }

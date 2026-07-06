@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -24,6 +25,7 @@ type fakeCapture struct {
 	sawEnv   bool
 	diffPath string
 	ctxPath  string
+	msgPath  string
 	diffBody string
 	ctxBody  string
 }
@@ -31,7 +33,7 @@ type fakeCapture struct {
 func (f *fakeCapture) Capture(_ context.Context, s CaptureSpec, _ func(string)) ([]byte, error) {
 	f.spec = s
 	env := envMap(s.Env)
-	f.diffPath, f.ctxPath = env["GG_STAGED_DIFF"], env["GG_CONTEXT_FILE"]
+	f.diffPath, f.ctxPath, f.msgPath = env["GG_STAGED_DIFF"], env["GG_CONTEXT_FILE"], env["GG_MESSAGE_FILE"]
 	f.sawEnv = f.diffPath != "" && f.ctxPath != ""
 	if b, err := os.ReadFile(f.diffPath); err == nil {
 		f.diffBody = string(b)
@@ -94,12 +96,20 @@ func TestGenerateMessageBuildsContextAndCaptures(t *testing.T) {
 		t.Fatalf("summary does not reference diff path %s:\n%s", fc.diffPath, fc.ctxBody)
 	}
 
+	// The empty output file is provisioned in the env for a task-agent to write.
+	if fc.msgPath == "" {
+		t.Fatalf("runner did not receive GG_MESSAGE_FILE: %v", fc.spec.Env)
+	}
+
 	// Temp files are removed once Run returns.
 	if _, err := os.Stat(fc.diffPath); !os.IsNotExist(err) {
 		t.Fatalf("diff temp file not removed: %s", fc.diffPath)
 	}
 	if _, err := os.Stat(fc.ctxPath); !os.IsNotExist(err) {
 		t.Fatalf("context temp file not removed: %s", fc.ctxPath)
+	}
+	if _, err := os.Stat(fc.msgPath); !os.IsNotExist(err) {
+		t.Fatalf("message temp file not removed: %s", fc.msgPath)
 	}
 }
 
@@ -183,6 +193,61 @@ func TestGenerateMessageMultiFileStatNewlineDelimited(t *testing.T) {
 	}
 	if aLine == bLine {
 		t.Fatalf("a.txt and b.txt run together on one line — stat NUL separators were not converted to newlines:\n%q", fc.ctxBody)
+	}
+}
+
+// TestGenerateMessagePrefersMessageFile exercises the output-channel contract
+// end-to-end with the REAL ShellCaptureRunner (not the fake): a task-agent tool
+// that writes the message to $GG_MESSAGE_FILE — while printing an unrelated
+// report to stdout, as Junie does — has the FILE content returned as
+// Result.Captured, not the stdout. This is the whole point of the file channel.
+func TestGenerateMessagePrefersMessageFile(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	if runtime.GOOS == "windows" {
+		t.Skip("uses sh/printf")
+	}
+	dir, repo := newRepo(t)
+	stageFile(t, dir, repo, "a.txt", "one\ntwo\n")
+
+	// The script's stdout must be ignored; the file content must win.
+	cmd := `printf 'this stdout is a work report, not the message\n'; ` +
+		`printf 'File subject\n\nFile body from the agent.\n' > "$GG_MESSAGE_FILE"`
+	res, err := GenerateMessage{Command: cmd, Dir: dir}.Run(context.Background(),
+		OpDeps{Repo: repo, CaptureRunner: ShellCaptureRunner{}})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	const want = "File subject\n\nFile body from the agent.\n"
+	if res.Captured != want {
+		t.Fatalf("captured=%q, want the message-file content %q (file must win over stdout)", res.Captured, want)
+	}
+}
+
+// TestGenerateMessageFallsBackToStdoutWhenFileEmpty pins the other branch: a
+// stdout tool (e.g. Claude, whose --output-format json .result IS the message)
+// leaves $GG_MESSAGE_FILE untouched, so Result.Captured is its stdout verbatim
+// — the pre-existing behavior must not regress now that a file is provided.
+func TestGenerateMessageFallsBackToStdoutWhenFileEmpty(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	if runtime.GOOS == "windows" {
+		t.Skip("uses sh/printf")
+	}
+	dir, repo := newRepo(t)
+	stageFile(t, dir, repo, "a.txt", "one\ntwo\n")
+
+	// Writes nothing to $GG_MESSAGE_FILE; only stdout carries the message.
+	res, err := GenerateMessage{Command: `printf 'Stdout subject\n\nStdout body.\n'`, Dir: dir}.Run(
+		context.Background(), OpDeps{Repo: repo, CaptureRunner: ShellCaptureRunner{}})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	const want = "Stdout subject\n\nStdout body.\n"
+	if res.Captured != want {
+		t.Fatalf("captured=%q, want stdout %q (empty message file must fall back to stdout)", res.Captured, want)
 	}
 }
 

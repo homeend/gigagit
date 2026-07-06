@@ -130,10 +130,15 @@ const claudeCommitCommand = `<bin> -p ` + claudeCommitPrompt + ` \
   --allowedTools "Read" "Bash(git diff *)" "Bash(git log *)" "Bash(git show *)" "Bash(git status *)"`
 
 // junieCommitPrompt is the capture-lane commit-message prompt for Junie.
-// Best-effort: Junie's --output-format json .result is a markdown report
-// (spec §probes), not a clean message — the parser splits it and the
-// editable commit-popup fields absorb whatever comes back.
-const junieCommitPrompt = `"Write a git commit message for the staged changes. The change summary is at <env:GG_CONTEXT_FILE> and the full diff at <env:GG_STAGED_DIFF>. Output ONLY the commit message: a concise subject line, a blank line, then a short body. Do not run git commit and do not modify any files."`
+// Junie is a task-agent: its stdout (--output-format json .result) is only a
+// work report, never the message itself (verified 2026-07-06 — the .result was
+// "### Summary / ### Changes / ### Verification", not a commit message). So the
+// message comes back through the file at $GG_MESSAGE_FILE, which the engine
+// reads and prefers over stdout (see engine.GenerateMessage's output-channel
+// contract). The "absolute path outside the repository" clause is load-bearing:
+// a coding agent can refuse to write outside its project root, and that hint is
+// what tells Junie the write is allowed (probe #3, 2026-07-06).
+const junieCommitPrompt = `"Your task is to write a git commit message for the staged changes into the file at <env:GG_MESSAGE_FILE> (an absolute path outside the repository). The change summary is at <env:GG_CONTEXT_FILE> and the full diff at <env:GG_STAGED_DIFF>. Write ONLY the commit message to that file: a concise subject line, a blank line, then a short body. Do not run git commit and do not modify any other files."`
 
 // junieCommitCommand is the default (capture-mode) Junie commit_message
 // template. No yolo variant: Junie's --brave is interactive-only (Brave
