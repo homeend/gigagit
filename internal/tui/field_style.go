@@ -31,39 +31,61 @@ func (f textfield) cursorLineCol() (line, col int) {
 	return line, col
 }
 
-// styledLines renders the buffer as one styled string per text line, each
-// background-filled to at least width columns so the editable slot is visible
-// even when empty. When focused, the cell at the cursor is drawn as a light
-// block so it stays visible against the field background. Lines longer than
-// width overflow (no truncation, matching the unstyled fields' old behavior).
-// Each line is composed of self-contained styled segments (no nesting) so the
-// background never bleeds past a reset.
+// styledLines renders the buffer as styled display lines, each background-filled
+// to exactly width columns so the editable slot is visible even when empty. A
+// logical line (split on '\n') longer than width is HARD-WRAPPED into
+// consecutive width-wide chunks — one display line each — so viewField's uniform
+// continuation indent applies to every wrapped piece (otherwise an over-long
+// line overflows the box and the modal re-wraps its tail to column 0, under the
+// label, with a stray background segment). When focused, the cell at the cursor
+// is drawn as a light block. Each display line is self-contained styled segments
+// (no nesting) so the background never bleeds past a reset.
 func (f textfield) styledLines(focused bool, width int) []string {
 	if width < 1 {
 		width = 1
 	}
-	lines := strings.Split(string(f.runes), "\n")
+	logical := strings.Split(string(f.runes), "\n")
 	curLine, curCol := -1, -1
 	if focused {
 		curLine, curCol = f.cursorLineCol()
 	}
-	out := make([]string, len(lines))
-	for i, ln := range lines {
+	var out []string
+	for li, ln := range logical {
 		runes := []rune(ln)
-		if pad := width - len(runes); pad > 0 {
-			runes = append(runes, []rune(strings.Repeat(" ", pad))...)
+		n := len(runes)
+		// Display chunks: enough width-wide slices to cover the line (at least
+		// one, so an empty line still shows the slot), plus one extra when the
+		// cursor sits exactly at a full-width line end (it belongs at the start
+		// of a fresh chunk, not overflowing the last one by a cell).
+		chunks := n / width
+		if chunks == 0 || n%width != 0 {
+			chunks++
 		}
-		if i != curLine {
-			out[i] = fieldStyle.Render(string(runes))
-			continue
+		if li == curLine && curCol == n && n > 0 && n%width == 0 {
+			chunks++
 		}
-		cc := curCol
-		if cc >= len(runes) { // cursor at end of a line already >= width
-			runes = append(runes, ' ')
+		for ci := 0; ci < chunks; ci++ {
+			start := ci * width
+			var chunk []rune
+			if start < n {
+				end := start + width
+				if end > n {
+					end = n
+				}
+				chunk = append(chunk, runes[start:end]...)
+			}
+			if pad := width - len(chunk); pad > 0 {
+				chunk = append(chunk, []rune(strings.Repeat(" ", pad))...)
+			}
+			if li == curLine && curCol >= start && curCol < start+width {
+				cc := curCol - start
+				out = append(out, fieldStyle.Render(string(chunk[:cc]))+
+					fieldCursorStyle.Render(string(chunk[cc:cc+1]))+
+					fieldStyle.Render(string(chunk[cc+1:])))
+			} else {
+				out = append(out, fieldStyle.Render(string(chunk)))
+			}
 		}
-		out[i] = fieldStyle.Render(string(runes[:cc])) +
-			fieldCursorStyle.Render(string(runes[cc])) +
-			fieldStyle.Render(string(runes[cc+1:]))
 	}
 	return out
 }
