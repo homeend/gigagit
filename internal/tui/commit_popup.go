@@ -161,12 +161,47 @@ func (p *commitPopup) box(m Model) string {
 	w, _ := m.overlayDims()
 	b.WriteString(heading + "\n\n")
 	b.WriteString(renderCommitFields(p, popupContentWidth(w)))
+	b.WriteString("\n")
 	if p.generating {
-		b.WriteString("\n⟳ generating message… ([esc] to cancel)\n")
+		// While a run is in flight every key but esc is swallowed, so show only
+		// the cancel hint rather than the full (inert) key list.
+		b.WriteString("⟳ generating message… ([esc] to cancel)")
+	} else {
+		b.WriteString(packHints([]string{
+			"[tab] switch field",
+			"[enter] newline/next",
+			"[ctrl+g] generate",
+			"[ctrl+s] commit",
+			"[esc] cancel",
+		}, popupContentWidth(w)))
 	}
-	b.WriteString("\n[tab] switch field  [enter] newline/next  [ctrl+g] generate  [ctrl+s] commit  [esc] cancel")
 
 	return modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"
+}
+
+// packHints joins "[key] label" hint pairs into lines no wider than width,
+// breaking ONLY between pairs so a key is never split from its label by a
+// naive wrap (which reads as a dangling "[ctrl+g]" over "generate"). The pairs
+// are ASCII, so byte length is display width.
+func packHints(pairs []string, width int) string {
+	var b strings.Builder
+	line := 0
+	for i, p := range pairs {
+		switch {
+		case i == 0:
+			b.WriteString(p)
+			line = len(p)
+		case line+2+len(p) > width:
+			b.WriteString("\n")
+			b.WriteString(p)
+			line = len(p)
+		default:
+			b.WriteString("  ")
+			b.WriteString(p)
+			line += 2 + len(p)
+		}
+	}
+	return b.String()
 }
 
 // renderCommitFields draws the title/description fields with the focus cursor,

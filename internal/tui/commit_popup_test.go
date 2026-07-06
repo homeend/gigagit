@@ -1,10 +1,41 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
+
+func TestPackHintsKeepsKeyPairsIntact(t *testing.T) {
+	pairs := []string{
+		"[tab] switch field", "[enter] newline/next",
+		"[ctrl+g] generate", "[ctrl+s] commit", "[esc] cancel",
+	}
+	// A narrow width forces wrapping; every pair must stay on one line and no
+	// line may exceed the width — the bug was "[ctrl+g]" wrapping away from its
+	// "generate" label, reading as a dangling key.
+	out := packHints(pairs, 52)
+	for _, line := range strings.Split(out, "\n") {
+		if len(line) > 52 {
+			t.Fatalf("line exceeds width 52: %q (%d)", line, len(line))
+		}
+		for _, p := range pairs {
+			key := p[:strings.IndexByte(p, ']')+1] // e.g. "[ctrl+g]"
+			if strings.Contains(line, key) && !strings.Contains(line, p) {
+				t.Fatalf("%q split from its label on line %q", key, line)
+			}
+		}
+	}
+	for _, p := range pairs { // nothing dropped
+		if !strings.Contains(out, p) {
+			t.Fatalf("missing pair %q in %q", p, out)
+		}
+	}
+	if strings.Contains(packHints(pairs, 200), "\n") {
+		t.Fatal("a wide width should keep all pairs on one line")
+	}
+}
 
 func TestCommitPopupMessageAssembly(t *testing.T) {
 	if got := (&commitPopup{title: newTextField("subj")}).message(); got != "subj" {
