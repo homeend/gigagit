@@ -108,7 +108,7 @@ func (m Model) layout() layoutGeom {
 	g.boxH[panelCommits] = bodyH
 	g.pos[panelCommits] = point{leftW, 1}
 
-	// Fullscreen: a T-pinned panel takes the entire body — both columns. Runs
+	// Fullscreen: a ctrl+t-pinned panel takes the entire body — both columns. Runs
 	// last so it overrides both the normal split and a t column-pin underneath
 	// (which stays set: dropping fullscreen returns to it). fullMaxActive
 	// carries the stale-pin fallback and yields to the files view / stash list

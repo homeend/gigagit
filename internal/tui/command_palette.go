@@ -19,6 +19,7 @@ type paletteCommand struct {
 // commandPalette is the generic command launcher (ctrl+p). For now it holds a
 // single command, "Show commit"; it is built to grow (add a paletteCommand).
 type commandPalette struct {
+	popupMax
 	cmds []paletteCommand
 	sel  int
 }
@@ -79,7 +80,7 @@ func (p *commandPalette) render(m Model, below string) string {
 
 func (p *commandPalette) box(m Model) string {
 	w, _ := m.overlayDims()
-	inner := popupInnerWidth(w)
+	inner := popupResolveWidth(w, p.maximized, popupInnerWidth(w))
 	textW := popupTextWidth(inner)
 	parts := []string{"Commands", ""}
 	for i, c := range p.cmds {

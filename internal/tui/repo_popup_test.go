@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -251,5 +252,38 @@ func TestRepoPopupDoesNotWrapLongPath(t *testing.T) {
 	}
 	if pathLines != 1 {
 		t.Errorf("path rendered across %d lines, want 1 (no wrap):\n%s", pathLines, out)
+	}
+}
+
+func TestRepoPopupMaximizeWidensAndLiftsRowCap(t *testing.T) {
+	m := Model{}
+	m.width, m.height = 200, 50
+	p := &repoPopup{}
+	for i := 0; i < 30; i++ { // more than the fixed cap of 12
+		p.entries = append(p.entries, repos.Entry{Path: fmt.Sprintf("/home/user/repos/project-number-%d", i)})
+	}
+
+	normal := p.box(m)
+	p.maximized = true
+	maxed := p.box(m)
+
+	if lipgloss.Width(maxed) <= lipgloss.Width(normal) {
+		t.Fatalf("maximized width %d must exceed normal %d", lipgloss.Width(maxed), lipgloss.Width(normal))
+	}
+	if lipgloss.Height(maxed) <= lipgloss.Height(normal) {
+		t.Fatalf("maximized must show more rows: height %d vs %d", lipgloss.Height(maxed), lipgloss.Height(normal))
+	}
+}
+
+func TestRepoPopupTKeyDoesNotMaximizeWhileFiltering(t *testing.T) {
+	m := Model{}
+	m.width, m.height = 200, 50
+	p := &repoPopup{filtering: true}
+	p.update(m, runeKey("T"))
+	if p.maximized {
+		t.Fatal(`"T" while filtering must not maximize`)
+	}
+	if p.query != "T" {
+		t.Fatalf(`"T" while filtering must be a literal char; query=%q`, p.query)
 	}
 }

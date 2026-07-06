@@ -11,6 +11,7 @@ import (
 // annotateTagPopup edits the message for an existing tag, force-recreating it
 // as annotated at its current target. Prefilled with the tag's subject.
 type annotateTagPopup struct {
+	popupMax
 	tag     string    // the tag being annotated (fixed)
 	target  string    // its current commit, preserved
 	message textfield // prefilled with the tag's current subject
@@ -58,5 +59,5 @@ func (p *annotateTagPopup) box(m Model) string {
 	w, _ := m.overlayDims()
 	b.WriteString(viewField("message: ", p.message, true, popupContentWidth(w)) + "\n\n")
 	b.WriteString("[type] message  [enter] annotate  [esc] cancel")
-	return modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"
+	return modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 }

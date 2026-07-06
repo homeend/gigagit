@@ -470,7 +470,7 @@ func (m Model) renderInterface() string {
 		cmRows, _, cmDecos := m.commitBody(g.rightW, g.boxH[panelCommits])
 		right = m.renderPanel(panelCommits, m.panelLabel(panelCommits, "Commits ("+m.commitScopeLabel()+")"), cmRows, cmDecos, g.rightW, g.boxH[panelCommits])
 	}
-	// One side can be empty (a T fullscreen hides the other column entirely);
+	// One side can be empty (a ctrl+t fullscreen hides the other column entirely);
 	// join only when both exist so no zero-width block leaks artifacts.
 	var body string
 	switch {

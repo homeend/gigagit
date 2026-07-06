@@ -12,6 +12,7 @@ import (
 // the selected notice's actions; esc backs out (actions → list → closed).
 // Acting or dismissing removes the notice from the session list.
 type noticePopup struct {
+	popupMax
 	sel         int
 	showActions bool
 	actSel      int
@@ -133,7 +134,14 @@ func (m Model) applyNoticeAction(n notice, act noticeAction) (Model, tea.Cmd) {
 
 func (p *noticePopup) render(m Model, below string) string {
 	w, h := m.overlayDims()
-	inner := popupWideInnerWidth(w)
+	return overlayCenter(clipToHeight(below, h), p.box(m), w, h)
+}
+
+// box draws the notice dialog (modal box only): the notice list, or (when
+// showActions) the selected notice's detail + action list.
+func (p *noticePopup) box(m Model) string {
+	w, h := m.overlayDims()
+	inner := popupResolveWidth(w, p.maximized, popupWideInnerWidth(w))
 	textW := popupTextWidth(inner)
 	var b strings.Builder
 	if p.showActions {
@@ -170,8 +178,9 @@ func (p *noticePopup) render(m Model, below string) string {
 				wr[i] = winRow{text: fmt.Sprintf("%s%s", prefix, n.title), style: st}
 			}
 			rows := len(m.notices)
-			if rows > 12 {
-				rows = 12
+			capRows := popupResolveRowCap(p.maximized, h, 12)
+			if rows > capRows {
+				rows = capRows
 			}
 			for _, line := range renderWindow(wr, winOpts{w: textW, h: rows, mode: p.mode, anchor: p.sel, hscroll: p.hscroll}) {
 				b.WriteString(line + "\n")
@@ -179,5 +188,5 @@ func (p *noticePopup) render(m Model, below string) string {
 		}
 		b.WriteString("\n[↑/↓] select  [enter] actions  [z] mode  [esc] close")
 	}
-	return overlayCenter(clipToHeight(below, h), popupBox(inner, strings.TrimRight(b.String(), "\n")), w, h)
+	return popupBox(inner, strings.TrimRight(b.String(), "\n"))
 }

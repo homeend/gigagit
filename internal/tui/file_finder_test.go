@@ -4,6 +4,10 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/charmbracelet/lipgloss"
+
+	"github.com/homeend/gigagit/internal/fuzzy"
 )
 
 // TestFileFinderPagingScrollsViewport guards the green-unit/broken-render trap:
@@ -313,5 +317,38 @@ func TestFileFinderMouseSwallowed(t *testing.T) {
 	m, _ = m.openFileFinder()
 	if m.topLayer() == nil {
 		t.Fatal("file finder should be on the layer stack")
+	}
+}
+
+func TestFileFinderMaximizeWidensAndLiftsRowCap(t *testing.T) {
+	m := Model{}
+	m.width, m.height = 200, 50
+	p := &fileFinderPopup{}
+	for i := 0; i < 30; i++ { // more than the fixed cap of 16
+		p.matches = append(p.matches, fuzzy.Match{S: fmt.Sprintf("some/long/path/to/file-number-%d.go", i)})
+	}
+
+	normal := p.box(m)
+	p.maximized = true
+	maxed := p.box(m)
+
+	if lipgloss.Width(maxed) <= lipgloss.Width(normal) {
+		t.Fatalf("maximized width %d must exceed normal %d", lipgloss.Width(maxed), lipgloss.Width(normal))
+	}
+	if lipgloss.Height(maxed) <= lipgloss.Height(normal) {
+		t.Fatalf("maximized must show more rows: height %d vs %d", lipgloss.Height(maxed), lipgloss.Height(normal))
+	}
+}
+
+func TestFileFinderTKeyDoesNotMaximizeWhileFiltering(t *testing.T) {
+	m := Model{}
+	m.width, m.height = 200, 50
+	p := &fileFinderPopup{filtering: true}
+	p.update(m, runeKey("T"))
+	if p.maximized {
+		t.Fatal(`"T" while filtering must not maximize`)
+	}
+	if p.query != "T" {
+		t.Fatalf(`"T" while filtering must be a literal char; query=%q`, p.query)
 	}
 }

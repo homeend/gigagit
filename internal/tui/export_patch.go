@@ -41,6 +41,7 @@ func (m Model) startExportCommitPatch(sha string) (Model, tea.Cmd) {
 // has been generated. dest is prefilled with <defaultDir>/<name>; enter runs
 // engine.ExportFile with the (possibly edited) full path. Mirrors tempExportPopup.
 type exportPatchPopup struct {
+	popupMax
 	dest textfield
 	data []byte
 }
@@ -72,7 +73,7 @@ func (p *exportPatchPopup) render(m Model, below string) string {
 	b.WriteString("Export as patch\n\n")
 	b.WriteString(viewField("path: ", p.dest, true, popupContentWidth(w)) + "\n\n")
 	b.WriteString("[type] path  [enter] write  [esc] cancel")
-	box := modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"
+	box := modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 	return overlayCenter(clipToHeight(below, h), box, w, h)
 }
 

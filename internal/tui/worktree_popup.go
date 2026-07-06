@@ -26,6 +26,7 @@ const (
 // sources are fixed at open (seed/now) so the preview is stable across keystrokes
 // and the created branch matches what was shown.
 type worktreePopup struct {
+	popupMax
 	startPoint string // selected branch = <parent-branch>; a commit SHA in fromCommit mode
 	existing   bool   // checkout the startPoint branch itself; no new branch
 	fromCommit bool   // start point is a commit; the branch name is user-typed (no template)
@@ -339,7 +340,7 @@ func (p *worktreePopup) box(m Model) string {
 	// Fixed, comfortably-wide content width so a long branch/path wraps (full name
 	// stays visible) instead of stretching the box past the terminal edge. Capped
 	// to leave a margin on each side for the centered overlay.
-	return modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"
+	return modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 }
 
 // startCreateFromPopup launches the CreateWorktree op for the previewed names,

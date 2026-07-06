@@ -22,6 +22,7 @@ var cfLabels = [cfFieldCount]string{"Path:    ", "Author:  ", "Message: ", "Sinc
 // commitFilterPopup collects the non-branch feed filter. Opened with `\` on the
 // Commits panel; Enter applies (sets m.commitFilter + reloads), Esc cancels.
 type commitFilterPopup struct {
+	popupMax
 	fields [cfFieldCount]textfield
 	focus  cfField
 }
@@ -93,7 +94,7 @@ func (p *commitFilterPopup) collect() commitFilterFields {
 
 func (p *commitFilterPopup) render(m Model, below string) string {
 	w, h := m.overlayDims()
-	inner := popupInnerWidth(w)
+	inner := popupResolveWidth(w, p.maximized, popupInnerWidth(w))
 	cw := popupContentWidth(w)
 	var b strings.Builder
 	b.WriteString("Filter commits\n\n")

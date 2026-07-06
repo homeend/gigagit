@@ -11,6 +11,7 @@ import (
 // renameBranchPopup holds the in-flight rename-branch dialog. The text field is
 // pre-filled with the branch's current name.
 type renameBranchPopup struct {
+	popupMax
 	old  string    // the branch being renamed
 	name textfield // typed new name
 }
@@ -85,5 +86,5 @@ func (p *renameBranchPopup) box(m Model) string {
 	w, _ := m.overlayDims()
 	b.WriteString(viewField("name: ", p.name, true, popupContentWidth(w)) + "\n\n")
 	b.WriteString("[type] name  [enter] rename  [esc] cancel")
-	return modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"
+	return modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 }

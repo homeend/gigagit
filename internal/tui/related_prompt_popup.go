@@ -11,6 +11,7 @@ import (
 // closing it (any choice, or esc = Not now) returns to Settings with the
 // flipped toggle still visible.
 type relatedPromptPopup struct {
+	popupMax
 	prompt *relatedPrompt
 	sel    int // 0 = yes, 1 = not now, 2 = don't ask again
 }
@@ -66,7 +67,8 @@ func (p *relatedPromptPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 
 func (p *relatedPromptPopup) render(m Model, below string) string {
 	w, h := m.overlayDims()
-	textW := popupTextWidth(popupInnerWidth(w))
+	inner := popupResolveWidth(w, p.maximized, popupInnerWidth(w))
+	textW := popupTextWidth(inner)
 	var b strings.Builder
 	b.WriteString("Related option\n\n")
 	for _, line := range wrapWidth(p.prompt.question, textW, 1<<20) {
@@ -93,6 +95,6 @@ func (p *relatedPromptPopup) render(m Model, below string) string {
 			b.WriteString(seg + "\n")
 		}
 	}
-	box := modalStyle.Width(popupInnerWidth(w)).Render(strings.TrimRight(b.String(), "\n")) + "\n"
+	box := modalStyle.Width(inner).Render(strings.TrimRight(b.String(), "\n")) + "\n"
 	return overlayCenter(clipToHeight(below, h), box, w, h)
 }

@@ -16,6 +16,7 @@ import (
 // multi-line body (description), and commits the staged index on ctrl+s.
 // amend=true rewrites the last commit instead of creating a new one.
 type commitPopup struct {
+	popupMax
 	title textfield
 	desc  textfield
 	field int // 0 = title, 1 = description
@@ -26,7 +27,6 @@ type commitPopup struct {
 	genCmd     config.ToolCommand // the commit_message tool the last/current generate run used
 	spinFrame  int                // animated-spinner frame while generating (advanced by genSpinMsg)
 	genStart   time.Time          // when the current generate run began, for the elapsed counter
-	fullscreen bool               // ctrl+t: expand the box toward the whole terminal
 
 	// Task 7 gates, run in order ahead of dispatch (see commit_generate.go's
 	// startGenerate). Each is a commitPopup sub-state (it owns keys while
@@ -102,13 +102,8 @@ func (p *commitPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
 	}
-	// ctrl+t (also ctrl+shift+t, which most terminals send identically) toggles
-	// the wide/fullscreen box. Handled in every sub-state so you can expand
-	// while reading a generated message or watching a run.
-	if msg.Type == tea.KeyCtrlT || msg.String() == "ctrl+shift+t" {
-		p.fullscreen = !p.fullscreen
-		return m, nil
-	}
+	// ctrl+t (fullscreen) is handled centrally on the layer stack via popupMax
+	// (this popup embeds it), so it never reaches update — do NOT handle it here.
 	// Task 7 gates: each is a commitPopup sub-state that owns keys while
 	// open. Checked before generating/edit keys so a digit/y/esc typed here
 	// never falls through to field editing.
@@ -171,7 +166,9 @@ func (p *commitPopup) box(m Model) string {
 		heading = "Amend last commit"
 	}
 	w, _ := m.overlayDims()
-	innerW := p.boxWidth(w)
+	// Wider-than-standard default (commitNormalWidth); ctrl+t maximizes to
+	// popupFullInnerWidth via the shared popupMax mechanism (popupResolveWidth).
+	innerW := popupResolveWidth(w, p.maximized, commitNormalWidth(w))
 	contentW := innerW - modalStyle.GetHorizontalPadding()
 	if contentW < 1 {
 		contentW = 1
@@ -201,16 +198,11 @@ func (p *commitPopup) box(m Model) string {
 	return modalStyle.Width(innerW).Render(b.String()) + "\n"
 }
 
-// boxWidth is the commit popup's inner width: a comfortable reading width by
-// default (wider than the shared 56-column popup, so a generated message needs
-// fewer wrapped lines), or nearly the whole terminal when fullscreen (ctrl+t).
-func (p *commitPopup) boxWidth(termW int) int {
-	if p.fullscreen {
-		if iw := termW - 4; iw >= 40 {
-			return iw
-		}
-		return 40
-	}
+// commitNormalWidth is the commit popup's NON-maximized inner width: wider than
+// the shared 56-column popup (so a generated message needs fewer wrapped lines),
+// capped for readability. ctrl+t maximizing is handled centrally via popupMax /
+// popupResolveWidth, which widens to popupFullInnerWidth.
+func commitNormalWidth(termW int) int {
 	iw := termW - 8
 	if iw > 96 {
 		iw = 96

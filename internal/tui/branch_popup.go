@@ -14,6 +14,7 @@ import (
 
 // branchPopup holds the in-flight create-branch dialog.
 type branchPopup struct {
+	popupMax
 	startPoint  string    // selected branch the new one is based on
 	name        textfield // typed branch name
 	switchAfter bool      // B: smart-switch to the branch after creating it
@@ -130,5 +131,5 @@ func (p *branchPopup) box(m Model) string {
 	w, _ := m.overlayDims()
 	b.WriteString(viewField("name: ", p.name, true, popupContentWidth(w)) + "\n\n")
 	b.WriteString("[type] name  [ctrl+p] use prefix  [enter] create  [esc] cancel")
-	return modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"
+	return modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 }

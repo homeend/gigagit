@@ -14,6 +14,7 @@ import (
 // the ⏸ status segment and the x key remain the way back in (never trap the
 // user). Continue/abort dispatch the existing generic engine ops.
 type resumePromptPopup struct {
+	popupMax
 	op     string // "merge" | "rebase" | "cherry-pick" | "revert"
 	detail string // ConflictState.Describe() at push time; "" when unattributed
 	sel    int    // 0 = continue, 1 = abort, 2 = not now
@@ -80,7 +81,8 @@ func (p *resumePromptPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 
 func (p *resumePromptPopup) render(m Model, below string) string {
 	w, h := m.overlayDims()
-	textW := popupTextWidth(popupInnerWidth(w))
+	inner := popupResolveWidth(w, p.maximized, popupInnerWidth(w))
+	textW := popupTextWidth(inner)
 	var b strings.Builder
 	b.WriteString("⏸ " + p.op + " paused — all conflicts resolved\n")
 	if p.detail != "" {
@@ -103,6 +105,6 @@ func (p *resumePromptPopup) render(m Model, below string) string {
 		b.WriteString(row + "\n")
 	}
 	b.WriteString("\n[↑/↓] select  [enter] choose  [c] continue  [a] abort  [esc] not now")
-	box := modalStyle.Width(popupInnerWidth(w)).Render(strings.TrimRight(b.String(), "\n")) + "\n"
+	box := modalStyle.Width(inner).Render(strings.TrimRight(b.String(), "\n")) + "\n"
 	return overlayCenter(clipToHeight(below, h), box, w, h)
 }

@@ -35,6 +35,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   and Junie (`mode = "capture"`); Junie's output is best-effort — its
   `--output-format json` `.result` is a markdown report, not a clean
   message, and the parser and editable fields absorb whatever comes back.
+- **Fullscreen popups (`ctrl+t`).** `ctrl+t` now toggles ANY popup to a
+  near-fullscreen bordered box — every switcher, picker, list, viewer, table,
+  wizard, editor, and prompt — via one central handler on the popup layer
+  stack. `ctrl+t` also fullscreens the focused panel. `esc` still closes a popup. It uses `ctrl+t` rather than bare
+  `T` so it never collides with typing a capital T into a branch name, commit
+  message, filter, or tag text. (`ctrl+shift+t` is intentionally not used —
+  most terminals send the same control byte for both and can't distinguish
+  them.)
 - **External tools (stage 1: conflicts).** Run a configured agent or
   mergetool on a paused merge/rebase/cherry-pick/revert from the conflict
   window (`t`): repo-level agents (Claude Code, Junie) get a per-run temp

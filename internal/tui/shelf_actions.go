@@ -31,6 +31,7 @@ func (m Model) shelfRemoveCmd(entryID string) tea.Cmd {
 
 // shelfRestorePopup collects the (mandatory, no-default) restore destination.
 type shelfRestorePopup struct {
+	popupMax
 	entryID string
 	origin  string    // origin path, shown only as a hint — NOT prefilled
 	dest    textfield // typed destination (starts empty)
@@ -72,7 +73,7 @@ func (p *shelfRestorePopup) render(m Model, below string) string {
 	b.WriteString("from: " + p.origin + "  (shelved copy)\n")
 	b.WriteString(viewField("dest: ", p.dest, true, popupContentWidth(w)) + "\n\n")
 	b.WriteString("[type] path  [enter] restore  [esc] cancel")
-	box := modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"
+	box := modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 	return overlayCenter(clipToHeight(below, h), box, w, h)
 }
 

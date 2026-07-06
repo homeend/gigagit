@@ -11,6 +11,7 @@ import (
 // reflogCheckoutPopup collects a new branch name to create at a reflog entry's
 // commit and switch to. Mirrors tagCheckoutPopup.
 type reflogCheckoutPopup struct {
+	popupMax
 	ref  string // full SHA of the reflog entry
 	name textfield
 }
@@ -48,5 +49,5 @@ func (p *reflogCheckoutPopup) box(m Model) string {
 	w, _ := m.overlayDims()
 	b.WriteString(viewField("name: ", p.name, true, popupContentWidth(w)) + "\n\n")
 	b.WriteString("[type] name  [enter] checkout  [esc] cancel")
-	return modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"
+	return modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 }

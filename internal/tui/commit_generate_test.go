@@ -43,27 +43,28 @@ func commitGenTestModel(t *testing.T) Model {
 	return m
 }
 
-func TestCommitPopupFullscreenToggle(t *testing.T) {
+func TestCommitNormalWidthAndMaximize(t *testing.T) {
+	// The wider-than-standard default (B ii).
+	if got := commitNormalWidth(120); got != 96 { // capped
+		t.Fatalf("commitNormalWidth(120) = %d, want 96", got)
+	}
+	if got := commitNormalWidth(60); got != 52 { // termW-8
+		t.Fatalf("commitNormalWidth(60) = %d, want 52", got)
+	}
+	// ctrl+t maximizing goes through the shared popupMax mechanism: the commit
+	// popup embeds popupMax (so it is a maximizableLayer the central ctrl+t
+	// handler drives) and resolves its width via popupResolveWidth.
 	p := &commitPopup{}
-	if got := p.boxWidth(120); got != 96 { // normal caps at 96
-		t.Fatalf("normal boxWidth(120) = %d, want 96", got)
+	if p.maxed() {
+		t.Fatal("default not maximized")
 	}
-	if got := p.boxWidth(60); got != 52 { // termW-8
-		t.Fatalf("normal boxWidth(60) = %d, want 52", got)
+	p.toggleMaximize()
+	if !p.maxed() {
+		t.Fatal("toggleMaximize must maximize")
 	}
-	p.fullscreen = true
-	if got := p.boxWidth(120); got != 116 { // termW-4, wider than normal
-		t.Fatalf("fullscreen boxWidth(120) = %d, want 116", got)
-	}
-	// ctrl+t toggles the flag through update.
-	p.fullscreen = false
-	m := commitGenTestModel(t)
-	m = m.pushLayer(p)
-	if _, _ = p.update(m, tea.KeyMsg{Type: tea.KeyCtrlT}); !p.fullscreen {
-		t.Fatal("ctrl+t must enable fullscreen")
-	}
-	if _, _ = p.update(m, tea.KeyMsg{Type: tea.KeyCtrlT}); p.fullscreen {
-		t.Fatal("ctrl+t must toggle fullscreen off")
+	// Maximized width exceeds the normal (capped) width on a wide terminal.
+	if popupResolveWidth(120, p.maximized, commitNormalWidth(120)) <= commitNormalWidth(120) {
+		t.Fatal("maximized width should exceed the normal capped width")
 	}
 }
 

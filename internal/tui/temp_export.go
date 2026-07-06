@@ -62,6 +62,7 @@ func (m Model) startTempExportBookmark(b model.Bookmark) (Model, tea.Cmd) {
 // dest is prefilled with <base>/<name>; enter runs engine.ExportToDir with
 // the (possibly edited) destination.
 type tempExportPopup struct {
+	popupMax
 	dest  textfield
 	files []model.ExportFile
 }
@@ -93,6 +94,6 @@ func (p *tempExportPopup) render(m Model, below string) string {
 	b.WriteString("Copy to temp dir\n\n")
 	b.WriteString(viewField("dir: ", p.dest, true, popupContentWidth(w)) + "\n\n")
 	b.WriteString("[type] dir  [enter] write  [esc] cancel")
-	box := modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"
+	box := modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 	return overlayCenter(clipToHeight(below, h), box, w, h)
 }
