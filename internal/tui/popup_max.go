@@ -1,6 +1,6 @@
 package tui
 
-// popupMax is embedded by any popup that supports T-to-fullscreen. The layer
+// popupMax is embedded by any popup that supports ctrl+t-to-fullscreen. The layer
 // stack holds the popup *pointer*, so the flag persists across Model value
 // copies (same rationale as the modal/popup pointer fields). maximized is
 // transient view state: it resets when the popup instance is dropped.

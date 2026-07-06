@@ -172,7 +172,7 @@ type Model struct {
 	leftMax         panel // the pinned full-column left panel (valid only when leftMaxed)
 	leftMaxed       bool  // t has maximized leftMax to fill the whole left column
 	fullMax         panel // the pinned fullscreen panel (valid only when fullMaxed)
-	fullMaxed       bool  // T has maximized fullMax to fill the entire body
+	fullMaxed       bool  // ctrl+t has maximized fullMax to fill the entire body
 
 	remoteBranches []model.RemoteBranch // refs/remotes; shown by the Remotes tab
 	shelfEntries   []model.ShelfEntry   // default bucket; shown by the Shelf tab
@@ -2419,7 +2419,7 @@ func (m Model) activateTab(p panel) Model {
 
 // focusCommitsPanel routes deliberate "jump to the Commits panel" actions
 // (solo a tag, go to a branch tip, commits touching a file). Plain focus
-// assignment would strand focus on a hidden panel while a T fullscreen pin
+// assignment would strand focus on a hidden panel while a ctrl+t fullscreen pin
 // is active elsewhere, so the pin follows the jump — same re-pin rule as
 // activateTab (Commits is a valid fullscreen target). The transfer is
 // skipped while a surface (files view/stash list/file preview) suspends the
@@ -2481,7 +2481,7 @@ func (m Model) fullscreenYielded() bool {
 	return m.filesView != nil || m.stashView != nil || m.filesPreview != nil
 }
 
-// canFullMaximize reports whether T can pin the focused panel fullscreen:
+// canFullMaximize reports whether ctrl+t can pin the focused panel fullscreen:
 // focus is a small left-column panel or Commits, and no surface that needs
 // its own column is up (files view owns the left column; stash list and file
 // preview own the right one).

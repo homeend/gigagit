@@ -20,8 +20,7 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - **Fullscreen popups (`ctrl+t`).** `ctrl+t` now toggles ANY popup to a
   near-fullscreen bordered box — every switcher, picker, list, viewer, table,
   wizard, editor, and prompt — via one central handler on the popup layer
-  stack. `ctrl+t` also fullscreens the focused panel (bare `T` still works on
-  panels too). `esc` still closes a popup. It uses `ctrl+t` rather than bare
+  stack. `ctrl+t` also fullscreens the focused panel. `esc` still closes a popup. It uses `ctrl+t` rather than bare
   `T` so it never collides with typing a capital T into a branch name, commit
   message, filter, or tag text. (`ctrl+shift+t` is intentionally not used —
   most terminals send the same control byte for both and can't distinguish
