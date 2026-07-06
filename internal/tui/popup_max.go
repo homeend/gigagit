@@ -9,17 +9,10 @@ type popupMax struct{ maximized bool }
 // maxed reports whether the popup is currently maximized.
 func (p *popupMax) maxed() bool { return p.maximized }
 
-// toggleMaximize flips the maximized flag. The central "T" handler on the layer
-// stack (see maximizableLayer / the Update key dispatch) calls this on the top
-// popup; a popup never wires "T" into its own update.
+// toggleMaximize flips the maximized flag. The central ctrl+t handler on the
+// layer stack (see maximizableLayer / the Update key dispatch) calls this on the
+// top popup; a popup never wires the maximize key into its own update.
 func (p *popupMax) toggleMaximize() { p.maximized = !p.maximized }
-
-// capturingText reports whether the popup is currently capturing text input — a
-// /-filter query or a text/number field — so the central "T" handler leaves "T"
-// a literal character instead of maximizing. Default false (a popup with no
-// input state); a popup with a text-entry state overrides this to return true
-// while it is capturing.
-func (p *popupMax) capturingText() bool { return false }
 
 // popupResolveWidth returns the near-fullscreen inner width when maximized,
 // else the popup's normal width. popupFullInnerWidth (w-8) is the same width

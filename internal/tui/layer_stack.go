@@ -16,17 +16,15 @@ type layer interface {
 type layerStack struct{ entries []layer }
 
 // maximizableLayer is a centered-box popup whose size can be toggled to
-// near-fullscreen with capital T. A popup opts in by embedding popupMax (which
-// supplies toggleMaximize and a default capturingText) and rendering wider —
-// and taller where it caps rows — when maxed(). The central handler in Update
-// toggles the top layer unless it is currently capturing text (a filter query
-// or a text/number field), so T stays a literal character in inputs. Full-screen
-// surfaces (see isFullScreenLayer) do not embed popupMax and are never maximized
-// — they already own the screen.
+// near-fullscreen with ctrl+t. A popup opts in by embedding popupMax (which
+// supplies toggleMaximize) and rendering wider — and taller where it caps rows —
+// when maxed(). The central handler in Update toggles the top layer on ctrl+t;
+// ctrl+t never collides with typed text, so every popup (including text editors)
+// can maximize. Full-screen surfaces (see isFullScreenLayer) do not embed
+// popupMax and are never maximized — they already own the screen.
 type maximizableLayer interface {
 	layer
 	toggleMaximize()
-	capturingText() bool
 }
 
 // isFullScreenLayer reports whether l owns the whole screen (a surface: history,

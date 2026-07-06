@@ -68,9 +68,6 @@ func (p *repoPopup) visible() []repos.Entry {
 // fallthrough to global handlers). Navigation-first, like the finder and the
 // bookmark/shelf switchers: plain keys navigate, `/` enters a filter sub-mode
 // where runes (including `z`) type a query until esc/enter.
-// capturingText reports whether a text field is active so the central T
-// handler leaves T a literal character while typing.
-func (p *repoPopup) capturingText() bool { return p.filtering }
 
 func (p *repoPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {

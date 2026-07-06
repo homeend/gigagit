@@ -98,10 +98,6 @@ func (m Model) contentPageRows() int {
 	return n
 }
 
-// capturingText reports whether the /-filter input mode is active, so the
-// central T handler leaves T a literal character while typing a query.
-func (p *contentPopup) capturingText() bool { return p.typing }
-
 // update handles all keys while the viewer is open. It swallows everything (no
 // fallthrough to global handlers). Search mirrors the panel filter: / starts
 // input mode, enter keeps the query, esc cancels it.

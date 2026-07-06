@@ -8,6 +8,8 @@ import (
 
 func runeKey(s string) tea.KeyMsg { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)} }
 
+func ctrlT() tea.KeyMsg { return tea.KeyMsg{Type: tea.KeyCtrlT} }
+
 func TestToggleMaximize(t *testing.T) {
 	var p popupMax
 	p.toggleMaximize()
@@ -20,49 +22,49 @@ func TestToggleMaximize(t *testing.T) {
 	}
 }
 
-func TestCapturingTextDefaultFalse(t *testing.T) {
-	var p popupMax
-	if p.capturingText() {
-		t.Fatal("popupMax default capturingText must be false")
-	}
-}
-
-// contentPopup embeds popupMax and, on the layer stack, is maximized by the
-// central T handler in Model.Update — not by its own update. This locks in that
-// the central handler is wired.
-func TestCentralTMaximizesTopPopup(t *testing.T) {
+// A popup on the layer stack is maximized by the central ctrl+t handler in
+// Model.Update — not by its own update. This locks in that the central handler
+// is wired.
+func TestCentralCtrlTMaximizesTopPopup(t *testing.T) {
 	m := Model{}
 	m.width, m.height = 200, 50
 	p := newContentPopup("Title", contentLines(4))
 	m = m.pushLayer(p)
 
-	mm, _ := m.Update(runeKey("T"))
+	mm, _ := m.Update(ctrlT())
 	if !layerOf[*contentPopup](mm.(Model)).maxed() {
-		t.Fatal("central T handler must maximize the top popup")
+		t.Fatal("central ctrl+t handler must maximize the top popup")
 	}
-	// Second T restores.
-	mm2, _ := mm.(Model).Update(runeKey("T"))
+	// Second ctrl+t restores.
+	mm2, _ := mm.(Model).Update(ctrlT())
 	if layerOf[*contentPopup](mm2.(Model)).maxed() {
-		t.Fatal("second central T must restore the top popup")
+		t.Fatal("second ctrl+t must restore the top popup")
 	}
 }
 
-// While a popup is capturing text, the central T handler must leave T a literal
-// character (capturingText true) instead of maximizing.
-func TestCentralTLiteralWhileCapturing(t *testing.T) {
+// ctrl+t never collides with typed text, so it maximizes even while a popup is
+// capturing a filter query; and a literal capital T typed while capturing stays
+// a character (it is not the maximize key).
+func TestCtrlTMaximizesWhileCapturing(t *testing.T) {
 	m := Model{}
 	m.width, m.height = 200, 50
 	p := newContentPopup("Title", contentLines(4))
 	p.typing = true
 	m = m.pushLayer(p)
 
+	// A literal T while typing is just a character.
 	mm, _ := m.Update(runeKey("T"))
 	got := layerOf[*contentPopup](mm.(Model))
 	if got.maxed() {
-		t.Fatal("T while capturing text must not maximize")
+		t.Fatal("a typed T must not maximize")
 	}
 	if got.query != "T" {
-		t.Fatalf("T while capturing must be typed as a literal; query=%q", got.query)
+		t.Fatalf("a typed T must land in the query; query=%q", got.query)
+	}
+	// ctrl+t maximizes even mid-typing.
+	mm2, _ := mm.(Model).Update(ctrlT())
+	if !layerOf[*contentPopup](mm2.(Model)).maxed() {
+		t.Fatal("ctrl+t must maximize even while capturing text")
 	}
 }
 

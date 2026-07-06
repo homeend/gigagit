@@ -146,9 +146,6 @@ func (p *shelfPopup) moveSel(d int) {
 
 // update handles one key while the shelf switcher is open (the overlay contract).
 // Navigation-first; `/` enters a filter sub-mode (mirrors bookmarkPopup).
-// capturingText reports whether a text field is active so the central T
-// handler leaves T a literal character while typing.
-func (p *shelfPopup) capturingText() bool { return p.filtering }
 
 func (p *shelfPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
