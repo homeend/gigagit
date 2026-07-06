@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -87,9 +88,35 @@ func (m Model) confirmGenerate(p *commitPopup, resolved string) (Model, tea.Cmd)
 func (m Model) dispatchGenerate(p *commitPopup, resolvedCommand string) (Model, tea.Cmd) {
 	p.generating = true
 	p.genGen++
+	p.spinFrame = 0
+	p.genStart = time.Now()
 	ctx, cancel := context.WithCancel(context.Background())
 	m.genCancel = cancel
-	return m, m.genMessageCmd(resolvedCommand, p.genGen, ctx)
+	// Batch the headless run with an animated-spinner tick so the popup shows
+	// visible motion (not a frozen screen) while the agent works.
+	return m, tea.Batch(m.genMessageCmd(resolvedCommand, p.genGen, ctx), spinTickCmd(p.genGen))
+}
+
+// genSpinMsg advances the in-flight generate spinner; gen guards it against a
+// finished or superseded run (the noticeBlink self-stopping-tick pattern).
+type genSpinMsg struct{ gen int }
+
+// spinTickCmd schedules the next spinner frame ~100ms out.
+func spinTickCmd(gen int) tea.Cmd {
+	return tea.Tick(100*time.Millisecond, func(time.Time) tea.Msg { return genSpinMsg{gen: gen} })
+}
+
+// tickGenSpinner advances the spinner and reschedules while a matching run is
+// in flight; a stale/finished run stops the tick (no reschedule), so the
+// animation self-terminates when generation ends, is cancelled, or the popup
+// closes.
+func (m Model) tickGenSpinner(msg genSpinMsg) (Model, tea.Cmd) {
+	p := m.topCommitPopup()
+	if p == nil || !p.generating || msg.gen != p.genGen {
+		return m, nil
+	}
+	p.spinFrame++
+	return m, spinTickCmd(msg.gen)
 }
 
 // genMessageCmd runs the resolved command headless via the Task-3 engine op,

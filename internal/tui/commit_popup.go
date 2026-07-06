@@ -1,7 +1,9 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -22,6 +24,9 @@ type commitPopup struct {
 	generating bool               // a ctrl+g generate run (commit_generate.go) is in flight
 	genGen     int                // generation guard: bumped on every dispatch AND every esc-cancel
 	genCmd     config.ToolCommand // the commit_message tool the last/current generate run used
+	spinFrame  int                // animated-spinner frame while generating (advanced by genSpinMsg)
+	genStart   time.Time          // when the current generate run began, for the elapsed counter
+	fullscreen bool               // ctrl+t: expand the box toward the whole terminal
 
 	// Task 7 gates, run in order ahead of dispatch (see commit_generate.go's
 	// startGenerate). Each is a commitPopup sub-state (it owns keys while
@@ -97,6 +102,13 @@ func (p *commitPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
 	}
+	// ctrl+t (also ctrl+shift+t, which most terminals send identically) toggles
+	// the wide/fullscreen box. Handled in every sub-state so you can expand
+	// while reading a generated message or watching a run.
+	if msg.Type == tea.KeyCtrlT || msg.String() == "ctrl+shift+t" {
+		p.fullscreen = !p.fullscreen
+		return m, nil
+	}
 	// Task 7 gates: each is a commitPopup sub-state that owns keys while
 	// open. Checked before generating/edit keys so a digit/y/esc typed here
 	// never falls through to field editing.
@@ -159,24 +171,54 @@ func (p *commitPopup) box(m Model) string {
 		heading = "Amend last commit"
 	}
 	w, _ := m.overlayDims()
+	innerW := p.boxWidth(w)
+	contentW := innerW - modalStyle.GetHorizontalPadding()
+	if contentW < 1 {
+		contentW = 1
+	}
 	b.WriteString(heading + "\n\n")
-	b.WriteString(renderCommitFields(p, popupContentWidth(w)))
+	b.WriteString(renderCommitFields(p, contentW))
 	b.WriteString("\n")
 	if p.generating {
-		// While a run is in flight every key but esc is swallowed, so show only
-		// the cancel hint rather than the full (inert) key list.
-		b.WriteString("⟳ generating message… ([esc] to cancel)")
+		// While a run is in flight every key but esc is swallowed, so show an
+		// animated spinner + elapsed seconds (a clear "still working" signal)
+		// and the cancel hint, not the full (inert) key list.
+		frames := []rune("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
+		frame := frames[p.spinFrame%len(frames)]
+		elapsed := int(time.Since(p.genStart).Seconds())
+		b.WriteString(fmt.Sprintf("%c generating message… %ds  ([esc] to cancel)", frame, elapsed))
 	} else {
 		b.WriteString(packHints([]string{
 			"[tab] switch field",
 			"[enter] newline/next",
 			"[ctrl+g] generate",
+			"[ctrl+t] fullscreen",
 			"[ctrl+s] commit",
 			"[esc] cancel",
-		}, popupContentWidth(w)))
+		}, contentW))
 	}
 
-	return modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"
+	return modalStyle.Width(innerW).Render(b.String()) + "\n"
+}
+
+// boxWidth is the commit popup's inner width: a comfortable reading width by
+// default (wider than the shared 56-column popup, so a generated message needs
+// fewer wrapped lines), or nearly the whole terminal when fullscreen (ctrl+t).
+func (p *commitPopup) boxWidth(termW int) int {
+	if p.fullscreen {
+		if iw := termW - 4; iw >= 40 {
+			return iw
+		}
+		return 40
+	}
+	iw := termW - 8
+	if iw > 96 {
+		iw = 96
+	}
+	if iw < 40 {
+		iw = 40
+	}
+	return iw
 }
 
 // packHints joins "[key] label" hint pairs into lines no wider than width,

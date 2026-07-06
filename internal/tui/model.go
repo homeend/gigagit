@@ -2085,6 +2085,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case genMessageMsg:
 		return m.applyGeneratedMessage(msg), nil
+	case genSpinMsg:
+		return m.tickGenSpinner(msg)
 
 	case inProgressMsg:
 		if cp, ok := m.proc.(*conflictProcess); ok {

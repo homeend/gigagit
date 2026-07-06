@@ -43,6 +43,52 @@ func commitGenTestModel(t *testing.T) Model {
 	return m
 }
 
+func TestCommitPopupFullscreenToggle(t *testing.T) {
+	p := &commitPopup{}
+	if got := p.boxWidth(120); got != 96 { // normal caps at 96
+		t.Fatalf("normal boxWidth(120) = %d, want 96", got)
+	}
+	if got := p.boxWidth(60); got != 52 { // termW-8
+		t.Fatalf("normal boxWidth(60) = %d, want 52", got)
+	}
+	p.fullscreen = true
+	if got := p.boxWidth(120); got != 116 { // termW-4, wider than normal
+		t.Fatalf("fullscreen boxWidth(120) = %d, want 116", got)
+	}
+	// ctrl+t toggles the flag through update.
+	p.fullscreen = false
+	m := commitGenTestModel(t)
+	m = m.pushLayer(p)
+	if _, _ = p.update(m, tea.KeyMsg{Type: tea.KeyCtrlT}); !p.fullscreen {
+		t.Fatal("ctrl+t must enable fullscreen")
+	}
+	if _, _ = p.update(m, tea.KeyMsg{Type: tea.KeyCtrlT}); p.fullscreen {
+		t.Fatal("ctrl+t must toggle fullscreen off")
+	}
+}
+
+func TestGenSpinnerAdvancesAndSelfStops(t *testing.T) {
+	m := commitGenTestModel(t)
+	p := &commitPopup{}
+	m = m.pushLayer(p)
+	m, _ = m.startGenerate(p) // generating=true, genGen bumped, spinFrame=0
+	gen := p.genGen
+
+	// A matching in-flight tick advances the frame and reschedules.
+	if _, cmd := m.tickGenSpinner(genSpinMsg{gen: gen}); cmd == nil || p.spinFrame != 1 {
+		t.Fatalf("in-flight tick: spinFrame=%d cmd==nil=%v", p.spinFrame, cmd == nil)
+	}
+	// A stale-gen tick self-stops (no reschedule).
+	if _, cmd := m.tickGenSpinner(genSpinMsg{gen: gen - 1}); cmd != nil {
+		t.Fatal("stale-gen tick must not reschedule")
+	}
+	// Once the run ends, a tick self-stops.
+	p.generating = false
+	if _, cmd := m.tickGenSpinner(genSpinMsg{gen: gen}); cmd != nil {
+		t.Fatal("finished run: tick must not reschedule")
+	}
+}
+
 func TestGenerateFillsFieldsGenGuarded(t *testing.T) {
 	m := commitGenTestModel(t)
 	p := &commitPopup{}
