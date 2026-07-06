@@ -22,6 +22,14 @@ type commitPopup struct {
 	generating bool               // a ctrl+g generate run (commit_generate.go) is in flight
 	genGen     int                // generation guard: bumped on every dispatch AND every esc-cancel
 	genCmd     config.ToolCommand // the commit_message tool the last/current generate run used
+
+	// Task 7 gates, run in order ahead of dispatch (see commit_generate.go's
+	// startGenerate). Each is a commitPopup sub-state (it owns keys while
+	// open, NOT a pushed layer) and is mutually exclusive with the others —
+	// at most one is non-empty/non-nil at a time.
+	choosing   []config.ToolCommand // >1 commit_message tool: numbered picker
+	approving  string               // first-run approval: the resolved command awaiting Run/Cancel
+	confirming string               // existing title/desc text: the resolved command awaiting Replace/Cancel
 }
 
 // message assembles the git commit message: subject alone, or subject + blank
@@ -89,6 +97,18 @@ func (p *commitPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
 	}
+	// Task 7 gates: each is a commitPopup sub-state that owns keys while
+	// open. Checked before generating/edit keys so a digit/y/esc typed here
+	// never falls through to field editing.
+	if p.choosing != nil {
+		return p.updateChoosing(m, msg)
+	}
+	if p.approving != "" {
+		return p.updateApproving(m, msg)
+	}
+	if p.confirming != "" {
+		return p.updateConfirming(m, msg)
+	}
 	if p.generating {
 		if msg.Type == tea.KeyEsc {
 			return m.escGenerate(p), nil
@@ -120,8 +140,19 @@ func (p *commitPopup) render(m Model, below string) string {
 	return overlayCenter(clipToHeight(below, h), p.box(m), w, h)
 }
 
-// box draws the two-field commit dialog (modal box only).
+// box draws the two-field commit dialog (modal box only). While a Task 7
+// gate is open, it takes over the whole box (a distinct sub-screen, like the
+// generate run itself) rather than being appended below the fields.
 func (p *commitPopup) box(m Model) string {
+	if p.choosing != nil {
+		return p.chooseBox(m)
+	}
+	if p.approving != "" {
+		return p.approveBox(m)
+	}
+	if p.confirming != "" {
+		return p.confirmBox(m)
+	}
 	var b strings.Builder
 	heading := "Commit"
 	if p.amend {

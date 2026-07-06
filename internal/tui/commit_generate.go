@@ -2,9 +2,12 @@ package tui
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/exttool"
 	"github.com/homeend/gigagit/internal/template"
@@ -21,12 +24,18 @@ type genMessageMsg struct {
 	err     error
 }
 
-// startGenerate begins a commit_message capture run for the commit popup.
+// startGenerate begins a commit_message capture run for the commit popup,
+// gated by three sub-states run in order (each a commitPopup field, not a
+// pushed layer — see the routing in commit_popup.go's update):
 //
-// Scope seam for Task 7: this task assumes a SINGLE, already-approved
-// commit_message tool (cmds[0]). Task 7 inserts the chooser (len(cmds) > 1),
-// first-run approval, and confirm-replace-existing-text gates between the
-// guards below and the dispatchGenerate call.
+//  1. Chooser (len(cmds) > 1): p.choosing holds the candidates; a digit/enter
+//     selection (updateChoosing) picks one and continues at gateGenerate.
+//  2. First-run approval: an unapproved command (by config-text hash) sets
+//     p.approving to the resolved command text; y/enter (updateApproving)
+//     records the approval and continues at confirmGenerate; esc/n cancels.
+//  3. Confirm-replace: non-empty existing title/desc sets p.confirming; y/enter
+//     (updateConfirming) dispatches; esc cancels. Empty fields skip straight
+//     to dispatchGenerate.
 func (m Model) startGenerate(p *commitPopup) (Model, tea.Cmd) {
 	if m.status.Counts().Staged == 0 {
 		m.statusMsg = "nothing staged to describe"
@@ -37,13 +46,40 @@ func (m Model) startGenerate(p *commitPopup) (Model, tea.Cmd) {
 		m.statusMsg = "no commit-message tool configured (Settings → External tools)"
 		return m, nil
 	}
-	chosen := cmds[0] // Task 7: chooser when len(cmds) > 1
+	if len(cmds) > 1 {
+		p.choosing = cmds
+		return m, nil
+	}
+	return m.gateGenerate(p, cmds[0])
+}
+
+// gateGenerate resolves chosen and applies the first-run approval gate
+// (step 2). Approval is remembered on chosen.Command — the CONFIG template
+// text — never the resolved text, so the promptstate hash stays stable
+// across runs with different staged diffs (mirrors conflict_process.go's
+// gateOrRun/updateToolApprove).
+func (m Model) gateGenerate(p *commitPopup, chosen config.ToolCommand) (Model, tea.Cmd) {
 	resolved, err := template.ResolveCommand(chosen.Command, nil, template.CmdCtx{Repo: m.currentWorktree})
 	if err != nil {
 		m.statusMsg = "generate: " + err.Error()
 		return m, nil
 	}
 	p.genCmd = chosen
+	if !m.toolCommandApproved(chosen.Command) {
+		p.approving = resolved
+		return m, nil
+	}
+	return m.confirmGenerate(p, resolved)
+}
+
+// confirmGenerate applies the confirm-replace gate (step 3): existing
+// title/desc text asks before overwriting it; empty fields dispatch
+// straight through.
+func (m Model) confirmGenerate(p *commitPopup, resolved string) (Model, tea.Cmd) {
+	if strings.TrimSpace(p.title.Value()) != "" || strings.TrimSpace(p.desc.Value()) != "" {
+		p.confirming = resolved
+		return m, nil
+	}
 	return m.dispatchGenerate(p, resolved)
 }
 
@@ -118,4 +154,126 @@ func (m Model) topCommitPopup() *commitPopup {
 		return p
 	}
 	return nil
+}
+
+// --- Task 7 gate 1: chooser (len(cmds) > 1) ---
+
+// updateChoosing drives the tool chooser: a digit 1-9 selects that row
+// directly, enter selects the first (default) row, esc cancels back to plain
+// editing. Unlike the conflict lane's up/down list (conflictProcess's
+// confToolPick), this list is small and numbered, so a direct digit press is
+// the primary path — no cursor state to track.
+func (p *commitPopup) updateChoosing(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyEsc:
+		p.choosing = nil
+		return m, nil
+	case tea.KeyEnter:
+		return p.selectChosen(m, 0)
+	case tea.KeyRunes:
+		for _, r := range msg.Runes {
+			if r >= '1' && r <= '9' {
+				return p.selectChosen(m, int(r-'1'))
+			}
+		}
+	}
+	return m, nil
+}
+
+// selectChosen picks choosing[idx] (a no-op on an out-of-range index — e.g. a
+// digit beyond the list length) and continues at the approval gate.
+func (p *commitPopup) selectChosen(m Model, idx int) (Model, tea.Cmd) {
+	if idx < 0 || idx >= len(p.choosing) {
+		return m, nil
+	}
+	chosen := p.choosing[idx]
+	p.choosing = nil
+	return m.gateGenerate(p, chosen)
+}
+
+// chooseBox renders the numbered tool picker.
+func (p *commitPopup) chooseBox(m Model) string {
+	w, _ := m.overlayDims()
+	var b strings.Builder
+	b.WriteString("Choose a commit-message tool\n\n")
+	for i, tc := range p.choosing {
+		b.WriteString(fmt.Sprintf("[%d] %s\n", i+1, tc.Name))
+	}
+	b.WriteString("\n[1-9] choose  [enter] first  [esc] cancel")
+	return modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"
+}
+
+// --- Task 7 gate 2: first-run approval ---
+
+// updateApproving drives the first-run approval box: y/enter records the
+// approval (on the CONFIG command text, p.genCmd.Command — see gateGenerate)
+// and proceeds to the confirm-replace gate; esc/n cancels back to plain
+// editing without dispatching or recording anything.
+func (p *commitPopup) updateApproving(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyEsc:
+		p.approving = ""
+		return m, nil
+	case tea.KeyEnter:
+		return p.approveAndProceed(m)
+	case tea.KeyRunes:
+		switch string(msg.Runes) {
+		case "y":
+			return p.approveAndProceed(m)
+		case "n":
+			p.approving = ""
+			return m, nil
+		}
+	}
+	return m, nil
+}
+
+func (p *commitPopup) approveAndProceed(m Model) (Model, tea.Cmd) {
+	resolved := p.approving
+	p.approving = ""
+	m.rememberToolApproval(p.genCmd.Command)
+	return m.confirmGenerate(p, resolved)
+}
+
+// approveBox renders the shared approval body under a header naming the
+// chosen tool, mirroring conflict_process.go's confToolApprove render
+// (header + approvalBoxView(...) — see tool_approval.go for why the header
+// stays owned by each call site).
+func (p *commitPopup) approveBox(m Model) string {
+	w, _ := m.overlayDims()
+	header := "Run this command?  (" + p.genCmd.Name + ")\n\n"
+	return modalStyle.Width(popupInnerWidth(w)).Render(header+approvalBoxView(p.approving, w)) + "\n"
+}
+
+// --- Task 7 gate 3: confirm-replace ---
+
+// updateConfirming drives the confirm-replace box: y/enter dispatches the
+// run (replacing the current title/desc once the result lands); esc cancels,
+// leaving the existing text untouched.
+func (p *commitPopup) updateConfirming(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyEsc:
+		p.confirming = ""
+		return m, nil
+	case tea.KeyEnter:
+		return p.dispatchConfirmed(m)
+	case tea.KeyRunes:
+		if string(msg.Runes) == "y" {
+			return p.dispatchConfirmed(m)
+		}
+	}
+	return m, nil
+}
+
+func (p *commitPopup) dispatchConfirmed(m Model) (Model, tea.Cmd) {
+	resolved := p.confirming
+	p.confirming = ""
+	return m.dispatchGenerate(p, resolved)
+}
+
+// confirmBox renders the replace-existing-text confirmation.
+func (p *commitPopup) confirmBox(m Model) string {
+	w, _ := m.overlayDims()
+	content := "Replace current message?\n\nGenerating will overwrite the title/description below.\n\n[y]es / [enter]  [esc] no"
+	return modalStyle.Width(popupInnerWidth(w)).Render(content) + "\n"
 }
