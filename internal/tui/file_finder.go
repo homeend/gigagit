@@ -252,7 +252,7 @@ func (p *fileFinderPopup) box(m Model) string {
 
 	// Wrap the hint so [/] filter / [esc] survive on a narrow terminal (mirrors
 	// the bookmark/shelf switchers).
-	hint := []string{"[enter] open", "[↑↓ pgup/pgdn] nav", "[/] filter", "[z] mode", "[T] full", "[esc] close"}
+	hint := []string{"[enter] open", "[↑↓ pgup/pgdn] nav", "[/] filter", "[z] mode", "[ctrl+t] full", "[esc] close"}
 	parts := []string{header, ""}
 	parts = append(parts, bodyLines...)
 	parts = append(parts, "")

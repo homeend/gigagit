@@ -540,7 +540,7 @@ func (p *gitConfigPopup) box(m Model) string {
 		descLines = wrapWidth(descLine, textW, 3)
 	}
 
-	hint := []string{"[l] set local", "[g] set global", "[u] unset", "[/] filter", "[z] mode", "[T] full", "[esc] close"}
+	hint := []string{"[l] set local", "[g] set global", "[u] unset", "[/] filter", "[z] mode", "[ctrl+t] full", "[esc] close"}
 	parts := []string{title, "", header}
 	parts = append(parts, bodyLines...)
 	parts = append(parts, "")

@@ -34,7 +34,7 @@ func helpContent() []contentLine {
 		r("o", "cycle the focused panel's sort order"),
 		r("z", "cycle the focused window's text display (cutoff / wrap / scroll)"),
 		r("t", "maximize the focused left-column panel to fill the whole left column (t again restores); while maximized, ctrl+←/→ still cycles that slot's tabs"),
-		r("T", "fullscreen the focused panel — any left-column panel or Commits — to fill the whole screen (T or esc restores; t drops back to the left column); also maximizes a content popup (help / switchers / config explorer / finder) to a near-fullscreen box while it's open"),
+		r("ctrl+t", "fullscreen whatever is focused — any panel (bare T also works) OR any open popup — to a near-fullscreen box (ctrl+t or esc restores; on a panel, t drops back to the left column)"),
 		r("shift+←/→", "scroll display mode: pan the focused window horizontally"),
 		r("/", "filter the focused panel"),
 		r("ctrl+r", "clear the focused window's filtering — its / filter, or on the Commits panel the @ highlight and the \\ commit filter (other windows' filters are left untouched)"),

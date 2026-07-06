@@ -287,7 +287,7 @@ func (p *contentPopup) box(m Model) string {
 	if p.footer != "" {
 		b.WriteString("  " + truncate(p.footer, textW-2) + "\n")
 	}
-	hint := "[/] search  [z] mode  [T] full  [q] close"
+	hint := "[/] search  [z] mode  [ctrl+t] full  [q] close"
 	if len(vis) > capRows {
 		hint = fmt.Sprintf("%d/%d  %s", p.sel+1, len(vis), hint)
 	}

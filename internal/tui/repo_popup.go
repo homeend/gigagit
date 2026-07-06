@@ -228,7 +228,7 @@ func (p *repoPopup) box(m Model) string {
 		bodyLines = renderWindow(wr, winOpts{w: textW, h: h, mode: p.mode, anchor: p.sel, hscroll: p.hscroll})
 	}
 
-	hint := []string{"[enter] switch", "[ctrl+d] forget", "[/] filter", "[z] mode", "[T] full", "[esc] close"}
+	hint := []string{"[enter] switch", "[ctrl+d] forget", "[/] filter", "[z] mode", "[ctrl+t] full", "[esc] close"}
 	parts := []string{header, ""}
 	parts = append(parts, bodyLines...)
 	parts = append(parts, "")
