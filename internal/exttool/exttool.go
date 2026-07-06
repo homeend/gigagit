@@ -1,8 +1,8 @@
 // Package exttool is the hardcoded catalog of external tools/AI agents gg can
-// run per task category (conflict resolution and commit-message generation
-// now; review in a later stage), plus their detection. Supporting a new tool
-// is a code change (one Builtins entry), never a runtime definition — the
-// agentinit philosophy.
+// run per task category (conflict resolution, commit-message generation, and
+// code review), plus their detection. Supporting a new tool is a code change
+// (one Builtins entry), never a runtime definition — the agentinit
+// philosophy.
 // The catalog's command TEMPLATES never execute directly: the Settings wizard
 // materializes them as editable [[tools.command]] blocks in the gg config, and
 // only config content runs.
@@ -145,9 +145,26 @@ const junieCommitPrompt = `"Your task is to write a git commit message for the s
 // Mode), useless on a headless capture run.
 const junieCommitCommand = `<bin> --task ` + junieCommitPrompt + ` --output-format json --skip-update-check`
 
+// claudeReviewCommand — verified 2026-07-07: `claude -p "/code-review <range>"`
+// runs headless and .result is a clean severity-structured markdown report.
+// <range> is a runtime token (resolved by template.ResolveCommand). For the
+// uncommitted target <range> resolves empty and /code-review reviews the tree.
+const claudeReviewCommand = `<bin> -p "/code-review <range>" \
+  --output-format json \
+  --permission-mode acceptEdits \
+  --allowedTools "Read" "Bash(git diff *)" "Bash(git log *)" "Bash(git show *)" "Bash(git status *)"`
+
+// junieReviewPrompt — Junie is a task-agent: its stdout is a report, so the
+// review comes back through $GG_MESSAGE_FILE (the Stage-2 channel). Junie's own
+// --review flag reviews only uncommitted working changes and can't take a
+// range, so we feed it the diff at $GG_REVIEW_DIFF instead (verified 2026-07-07).
+const junieReviewPrompt = `"You are reviewing a code change. The full diff to review is in the file at <env:GG_REVIEW_DIFF> (range <range>). Write a concise code review — findings with severity and a short summary — into the file at <env:GG_MESSAGE_FILE> (an absolute path outside the repository). Do NOT modify any repository files and do NOT run git commit."`
+
+const junieReviewCommand = `<bin> --task ` + junieReviewPrompt + ` --output-format json --skip-update-check`
+
 // Builtins is the hardcoded catalog. Stage 1 shipped conflict templates;
-// stage 2 adds commit_message capture templates; review defaults land with
-// its stage (recorded in the spec).
+// stage 2 added commit_message capture templates; stage 3 adds review
+// capture templates.
 func Builtins() []Tool {
 	return []Tool{
 		{
@@ -156,6 +173,7 @@ func Builtins() []Tool {
 				{Category: CatConflict, Name: "Claude", Mode: ModeTerminal, Command: claudeConflictCommand},
 				{Category: CatConflict, Name: "Claude (yolo)", Mode: ModeTerminal, OptIn: true, Command: claudeConflictYoloCommand},
 				{Category: CatCommitMessage, Name: "Claude", Mode: ModeCapture, Command: claudeCommitCommand},
+				{Category: CatReview, Name: "Claude", Mode: ModeCapture, Command: claudeReviewCommand},
 			},
 		},
 		{
@@ -179,6 +197,7 @@ func Builtins() []Tool {
 				{Category: CatConflict, Name: "Junie", Mode: ModeTerminal, Command: junieConflictCommand},
 				{Category: CatConflict, Name: "Junie (yolo)", Mode: ModeTerminal, OptIn: true, Command: junieConflictYoloCommand},
 				{Category: CatCommitMessage, Name: "Junie", Mode: ModeCapture, Command: junieCommitCommand},
+				{Category: CatReview, Name: "Junie", Mode: ModeCapture, Command: junieReviewCommand},
 			},
 		},
 		{
