@@ -22,6 +22,7 @@ const fileFinderLimit = 200
 // matched rows are capped and the render uses window-then-build (only the
 // visible slice is built into winRows each frame).
 type fileFinderPopup struct {
+	popupMax
 	all       []string      // full path list from LsFiles (filled async)
 	loading   bool          // true until LsFiles returns
 	query     string        // current filter query
@@ -136,6 +137,9 @@ func (p *fileFinderPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	}
 	// Navigation mode. Display-mode + pan keys act here (they are query chars
 	// while filtering).
+	if p.handleMaxKey(msg) { // "T" toggles fullscreen (nav mode only)
+		return m, nil
+	}
 	switch msg.String() {
 	case "z":
 		p.mode = p.mode.next()
@@ -200,8 +204,8 @@ func (p *fileFinderPopup) render(m Model, below string) string {
 
 // box draws the picker box.
 func (p *fileFinderPopup) box(m Model) string {
-	w, _ := m.overlayDims()
-	inner := popupWideInnerWidth(w)
+	w, termH := m.overlayDims()
+	inner := popupResolveWidth(w, p.maximized, popupWideInnerWidth(w))
 	textW := popupTextWidth(inner)
 
 	// Header shows count / loading state + the filter query. While in the `/`
@@ -230,8 +234,12 @@ func (p *fileFinderPopup) box(m Model) string {
 		// Window-then-build: determine the visible slice first, then build
 		// only those winRows. This keeps render O(window) even at 200 results.
 		visH := len(p.matches)
-		if visH > 16 {
-			visH = 16
+		capRows := 16
+		if p.maximized {
+			capRows = popupMaxRowCap(termH)
+		}
+		if visH > capRows {
+			visH = capRows
 		}
 		// Compute window bounds (anchor = p.sel, height = visH).
 		start, end := windowBounds(len(p.matches), p.sel, visH)
@@ -249,7 +257,7 @@ func (p *fileFinderPopup) box(m Model) string {
 
 	// Wrap the hint so [/] filter / [esc] survive on a narrow terminal (mirrors
 	// the bookmark/shelf switchers).
-	hint := []string{"[enter] open", "[↑↓ pgup/pgdn] nav", "[/] filter", "[z] mode", "[esc] close"}
+	hint := []string{"[enter] open", "[↑↓ pgup/pgdn] nav", "[/] filter", "[z] mode", "[T] full", "[esc] close"}
 	parts := []string{header, ""}
 	parts = append(parts, bodyLines...)
 	parts = append(parts, "")
