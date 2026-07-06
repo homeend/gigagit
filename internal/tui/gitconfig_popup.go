@@ -110,6 +110,10 @@ func (p *gitConfigPopup) visible() []model.GitConfigRow {
 // query until esc/enter, and l/g/u open the in-place editor on curated rows.
 // While the editor is open ALL keys route to it (the filter `/` etc. are
 // inert).
+// capturingText reports whether a text field is active so the central T
+// handler leaves T a literal character while typing.
+func (p *gitConfigPopup) capturingText() bool { return p.filtering || p.edit != nil }
+
 func (p *gitConfigPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
@@ -140,9 +144,6 @@ func (p *gitConfigPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			p.query += string(msg.Runes)
 			p.sel = 0
 		}
-		return m, nil
-	}
-	if p.handleMaxKey(msg) { // "T" toggles fullscreen (nav mode only)
 		return m, nil
 	}
 	// Navigation mode. Display-mode + pan keys act here (query chars while filtering).

@@ -96,6 +96,10 @@ func (p *fileFinderPopup) moveSel(d int) {
 // navigation-first (like every other gg list and the bookmark/shelf switchers):
 // plain keys navigate, `/` enters a filter sub-mode where runes (including `z`
 // and `/`) type a query until esc/enter.
+// capturingText reports whether a text field is active so the central T
+// handler leaves T a literal character while typing.
+func (p *fileFinderPopup) capturingText() bool { return p.filtering }
+
 func (p *fileFinderPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
@@ -137,9 +141,6 @@ func (p *fileFinderPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	}
 	// Navigation mode. Display-mode + pan keys act here (they are query chars
 	// while filtering).
-	if p.handleMaxKey(msg) { // "T" toggles fullscreen (nav mode only)
-		return m, nil
-	}
 	switch msg.String() {
 	case "z":
 		p.mode = p.mode.next()

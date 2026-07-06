@@ -22,6 +22,19 @@ user action.
 
 ## Scope
 
+> **Revision (2026-07-06, post-review):** the "opt-in, convert the content-heavy
+> ones first" framing below was the wrong call — the ticket's requirement is
+> that **every** popup the user sees can go fullscreen with `T`, and leaving
+> most popups silently inert defeats the purpose. The mechanism is now
+> **centralized**: a single `T` handler on the layer stack (`maximizableLayer`
+> interface) toggles whatever popup is on top, gated by a per-popup
+> `capturingText()` so `T` stays literal in text fields. Every centered-box
+> popup is swept to render wider (and taller where it caps rows) when maximized.
+> Full-screen surfaces (`diffView`, the conflict editor, history/blame/rebase)
+> are excluded — they already own the screen. The original per-popup
+> `handleMaxKey`-in-nav-branch approach (below) is superseded; the six
+> already-converted popups are refactored onto the central handler.
+
 **Universal mechanism, opt-in per popup.** One shared, embeddable maximize
 state plus one shared width resolver. A popup "opts in" by embedding the state,
 honoring it in `render`, and calling the shared toggle helper in its navigation

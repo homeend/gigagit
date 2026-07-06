@@ -463,17 +463,6 @@ func TestContentPopupTKeyDoesNotMaximizeWhileTyping(t *testing.T) {
 	}
 }
 
-func TestContentPopupTKeyMaximizesInNavMode(t *testing.T) {
-	m := Model{}
-	m.width, m.height = 200, 50
-	p := newContentPopup("Title", contentLines(4))
-
-	p.update(m, runeKey("T"))
-	if !p.maximized {
-		t.Fatal(`"T" in nav mode must maximize`)
-	}
-}
-
 func TestContentPopupEscClosesWhileMaximized(t *testing.T) {
 	m := Model{}
 	m.width, m.height = 200, 50

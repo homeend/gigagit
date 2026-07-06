@@ -901,6 +901,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// special-cased: every layer (surfaces and popups) quits on it in its own
 		// update.
 		if l := m.topLayer(); l != nil {
+			// Capital T maximizes the top popup to a near-fullscreen box (mirrors
+			// the panel T), handled centrally so every maximizable popup behaves
+			// the same. Gated by capturingText so T stays a literal character
+			// while a filter/text field is capturing; full-screen surfaces don't
+			// implement the interface and fall through to their own update.
+			if mx, ok := l.(maximizableLayer); ok && msg.String() == "T" && !mx.capturingText() {
+				mx.toggleMaximize()
+				return m, nil
+			}
 			return l.update(m, msg)
 		}
 		// Filter-input mode captures every key (the panel label shows the query).

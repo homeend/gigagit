@@ -172,6 +172,10 @@ func (p *bookmarkPopup) byID(id string) (model.Bookmark, bool) {
 // update handles one key while the switcher is open (the overlay contract). The
 // popup is navigation-first (letters are actions, matching every other gg list);
 // `/` enters a filter sub-mode where runes type a query until esc/enter.
+// capturingText reports whether a text field is active so the central T
+// handler leaves T a literal character while typing.
+func (p *bookmarkPopup) capturingText() bool { return p.filtering }
+
 func (p *bookmarkPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
@@ -213,9 +217,6 @@ func (p *bookmarkPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			p.filter += string(msg.Runes)
 			p.sel = 0
 		}
-		return m, nil
-	}
-	if p.handleMaxKey(msg) { // "T" toggles fullscreen (nav mode only)
 		return m, nil
 	}
 	// Display-mode + pan keys take precedence over the navigation switch and

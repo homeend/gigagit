@@ -8,26 +8,61 @@ import (
 
 func runeKey(s string) tea.KeyMsg { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)} }
 
-func TestHandleMaxKeyTogglesOnT(t *testing.T) {
+func TestToggleMaximize(t *testing.T) {
 	var p popupMax
-	if !p.handleMaxKey(runeKey("T")) {
-		t.Fatal(`"T" must be consumed`)
-	}
+	p.toggleMaximize()
 	if !p.maxed() {
-		t.Fatal(`"T" must set maximized`)
+		t.Fatal("toggleMaximize must set maximized")
 	}
-	if !p.handleMaxKey(runeKey("T")) || p.maxed() {
-		t.Fatal(`second "T" must toggle back off`)
+	p.toggleMaximize()
+	if p.maxed() {
+		t.Fatal("second toggleMaximize must clear maximized")
 	}
 }
 
-func TestHandleMaxKeyIgnoresOtherKeys(t *testing.T) {
+func TestCapturingTextDefaultFalse(t *testing.T) {
 	var p popupMax
-	if p.handleMaxKey(runeKey("x")) {
-		t.Fatal(`"x" must NOT be consumed`)
+	if p.capturingText() {
+		t.Fatal("popupMax default capturingText must be false")
 	}
-	if p.maxed() {
-		t.Fatal(`"x" must not set maximized`)
+}
+
+// contentPopup embeds popupMax and, on the layer stack, is maximized by the
+// central T handler in Model.Update — not by its own update. This locks in that
+// the central handler is wired.
+func TestCentralTMaximizesTopPopup(t *testing.T) {
+	m := Model{}
+	m.width, m.height = 200, 50
+	p := newContentPopup("Title", contentLines(4))
+	m = m.pushLayer(p)
+
+	mm, _ := m.Update(runeKey("T"))
+	if !layerOf[*contentPopup](mm.(Model)).maxed() {
+		t.Fatal("central T handler must maximize the top popup")
+	}
+	// Second T restores.
+	mm2, _ := mm.(Model).Update(runeKey("T"))
+	if layerOf[*contentPopup](mm2.(Model)).maxed() {
+		t.Fatal("second central T must restore the top popup")
+	}
+}
+
+// While a popup is capturing text, the central T handler must leave T a literal
+// character (capturingText true) instead of maximizing.
+func TestCentralTLiteralWhileCapturing(t *testing.T) {
+	m := Model{}
+	m.width, m.height = 200, 50
+	p := newContentPopup("Title", contentLines(4))
+	p.typing = true
+	m = m.pushLayer(p)
+
+	mm, _ := m.Update(runeKey("T"))
+	got := layerOf[*contentPopup](mm.(Model))
+	if got.maxed() {
+		t.Fatal("T while capturing text must not maximize")
+	}
+	if got.query != "T" {
+		t.Fatalf("T while capturing must be typed as a literal; query=%q", got.query)
 	}
 }
 
