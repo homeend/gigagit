@@ -12,6 +12,7 @@ import (
 // multi-line body (description), and commits the staged index on ctrl+s.
 // amend=true rewrites the last commit instead of creating a new one.
 type commitPopup struct {
+	popupMax
 	title textfield
 	desc  textfield
 	field int // 0 = title, 1 = description
@@ -119,7 +120,7 @@ func (p *commitPopup) box(m Model) string {
 	b.WriteString(renderCommitFields(p, popupContentWidth(w)))
 	b.WriteString("\n[tab] switch field  [enter] newline/next  [ctrl+s] commit  [esc] cancel")
 
-	return modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"
+	return modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 }
 
 // renderCommitFields draws the title/description fields with the focus cursor,
