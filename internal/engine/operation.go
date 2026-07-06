@@ -9,6 +9,8 @@ type Result struct {
 	Summary string
 	Changed bool
 	Path    string // when an operation creates/targets a path (e.g. CreateWorktree), its absolute path
+	// Captured is the captured stdout, set only by capture ops like GenerateMessage.
+	Captured string
 }
 
 // OpDeps is everything an operation needs: the repo to act on, an optional
@@ -25,6 +27,9 @@ type OpDeps struct {
 	// HookRunner runs a post-create worktree hook. Nil ⇒ ShellHookRunner{}
 	// (production default); engine tests inject a fake.
 	HookRunner HookRunner
+	// CaptureRunner runs a headless capture command. Nil ⇒ ShellCaptureRunner{}
+	// (production default); engine tests inject a fake.
+	CaptureRunner CaptureRunner
 }
 
 // hookRunner is the nil-safe HookRunner (style of emit/escalate).
@@ -33,6 +38,14 @@ func (d OpDeps) hookRunner() HookRunner {
 		return ShellHookRunner{}
 	}
 	return d.HookRunner
+}
+
+// captureRunner is the nil-safe CaptureRunner (style of hookRunner).
+func (d OpDeps) captureRunner() CaptureRunner {
+	if d.CaptureRunner == nil {
+		return ShellCaptureRunner{}
+	}
+	return d.CaptureRunner
 }
 
 // escalate is the nil-safe form of Escalate (style of emit/decide).
