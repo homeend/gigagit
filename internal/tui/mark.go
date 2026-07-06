@@ -110,7 +110,8 @@ func (m Model) handleMarkKey() (tea.Model, tea.Cmd) {
 		m.statusMsg = "no pair operations for this panel"
 		return m, nil
 	}
-	m = m.pushLayer(&pairOpPopup{marked: m.mark.display, selected: key, ops: ops})
+	w, _ := m.overlayDims()
+	m = m.pushLayer(newPairOpPopup(w, m.mark.display, key, ops))
 	return m, nil
 }
 

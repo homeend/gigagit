@@ -48,3 +48,16 @@ func popupResolveRowCap(maximized bool, termH, normal int) int {
 	}
 	return normal
 }
+
+// autoMaxForContent reports whether a maximizable centered-box popup whose
+// widest content line is contentW columns should OPEN maximized: the content
+// exceeds the normal (unmaximized) text width AND maximizing actually buys more
+// room (guards a tiny terminal where both widths floor to the same value).
+// Popups call this ONCE at creation, so auto-maximizing never fights a later
+// manual ctrl+t toggle. This is how "a popup whose essential content would be
+// clipped opens full-size by default".
+func autoMaxForContent(w, contentW int) bool {
+	normal := popupTextWidth(popupInnerWidth(w))
+	full := popupTextWidth(popupFullInnerWidth(w))
+	return contentW > normal && full > normal
+}

@@ -42,3 +42,39 @@ func TestPairOpPopupRendersOps(t *testing.T) {
 		t.Fatalf("hint missing [z] mode:\n%s", out)
 	}
 }
+
+// When the marked/selected branch names make the rows wider than the default
+// box, the pair-op popup opens maximized so the names — essential to knowing
+// what the merge/rebase will do — are visible without pressing ctrl+t.
+func TestPairOpPopupAutoMaximizesWhenCutOff(t *testing.T) {
+	ops := pairOpsFor(panelBranches)
+	const marked = "fix/modal-wrap-content"
+	const selected = "feat/external-tools-stage3-review"
+
+	long := newPairOpPopup(120, marked, selected, ops)
+	if !long.maximized {
+		t.Fatalf("popup should auto-maximize when rows exceed the default width")
+	}
+
+	short := newPairOpPopup(120, "feat/x", "main", ops)
+	if short.maximized {
+		t.Fatalf("popup should NOT maximize when content fits the default width")
+	}
+}
+
+// A maximized pair-op popup renders the full branch names, not a truncated
+// "Merge fix/… into feat/…" row.
+func TestPairOpPopupShowsFullNamesWhenMaximized(t *testing.T) {
+	ops := pairOpsFor(panelBranches)
+	const marked = "fix/modal-wrap-content"
+	const selected = "feat/external-tools-stage3-review"
+
+	m := Model{width: 150, height: 40}
+	p := newPairOpPopup(m.width, marked, selected, ops)
+	out := ansi.Strip(p.box(m))
+
+	want := "Merge " + marked + " into " + selected
+	if !strings.Contains(out, want) {
+		t.Fatalf("full merge label not shown; want substring %q in:\n%s", want, out)
+	}
+}

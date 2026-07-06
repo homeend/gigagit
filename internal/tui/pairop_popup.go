@@ -17,6 +17,27 @@ type pairOpPopup struct {
 	hscroll          int      // modeScroll horizontal offset
 }
 
+// newPairOpPopup builds the picker for (marked, selected) and opens it
+// maximized when its rows — which spell out both branch names — would otherwise
+// be truncated at the default width. The branch names are the essential content
+// (they say exactly what the merge/rebase does), so on a long-named branch the
+// popup shows them in full without the user having to press ctrl+t.
+func newPairOpPopup(w int, marked, selected string, ops []pairOp) *pairOpPopup {
+	p := &pairOpPopup{marked: marked, selected: selected, ops: ops}
+	content := lipgloss.Width(marked + " + " + selected) // the title row
+	for _, op := range ops {
+		line := op.label(marked, selected)
+		if !op.enabled {
+			line += "  (" + op.note + ")"
+		}
+		if l := lipgloss.Width("> " + line); l > content {
+			content = l
+		}
+	}
+	p.maximized = autoMaxForContent(w, content)
+	return p
+}
+
 // update handles one key while the pair-op popup is open. The
 // popup swallows every key; ctrl+c still quits.
 func (p *pairOpPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
