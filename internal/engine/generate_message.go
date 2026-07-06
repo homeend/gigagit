@@ -78,11 +78,16 @@ func buildSummary(diffPath, stat string, log []model.LogLine, truncated bool) st
 	if truncated {
 		b.WriteString("  (truncated — inspect files with git)")
 	}
-	b.WriteString("\n\n## Files changed (git diff --cached --stat)\n")
+	b.WriteString("\n\n## Files changed (git diff --cached --numstat)\n")
+	stat = strings.ReplaceAll(stat, "\x00", "\n")
 	if strings.TrimSpace(stat) == "" {
 		b.WriteString("(no staged changes)\n")
 	} else {
-		b.WriteString(stat + "\n")
+		// git diff --numstat -z NUL-terminates every record, including the
+		// last, so stat already ends with a newline after the replace above;
+		// TrimRight+append guarantees exactly one trailing newline instead
+		// of doubling it into a stray blank line before the next section.
+		b.WriteString(strings.TrimRight(stat, "\n") + "\n")
 	}
 	b.WriteString("\n## Recent commit subjects (match this style)\n")
 	for _, l := range log {
