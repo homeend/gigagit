@@ -46,7 +46,7 @@ func ParseCaptureMessage(stdout []byte) (subject, body string, err error) {
 			case strings.TrimSpace(env.Subject) != "":
 				return strings.TrimSpace(env.Subject), strings.TrimSpace(env.Body), nil
 			case env.Result != nil:
-				text := strings.TrimSpace(*env.Result)
+				text := stripCodeFence(*env.Result)
 				subject, body = SplitMessage(text)
 				if subject == "" {
 					return "", "", ErrEmptyMessage
@@ -58,11 +58,30 @@ func ParseCaptureMessage(stdout []byte) (subject, body string, err error) {
 		// key at all) or malformed JSON that failed to unmarshal: fall through to
 		// raw-text handling and treat the input verbatim as the message.
 	}
-	subject, body = SplitMessage(string(t))
+	subject, body = SplitMessage(stripCodeFence(string(t)))
 	if subject == "" {
 		return "", "", ErrEmptyMessage
 	}
 	return subject, body, nil
+}
+
+// stripCodeFence removes a wrapping markdown code fence from agent output.
+// Agents frequently wrap a commit message in ``` … ``` (sometimes with a
+// language tag, e.g. ```text) even when told not to, which otherwise makes the
+// opening fence the commit subject. It fires ONLY when the first non-blank line
+// opens a fence, so a message that merely contains ``` in its body is left
+// untouched; a matching trailing bare ``` line is dropped as well.
+func stripCodeFence(s string) string {
+	s = strings.TrimSpace(s)
+	if !strings.HasPrefix(s, "```") {
+		return s
+	}
+	lines := strings.Split(s, "\n")
+	lines = lines[1:] // drop the opening ``` / ```lang line
+	if len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "```" {
+		lines = lines[:len(lines)-1] // drop the closing ``` line
+	}
+	return strings.TrimSpace(strings.Join(lines, "\n"))
 }
 
 // SplitMessage splits a commit message into (subject, body): the first line is
