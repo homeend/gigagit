@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/homeend/gigagit/internal/clipboard"
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/promptstate"
@@ -42,6 +43,69 @@ func TestRepoHealthMsgBuildsCommitGraphNotice(t *testing.T) {
 	}
 	if seg := m.noticeSegment(); !strings.Contains(seg, "1 notice") {
 		t.Fatalf("status segment = %q, want '! 1 notice …'", seg)
+	}
+}
+
+// x11NoToolAvail is the reported machine: an X11 desktop with no clipboard tool.
+func x11NoToolAvail() clipboard.Availability {
+	return clipboard.Availability{Session: "x11", Install: "xclip"}
+}
+
+func TestClipboardNoticeBuilder(t *testing.T) {
+	// Fires: a local display is present but no native tool is installed.
+	if n := clipboardNotice(x11NoToolAvail(), "/k"); n == nil || n.id != noticeClipboard {
+		t.Fatalf("want the clipboard notice, got %+v", n)
+	}
+	// nil: a native tool is available.
+	if n := clipboardNotice(clipboard.Availability{Available: true, Tool: "xclip"}, "/k"); n != nil {
+		t.Errorf("no notice when a tool is available, got %+v", n)
+	}
+	// nil: headless/SSH (nothing to install) — OSC 52 is expected there, so a
+	// "missing tool" nag would be a false positive.
+	if n := clipboardNotice(clipboard.Availability{}, "/k"); n != nil {
+		t.Errorf("no notice when there is nothing to install, got %+v", n)
+	}
+}
+
+func TestClipboardNoticeInstallHintMatchesSession(t *testing.T) {
+	x := clipboardNotice(clipboard.Availability{Session: "x11", Install: "xclip"}, "/k")
+	if !strings.Contains(strings.Join(x.detail, "\n"), "apt install xclip") {
+		t.Errorf("x11 notice must suggest xclip, detail=%v", x.detail)
+	}
+	w := clipboardNotice(clipboard.Availability{Session: "wayland", Install: "wl-clipboard"}, "/k")
+	if !strings.Contains(strings.Join(w.detail, "\n"), "wl-clipboard") {
+		t.Errorf("wayland notice must suggest wl-clipboard, detail=%v", w.detail)
+	}
+}
+
+func TestRepoHealthMsgBuildsClipboardNotice(t *testing.T) {
+	m, _ := noticeTestModel(t)
+	nm, _ := m.Update(repoHealthMsg{gen: m.noticeGen, health: model.RepoHealth{GitCommonDir: "/k"}, clipAvail: x11NoToolAvail()})
+	m = nm.(Model)
+	if len(m.notices) != 1 || m.notices[0].id != noticeClipboard {
+		t.Fatalf("notices = %+v, want the clipboard notice", m.notices)
+	}
+	if !m.noticesUnread {
+		t.Fatal("a fresh clipboard notice must start unread (blinking)")
+	}
+}
+
+func TestClipboardNoticePersistedDismissalFilters(t *testing.T) {
+	m, st := noticeTestModel(t)
+	if err := st.DismissNotice("/k", noticeClipboard); err != nil {
+		t.Fatal(err)
+	}
+	nm, _ := m.Update(repoHealthMsg{gen: m.noticeGen, health: model.RepoHealth{GitCommonDir: "/k"}, clipAvail: x11NoToolAvail()})
+	if got := nm.(Model).notices; len(got) != 0 {
+		t.Fatalf("persisted dismissal must filter the clipboard notice, got %+v", got)
+	}
+}
+
+func TestNoClipboardNoticeWhenToolAvailable(t *testing.T) {
+	m, _ := noticeTestModel(t)
+	nm, _ := m.Update(repoHealthMsg{gen: m.noticeGen, health: model.RepoHealth{GitCommonDir: "/k"}, clipAvail: clipboard.Availability{Available: true, Tool: "xclip"}})
+	if got := nm.(Model).notices; len(got) != 0 {
+		t.Fatalf("no clipboard notice when a tool is available, got %+v", got)
 	}
 }
 
