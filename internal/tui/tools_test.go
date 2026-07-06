@@ -34,6 +34,32 @@ func TestToolCommandsFiltersInvalidAndCapture(t *testing.T) {
 	}
 }
 
+func TestToolCommandsCommitMessageCaptureLive(t *testing.T) {
+	m := toolCfg(
+		config.ToolCommand{Category: "commit_message", Name: "Claude", Mode: "capture", Command: "claude -p <op>"},
+	)
+	got := m.toolCommands("commit_message")
+	if len(got) != 1 || got[0].Name != "Claude" {
+		t.Fatalf("toolCommands(commit_message) = %+v, want the capture command live", got)
+	}
+	if len(m.toolNoted) != 0 {
+		t.Errorf("a valid commit_message capture block must not be noted: %v", m.toolNoted)
+	}
+}
+
+func TestToolCommandsReviewCaptureStillInert(t *testing.T) {
+	m := toolCfg(
+		config.ToolCommand{Category: "review", Name: "Claude", Mode: "capture", Command: "claude -p <op>"},
+	)
+	got := m.toolCommands("review")
+	if len(got) != 0 {
+		t.Fatalf("toolCommands(review) = %+v, want capture still inert (stage 3)", got)
+	}
+	if len(m.toolNoted) != 1 {
+		t.Errorf("the inert review capture block must be noted once: %v", m.toolNoted)
+	}
+}
+
 func TestConflictToolChoices(t *testing.T) {
 	repoLevel := config.ToolCommand{Category: "conflict", Name: "Agent", Mode: "terminal", Command: "a"}
 	mergeOnly := config.ToolCommand{Category: "conflict", Name: "JM", Mode: "terminal", WhenOp: "merge", Command: "j"}

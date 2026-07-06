@@ -5,6 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/exttool"
 )
@@ -17,6 +18,10 @@ type commitPopup struct {
 	desc  textfield
 	field int // 0 = title, 1 = description
 	amend bool
+
+	generating bool               // a ctrl+g generate run (commit_generate.go) is in flight
+	genGen     int                // generation guard: bumped on every dispatch AND every esc-cancel
+	genCmd     config.ToolCommand // the commit_message tool the last/current generate run used
 }
 
 // message assembles the git commit message: subject alone, or subject + blank
@@ -77,10 +82,21 @@ func (p *commitPopup) applyEditKey(msg tea.KeyMsg) (submit, cancel bool) {
 }
 
 // update handles one key while the commit popup is open. It swallows every key:
-// esc cancels, ctrl+c quits, ctrl+s commits.
+// esc cancels, ctrl+c quits, ctrl+s commits. ctrl+g (generate) is handled here,
+// NOT in applyEditKey — reword/irebase's reword sub-mode share applyEditKey and
+// have no staged index to generate a message from.
 func (p *commitPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
+	}
+	if p.generating {
+		if msg.Type == tea.KeyEsc {
+			return m.escGenerate(p), nil
+		}
+		return m, nil // swallow every other key while a generate run is in flight
+	}
+	if msg.Type == tea.KeyCtrlG {
+		return m.startGenerate(p)
 	}
 	submit, cancel := p.applyEditKey(msg)
 	switch {
@@ -114,7 +130,10 @@ func (p *commitPopup) box(m Model) string {
 	w, _ := m.overlayDims()
 	b.WriteString(heading + "\n\n")
 	b.WriteString(renderCommitFields(p, popupContentWidth(w)))
-	b.WriteString("\n[tab] switch field  [enter] newline/next  [ctrl+s] commit  [esc] cancel")
+	if p.generating {
+		b.WriteString("\n⟳ generating message… ([esc] to cancel)\n")
+	}
+	b.WriteString("\n[tab] switch field  [enter] newline/next  [ctrl+g] generate  [ctrl+s] commit  [esc] cancel")
 
 	return modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"
 }

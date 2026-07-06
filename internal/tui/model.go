@@ -149,6 +149,7 @@ type Model struct {
 	watchGen            int                             // bumped per (re)build; stale watch msgs are dropped
 	bgCtx               context.Context                 // context for in-flight background (auto) reads; cancelled when a user op starts
 	bgCancel            context.CancelFunc              // cancels bgCtx; nil when no background batch is active
+	genCancel           context.CancelFunc              // cancels an in-flight commit-popup ctrl+g generate run; nil when none is active
 	refreshLastRun      map[refreshItem]time.Time       // last time each scheduled item fired (background scheduler)
 	refreshDur          map[refreshItem][]time.Duration // rolling ring (≤10) of measured read durations per item (Phase C)
 	bgQueue             []refreshItem                   // FIFO of pending background reads; one drains per tick
@@ -2082,6 +2083,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m = m.pushLayer(&commitPopup{title: newTextField(title), desc: newTextField(desc), amend: true})
 		return m, nil
 
+	case genMessageMsg:
+		return m.applyGeneratedMessage(msg), nil
+
 	case inProgressMsg:
 		if cp, ok := m.proc.(*conflictProcess); ok {
 			cp.inProgress = msg.op
@@ -2830,6 +2834,10 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.pendingGotoTip = ""                 // a repo switch must not fire a stale tip jump
 	m.pendingCheckout = pendingCheckout{} // a diverged checkout from the old repo must not prompt in the new one
 	m.pendingRemoteTagAdds = nil
+	if m.genCancel != nil { // a stale generate run from the old repo must not fill the new repo's popup
+		m.genCancel()
+		m.genCancel = nil
+	}
 	m.resumePromptShown = false // the new repo's paused state (if any) prompts fresh
 	m.notices = nil
 	m.noticesUnread = false
