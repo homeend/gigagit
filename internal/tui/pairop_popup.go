@@ -9,6 +9,7 @@ import (
 
 // pairOpPopup offers a panel's two-argument operations on (marked, selected).
 type pairOpPopup struct {
+	popupMax
 	marked, selected string
 	ops              []pairOp
 	sel              int
@@ -72,7 +73,7 @@ func (p *pairOpPopup) render(m Model, below string) string {
 // box draws the operation picker modal box.
 func (p *pairOpPopup) box(m Model) string {
 	w, _ := m.overlayDims()
-	inner := popupInnerWidth(w)
+	inner := popupResolveWidth(w, p.maximized, popupInnerWidth(w))
 	textW := popupTextWidth(inner)
 	wr := make([]winRow, len(p.ops))
 	for i, op := range p.ops {

@@ -18,6 +18,7 @@ import (
 // local/global scope, and create/rename/delete profiles. The single git write
 // goes through engine.SetIdentity; profile CRUD goes through domain.
 type identityView struct {
+	popupMax
 	loading  bool
 	id       model.Identity
 	profiles []model.Profile
@@ -317,7 +318,7 @@ func (v *identityView) box(m Model) string {
 	// than the standard 56-col prose popup, so popupInnerWidth would truncate
 	// them ("actions cut off"). Mirrors the bookmark/shelf switchers.
 	w, _ := m.overlayDims()
-	inner := popupWideInnerWidth(w)
+	inner := popupResolveWidth(w, v.maximized, popupWideInnerWidth(w))
 	textW := popupTextWidth(inner)
 
 	var body, footer []string
@@ -380,8 +381,10 @@ func (v *identityView) browseLines(m Model, textW int) (body, footer []string) {
 			wr[i] = winRow{text: row, style: st}
 		}
 		h := len(v.profiles)
-		if h > 8 {
-			h = 8
+		_, termH := m.overlayDims()
+		capRows := popupResolveRowCap(v.maximized, termH, 8)
+		if h > capRows {
+			h = capRows
 		}
 		parts = append(parts, renderWindow(wr, winOpts{w: textW, h: h, anchor: v.sel})...)
 	}

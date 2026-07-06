@@ -19,6 +19,7 @@ import (
 // single menu entry (agent-skill setup); the menu/picker split exists so
 // future options have a home.
 type settingsPopup struct {
+	popupMax
 	picker       bool      // false = menu screen, true = agent picker
 	errorsView   bool      // true = session-errors viewer screen
 	ratesView    bool      // true = refresh-rates viewer screen
@@ -563,6 +564,11 @@ func (p *settingsPopup) box(m Model) string {
 	if p.toolsView {
 		inner = popupFullInnerWidth(w)
 	}
+	// ctrl+t widens whichever screen is active to near-fullscreen. A no-op for
+	// toolsView, which is already full-width by design.
+	if p.maximized {
+		inner = popupFullInnerWidth(w)
+	}
 	textW := popupTextWidth(inner)
 	var b strings.Builder
 	if p.errorsView {
@@ -838,8 +844,9 @@ func (p *settingsPopup) box(m Model) string {
 				wr[i] = winRow{text: fmt.Sprintf("%s%s %s — %s", prefix, box, d.Agent.Label, d.Status), style: st}
 			}
 			h := len(p.dets)
-			if h > 12 {
-				h = 12
+			capRows := popupResolveRowCap(p.maximized, termH, 12)
+			if h > capRows {
+				h = capRows
 			}
 			for _, line := range renderWindow(wr, winOpts{w: textW, h: h, mode: p.mode, anchor: p.sel, hscroll: p.hscroll}) {
 				b.WriteString(line + "\n")

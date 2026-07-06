@@ -2,8 +2,11 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/engine"
@@ -120,5 +123,24 @@ func TestIdentityEscReturnsToSettings(t *testing.T) {
 	}
 	if layerOf[*settingsPopup](m) == nil {
 		t.Fatal("esc should reveal the settings menu beneath")
+	}
+}
+
+func TestIdentityViewMaximizeWidensAndLiftsRowCap(t *testing.T) {
+	m := Model{width: 200, height: 50}
+	v := sampleIdentityView()
+	for i := 0; i < 20; i++ { // more than the fixed cap of 8
+		v.profiles = append(v.profiles, model.Profile{Name: fmt.Sprintf("P%d", i), GitName: "n", GitEmail: "n@x"})
+	}
+
+	normal := v.box(m)
+	v.maximized = true
+	maxed := v.box(m)
+
+	if lipgloss.Width(maxed) <= lipgloss.Width(normal) {
+		t.Fatalf("maximized width %d must exceed normal %d", lipgloss.Width(maxed), lipgloss.Width(normal))
+	}
+	if lipgloss.Height(maxed) <= lipgloss.Height(normal) {
+		t.Fatalf("maximized must show more rows: height %d vs %d", lipgloss.Height(maxed), lipgloss.Height(normal))
 	}
 }
