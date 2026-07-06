@@ -234,10 +234,7 @@ func (p *fileFinderPopup) box(m Model) string {
 		// Window-then-build: determine the visible slice first, then build
 		// only those winRows. This keeps render O(window) even at 200 results.
 		visH := len(p.matches)
-		capRows := 16
-		if p.maximized {
-			capRows = popupMaxRowCap(termH)
-		}
+		capRows := popupResolveRowCap(p.maximized, termH, 16)
 		if visH > capRows {
 			visH = capRows
 		}

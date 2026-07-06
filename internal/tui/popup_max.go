@@ -43,3 +43,16 @@ func popupMaxRowCap(termH int) int {
 	}
 	return n
 }
+
+// popupResolveRowCap returns the visible-row budget for a list popup: when
+// maximized, the terminal-derived cap (popupMaxRowCap) but never fewer than
+// the popup's normal fixed cap, so maximizing never reduces the visible rows
+// even on a short terminal. Not maximized → the normal cap.
+func popupResolveRowCap(maximized bool, termH, normal int) int {
+	if maximized {
+		if c := popupMaxRowCap(termH); c > normal {
+			return c
+		}
+	}
+	return normal
+}

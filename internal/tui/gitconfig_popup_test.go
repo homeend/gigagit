@@ -203,6 +203,40 @@ func TestGitConfigPopupTKeyDoesNotMaximizeWhileFiltering(t *testing.T) {
 	}
 }
 
+// TestGitConfigPopupTKeyDoesNotMaximizeInEditMode covers the SECOND
+// text-capturing state in gitConfigPopup (besides the `/` filter): the
+// in-place value editor opened by `l`/`g` on a curated key. "user.name" (in
+// explorerRows) is a KindString curated key, so `g` opens a text-field
+// editor (edit.useField = true); typing "T" there must be captured by the
+// field, not consumed by handleMaxKey — the
+// `if p.edit != nil { return p.updateEdit(...) }` guard at the top of
+// update() must run before any maximize check.
+func TestGitConfigPopupTKeyDoesNotMaximizeInEditMode(t *testing.T) {
+	m, _ := settingsModel(t)
+	m = openExplorer(t, m)
+	p := layerOf[*gitConfigPopup](m)
+	for i, r := range p.visible() {
+		if r.Key == "user.name" {
+			p.sel = i
+		}
+	}
+
+	u, _ := m.Update(keyMsg("g"))
+	m = u.(Model)
+	if p.edit == nil || !p.edit.useField {
+		t.Fatal(`"g" on user.name must open a text-field editor`)
+	}
+
+	u, _ = m.Update(runeKey("T"))
+	m = u.(Model)
+	if p.maxed() {
+		t.Fatal(`"T" in edit mode must not maximize the popup`)
+	}
+	if p.edit == nil || !strings.Contains(p.edit.field.Value(), "T") {
+		t.Fatalf(`"T" in edit mode must be captured by the text field; field=%+v`, p.edit)
+	}
+}
+
 func TestGitConfigPopupMaximizeSurvivesRowReload(t *testing.T) {
 	m := Model{}
 	m.width, m.height = 200, 50

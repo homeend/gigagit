@@ -222,10 +222,7 @@ func (p *repoPopup) box(m Model) string {
 			wr[i] = winRow{text: row, style: st}
 		}
 		// Cap the visible body; renderWindow scrolls to keep p.sel in view.
-		capRows := 12
-		if p.maximized {
-			capRows = popupMaxRowCap(termH)
-		}
+		capRows := popupResolveRowCap(p.maximized, termH, 12)
 		h := len(vis)
 		if h > capRows {
 			h = capRows

@@ -48,3 +48,15 @@ func TestPopupMaxRowCap(t *testing.T) {
 		t.Fatalf("floor: got %d, want 3", got)
 	}
 }
+
+func TestPopupResolveRowCap(t *testing.T) {
+	if got := popupResolveRowCap(false, 50, 12); got != 12 {
+		t.Fatalf("normal: got %d, want 12", got)
+	}
+	if got := popupResolveRowCap(true, 50, 12); got != 38 { // popupMaxRowCap(50)=38 > 12
+		t.Fatalf("maximized tall: got %d, want 38", got)
+	}
+	if got := popupResolveRowCap(true, 20, 12); got != 12 { // popupMaxRowCap(20)=8 < 12 → floor
+		t.Fatalf("maximized short must floor to normal: got %d, want 12", got)
+	}
+}

@@ -133,10 +133,7 @@ func (m Model) renderBookmarkPopupBox(p *bookmarkPopup) string {
 			}
 			wr[n] = winRow{text: prefix + mark + " " + p.rows[i], style: st}
 		}
-		capRows := 12
-		if p.maximized {
-			capRows = popupMaxRowCap(termH)
-		}
+		capRows := popupResolveRowCap(p.maximized, termH, 12)
 		h := len(vis)
 		if h > capRows {
 			h = capRows
