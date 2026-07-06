@@ -14,12 +14,23 @@ import (
 // replaced by a stat + truncation note (the stat still lists every file).
 const MaxDiffBytes = 200 << 10
 
-// GenerateMessage runs a commit_message agent headless and returns its captured
-// stdout (Result.Captured). It first writes two context artifacts from the
-// staged diff — a labeled summary ($GG_CONTEXT_FILE) and the full unified diff
-// ($GG_STAGED_DIFF) — then runs the (resolved, approved) command via the
-// CaptureRunner, then removes them. LockMode Read: git reads only; no ref/tree
-// writes by gg. Approval is the caller's (TUI) responsibility, not the op's.
+// GenerateMessage runs a commit_message agent headless and returns the captured
+// message (Result.Captured). It first writes context artifacts from the staged
+// diff — a labeled summary ($GG_CONTEXT_FILE), the full unified diff
+// ($GG_STAGED_DIFF), and an empty output file ($GG_MESSAGE_FILE) — then runs the
+// (resolved, approved) command via the CaptureRunner, then removes them.
+//
+// Output channel contract: any capture tool MAY write the commit message to the
+// file at $GG_MESSAGE_FILE instead of stdout; non-empty file content wins over
+// stdout. This exists because a task-agent (e.g. Junie) treats "write a commit
+// message" as work-to-do and emits only a status report on stdout — the message
+// itself never reaches stdout, so it must come back through a file. A tool whose
+// stdout already IS the message (e.g. Claude's --output-format json .result)
+// leaves the file empty and its stdout is used. The contract generalizes to any
+// future capture lane (e.g. stage 3's review).
+//
+// LockMode Read: git reads only; no ref/tree writes by gg. Approval is the
+// caller's (TUI) responsibility, not the op's.
 type GenerateMessage struct {
 	Command string   // resolved, approved shell command line
 	Dir     string   // repo/worktree root
@@ -54,20 +65,34 @@ func (op GenerateMessage) Run(ctx context.Context, deps OpDeps) (Result, error) 
 		return Result{}, err
 	}
 	defer os.Remove(ctxPath)
+	// Empty output file: a task-agent tool writes the message here (see the
+	// contract on GenerateMessage); a stdout tool leaves it empty. Lives in the
+	// OS temp dir, outside the repo, so it never pollutes the working tree.
+	msgPath, err := writeTempFile("gg-msg-*.txt", "")
+	if err != nil {
+		return Result{}, err
+	}
+	defer os.Remove(msgPath)
 
 	env := append(append([]string{}, os.Environ()...), op.Env...)
 	env = append(env,
 		"GG_CONTEXT_FILE="+ctxPath,
 		"GG_STAGED_DIFF="+diffPath,
+		"GG_MESSAGE_FILE="+msgPath,
 		"GG_REPO="+op.Dir,
 	)
 	stdout, runErr := deps.captureRunner().Capture(ctx,
 		CaptureSpec{Dir: op.Dir, Env: env, Command: op.Command},
 		func(line string) { deps.emit(ctx, GitLine{Raw: line}) })
-	if runErr != nil {
-		return Result{Captured: string(stdout)}, runErr
+	// Non-empty file content wins over stdout (the output-channel contract).
+	captured := string(stdout)
+	if fileMsg, rerr := os.ReadFile(msgPath); rerr == nil && strings.TrimSpace(string(fileMsg)) != "" {
+		captured = string(fileMsg)
 	}
-	return Result{Captured: string(stdout), Summary: "generated commit message"}, nil
+	if runErr != nil {
+		return Result{Captured: captured}, runErr
+	}
+	return Result{Captured: captured, Summary: "generated commit message"}, nil
 }
 
 func buildSummary(diffPath, stat string, log []model.LogLine, truncated bool) string {

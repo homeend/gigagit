@@ -32,9 +32,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   approval of the resolved command (remembered per repo until the config
   text changes), and a confirm-replace prompt when the fields already hold
   text; `esc` cancels an in-flight run. Catalog defaults ship for Claude Code
-  and Junie (`mode = "capture"`); Junie's output is best-effort — its
-  `--output-format json` `.result` is a markdown report, not a clean
-  message, and the parser and editable fields absorb whatever comes back.
+  and Junie (`mode = "capture"`). A tool may return the message either on
+  stdout (Claude's `--output-format json` `.result`) or by writing it to the
+  file at `$GG_MESSAGE_FILE` — non-empty file content wins. That file channel
+  is what makes Junie work: it is a task-agent whose stdout is only a
+  `### Summary / ### Changes / ### Verification` work report, never the
+  message, so it writes the commit message to `$GG_MESSAGE_FILE` and gg reads
+  it back as a clean subject + body.
 - **Fullscreen popups (`ctrl+t`).** `ctrl+t` now toggles ANY popup to a
   near-fullscreen bordered box — every switcher, picker, list, viewer, table,
   wizard, editor, and prompt — via one central handler on the popup layer
