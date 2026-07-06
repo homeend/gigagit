@@ -115,8 +115,33 @@ const junieConflictCommand = `<bin> --prompt ` + junieConflictPrompt
 // exactly Junie's interactive mode).
 const junieConflictYoloCommand = junieConflictCommand + ` --brave`
 
-// Builtins is the hardcoded catalog. Stage 1 ships conflict templates only;
-// commit_message/review defaults land with their stages (recorded in the spec).
+// claudeCommitPrompt: capture-lane commit-message prompt. Dynamic content via
+// <env:...> only (injection posture). Prompt is the FIRST arg after `<bin> -p`.
+const claudeCommitPrompt = `"Write a git commit message for the staged changes. Read the summary at <env:GG_CONTEXT_FILE> (files changed, recent-commit style) and, for detail, the full diff at <env:GG_STAGED_DIFF>. Output ONLY the commit message and nothing else: a concise imperative subject line (max ~72 chars), a blank line, then a short body explaining what changed and why. No preamble, no markdown headings, no code fences. If the diff file notes it was truncated, inspect specific files with git."`
+
+// claudeCommitCommand is the default (capture-mode) commit_message template.
+// --output-format json gives a parseable envelope (.result). Read is on the
+// allowlist so the agent can open the context files; git verbs stay as a
+// drill-down fallback for a truncated diff. As with the conflict templates,
+// Claude's variadic --allowedTools must come LAST, after the prompt.
+const claudeCommitCommand = `<bin> -p ` + claudeCommitPrompt + ` \
+  --output-format json \
+  --allowedTools "Read" "Bash(git diff *)" "Bash(git log *)" "Bash(git show *)" "Bash(git status *)"`
+
+// junieCommitPrompt is the capture-lane commit-message prompt for Junie.
+// Best-effort: Junie's --output-format json .result is a markdown report
+// (spec §probes), not a clean message — the parser splits it and the
+// editable commit-popup fields absorb whatever comes back.
+const junieCommitPrompt = `"Write a git commit message for the staged changes. The change summary is at <env:GG_CONTEXT_FILE> and the full diff at <env:GG_STAGED_DIFF>. Output ONLY the commit message: a concise subject line, a blank line, then a short body. Do not run git commit and do not modify any files."`
+
+// junieCommitCommand is the default (capture-mode) Junie commit_message
+// template. No yolo variant: Junie's --brave is interactive-only (Brave
+// Mode), useless on a headless capture run.
+const junieCommitCommand = `<bin> --task ` + junieCommitPrompt + ` --output-format json --skip-update-check`
+
+// Builtins is the hardcoded catalog. Stage 1 shipped conflict templates;
+// stage 2 adds commit_message capture templates; review defaults land with
+// its stage (recorded in the spec).
 func Builtins() []Tool {
 	return []Tool{
 		{
@@ -124,6 +149,7 @@ func Builtins() []Tool {
 			Commands: []CommandTemplate{
 				{Category: CatConflict, Name: "Claude", Mode: ModeTerminal, Command: claudeConflictCommand},
 				{Category: CatConflict, Name: "Claude (yolo)", Mode: ModeTerminal, OptIn: true, Command: claudeConflictYoloCommand},
+				{Category: CatCommitMessage, Name: "Claude", Mode: ModeCapture, Command: claudeCommitCommand},
 			},
 		},
 		{
@@ -146,6 +172,7 @@ func Builtins() []Tool {
 			Commands: []CommandTemplate{
 				{Category: CatConflict, Name: "Junie", Mode: ModeTerminal, Command: junieConflictCommand},
 				{Category: CatConflict, Name: "Junie (yolo)", Mode: ModeTerminal, OptIn: true, Command: junieConflictYoloCommand},
+				{Category: CatCommitMessage, Name: "Junie", Mode: ModeCapture, Command: junieCommitCommand},
 			},
 		},
 		{
