@@ -154,3 +154,21 @@ func TestResolveCommandEnvTokenErrorsAtRuntime(t *testing.T) {
 		t.Errorf("<env:NAME> must error mentioning generation, got %v", err)
 	}
 }
+
+func TestResolveRangeToken(t *testing.T) {
+	got, err := ResolveCommand(`review <range>`, nil, CmdCtx{Range: "main..HEAD"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "review main..HEAD" {
+		t.Fatalf("got %q, want %q", got, "review main..HEAD")
+	}
+	// prose token: NOT shell-quoted even though a range can contain '/'
+	got, _ = ResolveCommand(`review <range>`, nil, CmdCtx{Range: "feature/x..main"})
+	if got != "review feature/x..main" {
+		t.Fatalf("range must substitute literally, got %q", got)
+	}
+	if err := ValidateCommandTokens("x <range>", false); err != nil {
+		t.Fatalf("<range> should be a valid token: %v", err)
+	}
+}

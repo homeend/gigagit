@@ -7,8 +7,9 @@ import (
 )
 
 // CmdCtx carries the values for external-tool command tokens. Prose fields
-// (Op/Source/Target/ConflictedFiles) substitute raw — the default commands
-// embed them inside prompt strings, and git refnames cannot contain spaces.
+// (Op/Source/Target/Range/ConflictedFiles) substitute raw — the default
+// commands embed them inside prompt strings, and git refnames/rev-ranges
+// cannot contain spaces.
 // Path fields (Repo/File/Local/Base/Remote/Merged/ContextFile) substitute
 // shell-quoted: they sit in argv positions and may contain spaces. Per-file
 // fields are "" for a repo-level command; using their tokens then is an
@@ -17,7 +18,7 @@ import (
 // empty ContextFile makes <context-file> an error too, since every
 // conflict-category run creates one.
 type CmdCtx struct {
-	Op, Source, Target, Repo          string
+	Op, Source, Target, Range, Repo   string
 	ConflictedFiles                   []string
 	File, Local, Base, Remote, Merged string
 	ContextFile                       string
@@ -58,6 +59,8 @@ func resolveCommandToken(body string, inputs map[string]string, ctx CmdCtx, goos
 		return ctx.Target, nil
 	case "conflicted-files":
 		return strings.Join(ctx.ConflictedFiles, " "), nil
+	case "range":
+		return ctx.Range, nil
 	case "repo":
 		return quoteArgFor(ctx.Repo, goos), nil
 	case "context-file":
@@ -94,7 +97,7 @@ func resolveCommandToken(body string, inputs map[string]string, ctx CmdCtx, goos
 
 // commandTokens is the runtime vocabulary; the bool marks per-file-only tokens.
 var commandTokens = map[string]bool{
-	"op": false, "source": false, "target": false, "conflicted-files": false,
+	"op": false, "source": false, "target": false, "range": false, "conflicted-files": false,
 	"repo": false, "context-file": false, "user": false,
 	"file": true, "local": true, "base": true, "remote": true, "merged": true,
 }
