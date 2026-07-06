@@ -14,6 +14,7 @@ import (
 // ref (SmartCheckout with a caller-chosen Local). Enter dispatches directly —
 // this popup IS the confirmation; esc cancels. Mirrors commitNamePopup.
 type checkoutAsPopup struct {
+	popupMax
 	remoteRef string // short remote ref, e.g. "origin/foo"
 	intent    engine.CheckoutIntent
 	name      textfield
@@ -52,7 +53,7 @@ func (p *checkoutAsPopup) render(m Model, below string) string {
 	b.WriteString("Check out " + p.remoteRef + " as\n\n")
 	b.WriteString(viewField("name: ", p.name, true, popupContentWidth(w)) + "\n\n")
 	b.WriteString("[enter] " + verb + "   [esc] cancel")
-	box := modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"
+	box := modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 	return overlayCenter(clipToHeight(below, h), box, w, h)
 }
 

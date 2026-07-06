@@ -14,6 +14,7 @@ import (
 // repoPopup is the transient repo-switcher picker opened with R. It holds an
 // MRU snapshot taken at open; ctrl+d edits both the snapshot and the registry.
 type repoPopup struct {
+	popupMax
 	entries   []repos.Entry
 	query     string // case-insensitive substring over name+path
 	filtering bool   // true while `/` filter sub-mode captures runes
@@ -67,6 +68,7 @@ func (p *repoPopup) visible() []repos.Entry {
 // fallthrough to global handlers). Navigation-first, like the finder and the
 // bookmark/shelf switchers: plain keys navigate, `/` enters a filter sub-mode
 // where runes (including `z`) type a query until esc/enter.
+
 func (p *repoPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
@@ -183,8 +185,8 @@ func (p *repoPopup) render(m Model, below string) string {
 
 // box draws the picker box (modal box only).
 func (p *repoPopup) box(m Model) string {
-	w, _ := m.overlayDims()
-	inner := popupInnerWidth(w)
+	w, termH := m.overlayDims()
+	inner := popupResolveWidth(w, p.maximized, popupInnerWidth(w))
 	textW := popupTextWidth(inner)
 
 	header := "Switch repository"
@@ -218,14 +220,15 @@ func (p *repoPopup) box(m Model) string {
 			wr[i] = winRow{text: row, style: st}
 		}
 		// Cap the visible body; renderWindow scrolls to keep p.sel in view.
+		capRows := popupResolveRowCap(p.maximized, termH, 12)
 		h := len(vis)
-		if h > 12 {
-			h = 12
+		if h > capRows {
+			h = capRows
 		}
 		bodyLines = renderWindow(wr, winOpts{w: textW, h: h, mode: p.mode, anchor: p.sel, hscroll: p.hscroll})
 	}
 
-	hint := []string{"[enter] switch", "[ctrl+d] forget", "[/] filter", "[z] mode", "[esc] close"}
+	hint := []string{"[enter] switch", "[ctrl+d] forget", "[/] filter", "[z] mode", "[ctrl+t] full", "[esc] close"}
 	parts := []string{header, ""}
 	parts = append(parts, bodyLines...)
 	parts = append(parts, "")

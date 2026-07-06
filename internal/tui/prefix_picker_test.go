@@ -1,11 +1,13 @@
 package tui
 
 import (
+	"fmt"
 	"math/rand/v2"
 	"testing"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/template"
@@ -120,5 +122,26 @@ func TestWorktreePopupPOpensPicker(t *testing.T) {
 	_, cmd := p.update(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
 	if cmd == nil {
 		t.Fatal("'p' in worktree stAction did not open the prefix picker")
+	}
+}
+
+func TestPrefixPickerMaximizeWidensAndLiftsRowCap(t *testing.T) {
+	m := Model{}
+	m.width, m.height = 200, 50
+	var items []model.Prefix
+	for i := 0; i < 20; i++ { // more than the fixed cap of 12
+		items = append(items, model.Prefix{Value: fmt.Sprintf("feat/%d-", i)})
+	}
+	p := newTestPrefixPicker(items, nil)
+
+	normal := p.box(m)
+	p.maximized = true
+	maxed := p.box(m)
+
+	if lipgloss.Width(maxed) <= lipgloss.Width(normal) {
+		t.Fatalf("maximized width %d must exceed normal %d", lipgloss.Width(maxed), lipgloss.Width(normal))
+	}
+	if lipgloss.Height(maxed) <= lipgloss.Height(normal) {
+		t.Fatalf("maximized must show more rows: height %d vs %d", lipgloss.Height(maxed), lipgloss.Height(normal))
 	}
 }

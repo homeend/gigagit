@@ -15,6 +15,7 @@ import (
 // the files-view opens: a ref that does not resolve shows an inline error and
 // keeps the popup open (no half-opened files-view on a typo).
 type gotoCommitPopup struct {
+	popupMax
 	input     textfield // the SHA / ref to resolve (no spaces)
 	err       string    // inline error from the last failed resolve; "" = none
 	resolving bool      // a resolve cmd is in flight
@@ -112,5 +113,5 @@ func (p *gotoCommitPopup) box(m Model) string {
 		b.WriteString("\n" + errorStyle.Render(p.err) + "\n")
 	}
 	b.WriteString("\n[enter] show  [esc] cancel")
-	return modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"
+	return modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 }

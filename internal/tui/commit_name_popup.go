@@ -13,6 +13,7 @@ import (
 // at the cursor; enter creates the shelf entry / bookmark with the name; esc
 // cancels. forShelf routes to the shelf vs bookmark create command.
 type commitNamePopup struct {
+	popupMax
 	commit   model.Commit
 	forShelf bool
 	name     textfield
@@ -56,6 +57,6 @@ func (p *commitNamePopup) render(m Model, below string) string {
 	b.WriteString(title + "\n\n")
 	b.WriteString(viewField("name: ", p.name, true, popupContentWidth(w)) + "\n\n")
 	b.WriteString("[ctrl+s] insert sha   [enter] " + verb + "   [esc] cancel")
-	box := modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"
+	box := modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 	return overlayCenter(clipToHeight(below, h), box, w, h)
 }

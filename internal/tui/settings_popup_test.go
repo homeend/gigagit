@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
 
+	"github.com/homeend/gigagit/internal/agentinit"
 	"github.com/homeend/gigagit/internal/agentskill"
 	"github.com/homeend/gigagit/internal/domain"
 )
@@ -287,5 +289,28 @@ func TestSettingsOpensHookEditor(t *testing.T) {
 	m, _ = sp.update(m, keyMsg("enter"))
 	if layerOf[*hookEditorPopup](m) == nil {
 		t.Fatal("Enter on hook entry should open the editor")
+	}
+}
+
+func TestSettingsPopupMaximizeWidensAndLiftsRowCap(t *testing.T) {
+	m := Model{}
+	m.width, m.height = 200, 50
+	var dets []agentinit.Detection
+	var checked []bool
+	for i := 0; i < 20; i++ { // more than the fixed cap of 12
+		dets = append(dets, agentinit.Detection{Agent: agentinit.Agent{ID: fmt.Sprintf("a%d", i), Label: fmt.Sprintf("Agent %d", i)}})
+		checked = append(checked, false)
+	}
+	p := &settingsPopup{picker: true, dets: dets, checked: checked}
+
+	normal := p.box(m)
+	p.maximized = true
+	maxed := p.box(m)
+
+	if lipgloss.Width(maxed) <= lipgloss.Width(normal) {
+		t.Fatalf("maximized width %d must exceed normal %d", lipgloss.Width(maxed), lipgloss.Width(normal))
+	}
+	if lipgloss.Height(maxed) <= lipgloss.Height(normal) {
+		t.Fatalf("maximized must show more rows: height %d vs %d", lipgloss.Height(maxed), lipgloss.Height(normal))
 	}
 }

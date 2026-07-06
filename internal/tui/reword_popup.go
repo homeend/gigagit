@@ -16,6 +16,7 @@ import (
 // and a single `git log -1` for an explicit popup-open is imperceptible), so
 // the body can never be dropped by a fast keystroke.
 type rewordPopup struct {
+	popupMax
 	commit string
 	ggBin  string
 	popup  commitPopup
@@ -93,5 +94,5 @@ func (p *rewordPopup) box(m Model) string {
 	b.WriteString("Reword commit " + shortHash(p.commit) + "\n\n")
 	b.WriteString(renderCommitFields(&p.popup, popupContentWidth(w)))
 	b.WriteString("\n[tab] switch field  [enter] newline/next  [ctrl+s] reword  [esc] cancel")
-	return modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"
+	return modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 }

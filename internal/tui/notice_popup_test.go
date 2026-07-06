@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -8,6 +9,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // noticeModelWithNotice returns a loaded model (real repo) carrying the
@@ -165,5 +167,25 @@ func TestDialogSwallowsGlobalKeys(t *testing.T) {
 	}
 	if len(m.layers.entries) != before || layerOf[*noticePopup](m) == nil {
 		t.Fatal("dialog must swallow global keys")
+	}
+}
+
+func TestNoticePopupMaximizeWidensAndLiftsRowCap(t *testing.T) {
+	m := Model{}
+	m.width, m.height = 200, 50
+	for i := 0; i < 20; i++ { // more than the fixed cap of 12
+		m.notices = append(m.notices, notice{id: fmt.Sprintf("n%d", i), title: fmt.Sprintf("notice %d", i)})
+	}
+	p := &noticePopup{}
+
+	normal := p.box(m)
+	p.maximized = true
+	maxed := p.box(m)
+
+	if lipgloss.Width(maxed) <= lipgloss.Width(normal) {
+		t.Fatalf("maximized width %d must exceed normal %d", lipgloss.Width(maxed), lipgloss.Width(normal))
+	}
+	if lipgloss.Height(maxed) <= lipgloss.Height(normal) {
+		t.Fatalf("maximized must show more rows: height %d vs %d", lipgloss.Height(maxed), lipgloss.Height(normal))
 	}
 }

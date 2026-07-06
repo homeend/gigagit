@@ -901,6 +901,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// special-cased: every layer (surfaces and popups) quits on it in its own
 		// update.
 		if l := m.topLayer(); l != nil {
+			// ctrl+t maximizes the top popup to a near-fullscreen box (the same
+			// key maximizes a panel), handled centrally so every maximizable
+			// popup behaves the same. ctrl+t never collides with typed text, so
+			// even text-entry popups maximize; full-screen surfaces don't
+			// implement the interface and fall through to their own update.
+			if mx, ok := l.(maximizableLayer); ok && msg.String() == "ctrl+t" {
+				mx.toggleMaximize()
+				return m, nil
+			}
 			return l.update(m, msg)
 		}
 		// Filter-input mode captures every key (the panel label shows the query).
@@ -1198,7 +1207,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 			return m, nil
-		case "T": // toggle fullscreen of the focused panel (left panel or Commits)
+		case "ctrl+t": // toggle fullscreen of the focused panel (left panel or Commits)
 			if m.canFullMaximize() {
 				if m.fullMaxed && m.fullMax == m.focus {
 					m.fullMaxed = false // back to whatever t-state sits underneath

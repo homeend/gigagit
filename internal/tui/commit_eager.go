@@ -96,6 +96,7 @@ func (m Model) eagerAdvance() (Model, tea.Cmd) {
 // its page cap with no match. enter on "Search N more" resumes with a fresh
 // budget; Cancel/esc stops the scan on the loaded set.
 type eagerPrompt struct {
+	popupMax
 	query   string
 	scanned int
 	sel     int // 0 = search more, 1 = cancel
@@ -130,7 +131,7 @@ func (p *eagerPrompt) render(m Model, below string) string {
 
 func (p *eagerPrompt) box(m Model) string {
 	w, _ := m.overlayDims()
-	inner := popupInnerWidth(w)
+	inner := popupResolveWidth(w, p.maximized, popupInnerWidth(w))
 	textW := popupTextWidth(inner)
 	parts := []string{
 		"Search deeper?",

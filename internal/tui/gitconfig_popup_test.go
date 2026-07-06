@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/homeend/gigagit/internal/model"
 )
@@ -172,5 +173,80 @@ func TestExplorerSwallowsGlobalKeys(t *testing.T) {
 	}
 	if len(m.layers.entries) != before || layerOf[*gitConfigPopup](m) == nil {
 		t.Fatal("explorer must swallow global keys")
+	}
+}
+
+func TestGitConfigPopupMaximizeWidens(t *testing.T) {
+	m := Model{}
+	m.width, m.height = 200, 50
+	p := &gitConfigPopup{}
+
+	normal := lipgloss.Width(p.box(m))
+	p.maximized = true
+	maxed := lipgloss.Width(p.box(m))
+	if maxed <= normal {
+		t.Fatalf("maximized width %d must exceed normal %d", maxed, normal)
+	}
+}
+
+func TestGitConfigPopupTKeyDoesNotMaximizeWhileFiltering(t *testing.T) {
+	m := Model{}
+	m.width, m.height = 200, 50
+	p := &gitConfigPopup{filtering: true}
+
+	p.update(m, runeKey("T"))
+	if p.maximized {
+		t.Fatal(`"T" while filtering must not maximize`)
+	}
+	if p.query != "T" {
+		t.Fatalf(`"T" while filtering must be a literal char; query=%q`, p.query)
+	}
+}
+
+// TestGitConfigPopupTKeyDoesNotMaximizeInEditMode covers the SECOND
+// text-capturing state in gitConfigPopup (besides the `/` filter): the
+// in-place value editor opened by `l`/`g` on a curated key. "user.name" (in
+// explorerRows) is a KindString curated key, so `g` opens a text-field
+// editor (edit.useField = true); typing "T" there must be captured by the
+// field, not consumed by handleMaxKey — the
+// `if p.edit != nil { return p.updateEdit(...) }` guard at the top of
+// update() must run before any maximize check.
+func TestGitConfigPopupTKeyDoesNotMaximizeInEditMode(t *testing.T) {
+	m, _ := settingsModel(t)
+	m = openExplorer(t, m)
+	p := layerOf[*gitConfigPopup](m)
+	for i, r := range p.visible() {
+		if r.Key == "user.name" {
+			p.sel = i
+		}
+	}
+
+	u, _ := m.Update(keyMsg("g"))
+	m = u.(Model)
+	if p.edit == nil || !p.edit.useField {
+		t.Fatal(`"g" on user.name must open a text-field editor`)
+	}
+
+	u, _ = m.Update(runeKey("T"))
+	m = u.(Model)
+	if p.maxed() {
+		t.Fatal(`"T" in edit mode must not maximize the popup`)
+	}
+	if p.edit == nil || !strings.Contains(p.edit.field.Value(), "T") {
+		t.Fatalf(`"T" in edit mode must be captured by the text field; field=%+v`, p.edit)
+	}
+}
+
+func TestGitConfigPopupMaximizeSurvivesRowReload(t *testing.T) {
+	m := Model{}
+	m.width, m.height = 200, 50
+	m = m.pushLayer(&gitConfigPopup{loading: true})
+	p := layerOf[*gitConfigPopup](m)
+	p.maximized = true
+
+	// A post-write row re-read lands on the same instance.
+	mm, _ := m.Update(gitConfigRowsMsg{gen: m.gitConfigGen, rows: nil})
+	if !layerOf[*gitConfigPopup](mm.(Model)).maxed() {
+		t.Fatal("maximized must survive a gitConfigRowsMsg reload")
 	}
 }

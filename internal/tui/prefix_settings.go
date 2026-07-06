@@ -13,6 +13,7 @@ import (
 // prefixSettingsView is the Settings sub-surface that manages branch prefixes
 // (browse + add/edit + delete, Global|Repo). Mirrors identityView's structure.
 type prefixSettingsView struct {
+	popupMax
 	loading bool
 	items   []model.Prefix
 	sel     int
@@ -174,8 +175,8 @@ func (v *prefixSettingsView) render(m Model, below string) string {
 }
 
 func (v *prefixSettingsView) box(m Model) string {
-	w, _ := m.overlayDims()
-	inner := popupWideInnerWidth(w)
+	w, termH := m.overlayDims()
+	inner := popupResolveWidth(w, v.maximized, popupWideInnerWidth(w))
 	textW := popupTextWidth(inner)
 
 	if v.mode == pfForm {
@@ -225,8 +226,9 @@ func (v *prefixSettingsView) box(m Model) string {
 			wr[i] = winRow{text: prefix + p.Value + "  " + tag, style: st}
 		}
 		h := len(v.items)
-		if h > 10 {
-			h = 10
+		capRows := popupResolveRowCap(v.maximized, termH, 10)
+		if h > capRows {
+			h = capRows
 		}
 		parts = append(parts, renderWindow(wr, winOpts{w: textW, h: h, anchor: v.sel})...)
 	}

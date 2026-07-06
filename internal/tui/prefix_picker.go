@@ -15,6 +15,7 @@ import (
 // labels) then hands the resolved string to onPick. resolve returns the
 // resolved string plus the prefix's <seq> names so the opener can bump them.
 type prefixPicker struct {
+	popupMax
 	items     []model.Prefix
 	rows      []string // display values, parallel to items
 	sel       int
@@ -166,8 +167,8 @@ func (p *prefixPicker) render(m Model, below string) string {
 }
 
 func (p *prefixPicker) box(m Model) string {
-	w, _ := m.overlayDims()
-	inner := popupWideInnerWidth(w)
+	w, termH := m.overlayDims()
+	inner := popupResolveWidth(w, p.maximized, popupWideInnerWidth(w))
 	textW := popupTextWidth(inner)
 
 	if p.fill != nil {
@@ -202,8 +203,9 @@ func (p *prefixPicker) box(m Model) string {
 			wr[n] = winRow{text: prefix + p.rows[i] + "  " + tag, style: st}
 		}
 		h := len(vis)
-		if h > 12 {
-			h = 12
+		capRows := popupResolveRowCap(p.maximized, termH, 12)
+		if h > capRows {
+			h = capRows
 		}
 		body = renderWindow(wr, winOpts{w: textW, h: h, anchor: p.sel})
 	}

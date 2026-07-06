@@ -21,6 +21,7 @@ import (
 // a scope editor (option picker or text field per the doc's Kind), u a
 // set-scopes-only unset chooser; non-curated rows stay read-only.
 type gitConfigPopup struct {
+	popupMax
 	rows      []model.GitConfigRow
 	loading   bool
 	query     string
@@ -109,6 +110,7 @@ func (p *gitConfigPopup) visible() []model.GitConfigRow {
 // query until esc/enter, and l/g/u open the in-place editor on curated rows.
 // While the editor is open ALL keys route to it (the filter `/` etc. are
 // inert).
+
 func (p *gitConfigPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
@@ -461,7 +463,7 @@ func gitConfigRowText(r model.GitConfigRow, keyW, localW, globalW, defaultW int)
 // open it shows the editor instead of the list.
 func (p *gitConfigPopup) box(m Model) string {
 	w, termH := m.overlayDims()
-	inner := popupWideInnerWidth(w)
+	inner := popupResolveWidth(w, p.maximized, popupWideInnerWidth(w))
 	textW := popupTextWidth(inner)
 
 	if p.edit != nil {
@@ -538,7 +540,7 @@ func (p *gitConfigPopup) box(m Model) string {
 		descLines = wrapWidth(descLine, textW, 3)
 	}
 
-	hint := []string{"[l] set local", "[g] set global", "[u] unset", "[/] filter", "[z] mode", "[esc] close"}
+	hint := []string{"[l] set local", "[g] set global", "[u] unset", "[/] filter", "[z] mode", "[ctrl+t] full", "[esc] close"}
 	parts := []string{title, "", header}
 	parts = append(parts, bodyLines...)
 	parts = append(parts, "")

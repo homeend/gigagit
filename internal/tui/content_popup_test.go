@@ -434,3 +434,44 @@ func TestContentPopupUsesWideBox(t *testing.T) {
 		t.Fatalf("80-char row must fit untruncated at 120 cols:\n%s", out)
 	}
 }
+
+func TestContentPopupMaximizeWidens(t *testing.T) {
+	m := Model{}
+	m.width, m.height = 200, 50
+	p := newContentPopup("Title", contentLines(4))
+
+	normal := lipgloss.Width(p.box(m))
+	p.maximized = true
+	maxed := lipgloss.Width(p.box(m))
+	if maxed <= normal {
+		t.Fatalf("maximized width %d must exceed normal %d", maxed, normal)
+	}
+}
+
+func TestContentPopupTKeyDoesNotMaximizeWhileTyping(t *testing.T) {
+	m := Model{}
+	m.width, m.height = 200, 50
+	p := newContentPopup("Title", contentLines(4))
+	p.typing = true // /-filter input mode
+
+	p.update(m, runeKey("T"))
+	if p.maximized {
+		t.Fatal(`"T" while typing must not maximize`)
+	}
+	if p.query != "T" {
+		t.Fatalf(`"T" while typing must be a literal char; query=%q`, p.query)
+	}
+}
+
+func TestContentPopupEscClosesWhileMaximized(t *testing.T) {
+	m := Model{}
+	m.width, m.height = 200, 50
+	p := newContentPopup("Title", contentLines(4))
+	m = m.pushLayer(p)
+	p.maximized = true
+
+	mm, _ := p.update(m, tea.KeyMsg{Type: tea.KeyEsc})
+	if mm.topLayer() != nil {
+		t.Fatal("esc must close the maximized popup outright (stack not popped)")
+	}
+}

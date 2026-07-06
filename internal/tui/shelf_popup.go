@@ -14,6 +14,7 @@ import (
 // shelfPopup is the centered shelf quick-switcher (G): a type-to-filter list of
 // the repo's shelved files. Mirrors bookmarkPopup.
 type shelfPopup struct {
+	popupMax
 	items     []model.ShelfEntry
 	rows      []string // e.Origin.Display(), parallel to items
 	sel       int
@@ -81,8 +82,8 @@ func (p *shelfPopup) render(m Model, below string) string {
 }
 
 func (m Model) renderShelfPopupBox(p *shelfPopup) string {
-	w, _ := m.overlayDims()
-	inner := popupWideInnerWidth(w)
+	w, termH := m.overlayDims()
+	inner := popupResolveWidth(w, p.maximized, popupWideInnerWidth(w))
 	textW := popupTextWidth(inner)
 
 	header := "Shelf"
@@ -113,9 +114,10 @@ func (m Model) renderShelfPopupBox(p *shelfPopup) string {
 			}
 			wr[n] = winRow{text: prefix + mark + " " + p.rows[i], style: st}
 		}
+		capRows := popupResolveRowCap(p.maximized, termH, 12)
 		h := len(vis)
-		if h > 12 {
-			h = 12
+		if h > capRows {
+			h = capRows
 		}
 		bodyLines = renderWindow(wr, winOpts{w: textW, h: h, mode: p.mode, anchor: p.sel, hscroll: p.hscroll})
 	}
@@ -125,7 +127,7 @@ func (m Model) renderShelfPopupBox(p *shelfPopup) string {
 	// Wrap the hint to the text width so [z] mode / [esc] close stay visible even
 	// on a narrow terminal, where a single-line footer would truncate them off
 	// (the reason z went undiscovered).
-	hint := []string{"[?] keys", "[enter] diff", "[e] editor", "[p] restore", "[t] temp dir", "[m] mark/compare", "[x] remove", "[c] vs bookmark", "[/] filter", "[z] mode", "[esc] close"}
+	hint := []string{"[?] keys", "[enter] diff", "[e] editor", "[p] restore", "[t] temp dir", "[m] mark/compare", "[x] remove", "[c] vs bookmark", "[/] filter", "[z] mode", "[ctrl+t] full", "[esc] close"}
 	parts = append(parts, "")
 	parts = append(parts, wrapParts(hint, textW, "  ")...)
 	return popupBox(inner, strings.Join(parts, "\n"))
@@ -144,6 +146,7 @@ func (p *shelfPopup) moveSel(d int) {
 
 // update handles one key while the shelf switcher is open (the overlay contract).
 // Navigation-first; `/` enters a filter sub-mode (mirrors bookmarkPopup).
+
 func (p *shelfPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit

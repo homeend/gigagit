@@ -11,6 +11,7 @@ import (
 
 // stashActionPopup is the Apply/Pop/Drop menu for one stash.
 type stashActionPopup struct {
+	popupMax
 	ref        string
 	subject    string
 	sel        int      // 0 Apply, 1 Pop, 2 Drop
@@ -88,7 +89,7 @@ func (a *stashActionPopup) render(m Model, below string) string {
 // box draws the stash-action popup box (modal box only).
 func (a *stashActionPopup) box(m Model) string {
 	w, _ := m.overlayDims()
-	inner := popupInnerWidth(w)
+	inner := popupResolveWidth(w, a.maximized, popupInnerWidth(w))
 	textW := popupTextWidth(inner)
 	var b strings.Builder
 	if a.confirming {

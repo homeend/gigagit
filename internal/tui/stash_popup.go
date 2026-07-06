@@ -19,6 +19,7 @@ type stashFileItem struct {
 // stashPopup is the create-stash dialog: a name field plus a checklist of the
 // working tree's unstaged/untracked files.
 type stashPopup struct {
+	popupMax
 	name  textfield
 	files []stashFileItem
 	field int // 0 = name, 1 = file list
@@ -148,5 +149,5 @@ func (p *stashPopup) box(m Model) string {
 		}
 	}
 	b.WriteString("\n[space] toggle  [tab] name/files  [ctrl+s] stash  [esc] cancel")
-	return modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"
+	return modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 }

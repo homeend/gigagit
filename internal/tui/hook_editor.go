@@ -12,6 +12,7 @@ import (
 // post_create_hook script (Settings → "Worktree post-create hook"). Enter
 // inserts a newline; Ctrl+S saves to the repo .gg.toml; Esc cancels.
 type hookEditorPopup struct {
+	popupMax
 	buf textfield
 }
 
@@ -63,10 +64,11 @@ func (p *hookEditorPopup) render(m Model, below string) string {
 }
 
 func (p *hookEditorPopup) box(m Model, w, h int) string {
-	boxW := w * 8 / 10
-	if boxW < 20 {
-		boxW = w
+	normalW := w * 8 / 10
+	if normalW < 20 {
+		normalW = w
 	}
+	boxW := popupResolveWidth(w, p.maximized, normalW)
 	// Size the scrollable script area so the WHOLE box fits within the terminal
 	// height — otherwise overlayCenter gets a negative top offset and clips the
 	// bottom help line off-screen. Chrome around the script: 5 content lines

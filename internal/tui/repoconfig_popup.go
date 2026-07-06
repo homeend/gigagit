@@ -68,6 +68,7 @@ func repoCfgEndpoints(act repoCfgAction, committed, private string) (src, dst st
 // repoConfigPopup lets the user copy/move the whole per-repo config between the
 // committed .gg.toml and the private user-dir file.
 type repoConfigPopup struct {
+	popupMax
 	committedPath string
 	privatePath   string
 	committedEx   bool
@@ -214,7 +215,7 @@ func slotDisplay(path string, exists bool) string {
 
 func (p *repoConfigPopup) box(m Model) string {
 	w, _ := m.overlayDims()
-	inner := popupWideInnerWidth(w) // paths are long
+	inner := popupResolveWidth(w, p.maximized, popupWideInnerWidth(w)) // paths are long
 	textW := popupTextWidth(inner)
 	var b strings.Builder
 	b.WriteString("Repo settings location\n\n")
