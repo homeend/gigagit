@@ -34,11 +34,16 @@ func (m Model) rememberToolApproval(command string) {
 // ("Run this command?  (Name)"), a piece of state this function has no way
 // to receive under the (command, width) signature, so the header and the
 // single popupBox wrap stay owned by each call site (conflict_process.go's
-// confToolApprove render); this keeps the conflict lane's rendered box
-// byte-identical to before the extraction. width is accepted for signature
-// symmetry with the brief and future callers that may want to wrap width-
-// aware content here; popupBox's own truncation already makes it unused
-// today — see task-5-report.md for the extraction-residue note.
+// confToolApprove render, and the commit-popup generate lane's approveBox
+// in commit_generate.go). The alternative — folding a generic header into
+// this function so it matched the (command, width) signature literally —
+// was rejected because it would have dropped the "(Name)" parenthetical and
+// changed the conflict lane's rendered box; keeping the header at each call
+// site keeps that box byte-identical to before the extraction. Consequence:
+// width is unused here today (popupBox's own truncation already makes any
+// internal wrapping redundant) — kept for signature symmetry and any future
+// header-aware variant a caller might need; if one ever does, add it as a
+// second small function rather than changing this one.
 func approvalBoxView(command string, width int) string {
 	_ = width
 	return command + "\n\n" +

@@ -50,7 +50,7 @@ panel and selected row right now; `?` opens the full searchable reference.
 | `u` | undo last commit (ref-only, soft reset) |
 | `w` | create a worktree **for the selected branch** (popup); `W` worktree on a **new** templated branch. Inside the popup: `w`/`enter` create, `W` create **and** switch, `e` edit the name, `p` pick a saved **branch prefix** (fills any `<user:…>` labels, then edit) |
 | `enter` | on the Branches panel: jump to the selected branch's **tip commit** in the Commits panel (deep-searching unloaded history if needed — the same machinery as `ctrl+f`); on the Worktrees panel: switch into the selected worktree; on the Files panel: full-screen side-by-side diff of the unstaged change (index → working tree); on the Staged panel: the staged diff (HEAD → index); on the files-view tree: diff of the file in the viewed commit. Inside the diff: `↑`/`↓` scroll, `pgup`/`pgdn` page, `n`/`p` (or `ctrl+↑`/`ctrl+↓`) jump between changes, `home`/`end` jump to the top/bottom of the file, then at the edge prime a step to the previous/next file in the list — a bottom-left cue appears and the next press moves to that file, announced by a bottom-left notice naming it (the tree or Status/Staged panel selection follows), `f` toggles full file ↔ changed-lines-only, `z` cycles the text display mode (scroll/wrap/truncate), `←`/`→`/`0` pan in scroll mode, `esc` closes. Changed lines highlight the exact words that differ; commit diffs are cached for instant re-open |
-| `ctrl+g` | on the Branches panel: **Solo this branch + go to its tip** — scopes the Commits feed to the branch (same toggle as the `.`-menu Solo: press again to un-solo) and lands the cursor on the tip once the reload finishes |
+| `ctrl+g` | on the Branches panel: **Solo this branch + go to its tip** — scopes the Commits feed to the branch (same toggle as the `.`-menu Solo: press again to un-solo) and lands the cursor on the tip once the reload finishes; in the **commit popup** (`c`/`C`): **generate a commit message** from the staged diff using a configured `commit_message` external agent (Settings → External tools), run headless — fills the title/description fields for you to review, nothing commits until `ctrl+s`. More than one tool configured shows a numbered chooser; an unapproved command shows a first-run approval (remembered per repo); existing title/description text asks before being replaced; `esc` cancels an in-flight run |
 | `z` | cycle the focused window's **text display mode** — cutoff (truncate, default) → wrap → scroll — for any list/tree/text window (panels, stash list, files tree, history, blame) and every list popup (repo switcher, help, conflict resolver, settings, pair-op, stash actions); `shift+←/→` pans horizontally in scroll mode |
 | `space` | on the **Files** panel: stage the selected working-tree file (`git add`); on the **Staged** panel: unstage it (`git restore --staged`); conflicted files are skipped; on the **Commits** panel: mark/unmark the selected commit for compare (same ◉ set as `m`, max 2) — marking the second commit opens the two-commit comparison immediately; `esc` clears all marks |
 | `H` | on the **Files** panel: open the region/line **staging picker** for the selected tracked file (the same surface as the conflict resolver) — `←`/`→` switch side (index ↔ working), `↑`/`↓` move the line cursor, `space` stages a line (result follows pick order), `c`/`i` take the whole hunk from index/working, `C`/`I` all hunks, `n`/`p` jump, `enter` applies (only the index changes — the working tree is untouched), `esc` cancels. Long lines are readable: `z` cycles the display mode (**scroll** default / wrap / cutoff) and `shift+←/→` pans in scroll mode; the picker scrolls vertically to keep the cursor in view |
@@ -430,6 +430,32 @@ Tokens for hand-written commands: `<repo>` `<file>` `<local>` `<base>`
 `<op>` `<source>` `<target>` `<conflicted-files>` `<user:LABEL>` (substituted
 literally — prefer `"$GG_*"`/`<context-file>` when a value might carry shell
 metacharacters).
+
+**Commit-message generation.** Press **`ctrl+g`** in the commit popup (`c`/`C`)
+to draft a message from the staged diff with a configured `commit_message`
+command — unlike conflict commands, these run **headless** (`mode =
+"capture"`, no terminal handover): the staged diff is written to two per-run
+files instead of a positional token — `$GG_CONTEXT_FILE` (a labeled summary:
+files changed, recent-commit style) and `$GG_STAGED_DIFF` (the full `git diff
+--cached`, truncated past a size cap with a note) — and the command's captured
+stdout is parsed into a subject + body pair that fills the popup's editable
+fields; nothing commits until you press `ctrl+s` yourself. The same chooser,
+first-run approval, and per-repo remembering as conflict commands apply; a
+confirm-replace prompt also guards against overwriting text already typed
+into the fields. Catalog defaults ship for Claude Code and Junie — Junie's is
+best-effort, since its `--output-format json` `.result` is a markdown report
+rather than a clean message, and the parser/editable fields absorb whatever
+comes back.
+
+```toml
+[[tools.command]]
+category = "commit_message"
+name     = "Claude"
+mode     = "capture"
+command  = '''claude -p "Write a git commit message for the staged changes. Read the summary at ${GG_CONTEXT_FILE} and the full diff at ${GG_STAGED_DIFF}. Output ONLY the commit message." \
+  --output-format json \
+  --allowedTools "Read" "Bash(git diff *)" "Bash(git log *)" "Bash(git show *)" "Bash(git status *)"'''
+```
 
 ### Environment
 

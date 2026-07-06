@@ -1,7 +1,8 @@
 // Package exttool is the hardcoded catalog of external tools/AI agents gg can
-// run per task category (conflict resolution now; commit-message and review in
-// later stages), plus their detection. Supporting a new tool is a code change
-// (one Builtins entry), never a runtime definition — the agentinit philosophy.
+// run per task category (conflict resolution and commit-message generation
+// now; review in a later stage), plus their detection. Supporting a new tool
+// is a code change (one Builtins entry), never a runtime definition — the
+// agentinit philosophy.
 // The catalog's command TEMPLATES never execute directly: the Settings wizard
 // materializes them as editable [[tools.command]] blocks in the gg config, and
 // only config content runs.
