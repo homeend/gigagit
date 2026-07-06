@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/homeend/gigagit/internal/clipboard"
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/model"
 )
@@ -39,6 +40,9 @@ type noticeAction struct {
 // noticeCommitGraph is the commit-graph recommendation's stable id.
 const noticeCommitGraph = "commit_graph_recommend"
 
+// noticeClipboard is the "install a clipboard tool" recommendation's stable id.
+const noticeClipboard = "clipboard_tool_missing"
+
 // bigRepoPackBytes is the pack-size floor for "big repo": below it the
 // commit-graph win doesn't matter enough to nag about.
 const bigRepoPackBytes = 100 << 20
@@ -51,19 +55,24 @@ var (
 )
 
 // repoHealthMsg carries one background health read; gen guards repo switches.
+// clipAvail rides along: it is an environment probe (not a git read), but it
+// is cheap and belongs to the same load event that rebuilds the notice list.
 type repoHealthMsg struct {
-	gen    int
-	health model.RepoHealth
-	err    error
+	gen       int
+	health    model.RepoHealth
+	clipAvail clipboard.Availability
+	err       error
 }
 
 // repoHealthCmd reads repo health off the UI thread (startup, reRoot, and
-// whenever Settings opens so its Commit-graph row shows fresh state).
+// whenever Settings opens so its Commit-graph row shows fresh state). It also
+// probes clipboard availability there so the PATH/socket lookups stay off the
+// UI thread and reflect a tool installed mid-session on the next load.
 func (m Model) repoHealthCmd(gen int) tea.Cmd {
 	svc := m.svc
 	return func() tea.Msg {
 		h, err := svc.RepoHealth(context.Background())
-		return repoHealthMsg{gen: gen, health: h, err: err}
+		return repoHealthMsg{gen: gen, health: h, clipAvail: clipboard.Probe(), err: err}
 	}
 }
 
@@ -103,6 +112,9 @@ func (m Model) applyRepoHealth(msg repoHealthMsg) (Model, tea.Cmd) {
 	}
 	var next []notice
 	if n := commitGraphNotice(msg.health); n != nil && !dismissed[n.id] && !m.noticeSessionDismissed[n.id] {
+		next = append(next, *n)
+	}
+	if n := clipboardNotice(msg.clipAvail, msg.health.GitCommonDir); n != nil && !dismissed[n.id] && !m.noticeSessionDismissed[n.id] {
 		next = append(next, *n)
 	}
 	m.notices = next
@@ -159,6 +171,50 @@ func (m Model) startCommitGraphWriteAndEnable() (Model, tea.Cmd) {
 	m.pendingNoticeConfig = &engine.SetGitConfig{Key: "fetch.writeCommitGraph", Value: "true"}
 	m.refreshHealthAfterOp = true
 	return m.startOp(engine.WriteCommitGraph{})
+}
+
+// clipboardNotice fires when a local display session (X11 or Wayland) is
+// present but no native clipboard tool is installed — the case where gg's copy
+// actions silently fall back to an OSC 52 escape that many terminals (and tmux
+// without extra config) do not honour. It is informational: gg cannot install
+// a package for the user (needs root, distro-specific), so the only actions are
+// the two dismissals. Installing the tool makes the notice self-clear on the
+// next load (Probe then reports Available), so it never nags after it is fixed.
+func clipboardNotice(av clipboard.Availability, repoKey string) *notice {
+	if av.Available || av.Install == "" {
+		return nil
+	}
+	detail := []string{
+		"gg's copy actions (commit SHAs, branch/tag names, diffs) can't reach",
+		"your system clipboard: a Linux terminal app needs a small helper program",
+		"and none is installed. gg is falling back to a terminal escape (OSC 52)",
+		"that many terminals — and tmux without extra config — don't honour, so a",
+		"copy can silently do nothing.",
+		"",
+		"Install one, then copy again — gg picks it up automatically, no restart:",
+		"",
+	}
+	detail = append(detail, clipboardInstallLines(av.Install)...)
+	return &notice{
+		id:      noticeClipboard,
+		repoKey: repoKey,
+		title:   "Clipboard copy may not work — install a clipboard tool",
+		detail:  detail,
+		actions: []noticeAction{
+			{label: "Not now (ask again next load)"},
+			{label: "Never for this repo", never: true},
+		},
+	}
+}
+
+// clipboardInstallLines renders per-distro install commands for the suggested
+// package (xclip for X11, wl-clipboard for Wayland).
+func clipboardInstallLines(pkg string) []string {
+	return []string{
+		"    Debian/Ubuntu:  sudo apt install " + pkg,
+		"    Fedora:         sudo dnf install " + pkg,
+		"    Arch:           sudo pacman -S " + pkg,
+	}
 }
 
 // removeNotice drops one notice from the session list.

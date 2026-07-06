@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"unicode/utf16"
@@ -16,42 +17,170 @@ import (
 // found and no tty was available for the OSC 52 fallback.
 var ErrUnavailable = errors.New("clipboard: no clipboard method available")
 
-// nativeArgv returns the argv for the platform's clipboard-copy command, or
-// ok=false when none is on PATH. It is pure: GOOS, the WSL signal, the
-// environment, and PATH lookup are all injected so the detection matrix is
-// unit-testable. The command reads the text to copy from its stdin.
+// nativeCopy describes how to run the platform's native clipboard command:
+// the argv plus any extra environment the subprocess needs (KEY=VALUE). env is
+// nil for every command except a wl-copy whose WAYLAND_DISPLAY had to be
+// recovered off-environment (see nativeCopyCmd's Wayland branch).
+type nativeCopy struct {
+	argv []string
+	env  []string
+}
+
+// nativeCopyCmd returns how to run the platform's clipboard-copy command, or
+// ok=false when none is usable. It is pure: GOOS, the WSL signal, the
+// environment, PATH lookup, and Wayland-display resolution are all injected so
+// the detection matrix is unit-testable. The command reads the text to copy
+// from its stdin.
 //
 // Ordering matters on Linux: under WSL, clip.exe wins over wl-copy/xclip even
 // when WSLg makes those present, because the Windows clipboard is the one the
 // user actually sees. Off WSL, Wayland's wl-copy is preferred when a Wayland
-// display is set, then the X11 tools.
-func nativeArgv(goos string, isWSL bool, env func(string) string, lookPath func(string) (string, error)) ([]string, bool) {
+// display is resolvable, then the X11 tools.
+//
+// wl-copy needs a WAYLAND_DISPLAY to connect. It is gated on `waylandDisplay`
+// resolving one rather than on `env("WAYLAND_DISPLAY") != ""`, because tmux
+// does NOT propagate WAYLAND_DISPLAY into its environment (it is not in tmux's
+// default update-environment set) — so inside tmux the var is empty even on a
+// live Wayland session. `waylandDisplay` recovers it by probing the runtime
+// dir; when it comes back off-environment we inject it so the wl-copy child
+// can connect. This mirrors detectWSL's reason for reading osrelease instead
+// of $WSL_DISTRO_NAME: the same tmux env-staleness, a different variable.
+func nativeCopyCmd(goos string, isWSL bool, env func(string) string, lookPath func(string) (string, error), waylandDisplay func() (string, bool)) (nativeCopy, bool) {
 	has := func(name string) bool { _, err := lookPath(name); return err == nil }
 
 	switch goos {
 	case "darwin":
 		if has("pbcopy") {
-			return []string{"pbcopy"}, true
+			return nativeCopy{argv: []string{"pbcopy"}}, true
 		}
 	case "windows":
 		if has("clip") {
-			return []string{"clip"}, true
+			return nativeCopy{argv: []string{"clip"}}, true
 		}
 	case "linux":
 		if isWSL && has("clip.exe") {
-			return []string{"clip.exe"}, true
+			return nativeCopy{argv: []string{"clip.exe"}}, true
 		}
-		if env("WAYLAND_DISPLAY") != "" && has("wl-copy") {
-			return []string{"wl-copy"}, true
+		if has("wl-copy") {
+			if disp, ok := waylandDisplay(); ok {
+				nc := nativeCopy{argv: []string{"wl-copy"}}
+				if env("WAYLAND_DISPLAY") == "" {
+					// Recovered off-env (tmux stripped it): the child needs it.
+					nc.env = []string{"WAYLAND_DISPLAY=" + disp}
+				}
+				return nc, true
+			}
 		}
 		if has("xclip") {
-			return []string{"xclip", "-selection", "clipboard"}, true
+			return nativeCopy{argv: []string{"xclip", "-selection", "clipboard"}}, true
 		}
 		if has("xsel") {
-			return []string{"xsel", "--clipboard", "--input"}, true
+			return nativeCopy{argv: []string{"xsel", "--clipboard", "--input"}}, true
 		}
 	}
-	return nil, false
+	return nativeCopy{}, false
+}
+
+// resolveWaylandDisplay returns the WAYLAND_DISPLAY to use for wl-copy. A value
+// already in the environment is used verbatim; otherwise (the tmux case) the
+// runtime dir is scanned for a live wayland-N socket and its absolute path is
+// returned, so the wl-copy child connects even without XDG_RUNTIME_DIR set.
+func resolveWaylandDisplay(env func(string) string) (string, bool) {
+	if d := env("WAYLAND_DISPLAY"); d != "" {
+		return d, true
+	}
+	runtimeDir := env("XDG_RUNTIME_DIR")
+	if runtimeDir == "" {
+		runtimeDir = fmt.Sprintf("/run/user/%d", os.Getuid())
+	}
+	return findWaylandSocket(runtimeDir)
+}
+
+// findWaylandSocket scans runtimeDir for a Wayland display socket (wayland-0,
+// wayland-1, …), skipping the sibling ".lock" regular file, and returns the
+// absolute path of the lowest-named one. Returning an absolute path (not a bare
+// name) means WAYLAND_DISPLAY works even if XDG_RUNTIME_DIR is absent from the
+// child's environment — libwayland treats an absolute WAYLAND_DISPLAY as-is.
+func findWaylandSocket(runtimeDir string) (string, bool) {
+	entries, err := os.ReadDir(runtimeDir)
+	if err != nil {
+		return "", false
+	}
+	best := ""
+	for _, e := range entries {
+		name := e.Name()
+		if !strings.HasPrefix(name, "wayland-") || strings.HasSuffix(name, ".lock") {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil || info.Mode()&os.ModeSocket == 0 {
+			continue
+		}
+		if best == "" || name < best {
+			best = name
+		}
+	}
+	if best == "" {
+		return "", false
+	}
+	return filepath.Join(runtimeDir, best), true
+}
+
+// Availability reports whether gg can put text on the system clipboard via a
+// native command, and — when it cannot — the local display session that was
+// detected and what to install for it. It backs the "install a clipboard tool"
+// notice: a CLI app cannot set the X11/Wayland clipboard from raw bytes, it
+// needs xclip/xsel or wl-copy; without one, gg is stuck on the OSC 52 terminal
+// escape, which many terminals (and tmux without extra config) do not honour.
+type Availability struct {
+	Available bool   // a native clipboard command is present and usable
+	Tool      string // the command gg will use, when Available (e.g. "xclip")
+	Session   string // detected local display: "wayland", "x11", or "" (headless/unknown)
+	Install   string // package to install when a present local display lacks its tool ("" = nothing to suggest)
+}
+
+// probe is the pure core of Probe: it resolves what Copy would do from injected
+// GOOS/WSL/env/PATH/Wayland deps. Install is set ONLY when a local display is
+// present but its native tool is missing — the unambiguous "there is a
+// clipboard right here and gg can't reach it" case. A headless/SSH session
+// (no local display) leaves Install empty: OSC 52 is the expected path there
+// and a "missing tool" nag would be a false positive.
+func probe(goos string, isWSL bool, env func(string) string, lookPath func(string) (string, error), waylandDisplay func() (string, bool)) Availability {
+	disp, wlOK := "", false
+	if goos == "linux" {
+		disp, wlOK = waylandDisplay()
+	}
+	memoWayland := func() (string, bool) { return disp, wlOK }
+
+	var av Availability
+	switch {
+	case wlOK:
+		av.Session = "wayland"
+	case goos == "linux" && env("DISPLAY") != "":
+		av.Session = "x11"
+	}
+
+	if nc, ok := nativeCopyCmd(goos, isWSL, env, lookPath, memoWayland); ok {
+		av.Available = true
+		av.Tool = nc.argv[0]
+		return av
+	}
+	switch av.Session {
+	case "wayland":
+		av.Install = "wl-clipboard"
+	case "x11":
+		av.Install = "xclip"
+	}
+	return av
+}
+
+// Probe reports whether gg has a native clipboard command and, if not, what to
+// install for the detected local display. It runs the same detection as Copy
+// (including the tmux-safe Wayland-socket recovery), so a notice built from it
+// matches what Copy will actually do.
+func Probe() Availability {
+	return probe(runtime.GOOS, detectWSL(), os.Getenv, exec.LookPath,
+		func() (string, bool) { return resolveWaylandDisplay(os.Getenv) })
 }
 
 // detectWSL reports whether we run under WSL. It reads the kernel osrelease
@@ -100,21 +229,27 @@ func clipboardStdin(cmdName, text string) []byte {
 	return buf
 }
 
-// runArgv pipes text to the stdin of argv[0] with argv[1:] as arguments. It is
-// a package var so tests can substitute a fake without spawning a process (and
-// without clobbering the developer's real clipboard).
-var runArgv = func(argv []string, text string) error {
+// runArgv pipes text to the stdin of argv[0] with argv[1:] as arguments,
+// adding extraEnv (KEY=VALUE) to the inherited environment when non-empty (a
+// recovered WAYLAND_DISPLAY for wl-copy). It is a package var so tests can
+// substitute a fake without spawning a process (and without clobbering the
+// developer's real clipboard).
+var runArgv = func(argv []string, extraEnv []string, text string) error {
 	cmd := exec.Command(argv[0], argv[1:]...)
 	cmd.Stdin = bytes.NewReader(clipboardStdin(argv[0], text))
+	if len(extraEnv) > 0 {
+		cmd.Env = append(os.Environ(), extraEnv...)
+	}
 	return cmd.Run()
 }
 
 // sysClipboard captures the resolved environment for a single copy so the
 // ordering logic can be exercised in tests without touching the real system.
 type sysClipboard struct {
-	argv      []string                     // native command argv; nil when none available
-	run       func([]string, string) error // executes the native command
-	preferOSC bool                         // try OSC 52 before native (SSH)
+	argv      []string                                 // native command argv; nil when none available
+	argvEnv   []string                                 // extra env for the native argv (recovered WAYLAND_DISPLAY); may be nil
+	run       func(argv, env []string, s string) error // executes the native command
+	preferOSC bool                                     // try OSC 52 before native (SSH)
 }
 
 // copy writes text to the clipboard, trying native and OSC 52 in the order set
@@ -125,7 +260,7 @@ func (c sysClipboard) copy(tty io.Writer, text string) (string, error) {
 		if c.argv == nil {
 			return "", false, nil
 		}
-		if err := c.run(c.argv, text); err != nil {
+		if err := c.run(c.argv, c.argvEnv, text); err != nil {
 			return "", false, fmt.Errorf("clipboard: %s: %w", c.argv[0], err)
 		}
 		return c.argv[0], true, nil
@@ -167,7 +302,8 @@ func (c sysClipboard) copy(tty io.Writer, text string) (string, error) {
 // nil when no terminal is available. It returns a short method label
 // ("clip.exe", "osc52", …) for status reporting.
 func Copy(tty io.Writer, text string) (string, error) {
-	argv, _ := nativeArgv(runtime.GOOS, detectWSL(), os.Getenv, exec.LookPath)
-	c := sysClipboard{argv: argv, run: runArgv, preferOSC: preferOSC52(os.Getenv)}
+	nc, _ := nativeCopyCmd(runtime.GOOS, detectWSL(), os.Getenv, exec.LookPath,
+		func() (string, bool) { return resolveWaylandDisplay(os.Getenv) })
+	c := sysClipboard{argv: nc.argv, argvEnv: nc.env, run: runArgv, preferOSC: preferOSC52(os.Getenv)}
 	return c.copy(tty, text)
 }

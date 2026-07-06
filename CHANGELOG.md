@@ -8,7 +8,25 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+### Added
+- **"Install a clipboard tool" notice.** The notification center (`!`) now
+  warns when a local X11/Wayland session is present but no clipboard helper is
+  installed — the case where copy actions fall back to an OSC 52 terminal
+  escape that many terminals (and tmux without extra config) don't honour, so
+  copies silently do nothing. The notice names the exact package to install
+  (`xclip` for X11, `wl-clipboard` for Wayland) with per-distro commands, and
+  self-clears on the next load once a tool is present. A headless/SSH session
+  (where OSC 52 is the expected path) never triggers it.
+
 ### Fixed
+- **Clipboard copy now works on a Wayland session inside tmux.** tmux does not
+  propagate `WAYLAND_DISPLAY` into its environment, so gg skipped `wl-copy`
+  (its `WAYLAND_DISPLAY`-gated Wayland tool) and fell back to an OSC 52 escape
+  that didn't reach the clipboard. gg now recovers the display by probing
+  `$XDG_RUNTIME_DIR` for the live `wayland-N` socket and runs `wl-copy` with it
+  injected — mirroring why WSL detection reads the kernel osrelease rather than
+  the tmux-stripped `$WSL_DISTRO_NAME`. (On an X11 session the fix is to install
+  `xclip`/`xsel`; the new notice above surfaces that.)
 - **`/`-filter navigation on the Commits panel is now O(1) per keypress at
   any feed size.** The filtered display index is memoized
   (`commitFilterMemo`) and rebuilt incrementally — typing narrows the cached
