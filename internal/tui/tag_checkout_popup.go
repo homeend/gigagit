@@ -10,6 +10,7 @@ import (
 
 // tagCheckoutPopup collects a new branch name to create at a tag and switch to.
 type tagCheckoutPopup struct {
+	popupMax
 	tag  string
 	name textfield
 }
@@ -47,5 +48,5 @@ func (p *tagCheckoutPopup) box(m Model) string {
 	w, _ := m.overlayDims()
 	b.WriteString(viewField("name: ", p.name, true, popupContentWidth(w)) + "\n\n")
 	b.WriteString("[type] name  [enter] checkout  [esc] cancel")
-	return modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"
+	return modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 }

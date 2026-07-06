@@ -36,6 +36,7 @@ type bookmarkPopup struct {
 // bookmarkPastePopup collects the (mandatory, no-default) paste destination,
 // carrying the already-resolved bytes so Enter just writes them.
 type bookmarkPastePopup struct {
+	popupMax
 	origin string
 	data   []byte
 	dest   textfield
@@ -517,7 +518,7 @@ func (p *bookmarkPastePopup) render(m Model, below string) string {
 	b.WriteString("from: " + p.origin + "  (resolved now)\n")
 	b.WriteString(viewField("dest: ", p.dest, true, popupContentWidth(w)) + "\n\n")
 	b.WriteString("[type] path  [enter] paste  [esc] cancel")
-	box := modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"
+	box := modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 	return overlayCenter(clipToHeight(below, h), box, w, h)
 }
 

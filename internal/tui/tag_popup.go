@@ -11,6 +11,7 @@ import (
 // tagPopup is the create-tag dialog at a commit. An empty message creates a
 // lightweight tag; a non-empty one an annotated tag. tab toggles the field.
 type tagPopup struct {
+	popupMax
 	commit  string // full SHA the tag points at
 	name    textfield
 	message textfield
@@ -62,5 +63,5 @@ func (p *tagPopup) box(m Model) string {
 	b.WriteString(viewField(msgMark+"message: ", p.message, p.onMsg, cw) + "\n")
 	b.WriteString(strings.Repeat(" ", 11) + "(empty message = lightweight tag)\n\n")
 	b.WriteString("[tab] field  [enter] create  [esc] cancel")
-	return modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"
+	return modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 }
