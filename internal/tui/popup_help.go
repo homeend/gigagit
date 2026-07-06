@@ -24,6 +24,7 @@ func bookmarkSwitcherHelp(compare bool) []contentLine {
 			cheatRow("enter", "compare the focused file against the highlighted bookmark"),
 			cheatRow("/", "filter the list (enter keeps, esc cancels)"),
 			cheatRow("z", "cycle text display: cutoff / wrap / scroll"),
+			cheatRow("T", "toggle fullscreen: wider box, more visible rows"),
 			cheatRow("esc", "cancel"),
 		}
 	}
@@ -38,6 +39,7 @@ func bookmarkSwitcherHelp(compare bool) []contentLine {
 		cheatRow("x", "remove the bookmark (confirms)"),
 		cheatRow("/", "filter the list (enter keeps, esc cancels)"),
 		cheatRow("z", "cycle text display: cutoff / wrap / scroll"),
+		cheatRow("T", "toggle fullscreen: wider box, more visible rows"),
 		cheatRow("esc", "close the switcher"),
 	}
 }
@@ -50,6 +52,7 @@ func shelfSwitcherHelp(compare bool) []contentLine {
 			cheatRow("enter", "compare the focused file against the highlighted entry"),
 			cheatRow("/", "filter the list (enter keeps, esc cancels)"),
 			cheatRow("z", "cycle text display: cutoff / wrap / scroll"),
+			cheatRow("T", "toggle fullscreen: wider box, more visible rows"),
 			cheatRow("esc", "cancel"),
 		}
 	}
@@ -64,6 +67,7 @@ func shelfSwitcherHelp(compare bool) []contentLine {
 		cheatRow("x", "remove from the shelf (confirms)"),
 		cheatRow("/", "filter the list (enter keeps, esc cancels)"),
 		cheatRow("z", "cycle text display: cutoff / wrap / scroll"),
+		cheatRow("T", "toggle fullscreen: wider box, more visible rows"),
 		cheatRow("esc", "close the switcher"),
 	}
 }
