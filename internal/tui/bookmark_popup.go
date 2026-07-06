@@ -19,6 +19,7 @@ import (
 // bookmarkPopup is the centered quick-switcher: a type-to-filter list of the
 // repo's bookmarks.
 type bookmarkPopup struct {
+	popupMax
 	items     []model.Bookmark
 	rows      []string // display strings, parallel to items
 	sel       int
@@ -100,8 +101,8 @@ func (p *bookmarkPopup) render(m Model, below string) string {
 }
 
 func (m Model) renderBookmarkPopupBox(p *bookmarkPopup) string {
-	w, _ := m.overlayDims()
-	inner := popupWideInnerWidth(w)
+	w, termH := m.overlayDims()
+	inner := popupResolveWidth(w, p.maximized, popupWideInnerWidth(w))
 	textW := popupTextWidth(inner)
 
 	header := "Bookmarks"
@@ -132,9 +133,13 @@ func (m Model) renderBookmarkPopupBox(p *bookmarkPopup) string {
 			}
 			wr[n] = winRow{text: prefix + mark + " " + p.rows[i], style: st}
 		}
+		capRows := 12
+		if p.maximized {
+			capRows = popupMaxRowCap(termH)
+		}
 		h := len(vis)
-		if h > 12 {
-			h = 12
+		if h > capRows {
+			h = capRows
 		}
 		bodyLines = renderWindow(wr, winOpts{w: textW, h: h, mode: p.mode, anchor: p.sel, hscroll: p.hscroll})
 	}
@@ -143,7 +148,7 @@ func (m Model) renderBookmarkPopupBox(p *bookmarkPopup) string {
 	parts = append(parts, bodyLines...)
 	// Wrap the hint so [z] mode / [esc] close survive on a narrow terminal,
 	// where a single-line footer would truncate them off (mirrors shelfPopup).
-	hint := []string{"[?] keys", "[enter] jump", "[e] editor", "[p] paste", "[t] temp dir", "[m] mark/compare", "[x] remove", "[c] vs shelf", "[/] filter", "[z] mode", "[esc] close"}
+	hint := []string{"[?] keys", "[enter] jump", "[e] editor", "[p] paste", "[t] temp dir", "[m] mark/compare", "[x] remove", "[c] vs shelf", "[/] filter", "[z] mode", "[T] full", "[esc] close"}
 	parts = append(parts, "")
 	parts = append(parts, wrapParts(hint, textW, "  ")...)
 	return popupBox(inner, strings.Join(parts, "\n"))
@@ -211,6 +216,9 @@ func (p *bookmarkPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			p.filter += string(msg.Runes)
 			p.sel = 0
 		}
+		return m, nil
+	}
+	if p.handleMaxKey(msg) { // "T" toggles fullscreen (nav mode only)
 		return m, nil
 	}
 	// Display-mode + pan keys take precedence over the navigation switch and

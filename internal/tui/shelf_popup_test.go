@@ -1,8 +1,11 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/homeend/gigagit/internal/model"
 )
@@ -169,5 +172,39 @@ func TestShelfEntryDisplayLabel(t *testing.T) {
 	}
 	if shelfEntryDisplay(plain) != plain.Origin.Display() {
 		t.Fatalf("unlabeled display should equal Origin.Display()")
+	}
+}
+
+func TestShelfPopupMaximizeWidensAndLiftsRowCap(t *testing.T) {
+	m := Model{}
+	m.width, m.height = 200, 50
+	p := &shelfPopup{}
+	for i := 0; i < 30; i++ { // more than the fixed cap of 12
+		p.items = append(p.items, model.ShelfEntry{})
+		p.rows = append(p.rows, fmt.Sprintf("some/long/origin/path/file%d", i))
+	}
+
+	normal := m.renderShelfPopupBox(p)
+	p.maximized = true
+	maxed := m.renderShelfPopupBox(p)
+
+	if lipgloss.Width(maxed) <= lipgloss.Width(normal) {
+		t.Fatalf("maximized width %d must exceed normal %d", lipgloss.Width(maxed), lipgloss.Width(normal))
+	}
+	if lipgloss.Height(maxed) <= lipgloss.Height(normal) {
+		t.Fatalf("maximized must show more rows: height %d vs %d", lipgloss.Height(maxed), lipgloss.Height(normal))
+	}
+}
+
+func TestShelfPopupTKeyDoesNotMaximizeWhileFiltering(t *testing.T) {
+	m := Model{}
+	m.width, m.height = 200, 50
+	p := &shelfPopup{filtering: true}
+	p.update(m, runeKey("T"))
+	if p.maximized {
+		t.Fatal(`"T" while filtering must not maximize`)
+	}
+	if p.filter != "T" {
+		t.Fatalf(`"T" while filtering must be a literal char; filter=%q`, p.filter)
 	}
 }
