@@ -17,6 +17,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   repo), now sub-millisecond.
 
 ### Added
+- **Fullscreen popups (`T`).** Capital `T` now toggles a content-heavy popup to
+  a near-fullscreen bordered box — the content viewer and `?` help, the
+  git-config explorer, the bookmark/shelf/repo switchers, and the fuzzy file
+  finder. Mirrors the panel `T`; `esc` still closes. `T` stays a literal
+  character while a filter or text field is active.
 - **External tools (stage 1: conflicts).** Run a configured agent or
   mergetool on a paused merge/rebase/cherry-pick/revert from the conflict
   window (`t`): repo-level agents (Claude Code, Junie) get a per-run temp
