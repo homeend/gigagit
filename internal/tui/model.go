@@ -2838,6 +2838,14 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 		m.genCancel()
 		m.genCancel = nil
 	}
+	// genGen is intentionally NOT bumped here (unlike pushCheckGen/noticeGen/
+	// gitConfigGen above): a commit popup can't be open across a repo switch
+	// today — while generating it swallows every key but esc, and reRoot's
+	// call sites (repo switcher, worktree switch, etc.) are all
+	// keyboard-gated, so no popup survives to receive a stale result. If a
+	// future refactor makes reRoot reachable while a commitPopup layer is
+	// open, this assumption must be revisited (genGen would need bumping too,
+	// mirroring genCancel's cancel-and-clear above).
 	m.resumePromptShown = false // the new repo's paused state (if any) prompts fresh
 	m.notices = nil
 	m.noticesUnread = false

@@ -3,6 +3,7 @@ package engine
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"runtime"
@@ -60,5 +61,11 @@ func (ShellCaptureRunner) Capture(ctx context.Context, spec CaptureSpec, onLine 
 
 	err = cmd.Run()
 	lw.flush()
+	// A clean exit whose pipes a detached grandchild held open past WaitDelay
+	// returns ErrWaitDelay even though stdout is fully captured; mirror
+	// gitexec.RunEnv's handling so a successful agent's output isn't discarded.
+	if errors.Is(err, exec.ErrWaitDelay) && cmd.ProcessState != nil && cmd.ProcessState.ExitCode() == 0 {
+		return out.Bytes(), nil
+	}
 	return out.Bytes(), err // err is *exec.ExitError on non-zero exit
 }
