@@ -2,8 +2,12 @@
 // OS clipboard command (clip.exe on WSL/Windows, pbcopy on macOS,
 // wl-copy/xclip/xsel on Linux) for local sessions and falls back to the OSC 52
 // terminal escape for remote/SSH sessions or when no native command exists.
-// The OSC 52 sequence builder is pure (no env, no I/O) so the bytes stay
-// unit-testable; it has no TUI or git dependencies.
+// On a Wayland session inside tmux — where tmux strips WAYLAND_DISPLAY — the
+// display is recovered by probing the runtime dir so wl-copy still works.
+// Probe reports whether a native command is available (and, when not, what to
+// install), backing the "install a clipboard tool" notice. The OSC 52 sequence
+// builder is pure (no env, no I/O) so the bytes stay unit-testable; it has no
+// TUI or git dependencies.
 package clipboard
 
 import (
