@@ -1,11 +1,15 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/exttool"
 )
 
 // commitPopup collects a commit message as a subject (title) plus an optional
@@ -17,6 +21,20 @@ type commitPopup struct {
 	desc  textfield
 	field int // 0 = title, 1 = description
 	amend bool
+
+	generating bool               // a ctrl+g generate run (commit_generate.go) is in flight
+	genGen     int                // generation guard: bumped on every dispatch AND every esc-cancel
+	genCmd     config.ToolCommand // the commit_message tool the last/current generate run used
+	spinFrame  int                // animated-spinner frame while generating (advanced by genSpinMsg)
+	genStart   time.Time          // when the current generate run began, for the elapsed counter
+
+	// Task 7 gates, run in order ahead of dispatch (see commit_generate.go's
+	// startGenerate). Each is a commitPopup sub-state (it owns keys while
+	// open, NOT a pushed layer) and is mutually exclusive with the others —
+	// at most one is non-empty/non-nil at a time.
+	choosing   []config.ToolCommand // >1 commit_message tool: numbered picker
+	approving  string               // first-run approval: the resolved command awaiting Run/Cancel
+	confirming string               // existing title/desc text: the resolved command awaiting Replace/Cancel
 }
 
 // message assembles the git commit message: subject alone, or subject + blank
@@ -33,11 +51,7 @@ func (p *commitPopup) message() string {
 // amend pre-fill: the first line is the subject, the rest (after blank lines)
 // the body.
 func splitMessage(msg string) (title, desc string) {
-	msg = strings.TrimRight(msg, "\n")
-	if i := strings.IndexByte(msg, '\n'); i >= 0 {
-		return msg[:i], strings.TrimLeft(msg[i+1:], "\n")
-	}
-	return msg, ""
+	return exttool.SplitMessage(msg)
 }
 
 // applyEditKey applies one key to the popup's title/description fields and
@@ -81,10 +95,35 @@ func (p *commitPopup) applyEditKey(msg tea.KeyMsg) (submit, cancel bool) {
 }
 
 // update handles one key while the commit popup is open. It swallows every key:
-// esc cancels, ctrl+c quits, ctrl+s commits.
+// esc cancels, ctrl+c quits, ctrl+s commits. ctrl+g (generate) is handled here,
+// NOT in applyEditKey — reword/irebase's reword sub-mode share applyEditKey and
+// have no staged index to generate a message from.
 func (p *commitPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
+	}
+	// ctrl+t (fullscreen) is handled centrally on the layer stack via popupMax
+	// (this popup embeds it), so it never reaches update — do NOT handle it here.
+	// Task 7 gates: each is a commitPopup sub-state that owns keys while
+	// open. Checked before generating/edit keys so a digit/y/esc typed here
+	// never falls through to field editing.
+	if p.choosing != nil {
+		return p.updateChoosing(m, msg)
+	}
+	if p.approving != "" {
+		return p.updateApproving(m, msg)
+	}
+	if p.confirming != "" {
+		return p.updateConfirming(m, msg)
+	}
+	if p.generating {
+		if msg.Type == tea.KeyEsc {
+			return m.escGenerate(p), nil
+		}
+		return m, nil // swallow every other key while a generate run is in flight
+	}
+	if msg.Type == tea.KeyCtrlG {
+		return m.startGenerate(p)
 	}
 	submit, cancel := p.applyEditKey(msg)
 	switch {
@@ -108,19 +147,95 @@ func (p *commitPopup) render(m Model, below string) string {
 	return overlayCenter(clipToHeight(below, h), p.box(m), w, h)
 }
 
-// box draws the two-field commit dialog (modal box only).
+// box draws the two-field commit dialog (modal box only). While a Task 7
+// gate is open, it takes over the whole box (a distinct sub-screen, like the
+// generate run itself) rather than being appended below the fields.
 func (p *commitPopup) box(m Model) string {
+	if p.choosing != nil {
+		return p.chooseBox(m)
+	}
+	if p.approving != "" {
+		return p.approveBox(m)
+	}
+	if p.confirming != "" {
+		return p.confirmBox(m)
+	}
 	var b strings.Builder
 	heading := "Commit"
 	if p.amend {
 		heading = "Amend last commit"
 	}
 	w, _ := m.overlayDims()
+	// Wider-than-standard default (commitNormalWidth); ctrl+t maximizes to
+	// popupFullInnerWidth via the shared popupMax mechanism (popupResolveWidth).
+	innerW := popupResolveWidth(w, p.maximized, commitNormalWidth(w))
+	contentW := innerW - modalStyle.GetHorizontalPadding()
+	if contentW < 1 {
+		contentW = 1
+	}
 	b.WriteString(heading + "\n\n")
-	b.WriteString(renderCommitFields(p, popupContentWidth(w)))
-	b.WriteString("\n[tab] switch field  [enter] newline/next  [ctrl+s] commit  [esc] cancel")
+	b.WriteString(renderCommitFields(p, contentW))
+	b.WriteString("\n")
+	if p.generating {
+		// While a run is in flight every key but esc is swallowed, so show an
+		// animated spinner + elapsed seconds (a clear "still working" signal)
+		// and the cancel hint, not the full (inert) key list.
+		frames := []rune("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
+		frame := frames[p.spinFrame%len(frames)]
+		elapsed := int(time.Since(p.genStart).Seconds())
+		b.WriteString(fmt.Sprintf("%c generating message… %ds  ([esc] to cancel)", frame, elapsed))
+	} else {
+		b.WriteString(packHints([]string{
+			"[tab] switch field",
+			"[enter] newline/next",
+			"[ctrl+g] generate",
+			"[ctrl+t] fullscreen",
+			"[ctrl+s] commit",
+			"[esc] cancel",
+		}, contentW))
+	}
 
-	return modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
+	return modalStyle.Width(innerW).Render(b.String()) + "\n"
+}
+
+// commitNormalWidth is the commit popup's NON-maximized inner width: wider than
+// the shared 56-column popup (so a generated message needs fewer wrapped lines),
+// capped for readability. ctrl+t maximizing is handled centrally via popupMax /
+// popupResolveWidth, which widens to popupFullInnerWidth.
+func commitNormalWidth(termW int) int {
+	iw := termW - 8
+	if iw > 96 {
+		iw = 96
+	}
+	if iw < 40 {
+		iw = 40
+	}
+	return iw
+}
+
+// packHints joins "[key] label" hint pairs into lines no wider than width,
+// breaking ONLY between pairs so a key is never split from its label by a
+// naive wrap (which reads as a dangling "[ctrl+g]" over "generate"). The pairs
+// are ASCII, so byte length is display width.
+func packHints(pairs []string, width int) string {
+	var b strings.Builder
+	line := 0
+	for i, p := range pairs {
+		switch {
+		case i == 0:
+			b.WriteString(p)
+			line = len(p)
+		case line+2+len(p) > width:
+			b.WriteString("\n")
+			b.WriteString(p)
+			line = len(p)
+		default:
+			b.WriteString("  ")
+			b.WriteString(p)
+			line += 2 + len(p)
+		}
+	}
+	return b.String()
 }
 
 // renderCommitFields draws the title/description fields with the focus cursor,

@@ -4,16 +4,18 @@ import (
 	"fmt"
 
 	"github.com/homeend/gigagit/internal/config"
+	"github.com/homeend/gigagit/internal/exttool"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/observ"
 	"github.com/homeend/gigagit/internal/template"
 )
 
 // toolCommands returns the runnable external-tool commands for a category:
-// structurally valid, token-valid, terminal-mode. An invalid or (stage 1)
-// capture-mode block is INERT — skipped with one session failure note per
-// block (never a startup error), so a config typo degrades a menu instead of
-// breaking the app.
+// structurally valid, token-valid, terminal-mode (or, for commit_message as
+// of stage 2, capture-mode — the ctrl+g generate mechanic). A capture-mode
+// block outside commit_message (review is stage 3) is still INERT — skipped
+// with one session failure note per block (never a startup error), so a
+// config typo degrades a menu instead of breaking the app.
 func (m Model) toolCommands(category string) []config.ToolCommand {
 	var out []config.ToolCommand
 	for _, tc := range m.cfg.Tools.Command {
@@ -32,12 +34,12 @@ func (m Model) toolCommands(category string) []config.ToolCommand {
 	return out
 }
 
-// toolUsable is the full stage-1 usability check for one block.
+// toolUsable is the full usability check for one block.
 func (m Model) toolUsable(tc config.ToolCommand) error {
 	if err := config.ValidateToolCommand(tc); err != nil {
 		return err
 	}
-	if tc.Mode == "capture" {
+	if tc.Mode == "capture" && tc.Category != string(exttool.CatCommitMessage) {
 		return fmt.Errorf("tools: %s: mode \"capture\" is not supported yet (terminal only)", tc.Name)
 	}
 	return template.ValidateCommandTokens(tc.Command, tc.PerFile)

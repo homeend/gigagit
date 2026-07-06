@@ -212,16 +212,6 @@ func TestOptInMarksExactlyTheYoloVariants(t *testing.T) {
 	}
 }
 
-func TestStage1CatalogIsConflictOnly(t *testing.T) {
-	for _, tl := range Builtins() {
-		for _, ct := range tl.Commands {
-			if ct.Category != CatConflict {
-				t.Errorf("stage 1 ships conflict templates only; found %s/%s", ct.Category, ct.Name)
-			}
-		}
-	}
-}
-
 func TestGenerateCommand(t *testing.T) {
 	ct := CommandTemplate{Command: "<bin> --auto-merge <local>"}
 	if got := GenerateCommand(ct, "meld"); got != "meld --auto-merge <local>" {
@@ -258,5 +248,49 @@ func TestGenerateCommandForEnvTokenNestsInDoubleQuotedPrompt(t *testing.T) {
 	want := `claude "Read the file at ${GG_CONTEXT_FILE} and summarize it."`
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+// TestBuiltinsCommitMessageTemplates pins the stage-2 commit_message catalog
+// rows (Claude, Junie): capture mode, no yolo variant, and the argv-order
+// contract that bit Stage 1 — the prompt is the first argument after <bin>
+// (here after `<bin> -p`), with Claude's variadic --allowedTools coming LAST.
+func TestBuiltinsCommitMessageTemplates(t *testing.T) {
+	var claude, junie *CommandTemplate
+	for _, tl := range Builtins() {
+		for i := range tl.Commands {
+			c := &tl.Commands[i]
+			if c.Category != CatCommitMessage {
+				continue
+			}
+			if c.Mode != ModeCapture {
+				t.Fatalf("%s: commit_message must be capture", c.Name)
+			}
+			if c.OptIn {
+				t.Fatalf("%s: no yolo for capture lane", c.Name)
+			}
+			switch tl.ID {
+			case "claude":
+				claude = c
+			case "junie":
+				junie = c
+			}
+		}
+	}
+	if claude == nil || junie == nil {
+		t.Fatal("want claude + junie commit_message templates")
+	}
+
+	// Prompt is the FIRST arg after <bin> (-p/--task); env tokens render per-OS.
+	gen := GenerateCommandFor(*claude, "claude", "linux")
+	if !strings.HasPrefix(gen, `claude -p "`) {
+		t.Fatalf("claude prompt not first: %q", gen)
+	}
+	if !strings.Contains(gen, "${GG_CONTEXT_FILE}") || !strings.Contains(gen, "${GG_STAGED_DIFF}") {
+		t.Fatalf("claude missing env refs: %q", gen)
+	}
+	// Variadic --allowedTools must come AFTER the prompt.
+	if strings.Index(gen, "--allowedTools") < strings.Index(gen, `"`) {
+		t.Fatal("allowedTools before prompt")
 	}
 }

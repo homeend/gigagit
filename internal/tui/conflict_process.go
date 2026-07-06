@@ -336,8 +336,7 @@ func (p *conflictProcess) buildToolRun(m Model, tc config.ToolCommand, inputs ma
 // (per repo, by template hash) runs immediately; otherwise the approval box
 // shows the exact resolved command first.
 func (p *conflictProcess) gateOrRun(m Model) (Model, tea.Cmd) {
-	hash := toolCommandHash(p.pending.tc.Command)
-	if m.promptStore != nil && m.promptStore.ApprovedToolCommands(m.toolRepoKey())[hash] {
+	if m.toolCommandApproved(p.pending.tc.Command) {
 		return p.runPending(m)
 	}
 	p.st = confToolApprove
@@ -360,9 +359,7 @@ func (p *conflictProcess) updateToolApprove(m Model, msg tea.KeyMsg) (Model, tea
 		p.st = confListing
 		return m, nil
 	case "enter":
-		if m.promptStore != nil {
-			_ = m.promptStore.ApproveToolCommand(m.toolRepoKey(), toolCommandHash(p.pending.tc.Command))
-		}
+		m.rememberToolApproval(p.pending.tc.Command)
 		return p.runPending(m)
 	}
 	return m, nil
@@ -490,12 +487,8 @@ func (p *conflictProcess) render(m Model, below string) string {
 		b.WriteString("\n[tab/enter] next  [esc] cancel")
 		return overlayCenter(bg, popupBox(popupInnerWidth(w), b.String()), w, h)
 	case confToolApprove:
-		var b strings.Builder
-		b.WriteString("Run this command?  (" + p.pending.tc.Name + ")\n\n")
-		b.WriteString(p.pending.resolved + "\n\n")
-		b.WriteString("Approval is remembered for this repo until the command text changes.\n")
-		b.WriteString("[enter] run  [esc] cancel")
-		return overlayCenter(bg, popupBox(popupInnerWidth(w), b.String()), w, h)
+		header := "Run this command?  (" + p.pending.tc.Name + ")\n\n"
+		return overlayCenter(bg, popupBox(popupInnerWidth(w), header+approvalBoxView(p.pending.resolved, w)), w, h)
 	case confToolMark:
 		msg := "The tool changed " + p.pending.file + ".\n\nMark it as resolved (git add)?\n\n[y/enter] mark resolved  [n/esc] not now"
 		return overlayCenter(bg, popupBox(popupInnerWidth(w), msg), w, h)

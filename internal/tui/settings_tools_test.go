@@ -109,13 +109,24 @@ func TestApplyToolsWizardWritesMissingOnly(t *testing.T) {
 	if len(cfg.Tools.Command) != wantWritten {
 		t.Errorf("config has %d commands, want %d", len(cfg.Tools.Command), wantWritten)
 	}
+	sawCommitMsg := false
 	for _, tc := range cfg.Tools.Command {
-		if tc.Name == "Claude" {
-			t.Error("existing Claude block must be skipped, not rewritten")
+		// The skip is keyed on (category, name): the pre-existing
+		// (conflict, Claude) must not be rewritten, but a (commit_message,
+		// Claude) block is a different key and is legitimately written.
+		if tc.Category == "conflict" && tc.Name == "Claude" {
+			t.Error("existing (conflict, Claude) block must be skipped, not rewritten")
 		}
-		if tc.Command == "" || tc.Category != "conflict" {
+		if tc.Command == "" || (tc.Category != "conflict" && tc.Category != "commit_message") {
 			t.Errorf("generated block malformed: %+v", tc)
 		}
+		if tc.Category == "commit_message" {
+			sawCommitMsg = true
+		}
+	}
+	// Stage 2: the wizard also writes commit_message rows for detected tools.
+	if !sawCommitMsg {
+		t.Error("wizard should write commit_message blocks (stage 2)")
 	}
 	// The in-memory config was reloaded onto the model.
 	if len(m2.cfg.Tools.Command) != wantWritten {

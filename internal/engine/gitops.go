@@ -45,8 +45,12 @@ type GitOps interface {
 	LastCommitMessage(ctx context.Context) (string, error)
 	CommitMessage(ctx context.Context, rev string) (string, error)
 	CommitLine(ctx context.Context, rev string) (model.LogLine, error)
+	LogLines(ctx context.Context, rev string, n int) ([]model.LogLine, error)
 	RevParse(ctx context.Context, rev string) (string, error)
 	ResetSoft(ctx context.Context, ref string) error
+
+	DiffPatch(ctx context.Context, spec model.DiffSpec) (string, error)
+	DiffNumstat(ctx context.Context, spec model.DiffSpec) (string, error)
 
 	StashList(ctx context.Context) ([]string, error)
 	StashPush(ctx context.Context, message string, paths []string, includeUntracked bool) error

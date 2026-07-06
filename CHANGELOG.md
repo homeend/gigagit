@@ -17,6 +17,24 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   repo), now sub-millisecond.
 
 ### Added
+- **External tools (stage 2: AI-generated commit messages).** `ctrl+g` in the
+  commit popup (`c`/`C`) drafts a commit message from the staged diff using a
+  configured `commit_message` agent, run **headless** (no terminal handover):
+  the staged diff is written to two per-run context files — a labeled
+  summary (`$GG_CONTEXT_FILE`: files changed, recent-commit style) and the
+  full `git diff --cached` (`$GG_STAGED_DIFF`, truncated past a size cap with
+  a note) — the agent's captured stdout is parsed into a subject + body pair
+  (format-agnostic: plain text, Claude's `--output-format json` `.result`, or
+  its `--json-schema` envelope), and the result fills the popup's editable
+  title/description fields. Nothing commits automatically — review and
+  `ctrl+s` as usual. The same gates as the conflict lane apply: a numbered
+  chooser when more than one `commit_message` tool is configured, first-run
+  approval of the resolved command (remembered per repo until the config
+  text changes), and a confirm-replace prompt when the fields already hold
+  text; `esc` cancels an in-flight run. Catalog defaults ship for Claude Code
+  and Junie (`mode = "capture"`); Junie's output is best-effort — its
+  `--output-format json` `.result` is a markdown report, not a clean
+  message, and the parser and editable fields absorb whatever comes back.
 - **Fullscreen popups (`ctrl+t`).** `ctrl+t` now toggles ANY popup to a
   near-fullscreen bordered box — every switcher, picker, list, viewer, table,
   wizard, editor, and prompt — via one central handler on the popup layer

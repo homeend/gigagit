@@ -70,6 +70,49 @@ func TestViewFieldEmptyFocusedShowsCursor(t *testing.T) {
 	}
 }
 
+func TestViewFieldWrapsLongLineAligned(t *testing.T) {
+	asciiProfile(t)
+	// A single logical line longer than the field width must WRAP into multiple
+	// display lines, each starting in the same column as the first (the Junie
+	// bug: the wrapped tail landed at column 0 under the label).
+	f := newTextField("abcdefghij")      // 10 runes
+	out := viewField("d: ", f, false, 9) // prefix width 3 → field width 6
+	lines := strings.Split(out, "\n")
+	if len(lines) != 2 {
+		t.Fatalf("want 2 wrapped lines, got %d: %q", len(lines), out)
+	}
+	if lines[0] != "d: abcdef" {
+		t.Fatalf("line0 = %q, want %q", lines[0], "d: abcdef")
+	}
+	col0 := strings.Index(lines[0], "abcdef")
+	col1 := strings.Index(lines[1], "ghij")
+	if col0 != col1 {
+		t.Fatalf("wrap continuation misaligned: first=%d cont=%d (%q/%q)", col0, col1, lines[0], lines[1])
+	}
+	for i, l := range lines { // every display line is exactly contentWidth (9)
+		if lipgloss.Width(l) != 9 {
+			t.Fatalf("line %d width = %d, want 9: %q", i, lipgloss.Width(l), l)
+		}
+	}
+}
+
+func TestStyledLinesCursorFollowsWrap(t *testing.T) {
+	forceColor(t)
+	f := newTextField("abcdefgh") // 8 runes
+	f.cursor = 7                  // the 'h' — in the SECOND width-4 chunk
+	foc := f.styledLines(true, 4)
+	unf := f.styledLines(false, 4)
+	if len(foc) != 2 || len(unf) != 2 {
+		t.Fatalf("want 2 chunks each: foc=%d unf=%d", len(foc), len(unf))
+	}
+	if foc[0] != unf[0] {
+		t.Fatalf("cursor must not render on the first chunk")
+	}
+	if foc[1] == unf[1] {
+		t.Fatal("cursor must render on the second (wrapped) chunk, but it is identical to unfocused")
+	}
+}
+
 func TestCommitPopupDescriptionColumnsAlign(t *testing.T) {
 	asciiProfile(t)
 	p := &commitPopup{amend: true}
