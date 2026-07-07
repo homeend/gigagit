@@ -171,6 +171,32 @@ type repoPathPopup struct {
     false`, keep open.
   - success → unwind popup + palette, `return m.reRoot(msg.top)`.
 
+  This requires a **new `case repoResolvedMsg:` arm in `Model.Update`'s message
+  type-switch**, mirroring the `gotoCommitResolvedMsg` arm (`model.go:431`):
+
+  ```go
+  case repoResolvedMsg:
+      p := layerOf[*repoPathPopup](m)
+      if p == nil || p != m.topLayer() || strings.TrimSpace(p.input.Value()) != msg.path {
+          return m, nil // layer closed, or the field was edited since dispatch
+      }
+      return m.resolvedRepoPath(p, msg)
+  ```
+
+  `~` expansion uses `os.UserHomeDir()` — **not** `$HOME` (unset on Windows; this
+  repo is cross-platform).
+
+### Key routing / message dispatch (no wiring for popup keys)
+
+Key input reaches the top layer polymorphically — `Model.Update` calls
+`l.update(m, msg)` on `m.topLayer()` (`model.go:919`). Both new popups satisfy the
+`layer` interface via their own `update`/`render`, so **no key-routing arm is
+needed** for them. `ctrl+t` maximize is also handled centrally (the
+`maximizableLayer` branch at `model.go:915`), so embedding `popupMax` is all
+that's required to get it. The **only** dispatch wiring is the async
+`repoResolvedMsg` message arm above (message dispatch *is* a type switch;
+`filePathPopup` has no async message, so it needs none).
+
 `reRoot` blanks to a loading state and reloads; its load path calls
 `repos.Touch(statePath, CurrentWorktree, now)`, so the newly opened repo is
 recorded in the MRU registry and appears in the `R` switcher next session. No
@@ -204,10 +230,22 @@ In `internal/tui/settings_popup.go`:
   slice.
 - Remove their two `case` arms in the `enter` handler
   (`case settingsMenuGitConfig:` / `case settingsMenuAgents:`).
-- Keep the `settingsMenu*` string consts and the `openGitConfigExplorer` /
-  `openAgentPicker` methods (now called only from the palette). If a const
-  becomes entirely unused after removal, delete it too (go vet / unused-const
-  check will tell us).
+- Keep the `openGitConfigExplorer` / `openAgentPicker` methods (now called only
+  from the palette).
+- **Delete the `settingsMenuGitConfig` and `settingsMenuAgents` consts.** Unused
+  *package-level* consts do **not** trip `go vet` or the compiler (only unused
+  locals/imports do), so leaving them would silently linger. After removing the
+  slice entries + cases, their only remaining references are in tests (below), so
+  delete the consts and update those tests. The palette's labels are plain string
+  literals in `paletteCommands()` ("Git config explorer", "Set up agent skills"),
+  not shared with the deleted consts.
+- **Tests that break and must be updated:**
+  - `gitconfig_popup_test.go:33` references `settingsMenuGitConfig` (asserts it is
+    in the settings menu). Repoint it: assert the entry is now a *palette* command
+    and no longer in `settingsMenu`.
+  - `settings_popup_test.go:50` asserts the first (selected, `menuSel 0`) menu row
+    is "Set up agent skills". With agents removed, the first row becomes
+    `settingsMenuTools` ("External tools") — update the assertion.
 
 The two surfaces are unchanged; they simply no longer appear under `,`.
 
@@ -257,6 +295,21 @@ tests need a real repo).
 - `internal/tui/settings_popup.go` — remove the two moved rows + their cases.
 - Tests: `command_palette_test.go`, new `file_path_popup_test.go`,
   `repo_path_popup_test.go`, `settings_popup_test.go` (menu assertion).
+
+## Execution notes (worktree isolation)
+
+All work lands in the worktree at
+`/mnt/t/others/gigagit/.claude/worktrees/palette-commands` (branch
+`feat/palette-commands`), **not** the main checkout. Edits/Writes using an
+absolute path ignore the worktree, and subagents start in the main checkout — a
+failure mode that bit the review-human-labels work earlier today. Therefore:
+
+- Use the **worktree absolute path** for every Write/Edit.
+- Any subagent must `cd` into the worktree and verify `git branch --show-current`
+  == `feat/palette-commands` before touching files.
+- Before each commit, confirm the diff actually landed in the worktree (`git -C
+  <worktree> status`), not in main.
+- Build/test from inside the worktree: `go build -o ./gg ./cmd/gg`, `./test.sh`.
 
 ## Out of scope / non-goals
 
