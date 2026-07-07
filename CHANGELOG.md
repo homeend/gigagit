@@ -19,6 +19,25 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   (where OSC 52 is the expected path) never triggers it.
 
 ### Fixed
+- **The branch pair-op popup opens full-size when a branch name is too long to
+  fit.** Marking one branch and picking merge/rebase/interactive-rebase against
+  another opens a picker whose rows spell out *both* branch names
+  (`Merge <a> into <b>`) — the essential content. It was capped at the default
+  popup width, so long names truncated to `Merge fix/… into feat/…`. The popup
+  now opens maximized whenever its rows would be clipped at the default width,
+  showing the full names; `ctrl+t` still toggles it and `z` still cycles
+  wrap/scroll. (Groundwork — `autoMaxForContent` — for extending the same
+  "open full-size when content is clipped" default to other maximizable popups.)
+- **Decision/confirm popups no longer clip long text.** Every confirm and
+  decision dialog (merge/rebase/pull/switch/checkout confirms, the SmartPull
+  worktree fork, delete-branch/tag prompts, "export path exists", the
+  post-create-hook approval, …) renders through one modal. It was the only
+  popup with no width bound, so a long branch name — the essential thing you
+  need to read to know what you're confirming — made the box wider than the
+  terminal and the terminal clipped the edges. The modal now wraps its prompt
+  and options to the terminal width (hard-wrapping a single unbreakable token so
+  even a space-free name stays visible); short dialogs are unchanged. Reported
+  when merging a branch with a very long, multi-author name into `main`.
 - **Clipboard copy now works on a Wayland session inside tmux.** tmux does not
   propagate `WAYLAND_DISPLAY` into its environment, so gg skipped `wl-copy`
   (its `WAYLAND_DISPLAY`-gated Wayland tool) and fell back to an OSC 52 escape
