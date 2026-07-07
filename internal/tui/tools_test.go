@@ -47,16 +47,18 @@ func TestToolCommandsCommitMessageCaptureLive(t *testing.T) {
 	}
 }
 
-func TestToolCommandsReviewCaptureStillInert(t *testing.T) {
+func TestToolCommandsReviewCaptureLive(t *testing.T) {
+	// Stage 3 un-inerts review capture: a valid review capture block is now a
+	// live command (backing the . -menu review lanes), not noted.
 	m := toolCfg(
 		config.ToolCommand{Category: "review", Name: "Claude", Mode: "capture", Command: "claude -p <op>"},
 	)
 	got := m.toolCommands("review")
-	if len(got) != 0 {
-		t.Fatalf("toolCommands(review) = %+v, want capture still inert (stage 3)", got)
+	if len(got) != 1 || got[0].Name != "Claude" {
+		t.Fatalf("toolCommands(review) = %+v, want the capture command live", got)
 	}
-	if len(m.toolNoted) != 1 {
-		t.Errorf("the inert review capture block must be noted once: %v", m.toolNoted)
+	if len(m.toolNoted) != 0 {
+		t.Errorf("a valid review capture block must not be noted: %v", m.toolNoted)
 	}
 }
 

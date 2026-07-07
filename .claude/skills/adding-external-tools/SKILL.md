@@ -27,8 +27,10 @@ no TUI/config code changes are needed for a standard addition.
    - `ExtraProbes` — absolute install paths for off-PATH platforms (Meld on
      Windows: `C:\Program Files\Meld\Meld.exe`); a probe hit puts the
      absolute path into the command (auto-quoted if it has spaces).
-   - `Commands` — one `CommandTemplate` per category entry (stage 1:
-     `CatConflict` only).
+   - `Commands` — one `CommandTemplate` per category entry (shipped
+     categories so far: `CatConflict` — stage 1; `CatCommitMessage` and
+     `CatReview` — both headless `mode = "capture"`, stage 2 and stage 3
+     respectively).
 
 3. **Command template rules** (all enforced by tests — see §4):
    - Start from `<bin>` (replaced at generation).

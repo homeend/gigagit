@@ -1,0 +1,25 @@
+name = "gg review <range> --tool prints and persists a fake AI review report"
+
+[input]
+steps = [
+  { write = ".gg.toml", content = '''
+[[tools.command]]
+category = "review"
+name = "Echo"
+mode = "capture"
+command = 'printf "FAKE REVIEW of <range>\n"'
+''' },
+  { write = "a.txt", content = "v1\n" },
+  { commit = "initial" },
+  { write = "a.txt", content = "v2\n" },
+  { commit = "second" },
+]
+
+[[run]]
+cmd = ["review", "--tool", "Echo", "HEAD~1..HEAD"]
+exit = 0
+stdout_contains = ["FAKE REVIEW of HEAD~1..HEAD"]
+
+[expect]
+branch = "main"
+clean = true

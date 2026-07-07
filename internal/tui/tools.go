@@ -11,9 +11,9 @@ import (
 )
 
 // toolCommands returns the runnable external-tool commands for a category:
-// structurally valid, token-valid, terminal-mode (or, for commit_message as
-// of stage 2, capture-mode — the ctrl+g generate mechanic). A capture-mode
-// block outside commit_message (review is stage 3) is still INERT — skipped
+// structurally valid, token-valid, terminal-mode (or, for commit_message and
+// review, capture-mode — the ctrl+g generate and the . -menu review lanes). A
+// capture-mode block outside those two categories is still INERT — skipped
 // with one session failure note per block (never a startup error), so a
 // config typo degrades a menu instead of breaking the app.
 func (m Model) toolCommands(category string) []config.ToolCommand {
@@ -39,8 +39,8 @@ func (m Model) toolUsable(tc config.ToolCommand) error {
 	if err := config.ValidateToolCommand(tc); err != nil {
 		return err
 	}
-	if tc.Mode == "capture" && tc.Category != string(exttool.CatCommitMessage) {
-		return fmt.Errorf("tools: %s: mode \"capture\" is not supported yet (terminal only)", tc.Name)
+	if tc.Mode == "capture" && tc.Category != string(exttool.CatCommitMessage) && tc.Category != string(exttool.CatReview) {
+		return fmt.Errorf("tools: %s: mode \"capture\" is not supported for category %q", tc.Name, tc.Category)
 	}
 	return template.ValidateCommandTokens(tc.Command, tc.PerFile)
 }

@@ -33,7 +33,7 @@ type maximizableLayer interface {
 // from the surfaces beneath it. Keep in sync when adding a full-screen surface.
 func isFullScreenLayer(l layer) bool {
 	switch l.(type) {
-	case *historyView, *blameView, *irebaseEditor, *hunkPicker, *diffView:
+	case *historyView, *blameView, *irebaseEditor, *hunkPicker, *diffView, *reviewView:
 		return true
 	}
 	return false

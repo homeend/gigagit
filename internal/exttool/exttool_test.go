@@ -309,3 +309,38 @@ func TestBuiltinsCommitMessageTemplates(t *testing.T) {
 		t.Fatalf("junie missing input env refs: %q", gj)
 	}
 }
+
+func TestBuiltinsReviewTemplates(t *testing.T) {
+	var claude, junie *CommandTemplate
+	for _, tl := range Builtins() {
+		for i := range tl.Commands {
+			c := &tl.Commands[i]
+			if c.Category != CatReview {
+				continue
+			}
+			if c.Mode != ModeCapture {
+				t.Fatalf("%s: review must be capture (verified 2026-07-07)", c.Name)
+			}
+			switch tl.ID {
+			case "claude":
+				claude = c
+			case "junie":
+				junie = c
+			}
+		}
+	}
+	if claude == nil || junie == nil {
+		t.Fatal("want claude + junie review templates")
+	}
+	gc := GenerateCommandFor(*claude, "claude", "linux")
+	if !strings.Contains(gc, "/code-review <range>") {
+		t.Fatalf("claude review must run /code-review over <range>: %q", gc)
+	}
+	gj := GenerateCommandFor(*junie, "junie", "linux")
+	if !strings.Contains(gj, "${GG_MESSAGE_FILE}") || !strings.Contains(gj, "${GG_REVIEW_DIFF}") {
+		t.Fatalf("junie review must write GG_MESSAGE_FILE and read GG_REVIEW_DIFF: %q", gj)
+	}
+	if !strings.HasPrefix(gj, `junie --task "`) {
+		t.Fatalf("junie prompt must be first after --task: %q", gj)
+	}
+}

@@ -9,6 +9,37 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **External tools (stage 3: AI review).** Three `.`-menu entries run a
+  configured `review` agent headless and open its report in a new full-screen
+  viewer: Commits panel **"Review this commit"** (the focused commit's own
+  change, `<sha>^..<sha>`; a root commit reviews just itself), Branches panel
+  **"Review branch `<name>`"** (range `<base>..<tip>`, base = merge-base with
+  `main`, falling back to the branch's `@{upstream}`, then the tip's own
+  change when neither exists), and Files panel **"Review working changes"**.
+  Runs share the stage-2 capture-lane machinery: a numbered chooser when more
+  than one `review` command is configured, first-run approval of the resolved
+  command (remembered per repo), and an animated spinner while the agent
+  works; a failed or empty run surfaces the error in the status line instead
+  of opening an empty viewer. The report viewer is read-only and scrollable
+  (`↑↓`/`pgup`/`pgdn`/`home`/`end`), supports `/` search, **`e`** opens the
+  same report file in `$EDITOR`, and `esc` closes. Every report is also
+  written durably to `<state>/gg/reviews/<repo-key>/<YYYYMMDD-HHMM>-<range>.md`
+  so it survives past the session — reports accumulate; there's no
+  history-browser UI yet, but the files are on disk and reopenable. A new
+  scriptable **`gg review [--tool <name>] [--working] [<rev>|<A..B>]`** CLI
+  verb runs the same pipeline non-interactively: it prints the report to
+  stdout and persists it to the same path. Flags must precede the positional
+  (like `gg log -n`); a single-commit positional reviews that commit's own
+  change, an `A..B` positional reviews the range, `--working` reviews
+  uncommitted changes, and no positional reviews the current branch's work
+  (the same base-resolution as the Branches-panel entry). Exits 0 on a
+  produced report, 1 on tool failure/empty report/no configured review tool,
+  2 on a usage error; drivable under `gg batch`. Catalog defaults ship for
+  Claude Code (`/code-review <range>`, verified headless under `-p`) and
+  Junie — a task-agent whose report comes back through the
+  `$GG_MESSAGE_FILE` channel introduced in stage 2, since its own `--review`
+  flag can't take a range and is instead pointed at the diff via a new
+  `$GG_REVIEW_DIFF` file.
 - **"Install a clipboard tool" notice.** The notification center (`!`) now
   warns when a local X11/Wayland session is present but no clipboard helper is
   installed — the case where copy actions fall back to an OSC 52 terminal
