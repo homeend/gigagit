@@ -23,11 +23,23 @@ const (
 )
 
 // ReviewTarget is a resolved review scope: a human Range label plus the DiffSpec
-// to feed the agent. Working changes use the zero DiffSpec (Rev "", Cached false).
+// to feed the agent. Working changes use Diff.Rev "HEAD" (git diff HEAD — the
+// full working-tree + staged diff), NOT the zero DiffSpec, which is bare
+// `git diff` and would silently omit staged changes. See WorkingReviewTarget.
 type ReviewTarget struct {
 	Kind  ReviewKind
 	Range string // "" for the working-changes target
 	Diff  model.DiffSpec
+}
+
+// WorkingReviewTarget is the "review my uncommitted changes" target: the full
+// working-tree + staged diff vs HEAD (git diff HEAD), NOT bare `git diff`
+// which would omit staged changes (git diff = working tree vs index only).
+// The single source of truth for both the CLI (`gg review --working`) and the
+// TUI (Files panel "Review working changes") so the two call sites can't
+// diverge.
+func WorkingReviewTarget() ReviewTarget {
+	return ReviewTarget{Kind: ReviewWorking, Range: "", Diff: model.DiffSpec{Rev: "HEAD"}}
 }
 
 // ReviewResult is a produced review: the durable report path and its content.

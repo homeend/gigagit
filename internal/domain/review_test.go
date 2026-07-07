@@ -69,6 +69,53 @@ func TestReviewReportPersistsAndReturns(t *testing.T) {
 	}
 }
 
+// TestWorkingReviewTargetDiffsAgainstHEAD proves the working-changes target
+// diffs against HEAD (git diff HEAD, which includes staged changes), NOT the
+// zero DiffSpec (bare git diff = working tree vs index only, which silently
+// omits anything already staged).
+func TestWorkingReviewTargetDiffsAgainstHEAD(t *testing.T) {
+	target := WorkingReviewTarget()
+	if target.Diff.Rev != "HEAD" || target.Diff.Cached || len(target.Diff.Paths) != 0 {
+		t.Fatalf("Diff = %+v, want {Rev: HEAD}", target.Diff)
+	}
+	if target.Kind != ReviewWorking {
+		t.Fatalf("Kind = %v, want ReviewWorking", target.Kind)
+	}
+	if target.Range != "" {
+		t.Fatalf("Range = %q, want empty (working-changes target)", target.Range)
+	}
+}
+
+// TestWorkingReviewReportIncludesStagedChanges is the integration-level proof:
+// a file staged (but not committed) must appear in the review's captured
+// diff. Before the fix, WorkingReviewTarget's zero DiffSpec produced a bare
+// `git diff` (working tree vs index), which is EMPTY for a fully-staged
+// change — the review would silently see nothing.
+func TestWorkingReviewReportIncludesStagedChanges(t *testing.T) {
+	dir, svc := newRealRepo(t)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+
+	if err := os.WriteFile(dir+"/staged.txt", []byte("staged content\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitIn(t, dir, "add", "staged.txt")
+
+	target := WorkingReviewTarget()
+	// Echo the review diff file's contents straight to stdout so the report
+	// content proves what the diff actually contained.
+	cmd := `cat "$GG_REVIEW_DIFF"`
+	res, err := svc.ReviewReport(context.Background(), target, cmd, nil, time.Now())
+	if err != nil {
+		t.Fatalf("review: %v", err)
+	}
+	if !strings.Contains(res.Content, "staged content") {
+		t.Fatalf("review content = %q, want it to include the staged file's content", res.Content)
+	}
+	if !strings.Contains(res.Content, "staged.txt") {
+		t.Fatalf("review content = %q, want it to mention staged.txt", res.Content)
+	}
+}
+
 func TestSanitizeRangeForFilename(t *testing.T) {
 	cases := map[string]string{
 		"main..HEAD":      "main..HEAD",
@@ -151,7 +198,7 @@ func TestReviewReportEmptyReportErrors(t *testing.T) {
 	stateDir := t.TempDir()
 	t.Setenv("XDG_STATE_HOME", stateDir)
 
-	target := ReviewTarget{Kind: ReviewWorking, Range: "", Diff: model.DiffSpec{}}
+	target := WorkingReviewTarget()
 	_, err := svc.ReviewReport(context.Background(), target, "true", nil, time.Now())
 	if err == nil {
 		t.Fatal("ReviewReport: want error for an empty report, got nil")

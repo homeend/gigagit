@@ -104,7 +104,8 @@ func TestReviewRowsAbsentWithoutTool(t *testing.T) {
 	}
 }
 
-// (d) The working-changes row targets the zero DiffSpec / empty range.
+// (d) The working-changes row is offered (its target's Diff.Rev is asserted
+// against "HEAD" in TestWorkingReviewTargetDiffsAgainstHEAD, domain package).
 func TestWorkingReviewRowTarget(t *testing.T) {
 	m := reviewTestModel(t)
 	m.status = model.WorkingTreeStatus{Files: []model.FileStatus{{Path: "a.go", Unstaged: 'M'}}}

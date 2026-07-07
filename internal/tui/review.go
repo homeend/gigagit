@@ -129,7 +129,7 @@ func (m Model) branchReviewRow() (actionRow, bool) {
 }
 
 // workingReviewRow offers "Review working changes" on the Files panel — the
-// whole working tree vs HEAD (the zero DiffSpec / empty range).
+// full working tree + staged diff vs HEAD (domain.WorkingReviewTarget).
 func (m Model) workingReviewRow() (actionRow, bool) {
 	if m.focus != panelFiles || !m.opsIdle() || !m.hasReviewTool() {
 		return actionRow{}, false
@@ -138,7 +138,7 @@ func (m Model) workingReviewRow() (actionRow, bool) {
 		id:    "review-working",
 		label: "Review working changes",
 		run: func(m Model) (tea.Model, tea.Cmd) {
-			return m.startReviewLane(domain.ReviewTarget{Kind: domain.ReviewWorking})
+			return m.startReviewLane(domain.WorkingReviewTarget())
 		},
 	}, true
 }

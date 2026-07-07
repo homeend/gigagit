@@ -49,7 +49,7 @@ func cmdReview(svc *domain.Service, workdir string, rest []string, stdout, stder
 	var target domain.ReviewTarget
 	switch {
 	case *working:
-		target = domain.ReviewTarget{Kind: domain.ReviewWorking, Range: "", Diff: model.DiffSpec{}}
+		target = domain.WorkingReviewTarget()
 	case fs.NArg() >= 1:
 		target = reviewTargetForArg(fs.Arg(0))
 	default:
