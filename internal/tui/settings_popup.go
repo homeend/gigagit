@@ -52,11 +52,10 @@ const (
 	settingsMenuShowGraph   = "Show graph"
 	settingsMenuRepoLoc     = "Repo settings location"
 	settingsMenuCommitGraph = "Commit-graph"
-	settingsMenuGitConfig   = "Git config explorer"
 )
 
 // settingsMenu is the top-level menu order.
-var settingsMenu = []string{settingsMenuAgents, settingsMenuTools, settingsMenuIdentity, settingsMenuPrefixes, settingsMenuHook, settingsMenuOpLog, settingsMenuErrors, settingsMenuAutoRefresh, settingsMenuRemoteTags, settingsMenuRates, settingsMenuCommitSort, settingsMenuShowGraph, settingsMenuRepoLoc, settingsMenuCommitGraph, settingsMenuGitConfig}
+var settingsMenu = []string{settingsMenuAgents, settingsMenuTools, settingsMenuIdentity, settingsMenuPrefixes, settingsMenuHook, settingsMenuOpLog, settingsMenuErrors, settingsMenuAutoRefresh, settingsMenuRemoteTags, settingsMenuRates, settingsMenuCommitSort, settingsMenuShowGraph, settingsMenuRepoLoc, settingsMenuCommitGraph}
 
 // commitSortModes is the cycle order for the "Commit sort" menu toggle:
 // date-order (default; git --date-order, perfect lanes) → plain (fast, git's
@@ -384,8 +383,6 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				}
 				// Same code path as the notice's "write + keep fresh" action.
 				return m.startCommitGraphWriteAndEnable()
-			case settingsMenuGitConfig:
-				return m.openGitConfigExplorer()
 			case settingsMenuRates:
 				p.ratesView = true
 				p.ratesSel = 0

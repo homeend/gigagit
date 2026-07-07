@@ -177,3 +177,14 @@ func TestPaletteFindOpensFinder(t *testing.T) {
 		t.Fatal("Find replaces the palette (it does not stay beneath)")
 	}
 }
+
+func TestPaletteGitConfigOpensExplorer(t *testing.T) {
+	m := gotoModel(t, gotoFullHash)
+	m, _ = palettePick(t, m, "Git config explorer")
+	if layerOf[*gitConfigPopup](m) == nil {
+		t.Fatal("Git config explorer should open the explorer popup")
+	}
+	if layerOf[*commandPalette](m) != nil {
+		t.Fatal("it replaces the palette")
+	}
+}

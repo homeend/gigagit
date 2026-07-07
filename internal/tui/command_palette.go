@@ -32,6 +32,7 @@ func paletteCommands() []paletteCommand {
 		{label: "File blame", run: func(m Model) (Model, tea.Cmd) { return m.openFilePathPopup(filePathBlame) }},
 		{label: "Find", keyHint: "F", run: func(m Model) (Model, tea.Cmd) { m = m.popLayer(); return m.openFileFinder() }},
 		{label: "Open repo", run: func(m Model) (Model, tea.Cmd) { return m.openRepoPathPopup() }},
+		{label: "Git config explorer", run: func(m Model) (Model, tea.Cmd) { m = m.popLayer(); return m.openGitConfigExplorer() }},
 	}
 }
 

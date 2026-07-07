@@ -19,27 +19,15 @@ func explorerRows() []model.GitConfigRow {
 	}
 }
 
-// openExplorer drives Settings → "Git config explorer" → enter, then delivers
+// openExplorer drives the command palette → "Git config explorer", then delivers
 // the rows as if the background read landed.
 func openExplorer(t *testing.T, m Model) Model {
 	t.Helper()
-	u, _ := m.Update(keyMsg(","))
-	m = u.(Model)
-	p := layerOf[*settingsPopup](m)
-	if p == nil {
-		t.Fatal("settings popup did not open")
-	}
-	for i, entry := range settingsMenu {
-		if entry == settingsMenuGitConfig {
-			p.menuSel = i
-		}
-	}
-	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	m = u.(Model)
+	m, _ = palettePick(t, m, "Git config explorer")
 	if layerOf[*gitConfigPopup](m) == nil {
-		t.Fatal("enter must open the explorer")
+		t.Fatal("palette must open the explorer")
 	}
-	u, _ = m.Update(gitConfigRowsMsg{gen: m.gitConfigGen, rows: explorerRows()})
+	u, _ := m.Update(gitConfigRowsMsg{gen: m.gitConfigGen, rows: explorerRows()})
 	return u.(Model)
 }
 
