@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -130,8 +131,16 @@ func TestSanitizeRangeForFilename(t *testing.T) {
 	}
 }
 
+// hexRangeRE matches a "<hex>..<hex>" or "<hex>^..<hex>" range: proof that
+// BranchReviewTarget's Range never carries a raw ref name (see
+// TestBranchReviewTargetResolvesToSha for the injection-closed proof).
+var hexRangeRE = regexp.MustCompile(`^[0-9a-f]{7,40}(\^)?\.\.[0-9a-f]{7,40}$`)
+
 // TestBranchReviewTarget proves BranchReviewTarget resolves <merge-base with
-// main>..<tip> for a feature branch created off main with one extra commit.
+// main>..<tip> for a feature branch created off main with one extra commit,
+// and that both endpoints are resolved to hex SHAs (not the branch name) —
+// closing the <range> command-injection vector (see
+// TestBranchReviewTargetResolvesToSha).
 func TestBranchReviewTarget(t *testing.T) {
 	dir, svc := newRealRepo(t)
 	ctx := context.Background()
@@ -146,12 +155,17 @@ func TestBranchReviewTarget(t *testing.T) {
 		t.Fatal(err)
 	}
 	wantBase := strings.TrimSpace(string(out))
+	out, err = exec.Command("git", "-C", dir, "rev-parse", "feature").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantTip := strings.TrimSpace(string(out))
 
 	target, err := svc.BranchReviewTarget(ctx, "feature")
 	if err != nil {
 		t.Fatalf("BranchReviewTarget: %v", err)
 	}
-	wantRange := wantBase + "..feature"
+	wantRange := wantBase + ".." + wantTip
 	if target.Range != wantRange {
 		t.Fatalf("Range = %q, want %q", target.Range, wantRange)
 	}
@@ -161,12 +175,19 @@ func TestBranchReviewTarget(t *testing.T) {
 	if target.Kind != ReviewBranch {
 		t.Fatalf("Kind = %v, want ReviewBranch", target.Kind)
 	}
+	if !hexRangeRE.MatchString(target.Range) {
+		t.Fatalf("Range = %q, does not look like a pure-hex range", target.Range)
+	}
+	if strings.Contains(target.Range, "feature") {
+		t.Fatalf("Range = %q, must not contain the branch name", target.Range)
+	}
 }
 
 // TestBranchReviewTargetTipAloneFallback proves the no-base, no-upstream
 // fallback reviews the tip commit's OWN change (tip^..tip), not an empty
-// "working tree vs tip" diff. An orphan branch shares no history with main,
-// so MergeBase(main, orphan) fails and there's no configured upstream either.
+// "working tree vs tip" diff, and that the range is the tip's resolved SHA
+// (not the branch name). An orphan branch shares no history with main, so
+// MergeBase(main, orphan) fails and there's no configured upstream either.
 func TestBranchReviewTargetTipAloneFallback(t *testing.T) {
 	dir, svc := newRealRepo(t)
 	ctx := context.Background()
@@ -174,11 +195,17 @@ func TestBranchReviewTargetTipAloneFallback(t *testing.T) {
 	runGitIn(t, dir, "checkout", "--orphan", "orphan")
 	runGitIn(t, dir, "commit", "-m", "orphan root")
 
+	out, err := exec.Command("git", "-C", dir, "rev-parse", "orphan").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantTip := strings.TrimSpace(string(out))
+
 	target, err := svc.BranchReviewTarget(ctx, "orphan")
 	if err != nil {
 		t.Fatalf("BranchReviewTarget: %v", err)
 	}
-	wantRange := "orphan^..orphan"
+	wantRange := wantTip + "^.." + wantTip
 	if target.Range != wantRange {
 		t.Fatalf("Range = %q, want %q", target.Range, wantRange)
 	}
@@ -187,6 +214,43 @@ func TestBranchReviewTargetTipAloneFallback(t *testing.T) {
 	}
 	if target.Kind != ReviewBranch {
 		t.Fatalf("Kind = %v, want ReviewBranch", target.Kind)
+	}
+	if !hexRangeRE.MatchString(target.Range) {
+		t.Fatalf("Range = %q, does not look like a pure-hex range", target.Range)
+	}
+}
+
+// TestBranchReviewTargetResolvesToSha is the injection-closed proof: a branch
+// whose name contains a shell metacharacter that git allows in ref names
+// must NOT leak into Range, because Range is later substituted as unquoted
+// prose into an external-tool command (`claude -p "/code-review <range>"`),
+// and command substitution executes inside double quotes.
+func TestBranchReviewTargetResolvesToSha(t *testing.T) {
+	dir, svc := newRealRepo(t)
+	ctx := context.Background()
+
+	// Prefer a branch name containing "$" (command substitution); git rejects
+	// some ref-name characters (space, ~, ^, :, ?, *, [, \), so fall back to
+	// another shell metacharacter git does allow if "$" is somehow rejected.
+	name := "ev$il"
+	cmd := exec.Command("git", "-C", dir, "branch", name)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Logf("git branch %q rejected (%v: %s), falling back to a;b", name, err, out)
+		name = "a;b"
+		runGitIn(t, dir, "branch", name)
+	}
+
+	target, err := svc.BranchReviewTarget(ctx, name)
+	if err != nil {
+		t.Fatalf("BranchReviewTarget: %v", err)
+	}
+	for _, bad := range []string{"$", "`", ";"} {
+		if strings.Contains(target.Range, bad) {
+			t.Fatalf("Range = %q, contains injectable char %q — <range> is not pure hex", target.Range, bad)
+		}
+	}
+	if !hexRangeRE.MatchString(target.Range) {
+		t.Fatalf("Range = %q, does not look like a pure-hex range", target.Range)
 	}
 }
 

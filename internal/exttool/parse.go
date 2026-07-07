@@ -86,6 +86,40 @@ func stripCodeFence(s string) string {
 	return strings.TrimSpace(strings.Join(lines, "\n"))
 }
 
+// ParseCaptureReport interprets an agent's captured output as a free-form
+// review report, format-agnostic the same way ParseCaptureMessage is: Claude
+// --output-format json wraps the markdown report in a JSON envelope
+// (.result); the raw markdown text a task-agent writes to $GG_MESSAGE_FILE
+// (e.g. Junie) is already clean and passed through unchanged; plain-text
+// output is passed through unchanged too. Unlike ParseCaptureMessage, a
+// report is NOT split into subject/body and its code fences are NOT
+// stripped — a review legitimately contains ``` code blocks as part of its
+// content. A tool-reported error (is_error) is returned as err.
+func ParseCaptureReport(captured string) (string, error) {
+	t := strings.TrimSpace(captured)
+	if len(t) > 0 && t[0] == '{' {
+		var env captureEnvelope
+		if json.Unmarshal([]byte(t), &env) == nil {
+			switch {
+			case env.IsError:
+				msg := "tool reported an error"
+				if env.Result != nil {
+					if trimmed := strings.TrimSpace(*env.Result); trimmed != "" {
+						msg = trimmed
+					}
+				}
+				return "", errors.New(msg)
+			case env.Result != nil:
+				return strings.TrimSpace(*env.Result), nil
+			}
+		}
+		// JSON-looking but unrecognized (no "result"/"is_error" match above) or
+		// malformed JSON that failed to unmarshal: fall through to raw-text
+		// handling and treat the input verbatim as the report.
+	}
+	return t, nil
+}
+
 // SplitMessage splits a commit message into (subject, body): the first line is
 // the subject, the rest (after leading blank lines) the body. The one canonical
 // split rule (the TUI amend pre-fill delegates here).

@@ -26,6 +26,44 @@ func TestParseCaptureMessageStripsCodeFence(t *testing.T) {
 	}
 }
 
+func TestParseCaptureReport(t *testing.T) {
+	// Claude --output-format json wraps the markdown report in .result.
+	if got, err := ParseCaptureReport(`{"result":"## Review\n- finding","is_error":false}`); err != nil || got != "## Review\n- finding" {
+		t.Fatalf("claude envelope: (%q,%v)", got, err)
+	}
+	// A tool-reported error surfaces as err, using .result as the message.
+	if _, err := ParseCaptureReport(`{"is_error":true,"result":"boom"}`); err == nil || !strings.Contains(err.Error(), "boom") {
+		t.Fatalf("is_error: err=%v, want it to contain %q", err, "boom")
+	}
+	// An is_error envelope with no usable .result falls back to a generic message.
+	if _, err := ParseCaptureReport(`{"is_error":true}`); err == nil || !strings.Contains(err.Error(), "error") {
+		t.Fatalf("is_error no result: err=%v", err)
+	}
+	// Raw markdown (Junie's $GG_MESSAGE_FILE path) passes through unchanged,
+	// code fences and all — a report is never subject/body split or defenced.
+	raw := "### Summary\n- did a thing\n\n```go\nfunc f() {}\n```"
+	if got, err := ParseCaptureReport(raw); err != nil || got != raw {
+		t.Fatalf("raw markdown: (%q,%v) want unchanged %q", got, err, raw)
+	}
+	// Plain text passes through unchanged too.
+	if got, err := ParseCaptureReport("just a plain report"); err != nil || got != "just a plain report" {
+		t.Fatalf("plain text: (%q,%v)", got, err)
+	}
+	// Whitespace-only input is trimmed to empty, not an error (the caller,
+	// domain.ReviewReport, treats an empty report as its own failure).
+	if got, err := ParseCaptureReport("   \n  "); err != nil || got != "" {
+		t.Fatalf("whitespace: (%q,%v)", got, err)
+	}
+	// JSON-looking but no "result" key: falls through to raw-text handling.
+	if got, err := ParseCaptureReport(`{"foo":"bar"}`); err != nil || got != `{"foo":"bar"}` {
+		t.Fatalf("no-result json: (%q,%v)", got, err)
+	}
+	// Malformed JSON falls through to raw-text handling too.
+	if got, err := ParseCaptureReport("{not valid json"); err != nil || got != "{not valid json" {
+		t.Fatalf("malformed json: (%q,%v)", got, err)
+	}
+}
+
 func TestParseCaptureMessage(t *testing.T) {
 	cases := []struct {
 		name, in, subj, body string
