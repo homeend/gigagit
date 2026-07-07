@@ -206,21 +206,71 @@ extra registration code is needed.
 clear arbitrary popups, so the popup **and** the palette must be popped *before*
 calling it (both are, per the unwind step above).
 
-## Component 3 — thin wrappers (Find, Git config, Agent skills)
+## Component 3 — thin wrappers (Find, Git config)
 
-Each palette entry's `run` pops the palette, then calls the existing opener:
+`openFileFinder` and `openGitConfigExplorer` each push their own standalone layer,
+so these two entries pop the palette then call the opener verbatim:
 
 ```go
 // Find
 run: func(m Model) (Model, tea.Cmd) { m = m.popLayer(); return m.openFileFinder() }
 // Git config explorer
 run: func(m Model) (Model, tea.Cmd) { m = m.popLayer(); return m.openGitConfigExplorer() }
-// Set up agent skills  (openAgentPicker returns Model only)
-run: func(m Model) (Model, tea.Cmd) { m = m.popLayer(); return m.openAgentPicker(), nil }
 ```
 
 No behavior of the underlying surfaces changes; only a second entry point is
 added.
+
+## Component 3b — Set up agent skills (Settings-hosted picker)
+
+**Not a thin wrapper.** The agent picker is an inline *sub-state* of
+`settingsPopup` (`picker bool` alongside `errorsView`/`ratesView`/`toolsView`),
+sharing that popup's `sel`/`mode`/`hscroll`/`z`-cycle state and render. It is not
+a standalone layer, and `openAgentPicker()` mutates an already-open
+`settingsPopup` (`p := layerOf[*settingsPopup](m); …; p.picker = true`) — calling
+it with no settings popup on the stack nil-derefs.
+
+To move it to the palette without duplicating the picker's render/mode/install
+code (DRY) or leaving dead code, the palette entry opens Settings **pre-set to the
+picker**, and a new flag makes `esc` from a palette-launched picker return to
+**base** rather than the Settings menu (so it reads as "moved out of Settings",
+not "a shortcut into Settings"):
+
+- Add `pickerFromPalette bool` to `settingsPopup` (default false = opened via the
+  `,` menu, unchanged behavior).
+- Palette `run`:
+
+  ```go
+  // Set up agent skills
+  run: func(m Model) (Model, tea.Cmd) {
+      m = m.popLayer()                 // drop the palette
+      m, cmd := m.openSettings()       // push a fresh settingsPopup (menu screen)
+      m = m.openAgentPicker()          // flip it into picker mode (returns Model)
+      if sp := layerOf[*settingsPopup](m); sp != nil {
+          sp.pickerFromPalette = true
+      }
+      return m, cmd
+  }
+  ```
+
+- In `settingsPopup.update`'s `esc` handling, the existing picker branch
+  (`settings_popup.go:307`) becomes:
+
+  ```go
+  if p.picker {
+      if p.pickerFromPalette { // launched from the palette → esc backs out to base
+          m = m.popLayer()
+          return m, nil
+      }
+      p.picker = false // launched from the , menu → esc returns to the menu
+      return m, nil
+  }
+  ```
+
+The install action (`enter`, `settings_popup.go:519`) already `popLayer`s to base
+and is unchanged. `openAgentPicker` and all picker render/mode code stay — they
+are now reached from the palette instead of the removed menu row (so they are not
+dead code).
 
 ## Component 4 — Settings menu removals
 
@@ -230,15 +280,18 @@ In `internal/tui/settings_popup.go`:
   slice.
 - Remove their two `case` arms in the `enter` handler
   (`case settingsMenuGitConfig:` / `case settingsMenuAgents:`).
-- Keep the `openGitConfigExplorer` / `openAgentPicker` methods (now called only
-  from the palette).
+- Keep the `openGitConfigExplorer` / `openAgentPicker` methods and **all** the
+  picker render/update/install code in `settingsPopup` — they are now reached from
+  the palette (Components 3 / 3b), not the removed menu rows, so they are live.
+- Add the `pickerFromPalette bool` field and the two-branch `esc` handling from
+  Component 3b.
 - **Delete the `settingsMenuGitConfig` and `settingsMenuAgents` consts.** Unused
   *package-level* consts do **not** trip `go vet` or the compiler (only unused
   locals/imports do), so leaving them would silently linger. After removing the
   slice entries + cases, their only remaining references are in tests (below), so
   delete the consts and update those tests. The palette's labels are plain string
-  literals in `paletteCommands()` ("Git config explorer", "Set up agent skills"),
-  not shared with the deleted consts.
+  literals in `paletteCommands()` ("Git config explorer", "Set up agent skills
+  (using-gg)"), not shared with the deleted consts.
 - **Tests that break and must be updated:**
   - `gitconfig_popup_test.go:33` references `settingsMenuGitConfig` (asserts it is
     in the settings menu). Repoint it: assert the entry is now a *palette* command
@@ -274,11 +327,15 @@ New/updated tests in `internal/tui`:
   `reRoot`s to its top-level (and unwinds popup+palette); a non-repo temp dir sets
   the inline error and keeps the popup open; a subdirectory of a repo resolves to
   the repo root. `~` expansion covered by a unit test on the expansion helper.
-- **Wrappers**: each of Find / Git config / Agent skills, launched from the
-  palette, pops the palette and pushes the correct layer (`*fileFinderPopup`,
-  `*gitConfigPopup`, agent picker).
-- **Settings**: `settingsMenu` no longer contains `settingsMenuGitConfig` /
-  `settingsMenuAgents`.
+- **Wrappers**: Find and Git config, launched from the palette, pop the palette
+  and push the correct standalone layer (`*fileFinderPopup`, `*gitConfigPopup`).
+- **Agent skills**: launched from the palette, pops the palette and opens a
+  `*settingsPopup` with `picker == true && pickerFromPalette == true`; `esc` from
+  it returns to base (no `*settingsPopup` left), whereas the `,`-menu path
+  (`pickerFromPalette == false`) still returns to the Settings menu.
+- **Settings**: `settingsMenu` no longer contains "Git config explorer" /
+  "Set up agent skills (using-gg)"; the first (selected) row is now
+  `settingsMenuTools` ("External tools").
 
 Follow TDD (tests first) per repo convention. Tests use the `FakeRunner` for argv
 assertions or a real `git` in a `t.TempDir()` (the `repoPathPopup` `TopLevel`
@@ -292,9 +349,11 @@ tests need a real repo).
   + the resolved-msg handler.
 - `internal/tui/model.go` — dispatch `repoResolvedMsg` to `resolvedRepoPath`
   (tag-gated), mirroring `gotoCommitResolvedMsg`.
-- `internal/tui/settings_popup.go` — remove the two moved rows + their cases.
+- `internal/tui/settings_popup.go` — remove the two moved rows + their cases +
+  the two consts; add `pickerFromPalette bool` + the two-branch picker `esc`.
 - Tests: `command_palette_test.go`, new `file_path_popup_test.go`,
-  `repo_path_popup_test.go`, `settings_popup_test.go` (menu assertion).
+  `repo_path_popup_test.go`, `settings_popup_test.go` (menu assertion + the
+  palette-launched agent picker), `gitconfig_popup_test.go` (repointed).
 
 ## Execution notes (worktree isolation)
 
