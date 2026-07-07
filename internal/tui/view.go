@@ -1504,17 +1504,61 @@ func (m Model) commitHaystackAt(i int) string {
 }
 
 func (m Model) renderModal() string {
+	// Bound content to the terminal so long dynamic text (a long branch name, an
+	// export path) wraps instead of overflowing the box and being clipped by
+	// overlayCenter. maxW leaves room for modalStyle's double border (2) and
+	// horizontal padding (4) plus a 2-column margin off the screen edge; it is
+	// only a CAP — short prompts stay compact and the box sizes to its content.
+	w, _ := m.overlayDims()
+	maxW := w - 8
+	if maxW < 20 {
+		maxW = 20
+	}
+
 	var b strings.Builder
-	b.WriteString(m.modal.req.Prompt)
-	b.WriteString("\n\n")
-	for i, opt := range m.modal.req.Options {
-		if i == m.modal.sel {
-			b.WriteString(selectedRow.Render("> " + opt))
-		} else {
-			b.WriteString("  " + opt)
+	// Prompt: keep any explicit line breaks (e.g. the hook-approval script),
+	// word-wrapping each physical line. wrapWords hard-chunks a single token
+	// wider than maxW, so an unbreakable long branch name still fits.
+	for _, line := range strings.Split(m.modal.req.Prompt, "\n") {
+		if wrapped := wrapWords(line, maxW); len(wrapped) > 0 {
+			b.WriteString(strings.Join(wrapped, "\n"))
 		}
 		b.WriteString("\n")
 	}
-	b.WriteString("\n[↑/↓] choose  [enter] confirm  [esc] abort")
+	b.WriteString("\n")
+
+	// Options: word-wrap each to leave room for the 2-column selection marker;
+	// continuation lines indent under the text, and the selected option's
+	// reverse-video highlight is applied to every one of its physical lines.
+	optW := maxW - 2
+	if optW < 1 {
+		optW = 1
+	}
+	for i, opt := range m.modal.req.Options {
+		wrapped := wrapWords(opt, optW)
+		if len(wrapped) == 0 {
+			wrapped = []string{""}
+		}
+		for j, seg := range wrapped {
+			marker := "  "
+			if j == 0 && i == m.modal.sel {
+				marker = "> "
+			}
+			row := marker + seg
+			if i == m.modal.sel {
+				row = selectedRow.Render(row)
+			}
+			b.WriteString(row)
+			b.WriteString("\n")
+		}
+	}
+
+	footer := "[↑/↓] choose  [enter] confirm  [esc] abort"
+	b.WriteString("\n")
+	if lipgloss.Width(footer) > maxW {
+		b.WriteString(strings.Join(wrapWords(footer, maxW), "\n"))
+	} else {
+		b.WriteString(footer)
+	}
 	return modalStyle.Render(b.String()) + "\n"
 }
