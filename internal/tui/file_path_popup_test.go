@@ -166,3 +166,14 @@ func TestFilePathPopupRenders(t *testing.T) {
 		}
 	}
 }
+
+func TestPaletteFindOpensFinder(t *testing.T) {
+	m := gotoModel(t, gotoFullHash)
+	m, _ = palettePick(t, m, "Find")
+	if layerOf[*fileFinderPopup](m) == nil {
+		t.Fatal("Find should open the fuzzy file finder")
+	}
+	if layerOf[*commandPalette](m) != nil {
+		t.Fatal("Find replaces the palette (it does not stay beneath)")
+	}
+}
