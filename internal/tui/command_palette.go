@@ -28,6 +28,8 @@ type commandPalette struct {
 func paletteCommands() []paletteCommand {
 	return []paletteCommand{
 		{label: "Show commit", keyHint: "#", run: Model.openGotoCommitPopup},
+		{label: "File history", run: func(m Model) (Model, tea.Cmd) { return m.openFilePathPopup(filePathHistory) }},
+		{label: "File blame", run: func(m Model) (Model, tea.Cmd) { return m.openFilePathPopup(filePathBlame) }},
 	}
 }
 
