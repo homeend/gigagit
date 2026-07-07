@@ -126,6 +126,9 @@ func availableActions(m Model) []actionRow {
 	if r, ok := m.fileIgnoreExtRow(); ok {
 		out = append(out, r)
 	}
+	if r, ok := m.workingReviewRow(); ok {
+		out = append(out, r)
+	}
 	if r, ok := m.shelfAddRow(); ok {
 		out = append(out, r)
 	}
@@ -192,6 +195,9 @@ func availableActions(m Model) []actionRow {
 	if r, ok := m.branchRebaseRow(); ok {
 		out = append(out, r)
 	}
+	if r, ok := m.branchReviewRow(); ok {
+		out = append(out, r)
+	}
 	if r, ok := m.pushBranchRow(); ok {
 		out = append(out, r)
 	}
@@ -224,6 +230,9 @@ func (m Model) appendCommitContextRows(out []actionRow) []actionRow {
 		out = append(out, r)
 	}
 	if r, ok := m.commitExportPatchRow(); ok {
+		out = append(out, r)
+	}
+	if r, ok := m.focusedCommitReviewRow(); ok {
 		out = append(out, r)
 	}
 	out = append(out, m.commitBranchRows()...)
