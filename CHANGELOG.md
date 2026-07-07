@@ -9,6 +9,25 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Review a marked commit range (AI).** With two (or more) commits ◉-marked
+  in the Commits panel, the `.` menu offers **"Review marked range (AI)"** —
+  it reviews exactly the same changes **"Compare selection"** would show
+  (`older..newer` for two marks, `oldest^..newest` for three or more), so
+  marking-then-reviewing and marking-then-comparing scope identically. A
+  working-tree / staged mark in the selection hides the row (a review needs a
+  commit-to-commit range). Routes through the same review lane as the other
+  `.`-menu review entries.
+- **Human-friendly review labels + date-foldered reports.** The blinking
+  status indicator, the report-viewer title, and the report filename now show
+  a readable label — a **branch name** for a branch review, the **commit
+  title** (`<short-sha> <subject>`) for a commit review, the **range** you
+  typed for `gg review <A..B>`, or **"working changes"** — instead of the raw
+  hex SHA range. (The SHA range is still what's fed to the tool's `<range>`
+  token; only the *display* changed. The branch-name → hex-SHA resolution that
+  closed the earlier `<range>` command-injection is unaffected — the name is
+  display-only and never executed.) Reports are now filed under a per-day
+  folder: `<state>/gg/reviews/<repo-key>/<YYYY-MM-DD>/<HH-MM>-<label>.md`,
+  keeping the archive browsable.
 - **External tools (stage 3: AI review).** Three `.`-menu entries run a
   configured `review` agent headless and open its report in a new full-screen
   viewer: Commits panel **"Review this commit"** (the focused commit's own
@@ -23,7 +42,7 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   of opening an empty viewer. The report viewer is read-only and scrollable
   (`↑↓`/`pgup`/`pgdn`/`home`/`end`), supports `/` search, **`e`** opens the
   same report file in `$EDITOR`, and `esc` closes. Every report is also
-  written durably to `<state>/gg/reviews/<repo-key>/<YYYYMMDD-HHMM>-<range>.md`
+  written durably to `<state>/gg/reviews/<repo-key>/<YYYY-MM-DD>/<HH-MM>-<label>.md`
   so it survives past the session — reports accumulate; there's no
   history-browser UI yet, but the files are on disk and reopenable. A new
   scriptable **`gg review [--tool <name>] [--working] [<rev>|<A..B>]`** CLI

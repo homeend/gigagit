@@ -91,11 +91,13 @@ func cmdReview(svc *domain.Service, workdir string, rest []string, stdout, stder
 // would diff the WORKING TREE against arg, which is empty on a clean
 // checkout, not the commit's own change).
 func reviewTargetForArg(arg string) domain.ReviewTarget {
+	// Label = the arg as typed (already human-readable, e.g. "main..HEAD" or a
+	// short sha) for the report title/filename; Range stays the executed rev.
 	if strings.Contains(arg, "..") {
-		return domain.ReviewTarget{Kind: domain.ReviewRange, Range: arg, Diff: model.DiffSpec{Rev: arg}}
+		return domain.ReviewTarget{Kind: domain.ReviewRange, Range: arg, Label: arg, Diff: model.DiffSpec{Rev: arg}}
 	}
 	rng := arg + "^.." + arg
-	return domain.ReviewTarget{Kind: domain.ReviewRange, Range: rng, Diff: model.DiffSpec{Rev: rng}}
+	return domain.ReviewTarget{Kind: domain.ReviewRange, Range: rng, Label: arg, Diff: model.DiffSpec{Rev: rng}}
 }
 
 // selectReviewCommand loads the effective config and returns the chosen

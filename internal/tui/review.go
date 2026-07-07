@@ -86,7 +86,13 @@ func reviewTargetForCommit(c model.Commit) domain.ReviewTarget {
 	if len(c.Parents) == 0 {
 		rng = c.Hash
 	}
-	return domain.ReviewTarget{Kind: domain.ReviewRange, Range: rng, Diff: model.DiffSpec{Rev: rng}}
+	// Label = "<short> <subject>": the commit TITLE the user recognizes, plus
+	// the short sha to keep the report filename unique-ish. Range stays hex.
+	label := shortHash(c.Hash)
+	if s := strings.TrimSpace(c.Subject); s != "" {
+		label += " " + s
+	}
+	return domain.ReviewTarget{Kind: domain.ReviewRange, Range: rng, Label: label, Diff: model.DiffSpec{Rev: rng}}
 }
 
 // --- menu rows (self-gating; each needs opsIdle AND a configured review tool) ---
@@ -147,6 +153,70 @@ func (m Model) workingReviewRow() (actionRow, bool) {
 			return m.startReviewLane(domain.WorkingReviewTarget())
 		},
 	}, true
+}
+
+// markedRangeReviewRow offers "Review marked range (AI)" on the Commits panel
+// when 2+ commits are ◉-marked. It reviews EXACTLY what "Compare selection"
+// shows (compareSelectionEndpoints): older..newer for 2 marks, oldest^..newest
+// for 3+ — so marking-then-reviewing and marking-then-comparing scope the same
+// changes. Refused when either endpoint is a WIP row (working tree / staged): a
+// review needs a commit-to-commit range, and the endpoint hashes are feed
+// commit shas (pure hex) so Range stays injection-safe without ResolveCommit.
+func (m Model) markedRangeReviewRow() (actionRow, bool) {
+	if m.focus != panelCommits || !m.opsIdle() || !m.hasReviewTool() || m.reviewRunning {
+		return actionRow{}, false
+	}
+	if len(m.validCompareKeys()) < 2 {
+		return actionRow{}, false
+	}
+	left, right, _, ok := m.compareSelectionEndpoints()
+	if !ok || left.Kind != model.EndpointCommit || right.Kind != model.EndpointCommit {
+		return actionRow{}, false
+	}
+	rng := left.Hash + ".." + right.Hash
+	target := domain.ReviewTarget{
+		Kind:  domain.ReviewRange,
+		Range: rng,
+		Label: m.markedRangeLabel(),
+		Diff:  model.DiffSpec{Rev: rng},
+	}
+	return actionRow{
+		id:    "review-marked-range",
+		label: "Review marked range (AI)",
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			return m.startReviewLane(target)
+		},
+	}, true
+}
+
+// markedRangeLabel builds the human label for a marked commit range from the
+// oldest and newest MARKED commits: "<oldShort>..<newShort> — <newSubject>"
+// (the newest = the range tip). Built from the commits themselves, not the
+// endpoint hashes (whose left may carry a trailing "^" for 3+ marks). "" if no
+// commit marks resolve (the caller then falls back to the hex Range).
+func (m Model) markedRangeLabel() string {
+	oldest, newest := -1, -1
+	oldestRank, newestRank := -1, 1<<30
+	for _, k := range m.validCompareKeys() {
+		r := m.compareKeyRank(k)
+		if r < 0 || r >= len(m.commits) {
+			continue // WIP sentinel or unknown key — not a commit
+		}
+		if r > oldestRank {
+			oldestRank, oldest = r, r
+		}
+		if r < newestRank {
+			newestRank, newest = r, r
+		}
+	}
+	if oldest < 0 || newest < 0 {
+		return ""
+	}
+	lbl := shortHash(m.commits[oldest].Hash) + ".." + shortHash(m.commits[newest].Hash)
+	if s := strings.TrimSpace(m.commits[newest].Subject); s != "" {
+		lbl += " — " + s
+	}
+	return lbl
 }
 
 // reviewBranchTargetCmd resolves a branch's review scope off the UI thread. gen
@@ -243,15 +313,17 @@ func (m Model) applyReviewDone(msg reviewDoneMsg) (Model, tea.Cmd) {
 		m.statusMsg = "review: " + msg.err.Error()
 		return m, nil
 	}
-	return m.pushLayer(newReviewView(reviewTitle(msg.res.Range), msg.res.Path, msg.res.Content)), nil
+	return m.pushLayer(newReviewView(reviewTitle(msg.res.Label), msg.res.Path, msg.res.Content)), nil
 }
 
-// reviewTitle names the report viewer; the working-changes target has no range.
-func reviewTitle(rng string) string {
-	if strings.TrimSpace(rng) == "" {
+// reviewTitle names the report viewer from the human label (branch name /
+// "<short> <subject>" / range / "working changes"). An empty label (a target
+// that set neither Label nor Range) falls back to "working changes".
+func reviewTitle(label string) string {
+	if strings.TrimSpace(label) == "" {
 		return "Review: working changes"
 	}
-	return "Review: " + rng
+	return "Review: " + label
 }
 
 // cancelReview cancels an in-flight background run, clears the running flag
@@ -357,10 +429,9 @@ func (lane *reviewLane) render(m Model, below string) string {
 	return overlayCenter(clipToHeight(below, h), box, w, h)
 }
 
-// reviewScopeLabel names the review scope for the running-review status label.
+// reviewScopeLabel names the review scope for the running-review status label
+// (the blinking "⟳ reviewing <label>…" segment) — the human DisplayLabel, so
+// the bottom bar shows a branch name / commit title / range, never a raw SHA.
 func reviewScopeLabel(t domain.ReviewTarget) string {
-	if strings.TrimSpace(t.Range) == "" {
-		return "working changes"
-	}
-	return t.Range
+	return t.DisplayLabel()
 }

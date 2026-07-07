@@ -70,6 +70,77 @@ func TestReviewTargetForCommitRoot(t *testing.T) {
 	}
 }
 
+// The commit-review Label is the human "<short> <subject>" (the commit title),
+// while Range stays the hex-ish sha^..sha executed by the tool.
+func TestReviewTargetForCommitLabel(t *testing.T) {
+	tgt := reviewTargetForCommit(model.Commit{Hash: "0123456789abcdef", Parents: []string{"p0"}, Subject: "fix: wrap modal"})
+	if want := "0123456 fix: wrap modal"; tgt.Label != want {
+		t.Fatalf("Label = %q, want %q", tgt.Label, want)
+	}
+}
+
+// Task B: two ◉-marked commits offer "Review marked range (AI)" scoped to
+// older..newer (the same range "Compare selection" shows), Range hex and Label
+// human. loadedModelLinearCommits builds c0(oldest)…; git log puts the newest
+// first, so commits[0]="c2" and commits[2]="c0".
+func TestMarkedRangeReviewRow(t *testing.T) {
+	m := loadedModelLinearCommits(t, 3)
+	m.focus = panelCommits
+	m.loading = false
+	m.cfg.Tools.Command = []config.ToolCommand{
+		{Category: "review", Name: "A", Mode: "capture", Command: "echo hi"},
+	}
+	m.promptStore = promptstate.NewFileStore(filepath.Join(t.TempDir(), "prompts.toml"))
+
+	if _, ok := m.markedRangeReviewRow(); ok {
+		t.Fatal("marked-range review row must be absent with no selection")
+	}
+
+	m.commitCompareSet = selectionSet(m.commits[0].Hash, m.commits[2].Hash)
+	row, ok := m.markedRangeReviewRow()
+	if !ok {
+		t.Fatal("marked-range review row must appear with 2 commits marked")
+	}
+	if row.label != "Review marked range (AI)" {
+		t.Fatalf("label = %q", row.label)
+	}
+
+	mm, _ := row.run(m)
+	lane, ok := mm.(Model).topLayer().(*reviewLane)
+	if !ok {
+		t.Fatalf("running the row must open the review lane, got %T", mm.(Model).topLayer())
+	}
+	wantRange := m.commits[2].Hash + ".." + m.commits[0].Hash // older..newer
+	if lane.target.Range != wantRange {
+		t.Fatalf("Range = %q, want %q", lane.target.Range, wantRange)
+	}
+	if lane.target.Diff.Rev != wantRange {
+		t.Fatalf("Diff.Rev = %q, want %q", lane.target.Diff.Rev, wantRange)
+	}
+	wantLabel := shortHash(m.commits[2].Hash) + ".." + shortHash(m.commits[0].Hash) + " — c2"
+	if lane.target.Label != wantLabel {
+		t.Fatalf("Label = %q, want %q", lane.target.Label, wantLabel)
+	}
+}
+
+// A WIP row (working tree / staged) in the marked set hides the marked-range
+// review row: a review needs a commit-to-commit range (also keeps Range hex).
+func TestMarkedRangeReviewRefusesWip(t *testing.T) {
+	m := loadedModelLinearCommits(t, 3)
+	m.focus = panelCommits
+	m.loading = false
+	m.cfg.Tools.Command = []config.ToolCommand{
+		{Category: "review", Name: "A", Mode: "capture", Command: "echo hi"},
+	}
+	m.promptStore = promptstate.NewFileStore(filepath.Join(t.TempDir(), "prompts.toml"))
+	m.wipRows = []wipRow{{wipWorktree, 1}}
+	m.commitCompareSet = selectionSet(m.commits[0].Hash, wipKey(wipRow{kind: wipWorktree}))
+
+	if _, ok := m.markedRangeReviewRow(); ok {
+		t.Fatal("marked-range review row must be absent when a WIP row is marked")
+	}
+}
+
 // focusedCommitReviewRow wires the target from the Commits panel selection.
 func TestFocusedCommitReviewRow(t *testing.T) {
 	m := loadedModelLinearCommits(t, 3)
@@ -243,7 +314,7 @@ func TestReviewDoneSuccessOpensViewer(t *testing.T) {
 	if m.reviewRunningLabel != "a..b" {
 		t.Fatalf("reviewRunningLabel = %q, want a..b", m.reviewRunningLabel)
 	}
-	m, _ = m.applyReviewDone(reviewDoneMsg{gen: m.reviewGen, res: domain.ReviewResult{Path: "/x/r.md", Content: "hi\n", Range: "a..b"}})
+	m, _ = m.applyReviewDone(reviewDoneMsg{gen: m.reviewGen, res: domain.ReviewResult{Path: "/x/r.md", Content: "hi\n", Range: "a..b", Label: "a..b"}})
 	rv, ok := m.topLayer().(*reviewView)
 	if !ok {
 		t.Fatalf("success must push the report viewer, got %T", m.topLayer())
