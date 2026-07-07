@@ -152,6 +152,9 @@ type Model struct {
 	genCancel           context.CancelFunc              // cancels an in-flight commit-popup ctrl+g generate run; nil when none is active
 	reviewGen           int                             // monotonic guard for the review capture lane; bumped on dispatch, cancel, reRoot — a stale/killed result carrying an older gen is dropped (survives a lane being popped and re-pushed, unlike a per-lane counter)
 	reviewCancel        context.CancelFunc              // cancels an in-flight review run; nil when none is active
+	reviewRunning       bool                            // a review runs in the background (lane already popped); blocks other external-LLM actions and drives the blinking status indicator
+	reviewRunningLabel  string                          // scope label for the running-review status segment (e.g. "main..HEAD" / "working changes")
+	reviewBlink         bool                            // blink phase for the running-review status segment (style alternation, never terminal blink)
 	refreshLastRun      map[refreshItem]time.Time       // last time each scheduled item fired (background scheduler)
 	refreshDur          map[refreshItem][]time.Duration // rolling ring (≤10) of measured read durations per item (Phase C)
 	bgQueue             []refreshItem                   // FIFO of pending background reads; one drains per tick
@@ -2110,8 +2113,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.startReviewLane(msg.target)
 	case reviewDoneMsg:
 		return m.applyReviewDone(msg)
-	case reviewSpinMsg:
-		return m.tickReviewSpinner(msg)
+	case reviewBlinkMsg:
+		if !m.reviewRunning || msg.gen != m.reviewGen {
+			return m, nil // run finished / cancelled / superseded: stop re-arming
+		}
+		m.reviewBlink = !m.reviewBlink
+		return m, reviewBlinkCmd(msg.gen)
 
 	case inProgressMsg:
 		if cp, ok := m.proc.(*conflictProcess); ok {

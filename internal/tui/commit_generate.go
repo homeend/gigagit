@@ -38,6 +38,10 @@ type genMessageMsg struct {
 //     (updateConfirming) dispatches; esc cancels. Empty fields skip straight
 //     to dispatchGenerate.
 func (m Model) startGenerate(p *commitPopup) (Model, tea.Cmd) {
+	if m.reviewRunning {
+		m.statusMsg = "a review is in progress — wait for it to finish"
+		return m, nil
+	}
 	if m.status.Counts().Staged == 0 {
 		m.statusMsg = "nothing staged to describe"
 		return m, nil

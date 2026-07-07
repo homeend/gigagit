@@ -171,6 +171,10 @@ func (p *conflictProcess) updateListing(m Model, msg tea.KeyMsg) (Model, tea.Cmd
 		p.st = confWorking // loading the file; the picker shows when it arrives
 		return m, m.loadConflictFileCmd(f.Path)
 	case "t": // run an external tool on the conflicts
+		if m.reviewRunning {
+			m.statusMsg = "a review is in progress — wait for it to finish"
+			return m, nil
+		}
 		var focused *model.FileStatus
 		if p.sel >= 0 && p.sel < len(p.files) {
 			focused = &p.files[p.sel]

@@ -400,9 +400,11 @@ func (m Model) renderInterface() string {
 		add(m.statusMsg)
 		add(notice)
 		add(m.noticeSegment())
+		add(m.reviewSegment())
 		add(markHint)
 	} else {
 		add(m.noticeSegment())
+		add(m.reviewSegment())
 		add(markHint)
 		add(notice)
 		add(m.statusMsg)
@@ -1122,6 +1124,28 @@ func fileGlyph(p panel, f model.FileStatus) byte {
 // commitBranchHint returns "⎇ <branch> · # <id>" for the selected commit when
 // the Commits panel is focused, else "". The branch is the ref the commit was
 // reached from in the feed walk (model.Commit.Source, via `git log --source`/%S);
+// Blink = style alternation between these two on m.reviewBlink (the review runs
+// in the background, not an error — a neutral cyan, not the notice red).
+var (
+	reviewHotStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("39")).Bold(true)
+	reviewDimStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("31"))
+)
+
+// reviewSegment renders the blinking "a review is running" status indicator
+// while a background review is in flight. Style alternation on m.reviewBlink
+// (the noticeSegment idiom), never terminal-native blink. "" when no review is
+// running (or the conflict process owns the screen).
+func (m Model) reviewSegment() string {
+	if !m.reviewRunning || m.proc != nil {
+		return ""
+	}
+	seg := "⟳ reviewing " + m.reviewRunningLabel + "…"
+	if m.reviewBlink {
+		return reviewHotStyle.Render(seg)
+	}
+	return reviewDimStyle.Render(seg)
+}
+
 // the short id lives here because the commit list rows show the branch column
 // instead of the id. Shown in the status line, occluding no commit row.
 func (m Model) commitBranchHint() string {

@@ -21,19 +21,20 @@ import (
 // lane IS its own layer (reviewLane) pushed on the stack, mirroring the
 // commitNamePopup layer pattern (embed popupMax, own update/render).
 //
-// The lane runs three sub-states in order (chooser → approval → running),
-// each rendered as a centered box. Because the lane owns the whole layer, esc
-// in ANY sub-state pops the lane (there is nothing behind it to return to) —
-// and while running, esc also cancels the run and bumps the Model-level
-// reviewGen so a ctx-killed agent's late *exec.ExitError result is dropped by
-// the gen guard rather than surfaced. The gen lives on the Model (not the
-// lane) so it stays monotonic across a lane being cancelled/popped and a new
-// one pushed: a stale result from a previous lane can never match the live
-// gen of a new lane.
+// The lane runs two FOREGROUND sub-states in order (chooser → approval), each
+// rendered as a centered box; esc in either pops the lane (there is nothing
+// behind it to return to). Dispatch then BACKGROUNDS the run: the lane is
+// popped, m.reviewRunning goes true, and the TUI stays fully usable while the
+// agent works — a blinking status segment marks it in flight, other
+// external-LLM actions are refused, and the report viewer auto-pops when it
+// lands. The gen lives on the Model (not the lane) so it stays monotonic across
+// a lane being cancelled/popped and a new run started: a stale/ctx-killed
+// result carrying an older gen (an *exec.ExitError, not context.Canceled) is
+// dropped by the gen guard rather than surfaced.
 
-// reviewLane is the review capture lane: a layer whose sub-state runs a review
-// tool headless (via domain.ReviewReport) and, on success, replaces itself
-// with the full-screen reviewView report.
+// reviewLane is the review capture lane: a foreground layer whose sub-state
+// picks and approves a review tool, then backgrounds the headless run (via
+// domain.ReviewReport) and pops itself.
 type reviewLane struct {
 	popupMax
 	target    domain.ReviewTarget  // fully resolved before the lane opens (branch target resolves in an async hop first)
@@ -41,9 +42,6 @@ type reviewLane struct {
 	choosing  bool                 // true while the numbered tool chooser is shown
 	approving string               // non-empty: the resolved command awaiting first-run approval
 	genCmd    config.ToolCommand   // the chosen command (approval is keyed on its CONFIG text)
-	running   bool                 // true while the agent runs (spinner)
-	spinFrame int                  // animated-spinner frame (advanced by reviewSpinMsg)
-	spinStart time.Time            // run start, for the elapsed-seconds readout
 }
 
 // reviewDoneMsg carries the result of a headless review run. gen is the
@@ -55,9 +53,17 @@ type reviewDoneMsg struct {
 	err error
 }
 
-// reviewSpinMsg advances the in-flight review spinner; gen guards it against a
-// finished or superseded run (the genSpinMsg pattern).
-type reviewSpinMsg struct{ gen int }
+// reviewBlinkMsg flips the running-review status indicator's blink phase. gen
+// ties the tick to the run that armed it; a stale gen (a later cancel/reRoot
+// bump, or the run finishing) drops it so no second parallel lane arms.
+// Modeled on noticeBlinkMsg.
+type reviewBlinkMsg struct{ gen int }
+
+// reviewBlinkCmd schedules the next blink flip (~800ms; only re-armed while the
+// run's gen still matches, so the tick self-stops). Modeled on noticeBlinkCmd.
+func reviewBlinkCmd(gen int) tea.Cmd {
+	return tea.Tick(800*time.Millisecond, func(time.Time) tea.Msg { return reviewBlinkMsg{gen: gen} })
+}
 
 // reviewTargetReadyMsg carries a BranchReviewTarget resolved off the UI thread
 // (a branch review needs a ctx to find its merge-base); the Update handler
@@ -92,7 +98,7 @@ func (m Model) hasReviewTool() bool {
 
 // focusedCommitReviewRow offers "Review this commit" on the Commits panel.
 func (m Model) focusedCommitReviewRow() (actionRow, bool) {
-	if m.focus != panelCommits || !m.opsIdle() || !m.hasReviewTool() {
+	if m.focus != panelCommits || !m.opsIdle() || !m.hasReviewTool() || m.reviewRunning {
 		return actionRow{}, false
 	}
 	bi, ok := m.backingIndex(panelCommits)
@@ -115,7 +121,7 @@ func (m Model) focusedCommitReviewRow() (actionRow, bool) {
 // target is known.
 func (m Model) branchReviewRow() (actionRow, bool) {
 	b, ok := m.selectedBranch()
-	if m.focus != panelBranches || !m.opsIdle() || !ok || !m.hasReviewTool() {
+	if m.focus != panelBranches || !m.opsIdle() || !ok || !m.hasReviewTool() || m.reviewRunning {
 		return actionRow{}, false
 	}
 	name := b.Name
@@ -131,7 +137,7 @@ func (m Model) branchReviewRow() (actionRow, bool) {
 // workingReviewRow offers "Review working changes" on the Files panel — the
 // full working tree + staged diff vs HEAD (domain.WorkingReviewTarget).
 func (m Model) workingReviewRow() (actionRow, bool) {
-	if m.focus != panelFiles || !m.opsIdle() || !m.hasReviewTool() {
+	if m.focus != panelFiles || !m.opsIdle() || !m.hasReviewTool() || m.reviewRunning {
 		return actionRow{}, false
 	}
 	return actionRow{
@@ -190,20 +196,22 @@ func (m Model) reviewGate(lane *reviewLane, chosen config.ToolCommand) (Model, t
 	return m.reviewDispatch(lane, resolved)
 }
 
-// reviewDispatch arms the run: sets the spinner going and batches the headless
-// review with an animated-spinner tick. reviewGen is bumped here (and read into
-// the run/tick) so a later cancel that re-bumps it drops this run's result.
+// reviewDispatch BACKGROUNDS the run: it pops the lane (so the TUI stays
+// usable), flags m.reviewRunning with the scope label for the blinking status
+// indicator, then batches the headless review with the blink tick. reviewGen is
+// bumped here (and read into the run/blink) so a later cancel that re-bumps it
+// drops this run's result AND stops the blink.
 func (m Model) reviewDispatch(lane *reviewLane, resolved string) (Model, tea.Cmd) {
-	lane.choosing = false
-	lane.approving = ""
-	lane.running = true
-	lane.spinFrame = 0
-	lane.spinStart = time.Now()
+	target := lane.target
+	m = m.removeLayer(lane) // the run moves to the background; the lane closes
+	m.reviewRunning = true
+	m.reviewRunningLabel = reviewScopeLabel(target)
+	m.reviewBlink = false
 	m.reviewGen++
 	gen := m.reviewGen
 	ctx, cancel := context.WithCancel(context.Background())
 	m.reviewCancel = cancel
-	return m, tea.Batch(m.reviewRunCmd(resolved, lane.target, gen, ctx), reviewSpinTickCmd(gen))
+	return m, tea.Batch(m.reviewRunCmd(resolved, target, gen, ctx), reviewBlinkCmd(gen))
 }
 
 // reviewRunCmd runs the resolved command headless via domain.ReviewReport
@@ -218,37 +226,18 @@ func (m Model) reviewRunCmd(resolved string, target domain.ReviewTarget, gen int
 	}
 }
 
-// reviewSpinTickCmd schedules the next spinner frame ~100ms out.
-func reviewSpinTickCmd(gen int) tea.Cmd {
-	return tea.Tick(100*time.Millisecond, func(time.Time) tea.Msg { return reviewSpinMsg{gen: gen} })
-}
-
-// tickReviewSpinner advances the spinner and reschedules while a matching run
-// is in flight; a stale/finished/cancelled run stops the tick (no reschedule).
-func (m Model) tickReviewSpinner(msg reviewSpinMsg) (Model, tea.Cmd) {
-	lane := layerOf[*reviewLane](m)
-	if lane == nil || !lane.running || msg.gen != m.reviewGen {
-		return m, nil
-	}
-	lane.spinFrame++
-	return m, reviewSpinTickCmd(msg.gen)
-}
-
-// applyReviewDone handles the finished run: gen-guarded, it pops the lane and
-// pushes the report viewer on success, or surfaces the error. A result whose
-// gen no longer matches m.reviewGen (cancelled/superseded/repo-switched) is
-// dropped silently — essential because a ctx-killed agent returns
-// *exec.ExitError, not context.Canceled, so only the gen check tells a
-// deliberate cancel from a real failure.
+// applyReviewDone handles the finished background run: gen-guarded, it clears
+// the running flag and, on success, auto-pops the report viewer over whatever
+// the user was doing (the lane is already gone). A result whose gen no longer
+// matches m.reviewGen (cancelled/superseded/repo-switched) is dropped silently
+// — essential because a ctx-killed agent returns *exec.ExitError, not
+// context.Canceled, so only the gen check tells a deliberate cancel from a real
+// failure.
 func (m Model) applyReviewDone(msg reviewDoneMsg) (Model, tea.Cmd) {
 	if msg.gen != m.reviewGen {
 		return m, nil // stale / cancelled / superseded / repo switched
 	}
-	lane := layerOf[*reviewLane](m)
-	if lane == nil {
-		return m, nil // lane already gone
-	}
-	m = m.removeLayer(lane)
+	m.reviewRunning = false
 	m.reviewCancel = nil
 	if msg.err != nil {
 		m.statusMsg = "review: " + msg.err.Error()
@@ -265,13 +254,16 @@ func reviewTitle(rng string) string {
 	return "Review: " + rng
 }
 
-// cancelReview cancels an in-flight run and bumps reviewGen so the late,
-// ctx-killed result is dropped. Mirrors escGenerate's gen bump.
+// cancelReview cancels an in-flight background run, clears the running flag
+// (killing the blink), and bumps reviewGen so the late, ctx-killed result is
+// dropped. Reachable via reRoot (a repo switch); mirrors escGenerate's gen
+// bump.
 func (m Model) cancelReview() Model {
 	if m.reviewCancel != nil {
 		m.reviewCancel()
 		m.reviewCancel = nil
 	}
+	m.reviewRunning = false
 	m.reviewGen++
 	return m
 }
@@ -282,17 +274,13 @@ func (lane *reviewLane) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
 	}
-	// esc always pops the lane (nothing sits behind it); a running lane also
-	// cancels the run first so the killed result is dropped by the gen guard.
+	// esc pops the lane (nothing sits behind it). The lane only ever holds the
+	// foreground chooser/approval now — a dispatched run has already backgrounded
+	// and popped the lane — so there is nothing to cancel here.
 	if msg.Type == tea.KeyEsc {
-		if lane.running {
-			m = m.cancelReview()
-		}
 		return m.popLayer(), nil
 	}
 	switch {
-	case lane.running:
-		return m, nil // every key but esc/ctrl+c is swallowed while the agent works
 	case lane.approving != "":
 		return lane.updateApproving(m, msg)
 	case lane.choosing:
@@ -355,12 +343,6 @@ func (lane *reviewLane) render(m Model, below string) string {
 	w, h := m.overlayDims()
 	var b strings.Builder
 	switch {
-	case lane.running:
-		frames := []rune("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
-		frame := frames[lane.spinFrame%len(frames)]
-		elapsed := int(time.Since(lane.spinStart).Seconds())
-		b.WriteString("Review\n\n")
-		b.WriteString(fmt.Sprintf("%c reviewing %s… %ds  ([esc] to cancel)", frame, reviewScopeLabel(lane.target), elapsed))
 	case lane.approving != "":
 		b.WriteString("Run this command?  (" + lane.genCmd.Name + ")\n\n")
 		b.WriteString(approvalBoxView(lane.approving, w))
@@ -375,7 +357,7 @@ func (lane *reviewLane) render(m Model, below string) string {
 	return overlayCenter(clipToHeight(below, h), box, w, h)
 }
 
-// reviewScopeLabel names the review scope for the spinner readout.
+// reviewScopeLabel names the review scope for the running-review status label.
 func reviewScopeLabel(t domain.ReviewTarget) string {
 	if strings.TrimSpace(t.Range) == "" {
 		return "working changes"
