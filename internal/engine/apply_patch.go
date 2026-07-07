@@ -134,13 +134,34 @@ func (op ApplyPatch) runAm(ctx context.Context, deps OpDeps, base string) (Resul
 // mode's "lands unstaged" contract. Only on a miss does it retry with
 // `--3way`, which exits non-zero BOTH when it left conflict markers and when
 // it applied nothing — unmerged index entries tell the two apart.
+//
+// A clean --3way retry is the tricky case: --3way's implied --index means
+// the retry, on success, staged the patch's changes — the SAME contract
+// violation calling --3way unconditionally would cause, just reached via the
+// fallback instead of the first attempt. So a clean fallback apply is
+// followed by a surgical unstage: PatchPaths reads the patch (touching
+// nothing) for exactly the paths it changed, and UnstagePaths restores only
+// those from the index, leaving the resolved content in the working tree and
+// any unrelated pre-staged user changes untouched. The conflict path below
+// (a dirty --3way retry) is unaffected: it already returns Result+error and
+// leaves the unmerged entries for the conflict process, which is correct.
 func (op ApplyPatch) runApply(ctx context.Context, deps OpDeps, base string) (Result, error) {
 	deps.emit(ctx, Progress{Step: "applying", Detail: base + " (working tree)"})
 	applyErr := deps.Repo.ApplyPatch(ctx, op.Path, false)
-	if applyErr != nil {
+	fellBackToThreeWay := applyErr != nil
+	if fellBackToThreeWay {
 		applyErr = deps.Repo.ApplyPatch(ctx, op.Path, true)
 	}
 	if applyErr == nil {
+		if fellBackToThreeWay {
+			if uerr := op.unstageAfterThreeWay(ctx, deps); uerr != nil {
+				// The apply itself succeeded — the working tree genuinely
+				// changed — so Changed:true here (like the keep-conflicts
+				// shape below) rather than the zero Result, so a frontend
+				// keying its refresh off Changed doesn't show stale state.
+				return Result{Changed: true}, uerr
+			}
+		}
 		res := Result{Summary: "applied " + base + " to working tree", Changed: true}
 		deps.emit(ctx, Done{Result: res})
 		return res, nil
@@ -154,6 +175,32 @@ func (op ApplyPatch) runApply(ctx context.Context, deps OpDeps, base string) (Re
 			fmt.Errorf("apply conflict: %s left %d file(s) unmerged — resolve and commit", base, n)
 	}
 	return Result{}, fmt.Errorf("patch does not apply; nothing changed: %w", applyErr)
+}
+
+// unstageAfterThreeWay restores the index after a clean --3way fallback
+// apply (see runApply's doc comment for why --3way's implied --index makes
+// this necessary). It reads back exactly the paths the patch touched via
+// PatchPaths (a read of the patch file only, nothing git-side) and unstages
+// only those, so an unrelated file the caller had already staged before
+// running this op is left alone. Any failure here means the working tree
+// carries the patch's changes but the index is in an unknown state relative
+// to those paths — the error is worded so callers don't mistake it for a
+// failed apply (the apply itself already succeeded). Known gap (see
+// git.PatchPaths' doc comment): for a renamed file, PatchPaths can only
+// report the new path, so the old path's staged deletion survives — a
+// smaller residual state, not the original silent-full-stage bug.
+func (op ApplyPatch) unstageAfterThreeWay(ctx context.Context, deps OpDeps) error {
+	paths, perr := deps.Repo.PatchPaths(ctx, op.Path)
+	if perr != nil {
+		return fmt.Errorf("applied but left staged: read patch paths: %w", perr)
+	}
+	if len(paths) == 0 {
+		return fmt.Errorf("applied but left staged: patch reported no touched paths")
+	}
+	if perr := deps.Repo.UnstagePaths(ctx, paths); perr != nil {
+		return fmt.Errorf("applied but left staged: %w", perr)
+	}
+	return nil
 }
 
 // readHead returns up to n bytes from the start of the file at path.

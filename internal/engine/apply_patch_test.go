@@ -104,6 +104,102 @@ func TestApplyPatchWorkingTreeClean(t *testing.T) {
 	}
 }
 
+// TestApplyPatchWorkingTreeDriftFallbackUnstaged: a plain `git apply` misses
+// because local HEAD drifted on a context line near the hunk (not the hunk's
+// own line), so the --3way retry resolves it CLEANLY (no conflict markers,
+// no unmerged entries) — but --3way implies --index, so without the fix the
+// clean resolution would land staged, violating ApplyModeWorkingTree's
+// "lands unstaged" contract. Also pins the surgical-unstage property: a
+// pre-existing staged change to an UNRELATED file must survive still staged.
+func TestApplyPatchWorkingTreeDriftFallbackUnstaged(t *testing.T) {
+	dir, repo := newRepo(t)
+	writeCommit(t, dir, "file.txt", "one\ntwo\nthree\nfour\nfive\n", "base")
+	sha := writeCommit(t, dir, "file.txt", "one\ntwo\nTHREE\nfour\nfive\n", "change three")
+	patchBody := apGitOut(t, dir, "diff", sha+"~1", sha, "--", "file.txt")
+	p := filepath.Join(t.TempDir(), "drift.patch")
+	if err := os.WriteFile(p, []byte(patchBody+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	apGitOut(t, dir, "reset", "--hard", sha+"~1")
+
+	// Local drift: a committed edit to a DIFFERENT line of the same file,
+	// close enough to sit inside the hunk's context window. This makes the
+	// plain context-matching apply fail (the context text no longer matches
+	// verbatim) while --3way's blob-level merge still resolves cleanly,
+	// since the local edit and the patch's edit don't overlap.
+	writeCommit(t, dir, "file.txt", "ONE\ntwo\nthree\nfour\nfive\n", "local drift on an unrelated line")
+
+	// A pre-existing staged change to a DIFFERENT file must survive the
+	// apply still staged — pins that the unstage is scoped to the patch's
+	// own paths, not a blanket unstage-everything.
+	if err := os.WriteFile(filepath.Join(dir, "other.txt"), []byte("pre-existing staged content\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	apGitOut(t, dir, "add", "other.txt")
+
+	before := apGitOut(t, dir, "rev-parse", "HEAD")
+
+	res, err := ApplyPatch{Path: p, Mode: ApplyModeWorkingTree}.Run(
+		context.Background(), OpDeps{Repo: repo})
+	if err != nil {
+		t.Fatalf("apply working (drift fallback): %v", err)
+	}
+	if !res.Changed {
+		t.Fatalf("res = %+v, want Changed", res)
+	}
+	if got := apGitOut(t, dir, "rev-parse", "HEAD"); got != before {
+		t.Fatal("working-tree mode must not commit")
+	}
+	want := "ONE\ntwo\nTHREE\nfour\nfive\n"
+	if got, _ := os.ReadFile(filepath.Join(dir, "file.txt")); string(got) != want {
+		t.Fatalf("file.txt = %q, want %q (both edits present)", got, want)
+	}
+	if staged := apGitOut(t, dir, "diff", "--cached", "--name-only"); staged != "other.txt" {
+		t.Fatalf("staged = %q, want exactly %q (file.txt unstaged, other.txt still staged)", staged, "other.txt")
+	}
+	if unmerged := apGitOut(t, dir, "diff", "--name-only", "--diff-filter=U"); unmerged != "" {
+		t.Fatalf("unmerged = %q, want none (clean 3-way resolution)", unmerged)
+	}
+}
+
+// TestApplyPatchWorkingTreeDriftFallbackUnstagedMailbox: the same drift
+// scenario as TestApplyPatchWorkingTreeDriftFallbackUnstaged, but with a
+// format-patch MAILBOX (mailboxFor) instead of a plain diff — the shape
+// ApplyModeWorkingTree also accepts (see TestApplyPatchWorkingTreeClean).
+// PatchPaths runs `git apply --numstat -z` on whatever file the op was
+// given, so this pins that the From/Subject/diffstat mailbox preamble
+// doesn't confuse it into reporting zero paths (which would turn a
+// successful mailbox apply into a false "applied but left staged" error).
+func TestApplyPatchWorkingTreeDriftFallbackUnstagedMailbox(t *testing.T) {
+	dir, repo := newRepo(t)
+	writeCommit(t, dir, "file.txt", "one\ntwo\nthree\nfour\nfive\n", "base")
+	sha := writeCommit(t, dir, "file.txt", "one\ntwo\nTHREE\nfour\nfive\n", "change three")
+	patch := mailboxFor(t, dir, sha)
+	apGitOut(t, dir, "reset", "--hard", sha+"~1")
+
+	writeCommit(t, dir, "file.txt", "ONE\ntwo\nthree\nfour\nfive\n", "local drift on an unrelated line")
+	before := apGitOut(t, dir, "rev-parse", "HEAD")
+
+	res, err := ApplyPatch{Path: patch, Mode: ApplyModeWorkingTree}.Run(
+		context.Background(), OpDeps{Repo: repo})
+	if err != nil {
+		t.Fatalf("apply working (mailbox drift fallback): %v", err)
+	}
+	if !res.Changed {
+		t.Fatalf("res = %+v, want Changed", res)
+	}
+	if got := apGitOut(t, dir, "rev-parse", "HEAD"); got != before {
+		t.Fatal("working-tree mode must not commit")
+	}
+	want := "ONE\ntwo\nTHREE\nfour\nfive\n"
+	if got, _ := os.ReadFile(filepath.Join(dir, "file.txt")); string(got) != want {
+		t.Fatalf("file.txt = %q, want %q (both edits present)", got, want)
+	}
+	if staged := apGitOut(t, dir, "diff", "--cached", "--name-only"); staged != "" {
+		t.Fatalf("staged = %q, want empty (nothing left staged)", staged)
+	}
+}
+
 // TestApplyPatchAmConflictAtomic: a conflicting mailbox in Commits mode rolls
 // back completely — HEAD unchanged, no rebase-apply left, worktree clean.
 func TestApplyPatchAmConflictAtomic(t *testing.T) {

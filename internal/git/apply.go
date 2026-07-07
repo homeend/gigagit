@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/homeend/gigagit/internal/gitcmd"
 )
@@ -35,6 +36,59 @@ func (r *Repo) ApplyPatch(ctx context.Context, path string, threeWay bool) error
 	b := gitcmd.New("apply").ArgIf(threeWay, "--3way").Arg(path)
 	_, err := r.Runner.Run(ctx, "git apply", b.ToArgv())
 	return err
+}
+
+// PatchPaths returns the paths the patch file at path touches
+// (`git apply --numstat -z <path>`) — it reads the patch only, touching
+// neither the working tree nor the index. Record shape: ordinarily one
+// "added\tdeleted\tpath\x00" record per file, same as DiffNumstat/
+// ParseNumstat. The parser also recognizes `git diff --numstat -z`'s rename
+// shape (empty path field, next two NUL fields are old/new) defensively, but
+// empirically (verified against git 2.43) `git apply --numstat -z` does NOT
+// use it for a rename: it emits a single record naming only the NEW path,
+// even when the patch's diff --git header carries "rename from"/"rename to".
+// That is a known gap for this verb's sole caller, engine.ApplyPatch's
+// plain-apply-failed/--3way-succeeded fallback: PatchPaths is used to
+// surgically unstage what --3way's implied --index staged, but for a
+// renamed file it can only unstage the new path — the old path's staged
+// deletion is left behind (harmless but not fully "unstaged": `git status`
+// shows `D <old>` / `?? <new>` instead of the rename disappearing from the
+// index). One invocation.
+func (r *Repo) PatchPaths(ctx context.Context, path string) ([]string, error) {
+	b := gitcmd.New("apply").Arg("--numstat", "-z", path)
+	res, err := r.Runner.Run(ctx, "git apply", b.ToArgv())
+	if err != nil {
+		return nil, err
+	}
+	return parsePatchNumstatPaths(res.Stdout), nil
+}
+
+// parsePatchNumstatPaths parses `git apply --numstat -z` output into the
+// list of touched paths, per the record shape documented on PatchPaths.
+func parsePatchNumstatPaths(out string) []string {
+	fields := strings.Split(out, "\x00")
+	var paths []string
+	for i := 0; i < len(fields); i++ {
+		f := fields[i]
+		if f == "" {
+			continue
+		}
+		parts := strings.SplitN(f, "\t", 3)
+		if len(parts) != 3 {
+			continue
+		}
+		p := parts[2]
+		if p == "" { // rename: the next two fields are old, new
+			if i+2 >= len(fields) || fields[i+1] == "" || fields[i+2] == "" {
+				break
+			}
+			paths = append(paths, fields[i+1], fields[i+2])
+			i += 2
+			continue
+		}
+		paths = append(paths, p)
+	}
+	return paths
 }
 
 // AmMailbox applies a format-patch mailbox as real commits
