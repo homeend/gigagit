@@ -90,6 +90,72 @@ func TestReviewViewEditorOpensReportFile(t *testing.T) {
 	}
 }
 
+// z cycles the long-line layout through cutoff → wrap → scroll → cutoff.
+func TestReviewViewZCyclesMode(t *testing.T) {
+	rv := newReviewView("Review", "/tmp/x.md", "line\n")
+	m := Model{width: 40, height: 10}
+	m = m.pushLayer(rv)
+	if rv.mode != modeCutoff {
+		t.Fatalf("default mode = %v, want modeCutoff", rv.mode)
+	}
+	m, _ = rv.update(m, keyMsg("z"))
+	if rv.mode != modeWrap {
+		t.Fatalf("after one z, mode = %v, want modeWrap", rv.mode)
+	}
+	m, _ = rv.update(m, keyMsg("z"))
+	if rv.mode != modeScroll {
+		t.Fatalf("after two z, mode = %v, want modeScroll", rv.mode)
+	}
+	m, _ = rv.update(m, keyMsg("z"))
+	if rv.mode != modeCutoff {
+		t.Fatalf("after three z, mode = %v, want modeCutoff (wrap-around)", rv.mode)
+	}
+}
+
+// In wrap mode a long line's tail — cut off in cutoff mode — becomes visible on
+// a wrapped continuation line.
+func TestReviewViewWrapShowsTail(t *testing.T) {
+	long := strings.Repeat("A", 30) + "TAILWORD"
+	rv := newReviewView("Review", "/tmp/x.md", long+"\n")
+	m := Model{width: 20, height: 10} // narrower than the line: the tail is off-screen in cutoff
+	m = m.pushLayer(rv)
+
+	if strings.Contains(rv.render(m, ""), "TAILWORD") {
+		t.Fatal("cutoff mode should truncate the tail away")
+	}
+	m, _ = rv.update(m, keyMsg("z")) // → modeWrap
+	if rv.mode != modeWrap {
+		t.Fatalf("expected modeWrap, got %v", rv.mode)
+	}
+	if !strings.Contains(rv.render(m, ""), "TAILWORD") {
+		t.Fatalf("wrap mode must reveal the wrapped tail:\n%s", rv.render(m, ""))
+	}
+}
+
+// Wrap mode inflates the display-line count, and scroll still clamps to it.
+func TestReviewViewWrapScrollClamps(t *testing.T) {
+	// One logical line far wider than the box → many wrapped display lines.
+	rv := newReviewView("Review", "/tmp/x.md", strings.Repeat("W", 400)+"\n")
+	m := Model{width: 20, height: 10}
+	m = m.pushLayer(rv)
+	m, _ = rv.update(m, keyMsg("z")) // → modeWrap
+	m, _ = rv.update(m, tea.KeyMsg{Type: tea.KeyEnd})
+	body := rv.bodyRows(m)
+	dl := rv.displayLines(20)
+	wantMax := rv.maxScroll(body, len(dl))
+	if rv.scroll != wantMax {
+		t.Fatalf("end must clamp to maxScroll: scroll=%d want=%d (dl=%d body=%d)", rv.scroll, wantMax, len(dl), body)
+	}
+	if wantMax == 0 {
+		t.Fatal("a 400-wide wrapped line must overflow a 20-wide/short box")
+	}
+	// Over-scrolling past the end still clamps back.
+	m, _ = rv.update(m, tea.KeyMsg{Type: tea.KeyPgDown})
+	if rv.scroll > wantMax {
+		t.Fatalf("scroll must never exceed maxScroll, got %d > %d", rv.scroll, wantMax)
+	}
+}
+
 func TestReviewViewSlashSearchJumpsToMatch(t *testing.T) {
 	var b strings.Builder
 	for i := 0; i < 40; i++ {
