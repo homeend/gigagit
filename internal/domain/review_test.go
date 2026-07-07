@@ -17,6 +17,9 @@ func runGitIn(t *testing.T, dir string, args ...string) {
 	t.Helper()
 	c := exec.Command("git", args...)
 	c.Dir = dir
+	c.Env = append(os.Environ(),
+		"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t",
+		"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
 	if out, err := c.CombinedOutput(); err != nil {
 		t.Fatalf("git %v: %v\n%s", args, err, out)
 	}
@@ -110,5 +113,53 @@ func TestBranchReviewTarget(t *testing.T) {
 	}
 	if target.Kind != ReviewBranch {
 		t.Fatalf("Kind = %v, want ReviewBranch", target.Kind)
+	}
+}
+
+// TestBranchReviewTargetTipAloneFallback proves the no-base, no-upstream
+// fallback reviews the tip commit's OWN change (tip^..tip), not an empty
+// "working tree vs tip" diff. An orphan branch shares no history with main,
+// so MergeBase(main, orphan) fails and there's no configured upstream either.
+func TestBranchReviewTargetTipAloneFallback(t *testing.T) {
+	dir, svc := newRealRepo(t)
+	ctx := context.Background()
+
+	runGitIn(t, dir, "checkout", "--orphan", "orphan")
+	runGitIn(t, dir, "commit", "-m", "orphan root")
+
+	target, err := svc.BranchReviewTarget(ctx, "orphan")
+	if err != nil {
+		t.Fatalf("BranchReviewTarget: %v", err)
+	}
+	wantRange := "orphan^..orphan"
+	if target.Range != wantRange {
+		t.Fatalf("Range = %q, want %q", target.Range, wantRange)
+	}
+	if target.Diff.Rev != wantRange {
+		t.Fatalf("Diff.Rev = %q, want %q", target.Diff.Rev, wantRange)
+	}
+	if target.Kind != ReviewBranch {
+		t.Fatalf("Kind = %v, want ReviewBranch", target.Kind)
+	}
+}
+
+// TestReviewReportEmptyReportErrors proves a resolved command that prints
+// nothing is treated as a failure, and that no report file is written in
+// that case.
+func TestReviewReportEmptyReportErrors(t *testing.T) {
+	_, svc := newRealRepo(t)
+	stateDir := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", stateDir)
+
+	target := ReviewTarget{Kind: ReviewWorking, Range: "", Diff: model.DiffSpec{}}
+	_, err := svc.ReviewReport(context.Background(), target, "true", nil, time.Now())
+	if err == nil {
+		t.Fatal("ReviewReport: want error for an empty report, got nil")
+	}
+
+	reviewsDir := stateDir + "/gg/reviews"
+	entries, statErr := os.ReadDir(reviewsDir)
+	if statErr == nil && len(entries) != 0 {
+		t.Fatalf("expected no report file written, found %v under %s", entries, reviewsDir)
 	}
 }

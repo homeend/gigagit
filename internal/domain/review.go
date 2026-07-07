@@ -67,7 +67,7 @@ func (s *Service) writeReviewReport(ctx context.Context, rng, content string, no
 	if base == "" {
 		return "", fmt.Errorf("review: no state dir available")
 	}
-	common, err := s.repo.GitCommonDir(ctx)
+	common, err := s.GitCommonDir(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -127,8 +127,9 @@ func (s *Service) BranchReviewTarget(ctx context.Context, tip string) (ReviewTar
 		if up, uerr := s.repo.UpstreamRef(ctx, tip); uerr == nil && strings.TrimSpace(up) != "" {
 			base = strings.TrimSpace(up)
 		} else {
-			// no base: review the tip commit alone
-			return ReviewTarget{Kind: ReviewBranch, Range: tip, Diff: model.DiffSpec{Rev: tip}}, nil
+			// no base found: review just the tip commit's own change (vs its parent)
+			rng := tip + "^.." + tip
+			return ReviewTarget{Kind: ReviewBranch, Range: rng, Diff: model.DiffSpec{Rev: rng}}, nil
 		}
 	}
 	base = strings.TrimSpace(base)
