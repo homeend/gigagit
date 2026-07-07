@@ -44,6 +44,15 @@ guards against removing the worktree you are standing in.
 - `gg show <commit> [--patch] [-- <file>...]` — `<short-sha> <subject>`
   header plus the commit's terse stat block (default) or full patch
   (`--patch`).
+- `gg review [--tool <name>] [--working] [<rev>|<A..B>]` — runs a configured
+  AI review agent headless and prints its report to stdout (also persisted
+  under the gg state dir). Flags must precede the positional (like `gg log
+  -n`). No positional reviews the current branch's work; a single `<rev>`
+  reviews just that commit's own change (`rev^..rev`); an `A..B` positional
+  is used as a range; `--working` reviews uncommitted changes. `--tool`
+  picks among configured `review` commands when more than one is set up.
+  Exit 0 on a produced report, 1 on tool failure/empty report/no review tool
+  configured, 2 on a usage error.
 - `gg add (-A | <path>...)` / `gg unstage <path>...` — stage paths (or
   everything incl. untracked with `-A`) / remove paths from the index
   keeping working-tree content. `gg add` + `gg commit` fully replaces

@@ -102,6 +102,11 @@ gg log [-n N] [<rev>|<A..B>]  # terse "<short-sha> <subject>" history, newest fi
 gg diff [--stat|--name-only] [--cached] [<rev>|<A..B>] [-- <paths>...]
                                       # full patch by default; --stat = terse per-file +A -D; --name-only = bare paths
 gg show <commit> [--patch] [-- <file>...]   # "<short-sha> <subject>" header + terse stat (default) or full patch
+gg review [--tool <name>] [--working] [<rev>|<A..B>]
+                                      # AI code review; flags MUST precede the positional (like gg log -n). No positional
+                                      # reviews the current branch's work; a single <rev> reviews just that commit's own
+                                      # change; --working reviews uncommitted changes. Prints the report to stdout and
+                                      # persists it under the gg state dir; --tool picks among configured review commands
 gg add (-A | <path>...)       # stage paths, or everything incl. untracked with -A
 gg unstage <path>...          # remove paths from the index, keeping working-tree content
 gg commit -m "msg"            # add -a to stage tracked changes; --amend rewrites the last commit
@@ -456,6 +461,23 @@ command  = '''claude -p "Write a git commit message for the staged changes. Read
   --output-format json \
   --allowedTools "Read" "Bash(git diff *)" "Bash(git log *)" "Bash(git show *)" "Bash(git status *)"'''
 ```
+
+**Code review (AI).** The `.` menu offers **"Review this commit"** (Commits
+panel — the focused commit's own change), **"Review branch `<name>`"**
+(Branches panel — the branch's work since it diverged from `main`, falling
+back to its upstream), and **"Review working changes"** (Files panel), each
+running a configured `review` command — also `mode = "capture"`, headless —
+over the target's diff. The same chooser/first-run-approval gates apply; on
+success the agent's report opens in a new full-screen, read-only viewer
+(`↑↓`/`pgup`/`pgdn`/`home`/`end` scroll, `/` search, **`e`** opens the report
+file in `$EDITOR`, `esc` closes), and a failed or empty run reports the error
+in the status line instead. Every report is also written durably to
+`<state>/gg/reviews/<repo-key>/<YYYYMMDD-HHMM>-<range>.md`, so past reviews
+stay on disk and reopenable. The same pipeline is scriptable as `gg review`
+(see the CLI section above). Catalog defaults ship for Claude Code
+(`/code-review <range>`) and Junie (its report likewise comes back through
+`$GG_MESSAGE_FILE`, fed the diff via a new `$GG_REVIEW_DIFF` file since its
+own `--review` flag can't take a range).
 
 ### Environment
 
