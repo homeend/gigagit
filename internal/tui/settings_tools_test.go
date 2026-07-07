@@ -110,6 +110,7 @@ func TestApplyToolsWizardWritesMissingOnly(t *testing.T) {
 		t.Errorf("config has %d commands, want %d", len(cfg.Tools.Command), wantWritten)
 	}
 	sawCommitMsg := false
+	sawReview := false
 	for _, tc := range cfg.Tools.Command {
 		// The skip is keyed on (category, name): the pre-existing
 		// (conflict, Claude) must not be rewritten, but a (commit_message,
@@ -117,16 +118,23 @@ func TestApplyToolsWizardWritesMissingOnly(t *testing.T) {
 		if tc.Category == "conflict" && tc.Name == "Claude" {
 			t.Error("existing (conflict, Claude) block must be skipped, not rewritten")
 		}
-		if tc.Command == "" || (tc.Category != "conflict" && tc.Category != "commit_message") {
+		if tc.Command == "" || (tc.Category != "conflict" && tc.Category != "commit_message" && tc.Category != "review") {
 			t.Errorf("generated block malformed: %+v", tc)
 		}
 		if tc.Category == "commit_message" {
 			sawCommitMsg = true
 		}
+		if tc.Category == "review" {
+			sawReview = true
+		}
 	}
 	// Stage 2: the wizard also writes commit_message rows for detected tools.
 	if !sawCommitMsg {
 		t.Error("wizard should write commit_message blocks (stage 2)")
+	}
+	// Stage 3: the wizard also writes review rows for detected tools.
+	if !sawReview {
+		t.Error("wizard should write review blocks (stage 3)")
 	}
 	// The in-memory config was reloaded onto the model.
 	if len(m2.cfg.Tools.Command) != wantWritten {
