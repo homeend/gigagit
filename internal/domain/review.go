@@ -23,14 +23,40 @@ const (
 	ReviewWorking
 )
 
-// ReviewTarget is a resolved review scope: a human Range label plus the DiffSpec
-// to feed the agent. Working changes use Diff.Rev "HEAD" (git diff HEAD — the
-// full working-tree + staged diff), NOT the zero DiffSpec, which is bare
-// `git diff` and would silently omit staged changes. See WorkingReviewTarget.
+// ReviewTarget is a resolved review scope: the DiffSpec to feed the agent, the
+// injection-safe Range that the command's <range> token / DiffSpec.Rev use, and
+// a human-friendly Label for every DISPLAY surface (status bar, viewer title,
+// report filename, the agent's # Range: context header).
+//
+// Range vs Label is a security boundary, not cosmetics: Range must be pure hex
+// (or a user-typed rev) because it is spliced UNQUOTED into `claude -p
+// "/code-review <range>"` — a branch name there is a command-injection vector
+// (git allows $()/backticks in ref names). Label is NEVER executed; it is only
+// rendered or written to a file, so it may carry a branch name or commit
+// subject freely. See BranchReviewTarget's comment.
+//
+// Working changes use Diff.Rev "HEAD" (git diff HEAD — the full working-tree +
+// staged diff), NOT the zero DiffSpec, which is bare `git diff` and would
+// silently omit staged changes. See WorkingReviewTarget.
 type ReviewTarget struct {
 	Kind  ReviewKind
-	Range string // "" for the working-changes target
+	Range string // injection-safe: hex SHA range / user-typed rev. "" for working changes.
+	Label string // human display: branch name / "<short> <subject>" / typed range / "working changes"
 	Diff  model.DiffSpec
+}
+
+// DisplayLabel is the human string shown for this target (status bar, viewer
+// title, report filename). It falls back Label → Range → "working changes": a
+// construction site that forgets Label degrades to the (visible) old hex-range
+// behavior rather than silently mislabeling every report "working changes".
+func (t ReviewTarget) DisplayLabel() string {
+	if s := strings.TrimSpace(t.Label); s != "" {
+		return s
+	}
+	if s := strings.TrimSpace(t.Range); s != "" {
+		return s
+	}
+	return "working changes"
 }
 
 // WorkingReviewTarget is the "review my uncommitted changes" target: the full
@@ -40,26 +66,29 @@ type ReviewTarget struct {
 // TUI (Files panel "Review working changes") so the two call sites can't
 // diverge.
 func WorkingReviewTarget() ReviewTarget {
-	return ReviewTarget{Kind: ReviewWorking, Range: "", Diff: model.DiffSpec{Rev: "HEAD"}}
+	return ReviewTarget{Kind: ReviewWorking, Range: "", Label: "working changes", Diff: model.DiffSpec{Rev: "HEAD"}}
 }
 
-// ReviewResult is a produced review: the durable report path and its content.
+// ReviewResult is a produced review: the durable report path, its content, the
+// injection-safe range, and the human Label used for the title/filename.
 type ReviewResult struct {
 	Path    string
 	Content string
 	Range   string
+	Label   string
 }
 
 // ReviewReport runs resolvedCommand over target via engine.ReviewChanges, then
 // persists the captured report under <state>/gg/reviews/<repoKey>/. now is
 // injected so the filename timestamp is testable.
 func (s *Service) ReviewReport(ctx context.Context, target ReviewTarget, resolvedCommand string, env []string, now time.Time) (ReviewResult, error) {
+	label := target.DisplayLabel()
 	op := engine.ReviewChanges{
 		Command:    resolvedCommand,
 		Dir:        s.workdir,
 		Env:        env,
 		Diff:       target.Diff,
-		RangeLabel: target.Range,
+		RangeLabel: label, // the agent's "# Range:" context header — display text, not executed
 	}
 	res, err := s.Execute(ctx, op, nil, nil)
 	if err != nil {
@@ -77,14 +106,20 @@ func (s *Service) ReviewReport(ctx context.Context, target ReviewTarget, resolve
 	if strings.TrimSpace(report) == "" {
 		return ReviewResult{}, fmt.Errorf("review produced an empty report")
 	}
-	path, werr := s.writeReviewReport(ctx, target.Range, report, now)
+	path, werr := s.writeReviewReport(ctx, label, report, now)
 	if werr != nil {
 		return ReviewResult{}, werr
 	}
-	return ReviewResult{Path: path, Content: report, Range: target.Range}, nil
+	return ReviewResult{Path: path, Content: report, Range: target.Range, Label: label}, nil
 }
 
-func (s *Service) writeReviewReport(ctx context.Context, rng, content string, now time.Time) (string, error) {
+// writeReviewReport persists a report under a date-foldered, human-readable
+// path: <state>/gg/reviews/<repoKey>/<YYYY-MM-DD>/<HH-MM>-<label>.md, where
+// label is the target's DisplayLabel (branch name / "<short> <subject>" / range
+// / "working changes"), truncated and filename-sanitized. Grouping by day keeps
+// the archive browsable; the label in the name says what each report is at a
+// glance.
+func (s *Service) writeReviewReport(ctx context.Context, label, content string, now time.Time) (string, error) {
 	base := reviewsBaseDir()
 	if base == "" {
 		return "", fmt.Errorf("review: no state dir available")
@@ -93,16 +128,26 @@ func (s *Service) writeReviewReport(ctx context.Context, rng, content string, no
 	if err != nil {
 		return "", err
 	}
-	dir := filepath.Join(base, repoKey(strings.TrimSpace(common)))
+	dir := filepath.Join(base, repoKey(strings.TrimSpace(common)), now.Format("2006-01-02"))
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
-	name := now.Format("20060102-1504") + "-" + sanitizeRangeForFilename(rng) + ".md"
+	name := now.Format("15-04") + "-" + sanitizeRangeForFilename(truncateLabel(label, 60)) + ".md"
 	path := filepath.Join(dir, name)
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		return "", err
 	}
 	return path, nil
+}
+
+// truncateLabel bounds a display label to n runes (subjects are unbounded) so a
+// report filename stays a reasonable length. Rune-safe; trims trailing space.
+func truncateLabel(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return strings.TrimRight(string(r[:n]), " ")
 }
 
 // reviewsBaseDir mirrors shelfBaseDir (shelfstore.go) with a "reviews" leaf.
@@ -169,7 +214,7 @@ func (s *Service) BranchReviewTarget(ctx context.Context, tip string) (ReviewTar
 		} else {
 			// no base found: review just the tip commit's own change (vs its parent)
 			rng := tipSHA + "^.." + tipSHA
-			return ReviewTarget{Kind: ReviewBranch, Range: rng, Diff: model.DiffSpec{Rev: rng}}, nil
+			return ReviewTarget{Kind: ReviewBranch, Range: rng, Label: tip, Diff: model.DiffSpec{Rev: rng}}, nil
 		}
 	}
 	baseSHA, err := s.repo.ResolveCommit(ctx, strings.TrimSpace(base))
@@ -177,5 +222,6 @@ func (s *Service) BranchReviewTarget(ctx context.Context, tip string) (ReviewTar
 		return ReviewTarget{}, err
 	}
 	rng := baseSHA + ".." + tipSHA
-	return ReviewTarget{Kind: ReviewBranch, Range: rng, Diff: model.DiffSpec{Rev: rng}}, nil
+	// Range is the hex range (executed); Label is the branch NAME (display only).
+	return ReviewTarget{Kind: ReviewBranch, Range: rng, Label: tip, Diff: model.DiffSpec{Rev: rng}}, nil
 }

@@ -465,15 +465,21 @@ command  = '''claude -p "Write a git commit message for the staged changes. Read
 **Code review (AI).** The `.` menu offers **"Review this commit"** (Commits
 panel — the focused commit's own change), **"Review branch `<name>`"**
 (Branches panel — the branch's work since it diverged from `main`, falling
-back to its upstream), and **"Review working changes"** (Files panel), each
+back to its upstream), **"Review working changes"** (Files panel), and
+**"Review marked range (AI)"** (Commits panel, when two or more commits are
+◉-marked — it reviews the same range **"Compare selection"** shows), each
 running a configured `review` command — also `mode = "capture"`, headless —
-over the target's diff. The same chooser/first-run-approval gates apply; on
-success the agent's report opens in a new full-screen, read-only viewer
-(`↑↓`/`pgup`/`pgdn`/`home`/`end` scroll, `/` search, **`e`** opens the report
-file in `$EDITOR`, `esc` closes), and a failed or empty run reports the error
-in the status line instead. Every report is also written durably to
-`<state>/gg/reviews/<repo-key>/<YYYYMMDD-HHMM>-<range>.md`, so past reviews
-stay on disk and reopenable. The same pipeline is scriptable as `gg review`
+over the target's diff. The same chooser/first-run-approval gates apply; the
+review runs in the background (a blinking `⟳ reviewing <label>…` status names
+the scope by **branch name / commit title / range**, not a raw SHA) and on
+success the agent's report auto-opens in a new full-screen, read-only viewer
+(`↑↓`/`pgup`/`pgdn`/`home`/`end` scroll, `z` wrap mode, `/` search, **`e`**
+opens the report file in `$EDITOR`, `esc` closes); a failed or empty run
+reports the error in the status line instead. Every report is also written
+durably to `<state>/gg/reviews/<repo-key>/<YYYY-MM-DD>/<HH-MM>-<label>.md` (a
+per-day folder; the label is the branch name / `<short-sha> <subject>` /
+range), so past reviews stay on disk and reopenable. The same pipeline is
+scriptable as `gg review`
 (see the CLI section above). Catalog defaults ship for Claude Code
 (`/code-review <range>`) and Junie (its report likewise comes back through
 `$GG_MESSAGE_FILE`, fed the diff via a new `$GG_REVIEW_DIFF` file since its

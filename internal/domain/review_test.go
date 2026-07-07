@@ -64,9 +64,13 @@ func TestReviewReportPersistsAndReturns(t *testing.T) {
 	if got := string(persisted); !strings.Contains(got, "REPORT: one finding") {
 		t.Fatalf("persisted file content=%q", got)
 	}
-	// filename carries the sanitized range + the stamped time
-	if !strings.Contains(res.Path, "20260707-0130") || !strings.Contains(res.Path, "HEAD~1..HEAD") {
-		t.Fatalf("filename should carry timestamp+range: %q", res.Path)
+	// New layout: a per-day folder (YYYY-MM-DD) holding <HH-MM>-<label>.md.
+	// Label is unset here, so DisplayLabel falls back to the Range.
+	if !strings.Contains(res.Path, "2026-07-07") || !strings.Contains(res.Path, "01-30-HEAD~1..HEAD.md") {
+		t.Fatalf("path should be <date>/<HH-MM>-<label>.md: %q", res.Path)
+	}
+	if res.Label != "HEAD~1..HEAD" {
+		t.Fatalf("Label = %q, want the range fallback HEAD~1..HEAD", res.Label)
 	}
 }
 
@@ -181,6 +185,10 @@ func TestBranchReviewTarget(t *testing.T) {
 	if strings.Contains(target.Range, "feature") {
 		t.Fatalf("Range = %q, must not contain the branch name", target.Range)
 	}
+	// The branch NAME lives in Label (display only), never in the executed Range.
+	if target.Label != "feature" {
+		t.Fatalf("Label = %q, want the branch name \"feature\"", target.Label)
+	}
 }
 
 // TestBranchReviewTargetTipAloneFallback proves the no-base, no-upstream
@@ -217,6 +225,9 @@ func TestBranchReviewTargetTipAloneFallback(t *testing.T) {
 	}
 	if !hexRangeRE.MatchString(target.Range) {
 		t.Fatalf("Range = %q, does not look like a pure-hex range", target.Range)
+	}
+	if target.Label != "orphan" {
+		t.Fatalf("Label = %q, want the branch name \"orphan\"", target.Label)
 	}
 }
 
@@ -272,5 +283,40 @@ func TestReviewReportEmptyReportErrors(t *testing.T) {
 	entries, statErr := os.ReadDir(reviewsDir)
 	if statErr == nil && len(entries) != 0 {
 		t.Fatalf("expected no report file written, found %v under %s", entries, reviewsDir)
+	}
+}
+
+// TestReviewDisplayLabelFallback: the display chain is Label → Range → "working
+// changes", so a construction site that forgets Label degrades to the visible
+// hex range, never a silent "working changes" mislabel.
+func TestReviewDisplayLabelFallback(t *testing.T) {
+	if got := (ReviewTarget{Label: "feat/foo", Range: "aaa..bbb"}).DisplayLabel(); got != "feat/foo" {
+		t.Fatalf("DisplayLabel = %q, want the Label", got)
+	}
+	if got := (ReviewTarget{Range: "aaa..bbb"}).DisplayLabel(); got != "aaa..bbb" {
+		t.Fatalf("DisplayLabel = %q, want the Range fallback", got)
+	}
+	if got := (ReviewTarget{}).DisplayLabel(); got != "working changes" {
+		t.Fatalf("DisplayLabel = %q, want \"working changes\"", got)
+	}
+}
+
+// TestReviewReportFolderedByDate proves the persisted path is
+// <repoKey>/<YYYY-MM-DD>/<HH-MM>-<label>.md and that the human Label (not the
+// hex Range) names the file.
+func TestReviewReportFolderedByDate(t *testing.T) {
+	_, svc := newRealRepo(t)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	target := ReviewTarget{Kind: ReviewBranch, Range: "aaaaaaa..bbbbbbb", Label: "feat/my-branch", Diff: model.DiffSpec{Rev: "HEAD"}}
+	when := time.Date(2026, 7, 7, 14, 5, 0, 0, time.UTC)
+	res, err := svc.ReviewReport(context.Background(), target, `printf 'ok\n'`, nil, when)
+	if err != nil {
+		t.Fatalf("review: %v", err)
+	}
+	if !strings.Contains(res.Path, "2026-07-07") {
+		t.Fatalf("path %q should be under a YYYY-MM-DD folder", res.Path)
+	}
+	if !strings.Contains(res.Path, "14-05-feat-my-branch.md") {
+		t.Fatalf("path %q should be <HH-MM>-<sanitized-label>.md (branch name, not the SHA range)", res.Path)
 	}
 }
