@@ -9,6 +9,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Compare branches (Branches panel)**: mark a branch with `m`, `m` on a second —
+  the pair-op picker now offers *Compare A ↔ B*: the full tip-to-tip diff in the
+  compare files view (full branch names in the title). `f` cycles an origin
+  filter — all differences / only files A changed / only files B changed —
+  computed from the merge base (`no common ancestor` disables it). TUI-only;
+  `gg compare A B` already covers the CLI.
 - **Import/apply a patch.** `gg apply [--am | --working] <path>` and a TUI
   command-palette **"Apply patch…"** entry (`ctrl+p`) import a patch file —
   the inverse of `gg commit export-patch` / the `.`-menu "Export commit as
