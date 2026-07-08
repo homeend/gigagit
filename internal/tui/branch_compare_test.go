@@ -1,9 +1,14 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
+
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -117,5 +122,141 @@ func TestOpenBranchCompareSamePairKeepsView(t *testing.T) {
 	m, _ = m.openBranchCompare("feat/x", "main")
 	if !m.comparePair.originsLoaded {
 		t.Fatal("same-pair reopen must keep the existing state (no reset)")
+	}
+}
+
+// filterCompareFiles keeps rows whose new OR old path is in the set (a
+// rename matches from either side); a nil set means "all".
+func TestFilterCompareFiles(t *testing.T) {
+	files := []model.CommitFile{
+		{Status: "M", Path: "a.txt"},
+		{Status: "M", Path: "b.txt"},
+		{Status: "R", Path: "r-new.txt", OldPath: "r-old.txt"},
+	}
+	if got := filterCompareFiles(files, nil); len(got) != 3 {
+		t.Fatalf("nil set should keep all rows, got %d", len(got))
+	}
+	set := map[string]bool{"a.txt": true, "r-old.txt": true}
+	got := filterCompareFiles(files, set)
+	if len(got) != 2 || got[0].Path != "a.txt" || got[1].Path != "r-new.txt" {
+		t.Fatalf("filtered = %+v, want a.txt + the rename (matched via old path)", got)
+	}
+}
+
+// f cycles all -> left-only -> right-only -> all, rebuilding rows and title.
+func TestFKeyCyclesScope(t *testing.T) {
+	m := Model{width: 120, height: 40}
+	m, _ = m.openBranchCompare("feat/x", "main")
+	files := []model.CommitFile{
+		{Status: "M", Path: "a.txt"},
+		{Status: "M", Path: "b.txt"},
+	}
+	mm, _ := m.Update(compareFilesMsg{tag: m.compareTag, files: files})
+	m = mm.(Model)
+	origins := model.CompareOrigins{
+		APaths: map[string]bool{"a.txt": true},
+		BPaths: map[string]bool{"b.txt": true},
+	}
+	mm, _ = m.Update(compareOriginsMsg{tag: m.compareTag, origins: origins})
+	m = mm.(Model)
+
+	mm, _ = m.Update(keyMsg("f")) // -> left only
+	m = mm.(Model)
+	if m.comparePair.scope != compareScopeLeft {
+		t.Fatalf("scope = %v, want left", m.comparePair.scope)
+	}
+	if got := len(m.filesView.lines); got != 1 {
+		t.Fatalf("left-only rows = %d, want 1 (a.txt)", got)
+	}
+	if !strings.Contains(m.filesTitle, "only files feat/x changed") {
+		t.Fatalf("title = %q", m.filesTitle)
+	}
+
+	mm, _ = m.Update(keyMsg("f")) // -> right only
+	m = mm.(Model)
+	if m.comparePair.scope != compareScopeRight {
+		t.Fatalf("scope = %v, want right", m.comparePair.scope)
+	}
+	if !strings.Contains(m.filesTitle, "only files main changed") {
+		t.Fatalf("title = %q", m.filesTitle)
+	}
+
+	mm, _ = m.Update(keyMsg("f")) // -> all
+	m = mm.(Model)
+	if m.comparePair.scope != compareScopeAll {
+		t.Fatalf("scope = %v, want all", m.comparePair.scope)
+	}
+	if got := len(m.filesView.lines); got != 2 {
+		t.Fatalf("all rows = %d, want 2", got)
+	}
+	if strings.Contains(m.filesTitle, "only files") {
+		t.Fatalf("all-scope title should carry no filter suffix: %q", m.filesTitle)
+	}
+}
+
+// f before the origin sets land: status note, scope unchanged.
+func TestFKeyBeforeOriginsLoaded(t *testing.T) {
+	m := Model{width: 120, height: 40}
+	m, _ = m.openBranchCompare("feat/x", "main")
+	mm, _ := m.Update(keyMsg("f"))
+	m = mm.(Model)
+	if m.comparePair.scope != compareScopeAll {
+		t.Fatal("scope must stay all while origins are loading")
+	}
+	if m.statusMsg != "origin filter loading…" {
+		t.Fatalf("statusMsg = %q", m.statusMsg)
+	}
+}
+
+// No merge base: the typed sentinel maps to the unavailable note.
+func TestFKeyNoMergeBase(t *testing.T) {
+	m := Model{width: 120, height: 40}
+	m, _ = m.openBranchCompare("feat/x", "main")
+	mm, _ := m.Update(compareOriginsMsg{tag: m.compareTag, err: fmt.Errorf("%w: exit 1", domain.ErrNoMergeBase)})
+	m = mm.(Model)
+	mm, _ = m.Update(keyMsg("f"))
+	m = mm.(Model)
+	if m.comparePair.scope != compareScopeAll {
+		t.Fatal("scope must stay all without a merge base")
+	}
+	if m.statusMsg != "no common ancestor — filter unavailable" {
+		t.Fatalf("statusMsg = %q", m.statusMsg)
+	}
+}
+
+// f is inert in a NON-branch compare (comparePair == nil).
+func TestFKeyInertInNonBranchCompare(t *testing.T) {
+	m := Model{width: 120, height: 40}
+	m, _ = m.openCompareFiles(
+		model.Endpoint{Kind: model.EndpointCommit, Hash: "abc1234"},
+		model.Endpoint{Kind: model.EndpointWorkTree})
+	mm, _ := m.Update(keyMsg("f"))
+	m = mm.(Model)
+	if m.statusMsg != "" {
+		t.Fatalf("f in a non-branch compare must be inert, got note %q", m.statusMsg)
+	}
+}
+
+// The filtered view renders (guards the green-unit/broken-render class) and
+// the footer hint advertises [f] filter for a branch pair.
+func TestBranchCompareRendersWithFilter(t *testing.T) {
+	m := loadedModel(t) // real repo + svc (nav_test.go); cmds are not invoked
+	mm0, _ := m.Update(tea.WindowSizeMsg{Width: 160, Height: 40})
+	m = mm0.(Model)
+	m, _ = m.openBranchCompare("feat/x", "main")
+	files := []model.CommitFile{{Status: "M", Path: "a.txt"}, {Status: "M", Path: "b.txt"}}
+	mm, _ := m.Update(compareFilesMsg{tag: m.compareTag, files: files})
+	m = mm.(Model)
+	origins := model.CompareOrigins{APaths: map[string]bool{"a.txt": true}, BPaths: map[string]bool{"b.txt": true}}
+	mm, _ = m.Update(compareOriginsMsg{tag: m.compareTag, origins: origins})
+	m = mm.(Model)
+	mm, _ = m.Update(keyMsg("f"))
+	m = mm.(Model)
+	out := ansi.Strip(m.View())
+	if !strings.Contains(out, "a.txt") || strings.Contains(out, "b.txt") {
+		t.Fatalf("left-only render should list a.txt and not b.txt:\n%s", out)
+	}
+	if !strings.Contains(out, "[f] filter") {
+		t.Fatalf("footer hint missing [f] filter:\n%s", out)
 	}
 }

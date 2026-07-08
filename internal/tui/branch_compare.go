@@ -2,9 +2,11 @@ package tui
 
 import (
 	"context"
+	"errors"
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -81,4 +83,58 @@ func (m Model) loadCompareOriginsCmd(a, b, tag string) tea.Cmd {
 		origins, err := svc.CompareOrigins(context.Background(), a, b)
 		return compareOriginsMsg{tag: tag, origins: origins, err: err}
 	}
+}
+
+// pathSet returns the active scope's origin set; nil means "no filtering"
+// (compareScopeAll).
+func (p *comparePairState) pathSet() map[string]bool {
+	switch p.scope {
+	case compareScopeLeft:
+		return p.origins.APaths
+	case compareScopeRight:
+		return p.origins.BPaths
+	}
+	return nil
+}
+
+// filterCompareFiles keeps the rows whose path (or rename old-path) is in
+// set; a nil set keeps everything.
+func filterCompareFiles(files []model.CommitFile, set map[string]bool) []model.CommitFile {
+	if set == nil {
+		return files
+	}
+	out := make([]model.CommitFile, 0, len(files))
+	for _, f := range files {
+		if set[f.Path] || (f.OldPath != "" && set[f.OldPath]) {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+// cycleCompareScope is the f key: advance the origin-filter scope and rebuild
+// the tree rows from the retained raw list. Origins not usable yet: a status
+// note, scope unchanged.
+func (m Model) cycleCompareScope() Model {
+	p := m.comparePair
+	if p == nil {
+		return m // not a branch-pair compare: f is inert
+	}
+	if p.originsErr != nil {
+		if errors.Is(p.originsErr, domain.ErrNoMergeBase) {
+			m.statusMsg = "no common ancestor — filter unavailable"
+		} else {
+			m.statusMsg = "origin filter unavailable: " + p.originsErr.Error()
+		}
+		return m
+	}
+	if !p.originsLoaded {
+		m.statusMsg = "origin filter loading…"
+		return m
+	}
+	p.scope = (p.scope + 1) % 3
+	m.filesView.lines = commitFileLines(filterCompareFiles(p.files, p.pathSet()))
+	m.filesView.sel = 0
+	m.filesTitle = branchCompareTitle(p.left, p.right, p.scope)
+	return m
 }

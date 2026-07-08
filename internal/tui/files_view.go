@@ -476,6 +476,11 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		bv := newBlameView(ctx)
 		m = m.pushLayer(bv)
 		return m, m.loadBlameCmd(ctx, bv.tag)
+	case "f": // branch-pair compare: cycle the origin filter (all / left / right)
+		if !m.inCompareMode() || m.comparePair == nil {
+			return m, nil
+		}
+		return m.cycleCompareScope(), nil
 	case "enter":
 		if !m.filesTreeFocused {
 			// List side: for a stash, enter opens the Apply/Pop/Drop popup (the
@@ -747,6 +752,9 @@ func (m Model) renderFilesView(boxW, boxH int) string {
 		lines = append(lines, padRight("", innerW))
 	}
 	hint := "[enter] diff  [h] history  [b] blame  [/] search  [esc] close"
+	if m.comparePair != nil {
+		hint = "[enter] diff  [f] filter  [h] history  [b] blame  [/] search  [esc] close"
+	}
 	if len(vis) > rowsCap {
 		hint = fmt.Sprintf("%d/%d  %s", p.sel+1, len(vis), hint)
 	}
