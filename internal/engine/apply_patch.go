@@ -19,8 +19,10 @@ const (
 	// ApplyModeAuto detects the format: a mailbox forks via the
 	// apply_patch.mode decision, a plain diff goes to the working tree.
 	ApplyModeAuto ApplyPatchMode = iota
-	// ApplyModeWorkingTree runs `git apply --3way`: changes land unstaged;
-	// conflicts land as markers + unmerged entries for the conflict process.
+	// ApplyModeWorkingTree lands the patch unstaged: a plain `git apply`
+	// first, falling back to `--3way` (+ a surgical unstage on a clean
+	// fallback) only on a miss; conflicts land as markers + unmerged
+	// entries for the conflict process (see runApply's doc comment).
 	ApplyModeWorkingTree
 	// ApplyModeCommits runs `git am --3way`: the mailbox is replayed as real
 	// commits (author/date/message preserved). Atomic: any failure rolls back
@@ -29,12 +31,16 @@ const (
 )
 
 // ApplyModeDecisionID names the mode fork a mailbox patch raises under
-// ApplyModeAuto. Options: applyOptWorkingTree (safe, first), applyOptCommits.
+// ApplyModeAuto. Options: applyOptWorkingTree (safe, first), applyOptCommits,
+// applyOptAbort (last — the TUI's abortOption maps esc to the option named
+// "abort" if present, else the LAST option; without this, esc would have
+// silently run git am, gg's convention-abiding options list this fixes).
 const ApplyModeDecisionID = "apply_patch.mode"
 
 const (
 	applyOptWorkingTree = "working-tree"
 	applyOptCommits     = "commits"
+	applyOptAbort       = "abort"
 )
 
 var (
@@ -79,7 +85,7 @@ func (op ApplyPatch) Run(ctx context.Context, deps OpDeps) (Result, error) {
 			choice, derr := deps.decide(ctx, DecisionRequest{
 				ID:      ApplyModeDecisionID,
 				Prompt:  base + " is a format-patch mailbox — apply how?",
-				Options: []string{applyOptWorkingTree, applyOptCommits},
+				Options: []string{applyOptWorkingTree, applyOptCommits, applyOptAbort},
 			})
 			if derr != nil {
 				return Result{}, derr
@@ -89,6 +95,8 @@ func (op ApplyPatch) Run(ctx context.Context, deps OpDeps) (Result, error) {
 				mode = ApplyModeWorkingTree
 			case applyOptCommits:
 				mode = ApplyModeCommits
+			case applyOptAbort:
+				return Result{}, ErrApplyCancelled
 			default:
 				return Result{}, ErrApplyCancelled
 			}
@@ -106,8 +114,19 @@ func (op ApplyPatch) Run(ctx context.Context, deps OpDeps) (Result, error) {
 
 // runAm replays the mailbox as commits, atomically: on any failure a started
 // am is rolled back (guarded by AmInProgress — a bare rebase-apply dir
-// belongs to a paused REBASE, which must not be am-aborted).
+// belongs to a paused REBASE, which must not be am-aborted). It first
+// refuses up front if the repo ALREADY has a paused am (e.g. a raw `git am`
+// the user ran outside gg and hasn't finished): without this check,
+// AmMailbox would fail ("previous rebase directory still exists"), the
+// post-failure AmInProgress guard below would see true, and the rollback
+// would run `git am --abort` on the USER'S paused am — destroying their
+// partial conflict-resolution edits while reporting "nothing changed". The
+// post-failure abort further down only ever cleans up an am gg itself
+// started, because this guard already rejected any pre-existing one.
 func (op ApplyPatch) runAm(ctx context.Context, deps OpDeps, base string) (Result, error) {
+	if in, _ := deps.Repo.AmInProgress(ctx); in {
+		return Result{}, fmt.Errorf("a git am is already in progress in this repository — finish it (git am --continue) or abort it (git am --abort) first; nothing changed")
+	}
 	deps.emit(ctx, Progress{Step: "applying", Detail: base + " (recreate commits)"})
 	if amErr := deps.Repo.AmMailbox(ctx, op.Path, true); amErr != nil {
 		if in, _ := deps.Repo.AmInProgress(ctx); in {
@@ -170,6 +189,13 @@ func (op ApplyPatch) runApply(ctx context.Context, deps OpDeps, base string) (Re
 	if stErr == nil && st.Counts().Conflicted > 0 {
 		// The SmartMerge keep-conflicts shape: Result AND error, so the TUI
 		// refreshes (conflict process picks the files up) and the CLI exits 1.
+		// Mixed multi-file patches: when a --3way retry leaves SOME files
+		// conflicted, the cleanly-resolved sibling files stay staged here —
+		// unstageAfterThreeWay only runs on the fully-clean branch above, so
+		// a partially-conflicting patch never surgically unstages anything.
+		// This mirrors plain `git apply --3way`/`git am` behavior (staged
+		// resolved files alongside unmerged conflicted ones) and is
+		// deliberate, not a gap.
 		n := st.Counts().Conflicted
 		return Result{Summary: "applied " + base + " with conflicts in " + strconv.Itoa(n) + " file(s) (left in tree)", Changed: true},
 			fmt.Errorf("apply conflict: %s left %d file(s) unmerged — resolve and commit", base, n)

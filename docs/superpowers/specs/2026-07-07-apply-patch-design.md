@@ -62,7 +62,7 @@ output included).
 type ApplyPatchMode int
 const (
     ApplyModeAuto ApplyPatchMode = iota // detect; decision on a mailbox
-    ApplyModeWorkingTree                // git apply --3way
+    ApplyModeWorkingTree                // plain `git apply`, --3way fallback
     ApplyModeCommits                    // git am --3way (mailbox only)
 )
 type ApplyPatch struct {
@@ -81,17 +81,30 @@ Flow:
    author/message to work with.
 3. `ApplyModeAuto` + mailbox → `DecisionNeeded` with
    `ApplyModeDecisionID = "apply_patch.mode"`, options
-   `["working-tree", "commits"]` (safe option first). A decider error
-   surfaces raw (the `ExportFile` convention); an unrecognized answer
-   maps to `ErrApplyCancelled`, nothing run either way. `Auto` +
-   plain diff → working-tree directly, no decision.
-4. **Commits path:** `AmMailbox(ctx, path, true)`. On error: if
-   `AmInProgress` → `AmAbort` (rolls the branch back to the pre-am state,
+   `["working-tree", "commits", "abort"]` (safe option first, `abort`
+   last). The TUI's generic modal maps esc to the option named `"abort"`
+   if present (gg's convention across every other decision) — without it
+   listed explicitly, esc would fall through to the LAST option and
+   silently run `git am`. A decider error surfaces raw (the `ExportFile`
+   convention); the `abort` answer (and, as a belt-and-braces default, any
+   unrecognized answer) maps to `ErrApplyCancelled`, nothing run either
+   way. `Auto` + plain diff → working-tree directly, no decision.
+4. **Commits path:** first probes `AmInProgress` — if a `git am` is
+   ALREADY paused in the repo (e.g. the user started one outside gg and
+   hasn't finished it), refuses up front with a typed error, nothing run.
+   This guard exists because `AmMailbox` would otherwise fail immediately
+   ("previous rebase directory still exists"), the post-failure
+   `AmInProgress` check would see true, and the rollback would run
+   `git am --abort` on the USER'S paused am — destroying their partial
+   conflict-resolution edits while reporting "nothing changed". Once clear,
+   `AmMailbox(ctx, path, true)` runs. On error: if `AmInProgress` (an am gg
+   itself started) → `AmAbort` (rolls the branch back to the pre-am state,
    even mid-way through a multi-patch mailbox), then return a typed
    `AmFailedError` wrapping git's message; summary reports nothing
-   changed. On success: summary `applied N commit(s) from <base>`
-   (N read back via `git log` count against the pre-am HEAD, best-effort —
-   the `Commit` op's read-back precedent).
+   changed. On success: summary `applied <base>: now at <short-sha>
+   <subject>` (read back via `git.CommitLine` against the new HEAD,
+   best-effort — the `Commit` op's read-back precedent; a failed read only
+   costs the sha/subject in the summary).
 5. **Working-tree path:** `ApplyPatch(ctx, path, true)`. Exit 0 → clean,
    `Changed: true`, summary `applied <base> to working tree`. Non-zero →
    probe `git status` for unmerged entries: some present → applied WITH
@@ -140,8 +153,9 @@ gg apply [--am | --working] <path>
   dispatches `startOp(engine.ApplyPatch{Path, Mode: ApplyModeAuto})`,
   esc cancels. Embeds `popupMax`.
 - **Mode fork:** the existing modal Decider renders the
-  `apply_patch.mode` decision (Working-tree changes / Recreate commits;
-  esc = cancel, nothing applied).
+  `apply_patch.mode` decision (Working-tree changes / Recreate commits /
+  Abort; esc maps to the explicit `"abort"` option — gg's `abortOption`
+  convention — so esc genuinely cancels, nothing applied).
 - **`opAffectedSources`:** map `ApplyPatch` → {status, feed, branches}
   (am moves the branch tip and adds commits; apply changes status). The
   conflicted-apply case then flows through the normal status→conflict
@@ -153,10 +167,11 @@ gg apply [--am | --working] <path>
 |---|---|
 | File missing/unreadable | Op error before any git runs |
 | `--am` on a plain diff | Typed `ErrNotMailbox` |
-| am conflict (any patch in the mailbox) | `git am --abort`, typed error, **branch unchanged** |
+| `--am` while a git am is ALREADY paused (e.g. the user's own, started outside gg) | Refused up front (`AmInProgress` probed before `AmMailbox` runs), typed error; the pre-existing paused am is left untouched |
+| am conflict (any patch in the mailbox, no pre-existing am) | `git am --abort`, typed error, **branch unchanged** |
 | apply conflict (3-way possible) | Markers + unmerged entries land; `Changed:true`; existing conflict process (CLI exits 1) |
 | apply impossible (no 3-way base) | Op error, **tree unchanged** |
-| Decision cancelled (TUI esc) | `ErrApplyCancelled`, nothing run |
+| Decision cancelled (TUI esc → the explicit `"abort"` option) | `ErrApplyCancelled`, nothing run |
 
 ## Testing
 
@@ -168,8 +183,13 @@ gg apply [--am | --working] <path>
   - apply-clean: unstaged changes present, nothing staged/committed.
   - apply-conflict: markers present, `Changed:true`, HEAD unchanged.
   - am-conflict: op errors, HEAD unchanged, no `rebase-apply` left.
-  - Auto+mailbox emits the decision; scripted decider answers both ways;
-    cancel answer runs nothing.
+  - pre-existing paused am: a raw `git am --3way` paused outside gg
+    survives an `ApplyModeCommits` call untouched (op errors, `rebase-apply`
+    still present) — Finding 2 of the final review.
+  - Auto+mailbox emits the decision; scripted decider answers all three
+    ways (`working-tree`/`commits`/`abort`); the `abort` answer (and any
+    unrecognized answer) cancels — `ErrApplyCancelled`, HEAD unchanged,
+    worktree clean — Finding 1 of the final review.
   - `Commits` on plain diff → `ErrNotMailbox`.
 - `internal/cli`: flag parsing/usage-error cases; exit codes.
 - `internal/tui`: palette entry opens the popup; enter dispatches the op;

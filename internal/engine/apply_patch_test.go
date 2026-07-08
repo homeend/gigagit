@@ -39,6 +39,20 @@ func writeCommit(t *testing.T, dir, name, content, msg string) string {
 	return apGitOut(t, dir, "rev-parse", "HEAD")
 }
 
+// apGitAllowFail runs git in dir like apGitOut, but does NOT fail the test on
+// a non-zero exit — for a call expected to fail (e.g. a `git am` that pauses
+// on conflict), mirroring conflict_test.go's newConflictRepo `run` helper.
+func apGitAllowFail(t *testing.T, dir string, args ...string) (string, error) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(),
+		"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t",
+		"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+	out, err := cmd.CombinedOutput()
+	return strings.TrimSpace(string(out)), err
+}
+
 // mailboxFor exports rev as a format-patch mailbox file and returns its path.
 func mailboxFor(t *testing.T, dir, rev string) string {
 	t.Helper()
@@ -228,6 +242,51 @@ func TestApplyPatchAmConflictAtomic(t *testing.T) {
 	}
 }
 
+// TestApplyPatchRefusesPreExistingAm pins Finding 2: a USER'S own paused raw
+// `git am` (started outside gg, e.g. mid-conflict-resolution) must survive an
+// ApplyPatch{Mode: ApplyModeCommits} call untouched. Before the fix, the op
+// would call AmMailbox (which fails immediately — "previous rebase directory
+// still exists"), see AmInProgress true, and run `git am --abort` — silently
+// destroying the user's paused am and any partial resolution edits, then
+// report "nothing changed". The fix probes AmInProgress BEFORE calling
+// AmMailbox and refuses outright, so the rollback logic never touches an am
+// it didn't start.
+func TestApplyPatchRefusesPreExistingAm(t *testing.T) {
+	dir, repo := newRepo(t)
+	// Build a linear history: base -> change one.txt (conflicting patch) ->
+	// add two.txt (an unrelated, later, DIFFERENT patch).
+	writeCommit(t, dir, "one.txt", "one\n", "add one")
+	confSha := writeCommit(t, dir, "one.txt", "one\nchanged\n", "change one")
+	conflictingMailbox := mailboxFor(t, dir, confSha)
+	otherSha := writeCommit(t, dir, "two.txt", "two\n", "add two")
+	differentMailbox := mailboxFor(t, dir, otherSha)
+
+	// Reset to base, then diverge so the conflicting mailbox cannot 3-way
+	// resolve when raw `git am` is run below.
+	apGitOut(t, dir, "reset", "--hard", confSha+"~1")
+	writeCommit(t, dir, "one.txt", "one\nCONFLICT\n", "local side")
+
+	// The user pauses a raw `git am --3way` outside gg (expected to fail and
+	// leave .git/rebase-apply on disk — apGitAllowFail tolerates the
+	// non-zero exit instead of failing the test).
+	if _, amErr := apGitAllowFail(t, dir, "am", "--3way", conflictingMailbox); amErr == nil {
+		t.Fatal("setup: expected the raw git am to conflict and pause")
+	}
+	rebaseApplyDir := filepath.Join(dir, ".git", "rebase-apply")
+	if _, statErr := os.Stat(rebaseApplyDir); statErr != nil {
+		t.Fatalf("setup: expected a paused rebase-apply dir, stat error: %v", statErr)
+	}
+
+	_, err := ApplyPatch{Path: differentMailbox, Mode: ApplyModeCommits}.Run(
+		context.Background(), OpDeps{Repo: repo})
+	if err == nil {
+		t.Fatal("ApplyPatch must refuse while a git am is already in progress")
+	}
+	if _, statErr := os.Stat(rebaseApplyDir); statErr != nil {
+		t.Fatalf("the user's paused am must survive untouched, but rebase-apply is gone: %v", statErr)
+	}
+}
+
 // TestApplyPatchWorkingTreeConflict: working-tree mode on a conflicting patch
 // leaves 3-way conflict markers + unmerged entries, returns Result{Changed}
 // AND an error (the SmartMerge keep-conflicts shape); HEAD unchanged.
@@ -296,6 +355,65 @@ func TestApplyPatchAutoMailboxDecision(t *testing.T) {
 		OpDeps{Repo: repo, Decider: MapDecider{ApplyModeDecisionID: "bogus"}})
 	if !errors.Is(err, ErrApplyCancelled) {
 		t.Fatalf("err = %v, want ErrApplyCancelled", err)
+	}
+}
+
+// TestApplyPatchAutoMailboxAbortAnswer: the "abort" answer (what the TUI's
+// abortOption maps esc to, since it's the LAST option in
+// ApplyModeDecisionID's options list) must cancel — ErrApplyCancelled, HEAD
+// unchanged, worktree clean — NOT silently run git am. This pins Finding 1:
+// before the fix, "abort" wasn't a recognized option name, esc mapped to the
+// (then-)last option "commits", and the modal's esc key ran `git am` instead
+// of cancelling.
+func TestApplyPatchAutoMailboxAbortAnswer(t *testing.T) {
+	dir, repo := newRepo(t)
+	writeCommit(t, dir, "foo.txt", "one\n", "add foo")
+	sha := writeCommit(t, dir, "foo.txt", "one\ntwo\n", "extend foo")
+	patch := mailboxFor(t, dir, sha)
+	apGitOut(t, dir, "reset", "--hard", "HEAD~1")
+	before := apGitOut(t, dir, "rev-parse", "HEAD")
+
+	_, err := (ApplyPatch{Path: patch, Mode: ApplyModeAuto}).Run(context.Background(),
+		OpDeps{Repo: repo, Decider: MapDecider{ApplyModeDecisionID: "abort"}})
+	if !errors.Is(err, ErrApplyCancelled) {
+		t.Fatalf("err = %v, want ErrApplyCancelled", err)
+	}
+	if got := apGitOut(t, dir, "rev-parse", "HEAD"); got != before {
+		t.Fatal("HEAD must be unchanged after an abort answer")
+	}
+	if st := apGitOut(t, dir, "status", "--porcelain"); st != "" {
+		t.Fatalf("worktree must be clean after an abort answer, got %q", st)
+	}
+}
+
+// TestApplyPatchAutoMailboxDecisionOptionsIncludeAbort pins the options list
+// itself: abortOption (internal/tui) picks the option named "abort" if
+// present, so the decision request must offer it explicitly rather than
+// relying on it happening to be last.
+func TestApplyPatchAutoMailboxDecisionOptionsIncludeAbort(t *testing.T) {
+	dir, repo := newRepo(t)
+	writeCommit(t, dir, "foo.txt", "one\n", "add foo")
+	sha := writeCommit(t, dir, "foo.txt", "one\ntwo\n", "extend foo")
+	patch := mailboxFor(t, dir, sha)
+	apGitOut(t, dir, "reset", "--hard", "HEAD~1")
+
+	var seen DecisionRequest
+	dec := DeciderFunc(func(_ context.Context, req DecisionRequest) (DecisionResponse, error) {
+		seen = req
+		return DecisionResponse{Option: "abort"}, nil
+	})
+	if _, err := (ApplyPatch{Path: patch, Mode: ApplyModeAuto}).Run(context.Background(),
+		OpDeps{Repo: repo, Decider: dec}); !errors.Is(err, ErrApplyCancelled) {
+		t.Fatalf("err = %v, want ErrApplyCancelled", err)
+	}
+	found := false
+	for _, o := range seen.Options {
+		if o == "abort" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("decision options = %v, want \"abort\" present", seen.Options)
 	}
 }
 
