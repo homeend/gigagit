@@ -15,30 +15,31 @@ import (
 	"github.com/homeend/gigagit/internal/observ"
 )
 
-// settingsPopup is the generic Settings surface opened with `,`. v1 has a
-// single menu entry (agent-skill setup); the menu/picker split exists so
-// future options have a home.
+// settingsPopup is the generic Settings surface opened with `,`. The
+// menu/picker split predates the agent picker's move to the command palette
+// (openAgentPicker is now reached only from there, via pickerFromPalette) and
+// still holds many other option screens.
 type settingsPopup struct {
 	popupMax
-	picker       bool      // false = menu screen, true = agent picker
-	errorsView   bool      // true = session-errors viewer screen
-	ratesView    bool      // true = refresh-rates viewer screen
-	ratesSel     int       // selected row in the Refresh rates editor
-	ratesEditing bool      // an interval field is open
-	ratesField   textfield // the inline numeric editor
-	dets         []agentinit.Detection
-	checked      []bool
-	toolsView    bool            // true = external-tools wizard screen
-	toolRows     []toolWizardRow // detected tool × catalog command rows
-	toolChecked  []bool
-	sel          int      // selection within the agent picker list
-	menuSel      int      // selection within the top-level menu (independent of sel)
-	mode         dispMode // text display mode; z cycles (cutoff default)
-	hscroll      int      // modeScroll horizontal offset
+	picker            bool      // false = menu screen, true = agent picker
+	pickerFromPalette bool      // true = picker opened from the command palette → esc returns to base, not the menu
+	errorsView        bool      // true = session-errors viewer screen
+	ratesView         bool      // true = refresh-rates viewer screen
+	ratesSel          int       // selected row in the Refresh rates editor
+	ratesEditing      bool      // an interval field is open
+	ratesField        textfield // the inline numeric editor
+	dets              []agentinit.Detection
+	checked           []bool
+	toolsView         bool            // true = external-tools wizard screen
+	toolRows          []toolWizardRow // detected tool × catalog command rows
+	toolChecked       []bool
+	sel               int      // selection within the agent picker list
+	menuSel           int      // selection within the top-level menu (independent of sel)
+	mode              dispMode // text display mode; z cycles (cutoff default)
+	hscroll           int      // modeScroll horizontal offset
 }
 
 const (
-	settingsMenuAgents      = "Set up agent skills (using-gg)"
 	settingsMenuTools       = "External tools"
 	settingsMenuIdentity    = "Identity & profiles"
 	settingsMenuPrefixes    = "Branch prefixes"
@@ -55,7 +56,7 @@ const (
 )
 
 // settingsMenu is the top-level menu order.
-var settingsMenu = []string{settingsMenuAgents, settingsMenuTools, settingsMenuIdentity, settingsMenuPrefixes, settingsMenuHook, settingsMenuOpLog, settingsMenuErrors, settingsMenuAutoRefresh, settingsMenuRemoteTags, settingsMenuRates, settingsMenuCommitSort, settingsMenuShowGraph, settingsMenuRepoLoc, settingsMenuCommitGraph}
+var settingsMenu = []string{settingsMenuTools, settingsMenuIdentity, settingsMenuPrefixes, settingsMenuHook, settingsMenuOpLog, settingsMenuErrors, settingsMenuAutoRefresh, settingsMenuRemoteTags, settingsMenuRates, settingsMenuCommitSort, settingsMenuShowGraph, settingsMenuRepoLoc, settingsMenuCommitGraph}
 
 // commitSortModes is the cycle order for the "Commit sort" menu toggle:
 // date-order (default; git --date-order, perfect lanes) → plain (fast, git's
@@ -304,7 +305,11 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			return m, nil
 		}
 		if p.picker {
-			p.picker = false
+			if p.pickerFromPalette { // launched from the palette → esc backs out to base
+				m = m.popLayer()
+				return m, nil
+			}
+			p.picker = false // launched from the , menu → esc returns to the menu
 			return m, nil
 		}
 		if p.toolsView {
@@ -344,8 +349,6 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			return m, nil
 		case tea.KeyEnter:
 			switch settingsMenu[p.menuSel] {
-			case settingsMenuAgents:
-				return m.openAgentPicker(), nil
 			case settingsMenuTools:
 				return m.openToolsWizard(), nil
 			case settingsMenuIdentity:

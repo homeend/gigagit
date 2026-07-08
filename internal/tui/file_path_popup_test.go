@@ -188,3 +188,24 @@ func TestPaletteGitConfigOpensExplorer(t *testing.T) {
 		t.Fatal("it replaces the palette")
 	}
 }
+
+func TestPaletteAgentSkillsOpensPickerDirect(t *testing.T) {
+	m := gotoModel(t, gotoFullHash)
+	m, _ = palettePick(t, m, "Set up agent skills (using-gg)")
+	sp := layerOf[*settingsPopup](m)
+	if sp == nil || !sp.picker || !sp.pickerFromPalette {
+		t.Fatal("agent skills should open Settings pre-set to the palette-launched picker")
+	}
+	if layerOf[*commandPalette](m) != nil {
+		t.Fatal("it replaces the palette")
+	}
+}
+
+func TestPaletteAgentSkillsEscReturnsToBase(t *testing.T) {
+	m := gotoModel(t, gotoFullHash)
+	m, _ = palettePick(t, m, "Set up agent skills (using-gg)")
+	m, _ = send(m, keyType(tea.KeyEsc))
+	if layerOf[*settingsPopup](m) != nil {
+		t.Fatal("esc from a palette-launched picker must close Settings entirely (return to base)")
+	}
+}

@@ -26,7 +26,7 @@ func helpContent() []contentLine {
 		r("W", "worktree popup on a new templated branch. In the popup, p picks a saved branch prefix (Settings → Branch prefixes), fills any <user:…> labels, and seeds the editable name"),
 		r("m", "mark a row; m on a second row opens the pair-op picker"),
 		r("R", "repo switcher popup (navigation-first: ↑↓/jk/pgup/pgdn move, / filters, enter switches — while filtering, the first enter locks the filter)"),
-		r(",", "settings (agent skill install)"),
+		r(",", "settings"),
 		r(".", "action menu — context actions for the selected row and panel (incl. copy actions)"),
 		r("ctrl+p", "command palette — generic command launcher (↑↓/jk move, enter runs, esc closes); currently: Show commit"),
 		r("#", "show commit by SHA: type a commit-ish (SHA / ref); enter resolves it and opens that commit's files in the files-view"),

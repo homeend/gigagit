@@ -33,6 +33,15 @@ func paletteCommands() []paletteCommand {
 		{label: "Find", keyHint: "F", run: func(m Model) (Model, tea.Cmd) { m = m.popLayer(); return m.openFileFinder() }},
 		{label: "Open repo", run: func(m Model) (Model, tea.Cmd) { return m.openRepoPathPopup() }},
 		{label: "Git config explorer", run: func(m Model) (Model, tea.Cmd) { m = m.popLayer(); return m.openGitConfigExplorer() }},
+		{label: "Set up agent skills (using-gg)", run: func(m Model) (Model, tea.Cmd) {
+			m = m.popLayer()
+			m, cmd := m.openSettings()
+			m = m.openAgentPicker()
+			if sp := layerOf[*settingsPopup](m); sp != nil {
+				sp.pickerFromPalette = true
+			}
+			return m, cmd
+		}},
 	}
 }
 
