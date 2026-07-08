@@ -14,6 +14,28 @@ func (m Model) opsIdle() bool {
 	return !m.running && !m.loading
 }
 
+// paletteReachable reports whether ctrl+p may open the command palette right now.
+// It opens over exactly the surfaces the other global keys (g/G/F) already open
+// over: the base panels and the read-only browse windows — the files-tree and
+// stash-list field surfaces (topLayer is nil for those), and the diff/history/
+// blame layers. It never opens while an input popup, an interactive editor
+// (interactive rebase / hunk staging), a decision modal, a process, or the
+// action menu owns the keyboard, and only when ops are idle. (The review viewer
+// is excluded to stay in lock-step with g/G/F, which it also doesn't wire.)
+func (m Model) paletteReachable() bool {
+	if !m.opsIdle() || m.modal != nil || m.proc != nil || m.actionMenu != nil {
+		return false
+	}
+	switch m.topLayer().(type) {
+	case nil, *diffView, *historyView, *blameView:
+		return true
+	default:
+		// popups, the palette itself, the review viewer, interactive editors
+		// (irebaseEditor/hunkPicker), …
+		return false
+	}
+}
+
 // canStageHunks reports whether the Files panel's selected row is a tracked,
 // non-conflicted file the hunk-staging picker can open.
 func (m Model) canStageHunks() bool {

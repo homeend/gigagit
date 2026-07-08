@@ -915,6 +915,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.actionMenu != nil {
 			return m.updateActionMenuKey(msg)
 		}
+		// ctrl+p opens the command palette over the base panels and any read-only
+		// browse window (files tree, stash list, diff/history/blame/review) — see
+		// paletteReachable. Placed above the layer/files-view routing below so
+		// those windows don't swallow it; input popups, interactive editors, the
+		// decision modal, a process, and the action menu (all handled above or
+		// excluded by paletteReachable) still block it.
+		if msg.String() == "ctrl+p" && m.paletteReachable() {
+			return m.openCommandPalette()
+		}
 		// The layer stack (full-screen surfaces + centered popups) is global: its
 		// top owns the keyboard above the diff view (mirrors the action menu and
 		// render()). History/blame/rebase editors and the bookmark/shelf switchers,
@@ -1590,10 +1599,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.openActionMenu(), nil
 		case "?":
 			m = m.pushLayer(newContentPopup("Help — keys", helpContent()))
-		case "ctrl+p":
-			if m.opsIdle() {
-				return m.openCommandPalette()
-			}
 		case "#":
 			if m.opsIdle() {
 				return m.openGotoCommitPopup()

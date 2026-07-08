@@ -26,14 +26,14 @@ type commandPalette struct {
 
 // paletteCommands is the registry of palette entries, in display order.
 func paletteCommands() []paletteCommand {
+	// Entries are listed alphabetically by label.
 	return []paletteCommand{
-		{label: "Show commit", keyHint: "#", run: Model.openGotoCommitPopup},
-		{label: "File history", run: func(m Model) (Model, tea.Cmd) { return m.openFilePathPopup(filePathHistory) }},
-		{label: "File blame", run: func(m Model) (Model, tea.Cmd) { return m.openFilePathPopup(filePathBlame) }},
-		{label: "Find", keyHint: "F", run: func(m Model) (Model, tea.Cmd) { m = m.popLayer(); return m.openFileFinder() }},
-		{label: "Open repo", run: func(m Model) (Model, tea.Cmd) { return m.openRepoPathPopup() }},
 		{label: "Apply patch…", run: Model.openApplyPatchPopup},
+		{label: "File blame", run: func(m Model) (Model, tea.Cmd) { return m.openFilePathPopup(filePathBlame) }},
+		{label: "File history", run: func(m Model) (Model, tea.Cmd) { return m.openFilePathPopup(filePathHistory) }},
+		{label: "Find", keyHint: "F", run: func(m Model) (Model, tea.Cmd) { m = m.popLayer(); return m.openFileFinder() }},
 		{label: "Git config explorer", run: func(m Model) (Model, tea.Cmd) { m = m.popLayer(); return m.openGitConfigExplorer() }},
+		{label: "Open repo", run: func(m Model) (Model, tea.Cmd) { return m.openRepoPathPopup() }},
 		{label: "Set up agent skills (using-gg)", run: func(m Model) (Model, tea.Cmd) {
 			m = m.popLayer()
 			m, cmd := m.openSettings()
@@ -43,6 +43,7 @@ func paletteCommands() []paletteCommand {
 			}
 			return m, cmd
 		}},
+		{label: "Show commit", keyHint: "#", run: Model.openGotoCommitPopup},
 	}
 }
 
