@@ -84,6 +84,8 @@ func runOne(svc *domain.Service, workdir, cmd string, rest []string, stdin io.Re
 		return cmdAdd(svc, rest, stdout, stderr)
 	case "unstage":
 		return cmdUnstage(svc, rest, stdout, stderr)
+	case "apply":
+		return cmdApply(svc, workdir, rest, stdout, stderr)
 	case "shelf":
 		return cmdShelf(svc, rest, stdin, stdout, stderr)
 	case "bookmark":
@@ -140,7 +142,7 @@ var commands = map[string]bool{
 	"discard": true, "add": true, "unstage": true, "shelf": true, "bookmark": true, "log": true, "prefix": true,
 	"remote": true, "tag": true, "compare": true, "diff": true, "show": true,
 	"inspect": true, "repo": true, "init": true, "config": true, "batch": true,
-	"review": true,
+	"review": true, "apply": true,
 }
 
 // IsCommand reports whether tok is a gg CLI subcommand (used by cmd/gg to

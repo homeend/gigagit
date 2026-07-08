@@ -90,6 +90,7 @@ func TestPaletteRegistryOrder(t *testing.T) {
 		{"File blame", ""},
 		{"Find", "F"},
 		{"Open repo", ""},
+		{"Apply patch…", ""},
 		{"Git config explorer", ""},
 		{"Set up agent skills (using-gg)", ""},
 	}

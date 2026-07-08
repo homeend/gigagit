@@ -1,0 +1,78 @@
+name = "cli: gg apply lands a mailbox patch (working tree by default, --am recreates the commit)"
+
+# The patch file is provided as repo content (a real `git format-patch`
+# mailbox; the From_ sha is foreign to this repo, which is fine — plain apply
+# and am's clean path never read it). It can't be produced in-scenario by
+# `gg commit export-patch --out <relative>`: the export write resolves
+# against the PROCESS cwd (engine.ExportFile writes via os), which in the
+# in-process harness is the e2e package dir, not the sandbox.
+
+[[input.steps]]
+write = "f.txt"
+content = "one\n"
+
+[[input.steps]]
+commit = "add f"
+
+[[input.steps]]
+write = "extend.patch"
+content = '''
+From a6586e2e33238ca93b539bdcbf6dd7e8d6d7ab20 Mon Sep 17 00:00:00 2001
+From: t <t@t>
+Date: Thu, 1 Jan 2026 00:00:10 +0000
+Subject: [PATCH] extend f
+
+---
+ f.txt | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/f.txt b/f.txt
+index 5626abf..814f4a4 100644
+--- a/f.txt
++++ b/f.txt
+@@ -1 +1,2 @@
+ one
++two
+--
+2.43.0
+'''
+
+[[input.steps]]
+commit = "add patch"
+
+# Default mode: working tree — the change lands unstaged, nothing committed.
+[[run]]
+cmd             = ["apply", "extend.patch"]
+exit            = 0
+stdout_contains = ["applied"]
+
+[[run]]
+cmd             = ["log", "-n", "1"]
+exit            = 0
+stdout_contains = ["add patch"]
+stdout_excludes = ["extend f"]
+
+# Restore the tree, then --am: the commit is recreated from the mailbox.
+[[run]]
+cmd  = ["discard", "--yes", "--all"]
+exit = 0
+
+[[run]]
+cmd             = ["apply", "--am", "extend.patch"]
+exit            = 0
+stdout_contains = ["applied", "extend f"]
+
+[[run]]
+cmd             = ["log", "-n", "1"]
+exit            = 0
+stdout_contains = ["extend f"]
+
+[expect]
+branch = "main"
+clean  = true
+
+[expect.files]
+"f.txt" = "one\ntwo\n"
+
+[[expect.log]]
+subjects = ["extend f", "add patch", "add f"]

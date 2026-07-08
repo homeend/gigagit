@@ -566,6 +566,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		p := &exportPatchPopup{data: msg.data}
 		p.dest = newTextField(msg.defaultPath)
 		return m.pushLayer(p), nil
+	case applyPatchDirMsg:
+		p := &applyPatchPopup{}
+		prefill := ""
+		if msg.err == nil && msg.dir != "" {
+			prefill = msg.dir + string(os.PathSeparator)
+		}
+		p.path = newTextField(prefill)
+		return m.pushLayer(p), nil
 	case bookmarkAddedMsg:
 		if msg.err != nil {
 			m.statusMsg = "bookmark: " + msg.err.Error()

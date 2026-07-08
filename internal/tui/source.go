@@ -273,6 +273,11 @@ func opAffectedSources(op engine.Operation) []sourceKey {
 		return []sourceKey{srcIdentity}
 	case engine.SmartMerge, engine.SmartRebase:
 		return []sourceKey{srcStatus, srcFeed, srcBranches}
+	case engine.ApplyPatch:
+		// Commits mode moves the branch tip and adds commits; working-tree
+		// mode changes status (possibly to conflicted). One op covers both,
+		// so refresh the union.
+		return []sourceKey{srcStatus, srcFeed, srcBranches}
 	case engine.DeleteBranch, engine.RenameBranch:
 		// Branch-only ref change: refresh the Branches panel and the feed (its
 		// %D ref decorations and tip markers move). NOT tags — leaving these

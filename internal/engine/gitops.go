@@ -118,6 +118,11 @@ type GitOps interface {
 	ReadWorktreeFile(ctx context.Context, path string) ([]byte, error)
 	WriteWorktreeFile(ctx context.Context, path string, content []byte) error
 	StageBlob(ctx context.Context, path string, content []byte) error
+	ApplyPatch(ctx context.Context, path string, threeWay bool) error
+	PatchPaths(ctx context.Context, path string) ([]string, error)
+	AmMailbox(ctx context.Context, path string, threeWay bool) error
+	AmAbort(ctx context.Context) error
+	AmInProgress(ctx context.Context) (bool, error)
 	MergeContinue(ctx context.Context, dir string) error
 	RebaseContinue(ctx context.Context, dir string) error
 }
