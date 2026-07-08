@@ -54,6 +54,13 @@ func pairOpsFor(p panel) []pairOp {
 				return m, m.loadIrebaseCmd(marked, selected)
 			},
 		},
+		{
+			label:   func(marked, selected string) string { return "Compare " + marked + " ↔ " + selected },
+			enabled: true,
+			open: func(m Model, marked, selected string) (Model, tea.Cmd) {
+				return m.openBranchCompare(marked, selected)
+			},
+		},
 	}
 }
 

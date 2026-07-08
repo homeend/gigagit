@@ -101,6 +101,7 @@ type Model struct {
 	filesLeft         model.Endpoint // compare mode: older side
 	filesRight        model.Endpoint // compare mode: newer side
 	compareTag        string         // gates stale compareFilesMsg results
+	comparePair       *comparePairState // branch-pair compare extension (origin filter); nil for every other compare
 	filesStashTag     string         // when the files tree is showing a stash: its ref (gates stash-file loads)
 	filesReturnFocus  panel          // panel that opened the files view; esc/l restore focus here (the view itself runs on panelCommits)
 	filesTreeFocused  bool           // true = the tree side owns vertical movement (←/→/tab)
@@ -458,8 +459,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+		if m.comparePair != nil {
+			m.comparePair.files = msg.files
+		}
 		m.filesView.lines = commitFileLines(msg.files)
 		m.filesView.sel = 0
+		return m, nil
+	case compareOriginsMsg:
+		if m.filesView == nil || !m.inCompareMode() || m.comparePair == nil || msg.tag != m.compareTag {
+			return m, nil // stale or closed
+		}
+		m.comparePair.origins = msg.origins
+		m.comparePair.originsErr = msg.err
+		m.comparePair.originsLoaded = msg.err == nil
 		return m, nil
 	case commitsPagedMsg:
 		if m.feed != nil && msg.gen == m.feed.Gen() {

@@ -76,8 +76,8 @@ func TestMarkPairOpensPopupOnBranches(t *testing.T) {
 	if pp.marked != "main" || pp.selected != "feat/a" {
 		t.Fatalf("popup pair = %s + %s", pp.marked, pp.selected)
 	}
-	if len(pp.ops) != 3 {
-		t.Fatalf("branches must register merge + rebase + interactive rebase, got %d ops", len(pp.ops))
+	if len(pp.ops) != 4 {
+		t.Fatalf("branches must register merge + rebase + interactive rebase + compare, got %d ops", len(pp.ops))
 	}
 }
 

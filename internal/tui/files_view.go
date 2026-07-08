@@ -40,6 +40,7 @@ func (m Model) closeFilesView() Model {
 	m.filesLeft = model.Endpoint{}
 	m.filesRight = model.Endpoint{}
 	m.compareTag = ""
+	m.comparePair = nil
 	m.filesStashTag = ""
 	m.filesTreeFocused = false
 	m.filesReadInflight = false
