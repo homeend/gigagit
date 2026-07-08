@@ -28,6 +28,7 @@ type commandPalette struct {
 func paletteCommands() []paletteCommand {
 	return []paletteCommand{
 		{label: "Show commit", keyHint: "#", run: Model.openGotoCommitPopup},
+		{label: "Apply patch…", keyHint: "", run: Model.openApplyPatchPopup},
 	}
 }
 
