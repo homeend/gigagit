@@ -309,7 +309,10 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				m = m.popLayer()
 				return m, nil
 			}
-			p.picker = false // launched from the , menu → esc returns to the menu
+			// Retained primitive: openAgentPicker's only production caller (the
+			// palette) sets pickerFromPalette, so this menu-return branch is reached
+			// only by tests today — kept so a future , menu row could reopen the picker.
+			p.picker = false
 			return m, nil
 		}
 		if p.toolsView {

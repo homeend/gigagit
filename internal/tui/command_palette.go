@@ -16,8 +16,8 @@ type paletteCommand struct {
 	run     func(Model) (Model, tea.Cmd)
 }
 
-// commandPalette is the generic command launcher (ctrl+p). For now it holds a
-// single command, "Show commit"; it is built to grow (add a paletteCommand).
+// commandPalette is the generic command launcher (ctrl+p). It holds the palette
+// entries (see paletteCommands) and grows by adding a paletteCommand.
 type commandPalette struct {
 	popupMax
 	cmds []paletteCommand
