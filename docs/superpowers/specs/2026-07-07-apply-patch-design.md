@@ -17,7 +17,10 @@ output included).
 - **Two apply modes, user-chosen:**
   - **Working-tree** (`git apply --3way`): the patch's diff lands as
     *unstaged* changes for the user to review/stage/commit. Works with any
-    unified diff.
+    unified diff. (As built: a plain `git apply` runs first, falling back
+    to `--3way` only on a miss, followed by a surgical unstage on a clean
+    fallback — `--3way` implies `--index` in real git, so calling it
+    unconditionally would stage even a clean apply.)
   - **Recreate-commits** (`git am --3way`): replays a format-patch mailbox as
     real commit(s), preserving author/date/message.
 - **Format detection:** a mailbox (format-patch output, first line starts
@@ -78,8 +81,9 @@ Flow:
    author/message to work with.
 3. `ApplyModeAuto` + mailbox → `DecisionNeeded` with
    `ApplyModeDecisionID = "apply_patch.mode"`, options
-   `["working-tree", "commits"]` (safe option first). A decider error or
-   any other answer cancels: `ErrApplyCancelled`, nothing run. `Auto` +
+   `["working-tree", "commits"]` (safe option first). A decider error
+   surfaces raw (the `ExportFile` convention); an unrecognized answer
+   maps to `ErrApplyCancelled`, nothing run either way. `Auto` +
    plain diff → working-tree directly, no decision.
 4. **Commits path:** `AmMailbox(ctx, path, true)`. On error: if
    `AmInProgress` → `AmAbort` (rolls the branch back to the pre-am state,

@@ -9,6 +9,22 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Import/apply a patch.** `gg apply [--am | --working] <path>` and a TUI
+  command-palette **"Apply patch…"** entry (`ctrl+p`) import a patch file —
+  the inverse of `gg commit export-patch` / the `.`-menu "Export commit as
+  patch", and round-trips them. Working-tree mode (the default) lands the
+  diff as *unstaged* changes for you to review/stage/commit; a hunk that
+  doesn't apply cleanly falls back to a 3-way merge, leaving standard
+  conflict markers + unmerged entries in the tree for the existing conflict
+  process (`x`) to resolve — no new machinery. Recreate-commits mode
+  (`--am`) replays a `git format-patch` mailbox as real commits, preserving
+  author/date/message, and is atomic: any failure rolls back completely
+  (`git am --abort`), nothing half-applied; it refuses a plain diff
+  (`--am` needs a mailbox, `ErrNotMailbox`). In the TUI, a mailbox patch
+  forks a working-tree/recreate-commits choice; the CLI always takes an
+  explicit mode and never forks. `gg apply` exits 0 on a clean apply, 1 on
+  failure or applied-with-conflicts (conflicts left in the tree, the
+  `gg merge --on-conflict=keep` convention), 2 on a usage error.
 - **Review a marked commit range (AI).** With two (or more) commits ◉-marked
   in the Commits panel, the `.` menu offers **"Review marked range (AI)"** —
   it reviews exactly the same changes **"Compare selection"** would show

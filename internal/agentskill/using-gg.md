@@ -73,6 +73,14 @@ guards against removing the worktree you are standing in.
   overwrites an existing target, otherwise it refuses (exit 2). Refuses a
   merge commit — `git format-patch -1` on a merge silently emits a different
   commit's patch instead of erroring.
+- `gg apply [--am | --working] <path>` — apply a patch file (the inverse of
+  `gg commit export-patch`; round-trips it). Default = working-tree mode:
+  lands the diff as unstaged changes, nothing committed; a hunk that
+  doesn't apply cleanly falls back to a 3-way merge, and conflicts stay in
+  the tree as markers (exit 1) for you to resolve and commit. `--am`
+  recreates commits from a `git format-patch` mailbox (author/date/message
+  preserved) and is atomic: a conflicting mailbox is rolled back completely
+  (exit 1, nothing changed). `--am` on a plain diff is refused.
 - `gg pull [<branch>] [--background] [--on-conflict rebase|merge|reset|abort]` —
   smart pull; with `<branch>` + `--background` it fast-forwards that branch's
   ref without checking it out. On a diverged current branch, `--on-conflict=reset`
