@@ -28,7 +28,7 @@ func helpContent() []contentLine {
 		r("R", "repo switcher popup (navigation-first: ↑↓/jk/pgup/pgdn move, / filters, enter switches — while filtering, the first enter locks the filter)"),
 		r(",", "settings"),
 		r(".", "action menu — context actions for the selected row and panel (incl. copy actions)"),
-		r("ctrl+p", "command palette — generic command launcher (↑↓/jk move, enter runs, esc closes); currently: Show commit"),
+		r("ctrl+p", "command palette — generic command launcher (↑↓/jk move, enter runs, esc closes); includes Show commit, File history, File blame, Find, Open repo, Git config explorer, Set up agent skills"),
 		r("#", "show commit by SHA: type a commit-ish (SHA / ref); enter resolves it and opens that commit's files in the files-view"),
 		r("", "Compare against working dir / Copy to working dir (.-menu): on any focused stash/commit/staged file, diffs that version against the same path in the working tree (Compare) or writes it into the working tree at its own path (Copy)"),
 		r("o", "cycle the focused panel's sort order"),
