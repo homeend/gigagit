@@ -15,30 +15,31 @@ import (
 	"github.com/homeend/gigagit/internal/observ"
 )
 
-// settingsPopup is the generic Settings surface opened with `,`. v1 has a
-// single menu entry (agent-skill setup); the menu/picker split exists so
-// future options have a home.
+// settingsPopup is the generic Settings surface opened with `,`. The
+// menu/picker split predates the agent picker's move to the command palette
+// (openAgentPicker is now reached only from there, via pickerFromPalette) and
+// still holds many other option screens.
 type settingsPopup struct {
 	popupMax
-	picker       bool      // false = menu screen, true = agent picker
-	errorsView   bool      // true = session-errors viewer screen
-	ratesView    bool      // true = refresh-rates viewer screen
-	ratesSel     int       // selected row in the Refresh rates editor
-	ratesEditing bool      // an interval field is open
-	ratesField   textfield // the inline numeric editor
-	dets         []agentinit.Detection
-	checked      []bool
-	toolsView    bool            // true = external-tools wizard screen
-	toolRows     []toolWizardRow // detected tool × catalog command rows
-	toolChecked  []bool
-	sel          int      // selection within the agent picker list
-	menuSel      int      // selection within the top-level menu (independent of sel)
-	mode         dispMode // text display mode; z cycles (cutoff default)
-	hscroll      int      // modeScroll horizontal offset
+	picker            bool      // false = menu screen, true = agent picker
+	pickerFromPalette bool      // true = picker opened from the command palette → esc returns to base, not the menu
+	errorsView        bool      // true = session-errors viewer screen
+	ratesView         bool      // true = refresh-rates viewer screen
+	ratesSel          int       // selected row in the Refresh rates editor
+	ratesEditing      bool      // an interval field is open
+	ratesField        textfield // the inline numeric editor
+	dets              []agentinit.Detection
+	checked           []bool
+	toolsView         bool            // true = external-tools wizard screen
+	toolRows          []toolWizardRow // detected tool × catalog command rows
+	toolChecked       []bool
+	sel               int      // selection within the agent picker list
+	menuSel           int      // selection within the top-level menu (independent of sel)
+	mode              dispMode // text display mode; z cycles (cutoff default)
+	hscroll           int      // modeScroll horizontal offset
 }
 
 const (
-	settingsMenuAgents      = "Set up agent skills (using-gg)"
 	settingsMenuTools       = "External tools"
 	settingsMenuIdentity    = "Identity & profiles"
 	settingsMenuPrefixes    = "Branch prefixes"
@@ -52,11 +53,10 @@ const (
 	settingsMenuShowGraph   = "Show graph"
 	settingsMenuRepoLoc     = "Repo settings location"
 	settingsMenuCommitGraph = "Commit-graph"
-	settingsMenuGitConfig   = "Git config explorer"
 )
 
 // settingsMenu is the top-level menu order.
-var settingsMenu = []string{settingsMenuAgents, settingsMenuTools, settingsMenuIdentity, settingsMenuPrefixes, settingsMenuHook, settingsMenuOpLog, settingsMenuErrors, settingsMenuAutoRefresh, settingsMenuRemoteTags, settingsMenuRates, settingsMenuCommitSort, settingsMenuShowGraph, settingsMenuRepoLoc, settingsMenuCommitGraph, settingsMenuGitConfig}
+var settingsMenu = []string{settingsMenuTools, settingsMenuIdentity, settingsMenuPrefixes, settingsMenuHook, settingsMenuOpLog, settingsMenuErrors, settingsMenuAutoRefresh, settingsMenuRemoteTags, settingsMenuRates, settingsMenuCommitSort, settingsMenuShowGraph, settingsMenuRepoLoc, settingsMenuCommitGraph}
 
 // commitSortModes is the cycle order for the "Commit sort" menu toggle:
 // date-order (default; git --date-order, perfect lanes) → plain (fast, git's
@@ -305,6 +305,13 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			return m, nil
 		}
 		if p.picker {
+			if p.pickerFromPalette { // launched from the palette → esc backs out to base
+				m = m.popLayer()
+				return m, nil
+			}
+			// Retained primitive: openAgentPicker's only production caller (the
+			// palette) sets pickerFromPalette, so this menu-return branch is reached
+			// only by tests today — kept so a future , menu row could reopen the picker.
 			p.picker = false
 			return m, nil
 		}
@@ -345,8 +352,6 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			return m, nil
 		case tea.KeyEnter:
 			switch settingsMenu[p.menuSel] {
-			case settingsMenuAgents:
-				return m.openAgentPicker(), nil
 			case settingsMenuTools:
 				return m.openToolsWizard(), nil
 			case settingsMenuIdentity:
@@ -384,8 +389,6 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				}
 				// Same code path as the notice's "write + keep fresh" action.
 				return m.startCommitGraphWriteAndEnable()
-			case settingsMenuGitConfig:
-				return m.openGitConfigExplorer()
 			case settingsMenuRates:
 				p.ratesView = true
 				p.ratesSel = 0

@@ -16,8 +16,8 @@ type paletteCommand struct {
 	run     func(Model) (Model, tea.Cmd)
 }
 
-// commandPalette is the generic command launcher (ctrl+p). For now it holds a
-// single command, "Show commit"; it is built to grow (add a paletteCommand).
+// commandPalette is the generic command launcher (ctrl+p). It holds the palette
+// entries (see paletteCommands) and grows by adding a paletteCommand.
 type commandPalette struct {
 	popupMax
 	cmds []paletteCommand
@@ -28,6 +28,20 @@ type commandPalette struct {
 func paletteCommands() []paletteCommand {
 	return []paletteCommand{
 		{label: "Show commit", keyHint: "#", run: Model.openGotoCommitPopup},
+		{label: "File history", run: func(m Model) (Model, tea.Cmd) { return m.openFilePathPopup(filePathHistory) }},
+		{label: "File blame", run: func(m Model) (Model, tea.Cmd) { return m.openFilePathPopup(filePathBlame) }},
+		{label: "Find", keyHint: "F", run: func(m Model) (Model, tea.Cmd) { m = m.popLayer(); return m.openFileFinder() }},
+		{label: "Open repo", run: func(m Model) (Model, tea.Cmd) { return m.openRepoPathPopup() }},
+		{label: "Git config explorer", run: func(m Model) (Model, tea.Cmd) { m = m.popLayer(); return m.openGitConfigExplorer() }},
+		{label: "Set up agent skills (using-gg)", run: func(m Model) (Model, tea.Cmd) {
+			m = m.popLayer()
+			m, cmd := m.openSettings()
+			m = m.openAgentPicker()
+			if sp := layerOf[*settingsPopup](m); sp != nil {
+				sp.pickerFromPalette = true
+			}
+			return m, cmd
+		}},
 	}
 }
 

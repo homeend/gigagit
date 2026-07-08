@@ -13,7 +13,7 @@ import (
 	"github.com/homeend/gigagit/internal/model"
 )
 
-// gitConfigPopup is the Settings → "Git config explorer": every key git
+// gitConfigPopup is the command palette's "Git config explorer": every key git
 // knows (git help -c), the explicitly-set local/global values, and — for
 // curated keys (internal/gitconfdocs) — the real default and a description.
 // Navigation-first like the repo switcher: / filters (move-while-typing),

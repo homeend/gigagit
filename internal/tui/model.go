@@ -436,6 +436,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m.resolvedGotoCommit(p, msg)
+	case repoResolvedMsg:
+		p := layerOf[*repoPathPopup](m)
+		// Tag-gate by the submitted text: only act if this popup is still on top
+		// and its input is unchanged (a since-edited field discards a stale result).
+		if p == nil || p != m.topLayer() || strings.TrimSpace(p.input.Value()) != msg.path {
+			return m, nil
+		}
+		return m.resolvedRepoPath(p, msg)
 	case compareFilesMsg:
 		if m.filesView == nil || !m.inCompareMode() || msg.tag != m.compareTag {
 			return m, nil // stale or closed

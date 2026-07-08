@@ -82,3 +82,24 @@ func TestCommandPaletteRenders(t *testing.T) {
 		}
 	}
 }
+
+func TestPaletteRegistryOrder(t *testing.T) {
+	want := []struct{ label, keyHint string }{
+		{"Show commit", "#"},
+		{"File history", ""},
+		{"File blame", ""},
+		{"Find", "F"},
+		{"Open repo", ""},
+		{"Git config explorer", ""},
+		{"Set up agent skills (using-gg)", ""},
+	}
+	cmds := paletteCommands()
+	if len(cmds) != len(want) {
+		t.Fatalf("palette has %d commands, want %d", len(cmds), len(want))
+	}
+	for i, w := range want {
+		if cmds[i].label != w.label || cmds[i].keyHint != w.keyHint {
+			t.Errorf("cmd %d = {%q,%q}, want {%q,%q}", i, cmds[i].label, cmds[i].keyHint, w.label, w.keyHint)
+		}
+	}
+}

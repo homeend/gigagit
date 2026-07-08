@@ -47,7 +47,7 @@ func TestSettingsMenuHighlightsSelectedRow(t *testing.T) {
 	// reverse code specifically isolates the row highlight from frame styling.
 	const reverse = "\x1b[7m"
 
-	sel := lineWith(out, "Set up agent skills") // settingsMenuAgents, selected (menuSel 0)
+	sel := lineWith(out, "External tools") // settingsMenuTools, now the first row (menuSel 0)
 	if sel == "" {
 		t.Fatalf("selected menu row not found:\n%s", ansi.Strip(out))
 	}
@@ -89,7 +89,7 @@ func TestCommaOpensSettingsMenu(t *testing.T) {
 		t.Fatal("should open on the menu screen, not the picker")
 	}
 	out := m.View()
-	if !strings.Contains(out, "Settings") || !strings.Contains(out, "agent") {
+	if !strings.Contains(out, "Settings") || !strings.Contains(out, "External tools") {
 		t.Fatalf("menu content missing:\n%s", out)
 	}
 }
@@ -130,14 +130,14 @@ func TestSettingsPopupZCyclesMode(t *testing.T) {
 }
 
 func TestPickerCheckboxDefaults(t *testing.T) {
+	// The picker is no longer reached via the , menu (agent skills moved to
+	// the command palette) — open it the way the palette entry does.
 	m, _ := settingsModel(t)
-	u, _ := m.Update(keyMsg(","))
-	m = u.(Model)
-	u, _ = m.Update(keyMsg("enter")) // menu entry -> picker
-	m = u.(Model)
+	m, _ = m.openSettings()
+	m = m.openAgentPicker()
 	p := layerOf[*settingsPopup](m)
 	if p == nil || !p.picker {
-		t.Fatal("enter on the menu entry should open the picker")
+		t.Fatal("openAgentPicker should open the picker")
 	}
 	// claude-project (.claude, new) unchecked; agents-md (old block) checked.
 	byID := map[string]bool{}
@@ -153,11 +153,11 @@ func TestPickerCheckboxDefaults(t *testing.T) {
 }
 
 func TestPickerToggleAndApply(t *testing.T) {
+	// The picker is no longer reached via the , menu (agent skills moved to
+	// the command palette) — open it the way the palette entry does.
 	m, dir := settingsModel(t)
-	u, _ := m.Update(keyMsg(","))
-	m = u.(Model)
-	u, _ = m.Update(keyMsg("enter"))
-	m = u.(Model)
+	m, _ = m.openSettings()
+	m = m.openAgentPicker()
 	// Move to the claude-project row and check it.
 	p := layerOf[*settingsPopup](m)
 	idx := -1
@@ -170,7 +170,7 @@ func TestPickerToggleAndApply(t *testing.T) {
 		t.Fatal("claude-project not in picker")
 	}
 	p.sel = idx
-	u, _ = m.Update(keyMsg("space"))
+	u, _ := m.Update(keyMsg("space"))
 	m = u.(Model)
 	if !layerOf[*settingsPopup](m).checked[idx] {
 		t.Fatal("space should toggle the checkbox")
@@ -197,17 +197,20 @@ func TestPickerToggleAndApply(t *testing.T) {
 	}
 }
 
+// Two-level esc navigation within Settings: esc from a sub-screen (here the
+// Tools wizard, menuSel 0 since agent skills moved to the palette) backs out
+// to the menu, then esc from the menu closes the popup entirely.
 func TestSettingsEscBackThenClose(t *testing.T) {
 	m, _ := settingsModel(t)
 	u, _ := m.Update(keyMsg(","))
 	m = u.(Model)
-	u, _ = m.Update(keyMsg("enter"))
+	u, _ = m.Update(keyMsg("enter")) // menu entry (External tools) -> tools wizard
 	m = u.(Model)
-	u, _ = m.Update(keyMsg("esc")) // picker -> menu
+	u, _ = m.Update(keyMsg("esc")) // tools wizard -> menu
 	m = u.(Model)
 	p := layerOf[*settingsPopup](m)
-	if p == nil || p.picker {
-		t.Fatal("esc in the picker should go back to the menu")
+	if p == nil || p.toolsView {
+		t.Fatal("esc in the tools wizard should go back to the menu")
 	}
 	u, _ = m.Update(keyMsg("esc")) // menu -> closed
 	m = u.(Model)
