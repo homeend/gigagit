@@ -9,6 +9,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Command palette (`ctrl+p`) gains six commands.** File history and File
+  blame prompt for a path (typed relative, absolute, or `./`-prefixed —
+  normalized to repo-relative) and open the existing history/blame view;
+  Find launches the fuzzy file finder; Open repo prompts for a path
+  (`~` expands to home) and switches to it after validating it's a real repo,
+  with an inline error on failure. Git config explorer and Set up agent
+  skills (using-gg) both move out of the Settings (`,`) menu into the
+  palette — the agent-skills picker still opens through Settings internally
+  (so its screens are unchanged) but now returns straight to the palette on
+  `esc` instead of the Settings menu.
 - **Review a marked commit range (AI).** With two (or more) commits ◉-marked
   in the Commits panel, the `.` menu offers **"Review marked range (AI)"** —
   it reviews exactly the same changes **"Compare selection"** would show
