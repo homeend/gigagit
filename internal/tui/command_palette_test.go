@@ -20,8 +20,7 @@ func TestCommandPaletteOpens(t *testing.T) {
 // palette is the source, so it stays underneath for esc to reveal).
 func TestCommandPaletteEnterRunsShowCommit(t *testing.T) {
 	m := gotoModel(t, gotoFullHash)
-	m, _ = send(m, keyType(tea.KeyCtrlP))
-	m, _ = send(m, keyType(tea.KeyEnter))
+	m, _ = palettePick(t, m, "Show commit")
 	if layerOf[*gotoCommitPopup](m) == nil {
 		t.Fatal("Show commit should open the goto-commit popup")
 	}
@@ -33,9 +32,8 @@ func TestCommandPaletteEnterRunsShowCommit(t *testing.T) {
 // esc out of the show-commit popup returns to the palette it was opened from.
 func TestCommandPaletteEscFromGotoReturnsToPalette(t *testing.T) {
 	m := gotoModel(t, gotoFullHash)
-	m, _ = send(m, keyType(tea.KeyCtrlP))
-	m, _ = send(m, keyType(tea.KeyEnter)) // opens goto over the palette
-	m, _ = send(m, keyType(tea.KeyEsc))   // back out of goto
+	m, _ = palettePick(t, m, "Show commit") // opens goto over the palette
+	m, _ = send(m, keyType(tea.KeyEsc))     // back out of goto
 	if layerOf[*gotoCommitPopup](m) != nil {
 		t.Fatal("esc should close the show-commit popup")
 	}
@@ -48,8 +46,7 @@ func TestCommandPaletteEscFromGotoReturnsToPalette(t *testing.T) {
 // must not open over a stale palette.
 func TestCommandPaletteResolveUnwindsBoth(t *testing.T) {
 	m := gotoModel(t, gotoFullHash)
-	m, _ = send(m, keyType(tea.KeyCtrlP))
-	m, _ = send(m, keyType(tea.KeyEnter))
+	m, _ = palettePick(t, m, "Show commit")
 	m = typeRunes(t, m, "abc")
 	m, cmd := send(m, keyType(tea.KeyEnter))
 	m, _ = send(m, cmd()) // run the resolve
@@ -85,14 +82,14 @@ func TestCommandPaletteRenders(t *testing.T) {
 
 func TestPaletteRegistryOrder(t *testing.T) {
 	want := []struct{ label, keyHint string }{
-		{"Show commit", "#"},
-		{"File history", ""},
-		{"File blame", ""},
-		{"Find", "F"},
-		{"Open repo", ""},
 		{"Apply patch…", ""},
+		{"File blame", ""},
+		{"File history", ""},
+		{"Find", "F"},
 		{"Git config explorer", ""},
+		{"Open repo", ""},
 		{"Set up agent skills (using-gg)", ""},
+		{"Show commit", "#"},
 	}
 	cmds := paletteCommands()
 	if len(cmds) != len(want) {
