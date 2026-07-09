@@ -181,6 +181,15 @@ type CommitFile struct {
 	OldPath string // set only for renames/copies
 }
 
+// CompareOrigins attributes changed paths to each side of a branch
+// comparison: APaths/BPaths hold every path the respective branch touched
+// since the two diverged (diff merge-base..tip), keyed for membership tests.
+// Renames contribute both their old and new path.
+type CompareOrigins struct {
+	APaths map[string]bool
+	BPaths map[string]bool
+}
+
 // FileSource identifies where a FileRef's bytes come from.
 type FileSource int
 

@@ -94,19 +94,20 @@ type Model struct {
 	conflict          domain.ConflictState // source of the current conflict (merge/rebase parties), for the notice
 	resumePromptShown bool                 // one-shot: the continue/abort prompt fired for the current paused-op instance; re-arms when the state clears (maybeResumePrompt)
 
-	filesMode         filesMode      // authoritative source mode (changed/fullTree/compare/stash)
-	filesView         *contentPopup  // commit files tree replacing the left column; nil = closed
-	filesTitle        string         // "Files <short-hash> <subject>", updated with the content
-	filesHash         string         // commit the view wants; gates stale async results
-	filesLeft         model.Endpoint // compare mode: older side
-	filesRight        model.Endpoint // compare mode: newer side
-	compareTag        string         // gates stale compareFilesMsg results
-	filesStashTag     string         // when the files tree is showing a stash: its ref (gates stash-file loads)
-	filesReturnFocus  panel          // panel that opened the files view; esc/l restore focus here (the view itself runs on panelCommits)
-	filesTreeFocused  bool           // true = the tree side owns vertical movement (←/→/tab)
-	filesReadInflight bool           // a per-commit files-view CommitFiles read is outstanding; drop further nav reads until it lands (pure-drop pacing on large repos)
-	filesPreview      *contentPopup  // full-tree mode: read-only file content shown in the right column (nil = none)
-	filesPreviewTag   string         // <path>@<hash>; gates stale ShowFile results for the preview
+	filesMode         filesMode         // authoritative source mode (changed/fullTree/compare/stash)
+	filesView         *contentPopup     // commit files tree replacing the left column; nil = closed
+	filesTitle        string            // "Files <short-hash> <subject>", updated with the content
+	filesHash         string            // commit the view wants; gates stale async results
+	filesLeft         model.Endpoint    // compare mode: older side
+	filesRight        model.Endpoint    // compare mode: newer side
+	compareTag        string            // gates stale compareFilesMsg results
+	comparePair       *comparePairState // branch-pair compare extension (origin filter); nil for every other compare
+	filesStashTag     string            // when the files tree is showing a stash: its ref (gates stash-file loads)
+	filesReturnFocus  panel             // panel that opened the files view; esc/l restore focus here (the view itself runs on panelCommits)
+	filesTreeFocused  bool              // true = the tree side owns vertical movement (←/→/tab)
+	filesReadInflight bool              // a per-commit files-view CommitFiles read is outstanding; drop further nav reads until it lands (pure-drop pacing on large repos)
+	filesPreview      *contentPopup     // full-tree mode: read-only file content shown in the right column (nil = none)
+	filesPreviewTag   string            // <path>@<hash>; gates stale ShowFile results for the preview
 
 	diffTag     string      // request key of the wanted diff; gates stale async results
 	diffNav     diffNavKind // which list the open diff was opened from (Home/End file-stepping)
@@ -458,8 +459,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
-		m.filesView.lines = commitFileLines(msg.files)
+		if m.comparePair != nil {
+			m.comparePair.files = msg.files
+			m.filesView.lines = commitFileLines(filterCompareFiles(msg.files, m.comparePair.pathSet()))
+		} else {
+			m.filesView.lines = commitFileLines(msg.files)
+		}
 		m.filesView.sel = 0
+		return m, nil
+	case compareOriginsMsg:
+		if m.filesView == nil || !m.inCompareMode() || m.comparePair == nil || msg.tag != m.compareTag {
+			return m, nil // stale or closed
+		}
+		m.comparePair.origins = msg.origins
+		m.comparePair.originsErr = msg.err
+		m.comparePair.originsLoaded = msg.err == nil
 		return m, nil
 	case commitsPagedMsg:
 		if m.feed != nil && msg.gen == m.feed.Gen() {
