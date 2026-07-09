@@ -21,9 +21,10 @@ only adds copy affordances that read them.
 ## Behavior
 
 In both quick-switchers, pressing **`y`** on a highlighted **single-file
-entry** opens a small chooser modal rendered above the still-open switcher
-(the shelf remove-prompt pattern, `shelfPopupRemovePrompt`,
-`internal/tui/shelf_popup.go`):
+entry** opens a small chooser modal while the switcher stays on the layer
+stack (the shelf remove-prompt pattern, `shelfPopupRemovePrompt`,
+`internal/tui/shelf_popup.go`; visually the modal replaces the switcher box
+until it resolves — Cancel reveals the switcher unchanged):
 
 ```
 Copy — <repo-relative path>
