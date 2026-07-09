@@ -461,8 +461,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.comparePair != nil {
 			m.comparePair.files = msg.files
+			m.filesView.lines = commitFileLines(filterCompareFiles(msg.files, m.comparePair.pathSet()))
+		} else {
+			m.filesView.lines = commitFileLines(msg.files)
 		}
-		m.filesView.lines = commitFileLines(msg.files)
 		m.filesView.sel = 0
 		return m, nil
 	case compareOriginsMsg:

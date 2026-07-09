@@ -90,6 +90,107 @@ func TestCompareOriginsMsgTagGate(t *testing.T) {
 	}
 }
 
+// openBranchCompare resolves branch names to tip hashes for the Endpoint pair
+// (the diff cache treats commit↔commit endpoints as immutable — a branch
+// name in Endpoint.Hash would poison it), while keeping the full names for
+// display (comparePair.left/right, the title).
+func TestOpenBranchCompareResolvesTipHashes(t *testing.T) {
+	m := Model{width: 120, height: 40}
+	m.branches = []model.Branch{
+		{Name: "feat/x", Hash: "aaaa111"},
+		{Name: "main", Hash: "bbbb222"},
+	}
+	m, _ = m.openBranchCompare("feat/x", "main")
+
+	if m.filesLeft.Hash != "aaaa111" || m.filesRight.Hash != "bbbb222" {
+		t.Fatalf("endpoints = %q / %q, want tip hashes aaaa111 / bbbb222", m.filesLeft.Hash, m.filesRight.Hash)
+	}
+	if !strings.Contains(m.filesTitle, "feat/x ↔ main") {
+		t.Fatalf("title %q must still carry the branch names", m.filesTitle)
+	}
+	if m.comparePair == nil || m.comparePair.left != "feat/x" || m.comparePair.right != "main" {
+		t.Fatalf("comparePair = %+v, want branch names retained", m.comparePair)
+	}
+}
+
+// When the branches list doesn't know a name (e.g. not yet loaded), the
+// endpoint falls back to the name itself — still a valid commit-ish, just
+// without the diff-cache immutability guarantee.
+func TestOpenBranchCompareUnknownBranchFallsBack(t *testing.T) {
+	m := Model{width: 120, height: 40}
+	m, _ = m.openBranchCompare("feat/x", "main")
+	if m.filesLeft.Hash != "feat/x" || m.filesRight.Hash != "main" {
+		t.Fatalf("endpoints = %q / %q, want name fallback", m.filesLeft.Hash, m.filesRight.Hash)
+	}
+}
+
+// f must refuse to cycle before the raw file list has arrived — cycling
+// against a nil list would render a transient "(no files)" via
+// filterCompareFiles(nil, set) even once origins are loaded.
+func TestFKeyRefusedBeforeFilesArrive(t *testing.T) {
+	m := Model{width: 120, height: 40}
+	m, _ = m.openBranchCompare("feat/x", "main")
+	origins := model.CompareOrigins{
+		APaths: map[string]bool{"a.txt": true},
+		BPaths: map[string]bool{"b.txt": true},
+	}
+	mm, _ := m.Update(compareOriginsMsg{tag: m.compareTag, origins: origins})
+	m = mm.(Model)
+
+	mm, _ = m.Update(keyMsg("f"))
+	m = mm.(Model)
+	if m.comparePair.scope != compareScopeAll {
+		t.Fatal("scope must stay all while the file list hasn't arrived")
+	}
+	if m.statusMsg != "compare still loading…" {
+		t.Fatalf("statusMsg = %q", m.statusMsg)
+	}
+}
+
+// A late-arriving compareFilesMsg (e.g. a reload) must render through the
+// ACTIVE scope, not revert to the unfiltered list — the compareFilesMsg
+// handler races compareOriginsMsg (tea.Batch, no ordering), so it can't
+// blindly overwrite filesView.lines with the raw list.
+func TestLateCompareFilesRespectsActiveScope(t *testing.T) {
+	m := Model{width: 120, height: 40}
+	m, _ = m.openBranchCompare("feat/x", "main")
+	files := []model.CommitFile{
+		{Status: "M", Path: "a.txt"},
+		{Status: "M", Path: "b.txt"},
+	}
+	mm, _ := m.Update(compareFilesMsg{tag: m.compareTag, files: files})
+	m = mm.(Model)
+	origins := model.CompareOrigins{
+		APaths: map[string]bool{"a.txt": true},
+		BPaths: map[string]bool{"b.txt": true},
+	}
+	mm, _ = m.Update(compareOriginsMsg{tag: m.compareTag, origins: origins})
+	m = mm.(Model)
+
+	mm, _ = m.Update(keyMsg("f")) // -> left only
+	m = mm.(Model)
+	if m.comparePair.scope != compareScopeLeft {
+		t.Fatalf("scope = %v, want left", m.comparePair.scope)
+	}
+	if got := len(m.filesView.lines); got != 1 {
+		t.Fatalf("left-only rows = %d, want 1 (a.txt)", got)
+	}
+
+	// A second compareFilesMsg for the same tag lands (a reload) — the
+	// active Left scope must still apply, not the unfiltered list.
+	mm, _ = m.Update(compareFilesMsg{tag: m.compareTag, files: files})
+	m = mm.(Model)
+	if m.comparePair.scope != compareScopeLeft {
+		t.Fatalf("scope changed on reload: %v", m.comparePair.scope)
+	}
+	if got := len(m.filesView.lines); got != 1 {
+		t.Fatalf("post-reload rows = %d, want 1 (still left-only, not reverted)", got)
+	}
+	if m.filesView.lines[0].text == "" || !strings.Contains(m.filesView.lines[0].text, "a.txt") {
+		t.Fatalf("post-reload line = %q, want a.txt", m.filesView.lines[0].text)
+	}
+}
+
 // The raw compare file list is retained on comparePair (Task 3 rebuilds rows
 // from it when the scope changes); non-branch compares keep the old behavior.
 func TestCompareFilesMsgRetainsRawListForBranchPair(t *testing.T) {

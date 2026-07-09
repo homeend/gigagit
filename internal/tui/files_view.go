@@ -246,7 +246,7 @@ type compareFilesMsg struct {
 // (left = older, right = newer), e.g. a commit vs the working tree. The proven
 // single-commit path is untouched; this is a parallel mode (filesModeCompare).
 func (m Model) openCompareFiles(left, right model.Endpoint) (Model, tea.Cmd) {
-	tag := "cmp:" + left.CacheTag() + ":" + right.CacheTag()
+	tag := compareTagFor(left, right)
 	// Already showing (or loading) this exact comparison: keep it — re-running
 	// the load would only blank and repaint identical content. Each caller
 	// orders its endpoints deterministically, so the same pair from the same

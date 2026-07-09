@@ -57,13 +57,43 @@ func branchCompareTitle(left, right string, scope compareScope) string {
 	return t
 }
 
+// branchTipHash resolves a local branch's tip hash from the loaded branches
+// list; falls back to the name itself when the list doesn't know it (the
+// name is still a valid commit-ish — only the diff-cache immutability
+// guarantee is lost).
+func (m Model) branchTipHash(name string) string {
+	for _, b := range m.branches {
+		if b.Name == name {
+			return b.Hash
+		}
+	}
+	return name
+}
+
+// compareTagFor is the compare-view identity tag for an endpoint pair; both
+// openCompareFiles and openBranchCompare must build the SAME tag for the
+// same pair (the same-pair guard and every stale-msg gate key off it).
+func compareTagFor(left, right model.Endpoint) string {
+	return "cmp:" + left.CacheTag() + ":" + right.CacheTag()
+}
+
 // openBranchCompare opens the compare files view for two branches (full
 // tip-to-tip diff, marked = left/older, selected = right/newer), arms the
 // branch-pair state, and starts the origin-set load in the background.
+//
+// The endpoints carry each branch's TIP HASH, not its name — a branch name
+// in Endpoint.Hash would poison the session-lived diff cache, which treats
+// commit↔commit endpoints as immutable (a per-file diff cached under the
+// branch name is served stale after the user commits to it and re-opens the
+// same compare). The branch NAMES are kept for comparePairState.left/right,
+// the title, and the origin-set load — all display-facing or valid
+// commit-ish, never cache keys.
 func (m Model) openBranchCompare(marked, selected string) (Model, tea.Cmd) {
-	left := model.Endpoint{Kind: model.EndpointCommit, Hash: marked}
-	right := model.Endpoint{Kind: model.EndpointCommit, Hash: selected}
-	tag := "cmp:" + left.CacheTag() + ":" + right.CacheTag()
+	markedHash := m.branchTipHash(marked)
+	selectedHash := m.branchTipHash(selected)
+	left := model.Endpoint{Kind: model.EndpointCommit, Hash: markedHash}
+	right := model.Endpoint{Kind: model.EndpointCommit, Hash: selectedHash}
+	tag := compareTagFor(left, right)
 	// Same pair already showing: keep it (the openCompareFiles same-tag
 	// convention), and keep its state — re-arming would drop loaded origins.
 	if m.filesView != nil && m.inCompareMode() && m.compareTag == tag && m.comparePair != nil {
@@ -73,7 +103,7 @@ func (m Model) openBranchCompare(marked, selected string) (Model, tea.Cmd) {
 	m, cmd = m.openCompareFiles(left, right) // clean slate: clears any prior comparePair
 	m.comparePair = &comparePairState{left: marked, right: selected}
 	m.filesTitle = branchCompareTitle(marked, selected, compareScopeAll)
-	return m, tea.Batch(cmd, m.loadCompareOriginsCmd(marked, selected, tag))
+	return m, tea.Batch(cmd, m.loadCompareOriginsCmd(markedHash, selectedHash, tag))
 }
 
 // loadCompareOriginsCmd fetches the origin sets off the UI thread.
@@ -130,6 +160,10 @@ func (m Model) cycleCompareScope() Model {
 	}
 	if !p.originsLoaded {
 		m.statusMsg = "origin filter loading…"
+		return m
+	}
+	if p.files == nil {
+		m.statusMsg = "compare still loading…"
 		return m
 	}
 	p.scope = (p.scope + 1) % 3
