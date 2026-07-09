@@ -148,3 +148,17 @@ func TestPrefixSettingsFormRendersInlineError(t *testing.T) {
 		t.Fatal("form box must render the inline error line")
 	}
 }
+
+// ctrl+d works even while typing (the textfield doesn't consume it) and must
+// not disturb the form's state.
+func TestPrefixSettingsCtrlDOpensFormatHelp(t *testing.T) {
+	v := &prefixSettingsView{mode: pfForm}
+	v.fValue = newTextField("feat/")
+	m2, _ := v.update(Model{}, tea.KeyMsg{Type: tea.KeyCtrlD})
+	if layerOf[*contentPopup](m2) == nil {
+		t.Fatal("ctrl+d must push the token/date-format help sheet")
+	}
+	if v.mode != pfForm || v.fValue.Value() != "feat/" {
+		t.Fatal("form state must survive opening the help sheet")
+	}
+}

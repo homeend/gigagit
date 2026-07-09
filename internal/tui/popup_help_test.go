@@ -3,6 +3,7 @@ package tui
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/homeend/gigagit/internal/model"
 )
@@ -151,5 +152,24 @@ func TestSwitcherFootersAdvertiseQuestionMark(t *testing.T) {
 	sh := shelfPopupModel()
 	if f := sh.renderShelfPopupBox(sh.shelfSwitcher()); !strings.Contains(f, "[?] keys") {
 		t.Errorf("shelf switcher footer must advertise [?] keys:\n%s", f)
+	}
+}
+
+func TestPrefixTokensHelpContent(t *testing.T) {
+	now := time.Date(2026, 6, 11, 14, 5, 9, 0, time.UTC)
+	var joined strings.Builder
+	for _, l := range prefixTokensHelp(now) {
+		joined.WriteString(l.text + "\n")
+	}
+	s := joined.String()
+	for _, want := range []string{
+		"<date>", "<date:FMT>", "yyyy", "MM", "dd", "HH", "mm", "ss",
+		"2026-06-11",    // the live <date> example
+		"20260611-1405", // the <date:yyyyMMdd-HHmm> example
+		"<user:LABEL>", "<random-alpha:N>",
+	} {
+		if !strings.Contains(s, want) {
+			t.Errorf("help sheet missing %q", want)
+		}
 	}
 }

@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -148,6 +149,8 @@ func (v *prefixSettingsView) updateForm(m Model, msg tea.KeyMsg) (Model, tea.Cmd
 			v.field++
 		}
 		return m, nil
+	case tea.KeyCtrlD:
+		return m.pushLayer(newContentPopup(prefixTokensHelpTitle, prefixTokensHelp(time.Now()))), nil
 	case tea.KeyEnter:
 		p, ok := v.formPrefix()
 		if !ok {
@@ -212,7 +215,7 @@ func (v *prefixSettingsView) box(m Model) string {
 			"",
 			"Tokens: <user:LABEL> <seq:NAME:N> <date> <date:FMT> <parent-branch> <repo> <random-*>",
 			"",
-			"[↑/↓] field  [←/→] scope  [enter] save  [esc] back",
+			"[↑/↓] field  [←/→] scope  [enter] save  [ctrl+d] formats  [esc] back",
 		)
 		return popupBox(inner, strings.Join(parts, "\n"))
 	}

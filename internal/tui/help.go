@@ -254,7 +254,7 @@ func helpContent() []contentLine {
 		r("copy", "Copy commit id / commit title (Commits); Copy file path / file name (Files/Staged) — OSC 52"),
 		h("Settings (,)"),
 		r("↑/↓", "move between entries"),
-		r("enter", "open the selected setting (external tools, identity, branch prefixes, refresh rates, commit sort, …). The agent-skills picker moved to the ctrl+p palette (Set up agent skills)"),
+		r("enter", "open the selected setting (external tools, identity, branch prefixes, refresh rates, commit sort, …). The agent-skills picker moved to the ctrl+p palette (Set up agent skills). In the add-prefix form, ctrl+d shows a token/date-format cheat sheet"),
 		r("z", "cycle text display: cutoff / wrap / scroll"),
 		r("esc", "back to the menu from a sub-screen, then close"),
 		h("Decision modal"),
