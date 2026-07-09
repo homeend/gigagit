@@ -26,6 +26,8 @@ func TestResolveSubstitutionTokens(t *testing.T) {
 	}{
 		{"parent and repo", "<repo>/from-<parent-branch>", nil, fixedCtx(), "aaa/from-main"},
 		{"date", "d-<date:yyyy-MM-dd HH:mm>", nil, fixedCtx(), "d-2026-06-11 14:05"},
+		{"date bare defaults to yyyy-MM-dd", "d-<date>", nil, fixedCtx(), "d-2026-06-11"},
+		{"date empty format defaults too", "d-<date:>", nil, fixedCtx(), "d-2026-06-11"},
 		{"seq padded", "i-<seq:issue:4>", nil, fixedCtx(), "i-0042"},
 		{"seq unpadded", "i-<seq:issue>", nil, fixedCtx(), "i-42"},
 		// Resolver only substitutes the supplied number; an absent key => 0. The
@@ -145,6 +147,9 @@ func TestResolveNilCtxDependenciesError(t *testing.T) {
 	// injected: must return an error, never panic.
 	if _, err := Resolve("<date:yyyy>", nil, Ctx{}); err == nil {
 		t.Error("nil Ctx.Now should error, not panic")
+	}
+	if _, err := Resolve("<date>", nil, Ctx{}); err == nil {
+		t.Error("bare <date> with nil Ctx.Now should error, not panic")
 	}
 	if _, err := Resolve("<random-alpha:4>", nil, Ctx{}); err == nil {
 		t.Error("nil Ctx.Rand should error, not panic")

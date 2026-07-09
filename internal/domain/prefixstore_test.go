@@ -55,6 +55,7 @@ func TestValidatePrefixValue(t *testing.T) {
 		"john_smith/ISSUE-<user:issue-id>",
 		"john_smith/sandbox-<seq:sandbox_seq:4>",
 		"wt/<date:yyyy-MM-dd>/",
+		"wt/<date>/",
 		"<parent-branch>/<random-alpha:4>",
 	}
 	for _, v := range ok {
@@ -66,7 +67,6 @@ func TestValidatePrefixValue(t *testing.T) {
 		"",
 		"<branch>",
 		"x-<branch>-y",
-		"<date>",    // missing format → engine errors
 		"<bogus:1>", // unknown token
 	}
 	for _, v := range bad {
