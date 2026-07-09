@@ -34,6 +34,7 @@ func bookmarkSwitcherHelp(compare bool) []contentLine {
 		cheatRow("e", "open the bookmarked file in your external editor, read-only (file bookmarks only)"),
 		cheatRow("p", "paste the bookmarked file to a path you type (file bookmarks only)"),
 		cheatRow("t", "copy to a new dir under <repo>.tmp (file or commit bookmarks)"),
+		cheatRow("y", "copy the bookmarked file's path or name to the clipboard (file bookmarks only)"),
 		cheatRow("m", "mark one, then a second bookmark to compare the two (file bookmarks only)"),
 		cheatRow("c", "compare the highlighted bookmark against a shelf entry (file bookmarks only)"),
 		cheatRow("x", "remove the bookmark (confirms)"),
