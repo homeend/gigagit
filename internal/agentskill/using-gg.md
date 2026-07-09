@@ -238,7 +238,7 @@ guards against removing the worktree you are standing in.
 - `gg prefix ls` / `gg prefix add [--global] <value>` / `gg prefix rm [--global] <value>`
   — **branch prefixes**: reusable, templated branch-name skeletons in a two-scope
   store (repo by default; `--global` for every repo). `<value>` may use gg tokens
-  (`<user:LABEL>`, `<seq:NAME:N>`, `<date:…>`, `<parent-branch>`, `<repo>`,
+  (`<user:LABEL>`, `<seq:NAME:N>`, `<date>`/`<date:…>` (bare `<date>` = today as `yyyy-MM-dd`), `<parent-branch>`, `<repo>`,
   `<random-*>`; `<branch>` is rejected). In the TUI, the create-branch popup
   (`ctrl+p`) and create-worktree popup (`p`) let you pick one, fill any
   `<user:…>` labels, and append the rest of the name.

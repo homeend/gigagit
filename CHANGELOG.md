@@ -16,6 +16,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   Previously the field started empty and the origin was shown only as a hint.
 
 ### Added
+- **Branch-prefix editing niceties (Settings → Branch prefixes).** An invalid
+  prefix no longer closes the add form and buries the error in the status
+  bar: the form stays open with the typed value intact and the error shown
+  inline, ready to fix. `ctrl+d` in the form opens a cheat sheet of every
+  template token and the `<date:FMT>` format letters, with live examples.
+  And a bare `<date>` token (no format) now defaults to `yyyy-MM-dd`
+  everywhere templates resolve — prefixes and the worktree `path_template`.
 - **Browse a shelved commit's files (`G` switcher, `enter`).** Enter on a
   shelved-commit entry now opens the files view populated with every file
   frozen in the entry (the commit's added/modified files at shelve time;
