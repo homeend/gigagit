@@ -16,6 +16,21 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   Previously the field started empty and the origin was shown only as a hint.
 
 ### Added
+- **Browse a shelved commit's files (`G` switcher, `enter`).** Enter on a
+  shelved-commit entry now opens the files view populated with every file
+  frozen in the entry (the commit's added/modified files at shelve time;
+  deletions carry no content and aren't stored). Each row works like any
+  files-view row: `enter` diffs the frozen version against the working tree,
+  and the `.` menu offers **View file** / **Open in external editor** (both
+  read the frozen bytes, durable even after `git gc`) and **Copy to working
+  dir** — the restore path: it writes that one file back to its own
+  repo-relative path as an unstaged change (overwrite-confirmed), so
+  cherry-picking files out of a shelved commit is browse → diff → copy.
+  Previously enter on a commit entry was refused with a notice. Under the
+  hood, a shelf file-reference is now member-aware: a shelved commit's ref
+  with a path resolves to that one file's bytes from the stored tar, which
+  also makes **Compare against working dir / bookmark / shelf** and
+  **Bookmark this file** work on the members.
 - **Compare branches (Branches panel)**: mark a branch with `m`, `m` on a second —
   the pair-op picker now offers *Compare A ↔ B*: the full tip-to-tip diff in the
   compare files view (full branch names in the title). `f` cycles an origin

@@ -24,10 +24,12 @@ const (
 	filesModeFullTree                  // every file at the commit (ls-tree); `a` toggle
 	filesModeCompare                   // two endpoints (filesLeft/filesRight)
 	filesModeStash                     // a stash's files (filesStashTag)
+	filesModeShelf                     // a shelved commit's frozen files (filesShelfID)
 )
 
 func (m Model) inCompareMode() bool { return m.filesMode == filesModeCompare }
 func (m Model) inFullTree() bool    { return m.filesMode == filesModeFullTree }
+func (m Model) inShelfFiles() bool  { return m.filesMode == filesModeShelf }
 
 // closeFilesView closes the view and zeroes the ENTIRE cluster — the single
 // place that defines "no files view is open". Replaces the per-site partial
@@ -42,6 +44,8 @@ func (m Model) closeFilesView() Model {
 	m.compareTag = ""
 	m.comparePair = nil
 	m.filesStashTag = ""
+	m.filesShelfID = ""
+	m.filesShelfLabel = ""
 	m.filesTreeFocused = false
 	m.filesReadInflight = false
 	m.filesPreview = nil
@@ -79,6 +83,46 @@ func (m Model) openStashFiles(ref, subject string) (Model, tea.Cmd) {
 	return m, m.loadStashFilesCmd(ref)
 }
 
+// openShelfCommitFiles opens a shelved commit's frozen files (mode=Shelf) from
+// a clean slate: the tar's members in the tree, each carrying the standard
+// focused-file actions (diff vs working tree, Copy to working dir, …) through
+// the shelf-member FileRef. Invoked from the G switcher, so the layer stack is
+// cleared first (the compareCommitBookmark precedent — the files view is not a
+// layer and must not draw under the popup).
+func (m Model) openShelfCommitFiles(e model.ShelfEntry) (Model, tea.Cmd) {
+	if m.filesView == nil { // fresh open: remember the source panel for esc/l to restore
+		m.filesReturnFocus = m.focus
+	}
+	m = m.clearLayers()
+	m = m.closeFilesView()
+	m.filesView = &contentPopup{lines: []contentLine{{text: "(loading…)"}}}
+	m.filesTitle = "Files " + shelfEntryDisplay(e)
+	m.filesMode = filesModeShelf
+	m.filesShelfID = e.ID
+	m.filesShelfLabel = "shelf #" + shortShelf(e)
+	// The tree owns the view: a shelved commit is not part of the feed, so
+	// there is no live commit list to follow on the right (compare-mode rule).
+	m.filesTreeFocused = true
+	return m, m.loadShelfFilesCmd(e.ID)
+}
+
+// shelfFilesMsg carries a shelved commit's member list, tagged with the entry
+// id so a stale result (view closed / another entry opened) is dropped.
+type shelfFilesMsg struct {
+	id    string
+	files []model.CommitFile
+	err   error
+}
+
+// loadShelfFilesCmd lists the shelved commit's tar members off the UI thread.
+func (m Model) loadShelfFilesCmd(entryID string) tea.Cmd {
+	svc := m.svc
+	return func() tea.Msg {
+		files, err := svc.ShelfCommitFiles(context.Background(), entryID)
+		return shelfFilesMsg{id: entryID, files: files, err: err}
+	}
+}
+
 // toggleFullTree flips between a commit's changed files and its full tree,
 // dropping any open preview and reloading. Caller guards that a commit files
 // view (not stash/compare) is open.
@@ -100,10 +144,10 @@ func (m Model) toggleFullTree() (Model, tea.Cmd) {
 }
 
 // focusTree / focusRight move focus within an open files view. focusRight is
-// inert in compare mode (no commit-list side to focus).
+// inert in compare and shelf modes (no commit-list side to focus).
 func (m Model) focusTree() Model { m.filesTreeFocused = true; return m }
 func (m Model) focusRight() Model {
-	if !m.inCompareMode() {
+	if !m.inCompareMode() && !m.inShelfFiles() {
 		m.filesTreeFocused = false
 	}
 	return m
@@ -584,6 +628,16 @@ func (m Model) openDiffForFileLine(l contentLine) (tea.Model, tea.Cmd) {
 		m.diffTag = "cmp:" + m.filesLeft.CacheTag() + ":" + m.filesRight.CacheTag() + ":" + l.path
 		return m, m.loadCompareDiffCmd(m.filesLeft, m.filesRight, l)
 	}
+	if m.inShelfFiles() {
+		// Shelf mode: the frozen member (old) against the working file (new) —
+		// the same two-ref compare the .-menu's compare-against-working-dir uses.
+		left := model.FileRef{Source: model.SourceShelf, Locator: m.filesShelfID, Path: l.path}
+		right := model.FileRef{Source: model.SourceUnstaged, Path: l.path}
+		subtitle := m.filesShelfLabel + " → working tree"
+		m.diffLayer().context = subtitle
+		m.diffTag = "shelffile:" + m.filesShelfID + ":" + l.path
+		return m, m.loadCompareTwoRefsCmd(left, right, l.path, subtitle, m.diffTag)
+	}
 	m.diffTag = "commit:" + m.filesHash + ":" + l.path
 	return m, m.loadCommitDiffCmd(m.filesHash, l)
 }
@@ -611,11 +665,11 @@ func (m Model) moveListUnderFilesView(delta int) (tea.Model, tea.Cmd) {
 // moveCommitUnderFilesView shifts the Commits selection by delta and fires
 // the follow-live reload when it lands on a different commit.
 func (m Model) moveCommitUnderFilesView(delta int) (tea.Model, tea.Cmd) {
-	// Compare mode has no live commit list: shifting the selection here would
-	// reassign filesHash and reload a plain commit view, discarding the
-	// comparison. Guard at the chokepoint so keyboard AND mouse (mouse.go calls
-	// this directly) are both locked out.
-	if m.inCompareMode() {
+	// Compare and shelf modes have no live commit list: shifting the selection
+	// here would reassign filesHash and reload a plain commit view, discarding
+	// the comparison / the shelved-commit tree. Guard at the chokepoint so
+	// keyboard AND mouse (mouse.go calls this directly) are both locked out.
+	if m.inCompareMode() || m.inShelfFiles() {
 		return m, nil
 	}
 	// Pure-drop: while a per-commit files read is outstanding, ignore the move

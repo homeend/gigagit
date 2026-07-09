@@ -58,12 +58,12 @@ func shelfSwitcherHelp(compare bool) []contentLine {
 	}
 	return []contentLine{
 		cheatRow("↑/k ↓/j", "move the selection"),
-		cheatRow("enter", "diff the shelved copy vs the working-tree file"),
-		cheatRow("e", "open the shelved copy in your external editor, read-only"),
-		cheatRow("p", "restore the shelved copy (path prefilled with the original; ctrl+r re-fills it)"),
+		cheatRow("enter", "file entry: diff vs the working-tree file; shelved commit: browse its files (diff / copy each to the working tree)"),
+		cheatRow("e", "open the shelved copy in your external editor, read-only (file entries only)"),
+		cheatRow("p", "restore the shelved copy (path prefilled with the original; ctrl+r re-fills it; file entries only)"),
 		cheatRow("t", "copy to a new dir under <repo>.tmp"),
-		cheatRow("m", "mark one, then a second entry to compare the two"),
-		cheatRow("c", "compare the highlighted entry against a bookmark"),
+		cheatRow("m", "mark one, then a second entry to compare the two (file entries only)"),
+		cheatRow("c", "compare the highlighted entry against a bookmark (file entries only)"),
 		cheatRow("x", "remove from the shelf (confirms)"),
 		cheatRow("/", "filter the list (enter keeps, esc cancels)"),
 		cheatRow("z", "cycle text display: cutoff / wrap / scroll"),

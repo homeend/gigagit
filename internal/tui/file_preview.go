@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // filesViewSelectedLine returns the currently-selected content line in the
@@ -41,6 +42,21 @@ func (m Model) viewFileRow() (actionRow, bool) {
 		return actionRow{}, false
 	}
 	path, hash := l.path, m.filesHash
+	if m.inShelfFiles() {
+		// Shelf mode: the frozen member bytes, not ShowFile — filesHash is empty
+		// here and `git show :path` would silently preview the INDEX blob.
+		ref := model.FileRef{Source: model.SourceShelf, Locator: m.filesShelfID, Path: path}
+		svc, tag := m.svc, path+"@shelf:"+m.filesShelfID
+		return actionRow{
+			id:    "view-file",
+			label: "View file (frozen shelf content)",
+			run: func(m Model) (tea.Model, tea.Cmd) {
+				return m.openPreviewSrc(tag, path, func(ctx context.Context) ([]byte, error) {
+					return svc.ResolveBytes(ctx, ref)
+				})
+			},
+		}, true
+	}
 	return actionRow{
 		id:    "view-file",
 		label: "View file (content at this commit)",
@@ -60,6 +76,19 @@ func (m Model) openExternalRow() (actionRow, bool) {
 		return actionRow{}, false
 	}
 	path, hash, svc := l.path, m.filesHash, m.svc
+	if m.inShelfFiles() {
+		// Shelf mode: same INDEX-blob trap as viewFileRow — resolve the member.
+		ref := model.FileRef{Source: model.SourceShelf, Locator: m.filesShelfID, Path: path}
+		return actionRow{
+			id:    "open-external",
+			label: "Open in external editor",
+			run: func(m Model) (tea.Model, tea.Cmd) {
+				return m, m.openInEditorCmd(path, func(ctx context.Context) ([]byte, error) {
+					return svc.ResolveBytes(ctx, ref)
+				})
+			},
+		}, true
+	}
 	return actionRow{
 		id:    "open-external",
 		label: "Open in external editor",
@@ -98,10 +127,20 @@ func (m Model) commitsTouchingFileRow() (actionRow, bool) {
 // focuses it so the cursor scrolls the content immediately. A files-view
 // transition (paired with closePreview).
 func (m Model) openPreview(hash, path string) (Model, tea.Cmd) {
+	svc := m.svc
+	return m.openPreviewSrc(path+"@"+hash, path, func(ctx context.Context) ([]byte, error) {
+		return svc.ShowFile(ctx, hash, path)
+	})
+}
+
+// openPreviewSrc is the source-agnostic preview open: tag gates stale results,
+// load resolves the bytes off the UI thread. Backs both the commit preview
+// (ShowFile) and the shelf-member preview (ResolveBytes).
+func (m Model) openPreviewSrc(tag, path string, load func(context.Context) ([]byte, error)) (Model, tea.Cmd) {
 	m.filesPreview = &contentPopup{title: path, lines: []contentLine{{text: "(loading…)"}}}
-	m.filesPreviewTag = path + "@" + hash
+	m.filesPreviewTag = tag
 	m.filesTreeFocused = false // land in the preview to scroll
-	return m, m.loadFileContentCmd(hash, path)
+	return m, loadFileContentSrcCmd(tag, load)
 }
 
 // fileContentMsg carries a previewed file's content lines, tagged so a stale load
@@ -112,13 +151,11 @@ type fileContentMsg struct {
 	err   error
 }
 
-// loadFileContentCmd reads path's bytes at hash and splits them into content
-// lines off the UI thread.
-func (m Model) loadFileContentCmd(hash, path string) tea.Cmd {
-	svc := m.svc
-	tag := path + "@" + hash
+// loadFileContentSrcCmd resolves a preview's bytes via load and splits them
+// into content lines off the UI thread.
+func loadFileContentSrcCmd(tag string, load func(context.Context) ([]byte, error)) tea.Cmd {
 	return func() tea.Msg {
-		data, err := svc.ShowFile(context.Background(), hash, path)
+		data, err := load(context.Background())
 		if err != nil {
 			return fileContentMsg{tag: tag, err: err}
 		}

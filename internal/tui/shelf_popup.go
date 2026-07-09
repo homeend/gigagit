@@ -127,7 +127,7 @@ func (m Model) renderShelfPopupBox(p *shelfPopup) string {
 	// Wrap the hint to the text width so [z] mode / [esc] close stay visible even
 	// on a narrow terminal, where a single-line footer would truncate them off
 	// (the reason z went undiscovered).
-	hint := []string{"[?] keys", "[enter] diff", "[e] editor", "[p] restore", "[t] temp dir", "[m] mark/compare", "[x] remove", "[c] vs bookmark", "[/] filter", "[z] mode", "[ctrl+t] full", "[esc] close"}
+	hint := []string{"[?] keys", "[enter] diff/browse", "[e] editor", "[p] restore", "[t] temp dir", "[m] mark/compare", "[x] remove", "[c] vs bookmark", "[/] filter", "[z] mode", "[ctrl+t] full", "[esc] close"}
 	parts = append(parts, "")
 	parts = append(parts, wrapParts(hint, textW, "  ")...)
 	return popupBox(inner, strings.Join(parts, "\n"))
@@ -223,8 +223,10 @@ func (p *shelfPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			}
 			return m.openCompareFocusedVsShelf(*p.compareRef, p.compareLabel, e)
 		}
-		if nm, blocked := m.commitShelfNotice(p); blocked {
-			return nm, nil
+		if e.IsCommit() {
+			// Browse the shelved commit's frozen files in the files view; each
+			// row diffs/copies against the working tree from there.
+			return m.openShelfCommitFiles(e)
 		}
 		return m.openShelfCompareEntry(e)
 	case tea.KeyUp:
@@ -319,7 +321,7 @@ func (p *shelfPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 // commitBookmarkNotice; [t] temp export and [x] remove stay available.
 func (m Model) commitShelfNotice(p *shelfPopup) (Model, bool) {
 	if e, ok := p.selected(); ok && e.IsCommit() {
-		m.statusMsg = "not available for a shelved commit — [t] copies it to a temp dir"
+		m.statusMsg = "not available for a shelved commit — enter browses its files, [t] copies them to a temp dir"
 		return m, true
 	}
 	return m, false

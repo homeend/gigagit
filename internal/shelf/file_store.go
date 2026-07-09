@@ -215,6 +215,18 @@ func (fs *FileStore) Get(entryID string) ([]byte, error) {
 	return nil, ErrNotFound
 }
 
+// Find returns the entry record for an id — Get's metadata sibling (same
+// all-bucket scan), for callers that need the entry's kind/origin, not bytes.
+func (fs *FileStore) Find(entryID string) (model.ShelfEntry, error) {
+	idx := fs.read()
+	for _, e := range idx.Entries {
+		if e.ID == entryID {
+			return e, nil
+		}
+	}
+	return model.ShelfEntry{}, ErrNotFound
+}
+
 func (fs *FileStore) List(bucket string, skip, limit int) ([]model.ShelfEntry, error) {
 	bucket = normalizeBucket(bucket)
 	idx := fs.read()

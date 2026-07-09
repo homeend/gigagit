@@ -38,6 +38,14 @@ func (m Model) focusedBookmark() (model.Bookmark, bool) {
 		return model.Bookmark{State: model.StateUnstaged, Worktree: m.currentWorktree, Branch: m.status.Branch, Path: v.title}, true
 	}
 	if v := m.filesView; v != nil {
+		if m.filesTreeFocused && m.inShelfFiles() && m.filesShelfID != "" {
+			// Shelf mode: the row is a member of the shelved commit's tar — a
+			// shelf-addressed frozen file, resolved member-wise by ResolveBytes.
+			if vis := v.visible(); v.sel >= 0 && v.sel < len(vis) && vis[v.sel].path != "" {
+				return model.Bookmark{State: model.StateShelf, ShelfID: m.filesShelfID, Path: vis[v.sel].path}, true
+			}
+			return model.Bookmark{}, false
+		}
 		if m.filesTreeFocused && m.filesHash != "" {
 			if vis := v.visible(); v.sel >= 0 && v.sel < len(vis) && vis[v.sel].path != "" {
 				// A file deleted in this commit (status D) has no content at
