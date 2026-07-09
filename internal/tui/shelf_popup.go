@@ -217,7 +217,14 @@ func (p *shelfPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			return m, nil
 		}
 		if p.compareRef != nil {
+			if e.IsCommit() {
+				m.statusMsg = "cannot compare a file against a shelved commit"
+				return m, nil
+			}
 			return m.openCompareFocusedVsShelf(*p.compareRef, p.compareLabel, e)
+		}
+		if nm, blocked := m.commitShelfNotice(p); blocked {
+			return nm, nil
 		}
 		return m.openShelfCompareEntry(e)
 	case tea.KeyUp:
@@ -251,6 +258,9 @@ func (p *shelfPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			if p.compareRef != nil {
 				return m, nil
 			}
+			if nm, blocked := m.commitShelfNotice(p); blocked {
+				return nm, nil
+			}
 			e, ok := p.selected()
 			if !ok {
 				return m, nil
@@ -260,15 +270,24 @@ func (p *shelfPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			if p.compareRef != nil {
 				return m, nil
 			}
+			if nm, blocked := m.commitShelfNotice(p); blocked {
+				return nm, nil
+			}
 			return m.shelfPopupMark()
 		case "c":
 			if p.compareRef != nil {
 				return m, nil
 			}
+			if nm, blocked := m.commitShelfNotice(p); blocked {
+				return nm, nil
+			}
 			return m.shelfCompareAgainstBookmark()
 		case "e":
 			if p.compareRef != nil {
 				return m, nil
+			}
+			if nm, blocked := m.commitShelfNotice(p); blocked {
+				return nm, nil
 			}
 			e, ok := p.selected()
 			if !ok {
@@ -290,6 +309,20 @@ func (p *shelfPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+// commitShelfNotice sets a "not for a shelved commit" status and reports true
+// when the highlighted entry is a shelved commit (a path-less tar payload), so
+// the caller can no-op a file-only key (diff / restore / editor / mark /
+// vs-bookmark) instead of treating the tar as a file — the empty origin path
+// would otherwise resolve to the worktree root ("is a directory"). Mirrors
+// commitBookmarkNotice; [t] temp export and [x] remove stay available.
+func (m Model) commitShelfNotice(p *shelfPopup) (Model, bool) {
+	if e, ok := p.selected(); ok && e.IsCommit() {
+		m.statusMsg = "not available for a shelved commit — [t] copies it to a temp dir"
+		return m, true
+	}
+	return m, false
 }
 
 func (m Model) shelfPopupRemovePrompt() (Model, tea.Cmd) {

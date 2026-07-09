@@ -101,6 +101,15 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   (where OSC 52 is the expected path) never triggers it.
 
 ### Fixed
+- **A shelved commit no longer errors in the shelf switcher's per-file actions.**
+  Pressing `enter` (diff vs working tree) on a `G`-switcher entry created by
+  "Shelf this commit" tried to read the entry's empty origin path as a file —
+  the diff opened onto `error: read <repo>: is a directory`. The per-file keys
+  (`enter` diff, `p` restore, `e` editor, `m` mark/compare, `c` vs bookmark)
+  now explain they don't apply to a shelved commit (a frozen tar of the
+  commit's changed files) and point at `[t]`, which copies it to a temp dir;
+  `[x]` remove still works. Mirrors the commit-bookmark guard in the `g`
+  switcher.
 - **The branch pair-op popup opens full-size when a branch name is too long to
   fit.** Marking one branch and picking merge/rebase/interactive-rebase against
   another opens a picker whose rows spell out *both* branch names
