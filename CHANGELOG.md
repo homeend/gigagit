@@ -31,6 +31,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   with a path resolves to that one file's bytes from the stored tar, which
   also makes **Compare against working dir / bookmark / shelf** and
   **Bookmark this file** work on the members.
+- **Copy a file's path or name from the `g`/`G` switchers**: pressing `y` on a
+  single-file bookmark or shelf entry opens a small chooser — *Copy file path*
+  (the repo-relative path) / *Copy file name* (just the basename) / *Cancel* —
+  and writes the pick to the system clipboard, matching the Files-panel
+  `.`-menu copy rows. On a shelved commit or a commit bookmark `y` shows the
+  usual "not available" notice instead.
 - **Compare branches (Branches panel)**: mark a branch with `m`, `m` on a second —
   the pair-op picker now offers *Compare A ↔ B*: the full tip-to-tip diff in the
   compare files view (full branch names in the title). `f` cycles an origin
