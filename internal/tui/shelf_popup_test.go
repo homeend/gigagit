@@ -208,3 +208,77 @@ func TestShelfPopupTKeyDoesNotMaximizeWhileFiltering(t *testing.T) {
 		t.Fatalf(`"T" while filtering must be a literal char; filter=%q`, p.filter)
 	}
 }
+
+func TestShelfPopupYOpensCopyChooser(t *testing.T) {
+	m := shelfPopModel(shEntry("a", "dir/x.go"))
+	mm, _ := m.Update(keyMsg("y"))
+	m = mm.(Model)
+	if m.modal == nil || m.modal.req.ID != "copy-file" {
+		t.Fatalf("y should open the copy chooser modal, modal=%+v", m.modal)
+	}
+	if !strings.Contains(m.modal.req.Prompt, "dir/x.go") {
+		t.Errorf("prompt should name the entry's path, got %q", m.modal.req.Prompt)
+	}
+	if m.shelfSwitcher() == nil {
+		t.Error("the switcher must stay on the stack beneath the modal")
+	}
+}
+
+func TestShelfPopupYOnCommitEntryNotices(t *testing.T) {
+	e := model.ShelfEntry{ID: "c1", Kind: model.ShelfKindCommit,
+		Origin: model.FileAddress{State: model.StateCommitted, Commit: "a1b2c3d4e5"}}
+	m := shelfPopModel(e)
+	mm, _ := m.Update(keyMsg("y"))
+	m = mm.(Model)
+	if m.modal != nil {
+		t.Fatal("y must not open the chooser for a shelved commit")
+	}
+	if !strings.Contains(m.statusMsg, "shelved commit") {
+		t.Errorf("statusMsg = %q, want the shelved-commit notice", m.statusMsg)
+	}
+}
+
+func TestShelfPopupYInertInCompareMode(t *testing.T) {
+	m := shelfPopModel(shEntry("a", "x.go"))
+	m.shelfSwitcher().compareRef = &model.FileRef{Source: model.SourceUnstaged, Path: "focused.go"}
+	mm, _ := m.Update(keyMsg("y"))
+	m = mm.(Model)
+	if m.modal != nil {
+		t.Fatal("y must be inert in compare-picker mode")
+	}
+}
+
+func TestShelfPopupYEmptyListNoop(t *testing.T) {
+	m := shelfPopModel()
+	mm, _ := m.Update(keyMsg("y"))
+	m = mm.(Model)
+	if m.modal != nil {
+		t.Fatal("y on an empty list must be a no-op")
+	}
+}
+
+func TestShelfPopupYWhileFilteringIsText(t *testing.T) {
+	m := Model{}
+	m.width, m.height = 200, 50
+	p := &shelfPopup{filtering: true}
+	p.update(m, runeKey("y"))
+	if p.filter != "y" {
+		t.Fatalf(`"y" while filtering must be a literal char; filter=%q`, p.filter)
+	}
+}
+
+func TestShelfPopupAdvertisesCopy(t *testing.T) {
+	m := shelfPopModel(shEntry("a", "x.go"))
+	if out := m.renderShelfPopupBox(m.shelfSwitcher()); !strings.Contains(out, "[y] copy") {
+		t.Errorf("hint line missing [y] copy:\n%s", out)
+	}
+	found := false
+	for _, l := range shelfSwitcherHelp(false) {
+		if strings.HasPrefix(l.text, "y ") {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("shelfSwitcherHelp(false) missing the y row")
+	}
+}

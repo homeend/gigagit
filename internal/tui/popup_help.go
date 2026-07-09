@@ -62,6 +62,7 @@ func shelfSwitcherHelp(compare bool) []contentLine {
 		cheatRow("e", "open the shelved copy in your external editor, read-only"),
 		cheatRow("p", "restore the shelved copy (path prefilled with the original; ctrl+r re-fills it)"),
 		cheatRow("t", "copy to a new dir under <repo>.tmp"),
+		cheatRow("y", "copy the file's path or name to the clipboard (file entries only)"),
 		cheatRow("m", "mark one, then a second entry to compare the two"),
 		cheatRow("c", "compare the highlighted entry against a bookmark"),
 		cheatRow("x", "remove from the shelf (confirms)"),
