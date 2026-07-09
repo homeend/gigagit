@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -19,9 +20,10 @@ type prefixSettingsView struct {
 	sel     int
 	mode    pfMode
 
-	fValue textfield
-	scope  model.ProfileScope
-	field  int // 0 = value, 1 = scope
+	fValue  textfield
+	scope   model.ProfileScope
+	field   int    // 0 = value, 1 = scope
+	formErr string // inline validation error shown in the form; "" = none
 }
 
 type pfMode int
@@ -115,6 +117,7 @@ func (v *prefixSettingsView) updateBrowse(m Model, msg tea.KeyMsg) (Model, tea.C
 		v.fValue = newTextField("")
 		v.scope = model.ProfileScopeGlobal
 		v.field = 0
+		v.formErr = ""
 		v.mode = pfForm
 		return m, nil
 	case "d":
@@ -148,9 +151,14 @@ func (v *prefixSettingsView) updateForm(m Model, msg tea.KeyMsg) (Model, tea.Cmd
 	case tea.KeyEnter:
 		p, ok := v.formPrefix()
 		if !ok {
-			m.statusMsg = "prefix value is required"
+			v.formErr = "prefix value is required"
 			return m, nil
 		}
+		if err := domain.ValidatePrefixValue(p.Value); err != nil {
+			v.formErr = err.Error()
+			return m, nil
+		}
+		v.formErr = ""
 		v.mode = pfBrowse
 		return m, m.addPrefixCmd(p)
 	}
@@ -196,11 +204,16 @@ func (v *prefixSettingsView) box(m Model) string {
 			"Add branch prefix", "",
 			viewField(cur+"value: ", v.fValue, v.field == 0, textW),
 			scopeCursor + "scope: " + scopeVal,
+		}
+		if v.formErr != "" {
+			parts = append(parts, "", errorStyle.Render(v.formErr))
+		}
+		parts = append(parts,
 			"",
-			"Tokens: <user:LABEL> <seq:NAME:N> <date:FMT> <parent-branch> <repo> <random-*>",
+			"Tokens: <user:LABEL> <seq:NAME:N> <date> <date:FMT> <parent-branch> <repo> <random-*>",
 			"",
 			"[↑/↓] field  [←/→] scope  [enter] save  [esc] back",
-		}
+		)
 		return popupBox(inner, strings.Join(parts, "\n"))
 	}
 

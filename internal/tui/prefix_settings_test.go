@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -74,5 +75,76 @@ func TestPrefixSettingsMaximizeWidensAndLiftsRowCap(t *testing.T) {
 	}
 	if lipgloss.Height(maxed) <= lipgloss.Height(normal) {
 		t.Fatalf("maximized must show more rows: height %d vs %d", lipgloss.Height(maxed), lipgloss.Height(normal))
+	}
+}
+
+// An invalid value must NOT close the form or dispatch the add — the error
+// shows inline and the typed value survives so the user can fix it.
+func TestPrefixSettingsInvalidValueKeepsFormOpen(t *testing.T) {
+	v := &prefixSettingsView{mode: pfForm}
+	v.fValue = newTextField("x-<bogus:1>-y")
+	_, cmd := v.update(Model{}, tea.KeyMsg{Type: tea.KeyEnter})
+	if v.mode != pfForm {
+		t.Fatal("invalid value must keep the form open")
+	}
+	if cmd != nil {
+		t.Fatal("invalid value must not dispatch an add")
+	}
+	if !strings.Contains(v.formErr, "<bogus:1>") {
+		t.Fatalf("formErr = %q, want it to name the bad token", v.formErr)
+	}
+	if v.fValue.Value() != "x-<bogus:1>-y" {
+		t.Fatal("typed value must be preserved")
+	}
+}
+
+// The empty-value message moves inline too (it used to be a bottom-bar
+// statusMsg).
+func TestPrefixSettingsEmptyValueInlineError(t *testing.T) {
+	v := &prefixSettingsView{mode: pfForm}
+	v.fValue = newTextField("   ")
+	m2, cmd := v.update(Model{}, tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd != nil || v.mode != pfForm {
+		t.Fatal("empty value must keep the form open without dispatching")
+	}
+	if v.formErr != "prefix value is required" {
+		t.Fatalf("formErr = %q", v.formErr)
+	}
+	if m2.statusMsg != "" {
+		t.Fatalf("statusMsg = %q, want the error inline instead", m2.statusMsg)
+	}
+}
+
+func TestPrefixSettingsValidValueClosesFormAndDispatches(t *testing.T) {
+	v := &prefixSettingsView{mode: pfForm}
+	v.fValue = newTextField("feat/<date>") // bare <date> is valid since Task 1
+	_, cmd := v.update(Model{}, tea.KeyMsg{Type: tea.KeyEnter})
+	if v.mode != pfBrowse {
+		t.Fatal("valid value must close the form")
+	}
+	if cmd == nil {
+		t.Fatal("valid value must dispatch the add")
+	}
+	if v.formErr != "" {
+		t.Fatalf("formErr = %q, want empty", v.formErr)
+	}
+}
+
+// Reopening the form must not show a stale error from the previous attempt.
+func TestPrefixSettingsReopenClearsInlineError(t *testing.T) {
+	v := &prefixSettingsView{mode: pfBrowse, formErr: "stale"}
+	v.update(Model{}, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	if v.formErr != "" {
+		t.Fatalf("formErr = %q, want cleared on open", v.formErr)
+	}
+}
+
+func TestPrefixSettingsFormRendersInlineError(t *testing.T) {
+	m := Model{}
+	m.width, m.height = 120, 40
+	v := &prefixSettingsView{mode: pfForm, formErr: "invalid prefix: template: unknown token <bogus>"}
+	v.fValue = newTextField("<bogus>")
+	if !strings.Contains(v.box(m), "unknown token <bogus>") {
+		t.Fatal("form box must render the inline error line")
 	}
 }
