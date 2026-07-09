@@ -16,6 +16,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   Previously the field started empty and the origin was shown only as a hint.
 
 ### Added
+- **Copy a file's path or name from the `g`/`G` switchers**: pressing `y` on a
+  single-file bookmark or shelf entry opens a small chooser — *Copy file path*
+  (the repo-relative path) / *Copy file name* (just the basename) / *Cancel* —
+  and writes the pick to the system clipboard, matching the Files-panel
+  `.`-menu copy rows. On a shelved commit or a commit bookmark `y` shows the
+  usual "not available" notice instead.
 - **Compare branches (Branches panel)**: mark a branch with `m`, `m` on a second —
   the pair-op picker now offers *Compare A ↔ B*: the full tip-to-tip diff in the
   compare files view (full branch names in the title). `f` cycles an origin
