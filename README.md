@@ -187,7 +187,7 @@ gg shell-init fish | source
 
 Optional `.gg.toml` in the repo (overlaid on a global config) configures worktree
 branch/path templates with tokens like `<parent-branch>`, `<repo>`,
-`<date:YYYY-MM-DD>`, `<seq:NAME:N>`, and `<user:LABEL>`. Per-repo `<seq>` counters
+`<date:yyyy-MM-dd>` (bare `<date>` defaults to `yyyy-MM-dd`), `<seq:NAME:N>`, and `<user:LABEL>`. Per-repo `<seq>` counters
 live in `<git-common-dir>/gg/state.toml`.
 
 Run `gg config init --repo` (writes `.gg.toml` at the repo root) or `gg config
