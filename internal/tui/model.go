@@ -103,6 +103,8 @@ type Model struct {
 	compareTag        string            // gates stale compareFilesMsg results
 	comparePair       *comparePairState // branch-pair compare extension (origin filter); nil for every other compare
 	filesStashTag     string            // when the files tree is showing a stash: its ref (gates stash-file loads)
+	filesShelfID      string            // shelf mode: the shelved-commit entry id (gates shelf-file loads, keys member refs)
+	filesShelfLabel   string            // shelf mode: "shelf #<short>" display label for diff contexts
 	filesReturnFocus  panel             // panel that opened the files view; esc/l restore focus here (the view itself runs on panelCommits)
 	filesTreeFocused  bool              // true = the tree side owns vertical movement (←/→/tab)
 	filesReadInflight bool              // a per-commit files-view CommitFiles read is outstanding; drop further nav reads until it lands (pure-drop pacing on large repos)
@@ -379,6 +381,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.filesView.lines = commitFileLines(msg.files)
 		m.filesView.sel = 0
 		m.filesTitle = "Files " + shortHash(msg.hash) + " " + msg.subject
+		return m, nil
+	case shelfFilesMsg:
+		if m.filesView == nil || !m.inShelfFiles() || msg.id != m.filesShelfID {
+			return m, nil // view closed, or a stale result for another entry
+		}
+		if msg.err != nil {
+			m.statusMsg = "shelf files: " + msg.err.Error()
+			if len(m.filesView.lines) == 1 && m.filesView.lines[0].text == "(loading…)" {
+				m.filesView.lines = []contentLine{{text: "(load failed)"}}
+			}
+			return m, nil
+		}
+		m.filesView.lines = commitFileLines(msg.files)
+		m.filesView.sel = 0
 		return m, nil
 	case treeFilesMsg:
 		m.filesReadInflight = false

@@ -18,11 +18,11 @@ func shCommitEntry(id string) model.ShelfEntry {
 }
 
 // A shelved commit has no single file behind it: the per-file switcher actions
-// (enter diff, p restore, e editor, m mark, c vs-bookmark) must notice-and-no-op
-// instead of joining the empty origin path onto the worktree root (which read
-// the repo directory as a file: "is a directory").
+// (p restore, e editor, m mark, c vs-bookmark) must notice-and-no-op instead of
+// treating the tar payload as a file. (enter is different: it opens the shelf
+// files view — TestShelfSwitcherEnterOpensCommitFilesView.)
 func TestShelfPopupCommitEntryGuardsFileActions(t *testing.T) {
-	for _, key := range []string{"enter", "p", "e", "m", "c"} {
+	for _, key := range []string{"p", "e", "m", "c"} {
 		m := shelfPopModel(shCommitEntry("ce"))
 		mm, cmd := m.Update(keyMsg(key))
 		m = mm.(Model)

@@ -76,6 +76,61 @@ func (s *Service) ShelfAddCommit(ctx context.Context, sha, label string) (model.
 	return st.PutCommit("", addr, tar, label)
 }
 
+// ShelfCommitFiles lists the files frozen in a shelved commit's tar — a header
+// scan only, no data copy. Rows carry an empty Status: A-vs-M relative to the
+// commit's original parent is not recorded in the tar. Backs the files-view
+// shelf mode.
+func (s *Service) ShelfCommitFiles(ctx context.Context, entryID string) ([]model.CommitFile, error) {
+	st := s.shelfStore(ctx)
+	if st == nil {
+		return nil, ErrShelfDisabled
+	}
+	e, err := st.Find(entryID)
+	if err != nil {
+		return nil, err
+	}
+	if !e.IsCommit() {
+		return nil, fmt.Errorf("shelf: entry %s is not a shelved commit", entryID)
+	}
+	blob, err := st.Get(entryID)
+	if err != nil {
+		return nil, err
+	}
+	names, err := tarMemberNames(blob)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]model.CommitFile, 0, len(names))
+	for _, n := range names {
+		out = append(out, model.CommitFile{Path: n})
+	}
+	return out, nil
+}
+
+// shelfResolve is ResolveBytes' shelf branch: a commit entry with a path
+// resolves to that member's bytes from the tar; a commit entry without a path
+// stays the whole tar (backs export); a file entry stays the whole blob — the
+// discriminator is the ENTRY KIND, never the content (a shelved .tar *file*
+// must stay a blob).
+func (s *Service) shelfResolve(ctx context.Context, entryID, path string) ([]byte, error) {
+	st := s.shelfStore(ctx)
+	if st == nil {
+		return nil, ErrShelfDisabled
+	}
+	e, err := st.Find(entryID)
+	if err != nil {
+		return nil, err
+	}
+	blob, err := st.Get(entryID)
+	if err != nil {
+		return nil, err
+	}
+	if !e.IsCommit() || path == "" {
+		return blob, nil
+	}
+	return tarMember(blob, path)
+}
+
 // ShelfRemove deletes an entry (and reclaims its blob if unreferenced).
 func (s *Service) ShelfRemove(ctx context.Context, entryID string) error {
 	st := s.shelfStore(ctx)

@@ -79,6 +79,49 @@ func extractTar(data []byte) ([]model.ExportFile, error) {
 	return out, nil
 }
 
+// tarMemberNames lists a tar's regular-file paths — headers only, the data is
+// skipped, so listing a large shelved commit costs no member copies.
+func tarMemberNames(data []byte) ([]string, error) {
+	tr := tar.NewReader(bytes.NewReader(data))
+	var out []string
+	for {
+		h, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		if h.Typeflag != tar.TypeReg && h.Typeflag != tar.TypeRegA {
+			continue
+		}
+		out = append(out, filepath.Clean(h.Name))
+	}
+	return out, nil
+}
+
+// tarMember returns one regular file's bytes from a tar, erroring (with the
+// path) when it is not present.
+func tarMember(data []byte, path string) ([]byte, error) {
+	tr := tar.NewReader(bytes.NewReader(data))
+	for {
+		h, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		if h.Typeflag != tar.TypeReg && h.Typeflag != tar.TypeRegA {
+			continue
+		}
+		if filepath.Clean(h.Name) == filepath.Clean(path) {
+			return io.ReadAll(tr)
+		}
+	}
+	return nil, fmt.Errorf("shelf: %s is not in this shelved commit", path)
+}
+
 // ExportShelfEntry resolves a shelf entry into the files to write plus the
 // default target subdir name. A commit entry extracts its stored tar (durable,
 // no git); a file entry is a single ExportFile at its origin path.

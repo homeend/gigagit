@@ -178,7 +178,13 @@ func (m Model) footerLine() string {
 			msgHint = "  [i] msg"
 		}
 		if m.filesTreeFocused {
-			return "tree: [↑/↓] move  [enter] diff  [a] all files  [.] view file/copy  [/] search  [h] hist  [b] blame  [z] view" + msgHint + "  [esc/l] close"
+			// [a] mirrors the handler's gate exactly (stash/compare/shelf have no
+			// full tree to toggle to) so the footer never advertises a dead key.
+			aHint := ""
+			if m.stashView == nil && !m.inCompareMode() && m.filesHash != "" {
+				aHint = "  [a] all files"
+			}
+			return "tree: [↑/↓] move  [enter] diff" + aHint + "  [.] view file/copy  [/] search  [h] hist  [b] blame  [z] view" + msgHint + "  [esc/l] close"
 		}
 		return "commits: [enter/tab] tree  [↑/↓] move  [<>=] graph  [a] all files  [/] search  [.] actions" + msgHint + "  [esc/l] close"
 	}

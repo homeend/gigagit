@@ -32,6 +32,7 @@ type Store interface {
 	Put(bucket string, addr model.FileAddress, data []byte) (model.ShelfEntry, error)
 	PutCommit(bucket string, addr model.FileAddress, tar []byte, label string) (model.ShelfEntry, error)
 	Get(entryID string) ([]byte, error)
+	Find(entryID string) (model.ShelfEntry, error)
 	List(bucket string, skip, limit int) ([]model.ShelfEntry, error)
 	Buckets() ([]model.ShelfBucket, error)
 	Remove(entryID string) error
