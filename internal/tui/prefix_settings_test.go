@@ -142,7 +142,7 @@ func TestPrefixSettingsReopenClearsInlineError(t *testing.T) {
 func TestPrefixSettingsFormRendersInlineError(t *testing.T) {
 	m := Model{}
 	m.width, m.height = 120, 40
-	v := &prefixSettingsView{mode: pfForm, formErr: "invalid prefix: template: unknown token <bogus>"}
+	v := &prefixSettingsView{mode: pfForm, formErr: "invalid prefix: unknown token <bogus>"}
 	v.fValue = newTextField("<bogus>")
 	if !strings.Contains(v.box(m), "unknown token <bogus>") {
 		t.Fatal("form box must render the inline error line")
@@ -155,8 +155,12 @@ func TestPrefixSettingsCtrlDOpensFormatHelp(t *testing.T) {
 	v := &prefixSettingsView{mode: pfForm}
 	v.fValue = newTextField("feat/")
 	m2, _ := v.update(Model{}, tea.KeyMsg{Type: tea.KeyCtrlD})
-	if layerOf[*contentPopup](m2) == nil {
+	sheet := layerOf[*contentPopup](m2)
+	if sheet == nil {
 		t.Fatal("ctrl+d must push the token/date-format help sheet")
+	}
+	if sheet.title != prefixTokensHelpTitle {
+		t.Fatalf("ctrl+d pushed %q, want %q", sheet.title, prefixTokensHelpTitle)
 	}
 	if v.mode != pfForm || v.fValue.Value() != "feat/" {
 		t.Fatal("form state must survive opening the help sheet")

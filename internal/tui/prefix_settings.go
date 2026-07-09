@@ -158,7 +158,9 @@ func (v *prefixSettingsView) updateForm(m Model, msg tea.KeyMsg) (Model, tea.Cmd
 			return m, nil
 		}
 		if err := domain.ValidatePrefixValue(p.Value); err != nil {
-			v.formErr = err.Error()
+			// err wraps a template error; drop its "template: " prefix — the
+			// user is editing a prefix, not calling the template package.
+			v.formErr = strings.Replace(err.Error(), "template: ", "", 1)
 			return m, nil
 		}
 		v.formErr = ""
