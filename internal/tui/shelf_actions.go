@@ -29,12 +29,12 @@ func (m Model) shelfRemoveCmd(entryID string) tea.Cmd {
 
 // --- restore destination popup -------------------------------------------
 
-// shelfRestorePopup collects the (mandatory, no-default) restore destination.
+// shelfRestorePopup collects the (mandatory) restore destination.
 type shelfRestorePopup struct {
 	popupMax
 	entryID string
-	origin  string    // origin path, shown only as a hint — NOT prefilled
-	dest    textfield // typed destination (starts empty)
+	origin  string    // origin path; prefills dest and backs the ctrl+r re-fill
+	dest    textfield // destination (prefilled with origin, freely editable)
 }
 
 // update handles one key while the restore popup is open (the overlay contract).
@@ -59,6 +59,8 @@ func (p *shelfRestorePopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		// engine.WriteFile owns the Overwrite/Cancel fork via the modal decider.
 		return m.startOp(engine.WriteFile{Path: dest, Data: blob})
+	case tea.KeyCtrlR:
+		p.dest = newTextField(p.origin) // re-fill with the origin path, cursor at end
 	default:
 		p.dest.HandleEditKey(msg)
 	}
@@ -69,10 +71,10 @@ func (p *shelfRestorePopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 func (p *shelfRestorePopup) render(m Model, below string) string {
 	w, h := m.overlayDims()
 	var b strings.Builder
-	b.WriteString("Restore shelved file to a new path\n\n")
+	b.WriteString("Restore shelved file\n\n")
 	b.WriteString("from: " + p.origin + "  (shelved copy)\n")
 	b.WriteString(viewField("dest: ", p.dest, true, popupContentWidth(w)) + "\n\n")
-	b.WriteString("[type] path  [enter] restore  [esc] cancel")
+	b.WriteString("[type] path  [enter] restore  [ctrl+r] original path  [esc] cancel")
 	box := modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 	return overlayCenter(clipToHeight(below, h), box, w, h)
 }
@@ -88,11 +90,14 @@ func (m Model) openShelfCompareEntry(e model.ShelfEntry) (Model, tea.Cmd) {
 	return m.openPickerDiff(v, "shelf:"+e.ID, m.loadShelfCompareCmd(e))
 }
 
-// openShelfRestore pushes the mandatory-dest restore popup for entry e over the
-// shelf switcher (which stays beneath; esc/success returns to it). The dest is
-// deliberately NOT prefilled (unlike bookmark paste).
+// openShelfRestore pushes the restore popup for entry e over the shelf
+// switcher (which stays beneath; esc/success returns to it). The dest is
+// prefilled with the origin path — restoring in place is the common case, and
+// engine.WriteFile's Overwrite/Cancel fork guards the clobber; ctrl+r re-fills
+// it after an edit. (Bookmark paste instead prefills a _RESTORED variant: a
+// paste is a copy-beside, a restore is a put-back.)
 func (m Model) openShelfRestore(e model.ShelfEntry) (Model, tea.Cmd) {
-	return m.pushLayer(&shelfRestorePopup{entryID: e.ID, origin: e.Origin.Path}), nil
+	return m.pushLayer(&shelfRestorePopup{entryID: e.ID, origin: e.Origin.Path, dest: newTextField(e.Origin.Path)}), nil
 }
 
 func shortShelf(e model.ShelfEntry) string {

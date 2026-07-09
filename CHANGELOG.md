@@ -8,6 +8,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+### Changed
+- **Shelf restore (`G` switcher, `p`) prefills the destination** with the
+  entry's original path — enter puts the copy straight back in place (the
+  existing overwrite/cancel confirm still guards a clobber); edit the path to
+  restore elsewhere, and `ctrl+r` re-fills the original path after an edit.
+  Previously the field started empty and the origin was shown only as a hint.
+
 ### Added
 - **Compare branches (Branches panel)**: mark a branch with `m`, `m` on a second —
   the pair-op picker now offers *Compare A ↔ B*: the full tip-to-tip diff in the
