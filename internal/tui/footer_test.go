@@ -609,3 +609,52 @@ func TestRenderFooterShowsTailWhenOverflowing(t *testing.T) {
 		t.Fatalf("narrow render must show the overflow tail:\n%s", out)
 	}
 }
+
+// TestFitFooterTailOnlyWidth pins the band where nothing but the tail fits:
+// at w == the tail's own width every label is hidden and the tail stands alone.
+func TestFitFooterTailOnlyWidth(t *testing.T) {
+	m := footerModel()
+	line, hidden := fitFooter(m, lipgloss.Width(footerOverflowTail))
+	if line != footerOverflowTail {
+		t.Errorf("tail-only width must render the bare tail: %q", line)
+	}
+	if len(hidden) == 0 {
+		t.Error("tail-only width must hide every non-help binding")
+	}
+	var nonHelp int
+	for _, p := range m.footerParts() {
+		if p.binding.id != "help" {
+			nonHelp++
+		}
+	}
+	if len(hidden) != nonHelp {
+		t.Errorf("hidden = %d bindings, want all %d non-help parts", len(hidden), nonHelp)
+	}
+}
+
+// TestFitFooterEmptyParts: an allowlist whose ids are all unavailable (and a
+// running op gating [.] actions out) yields no parts — the empty line "fits"
+// at any width and nothing is hidden.
+func TestFitFooterEmptyParts(t *testing.T) {
+	m := footerModel()
+	m.running = true
+	m.cfg.UI.FooterActions = []string{"notices"} // no notices in the fixture
+	line, hidden := fitFooter(m, 5)
+	if line != "" || hidden != nil {
+		t.Errorf("empty parts must fit trivially: %q hidden=%v", line, hidden)
+	}
+}
+
+func TestFooterPartsAllowlistDeduplicatesActions(t *testing.T) {
+	m := footerModel()
+	m.cfg.UI.FooterActions = []string{"actions", "pull"}
+	var n int
+	for _, p := range m.footerParts() {
+		if p.binding.id == "actions" {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Errorf("actions must appear exactly once, got %d", n)
+	}
+}

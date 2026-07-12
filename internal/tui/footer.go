@@ -215,13 +215,19 @@ type footerPart struct {
 func (m Model) footerParts() []footerPart {
 	if ids := m.cfg.UI.FooterActions; len(ids) > 0 {
 		var parts []footerPart
+		haveActions := false
 		for _, id := range ids {
 			if b, ok := bindingByID(id); ok && b.when(m) {
 				parts = append(parts, footerPart{label: b.label, binding: b})
+				if id == "actions" {
+					haveActions = true
+				}
 			}
 		}
-		if b, ok := bindingByID("actions"); ok && b.when(m) {
-			parts = append(parts, footerPart{label: b.label, binding: b})
+		if !haveActions {
+			if b, ok := bindingByID("actions"); ok && b.when(m) {
+				parts = append(parts, footerPart{label: b.label, binding: b})
+			}
 		}
 		return parts
 	}
@@ -316,15 +322,19 @@ func fitFooter(m Model, w int) (string, []footerBinding) {
 	cur := ""
 	var hidden []footerBinding
 	fitting := true
+	pendingGroup := false
 	for _, p := range parts {
 		if p.binding.id == "help" {
+			pendingGroup = pendingGroup || p.groupStart
 			continue // always visible, inside the tail
 		}
+		groupStart := p.groupStart || pendingGroup
+		pendingGroup = false
 		if fitting {
 			sep := ""
 			if cur != "" {
 				sep = " "
-				if p.groupStart {
+				if groupStart {
 					sep = "  •  "
 				}
 			}
