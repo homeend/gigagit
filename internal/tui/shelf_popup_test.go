@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/homeend/gigagit/internal/model"
@@ -280,5 +281,28 @@ func TestShelfPopupAdvertisesCopy(t *testing.T) {
 	}
 	if !found {
 		t.Error("shelfSwitcherHelp(false) missing the y row")
+	}
+}
+
+func TestShelfPopupEnterBumpsPickGen(t *testing.T) {
+	m := shelfPopModel(shEntry("e1", "dir/x.go"))
+	before := m.pickGen
+	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = mm.(Model)
+	if m.pickGen <= before {
+		t.Fatalf("enter closes/re-stacks the switcher and must invalidate an in-flight probe; pickGen %d -> %d", before, m.pickGen)
+	}
+}
+
+func TestShelfPopupAKeyStaysQueryRuneWhileFiltering(t *testing.T) {
+	m := Model{}
+	m.width, m.height = 200, 50
+	p := &shelfPopup{filtering: true}
+	_, cmd := p.update(m, runeKey("a"))
+	if p.filter != "a" {
+		t.Fatalf(`"a" while filtering must be a literal char; filter=%q`, p.filter)
+	}
+	if cmd != nil {
+		t.Fatal(`"a" while filtering must not dispatch a probe`)
 	}
 }

@@ -47,6 +47,11 @@ func (m Model) handlePickProbe(msg pickProbeMsg) (Model, tea.Cmd) {
 	if msg.gen != m.pickGen || m.running {
 		return m, nil // stale (switcher closed / repo switched) or an op raced in
 	}
+	if m.modal != nil {
+		// Another dialog opened while the probe ran — never clobber it.
+		m.statusMsg = "cherry-pick: cancelled (another dialog opened) — press a again"
+		return m, nil
+	}
 	if msg.err != nil {
 		m.statusMsg = "cherry-pick: " + msg.err.Error()
 		return m, nil
