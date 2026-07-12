@@ -224,6 +224,8 @@ func TestShelfUsageErrors(t *testing.T) {
 func shelfCherryPickFixture(t *testing.T) (dir, id, sha string) {
 	t.Helper()
 	dir = shelfRepo(t)
+	gitRun(t, dir, "config", "user.name", "t")
+	gitRun(t, dir, "config", "user.email", "t@t")
 	gitRun(t, dir, "checkout", "-b", "feat")
 	if err := os.WriteFile(filepath.Join(dir, "pick.txt"), []byte("picked\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -333,6 +335,8 @@ func TestShelfCherryPickGcdFallsBackToPatch(t *testing.T) {
 func mergeShelfFixture(t *testing.T) (dir, id, sha, preMerge string) {
 	t.Helper()
 	dir = shelfRepo(t)
+	gitRun(t, dir, "config", "user.name", "t")
+	gitRun(t, dir, "config", "user.email", "t@t")
 	gitRun(t, dir, "checkout", "-b", "side")
 	if err := os.WriteFile(filepath.Join(dir, "side.txt"), []byte("side\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -412,6 +416,8 @@ func TestShelfCherryPickUnknownID(t *testing.T) {
 func shelfConflictFixture(t *testing.T) (dir, id string) {
 	t.Helper()
 	dir = shelfRepo(t)
+	gitRun(t, dir, "config", "user.name", "t")
+	gitRun(t, dir, "config", "user.email", "t@t")
 	if err := os.WriteFile(filepath.Join(dir, "shared.txt"), []byte("base\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -446,9 +452,14 @@ func TestShelfCherryPickConflictKeep(t *testing.T) {
 
 func TestShelfCherryPickConflictAbort(t *testing.T) {
 	dir, id := shelfConflictFixture(t)
-	code, _, _ := runCLI(t, dir, "shelf", "cherry-pick", "--on-conflict=abort", id)
-	if code != 1 {
-		t.Fatalf("exit %d, want 1", code)
+	code, out, errb := runCLI(t, dir, "shelf", "cherry-pick", "--on-conflict=abort", id)
+	// Parity with `gg cherry-pick --on-conflict=abort`: the abort is the
+	// requested outcome and the rollback succeeded → exit 0, "aborted" summary.
+	if code != 0 {
+		t.Fatalf("exit %d, want 0 (stderr: %s)", code, errb)
+	}
+	if !strings.Contains(out, "aborted") {
+		t.Fatalf("abort summary missing: %q", out)
 	}
 	got, err := os.ReadFile(filepath.Join(dir, "shared.txt"))
 	if err != nil || string(got) != "main\n" {
