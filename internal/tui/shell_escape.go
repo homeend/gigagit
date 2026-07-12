@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -182,4 +183,59 @@ func (m Model) handleShellDone(msg shellDoneMsg) (Model, tea.Cmd) {
 		return m, cmd
 	}
 	return m, nil
+}
+
+// shellCmdPopup collects one shell command to run with the press-enter-to-
+// return wrapper (the repoPathPopup pattern). alt+↓/↑ recalls previous
+// commands via the shared search-history rings.
+type shellCmdPopup struct {
+	popupMax
+	input textfield
+}
+
+func (m Model) openShellCmdPopup() (Model, tea.Cmd) {
+	return m.pushLayer(&shellCmdPopup{input: newTextField("")}), nil
+}
+
+func (p *shellCmdPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
+	if msg.Type == tea.KeyCtrlC {
+		return m, tea.Quit
+	}
+	// History recall: a committed pick (enter on the dropdown) only fills the
+	// field — the user presses enter again to actually run it.
+	if nm, nq, handled, _ := m.recallUpdate(scopeShellCmd, msg, p.input.Value()); handled {
+		p.input = newTextField(nq)
+		return nm, nil
+	} else {
+		m = nm
+	}
+	switch msg.Type {
+	case tea.KeyEsc:
+		m = m.recallReset()
+		return m.popLayer(), nil
+	case tea.KeyEnter:
+		command := strings.TrimSpace(p.input.Value())
+		if command == "" {
+			return m, nil // nothing to run; keep the popup open
+		}
+		var record tea.Cmd
+		m, record = m.recordSearch(scopeShellCmd, command)
+		m = m.popLayer()
+		var run tea.Cmd
+		m, run = m.runShellCommand(command)
+		return m, tea.Batch(record, run)
+	default:
+		p.input.HandleEditKey(msg) // spaces included — do NOT swallow KeySpace
+	}
+	return m, nil
+}
+
+func (p *shellCmdPopup) render(m Model, below string) string {
+	w, h := m.overlayDims()
+	var b strings.Builder
+	b.WriteString("Run a shell command in the worktree\n\n")
+	b.WriteString(viewField("$ ", p.input, true, popupContentWidth(w)) + "\n\n")
+	b.WriteString("[enter] run  [alt+↓] history  [esc] cancel")
+	box := modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
+	return m.withRecall(overlayCenter(clipToHeight(below, h), box, w, h))
 }

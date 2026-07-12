@@ -34,6 +34,8 @@ func paletteCommands() []paletteCommand {
 		{label: "Find", keyHint: "F", run: func(m Model) (Model, tea.Cmd) { m = m.popLayer(); return m.openFileFinder() }},
 		{label: "Git config explorer", run: func(m Model) (Model, tea.Cmd) { m = m.popLayer(); return m.openGitConfigExplorer() }},
 		{label: "Open repo", run: func(m Model) (Model, tea.Cmd) { return m.openRepoPathPopup() }},
+		{label: "Open shell", keyHint: "ctrl+o", run: func(m Model) (Model, tea.Cmd) { m = m.popLayer(); return m.openSubshell() }},
+		{label: "Run shell command…", run: func(m Model) (Model, tea.Cmd) { return m.openShellCmdPopup() }},
 		{label: "Set up agent skills (using-gg)", run: func(m Model) (Model, tea.Cmd) {
 			m = m.popLayer()
 			m, cmd := m.openSettings()

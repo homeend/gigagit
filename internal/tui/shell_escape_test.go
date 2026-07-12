@@ -7,6 +7,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 func fakeEnv(m map[string]string) func(string) string {
@@ -179,5 +181,73 @@ func TestShellDoneExitErrorIsNotAnError(t *testing.T) {
 	m = mm.(Model)
 	if cmd != nil || !strings.HasPrefix(m.statusMsg, "shell: ") {
 		t.Fatalf("launch failure must surface (msg=%q)", m.statusMsg)
+	}
+}
+
+func TestPaletteHasShellRows(t *testing.T) {
+	var labels []string
+	for _, c := range paletteCommands() {
+		labels = append(labels, c.label)
+	}
+	joined := strings.Join(labels, "|")
+	if !strings.Contains(joined, "Open shell") || !strings.Contains(joined, "Run shell command…") {
+		t.Fatalf("palette missing shell rows: %v", labels)
+	}
+}
+
+func TestShellCmdPopupEnterRunsAndRecords(t *testing.T) {
+	m := footerModel()
+	m.width, m.height = 100, 30
+	mm, _ := m.openShellCmdPopup()
+	m = mm
+
+	p := layerOf[*shellCmdPopup](m)
+	if p == nil {
+		t.Fatal("popup must be on the stack")
+	}
+	for _, r := range "git cherry-pick --skip" {
+		res, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = res.(Model)
+	}
+	res, cmd := m.Update(keyMsg("enter"))
+	m = res.(Model)
+	if cmd == nil {
+		t.Fatal("enter with a command must dispatch the handover")
+	}
+	if layerOf[*shellCmdPopup](m) != nil {
+		t.Fatal("popup must close on dispatch")
+	}
+	if len(m.searchHist[scopeShellCmd]) == 0 || m.searchHist[scopeShellCmd][0] != "git cherry-pick --skip" {
+		t.Fatalf("command must be recorded for recall, got %v", m.searchHist[scopeShellCmd])
+	}
+}
+
+func TestShellCmdPopupEmptyEnterNoops(t *testing.T) {
+	m := footerModel()
+	m.width, m.height = 100, 30
+	mm, _ := m.openShellCmdPopup()
+	m = mm
+	res, cmd := m.Update(keyMsg("enter"))
+	m = res.(Model)
+	if cmd != nil || layerOf[*shellCmdPopup](m) == nil {
+		t.Fatal("empty enter must keep the popup open and dispatch nothing")
+	}
+	res, _ = m.Update(keyMsg("esc"))
+	m = res.(Model)
+	if layerOf[*shellCmdPopup](m) != nil {
+		t.Fatal("esc must close the popup")
+	}
+}
+
+func TestShellCmdPopupRecall(t *testing.T) {
+	m := footerModel()
+	m.width, m.height = 100, 30
+	m.searchHist = map[string][]string{scopeShellCmd: {"git status"}}
+	mm, _ := m.openShellCmdPopup()
+	m = mm
+	res, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown, Alt: true})
+	m = res.(Model)
+	if p := layerOf[*shellCmdPopup](m); p == nil || p.input.Value() != "git status" {
+		t.Fatalf("alt+down must preview history into the field, got %q", p.input.Value())
 	}
 }
