@@ -122,3 +122,47 @@ func TestHelpDocumentsFilesStaged(t *testing.T) {
 		t.Error("help does not document the Files and Staged panels")
 	}
 }
+
+// TestHelpListsHiddenFooterKeysAtNarrowWidth: at a width where the footer
+// overflows, ? must open help with a leading "More keys" section listing
+// exactly the bindings fitFooter dropped, in footer order.
+func TestHelpListsHiddenFooterKeysAtNarrowWidth(t *testing.T) {
+	m := footerModel()
+	m.width = 40
+	u, _ := m.Update(keyMsg("?"))
+	m = u.(Model)
+	p := layerOf[*contentPopup](m)
+	if p == nil {
+		t.Fatal("? must open the help popup")
+	}
+	_, hidden := fitFooter(m, m.layout().w)
+	if len(hidden) == 0 {
+		t.Fatal("fixture must overflow at width 40")
+	}
+	if !p.lines[0].heading || !strings.Contains(p.lines[0].text, "More keys") {
+		t.Fatalf("first help line must be the hidden-keys heading, got %+v", p.lines[0])
+	}
+	for i, b := range hidden {
+		if !strings.Contains(p.lines[1+i].text, b.label) {
+			t.Errorf("help row %d must carry %q, got %q", i, b.label, p.lines[1+i].text)
+		}
+	}
+	// The static table must follow, un-mangled.
+	if !strings.Contains(p.lines[1+len(hidden)].text, "Global") {
+		t.Errorf("static help must follow the hidden section, got %q", p.lines[1+len(hidden)].text)
+	}
+}
+
+func TestHelpNoHiddenSectionAtWideWidth(t *testing.T) {
+	m := footerModel()
+	m.width = 500
+	u, _ := m.Update(keyMsg("?"))
+	m = u.(Model)
+	p := layerOf[*contentPopup](m)
+	if p == nil {
+		t.Fatal("? must open the help popup")
+	}
+	if strings.Contains(p.lines[0].text, "More keys") {
+		t.Fatal("no hidden-keys section expected at a width where everything fits")
+	}
+}

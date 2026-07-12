@@ -360,7 +360,7 @@ func (m Model) renderInterface() string {
 	g := m.layout()
 
 	header := m.headerLine(g.w)
-	footer := truncate(m.footerLine(), g.w)
+	footer, _ := fitFooter(m, g.w)
 	errMode := statusIsError(m.statusMsg)
 	var notice string
 	// Suppressed while the conflict process is active — it draws its own window

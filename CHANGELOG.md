@@ -16,6 +16,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   Previously the field started empty and the origin was shown only as a hint.
 
 ### Added
+- TUI: the footer no longer hard-truncates on narrow terminals — whole
+  shortcut labels are dropped from the end, the line ends with a protected
+  `… [?] help` tail, and the `?` help window lists the dropped keys in a
+  leading "More keys (not shown in the footer)" section.
 - **Branch-prefix editing niceties (Settings → Branch prefixes).** An invalid
   prefix no longer closes the add form and buries the error in the status
   bar: the form stays open with the typed value intact and the error shown

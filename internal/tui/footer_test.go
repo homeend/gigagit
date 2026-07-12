@@ -453,3 +453,208 @@ func TestBranchesFooterAdvertisesTipKeys(t *testing.T) {
 		t.Fatal("enter tip predicate should ignore busy (pure navigation)")
 	}
 }
+
+// TestFooterPartsRoundTrip pins the refactor: joining the parts must
+// reproduce footerLine byte-for-byte, and exactly one part (the first live
+// global after a non-empty context group) carries the bullet separator.
+func TestFooterPartsRoundTrip(t *testing.T) {
+	m := footerModel()
+	if got := joinFooterParts(m.footerParts()); got != m.footerLine() {
+		t.Errorf("joinFooterParts(footerParts()) = %q\nfooterLine() = %q", got, m.footerLine())
+	}
+	if !strings.Contains(m.footerLine(), "  •  ") {
+		t.Fatalf("fixture footer must contain the group separator: %q", m.footerLine())
+	}
+	var starts int
+	for _, p := range m.footerParts() {
+		if p.groupStart {
+			starts++
+		}
+	}
+	if starts != 1 {
+		t.Errorf("exactly one groupStart expected, got %d", starts)
+	}
+}
+
+func TestFooterPartsAllowlistRoundTrip(t *testing.T) {
+	m := footerModel()
+	m.cfg.UI.FooterActions = []string{"repo", "pull"}
+	if got := joinFooterParts(m.footerParts()); got != m.footerLine() {
+		t.Errorf("allowlist parts = %q\nfooterLine() = %q", got, m.footerLine())
+	}
+	parts := m.footerParts()
+	if len(parts) == 0 || parts[len(parts)-1].binding.id != "actions" {
+		t.Errorf("allowlist parts must end with the actions binding: %+v", parts)
+	}
+}
+
+// TestFooterOverrideModes pins which states bypass the registry footer.
+func TestFooterOverrideModes(t *testing.T) {
+	m := footerModel()
+	if _, ok := m.footerOverride(); ok {
+		t.Error("idle panels must use the registry footer")
+	}
+	m.filterTyping = true
+	if s, ok := m.footerOverride(); !ok || !strings.Contains(s, "filter") {
+		t.Errorf("filterTyping must override the footer, got %q ok=%v", s, ok)
+	}
+}
+
+func TestFitFooterWideUnchanged(t *testing.T) {
+	m := footerModel()
+	line, hidden := fitFooter(m, 500)
+	if line != m.footerLine() {
+		t.Errorf("wide fit must be untrimmed:\n%q\n%q", line, m.footerLine())
+	}
+	if hidden != nil {
+		t.Errorf("wide fit must hide nothing: %v", hidden)
+	}
+}
+
+func TestFitFooterExactWidthUnchanged(t *testing.T) {
+	m := footerModel()
+	full := m.footerLine()
+	line, hidden := fitFooter(m, lipgloss.Width(full))
+	if line != full || hidden != nil {
+		t.Errorf("exact-width fit must be unchanged: %q hidden=%v", line, hidden)
+	}
+}
+
+// TestFitFooterNarrowDropsFromEndAndAppendsTail is the core contract: whole
+// labels drop from the end, the line ends with the protected tail, fits the
+// width, and hidden is exactly the contiguous dropped tail in footer order.
+func TestFitFooterNarrowDropsFromEndAndAppendsTail(t *testing.T) {
+	m := footerModel()
+	full := m.footerLine()
+	w := lipgloss.Width(full) - 1 // one column short: at least one label drops
+	line, hidden := fitFooter(m, w)
+	if lipgloss.Width(line) > w {
+		t.Errorf("fitted line overflows: %d > %d (%q)", lipgloss.Width(line), w, line)
+	}
+	if !strings.HasSuffix(line, footerOverflowTail) {
+		t.Errorf("trimmed footer must end with %q: %q", footerOverflowTail, line)
+	}
+	if len(hidden) == 0 {
+		t.Fatal("at least one binding must be reported hidden")
+	}
+	var nonHelp []footerPart
+	for _, p := range m.footerParts() {
+		if p.binding.id != "help" {
+			nonHelp = append(nonHelp, p)
+		}
+	}
+	cut := len(nonHelp) - len(hidden)
+	if cut <= 0 {
+		t.Fatalf("expected a visible prefix, all %d parts hidden", len(nonHelp))
+	}
+	for i, b := range hidden {
+		if nonHelp[cut+i].label != b.label {
+			t.Fatalf("hidden[%d] = %q, want contiguous tail part %q", i, b.label, nonHelp[cut+i].label)
+		}
+	}
+	want := joinFooterParts(nonHelp[:cut]) + " " + footerOverflowTail
+	if line != want {
+		t.Errorf("fitted line = %q, want %q", line, want)
+	}
+}
+
+func TestFitFooterTinyWidthFallsBackToTruncate(t *testing.T) {
+	m := footerModel()
+	line, hidden := fitFooter(m, 8) // narrower than the tail itself (10 cols)
+	if want := truncate(m.footerLine(), 8); line != want {
+		t.Errorf("tiny width must fall back to truncation: %q want %q", line, want)
+	}
+	if hidden != nil {
+		t.Errorf("tiny-width fallback must hide nothing: %v", hidden)
+	}
+}
+
+func TestFitFooterPassesThroughModeFooters(t *testing.T) {
+	m := footerModel()
+	m.filterTyping = true
+	line, hidden := fitFooter(m, 20)
+	if want := truncate(m.footerLine(), 20); line != want {
+		t.Errorf("mode footer must be truncated as before: %q want %q", line, want)
+	}
+	if hidden != nil {
+		t.Errorf("mode footers hide nothing: %v", hidden)
+	}
+}
+
+func TestFitFooterAllowlistOverflow(t *testing.T) {
+	m := footerModel()
+	m.cfg.UI.FooterActions = []string{"repo", "pull", "stashes", "undo", "bookmarks", "find", "order", "view", "settings"}
+	full := m.footerLine()
+	w := lipgloss.Width(full) - 1
+	line, hidden := fitFooter(m, w)
+	if !strings.HasSuffix(line, footerOverflowTail) {
+		t.Errorf("allowlist overflow must end with the tail: %q", line)
+	}
+	if len(hidden) == 0 {
+		t.Error("allowlist overflow must report hidden bindings")
+	}
+	if lipgloss.Width(line) > w {
+		t.Errorf("allowlist fitted line overflows: %q", line)
+	}
+}
+
+// TestRenderFooterShowsTailWhenOverflowing pins the view.go wiring: the
+// rendered frame's footer must end with the protected tail, never a
+// mid-label hard cut.
+func TestRenderFooterShowsTailWhenOverflowing(t *testing.T) {
+	m := footerModel()
+	m.width = 40
+	out := ansi.Strip(m.render())
+	if !strings.Contains(out, footerOverflowTail) {
+		t.Fatalf("narrow render must show the overflow tail:\n%s", out)
+	}
+}
+
+// TestFitFooterTailOnlyWidth pins the band where nothing but the tail fits:
+// at w == the tail's own width every label is hidden and the tail stands alone.
+func TestFitFooterTailOnlyWidth(t *testing.T) {
+	m := footerModel()
+	line, hidden := fitFooter(m, lipgloss.Width(footerOverflowTail))
+	if line != footerOverflowTail {
+		t.Errorf("tail-only width must render the bare tail: %q", line)
+	}
+	if len(hidden) == 0 {
+		t.Error("tail-only width must hide every non-help binding")
+	}
+	var nonHelp int
+	for _, p := range m.footerParts() {
+		if p.binding.id != "help" {
+			nonHelp++
+		}
+	}
+	if len(hidden) != nonHelp {
+		t.Errorf("hidden = %d bindings, want all %d non-help parts", len(hidden), nonHelp)
+	}
+}
+
+// TestFitFooterEmptyParts: an allowlist whose ids are all unavailable (and a
+// running op gating [.] actions out) yields no parts — the empty line "fits"
+// at any width and nothing is hidden.
+func TestFitFooterEmptyParts(t *testing.T) {
+	m := footerModel()
+	m.running = true
+	m.cfg.UI.FooterActions = []string{"notices"} // no notices in the fixture
+	line, hidden := fitFooter(m, 5)
+	if line != "" || hidden != nil {
+		t.Errorf("empty parts must fit trivially: %q hidden=%v", line, hidden)
+	}
+}
+
+func TestFooterPartsAllowlistDeduplicatesActions(t *testing.T) {
+	m := footerModel()
+	m.cfg.UI.FooterActions = []string{"actions", "pull"}
+	var n int
+	for _, p := range m.footerParts() {
+		if p.binding.id == "actions" {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Errorf("actions must appear exactly once, got %d", n)
+	}
+}

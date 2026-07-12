@@ -39,7 +39,11 @@ go build ./cmd/gg            # produces ./gg
 Run `gg` with no arguments to open the interactive UI.
 
 The footer is contextual: it lists only the keys that apply to the focused
-panel and selected row right now; `?` opens the full searchable reference.
+panel and selected row right now. When the terminal is too narrow for all of
+them, whole entries are dropped from the end and the line ends with
+`… [?] help` — the dropped keys are listed at the top of the `?` help window
+("More keys"), so nothing is ever silently hidden. `?` opens the full
+searchable reference.
 
 | Key | Action |
 |-----|--------|
