@@ -149,27 +149,26 @@ var globalBindings = []footerBinding{
 	{"quit", "q", "[q] quit", func(Model) bool { return true }, scopeGlobal},
 }
 
-// footerLine builds the context-sensitive footer: panel/row-specific actions,
-// a separator, then the predicated global tail. Filter-input mode overrides
-// everything because that mode captures every key.
-func (m Model) footerLine() string {
+// footerOverride returns the hand-written footer for the modes that own the
+// keyboard, or ok=false when the registry-driven footer applies.
+func (m Model) footerOverride() (string, bool) {
 	// A process owns the keyboard; the panel footer would advertise keys that do
 	// nothing, so show the process's own indicator instead.
 	if m.proc != nil {
-		return m.proc.indicator(m)
+		return m.proc.indicator(m), true
 	}
 	if m.filterTyping {
-		return "filter: type to search  [↑↓] move  [enter] keep  [esc] cancel"
+		return "filter: type to search  [↑↓] move  [enter] keep  [esc] cancel", true
 	}
 	if m.highlightTyping {
-		return "highlight: type to search  [↑↓] move  [ctrl+↑/↓] prev/next match  [enter] keep  [esc] clear"
+		return "highlight: type to search  [↑↓] move  [ctrl+↑/↓] prev/next match  [enter] keep  [esc] clear", true
 	}
 	// The files view owns the keyboard while open, so the registry footer would
 	// lie; show the view's own keys instead. The commit-list side mirrors the
 	// Commits panel (. menu + graph keys); the tree side is file-scoped.
 	if m.filesView != nil {
 		if m.filesPreview != nil && !m.filesTreeFocused {
-			return "file: [↑/↓] scroll  [z] view  [←/tab] back to tree  [esc] close preview"
+			return "file: [↑/↓] scroll  [z] view  [←/tab] back to tree  [esc] close preview", true
 		}
 		// i shows the displayed commit's message — only when canShowFilesViewMessage
 		// holds (same gate as the handler, so the footer never advertises a dead i).
@@ -184,50 +183,88 @@ func (m Model) footerLine() string {
 			if m.stashView == nil && !m.inCompareMode() && m.filesHash != "" {
 				aHint = "  [a] all files"
 			}
-			return "tree: [↑/↓] move  [enter] diff" + aHint + "  [.] view file/copy  [/] search  [h] hist  [b] blame  [z] view" + msgHint + "  [esc/l] close"
+			return "tree: [↑/↓] move  [enter] diff" + aHint + "  [.] view file/copy  [/] search  [h] hist  [b] blame  [z] view" + msgHint + "  [esc/l] close", true
 		}
-		return "commits: [enter/tab] tree  [↑/↓] move  [<>=] graph  [a] all files  [/] search  [.] actions" + msgHint + "  [esc/l] close"
+		return "commits: [enter/tab] tree  [↑/↓] move  [<>=] graph  [a] all files  [/] search  [.] actions" + msgHint + "  [esc/l] close", true
 	}
 	// The stash list owns the keyboard while it is the focused right column
 	// (no file tree yet). When focus has moved to a left panel, fall through to
 	// that panel's normal footer.
 	if m.stashView != nil && m.focus == panelCommits {
-		return "stash: [↑/↓] move  [l] files  [z] view  [←] panels  [enter] apply/pop/drop  [esc/S] close"
+		return "stash: [↑/↓] move  [l] files  [z] view  [←] panels  [enter] apply/pop/drop  [esc/S] close", true
 	}
-	// A configured footer_actions allowlist replaces the default two-group
-	// layout: show exactly those ids, in list order, among the available ones.
-	// [.] actions always stays so the menu remains discoverable.
+	return "", false
+}
+
+// footerPart is one renderable footer label plus the binding behind it.
+// groupStart marks the context→global boundary ("  •  " separator).
+type footerPart struct {
+	label      string
+	binding    footerBinding
+	groupStart bool
+}
+
+// footerParts returns the registry-driven footer as ordered parts. A
+// configured footer_actions allowlist replaces the default two-group layout:
+// exactly those ids, in list order, among the available ones; [.] actions
+// always stays so the menu remains discoverable.
+func (m Model) footerParts() []footerPart {
 	if ids := m.cfg.UI.FooterActions; len(ids) > 0 {
-		var labels []string
+		var parts []footerPart
 		for _, id := range ids {
 			if b, ok := bindingByID(id); ok && b.when(m) {
-				labels = append(labels, b.label)
+				parts = append(parts, footerPart{label: b.label, binding: b})
 			}
 		}
 		if b, ok := bindingByID("actions"); ok && b.when(m) {
-			labels = append(labels, b.label)
+			parts = append(parts, footerPart{label: b.label, binding: b})
 		}
-		return strings.Join(labels, " ")
+		return parts
 	}
-	var ctx, glob []string
+	var parts []footerPart
 	for _, b := range contextBindings {
 		if b.when(m) {
-			ctx = append(ctx, b.label)
+			parts = append(parts, footerPart{label: b.label, binding: b})
 		}
 	}
+	nCtx := len(parts)
 	for _, b := range globalBindings {
 		if b.when(m) {
-			glob = append(glob, b.label)
+			p := footerPart{label: b.label, binding: b}
+			if len(parts) == nCtx && nCtx > 0 {
+				p.groupStart = true
+			}
+			parts = append(parts, p)
 		}
 	}
-	var groups []string
-	if len(ctx) > 0 {
-		groups = append(groups, strings.Join(ctx, " "))
+	return parts
+}
+
+// joinFooterParts renders parts with the standard separators: one space
+// within a group, "  •  " at the groupStart boundary.
+func joinFooterParts(parts []footerPart) string {
+	var b strings.Builder
+	for i, p := range parts {
+		if i > 0 {
+			if p.groupStart {
+				b.WriteString("  •  ")
+			} else {
+				b.WriteString(" ")
+			}
+		}
+		b.WriteString(p.label)
 	}
-	if len(glob) > 0 {
-		groups = append(groups, strings.Join(glob, " "))
+	return b.String()
+}
+
+// footerLine builds the context-sensitive footer: panel/row-specific actions,
+// a separator, then the predicated global tail. Mode footers (filter input,
+// files view, …) override everything because those modes capture every key.
+func (m Model) footerLine() string {
+	if s, ok := m.footerOverride(); ok {
+		return s
 	}
-	return strings.Join(groups, "  •  ")
+	return joinFooterParts(m.footerParts())
 }
 
 // bindingByID finds a registry binding by its action id. Ids are unique

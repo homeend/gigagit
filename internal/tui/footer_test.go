@@ -453,3 +453,49 @@ func TestBranchesFooterAdvertisesTipKeys(t *testing.T) {
 		t.Fatal("enter tip predicate should ignore busy (pure navigation)")
 	}
 }
+
+// TestFooterPartsRoundTrip pins the refactor: joining the parts must
+// reproduce footerLine byte-for-byte, and exactly one part (the first live
+// global after a non-empty context group) carries the bullet separator.
+func TestFooterPartsRoundTrip(t *testing.T) {
+	m := footerModel()
+	if got := joinFooterParts(m.footerParts()); got != m.footerLine() {
+		t.Errorf("joinFooterParts(footerParts()) = %q\nfooterLine() = %q", got, m.footerLine())
+	}
+	if !strings.Contains(m.footerLine(), "  •  ") {
+		t.Fatalf("fixture footer must contain the group separator: %q", m.footerLine())
+	}
+	var starts int
+	for _, p := range m.footerParts() {
+		if p.groupStart {
+			starts++
+		}
+	}
+	if starts != 1 {
+		t.Errorf("exactly one groupStart expected, got %d", starts)
+	}
+}
+
+func TestFooterPartsAllowlistRoundTrip(t *testing.T) {
+	m := footerModel()
+	m.cfg.UI.FooterActions = []string{"repo", "pull"}
+	if got := joinFooterParts(m.footerParts()); got != m.footerLine() {
+		t.Errorf("allowlist parts = %q\nfooterLine() = %q", got, m.footerLine())
+	}
+	parts := m.footerParts()
+	if len(parts) == 0 || parts[len(parts)-1].binding.id != "actions" {
+		t.Errorf("allowlist parts must end with the actions binding: %+v", parts)
+	}
+}
+
+// TestFooterOverrideModes pins which states bypass the registry footer.
+func TestFooterOverrideModes(t *testing.T) {
+	m := footerModel()
+	if _, ok := m.footerOverride(); ok {
+		t.Error("idle panels must use the registry footer")
+	}
+	m.filterTyping = true
+	if s, ok := m.footerOverride(); !ok || !strings.Contains(s, "filter") {
+		t.Errorf("filterTyping must override the footer, got %q ok=%v", s, ok)
+	}
+}
