@@ -934,6 +934,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+		// ctrl+o — the shell escape hatch. Handled ABOVE the process/layer
+		// routing (unlike ctrl+p) so it works from ANY surface, including
+		// the conflict process and its message screens — the motivating
+		// case is a cherry-pick whose continue failed needing --skip. The
+		// opsIdle gate lives in openSubshell. A control chord never
+		// collides with typed text (the ctrl+t argument).
+		if msg.String() == "ctrl+o" {
+			return m.openSubshell()
+		}
 		// A process owns the interface entirely: while one is active all input is
 		// its own and every other window/command below is unreachable. Sits just
 		// below the modal (a process's own job may still raise a decision).
@@ -1905,6 +1914,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case pickProbeMsg:
 		return m.handlePickProbe(msg)
+	case shellDoneMsg:
+		return m.handleShellDone(msg)
 	case opFinishedMsg:
 		if m.opCancel != nil {
 			m.opCancel() // op already returned; this only frees the ctx

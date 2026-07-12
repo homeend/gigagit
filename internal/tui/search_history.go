@@ -20,6 +20,7 @@ const (
 	scopeFiletree = "filetree"
 	scopeBookmark = "bookmark"
 	scopeShelf    = "shelf"
+	scopeShellCmd = "shellcmd"
 )
 
 // searchHistLoadedMsg carries the rings read once at startup.

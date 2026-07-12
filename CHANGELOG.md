@@ -24,6 +24,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   Previously the field started empty and the origin was shown only as a hint.
 
 ### Added
+- Shell escape: `ctrl+o` anywhere in the TUI (even over a failed conflict
+  resolve) suspends gg into an interactive `$SHELL` in the worktree — run
+  whatever git needs (`git cherry-pick --skip`, …), `exit` returns to gg
+  with a full reload. The `ctrl+p` palette gains **Open shell** and **Run
+  shell command…** (one-off command with a press-enter-to-return pause and
+  `alt+↓` history recall).
 - Cherry-pick a bookmarked or shelved commit: `a` in the `g`/`G` switchers
   applies the highlighted commit entry onto the current branch (confirm
   modal). While the commit exists it is a true `git cherry-pick`; a shelved
