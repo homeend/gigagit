@@ -9,6 +9,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Changed
+- **`gg version` now reports the real version for `go install` builds.**
+  When the `-ldflags` values from `build.sh` are absent, `internal/buildinfo`
+  falls back to Go's embedded build info (`runtime/debug.ReadBuildInfo`): a
+  `go install github.com/homeend/gigagit/cmd/gg@latest` binary prints its
+  module version (e.g. `gg v0.1.16 (none) windows/amd64`) instead of
+  `gg dev (none)`, and a plain `go build` from a checkout prints the commit
+  (`vcs.revision`, `-dirty` when the tree is modified). Explicit `-ldflags`
+  values still win.
 - **Shelf restore (`G` switcher, `p`) prefills the destination** with the
   entry's original path — enter puts the copy straight back in place (the
   existing overwrite/cancel confirm still guards a clobber); edit the path to
