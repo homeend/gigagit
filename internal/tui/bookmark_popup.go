@@ -354,7 +354,7 @@ func (p *bookmarkPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				m.statusMsg = "cherry-pick: only for a commit bookmark"
 				return m, nil
 			}
-			return m.startPickCommit(pickTarget{sha: b.Commit, label: b.Label})
+			return m.startPickCommit(pickTarget{sha: b.Commit})
 		case "y":
 			if p.compareRef != nil {
 				return m, nil

@@ -273,6 +273,12 @@ func opAffectedSources(op engine.Operation) []sourceKey {
 		return []sourceKey{srcIdentity}
 	case engine.SmartMerge, engine.SmartRebase:
 		return []sourceKey{srcStatus, srcFeed, srcBranches}
+	case engine.CherryPick:
+		// Moves the branch tip and may leave conflicts, same shape as
+		// SmartMerge/SmartRebase. Mapping it avoids falling through to "all
+		// sources", which would auto-fire the srcTags-arrival remote-tags
+		// probe (a needless network round-trip) after every cherry-pick.
+		return []sourceKey{srcStatus, srcFeed, srcBranches}
 	case engine.ApplyPatch:
 		// Commits mode moves the branch tip and adds commits; working-tree
 		// mode changes status (possibly to conflicted). One op covers both,

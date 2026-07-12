@@ -350,6 +350,7 @@ func TestOpAffectedSources(t *testing.T) {
 		{engine.SetIdentity{}, []sourceKey{srcIdentity}},
 		{engine.SmartMerge{}, []sourceKey{srcStatus, srcFeed, srcBranches}},
 		{engine.SmartRebase{}, []sourceKey{srcStatus, srcFeed, srcBranches}},
+		{engine.CherryPick{}, []sourceKey{srcStatus, srcFeed, srcBranches}},
 		{engine.ApplyPatch{}, []sourceKey{srcStatus, srcFeed, srcBranches}},
 		{engine.DeleteBranch{}, []sourceKey{srcBranches, srcFeed}},
 		{engine.RenameBranch{}, []sourceKey{srcBranches, srcFeed}},

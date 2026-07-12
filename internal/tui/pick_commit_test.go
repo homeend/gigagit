@@ -76,7 +76,7 @@ func TestPickProbeMissingWithPatchAppliesPatch(t *testing.T) {
 
 	msg := pickProbeMsg{
 		gen:    m.pickGen,
-		target: pickTarget{sha: "a1b2c3d4e5f6a7b8", label: "fix", shelfID: e.ID, hasPatch: true},
+		target: pickTarget{sha: "a1b2c3d4e5f6a7b8", shelfID: e.ID, hasPatch: true},
 		found:  false,
 	}
 	mm, _ := m.Update(msg)

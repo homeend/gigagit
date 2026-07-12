@@ -15,7 +15,6 @@ import (
 // (which may already be closed when the probe returns).
 type pickTarget struct {
 	sha      string // full commit sha (Bookmark.Commit / ShelfEntry.Origin.Commit)
-	label    string // display fallback when the commit is gone (entry label/subject)
 	shelfID  string // non-empty = shelf entry (the patch lane is possible)
 	hasPatch bool   // the shelf entry carries a stored patch blob
 }

@@ -322,7 +322,7 @@ func (p *shelfPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				return m, nil
 			}
 			return m.startPickCommit(pickTarget{
-				sha: e.Origin.Commit, label: e.Label,
+				sha:     e.Origin.Commit,
 				shelfID: e.ID, hasPatch: e.PatchSHA != "",
 			})
 		case "y":
