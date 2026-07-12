@@ -1,7 +1,9 @@
 package domain
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -128,5 +130,83 @@ func TestTempExportBaseIsSiblingDotTmp(t *testing.T) {
 	}
 	if filepath.Base(filepath.Dir(base)) != filepath.Base(filepath.Dir(repoDir)) {
 		t.Fatalf("base = %q, want a sibling of repo dir %q (no extra path segment)", base, repoDir)
+	}
+}
+
+func TestShelfAddCommitStoresPatch(t *testing.T) {
+	repoDir, svc := newRealRepo(t)
+	svc.SetShelfStore(shelf.NewFileStore(t.TempDir()))
+	ctx := context.Background()
+
+	writeCommit(t, repoDir, "src/a.txt", "alpha\n", "add a")
+	sha := headHash(t, repoDir)
+
+	e, err := svc.ShelfAddCommit(ctx, sha, "")
+	if err != nil {
+		t.Fatalf("ShelfAddCommit: %v", err)
+	}
+	if e.PatchSHA == "" {
+		t.Fatal("a non-merge commit entry must carry a patch snapshot")
+	}
+	path, err := svc.ShelfPatchFile(ctx, e.ID)
+	if err != nil {
+		t.Fatalf("ShelfPatchFile: %v", err)
+	}
+	defer os.Remove(path)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.HasPrefix(data, []byte("From ")) {
+		t.Fatalf("patch must be a format-patch mailbox, got head %q", data[:min(20, len(data))])
+	}
+	if !bytes.Contains(data, []byte("add a")) {
+		t.Fatal("patch must carry the commit subject")
+	}
+}
+
+func TestShelfAddCommitMergeSkipsPatch(t *testing.T) {
+	repoDir, svc := newRealRepo(t)
+	svc.SetShelfStore(shelf.NewFileStore(t.TempDir()))
+	ctx := context.Background()
+
+	writeCommit(t, repoDir, "base.txt", "base\n", "base")
+	gitRun(t, repoDir, "checkout", "-b", "side")
+	writeCommit(t, repoDir, "side.txt", "side\n", "side change")
+	gitRun(t, repoDir, "checkout", "-")
+	writeCommit(t, repoDir, "main.txt", "main\n", "main change")
+	gitRun(t, repoDir, "merge", "--no-ff", "-m", "merge side", "side")
+	sha := headHash(t, repoDir)
+
+	e, err := svc.ShelfAddCommit(ctx, sha, "")
+	if err != nil {
+		t.Fatalf("shelving a merge commit must still succeed: %v", err)
+	}
+	if e.PatchSHA != "" {
+		t.Fatal("a merge commit must not store a patch snapshot")
+	}
+	if _, err := svc.ShelfPatchFile(ctx, e.ID); !errors.Is(err, shelf.ErrNoPatch) {
+		t.Fatalf("ShelfPatchFile = %v, want shelf.ErrNoPatch", err)
+	}
+}
+
+func TestCommitLookup(t *testing.T) {
+	repoDir, svc := newRealRepo(t)
+	ctx := context.Background()
+
+	writeCommit(t, repoDir, "a.txt", "a\n", "subject here")
+	sha := headHash(t, repoDir)
+
+	line, found, err := svc.CommitLookup(ctx, sha)
+	if err != nil || !found {
+		t.Fatalf("CommitLookup(%s): found=%v err=%v", sha, found, err)
+	}
+	if line.Subject != "subject here" || line.Hash == "" {
+		t.Fatalf("line = %+v", line)
+	}
+
+	_, found, err = svc.CommitLookup(ctx, "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
+	if err != nil || found {
+		t.Fatalf("missing commit: found=%v err=%v, want false, nil", found, err)
 	}
 }

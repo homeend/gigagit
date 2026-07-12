@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/shelf"
 )
 
 // ErrShelfDisabled means no state directory was resolvable.
@@ -72,8 +74,16 @@ func (s *Service) ShelfAddCommit(ctx context.Context, sha, label string) (model.
 	if err != nil {
 		return model.ShelfEntry{}, err
 	}
+	// Best-effort patch snapshot: lets the entry be re-applied as a commit
+	// (git am) even after the commit object is gc'd. A merge commit (refused
+	// by CommitPatch), an oversized patch, or a format-patch failure just
+	// skips the snapshot — shelving must never fail over it.
+	patch, _, perr := s.CommitPatch(ctx, sha)
+	if perr != nil || len(patch) > shelf.MaxCommitArchiveBytes {
+		patch = nil
+	}
 	addr := model.FileAddress{State: model.StateCommitted, Commit: sha, Path: ""}
-	return st.PutCommit("", addr, tar, nil, label)
+	return st.PutCommit("", addr, tar, patch, label)
 }
 
 // ShelfCommitFiles lists the files frozen in a shelved commit's tar — a header
@@ -138,4 +148,33 @@ func (s *Service) ShelfRemove(ctx context.Context, entryID string) error {
 		return ErrShelfDisabled
 	}
 	return st.Remove(entryID)
+}
+
+// ShelfPatchFile materializes entryID's stored format-patch mailbox to a temp
+// file (engine.ApplyPatch takes a disk path) and returns that path. The caller
+// owns deletion once the op that consumed it finishes. shelf.ErrNoPatch when
+// the entry has no snapshot.
+func (s *Service) ShelfPatchFile(ctx context.Context, entryID string) (string, error) {
+	st := s.shelfStore(ctx)
+	if st == nil {
+		return "", ErrShelfDisabled
+	}
+	data, err := st.GetPatch(entryID)
+	if err != nil {
+		return "", err
+	}
+	f, err := os.CreateTemp("", "gg-shelf-*.patch")
+	if err != nil {
+		return "", err
+	}
+	if _, err := f.Write(data); err != nil {
+		f.Close()
+		os.Remove(f.Name())
+		return "", err
+	}
+	if err := f.Close(); err != nil {
+		os.Remove(f.Name())
+		return "", err
+	}
+	return f.Name(), nil
 }

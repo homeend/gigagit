@@ -508,3 +508,21 @@ func (s *Service) CommitTimes(ctx context.Context, shas []string) (map[string]in
 		return s.repo.CommitTimes(ctx, shas)
 	})
 }
+
+// CommitLookup resolves rev to its short-sha + subject, reporting found=false
+// when no such commit exists. Missing is an EXPECTED state here (a bookmarked
+// or shelved commit may have been gc'd), so it is not an error and is never
+// recorded to the failure log (queryQuiet); only a context cancellation
+// propagates as err. Backs the TUI's cherry-pick lane probe.
+func (s *Service) CommitLookup(ctx context.Context, rev string) (model.LogLine, bool, error) {
+	line, err := queryQuiet(ctx, s, "commitLookup:"+rev, func(ctx context.Context) (model.LogLine, error) {
+		return s.repo.CommitLine(ctx, rev)
+	})
+	if err != nil {
+		if ctx.Err() != nil {
+			return model.LogLine{}, false, ctx.Err()
+		}
+		return model.LogLine{}, false, nil
+	}
+	return line, true, nil
+}
