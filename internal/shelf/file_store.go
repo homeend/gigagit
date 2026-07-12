@@ -170,9 +170,12 @@ func (fs *FileStore) Put(bucket string, addr model.FileAddress, data []byte) (mo
 }
 
 // PutCommit stores a commit's changed-files tar as a durable ShelfKindCommit
-// entry (id: commit-<shortsha>-<blobsha8>).
-func (fs *FileStore) PutCommit(bucket string, addr model.FileAddress, tar []byte, label string) (model.ShelfEntry, error) {
-	if len(tar) > MaxCommitArchiveBytes {
+// entry (id: commit-<shortsha>-<blobsha8>). A non-empty patch (the commit's
+// format-patch mailbox) is stored as a second content-addressed blob so the
+// entry can be re-applied as a commit after the original is gc'd; nil = no
+// snapshot (merge commit, oversized, or shelved before patch support).
+func (fs *FileStore) PutCommit(bucket string, addr model.FileAddress, tar, patch []byte, label string) (model.ShelfEntry, error) {
+	if len(tar) > MaxCommitArchiveBytes || len(patch) > MaxCommitArchiveBytes {
 		return model.ShelfEntry{}, ErrTooLarge
 	}
 	bucket = normalizeBucket(bucket)
@@ -180,19 +183,29 @@ func (fs *FileStore) PutCommit(bucket string, addr model.FileAddress, tar []byte
 	if err != nil {
 		return model.ShelfEntry{}, err
 	}
+	var patchSHA string
+	var patchSize int64
+	if len(patch) > 0 {
+		if patchSHA, err = fs.writeBlob(patch); err != nil {
+			return model.ShelfEntry{}, err
+		}
+		patchSize = int64(len(patch))
+	}
 	short := addr.Commit
 	if len(short) > 7 {
 		short = short[:7]
 	}
 	return fs.putEntry(model.ShelfEntry{
-		ID:      fmt.Sprintf("commit-%s-%s", short, sha[:8]),
-		Bucket:  bucket,
-		Kind:    model.ShelfKindCommit,
-		Origin:  addr,
-		Label:   label,
-		SHA:     sha,
-		Size:    int64(len(tar)),
-		Created: time.Now(),
+		ID:        fmt.Sprintf("commit-%s-%s", short, sha[:8]),
+		Bucket:    bucket,
+		Kind:      model.ShelfKindCommit,
+		Origin:    addr,
+		Label:     label,
+		SHA:       sha,
+		Size:      int64(len(tar)),
+		PatchSHA:  patchSHA,
+		PatchSize: patchSize,
+		Created:   time.Now(),
 	})
 }
 
@@ -210,6 +223,21 @@ func (fs *FileStore) Get(entryID string) ([]byte, error) {
 	for _, e := range idx.Entries {
 		if e.ID == entryID {
 			return os.ReadFile(fs.blobPath(e.SHA))
+		}
+	}
+	return nil, ErrNotFound
+}
+
+// GetPatch returns an entry's stored format-patch mailbox — Get's sibling for
+// the second (patch) blob. ErrNoPatch when the entry has no snapshot.
+func (fs *FileStore) GetPatch(entryID string) ([]byte, error) {
+	idx := fs.read()
+	for _, e := range idx.Entries {
+		if e.ID == entryID {
+			if e.PatchSHA == "" {
+				return nil, ErrNoPatch
+			}
+			return os.ReadFile(fs.blobPath(e.PatchSHA))
 		}
 	}
 	return nil, ErrNotFound
@@ -260,29 +288,35 @@ func (fs *FileStore) Buckets() ([]model.ShelfBucket, error) {
 
 func (fs *FileStore) Remove(entryID string) error {
 	idx := fs.read()
-	var sha string
+	var removed []string
 	kept := idx.Entries[:0]
 	for _, e := range idx.Entries {
 		if e.ID == entryID {
-			sha = e.SHA
+			removed = append(removed, e.SHA)
+			if e.PatchSHA != "" {
+				removed = append(removed, e.PatchSHA)
+			}
 			continue
 		}
 		kept = append(kept, e)
 	}
 	idx.Entries = kept
-	if sha == "" {
+	if len(removed) == 0 {
 		return ErrNotFound
 	}
-	// Reclaim the blob only when no surviving entry references it.
-	stillUsed := false
-	for _, e := range idx.Entries {
-		if e.SHA == sha {
-			stillUsed = true
-			break
+	// Reclaim each blob only when no surviving entry references it (as either
+	// its tar/file blob or its patch blob — content-addressing may share).
+	for _, sha := range removed {
+		stillUsed := false
+		for _, e := range idx.Entries {
+			if e.SHA == sha || e.PatchSHA == sha {
+				stillUsed = true
+				break
+			}
 		}
-	}
-	if !stillUsed {
-		os.Remove(fs.blobPath(sha))
+		if !stillUsed {
+			os.Remove(fs.blobPath(sha))
+		}
 	}
 	return fs.write(idx)
 }

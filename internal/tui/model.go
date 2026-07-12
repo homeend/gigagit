@@ -53,6 +53,8 @@ type Model struct {
 	pendingCheckout       pendingCheckout     // arms the diverged-checkout recovery modal; zero remoteRef = none
 	pendingRemoteTagAdds  []string            // tags to optimistically add to remoteTagNames on PushTags success
 	pushCheckGen          int                 // generation guard for the async pre-push remote-tag check
+	pickGen               int                 // generation guard for the async cherry-pick commit probe
+	pickPatchTemp         string              // patch lane's temp file; removed when its op finishes
 	reflog                []model.ReflogEntry // HEAD reflog; shown by the Reflog tab in the bottom slot
 	currentWorktree       string
 
@@ -1901,6 +1903,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			},
 		}
 		return m, nil
+	case pickProbeMsg:
+		return m.handlePickProbe(msg)
 	case opFinishedMsg:
 		if m.opCancel != nil {
 			m.opCancel() // op already returned; this only frees the ctx
@@ -1908,6 +1912,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.running = false
 		m.opMsgs = nil
+		m = m.cleanupPickPatchTemp()
 		// A foreground fetch is a single (uncontended) `git fetch`, so its duration
 		// is a representative measurement for the background-fetch row — record it
 		// (success only). It does NOT enable the background fetch task on its own;
@@ -2916,6 +2921,8 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.diffTag = ""
 	m.remoteTagNames = nil // tag names from a different repo must not bleed into the new one
 	m.pushCheckGen++       // drop any in-flight pre-push tag check from the old repo
+	m.pickGen++            // drop any in-flight cherry-pick probe from the old repo
+	m = m.cleanupPickPatchTemp()
 	m.pendingPushTags = nil
 	m.pendingGotoTip = ""                 // a repo switch must not fire a stale tip jump
 	m.pendingCheckout = pendingCheckout{} // a diverged checkout from the old repo must not prompt in the new one

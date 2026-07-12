@@ -288,14 +288,21 @@ type ShelfBucket struct {
 
 // ShelfEntry is one shelved file: immutable content plus structured provenance.
 type ShelfEntry struct {
-	ID      string // "<source-word>-<pathslug>-<shorthash>"
-	Bucket  string
-	Kind    ShelfKind   // file (raw bytes) vs commit (tar archive)
-	Origin  FileAddress // where it was captured from (provenance + display)
-	Label   string      // human name (commit entries); "" = none. Display-only, not in ID.
-	SHA     string      // content hash; also the blob filename
-	Size    int64
-	Created time.Time
+	ID     string // "<source-word>-<pathslug>-<shorthash>"
+	Bucket string
+	Kind   ShelfKind   // file (raw bytes) vs commit (tar archive)
+	Origin FileAddress // where it was captured from (provenance + display)
+	Label  string      // human name (commit entries); "" = none. Display-only, not in ID.
+	SHA    string      // content hash; also the blob filename
+	Size   int64
+	// PatchSHA/PatchSize describe an optional second blob for a commit entry:
+	// the commit's format-patch mailbox, snapshotted at shelve time so the
+	// entry can be re-applied as a commit (git am) even after the commit
+	// object is gc'd. "" = none (a file entry, an old entry, a merge commit,
+	// or an oversized/failed patch).
+	PatchSHA  string
+	PatchSize int64
+	Created   time.Time
 }
 
 // IsCommit reports whether the entry is a shelved commit (tar payload) rather
