@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-12
 **Branch:** `feat/shell-escape`
-**Status:** approved design; spec pending user review
+**Status:** implemented on feat/shell-escape
 
 ## Problem
 
