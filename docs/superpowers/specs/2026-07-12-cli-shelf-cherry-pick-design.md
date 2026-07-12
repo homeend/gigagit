@@ -1,7 +1,7 @@
 # CLI cherry-pick of a shelved commit — design
 
 **Date:** 2026-07-12
-**Status:** approved
+**Status:** implemented
 **Branch:** feat/cli-shelf-cherry-pick
 **Follow-up to:** docs/superpowers/specs/2026-07-12-cherry-pick-shelf-bookmark-design.md
 (its "Deferred work" section is this feature's mandate)
