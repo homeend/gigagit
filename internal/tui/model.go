@@ -1628,7 +1628,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// returns earlier); the menu lists whatever is currently available.
 			return m.openActionMenu(), nil
 		case "?":
-			m = m.pushLayer(newContentPopup("Help — keys", helpContent()))
+			_, hidden := fitFooter(m, m.layout().w)
+			m = m.pushLayer(newContentPopup("Help — keys", helpWithHidden(hidden)))
 		case "#":
 			if m.opsIdle() {
 				return m.openGotoCommitPopup()

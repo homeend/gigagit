@@ -270,3 +270,21 @@ func helpContent() []contentLine {
 		r("q/enter", "close"),
 	}
 }
+
+// helpWithHidden prepends the footer's currently hidden bindings — dropped
+// for width by fitFooter at this exact terminal size — as the first help
+// section, so the footer's "… [?] help" tail always leads to a list of
+// exactly what was cut. With nothing hidden the static table is returned
+// as-is. layout().w is a pure function of the model, so the ? handler and
+// the renderer can never disagree about what was hidden.
+func helpWithHidden(hidden []footerBinding) []contentLine {
+	if len(hidden) == 0 {
+		return helpContent()
+	}
+	lines := make([]contentLine, 0, len(hidden)+1)
+	lines = append(lines, contentLine{text: "More keys (not shown in the footer)", heading: true})
+	for _, b := range hidden {
+		lines = append(lines, contentLine{text: padRight(b.key, 16) + b.label})
+	}
+	return append(lines, helpContent()...)
+}

@@ -597,3 +597,15 @@ func TestFitFooterAllowlistOverflow(t *testing.T) {
 		t.Errorf("allowlist fitted line overflows: %q", line)
 	}
 }
+
+// TestRenderFooterShowsTailWhenOverflowing pins the view.go wiring: the
+// rendered frame's footer must end with the protected tail, never a
+// mid-label hard cut.
+func TestRenderFooterShowsTailWhenOverflowing(t *testing.T) {
+	m := footerModel()
+	m.width = 40
+	out := ansi.Strip(m.render())
+	if !strings.Contains(out, footerOverflowTail) {
+		t.Fatalf("narrow render must show the overflow tail:\n%s", out)
+	}
+}
