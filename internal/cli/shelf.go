@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 
 	"github.com/homeend/gigagit/internal/domain"
@@ -20,7 +21,7 @@ import (
 // entries.
 func cmdShelf(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: gg shelf <add|commit|restore|export|list|rm> ...")
+		fmt.Fprintln(stderr, "usage: gg shelf <add|commit|cherry-pick|restore|export|list|rm> ...")
 		return 2
 	}
 	sub, rest := args[0], args[1:]
@@ -29,6 +30,8 @@ func cmdShelf(svc *domain.Service, args []string, stdin io.Reader, stdout, stder
 		return shelfAdd(svc, rest, stdout, stderr)
 	case "commit":
 		return shelfCommit(svc, rest, stdout, stderr)
+	case "cherry-pick":
+		return shelfCherryPick(svc, rest, stdin, stdout, stderr)
 	case "list":
 		return shelfList(svc, rest, stdout, stderr)
 	case "rm":
@@ -249,4 +252,77 @@ func shelfEntryByID(svc *domain.Service, ctx context.Context, id string) (model.
 			return model.ShelfEntry{}, false
 		}
 	}
+}
+
+// shelfCherryPick re-applies a shelved commit onto the current branch: a live
+// `git cherry-pick` while the commit object still exists, or a replay of the
+// shelve-time format-patch snapshot (`git am --3way`, atomic) once it is
+// gc'd. --patch forces the snapshot lane. The non-interactive twin of the
+// TUI switchers' `a` key. Exit codes per the gg apply convention: 0 applied,
+// 1 failure or conflicts left in the tree, 2 usage.
+func shelfCherryPick(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("shelf cherry-pick", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	patch := fs.Bool("patch", false, "force the stored-patch replay (git am) even if the commit exists")
+	onConflict := fs.String("on-conflict", "", "answer a live-lane cherry-pick conflict: keep|abort")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if fs.NArg() != 1 || fs.Arg(0) == "" {
+		fmt.Fprintln(stderr, "usage: gg shelf cherry-pick [--patch] [--on-conflict=keep|abort] <entry-id>")
+		return 2
+	}
+	policy := map[string]string{}
+	switch *onConflict {
+	case "":
+	case "keep":
+		policy["cherry-pick-conflict"] = "keep-conflicts"
+	case "abort":
+		policy["cherry-pick-conflict"] = "abort"
+	default:
+		fmt.Fprintf(stderr, "shelf cherry-pick: invalid --on-conflict %q (keep|abort)\n", *onConflict)
+		return 2
+	}
+	ctx := context.Background()
+	e, ok := shelfEntryByID(svc, ctx, fs.Arg(0))
+	if !ok {
+		fmt.Fprintf(stderr, "shelf cherry-pick: no entry %q\n", fs.Arg(0))
+		return 1
+	}
+	if !e.IsCommit() {
+		fmt.Fprintf(stderr, "shelf cherry-pick: %s is not a shelved commit\n", e.ID)
+		return 1
+	}
+	sha := e.Origin.Commit
+	_, found, err := svc.CommitLookup(ctx, sha)
+	if err != nil {
+		fmt.Fprintln(stderr, "shelf cherry-pick:", err)
+		return 1
+	}
+	if found && !*patch { // live lane: the commit object still exists
+		dec := cliDecider{policy: policy, in: stdin, out: stderr, interactive: stdinIsTerminal()}
+		res, err := runOperation(ctx, svc, engine.CherryPick{Commit: sha}, dec, stderr)
+		return finish(res, err, stdout, stderr)
+	}
+	// Patch lane: forced by --patch, or the commit is gone.
+	if e.PatchSHA == "" {
+		if *patch {
+			fmt.Fprintf(stderr, "shelf cherry-pick: entry %s has no stored patch\n", e.ID)
+		} else {
+			short := sha
+			if len(short) > 7 {
+				short = short[:7]
+			}
+			fmt.Fprintf(stderr, "shelf cherry-pick: commit %s no longer exists and this entry has no stored patch (shelved before patch support, or a merge commit)\n", short)
+		}
+		return 1
+	}
+	tmp, err := svc.ShelfPatchFile(ctx, e.ID)
+	if err != nil {
+		fmt.Fprintln(stderr, "shelf cherry-pick:", err)
+		return 1
+	}
+	defer os.Remove(tmp)
+	res, err := runOperation(ctx, svc, engine.ApplyPatch{Path: tmp, Mode: engine.ApplyModeCommits}, cliDecider{}, stderr)
+	return finish(res, err, stdout, stderr)
 }
