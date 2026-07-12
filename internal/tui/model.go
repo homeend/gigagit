@@ -1878,6 +1878,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.gen != m.pushCheckGen {
 			return m, nil // superseded (another P / op / repo switch)
 		}
+		if m.running {
+			// An op started during the 5s check — never start a push under it.
+			m.statusMsg = "push cancelled (an operation is running) — press P again"
+			return m, nil
+		}
 		if m.modal != nil {
 			// Another dialog opened during the 5s check — never clobber it
 			// (and never start a push under it).

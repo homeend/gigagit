@@ -28,7 +28,8 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   shelved commit from the command line: a live `git cherry-pick` while the commit
   exists, or an atomic replay of the shelve-time patch snapshot (`git am --3way`)
   once it's gc'd; `--patch` forces the replay lane. Exit codes per `gg apply`
-  (0 applied, 1 failure/conflicts, 2 usage); works under `gg batch`. The CLI twin
+  (0 applied — or a clean `--on-conflict=abort` — 1 failure/conflicts, 2 usage);
+  works under `gg batch`. The CLI twin
   of the `a` key in the TUI's `g`/`G` switchers.
 - TUI hardening: async probe results (cherry-pick commit probe, pre-push tag check)
   no longer clobber an open dialog — they drop with a visible status notice; the

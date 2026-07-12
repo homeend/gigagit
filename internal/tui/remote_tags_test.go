@@ -138,3 +138,21 @@ func TestPushTagCheckDroppedWhenModalOpen(t *testing.T) {
 		t.Fatalf("the drop must be visible; statusMsg = %q", m.statusMsg)
 	}
 }
+
+func TestPushTagCheckDroppedWhenOpRunning(t *testing.T) {
+	m := footerModel()
+	m.pushCheckGen = 3
+	m.running = true
+	// Zero unpushed tags: without the guard this is the dangerous path that
+	// calls startOp directly under the already-running op.
+	msg := pushTagCheckMsg{gen: 3, tipTags: []model.Tag{{Name: "v9"}},
+		remoteSet: map[string]bool{"v9": true}}
+	mm, cmd := m.Update(msg)
+	m = mm.(Model)
+	if cmd != nil {
+		t.Fatal("no push may start under a running op")
+	}
+	if !strings.Contains(m.statusMsg, "press P again") {
+		t.Fatalf("the drop must be visible; statusMsg = %q", m.statusMsg)
+	}
+}
