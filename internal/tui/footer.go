@@ -1,6 +1,10 @@
 package tui
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/charmbracelet/lipgloss"
+)
 
 // bindingScope tells the . action menu how relevant a binding is. The footer
 // shows all available bindings regardless of scope; the menu shows only the
@@ -281,4 +285,62 @@ func bindingByID(id string) (footerBinding, bool) {
 		}
 	}
 	return footerBinding{}, false
+}
+
+// footerOverflowTail is the protected tail rendered when the footer had to
+// drop labels: the ellipsis signals more keys exist, and ? (the help window)
+// is where the dropped ones are listed.
+const footerOverflowTail = "… [?] help"
+
+// fitFooter renders the footer to at most w display columns without ever
+// cutting a label mid-word. When the full line fits it is returned unchanged.
+// Otherwise whole labels are dropped from the end (context bindings render
+// first, so the stable global keys hide before the panel-specific ones), the
+// line ends with footerOverflowTail, and the dropped bindings are returned
+// for the ? help window to list. Hand-written mode footers (process, filter
+// input, files view, stash list) are width-truncated as before and hide
+// nothing; so does the degenerate width where not even the tail fits.
+func fitFooter(m Model, w int) (string, []footerBinding) {
+	if s, ok := m.footerOverride(); ok {
+		return truncate(s, w), nil
+	}
+	parts := m.footerParts()
+	full := joinFooterParts(parts)
+	if lipgloss.Width(full) <= w {
+		return full, nil
+	}
+	tailW := lipgloss.Width(footerOverflowTail)
+	if tailW > w {
+		return truncate(full, w), nil
+	}
+	cur := ""
+	var hidden []footerBinding
+	fitting := true
+	for _, p := range parts {
+		if p.binding.id == "help" {
+			continue // always visible, inside the tail
+		}
+		if fitting {
+			sep := ""
+			if cur != "" {
+				sep = " "
+				if p.groupStart {
+					sep = "  •  "
+				}
+			}
+			cand := cur + sep + p.label
+			if lipgloss.Width(cand)+1+tailW <= w {
+				cur = cand
+				continue
+			}
+			// First label that doesn't fit: stop taking — everything from
+			// here on is hidden, so labels only ever drop from the end.
+			fitting = false
+		}
+		hidden = append(hidden, p.binding)
+	}
+	if cur == "" {
+		return footerOverflowTail, hidden
+	}
+	return cur + " " + footerOverflowTail, hidden
 }
