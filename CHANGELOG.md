@@ -24,6 +24,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   Previously the field started empty and the origin was shown only as a hint.
 
 ### Added
+- `gg shelf cherry-pick [--patch] [--on-conflict=keep|abort] <entry-id>` — re-apply a
+  shelved commit from the command line: a live `git cherry-pick` while the commit
+  exists, or an atomic replay of the shelve-time patch snapshot (`git am --3way`)
+  once it's gc'd; `--patch` forces the replay lane. Exit codes per `gg apply`
+  (0 applied, 1 failure/conflicts, 2 usage); works under `gg batch`. The CLI twin
+  of the `a` key in the TUI's `g`/`G` switchers.
+- TUI hardening: async probe results (cherry-pick commit probe, pre-push tag check)
+  no longer clobber an open dialog — they drop with a visible status notice; the
+  `g`/`G` switchers invalidate an in-flight cherry-pick probe on every close path,
+  not just esc.
 - Shell escape: `ctrl+o` anywhere in the TUI (even over a failed conflict
   resolve) suspends gg into an interactive `$SHELL` in the worktree — run
   whatever git needs (`git cherry-pick --skip`, …), `exit` returns to gg
