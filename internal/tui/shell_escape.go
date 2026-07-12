@@ -62,11 +62,18 @@ func shellScriptFile(body string) (string, error) {
 // subshellExec builds the interactive-subshell process: banner, then the
 // user's shell, cwd = dir. POSIX runs a wrapper script (returned for cleanup);
 // Windows needs no script (cmd /K prints the banner and stays interactive).
+//
+// The POSIX wrapper is sh syntax, so it is interpreted by /bin/sh regardless
+// of $SHELL (a fish or csh user would otherwise hit a parse error and the
+// escape hatch would break entirely) — the handoff to the user's own shell
+// happens INSIDE the script via `exec "${SHELL:-/bin/sh}"`, which re-reads
+// $SHELL from the child's environment, so it still lands the user in fish/csh
+// as expected.
 func subshellExec(dir string, getenv func(string) string) (*exec.Cmd, string, error) {
-	bin := shellEscapeBin(runtime.GOOS, getenv)
 	var cmd *exec.Cmd
 	script := ""
 	if runtime.GOOS == "windows" {
+		bin := shellEscapeBin(runtime.GOOS, getenv)
 		cmd = exec.Command(bin, "/K", "echo gg subshell - 'exit' returns to gg")
 	} else {
 		body := "echo \"gg subshell — 'exit' returns to gg\"\n" +
@@ -75,7 +82,7 @@ func subshellExec(dir string, getenv func(string) string) (*exec.Cmd, string, er
 		if script, err = shellScriptFile(body); err != nil {
 			return nil, "", err
 		}
-		cmd = exec.Command(bin, script)
+		cmd = exec.Command("/bin/sh", script)
 	}
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "GG=1")
@@ -86,8 +93,11 @@ func subshellExec(dir string, getenv func(string) string) (*exec.Cmd, string, er
 // a pause keeps its output on screen until the user returns (vim's :! shape).
 // The command text is written INTO the script body, never spliced into an
 // argv string — no quoting surface beyond what the user themselves typed.
+// The POSIX wrapper is sh syntax (like subshellExec's), so it runs under
+// /bin/sh unconditionally rather than $SHELL — the one-off command itself
+// deliberately gets sh semantics too (the lazygit convention: `:!`-style
+// one-liners run under sh, not the user's interactive shell).
 func shellCommandExec(dir, command string, getenv func(string) string) (*exec.Cmd, string, error) {
-	bin := shellEscapeBin(runtime.GOOS, getenv)
 	var body string
 	if runtime.GOOS == "windows" {
 		body = command + "\r\n" +
@@ -110,9 +120,10 @@ func shellCommandExec(dir, command string, getenv func(string) string) (*exec.Cm
 	}
 	var cmd *exec.Cmd
 	if runtime.GOOS == "windows" {
+		bin := shellEscapeBin(runtime.GOOS, getenv)
 		cmd = exec.Command(bin, "/C", script)
 	} else {
-		cmd = exec.Command(bin, script)
+		cmd = exec.Command("/bin/sh", script)
 	}
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "GG=1")
@@ -177,12 +188,13 @@ func (m Model) handleShellDone(msg shellDoneMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 	m.statusMsg = "returned from shell"
-	if !m.loading && !m.anySourceInflight() {
-		var cmd tea.Cmd
-		m, cmd = m.reloadAllCmd(true, false)
-		return m, cmd
-	}
-	return m, nil
+	// Always reload, even mid an in-flight read: the user may have committed,
+	// rebased, or anything else while gg was suspended, and each source's
+	// per-source gen bump (reloadSourcesCmd) makes this safe unconditionally —
+	// any stale in-flight read is dropped when it lands.
+	var cmd tea.Cmd
+	m, cmd = m.reloadAllCmd(true, false)
+	return m, cmd
 }
 
 // shellCmdPopup collects one shell command to run with the press-enter-to-

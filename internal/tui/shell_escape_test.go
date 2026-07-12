@@ -54,10 +54,10 @@ func TestSubshellExecPosix(t *testing.T) {
 		t.Fatalf("script missing the banner:\n%s", body)
 	}
 	if !strings.Contains(string(body), `exec "${SHELL:-/bin/sh}"`) {
-		t.Fatalf("script missing the exec line:\n%s", body)
+		t.Fatalf("script missing the exec line (the handoff to the user's own shell):\n%s", body)
 	}
-	if len(cmd.Args) != 2 || cmd.Args[0] != "/usr/bin/zsh" || cmd.Args[1] != script {
-		t.Fatalf("argv = %v, want [/usr/bin/zsh <script>]", cmd.Args)
+	if len(cmd.Args) != 2 || cmd.Args[0] != "/bin/sh" || cmd.Args[1] != script {
+		t.Fatalf("argv = %v, want [/bin/sh <script>] — the wrapper is sh syntax and must be interpreted by /bin/sh regardless of $SHELL", cmd.Args)
 	}
 	if cmd.Dir != "/some/worktree" {
 		t.Fatalf("Dir = %q", cmd.Dir)
@@ -104,6 +104,15 @@ func TestShellCommandExecPosix(t *testing.T) {
 	}
 	if cmd.Dir != "/some/worktree" {
 		t.Fatalf("Dir = %q", cmd.Dir)
+	}
+	found := false
+	for _, e := range cmd.Env {
+		if e == "GG=1" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("env must carry GG=1")
 	}
 }
 
@@ -164,6 +173,25 @@ func TestShellDoneReloadsAndCleans(t *testing.T) {
 	}
 	if m.statusMsg != "returned from shell" || cmd == nil {
 		t.Fatalf("return path must set the status and reload (msg=%q cmd=%v)", m.statusMsg, cmd)
+	}
+}
+
+// TestShellDoneReloadsEvenWhenSourceInflight asserts the return-path reload is
+// unconditional: a source read that predates the shell handover (started
+// before ctrl+o, still in flight when the user returns) must not suppress the
+// reload — reloadSourcesCmd's per-source gen bump drops that stale read when
+// it lands, so skipping here would only leave the UI stale until a manual r.
+func TestShellDoneReloadsEvenWhenSourceInflight(t *testing.T) {
+	m := footerModel()
+	m.loading = false
+	m.srcInflight = map[sourceKey]bool{srcStatus: true}
+	if !m.anySourceInflight() {
+		t.Fatal("test setup: srcInflight must report true")
+	}
+	mm, cmd := m.Update(shellDoneMsg{})
+	m = mm.(Model)
+	if cmd == nil {
+		t.Fatal("reload must fire even with a stale source read in flight")
 	}
 }
 
