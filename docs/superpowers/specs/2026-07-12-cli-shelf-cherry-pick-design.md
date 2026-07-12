@@ -90,9 +90,11 @@ Flow:
 `stdin` threads into the subcommand for the live lane's interactive decider
 (`cmdShelf` already receives it for `restore`/`export`).
 
-Exit codes: 0 = commit created; 1 = failure OR conflicts left in the tree
-(live lane under `--on-conflict=keep`, which returns `Changed:true` plus a
-non-nil error — `finish` maps any error to 1); 2 = usage.
+Exit codes: 0 = commit created (or a requested `--on-conflict=abort` rolled
+back cleanly — engine returns `Changed:false, err==nil`, matching
+`gg cherry-pick`); 1 = failure OR conflicts left in the tree (live lane under
+`--on-conflict=keep`, which returns `Changed:true` plus a non-nil error —
+`finish` maps any error to 1); 2 = usage.
 
 ### 2. Deferred hardening (same branch)
 
@@ -154,7 +156,10 @@ helpers, the `cherrypick_test.go`/`apply_test.go` patterns):
 - `--patch` on a patch-less entry → exit 1 `entry has no stored patch`.
 - File entry → exit 1 `not a shelved commit`; unknown id → exit 1.
 - Conflict + `--on-conflict=keep` → exit 1, conflicted file present in tree;
-  `--on-conflict=abort` → exit 1, tree clean.
+  `--on-conflict=abort` → exit 0, tree clean (parity: `gg cherry-pick
+  --on-conflict=abort` exits 0 — the abort was the requested outcome and the
+  rollback succeeded; scripts detect "didn't land" from the `aborted:`
+  summary).
 - Usage errors (no positional, two positionals, bad `--on-conflict`) → 2.
 - `gg batch` drives the command (one line in an existing batch test, not a
   new e2e scenario).

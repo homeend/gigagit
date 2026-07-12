@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Exit codes (spec, verbatim): **0 = commit created; 1 = failure OR conflicts left in the tree; 2 = usage.**
+- Exit codes (spec, verbatim): **0 = commit created (or a requested `--on-conflict=abort` rolled back cleanly, matching `gg cherry-pick`); 1 = failure OR conflicts left in the tree; 2 = usage.**
 - Error/status wordings are load-bearing — copy them **verbatim** from the task steps (tests assert substrings).
 - `internal/cli` and `internal/tui` never import `internal/git` or `internal/shelf` in non-test files (archtest-guarded; `_test.go` files are exempt).
 - Tests use a real `git` in `t.TempDir()`; shelf-touching CLI tests MUST isolate state via the existing `shelfRepo(t)` pattern (`t.Setenv("XDG_STATE_HOME", …)` + `t.Setenv("HOME", …)`) **before** creating entries.
@@ -396,9 +396,14 @@ func TestShelfCherryPickConflictKeep(t *testing.T) {
 
 func TestShelfCherryPickConflictAbort(t *testing.T) {
 	dir, id := shelfConflictFixture(t)
-	code, _, _ := runCLI(t, dir, "shelf", "cherry-pick", "--on-conflict=abort", id)
-	if code != 1 {
-		t.Fatalf("exit %d, want 1", code)
+	code, out, errb := runCLI(t, dir, "shelf", "cherry-pick", "--on-conflict=abort", id)
+	// Parity with `gg cherry-pick --on-conflict=abort`: the abort is the
+	// requested outcome and the rollback succeeded → exit 0, "aborted" summary.
+	if code != 0 {
+		t.Fatalf("exit %d, want 0 (stderr: %s)", code, errb)
+	}
+	if !strings.Contains(out, "aborted") {
+		t.Fatalf("abort summary missing: %q", out)
 	}
 	got, err := os.ReadFile(filepath.Join(dir, "shared.txt"))
 	if err != nil || string(got) != "main\n" {
