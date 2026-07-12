@@ -146,7 +146,7 @@ func (m Model) renderBookmarkPopupBox(p *bookmarkPopup) string {
 	parts = append(parts, bodyLines...)
 	// Wrap the hint so [z] mode / [esc] close survive on a narrow terminal,
 	// where a single-line footer would truncate them off (mirrors shelfPopup).
-	hint := []string{"[?] keys", "[enter] jump", "[e] editor", "[p] paste", "[t] temp dir", "[y] copy", "[m] mark/compare", "[x] remove", "[c] vs shelf", "[/] filter", "[z] mode", "[ctrl+t] full", "[esc] close"}
+	hint := []string{"[?] keys", "[enter] jump", "[e] editor", "[p] paste", "[t] temp dir", "[a] cherry-pick", "[y] copy", "[m] mark/compare", "[x] remove", "[c] vs shelf", "[/] filter", "[z] mode", "[ctrl+t] full", "[esc] close"}
 	parts = append(parts, "")
 	parts = append(parts, wrapParts(hint, textW, "  ")...)
 	return popupBox(inner, strings.Join(parts, "\n"))
@@ -239,6 +239,7 @@ func (p *bookmarkPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	}
 	switch msg.Type {
 	case tea.KeyEsc:
+		m.pickGen++ // invalidate an in-flight cherry-pick probe
 		m = m.popLayer()
 	case tea.KeyEnter:
 		if p.compareRef != nil {
@@ -341,6 +342,19 @@ func (p *bookmarkPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			// exactly what ExportBookmark handles — [t] works for both commit and
 			// file bookmarks.
 			return m.startTempExportBookmark(b)
+		case "a":
+			if p.compareRef != nil {
+				return m, nil
+			}
+			b, ok := p.selected()
+			if !ok {
+				return m, nil
+			}
+			if !b.IsCommit() {
+				m.statusMsg = "cherry-pick: only for a commit bookmark"
+				return m, nil
+			}
+			return m.startPickCommit(pickTarget{sha: b.Commit, label: b.Label})
 		case "y":
 			if p.compareRef != nil {
 				return m, nil

@@ -127,7 +127,7 @@ func (m Model) renderShelfPopupBox(p *shelfPopup) string {
 	// Wrap the hint to the text width so [z] mode / [esc] close stay visible even
 	// on a narrow terminal, where a single-line footer would truncate them off
 	// (the reason z went undiscovered).
-	hint := []string{"[?] keys", "[enter] diff/browse", "[e] editor", "[p] restore", "[t] temp dir", "[y] copy", "[m] mark/compare", "[x] remove", "[c] vs bookmark", "[/] filter", "[z] mode", "[ctrl+t] full", "[esc] close"}
+	hint := []string{"[?] keys", "[enter] diff/browse", "[e] editor", "[p] restore", "[t] temp dir", "[a] cherry-pick", "[y] copy", "[m] mark/compare", "[x] remove", "[c] vs bookmark", "[/] filter", "[z] mode", "[ctrl+t] full", "[esc] close"}
 	parts = append(parts, "")
 	parts = append(parts, wrapParts(hint, textW, "  ")...)
 	return popupBox(inner, strings.Join(parts, "\n"))
@@ -210,6 +210,7 @@ func (p *shelfPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	}
 	switch msg.Type {
 	case tea.KeyEsc:
+		m.pickGen++ // invalidate an in-flight cherry-pick probe
 		m = m.popLayer()
 	case tea.KeyEnter:
 		e, ok := p.selected()
@@ -308,6 +309,22 @@ func (p *shelfPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				return m, nil
 			}
 			return m.startTempExportShelf(e)
+		case "a":
+			if p.compareRef != nil {
+				return m, nil
+			}
+			e, ok := p.selected()
+			if !ok {
+				return m, nil
+			}
+			if !e.IsCommit() {
+				m.statusMsg = "cherry-pick: only for a shelved commit"
+				return m, nil
+			}
+			return m.startPickCommit(pickTarget{
+				sha: e.Origin.Commit, label: e.Label,
+				shelfID: e.ID, hasPatch: e.PatchSHA != "",
+			})
 		case "y":
 			if p.compareRef != nil {
 				return m, nil
