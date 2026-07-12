@@ -1,9 +1,12 @@
 package tui
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"runtime"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 // Shell escape — the emergency hatch (spec: docs/superpowers/specs/
@@ -113,4 +116,70 @@ func shellCommandExec(dir, command string, getenv func(string) string) (*exec.Cm
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "GG=1")
 	return cmd, script, nil
+}
+
+// shellDoneMsg signals the handed-over shell/command process exited. script
+// is the wrapper to delete ("" on the Windows subshell, which has none).
+type shellDoneMsg struct {
+	script string
+	err    error
+}
+
+// openSubshell suspends gg into an interactive shell in the worktree. Gated
+// on opsIdle: the shell must not race a live gg op. (The motivating stuck
+// cherry-pick IS idle — the failed continue already returned; the pause
+// lives in git's sequencer, not in a running gg op.)
+func (m Model) openSubshell() (Model, tea.Cmd) {
+	if !m.opsIdle() {
+		m.statusMsg = "an operation is running — shell available when it finishes"
+		return m, nil
+	}
+	cmd, script, err := subshellExec(m.currentWorktree, os.Getenv)
+	if err != nil {
+		m.statusMsg = "shell: " + err.Error()
+		return m, nil
+	}
+	return m, tea.ExecProcess(cmd, func(err error) tea.Msg {
+		return shellDoneMsg{script: script, err: err}
+	})
+}
+
+// runShellCommand runs one typed command with the press-enter-to-return
+// wrapper. Same gate and return path as the subshell.
+func (m Model) runShellCommand(command string) (Model, tea.Cmd) {
+	if !m.opsIdle() {
+		m.statusMsg = "an operation is running — shell available when it finishes"
+		return m, nil
+	}
+	cmd, script, err := shellCommandExec(m.currentWorktree, command, os.Getenv)
+	if err != nil {
+		m.statusMsg = "shell: " + err.Error()
+		return m, nil
+	}
+	return m, tea.ExecProcess(cmd, func(err error) tea.Msg {
+		return shellDoneMsg{script: script, err: err}
+	})
+}
+
+// handleShellDone is the return path: clean the wrapper, then a full
+// manual-grade reload — the user may have committed, skipped, rebased, or
+// anything else while gg was suspended. A non-zero EXIT is not an error
+// (the subshell inherits the last command's status; the one-off wrapper
+// already showed "[exit N]"); only a failure to LAUNCH surfaces.
+func (m Model) handleShellDone(msg shellDoneMsg) (Model, tea.Cmd) {
+	if msg.script != "" {
+		_ = os.Remove(msg.script)
+	}
+	var exitErr *exec.ExitError
+	if msg.err != nil && !errors.As(msg.err, &exitErr) {
+		m.statusMsg = "shell: " + msg.err.Error()
+		return m, nil
+	}
+	m.statusMsg = "returned from shell"
+	if !m.loading && !m.anySourceInflight() {
+		var cmd tea.Cmd
+		m, cmd = m.reloadAllCmd(true, false)
+		return m, cmd
+	}
+	return m, nil
 }

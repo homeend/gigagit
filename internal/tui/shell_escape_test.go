@@ -1,7 +1,9 @@
 package tui
 
 import (
+	"errors"
 	"os"
+	"os/exec"
 	"runtime"
 	"strings"
 	"testing"
@@ -100,5 +102,82 @@ func TestShellCommandExecPosix(t *testing.T) {
 	}
 	if cmd.Dir != "/some/worktree" {
 		t.Fatalf("Dir = %q", cmd.Dir)
+	}
+}
+
+func TestCtrlOOpensSubshellFromAnywhere(t *testing.T) {
+	// Bare panels.
+	m := footerModel()
+	mm, cmd := m.Update(keyMsg("ctrl+o"))
+	m = mm.(Model)
+	if cmd == nil {
+		t.Fatal("ctrl+o on the panels must return the handover cmd")
+	}
+	// Over an open popup layer (the switcher) — stack untouched.
+	m = shellEscTestModelWithLayer()
+	mm, cmd = m.Update(keyMsg("ctrl+o"))
+	m = mm.(Model)
+	if cmd == nil || m.topLayer() == nil {
+		t.Fatalf("ctrl+o over a popup must hand over AND keep the stack (cmd=%v top=%v)", cmd, m.topLayer())
+	}
+	// Over the conflict process — the motivating emergency.
+	m = footerModel()
+	m.proc = &conflictProcess{st: confListing}
+	mm, cmd = m.Update(keyMsg("ctrl+o"))
+	m = mm.(Model)
+	if cmd == nil || m.proc == nil {
+		t.Fatalf("ctrl+o over the conflict process must hand over AND keep the process (cmd=%v proc=%v)", cmd, m.proc)
+	}
+}
+
+// shellEscTestModelWithLayer builds a model with one popup on the stack.
+func shellEscTestModelWithLayer() Model {
+	m := footerModel()
+	m.width, m.height = 100, 30
+	m = m.pushLayer(newShelfPopup(nil))
+	return m
+}
+
+func TestCtrlOBusyNotices(t *testing.T) {
+	m := footerModel()
+	m.running = true
+	mm, cmd := m.Update(keyMsg("ctrl+o"))
+	m = mm.(Model)
+	if cmd != nil || !strings.Contains(m.statusMsg, "an operation is running") {
+		t.Fatalf("busy ctrl+o must notice, not hand over (cmd=%v msg=%q)", cmd, m.statusMsg)
+	}
+}
+
+func TestShellDoneReloadsAndCleans(t *testing.T) {
+	m := footerModel()
+	f, err := os.CreateTemp(t.TempDir(), "gg-shell-*.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+	mm, cmd := m.Update(shellDoneMsg{script: f.Name()})
+	m = mm.(Model)
+	if _, err := os.Stat(f.Name()); !os.IsNotExist(err) {
+		t.Fatalf("wrapper script must be removed, stat err=%v", err)
+	}
+	if m.statusMsg != "returned from shell" || cmd == nil {
+		t.Fatalf("return path must set the status and reload (msg=%q cmd=%v)", m.statusMsg, cmd)
+	}
+}
+
+func TestShellDoneExitErrorIsNotAnError(t *testing.T) {
+	m := footerModel()
+	exitErr := &exec.ExitError{}
+	mm, _ := m.Update(shellDoneMsg{err: exitErr})
+	m = mm.(Model)
+	if m.statusMsg != "returned from shell" {
+		t.Fatalf("a non-zero shell exit is not an error, got %q", m.statusMsg)
+	}
+	// A genuine launch failure IS an error.
+	m = footerModel()
+	mm, cmd := m.Update(shellDoneMsg{err: errors.New("fork/exec: no such file")})
+	m = mm.(Model)
+	if cmd != nil || !strings.HasPrefix(m.statusMsg, "shell: ") {
+		t.Fatalf("launch failure must surface (msg=%q)", m.statusMsg)
 	}
 }
