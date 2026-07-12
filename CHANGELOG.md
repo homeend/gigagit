@@ -16,6 +16,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   Previously the field started empty and the origin was shown only as a hint.
 
 ### Added
+- Cherry-pick a bookmarked or shelved commit: `a` in the `g`/`G` switchers
+  applies the highlighted commit entry onto the current branch (confirm
+  modal). While the commit exists it is a true `git cherry-pick`; a shelved
+  commit whose object was gc'd is re-applied from a patch snapshot
+  (`git format-patch` mailbox) now stored alongside the tar at shelve time
+  (`git am --3way`, atomic). A bookmark or a pre-patch/merge shelf entry
+  whose commit is gone gets a clear notice instead of a git error.
 - **Branch-prefix editing niceties (Settings → Branch prefixes).** An invalid
   prefix no longer closes the add form and buries the error in the status
   bar: the form stays open with the typed value intact and the error shown

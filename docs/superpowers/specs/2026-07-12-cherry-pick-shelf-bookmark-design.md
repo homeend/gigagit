@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-12
 **Branch:** `feat/cherry-pick-shelf-bookmark`
-**Status:** approved approach (two-lane pick with patch snapshot); spec pending user review
+**Status:** implemented on feat/cherry-pick-shelf-bookmark
 
 ## Problem
 
