@@ -2,6 +2,8 @@ package shelf
 
 import (
 	"bytes"
+	"errors"
+	"os"
 	"strings"
 	"testing"
 
@@ -122,7 +124,7 @@ func TestPutCommitStoresArchiveKind(t *testing.T) {
 	fs := NewFileStore(t.TempDir())
 	tar := []byte("PK-not-really-a-tar-but-bytes")
 	addr := model.FileAddress{State: model.StateCommitted, Commit: "a1b2c3d4e5f6", Path: ""}
-	e, err := fs.PutCommit("", addr, tar, "")
+	e, err := fs.PutCommit("", addr, tar, nil, "")
 	if err != nil {
 		t.Fatalf("PutCommit: %v", err)
 	}
@@ -152,7 +154,7 @@ func TestPutCommitStoresArchiveKind(t *testing.T) {
 func TestPutCommitPersistsLabel(t *testing.T) {
 	fs := NewFileStore(t.TempDir())
 	addr := model.FileAddress{State: model.StateCommitted, Commit: "a1b2c3d4e5f6", Path: ""}
-	e, err := fs.PutCommit("", addr, []byte("tarbytes"), "my fix")
+	e, err := fs.PutCommit("", addr, []byte("tarbytes"), nil, "my fix")
 	if err != nil {
 		t.Fatalf("PutCommit: %v", err)
 	}
@@ -167,5 +169,96 @@ func TestPutCommitPersistsLabel(t *testing.T) {
 	}
 	if page[0].Label != "my fix" {
 		t.Fatalf("reloaded Label = %q, want %q", page[0].Label, "my fix")
+	}
+}
+
+func TestPutCommitStoresPatchBlob(t *testing.T) {
+	fs := NewFileStore(t.TempDir())
+	addr := model.FileAddress{State: model.StateCommitted, Commit: "a1b2c3d4e5f6", Path: ""}
+	patch := []byte("From a1b2c3d4e5f6 Mon Sep 17 00:00:00 2001\nSubject: x\n")
+	e, err := fs.PutCommit("", addr, []byte("tarbytes"), patch, "fix")
+	if err != nil {
+		t.Fatalf("PutCommit: %v", err)
+	}
+	if e.PatchSHA == "" || e.PatchSize != int64(len(patch)) {
+		t.Fatalf("patch fields = %q / %d, want set / %d", e.PatchSHA, e.PatchSize, len(patch))
+	}
+	got, err := fs.GetPatch(e.ID)
+	if err != nil || string(got) != string(patch) {
+		t.Fatalf("GetPatch = %q, %v", got, err)
+	}
+	// The tar payload is untouched by the patch blob.
+	tar, err := fs.Get(e.ID)
+	if err != nil || string(tar) != "tarbytes" {
+		t.Fatalf("Get = %q, %v", tar, err)
+	}
+	// Patch fields survive the TOML index round-trip.
+	fs2 := NewFileStore(fsRoot(fs))
+	e2, err := fs2.Find(e.ID)
+	if err != nil || e2.PatchSHA != e.PatchSHA || e2.PatchSize != e.PatchSize {
+		t.Fatalf("reloaded patch fields = %q / %d, %v", e2.PatchSHA, e2.PatchSize, err)
+	}
+}
+
+func TestPutCommitWithoutPatch(t *testing.T) {
+	fs := NewFileStore(t.TempDir())
+	addr := model.FileAddress{State: model.StateCommitted, Commit: "a1b2c3d4e5f6", Path: ""}
+	e, err := fs.PutCommit("", addr, []byte("tarbytes"), nil, "")
+	if err != nil {
+		t.Fatalf("PutCommit: %v", err)
+	}
+	if e.PatchSHA != "" || e.PatchSize != 0 {
+		t.Fatalf("no-patch entry carries patch fields: %q / %d", e.PatchSHA, e.PatchSize)
+	}
+	if _, err := fs.GetPatch(e.ID); !errors.Is(err, ErrNoPatch) {
+		t.Fatalf("GetPatch = %v, want ErrNoPatch", err)
+	}
+	if _, err := fs.GetPatch("no-such-entry"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("GetPatch(unknown) = %v, want ErrNotFound", err)
+	}
+}
+
+func TestRemoveReclaimsPatchBlob(t *testing.T) {
+	fs := NewFileStore(t.TempDir())
+	addr := model.FileAddress{State: model.StateCommitted, Commit: "a1b2c3d4e5f6", Path: ""}
+	e, err := fs.PutCommit("", addr, []byte("tarbytes"), []byte("patchbytes"), "")
+	if err != nil {
+		t.Fatalf("PutCommit: %v", err)
+	}
+	tarBlob, patchBlob := fs.blobPath(e.SHA), fs.blobPath(e.PatchSHA)
+	if _, err := os.Stat(patchBlob); err != nil {
+		t.Fatalf("patch blob missing after PutCommit: %v", err)
+	}
+	if err := fs.Remove(e.ID); err != nil {
+		t.Fatalf("Remove: %v", err)
+	}
+	if _, err := os.Stat(tarBlob); !os.IsNotExist(err) {
+		t.Fatalf("tar blob not reclaimed: %v", err)
+	}
+	if _, err := os.Stat(patchBlob); !os.IsNotExist(err) {
+		t.Fatalf("patch blob not reclaimed: %v", err)
+	}
+}
+
+func TestRemoveKeepsSharedPatchBlob(t *testing.T) {
+	fs := NewFileStore(t.TempDir())
+	a := model.FileAddress{State: model.StateCommitted, Commit: "a1b2c3d4e5f6"}
+	b := model.FileAddress{State: model.StateCommitted, Commit: "f6e5d4c3b2a1"}
+	e1, err := fs.PutCommit("", a, []byte("tar-one"), []byte("same-patch"), "")
+	if err != nil {
+		t.Fatalf("PutCommit e1: %v", err)
+	}
+	e2, err := fs.PutCommit("", b, []byte("tar-two"), []byte("same-patch"), "")
+	if err != nil {
+		t.Fatalf("PutCommit e2: %v", err)
+	}
+	if e1.PatchSHA != e2.PatchSHA {
+		t.Fatal("content-addressing must dedup identical patch blobs")
+	}
+	if err := fs.Remove(e1.ID); err != nil {
+		t.Fatalf("Remove: %v", err)
+	}
+	if _, err := fs.GetPatch(e2.ID); err != nil {
+		t.Fatalf("survivor's patch must remain readable: %v", err)
 	}
 }

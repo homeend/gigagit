@@ -26,12 +26,18 @@ var ErrTooLarge = errors.New("shelf: file exceeds size limit")
 // ErrNotFound is returned by Get/Remove for an unknown entry id.
 var ErrNotFound = errors.New("shelf: entry not found")
 
+// ErrNoPatch is returned by GetPatch for an entry that exists but has no
+// stored patch snapshot (a file entry, a pre-patch-support commit entry, or
+// a merge commit).
+var ErrNoPatch = errors.New("shelf: entry has no stored patch")
+
 // Store persists shelved files. Implementations are safe for sequential use by
 // one process; cross-process writes are last-writer-wins (atomic index rewrite).
 type Store interface {
 	Put(bucket string, addr model.FileAddress, data []byte) (model.ShelfEntry, error)
-	PutCommit(bucket string, addr model.FileAddress, tar []byte, label string) (model.ShelfEntry, error)
+	PutCommit(bucket string, addr model.FileAddress, tar, patch []byte, label string) (model.ShelfEntry, error)
 	Get(entryID string) ([]byte, error)
+	GetPatch(entryID string) ([]byte, error)
 	Find(entryID string) (model.ShelfEntry, error)
 	List(bucket string, skip, limit int) ([]model.ShelfEntry, error)
 	Buckets() ([]model.ShelfBucket, error)

@@ -73,7 +73,7 @@ func (s *Service) ShelfAddCommit(ctx context.Context, sha, label string) (model.
 		return model.ShelfEntry{}, err
 	}
 	addr := model.FileAddress{State: model.StateCommitted, Commit: sha, Path: ""}
-	return st.PutCommit("", addr, tar, label)
+	return st.PutCommit("", addr, tar, nil, label)
 }
 
 // ShelfCommitFiles lists the files frozen in a shelved commit's tar — a header
