@@ -220,7 +220,10 @@ func (p *shellCmdPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		var record tea.Cmd
 		m, record = m.recordSearch(scopeShellCmd, command)
-		m = m.popLayer()
+		m = m.popLayer() // the command popup
+		if _, ok := m.topLayer().(*commandPalette); ok {
+			m = m.popLayer() // the palette that launched it
+		}
 		var run tea.Cmd
 		m, run = m.runShellCommand(command)
 		return m, tea.Batch(record, run)
@@ -237,5 +240,5 @@ func (p *shellCmdPopup) render(m Model, below string) string {
 	b.WriteString(viewField("$ ", p.input, true, popupContentWidth(w)) + "\n\n")
 	b.WriteString("[enter] run  [alt+↓] history  [esc] cancel")
 	box := modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
-	return m.withRecall(overlayCenter(clipToHeight(below, h), box, w, h))
+	return overlayCenter(clipToHeight(below, h), box, w, h)
 }

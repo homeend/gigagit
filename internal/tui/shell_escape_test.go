@@ -239,6 +239,26 @@ func TestShellCmdPopupEmptyEnterNoops(t *testing.T) {
 	}
 }
 
+// The full palette path: "Run shell command…" opens the popup OVER the palette
+// (the "Open repo" convention), so the enter dispatch must pop BOTH — the user
+// must not land back in a stale palette after the shell returns.
+func TestShellCmdPopupFromPalettePopsBoth(t *testing.T) {
+	m := footerModel()
+	m.width, m.height = 100, 30
+	m, _ = palettePick(t, m, "Run shell command…")
+	if layerOf[*shellCmdPopup](m) == nil || layerOf[*commandPalette](m) == nil {
+		t.Fatal("the row must open the popup over the palette")
+	}
+	m = typeRunes(t, m, "git status")
+	m, cmd := send(m, keyType(tea.KeyEnter))
+	if cmd == nil {
+		t.Fatal("enter with a command must dispatch the handover")
+	}
+	if m.topLayer() != nil {
+		t.Fatalf("dispatch must leave a clean stack, top = %T", m.topLayer())
+	}
+}
+
 func TestShellCmdPopupRecall(t *testing.T) {
 	m := footerModel()
 	m.width, m.height = 100, 30
