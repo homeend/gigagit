@@ -241,8 +241,8 @@ guards against removing the worktree you are standing in.
   shelve time (`git am --3way`, atomic — all-or-nothing); `--patch` forces
   that lane even while the commit exists. An entry shelved before patch
   support, or a merge commit, has no snapshot: the gc'd case then exits 1
-  with a clear message. Exit 0 = commit created, 1 = failure or conflicts
-  left, 2 = usage.
+  with a clear message. Exit 0 = commit created, or a clean
+  `--on-conflict=abort`; 1 = failure or conflicts left; 2 = usage.
 - `gg bookmark add [--rev <commit>] [--staged] [--worktree <path>] <path>...` /
   `gg bookmark list` / `gg bookmark rm <id>` /
   `gg bookmark paste [--force] <id> <dest>` — **bookmarks**: a persistent registry
