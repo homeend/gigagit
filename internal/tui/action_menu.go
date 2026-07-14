@@ -458,10 +458,13 @@ func (m Model) fileCopyRows(filePath, rev string) []actionRow {
 	return rows
 }
 
-// fileCopyPathName returns the path + basename copy rows for a file.
+// fileCopyPathName returns the repo-relative path, absolute path, and basename
+// copy rows for a file. The absolute path is anchored on the current worktree.
 func (m Model) fileCopyPathName(p string) []actionRow {
+	abs := m.absFilePath("", p)
 	return []actionRow{
 		m.copyRow("copy-file-path", "Copy file path", "Copied path: "+p, p),
+		m.copyRow("copy-file-abspath", "Copy absolute file path", "Copied absolute path: "+abs, abs),
 		m.copyRow("copy-file-name", "Copy file name", "Copied file name: "+path.Base(p), path.Base(p)),
 	}
 }

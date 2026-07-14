@@ -178,16 +178,19 @@ func TestContextCopyRowsCommits(t *testing.T) {
 }
 
 func TestContextCopyRowsFiles(t *testing.T) {
-	m := filesMenuModel() // Files panel, selected "dir/f.txt"
+	m := filesMenuModel() // Files panel, selected "dir/f.txt"; currentWorktree "/repo"
 	rows := m.contextCopyRows()
-	if len(rows) != 2 {
-		t.Fatalf("want path+name copy rows, got %v", rows)
+	if len(rows) != 3 {
+		t.Fatalf("want path+abspath+name copy rows, got %v", rows)
 	}
 	if rows[0].id != "copy-file-path" || rows[0].copyText != "dir/f.txt" {
 		t.Errorf("row[0] = {%q,%q}, want copy-file-path dir/f.txt", rows[0].id, rows[0].copyText)
 	}
-	if rows[1].id != "copy-file-name" || rows[1].copyText != "f.txt" {
-		t.Errorf("row[1] = {%q,%q}, want copy-file-name f.txt", rows[1].id, rows[1].copyText)
+	if rows[1].id != "copy-file-abspath" || rows[1].copyText != "/repo/dir/f.txt" {
+		t.Errorf("row[1] = {%q,%q}, want copy-file-abspath /repo/dir/f.txt", rows[1].id, rows[1].copyText)
+	}
+	if rows[2].id != "copy-file-name" || rows[2].copyText != "f.txt" {
+		t.Errorf("row[2] = {%q,%q}, want copy-file-name f.txt", rows[2].id, rows[2].copyText)
 	}
 }
 
@@ -199,14 +202,17 @@ func TestContextCopyRowsStaged(t *testing.T) {
 	m.focus = panelStaged
 	m.status.Files = []model.FileStatus{{Path: "dir/g.txt", Kind: model.KindTracked, Staged: 'M', Unstaged: '.'}}
 	rows := m.contextCopyRows()
-	if len(rows) != 2 {
-		t.Fatalf("want path+name copy rows on the Staged panel, got %v", rows)
+	if len(rows) != 3 {
+		t.Fatalf("want path+abspath+name copy rows on the Staged panel, got %v", rows)
 	}
 	if rows[0].id != "copy-file-path" || rows[0].copyText != "dir/g.txt" {
 		t.Errorf("row[0] = {%q,%q}, want copy-file-path dir/g.txt", rows[0].id, rows[0].copyText)
 	}
-	if rows[1].id != "copy-file-name" || rows[1].copyText != "g.txt" {
-		t.Errorf("row[1] = {%q,%q}, want copy-file-name g.txt", rows[1].id, rows[1].copyText)
+	if rows[1].id != "copy-file-abspath" || rows[1].copyText != "/repo/dir/g.txt" {
+		t.Errorf("row[1] = {%q,%q}, want copy-file-abspath /repo/dir/g.txt", rows[1].id, rows[1].copyText)
+	}
+	if rows[2].id != "copy-file-name" || rows[2].copyText != "g.txt" {
+		t.Errorf("row[2] = {%q,%q}, want copy-file-name g.txt", rows[2].id, rows[2].copyText)
 	}
 }
 

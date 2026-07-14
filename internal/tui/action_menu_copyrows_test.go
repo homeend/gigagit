@@ -171,6 +171,32 @@ func TestContextCopyRowsRemoteName(t *testing.T) {
 	}
 }
 
+func TestFileCopyPathNameIncludesAbsolute(t *testing.T) {
+	m := footerModel() // currentWorktree == "/repo"
+	rows := m.fileCopyPathName("dir/f.go")
+	got := ids(rows)
+	if !got["copy-file-path"] || !got["copy-file-abspath"] || !got["copy-file-name"] {
+		t.Fatalf("rows = %v, want path/abspath/name", got)
+	}
+	if r, _ := findRow(rows, "copy-file-abspath"); r.copyText != "/repo/dir/f.go" {
+		t.Errorf("abspath copyText = %q, want /repo/dir/f.go", r.copyText)
+	}
+	// The repo-relative row is unchanged.
+	if r, _ := findRow(rows, "copy-file-path"); r.copyText != "dir/f.go" {
+		t.Errorf("path copyText = %q, want dir/f.go", r.copyText)
+	}
+}
+
+func TestAbsFilePathDefaultsToCurrentWorktree(t *testing.T) {
+	m := footerModel() // currentWorktree == "/repo"
+	if got := m.absFilePath("", "a/b.go"); got != "/repo/a/b.go" {
+		t.Errorf("empty base = %q, want /repo/a/b.go", got)
+	}
+	if got := m.absFilePath("/wt", "a/b.go"); got != "/wt/a/b.go" {
+		t.Errorf("explicit base = %q, want /wt/a/b.go", got)
+	}
+}
+
 func TestAvailableActionsContentWindowCopyOnly(t *testing.T) {
 	// File tree open while focus is still panelCommits: the commit-files [l]
 	// binding is available, but the menu must list ONLY copy rows (replaying l

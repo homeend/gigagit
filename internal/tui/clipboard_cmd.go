@@ -4,6 +4,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"path/filepath"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/mattn/go-isatty"
@@ -11,6 +12,16 @@ import (
 	"github.com/homeend/gigagit/internal/clipboard"
 	"github.com/homeend/gigagit/internal/engine"
 )
+
+// absFilePath joins a repo-relative path onto base, defaulting to the current
+// worktree when base is empty. It is the single source of truth for the
+// "Copy absolute file path" actions so every surface agrees byte-for-byte.
+func (m Model) absFilePath(base, rel string) string {
+	if base == "" {
+		base = m.currentWorktree
+	}
+	return filepath.Join(base, rel)
+}
 
 // clipboardCopiedMsg reports the outcome of a copy action. ok is the success
 // status line; err (when non-nil) becomes a "copy failed: …" status.
