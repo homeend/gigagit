@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/gitwatch"
 	"github.com/homeend/gigagit/internal/hunkpick"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/promptstate"
 	"github.com/homeend/gigagit/internal/rebaseplan"
@@ -661,6 +663,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Apply the persisted Commits render mode ([ui] show_graph): "off" starts
 		// in the flat list, exactly like the . menu's "Show as list".
 		m.commitListMode = !m.showGraphConfigured()
+		// Apply [ui] language ([ui] show_graph precedent: both config-arrival
+		// paths, so a repo switch re-applies a repo override).
+		m = m.applyLanguage()
 		// Seed the header's repo path now, on the startup path (which fans out via
 		// the per-source registry and never sets currentWorktree the way the legacy
 		// loadCmd's Snapshot did). Without this the top-right path stays blank until
@@ -715,6 +720,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Apply the persisted Commits render mode ([ui] show_graph) on the
 			// legacy load path too (reRoot / repo switch).
 			m.commitListMode = !m.showGraphConfigured()
+			m = m.applyLanguage()
 			m.gitCommonDir = msg.gitCommonDir
 			m.headTimes = msg.headTimes
 			if m.eager.active {
@@ -2470,6 +2476,17 @@ func discardPrompt(restore, remove []string, n int) string {
 func (m Model) rememberLeftFocus() Model {
 	if m.focus != panelCommits {
 		m.lastLeftPanel = m.focus
+	}
+	return m
+}
+
+// applyLanguage activates [ui] language, failing soft to English with a
+// status notice — a bad code or malformed bundle must never break startup
+// (the ValidateToolCommand inert-at-load convention).
+func (m Model) applyLanguage() Model {
+	if err := i18n.SetLanguage(m.cfg.UI.Language, config.LangDir()); err != nil {
+		_ = i18n.SetLanguage("", "")
+		m.statusMsg = "language " + strconv.Quote(m.cfg.UI.Language) + " unavailable — using English (" + err.Error() + ")"
 	}
 	return m
 }
