@@ -194,6 +194,7 @@ git commit -m "feat(tui): Copy absolute path in the fuzzy file finder"
 - Produces:
   - `func copyFileChoice(option, p, abs string) (okMsg, text string, ok bool)`
   - `func (m Model) copyFilePrompt(base, p string) (Model, tea.Cmd)`
+  - A new `copyTexts map[string]string` field on `decisionState` (`internal/tui/op.go:154`), populated only by `copyFilePrompt` (option label → resolved clipboard text). This is the **inspectable seam**: it lets a test assert the exact absolute text the chooser captured — including that the base was the entry's origin worktree — **without running the clipboard cmd** (which would write the real clipboard). Without it, a regression from `b.Worktree` to `""` stays green because `onResolve` returns a non-nil cmd either way.
 
 - [ ] **Step 1: Update existing chooser tests to the new signatures + option**
 
@@ -245,17 +246,22 @@ func TestCopyFilePromptOpensModal(t *testing.T) {
 	if _, cmd := m.modal.onResolve(m, "Cancel"); cmd != nil {
 		t.Error("Cancel should return no cmd")
 	}
+	// The inspectable seam: an empty base anchors on the current worktree.
+	if got := m.modal.copyTexts["Copy absolute file path"]; got != "/repo/dir/f.txt" {
+		t.Errorf("captured abs = %q, want /repo/dir/f.txt", got)
+	}
 }
 
-func TestCopyFilePromptBaseFallback(t *testing.T) {
-	// An empty base resolves the absolute option against the current worktree;
-	// a non-empty base (a cross-worktree bookmark) resolves against that base.
+func TestCopyFilePromptBaseAnchorsOnEntryWorktree(t *testing.T) {
+	// A non-empty base (a cross-worktree bookmark) resolves the absolute option
+	// against THAT base, not the current worktree — the crux of the design.
 	m := footerModel() // currentWorktree == "/repo"
 	m, _ = m.copyFilePrompt("/wt", "dir/f.txt")
-	// The absolute row's text is captured in the modal closure; exercise it via
-	// copyFileChoice with the same abs the prompt computed.
-	if got := m.absFilePath("/wt", "dir/f.txt"); got != "/wt/dir/f.txt" {
-		t.Errorf("abs = %q, want /wt/dir/f.txt", got)
+	if got := m.modal.copyTexts["Copy absolute file path"]; got != "/wt/dir/f.txt" {
+		t.Errorf("captured abs = %q, want /wt/dir/f.txt (entry's own worktree)", got)
+	}
+	if got := m.modal.copyTexts["Copy file path"]; got != "dir/f.txt" {
+		t.Errorf("captured rel = %q, want dir/f.txt", got)
 	}
 }
 ```
@@ -288,15 +294,25 @@ func copyFileChoice(option, p, abs string) (okMsg, text string, ok bool) {
 // copyFilePrompt opens the path/name copy chooser for a repo-relative file
 // path. base is the worktree the file belongs to (empty → current worktree),
 // used to build the absolute-path option. The modal renders above the calling
-// popup; Cancel — kept last so esc maps to it — reveals it unchanged.
+// popup; Cancel — kept last so esc maps to it — reveals it unchanged. copyTexts
+// records each option's resolved clipboard text so tests can pin the captured
+// value (esp. the base-anchored absolute path) without running the clipboard.
 func (m Model) copyFilePrompt(base, p string) (Model, tea.Cmd) {
 	abs := m.absFilePath(base, p)
+	opts := []string{"Copy file path", "Copy absolute file path", "Copy file name", "Cancel"}
+	texts := map[string]string{}
+	for _, o := range opts {
+		if _, text, ok := copyFileChoice(o, p, abs); ok {
+			texts[o] = text
+		}
+	}
 	m.modal = &decisionState{
 		req: engine.DecisionRequest{
 			ID:      "copy-file",
 			Prompt:  "Copy — " + p,
-			Options: []string{"Copy file path", "Copy absolute file path", "Copy file name", "Cancel"},
+			Options: opts,
 		},
+		copyTexts: texts,
 		onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {
 			if okMsg, text, ok := copyFileChoice(opt, p, abs); ok {
 				return m, m.copyToClipboardCmd(okMsg, text)
@@ -305,6 +321,19 @@ func (m Model) copyFilePrompt(base, p string) (Model, tea.Cmd) {
 		},
 	}
 	return m, nil
+}
+```
+
+Also add the field to `decisionState` in `internal/tui/op.go` (line 154):
+
+```go
+type decisionState struct {
+	req       engine.DecisionRequest
+	reply     chan engine.DecisionResponse
+	sel       int
+	confirm   bool // yes/no confirm modal: enables y/n accelerators (frontend-only)
+	copyTexts map[string]string // copy-file chooser: option label → resolved clipboard text (test-inspectable; nil for other modals)
+	onResolve func(m Model, opt string) (tea.Model, tea.Cmd)
 }
 ```
 
@@ -339,15 +368,20 @@ func TestBookmarkPopupYChooserHasAbsoluteOnOriginWorktree(t *testing.T) {
 		t.Errorf("options = %q, want %q", got, want)
 	}
 	// The absolute option resolves against the bookmark's OWN worktree (/wt),
-	// not the current worktree (/repo).
-	_, cmd := m.modal.onResolve(m, "Copy absolute file path")
-	if cmd == nil {
-		t.Fatal("absolute option should return a clipboard cmd")
-	}
-	if got := m.absFilePath("/wt", "dir/y.go"); got != "/wt/dir/y.go" {
-		t.Errorf("abs = %q, want /wt/dir/y.go", got)
+	// not the current worktree (/repo). This pins the copyFilePrompt(b.Worktree,
+	// …) wiring: passing "" would capture /repo/dir/y.go and fail here.
+	if got := m.modal.copyTexts["Copy absolute file path"]; got != "/wt/dir/y.go" {
+		t.Errorf("captured abs = %q, want /wt/dir/y.go (bookmark's own worktree)", got)
 	}
 }
+```
+
+Add the mirror test to `internal/tui/shelf_popup_test.go` (a shelf entry whose `Origin.Worktree` is `/wt`). Follow the existing `shelf_popup_test.go` construction for a file entry with `Origin` set (see the test near line 214) and assert:
+
+```go
+	if got := m.modal.copyTexts["Copy absolute file path"]; got != "/wt/dir/s.go" {
+		t.Errorf("captured abs = %q, want /wt/dir/s.go (shelf entry's own worktree)", got)
+	}
 ```
 
 - [ ] **Step 6: Run tests to verify they pass**
@@ -372,15 +406,19 @@ git commit -m "feat(tui): Copy absolute file path in the g/G copy chooser"
 ### Task 4: Docs (help + cheat rows + CHANGELOG)
 
 **Files:**
-- Modify: `internal/tui/help.go:255` — copy-summary line.
+- Modify: `internal/tui/help.go:21,22,24,255` — the `g`/`G` switcher descriptions, the `F` finder menu enumeration, and the copy-summary line.
 - Modify: `internal/tui/popup_help.go:41,71` — `y` cheat rows for the switchers.
 - Modify: `CHANGELOG.md`.
 
 **Interfaces:** none (documentation only).
 
-- [ ] **Step 1: Update help.go copy summary**
+- [ ] **Step 1: Update the four help.go lines**
 
-In `internal/tui/help.go`, line 255, change the copy summary to mention the absolute path:
+In `internal/tui/help.go`:
+
+- Line 21 (`g` bookmark switcher) and line 22 (`G` shelf switcher): change the substring `y copies the file's path or name to the clipboard` → `y copies the file's path, absolute path, or name to the clipboard`.
+- Line 24 (`F` finder menu enumeration): change `Open in editor, Copy path` → `Open in editor, Copy path, Copy absolute path`.
+- Line 255, change the copy summary to mention the absolute path:
 
 ```go
 		r("copy", "Copy commit id / commit title (Commits); Copy file path / absolute file path / file name (Files/Staged) — OSC 52"),
