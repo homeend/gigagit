@@ -336,7 +336,7 @@ func (p *shelfPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			if !ok {
 				return m, nil
 			}
-			return m.copyFilePrompt(e.Origin.Path)
+			return m.copyFilePrompt(e.Origin.Worktree, e.Origin.Path)
 		}
 	}
 	return m, nil

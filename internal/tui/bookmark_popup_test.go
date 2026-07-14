@@ -66,6 +66,25 @@ func TestBookmarkPopupYOpensCopyChooser(t *testing.T) {
 	}
 }
 
+func TestBookmarkPopupYChooserHasAbsoluteOnOriginWorktree(t *testing.T) {
+	m := bookmarkCopyModel(model.Bookmark{ID: "b1", State: model.StateUnstaged, Worktree: "/wt", Path: "dir/y.go"})
+	mm, _ := m.Update(keyMsg("y"))
+	m = mm.(Model)
+	if m.modal == nil {
+		t.Fatal("y should open the copy chooser")
+	}
+	const want = "Copy file path|Copy absolute file path|Copy file name|Cancel"
+	if got := strings.Join(m.modal.req.Options, "|"); got != want {
+		t.Errorf("options = %q, want %q", got, want)
+	}
+	// The absolute option resolves against the bookmark's OWN worktree (/wt),
+	// not the current worktree (/repo). This pins the copyFilePrompt(b.Worktree,
+	// …) wiring: passing "" would capture /repo/dir/y.go and fail here.
+	if got := m.modal.copyTexts["Copy absolute file path"]; got != "/wt/dir/y.go" {
+		t.Errorf("captured abs = %q, want /wt/dir/y.go (bookmark's own worktree)", got)
+	}
+}
+
 func TestBookmarkPopupYOnCommitBookmarkNotices(t *testing.T) {
 	m := bookmarkCopyModel(model.Bookmark{ID: "cb", State: model.StateCommitted, Commit: "a1b2c3d4e5"})
 	mm, _ := m.Update(keyMsg("y"))

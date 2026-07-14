@@ -366,7 +366,7 @@ func (p *bookmarkPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			if !ok {
 				return m, nil
 			}
-			return m.copyFilePrompt(b.Path)
+			return m.copyFilePrompt(b.Worktree, b.Path)
 		}
 	}
 	return m, nil

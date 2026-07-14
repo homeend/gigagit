@@ -367,6 +367,15 @@ func (m Model) fileFinderActionRows(path string) []actionRow {
 			},
 		},
 		{
+			id:    "ff-copy-abspath",
+			label: "Copy absolute path",
+			run: func(m Model) (tea.Model, tea.Cmd) {
+				m = m.popLayer()
+				abs := m.absFilePath("", path)
+				return m, m.copyToClipboardCmd("Copied "+abs, abs)
+			},
+		},
+		{
 			id:    "ff-commits-touching",
 			label: "Commits touching this",
 			run: func(m Model) (tea.Model, tea.Cmd) {
