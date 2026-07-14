@@ -1231,7 +1231,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.modal = &decisionState{
 						req: engine.DecisionRequest{
 							ID:      "switch-to-worktree",
-							Prompt:  b.Name + " is checked out in another worktree:\n" + wtPath,
+							Prompt:  i18n.T("%s is checked out in another worktree:\n%s", b.Name, wtPath),
 							Options: []string{"go to worktree", "cancel"},
 						},
 						onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {
@@ -1401,7 +1401,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.modal = &decisionState{
 				req: engine.DecisionRequest{
 					ID:      "discard-all",
-					Prompt:  "Discard ALL unstaged changes? This cannot be undone.",
+					Prompt:  i18n.T("Discard ALL unstaged changes? This cannot be undone."),
 					Options: []string{"Discard", "Cancel"},
 				},
 				onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {
@@ -1902,7 +1902,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.modal = &decisionState{
 			req: engine.DecisionRequest{
 				ID:      "push-with-tags",
-				Prompt:  "Branch tip has " + pushTagsNoun(unpushed) + " not on the remote. Push too?",
+				Prompt:  i18n.T("Branch tip has %s not on the remote. Push too?", pushTagsNoun(unpushed)),
 				Options: []string{"Push branch + tags", "Push branch only", "Cancel"},
 			},
 			onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {
@@ -2256,7 +2256,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.modal = &decisionState{
 				req: engine.DecisionRequest{
 					ID:      "squash-reorder",
-					Prompt:  "Selected commits aren't adjacent. Reorder them adjacent, then squash?",
+					Prompt:  i18n.T("Selected commits aren't adjacent. Reorder them adjacent, then squash?"),
 					Options: []string{"Reorder & squash", "Cancel"},
 				},
 				onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {
@@ -2466,9 +2466,9 @@ func (m Model) discardTargets() (restore, remove []string, n int) {
 func discardPrompt(restore, remove []string, n int) string {
 	if n == 1 {
 		all := append(append([]string{}, restore...), remove...)
-		return "Discard changes to " + all[0] + "? This cannot be undone."
+		return i18n.T("Discard changes to %s? This cannot be undone.", all[0])
 	}
-	return fmt.Sprintf("Discard changes to %d files? This cannot be undone.", n)
+	return i18n.T("Discard changes to %d files? This cannot be undone.", n)
 }
 
 // rememberLeftFocus records the focused panel as ←'s return target when it

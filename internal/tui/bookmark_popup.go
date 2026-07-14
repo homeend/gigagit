@@ -13,6 +13,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -400,7 +401,7 @@ func (m Model) bookmarkRemovePrompt() (Model, tea.Cmd) {
 	m.modal = &decisionState{
 		req: engine.DecisionRequest{
 			ID:      "bookmark-remove",
-			Prompt:  "Remove bookmark " + b.Path + "?",
+			Prompt:  i18n.T("Remove bookmark %s?", b.Path),
 			Options: []string{"Remove", "Cancel"},
 		},
 		onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {

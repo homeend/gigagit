@@ -48,7 +48,7 @@ func (m Model) reflogCheckoutRow() (actionRow, bool) {
 			m.modal = &decisionState{
 				req: engine.DecisionRequest{
 					ID:      "reflog-checkout",
-					Prompt:  "Check out " + shortHash(ref) + ":",
+					Prompt:  i18n.T("Check out %s:", shortHash(ref)),
 					Options: []string{"Detached", "Create branch…", "Cancel"},
 				},
 				onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {

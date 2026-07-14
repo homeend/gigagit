@@ -51,7 +51,7 @@ func (m Model) tagCheckoutRow() (actionRow, bool) {
 			m.modal = &decisionState{
 				req: engine.DecisionRequest{
 					ID:      "checkout-tag",
-					Prompt:  "Check out " + name + ":",
+					Prompt:  i18n.T("Check out %s:", name),
 					Options: []string{"Detached", "Create branch…", "Create worktree…", "Cancel"},
 				},
 				onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {
@@ -189,7 +189,7 @@ func (m Model) tagDeleteRow() (actionRow, bool) {
 			m.modal = &decisionState{
 				req: engine.DecisionRequest{
 					ID:      "delete-tag",
-					Prompt:  "Delete tag " + name + "?",
+					Prompt:  i18n.T("Delete tag %s?", name),
 					Options: []string{"Delete", "Cancel"},
 				},
 				onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {
