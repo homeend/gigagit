@@ -6,6 +6,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/homeend/gigagit/internal/i18n"
 )
 
 // actionRow is one runnable action in the . menu: its stable id, the key that
@@ -386,14 +388,14 @@ func (m Model) contextCopyRows() []actionRow {
 			}
 		}
 		if m.filesHash != "" { // a commit's files (a stash file tree has no commit id)
-			rows = append(rows, m.copyRow("copy-commit-id", "Copy commit id", "Copied commit id "+shortHash(m.filesHash), m.filesHash))
+			rows = append(rows, m.copyRow("copy-commit-id", i18n.T("Copy commit id"), i18n.T("Copied commit id %s", shortHash(m.filesHash)), m.filesHash))
 		}
 		return rows
 	}
 	if v := m.stashView; v != nil && m.focus == panelCommits {
 		if v.sel >= 0 && v.sel < len(v.entries) {
 			ref := v.entries[v.sel].Ref
-			return []actionRow{m.copyRow("copy-stash-ref", "Copy stash ref", "Copied stash ref "+ref, ref)}
+			return []actionRow{m.copyRow("copy-stash-ref", i18n.T("Copy stash ref"), i18n.T("Copied stash ref %s", ref), ref)}
 		}
 		return nil
 	}
@@ -402,15 +404,15 @@ func (m Model) contextCopyRows() []actionRow {
 		if bi, ok := m.backingIndex(panelReflog); ok {
 			e := m.reflog[bi]
 			return []actionRow{
-				m.copyRow("copy-reflog-sha", "Copy SHA", "Copied SHA "+shortHash(e.Hash), e.Hash),
+				m.copyRow("copy-reflog-sha", i18n.T("Copy SHA"), i18n.T("Copied SHA %s", shortHash(e.Hash)), e.Hash),
 			}
 		}
 	case m.focus == panelCommits:
 		if bi, ok := m.backingIndex(panelCommits); ok {
 			c := m.commits[bi]
 			return []actionRow{
-				m.copyRow("copy-commit-id", "Copy commit id", "Copied commit id "+shortHash(c.Hash), c.Hash),
-				m.copyRow("copy-commit-title", "Copy commit title", "Copied commit title", c.Subject),
+				m.copyRow("copy-commit-id", i18n.T("Copy commit id"), i18n.T("Copied commit id %s", shortHash(c.Hash)), c.Hash),
+				m.copyRow("copy-commit-title", i18n.T("Copy commit title"), i18n.T("Copied commit title"), c.Subject),
 			}
 		}
 	case m.isFilesPanel(m.focus):
@@ -421,8 +423,8 @@ func (m Model) contextCopyRows() []actionRow {
 		if bi, ok := m.backingIndex(panelBranches); ok {
 			b := m.branches[bi]
 			return []actionRow{
-				m.copyRow("copy-branch-name", "Copy branch name", "Copied branch name "+b.Name, b.Name),
-				m.copyRow("copy-commit-id", "Copy commit id", "Copied commit id "+shortHash(b.Hash), b.Hash),
+				m.copyRow("copy-branch-name", i18n.T("Copy branch name"), i18n.T("Copied branch name %s", b.Name), b.Name),
+				m.copyRow("copy-commit-id", i18n.T("Copy commit id"), i18n.T("Copied commit id %s", shortHash(b.Hash)), b.Hash),
 				m.copyShaRow(b.Name, b.Hash),
 			}
 		}
@@ -430,8 +432,8 @@ func (m Model) contextCopyRows() []actionRow {
 		if bi, ok := m.backingIndex(panelRemotes); ok {
 			rb := m.remoteBranches[bi]
 			return []actionRow{
-				m.copyRow("copy-branch-name", "Copy branch name", "Copied branch name "+rb.Name, rb.Name),
-				m.copyRow("copy-commit-id", "Copy commit id", "Copied commit id "+shortHash(rb.Hash), rb.Hash),
+				m.copyRow("copy-branch-name", i18n.T("Copy branch name"), i18n.T("Copied branch name %s", rb.Name), rb.Name),
+				m.copyRow("copy-commit-id", i18n.T("Copy commit id"), i18n.T("Copied commit id %s", shortHash(rb.Hash)), rb.Hash),
 				m.copyShaRow(rb.Name, rb.Hash),
 			}
 		}
@@ -439,8 +441,8 @@ func (m Model) contextCopyRows() []actionRow {
 		if bi, ok := m.backingIndex(panelTags); ok && bi >= 0 && bi < len(m.tags) {
 			tg := m.tags[bi]
 			return []actionRow{
-				m.copyRow("copy-tag-name", "Copy tag name", "Copied tag name "+tg.Name, tg.Name),
-				m.copyRow("copy-commit-id", "Copy commit id", "Copied commit id "+shortHash(tg.Target), tg.Target),
+				m.copyRow("copy-tag-name", i18n.T("Copy tag name"), i18n.T("Copied tag name %s", tg.Name), tg.Name),
+				m.copyRow("copy-commit-id", i18n.T("Copy commit id"), i18n.T("Copied commit id %s", shortHash(tg.Target)), tg.Target),
 				m.copyShaRow(tg.Target, tg.Target),
 			}
 		}
@@ -453,7 +455,7 @@ func (m Model) contextCopyRows() []actionRow {
 func (m Model) fileCopyRows(filePath, rev string) []actionRow {
 	rows := m.fileCopyPathName(filePath)
 	if rev != "" {
-		rows = append(rows, m.copyRow("copy-commit-id", "Copy commit id", "Copied commit id "+shortHash(rev), rev))
+		rows = append(rows, m.copyRow("copy-commit-id", i18n.T("Copy commit id"), i18n.T("Copied commit id %s", shortHash(rev)), rev))
 	}
 	return rows
 }
@@ -463,9 +465,9 @@ func (m Model) fileCopyRows(filePath, rev string) []actionRow {
 func (m Model) fileCopyPathName(p string) []actionRow {
 	abs := m.absFilePath("", p)
 	return []actionRow{
-		m.copyRow("copy-file-path", "Copy file path", "Copied path: "+p, p),
-		m.copyRow("copy-file-abspath", "Copy absolute file path", "Copied absolute path: "+abs, abs),
-		m.copyRow("copy-file-name", "Copy file name", "Copied file name: "+path.Base(p), path.Base(p)),
+		m.copyRow("copy-file-path", i18n.T("Copy file path"), i18n.T("Copied path: %s", p), p),
+		m.copyRow("copy-file-abspath", i18n.T("Copy absolute file path"), i18n.T("Copied absolute path: %s", abs), abs),
+		m.copyRow("copy-file-name", i18n.T("Copy file name"), i18n.T("Copied file name: %s", path.Base(p)), path.Base(p)),
 	}
 }
 
@@ -665,7 +667,7 @@ func (m Model) renderActionMenu() string {
 	vis := a.visible()
 	var bodyLines []string
 	if len(vis) == 0 {
-		bodyLines = []string{padRight("  (no match)", textW)}
+		bodyLines = []string{padRight("  "+i18n.T("(no match)"), textW)}
 	} else {
 		wr := make([]winRow, len(vis))
 		for i, r := range vis {
@@ -682,7 +684,7 @@ func (m Model) renderActionMenu() string {
 		}
 		bodyLines = renderWindow(wr, winOpts{w: textW, h: h, mode: a.mode, anchor: a.sel, hscroll: a.hscroll})
 	}
-	header := "Actions"
+	header := i18n.T("Actions")
 	if a.typing {
 		header += "  /" + a.query + "█"
 	} else if a.query != "" {
@@ -690,6 +692,6 @@ func (m Model) renderActionMenu() string {
 	}
 	parts := []string{header, ""}
 	parts = append(parts, bodyLines...)
-	parts = append(parts, "", "[key]/[enter] run  [/] filter  [z] mode  [esc] close")
+	parts = append(parts, "", i18n.T("[key]/[enter] run  [/] filter  [z] mode  [esc] close"))
 	return popupBox(inner, strings.Join(parts, "\n"))
 }

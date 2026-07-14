@@ -1168,7 +1168,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "p":
 			if !m.running && !m.loading {
-				return m.confirmOp(m.pullForFocus(), "Pull? This may rewrite the working tree.")
+				return m.confirmOp(m.pullForFocus(), i18n.T("Pull? This may rewrite the working tree."))
 			}
 		case "f":
 			if m.canFetchRemotes() {
@@ -1189,7 +1189,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// declined: only SmartCheckout yields the typed error, every
 				// checkout dispatch overwrites this, and opFinishedMsg/reRoot clear it.
 				m.pendingCheckout = pendingCheckout{remoteRef: rb.Name, base: rb.Branch, intent: engine.CheckoutStay}
-				return m.confirmOp(engine.SmartCheckout{RemoteRef: rb.Name, Local: rb.Branch, Intent: engine.CheckoutStay}, "Check out "+rb.Branch+"?")
+				return m.confirmOp(engine.SmartCheckout{RemoteRef: rb.Name, Local: rb.Branch, Intent: engine.CheckoutStay}, i18n.T("Check out %s?", rb.Branch))
 			}
 			if m.canCommit() {
 				m = m.pushLayer(&commitPopup{})
@@ -1215,7 +1215,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, nil
 				}
 				m.pendingCheckout = pendingCheckout{remoteRef: rb.Name, base: rb.Branch, intent: engine.CheckoutSwitch}
-				return m.confirmOp(engine.SmartCheckout{RemoteRef: rb.Name, Local: rb.Branch, Intent: engine.CheckoutSwitch}, "Switch to "+rb.Branch+"?")
+				return m.confirmOp(engine.SmartCheckout{RemoteRef: rb.Name, Local: rb.Branch, Intent: engine.CheckoutSwitch}, i18n.T("Switch to %s?", rb.Branch))
 			}
 			if m.focus == panelFiles && m.opsIdle() {
 				if mm, ok := m.openStashPopup(); ok {
@@ -1243,7 +1243,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 					return m, nil
 				}
-				return m.confirmOp(engine.SmartSwitch{Branch: b.Name}, "Switch to "+b.Name+"?")
+				return m.confirmOp(engine.SmartSwitch{Branch: b.Name}, i18n.T("Switch to %s?", b.Name))
 			}
 		case "S":
 			if m.stashView != nil { // toggle closed (focus is on a left panel here)

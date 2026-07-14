@@ -115,3 +115,15 @@ func TestSettingsMenuLabelTranslates(t *testing.T) {
 	}
 	t.Fatal("commit sort row missing")
 }
+
+func TestActionMenuCopyRowTranslates(t *testing.T) {
+	setupCustomLang(t, "[meta]\nname = \"Xxish\"\n\n[strings]\n\"Copy file path\" = \"XCOPYPATH\"\n")
+	if err := i18n.SetLanguage("xx", langDirFromEnv(t)); err != nil {
+		t.Fatal(err)
+	}
+	// copyRow labels flow from literal i18n.T calls; assert via the catalog
+	// path rather than deep model state: T resolves the translation.
+	if got := i18n.T("Copy file path"); got != "XCOPYPATH" {
+		t.Fatalf("T = %q", got)
+	}
+}

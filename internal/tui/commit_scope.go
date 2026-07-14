@@ -10,6 +10,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -813,7 +814,7 @@ func (m Model) commitFastForwardRow() (actionRow, bool) {
 		id:    "commit-fast-forward",
 		label: "Fast-forward " + branch + " to here",
 		run: func(m Model) (tea.Model, tea.Cmd) {
-			return m.confirmOp(engine.FastForward{Commit: selHash}, "Fast-forward to this commit?")
+			return m.confirmOp(engine.FastForward{Commit: selHash}, i18n.T("Fast-forward to this commit?"))
 		},
 	}, true
 }
@@ -834,7 +835,7 @@ func (m Model) commitResetRow() (actionRow, bool) {
 		id:    "commit-reset",
 		label: "Reset to this commit",
 		run: func(m Model) (tea.Model, tea.Cmd) {
-			return m.confirmOp(engine.Reset{Commit: hash}, "Reset to "+shortHash(hash)+"? This moves the current branch ref.")
+			return m.confirmOp(engine.Reset{Commit: hash}, i18n.T("Reset to %s? This moves the current branch ref.", shortHash(hash)))
 		},
 	}, true
 }

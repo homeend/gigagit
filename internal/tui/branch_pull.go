@@ -4,6 +4,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/i18n"
 )
 
 // pullForFocus picks what `p` pulls. On the Branches panel with a NON-current
@@ -37,7 +38,7 @@ func (m Model) backgroundPullRow() (actionRow, bool) {
 		id:    "pull-branch-bg",
 		label: "Pull " + name + " (stay here)",
 		run: func(m Model) (tea.Model, tea.Cmd) {
-			return m.confirmOp(engine.SmartPull{Branch: name, Intent: engine.PullInBackground}, "Pull "+name+" (stay here)?")
+			return m.confirmOp(engine.SmartPull{Branch: name, Intent: engine.PullInBackground}, i18n.T("Pull %s (stay here)?", name))
 		},
 	}, true
 }
