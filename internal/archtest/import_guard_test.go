@@ -48,6 +48,7 @@ func TestLayeringDAG(t *testing.T) {
 		"repogate":    {"git", "engine", "domain", "tui", "cli", "app"},
 		"domain":      {"tui", "cli", "app"},
 		"gitwatch":    {"git", "engine", "domain", "tui", "cli", "app"},
+		"i18n":        {"git", "engine", "domain", "tui", "cli", "app"},
 		"commitgraph": {"git", "engine", "domain", "tui", "cli", "app"},
 		"promptstate": {"git", "engine", "domain", "tui", "cli", "app"},
 		"textdiff":    {"git", "engine", "domain", "tui", "cli", "app"},
