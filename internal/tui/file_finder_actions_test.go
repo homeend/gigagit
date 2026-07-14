@@ -22,7 +22,7 @@ func TestFileFinderEnterOpensActionMenu(t *testing.T) {
 	for _, r := range m.actionMenu.rows {
 		got[r.id] = true
 	}
-	for _, id := range []string{"ff-view", "ff-diff", "ff-history", "ff-blame", "ff-editor", "ff-copy-path", "ff-commits-touching"} {
+	for _, id := range []string{"ff-view", "ff-diff", "ff-history", "ff-blame", "ff-editor", "ff-copy-path", "ff-copy-abspath", "ff-commits-touching"} {
 		if !got[id] {
 			t.Fatalf("missing %s; rows=%v", id, got)
 		}
@@ -162,5 +162,17 @@ func TestFileFinderEditorAndCopyReturnCmds(t *testing.T) {
 	}
 	if layerOf[*fileFinderPopup](m3) != nil {
 		t.Fatal("the finder must be popped by ff-copy-path")
+	}
+}
+
+func TestFileFinderCopyAbsPathRow(t *testing.T) {
+	m, rows := finderSetup(t, "a/b.go")
+	run := finderRow(t, rows, "ff-copy-abspath")
+	nm, cmd := run(m)
+	if cmd == nil {
+		t.Fatal("ff-copy-abspath should return a non-nil tea.Cmd")
+	}
+	if layerOf[*fileFinderPopup](nm.(Model)) != nil {
+		t.Fatal("the finder must be popped by ff-copy-abspath")
 	}
 }
