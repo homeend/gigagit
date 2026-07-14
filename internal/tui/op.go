@@ -155,7 +155,8 @@ type decisionState struct {
 	req       engine.DecisionRequest
 	reply     chan engine.DecisionResponse
 	sel       int
-	confirm   bool // yes/no confirm modal: enables y/n accelerators (frontend-only)
+	confirm   bool              // yes/no confirm modal: enables y/n accelerators (frontend-only)
+	copyTexts map[string]string // copy-file chooser: option label → resolved clipboard text (test-inspectable; nil for other modals)
 	onResolve func(m Model, opt string) (tea.Model, tea.Cmd)
 }
 

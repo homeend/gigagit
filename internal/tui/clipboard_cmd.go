@@ -52,12 +52,16 @@ func (m Model) copyToClipboardCmd(ok, text string) tea.Cmd {
 }
 
 // copyFileChoice maps a copy-chooser option to its status line and clipboard
-// text. ok is false for Cancel or an unknown option. The strings match the
-// Files-panel copy rows (fileCopyPathName) so both surfaces speak alike.
-func copyFileChoice(option, p string) (okMsg, text string, ok bool) {
+// text. p is the repo-relative path; abs is the absolute path (precomputed by
+// copyFilePrompt). ok is false for Cancel or an unknown option. The strings
+// match the Files-panel copy rows (fileCopyPathName) so both surfaces speak
+// alike.
+func copyFileChoice(option, p, abs string) (okMsg, text string, ok bool) {
 	switch option {
 	case "Copy file path":
 		return "Copied path: " + p, p, true
+	case "Copy absolute file path":
+		return "Copied absolute path: " + abs, abs, true
 	case "Copy file name":
 		return "Copied file name: " + path.Base(p), path.Base(p), true
 	}
@@ -65,17 +69,30 @@ func copyFileChoice(option, p string) (okMsg, text string, ok bool) {
 }
 
 // copyFilePrompt opens the path/name copy chooser for a repo-relative file
-// path. The modal renders above the calling popup (which stays on the layer
-// stack); Cancel — kept last so esc maps to it — reveals it unchanged.
-func (m Model) copyFilePrompt(p string) (Model, tea.Cmd) {
+// path. base is the worktree the file belongs to (empty → current worktree),
+// used to build the absolute-path option. The modal renders above the calling
+// popup (which stays on the layer stack); Cancel — kept last so esc maps to it
+// — reveals it unchanged. copyTexts records each option's resolved clipboard
+// text so tests can pin the captured value (esp. the base-anchored absolute
+// path) without running the clipboard cmd.
+func (m Model) copyFilePrompt(base, p string) (Model, tea.Cmd) {
+	abs := m.absFilePath(base, p)
+	opts := []string{"Copy file path", "Copy absolute file path", "Copy file name", "Cancel"}
+	texts := map[string]string{}
+	for _, o := range opts {
+		if _, text, ok := copyFileChoice(o, p, abs); ok {
+			texts[o] = text
+		}
+	}
 	m.modal = &decisionState{
 		req: engine.DecisionRequest{
 			ID:      "copy-file",
 			Prompt:  "Copy — " + p,
-			Options: []string{"Copy file path", "Copy file name", "Cancel"},
+			Options: opts,
 		},
+		copyTexts: texts,
 		onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {
-			if okMsg, text, ok := copyFileChoice(opt, p); ok {
+			if okMsg, text, ok := copyFileChoice(opt, p, abs); ok {
 				return m, m.copyToClipboardCmd(okMsg, text)
 			}
 			return m, nil
