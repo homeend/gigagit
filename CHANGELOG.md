@@ -8,6 +8,21 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+### Added
+- **Multilanguage TUI (stage 1).** New `[ui] language` setting: the TUI
+  renders in Japanese (`ja`), Korean (`ko`), Chinese (`zh`), Russian (`ru`),
+  or English (default). Pick it from Settings (`,`) → **Language** (persists
+  to the global config) or set `[ui] language` directly. Custom languages:
+  drop a `<code>.toml` into `$XDG_CONFIG_HOME/gg/lang/` — a new code adds a
+  language, reusing a built-in code overlays it per-key (fix just the
+  strings you disagree with); missing strings fall back to English. Covered
+  so far: the footer, help, Settings, command palette, `.` menus, confirm
+  prompts, the commit/create-branch/create-worktree popups, and status
+  hints — CLI output, git output, and engine messages stay English by
+  design (the agent-facing, script-stable surface). Fail-soft throughout: an
+  unknown language code or a malformed bundle keeps English and shows a
+  one-line notice, never a startup error.
+
 ### Changed
 - **`gg version` now reports the real version for `go install` builds.**
   When the `-ldflags` values from `build.sh` are absent, `internal/buildinfo`
