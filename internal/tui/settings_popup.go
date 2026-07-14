@@ -12,6 +12,7 @@ import (
 	"github.com/homeend/gigagit/internal/agentinit"
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/exttool"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/observ"
 )
 
@@ -51,12 +52,13 @@ const (
 	settingsMenuRates       = "Refresh rates"
 	settingsMenuCommitSort  = "Commit sort"
 	settingsMenuShowGraph   = "Show graph"
+	settingsMenuLanguage    = "Language"
 	settingsMenuRepoLoc     = "Repo settings location"
 	settingsMenuCommitGraph = "Commit-graph"
 )
 
 // settingsMenu is the top-level menu order.
-var settingsMenu = []string{settingsMenuTools, settingsMenuIdentity, settingsMenuPrefixes, settingsMenuHook, settingsMenuOpLog, settingsMenuErrors, settingsMenuAutoRefresh, settingsMenuRemoteTags, settingsMenuRates, settingsMenuCommitSort, settingsMenuShowGraph, settingsMenuRepoLoc, settingsMenuCommitGraph}
+var settingsMenu = []string{settingsMenuTools, settingsMenuIdentity, settingsMenuPrefixes, settingsMenuHook, settingsMenuOpLog, settingsMenuErrors, settingsMenuAutoRefresh, settingsMenuRemoteTags, settingsMenuRates, settingsMenuCommitSort, settingsMenuShowGraph, settingsMenuLanguage, settingsMenuRepoLoc, settingsMenuCommitGraph}
 
 // commitSortModes is the cycle order for the "Commit sort" menu toggle:
 // date-order (default; git --date-order, perfect lanes) → plain (fast, git's
@@ -112,6 +114,9 @@ func settingsMenuLabel(m Model, i int) string {
 			return settingsMenuShowGraph + ": on"
 		}
 		return settingsMenuShowGraph + ": off"
+	}
+	if settingsMenu[i] == settingsMenuLanguage {
+		return settingsMenuLanguage + ": " + i18n.ActiveName()
 	}
 	if settingsMenu[i] == settingsMenuCommitGraph {
 		if !m.repoHealthKnown {
@@ -373,6 +378,8 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				// A related option may be worth reconsidering now (e.g. commit
 				// sort buys nothing with the graph hidden) — one follow-up, max.
 				return m.maybeRelatedPrompt(settingShowGraph, m.cfg.UI.ShowGraph)
+			case settingsMenuLanguage:
+				return m.openLanguagePicker()
 			case settingsMenuRepoLoc:
 				return m.openRepoConfigLocation(), nil
 			case settingsMenuCommitGraph:
