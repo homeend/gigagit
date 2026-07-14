@@ -24,6 +24,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   Previously the field started empty and the origin was shown only as a hint.
 
 ### Added
+- **Copy absolute file path** — every "Copy file path" surface now also offers
+  copying the file's absolute filesystem path: the `.` action menu (Files,
+  Staged, files view, history/blame/diff), the fuzzy file finder (`Copy
+  absolute path`), and the `y` copy chooser in the `g`/`G` bookmark & shelf
+  switchers. In the switchers the absolute path is anchored on the entry's own
+  origin worktree. The existing repo-relative "Copy file path" is unchanged.
 - Shell escape: `ctrl+o` anywhere in the TUI (even over a failed conflict
   resolve) suspends gg into an interactive `$SHELL` in the worktree — run
   whatever git needs (`git cherry-pick --skip`, …), `exit` returns to gg
