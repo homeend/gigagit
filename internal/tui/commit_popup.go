@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"fmt"
 	"strings"
 	"time"
 
@@ -10,6 +9,7 @@ import (
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/exttool"
+	"github.com/homeend/gigagit/internal/i18n"
 )
 
 // commitPopup collects a commit message as a subject (title) plus an optional
@@ -131,7 +131,7 @@ func (p *commitPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		m = m.popLayer()
 	case submit:
 		if strings.TrimSpace(p.title.Value()) == "" {
-			m.statusMsg = "title required"
+			m.statusMsg = i18n.T("title required")
 			return m, nil
 		}
 		op := engine.Commit{Message: p.message(), Amend: p.amend}
@@ -161,9 +161,9 @@ func (p *commitPopup) box(m Model) string {
 		return p.confirmBox(m)
 	}
 	var b strings.Builder
-	heading := "Commit"
+	heading := i18n.T("Commit")
 	if p.amend {
-		heading = "Amend last commit"
+		heading = i18n.T("Amend last commit")
 	}
 	w, _ := m.overlayDims()
 	// Wider-than-standard default (commitNormalWidth); ctrl+t maximizes to
@@ -183,15 +183,15 @@ func (p *commitPopup) box(m Model) string {
 		frames := []rune("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
 		frame := frames[p.spinFrame%len(frames)]
 		elapsed := int(time.Since(p.genStart).Seconds())
-		b.WriteString(fmt.Sprintf("%c generating message… %ds  ([esc] to cancel)", frame, elapsed))
+		b.WriteString(i18n.T("%c generating message… %ds  ([esc] to cancel)", frame, elapsed))
 	} else {
 		b.WriteString(packHints([]string{
-			"[tab] switch field",
-			"[enter] newline/next",
-			"[ctrl+g] generate",
-			"[ctrl+t] fullscreen",
-			"[ctrl+s] commit",
-			"[esc] cancel",
+			i18n.T("[tab] switch field"),
+			i18n.T("[enter] newline/next"),
+			i18n.T("[ctrl+g] generate"),
+			i18n.T("[ctrl+t] fullscreen"),
+			i18n.T("[ctrl+s] commit"),
+			i18n.T("[esc] cancel"),
 		}, contentW))
 	}
 
