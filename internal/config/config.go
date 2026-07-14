@@ -66,6 +66,11 @@ type UIConfig struct {
 	// Persisted per-repo (.gg.toml) by the Settings "Show graph" toggle.
 	ShowGraph string `toml:"show_graph"`
 
+	// Language selects the TUI display language: empty/"en" = English,
+	// "ja"/"ko"/"zh"/"ru" built in, or a custom code matching a file in
+	// $XDG_CONFIG_HOME/gg/lang/<code>.toml. CLI output is always English.
+	Language string `toml:"language"`
+
 	ShowEOLOnlyChanges bool `toml:"show_eol_only_changes"` // surface files whose only unstaged change is line endings (CRLF↔LF); false (default) hides them as noise
 
 	// DisableSlowOpConfirm turns OFF the yes/no confirmation shown before slow
@@ -247,6 +252,9 @@ func overlayUI(dst *UIConfig, src UIConfig) {
 	if src.ShowGraph != "" {
 		dst.ShowGraph = src.ShowGraph
 	}
+	if src.Language != "" {
+		dst.Language = src.Language
+	}
 	// Inverted polarity: the default (false) is the active feature (hide), so
 	// only a true in a higher layer overlays — matching the zero-is-unset rule.
 	if src.ShowEOLOnlyChanges {
@@ -340,6 +348,13 @@ func configHome() string {
 // and falling back to ~/.config/gg/config.toml.
 func DefaultGlobalPath() string {
 	return filepath.Join(configHome(), "gg", "config.toml")
+}
+
+// LangDir is the machine-local custom-language bundle directory. A file
+// <code>.toml here overlays the embedded bundle of the same code per-key,
+// or adds a brand-new language.
+func LangDir() string {
+	return filepath.Join(configHome(), "gg", "lang")
 }
 
 // EncodeRepoKey turns an absolute repo path into a filesystem-safe, readable
