@@ -98,3 +98,20 @@ func TestPickerEscCancelsWithoutChange(t *testing.T) {
 		t.Fatal("esc should return to the Settings menu beneath")
 	}
 }
+
+func TestSettingsMenuLabelTranslates(t *testing.T) {
+	setupCustomLang(t, "[meta]\nname = \"Xxish\"\n\n[strings]\n\"Commit sort\" = \"XSORT\"\n")
+	if err := i18n.SetLanguage("xx", langDirFromEnv(t)); err != nil {
+		t.Fatal(err)
+	}
+	m := newTestModel(t)
+	for i, e := range settingsMenu {
+		if e == settingsMenuCommitSort {
+			if got := settingsMenuLabel(m, i); !strings.Contains(got, "XSORT") {
+				t.Fatalf("label = %q, want translated title", got)
+			}
+			return
+		}
+	}
+	t.Fatal("commit sort row missing")
+}

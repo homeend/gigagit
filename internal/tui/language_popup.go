@@ -49,14 +49,14 @@ func (p *languagePickerPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		m = m.popLayer()
 		if err := i18n.SetLanguage(l.Code, config.LangDir()); err != nil {
 			// fail soft: stay on the previous language, report why
-			m.statusMsg = "language: " + err.Error()
+			m.statusMsg = i18n.T("language: %s", err.Error())
 			return m, nil
 		}
 		m.cfg.UI.Language = l.Code
 		if err := config.SetGlobalUILanguage(config.DefaultGlobalPath(), l.Code); err != nil {
-			m.statusMsg = "language: " + l.Name + " (not saved: " + err.Error() + ")"
+			m.statusMsg = i18n.T("language: %s (not saved: %s)", l.Name, err.Error())
 		} else {
-			m.statusMsg = "language: " + l.Name
+			m.statusMsg = i18n.T("language: %s", l.Name)
 		}
 		return m, nil
 	}
@@ -67,7 +67,7 @@ func (p *languagePickerPopup) render(m Model, below string) string {
 	w, h := m.overlayDims()
 	inner := popupResolveWidth(w, p.maximized, popupInnerWidth(w))
 	var b strings.Builder
-	b.WriteString("Language\n\n")
+	b.WriteString(i18n.T("Language") + "\n\n")
 	for i, l := range p.langs {
 		prefix := "  "
 		if i == p.sel {
@@ -83,7 +83,7 @@ func (p *languagePickerPopup) render(m Model, below string) string {
 		}
 		b.WriteString(row + "\n")
 	}
-	b.WriteString("\n[↑/↓] select  [enter] choose  [esc] cancel")
+	b.WriteString("\n" + i18n.T("[↑/↓] select  [enter] choose  [esc] cancel"))
 	box := modalStyle.Width(inner).Render(strings.TrimRight(b.String(), "\n")) + "\n"
 	return overlayCenter(clipToHeight(below, h), box, w, h)
 }
