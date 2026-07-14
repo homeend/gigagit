@@ -101,7 +101,7 @@ func availableActions(m Model) []actionRow {
 		return rows
 	}
 	var row, window []actionRow
-	for _, b := range contextBindings {
+	for _, b := range contextBindings() {
 		if b.id == "" || !b.when(m) {
 			continue
 		}

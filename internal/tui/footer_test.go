@@ -42,7 +42,7 @@ func TestFooterBindingIDsUniqueAndPresent(t *testing.T) {
 	// "Go to tip in commits" (id commits-goto-tip) and "Solo this branch" rows,
 	// so folding it into the menu under its own id would double them up.
 	multiKeyTypes := map[string]bool{"space": true, "enter": true, "ctrl+g": true}
-	for _, b := range append(append([]footerBinding{}, contextBindings...), globalBindings...) {
+	for _, b := range append(append([]footerBinding{}, contextBindings()...), globalBindings()...) {
 		if nav[b.key] {
 			if b.id != "" {
 				t.Errorf("navigation key %q must have empty id, got %q", b.key, b.id)
@@ -424,7 +424,7 @@ func TestFooterStageVsUnstage(t *testing.T) {
 // bindingByLabel finds a context binding by its (unique) rendered label.
 func bindingByLabel(t *testing.T, label string) footerBinding {
 	t.Helper()
-	for _, b := range contextBindings {
+	for _, b := range contextBindings() {
 		if b.label == label {
 			return b
 		}

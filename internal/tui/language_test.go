@@ -26,6 +26,12 @@ func setupCustomLang(t *testing.T, body string) {
 	t.Cleanup(func() { _ = i18n.SetLanguage("", "") })
 }
 
+// langDirFromEnv resolves the custom lang dir setupCustomLang created.
+func langDirFromEnv(t *testing.T) string {
+	t.Helper()
+	return filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "gg", "lang")
+}
+
 func TestConfigReadyAppliesLanguage(t *testing.T) {
 	setupCustomLang(t, "[meta]\nname = \"Xxish\"\n\n[strings]\n")
 	m := newTestModel(t)
