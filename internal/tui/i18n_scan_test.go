@@ -32,6 +32,13 @@ func tuiI18nCatalog(t *testing.T) map[string]bool {
 		if perr != nil {
 			t.Fatalf("parse %s: %v", name, perr)
 		}
+		// Forbid aliased imports of the i18n package — the T-call scan matches
+		// the bare identifier "i18n", so aliasing would make calls invisible.
+		for _, imp := range f.Imports {
+			if imp.Path.Value == `"github.com/homeend/gigagit/internal/i18n"` && imp.Name != nil {
+				t.Errorf("%s: the i18n package must be imported without an alias (the T-call scan matches the bare identifier)", name)
+			}
+		}
 		ast.Inspect(f, func(n ast.Node) bool {
 			call, ok := n.(*ast.CallExpr)
 			if !ok {
