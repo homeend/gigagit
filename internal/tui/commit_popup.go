@@ -5,6 +5,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/engine"
@@ -215,24 +216,28 @@ func commitNormalWidth(termW int) int {
 
 // packHints joins "[key] label" hint pairs into lines no wider than width,
 // breaking ONLY between pairs so a key is never split from its label by a
-// naive wrap (which reads as a dangling "[ctrl+g]" over "generate"). The pairs
-// are ASCII, so byte length is display width.
+// naive wrap (which reads as a dangling "[ctrl+g]" over "generate"). Packing
+// is done by display-cell width (lipgloss.Width), not byte length: a
+// translated label (e.g. "[ctrl+g] 生成" under a ja/ko/zh catalog) packs more
+// UTF-8 bytes into fewer terminal cells than ASCII, so byte-length math would
+// under-fit or over-fit a line relative to what actually renders.
 func packHints(pairs []string, width int) string {
 	var b strings.Builder
 	line := 0
 	for i, p := range pairs {
+		pw := lipgloss.Width(p)
 		switch {
 		case i == 0:
 			b.WriteString(p)
-			line = len(p)
-		case line+2+len(p) > width:
+			line = pw
+		case line+2+pw > width:
 			b.WriteString("\n")
 			b.WriteString(p)
-			line = len(p)
+			line = pw
 		default:
 			b.WriteString("  ")
 			b.WriteString(p)
-			line += 2 + len(p)
+			line += 2 + pw
 		}
 	}
 	return b.String()
