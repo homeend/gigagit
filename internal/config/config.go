@@ -164,6 +164,25 @@ func Load(globalPath, repoPath string) (Config, error) {
 	return cfg, nil
 }
 
+// FileUILanguage reads one config file's [ui] language value ("" when the
+// file is missing, unreadable, or the key is unset). The TUI language
+// picker uses it to warn that a repo-level key overrides the global choice
+// the picker writes.
+func FileUILanguage(path string) string {
+	if path == "" {
+		return ""
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	var c Config
+	if err := toml.Unmarshal(data, &c); err != nil {
+		return ""
+	}
+	return c.UI.Language
+}
+
 // decodeFile reads and decodes one config file. ok is false (no error) when the
 // file does not exist.
 func decodeFile(path string) (Config, bool, error) {
