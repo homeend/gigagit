@@ -9,6 +9,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Changed
+- **ctrl+f always digs deeper.** The Commits eager search (ctrl+f on a `/`
+  filter or `@` highlight) used to stop for good once any match was in the
+  loaded commits — pressing ctrl+f again jumped back to that match (or did
+  nothing after a `/`-sourced jump cleared the filter) instead of loading
+  more history. Now every ctrl+f press restarts the cycle past the
+  already-loaded commits: it pages new batches, jumps to the next match when
+  one appears, and re-asks with the "Search deeper?" prompt when the budgeted
+  batches come up empty. The query from the last eager search is remembered,
+  so ctrl+f keeps working after the jump cleared the `/` filter (the repo
+  switcher forgets it; a status line shows which query is being searched).
 - **Multilanguage TUI (stage 2): fuller coverage + hardening.** The status
   line, the resume-paused-op prompt, the push-tip-tags prompt, every
   footer-override mode, and the conflict-process indicator are now

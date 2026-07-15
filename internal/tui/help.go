@@ -140,7 +140,7 @@ func helpContent() []contentLine {
 		r("", i18n.T("uncommitted work shows as ◇ Working tree / ◇ Staged rows atop the graph (only when dirty); l/enter diffs them (working tree vs index, index vs HEAD); commit-only actions are unavailable on them")),
 		r("", i18n.T("the ◇ Working tree / ◇ Staged rows can be added (m) to the ◉ compare selection like commits — Compare selection then diffs a commit against your working copy or index")),
 		r("@", i18n.T("highlight search: keep all commits visible, dim non-matches (graph stays); ctrl+↑/↓ jump prev/next match; enter keeps, esc clears")),
-		r("ctrl+f", i18n.T("Commits: eager search — if the active / filter or @ highlight query isn't in the loaded commits, page history to find it and jump to it (asks before scanning deeper)")),
+		r("ctrl+f", i18n.T("Commits: eager search — page unloaded history for the next match of the active / filter or @ highlight query and jump to it; every press digs past the already-loaded commits and re-asks before scanning deeper")),
 		r("ctrl+l", i18n.T("Commits: load the next batch of commits now (without scrolling to the end)")),
 		r("home/end", i18n.T("jump to the top / bottom of the focused list; End on Commits also loads the next batch")),
 		r("\\", i18n.T("filter commits by path / author / message / date (popup; empty fields clear that axis, ctrl+r clears all fields); graph hides while filtered")),

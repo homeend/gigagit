@@ -521,7 +521,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.sel[panelCommits] = 0
 		}
 		if m.eager.active {
-			m.eager = eagerSearch{}
+			// Abort the in-flight scan but keep the query: a repeat ctrl+f after
+			// e.g. a background feed refresh should still dig deeper for it.
+			m.eager = eagerSearch{query: m.eager.query}
 		}
 		if tip := m.pendingGotoTip; tip != "" {
 			m.pendingGotoTip = ""
@@ -723,9 +725,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m = m.applyLanguage()
 			m.gitCommonDir = msg.gitCommonDir
 			m.headTimes = msg.headTimes
-			if m.eager.active {
-				m.eager = eagerSearch{}
-			}
+			// reRoot/repo switch: drop the scan AND the retained ctrl+f query —
+			// it belongs to the previous repo's history.
+			m.eager = eagerSearch{}
 			// Clamp selections so a row removed since the last load (e.g. a
 			// deleted worktree) can't leave an index pointing past the end.
 			for p := panel(0); p < panelCount; p++ {
@@ -1024,7 +1026,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					var recCmd tea.Cmd
 					m, recCmd = m.recordSearch(scopePanel, m.filterQuery)
 					var cmd tea.Cmd
-					m, cmd = m.startEagerSearch(m.filterQuery)
+					m, cmd = m.startEagerSearchDeeper(m.filterQuery)
 					return m, tea.Batch(recCmd, cmd)
 				}
 				return m, nil
@@ -1101,7 +1103,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				var recCmd tea.Cmd
 				m, recCmd = m.recordSearch(scopePanel, m.highlightQuery)
 				var cmd tea.Cmd
-				m, cmd = m.startEagerSearch(m.highlightQuery)
+				m, cmd = m.startEagerSearchDeeper(m.highlightQuery)
 				return m, tea.Batch(recCmd, cmd)
 			case tea.KeyEnter:
 				m.highlightTyping = false // commit: highlight stays active
@@ -1652,16 +1654,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m.openGotoCommitPopup()
 			}
 		case "ctrl+f":
-			// Eager search: scan unloaded history for the active Commits search,
+			// Eager search: page unloaded history for the active Commits search,
 			// whichever is engaged (the / filter or the @ highlight; mutually
-			// exclusive). startEagerSearch clears the / filter (go-to); the @
-			// highlight persists so the found commit shows highlighted.
+			// exclusive). Every press restarts the cycle past the already-loaded
+			// commits — a hit on screen doesn't stop ctrl+f from digging deeper.
+			// The / filter is cleared on start (go-to); the @ highlight persists
+			// so the found commit shows highlighted. With neither engaged, the
+			// query retained from the last eager search is reused (a /-sourced
+			// jump cleared the filter, so repeat presses would otherwise go dead).
 			if m.focus == panelCommits {
 				if m.filterPanel == panelCommits && m.filterQuery != "" {
-					return m.startEagerSearch(m.filterQuery)
+					return m.startEagerSearchDeeper(m.filterQuery)
 				}
 				if m.highlightQuery != "" {
-					return m.startEagerSearch(m.highlightQuery)
+					return m.startEagerSearchDeeper(m.highlightQuery)
+				}
+				if m.eager.query != "" {
+					return m.startEagerSearchDeeper(m.eager.query)
 				}
 			}
 		case "l":
