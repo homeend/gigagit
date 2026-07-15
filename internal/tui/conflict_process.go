@@ -14,6 +14,7 @@ import (
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/template"
 )
@@ -531,23 +532,23 @@ func (p *conflictProcess) refreshed(m Model) (Model, tea.Cmd) {
 func (p *conflictProcess) indicator(m Model) string {
 	switch p.st {
 	case confPicking:
-		return "Resolving conflicts · line editor"
+		return i18n.T("Resolving conflicts · line editor")
 	case confWorking:
-		return "Resolving conflicts · working…  [esc] cancel"
+		return i18n.T("Resolving conflicts · working…  [esc] cancel")
 	case confReporting:
-		return "Resolving conflicts · error — [any key] back to the list"
+		return i18n.T("Resolving conflicts · error — [any key] back to the list")
 	case confToolPick:
-		return "Resolving conflicts · choose a tool  [↑/↓] select  [enter] run  [esc] back"
+		return i18n.T("Resolving conflicts · choose a tool  [↑/↓] select  [enter] run  [esc] back")
 	case confToolFill, confToolApprove, confToolMark:
-		return "Resolving conflicts · tool run…  [esc] back"
+		return i18n.T("Resolving conflicts · tool run…  [esc] back")
 	default: // confListing
 		if len(p.files) == 0 {
 			if p.inProgress != "" {
-				return "Resolving conflicts · all resolved — [c] continue " + p.inProgress + "  [a] abort  [L] leave"
+				return i18n.T("Resolving conflicts · all resolved — [c] continue %s  [a] abort  [L] leave", opDisplayName(p.inProgress))
 			}
-			return "Resolving conflicts · all resolved — [L] leave"
+			return i18n.T("Resolving conflicts · all resolved — [L] leave")
 		}
-		return fmt.Sprintf("Resolving conflicts · %d left — [↑/↓] file  per-file keys in the box  [A] all  [L] leave", len(p.files))
+		return i18n.T("Resolving conflicts · %d left — [↑/↓] file  per-file keys in the box  [A] all  [L] leave", len(p.files))
 	}
 }
 
