@@ -527,7 +527,7 @@ func (m Model) compareSelectionEndpoints() (left, right model.Endpoint, note str
 		}
 	}
 	if len(sel) < 2 {
-		return left, right, "select at least 2 rows to compare", false
+		return left, right, i18n.T("select at least 2 rows to compare"), false
 	}
 	// older = max rank, newer = min rank (working tree/staged rank negative = newest).
 	oldest, newest := sel[0], sel[0]
@@ -547,11 +547,11 @@ func (m Model) compareSelectionEndpoints() (left, right model.Endpoint, note str
 		return m.compareKeyEndpoint(oldest.key), m.compareKeyEndpoint(newest.key), "", true
 	}
 	if hasWip {
-		return left, right, "range compare (3+) is commits-only; remove the working tree / staged row", false
+		return left, right, i18n.T("range compare (3+) is commits-only; remove the working tree / staged row"), false
 	}
 	// 3+ commits: squash from oldest^. Refuse if the oldest is a root commit.
 	if oi := oldest.rank; oi >= 0 && oi < len(m.commits) && len(m.commits[oi].Parents) == 0 {
-		return left, right, "can't squash a range from the root commit", false
+		return left, right, i18n.T("can't squash a range from the root commit"), false
 	}
 	return model.Endpoint{Kind: model.EndpointCommit, Hash: oldest.key + "^"},
 		model.Endpoint{Kind: model.EndpointCommit, Hash: newest.key}, "", true
