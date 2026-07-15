@@ -590,7 +590,7 @@ func conflictListBox(m Model, files []model.FileStatus, sel int, src domain.Conf
 	textW := popupTextWidth(inner)
 	var b strings.Builder
 	b.WriteString("Resolve conflicts\n")
-	if s := src.Describe(); s != "" {
+	if s := describeConflict(src); s != "" {
 		b.WriteString(conflictSrcStyle.Render(s) + "\n")
 	}
 	b.WriteString("\n")
