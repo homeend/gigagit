@@ -2,6 +2,7 @@ package tui
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -114,6 +115,54 @@ func TestSettingsMenuLabelTranslates(t *testing.T) {
 		}
 	}
 	t.Fatal("commit sort row missing")
+}
+
+// TestLanguagePickerRepoOverrideHint pins that opening the picker detects a
+// repo-level [ui] language override (config.FileUILanguage on
+// m.repoConfigPath) and renders the dimmed warning line beneath the title.
+// Constructed directly (not via newTestModel/Settings) since
+// openLanguagePicker only reads m.repoConfigPath — no domain/engine wiring
+// needed.
+func TestLanguagePickerRepoOverrideHint(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, ".gg.toml")
+	if err := os.WriteFile(p, []byte("[ui]\nlanguage = \"ja\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := Model{repoConfigPath: p}
+	m2, _ := m.openLanguagePicker()
+	pop, ok := m2.topLayer().(*languagePickerPopup)
+	if !ok {
+		t.Fatal("picker not on top")
+	}
+	if !pop.repoOverride {
+		t.Fatal("repoOverride must be set when the repo config sets [ui] language")
+	}
+	// The hint text (59 display columns) is wider than the popup's fixed
+	// 56-column inner width (popupInnerWidth), so lipgloss word-wraps it
+	// across two physical lines in the real render — checked as two
+	// fragments rather than one contiguous substring for that reason.
+	out := pop.render(m2, "")
+	if !strings.Contains(out, "overrides this") || !strings.Contains(out, "choice)") {
+		t.Fatalf("hint line missing from render:\n%s", out)
+	}
+}
+
+// TestLanguagePickerSetLanguageFailureStatus drives the picker's own
+// enter-handling branch directly (a bogus lang code i18n.SetLanguage can't
+// resolve, embedded or custom) to pin the fail-soft path: the picker still
+// closes (never traps the user) and reports why via a "language failed: …"
+// status message instead of silently doing nothing.
+func TestLanguagePickerSetLanguageFailureStatus(t *testing.T) {
+	p := &languagePickerPopup{langs: []i18n.Lang{{Code: "zz-bogus", Name: "Bogus"}}, sel: 0}
+	m := Model{}.pushLayer(p)
+	m2, _ := p.update(m, keyMsg("enter"))
+	if !strings.Contains(m2.statusMsg, "language failed:") {
+		t.Fatalf("statusMsg = %q, want it to contain %q", m2.statusMsg, "language failed:")
+	}
+	if layerOf[*languagePickerPopup](m2) != nil {
+		t.Fatal("picker must close even when SetLanguage fails (fail-soft, never trap the user)")
+	}
 }
 
 func TestActionMenuCopyRowTranslates(t *testing.T) {

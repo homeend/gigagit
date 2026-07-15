@@ -802,7 +802,7 @@ func (p *settingsPopup) box(m Model) string {
 				if row.existing {
 					suffix = " " + i18n.T("(configured)")
 					text = base + suffix
-					deco = toolConfiguredSuffixDecorator(len([]rune(base)), len([]rune(suffix)))
+					deco = toolConfiguredSuffixDecorator(lipgloss.Width(base), lipgloss.Width(suffix))
 				}
 				wr[i] = winRow{text: text, style: st, decorate: deco}
 			}

@@ -172,12 +172,8 @@ func FileUILanguage(path string) string {
 	if path == "" {
 		return ""
 	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return ""
-	}
-	var c Config
-	if err := toml.Unmarshal(data, &c); err != nil {
+	c, ok, err := decodeFile(path)
+	if err != nil || !ok {
 		return ""
 	}
 	return c.UI.Language
