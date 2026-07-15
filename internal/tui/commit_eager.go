@@ -9,11 +9,19 @@ import (
 )
 
 // eagerSearch is the state of a /-search that pages unloaded history looking for
-// a match. budget is the number of pages left to scan before re-prompting.
+// a match. budget is the number of pages left to scan before re-prompting. from
+// is the feed-index floor: only commits at m.commits[from:] count as matches
+// (0 = the whole list, WIP rows included). Each ctrl+f press sets it to the
+// loaded count so the scan always digs past what is already on screen, even
+// when an earlier match was found. After a search ends, query stays behind
+// (active=false) so the next ctrl+f can restart the cycle deeper — a /-sourced
+// jump clears the filter ("go to" semantics), so the query would otherwise be
+// gone after the first hit.
 type eagerSearch struct {
 	active bool
 	query  string
 	budget int
+	from   int
 }
 
 // commitSearchMaxPages is the configured per-pass page cap for eager search.
@@ -27,14 +35,19 @@ func (m Model) commitSearchMaxPages() int {
 // firstCommitMatch returns the DISPLAY position (same space as m.sel[panelCommits])
 // of the first Commits row whose haystack contains query (case-insensitive), or
 // (0, false). Mirrors scanHighlightMatch's display→backing mapping so it is correct
-// under a non-default sort.
-func (m Model) firstCommitMatch(query string) (int, bool) {
+// under a non-default sort. A from > 0 restricts matches to feed indices >= from
+// (commits loaded after an eager restart); it also excludes WIP pseudo-rows,
+// which are never "newly loaded history".
+func (m Model) firstCommitMatch(query string, from int) (int, bool) {
 	if query == "" {
 		return 0, false
 	}
 	idx := m.displayIndices(panelCommits)
 	q := strings.ToLower(query)
 	for d, bi := range idx {
+		if from > 0 && bi-m.wipCount() < from {
+			continue
+		}
 		if strings.Contains(strings.ToLower(m.commitHaystackAt(bi)), q) {
 			return d, true
 		}
@@ -52,6 +65,23 @@ func (m Model) firstCommitMatch(query string) (int, bool) {
 // goto-tip fallback starts the search from there) is preserved — "go to"
 // semantics only ever concern the Commits list.
 func (m Model) startEagerSearch(query string) (Model, tea.Cmd) {
+	return m.startEagerSearchFrom(query, 0)
+}
+
+// startEagerSearchDeeper is the ctrl+f entry point: it restarts the eager cycle
+// past the already-loaded commits, so every press pages new history even when an
+// earlier match is already on screen. If the fresh batches come up empty the
+// usual "search deeper?" prompt re-asks, and a later press redoes the whole
+// cycle from the then-current end.
+func (m Model) startEagerSearchDeeper(query string) (Model, tea.Cmd) {
+	if query == "" {
+		return m, nil
+	}
+	m.statusMsg = "searching deeper for '" + query + "'…"
+	return m.startEagerSearchFrom(query, len(m.commits))
+}
+
+func (m Model) startEagerSearchFrom(query string, from int) (Model, tea.Cmd) {
 	if query == "" {
 		return m, nil
 	}
@@ -59,7 +89,7 @@ func (m Model) startEagerSearch(query string) (Model, tea.Cmd) {
 		m.filterTyping = false
 		m.filterQuery = "" // no sticky filter — land the cursor in the full list
 	}
-	m.eager = eagerSearch{active: true, query: query, budget: m.commitSearchMaxPages()}
+	m.eager = eagerSearch{active: true, query: query, budget: m.commitSearchMaxPages(), from: from}
 	return m.eagerAdvance()
 }
 
@@ -70,22 +100,33 @@ func (m Model) eagerAdvance() (Model, tea.Cmd) {
 	if !m.eager.active {
 		return m, nil
 	}
-	if d, ok := m.firstCommitMatch(m.eager.query); ok {
+	if d, ok := m.firstCommitMatch(m.eager.query, m.eager.from); ok {
 		m.sel[panelCommits] = d
 		m = m.focusCommitsPanel()
-		m.eager = eagerSearch{}
+		if m.eager.from > 0 {
+			m.statusMsg = "found '" + m.eager.query + "'"
+		}
+		m.eager = eagerSearch{query: m.eager.query} // keep the query for a repeat ctrl+f
 		return m, nil
 	}
 	if m.feed == nil || !m.feed.CanLoadMore() {
-		m.statusMsg = "'" + m.eager.query + "' not found in full history"
-		m.eager = eagerSearch{}
+		if m.eager.from > 0 {
+			m.statusMsg = "no further match for '" + m.eager.query + "' in history"
+		} else {
+			m.statusMsg = "'" + m.eager.query + "' not found in full history"
+		}
+		m.eager = eagerSearch{query: m.eager.query}
 		return m, nil
 	}
 	if m.eager.budget <= 0 {
 		// Cap reached with no match: pause and ask (Task D3 supplies eagerPrompt).
-		q := m.eager.query
+		q, from := m.eager.query, m.eager.from
 		m.eager.active = false
-		return m.pushLayer(&eagerPrompt{query: q, scanned: m.commitsTotal()}), nil
+		scanned := m.commitsTotal()
+		if from > 0 {
+			scanned = len(m.commits) - from // only what this pass actually scanned
+		}
+		return m.pushLayer(&eagerPrompt{query: q, scanned: scanned, from: from}), nil
 	}
 	m.eager.budget--
 	m.commitsLoading = true
@@ -99,6 +140,7 @@ type eagerPrompt struct {
 	popupMax
 	query   string
 	scanned int
+	from    int // >0: a deeper pass — resume keeps the floor, wording says "further"
 	sel     int // 0 = search more, 1 = cancel
 }
 
@@ -118,7 +160,7 @@ func (p *eagerPrompt) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			return m.popLayer(), nil
 		}
 		m = m.popLayer()
-		m.eager = eagerSearch{active: true, query: p.query, budget: m.commitSearchMaxPages()}
+		m.eager = eagerSearch{active: true, query: p.query, budget: m.commitSearchMaxPages(), from: p.from}
 		return m.eagerAdvance()
 	}
 	return m, nil
@@ -133,10 +175,14 @@ func (p *eagerPrompt) box(m Model) string {
 	w, _ := m.overlayDims()
 	inner := popupResolveWidth(w, p.maximized, popupInnerWidth(w))
 	textW := popupTextWidth(inner)
+	report := "Searched " + strconv.Itoa(p.scanned) + " commits, no match for \"" + p.query + "\"."
+	if p.from > 0 {
+		report = "Searched " + strconv.Itoa(p.scanned) + " more commits, no further match for \"" + p.query + "\"."
+	}
 	parts := []string{
 		"Search deeper?",
 		"",
-		"Searched " + strconv.Itoa(p.scanned) + " commits, no match for \"" + p.query + "\".",
+		report,
 		"",
 	}
 	opts := []string{"Search " + strconv.Itoa(m.commitSearchMaxPages()) + " more pages", "Cancel"}
