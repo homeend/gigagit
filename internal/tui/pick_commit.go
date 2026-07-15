@@ -55,7 +55,7 @@ func (m Model) handlePickProbe(msg pickProbeMsg) (Model, tea.Cmd) {
 	t := msg.target
 	branch := m.status.Branch
 	if branch == "" {
-		branch = "the current branch"
+		branch = i18n.T("the current branch")
 	}
 	if msg.found {
 		sha := t.sha
