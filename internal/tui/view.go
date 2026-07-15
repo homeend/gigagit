@@ -1129,7 +1129,7 @@ func (m Model) reviewSegment() string {
 	if !m.reviewRunning || m.proc != nil {
 		return ""
 	}
-	seg := "⟳ reviewing " + m.reviewRunningLabel + "…"
+	seg := i18n.T("⟳ reviewing %s…", m.reviewRunningLabel)
 	if m.reviewBlink {
 		return reviewHotStyle.Render(seg)
 	}

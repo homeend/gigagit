@@ -64,3 +64,29 @@ func pausedNotice(op, src string) string {
 	}
 	return i18n.T("⏸ %s paused (%s) — press [x] to continue or abort", op, src)
 }
+
+// sourceDisplayName translates a data-source name for status-line display.
+// sourceNames stays English (identity, error-log prose); this is the
+// render-time lookup. The switch is literal-key so the scan test sees every
+// key.
+func sourceDisplayName(s sourceKey) string {
+	switch s {
+	case srcStatus:
+		return i18n.T("status")
+	case srcBranches:
+		return i18n.T("branches")
+	case srcRemotes:
+		return i18n.T("remotes")
+	case srcTags:
+		return i18n.T("tags")
+	case srcReflog:
+		return i18n.T("reflog")
+	case srcWorktrees:
+		return i18n.T("worktrees")
+	case srcFeed:
+		return i18n.T("commits")
+	case srcIdentity:
+		return i18n.T("identity")
+	}
+	return sourceNames[s]
+}

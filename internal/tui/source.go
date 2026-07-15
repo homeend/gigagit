@@ -115,7 +115,7 @@ var sourceNames = map[sourceKey]string{
 
 // sourceErr formats a per-source error for display on the status line.
 func sourceErr(s sourceKey, err error) string {
-	return sourceNames[s] + ": " + err.Error()
+	return sourceDisplayName(s) + ": " + err.Error()
 }
 
 // readSourceCmd reads one source off the UI thread via the gated domain layer

@@ -61,3 +61,11 @@ func TestPausedNotice(t *testing.T) {
 		t.Fatalf("source must appear parenthesised, got %q", got)
 	}
 }
+
+func TestSourceDisplayNameEnglishPassthrough(t *testing.T) {
+	for s := sourceKey(0); s < srcCount; s++ {
+		if got := sourceDisplayName(s); got != sourceNames[s] {
+			t.Fatalf("sourceDisplayName(%d) = %q, want %q", s, got, sourceNames[s])
+		}
+	}
+}
