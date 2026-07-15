@@ -607,7 +607,7 @@ func (m Model) commitSquashRow() (actionRow, bool) {
 			for k := range m.commitCompareSet {
 				switch k {
 				case wipKey(wipRow{kind: wipWorktree}), wipKey(wipRow{kind: wipStaged}):
-					m.statusMsg = "squash is commits-only; remove the working tree / staged row"
+					m.statusMsg = i18n.T("squash is commits-only; remove the working tree / staged row")
 					return m, nil
 				}
 				targets = append(targets, k)
@@ -616,12 +616,12 @@ func (m Model) commitSquashRow() (actionRow, bool) {
 				}
 			}
 			if oldest == "" {
-				m.statusMsg = "select at least 2 commits to squash"
+				m.statusMsg = i18n.T("select at least 2 commits to squash")
 				return m, nil
 			}
 			// Root guard: the oldest commit needs a parent to rebase onto.
 			if oldestRank >= 0 && oldestRank < len(m.commits) && len(m.commits[oldestRank].Parents) == 0 {
-				m.statusMsg = "can't squash from the root commit"
+				m.statusMsg = i18n.T("can't squash from the root commit")
 				return m, nil
 			}
 			return m, m.loadSquashRangeCmd(m.status.Branch, oldest+"^", targets)
@@ -681,7 +681,7 @@ func (m Model) commitDropSelectionRow() (actionRow, bool) {
 				}
 				switch k {
 				case wipKey(wipRow{kind: wipWorktree}), wipKey(wipRow{kind: wipStaged}):
-					m.statusMsg = "drop is commits-only; remove the working tree / staged row"
+					m.statusMsg = i18n.T("drop is commits-only; remove the working tree / staged row")
 					return m, nil
 				}
 				targets = append(targets, k)
@@ -690,12 +690,12 @@ func (m Model) commitDropSelectionRow() (actionRow, bool) {
 				}
 			}
 			if len(targets) < 2 {
-				m.statusMsg = "select at least 2 commits to drop"
+				m.statusMsg = i18n.T("select at least 2 commits to drop")
 				return m, nil
 			}
 			// Root guard: the oldest commit needs a parent to rebase onto.
 			if oldestRank >= 0 && oldestRank < len(m.commits) && len(m.commits[oldestRank].Parents) == 0 {
-				m.statusMsg = "can't drop a range that includes the root commit"
+				m.statusMsg = i18n.T("can't drop a range that includes the root commit")
 				return m, nil
 			}
 			return m, m.loadDropRangeCmd(m.status.Branch, oldest+"^", targets)
@@ -765,7 +765,7 @@ func (m Model) commitRevertRow() (actionRow, bool) {
 		label: "Revert this commit",
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			if isMerge {
-				m.statusMsg = "cannot revert a merge commit (v1)"
+				m.statusMsg = i18n.T("cannot revert a merge commit (v1)")
 				return m, nil
 			}
 			return m.startOp(engine.Revert{Commit: hash})

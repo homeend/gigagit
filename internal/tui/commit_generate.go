@@ -11,6 +11,7 @@ import (
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/exttool"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/template"
 )
 
@@ -39,16 +40,16 @@ type genMessageMsg struct {
 //     to dispatchGenerate.
 func (m Model) startGenerate(p *commitPopup) (Model, tea.Cmd) {
 	if m.reviewRunning {
-		m.statusMsg = "a review is in progress — wait for it to finish"
+		m.statusMsg = i18n.T("a review is in progress — wait for it to finish")
 		return m, nil
 	}
 	if m.status.Counts().Staged == 0 {
-		m.statusMsg = "nothing staged to describe"
+		m.statusMsg = i18n.T("nothing staged to describe")
 		return m, nil
 	}
 	cmds := m.toolCommands(string(exttool.CatCommitMessage))
 	if len(cmds) == 0 {
-		m.statusMsg = "no commit-message tool configured (Settings → External tools)"
+		m.statusMsg = i18n.T("no commit-message tool configured (Settings → External tools)")
 		return m, nil
 	}
 	if len(cmds) > 1 {
@@ -66,7 +67,7 @@ func (m Model) startGenerate(p *commitPopup) (Model, tea.Cmd) {
 func (m Model) gateGenerate(p *commitPopup, chosen config.ToolCommand) (Model, tea.Cmd) {
 	resolved, err := template.ResolveCommand(chosen.Command, nil, template.CmdCtx{Repo: m.currentWorktree})
 	if err != nil {
-		m.statusMsg = "generate: " + err.Error()
+		m.statusMsg = i18n.T("generate: %s", err.Error())
 		return m, nil
 	}
 	p.genCmd = chosen
@@ -153,7 +154,7 @@ func (m Model) applyGeneratedMessage(msg genMessageMsg) Model {
 	p.generating = false
 	m.genCancel = nil
 	if msg.err != nil {
-		m.statusMsg = "generate: " + msg.err.Error()
+		m.statusMsg = i18n.T("generate: %s", msg.err.Error())
 		return m
 	}
 	p.title = newTextField(msg.subject)

@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/homeend/gigagit/internal/i18n"
 )
 
 // Shell escape — the emergency hatch (spec: docs/superpowers/specs/
@@ -143,12 +145,12 @@ type shellDoneMsg struct {
 // lives in git's sequencer, not in a running gg op.)
 func (m Model) openSubshell() (Model, tea.Cmd) {
 	if !m.opsIdle() {
-		m.statusMsg = "an operation is running — shell available when it finishes"
+		m.statusMsg = i18n.T("an operation is running — shell available when it finishes")
 		return m, nil
 	}
 	cmd, script, err := subshellExec(m.currentWorktree, os.Getenv)
 	if err != nil {
-		m.statusMsg = "shell: " + err.Error()
+		m.statusMsg = i18n.T("shell: %s", err.Error())
 		return m, nil
 	}
 	return m, tea.ExecProcess(cmd, func(err error) tea.Msg {
@@ -160,12 +162,12 @@ func (m Model) openSubshell() (Model, tea.Cmd) {
 // wrapper. Same gate and return path as the subshell.
 func (m Model) runShellCommand(command string) (Model, tea.Cmd) {
 	if !m.opsIdle() {
-		m.statusMsg = "an operation is running — shell available when it finishes"
+		m.statusMsg = i18n.T("an operation is running — shell available when it finishes")
 		return m, nil
 	}
 	cmd, script, err := shellCommandExec(m.currentWorktree, command, os.Getenv)
 	if err != nil {
-		m.statusMsg = "shell: " + err.Error()
+		m.statusMsg = i18n.T("shell: %s", err.Error())
 		return m, nil
 	}
 	return m, tea.ExecProcess(cmd, func(err error) tea.Msg {
@@ -184,10 +186,10 @@ func (m Model) handleShellDone(msg shellDoneMsg) (Model, tea.Cmd) {
 	}
 	var exitErr *exec.ExitError
 	if msg.err != nil && !errors.As(msg.err, &exitErr) {
-		m.statusMsg = "shell: " + msg.err.Error()
+		m.statusMsg = i18n.T("shell: %s", msg.err.Error())
 		return m, nil
 	}
-	m.statusMsg = "returned from shell"
+	m.statusMsg = i18n.T("returned from shell")
 	// Always reload, even mid an in-flight read: the user may have committed,
 	// rebased, or anything else while gg was suspended, and each source's
 	// per-source gen bump (reloadSourcesCmd) makes this safe unconditionally —

@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -152,18 +153,18 @@ func (m Model) cycleCompareScope() Model {
 	}
 	if p.originsErr != nil {
 		if errors.Is(p.originsErr, domain.ErrNoMergeBase) {
-			m.statusMsg = "no common ancestor — filter unavailable"
+			m.statusMsg = i18n.T("no common ancestor — filter unavailable")
 		} else {
-			m.statusMsg = "origin filter unavailable: " + p.originsErr.Error()
+			m.statusMsg = i18n.T("origin filter unavailable: %s", p.originsErr.Error())
 		}
 		return m
 	}
 	if !p.originsLoaded {
-		m.statusMsg = "origin filter loading…"
+		m.statusMsg = i18n.T("origin filter loading…")
 		return m
 	}
 	if p.files == nil {
-		m.statusMsg = "compare still loading…"
+		m.statusMsg = i18n.T("compare still loading…")
 		return m
 	}
 	p.scope = (p.scope + 1) % 3

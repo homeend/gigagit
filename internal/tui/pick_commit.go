@@ -49,7 +49,7 @@ func (m Model) handlePickProbe(msg pickProbeMsg) (Model, tea.Cmd) {
 		return m, nil // stale (switcher closed / repo switched) or an op raced in
 	}
 	if msg.err != nil {
-		m.statusMsg = "cherry-pick: " + msg.err.Error()
+		m.statusMsg = i18n.T("cherry-pick: %s", msg.err.Error())
 		return m, nil
 	}
 	t := msg.target
@@ -97,7 +97,7 @@ func (m Model) handlePickProbe(msg pickProbeMsg) (Model, tea.Cmd) {
 				// bookmarkPastePrompt precedent for sync resolution in update.
 				path, err := m.svc.ShelfPatchFile(context.Background(), id)
 				if err != nil {
-					m.statusMsg = "apply patch: " + err.Error()
+					m.statusMsg = i18n.T("apply patch: %s", err.Error())
 					return m, nil
 				}
 				m.pickPatchTemp = path
@@ -108,9 +108,9 @@ func (m Model) handlePickProbe(msg pickProbeMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 	if t.shelfID != "" {
-		m.statusMsg = "commit no longer exists and this entry has no stored patch (shelved before patch support, or a merge commit)"
+		m.statusMsg = i18n.T("commit no longer exists and this entry has no stored patch (shelved before patch support, or a merge commit)")
 	} else {
-		m.statusMsg = "commit no longer exists — a bookmark stores no snapshot (shelve commits to keep them applyable)"
+		m.statusMsg = i18n.T("commit no longer exists — a bookmark stores no snapshot (shelve commits to keep them applyable)")
 	}
 	return m, nil
 }

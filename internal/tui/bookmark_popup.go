@@ -249,7 +249,7 @@ func (p *bookmarkPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				return m, nil
 			}
 			if b.IsCommit() {
-				m.statusMsg = "cannot compare a file against a commit bookmark"
+				m.statusMsg = i18n.T("cannot compare a file against a commit bookmark")
 				return m, nil
 			}
 			return m.openCompareFocusedVsBookmark(*p.compareRef, p.compareLabel, b)
@@ -352,7 +352,7 @@ func (p *bookmarkPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				return m, nil
 			}
 			if !b.IsCommit() {
-				m.statusMsg = "cherry-pick: only for a commit bookmark"
+				m.statusMsg = i18n.T("cherry-pick: only for a commit bookmark")
 				return m, nil
 			}
 			return m.startPickCommit(pickTarget{sha: b.Commit})
@@ -438,7 +438,7 @@ func (m Model) bookmarkPastePrompt() (Model, tea.Cmd) {
 	}
 	data, err := m.svc.BookmarkBytes(context.Background(), b)
 	if err != nil {
-		m.statusMsg = "bookmark paste: " + err.Error()
+		m.statusMsg = i18n.T("bookmark paste: %s", err.Error())
 		return m, nil
 	}
 	// Push over the switcher (which stays beneath); esc/success returns to it.
@@ -556,12 +556,12 @@ func (p *bookmarkPastePopup) render(m Model, below string) string {
 func (m Model) compareCommitBookmark(b model.Bookmark) (Model, tea.Cmd) {
 	bi, ok := m.backingIndex(panelCommits)
 	if !ok {
-		m.statusMsg = "no commit selected to compare against"
+		m.statusMsg = i18n.T("no commit selected to compare against")
 		return m, nil
 	}
 	subject := m.commits[bi].Hash
 	if subject == b.Commit {
-		m.statusMsg = "select a different commit to compare against"
+		m.statusMsg = i18n.T("select a different commit to compare against")
 		return m, nil
 	}
 	m = m.clearLayers() // close the switcher so the files view is not drawn under it
@@ -575,7 +575,7 @@ func (m Model) compareCommitBookmark(b model.Bookmark) (Model, tea.Cmd) {
 // no-op a file-only key (paste / vs-shelf / mark). File bookmarks pass through.
 func (m Model) commitBookmarkNotice(p *bookmarkPopup) (Model, bool) {
 	if b, ok := p.selected(); ok && b.IsCommit() {
-		m.statusMsg = "not available for a commit bookmark"
+		m.statusMsg = i18n.T("not available for a commit bookmark")
 		return m, true
 	}
 	return m, false
