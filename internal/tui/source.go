@@ -105,8 +105,9 @@ func (m Model) maybeFeedUpstreamRewalk() bool {
 		!m.srcInflight[srcFeed]
 }
 
-// sourceNames maps each source key to its human-readable name, used for error
-// messages. Package-level to avoid reallocating the literal on every error.
+// sourceNames maps each source key to its English name — the identity/fallback
+// behind sourceDisplayName and the reference for its passthrough test.
+// Package-level to avoid reallocating the literal on every error.
 var sourceNames = map[sourceKey]string{
 	srcStatus: "status", srcBranches: "branches", srcRemotes: "remotes",
 	srcTags: "tags", srcReflog: "reflog", srcWorktrees: "worktrees",
