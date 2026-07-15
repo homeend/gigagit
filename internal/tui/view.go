@@ -152,6 +152,9 @@ func statusIsError(msg string) bool {
 		}
 	}
 	for k, tr := range i18n.ActiveTranslations() {
+		if !strings.ContainsRune(k, '%') {
+			continue // error-status keys are "<prefix>: %s"-shaped; a verb-less key sharing the prefix (e.g. a footer) is not a status message
+		}
 		for _, p := range statusErrorPrefixes {
 			if !strings.HasPrefix(k, p) {
 				continue

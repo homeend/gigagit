@@ -131,7 +131,8 @@ func TestStatusIsErrorSurvivesTranslation(t *testing.T) {
 	body := "[meta]\nname=\"Test\"\n[strings]\n" +
 		"\"error: %s\" = \"TESTERR: %s\"\n" +
 		"\"amend: %s\" = \"TESTAMEND: %s\"\n" +
-		"\"loading…\" = \"TESTLOAD…\"\n"
+		"\"loading…\" = \"TESTLOAD…\"\n" +
+		"\"commits: [enter/tab] tree  …\" = \"TESTFOOT: [x] example\"\n"
 	if err := os.WriteFile(filepath.Join(dir, "xx.toml"), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -148,6 +149,10 @@ func TestStatusIsErrorSurvivesTranslation(t *testing.T) {
 	}
 	if got := i18n.T("loading…"); statusIsError(got) {
 		t.Errorf("statusIsError(%q) = true, want false (not an error key)", got)
+	}
+	// Guard against verb-less keys sharing error prefixes (e.g. a footer sharing "commits:")
+	if statusIsError("TESTFOOT: something") {
+		t.Errorf("statusIsError(%q) = true, want false (verb-less footer key excluded by guard)", "TESTFOOT: something")
 	}
 }
 
