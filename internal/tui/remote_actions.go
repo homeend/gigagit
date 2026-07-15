@@ -6,6 +6,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/i18n"
 )
 
 // copyShaRow builds a "Copy commit sha" action that resolves ref to its full
@@ -80,7 +81,7 @@ func (m Model) remoteMergeRow() (actionRow, bool) {
 		id:    "remote-merge",
 		label: "Merge " + rb.Name + " into current (" + cur + ")",
 		run: func(m Model) (tea.Model, tea.Cmd) {
-			return m.confirmOp(engine.SmartMerge{Source: rb.Name}, "Merge "+rb.Name+" into current branch?")
+			return m.confirmOp(engine.SmartMerge{Source: rb.Name}, i18n.T("Merge %s into current branch?", rb.Name))
 		},
 	}, true
 }
@@ -100,7 +101,7 @@ func (m Model) remoteRebaseRow() (actionRow, bool) {
 		id:    "remote-rebase",
 		label: "Rebase current (" + cur + ") onto " + rb.Name,
 		run: func(m Model) (tea.Model, tea.Cmd) {
-			return m.confirmOp(engine.SmartRebase{Onto: rb.Name}, "Rebase current branch onto "+rb.Name+"?")
+			return m.confirmOp(engine.SmartRebase{Onto: rb.Name}, i18n.T("Rebase current branch onto %s?", rb.Name))
 		},
 	}, true
 }
@@ -129,7 +130,7 @@ func (m Model) remoteResetRow() (actionRow, bool) {
 		label: "Reset current (" + cur + ") to " + rb.Name + " tip",
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			return m.mustConfirmOp(engine.Reset{Commit: rb.Name, Mode: "hard"},
-				"Reset "+cur+" to "+rb.Name+"? This discards local commits and uncommitted changes.")
+				i18n.T("Reset %s to %s? This discards local commits and uncommitted changes.", cur, rb.Name))
 		},
 	}, true
 }

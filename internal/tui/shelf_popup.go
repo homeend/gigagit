@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -370,7 +371,7 @@ func (m Model) shelfPopupRemovePrompt() (Model, tea.Cmd) {
 	m.modal = &decisionState{
 		req: engine.DecisionRequest{
 			ID:      "shelf-remove",
-			Prompt:  "Remove " + e.Origin.Path + " from the shelf? (the frozen copy is destroyed)",
+			Prompt:  i18n.T("Remove %s from the shelf? (the frozen copy is destroyed)", e.Origin.Path),
 			Options: []string{"Remove", "Cancel"},
 		},
 		onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {

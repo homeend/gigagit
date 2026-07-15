@@ -1,15 +1,16 @@
 package tui
 
 import (
-	"fmt"
 	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/exttool"
+	"github.com/homeend/gigagit/internal/i18n"
 )
 
 // commitPopup collects a commit message as a subject (title) plus an optional
@@ -131,7 +132,7 @@ func (p *commitPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		m = m.popLayer()
 	case submit:
 		if strings.TrimSpace(p.title.Value()) == "" {
-			m.statusMsg = "title required"
+			m.statusMsg = i18n.T("title required")
 			return m, nil
 		}
 		op := engine.Commit{Message: p.message(), Amend: p.amend}
@@ -161,9 +162,9 @@ func (p *commitPopup) box(m Model) string {
 		return p.confirmBox(m)
 	}
 	var b strings.Builder
-	heading := "Commit"
+	heading := i18n.T("Commit")
 	if p.amend {
-		heading = "Amend last commit"
+		heading = i18n.T("Amend last commit")
 	}
 	w, _ := m.overlayDims()
 	// Wider-than-standard default (commitNormalWidth); ctrl+t maximizes to
@@ -183,15 +184,15 @@ func (p *commitPopup) box(m Model) string {
 		frames := []rune("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
 		frame := frames[p.spinFrame%len(frames)]
 		elapsed := int(time.Since(p.genStart).Seconds())
-		b.WriteString(fmt.Sprintf("%c generating message… %ds  ([esc] to cancel)", frame, elapsed))
+		b.WriteString(i18n.T("%c generating message… %ds  ([esc] to cancel)", frame, elapsed))
 	} else {
 		b.WriteString(packHints([]string{
-			"[tab] switch field",
-			"[enter] newline/next",
-			"[ctrl+g] generate",
-			"[ctrl+t] fullscreen",
-			"[ctrl+s] commit",
-			"[esc] cancel",
+			i18n.T("[tab] switch field"),
+			i18n.T("[enter] newline/next"),
+			i18n.T("[ctrl+g] generate"),
+			i18n.T("[ctrl+t] fullscreen"),
+			i18n.T("[ctrl+s] commit"),
+			i18n.T("[esc] cancel"),
 		}, contentW))
 	}
 
@@ -215,24 +216,28 @@ func commitNormalWidth(termW int) int {
 
 // packHints joins "[key] label" hint pairs into lines no wider than width,
 // breaking ONLY between pairs so a key is never split from its label by a
-// naive wrap (which reads as a dangling "[ctrl+g]" over "generate"). The pairs
-// are ASCII, so byte length is display width.
+// naive wrap (which reads as a dangling "[ctrl+g]" over "generate"). Packing
+// is done by display-cell width (lipgloss.Width), not byte length: a
+// translated label (e.g. "[ctrl+g] 生成" under a ja/ko/zh catalog) packs more
+// UTF-8 bytes into fewer terminal cells than ASCII, so byte-length math would
+// under-fit or over-fit a line relative to what actually renders.
 func packHints(pairs []string, width int) string {
 	var b strings.Builder
 	line := 0
 	for i, p := range pairs {
+		pw := lipgloss.Width(p)
 		switch {
 		case i == 0:
 			b.WriteString(p)
-			line = len(p)
-		case line+2+len(p) > width:
+			line = pw
+		case line+2+pw > width:
 			b.WriteString("\n")
 			b.WriteString(p)
-			line = len(p)
+			line = pw
 		default:
 			b.WriteString("  ")
 			b.WriteString(p)
-			line += 2 + len(p)
+			line += 2 + pw
 		}
 	}
 	return b.String()

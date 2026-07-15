@@ -11,6 +11,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/clipboard"
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/i18n"
 )
 
 // absFilePath joins a repo-relative path onto base, defaulting to the current
@@ -87,7 +88,7 @@ func (m Model) copyFilePrompt(base, p string) (Model, tea.Cmd) {
 	m.modal = &decisionState{
 		req: engine.DecisionRequest{
 			ID:      "copy-file",
-			Prompt:  "Copy — " + p,
+			Prompt:  i18n.T("Copy — %s", p),
 			Options: opts,
 		},
 		copyTexts: texts,

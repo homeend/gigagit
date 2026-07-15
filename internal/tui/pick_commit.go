@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -61,7 +62,7 @@ func (m Model) handlePickProbe(msg pickProbeMsg) (Model, tea.Cmd) {
 		m.modal = &decisionState{
 			req: engine.DecisionRequest{
 				ID:      "pick-commit",
-				Prompt:  "Cherry-pick " + msg.line.Hash + " " + msg.line.Subject + " onto " + branch + "?",
+				Prompt:  i18n.T("Cherry-pick %s %s onto %s?", msg.line.Hash, msg.line.Subject, branch),
 				Options: []string{"Cherry-pick", "Cancel"},
 			},
 			onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {
@@ -85,7 +86,7 @@ func (m Model) handlePickProbe(msg pickProbeMsg) (Model, tea.Cmd) {
 		m.modal = &decisionState{
 			req: engine.DecisionRequest{
 				ID:      "pick-commit-patch",
-				Prompt:  "Commit " + short + " is no longer in the repo. Re-apply the shelved patch as a new commit?",
+				Prompt:  i18n.T("Commit %s is no longer in the repo. Re-apply the shelved patch as a new commit?", short),
 				Options: []string{"Apply patch", "Cancel"},
 			},
 			onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {

@@ -45,10 +45,10 @@ func TestHelpSearchFindsBinding(t *testing.T) {
 // /-separated (e.g. "q/ctrl+c").
 func TestHelpFooterCoverage(t *testing.T) {
 	var keys []string
-	for _, b := range contextBindings {
+	for _, b := range contextBindings() {
 		keys = append(keys, b.key)
 	}
-	for _, b := range globalBindings {
+	for _, b := range globalBindings() {
 		keys = append(keys, b.key)
 	}
 	if len(keys) < 10 {

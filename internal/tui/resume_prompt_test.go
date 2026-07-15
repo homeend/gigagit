@@ -198,7 +198,7 @@ func TestStartConflictProcessOpensForPausedOpWithZeroFiles(t *testing.T) {
 
 func TestResolveFooterBindingAdvertisesPausedOp(t *testing.T) {
 	m := Model{conflict: domain.ConflictState{Op: "rebase"}}
-	for _, b := range globalBindings {
+	for _, b := range globalBindings() {
 		if b.id == "resolve" {
 			if !b.when(m) {
 				t.Fatal("[x] resolve not advertised while a rebase is paused")

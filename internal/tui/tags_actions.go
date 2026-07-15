@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -50,7 +51,7 @@ func (m Model) tagCheckoutRow() (actionRow, bool) {
 			m.modal = &decisionState{
 				req: engine.DecisionRequest{
 					ID:      "checkout-tag",
-					Prompt:  "Check out " + name + ":",
+					Prompt:  i18n.T("Check out %s:", name),
 					Options: []string{"Detached", "Create branch…", "Create worktree…", "Cancel"},
 				},
 				onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {
@@ -93,7 +94,7 @@ func (m Model) tagMergeRow() (actionRow, bool) {
 		id:    "tag-merge",
 		label: "Merge " + name + " into current (" + cur + ")",
 		run: func(m Model) (tea.Model, tea.Cmd) {
-			return m.confirmOp(engine.SmartMerge{Source: name}, "Merge "+name+" into current branch?")
+			return m.confirmOp(engine.SmartMerge{Source: name}, i18n.T("Merge %s into current branch?", name))
 		},
 	}, true
 }
@@ -116,7 +117,7 @@ func (m Model) tagRebaseRow() (actionRow, bool) {
 		id:    "tag-rebase",
 		label: "Rebase current (" + cur + ") onto " + name,
 		run: func(m Model) (tea.Model, tea.Cmd) {
-			return m.confirmOp(engine.SmartRebase{Onto: name}, "Rebase current branch onto "+name+"?")
+			return m.confirmOp(engine.SmartRebase{Onto: name}, i18n.T("Rebase current branch onto %s?", name))
 		},
 	}, true
 }
@@ -188,7 +189,7 @@ func (m Model) tagDeleteRow() (actionRow, bool) {
 			m.modal = &decisionState{
 				req: engine.DecisionRequest{
 					ID:      "delete-tag",
-					Prompt:  "Delete tag " + name + "?",
+					Prompt:  i18n.T("Delete tag %s?", name),
 					Options: []string{"Delete", "Cancel"},
 				},
 				onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {

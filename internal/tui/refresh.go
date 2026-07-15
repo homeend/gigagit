@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/i18n"
 )
 
 // refreshItem is one schedulable background-refresh unit: a source read, or a
@@ -433,5 +434,5 @@ func (m Model) bgRefreshHint() string {
 	case !m.bgActiveItem.isFetch:
 		name = sourceNames[m.bgActiveItem.source]
 	}
-	return "⟳ " + name + "…"
+	return i18n.T("⟳ %s…", name)
 }

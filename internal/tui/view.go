@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/pusherr"
 )
@@ -373,15 +374,15 @@ func (m Model) renderInterface() string {
 		if src := m.conflict.Describe(); src != "" {
 			notice += " " + src
 		}
-		notice += " — press [x] to resolve"
+		notice += i18n.T(" — press [x] to resolve")
 	} else if m.conflict.Op != "" && m.proc == nil {
 		// A sequencer op is paused with nothing left unmerged (resolved
 		// outside gg, or all handled and the process left open-ended).
-		notice = "⏸ " + m.conflict.Op + " paused"
+		notice = i18n.T("⏸ %s paused", m.conflict.Op)
 		if src := m.conflict.Describe(); src != "" {
 			notice += " (" + src + ")"
 		}
-		notice += " — press [x] to continue or abort"
+		notice += i18n.T(" — press [x] to continue or abort")
 	}
 	var markHint string
 	if m.mark != nil && m.markAlive() {

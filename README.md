@@ -359,6 +359,27 @@ example, `footer_actions = ["pull", "commit", "filter"]` shrinks the footer to
 those (plus `[.] actions`), leaving everything else one keypress away in the `.`
 menu.
 
+### Languages
+
+The TUI speaks English (default), 日本語, 한국어, 中文, and Русский: Settings
+(`,`) → **Language**, or set `[ui] language = "ja"` directly (the picker
+persists the choice to the **global** config). Custom languages or
+per-string overrides live in `$XDG_CONFIG_HOME/gg/lang/<code>.toml`:
+
+```toml
+[meta]
+name = "My language"
+
+[strings]
+"Commit" = "…"
+"committed %s %s" = "%[2]s — %[1]s …"   # printf verbs may be reordered
+```
+
+A new code adds a language; reusing a built-in code (`ja`/`ko`/`zh`/`ru`)
+overlays it per-key — fix just the strings you disagree with. Anything
+untranslated falls back to English. CLI output is always English — it's the
+agent-facing, script-stable surface.
+
 ### Notifications
 
 gg checks repo health in the background on every load. When it finds
