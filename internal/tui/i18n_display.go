@@ -90,3 +90,95 @@ func sourceDisplayName(s sourceKey) string {
 	}
 	return sourceNames[s]
 }
+
+// optionDisplayName translates a decision-option label for display in the
+// modal. Option VALUES are protocol — Options lists, onResolve/decider
+// comparisons, and the esc→"abort" mapping keep the English word; ONLY
+// renderModal's option loop comes here. A value with no case (e.g. a
+// dynamic name) passes through — names must not be translated anyway.
+// Task: internal/tui/options_vocab_test.go forces every statically declared
+// option value through the bundles; the bundle orphan check forces each
+// bundle key back to a T() literal, which is the case arm here.
+func optionDisplayName(value string) string {
+	switch value {
+	case "Apply patch":
+		return i18n.T("Apply patch")
+	case "Cancel":
+		return i18n.T("Cancel")
+	case "Cherry-pick":
+		return i18n.T("Cherry-pick")
+	case "Create branch…":
+		return i18n.T("Create branch…")
+	case "Create worktree…":
+		return i18n.T("Create worktree…")
+	case "Delete":
+		return i18n.T("Delete")
+	case "Detached":
+		return i18n.T("Detached")
+	case "Discard":
+		return i18n.T("Discard")
+	case "No":
+		return i18n.T("No")
+	case "Push branch + tags":
+		return i18n.T("Push branch + tags")
+	case "Push branch only":
+		return i18n.T("Push branch only")
+	case "Remove":
+		return i18n.T("Remove")
+	case "Reorder & squash":
+		return i18n.T("Reorder & squash")
+	case "Yes":
+		return i18n.T("Yes")
+	case "abort":
+		return i18n.T("abort")
+	case "cancel":
+		return i18n.T("cancel")
+	case "check out as different name…":
+		return i18n.T("check out as different name…")
+	case "checkout-and-resolve":
+		return i18n.T("checkout-and-resolve")
+	case "commits":
+		return i18n.T("commits")
+	case "delete":
+		return i18n.T("delete")
+	case "force":
+		return i18n.T("force")
+	case "force-delete":
+		return i18n.T("force-delete")
+	case "force-with-lease":
+		return i18n.T("force-with-lease")
+	case "go to worktree":
+		return i18n.T("go to worktree")
+	case "hard":
+		return i18n.T("hard")
+	case "keep":
+		return i18n.T("keep")
+	case "keep-conflicts":
+		return i18n.T("keep-conflicts")
+	case "merge":
+		return i18n.T("merge")
+	case "mixed":
+		return i18n.T("mixed")
+	case "no":
+		return i18n.T("no")
+	case "proceed":
+		return i18n.T("proceed")
+	case "rebase":
+		return i18n.T("rebase")
+	case "reset":
+		return i18n.T("reset")
+	case "run":
+		return i18n.T("run")
+	case "skip":
+		return i18n.T("skip")
+	case "soft":
+		return i18n.T("soft")
+	case "unlock-and-remove":
+		return i18n.T("unlock-and-remove")
+	case "working-tree":
+		return i18n.T("working-tree")
+	case "yes":
+		return i18n.T("yes")
+	}
+	return value
+}

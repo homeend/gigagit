@@ -69,3 +69,25 @@ func TestSourceDisplayNameEnglishPassthrough(t *testing.T) {
 		}
 	}
 }
+
+func TestOptionDisplayNameEnglishPassthrough(t *testing.T) {
+	// English is the key: with no language set, every value maps to itself.
+	for _, v := range []string{
+		"Apply patch", "Cancel", "Cherry-pick", "Create branch…",
+		"Create worktree…", "Delete", "Detached", "Discard", "No",
+		"Push branch + tags", "Push branch only", "Remove",
+		"Reorder & squash", "Yes", "abort", "cancel",
+		"check out as different name…", "checkout-and-resolve", "commits",
+		"delete", "force", "force-delete", "force-with-lease",
+		"go to worktree", "hard", "keep", "keep-conflicts", "merge",
+		"mixed", "no", "proceed", "rebase", "reset", "run", "skip", "soft",
+		"unlock-and-remove", "working-tree", "yes",
+	} {
+		if got := optionDisplayName(v); got != v {
+			t.Fatalf("optionDisplayName(%q) = %q, want passthrough", v, got)
+		}
+	}
+	if got := optionDisplayName("feature/dynamic-branch-name"); got != "feature/dynamic-branch-name" {
+		t.Fatalf("unknown value must pass through, got %q", got)
+	}
+}

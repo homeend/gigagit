@@ -1549,7 +1549,7 @@ func (m Model) renderModal() string {
 		optW = 1
 	}
 	for i, opt := range m.modal.req.Options {
-		wrapped := wrapWords(opt, optW)
+		wrapped := wrapWords(optionDisplayName(opt), optW)
 		if len(wrapped) == 0 {
 			wrapped = []string{""}
 		}
@@ -1567,7 +1567,7 @@ func (m Model) renderModal() string {
 		}
 	}
 
-	footer := "[↑/↓] choose  [enter] confirm  [esc] abort"
+	footer := i18n.T("[↑/↓] choose  [enter] confirm  [esc] abort")
 	b.WriteString("\n")
 	if lipgloss.Width(footer) > maxW {
 		b.WriteString(strings.Join(wrapWords(footer, maxW), "\n"))
