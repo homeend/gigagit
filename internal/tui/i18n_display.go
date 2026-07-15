@@ -1,9 +1,22 @@
 package tui
 
 import (
+	"strings"
+
+	"github.com/charmbracelet/lipgloss"
+
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 )
+
+// padCell right-pads s to display width w using lipgloss.Width (rune-width
+// aware), not byte count. fmt's %-Ns pads by BYTE length, which misaligns a
+// translated CJK cell in the Rates editor's fixed-width columns (a CJK rune
+// is ~3 bytes but only 2 display cells) — this is the alignment-safe
+// replacement for the translated columns there.
+func padCell(s string, w int) string {
+	return s + strings.Repeat(" ", max(0, w-lipgloss.Width(s)))
+}
 
 // opDisplayName translates a sequencer op name for display. The op VALUES
 // ("merge", "rebase", "cherry-pick", "revert") are protocol — state,

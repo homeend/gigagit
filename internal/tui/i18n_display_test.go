@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/lipgloss"
+
 	"github.com/homeend/gigagit/internal/domain"
 )
 
@@ -89,5 +91,17 @@ func TestOptionDisplayNameEnglishPassthrough(t *testing.T) {
 	}
 	if got := optionDisplayName("feature/dynamic-branch-name"); got != "feature/dynamic-branch-name" {
 		t.Fatalf("unknown value must pass through, got %q", got)
+	}
+}
+
+// padCell now lives in i18n_display.go (moved from settings_popup.go) so the
+// identity popup's label columns can share it. This pins the alignment
+// property both call sites rely on: a wider CJK label still pads to the same
+// display width as a narrower ASCII one.
+func TestIdentityLabelPadCellAlignsCJK(t *testing.T) {
+	ascii := "  " + padCell("Name", 9) + " v"
+	cjk := "  " + padCell("名前", 9) + " v"
+	if lipgloss.Width(ascii) != lipgloss.Width(cjk) {
+		t.Fatalf("padded label columns misalign: %d vs %d", lipgloss.Width(ascii), lipgloss.Width(cjk))
 	}
 }
