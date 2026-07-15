@@ -150,7 +150,7 @@ func (p *noticePopup) box(m Model) string {
 		if n := p.currentNotice(m); n != nil {
 			b.WriteString(n.title + "\n\n")
 			for _, line := range n.detail {
-				for _, seg := range wrapWidth(line, textW, 1<<20) {
+				for _, seg := range wrapWords(line, textW) {
 					b.WriteString(seg + "\n")
 				}
 			}

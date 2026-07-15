@@ -120,6 +120,12 @@ func optionDisplayName(value string) string {
 		return i18n.T("Cancel")
 	case "Cherry-pick":
 		return i18n.T("Cherry-pick")
+	case "Copy absolute file path":
+		return i18n.T("Copy absolute file path")
+	case "Copy file name":
+		return i18n.T("Copy file name")
+	case "Copy file path":
+		return i18n.T("Copy file path")
 	case "Create branch…":
 		return i18n.T("Create branch…")
 	case "Create worktree…":
@@ -178,6 +184,8 @@ func optionDisplayName(value string) string {
 		return i18n.T("overwrite")
 	case "proceed":
 		return i18n.T("proceed")
+	case "pull now":
+		return i18n.T("pull now")
 	case "rebase":
 		return i18n.T("rebase")
 	case "reset":
@@ -192,6 +200,10 @@ func optionDisplayName(value string) string {
 		return i18n.T("unlock-and-remove")
 	case "working-tree":
 		return i18n.T("working-tree")
+	case "worktree-and-branch":
+		return i18n.T("worktree-and-branch")
+	case "worktree-only":
+		return i18n.T("worktree-only")
 	case "yes":
 		return i18n.T("yes")
 	}

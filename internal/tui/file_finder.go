@@ -9,6 +9,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/fuzzy"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -363,7 +364,7 @@ func (m Model) fileFinderActionRows(path string) []actionRow {
 			label: "Copy path",
 			run: func(m Model) (tea.Model, tea.Cmd) {
 				m = m.popLayer()
-				return m, m.copyToClipboardCmd("Copied "+path, path)
+				return m, m.copyToClipboardCmd(i18n.T("Copied %s", path), path)
 			},
 		},
 		{
@@ -372,7 +373,7 @@ func (m Model) fileFinderActionRows(path string) []actionRow {
 			run: func(m Model) (tea.Model, tea.Cmd) {
 				m = m.popLayer()
 				abs := m.absFilePath("", path)
-				return m, m.copyToClipboardCmd("Copied "+abs, abs)
+				return m, m.copyToClipboardCmd(i18n.T("Copied %s", abs), abs)
 			},
 		},
 		{

@@ -54,17 +54,18 @@ func (m Model) copyToClipboardCmd(ok, text string) tea.Cmd {
 
 // copyFileChoice maps a copy-chooser option to its status line and clipboard
 // text. p is the repo-relative path; abs is the absolute path (precomputed by
-// copyFilePrompt). ok is false for Cancel or an unknown option. The strings
-// match the Files-panel copy rows (fileCopyPathName) so both surfaces speak
-// alike.
+// copyFilePrompt). ok is false for Cancel or an unknown option. The okMsg
+// routes through the SAME i18n keys as the Files-panel copy rows
+// (fileCopyPathName), so both surfaces render identically — including under
+// an active translation, not just in the English fallback.
 func copyFileChoice(option, p, abs string) (okMsg, text string, ok bool) {
 	switch option {
 	case "Copy file path":
-		return "Copied path: " + p, p, true
+		return i18n.T("Copied path: %s", p), p, true
 	case "Copy absolute file path":
-		return "Copied absolute path: " + abs, abs, true
+		return i18n.T("Copied absolute path: %s", abs), abs, true
 	case "Copy file name":
-		return "Copied file name: " + path.Base(p), path.Base(p), true
+		return i18n.T("Copied file name: %s", path.Base(p)), path.Base(p), true
 	}
 	return "", "", false
 }

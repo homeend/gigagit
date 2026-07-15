@@ -44,9 +44,15 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   zh 2 / ru 8 — terminology drift and punctuation-width cleanup) that also
   re-audited every error-prefixed key against the topic-head-leads-
   translation rule `statusIsError` depends on (zero violations found). With
-  this, the TUI is translated everywhere except engine/CLI prose (English
-  by design, the agent-facing surface) — roughly 220 new keys across all
-  four bundles, which now run close to 790 lines each.
+  this, the TUI's decision modals, popups, and statusMsg tail are translated;
+  engine/CLI prose stays English by design (the agent-facing surface), and a
+  declared stage-4 remainder of chrome is still English: pair-op picker
+  labels and footer, footer/hint strips in the fuzzy file finder, files view,
+  bookmark/shelf popups, command palette, prefix picker/settings, tool
+  approval, shell escape, checkout-as, the commit eager-search popup, and the
+  conflict-process list box, plus the review tool chooser, conflict picker,
+  and repo popup — roughly 220 new keys across all four bundles, which now
+  run close to 790 lines each.
 - **ctrl+f always digs deeper.** The Commits eager search (ctrl+f on a `/`
   filter or `@` highlight) used to stop for good once any match was in the
   loaded commits — pressing ctrl+f again jumped back to that match (or did
