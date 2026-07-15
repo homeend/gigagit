@@ -244,18 +244,18 @@ func (m Model) toggleOpLog() Model {
 		err = m.opLog.enable()
 	}
 	if err != nil {
-		m.statusMsg = "operation log: " + err.Error()
+		m.statusMsg = i18n.T("operation log: %s", err.Error())
 		return m
 	}
 	m.cfg.Debug.LogOperations = m.opLog.on // keep the in-memory view in sync
 	if perr := config.SetGlobalDebugLogOperations(config.DefaultGlobalPath(), m.opLog.on); perr != nil {
-		m.statusMsg = "operation log toggled but not saved: " + perr.Error()
+		m.statusMsg = i18n.T("operation log toggled but not saved: %s", perr.Error())
 		return m
 	}
 	if m.opLog.on {
-		m.statusMsg = "operation log on — " + m.opLog.path
+		m.statusMsg = i18n.T("operation log on — %s", m.opLog.path)
 	} else {
-		m.statusMsg = "operation log off"
+		m.statusMsg = i18n.T("operation log off")
 	}
 	return m
 }
@@ -323,6 +323,23 @@ func (m Model) openAgentPicker() Model {
 	p.sel = 0
 	p.picker = true
 	return m
+}
+
+// agentStatusDisplay translates an agentinit.Status label for the
+// agent-skills picker row (the sourceDisplayName pattern: the enum's
+// String() lives in another package and stays English/identity there, so
+// this render-time switch — keyed on the exported constants, not the string
+// — is the translation point).
+func agentStatusDisplay(s agentinit.Status) string {
+	switch s {
+	case agentinit.StatusNew:
+		return i18n.T("new")
+	case agentinit.StatusOutdated:
+		return i18n.T("outdated")
+	case agentinit.StatusUpToDate:
+		return i18n.T("up to date")
+	}
+	return s.String()
 }
 
 // update handles all keys while the settings popup is open.
@@ -418,11 +435,11 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				return m.openRepoConfigLocation(), nil
 			case settingsMenuCommitGraph:
 				if !m.repoHealthKnown {
-					m.statusMsg = "still checking the repo — try again in a moment"
+					m.statusMsg = i18n.T("still checking the repo — try again in a moment")
 					return m, nil
 				}
 				if m.repoHealth.HasCommitGraph && m.repoHealth.WriteCommitGraphValue == "true" {
-					m.statusMsg = "commit-graph present and auto-refresh already on"
+					m.statusMsg = i18n.T("commit-graph present and auto-refresh already on")
 					return m, nil
 				}
 				if m.running {
@@ -535,14 +552,14 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			m2, n, err := m.applyToolsWizard(p.toolRows, p.toolChecked, config.DefaultGlobalPath())
 			p.toolsView = false
 			if err != nil {
-				m2.statusMsg = "external tools: " + err.Error()
+				m2.statusMsg = i18n.T("external tools: %s", err.Error())
 				return m2, nil
 			}
 			if n == 0 {
-				m2.statusMsg = "external tools: nothing to write (already configured or unchecked)"
+				m2.statusMsg = i18n.T("external tools: nothing to write (already configured or unchecked)")
 				return m2, nil
 			}
-			m2.statusMsg = fmt.Sprintf("external tools: %d command(s) written to %s", n, config.DefaultGlobalPath())
+			m2.statusMsg = i18n.T("external tools: %d command(s) written to %s", n, config.DefaultGlobalPath())
 			return m2, nil
 		}
 		return m, nil
@@ -577,9 +594,9 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			}
 		}
 		m = m.popLayer()
-		m.statusMsg = fmt.Sprintf("agent skills: %d installed, %d refreshed", installed, refreshed)
+		m.statusMsg = i18n.T("agent skills: %d installed, %d refreshed", installed, refreshed)
 		if failed > 0 {
-			m.statusMsg += fmt.Sprintf(", %d failed", failed)
+			m.statusMsg += i18n.T(", %d failed", failed)
 		}
 		return m, nil
 	}
@@ -590,6 +607,15 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 func (p *settingsPopup) render(m Model, below string) string {
 	w, h := m.overlayDims()
 	return overlayCenter(clipToHeight(below, h), p.box(m), w, h)
+}
+
+// padCell right-pads s to display width w using lipgloss.Width (rune-width
+// aware), not byte count. fmt's %-Ns pads by BYTE length, which misaligns a
+// translated CJK cell in the Rates editor's fixed-width columns (a CJK rune
+// is ~3 bytes but only 2 display cells) — this is the alignment-safe
+// replacement for the translated columns there.
+func padCell(s string, w int) string {
+	return s + strings.Repeat(" ", max(0, w-lipgloss.Width(s)))
 }
 
 // box draws whichever screen is active (modal box only).
@@ -616,11 +642,11 @@ func (p *settingsPopup) box(m Model) string {
 	textW := popupTextWidth(inner)
 	var b strings.Builder
 	if p.errorsView {
-		b.WriteString("Session errors\n\n")
+		b.WriteString(i18n.T("Session errors") + "\n\n")
 		fs := observ.SessionFailures()
 		anyTrunc := false
 		if len(fs) == 0 {
-			b.WriteString("  no errors this session\n")
+			b.WriteString("  " + i18n.T("no errors this session") + "\n")
 		} else {
 			wr := make([]winRow, len(fs))
 			for i, e := range fs {
@@ -666,26 +692,34 @@ func (p *settingsPopup) box(m Model) string {
 		// errors.log lives.
 		if path := defaultErrLogPath(); path != "" {
 			b.WriteString("\n")
-			for _, seg := range wrapWidth("full history: "+path, textW, 1<<20) {
+			for _, seg := range wrapWidth(i18n.T("full history: %s", path), textW, 1<<20) {
 				b.WriteString(seg + "\n")
 			}
 		}
 		// Advertise z only when it does something: an entry too long to fit (in
 		// any mode) is what wrap/scroll reveal. Otherwise the hint is a lie.
 		if anyTrunc {
-			b.WriteString("\n[z] mode  [esc] back")
+			b.WriteString("\n" + i18n.T("[z] mode") + "  " + i18n.T("[esc] back"))
 		} else {
-			b.WriteString("\n[esc] back")
+			b.WriteString("\n" + i18n.T("[esc] back"))
 		}
 	} else if p.ratesView {
-		b.WriteString("Refresh rates\n\n")
+		b.WriteString(i18n.T("Refresh rates") + "\n\n")
 		if !m.cfg.Refresh.Enabled {
-			b.WriteString("  auto-refresh is OFF — enable it in Settings → Auto-refresh\n\n")
+			b.WriteString("  " + i18n.T("auto-refresh is OFF — enable it in Settings → Auto-refresh") + "\n\n")
 		}
 		// Column header. "file-watch" labels the [x]/[ ] checkbox column so it is not
-		// an unexplained box; the legend below the table says what it means.
-		b.WriteString(fmt.Sprintf("  %-11s %-11s %-16s %s\n", "window", "file-watch", "refresh", "avg read"))
+		// an unexplained box; the legend below the table says what it means. Header
+		// words are translated; padCell (not %-Ns, which pads by byte count) keeps
+		// the columns aligned when a translated word is CJK (rune width != byte
+		// width — see padCell's doc comment).
+		b.WriteString(fmt.Sprintf("  %s %s %s %s\n",
+			padCell(i18n.T("window"), 11), padCell(i18n.T("file-watch"), 11),
+			padCell(i18n.T("refresh"), 16), i18n.T("avg read")))
 		for i, it := range scheduledItems {
+			// Row NAMES are [refresh] config keys (what a user would type in
+			// .gg.toml), not display prose, so they stay English/untranslated —
+			// unlike sourceDisplayName's translated status-line names.
 			name := "fetch"
 			if it.isRemoteTags {
 				name = "remote_tags"
@@ -701,22 +735,22 @@ func (p *settingsPopup) box(m Model) string {
 				valCell = p.ratesField.View(true) + "s"
 			} else if watchEligible(it) && watchOn(m.cfg.Refresh, it) {
 				if m.watchSupported {
-					valCell = "watch"
+					valCell = i18n.T("watch")
 				} else {
 					// drvfs: watch unavailable → falls back to the interval
 					secs, on := scheduledInterval(m.cfg.Refresh, it)
 					if on {
-						valCell = fmt.Sprintf("watch (9p→%ds)", secs)
+						valCell = i18n.T("watch (9p→%ds)", secs)
 					} else {
-						valCell = "watch (9p→off)"
+						valCell = i18n.T("watch (9p→off)")
 					}
 				}
 			} else {
 				secs, on := scheduledInterval(m.cfg.Refresh, it)
 				if on {
-					valCell = fmt.Sprintf("every %ds", secs)
+					valCell = i18n.T("every %ds", secs)
 				} else {
-					valCell = "off"
+					valCell = i18n.T("off")
 				}
 			}
 			// avg stat
@@ -741,24 +775,24 @@ func (p *settingsPopup) box(m Model) string {
 					watchBox = "[ ]"
 				}
 			}
-			b.WriteString(fmt.Sprintf("%s%-11s %-11s %-16s %s\n", prefix, name, watchBox, valCell, avgStr))
+			b.WriteString(fmt.Sprintf("%s%-11s %-11s %s %s\n", prefix, name, watchBox, padCell(valCell, 16), avgStr))
 		}
 		if p.ratesEditing {
-			b.WriteString("\n[0-9] edit  [enter] save  [esc] cancel   (0 = off)")
+			b.WriteString("\n" + i18n.T("[0-9] edit  [enter] save  [esc] cancel   (0 = off)"))
 		} else {
-			b.WriteString("\nfile-watch = auto-detect .git changes instantly (else poll on the interval)")
-			b.WriteString("\n[↑/↓] select  [enter] edit interval  [space]/[w] file-watch  [esc] back")
+			b.WriteString("\n" + i18n.T("file-watch = auto-detect .git changes instantly (else poll on the interval)"))
+			b.WriteString("\n" + i18n.T("[↑/↓] select  [enter] edit interval  [space]/[w] file-watch  [esc] back"))
 		}
 	} else if p.toolsView {
 		// hint is computed up front (not just written at the end) because the
 		// command-preview height budget below needs its line count to know how
 		// much room is actually left over.
-		hintParts := []string{"[space] toggle", "[enter] write to global config", "[z] mode", "[esc] back"}
+		hintParts := []string{i18n.T("[space] toggle"), i18n.T("[enter] write to global config"), i18n.T("[z] mode"), i18n.T("[esc] back")}
 		hintLines := wrapParts(hintParts, textW, "  ")
 
-		b.WriteString("External tools — detected\n\n")
+		b.WriteString(i18n.T("External tools — detected") + "\n\n")
 		if len(p.toolRows) == 0 {
-			b.WriteString("  no known tools detected on this machine (looked for: claude, junie, meld)\n")
+			b.WriteString("  " + i18n.T("no known tools detected on this machine (looked for: claude, junie, meld)") + "\n")
 		} else {
 			wr := make([]winRow, len(p.toolRows))
 			for i, row := range p.toolRows {
@@ -775,7 +809,7 @@ func (p *settingsPopup) box(m Model) string {
 				text, suffix := base, ""
 				var deco rowDecorator
 				if row.existing {
-					suffix = " (configured)"
+					suffix = " " + i18n.T("(configured)")
 					text = base + suffix
 					deco = toolConfiguredSuffixDecorator(len([]rune(base)), len([]rune(suffix)))
 				}
@@ -806,9 +840,9 @@ func (p *settingsPopup) box(m Model) string {
 				b.WriteString("\n")
 				var destLines []string
 				if row.existing {
-					destLines = []string{"already configured — skipped on apply"}
+					destLines = []string{i18n.T("already configured — skipped on apply")}
 				} else {
-					destLines = wrapWidth("writes to: "+config.DefaultGlobalPath(), textW, 1<<20)
+					destLines = wrapWidth(i18n.T("writes to: %s", config.DefaultGlobalPath()), textW, 1<<20)
 				}
 				for _, seg := range destLines {
 					b.WriteString(dimRowStyle.Render(seg) + "\n")
@@ -870,9 +904,9 @@ func (p *settingsPopup) box(m Model) string {
 		}
 		b.WriteString("\n" + i18n.T("[↑/↓] select  [enter] open/toggle  [esc] close"))
 	} else {
-		b.WriteString("Set up agent skills\n\n")
+		b.WriteString(i18n.T("Set up agent skills") + "\n\n")
 		if len(p.dets) == 0 {
-			b.WriteString("  no supported agents detected\n")
+			b.WriteString("  " + i18n.T("no supported agents detected") + "\n")
 		} else {
 			wr := make([]winRow, len(p.dets))
 			for i, d := range p.dets {
@@ -885,7 +919,7 @@ func (p *settingsPopup) box(m Model) string {
 				if p.checked[i] {
 					box = "[x]"
 				}
-				wr[i] = winRow{text: fmt.Sprintf("%s%s %s — %s", prefix, box, d.Agent.Label, d.Status), style: st}
+				wr[i] = winRow{text: fmt.Sprintf("%s%s %s — %s", prefix, box, d.Agent.Label, agentStatusDisplay(d.Status)), style: st}
 			}
 			h := len(p.dets)
 			capRows := popupResolveRowCap(p.maximized, termH, 12)
@@ -896,7 +930,7 @@ func (p *settingsPopup) box(m Model) string {
 				b.WriteString(line + "\n")
 			}
 		}
-		b.WriteString("\n[space] toggle  [enter] apply  [z] mode  [esc] back")
+		b.WriteString("\n" + strings.Join([]string{i18n.T("[space] toggle"), i18n.T("[enter] apply"), i18n.T("[z] mode"), i18n.T("[esc] back")}, "  "))
 	}
 	return popupBox(inner, strings.TrimRight(b.String(), "\n"))
 }
