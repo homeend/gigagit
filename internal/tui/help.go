@@ -48,7 +48,7 @@ func helpContent() []contentLine {
 		r("click", i18n.T("focus the window under the cursor and select the clicked row")),
 		r("wheel", i18n.T("scroll the list under the cursor ([ui] wheel_step rows; files view: tree or commits)")),
 		r("↑/k ↓/j", i18n.T("move the selection")),
-		r("pgup/pgdn", i18n.T("page the selection (25% of the viewport)")),
+		r("pgup/pgdn", i18n.T("page the selection (a quarter of the viewport)")),
 		r("esc", i18n.T("clear the mark, then the active filter")),
 		r("c", i18n.T("commit the staged index (title + description popup)")),
 		r("C", i18n.T("amend the last commit (edit message / fold in staged changes)")),
