@@ -6,6 +6,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/rebaseplan"
 )
@@ -63,7 +64,7 @@ func (e *irebaseEditor) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			e.reword = nil
 		case submit:
 			if strings.TrimSpace(e.reword.title.Value()) == "" {
-				m.statusMsg = "title required"
+				m.statusMsg = i18n.T("title required")
 				return m, nil
 			}
 			e.rows[e.sel].action = rebaseplan.Reword
@@ -91,7 +92,7 @@ func (e *irebaseEditor) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		// Squash melds into the older neighbor (the row below, newest-first).
 		// The oldest row (last) has nothing older — refuse.
 		if e.sel == len(e.rows)-1 {
-			m.statusMsg = "squash: the oldest commit has nothing to squash into"
+			m.statusMsg = i18n.T("squash: the oldest commit has nothing to squash into")
 			return m, nil
 		}
 		e.rows[e.sel].action = rebaseplan.Squash

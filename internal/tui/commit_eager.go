@@ -6,6 +6,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/homeend/gigagit/internal/i18n"
 )
 
 // eagerSearch is the state of a /-search that pages unloaded history looking for
@@ -77,7 +79,7 @@ func (m Model) startEagerSearchDeeper(query string) (Model, tea.Cmd) {
 	if query == "" {
 		return m, nil
 	}
-	m.statusMsg = "searching deeper for '" + query + "'…"
+	m.statusMsg = i18n.T("searching deeper for '%s'…", query)
 	return m.startEagerSearchFrom(query, len(m.commits))
 }
 
@@ -104,16 +106,16 @@ func (m Model) eagerAdvance() (Model, tea.Cmd) {
 		m.sel[panelCommits] = d
 		m = m.focusCommitsPanel()
 		if m.eager.from > 0 {
-			m.statusMsg = "found '" + m.eager.query + "'"
+			m.statusMsg = i18n.T("found '%s'", m.eager.query)
 		}
 		m.eager = eagerSearch{query: m.eager.query} // keep the query for a repeat ctrl+f
 		return m, nil
 	}
 	if m.feed == nil || !m.feed.CanLoadMore() {
 		if m.eager.from > 0 {
-			m.statusMsg = "no further match for '" + m.eager.query + "' in history"
+			m.statusMsg = i18n.T("no further match for '%s' in history", m.eager.query)
 		} else {
-			m.statusMsg = "'" + m.eager.query + "' not found in full history"
+			m.statusMsg = i18n.T("'%s' not found in full history", m.eager.query)
 		}
 		m.eager = eagerSearch{query: m.eager.query}
 		return m, nil

@@ -9,6 +9,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/hunkpick"
+	"github.com/homeend/gigagit/internal/i18n"
 )
 
 var (
@@ -211,14 +212,14 @@ func (e *hunkPicker) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case "enter":
 		if e.requireAll {
 			if n := e.doc.Pending(); n > 0 {
-				m.statusMsg = fmt.Sprintf("%d region(s) left to resolve", n)
+				m.statusMsg = i18n.T("%d region(s) left to resolve", n)
 				e.focusFirstUndecided()
 				return m, nil
 			}
 		}
 		out, ok := e.doc.Resolved()
 		if !ok {
-			m.statusMsg = "internal error: undecided regions"
+			m.statusMsg = i18n.T("internal error: undecided regions")
 			return m, nil
 		}
 		return e.apply(m, out)

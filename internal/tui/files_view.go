@@ -10,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -595,7 +596,7 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // the stepper knows the source list. Refuses to open below 60 columns.
 func (m Model) openDiffForFileLine(l contentLine) (tea.Model, tea.Cmd) {
 	if m.width > 0 && m.width < 60 {
-		m.statusMsg = "terminal too narrow for the diff view"
+		m.statusMsg = i18n.T("terminal too narrow for the diff view")
 		return m, nil
 	}
 	m.diffNotice = "" // drop any stale notice; the stepper re-posts its arrival notice

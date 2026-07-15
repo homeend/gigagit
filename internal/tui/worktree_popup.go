@@ -353,7 +353,7 @@ func (m Model) startCreateFromPopup(p *worktreePopup, switchAfter bool) (Model, 
 		return m, nil
 	}
 	if p.previewErr != nil {
-		m.statusMsg = "cannot create: " + p.previewErr.Error()
+		m.statusMsg = i18n.T("cannot create: %s", p.previewErr.Error())
 		return m, nil
 	}
 	m.pendingSeqBump = p.consumedSeqNames()

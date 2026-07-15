@@ -220,7 +220,7 @@ func (p *shelfPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		if p.compareRef != nil {
 			if e.IsCommit() {
-				m.statusMsg = "cannot compare a file against a shelved commit"
+				m.statusMsg = i18n.T("cannot compare a file against a shelved commit")
 				return m, nil
 			}
 			return m.openCompareFocusedVsShelf(*p.compareRef, p.compareLabel, e)
@@ -319,7 +319,7 @@ func (p *shelfPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				return m, nil
 			}
 			if !e.IsCommit() {
-				m.statusMsg = "cherry-pick: only for a shelved commit"
+				m.statusMsg = i18n.T("cherry-pick: only for a shelved commit")
 				return m, nil
 			}
 			return m.startPickCommit(pickTarget{
@@ -351,7 +351,7 @@ func (p *shelfPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 // commitBookmarkNotice; [t] temp export and [x] remove stay available.
 func (m Model) commitShelfNotice(p *shelfPopup) (Model, bool) {
 	if e, ok := p.selected(); ok && e.IsCommit() {
-		m.statusMsg = "not available for a shelved commit — enter browses its files, [t] copies them to a temp dir"
+		m.statusMsg = i18n.T("not available for a shelved commit — enter browses its files, [t] copies them to a temp dir")
 		return m, true
 	}
 	return m, false

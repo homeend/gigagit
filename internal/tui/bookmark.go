@@ -6,6 +6,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -281,7 +282,7 @@ func (m Model) copyToWorkingDirRow() (actionRow, bool) {
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			data, err := m.svc.ResolveBytes(context.Background(), ref)
 			if err != nil {
-				m.statusMsg = "copy to working dir: " + err.Error()
+				m.statusMsg = i18n.T("copy to working dir: %s", err.Error())
 				return m, nil
 			}
 			return m.startOp(engine.WriteFile{Path: ref.Path, Data: data})

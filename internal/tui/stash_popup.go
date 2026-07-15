@@ -6,6 +6,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -87,7 +88,7 @@ func (p *stashPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case "ctrl+s":
 		op, ok := p.op()
 		if !ok {
-			m.statusMsg = "select at least one file"
+			m.statusMsg = i18n.T("select at least one file")
 			return m, nil
 		}
 		if strings.TrimSpace(op.Message) == "" {

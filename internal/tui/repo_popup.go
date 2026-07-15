@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/repos"
 )
 
@@ -41,7 +42,7 @@ func (p *repoPopup) moveSel(d int) {
 func (m Model) openRepoPopup() (Model, bool) {
 	entries := repos.Load(m.statePath)
 	if len(entries) == 0 {
-		m.statusMsg = "no known repositories yet (gg records them as you open repos)"
+		m.statusMsg = i18n.T("no known repositories yet (gg records them as you open repos)")
 		return m, false
 	}
 	m = m.pushLayer(&repoPopup{entries: entries, now: time.Now()})
