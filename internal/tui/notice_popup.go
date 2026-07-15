@@ -6,6 +6,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/homeend/gigagit/internal/i18n"
 )
 
 // noticePopup is the ! notification dialog: a list of notices; enter opens
@@ -119,11 +121,11 @@ func (m Model) applyNoticeAction(n notice, act noticeAction) (Model, tea.Cmd) {
 	m.noticeSessionDismissed[n.id] = true // a mid-session health re-read must not resurrect it
 	if act.never {
 		if m.promptStore == nil {
-			m.statusMsg = "dismissed for this session (no state dir — can't persist)"
+			m.statusMsg = i18n.T("dismissed for this session (no state dir — can't persist)")
 		} else if err := m.promptStore.DismissNotice(n.repoKey, n.id); err != nil {
-			m.statusMsg = "dismissed for this session (couldn't persist: " + err.Error() + ")"
+			m.statusMsg = i18n.T("dismissed for this session (couldn't persist: %s)", err.Error())
 		} else {
-			m.statusMsg = "notice dismissed for this repo — " + defaultPromptStatePath()
+			m.statusMsg = i18n.T("notice dismissed for this repo — %s", defaultPromptStatePath())
 		}
 	}
 	if act.run != nil {
@@ -161,12 +163,12 @@ func (p *noticePopup) box(m Model) string {
 				}
 				b.WriteString(row + "\n")
 			}
-			b.WriteString("\n[↑/↓] select  [enter] choose  [esc] back")
+			b.WriteString("\n" + i18n.T("[↑/↓] select  [enter] choose  [esc] back"))
 		}
 	} else {
-		b.WriteString("Notifications\n\n")
+		b.WriteString(i18n.T("Notifications") + "\n\n")
 		if len(m.notices) == 0 {
-			b.WriteString("  no notices for this repo\n")
+			b.WriteString("  " + i18n.T("no notices for this repo") + "\n")
 		} else {
 			wr := make([]winRow, len(m.notices))
 			for i, n := range m.notices {
@@ -186,7 +188,7 @@ func (p *noticePopup) box(m Model) string {
 				b.WriteString(line + "\n")
 			}
 		}
-		b.WriteString("\n[↑/↓] select  [enter] actions  [z] mode  [esc] close")
+		b.WriteString("\n" + i18n.T("[↑/↓] select  [enter] actions  [z] mode  [esc] close"))
 	}
 	return popupBox(inner, strings.TrimRight(b.String(), "\n"))
 }
