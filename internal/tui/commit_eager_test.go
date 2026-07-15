@@ -160,6 +160,57 @@ func TestEagerClearedOnExternalReload(t *testing.T) {
 	}
 }
 
+func TestCtrlFKeepsCommitFilter(t *testing.T) {
+	m := eagerModel(t, []model.Commit{{Hash: "a", Subject: "fix docs"}})
+	m.filterPanel = panelCommits
+	m.filterQuery = "docs"
+	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlF})
+	got := nm.(Model)
+	if got.filterQuery != "docs" || got.filterPanel != panelCommits {
+		t.Fatalf("ctrl+f must keep the / filter engaged like @ (query=%q panel=%v)", got.filterQuery, got.filterPanel)
+	}
+	if !got.eager.active {
+		t.Fatal("the deeper search should still start")
+	}
+}
+
+func TestCtrlFWhileTypingKeepsFilter(t *testing.T) {
+	m := eagerModel(t, []model.Commit{{Hash: "a", Subject: "fix docs"}})
+	m.filterTyping = true
+	m.filterPanel = panelCommits
+	m.filterQuery = "docs"
+	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlF})
+	got := nm.(Model)
+	if got.filterTyping {
+		t.Fatal("ctrl+f should commit the /-filter (stop typing)")
+	}
+	if got.filterQuery != "docs" {
+		t.Fatalf("filterQuery = %q, want kept (same as the @ highlight)", got.filterQuery)
+	}
+}
+
+func TestEagerAdvanceJumpsWithinFilteredView(t *testing.T) {
+	m := eagerModel(t, []model.Commit{
+		{Hash: "a", Subject: "docs one"},
+		{Hash: "b", Subject: "noise"},
+		{Hash: "c", Subject: "docs two"},
+	})
+	m.filterPanel = panelCommits
+	m.filterQuery = "docs"
+	m.eager = eagerSearch{active: true, query: "docs", budget: 5, from: 2} // "c" newly loaded
+	nm, _ := m.eagerAdvance()
+	if nm.eager.active {
+		t.Fatal("a match at/after from must end the search")
+	}
+	// Filtered display = [a, c]; the jump must land on c (display index 1).
+	if nm.sel[panelCommits] != 1 {
+		t.Fatalf("sel = %d, want 1 (the new match within the filtered view)", nm.sel[panelCommits])
+	}
+	if nm.filterQuery != "docs" {
+		t.Fatalf("filter must stay engaged through the jump, got %q", nm.filterQuery)
+	}
+}
+
 func TestCtrlFWithLoadedMatchStillPagesDeeper(t *testing.T) {
 	m := eagerModel(t, []model.Commit{{Hash: "a", Subject: "fix docs"}})
 	m.filterPanel = panelCommits
