@@ -9,6 +9,44 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Changed
+- **Multilanguage TUI (stage 3): decision options, six popups, and the
+  statusMsg tail.** Decision-modal option LABELS now translate at the
+  single render site (`optionDisplayName` in the new
+  `internal/tui/i18n_display.go`, which also now hosts `padCell`) — option
+  VALUES (`Options` lists, decider/`onResolve` comparisons, the esc→`abort`
+  mapping) stay English protocol, only the rendered label changes, and the
+  modal footer is translated too. A new `internal/tui/options_vocab_test.go`
+  AST scan enforces this going forward: every statically declared
+  `Options: []string{…}` value across `engine`+`tui` must have an
+  `optionDisplayName` case and exist in all four bundles (it caught a
+  missing `"overwrite"` case on its first run). Six more popups are fully
+  translated: identity & profiles (byte-width `%-9s`/`%-10s` column pads
+  replaced by the shared, display-width-aware `padCell`), the git-config
+  explorer (`configRowDecorator` rewritten to display-column math, with a
+  new CJK regression test), the notification center, the repo-config
+  location popup (`slotDisplay` gets the same `padCell` fix), the review
+  viewer chrome (report *content* stays whatever the agent produced), and
+  the worktree post-create hook editor. The `statusMsg` tail — roughly 110
+  call sites across `model.go` and two dozen other files — is translated in
+  three waves, including a handful missed by grep the first time round
+  (`compareSelectionEndpoints` notices) and picked up in review. Red error
+  styling survives all of this: a new `i18n.ActiveTranslations()` accessor
+  lets `statusIsError` derive its error-prefix set from the active
+  catalog's own translated, `%`-verb-bearing, error-prefixed keys (retroactive
+  to stage-1/stage-2 keys too), guarded against a verb-less key sharing the
+  same prefix (e.g. a footer label) and against a translation that reorders
+  its topic word past the verb — either case just renders unstyled instead
+  of mis-styled. Carried polish: `config.FileUILanguage` now delegates to
+  the shared `decodeFile` helper, the Language-picker repo-override hint
+  gained failure-path tests, and `toolConfiguredSuffixDecorator` moved to
+  display-column math (`dimSpanRunes`) instead of byte slicing. Closed with
+  a per-language QA delta pass across all four bundles (ja 6 fixes / ko 4 /
+  zh 2 / ru 8 — terminology drift and punctuation-width cleanup) that also
+  re-audited every error-prefixed key against the topic-head-leads-
+  translation rule `statusIsError` depends on (zero violations found). With
+  this, the TUI is translated everywhere except engine/CLI prose (English
+  by design, the agent-facing surface) — roughly 220 new keys across all
+  four bundles, which now run close to 790 lines each.
 - **ctrl+f always digs deeper.** The Commits eager search (ctrl+f on a `/`
   filter or `@` highlight) used to stop for good once any match was in the
   loaded commits — pressing ctrl+f again jumped back to that match (or did
