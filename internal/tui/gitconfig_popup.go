@@ -2,7 +2,6 @@ package tui
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -10,6 +9,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/gitconfdocs"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -207,7 +207,9 @@ func (p *gitConfigPopup) selectedRowData() (model.GitConfigRow, bool) {
 }
 
 // readOnlyRefusal is the statusMsg for an edit key on a non-curated row.
-const readOnlyRefusal = "read-only: not a curated key (edit via git config)"
+func readOnlyRefusal() string {
+	return i18n.T("read-only: not a curated key (edit via git config)")
+}
 
 // openSetEditor opens the set editor for the selected curated row at the
 // chosen scope: an option picker for bool/enum kinds (pre-selected on the
@@ -220,7 +222,7 @@ func (p *gitConfigPopup) openSetEditor(m Model, global bool) (Model, tea.Cmd) {
 	}
 	doc := gitconfdocs.Lookup(row.Key)
 	if doc == nil {
-		m.statusMsg = readOnlyRefusal
+		m.statusMsg = readOnlyRefusal()
 		return m, nil
 	}
 	cur, isSet := row.LocalValue, row.LocalSet
@@ -273,7 +275,7 @@ func (p *gitConfigPopup) openUnsetChooser(m Model) (Model, tea.Cmd) {
 	}
 	doc := gitconfdocs.Lookup(row.Key)
 	if doc == nil {
-		m.statusMsg = readOnlyRefusal
+		m.statusMsg = readOnlyRefusal()
 		return m, nil
 	}
 	var opts []string
@@ -284,12 +286,29 @@ func (p *gitConfigPopup) openUnsetChooser(m Model) (Model, tea.Cmd) {
 		opts = append(opts, unsetGlobalLabel)
 	}
 	if len(opts) == 0 {
-		m.statusMsg = "nothing to unset"
+		m.statusMsg = i18n.T("nothing to unset")
 		return m, nil
 	}
 	opts = append(opts, unsetCancelLabel)
 	p.edit = &configEdit{key: doc.Key, doc: doc, unset: true, options: opts}
 	return m, nil
+}
+
+// unsetOptionDisplay translates an unset-chooser option label for display.
+// editEnter's switch (below) still matches the English identifiers in the
+// const block above — this is an in-popup choice list, not an engine
+// Decider option protocol, so translating only the rendered label can't
+// affect dispatch.
+func unsetOptionDisplay(opt string) string {
+	switch opt {
+	case unsetLocalLabel:
+		return i18n.T("Unset local")
+	case unsetGlobalLabel:
+		return i18n.T("Unset global")
+	case unsetCancelLabel:
+		return i18n.T("Cancel")
+	}
+	return opt
 }
 
 // updateEdit routes every key while the editor is open: esc cancels back to
@@ -470,11 +489,11 @@ func (p *gitConfigPopup) box(m Model) string {
 		return p.editBox(inner, textW)
 	}
 
-	title := "Git config"
+	title := i18n.T("Git config")
 	if p.loading {
-		title += " (⏳ loading…)"
+		title += i18n.T(" (⏳ loading…)")
 	} else {
-		title += fmt.Sprintf(" (%d keys)", len(p.rows))
+		title += i18n.T(" (%d keys)", len(p.rows))
 	}
 	switch {
 	case p.filtering:
@@ -482,19 +501,19 @@ func (p *gitConfigPopup) box(m Model) string {
 	case p.query != "":
 		title += "  /" + p.query
 	default:
-		title += "   (press / to filter)"
+		title += i18n.T("   (press / to filter)")
 	}
 
 	keyW, localW, globalW, defaultW := gitConfigColWidths(textW)
-	header := padRight("Key", keyW) + " " + padRight("Local", localW) + " " + padRight("Global", globalW) + " " + padRight("Default", defaultW)
+	header := padRight(i18n.T("Key"), keyW) + " " + padRight(i18n.T("Local"), localW) + " " + padRight(i18n.T("Global"), globalW) + " " + padRight(i18n.T("Default"), defaultW)
 
 	vis := p.visible()
 	var bodyLines []string
 	switch {
 	case p.loading:
-		bodyLines = []string{padRight("  loading…", textW)}
+		bodyLines = []string{padRight("  "+i18n.T("loading…"), textW)}
 	case len(vis) == 0:
-		bodyLines = []string{padRight("  (no match)", textW)}
+		bodyLines = []string{padRight("  "+i18n.T("(no match)"), textW)}
 	default:
 		wr := make([]winRow, len(vis))
 		for i, r := range vis {
@@ -540,7 +559,15 @@ func (p *gitConfigPopup) box(m Model) string {
 		descLines = wrapWidth(descLine, textW, 3)
 	}
 
-	hint := []string{"[l] set local", "[g] set global", "[u] unset", "[/] filter", "[z] mode", "[ctrl+t] full", "[esc] close"}
+	hint := []string{
+		i18n.T("[l] set local"),
+		i18n.T("[g] set global"),
+		i18n.T("[u] unset"),
+		i18n.T("[/] filter"),
+		i18n.T("[z] mode"),
+		i18n.T("[ctrl+t] full"),
+		i18n.T("[esc] close"),
+	}
 	parts := []string{title, "", header}
 	parts = append(parts, bodyLines...)
 	parts = append(parts, "")
@@ -555,22 +582,22 @@ func (p *gitConfigPopup) box(m Model) string {
 // and the save/cancel hint.
 func (p *gitConfigPopup) editBox(inner, textW int) string {
 	e := p.edit
-	scope := "local"
-	if e.global {
-		scope = "global"
-	}
-	title := "Set " + e.key + " (" + scope + ")"
+	title := i18n.T("Set %s (%s)", e.key, gitConfigScopeDisplay(e.global))
 	if e.unset {
-		title = "Unset " + e.key
+		title = i18n.T("Unset %s", e.key)
 	}
 	parts := []string{title, ""}
 	if e.useField {
-		parts = append(parts, viewField("value: ", e.field, true, textW))
+		parts = append(parts, viewField(i18n.T("value: "), e.field, true, textW))
 	} else {
 		for i, opt := range e.options {
-			row := "  " + opt
+			label := opt
+			if e.unset {
+				label = unsetOptionDisplay(opt)
+			}
+			row := "  " + label
 			if i == e.optSel {
-				row = selectedRow.Render("> " + opt)
+				row = selectedRow.Render("> " + label)
 			}
 			parts = append(parts, row)
 		}
@@ -579,8 +606,19 @@ func (p *gitConfigPopup) editBox(inner, textW int) string {
 		parts = append(parts, "")
 		parts = append(parts, wrapWidth(e.doc.Desc, textW, 3)...)
 	}
-	parts = append(parts, "", "[enter] save  [esc] cancel")
+	parts = append(parts, "", i18n.T("[enter] save")+"  "+i18n.T("[esc] cancel"))
 	return popupBox(inner, strings.Join(parts, "\n"))
+}
+
+// gitConfigScopeDisplay translates the local/global scope word for the set-
+// editor title. The bool e.global (not this string) is what drives the
+// actual SetGitConfig{Global: ...} op, so this is a pure display switch — the
+// agentStatusDisplay pattern — and can never affect which scope is written.
+func gitConfigScopeDisplay(global bool) string {
+	if global {
+		return i18n.T("global")
+	}
+	return i18n.T("local")
 }
 
 // configCell renders one scope cell's PLAIN text: the value, or "(unset)".
@@ -593,7 +631,7 @@ func (p *gitConfigPopup) editBox(inner, textW int) string {
 func configCell(v string, set bool, width int) string {
 	text := v
 	if !set {
-		text = "(unset)"
+		text = i18n.T("(unset)")
 	}
 	return padRight(truncate(text, width), width)
 }
@@ -634,21 +672,28 @@ func configRowDecorator(row model.GitConfigRow, keyW, localW, globalW int) rowDe
 		r := []rune(visible)
 		var b strings.Builder
 		i := 0
+		// col tracks ACCUMULATED DISPLAY WIDTH from hscroll, not rune index.
+		// sp.Start/sp.Length are display columns (derived from keyW/localW/
+		// globalW), and a translated "(unset)" cell (configCell) can hold
+		// double-width CJK glyphs — rune-index-as-column (the ASCII-only
+		// shortcut commitLineDecorator uses, safe there only by the same
+		// accident) would drift the span boundary as soon as a multi-column
+		// rune appears in or before it.
+		col := hscroll
 		for i < len(r) {
-			col := i + hscroll
 			colored := false
 			for _, sp := range spans {
 				if col >= sp.Start && col < sp.Start+sp.Length {
-					j := i
+					j, c := i, col
 					for j < len(r) {
-						c := j + hscroll
 						if c < sp.Start || c >= sp.Start+sp.Length {
 							break
 						}
+						c += lipgloss.Width(string(r[j]))
 						j++
 					}
 					b.WriteString(sp.Style.Render(string(r[i:j])))
-					i = j
+					i, col = j, c
 					colored = true
 					break
 				}
@@ -657,6 +702,7 @@ func configRowDecorator(row model.GitConfigRow, keyW, localW, globalW int) rowDe
 				continue
 			}
 			b.WriteRune(r[i])
+			col += lipgloss.Width(string(r[i]))
 			i++
 		}
 		return b.String()
