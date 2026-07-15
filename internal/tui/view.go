@@ -367,26 +367,15 @@ func (m Model) renderInterface() string {
 	// Suppressed while the conflict process is active — it draws its own window
 	// over this background, so a "press [x] to resolve" notice would be wrong.
 	if n := len(m.status.Conflicts()); n > 0 && m.proc == nil {
-		notice = fmt.Sprintf("⚠ %d conflict", n)
-		if n != 1 {
-			notice += "s"
-		}
-		if src := m.conflict.Describe(); src != "" {
-			notice += " " + src
-		}
-		notice += i18n.T(" — press [x] to resolve")
+		notice = conflictNotice(n, describeConflict(m.conflict))
 	} else if m.conflict.Op != "" && m.proc == nil {
 		// A sequencer op is paused with nothing left unmerged (resolved
 		// outside gg, or all handled and the process left open-ended).
-		notice = i18n.T("⏸ %s paused", m.conflict.Op)
-		if src := m.conflict.Describe(); src != "" {
-			notice += " (" + src + ")"
-		}
-		notice += i18n.T(" — press [x] to continue or abort")
+		notice = pausedNotice(opDisplayName(m.conflict.Op), describeConflict(m.conflict))
 	}
 	var markHint string
 	if m.mark != nil && m.markAlive() {
-		markHint = "◆ marked: " + m.mark.display
+		markHint = i18n.T("◆ marked: %s", m.mark.display)
 	}
 	// Assemble the segments. In error mode the message LEADS so truncation can
 	// never hide it behind the persistent conflict/mark hints; otherwise the
@@ -1140,7 +1129,7 @@ func (m Model) reviewSegment() string {
 	if !m.reviewRunning || m.proc != nil {
 		return ""
 	}
-	seg := "⟳ reviewing " + m.reviewRunningLabel + "…"
+	seg := i18n.T("⟳ reviewing %s…", m.reviewRunningLabel)
 	if m.reviewBlink {
 		return reviewHotStyle.Render(seg)
 	}

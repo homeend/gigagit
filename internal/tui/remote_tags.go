@@ -2,12 +2,12 @@ package tui
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -132,14 +132,6 @@ func (m Model) startPush() (tea.Model, tea.Cmd) {
 		return m.startOp(m.pushCurrentOp())
 	}
 	m.pushCheckGen++
-	m.statusMsg = "checking remote tags…"
+	m.statusMsg = i18n.T("checking remote tags…")
 	return m, m.pushTagCheckCmd(m.pushCheckGen, tipTags)
-}
-
-// pushTagsNoun returns "tag x" or "tags x, y" for error messages and prompts.
-func pushTagsNoun(names []string) string {
-	if len(names) == 1 {
-		return "tag " + names[0]
-	}
-	return "tags " + strings.Join(names, ", ")
 }

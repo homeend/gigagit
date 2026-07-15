@@ -511,3 +511,20 @@ func TestPrivateRepoPathEmptyAnchor(t *testing.T) {
 		t.Errorf("empty anchor should yield empty path, got %q", got)
 	}
 }
+
+func TestFileUILanguage(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, ".gg.toml")
+	if err := os.WriteFile(p, []byte("[ui]\nlanguage = \"ja\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := FileUILanguage(p); got != "ja" {
+		t.Fatalf("got %q, want ja", got)
+	}
+	if got := FileUILanguage(filepath.Join(dir, "missing.toml")); got != "" {
+		t.Fatalf("missing file must yield empty, got %q", got)
+	}
+	if got := FileUILanguage(""); got != "" {
+		t.Fatalf("empty path must yield empty, got %q", got)
+	}
+}

@@ -1899,10 +1899,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if len(unpushed) == 0 {
 			return m.startOp(m.pushCurrentOp()) // nothing to offer (or timed out) → just push
 		}
+		prompt := i18n.T("Branch tip has tags %s not on the remote. Push too?", strings.Join(unpushed, ", "))
+		if len(unpushed) == 1 {
+			prompt = i18n.T("Branch tip has tag %s not on the remote. Push too?", unpushed[0])
+		}
 		m.modal = &decisionState{
 			req: engine.DecisionRequest{
 				ID:      "push-with-tags",
-				Prompt:  i18n.T("Branch tip has %s not on the remote. Push too?", pushTagsNoun(unpushed)),
+				Prompt:  prompt,
 				Options: []string{"Push branch + tags", "Push branch only", "Cancel"},
 			},
 			onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {

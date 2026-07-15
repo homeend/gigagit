@@ -17,7 +17,7 @@ import (
 func (m Model) copyShaRow(ref, fallbackShort string) actionRow {
 	return actionRow{
 		id:    "copy-commit-sha",
-		label: "Copy commit sha",
+		label: i18n.T("Copy commit sha"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			full := fallbackShort
 			if m.svc != nil {
@@ -25,7 +25,7 @@ func (m Model) copyShaRow(ref, fallbackShort string) actionRow {
 					full = s
 				}
 			}
-			return m, m.copyToClipboardCmd("Copied commit sha "+shortHash(full), full)
+			return m, m.copyToClipboardCmd(i18n.T("Copied commit sha %s", shortHash(full)), full)
 		},
 	}
 }

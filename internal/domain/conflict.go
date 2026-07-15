@@ -22,6 +22,7 @@ type ConflictState struct {
 }
 
 // Describe renders the human phrase, or "" when there is nothing to attribute.
+// Translated sibling: tui's describeConflict (+ its parity test) — keep in lockstep.
 func (c ConflictState) Describe() string {
 	switch {
 	case c.Op == "merge" && c.Source != "" && c.Target != "":

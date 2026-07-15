@@ -427,12 +427,12 @@ func (m Model) bgRefreshHint() string {
 	if samples := m.refreshDur[m.bgActiveItem]; len(samples) > 0 && meanDuration(samples) < time.Second {
 		return ""
 	}
-	name := "fetch"
+	name := i18n.T("fetch")
 	switch {
 	case m.bgActiveItem.isRemoteTags:
-		name = "remote tags"
+		name = i18n.T("remote tags")
 	case !m.bgActiveItem.isFetch:
-		name = sourceNames[m.bgActiveItem.source]
+		name = sourceDisplayName(m.bgActiveItem.source)
 	}
 	return i18n.T("⟳ %s…", name)
 }

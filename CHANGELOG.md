@@ -8,6 +8,35 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+### Changed
+- **Multilanguage TUI (stage 2): fuller coverage + hardening.** The status
+  line, the resume-paused-op prompt, the push-tip-tags prompt, every
+  footer-override mode, and the conflict-process indicator are now
+  translated, alongside the Settings sub-screens that were still English
+  (operation log, commit-graph, external tools, agent skills, session
+  errors, refresh-rates editor — ~40 more keys). Op/source names and
+  decision values stay English (protocol); only display prose is localized,
+  centralized in a new `internal/tui/i18n_display.go`
+  (`opDisplayName`/`sourceDisplayName`/`describeConflict`/`conflictNotice`/
+  `pausedNotice`). Multi-count messages (e.g. unpushed tip tags) now use a
+  two-key singular/plural convention instead of baking a count into one
+  string. `CheckVerbs` — the load-time guard that a translation's `%`-verbs
+  match its English key — is stricter: a `*` width/precision now counts as
+  its own consumed argument, and an explicit `%[n]` index is checked against
+  the key's argument count; this also caught a help string ("a quarter of
+  the viewport", previously worded as "25%" and misread as a `%o` verb,
+  making it untranslatable). `SetLanguage` now surfaces an
+  existing-but-unreadable custom bundle file (e.g. permission-denied) as a
+  real error instead of silently falling back to English with no clue why —
+  a genuinely missing file is unaffected. The Language picker shows a dim
+  hint when the active repo config sets `[ui] language` itself, since that
+  overrides the global choice you're about to pick. Rounded out with a
+  per-language bundle review across all four bundles (terminology
+  unification — e.g. distinct Chinese verbs for "fetch" vs "pull" —
+  punctuation width, and particle/case grammar fixes) and lipgloss-width-aware
+  column padding in the refresh-rates editor (was byte-width, misaligning
+  wide-character translations).
+
 ### Added
 - **Multilanguage TUI (stage 1).** New `[ui] language` setting: the TUI
   renders in Japanese (`ja`), Korean (`ko`), Chinese (`zh`), Russian (`ru`),

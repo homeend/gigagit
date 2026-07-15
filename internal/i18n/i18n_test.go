@@ -3,6 +3,7 @@ package i18n
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"testing"
 )
@@ -193,4 +194,26 @@ func TestConcurrentTAndSetLanguage(t *testing.T) {
 		_ = SetLanguage("", "")
 	}
 	wg.Wait()
+}
+
+func TestSetLanguageSurfacesUnreadableCustomFile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("chmod 000 not enforced")
+	}
+	if os.Getuid() == 0 {
+		t.Skip("root ignores file modes")
+	}
+	dir := t.TempDir()
+	p := filepath.Join(dir, "ja.toml")
+	if err := os.WriteFile(p, []byte("[meta]\nname=\"x\"\n[strings]\n"), 0o000); err != nil {
+		t.Fatal(err)
+	}
+	defer SetLanguage("", "") // restore English for other tests
+	if err := SetLanguage("ja", dir); err == nil {
+		t.Fatal("want error: custom file exists but is unreadable (EACCES)")
+	}
+	// A merely-absent custom file stays fine: the embedded bundle carries it.
+	if err := SetLanguage("ja", t.TempDir()); err != nil {
+		t.Fatalf("absent custom file must not error: %v", err)
+	}
 }

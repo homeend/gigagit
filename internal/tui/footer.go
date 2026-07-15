@@ -170,40 +170,40 @@ func (m Model) footerOverride() (string, bool) {
 		return m.proc.indicator(m), true
 	}
 	if m.filterTyping {
-		return "filter: type to search  [↑↓] move  [enter] keep  [esc] cancel", true
+		return i18n.T("filter: type to search  [↑↓] move  [enter] keep  [esc] cancel"), true
 	}
 	if m.highlightTyping {
-		return "highlight: type to search  [↑↓] move  [ctrl+↑/↓] prev/next match  [enter] keep  [esc] clear", true
+		return i18n.T("highlight: type to search  [↑↓] move  [ctrl+↑/↓] prev/next match  [enter] keep  [esc] clear"), true
 	}
 	// The files view owns the keyboard while open, so the registry footer would
 	// lie; show the view's own keys instead. The commit-list side mirrors the
 	// Commits panel (. menu + graph keys); the tree side is file-scoped.
 	if m.filesView != nil {
 		if m.filesPreview != nil && !m.filesTreeFocused {
-			return "file: [↑/↓] scroll  [z] view  [←/tab] back to tree  [esc] close preview", true
+			return i18n.T("file: [↑/↓] scroll  [z] view  [←/tab] back to tree  [esc] close preview"), true
 		}
 		// i shows the displayed commit's message — only when canShowFilesViewMessage
 		// holds (same gate as the handler, so the footer never advertises a dead i).
 		msgHint := ""
 		if m.canShowFilesViewMessage() {
-			msgHint = "  [i] msg"
+			msgHint = i18n.T("  [i] msg")
 		}
 		if m.filesTreeFocused {
 			// [a] mirrors the handler's gate exactly (stash/compare/shelf have no
 			// full tree to toggle to) so the footer never advertises a dead key.
 			aHint := ""
 			if m.stashView == nil && !m.inCompareMode() && m.filesHash != "" {
-				aHint = "  [a] all files"
+				aHint = i18n.T("  [a] all files")
 			}
-			return "tree: [↑/↓] move  [enter] diff" + aHint + "  [.] view file/copy  [/] search  [h] hist  [b] blame  [z] view" + msgHint + "  [esc/l] close", true
+			return i18n.T("tree: [↑/↓] move  [enter] diff") + aHint + i18n.T("  [.] view file/copy  [/] search  [h] hist  [b] blame  [z] view") + msgHint + i18n.T("  [esc/l] close"), true
 		}
-		return "commits: [enter/tab] tree  [↑/↓] move  [<>=] graph  [a] all files  [/] search  [.] actions" + msgHint + "  [esc/l] close", true
+		return i18n.T("commits: [enter/tab] tree  [↑/↓] move  [<>=] graph  [a] all files  [/] search  [.] actions") + msgHint + i18n.T("  [esc/l] close"), true
 	}
 	// The stash list owns the keyboard while it is the focused right column
 	// (no file tree yet). When focus has moved to a left panel, fall through to
 	// that panel's normal footer.
 	if m.stashView != nil && m.focus == panelCommits {
-		return "stash: [↑/↓] move  [l] files  [z] view  [←] panels  [enter] apply/pop/drop  [esc/S] close", true
+		return i18n.T("stash: [↑/↓] move  [l] files  [z] view  [←] panels  [enter] apply/pop/drop  [esc/S] close"), true
 	}
 	return "", false
 }

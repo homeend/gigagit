@@ -98,6 +98,10 @@ func SetLanguage(code, customDir string) error {
 				name = n
 			}
 			found = true
+		} else if !os.IsNotExist(err) {
+			// An existing-but-unreadable overlay must not silently behave
+			// as "not found" — the user would see English with no clue why.
+			return fmt.Errorf("i18n: %s: %w", p, err)
 		}
 	}
 	if !found {

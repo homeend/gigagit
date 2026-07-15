@@ -25,3 +25,30 @@ func TestCheckVerbs(t *testing.T) {
 		}
 	}
 }
+
+func TestCheckVerbsRejectsDynamicWidthMismatch(t *testing.T) {
+	if err := CheckVerbs("%d items", "%*d items"); err == nil {
+		t.Fatal("want error: translation adds a *-width arg the key does not have")
+	}
+	if err := CheckVerbs("%*d", "%*d"); err != nil {
+		t.Fatalf("matching *-width must pass: %v", err)
+	}
+	if err := CheckVerbs("%*.*f", "%*.*f"); err != nil {
+		t.Fatalf("matching *-width and *-precision must pass: %v", err)
+	}
+}
+
+func TestCheckVerbsExplicitIndexRange(t *testing.T) {
+	if err := CheckVerbs("%s and %s", "%[2]s / %[1]s"); err != nil {
+		t.Fatalf("in-range reorder must pass: %v", err)
+	}
+	if err := CheckVerbs("%s", "%[9]s"); err == nil {
+		t.Fatal("want error: index 9 out of range for a 1-arg key")
+	}
+	if err := CheckVerbs("%s", "%[0]s"); err == nil {
+		t.Fatal("want error: index 0 is invalid (Sprintf indexes are 1-based)")
+	}
+	if err := CheckVerbs("%s", "%[s"); err == nil {
+		t.Fatal("want error: malformed index bracket")
+	}
+}
