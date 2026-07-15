@@ -217,3 +217,24 @@ func TestSetLanguageSurfacesUnreadableCustomFile(t *testing.T) {
 		t.Fatalf("absent custom file must not error: %v", err)
 	}
 }
+
+func TestActiveTranslationsEmptyForEnglish(t *testing.T) {
+	reset(t)
+	if m := ActiveTranslations(); len(m) != 0 {
+		t.Fatalf("English ActiveTranslations() = %v, want empty", m)
+	}
+}
+
+func TestActiveTranslationsNonEmptyAfterSetLanguage(t *testing.T) {
+	reset(t)
+	if err := SetLanguage("ja", ""); err != nil {
+		t.Fatal(err)
+	}
+	m := ActiveTranslations()
+	if len(m) == 0 {
+		t.Fatal("ActiveTranslations() empty after SetLanguage(ja)")
+	}
+	if _, ok := m["error: %s"]; !ok {
+		t.Fatalf("ActiveTranslations() missing known key %q; got %d keys", "error: %s", len(m))
+	}
+}

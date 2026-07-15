@@ -138,11 +138,33 @@ func friendlyPushError(low string) (string, bool) {
 	return "", false
 }
 
-// statusIsError reports whether a status message reports a failure.
+// statusIsError reports whether a status message reports a failure. Keys
+// are English, so the English prefixes classify directly; under a non-
+// English catalog the same classification is derived per call from the
+// translations of the error-prefixed KEYS (the head of each translation up
+// to its first verb). A translation that reorders its arguments ahead of
+// the topic word yields a too-short head and is skipped — that message
+// just renders unstyled, never mis-styled.
 func statusIsError(msg string) bool {
 	for _, p := range statusErrorPrefixes {
 		if strings.HasPrefix(msg, p) {
 			return true
+		}
+	}
+	for k, tr := range i18n.ActiveTranslations() {
+		for _, p := range statusErrorPrefixes {
+			if !strings.HasPrefix(k, p) {
+				continue
+			}
+			head := tr
+			if i := strings.IndexByte(head, '%'); i >= 0 {
+				head = head[:i]
+			}
+			head = strings.TrimSpace(head)
+			if len([]rune(head)) >= 2 && strings.HasPrefix(msg, head) {
+				return true
+			}
+			break
 		}
 	}
 	return false
