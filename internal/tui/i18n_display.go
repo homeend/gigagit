@@ -161,6 +161,8 @@ func optionDisplayName(value string) string {
 		return i18n.T("mixed")
 	case "no":
 		return i18n.T("no")
+	case "overwrite":
+		return i18n.T("overwrite")
 	case "proceed":
 		return i18n.T("proceed")
 	case "rebase":
