@@ -101,23 +101,13 @@ func (m Model) applyRepoHealth(msg repoHealthMsg) (Model, tea.Cmd) {
 	}
 	m.repoHealth = msg.health
 	m.repoHealthKnown = true
+	m.clipAvail = msg.clipAvail
 
-	var dismissed map[string]bool
-	if m.promptStore != nil {
-		dismissed = m.promptStore.DismissedNotices(msg.health.GitCommonDir)
-	}
 	prev := make(map[string]bool, len(m.notices))
 	for _, n := range m.notices {
 		prev[n.id] = true
 	}
-	var next []notice
-	if n := commitGraphNotice(msg.health); n != nil && !dismissed[n.id] && !m.noticeSessionDismissed[n.id] {
-		next = append(next, *n)
-	}
-	if n := clipboardNotice(msg.clipAvail, msg.health.GitCommonDir); n != nil && !dismissed[n.id] && !m.noticeSessionDismissed[n.id] {
-		next = append(next, *n)
-	}
-	m.notices = next
+	m = m.rebuildNotices()
 	var cmd tea.Cmd
 	for _, n := range m.notices {
 		if !prev[n.id] {
@@ -131,6 +121,29 @@ func (m Model) applyRepoHealth(msg repoHealthMsg) (Model, tea.Cmd) {
 		}
 	}
 	return m, cmd
+}
+
+// rebuildNotices re-derives m.notices from the cached health snapshot.
+// Notice titles/details/action labels bake i18n.T output at build time, so a
+// language switch must rebuild them; ids are stable, so dismissals hold and
+// no blink logic runs here (applyRepoHealth owns blinking).
+func (m Model) rebuildNotices() Model {
+	if !m.repoHealthKnown {
+		return m // nothing cached yet: the first health read builds in the new language
+	}
+	var dismissed map[string]bool
+	if m.promptStore != nil {
+		dismissed = m.promptStore.DismissedNotices(m.repoHealth.GitCommonDir)
+	}
+	var next []notice
+	if n := commitGraphNotice(m.repoHealth); n != nil && !dismissed[n.id] && !m.noticeSessionDismissed[n.id] {
+		next = append(next, *n)
+	}
+	if n := clipboardNotice(m.clipAvail, m.repoHealth.GitCommonDir); n != nil && !dismissed[n.id] && !m.noticeSessionDismissed[n.id] {
+		next = append(next, *n)
+	}
+	m.notices = next
+	return m
 }
 
 // commitGraphNotice fires when the repo is big (pack ≥ bigRepoPackBytes), has

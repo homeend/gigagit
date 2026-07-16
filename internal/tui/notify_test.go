@@ -8,6 +8,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/clipboard"
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/promptstate"
 )
@@ -306,6 +307,30 @@ func TestChainHopKeepsHealthRefreshArmed(t *testing.T) {
 	m = driveOp(t, m, cmd)
 	if m.refreshHealthAfterOp {
 		t.Fatal("flag must clear after the chained op finishes")
+	}
+}
+
+// A language switch must rebuild notice content (titles/details bake i18n.T
+// output at build time), without re-blinking (ids unchanged).
+func TestLanguageSwitchRebuildsNotices(t *testing.T) {
+	m, _ := noticeTestModel(t)
+	nm, _ := m.Update(repoHealthMsg{gen: m.noticeGen, health: model.RepoHealth{GitCommonDir: "/k"}, clipAvail: x11NoToolAvail()})
+	m = nm.(Model)
+	if len(m.notices) == 0 {
+		t.Fatal("fixture built no notice")
+	}
+	before := m.notices[0].title
+
+	setupCustomLang(t, "[meta]\nname = \"Xxish\"\n\n[strings]\n"+
+		"\"Clipboard copy may not work — install a clipboard tool\" = \"XCLIP-TITLE\"\n")
+	if err := i18n.SetLanguage("xx", langDirFromEnv(t)); err != nil {
+		t.Skipf("xx bundle unavailable: %v", err)
+	}
+	t.Cleanup(func() { _ = i18n.SetLanguage("", "") })
+
+	m = m.rebuildNotices()
+	if m.notices[0].title == before {
+		t.Fatalf("notice title not rebuilt after language switch: %q", before)
 	}
 }
 

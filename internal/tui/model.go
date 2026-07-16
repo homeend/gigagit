@@ -12,6 +12,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/clipboard"
 	"github.com/homeend/gigagit/internal/commitgraph"
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
@@ -59,17 +60,18 @@ type Model struct {
 	reflog                []model.ReflogEntry // HEAD reflog; shown by the Reflog tab in the bottom slot
 	currentWorktree       string
 
-	notices                []notice             // session notice list (see notify.go)
-	noticesUnread          bool                 // blink while true; opening the ! dialog clears it
-	blinkOn                bool                 // current blink phase (style alternation)
-	noticeGen              int                  // stale-drop guard for repoHealthMsg across repo switches
-	gitConfigGen           int                  // stale-drop guard for explorer row loads
-	blinkGen               int                  // bumped on every blink-tick arm; stale ticks are dropped (single blink lane)
-	noticeSessionDismissed map[string]bool      // "Not now" ids; cleared on reRoot (re-evaluated next load)
-	repoHealth             model.RepoHealth     // last health snapshot (Settings Commit-graph row)
-	repoHealthKnown        bool                 // false until the first repoHealthMsg lands
-	pendingNoticeConfig    *engine.SetGitConfig // chained after WriteCommitGraph succeeds
-	refreshHealthAfterOp   bool                 // re-read repo health once the op (incl. its chain) finishes
+	notices                []notice               // session notice list (see notify.go)
+	noticesUnread          bool                   // blink while true; opening the ! dialog clears it
+	blinkOn                bool                   // current blink phase (style alternation)
+	noticeGen              int                    // stale-drop guard for repoHealthMsg across repo switches
+	gitConfigGen           int                    // stale-drop guard for explorer row loads
+	blinkGen               int                    // bumped on every blink-tick arm; stale ticks are dropped (single blink lane)
+	noticeSessionDismissed map[string]bool        // "Not now" ids; cleared on reRoot (re-evaluated next load)
+	repoHealth             model.RepoHealth       // last health snapshot (Settings Commit-graph row)
+	repoHealthKnown        bool                   // false until the first repoHealthMsg lands
+	clipAvail              clipboard.Availability // cached probe result; rebuildNotices reuses it on a language switch
+	pendingNoticeConfig    *engine.SetGitConfig   // chained after WriteCommitGraph succeeds
+	refreshHealthAfterOp   bool                   // re-read repo health once the op (incl. its chain) finishes
 
 	cfg          config.Config
 	opLog        *opLog            // operation-log file + span-sink lifecycle; the , Settings toggle
