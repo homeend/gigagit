@@ -41,7 +41,7 @@ func (m Model) renameBranchRow() (actionRow, bool) {
 	}
 	return actionRow{
 		id:    "rename-branch",
-		label: "Rename branch",
+		label: i18n.T("Rename branch"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			m, _ = m.openRenameBranchPopup()
 			return m, nil

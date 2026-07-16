@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -153,7 +154,7 @@ func (m Model) commitViewMessageRow() (actionRow, bool) {
 	}
 	return actionRow{
 		id:    "commit-view-message",
-		label: "View message",
+		label: i18n.T("View message"),
 		run:   func(m Model) (tea.Model, tea.Cmd) { return m.openCommitMessagePopup(c) },
 	}, true
 }
@@ -165,7 +166,7 @@ func (m Model) commitEditMessageRow() (actionRow, bool) {
 	}
 	return actionRow{
 		id:    "commit-edit-message",
-		label: "Open message in editor",
+		label: i18n.T("Open message in editor"),
 		run:   func(m Model) (tea.Model, tea.Cmd) { return m.openCommitMessageEditor(c) },
 	}, true
 }

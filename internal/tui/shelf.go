@@ -5,6 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -60,7 +61,7 @@ func (m Model) shelfAddRow() (actionRow, bool) {
 	}
 	return actionRow{
 		id:    "shelf-add",
-		label: "Add to shelf",
+		label: i18n.T("Add to shelf"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			return m, m.shelfAddCmd(addr)
 		},
@@ -93,7 +94,7 @@ func (m Model) commitShelfRow() (actionRow, bool) {
 	c := m.commits[bi]
 	return actionRow{
 		id:    "commit-shelf",
-		label: "Shelf this commit",
+		label: i18n.T("Shelf this commit"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			return m.pushLayer(&commitNamePopup{commit: c, forShelf: true, name: newTextField(c.Subject)}), nil
 		},
@@ -113,7 +114,7 @@ func (m Model) reflogShelfRow() (actionRow, bool) {
 	c := model.Commit{Hash: e.Hash, Subject: e.Subject}
 	return actionRow{
 		id:    "reflog-shelf",
-		label: "Shelf this commit",
+		label: i18n.T("Shelf this commit"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			return m.pushLayer(&commitNamePopup{commit: c, forShelf: true, name: newTextField(c.Subject)}), nil
 		},

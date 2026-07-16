@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -49,7 +50,7 @@ func (m Model) viewFileRow() (actionRow, bool) {
 		svc, tag := m.svc, path+"@shelf:"+m.filesShelfID
 		return actionRow{
 			id:    "view-file",
-			label: "View file (frozen shelf content)",
+			label: i18n.T("View file (frozen shelf content)"),
 			run: func(m Model) (tea.Model, tea.Cmd) {
 				return m.openPreviewSrc(tag, path, func(ctx context.Context) ([]byte, error) {
 					return svc.ResolveBytes(ctx, ref)
@@ -59,7 +60,7 @@ func (m Model) viewFileRow() (actionRow, bool) {
 	}
 	return actionRow{
 		id:    "view-file",
-		label: "View file (content at this commit)",
+		label: i18n.T("View file (content at this commit)"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			return m.openPreview(hash, path)
 		},
@@ -81,7 +82,7 @@ func (m Model) openExternalRow() (actionRow, bool) {
 		ref := model.FileRef{Source: model.SourceShelf, Locator: m.filesShelfID, Path: path}
 		return actionRow{
 			id:    "open-external",
-			label: "Open in external editor",
+			label: i18n.T("Open in external editor"),
 			run: func(m Model) (tea.Model, tea.Cmd) {
 				return m, m.openInEditorCmd(path, func(ctx context.Context) ([]byte, error) {
 					return svc.ResolveBytes(ctx, ref)
@@ -91,7 +92,7 @@ func (m Model) openExternalRow() (actionRow, bool) {
 	}
 	return actionRow{
 		id:    "open-external",
-		label: "Open in external editor",
+		label: i18n.T("Open in external editor"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			return m, m.openInEditorCmd(path, func(ctx context.Context) ([]byte, error) {
 				return svc.ShowFile(ctx, hash, path)
@@ -113,7 +114,7 @@ func (m Model) commitsTouchingFileRow() (actionRow, bool) {
 	filePath := l.path
 	return actionRow{
 		id:    "files-commits-touching",
-		label: "Commits touching this",
+		label: i18n.T("Commits touching this"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			m = m.closeFilesView()
 			m.commitFilter = commitFilterFields{Paths: []string{filePath}}

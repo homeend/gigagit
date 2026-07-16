@@ -115,7 +115,7 @@ func (m Model) focusedCommitReviewRow() (actionRow, bool) {
 	target := reviewTargetForCommit(m.commits[bi])
 	return actionRow{
 		id:    "review-commit",
-		label: "Review this commit",
+		label: i18n.T("Review this commit"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			return m.startReviewLane(target)
 		},
@@ -134,7 +134,7 @@ func (m Model) branchReviewRow() (actionRow, bool) {
 	name := b.Name
 	return actionRow{
 		id:    "review-branch",
-		label: "Review branch " + name,
+		label: i18n.T("Review branch %s", name),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			return m, m.reviewBranchTargetCmd(name, m.reviewGen)
 		},
@@ -149,7 +149,7 @@ func (m Model) workingReviewRow() (actionRow, bool) {
 	}
 	return actionRow{
 		id:    "review-working",
-		label: "Review working changes",
+		label: i18n.T("Review working changes"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			return m.startReviewLane(domain.WorkingReviewTarget())
 		},
@@ -183,7 +183,7 @@ func (m Model) markedRangeReviewRow() (actionRow, bool) {
 	}
 	return actionRow{
 		id:    "review-marked-range",
-		label: "Review marked range (AI)",
+		label: i18n.T("Review marked range (AI)"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			return m.startReviewLane(target)
 		},

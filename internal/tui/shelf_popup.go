@@ -425,6 +425,6 @@ func (m Model) shelfCompareAgainstBookmark() (Model, tea.Cmd) {
 	ref := model.FileRef{Source: model.SourceShelf, Locator: e.ID, Path: e.Origin.Path}
 	// Keep this switcher on the stack: the bookmark picker is pushed on top so esc
 	// in it returns here (the diff on a pick clears both via openPickerDiff).
-	m.pendingCompare = &pendingCompare{ref: ref, label: "shelf #" + shortShelf(e), target: compareBookmark}
+	m.pendingCompare = &pendingCompare{ref: ref, label: i18n.T("shelf #%s", shortShelf(e)), target: compareBookmark}
 	return m, m.loadBookmarksCmd()
 }

@@ -131,7 +131,7 @@ func (m Model) exportFilePatchRow() (actionRow, bool) {
 	sha, path := dv.rev, dv.title
 	return actionRow{
 		id:    "file-export-patch",
-		label: "Export this file's diff as patch",
+		label: i18n.T("Export this file's diff as patch"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			return m.startExportFilePatch(sha, path)
 		},
@@ -156,7 +156,7 @@ func (m Model) commitExportPatchRow() (actionRow, bool) {
 	sha := c.Hash
 	return actionRow{
 		id:    "commit-export-patch",
-		label: "Export commit as patch",
+		label: i18n.T("Export commit as patch"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			return m.startExportCommitPatch(sha)
 		},

@@ -22,7 +22,7 @@ func (m Model) reflogResetRow() (actionRow, bool) {
 	hash := m.reflog[bi].Hash // full SHA → unambiguous
 	return actionRow{
 		id:    "reflog-reset",
-		label: "Reset to this entry",
+		label: i18n.T("Reset to this entry"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			return m.confirmOp(engine.Reset{Commit: hash}, i18n.T("Reset to %s? This moves the current branch ref.", shortHash(hash)))
 		},
@@ -43,7 +43,7 @@ func (m Model) reflogCheckoutRow() (actionRow, bool) {
 	ref := m.reflog[bi].Hash // full SHA
 	return actionRow{
 		id:    "reflog-checkout",
-		label: "Check out this entry…",
+		label: i18n.T("Check out this entry…"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			m.modal = &decisionState{
 				req: engine.DecisionRequest{

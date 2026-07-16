@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/i18n"
 )
 
 // editorViewMsg carries a throwaway temp file written for read-only external
@@ -107,7 +108,7 @@ func (m Model) surfaceExternalRow() (actionRow, bool) {
 	row := func(path string, resolve func(context.Context) ([]byte, error)) (actionRow, bool) {
 		return actionRow{
 			id:    "open-external",
-			label: "Open in external editor",
+			label: i18n.T("Open in external editor"),
 			run: func(m Model) (tea.Model, tea.Cmd) {
 				return m, m.openInEditorCmd(path, resolve)
 			},
