@@ -434,5 +434,9 @@ func (lane *reviewLane) render(m Model, below string) string {
 // (the blinking "⟳ reviewing <label>…" segment) — the human DisplayLabel, so
 // the bottom bar shows a branch name / commit title / range, never a raw SHA.
 func reviewScopeLabel(t domain.ReviewTarget) string {
-	return t.DisplayLabel()
+	l := t.DisplayLabel()
+	if l == "working changes" { // domain's untranslated fallback — domain can't import i18n
+		return i18n.T("working changes")
+	}
+	return l
 }
