@@ -150,6 +150,12 @@ func (p *noticePopup) box(m Model) string {
 		if n := p.currentNotice(m); n != nil {
 			b.WriteString(n.title + "\n\n")
 			for _, line := range n.detail {
+				if lipgloss.Width(line) <= textW {
+					// short lines pass through verbatim — preserves the install
+					// table's indentation and column alignment
+					b.WriteString(line + "\n")
+					continue
+				}
 				for _, seg := range wrapWords(line, textW) {
 					b.WriteString(seg + "\n")
 				}
