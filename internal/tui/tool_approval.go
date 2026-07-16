@@ -1,5 +1,7 @@
 package tui
 
+import "github.com/homeend/gigagit/internal/i18n"
+
 // tool_approval.go holds the first-run approval primitives shared by every
 // external-tool lane: the conflict process (Stage 1) and the commit-message
 // lane (Stage 2). Each lane keeps its own state machine — the conflict
@@ -47,6 +49,6 @@ func (m Model) rememberToolApproval(command string) {
 func approvalBoxView(command string, width int) string {
 	_ = width
 	return command + "\n\n" +
-		"Approval is remembered for this repo until the command text changes.\n" +
-		"[enter] run  [esc] cancel"
+		i18n.T("Approval is remembered for this repo until the command text changes.") + "\n" +
+		i18n.T("[enter] run  [esc] cancel")
 }

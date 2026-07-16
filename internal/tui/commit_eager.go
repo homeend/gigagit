@@ -185,12 +185,12 @@ func (p *eagerPrompt) box(m Model) string {
 	w, _ := m.overlayDims()
 	inner := popupResolveWidth(w, p.maximized, popupInnerWidth(w))
 	textW := popupTextWidth(inner)
-	report := "Searched " + strconv.Itoa(p.scanned) + " commits, no match for \"" + p.query + "\"."
+	report := i18n.T("Searched %d commits, no match for \"%s\".", p.scanned, p.query)
 	if p.from > 0 {
-		report = "Searched " + strconv.Itoa(p.scanned) + " more commits, no further match for \"" + p.query + "\"."
+		report = i18n.T("Searched %d more commits, no further match for \"%s\".", p.scanned, p.query)
 	}
 	parts := []string{
-		"Search deeper?",
+		i18n.T("Search deeper?"),
 		"",
 		report,
 		"",
@@ -203,6 +203,6 @@ func (p *eagerPrompt) box(m Model) string {
 		}
 		parts = append(parts, st.Render(padRight(prefix+o, textW)))
 	}
-	parts = append(parts, "", "[enter] choose  [esc] cancel")
+	parts = append(parts, "", i18n.T("[enter] choose  [esc] cancel"))
 	return popupBox(inner, strings.Join(parts, "\n"))
 }

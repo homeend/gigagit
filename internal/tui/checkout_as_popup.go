@@ -45,15 +45,15 @@ func (p *checkoutAsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 }
 
 func (p *checkoutAsPopup) render(m Model, below string) string {
-	verb := "check out"
+	verb := i18n.T("check out")
 	if p.intent == engine.CheckoutSwitch {
-		verb = "switch"
+		verb = i18n.T("switch")
 	}
 	w, h := m.overlayDims()
 	var b strings.Builder
-	b.WriteString("Check out " + p.remoteRef + " as\n\n")
-	b.WriteString(viewField("name: ", p.name, true, popupContentWidth(w)) + "\n\n")
-	b.WriteString("[enter] " + verb + "   [esc] cancel")
+	b.WriteString(i18n.T("Check out %s as", p.remoteRef) + "\n\n")
+	b.WriteString(viewField(i18n.T("name: "), p.name, true, popupContentWidth(w)) + "\n\n")
+	b.WriteString(i18n.T("[enter] %s   [esc] cancel", verb))
 	box := modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 	return overlayCenter(clipToHeight(below, h), box, w, h)
 }

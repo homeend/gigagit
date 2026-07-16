@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -197,16 +198,16 @@ func (v *prefixSettingsView) box(m Model) string {
 		if v.field == 1 {
 			scopeCursor = "> "
 		}
-		scopeVal := "global (every repo)"
+		scopeVal := i18n.T("global (every repo)")
 		if v.scope == model.ProfileScopeRepo {
-			scopeVal = "this repo only"
+			scopeVal = i18n.T("this repo only")
 		}
 		cur := "  "
 		if v.field == 0 {
 			cur = "> "
 		}
 		parts := []string{
-			"Add branch prefix", "",
+			i18n.T("Add branch prefix"), "",
 			viewField(cur+"value: ", v.fValue, v.field == 0, textW),
 			scopeCursor + "scope: " + scopeVal,
 		}
@@ -215,20 +216,20 @@ func (v *prefixSettingsView) box(m Model) string {
 		}
 		parts = append(parts,
 			"",
-			"Tokens: <user:LABEL> <seq:NAME:N> <date> <date:FMT> <parent-branch> <repo> <random-*>",
+			i18n.T("Tokens: <user:LABEL> <seq:NAME:N> <date> <date:FMT> <parent-branch> <repo> <random-*>"),
 			"",
-			"[↑/↓] field  [←/→] scope  [enter] save  [ctrl+d] formats  [esc] back",
+			i18n.T("[↑/↓] field  [←/→] scope  [enter] save  [ctrl+d] formats  [esc] back"),
 		)
 		return popupBox(inner, strings.Join(parts, "\n"))
 	}
 
-	parts := []string{"Branch prefixes", ""}
+	parts := []string{i18n.T("Branch prefixes"), ""}
 	if v.loading {
-		parts = append(parts, "  (loading…)")
+		parts = append(parts, i18n.T("  (loading…)"))
 		return popupBox(inner, strings.Join(parts, "\n"))
 	}
 	if len(v.items) == 0 {
-		parts = append(parts, "  (none yet — [n] to add)")
+		parts = append(parts, i18n.T("  (none yet — [n] to add)"))
 	} else {
 		wr := make([]winRow, len(v.items))
 		for i, p := range v.items {
@@ -250,6 +251,6 @@ func (v *prefixSettingsView) box(m Model) string {
 		}
 		parts = append(parts, renderWindow(wr, winOpts{w: textW, h: h, anchor: v.sel})...)
 	}
-	parts = append(parts, "", "[n] add  [d] delete  [esc] back")
+	parts = append(parts, "", i18n.T("[n] add  [d] delete  [esc] back"))
 	return popupBox(inner, strings.Join(parts, "\n"))
 }
