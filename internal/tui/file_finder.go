@@ -298,7 +298,7 @@ func (m Model) fileFinderActionRows(path string) []actionRow {
 	return []actionRow{
 		{
 			id:    "ff-view",
-			label: "View content",
+			label: i18n.T("View content"),
 			run: func(m Model) (tea.Model, tea.Cmd) {
 				m = m.popLayer()
 				cp := newContentPopup("View "+path, []contentLine{{text: "(loading…)"}})
@@ -308,7 +308,7 @@ func (m Model) fileFinderActionRows(path string) []actionRow {
 		},
 		{
 			id:    "ff-diff",
-			label: "Diff (HEAD ↔ working tree)",
+			label: i18n.T("Diff (HEAD ↔ working tree)"),
 			run: func(m Model) (tea.Model, tea.Cmd) {
 				m = m.popLayer()
 				left := model.Endpoint{Kind: model.EndpointCommit, Hash: "HEAD"}
@@ -328,7 +328,7 @@ func (m Model) fileFinderActionRows(path string) []actionRow {
 		},
 		{
 			id:    "ff-history",
-			label: "History",
+			label: i18n.T("History"),
 			run: func(m Model) (tea.Model, tea.Cmd) {
 				m = m.popLayer()
 				ctx := navContext{path: path}
@@ -339,7 +339,7 @@ func (m Model) fileFinderActionRows(path string) []actionRow {
 		},
 		{
 			id:    "ff-blame",
-			label: "Blame",
+			label: i18n.T("Blame"),
 			run: func(m Model) (tea.Model, tea.Cmd) {
 				m = m.popLayer()
 				ctx := navContext{path: path}
@@ -350,7 +350,7 @@ func (m Model) fileFinderActionRows(path string) []actionRow {
 		},
 		{
 			id:    "ff-editor",
-			label: "Open in editor",
+			label: i18n.T("Open in editor"),
 			run: func(m Model) (tea.Model, tea.Cmd) {
 				m = m.popLayer()
 				return m, m.openInEditorCmd(path, func(ctx context.Context) ([]byte, error) {
@@ -360,7 +360,7 @@ func (m Model) fileFinderActionRows(path string) []actionRow {
 		},
 		{
 			id:    "ff-copy-path",
-			label: "Copy path",
+			label: i18n.T("Copy path"),
 			run: func(m Model) (tea.Model, tea.Cmd) {
 				m = m.popLayer()
 				return m, m.copyToClipboardCmd(i18n.T("Copied %s", path), path)
@@ -368,7 +368,7 @@ func (m Model) fileFinderActionRows(path string) []actionRow {
 		},
 		{
 			id:    "ff-copy-abspath",
-			label: "Copy absolute path",
+			label: i18n.T("Copy absolute path"),
 			run: func(m Model) (tea.Model, tea.Cmd) {
 				m = m.popLayer()
 				abs := m.absFilePath("", path)
@@ -377,7 +377,7 @@ func (m Model) fileFinderActionRows(path string) []actionRow {
 		},
 		{
 			id:    "ff-commits-touching",
-			label: "Commits touching this",
+			label: i18n.T("Commits touching this"),
 			run: func(m Model) (tea.Model, tea.Cmd) {
 				m = m.popLayer()
 				m.commitFilter = commitFilterFields{Paths: []string{path}}
