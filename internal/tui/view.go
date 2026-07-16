@@ -452,7 +452,7 @@ func (m Model) renderInterface() string {
 	// Narrow terminals: a single commits column (two columns won't fit cleanly).
 	if g.w < 40 {
 		cmRows, _, decos := m.commitBody(g.w, g.boxH[panelCommits])
-		body := m.renderPanel(panelCommits, m.panelLabel(panelCommits, "Commits ("+m.commitScopeLabel()+")"), cmRows, decos, g.w, g.boxH[panelCommits])
+		body := m.renderPanel(panelCommits, m.panelLabel(panelCommits, i18n.T("Commits (%s)", m.commitScopeLabel())), cmRows, decos, g.w, g.boxH[panelCommits])
 		return strings.Join([]string{header, body, footer, statusLine}, "\n")
 	}
 
@@ -485,7 +485,7 @@ func (m Model) renderInterface() string {
 		right = m.renderStashList(g.rightW, g.boxH[panelCommits])
 	default:
 		cmRows, _, cmDecos := m.commitBody(g.rightW, g.boxH[panelCommits])
-		right = m.renderPanel(panelCommits, m.panelLabel(panelCommits, "Commits ("+m.commitScopeLabel()+")"), cmRows, cmDecos, g.rightW, g.boxH[panelCommits])
+		right = m.renderPanel(panelCommits, m.panelLabel(panelCommits, i18n.T("Commits (%s)", m.commitScopeLabel())), cmRows, cmDecos, g.rightW, g.boxH[panelCommits])
 	}
 	// One side can be empty (a ctrl+t fullscreen hides the other column entirely);
 	// join only when both exist so no zero-width block leaks artifacts.

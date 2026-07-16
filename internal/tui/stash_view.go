@@ -165,7 +165,7 @@ func (m Model) renderStashList(boxW, boxH int) string {
 	// m.focus is the right column AND the file tree isn't the active side.
 	// Mirrors panelFocused(panelCommits) for the commit files view.
 	focused := m.focus == panelCommits && !(m.filesView != nil && m.filesTreeFocused)
-	return m.renderListBox("Stashes", rows, v.sel, boxW, boxH, focused, v.mode, v.hscroll)
+	return m.renderListBox(i18n.T("Stashes"), rows, v.sel, boxW, boxH, focused, v.mode, v.hscroll)
 }
 
 // openStashView opens the stash list window in the right column and moves focus
