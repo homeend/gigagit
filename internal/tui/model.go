@@ -998,10 +998,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// own filter rides contentPopup.typing (not m.filterTyping), so the two
 		// never collide.
 		if m.filterTyping {
+			// The row under the cursor BEFORE this key edits the query: a query
+			// edit re-seats the cursor on the nearest match at or after it
+			// (snapFilterSel) instead of resetting to the top — mid-list search
+			// stays mid-list, the @-snap rule.
+			anchor := m.filterAnchor(m.filterPanel)
 			if nm, nq, handled, commit := m.recallUpdate(scopePanel, msg, m.filterQuery); handled {
 				m = nm
 				m.filterQuery = nq
-				m.sel[m.filterPanel] = 0
+				m = m.snapFilterSel(m.filterPanel, anchor)
 				if commit {
 					m.filterTyping = false
 					m, recCmd := m.recordSearch(scopePanel, m.filterQuery)
@@ -1021,6 +1026,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case tea.KeyEsc:
 				m.filterTyping = false
 				m.filterQuery = ""
+				m = m.snapFilterSel(m.filterPanel, anchor) // keep the cursor on the same row in the full list
 			case tea.KeyCtrlF:
 				if m.filterPanel == panelCommits {
 					var recCmd tea.Cmd
@@ -1065,13 +1071,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if r := []rune(m.filterQuery); len(r) > 0 {
 					m.filterQuery = string(r[:len(r)-1])
 				}
-				m.sel[m.filterPanel] = 0
+				m = m.snapFilterSel(m.filterPanel, anchor)
 			case tea.KeySpace:
 				m.filterQuery += " "
-				m.sel[m.filterPanel] = 0
+				m = m.snapFilterSel(m.filterPanel, anchor)
 			case tea.KeyRunes:
 				m.filterQuery += string(msg.Runes)
-				m.sel[m.filterPanel] = 0
+				m = m.snapFilterSel(m.filterPanel, anchor)
 			}
 			return m, nil
 		}
@@ -1587,14 +1593,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.filterPanel = m.focus
 				m.filterQuery = ""
 				m.filterTyping = true
-				m.sel[m.focus] = 0
+				// The cursor stays put: an empty query shows the full list, and
+				// each typed rune snaps to the nearest match at/after it.
 				m = m.recallReset()
 			}
 		case "@":
 			if !m.running && !m.loading && m.focus == panelCommits {
 				m.filterTyping = false // mutually exclusive with the / filter
-				if m.filterPanel == panelCommits {
+				if m.filterPanel == panelCommits && m.filterQuery != "" {
+					// Dropping the filter expands the list: keep the cursor on
+					// the same commit rather than on a raw display position.
+					anchor := m.filterAnchor(panelCommits)
 					m.filterQuery = ""
+					m = m.snapFilterSel(panelCommits, anchor)
 				}
 				m.highlightQuery = ""
 				m.highlightTyping = true
@@ -1753,7 +1764,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// filterPanel is intentionally left set — filterActive() gates on a
 			// non-empty query, so the residue is inert.
 			if m.filterQuery != "" {
+				anchor := m.filterAnchor(m.filterPanel)
 				m.filterQuery = ""
+				m = m.snapFilterSel(m.filterPanel, anchor) // same row, full list
 				return m, nil
 			}
 			// Lowest priority: with nothing lighter to drop, esc exits a T

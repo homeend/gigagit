@@ -9,6 +9,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Changed
+- **`/` search starts from the cursor, not from the top.** Engaging the `/`
+  filter (in any panel, and on the files view's commit-list side) used to
+  reset the cursor to row 0, and every typed character reset it again — with
+  several pages of commits loaded and the cursor mid-list, each search
+  restarted from the very beginning. Now the cursor stays put when `/` opens,
+  each query edit re-seats it on the nearest match at or after it (wrapping
+  to the top only when every match is above — the same rule the `@` highlight
+  snap already followed), and leaving the filter (`esc`, `ctrl+r`, or
+  switching to `@`) keeps the cursor on the same row in the full list instead
+  of teleporting it to an unrelated display position.
 - **ctrl+f always digs deeper.** The Commits eager search (ctrl+f on a `/`
   filter or `@` highlight) used to stop for good once any match was in the
   loaded commits — pressing ctrl+f again jumped back to that match (or did

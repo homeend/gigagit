@@ -490,7 +490,8 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.filterPanel = panelCommits
 			m.filterQuery = ""
 			m.filterTyping = true
-			m.sel[panelCommits] = 0
+			// Cursor stays put (the main `/` entry rule): typing snaps to the
+			// nearest match at/after it instead of restarting from the top.
 			return m, nil
 		}
 		p.typing = true
