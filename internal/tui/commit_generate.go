@@ -273,7 +273,7 @@ func (p *commitPopup) approveAndProceed(m Model) (Model, tea.Cmd) {
 // stays owned by each call site).
 func (p *commitPopup) approveBox(m Model) string {
 	w, _ := m.overlayDims()
-	header := "Run this command?  (" + p.genCmd.Name + ")\n\n"
+	header := i18n.T("Run this command?  (%s)", p.genCmd.Name) + "\n\n"
 	return modalStyle.Width(popupInnerWidth(w)).Render(header+approvalBoxView(p.approving, w)) + "\n"
 }
 

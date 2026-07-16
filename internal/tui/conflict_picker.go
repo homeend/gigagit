@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"fmt"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -55,9 +54,9 @@ func cyclePickerMode(d dispMode) dispMode {
 // newConflictPicker wires the conflict-resolution params.
 func newConflictPicker(path string, doc *hunkpick.Doc) *hunkPicker {
 	return &hunkPicker{
-		title:      "Resolve conflicts: " + path,
-		leftLabel:  "current",
-		rightLabel: "incoming",
+		title:      i18n.T("Resolve conflicts: %s", path),
+		leftLabel:  i18n.T("current"),
+		rightLabel: i18n.T("incoming"),
 		requireAll: true,
 		apply: func(m Model, content []byte) (Model, tea.Cmd) {
 			m = m.popLayer()
@@ -86,9 +85,9 @@ func newProcessConflictPicker(path string, doc *hunkpick.Doc) *hunkPicker {
 // newStagePicker wires the hunk-staging params.
 func newStagePicker(path string, doc *hunkpick.Doc) *hunkPicker {
 	return &hunkPicker{
-		title:      "Stage hunks: " + path,
-		leftLabel:  "index",
-		rightLabel: "working",
+		title:      i18n.T("Stage hunks: %s", path),
+		leftLabel:  i18n.T("index"),
+		rightLabel: i18n.T("working"),
 		requireAll: false,
 		apply: func(m Model, content []byte) (Model, tea.Cmd) {
 			m = m.popLayer()
@@ -235,9 +234,9 @@ func (e *hunkPicker) badge(b *hunkpick.Block) string {
 	case hunkpick.TakeIncoming:
 		return "✓ " + e.rightLabel
 	case hunkpick.LineByLine:
-		return "line-by-line"
+		return i18n.T("line-by-line")
 	default:
-		return "· undecided"
+		return i18n.T("· undecided")
 	}
 }
 
@@ -276,9 +275,9 @@ func pickerCell(blk *hunkpick.Block, side hunkpick.Side, r int, cursor bool) *wi
 func (e *hunkPicker) render(m Model, _ string) string {
 	w, H := m.overlayDims()
 
-	header := fmt.Sprintf("%s    %d hunks", e.title, len(e.blocks))
+	header := e.title + "    " + i18n.T("%d hunks", len(e.blocks))
 	if e.requireAll {
-		header = fmt.Sprintf("%s    %d regions · %d left", e.title, len(e.blocks), e.doc.Pending())
+		header = e.title + "    " + i18n.T("%d regions · %d left", len(e.blocks), e.doc.Pending())
 	}
 
 	// Column header: which physical column is left/right, with the active side
@@ -287,9 +286,9 @@ func (e *hunkPicker) render(m Model, _ string) string {
 
 	// The hint wraps instead of truncating so no command is ever cut off.
 	hintLines := wrapParts([]string{
-		"[←/→] side", "[shift+←/→] scroll", "[z] mode", "[↑/↓] line", "[space] pick",
-		"[c] " + e.leftLabel, "[i] " + e.rightLabel, "[C/I] all", "[n/p] hunk",
-		"[enter] apply", "[esc] cancel",
+		i18n.T("[←/→] side"), i18n.T("[shift+←/→] scroll"), i18n.T("[z] mode"), i18n.T("[↑/↓] line"), i18n.T("[space] pick"),
+		"[c] " + e.leftLabel, "[i] " + e.rightLabel, i18n.T("[C/I] all"), i18n.T("[n/p] hunk"),
+		i18n.T("[enter] apply"), i18n.T("[esc] cancel"),
 	}, w, "  ")
 
 	// header, column labels, blank, hint(N).
@@ -315,7 +314,7 @@ func (e *hunkPicker) render(m Model, _ string) string {
 			marker, hstyle = "▶ ", pickerFocus
 		}
 		rows = append(rows, colRow{full: &winCell{
-			body:  fmt.Sprintf("%shunk %d/%d — %s", marker, blockNo+1, len(e.blocks), e.badge(blk)),
+			body:  marker + i18n.T("hunk %d/%d — %s", blockNo+1, len(e.blocks), e.badge(blk)),
 			style: hstyle,
 		}})
 		n := len(blk.Current)
@@ -334,7 +333,7 @@ func (e *hunkPicker) render(m Model, _ string) string {
 			})
 		}
 		if blk.Mode == hunkpick.LineByLine {
-			rows = append(rows, colRow{full: &winCell{body: "  result:", style: pickerDim}})
+			rows = append(rows, colRow{full: &winCell{body: "  " + i18n.T("result:"), style: pickerDim}})
 			tmp := &hunkpick.Doc{Items: []hunkpick.Item{{Block: blk}}}
 			if out, ok := tmp.Resolved(); ok {
 				for _, l := range strings.Split(strings.TrimRight(string(out), "\n"), "\n") {

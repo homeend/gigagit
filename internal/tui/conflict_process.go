@@ -478,24 +478,26 @@ func (p *conflictProcess) render(m Model, below string) string {
 		}
 		return below
 	case confWorking:
-		return overlayCenter(bg, conflictMsgBox(m, "Working…  [esc] cancel"), w, h)
+		return overlayCenter(bg, conflictMsgBox(m, i18n.T("Working…  [esc] cancel")), w, h)
 	case confReporting:
-		return overlayCenter(bg, conflictMsgBox(m, "Resolve failed:\n\n"+p.errMsg+"\n\n[any key] back to the list"), w, h)
+		return overlayCenter(bg, conflictMsgBox(m, i18n.T("Resolve failed:")+"\n\n"+p.errMsg+"\n\n"+i18n.T("[any key] back to the list")), w, h)
 	case confToolPick:
 		return overlayCenter(bg, conflictToolPickBox(m, p.toolChoices, p.toolSel), w, h)
 	case confToolFill:
 		var b strings.Builder
-		b.WriteString("Tool inputs\n\n")
+		b.WriteString(i18n.T("Tool inputs") + "\n\n")
 		for _, line := range p.toolFill.view(popupContentWidth(w)) {
 			b.WriteString(line + "\n")
 		}
-		b.WriteString("\n[tab/enter] next  [esc] cancel")
+		b.WriteString("\n" + i18n.T("[tab/enter] next  [esc] cancel"))
 		return overlayCenter(bg, popupBox(popupInnerWidth(w), b.String()), w, h)
 	case confToolApprove:
-		header := "Run this command?  (" + p.pending.tc.Name + ")\n\n"
+		header := i18n.T("Run this command?  (%s)", p.pending.tc.Name) + "\n\n"
 		return overlayCenter(bg, popupBox(popupInnerWidth(w), header+approvalBoxView(p.pending.resolved, w)), w, h)
 	case confToolMark:
-		msg := "The tool changed " + p.pending.file + ".\n\nMark it as resolved (git add)?\n\n[y/enter] mark resolved  [n/esc] not now"
+		msg := i18n.T("The tool changed %s.", p.pending.file) + "\n\n" +
+			i18n.T("Mark it as resolved (git add)?") + "\n\n" +
+			i18n.T("[y/enter] mark resolved  [n/esc] not now")
 		return overlayCenter(bg, popupBox(popupInnerWidth(w), msg), w, h)
 	}
 	return below
@@ -590,13 +592,13 @@ func conflictListBox(m Model, files []model.FileStatus, sel int, src domain.Conf
 	inner := popupInnerWidth(w)
 	textW := popupTextWidth(inner)
 	var b strings.Builder
-	b.WriteString("Resolve conflicts\n")
+	b.WriteString(i18n.T("Resolve conflicts") + "\n")
 	if s := describeConflict(src); s != "" {
 		b.WriteString(conflictSrcStyle.Render(s) + "\n")
 	}
 	b.WriteString("\n")
 	if len(files) == 0 {
-		b.WriteString("  (all resolved)\n")
+		b.WriteString("  " + i18n.T("(all resolved)") + "\n")
 	} else {
 		wr := make([]winRow, len(files))
 		for i, f := range files {
@@ -615,7 +617,7 @@ func conflictListBox(m Model, files []model.FileStatus, sel int, src domain.Conf
 			b.WriteString(line + "\n")
 		}
 	}
-	hintParts := append(conflictHints(files, sel, inProgress, len(m.toolCommands("conflict"))), "[L] leave", "[z] mode")
+	hintParts := append(conflictHints(files, sel, inProgress, len(m.toolCommands("conflict"))), i18n.T("[L] leave"), i18n.T("[z] mode"))
 	b.WriteString("\n" + strings.Join(wrapParts(hintParts, textW, "  "), "\n"))
 	return popupBox(inner, b.String())
 }
@@ -628,19 +630,19 @@ func conflictListBox(m Model, files []model.FileStatus, sel int, src domain.Conf
 func conflictHints(files []model.FileStatus, sel int, inProgress string, nTools int) []string {
 	if len(files) == 0 {
 		if inProgress != "" {
-			return []string{"all resolved", "[c] continue " + inProgress, "[a] abort"}
+			return []string{i18n.T("all resolved"), i18n.T("[c] continue %s", opDisplayName(inProgress)), i18n.T("[a] abort")}
 		}
-		return []string{"(all resolved)"}
+		return []string{i18n.T("(all resolved)")}
 	}
-	parts := []string{"[↑/↓] file"}
+	parts := []string{i18n.T("[↑/↓] file")}
 	if sel >= 0 && sel < len(files) {
 		f := files[sel]
 		if f.ConflictClass() == model.ConflictBothSides {
-			parts = append(parts, "[enter] line editor")
+			parts = append(parts, i18n.T("[enter] line editor"))
 		}
 		for _, a := range []struct{ key, label string }{
-			{"C", "keep ours"}, {"i", "keep theirs"}, {"m", "mark resolved"},
-			{"k", "keep modified"}, {"d", "delete"}, {"b", "keep base"},
+			{"C", i18n.T("keep ours")}, {"i", i18n.T("keep theirs")}, {"m", i18n.T("mark resolved")},
+			{"k", i18n.T("keep modified")}, {"d", i18n.T("delete")}, {"b", i18n.T("keep base")},
 		} {
 			if _, ok := conflictActionFor(f, a.key); ok {
 				parts = append(parts, "["+a.key+"] "+a.label)
@@ -648,11 +650,11 @@ func conflictHints(files []model.FileStatus, sel int, inProgress string, nTools 
 		}
 	}
 	if nTools > 0 {
-		parts = append(parts, "[t] tools")
+		parts = append(parts, i18n.T("[t] tools"))
 	}
-	parts = append(parts, "[A] resolve all")
+	parts = append(parts, i18n.T("[A] resolve all"))
 	if inProgress != "" {
-		parts = append(parts, "[a] abort")
+		parts = append(parts, i18n.T("[a] abort"))
 	}
 	return parts
 }
@@ -664,7 +666,7 @@ func conflictToolPickBox(m Model, choices []config.ToolCommand, sel int) string 
 	inner := popupInnerWidth(w)
 	textW := popupTextWidth(inner)
 	var b strings.Builder
-	b.WriteString("Run external tool\n\n")
+	b.WriteString(i18n.T("Run external tool") + "\n\n")
 	for i, tc := range choices {
 		prefix, st := "  ", lipgloss.NewStyle()
 		if i == sel {
@@ -672,10 +674,10 @@ func conflictToolPickBox(m Model, choices []config.ToolCommand, sel int) string 
 		}
 		label := tc.Name
 		if tc.PerFile {
-			label += "  (this file)"
+			label += "  " + i18n.T("(this file)")
 		}
 		b.WriteString(st.Render(truncate(prefix+label, textW)) + "\n")
 	}
-	b.WriteString("\n[↑/↓] select  [enter] run  [esc] back")
+	b.WriteString("\n" + i18n.T("[↑/↓] select  [enter] run  [esc] back"))
 	return popupBox(inner, b.String())
 }

@@ -417,14 +417,14 @@ func (lane *reviewLane) render(m Model, below string) string {
 	var b strings.Builder
 	switch {
 	case lane.approving != "":
-		b.WriteString("Run this command?  (" + lane.genCmd.Name + ")\n\n")
+		b.WriteString(i18n.T("Run this command?  (%s)", lane.genCmd.Name) + "\n\n")
 		b.WriteString(approvalBoxView(lane.approving, w))
 	case lane.choosing:
-		b.WriteString("Choose a review tool\n\n")
+		b.WriteString(i18n.T("Choose a review tool") + "\n\n")
 		for i, tc := range lane.cmds {
 			b.WriteString(fmt.Sprintf("[%d] %s\n", i+1, tc.Name))
 		}
-		b.WriteString("\n[1-9] choose  [enter] first  [esc] cancel")
+		b.WriteString("\n" + i18n.T("[1-9] choose  [enter] first  [esc] cancel"))
 	}
 	box := modalStyle.Width(popupResolveWidth(w, lane.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 	return overlayCenter(clipToHeight(below, h), box, w, h)
