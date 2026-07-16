@@ -211,7 +211,7 @@ func (m Model) moveStashUnderFilesView(delta int) (tea.Model, tea.Cmd) {
 	if e.Ref == m.filesStashTag { // the tree already shows this stash
 		return m, nil
 	}
-	m.filesTitle = "Files " + e.Ref + " " + e.Subject
+	m.filesTitle = i18n.T("Files %s %s", e.Ref, e.Subject)
 	m.filesContext = e.Ref + " " + e.Subject
 	m.filesStashTag = e.Ref
 	return m, m.loadStashFilesCmd(e.Ref)

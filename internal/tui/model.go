@@ -385,7 +385,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// survives the commit change (track one file through history).
 		m.filesView.lines = commitFileLines(msg.files)
 		m.filesView.sel = 0
-		m.filesTitle = "Files " + shortHash(msg.hash) + " " + msg.subject
+		m.filesTitle = i18n.T("Files %s %s", shortHash(msg.hash), msg.subject)
 		m.filesContext = shortHash(msg.hash) + " " + msg.subject
 		return m, nil
 	case shelfFilesMsg:
@@ -416,7 +416,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.filesView.lines = msg.lines // pre-built off-thread
 		m.filesView.sel = 0
-		m.filesTitle = "Files " + shortHash(msg.hash) + " (all files) " + msg.subject
+		m.filesTitle = i18n.T("Files %s (all files) %s", shortHash(msg.hash), msg.subject)
 		m.filesContext = shortHash(msg.hash) + " (all files) " + msg.subject
 		return m, nil
 	case fileContentMsg:
