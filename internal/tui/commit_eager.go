@@ -14,9 +14,9 @@ import (
 // (0 = the whole list, WIP rows included). Each ctrl+f press sets it to the
 // loaded count so the scan always digs past what is already on screen, even
 // when an earlier match was found. After a search ends, query stays behind
-// (active=false) so the next ctrl+f can restart the cycle deeper — a /-sourced
-// jump clears the filter ("go to" semantics), so the query would otherwise be
-// gone after the first hit.
+// (active=false) so the next ctrl+f can restart the cycle deeper even once the
+// / filter or @ highlight is gone (e.g. esc-cleared, or the goto-tip fallback
+// which clears a filter on start).
 type eagerSearch struct {
 	active bool
 	query  string
@@ -25,11 +25,12 @@ type eagerSearch struct {
 }
 
 // commitSearchMaxPages is the configured per-pass page cap for eager search.
+// The fallback mirrors config.Defaults() for a Model whose cfg never arrived.
 func (m Model) commitSearchMaxPages() int {
 	if n := m.cfg.UI.CommitSearchMaxPages; n > 0 {
 		return n
 	}
-	return 5
+	return 50
 }
 
 // firstCommitMatch returns the DISPLAY position (same space as m.sel[panelCommits])
@@ -56,15 +57,20 @@ func (m Model) firstCommitMatch(query string, from int) (int, bool) {
 }
 
 // startEagerSearch begins scanning history for query (up to commitSearchMaxPages
-// pages before asking to go deeper). "Go to" semantics: it CLEARS a Commits-panel
-// /-filter so the cursor lands on the found commit within the full list (with
-// surrounding history), not in a filtered-down view. Reused by the @-highlight
-// trigger too, for which clearing filterQuery is a no-op and highlightQuery is
-// left set (the found commit lands highlighted). The query lives in eager state
-// regardless. A filter belonging to ANOTHER panel (e.g. Branches, when the
-// goto-tip fallback starts the search from there) is preserved — "go to"
-// semantics only ever concern the Commits list.
+// pages before asking to go deeper). This is the goto-tip fallback entry: "go to"
+// semantics CLEAR a Commits-panel /-filter, because the searched hash is
+// unrelated to the filter text — a kept filter could hide the target row from
+// displayIndices entirely. A filter belonging to ANOTHER panel (e.g. Branches,
+// when the goto-tip fallback starts the search from there) is preserved — "go
+// to" semantics only ever concern the Commits list.
 func (m Model) startEagerSearch(query string) (Model, tea.Cmd) {
+	if query == "" {
+		return m, nil
+	}
+	if m.filterPanel == panelCommits {
+		m.filterTyping = false
+		m.filterQuery = "" // no sticky filter — land the cursor in the full list
+	}
 	return m.startEagerSearchFrom(query, 0)
 }
 
@@ -72,10 +78,16 @@ func (m Model) startEagerSearch(query string) (Model, tea.Cmd) {
 // past the already-loaded commits, so every press pages new history even when an
 // earlier match is already on screen. If the fresh batches come up empty the
 // usual "search deeper?" prompt re-asks, and a later press redoes the whole
-// cycle from the then-current end.
+// cycle from the then-current end. Unlike the goto-tip entry above, a Commits
+// /-filter STAYS engaged (same standing as the @ highlight — the query IS the
+// filter text, so every hit is visible in the filtered list); ctrl+f only
+// commits an in-progress typing session.
 func (m Model) startEagerSearchDeeper(query string) (Model, tea.Cmd) {
 	if query == "" {
 		return m, nil
+	}
+	if m.filterPanel == panelCommits {
+		m.filterTyping = false
 	}
 	m.statusMsg = "searching deeper for '" + query + "'…"
 	return m.startEagerSearchFrom(query, len(m.commits))
@@ -84,10 +96,6 @@ func (m Model) startEagerSearchDeeper(query string) (Model, tea.Cmd) {
 func (m Model) startEagerSearchFrom(query string, from int) (Model, tea.Cmd) {
 	if query == "" {
 		return m, nil
-	}
-	if m.filterPanel == panelCommits {
-		m.filterTyping = false
-		m.filterQuery = "" // no sticky filter — land the cursor in the full list
 	}
 	m.eager = eagerSearch{active: true, query: query, budget: m.commitSearchMaxPages(), from: from}
 	return m.eagerAdvance()

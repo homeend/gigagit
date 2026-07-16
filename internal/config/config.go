@@ -44,7 +44,7 @@ type UIConfig struct {
 
 	CommitInitialCount   int `toml:"commit_initial_count"`    // commits walked on first paint; <=0 = unset (default 300)
 	CommitBatchSize      int `toml:"commit_batch_size"`       // commits per later page (scroll / ctrl+l); <=0 = unset (default 300)
-	CommitSearchMaxPages int `toml:"commit_search_max_pages"` // eager /-search page cap before re-prompting; <=0 = unset (default 5)
+	CommitSearchMaxPages int `toml:"commit_search_max_pages"` // eager /-search page cap before re-prompting; <=0 = unset (default 50)
 
 	// CommitSort selects commit ordering for the Commits panel + graph:
 	//   "date-order" — git --date-order: a global topological sort (parent never
@@ -138,7 +138,7 @@ func Defaults() Config {
 			DefaultBranchTemplate: "b/from-<parent-branch>-<random-alpha:4>",
 		},
 		UI: UIConfig{WheelStep: 3, HScrollStep: 8, CommitGraphLanes: 8, CommitGraphMinLanes: 2, CommitGraphStep: 4,
-			CommitInitialCount: 300, CommitBatchSize: 300, CommitSearchMaxPages: 5, CommitSort: "date-order", ShowGraph: "on"},
+			CommitInitialCount: 300, CommitBatchSize: 300, CommitSearchMaxPages: 50, CommitSort: "date-order", ShowGraph: "on"},
 	}
 }
 

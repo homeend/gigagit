@@ -16,9 +16,15 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   more history. Now every ctrl+f press restarts the cycle past the
   already-loaded commits: it pages new batches, jumps to the next match when
   one appears, and re-asks with the "Search deeper?" prompt when the budgeted
-  batches come up empty. The query from the last eager search is remembered,
-  so ctrl+f keeps working after the jump cleared the `/` filter (the repo
-  switcher forgets it; a status line shows which query is being searched).
+  batches come up empty. The `/` filter now stays engaged through the search
+  and the jump, exactly like the `@` highlight — the query no longer vanishes
+  from the commit bar (only the Branches goto-tip fallback still clears a
+  filter, since there the searched hash is unrelated to the filter text and a
+  kept filter could hide the target). The query from the last eager search is
+  also remembered, so ctrl+f keeps digging even after esc cleared the search
+  (the repo switcher forgets it; a status line shows which query is searched).
+  The default per-pass scan budget (`[ui] commit_search_max_pages`) is raised
+  from 5 to 50 pages, so one pass covers ~15k commits before re-asking.
 - **Multilanguage TUI (stage 2): fuller coverage + hardening.** The status
   line, the resume-paused-op prompt, the push-tip-tags prompt, every
   footer-override mode, and the conflict-process indicator are now
