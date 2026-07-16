@@ -72,10 +72,10 @@ func (p *shelfRestorePopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 func (p *shelfRestorePopup) render(m Model, below string) string {
 	w, h := m.overlayDims()
 	var b strings.Builder
-	b.WriteString("Restore shelved file\n\n")
-	b.WriteString("from: " + p.origin + "  (shelved copy)\n")
-	b.WriteString(viewField("dest: ", p.dest, true, popupContentWidth(w)) + "\n\n")
-	b.WriteString("[type] path  [enter] restore  [ctrl+r] original path  [esc] cancel")
+	b.WriteString(i18n.T("Restore shelved file") + "\n\n")
+	b.WriteString(i18n.T("from: %s  (shelved copy)", p.origin) + "\n")
+	b.WriteString(viewField(i18n.T("dest: "), p.dest, true, popupContentWidth(w)) + "\n\n")
+	b.WriteString(i18n.T("[type] path  [enter] restore  [ctrl+r] original path  [esc] cancel"))
 	box := modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 	return overlayCenter(clipToHeight(below, h), box, w, h)
 }

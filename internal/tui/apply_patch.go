@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/i18n"
 )
 
 // applyPatchDirMsg carries the resolved default patch directory for the
@@ -60,9 +61,9 @@ func (p *applyPatchPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 func (p *applyPatchPopup) render(m Model, below string) string {
 	w, h := m.overlayDims()
 	var b strings.Builder
-	b.WriteString("Apply patch\n\n")
-	b.WriteString(viewField("path: ", p.path, true, popupContentWidth(w)) + "\n\n")
-	b.WriteString("[type] path  [enter] apply  [esc] cancel")
+	b.WriteString(i18n.T("Apply patch") + "\n\n")
+	b.WriteString(viewField(i18n.T("path: "), p.path, true, popupContentWidth(w)) + "\n\n")
+	b.WriteString(i18n.T("[type] path  [enter] apply  [esc] cancel"))
 	box := modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 	return overlayCenter(clipToHeight(below, h), box, w, h)
 }

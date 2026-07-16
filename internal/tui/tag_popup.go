@@ -6,6 +6,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/i18n"
 )
 
 // tagPopup is the create-tag dialog at a commit. An empty message creates a
@@ -58,10 +59,10 @@ func (p *tagPopup) box(m Model) string {
 	w, _ := m.overlayDims()
 	cw := popupContentWidth(w)
 	var b strings.Builder
-	b.WriteString("Create tag at " + displayStart(p.commit) + "\n\n")
-	b.WriteString(viewField(nameMark+"name:    ", p.name, !p.onMsg, cw) + "\n")
-	b.WriteString(viewField(msgMark+"message: ", p.message, p.onMsg, cw) + "\n")
-	b.WriteString(strings.Repeat(" ", 11) + "(empty message = lightweight tag)\n\n")
-	b.WriteString("[tab] field  [enter] create  [esc] cancel")
+	b.WriteString(i18n.T("Create tag at %s", displayStart(p.commit)) + "\n\n")
+	b.WriteString(viewField(nameMark+i18n.T("name:    "), p.name, !p.onMsg, cw) + "\n")
+	b.WriteString(viewField(msgMark+i18n.T("message: "), p.message, p.onMsg, cw) + "\n")
+	b.WriteString(strings.Repeat(" ", 11) + i18n.T("(empty message = lightweight tag)") + "\n\n")
+	b.WriteString(i18n.T("[tab] field  [enter] create  [esc] cancel"))
 	return modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 }

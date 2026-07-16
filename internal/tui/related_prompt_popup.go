@@ -31,7 +31,7 @@ func (m Model) maybeRelatedPrompt(setting, newValue string) (Model, tea.Cmd) {
 
 // options returns the fixed three-choice list, yes-label first.
 func (p *relatedPromptPopup) options() []string {
-	return []string{p.prompt.yesLabel, "Not now", "No — don't ask again"}
+	return []string{p.prompt.yesLabel, i18n.T("Not now"), i18n.T("No — don't ask again")}
 }
 
 func (p *relatedPromptPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
@@ -72,7 +72,7 @@ func (p *relatedPromptPopup) render(m Model, below string) string {
 	inner := popupResolveWidth(w, p.maximized, popupInnerWidth(w))
 	textW := popupTextWidth(inner)
 	var b strings.Builder
-	b.WriteString("Related option\n\n")
+	b.WriteString(i18n.T("Related option") + "\n\n")
 	for _, line := range wrapWidth(p.prompt.question, textW, 1<<20) {
 		b.WriteString(line + "\n")
 	}
@@ -88,12 +88,12 @@ func (p *relatedPromptPopup) render(m Model, below string) string {
 		}
 		b.WriteString(row + "\n")
 	}
-	b.WriteString("\n[↑/↓] select  [enter] choose  [esc] not now")
+	b.WriteString("\n" + i18n.T("[↑/↓] select  [enter] choose  [esc] not now"))
 	// Name the state file so a persisted "don't ask again" is discoverable
 	// and resettable (delete or edit prompts.toml to bring prompts back).
 	if path := defaultPromptStatePath(); path != "" {
 		b.WriteString("\n")
-		for _, seg := range wrapWidth("don't-ask-again choices: "+path, textW, 1<<20) {
+		for _, seg := range wrapWidth(i18n.T("don't-ask-again choices: %s", path), textW, 1<<20) {
 			b.WriteString(seg + "\n")
 		}
 	}

@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -79,7 +80,7 @@ func (p *gotoCommitPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 func (m Model) resolvedGotoCommit(p *gotoCommitPopup, msg gotoCommitResolvedMsg) (Model, tea.Cmd) {
 	p.resolving = false
 	if msg.err != nil {
-		p.err = "no such commit: " + msg.rev
+		p.err = i18n.T("no such commit: %s", msg.rev)
 		return m, nil
 	}
 	m = m.popLayer()
@@ -107,11 +108,11 @@ func (p *gotoCommitPopup) render(m Model, below string) string {
 func (p *gotoCommitPopup) box(m Model) string {
 	w, _ := m.overlayDims()
 	var b strings.Builder
-	b.WriteString("Show commit\n\n")
-	b.WriteString(viewField("commit: ", p.input, true, popupContentWidth(w)) + "\n")
+	b.WriteString(i18n.T("Show commit") + "\n\n")
+	b.WriteString(viewField(i18n.T("commit: "), p.input, true, popupContentWidth(w)) + "\n")
 	if p.err != "" {
 		b.WriteString("\n" + errorStyle.Render(p.err) + "\n")
 	}
-	b.WriteString("\n[enter] show  [esc] cancel")
+	b.WriteString("\n" + i18n.T("[enter] show  [esc] cancel"))
 	return modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 }

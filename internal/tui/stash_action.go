@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/i18n"
 )
 
 // stashActionPopup is the Apply/Pop/Drop menu for one stash.
@@ -21,6 +22,21 @@ type stashActionPopup struct {
 }
 
 var stashActions = []string{"Apply", "Pop", "Drop"}
+
+// stashActionLabel translates a stashActions entry for display at render
+// time (a package var initializer would freeze the English text before any
+// language loads — see cfLabel's identical rationale).
+func stashActionLabel(name string) string {
+	switch name {
+	case "Apply":
+		return i18n.T("Apply")
+	case "Pop":
+		return i18n.T("Pop")
+	case "Drop":
+		return i18n.T("Drop")
+	}
+	return name
+}
 
 // update handles all keys while the stash-action popup is open.
 func (a *stashActionPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
@@ -93,10 +109,10 @@ func (a *stashActionPopup) box(m Model) string {
 	textW := popupTextWidth(inner)
 	var b strings.Builder
 	if a.confirming {
-		b.WriteString("Drop " + a.ref + "?\n\n" + a.subject + "\n\n[y] drop   [n] cancel")
+		b.WriteString(i18n.T("Drop %s?", a.ref) + "\n\n" + a.subject + "\n\n" + i18n.T("[y] drop   [n] cancel"))
 		return popupBox(inner, b.String())
 	}
-	b.WriteString("Stash " + a.ref + "\n" + a.subject + "\n\n")
+	b.WriteString(i18n.T("Stash %s", a.ref) + "\n" + a.subject + "\n\n")
 	wr := make([]winRow, len(stashActions))
 	for i, name := range stashActions {
 		prefix := "  "
@@ -104,11 +120,11 @@ func (a *stashActionPopup) box(m Model) string {
 		if i == a.sel {
 			prefix, st = "> ", selectedRow
 		}
-		wr[i] = winRow{text: prefix + name, style: st}
+		wr[i] = winRow{text: prefix + stashActionLabel(name), style: st}
 	}
 	for _, line := range renderWindow(wr, winOpts{w: textW, h: len(stashActions), mode: a.mode, anchor: a.sel, hscroll: a.hscroll}) {
 		b.WriteString(line + "\n")
 	}
-	b.WriteString("\n[enter] do  [z] mode  [esc] cancel")
+	b.WriteString("\n" + i18n.T("[enter] do  [z] mode  [esc] cancel"))
 	return popupBox(inner, b.String())
 }

@@ -6,6 +6,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/i18n"
 )
 
 // renameBranchPopup holds the in-flight rename-branch dialog. The text field is
@@ -82,9 +83,9 @@ func (p *renameBranchPopup) render(m Model, below string) string {
 // box draws the rename-branch dialog (modal box only).
 func (p *renameBranchPopup) box(m Model) string {
 	var b strings.Builder
-	b.WriteString("Rename branch " + p.old + "\n\n")
+	b.WriteString(i18n.T("Rename branch %s", p.old) + "\n\n")
 	w, _ := m.overlayDims()
-	b.WriteString(viewField("name: ", p.name, true, popupContentWidth(w)) + "\n\n")
-	b.WriteString("[type] name  [enter] rename  [esc] cancel")
+	b.WriteString(viewField(i18n.T("name: "), p.name, true, popupContentWidth(w)) + "\n\n")
+	b.WriteString(i18n.T("[type] name  [enter] rename  [esc] cancel"))
 	return modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 }
