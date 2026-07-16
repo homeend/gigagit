@@ -2,7 +2,6 @@ package tui
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -211,9 +210,9 @@ func (p *fileFinderPopup) box(m Model) string {
 	// sub-mode a cursor block trails the query; otherwise a hint advertises `/`.
 	var header string
 	if p.loading {
-		header = "Find file  (loading…)"
+		header = i18n.T("Find file  (loading…)")
 	} else {
-		header = fmt.Sprintf("Find file  %d/%d", len(p.matches), len(p.all))
+		header = i18n.T("Find file  %d/%d", len(p.matches), len(p.all))
 	}
 	switch {
 	case p.filtering:
@@ -221,14 +220,14 @@ func (p *fileFinderPopup) box(m Model) string {
 	case p.query != "":
 		header += "  /" + p.query
 	case !p.loading:
-		header += "   (press / to filter)"
+		header += i18n.T("   (press / to filter)")
 	}
 
 	var bodyLines []string
 	if p.loading {
-		bodyLines = []string{padRight("  (loading…)", textW)}
+		bodyLines = []string{padRight(i18n.T("  (loading…)"), textW)}
 	} else if len(p.matches) == 0 {
-		bodyLines = []string{padRight("  (no match)", textW)}
+		bodyLines = []string{padRight(i18n.T("  (no match)"), textW)}
 	} else {
 		// Window-then-build: determine the visible slice first, then build
 		// only those winRows. This keeps render O(window) even at 200 results.
@@ -253,7 +252,7 @@ func (p *fileFinderPopup) box(m Model) string {
 
 	// Wrap the hint so [/] filter / [esc] survive on a narrow terminal (mirrors
 	// the bookmark/shelf switchers).
-	hint := []string{"[enter] open", "[↑↓ pgup/pgdn] nav", "[/] filter", "[z] mode", "[ctrl+t] full", "[esc] close"}
+	hint := []string{i18n.T("[enter] open"), i18n.T("[↑↓ pgup/pgdn] nav"), i18n.T("[/] filter"), i18n.T("[z] mode"), i18n.T("[ctrl+t] full"), i18n.T("[esc] close")}
 	parts := []string{header, ""}
 	parts = append(parts, bodyLines...)
 	parts = append(parts, "")
@@ -409,7 +408,7 @@ func (m Model) loadFileContentLayerCmd(path string) tea.Cmd {
 			return fileContentLayerMsg{path: path, err: err}
 		}
 		if len(data) > domain.MaxDiffBytes {
-			return fileContentLayerMsg{path: path, lines: []contentLine{{text: "(file too large to preview)"}}}
+			return fileContentLayerMsg{path: path, lines: []contentLine{{text: i18n.T("(file too large to preview)")}}}
 		}
 		return fileContentLayerMsg{path: path, lines: fileContentLines(data)}
 	}

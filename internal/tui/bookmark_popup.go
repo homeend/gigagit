@@ -107,9 +107,9 @@ func (m Model) renderBookmarkPopupBox(p *bookmarkPopup) string {
 	inner := popupResolveWidth(w, p.maximized, popupWideInnerWidth(w))
 	textW := popupTextWidth(inner)
 
-	header := "Bookmarks"
+	header := i18n.T("Bookmarks")
 	if p.compareRef != nil {
-		header = "Compare " + p.compareRef.Path + " against:"
+		header = i18n.T("Compare %s against:", p.compareRef.Path)
 	}
 	if p.filtering {
 		header += "  /" + p.filter + "█"
@@ -120,7 +120,7 @@ func (m Model) renderBookmarkPopupBox(p *bookmarkPopup) string {
 	vis := p.visibleIdx()
 	var bodyLines []string
 	if len(vis) == 0 {
-		bodyLines = []string{padRight("  (none)", textW)}
+		bodyLines = []string{padRight(i18n.T("  (none)"), textW)}
 	} else {
 		wr := make([]winRow, len(vis))
 		for n, i := range vis {
@@ -147,7 +147,7 @@ func (m Model) renderBookmarkPopupBox(p *bookmarkPopup) string {
 	parts = append(parts, bodyLines...)
 	// Wrap the hint so [z] mode / [esc] close survive on a narrow terminal,
 	// where a single-line footer would truncate them off (mirrors shelfPopup).
-	hint := []string{"[?] keys", "[enter] jump", "[e] editor", "[p] paste", "[t] temp dir", "[a] cherry-pick", "[y] copy", "[m] mark/compare", "[x] remove", "[c] vs shelf", "[/] filter", "[z] mode", "[ctrl+t] full", "[esc] close"}
+	hint := []string{i18n.T("[?] keys"), i18n.T("[enter] jump"), i18n.T("[e] editor"), i18n.T("[p] paste"), i18n.T("[t] temp dir"), i18n.T("[a] cherry-pick"), i18n.T("[y] copy"), i18n.T("[m] mark/compare"), i18n.T("[x] remove"), i18n.T("[c] vs shelf"), i18n.T("[/] filter"), i18n.T("[z] mode"), i18n.T("[ctrl+t] full"), i18n.T("[esc] close")}
 	parts = append(parts, "")
 	parts = append(parts, wrapParts(hint, textW, "  ")...)
 	return popupBox(inner, strings.Join(parts, "\n"))
@@ -541,10 +541,10 @@ func (p *bookmarkPastePopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 func (p *bookmarkPastePopup) render(m Model, below string) string {
 	w, h := m.overlayDims()
 	var b strings.Builder
-	b.WriteString("Paste bookmarked file to a new path\n\n")
-	b.WriteString("from: " + p.origin + "  (resolved now)\n")
+	b.WriteString(i18n.T("Paste bookmarked file to a new path") + "\n\n")
+	b.WriteString(i18n.T("from: %s  (resolved now)", p.origin) + "\n")
 	b.WriteString(viewField("dest: ", p.dest, true, popupContentWidth(w)) + "\n\n")
-	b.WriteString("[type] path  [enter] paste  [esc] cancel")
+	b.WriteString(i18n.T("[type] path  [enter] paste  [esc] cancel"))
 	box := modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 	return overlayCenter(clipToHeight(below, h), box, w, h)
 }

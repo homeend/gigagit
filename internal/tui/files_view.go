@@ -62,8 +62,8 @@ func (m Model) openChangedFiles(c model.Commit) (Model, tea.Cmd) {
 		m.filesReturnFocus = m.focus
 	}
 	m = m.closeFilesView()
-	m.filesView = &contentPopup{lines: []contentLine{{text: "(loading…)"}}}
-	m.filesTitle = "Files " + shortHash(c.Hash) + " " + c.Subject
+	m.filesView = &contentPopup{lines: []contentLine{{text: i18n.T("(loading…)")}}}
+	m.filesTitle = i18n.T("Files %s %s", shortHash(c.Hash), c.Subject)
 	m.filesHash = c.Hash
 	m.filesMode = filesModeChanged
 	m.filesReadInflight = true
@@ -77,8 +77,8 @@ func (m Model) openStashFiles(ref, subject string) (Model, tea.Cmd) {
 		m.filesReturnFocus = m.focus
 	}
 	m = m.closeFilesView()
-	m.filesView = &contentPopup{lines: []contentLine{{text: "(loading…)"}}}
-	m.filesTitle = "Files " + ref + " " + subject
+	m.filesView = &contentPopup{lines: []contentLine{{text: i18n.T("(loading…)")}}}
+	m.filesTitle = i18n.T("Files %s %s", ref, subject)
 	m.filesStashTag = ref
 	m.filesMode = filesModeStash
 	return m, m.loadStashFilesCmd(ref)
@@ -96,11 +96,11 @@ func (m Model) openShelfCommitFiles(e model.ShelfEntry) (Model, tea.Cmd) {
 	}
 	m = m.clearLayers()
 	m = m.closeFilesView()
-	m.filesView = &contentPopup{lines: []contentLine{{text: "(loading…)"}}}
-	m.filesTitle = "Files " + shelfEntryDisplay(e)
+	m.filesView = &contentPopup{lines: []contentLine{{text: i18n.T("(loading…)")}}}
+	m.filesTitle = i18n.T("Files %s", shelfEntryDisplay(e))
 	m.filesMode = filesModeShelf
 	m.filesShelfID = e.ID
-	m.filesShelfLabel = "shelf #" + shortShelf(e)
+	m.filesShelfLabel = i18n.T("shelf #%s", shortShelf(e))
 	// The tree owns the view: a shelved commit is not part of the feed, so
 	// there is no live commit list to follow on the right (compare-mode rule).
 	m.filesTreeFocused = true
@@ -136,7 +136,7 @@ func (m Model) toggleFullTree() (Model, tea.Cmd) {
 	m.filesPreview = nil
 	m.filesPreviewTag = ""
 	if p := m.filesView; p != nil {
-		p.lines = []contentLine{{text: "(loading…)"}}
+		p.lines = []contentLine{{text: i18n.T("(loading…)")}}
 		p.sel = 0
 		p.query = ""
 	}
@@ -169,7 +169,7 @@ func (m Model) closePreview() Model {
 // the same heading twice.
 func commitFileLines(files []model.CommitFile) []contentLine {
 	if len(files) == 0 {
-		return []contentLine{{text: "(no files)"}}
+		return []contentLine{{text: i18n.T("(no files)")}}
 	}
 	sorted := make([]model.CommitFile, len(files))
 	copy(sorted, files)
@@ -303,7 +303,7 @@ func (m Model) openCompareFiles(left, right model.Endpoint) (Model, tea.Cmd) {
 		m.filesReturnFocus = m.focus
 	}
 	m = m.closeFilesView() // clean slate: clears any prior changed/stash/fullTree/preview state
-	m.filesView = &contentPopup{lines: []contentLine{{text: "(loading…)"}}}
+	m.filesView = &contentPopup{lines: []contentLine{{text: i18n.T("(loading…)")}}}
 	m.filesTitle = left.Display() + " ↔ " + right.Display()
 	m.filesMode = filesModeCompare
 	m.filesLeft = left
@@ -799,7 +799,7 @@ func (m Model) renderFilesView(boxW, boxH int) string {
 		lines = append(lines, padRight(truncate(search, innerW), innerW))
 	}
 	if len(vis) == 0 {
-		lines = append(lines, padRight(truncate("  (no match)", innerW), innerW))
+		lines = append(lines, padRight(truncate(i18n.T("  (no match)"), innerW), innerW))
 	} else {
 		win := renderWindow(wr, winOpts{w: innerW, h: rowsCap, mode: p.mode, anchor: anchor, hscroll: p.hscroll})
 		lines = append(lines, win...)
@@ -807,9 +807,9 @@ func (m Model) renderFilesView(boxW, boxH int) string {
 	for len(lines) < contentH-1 {
 		lines = append(lines, padRight("", innerW))
 	}
-	hint := "[enter] diff  [h] history  [b] blame  [/] search  [esc] close"
+	hint := i18n.T("[enter] diff  [h] history  [b] blame  [/] search  [esc] close")
 	if m.comparePair != nil {
-		hint = "[enter] diff  [f] filter  [h] history  [b] blame  [/] search  [esc] close"
+		hint = i18n.T("[enter] diff  [f] filter  [h] history  [b] blame  [/] search  [esc] close")
 	}
 	if len(vis) > rowsCap {
 		hint = fmt.Sprintf("%d/%d  %s", p.sel+1, len(vis), hint)
