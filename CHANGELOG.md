@@ -23,6 +23,8 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   kept filter could hide the target). The query from the last eager search is
   also remembered, so ctrl+f keeps digging even after esc cleared the search
   (the repo switcher forgets it; a status line shows which query is searched).
+  The default per-pass scan budget (`[ui] commit_search_max_pages`) is raised
+  from 5 to 50 pages, so one pass covers ~15k commits before re-asking.
 - **Multilanguage TUI (stage 2): fuller coverage + hardening.** The status
   line, the resume-paused-op prompt, the push-tip-tags prompt, every
   footer-override mode, and the conflict-process indicator are now

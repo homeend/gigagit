@@ -25,11 +25,12 @@ type eagerSearch struct {
 }
 
 // commitSearchMaxPages is the configured per-pass page cap for eager search.
+// The fallback mirrors config.Defaults() for a Model whose cfg never arrived.
 func (m Model) commitSearchMaxPages() int {
 	if n := m.cfg.UI.CommitSearchMaxPages; n > 0 {
 		return n
 	}
-	return 5
+	return 50
 }
 
 // firstCommitMatch returns the DISPLAY position (same space as m.sel[panelCommits])

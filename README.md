@@ -238,7 +238,7 @@ git deletion in a shared repo.
 `[ui] commit_initial_count` sets how many commits are loaded on first paint
 (default 300); `[ui] commit_batch_size` sets how many more are loaded per page
 (default 300); `[ui] commit_search_max_pages` sets how many extra pages
-`ctrl+f` eager search will scan before asking permission to go deeper (default 5);
+`ctrl+f` eager search will scan before asking permission to go deeper (default 50);
 `[ui] commit_sort` selects commit ordering for the Commits panel and its graph:
 `date-order` (the default; `git --date-order`, a global topological sort so the
 graph's branch forks always draw correctly) or `plain` (git's lazy newest-first
