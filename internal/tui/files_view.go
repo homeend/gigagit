@@ -39,6 +39,7 @@ func (m Model) closeFilesView() Model {
 	m.filesMode = filesModeChanged
 	m.filesView = nil
 	m.filesTitle = ""
+	m.filesContext = ""
 	m.filesHash = ""
 	m.filesLeft = model.Endpoint{}
 	m.filesRight = model.Endpoint{}
@@ -64,6 +65,7 @@ func (m Model) openChangedFiles(c model.Commit) (Model, tea.Cmd) {
 	m = m.closeFilesView()
 	m.filesView = &contentPopup{lines: []contentLine{{text: i18n.T("(loading…)")}}}
 	m.filesTitle = i18n.T("Files %s %s", shortHash(c.Hash), c.Subject)
+	m.filesContext = shortHash(c.Hash) + " " + c.Subject
 	m.filesHash = c.Hash
 	m.filesMode = filesModeChanged
 	m.filesReadInflight = true
@@ -79,6 +81,7 @@ func (m Model) openStashFiles(ref, subject string) (Model, tea.Cmd) {
 	m = m.closeFilesView()
 	m.filesView = &contentPopup{lines: []contentLine{{text: i18n.T("(loading…)")}}}
 	m.filesTitle = i18n.T("Files %s %s", ref, subject)
+	m.filesContext = ref + " " + subject
 	m.filesStashTag = ref
 	m.filesMode = filesModeStash
 	return m, m.loadStashFilesCmd(ref)
@@ -98,6 +101,7 @@ func (m Model) openShelfCommitFiles(e model.ShelfEntry) (Model, tea.Cmd) {
 	m = m.closeFilesView()
 	m.filesView = &contentPopup{lines: []contentLine{{text: i18n.T("(loading…)")}}}
 	m.filesTitle = i18n.T("Files %s", shelfEntryDisplay(e))
+	m.filesContext = shelfEntryDisplay(e)
 	m.filesMode = filesModeShelf
 	m.filesShelfID = e.ID
 	m.filesShelfLabel = i18n.T("shelf #%s", shortShelf(e))
@@ -305,6 +309,7 @@ func (m Model) openCompareFiles(left, right model.Endpoint) (Model, tea.Cmd) {
 	m = m.closeFilesView() // clean slate: clears any prior changed/stash/fullTree/preview state
 	m.filesView = &contentPopup{lines: []contentLine{{text: i18n.T("(loading…)")}}}
 	m.filesTitle = left.Display() + " ↔ " + right.Display()
+	m.filesContext = m.filesTitle
 	m.filesMode = filesModeCompare
 	m.filesLeft = left
 	m.filesRight = right
@@ -604,7 +609,7 @@ func (m Model) openDiffForFileLine(l contentLine) (tea.Model, tea.Cmd) {
 	m.diffNav = diffNavTree
 	newV := &diffView{
 		title:   l.path,
-		context: "@ " + strings.TrimPrefix(m.filesTitle, "Files "),
+		context: "@ " + m.filesContext,
 		rev:     m.filesHash,
 		loading: true,
 		partial: m.diffPartial,
@@ -626,7 +631,7 @@ func (m Model) openDiffForFileLine(l contentLine) (tea.Model, tea.Cmd) {
 		return m, m.loadCompareDiffCmd(left, right, l)
 	}
 	if m.inCompareMode() {
-		m.diffLayer().context = m.filesTitle
+		m.diffLayer().context = m.filesContext
 		m.diffTag = "cmp:" + m.filesLeft.CacheTag() + ":" + m.filesRight.CacheTag() + ":" + l.path
 		return m, m.loadCompareDiffCmd(m.filesLeft, m.filesRight, l)
 	}

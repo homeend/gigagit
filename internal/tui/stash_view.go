@@ -212,6 +212,7 @@ func (m Model) moveStashUnderFilesView(delta int) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.filesTitle = "Files " + e.Ref + " " + e.Subject
+	m.filesContext = e.Ref + " " + e.Subject
 	m.filesStashTag = e.Ref
 	return m, m.loadStashFilesCmd(e.Ref)
 }

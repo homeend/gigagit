@@ -100,7 +100,8 @@ type Model struct {
 
 	filesMode         filesMode         // authoritative source mode (changed/fullTree/compare/stash)
 	filesView         *contentPopup     // commit files tree replacing the left column; nil = closed
-	filesTitle        string            // "Files <short-hash> <subject>", updated with the content
+	filesTitle        string            // "Files <short-hash> <subject>", updated with the content — rendered/localized display text; NEVER parsed
+	filesContext      string            // diff-view context payload (ref/subject or compare label) mirroring filesTitle's content sans any "Files "/panel framing; the diff view's "@ <context>" header reads THIS, not filesTitle
 	filesHash         string            // commit the view wants; gates stale async results
 	filesLeft         model.Endpoint    // compare mode: older side
 	filesRight        model.Endpoint    // compare mode: newer side
@@ -385,6 +386,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.filesView.lines = commitFileLines(msg.files)
 		m.filesView.sel = 0
 		m.filesTitle = "Files " + shortHash(msg.hash) + " " + msg.subject
+		m.filesContext = shortHash(msg.hash) + " " + msg.subject
 		return m, nil
 	case shelfFilesMsg:
 		if m.filesView == nil || !m.inShelfFiles() || msg.id != m.filesShelfID {
@@ -415,6 +417,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.filesView.lines = msg.lines // pre-built off-thread
 		m.filesView.sel = 0
 		m.filesTitle = "Files " + shortHash(msg.hash) + " (all files) " + msg.subject
+		m.filesContext = shortHash(msg.hash) + " (all files) " + msg.subject
 		return m, nil
 	case fileContentMsg:
 		if m.filesPreview == nil || msg.tag != m.filesPreviewTag {

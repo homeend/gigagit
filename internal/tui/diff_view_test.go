@@ -48,6 +48,7 @@ func filesViewModel() Model {
 	}, sel: 1}
 	m.filesHash = "abc1234def"
 	m.filesTitle = "Files abc1234 subject line"
+	m.filesContext = "abc1234 subject line"
 	m.filesTreeFocused = true
 	return m
 }
@@ -522,6 +523,31 @@ func TestEnterInTreeOpensCommitDiff(t *testing.T) {
 	}
 	if !strings.Contains(mm.diffLayer().context, "abc1234") {
 		t.Fatalf("context = %q, want the short hash", mm.diffLayer().context)
+	}
+}
+
+// TestEnterInTreeContextComesFromFilesContext proves the diff-view context is
+// read from the dedicated m.filesContext field, never parsed off the rendered
+// m.filesTitle — a localized title (no English "Files " prefix) would
+// otherwise leak straight into the diff header instead of being stripped.
+func TestEnterInTreeContextComesFromFilesContext(t *testing.T) {
+	m := filesViewModel()
+	m.filesTitle = "ファイル abc1234def subject line" // localized title: no "Files " prefix
+	m.filesContext = "abc1234def subject line"
+	u, cmd := m.Update(keyMsg("enter"))
+	mm := u.(Model)
+	if got, want := mm.diffLayer().context, "@ abc1234def subject line"; got != want {
+		t.Fatalf("initial (loading) context = %q, want %q", got, want)
+	}
+	if cmd == nil {
+		t.Fatal("expected the async diff-load cmd")
+	}
+	msg, ok := cmd().(diffMsg)
+	if !ok {
+		t.Fatalf("expected diffMsg, got %T", msg)
+	}
+	if got, want := msg.view.context, "@ abc1234def subject line"; got != want {
+		t.Fatalf("loaded context = %q, want %q", got, want)
 	}
 }
 

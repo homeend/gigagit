@@ -104,6 +104,7 @@ func (m Model) openBranchCompare(marked, selected string) (Model, tea.Cmd) {
 	m, cmd = m.openCompareFiles(left, right) // clean slate: clears any prior comparePair
 	m.comparePair = &comparePairState{left: marked, right: selected}
 	m.filesTitle = branchCompareTitle(marked, selected, compareScopeAll)
+	m.filesContext = m.filesTitle
 	return m, tea.Batch(cmd, m.loadCompareOriginsCmd(markedHash, selectedHash, tag))
 }
 
@@ -171,5 +172,6 @@ func (m Model) cycleCompareScope() Model {
 	m.filesView.lines = commitFileLines(filterCompareFiles(p.files, p.pathSet()))
 	m.filesView.sel = 0
 	m.filesTitle = branchCompareTitle(p.left, p.right, p.scope)
+	m.filesContext = m.filesTitle
 	return m
 }
