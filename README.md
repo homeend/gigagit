@@ -80,7 +80,7 @@ searchable reference.
 | `j`/`k` or `↑`/`↓` | move selection |
 | `pgup`/`pgdn` | move selection by 25% of the panel viewport |
 | `o` | cycle the focused panel's sort order (name/date, asc/desc) |
-| `/` | filter the focused panel (type, then `enter` to keep, `esc` to clear) |
+| `/` | filter the focused panel (type, then `enter` to keep, `esc` to clear). The search starts **from the cursor**, not from the top: each keystroke lands on the nearest match at/after the current row (wrapping to the top when every match is above, like `@`), and leaving the filter (`esc`, `ctrl+r`, or switching to `@`) keeps the cursor on the same row in the full list |
 | `\` | on the Commits panel: open the **commit feed filter** popup — type a path, author, message substring, and/or date range (`since` / `until`, passed verbatim to `git log`) to narrow the commit list; filters compose with any active branch scope; the commit-graph hides while a filter is active; clear via the `.` menu **Clear filter** row or by opening the popup and erasing all fields. "Commits touching this" in the fuzzy file finder (`F`) and in the files view `.` menu seeds the path field automatically |
 | `ctrl+l` | on the Commits panel: load the next batch of history on demand (without waiting to scroll to the bottom) |
 | `Home`/`End` | jump to the top / bottom of any navigable list; **End** on the Commits panel also loads the next history batch — press again to walk deeper |

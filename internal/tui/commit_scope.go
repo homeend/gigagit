@@ -43,7 +43,13 @@ func (f commitFilterFields) filtered() bool {
 func (m Model) clearFilteringForFocus() (Model, bool) {
 	if m.filterPanel == m.focus {
 		m.filterTyping = false
-		m.filterQuery = ""
+		if m.filterQuery != "" {
+			// Dropping the filter expands the list: keep the cursor on the
+			// same row rather than on a raw display position.
+			anchor := m.filterAnchor(m.filterPanel)
+			m.filterQuery = ""
+			m = m.snapFilterSel(m.filterPanel, anchor)
+		}
 	}
 	reload := false
 	if m.focus == panelCommits {
