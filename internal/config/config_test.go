@@ -324,7 +324,7 @@ func TestOverlayDisableSlowOpConfirm(t *testing.T) {
 func TestCommitPageSizeDefaultsAndOverlay(t *testing.T) {
 	// Defaults.
 	d := Defaults().UI
-	if d.CommitInitialCount != 300 || d.CommitBatchSize != 300 || d.CommitSearchMaxPages != 5 {
+	if d.CommitInitialCount != 300 || d.CommitBatchSize != 300 || d.CommitSearchMaxPages != 50 {
 		t.Fatalf("defaults = %d/%d/%d, want 300/300/5",
 			d.CommitInitialCount, d.CommitBatchSize, d.CommitSearchMaxPages)
 	}

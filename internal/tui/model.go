@@ -1658,10 +1658,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// whichever is engaged (the / filter or the @ highlight; mutually
 			// exclusive). Every press restarts the cycle past the already-loaded
 			// commits — a hit on screen doesn't stop ctrl+f from digging deeper.
-			// The / filter is cleared on start (go-to); the @ highlight persists
-			// so the found commit shows highlighted. With neither engaged, the
-			// query retained from the last eager search is reused (a /-sourced
-			// jump cleared the filter, so repeat presses would otherwise go dead).
+			// Both the / filter and the @ highlight STAY engaged (the query
+			// remains visible in the bar; only the goto-tip fallback clears a
+			// filter). With neither engaged, the query retained from the last
+			// eager search is reused (e.g. after esc cleared the filter).
 			if m.focus == panelCommits {
 				if m.filterPanel == panelCommits && m.filterQuery != "" {
 					return m.startEagerSearchDeeper(m.filterQuery)
