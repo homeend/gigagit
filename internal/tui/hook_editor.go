@@ -6,6 +6,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/config"
+	"github.com/homeend/gigagit/internal/i18n"
 )
 
 // hookEditorPopup is the wide multi-line editor for the [worktree]
@@ -47,13 +48,13 @@ func (p *hookEditorPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 func (m Model) saveHook(script string) (Model, tea.Cmd) {
 	m.cfg.Worktree.PostCreateHook = script
 	if m.repoConfigPath == "" {
-		m.statusMsg = "hook set (not saved: no repo config path)"
+		m.statusMsg = i18n.T("hook set (not saved: no repo config path)")
 		return m.popLayer(), nil
 	}
 	if err := config.SetWorktreePostCreateHook(m.repoConfigPath, script); err != nil {
-		m.statusMsg = "hook set but not saved: " + err.Error()
+		m.statusMsg = i18n.T("hook set but not saved: %s", err.Error())
 	} else {
-		m.statusMsg = "post-create hook saved"
+		m.statusMsg = i18n.T("post-create hook saved")
 	}
 	return m.popLayer(), nil
 }
@@ -93,13 +94,13 @@ func (p *hookEditorPopup) box(m Model, w, h int) string {
 	}
 
 	var b strings.Builder
-	b.WriteString("Worktree post-create hook (runs in the new worktree)\n")
-	b.WriteString("env: GG_MAIN_WORKTREE  GG_WORKTREE_PATH  GG_BRANCH  GG_REPO\n\n")
+	b.WriteString(i18n.T("Worktree post-create hook (runs in the new worktree)") + "\n")
+	b.WriteString(i18n.T("env: GG_MAIN_WORKTREE  GG_WORKTREE_PATH  GG_BRANCH  GG_REPO") + "\n\n")
 	b.WriteString(strings.Join(lines[top:end], "\n"))
 	if end-top < rows {
 		b.WriteString(strings.Repeat("\n", rows-(end-top)))
 	}
-	b.WriteString("\n\n[type] edit  [enter] newline  [ctrl+s] save  [esc] cancel")
+	b.WriteString("\n\n" + i18n.T("[type] edit  [enter] newline  [ctrl+s] save  [esc] cancel"))
 	// No trailing newline: this box is sized to fill the height, so an extra
 	// blank line would push overlayCenter's line count past the terminal.
 	return modalStyle.Width(boxW).Render(b.String())

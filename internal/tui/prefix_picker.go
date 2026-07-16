@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -155,7 +156,7 @@ func (p *prefixPicker) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 func (p *prefixPicker) finish(m Model, value string, inputs map[string]string) (Model, tea.Cmd) {
 	resolved, seqNames, err := p.resolve(value, inputs)
 	if err != nil {
-		m.statusMsg = "prefix: " + err.Error()
+		m.statusMsg = i18n.T("prefix: %s", err.Error())
 		return m.popLayer(), nil
 	}
 	return p.onPick(m, resolved, seqNames)

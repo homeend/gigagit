@@ -292,13 +292,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// The narrow layout has no left column; without this the view
 			// would keep capturing keys while invisible.
 			m = m.closeFilesView()
-			m.statusMsg = "files view closed: terminal too narrow"
+			m.statusMsg = i18n.T("files view closed: terminal too narrow")
 		}
 		if dv := m.diffLayer(); dv != nil && msg.Width > 0 {
 			if msg.Width < 60 {
 				m = m.removeLayer(dv)
 				m.diffTag = ""
-				m.statusMsg = "diff closed: terminal too narrow"
+				m.statusMsg = i18n.T("diff closed: terminal too narrow")
 			} else {
 				// Re-wrap at the new width, keeping the viewport anchored to
 				// the logical line currently at the top.
@@ -347,7 +347,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			wasLoading := p.loading
 			p.loading = false
 			if msg.err != nil {
-				m.statusMsg = "git config explorer: " + friendlyOpError(msg.err)
+				m.statusMsg = i18n.T("git config explorer: %s", friendlyOpError(msg.err))
 				if wasLoading {
 					// The initial load failed: nothing to show — close.
 					return m.popLayer(), healthCmd
@@ -374,7 +374,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil // view closed, or a stale result from fast movement
 		}
 		if msg.err != nil {
-			m.statusMsg = "files: " + msg.err.Error()
+			m.statusMsg = i18n.T("files: %s", msg.err.Error())
 			if len(m.filesView.lines) == 1 && m.filesView.lines[0].text == "(loading…)" {
 				m.filesView.lines = []contentLine{{text: "(load failed)"}}
 			}
@@ -391,7 +391,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil // view closed, or a stale result for another entry
 		}
 		if msg.err != nil {
-			m.statusMsg = "shelf files: " + msg.err.Error()
+			m.statusMsg = i18n.T("shelf files: %s", msg.err.Error())
 			if len(m.filesView.lines) == 1 && m.filesView.lines[0].text == "(loading…)" {
 				m.filesView.lines = []contentLine{{text: "(load failed)"}}
 			}
@@ -406,7 +406,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil // view closed, switched back to changed files, or stale
 		}
 		if msg.err != nil {
-			m.statusMsg = "files: " + msg.err.Error()
+			m.statusMsg = i18n.T("files: %s", msg.err.Error())
 			if len(m.filesView.lines) == 1 && m.filesView.lines[0].text == "(loading…)" {
 				m.filesView.lines = []contentLine{{text: "(load failed)"}}
 			}
@@ -470,7 +470,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil // stale or closed
 		}
 		if msg.err != nil {
-			m.statusMsg = "compare: " + msg.err.Error()
+			m.statusMsg = i18n.T("compare: %s", msg.err.Error())
 			// A failed compare must be retryable: clear the tag so re-opening the
 			// SAME pair isn't swallowed by the openCompareFiles same-tag guard.
 			m.compareTag = ""
@@ -559,7 +559,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case shelfLoadedMsg:
 		// A disabled shelf (no state dir) reports its reason but is not fatal.
 		if msg.err != nil {
-			m.statusMsg = "shelf: " + msg.err.Error()
+			m.statusMsg = i18n.T("shelf: %s", msg.err.Error())
 			m.shelfEntries = nil
 			m.pendingCompare = nil
 		} else {
@@ -581,14 +581,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case shelfAddedMsg:
 		if msg.err != nil {
-			m.statusMsg = "shelf add: " + msg.err.Error()
+			m.statusMsg = i18n.T("shelf add: %s", msg.err.Error())
 		} else {
-			m.statusMsg = "shelved " + msg.entry.Origin.Path + " → " + msg.entry.ID
+			m.statusMsg = i18n.T("shelved %s → %s", msg.entry.Origin.Path, msg.entry.ID)
 		}
 		return m, nil
 	case tempExportResolvedMsg:
 		if msg.err != nil {
-			m.statusMsg = "temp export: " + msg.err.Error()
+			m.statusMsg = i18n.T("temp export: %s", msg.err.Error())
 			return m, nil
 		}
 		p := &tempExportPopup{files: msg.files}
@@ -596,7 +596,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.pushLayer(p), nil
 	case patchResolvedMsg:
 		if msg.err != nil {
-			m.statusMsg = "export patch: " + msg.err.Error()
+			m.statusMsg = i18n.T("export patch: %s", msg.err.Error())
 			return m, nil
 		}
 		p := &exportPatchPopup{data: msg.data}
@@ -612,14 +612,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.pushLayer(p), nil
 	case bookmarkAddedMsg:
 		if msg.err != nil {
-			m.statusMsg = "bookmark: " + msg.err.Error()
+			m.statusMsg = i18n.T("bookmark: %s", msg.err.Error())
 		} else {
-			m.statusMsg = "bookmarked " + msg.bm.Path + " → " + msg.bm.ID
+			m.statusMsg = i18n.T("bookmarked %s → %s", msg.bm.Path, msg.bm.ID)
 		}
 		return m, nil
 	case bookmarksLoadedMsg:
 		if msg.err != nil {
-			m.statusMsg = "bookmarks: " + msg.err.Error()
+			m.statusMsg = i18n.T("bookmarks: %s", msg.err.Error())
 			m.pendingCompare = nil // don't let stale compare state hijack the next plain `g`
 			return m, nil
 		}
@@ -636,7 +636,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.pushLayer(p), nil
 	case prefixesLoadedMsg:
 		if msg.err != nil {
-			m.statusMsg = "prefixes: " + msg.err.Error()
+			m.statusMsg = i18n.T("prefixes: %s", msg.err.Error())
 			return m, nil
 		}
 		return m.pushLayer(newPrefixPicker(msg)), nil
@@ -651,7 +651,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil // user closed before load returned
 		}
 		if msg.err != nil {
-			m.statusMsg = "file finder: " + msg.err.Error()
+			m.statusMsg = i18n.T("file finder: %s", msg.err.Error())
 			m = m.popLayer()
 			return m, nil
 		}
@@ -707,7 +707,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.commitsExhausted = msg.commitsExhausted
 			m = m.graphLayerReset().rebuildCommitGraph()
 			if msg.commitErr != nil {
-				m.statusMsg = "commits: " + msg.commitErr.Error()
+				m.statusMsg = i18n.T("commits: %s", msg.commitErr.Error())
 			}
 			m.worktrees = msg.worktrees
 			m.tags = msg.tags
@@ -1229,7 +1229,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if mm, ok := m.openStashPopup(); ok {
 					return mm, nil
 				}
-				m.statusMsg = "nothing to stash"
+				m.statusMsg = i18n.T("nothing to stash")
 				return m, nil
 			}
 			if m.canSwitchBranch() {
@@ -1373,7 +1373,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				restore, remove, n := m.discardTargets()
 				if n == 0 {
-					m.statusMsg = "nothing to discard (resolve conflicts first)"
+					m.statusMsg = i18n.T("nothing to discard (resolve conflicts first)")
 					return m, nil
 				}
 				m.modal = &decisionState{
@@ -1400,9 +1400,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// canDiscardAll false here means one of two refusable states;
 				// explain which so the no-op isn't silent.
 				if len(m.status.Conflicts()) > 0 {
-					m.statusMsg = "resolve conflicts before discarding all"
+					m.statusMsg = i18n.T("resolve conflicts before discarding all")
 				} else {
-					m.statusMsg = "nothing to discard"
+					m.statusMsg = i18n.T("nothing to discard")
 				}
 				return m, nil
 			}
@@ -1442,7 +1442,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// side instead). A WIP pseudo-row opens its node-vs-parent compare.
 			if m.focus == panelCommits && m.canShowCommitFiles() {
 				if m.width > 0 && m.width < 40 {
-					m.statusMsg = "terminal too narrow for the files view"
+					m.statusMsg = i18n.T("terminal too narrow for the files view")
 					return m, nil
 				}
 				if r, ok := m.wipRowAt(m.commitSelUnified()); ok {
@@ -1687,7 +1687,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "l":
 			if m.focus == panelCommits && m.canShowCommitFiles() {
 				if m.width > 0 && m.width < 40 {
-					m.statusMsg = "terminal too narrow for the files view"
+					m.statusMsg = i18n.T("terminal too narrow for the files view")
 					return m, nil
 				}
 				// A pseudo-row opens its node-vs-parent compare instead of a commit's
@@ -1847,7 +1847,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.err != nil {
 			if msg.manual {
-				m.statusMsg = "remote tags: " + msg.err.Error()
+				m.statusMsg = i18n.T("remote tags: %s", msg.err.Error())
 			}
 			return m, nil // background: silent (queryQuiet did not record it)
 		}
@@ -2054,7 +2054,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if v := layerOf[*prefixSettingsView](m); v != nil {
 			v.loading = false
 			if msg.err != nil {
-				m.statusMsg = "prefixes: " + msg.err.Error()
+				m.statusMsg = i18n.T("prefixes: %s", msg.err.Error())
 			} else {
 				v.items = msg.items
 				if v.sel >= len(v.items) {
@@ -2087,7 +2087,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if msg.err != nil {
-			m.statusMsg = "error: " + msg.err.Error()
+			m.statusMsg = i18n.T("error: %s", msg.err.Error())
 			return m, nil
 		}
 		m.filesHash = msg.sha
@@ -2115,7 +2115,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case statusRefreshedMsg:
 		m.running = false
 		if msg.err != nil {
-			m.statusMsg = "error: " + msg.err.Error()
+			m.statusMsg = i18n.T("error: %s", msg.err.Error())
 			return m, nil
 		}
 		m = m.withStatus(msg.status)
@@ -2138,7 +2138,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case editorFinishedMsg:
 		if msg.err != nil {
-			m.statusMsg = "edit: " + msg.err.Error()
+			m.statusMsg = i18n.T("edit: %s", msg.err.Error())
 			return m, m.reloadStatusCmd("")
 		}
 		return m, m.reloadStatusCmd(editedSummary(msg.path))
@@ -2174,7 +2174,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case editorViewMsg:
 		if msg.err != nil {
-			m.statusMsg = "view: " + msg.err.Error()
+			m.statusMsg = i18n.T("view: %s", msg.err.Error())
 			return m, nil
 		}
 		return m, viewExternalCmd(msg.path, msg.name)
@@ -2182,7 +2182,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case editorViewFinishedMsg:
 		removeTempFile(msg.path)
 		if msg.err != nil {
-			m.statusMsg = "view: " + msg.err.Error()
+			m.statusMsg = i18n.T("view: %s", msg.err.Error())
 			return m, nil
 		}
 		m.statusMsg = viewedSummary(msg.name)
@@ -2190,7 +2190,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case amendPrefillMsg:
 		if msg.err != nil {
-			m.statusMsg = "amend: " + msg.err.Error()
+			m.statusMsg = i18n.T("amend: %s", msg.err.Error())
 			return m, nil
 		}
 		title, desc := splitMessage(msg.msg)
@@ -2207,7 +2207,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if msg.err != nil {
-			m.statusMsg = "review: " + msg.err.Error()
+			m.statusMsg = i18n.T("review: %s", msg.err.Error())
 			return m, nil
 		}
 		return m.startReviewLane(msg.target)
@@ -2237,16 +2237,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case irebaseLoadedMsg:
 		if msg.err != nil {
-			m.statusMsg = "interactive rebase: " + msg.err.Error()
+			m.statusMsg = i18n.T("interactive rebase: %s", msg.err.Error())
 			return m, nil
 		}
 		if len(msg.commits) == 0 {
-			m.statusMsg = "interactive rebase: no commits in range"
+			m.statusMsg = i18n.T("interactive rebase: no commits in range")
 			return m, nil
 		}
 		ggBin, err := os.Executable()
 		if err != nil {
-			m.statusMsg = "interactive rebase: " + err.Error()
+			m.statusMsg = i18n.T("interactive rebase: %s", err.Error())
 			return m, nil
 		}
 		m = m.pushLayer(newIrebaseEditor(msg.branch, msg.onto, msg.commits, ggBin))
@@ -2254,24 +2254,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case rebaseRangeLoadedMsg:
 		if msg.err != nil {
-			m.statusMsg = "rebase: " + msg.err.Error()
+			m.statusMsg = i18n.T("rebase: %s", msg.err.Error())
 			return m, nil
 		}
 		plan, perr := rebaseplan.BuildSingleEdit(msg.commits, msg.target, msg.edit)
 		if perr != nil {
-			m.statusMsg = "rebase: " + perr.Error()
+			m.statusMsg = i18n.T("rebase: %s", perr.Error())
 			return m, nil
 		}
 		ggBin, err := os.Executable()
 		if err != nil {
-			m.statusMsg = "rebase: " + err.Error()
+			m.statusMsg = i18n.T("rebase: %s", err.Error())
 			return m, nil
 		}
 		return m.startOp(engine.InteractiveRebase{Branch: msg.branch, Onto: msg.onto, Plan: plan, GGBin: ggBin})
 
 	case squashRangeLoadedMsg:
 		if msg.err != nil {
-			m.statusMsg = "squash: " + msg.err.Error()
+			m.statusMsg = i18n.T("squash: %s", msg.err.Error())
 			return m, nil
 		}
 		plan, perr := rebaseplan.BuildSquash(msg.commits, msg.targets)
@@ -2291,12 +2291,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 					rp, err := rebaseplan.BuildSquashReorder(commits, targets)
 					if err != nil {
-						m.statusMsg = "squash: " + err.Error()
+						m.statusMsg = i18n.T("squash: %s", err.Error())
 						return m, nil
 					}
 					ggBin, err := os.Executable()
 					if err != nil {
-						m.statusMsg = "squash: " + err.Error()
+						m.statusMsg = i18n.T("squash: %s", err.Error())
 						return m, nil
 					}
 					m.commitCompareSet = nil
@@ -2311,18 +2311,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// off-branch rows so the user can retry from a valid selection.
 			note := perr.Error()
 			if n := m.unmarkOffBranchTargets(msg.commits, msg.targets); n > 0 {
-				noun := "commit"
-				if n > 1 {
-					noun = "commits"
+				if n == 1 {
+					m.statusMsg = i18n.T("squash: %s; unmarked %d off-branch commit", note, n)
+				} else {
+					m.statusMsg = i18n.T("squash: %s; unmarked %d off-branch commits", note, n)
 				}
-				note = fmt.Sprintf("%s; unmarked %d off-branch %s", note, n, noun)
+				return m, nil
 			}
-			m.statusMsg = "squash: " + note
+			m.statusMsg = i18n.T("squash: %s", note)
 			return m, nil
 		}
 		ggBin, err := os.Executable()
 		if err != nil {
-			m.statusMsg = "squash: " + err.Error()
+			m.statusMsg = i18n.T("squash: %s", err.Error())
 			return m, nil
 		}
 		m.commitCompareSet = nil // the squash consumes the selection
@@ -2330,17 +2331,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case dropRangeLoadedMsg:
 		if msg.err != nil {
-			m.statusMsg = "drop: " + msg.err.Error()
+			m.statusMsg = i18n.T("drop: %s", msg.err.Error())
 			return m, nil
 		}
 		plan, perr := rebaseplan.BuildDrop(msg.commits, msg.targets)
 		if perr != nil {
-			m.statusMsg = "drop: " + perr.Error()
+			m.statusMsg = i18n.T("drop: %s", perr.Error())
 			return m, nil
 		}
 		ggBin, err := os.Executable()
 		if err != nil {
-			m.statusMsg = "drop: " + err.Error()
+			m.statusMsg = i18n.T("drop: %s", err.Error())
 			return m, nil
 		}
 		m.commitCompareSet = nil // the drop consumes the selection
@@ -2358,17 +2359,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if msg.err != nil {
-			return fail("conflict: " + msg.err.Error())
+			return fail(i18n.T("conflict: %s", msg.err.Error()))
 		}
 		if textdiff.IsBinary(msg.content) {
-			return fail("hunk picker: binary file")
+			return fail(i18n.T("hunk picker: binary file"))
 		}
 		doc, err := hunkpick.ParseConflict(msg.content)
 		if err != nil {
-			return fail("hunk picker: " + err.Error())
+			return fail(i18n.T("hunk picker: %s", err.Error()))
 		}
 		if len(doc.Blocks()) == 0 {
-			return fail("hunk picker: no conflict regions found")
+			return fail(i18n.T("hunk picker: no conflict regions found"))
 		}
 		if inProc {
 			cp.picker = newProcessConflictPicker(msg.path, doc)
@@ -2380,17 +2381,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case stageHunksLoadedMsg:
 		if msg.err != nil {
-			m.statusMsg = "stage hunks: " + msg.err.Error()
+			m.statusMsg = i18n.T("stage hunks: %s", msg.err.Error())
 			return m, nil
 		}
 		if textdiff.IsBinary(msg.index) || textdiff.IsBinary(msg.work) {
-			m.statusMsg = "stage hunks: binary file"
+			m.statusMsg = i18n.T("stage hunks: binary file")
 			return m, nil
 		}
 		doc := hunkpick.FromDiff(msg.index, msg.work)
 		doc.SetAll(hunkpick.TakeCurrent) // default: nothing staged
 		if len(doc.Blocks()) == 0 {
-			m.statusMsg = "stage hunks: nothing to stage"
+			m.statusMsg = i18n.T("stage hunks: nothing to stage")
 			return m, nil
 		}
 		m = m.pushLayer(newStagePicker(msg.path, doc))
@@ -2398,7 +2399,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case clipboardCopiedMsg:
 		if msg.err != nil {
-			m.statusMsg = "copy failed: " + msg.err.Error()
+			m.statusMsg = i18n.T("copy failed: %s", msg.err.Error())
 		} else {
 			m.statusMsg = msg.ok
 		}
@@ -2417,7 +2418,7 @@ func (m Model) handleStageKey() (tea.Model, tea.Cmd) {
 	paths, hadConflict := m.stageTargets()
 	if len(paths) == 0 {
 		if hadConflict {
-			m.statusMsg = "resolve conflicts first"
+			m.statusMsg = i18n.T("resolve conflicts first")
 		}
 		return m, nil
 	}
@@ -2426,7 +2427,7 @@ func (m Model) handleStageKey() (tea.Model, tea.Cmd) {
 	m.fileMarks = nil
 	// Direction is the panel: Files stages, Staged unstages.
 	m.running = true
-	m.statusMsg = "working…"
+	m.statusMsg = i18n.T("working…")
 	return m, m.stageCmd(engine.Stage{Paths: paths, Unstage: m.focus == panelStaged})
 }
 
@@ -2512,7 +2513,7 @@ func (m Model) rememberLeftFocus() Model {
 func (m Model) applyLanguage() Model {
 	if err := i18n.SetLanguage(m.cfg.UI.Language, config.LangDir()); err != nil {
 		_ = i18n.SetLanguage("", "")
-		m.statusMsg = "language " + strconv.Quote(m.cfg.UI.Language) + " unavailable — using English (" + err.Error() + ")"
+		m.statusMsg = i18n.T("language %s unavailable — using English (%s)", strconv.Quote(m.cfg.UI.Language), err.Error())
 	}
 	return m
 }

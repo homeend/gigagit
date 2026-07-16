@@ -4,6 +4,8 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/homeend/gigagit/internal/i18n"
 )
 
 // relatedPromptPopup asks the ONE follow-up question a Settings toggle can
@@ -53,11 +55,11 @@ func (p *relatedPromptPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			return rp.apply(m)
 		case 2:
 			if m.promptStore == nil {
-				m.statusMsg = "couldn't save the choice (no state dir) — will ask again"
+				m.statusMsg = i18n.T("couldn't save the choice (no state dir) — will ask again")
 			} else if err := m.promptStore.SuppressPrompt(rp.id); err != nil {
-				m.statusMsg = "couldn't save the choice — will ask again (" + err.Error() + ")"
+				m.statusMsg = i18n.T("couldn't save the choice — will ask again (%s)", err.Error())
 			} else {
-				m.statusMsg = "won't ask again — saved to " + defaultPromptStatePath()
+				m.statusMsg = i18n.T("won't ask again — saved to %s", defaultPromptStatePath())
 			}
 		}
 		return m, nil

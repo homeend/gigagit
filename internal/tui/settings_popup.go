@@ -609,15 +609,6 @@ func (p *settingsPopup) render(m Model, below string) string {
 	return overlayCenter(clipToHeight(below, h), p.box(m), w, h)
 }
 
-// padCell right-pads s to display width w using lipgloss.Width (rune-width
-// aware), not byte count. fmt's %-Ns pads by BYTE length, which misaligns a
-// translated CJK cell in the Rates editor's fixed-width columns (a CJK rune
-// is ~3 bytes but only 2 display cells) — this is the alignment-safe
-// replacement for the translated columns there.
-func padCell(s string, w int) string {
-	return s + strings.Repeat(" ", max(0, w-lipgloss.Width(s)))
-}
-
 // box draws whichever screen is active (modal box only).
 func (p *settingsPopup) box(m Model) string {
 	w, termH := m.overlayDims()
@@ -811,7 +802,7 @@ func (p *settingsPopup) box(m Model) string {
 				if row.existing {
 					suffix = " " + i18n.T("(configured)")
 					text = base + suffix
-					deco = toolConfiguredSuffixDecorator(len([]rune(base)), len([]rune(suffix)))
+					deco = toolConfiguredSuffixDecorator(lipgloss.Width(base), lipgloss.Width(suffix))
 				}
 				wr[i] = winRow{text: text, style: st, decorate: deco}
 			}

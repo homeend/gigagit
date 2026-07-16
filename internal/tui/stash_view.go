@@ -5,6 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -125,7 +126,7 @@ func (m Model) updateStashViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if m.width > 0 && m.width < 40 {
-			m.statusMsg = "terminal too narrow for the files view"
+			m.statusMsg = i18n.T("terminal too narrow for the files view")
 			return m, nil
 		}
 		e := v.entries[v.sel]

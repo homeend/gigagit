@@ -60,6 +60,16 @@ func T(key string, args ...any) string {
 // ActiveCode reports the active language code ("en" when unset).
 func ActiveCode() string { return active.Load().code }
 
+// ActiveTranslations returns the active catalog's key→translation map —
+// empty for English (English is the key itself; there is nothing to map).
+// The returned map is the catalog's own storage and MUST NOT be mutated:
+// catalogs are immutable once built (mergeBundle constructs the map fully
+// before SetLanguage stores it) and shared across goroutines via the
+// atomic pointer.
+func ActiveTranslations() map[string]string {
+	return active.Load().strings
+}
+
 // ActiveName reports the active language's native display name.
 func ActiveName() string { return active.Load().name }
 

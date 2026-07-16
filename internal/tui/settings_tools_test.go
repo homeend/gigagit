@@ -305,3 +305,23 @@ func TestToolsWizardWideTerminalAvoidsMidWordWrap(t *testing.T) {
 		t.Fatalf("expected the --allowedTools line to render on one unwrapped line at full width:\nwant substring: %q\ngot:\n%s", wantLine, out)
 	}
 }
+
+// TestDimSpanRunesCJKColumns pins dimSpanRunes to display-COLUMN math, not
+// rune-index math: a CJK rune occupies 2 columns but 1 rune index, so a
+// naive rune-index span (the bug this replaces) would dim the wrong slice
+// once a wide-rune prefix is involved.
+func TestDimSpanRunesCJKColumns(t *testing.T) {
+	// "工具" = 2 runes, 4 display columns; suffix span in COLUMNS.
+	r := []rune("工具 (configured)")
+	// span starts at column 4 (after 工具), width 13 = len(" (configured)")
+	from, to := dimSpanRunes(r, 0, 4, 13)
+	if from != 2 || to != len(r) {
+		t.Fatalf("unscrolled: got [%d,%d), want [2,%d)", from, to, len(r))
+	}
+	// scrolled 2 columns: the first CJK rune is cut; visible starts at 工's end
+	vis := r[1:]
+	from, to = dimSpanRunes(vis, 2, 4, 13)
+	if from != 1 || to != len(vis) {
+		t.Fatalf("scrolled: got [%d,%d), want [1,%d)", from, to, len(vis))
+	}
+}

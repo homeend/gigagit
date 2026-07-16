@@ -166,14 +166,14 @@ func (p *conflictProcess) updateListing(m Model, msg tea.KeyMsg) (Model, tea.Cmd
 		}
 		f := p.files[p.sel]
 		if f.ConflictClass() != model.ConflictBothSides {
-			m.statusMsg = "line editor: only for files modified on both sides"
+			m.statusMsg = i18n.T("line editor: only for files modified on both sides")
 			return m, nil
 		}
 		p.st = confWorking // loading the file; the picker shows when it arrives
 		return m, m.loadConflictFileCmd(f.Path)
 	case "t": // run an external tool on the conflicts
 		if m.reviewRunning {
-			m.statusMsg = "a review is in progress — wait for it to finish"
+			m.statusMsg = i18n.T("a review is in progress — wait for it to finish")
 			return m, nil
 		}
 		var focused *model.FileStatus
@@ -182,7 +182,7 @@ func (p *conflictProcess) updateListing(m Model, msg tea.KeyMsg) (Model, tea.Cmd
 		}
 		choices := conflictToolChoices(m.toolCommands("conflict"), p.src.Op, focused)
 		if len(choices) == 0 {
-			m.statusMsg = "no external tools configured — Settings (,) → External tools"
+			m.statusMsg = i18n.T("no external tools configured — Settings (,) → External tools")
 			return m, nil
 		}
 		p.toolChoices, p.toolSel = choices, 0
@@ -455,7 +455,7 @@ func (p *conflictProcess) toolFinished(m Model, msg toolFinishedMsg) (Model, tea
 			p.errMsg = toolExitName(msg.pending) + ": " + msg.err.Error()
 			return m, nil
 		}
-		m.statusMsg = "tool interrupted"
+		m.statusMsg = i18n.T("tool interrupted")
 	}
 	if msg.pending != nil && msg.pending.tc.PerFile && changed {
 		p.pending = msg.pending

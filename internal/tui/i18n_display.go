@@ -1,9 +1,22 @@
 package tui
 
 import (
+	"strings"
+
+	"github.com/charmbracelet/lipgloss"
+
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 )
+
+// padCell right-pads s to display width w using lipgloss.Width (rune-width
+// aware), not byte count. fmt's %-Ns pads by BYTE length, which misaligns a
+// translated CJK cell in the Rates editor's fixed-width columns (a CJK rune
+// is ~3 bytes but only 2 display cells) — this is the alignment-safe
+// replacement for the translated columns there.
+func padCell(s string, w int) string {
+	return s + strings.Repeat(" ", max(0, w-lipgloss.Width(s)))
+}
 
 // opDisplayName translates a sequencer op name for display. The op VALUES
 // ("merge", "rebase", "cherry-pick", "revert") are protocol — state,
@@ -89,4 +102,110 @@ func sourceDisplayName(s sourceKey) string {
 		return i18n.T("identity")
 	}
 	return sourceNames[s]
+}
+
+// optionDisplayName translates a decision-option label for display in the
+// modal. Option VALUES are protocol — Options lists, onResolve/decider
+// comparisons, and the esc→"abort" mapping keep the English word; ONLY
+// renderModal's option loop comes here. A value with no case (e.g. a
+// dynamic name) passes through — names must not be translated anyway.
+// Task: internal/tui/options_vocab_test.go forces every statically declared
+// option value through the bundles; the bundle orphan check forces each
+// bundle key back to a T() literal, which is the case arm here.
+func optionDisplayName(value string) string {
+	switch value {
+	case "Apply patch":
+		return i18n.T("Apply patch")
+	case "Cancel":
+		return i18n.T("Cancel")
+	case "Cherry-pick":
+		return i18n.T("Cherry-pick")
+	case "Copy absolute file path":
+		return i18n.T("Copy absolute file path")
+	case "Copy file name":
+		return i18n.T("Copy file name")
+	case "Copy file path":
+		return i18n.T("Copy file path")
+	case "Create branch…":
+		return i18n.T("Create branch…")
+	case "Create worktree…":
+		return i18n.T("Create worktree…")
+	case "Delete":
+		return i18n.T("Delete")
+	case "Detached":
+		return i18n.T("Detached")
+	case "Discard":
+		return i18n.T("Discard")
+	case "No":
+		return i18n.T("No")
+	case "Push branch + tags":
+		return i18n.T("Push branch + tags")
+	case "Push branch only":
+		return i18n.T("Push branch only")
+	case "Remove":
+		return i18n.T("Remove")
+	case "Reorder & squash":
+		return i18n.T("Reorder & squash")
+	case "Yes":
+		return i18n.T("Yes")
+	case "abort":
+		return i18n.T("abort")
+	case "cancel":
+		return i18n.T("cancel")
+	case "check out as different name…":
+		return i18n.T("check out as different name…")
+	case "checkout-and-resolve":
+		return i18n.T("checkout-and-resolve")
+	case "commits":
+		return i18n.T("commits")
+	case "delete":
+		return i18n.T("delete")
+	case "force":
+		return i18n.T("force")
+	case "force-delete":
+		return i18n.T("force-delete")
+	case "force-with-lease":
+		return i18n.T("force-with-lease")
+	case "go to worktree":
+		return i18n.T("go to worktree")
+	case "hard":
+		return i18n.T("hard")
+	case "keep":
+		return i18n.T("keep")
+	case "keep-conflicts":
+		return i18n.T("keep-conflicts")
+	case "merge":
+		return i18n.T("merge")
+	case "mixed":
+		return i18n.T("mixed")
+	case "no":
+		return i18n.T("no")
+	case "overwrite":
+		return i18n.T("overwrite")
+	case "proceed":
+		return i18n.T("proceed")
+	case "pull now":
+		return i18n.T("pull now")
+	case "rebase":
+		return i18n.T("rebase")
+	case "reset":
+		return i18n.T("reset")
+	case "run":
+		return i18n.T("run")
+	case "skip":
+		return i18n.T("skip")
+	case "soft":
+		return i18n.T("soft")
+	case "unlock-and-remove":
+		return i18n.T("unlock-and-remove")
+	case "working-tree":
+		return i18n.T("working-tree")
+	case "worktree-and-branch":
+		return i18n.T("worktree-and-branch")
+	case "worktree-only":
+		return i18n.T("worktree-only")
+	case "yes":
+		return i18n.T("yes")
+	}
+	return value
 }

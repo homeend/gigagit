@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/homeend/gigagit/internal/model"
 )
@@ -148,6 +149,67 @@ func TestExplorerWrapModeUnsetCellsNotCorrupted(t *testing.T) {
 	if prefixed != total {
 		t.Fatalf("an \"(unset)\" cell lost its dim-color escape across a wrap line break: only %d of %d occurrences are immediately prefixed by the color escape %q\nview:\n%s",
 			prefixed, total, openSeq, out)
+	}
+}
+
+// TestConfigRowDecoratorCJKUnsetSpanExact is a regression test for the bug
+// fixed by commit 4fa416c: the pre-fix configRowDecorator measured span
+// boundaries in RUNE INDEX, implicitly treating every rune as exactly one
+// display column. That held only because the "(unset)" placeholder used to
+// be hardcoded ASCII; once i18n.T("(unset)") can render as CJK (e.g. ja's
+// "(未設定)" — 5 runes but 8 display columns), a rune-index boundary drifts
+// from the true display-column boundary by the accumulated CJK width,
+// bleeding the LOCAL cell's dim styling into the separator AND the start of
+// the following (correctly SET, un-dimmed) global cell.
+//
+// Drives configRowDecorator directly with a hand-built row/cell layout — no
+// i18n.SetLanguage, so this exercises the span math itself, not the
+// translation catalog — with fully controlled column geometry: keyW=3
+// ("abc"), localW=8 (exactly the CJK placeholder's 8 display columns),
+// globalW=6 (an ASCII SET value "abcdef" that must stay undimmed).
+func TestConfigRowDecoratorCJKUnsetSpanExact(t *testing.T) {
+	forceColor(t)
+	const (
+		keyW    = 3
+		localW  = 8
+		globalW = 6
+	)
+	const unsetCJK = "(未設定)" // 5 runes, 8 display columns
+	if w := lipgloss.Width(unsetCJK); w != localW {
+		t.Fatalf("test fixture drift: unsetCJK display width = %d, want %d", w, localW)
+	}
+	visible := "abc " + unsetCJK + " abcdef"
+
+	row := model.GitConfigRow{LocalSet: false, GlobalSet: true}
+	dec := configRowDecorator(row, keyW, localW, globalW)
+	if dec == nil {
+		t.Fatal("expected a non-nil decorator when LocalSet is false")
+	}
+
+	out := dec(visible, 0, 0)
+
+	// (a) content preservation: dimming must never lose, duplicate, or split
+	// a glyph — stripping the ANSI escapes must reproduce the input verbatim.
+	if stripped := ansi.Strip(out); stripped != visible {
+		t.Fatalf("decorator corrupted row content:\n got  %q\n want %q\nraw: %q", stripped, visible, out)
+	}
+
+	// (b) the dimmed span must cover EXACTLY the local cell's display
+	// columns — no more (bleeding into the separator/global cell), no less
+	// (the CJK placeholder must render whole). Under the old rune-index math
+	// the local span's inner loop walked a display-column budget (8) one
+	// RUNE at a time, so it consumed 8 runes from index 4 instead of the 5
+	// runes that actually make up 8 display columns of CJK — swallowing the
+	// separator and the leading "ab" of "abcdef" into the SAME Render call,
+	// so this exact substring is absent under the old code.
+	want := unsetStyle.Render(unsetCJK)
+	if !strings.Contains(out, want) {
+		t.Fatalf("dimmed span does not cover exactly the local cell %q; got:\n%q", unsetCJK, out)
+	}
+	// The un-dimmed global value must survive untouched, immediately after
+	// the separator that follows the dimmed span.
+	if !strings.Contains(out, want+" abcdef") {
+		t.Fatalf("global cell value bled into (or was displaced by) the dimmed span; got:\n%q", out)
 	}
 }
 

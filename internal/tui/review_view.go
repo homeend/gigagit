@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/homeend/gigagit/internal/i18n"
 )
 
 // reviewView is the full-screen, read-only report viewer: displays a captured
@@ -122,11 +124,11 @@ func (r *reviewView) render(m Model, _ string) string {
 	r.clampScroll(body, len(dl))
 
 	header := truncate(r.title, w)
-	hint := truncate("[↑↓] scroll  [pgup/pgdn] page  [z] wrap  [e] edit  [/] search  [esc] close", w)
+	hint := truncate(i18n.T("[↑↓] scroll  [pgup/pgdn] page  [z] wrap  [e] edit  [/] search  [esc] close"), w)
 	if r.typing {
 		hint = truncate("/"+r.query+"█", w)
 	} else if r.query != "" {
-		hint = truncate("/"+r.query+"  [n] next  "+hint, w)
+		hint = truncate("/"+r.query+"  "+i18n.T("[n] next")+"  "+hint, w)
 	}
 
 	end := r.scroll + body
@@ -147,7 +149,7 @@ func (r *reviewView) render(m Model, _ string) string {
 		}
 	}
 	if len(dl) == 0 {
-		rows[0] = padRight(truncate("(empty report)", w), w)
+		rows[0] = padRight(truncate(i18n.T("(empty report)"), w), w)
 	}
 
 	out := header + "\n" + strings.Join(rows, "\n") + "\n" + hint

@@ -11,6 +11,7 @@ import (
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/exttool"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/template"
 )
@@ -237,7 +238,7 @@ func (m Model) reviewBranchTargetCmd(tip string, gen int) tea.Cmd {
 func (m Model) startReviewLane(target domain.ReviewTarget) (Model, tea.Cmd) {
 	cmds := m.toolCommands(string(exttool.CatReview))
 	if len(cmds) == 0 {
-		m.statusMsg = "no review tool configured (Settings → External tools)"
+		m.statusMsg = i18n.T("no review tool configured (Settings → External tools)")
 		return m, nil
 	}
 	lane := &reviewLane{target: target, cmds: cmds}
@@ -255,7 +256,7 @@ func (m Model) startReviewLane(target domain.ReviewTarget) (Model, tea.Cmd) {
 func (m Model) reviewGate(lane *reviewLane, chosen config.ToolCommand) (Model, tea.Cmd) {
 	resolved, err := template.ResolveCommand(chosen.Command, nil, template.CmdCtx{Range: lane.target.Range, Repo: m.currentWorktree})
 	if err != nil {
-		m.statusMsg = "review: " + err.Error()
+		m.statusMsg = i18n.T("review: %s", err.Error())
 		return m.popLayer(), nil
 	}
 	lane.genCmd = chosen
@@ -310,7 +311,7 @@ func (m Model) applyReviewDone(msg reviewDoneMsg) (Model, tea.Cmd) {
 	m.reviewRunning = false
 	m.reviewCancel = nil
 	if msg.err != nil {
-		m.statusMsg = "review: " + msg.err.Error()
+		m.statusMsg = i18n.T("review: %s", msg.err.Error())
 		return m, nil
 	}
 	return m.pushLayer(newReviewView(reviewTitle(msg.res.Label), msg.res.Path, msg.res.Content)), nil
@@ -321,9 +322,9 @@ func (m Model) applyReviewDone(msg reviewDoneMsg) (Model, tea.Cmd) {
 // that set neither Label nor Range) falls back to "working changes".
 func reviewTitle(label string) string {
 	if strings.TrimSpace(label) == "" {
-		return "Review: working changes"
+		return i18n.T("Review: working changes")
 	}
-	return "Review: " + label
+	return i18n.T("Review: %s", label)
 }
 
 // cancelReview cancels an in-flight background run, clears the running flag

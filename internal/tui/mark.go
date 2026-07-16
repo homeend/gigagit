@@ -4,6 +4,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/i18n"
 )
 
 // markState identifies a marked row by stable identity (panelList.Key), not
@@ -114,7 +115,7 @@ func (m Model) handleMarkKey() (tea.Model, tea.Cmd) {
 	}
 	ops := pairOpsFor(m.focus)
 	if len(ops) == 0 {
-		m.statusMsg = "no pair operations for this panel"
+		m.statusMsg = i18n.T("no pair operations for this panel")
 		return m, nil
 	}
 	w, _ := m.overlayDims()

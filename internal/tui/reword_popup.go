@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/i18n"
 )
 
 // rewordPopup wraps the shared commit-message editor (commitPopup) with the
@@ -71,7 +72,7 @@ func (p *rewordPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		m = m.popLayer()
 	case submit:
 		if strings.TrimSpace(p.popup.title.Value()) == "" {
-			m.statusMsg = "title required"
+			m.statusMsg = i18n.T("title required")
 			return m, nil
 		}
 		op := engine.Reword{Commit: p.commit, NewMsg: p.popup.message(), GGBin: p.ggBin}

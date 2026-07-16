@@ -12,6 +12,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -54,7 +55,7 @@ func (p *shelfRestorePopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		m = m.popLayer() // back to the switcher; it stays visible during the write
 		blob, err := m.svc.ShelfBlob(context.Background(), entry)
 		if err != nil {
-			m.statusMsg = "shelf restore: " + err.Error()
+			m.statusMsg = i18n.T("shelf restore: %s", err.Error())
 			return m, nil
 		}
 		// engine.WriteFile owns the Overwrite/Cancel fork via the modal decider.

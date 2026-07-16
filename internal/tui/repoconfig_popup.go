@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/homeend/gigagit/internal/config"
+	"github.com/homeend/gigagit/internal/i18n"
 )
 
 // repoCfgAction is one whole-file relocation of the per-repo config between the
@@ -25,13 +26,13 @@ const (
 func repoCfgActionLabel(a repoCfgAction) string {
 	switch a {
 	case actCopyToPrivate:
-		return "Copy to private (user dir)"
+		return i18n.T("Copy to private (user dir)")
 	case actMoveToPrivate:
-		return "Move to private (user dir)"
+		return i18n.T("Move to private (user dir)")
 	case actCopyToCommitted:
-		return "Copy to committed (.gg.toml)"
+		return i18n.T("Copy to committed (.gg.toml)")
 	case actMoveToCommitted:
-		return "Move to committed (.gg.toml)"
+		return i18n.T("Move to committed (.gg.toml)")
 	}
 	return "?"
 }
@@ -170,13 +171,13 @@ func (p *repoConfigPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 func (p *repoConfigPopup) run(m Model, act repoCfgAction) (Model, tea.Cmd) {
 	src, dst, isMove := repoCfgEndpoints(act, p.committedPath, p.privatePath)
 	if err := config.CopyRepoConfig(src, dst); err != nil {
-		m.statusMsg = "repo settings: " + err.Error()
+		m.statusMsg = i18n.T("repo settings: %s", err.Error())
 		return m, nil
 	}
-	m.statusMsg = "repo settings: " + repoCfgActionLabel(act) + " done"
+	m.statusMsg = i18n.T("repo settings: %s done", repoCfgActionLabel(act))
 	if isMove {
 		if err := config.RemoveRepoConfig(src); err != nil {
-			m.statusMsg = "repo settings: copied but source not removed: " + err.Error()
+			m.statusMsg = i18n.T("repo settings: copied but source not removed: %s", err.Error())
 		}
 	}
 	// The op is now fully complete (copy landed, and — for a move — the remove
@@ -205,12 +206,13 @@ func (p *repoConfigPopup) render(m Model, below string) string {
 
 func slotDisplay(path string, exists bool) string {
 	if path == "" {
-		return "(unavailable)"
+		return i18n.T("(unavailable)")
 	}
+	status := i18n.T("absent")
 	if exists {
-		return "present  " + path
+		status = i18n.T("present")
 	}
-	return "absent   " + path
+	return padCell(status, 9) + path
 }
 
 func (p *repoConfigPopup) box(m Model) string {
@@ -218,22 +220,22 @@ func (p *repoConfigPopup) box(m Model) string {
 	inner := popupResolveWidth(w, p.maximized, popupWideInnerWidth(w)) // paths are long
 	textW := popupTextWidth(inner)
 	var b strings.Builder
-	b.WriteString("Repo settings location\n\n")
-	b.WriteString("  committed  " + slotDisplay(p.committedPath, p.committedEx) + "\n")
-	b.WriteString("  private    " + slotDisplay(p.privatePath, p.privateEx) + "\n\n")
+	b.WriteString(i18n.T("Repo settings location") + "\n\n")
+	b.WriteString("  " + padCell(i18n.T("committed"), 11) + slotDisplay(p.committedPath, p.committedEx) + "\n")
+	b.WriteString("  " + padCell(i18n.T("private"), 11) + slotDisplay(p.privatePath, p.privateEx) + "\n\n")
 
 	if p.confirm {
 		_, dst, _ := repoCfgEndpoints(p.pending, p.committedPath, p.privatePath)
-		for _, seg := range wrapWidth("Overwrite "+dst+" ?", textW, 1<<20) {
+		for _, seg := range wrapWidth(i18n.T("Overwrite %s ?", dst), textW, 1<<20) {
 			b.WriteString(seg + "\n")
 		}
-		b.WriteString("\n[y] overwrite  [n/esc] cancel")
+		b.WriteString("\n" + i18n.T("[y] overwrite  [n/esc] cancel"))
 		return popupBox(inner, strings.TrimRight(b.String(), "\n"))
 	}
 
 	if len(p.actions) == 0 {
-		b.WriteString("  (nothing to move — no per-repo config here, or not in a repo)\n")
-		b.WriteString("\n[esc] close")
+		b.WriteString("  " + i18n.T("(nothing to move — no per-repo config here, or not in a repo)") + "\n")
+		b.WriteString("\n" + i18n.T("[esc] close"))
 		return popupBox(inner, strings.TrimRight(b.String(), "\n"))
 	}
 
@@ -249,7 +251,7 @@ func (p *repoConfigPopup) box(m Model) string {
 	for _, line := range renderWindow(wr, winOpts{w: textW, h: len(p.actions), mode: modeCutoff, anchor: p.sel}) {
 		b.WriteString(line + "\n")
 	}
-	b.WriteString("\nactive file = private if present; move deletes the source (may dirty a tracked .gg.toml)")
-	b.WriteString("\n[↑/↓] select  [enter] do  [esc] close")
+	b.WriteString("\n" + i18n.T("active file = private if present; move deletes the source (may dirty a tracked .gg.toml)"))
+	b.WriteString("\n" + i18n.T("[↑/↓] select  [enter] do  [esc] close"))
 	return popupBox(inner, strings.TrimRight(b.String(), "\n"))
 }

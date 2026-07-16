@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/lipgloss"
+
 	"github.com/homeend/gigagit/internal/domain"
 )
 
@@ -67,5 +69,39 @@ func TestSourceDisplayNameEnglishPassthrough(t *testing.T) {
 		if got := sourceDisplayName(s); got != sourceNames[s] {
 			t.Fatalf("sourceDisplayName(%d) = %q, want %q", s, got, sourceNames[s])
 		}
+	}
+}
+
+func TestOptionDisplayNameEnglishPassthrough(t *testing.T) {
+	// English is the key: with no language set, every value maps to itself.
+	for _, v := range []string{
+		"Apply patch", "Cancel", "Cherry-pick", "Create branch…",
+		"Create worktree…", "Delete", "Detached", "Discard", "No",
+		"Push branch + tags", "Push branch only", "Remove",
+		"Reorder & squash", "Yes", "abort", "cancel",
+		"check out as different name…", "checkout-and-resolve", "commits",
+		"delete", "force", "force-delete", "force-with-lease",
+		"go to worktree", "hard", "keep", "keep-conflicts", "merge",
+		"mixed", "no", "proceed", "rebase", "reset", "run", "skip", "soft",
+		"unlock-and-remove", "working-tree", "yes",
+	} {
+		if got := optionDisplayName(v); got != v {
+			t.Fatalf("optionDisplayName(%q) = %q, want passthrough", v, got)
+		}
+	}
+	if got := optionDisplayName("feature/dynamic-branch-name"); got != "feature/dynamic-branch-name" {
+		t.Fatalf("unknown value must pass through, got %q", got)
+	}
+}
+
+// padCell now lives in i18n_display.go (moved from settings_popup.go) so the
+// identity popup's label columns can share it. This pins the alignment
+// property both call sites rely on: a wider CJK label still pads to the same
+// display width as a narrower ASCII one.
+func TestIdentityLabelPadCellAlignsCJK(t *testing.T) {
+	ascii := "  " + padCell("Name", 9) + " v"
+	cjk := "  " + padCell("名前", 9) + " v"
+	if lipgloss.Width(ascii) != lipgloss.Width(cjk) {
+		t.Fatalf("padded label columns misalign: %d vs %d", lipgloss.Width(ascii), lipgloss.Width(cjk))
 	}
 }

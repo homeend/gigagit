@@ -533,7 +533,7 @@ func (m Model) compareSelectionEndpoints() (left, right model.Endpoint, note str
 		}
 	}
 	if len(sel) < 2 {
-		return left, right, "select at least 2 rows to compare", false
+		return left, right, i18n.T("select at least 2 rows to compare"), false
 	}
 	// older = max rank, newer = min rank (working tree/staged rank negative = newest).
 	oldest, newest := sel[0], sel[0]
@@ -553,11 +553,11 @@ func (m Model) compareSelectionEndpoints() (left, right model.Endpoint, note str
 		return m.compareKeyEndpoint(oldest.key), m.compareKeyEndpoint(newest.key), "", true
 	}
 	if hasWip {
-		return left, right, "range compare (3+) is commits-only; remove the working tree / staged row", false
+		return left, right, i18n.T("range compare (3+) is commits-only; remove the working tree / staged row"), false
 	}
 	// 3+ commits: squash from oldest^. Refuse if the oldest is a root commit.
 	if oi := oldest.rank; oi >= 0 && oi < len(m.commits) && len(m.commits[oi].Parents) == 0 {
-		return left, right, "can't squash a range from the root commit", false
+		return left, right, i18n.T("can't squash a range from the root commit"), false
 	}
 	return model.Endpoint{Kind: model.EndpointCommit, Hash: oldest.key + "^"},
 		model.Endpoint{Kind: model.EndpointCommit, Hash: newest.key}, "", true
@@ -613,7 +613,7 @@ func (m Model) commitSquashRow() (actionRow, bool) {
 			for k := range m.commitCompareSet {
 				switch k {
 				case wipKey(wipRow{kind: wipWorktree}), wipKey(wipRow{kind: wipStaged}):
-					m.statusMsg = "squash is commits-only; remove the working tree / staged row"
+					m.statusMsg = i18n.T("squash is commits-only; remove the working tree / staged row")
 					return m, nil
 				}
 				targets = append(targets, k)
@@ -622,12 +622,12 @@ func (m Model) commitSquashRow() (actionRow, bool) {
 				}
 			}
 			if oldest == "" {
-				m.statusMsg = "select at least 2 commits to squash"
+				m.statusMsg = i18n.T("select at least 2 commits to squash")
 				return m, nil
 			}
 			// Root guard: the oldest commit needs a parent to rebase onto.
 			if oldestRank >= 0 && oldestRank < len(m.commits) && len(m.commits[oldestRank].Parents) == 0 {
-				m.statusMsg = "can't squash from the root commit"
+				m.statusMsg = i18n.T("can't squash from the root commit")
 				return m, nil
 			}
 			return m, m.loadSquashRangeCmd(m.status.Branch, oldest+"^", targets)
@@ -687,7 +687,7 @@ func (m Model) commitDropSelectionRow() (actionRow, bool) {
 				}
 				switch k {
 				case wipKey(wipRow{kind: wipWorktree}), wipKey(wipRow{kind: wipStaged}):
-					m.statusMsg = "drop is commits-only; remove the working tree / staged row"
+					m.statusMsg = i18n.T("drop is commits-only; remove the working tree / staged row")
 					return m, nil
 				}
 				targets = append(targets, k)
@@ -696,12 +696,12 @@ func (m Model) commitDropSelectionRow() (actionRow, bool) {
 				}
 			}
 			if len(targets) < 2 {
-				m.statusMsg = "select at least 2 commits to drop"
+				m.statusMsg = i18n.T("select at least 2 commits to drop")
 				return m, nil
 			}
 			// Root guard: the oldest commit needs a parent to rebase onto.
 			if oldestRank >= 0 && oldestRank < len(m.commits) && len(m.commits[oldestRank].Parents) == 0 {
-				m.statusMsg = "can't drop a range that includes the root commit"
+				m.statusMsg = i18n.T("can't drop a range that includes the root commit")
 				return m, nil
 			}
 			return m, m.loadDropRangeCmd(m.status.Branch, oldest+"^", targets)
@@ -771,7 +771,7 @@ func (m Model) commitRevertRow() (actionRow, bool) {
 		label: "Revert this commit",
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			if isMerge {
-				m.statusMsg = "cannot revert a merge commit (v1)"
+				m.statusMsg = i18n.T("cannot revert a merge commit (v1)")
 				return m, nil
 			}
 			return m.startOp(engine.Revert{Commit: hash})
