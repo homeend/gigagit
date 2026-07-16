@@ -15,8 +15,10 @@ import (
 // asks one follow-up question. Options are always Yes / Not now / No — don't
 // ask again; "Yes" must reuse the related Settings row's exact code path.
 type relatedPrompt struct {
-	id       string // stable suppression key (persisted in prompts.toml)
-	setting  string // which Settings toggle triggers evaluation
+	id      string // stable suppression key (persisted in prompts.toml)
+	setting string // which Settings toggle triggers evaluation
+	// question is the raw lookup key for relatedQuestion — display-only,
+	// resolved at render time for the same freeze reason as yesLabel below.
 	question string
 	// yesLabel is the raw lookup key for relatedYesLabel — display-only
 	// (the popup dispatches by index, never by comparing this text). It is
@@ -74,6 +76,18 @@ func relatedYesLabel(key string) string {
 		return i18n.T("Yes, set plain")
 	case "Yes, set date-order":
 		return i18n.T("Yes, set date-order")
+	}
+	return key
+}
+
+// relatedQuestion translates a relatedPrompt.question key at render time
+// (same freeze rationale as relatedYesLabel).
+func relatedQuestion(key string) string {
+	switch key {
+	case "Ordering only matters for graph lanes — also switch Commit sort to plain (much faster on big repos)?":
+		return i18n.T("Ordering only matters for graph lanes — also switch Commit sort to plain (much faster on big repos)?")
+	case "The graph draws correct lanes only with date-order — switch Commit sort back to date-order?":
+		return i18n.T("The graph draws correct lanes only with date-order — switch Commit sort back to date-order?")
 	}
 	return key
 }

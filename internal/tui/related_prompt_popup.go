@@ -73,7 +73,7 @@ func (p *relatedPromptPopup) render(m Model, below string) string {
 	textW := popupTextWidth(inner)
 	var b strings.Builder
 	b.WriteString(i18n.T("Related option") + "\n\n")
-	for _, line := range wrapWidth(p.prompt.question, textW, 1<<20) {
+	for _, line := range wrapWidth(relatedQuestion(p.prompt.question), textW, 1<<20) {
 		b.WriteString(line + "\n")
 	}
 	b.WriteString("\n")
