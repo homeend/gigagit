@@ -543,7 +543,7 @@ func (p *bookmarkPastePopup) render(m Model, below string) string {
 	var b strings.Builder
 	b.WriteString(i18n.T("Paste bookmarked file to a new path") + "\n\n")
 	b.WriteString(i18n.T("from: %s  (resolved now)", p.origin) + "\n")
-	b.WriteString(viewField("dest: ", p.dest, true, popupContentWidth(w)) + "\n\n")
+	b.WriteString(viewField(i18n.T("dest: "), p.dest, true, popupContentWidth(w)) + "\n\n")
 	b.WriteString(i18n.T("[type] path  [enter] paste  [esc] cancel"))
 	box := modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 	return overlayCenter(clipToHeight(below, h), box, w, h)

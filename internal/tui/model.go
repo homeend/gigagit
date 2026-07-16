@@ -4,7 +4,6 @@ package tui
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"slices"
 	"strconv"
@@ -417,7 +416,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.filesView.lines = msg.lines // pre-built off-thread
 		m.filesView.sel = 0
 		m.filesTitle = i18n.T("Files %s (all files) %s", shortHash(msg.hash), msg.subject)
-		m.filesContext = shortHash(msg.hash) + " (all files) " + msg.subject
+		m.filesContext = i18n.T("%s (all files) %s", shortHash(msg.hash), msg.subject)
 		return m, nil
 	case fileContentMsg:
 		if m.filesPreview == nil || msg.tag != m.filesPreviewTag {
@@ -2725,16 +2724,21 @@ func (m Model) panelLen(p panel) int {
 	return len(idx)
 }
 
-// commitScopeLabel describes the Commits feed mode for the panel header.
+// commitScopeLabel describes the Commits feed mode for the panel header. Its
+// only consumers are the two view.go render sites, both feeding the already-
+// translated "Commits (%s)" title (no cache key, comparison, or other
+// non-display path reads it) — safe to translate here at the definition
+// site. commitFilterChips' compact "path="/"msg="-style chip syntax is left
+// untranslated (no bundle already translates similar chip syntax).
 func (m Model) commitScopeLabel() string {
 	var base string
 	switch len(m.commitScopeBranches) {
 	case 0:
-		base = "all"
+		base = i18n.T("all")
 	case 1:
-		base = "solo: " + m.commitScopeBranches[0]
+		base = i18n.T("solo: %s", m.commitScopeBranches[0])
 	default:
-		base = fmt.Sprintf("%d branches", len(m.commitScopeBranches))
+		base = i18n.T("%d branches", len(m.commitScopeBranches))
 	}
 	chips := m.commitFilterChips()
 	if chips == "" {

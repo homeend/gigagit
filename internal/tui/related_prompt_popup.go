@@ -31,7 +31,7 @@ func (m Model) maybeRelatedPrompt(setting, newValue string) (Model, tea.Cmd) {
 
 // options returns the fixed three-choice list, yes-label first.
 func (p *relatedPromptPopup) options() []string {
-	return []string{p.prompt.yesLabel, i18n.T("Not now"), i18n.T("No — don't ask again")}
+	return []string{relatedYesLabel(p.prompt.yesLabel), i18n.T("Not now"), i18n.T("No — don't ask again")}
 }
 
 func (p *relatedPromptPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {

@@ -5,6 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/promptstate"
 	"github.com/homeend/gigagit/internal/repos"
 )
@@ -17,6 +18,12 @@ type relatedPrompt struct {
 	id       string // stable suppression key (persisted in prompts.toml)
 	setting  string // which Settings toggle triggers evaluation
 	question string
+	// yesLabel is the raw lookup key for relatedYesLabel — display-only
+	// (the popup dispatches by index, never by comparing this text). It is
+	// NOT translated here: relatedPrompts is a package-level var, and an
+	// i18n.T call in its initializer would freeze the English text at
+	// package init, before any language loads (the cfLabel/stashActionLabel
+	// rationale). relatedYesLabel resolves it at render time instead.
 	yesLabel string
 	// when gates the prompt on the LIVE config after the toggle applied:
 	// newValue is the setting's fresh value; check the related option's
@@ -55,6 +62,20 @@ var relatedPrompts = []relatedPrompt{
 		},
 		apply: func(m Model) (Model, tea.Cmd) { return m.cycleCommitSort() },
 	},
+}
+
+// relatedYesLabel translates a relatedPrompt.yesLabel key at render time (see
+// the field's doc comment — a package var initializer would freeze the
+// English text before any language loads; identical rationale to
+// stashActionLabel/cfLabel).
+func relatedYesLabel(key string) string {
+	switch key {
+	case "Yes, set plain":
+		return i18n.T("Yes, set plain")
+	case "Yes, set date-order":
+		return i18n.T("Yes, set date-order")
+	}
+	return key
 }
 
 // relatedPromptFor returns the first registered, non-suppressed prompt whose
