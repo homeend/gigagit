@@ -636,8 +636,10 @@ func tabSegAt(segs []tabSeg, col int) (panel, bool) {
 // topTabSegs builds the shared top-slot tabs (Branches · Remotes · Worktrees):
 // the active tab spelled out and bracketed, the inactive ones single-letter
 // markers so all three fit the narrow left column (w/3) even at 80 cols, leaving
-// room for the sort/filter decoration panelLabel appends. Plain ASCII so
-// renderPanel's truncate stays safe.
+// room for the sort/filter decoration panelLabel appends. Labels are
+// translated (i18n.T) and may contain wide CJK glyphs; renderPanel's truncate
+// and tabSegAt's column lookup both work in display columns (lipgloss.Width),
+// not bytes/runes, so this stays safe.
 func topTabSegs(active panel) []tabSeg {
 	mark := func(p panel, full, short string) string {
 		if p == active {

@@ -44,8 +44,8 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   drift, genitive-count and particle/case fixes, and field-tag width
   alignment). With this wave, **the TUI is fully translated**; only
   engine/CLI prose stays English by design (the agent-facing, script-stable
-  surface). ~270 new keys land in all four bundles, which now run past 1,050
-  lines each.
+  surface). ~405 new keys land in all four bundles, which now run just under
+  1,200 lines each.
 - **`/` search starts from the cursor, not from the top.** Engaging the `/`
   filter (in any panel, and on the files view's commit-list side) used to
   reset the cursor to row 0, and every typed character reset it again — with

@@ -3026,7 +3026,7 @@ func (m Model) View() string {
 		return "gigagit (loading…)\n" // startup + repo-switch keep the blank screen
 	}
 	if m.err != nil {
-		return "error: " + m.err.Error() + "\n"
+		return i18n.T("error: %s", m.err.Error()) + "\n"
 	}
 	return m.render()
 }
