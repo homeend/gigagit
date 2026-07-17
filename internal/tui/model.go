@@ -377,8 +377,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.err != nil {
 			m.statusMsg = i18n.T("files: %s", msg.err.Error())
-			if len(m.filesView.lines) == 1 && m.filesView.lines[0].text == "(loading…)" {
-				m.filesView.lines = []contentLine{{text: "(load failed)"}}
+			if len(m.filesView.lines) == 1 && isLoadingPlaceholder(m.filesView.lines[0].text) {
+				m.filesView.lines = []contentLine{{text: i18n.T("(load failed)")}}
 			}
 			return m, nil
 		}
@@ -395,8 +395,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.err != nil {
 			m.statusMsg = i18n.T("shelf files: %s", msg.err.Error())
-			if len(m.filesView.lines) == 1 && m.filesView.lines[0].text == "(loading…)" {
-				m.filesView.lines = []contentLine{{text: "(load failed)"}}
+			if len(m.filesView.lines) == 1 && isLoadingPlaceholder(m.filesView.lines[0].text) {
+				m.filesView.lines = []contentLine{{text: i18n.T("(load failed)")}}
 			}
 			return m, nil
 		}
@@ -410,8 +410,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.err != nil {
 			m.statusMsg = i18n.T("files: %s", msg.err.Error())
-			if len(m.filesView.lines) == 1 && m.filesView.lines[0].text == "(loading…)" {
-				m.filesView.lines = []contentLine{{text: "(load failed)"}}
+			if len(m.filesView.lines) == 1 && isLoadingPlaceholder(m.filesView.lines[0].text) {
+				m.filesView.lines = []contentLine{{text: i18n.T("(load failed)")}}
 			}
 			return m, nil
 		}
@@ -478,8 +478,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// A failed compare must be retryable: clear the tag so re-opening the
 			// SAME pair isn't swallowed by the openCompareFiles same-tag guard.
 			m.compareTag = ""
-			if len(m.filesView.lines) == 1 && m.filesView.lines[0].text == "(loading…)" {
-				m.filesView.lines = []contentLine{{text: "(load failed)"}}
+			if len(m.filesView.lines) == 1 && isLoadingPlaceholder(m.filesView.lines[0].text) {
+				m.filesView.lines = []contentLine{{text: i18n.T("(load failed)")}}
 			}
 			return m, nil
 		}

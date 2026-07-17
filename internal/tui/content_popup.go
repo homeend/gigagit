@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/homeend/gigagit/internal/i18n"
 )
 
 // contentLine is one display line of a contentPopup. heading lines are section
@@ -42,6 +44,16 @@ type contentPopup struct {
 
 func newContentPopup(title string, lines []contentLine) *contentPopup {
 	return &contentPopup{title: title, lines: lines}
+}
+
+// isLoadingPlaceholder reports whether text is the (possibly translated)
+// "(loading…)" placeholder written by the async-load construction sites.
+// Translation is resolved live against the ACTIVE catalog (i18n.T is
+// process-global) so a completion handler can recognize its own placeholder
+// under any language, not just English — comparing against the raw English
+// literal silently breaks the failure path once the placeholder is translated.
+func isLoadingPlaceholder(text string) bool {
+	return text == i18n.T("(loading…)")
 }
 
 // visible returns the filtered lines in display order: non-heading lines
