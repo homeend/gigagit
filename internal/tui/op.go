@@ -106,7 +106,7 @@ func (m Model) stageCmd(op engine.Operation) tea.Cmd {
 			return statusRefreshedMsg{err: err}
 		}
 		st, serr := svc.Status(context.Background())
-		return statusRefreshedMsg{summary: res.Summary, status: st, err: serr}
+		return statusRefreshedMsg{summary: renderSummary(res), status: st, err: serr}
 	}
 }
 

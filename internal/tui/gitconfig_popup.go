@@ -409,7 +409,7 @@ func (m Model) gitConfigWriteCmd(op engine.SetGitConfig) tea.Cmd {
 		if h, herr := svc.RepoHealth(context.Background()); herr == nil {
 			health = &h
 		}
-		return gitConfigRowsMsg{gen: gen, rows: rows, err: rerr, summary: res.Summary, health: health}
+		return gitConfigRowsMsg{gen: gen, rows: rows, err: rerr, summary: renderSummary(res), health: health}
 	}
 }
 

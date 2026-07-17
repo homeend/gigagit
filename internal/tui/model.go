@@ -1802,12 +1802,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case opEventMsg:
 		switch e := msg.event.(type) {
 		case engine.Progress:
-			m.statusMsg = e.Step
-			if e.Detail != "" {
-				m.statusMsg += ": " + e.Detail
-			}
+			m.statusMsg = renderProgress(e)
 		case engine.Done:
-			m.statusMsg = e.Result.Summary
+			m.statusMsg = renderSummary(e.Result)
 		}
 		return m, waitForOp(m.opMsgs)
 	case opDecisionMsg:
@@ -1989,7 +1986,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.pendingRemoteTagAdds = nil
 		} else {
 			if msg.res.Summary != "" {
-				m.statusMsg = msg.res.Summary
+				m.statusMsg = renderSummary(msg.res)
 			}
 			for _, name := range m.pendingSeqBump {
 				_, _ = config.BumpSeq(m.gitCommonDir, name)

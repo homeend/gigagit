@@ -1560,7 +1560,7 @@ func (m Model) renderModal() string {
 	// Prompt: keep any explicit line breaks (e.g. the hook-approval script),
 	// word-wrapping each physical line. wrapWords hard-chunks a single token
 	// wider than maxW, so an unbreakable long branch name still fits.
-	for _, line := range strings.Split(m.modal.req.Prompt, "\n") {
+	for _, line := range strings.Split(renderPrompt(m.modal.req), "\n") {
 		if wrapped := wrapWords(line, maxW); len(wrapped) > 0 {
 			b.WriteString(strings.Join(wrapped, "\n"))
 		}
