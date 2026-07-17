@@ -155,7 +155,7 @@ func (v *prefixSettingsView) updateForm(m Model, msg tea.KeyMsg) (Model, tea.Cmd
 	case tea.KeyEnter:
 		p, ok := v.formPrefix()
 		if !ok {
-			v.formErr = "prefix value is required"
+			v.formErr = i18n.T("prefix value is required")
 			return m, nil
 		}
 		if err := domain.ValidatePrefixValue(p.Value); err != nil {

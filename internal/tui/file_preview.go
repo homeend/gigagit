@@ -2,7 +2,6 @@ package tui
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -250,7 +249,7 @@ func (m Model) renderFilePreview(boxW, boxH int) string {
 	lines := make([]string, 0, contentH)
 	lines = append(lines, padRight(truncate(i18n.T("View %s", p.title), innerW), innerW))
 	if len(vis) == 0 {
-		lines = append(lines, padRight(truncate("  (empty)", innerW), innerW))
+		lines = append(lines, padRight(truncate(i18n.T("  (empty)"), innerW), innerW))
 	} else {
 		win := renderWindow(wr, winOpts{w: innerW, h: rowsCap, mode: p.mode, anchor: 0, hscroll: p.hscroll})
 		lines = append(lines, win...)
@@ -258,7 +257,7 @@ func (m Model) renderFilePreview(boxW, boxH int) string {
 	for len(lines) < contentH-1 {
 		lines = append(lines, padRight("", innerW))
 	}
-	hint := fmt.Sprintf("%d/%d  [↑/↓] scroll  [z] view  [esc] close", start+1, len(vis))
+	hint := i18n.T("%d/%d  [↑/↓] scroll  [z] view  [esc] close", start+1, len(vis))
 	lines = append(lines, padRight(truncate(hint, innerW), innerW))
 
 	style := bluredPanel

@@ -157,9 +157,9 @@ func (m Model) renderStashList(boxW, boxH int) string {
 	case v.loading:
 		rows = []string{i18n.T("(loading…)")}
 	case v.err != nil:
-		rows = []string{"error: " + v.err.Error()}
+		rows = []string{i18n.T("error: %s", v.err.Error())}
 	case len(v.entries) == 0:
-		rows = []string{"(no stashes)"}
+		rows = []string{i18n.T("(no stashes)")}
 	}
 	// Focused (bright border, highlighted cursor) only when it owns focus:
 	// m.focus is the right column AND the file tree isn't the active side.

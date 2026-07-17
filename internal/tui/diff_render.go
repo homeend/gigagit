@@ -6,6 +6,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/textdiff"
 )
 
@@ -22,18 +23,18 @@ var (
 // short enough that [esc] close survives truncation at width 100
 // (TestRenderDiffViewPanes). The scroll variant appends the pan keys.
 func diffHintFor(long longMode) string {
-	mode := "scroll"
+	mode := i18n.T("scroll")
 	switch long {
 	case longWrap:
-		mode = "wrap"
+		mode = i18n.T("wrap")
 	case longTruncate:
-		mode = "trunc"
+		mode = i18n.T("trunc")
 	}
 	pan := ""
 	if long == longScroll {
-		pan = "  [←→/0] pan"
+		pan = i18n.T("  [←→/0] pan")
 	}
-	return "[↑↓] scroll  [n/p] change  [f] part  [z] lines:" + mode + pan + "  [h] hist  [b] blame  [esc] close"
+	return i18n.T("[↑↓] scroll  [n/p] change  [f] part  [z] lines:%s", mode) + pan + i18n.T("  [h] hist  [b] blame  [esc] close")
 }
 
 // cellSeg is one pane's text for one display row: the sanitized display runes

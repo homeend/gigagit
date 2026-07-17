@@ -64,7 +64,7 @@ func (m Model) loadCommitMessageCmd(c model.Commit, short string) tea.Cmd {
 		lines := commitMetaHeader(c)
 		msg, err := svc.CommitMessage(context.Background(), c.Hash)
 		if err != nil {
-			lines = append(lines, contentLine{text: "(load failed: " + err.Error() + ")"})
+			lines = append(lines, contentLine{text: i18n.T("(load failed: %s)", err.Error())})
 		} else {
 			lines = append(lines, fileContentLines([]byte(strings.TrimRight(msg, "\n")))...)
 		}

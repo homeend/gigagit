@@ -111,7 +111,7 @@ func friendlyOpError(err error) string {
 	if msg, ok := friendlyPushError(low); ok {
 		return msg
 	}
-	return "error: " + s
+	return i18n.T("error: %s", s)
 }
 
 // friendlyPushError rewrites git's multi-line push-rejection stderr into one

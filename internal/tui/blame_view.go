@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -154,7 +155,7 @@ func (b *blameView) render(m Model, _ string) string {
 	case b.err != nil:
 		win = padLines("  error: "+b.err.Error(), w, body)
 	case len(b.lines) == 0:
-		win = padLines("  (empty)", w, body)
+		win = padLines(i18n.T("  (empty)"), w, body)
 	}
 
 	out := header + "\n" + strings.Join(win, "\n") + "\n" + hint

@@ -425,7 +425,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil // preview closed, or a stale load (another file opened)
 		}
 		if msg.err != nil {
-			m.filesPreview.lines = []contentLine{{text: "(load failed: " + msg.err.Error() + ")"}}
+			m.filesPreview.lines = []contentLine{{text: i18n.T("(load failed: %s)", msg.err.Error())}}
 			return m, nil
 		}
 		m.filesPreview.lines = msg.lines
@@ -438,7 +438,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil // layer closed, or a stale load from a different path
 		}
 		if msg.err != nil {
-			cp.lines = []contentLine{{text: "(load failed: " + msg.err.Error() + ")"}}
+			cp.lines = []contentLine{{text: i18n.T("(load failed: %s)", msg.err.Error())}}
 			return m, nil
 		}
 		cp.lines = msg.lines
