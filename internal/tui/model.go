@@ -434,7 +434,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case fileContentLayerMsg:
 		cp := layerOf[*contentPopup](m)
 		// Tag-gate: only fill the contentPopup whose title matches this path load.
-		if cp == nil || cp.title != "View "+msg.path {
+		if cp == nil || cp.title != i18n.T("View %s", msg.path) {
 			return m, nil // layer closed, or a stale load from a different path
 		}
 		if msg.err != nil {
@@ -1663,7 +1663,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.openActionMenu(), nil
 		case "?":
 			_, hidden := fitFooter(m, m.layout().w)
-			m = m.pushLayer(newContentPopup("Help — keys", helpWithHidden(hidden)))
+			m = m.pushLayer(newContentPopup(i18n.T("Help — keys"), helpWithHidden(hidden)))
 		case "#":
 			if m.opsIdle() {
 				return m.openGotoCommitPopup()

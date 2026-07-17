@@ -301,7 +301,7 @@ func (m Model) fileFinderActionRows(path string) []actionRow {
 			label: i18n.T("View content"),
 			run: func(m Model) (tea.Model, tea.Cmd) {
 				m = m.popLayer()
-				cp := newContentPopup("View "+path, []contentLine{{text: "(loading…)"}})
+				cp := newContentPopup(i18n.T("View %s", path), []contentLine{{text: i18n.T("(loading…)")}})
 				m = m.pushLayer(cp)
 				return m, m.loadFileContentLayerCmd(path)
 			},

@@ -155,7 +155,7 @@ func (m Model) renderStashList(boxW, boxH int) string {
 	}
 	switch {
 	case v.loading:
-		rows = []string{"(loading…)"}
+		rows = []string{i18n.T("(loading…)")}
 	case v.err != nil:
 		rows = []string{"error: " + v.err.Error()}
 	case len(v.entries) == 0:

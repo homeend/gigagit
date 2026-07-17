@@ -244,7 +244,7 @@ func (p *shelfPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		case "?":
 			// Open the compact cheat sheet over the still-open switcher; esc
 			// closes it and returns here (contentPopup's esc just nils itself).
-			m = m.pushLayer(newContentPopup(shelfSwitcherHelpTitle, shelfSwitcherHelp(p.compareRef != nil)))
+			m = m.pushLayer(newContentPopup(shelfSwitcherHelpTitle(), shelfSwitcherHelp(p.compareRef != nil)))
 			return m, nil
 		case "/":
 			p.filtering = true

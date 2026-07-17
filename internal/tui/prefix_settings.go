@@ -151,7 +151,7 @@ func (v *prefixSettingsView) updateForm(m Model, msg tea.KeyMsg) (Model, tea.Cmd
 		}
 		return m, nil
 	case tea.KeyCtrlD:
-		return m.pushLayer(newContentPopup(prefixTokensHelpTitle, prefixTokensHelp(time.Now()))), nil
+		return m.pushLayer(newContentPopup(prefixTokensHelpTitle(), prefixTokensHelp(time.Now()))), nil
 	case tea.KeyEnter:
 		p, ok := v.formPrefix()
 		if !ok {

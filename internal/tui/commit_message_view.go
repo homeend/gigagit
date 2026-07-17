@@ -31,7 +31,7 @@ func (m Model) commitForMessageView() (model.Commit, bool) {
 // doubles as the async tag: the commitMessageMsg handler fills only the popup
 // whose title byte-matches, so a stale load from a different commit (the user
 // esc'd and reopened on another row) can't land in the wrong popup.
-func commitMessageTitle(short string) string { return "Commit " + short + " message" }
+func commitMessageTitle(short string) string { return i18n.T("Commit %s message", short) }
 
 // commitMessageMsg carries the async result of loadCommitMessageCmd: the full
 // popup content (the git-show-style metadata header built from the in-memory
@@ -48,7 +48,7 @@ type commitMessageMsg struct {
 // popup scrolls/pages/searches like any other.
 func (m Model) openCommitMessagePopup(c model.Commit) (Model, tea.Cmd) {
 	short := shortHash(c.Hash)
-	cp := newContentPopup(commitMessageTitle(short), append(commitMetaHeader(c), contentLine{text: "(loading…)"}))
+	cp := newContentPopup(commitMessageTitle(short), append(commitMetaHeader(c), contentLine{text: i18n.T("(loading…)")}))
 	cp.footer = commitFooterLine(c)
 	m = m.pushLayer(cp)
 	return m, m.loadCommitMessageCmd(c, short)

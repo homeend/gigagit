@@ -138,7 +138,7 @@ func (m Model) openPreview(hash, path string) (Model, tea.Cmd) {
 // load resolves the bytes off the UI thread. Backs both the commit preview
 // (ShowFile) and the shelf-member preview (ResolveBytes).
 func (m Model) openPreviewSrc(tag, path string, load func(context.Context) ([]byte, error)) (Model, tea.Cmd) {
-	m.filesPreview = &contentPopup{title: path, lines: []contentLine{{text: "(loading…)"}}}
+	m.filesPreview = &contentPopup{title: path, lines: []contentLine{{text: i18n.T("(loading…)")}}}
 	m.filesPreviewTag = tag
 	m.filesTreeFocused = false // land in the preview to scroll
 	return m, loadFileContentSrcCmd(tag, load)
