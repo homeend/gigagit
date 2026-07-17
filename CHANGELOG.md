@@ -21,7 +21,7 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   (annotate tag, apply patch, commit filter, `ctrl+g` generate, export patch,
   goto-commit, interactive-rebase edit, reflog checkout, related-prompt,
   rename branch, repo path, reword, shelf actions, stash action/popup, tag
-  checkout/popup, temp export) are translated too. Roughly 145 action-menu
+  checkout/popup, temp export) are translated too. Roughly 100 action-menu
   row labels across the package are wrapped, including commit scope, tags,
   remotes, and the rebase commit-move/drop rows. A new AST gate,
   `internal/tui/menu_labels_test.go` (`TestActionMenuLabelsTranslated`), sits
