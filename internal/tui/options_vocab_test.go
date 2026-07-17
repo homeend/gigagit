@@ -199,55 +199,90 @@ func collectOptionValues(t *testing.T, dir string) map[string]string {
 			return nil
 		}
 
-		for _, f := range pkg.Files {
-			ast.Inspect(f, func(n ast.Node) bool {
-				kv, ok := n.(*ast.KeyValueExpr)
-				if !ok {
-					return true
-				}
-				key, ok := kv.Key.(*ast.Ident)
-				if !ok || key.Name != "Options" {
-					return true
-				}
-				switch v := kv.Value.(type) {
-				case *ast.CompositeLit:
-					for _, el := range v.Elts {
-						pos := fset.Position(el.Pos()).String()
-						switch e := el.(type) {
-						case *ast.BasicLit:
-							if e.Kind == token.STRING {
-								if val, err := strconv.Unquote(e.Value); err == nil {
-									out[val] = pos
-								}
-							}
-						case *ast.Ident:
-							if val, ok := consts[e.Name]; ok {
-								out[val] = pos
-							} else {
-								t.Errorf("%s: option element %s is not a same-package string const — use a literal or add resolution", pos, e.Name)
-							}
-						default:
-							t.Errorf("%s: option element is neither a string literal nor a const identifier", pos)
-						}
-					}
-				case *ast.Ident:
-					pos := fset.Position(kv.Pos()).String()
-					var info *sliceInfo
-					if fd := enclosingFunc(kv.Pos()); fd != nil {
-						info = funcSlices[fd][v.Name]
-					}
-					if info == nil || !info.ok {
-						t.Errorf("%s: option identifier %s could not be resolved to a static []string in its enclosing function — add a resolvable local slice assignment or a literal", pos, v.Name)
+		// isParam reports whether name is a parameter of fd. A pass-through
+		// helper (engine.PromptReq forwards its `options` parameter to
+		// DecisionRequest.Options) cannot know its option values statically;
+		// they arrive at the call sites, collected separately below.
+		isParam := func(fd *ast.FuncDecl, name string) bool {
+			if fd == nil || fd.Type.Params == nil {
+				return false
+			}
+			for _, field := range fd.Type.Params.List {
+				for _, id := range field.Names {
+					if id.Name == name {
 						return true
 					}
-					for _, val := range info.values {
-						out[val] = pos
+				}
+			}
+			return false
+		}
+
+		// resolveOptions collects one options expression's string values into
+		// out — a `[]string{…}` literal or a variable-built slice identifier.
+		// Shared by the `Options:` struct field and engine.PromptReq's
+		// call-site options argument, so migrating a decision from a bare
+		// DecisionRequest literal to PromptReq keeps its options covered.
+		resolveOptions := func(fd *ast.FuncDecl, value ast.Expr) {
+			switch v := value.(type) {
+			case *ast.CompositeLit:
+				for _, el := range v.Elts {
+					pos := fset.Position(el.Pos()).String()
+					switch e := el.(type) {
+					case *ast.BasicLit:
+						if e.Kind == token.STRING {
+							if val, err := strconv.Unquote(e.Value); err == nil {
+								out[val] = pos
+							}
+						}
+					case *ast.Ident:
+						if val, ok := consts[e.Name]; ok {
+							out[val] = pos
+						} else {
+							t.Errorf("%s: option element %s is not a same-package string const — use a literal or add resolution", pos, e.Name)
+						}
+					default:
+						t.Errorf("%s: option element is neither a string literal nor a const identifier", pos)
 					}
-				default:
-					// Neither a composite literal nor a plain identifier (e.g. an
-					// append(...) call building option names dynamically) — keep it
-					// visible, never silent.
-					t.Logf("%s: Options is not a composite literal — dynamic values render untranslated by design", fset.Position(kv.Pos()))
+				}
+			case *ast.Ident:
+				pos := fset.Position(value.Pos()).String()
+				if isParam(fd, v.Name) {
+					return // pass-through helper param; values come from call sites
+				}
+				var info *sliceInfo
+				if fd != nil {
+					info = funcSlices[fd][v.Name]
+				}
+				if info == nil || !info.ok {
+					t.Errorf("%s: option identifier %s could not be resolved to a static []string in its enclosing function — add a resolvable local slice assignment or a literal", pos, v.Name)
+					return
+				}
+				for _, val := range info.values {
+					out[val] = pos
+				}
+			default:
+				// Neither a composite literal nor a plain identifier (e.g. an
+				// append(...) call building option names dynamically) — keep it
+				// visible, never silent.
+				t.Logf("%s: options value is not a composite literal — dynamic values render untranslated by design", fset.Position(value.Pos()))
+			}
+		}
+
+		for _, f := range pkg.Files {
+			ast.Inspect(f, func(n ast.Node) bool {
+				switch node := n.(type) {
+				case *ast.KeyValueExpr:
+					key, ok := node.Key.(*ast.Ident)
+					if !ok || key.Name != "Options" {
+						return true
+					}
+					resolveOptions(enclosingFunc(node.Pos()), node.Value)
+				case *ast.CallExpr:
+					// engine.PromptReq(id, format, options, args...) — arg 2 is
+					// the options slice, now that prompts build through the helper.
+					if calleeName(node) == "PromptReq" && len(node.Args) >= 3 {
+						resolveOptions(enclosingFunc(node.Pos()), node.Args[2])
+					}
 				}
 				return true
 			})
