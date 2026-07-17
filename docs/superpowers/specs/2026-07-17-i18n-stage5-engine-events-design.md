@@ -32,7 +32,7 @@ sentence above them.
 |---|---|---|
 | `Result.Summary` | 107 construction sites | `model.go` opEventMsg `engine.Done` case; opFinishedMsg; `op.go:109` statusRefreshedMsg; `gitconfig_popup.go:412` |
 | `Progress{Step, Detail}` | 83 emit sites | `model.go` opEventMsg `engine.Progress` case (`step` or `step: detail`) |
-| `DecisionRequest.Prompt` | 14 construction sites (7 `DecisionNeeded` emit points; all forks flow through `OpDeps.decide`) | decision modal (`decisionState{req}`) |
+| `DecisionRequest.Prompt` | 34 construction sites (7 direct `DecisionNeeded` emits; all forks flow through `OpDeps.decide`) | decision modal (`decisionState{req}`) |
 
 All three are pre-interpolated English strings when they reach the TUI, so
 render-site translation alone cannot work (the sentinel-comparison class —
@@ -103,7 +103,7 @@ func (r Result) AppendSummary(format string, args ...any) Result
 
 ```go
 type Progress struct {
-    Step      string // stable ~40-word vocabulary; translated directly as its own key
+    Step      string // stable 52-word vocabulary; translated directly as its own key
     Detail    string
     DetailMsg Msg // set only when Detail contains English glue; empty = Detail is pure data, shown verbatim
 }
@@ -137,7 +137,7 @@ type DecisionRequest struct {
 func PromptReq(id, format string, options []string, args ...any) DecisionRequest
 ```
 
-All 14 prompt construction sites convert. The one variable-built prompt
+All 34 prompt construction sites convert. The one variable-built prompt
 (`ops_basic.go:137`, `Prompt: prompt`) is restructured so each conditional
 branch calls `PromptReq` with its own literal format — every English
 sentence must originate as a literal format at a helper call site (the
@@ -219,16 +219,16 @@ pattern).** An AST scan over `internal/engine` (non-test files):
   any assignment to `.Summary`, and a `DecisionRequest` composite literal
   with a `Prompt:` field are all violations (helpers only). `Progress`
   composites remain legal (the pure-data form is the common case).
-- A `collected < 100` floor guards a scan gone blind (there are ~160+
+- A `collected < 150` floor guards a scan gone blind (there are ~200
   literals on day one).
 - Mutation-proof the gate red once (drop one key from one bundle, watch
   it fail) before relying on it.
 
 ### Bundles and translation QA
 
-- ~107 summary formats + ~40 step words + ~10 detail formats + ~14
-  prompts + ~6 suffix parts ≈ **~170–180 new keys ×4** (`ja`/`ko`/`zh`/`ru`
-  bundles grow ~1,180 → ~1,350 keys). Keys inserted in place, never
+- ~107 summary formats + 52 step words + ~10 detail formats + ~34
+  prompts + ~6 suffix parts ≈ **~195–210 new keys ×4** (`ja`/`ko`/`zh`/`ru`
+  bundles grow ~1,180 → ~1,385 keys). Keys inserted in place, never
   re-sorted; all four bundles in the same commit as the code that
   introduces the key.
 - **Plurals:** keep the existing single-key English forms (`"%d file(s)"`)
