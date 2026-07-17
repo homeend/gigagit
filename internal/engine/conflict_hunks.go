@@ -19,7 +19,7 @@ func (op ResolveConflictHunks) Run(ctx context.Context, deps OpDeps) (Result, er
 	if err := deps.Repo.StagePaths(ctx, []string{op.Path}); err != nil {
 		return Result{}, err
 	}
-	res := Result{Summary: "resolved " + op.Path + " (hunks)", Changed: true}
+	res := Result{Changed: true}.WithSummary("resolved %s (hunks)", op.Path)
 	deps.emit(ctx, Done{Result: res})
 	return res, nil
 }

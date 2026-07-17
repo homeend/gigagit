@@ -16,7 +16,7 @@ func (op SmartSwitch) Run(ctx context.Context, deps OpDeps) (Result, error) {
 		return Result{}, err
 	}
 	if cur == op.Branch {
-		return Result{Summary: "already on " + op.Branch}, nil
+		return Result{}.WithSummary("already on %s", op.Branch), nil
 	}
 
 	dirty, err := deps.Repo.IsDirty(ctx)
@@ -40,19 +40,16 @@ func (op SmartSwitch) Run(ctx context.Context, deps OpDeps) (Result, error) {
 		return Result{}, err
 	}
 
+	res := Result{Changed: true}.WithSummary("switched to %s", op.Branch)
 	if stashed {
 		deps.emit(ctx, Progress{Step: "restoring changes"})
 		if err := deps.Repo.StashPop(ctx, ""); err != nil {
-			deps.emit(ctx, DecisionNeeded{Request: DecisionRequest{
-				ID:      "stash-pop-conflict",
-				Prompt:  "Restoring your changes conflicts with " + op.Branch,
-				Options: []string{"keep", "abort"},
-			}})
-			return Result{Summary: "switched to " + op.Branch + "; restore conflicted (changes preserved in stash)", Changed: true},
+			deps.emit(ctx, DecisionNeeded{Request: PromptReq("stash-pop-conflict", "Restoring your changes conflicts with %s", []string{"keep", "abort"}, op.Branch)})
+			return res.AppendSummary("; restore conflicted (changes preserved in stash)"),
 				fmt.Errorf("stash pop conflict after switching to %s: %w", op.Branch, err)
 		}
 	}
-	return Result{Summary: "switched to " + op.Branch, Changed: true}, nil
+	return res, nil
 }
 
 var _ Operation = SmartSwitch{}

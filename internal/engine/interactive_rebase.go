@@ -133,24 +133,20 @@ func (op InteractiveRebase) wrapped(ctx context.Context, deps OpDeps, switchTo s
 	res, paused, rebaseErr := op.irebaseAt(ctx, deps, "", env)
 	if rebaseErr != nil {
 		if stashed && res.Summary != "" {
-			res.Summary += " (your changes remain stashed)"
+			res = res.AppendSummary(" (your changes remain stashed)")
 		}
 		return res, paused, rebaseErr
 	}
 	if stashed {
 		deps.emit(ctx, Progress{Step: "restoring changes"})
 		if err := deps.Repo.StashPop(ctx, ""); err != nil {
-			deps.emit(ctx, DecisionNeeded{Request: DecisionRequest{
-				ID:      "stash-pop-conflict",
-				Prompt:  "Restoring your changes conflicted",
-				Options: []string{"keep", "abort"},
-			}})
-			return Result{Summary: res.Summary + "; restore conflicted (changes preserved in stash)", Changed: res.Changed},
+			deps.emit(ctx, DecisionNeeded{Request: PromptReq("stash-pop-conflict", "Restoring your changes conflicted", []string{"keep", "abort"})})
+			return res.AppendSummary("; restore conflicted (changes preserved in stash)"),
 				false, fmt.Errorf("stash pop conflict after rebasing %s: %w", op.Branch, err)
 		}
 		if len(staged) > 0 {
 			if err := deps.Repo.StagePaths(ctx, staged); err != nil {
-				return Result{Summary: res.Summary + "; could not restore the staged index", Changed: res.Changed}, false, err
+				return res.AppendSummary("; could not restore the staged index"), false, err
 			}
 		}
 	}
@@ -186,14 +182,18 @@ func (op InteractiveRebase) stashBegin(ctx context.Context, deps OpDeps) (stashe
 // irebaseAt drives the interactive rebase in dir ("" = current worktree),
 // returning paused=true when a conflict left it for `git rebase --continue`.
 func (op InteractiveRebase) irebaseAt(ctx context.Context, deps OpDeps, dir string, env []string) (Result, bool, error) {
-	where := ""
-	if dir != "" {
-		where = " in worktree " + dir
+	if dir == "" {
+		deps.emit(ctx, Progressf("rebasing", "%s onto %s", op.Branch, op.Onto))
+	} else {
+		deps.emit(ctx, Progressf("rebasing", "%s onto %s in worktree %s", op.Branch, op.Onto, dir))
 	}
-	deps.emit(ctx, Progress{Step: "rebasing", Detail: op.Branch + " onto " + op.Onto + where})
 	rebaseErr := deps.Repo.RebaseInteractive(ctx, dir, op.Onto, env)
 	if rebaseErr == nil {
-		return Result{Summary: "rebased " + op.Branch + " onto " + op.Onto + where, Changed: true}, false, nil
+		res := Result{Changed: true}.WithSummary("rebased %s onto %s", op.Branch, op.Onto)
+		if dir != "" {
+			res = res.AppendSummary(" in worktree %s", dir)
+		}
+		return res, false, nil
 	}
 	inRebase, stateErr := deps.Repo.RebaseInProgress(ctx, dir)
 	if stateErr != nil {
@@ -202,22 +202,22 @@ func (op InteractiveRebase) irebaseAt(ctx context.Context, deps OpDeps, dir stri
 	if !inRebase {
 		return Result{}, false, fmt.Errorf("interactive rebase: %s onto %s: %w", op.Branch, op.Onto, rebaseErr)
 	}
-	choice, derr := deps.decide(ctx, DecisionRequest{
-		ID:      "rebase-conflict",
-		Prompt:  "Rebasing " + op.Branch + " onto " + op.Onto + " hit conflicts",
-		Options: []string{"keep-conflicts", "abort"},
-	})
+	choice, derr := deps.decide(ctx, PromptReq("rebase-conflict", "Rebasing %s onto %s hit conflicts", []string{"keep-conflicts", "abort"}, op.Branch, op.Onto))
 	if derr != nil {
 		return Result{}, false, derr
 	}
 	if choice.Option == "keep-conflicts" {
-		return Result{Summary: "rebase of " + op.Branch + " onto " + op.Onto + where + " paused on a conflict (resolve, then `git rebase --continue`)", Changed: true},
-			true, fmt.Errorf("rebase conflict: %s onto %s", op.Branch, op.Onto)
+		res := Result{Changed: true}.WithSummary("rebase of %s onto %s", op.Branch, op.Onto)
+		if dir != "" {
+			res = res.AppendSummary(" in worktree %s", dir)
+		}
+		res = res.AppendSummary(" paused on a conflict (resolve, then `git rebase --continue`)")
+		return res, true, fmt.Errorf("rebase conflict: %s onto %s", op.Branch, op.Onto)
 	}
 	if err := deps.Repo.RebaseAbort(ctx, dir); err != nil {
 		return Result{}, false, fmt.Errorf("interactive rebase: abort failed: %w", err)
 	}
-	return Result{Summary: "aborted: interactive rebase of " + op.Branch + " onto " + op.Onto, Changed: false}, false, nil
+	return Result{Changed: false}.WithSummary("aborted: interactive rebase of %s onto %s", op.Branch, op.Onto), false, nil
 }
 
 // writePlanFile serializes the plan to a temp JSON file and returns its path.

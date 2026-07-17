@@ -38,7 +38,7 @@ func (op CherryPick) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	deps.emit(ctx, Progress{Step: "cherry-picking", Detail: op.Commit})
 	pickErr := deps.Repo.CherryPick(ctx, "", op.Commit)
 	if pickErr == nil {
-		return op.restore(ctx, deps, stashed, Result{Summary: "cherry-picked " + op.Commit, Changed: true})
+		return op.restore(ctx, deps, stashed, Result{Changed: true}.WithSummary("cherry-picked %s", op.Commit))
 	}
 
 	inPick, stateErr := deps.Repo.CherryPickInProgress(ctx, "")
@@ -60,26 +60,22 @@ func (op CherryPick) Run(ctx context.Context, deps OpDeps) (Result, error) {
 		return Result{}, fmt.Errorf("cherry-pick %s: nothing to apply (the commit is already on this branch); aborted", op.Commit)
 	}
 
-	choice, derr := deps.decide(ctx, DecisionRequest{
-		ID:      "cherry-pick-conflict",
-		Prompt:  "Cherry-picking " + op.Commit + " hit conflicts",
-		Options: []string{"keep-conflicts", "abort"},
-	})
+	choice, derr := deps.decide(ctx, PromptReq("cherry-pick-conflict", "Cherry-picking %s hit conflicts", []string{"keep-conflicts", "abort"}, op.Commit))
 	if derr != nil {
 		return Result{}, derr
 	}
 	if choice.Option == "keep-conflicts" {
-		summary := "cherry-pick of " + op.Commit + " has conflicts (left in tree)"
+		res := Result{Changed: true}.WithSummary("cherry-pick of %s has conflicts (left in tree)", op.Commit)
 		if stashed {
-			summary += " (your changes remain stashed)"
+			res = res.AppendSummary(" (your changes remain stashed)")
 		}
-		return Result{Summary: summary, Changed: true}, fmt.Errorf("cherry-pick conflict: %s", op.Commit)
+		return res, fmt.Errorf("cherry-pick conflict: %s", op.Commit)
 	}
 	if err := deps.Repo.CherryPickAbort(ctx, ""); err != nil {
 		return Result{}, fmt.Errorf("cherry-pick: abort failed: %w", err)
 	}
 	// Tree is back to the pre-pick tip; safe to restore the autostash.
-	return op.restore(ctx, deps, stashed, Result{Summary: "aborted: cherry-pick " + op.Commit, Changed: false})
+	return op.restore(ctx, deps, stashed, Result{Changed: false}.WithSummary("aborted: cherry-pick %s", op.Commit))
 }
 
 // restore pops the autostash (if any) onto the now-clean tree. A pop conflict
@@ -90,7 +86,7 @@ func (op CherryPick) restore(ctx context.Context, deps OpDeps, stashed bool, res
 	}
 	deps.emit(ctx, Progress{Step: "restoring changes"})
 	if err := deps.Repo.StashPop(ctx, ""); err != nil {
-		return Result{Summary: res.Summary + "; restore conflicted (changes preserved in stash)", Changed: res.Changed},
+		return res.AppendSummary("; restore conflicted (changes preserved in stash)"),
 			fmt.Errorf("stash pop conflict after cherry-pick %s: %w", op.Commit, err)
 	}
 	return res, nil
