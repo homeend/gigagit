@@ -41,7 +41,15 @@ func (op SetGitConfig) Run(ctx context.Context, deps OpDeps) (Result, error) {
 		if err := deps.Repo.ConfigUnset(ctx, scope, op.Key); err != nil {
 			return Result{}, fmt.Errorf("unset git config: %s: %w", op.Key, err)
 		}
-		res := Result{Changed: true}.WithSummary("%s unset %s", op.Key, where)
+		// Per-scope literal formats (not a `where` arg) so no English scope
+		// word leaks into a translated summary — the scope is prose, and stage
+		// 5 keeps prose in the format, never an arg.
+		var res Result
+		if op.Global {
+			res = Result{Changed: true}.WithSummary("%s unset globally", op.Key)
+		} else {
+			res = Result{Changed: true}.WithSummary("%s unset in this repo", op.Key)
+		}
 		deps.emit(ctx, Done{Result: res})
 		return res, nil
 	}
@@ -49,7 +57,12 @@ func (op SetGitConfig) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	if err := deps.Repo.ConfigSet(ctx, scope, op.Key, op.Value); err != nil {
 		return Result{}, fmt.Errorf("set git config: %s: %w", op.Key, err)
 	}
-	res := Result{Changed: true}.WithSummary("%s = %s set %s", op.Key, op.Value, where)
+	var res Result
+	if op.Global {
+		res = Result{Changed: true}.WithSummary("%s = %s set globally", op.Key, op.Value)
+	} else {
+		res = Result{Changed: true}.WithSummary("%s = %s set in this repo", op.Key, op.Value)
+	}
 	deps.emit(ctx, Done{Result: res})
 	return res, nil
 }

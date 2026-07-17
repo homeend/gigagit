@@ -39,7 +39,14 @@ func (op SetIdentity) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	if err := deps.Repo.ConfigSet(ctx, scope, "user.email", op.Email); err != nil {
 		return Result{}, fmt.Errorf("set identity: user.email: %w", err)
 	}
-	res := Result{Changed: true}.WithSummary("identity %s <%s> set %s", op.Name, op.Email, where)
+	// Per-scope literal formats so the scope word is never an English arg
+	// inside a translated summary (stage-5 prose-in-format rule).
+	var res Result
+	if op.Global {
+		res = Result{Changed: true}.WithSummary("identity %s <%s> set globally", op.Name, op.Email)
+	} else {
+		res = Result{Changed: true}.WithSummary("identity %s <%s> set this repo", op.Name, op.Email)
+	}
 	deps.emit(ctx, Done{Result: res})
 	return res, nil
 }
