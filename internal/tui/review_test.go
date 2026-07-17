@@ -471,7 +471,9 @@ func TestReviewBlinkTickTogglesAndSelfStops(t *testing.T) {
 // domain.ReviewTarget.DisplayLabel().
 func TestReviewScopeLabelTranslatesWorkingChanges(t *testing.T) {
 	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "xx.toml"), []byte("[meta]\nname=\"xx\"\n[strings]\n\"working changes\" = \"XX-working\"\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, "xx.toml"), []byte("[meta]\nname=\"xx\"\n[strings]\n"+
+		"\"working changes\" = \"XX-working\"\n"+
+		"\"Review: working changes\" = \"XX-Review-working\"\n"), 0o644)
 	if err := i18n.SetLanguage("xx", dir); err != nil {
 		t.Fatalf("SetLanguage: %v", err)
 	}
@@ -480,5 +482,14 @@ func TestReviewScopeLabelTranslatesWorkingChanges(t *testing.T) {
 	got := reviewScopeLabel(domain.ReviewTarget{Kind: domain.ReviewWorking})
 	if got != "XX-working" {
 		t.Fatalf("reviewScopeLabel = %q, want translated fallback", got)
+	}
+
+	// reviewTitle must recognize the literal "working changes" label (the
+	// always-non-empty label a working-changes review actually carries) and
+	// route it through the translated sibling key, not the generic
+	// "Review: %s" format — which would silently degrade to untranslated
+	// English since the label itself is never translated.
+	if title := reviewTitle("working changes"); title != "XX-Review-working" {
+		t.Fatalf("reviewTitle(\"working changes\") = %q, want the translated sibling key", title)
 	}
 }

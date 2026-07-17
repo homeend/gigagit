@@ -319,9 +319,12 @@ func (m Model) applyReviewDone(msg reviewDoneMsg) (Model, tea.Cmd) {
 
 // reviewTitle names the report viewer from the human label (branch name /
 // "<short> <subject>" / range / "working changes"). An empty label (a target
-// that set neither Label nor Range) falls back to "working changes".
+// that set neither Label nor Range) falls back to "working changes", and so
+// does the literal "working changes" label itself (domain's untranslated
+// fallback — see reviewScopeLabel) — both take the translated sibling key
+// instead of running it through the generic "Review: %s" format.
 func reviewTitle(label string) string {
-	if strings.TrimSpace(label) == "" {
+	if strings.TrimSpace(label) == "" || label == "working changes" {
 		return i18n.T("Review: working changes")
 	}
 	return i18n.T("Review: %s", label)
