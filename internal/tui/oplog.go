@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/homeend/gigagit/internal/buildinfo"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/observ"
 	"github.com/homeend/gigagit/internal/repos"
 )
@@ -43,7 +44,11 @@ func (l *opLog) enable() error {
 		return nil
 	}
 	if l.path == "" {
-		return fmt.Errorf("operation log: no state directory")
+		// Bare "no state directory" — every caller already wraps this error with
+		// its own "operation log: %s" prefix (settings_popup.go, run.go); the old
+		// "operation log: no state directory" duplicated that prefix in the
+		// rendered status line.
+		return fmt.Errorf("%s", i18n.T("no state directory"))
 	}
 	if err := os.MkdirAll(filepath.Dir(l.path), 0o755); err != nil {
 		return err

@@ -51,9 +51,9 @@ func branchCompareTitle(left, right string, scope compareScope) string {
 	t := left + " ↔ " + right
 	switch scope {
 	case compareScopeLeft:
-		t += " — only files " + left + " changed"
+		t += i18n.T(" — only files %s changed", left)
 	case compareScopeRight:
-		t += " — only files " + right + " changed"
+		t += i18n.T(" — only files %s changed", right)
 	}
 	return t
 }

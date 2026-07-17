@@ -238,9 +238,9 @@ func (v *prefixSettingsView) box(m Model) string {
 			if i == v.sel {
 				prefix, st = "> ", selectedRow
 			}
-			tag := "[global]"
+			tag := i18n.T("[global]")
 			if p.Scope == model.ProfileScopeRepo {
-				tag = "[this repo]"
+				tag = i18n.T("[this repo]")
 			}
 			wr[i] = winRow{text: prefix + p.Value + "  " + tag, style: st}
 		}

@@ -255,8 +255,8 @@ func (m Model) compareAgainstWorkingDirRow() (actionRow, bool) {
 		label: i18n.T("Compare against working dir"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			right := model.FileRef{Source: model.SourceUnstaged, Path: ref.Path}
-			title := ref.Path + " ↔ working"
-			subtitle := label + " → working dir"
+			title := i18n.T("%s ↔ working", ref.Path)
+			subtitle := i18n.T("%s → working dir", label)
 			tag := "cmpwd:" + ref.Path
 			v := &diffView{title: title, context: subtitle, loading: true, partial: m.diffPartial, long: m.diffLong}
 			v.width, _ = m.overlayDims()

@@ -285,7 +285,7 @@ func helpWithHidden(hidden []footerBinding) []contentLine {
 		return helpContent()
 	}
 	lines := make([]contentLine, 0, len(hidden)+1)
-	lines = append(lines, contentLine{text: "More keys (not shown in the footer)", heading: true})
+	lines = append(lines, contentLine{text: i18n.T("More keys (not shown in the footer)"), heading: true})
 	for _, b := range hidden {
 		lines = append(lines, contentLine{text: padRight(b.key, 16) + b.label})
 	}

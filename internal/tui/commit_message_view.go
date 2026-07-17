@@ -78,19 +78,19 @@ func (m Model) loadCommitMessageCmd(c model.Commit, short string) tea.Cmd {
 // body. No git call — every field is on model.Commit.
 func commitMetaHeader(c model.Commit) []contentLine {
 	out := []contentLine{
-		{text: "commit " + c.Hash},
-		{text: "Author: " + c.Author},
-		{text: "Date:   " + commitDateString(c)},
+		{text: i18n.T("commit %s", c.Hash)},
+		{text: i18n.T("Author: %s", c.Author)},
+		{text: i18n.T("Date:   %s", commitDateString(c))},
 	}
 	if refs := commitRefsLine(c); refs != "" {
-		out = append(out, contentLine{text: "Refs:   " + refs})
+		out = append(out, contentLine{text: i18n.T("Refs:   %s", refs)})
 	}
 	if len(c.Parents) > 1 {
 		shorts := make([]string, len(c.Parents))
 		for i, p := range c.Parents {
 			shorts[i] = shortHash(p)
 		}
-		out = append(out, contentLine{text: "Merge:  " + strings.Join(shorts, " ")})
+		out = append(out, contentLine{text: i18n.T("Merge:  %s", strings.Join(shorts, " "))})
 	}
 	return append(out, contentLine{text: ""})
 }
@@ -107,7 +107,7 @@ func commitFooterLine(c model.Commit) string {
 // commitDateString formats a commit's author time as a local absolute stamp.
 func commitDateString(c model.Commit) string {
 	if c.UnixTime == 0 {
-		return "(unknown)"
+		return i18n.T("(unknown)")
 	}
 	return time.Unix(c.UnixTime, 0).Format("2006-01-02 15:04")
 }
@@ -121,7 +121,7 @@ func commitRefsLine(c model.Commit) string {
 	parts := make([]string, 0, len(c.Refs))
 	for _, r := range c.Refs {
 		if r.Kind == model.RefTag {
-			parts = append(parts, "tag: "+r.Name)
+			parts = append(parts, i18n.T("tag: %s", r.Name))
 		} else {
 			parts = append(parts, r.Name)
 		}

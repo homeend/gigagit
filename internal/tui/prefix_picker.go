@@ -197,9 +197,9 @@ func (p *prefixPicker) box(m Model) string {
 			if n == p.sel {
 				prefix, st = "> ", selectedRow
 			}
-			tag := "[global]"
+			tag := i18n.T("[global]")
 			if p.items[i].Scope == model.ProfileScopeRepo {
-				tag = "[this repo]"
+				tag = i18n.T("[this repo]")
 			}
 			wr[n] = winRow{text: prefix + p.rows[i] + "  " + tag, style: st}
 		}

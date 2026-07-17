@@ -1,6 +1,9 @@
 package tui
 
-import "github.com/homeend/gigagit/internal/model"
+import (
+	"github.com/homeend/gigagit/internal/i18n"
+	"github.com/homeend/gigagit/internal/model"
+)
 
 // wipKind distinguishes the two pseudo-rows that represent uncommitted work.
 type wipKind int
@@ -21,6 +24,29 @@ func (r wipRow) label() string {
 		return "Staged"
 	}
 	return "Working tree"
+}
+
+// titleLabel is label() translated for display (the row text text() renders).
+// label() itself MUST stay English: it's the sentinel wipKey/wipSyntheticHash
+// embed for identity (mark set, ◉ compare set, the synthetic graph-node hash),
+// which has to stay stable across a runtime language switch — translate only
+// at the render expression, never the identity source.
+func (r wipRow) titleLabel() string {
+	if r.kind == wipStaged {
+		return i18n.T("Staged")
+	}
+	return i18n.T("Working tree")
+}
+
+// lowerLabel is the lowercase display form used by the status bar / compare
+// menu (view.go's selection-summary line, compareKeyLabel below) — a distinct
+// key from titleLabel so a translation isn't forced through Go's ASCII
+// strings.ToLower on scripts where that's meaningless.
+func (r wipRow) lowerLabel() string {
+	if r.kind == wipStaged {
+		return i18n.T("staged")
+	}
+	return i18n.T("working tree")
 }
 
 // deriveWipRows builds the dirty-only pseudo-rows from a status snapshot:
@@ -152,9 +178,9 @@ func (m Model) compareKeyRank(key string) int {
 func (m Model) compareKeyLabel(key string) string {
 	switch key {
 	case wipKey(wipRow{kind: wipWorktree}):
-		return "working tree"
+		return wipRow{kind: wipWorktree}.lowerLabel()
 	case wipKey(wipRow{kind: wipStaged}):
-		return "staged"
+		return wipRow{kind: wipStaged}.lowerLabel()
 	default:
 		return shortHash(key)
 	}

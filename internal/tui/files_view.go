@@ -626,7 +626,7 @@ func (m Model) openDiffForFileLine(l contentLine) (tea.Model, tea.Cmd) {
 		// working tree instead — useful for any file in the tree.
 		left := model.Endpoint{Kind: model.EndpointCommit, Hash: m.filesHash}
 		right := model.Endpoint{Kind: model.EndpointWorkTree}
-		m.diffLayer().context = shortHash(m.filesHash) + " ↔ working tree"
+		m.diffLayer().context = i18n.T("%s ↔ working tree", shortHash(m.filesHash))
 		m.diffTag = "cmp:" + left.CacheTag() + ":" + right.CacheTag() + ":" + l.path
 		return m, m.loadCompareDiffCmd(left, right, l)
 	}
@@ -640,7 +640,7 @@ func (m Model) openDiffForFileLine(l contentLine) (tea.Model, tea.Cmd) {
 		// the same two-ref compare the .-menu's compare-against-working-dir uses.
 		left := model.FileRef{Source: model.SourceShelf, Locator: m.filesShelfID, Path: l.path}
 		right := model.FileRef{Source: model.SourceUnstaged, Path: l.path}
-		subtitle := m.filesShelfLabel + " → working tree"
+		subtitle := i18n.T("%s → working tree", m.filesShelfLabel)
 		m.diffLayer().context = subtitle
 		m.diffTag = "shelffile:" + m.filesShelfID + ":" + l.path
 		return m, m.loadCompareTwoRefsCmd(left, right, l.path, subtitle, m.diffTag)

@@ -10,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/textdiff"
 )
@@ -75,9 +76,9 @@ const (
 func wrapCue(d wrapDir) string {
 	switch d {
 	case wrapToStart:
-		return "↻ n again → top"
+		return i18n.T("↻ n again → top")
 	case wrapToEnd:
-		return "↻ p again → bottom"
+		return i18n.T("↻ p again → bottom")
 	}
 	return ""
 }
@@ -359,9 +360,9 @@ func statusDiffTag(path string, staged bool) string {
 
 func statusDiffContext(staged bool) string {
 	if staged {
-		return "HEAD → index (staged)"
+		return i18n.T("HEAD → index (staged)")
 	}
-	return "index → working tree"
+	return i18n.T("index → working tree")
 }
 
 // openStatusDiff opens the full-screen diff for a Status (staged=false) or
@@ -651,7 +652,7 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		} else if m.diffNav != diffNavNone {
 			switch {
 			case !m.peekDiffFile(-1):
-				m.diffNotice = "▸ no previous file"
+				m.diffNotice = i18n.T("▸ no previous file")
 			case fileArmed == fileArmPrev:
 				return m.stepDiffFile(-1)
 			default:
@@ -666,7 +667,7 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		} else if m.diffNav != diffNavNone {
 			switch {
 			case !m.peekDiffFile(1):
-				m.diffNotice = "▸ no next file"
+				m.diffNotice = i18n.T("▸ no next file")
 			case fileArmed == fileArmNext:
 				return m.stepDiffFile(1)
 			default:
@@ -696,7 +697,7 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if v.onLastBlock() && m.diffNav != diffNavNone {
 			switch {
 			case !m.peekDiffFile(1):
-				m.diffNotice = "▸ no next file"
+				m.diffNotice = i18n.T("▸ no next file")
 			case fileArmed == fileArmNext:
 				return m.stepDiffFile(1)
 			default:
@@ -708,7 +709,7 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if v.onFirstBlock() && m.diffNav != diffNavNone {
 			switch {
 			case !m.peekDiffFile(-1):
-				m.diffNotice = "▸ no previous file"
+				m.diffNotice = i18n.T("▸ no previous file")
 			case fileArmed == fileArmPrev:
 				return m.stepDiffFile(-1)
 			default:

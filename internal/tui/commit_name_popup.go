@@ -5,6 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -47,16 +48,17 @@ func (p *commitNamePopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 }
 
 func (p *commitNamePopup) render(m Model, below string) string {
-	title := "Bookmark this commit"
-	verb := "bookmark"
+	title := i18n.T("Bookmark this commit")
+	hint := i18n.T("[ctrl+s] insert sha   [enter] bookmark   [esc] cancel")
 	if p.forShelf {
-		title, verb = "Shelf this commit", "shelf"
+		title = i18n.T("Shelf this commit")
+		hint = i18n.T("[ctrl+s] insert sha   [enter] shelf   [esc] cancel")
 	}
 	w, h := m.overlayDims()
 	var b strings.Builder
 	b.WriteString(title + "\n\n")
-	b.WriteString(viewField("name: ", p.name, true, popupContentWidth(w)) + "\n\n")
-	b.WriteString("[ctrl+s] insert sha   [enter] " + verb + "   [esc] cancel")
+	b.WriteString(viewField(i18n.T("name: "), p.name, true, popupContentWidth(w)) + "\n\n")
+	b.WriteString(hint)
 	box := modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 	return overlayCenter(clipToHeight(below, h), box, w, h)
 }

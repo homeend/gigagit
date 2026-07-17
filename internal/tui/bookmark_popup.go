@@ -592,7 +592,7 @@ func (m Model) bookmarkJump() (Model, tea.Cmd) {
 		return m, nil
 	}
 	width, _ := m.overlayDims()
-	v := &diffView{title: b.Path, context: bookmarkDisplay(b) + " → working tree", rev: "", loading: true, partial: m.diffPartial, long: m.diffLong, width: width}
+	v := &diffView{title: b.Path, context: i18n.T("%s → working tree", bookmarkDisplay(b)), rev: "", loading: true, partial: m.diffPartial, long: m.diffLong, width: width}
 	return m.openPickerDiff(v, "bookmark:"+b.ID, m.loadBookmarkCompareCmd(b))
 }
 
@@ -604,7 +604,7 @@ func (m Model) loadBookmarkCompareCmd(bm model.Bookmark) tea.Cmd {
 	root := m.currentWorktree
 	body := m.diffBodyRows()
 	tag := "bookmark:" + bm.ID
-	v := &diffView{title: bm.Path, context: bookmarkDisplay(bm) + " → working tree", rev: "", partial: m.diffPartial, long: m.diffLong}
+	v := &diffView{title: bm.Path, context: i18n.T("%s → working tree", bookmarkDisplay(bm)), rev: "", partial: m.diffPartial, long: m.diffLong}
 	v.width, _ = m.overlayDims()
 	full := filepath.Join(root, bm.Path)
 

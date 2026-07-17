@@ -70,7 +70,7 @@ func blameAge(now, t time.Time) string {
 	d := now.Sub(t)
 	switch {
 	case d < time.Minute:
-		return "now"
+		return i18n.T("now")
 	case d < time.Hour:
 		return fmt.Sprintf("%dm", int(d.Minutes()))
 	case d < 24*time.Hour:
@@ -119,8 +119,8 @@ func (b *blameView) render(m Model, _ string) string {
 	w, scrH := m.overlayDims()
 	body := m.blameBodyRows()
 
-	header := truncate("blame: "+b.ctx.path+revSuffix(b.ctx.rev), w)
-	hint := truncate("[↑↓] line  [pgup/pgdn] page  [enter] history  [e] editor  [esc/b] back", w)
+	header := truncate(i18n.T("blame: %s", b.ctx.path+revSuffix(b.ctx.rev)), w)
+	hint := truncate(i18n.T("[↑↓] line  [pgup/pgdn] page  [enter] history  [e] editor  [esc/b] back"), w)
 
 	gw := blameGutterW
 	if gw > w-10 {
@@ -173,7 +173,7 @@ func revSuffix(rev string) string {
 // blameGutterText is the per-block remark: hash, author (≤12), compact age.
 func blameGutterText(ln model.BlameLine, now time.Time) string {
 	if ln.Hash == "" {
-		return "(uncommitted)"
+		return i18n.T("(uncommitted)")
 	}
 	author := padRight(truncate(ln.Author, 12), 12)
 	return shortHash(ln.Hash) + " " + author + " " + blameAge(now, time.Unix(ln.Time, 0))

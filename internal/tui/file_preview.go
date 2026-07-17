@@ -160,7 +160,7 @@ func loadFileContentSrcCmd(tag string, load func(context.Context) ([]byte, error
 			return fileContentMsg{tag: tag, err: err}
 		}
 		if len(data) > domain.MaxDiffBytes {
-			return fileContentMsg{tag: tag, lines: []contentLine{{text: "(file too large to preview)"}}}
+			return fileContentMsg{tag: tag, lines: []contentLine{{text: i18n.T("(file too large to preview)")}}}
 		}
 		return fileContentMsg{tag: tag, lines: fileContentLines(data)}
 	}
@@ -171,7 +171,7 @@ func loadFileContentSrcCmd(tag string, load func(context.Context) ([]byte, error
 func fileContentLines(data []byte) []contentLine {
 	s := strings.TrimRight(string(data), "\n")
 	if s == "" {
-		return []contentLine{{text: "(empty file)"}}
+		return []contentLine{{text: i18n.T("(empty file)")}}
 	}
 	parts := strings.Split(s, "\n")
 	out := make([]contentLine, len(parts))

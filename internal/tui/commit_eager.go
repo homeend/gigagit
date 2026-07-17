@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"strconv"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -195,7 +194,7 @@ func (p *eagerPrompt) box(m Model) string {
 		report,
 		"",
 	}
-	opts := []string{"Search " + strconv.Itoa(m.commitSearchMaxPages()) + " more pages", "Cancel"}
+	opts := []string{i18n.T("Search %d more pages", m.commitSearchMaxPages()), i18n.T("Cancel")}
 	for i, o := range opts {
 		prefix, st := "  ", lipgloss.NewStyle()
 		if i == p.sel {

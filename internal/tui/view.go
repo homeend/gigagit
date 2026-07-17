@@ -106,7 +106,7 @@ func friendlyOpError(err error) string {
 	if strings.Contains(low, "terminal prompts disabled") ||
 		strings.Contains(low, "could not read username") ||
 		strings.Contains(low, "could not read password") {
-		return "error: remote needs credentials — configure a git credential helper (gg cannot prompt for them)"
+		return i18n.T("error: %s", i18n.T("remote needs credentials — configure a git credential helper (gg cannot prompt for them)"))
 	}
 	if msg, ok := friendlyPushError(low); ok {
 		return msg
@@ -129,11 +129,11 @@ func friendlyOpError(err error) string {
 func friendlyPushError(low string) (string, bool) {
 	switch {
 	case pusherr.IsHookRejection(low):
-		return "error: push rejected by the remote (protected branch or server-side hook)", true
+		return i18n.T("error: %s", i18n.T("push rejected by the remote (protected branch or server-side hook)")), true
 	case pusherr.IsStaleInfo(low):
-		return "error: force-with-lease refused — remote moved; fetch & review, then retry", true
+		return i18n.T("error: %s", i18n.T("force-with-lease refused — remote moved; fetch & review, then retry")), true
 	case pusherr.IsNonFastForward(low):
-		return "error: push rejected — remote has new commits; pull/rebase first, or force-push", true
+		return i18n.T("error: %s", i18n.T("push rejected — remote has new commits; pull/rebase first, or force-push")), true
 	}
 	return "", false
 }
@@ -438,9 +438,9 @@ func (m Model) renderInterface() string {
 	}
 	if m.anySourceLoading() && !m.running {
 		if statusLine == "" {
-			statusLine = "⏳ reloading…"
+			statusLine = i18n.T("⏳ reloading…")
 		} else {
-			statusLine = "⏳ reloading… · " + statusLine
+			statusLine = i18n.T("⏳ reloading…") + " · " + statusLine
 		}
 	}
 	statusLine = truncate(oneLine(statusLine), g.w)
@@ -507,7 +507,7 @@ func (m Model) renderInterface() string {
 // space left between them is middle-elided, always keeping the repo directory
 // name (the path's final segment) visible.
 func (m Model) headerLine(w int) string {
-	rest := "  branch " + m.status.Branch
+	rest := i18n.T("  branch %s", m.status.Branch)
 	if m.status.Upstream != "" {
 		rest += fmt.Sprintf(" (↑%d ↓%d)", m.status.Ahead, m.status.Behind)
 	}
@@ -646,17 +646,17 @@ func topTabSegs(active panel) []tabSeg {
 		return short
 	}
 	return []tabSeg{
-		{panelBranches, mark(panelBranches, "Branches", "B")},
-		{panelRemotes, mark(panelRemotes, "Remotes", "R")},
-		{panelWorktrees, mark(panelWorktrees, "Worktrees", "W")},
+		{panelBranches, mark(panelBranches, i18n.T("Branches"), "B")},
+		{panelRemotes, mark(panelRemotes, i18n.T("Remotes"), "R")},
+		{panelWorktrees, mark(panelWorktrees, i18n.T("Worktrees"), "W")},
 	}
 }
 
 // filesTabSegs builds the middle-slot tabs (Files · Tags): the active tab spelled
 // out with its row count and bracketed, the inactive tab shown plainly.
 func filesTabSegs(active panel, filesN, tagsN int) []tabSeg {
-	files := fmt.Sprintf("Files %d", filesN)
-	tags := fmt.Sprintf("Tags %d", tagsN)
+	files := i18n.T("Files %d", filesN)
+	tags := i18n.T("Tags %d", tagsN)
 	if active == panelTags {
 		return []tabSeg{{panelFiles, files}, {panelTags, "[" + tags + "]"}}
 	}
@@ -666,8 +666,8 @@ func filesTabSegs(active panel, filesN, tagsN int) []tabSeg {
 // bottomTabSegs builds the bottom-slot tabs (Staged · Reflog): the active tab
 // spelled out with its row count and bracketed, the inactive tab shown plainly.
 func bottomTabSegs(active panel, stagedN, reflogN int) []tabSeg {
-	staged := fmt.Sprintf("Staged %d", stagedN)
-	reflog := fmt.Sprintf("Reflog %d", reflogN)
+	staged := i18n.T("Staged %d", stagedN)
+	reflog := i18n.T("Reflog %d", reflogN)
 	if active == panelReflog {
 		return []tabSeg{{panelStaged, staged}, {panelReflog, "[" + reflog + "]"}}
 	}
@@ -713,7 +713,7 @@ func (m Model) renderPanel(p panel, label string, rows []string, decos []rowDeco
 		// No room for any data rows below the label; render the label only so the
 		// panel never exceeds boxH (windowRows would otherwise force one row).
 	} else if len(rows) == 0 {
-		lines = append(lines, padRight(truncate("  (none)", innerW), innerW))
+		lines = append(lines, padRight(truncate(i18n.T("  (none)"), innerW), innerW))
 	} else {
 		marked := m.markedDisplayIndices(p)
 		cmpSet := m.compareSetDisplayIndices(p)
@@ -1168,7 +1168,7 @@ func (m Model) commitBranchHint() string {
 		return ""
 	}
 	if r, ok := m.wipRowAt(m.commitSelUnified()); ok { // pseudo-row: no commit id
-		return fmt.Sprintf("%s · %d files", strings.ToLower(r.label()), r.count)
+		return i18n.T("%s · %d files", r.lowerLabel(), r.count)
 	}
 	bi, ok := m.backingIndex(panelCommits)
 	if !ok || bi < 0 || bi >= len(m.commits) {

@@ -147,8 +147,8 @@ func (h *historyView) render(m Model, _ string) string {
 	w, scrH := m.overlayDims()
 	body := m.historyBodyRows()
 
-	header := truncate("history: "+h.ctx.path, w)
-	hint := truncate("[↑↓] commit  [enter] diff  [e] editor  [esc] back", w)
+	header := truncate(i18n.T("history: %s", h.ctx.path), w)
+	hint := truncate(i18n.T("[↑↓] commit  [enter] diff  [e] editor  [esc] back"), w)
 
 	// Left list. Right pane shown only when wide enough (>=60); else list-only.
 	split := w >= 60
@@ -170,11 +170,11 @@ func (h *historyView) render(m Model, _ string) string {
 	}
 	win := renderWindow(wr, winOpts{w: listW, h: body, mode: h.mode, anchor: h.sel, hscroll: h.hscroll})
 	if h.loading {
-		win = padLines("  (loading…)", listW, body)
+		win = padLines(i18n.T("  (loading…)"), listW, body)
 	} else if h.err != nil {
-		win = padLines("  error: "+h.err.Error(), listW, body)
+		win = padLines(i18n.T("  error: %s", h.err.Error()), listW, body)
 	} else if len(h.commits) == 0 {
-		win = padLines("  (no history)", listW, body)
+		win = padLines(i18n.T("  (no history)"), listW, body)
 	}
 	for len(win) < body {
 		win = append(win, padRight("", listW))

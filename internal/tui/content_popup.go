@@ -291,7 +291,7 @@ func (p *contentPopup) box(m Model) string {
 		b.WriteString("\n")
 	}
 	if len(vis) == 0 {
-		b.WriteString("  (no match)\n")
+		b.WriteString(i18n.T("  (no match)") + "\n")
 	}
 	for _, r := range win {
 		b.WriteString(r + "\n")
@@ -299,7 +299,7 @@ func (p *contentPopup) box(m Model) string {
 	if p.footer != "" {
 		b.WriteString("  " + truncate(p.footer, textW-2) + "\n")
 	}
-	hint := "[/] search  [z] mode  [ctrl+t] full  [q] close"
+	hint := i18n.T("[/] search  [z] mode  [ctrl+t] full  [q] close")
 	if len(vis) > capRows {
 		hint = fmt.Sprintf("%d/%d  %s", p.sel+1, len(vis), hint)
 	}

@@ -42,7 +42,7 @@ func (m Model) openInEditorCmd(name string, resolve func(context.Context) ([]byt
 			return editorViewMsg{name: name, err: err}
 		}
 		if len(data) > domain.MaxDiffBytes {
-			return editorViewMsg{name: name, err: fmt.Errorf("file too large to open (%d bytes)", len(data))}
+			return editorViewMsg{name: name, err: fmt.Errorf("%s", i18n.T("file too large to open (%d bytes)", len(data)))}
 		}
 		path, err := writeReadOnlyTempFile(name, data)
 		return editorViewMsg{path: path, name: name, err: err}
@@ -97,7 +97,7 @@ func removeTempFile(path string) {
 }
 
 // viewedSummary is the status-bar message after a successful external view.
-func viewedSummary(name string) string { return "viewed " + filepath.Base(name) }
+func viewedSummary(name string) string { return i18n.T("viewed %s", filepath.Base(name)) }
 
 // surfaceExternalRow builds the "Open in external editor" action for the history
 // or blame surface on top (the file at the selected commit / the blamed file at

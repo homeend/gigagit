@@ -315,7 +315,7 @@ func (m Model) fileFinderActionRows(path string) []actionRow {
 				right := model.Endpoint{Kind: model.EndpointWorkTree}
 				v := &diffView{
 					title:   path,
-					context: "HEAD ↔ working tree",
+					context: i18n.T("HEAD ↔ working tree"),
 					loading: true,
 					partial: m.diffPartial,
 					long:    m.diffLong,

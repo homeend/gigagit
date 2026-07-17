@@ -94,7 +94,7 @@ func (m Model) stagedOpenExternalRow() (actionRow, bool) {
 }
 
 // editedSummary is the status-bar message after a successful edit.
-func editedSummary(rel string) string { return "edited " + filepath.Base(rel) }
+func editedSummary(rel string) string { return i18n.T("edited %s", filepath.Base(rel)) }
 
 // editFileCmd suspends the TUI and opens rel (repo-relative) in the user's
 // editor; on exit it yields an editorFinishedMsg. Bubble Tea's ExecProcess owns
