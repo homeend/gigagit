@@ -35,7 +35,12 @@ func engineProseKeys(t *testing.T) map[string]bool {
 	}
 	for _, e := range ents {
 		name := e.Name()
-		if e.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+		// msg.go is where WithSummary/AppendSummary/Progressf/PromptReq are
+		// DEFINED: Progressf's own "Progress{Step: step}" forwards a caller
+		// parameter and can never be a literal — that's not a missing key,
+		// it's the mechanism itself. Task 6's TestEngineProseHelperOnly
+		// skips msg.go for the same reason.
+		if e.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") || name == "msg.go" {
 			continue
 		}
 		f, perr := parser.ParseFile(fset, filepath.Join(engineDir, name), nil, 0)
