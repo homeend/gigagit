@@ -21,16 +21,20 @@ func (op Commit) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	if err := deps.Repo.Commit(ctx, op.Message, op.All, op.Amend); err != nil {
 		return Result{}, err
 	}
-	summary := "committed"
-	if op.Amend {
-		summary = "amended"
-	}
 	// Best-effort: name the commit we just made. The commit itself
 	// succeeded, so a failed read only costs the sha in the summary.
+	var res Result
 	if line, lerr := deps.Repo.CommitLine(ctx, "HEAD"); lerr == nil {
-		summary += " " + line.Hash + " " + line.Subject
+		if op.Amend {
+			res = Result{Changed: true}.WithSummary("amended %s %s", line.Hash, line.Subject)
+		} else {
+			res = Result{Changed: true}.WithSummary("committed %s %s", line.Hash, line.Subject)
+		}
+	} else if op.Amend {
+		res = Result{Changed: true}.WithSummary("amended")
+	} else {
+		res = Result{Changed: true}.WithSummary("committed")
 	}
-	res := Result{Summary: summary, Changed: true}
 	deps.emit(ctx, Done{Result: res})
 	return res, nil
 }
@@ -60,7 +64,7 @@ func (op Push) Run(ctx context.Context, deps OpDeps) (Result, error) {
 			return Result{}, err
 		}
 		if !ok {
-			return Result{Summary: "push cancelled", Changed: false}, nil
+			return Result{Changed: false}.WithSummary("push cancelled"), nil
 		}
 		return op.push(ctx, deps, force)
 	}
@@ -68,7 +72,7 @@ func (op Push) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	deps.emit(ctx, Progress{Step: "pushing", Detail: op.Remote + " " + op.Branch})
 	err := deps.Repo.Push(ctx, op.Remote, op.Branch, op.SetUpstream, git.PushNoForce)
 	if err == nil {
-		res := Result{Summary: "pushed", Changed: true}
+		res := Result{Changed: true}.WithSummary("pushed")
 		deps.emit(ctx, Done{Result: res})
 		return res, nil
 	}
@@ -82,11 +86,12 @@ func (op Push) Run(ctx context.Context, deps OpDeps) (Result, error) {
 // means the user aborted. The safer lease-protected option leads (index 0) so a
 // modal's default enter never triggers a plain overwrite.
 func (op Push) decideForce(ctx context.Context, deps OpDeps) (git.PushForce, bool, error) {
-	choice, err := deps.decide(ctx, DecisionRequest{
-		ID:      "push-force",
-		Prompt:  "Force-push " + op.Branch + " to " + op.Remote + " (overwrites the remote branch)",
-		Options: []string{"force-with-lease", "force", "abort"},
-	})
+	choice, err := deps.decide(ctx, PromptReq(
+		"push-force",
+		"Force-push %s to %s (overwrites the remote branch)",
+		[]string{"force-with-lease", "force", "abort"},
+		op.Branch, op.Remote,
+	))
 	if err != nil {
 		return git.PushNoForce, false, err
 	}
@@ -108,7 +113,7 @@ func (op Push) push(ctx context.Context, deps OpDeps, force git.PushForce) (Resu
 	if err := deps.Repo.Push(ctx, op.Remote, op.Branch, op.SetUpstream, force); err != nil {
 		return Result{}, err
 	}
-	res := Result{Summary: "pushed", Changed: true}
+	res := Result{Changed: true}.WithSummary("pushed")
 	deps.emit(ctx, Done{Result: res})
 	return res, nil
 }
@@ -126,17 +131,23 @@ func (op Push) recoverRejected(ctx context.Context, deps OpDeps) (Result, error)
 	if cur, cerr := deps.Repo.CurrentBranch(ctx); cerr == nil && cur == op.Branch {
 		allowRebase = true
 	}
-	opts := []string{"force", "abort"}
-	prompt := "Remote has new commits on " + op.Branch + " — force-push or abort"
+	var choice DecisionResponse
+	var err error
 	if allowRebase {
-		opts = []string{"rebase", "force", "abort"}
-		prompt = "Remote has new commits on " + op.Branch + " — rebase onto them, force-push, or abort"
+		choice, err = deps.decide(ctx, PromptReq(
+			"push-rejected",
+			"Remote has new commits on %s — rebase onto them, force-push, or abort",
+			[]string{"rebase", "force", "abort"},
+			op.Branch,
+		))
+	} else {
+		choice, err = deps.decide(ctx, PromptReq(
+			"push-rejected",
+			"Remote has new commits on %s — force-push or abort",
+			[]string{"force", "abort"},
+			op.Branch,
+		))
 	}
-	choice, err := deps.decide(ctx, DecisionRequest{
-		ID:      "push-rejected",
-		Prompt:  prompt,
-		Options: opts,
-	})
 	if err != nil {
 		return Result{}, err
 	}
@@ -152,11 +163,11 @@ func (op Push) recoverRejected(ctx context.Context, deps OpDeps) (Result, error)
 			return Result{}, derr
 		}
 		if !ok {
-			return Result{Summary: "push cancelled", Changed: false}, nil
+			return Result{Changed: false}.WithSummary("push cancelled"), nil
 		}
 		return op.push(ctx, deps, force)
 	case "abort", "":
-		return Result{Summary: "push cancelled", Changed: false}, nil
+		return Result{Changed: false}.WithSummary("push cancelled"), nil
 	default:
 		return Result{}, fmt.Errorf("push: unknown recovery %q", choice.Option)
 	}
@@ -179,29 +190,30 @@ func (op Push) rebaseThenPush(ctx context.Context, deps OpDeps) (Result, error) 
 		if !inRebase {
 			return Result{}, fmt.Errorf("push rebase: %w", rebaseErr)
 		}
-		choice, derr := deps.decide(ctx, DecisionRequest{
-			ID:      "rebase-conflict",
-			Prompt:  "Rebasing " + op.Branch + " onto " + op.Remote + "/" + op.Branch + " hit conflicts",
-			Options: []string{"keep-conflicts", "abort"},
-		})
+		choice, derr := deps.decide(ctx, PromptReq(
+			"rebase-conflict",
+			"Rebasing %s onto %s/%s hit conflicts",
+			[]string{"keep-conflicts", "abort"},
+			op.Branch, op.Remote, op.Branch,
+		))
 		if derr != nil {
 			return Result{}, derr
 		}
 		if choice.Option == "keep-conflicts" {
-			return Result{Summary: "rebase paused on a conflict (resolve, then `git rebase --continue`, then push)", Changed: true},
+			return Result{Changed: true}.WithSummary("rebase paused on a conflict (resolve, then `git rebase --continue`, then push)"),
 				fmt.Errorf("push rebase conflict: %s", op.Branch)
 		}
 		if err := deps.Repo.RebaseAbort(ctx, ""); err != nil {
 			return Result{}, fmt.Errorf("push rebase: abort failed: %w", err)
 		}
-		return Result{Summary: "push cancelled (rebase aborted)", Changed: false}, nil
+		return Result{Changed: false}.WithSummary("push cancelled (rebase aborted)"), nil
 	}
 
 	deps.emit(ctx, Progress{Step: "pushing", Detail: op.Remote + " " + op.Branch})
 	if err := deps.Repo.Push(ctx, op.Remote, op.Branch, op.SetUpstream, git.PushNoForce); err != nil {
 		return Result{}, err // second rejection or other error: surface, no loop
 	}
-	res := Result{Summary: "rebased and pushed", Changed: true}
+	res := Result{Changed: true}.WithSummary("rebased and pushed")
 	deps.emit(ctx, Done{Result: res})
 	return res, nil
 }
@@ -218,7 +230,7 @@ func (op Stash) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	if err := deps.Repo.StashPush(ctx, op.Message, op.Paths, op.IncludeUntracked); err != nil {
 		return Result{}, err
 	}
-	res := Result{Summary: "stashed: " + op.Message, Changed: true}
+	res := Result{Changed: true}.WithSummary("stashed: %s", op.Message)
 	deps.emit(ctx, Done{Result: res})
 	return res, nil
 }
@@ -231,7 +243,7 @@ func (op StashApply) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	if err := deps.Repo.StashApply(ctx, op.Ref); err != nil {
 		return Result{}, err
 	}
-	res := Result{Summary: "applied " + op.Ref, Changed: true}
+	res := Result{Changed: true}.WithSummary("applied %s", op.Ref)
 	deps.emit(ctx, Done{Result: res})
 	return res, nil
 }
@@ -244,7 +256,7 @@ func (op StashPop) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	if err := deps.Repo.StashPop(ctx, op.Ref); err != nil {
 		return Result{}, err
 	}
-	res := Result{Summary: "popped " + op.Ref, Changed: true}
+	res := Result{Changed: true}.WithSummary("popped %s", op.Ref)
 	deps.emit(ctx, Done{Result: res})
 	return res, nil
 }
@@ -257,7 +269,7 @@ func (op StashDrop) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	if err := deps.Repo.StashDrop(ctx, op.Ref); err != nil {
 		return Result{}, err
 	}
-	res := Result{Summary: "dropped " + op.Ref, Changed: true}
+	res := Result{Changed: true}.WithSummary("dropped %s", op.Ref)
 	deps.emit(ctx, Done{Result: res})
 	return res, nil
 }

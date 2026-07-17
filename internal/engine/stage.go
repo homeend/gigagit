@@ -31,7 +31,7 @@ func (op Stage) Run(ctx context.Context, deps OpDeps) (Result, error) {
 		if err := deps.Repo.StageAll(ctx); err != nil {
 			return Result{}, fmt.Errorf("stage: %w", err)
 		}
-		return Result{Summary: "staged all changes", Changed: true}, nil
+		return Result{Changed: true}.WithSummary("staged all changes"), nil
 	}
 	if len(op.Paths) == 0 {
 		return Result{}, fmt.Errorf("stage: no paths")
@@ -50,5 +50,8 @@ func (op Stage) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	if err != nil {
 		return Result{}, fmt.Errorf("stage: %w", err)
 	}
-	return Result{Summary: verb + " " + strings.Join(op.Paths, " "), Changed: true}, nil
+	if op.Unstage {
+		return Result{Changed: true}.WithSummary("unstaged %s", strings.Join(op.Paths, " ")), nil
+	}
+	return Result{Changed: true}.WithSummary("staged %s", strings.Join(op.Paths, " ")), nil
 }

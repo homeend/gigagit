@@ -39,7 +39,7 @@ func (op SetIdentity) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	if err := deps.Repo.ConfigSet(ctx, scope, "user.email", op.Email); err != nil {
 		return Result{}, fmt.Errorf("set identity: user.email: %w", err)
 	}
-	res := Result{Summary: fmt.Sprintf("identity %s <%s> set %s", op.Name, op.Email, where), Changed: true}
+	res := Result{Changed: true}.WithSummary("identity %s <%s> set %s", op.Name, op.Email, where)
 	deps.emit(ctx, Done{Result: res})
 	return res, nil
 }

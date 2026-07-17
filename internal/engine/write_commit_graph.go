@@ -25,7 +25,7 @@ func (op WriteCommitGraph) Run(ctx context.Context, deps OpDeps) (Result, error)
 	if err != nil {
 		return Result{}, fmt.Errorf("write commit-graph: %w", err)
 	}
-	res := Result{Summary: "commit-graph written", Changed: true}
+	res := Result{Changed: true}.WithSummary("commit-graph written")
 	deps.emit(ctx, Done{Result: res})
 	return res, nil
 }

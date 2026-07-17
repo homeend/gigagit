@@ -41,7 +41,7 @@ func (op SetGitConfig) Run(ctx context.Context, deps OpDeps) (Result, error) {
 		if err := deps.Repo.ConfigUnset(ctx, scope, op.Key); err != nil {
 			return Result{}, fmt.Errorf("unset git config: %s: %w", op.Key, err)
 		}
-		res := Result{Summary: fmt.Sprintf("%s unset %s", op.Key, where), Changed: true}
+		res := Result{Changed: true}.WithSummary("%s unset %s", op.Key, where)
 		deps.emit(ctx, Done{Result: res})
 		return res, nil
 	}
@@ -49,7 +49,7 @@ func (op SetGitConfig) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	if err := deps.Repo.ConfigSet(ctx, scope, op.Key, op.Value); err != nil {
 		return Result{}, fmt.Errorf("set git config: %s: %w", op.Key, err)
 	}
-	res := Result{Summary: fmt.Sprintf("%s = %s set %s", op.Key, op.Value, where), Changed: true}
+	res := Result{Changed: true}.WithSummary("%s = %s set %s", op.Key, op.Value, where)
 	deps.emit(ctx, Done{Result: res})
 	return res, nil
 }

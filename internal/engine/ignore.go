@@ -22,14 +22,14 @@ func (op Ignore) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	line := ignoreLine(op.Path, op.Ext)
 	existing, _ := deps.Repo.ReadWorktreeFile(ctx, ".gitignore") // absent → nil
 	if alreadyIgnored(existing, line) {
-		res := Result{Summary: line + " already in .gitignore"}
+		res := Result{}.WithSummary("%s already in .gitignore", line)
 		deps.emit(ctx, Done{Result: res})
 		return res, nil
 	}
 	if err := deps.Repo.WriteWorktreeFile(ctx, ".gitignore", appendIgnoreLine(existing, line)); err != nil {
 		return Result{}, err
 	}
-	res := Result{Summary: "ignored " + line, Changed: true}
+	res := Result{Changed: true}.WithSummary("ignored %s", line)
 	deps.emit(ctx, Done{Result: res})
 	return res, nil
 }

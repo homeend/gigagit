@@ -26,7 +26,7 @@ func (UndoLastCommit) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	if err := deps.Repo.ResetSoft(ctx, "HEAD@{1}"); err != nil {
 		return Result{}, err
 	}
-	res := Result{Summary: "undid last commit (changes kept staged)", Changed: true}
+	res := Result{Changed: true}.WithSummary("undid last commit (changes kept staged)")
 	deps.emit(ctx, Done{Result: res})
 	return res, nil
 }
