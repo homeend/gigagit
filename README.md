@@ -377,7 +377,10 @@ name = "My language"
 
 A new code adds a language; reusing a built-in code (`ja`/`ko`/`zh`/`ru`)
 overlays it per-key — fix just the strings you disagree with. Anything
-untranslated falls back to English. CLI output is always English — it's the
+untranslated falls back to English. Operation status lines, progress steps,
+and confirmation prompts localize too: the engine always emits them in
+English (so the CLI, logs, and agents stay stable), and the TUI renders the
+localized form alongside. CLI output is always English — it's the
 agent-facing, script-stable surface.
 
 ### Notifications

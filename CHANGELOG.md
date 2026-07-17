@@ -9,6 +9,26 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Changed
+- **Multilanguage TUI (stage 5): operation status, progress, and prompts,
+  localized.** The last English-only surface inside the TUI — the busy line
+  while an operation runs, the after-op status summary, and the decision-
+  modal prompt sentence — now renders in the active language (~200 new keys
+  ×4 bundles: ja/ko/zh/ru, ~1,180 → ~1,385 keys each). The mechanism is a
+  **dual-channel engine contract**: every operation still emits its English
+  `Result.Summary` / `Progress.Detail` / `DecisionRequest.Prompt` byte-for-
+  byte unchanged (so the CLI, `operations.log`, e2e scenarios, and agents
+  are entirely unaffected), and additionally carries the unformatted
+  `Msg{Format, Args}` pair — built only through the `WithSummary` /
+  `AppendSummary` / `Progressf` / `PromptReq` helpers so the two channels
+  cannot drift. A single TUI render seam (`internal/tui/i18n_engine.go`)
+  translates the localizable channel and falls back to the English string
+  when it is absent, so any un-migrated site degrades to English rather than
+  breaking. Two AST gates enforce it: `engine_prose_test.go` requires every
+  engine format/step literal to exist in all four bundles and forbids
+  hand-built `Summary:`/`Prompt:` strings (helpers only), and the
+  options-vocab gate learned the `PromptReq` pass-through. Engine error
+  prose stays English (it renders inside the already-translated
+  `friendlyOpError` frame); CLI/agent output stays English by design.
 - **Multilanguage TUI (stage 4): the last remaining chrome, translated.**
   Closes the "declared stage-4 remainder" list from stage 3. Pair-op picker
   labels and footer (mark.go's Merge/Rebase/Interactive rebase/Compare
