@@ -7,8 +7,13 @@ import (
 // Result is the outcome of an operation.
 type Result struct {
 	Summary string
-	Changed bool
-	Path    string // when an operation creates/targets a path (e.g. CreateWorktree), its absolute path
+	// SummaryParts is the localizable channel for Summary: English format
+	// strings (doubling as i18n catalog keys) plus args. Built ONLY via
+	// WithSummary/AppendSummary so the channels stay in lockstep. Empty =
+	// frontends render the English Summary verbatim.
+	SummaryParts []Msg
+	Changed      bool
+	Path         string // when an operation creates/targets a path (e.g. CreateWorktree), its absolute path
 	// Captured is the captured stdout, set only by capture ops like GenerateMessage.
 	Captured string
 }

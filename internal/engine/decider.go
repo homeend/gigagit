@@ -8,9 +8,12 @@ import (
 
 // DecisionRequest describes a fork an operation cannot resolve on its own.
 type DecisionRequest struct {
-	ID      string
-	Prompt  string
-	Options []string
+	ID     string
+	Prompt string
+	// PromptMsg is the localizable channel for Prompt, built via PromptReq.
+	// Empty = frontends render the English Prompt verbatim.
+	PromptMsg Msg
+	Options   []string
 }
 
 // DecisionResponse is the chosen option.
