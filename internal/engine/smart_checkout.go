@@ -88,7 +88,7 @@ func (op SmartCheckout) Run(ctx context.Context, deps OpDeps) (Result, error) {
 		// nested repogate reservation under the one we already hold.
 		return SmartSwitch{Branch: op.Local}.Run(ctx, deps)
 	}
-	return Result{Summary: "checked out " + op.RemoteRef + " as " + op.Local, Changed: true}, nil
+	return Result{Changed: true}.WithSummary("checked out %s as %s", op.RemoteRef, op.Local), nil
 }
 
 var _ Operation = SmartCheckout{}

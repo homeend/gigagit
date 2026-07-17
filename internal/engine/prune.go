@@ -19,13 +19,13 @@ func (op Prune) Run(ctx context.Context, deps OpDeps) (Result, error) {
 		return Result{}, err
 	}
 	if len(names) == 0 {
-		return Result{Summary: "no remotes to prune"}, nil
+		return Result{}.WithSummary("no remotes to prune"), nil
 	}
 	deps.emit(ctx, Progress{Step: "pruning", Detail: strings.Join(names, " ")})
 	if err := deps.Repo.PruneRemotes(ctx, names...); err != nil {
 		return Result{}, err
 	}
-	res := Result{Summary: "pruned remotes: " + strings.Join(names, " "), Changed: true}
+	res := Result{Changed: true}.WithSummary("pruned remotes: %s", strings.Join(names, " "))
 	deps.emit(ctx, Done{Result: res})
 	return res, nil
 }

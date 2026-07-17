@@ -17,7 +17,7 @@ func (op PruneWorktrees) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	if err := deps.Repo.PruneWorktrees(ctx); err != nil {
 		return Result{}, err
 	}
-	res := Result{Summary: "pruned stale worktrees", Changed: true}
+	res := Result{Changed: true}.WithSummary("pruned stale worktrees")
 	deps.emit(ctx, Done{Result: res})
 	return res, nil
 }

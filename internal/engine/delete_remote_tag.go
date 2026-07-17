@@ -34,11 +34,7 @@ func (op DeleteRemoteTag) Run(ctx context.Context, deps OpDeps) (Result, error) 
 		case 1:
 			remote = names[0]
 		default:
-			choice, derr := deps.decide(ctx, DecisionRequest{
-				ID:      "delete-remote-tag-remote",
-				Prompt:  "Delete " + op.Tag + " from which remote?",
-				Options: append(append([]string{}, names...), "abort"),
-			})
+			choice, derr := deps.decide(ctx, PromptReq("delete-remote-tag-remote", "Delete %s from which remote?", append(append([]string{}, names...), "abort"), op.Tag))
 			if derr != nil {
 				return Result{}, derr
 			}
@@ -49,23 +45,19 @@ func (op DeleteRemoteTag) Run(ctx context.Context, deps OpDeps) (Result, error) 
 		}
 	}
 
-	confirm, err := deps.decide(ctx, DecisionRequest{
-		ID:      "delete-remote-tag",
-		Prompt:  "Delete tag " + op.Tag + " from " + remote + "? This pushes a deletion to " + remote + ".",
-		Options: []string{"delete", "abort"},
-	})
+	confirm, err := deps.decide(ctx, PromptReq("delete-remote-tag", "Delete tag %s from %s? This pushes a deletion to %s.", []string{"delete", "abort"}, op.Tag, remote, remote))
 	if err != nil {
 		return Result{}, err
 	}
 	if confirm.Option != "delete" {
-		return Result{Summary: "cancelled", Changed: false}, nil
+		return Result{Changed: false}.WithSummary("cancelled"), nil
 	}
 
 	deps.emit(ctx, Progress{Step: "deleting remote tag", Detail: op.Tag + " ← " + remote})
 	if err := deps.Repo.PushDeleteTag(ctx, remote, op.Tag); err != nil {
 		return Result{}, fmt.Errorf("delete remote tag: %w", err)
 	}
-	res := Result{Summary: "deleted " + op.Tag + " from " + remote, Changed: true}
+	res := Result{Changed: true}.WithSummary("deleted %s from %s", op.Tag, remote)
 	deps.emit(ctx, Done{Result: res})
 	return res, nil
 }

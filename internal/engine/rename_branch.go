@@ -24,7 +24,7 @@ func (op RenameBranch) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	if err := deps.Repo.RenameBranch(ctx, op.Old, op.New); err != nil {
 		return Result{}, fmt.Errorf("rename branch: %w", err)
 	}
-	res := Result{Summary: "renamed branch " + op.Old + " → " + op.New, Changed: true}
+	res := Result{Changed: true}.WithSummary("renamed branch %s → %s", op.Old, op.New)
 	deps.emit(ctx, Done{Result: res})
 	return res, nil
 }

@@ -58,8 +58,7 @@ func (op CreateWorktreeForBranch) Run(ctx context.Context, deps OpDeps) (Result,
 		return Result{}, fmt.Errorf("create worktree: %w", err)
 	}
 
-	note := runPostCreateHook(ctx, deps, abs, op.Branch, op.PostCreateHook)
-	res := Result{Summary: "worktree created: " + abs + note, Changed: true, Path: abs}
+	res := runPostCreateHook(ctx, deps, Result{Changed: true, Path: abs}.WithSummary("worktree created: %s", abs), abs, op.Branch, op.PostCreateHook)
 	deps.emit(ctx, Done{Result: res})
 	return res, nil
 }
