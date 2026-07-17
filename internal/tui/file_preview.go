@@ -248,7 +248,7 @@ func (m Model) renderFilePreview(boxW, boxH int) string {
 	}
 
 	lines := make([]string, 0, contentH)
-	lines = append(lines, padRight(truncate("View "+p.title, innerW), innerW))
+	lines = append(lines, padRight(truncate(i18n.T("View %s", p.title), innerW), innerW))
 	if len(vis) == 0 {
 		lines = append(lines, padRight(truncate("  (empty)", innerW), innerW))
 	} else {
