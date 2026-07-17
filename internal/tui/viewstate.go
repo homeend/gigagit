@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -169,13 +170,13 @@ const (
 func (s sortMode) String() string {
 	switch s {
 	case sortNameAsc:
-		return "name↑"
+		return i18n.T("name") + "↑"
 	case sortNameDesc:
-		return "name↓"
+		return i18n.T("name") + "↓"
 	case sortDateAsc:
-		return "date↑"
+		return i18n.T("date") + "↑"
 	case sortDateDesc:
-		return "date↓"
+		return i18n.T("date") + "↓"
 	}
 	return ""
 }

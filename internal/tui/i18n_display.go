@@ -18,6 +18,26 @@ func padCell(s string, w int) string {
 	return s + strings.Repeat(" ", max(0, w-lipgloss.Width(s)))
 }
 
+// maxLabelWidth returns the widest display width among labels, floored at
+// min — the pad width for a label column whose translations may exceed the
+// English layout constant. Keeps English layout unchanged when every label's
+// display width is <= min (the historical width).
+//
+// Named maxLabelWidth rather than the brief's maxCellWidth: this package
+// already has an unrelated maxCellWidth(lines []textdiff.Line) int in
+// diff_render.go (the diff view's horizontal-scroll extent) — Go has no
+// function overloading, so the two can't share a name. This name is a better
+// fit for what it computes anyway (a label column's pad width).
+func maxLabelWidth(min int, labels ...string) int {
+	w := min
+	for _, l := range labels {
+		if lw := lipgloss.Width(l); lw > w {
+			w = lw
+		}
+	}
+	return w
+}
+
 // opDisplayName translates a sequencer op name for display. The op VALUES
 // ("merge", "rebase", "cherry-pick", "revert") are protocol — state,
 // config, and comparisons keep the English word; only rendering comes here.

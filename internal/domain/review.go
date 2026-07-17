@@ -56,6 +56,9 @@ func (t ReviewTarget) DisplayLabel() string {
 	if s := strings.TrimSpace(t.Range); s != "" {
 		return s
 	}
+	// The TUI (reviewScopeLabel, reviewTitle) matches this literal byte-for-byte
+	// to route it through a translated key — domain must not import i18n, so
+	// rewording it here silently degrades that surface to untranslated English.
 	return "working changes"
 }
 
@@ -64,7 +67,9 @@ func (t ReviewTarget) DisplayLabel() string {
 // which would omit staged changes (git diff = working tree vs index only).
 // The single source of truth for both the CLI (`gg review --working`) and the
 // TUI (Files panel "Review working changes") so the two call sites can't
-// diverge.
+// diverge. Its Label "working changes" is matched byte-for-byte by the TUI's
+// reviewTitle to pick the translated sibling key ("Review: working changes")
+// instead of the generic "Review: %s" format — see DisplayLabel's fallback.
 func WorkingReviewTarget() ReviewTarget {
 	return ReviewTarget{Kind: ReviewWorking, Range: "", Label: "working changes", Diff: model.DiffSpec{Rev: "HEAD"}}
 }

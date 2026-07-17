@@ -4,6 +4,8 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/homeend/gigagit/internal/i18n"
 )
 
 type cfField int
@@ -17,7 +19,24 @@ const (
 	cfFieldCount
 )
 
-var cfLabels = [cfFieldCount]string{"Path:    ", "Author:  ", "Message: ", "Since:   ", "Until:   "}
+// cfLabel translates a field's aligned label at render time (not a package
+// var — a var initializer would freeze the English text at package init,
+// before any language loads; see cfg language switching in Settings).
+func cfLabel(f cfField) string {
+	switch f {
+	case cfPath:
+		return i18n.T("Path:    ")
+	case cfAuthor:
+		return i18n.T("Author:  ")
+	case cfGrep:
+		return i18n.T("Message: ")
+	case cfSince:
+		return i18n.T("Since:   ")
+	case cfUntil:
+		return i18n.T("Until:   ")
+	}
+	return ""
+}
 
 // commitFilterPopup collects the non-branch feed filter. Opened with `\` on the
 // Commits panel; Enter applies (sets m.commitFilter + reloads), Esc cancels.
@@ -97,12 +116,12 @@ func (p *commitFilterPopup) render(m Model, below string) string {
 	inner := popupResolveWidth(w, p.maximized, popupInnerWidth(w))
 	cw := popupContentWidth(w)
 	var b strings.Builder
-	b.WriteString("Filter commits\n\n")
+	b.WriteString(i18n.T("Filter commits") + "\n\n")
 	for i := cfField(0); i < cfFieldCount; i++ {
-		b.WriteString(viewField(cfLabels[i], p.fields[i], i == p.focus, cw))
+		b.WriteString(viewField(cfLabel(i), p.fields[i], i == p.focus, cw))
 		b.WriteString("\n")
 	}
-	b.WriteString("\n[enter] apply  [tab] next  [ctrl+r] clear all  [esc] cancel")
+	b.WriteString("\n" + i18n.T("[enter] apply  [tab] next  [ctrl+r] clear all  [esc] cancel"))
 	box := modalStyle.Width(inner).Render(b.String()) + "\n"
 	return overlayCenter(clipToHeight(below, h), box, w, h)
 }

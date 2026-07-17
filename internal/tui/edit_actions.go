@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/homeend/gigagit/internal/i18n"
 )
 
 func defaultEditor() string {
@@ -58,7 +60,7 @@ func (m Model) fileEditRow() (actionRow, bool) {
 	p := m.status.Files[bi].Path
 	return actionRow{
 		id:    "edit-file",
-		label: "Edit in editor",
+		label: i18n.T("Edit in editor"),
 		run:   func(m Model) (tea.Model, tea.Cmd) { return m, m.editFileCmd(p) },
 	}, true
 }
@@ -82,7 +84,7 @@ func (m Model) stagedOpenExternalRow() (actionRow, bool) {
 	p, svc := f.Path, m.svc
 	return actionRow{
 		id:    "open-external-staged",
-		label: "Open staged version in external editor",
+		label: i18n.T("Open staged version in external editor"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			return m, m.openInEditorCmd(p, func(ctx context.Context) ([]byte, error) {
 				return svc.ShowFile(ctx, "", p) // `git show :path` = the index blob
@@ -92,7 +94,7 @@ func (m Model) stagedOpenExternalRow() (actionRow, bool) {
 }
 
 // editedSummary is the status-bar message after a successful edit.
-func editedSummary(rel string) string { return "edited " + filepath.Base(rel) }
+func editedSummary(rel string) string { return i18n.T("edited %s", filepath.Base(rel)) }
 
 // editFileCmd suspends the TUI and opens rel (repo-relative) in the user's
 // editor; on exit it yields an editorFinishedMsg. Bubble Tea's ExecProcess owns

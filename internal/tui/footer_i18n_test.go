@@ -12,6 +12,7 @@ func TestFooterRendersTranslatedLabels(t *testing.T) {
 	if err := i18n.SetLanguage("xx", langDirFromEnv(t)); err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { _ = i18n.SetLanguage("", "") })
 	_ = newTestModel(t) // smoke-check model construction alongside the live language switch
 	for _, b := range globalBindings() {
 		if b.id == "settings" {

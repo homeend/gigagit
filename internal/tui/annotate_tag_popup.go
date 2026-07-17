@@ -6,6 +6,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/i18n"
 )
 
 // annotateTagPopup edits the message for an existing tag, force-recreating it
@@ -55,9 +56,9 @@ func (p *annotateTagPopup) render(m Model, below string) string {
 
 func (p *annotateTagPopup) box(m Model) string {
 	var b strings.Builder
-	b.WriteString("Annotate tag " + p.tag + "\n\n")
+	b.WriteString(i18n.T("Annotate tag %s", p.tag) + "\n\n")
 	w, _ := m.overlayDims()
-	b.WriteString(viewField("message: ", p.message, true, popupContentWidth(w)) + "\n\n")
-	b.WriteString("[type] message  [enter] annotate  [esc] cancel")
+	b.WriteString(viewField(i18n.T("message: "), p.message, true, popupContentWidth(w)) + "\n\n")
+	b.WriteString(i18n.T("[type] message  [enter] annotate  [esc] cancel"))
 	return modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 }

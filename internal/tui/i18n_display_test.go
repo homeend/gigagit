@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/i18n"
 )
 
 // English is the key, so with no language set every func must return the
@@ -103,5 +104,40 @@ func TestIdentityLabelPadCellAlignsCJK(t *testing.T) {
 	cjk := "  " + padCell("名前", 9) + " v"
 	if lipgloss.Width(ascii) != lipgloss.Width(cjk) {
 		t.Fatalf("padded label columns misalign: %d vs %d", lipgloss.Width(ascii), lipgloss.Width(cjk))
+	}
+}
+
+// TestTranslatedPadColumnsAlign is the F3 regression test: ru "закоммиченный"
+// (13 cells) overflows the historical 11-cell pad; column widths must be
+// computed from the rendered label set, not hard constants.
+//
+// NOTE: the brief's interface names this helper maxCellWidth, but that name
+// already exists in this package (diff_render.go's maxCellWidth(lines
+// []textdiff.Line) int, with its own test in diff_render_test.go) — Go has no
+// overloading, so a second package-scope maxCellWidth cannot coexist. The
+// unrelated diff helper has no ties to i18n/label columns and nothing outside
+// this package's diff code references it by name, so the new pad-width helper
+// is named maxLabelWidth instead (also a more accurate name for what it does)
+// rather than renaming the pre-existing, out-of-scope diff helper.
+func TestTranslatedPadColumnsAlign(t *testing.T) {
+	if err := i18n.SetLanguage("ru", t.TempDir()); err != nil { // embedded bundle; dir only holds overrides
+		t.Fatalf("SetLanguage(ru): %v", err)
+	}
+	t.Cleanup(func() { _ = i18n.SetLanguage("", "") })
+
+	labels := []string{i18n.T("committed"), i18n.T("private")}
+	w := maxLabelWidth(11, labels...)
+	for _, l := range labels {
+		if got := lipgloss.Width(padCell(l, w)); got != w {
+			t.Fatalf("padCell(%q, %d) renders %d cells — label overflows its column", l, w, got)
+		}
+	}
+	// identity scope labels, 9-cell historical width
+	scope := []string{i18n.T("Global"), i18n.T("Repo"), i18n.T("Effective")}
+	sw := maxLabelWidth(9, scope...)
+	for _, l := range scope {
+		if got := lipgloss.Width(padCell(l, sw)); got != sw {
+			t.Fatalf("scope label %q overflows computed width %d (got %d)", l, sw, got)
+		}
 	}
 }

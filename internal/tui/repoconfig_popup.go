@@ -212,7 +212,7 @@ func slotDisplay(path string, exists bool) string {
 	if exists {
 		status = i18n.T("present")
 	}
-	return padCell(status, 9) + path
+	return padCell(status, maxLabelWidth(9, i18n.T("absent"), i18n.T("present"))) + path
 }
 
 func (p *repoConfigPopup) box(m Model) string {
@@ -220,9 +220,10 @@ func (p *repoConfigPopup) box(m Model) string {
 	inner := popupResolveWidth(w, p.maximized, popupWideInnerWidth(w)) // paths are long
 	textW := popupTextWidth(inner)
 	var b strings.Builder
+	cw := maxLabelWidth(11, i18n.T("committed"), i18n.T("private"))
 	b.WriteString(i18n.T("Repo settings location") + "\n\n")
-	b.WriteString("  " + padCell(i18n.T("committed"), 11) + slotDisplay(p.committedPath, p.committedEx) + "\n")
-	b.WriteString("  " + padCell(i18n.T("private"), 11) + slotDisplay(p.privatePath, p.privateEx) + "\n\n")
+	b.WriteString("  " + padCell(i18n.T("committed"), cw) + slotDisplay(p.committedPath, p.committedEx) + "\n")
+	b.WriteString("  " + padCell(i18n.T("private"), cw) + slotDisplay(p.privatePath, p.privateEx) + "\n\n")
 
 	if p.confirm {
 		_, dst, _ := repoCfgEndpoints(p.pending, p.committedPath, p.privatePath)

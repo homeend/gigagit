@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"strconv"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -185,17 +184,17 @@ func (p *eagerPrompt) box(m Model) string {
 	w, _ := m.overlayDims()
 	inner := popupResolveWidth(w, p.maximized, popupInnerWidth(w))
 	textW := popupTextWidth(inner)
-	report := "Searched " + strconv.Itoa(p.scanned) + " commits, no match for \"" + p.query + "\"."
+	report := i18n.T("Searched %d commits, no match for \"%s\".", p.scanned, p.query)
 	if p.from > 0 {
-		report = "Searched " + strconv.Itoa(p.scanned) + " more commits, no further match for \"" + p.query + "\"."
+		report = i18n.T("Searched %d more commits, no further match for \"%s\".", p.scanned, p.query)
 	}
 	parts := []string{
-		"Search deeper?",
+		i18n.T("Search deeper?"),
 		"",
 		report,
 		"",
 	}
-	opts := []string{"Search " + strconv.Itoa(m.commitSearchMaxPages()) + " more pages", "Cancel"}
+	opts := []string{i18n.T("Search %d more pages", m.commitSearchMaxPages()), i18n.T("Cancel")}
 	for i, o := range opts {
 		prefix, st := "  ", lipgloss.NewStyle()
 		if i == p.sel {
@@ -203,6 +202,6 @@ func (p *eagerPrompt) box(m Model) string {
 		}
 		parts = append(parts, st.Render(padRight(prefix+o, textW)))
 	}
-	parts = append(parts, "", "[enter] choose  [esc] cancel")
+	parts = append(parts, "", i18n.T("[enter] choose  [esc] cancel"))
 	return popupBox(inner, strings.Join(parts, "\n"))
 }

@@ -9,6 +9,43 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Changed
+- **Multilanguage TUI (stage 4): the last remaining chrome, translated.**
+  Closes the "declared stage-4 remainder" list from stage 3. Pair-op picker
+  labels and footer (mark.go's Merge/Rebase/Interactive rebase/Compare
+  closures, restructured from string concatenation to `i18n.T` format keys)
+  are translated, plus browse/switcher chrome across the fuzzy file finder,
+  files view, bookmark and shelf popups, the command palette, and the repo
+  popup. The conflict process/picker and review-tool chooser are translated,
+  alongside the prefix picker/settings, tool-approval, shell-escape,
+  checkout-as, and commit eager-search popups. All 18 textfield-style popups
+  (annotate tag, apply patch, commit filter, `ctrl+g` generate, export patch,
+  goto-commit, interactive-rebase edit, reflog checkout, related-prompt,
+  rename branch, repo path, reword, shelf actions, stash action/popup, tag
+  checkout/popup, temp export) are translated too. Roughly 100 action-menu
+  row labels across the package are wrapped, including commit scope, tags,
+  remotes, and the rebase commit-move/drop rows. A new AST gate,
+  `internal/tui/menu_labels_test.go` (`TestActionMenuLabelsTranslated`), sits
+  alongside `options_vocab_test.go`: it walks every `actionRow` composite
+  literal's `label:` field AND every call-site argument at a same-package
+  function or method's `label string` parameter position (the positional
+  blind spot a helper like `commitEditRow` can hide a raw literal behind),
+  requiring every reached literal to route through `i18n.T` and every found
+  key to exist in all four bundles. Running it for the first time caught two
+  genuine untranslated panel titles outside any wave's file list
+  (`stash_view.go`'s "Stashes" and `view.go`'s "Commits (%s)"), fixed in the
+  same pass. Three related fixes round this out: notices are now
+  rebuilt on a language switch instead of keeping titles baked in at
+  construction time; the review lane's "working changes" status-bar argument
+  is translated; and label-column pad widths (git-config explorer, identity
+  & profiles, repo-config location) are now computed from the *translated*
+  label set via a new `maxLabelWidth` helper in `i18n_display.go`, next to
+  `padCell`, instead of a fixed English-length floor. Closed with four
+  per-language QA passes (ja 8 fixes / ko 18 / zh 20 / ru 21 — terminology
+  drift, genitive-count and particle/case fixes, and field-tag width
+  alignment). With this wave, **the TUI is fully translated**; only
+  engine/CLI prose stays English by design (the agent-facing, script-stable
+  surface). ~405 new keys land in all four bundles, which now run just under
+  1,200 lines each.
 - **`/` search starts from the cursor, not from the top.** Engaging the `/`
   filter (in any panel, and on the files view's commit-list side) used to
   reset the cursor to row 0, and every typed character reset it again — with

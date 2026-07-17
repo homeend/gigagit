@@ -439,22 +439,37 @@ const (
 // gitConfigColWidths computes the four column widths for the given text
 // width, shrinking from the ideal split when necessary (see the const block
 // above for the shrink order and rationale).
+//
+// Each column's floor is raised to its own translated header's display width
+// via maxLabelWidth — a header (i18n.T("Key")/"Local"/"Global"/"Default", see
+// box()'s header line) that renders wider than the historical floor constant
+// would otherwise overflow its column while the row cells beneath it (which
+// ARE truncated, see gitConfigRowText/gitConfigDefaultCell) stay in bounds,
+// desyncing the header from its column. The floors feed the SAME shrink loop
+// that produces keyW/localW/globalW/defaultW, so key gives way first (as
+// before) to make room when a floor grows — never a separate, second
+// computation that could drift from the one configRowDecorator consumes.
 func gitConfigColWidths(textW int) (keyW, localW, globalW, defaultW int) {
+	keyFloor := maxLabelWidth(gitConfigKeyFloor, i18n.T("Key"))
+	localFloor := maxLabelWidth(gitConfigSideFloor, i18n.T("Local"))
+	globalFloor := maxLabelWidth(gitConfigSideFloor, i18n.T("Global"))
+	defaultFloor := maxLabelWidth(gitConfigDefaultMin, i18n.T("Default"))
+
 	keyW, localW, globalW = gitConfigKeyIdeal, gitConfigLocalIdeal, gitConfigGlobalIdeal
 	sep := 3 * gitConfigColSep
-	need := func() int { return keyW + localW + globalW + sep + gitConfigDefaultMin }
-	for need() > textW && keyW > gitConfigKeyFloor {
+	need := func() int { return keyW + localW + globalW + sep + defaultFloor }
+	for need() > textW && keyW > keyFloor {
 		keyW--
 	}
-	for need() > textW && localW > gitConfigSideFloor {
+	for need() > textW && localW > localFloor {
 		localW--
 	}
-	for need() > textW && globalW > gitConfigSideFloor {
+	for need() > textW && globalW > globalFloor {
 		globalW--
 	}
 	defaultW = textW - keyW - localW - globalW - sep
-	if defaultW < 1 {
-		defaultW = 1
+	if defaultW < defaultFloor {
+		defaultW = defaultFloor
 	}
 	return
 }

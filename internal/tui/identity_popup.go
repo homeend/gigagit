@@ -338,7 +338,7 @@ func (v *identityView) box(m Model) string {
 	return popupBox(inner, strings.Join(parts, "\n"))
 }
 
-func identityLine(label, name, email string, set bool, inheritNote string) string {
+func identityLine(label, name, email string, set bool, inheritNote string, labelWidth int) string {
 	val := i18n.T("(not set)")
 	if inheritNote != "" {
 		val = inheritNote
@@ -346,7 +346,7 @@ func identityLine(label, name, email string, set bool, inheritNote string) strin
 	if set {
 		val = fmt.Sprintf("%s <%s>", name, email)
 	}
-	return "  " + padCell(label, 9) + " " + val
+	return "  " + padCell(label, labelWidth) + " " + val
 }
 
 func (v *identityView) browseLines(m Model, textW int) (body, footer []string) {
@@ -355,14 +355,15 @@ func (v *identityView) browseLines(m Model, textW int) (body, footer []string) {
 		return append(parts, "  "+i18n.T("(loading…)")), []string{i18n.T("[esc]")}
 	}
 	parts = append(parts, i18n.T("Current identity"))
-	parts = append(parts, identityLine(i18n.T("Global"), v.id.GlobalName, v.id.GlobalEmail, v.id.GlobalSet, ""))
+	sw := maxLabelWidth(9, i18n.T("Global"), i18n.T("Repo"), i18n.T("Effective"))
+	parts = append(parts, identityLine(i18n.T("Global"), v.id.GlobalName, v.id.GlobalEmail, v.id.GlobalSet, "", sw))
 	repoNote := ""
 	if !v.id.LocalSet && v.id.GlobalSet {
 		repoNote = i18n.T("(not set — inherits global)")
 	}
-	parts = append(parts, identityLine(i18n.T("Repo"), v.id.LocalName, v.id.LocalEmail, v.id.LocalSet, repoNote))
+	parts = append(parts, identityLine(i18n.T("Repo"), v.id.LocalName, v.id.LocalEmail, v.id.LocalSet, repoNote, sw))
 	effSet := v.id.EffectiveName != "" || v.id.EffectiveEmail != ""
-	parts = append(parts, identityLine(i18n.T("Effective"), v.id.EffectiveName, v.id.EffectiveEmail, effSet, ""))
+	parts = append(parts, identityLine(i18n.T("Effective"), v.id.EffectiveName, v.id.EffectiveEmail, effSet, "", sw))
 	parts = append(parts, "", i18n.T("Profiles"))
 	if len(v.profiles) == 0 {
 		parts = append(parts, "  "+i18n.T("(none yet — [n] to create)"))
@@ -413,19 +414,28 @@ func profileScopeLabel(s model.ProfileScope) string {
 	}
 }
 
-func (v *identityView) fieldLine(label string, f textfield, focused bool, contentWidth int) string {
+func (v *identityView) fieldLine(label string, f textfield, focused bool, contentWidth, labelWidth int) string {
 	cursor := "  "
 	if focused {
 		cursor = "> "
 	}
-	return viewField(cursor+padCell(label, 10)+" ", f, focused, contentWidth)
+	return viewField(cursor+padCell(label, labelWidth)+" ", f, focused, contentWidth)
+}
+
+// fieldLabelWidth is the shared label-column width for both the edit-identity
+// form (Name/Email) and the profile form (Name/Git name/Git email/Scope) —
+// one computed width across the full label set so either form's column
+// aligns the same way, floored at the historical 10-cell constant.
+func fieldLabelWidth() int {
+	return maxLabelWidth(10, i18n.T("Name"), i18n.T("Email"), i18n.T("Git name"), i18n.T("Git email"), i18n.T("Scope"))
 }
 
 func (v *identityView) editLines(textW int) (body, footer []string) {
+	fw := fieldLabelWidth()
 	return []string{
 		i18n.T("Edit identity"), "",
-		v.fieldLine(i18n.T("Name"), v.fName, v.field == 0, textW),
-		v.fieldLine(i18n.T("Email"), v.fEmail, v.field == 1, textW),
+		v.fieldLine(i18n.T("Name"), v.fName, v.field == 0, textW, fw),
+		v.fieldLine(i18n.T("Email"), v.fEmail, v.field == 1, textW, fw),
 	}, []string{i18n.T("[↑/↓] field"), i18n.T("[enter] choose scope"), i18n.T("[esc] back")}
 }
 
@@ -439,12 +449,13 @@ func (v *identityView) formLines(textW int) (body, footer []string) {
 		scopeCursor = "> "
 	}
 	scopeVal := profileScopeLabel(v.scope)
+	fw := fieldLabelWidth()
 	return []string{
 		title, "",
-		v.fieldLine(i18n.T("Name"), v.fLabel, v.field == 0, textW),
-		v.fieldLine(i18n.T("Git name"), v.fName, v.field == 1, textW),
-		v.fieldLine(i18n.T("Git email"), v.fEmail, v.field == 2, textW),
-		scopeCursor + padCell(i18n.T("Scope"), 10) + " " + scopeVal,
+		v.fieldLine(i18n.T("Name"), v.fLabel, v.field == 0, textW, fw),
+		v.fieldLine(i18n.T("Git name"), v.fName, v.field == 1, textW, fw),
+		v.fieldLine(i18n.T("Git email"), v.fEmail, v.field == 2, textW, fw),
+		scopeCursor + padCell(i18n.T("Scope"), fw) + " " + scopeVal,
 	}, []string{i18n.T("[↑/↓] field"), i18n.T("[←/→] scope"), i18n.T("[enter] save"), i18n.T("[esc] back")}
 }
 

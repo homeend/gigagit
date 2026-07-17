@@ -2,12 +2,12 @@ package tui
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -49,7 +49,7 @@ func (m Model) viewFileRow() (actionRow, bool) {
 		svc, tag := m.svc, path+"@shelf:"+m.filesShelfID
 		return actionRow{
 			id:    "view-file",
-			label: "View file (frozen shelf content)",
+			label: i18n.T("View file (frozen shelf content)"),
 			run: func(m Model) (tea.Model, tea.Cmd) {
 				return m.openPreviewSrc(tag, path, func(ctx context.Context) ([]byte, error) {
 					return svc.ResolveBytes(ctx, ref)
@@ -59,7 +59,7 @@ func (m Model) viewFileRow() (actionRow, bool) {
 	}
 	return actionRow{
 		id:    "view-file",
-		label: "View file (content at this commit)",
+		label: i18n.T("View file (content at this commit)"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			return m.openPreview(hash, path)
 		},
@@ -81,7 +81,7 @@ func (m Model) openExternalRow() (actionRow, bool) {
 		ref := model.FileRef{Source: model.SourceShelf, Locator: m.filesShelfID, Path: path}
 		return actionRow{
 			id:    "open-external",
-			label: "Open in external editor",
+			label: i18n.T("Open in external editor"),
 			run: func(m Model) (tea.Model, tea.Cmd) {
 				return m, m.openInEditorCmd(path, func(ctx context.Context) ([]byte, error) {
 					return svc.ResolveBytes(ctx, ref)
@@ -91,7 +91,7 @@ func (m Model) openExternalRow() (actionRow, bool) {
 	}
 	return actionRow{
 		id:    "open-external",
-		label: "Open in external editor",
+		label: i18n.T("Open in external editor"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			return m, m.openInEditorCmd(path, func(ctx context.Context) ([]byte, error) {
 				return svc.ShowFile(ctx, hash, path)
@@ -113,7 +113,7 @@ func (m Model) commitsTouchingFileRow() (actionRow, bool) {
 	filePath := l.path
 	return actionRow{
 		id:    "files-commits-touching",
-		label: "Commits touching this",
+		label: i18n.T("Commits touching this"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			m = m.closeFilesView()
 			m.commitFilter = commitFilterFields{Paths: []string{filePath}}
@@ -137,7 +137,7 @@ func (m Model) openPreview(hash, path string) (Model, tea.Cmd) {
 // load resolves the bytes off the UI thread. Backs both the commit preview
 // (ShowFile) and the shelf-member preview (ResolveBytes).
 func (m Model) openPreviewSrc(tag, path string, load func(context.Context) ([]byte, error)) (Model, tea.Cmd) {
-	m.filesPreview = &contentPopup{title: path, lines: []contentLine{{text: "(loading…)"}}}
+	m.filesPreview = &contentPopup{title: path, lines: []contentLine{{text: i18n.T("(loading…)")}}}
 	m.filesPreviewTag = tag
 	m.filesTreeFocused = false // land in the preview to scroll
 	return m, loadFileContentSrcCmd(tag, load)
@@ -160,7 +160,7 @@ func loadFileContentSrcCmd(tag string, load func(context.Context) ([]byte, error
 			return fileContentMsg{tag: tag, err: err}
 		}
 		if len(data) > domain.MaxDiffBytes {
-			return fileContentMsg{tag: tag, lines: []contentLine{{text: "(file too large to preview)"}}}
+			return fileContentMsg{tag: tag, lines: []contentLine{{text: i18n.T("(file too large to preview)")}}}
 		}
 		return fileContentMsg{tag: tag, lines: fileContentLines(data)}
 	}
@@ -171,7 +171,7 @@ func loadFileContentSrcCmd(tag string, load func(context.Context) ([]byte, error
 func fileContentLines(data []byte) []contentLine {
 	s := strings.TrimRight(string(data), "\n")
 	if s == "" {
-		return []contentLine{{text: "(empty file)"}}
+		return []contentLine{{text: i18n.T("(empty file)")}}
 	}
 	parts := strings.Split(s, "\n")
 	out := make([]contentLine, len(parts))
@@ -247,9 +247,9 @@ func (m Model) renderFilePreview(boxW, boxH int) string {
 	}
 
 	lines := make([]string, 0, contentH)
-	lines = append(lines, padRight(truncate("View "+p.title, innerW), innerW))
+	lines = append(lines, padRight(truncate(i18n.T("View %s", p.title), innerW), innerW))
 	if len(vis) == 0 {
-		lines = append(lines, padRight(truncate("  (empty)", innerW), innerW))
+		lines = append(lines, padRight(truncate(i18n.T("  (empty)"), innerW), innerW))
 	} else {
 		win := renderWindow(wr, winOpts{w: innerW, h: rowsCap, mode: p.mode, anchor: 0, hscroll: p.hscroll})
 		lines = append(lines, win...)
@@ -257,7 +257,7 @@ func (m Model) renderFilePreview(boxW, boxH int) string {
 	for len(lines) < contentH-1 {
 		lines = append(lines, padRight("", innerW))
 	}
-	hint := fmt.Sprintf("%d/%d  [↑/↓] scroll  [z] view  [esc] close", start+1, len(vis))
+	hint := i18n.T("%d/%d  [↑/↓] scroll  [z] view  [esc] close", start+1, len(vis))
 	lines = append(lines, padRight(truncate(hint, innerW), innerW))
 
 	style := bluredPanel

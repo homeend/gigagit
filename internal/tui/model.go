@@ -4,7 +4,6 @@ package tui
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"slices"
 	"strconv"
@@ -13,6 +12,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/clipboard"
 	"github.com/homeend/gigagit/internal/commitgraph"
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
@@ -60,17 +60,18 @@ type Model struct {
 	reflog                []model.ReflogEntry // HEAD reflog; shown by the Reflog tab in the bottom slot
 	currentWorktree       string
 
-	notices                []notice             // session notice list (see notify.go)
-	noticesUnread          bool                 // blink while true; opening the ! dialog clears it
-	blinkOn                bool                 // current blink phase (style alternation)
-	noticeGen              int                  // stale-drop guard for repoHealthMsg across repo switches
-	gitConfigGen           int                  // stale-drop guard for explorer row loads
-	blinkGen               int                  // bumped on every blink-tick arm; stale ticks are dropped (single blink lane)
-	noticeSessionDismissed map[string]bool      // "Not now" ids; cleared on reRoot (re-evaluated next load)
-	repoHealth             model.RepoHealth     // last health snapshot (Settings Commit-graph row)
-	repoHealthKnown        bool                 // false until the first repoHealthMsg lands
-	pendingNoticeConfig    *engine.SetGitConfig // chained after WriteCommitGraph succeeds
-	refreshHealthAfterOp   bool                 // re-read repo health once the op (incl. its chain) finishes
+	notices                []notice               // session notice list (see notify.go)
+	noticesUnread          bool                   // blink while true; opening the ! dialog clears it
+	blinkOn                bool                   // current blink phase (style alternation)
+	noticeGen              int                    // stale-drop guard for repoHealthMsg across repo switches
+	gitConfigGen           int                    // stale-drop guard for explorer row loads
+	blinkGen               int                    // bumped on every blink-tick arm; stale ticks are dropped (single blink lane)
+	noticeSessionDismissed map[string]bool        // "Not now" ids; cleared on reRoot (re-evaluated next load)
+	repoHealth             model.RepoHealth       // last health snapshot (Settings Commit-graph row)
+	repoHealthKnown        bool                   // false until the first repoHealthMsg lands
+	clipAvail              clipboard.Availability // cached probe result; rebuildNotices reuses it on a language switch
+	pendingNoticeConfig    *engine.SetGitConfig   // chained after WriteCommitGraph succeeds
+	refreshHealthAfterOp   bool                   // re-read repo health once the op (incl. its chain) finishes
 
 	cfg          config.Config
 	opLog        *opLog            // operation-log file + span-sink lifecycle; the , Settings toggle
@@ -100,7 +101,8 @@ type Model struct {
 
 	filesMode         filesMode         // authoritative source mode (changed/fullTree/compare/stash)
 	filesView         *contentPopup     // commit files tree replacing the left column; nil = closed
-	filesTitle        string            // "Files <short-hash> <subject>", updated with the content
+	filesTitle        string            // "Files <short-hash> <subject>", updated with the content — rendered/localized display text; NEVER parsed
+	filesContext      string            // diff-view context payload (ref/subject or compare label) mirroring filesTitle's content sans any "Files "/panel framing; the diff view's "@ <context>" header reads THIS, not filesTitle
 	filesHash         string            // commit the view wants; gates stale async results
 	filesLeft         model.Endpoint    // compare mode: older side
 	filesRight        model.Endpoint    // compare mode: newer side
@@ -375,8 +377,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.err != nil {
 			m.statusMsg = i18n.T("files: %s", msg.err.Error())
-			if len(m.filesView.lines) == 1 && m.filesView.lines[0].text == "(loading…)" {
-				m.filesView.lines = []contentLine{{text: "(load failed)"}}
+			if len(m.filesView.lines) == 1 && isLoadingPlaceholder(m.filesView.lines[0].text) {
+				m.filesView.lines = []contentLine{{text: i18n.T("(load failed)")}}
 			}
 			return m, nil
 		}
@@ -384,7 +386,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// survives the commit change (track one file through history).
 		m.filesView.lines = commitFileLines(msg.files)
 		m.filesView.sel = 0
-		m.filesTitle = "Files " + shortHash(msg.hash) + " " + msg.subject
+		m.filesTitle = i18n.T("Files %s %s", shortHash(msg.hash), msg.subject)
+		m.filesContext = shortHash(msg.hash) + " " + msg.subject
 		return m, nil
 	case shelfFilesMsg:
 		if m.filesView == nil || !m.inShelfFiles() || msg.id != m.filesShelfID {
@@ -392,8 +395,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.err != nil {
 			m.statusMsg = i18n.T("shelf files: %s", msg.err.Error())
-			if len(m.filesView.lines) == 1 && m.filesView.lines[0].text == "(loading…)" {
-				m.filesView.lines = []contentLine{{text: "(load failed)"}}
+			if len(m.filesView.lines) == 1 && isLoadingPlaceholder(m.filesView.lines[0].text) {
+				m.filesView.lines = []contentLine{{text: i18n.T("(load failed)")}}
 			}
 			return m, nil
 		}
@@ -407,21 +410,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.err != nil {
 			m.statusMsg = i18n.T("files: %s", msg.err.Error())
-			if len(m.filesView.lines) == 1 && m.filesView.lines[0].text == "(loading…)" {
-				m.filesView.lines = []contentLine{{text: "(load failed)"}}
+			if len(m.filesView.lines) == 1 && isLoadingPlaceholder(m.filesView.lines[0].text) {
+				m.filesView.lines = []contentLine{{text: i18n.T("(load failed)")}}
 			}
 			return m, nil
 		}
 		m.filesView.lines = msg.lines // pre-built off-thread
 		m.filesView.sel = 0
-		m.filesTitle = "Files " + shortHash(msg.hash) + " (all files) " + msg.subject
+		m.filesTitle = i18n.T("Files %s (all files) %s", shortHash(msg.hash), msg.subject)
+		m.filesContext = i18n.T("%s (all files) %s", shortHash(msg.hash), msg.subject)
 		return m, nil
 	case fileContentMsg:
 		if m.filesPreview == nil || msg.tag != m.filesPreviewTag {
 			return m, nil // preview closed, or a stale load (another file opened)
 		}
 		if msg.err != nil {
-			m.filesPreview.lines = []contentLine{{text: "(load failed: " + msg.err.Error() + ")"}}
+			m.filesPreview.lines = []contentLine{{text: i18n.T("(load failed: %s)", msg.err.Error())}}
 			return m, nil
 		}
 		m.filesPreview.lines = msg.lines
@@ -430,11 +434,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case fileContentLayerMsg:
 		cp := layerOf[*contentPopup](m)
 		// Tag-gate: only fill the contentPopup whose title matches this path load.
-		if cp == nil || cp.title != "View "+msg.path {
+		if cp == nil || cp.title != i18n.T("View %s", msg.path) {
 			return m, nil // layer closed, or a stale load from a different path
 		}
 		if msg.err != nil {
-			cp.lines = []contentLine{{text: "(load failed: " + msg.err.Error() + ")"}}
+			cp.lines = []contentLine{{text: i18n.T("(load failed: %s)", msg.err.Error())}}
 			return m, nil
 		}
 		cp.lines = msg.lines
@@ -474,8 +478,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// A failed compare must be retryable: clear the tag so re-opening the
 			// SAME pair isn't swallowed by the openCompareFiles same-tag guard.
 			m.compareTag = ""
-			if len(m.filesView.lines) == 1 && m.filesView.lines[0].text == "(loading…)" {
-				m.filesView.lines = []contentLine{{text: "(load failed)"}}
+			if len(m.filesView.lines) == 1 && isLoadingPlaceholder(m.filesView.lines[0].text) {
+				m.filesView.lines = []contentLine{{text: i18n.T("(load failed)")}}
 			}
 			return m, nil
 		}
@@ -1659,7 +1663,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.openActionMenu(), nil
 		case "?":
 			_, hidden := fitFooter(m, m.layout().w)
-			m = m.pushLayer(newContentPopup("Help — keys", helpWithHidden(hidden)))
+			m = m.pushLayer(newContentPopup(i18n.T("Help — keys"), helpWithHidden(hidden)))
 		case "#":
 			if m.opsIdle() {
 				return m.openGotoCommitPopup()
@@ -2722,16 +2726,21 @@ func (m Model) panelLen(p panel) int {
 	return len(idx)
 }
 
-// commitScopeLabel describes the Commits feed mode for the panel header.
+// commitScopeLabel describes the Commits feed mode for the panel header. Its
+// only consumers are the two view.go render sites, both feeding the already-
+// translated "Commits (%s)" title (no cache key, comparison, or other
+// non-display path reads it) — safe to translate here at the definition
+// site. commitFilterChips' compact "path="/"msg="-style chip syntax is left
+// untranslated (no bundle already translates similar chip syntax).
 func (m Model) commitScopeLabel() string {
 	var base string
 	switch len(m.commitScopeBranches) {
 	case 0:
-		base = "all"
+		base = i18n.T("all")
 	case 1:
-		base = "solo: " + m.commitScopeBranches[0]
+		base = i18n.T("solo: %s", m.commitScopeBranches[0])
 	default:
-		base = fmt.Sprintf("%d branches", len(m.commitScopeBranches))
+		base = i18n.T("%d branches", len(m.commitScopeBranches))
 	}
 	chips := m.commitFilterChips()
 	if chips == "" {
@@ -3017,7 +3026,7 @@ func (m Model) View() string {
 		return "gigagit (loading…)\n" // startup + repo-switch keep the blank screen
 	}
 	if m.err != nil {
-		return "error: " + m.err.Error() + "\n"
+		return i18n.T("error: %s", m.err.Error()) + "\n"
 	}
 	return m.render()
 }

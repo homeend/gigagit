@@ -11,6 +11,7 @@ import (
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/git"
 	"github.com/homeend/gigagit/internal/gitexec"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -581,6 +582,34 @@ func TestFilesViewLoadErrorKeepsViewAndSetsStatus(t *testing.T) {
 	}
 	if len(m.filesView.lines) != 1 || m.filesView.lines[0].text != "(load failed)" {
 		t.Fatalf("lines = %+v, want the failed placeholder", m.filesView.lines)
+	}
+}
+
+// TestFilesViewLoadErrorSwapsTranslatedPlaceholder guards the regression fixed
+// in i18n stage 4: the load-error handlers used to detect the loading
+// placeholder by comparing against the raw English literal, so once the
+// construction sites started writing i18n.T("(loading…)"), a failed load under
+// a non-English bundle never swapped in the failure text — the view stayed
+// stuck on the (translated) loading placeholder forever. isLoadingPlaceholder
+// must compare against the ACTIVE translation instead.
+func TestFilesViewLoadErrorSwapsTranslatedPlaceholder(t *testing.T) {
+	setupCustomLang(t, "[meta]\nname = \"Xxish\"\n\n[strings]\n"+
+		"\"(loading…)\" = \"TESTLOADING\"\n"+
+		"\"(load failed)\" = \"TESTFAILED\"\n")
+	if err := i18n.SetLanguage("xx", langDirFromEnv(t)); err != nil {
+		t.Fatal(err)
+	}
+
+	m := filesModel()
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("l")})
+	m = updated.(Model)
+	if len(m.filesView.lines) != 1 || m.filesView.lines[0].text != "TESTLOADING" {
+		t.Fatalf("construction placeholder = %+v, want the translated loading text", m.filesView.lines)
+	}
+	updated, _ = m.Update(commitFilesMsg{hash: m.filesHash, err: fmt.Errorf("boom")})
+	m = updated.(Model)
+	if len(m.filesView.lines) != 1 || m.filesView.lines[0].text != "TESTFAILED" {
+		t.Fatalf("lines = %+v, want the translated failed placeholder (not stuck on loading)", m.filesView.lines)
 	}
 }
 

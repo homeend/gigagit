@@ -2,7 +2,6 @@ package tui
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -211,9 +210,9 @@ func (p *fileFinderPopup) box(m Model) string {
 	// sub-mode a cursor block trails the query; otherwise a hint advertises `/`.
 	var header string
 	if p.loading {
-		header = "Find file  (loading…)"
+		header = i18n.T("Find file  (loading…)")
 	} else {
-		header = fmt.Sprintf("Find file  %d/%d", len(p.matches), len(p.all))
+		header = i18n.T("Find file  %d/%d", len(p.matches), len(p.all))
 	}
 	switch {
 	case p.filtering:
@@ -221,14 +220,14 @@ func (p *fileFinderPopup) box(m Model) string {
 	case p.query != "":
 		header += "  /" + p.query
 	case !p.loading:
-		header += "   (press / to filter)"
+		header += i18n.T("   (press / to filter)")
 	}
 
 	var bodyLines []string
 	if p.loading {
-		bodyLines = []string{padRight("  (loading…)", textW)}
+		bodyLines = []string{padRight(i18n.T("  (loading…)"), textW)}
 	} else if len(p.matches) == 0 {
-		bodyLines = []string{padRight("  (no match)", textW)}
+		bodyLines = []string{padRight(i18n.T("  (no match)"), textW)}
 	} else {
 		// Window-then-build: determine the visible slice first, then build
 		// only those winRows. This keeps render O(window) even at 200 results.
@@ -253,7 +252,7 @@ func (p *fileFinderPopup) box(m Model) string {
 
 	// Wrap the hint so [/] filter / [esc] survive on a narrow terminal (mirrors
 	// the bookmark/shelf switchers).
-	hint := []string{"[enter] open", "[↑↓ pgup/pgdn] nav", "[/] filter", "[z] mode", "[ctrl+t] full", "[esc] close"}
+	hint := []string{i18n.T("[enter] open"), i18n.T("[↑↓ pgup/pgdn] nav"), i18n.T("[/] filter"), i18n.T("[z] mode"), i18n.T("[ctrl+t] full"), i18n.T("[esc] close")}
 	parts := []string{header, ""}
 	parts = append(parts, bodyLines...)
 	parts = append(parts, "")
@@ -299,24 +298,24 @@ func (m Model) fileFinderActionRows(path string) []actionRow {
 	return []actionRow{
 		{
 			id:    "ff-view",
-			label: "View content",
+			label: i18n.T("View content"),
 			run: func(m Model) (tea.Model, tea.Cmd) {
 				m = m.popLayer()
-				cp := newContentPopup("View "+path, []contentLine{{text: "(loading…)"}})
+				cp := newContentPopup(i18n.T("View %s", path), []contentLine{{text: i18n.T("(loading…)")}})
 				m = m.pushLayer(cp)
 				return m, m.loadFileContentLayerCmd(path)
 			},
 		},
 		{
 			id:    "ff-diff",
-			label: "Diff (HEAD ↔ working tree)",
+			label: i18n.T("Diff (HEAD ↔ working tree)"),
 			run: func(m Model) (tea.Model, tea.Cmd) {
 				m = m.popLayer()
 				left := model.Endpoint{Kind: model.EndpointCommit, Hash: "HEAD"}
 				right := model.Endpoint{Kind: model.EndpointWorkTree}
 				v := &diffView{
 					title:   path,
-					context: "HEAD ↔ working tree",
+					context: i18n.T("HEAD ↔ working tree"),
 					loading: true,
 					partial: m.diffPartial,
 					long:    m.diffLong,
@@ -329,7 +328,7 @@ func (m Model) fileFinderActionRows(path string) []actionRow {
 		},
 		{
 			id:    "ff-history",
-			label: "History",
+			label: i18n.T("History"),
 			run: func(m Model) (tea.Model, tea.Cmd) {
 				m = m.popLayer()
 				ctx := navContext{path: path}
@@ -340,7 +339,7 @@ func (m Model) fileFinderActionRows(path string) []actionRow {
 		},
 		{
 			id:    "ff-blame",
-			label: "Blame",
+			label: i18n.T("Blame"),
 			run: func(m Model) (tea.Model, tea.Cmd) {
 				m = m.popLayer()
 				ctx := navContext{path: path}
@@ -351,7 +350,7 @@ func (m Model) fileFinderActionRows(path string) []actionRow {
 		},
 		{
 			id:    "ff-editor",
-			label: "Open in editor",
+			label: i18n.T("Open in editor"),
 			run: func(m Model) (tea.Model, tea.Cmd) {
 				m = m.popLayer()
 				return m, m.openInEditorCmd(path, func(ctx context.Context) ([]byte, error) {
@@ -361,7 +360,7 @@ func (m Model) fileFinderActionRows(path string) []actionRow {
 		},
 		{
 			id:    "ff-copy-path",
-			label: "Copy path",
+			label: i18n.T("Copy path"),
 			run: func(m Model) (tea.Model, tea.Cmd) {
 				m = m.popLayer()
 				return m, m.copyToClipboardCmd(i18n.T("Copied %s", path), path)
@@ -369,7 +368,7 @@ func (m Model) fileFinderActionRows(path string) []actionRow {
 		},
 		{
 			id:    "ff-copy-abspath",
-			label: "Copy absolute path",
+			label: i18n.T("Copy absolute path"),
 			run: func(m Model) (tea.Model, tea.Cmd) {
 				m = m.popLayer()
 				abs := m.absFilePath("", path)
@@ -378,7 +377,7 @@ func (m Model) fileFinderActionRows(path string) []actionRow {
 		},
 		{
 			id:    "ff-commits-touching",
-			label: "Commits touching this",
+			label: i18n.T("Commits touching this"),
 			run: func(m Model) (tea.Model, tea.Cmd) {
 				m = m.popLayer()
 				m.commitFilter = commitFilterFields{Paths: []string{path}}
@@ -409,7 +408,7 @@ func (m Model) loadFileContentLayerCmd(path string) tea.Cmd {
 			return fileContentLayerMsg{path: path, err: err}
 		}
 		if len(data) > domain.MaxDiffBytes {
-			return fileContentLayerMsg{path: path, lines: []contentLine{{text: "(file too large to preview)"}}}
+			return fileContentLayerMsg{path: path, lines: []contentLine{{text: i18n.T("(file too large to preview)")}}}
 		}
 		return fileContentLayerMsg{path: path, lines: fileContentLines(data)}
 	}

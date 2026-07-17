@@ -101,7 +101,7 @@ func (p *commandPalette) box(m Model) string {
 	w, _ := m.overlayDims()
 	inner := popupResolveWidth(w, p.maximized, popupInnerWidth(w))
 	textW := popupTextWidth(inner)
-	parts := []string{"Commands", ""}
+	parts := []string{i18n.T("Commands"), ""}
 	for i, c := range p.cmds {
 		prefix := "  "
 		st := lipgloss.NewStyle()
@@ -119,6 +119,6 @@ func (p *commandPalette) box(m Model) string {
 		}
 		parts = append(parts, st.Render(padRight(row, textW)))
 	}
-	parts = append(parts, "", "[enter] run  [esc] close")
+	parts = append(parts, "", i18n.T("[enter] run  [esc] close"))
 	return popupBox(inner, strings.Join(parts, "\n"))
 }

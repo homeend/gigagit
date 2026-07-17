@@ -173,13 +173,13 @@ func (p *prefixPicker) box(m Model) string {
 	textW := popupTextWidth(inner)
 
 	if p.fill != nil {
-		parts := []string{"Fill " + p.fillValue, ""}
+		parts := []string{i18n.T("Fill %s", p.fillValue), ""}
 		parts = append(parts, p.fill.view(textW)...)
-		parts = append(parts, "", "[tab] next  [enter] done  [esc] back")
+		parts = append(parts, "", i18n.T("[tab] next  [enter] done  [esc] back"))
 		return popupBox(inner, strings.Join(parts, "\n"))
 	}
 
-	header := "Branch prefixes"
+	header := i18n.T("Branch prefixes")
 	if p.filtering {
 		header += "  /" + p.filter + "█"
 	} else if p.filter != "" {
@@ -188,7 +188,7 @@ func (p *prefixPicker) box(m Model) string {
 	vis := p.visibleIdx()
 	var body []string
 	if len(vis) == 0 {
-		body = []string{padRight("  (none — add in Settings → Branch prefixes)", textW)}
+		body = []string{padRight(i18n.T("  (none — add in Settings → Branch prefixes)"), textW)}
 	} else {
 		wr := make([]winRow, len(vis))
 		for n, i := range vis {
@@ -197,9 +197,9 @@ func (p *prefixPicker) box(m Model) string {
 			if n == p.sel {
 				prefix, st = "> ", selectedRow
 			}
-			tag := "[global]"
+			tag := i18n.T("[global]")
 			if p.items[i].Scope == model.ProfileScopeRepo {
-				tag = "[this repo]"
+				tag = i18n.T("[this repo]")
 			}
 			wr[n] = winRow{text: prefix + p.rows[i] + "  " + tag, style: st}
 		}
@@ -211,6 +211,6 @@ func (p *prefixPicker) box(m Model) string {
 		body = renderWindow(wr, winOpts{w: textW, h: h, anchor: p.sel})
 	}
 	parts := append([]string{header, ""}, body...)
-	parts = append(parts, "", "[enter] use  [/] filter  [esc] cancel")
+	parts = append(parts, "", i18n.T("[enter] use  [/] filter  [esc] cancel"))
 	return popupBox(inner, strings.Join(parts, "\n"))
 }

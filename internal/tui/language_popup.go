@@ -61,6 +61,7 @@ func (p *languagePickerPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			return m, nil
 		}
 		m.cfg.UI.Language = l.Code
+		m = m.rebuildNotices()
 		if err := config.SetGlobalUILanguage(config.DefaultGlobalPath(), l.Code); err != nil {
 			m.statusMsg = i18n.T("language: %s (not saved: %s)", l.Name, err.Error())
 		} else {

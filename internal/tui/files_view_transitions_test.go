@@ -12,6 +12,7 @@ func TestCloseFilesViewZeroesEverything(t *testing.T) {
 	// dirty every field the way full-tree-with-preview-after-compare would
 	m.filesView = &contentPopup{}
 	m.filesTitle = "x"
+	m.filesContext = "stale"
 	m.filesHash = "abc"
 	m.filesLeft = model.Endpoint{Kind: model.EndpointCommit, Hash: "a"}
 	m.filesRight = model.Endpoint{Kind: model.EndpointWorkTree}
@@ -26,6 +27,7 @@ func TestCloseFilesViewZeroesEverything(t *testing.T) {
 	m = m.closeFilesView()
 
 	if m.filesView != nil || m.filesPreview != nil || m.filesTitle != "" ||
+		m.filesContext != "" ||
 		m.filesHash != "" || m.inCompareMode() || m.inFullTree() || m.compareTag != "" ||
 		m.filesStashTag != "" || m.filesTreeFocused || m.filesReadInflight ||
 		m.filesPreviewTag != "" || m.filesLeft != (model.Endpoint{}) ||

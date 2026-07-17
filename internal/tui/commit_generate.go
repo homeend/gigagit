@@ -227,11 +227,11 @@ func (p *commitPopup) selectChosen(m Model, idx int) (Model, tea.Cmd) {
 func (p *commitPopup) chooseBox(m Model) string {
 	w, _ := m.overlayDims()
 	var b strings.Builder
-	b.WriteString("Choose a commit-message tool\n\n")
+	b.WriteString(i18n.T("Choose a commit-message tool") + "\n\n")
 	for i, tc := range p.choosing {
 		b.WriteString(fmt.Sprintf("[%d] %s\n", i+1, tc.Name))
 	}
-	b.WriteString("\n[1-9] choose  [enter] first  [esc] cancel")
+	b.WriteString("\n" + i18n.T("[1-9] choose  [enter] first  [esc] cancel"))
 	return modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"
 }
 
@@ -273,7 +273,7 @@ func (p *commitPopup) approveAndProceed(m Model) (Model, tea.Cmd) {
 // stays owned by each call site).
 func (p *commitPopup) approveBox(m Model) string {
 	w, _ := m.overlayDims()
-	header := "Run this command?  (" + p.genCmd.Name + ")\n\n"
+	header := i18n.T("Run this command?  (%s)", p.genCmd.Name) + "\n\n"
 	return modalStyle.Width(popupInnerWidth(w)).Render(header+approvalBoxView(p.approving, w)) + "\n"
 }
 
@@ -306,6 +306,8 @@ func (p *commitPopup) dispatchConfirmed(m Model) (Model, tea.Cmd) {
 // confirmBox renders the replace-existing-text confirmation.
 func (p *commitPopup) confirmBox(m Model) string {
 	w, _ := m.overlayDims()
-	content := "Replace current message?\n\nGenerating will overwrite the title/description below.\n\n[y]es / [enter]  [esc] no"
+	content := i18n.T("Replace current message?") + "\n\n" +
+		i18n.T("Generating will overwrite the title/description below.") + "\n\n" +
+		i18n.T("[y]es / [enter]  [esc] no")
 	return modalStyle.Width(popupInnerWidth(w)).Render(content) + "\n"
 }

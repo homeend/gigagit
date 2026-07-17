@@ -105,6 +105,7 @@ func TestSettingsMenuLabelTranslates(t *testing.T) {
 	if err := i18n.SetLanguage("xx", langDirFromEnv(t)); err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { _ = i18n.SetLanguage("", "") })
 	m := newTestModel(t)
 	for i, e := range settingsMenu {
 		if e == settingsMenuCommitSort {
