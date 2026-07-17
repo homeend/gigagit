@@ -151,9 +151,9 @@ func (b *blameView) render(m Model, _ string) string {
 	win := renderWindow(wr, winOpts{w: w, h: body, mode: b.mode, anchor: b.sel, hscroll: b.hscroll, prefixW: gw + 1})
 	switch {
 	case b.loading:
-		win = padLines("  (loading…)", w, body)
+		win = padLines(i18n.T("  (loading…)"), w, body)
 	case b.err != nil:
-		win = padLines("  error: "+b.err.Error(), w, body)
+		win = padLines(i18n.T("  error: %s", b.err.Error()), w, body)
 	case len(b.lines) == 0:
 		win = padLines(i18n.T("  (empty)"), w, body)
 	}

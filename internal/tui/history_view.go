@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -207,18 +208,18 @@ func (h *historyView) render(m Model, _ string) string {
 // renderRightPane draws the selected commit's diff using the shared diff pane.
 func (h *historyView) renderRightPane(m Model, w, body int) string {
 	if h.diff == nil {
-		return padBox("  (select a commit)", w, body)
+		return padBox(i18n.T("  (select a commit)"), w, body)
 	}
 	v := h.diff
 	switch {
 	case v.loading:
-		return padBox("  (loading…)", w, body)
+		return padBox(i18n.T("  (loading…)"), w, body)
 	case v.err != nil:
-		return padBox(truncate("  error: "+v.err.Error(), w), w, body)
+		return padBox(truncate(i18n.T("  error: %s", v.err.Error()), w), w, body)
 	case v.binary:
-		return padBox("  (binary file)", w, body)
+		return padBox(i18n.T("  (binary file)"), w, body)
 	case v.tooLarge:
-		return padBox("  (file too large)", w, body)
+		return padBox(i18n.T("  (file too large)"), w, body)
 	}
 	lines := m.diffPaneLines(v, w, body)
 	for len(lines) < body {

@@ -165,25 +165,25 @@ func (m Model) renderDiffView() string {
 	note := ""
 	switch {
 	case v.truncated:
-		note = "  (alignment skipped: large file)"
+		note = i18n.T("  (alignment skipped: large file)")
 	// loading/err/binary/tooLarge render their own body state below; the
 	// guards here keep the note from doubling up with them.
 	case !v.loading && v.err == nil && !v.binary && !v.tooLarge && len(v.blocks) == 0:
-		note = "  (no content difference)"
+		note = i18n.T("  (no content difference)")
 	}
-	head := "diff: " + v.title + "  " + v.context + note
+	head := i18n.T("diff: %s", v.title) + "  " + v.context + note
 	// Right-aligned status: which change is in view (1-based) of how many, then
 	// the visible row range.
 	right := ""
 	if len(v.blocks) > 0 {
-		right = fmt.Sprintf("change %d/%d", v.currentBlockOrdinal()+1, len(v.blocks))
+		right = i18n.T("change %d/%d", v.currentBlockOrdinal()+1, len(v.blocks))
 	}
 	if n := len(v.disp); n > 0 {
 		hi := v.offset + body
 		if hi > n {
 			hi = n
 		}
-		rangeStr := fmt.Sprintf("rows %d–%d/%d", v.offset+1, hi, n)
+		rangeStr := i18n.T("rows %d–%d/%d", v.offset+1, hi, n)
 		if right != "" {
 			right += "  " + rangeStr
 		} else {
@@ -210,13 +210,13 @@ func (m Model) renderDiffView() string {
 	lines = append(lines, header)
 	switch {
 	case v.loading:
-		lines = append(lines, "  (loading…)")
+		lines = append(lines, i18n.T("  (loading…)"))
 	case v.err != nil:
-		lines = append(lines, truncate("  error: "+v.err.Error(), w))
+		lines = append(lines, truncate(i18n.T("  error: %s", v.err.Error()), w))
 	case v.binary:
-		lines = append(lines, "  (binary file)")
+		lines = append(lines, i18n.T("  (binary file)"))
 	case v.tooLarge:
-		lines = append(lines, "  (file too large)")
+		lines = append(lines, i18n.T("  (file too large)"))
 	default:
 		lines = append(lines, m.diffPaneLines(v, w, body)...)
 	}
@@ -432,9 +432,9 @@ func maxCellWidth(lines []textdiff.Line) int {
 // foldSeparator renders a fold marker as a centered label on a dim rule
 // spanning the full width.
 func foldSeparator(n, w int) string {
-	label := fmt.Sprintf(" ⤬ %d unchanged lines ", n)
+	label := i18n.T(" ⤬ %d unchanged lines ", n)
 	if n == 1 {
-		label = " ⤬ 1 unchanged line "
+		label = i18n.T(" ⤬ 1 unchanged line ")
 	}
 	lw := lipgloss.Width(label)
 	if lw >= w {
