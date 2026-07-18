@@ -22,18 +22,18 @@ func (op CreateBranch) Run(ctx context.Context, deps OpDeps) (Result, error) {
 		return Result{}, fmt.Errorf("create branch: invalid branch name %q: %w", op.Name, err)
 	}
 
-	detail := op.Name
 	if op.StartPoint != "" {
-		detail += " from " + op.StartPoint
+		deps.emit(ctx, Progressf("creating branch", "%s from %s", op.Name, op.StartPoint))
+	} else {
+		deps.emit(ctx, Progress{Step: "creating branch", Detail: op.Name})
 	}
-	deps.emit(ctx, Progress{Step: "creating branch", Detail: detail})
 
 	// An already-existing branch is refused by git itself; just wrap the error.
 	if err := deps.Repo.CreateBranch(ctx, op.Name, op.StartPoint); err != nil {
 		return Result{}, fmt.Errorf("create branch: %w", err)
 	}
 
-	res := Result{Summary: "created branch " + op.Name, Changed: true}
+	res := Result{Changed: true}.WithSummary("created branch %s", op.Name)
 	deps.emit(ctx, Done{Result: res})
 	return res, nil
 }

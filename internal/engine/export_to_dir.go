@@ -3,7 +3,6 @@ package engine
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 
@@ -33,11 +32,12 @@ func (op ExportToDir) LockMode() repogate.Mode { return repogate.Read }
 
 func (op ExportToDir) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	if _, err := os.Stat(op.Dir); err == nil {
-		choice, derr := deps.decide(ctx, DecisionRequest{
-			ID:      "overwrite",
-			Prompt:  "Directory exists: " + op.Dir,
-			Options: []string{writeOverwrite, writeCancel},
-		})
+		choice, derr := deps.decide(ctx, PromptReq(
+			"overwrite",
+			"Directory exists: %s",
+			[]string{writeOverwrite, writeCancel},
+			op.Dir,
+		))
 		if derr != nil {
 			return Result{}, derr
 		}
@@ -56,13 +56,9 @@ func (op ExportToDir) Run(ctx context.Context, deps OpDeps) (Result, error) {
 		if err := os.WriteFile(full, f.Data, 0o644); err != nil {
 			return Result{}, err
 		}
-		deps.emit(ctx, Progress{Step: "export", Detail: fmt.Sprintf("wrote %s (%d/%d)", f.RelPath, i+1, len(op.Files))})
+		deps.emit(ctx, Progressf("export", "wrote %s (%d/%d)", f.RelPath, i+1, len(op.Files)))
 	}
-	res := Result{
-		Summary: fmt.Sprintf("exported %d file(s) to %s", len(op.Files), op.Dir),
-		Changed: true,
-		Path:    op.Dir,
-	}
+	res := Result{Changed: true, Path: op.Dir}.WithSummary("exported %d file(s) to %s", len(op.Files), op.Dir)
 	deps.emit(ctx, Done{Result: res})
 	return res, nil
 }

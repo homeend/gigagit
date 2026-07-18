@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strconv"
 
 	"github.com/homeend/gigagit/internal/git"
 )
@@ -82,11 +81,12 @@ func (op ApplyPatch) Run(ctx context.Context, deps OpDeps) (Result, error) {
 		if !mailbox {
 			mode = ApplyModeWorkingTree
 		} else {
-			choice, derr := deps.decide(ctx, DecisionRequest{
-				ID:      ApplyModeDecisionID,
-				Prompt:  base + " is a format-patch mailbox — apply how?",
-				Options: []string{applyOptWorkingTree, applyOptCommits, applyOptAbort},
-			})
+			choice, derr := deps.decide(ctx, PromptReq(
+				ApplyModeDecisionID,
+				"%s is a format-patch mailbox — apply how?",
+				[]string{applyOptWorkingTree, applyOptCommits, applyOptAbort},
+				base,
+			))
 			if derr != nil {
 				return Result{}, derr
 			}
@@ -127,7 +127,7 @@ func (op ApplyPatch) runAm(ctx context.Context, deps OpDeps, base string) (Resul
 	if in, _ := deps.Repo.AmInProgress(ctx); in {
 		return Result{}, fmt.Errorf("a git am is already in progress in this repository — finish it (git am --continue) or abort it (git am --abort) first; nothing changed")
 	}
-	deps.emit(ctx, Progress{Step: "applying", Detail: base + " (recreate commits)"})
+	deps.emit(ctx, Progressf("applying", "%s (recreate commits)", base))
 	if amErr := deps.Repo.AmMailbox(ctx, op.Path, true); amErr != nil {
 		if in, _ := deps.Repo.AmInProgress(ctx); in {
 			if abortErr := deps.Repo.AmAbort(ctx); abortErr != nil {
@@ -136,13 +136,12 @@ func (op ApplyPatch) runAm(ctx context.Context, deps OpDeps, base string) (Resul
 		}
 		return Result{}, fmt.Errorf("patch does not apply cleanly; nothing changed: %w", amErr)
 	}
-	summary := "applied " + base + " as commits"
+	res := Result{Changed: true}.WithSummary("applied %s as commits", base)
 	// Name the resulting tip (the Commit op's read-back precedent;
 	// best-effort — a failed read only costs the sha in the summary).
 	if line, lerr := deps.Repo.CommitLine(ctx, "HEAD"); lerr == nil {
-		summary = "applied " + base + ": now at " + line.Hash + " " + line.Subject
+		res = Result{Changed: true}.WithSummary("applied %s: now at %s %s", base, line.Hash, line.Subject)
 	}
-	res := Result{Summary: summary, Changed: true}
 	deps.emit(ctx, Done{Result: res})
 	return res, nil
 }
@@ -165,7 +164,7 @@ func (op ApplyPatch) runAm(ctx context.Context, deps OpDeps, base string) (Resul
 // (a dirty --3way retry) is unaffected: it already returns Result+error and
 // leaves the unmerged entries for the conflict process, which is correct.
 func (op ApplyPatch) runApply(ctx context.Context, deps OpDeps, base string) (Result, error) {
-	deps.emit(ctx, Progress{Step: "applying", Detail: base + " (working tree)"})
+	deps.emit(ctx, Progressf("applying", "%s (working tree)", base))
 	applyErr := deps.Repo.ApplyPatch(ctx, op.Path, false)
 	fellBackToThreeWay := applyErr != nil
 	if fellBackToThreeWay {
@@ -181,7 +180,7 @@ func (op ApplyPatch) runApply(ctx context.Context, deps OpDeps, base string) (Re
 				return Result{Changed: true}, uerr
 			}
 		}
-		res := Result{Summary: "applied " + base + " to working tree", Changed: true}
+		res := Result{Changed: true}.WithSummary("applied %s to working tree", base)
 		deps.emit(ctx, Done{Result: res})
 		return res, nil
 	}
@@ -197,7 +196,7 @@ func (op ApplyPatch) runApply(ctx context.Context, deps OpDeps, base string) (Re
 		// resolved files alongside unmerged conflicted ones) and is
 		// deliberate, not a gap.
 		n := st.Counts().Conflicted
-		return Result{Summary: "applied " + base + " with conflicts in " + strconv.Itoa(n) + " file(s) (left in tree)", Changed: true},
+		return Result{Changed: true}.WithSummary("applied %s with conflicts in %d file(s) (left in tree)", base, n),
 			fmt.Errorf("apply conflict: %s left %d file(s) unmerged — resolve and commit", base, n)
 	}
 	return Result{}, fmt.Errorf("patch does not apply; nothing changed: %w", applyErr)

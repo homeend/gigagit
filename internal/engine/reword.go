@@ -47,7 +47,7 @@ func (op Reword) Run(ctx context.Context, deps OpDeps) (Result, error) {
 			if err := deps.Repo.Commit(ctx, op.NewMsg, false, true); err != nil {
 				return Result{}, fmt.Errorf("reword (amend): %w", err)
 			}
-			res := Result{Summary: "reworded " + shortSHA(target), Changed: true}
+			res := Result{Changed: true}.WithSummary("reworded %s", shortSHA(target))
 			deps.emit(ctx, Done{Result: res})
 			return res, nil
 		}
@@ -111,7 +111,7 @@ func (op Reword) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	if rerr != nil {
 		return res, rerr
 	}
-	res = Result{Summary: "reworded " + shortSHA(target), Changed: true}
+	res = Result{Changed: true}.WithSummary("reworded %s", shortSHA(target))
 	deps.emit(ctx, Done{Result: res})
 	return res, nil
 }

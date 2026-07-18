@@ -81,13 +81,9 @@ func (op SmartPull) Run(ctx context.Context, deps OpDeps) (Result, error) {
 		}
 		deps.emit(ctx, Progress{Step: "fast-forwarding ref", Detail: target})
 		if err := repo.FastForwardRef(ctx, remote, target); err == nil {
-			return Result{Summary: "fast-forwarded " + target, Changed: true}, nil
+			return Result{Changed: true}.WithSummary("fast-forwarded %s", target), nil
 		}
-		resp, derr := deps.decide(ctx, DecisionRequest{
-			ID:      "not-fast-forwardable",
-			Prompt:  "Cannot fast-forward " + target + " in the background",
-			Options: []string{"checkout-and-resolve", "abort"},
-		})
+		resp, derr := deps.decide(ctx, PromptReq("not-fast-forwardable", "Cannot fast-forward %s in the background", []string{"checkout-and-resolve", "abort"}, target))
 		if derr != nil {
 			return Result{}, derr
 		}
@@ -100,7 +96,7 @@ func (op SmartPull) Run(ctx context.Context, deps OpDeps) (Result, error) {
 			}
 			return op.checkoutPull(ctx, deps, remote, target, cur)
 		}
-		return Result{Summary: "aborted: " + target + " not fast-forwardable"}, nil
+		return Result{}.WithSummary("aborted: %s not fast-forwardable", target), nil
 	}
 
 	return op.checkoutPull(ctx, deps, remote, target, "")
@@ -113,13 +109,9 @@ func (op SmartPull) pullCurrent(ctx context.Context, deps OpDeps, remote, branch
 	}
 	deps.emit(ctx, Progress{Step: "pulling (ff-only)", Detail: branch})
 	if err := deps.Repo.Pull(ctx, remote, branch, git.PullFF); err == nil {
-		return Result{Summary: "pulled " + branch, Changed: true}, nil
+		return Result{Changed: true}.WithSummary("pulled %s", branch), nil
 	}
-	resp, derr := deps.decide(ctx, DecisionRequest{
-		ID:      "non-fast-forward",
-		Prompt:  branch + " has diverged from " + remote + " (reset discards local commits and changes)",
-		Options: []string{"rebase", "merge", "reset", "abort"},
-	})
+	resp, derr := deps.decide(ctx, PromptReq("non-fast-forward", "%s has diverged from %s (reset discards local commits and changes)", []string{"rebase", "merge", "reset", "abort"}, branch, remote))
 	if derr != nil {
 		return Result{}, derr
 	}
@@ -128,12 +120,12 @@ func (op SmartPull) pullCurrent(ctx context.Context, deps OpDeps, remote, branch
 		if err := deps.Repo.Pull(ctx, remote, branch, git.PullRebase); err != nil {
 			return Result{}, err
 		}
-		return Result{Summary: "pulled (rebased) " + branch, Changed: true}, nil
+		return Result{Changed: true}.WithSummary("pulled (rebased) %s", branch), nil
 	case "merge":
 		if err := deps.Repo.Pull(ctx, remote, branch, git.PullMerge); err != nil {
 			return Result{}, err
 		}
-		return Result{Summary: "pulled (merged) " + branch, Changed: true}, nil
+		return Result{Changed: true}.WithSummary("pulled (merged) %s", branch), nil
 	case "reset":
 		// The ff-only pull above failed WITHOUT starting a merge or rebase (that
 		// is the --ff-only guarantee), so there is no in-progress state to abort:
@@ -144,9 +136,9 @@ func (op SmartPull) pullCurrent(ctx context.Context, deps OpDeps, remote, branch
 		if err := deps.Repo.Reset(ctx, "hard", remoteTip); err != nil {
 			return Result{}, err
 		}
-		return Result{Summary: "reset " + branch + " to " + remoteTip + " (local changes discarded)", Changed: true}, nil
+		return Result{Changed: true}.WithSummary("reset %s to %s (local changes discarded)", branch, remoteTip), nil
 	default:
-		return Result{Summary: "aborted: " + branch + " diverged"}, nil
+		return Result{}.WithSummary("aborted: %s diverged", branch), nil
 	}
 }
 
@@ -160,14 +152,10 @@ func (op SmartPull) checkoutPull(ctx context.Context, deps OpDeps, remote, targe
 	if wt != nil {
 		deps.emit(ctx, Progress{Step: "pulling in worktree", Detail: wt.Path})
 		if err := repo.PullInWorktree(ctx, wt.Path, remote, target); err != nil {
-			deps.emit(ctx, DecisionNeeded{Request: DecisionRequest{
-				ID:      "worktree-pull-failed",
-				Prompt:  "Pull in worktree " + wt.Path + " failed",
-				Options: []string{"abort"},
-			}})
+			deps.emit(ctx, DecisionNeeded{Request: PromptReq("worktree-pull-failed", "Pull in worktree %s failed", []string{"abort"}, wt.Path)})
 			return Result{}, fmt.Errorf("smart pull: worktree %s: %w", wt.Path, err)
 		}
-		return Result{Summary: "pulled " + target + " in worktree " + wt.Path, Changed: true}, nil
+		return Result{Changed: true}.WithSummary("pulled %s in worktree %s", target, wt.Path), nil
 	}
 
 	dirty, err := repo.IsDirty(ctx)
@@ -195,6 +183,7 @@ func (op SmartPull) checkoutPull(ctx context.Context, deps OpDeps, remote, targe
 	_ = repo.Fetch(ctx, remote)
 	deps.emit(ctx, Progress{Step: "pulling (ff-only)", Detail: target})
 	pullErr := repo.Pull(ctx, remote, target, git.PullFF)
+	res := Result{Changed: true}.WithSummary("pulled %s", target)
 
 	if returnTo != "" && returnTo != target {
 		deps.emit(ctx, Progress{Step: "switching back", Detail: returnTo})
@@ -203,7 +192,7 @@ func (op SmartPull) checkoutPull(ctx context.Context, deps OpDeps, remote, targe
 				_ = repo.StashPop(ctx, "") // restore on target rather than strand the stash
 				stashed = false
 			}
-			return Result{Summary: "pulled " + target + "; could not switch back to " + returnTo + " (changes restored on " + target + ")", Changed: true},
+			return res.AppendSummary("; could not switch back to %s (changes restored on %s)", returnTo, target),
 				fmt.Errorf("smart pull: switch back to %s failed: %w", returnTo, err)
 		}
 	}
@@ -211,17 +200,13 @@ func (op SmartPull) checkoutPull(ctx context.Context, deps OpDeps, remote, targe
 	if stashed {
 		deps.emit(ctx, Progress{Step: "restoring changes"})
 		if err := repo.StashPop(ctx, ""); err != nil {
-			deps.emit(ctx, DecisionNeeded{Request: DecisionRequest{
-				ID:      "stash-pop-conflict",
-				Prompt:  "Restoring your changes conflicted",
-				Options: []string{"keep", "abort"},
-			}})
-			return Result{Summary: "pulled " + target + "; restore conflicted (changes preserved in stash)", Changed: true},
+			deps.emit(ctx, DecisionNeeded{Request: PromptReq("stash-pop-conflict", "Restoring your changes conflicted", []string{"keep", "abort"})})
+			return res.AppendSummary("; restore conflicted (changes preserved in stash)"),
 				fmt.Errorf("stash pop conflict after pulling %s: %w", target, err)
 		}
 	}
 	if pullErr != nil {
 		return Result{}, fmt.Errorf("smart pull: %s: %w", target, pullErr)
 	}
-	return Result{Summary: "pulled " + target, Changed: true}, nil
+	return res, nil
 }

@@ -19,12 +19,12 @@ func (op Checkout) Run(ctx context.Context, deps OpDeps) (Result, error) {
 		return Result{}, fmt.Errorf("checkout: Ref is required")
 	}
 	if op.Branch != "" {
-		deps.emit(ctx, Progress{Step: "creating branch", Detail: op.Branch + " at " + op.Ref})
+		deps.emit(ctx, Progressf("creating branch", "%s at %s", op.Branch, op.Ref))
 		// One atomic invocation: on failure no branch is left behind.
 		if err := deps.Repo.SwitchCreate(ctx, op.Branch, op.Ref); err != nil {
 			return Result{}, fmt.Errorf("checkout: %w", err)
 		}
-		res := Result{Summary: "created branch " + op.Branch + " at " + op.Ref + " and switched", Changed: true}
+		res := Result{Changed: true}.WithSummary("created branch %s at %s and switched", op.Branch, op.Ref)
 		deps.emit(ctx, Done{Result: res})
 		return res, nil
 	}
@@ -32,7 +32,7 @@ func (op Checkout) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	if err := deps.Repo.SwitchDetach(ctx, op.Ref); err != nil {
 		return Result{}, fmt.Errorf("checkout: %w", err)
 	}
-	res := Result{Summary: "checked out " + op.Ref + " (detached HEAD)", Changed: true}
+	res := Result{Changed: true}.WithSummary("checked out %s (detached HEAD)", op.Ref)
 	deps.emit(ctx, Done{Result: res})
 	return res, nil
 }

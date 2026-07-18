@@ -79,7 +79,7 @@ func (op ReviewChanges) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	if runErr != nil {
 		return Result{Captured: captured}, runErr
 	}
-	return Result{Captured: captured, Summary: "reviewed " + op.RangeLabel}, nil
+	return Result{Captured: captured}.WithSummary("reviewed %s", op.RangeLabel), nil
 }
 
 func (op ReviewChanges) reviewSummary(diffPath, stat string, truncated bool) string {

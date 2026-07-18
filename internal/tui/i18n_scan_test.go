@@ -59,7 +59,13 @@ func tuiI18nCatalog(t *testing.T) map[string]bool {
 			lit, ok := call.Args[0].(*ast.BasicLit)
 			if !ok || lit.Kind != token.STRING {
 				// Dynamic keys can't be extracted or translated — dynamic
-				// text must be a T *argument*, never part of the key.
+				// text must be a T *argument*, never part of the key. The
+				// ONE sanctioned exception: i18n_engine.go renders engine
+				// (format, args) pairs whose formats are gate-checked
+				// against all four bundles by engine_prose_test.go instead.
+				if name == "i18n_engine.go" {
+					return true
+				}
 				t.Errorf("%s: i18n.T key must be a string literal", fset.Position(call.Pos()))
 				return true
 			}
@@ -81,6 +87,9 @@ func TestI18nKeysAreLiterals(t *testing.T) {
 
 func TestI18nBundlesComplete(t *testing.T) {
 	catalog := tuiI18nCatalog(t)
+	for k := range engineProseKeys(t) { // engine formats are used keys too
+		catalog[k] = true
+	}
 	builtins := i18n.Builtins()
 	for _, code := range []string{"ja", "ko", "zh", "ru"} {
 		b, ok := builtins[code]

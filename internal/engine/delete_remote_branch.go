@@ -24,16 +24,12 @@ func (op DeleteRemoteBranch) Run(ctx context.Context, deps OpDeps) (Result, erro
 	}
 	ref := op.Remote + "/" + op.Branch
 
-	confirm, err := deps.decide(ctx, DecisionRequest{
-		ID:      "delete-remote-branch",
-		Prompt:  "Delete remote branch " + ref + "? This pushes a deletion to " + op.Remote + ".",
-		Options: []string{"delete", "abort"},
-	})
+	confirm, err := deps.decide(ctx, PromptReq("delete-remote-branch", "Delete remote branch %s? This pushes a deletion to %s.", []string{"delete", "abort"}, ref, op.Remote))
 	if err != nil {
 		return Result{}, err
 	}
 	if confirm.Option != "delete" {
-		return Result{Summary: "cancelled", Changed: false}, nil
+		return Result{Changed: false}.WithSummary("cancelled"), nil
 	}
 
 	deps.emit(ctx, Progress{Step: "deleting remote branch", Detail: ref})
@@ -41,7 +37,7 @@ func (op DeleteRemoteBranch) Run(ctx context.Context, deps OpDeps) (Result, erro
 		return Result{}, fmt.Errorf("delete remote branch: %w", err)
 	}
 
-	res := Result{Summary: "deleted " + ref, Changed: true}
+	res := Result{Changed: true}.WithSummary("deleted %s", ref)
 	deps.emit(ctx, Done{Result: res})
 	return res, nil
 }

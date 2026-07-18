@@ -17,7 +17,7 @@ func (op Fetch) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	if err := deps.Repo.FetchAll(ctx); err != nil {
 		return Result{}, err
 	}
-	res := Result{Summary: "fetched all remotes", Changed: true}
+	res := Result{Changed: true}.WithSummary("fetched all remotes")
 	deps.emit(ctx, Done{Result: res})
 	return res, nil
 }

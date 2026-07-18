@@ -92,7 +92,7 @@ func (op GenerateMessage) Run(ctx context.Context, deps OpDeps) (Result, error) 
 	if runErr != nil {
 		return Result{Captured: captured}, runErr
 	}
-	return Result{Captured: captured, Summary: "generated commit message"}, nil
+	return Result{Captured: captured}.WithSummary("generated commit message"), nil
 }
 
 func buildSummary(diffPath, stat string, log []model.LogLine, truncated bool) string {

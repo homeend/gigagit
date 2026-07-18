@@ -50,7 +50,7 @@ func (op Discard) Run(ctx context.Context, deps OpDeps) (Result, error) {
 		return Result{}, errors.Join(errs...)
 	}
 
-	res := Result{Summary: "discarded", Changed: true}
+	res := Result{Changed: true}.WithSummary("discarded")
 	deps.emit(ctx, Done{Result: res})
 	return res, nil
 }

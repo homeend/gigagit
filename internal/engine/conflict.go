@@ -25,7 +25,7 @@ type ResolveConflict struct {
 
 func (op ResolveConflict) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	deps.emit(ctx, Progress{Step: "resolving", Detail: op.Path})
-	var summary string
+	var res Result
 	switch op.Action {
 	case KeepOurs:
 		if err := deps.Repo.CheckoutSide(ctx, op.Path, "ours"); err != nil {
@@ -34,7 +34,7 @@ func (op ResolveConflict) Run(ctx context.Context, deps OpDeps) (Result, error) 
 		if err := deps.Repo.StagePaths(ctx, []string{op.Path}); err != nil {
 			return Result{}, err
 		}
-		summary = "resolved " + op.Path + " (kept ours)"
+		res = Result{Changed: true}.WithSummary("resolved %s (kept ours)", op.Path)
 	case KeepTheirs:
 		if err := deps.Repo.CheckoutSide(ctx, op.Path, "theirs"); err != nil {
 			return Result{}, err
@@ -42,7 +42,7 @@ func (op ResolveConflict) Run(ctx context.Context, deps OpDeps) (Result, error) 
 		if err := deps.Repo.StagePaths(ctx, []string{op.Path}); err != nil {
 			return Result{}, err
 		}
-		summary = "resolved " + op.Path + " (kept theirs)"
+		res = Result{Changed: true}.WithSummary("resolved %s (kept theirs)", op.Path)
 	case KeepBase:
 		if err := deps.Repo.CheckoutBaseStage(ctx, op.Path); err != nil {
 			return Result{}, err
@@ -50,21 +50,20 @@ func (op ResolveConflict) Run(ctx context.Context, deps OpDeps) (Result, error) 
 		if err := deps.Repo.StagePaths(ctx, []string{op.Path}); err != nil {
 			return Result{}, err
 		}
-		summary = "resolved " + op.Path + " (kept base)"
+		res = Result{Changed: true}.WithSummary("resolved %s (kept base)", op.Path)
 	case DeleteFile:
 		if err := deps.Repo.RemoveFile(ctx, op.Path); err != nil {
 			return Result{}, err
 		}
-		summary = "resolved " + op.Path + " (deleted)"
+		res = Result{Changed: true}.WithSummary("resolved %s (deleted)", op.Path)
 	case MarkResolved:
 		if err := deps.Repo.StagePaths(ctx, []string{op.Path}); err != nil {
 			return Result{}, err
 		}
-		summary = "marked " + op.Path + " resolved"
+		res = Result{Changed: true}.WithSummary("marked %s resolved", op.Path)
 	default:
 		return Result{}, errors.New("unknown conflict action")
 	}
-	res := Result{Summary: summary, Changed: true}
 	deps.emit(ctx, Done{Result: res})
 	return res, nil
 }
@@ -77,7 +76,7 @@ func (op MarkAllResolved) Run(ctx context.Context, deps OpDeps) (Result, error) 
 	if err := deps.Repo.StagePaths(ctx, op.Paths); err != nil {
 		return Result{}, err
 	}
-	res := Result{Summary: "marked all resolved", Changed: true}
+	res := Result{Changed: true}.WithSummary("marked all resolved")
 	deps.emit(ctx, Done{Result: res})
 	return res, nil
 }
@@ -93,25 +92,25 @@ func (op ContinueOp) Run(ctx context.Context, deps OpDeps) (Result, error) {
 		if err := deps.Repo.MergeContinue(ctx, ""); err != nil {
 			return Result{}, err
 		}
-		return conflictDone(deps, ctx, "merge continued")
+		return conflictDone(deps, ctx, Result{Changed: true}.WithSummary("merge continued"))
 	}
 	if ok, _ := deps.Repo.RebaseInProgress(ctx, ""); ok {
 		if err := deps.Repo.RebaseContinue(ctx, ""); err != nil {
 			return Result{}, err
 		}
-		return conflictDone(deps, ctx, "rebase continued")
+		return conflictDone(deps, ctx, Result{Changed: true}.WithSummary("rebase continued"))
 	}
 	if ok, _ := deps.Repo.CherryPickInProgress(ctx, ""); ok {
 		if err := deps.Repo.CherryPickContinue(ctx, ""); err != nil {
 			return Result{}, err
 		}
-		return conflictDone(deps, ctx, "cherry-pick continued")
+		return conflictDone(deps, ctx, Result{Changed: true}.WithSummary("cherry-pick continued"))
 	}
 	if ok, _ := deps.Repo.RevertInProgress(ctx, ""); ok {
 		if err := deps.Repo.RevertContinue(ctx, ""); err != nil {
 			return Result{}, err
 		}
-		return conflictDone(deps, ctx, "revert continued")
+		return conflictDone(deps, ctx, Result{Changed: true}.WithSummary("revert continued"))
 	}
 	return Result{}, errors.New("no merge, rebase, cherry-pick, or revert in progress")
 }
@@ -126,31 +125,30 @@ func (op AbortOp) Run(ctx context.Context, deps OpDeps) (Result, error) {
 		if err := deps.Repo.MergeAbort(ctx, ""); err != nil {
 			return Result{}, err
 		}
-		return conflictDone(deps, ctx, "merge aborted")
+		return conflictDone(deps, ctx, Result{Changed: true}.WithSummary("merge aborted"))
 	}
 	if ok, _ := deps.Repo.RebaseInProgress(ctx, ""); ok {
 		if err := deps.Repo.RebaseAbort(ctx, ""); err != nil {
 			return Result{}, err
 		}
-		return conflictDone(deps, ctx, "rebase aborted")
+		return conflictDone(deps, ctx, Result{Changed: true}.WithSummary("rebase aborted"))
 	}
 	if ok, _ := deps.Repo.CherryPickInProgress(ctx, ""); ok {
 		if err := deps.Repo.CherryPickAbort(ctx, ""); err != nil {
 			return Result{}, err
 		}
-		return conflictDone(deps, ctx, "cherry-pick aborted")
+		return conflictDone(deps, ctx, Result{Changed: true}.WithSummary("cherry-pick aborted"))
 	}
 	if ok, _ := deps.Repo.RevertInProgress(ctx, ""); ok {
 		if err := deps.Repo.RevertAbort(ctx, ""); err != nil {
 			return Result{}, err
 		}
-		return conflictDone(deps, ctx, "revert aborted")
+		return conflictDone(deps, ctx, Result{Changed: true}.WithSummary("revert aborted"))
 	}
 	return Result{}, errors.New("no merge, rebase, cherry-pick, or revert in progress")
 }
 
-func conflictDone(deps OpDeps, ctx context.Context, summary string) (Result, error) {
-	res := Result{Summary: summary, Changed: true}
+func conflictDone(deps OpDeps, ctx context.Context, res Result) (Result, error) {
 	deps.emit(ctx, Done{Result: res})
 	return res, nil
 }

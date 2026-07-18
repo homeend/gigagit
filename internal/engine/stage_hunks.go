@@ -15,7 +15,7 @@ func (op StageHunks) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	if err := deps.Repo.StageBlob(ctx, op.Path, op.Content); err != nil {
 		return Result{}, err
 	}
-	res := Result{Summary: "staged hunks in " + op.Path, Changed: true}
+	res := Result{Changed: true}.WithSummary("staged hunks in %s", op.Path)
 	deps.emit(ctx, Done{Result: res})
 	return res, nil
 }

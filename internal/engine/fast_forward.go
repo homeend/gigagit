@@ -38,7 +38,7 @@ func (op FastForward) Run(ctx context.Context, deps OpDeps) (Result, error) {
 		return Result{}, err
 	}
 	if target == head {
-		return Result{Summary: branch + " already up to date", Changed: false}, nil
+		return Result{Changed: false}.WithSummary("%s already up to date", branch), nil
 	}
 
 	ahead, err := deps.Repo.IsAncestor(ctx, "HEAD", target)
@@ -53,7 +53,7 @@ func (op FastForward) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	if err := deps.Repo.MergeFFOnly(ctx, "", target); err != nil {
 		return Result{}, fmt.Errorf("fast-forward %s to %s: %w", branch, shortSHA(target), err)
 	}
-	res := Result{Summary: "fast-forwarded " + branch + " to " + shortSHA(target), Changed: true}
+	res := Result{Changed: true}.WithSummary("fast-forwarded %s to %s", branch, shortSHA(target))
 	deps.emit(ctx, Done{Result: res})
 	return res, nil
 }
