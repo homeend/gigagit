@@ -225,6 +225,24 @@ func TestShelfPopupYOpensCopyChooser(t *testing.T) {
 	}
 }
 
+func TestShelfPopupYChooserHasAbsoluteOnOriginWorktree(t *testing.T) {
+	m := shelfPopModel(shEntry("a", "dir/x.go")) // Origin.Worktree == "/wt"
+	mm, _ := m.Update(keyMsg("y"))
+	m = mm.(Model)
+	if m.modal == nil {
+		t.Fatal("y should open the copy chooser")
+	}
+	const want = "Copy file path|Copy absolute file path|Copy file name|Cancel"
+	if got := strings.Join(m.modal.req.Options, "|"); got != want {
+		t.Errorf("options = %q, want %q", got, want)
+	}
+	// The absolute option resolves against the entry's OWN origin worktree
+	// (/wt), not the current worktree — pins copyFilePrompt(e.Origin.Worktree,…).
+	if got := m.modal.copyTexts["Copy absolute file path"]; got != "/wt/dir/x.go" {
+		t.Errorf("captured abs = %q, want /wt/dir/x.go (entry's own worktree)", got)
+	}
+}
+
 func TestShelfPopupYOnCommitEntryNotices(t *testing.T) {
 	e := model.ShelfEntry{ID: "c1", Kind: model.ShelfKindCommit,
 		Origin: model.FileAddress{State: model.StateCommitted, Commit: "a1b2c3d4e5"}}

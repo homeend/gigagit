@@ -4,20 +4,22 @@ package tui
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/clipboard"
 	"github.com/homeend/gigagit/internal/commitgraph"
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/gitwatch"
 	"github.com/homeend/gigagit/internal/hunkpick"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/promptstate"
 	"github.com/homeend/gigagit/internal/rebaseplan"
@@ -58,17 +60,18 @@ type Model struct {
 	reflog                []model.ReflogEntry // HEAD reflog; shown by the Reflog tab in the bottom slot
 	currentWorktree       string
 
-	notices                []notice             // session notice list (see notify.go)
-	noticesUnread          bool                 // blink while true; opening the ! dialog clears it
-	blinkOn                bool                 // current blink phase (style alternation)
-	noticeGen              int                  // stale-drop guard for repoHealthMsg across repo switches
-	gitConfigGen           int                  // stale-drop guard for explorer row loads
-	blinkGen               int                  // bumped on every blink-tick arm; stale ticks are dropped (single blink lane)
-	noticeSessionDismissed map[string]bool      // "Not now" ids; cleared on reRoot (re-evaluated next load)
-	repoHealth             model.RepoHealth     // last health snapshot (Settings Commit-graph row)
-	repoHealthKnown        bool                 // false until the first repoHealthMsg lands
-	pendingNoticeConfig    *engine.SetGitConfig // chained after WriteCommitGraph succeeds
-	refreshHealthAfterOp   bool                 // re-read repo health once the op (incl. its chain) finishes
+	notices                []notice               // session notice list (see notify.go)
+	noticesUnread          bool                   // blink while true; opening the ! dialog clears it
+	blinkOn                bool                   // current blink phase (style alternation)
+	noticeGen              int                    // stale-drop guard for repoHealthMsg across repo switches
+	gitConfigGen           int                    // stale-drop guard for explorer row loads
+	blinkGen               int                    // bumped on every blink-tick arm; stale ticks are dropped (single blink lane)
+	noticeSessionDismissed map[string]bool        // "Not now" ids; cleared on reRoot (re-evaluated next load)
+	repoHealth             model.RepoHealth       // last health snapshot (Settings Commit-graph row)
+	repoHealthKnown        bool                   // false until the first repoHealthMsg lands
+	clipAvail              clipboard.Availability // cached probe result; rebuildNotices reuses it on a language switch
+	pendingNoticeConfig    *engine.SetGitConfig   // chained after WriteCommitGraph succeeds
+	refreshHealthAfterOp   bool                   // re-read repo health once the op (incl. its chain) finishes
 
 	cfg          config.Config
 	opLog        *opLog            // operation-log file + span-sink lifecycle; the , Settings toggle
@@ -98,7 +101,8 @@ type Model struct {
 
 	filesMode         filesMode         // authoritative source mode (changed/fullTree/compare/stash)
 	filesView         *contentPopup     // commit files tree replacing the left column; nil = closed
-	filesTitle        string            // "Files <short-hash> <subject>", updated with the content
+	filesTitle        string            // "Files <short-hash> <subject>", updated with the content — rendered/localized display text; NEVER parsed
+	filesContext      string            // diff-view context payload (ref/subject or compare label) mirroring filesTitle's content sans any "Files "/panel framing; the diff view's "@ <context>" header reads THIS, not filesTitle
 	filesHash         string            // commit the view wants; gates stale async results
 	filesLeft         model.Endpoint    // compare mode: older side
 	filesRight        model.Endpoint    // compare mode: newer side
@@ -290,13 +294,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// The narrow layout has no left column; without this the view
 			// would keep capturing keys while invisible.
 			m = m.closeFilesView()
-			m.statusMsg = "files view closed: terminal too narrow"
+			m.statusMsg = i18n.T("files view closed: terminal too narrow")
 		}
 		if dv := m.diffLayer(); dv != nil && msg.Width > 0 {
 			if msg.Width < 60 {
 				m = m.removeLayer(dv)
 				m.diffTag = ""
-				m.statusMsg = "diff closed: terminal too narrow"
+				m.statusMsg = i18n.T("diff closed: terminal too narrow")
 			} else {
 				// Re-wrap at the new width, keeping the viewport anchored to
 				// the logical line currently at the top.
@@ -345,7 +349,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			wasLoading := p.loading
 			p.loading = false
 			if msg.err != nil {
-				m.statusMsg = "git config explorer: " + friendlyOpError(msg.err)
+				m.statusMsg = i18n.T("git config explorer: %s", friendlyOpError(msg.err))
 				if wasLoading {
 					// The initial load failed: nothing to show — close.
 					return m.popLayer(), healthCmd
@@ -372,9 +376,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil // view closed, or a stale result from fast movement
 		}
 		if msg.err != nil {
-			m.statusMsg = "files: " + msg.err.Error()
-			if len(m.filesView.lines) == 1 && m.filesView.lines[0].text == "(loading…)" {
-				m.filesView.lines = []contentLine{{text: "(load failed)"}}
+			m.statusMsg = i18n.T("files: %s", msg.err.Error())
+			if len(m.filesView.lines) == 1 && isLoadingPlaceholder(m.filesView.lines[0].text) {
+				m.filesView.lines = []contentLine{{text: i18n.T("(load failed)")}}
 			}
 			return m, nil
 		}
@@ -382,16 +386,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// survives the commit change (track one file through history).
 		m.filesView.lines = commitFileLines(msg.files)
 		m.filesView.sel = 0
-		m.filesTitle = "Files " + shortHash(msg.hash) + " " + msg.subject
+		m.filesTitle = i18n.T("Files %s %s", shortHash(msg.hash), msg.subject)
+		m.filesContext = shortHash(msg.hash) + " " + msg.subject
 		return m, nil
 	case shelfFilesMsg:
 		if m.filesView == nil || !m.inShelfFiles() || msg.id != m.filesShelfID {
 			return m, nil // view closed, or a stale result for another entry
 		}
 		if msg.err != nil {
-			m.statusMsg = "shelf files: " + msg.err.Error()
-			if len(m.filesView.lines) == 1 && m.filesView.lines[0].text == "(loading…)" {
-				m.filesView.lines = []contentLine{{text: "(load failed)"}}
+			m.statusMsg = i18n.T("shelf files: %s", msg.err.Error())
+			if len(m.filesView.lines) == 1 && isLoadingPlaceholder(m.filesView.lines[0].text) {
+				m.filesView.lines = []contentLine{{text: i18n.T("(load failed)")}}
 			}
 			return m, nil
 		}
@@ -404,22 +409,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil // view closed, switched back to changed files, or stale
 		}
 		if msg.err != nil {
-			m.statusMsg = "files: " + msg.err.Error()
-			if len(m.filesView.lines) == 1 && m.filesView.lines[0].text == "(loading…)" {
-				m.filesView.lines = []contentLine{{text: "(load failed)"}}
+			m.statusMsg = i18n.T("files: %s", msg.err.Error())
+			if len(m.filesView.lines) == 1 && isLoadingPlaceholder(m.filesView.lines[0].text) {
+				m.filesView.lines = []contentLine{{text: i18n.T("(load failed)")}}
 			}
 			return m, nil
 		}
 		m.filesView.lines = msg.lines // pre-built off-thread
 		m.filesView.sel = 0
-		m.filesTitle = "Files " + shortHash(msg.hash) + " (all files) " + msg.subject
+		m.filesTitle = i18n.T("Files %s (all files) %s", shortHash(msg.hash), msg.subject)
+		m.filesContext = i18n.T("%s (all files) %s", shortHash(msg.hash), msg.subject)
 		return m, nil
 	case fileContentMsg:
 		if m.filesPreview == nil || msg.tag != m.filesPreviewTag {
 			return m, nil // preview closed, or a stale load (another file opened)
 		}
 		if msg.err != nil {
-			m.filesPreview.lines = []contentLine{{text: "(load failed: " + msg.err.Error() + ")"}}
+			m.filesPreview.lines = []contentLine{{text: i18n.T("(load failed: %s)", msg.err.Error())}}
 			return m, nil
 		}
 		m.filesPreview.lines = msg.lines
@@ -428,11 +434,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case fileContentLayerMsg:
 		cp := layerOf[*contentPopup](m)
 		// Tag-gate: only fill the contentPopup whose title matches this path load.
-		if cp == nil || cp.title != "View "+msg.path {
+		if cp == nil || cp.title != i18n.T("View %s", msg.path) {
 			return m, nil // layer closed, or a stale load from a different path
 		}
 		if msg.err != nil {
-			cp.lines = []contentLine{{text: "(load failed: " + msg.err.Error() + ")"}}
+			cp.lines = []contentLine{{text: i18n.T("(load failed: %s)", msg.err.Error())}}
 			return m, nil
 		}
 		cp.lines = msg.lines
@@ -468,12 +474,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil // stale or closed
 		}
 		if msg.err != nil {
-			m.statusMsg = "compare: " + msg.err.Error()
+			m.statusMsg = i18n.T("compare: %s", msg.err.Error())
 			// A failed compare must be retryable: clear the tag so re-opening the
 			// SAME pair isn't swallowed by the openCompareFiles same-tag guard.
 			m.compareTag = ""
-			if len(m.filesView.lines) == 1 && m.filesView.lines[0].text == "(loading…)" {
-				m.filesView.lines = []contentLine{{text: "(load failed)"}}
+			if len(m.filesView.lines) == 1 && isLoadingPlaceholder(m.filesView.lines[0].text) {
+				m.filesView.lines = []contentLine{{text: i18n.T("(load failed)")}}
 			}
 			return m, nil
 		}
@@ -519,7 +525,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.sel[panelCommits] = 0
 		}
 		if m.eager.active {
-			m.eager = eagerSearch{}
+			// Abort the in-flight scan but keep the query: a repeat ctrl+f after
+			// e.g. a background feed refresh should still dig deeper for it.
+			m.eager = eagerSearch{query: m.eager.query}
 		}
 		if tip := m.pendingGotoTip; tip != "" {
 			m.pendingGotoTip = ""
@@ -555,7 +563,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case shelfLoadedMsg:
 		// A disabled shelf (no state dir) reports its reason but is not fatal.
 		if msg.err != nil {
-			m.statusMsg = "shelf: " + msg.err.Error()
+			m.statusMsg = i18n.T("shelf: %s", msg.err.Error())
 			m.shelfEntries = nil
 			m.pendingCompare = nil
 		} else {
@@ -577,14 +585,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case shelfAddedMsg:
 		if msg.err != nil {
-			m.statusMsg = "shelf add: " + msg.err.Error()
+			m.statusMsg = i18n.T("shelf add: %s", msg.err.Error())
 		} else {
-			m.statusMsg = "shelved " + msg.entry.Origin.Path + " → " + msg.entry.ID
+			m.statusMsg = i18n.T("shelved %s → %s", msg.entry.Origin.Path, msg.entry.ID)
 		}
 		return m, nil
 	case tempExportResolvedMsg:
 		if msg.err != nil {
-			m.statusMsg = "temp export: " + msg.err.Error()
+			m.statusMsg = i18n.T("temp export: %s", msg.err.Error())
 			return m, nil
 		}
 		p := &tempExportPopup{files: msg.files}
@@ -592,7 +600,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.pushLayer(p), nil
 	case patchResolvedMsg:
 		if msg.err != nil {
-			m.statusMsg = "export patch: " + msg.err.Error()
+			m.statusMsg = i18n.T("export patch: %s", msg.err.Error())
 			return m, nil
 		}
 		p := &exportPatchPopup{data: msg.data}
@@ -608,14 +616,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.pushLayer(p), nil
 	case bookmarkAddedMsg:
 		if msg.err != nil {
-			m.statusMsg = "bookmark: " + msg.err.Error()
+			m.statusMsg = i18n.T("bookmark: %s", msg.err.Error())
 		} else {
-			m.statusMsg = "bookmarked " + msg.bm.Path + " → " + msg.bm.ID
+			m.statusMsg = i18n.T("bookmarked %s → %s", msg.bm.Path, msg.bm.ID)
 		}
 		return m, nil
 	case bookmarksLoadedMsg:
 		if msg.err != nil {
-			m.statusMsg = "bookmarks: " + msg.err.Error()
+			m.statusMsg = i18n.T("bookmarks: %s", msg.err.Error())
 			m.pendingCompare = nil // don't let stale compare state hijack the next plain `g`
 			return m, nil
 		}
@@ -632,7 +640,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.pushLayer(p), nil
 	case prefixesLoadedMsg:
 		if msg.err != nil {
-			m.statusMsg = "prefixes: " + msg.err.Error()
+			m.statusMsg = i18n.T("prefixes: %s", msg.err.Error())
 			return m, nil
 		}
 		return m.pushLayer(newPrefixPicker(msg)), nil
@@ -647,7 +655,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil // user closed before load returned
 		}
 		if msg.err != nil {
-			m.statusMsg = "file finder: " + msg.err.Error()
+			m.statusMsg = i18n.T("file finder: %s", msg.err.Error())
 			m = m.popLayer()
 			return m, nil
 		}
@@ -661,6 +669,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Apply the persisted Commits render mode ([ui] show_graph): "off" starts
 		// in the flat list, exactly like the . menu's "Show as list".
 		m.commitListMode = !m.showGraphConfigured()
+		// Apply [ui] language ([ui] show_graph precedent: both config-arrival
+		// paths, so a repo switch re-applies a repo override).
+		m = m.applyLanguage()
 		// Seed the header's repo path now, on the startup path (which fans out via
 		// the per-source registry and never sets currentWorktree the way the legacy
 		// loadCmd's Snapshot did). Without this the top-right path stays blank until
@@ -700,7 +711,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.commitsExhausted = msg.commitsExhausted
 			m = m.graphLayerReset().rebuildCommitGraph()
 			if msg.commitErr != nil {
-				m.statusMsg = "commits: " + msg.commitErr.Error()
+				m.statusMsg = i18n.T("commits: %s", msg.commitErr.Error())
 			}
 			m.worktrees = msg.worktrees
 			m.tags = msg.tags
@@ -715,11 +726,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Apply the persisted Commits render mode ([ui] show_graph) on the
 			// legacy load path too (reRoot / repo switch).
 			m.commitListMode = !m.showGraphConfigured()
+			m = m.applyLanguage()
 			m.gitCommonDir = msg.gitCommonDir
 			m.headTimes = msg.headTimes
-			if m.eager.active {
-				m.eager = eagerSearch{}
-			}
+			// reRoot/repo switch: drop the scan AND the retained ctrl+f query —
+			// it belongs to the previous repo's history.
+			m.eager = eagerSearch{}
 			// Clamp selections so a row removed since the last load (e.g. a
 			// deleted worktree) can't leave an index pointing past the end.
 			for p := panel(0); p < panelCount; p++ {
@@ -990,10 +1002,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// own filter rides contentPopup.typing (not m.filterTyping), so the two
 		// never collide.
 		if m.filterTyping {
+			// The row under the cursor BEFORE this key edits the query: a query
+			// edit re-seats the cursor on the nearest match at or after it
+			// (snapFilterSel) instead of resetting to the top — mid-list search
+			// stays mid-list, the @-snap rule.
+			anchor := m.filterAnchor(m.filterPanel)
 			if nm, nq, handled, commit := m.recallUpdate(scopePanel, msg, m.filterQuery); handled {
 				m = nm
 				m.filterQuery = nq
-				m.sel[m.filterPanel] = 0
+				m = m.snapFilterSel(m.filterPanel, anchor)
 				if commit {
 					m.filterTyping = false
 					m, recCmd := m.recordSearch(scopePanel, m.filterQuery)
@@ -1013,12 +1030,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case tea.KeyEsc:
 				m.filterTyping = false
 				m.filterQuery = ""
+				m = m.snapFilterSel(m.filterPanel, anchor) // keep the cursor on the same row in the full list
 			case tea.KeyCtrlF:
 				if m.filterPanel == panelCommits {
 					var recCmd tea.Cmd
 					m, recCmd = m.recordSearch(scopePanel, m.filterQuery)
 					var cmd tea.Cmd
-					m, cmd = m.startEagerSearch(m.filterQuery)
+					m, cmd = m.startEagerSearchDeeper(m.filterQuery)
 					return m, tea.Batch(recCmd, cmd)
 				}
 				return m, nil
@@ -1057,13 +1075,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if r := []rune(m.filterQuery); len(r) > 0 {
 					m.filterQuery = string(r[:len(r)-1])
 				}
-				m.sel[m.filterPanel] = 0
+				m = m.snapFilterSel(m.filterPanel, anchor)
 			case tea.KeySpace:
 				m.filterQuery += " "
-				m.sel[m.filterPanel] = 0
+				m = m.snapFilterSel(m.filterPanel, anchor)
 			case tea.KeyRunes:
 				m.filterQuery += string(msg.Runes)
-				m.sel[m.filterPanel] = 0
+				m = m.snapFilterSel(m.filterPanel, anchor)
 			}
 			return m, nil
 		}
@@ -1095,7 +1113,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				var recCmd tea.Cmd
 				m, recCmd = m.recordSearch(scopePanel, m.highlightQuery)
 				var cmd tea.Cmd
-				m, cmd = m.startEagerSearch(m.highlightQuery)
+				m, cmd = m.startEagerSearchDeeper(m.highlightQuery)
 				return m, tea.Batch(recCmd, cmd)
 			case tea.KeyEnter:
 				m.highlightTyping = false // commit: highlight stays active
@@ -1162,7 +1180,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "p":
 			if !m.running && !m.loading {
-				return m.confirmOp(m.pullForFocus(), "Pull? This may rewrite the working tree.")
+				return m.confirmOp(m.pullForFocus(), i18n.T("Pull? This may rewrite the working tree."))
 			}
 		case "f":
 			if m.canFetchRemotes() {
@@ -1183,7 +1201,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// declined: only SmartCheckout yields the typed error, every
 				// checkout dispatch overwrites this, and opFinishedMsg/reRoot clear it.
 				m.pendingCheckout = pendingCheckout{remoteRef: rb.Name, base: rb.Branch, intent: engine.CheckoutStay}
-				return m.confirmOp(engine.SmartCheckout{RemoteRef: rb.Name, Local: rb.Branch, Intent: engine.CheckoutStay}, "Check out "+rb.Branch+"?")
+				return m.confirmOp(engine.SmartCheckout{RemoteRef: rb.Name, Local: rb.Branch, Intent: engine.CheckoutStay}, i18n.T("Check out %s?", rb.Branch))
 			}
 			if m.canCommit() {
 				m = m.pushLayer(&commitPopup{})
@@ -1209,13 +1227,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, nil
 				}
 				m.pendingCheckout = pendingCheckout{remoteRef: rb.Name, base: rb.Branch, intent: engine.CheckoutSwitch}
-				return m.confirmOp(engine.SmartCheckout{RemoteRef: rb.Name, Local: rb.Branch, Intent: engine.CheckoutSwitch}, "Switch to "+rb.Branch+"?")
+				return m.confirmOp(engine.SmartCheckout{RemoteRef: rb.Name, Local: rb.Branch, Intent: engine.CheckoutSwitch}, i18n.T("Switch to %s?", rb.Branch))
 			}
 			if m.focus == panelFiles && m.opsIdle() {
 				if mm, ok := m.openStashPopup(); ok {
 					return mm, nil
 				}
-				m.statusMsg = "nothing to stash"
+				m.statusMsg = i18n.T("nothing to stash")
 				return m, nil
 			}
 			if m.canSwitchBranch() {
@@ -1225,7 +1243,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.modal = &decisionState{
 						req: engine.DecisionRequest{
 							ID:      "switch-to-worktree",
-							Prompt:  b.Name + " is checked out in another worktree:\n" + wtPath,
+							Prompt:  i18n.T("%s is checked out in another worktree:\n%s", b.Name, wtPath),
 							Options: []string{"go to worktree", "cancel"},
 						},
 						onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {
@@ -1237,7 +1255,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 					return m, nil
 				}
-				return m.confirmOp(engine.SmartSwitch{Branch: b.Name}, "Switch to "+b.Name+"?")
+				return m.confirmOp(engine.SmartSwitch{Branch: b.Name}, i18n.T("Switch to %s?", b.Name))
 			}
 		case "S":
 			if m.stashView != nil { // toggle closed (focus is on a left panel here)
@@ -1359,7 +1377,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				restore, remove, n := m.discardTargets()
 				if n == 0 {
-					m.statusMsg = "nothing to discard (resolve conflicts first)"
+					m.statusMsg = i18n.T("nothing to discard (resolve conflicts first)")
 					return m, nil
 				}
 				m.modal = &decisionState{
@@ -1386,16 +1404,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// canDiscardAll false here means one of two refusable states;
 				// explain which so the no-op isn't silent.
 				if len(m.status.Conflicts()) > 0 {
-					m.statusMsg = "resolve conflicts before discarding all"
+					m.statusMsg = i18n.T("resolve conflicts before discarding all")
 				} else {
-					m.statusMsg = "nothing to discard"
+					m.statusMsg = i18n.T("nothing to discard")
 				}
 				return m, nil
 			}
 			m.modal = &decisionState{
 				req: engine.DecisionRequest{
 					ID:      "discard-all",
-					Prompt:  "Discard ALL unstaged changes? This cannot be undone.",
+					Prompt:  i18n.T("Discard ALL unstaged changes? This cannot be undone."),
 					Options: []string{"Discard", "Cancel"},
 				},
 				onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {
@@ -1428,7 +1446,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// side instead). A WIP pseudo-row opens its node-vs-parent compare.
 			if m.focus == panelCommits && m.canShowCommitFiles() {
 				if m.width > 0 && m.width < 40 {
-					m.statusMsg = "terminal too narrow for the files view"
+					m.statusMsg = i18n.T("terminal too narrow for the files view")
 					return m, nil
 				}
 				if r, ok := m.wipRowAt(m.commitSelUnified()); ok {
@@ -1579,14 +1597,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.filterPanel = m.focus
 				m.filterQuery = ""
 				m.filterTyping = true
-				m.sel[m.focus] = 0
+				// The cursor stays put: an empty query shows the full list, and
+				// each typed rune snaps to the nearest match at/after it.
 				m = m.recallReset()
 			}
 		case "@":
 			if !m.running && !m.loading && m.focus == panelCommits {
 				m.filterTyping = false // mutually exclusive with the / filter
-				if m.filterPanel == panelCommits {
+				if m.filterPanel == panelCommits && m.filterQuery != "" {
+					// Dropping the filter expands the list: keep the cursor on
+					// the same commit rather than on a raw display position.
+					anchor := m.filterAnchor(panelCommits)
 					m.filterQuery = ""
+					m = m.snapFilterSel(panelCommits, anchor)
 				}
 				m.highlightQuery = ""
 				m.highlightTyping = true
@@ -1640,28 +1663,35 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.openActionMenu(), nil
 		case "?":
 			_, hidden := fitFooter(m, m.layout().w)
-			m = m.pushLayer(newContentPopup("Help — keys", helpWithHidden(hidden)))
+			m = m.pushLayer(newContentPopup(i18n.T("Help — keys"), helpWithHidden(hidden)))
 		case "#":
 			if m.opsIdle() {
 				return m.openGotoCommitPopup()
 			}
 		case "ctrl+f":
-			// Eager search: scan unloaded history for the active Commits search,
+			// Eager search: page unloaded history for the active Commits search,
 			// whichever is engaged (the / filter or the @ highlight; mutually
-			// exclusive). startEagerSearch clears the / filter (go-to); the @
-			// highlight persists so the found commit shows highlighted.
+			// exclusive). Every press restarts the cycle past the already-loaded
+			// commits — a hit on screen doesn't stop ctrl+f from digging deeper.
+			// Both the / filter and the @ highlight STAY engaged (the query
+			// remains visible in the bar; only the goto-tip fallback clears a
+			// filter). With neither engaged, the query retained from the last
+			// eager search is reused (e.g. after esc cleared the filter).
 			if m.focus == panelCommits {
 				if m.filterPanel == panelCommits && m.filterQuery != "" {
-					return m.startEagerSearch(m.filterQuery)
+					return m.startEagerSearchDeeper(m.filterQuery)
 				}
 				if m.highlightQuery != "" {
-					return m.startEagerSearch(m.highlightQuery)
+					return m.startEagerSearchDeeper(m.highlightQuery)
+				}
+				if m.eager.query != "" {
+					return m.startEagerSearchDeeper(m.eager.query)
 				}
 			}
 		case "l":
 			if m.focus == panelCommits && m.canShowCommitFiles() {
 				if m.width > 0 && m.width < 40 {
-					m.statusMsg = "terminal too narrow for the files view"
+					m.statusMsg = i18n.T("terminal too narrow for the files view")
 					return m, nil
 				}
 				// A pseudo-row opens its node-vs-parent compare instead of a commit's
@@ -1738,7 +1768,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// filterPanel is intentionally left set — filterActive() gates on a
 			// non-empty query, so the residue is inert.
 			if m.filterQuery != "" {
+				anchor := m.filterAnchor(m.filterPanel)
 				m.filterQuery = ""
+				m = m.snapFilterSel(m.filterPanel, anchor) // same row, full list
 				return m, nil
 			}
 			// Lowest priority: with nothing lighter to drop, esc exits a T
@@ -1770,12 +1802,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case opEventMsg:
 		switch e := msg.event.(type) {
 		case engine.Progress:
-			m.statusMsg = e.Step
-			if e.Detail != "" {
-				m.statusMsg += ": " + e.Detail
-			}
+			m.statusMsg = renderProgress(e)
 		case engine.Done:
-			m.statusMsg = e.Result.Summary
+			m.statusMsg = renderSummary(e.Result)
 		}
 		return m, waitForOp(m.opMsgs)
 	case opDecisionMsg:
@@ -1819,7 +1848,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.err != nil {
 			if msg.manual {
-				m.statusMsg = "remote tags: " + msg.err.Error()
+				m.statusMsg = i18n.T("remote tags: %s", msg.err.Error())
 			}
 			return m, nil // background: silent (queryQuiet did not record it)
 		}
@@ -1880,13 +1909,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.running {
 			// An op started during the 5s check — never start a push under it.
-			m.statusMsg = "push cancelled (an operation is running) — press P again"
+			m.statusMsg = i18n.T("push cancelled (an operation is running) — press P again")
 			return m, nil
 		}
 		if m.modal != nil {
 			// Another dialog opened during the 5s check — never clobber it
 			// (and never start a push under it).
-			m.statusMsg = "push cancelled (another dialog opened) — press P again"
+			m.statusMsg = i18n.T("push cancelled (another dialog opened) — press P again")
 			return m, nil
 		}
 		m.statusMsg = ""
@@ -1904,10 +1933,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if len(unpushed) == 0 {
 			return m.startOp(m.pushCurrentOp()) // nothing to offer (or timed out) → just push
 		}
+		prompt := i18n.T("Branch tip has tags %s not on the remote. Push too?", strings.Join(unpushed, ", "))
+		if len(unpushed) == 1 {
+			prompt = i18n.T("Branch tip has tag %s not on the remote. Push too?", unpushed[0])
+		}
 		m.modal = &decisionState{
 			req: engine.DecisionRequest{
 				ID:      "push-with-tags",
-				Prompt:  "Branch tip has " + pushTagsNoun(unpushed) + " not on the remote. Push too?",
+				Prompt:  prompt,
 				Options: []string{"Push branch + tags", "Push branch only", "Cancel"},
 			},
 			onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {
@@ -1964,7 +1997,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.pendingRemoteTagAdds = nil
 		} else {
 			if msg.res.Summary != "" {
-				m.statusMsg = msg.res.Summary
+				m.statusMsg = renderSummary(msg.res)
 			}
 			for _, name := range m.pendingSeqBump {
 				_, _ = config.BumpSeq(m.gitCommonDir, name)
@@ -2033,7 +2066,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if v := layerOf[*prefixSettingsView](m); v != nil {
 			v.loading = false
 			if msg.err != nil {
-				m.statusMsg = "prefixes: " + msg.err.Error()
+				m.statusMsg = i18n.T("prefixes: %s", msg.err.Error())
 			} else {
 				v.items = msg.items
 				if v.sel >= len(v.items) {
@@ -2066,7 +2099,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if msg.err != nil {
-			m.statusMsg = "error: " + msg.err.Error()
+			m.statusMsg = i18n.T("error: %s", msg.err.Error())
 			return m, nil
 		}
 		m.filesHash = msg.sha
@@ -2094,7 +2127,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case statusRefreshedMsg:
 		m.running = false
 		if msg.err != nil {
-			m.statusMsg = "error: " + msg.err.Error()
+			m.statusMsg = i18n.T("error: %s", msg.err.Error())
 			return m, nil
 		}
 		m = m.withStatus(msg.status)
@@ -2117,7 +2150,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case editorFinishedMsg:
 		if msg.err != nil {
-			m.statusMsg = "edit: " + msg.err.Error()
+			m.statusMsg = i18n.T("edit: %s", msg.err.Error())
 			return m, m.reloadStatusCmd("")
 		}
 		return m, m.reloadStatusCmd(editedSummary(msg.path))
@@ -2153,7 +2186,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case editorViewMsg:
 		if msg.err != nil {
-			m.statusMsg = "view: " + msg.err.Error()
+			m.statusMsg = i18n.T("view: %s", msg.err.Error())
 			return m, nil
 		}
 		return m, viewExternalCmd(msg.path, msg.name)
@@ -2161,7 +2194,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case editorViewFinishedMsg:
 		removeTempFile(msg.path)
 		if msg.err != nil {
-			m.statusMsg = "view: " + msg.err.Error()
+			m.statusMsg = i18n.T("view: %s", msg.err.Error())
 			return m, nil
 		}
 		m.statusMsg = viewedSummary(msg.name)
@@ -2169,7 +2202,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case amendPrefillMsg:
 		if msg.err != nil {
-			m.statusMsg = "amend: " + msg.err.Error()
+			m.statusMsg = i18n.T("amend: %s", msg.err.Error())
 			return m, nil
 		}
 		title, desc := splitMessage(msg.msg)
@@ -2186,7 +2219,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if msg.err != nil {
-			m.statusMsg = "review: " + msg.err.Error()
+			m.statusMsg = i18n.T("review: %s", msg.err.Error())
 			return m, nil
 		}
 		return m.startReviewLane(msg.target)
@@ -2216,16 +2249,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case irebaseLoadedMsg:
 		if msg.err != nil {
-			m.statusMsg = "interactive rebase: " + msg.err.Error()
+			m.statusMsg = i18n.T("interactive rebase: %s", msg.err.Error())
 			return m, nil
 		}
 		if len(msg.commits) == 0 {
-			m.statusMsg = "interactive rebase: no commits in range"
+			m.statusMsg = i18n.T("interactive rebase: no commits in range")
 			return m, nil
 		}
 		ggBin, err := os.Executable()
 		if err != nil {
-			m.statusMsg = "interactive rebase: " + err.Error()
+			m.statusMsg = i18n.T("interactive rebase: %s", err.Error())
 			return m, nil
 		}
 		m = m.pushLayer(newIrebaseEditor(msg.branch, msg.onto, msg.commits, ggBin))
@@ -2233,24 +2266,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case rebaseRangeLoadedMsg:
 		if msg.err != nil {
-			m.statusMsg = "rebase: " + msg.err.Error()
+			m.statusMsg = i18n.T("rebase: %s", msg.err.Error())
 			return m, nil
 		}
 		plan, perr := rebaseplan.BuildSingleEdit(msg.commits, msg.target, msg.edit)
 		if perr != nil {
-			m.statusMsg = "rebase: " + perr.Error()
+			m.statusMsg = i18n.T("rebase: %s", perr.Error())
 			return m, nil
 		}
 		ggBin, err := os.Executable()
 		if err != nil {
-			m.statusMsg = "rebase: " + err.Error()
+			m.statusMsg = i18n.T("rebase: %s", err.Error())
 			return m, nil
 		}
 		return m.startOp(engine.InteractiveRebase{Branch: msg.branch, Onto: msg.onto, Plan: plan, GGBin: ggBin})
 
 	case squashRangeLoadedMsg:
 		if msg.err != nil {
-			m.statusMsg = "squash: " + msg.err.Error()
+			m.statusMsg = i18n.T("squash: %s", msg.err.Error())
 			return m, nil
 		}
 		plan, perr := rebaseplan.BuildSquash(msg.commits, msg.targets)
@@ -2261,7 +2294,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.modal = &decisionState{
 				req: engine.DecisionRequest{
 					ID:      "squash-reorder",
-					Prompt:  "Selected commits aren't adjacent. Reorder them adjacent, then squash?",
+					Prompt:  i18n.T("Selected commits aren't adjacent. Reorder them adjacent, then squash?"),
 					Options: []string{"Reorder & squash", "Cancel"},
 				},
 				onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {
@@ -2270,12 +2303,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 					rp, err := rebaseplan.BuildSquashReorder(commits, targets)
 					if err != nil {
-						m.statusMsg = "squash: " + err.Error()
+						m.statusMsg = i18n.T("squash: %s", err.Error())
 						return m, nil
 					}
 					ggBin, err := os.Executable()
 					if err != nil {
-						m.statusMsg = "squash: " + err.Error()
+						m.statusMsg = i18n.T("squash: %s", err.Error())
 						return m, nil
 					}
 					m.commitCompareSet = nil
@@ -2290,18 +2323,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// off-branch rows so the user can retry from a valid selection.
 			note := perr.Error()
 			if n := m.unmarkOffBranchTargets(msg.commits, msg.targets); n > 0 {
-				noun := "commit"
-				if n > 1 {
-					noun = "commits"
+				if n == 1 {
+					m.statusMsg = i18n.T("squash: %s; unmarked %d off-branch commit", note, n)
+				} else {
+					m.statusMsg = i18n.T("squash: %s; unmarked %d off-branch commits", note, n)
 				}
-				note = fmt.Sprintf("%s; unmarked %d off-branch %s", note, n, noun)
+				return m, nil
 			}
-			m.statusMsg = "squash: " + note
+			m.statusMsg = i18n.T("squash: %s", note)
 			return m, nil
 		}
 		ggBin, err := os.Executable()
 		if err != nil {
-			m.statusMsg = "squash: " + err.Error()
+			m.statusMsg = i18n.T("squash: %s", err.Error())
 			return m, nil
 		}
 		m.commitCompareSet = nil // the squash consumes the selection
@@ -2309,17 +2343,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case dropRangeLoadedMsg:
 		if msg.err != nil {
-			m.statusMsg = "drop: " + msg.err.Error()
+			m.statusMsg = i18n.T("drop: %s", msg.err.Error())
 			return m, nil
 		}
 		plan, perr := rebaseplan.BuildDrop(msg.commits, msg.targets)
 		if perr != nil {
-			m.statusMsg = "drop: " + perr.Error()
+			m.statusMsg = i18n.T("drop: %s", perr.Error())
 			return m, nil
 		}
 		ggBin, err := os.Executable()
 		if err != nil {
-			m.statusMsg = "drop: " + err.Error()
+			m.statusMsg = i18n.T("drop: %s", err.Error())
 			return m, nil
 		}
 		m.commitCompareSet = nil // the drop consumes the selection
@@ -2337,17 +2371,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if msg.err != nil {
-			return fail("conflict: " + msg.err.Error())
+			return fail(i18n.T("conflict: %s", msg.err.Error()))
 		}
 		if textdiff.IsBinary(msg.content) {
-			return fail("hunk picker: binary file")
+			return fail(i18n.T("hunk picker: binary file"))
 		}
 		doc, err := hunkpick.ParseConflict(msg.content)
 		if err != nil {
-			return fail("hunk picker: " + err.Error())
+			return fail(i18n.T("hunk picker: %s", err.Error()))
 		}
 		if len(doc.Blocks()) == 0 {
-			return fail("hunk picker: no conflict regions found")
+			return fail(i18n.T("hunk picker: no conflict regions found"))
 		}
 		if inProc {
 			cp.picker = newProcessConflictPicker(msg.path, doc)
@@ -2359,17 +2393,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case stageHunksLoadedMsg:
 		if msg.err != nil {
-			m.statusMsg = "stage hunks: " + msg.err.Error()
+			m.statusMsg = i18n.T("stage hunks: %s", msg.err.Error())
 			return m, nil
 		}
 		if textdiff.IsBinary(msg.index) || textdiff.IsBinary(msg.work) {
-			m.statusMsg = "stage hunks: binary file"
+			m.statusMsg = i18n.T("stage hunks: binary file")
 			return m, nil
 		}
 		doc := hunkpick.FromDiff(msg.index, msg.work)
 		doc.SetAll(hunkpick.TakeCurrent) // default: nothing staged
 		if len(doc.Blocks()) == 0 {
-			m.statusMsg = "stage hunks: nothing to stage"
+			m.statusMsg = i18n.T("stage hunks: nothing to stage")
 			return m, nil
 		}
 		m = m.pushLayer(newStagePicker(msg.path, doc))
@@ -2377,7 +2411,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case clipboardCopiedMsg:
 		if msg.err != nil {
-			m.statusMsg = "copy failed: " + msg.err.Error()
+			m.statusMsg = i18n.T("copy failed: %s", msg.err.Error())
 		} else {
 			m.statusMsg = msg.ok
 		}
@@ -2396,7 +2430,7 @@ func (m Model) handleStageKey() (tea.Model, tea.Cmd) {
 	paths, hadConflict := m.stageTargets()
 	if len(paths) == 0 {
 		if hadConflict {
-			m.statusMsg = "resolve conflicts first"
+			m.statusMsg = i18n.T("resolve conflicts first")
 		}
 		return m, nil
 	}
@@ -2405,7 +2439,7 @@ func (m Model) handleStageKey() (tea.Model, tea.Cmd) {
 	m.fileMarks = nil
 	// Direction is the panel: Files stages, Staged unstages.
 	m.running = true
-	m.statusMsg = "working…"
+	m.statusMsg = i18n.T("working…")
 	return m, m.stageCmd(engine.Stage{Paths: paths, Unstage: m.focus == panelStaged})
 }
 
@@ -2471,9 +2505,9 @@ func (m Model) discardTargets() (restore, remove []string, n int) {
 func discardPrompt(restore, remove []string, n int) string {
 	if n == 1 {
 		all := append(append([]string{}, restore...), remove...)
-		return "Discard changes to " + all[0] + "? This cannot be undone."
+		return i18n.T("Discard changes to %s? This cannot be undone.", all[0])
 	}
-	return fmt.Sprintf("Discard changes to %d files? This cannot be undone.", n)
+	return i18n.T("Discard changes to %d files? This cannot be undone.", n)
 }
 
 // rememberLeftFocus records the focused panel as ←'s return target when it
@@ -2481,6 +2515,17 @@ func discardPrompt(restore, remove []string, n int) string {
 func (m Model) rememberLeftFocus() Model {
 	if m.focus != panelCommits {
 		m.lastLeftPanel = m.focus
+	}
+	return m
+}
+
+// applyLanguage activates [ui] language, failing soft to English with a
+// status notice — a bad code or malformed bundle must never break startup
+// (the ValidateToolCommand inert-at-load convention).
+func (m Model) applyLanguage() Model {
+	if err := i18n.SetLanguage(m.cfg.UI.Language, config.LangDir()); err != nil {
+		_ = i18n.SetLanguage("", "")
+		m.statusMsg = i18n.T("language %s unavailable — using English (%s)", strconv.Quote(m.cfg.UI.Language), err.Error())
 	}
 	return m
 }
@@ -2689,16 +2734,21 @@ func (m Model) panelLen(p panel) int {
 	return len(idx)
 }
 
-// commitScopeLabel describes the Commits feed mode for the panel header.
+// commitScopeLabel describes the Commits feed mode for the panel header. Its
+// only consumers are the two view.go render sites, both feeding the already-
+// translated "Commits (%s)" title (no cache key, comparison, or other
+// non-display path reads it) — safe to translate here at the definition
+// site. commitFilterChips' compact "path="/"msg="-style chip syntax is left
+// untranslated (no bundle already translates similar chip syntax).
 func (m Model) commitScopeLabel() string {
 	var base string
 	switch len(m.commitScopeBranches) {
 	case 0:
-		base = "all"
+		base = i18n.T("all")
 	case 1:
-		base = "solo: " + m.commitScopeBranches[0]
+		base = i18n.T("solo: %s", m.commitScopeBranches[0])
 	default:
-		base = fmt.Sprintf("%d branches", len(m.commitScopeBranches))
+		base = i18n.T("%d branches", len(m.commitScopeBranches))
 	}
 	chips := m.commitFilterChips()
 	if chips == "" {
@@ -2984,7 +3034,7 @@ func (m Model) View() string {
 		return "gigagit (loading…)\n" // startup + repo-switch keep the blank screen
 	}
 	if m.err != nil {
-		return "error: " + m.err.Error() + "\n"
+		return i18n.T("error: %s", m.err.Error()) + "\n"
 	}
 	return m.render()
 }

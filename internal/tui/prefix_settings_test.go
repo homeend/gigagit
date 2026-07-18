@@ -159,8 +159,8 @@ func TestPrefixSettingsCtrlDOpensFormatHelp(t *testing.T) {
 	if sheet == nil {
 		t.Fatal("ctrl+d must push the token/date-format help sheet")
 	}
-	if sheet.title != prefixTokensHelpTitle {
-		t.Fatalf("ctrl+d pushed %q, want %q", sheet.title, prefixTokensHelpTitle)
+	if sheet.title != prefixTokensHelpTitle() {
+		t.Fatalf("ctrl+d pushed %q, want %q", sheet.title, prefixTokensHelpTitle())
 	}
 	if v.mode != pfForm || v.fValue.Value() != "feat/" {
 		t.Fatal("form state must survive opening the help sheet")

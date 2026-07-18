@@ -4,6 +4,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/i18n"
 )
 
 // branchMergeRow offers "Merge <branch> into current" on the Branches tab.
@@ -23,9 +24,9 @@ func (m Model) branchMergeRow() (actionRow, bool) {
 	}
 	return actionRow{
 		id:    "branch-merge",
-		label: "Merge " + b.Name + " into current (" + cur + ")",
+		label: i18n.T("Merge %s into current (%s)", b.Name, cur),
 		run: func(m Model) (tea.Model, tea.Cmd) {
-			return m.confirmOp(engine.SmartMerge{Source: b.Name}, "Merge "+b.Name+" into current branch?")
+			return m.confirmOp(engine.SmartMerge{Source: b.Name}, i18n.T("Merge %s into current branch?", b.Name))
 		},
 	}, true
 }
@@ -44,9 +45,9 @@ func (m Model) branchRebaseRow() (actionRow, bool) {
 	}
 	return actionRow{
 		id:    "branch-rebase",
-		label: "Rebase current (" + cur + ") onto " + b.Name,
+		label: i18n.T("Rebase current (%s) onto %s", cur, b.Name),
 		run: func(m Model) (tea.Model, tea.Cmd) {
-			return m.confirmOp(engine.SmartRebase{Onto: b.Name}, "Rebase current branch onto "+b.Name+"?")
+			return m.confirmOp(engine.SmartRebase{Onto: b.Name}, i18n.T("Rebase current branch onto %s?", b.Name))
 		},
 	}, true
 }

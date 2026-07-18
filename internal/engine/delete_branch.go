@@ -37,16 +37,12 @@ func (op DeleteBranch) Run(ctx context.Context, deps OpDeps) (Result, error) {
 
 	// Decision 1: confirm. A single TUI keypress must not delete a ref
 	// unconfirmed; the CLI pre-answers this (the command is the confirmation).
-	confirm, err := deps.decide(ctx, DecisionRequest{
-		ID:      "delete-branch",
-		Prompt:  "Delete branch " + op.Name + "?",
-		Options: []string{"delete", "abort"},
-	})
+	confirm, err := deps.decide(ctx, PromptReq("delete-branch", "Delete branch %s?", []string{"delete", "abort"}, op.Name))
 	if err != nil {
 		return Result{}, err
 	}
 	if confirm.Option != "delete" {
-		return Result{Summary: "cancelled", Changed: false}, nil
+		return Result{Changed: false}.WithSummary("cancelled"), nil
 	}
 
 	deps.emit(ctx, Progress{Step: "deleting branch", Detail: op.Name})
@@ -54,23 +50,19 @@ func (op DeleteBranch) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	// Safe delete first; force only via the same branch-unmerged fork
 	// RemoveWorktree ships (one decision shape across frontends).
 	if err := deps.Repo.DeleteBranch(ctx, op.Name, false); err != nil {
-		choice, derr := deps.decide(ctx, DecisionRequest{
-			ID:      "branch-unmerged",
-			Prompt:  "Branch " + op.Name + " is not fully merged; force-delete discards its unmerged commits.",
-			Options: []string{"force-delete", "keep"},
-		})
+		choice, derr := deps.decide(ctx, PromptReq("branch-unmerged", "Branch %s is not fully merged; force-delete discards its unmerged commits.", []string{"force-delete", "keep"}, op.Name))
 		if derr != nil {
 			return Result{}, derr
 		}
 		if choice.Option != "force-delete" {
-			return Result{Summary: "kept branch " + op.Name, Changed: false}, nil
+			return Result{Changed: false}.WithSummary("kept branch %s", op.Name), nil
 		}
 		if err := deps.Repo.DeleteBranch(ctx, op.Name, true); err != nil {
 			return Result{}, fmt.Errorf("delete branch (force): %w", err)
 		}
 	}
 
-	res := Result{Summary: "deleted branch " + op.Name, Changed: true}
+	res := Result{Changed: true}.WithSummary("deleted branch %s", op.Name)
 	deps.emit(ctx, Done{Result: res})
 	return res, nil
 }

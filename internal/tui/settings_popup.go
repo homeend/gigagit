@@ -12,6 +12,7 @@ import (
 	"github.com/homeend/gigagit/internal/agentinit"
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/exttool"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/observ"
 )
 
@@ -51,24 +52,75 @@ const (
 	settingsMenuRates       = "Refresh rates"
 	settingsMenuCommitSort  = "Commit sort"
 	settingsMenuShowGraph   = "Show graph"
+	settingsMenuLanguage    = "Language"
 	settingsMenuRepoLoc     = "Repo settings location"
 	settingsMenuCommitGraph = "Commit-graph"
 )
 
 // settingsMenu is the top-level menu order.
-var settingsMenu = []string{settingsMenuTools, settingsMenuIdentity, settingsMenuPrefixes, settingsMenuHook, settingsMenuOpLog, settingsMenuErrors, settingsMenuAutoRefresh, settingsMenuRemoteTags, settingsMenuRates, settingsMenuCommitSort, settingsMenuShowGraph, settingsMenuRepoLoc, settingsMenuCommitGraph}
+var settingsMenu = []string{settingsMenuTools, settingsMenuIdentity, settingsMenuPrefixes, settingsMenuHook, settingsMenuOpLog, settingsMenuErrors, settingsMenuAutoRefresh, settingsMenuRemoteTags, settingsMenuRates, settingsMenuCommitSort, settingsMenuShowGraph, settingsMenuLanguage, settingsMenuRepoLoc, settingsMenuCommitGraph}
 
 // commitSortModes is the cycle order for the "Commit sort" menu toggle:
 // date-order (default; git --date-order, perfect lanes) → plain (fast, git's
 // lazy order).
 var commitSortModes = []string{"date-order", "plain"}
 
-// settingsMenuLabel renders one menu row. The operation-log row is dynamic: it
-// shows the on/off state and the log filename, so the menu both reveals whether
-// logging is enabled and tells the user where to find it.
+// settingsMenuTitle translates a menu entry's base label. Each case is a
+// literal i18n.T call so the AST catalog scan can extract the keys; the
+// consts themselves stay untranslated identity values for the enter-handler
+// switch.
+func settingsMenuTitle(entry string) string {
+	switch entry {
+	case settingsMenuTools:
+		return i18n.T("External tools")
+	case settingsMenuIdentity:
+		return i18n.T("Identity & profiles")
+	case settingsMenuPrefixes:
+		return i18n.T("Branch prefixes")
+	case settingsMenuHook:
+		return i18n.T("Worktree post-create hook")
+	case settingsMenuOpLog:
+		return i18n.T("Operation log")
+	case settingsMenuErrors:
+		return i18n.T("Session errors")
+	case settingsMenuAutoRefresh:
+		return i18n.T("Auto-refresh")
+	case settingsMenuRemoteTags:
+		return i18n.T("Auto remote-tag refresh")
+	case settingsMenuRates:
+		return i18n.T("Refresh rates")
+	case settingsMenuCommitSort:
+		return i18n.T("Commit sort")
+	case settingsMenuShowGraph:
+		return i18n.T("Show graph")
+	case settingsMenuLanguage:
+		return i18n.T("Language")
+	case settingsMenuRepoLoc:
+		return i18n.T("Repo settings location")
+	case settingsMenuCommitGraph:
+		return i18n.T("Commit-graph")
+	}
+	return entry
+}
+
+// onOff renders a boolean setting state.
+func onOff(b bool) string {
+	if b {
+		return i18n.T("on")
+	}
+	return i18n.T("off")
+}
+
+// settingsMenuLabel renders one menu row: translated title + live state. The
+// operation-log row is dynamic: it shows the on/off state and the log
+// filename, so the menu both reveals whether logging is enabled and tells the
+// user where to find it.
 func settingsMenuLabel(m Model, i int) string {
-	if settingsMenu[i] == settingsMenuOpLog {
-		path := "(no state dir)"
+	entry := settingsMenu[i]
+	title := settingsMenuTitle(entry)
+	switch entry {
+	case settingsMenuOpLog:
+		path := i18n.T("(no state dir)")
 		on := false
 		if m.opLog != nil {
 			on = m.opLog.on
@@ -77,58 +129,45 @@ func settingsMenuLabel(m Model, i int) string {
 			}
 		}
 		if on {
-			return settingsMenuOpLog + ": on — " + path
+			return title + ": " + i18n.T("on") + " — " + path
 		}
-		return settingsMenuOpLog + ": off (" + path + ")"
-	}
-	if settingsMenu[i] == settingsMenuErrors {
+		return title + ": " + i18n.T("off") + " (" + path + ")"
+	case settingsMenuErrors:
 		path := defaultErrLogPath()
 		if path == "" {
-			path = "(no state dir)"
+			path = i18n.T("(no state dir)")
 		}
 		n := len(observ.SessionFailures())
 		if n == 0 {
-			return settingsMenuErrors + ": none — " + path
+			return title + ": " + i18n.T("none") + " — " + path
 		}
-		return fmt.Sprintf("%s: %d — %s", settingsMenuErrors, n, path)
-	}
-	if settingsMenu[i] == settingsMenuAutoRefresh {
-		if m.cfg.Refresh.Enabled {
-			return settingsMenuAutoRefresh + ": on"
-		}
-		return settingsMenuAutoRefresh + ": off"
-	}
-	if settingsMenu[i] == settingsMenuRemoteTags {
-		if m.cfg.Refresh.DisableRemoteTagsAuto {
-			return settingsMenuRemoteTags + ": off"
-		}
-		return settingsMenuRemoteTags + ": on"
-	}
-	if settingsMenu[i] == settingsMenuCommitSort {
-		return settingsMenuCommitSort + ": " + m.commitSort()
-	}
-	if settingsMenu[i] == settingsMenuShowGraph {
-		if m.showGraphConfigured() {
-			return settingsMenuShowGraph + ": on"
-		}
-		return settingsMenuShowGraph + ": off"
-	}
-	if settingsMenu[i] == settingsMenuCommitGraph {
+		return fmt.Sprintf("%s: %d — %s", title, n, path)
+	case settingsMenuAutoRefresh:
+		return title + ": " + onOff(m.cfg.Refresh.Enabled)
+	case settingsMenuRemoteTags:
+		return title + ": " + onOff(!m.cfg.Refresh.DisableRemoteTagsAuto)
+	case settingsMenuCommitSort:
+		return title + ": " + m.commitSort()
+	case settingsMenuShowGraph:
+		return title + ": " + onOff(m.showGraphConfigured())
+	case settingsMenuLanguage:
+		return title + ": " + i18n.ActiveName()
+	case settingsMenuCommitGraph:
 		if !m.repoHealthKnown {
-			return settingsMenuCommitGraph + ": (checking…)"
+			return title + ": " + i18n.T("(checking…)")
 		}
 		// The git option is named so the row maps to the config explorer's
 		// fetch.writeCommitGraph line — "auto-refresh" alone is unfindable there.
 		switch {
 		case !m.repoHealth.HasCommitGraph:
-			return settingsMenuCommitGraph + ": missing — enter writes + sets fetch.writeCommitGraph"
+			return title + ": " + i18n.T("missing — enter writes + sets fetch.writeCommitGraph")
 		case m.repoHealth.WriteCommitGraphValue == "true":
-			return settingsMenuCommitGraph + ": present, auto-refresh on (fetch.writeCommitGraph)"
+			return title + ": " + i18n.T("present, auto-refresh on (fetch.writeCommitGraph)")
 		default:
-			return settingsMenuCommitGraph + ": present, auto-refresh off — enter sets fetch.writeCommitGraph"
+			return title + ": " + i18n.T("present, auto-refresh off — enter sets fetch.writeCommitGraph")
 		}
 	}
-	return settingsMenu[i]
+	return title
 }
 
 // showGraphConfigured resolves [ui] show_graph: anything but an explicit "off"
@@ -150,11 +189,11 @@ func (m Model) toggleShowGraph() Model {
 	m.cfg.UI.ShowGraph = next
 	m.commitListMode = next == "off"
 	if m.repoConfigPath == "" {
-		m.statusMsg = "show graph → " + next + " (not saved: no repo config path)"
+		m.statusMsg = i18n.T("show graph → %s (not saved: no repo config path)", next)
 	} else if err := config.SetShowGraph(m.repoConfigPath, next); err != nil {
-		m.statusMsg = "show graph → " + next + " (not saved: " + err.Error() + ")"
+		m.statusMsg = i18n.T("show graph → %s (not saved: %s)", next, err.Error())
 	} else {
-		m.statusMsg = "show graph: " + next
+		m.statusMsg = i18n.T("show graph: %s", next)
 	}
 	return m
 }
@@ -182,11 +221,11 @@ func (m Model) cycleCommitSort() (Model, tea.Cmd) {
 	}
 	m.cfg.UI.CommitSort = next
 	if m.repoConfigPath == "" {
-		m.statusMsg = "commit sort → " + next + " (not saved: no repo config path)"
+		m.statusMsg = i18n.T("commit sort → %s (not saved: no repo config path)", next)
 	} else if err := config.SetCommitSort(m.repoConfigPath, next); err != nil {
-		m.statusMsg = "commit sort → " + next + " (not saved: " + err.Error() + ")"
+		m.statusMsg = i18n.T("commit sort → %s (not saved: %s)", next, err.Error())
 	} else {
-		m.statusMsg = "commit sort: " + next + " — reloading commits…"
+		m.statusMsg = i18n.T("commit sort: %s — reloading commits…", next)
 	}
 	m.feed.SetSortMode(next)
 	return m.reloadSourcesCmd([]sourceKey{srcFeed}, true, false)
@@ -205,18 +244,18 @@ func (m Model) toggleOpLog() Model {
 		err = m.opLog.enable()
 	}
 	if err != nil {
-		m.statusMsg = "operation log: " + err.Error()
+		m.statusMsg = i18n.T("operation log: %s", err.Error())
 		return m
 	}
 	m.cfg.Debug.LogOperations = m.opLog.on // keep the in-memory view in sync
 	if perr := config.SetGlobalDebugLogOperations(config.DefaultGlobalPath(), m.opLog.on); perr != nil {
-		m.statusMsg = "operation log toggled but not saved: " + perr.Error()
+		m.statusMsg = i18n.T("operation log toggled but not saved: %s", perr.Error())
 		return m
 	}
 	if m.opLog.on {
-		m.statusMsg = "operation log on — " + m.opLog.path
+		m.statusMsg = i18n.T("operation log on — %s", m.opLog.path)
 	} else {
-		m.statusMsg = "operation log off"
+		m.statusMsg = i18n.T("operation log off")
 	}
 	return m
 }
@@ -235,13 +274,13 @@ func (m Model) toggleAutoRefresh() Model {
 		}
 	}
 	if err := config.SetGlobalRefreshEnabled(config.DefaultGlobalPath(), want); err != nil {
-		m.statusMsg = "auto-refresh toggled but not saved: " + err.Error()
+		m.statusMsg = i18n.T("auto-refresh toggled but not saved: %s", err.Error())
 		return m
 	}
 	if want {
-		m.statusMsg = "auto-refresh on (per-source intervals from [refresh])"
+		m.statusMsg = i18n.T("auto-refresh on (per-source intervals from [refresh])")
 	} else {
-		m.statusMsg = "auto-refresh off"
+		m.statusMsg = i18n.T("auto-refresh off")
 	}
 	return m
 }
@@ -252,13 +291,13 @@ func (m Model) toggleAutoRemoteTags() Model {
 	wantDisabled := !m.cfg.Refresh.DisableRemoteTagsAuto
 	m.cfg.Refresh.DisableRemoteTagsAuto = wantDisabled
 	if err := config.SetGlobalDisableRemoteTagsAuto(config.DefaultGlobalPath(), wantDisabled); err != nil {
-		m.statusMsg = "auto remote-tag refresh toggled but not saved: " + err.Error()
+		m.statusMsg = i18n.T("auto remote-tag refresh toggled but not saved: %s", err.Error())
 		return m
 	}
 	if wantDisabled {
-		m.statusMsg = "auto remote-tag refresh off"
+		m.statusMsg = i18n.T("auto remote-tag refresh off")
 	} else {
-		m.statusMsg = "auto remote-tag refresh on"
+		m.statusMsg = i18n.T("auto remote-tag refresh on")
 	}
 	return m
 }
@@ -284,6 +323,23 @@ func (m Model) openAgentPicker() Model {
 	p.sel = 0
 	p.picker = true
 	return m
+}
+
+// agentStatusDisplay translates an agentinit.Status label for the
+// agent-skills picker row (the sourceDisplayName pattern: the enum's
+// String() lives in another package and stays English/identity there, so
+// this render-time switch — keyed on the exported constants, not the string
+// — is the translation point).
+func agentStatusDisplay(s agentinit.Status) string {
+	switch s {
+	case agentinit.StatusNew:
+		return i18n.T("new")
+	case agentinit.StatusOutdated:
+		return i18n.T("outdated")
+	case agentinit.StatusUpToDate:
+		return i18n.T("up to date")
+	}
+	return s.String()
 }
 
 // update handles all keys while the settings popup is open.
@@ -373,15 +429,17 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				// A related option may be worth reconsidering now (e.g. commit
 				// sort buys nothing with the graph hidden) — one follow-up, max.
 				return m.maybeRelatedPrompt(settingShowGraph, m.cfg.UI.ShowGraph)
+			case settingsMenuLanguage:
+				return m.openLanguagePicker()
 			case settingsMenuRepoLoc:
 				return m.openRepoConfigLocation(), nil
 			case settingsMenuCommitGraph:
 				if !m.repoHealthKnown {
-					m.statusMsg = "still checking the repo — try again in a moment"
+					m.statusMsg = i18n.T("still checking the repo — try again in a moment")
 					return m, nil
 				}
 				if m.repoHealth.HasCommitGraph && m.repoHealth.WriteCommitGraphValue == "true" {
-					m.statusMsg = "commit-graph present and auto-refresh already on"
+					m.statusMsg = i18n.T("commit-graph present and auto-refresh already on")
 					return m, nil
 				}
 				if m.running {
@@ -494,14 +552,14 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			m2, n, err := m.applyToolsWizard(p.toolRows, p.toolChecked, config.DefaultGlobalPath())
 			p.toolsView = false
 			if err != nil {
-				m2.statusMsg = "external tools: " + err.Error()
+				m2.statusMsg = i18n.T("external tools: %s", err.Error())
 				return m2, nil
 			}
 			if n == 0 {
-				m2.statusMsg = "external tools: nothing to write (already configured or unchecked)"
+				m2.statusMsg = i18n.T("external tools: nothing to write (already configured or unchecked)")
 				return m2, nil
 			}
-			m2.statusMsg = fmt.Sprintf("external tools: %d command(s) written to %s", n, config.DefaultGlobalPath())
+			m2.statusMsg = i18n.T("external tools: %d command(s) written to %s", n, config.DefaultGlobalPath())
 			return m2, nil
 		}
 		return m, nil
@@ -536,9 +594,9 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			}
 		}
 		m = m.popLayer()
-		m.statusMsg = fmt.Sprintf("agent skills: %d installed, %d refreshed", installed, refreshed)
+		m.statusMsg = i18n.T("agent skills: %d installed, %d refreshed", installed, refreshed)
 		if failed > 0 {
-			m.statusMsg += fmt.Sprintf(", %d failed", failed)
+			m.statusMsg += i18n.T(", %d failed", failed)
 		}
 		return m, nil
 	}
@@ -575,11 +633,11 @@ func (p *settingsPopup) box(m Model) string {
 	textW := popupTextWidth(inner)
 	var b strings.Builder
 	if p.errorsView {
-		b.WriteString("Session errors\n\n")
+		b.WriteString(i18n.T("Session errors") + "\n\n")
 		fs := observ.SessionFailures()
 		anyTrunc := false
 		if len(fs) == 0 {
-			b.WriteString("  no errors this session\n")
+			b.WriteString("  " + i18n.T("no errors this session") + "\n")
 		} else {
 			wr := make([]winRow, len(fs))
 			for i, e := range fs {
@@ -625,26 +683,34 @@ func (p *settingsPopup) box(m Model) string {
 		// errors.log lives.
 		if path := defaultErrLogPath(); path != "" {
 			b.WriteString("\n")
-			for _, seg := range wrapWidth("full history: "+path, textW, 1<<20) {
+			for _, seg := range wrapWidth(i18n.T("full history: %s", path), textW, 1<<20) {
 				b.WriteString(seg + "\n")
 			}
 		}
 		// Advertise z only when it does something: an entry too long to fit (in
 		// any mode) is what wrap/scroll reveal. Otherwise the hint is a lie.
 		if anyTrunc {
-			b.WriteString("\n[z] mode  [esc] back")
+			b.WriteString("\n" + i18n.T("[z] mode") + "  " + i18n.T("[esc] back"))
 		} else {
-			b.WriteString("\n[esc] back")
+			b.WriteString("\n" + i18n.T("[esc] back"))
 		}
 	} else if p.ratesView {
-		b.WriteString("Refresh rates\n\n")
+		b.WriteString(i18n.T("Refresh rates") + "\n\n")
 		if !m.cfg.Refresh.Enabled {
-			b.WriteString("  auto-refresh is OFF — enable it in Settings → Auto-refresh\n\n")
+			b.WriteString("  " + i18n.T("auto-refresh is OFF — enable it in Settings → Auto-refresh") + "\n\n")
 		}
 		// Column header. "file-watch" labels the [x]/[ ] checkbox column so it is not
-		// an unexplained box; the legend below the table says what it means.
-		b.WriteString(fmt.Sprintf("  %-11s %-11s %-16s %s\n", "window", "file-watch", "refresh", "avg read"))
+		// an unexplained box; the legend below the table says what it means. Header
+		// words are translated; padCell (not %-Ns, which pads by byte count) keeps
+		// the columns aligned when a translated word is CJK (rune width != byte
+		// width — see padCell's doc comment).
+		b.WriteString(fmt.Sprintf("  %s %s %s %s\n",
+			padCell(i18n.T("window"), 11), padCell(i18n.T("file-watch"), 11),
+			padCell(i18n.T("refresh"), 16), i18n.T("avg read")))
 		for i, it := range scheduledItems {
+			// Row NAMES are [refresh] config keys (what a user would type in
+			// .gg.toml), not display prose, so they stay English/untranslated —
+			// unlike sourceDisplayName's translated status-line names.
 			name := "fetch"
 			if it.isRemoteTags {
 				name = "remote_tags"
@@ -660,22 +726,22 @@ func (p *settingsPopup) box(m Model) string {
 				valCell = p.ratesField.View(true) + "s"
 			} else if watchEligible(it) && watchOn(m.cfg.Refresh, it) {
 				if m.watchSupported {
-					valCell = "watch"
+					valCell = i18n.T("watch")
 				} else {
 					// drvfs: watch unavailable → falls back to the interval
 					secs, on := scheduledInterval(m.cfg.Refresh, it)
 					if on {
-						valCell = fmt.Sprintf("watch (9p→%ds)", secs)
+						valCell = i18n.T("watch (9p→%ds)", secs)
 					} else {
-						valCell = "watch (9p→off)"
+						valCell = i18n.T("watch (9p→off)")
 					}
 				}
 			} else {
 				secs, on := scheduledInterval(m.cfg.Refresh, it)
 				if on {
-					valCell = fmt.Sprintf("every %ds", secs)
+					valCell = i18n.T("every %ds", secs)
 				} else {
-					valCell = "off"
+					valCell = i18n.T("off")
 				}
 			}
 			// avg stat
@@ -700,24 +766,24 @@ func (p *settingsPopup) box(m Model) string {
 					watchBox = "[ ]"
 				}
 			}
-			b.WriteString(fmt.Sprintf("%s%-11s %-11s %-16s %s\n", prefix, name, watchBox, valCell, avgStr))
+			b.WriteString(fmt.Sprintf("%s%-11s %-11s %s %s\n", prefix, name, watchBox, padCell(valCell, 16), avgStr))
 		}
 		if p.ratesEditing {
-			b.WriteString("\n[0-9] edit  [enter] save  [esc] cancel   (0 = off)")
+			b.WriteString("\n" + i18n.T("[0-9] edit  [enter] save  [esc] cancel   (0 = off)"))
 		} else {
-			b.WriteString("\nfile-watch = auto-detect .git changes instantly (else poll on the interval)")
-			b.WriteString("\n[↑/↓] select  [enter] edit interval  [space]/[w] file-watch  [esc] back")
+			b.WriteString("\n" + i18n.T("file-watch = auto-detect .git changes instantly (else poll on the interval)"))
+			b.WriteString("\n" + i18n.T("[↑/↓] select  [enter] edit interval  [space]/[w] file-watch  [esc] back"))
 		}
 	} else if p.toolsView {
 		// hint is computed up front (not just written at the end) because the
 		// command-preview height budget below needs its line count to know how
 		// much room is actually left over.
-		hintParts := []string{"[space] toggle", "[enter] write to global config", "[z] mode", "[esc] back"}
+		hintParts := []string{i18n.T("[space] toggle"), i18n.T("[enter] write to global config"), i18n.T("[z] mode"), i18n.T("[esc] back")}
 		hintLines := wrapParts(hintParts, textW, "  ")
 
-		b.WriteString("External tools — detected\n\n")
+		b.WriteString(i18n.T("External tools — detected") + "\n\n")
 		if len(p.toolRows) == 0 {
-			b.WriteString("  no known tools detected on this machine (looked for: claude, junie, meld)\n")
+			b.WriteString("  " + i18n.T("no known tools detected on this machine (looked for: claude, junie, meld)") + "\n")
 		} else {
 			wr := make([]winRow, len(p.toolRows))
 			for i, row := range p.toolRows {
@@ -734,9 +800,9 @@ func (p *settingsPopup) box(m Model) string {
 				text, suffix := base, ""
 				var deco rowDecorator
 				if row.existing {
-					suffix = " (configured)"
+					suffix = " " + i18n.T("(configured)")
 					text = base + suffix
-					deco = toolConfiguredSuffixDecorator(len([]rune(base)), len([]rune(suffix)))
+					deco = toolConfiguredSuffixDecorator(lipgloss.Width(base), lipgloss.Width(suffix))
 				}
 				wr[i] = winRow{text: text, style: st, decorate: deco}
 			}
@@ -765,9 +831,9 @@ func (p *settingsPopup) box(m Model) string {
 				b.WriteString("\n")
 				var destLines []string
 				if row.existing {
-					destLines = []string{"already configured — skipped on apply"}
+					destLines = []string{i18n.T("already configured — skipped on apply")}
 				} else {
-					destLines = wrapWidth("writes to: "+config.DefaultGlobalPath(), textW, 1<<20)
+					destLines = wrapWidth(i18n.T("writes to: %s", config.DefaultGlobalPath()), textW, 1<<20)
 				}
 				for _, seg := range destLines {
 					b.WriteString(dimRowStyle.Render(seg) + "\n")
@@ -813,7 +879,7 @@ func (p *settingsPopup) box(m Model) string {
 		}
 		b.WriteString("\n" + strings.Join(hintLines, "\n"))
 	} else if !p.picker {
-		b.WriteString("Settings\n\n")
+		b.WriteString(i18n.T("Settings") + "\n\n")
 		wr := make([]winRow, len(settingsMenu))
 		for i := range settingsMenu {
 			prefix := "  "
@@ -827,11 +893,11 @@ func (p *settingsPopup) box(m Model) string {
 		for _, line := range renderWindow(wr, winOpts{w: textW, h: len(settingsMenu), mode: p.mode, anchor: p.menuSel, hscroll: p.hscroll}) {
 			b.WriteString(line + "\n")
 		}
-		b.WriteString("\n[↑/↓] select  [enter] open/toggle  [esc] close")
+		b.WriteString("\n" + i18n.T("[↑/↓] select  [enter] open/toggle  [esc] close"))
 	} else {
-		b.WriteString("Set up agent skills\n\n")
+		b.WriteString(i18n.T("Set up agent skills") + "\n\n")
 		if len(p.dets) == 0 {
-			b.WriteString("  no supported agents detected\n")
+			b.WriteString("  " + i18n.T("no supported agents detected") + "\n")
 		} else {
 			wr := make([]winRow, len(p.dets))
 			for i, d := range p.dets {
@@ -844,7 +910,7 @@ func (p *settingsPopup) box(m Model) string {
 				if p.checked[i] {
 					box = "[x]"
 				}
-				wr[i] = winRow{text: fmt.Sprintf("%s%s %s — %s", prefix, box, d.Agent.Label, d.Status), style: st}
+				wr[i] = winRow{text: fmt.Sprintf("%s%s %s — %s", prefix, box, d.Agent.Label, agentStatusDisplay(d.Status)), style: st}
 			}
 			h := len(p.dets)
 			capRows := popupResolveRowCap(p.maximized, termH, 12)
@@ -855,7 +921,7 @@ func (p *settingsPopup) box(m Model) string {
 				b.WriteString(line + "\n")
 			}
 		}
-		b.WriteString("\n[space] toggle  [enter] apply  [z] mode  [esc] back")
+		b.WriteString("\n" + strings.Join([]string{i18n.T("[space] toggle"), i18n.T("[enter] apply"), i18n.T("[z] mode"), i18n.T("[esc] back")}, "  "))
 	}
 	return popupBox(inner, strings.TrimRight(b.String(), "\n"))
 }

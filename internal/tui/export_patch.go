@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/i18n"
 )
 
 // patchResolvedMsg carries a resolved patch (bytes + default destination path)
@@ -70,9 +71,9 @@ func (p *exportPatchPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 func (p *exportPatchPopup) render(m Model, below string) string {
 	w, h := m.overlayDims()
 	var b strings.Builder
-	b.WriteString("Export as patch\n\n")
-	b.WriteString(viewField("path: ", p.dest, true, popupContentWidth(w)) + "\n\n")
-	b.WriteString("[type] path  [enter] write  [esc] cancel")
+	b.WriteString(i18n.T("Export as patch") + "\n\n")
+	b.WriteString(viewField(i18n.T("path: "), p.dest, true, popupContentWidth(w)) + "\n\n")
+	b.WriteString(i18n.T("[type] path  [enter] write  [esc] cancel"))
 	box := modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 	return overlayCenter(clipToHeight(below, h), box, w, h)
 }
@@ -130,7 +131,7 @@ func (m Model) exportFilePatchRow() (actionRow, bool) {
 	sha, path := dv.rev, dv.title
 	return actionRow{
 		id:    "file-export-patch",
-		label: "Export this file's diff as patch",
+		label: i18n.T("Export this file's diff as patch"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			return m.startExportFilePatch(sha, path)
 		},
@@ -155,7 +156,7 @@ func (m Model) commitExportPatchRow() (actionRow, bool) {
 	sha := c.Hash
 	return actionRow{
 		id:    "commit-export-patch",
-		label: "Export commit as patch",
+		label: i18n.T("Export commit as patch"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			return m.startExportCommitPatch(sha)
 		},

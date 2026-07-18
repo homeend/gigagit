@@ -9,6 +9,177 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Changed
+- **Multilanguage TUI (stage 5): operation status, progress, and prompts,
+  localized.** The last English-only surface inside the TUI — the busy line
+  while an operation runs, the after-op status summary, and the decision-
+  modal prompt sentence — now renders in the active language (~200 new keys
+  ×4 bundles: ja/ko/zh/ru, ~1,180 → ~1,385 keys each). The mechanism is a
+  **dual-channel engine contract**: every operation still emits its English
+  `Result.Summary` / `Progress.Detail` / `DecisionRequest.Prompt` byte-for-
+  byte unchanged (so the CLI, `operations.log`, e2e scenarios, and agents
+  are entirely unaffected), and additionally carries the unformatted
+  `Msg{Format, Args}` pair — built only through the `WithSummary` /
+  `AppendSummary` / `Progressf` / `PromptReq` helpers so the two channels
+  cannot drift. A single TUI render seam (`internal/tui/i18n_engine.go`)
+  translates the localizable channel and falls back to the English string
+  when it is absent, so any un-migrated site degrades to English rather than
+  breaking. Two AST gates enforce it: `engine_prose_test.go` requires every
+  engine format/step literal to exist in all four bundles and forbids
+  hand-built `Summary:`/`Prompt:` strings (helpers only), and the
+  options-vocab gate learned the `PromptReq` pass-through. Engine error
+  prose stays English (it renders inside the already-translated
+  `friendlyOpError` frame); CLI/agent output stays English by design.
+- **Multilanguage TUI (stage 4): the last remaining chrome, translated.**
+  Closes the "declared stage-4 remainder" list from stage 3. Pair-op picker
+  labels and footer (mark.go's Merge/Rebase/Interactive rebase/Compare
+  closures, restructured from string concatenation to `i18n.T` format keys)
+  are translated, plus browse/switcher chrome across the fuzzy file finder,
+  files view, bookmark and shelf popups, the command palette, and the repo
+  popup. The conflict process/picker and review-tool chooser are translated,
+  alongside the prefix picker/settings, tool-approval, shell-escape,
+  checkout-as, and commit eager-search popups. All 18 textfield-style popups
+  (annotate tag, apply patch, commit filter, `ctrl+g` generate, export patch,
+  goto-commit, interactive-rebase edit, reflog checkout, related-prompt,
+  rename branch, repo path, reword, shelf actions, stash action/popup, tag
+  checkout/popup, temp export) are translated too. Roughly 100 action-menu
+  row labels across the package are wrapped, including commit scope, tags,
+  remotes, and the rebase commit-move/drop rows. A new AST gate,
+  `internal/tui/menu_labels_test.go` (`TestActionMenuLabelsTranslated`), sits
+  alongside `options_vocab_test.go`: it walks every `actionRow` composite
+  literal's `label:` field AND every call-site argument at a same-package
+  function or method's `label string` parameter position (the positional
+  blind spot a helper like `commitEditRow` can hide a raw literal behind),
+  requiring every reached literal to route through `i18n.T` and every found
+  key to exist in all four bundles. Running it for the first time caught two
+  genuine untranslated panel titles outside any wave's file list
+  (`stash_view.go`'s "Stashes" and `view.go`'s "Commits (%s)"), fixed in the
+  same pass. Three related fixes round this out: notices are now
+  rebuilt on a language switch instead of keeping titles baked in at
+  construction time; the review lane's "working changes" status-bar argument
+  is translated; and label-column pad widths (git-config explorer, identity
+  & profiles, repo-config location) are now computed from the *translated*
+  label set via a new `maxLabelWidth` helper in `i18n_display.go`, next to
+  `padCell`, instead of a fixed English-length floor. Closed with four
+  per-language QA passes (ja 8 fixes / ko 18 / zh 20 / ru 21 — terminology
+  drift, genitive-count and particle/case fixes, and field-tag width
+  alignment). With this wave, **the TUI is fully translated**; only
+  engine/CLI prose stays English by design (the agent-facing, script-stable
+  surface). ~405 new keys land in all four bundles, which now run just under
+  1,200 lines each.
+- **`/` search starts from the cursor, not from the top.** Engaging the `/`
+  filter (in any panel, and on the files view's commit-list side) used to
+  reset the cursor to row 0, and every typed character reset it again — with
+  several pages of commits loaded and the cursor mid-list, each search
+  restarted from the very beginning. Now the cursor stays put when `/` opens,
+  each query edit re-seats it on the nearest match at or after it (wrapping
+  to the top only when every match is above — the same rule the `@` highlight
+  snap already followed), and leaving the filter (`esc`, `ctrl+r`, or
+  switching to `@`) keeps the cursor on the same row in the full list instead
+  of teleporting it to an unrelated display position.
+- **Multilanguage TUI (stage 3): decision options, six popups, and the
+  statusMsg tail.** Decision-modal option LABELS now translate at the
+  single render site (`optionDisplayName` in the new
+  `internal/tui/i18n_display.go`, which also now hosts `padCell`) — option
+  VALUES (`Options` lists, decider/`onResolve` comparisons, the esc→`abort`
+  mapping) stay English protocol, only the rendered label changes, and the
+  modal footer is translated too. A new `internal/tui/options_vocab_test.go`
+  AST scan enforces this going forward: every statically declared
+  `Options: []string{…}` value across `engine`+`tui` must have an
+  `optionDisplayName` case and exist in all four bundles (it caught a
+  missing `"overwrite"` case on its first run). Six more popups are fully
+  translated: identity & profiles (byte-width `%-9s`/`%-10s` column pads
+  replaced by the shared, display-width-aware `padCell`), the git-config
+  explorer (`configRowDecorator` rewritten to display-column math, with a
+  new CJK regression test), the notification center, the repo-config
+  location popup (`slotDisplay` gets the same `padCell` fix), the review
+  viewer chrome (report *content* stays whatever the agent produced), and
+  the worktree post-create hook editor. The `statusMsg` tail — roughly 110
+  call sites across `model.go` and two dozen other files — is translated in
+  three waves, including a handful missed by grep the first time round
+  (`compareSelectionEndpoints` notices) and picked up in review. Red error
+  styling survives all of this: a new `i18n.ActiveTranslations()` accessor
+  lets `statusIsError` derive its error-prefix set from the active
+  catalog's own translated, `%`-verb-bearing, error-prefixed keys (retroactive
+  to stage-1/stage-2 keys too), guarded against a verb-less key sharing the
+  same prefix (e.g. a footer label) and against a translation that reorders
+  its topic word past the verb — either case just renders unstyled instead
+  of mis-styled. Carried polish: `config.FileUILanguage` now delegates to
+  the shared `decodeFile` helper, the Language-picker repo-override hint
+  gained failure-path tests, and `toolConfiguredSuffixDecorator` moved to
+  display-column math (`dimSpanRunes`) instead of byte slicing. Closed with
+  a per-language QA delta pass across all four bundles (ja 6 fixes / ko 4 /
+  zh 2 / ru 8 — terminology drift and punctuation-width cleanup) that also
+  re-audited every error-prefixed key against the topic-head-leads-
+  translation rule `statusIsError` depends on (zero violations found). With
+  this, the TUI's decision modals, popups, and statusMsg tail are translated;
+  engine/CLI prose stays English by design (the agent-facing surface), and a
+  declared stage-4 remainder of chrome is still English: pair-op picker
+  labels and footer, footer/hint strips in the fuzzy file finder, files view,
+  bookmark/shelf popups, command palette, prefix picker/settings, tool
+  approval, shell escape, checkout-as, the commit eager-search popup, and the
+  conflict-process list box, plus the review tool chooser, conflict picker,
+  and repo popup — roughly 220 new keys across all four bundles, which now
+  run close to 790 lines each.
+- **ctrl+f always digs deeper.** The Commits eager search (ctrl+f on a `/`
+  filter or `@` highlight) used to stop for good once any match was in the
+  loaded commits — pressing ctrl+f again jumped back to that match (or did
+  nothing after a `/`-sourced jump cleared the filter) instead of loading
+  more history. Now every ctrl+f press restarts the cycle past the
+  already-loaded commits: it pages new batches, jumps to the next match when
+  one appears, and re-asks with the "Search deeper?" prompt when the budgeted
+  batches come up empty. The `/` filter now stays engaged through the search
+  and the jump, exactly like the `@` highlight — the query no longer vanishes
+  from the commit bar (only the Branches goto-tip fallback still clears a
+  filter, since there the searched hash is unrelated to the filter text and a
+  kept filter could hide the target). The query from the last eager search is
+  also remembered, so ctrl+f keeps digging even after esc cleared the search
+  (the repo switcher forgets it; a status line shows which query is searched).
+  The default per-pass scan budget (`[ui] commit_search_max_pages`) is raised
+  from 5 to 50 pages, so one pass covers ~15k commits before re-asking.
+- **Multilanguage TUI (stage 2): fuller coverage + hardening.** The status
+  line, the resume-paused-op prompt, the push-tip-tags prompt, every
+  footer-override mode, and the conflict-process indicator are now
+  translated, alongside the Settings sub-screens that were still English
+  (operation log, commit-graph, external tools, agent skills, session
+  errors, refresh-rates editor — ~40 more keys). Op/source names and
+  decision values stay English (protocol); only display prose is localized,
+  centralized in a new `internal/tui/i18n_display.go`
+  (`opDisplayName`/`sourceDisplayName`/`describeConflict`/`conflictNotice`/
+  `pausedNotice`). Multi-count messages (e.g. unpushed tip tags) now use a
+  two-key singular/plural convention instead of baking a count into one
+  string. `CheckVerbs` — the load-time guard that a translation's `%`-verbs
+  match its English key — is stricter: a `*` width/precision now counts as
+  its own consumed argument, and an explicit `%[n]` index is checked against
+  the key's argument count; this also caught a help string ("a quarter of
+  the viewport", previously worded as "25%" and misread as a `%o` verb,
+  making it untranslatable). `SetLanguage` now surfaces an
+  existing-but-unreadable custom bundle file (e.g. permission-denied) as a
+  real error instead of silently falling back to English with no clue why —
+  a genuinely missing file is unaffected. The Language picker shows a dim
+  hint when the active repo config sets `[ui] language` itself, since that
+  overrides the global choice you're about to pick. Rounded out with a
+  per-language bundle review across all four bundles (terminology
+  unification — e.g. distinct Chinese verbs for "fetch" vs "pull" —
+  punctuation width, and particle/case grammar fixes) and lipgloss-width-aware
+  column padding in the refresh-rates editor (was byte-width, misaligning
+  wide-character translations).
+
+### Added
+- **Multilanguage TUI (stage 1).** New `[ui] language` setting: the TUI
+  renders in Japanese (`ja`), Korean (`ko`), Chinese (`zh`), Russian (`ru`),
+  or English (default). Pick it from Settings (`,`) → **Language** (persists
+  to the global config) or set `[ui] language` directly. Custom languages:
+  drop a `<code>.toml` into `$XDG_CONFIG_HOME/gg/lang/` — a new code adds a
+  language, reusing a built-in code overlays it per-key (fix just the
+  strings you disagree with); missing strings fall back to English. Covered
+  so far: the footer, help, Settings, command palette, `.` menus, confirm
+  prompts, the commit/create-branch/create-worktree popups, and status
+  hints — CLI output, git output, and engine messages stay English by
+  design (the agent-facing, script-stable surface). Fail-soft throughout: an
+  unknown language code or a malformed bundle keeps English and shows a
+  one-line notice, never a startup error.
+
+### Changed
 - **`gg version` now reports the real version for `go install` builds.**
   When the `-ldflags` values from `build.sh` are absent, `internal/buildinfo`
   falls back to Go's embedded build info (`runtime/debug.ReadBuildInfo`): a
@@ -35,6 +206,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   no longer clobber an open dialog — they drop with a visible status notice; the
   `g`/`G` switchers invalidate an in-flight cherry-pick probe on every close path,
   not just esc.
+- **Copy absolute file path** — every "Copy file path" surface now also offers
+  copying the file's absolute filesystem path: the `.` action menu (Files,
+  Staged, files view, history/blame/diff), the fuzzy file finder (`Copy
+  absolute path`), and the `y` copy chooser in the `g`/`G` bookmark & shelf
+  switchers. In the switchers the absolute path is anchored on the entry's own
+  origin worktree. The existing repo-relative "Copy file path" is unchanged.
 - Shell escape: `ctrl+o` anywhere in the TUI (even over a failed conflict
   resolve) suspends gg into an interactive `$SHELL` in the worktree — run
   whatever git needs (`git cherry-pick --skip`, …), `exit` returns to gg

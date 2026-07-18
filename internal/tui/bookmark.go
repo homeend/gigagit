@@ -6,6 +6,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -121,7 +122,7 @@ func (m Model) commitBookmarkRow() (actionRow, bool) {
 	c := m.commits[bi]
 	return actionRow{
 		id:    "commit-bookmark",
-		label: "Bookmark this commit",
+		label: i18n.T("Bookmark this commit"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			return m.pushLayer(&commitNamePopup{commit: c, forShelf: false, name: newTextField(c.Subject)}), nil
 		},
@@ -142,7 +143,7 @@ func (m Model) reflogBookmarkRow() (actionRow, bool) {
 	c := model.Commit{Hash: e.Hash, Subject: e.Subject}
 	return actionRow{
 		id:    "reflog-bookmark",
-		label: "Bookmark this commit",
+		label: i18n.T("Bookmark this commit"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			return m.pushLayer(&commitNamePopup{commit: c, forShelf: false, name: newTextField(c.Subject)}), nil
 		},
@@ -185,7 +186,7 @@ func (m Model) bookmarkAddRow() (actionRow, bool) {
 	}
 	return actionRow{
 		id:    "bookmark-add",
-		label: "Bookmark this file",
+		label: i18n.T("Bookmark this file"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			return m, m.bookmarkAddCmd(b)
 		},
@@ -213,7 +214,7 @@ func (m Model) compareAgainstBookmarkRow() (actionRow, bool) {
 	}
 	return actionRow{
 		id:    "bookmark-compare",
-		label: "Compare against bookmark",
+		label: i18n.T("Compare against bookmark"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			m.pendingCompare = &pendingCompare{ref: ref, label: label, target: compareBookmark}
 			return m, m.loadBookmarksCmd()
@@ -230,7 +231,7 @@ func (m Model) compareAgainstShelfRow() (actionRow, bool) {
 	}
 	return actionRow{
 		id:    "shelf-compare-against",
-		label: "Compare against shelf",
+		label: i18n.T("Compare against shelf"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			m.pendingCompare = &pendingCompare{ref: ref, label: label, target: compareShelf}
 			return m, m.loadShelfCmd(true)
@@ -251,11 +252,11 @@ func (m Model) compareAgainstWorkingDirRow() (actionRow, bool) {
 	}
 	return actionRow{
 		id:    "compare-working-dir",
-		label: "Compare against working dir",
+		label: i18n.T("Compare against working dir"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			right := model.FileRef{Source: model.SourceUnstaged, Path: ref.Path}
-			title := ref.Path + " ↔ working"
-			subtitle := label + " → working dir"
+			title := i18n.T("%s ↔ working", ref.Path)
+			subtitle := i18n.T("%s → working dir", label)
 			tag := "cmpwd:" + ref.Path
 			v := &diffView{title: title, context: subtitle, loading: true, partial: m.diffPartial, long: m.diffLong}
 			v.width, _ = m.overlayDims()
@@ -277,11 +278,11 @@ func (m Model) copyToWorkingDirRow() (actionRow, bool) {
 	}
 	return actionRow{
 		id:    "copy-working-dir",
-		label: "Copy to working dir",
+		label: i18n.T("Copy to working dir"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			data, err := m.svc.ResolveBytes(context.Background(), ref)
 			if err != nil {
-				m.statusMsg = "copy to working dir: " + err.Error()
+				m.statusMsg = i18n.T("copy to working dir: %s", err.Error())
 				return m, nil
 			}
 			return m.startOp(engine.WriteFile{Path: ref.Path, Data: data})

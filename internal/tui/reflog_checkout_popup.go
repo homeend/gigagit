@@ -6,6 +6,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/i18n"
 )
 
 // reflogCheckoutPopup collects a new branch name to create at a reflog entry's
@@ -45,9 +46,9 @@ func (p *reflogCheckoutPopup) render(m Model, below string) string {
 
 func (p *reflogCheckoutPopup) box(m Model) string {
 	var b strings.Builder
-	b.WriteString("New branch at " + shortHash(p.ref) + "\n\n")
+	b.WriteString(i18n.T("New branch at %s", shortHash(p.ref)) + "\n\n")
 	w, _ := m.overlayDims()
-	b.WriteString(viewField("name: ", p.name, true, popupContentWidth(w)) + "\n\n")
-	b.WriteString("[type] name  [enter] checkout  [esc] cancel")
+	b.WriteString(viewField(i18n.T("name: "), p.name, true, popupContentWidth(w)) + "\n\n")
+	b.WriteString(i18n.T("[type] name  [enter] checkout  [esc] cancel"))
 	return modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 }

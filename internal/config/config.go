@@ -44,7 +44,7 @@ type UIConfig struct {
 
 	CommitInitialCount   int `toml:"commit_initial_count"`    // commits walked on first paint; <=0 = unset (default 300)
 	CommitBatchSize      int `toml:"commit_batch_size"`       // commits per later page (scroll / ctrl+l); <=0 = unset (default 300)
-	CommitSearchMaxPages int `toml:"commit_search_max_pages"` // eager /-search page cap before re-prompting; <=0 = unset (default 5)
+	CommitSearchMaxPages int `toml:"commit_search_max_pages"` // eager /-search page cap before re-prompting; <=0 = unset (default 50)
 
 	// CommitSort selects commit ordering for the Commits panel + graph:
 	//   "date-order" — git --date-order: a global topological sort (parent never
@@ -65,6 +65,11 @@ type UIConfig struct {
 	// the graph back on over a global off. Empty = unset; resolved to "on".
 	// Persisted per-repo (.gg.toml) by the Settings "Show graph" toggle.
 	ShowGraph string `toml:"show_graph"`
+
+	// Language selects the TUI display language: empty/"en" = English,
+	// "ja"/"ko"/"zh"/"ru" built in, or a custom code matching a file in
+	// $XDG_CONFIG_HOME/gg/lang/<code>.toml. CLI output is always English.
+	Language string `toml:"language"`
 
 	ShowEOLOnlyChanges bool `toml:"show_eol_only_changes"` // surface files whose only unstaged change is line endings (CRLF↔LF); false (default) hides them as noise
 
@@ -133,7 +138,7 @@ func Defaults() Config {
 			DefaultBranchTemplate: "b/from-<parent-branch>-<random-alpha:4>",
 		},
 		UI: UIConfig{WheelStep: 3, HScrollStep: 8, CommitGraphLanes: 8, CommitGraphMinLanes: 2, CommitGraphStep: 4,
-			CommitInitialCount: 300, CommitBatchSize: 300, CommitSearchMaxPages: 5, CommitSort: "date-order", ShowGraph: "on"},
+			CommitInitialCount: 300, CommitBatchSize: 300, CommitSearchMaxPages: 50, CommitSort: "date-order", ShowGraph: "on"},
 	}
 }
 
@@ -157,6 +162,21 @@ func Load(globalPath, repoPath string) (Config, error) {
 		}
 	}
 	return cfg, nil
+}
+
+// FileUILanguage reads one config file's [ui] language value ("" when the
+// file is missing, unreadable, or the key is unset). The TUI language
+// picker uses it to warn that a repo-level key overrides the global choice
+// the picker writes.
+func FileUILanguage(path string) string {
+	if path == "" {
+		return ""
+	}
+	c, ok, err := decodeFile(path)
+	if err != nil || !ok {
+		return ""
+	}
+	return c.UI.Language
 }
 
 // decodeFile reads and decodes one config file. ok is false (no error) when the
@@ -246,6 +266,9 @@ func overlayUI(dst *UIConfig, src UIConfig) {
 	}
 	if src.ShowGraph != "" {
 		dst.ShowGraph = src.ShowGraph
+	}
+	if src.Language != "" {
+		dst.Language = src.Language
 	}
 	// Inverted polarity: the default (false) is the active feature (hide), so
 	// only a true in a higher layer overlays — matching the zero-is-unset rule.
@@ -340,6 +363,13 @@ func configHome() string {
 // and falling back to ~/.config/gg/config.toml.
 func DefaultGlobalPath() string {
 	return filepath.Join(configHome(), "gg", "config.toml")
+}
+
+// LangDir is the machine-local custom-language bundle directory. A file
+// <code>.toml here overlays the embedded bundle of the same code per-key,
+// or adds a brand-new language.
+func LangDir() string {
+	return filepath.Join(configHome(), "gg", "lang")
 }
 
 // EncodeRepoKey turns an absolute repo path into a filesystem-safe, readable

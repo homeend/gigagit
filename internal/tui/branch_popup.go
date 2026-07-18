@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/template"
 	"github.com/homeend/gigagit/internal/worktree"
 )
@@ -123,13 +124,13 @@ func displayStart(s string) string {
 func (p *branchPopup) box(m Model) string {
 	var b strings.Builder
 	start := displayStart(p.startPoint)
-	title := "Create branch from " + start
+	title := i18n.T("Create branch from %s", start)
 	if p.switchAfter {
-		title = "Create + switch branch from " + start
+		title = i18n.T("Create + switch branch from %s", start)
 	}
 	b.WriteString(title + "\n\n")
 	w, _ := m.overlayDims()
-	b.WriteString(viewField("name: ", p.name, true, popupContentWidth(w)) + "\n\n")
-	b.WriteString("[type] name  [ctrl+p] use prefix  [enter] create  [esc] cancel")
+	b.WriteString(viewField(i18n.T("name: "), p.name, true, popupContentWidth(w)) + "\n\n")
+	b.WriteString(i18n.T("[type] name  [ctrl+p] use prefix  [enter] create  [esc] cancel"))
 	return modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 }

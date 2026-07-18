@@ -2,6 +2,7 @@ package tui
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/rebaseplan"
 )
 
@@ -29,15 +30,15 @@ func (m Model) commitEditRow(id, label string, e rebaseplan.Edit) (actionRow, bo
 }
 
 func (m Model) commitDropRow() (actionRow, bool) {
-	return m.commitEditRow("commit-drop", "Drop commit", rebaseplan.EditDrop)
+	return m.commitEditRow("commit-drop", i18n.T("Drop commit"), rebaseplan.EditDrop)
 }
 
 func (m Model) commitMoveUpRow() (actionRow, bool) {
-	return m.commitEditRow("commit-move-up", "Move commit up (newer)", rebaseplan.EditMoveUp)
+	return m.commitEditRow("commit-move-up", i18n.T("Move commit up (newer)"), rebaseplan.EditMoveUp)
 }
 
 func (m Model) commitMoveDownRow() (actionRow, bool) {
-	return m.commitEditRow("commit-move-down", "Move commit down (older)", rebaseplan.EditMoveDown)
+	return m.commitEditRow("commit-move-down", i18n.T("Move commit down (older)"), rebaseplan.EditMoveDown)
 }
 
 // startCommitEditCmd derives the rebase base (rebaseplan.OntoFor) and loads the

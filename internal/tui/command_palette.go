@@ -5,6 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/homeend/gigagit/internal/i18n"
 )
 
 // paletteCommand is one runnable entry in the command palette: a label, the
@@ -28,15 +29,15 @@ type commandPalette struct {
 func paletteCommands() []paletteCommand {
 	// Entries are listed alphabetically by label.
 	return []paletteCommand{
-		{label: "Apply patch…", run: Model.openApplyPatchPopup},
-		{label: "File blame", run: func(m Model) (Model, tea.Cmd) { return m.openFilePathPopup(filePathBlame) }},
-		{label: "File history", run: func(m Model) (Model, tea.Cmd) { return m.openFilePathPopup(filePathHistory) }},
-		{label: "Find", keyHint: "F", run: func(m Model) (Model, tea.Cmd) { m = m.popLayer(); return m.openFileFinder() }},
-		{label: "Git config explorer", run: func(m Model) (Model, tea.Cmd) { m = m.popLayer(); return m.openGitConfigExplorer() }},
-		{label: "Open repo", run: func(m Model) (Model, tea.Cmd) { return m.openRepoPathPopup() }},
-		{label: "Open shell", keyHint: "ctrl+o", run: func(m Model) (Model, tea.Cmd) { m = m.popLayer(); return m.openSubshell() }},
-		{label: "Run shell command…", run: func(m Model) (Model, tea.Cmd) { return m.openShellCmdPopup() }},
-		{label: "Set up agent skills (using-gg)", run: func(m Model) (Model, tea.Cmd) {
+		{label: i18n.T("Apply patch…"), run: Model.openApplyPatchPopup},
+		{label: i18n.T("File blame"), run: func(m Model) (Model, tea.Cmd) { return m.openFilePathPopup(filePathBlame) }},
+		{label: i18n.T("File history"), run: func(m Model) (Model, tea.Cmd) { return m.openFilePathPopup(filePathHistory) }},
+		{label: i18n.T("Find"), keyHint: "F", run: func(m Model) (Model, tea.Cmd) { m = m.popLayer(); return m.openFileFinder() }},
+		{label: i18n.T("Git config explorer"), run: func(m Model) (Model, tea.Cmd) { m = m.popLayer(); return m.openGitConfigExplorer() }},
+		{label: i18n.T("Open repo"), run: func(m Model) (Model, tea.Cmd) { return m.openRepoPathPopup() }},
+		{label: i18n.T("Open shell"), keyHint: "ctrl+o", run: func(m Model) (Model, tea.Cmd) { m = m.popLayer(); return m.openSubshell() }},
+		{label: i18n.T("Run shell command…"), run: func(m Model) (Model, tea.Cmd) { return m.openShellCmdPopup() }},
+		{label: i18n.T("Set up agent skills (using-gg)"), run: func(m Model) (Model, tea.Cmd) {
 			m = m.popLayer()
 			m, cmd := m.openSettings()
 			m = m.openAgentPicker()
@@ -45,7 +46,7 @@ func paletteCommands() []paletteCommand {
 			}
 			return m, cmd
 		}},
-		{label: "Show commit", keyHint: "#", run: Model.openGotoCommitPopup},
+		{label: i18n.T("Show commit"), keyHint: "#", run: Model.openGotoCommitPopup},
 	}
 }
 
@@ -100,7 +101,7 @@ func (p *commandPalette) box(m Model) string {
 	w, _ := m.overlayDims()
 	inner := popupResolveWidth(w, p.maximized, popupInnerWidth(w))
 	textW := popupTextWidth(inner)
-	parts := []string{"Commands", ""}
+	parts := []string{i18n.T("Commands"), ""}
 	for i, c := range p.cmds {
 		prefix := "  "
 		st := lipgloss.NewStyle()
@@ -118,6 +119,6 @@ func (p *commandPalette) box(m Model) string {
 		}
 		parts = append(parts, st.Render(padRight(row, textW)))
 	}
-	parts = append(parts, "", "[enter] run  [esc] close")
+	parts = append(parts, "", i18n.T("[enter] run  [esc] close"))
 	return popupBox(inner, strings.Join(parts, "\n"))
 }

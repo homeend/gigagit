@@ -9,6 +9,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/template"
 	"github.com/homeend/gigagit/internal/worktree"
 )
@@ -279,9 +280,9 @@ func (p *worktreePopup) box(m Model) string {
 	w, _ := m.overlayDims()
 	cw := popupContentWidth(w)
 	var b strings.Builder
-	title := "Create worktree from " + displayStart(p.startPoint)
+	title := i18n.T("Create worktree from %s", displayStart(p.startPoint))
 	if p.existing {
-		title = "Create worktree for " + p.startPoint
+		title = i18n.T("Create worktree for %s", p.startPoint)
 	}
 	b.WriteString(title + "\n\n")
 
@@ -299,11 +300,11 @@ func (p *worktreePopup) box(m Model) string {
 	}
 
 	if p.state == stEdit {
-		b.WriteString(viewField("branch: ", p.editBuf, true, cw) + "\n")
+		b.WriteString(viewField(i18n.T("branch: "), p.editBuf, true, cw) + "\n")
 	} else {
-		b.WriteString("branch: " + p.previewBranch + "\n")
+		b.WriteString(i18n.T("branch: ") + p.previewBranch + "\n")
 	}
-	b.WriteString("path:   " + p.previewPath + "\n")
+	b.WriteString(i18n.T("path:   ") + p.previewPath + "\n")
 	if p.previewErr != nil {
 		b.WriteString("\n⚠ " + p.previewErr.Error() + "\n")
 	}
@@ -314,24 +315,24 @@ func (p *worktreePopup) box(m Model) string {
 		if !p.runHook {
 			mark = "[ ]"
 		}
-		b.WriteString(mark + " run post-create hook  ([h] toggle)\n")
+		b.WriteString(mark + " " + i18n.T("run post-create hook  ([h] toggle)") + "\n")
 	}
 	switch p.state {
 	case stInput:
-		b.WriteString("[type] value  [tab/enter] next field  [esc] cancel")
+		b.WriteString(i18n.T("[type] value  [tab/enter] next field  [esc] cancel"))
 	case stEdit:
-		b.WriteString("[type] edit name  [enter] done  [esc] discard")
+		b.WriteString(i18n.T("[type] edit name  [enter] done  [esc] discard"))
 	default:
 		if p.existing {
-			hint := "[w] create  [W] create & switch  [esc] cancel"
+			hint := i18n.T("[w] create  [W] create & switch  [esc] cancel")
 			if m.cfg.Worktree.PostCreateHook != "" {
-				hint = "[w] create  [W] create & switch  [h] hook  [esc] cancel"
+				hint = i18n.T("[w] create  [W] create & switch  [h] hook  [esc] cancel")
 			}
 			b.WriteString(hint)
 		} else {
-			hint := "[w] create  [W] create & switch  [e] edit name  [p] use a prefix  [esc] cancel"
+			hint := i18n.T("[w] create  [W] create & switch  [e] edit name  [p] use a prefix  [esc] cancel")
 			if m.cfg.Worktree.PostCreateHook != "" {
-				hint = "[w] create  [W] create & switch  [e] edit name  [p] use a prefix  [h] hook  [esc] cancel"
+				hint = i18n.T("[w] create  [W] create & switch  [e] edit name  [p] use a prefix  [h] hook  [esc] cancel")
 			}
 			b.WriteString(hint)
 		}
@@ -348,11 +349,11 @@ func (p *worktreePopup) box(m Model) string {
 // preview error refuses to launch.
 func (m Model) startCreateFromPopup(p *worktreePopup, switchAfter bool) (Model, tea.Cmd) {
 	if p.fromCommit && strings.TrimSpace(p.branchOverride) == "" {
-		m.statusMsg = "branch name required"
+		m.statusMsg = i18n.T("branch name required")
 		return m, nil
 	}
 	if p.previewErr != nil {
-		m.statusMsg = "cannot create: " + p.previewErr.Error()
+		m.statusMsg = i18n.T("cannot create: %s", p.previewErr.Error())
 		return m, nil
 	}
 	m.pendingSeqBump = p.consumedSeqNames()

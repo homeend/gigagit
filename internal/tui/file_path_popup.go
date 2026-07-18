@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/homeend/gigagit/internal/i18n"
 )
 
 // filePathKind selects which surface a filePathPopup opens on submit.
@@ -53,9 +55,9 @@ func (m Model) openFilePathPopup(kind filePathKind) (Model, tea.Cmd) {
 
 func (p *filePathPopup) title() string {
 	if p.kind == filePathBlame {
-		return "File blame"
+		return i18n.T("File blame")
 	}
-	return "File history"
+	return i18n.T("File history")
 }
 
 func (p *filePathPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
@@ -100,7 +102,7 @@ func (p *filePathPopup) box(m Model) string {
 	w, _ := m.overlayDims()
 	var b strings.Builder
 	b.WriteString(p.title() + "\n\n")
-	b.WriteString(viewField("path: ", p.input, true, popupContentWidth(w)) + "\n")
-	b.WriteString("\n[enter] show  [esc] cancel")
+	b.WriteString(viewField(i18n.T("path: "), p.input, true, popupContentWidth(w)) + "\n")
+	b.WriteString("\n" + i18n.T("[enter] show  [esc] cancel"))
 	return modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 }

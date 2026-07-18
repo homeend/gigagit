@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/rebaseplan"
 )
@@ -105,7 +106,7 @@ func (m Model) stageCmd(op engine.Operation) tea.Cmd {
 			return statusRefreshedMsg{err: err}
 		}
 		st, serr := svc.Status(context.Background())
-		return statusRefreshedMsg{summary: res.Summary, status: st, err: serr}
+		return statusRefreshedMsg{summary: renderSummary(res), status: st, err: serr}
 	}
 }
 
@@ -155,7 +156,8 @@ type decisionState struct {
 	req       engine.DecisionRequest
 	reply     chan engine.DecisionResponse
 	sel       int
-	confirm   bool // yes/no confirm modal: enables y/n accelerators (frontend-only)
+	confirm   bool              // yes/no confirm modal: enables y/n accelerators (frontend-only)
+	copyTexts map[string]string // copy-file chooser: option label → resolved clipboard text (test-inspectable; nil for other modals)
 	onResolve func(m Model, opt string) (tea.Model, tea.Cmd)
 }
 
@@ -208,7 +210,7 @@ func (m Model) startOp(op engine.Operation) (Model, tea.Cmd) {
 	}()
 	m.running = true
 	m.opStart = time.Now() // the perpetual heartbeat (Init) reads this to show elapsed time
-	m.statusMsg = "working…"
+	m.statusMsg = i18n.T("working…")
 	m.opMsgs = msgs
 	m.opCancel = cancel
 	return m, waitForOp(msgs)

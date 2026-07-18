@@ -86,14 +86,6 @@ func (m Model) applyToolsWizard(rows []toolWizardRow, checked []bool, globalPath
 	return m, len(blocks), nil
 }
 
-// toolConfiguredSuffixDecorator dims the trailing " (configured)" suffix on a
-// row that already has a matching config block, using the same post-slice
-// column-span technique as configRowDecorator (gitconfig_popup.go): text
-// stays raw so width-based truncation/wrap never has to reason about an
-// embedded escape sequence, and the color is applied to the final visible
-// line at the exact rune columns [baseLen, baseLen+suffixLen). Only the
-// row's first visual line is decorated (wrap continuations restart their
-// rune index at 0 — the same caveat configRowDecorator documents).
 // wrapWords greedily word-wraps s into lines of at most w display columns,
 // breaking at spaces so a command's flags/tokens are never split mid-word —
 // the live-feedback bug (wrapWidth's plain column-chunking turned
@@ -144,31 +136,49 @@ func wrapWords(s string, w int) []string {
 	return out
 }
 
-func toolConfiguredSuffixDecorator(baseLen, suffixLen int) rowDecorator {
+// dimSpanRunes returns the rune index range [from,to) of r whose display
+// columns fall inside [startW, startW+width), given the row is already
+// scrolled hscroll display columns. Columns, not rune indexes — a wide
+// (CJK) rune advances the column by 2.
+func dimSpanRunes(r []rune, hscroll, startW, width int) (int, int) {
+	from, to := -1, -1
+	col := hscroll
+	for i, c := range r {
+		w := lipgloss.Width(string(c))
+		if col >= startW && col < startW+width {
+			if from < 0 {
+				from = i
+			}
+			to = i + 1
+		}
+		col += w
+	}
+	if from < 0 {
+		return 0, 0
+	}
+	return from, to
+}
+
+// toolConfiguredSuffixDecorator dims the trailing " (configured)" suffix on a
+// row that already has a matching config block, using the same post-slice
+// column-span technique as configRowDecorator (gitconfig_popup.go): text
+// stays raw so width-based truncation/wrap never has to reason about an
+// embedded escape sequence, and the color is applied to the final visible
+// line at the exact DISPLAY COLUMNS [baseW, baseW+suffixW) — not rune
+// indexes, so a wide (CJK) rune in the base text doesn't throw off where the
+// suffix span starts. Only the row's first visual line is decorated (wrap
+// continuations restart their column count at 0 — the same caveat
+// configRowDecorator documents).
+func toolConfiguredSuffixDecorator(baseW, suffixW int) rowDecorator {
 	return func(visible string, hscroll, visualLine int) string {
-		if visualLine != 0 || suffixLen <= 0 {
+		if visualLine != 0 || suffixW <= 0 {
 			return visible
 		}
 		r := []rune(visible)
-		var b strings.Builder
-		i := 0
-		for i < len(r) {
-			col := i + hscroll
-			if col >= baseLen && col < baseLen+suffixLen {
-				j := i
-				for j < len(r) {
-					if c := j + hscroll; c < baseLen || c >= baseLen+suffixLen {
-						break
-					}
-					j++
-				}
-				b.WriteString(dimRowStyle.Render(string(r[i:j])))
-				i = j
-				continue
-			}
-			b.WriteRune(r[i])
-			i++
+		from, to := dimSpanRunes(r, hscroll, baseW, suffixW)
+		if from == to {
+			return visible
 		}
-		return b.String()
+		return string(r[:from]) + dimRowStyle.Render(string(r[from:to])) + string(r[to:])
 	}
 }

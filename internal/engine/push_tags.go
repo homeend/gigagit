@@ -15,7 +15,7 @@ type PushTags struct {
 
 func (op PushTags) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	if len(op.Names) == 0 {
-		return Result{Summary: "no tags to push", Changed: false}, nil
+		return Result{Changed: false}.WithSummary("no tags to push"), nil
 	}
 	remote := op.Remote
 	if remote == "" {
@@ -29,11 +29,7 @@ func (op PushTags) Run(ctx context.Context, deps OpDeps) (Result, error) {
 		case 1:
 			remote = names[0]
 		default:
-			choice, derr := deps.decide(ctx, DecisionRequest{
-				ID:      "push-tags-remote",
-				Prompt:  "Push tags to which remote?",
-				Options: append(append([]string{}, names...), "abort"),
-			})
+			choice, derr := deps.decide(ctx, PromptReq("push-tags-remote", "Push tags to which remote?", append(append([]string{}, names...), "abort")))
 			if derr != nil {
 				return Result{}, derr
 			}
@@ -47,7 +43,7 @@ func (op PushTags) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	if err := deps.Repo.PushTags(ctx, remote, op.Names); err != nil {
 		return Result{}, fmt.Errorf("push tags: %w", err)
 	}
-	res := Result{Summary: "pushed tags", Changed: true}
+	res := Result{Changed: true}.WithSummary("pushed tags")
 	deps.emit(ctx, Done{Result: res})
 	return res, nil
 }

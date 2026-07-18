@@ -5,6 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -125,7 +126,7 @@ func (m Model) updateStashViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if m.width > 0 && m.width < 40 {
-			m.statusMsg = "terminal too narrow for the files view"
+			m.statusMsg = i18n.T("terminal too narrow for the files view")
 			return m, nil
 		}
 		e := v.entries[v.sel]
@@ -154,17 +155,17 @@ func (m Model) renderStashList(boxW, boxH int) string {
 	}
 	switch {
 	case v.loading:
-		rows = []string{"(loading…)"}
+		rows = []string{i18n.T("(loading…)")}
 	case v.err != nil:
-		rows = []string{"error: " + v.err.Error()}
+		rows = []string{i18n.T("error: %s", v.err.Error())}
 	case len(v.entries) == 0:
-		rows = []string{"(no stashes)"}
+		rows = []string{i18n.T("(no stashes)")}
 	}
 	// Focused (bright border, highlighted cursor) only when it owns focus:
 	// m.focus is the right column AND the file tree isn't the active side.
 	// Mirrors panelFocused(panelCommits) for the commit files view.
 	focused := m.focus == panelCommits && !(m.filesView != nil && m.filesTreeFocused)
-	return m.renderListBox("Stashes", rows, v.sel, boxW, boxH, focused, v.mode, v.hscroll)
+	return m.renderListBox(i18n.T("Stashes"), rows, v.sel, boxW, boxH, focused, v.mode, v.hscroll)
 }
 
 // openStashView opens the stash list window in the right column and moves focus
@@ -210,7 +211,8 @@ func (m Model) moveStashUnderFilesView(delta int) (tea.Model, tea.Cmd) {
 	if e.Ref == m.filesStashTag { // the tree already shows this stash
 		return m, nil
 	}
-	m.filesTitle = "Files " + e.Ref + " " + e.Subject
+	m.filesTitle = i18n.T("Files %s %s", e.Ref, e.Subject)
+	m.filesContext = e.Ref + " " + e.Subject
 	m.filesStashTag = e.Ref
 	return m, m.loadStashFilesCmd(e.Ref)
 }

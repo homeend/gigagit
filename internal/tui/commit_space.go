@@ -1,6 +1,10 @@
 package tui
 
-import tea "github.com/charmbracelet/bubbletea"
+import (
+	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/homeend/gigagit/internal/i18n"
+)
 
 // handleCommitSpaceKey is the space gesture on the Commits panel: a fast path
 // over the same ◉ compare selection the m key toggles (commitCompareSet).
@@ -23,7 +27,7 @@ func (m Model) handleCommitSpaceKey() (tea.Model, tea.Cmd) {
 	// changes and history rewrites), and a ghost mark must not eat a slot.
 	valid := len(m.validCompareKeys())
 	if valid >= 2 {
-		m.statusMsg = "2 commits already marked — space a marked one to unmark, esc to unmark all"
+		m.statusMsg = i18n.T("2 commits already marked — space a marked one to unmark, esc to unmark all")
 		return m, nil
 	}
 	if m.commitCompareSet == nil {

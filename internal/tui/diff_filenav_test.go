@@ -17,6 +17,7 @@ func treeDiffModel(sel int) Model {
 	m.focus = panelCommits
 	m.filesHash = "abc"
 	m.filesTitle = "Files abc subj"
+	m.filesContext = "abc subj"
 	m.filesTreeFocused = true
 	m.filesView = &contentPopup{lines: []contentLine{
 		{text: "dir/", heading: true},

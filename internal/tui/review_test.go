@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/promptstate"
 )
@@ -462,5 +464,32 @@ func TestReviewBlinkTickTogglesAndSelfStops(t *testing.T) {
 	m.reviewRunning = false
 	if _, cmd := m.Update(reviewBlinkMsg{gen: 7}); cmd != nil {
 		t.Fatal("a tick after the run finished must not re-arm")
+	}
+}
+
+// reviewScopeLabel must translate the "working changes" fallback from
+// domain.ReviewTarget.DisplayLabel().
+func TestReviewScopeLabelTranslatesWorkingChanges(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "xx.toml"), []byte("[meta]\nname=\"xx\"\n[strings]\n"+
+		"\"working changes\" = \"XX-working\"\n"+
+		"\"Review: working changes\" = \"XX-Review-working\"\n"), 0o644)
+	if err := i18n.SetLanguage("xx", dir); err != nil {
+		t.Fatalf("SetLanguage: %v", err)
+	}
+	t.Cleanup(func() { _ = i18n.SetLanguage("", "") })
+
+	got := reviewScopeLabel(domain.ReviewTarget{Kind: domain.ReviewWorking})
+	if got != "XX-working" {
+		t.Fatalf("reviewScopeLabel = %q, want translated fallback", got)
+	}
+
+	// reviewTitle must recognize the literal "working changes" label (the
+	// always-non-empty label a working-changes review actually carries) and
+	// route it through the translated sibling key, not the generic
+	// "Review: %s" format — which would silently degrade to untranslated
+	// English since the label itself is never translated.
+	if title := reviewTitle("working changes"); title != "XX-Review-working" {
+		t.Fatalf("reviewTitle(\"working changes\") = %q, want the translated sibling key", title)
 	}
 }

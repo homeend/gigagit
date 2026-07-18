@@ -10,8 +10,12 @@ type Event interface{ isEvent() }
 
 // Progress reports a high-level step ("stashing", "fetching", "pulling").
 type Progress struct {
-	Step   string
+	Step   string // stable step vocabulary; a TUI translates it directly as its own key
 	Detail string
+	// DetailMsg is the localizable channel for Detail, set (via Progressf)
+	// only when Detail mixes English words into the data. Empty = Detail is
+	// pure data, rendered verbatim.
+	DetailMsg Msg
 }
 
 // GitLine carries one raw line of git stdout/stderr for a live log view.

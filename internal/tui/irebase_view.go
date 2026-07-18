@@ -6,6 +6,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/rebaseplan"
 )
@@ -63,7 +64,7 @@ func (e *irebaseEditor) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			e.reword = nil
 		case submit:
 			if strings.TrimSpace(e.reword.title.Value()) == "" {
-				m.statusMsg = "title required"
+				m.statusMsg = i18n.T("title required")
 				return m, nil
 			}
 			e.rows[e.sel].action = rebaseplan.Reword
@@ -91,7 +92,7 @@ func (e *irebaseEditor) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		// Squash melds into the older neighbor (the row below, newest-first).
 		// The oldest row (last) has nothing older — refuse.
 		if e.sel == len(e.rows)-1 {
-			m.statusMsg = "squash: the oldest commit has nothing to squash into"
+			m.statusMsg = i18n.T("squash: the oldest commit has nothing to squash into")
 			return m, nil
 		}
 		e.rows[e.sel].action = rebaseplan.Squash
@@ -131,7 +132,7 @@ func (e *irebaseEditor) render(m Model, _ string) string {
 		h = 24
 	}
 	var b strings.Builder
-	b.WriteString("Interactive rebase: " + e.branch + " onto " + e.onto + "\n\n")
+	b.WriteString(i18n.T("Interactive rebase: %s onto %s", e.branch, e.onto) + "\n\n")
 	for i, r := range e.rows {
 		cur := "  "
 		if i == e.sel {
@@ -141,7 +142,7 @@ func (e *irebaseEditor) render(m Model, _ string) string {
 		subj := r.subject
 		if r.action == rebaseplan.Reword && r.newMsg != "" {
 			first, _ := splitMessage(r.newMsg)
-			subj = first + "  (reworded)"
+			subj = i18n.T("%s  (reworded)", first)
 		}
 		line := cur + action + " " + shortHash(r.sha) + "  " + subj
 		if i == e.sel {
@@ -152,11 +153,11 @@ func (e *irebaseEditor) render(m Model, _ string) string {
 		b.WriteString("\n")
 	}
 	if e.reword != nil {
-		b.WriteString("\nReword:\n")
+		b.WriteString("\n" + i18n.T("Reword:") + "\n")
 		b.WriteString(renderCommitFields(e.reword, popupContentWidth(w)))
-		b.WriteString("\n[tab] switch field  [enter] newline/next  [ctrl+s] set  [esc] cancel")
+		b.WriteString("\n" + i18n.T("[tab] switch field  [enter] newline/next  [ctrl+s] set  [esc] cancel"))
 	} else {
-		b.WriteString("\n[p]ick [r]eword [s]quash [d]rop  [ctrl+↑/↓] move  [enter] start  [R]eset  [esc] cancel")
+		b.WriteString("\n" + i18n.T("[p]ick [r]eword [s]quash [d]rop  [ctrl+↑/↓] move  [enter] start  [R]eset  [esc] cancel"))
 	}
 	return b.String()
 }

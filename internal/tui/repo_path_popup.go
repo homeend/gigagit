@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/i18n"
 )
 
 // repoPathPopup takes a filesystem path to a git repository (any path inside one)
@@ -90,7 +91,7 @@ func (p *repoPathPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 func (m Model) resolvedRepoPath(p *repoPathPopup, msg repoResolvedMsg) (tea.Model, tea.Cmd) {
 	p.resolving = false
 	if msg.err != nil {
-		p.err = "not a git repository: " + msg.path
+		p.err = i18n.T("not a git repository: %s", msg.path)
 		return m, nil
 	}
 	m = m.popLayer() // the repo popup
@@ -108,11 +109,11 @@ func (p *repoPathPopup) render(m Model, below string) string {
 func (p *repoPathPopup) box(m Model) string {
 	w, _ := m.overlayDims()
 	var b strings.Builder
-	b.WriteString("Open repo\n\n")
-	b.WriteString(viewField("path: ", p.input, true, popupContentWidth(w)) + "\n")
+	b.WriteString(i18n.T("Open repo") + "\n\n")
+	b.WriteString(viewField(i18n.T("path: "), p.input, true, popupContentWidth(w)) + "\n")
 	if p.err != "" {
 		b.WriteString("\n" + errorStyle.Render(p.err) + "\n")
 	}
-	b.WriteString("\n[enter] open  [esc] cancel")
+	b.WriteString("\n" + i18n.T("[enter] open  [esc] cancel"))
 	return modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 }

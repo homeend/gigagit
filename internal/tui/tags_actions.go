@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -24,7 +25,7 @@ func (m Model) tagAnnotateRow() (actionRow, bool) {
 	name := m.tags[bi].Name
 	return actionRow{
 		id:    "tag-annotate",
-		label: "Annotate " + name,
+		label: i18n.T("Annotate %s", name),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			m, _ = m.openAnnotateTagPopup()
 			return m, nil
@@ -45,12 +46,12 @@ func (m Model) tagCheckoutRow() (actionRow, bool) {
 	name := m.tags[bi].Name
 	return actionRow{
 		id:    "tag-checkout",
-		label: "Check out tag",
+		label: i18n.T("Check out tag"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			m.modal = &decisionState{
 				req: engine.DecisionRequest{
 					ID:      "checkout-tag",
-					Prompt:  "Check out " + name + ":",
+					Prompt:  i18n.T("Check out %s:", name),
 					Options: []string{"Detached", "Create branch…", "Create worktree…", "Cancel"},
 				},
 				onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {
@@ -91,9 +92,9 @@ func (m Model) tagMergeRow() (actionRow, bool) {
 	name := m.tags[bi].Name
 	return actionRow{
 		id:    "tag-merge",
-		label: "Merge " + name + " into current (" + cur + ")",
+		label: i18n.T("Merge %s into current (%s)", name, cur),
 		run: func(m Model) (tea.Model, tea.Cmd) {
-			return m.confirmOp(engine.SmartMerge{Source: name}, "Merge "+name+" into current branch?")
+			return m.confirmOp(engine.SmartMerge{Source: name}, i18n.T("Merge %s into current branch?", name))
 		},
 	}, true
 }
@@ -114,9 +115,9 @@ func (m Model) tagRebaseRow() (actionRow, bool) {
 	name := m.tags[bi].Name
 	return actionRow{
 		id:    "tag-rebase",
-		label: "Rebase current (" + cur + ") onto " + name,
+		label: i18n.T("Rebase current (%s) onto %s", cur, name),
 		run: func(m Model) (tea.Model, tea.Cmd) {
-			return m.confirmOp(engine.SmartRebase{Onto: name}, "Rebase current branch onto "+name+"?")
+			return m.confirmOp(engine.SmartRebase{Onto: name}, i18n.T("Rebase current branch onto %s?", name))
 		},
 	}, true
 }
@@ -134,7 +135,7 @@ func (m Model) tagPushRow() (actionRow, bool) {
 	name := m.tags[bi].Name
 	return actionRow{
 		id:    "tag-push",
-		label: "Push tag",
+		label: i18n.T("Push tag"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			m.pendingRemoteTagSet = name
 			return m.startOp(engine.PushTag{Name: name})
@@ -157,7 +158,7 @@ func (m Model) tagSoloRow() (actionRow, bool) {
 	name := m.tags[bi].Name
 	return actionRow{
 		id:    "tag-solo",
-		label: "Solo this tag",
+		label: i18n.T("Solo this tag"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			if len(m.commitScopeBranches) == 1 && m.commitScopeBranches[0] == name {
 				m.commitScopeBranches = nil // re-solo → un-solo
@@ -183,12 +184,12 @@ func (m Model) tagDeleteRow() (actionRow, bool) {
 	name := m.tags[bi].Name
 	return actionRow{
 		id:    "tag-delete",
-		label: "Delete tag",
+		label: i18n.T("Delete tag"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			m.modal = &decisionState{
 				req: engine.DecisionRequest{
 					ID:      "delete-tag",
-					Prompt:  "Delete tag " + name + "?",
+					Prompt:  i18n.T("Delete tag %s?", name),
 					Options: []string{"Delete", "Cancel"},
 				},
 				onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {
@@ -217,7 +218,7 @@ func (m Model) tagDeleteRemoteRow() (actionRow, bool) {
 	name := m.tags[bi].Name
 	return actionRow{
 		id:    "tag-delete-remote",
-		label: "Delete " + name + " from remote",
+		label: i18n.T("Delete %s from remote", name),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			m.pendingRemoteTagUnset = name
 			return m.startOp(engine.DeleteRemoteTag{Tag: name})
@@ -234,7 +235,7 @@ func (m Model) tagRefreshRemoteRow() (actionRow, bool) {
 	}
 	return actionRow{
 		id:    "tag-refresh-remote",
-		label: "Refresh remote status",
+		label: i18n.T("Refresh remote status"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			return m, m.remoteTagsCmd(context.Background(), true)
 		},

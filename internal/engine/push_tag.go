@@ -29,11 +29,7 @@ func (op PushTag) Run(ctx context.Context, deps OpDeps) (Result, error) {
 		case 1:
 			remote = names[0]
 		default:
-			choice, derr := deps.decide(ctx, DecisionRequest{
-				ID:      "push-tag-remote",
-				Prompt:  "Push " + op.Name + " to which remote?",
-				Options: append(append([]string{}, names...), "abort"),
-			})
+			choice, derr := deps.decide(ctx, PromptReq("push-tag-remote", "Push %s to which remote?", append(append([]string{}, names...), "abort"), op.Name))
 			if derr != nil {
 				return Result{}, derr
 			}
@@ -47,7 +43,7 @@ func (op PushTag) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	if err := deps.Repo.PushTag(ctx, remote, op.Name); err != nil {
 		return Result{}, fmt.Errorf("push tag: %w", err)
 	}
-	res := Result{Summary: "pushed " + op.Name + " to " + remote, Changed: true}
+	res := Result{Changed: true}.WithSummary("pushed %s to %s", op.Name, remote)
 	deps.emit(ctx, Done{Result: res})
 	return res, nil
 }

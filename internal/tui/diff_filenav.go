@@ -5,6 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -38,9 +39,9 @@ const (
 func fileArmCue(d fileArmDir) string {
 	switch d {
 	case fileArmNext:
-		return "▸ N/end again → next file"
+		return i18n.T("▸ N/end again → next file")
 	case fileArmPrev:
-		return "▸ P/home again → previous file"
+		return i18n.T("▸ P/home again → previous file")
 	}
 	return ""
 }
@@ -73,18 +74,18 @@ func (m Model) boundaryCue() string {
 	var segs []string
 	if v.onFirstBlock() { // previous-direction gestures
 		if multi {
-			segs = append(segs, "pp → bottom")
+			segs = append(segs, i18n.T("pp → bottom"))
 		}
 		if m.peekDiffFile(-1) {
-			segs = append(segs, "PP → prev file")
+			segs = append(segs, i18n.T("PP → prev file"))
 		}
 	}
 	if v.onLastBlock() { // next-direction gestures
 		if multi {
-			segs = append(segs, "nn → top")
+			segs = append(segs, i18n.T("nn → top"))
 		}
 		if m.peekDiffFile(1) {
-			segs = append(segs, "NN → next file")
+			segs = append(segs, i18n.T("NN → next file"))
 		}
 	}
 	if len(segs) == 0 {
@@ -199,6 +200,6 @@ func (m Model) stepDiffFileStatus(dir int, staged bool) (tea.Model, tea.Cmd) {
 // returned (the open path cleared diffNotice, dropping any stale value first).
 func withDiffArrival(tm tea.Model, path string) tea.Model {
 	m := tm.(Model)
-	m.diffNotice = "▸ now: " + path
+	m.diffNotice = i18n.T("▸ now: %s", path)
 	return m
 }

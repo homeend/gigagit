@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -86,9 +87,9 @@ func (m Model) renderShelfPopupBox(p *shelfPopup) string {
 	inner := popupResolveWidth(w, p.maximized, popupWideInnerWidth(w))
 	textW := popupTextWidth(inner)
 
-	header := "Shelf"
+	header := i18n.T("Shelf")
 	if p.compareRef != nil {
-		header = "Compare " + p.compareRef.Path + " against:"
+		header = i18n.T("Compare %s against:", p.compareRef.Path)
 	}
 	if p.filtering {
 		header += "  /" + p.filter + "█"
@@ -99,7 +100,7 @@ func (m Model) renderShelfPopupBox(p *shelfPopup) string {
 	vis := p.visibleIdx()
 	var bodyLines []string
 	if len(vis) == 0 {
-		bodyLines = []string{padRight("  (none)", textW)}
+		bodyLines = []string{padRight(i18n.T("  (none)"), textW)}
 	} else {
 		wr := make([]winRow, len(vis))
 		for n, i := range vis {
@@ -127,7 +128,7 @@ func (m Model) renderShelfPopupBox(p *shelfPopup) string {
 	// Wrap the hint to the text width so [z] mode / [esc] close stay visible even
 	// on a narrow terminal, where a single-line footer would truncate them off
 	// (the reason z went undiscovered).
-	hint := []string{"[?] keys", "[enter] diff/browse", "[e] editor", "[p] restore", "[t] temp dir", "[a] cherry-pick", "[y] copy", "[m] mark/compare", "[x] remove", "[c] vs bookmark", "[/] filter", "[z] mode", "[ctrl+t] full", "[esc] close"}
+	hint := []string{i18n.T("[?] keys"), i18n.T("[enter] diff/browse"), i18n.T("[e] editor"), i18n.T("[p] restore"), i18n.T("[t] temp dir"), i18n.T("[a] cherry-pick"), i18n.T("[y] copy"), i18n.T("[m] mark/compare"), i18n.T("[x] remove"), i18n.T("[c] vs bookmark"), i18n.T("[/] filter"), i18n.T("[z] mode"), i18n.T("[ctrl+t] full"), i18n.T("[esc] close")}
 	parts = append(parts, "")
 	parts = append(parts, wrapParts(hint, textW, "  ")...)
 	return popupBox(inner, strings.Join(parts, "\n"))
@@ -220,7 +221,7 @@ func (p *shelfPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		if p.compareRef != nil {
 			if e.IsCommit() {
-				m.statusMsg = "cannot compare a file against a shelved commit"
+				m.statusMsg = i18n.T("cannot compare a file against a shelved commit")
 				return m, nil
 			}
 			return m.openCompareFocusedVsShelf(*p.compareRef, p.compareLabel, e)
@@ -244,7 +245,7 @@ func (p *shelfPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		case "?":
 			// Open the compact cheat sheet over the still-open switcher; esc
 			// closes it and returns here (contentPopup's esc just nils itself).
-			m = m.pushLayer(newContentPopup(shelfSwitcherHelpTitle, shelfSwitcherHelp(p.compareRef != nil)))
+			m = m.pushLayer(newContentPopup(shelfSwitcherHelpTitle(), shelfSwitcherHelp(p.compareRef != nil)))
 			return m, nil
 		case "/":
 			p.filtering = true
@@ -319,7 +320,7 @@ func (p *shelfPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				return m, nil
 			}
 			if !e.IsCommit() {
-				m.statusMsg = "cherry-pick: only for a shelved commit"
+				m.statusMsg = i18n.T("cherry-pick: only for a shelved commit")
 				return m, nil
 			}
 			return m.startPickCommit(pickTarget{
@@ -337,7 +338,7 @@ func (p *shelfPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			if !ok {
 				return m, nil
 			}
-			return m.copyFilePrompt(e.Origin.Path)
+			return m.copyFilePrompt(e.Origin.Worktree, e.Origin.Path)
 		}
 	}
 	return m, nil
@@ -351,7 +352,7 @@ func (p *shelfPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 // commitBookmarkNotice; [t] temp export and [x] remove stay available.
 func (m Model) commitShelfNotice(p *shelfPopup) (Model, bool) {
 	if e, ok := p.selected(); ok && e.IsCommit() {
-		m.statusMsg = "not available for a shelved commit — enter browses its files, [t] copies them to a temp dir"
+		m.statusMsg = i18n.T("not available for a shelved commit — enter browses its files, [t] copies them to a temp dir")
 		return m, true
 	}
 	return m, false
@@ -371,7 +372,7 @@ func (m Model) shelfPopupRemovePrompt() (Model, tea.Cmd) {
 	m.modal = &decisionState{
 		req: engine.DecisionRequest{
 			ID:      "shelf-remove",
-			Prompt:  "Remove " + e.Origin.Path + " from the shelf? (the frozen copy is destroyed)",
+			Prompt:  i18n.T("Remove %s from the shelf? (the frozen copy is destroyed)", e.Origin.Path),
 			Options: []string{"Remove", "Cancel"},
 		},
 		onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {
@@ -425,6 +426,6 @@ func (m Model) shelfCompareAgainstBookmark() (Model, tea.Cmd) {
 	ref := model.FileRef{Source: model.SourceShelf, Locator: e.ID, Path: e.Origin.Path}
 	// Keep this switcher on the stack: the bookmark picker is pushed on top so esc
 	// in it returns here (the diff on a pick clears both via openPickerDiff).
-	m.pendingCompare = &pendingCompare{ref: ref, label: "shelf #" + shortShelf(e), target: compareBookmark}
+	m.pendingCompare = &pendingCompare{ref: ref, label: i18n.T("shelf #%s", shortShelf(e)), target: compareBookmark}
 	return m, m.loadBookmarksCmd()
 }

@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -49,24 +50,24 @@ func (m Model) handlePickProbe(msg pickProbeMsg) (Model, tea.Cmd) {
 	}
 	if m.modal != nil {
 		// Another dialog opened while the probe ran — never clobber it.
-		m.statusMsg = "cherry-pick: cancelled (another dialog opened) — press a again"
+		m.statusMsg = i18n.T("cherry-pick: cancelled (another dialog opened) — press a again")
 		return m, nil
 	}
 	if msg.err != nil {
-		m.statusMsg = "cherry-pick: " + msg.err.Error()
+		m.statusMsg = i18n.T("cherry-pick: %s", msg.err.Error())
 		return m, nil
 	}
 	t := msg.target
 	branch := m.status.Branch
 	if branch == "" {
-		branch = "the current branch"
+		branch = i18n.T("the current branch")
 	}
 	if msg.found {
 		sha := t.sha
 		m.modal = &decisionState{
 			req: engine.DecisionRequest{
 				ID:      "pick-commit",
-				Prompt:  "Cherry-pick " + msg.line.Hash + " " + msg.line.Subject + " onto " + branch + "?",
+				Prompt:  i18n.T("Cherry-pick %s %s onto %s?", msg.line.Hash, msg.line.Subject, branch),
 				Options: []string{"Cherry-pick", "Cancel"},
 			},
 			onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {
@@ -90,7 +91,7 @@ func (m Model) handlePickProbe(msg pickProbeMsg) (Model, tea.Cmd) {
 		m.modal = &decisionState{
 			req: engine.DecisionRequest{
 				ID:      "pick-commit-patch",
-				Prompt:  "Commit " + short + " is no longer in the repo. Re-apply the shelved patch as a new commit?",
+				Prompt:  i18n.T("Commit %s is no longer in the repo. Re-apply the shelved patch as a new commit?", short),
 				Options: []string{"Apply patch", "Cancel"},
 			},
 			onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {
@@ -101,7 +102,7 @@ func (m Model) handlePickProbe(msg pickProbeMsg) (Model, tea.Cmd) {
 				// bookmarkPastePrompt precedent for sync resolution in update.
 				path, err := m.svc.ShelfPatchFile(context.Background(), id)
 				if err != nil {
-					m.statusMsg = "apply patch: " + err.Error()
+					m.statusMsg = i18n.T("apply patch: %s", err.Error())
 					return m, nil
 				}
 				m.pickPatchTemp = path
@@ -112,9 +113,9 @@ func (m Model) handlePickProbe(msg pickProbeMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 	if t.shelfID != "" {
-		m.statusMsg = "commit no longer exists and this entry has no stored patch (shelved before patch support, or a merge commit)"
+		m.statusMsg = i18n.T("commit no longer exists and this entry has no stored patch (shelved before patch support, or a merge commit)")
 	} else {
-		m.statusMsg = "commit no longer exists — a bookmark stores no snapshot (shelve commits to keep them applyable)"
+		m.statusMsg = i18n.T("commit no longer exists — a bookmark stores no snapshot (shelve commits to keep them applyable)")
 	}
 	return m, nil
 }

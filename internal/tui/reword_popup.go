@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/i18n"
 )
 
 // rewordPopup wraps the shared commit-message editor (commitPopup) with the
@@ -52,7 +53,7 @@ func (m Model) rewordRow() (actionRow, bool) {
 	}
 	return actionRow{
 		id:    "reword-commit",
-		label: "Rename commit",
+		label: i18n.T("Rename commit"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			m, _ = m.openRewordPopup()
 			return m, nil
@@ -71,7 +72,7 @@ func (p *rewordPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		m = m.popLayer()
 	case submit:
 		if strings.TrimSpace(p.popup.title.Value()) == "" {
-			m.statusMsg = "title required"
+			m.statusMsg = i18n.T("title required")
 			return m, nil
 		}
 		op := engine.Reword{Commit: p.commit, NewMsg: p.popup.message(), GGBin: p.ggBin}
@@ -91,8 +92,8 @@ func (p *rewordPopup) render(m Model, below string) string {
 func (p *rewordPopup) box(m Model) string {
 	w, _ := m.overlayDims()
 	var b strings.Builder
-	b.WriteString("Reword commit " + shortHash(p.commit) + "\n\n")
+	b.WriteString(i18n.T("Reword commit %s", shortHash(p.commit)) + "\n\n")
 	b.WriteString(renderCommitFields(&p.popup, popupContentWidth(w)))
-	b.WriteString("\n[tab] switch field  [enter] newline/next  [ctrl+s] reword  [esc] cancel")
+	b.WriteString("\n" + i18n.T("[tab] switch field  [enter] newline/next  [ctrl+s] reword  [esc] cancel"))
 	return modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 }

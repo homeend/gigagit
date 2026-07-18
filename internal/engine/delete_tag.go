@@ -16,7 +16,7 @@ func (op DeleteTag) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	if err := deps.Repo.DeleteTag(ctx, op.Name); err != nil {
 		return Result{}, fmt.Errorf("delete tag: %w", err)
 	}
-	res := Result{Summary: "deleted tag " + op.Name, Changed: true}
+	res := Result{Changed: true}.WithSummary("deleted tag %s", op.Name)
 	deps.emit(ctx, Done{Result: res})
 	return res, nil
 }

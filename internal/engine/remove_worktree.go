@@ -44,16 +44,12 @@ func (op RemoveWorktree) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	if op.Branch != "" {
 		scopeOpts = []string{"worktree-only", "worktree-and-branch", "abort"}
 	}
-	scope, err := deps.decide(ctx, DecisionRequest{
-		ID:      "remove-scope",
-		Prompt:  "Remove worktree at " + op.Path + "?",
-		Options: scopeOpts,
-	})
+	scope, err := deps.decide(ctx, PromptReq("remove-scope", "Remove worktree at %s?", scopeOpts, op.Path))
 	if err != nil {
 		return Result{}, err
 	}
 	if scope.Option == "abort" {
-		return Result{Summary: "cancelled", Changed: false}, nil
+		return Result{Changed: false}.WithSummary("cancelled"), nil
 	}
 
 	// Step 2: remove the worktree (safe, then a reactive decision on failure).
@@ -68,16 +64,12 @@ func (op RemoveWorktree) Run(ctx context.Context, deps OpDeps) (Result, error) {
 			// reason "initializing"; even `remove --force` refuses until it is
 			// unlocked. Make the unlock a deliberate choice — a worktree a user
 			// locked on purpose deserves the same consent.
-			choice, derr := deps.decide(ctx, DecisionRequest{
-				ID:      "worktree-locked",
-				Prompt:  "Worktree " + op.Path + " is locked (an interrupted create leaves it locked). Unlock and remove?",
-				Options: []string{"unlock-and-remove", "abort"},
-			})
+			choice, derr := deps.decide(ctx, PromptReq("worktree-locked", "Worktree %s is locked (an interrupted create leaves it locked). Unlock and remove?", []string{"unlock-and-remove", "abort"}, op.Path))
 			if derr != nil {
 				return Result{}, derr
 			}
 			if choice.Option != "unlock-and-remove" {
-				return Result{Summary: "cancelled; worktree not removed", Changed: false}, nil
+				return Result{Changed: false}.WithSummary("cancelled; worktree not removed"), nil
 			}
 			if err := deps.Repo.UnlockWorktree(ctx, op.Path); err != nil {
 				return Result{}, fmt.Errorf("unlock worktree: %w", err)
@@ -86,16 +78,12 @@ func (op RemoveWorktree) Run(ctx context.Context, deps OpDeps) (Result, error) {
 				return Result{}, fmt.Errorf("remove worktree (after unlock): %w", err)
 			}
 		} else {
-			force, derr := deps.decide(ctx, DecisionRequest{
-				ID:      "worktree-dirty",
-				Prompt:  "Cannot remove " + op.Path + " cleanly (it may have uncommitted changes). Force?",
-				Options: []string{"force", "abort"},
-			})
+			force, derr := deps.decide(ctx, PromptReq("worktree-dirty", "Cannot remove %s cleanly (it may have uncommitted changes). Force?", []string{"force", "abort"}, op.Path))
 			if derr != nil {
 				return Result{}, derr
 			}
 			if force.Option != "force" {
-				return Result{Summary: "cancelled; worktree not removed", Changed: false}, nil
+				return Result{Changed: false}.WithSummary("cancelled; worktree not removed"), nil
 			}
 			if err := deps.Repo.RemoveWorktree(ctx, op.Path, true, onLine); err != nil {
 				return Result{}, fmt.Errorf("remove worktree (force): %w", err)
@@ -103,18 +91,14 @@ func (op RemoveWorktree) Run(ctx context.Context, deps OpDeps) (Result, error) {
 		}
 	}
 
-	summary := "removed worktree " + op.Path
+	res := Result{Changed: true}.WithSummary("removed worktree %s", op.Path)
 
 	// Step 3: delete the branch if requested. Must follow worktree removal —
 	// git refuses to delete a branch still checked out in a worktree.
 	if scope.Option == "worktree-and-branch" && op.Branch != "" {
 		deps.emit(ctx, Progress{Step: "deleting branch", Detail: op.Branch})
 		if err := deps.Repo.DeleteBranch(ctx, op.Branch, false); err != nil {
-			choice, derr := deps.decide(ctx, DecisionRequest{
-				ID:      "branch-unmerged",
-				Prompt:  "Branch " + op.Branch + " is not fully merged; force-delete discards its unmerged commits.",
-				Options: []string{"force-delete", "keep"},
-			})
+			choice, derr := deps.decide(ctx, PromptReq("branch-unmerged", "Branch %s is not fully merged; force-delete discards its unmerged commits.", []string{"force-delete", "keep"}, op.Branch))
 			if derr != nil {
 				return Result{}, derr
 			}
@@ -122,16 +106,14 @@ func (op RemoveWorktree) Run(ctx context.Context, deps OpDeps) (Result, error) {
 				if err := deps.Repo.DeleteBranch(ctx, op.Branch, true); err != nil {
 					return Result{}, fmt.Errorf("delete branch (force): %w", err)
 				}
-				summary += " and branch " + op.Branch
+				res = res.AppendSummary(" and branch %s", op.Branch)
 			} else {
-				summary += " (branch " + op.Branch + " kept)"
+				res = res.AppendSummary(" (branch %s kept)", op.Branch)
 			}
 		} else {
-			summary += " and branch " + op.Branch
+			res = res.AppendSummary(" and branch %s", op.Branch)
 		}
 	}
-
-	res := Result{Summary: summary, Changed: true}
 	deps.emit(ctx, Done{Result: res})
 	return res, nil
 }

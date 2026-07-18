@@ -97,19 +97,15 @@ func (op SmartMerge) Run(ctx context.Context, deps OpDeps) (Result, error) {
 		// Conflicts kept (or the merge failed outright): popping the stash onto
 		// that tree would compound the mess. The stash survives.
 		if stashed && res.Summary != "" {
-			res.Summary += " (your changes remain stashed)"
+			res = res.AppendSummary(" (your changes remain stashed)")
 		}
 		return res, mergeErr
 	}
 	if stashed {
 		deps.emit(ctx, Progress{Step: "restoring changes"})
 		if err := deps.Repo.StashPop(ctx, ""); err != nil {
-			deps.emit(ctx, DecisionNeeded{Request: DecisionRequest{
-				ID:      "stash-pop-conflict",
-				Prompt:  "Restoring your changes conflicted",
-				Options: []string{"keep", "abort"},
-			}})
-			return Result{Summary: res.Summary + "; restore conflicted (changes preserved in stash)", Changed: res.Changed},
+			deps.emit(ctx, DecisionNeeded{Request: PromptReq("stash-pop-conflict", "Restoring your changes conflicted", []string{"keep", "abort"})})
+			return res.AppendSummary("; restore conflicted (changes preserved in stash)"),
 				fmt.Errorf("stash pop conflict after merging into %s: %w", target, err)
 		}
 	}
@@ -119,14 +115,18 @@ func (op SmartMerge) Run(ctx context.Context, deps OpDeps) (Result, error) {
 // mergeAt merges op.Source into target inside dir ("" = the current
 // worktree), resolving a conflict via the merge-conflict decision.
 func (op SmartMerge) mergeAt(ctx context.Context, deps OpDeps, dir, target string) (Result, error) {
-	where := ""
-	if dir != "" {
-		where = " in worktree " + dir
+	if dir == "" {
+		deps.emit(ctx, Progressf("merging", "%s into %s", op.Source, target))
+	} else {
+		deps.emit(ctx, Progressf("merging", "%s into %s in worktree %s", op.Source, target, dir))
 	}
-	deps.emit(ctx, Progress{Step: "merging", Detail: op.Source + " into " + target + where})
 	mergeErr := deps.Repo.Merge(ctx, dir, op.Source)
 	if mergeErr == nil {
-		return Result{Summary: "merged " + op.Source + " into " + target + where, Changed: true}, nil
+		res := Result{Changed: true}.WithSummary("merged %s into %s", op.Source, target)
+		if dir != "" {
+			res = res.AppendSummary(" in worktree %s", dir)
+		}
+		return res, nil
 	}
 	inMerge, stateErr := deps.Repo.MergeInProgress(ctx, dir)
 	if stateErr != nil {
@@ -136,20 +136,20 @@ func (op SmartMerge) mergeAt(ctx context.Context, deps OpDeps, dir, target strin
 		// Refused outright (e.g. unrelated histories): nothing to resolve.
 		return Result{}, fmt.Errorf("smart merge: %s into %s: %w", op.Source, target, mergeErr)
 	}
-	choice, derr := deps.decide(ctx, DecisionRequest{
-		ID:      "merge-conflict",
-		Prompt:  "Merging " + op.Source + " into " + target + " hit conflicts",
-		Options: []string{"keep-conflicts", "abort"},
-	})
+	choice, derr := deps.decide(ctx, PromptReq("merge-conflict", "Merging %s into %s hit conflicts", []string{"keep-conflicts", "abort"}, op.Source, target))
 	if derr != nil {
 		return Result{}, derr
 	}
 	if choice.Option == "keep-conflicts" {
-		return Result{Summary: "merge of " + op.Source + " into " + target + where + " has conflicts (left in tree)", Changed: true},
-			fmt.Errorf("merge conflict: %s into %s", op.Source, target)
+		res := Result{Changed: true}.WithSummary("merge of %s into %s", op.Source, target)
+		if dir != "" {
+			res = res.AppendSummary(" in worktree %s", dir)
+		}
+		res = res.AppendSummary(" has conflicts (left in tree)")
+		return res, fmt.Errorf("merge conflict: %s into %s", op.Source, target)
 	}
 	if err := deps.Repo.MergeAbort(ctx, dir); err != nil {
 		return Result{}, fmt.Errorf("smart merge: abort failed: %w", err)
 	}
-	return Result{Summary: "aborted: merging " + op.Source + " into " + target, Changed: false}, nil
+	return Result{Changed: false}.WithSummary("aborted: merging %s into %s", op.Source, target), nil
 }

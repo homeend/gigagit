@@ -30,11 +30,7 @@ func (op Reset) Run(ctx context.Context, deps OpDeps) (Result, error) {
 
 	mode := op.Mode
 	if mode == "" {
-		modeChoice, err := deps.decide(ctx, DecisionRequest{
-			ID:      "reset-mode",
-			Prompt:  "Reset the current branch to " + op.Commit,
-			Options: []string{"soft", "mixed", "hard", "cancel"},
-		})
+		modeChoice, err := deps.decide(ctx, PromptReq("reset-mode", "Reset the current branch to %s", []string{"soft", "mixed", "hard", "cancel"}, op.Commit))
 		if err != nil {
 			return Result{}, err
 		}
@@ -43,7 +39,7 @@ func (op Reset) Run(ctx context.Context, deps OpDeps) (Result, error) {
 		case "soft", "mixed", "hard":
 			// proceed
 		case "cancel", "":
-			return Result{Summary: "reset cancelled", Changed: false}, nil
+			return Result{Changed: false}.WithSummary("reset cancelled"), nil
 		default:
 			return Result{}, fmt.Errorf("reset: unknown mode %q", mode)
 		}
@@ -55,16 +51,12 @@ func (op Reset) Run(ctx context.Context, deps OpDeps) (Result, error) {
 			return Result{}, err
 		}
 		if !anc {
-			confirm, derr := deps.decide(ctx, DecisionRequest{
-				ID:      "reset-confirm",
-				Prompt:  "Commit " + op.Commit + " is not on the current branch; reset will move the branch onto it",
-				Options: []string{"proceed", "cancel"},
-			})
+			confirm, derr := deps.decide(ctx, PromptReq("reset-confirm", "Commit %s is not on the current branch; reset will move the branch onto it", []string{"proceed", "cancel"}, op.Commit))
 			if derr != nil {
 				return Result{}, derr
 			}
 			if confirm.Option != "proceed" {
-				return Result{Summary: "reset cancelled", Changed: false}, nil
+				return Result{Changed: false}.WithSummary("reset cancelled"), nil
 			}
 		}
 	} else {
@@ -80,7 +72,7 @@ func (op Reset) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	if err := deps.Repo.Reset(ctx, mode, op.Commit); err != nil {
 		return Result{}, fmt.Errorf("reset --%s %s: %w", mode, op.Commit, err)
 	}
-	res := Result{Summary: "reset (" + mode + ") to " + op.Commit, Changed: true}
+	res := Result{Changed: true}.WithSummary("reset (%s) to %s", mode, op.Commit)
 	deps.emit(ctx, Done{Result: res})
 	return res, nil
 }

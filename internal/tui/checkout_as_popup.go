@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -44,15 +45,15 @@ func (p *checkoutAsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 }
 
 func (p *checkoutAsPopup) render(m Model, below string) string {
-	verb := "check out"
+	verb := i18n.T("check out")
 	if p.intent == engine.CheckoutSwitch {
-		verb = "switch"
+		verb = i18n.T("switch")
 	}
 	w, h := m.overlayDims()
 	var b strings.Builder
-	b.WriteString("Check out " + p.remoteRef + " as\n\n")
-	b.WriteString(viewField("name: ", p.name, true, popupContentWidth(w)) + "\n\n")
-	b.WriteString("[enter] " + verb + "   [esc] cancel")
+	b.WriteString(i18n.T("Check out %s as", p.remoteRef) + "\n\n")
+	b.WriteString(viewField(i18n.T("name: "), p.name, true, popupContentWidth(w)) + "\n\n")
+	b.WriteString(i18n.T("[enter] %s   [esc] cancel", verb))
 	box := modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 	return overlayCenter(clipToHeight(below, h), box, w, h)
 }
@@ -87,7 +88,7 @@ func (m Model) checkoutDivergedModal(pc pendingCheckout) *decisionState {
 	return &decisionState{
 		req: engine.DecisionRequest{
 			ID:      "checkout-diverged",
-			Prompt:  pc.base + " has diverged from " + pc.remoteRef + " and cannot fast-forward.",
+			Prompt:  i18n.T("%s has diverged from %s and cannot fast-forward.", pc.base, pc.remoteRef),
 			Options: []string{"check out as different name…", "cancel"},
 		},
 		onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {
@@ -109,14 +110,14 @@ func (m Model) checkoutDivergedModal(pc pendingCheckout) *decisionState {
 // suggestion, keeping the pressed key's stay/switch intent.
 func (m Model) checkoutCurrentBranchModal(rb model.RemoteBranch, intent engine.CheckoutIntent) *decisionState {
 	const rename = "check out as different name…"
-	prompt := m.status.Branch + " is the current branch."
+	prompt := i18n.T("%s is the current branch.", m.status.Branch)
 	opts := []string{rename, "cancel"}
 	if rb.Name == m.status.Upstream {
 		if m.status.Behind > 0 {
-			prompt = fmt.Sprintf("%s is the current branch (behind %s by %d).", m.status.Branch, rb.Name, m.status.Behind)
+			prompt = i18n.T("%s is the current branch (behind %s by %d).", m.status.Branch, rb.Name, m.status.Behind)
 			opts = []string{"pull now", rename, "cancel"}
 		} else {
-			prompt = m.status.Branch + " is the current branch and already contains " + rb.Name + " (nothing to pull)."
+			prompt = i18n.T("%s is the current branch and already contains %s (nothing to pull).", m.status.Branch, rb.Name)
 		}
 	}
 	return &decisionState{

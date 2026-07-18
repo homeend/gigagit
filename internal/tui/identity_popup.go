@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -270,10 +271,10 @@ func (v *identityView) submitForm(m Model) (Model, tea.Cmd) {
 	if v.mode == idEditIdentity {
 		name, email := strings.TrimSpace(v.fName.Value()), strings.TrimSpace(v.fEmail.Value())
 		if name == "" || email == "" {
-			m.statusMsg = "name and email are required"
+			m.statusMsg = i18n.T("name and email are required")
 			return m, nil
 		}
-		v.applyName, v.applyEmail, v.applyLabel = name, email, "edited identity"
+		v.applyName, v.applyEmail, v.applyLabel = name, email, i18n.T("edited identity")
 		v.mode = idApply
 		return m, nil
 	}
@@ -282,7 +283,7 @@ func (v *identityView) submitForm(m Model) (Model, tea.Cmd) {
 	name := strings.TrimSpace(v.fName.Value())
 	email := strings.TrimSpace(v.fEmail.Value())
 	if label == "" || name == "" || email == "" {
-		m.statusMsg = "profile name, git name and email are required"
+		m.statusMsg = i18n.T("profile name, git name and email are required")
 		return m, nil
 	}
 	p := model.Profile{Name: label, GitName: name, GitEmail: email, Scope: v.scope}
@@ -337,34 +338,35 @@ func (v *identityView) box(m Model) string {
 	return popupBox(inner, strings.Join(parts, "\n"))
 }
 
-func identityLine(label, name, email string, set bool, inheritNote string) string {
-	val := "(not set)"
+func identityLine(label, name, email string, set bool, inheritNote string, labelWidth int) string {
+	val := i18n.T("(not set)")
 	if inheritNote != "" {
 		val = inheritNote
 	}
 	if set {
 		val = fmt.Sprintf("%s <%s>", name, email)
 	}
-	return fmt.Sprintf("  %-9s %s", label, val)
+	return "  " + padCell(label, labelWidth) + " " + val
 }
 
 func (v *identityView) browseLines(m Model, textW int) (body, footer []string) {
-	parts := []string{"Identity & profiles", ""}
+	parts := []string{i18n.T("Identity & profiles"), ""}
 	if v.loading {
-		return append(parts, "  (loading…)"), []string{"[esc]"}
+		return append(parts, "  "+i18n.T("(loading…)")), []string{i18n.T("[esc]")}
 	}
-	parts = append(parts, "Current identity")
-	parts = append(parts, identityLine("Global", v.id.GlobalName, v.id.GlobalEmail, v.id.GlobalSet, ""))
+	parts = append(parts, i18n.T("Current identity"))
+	sw := maxLabelWidth(9, i18n.T("Global"), i18n.T("Repo"), i18n.T("Effective"))
+	parts = append(parts, identityLine(i18n.T("Global"), v.id.GlobalName, v.id.GlobalEmail, v.id.GlobalSet, "", sw))
 	repoNote := ""
 	if !v.id.LocalSet && v.id.GlobalSet {
-		repoNote = "(not set — inherits global)"
+		repoNote = i18n.T("(not set — inherits global)")
 	}
-	parts = append(parts, identityLine("Repo", v.id.LocalName, v.id.LocalEmail, v.id.LocalSet, repoNote))
+	parts = append(parts, identityLine(i18n.T("Repo"), v.id.LocalName, v.id.LocalEmail, v.id.LocalSet, repoNote, sw))
 	effSet := v.id.EffectiveName != "" || v.id.EffectiveEmail != ""
-	parts = append(parts, identityLine("Effective", v.id.EffectiveName, v.id.EffectiveEmail, effSet, ""))
-	parts = append(parts, "", "Profiles")
+	parts = append(parts, identityLine(i18n.T("Effective"), v.id.EffectiveName, v.id.EffectiveEmail, effSet, "", sw))
+	parts = append(parts, "", i18n.T("Profiles"))
 	if len(v.profiles) == 0 {
-		parts = append(parts, "  (none yet — [n] to create)")
+		parts = append(parts, "  "+i18n.T("(none yet — [n] to create)"))
 	} else {
 		wr := make([]winRow, len(v.profiles))
 		for i, p := range v.profiles {
@@ -373,11 +375,7 @@ func (v *identityView) browseLines(m Model, textW int) (body, footer []string) {
 			if i == v.sel {
 				prefix, st = "> ", selectedRow
 			}
-			tag := "[global]"
-			if p.Scope == model.ProfileScopeRepo {
-				tag = "[this repo]"
-			}
-			row := fmt.Sprintf("%s%s — %s <%s>  %s", prefix, p.Name, p.GitName, p.GitEmail, tag)
+			row := fmt.Sprintf("%s%s — %s <%s>  %s", prefix, p.Name, p.GitName, p.GitEmail, profileScopeTag(p.Scope))
 			wr[i] = winRow{text: row, style: st}
 		}
 		h := len(v.profiles)
@@ -388,53 +386,84 @@ func (v *identityView) browseLines(m Model, textW int) (body, footer []string) {
 		}
 		parts = append(parts, renderWindow(wr, winOpts{w: textW, h: h, anchor: v.sel})...)
 	}
-	footer = []string{"[enter] apply", "[e] edit identity", "[n] new", "[r] rename", "[d] delete", "[esc]"}
+	footer = []string{i18n.T("[enter] apply"), i18n.T("[e] edit identity"), i18n.T("[n] new"), i18n.T("[r] rename"), i18n.T("[d] delete"), i18n.T("[esc]")}
 	return parts, footer
 }
 
-func (v *identityView) fieldLine(label string, f textfield, focused bool, contentWidth int) string {
+// profileScopeTag translates the compact scope tag shown next to a profile
+// row in the browse list. p.Scope stays the protocol enum throughout — only
+// this render-time switch (the agentStatusDisplay pattern) turns it into
+// display text.
+func profileScopeTag(s model.ProfileScope) string {
+	switch s {
+	case model.ProfileScopeRepo:
+		return i18n.T("[this repo]")
+	default:
+		return i18n.T("[global]")
+	}
+}
+
+// profileScopeLabel translates the scope value shown in the profile
+// create/rename form's own Scope field.
+func profileScopeLabel(s model.ProfileScope) string {
+	switch s {
+	case model.ProfileScopeRepo:
+		return i18n.T("this repo only")
+	default:
+		return i18n.T("global (every repo)")
+	}
+}
+
+func (v *identityView) fieldLine(label string, f textfield, focused bool, contentWidth, labelWidth int) string {
 	cursor := "  "
 	if focused {
 		cursor = "> "
 	}
-	return viewField(fmt.Sprintf("%s%-10s ", cursor, label), f, focused, contentWidth)
+	return viewField(cursor+padCell(label, labelWidth)+" ", f, focused, contentWidth)
+}
+
+// fieldLabelWidth is the shared label-column width for both the edit-identity
+// form (Name/Email) and the profile form (Name/Git name/Git email/Scope) —
+// one computed width across the full label set so either form's column
+// aligns the same way, floored at the historical 10-cell constant.
+func fieldLabelWidth() int {
+	return maxLabelWidth(10, i18n.T("Name"), i18n.T("Email"), i18n.T("Git name"), i18n.T("Git email"), i18n.T("Scope"))
 }
 
 func (v *identityView) editLines(textW int) (body, footer []string) {
+	fw := fieldLabelWidth()
 	return []string{
-		"Edit identity", "",
-		v.fieldLine("Name", v.fName, v.field == 0, textW),
-		v.fieldLine("Email", v.fEmail, v.field == 1, textW),
-	}, []string{"[↑/↓] field", "[enter] choose scope", "[esc] back"}
+		i18n.T("Edit identity"), "",
+		v.fieldLine(i18n.T("Name"), v.fName, v.field == 0, textW, fw),
+		v.fieldLine(i18n.T("Email"), v.fEmail, v.field == 1, textW, fw),
+	}, []string{i18n.T("[↑/↓] field"), i18n.T("[enter] choose scope"), i18n.T("[esc] back")}
 }
 
 func (v *identityView) formLines(textW int) (body, footer []string) {
-	title := "New profile"
+	title := i18n.T("New profile")
 	if v.renameFrom != "" {
-		title = "Edit profile"
+		title = i18n.T("Edit profile")
 	}
 	scopeCursor := "  "
 	if v.field == 3 {
 		scopeCursor = "> "
 	}
-	scopeVal := "global (every repo)"
-	if v.scope == model.ProfileScopeRepo {
-		scopeVal = "this repo only"
-	}
+	scopeVal := profileScopeLabel(v.scope)
+	fw := fieldLabelWidth()
 	return []string{
 		title, "",
-		v.fieldLine("Name", v.fLabel, v.field == 0, textW),
-		v.fieldLine("Git name", v.fName, v.field == 1, textW),
-		v.fieldLine("Git email", v.fEmail, v.field == 2, textW),
-		fmt.Sprintf("%s%-10s %s", scopeCursor, "Scope", scopeVal),
-	}, []string{"[↑/↓] field", "[←/→] scope", "[enter] save", "[esc] back"}
+		v.fieldLine(i18n.T("Name"), v.fLabel, v.field == 0, textW, fw),
+		v.fieldLine(i18n.T("Git name"), v.fName, v.field == 1, textW, fw),
+		v.fieldLine(i18n.T("Git email"), v.fEmail, v.field == 2, textW, fw),
+		scopeCursor + padCell(i18n.T("Scope"), fw) + " " + scopeVal,
+	}, []string{i18n.T("[↑/↓] field"), i18n.T("[←/→] scope"), i18n.T("[enter] save"), i18n.T("[esc] back")}
 }
 
 func (v *identityView) applyLines() (body, footer []string) {
 	return []string{
-		"Apply identity", "",
+		i18n.T("Apply identity"), "",
 		fmt.Sprintf("  %s <%s>", v.applyName, v.applyEmail),
-		fmt.Sprintf("  from: %s", v.applyLabel),
-		"", "Apply to:",
-	}, []string{"[r] this repo", "[g] globally", "[esc] back"}
+		i18n.T("  from: %s", v.applyLabel),
+		"", i18n.T("Apply to:"),
+	}, []string{i18n.T("[r] this repo"), i18n.T("[g] globally"), i18n.T("[esc] back")}
 }

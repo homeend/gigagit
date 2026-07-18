@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 func TestPackHintsKeepsKeyPairsIntact(t *testing.T) {
@@ -34,6 +35,35 @@ func TestPackHintsKeepsKeyPairsIntact(t *testing.T) {
 	}
 	if strings.Contains(packHints(pairs, 200), "\n") {
 		t.Fatal("a wide width should keep all pairs on one line")
+	}
+}
+
+// TestPackHintsCJKUsesDisplayWidthNotBytes covers a translated hint label
+// (e.g. under a ja/ko/zh catalog): CJK glyphs are 3 bytes in UTF-8 but only 2
+// display cells, so byte-length packing systematically undercounts how much
+// fits on a line. pair1 is 22 bytes / 16 cells; pair2 is 7 bytes/cells. At
+// width 27, byte math sees 22+2+7=31 > 27 (wraps pair2 to its own line) while
+// cell math sees 16+2+7=25 <= 27 (both pairs fit on one line) — the two
+// counting methods disagree on the split point, which is exactly the bug.
+func TestPackHintsCJKUsesDisplayWidthNotBytes(t *testing.T) {
+	pair1 := "[a] 生成生成生成" // 4 ASCII + 6 CJK runes: 22 bytes, 16 display cells
+	pair2 := "[b] set"    // 7 ASCII bytes/cells
+	pairs := []string{pair1, pair2}
+	const width = 27
+
+	out := packHints(pairs, width)
+
+	lines := strings.Split(out, "\n")
+	if len(lines) != 1 {
+		t.Fatalf("expected pairs to pack onto one line by display width, got %d lines: %q", len(lines), out)
+	}
+	for _, line := range lines {
+		if w := lipgloss.Width(line); w > width {
+			t.Fatalf("line exceeds display width %d: %q (width %d)", width, line, w)
+		}
+	}
+	if !strings.Contains(out, pair1) || !strings.Contains(out, pair2) {
+		t.Fatalf("missing a pair in %q", out)
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/homeend/gigagit/internal/i18n"
 )
 
 // bindingScope tells the . action menu how relevant a binding is. The footer
@@ -33,124 +34,131 @@ type footerBinding struct {
 	scope bindingScope
 }
 
-// contextBindings are the panel/row-specific actions, rendered first. The
-// three m-bindings and two d-bindings have mutually exclusive predicates, so
-// at most one of each key renders at a time.
-var contextBindings = []footerBinding{
-	{"switch", "s", "[s]witch", func(m Model) bool { return m.focus == panelBranches && m.canSwitchBranch() }, scopeRow},
-	{"branch", "b", "[b]ranch", func(m Model) bool { return m.focus == panelBranches && m.canOpenBranchPopup() }, scopeRow},
-	{"worktree", "w", "[w]orktree", func(m Model) bool { return m.focus == panelBranches && m.canOpenWorktreePopup() }, scopeRow},
-	{"delete-branch", "d", "[d]elete", func(m Model) bool { return m.focus == panelBranches && m.canDeleteBranch() }, scopeRow},
-	{"", "enter", "[enter] tip", func(m Model) bool {
-		_, ok := m.selectedBranch()
-		return m.focus == panelBranches && ok
-	}, scopeRow},
-	{"", "ctrl+g", "[ctrl+g] solo+tip", func(m Model) bool {
-		_, ok := m.selectedBranch()
-		return m.focus == panelBranches && m.opsIdle() && ok
-	}, scopeRow},
-	{"mark", "m", "[m]ark", func(m Model) bool {
-		return m.focus == panelBranches && m.canMark() && !m.markOnFocusedPanel()
-	}, scopeRow},
-	{"unmark", "m", "[m] unmark", func(m Model) bool {
-		return m.focus == panelBranches && m.canMark() && m.markOnFocusedPanel() && m.cursorOnMark()
-	}, scopeRow},
-	{"pair", "m", "[m] pair", func(m Model) bool {
-		return m.focus == panelBranches && m.canMark() && m.markOnFocusedPanel() && !m.cursorOnMark()
-	}, scopeRow},
-	{"switch-worktree", "enter", "[enter] switch", func(m Model) bool { return m.focus == panelWorktrees && m.canEnterWorktree() }, scopeRow},
-	{"delete-worktree", "d", "[d]elete", func(m Model) bool { return m.focus == panelWorktrees && m.canDeleteWorktree() }, scopeRow},
-	{"checkout-remote", "c", "[c]heckout", func(m Model) bool { return m.focus == panelRemotes && m.canCheckoutRemote() }, scopeRow},
-	{"switch-remote", "s", "[s]witch", func(m Model) bool { return m.focus == panelRemotes && m.canCheckoutRemote() }, scopeRow},
-	{"fetch", "f", "[f]etch", func(m Model) bool { return m.canFetchRemotes() }, scopeWindow},
-	{"tag-goto", "enter", "[enter] go to commit", func(m Model) bool { return m.focus == panelTags && len(m.tags) > 0 }, scopeRow},
-	{"file-diff", "enter", "[enter] diff", func(m Model) bool { return m.canShowFileDiff() }, scopeRow},
-	{"stage", "space", "[space] stage", func(m Model) bool { return m.focus == panelFiles && m.canStage() }, scopeRow},
-	{"stage-hunks", "H", "[H] hunks", func(m Model) bool { return m.canStageHunks() }, scopeRow},
-	{"unstage", "space", "[space] unstage", func(m Model) bool { return m.focus == panelStaged && m.canStage() }, scopeRow},
-	{"stash", "s", "[s] stash", func(m Model) bool {
-		return m.focus == panelFiles && m.opsIdle() && len(stashCandidates(m.status)) > 0
-	}, scopeWindow},
-	{"mark-file", "m", "[m] mark", func(m Model) bool { return m.isFilesPanel(m.focus) && m.panelLen(m.focus) > 0 }, scopeRow},
-	{"discard", "d", "[d]iscard", func(m Model) bool { return m.focus == panelFiles && m.canDiscard() }, scopeRow},
-	{"discard-all", "D", "[D] discard all", func(m Model) bool { return m.focus == panelFiles && m.canDiscardAll() }, scopeWindow},
-	{"commit-files", "l", "[enter/l] files", func(m Model) bool {
-		// Stricter than the dispatch: the narrow case is a statusMsg no-op
-		// there, so don't advertise it. enter drills in (focuses the tree); l
-		// opens the same view on the commit-list side.
-		return m.focus == panelCommits && m.canShowCommitFiles() && !(m.width > 0 && m.width < 40)
-	}, scopeRow},
-	{"", "space", "[space] mark", func(m Model) bool {
-		// Raw set size ≤ 1 guarantees space will mark (a possible stale key
-		// can't force a refusal); ≥ 2 is ambiguous under stale marks, so the
-		// footer stays silent there — omitting an available key is allowed,
-		// advertising a wrong outcome is not. Raw len keeps this O(1) per
-		// frame (validCompareKeys would scan the loaded feed every render).
-		if m.focus != panelCommits || !m.opsIdle() || len(m.commitCompareSet) > 1 {
-			return false
-		}
-		key, ok := m.selectedKey(panelCommits)
-		return ok && !m.commitCompareSet[key]
-	}, scopeRow},
-	{"", "space", "[space] unmark", func(m Model) bool {
-		if m.focus != panelCommits || !m.opsIdle() {
-			return false
-		}
-		key, ok := m.selectedKey(panelCommits)
-		return ok && m.commitCompareSet[key]
-	}, scopeRow},
-	{"commit-message", "i", "[i] message [I] in editor", func(m Model) bool {
-		_, ok := m.commitForMessageView()
-		return ok
-	}, scopeRow},
-	{"commit-filter", "\\", `[\] filter`, func(m Model) bool {
-		return m.focus == panelCommits && !(m.width > 0 && m.width < 40)
-	}, scopeWindow},
-	{"graph-window", "", "[<>] graph [⇧←→] pan [=] center", func(m Model) bool {
-		return m.focus == panelCommits && m.graphActive()
-	}, scopeWindow},
-	{"maximize", "t", "[t] max", func(m Model) bool {
-		// Stricter than the dispatch gate: don't advertise maximizing an empty box.
-		return m.opsIdle() && m.canMaximizeLeft() && m.panelLen(m.focus) > 0
-	}, scopeWindow},
-	{"fullscreen", "ctrl+t", "[ctrl+t] full", func(m Model) bool {
-		// Same stricter gate as t: don't advertise fullscreening an empty box.
-		// Also gated narrow like the \ filter binding above: below 40 columns
-		// the layout is already single-column, so ctrl+t has nothing left to add.
-		return m.opsIdle() && m.canFullMaximize() && m.panelLen(m.focus) > 0 && !(m.width > 0 && m.width < 40)
-	}, scopeWindow},
+// contextBindings returns the per-panel footer registry. A function, not a
+// package var: labels go through i18n.T, which must re-evaluate when the
+// language changes (a var would freeze English at init, before config
+// arrives). The three m-bindings and two d-bindings have mutually exclusive
+// predicates, so at most one of each key renders at a time.
+func contextBindings() []footerBinding {
+	return []footerBinding{
+		{"switch", "s", i18n.T("[s]witch"), func(m Model) bool { return m.focus == panelBranches && m.canSwitchBranch() }, scopeRow},
+		{"branch", "b", i18n.T("[b]ranch"), func(m Model) bool { return m.focus == panelBranches && m.canOpenBranchPopup() }, scopeRow},
+		{"worktree", "w", i18n.T("[w]orktree"), func(m Model) bool { return m.focus == panelBranches && m.canOpenWorktreePopup() }, scopeRow},
+		{"delete-branch", "d", i18n.T("[d]elete"), func(m Model) bool { return m.focus == panelBranches && m.canDeleteBranch() }, scopeRow},
+		{"", "enter", i18n.T("[enter] tip"), func(m Model) bool {
+			_, ok := m.selectedBranch()
+			return m.focus == panelBranches && ok
+		}, scopeRow},
+		{"", "ctrl+g", i18n.T("[ctrl+g] solo+tip"), func(m Model) bool {
+			_, ok := m.selectedBranch()
+			return m.focus == panelBranches && m.opsIdle() && ok
+		}, scopeRow},
+		{"mark", "m", i18n.T("[m]ark"), func(m Model) bool {
+			return m.focus == panelBranches && m.canMark() && !m.markOnFocusedPanel()
+		}, scopeRow},
+		{"unmark", "m", i18n.T("[m] unmark"), func(m Model) bool {
+			return m.focus == panelBranches && m.canMark() && m.markOnFocusedPanel() && m.cursorOnMark()
+		}, scopeRow},
+		{"pair", "m", i18n.T("[m] pair"), func(m Model) bool {
+			return m.focus == panelBranches && m.canMark() && m.markOnFocusedPanel() && !m.cursorOnMark()
+		}, scopeRow},
+		{"switch-worktree", "enter", i18n.T("[enter] switch"), func(m Model) bool { return m.focus == panelWorktrees && m.canEnterWorktree() }, scopeRow},
+		{"delete-worktree", "d", i18n.T("[d]elete"), func(m Model) bool { return m.focus == panelWorktrees && m.canDeleteWorktree() }, scopeRow},
+		{"checkout-remote", "c", i18n.T("[c]heckout"), func(m Model) bool { return m.focus == panelRemotes && m.canCheckoutRemote() }, scopeRow},
+		{"switch-remote", "s", i18n.T("[s]witch"), func(m Model) bool { return m.focus == panelRemotes && m.canCheckoutRemote() }, scopeRow},
+		{"fetch", "f", i18n.T("[f]etch"), func(m Model) bool { return m.canFetchRemotes() }, scopeWindow},
+		{"tag-goto", "enter", i18n.T("[enter] go to commit"), func(m Model) bool { return m.focus == panelTags && len(m.tags) > 0 }, scopeRow},
+		{"file-diff", "enter", i18n.T("[enter] diff"), func(m Model) bool { return m.canShowFileDiff() }, scopeRow},
+		{"stage", "space", i18n.T("[space] stage"), func(m Model) bool { return m.focus == panelFiles && m.canStage() }, scopeRow},
+		{"stage-hunks", "H", i18n.T("[H] hunks"), func(m Model) bool { return m.canStageHunks() }, scopeRow},
+		{"unstage", "space", i18n.T("[space] unstage"), func(m Model) bool { return m.focus == panelStaged && m.canStage() }, scopeRow},
+		{"stash", "s", i18n.T("[s] stash"), func(m Model) bool {
+			return m.focus == panelFiles && m.opsIdle() && len(stashCandidates(m.status)) > 0
+		}, scopeWindow},
+		{"mark-file", "m", i18n.T("[m] mark"), func(m Model) bool { return m.isFilesPanel(m.focus) && m.panelLen(m.focus) > 0 }, scopeRow},
+		{"discard", "d", i18n.T("[d]iscard"), func(m Model) bool { return m.focus == panelFiles && m.canDiscard() }, scopeRow},
+		{"discard-all", "D", i18n.T("[D] discard all"), func(m Model) bool { return m.focus == panelFiles && m.canDiscardAll() }, scopeWindow},
+		{"commit-files", "l", i18n.T("[enter/l] files"), func(m Model) bool {
+			// Stricter than the dispatch: the narrow case is a statusMsg no-op
+			// there, so don't advertise it. enter drills in (focuses the tree); l
+			// opens the same view on the commit-list side.
+			return m.focus == panelCommits && m.canShowCommitFiles() && !(m.width > 0 && m.width < 40)
+		}, scopeRow},
+		{"", "space", i18n.T("[space] mark"), func(m Model) bool {
+			// Raw set size ≤ 1 guarantees space will mark (a possible stale key
+			// can't force a refusal); ≥ 2 is ambiguous under stale marks, so the
+			// footer stays silent there — omitting an available key is allowed,
+			// advertising a wrong outcome is not. Raw len keeps this O(1) per
+			// frame (validCompareKeys would scan the loaded feed every render).
+			if m.focus != panelCommits || !m.opsIdle() || len(m.commitCompareSet) > 1 {
+				return false
+			}
+			key, ok := m.selectedKey(panelCommits)
+			return ok && !m.commitCompareSet[key]
+		}, scopeRow},
+		{"", "space", i18n.T("[space] unmark"), func(m Model) bool {
+			if m.focus != panelCommits || !m.opsIdle() {
+				return false
+			}
+			key, ok := m.selectedKey(panelCommits)
+			return ok && m.commitCompareSet[key]
+		}, scopeRow},
+		{"commit-message", "i", i18n.T("[i] message [I] in editor"), func(m Model) bool {
+			_, ok := m.commitForMessageView()
+			return ok
+		}, scopeRow},
+		{"commit-filter", "\\", i18n.T(`[\] filter`), func(m Model) bool {
+			return m.focus == panelCommits && !(m.width > 0 && m.width < 40)
+		}, scopeWindow},
+		{"graph-window", "", i18n.T("[<>] graph [⇧←→] pan [=] center"), func(m Model) bool {
+			return m.focus == panelCommits && m.graphActive()
+		}, scopeWindow},
+		{"maximize", "t", i18n.T("[t] max"), func(m Model) bool {
+			// Stricter than the dispatch gate: don't advertise maximizing an empty box.
+			return m.opsIdle() && m.canMaximizeLeft() && m.panelLen(m.focus) > 0
+		}, scopeWindow},
+		{"fullscreen", "ctrl+t", i18n.T("[ctrl+t] full"), func(m Model) bool {
+			// Same stricter gate as t: don't advertise fullscreening an empty box.
+			// Also gated narrow like the \ filter binding above: below 40 columns
+			// the layout is already single-column, so ctrl+t has nothing left to add.
+			return m.opsIdle() && m.canFullMaximize() && m.panelLen(m.focus) > 0 && !(m.width > 0 && m.width < 40)
+		}, scopeWindow},
+	}
 }
 
-// globalBindings are the always-relevant tail, still individually predicated
-// (while an op runs everything gated on opsIdle drops out and the footer
-// collapses to tab/help/quit).
-var globalBindings = []footerBinding{
-	{"resolve", "x", "[x] resolve", Model.canEnterConflict, scopeGlobal},
-	{"commit", "c", "[c] commit", Model.canCommit, scopeGlobal},
-	{"amend", "C", "[C] amend", Model.canAmend, scopeGlobal},
-	{"pull", "p", "[p]ull", Model.opsIdle, scopeGlobal},
-	{"push", "P", "[P]ush", func(m Model) bool { return m.opsIdle() && m.status.Branch != "" }, scopeGlobal},
-	{"stashes", "S", "[S]tashes", Model.opsIdle, scopeGlobal},
-	{"undo", "u", "[u]ndo", Model.opsIdle, scopeGlobal},
-	{"bookmarks", "g", "[g] bookmarks", Model.opsIdle, scopeGlobal},
-	{"shelf", "G", "[G] shelf", Model.opsIdle, scopeGlobal},
-	{"notices", "!", "[!] notices", func(m Model) bool { return len(m.notices) > 0 }, scopeGlobal},
-	{"find", "F", "[F] find file", Model.opsIdle, scopeGlobal},
-	{"order", "o", "[o]rder", Model.opsIdle, scopeGlobal},
-	{"view", "z", "[z] view", Model.opsIdle, scopeGlobal},
-	{"load-batch", "ctrl+l", "[ctrl+l] more", Model.opsIdle, scopeGlobal},
-	{"eager-find", "ctrl+f", "[ctrl+f] find deeper", Model.opsIdle, scopeGlobal},
-	{"filter", "/", "[/]filter", Model.opsIdle, scopeGlobal},
-	{"clear-filters", "ctrl+r", "[ctrl+r] clear filter", Model.canClearFilters, scopeGlobal},
-	{"repo", "R", "[R]epo", Model.opsIdle, scopeGlobal},
-	{"settings", ",", "[,] settings", Model.opsIdle, scopeGlobal},
-	{"actions", ".", "[.] actions", Model.opsIdle, scopeGlobal},
-	{"commands", "ctrl+p", "[ctrl+p] commands", Model.opsIdle, scopeGlobal},
-	{"", "tab", "[tab] focus", func(Model) bool { return true }, scopeGlobal},
-	{"", "ctrl+←/→", "[ctrl+←/→] tab", Model.opsIdle, scopeGlobal},
-	{"reload", "r", "[r] reload", func(m Model) bool { return !m.running && !m.loading }, scopeGlobal},
-	{"help", "?", "[?] help", func(Model) bool { return true }, scopeGlobal},
-	{"quit", "q", "[q] quit", func(Model) bool { return true }, scopeGlobal},
+// globalBindings returns the always-relevant tail, still individually
+// predicated (while an op runs everything gated on opsIdle drops out and the
+// footer collapses to tab/help/quit). A function for the same reason as
+// contextBindings: labels must re-evaluate on a live language switch.
+func globalBindings() []footerBinding {
+	return []footerBinding{
+		{"resolve", "x", i18n.T("[x] resolve"), Model.canEnterConflict, scopeGlobal},
+		{"commit", "c", i18n.T("[c] commit"), Model.canCommit, scopeGlobal},
+		{"amend", "C", i18n.T("[C] amend"), Model.canAmend, scopeGlobal},
+		{"pull", "p", i18n.T("[p]ull"), Model.opsIdle, scopeGlobal},
+		{"push", "P", i18n.T("[P]ush"), func(m Model) bool { return m.opsIdle() && m.status.Branch != "" }, scopeGlobal},
+		{"stashes", "S", i18n.T("[S]tashes"), Model.opsIdle, scopeGlobal},
+		{"undo", "u", i18n.T("[u]ndo"), Model.opsIdle, scopeGlobal},
+		{"bookmarks", "g", i18n.T("[g] bookmarks"), Model.opsIdle, scopeGlobal},
+		{"shelf", "G", i18n.T("[G] shelf"), Model.opsIdle, scopeGlobal},
+		{"notices", "!", i18n.T("[!] notices"), func(m Model) bool { return len(m.notices) > 0 }, scopeGlobal},
+		{"find", "F", i18n.T("[F] find file"), Model.opsIdle, scopeGlobal},
+		{"order", "o", i18n.T("[o]rder"), Model.opsIdle, scopeGlobal},
+		{"view", "z", i18n.T("[z] view"), Model.opsIdle, scopeGlobal},
+		{"load-batch", "ctrl+l", i18n.T("[ctrl+l] more"), Model.opsIdle, scopeGlobal},
+		{"eager-find", "ctrl+f", i18n.T("[ctrl+f] find deeper"), Model.opsIdle, scopeGlobal},
+		{"filter", "/", i18n.T("[/]filter"), Model.opsIdle, scopeGlobal},
+		{"clear-filters", "ctrl+r", i18n.T("[ctrl+r] clear filter"), Model.canClearFilters, scopeGlobal},
+		{"repo", "R", i18n.T("[R]epo"), Model.opsIdle, scopeGlobal},
+		{"settings", ",", i18n.T("[,] settings"), Model.opsIdle, scopeGlobal},
+		{"actions", ".", i18n.T("[.] actions"), Model.opsIdle, scopeGlobal},
+		{"commands", "ctrl+p", i18n.T("[ctrl+p] commands"), Model.opsIdle, scopeGlobal},
+		{"", "tab", i18n.T("[tab] focus"), func(Model) bool { return true }, scopeGlobal},
+		{"", "ctrl+←/→", i18n.T("[ctrl+←/→] tab"), Model.opsIdle, scopeGlobal},
+		{"reload", "r", i18n.T("[r] reload"), func(m Model) bool { return !m.running && !m.loading }, scopeGlobal},
+		{"help", "?", i18n.T("[?] help"), func(Model) bool { return true }, scopeGlobal},
+		{"quit", "q", i18n.T("[q] quit"), func(Model) bool { return true }, scopeGlobal},
+	}
 }
 
 // footerOverride returns the hand-written footer for the modes that own the
@@ -162,40 +170,40 @@ func (m Model) footerOverride() (string, bool) {
 		return m.proc.indicator(m), true
 	}
 	if m.filterTyping {
-		return "filter: type to search  [↑↓] move  [enter] keep  [esc] cancel", true
+		return i18n.T("filter: type to search  [↑↓] move  [enter] keep  [esc] cancel"), true
 	}
 	if m.highlightTyping {
-		return "highlight: type to search  [↑↓] move  [ctrl+↑/↓] prev/next match  [enter] keep  [esc] clear", true
+		return i18n.T("highlight: type to search  [↑↓] move  [ctrl+↑/↓] prev/next match  [enter] keep  [esc] clear"), true
 	}
 	// The files view owns the keyboard while open, so the registry footer would
 	// lie; show the view's own keys instead. The commit-list side mirrors the
 	// Commits panel (. menu + graph keys); the tree side is file-scoped.
 	if m.filesView != nil {
 		if m.filesPreview != nil && !m.filesTreeFocused {
-			return "file: [↑/↓] scroll  [z] view  [←/tab] back to tree  [esc] close preview", true
+			return i18n.T("file: [↑/↓] scroll  [z] view  [←/tab] back to tree  [esc] close preview"), true
 		}
 		// i shows the displayed commit's message — only when canShowFilesViewMessage
 		// holds (same gate as the handler, so the footer never advertises a dead i).
 		msgHint := ""
 		if m.canShowFilesViewMessage() {
-			msgHint = "  [i] msg"
+			msgHint = i18n.T("  [i] msg")
 		}
 		if m.filesTreeFocused {
 			// [a] mirrors the handler's gate exactly (stash/compare/shelf have no
 			// full tree to toggle to) so the footer never advertises a dead key.
 			aHint := ""
 			if m.stashView == nil && !m.inCompareMode() && m.filesHash != "" {
-				aHint = "  [a] all files"
+				aHint = i18n.T("  [a] all files")
 			}
-			return "tree: [↑/↓] move  [enter] diff" + aHint + "  [.] view file/copy  [/] search  [h] hist  [b] blame  [z] view" + msgHint + "  [esc/l] close", true
+			return i18n.T("tree: [↑/↓] move  [enter] diff") + aHint + i18n.T("  [.] view file/copy  [/] search  [h] hist  [b] blame  [z] view") + msgHint + i18n.T("  [esc/l] close"), true
 		}
-		return "commits: [enter/tab] tree  [↑/↓] move  [<>=] graph  [a] all files  [/] search  [.] actions" + msgHint + "  [esc/l] close", true
+		return i18n.T("commits: [enter/tab] tree  [↑/↓] move  [<>=] graph  [a] all files  [/] search  [.] actions") + msgHint + i18n.T("  [esc/l] close"), true
 	}
 	// The stash list owns the keyboard while it is the focused right column
 	// (no file tree yet). When focus has moved to a left panel, fall through to
 	// that panel's normal footer.
 	if m.stashView != nil && m.focus == panelCommits {
-		return "stash: [↑/↓] move  [l] files  [z] view  [←] panels  [enter] apply/pop/drop  [esc/S] close", true
+		return i18n.T("stash: [↑/↓] move  [l] files  [z] view  [←] panels  [enter] apply/pop/drop  [esc/S] close"), true
 	}
 	return "", false
 }
@@ -232,13 +240,13 @@ func (m Model) footerParts() []footerPart {
 		return parts
 	}
 	var parts []footerPart
-	for _, b := range contextBindings {
+	for _, b := range contextBindings() {
 		if b.when(m) {
 			parts = append(parts, footerPart{label: b.label, binding: b})
 		}
 	}
 	nCtx := len(parts)
-	for _, b := range globalBindings {
+	for _, b := range globalBindings() {
 		if b.when(m) {
 			p := footerPart{label: b.label, binding: b}
 			if len(parts) == nCtx && nCtx > 0 {
@@ -280,12 +288,12 @@ func (m Model) footerLine() string {
 // bindingByID finds a registry binding by its action id. Ids are unique
 // (TestFooterBindingIDsUniqueAndPresent), so the first match is the only one.
 func bindingByID(id string) (footerBinding, bool) {
-	for _, b := range contextBindings {
+	for _, b := range contextBindings() {
 		if b.id == id {
 			return b, true
 		}
 	}
-	for _, b := range globalBindings {
+	for _, b := range globalBindings() {
 		if b.id == id {
 			return b, true
 		}

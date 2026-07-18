@@ -98,19 +98,15 @@ func (op SmartRebase) Run(ctx context.Context, deps OpDeps) (Result, error) {
 		// Paused mid-rebase (or refused outright): popping onto that tree would
 		// compound the mess. The stash survives.
 		if stashed && res.Summary != "" {
-			res.Summary += " (your changes remain stashed)"
+			res = res.AppendSummary(" (your changes remain stashed)")
 		}
 		return res, rebaseErr
 	}
 	if stashed {
 		deps.emit(ctx, Progress{Step: "restoring changes"})
 		if err := deps.Repo.StashPop(ctx, ""); err != nil {
-			deps.emit(ctx, DecisionNeeded{Request: DecisionRequest{
-				ID:      "stash-pop-conflict",
-				Prompt:  "Restoring your changes conflicted",
-				Options: []string{"keep", "abort"},
-			}})
-			return Result{Summary: res.Summary + "; restore conflicted (changes preserved in stash)", Changed: res.Changed},
+			deps.emit(ctx, DecisionNeeded{Request: PromptReq("stash-pop-conflict", "Restoring your changes conflicted", []string{"keep", "abort"})})
+			return res.AppendSummary("; restore conflicted (changes preserved in stash)"),
 				fmt.Errorf("stash pop conflict after rebasing %s: %w", branch, err)
 		}
 	}
@@ -121,14 +117,18 @@ func (op SmartRebase) Run(ctx context.Context, deps OpDeps) (Result, error) {
 // resolving a conflict via the rebase-conflict decision. A kept conflict leaves
 // the repo paused mid-replay (detached HEAD), NOT cleanly on branch.
 func (op SmartRebase) rebaseAt(ctx context.Context, deps OpDeps, dir, branch string) (Result, error) {
-	where := ""
-	if dir != "" {
-		where = " in worktree " + dir
+	if dir == "" {
+		deps.emit(ctx, Progressf("rebasing", "%s onto %s", branch, op.Onto))
+	} else {
+		deps.emit(ctx, Progressf("rebasing", "%s onto %s in worktree %s", branch, op.Onto, dir))
 	}
-	deps.emit(ctx, Progress{Step: "rebasing", Detail: branch + " onto " + op.Onto + where})
 	rebaseErr := deps.Repo.Rebase(ctx, dir, op.Onto)
 	if rebaseErr == nil {
-		return Result{Summary: "rebased " + branch + " onto " + op.Onto + where, Changed: true}, nil
+		res := Result{Changed: true}.WithSummary("rebased %s onto %s", branch, op.Onto)
+		if dir != "" {
+			res = res.AppendSummary(" in worktree %s", dir)
+		}
+		return res, nil
 	}
 	inRebase, stateErr := deps.Repo.RebaseInProgress(ctx, dir)
 	if stateErr != nil {
@@ -138,20 +138,20 @@ func (op SmartRebase) rebaseAt(ctx context.Context, deps OpDeps, dir, branch str
 		// Refused outright (e.g. nothing to replay): nothing to resolve.
 		return Result{}, fmt.Errorf("smart rebase: %s onto %s: %w", branch, op.Onto, rebaseErr)
 	}
-	choice, derr := deps.decide(ctx, DecisionRequest{
-		ID:      "rebase-conflict",
-		Prompt:  "Rebasing " + branch + " onto " + op.Onto + " hit conflicts",
-		Options: []string{"keep-conflicts", "abort"},
-	})
+	choice, derr := deps.decide(ctx, PromptReq("rebase-conflict", "Rebasing %s onto %s hit conflicts", []string{"keep-conflicts", "abort"}, branch, op.Onto))
 	if derr != nil {
 		return Result{}, derr
 	}
 	if choice.Option == "keep-conflicts" {
-		return Result{Summary: "rebase of " + branch + " onto " + op.Onto + where + " paused on a conflict (resolve, then `git rebase --continue`)", Changed: true},
-			fmt.Errorf("rebase conflict: %s onto %s", branch, op.Onto)
+		res := Result{Changed: true}.WithSummary("rebase of %s onto %s", branch, op.Onto)
+		if dir != "" {
+			res = res.AppendSummary(" in worktree %s", dir)
+		}
+		res = res.AppendSummary(" paused on a conflict (resolve, then `git rebase --continue`)")
+		return res, fmt.Errorf("rebase conflict: %s onto %s", branch, op.Onto)
 	}
 	if err := deps.Repo.RebaseAbort(ctx, dir); err != nil {
 		return Result{}, fmt.Errorf("smart rebase: abort failed: %w", err)
 	}
-	return Result{Summary: "aborted: rebasing " + branch + " onto " + op.Onto, Changed: false}, nil
+	return Result{Changed: false}.WithSummary("aborted: rebasing %s onto %s", branch, op.Onto), nil
 }

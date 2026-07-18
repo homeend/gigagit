@@ -324,7 +324,7 @@ func TestOverlayDisableSlowOpConfirm(t *testing.T) {
 func TestCommitPageSizeDefaultsAndOverlay(t *testing.T) {
 	// Defaults.
 	d := Defaults().UI
-	if d.CommitInitialCount != 300 || d.CommitBatchSize != 300 || d.CommitSearchMaxPages != 5 {
+	if d.CommitInitialCount != 300 || d.CommitBatchSize != 300 || d.CommitSearchMaxPages != 50 {
 		t.Fatalf("defaults = %d/%d/%d, want 300/300/5",
 			d.CommitInitialCount, d.CommitBatchSize, d.CommitSearchMaxPages)
 	}
@@ -509,5 +509,22 @@ func TestPrivateRepoPathXDG(t *testing.T) {
 func TestPrivateRepoPathEmptyAnchor(t *testing.T) {
 	if got := PrivateRepoPath(""); got != "" {
 		t.Errorf("empty anchor should yield empty path, got %q", got)
+	}
+}
+
+func TestFileUILanguage(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, ".gg.toml")
+	if err := os.WriteFile(p, []byte("[ui]\nlanguage = \"ja\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := FileUILanguage(p); got != "ja" {
+		t.Fatalf("got %q, want ja", got)
+	}
+	if got := FileUILanguage(filepath.Join(dir, "missing.toml")); got != "" {
+		t.Fatalf("missing file must yield empty, got %q", got)
+	}
+	if got := FileUILanguage(""); got != "" {
+		t.Fatalf("empty path must yield empty, got %q", got)
 	}
 }

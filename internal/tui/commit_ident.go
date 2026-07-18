@@ -14,8 +14,9 @@ import (
 const wipNodeGlyph = "◇"
 
 // text renders a pseudo-row body, e.g. "Working tree (2)" / "Staged (1)".
+// Uses titleLabel() (translated), not label() (the English identity sentinel).
 func (r wipRow) text() string {
-	return fmt.Sprintf("%s (%d)", r.label(), r.count)
+	return fmt.Sprintf("%s (%d)", r.titleLabel(), r.count)
 }
 
 // commitIdentW is the fixed display width of the commit-row identity column

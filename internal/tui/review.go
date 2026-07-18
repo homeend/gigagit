@@ -11,6 +11,7 @@ import (
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/exttool"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/template"
 )
@@ -114,7 +115,7 @@ func (m Model) focusedCommitReviewRow() (actionRow, bool) {
 	target := reviewTargetForCommit(m.commits[bi])
 	return actionRow{
 		id:    "review-commit",
-		label: "Review this commit",
+		label: i18n.T("Review this commit"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			return m.startReviewLane(target)
 		},
@@ -133,7 +134,7 @@ func (m Model) branchReviewRow() (actionRow, bool) {
 	name := b.Name
 	return actionRow{
 		id:    "review-branch",
-		label: "Review branch " + name,
+		label: i18n.T("Review branch %s", name),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			return m, m.reviewBranchTargetCmd(name, m.reviewGen)
 		},
@@ -148,7 +149,7 @@ func (m Model) workingReviewRow() (actionRow, bool) {
 	}
 	return actionRow{
 		id:    "review-working",
-		label: "Review working changes",
+		label: i18n.T("Review working changes"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			return m.startReviewLane(domain.WorkingReviewTarget())
 		},
@@ -182,7 +183,7 @@ func (m Model) markedRangeReviewRow() (actionRow, bool) {
 	}
 	return actionRow{
 		id:    "review-marked-range",
-		label: "Review marked range (AI)",
+		label: i18n.T("Review marked range (AI)"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			return m.startReviewLane(target)
 		},
@@ -237,7 +238,7 @@ func (m Model) reviewBranchTargetCmd(tip string, gen int) tea.Cmd {
 func (m Model) startReviewLane(target domain.ReviewTarget) (Model, tea.Cmd) {
 	cmds := m.toolCommands(string(exttool.CatReview))
 	if len(cmds) == 0 {
-		m.statusMsg = "no review tool configured (Settings → External tools)"
+		m.statusMsg = i18n.T("no review tool configured (Settings → External tools)")
 		return m, nil
 	}
 	lane := &reviewLane{target: target, cmds: cmds}
@@ -255,7 +256,7 @@ func (m Model) startReviewLane(target domain.ReviewTarget) (Model, tea.Cmd) {
 func (m Model) reviewGate(lane *reviewLane, chosen config.ToolCommand) (Model, tea.Cmd) {
 	resolved, err := template.ResolveCommand(chosen.Command, nil, template.CmdCtx{Range: lane.target.Range, Repo: m.currentWorktree})
 	if err != nil {
-		m.statusMsg = "review: " + err.Error()
+		m.statusMsg = i18n.T("review: %s", err.Error())
 		return m.popLayer(), nil
 	}
 	lane.genCmd = chosen
@@ -310,7 +311,7 @@ func (m Model) applyReviewDone(msg reviewDoneMsg) (Model, tea.Cmd) {
 	m.reviewRunning = false
 	m.reviewCancel = nil
 	if msg.err != nil {
-		m.statusMsg = "review: " + msg.err.Error()
+		m.statusMsg = i18n.T("review: %s", msg.err.Error())
 		return m, nil
 	}
 	return m.pushLayer(newReviewView(reviewTitle(msg.res.Label), msg.res.Path, msg.res.Content)), nil
@@ -318,12 +319,15 @@ func (m Model) applyReviewDone(msg reviewDoneMsg) (Model, tea.Cmd) {
 
 // reviewTitle names the report viewer from the human label (branch name /
 // "<short> <subject>" / range / "working changes"). An empty label (a target
-// that set neither Label nor Range) falls back to "working changes".
+// that set neither Label nor Range) falls back to "working changes", and so
+// does the literal "working changes" label itself (domain's untranslated
+// fallback — see reviewScopeLabel) — both take the translated sibling key
+// instead of running it through the generic "Review: %s" format.
 func reviewTitle(label string) string {
-	if strings.TrimSpace(label) == "" {
-		return "Review: working changes"
+	if strings.TrimSpace(label) == "" || label == "working changes" {
+		return i18n.T("Review: working changes")
 	}
-	return "Review: " + label
+	return i18n.T("Review: %s", label)
 }
 
 // cancelReview cancels an in-flight background run, clears the running flag
@@ -416,14 +420,14 @@ func (lane *reviewLane) render(m Model, below string) string {
 	var b strings.Builder
 	switch {
 	case lane.approving != "":
-		b.WriteString("Run this command?  (" + lane.genCmd.Name + ")\n\n")
+		b.WriteString(i18n.T("Run this command?  (%s)", lane.genCmd.Name) + "\n\n")
 		b.WriteString(approvalBoxView(lane.approving, w))
 	case lane.choosing:
-		b.WriteString("Choose a review tool\n\n")
+		b.WriteString(i18n.T("Choose a review tool") + "\n\n")
 		for i, tc := range lane.cmds {
 			b.WriteString(fmt.Sprintf("[%d] %s\n", i+1, tc.Name))
 		}
-		b.WriteString("\n[1-9] choose  [enter] first  [esc] cancel")
+		b.WriteString("\n" + i18n.T("[1-9] choose  [enter] first  [esc] cancel"))
 	}
 	box := modalStyle.Width(popupResolveWidth(w, lane.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 	return overlayCenter(clipToHeight(below, h), box, w, h)
@@ -433,5 +437,9 @@ func (lane *reviewLane) render(m Model, below string) string {
 // (the blinking "⟳ reviewing <label>…" segment) — the human DisplayLabel, so
 // the bottom bar shows a branch name / commit title / range, never a raw SHA.
 func reviewScopeLabel(t domain.ReviewTarget) string {
-	return t.DisplayLabel()
+	l := t.DisplayLabel()
+	if l == "working changes" { // domain's untranslated fallback — domain can't import i18n
+		return i18n.T("working changes")
+	}
+	return l
 }

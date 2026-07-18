@@ -40,7 +40,7 @@ func (op Revert) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	deps.emit(ctx, Progress{Step: "reverting", Detail: op.Commit})
 	revErr := deps.Repo.Revert(ctx, "", op.Commit)
 	if revErr == nil {
-		return op.restore(ctx, deps, stashed, Result{Summary: "reverted " + op.Commit, Changed: true})
+		return op.restore(ctx, deps, stashed, Result{Changed: true}.WithSummary("reverted %s", op.Commit))
 	}
 
 	inRevert, stateErr := deps.Repo.RevertInProgress(ctx, "")
@@ -64,26 +64,22 @@ func (op Revert) Run(ctx context.Context, deps OpDeps) (Result, error) {
 		return Result{}, fmt.Errorf("revert %s: nothing to undo (already reverted); aborted", op.Commit)
 	}
 
-	choice, derr := deps.decide(ctx, DecisionRequest{
-		ID:      "revert-conflict",
-		Prompt:  "Reverting " + op.Commit + " hit conflicts",
-		Options: []string{"keep-conflicts", "abort"},
-	})
+	choice, derr := deps.decide(ctx, PromptReq("revert-conflict", "Reverting %s hit conflicts", []string{"keep-conflicts", "abort"}, op.Commit))
 	if derr != nil {
 		return Result{}, derr
 	}
 	if choice.Option == "keep-conflicts" {
-		summary := "revert of " + op.Commit + " has conflicts (left in tree)"
+		res := Result{Changed: true}.WithSummary("revert of %s has conflicts (left in tree)", op.Commit)
 		if stashed {
-			summary += " (your changes remain stashed)"
+			res = res.AppendSummary(" (your changes remain stashed)")
 		}
-		return Result{Summary: summary, Changed: true}, fmt.Errorf("revert conflict: %s", op.Commit)
+		return res, fmt.Errorf("revert conflict: %s", op.Commit)
 	}
 	if err := deps.Repo.RevertAbort(ctx, ""); err != nil {
 		return Result{}, fmt.Errorf("revert: abort failed: %w", err)
 	}
 	// Tree is back to the pre-revert tip; safe to restore the autostash.
-	return op.restore(ctx, deps, stashed, Result{Summary: "aborted: revert " + op.Commit, Changed: false})
+	return op.restore(ctx, deps, stashed, Result{Changed: false}.WithSummary("aborted: revert %s", op.Commit))
 }
 
 // restore pops the autostash (if any) onto the now-clean tree. A pop conflict
@@ -94,7 +90,7 @@ func (op Revert) restore(ctx context.Context, deps OpDeps, stashed bool, res Res
 	}
 	deps.emit(ctx, Progress{Step: "restoring changes"})
 	if err := deps.Repo.StashPop(ctx, ""); err != nil {
-		return Result{Summary: res.Summary + "; restore conflicted (changes preserved in stash)", Changed: res.Changed},
+		return res.AppendSummary("; restore conflicted (changes preserved in stash)"),
 			fmt.Errorf("stash pop conflict after revert %s: %w", op.Commit, err)
 	}
 	return res, nil

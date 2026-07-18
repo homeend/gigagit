@@ -5,6 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -35,7 +36,7 @@ func (m Model) fileIgnoreRow() (actionRow, bool) {
 	}
 	return actionRow{
 		id:    "ignore-file",
-		label: "Add to .gitignore",
+		label: i18n.T("Add to .gitignore"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			return m.startOp(engine.Ignore{Path: p})
 		},
@@ -51,7 +52,7 @@ func (m Model) fileIgnoreExtRow() (actionRow, bool) {
 	}
 	return actionRow{
 		id:    "ignore-ext",
-		label: "Add extension to .gitignore (*" + path.Ext(p) + ")",
+		label: i18n.T("Add extension to .gitignore (*%s)", path.Ext(p)),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			return m.startOp(engine.Ignore{Path: p, Ext: true})
 		},

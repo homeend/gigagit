@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -30,7 +31,7 @@ func (m Model) commitForMessageView() (model.Commit, bool) {
 // doubles as the async tag: the commitMessageMsg handler fills only the popup
 // whose title byte-matches, so a stale load from a different commit (the user
 // esc'd and reopened on another row) can't land in the wrong popup.
-func commitMessageTitle(short string) string { return "Commit " + short + " message" }
+func commitMessageTitle(short string) string { return i18n.T("Commit %s message", short) }
 
 // commitMessageMsg carries the async result of loadCommitMessageCmd: the full
 // popup content (the git-show-style metadata header built from the in-memory
@@ -47,7 +48,7 @@ type commitMessageMsg struct {
 // popup scrolls/pages/searches like any other.
 func (m Model) openCommitMessagePopup(c model.Commit) (Model, tea.Cmd) {
 	short := shortHash(c.Hash)
-	cp := newContentPopup(commitMessageTitle(short), append(commitMetaHeader(c), contentLine{text: "(loading…)"}))
+	cp := newContentPopup(commitMessageTitle(short), append(commitMetaHeader(c), contentLine{text: i18n.T("(loading…)")}))
 	cp.footer = commitFooterLine(c)
 	m = m.pushLayer(cp)
 	return m, m.loadCommitMessageCmd(c, short)
@@ -63,7 +64,7 @@ func (m Model) loadCommitMessageCmd(c model.Commit, short string) tea.Cmd {
 		lines := commitMetaHeader(c)
 		msg, err := svc.CommitMessage(context.Background(), c.Hash)
 		if err != nil {
-			lines = append(lines, contentLine{text: "(load failed: " + err.Error() + ")"})
+			lines = append(lines, contentLine{text: i18n.T("(load failed: %s)", err.Error())})
 		} else {
 			lines = append(lines, fileContentLines([]byte(strings.TrimRight(msg, "\n")))...)
 		}
@@ -77,19 +78,19 @@ func (m Model) loadCommitMessageCmd(c model.Commit, short string) tea.Cmd {
 // body. No git call — every field is on model.Commit.
 func commitMetaHeader(c model.Commit) []contentLine {
 	out := []contentLine{
-		{text: "commit " + c.Hash},
-		{text: "Author: " + c.Author},
-		{text: "Date:   " + commitDateString(c)},
+		{text: i18n.T("commit %s", c.Hash)},
+		{text: i18n.T("Author: %s", c.Author)},
+		{text: i18n.T("Date:   %s", commitDateString(c))},
 	}
 	if refs := commitRefsLine(c); refs != "" {
-		out = append(out, contentLine{text: "Refs:   " + refs})
+		out = append(out, contentLine{text: i18n.T("Refs:   %s", refs)})
 	}
 	if len(c.Parents) > 1 {
 		shorts := make([]string, len(c.Parents))
 		for i, p := range c.Parents {
 			shorts[i] = shortHash(p)
 		}
-		out = append(out, contentLine{text: "Merge:  " + strings.Join(shorts, " ")})
+		out = append(out, contentLine{text: i18n.T("Merge:  %s", strings.Join(shorts, " "))})
 	}
 	return append(out, contentLine{text: ""})
 }
@@ -106,7 +107,7 @@ func commitFooterLine(c model.Commit) string {
 // commitDateString formats a commit's author time as a local absolute stamp.
 func commitDateString(c model.Commit) string {
 	if c.UnixTime == 0 {
-		return "(unknown)"
+		return i18n.T("(unknown)")
 	}
 	return time.Unix(c.UnixTime, 0).Format("2006-01-02 15:04")
 }
@@ -120,7 +121,7 @@ func commitRefsLine(c model.Commit) string {
 	parts := make([]string, 0, len(c.Refs))
 	for _, r := range c.Refs {
 		if r.Kind == model.RefTag {
-			parts = append(parts, "tag: "+r.Name)
+			parts = append(parts, i18n.T("tag: %s", r.Name))
 		} else {
 			parts = append(parts, r.Name)
 		}
@@ -153,7 +154,7 @@ func (m Model) commitViewMessageRow() (actionRow, bool) {
 	}
 	return actionRow{
 		id:    "commit-view-message",
-		label: "View message",
+		label: i18n.T("View message"),
 		run:   func(m Model) (tea.Model, tea.Cmd) { return m.openCommitMessagePopup(c) },
 	}, true
 }
@@ -165,7 +166,7 @@ func (m Model) commitEditMessageRow() (actionRow, bool) {
 	}
 	return actionRow{
 		id:    "commit-edit-message",
-		label: "Open message in editor",
+		label: i18n.T("Open message in editor"),
 		run:   func(m Model) (tea.Model, tea.Cmd) { return m.openCommitMessageEditor(c) },
 	}, true
 }

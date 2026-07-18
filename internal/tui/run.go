@@ -9,6 +9,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/repos"
 )
 
@@ -34,7 +35,7 @@ func Run(svc *domain.Service) (string, error) {
 	}
 	if cfg.Debug.LogOperations {
 		if err := m.opLog.enable(); err != nil {
-			m.statusMsg = "operation log: " + err.Error()
+			m.statusMsg = i18n.T("operation log: %s", err.Error())
 		}
 	}
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())

@@ -2,7 +2,6 @@ package tui
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -10,6 +9,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/clipboard"
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -101,23 +101,13 @@ func (m Model) applyRepoHealth(msg repoHealthMsg) (Model, tea.Cmd) {
 	}
 	m.repoHealth = msg.health
 	m.repoHealthKnown = true
+	m.clipAvail = msg.clipAvail
 
-	var dismissed map[string]bool
-	if m.promptStore != nil {
-		dismissed = m.promptStore.DismissedNotices(msg.health.GitCommonDir)
-	}
 	prev := make(map[string]bool, len(m.notices))
 	for _, n := range m.notices {
 		prev[n.id] = true
 	}
-	var next []notice
-	if n := commitGraphNotice(msg.health); n != nil && !dismissed[n.id] && !m.noticeSessionDismissed[n.id] {
-		next = append(next, *n)
-	}
-	if n := clipboardNotice(msg.clipAvail, msg.health.GitCommonDir); n != nil && !dismissed[n.id] && !m.noticeSessionDismissed[n.id] {
-		next = append(next, *n)
-	}
-	m.notices = next
+	m = m.rebuildNotices()
 	var cmd tea.Cmd
 	for _, n := range m.notices {
 		if !prev[n.id] {
@@ -133,6 +123,29 @@ func (m Model) applyRepoHealth(msg repoHealthMsg) (Model, tea.Cmd) {
 	return m, cmd
 }
 
+// rebuildNotices re-derives m.notices from the cached health snapshot.
+// Notice titles/details/action labels bake i18n.T output at build time, so a
+// language switch must rebuild them; ids are stable, so dismissals hold and
+// no blink logic runs here (applyRepoHealth owns blinking).
+func (m Model) rebuildNotices() Model {
+	if !m.repoHealthKnown {
+		return m // nothing cached yet: the first health read builds in the new language
+	}
+	var dismissed map[string]bool
+	if m.promptStore != nil {
+		dismissed = m.promptStore.DismissedNotices(m.repoHealth.GitCommonDir)
+	}
+	var next []notice
+	if n := commitGraphNotice(m.repoHealth); n != nil && !dismissed[n.id] && !m.noticeSessionDismissed[n.id] {
+		next = append(next, *n)
+	}
+	if n := clipboardNotice(m.clipAvail, m.repoHealth.GitCommonDir); n != nil && !dismissed[n.id] && !m.noticeSessionDismissed[n.id] {
+		next = append(next, *n)
+	}
+	m.notices = next
+	return m
+}
+
 // commitGraphNotice fires when the repo is big (pack ≥ bigRepoPackBytes), has
 // no commit-graph file/chain, and fetch.writeCommitGraph is unset — the case
 // where one keystroke makes commit browsing ~10× faster.
@@ -143,23 +156,21 @@ func commitGraphNotice(h model.RepoHealth) *notice {
 	return &notice{
 		id:      noticeCommitGraph,
 		repoKey: h.GitCommonDir,
-		title:   "Commit browsing can be ~10× faster in this repo",
+		title:   i18n.T("Commit browsing can be ~10× faster in this repo"),
 		detail: []string{
-			fmt.Sprintf("This repo is big (%.0f MB of packs) and has no commit-graph file,", float64(h.PackBytes)/(1<<20)),
-			"so ordered commit walks (the Commits panel's paging) re-walk history",
-			"every time. Writing one takes a moment and git keeps it fresh when",
-			"fetch.writeCommitGraph is on.",
+			i18n.T("This repo is big (%.0f MB of packs) and has no commit-graph file, so ordered commit walks (the Commits panel's paging) re-walk history every time.", float64(h.PackBytes)/(1<<20)),
+			i18n.T("Writing one takes a moment and git keeps it fresh when fetch.writeCommitGraph is on."),
 		},
 		actions: []noticeAction{
-			{label: "Write commit-graph now + keep it fresh (fetch.writeCommitGraph=true)",
+			{label: i18n.T("Write commit-graph now + keep it fresh (fetch.writeCommitGraph=true)"),
 				run: Model.startCommitGraphWriteAndEnable},
-			{label: "Enable auto-refresh only (graph appears on next fetch/gc)",
+			{label: i18n.T("Enable auto-refresh only (graph appears on next fetch/gc)"),
 				run: func(m Model) (Model, tea.Cmd) {
 					m.refreshHealthAfterOp = true
 					return m.startOp(engine.SetGitConfig{Key: "fetch.writeCommitGraph", Value: "true"})
 				}},
-			{label: "Not now (ask again next load)"},
-			{label: "Never for this repo", never: true},
+			{label: i18n.T("Not now (ask again next load)")},
+			{label: i18n.T("Never for this repo"), never: true},
 		},
 	}
 }
@@ -185,24 +196,21 @@ func clipboardNotice(av clipboard.Availability, repoKey string) *notice {
 		return nil
 	}
 	detail := []string{
-		"gg's copy actions (commit SHAs, branch/tag names, diffs) can't reach",
-		"your system clipboard: a Linux terminal app needs a small helper program",
-		"and none is installed. gg is falling back to a terminal escape (OSC 52)",
-		"that many terminals — and tmux without extra config — don't honour, so a",
-		"copy can silently do nothing.",
+		i18n.T("gg's copy actions (commit SHAs, branch/tag names, diffs) can't reach your system clipboard: a Linux terminal app needs a small helper program and none is installed."),
+		i18n.T("gg is falling back to a terminal escape (OSC 52) that many terminals — and tmux without extra config — don't honour, so a copy can silently do nothing."),
 		"",
-		"Install one, then copy again — gg picks it up automatically, no restart:",
+		i18n.T("Install one, then copy again — gg picks it up automatically, no restart:"),
 		"",
 	}
 	detail = append(detail, clipboardInstallLines(av.Install)...)
 	return &notice{
 		id:      noticeClipboard,
 		repoKey: repoKey,
-		title:   "Clipboard copy may not work — install a clipboard tool",
+		title:   i18n.T("Clipboard copy may not work — install a clipboard tool"),
 		detail:  detail,
 		actions: []noticeAction{
-			{label: "Not now (ask again next load)"},
-			{label: "Never for this repo", never: true},
+			{label: i18n.T("Not now (ask again next load)")},
+			{label: i18n.T("Never for this repo"), never: true},
 		},
 	}
 }
@@ -211,9 +219,9 @@ func clipboardNotice(av clipboard.Availability, repoKey string) *notice {
 // package (xclip for X11, wl-clipboard for Wayland).
 func clipboardInstallLines(pkg string) []string {
 	return []string{
-		"    Debian/Ubuntu:  sudo apt install " + pkg,
-		"    Fedora:         sudo dnf install " + pkg,
-		"    Arch:           sudo pacman -S " + pkg,
+		i18n.T("    Debian/Ubuntu:  sudo apt install %s", pkg),
+		i18n.T("    Fedora:         sudo dnf install %s", pkg),
+		i18n.T("    Arch:           sudo pacman -S %s", pkg),
 	}
 }
 
@@ -237,11 +245,10 @@ func (m Model) noticeSegment() string {
 	if n == 0 || m.proc != nil {
 		return ""
 	}
-	seg := fmt.Sprintf("! %d notice", n)
+	seg := i18n.T("! %d notice — press [!]", n)
 	if n != 1 {
-		seg += "s"
+		seg = i18n.T("! %d notices — press [!]", n)
 	}
-	seg += " — press [!]"
 	if !m.noticesUnread {
 		return seg
 	}

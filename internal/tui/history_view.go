@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -146,8 +147,8 @@ func (h *historyView) render(m Model, _ string) string {
 	w, scrH := m.overlayDims()
 	body := m.historyBodyRows()
 
-	header := truncate("history: "+h.ctx.path, w)
-	hint := truncate("[↑↓] commit  [enter] diff  [e] editor  [esc] back", w)
+	header := truncate(i18n.T("history: %s", h.ctx.path), w)
+	hint := truncate(i18n.T("[↑↓] commit  [enter] diff  [e] editor  [esc] back"), w)
 
 	// Left list. Right pane shown only when wide enough (>=60); else list-only.
 	split := w >= 60
@@ -169,11 +170,11 @@ func (h *historyView) render(m Model, _ string) string {
 	}
 	win := renderWindow(wr, winOpts{w: listW, h: body, mode: h.mode, anchor: h.sel, hscroll: h.hscroll})
 	if h.loading {
-		win = padLines("  (loading…)", listW, body)
+		win = padLines(i18n.T("  (loading…)"), listW, body)
 	} else if h.err != nil {
-		win = padLines("  error: "+h.err.Error(), listW, body)
+		win = padLines(i18n.T("  error: %s", h.err.Error()), listW, body)
 	} else if len(h.commits) == 0 {
-		win = padLines("  (no history)", listW, body)
+		win = padLines(i18n.T("  (no history)"), listW, body)
 	}
 	for len(win) < body {
 		win = append(win, padRight("", listW))
@@ -207,18 +208,18 @@ func (h *historyView) render(m Model, _ string) string {
 // renderRightPane draws the selected commit's diff using the shared diff pane.
 func (h *historyView) renderRightPane(m Model, w, body int) string {
 	if h.diff == nil {
-		return padBox("  (select a commit)", w, body)
+		return padBox(i18n.T("  (select a commit)"), w, body)
 	}
 	v := h.diff
 	switch {
 	case v.loading:
-		return padBox("  (loading…)", w, body)
+		return padBox(i18n.T("  (loading…)"), w, body)
 	case v.err != nil:
-		return padBox(truncate("  error: "+v.err.Error(), w), w, body)
+		return padBox(truncate(i18n.T("  error: %s", v.err.Error()), w), w, body)
 	case v.binary:
-		return padBox("  (binary file)", w, body)
+		return padBox(i18n.T("  (binary file)"), w, body)
 	case v.tooLarge:
-		return padBox("  (file too large)", w, body)
+		return padBox(i18n.T("  (file too large)"), w, body)
 	}
 	lines := m.diffPaneLines(v, w, body)
 	for len(lines) < body {

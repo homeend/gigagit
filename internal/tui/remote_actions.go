@@ -6,6 +6,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/i18n"
 )
 
 // copyShaRow builds a "Copy commit sha" action that resolves ref to its full
@@ -16,7 +17,7 @@ import (
 func (m Model) copyShaRow(ref, fallbackShort string) actionRow {
 	return actionRow{
 		id:    "copy-commit-sha",
-		label: "Copy commit sha",
+		label: i18n.T("Copy commit sha"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			full := fallbackShort
 			if m.svc != nil {
@@ -24,7 +25,7 @@ func (m Model) copyShaRow(ref, fallbackShort string) actionRow {
 					full = s
 				}
 			}
-			return m, m.copyToClipboardCmd("Copied commit sha "+shortHash(full), full)
+			return m, m.copyToClipboardCmd(i18n.T("Copied commit sha %s", shortHash(full)), full)
 		},
 	}
 }
@@ -55,7 +56,7 @@ func (m Model) remoteCreateWorktreeRow() (actionRow, bool) {
 	}
 	return actionRow{
 		id:    "remote-worktree",
-		label: "Create worktree from " + rb.Name,
+		label: i18n.T("Create worktree from %s", rb.Name),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			return m.openWorktreeAt(rb.Name, rb.Branch), nil
 		},
@@ -78,9 +79,9 @@ func (m Model) remoteMergeRow() (actionRow, bool) {
 	}
 	return actionRow{
 		id:    "remote-merge",
-		label: "Merge " + rb.Name + " into current (" + cur + ")",
+		label: i18n.T("Merge %s into current (%s)", rb.Name, cur),
 		run: func(m Model) (tea.Model, tea.Cmd) {
-			return m.confirmOp(engine.SmartMerge{Source: rb.Name}, "Merge "+rb.Name+" into current branch?")
+			return m.confirmOp(engine.SmartMerge{Source: rb.Name}, i18n.T("Merge %s into current branch?", rb.Name))
 		},
 	}, true
 }
@@ -98,9 +99,9 @@ func (m Model) remoteRebaseRow() (actionRow, bool) {
 	}
 	return actionRow{
 		id:    "remote-rebase",
-		label: "Rebase current (" + cur + ") onto " + rb.Name,
+		label: i18n.T("Rebase current (%s) onto %s", cur, rb.Name),
 		run: func(m Model) (tea.Model, tea.Cmd) {
-			return m.confirmOp(engine.SmartRebase{Onto: rb.Name}, "Rebase current branch onto "+rb.Name+"?")
+			return m.confirmOp(engine.SmartRebase{Onto: rb.Name}, i18n.T("Rebase current branch onto %s?", rb.Name))
 		},
 	}, true
 }
@@ -126,10 +127,10 @@ func (m Model) remoteResetRow() (actionRow, bool) {
 	}
 	return actionRow{
 		id:    "remote-reset",
-		label: "Reset current (" + cur + ") to " + rb.Name + " tip",
+		label: i18n.T("Reset current (%s) to %s tip", cur, rb.Name),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			return m.mustConfirmOp(engine.Reset{Commit: rb.Name, Mode: "hard"},
-				"Reset "+cur+" to "+rb.Name+"? This discards local commits and uncommitted changes.")
+				i18n.T("Reset %s to %s? This discards local commits and uncommitted changes.", cur, rb.Name))
 		},
 	}, true
 }
@@ -141,7 +142,7 @@ func (m Model) remotePruneRow() (actionRow, bool) {
 	}
 	return actionRow{
 		id:    "prune-remotes",
-		label: "Prune remotes (drop deleted branches)",
+		label: i18n.T("Prune remotes (drop deleted branches)"),
 		run:   func(m Model) (tea.Model, tea.Cmd) { return m.startOp(engine.Prune{}) },
 	}, true
 }
@@ -156,7 +157,7 @@ func (m Model) remoteDeleteRow() (actionRow, bool) {
 	}
 	return actionRow{
 		id:    "remote-delete",
-		label: "Delete " + rb.Name,
+		label: i18n.T("Delete %s", rb.Name),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			return m.startOp(engine.DeleteRemoteBranch{Remote: rb.Remote, Branch: rb.Branch})
 		},
@@ -173,7 +174,7 @@ func (m Model) remoteCheckoutAsRow() (actionRow, bool) {
 	}
 	return actionRow{
 		id:    "remote-checkout-as",
-		label: "Check out " + rb.Name + " as…",
+		label: i18n.T("Check out %s as…", rb.Name),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			return m.openCheckoutAsPopup(rb.Name, rb.Branch, engine.CheckoutStay), nil
 		},
@@ -190,7 +191,7 @@ func (m Model) remoteSwitchAsRow() (actionRow, bool) {
 	}
 	return actionRow{
 		id:    "remote-switch-as",
-		label: "Switch to " + rb.Name + " as…",
+		label: i18n.T("Switch to %s as…", rb.Name),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			return m.openCheckoutAsPopup(rb.Name, rb.Branch, engine.CheckoutSwitch), nil
 		},

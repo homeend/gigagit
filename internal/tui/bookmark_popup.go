@@ -13,6 +13,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -106,9 +107,9 @@ func (m Model) renderBookmarkPopupBox(p *bookmarkPopup) string {
 	inner := popupResolveWidth(w, p.maximized, popupWideInnerWidth(w))
 	textW := popupTextWidth(inner)
 
-	header := "Bookmarks"
+	header := i18n.T("Bookmarks")
 	if p.compareRef != nil {
-		header = "Compare " + p.compareRef.Path + " against:"
+		header = i18n.T("Compare %s against:", p.compareRef.Path)
 	}
 	if p.filtering {
 		header += "  /" + p.filter + "█"
@@ -119,7 +120,7 @@ func (m Model) renderBookmarkPopupBox(p *bookmarkPopup) string {
 	vis := p.visibleIdx()
 	var bodyLines []string
 	if len(vis) == 0 {
-		bodyLines = []string{padRight("  (none)", textW)}
+		bodyLines = []string{padRight(i18n.T("  (none)"), textW)}
 	} else {
 		wr := make([]winRow, len(vis))
 		for n, i := range vis {
@@ -146,7 +147,7 @@ func (m Model) renderBookmarkPopupBox(p *bookmarkPopup) string {
 	parts = append(parts, bodyLines...)
 	// Wrap the hint so [z] mode / [esc] close survive on a narrow terminal,
 	// where a single-line footer would truncate them off (mirrors shelfPopup).
-	hint := []string{"[?] keys", "[enter] jump", "[e] editor", "[p] paste", "[t] temp dir", "[a] cherry-pick", "[y] copy", "[m] mark/compare", "[x] remove", "[c] vs shelf", "[/] filter", "[z] mode", "[ctrl+t] full", "[esc] close"}
+	hint := []string{i18n.T("[?] keys"), i18n.T("[enter] jump"), i18n.T("[e] editor"), i18n.T("[p] paste"), i18n.T("[t] temp dir"), i18n.T("[a] cherry-pick"), i18n.T("[y] copy"), i18n.T("[m] mark/compare"), i18n.T("[x] remove"), i18n.T("[c] vs shelf"), i18n.T("[/] filter"), i18n.T("[z] mode"), i18n.T("[ctrl+t] full"), i18n.T("[esc] close")}
 	parts = append(parts, "")
 	parts = append(parts, wrapParts(hint, textW, "  ")...)
 	return popupBox(inner, strings.Join(parts, "\n"))
@@ -249,7 +250,7 @@ func (p *bookmarkPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				return m, nil
 			}
 			if b.IsCommit() {
-				m.statusMsg = "cannot compare a file against a commit bookmark"
+				m.statusMsg = i18n.T("cannot compare a file against a commit bookmark")
 				return m, nil
 			}
 			return m.openCompareFocusedVsBookmark(*p.compareRef, p.compareLabel, b)
@@ -271,7 +272,7 @@ func (p *bookmarkPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		case "?":
 			// Open the compact cheat sheet over the still-open switcher; esc
 			// closes it and returns here (contentPopup's esc just nils itself).
-			m = m.pushLayer(newContentPopup(bookmarkSwitcherHelpTitle, bookmarkSwitcherHelp(p.compareRef != nil)))
+			m = m.pushLayer(newContentPopup(bookmarkSwitcherHelpTitle(), bookmarkSwitcherHelp(p.compareRef != nil)))
 			return m, nil
 		case "/":
 			p.filtering = true
@@ -352,7 +353,7 @@ func (p *bookmarkPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				return m, nil
 			}
 			if !b.IsCommit() {
-				m.statusMsg = "cherry-pick: only for a commit bookmark"
+				m.statusMsg = i18n.T("cherry-pick: only for a commit bookmark")
 				return m, nil
 			}
 			return m.startPickCommit(pickTarget{sha: b.Commit})
@@ -367,7 +368,7 @@ func (p *bookmarkPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			if !ok {
 				return m, nil
 			}
-			return m.copyFilePrompt(b.Path)
+			return m.copyFilePrompt(b.Worktree, b.Path)
 		}
 	}
 	return m, nil
@@ -401,7 +402,7 @@ func (m Model) bookmarkRemovePrompt() (Model, tea.Cmd) {
 	m.modal = &decisionState{
 		req: engine.DecisionRequest{
 			ID:      "bookmark-remove",
-			Prompt:  "Remove bookmark " + b.Path + "?",
+			Prompt:  i18n.T("Remove bookmark %s?", b.Path),
 			Options: []string{"Remove", "Cancel"},
 		},
 		onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {
@@ -438,7 +439,7 @@ func (m Model) bookmarkPastePrompt() (Model, tea.Cmd) {
 	}
 	data, err := m.svc.BookmarkBytes(context.Background(), b)
 	if err != nil {
-		m.statusMsg = "bookmark paste: " + err.Error()
+		m.statusMsg = i18n.T("bookmark paste: %s", err.Error())
 		return m, nil
 	}
 	// Push over the switcher (which stays beneath); esc/success returns to it.
@@ -541,10 +542,10 @@ func (p *bookmarkPastePopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 func (p *bookmarkPastePopup) render(m Model, below string) string {
 	w, h := m.overlayDims()
 	var b strings.Builder
-	b.WriteString("Paste bookmarked file to a new path\n\n")
-	b.WriteString("from: " + p.origin + "  (resolved now)\n")
-	b.WriteString(viewField("dest: ", p.dest, true, popupContentWidth(w)) + "\n\n")
-	b.WriteString("[type] path  [enter] paste  [esc] cancel")
+	b.WriteString(i18n.T("Paste bookmarked file to a new path") + "\n\n")
+	b.WriteString(i18n.T("from: %s  (resolved now)", p.origin) + "\n")
+	b.WriteString(viewField(i18n.T("dest: "), p.dest, true, popupContentWidth(w)) + "\n\n")
+	b.WriteString(i18n.T("[type] path  [enter] paste  [esc] cancel"))
 	box := modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 	return overlayCenter(clipToHeight(below, h), box, w, h)
 }
@@ -556,12 +557,12 @@ func (p *bookmarkPastePopup) render(m Model, below string) string {
 func (m Model) compareCommitBookmark(b model.Bookmark) (Model, tea.Cmd) {
 	bi, ok := m.backingIndex(panelCommits)
 	if !ok {
-		m.statusMsg = "no commit selected to compare against"
+		m.statusMsg = i18n.T("no commit selected to compare against")
 		return m, nil
 	}
 	subject := m.commits[bi].Hash
 	if subject == b.Commit {
-		m.statusMsg = "select a different commit to compare against"
+		m.statusMsg = i18n.T("select a different commit to compare against")
 		return m, nil
 	}
 	m = m.clearLayers() // close the switcher so the files view is not drawn under it
@@ -575,7 +576,7 @@ func (m Model) compareCommitBookmark(b model.Bookmark) (Model, tea.Cmd) {
 // no-op a file-only key (paste / vs-shelf / mark). File bookmarks pass through.
 func (m Model) commitBookmarkNotice(p *bookmarkPopup) (Model, bool) {
 	if b, ok := p.selected(); ok && b.IsCommit() {
-		m.statusMsg = "not available for a commit bookmark"
+		m.statusMsg = i18n.T("not available for a commit bookmark")
 		return m, true
 	}
 	return m, false
@@ -592,7 +593,7 @@ func (m Model) bookmarkJump() (Model, tea.Cmd) {
 		return m, nil
 	}
 	width, _ := m.overlayDims()
-	v := &diffView{title: b.Path, context: bookmarkDisplay(b) + " → working tree", rev: "", loading: true, partial: m.diffPartial, long: m.diffLong, width: width}
+	v := &diffView{title: b.Path, context: i18n.T("%s → working tree", bookmarkDisplay(b)), rev: "", loading: true, partial: m.diffPartial, long: m.diffLong, width: width}
 	return m.openPickerDiff(v, "bookmark:"+b.ID, m.loadBookmarkCompareCmd(b))
 }
 
@@ -604,7 +605,7 @@ func (m Model) loadBookmarkCompareCmd(bm model.Bookmark) tea.Cmd {
 	root := m.currentWorktree
 	body := m.diffBodyRows()
 	tag := "bookmark:" + bm.ID
-	v := &diffView{title: bm.Path, context: bookmarkDisplay(bm) + " → working tree", rev: "", partial: m.diffPartial, long: m.diffLong}
+	v := &diffView{title: bm.Path, context: i18n.T("%s → working tree", bookmarkDisplay(bm)), rev: "", partial: m.diffPartial, long: m.diffLong}
 	v.width, _ = m.overlayDims()
 	full := filepath.Join(root, bm.Path)
 

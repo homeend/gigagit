@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -50,9 +51,9 @@ func branchCompareTitle(left, right string, scope compareScope) string {
 	t := left + " ↔ " + right
 	switch scope {
 	case compareScopeLeft:
-		t += " — only files " + left + " changed"
+		t += i18n.T(" — only files %s changed", left)
 	case compareScopeRight:
-		t += " — only files " + right + " changed"
+		t += i18n.T(" — only files %s changed", right)
 	}
 	return t
 }
@@ -103,6 +104,7 @@ func (m Model) openBranchCompare(marked, selected string) (Model, tea.Cmd) {
 	m, cmd = m.openCompareFiles(left, right) // clean slate: clears any prior comparePair
 	m.comparePair = &comparePairState{left: marked, right: selected}
 	m.filesTitle = branchCompareTitle(marked, selected, compareScopeAll)
+	m.filesContext = m.filesTitle
 	return m, tea.Batch(cmd, m.loadCompareOriginsCmd(markedHash, selectedHash, tag))
 }
 
@@ -152,23 +154,24 @@ func (m Model) cycleCompareScope() Model {
 	}
 	if p.originsErr != nil {
 		if errors.Is(p.originsErr, domain.ErrNoMergeBase) {
-			m.statusMsg = "no common ancestor — filter unavailable"
+			m.statusMsg = i18n.T("no common ancestor — filter unavailable")
 		} else {
-			m.statusMsg = "origin filter unavailable: " + p.originsErr.Error()
+			m.statusMsg = i18n.T("origin filter unavailable: %s", p.originsErr.Error())
 		}
 		return m
 	}
 	if !p.originsLoaded {
-		m.statusMsg = "origin filter loading…"
+		m.statusMsg = i18n.T("origin filter loading…")
 		return m
 	}
 	if p.files == nil {
-		m.statusMsg = "compare still loading…"
+		m.statusMsg = i18n.T("compare still loading…")
 		return m
 	}
 	p.scope = (p.scope + 1) % 3
 	m.filesView.lines = commitFileLines(filterCompareFiles(p.files, p.pathSet()))
 	m.filesView.sel = 0
 	m.filesTitle = branchCompareTitle(p.left, p.right, p.scope)
+	m.filesContext = m.filesTitle
 	return m
 }

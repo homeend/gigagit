@@ -5,6 +5,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/homeend/gigagit/internal/i18n"
 )
 
 // pairOpPopup offers a panel's two-argument operations on (marked, selected).
@@ -112,6 +114,6 @@ func (p *pairOpPopup) box(m Model) string {
 	body := renderWindow(wr, winOpts{w: textW, h: len(p.ops), mode: p.mode, anchor: p.sel, hscroll: p.hscroll})
 	parts := []string{p.marked + " + " + p.selected, ""}
 	parts = append(parts, body...)
-	parts = append(parts, "", "[↑/↓] choose  [enter] run  [z] mode  [esc] cancel")
+	parts = append(parts, "", i18n.T("[↑/↓] choose  [enter] run  [z] mode  [esc] cancel"))
 	return popupBox(inner, strings.Join(parts, "\n"))
 }

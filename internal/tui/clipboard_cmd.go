@@ -4,13 +4,25 @@ import (
 	"io"
 	"os"
 	"path"
+	"path/filepath"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/mattn/go-isatty"
 
 	"github.com/homeend/gigagit/internal/clipboard"
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/i18n"
 )
+
+// absFilePath joins a repo-relative path onto base, defaulting to the current
+// worktree when base is empty. It is the single source of truth for the
+// "Copy absolute file path" actions so every surface agrees byte-for-byte.
+func (m Model) absFilePath(base, rel string) string {
+	if base == "" {
+		base = m.currentWorktree
+	}
+	return filepath.Join(base, rel)
+}
 
 // clipboardCopiedMsg reports the outcome of a copy action. ok is the success
 // status line; err (when non-nil) becomes a "copy failed: …" status.
@@ -41,30 +53,48 @@ func (m Model) copyToClipboardCmd(ok, text string) tea.Cmd {
 }
 
 // copyFileChoice maps a copy-chooser option to its status line and clipboard
-// text. ok is false for Cancel or an unknown option. The strings match the
-// Files-panel copy rows (fileCopyPathName) so both surfaces speak alike.
-func copyFileChoice(option, p string) (okMsg, text string, ok bool) {
+// text. p is the repo-relative path; abs is the absolute path (precomputed by
+// copyFilePrompt). ok is false for Cancel or an unknown option. The okMsg
+// routes through the SAME i18n keys as the Files-panel copy rows
+// (fileCopyPathName), so both surfaces render identically — including under
+// an active translation, not just in the English fallback.
+func copyFileChoice(option, p, abs string) (okMsg, text string, ok bool) {
 	switch option {
 	case "Copy file path":
-		return "Copied path: " + p, p, true
+		return i18n.T("Copied path: %s", p), p, true
+	case "Copy absolute file path":
+		return i18n.T("Copied absolute path: %s", abs), abs, true
 	case "Copy file name":
-		return "Copied file name: " + path.Base(p), path.Base(p), true
+		return i18n.T("Copied file name: %s", path.Base(p)), path.Base(p), true
 	}
 	return "", "", false
 }
 
 // copyFilePrompt opens the path/name copy chooser for a repo-relative file
-// path. The modal renders above the calling popup (which stays on the layer
-// stack); Cancel — kept last so esc maps to it — reveals it unchanged.
-func (m Model) copyFilePrompt(p string) (Model, tea.Cmd) {
+// path. base is the worktree the file belongs to (empty → current worktree),
+// used to build the absolute-path option. The modal renders above the calling
+// popup (which stays on the layer stack); Cancel — kept last so esc maps to it
+// — reveals it unchanged. copyTexts records each option's resolved clipboard
+// text so tests can pin the captured value (esp. the base-anchored absolute
+// path) without running the clipboard cmd.
+func (m Model) copyFilePrompt(base, p string) (Model, tea.Cmd) {
+	abs := m.absFilePath(base, p)
+	opts := []string{"Copy file path", "Copy absolute file path", "Copy file name", "Cancel"}
+	texts := map[string]string{}
+	for _, o := range opts {
+		if _, text, ok := copyFileChoice(o, p, abs); ok {
+			texts[o] = text
+		}
+	}
 	m.modal = &decisionState{
 		req: engine.DecisionRequest{
 			ID:      "copy-file",
-			Prompt:  "Copy — " + p,
-			Options: []string{"Copy file path", "Copy file name", "Cancel"},
+			Prompt:  i18n.T("Copy — %s", p),
+			Options: opts,
 		},
+		copyTexts: texts,
 		onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {
-			if okMsg, text, ok := copyFileChoice(opt, p); ok {
+			if okMsg, text, ok := copyFileChoice(opt, p, abs); ok {
 				return m, m.copyToClipboardCmd(okMsg, text)
 			}
 			return m, nil

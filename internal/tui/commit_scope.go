@@ -3,13 +3,13 @@ package tui
 import (
 	"context"
 	"slices"
-	"strconv"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -42,7 +42,13 @@ func (f commitFilterFields) filtered() bool {
 func (m Model) clearFilteringForFocus() (Model, bool) {
 	if m.filterPanel == m.focus {
 		m.filterTyping = false
-		m.filterQuery = ""
+		if m.filterQuery != "" {
+			// Dropping the filter expands the list: keep the cursor on the
+			// same row rather than on a raw display position.
+			anchor := m.filterAnchor(m.filterPanel)
+			m.filterQuery = ""
+			m = m.snapFilterSel(m.filterPanel, anchor)
+		}
 	}
 	reload := false
 	if m.focus == panelCommits {
@@ -151,7 +157,7 @@ func (m Model) commitSoloRow() (actionRow, bool) {
 	}
 	return actionRow{
 		id:    "commits-solo",
-		label: "Solo this branch",
+		label: i18n.T("Solo this branch"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			if len(m.commitScopeBranches) == 1 && m.commitScopeBranches[0] == b.Name {
 				m.commitScopeBranches = nil // re-solo → un-solo
@@ -175,9 +181,9 @@ func (m Model) commitToggleRow() (actionRow, bool) {
 		return actionRow{}, false
 	}
 	in := slices.Contains(m.commitScopeBranches, b.Name)
-	label := "Add to commit view"
+	label := i18n.T("Add to commit view")
 	if in {
-		label = "Remove from commit view"
+		label = i18n.T("Remove from commit view")
 	}
 	return actionRow{
 		id:    "commits-toggle",
@@ -215,25 +221,25 @@ func (m Model) graphWindowRows() []actionRow {
 		return nil
 	}
 	return []actionRow{
-		{id: "graph-widen", label: "Widen graph", run: func(m Model) (tea.Model, tea.Cmd) {
+		{id: "graph-widen", label: i18n.T("Widen graph"), run: func(m Model) (tea.Model, tea.Cmd) {
 			m.commitGraphCols = m.clampCols(m.graphCols() + m.graphStep())
 			m.commitGraphScroll = m.clampScroll(m.commitGraphScroll)
 			return m, nil
 		}},
-		{id: "graph-narrow", label: "Narrow graph", run: func(m Model) (tea.Model, tea.Cmd) {
+		{id: "graph-narrow", label: i18n.T("Narrow graph"), run: func(m Model) (tea.Model, tea.Cmd) {
 			m.commitGraphCols = m.clampCols(m.graphCols() - m.graphStep())
 			m.commitGraphScroll = m.clampScroll(m.commitGraphScroll)
 			return m, nil
 		}},
-		{id: "graph-pan-left", label: "Pan graph left", run: func(m Model) (tea.Model, tea.Cmd) {
+		{id: "graph-pan-left", label: i18n.T("Pan graph left"), run: func(m Model) (tea.Model, tea.Cmd) {
 			m.commitGraphScroll = m.clampScroll(m.commitGraphScroll - m.graphPanStep())
 			return m, nil
 		}},
-		{id: "graph-pan-right", label: "Pan graph right", run: func(m Model) (tea.Model, tea.Cmd) {
+		{id: "graph-pan-right", label: i18n.T("Pan graph right"), run: func(m Model) (tea.Model, tea.Cmd) {
 			m.commitGraphScroll = m.clampScroll(m.commitGraphScroll + m.graphPanStep())
 			return m, nil
 		}},
-		{id: "graph-center", label: "Center on selected commit", run: func(m Model) (tea.Model, tea.Cmd) {
+		{id: "graph-center", label: i18n.T("Center on selected commit"), run: func(m Model) (tea.Model, tea.Cmd) {
 			return m.snapGraphToSelected(), nil
 		}},
 	}
@@ -245,9 +251,9 @@ func (m Model) commitViewModeRow() (actionRow, bool) {
 	if m.focus != panelBranches && m.focus != panelCommits {
 		return actionRow{}, false
 	}
-	label := "Show as list"
+	label := i18n.T("Show as list")
 	if m.commitListMode {
-		label = "Show as graph"
+		label = i18n.T("Show as graph")
 	}
 	return actionRow{
 		id:    "commits-viewmode",
@@ -274,7 +280,7 @@ func (m Model) commitGotoTipRow() (actionRow, bool) {
 	}
 	return actionRow{
 		id:    "commits-goto-tip",
-		label: "Go to tip in commits",
+		label: i18n.T("Go to tip in commits"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			nm, cmd := m.gotoCommitByHash(b.Hash)
 			return nm, cmd
@@ -314,7 +320,7 @@ func (m Model) commitCreateBranchRow() (actionRow, bool) {
 	hash := m.commits[bi].Hash // full SHA → unambiguous start-point
 	return actionRow{
 		id:    "commit-create-branch",
-		label: "Create branch here",
+		label: i18n.T("Create branch here"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			m = m.pushLayer(&branchPopup{startPoint: hash})
 			return m, nil
@@ -335,7 +341,7 @@ func (m Model) commitCreateTagRow() (actionRow, bool) {
 	hash := m.commits[bi].Hash
 	return actionRow{
 		id:    "commit-create-tag",
-		label: "Create tag here",
+		label: i18n.T("Create tag here"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			return m.pushLayer(&tagPopup{commit: hash}), nil
 		},
@@ -357,7 +363,7 @@ func (m Model) commitCompareWorktreeRow() (actionRow, bool) {
 	hash := m.commits[bi].Hash
 	return actionRow{
 		id:    "commit-compare-worktree",
-		label: "Compare against working tree",
+		label: i18n.T("Compare against working tree"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			return m.openCompareFiles(
 				model.Endpoint{Kind: model.EndpointCommit, Hash: hash},
@@ -377,7 +383,7 @@ func (m Model) commitCompareStagedRow() (actionRow, bool) {
 	hash := m.commits[bi].Hash
 	return actionRow{
 		id:    "commit-compare-staged",
-		label: "Compare against staged",
+		label: i18n.T("Compare against staged"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			return m.openCompareFiles(
 				model.Endpoint{Kind: model.EndpointCommit, Hash: hash},
@@ -415,9 +421,9 @@ func (m Model) commitCompareToggleRow() (actionRow, bool) {
 		return actionRow{}, false
 	}
 	in := m.commitCompareSet[key]
-	label := "Add to compare selection (space)"
+	label := i18n.T("Add to compare selection (space)")
 	if in {
-		label = "Unmark commit"
+		label = i18n.T("Unmark commit")
 	}
 	return actionRow{
 		id:    "commit-compare-toggle",
@@ -445,13 +451,13 @@ func (m Model) commitCompareClearRow() (actionRow, bool) {
 	if m.focus != panelCommits || len(m.commitCompareSet) == 0 {
 		return actionRow{}, false
 	}
-	label := "Unmark all commits (" + strconv.Itoa(len(m.validCompareKeys())) + ")"
+	label := i18n.T("Unmark all commits (%d)", len(m.validCompareKeys()))
 	if len(m.commitCompareSet) < 2 {
 		key, ok := m.selectedKey(panelCommits)
 		if ok && m.commitCompareSet[key] {
 			return actionRow{}, false
 		}
-		label = "Unmark the marked commit"
+		label = i18n.T("Unmark the marked commit")
 	}
 	return actionRow{
 		id:    "commit-compare-clear",
@@ -526,7 +532,7 @@ func (m Model) compareSelectionEndpoints() (left, right model.Endpoint, note str
 		}
 	}
 	if len(sel) < 2 {
-		return left, right, "select at least 2 rows to compare", false
+		return left, right, i18n.T("select at least 2 rows to compare"), false
 	}
 	// older = max rank, newer = min rank (working tree/staged rank negative = newest).
 	oldest, newest := sel[0], sel[0]
@@ -546,11 +552,11 @@ func (m Model) compareSelectionEndpoints() (left, right model.Endpoint, note str
 		return m.compareKeyEndpoint(oldest.key), m.compareKeyEndpoint(newest.key), "", true
 	}
 	if hasWip {
-		return left, right, "range compare (3+) is commits-only; remove the working tree / staged row", false
+		return left, right, i18n.T("range compare (3+) is commits-only; remove the working tree / staged row"), false
 	}
 	// 3+ commits: squash from oldest^. Refuse if the oldest is a root commit.
 	if oi := oldest.rank; oi >= 0 && oi < len(m.commits) && len(m.commits[oi].Parents) == 0 {
-		return left, right, "can't squash a range from the root commit", false
+		return left, right, i18n.T("can't squash a range from the root commit"), false
 	}
 	return model.Endpoint{Kind: model.EndpointCommit, Hash: oldest.key + "^"},
 		model.Endpoint{Kind: model.EndpointCommit, Hash: newest.key}, "", true
@@ -566,9 +572,9 @@ func (m Model) commitCompareSelectionRow() (actionRow, bool) {
 	if n < 2 {
 		return actionRow{}, false
 	}
-	label := "Compare the 2 selected commits"
+	label := i18n.T("Compare the 2 selected commits")
 	if n >= 3 {
-		label = "Compare range of " + strconv.Itoa(n) + " commits (combined diff)"
+		label = i18n.T("Compare range of %d commits (combined diff)", n)
 	}
 	return actionRow{
 		id:    "commit-compare-selection",
@@ -599,14 +605,14 @@ func (m Model) commitSquashRow() (actionRow, bool) {
 	}
 	return actionRow{
 		id:    "commit-squash",
-		label: "Squash " + strconv.Itoa(n) + " commits",
+		label: i18n.T("Squash %d commits", n),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			var targets []string
 			oldest, oldestRank := "", -1
 			for k := range m.commitCompareSet {
 				switch k {
 				case wipKey(wipRow{kind: wipWorktree}), wipKey(wipRow{kind: wipStaged}):
-					m.statusMsg = "squash is commits-only; remove the working tree / staged row"
+					m.statusMsg = i18n.T("squash is commits-only; remove the working tree / staged row")
 					return m, nil
 				}
 				targets = append(targets, k)
@@ -615,12 +621,12 @@ func (m Model) commitSquashRow() (actionRow, bool) {
 				}
 			}
 			if oldest == "" {
-				m.statusMsg = "select at least 2 commits to squash"
+				m.statusMsg = i18n.T("select at least 2 commits to squash")
 				return m, nil
 			}
 			// Root guard: the oldest commit needs a parent to rebase onto.
 			if oldestRank >= 0 && oldestRank < len(m.commits) && len(m.commits[oldestRank].Parents) == 0 {
-				m.statusMsg = "can't squash from the root commit"
+				m.statusMsg = i18n.T("can't squash from the root commit")
 				return m, nil
 			}
 			return m, m.loadSquashRangeCmd(m.status.Branch, oldest+"^", targets)
@@ -670,7 +676,7 @@ func (m Model) commitDropSelectionRow() (actionRow, bool) {
 	}
 	return actionRow{
 		id:    "commit-drop-selection",
-		label: "Drop " + strconv.Itoa(n) + " selected commits",
+		label: i18n.T("Drop %d selected commits", n),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			var targets []string
 			oldest, oldestRank := "", -1
@@ -680,7 +686,7 @@ func (m Model) commitDropSelectionRow() (actionRow, bool) {
 				}
 				switch k {
 				case wipKey(wipRow{kind: wipWorktree}), wipKey(wipRow{kind: wipStaged}):
-					m.statusMsg = "drop is commits-only; remove the working tree / staged row"
+					m.statusMsg = i18n.T("drop is commits-only; remove the working tree / staged row")
 					return m, nil
 				}
 				targets = append(targets, k)
@@ -689,12 +695,12 @@ func (m Model) commitDropSelectionRow() (actionRow, bool) {
 				}
 			}
 			if len(targets) < 2 {
-				m.statusMsg = "select at least 2 commits to drop"
+				m.statusMsg = i18n.T("select at least 2 commits to drop")
 				return m, nil
 			}
 			// Root guard: the oldest commit needs a parent to rebase onto.
 			if oldestRank >= 0 && oldestRank < len(m.commits) && len(m.commits[oldestRank].Parents) == 0 {
-				m.statusMsg = "can't drop a range that includes the root commit"
+				m.statusMsg = i18n.T("can't drop a range that includes the root commit")
 				return m, nil
 			}
 			return m, m.loadDropRangeCmd(m.status.Branch, oldest+"^", targets)
@@ -716,7 +722,7 @@ func (m Model) commitCreateWorktreeRow() (actionRow, bool) {
 	hash := m.commits[bi].Hash
 	return actionRow{
 		id:    "commit-create-worktree",
-		label: "Create worktree here",
+		label: i18n.T("Create worktree here"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			return m.openWorktreeAt(hash, ""), nil
 		},
@@ -737,7 +743,7 @@ func (m Model) commitCherryPickRow() (actionRow, bool) {
 	hash := m.commits[bi].Hash // full SHA → unambiguous
 	return actionRow{
 		id:    "commit-cherry-pick",
-		label: "Cherry-pick here",
+		label: i18n.T("Cherry-pick here"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			return m.startOp(engine.CherryPick{Commit: hash})
 		},
@@ -761,10 +767,10 @@ func (m Model) commitRevertRow() (actionRow, bool) {
 	isMerge := len(c.Parents) > 1
 	return actionRow{
 		id:    "commit-revert",
-		label: "Revert this commit",
+		label: i18n.T("Revert this commit"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			if isMerge {
-				m.statusMsg = "cannot revert a merge commit (v1)"
+				m.statusMsg = i18n.T("cannot revert a merge commit (v1)")
 				return m, nil
 			}
 			return m.startOp(engine.Revert{Commit: hash})
@@ -811,9 +817,9 @@ func (m Model) commitFastForwardRow() (actionRow, bool) {
 
 	return actionRow{
 		id:    "commit-fast-forward",
-		label: "Fast-forward " + branch + " to here",
+		label: i18n.T("Fast-forward %s to here", branch),
 		run: func(m Model) (tea.Model, tea.Cmd) {
-			return m.confirmOp(engine.FastForward{Commit: selHash}, "Fast-forward to this commit?")
+			return m.confirmOp(engine.FastForward{Commit: selHash}, i18n.T("Fast-forward to this commit?"))
 		},
 	}, true
 }
@@ -832,9 +838,9 @@ func (m Model) commitResetRow() (actionRow, bool) {
 	hash := m.commits[bi].Hash // full SHA → unambiguous
 	return actionRow{
 		id:    "commit-reset",
-		label: "Reset to this commit",
+		label: i18n.T("Reset to this commit"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
-			return m.confirmOp(engine.Reset{Commit: hash}, "Reset to "+shortHash(hash)+"? This moves the current branch ref.")
+			return m.confirmOp(engine.Reset{Commit: hash}, i18n.T("Reset to %s? This moves the current branch ref.", shortHash(hash)))
 		},
 	}, true
 }
@@ -867,7 +873,7 @@ func (m Model) commitClearFilterRow() (actionRow, bool) {
 	}
 	return actionRow{
 		id:    "commits-clear-filter",
-		label: "Clear filter",
+		label: i18n.T("Clear filter"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			m.commitFilter = commitFilterFields{}
 			return m.startFeedReload()
@@ -886,7 +892,7 @@ func (m Model) commitShowAllRow() (actionRow, bool) {
 	}
 	return actionRow{
 		id:    "commits-showall",
-		label: "Show all branches",
+		label: i18n.T("Show all branches"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			m.commitScopeBranches = nil
 			return m.startFeedReload()
@@ -922,7 +928,7 @@ func (m Model) commitBranchRows() []actionRow {
 		name := r.Name
 		rows = append(rows, actionRow{
 			id:    "rename-branch",
-			label: "Rename branch " + name,
+			label: i18n.T("Rename branch %s", name),
 			run: func(m Model) (tea.Model, tea.Cmd) {
 				return m.pushLayer(&renameBranchPopup{old: name, name: newTextField(name)}), nil
 			},
@@ -930,7 +936,7 @@ func (m Model) commitBranchRows() []actionRow {
 		if !r.Head && !checkedOut[name] {
 			rows = append(rows, actionRow{
 				id:    "delete-branch",
-				label: "Delete branch " + name,
+				label: i18n.T("Delete branch %s", name),
 				run: func(m Model) (tea.Model, tea.Cmd) {
 					return m.startOp(engine.DeleteBranch{Name: name})
 				},

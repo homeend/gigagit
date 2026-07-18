@@ -51,6 +51,14 @@ func SetShowGraph(path, value string) error {
 	return setScalarLine(path, "ui", "show_graph", strconv.Quote(value))
 }
 
+// SetGlobalUILanguage persists `[ui] language` to the given config file
+// (callers pass DefaultGlobalPath() — a language is per-human, not
+// per-repo), preserving comments. The normal [ui] overlay still lets a repo
+// .gg.toml override it for the odd shared-demo repo.
+func SetGlobalUILanguage(path, code string) error {
+	return setScalarLine(path, "ui", "language", strconv.Quote(code))
+}
+
 // SetRefreshInterval persists `[refresh] <source> = secs` to the given config
 // file (the repo .gg.toml), preserving the rest of the file. Backs the Settings
 // "Refresh rates" inline editor.

@@ -6,6 +6,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/i18n"
 )
 
 // resumePromptPopup asks the one continue/abort question after gg detects a
@@ -16,7 +17,7 @@ import (
 type resumePromptPopup struct {
 	popupMax
 	op     string // "merge" | "rebase" | "cherry-pick" | "revert"
-	detail string // ConflictState.Describe() at push time; "" when unattributed
+	detail string // describeConflict(m.conflict) at push time; "" when unattributed
 	sel    int    // 0 = continue, 1 = abort, 2 = not now
 }
 
@@ -38,12 +39,13 @@ func (m Model) maybeResumePrompt() Model {
 		return m
 	}
 	m.resumePromptShown = true
-	return m.pushLayer(&resumePromptPopup{op: m.conflict.Op, detail: m.conflict.Describe()})
+	return m.pushLayer(&resumePromptPopup{op: m.conflict.Op, detail: describeConflict(m.conflict)})
 }
 
 // options returns the fixed three-choice list, continue first.
 func (p *resumePromptPopup) options() []string {
-	return []string{"Continue " + p.op, "Abort " + p.op, "Not now"}
+	op := opDisplayName(p.op)
+	return []string{i18n.T("Continue %s", op), i18n.T("Abort %s", op), i18n.T("Not now")}
 }
 
 func (p *resumePromptPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
@@ -84,12 +86,12 @@ func (p *resumePromptPopup) render(m Model, below string) string {
 	inner := popupResolveWidth(w, p.maximized, popupInnerWidth(w))
 	textW := popupTextWidth(inner)
 	var b strings.Builder
-	b.WriteString("⏸ " + p.op + " paused — all conflicts resolved\n")
+	b.WriteString(i18n.T("⏸ %s paused — all conflicts resolved", opDisplayName(p.op)) + "\n")
 	if p.detail != "" {
 		b.WriteString(conflictSrcStyle.Render(p.detail) + "\n")
 	}
 	b.WriteString("\n")
-	for _, line := range wrapWidth("Continue the "+p.op+" now, or abort it? You can come back any time with [x].", textW, 1<<20) {
+	for _, line := range wrapWidth(i18n.T("Continue the %s now, or abort it? You can come back any time with [x].", opDisplayName(p.op)), textW, 1<<20) {
 		b.WriteString(line + "\n")
 	}
 	b.WriteString("\n")
@@ -104,7 +106,7 @@ func (p *resumePromptPopup) render(m Model, below string) string {
 		}
 		b.WriteString(row + "\n")
 	}
-	b.WriteString("\n[↑/↓] select  [enter] choose  [c] continue  [a] abort  [esc] not now")
+	b.WriteString("\n" + i18n.T("[↑/↓] select  [enter] choose  [c] continue  [a] abort  [esc] not now"))
 	box := modalStyle.Width(inner).Render(strings.TrimRight(b.String(), "\n")) + "\n"
 	return overlayCenter(clipToHeight(below, h), box, w, h)
 }

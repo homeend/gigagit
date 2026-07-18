@@ -19,20 +19,21 @@ func (op CreateTag) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	if op.Name == "" {
 		return Result{}, fmt.Errorf("create tag: Name is required")
 	}
-	detail := op.Name
 	if op.Commit != "" {
-		detail += " at " + op.Commit
+		deps.emit(ctx, Progressf("creating tag", "%s at %s", op.Name, op.Commit))
+	} else {
+		deps.emit(ctx, Progress{Step: "creating tag", Detail: op.Name})
 	}
-	deps.emit(ctx, Progress{Step: "creating tag", Detail: detail})
 
 	if err := deps.Repo.CreateTag(ctx, op.Name, op.Commit, op.Message, op.Force); err != nil {
 		return Result{}, fmt.Errorf("create tag: %w", err)
 	}
-	kind := "lightweight"
+	var res Result
 	if op.Message != "" {
-		kind = "annotated"
+		res = Result{Changed: true}.WithSummary("created annotated tag %s", op.Name)
+	} else {
+		res = Result{Changed: true}.WithSummary("created lightweight tag %s", op.Name)
 	}
-	res := Result{Summary: "created " + kind + " tag " + op.Name, Changed: true}
 	deps.emit(ctx, Done{Result: res})
 	return res, nil
 }

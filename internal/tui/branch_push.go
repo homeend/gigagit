@@ -4,6 +4,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/i18n"
 )
 
 // pushBranchRow is the Branches-panel `.`-menu action "Push <branch>", offered
@@ -24,7 +25,7 @@ func (m Model) pushBranchRow() (actionRow, bool) {
 	name := b.Name
 	return actionRow{
 		id:    "push-branch",
-		label: "Push " + name,
+		label: i18n.T("Push %s", name),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			return m.startOp(engine.Push{Remote: "origin", Branch: name, SetUpstream: true})
 		},

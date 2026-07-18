@@ -26,22 +26,20 @@ func hookPromptPreview(script string) string {
 		fmt.Sprintf("\n… (%d more lines — see .gg.toml)", len(lines)-maxLines)
 }
 
-// runPostCreateHook runs the configured post-create hook in the new worktree.
-// It is non-fatal: the worktree already exists, so a hook error/non-zero exit is
-// surfaced (a GitLine plus a returned Summary suffix) but never fails the op.
-// Returns "" on success or when no hook is configured.
-func runPostCreateHook(ctx context.Context, deps OpDeps, worktreePath, branch, script string) string {
+// runPostCreateHook runs the configured post-create hook in the new worktree,
+// returning res with a Summary suffix (via AppendSummary) describing the
+// outcome when the hook itself errors or exits non-zero. It is non-fatal: the
+// worktree already exists, so a hook error/non-zero exit is surfaced (a
+// GitLine plus the Summary suffix) but never fails the op. Returns res
+// unchanged on success or when no hook is configured.
+func runPostCreateHook(ctx context.Context, deps OpDeps, res Result, worktreePath, branch, script string) Result {
 	if strings.TrimSpace(script) == "" {
-		return ""
+		return res
 	}
-	resp, derr := deps.decide(ctx, DecisionRequest{
-		ID:      HookDecisionID,
-		Prompt:  "Run this post-create hook?\n\n" + hookPromptPreview(script),
-		Options: []string{"run", "skip"},
-	})
+	resp, derr := deps.decide(ctx, PromptReq(HookDecisionID, "Run this post-create hook?\n\n%s", []string{"run", "skip"}, hookPromptPreview(script)))
 	if derr != nil || resp.Option != "run" {
 		deps.emit(ctx, GitLine{Raw: "post-create hook skipped"})
-		return ""
+		return res
 	}
 	main, _ := mainWorktreeRoot(ctx, deps) // best-effort; "" if unavailable
 	env := append(os.Environ(),
@@ -56,11 +54,11 @@ func runPostCreateHook(ctx context.Context, deps OpDeps, worktreePath, branch, s
 	switch {
 	case err != nil:
 		deps.emit(ctx, GitLine{Raw: "post-create hook error: " + err.Error()})
-		return " (post-create hook error: " + err.Error() + ")"
+		return res.AppendSummary(" (post-create hook error: %s)", err.Error())
 	case code != 0:
 		msg := fmt.Sprintf("post-create hook exited with code %d", code)
 		deps.emit(ctx, GitLine{Raw: msg})
-		return fmt.Sprintf(" (post-create hook failed: exit %d)", code)
+		return res.AppendSummary(" (post-create hook failed: exit %d)", code)
 	}
-	return ""
+	return res
 }

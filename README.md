@@ -80,11 +80,11 @@ searchable reference.
 | `j`/`k` or `↑`/`↓` | move selection |
 | `pgup`/`pgdn` | move selection by 25% of the panel viewport |
 | `o` | cycle the focused panel's sort order (name/date, asc/desc) |
-| `/` | filter the focused panel (type, then `enter` to keep, `esc` to clear) |
+| `/` | filter the focused panel (type, then `enter` to keep, `esc` to clear). The search starts **from the cursor**, not from the top: each keystroke lands on the nearest match at/after the current row (wrapping to the top when every match is above, like `@`), and leaving the filter (`esc`, `ctrl+r`, or switching to `@`) keeps the cursor on the same row in the full list |
 | `\` | on the Commits panel: open the **commit feed filter** popup — type a path, author, message substring, and/or date range (`since` / `until`, passed verbatim to `git log`) to narrow the commit list; filters compose with any active branch scope; the commit-graph hides while a filter is active; clear via the `.` menu **Clear filter** row or by opening the popup and erasing all fields. "Commits touching this" in the fuzzy file finder (`F`) and in the files view `.` menu seeds the path field automatically |
 | `ctrl+l` | on the Commits panel: load the next batch of history on demand (without waiting to scroll to the bottom) |
 | `Home`/`End` | jump to the top / bottom of any navigable list; **End** on the Commits panel also loads the next history batch — press again to walk deeper |
-| `ctrl+f` | on the Commits panel: **eager search** — when the active `/` filter or `@` highlight query has no match in the already-loaded commits, `ctrl+f` pages history until it finds the first hit and jumps to it; if that would load many more pages gg asks first |
+| `ctrl+f` | on the Commits panel: **eager search** — pages unloaded history for the next match of the active `/` filter or `@` highlight query and jumps to it. Every press digs past the already-loaded commits (a hit already on screen doesn't stop it), and gg asks before loading many more pages; the `/` filter stays engaged just like `@` (the query stays visible in the bar), and the last query is remembered so `ctrl+f` keeps digging even after you esc-clear the search |
 | `R` | switch repository (popup: type to filter, `enter` to switch, `ctrl+d` to forget, `ctrl+t` maximizes the popup to a near-fullscreen box) |
 | `ctrl+o` | **shell escape** — the emergency hatch: suspends gg into an interactive `$SHELL` (`%COMSPEC%` on Windows) in the current worktree, from **any** surface, including mid conflict-resolve or any other window — `exit` returns to gg with a full reload. Never swallowed by whatever window is open, but it waits for a running gg operation to finish first |
 | `ctrl+p` | **command palette** — a searchable launcher for commands that don't have (or don't need) their own dedicated key: **Show commit** (`#`), **File history** / **File blame** (type a path — relative, absolute, or `./`-prefixed, normalized to repo-relative — then opens the same `h`/`b` view), **Find** (`F`, the fuzzy file finder), **Open repo** (type a path to a repo not already open; `~` expands to home; an invalid path shows an inline error instead of switching), **Apply patch…** (an editable path popup — applies a patch file to the working tree as unstaged changes, conflicts landing as markers for `x`; a `git format-patch` mailbox offers to recreate its commits instead — see `gg apply` below), **Git config explorer**, **Set up agent skills**, **Open shell** (same as `ctrl+o`), and **Run shell command…** (type one command, run it in the worktree with a press-enter-to-return pause so the output stays on screen; `alt+↓`/`alt+↑` recalls previous commands); `↑`/`↓` select, `enter` runs, `esc` closes |
@@ -239,7 +239,7 @@ git deletion in a shared repo.
 `[ui] commit_initial_count` sets how many commits are loaded on first paint
 (default 300); `[ui] commit_batch_size` sets how many more are loaded per page
 (default 300); `[ui] commit_search_max_pages` sets how many extra pages
-`ctrl+f` eager search will scan before asking permission to go deeper (default 5);
+`ctrl+f` eager search will scan before asking permission to go deeper (default 50);
 `[ui] commit_sort` selects commit ordering for the Commits panel and its graph:
 `date-order` (the default; `git --date-order`, a global topological sort so the
 graph's branch forks always draw correctly) or `plain` (git's lazy newest-first
@@ -359,6 +359,30 @@ unstage file-diff stash mark-file commit-files switch-worktree` (context). For
 example, `footer_actions = ["pull", "commit", "filter"]` shrinks the footer to
 those (plus `[.] actions`), leaving everything else one keypress away in the `.`
 menu.
+
+### Languages
+
+The TUI speaks English (default), 日本語, 한국어, 中文, and Русский: Settings
+(`,`) → **Language**, or set `[ui] language = "ja"` directly (the picker
+persists the choice to the **global** config). Custom languages or
+per-string overrides live in `$XDG_CONFIG_HOME/gg/lang/<code>.toml`:
+
+```toml
+[meta]
+name = "My language"
+
+[strings]
+"Commit" = "…"
+"committed %s %s" = "%[2]s — %[1]s …"   # printf verbs may be reordered
+```
+
+A new code adds a language; reusing a built-in code (`ja`/`ko`/`zh`/`ru`)
+overlays it per-key — fix just the strings you disagree with. Anything
+untranslated falls back to English. Operation status lines, progress steps,
+and confirmation prompts localize too: the engine always emits them in
+English (so the CLI, logs, and agents stay stable), and the TUI renders the
+localized form alongside. CLI output is always English — it's the
+agent-facing, script-stable surface.
 
 ### Notifications
 

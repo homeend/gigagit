@@ -31,16 +31,17 @@ func (op WriteFile) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	if err == nil {
 		if bytes.Equal(existing, op.Data) {
 			// Identical content already there — nothing to do.
-			res := Result{Summary: "unchanged"}
+			res := Result{}.WithSummary("unchanged")
 			deps.emit(ctx, Done{Result: res})
 			return res, nil
 		}
 		// Exists and differs — ask before clobbering.
-		choice, derr := deps.decide(ctx, DecisionRequest{
-			ID:      "overwrite",
-			Prompt:  "File exists: " + op.Path,
-			Options: []string{writeOverwrite, writeCancel},
-		})
+		choice, derr := deps.decide(ctx, PromptReq(
+			"overwrite",
+			"File exists: %s",
+			[]string{writeOverwrite, writeCancel},
+			op.Path,
+		))
 		if derr != nil {
 			return Result{}, derr
 		}
@@ -52,7 +53,7 @@ func (op WriteFile) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	if err := deps.Repo.WriteWorktreeFile(ctx, op.Path, op.Data); err != nil {
 		return Result{}, err
 	}
-	res := Result{Summary: "wrote " + op.Path, Changed: true}
+	res := Result{Changed: true}.WithSummary("wrote %s", op.Path)
 	deps.emit(ctx, Done{Result: res})
 	return res, nil
 }

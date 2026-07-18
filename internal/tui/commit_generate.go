@@ -11,6 +11,7 @@ import (
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/exttool"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/template"
 )
 
@@ -39,16 +40,16 @@ type genMessageMsg struct {
 //     to dispatchGenerate.
 func (m Model) startGenerate(p *commitPopup) (Model, tea.Cmd) {
 	if m.reviewRunning {
-		m.statusMsg = "a review is in progress — wait for it to finish"
+		m.statusMsg = i18n.T("a review is in progress — wait for it to finish")
 		return m, nil
 	}
 	if m.status.Counts().Staged == 0 {
-		m.statusMsg = "nothing staged to describe"
+		m.statusMsg = i18n.T("nothing staged to describe")
 		return m, nil
 	}
 	cmds := m.toolCommands(string(exttool.CatCommitMessage))
 	if len(cmds) == 0 {
-		m.statusMsg = "no commit-message tool configured (Settings → External tools)"
+		m.statusMsg = i18n.T("no commit-message tool configured (Settings → External tools)")
 		return m, nil
 	}
 	if len(cmds) > 1 {
@@ -66,7 +67,7 @@ func (m Model) startGenerate(p *commitPopup) (Model, tea.Cmd) {
 func (m Model) gateGenerate(p *commitPopup, chosen config.ToolCommand) (Model, tea.Cmd) {
 	resolved, err := template.ResolveCommand(chosen.Command, nil, template.CmdCtx{Repo: m.currentWorktree})
 	if err != nil {
-		m.statusMsg = "generate: " + err.Error()
+		m.statusMsg = i18n.T("generate: %s", err.Error())
 		return m, nil
 	}
 	p.genCmd = chosen
@@ -153,7 +154,7 @@ func (m Model) applyGeneratedMessage(msg genMessageMsg) Model {
 	p.generating = false
 	m.genCancel = nil
 	if msg.err != nil {
-		m.statusMsg = "generate: " + msg.err.Error()
+		m.statusMsg = i18n.T("generate: %s", msg.err.Error())
 		return m
 	}
 	p.title = newTextField(msg.subject)
@@ -226,11 +227,11 @@ func (p *commitPopup) selectChosen(m Model, idx int) (Model, tea.Cmd) {
 func (p *commitPopup) chooseBox(m Model) string {
 	w, _ := m.overlayDims()
 	var b strings.Builder
-	b.WriteString("Choose a commit-message tool\n\n")
+	b.WriteString(i18n.T("Choose a commit-message tool") + "\n\n")
 	for i, tc := range p.choosing {
 		b.WriteString(fmt.Sprintf("[%d] %s\n", i+1, tc.Name))
 	}
-	b.WriteString("\n[1-9] choose  [enter] first  [esc] cancel")
+	b.WriteString("\n" + i18n.T("[1-9] choose  [enter] first  [esc] cancel"))
 	return modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"
 }
 
@@ -272,7 +273,7 @@ func (p *commitPopup) approveAndProceed(m Model) (Model, tea.Cmd) {
 // stays owned by each call site).
 func (p *commitPopup) approveBox(m Model) string {
 	w, _ := m.overlayDims()
-	header := "Run this command?  (" + p.genCmd.Name + ")\n\n"
+	header := i18n.T("Run this command?  (%s)", p.genCmd.Name) + "\n\n"
 	return modalStyle.Width(popupInnerWidth(w)).Render(header+approvalBoxView(p.approving, w)) + "\n"
 }
 
@@ -305,6 +306,8 @@ func (p *commitPopup) dispatchConfirmed(m Model) (Model, tea.Cmd) {
 // confirmBox renders the replace-existing-text confirmation.
 func (p *commitPopup) confirmBox(m Model) string {
 	w, _ := m.overlayDims()
-	content := "Replace current message?\n\nGenerating will overwrite the title/description below.\n\n[y]es / [enter]  [esc] no"
+	content := i18n.T("Replace current message?") + "\n\n" +
+		i18n.T("Generating will overwrite the title/description below.") + "\n\n" +
+		i18n.T("[y]es / [enter]  [esc] no")
 	return modalStyle.Width(popupInnerWidth(w)).Render(content) + "\n"
 }

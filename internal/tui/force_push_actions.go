@@ -4,6 +4,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/i18n"
 )
 
 // forcePushRow offers "Force push <branch>" on the Branches panel when the
@@ -22,7 +23,7 @@ func (m Model) forcePushRow() (actionRow, bool) {
 	}
 	return actionRow{
 		id:    "force-push",
-		label: "Force push " + b.Name,
+		label: i18n.T("Force push %s", b.Name),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			return m.startOp(engine.Push{Remote: "origin", Branch: m.status.Branch, SetUpstream: true, Force: true})
 		},

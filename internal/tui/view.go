@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/pusherr"
 )
@@ -105,12 +106,12 @@ func friendlyOpError(err error) string {
 	if strings.Contains(low, "terminal prompts disabled") ||
 		strings.Contains(low, "could not read username") ||
 		strings.Contains(low, "could not read password") {
-		return "error: remote needs credentials — configure a git credential helper (gg cannot prompt for them)"
+		return i18n.T("error: %s", i18n.T("remote needs credentials — configure a git credential helper (gg cannot prompt for them)"))
 	}
 	if msg, ok := friendlyPushError(low); ok {
 		return msg
 	}
-	return "error: " + s
+	return i18n.T("error: %s", s)
 }
 
 // friendlyPushError rewrites git's multi-line push-rejection stderr into one
@@ -128,20 +129,45 @@ func friendlyOpError(err error) string {
 func friendlyPushError(low string) (string, bool) {
 	switch {
 	case pusherr.IsHookRejection(low):
-		return "error: push rejected by the remote (protected branch or server-side hook)", true
+		return i18n.T("error: %s", i18n.T("push rejected by the remote (protected branch or server-side hook)")), true
 	case pusherr.IsStaleInfo(low):
-		return "error: force-with-lease refused — remote moved; fetch & review, then retry", true
+		return i18n.T("error: %s", i18n.T("force-with-lease refused — remote moved; fetch & review, then retry")), true
 	case pusherr.IsNonFastForward(low):
-		return "error: push rejected — remote has new commits; pull/rebase first, or force-push", true
+		return i18n.T("error: %s", i18n.T("push rejected — remote has new commits; pull/rebase first, or force-push")), true
 	}
 	return "", false
 }
 
-// statusIsError reports whether a status message reports a failure.
+// statusIsError reports whether a status message reports a failure. Keys
+// are English, so the English prefixes classify directly; under a non-
+// English catalog the same classification is derived per call from the
+// translations of the error-prefixed KEYS (the head of each translation up
+// to its first verb). A translation that reorders its arguments ahead of
+// the topic word yields a too-short head and is skipped — that message
+// just renders unstyled, never mis-styled.
 func statusIsError(msg string) bool {
 	for _, p := range statusErrorPrefixes {
 		if strings.HasPrefix(msg, p) {
 			return true
+		}
+	}
+	for k, tr := range i18n.ActiveTranslations() {
+		if !strings.ContainsRune(k, '%') {
+			continue // error-status keys are "<prefix>: %s"-shaped; a verb-less key sharing the prefix (e.g. a footer) is not a status message
+		}
+		for _, p := range statusErrorPrefixes {
+			if !strings.HasPrefix(k, p) {
+				continue
+			}
+			head := tr
+			if i := strings.IndexByte(head, '%'); i >= 0 {
+				head = head[:i]
+			}
+			head = strings.TrimSpace(head)
+			if len([]rune(head)) >= 2 && strings.HasPrefix(msg, head) {
+				return true
+			}
+			break
 		}
 	}
 	return false
@@ -366,26 +392,15 @@ func (m Model) renderInterface() string {
 	// Suppressed while the conflict process is active — it draws its own window
 	// over this background, so a "press [x] to resolve" notice would be wrong.
 	if n := len(m.status.Conflicts()); n > 0 && m.proc == nil {
-		notice = fmt.Sprintf("⚠ %d conflict", n)
-		if n != 1 {
-			notice += "s"
-		}
-		if src := m.conflict.Describe(); src != "" {
-			notice += " " + src
-		}
-		notice += " — press [x] to resolve"
+		notice = conflictNotice(n, describeConflict(m.conflict))
 	} else if m.conflict.Op != "" && m.proc == nil {
 		// A sequencer op is paused with nothing left unmerged (resolved
 		// outside gg, or all handled and the process left open-ended).
-		notice = "⏸ " + m.conflict.Op + " paused"
-		if src := m.conflict.Describe(); src != "" {
-			notice += " (" + src + ")"
-		}
-		notice += " — press [x] to continue or abort"
+		notice = pausedNotice(opDisplayName(m.conflict.Op), describeConflict(m.conflict))
 	}
 	var markHint string
 	if m.mark != nil && m.markAlive() {
-		markHint = "◆ marked: " + m.mark.display
+		markHint = i18n.T("◆ marked: %s", m.mark.display)
 	}
 	// Assemble the segments. In error mode the message LEADS so truncation can
 	// never hide it behind the persistent conflict/mark hints; otherwise the
@@ -423,9 +438,9 @@ func (m Model) renderInterface() string {
 	}
 	if m.anySourceLoading() && !m.running {
 		if statusLine == "" {
-			statusLine = "⏳ reloading…"
+			statusLine = i18n.T("⏳ reloading…")
 		} else {
-			statusLine = "⏳ reloading… · " + statusLine
+			statusLine = i18n.T("⏳ reloading…") + " · " + statusLine
 		}
 	}
 	statusLine = truncate(oneLine(statusLine), g.w)
@@ -437,7 +452,7 @@ func (m Model) renderInterface() string {
 	// Narrow terminals: a single commits column (two columns won't fit cleanly).
 	if g.w < 40 {
 		cmRows, _, decos := m.commitBody(g.w, g.boxH[panelCommits])
-		body := m.renderPanel(panelCommits, m.panelLabel(panelCommits, "Commits ("+m.commitScopeLabel()+")"), cmRows, decos, g.w, g.boxH[panelCommits])
+		body := m.renderPanel(panelCommits, m.panelLabel(panelCommits, i18n.T("Commits (%s)", m.commitScopeLabel())), cmRows, decos, g.w, g.boxH[panelCommits])
 		return strings.Join([]string{header, body, footer, statusLine}, "\n")
 	}
 
@@ -470,7 +485,7 @@ func (m Model) renderInterface() string {
 		right = m.renderStashList(g.rightW, g.boxH[panelCommits])
 	default:
 		cmRows, _, cmDecos := m.commitBody(g.rightW, g.boxH[panelCommits])
-		right = m.renderPanel(panelCommits, m.panelLabel(panelCommits, "Commits ("+m.commitScopeLabel()+")"), cmRows, cmDecos, g.rightW, g.boxH[panelCommits])
+		right = m.renderPanel(panelCommits, m.panelLabel(panelCommits, i18n.T("Commits (%s)", m.commitScopeLabel())), cmRows, cmDecos, g.rightW, g.boxH[panelCommits])
 	}
 	// One side can be empty (a ctrl+t fullscreen hides the other column entirely);
 	// join only when both exist so no zero-width block leaks artifacts.
@@ -492,7 +507,7 @@ func (m Model) renderInterface() string {
 // space left between them is middle-elided, always keeping the repo directory
 // name (the path's final segment) visible.
 func (m Model) headerLine(w int) string {
-	rest := "  branch " + m.status.Branch
+	rest := i18n.T("  branch %s", m.status.Branch)
 	if m.status.Upstream != "" {
 		rest += fmt.Sprintf(" (↑%d ↓%d)", m.status.Ahead, m.status.Behind)
 	}
@@ -621,8 +636,10 @@ func tabSegAt(segs []tabSeg, col int) (panel, bool) {
 // topTabSegs builds the shared top-slot tabs (Branches · Remotes · Worktrees):
 // the active tab spelled out and bracketed, the inactive ones single-letter
 // markers so all three fit the narrow left column (w/3) even at 80 cols, leaving
-// room for the sort/filter decoration panelLabel appends. Plain ASCII so
-// renderPanel's truncate stays safe.
+// room for the sort/filter decoration panelLabel appends. Labels are
+// translated (i18n.T) and may contain wide CJK glyphs; renderPanel's truncate
+// and tabSegAt's column lookup both work in display columns (lipgloss.Width),
+// not bytes/runes, so this stays safe.
 func topTabSegs(active panel) []tabSeg {
 	mark := func(p panel, full, short string) string {
 		if p == active {
@@ -631,17 +648,17 @@ func topTabSegs(active panel) []tabSeg {
 		return short
 	}
 	return []tabSeg{
-		{panelBranches, mark(panelBranches, "Branches", "B")},
-		{panelRemotes, mark(panelRemotes, "Remotes", "R")},
-		{panelWorktrees, mark(panelWorktrees, "Worktrees", "W")},
+		{panelBranches, mark(panelBranches, i18n.T("Branches"), "B")},
+		{panelRemotes, mark(panelRemotes, i18n.T("Remotes"), "R")},
+		{panelWorktrees, mark(panelWorktrees, i18n.T("Worktrees"), "W")},
 	}
 }
 
 // filesTabSegs builds the middle-slot tabs (Files · Tags): the active tab spelled
 // out with its row count and bracketed, the inactive tab shown plainly.
 func filesTabSegs(active panel, filesN, tagsN int) []tabSeg {
-	files := fmt.Sprintf("Files %d", filesN)
-	tags := fmt.Sprintf("Tags %d", tagsN)
+	files := i18n.T("Files %d", filesN)
+	tags := i18n.T("Tags %d", tagsN)
 	if active == panelTags {
 		return []tabSeg{{panelFiles, files}, {panelTags, "[" + tags + "]"}}
 	}
@@ -651,8 +668,8 @@ func filesTabSegs(active panel, filesN, tagsN int) []tabSeg {
 // bottomTabSegs builds the bottom-slot tabs (Staged · Reflog): the active tab
 // spelled out with its row count and bracketed, the inactive tab shown plainly.
 func bottomTabSegs(active panel, stagedN, reflogN int) []tabSeg {
-	staged := fmt.Sprintf("Staged %d", stagedN)
-	reflog := fmt.Sprintf("Reflog %d", reflogN)
+	staged := i18n.T("Staged %d", stagedN)
+	reflog := i18n.T("Reflog %d", reflogN)
 	if active == panelReflog {
 		return []tabSeg{{panelStaged, staged}, {panelReflog, "[" + reflog + "]"}}
 	}
@@ -698,7 +715,7 @@ func (m Model) renderPanel(p panel, label string, rows []string, decos []rowDeco
 		// No room for any data rows below the label; render the label only so the
 		// panel never exceeds boxH (windowRows would otherwise force one row).
 	} else if len(rows) == 0 {
-		lines = append(lines, padRight(truncate("  (none)", innerW), innerW))
+		lines = append(lines, padRight(truncate(i18n.T("  (none)"), innerW), innerW))
 	} else {
 		marked := m.markedDisplayIndices(p)
 		cmpSet := m.compareSetDisplayIndices(p)
@@ -1139,7 +1156,7 @@ func (m Model) reviewSegment() string {
 	if !m.reviewRunning || m.proc != nil {
 		return ""
 	}
-	seg := "⟳ reviewing " + m.reviewRunningLabel + "…"
+	seg := i18n.T("⟳ reviewing %s…", m.reviewRunningLabel)
 	if m.reviewBlink {
 		return reviewHotStyle.Render(seg)
 	}
@@ -1153,7 +1170,7 @@ func (m Model) commitBranchHint() string {
 		return ""
 	}
 	if r, ok := m.wipRowAt(m.commitSelUnified()); ok { // pseudo-row: no commit id
-		return fmt.Sprintf("%s · %d files", strings.ToLower(r.label()), r.count)
+		return i18n.T("%s · %d files", r.lowerLabel(), r.count)
 	}
 	bi, ok := m.backingIndex(panelCommits)
 	if !ok || bi < 0 || bi >= len(m.commits) {
@@ -1543,7 +1560,7 @@ func (m Model) renderModal() string {
 	// Prompt: keep any explicit line breaks (e.g. the hook-approval script),
 	// word-wrapping each physical line. wrapWords hard-chunks a single token
 	// wider than maxW, so an unbreakable long branch name still fits.
-	for _, line := range strings.Split(m.modal.req.Prompt, "\n") {
+	for _, line := range strings.Split(renderPrompt(m.modal.req), "\n") {
 		if wrapped := wrapWords(line, maxW); len(wrapped) > 0 {
 			b.WriteString(strings.Join(wrapped, "\n"))
 		}
@@ -1559,7 +1576,7 @@ func (m Model) renderModal() string {
 		optW = 1
 	}
 	for i, opt := range m.modal.req.Options {
-		wrapped := wrapWords(opt, optW)
+		wrapped := wrapWords(optionDisplayName(opt), optW)
 		if len(wrapped) == 0 {
 			wrapped = []string{""}
 		}
@@ -1577,7 +1594,7 @@ func (m Model) renderModal() string {
 		}
 	}
 
-	footer := "[↑/↓] choose  [enter] confirm  [esc] abort"
+	footer := i18n.T("[↑/↓] choose  [enter] confirm  [esc] abort")
 	b.WriteString("\n")
 	if lipgloss.Width(footer) > maxW {
 		b.WriteString(strings.Join(wrapWords(footer, maxW), "\n"))

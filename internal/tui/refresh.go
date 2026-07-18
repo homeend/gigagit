@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/i18n"
 )
 
 // refreshItem is one schedulable background-refresh unit: a source read, or a
@@ -217,7 +218,7 @@ func (m Model) toggleRefreshWatch(it refreshItem) (Model, tea.Cmd) {
 	m.refreshLastRun[it] = time.Now()
 	if m.repoConfigPath != "" {
 		if err := config.SetRefreshWatch(m.repoConfigPath, refreshTomlKey(it), want); err != nil {
-			m.statusMsg = "watch toggled but not saved: " + err.Error()
+			m.statusMsg = i18n.T("watch toggled but not saved: %s", err.Error())
 		}
 	}
 	m.watchGen++
@@ -242,11 +243,11 @@ func (m Model) saveRefreshInterval(it refreshItem, secs int) Model {
 	}
 	m.refreshLastRun[it] = time.Now()
 	if m.repoConfigPath == "" {
-		m.statusMsg = "refresh interval set (not saved: no repo config path)"
+		m.statusMsg = i18n.T("refresh interval set (not saved: no repo config path)")
 		return m
 	}
 	if err := config.SetRefreshInterval(m.repoConfigPath, refreshTomlKey(it), secs); err != nil {
-		m.statusMsg = "refresh interval set but not saved: " + err.Error()
+		m.statusMsg = i18n.T("refresh interval set but not saved: %s", err.Error())
 	}
 	return m
 }
@@ -426,12 +427,12 @@ func (m Model) bgRefreshHint() string {
 	if samples := m.refreshDur[m.bgActiveItem]; len(samples) > 0 && meanDuration(samples) < time.Second {
 		return ""
 	}
-	name := "fetch"
+	name := i18n.T("fetch")
 	switch {
 	case m.bgActiveItem.isRemoteTags:
-		name = "remote tags"
+		name = i18n.T("remote tags")
 	case !m.bgActiveItem.isFetch:
-		name = sourceNames[m.bgActiveItem.source]
+		name = sourceDisplayName(m.bgActiveItem.source)
 	}
-	return "⟳ " + name + "…"
+	return i18n.T("⟳ %s…", name)
 }

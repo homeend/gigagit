@@ -12,6 +12,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -54,7 +55,7 @@ func (p *shelfRestorePopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		m = m.popLayer() // back to the switcher; it stays visible during the write
 		blob, err := m.svc.ShelfBlob(context.Background(), entry)
 		if err != nil {
-			m.statusMsg = "shelf restore: " + err.Error()
+			m.statusMsg = i18n.T("shelf restore: %s", err.Error())
 			return m, nil
 		}
 		// engine.WriteFile owns the Overwrite/Cancel fork via the modal decider.
@@ -71,10 +72,10 @@ func (p *shelfRestorePopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 func (p *shelfRestorePopup) render(m Model, below string) string {
 	w, h := m.overlayDims()
 	var b strings.Builder
-	b.WriteString("Restore shelved file\n\n")
-	b.WriteString("from: " + p.origin + "  (shelved copy)\n")
-	b.WriteString(viewField("dest: ", p.dest, true, popupContentWidth(w)) + "\n\n")
-	b.WriteString("[type] path  [enter] restore  [ctrl+r] original path  [esc] cancel")
+	b.WriteString(i18n.T("Restore shelved file") + "\n\n")
+	b.WriteString(i18n.T("from: %s  (shelved copy)", p.origin) + "\n")
+	b.WriteString(viewField(i18n.T("dest: "), p.dest, true, popupContentWidth(w)) + "\n\n")
+	b.WriteString(i18n.T("[type] path  [enter] restore  [ctrl+r] original path  [esc] cancel"))
 	box := modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 	return overlayCenter(clipToHeight(below, h), box, w, h)
 }
@@ -86,7 +87,7 @@ func (p *shelfRestorePopup) render(m Model, below string) string {
 // invoked from the popup over a stacked surface.
 func (m Model) openShelfCompareEntry(e model.ShelfEntry) (Model, tea.Cmd) {
 	width, _ := m.overlayDims()
-	v := &diffView{title: e.Origin.Path, context: "shelf #" + shortShelf(e) + " → working tree", rev: "", loading: true, partial: m.diffPartial, long: m.diffLong, width: width}
+	v := &diffView{title: e.Origin.Path, context: i18n.T("%s → working tree", i18n.T("shelf #%s", shortShelf(e))), rev: "", loading: true, partial: m.diffPartial, long: m.diffLong, width: width}
 	return m.openPickerDiff(v, "shelf:"+e.ID, m.loadShelfCompareCmd(e))
 }
 
@@ -122,7 +123,7 @@ func (m Model) openShelfCompareTwoEntries(a, b model.ShelfEntry) (Model, tea.Cmd
 	if a.Origin.Path != b.Origin.Path {
 		title = a.Origin.Path + " ↔ " + b.Origin.Path
 	}
-	ctx := "shelf #" + shortShelf(a) + " → shelf #" + shortShelf(b)
+	ctx := i18n.T("shelf #%s", shortShelf(a)) + " → " + i18n.T("shelf #%s", shortShelf(b))
 	width, _ := m.overlayDims()
 	v := &diffView{title: title, context: ctx, rev: "", loading: true, partial: m.diffPartial, long: m.diffLong, width: width}
 	return m.openPickerDiff(v, "shelf2:"+a.ID+":"+b.ID, m.loadShelfCompareTwoCmd(a, b, title, ctx))
@@ -158,7 +159,7 @@ func (m Model) loadShelfCompareCmd(e model.ShelfEntry) tea.Cmd {
 	root := m.currentWorktree
 	body := m.diffBodyRows()
 	tag := "shelf:" + e.ID
-	v := &diffView{title: e.Origin.Path, context: "shelf #" + shortShelf(e) + " → working tree", rev: "", partial: m.diffPartial, long: m.diffLong}
+	v := &diffView{title: e.Origin.Path, context: i18n.T("%s → working tree", i18n.T("shelf #%s", shortShelf(e))), rev: "", partial: m.diffPartial, long: m.diffLong}
 	v.width, _ = m.overlayDims()
 	entryID := e.ID
 	full := filepath.Join(root, e.Origin.Path)

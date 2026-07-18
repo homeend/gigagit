@@ -6,6 +6,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -48,16 +49,17 @@ func (m Model) openCompareFocusedVsBookmark(ref model.FileRef, label string, bm 
 func (m Model) openCompareFocusedVsShelf(ref model.FileRef, label string, e model.ShelfEntry) (Model, tea.Cmd) {
 	right := model.FileRef{Source: model.SourceShelf, Locator: e.ID, Path: e.Origin.Path}
 	width, _ := m.overlayDims()
+	shelfLabel := i18n.T("shelf #%s", shortShelf(e))
 	v := &diffView{
 		title:   ref.Path + " ↔ " + e.Origin.Path,
-		context: label + " → shelf #" + shortShelf(e),
+		context: label + " → " + shelfLabel,
 		loading: true,
 		partial: m.diffPartial,
 		long:    m.diffLong,
 		width:   width,
 	}
 	tag := "cmpsh:" + ref.Path + ":" + e.ID
-	return m.openPickerDiff(v, tag, m.loadCompareTwoRefsCmd(ref, right, ref.Path+" ↔ "+e.Origin.Path, label+" → shelf #"+shortShelf(e), tag))
+	return m.openPickerDiff(v, tag, m.loadCompareTwoRefsCmd(ref, right, ref.Path+" ↔ "+e.Origin.Path, label+" → "+shelfLabel, tag))
 }
 
 // loadCompareTwoRefsCmd resolves both sides via ResolveBytes and runs the Differ.

@@ -4,6 +4,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/i18n"
 )
 
 // markState identifies a marked row by stable identity (panelList.Key), not
@@ -34,28 +35,28 @@ func pairOpsFor(p panel) []pairOp {
 	}
 	return []pairOp{
 		{
-			label: func(marked, selected string) string { return "Merge " + marked + " into " + selected },
+			label: func(marked, selected string) string { return i18n.T("Merge %s into %s", marked, selected) },
 			build: func(marked, selected string) engine.Operation {
 				return engine.SmartMerge{Source: marked, Target: selected}
 			},
 			enabled: true,
 		},
 		{
-			label: func(marked, selected string) string { return "Rebase " + marked + " onto " + selected },
+			label: func(marked, selected string) string { return i18n.T("Rebase %s onto %s", marked, selected) },
 			build: func(marked, selected string) engine.Operation {
 				return engine.SmartRebase{Branch: marked, Onto: selected}
 			},
 			enabled: true,
 		},
 		{
-			label:   func(marked, selected string) string { return "Interactive rebase " + marked + " onto " + selected },
+			label:   func(marked, selected string) string { return i18n.T("Interactive rebase %s onto %s", marked, selected) },
 			enabled: true,
 			open: func(m Model, marked, selected string) (Model, tea.Cmd) {
 				return m, m.loadIrebaseCmd(marked, selected)
 			},
 		},
 		{
-			label:   func(marked, selected string) string { return "Compare " + marked + " ↔ " + selected },
+			label:   func(marked, selected string) string { return i18n.T("Compare %s ↔ %s", marked, selected) },
 			enabled: true,
 			open: func(m Model, marked, selected string) (Model, tea.Cmd) {
 				return m.openBranchCompare(marked, selected)
@@ -114,7 +115,7 @@ func (m Model) handleMarkKey() (tea.Model, tea.Cmd) {
 	}
 	ops := pairOpsFor(m.focus)
 	if len(ops) == 0 {
-		m.statusMsg = "no pair operations for this panel"
+		m.statusMsg = i18n.T("no pair operations for this panel")
 		return m, nil
 	}
 	w, _ := m.overlayDims()

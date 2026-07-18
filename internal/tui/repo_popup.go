@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/repos"
 )
 
@@ -41,7 +42,7 @@ func (p *repoPopup) moveSel(d int) {
 func (m Model) openRepoPopup() (Model, bool) {
 	entries := repos.Load(m.statePath)
 	if len(entries) == 0 {
-		m.statusMsg = "no known repositories yet (gg records them as you open repos)"
+		m.statusMsg = i18n.T("no known repositories yet (gg records them as you open repos)")
 		return m, false
 	}
 	m = m.pushLayer(&repoPopup{entries: entries, now: time.Now()})
@@ -189,20 +190,20 @@ func (p *repoPopup) box(m Model) string {
 	inner := popupResolveWidth(w, p.maximized, popupInnerWidth(w))
 	textW := popupTextWidth(inner)
 
-	header := "Switch repository"
+	header := i18n.T("Switch repository")
 	switch {
 	case p.filtering:
 		header += "  /" + p.query + "█"
 	case p.query != "":
 		header += "  /" + p.query
 	default:
-		header += "   (press / to filter)"
+		header += i18n.T("   (press / to filter)")
 	}
 
 	vis := p.visible()
 	var bodyLines []string
 	if len(vis) == 0 {
-		bodyLines = []string{padRight("  (no match)", textW)}
+		bodyLines = []string{padRight(i18n.T("  (no match)"), textW)}
 	} else {
 		wr := make([]winRow, len(vis))
 		for i, e := range vis {
@@ -228,7 +229,7 @@ func (p *repoPopup) box(m Model) string {
 		bodyLines = renderWindow(wr, winOpts{w: textW, h: h, mode: p.mode, anchor: p.sel, hscroll: p.hscroll})
 	}
 
-	hint := []string{"[enter] switch", "[ctrl+d] forget", "[/] filter", "[z] mode", "[ctrl+t] full", "[esc] close"}
+	hint := []string{i18n.T("[enter] switch"), i18n.T("[ctrl+d] forget"), i18n.T("[/] filter"), i18n.T("[z] mode"), i18n.T("[ctrl+t] full"), i18n.T("[esc] close")}
 	parts := []string{header, ""}
 	parts = append(parts, bodyLines...)
 	parts = append(parts, "")
@@ -248,12 +249,12 @@ func ageString(now, t time.Time) string {
 	d := now.Sub(t)
 	switch {
 	case d < time.Minute:
-		return "just now"
+		return i18n.T("just now")
 	case d < time.Hour:
-		return fmt.Sprintf("%dm ago", int(d.Minutes()))
+		return i18n.T("%dm ago", int(d.Minutes()))
 	case d < 24*time.Hour:
-		return fmt.Sprintf("%dh ago", int(d.Hours()))
+		return i18n.T("%dh ago", int(d.Hours()))
 	default:
-		return fmt.Sprintf("%dd ago", int(d.Hours()/24))
+		return i18n.T("%dd ago", int(d.Hours()/24))
 	}
 }

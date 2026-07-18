@@ -4,6 +4,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -21,9 +22,9 @@ func (m Model) reflogResetRow() (actionRow, bool) {
 	hash := m.reflog[bi].Hash // full SHA → unambiguous
 	return actionRow{
 		id:    "reflog-reset",
-		label: "Reset to this entry",
+		label: i18n.T("Reset to this entry"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
-			return m.confirmOp(engine.Reset{Commit: hash}, "Reset to "+shortHash(hash)+"? This moves the current branch ref.")
+			return m.confirmOp(engine.Reset{Commit: hash}, i18n.T("Reset to %s? This moves the current branch ref.", shortHash(hash)))
 		},
 	}, true
 }
@@ -42,12 +43,12 @@ func (m Model) reflogCheckoutRow() (actionRow, bool) {
 	ref := m.reflog[bi].Hash // full SHA
 	return actionRow{
 		id:    "reflog-checkout",
-		label: "Check out this entry…",
+		label: i18n.T("Check out this entry…"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			m.modal = &decisionState{
 				req: engine.DecisionRequest{
 					ID:      "reflog-checkout",
-					Prompt:  "Check out " + shortHash(ref) + ":",
+					Prompt:  i18n.T("Check out %s:", shortHash(ref)),
 					Options: []string{"Detached", "Create branch…", "Cancel"},
 				},
 				onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {

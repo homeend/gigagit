@@ -2,11 +2,14 @@ package tui
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -116,6 +119,59 @@ func TestStatusIsError(t *testing.T) {
 		if statusIsError(s) {
 			t.Errorf("statusIsError(%q) = true, want false", s)
 		}
+	}
+}
+
+// TestStatusIsErrorSurvivesTranslation guards the retroactive defect: status
+// messages are translated (i18n stages 1-3), so statusIsError must classify
+// a TRANSLATED error message as an error too, not just the English original.
+// A custom "xx" bundle stands in for any real non-English language.
+func TestStatusIsErrorSurvivesTranslation(t *testing.T) {
+	dir := t.TempDir()
+	body := "[meta]\nname=\"Test\"\n[strings]\n" +
+		"\"error: %s\" = \"TESTERR: %s\"\n" +
+		"\"amend: %s\" = \"TESTAMEND: %s\"\n" +
+		"\"loading…\" = \"TESTLOAD…\"\n" +
+		"\"commits: [enter/tab] tree  …\" = \"TESTFOOT: [x] example\"\n"
+	if err := os.WriteFile(filepath.Join(dir, "xx.toml"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := i18n.SetLanguage("xx", dir); err != nil {
+		t.Fatal(err)
+	}
+	defer i18n.SetLanguage("", "")
+
+	if got := i18n.T("error: %s", "boom"); !statusIsError(got) {
+		t.Errorf("statusIsError(%q) = false, want true (translated error:)", got)
+	}
+	if got := i18n.T("amend: %s", "boom"); !statusIsError(got) {
+		t.Errorf("statusIsError(%q) = false, want true (translated amend:)", got)
+	}
+	if got := i18n.T("loading…"); statusIsError(got) {
+		t.Errorf("statusIsError(%q) = true, want false (not an error key)", got)
+	}
+	// Guard against verb-less keys sharing error prefixes (e.g. a footer sharing "commits:")
+	if statusIsError("TESTFOOT: something") {
+		t.Errorf("statusIsError(%q) = true, want false (verb-less footer key excluded by guard)", "TESTFOOT: something")
+	}
+}
+
+// TestStatusIsErrorEnglishAfterReset guards that resetting to English still
+// classifies plain English error prefixes correctly (no regression from the
+// translated-prefix derivation).
+func TestStatusIsErrorEnglishAfterReset(t *testing.T) {
+	dir := t.TempDir()
+	body := "[meta]\nname=\"Test\"\n[strings]\n\"error: %s\" = \"TESTERR: %s\"\n"
+	if err := os.WriteFile(filepath.Join(dir, "xx.toml"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := i18n.SetLanguage("xx", dir); err != nil {
+		t.Fatal(err)
+	}
+	i18n.SetLanguage("", "")
+
+	if !statusIsError("error: boom") {
+		t.Errorf("statusIsError(%q) = false, want true after reset to English", "error: boom")
 	}
 }
 
