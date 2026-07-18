@@ -225,6 +225,17 @@ guards against removing the worktree you are standing in.
   (e.g. `/a/x/repo` → `/a/x/repo.tmp`); `<name>` is `commit-<7-char-sha>` for a
   commit entry, else the entry's id. `--force` overwrites an existing target
   directory; without it an existing target refuses (exit 2).
+- `gg shelf cherry-pick [--patch] [--on-conflict=keep|abort] <entry-id>` —
+  re-apply a **shelved commit** onto the current branch. While the original
+  commit object still exists this is a live `git cherry-pick`
+  (`--on-conflict` pre-answers a conflict: `keep` leaves conflict markers in
+  the tree and exits 1, `abort` rolls back cleanly and exits 0). Once the commit is
+  gc'd or the history rewritten, gg replays the patch snapshot frozen at
+  shelve time (`git am --3way`, atomic — all-or-nothing); `--patch` forces
+  that lane even while the commit exists. An entry shelved before patch
+  support, or a merge commit, has no snapshot: the gc'd case then exits 1
+  with a clear message. Exit 0 = commit created, or a clean
+  `--on-conflict=abort`; 1 = failure or conflicts left; 2 = usage.
 - `gg bookmark add [--rev <commit>] [--staged] [--worktree <path>] <path>...` /
   `gg bookmark list` / `gg bookmark rm <id>` /
   `gg bookmark paste [--force] <id> <dest>` — **bookmarks**: a persistent registry

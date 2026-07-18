@@ -1,6 +1,12 @@
 package tui
 
-import "testing"
+import (
+	"strings"
+	"testing"
+
+	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/model"
+)
 
 // Manual remoteTagsMsg stores the set.
 func TestRemoteTagsMsgStoresSet(t *testing.T) {
@@ -110,3 +116,43 @@ var errTestRemote = errString("boom")
 type errString string
 
 func (e errString) Error() string { return string(e) }
+
+func TestPushTagCheckDroppedWhenModalOpen(t *testing.T) {
+	m := footerModel()
+	m.pushCheckGen = 3
+	m.modal = &decisionState{req: engine.DecisionRequest{
+		ID: "other", Prompt: "unrelated?", Options: []string{"x", "y"}}}
+	// One unpushed tip tag: without the guard this opens the push-with-tags
+	// modal (clobbering "other") — or worse, starts a push under the dialog.
+	msg := pushTagCheckMsg{gen: 3, tipTags: []model.Tag{{Name: "v9"}},
+		remoteSet: map[string]bool{}}
+	mm, cmd := m.Update(msg)
+	m = mm.(Model)
+	if m.modal == nil || m.modal.req.ID != "other" {
+		t.Fatal("an open modal must not be clobbered by a returning push-tag check")
+	}
+	if m.running || cmd != nil {
+		t.Fatalf("no push may start under an open dialog (running=%v cmd=%v)", m.running, cmd)
+	}
+	if !strings.Contains(m.statusMsg, "press P again") {
+		t.Fatalf("the drop must be visible; statusMsg = %q", m.statusMsg)
+	}
+}
+
+func TestPushTagCheckDroppedWhenOpRunning(t *testing.T) {
+	m := footerModel()
+	m.pushCheckGen = 3
+	m.running = true
+	// Zero unpushed tags: without the guard this is the dangerous path that
+	// calls startOp directly under the already-running op.
+	msg := pushTagCheckMsg{gen: 3, tipTags: []model.Tag{{Name: "v9"}},
+		remoteSet: map[string]bool{"v9": true}}
+	mm, cmd := m.Update(msg)
+	m = mm.(Model)
+	if cmd != nil {
+		t.Fatal("no push may start under a running op")
+	}
+	if !strings.Contains(m.statusMsg, "press P again") {
+		t.Fatalf("the drop must be visible; statusMsg = %q", m.statusMsg)
+	}
+}

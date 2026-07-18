@@ -243,6 +243,7 @@ func (p *bookmarkPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.pickGen++ // invalidate an in-flight cherry-pick probe
 		m = m.popLayer()
 	case tea.KeyEnter:
+		m.pickGen++ // every enter path leaves or re-stacks the switcher; drop an in-flight probe
 		if p.compareRef != nil {
 			b, ok := p.selected()
 			if !ok {

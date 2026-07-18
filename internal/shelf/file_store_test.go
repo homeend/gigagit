@@ -262,3 +262,78 @@ func TestRemoveKeepsSharedPatchBlob(t *testing.T) {
 		t.Fatalf("survivor's patch must remain readable: %v", err)
 	}
 }
+
+// Cross-field reclaim: a removed entry's PATCH blob may be a survivor's TAR
+// blob (and vice versa). Remove must check both fields of every survivor
+// before deleting — this is the branch where a regression means data loss.
+
+func TestRemoveKeepsPatchBlobSharedWithSurvivorTar(t *testing.T) {
+	fs := NewFileStore(t.TempDir())
+	a := model.FileAddress{State: model.StateCommitted, Commit: "a1b2c3d4e5f6"}
+	b := model.FileAddress{State: model.StateCommitted, Commit: "f6e5d4c3b2a1"}
+	// Survivor's TAR bytes == removed entry's PATCH bytes → one shared blob.
+	survivor, err := fs.PutCommit("", a, []byte("shared-bytes"), nil, "")
+	if err != nil {
+		t.Fatalf("PutCommit survivor: %v", err)
+	}
+	victim, err := fs.PutCommit("", b, []byte("tar-two"), []byte("shared-bytes"), "")
+	if err != nil {
+		t.Fatalf("PutCommit victim: %v", err)
+	}
+	if survivor.SHA != victim.PatchSHA {
+		t.Fatal("fixture broken: expected the tar and patch blobs to dedup to one SHA")
+	}
+	if err := fs.Remove(victim.ID); err != nil {
+		t.Fatalf("Remove: %v", err)
+	}
+	if _, err := os.Stat(fs.blobPath(survivor.SHA)); err != nil {
+		t.Fatalf("survivor's tar blob was reclaimed via the victim's PatchSHA: %v", err)
+	}
+}
+
+func TestRemoveKeepsTarBlobSharedWithSurvivorPatch(t *testing.T) {
+	fs := NewFileStore(t.TempDir())
+	a := model.FileAddress{State: model.StateCommitted, Commit: "a1b2c3d4e5f6"}
+	b := model.FileAddress{State: model.StateCommitted, Commit: "f6e5d4c3b2a1"}
+	// Survivor's PATCH bytes == removed entry's TAR bytes → one shared blob.
+	survivor, err := fs.PutCommit("", a, []byte("tar-one"), []byte("shared-bytes"), "")
+	if err != nil {
+		t.Fatalf("PutCommit survivor: %v", err)
+	}
+	victim, err := fs.PutCommit("", b, []byte("shared-bytes"), nil, "")
+	if err != nil {
+		t.Fatalf("PutCommit victim: %v", err)
+	}
+	if survivor.PatchSHA != victim.SHA {
+		t.Fatal("fixture broken: expected the patch and tar blobs to dedup to one SHA")
+	}
+	if err := fs.Remove(victim.ID); err != nil {
+		t.Fatalf("Remove: %v", err)
+	}
+	if _, err := fs.GetPatch(survivor.ID); err != nil {
+		t.Fatalf("survivor's patch was reclaimed via the victim's SHA: %v", err)
+	}
+}
+
+func TestRemoveKeepsFileBlobSharedWithSurvivorPatch(t *testing.T) {
+	fs := NewFileStore(t.TempDir())
+	a := model.FileAddress{State: model.StateCommitted, Commit: "a1b2c3d4e5f6"}
+	fileAddr := model.FileAddress{State: model.StateUnstaged, Worktree: "/w", Path: "x.txt"}
+	survivor, err := fs.PutCommit("", a, []byte("tar-one"), []byte("shared-bytes"), "")
+	if err != nil {
+		t.Fatalf("PutCommit survivor: %v", err)
+	}
+	victim, err := fs.Put("", fileAddr, []byte("shared-bytes"))
+	if err != nil {
+		t.Fatalf("Put victim: %v", err)
+	}
+	if survivor.PatchSHA != victim.SHA {
+		t.Fatal("fixture broken: expected the patch and file blobs to dedup to one SHA")
+	}
+	if err := fs.Remove(victim.ID); err != nil {
+		t.Fatalf("Remove: %v", err)
+	}
+	if _, err := fs.GetPatch(survivor.ID); err != nil {
+		t.Fatalf("survivor's patch was reclaimed via a removed FILE entry's SHA: %v", err)
+	}
+}

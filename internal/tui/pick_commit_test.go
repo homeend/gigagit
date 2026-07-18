@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/shelf" // test-only import; archtest checks non-test imports
 )
@@ -226,5 +227,23 @@ func TestSwitcherHintsAdvertiseCherryPick(t *testing.T) {
 		if !strings.Contains(joined, "cherry-pick") {
 			t.Fatalf("cheat sheet missing the cherry-pick row:\n%s", joined)
 		}
+	}
+}
+
+func TestPickProbeDroppedWhenModalOpen(t *testing.T) {
+	m := pickModel()
+	m.modal = &decisionState{req: engine.DecisionRequest{
+		ID: "other", Prompt: "unrelated?", Options: []string{"x", "y"}}}
+	mm, cmd := m.Update(pickProbeMsg{gen: m.pickGen, target: pickTarget{sha: "abc"},
+		line: model.LogLine{Hash: "abc1234", Subject: "s"}, found: true})
+	m = mm.(Model)
+	if m.modal == nil || m.modal.req.ID != "other" {
+		t.Fatal("an open modal must not be clobbered by a returning pick probe")
+	}
+	if cmd != nil {
+		t.Fatal("a dropped probe must dispatch nothing")
+	}
+	if !strings.Contains(m.statusMsg, "press a again") {
+		t.Fatalf("the drop must be visible; statusMsg = %q", m.statusMsg)
 	}
 }

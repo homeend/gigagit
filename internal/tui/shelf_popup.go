@@ -214,6 +214,7 @@ func (p *shelfPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.pickGen++ // invalidate an in-flight cherry-pick probe
 		m = m.popLayer()
 	case tea.KeyEnter:
+		m.pickGen++ // every enter path leaves or re-stacks the switcher; drop an in-flight probe
 		e, ok := p.selected()
 		if !ok {
 			return m, nil
