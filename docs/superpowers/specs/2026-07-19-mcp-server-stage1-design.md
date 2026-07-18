@@ -66,12 +66,15 @@ depends on a live TUI having written a snapshot.
   (Windows: the same `%LocalAppData%` root `internal/repos` uses). Keyed by **git common
   dir** so all worktrees of a repo share one session identity; the payload names the
   specific worktree the TUI is in.
-- Written **debounced (~300 ms)** after `Update` cycles, via the standard atomic pattern
-  (write temp file, rename). "State-affecting" is defined by the payload, not the input:
-  the writer serializes the snapshot and writes only when the serialized bytes differ from
+- Written from the TUI's **existing perpetual 1-second heartbeat tick** (the busy-line
+  heartbeat started in `Init`), via the standard atomic pattern (write temp file, rename).
+  "State-affecting" is defined by the payload, not the input: each heartbeat serializes
+  the snapshot (timestamp excluded) and writes only when the serialized bytes differ from
   the last written payload — no field-by-field dirty tracking, no write when nothing the
-  agent can see changed. Serialization is cheap (a few hundred bytes of IDs and paths);
-  the debounce exists to avoid a serialize-compare per keystroke.
+  agent can see changed. Snapshot latency is therefore ≤1 s, which satisfies the
+  point-in-time contract (user decision: "doesn't need to be live"); serialization is
+  cheap (a few hundred bytes of IDs and paths), so a once-per-second serialize-compare
+  costs nothing and needs no new timer.
 - **Removed best-effort on clean TUI exit**, and on `reRoot` the old repo's file is removed
   and the new repo's file written — the file doubles as session presence. A crashed TUI
   leaves a stale file; the payload's `written_at` + `pid` let the agent judge freshness
@@ -101,7 +104,7 @@ snapshot file exists.
     "head": "<full sha>"
   },
   "focus": {
-    "panel": "commits",                        // status|branches|remotes|tags|worktrees|reflog|commits|files
+    "panel": "commits",                        // branches|worktrees|remotes|files|staged|commits|tags|reflog
     "left_tab": "branches",                    // active left-column tab
     "bottom_tab": "commits"                    // active bottom tab when split
   },
@@ -202,7 +205,9 @@ Reply rows: `{id, kind, origin_display, label, path, commit, size, has_patch, cr
 Backing: `domain.ShelfList`.
 
 **7. `gg_shelf_commit_files`** — params: `id` (required).
-Members of a shelved commit: `[{path, status, additions, deletions}]` (`model.CommitFile`).
+Members of a shelved commit: `[{path, status, old_path}]` (`model.CommitFile` — status
+letter A/M/D/R/C/T plus the pre-rename path when applicable; no numstat counts, the
+compare read-model does not carry them).
 Clear error when the entry is a file entry. Backing: `domain.ShelfCommitFiles`.
 
 **8. `gg_shelf_read`** — params: `id`, `member?`, `max_bytes?` (default 262144).
@@ -216,7 +221,7 @@ Backing: `domain.ResolveBytes(FileRef{Source: SourceShelf, Locator: id, Path: me
 `{"kind": "worktree"|"index"|"commit", "rev"?}` (`rev` required for `"commit"`; any
 rev-parseable name — resolved to a sha before the compare, mirroring the TUI's
 resolve-to-tip-hash rule so the diff cache is never keyed on a mutable name).
-Reply: `{left_display, right_display, files: [{path, status, additions, deletions}]}`.
+Reply: `{left_display, right_display, files: [{path, status, old_path}]}`.
 Backing: rev resolution via the existing commit-lookup query + `domain.CompareFiles`
 (`model.Endpoint` pair).
 
