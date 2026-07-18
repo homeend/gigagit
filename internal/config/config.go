@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/pelletier/go-toml/v2"
@@ -400,4 +401,39 @@ func PrivateRepoPath(mainWorktreePath string) string {
 		return ""
 	}
 	return filepath.Join(configHome(), "gg", "projects", EncodeRepoKey(mainWorktreePath), "config.toml")
+}
+
+// stateHome resolves the machine-local state root exactly like
+// repos.DefaultStatePath: %LocalAppData% on Windows, else $XDG_STATE_HOME,
+// else ~/.local/state. "" when no home exists.
+func stateHome() string {
+	if runtime.GOOS == "windows" {
+		if lad := os.Getenv("LocalAppData"); lad != "" {
+			return lad
+		}
+	}
+	if s := os.Getenv("XDG_STATE_HOME"); s != "" {
+		return s
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".local", "state")
+}
+
+// SessionSnapshotPath is the TUI session-snapshot file for the repo whose git
+// COMMON dir is commonDir (always absolute — the GitCommonDir verb passes
+// --path-format=absolute): <state>/gg/sessions/<EncodeRepoKey(commonDir)>/ui-state.json.
+// Keyed by common dir so every worktree of a repo shares one session identity.
+// "" (snapshot disabled) when commonDir is "" or no state root exists.
+func SessionSnapshotPath(commonDir string) string {
+	if commonDir == "" {
+		return ""
+	}
+	root := stateHome()
+	if root == "" {
+		return ""
+	}
+	return filepath.Join(root, "gg", "sessions", EncodeRepoKey(commonDir), "ui-state.json")
 }

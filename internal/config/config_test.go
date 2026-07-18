@@ -528,3 +528,19 @@ func TestFileUILanguage(t *testing.T) {
 		t.Fatalf("empty path must yield empty, got %q", got)
 	}
 }
+
+func TestSessionSnapshotPath(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", "/xdg-state")
+	got := SessionSnapshotPath("/mnt/repo/.git")
+	want := filepath.Join("/xdg-state", "gg", "sessions", EncodeRepoKey("/mnt/repo/.git"), "ui-state.json")
+	if got != want {
+		t.Fatalf("SessionSnapshotPath = %q, want %q", got, want)
+	}
+	if SessionSnapshotPath("") != "" {
+		t.Fatal("empty commonDir must disable the snapshot (empty path)")
+	}
+	other := SessionSnapshotPath("/mnt/other/.git")
+	if other == got {
+		t.Fatal("distinct repos must map to distinct snapshot paths")
+	}
+}
