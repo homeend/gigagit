@@ -305,6 +305,75 @@ gg never hangs waiting for input mid-operation. When an operation hits a fork
 Exit codes: 0 = success, 1 = operation failed or needs a decision,
 2 = usage error.
 
+## Registering yourself as a gg tool
+
+gg can call an external AI agent for three tasks: **resolving conflicts**
+(the TUI conflict window's `t` picker), **generating commit messages** (the
+commit popup's `ctrl+g`), and **reviewing changes** (`gg review` and the TUI
+review rows). Each tool is a `[[tools.command]]` block in gg's config. The
+easiest path is the human running Settings → External tools, which detects
+installed agents and writes these blocks; write a block yourself only when
+asked to, or for a tool the catalog doesn't know.
+
+Where to write it: the global config (`$XDG_CONFIG_HOME/gg/config.toml`,
+default `~/.config/gg/config.toml`) applies to every repo; the repo's
+`.gg.toml` applies to one. The lists concatenate, and a repo block wins a
+`(category, name)` collision.
+
+```toml
+[[tools.command]]
+category = "commit_message"   # conflict | commit_message | review
+name     = "MyAgent"          # picker label; unique per category
+mode     = "capture"          # capture = headless | terminal = takes the TTY
+command  = '''myagent --do-the-task'''
+# per_file = true             # conflict only: run once per conflicted file
+# when_op  = "merge"          # conflict only: merge|rebase|cherry-pick|revert
+```
+
+A structurally invalid block (unknown category/mode, empty name/command,
+`per_file` outside conflict, unknown `when_op`) is silently ignored at load.
+The command body cannot contain `'''`. **First run is approval-gated**: gg
+shows the human the fully resolved command (Run/Cancel), remembered per repo
+keyed on the block's text — editing the block re-prompts.
+
+Per-category contract (env vars are absolute paths; stdin is /dev/null):
+
+- **commit_message** (`mode = "capture"`): read `$GG_CONTEXT_FILE` (change
+  summary + recent commit subjects) and `$GG_STAGED_DIFF` (full staged diff;
+  replaced by a stat-only note when huge). Return the message EITHER as
+  stdout — plain text, or Claude-style `--output-format json` (`.result`) —
+  OR by writing it to `$GG_MESSAGE_FILE`; **non-empty file content wins over
+  stdout** (use the file if your stdout is a status report, not the answer).
+  Format: subject line, blank line, body. Do not run `git commit`.
+- **review** (`mode = "capture"`): the `<range>` token in the command text
+  resolves to the injection-safe range under review (e.g. `abc12..def34`;
+  empty for a working-changes review). Read `$GG_CONTEXT_FILE` (range label
+  + numstat) and `$GG_REVIEW_DIFF` (the full diff). Return a free-form
+  markdown report via stdout or `$GG_MESSAGE_FILE` (same file-wins rule);
+  gg persists it under the state dir and shows it in a viewer. Do not
+  modify repository files.
+- **conflict** (`mode = "terminal"` — gg suspends and hands you the real
+  terminal in the worktree): a paused merge/rebase/cherry-pick/revert has
+  conflicts. Env: `GG_OP`, `GG_SOURCE`, `GG_TARGET`, `GG_CONFLICTED_FILES`
+  (space-joined), `GG_REPO`, and `GG_CONTEXT_FILE` (op header + one
+  conflicted path per line). Resolve the files and stage them; do NOT
+  continue or abort the operation unless asked — gg re-reads status when
+  you exit and offers the continue step itself. With `per_file = true`
+  (mergetool style) the command instead runs for one file with the
+  `<local>`/`<base>`/`<remote>`/`<merged>` path tokens (also as `GG_LOCAL`
+  etc.); editing `<merged>` offers mark-resolved on return.
+
+Tokens usable in `command`: path tokens `<repo>` `<file>` `<local>` `<base>`
+`<remote>` `<merged>` `<context-file>` (gg shell-quotes them), prose tokens
+`<op>` `<source>` `<target>` `<conflicted-files>` `<range>` `<user:LABEL>`
+(`<user:…>` prompts the human at run time). Plain `${GG_*}` env references
+work too — the vars are always exported. `<bin>`/`<env:NAME>` are
+wizard-only; in a hand-written block name the binary and env vars directly.
+
+Once configured: commit messages come from `ctrl+g` in the commit popup,
+reviews from `gg review [--tool <name>]` or the TUI review rows, conflict
+tools from `t` in the conflict window.
+
 ## Shell following
 
 Worktree and repo switches write the target directory to `--cwd-file <path>`

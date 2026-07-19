@@ -9,6 +9,17 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **The "using-gg" agent skill now teaches agents to register THEMSELVES as
+  gg tools.** A new "Registering yourself as a gg tool" section documents
+  the `[[tools.command]]` block (schema, config locations, the global+repo
+  concatenation rule, inert-on-invalid loading, the `'''` restriction, the
+  first-run approval gate) and the per-category contracts an agent must
+  honor: `commit_message` (read `$GG_CONTEXT_FILE`/`$GG_STAGED_DIFF`, answer
+  via stdout or `$GG_MESSAGE_FILE` — non-empty file wins), `review` (the
+  `<range>` token, `$GG_REVIEW_DIFF`, free-form markdown report), and
+  `conflict` (terminal handover, `GG_*` env, per_file mergetool tokens).
+  `agentskill.Version` 48 → 49; run `gg init --update` to refresh installed
+  copies.
 - **Worktree switch guard + cross-environment repair.** Every TUI switch —
   the Worktrees panel, the "go to worktree" branch prompt, the repo
   switcher and "Open repo" popups, and the chained post-operation switches
