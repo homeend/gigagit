@@ -270,6 +270,11 @@ func opAffectedSources(op engine.Operation) []sourceKey {
 		return []sourceKey{srcBranches, srcWorktrees}
 	case engine.RemoveWorktree:
 		return []sourceKey{srcBranches, srcWorktrees}
+	case engine.RepairWorktree:
+		// Only the worktree admin metadata changed. (The success path chains
+		// a full reRoot before this mapping is consulted; this covers the
+		// failure path without a full-reload + remote-tags probe.)
+		return []sourceKey{srcWorktrees}
 	case engine.SetIdentity:
 		return []sourceKey{srcIdentity}
 	case engine.SmartMerge, engine.SmartRebase:

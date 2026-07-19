@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/i18n"
 )
 
@@ -115,4 +116,85 @@ func TestGuardedReRootRepairableOffersModal(t *testing.T) {
 	// leaks. The dispatched-op shape (RepairWorktree on the TRANSLATED path)
 	// is pinned by pendingRepairSwitch above plus the engine op's own tests.
 	driveOp(t, r, cmd3)
+}
+
+func TestOpFinishedChainsRepairSwitch(t *testing.T) {
+	m := newTestModel(t)
+	m.running = true
+	m.pendingRepairSwitch = "/repaired/path"
+	setGuardSeams(t, "linux", "/repaired/path")
+
+	u, cmd := m.Update(opFinishedMsg{res: engine.Result{Changed: true}})
+	got := u.(Model)
+
+	if got.pendingRepairSwitch != "" {
+		t.Fatalf("pendingRepairSwitch = %q after success, want cleared", got.pendingRepairSwitch)
+	}
+	if got.switchTarget != "/repaired/path" || !got.loading {
+		t.Fatalf("must reRoot to the repaired path: switchTarget=%q loading=%v", got.switchTarget, got.loading)
+	}
+	if cmd == nil {
+		t.Fatal("the chained reRoot must return its reload command")
+	}
+}
+
+func TestOpFinishedErrorClearsRepairSwitch(t *testing.T) {
+	m := newTestModel(t)
+	m.loading = false                // newTestModel starts in the app-bootstrap loading state; isolate the no-switch assertion
+	m.pendingSources = []sourceKey{} // this test bypasses startOp, so pendingSources would default to nil (= reload every
+	// source); an explicit empty slice keeps the fallthrough reloadSourcesCmd from flipping
+	// loading=true on its own, which would otherwise pollute the "did we switch" assertion below
+	// with an unrelated, ordinary post-op source refresh.
+	m.running = true
+	m.pendingRepairSwitch = "/repaired/path"
+	setGuardSeams(t, "linux", "/repaired/path")
+
+	u, _ := m.Update(opFinishedMsg{err: errors.New("boom")})
+	got := u.(Model)
+
+	if got.pendingRepairSwitch != "" {
+		t.Fatalf("pendingRepairSwitch = %q after error, want cleared", got.pendingRepairSwitch)
+	}
+	if got.switchTarget != "" || got.loading {
+		t.Fatal("a failed repair must not switch")
+	}
+}
+
+func TestAbortedOpDoesNotChainRepairSwitch(t *testing.T) {
+	m := newTestModel(t)
+	m.loading = false                // newTestModel starts in the app-bootstrap loading state; isolate the no-switch assertion
+	m.pendingSources = []sourceKey{} // this test bypasses startOp, so pendingSources would default to nil (= reload every
+	// source); an explicit empty slice keeps the fallthrough reloadSourcesCmd from flipping
+	// loading=true on its own, which would otherwise pollute the "did we switch" assertion below
+	// with an unrelated, ordinary post-op source refresh.
+	m.running = true
+	m.pendingRepairSwitch = "/repaired/path"
+	setGuardSeams(t, "linux", "/repaired/path")
+
+	// Changed:false, err:nil — an aborted/cancelled op must not chain.
+	u, _ := m.Update(opFinishedMsg{res: engine.Result{Changed: false}})
+	got := u.(Model)
+
+	if got.pendingRepairSwitch != "" {
+		t.Fatalf("pendingRepairSwitch = %q after abort, want cleared", got.pendingRepairSwitch)
+	}
+	if got.switchTarget != "" || got.loading {
+		t.Fatal("an aborted op must not switch")
+	}
+}
+
+func TestReRootClearsPendingRepairSwitch(t *testing.T) {
+	m := newTestModel(t)
+	m.pendingRepairSwitch = "/stale"
+	u, _ := m.reRoot(t.TempDir())
+	if got := u.(Model); got.pendingRepairSwitch != "" {
+		t.Fatal("reRoot must clear pendingRepairSwitch")
+	}
+}
+
+func TestOpAffectedSourcesRepairWorktree(t *testing.T) {
+	got := opAffectedSources(engine.RepairWorktree{})
+	if len(got) != 1 || got[0] != srcWorktrees {
+		t.Fatalf("opAffectedSources(RepairWorktree) = %v, want [srcWorktrees]", got)
+	}
 }

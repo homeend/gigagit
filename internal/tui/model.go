@@ -1267,7 +1267,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						},
 						onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {
 							if opt == "go to worktree" {
-								return m.reRoot(wtPath)
+								return m.guardedReRoot(wtPath, false)
 							}
 							return m, nil
 						},
@@ -1458,7 +1458,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			if m.focus == panelWorktrees && m.canEnterWorktree() {
 				wt, _ := m.selectedWorktree()
-				return m.reRoot(wt.Path)
+				return m.guardedReRoot(wt.Path, true)
 			}
 			// On the Commits panel, enter "drills in": it opens the files view AND
 			// lands focus on the tree (l opens the same view on the commit-list
@@ -2001,6 +2001,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		switchTo := ""
 		chainSwitch := ""
+		repairSwitch := ""
 		var pushTags []string
 		var noticeCfg *engine.SetGitConfig
 		pendingCo := m.pendingCheckout // captured; cleared below whatever happened
@@ -2030,6 +2031,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if msg.res.Changed {
 				pushTags = m.pendingPushTags
 				noticeCfg = m.pendingNoticeConfig
+				repairSwitch = m.pendingRepairSwitch
 			}
 			m = m.applyPendingRemoteTag()
 		}
@@ -2038,11 +2040,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.pendingSwitchBranch = ""            // cleared before the chained op starts, so it cannot re-fire
 		m.pendingPushTags = nil               // unconditional; covers both error and success paths
 		m.pendingNoticeConfig = nil           // unconditional; covers both error and success paths
+		m.pendingRepairSwitch = ""            // unconditional; covers both error and success paths
 		m.pendingCheckout = pendingCheckout{} // unconditional; only a fresh checkout dispatch re-arms it
 		srcs := m.pendingSources              // nil = all (safe default for any unmapped op)
 		m.pendingSources = nil
 		if switchTo != "" {
-			return m.reRoot(switchTo)
+			return m.guardedReRoot(switchTo, false)
+		}
+		if repairSwitch != "" {
+			// The repair just made this path reachable; the guard re-verifies
+			// (offerRepair=false — a repair that somehow didn't take refuses
+			// instead of crashing).
+			return m.guardedReRoot(repairSwitch, false)
 		}
 		if chainSwitch != "" {
 			return m.startOp(engine.SmartSwitch{Branch: chainSwitch})
@@ -3025,6 +3034,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.pickGen++            // drop any in-flight cherry-pick probe from the old repo
 	m = m.cleanupPickPatchTemp()
 	m.pendingPushTags = nil
+	m.pendingRepairSwitch = ""            // a repo switch must not fire a stale repair chain
 	m.pendingGotoTip = ""                 // a repo switch must not fire a stale tip jump
 	m.pendingCheckout = pendingCheckout{} // a diverged checkout from the old repo must not prompt in the new one
 	m.pendingRemoteTagAdds = nil
