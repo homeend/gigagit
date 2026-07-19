@@ -59,9 +59,6 @@ func (s *Server) sdkServer() *sdk.Server {
 	return srv
 }
 
-// Filled by the export tool file.
-func (s *Server) registerExportTool(srv *sdk.Server) {}
-
 // Serve runs the MCP server over stdio until ctx ends or the client closes.
 // workdir resolves the repo like the CLI does (the process cwd for gg mcp).
 func Serve(ctx context.Context, workdir string) error {
