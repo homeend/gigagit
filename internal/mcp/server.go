@@ -59,8 +59,7 @@ func (s *Server) sdkServer() *sdk.Server {
 	return srv
 }
 
-// Filled by the shelf/compare/export tool files.
-func (s *Server) registerShelfTools(srv *sdk.Server)   {}
+// Filled by the compare/export tool files.
 func (s *Server) registerCompareTools(srv *sdk.Server) {}
 func (s *Server) registerExportTool(srv *sdk.Server)   {}
 

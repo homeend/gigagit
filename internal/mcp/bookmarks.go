@@ -94,6 +94,9 @@ func (s *Server) registerBookmarkTools(srv *sdk.Server) {
 		if limit <= 0 {
 			limit = 100
 		}
+		if in.Skip < 0 {
+			in.Skip = 0
+		}
 		bs, err := s.svc.BookmarkList(ctx, in.Skip, limit)
 		if err != nil {
 			return nil, out, fmt.Errorf("listing bookmarks: %v", err)

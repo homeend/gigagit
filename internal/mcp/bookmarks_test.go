@@ -44,6 +44,16 @@ func TestBookmarksListAndGet(t *testing.T) {
 	}
 }
 
+func TestBookmarksListNegativeSkipDoesNotPanic(t *testing.T) {
+	e := newTestEnv(t)
+	seedBookmark(t, e)
+	out := e.call(t, "gg_bookmarks_list", map[string]any{"skip": -5})
+	rows, ok := out["bookmarks"].([]any)
+	if !ok || len(rows) != 1 {
+		t.Fatalf("bookmarks = %v", out["bookmarks"])
+	}
+}
+
 func TestBookmarkGetUnknownID(t *testing.T) {
 	e := newTestEnv(t)
 	msg := e.callErr(t, "gg_bookmark_get", map[string]any{"id": "nope"})

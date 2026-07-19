@@ -141,6 +141,17 @@ func (s *Service) shelfResolve(ctx context.Context, entryID, path string) ([]byt
 	return tarMember(blob, path)
 }
 
+// ShelfFind returns an entry's metadata by id (a local index read; no
+// reservation). The entry-kind discriminator for callers that must branch on
+// file-vs-commit without fetching the blob (the MCP read/export tools).
+func (s *Service) ShelfFind(ctx context.Context, entryID string) (model.ShelfEntry, error) {
+	st := s.shelfStore(ctx)
+	if st == nil {
+		return model.ShelfEntry{}, ErrShelfDisabled
+	}
+	return st.Find(entryID)
+}
+
 // ShelfRemove deletes an entry (and reclaims its blob if unreferenced).
 func (s *Service) ShelfRemove(ctx context.Context, entryID string) error {
 	st := s.shelfStore(ctx)
