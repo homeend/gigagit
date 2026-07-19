@@ -92,7 +92,7 @@ var (
 // the message reports a failure (built from an error). Render-time styling keys
 // off these so there is no severity flag to keep in sync across call sites; keep
 // this list aligned with the error-setting sites in model.go and the popups.
-var statusErrorPrefixes = []string{"error:", "files:", "commits:", "amend:", "interactive rebase:", "cannot create:"}
+var statusErrorPrefixes = []string{"error:", "files:", "commits:", "amend:", "interactive rebase:", "cannot create:", "cannot switch:"}
 
 // friendlyOpError turns an operation failure into the status-bar message. gg
 // runs git with GIT_TERMINAL_PROMPT=0 (so a credential prompt can never freeze
