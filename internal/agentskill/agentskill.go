@@ -16,7 +16,7 @@ var body string
 
 // Version is bumped whenever using-gg.md (or the rendered wrappers) change.
 // Installed copies carry it so init can tell new/outdated/up-to-date apart.
-const Version = 48
+const Version = 49
 
 // Body is the canonical markdown body — no frontmatter, no markers.
 func Body() string { return body }
