@@ -28,6 +28,22 @@ func TestPruneWorktreesArgv(t *testing.T) {
 	}
 }
 
+func TestWorktreeRepairArgv(t *testing.T) {
+	f := gitexec.NewFakeRunner()
+	f.SetResponse("git worktree repair", gitexec.Result{})
+	repo := &Repo{Runner: f}
+	if err := repo.WorktreeRepair(context.Background(), "/x/wt"); err != nil {
+		t.Fatalf("repair: %v", err)
+	}
+	want := []string{"worktree", "repair", "/x/wt"}
+	if !reflect.DeepEqual(f.Calls[0].Argv, want) {
+		t.Fatalf("argv = %v, want %v", f.Calls[0].Argv, want)
+	}
+	if f.Calls[0].Name != "git worktree repair" {
+		t.Fatalf("span = %q, want %q", f.Calls[0].Name, "git worktree repair")
+	}
+}
+
 func TestTopLevelReturnsRepoRoot(t *testing.T) {
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}

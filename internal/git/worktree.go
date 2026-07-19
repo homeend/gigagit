@@ -111,6 +111,17 @@ func (r *Repo) PruneWorktrees(ctx context.Context) error {
 	return err
 }
 
+// WorktreeRepair rebinds a linked worktree's two absolute-path link records
+// (the main repo's admin gitdir file and the worktree's .git back-link) to
+// the given on-disk path (`git worktree repair <path>`), run from the
+// current repo. Used when a worktree was created under another environment's
+// path notation (WSL vs Windows) or moved on disk.
+func (r *Repo) WorktreeRepair(ctx context.Context, path string) error {
+	argv := gitcmd.New("worktree").Arg("repair", path).ToArgv()
+	_, err := r.Runner.Run(ctx, "git worktree repair", argv)
+	return err
+}
+
 // DeleteBranch deletes a local branch (`git branch -d|-D <name>`). Without force
 // git refuses to delete a branch that is not fully merged; force uses -D.
 func (r *Repo) DeleteBranch(ctx context.Context, name string, force bool) error {
