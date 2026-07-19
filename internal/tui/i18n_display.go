@@ -208,6 +208,8 @@ func optionDisplayName(value string) string {
 		return i18n.T("pull now")
 	case "rebase":
 		return i18n.T("rebase")
+	case "repair":
+		return i18n.T("repair")
 	case "reset":
 		return i18n.T("reset")
 	case "run":

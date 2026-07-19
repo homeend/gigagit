@@ -98,7 +98,7 @@ func (m Model) resolvedRepoPath(p *repoPathPopup, msg repoResolvedMsg) (tea.Mode
 	if _, ok := m.topLayer().(*commandPalette); ok {
 		m = m.popLayer() // the palette that launched it
 	}
-	return m.reRoot(msg.top)
+	return m.guardedReRoot(msg.top, false)
 }
 
 func (p *repoPathPopup) render(m Model, below string) string {

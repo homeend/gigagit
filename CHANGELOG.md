@@ -9,6 +9,24 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Worktree switch guard + cross-environment repair.** Every TUI switch —
+  the Worktrees panel, the "go to worktree" branch prompt, the repo
+  switcher and "Open repo" popups, and the chained post-operation switches
+  — now verifies the target directory is reachable *before* tearing down
+  the current session, and refuses an unreachable target with a status
+  message instead of the raw `chdir` crash that used to follow a moved or
+  deleted worktree. The Worktrees panel goes one step
+  further for the one case that's actually fixable: a linked worktree
+  created on the other side of a WSL↔Windows path-notation boundary
+  (`/mnt/t/…` vs `T:\…` on the same shared disk) — its admin gitdir file and
+  `.git` back-link still point at the other environment's notation, so it
+  stats as unreachable here even though the files are right there. Entering
+  it now offers a repair/cancel modal; choosing repair runs
+  `git worktree repair` on the translated path and, on success, switches
+  straight into the repaired worktree. New: the `git.WorktreeRepair` verb
+  (`git worktree repair <path>`) and the `engine.RepairWorktree{Path}` op
+  that runs it (default `TreeWrite`; the confirm prompt is TUI-side, not
+  the op's).
 - `gg mcp` — an MCP (Model Context Protocol) stdio server exposing gg's
   non-git value to AI agents: `gg_ui_state` (the live TUI session snapshot —
   focus, cursor selections, ◉-marked commits, marked files, open diff/compare

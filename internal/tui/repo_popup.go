@@ -144,7 +144,7 @@ func (p *repoPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		if samePathTUI(target, m.currentWorktree) {
 			return m, nil // already here
 		}
-		tm, cmd := m.reRoot(target)
+		tm, cmd := m.guardedReRoot(target, false)
 		return tm.(Model), cmd
 	case tea.KeyCtrlD:
 		vis := p.visible()
