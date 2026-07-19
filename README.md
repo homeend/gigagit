@@ -8,7 +8,8 @@ system `git`.
 > engine, one-key smart operations (pull / switch / merge / rebase / commit /
 > stash / undo), interactive rebase, conflict resolution, a rich keyboard TUI,
 > and a fully scriptable CLI are all in place. No `1.0` tag has been cut yet. An
-> MCP server stage 1 (`gg mcp`) has shipped; heavy-ops MCP surfaces remain on the
+> MCP server (`gg mcp`) has shipped, stage 1 (read-only) and stage 2 (mutating
+> tools, gated by client consent); heavy-ops MCP surfaces remain on the
 > roadmap. See [`CHANGELOG.md`](CHANGELOG.md) for the full feature list and
 > [`CLAUDE.md`](CLAUDE.md) for the architecture.
 
@@ -209,7 +210,17 @@ agents already have the `gg` CLI for those — but the things only gg knows:
   commit), `gg_compare_file` (unified diff between any two file versions,
   including bookmarks and shelved-commit members).
 - **Export** — `gg_export` copies a bookmark or shelf entry into a local
-  directory. Stage 1 never mutates the repository.
+  directory.
+- **Mutating tools (stage 2)** — `gg_cherry_pick` re-applies a shelved or
+  bookmarked commit onto the current branch (falling back to the shelved
+  commit's stored patch when the original was gc'd), and
+  `gg_write_to_worktree` restores/pastes a stored file version as an unstaged
+  change. Both are annotated destructive, so your MCP client asks before
+  running them; `on_conflict` / `overwrite` parameters control the risky
+  paths explicitly.
+
+Stage 1 tools are read-only; stage 2 tools mutate the repository only behind
+your MCP client's consent prompt.
 
 Register it with Claude Code from your repo directory:
 

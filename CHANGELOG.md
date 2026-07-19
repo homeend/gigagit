@@ -22,6 +22,17 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - The TUI now publishes a per-repo session snapshot
   (`<state>/gg/sessions/<repo-key>/ui-state.json`, atomic write-on-change from
   the 1s heartbeat, removed on exit/repo-switch) that backs `gg_ui_state`.
+- `gg mcp` stage 2 — the first mutating MCP tools, each gated by the MCP
+  client's destructive-tool consent prompt: `gg_cherry_pick` re-applies a
+  shelved or bookmarked commit onto the current branch (live cherry-pick while
+  the commit exists; a shelved commit's stored patch replays atomically via
+  `git am --3way` after a gc, or with `mode:"patch"`; `on_conflict:"abort"`
+  rolls back, `"keep"` leaves the conflicts and reports the conflicted files),
+  and `gg_write_to_worktree` writes a shelf file entry, a shelved-commit
+  member, or a file bookmark into the working tree as an unstaged change
+  (destination defaults to the entry's own path; `overwrite` guard; identical
+  content is a reported no-op). All 13 tools now carry read-only/destructive
+  annotations.
 
 ### Changed
 - **Multilanguage TUI (stage 5): operation status, progress, and prompts,
