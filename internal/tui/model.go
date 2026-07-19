@@ -337,6 +337,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case repoHealthMsg:
 		return m.applyRepoHealth(msg)
+	case snapshotTargetMsg:
+		if msg.svc != m.svc {
+			return m, nil // stale: a later repo switch superseded this resolve
+		}
+		m.snapshotCommonDir = msg.commonDir
+		m.snapshotWorktree = msg.worktree
+		m.snapshotPath = config.SessionSnapshotPath(msg.commonDir)
+		m.lastSnapshot = nil
+		return m, nil
 	case gitConfigRowsMsg:
 		if msg.gen != m.gitConfigGen {
 			return m, nil // stale: reopened or repo-switched since dispatch
@@ -2986,7 +2995,10 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.watchGen++
 	m.watchSupported = false
 	m.svc = domain.OpenTUI(path)
-	m = m.initSnapshotTarget()
+	// Disable the snapshot synchronously (no git subprocess here — reRoot runs
+	// on the Update goroutine); snapshotTargetCmd below re-resolves and
+	// re-enables it once its two reads land off-thread.
+	m.snapshotPath, m.snapshotCommonDir, m.snapshotWorktree, m.lastSnapshot = "", "", "", nil
 	m.feed = m.svc.CommitFeed()
 	m.switchTarget = path
 	m.loading = true
@@ -3036,7 +3048,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.pendingNoticeConfig = nil
 	m.refreshHealthAfterOp = false
 	m.loadGen++
-	return m, tea.Batch(m.loadCmd(), m.startWatchCmd(m.watchGen), m.repoHealthCmd(m.noticeGen))
+	return m, tea.Batch(m.loadCmd(), m.startWatchCmd(m.watchGen), m.repoHealthCmd(m.noticeGen), snapshotTargetCmd(m.svc))
 }
 
 // View implements tea.Model.

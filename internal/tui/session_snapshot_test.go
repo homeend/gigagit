@@ -8,6 +8,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/model"
 )
@@ -134,4 +135,50 @@ func TestMaybeWriteSnapshotDisabled(t *testing.T) {
 	m.snapshotPath = "" // no state root / not a repo
 	m = m.maybeWriteSnapshot()
 	// Nothing to assert beyond "no panic": disabled means no write target.
+}
+
+// TestSnapshotTargetMsgStaleServiceDropped covers reRoot's async snapshot-target
+// resolution (snapshotTargetCmd/snapshotTargetMsg): a resolve whose svc no
+// longer matches the model's current *domain.Service (a later repo switch
+// superseded it, pointer identity is the staleness guard) must be dropped
+// without touching the snapshot fields; a resolve for the CURRENT svc must
+// apply.
+func TestSnapshotTargetMsgStaleServiceDropped(t *testing.T) {
+	m := newTestModel(t)
+	m.snapshotCommonDir = "/old/.git"
+	m.snapshotWorktree = "/old"
+	m.snapshotPath = "/old/path"
+	m.lastSnapshot = []byte("stale-payload")
+
+	other := newTestModel(t) // a distinct *domain.Service pointer
+	if other.svc == m.svc {
+		t.Fatal("test setup: expected two distinct *domain.Service instances")
+	}
+
+	updated, _ := m.Update(snapshotTargetMsg{svc: other.svc, commonDir: "/new/.git", worktree: "/new"})
+	mm, ok := updated.(Model)
+	if !ok {
+		t.Fatalf("Update returned %T, want Model", updated)
+	}
+	if mm.snapshotCommonDir != "/old/.git" || mm.snapshotWorktree != "/old" || mm.snapshotPath != "/old/path" {
+		t.Fatalf("stale snapshotTargetMsg must not change snapshot fields: %+v", mm)
+	}
+	if string(mm.lastSnapshot) != "stale-payload" {
+		t.Fatalf("stale snapshotTargetMsg must not clear lastSnapshot: %q", mm.lastSnapshot)
+	}
+
+	updated, _ = m.Update(snapshotTargetMsg{svc: m.svc, commonDir: "/new/.git", worktree: "/new"})
+	mm, ok = updated.(Model)
+	if !ok {
+		t.Fatalf("Update returned %T, want Model", updated)
+	}
+	if mm.snapshotCommonDir != "/new/.git" || mm.snapshotWorktree != "/new" {
+		t.Fatalf("current-svc snapshotTargetMsg must apply: %+v", mm)
+	}
+	if want := config.SessionSnapshotPath("/new/.git"); mm.snapshotPath != want {
+		t.Fatalf("snapshotPath = %q, want %q", mm.snapshotPath, want)
+	}
+	if mm.lastSnapshot != nil {
+		t.Fatal("current-svc snapshotTargetMsg must clear lastSnapshot")
+	}
 }

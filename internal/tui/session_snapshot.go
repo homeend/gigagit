@@ -9,7 +9,10 @@ import (
 	"slices"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/homeend/gigagit/internal/config"
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -304,8 +307,12 @@ func removeSnapshotFile(path string) {
 	}
 }
 
-// initSnapshotTarget resolves where this session's snapshot lives. Called from
-// run.go at startup and from reRoot after a repo switch (with the new svc).
+// initSnapshotTarget resolves where this session's snapshot lives. This is
+// the SYNCHRONOUS startup path: run.go calls it before tea.NewProgram starts,
+// off the Bubble Tea event loop, so blocking on two git subprocesses here is
+// safe. reRoot (a repo switch mid-session) must NOT call this directly — it
+// runs on the Update goroutine, so it disables the snapshot synchronously and
+// resolves the new target asynchronously via snapshotTargetCmd instead.
 func (m Model) initSnapshotTarget() Model {
 	ctx := context.Background()
 	m.snapshotCommonDir, m.snapshotPath = "", ""
@@ -318,4 +325,35 @@ func (m Model) initSnapshotTarget() Model {
 	}
 	m.lastSnapshot = nil
 	return m
+}
+
+// snapshotTargetMsg carries the resolved snapshot target (common dir +
+// worktree) for one svc generation. svc doubles as the staleness guard
+// (pointer identity): a repo switch replaces m.svc with a new *domain.Service,
+// so a late-arriving resolve from a superseded switch is recognizable and
+// dropped by the Update case rather than clobbering the current repo's state.
+type snapshotTargetMsg struct {
+	svc                 *domain.Service
+	commonDir, worktree string
+}
+
+// snapshotTargetCmd resolves where svc's session snapshot lives, off the
+// Update goroutine (unlike initSnapshotTarget, which is the synchronous
+// startup-only path). Used by reRoot after a repo switch: reRoot itself
+// disables the snapshot synchronously, and this cmd re-enables it once the
+// two git reads land. A GitCommonDir error sends an empty commonDir, which
+// keeps the snapshot disabled for this repo (matching initSnapshotTarget's
+// own error handling).
+func snapshotTargetCmd(svc *domain.Service) tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+		var commonDir, worktree string
+		if cd, err := svc.GitCommonDir(ctx); err == nil {
+			commonDir = cd
+		}
+		if top, err := svc.TopLevel(ctx); err == nil {
+			worktree = top
+		}
+		return snapshotTargetMsg{svc: svc, commonDir: commonDir, worktree: worktree}
+	}
 }
