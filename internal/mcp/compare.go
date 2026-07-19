@@ -168,6 +168,7 @@ func (s *Server) registerCompareTools(srv *sdk.Server) {
 	sdk.AddTool(srv, &sdk.Tool{
 		Name:        "gg_compare_trees",
 		Description: "Whole-tree compare between two endpoints (worktree, index, or a commit by rev): the changed-file list with status letters. Use gg_compare_file for one file's diff.",
+		Annotations: readOnlyAnnotations(),
 	}, func(ctx context.Context, _ *sdk.CallToolRequest, in compareTreesIn) (*sdk.CallToolResult, compareTreesOut, error) {
 		out := compareTreesOut{Repo: s.repoInfo(), Files: []commitFileRow{}}
 		if err := s.repoCheck(); err != nil {
@@ -195,6 +196,7 @@ func (s *Server) registerCompareTools(srv *sdk.Server) {
 	sdk.AddTool(srv, &sdk.Tool{
 		Name:        "gg_compare_file",
 		Description: "Unified diff between two file versions. Each side: {source: unstaged|staged|commit|shelf, locator, path} or {source: bookmark, id}. locator = revision for commit, shelf entry id for shelf (path = member for shelved commits).",
+		Annotations: readOnlyAnnotations(),
 	}, func(ctx context.Context, _ *sdk.CallToolRequest, in compareFileIn) (*sdk.CallToolResult, compareFileOut, error) {
 		out := compareFileOut{Repo: s.repoInfo()}
 		if err := s.repoCheck(); err != nil {

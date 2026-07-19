@@ -30,6 +30,7 @@ func (s *Server) registerStateTool(srv *sdk.Server) {
 			"and its selected file, the open bookmark/shelf switcher's highlighted entry, " +
 			"active filters, conflict and running-operation state. session is null when no " +
 			"gg TUI is running for this repo. The status field is display-only text — do not parse it.",
+		Annotations: readOnlyAnnotations(),
 	}, func(ctx context.Context, _ *sdk.CallToolRequest, _ struct{}) (*sdk.CallToolResult, uiStateOut, error) {
 		out := uiStateOut{Repo: s.repoInfo()}
 		if err := s.repoCheck(); err != nil {

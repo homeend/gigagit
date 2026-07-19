@@ -30,6 +30,7 @@ func (s *Server) registerExportTool(srv *sdk.Server) {
 	sdk.AddTool(srv, &sdk.Tool{
 		Name:        "gg_export",
 		Description: "Copy a bookmark or shelf entry (a file, or a whole shelved/bookmarked commit's files) into a local directory. Exactly one of bookmark/shelf. dir defaults to gg's temp-export area; an existing dir is refused unless overwrite:true. Never touches the repository.",
+		Annotations: mutatingAnnotations(),
 	}, func(ctx context.Context, _ *sdk.CallToolRequest, in exportIn) (*sdk.CallToolResult, exportOut, error) {
 		out := exportOut{Repo: s.repoInfo(), Files: []string{}}
 		if err := s.repoCheck(); err != nil {

@@ -108,27 +108,46 @@ func (e *testEnv) callErr(t *testing.T, name string, args map[string]any) string
 	return resultText(res)
 }
 
-func TestServerListsStageOneTools(t *testing.T) {
+func TestServerToolRosterAndAnnotations(t *testing.T) {
 	e := newTestEnv(t)
 	res, err := e.cs.ListTools(context.Background(), &sdk.ListToolsParams{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := map[string]bool{}
+	readOnly := map[string]bool{
+		"gg_ui_state": true, "gg_bookmarks_list": true, "gg_bookmark_get": true,
+		"gg_bookmark_read": true, "gg_shelf_buckets": true, "gg_shelf_list": true,
+		"gg_shelf_commit_files": true, "gg_shelf_read": true,
+		"gg_compare_trees": true, "gg_compare_file": true,
+		// non-read-only:
+		"gg_export": false, "gg_cherry_pick": false, "gg_write_to_worktree": false,
+	}
+	got := map[string]*sdk.Tool{}
 	for _, tool := range res.Tools {
-		got[tool.Name] = true
+		got[tool.Name] = tool
 	}
-	want := []string{
-		"gg_ui_state",
-		"gg_bookmarks_list", "gg_bookmark_get", "gg_bookmark_read",
-		"gg_shelf_buckets", "gg_shelf_list", "gg_shelf_commit_files", "gg_shelf_read",
-		"gg_compare_trees", "gg_compare_file",
-		"gg_export",
-	}
-	for _, name := range want {
-		if !got[name] {
-			t.Errorf("tool %s not registered; got %v", name, got)
+	for name, ro := range readOnly {
+		tool, ok := got[name]
+		if !ok {
+			t.Errorf("tool %s not registered", name)
+			continue
 		}
+		if tool.Annotations == nil {
+			t.Errorf("%s: missing annotations", name)
+			continue
+		}
+		if tool.Annotations.ReadOnlyHint != ro {
+			t.Errorf("%s: ReadOnlyHint = %v, want %v", name, tool.Annotations.ReadOnlyHint, ro)
+		}
+		if tool.Annotations.OpenWorldHint == nil || *tool.Annotations.OpenWorldHint {
+			t.Errorf("%s: OpenWorldHint must be explicitly false", name)
+		}
+		if !ro && (tool.Annotations.DestructiveHint == nil || !*tool.Annotations.DestructiveHint) {
+			t.Errorf("%s: mutating tool must carry DestructiveHint true", name)
+		}
+	}
+	if len(got) != len(readOnly) {
+		t.Errorf("roster size = %d, want %d: %v", len(got), len(readOnly), got)
 	}
 }
 

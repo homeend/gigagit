@@ -10,8 +10,9 @@ import (
 )
 
 // staticDecider answers engine forks from a fixed policy (the CLI flag-policy
-// pattern). Stage 1's only reachable decision is ExportToDir's "overwrite";
-// anything else fails loud — an MCP tool must never wedge on a question.
+// pattern). The "overwrite" policy backs both ExportToDir (gg_export) and
+// WriteFile (gg_write_to_worktree); "cherry-pick-conflict" backs gg_cherry_pick;
+// anything unexpected fails loud — an MCP tool must never wedge on a question.
 type staticDecider struct {
 	policy map[string]string
 }
