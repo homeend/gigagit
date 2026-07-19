@@ -7,9 +7,10 @@ system `git`.
 > **Status:** actively developed and ready for daily use. The worktree-aware
 > engine, one-key smart operations (pull / switch / merge / rebase / commit /
 > stash / undo), interactive rebase, conflict resolution, a rich keyboard TUI,
-> and a fully scriptable CLI are all in place. No `1.0` tag has been cut yet, and
-> an MCP server for AI agents is on the roadmap. See [`CHANGELOG.md`](CHANGELOG.md)
-> for the full feature list and [`CLAUDE.md`](CLAUDE.md) for the architecture.
+> and a fully scriptable CLI are all in place. No `1.0` tag has been cut yet. An
+> MCP server stage 1 (`gg mcp`) has shipped; heavy-ops MCP surfaces remain on the
+> roadmap. See [`CHANGELOG.md`](CHANGELOG.md) for the full feature list and
+> [`CLAUDE.md`](CLAUDE.md) for the architecture.
 
 ## Why
 

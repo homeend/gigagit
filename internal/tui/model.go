@@ -2459,6 +2459,8 @@ func (m Model) handleStageKey() (tea.Model, tea.Cmd) {
 	// not carry over to the panel the files land in.
 	m.fileMarks = nil
 	// Direction is the panel: Files stages, Staged unstages.
+	// opName stays "" here: the snapshot's running_op is omitted during this
+	// instant synchronous stage — never stale, since op completion clears it.
 	m.running = true
 	m.statusMsg = i18n.T("working…")
 	return m, m.stageCmd(engine.Stage{Paths: paths, Unstage: m.focus == panelStaged})

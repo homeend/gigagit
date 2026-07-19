@@ -118,8 +118,17 @@ func TestServerListsStageOneTools(t *testing.T) {
 	for _, tool := range res.Tools {
 		got[tool.Name] = true
 	}
-	if !got["gg_ui_state"] {
-		t.Fatalf("gg_ui_state not registered; got %v", got)
+	want := []string{
+		"gg_ui_state",
+		"gg_bookmarks_list", "gg_bookmark_get", "gg_bookmark_read",
+		"gg_shelf_buckets", "gg_shelf_list", "gg_shelf_commit_files", "gg_shelf_read",
+		"gg_compare_trees", "gg_compare_file",
+		"gg_export",
+	}
+	for _, name := range want {
+		if !got[name] {
+			t.Errorf("tool %s not registered; got %v", name, got)
+		}
 	}
 }
 
