@@ -1,0 +1,118 @@
+package tui
+
+import (
+	"errors"
+	"testing"
+
+	"github.com/homeend/gigagit/internal/i18n"
+)
+
+// setGuardSeams fabricates stat/GOOS results for guardedReRoot: only the
+// listed paths "exist". Restored on cleanup. The repairable verdict cannot
+// be produced with a real stat on a Linux CI box (it needs a foreign-
+// notation path that exists), hence the seam.
+func setGuardSeams(t *testing.T, goos string, existing ...string) {
+	t.Helper()
+	set := map[string]bool{}
+	for _, p := range existing {
+		set[p] = true
+	}
+	oldStat, oldGOOS := guardStat, guardGOOS
+	guardStat = func(p string) error {
+		if set[p] {
+			return nil
+		}
+		return errors.New("stat: missing")
+	}
+	guardGOOS = goos
+	t.Cleanup(func() { guardStat, guardGOOS = oldStat, oldGOOS })
+}
+
+func TestGuardedReRootReachableSwitches(t *testing.T) {
+	m := newTestModel(t)
+	setGuardSeams(t, "linux", "/ok/path")
+	u, cmd := m.guardedReRoot("/ok/path", false)
+	got := u.(Model)
+	if got.switchTarget != "/ok/path" || !got.loading {
+		t.Fatalf("reachable target must reRoot: switchTarget=%q loading=%v", got.switchTarget, got.loading)
+	}
+	if cmd == nil {
+		t.Fatal("reRoot must return its reload command")
+	}
+}
+
+func TestGuardedReRootUnreachableRefuses(t *testing.T) {
+	m := newTestModel(t)
+	m.loading = false         // newTestModel starts in the app-bootstrap loading state; isolate the refusal path
+	setGuardSeams(t, "linux") // nothing exists
+	u, cmd := m.guardedReRoot("/gone", true)
+	got := u.(Model)
+	if got.loading || got.switchTarget != "" {
+		t.Fatal("unreachable target must not start a switch")
+	}
+	if got.modal != nil {
+		t.Fatal("unreachable (untranslatable) target must not offer repair")
+	}
+	if want := i18n.T("cannot switch: %s is not reachable from here", "/gone"); got.statusMsg != want {
+		t.Fatalf("statusMsg = %q, want %q", got.statusMsg, want)
+	}
+	if cmd != nil {
+		t.Fatal("refusal returns no command")
+	}
+}
+
+func TestGuardedReRootRepairableWithoutOfferRefuses(t *testing.T) {
+	m := newTestModel(t)
+	m.loading = false // newTestModel starts in the app-bootstrap loading state; isolate the refusal path
+	setGuardSeams(t, "windows", `T:\x`)
+	u, _ := m.guardedReRoot("/mnt/t/x", false)
+	got := u.(Model)
+	if got.modal != nil || got.loading {
+		t.Fatal("repairable without offerRepair must plain-refuse")
+	}
+	if want := i18n.T("cannot switch: %s is not reachable from here", "/mnt/t/x"); got.statusMsg != want {
+		t.Fatalf("statusMsg = %q, want %q", got.statusMsg, want)
+	}
+}
+
+func TestGuardedReRootRepairableOffersModal(t *testing.T) {
+	m := newTestModel(t)
+	m.loading = false // newTestModel starts in the app-bootstrap loading state; isolate the "offer itself must not switch" check
+	setGuardSeams(t, "windows", `T:\x`)
+	u, cmd := m.guardedReRoot("/mnt/t/x", true)
+	got := u.(Model)
+	if cmd != nil || got.loading {
+		t.Fatal("the offer itself must not switch")
+	}
+	if got.modal == nil {
+		t.Fatal("repairable + offerRepair must push the modal")
+	}
+	if got.modal.req.ID != "worktree-cross-env-repair" {
+		t.Fatalf("modal ID = %q", got.modal.req.ID)
+	}
+	wantOpts := []string{"repair", "cancel"}
+	if len(got.modal.req.Options) != 2 || got.modal.req.Options[0] != wantOpts[0] || got.modal.req.Options[1] != wantOpts[1] {
+		t.Fatalf("options = %v, want %v (cancel LAST: esc maps to the last option)", got.modal.req.Options, wantOpts)
+	}
+
+	// cancel: stays put, nothing pending, no op.
+	u2, cmd2 := got.modal.onResolve(got, "cancel")
+	c := u2.(Model)
+	if cmd2 != nil || c.running || c.pendingRepairSwitch != "" {
+		t.Fatal("cancel must not dispatch anything")
+	}
+
+	// repair: arms the chain with the TRANSLATED path and starts the op.
+	u3, cmd3 := got.modal.onResolve(got, "repair")
+	r := u3.(Model)
+	if r.pendingRepairSwitch != `T:\x` {
+		t.Fatalf("pendingRepairSwitch = %q, want %q", r.pendingRepairSwitch, `T:\x`)
+	}
+	if !r.running {
+		t.Fatal("repair must start the RepairWorktree op")
+	}
+	// Drain the (failing — T:\x isn't a real worktree here) op so nothing
+	// leaks. The dispatched-op shape (RepairWorktree on the TRANSLATED path)
+	// is pinned by pendingRepairSwitch above plus the engine op's own tests.
+	driveOp(t, r, cmd3)
+}

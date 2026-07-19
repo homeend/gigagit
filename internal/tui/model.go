@@ -51,6 +51,7 @@ type Model struct {
 	pendingRemoteTagSet   string              // tag to add to remoteTagNames on next op success (optimistic push)
 	pendingRemoteTagUnset string              // tag to drop from remoteTagNames on next op success (optimistic delete-remote)
 	pendingPushTags       []string            // tip tags to push after a successful branch Push (chained as PushTags op)
+	pendingRepairSwitch   string              // translated worktree path to switch to after a successful RepairWorktree (chained in opFinishedMsg)
 	pendingGotoTip        string              // branch tip to jump to once the ctrl+g solo reload lands (drained by commitsReloadedMsg)
 	pendingCheckout       pendingCheckout     // arms the diverged-checkout recovery modal; zero remoteRef = none
 	pendingRemoteTagAdds  []string            // tags to optimistically add to remoteTagNames on PushTags success
