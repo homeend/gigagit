@@ -297,6 +297,13 @@ func opAffectedSources(op engine.Operation) []sourceKey {
 		// auto-triggered a background ls-remote (the ▲ pushed-state lookup) on
 		// every branch delete/rename, a needless network round-trip.
 		return []sourceKey{srcBranches, srcFeed}
+	case engine.DeleteRemoteBranch:
+		// The remote-tracking ref vanishes (Remotes panel + the feed's %D
+		// decorations/tip markers), and a local branch tracking it loses its
+		// upstream/ahead-behind (Branches). Same no-tags rationale as
+		// DeleteBranch: unmapped, this fell through to "all sources" and
+		// auto-fired the remote-tags ls-remote probe after every delete.
+		return []sourceKey{srcBranches, srcRemotes, srcFeed}
 	case engine.ExportFile, engine.ExportToDir:
 		return []sourceKey{} // writes outside the working tree; refresh nothing
 	case engine.WriteCommitGraph, engine.SetGitConfig:

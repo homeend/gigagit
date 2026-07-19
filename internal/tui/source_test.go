@@ -484,3 +484,21 @@ func TestSrcStatusRestoresFilesPanelSelection(t *testing.T) {
 		t.Fatalf("panelStaged sel %d out of bounds (len %d)", mm.sel[panelStaged], n)
 	}
 }
+
+func TestOpAffectedSourcesDeleteRemoteBranch(t *testing.T) {
+	// Unmapped, a remote-branch delete fell through to "all sources", and the
+	// tags reload auto-fired the srcTags-arrival remote-tags ls-remote probe —
+	// a needless network round-trip. Same rationale as the DeleteBranch and
+	// Push mappings; srcRemotes because the remote-tracking ref list changed,
+	// srcBranches/srcFeed for upstream info and %D decorations / tip markers.
+	got := opAffectedSources(engine.DeleteRemoteBranch{})
+	want := []sourceKey{srcBranches, srcRemotes, srcFeed}
+	if len(got) != len(want) {
+		t.Fatalf("opAffectedSources(DeleteRemoteBranch) = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("opAffectedSources(DeleteRemoteBranch) = %v, want %v", got, want)
+		}
+	}
+}
