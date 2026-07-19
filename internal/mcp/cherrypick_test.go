@@ -194,6 +194,35 @@ func TestCherryPickRefusals(t *testing.T) {
 	}
 }
 
+// TestCherryPickPatchlessShelfEntry covers a shelved MERGE commit whose object
+// was gc'd: ShelfAddCommit's patch snapshot is best-effort and CommitPatch
+// refuses a merge commit (ErrMergeCommitPatch), so the entry stores no patch
+// and the patch lane must refuse with a clear message rather than panicking
+// or attempting an am replay with an empty path.
+func TestCherryPickPatchlessShelfEntry(t *testing.T) {
+	e := newTestEnv(t)
+	// Build a real 2-parent merge commit: branch off main, commit on the
+	// branch, then merge it back with --no-ff.
+	gitRun(t, e.dir, "checkout", "-b", "feature")
+	commitOnBranch(t, e, "m.txt", "merged content\n", "feat: on feature branch")
+	gitRun(t, e.dir, "checkout", "main")
+	gitRun(t, e.dir, "merge", "--no-ff", "-m", "Merge feature", "feature")
+	mergeSha := gitRun(t, e.dir, "rev-parse", "HEAD")
+
+	ce := seedShelfCommitAt(t, e, mergeSha, "merge label")
+	if ce.PatchSHA != "" {
+		t.Skip("ShelfAddCommit unexpectedly stored a patch for this merge-commit fixture; adjust the fixture so it exercises the patchless lane")
+	}
+
+	gitRun(t, e.dir, "reset", "--hard", "HEAD~1") // move main back before the merge
+	gcAway(t, e, mergeSha)
+
+	msg := e.callErr(t, "gg_cherry_pick", map[string]any{"source": map[string]any{"shelf": ce.ID}})
+	if !strings.Contains(msg, "no stored patch") {
+		t.Fatalf("merge-commit shelf entry without a patch must say so: %s", msg)
+	}
+}
+
 func TestCherryPickBookmarkGoneCommit(t *testing.T) {
 	e := newTestEnv(t)
 	sha := commitOnBranch(t, e, "g.txt", "g\n", "feat: g")
