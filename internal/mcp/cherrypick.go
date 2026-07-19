@@ -39,6 +39,7 @@ func (s *Server) registerCherryPickTool(srv *sdk.Server) {
 			"gc'd (or mode:\"patch\") replays its stored patch atomically (git am --3way). " +
 			"on_conflict: \"abort\" (default, rolls back) or \"keep\" (leaves conflict markers " +
 			"in the tree and reports the conflicted files). MUTATES the repository.",
+		Annotations: mutatingAnnotations(),
 	}, func(ctx context.Context, _ *sdk.CallToolRequest, in cherryPickIn) (*sdk.CallToolResult, cherryPickOut, error) {
 		out := cherryPickOut{Repo: s.repoInfo()}
 		if err := s.repoCheck(); err != nil {

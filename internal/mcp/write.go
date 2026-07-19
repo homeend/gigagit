@@ -37,6 +37,7 @@ func (s *Server) registerWriteTool(srv *sdk.Server) {
 			"commit, or a file bookmark — into the working tree as an UNSTAGED change. path " +
 			"defaults to the entry's own origin path; an existing different file is refused " +
 			"unless overwrite:true; identical content is a no-op. MUTATES the working tree.",
+		Annotations: mutatingAnnotations(),
 	}, func(ctx context.Context, _ *sdk.CallToolRequest, in writeIn) (*sdk.CallToolResult, writeOut, error) {
 		out := writeOut{Repo: s.repoInfo()}
 		if err := s.repoCheck(); err != nil {

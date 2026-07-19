@@ -83,6 +83,7 @@ func (s *Server) registerShelfTools(srv *sdk.Server) {
 	sdk.AddTool(srv, &sdk.Tool{
 		Name:        "gg_shelf_buckets",
 		Description: "List gg shelf buckets (named groups of shelved files/commits).",
+		Annotations: readOnlyAnnotations(),
 	}, func(ctx context.Context, _ *sdk.CallToolRequest, _ struct{}) (*sdk.CallToolResult, shelfBucketsOut, error) {
 		out := shelfBucketsOut{Repo: s.repoInfo(), Buckets: []shelfBucketRow{}}
 		if err := s.repoCheck(); err != nil {
@@ -101,6 +102,7 @@ func (s *Server) registerShelfTools(srv *sdk.Server) {
 	sdk.AddTool(srv, &sdk.Tool{
 		Name:        "gg_shelf_list",
 		Description: "List shelf entries in a bucket (default \"default\"). kind is \"file\" (one shelved file) or \"commit\" (a frozen commit snapshot). Paged: skip/limit, limit defaults to 100.",
+		Annotations: readOnlyAnnotations(),
 	}, func(ctx context.Context, _ *sdk.CallToolRequest, in shelfListIn) (*sdk.CallToolResult, shelfListOut, error) {
 		out := shelfListOut{Repo: s.repoInfo(), Entries: []shelfRow{}}
 		if err := s.repoCheck(); err != nil {
@@ -130,6 +132,7 @@ func (s *Server) registerShelfTools(srv *sdk.Server) {
 	sdk.AddTool(srv, &sdk.Tool{
 		Name:        "gg_shelf_commit_files",
 		Description: "List the member files of a shelved COMMIT entry (path, status letter, old_path for renames).",
+		Annotations: readOnlyAnnotations(),
 	}, func(ctx context.Context, _ *sdk.CallToolRequest, in shelfIDIn) (*sdk.CallToolResult, shelfCommitFilesOut, error) {
 		out := shelfCommitFilesOut{Repo: s.repoInfo(), Files: []commitFileRow{}}
 		if err := s.repoCheck(); err != nil {
@@ -158,6 +161,7 @@ func (s *Server) registerShelfTools(srv *sdk.Server) {
 	sdk.AddTool(srv, &sdk.Tool{
 		Name:        "gg_shelf_read",
 		Description: "Read a shelf entry's content: a file entry's bytes, or ONE member of a commit entry (member = repo-relative path from gg_shelf_commit_files). Text only; binary is flagged. max_bytes caps the text, default 262144.",
+		Annotations: readOnlyAnnotations(),
 	}, func(ctx context.Context, _ *sdk.CallToolRequest, in shelfReadIn) (*sdk.CallToolResult, shelfReadOut, error) {
 		out := shelfReadOut{Repo: s.repoInfo()}
 		if err := s.repoCheck(); err != nil {

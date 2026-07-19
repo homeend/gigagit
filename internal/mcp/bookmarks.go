@@ -85,6 +85,7 @@ func (s *Server) registerBookmarkTools(srv *sdk.Server) {
 	sdk.AddTool(srv, &sdk.Tool{
 		Name:        "gg_bookmarks_list",
 		Description: "List gg bookmarks (rich file/commit references saved by the user). Paged: skip/limit, limit defaults to 100.",
+		Annotations: readOnlyAnnotations(),
 	}, func(ctx context.Context, _ *sdk.CallToolRequest, in bookmarksListIn) (*sdk.CallToolResult, bookmarksListOut, error) {
 		out := bookmarksListOut{Repo: s.repoInfo(), Bookmarks: []bookmarkRow{}}
 		if err := s.repoCheck(); err != nil {
@@ -110,6 +111,7 @@ func (s *Server) registerBookmarkTools(srv *sdk.Server) {
 	sdk.AddTool(srv, &sdk.Tool{
 		Name:        "gg_bookmark_get",
 		Description: "Full metadata of one gg bookmark by id.",
+		Annotations: readOnlyAnnotations(),
 	}, func(ctx context.Context, _ *sdk.CallToolRequest, in bookmarkIDIn) (*sdk.CallToolResult, bookmarkGetOut, error) {
 		out := bookmarkGetOut{Repo: s.repoInfo()}
 		if err := s.repoCheck(); err != nil {
@@ -129,6 +131,7 @@ func (s *Server) registerBookmarkTools(srv *sdk.Server) {
 	sdk.AddTool(srv, &sdk.Tool{
 		Name:        "gg_bookmark_read",
 		Description: "Read a bookmarked file's content (text; binary is flagged and read via gg_export instead). max_bytes caps the text, default 262144.",
+		Annotations: readOnlyAnnotations(),
 	}, func(ctx context.Context, _ *sdk.CallToolRequest, in bookmarkReadIn) (*sdk.CallToolResult, bookmarkReadOut, error) {
 		out := bookmarkReadOut{Repo: s.repoInfo()}
 		if err := s.repoCheck(); err != nil {
