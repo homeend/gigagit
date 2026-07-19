@@ -82,7 +82,7 @@ func TestLogScopedArgv(t *testing.T) {
 	if _, err := r.LogScoped(context.Background(), 50, 0, LogScope{}, true); err != nil {
 		t.Fatal(err)
 	}
-	for _, w := range []string{"--date-order", "--decorate=full", "--source", "--branches", "HEAD"} {
+	for _, w := range []string{"--date-order", "--ignore-missing", "--decorate=full", "--source", "--branches", "HEAD"} {
 		if !logArgvContains(t, f, w) {
 			t.Fatalf("all-scope argv missing %q: %v", w, f.Calls)
 		}
@@ -276,6 +276,24 @@ func TestLogScopedAppendsUpstreams(t *testing.T) {
 	}
 	if !logArgvContains(t, f, "origin/main") {
 		t.Fatalf("argv = %v, want the upstream ref appended", f.Calls)
+	}
+}
+
+// TestLogScopedRealMissingUpstream reproduces the delete-remote-branch race:
+// the feed's applied scope still lists an upstream whose remote-tracking ref
+// was just deleted (git push --delete drops refs/remotes/<r>/<b> immediately,
+// before the TUI's remote-branches list refreshes and the scope re-walks).
+// The walk must skip the gone ref, not fail with exit 128 "unknown revision".
+func TestLogScopedRealMissingUpstream(t *testing.T) {
+	_, runner := newTestRepo(t) // one commit on main
+	repo := &Repo{Runner: runner}
+	cs, err := repo.LogScoped(context.Background(), 10, 0,
+		LogScope{Upstreams: []string{"origin/deleted-branch"}}, true)
+	if err != nil {
+		t.Fatalf("LogScoped with a missing upstream must not fail: %v", err)
+	}
+	if len(cs) == 0 {
+		t.Fatal("expected the repo's commits despite the missing upstream")
 	}
 }
 

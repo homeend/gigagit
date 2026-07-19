@@ -375,6 +375,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   (where OSC 52 is the expected path) never triggers it.
 
 ### Fixed
+- **Deleting a remote branch no longer flashes a `git log … unknown revision`
+  error.** `git push --delete` removes the local remote-tracking ref
+  immediately, but the Commits feed's next re-walk still listed that ref in
+  its applied scope (the remote-branches list refreshes concurrently, so the
+  `feedUpstreams` filter ran against a stale snapshot) — `git log` failed
+  with exit 128 and the error hit the status line and `errors.log`, even
+  though the delete itself succeeded. The feed walk now passes
+  `--ignore-missing`, so a scope ref that vanished between scope application
+  and the walk is skipped instead of failing; the same protects any ref
+  deleted externally (e.g. `fetch --prune`) mid-session.
 - **A shelved commit no longer errors in the shelf switcher's per-file actions.**
   Pressing `enter` (diff vs working tree) on a `G`-switcher entry created by
   "Shelf this commit" tried to read the entry's empty origin path as a file —

@@ -84,8 +84,11 @@ func (m Model) startFeedReload() (Model, tea.Cmd) {
 
 // feedUpstreams returns the deduped upstream refs of the local branches in the
 // current feed scope (all local branches when the scope is empty), restricted to
-// refs that actually exist as remote-tracking branches — git log errors on a
-// missing ref, so a configured-but-unfetched upstream must be dropped.
+// refs that actually exist as remote-tracking branches — a configured-but-
+// unfetched upstream would churn the scope signature for nothing. The walk
+// itself also tolerates a ref vanishing after this filter (--ignore-missing in
+// LogScoped): m.remoteBranches is a snapshot, so a just-deleted remote branch
+// can still be listed here until its source refresh lands.
 func (m Model) feedUpstreams() []string {
 	exists := make(map[string]bool, len(m.remoteBranches))
 	for _, rb := range m.remoteBranches {
