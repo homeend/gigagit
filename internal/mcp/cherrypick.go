@@ -38,7 +38,8 @@ func (s *Server) registerCherryPickTool(srv *sdk.Server) {
 			"Live cherry-pick while the commit object exists; a shelved commit whose object was " +
 			"gc'd (or mode:\"patch\") replays its stored patch atomically (git am --3way). " +
 			"on_conflict: \"abort\" (default, rolls back) or \"keep\" (leaves conflict markers " +
-			"in the tree and reports the conflicted files). MUTATES the repository.",
+			"in the tree and reports the conflicted files); it applies to the live pick only — " +
+			"the stored-patch replay is always atomic (all-or-nothing). MUTATES the repository.",
 		Annotations: mutatingAnnotations(),
 	}, func(ctx context.Context, _ *sdk.CallToolRequest, in cherryPickIn) (*sdk.CallToolResult, cherryPickOut, error) {
 		out := cherryPickOut{Repo: s.repoInfo()}
