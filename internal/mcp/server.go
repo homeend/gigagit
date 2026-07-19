@@ -57,6 +57,7 @@ func (s *Server) sdkServer() *sdk.Server {
 	s.registerCompareTools(srv)
 	s.registerExportTool(srv)
 	s.registerCherryPickTool(srv)
+	s.registerWriteTool(srv)
 	return srv
 }
 
