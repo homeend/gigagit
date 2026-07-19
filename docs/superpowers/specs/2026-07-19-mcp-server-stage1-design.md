@@ -101,7 +101,7 @@ snapshot file exists.
     "common_dir": "/abs/path/.git",
     "worktree": "/abs/path",                   // the worktree this TUI runs in
     "branch": "main",                          // current branch ("" when detached)
-    "head": "<full sha>"
+    "head": "<short sha>"                    // git's disambiguated short hash — valid input to any rev-taking tool
   },
   "focus": {
     "panel": "commits",                        // branches|worktrees|remotes|files|staged|commits|tags|reflog
