@@ -115,3 +115,27 @@ func TestCompareFileBinary(t *testing.T) {
 		t.Fatalf("expected binary flag: %v", out)
 	}
 }
+
+func TestCompareFileBodyLinesResemblingHeadersSurvive(t *testing.T) {
+	e := newTestEnv(t)
+	if err := os.WriteFile(filepath.Join(e.dir, "q.sql"), []byte("-- old comment\nselect 1;\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(e.dir, "q2.sql"), []byte("-- new comment\nselect 1;\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out := e.call(t, "gg_compare_file", map[string]any{
+		"left":  map[string]any{"source": "unstaged", "path": "q.sql"},
+		"right": map[string]any{"source": "unstaged", "path": "q2.sql"},
+	})
+	diff := out["unified_diff"].(string)
+	if !strings.Contains(diff, "--- old comment") {
+		t.Fatalf("removed body line resembling a header was corrupted: %s", diff)
+	}
+	if !strings.Contains(diff, "+-- new comment") {
+		t.Fatalf("added body line lost: %s", diff)
+	}
+	if got := strings.Count(diff, "--- "+out["left_display"].(string)); got != 1 {
+		t.Fatalf("expected exactly 1 relabelled header, got %d: %s", got, diff)
+	}
+}

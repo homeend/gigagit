@@ -137,21 +137,29 @@ func isBinary(data []byte) bool {
 
 // relabelDiff strips the temp-path noise from git diff --no-index output:
 // drops the "diff --git"/"index" header lines and rewrites ---/+++ to the
-// human display labels.
+// human display labels. Header rewriting stops at the first @@ hunk line so
+// body lines that merely look like headers (e.g., a removed SQL comment
+// "-- foo" renders as "--- foo") are never touched.
 func relabelDiff(diff, leftDisplay, rightDisplay string) string {
 	lines := strings.Split(diff, "\n")
 	out := make([]string, 0, len(lines))
+	inHeader := true
 	for _, ln := range lines {
-		switch {
-		case strings.HasPrefix(ln, "diff --git "), strings.HasPrefix(ln, "index "):
-			continue
-		case strings.HasPrefix(ln, "--- "):
-			out = append(out, "--- "+leftDisplay)
-		case strings.HasPrefix(ln, "+++ "):
-			out = append(out, "+++ "+rightDisplay)
-		default:
-			out = append(out, ln)
+		if inHeader {
+			switch {
+			case strings.HasPrefix(ln, "@@"):
+				inHeader = false
+			case strings.HasPrefix(ln, "diff --git "), strings.HasPrefix(ln, "index "):
+				continue
+			case strings.HasPrefix(ln, "--- "):
+				out = append(out, "--- "+leftDisplay)
+				continue
+			case strings.HasPrefix(ln, "+++ "):
+				out = append(out, "+++ "+rightDisplay)
+				continue
+			}
 		}
+		out = append(out, ln)
 	}
 	return strings.Join(out, "\n")
 }
