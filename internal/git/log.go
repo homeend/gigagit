@@ -17,8 +17,11 @@ const logFormat = "%H%x1f%P%x1f%an%x1f%at%x1f%s%x1f%D%x1f%S"
 // LogScope selects and narrows the walk. Branches selects refs (empty → all
 // local branches plus HEAD). Upstreams are extra remote-tracking refs (e.g.
 // "origin/main") appended to the walk so a branch's remote tip shows even when
-// the local branch is behind; callers must only pass upstreams that resolve
-// (git log errors on a missing ref). Paths/Author/Grep/Since/Until further
+// the local branch is behind. A scope ref that no longer resolves is skipped
+// (--ignore-missing), not an error: a remote-tracking ref can vanish between
+// scope application and the walk — git push --delete drops it immediately,
+// and the feed re-walks its retained scope before the remote-branches list
+// refreshes. Paths/Author/Grep/Since/Until further
 // FILTER the result with native `git log` flags; any of them being set makes the
 // feed a non-contiguous subset of history (path scope also narrows to commits
 // that touched those paths). Branches/Upstreams alone do NOT count as a filter.
@@ -49,6 +52,7 @@ func (r *Repo) LogScoped(ctx context.Context, limit, skip int, scope LogScope, d
 	b := gitcmd.New("log").
 		Arg("-n", strconv.Itoa(limit)).
 		ArgIf(dateOrder, "--date-order").
+		Arg("--ignore-missing").
 		Arg("--decorate=full", "--source", "--format="+logFormat).
 		ArgIf(skip > 0, "--skip="+strconv.Itoa(skip)).
 		ArgIf(scope.Author != "", "--author="+scope.Author).
