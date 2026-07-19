@@ -1267,7 +1267,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						},
 						onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {
 							if opt == "go to worktree" {
-								return m.guardedReRoot(wtPath, false)
+								// offerRepair: this route targets a worktree of
+								// the CURRENT repo, same as the Worktrees-panel
+								// enter — a foreign-notation link gets the
+								// repair offer, not just the refusal.
+								return m.guardedReRoot(wtPath, true)
 							}
 							return m, nil
 						},

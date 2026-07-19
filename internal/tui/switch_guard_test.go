@@ -198,3 +198,31 @@ func TestOpAffectedSourcesRepairWorktree(t *testing.T) {
 		t.Fatalf("opAffectedSources(RepairWorktree) = %v, want [srcWorktrees]", got)
 	}
 }
+
+func TestGoToWorktreeOffersRepairForForeignNotation(t *testing.T) {
+	// The Branches-panel s-switch route ("<branch> is checked out in another
+	// worktree" → go to worktree) targets a worktree of the CURRENT repo —
+	// exactly the repairable case — so it must offer the repair modal like
+	// the Worktrees-panel enter site, not the plain refusal (user-reported
+	// gap: the natural Windows-side flow goes through Branches, not the
+	// Worktrees tab).
+	m := footerModel()
+	m.worktrees[1].Path = "/mnt/t/repo/wt-x" // recorded in WSL notation
+	m.sel[panelBranches] = 1                 // feat/x, checked out in wt-x
+	m.focus = panelBranches
+	setGuardSeams(t, "windows", `T:\repo\wt-x`) // only the translation exists here
+
+	u, _ := m.Update(keyMsg("s"))
+	got := u.(Model)
+	if got.modal == nil || got.modal.req.ID != "switch-to-worktree" {
+		t.Fatalf("s on a branch checked out elsewhere must open the jump modal, got %+v", got.modal)
+	}
+	u2, _ := got.modal.onResolve(got, "go to worktree")
+	r := u2.(Model)
+	if r.modal == nil || r.modal.req.ID != "worktree-cross-env-repair" {
+		t.Fatalf("go to worktree on a foreign-notation worktree must offer repair; modal=%+v status=%q", r.modal, r.statusMsg)
+	}
+	if r.loading || r.switchTarget != "" {
+		t.Fatal("the offer itself must not switch")
+	}
+}
