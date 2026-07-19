@@ -13,11 +13,11 @@ func TestTranslatePath(t *testing.T) {
 		// windows: WSL-recorded /mnt/<x>/… → <X>:\…
 		{"windows", "/mnt/t/others/gigagit", `T:\others\gigagit`, true},
 		{"windows", "/mnt/c/Users/x", `C:\Users\x`, true},
-		{"windows", "/mnt/t", `T:\`, true},                // bare mount root → drive root, never a drive-relative "T:"
-		{"windows", "/mnt/", "", false},                   // no drive letter
-		{"windows", "/mnt/tt/x", "", false},               // multi-letter mount is not a drive
-		{"windows", "/home/user/repo", "", false},         // plain Linux path: no counterpart
-		{"windows", `T:\already\windows`, "", false},      // already native
+		{"windows", "/mnt/t", `T:\`, true},           // bare mount root → drive root, never a drive-relative "T:"
+		{"windows", "/mnt/", "", false},              // no drive letter
+		{"windows", "/mnt/tt/x", "", false},          // multi-letter mount is not a drive
+		{"windows", "/home/user/repo", "", false},    // plain Linux path: no counterpart
+		{"windows", `T:\already\windows`, "", false}, // already native
 		// linux (WSL): Windows-recorded <X>:… → /mnt/<x>/…
 		{"linux", `T:\others\gigagit`, "/mnt/t/others/gigagit", true},
 		{"linux", "T:/others/gigagit", "/mnt/t/others/gigagit", true}, // forward-slash Windows form
