@@ -209,6 +209,7 @@ func (m Model) startOp(op engine.Operation) (Model, tea.Cmd) {
 		}
 	}()
 	m.running = true
+	m.opName = engine.OpName(op)
 	m.opStart = time.Now() // the perpetual heartbeat (Init) reads this to show elapsed time
 	m.statusMsg = i18n.T("working…")
 	m.opMsgs = msgs

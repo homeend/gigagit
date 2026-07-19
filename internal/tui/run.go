@@ -38,10 +38,14 @@ func Run(svc *domain.Service) (string, error) {
 			m.statusMsg = i18n.T("operation log: %s", err.Error())
 		}
 	}
+	m = m.initSnapshotTarget()
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	final, err := p.Run()
-	if fm, ok := final.(Model); ok && fm.opCancel != nil {
-		fm.opCancel()
+	if fm, ok := final.(Model); ok {
+		if fm.opCancel != nil {
+			fm.opCancel()
+		}
+		removeSnapshotFile(fm.snapshotPath)
 	}
 	if err != nil {
 		return "", err
