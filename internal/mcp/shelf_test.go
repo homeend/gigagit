@@ -116,6 +116,15 @@ func TestShelfReadCommitWithoutMemberRefused(t *testing.T) {
 	}
 }
 
+func TestShelfReadFileEntryWithMemberRefused(t *testing.T) {
+	e := newTestEnv(t)
+	fe := seedShelfFile(t, e)
+	msg := e.callErr(t, "gg_shelf_read", map[string]any{"id": fe.ID, "member": "a.txt"})
+	if !strings.Contains(msg, "omit member") {
+		t.Fatalf("error = %s", msg)
+	}
+}
+
 func TestShelfReadUnknownID(t *testing.T) {
 	e := newTestEnv(t)
 	msg := e.callErr(t, "gg_shelf_read", map[string]any{"id": "nope"})

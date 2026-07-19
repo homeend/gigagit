@@ -59,9 +59,8 @@ func (s *Server) sdkServer() *sdk.Server {
 	return srv
 }
 
-// Filled by the compare/export tool files.
-func (s *Server) registerCompareTools(srv *sdk.Server) {}
-func (s *Server) registerExportTool(srv *sdk.Server)   {}
+// Filled by the export tool file.
+func (s *Server) registerExportTool(srv *sdk.Server) {}
 
 // Serve runs the MCP server over stdio until ctx ends or the client closes.
 // workdir resolves the repo like the CLI does (the process cwd for gg mcp).
