@@ -54,6 +54,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   content is a reported no-op). All 13 tools now carry read-only/destructive
   annotations.
 
+### Fixed
+- **Deleting a remote branch no longer triggers a needless network probe.**
+  `DeleteRemoteBranch` was unmapped in the post-op refresh table, so it fell
+  through to "reload all sources" — and the tags reload auto-fired the
+  remote-tags `ls-remote` lookup (the ▲ pushed-state indicator) after every
+  delete. It now refreshes only what changed: the Branches and Remotes
+  panels and the commit feed's decorations.
+
 ### Changed
 - **Multilanguage TUI (stage 5): operation status, progress, and prompts,
   localized.** The last English-only surface inside the TUI — the busy line
