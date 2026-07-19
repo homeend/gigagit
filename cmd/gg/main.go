@@ -13,6 +13,7 @@ import (
 	"github.com/homeend/gigagit/internal/buildinfo"
 	"github.com/homeend/gigagit/internal/cli"
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/mcp"
 	"github.com/homeend/gigagit/internal/observ"
 	"github.com/homeend/gigagit/internal/repos"
 	"github.com/homeend/gigagit/internal/shellinit"
@@ -44,6 +45,13 @@ func main() {
 		runInspect(args[1:])
 		return
 	}
+	if len(args) > 0 && args[0] == "mcp" {
+		if err := mcp.Serve(context.Background(), "."); err != nil {
+			fmt.Fprintln(os.Stderr, "gg mcp:", err)
+			os.Exit(1)
+		}
+		return
+	}
 	if len(args) > 0 && args[0] == "__rebase-seq" {
 		if err := runRebaseSeq(args[1:]); err != nil {
 			fmt.Fprintln(os.Stderr, "gg __rebase-seq:", err)
@@ -64,7 +72,7 @@ func main() {
 	// A mistyped/unknown subcommand should error, not silently open the TUI.
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 		fmt.Fprintf(os.Stderr, "gg: unknown command %q\n", args[0])
-		fmt.Fprintln(os.Stderr, "commands: status commit pull push switch checkout branch stash undo discard shelf bookmark merge rebase cherry-pick revert reset worktree remote tag compare repo init inspect version (run `gg` with no arguments for the TUI)")
+		fmt.Fprintln(os.Stderr, "commands: status commit pull push switch checkout branch stash undo discard shelf bookmark merge rebase cherry-pick revert reset worktree remote tag compare repo init mcp inspect version (run `gg` with no arguments for the TUI)")
 		os.Exit(2)
 	}
 	// No subcommand: launch the TUI. The runner stack (LimitRunner + ssh

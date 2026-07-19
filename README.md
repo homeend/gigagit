@@ -7,9 +7,10 @@ system `git`.
 > **Status:** actively developed and ready for daily use. The worktree-aware
 > engine, one-key smart operations (pull / switch / merge / rebase / commit /
 > stash / undo), interactive rebase, conflict resolution, a rich keyboard TUI,
-> and a fully scriptable CLI are all in place. No `1.0` tag has been cut yet, and
-> an MCP server for AI agents is on the roadmap. See [`CHANGELOG.md`](CHANGELOG.md)
-> for the full feature list and [`CLAUDE.md`](CLAUDE.md) for the architecture.
+> and a fully scriptable CLI are all in place. No `1.0` tag has been cut yet. An
+> MCP server stage 1 (`gg mcp`) has shipped; heavy-ops MCP surfaces remain on the
+> roadmap. See [`CHANGELOG.md`](CHANGELOG.md) for the full feature list and
+> [`CLAUDE.md`](CLAUDE.md) for the architecture.
 
 ## Why
 
@@ -187,6 +188,33 @@ So switching/creating a worktree can move your shell into it:
 eval "$(gg shell-init bash)"
 # fish
 gg shell-init fish | source
+```
+
+## MCP server (`gg mcp`)
+
+`gg mcp` serves gg's non-git value to AI agents over the Model Context
+Protocol (stdio). It deliberately does NOT expose normal git operations —
+agents already have the `gg` CLI for those — but the things only gg knows:
+
+- **`gg_ui_state`** — what the gg TUI is showing right now: focused panel,
+  cursor commit/branch/tag/worktree, ◉-marked commits, marked files, the open
+  diff/compare view and its selected file, the highlighted bookmark/shelf
+  entry in an open `g`/`G` switcher, active filters, conflict/paused-op state.
+  (The TUI publishes a snapshot file under your XDG state dir; no TUI running
+  → `session: null`.)
+- **Bookmarks** — `gg_bookmarks_list`, `gg_bookmark_get`, `gg_bookmark_read`.
+- **Shelves** — `gg_shelf_buckets`, `gg_shelf_list`, `gg_shelf_commit_files`,
+  `gg_shelf_read`.
+- **Compare** — `gg_compare_trees` (changed files between worktree/index/any
+  commit), `gg_compare_file` (unified diff between any two file versions,
+  including bookmarks and shelved-commit members).
+- **Export** — `gg_export` copies a bookmark or shelf entry into a local
+  directory. Stage 1 never mutates the repository.
+
+Register it with Claude Code from your repo directory:
+
+```sh
+claude mcp add gg -- gg mcp
 ```
 
 ## Configuration

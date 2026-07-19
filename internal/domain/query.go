@@ -526,3 +526,13 @@ func (s *Service) CommitLookup(ctx context.Context, rev string) (model.LogLine, 
 	}
 	return line, true, nil
 }
+
+// DiffNoIndex returns the unified diff between two absolute filesystem paths
+// (`git diff --no-index`), under a Read reservation. "" means identical.
+// Backs the MCP gg_compare_file tool, which materializes both sides to temp
+// files first.
+func (s *Service) DiffNoIndex(ctx context.Context, a, b string) (string, error) {
+	return query(ctx, s, "diffNoIndex:"+a+":"+b, func(ctx context.Context) (string, error) {
+		return s.repo.DiffNoIndex(ctx, a, b)
+	})
+}

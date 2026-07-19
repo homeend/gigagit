@@ -179,6 +179,15 @@ type Model struct {
 	opMsgs    chan tea.Msg
 	modal     *decisionState
 
+	// Session snapshot (agent-facing; see session_snapshot.go). snapshotPath
+	// "" = disabled (no repo / no state root). lastSnapshot is the last
+	// serialized payload (timestamp-less) for write-on-change.
+	snapshotPath      string
+	snapshotCommonDir string
+	snapshotWorktree  string
+	lastSnapshot      []byte
+	opName            string // engine.OpName of the in-flight op; "" when idle
+
 	focus           panel
 	lastLeftPanel   panel // ←'s return target; zero value = panelBranches
 	activeLeftTab   panel // which of Branches/Remotes/Worktrees shows in the shared left tab slot; zero value = panelBranches
@@ -328,6 +337,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case repoHealthMsg:
 		return m.applyRepoHealth(msg)
+	case snapshotTargetMsg:
+		if msg.svc != m.svc {
+			return m, nil // stale: a later repo switch superseded this resolve
+		}
+		m.snapshotCommonDir = msg.commonDir
+		m.snapshotWorktree = msg.worktree
+		m.snapshotPath = config.SessionSnapshotPath(msg.commonDir)
+		m.lastSnapshot = nil
+		return m, nil
 	case gitConfigRowsMsg:
 		if msg.gen != m.gitConfigGen {
 			return m, nil // stale: reopened or repo-switched since dispatch
@@ -1865,6 +1883,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Also drives the background auto-refresh scheduler.
 		var cmd tea.Cmd
 		m, cmd = m.refreshTick(time.Now())
+		m = m.maybeWriteSnapshot()
 		return m, tea.Batch(cmd, heartbeatCmd())
 	case watchReadyMsg:
 		if msg.gen != m.watchGen {
@@ -1966,6 +1985,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.opCancel = nil
 		}
 		m.running = false
+		m.opName = ""
 		m.opMsgs = nil
 		m = m.cleanupPickPatchTemp()
 		// A foreground fetch is a single (uncontended) `git fetch`, so its duration
@@ -2126,6 +2146,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case statusRefreshedMsg:
 		m.running = false
+		m.opName = ""
 		if msg.err != nil {
 			m.statusMsg = i18n.T("error: %s", msg.err.Error())
 			return m, nil
@@ -2438,6 +2459,8 @@ func (m Model) handleStageKey() (tea.Model, tea.Cmd) {
 	// not carry over to the panel the files land in.
 	m.fileMarks = nil
 	// Direction is the panel: Files stages, Staged unstages.
+	// opName stays "" here: the snapshot's running_op is omitted during this
+	// instant synchronous stage — never stale, since op completion clears it.
 	m.running = true
 	m.statusMsg = i18n.T("working…")
 	return m, m.stageCmd(engine.Stage{Paths: paths, Unstage: m.focus == panelStaged})
@@ -2966,6 +2989,7 @@ func (m Model) commitPageEligible() bool {
 // --cwd-file by cmd/gg). A fresh span ring is used for the new root; the cmd/gg
 // panic dump still references the original repo (acceptable for a debug aid).
 func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
+	removeSnapshotFile(m.snapshotPath) // the old repo's session ends here
 	if m.watcher != nil {
 		_ = m.watcher.Close()
 		m.watcher = nil
@@ -2973,6 +2997,10 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.watchGen++
 	m.watchSupported = false
 	m.svc = domain.OpenTUI(path)
+	// Disable the snapshot synchronously (no git subprocess here — reRoot runs
+	// on the Update goroutine); snapshotTargetCmd below re-resolves and
+	// re-enables it once its two reads land off-thread.
+	m.snapshotPath, m.snapshotCommonDir, m.snapshotWorktree, m.lastSnapshot = "", "", "", nil
 	m.feed = m.svc.CommitFeed()
 	m.switchTarget = path
 	m.loading = true
@@ -3022,7 +3050,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.pendingNoticeConfig = nil
 	m.refreshHealthAfterOp = false
 	m.loadGen++
-	return m, tea.Batch(m.loadCmd(), m.startWatchCmd(m.watchGen), m.repoHealthCmd(m.noticeGen))
+	return m, tea.Batch(m.loadCmd(), m.startWatchCmd(m.watchGen), m.repoHealthCmd(m.noticeGen), snapshotTargetCmd(m.svc))
 }
 
 // View implements tea.Model.

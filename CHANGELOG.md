@@ -8,6 +8,21 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+### Added
+- `gg mcp` — an MCP (Model Context Protocol) stdio server exposing gg's
+  non-git value to AI agents: `gg_ui_state` (the live TUI session snapshot —
+  focus, cursor selections, ◉-marked commits, marked files, open diff/compare
+  view, open bookmark/shelf switcher, filters, conflict/running-op state),
+  bookmark tools (`gg_bookmarks_list`/`gg_bookmark_get`/`gg_bookmark_read`),
+  shelf tools (`gg_shelf_buckets`/`gg_shelf_list`/`gg_shelf_commit_files`/
+  `gg_shelf_read`), compare tools (`gg_compare_trees`/`gg_compare_file`), and
+  `gg_export` (copy a bookmark/shelf entry into a local directory). Stage 1 is
+  the safe surface only — no repo mutation. Register with
+  `claude mcp add gg -- gg mcp` from the repo directory.
+- The TUI now publishes a per-repo session snapshot
+  (`<state>/gg/sessions/<repo-key>/ui-state.json`, atomic write-on-change from
+  the 1s heartbeat, removed on exit/repo-switch) that backs `gg_ui_state`.
+
 ### Changed
 - **Multilanguage TUI (stage 5): operation status, progress, and prompts,
   localized.** The last English-only surface inside the TUI — the busy line
