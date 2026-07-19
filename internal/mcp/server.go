@@ -59,11 +59,10 @@ func (s *Server) sdkServer() *sdk.Server {
 	return srv
 }
 
-// Filled by the bookmark/shelf/compare/export tool files.
-func (s *Server) registerBookmarkTools(srv *sdk.Server) {}
-func (s *Server) registerShelfTools(srv *sdk.Server)    {}
-func (s *Server) registerCompareTools(srv *sdk.Server)  {}
-func (s *Server) registerExportTool(srv *sdk.Server)    {}
+// Filled by the shelf/compare/export tool files.
+func (s *Server) registerShelfTools(srv *sdk.Server)   {}
+func (s *Server) registerCompareTools(srv *sdk.Server) {}
+func (s *Server) registerExportTool(srv *sdk.Server)   {}
 
 // Serve runs the MCP server over stdio until ctx ends or the client closes.
 // workdir resolves the repo like the CLI does (the process cwd for gg mcp).
