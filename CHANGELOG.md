@@ -9,6 +9,18 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **`gg init --to <path>` — install the agent skill anywhere, for agents gg
+  doesn't know.** The hardcoded registry covers the common agents; `--to`
+  is the fallback for everything else: point it at a shared instruction
+  FILE and the skill lands as the same marker-delimited managed block the
+  AGENTS.md-style targets get (idempotent, version-stamped, surrounding
+  content untouched, file created if missing), or at a DIRECTORY and it
+  writes a Claude-style `<dir>/using-gg/SKILL.md`. The target is recorded
+  in a machine-local registry (`agent-targets.toml` beside `repos.toml`),
+  shows up in the `gg init` listing as a `Custom` row with the usual
+  new/outdated/up-to-date status, and is refreshed by `gg init --update`
+  like any supported agent — so an unsupported agent's copy never silently
+  goes stale when the skill version bumps. `agentskill.Version` → 52.
 - **The "using-gg" agent skill now teaches agents to register THEMSELVES as
   gg tools.** A new "Registering yourself as a gg tool" section documents
   the `[[tools.command]]` block (schema, config locations, the global+repo
