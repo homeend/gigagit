@@ -490,3 +490,55 @@ func TestAntigravityTemplates(t *testing.T) {
 		t.Fatalf("agy review must read GG_REVIEW_DIFF and label <range>: %q", gr)
 	}
 }
+
+// TestKimiTemplates pins the verified kimi shapes (kimi 0.27.0, probed
+// 2026-07-20): -p stdout is decorated (responses arrive prefixed "• "), so
+// both capture lanes deliver through the GG_MESSAGE_FILE channel, which a
+// plain -p run can write (outside-workspace read+write and headless
+// `git add` were all probed working with no approval flags). Kimi has no
+// interactive-with-prompt flag, so the conflict lane is a headless -p run
+// under the normal terminal handover.
+func TestKimiTemplates(t *testing.T) {
+	var kimi Tool
+	for _, tl := range Builtins() {
+		if tl.ID == "kimi" {
+			kimi = tl
+		}
+	}
+	if kimi.ID == "" {
+		t.Fatal("kimi not in catalog")
+	}
+	if len(kimi.ExtraProbes) != 1 || kimi.ExtraProbes[0] != "~/.kimi-code/bin/kimi" {
+		t.Fatalf("kimi ExtraProbes = %v, want the ~/.kimi-code install probe", kimi.ExtraProbes)
+	}
+	byName := map[string]CommandTemplate{}
+	for _, ct := range kimi.Commands {
+		byName[string(ct.Category)+"/"+ct.Name] = ct
+	}
+	for _, key := range []string{"commit_message/Kimi", "review/Kimi"} {
+		gen := GenerateCommandFor(byName[key], "kimi", "linux")
+		if !strings.HasPrefix(gen, `kimi -p "`) {
+			t.Fatalf("%s: prompt not first after -p: %q", key, gen)
+		}
+		if !strings.Contains(gen, "${GG_MESSAGE_FILE}") {
+			t.Fatalf("%s: must write to GG_MESSAGE_FILE (stdout is •-decorated): %q", key, gen)
+		}
+		if strings.Contains(gen, "--yolo") || strings.Contains(gen, "--auto") {
+			t.Fatalf("%s: plain -p suffices, no approval flags (probed): %q", key, gen)
+		}
+	}
+	if !strings.Contains(GenerateCommandFor(byName["commit_message/Kimi"], "kimi", "linux"), "${GG_STAGED_DIFF}") {
+		t.Fatal("kimi commit must read GG_STAGED_DIFF")
+	}
+	gr := GenerateCommandFor(byName["review/Kimi"], "kimi", "linux")
+	if !strings.Contains(gr, "${GG_REVIEW_DIFF}") || !strings.Contains(gr, "<range>") {
+		t.Fatalf("kimi review must read GG_REVIEW_DIFF and label <range>: %q", gr)
+	}
+	yolo := byName["conflict/Kimi (yolo)"]
+	if !yolo.OptIn || !strings.Contains(yolo.Command, "--yolo") {
+		t.Fatalf("kimi yolo conflict must be OptIn with --yolo: %+v", yolo)
+	}
+	if def := byName["conflict/Kimi"]; def.OptIn || strings.Contains(def.Command, "--yolo") {
+		t.Fatalf("default kimi conflict must not auto-approve: %+v", def)
+	}
+}

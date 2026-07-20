@@ -227,6 +227,31 @@ const agyReviewPrompt = `"You are reviewing a code change. The full diff to revi
 
 const agyReviewCommand = `<bin> -p ` + agyReviewPrompt + ` --dangerously-skip-permissions`
 
+// Kimi Code templates — verified against the REAL binary, kimi 0.27.0,
+// 2026-07-20. `kimi --help`: -p/--prompt runs one prompt non-interactively
+// and prints the response; -y/--yolo auto-approves all actions; there is NO
+// interactive-with-initial-prompt flag, so the conflict lane is a headless
+// -p run in the real terminal under the normal handover. Live probes
+// (authenticated): plain -p edited a file and ran `git add` headlessly
+// (staged entry confirmed, exit 0); plain -p read AND wrote files outside
+// the workspace with no approval flags; -p stdout decorates the response
+// with a leading "• " (which would corrupt a commit subject), so both
+// capture lanes deliver through the $GG_MESSAGE_FILE channel instead of
+// stdout.
+const kimiConflictPrompt = `"A git <env:GG_OP> operation is paused with conflicts in this repository. Read the context file at <env:GG_CONTEXT_FILE> for the operation's parties and the conflicted paths. Inspect both sides' history to understand intent, resolve each conflict by editing the files, then run git add on each resolved file. Do NOT run git commit or any --continue command - stop when everything is staged and summarize what you chose."`
+
+const kimiConflictCommand = `<bin> -p ` + kimiConflictPrompt
+
+const kimiConflictYoloCommand = kimiConflictCommand + ` --yolo`
+
+const kimiCommitPrompt = `"Write a git commit message for the staged changes into the file at <env:GG_MESSAGE_FILE> (an absolute path outside the repository). The change summary is at <env:GG_CONTEXT_FILE> and the full diff at <env:GG_STAGED_DIFF>. Write ONLY the commit message to that file: a concise imperative subject line (max ~72 chars), a blank line, then a short body. Do not run git commit and do not modify any other files."`
+
+const kimiCommitCommand = `<bin> -p ` + kimiCommitPrompt
+
+const kimiReviewPrompt = `"You are reviewing a code change. The full diff to review is in the file at <env:GG_REVIEW_DIFF> (range <range>). Write a concise code review - findings with severity and a short summary - into the file at <env:GG_MESSAGE_FILE> (an absolute path outside the repository). Do NOT modify any repository files and do NOT run git commit."`
+
+const kimiReviewCommand = `<bin> -p ` + kimiReviewPrompt
+
 // Builtins is the hardcoded catalog. Stage 1 shipped conflict templates;
 // stage 2 added commit_message capture templates; stage 3 adds review
 // capture templates.
@@ -281,6 +306,16 @@ func Builtins() []Tool {
 				{Category: CatConflict, Name: "Antigravity (yolo)", Mode: ModeTerminal, OptIn: true, Command: agyConflictYoloCommand},
 				{Category: CatCommitMessage, Name: "Antigravity", Mode: ModeCapture, OptIn: true, Command: agyCommitCommand},
 				{Category: CatReview, Name: "Antigravity", Mode: ModeCapture, OptIn: true, Command: agyReviewCommand},
+			},
+		},
+		{
+			ID: "kimi", Label: "Kimi Code", Bins: []string{"kimi"},
+			ExtraProbes: []string{"~/.kimi-code/bin/kimi"},
+			Commands: []CommandTemplate{
+				{Category: CatConflict, Name: "Kimi", Mode: ModeTerminal, Command: kimiConflictCommand},
+				{Category: CatConflict, Name: "Kimi (yolo)", Mode: ModeTerminal, OptIn: true, Command: kimiConflictYoloCommand},
+				{Category: CatCommitMessage, Name: "Kimi", Mode: ModeCapture, Command: kimiCommitCommand},
+				{Category: CatReview, Name: "Kimi", Mode: ModeCapture, Command: kimiReviewCommand},
 			},
 		},
 		{
