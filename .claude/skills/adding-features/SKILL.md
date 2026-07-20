@@ -28,7 +28,7 @@ TUI `case "d"` in `internal/tui/model.go`, `cmdWorktreeRemove` in
 | 5 | `internal/cli/<file>.go` | `flag.NewFlagSet(name, flag.ContinueOnError)` + `fs.SetOutput(stderr)`; map flags → `policy map[string]string` keyed by **decision IDs**; `cliDecider{policy, in, out, interactive: stdinIsTerminal()}`; `runOperation(...)`; `return finish(res, err, stdout, stderr)` (don't inline the ✓ print). |
 | 6 | `internal/cli/cli.go` | Register: `commands` map entry + `case` in `Run`'s switch. |
 | 7 | `cmd/gg/main.go` (~line 37) | **Update the unknown-command help string** listing commands. (It drifts — verify it's complete while you're there.) |
-| 7b | `internal/agentskill/using-gg.md` | **CLI surface changed (commands/flags/decision IDs)?** Update the embedded using-gg skill, bump `agentskill.Version`, and re-run `gg init` (or `gg init --update`) wherever it's installed. |
+| 7b | `internal/agentskill/using-gg.md` | **Agent-facing surface changed (CLI commands/flags/decision IDs, MCP tools, or an agentic task contract)?** Update the embedded using-gg skill — full sync rule in `defining-agentic-tasks` (bump `agentskill.Version`, `gg init --update`, commit the regenerated `.claude/skills/using-gg/SKILL.md`). |
 | 8 | Docs | `CHANGELOG.md` always; `README.md` key table + CLI list if user-facing; `CLAUDE.md` if the package map changed. |
 
 MCP (future): nothing to wire today — forks get pre-answered via

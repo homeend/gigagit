@@ -420,6 +420,25 @@ Once configured: commit messages come from `ctrl+g` in the commit popup,
 reviews from `gg review [--tool <name>]` or the TUI review rows, conflict
 tools from `t` in the conflict window.
 
+## Interacting over MCP
+
+Besides the CLI, gg ships an MCP server: `gg mcp` (stdio) serves the repo
+it starts in — one server per repo, discovered from the working directory;
+every reply carries `repo{common_dir, worktree}`. Register it from the
+repo directory, e.g. for Claude Code: `claude mcp add gg -- gg mcp`.
+
+Use the CLI for git operations — that is what it is for. Use MCP for what
+only gg knows: `gg_ui_state` (the live TUI session — focused panel, cursor,
+◉-marked commits, open compare, conflict/running-op state; `session: null`
+when no TUI is running for the repo), bookmark and shelf listing/reading,
+`gg_compare_trees`/`gg_compare_file` (diff any two versions, including
+shelved-commit members), `gg_export` (copy a bookmark/shelf entry to a
+directory), and two consent-gated mutations — `gg_cherry_pick` (re-apply a
+shelved/bookmarked commit; falls back to the shelf's stored patch when the
+original was gc'd) and `gg_write_to_worktree` (restore a stored file
+version as an unstaged change). The mutating tools are annotated
+destructive, so your MCP client prompts before running them.
+
 ## Shell following
 
 Worktree and repo switches write the target directory to `--cwd-file <path>`

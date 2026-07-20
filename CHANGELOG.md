@@ -24,8 +24,18 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   complete worked example block per category, the `GG_TASK` env and
   capture-run cwd, and a headless verification path (`gg review --tool
   <name> HEAD`; the CLI run is its own consent — the TUI approval popup
-  still guards `ctrl+g`/`t`). `agentskill.Version` 48 → 50; run
-  `gg init --update` to refresh installed copies.
+  still guards `ctrl+g`/`t`). using-gg also gains an **"Interacting over
+  MCP"** section (the server, one-repo-per-cwd rule, the tool roster, and
+  when to prefer MCP over the CLI) — MCP is an agent-facing interaction
+  channel, so it belongs in the interaction skill. A new PROJECT skill,
+  **`defining-agentic-tasks`**, owns the other side of the boundary: what
+  an agent is expected to DO per task category (the conflict /
+  commit_message / review contracts, the catalog prompts that encode them,
+  detection gating which agents the wizard offers, and the using-gg sync
+  rule), referring to `adding-external-tools` for process-running
+  mechanics without duplicating them; `adding-features` 7b's trigger
+  widened to the whole agent-facing surface. `agentskill.Version` 48 → 51;
+  run `gg init --update` to refresh installed copies.
 - **Worktree switch guard + cross-environment repair.** Every TUI switch —
   the Worktrees panel, the "go to worktree" branch prompt, the repo
   switcher and "Open repo" popups, and the chained post-operation switches
