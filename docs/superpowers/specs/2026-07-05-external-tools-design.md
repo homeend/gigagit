@@ -285,6 +285,31 @@ in the prompt is guidance, not enforcement, in this mode.
 - `review` / Claude (`capture`): `claude -p "/code-review <range>" --output-format json`
 - `review` / Junie (`terminal`): `junie --review "Review the changes in <range>"`
 
+### Roster expansion (2026-07-20)
+
+Three tools joined the catalog with live-verified defaults — see
+`2026-07-20-agent-roster-expansion-design.md` for the probe evidence:
+
+- **OpenAI Codex** (`codex`): interactive conflict lane (positional
+  prompt); capture lanes via `codex exec --sandbox read-only
+  --output-last-message "$GG_MESSAGE_FILE"`.
+- **Antigravity** (`agy`): `--prompt-interactive` conflict lane; capture
+  lanes are OptIn and pair `--dangerously-skip-permissions` with the
+  `$GG_MESSAGE_FILE` channel (headless agy auto-denies permission-gated
+  tools; no CLI allowlist exists).
+- **Kimi Code** (`kimi`): shipped in parallel (branch `feat/kimi-agent`,
+  merged `acacd0b2`) — headless `-p` for every lane under terminal handover;
+  no yolo variant exists, because `-p` REFUSES `--yolo`/`--auto` ("Cannot
+  combine --prompt with --yolo", 0.27.0) and print mode approves its own
+  edits. Capture lanes use the `$GG_MESSAGE_FILE` channel (plain `-p`
+  stdout is a work report). This branch adds only the first `~/`-expanded
+  `ExtraProbes` entry to that tool (`~/.kimi-code/bin/kimi`), covering the
+  standard installer's rc-file-only PATH entry.
+
+The OptIn rule generalized with this batch: OptIn ⇔ the command carries a
+permission-bypass flag (`--dangerously-*`, `--yolo`, `--brave`) — no longer
+"(yolo)" name matching.
+
 ## Placeholders and environment
 
 A command-context resolver in `internal/template` (new entry point reusing

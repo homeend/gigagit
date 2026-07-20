@@ -10,6 +10,7 @@ package exttool
 
 import (
 	"os"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
@@ -202,6 +203,70 @@ const kimiConflictPrompt = `"A git <env:GG_OP> operation is paused with conflict
 // $GG_CONTEXT_FILE, edited the conflicted file, ran `git add`, and exited 0.
 const kimiConflictCommand = `<bin> -p ` + kimiConflictPrompt
 
+// Codex templates — verified against the REAL binary, codex-cli 0.144.6,
+// 2026-07-20. `codex --help`: positional [PROMPT] starts an interactive
+// session; --dangerously-bypass-approvals-and-sandbox exists on the
+// interactive CLI. `codex exec --help`: non-interactive; -s/--sandbox
+// read-only; -o/--output-last-message <FILE> "file where the last message
+// from the agent should be written". Live probe (authenticated, inside a
+// git repo, stdin /dev/null): exit 0, the message file held exactly the
+// final message, stdout carried only the final message (session log on
+// stderr). The trust gate fires only OUTSIDE a git repo, so no
+// --skip-git-repo-check.
+const codexConflictPrompt = `"A git <env:GG_OP> operation is paused with conflicts in this repository. Read the context file at <env:GG_CONTEXT_FILE> for the operation's parties and the conflicted paths. Inspect both sides' history to understand intent, resolve each conflict by editing the files, then run git add on each resolved file. Do NOT run git commit or any --continue command - stop when everything is staged and summarize what you chose and why."`
+
+const codexConflictCommand = `<bin> ` + codexConflictPrompt
+
+const codexConflictYoloCommand = codexConflictCommand + ` --dangerously-bypass-approvals-and-sandbox`
+
+// codexCommitCommand: the final assistant message IS the deliverable —
+// codex's harness (not the sandboxed agent) writes it to $GG_MESSAGE_FILE
+// via --output-last-message, which the engine prefers over stdout. The file
+// argument is double-quoted in the template (the first standalone <env:>
+// use in the catalog) so a temp path with spaces cannot word-split.
+const codexCommitPrompt = `"Write a git commit message for the staged changes. Read the summary at <env:GG_CONTEXT_FILE> (files changed, recent-commit style) and, for detail, the full diff at <env:GG_STAGED_DIFF>. Your final message must be ONLY the commit message and nothing else: a concise imperative subject line (max ~72 chars), a blank line, then a short body explaining what changed and why. No preamble, no markdown headings, no code fences. If the diff file notes it was truncated, inspect specific files with git."`
+
+const codexCommitCommand = `<bin> exec ` + codexCommitPrompt + ` --sandbox read-only --output-last-message "<env:GG_MESSAGE_FILE>"`
+
+const codexReviewPrompt = `"You are reviewing a code change. The full diff to review is in the file at <env:GG_REVIEW_DIFF> (range <range>). Your final message must be ONLY a concise code review - findings with severity and a short summary. Do NOT modify any repository files and do NOT run git commit."`
+
+const codexReviewCommand = `<bin> exec ` + codexReviewPrompt + ` --sandbox read-only --output-last-message "<env:GG_MESSAGE_FILE>"`
+
+// Antigravity templates — verified against the REAL binary, agy 1.1.4,
+// 2026-07-20. `agy --help`: -p/--print runs one prompt non-interactively;
+// -i/--prompt-interactive runs an initial prompt and stays interactive;
+// --dangerously-skip-permissions auto-approves tool permission requests.
+// Live probes (authenticated): headless -p AUTO-DENIES permission-gated
+// tools ("a tool required the \"read_file\" permission that headless mode
+// cannot prompt for, so it was auto-denied") — even reading gg's context
+// files, which live outside the workspace; --mode accept-edits does NOT
+// lift the denial; there is no CLI allowlist flag (only settings.json
+// permissions.allow, user config gg must not edit). With
+// --dangerously-skip-permissions the outside-workspace read AND the
+// GG_MESSAGE_FILE write both succeeded exactly. --sandbox was probed and
+// REJECTED: it polluted stdout with agent narration. Because the capture
+// lanes bypass agy's own permission prompts they are OptIn (wizard shows
+// them unchecked); the interactive conflict default needs no flag — agy
+// prompts in-terminal under gg's handover.
+const agyConflictPrompt = `"A git <env:GG_OP> operation is paused with conflicts in this repository. Read the context file at <env:GG_CONTEXT_FILE> for the operation's parties and the conflicted paths. Inspect both sides' history to understand intent, resolve each conflict by editing the files, then run git add on each resolved file. Do NOT run git commit or any --continue command - stop when everything is staged and summarize what you chose."`
+
+const agyConflictCommand = `<bin> --prompt-interactive ` + agyConflictPrompt
+
+const agyConflictYoloCommand = agyConflictCommand + ` --dangerously-skip-permissions`
+
+// The capture lanes use the file channel (the Junie contract: the engine
+// prefers a non-empty $GG_MESSAGE_FILE over stdout) because agy's -p stdout
+// was observed narration-prefixed in one probe and clean in another — not
+// reliably parseable — while the probed file write delivered the payload
+// byte-exact.
+const agyCommitPrompt = `"Write a git commit message for the staged changes into the file at <env:GG_MESSAGE_FILE> (an absolute path outside the repository). The change summary is at <env:GG_CONTEXT_FILE> and the full diff at <env:GG_STAGED_DIFF>. Write ONLY the commit message to that file: a concise imperative subject line (max ~72 chars), a blank line, then a short body. Do not run git commit and do not modify any other files."`
+
+const agyCommitCommand = `<bin> -p ` + agyCommitPrompt + ` --dangerously-skip-permissions`
+
+const agyReviewPrompt = `"You are reviewing a code change. The full diff to review is in the file at <env:GG_REVIEW_DIFF> (range <range>). Write a concise code review - findings with severity and a short summary - into the file at <env:GG_MESSAGE_FILE> (an absolute path outside the repository). Do NOT modify any repository files and do NOT run git commit."`
+
+const agyReviewCommand = `<bin> -p ` + agyReviewPrompt + ` --dangerously-skip-permissions`
+
 // Builtins is the hardcoded catalog. Stage 1 shipped conflict templates;
 // stage 2 added commit_message capture templates; stage 3 adds review
 // capture templates.
@@ -241,7 +306,29 @@ func Builtins() []Tool {
 			},
 		},
 		{
+			ID: "codex", Label: "OpenAI Codex", Bins: []string{"codex"},
+			Commands: []CommandTemplate{
+				{Category: CatConflict, Name: "Codex", Mode: ModeTerminal, Command: codexConflictCommand},
+				{Category: CatConflict, Name: "Codex (yolo)", Mode: ModeTerminal, OptIn: true, Command: codexConflictYoloCommand},
+				{Category: CatCommitMessage, Name: "Codex", Mode: ModeCapture, Command: codexCommitCommand},
+				{Category: CatReview, Name: "Codex", Mode: ModeCapture, Command: codexReviewCommand},
+			},
+		},
+		{
+			ID: "antigravity", Label: "Antigravity", Bins: []string{"agy"},
+			Commands: []CommandTemplate{
+				{Category: CatConflict, Name: "Antigravity", Mode: ModeTerminal, Command: agyConflictCommand},
+				{Category: CatConflict, Name: "Antigravity (yolo)", Mode: ModeTerminal, OptIn: true, Command: agyConflictYoloCommand},
+				{Category: CatCommitMessage, Name: "Antigravity", Mode: ModeCapture, OptIn: true, Command: agyCommitCommand},
+				{Category: CatReview, Name: "Antigravity", Mode: ModeCapture, OptIn: true, Command: agyReviewCommand},
+			},
+		},
+		{
+			// ExtraProbes covers the standard installer's location: kimi's
+			// PATH entry lives in a shell rc file, so a gg launched another
+			// way (desktop entry, another shell) would otherwise miss it.
 			ID: "kimi", Label: "Kimi Code", Bins: []string{"kimi"},
+			ExtraProbes: []string{"~/.kimi-code/bin/kimi"},
 			Commands: []CommandTemplate{
 				{Category: CatConflict, Name: "Kimi", Mode: ModeTerminal, Command: kimiConflictCommand},
 				{Category: CatCommitMessage, Name: "Kimi", Mode: ModeCapture, Command: kimiCommitCommand},
@@ -269,10 +356,17 @@ type Detection struct {
 // Detect probes the catalog with injected lookups (exec.LookPath / os.Stat in
 // production — the clipboard nativeArgv seam pattern) so tests never touch the
 // developer's machine. First Bins hit wins; ExtraProbes are consulted only
-// when no Bins name resolves.
-func Detect(look func(string) (string, error), stat func(string) (os.FileInfo, error)) []Detection {
+// when no Bins name resolves. A probe with a "~/" prefix expands against
+// home (empty home skips it — the agentinit hermeticity rule); this covers
+// installs whose PATH entry lives only in a shell rc file, like Kimi Code's
+// ~/.kimi-code/bin.
+func Detect(look func(string) (string, error), stat func(string) (os.FileInfo, error), home string) []Detection {
+	return detectIn(Builtins(), look, stat, home)
+}
+
+func detectIn(tools []Tool, look func(string) (string, error), stat func(string) (os.FileInfo, error), home string) []Detection {
 	var out []Detection
-	for _, tl := range Builtins() {
+	for _, tl := range tools {
 		bin := ""
 		for _, b := range tl.Bins {
 			if _, err := look(b); err == nil {
@@ -282,6 +376,12 @@ func Detect(look func(string) (string, error), stat func(string) (os.FileInfo, e
 		}
 		if bin == "" {
 			for _, p := range tl.ExtraProbes {
+				if strings.HasPrefix(p, "~/") {
+					if home == "" {
+						continue
+					}
+					p = filepath.Join(home, p[2:])
+				}
 				if _, err := stat(p); err == nil {
 					bin = p
 					break
