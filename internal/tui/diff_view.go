@@ -542,14 +542,22 @@ func compareDiffKey(left, right model.Endpoint, path string) string {
 
 // loadCompareDiffCmd computes one file's diff between two endpoints. Each side
 // resolves through ResolveBytes (commit / staged / unstaged); an "A" status has
-// no old side, a "D" status no new side. The diff view is already constructed
-// by the caller.
+// no old side, a "D" status no new side. The result fills a PRIVATE view (the
+// loadCommitDiffCmd pattern) applied by the tag-gated diffMsg handler — the
+// closure must never touch the live layer, or a superseded load (file-stepping
+// outrunning a slow read; easy when cached commit↔commit neighbors answer
+// instantly) clobbers the file the view has since moved to. Scalars snapshot
+// the layer the caller just built (context/rev vary per caller).
 func (m Model) loadCompareDiffCmd(left, right model.Endpoint, line contentLine) tea.Cmd {
 	svc := m.svc
 	differ := m.diffDiffer()
 	body := m.diffBodyRows()
+	width, _ := m.overlayDims()
 	tag := "cmp:" + left.CacheTag() + ":" + right.CacheTag() + ":" + line.path
-	v := m.diffLayer()
+	v := &diffView{title: line.path, partial: m.diffPartial, long: m.diffLong, width: width}
+	if dv := m.diffLayer(); dv != nil {
+		v.context, v.rev = dv.context, dv.rev
+	}
 	key := compareDiffKey(left, right, line.path)
 
 	oldP := line.path

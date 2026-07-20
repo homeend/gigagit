@@ -130,6 +130,18 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   (`ExtraProbes` gained `~/` expansion).
 
 ### Fixed
+- **File-stepping through a comparison no longer shows the wrong file's
+  diff.** In a compare files view (marked commits, branch compare, full-tree
+  mode, or the finder's HEAD ↔ working tree diff), stepping between files
+  with N/P/Home/End could leave the diff view showing a *different* file's
+  content under the new file's title — stepping then looked stuck ("no
+  next/previous file" cues while the tree clearly had more, n/p walking the
+  wrong change blocks). The compare loader mutated the live diff view from
+  its async closure with no staleness gate, so a superseded load landing
+  late (easy: already-viewed commit↔commit neighbors answer instantly from
+  the diff cache while the abandoned load is still reading) overwrote the
+  file the view had since stepped to. It now fills a private view applied
+  only through the tag-gated result path, like every other diff loader.
 - **Deleting a remote branch no longer triggers a needless network probe.**
   `DeleteRemoteBranch` was unmapped in the post-op refresh table, so it fell
   through to "reload all sources" — and the tags reload auto-fired the
