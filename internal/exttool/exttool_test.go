@@ -371,3 +371,56 @@ func TestBuiltinsReviewTemplates(t *testing.T) {
 		t.Fatalf("junie prompt must be first after --task: %q", gj)
 	}
 }
+
+// TestCodexTemplates pins the verified codex shapes (codex-cli 0.144.6,
+// probed 2026-07-20): exec is the capture lane, the final message arrives
+// via --output-last-message (the native GG_MESSAGE_FILE channel), and the
+// file argument is double-quoted in the template so a temp path with spaces
+// cannot word-split — the first standalone <env:> use in the catalog.
+func TestCodexTemplates(t *testing.T) {
+	var codex Tool
+	for _, tl := range Builtins() {
+		if tl.ID == "codex" {
+			codex = tl
+		}
+	}
+	if codex.ID == "" {
+		t.Fatal("codex not in catalog")
+	}
+	byName := map[string]CommandTemplate{}
+	for _, ct := range codex.Commands {
+		byName[string(ct.Category)+"/"+ct.Name] = ct
+	}
+
+	commit := byName["commit_message/Codex"]
+	gen := GenerateCommandFor(commit, "codex", "linux")
+	if !strings.HasPrefix(gen, `codex exec "`) {
+		t.Fatalf("codex commit prompt not first after exec: %q", gen)
+	}
+	if !strings.Contains(gen, `--output-last-message "${GG_MESSAGE_FILE}"`) {
+		t.Fatalf("codex commit must write the quoted message file: %q", gen)
+	}
+	if !strings.Contains(gen, "--sandbox read-only") {
+		t.Fatalf("codex capture lanes must be read-only sandboxed: %q", gen)
+	}
+
+	review := byName["review/Codex"]
+	gr := GenerateCommandFor(review, "codex", "linux")
+	if !strings.Contains(gr, "${GG_REVIEW_DIFF}") || !strings.Contains(gr, "<range>") {
+		t.Fatalf("codex review must read GG_REVIEW_DIFF and label <range>: %q", gr)
+	}
+	if !strings.Contains(gr, `--output-last-message "${GG_MESSAGE_FILE}"`) {
+		t.Fatalf("codex review must write the quoted message file: %q", gr)
+	}
+
+	yolo := byName["conflict/Codex (yolo)"]
+	if !yolo.OptIn {
+		t.Fatal("codex yolo conflict must be OptIn")
+	}
+	if !strings.Contains(yolo.Command, "--dangerously-bypass-approvals-and-sandbox") {
+		t.Fatalf("codex yolo must bypass approvals: %q", yolo.Command)
+	}
+	if def := byName["conflict/Codex"]; def.OptIn || strings.Contains(def.Command, "--dangerously-") {
+		t.Fatalf("default codex conflict must not bypass approvals: %+v", def)
+	}
+}

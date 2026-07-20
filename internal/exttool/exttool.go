@@ -163,6 +163,35 @@ const junieReviewPrompt = `"You are reviewing a code change. The full diff to re
 
 const junieReviewCommand = `<bin> --task ` + junieReviewPrompt + ` --output-format json --skip-update-check`
 
+// Codex templates — verified against the REAL binary, codex-cli 0.144.6,
+// 2026-07-20. `codex --help`: positional [PROMPT] starts an interactive
+// session; --dangerously-bypass-approvals-and-sandbox exists on the
+// interactive CLI. `codex exec --help`: non-interactive; -s/--sandbox
+// read-only; -o/--output-last-message <FILE> "file where the last message
+// from the agent should be written". Live probe (authenticated, inside a
+// git repo, stdin /dev/null): exit 0, the message file held exactly the
+// final message, stdout carried only the final message (session log on
+// stderr). The trust gate fires only OUTSIDE a git repo, so no
+// --skip-git-repo-check.
+const codexConflictPrompt = `"A git <env:GG_OP> operation is paused with conflicts in this repository. Read the context file at <env:GG_CONTEXT_FILE> for the operation's parties and the conflicted paths. Inspect both sides' history to understand intent, resolve each conflict by editing the files, then run git add on each resolved file. Do NOT run git commit or any --continue command - stop when everything is staged and summarize what you chose and why."`
+
+const codexConflictCommand = `<bin> ` + codexConflictPrompt
+
+const codexConflictYoloCommand = codexConflictCommand + ` --dangerously-bypass-approvals-and-sandbox`
+
+// codexCommitCommand: the final assistant message IS the deliverable —
+// codex's harness (not the sandboxed agent) writes it to $GG_MESSAGE_FILE
+// via --output-last-message, which the engine prefers over stdout. The file
+// argument is double-quoted in the template (the first standalone <env:>
+// use in the catalog) so a temp path with spaces cannot word-split.
+const codexCommitPrompt = `"Write a git commit message for the staged changes. Read the summary at <env:GG_CONTEXT_FILE> (files changed, recent-commit style) and, for detail, the full diff at <env:GG_STAGED_DIFF>. Your final message must be ONLY the commit message and nothing else: a concise imperative subject line (max ~72 chars), a blank line, then a short body explaining what changed and why. No preamble, no markdown headings, no code fences. If the diff file notes it was truncated, inspect specific files with git."`
+
+const codexCommitCommand = `<bin> exec ` + codexCommitPrompt + ` --sandbox read-only --output-last-message "<env:GG_MESSAGE_FILE>"`
+
+const codexReviewPrompt = `"You are reviewing a code change. The full diff to review is in the file at <env:GG_REVIEW_DIFF> (range <range>). Your final message must be ONLY a concise code review - findings with severity and a short summary. Do NOT modify any repository files and do NOT run git commit."`
+
+const codexReviewCommand = `<bin> exec ` + codexReviewPrompt + ` --sandbox read-only --output-last-message "<env:GG_MESSAGE_FILE>"`
+
 // Builtins is the hardcoded catalog. Stage 1 shipped conflict templates;
 // stage 2 added commit_message capture templates; stage 3 adds review
 // capture templates.
@@ -199,6 +228,15 @@ func Builtins() []Tool {
 				{Category: CatConflict, Name: "Junie (yolo)", Mode: ModeTerminal, OptIn: true, Command: junieConflictYoloCommand},
 				{Category: CatCommitMessage, Name: "Junie", Mode: ModeCapture, Command: junieCommitCommand},
 				{Category: CatReview, Name: "Junie", Mode: ModeCapture, Command: junieReviewCommand},
+			},
+		},
+		{
+			ID: "codex", Label: "OpenAI Codex", Bins: []string{"codex"},
+			Commands: []CommandTemplate{
+				{Category: CatConflict, Name: "Codex", Mode: ModeTerminal, Command: codexConflictCommand},
+				{Category: CatConflict, Name: "Codex (yolo)", Mode: ModeTerminal, OptIn: true, Command: codexConflictYoloCommand},
+				{Category: CatCommitMessage, Name: "Codex", Mode: ModeCapture, Command: codexCommitCommand},
+				{Category: CatReview, Name: "Codex", Mode: ModeCapture, Command: codexReviewCommand},
 			},
 		},
 		{
