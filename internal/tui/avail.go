@@ -111,6 +111,18 @@ func (m Model) worktreeForBranch(branch string) (model.Worktree, bool) {
 	return model.Worktree{}, false
 }
 
+// worktreeAbsPathForBranch returns the absolute path of the worktree that has
+// branch checked out, if any — unlike worktreeForBranch it includes the
+// current worktree, since a copy action targets any checkout of the branch.
+func (m Model) worktreeAbsPathForBranch(branch string) (string, bool) {
+	for _, w := range m.worktrees {
+		if w.Branch == branch {
+			return w.Path, true
+		}
+	}
+	return "", false
+}
+
 // canSwitchBranch gates s: SmartSwitch to the selected branch. Switching to
 // the branch already checked out in this worktree: git refuses, so skip it.
 func (m Model) canSwitchBranch() bool {

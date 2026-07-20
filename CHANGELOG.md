@@ -9,6 +9,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Copy a worktree's absolute path from the `.` menu.** The Worktrees
+  panel's context menu gains "Copy absolute path" (the selected worktree's
+  root), and the Branches panel's copy rows gain "Copy worktree absolute
+  path" whenever the selected branch is checked out in a worktree —
+  including the current one.
 - **The "using-gg" agent skill now teaches agents to register THEMSELVES as
   gg tools.** A new "Registering yourself as a gg tool" section documents
   the `[[tools.command]]` block (schema, config locations, the global+repo
