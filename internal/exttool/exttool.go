@@ -10,6 +10,7 @@ package exttool
 
 import (
 	"os"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
@@ -221,10 +222,17 @@ type Detection struct {
 // Detect probes the catalog with injected lookups (exec.LookPath / os.Stat in
 // production — the clipboard nativeArgv seam pattern) so tests never touch the
 // developer's machine. First Bins hit wins; ExtraProbes are consulted only
-// when no Bins name resolves.
-func Detect(look func(string) (string, error), stat func(string) (os.FileInfo, error)) []Detection {
+// when no Bins name resolves. A probe with a "~/" prefix expands against
+// home (empty home skips it — the agentinit hermeticity rule); this covers
+// installs whose PATH entry lives only in a shell rc file, like Kimi Code's
+// ~/.kimi-code/bin.
+func Detect(look func(string) (string, error), stat func(string) (os.FileInfo, error), home string) []Detection {
+	return detectIn(Builtins(), look, stat, home)
+}
+
+func detectIn(tools []Tool, look func(string) (string, error), stat func(string) (os.FileInfo, error), home string) []Detection {
 	var out []Detection
-	for _, tl := range Builtins() {
+	for _, tl := range tools {
 		bin := ""
 		for _, b := range tl.Bins {
 			if _, err := look(b); err == nil {
@@ -234,6 +242,12 @@ func Detect(look func(string) (string, error), stat func(string) (os.FileInfo, e
 		}
 		if bin == "" {
 			for _, p := range tl.ExtraProbes {
+				if strings.HasPrefix(p, "~/") {
+					if home == "" {
+						continue
+					}
+					p = filepath.Join(home, p[2:])
+				}
 				if _, err := stat(p); err == nil {
 					bin = p
 					break

@@ -3,6 +3,7 @@ package exttool
 import (
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -30,7 +31,7 @@ func fakeStat(existing map[string]bool) func(string) (os.FileInfo, error) {
 }
 
 func TestDetectFindsBinsOnPath(t *testing.T) {
-	dets := Detect(fakeLook(map[string]string{"claude": "/usr/bin/claude", "meld": "/usr/bin/meld"}), fakeStat(nil))
+	dets := Detect(fakeLook(map[string]string{"claude": "/usr/bin/claude", "meld": "/usr/bin/meld"}), fakeStat(nil), "")
 	got := map[string]string{}
 	for _, d := range dets {
 		got[d.Tool.ID] = d.Bin
@@ -59,9 +60,35 @@ func TestDetectExtraProbeYieldsAbsolutePath(t *testing.T) {
 		t.Fatal("meld has no ExtraProbes; expected the Windows install path")
 	}
 	probe := meld.ExtraProbes[0]
-	dets := Detect(fakeLook(nil), fakeStat(map[string]bool{probe: true}))
+	dets := Detect(fakeLook(nil), fakeStat(map[string]bool{probe: true}), "")
 	if len(dets) != 1 || dets[0].Tool.ID != "meld" || dets[0].Bin != probe {
 		t.Fatalf("dets = %+v, want one meld detection with Bin=%q", dets, probe)
+	}
+}
+
+func TestDetectTildeProbeExpandsAgainstHome(t *testing.T) {
+	tool := Tool{ID: "fake", Label: "Fake", Bins: []string{"fakebin"},
+		ExtraProbes: []string{"~/.fake/bin/fake"},
+		Commands:    []CommandTemplate{{Category: CatConflict, Name: "Fake", Mode: ModeTerminal, Command: "<bin>"}}}
+
+	// ~/ probe expands against home; the expanded absolute path is the Bin.
+	want := filepath.Join("/home/u", ".fake", "bin", "fake")
+	dets := detectIn([]Tool{tool}, fakeLook(nil), fakeStat(map[string]bool{want: true}), "/home/u")
+	if len(dets) != 1 || dets[0].Bin != want {
+		t.Fatalf("dets = %+v, want one detection with Bin=%q", dets, want)
+	}
+
+	// Empty home skips ~/ probes entirely (hermeticity — tests must never
+	// resolve against the developer's real home).
+	dets = detectIn([]Tool{tool}, fakeLook(nil), fakeStat(map[string]bool{want: true}), "")
+	if len(dets) != 0 {
+		t.Fatalf("empty home must skip ~/ probes, got %+v", dets)
+	}
+
+	// A PATH hit still wins over the probe and keeps the bare name.
+	dets = detectIn([]Tool{tool}, fakeLook(map[string]string{"fakebin": "/usr/bin/fakebin"}), fakeStat(nil), "/home/u")
+	if len(dets) != 1 || dets[0].Bin != "fakebin" {
+		t.Fatalf("PATH hit must win with bare name, got %+v", dets)
 	}
 }
 
