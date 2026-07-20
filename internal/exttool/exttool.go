@@ -27,7 +27,9 @@ const (
 
 // Mode is how a command runs: terminal = suspend the TUI and hand over the
 // real terminal (interactive agents, GUI mergetools); capture = run headless
-// and capture stdout (stage 2+).
+// in the background while gg's TUI stays up with a "running" box (the
+// commit_message/review lanes, and headless conflict agents like `kimi -p`
+// that draw no terminal UI of their own).
 type Mode string
 
 const (
@@ -194,13 +196,19 @@ const kimiReviewCommand = `<bin> -p ` + kimiReviewPrompt
 // tokens only), including the sequencer-boundary clause.
 const kimiConflictPrompt = `"A git <env:GG_OP> operation is paused with conflicts in this repository. Read the context file at <env:GG_CONTEXT_FILE> for the operation's parties and the conflicted paths. Resolve each conflict by editing the files, then run git add on each resolved file. Do NOT run git commit or any --continue command -- stop when everything is staged and summarize what you chose."`
 
-// kimiConflictCommand is the conflict template: a headless `-p` run under
-// gg's terminal handover. Kimi has no "start interactive mode with the
-// prompt pre-submitted" flag, and `-y`/`--auto` are REJECTED in combination
-// with `-p` ("Cannot combine --prompt with --yolo", 0.27.0) — but print mode
-// needs neither: it approves the edits itself. Verified end-to-end
-// 2026-07-20 (kimi 0.27.0): against a real paused merge, `kimi -p` read
-// $GG_CONTEXT_FILE, edited the conflicted file, ran `git add`, and exited 0.
+// kimiConflictCommand is the conflict template: a headless `-p` run. Kimi
+// has no "start interactive mode with the prompt pre-submitted" flag, and
+// `-y`/`--auto` are REJECTED in combination with `-p` ("Cannot combine
+// --prompt with --yolo", 0.27.0) — but print mode needs neither: it approves
+// the edits itself. Verified end-to-end 2026-07-20 (kimi 0.27.0): against a
+// real paused merge, `kimi -p` read $GG_CONTEXT_FILE, edited the conflicted
+// file, ran `git add`, and exited 0.
+//
+// The template is ModeCapture, not the terminal handover the other conflict
+// agents use: `kimi -p` draws no UI until its final response, so under a
+// handover the user stares at a dead screen for minutes. Capture keeps gg's
+// TUI up with a "running" box instead; kimi's stdout is only a work report
+// (see kimiCommitPrompt), so nothing is lost by not showing it live.
 const kimiConflictCommand = `<bin> -p ` + kimiConflictPrompt
 
 // Codex templates — verified against the REAL binary, codex-cli 0.144.6,
@@ -330,7 +338,7 @@ func Builtins() []Tool {
 			ID: "kimi", Label: "Kimi Code", Bins: []string{"kimi"},
 			ExtraProbes: []string{"~/.kimi-code/bin/kimi"},
 			Commands: []CommandTemplate{
-				{Category: CatConflict, Name: "Kimi", Mode: ModeTerminal, Command: kimiConflictCommand},
+				{Category: CatConflict, Name: "Kimi", Mode: ModeCapture, Command: kimiConflictCommand},
 				{Category: CatCommitMessage, Name: "Kimi", Mode: ModeCapture, Command: kimiCommitCommand},
 				{Category: CatReview, Name: "Kimi", Mode: ModeCapture, Command: kimiReviewCommand},
 			},

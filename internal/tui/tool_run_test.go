@@ -2,6 +2,7 @@ package tui
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -190,7 +191,7 @@ func TestToolScriptAndExecCmd(t *testing.T) {
 			t.Errorf("script must propagate the real exit code: %q", content)
 		}
 	}
-	cmd := toolExecCmd(script, "/tmp", []string{"GG_OP=merge"})
+	cmd := toolExecCmd(context.Background(), script, "/tmp", []string{"GG_OP=merge"})
 	if cmd.Dir != "/tmp" {
 		t.Errorf("Dir = %q", cmd.Dir)
 	}
@@ -345,28 +346,34 @@ func TestToolInterruptExitSignalDeath(t *testing.T) {
 	}
 }
 
-// TestToolDisposition pins the three shapes a run's exit can render as in
-// the operation log: a clean exit, an interrupt-quit (folded to the friendly
+// TestToolDisposition pins the shapes a run's exit can render as in the
+// operation log: a clean exit, an interrupt-quit (folded to the friendly
 // label regardless of whether it arrived as a 128+code exit or a raw signal
-// death), and a genuine non-interrupt failure (the raw Go error text).
+// death), an esc-cancelled capture run, and a genuine non-interrupt failure
+// (the raw Go error text).
 func TestToolDisposition(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX-only: relies on sh -c exit codes")
 	}
-	if got := toolDisposition(nil); got != "ok" {
+	if got := toolDispositionErr(nil); got != "ok" {
 		t.Errorf("nil err disposition = %q, want %q", got, "ok")
 	}
 	interruptErr := exec.Command("sh", "-c", "exit 130").Run()
-	if got := toolDisposition(interruptErr); got != "interrupted (treated as quit)" {
+	if got := toolDispositionErr(interruptErr); got != "interrupted (treated as quit)" {
 		t.Errorf("130-exit disposition = %q, want %q", got, "interrupted (treated as quit)")
 	}
 	sigErr := exec.Command("sh", "-c", "kill -INT $$").Run()
-	if got := toolDisposition(sigErr); got != "interrupted (treated as quit)" {
+	if got := toolDispositionErr(sigErr); got != "interrupted (treated as quit)" {
 		t.Errorf("signal-death disposition = %q, want %q", got, "interrupted (treated as quit)")
 	}
 	failErr := exec.Command("sh", "-c", "exit 7").Run()
-	if got := toolDisposition(failErr); got != "exit status 7" {
+	if got := toolDispositionErr(failErr); got != "exit status 7" {
 		t.Errorf("failure disposition = %q, want %q", got, "exit status 7")
+	}
+	// A cancelled capture run reports as a quit, never as its raw kill error.
+	killErr := exec.Command("sh", "-c", "kill -KILL $$").Run()
+	if got := toolDisposition(toolFinishedMsg{err: killErr, canceled: true}); got != "cancelled (esc)" {
+		t.Errorf("cancelled capture disposition = %q, want %q", got, "cancelled (esc)")
 	}
 }
 
@@ -405,5 +412,84 @@ func TestLogToolExit(t *testing.T) {
 		if !strings.Contains(line, `"exit_code":7`) {
 			t.Errorf("log line missing exit code: %s", line)
 		}
+	}
+}
+
+// TestExecCaptureToolCmd drives the background capture lane end to end: the
+// script runs with no terminal handover, its combined output rides back on
+// the message (the failure box's only view into what the tool said), and a
+// real non-zero exit is a failure — not folded to a quit.
+func TestExecCaptureToolCmd(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX-only: exercises the .sh lane via $SHELL")
+	}
+	m := New(nil)
+	m.currentWorktree = t.TempDir()
+	pending := &pendingToolRun{
+		tc:       config.ToolCommand{Name: "Kimi", Mode: "capture"},
+		resolved: "echo out; echo err >&2; exit 3",
+	}
+	msg, ok := m.execCaptureToolCmd(context.Background(), pending)().(toolFinishedMsg)
+	if !ok {
+		t.Fatal("capture cmd must return a toolFinishedMsg")
+	}
+	defer os.Remove(msg.script)
+	if msg.err == nil {
+		t.Fatal("exit 3 must surface as an error")
+	}
+	if msg.canceled {
+		t.Error("a plain failure must not be marked canceled")
+	}
+	out := string(msg.output)
+	if !strings.Contains(out, "out") || !strings.Contains(out, "err") {
+		t.Errorf("combined output = %q, want both stdout and stderr", out)
+	}
+}
+
+// TestExecCaptureToolCmdCancel pins the esc path: cancelling the context
+// kills the in-flight script and marks the message canceled (a user quit),
+// so toolFinished never shows an error box for it.
+func TestExecCaptureToolCmdCancel(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX-only: exercises the .sh lane via $SHELL")
+	}
+	m := New(nil)
+	m.currentWorktree = t.TempDir()
+	pending := &pendingToolRun{
+		tc:       config.ToolCommand{Name: "Kimi", Mode: "capture"},
+		resolved: "sleep 30",
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan toolFinishedMsg, 1)
+	go func() { done <- m.execCaptureToolCmd(ctx, pending)().(toolFinishedMsg) }()
+	time.Sleep(200 * time.Millisecond) // let the script actually start
+	cancel()
+	select {
+	case msg := <-done:
+		defer os.Remove(msg.script)
+		if !msg.canceled {
+			t.Error("a ctx-killed run must be marked canceled")
+		}
+		if msg.err == nil {
+			t.Error("the kill itself should still surface as err (classified by canceled)")
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("cancelled capture run did not return")
+	}
+}
+
+// TestOutputTail pins the failure-box rendering: empty output renders as
+// nothing, a long output keeps only its last n lines.
+func TestOutputTail(t *testing.T) {
+	if got := outputTail(nil, 8); got != "" {
+		t.Errorf("empty output tail = %q, want %q", got, "")
+	}
+	var b strings.Builder
+	for i := 1; i <= 10; i++ {
+		fmt.Fprintf(&b, "line %d\n", i)
+	}
+	got := outputTail([]byte(b.String()), 3)
+	if !strings.Contains(got, "line 8") || !strings.Contains(got, "line 10") || strings.Contains(got, "line 7") {
+		t.Errorf("tail = %q, want exactly lines 8-10", got)
 	}
 }

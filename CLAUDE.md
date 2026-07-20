@@ -11,6 +11,14 @@ shells out to the system `git` binary rather than reimplementing git.
 
 Module: `github.com/homeend/gigagit` · Go 1.26.
 
+## Workflow
+
+**Always develop features in a worktree.** Create a dedicated worktree with a
+feature branch (`gg branch create <feat/...>` + `gg worktree add --branch
+<feat/...>`), commit the work there, then `gg merge` it back into `main` and
+remove the worktree. Never build feature work up uncommitted (or commit it
+directly) in the main checkout.
+
 ## Architecture
 
 A **frontend-agnostic core engine** drives three frontends over thin git verbs:

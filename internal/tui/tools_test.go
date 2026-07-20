@@ -13,7 +13,7 @@ func toolCfg(cmds ...config.ToolCommand) Model {
 	return m
 }
 
-func TestToolCommandsFiltersInvalidAndCapture(t *testing.T) {
+func TestToolCommandsFiltersInvalid(t *testing.T) {
 	m := toolCfg(
 		config.ToolCommand{Category: "conflict", Name: "OK", Mode: "terminal", Command: "x <op>"},
 		config.ToolCommand{Category: "conflict", Name: "Cap", Mode: "capture", Command: "x"},
@@ -22,14 +22,14 @@ func TestToolCommandsFiltersInvalidAndCapture(t *testing.T) {
 		config.ToolCommand{Category: "commit_message", Name: "Other", Mode: "terminal", Command: "x"},
 	)
 	got := m.toolCommands("conflict")
-	if len(got) != 1 || got[0].Name != "OK" {
-		t.Fatalf("toolCommands = %+v, want just OK", got)
+	if len(got) != 2 || got[0].Name != "OK" || got[1].Name != "Cap" {
+		t.Fatalf("toolCommands = %+v, want OK and Cap (conflict capture is live)", got)
 	}
-	if len(m.toolNoted) != 3 { // Cap, BadTok, BadCat noted once each; Other is valid, different category
-		t.Errorf("noted %d blocks, want 3: %v", len(m.toolNoted), m.toolNoted)
+	if len(m.toolNoted) != 2 { // BadTok, BadCat noted once each; Other is valid, different category
+		t.Errorf("noted %d blocks, want 2: %v", len(m.toolNoted), m.toolNoted)
 	}
 	m.toolCommands("conflict") // second call must not re-note
-	if len(m.toolNoted) != 3 {
+	if len(m.toolNoted) != 2 {
 		t.Errorf("re-noting on repeat call: %v", m.toolNoted)
 	}
 }
