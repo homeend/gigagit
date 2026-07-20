@@ -10,6 +10,11 @@ Supporting a new tool is **one `Tool` entry in `exttool.Builtins()`**
 picker, approval gate, execution, and logging all pick it up automatically;
 no TUI/config code changes are needed for a standard addition.
 
+Scope note: this skill owns the MECHANICS of running an external process
+(an external tool is not necessarily an agent). What an AI agent is
+expected to DO per category — the task contracts the prompts must encode —
+is owned by `defining-agentic-tasks`; consult it when the tool is an agent.
+
 ## Checklist
 
 1. **Verify against the REAL binary first, not web docs.** Run

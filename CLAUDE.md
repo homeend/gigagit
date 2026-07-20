@@ -116,8 +116,11 @@ engine→TUI→CLI wiring checklist for a new operation/command;
 `writing-e2e-scenarios` — schema + operation contracts for authoring
 `e2e/scenarios/*.toml`; `adding-external-tools` — the checklist for adding
 a new agent/tool to the `exttool` catalog pool (verify against the real
-binary, template rules, OptIn variants). Use them whenever adding a
-feature, TUI surface, e2e scenario, or external tool.
+binary, template rules, OptIn variants); `defining-agentic-tasks` — what an
+AI agent is expected to DO per task category (conflict / commit_message /
+review contracts, the prompts that encode them, and the using-gg sync rule
+for any agent-facing surface change). Use them whenever adding a
+feature, TUI surface, e2e scenario, external tool, or agentic task.
 
 **After each completed stage/feature, update the project docs:**
 `CHANGELOG.md` (always), `README.md` (if user-facing surface changed), this
