@@ -192,6 +192,41 @@ const codexReviewPrompt = `"You are reviewing a code change. The full diff to re
 
 const codexReviewCommand = `<bin> exec ` + codexReviewPrompt + ` --sandbox read-only --output-last-message "<env:GG_MESSAGE_FILE>"`
 
+// Antigravity templates — verified against the REAL binary, agy 1.1.4,
+// 2026-07-20. `agy --help`: -p/--print runs one prompt non-interactively;
+// -i/--prompt-interactive runs an initial prompt and stays interactive;
+// --dangerously-skip-permissions auto-approves tool permission requests.
+// Live probes (authenticated): headless -p AUTO-DENIES permission-gated
+// tools ("a tool required the \"read_file\" permission that headless mode
+// cannot prompt for, so it was auto-denied") — even reading gg's context
+// files, which live outside the workspace; --mode accept-edits does NOT
+// lift the denial; there is no CLI allowlist flag (only settings.json
+// permissions.allow, user config gg must not edit). With
+// --dangerously-skip-permissions the outside-workspace read AND the
+// GG_MESSAGE_FILE write both succeeded exactly. --sandbox was probed and
+// REJECTED: it polluted stdout with agent narration. Because the capture
+// lanes bypass agy's own permission prompts they are OptIn (wizard shows
+// them unchecked); the interactive conflict default needs no flag — agy
+// prompts in-terminal under gg's handover.
+const agyConflictPrompt = `"A git <env:GG_OP> operation is paused with conflicts in this repository. Read the context file at <env:GG_CONTEXT_FILE> for the operation's parties and the conflicted paths. Inspect both sides' history to understand intent, resolve each conflict by editing the files, then run git add on each resolved file. Do NOT run git commit or any --continue command - stop when everything is staged and summarize what you chose."`
+
+const agyConflictCommand = `<bin> --prompt-interactive ` + agyConflictPrompt
+
+const agyConflictYoloCommand = agyConflictCommand + ` --dangerously-skip-permissions`
+
+// The capture lanes use the file channel (the Junie contract: the engine
+// prefers a non-empty $GG_MESSAGE_FILE over stdout) because agy's -p stdout
+// was observed narration-prefixed in one probe and clean in another — not
+// reliably parseable — while the probed file write delivered the payload
+// byte-exact.
+const agyCommitPrompt = `"Write a git commit message for the staged changes into the file at <env:GG_MESSAGE_FILE> (an absolute path outside the repository). The change summary is at <env:GG_CONTEXT_FILE> and the full diff at <env:GG_STAGED_DIFF>. Write ONLY the commit message to that file: a concise imperative subject line (max ~72 chars), a blank line, then a short body. Do not run git commit and do not modify any other files."`
+
+const agyCommitCommand = `<bin> -p ` + agyCommitPrompt + ` --dangerously-skip-permissions`
+
+const agyReviewPrompt = `"You are reviewing a code change. The full diff to review is in the file at <env:GG_REVIEW_DIFF> (range <range>). Write a concise code review - findings with severity and a short summary - into the file at <env:GG_MESSAGE_FILE> (an absolute path outside the repository). Do NOT modify any repository files and do NOT run git commit."`
+
+const agyReviewCommand = `<bin> -p ` + agyReviewPrompt + ` --dangerously-skip-permissions`
+
 // Builtins is the hardcoded catalog. Stage 1 shipped conflict templates;
 // stage 2 added commit_message capture templates; stage 3 adds review
 // capture templates.
@@ -237,6 +272,15 @@ func Builtins() []Tool {
 				{Category: CatConflict, Name: "Codex (yolo)", Mode: ModeTerminal, OptIn: true, Command: codexConflictYoloCommand},
 				{Category: CatCommitMessage, Name: "Codex", Mode: ModeCapture, Command: codexCommitCommand},
 				{Category: CatReview, Name: "Codex", Mode: ModeCapture, Command: codexReviewCommand},
+			},
+		},
+		{
+			ID: "antigravity", Label: "Antigravity", Bins: []string{"agy"},
+			Commands: []CommandTemplate{
+				{Category: CatConflict, Name: "Antigravity", Mode: ModeTerminal, Command: agyConflictCommand},
+				{Category: CatConflict, Name: "Antigravity (yolo)", Mode: ModeTerminal, OptIn: true, Command: agyConflictYoloCommand},
+				{Category: CatCommitMessage, Name: "Antigravity", Mode: ModeCapture, OptIn: true, Command: agyCommitCommand},
+				{Category: CatReview, Name: "Antigravity", Mode: ModeCapture, OptIn: true, Command: agyReviewCommand},
 			},
 		},
 		{

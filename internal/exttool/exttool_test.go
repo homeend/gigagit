@@ -227,13 +227,26 @@ func TestJunieYoloTemplates(t *testing.T) {
 	}
 }
 
-// TestOptInMarksExactlyTheYoloVariants: OptIn is reserved for the aggressive
-// variants; every base template (and Meld, not an agent) stays default-in.
-func TestOptInMarksExactlyTheYoloVariants(t *testing.T) {
+// TestOptInMarksExactlyThePermissionBypassVariants: OptIn's meaning is "this
+// template bypasses the agent's own permission prompts" — the wizard shows
+// such rows unchecked. That is exactly the set of templates carrying a
+// bypass flag: --dangerously-* (claude, codex, antigravity), --yolo (kimi),
+// --brave (junie). Name-based "(yolo)" matching stopped being the rule when
+// antigravity's capture lanes (which NEED the bypass to work headless at
+// all) joined as OptIn rows without the suffix.
+func TestOptInMarksExactlyThePermissionBypassVariants(t *testing.T) {
+	bypass := func(cmd string) bool {
+		return strings.Contains(cmd, "--dangerously-") ||
+			strings.Contains(cmd, "--yolo") ||
+			strings.Contains(cmd, "--brave")
+	}
 	for _, tl := range Builtins() {
 		for _, ct := range tl.Commands {
-			if want := strings.Contains(ct.Name, "(yolo)"); ct.OptIn != want {
-				t.Errorf("%s/%s: OptIn = %v, want %v (OptIn ⇔ a yolo variant)", tl.ID, ct.Name, ct.OptIn, want)
+			if want := bypass(ct.Command); ct.OptIn != want {
+				t.Errorf("%s/%s: OptIn = %v, want %v (OptIn ⇔ a permission-bypass flag)", tl.ID, ct.Name, ct.OptIn, want)
+			}
+			if strings.Contains(ct.Name, "(yolo)") && !ct.OptIn {
+				t.Errorf("%s/%s: a (yolo)-named variant must be OptIn", tl.ID, ct.Name)
 			}
 		}
 	}
@@ -292,9 +305,6 @@ func TestBuiltinsCommitMessageTemplates(t *testing.T) {
 			}
 			if c.Mode != ModeCapture {
 				t.Fatalf("%s: commit_message must be capture", c.Name)
-			}
-			if c.OptIn {
-				t.Fatalf("%s: no yolo for capture lane", c.Name)
 			}
 			switch tl.ID {
 			case "claude":
@@ -422,5 +432,61 @@ func TestCodexTemplates(t *testing.T) {
 	}
 	if def := byName["conflict/Codex"]; def.OptIn || strings.Contains(def.Command, "--dangerously-") {
 		t.Fatalf("default codex conflict must not bypass approvals: %+v", def)
+	}
+}
+
+// TestAntigravityTemplates pins the verified agy shapes (agy 1.1.4, probed
+// 2026-07-20). Headless -p AUTO-DENIES every permission-gated tool (even
+// read_file on gg's context files, which live outside the workspace);
+// --mode accept-edits does not lift it and agy has no CLI allowlist flag.
+// The only per-run remedy is --dangerously-skip-permissions, so BOTH
+// capture templates carry it and are OptIn — the pairing is the safety
+// property. The conflict default runs interactively (TTY) where agy
+// prompts normally, so it carries no bypass flag.
+func TestAntigravityTemplates(t *testing.T) {
+	var agy Tool
+	for _, tl := range Builtins() {
+		if tl.ID == "antigravity" {
+			agy = tl
+		}
+	}
+	if agy.ID == "" {
+		t.Fatal("antigravity not in catalog")
+	}
+	if len(agy.Bins) != 1 || agy.Bins[0] != "agy" {
+		t.Fatalf("antigravity Bins = %v, want [agy]", agy.Bins)
+	}
+	for _, ct := range agy.Commands {
+		if ct.Mode == ModeCapture {
+			if !ct.OptIn || !strings.Contains(ct.Command, "--dangerously-skip-permissions") {
+				t.Errorf("%s/%s: capture lane must pair OptIn with --dangerously-skip-permissions: OptIn=%v cmd=%q",
+					ct.Category, ct.Name, ct.OptIn, ct.Command)
+			}
+			if !strings.Contains(ct.Command, "${GG_MESSAGE_FILE}") && !strings.Contains(ct.Command, "<env:GG_MESSAGE_FILE>") {
+				t.Errorf("%s/%s: capture lane must use the GG_MESSAGE_FILE channel: %q", ct.Category, ct.Name, ct.Command)
+			}
+		}
+	}
+	byName := map[string]CommandTemplate{}
+	for _, ct := range agy.Commands {
+		byName[string(ct.Category)+"/"+ct.Name] = ct
+	}
+	def := byName["conflict/Antigravity"]
+	if def.OptIn || strings.Contains(def.Command, "--dangerously-") {
+		t.Fatalf("default conflict lane must not bypass permissions: %+v", def)
+	}
+	if !strings.Contains(def.Command, "--prompt-interactive") {
+		t.Fatalf("conflict lane must pre-submit the prompt interactively: %q", def.Command)
+	}
+	gen := GenerateCommandFor(byName["commit_message/Antigravity"], "agy", "linux")
+	if !strings.HasPrefix(gen, `agy -p "`) {
+		t.Fatalf("agy commit prompt not first after -p: %q", gen)
+	}
+	if !strings.Contains(gen, "${GG_CONTEXT_FILE}") || !strings.Contains(gen, "${GG_STAGED_DIFF}") {
+		t.Fatalf("agy commit missing input env refs: %q", gen)
+	}
+	gr := GenerateCommandFor(byName["review/Antigravity"], "agy", "linux")
+	if !strings.Contains(gr, "${GG_REVIEW_DIFF}") || !strings.Contains(gr, "<range>") {
+		t.Fatalf("agy review must read GG_REVIEW_DIFF and label <range>: %q", gr)
 	}
 }
