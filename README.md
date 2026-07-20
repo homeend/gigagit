@@ -477,11 +477,11 @@ skips automatically when stdin is not a terminal).
 
 Settings (`,`) → **"External tools…"** probes PATH (plus a few known install
 locations) for supported agents/mergetools — currently Claude Code, Junie,
-and Meld — and lets you check off which ones to write as default commands
-into the **global** config (`~/.config/gg/config.toml`); rows already
-configured are shown checked and skipped, so the wizard never overwrites an
-edited command. Manual commands use the same shape, in either the global
-config or the repo `.gg.toml`.
+Meld, OpenAI Codex, Antigravity, and Kimi Code — and lets you check off
+which ones to write as default commands into the **global** config
+(`~/.config/gg/config.toml`); rows already configured are shown checked and
+skipped, so the wizard never overwrites an edited command. Manual commands
+use the same shape, in either the global config or the repo `.gg.toml`.
 
 In the conflict window (`x`), press **`t`** (shown only when at least one
 `conflict` command is configured) to pick one: repo-level agent commands

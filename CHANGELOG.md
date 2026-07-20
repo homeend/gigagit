@@ -97,6 +97,24 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   (destination defaults to the entry's own path; `overwrite` guard; identical
   content is a reported no-op). All 13 tools now carry read-only/destructive
   annotations.
+- External-tools catalog: OpenAI Codex, Antigravity (`agy`), and Kimi Code
+  entries for conflict resolution, commit-message generation, and review —
+  all shapes verified against the real binaries (codex-cli 0.144.6,
+  agy 1.1.4, kimi 0.27.0). Codex captures via its native
+  `--output-last-message` file channel; Kimi and Antigravity deliver
+  through `$GG_MESSAGE_FILE`. Antigravity's commit/review rows are
+  **opt-in** (unchecked in the wizard): headless `agy -p` auto-denies every
+  permission-gated tool, so those templates must carry
+  `--dangerously-skip-permissions`. The wizard never overwrites existing
+  `[[tools.command]]` blocks — already-configured categories pick up the
+  new tools by checking their new rows.
+- Agent-skills picker: detects Antigravity (`~/.gemini/antigravity-cli`)
+  and Kimi Code (`~/.kimi-code`) and installs the using-gg skill into their
+  global skill directories (`~/.gemini/config/skills/`,
+  `~/.kimi-code/skills/`).
+- External-tool detection now finds Kimi Code's standard install
+  (`~/.kimi-code/bin/kimi`) even when the shell PATH export is missing
+  (`ExtraProbes` gained `~/` expansion).
 
 ### Fixed
 - **Deleting a remote branch no longer triggers a needless network probe.**
