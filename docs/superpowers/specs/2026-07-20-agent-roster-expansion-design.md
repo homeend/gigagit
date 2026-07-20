@@ -87,8 +87,14 @@ double-quoted prompt text; prompts state the sequencer boundary (edit +
   `<bin> exec "<codexCommitPrompt>" --sandbox read-only --output-last-message "<env:GG_MESSAGE_FILE>"`
   — the native file channel: Codex's harness (not the sandboxed agent)
   writes the final message to `$GG_MESSAGE_FILE`, which the engine prefers
-  over stdout, so `codex exec`'s log-stream stdout is irrelevant.
-  read-only sandbox still allows reading `$GG_CONTEXT_FILE`/`$GG_STAGED_DIFF`.
+  over stdout. read-only sandbox still allows reading
+  `$GG_CONTEXT_FILE`/`$GG_STAGED_DIFF`.
+  **VERIFIED 2026-07-20 (codex 0.144.6 authenticated, live probe):** run
+  inside a git repo with stdin `/dev/null` → exit 0, the message file holds
+  exactly the final message (no decoration), stdout carries only the final
+  message (session log goes to stderr). The trust gate ("Not inside a
+  trusted directory") fires only OUTSIDE a git repo — gg always runs the
+  lane in a repo, so no `--skip-git-repo-check` is needed.
 - **review** (`Name: "Codex"`, ModeCapture): same shape with the review
   prompt (reads `$GG_REVIEW_DIFF`, labels `(range <range>)`) and
   `--output-last-message "<env:GG_MESSAGE_FILE>"`.
@@ -189,15 +195,18 @@ user's shell sourced the export line; gg launched another way would miss it.
    `gemini skills list` discovery check for Part 1; all `--help` evidence
    quoted with version + date in comments next to each entry (the
    adding-external-tools rule).
-2. **Auth-needed:** the user authenticates the CLIs they want fully
-   verified (`codex login`, first-run Gemini auth). Then:
-   `codex exec "Reply with exactly: ok" --sandbox read-only
-   --output-last-message <tmp>` (file content check); `gemini -p "Reply with
-   exactly: ok" --output-format json` (envelope shape).
+2. **Auth-needed:** only Gemini remains — after first-run Gemini auth:
+   `gemini -p "Reply with exactly: ok" --output-format json` (envelope
+   field names for the Part 3 parser cases).
    **Kimi is DONE** (2026-07-20, kimi 0.27.0 authenticated): stdout
    decoration (`• ` prefix) confirmed → file channel primary;
    outside-workspace read+write under plain `-p` confirmed; headless
    `git add` under plain `-p` confirmed. No Kimi probes remain.
+   **Codex is DONE** (2026-07-20, codex 0.144.6 authenticated): exec
+   file-channel probe green (exact message in file, clean stdout, logs on
+   stderr, git-repo trust satisfied). The interactive conflict lane rests
+   on the `--help` positional-PROMPT evidence (interactive sessions cannot
+   be probed headlessly), like Claude's.
 3. A template whose auth-needed probe cannot run ships in its primary shape
    with the entry comment stating what remains unverified; the changelog
    says the same. Pre-authorized fallbacks above are applied only on
