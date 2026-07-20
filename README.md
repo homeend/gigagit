@@ -474,7 +474,7 @@ skips automatically when stdin is not a terminal).
 
 Settings (`,`) → **"External tools…"** probes PATH (plus a few known install
 locations) for supported agents/mergetools — currently Claude Code, Junie,
-and Meld — and lets you check off which ones to write as default commands
+Kimi Code, and Meld — and lets you check off which ones to write as default commands
 into the **global** config (`~/.config/gg/config.toml`); rows already
 configured are shown checked and skipped, so the wizard never overwrites an
 edited command. Manual commands use the same shape, in either the global
@@ -482,7 +482,7 @@ config or the repo `.gg.toml`.
 
 In the conflict window (`x`), press **`t`** (shown only when at least one
 `conflict` command is configured) to pick one: repo-level agent commands
-(Claude Code, Junie) are always listed while an op is paused, get a per-run
+(Claude Code, Junie, Kimi Code) are always listed while an op is paused, get a per-run
 temp **context file** — the paused op, source, target, and the conflicted
 paths, one per line — exposed as `<context-file>`/`GG_CONTEXT_FILE` plus ten
 more `GG_*` env vars, and hand over the terminal. Per-file commands (Meld)
@@ -518,10 +518,11 @@ stdout is parsed into a subject + body pair that fills the popup's editable
 fields; nothing commits until you press `ctrl+s` yourself. The same chooser,
 first-run approval, and per-repo remembering as conflict commands apply; a
 confirm-replace prompt also guards against overwriting text already typed
-into the fields. Catalog defaults ship for Claude Code and Junie — Junie's is
-best-effort, since its `--output-format json` `.result` is a markdown report
-rather than a clean message, and the parser/editable fields absorb whatever
-comes back.
+into the fields. Catalog defaults ship for Claude Code, Junie, and Kimi Code
+— Junie's is best-effort, since its `--output-format json` `.result` is a
+markdown report rather than a clean message, and the parser/editable fields
+absorb whatever comes back; Kimi's print-mode stdout is likewise a report,
+so its default returns the message by writing `$GG_MESSAGE_FILE`.
 
 ```toml
 [[tools.command]]
@@ -552,9 +553,10 @@ per-day folder; the label is the branch name / `<short-sha> <subject>` /
 range), so past reviews stay on disk and reopenable. The same pipeline is
 scriptable as `gg review`
 (see the CLI section above). Catalog defaults ship for Claude Code
-(`/code-review <range>`) and Junie (its report likewise comes back through
-`$GG_MESSAGE_FILE`, fed the diff via a new `$GG_REVIEW_DIFF` file since its
-own `--review` flag can't take a range).
+(`/code-review <range>`), Junie, and Kimi Code — the Junie and Kimi reports
+likewise come back through `$GG_MESSAGE_FILE`, fed the diff via a new
+`$GG_REVIEW_DIFF` file (Junie's own `--review` flag can't take a range;
+Kimi's print-mode stdout is a report, not the review).
 
 ### Environment
 

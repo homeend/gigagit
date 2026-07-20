@@ -102,6 +102,8 @@ func Install(d Detection) error
 | `claude-global` | `~/.claude` | `~/.claude/skills/using-gg/SKILL.md` | WholeFile |
 | `junie` | `.junie` | `.junie/skills/using-gg/SKILL.md` | WholeFile (Junie discovers Agent Skills from `<projectRoot>/.junie/skills/`, same SKILL.md format as Claude Code) |
 | `junie-global` | `~/.junie` | `~/.junie/skills/using-gg/SKILL.md` | WholeFile (Junie CLI's user-scope skills; project-scope wins on name clash) |
+| `kimi` | `.kimi-code` | `.kimi-code/skills/using-gg/SKILL.md` | WholeFile (Kimi Code discovers Agent Skills from `<projectRoot>/.kimi-code/skills/`, same SKILL.md format as Claude Code) |
+| `kimi-global` | `~/.kimi-code` | `~/.kimi-code/skills/using-gg/SKILL.md` | WholeFile (Kimi Code's user-scope skills; moves with `KIMI_CODE_HOME` — the registry probes only the default location) |
 | `codex` | `~/.codex` | `~/.codex/AGENTS.md` | ManagedBlock |
 | `opencode` | `~/.config/opencode` | `~/.config/opencode/AGENTS.md` | ManagedBlock |
 | `agents-md` | `AGENTS.md` | `AGENTS.md` | ManagedBlock |

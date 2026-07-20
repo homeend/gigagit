@@ -10,9 +10,9 @@ user-definable commands plus auto-detected defaults for known tools:
 
 | Category (config value) | Known tools with defaults |
 |---|---|
-| `conflict` — resolve merge/rebase/cherry-pick/revert conflicts | Claude Code, Junie, Meld |
-| `commit_message` — generate a commit message (stage 2) | Claude Code, Junie |
-| `review` — review a branch / commit range (stage 3) | Claude Code, Junie |
+| `conflict` — resolve merge/rebase/cherry-pick/revert conflicts | Claude Code, Junie, Kimi Code, Meld |
+| `commit_message` — generate a commit message (stage 2) | Claude Code, Junie, Kimi Code |
+| `review` — review a branch / commit range (stage 3) | Claude Code, Junie, Kimi Code |
 
 The context-provisioning insight (from research): agentic CLIs need cwd +
 a precise task statement rendered from state gg already has — not piped
@@ -230,6 +230,19 @@ the real terminal gg hands over via `tea.ExecProcess`).
 ```
 meld --auto-merge --output=<merged> <local> <base> <remote>
 ```
+
+**Kimi Code** (added 2026-07-20, verified against a live kimi 0.27.0) —
+`commit_message` and `review` are `capture` entries built on
+`kimi -p "<prompt>"`; like Junie, print-mode stdout is a work report
+(reasoning bullets + a session-resume trailer), never the clean answer, so
+both prompts return through `$GG_MESSAGE_FILE` (a live `kimi -p` probe
+confirmed the agent reads `$GG_CONTEXT_FILE`/`$GG_STAGED_DIFF` and writes
+`$GG_MESSAGE_FILE` with no permission prompt, exit 0). The `conflict` lane
+is the same `kimi -p "<prompt>"` shape under terminal handover — kimi has no
+"start interactive with a pre-submitted prompt" flag, and `-y`/`--auto` are
+rejected in combination with `-p`, but print mode approves the edits itself
+(live probe: against a real paused merge, `kimi -p` read the context file,
+edited the conflicted file, ran `git add`, exit 0). No yolo variant exists.
 
 **Yolo variants (opt-in)** — each agent additionally ships an
 auto-approve/yolo alternative, but only where the agent exposes it as a
