@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -201,20 +202,24 @@ func toolScript(resolved string) (string, error) {
 
 // toolExecCmd builds the interpreter invocation for the script (mirrors
 // engine.hookShellArgv): $SHELL (default /bin/sh), or %COMSPEC% /C on Windows.
-func toolExecCmd(script, dir string, extraEnv []string) *exec.Cmd {
+// The context is inert for terminal-mode runs (the handover owns the
+// lifecycle); capture-mode runs pass a cancellable one so esc kills the
+// script (ShellCaptureRunner precedent: stdin stays nil, so a prompting
+// agent gets EOF, never a hang).
+func toolExecCmd(ctx context.Context, script, dir string, extraEnv []string) *exec.Cmd {
 	var cmd *exec.Cmd
 	if runtime.GOOS == "windows" {
 		comspec := os.Getenv("COMSPEC")
 		if comspec == "" {
 			comspec = "cmd"
 		}
-		cmd = exec.Command(comspec, "/C", script)
+		cmd = exec.CommandContext(ctx, comspec, "/C", script)
 	} else {
 		sh := os.Getenv("SHELL")
 		if sh == "" {
 			sh = "/bin/sh"
 		}
-		cmd = exec.Command(sh, script)
+		cmd = exec.CommandContext(ctx, sh, script)
 	}
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), extraEnv...)
@@ -227,13 +232,16 @@ type toolReadyMsg struct {
 	err     error
 }
 
-// toolFinishedMsg signals the handed-over tool process exited.
+// toolFinishedMsg signals the tool process exited (terminal handover or
+// background capture alike).
 type toolFinishedMsg struct {
 	pending  *pendingToolRun
 	script   string
 	preMtime time.Time
 	start    time.Time // when the process was handed the terminal (execToolCmd)
 	err      error
+	output   []byte // capture mode: combined stdout+stderr, for the failure box
+	canceled bool   // capture mode: ended by our own esc cancel, not a failure
 }
 
 // toolInterruptExit reports whether err represents a user-initiated
@@ -276,10 +284,18 @@ func toolInterruptExit(err error) bool {
 
 // toolDisposition renders the outcome of a tool run for the operation log:
 // "ok" for a clean exit, the friendly label for an interrupt-quit (see
-// toolInterruptExit), else the raw error text — Go renders that as "exit
-// status N" for a propagated code or "signal: <name>" for a signal death
-// toolInterruptExit didn't classify as a quit (e.g. SIGKILL).
-func toolDisposition(err error) string {
+// toolInterruptExit) or an esc-cancelled capture run, else the raw error text —
+// Go renders that as "exit status N" for a propagated code or "signal: <name>"
+// for a signal death toolInterruptExit didn't classify as a quit (e.g. SIGKILL).
+func toolDisposition(msg toolFinishedMsg) string {
+	if msg.canceled {
+		return "cancelled (esc)"
+	}
+	return toolDispositionErr(msg.err)
+}
+
+// toolDispositionErr is the error half of toolDisposition.
+func toolDispositionErr(err error) string {
 	if err == nil {
 		return "ok"
 	}
@@ -314,11 +330,11 @@ func logToolExit(msg toolFinishedMsg) {
 	}
 	span := observ.Span{
 		Name:     "tool " + toolExitName(msg.pending),
-		Args:     []string{"disposition=" + toolDisposition(msg.err)},
+		Args:     []string{"disposition=" + toolDisposition(msg)},
 		Start:    msg.start,
 		Duration: dur,
 	}
-	if msg.err != nil {
+	if msg.err != nil && !msg.canceled {
 		span.Err = msg.err.Error()
 		var exitErr *exec.ExitError
 		if errors.As(msg.err, &exitErr) {
@@ -339,14 +355,68 @@ func (m Model) execToolCmd(pending *pendingToolRun) tea.Cmd {
 	if err != nil {
 		return func() tea.Msg { return toolFinishedMsg{pending: pending, start: start, err: err} }
 	}
-	var preMtime time.Time
-	if pending.merged != "" {
-		if fi, err := os.Stat(pending.merged); err == nil {
-			preMtime = fi.ModTime()
-		}
-	}
-	cmd := toolExecCmd(script, m.currentWorktree, pending.env)
+	preMtime := toolPreMtime(pending)
+	cmd := toolExecCmd(context.Background(), script, m.currentWorktree, pending.env)
 	return tea.ExecProcess(cmd, func(err error) tea.Msg {
 		return toolFinishedMsg{pending: pending, script: script, preMtime: preMtime, start: start, err: err}
 	})
+}
+
+// execCaptureToolCmd runs a capture-mode command headless, in the background:
+// no terminal handover, so gg's TUI stays up with the conflict process's
+// "running" box — the right shape for agents like `kimi -p` that draw no
+// terminal UI of their own. The combined output rides back on the message:
+// unlike toolScript's hold-on-error (which keeps a failure visible in the
+// handed-over terminal), a failed capture run has no screen of its own, so
+// the failure box shows the output tail. ctx cancellation (the conflict
+// process wires m.opCancel to esc) kills the script and marks the message
+// canceled — a user quit, not a failure.
+func (m Model) execCaptureToolCmd(ctx context.Context, pending *pendingToolRun) tea.Cmd {
+	start := time.Now()
+	script, err := toolScript(pending.resolved)
+	if err != nil {
+		return func() tea.Msg { return toolFinishedMsg{pending: pending, start: start, err: err} }
+	}
+	preMtime := toolPreMtime(pending)
+	cmd := toolExecCmd(ctx, script, m.currentWorktree, pending.env)
+	cmd.WaitDelay = 3 * time.Second // ShellCaptureRunner's grandchild-pipe guard
+	return func() tea.Msg {
+		out, runErr := cmd.CombinedOutput()
+		// A clean exit whose pipes a detached grandchild held open past
+		// WaitDelay returns ErrWaitDelay; mirror ShellCaptureRunner so a
+		// successful run isn't reported as a failure.
+		if errors.Is(runErr, exec.ErrWaitDelay) && cmd.ProcessState != nil && cmd.ProcessState.ExitCode() == 0 {
+			runErr = nil
+		}
+		return toolFinishedMsg{
+			pending: pending, script: script, preMtime: preMtime, start: start,
+			err: runErr, output: out, canceled: ctx.Err() != nil,
+		}
+	}
+}
+
+// toolPreMtime snapshots the per-file merge target's mtime so the return path
+// can offer mark-resolved only on a real change (zero when not per-file).
+func toolPreMtime(pending *pendingToolRun) time.Time {
+	if pending.merged != "" {
+		if fi, err := os.Stat(pending.merged); err == nil {
+			return fi.ModTime()
+		}
+	}
+	return time.Time{}
+}
+
+// outputTail renders the last n lines of a capture run's combined output for
+// the failure box ("" when there is nothing to show). A capture-mode command
+// has no terminal of its own, so without this a fast-failing agent would
+// surface as a bare "exit status 1" with no hint of what it said.
+func outputTail(out []byte, n int) string {
+	lines := strings.Split(strings.TrimRight(string(out), "\n"), "\n")
+	if len(lines) == 1 && lines[0] == "" {
+		return ""
+	}
+	if len(lines) > n {
+		lines = lines[len(lines)-n:]
+	}
+	return "\n\n" + strings.Join(lines, "\n")
 }

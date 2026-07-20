@@ -40,10 +40,11 @@ func TestToolUsableAllowsReviewCapture(t *testing.T) {
 	if err := m.toolUsable(tc); err != nil {
 		t.Fatalf("review capture must be usable: %v", err)
 	}
-	// A capture block for an unsupported category stays inert.
-	bad := config.ToolCommand{Category: "conflict", Name: "Y", Mode: "capture", Command: "echo hi"}
-	if err := m.toolUsable(bad); err == nil {
-		t.Fatal("conflict capture must remain inert")
+	// A capture block for any supported category is usable (conflict included —
+	// headless agents like `kimi -p` run in the background capture lane).
+	cap := config.ToolCommand{Category: "conflict", Name: "Y", Mode: "capture", Command: "echo hi"}
+	if err := m.toolUsable(cap); err != nil {
+		t.Fatalf("conflict capture must be usable: %v", err)
 	}
 }
 

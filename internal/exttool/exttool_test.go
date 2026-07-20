@@ -385,10 +385,11 @@ func TestBuiltinsReviewTemplates(t *testing.T) {
 // TestKimiTemplates pins the Kimi Code catalog rows (verified against a live
 // kimi 0.27.0 on 2026-07-20): commit_message and review are capture-mode
 // `-p` runs that return through $GG_MESSAGE_FILE (print-mode stdout is a
-// report, never the answer); the conflict row is the same `-p` shape under
-// terminal handover — kimi rejects `-y`/`--auto` with `-p`, and print mode
-// approves the edits itself (live probe: resolved a real paused merge,
-// edit + `git add`, exit 0).
+// report, never the answer); the conflict row is the same `-p` shape in the
+// background capture lane — `kimi -p` draws no terminal UI until its final
+// response, so a handover would leave the user staring at a dead screen.
+// kimi rejects `-y`/`--auto` with `-p`, and print mode approves the edits
+// itself (live probe: resolved a real paused merge, edit + `git add`, exit 0).
 func TestKimiTemplates(t *testing.T) {
 	cm := findTemplate(t, CatCommitMessage, "Kimi")
 	gc := GenerateCommandFor(cm, "kimi", "linux")
@@ -411,8 +412,8 @@ func TestKimiTemplates(t *testing.T) {
 	}
 
 	cf := findTemplate(t, CatConflict, "Kimi")
-	if cf.OptIn || cf.Mode != ModeTerminal {
-		t.Fatalf("kimi conflict must be a plain terminal entry (no yolo variant exists): %+v", cf)
+	if cf.OptIn || cf.Mode != ModeCapture {
+		t.Fatalf("kimi conflict must be a plain background-capture entry (no yolo variant exists): %+v", cf)
 	}
 	if !strings.HasPrefix(cf.Command, `<bin> -p "`) {
 		t.Fatalf("kimi conflict command = %q, want `<bin> -p \"…\"", cf.Command)

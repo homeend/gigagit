@@ -488,8 +488,13 @@ In the conflict window (`x`), press **`t`** (shown only when at least one
 (Claude Code, Junie, Kimi Code) are always listed while an op is paused, get a per-run
 temp **context file** — the paused op, source, target, and the conflicted
 paths, one per line — exposed as `<context-file>`/`GG_CONTEXT_FILE` plus ten
-more `GG_*` env vars, and hand over the terminal. Per-file commands (Meld)
-are listed when the focused file is a both-sides conflict and get the
+more `GG_*` env vars, and either hand over the terminal (interactive agents
+like Claude Code and Junie) or run **headless in the background** (`mode =
+"capture"` — Kimi Code, whose `kimi -p` draws no terminal UI of its own)
+while gg keeps its TUI up with a "Running … [esc] cancel" box; a failed
+capture run shows the tail of the agent's output in the error box. Per-file
+commands (Meld) are listed when the focused file is a both-sides conflict and
+get the
 **LOCAL/BASE/REMOTE/MERGED** quartet; if the merged file changes, gg offers
 to mark it resolved. The first run of each command shows the fully resolved
 text for approval — Run / Cancel — remembered per repo until the command
@@ -512,8 +517,8 @@ metacharacters).
 
 **Commit-message generation.** Press **`ctrl+g`** in the commit popup (`c`/`C`)
 to draft a message from the staged diff with a configured `commit_message`
-command — unlike conflict commands, these run **headless** (`mode =
-"capture"`, no terminal handover): the staged diff is written to two per-run
+command — these run **headless** (`mode =
+"capture"`, no terminal handover, like a capture-mode conflict command): the staged diff is written to two per-run
 files instead of a positional token — `$GG_CONTEXT_FILE` (a labeled summary:
 files changed, recent-commit style) and `$GG_STAGED_DIFF` (the full `git diff
 --cached`, truncated past a size cap with a note) — and the command's captured

@@ -1,21 +1,18 @@
 package tui
 
 import (
-	"fmt"
-
 	"github.com/homeend/gigagit/internal/config"
-	"github.com/homeend/gigagit/internal/exttool"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/observ"
 	"github.com/homeend/gigagit/internal/template"
 )
 
 // toolCommands returns the runnable external-tool commands for a category:
-// structurally valid, token-valid, terminal-mode (or, for commit_message and
-// review, capture-mode — the ctrl+g generate and the . -menu review lanes). A
-// capture-mode block outside those two categories is still INERT — skipped
-// with one session failure note per block (never a startup error), so a
-// config typo degrades a menu instead of breaking the app.
+// structurally valid, token-valid, in either execution mode — terminal
+// (suspend the TUI, hand over the real terminal) or capture (run headless in
+// the background while the TUI shows a "running" box). An invalid block is
+// INERT — skipped with one session failure note per block (never a startup
+// error), so a config typo degrades a menu instead of breaking the app.
 func (m Model) toolCommands(category string) []config.ToolCommand {
 	var out []config.ToolCommand
 	for _, tc := range m.cfg.Tools.Command {
@@ -38,9 +35,6 @@ func (m Model) toolCommands(category string) []config.ToolCommand {
 func (m Model) toolUsable(tc config.ToolCommand) error {
 	if err := config.ValidateToolCommand(tc); err != nil {
 		return err
-	}
-	if tc.Mode == "capture" && tc.Category != string(exttool.CatCommitMessage) && tc.Category != string(exttool.CatReview) {
-		return fmt.Errorf("tools: %s: mode \"capture\" is not supported for category %q", tc.Name, tc.Category)
 	}
 	return template.ValidateCommandTokens(tc.Command, tc.PerFile)
 }

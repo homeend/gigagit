@@ -55,6 +55,7 @@ type conflictProcess struct {
 	toolSel     int
 	toolFill    *templateFill   // <user:…> collection while confToolFill
 	pending     *pendingToolRun // resolved run while confToolApprove/executing (Task 7)
+	toolRunning string          // capture-mode run in flight: the tool's name, for the "running" box
 }
 
 // startConflictProcess fills the active-process slot from the current
@@ -348,11 +349,19 @@ func (p *conflictProcess) gateOrRun(m Model) (Model, tea.Cmd) {
 	return m, nil
 }
 
-// runPending hands the terminal to the pending command.
+// runPending executes the pending command. Terminal mode hands over the real
+// terminal; capture mode runs headless in the background (the TUI keeps
+// drawing the "running" box) with m.opCancel wired so esc kills the run.
 func (p *conflictProcess) runPending(m Model) (Model, tea.Cmd) {
 	pending := p.pending
 	p.pending = nil
 	p.st = confWorking
+	if pending.tc.Mode == "capture" {
+		ctx, cancel := context.WithCancel(context.Background())
+		m.opCancel = cancel
+		p.toolRunning = pending.tc.Name
+		return m, m.execCaptureToolCmd(ctx, pending)
+	}
 	return m, m.execToolCmd(pending)
 }
 
@@ -424,19 +433,23 @@ func (p *conflictProcess) toolReady(m Model, msg toolReadyMsg) (Model, tea.Cmd) 
 	return p.gateOrRun(m)
 }
 
-// toolFinished receives the handed-over process's exit: clean temps, log the
-// exit disposition, surface a failure, offer mark-resolved when a per-file
-// run changed its file, and reload so the conflict list re-derives. An
-// interrupt exit — 130/143 (a shell that survived ctrl-C/SIGTERM and
-// propagated the code), OR the process itself killed by SIGINT/SIGTERM (the
-// common ctrl-C case, since the signal hits the whole foreground process
-// group — see toolInterruptExit) — is a normal quit, not a failure: it takes
-// the exact same success path as a zero exit, just with a status hint
-// instead of silence.
+// toolFinished receives the tool process's exit (handed-over terminal run or
+// background capture alike): clean temps, log the exit disposition, surface a
+// failure (with the captured output tail — a capture run has no terminal of
+// its own to have shown it), offer mark-resolved when a per-file run changed
+// its file, and reload so the conflict list re-derives. An interrupt exit —
+// 130/143 (a shell that survived ctrl-C/SIGTERM and propagated the code), OR
+// the process itself killed by SIGINT/SIGTERM (the common ctrl-C case, since
+// the signal hits the whole foreground process group — see toolInterruptExit),
+// OR an esc-cancelled capture run — is a normal quit, not a failure: it takes
+// the exact same success path as a zero exit, just with a status hint instead
+// of silence.
 func (p *conflictProcess) toolFinished(m Model, msg toolFinishedMsg) (Model, tea.Cmd) {
 	if msg.script != "" {
 		os.Remove(msg.script)
 	}
+	m.opCancel = nil // a capture run's cancel func; the run is over either way
+	p.toolRunning = ""
 	changed := false
 	if msg.pending != nil && msg.pending.merged != "" {
 		if fi, err := os.Stat(msg.pending.merged); err == nil && fi.ModTime().After(msg.preMtime) {
@@ -449,10 +462,12 @@ func (p *conflictProcess) toolFinished(m Model, msg toolFinishedMsg) (Model, tea
 		}
 	}
 	logToolExit(msg)
-	if msg.err != nil {
+	if msg.canceled {
+		m.statusMsg = i18n.T("tool cancelled")
+	} else if msg.err != nil {
 		if !toolInterruptExit(msg.err) {
 			p.st = confReporting
-			p.errMsg = toolExitName(msg.pending) + ": " + msg.err.Error()
+			p.errMsg = toolExitName(msg.pending) + ": " + msg.err.Error() + outputTail(msg.output, 8)
 			return m, nil
 		}
 		m.statusMsg = i18n.T("tool interrupted")
@@ -478,7 +493,11 @@ func (p *conflictProcess) render(m Model, below string) string {
 		}
 		return below
 	case confWorking:
-		return overlayCenter(bg, conflictMsgBox(m, i18n.T("Working…  [esc] cancel")), w, h)
+		msg := i18n.T("Working…  [esc] cancel")
+		if p.toolRunning != "" { // a capture-mode tool run owns the wait
+			msg = i18n.T("Running %s…  [esc] cancel", p.toolRunning)
+		}
+		return overlayCenter(bg, conflictMsgBox(m, msg), w, h)
 	case confReporting:
 		return overlayCenter(bg, conflictMsgBox(m, i18n.T("Resolve failed:")+"\n\n"+p.errMsg+"\n\n"+i18n.T("[any key] back to the list")), w, h)
 	case confToolPick:
@@ -536,6 +555,9 @@ func (p *conflictProcess) indicator(m Model) string {
 	case confPicking:
 		return i18n.T("Resolving conflicts · line editor")
 	case confWorking:
+		if p.toolRunning != "" {
+			return i18n.T("Resolving conflicts · running %s…  [esc] cancel", p.toolRunning)
+		}
 		return i18n.T("Resolving conflicts · working…  [esc] cancel")
 	case confReporting:
 		return i18n.T("Resolving conflicts · error — [any key] back to the list")
