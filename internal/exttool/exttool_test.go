@@ -344,3 +344,51 @@ func TestBuiltinsReviewTemplates(t *testing.T) {
 		t.Fatalf("junie prompt must be first after --task: %q", gj)
 	}
 }
+
+// TestKimiTemplates pins the Kimi Code catalog rows (verified against a live
+// kimi 0.27.0 on 2026-07-20): commit_message and review are capture-mode
+// `-p` runs that return through $GG_MESSAGE_FILE (print-mode stdout is a
+// report, never the answer); the conflict row is the same `-p` shape under
+// terminal handover — kimi rejects `-y`/`--auto` with `-p`, and print mode
+// approves the edits itself (live probe: resolved a real paused merge,
+// edit + `git add`, exit 0).
+func TestKimiTemplates(t *testing.T) {
+	cm := findTemplate(t, CatCommitMessage, "Kimi")
+	gc := GenerateCommandFor(cm, "kimi", "linux")
+	if !strings.HasPrefix(gc, `kimi -p "`) {
+		t.Fatalf("kimi commit prompt not first after -p: %q", gc)
+	}
+	for _, ref := range []string{"${GG_MESSAGE_FILE}", "${GG_CONTEXT_FILE}", "${GG_STAGED_DIFF}"} {
+		if !strings.Contains(gc, ref) {
+			t.Fatalf("kimi commit template missing %s: %q", ref, gc)
+		}
+	}
+
+	rv := findTemplate(t, CatReview, "Kimi")
+	gr := GenerateCommandFor(rv, "kimi", "linux")
+	if !strings.Contains(gr, "${GG_MESSAGE_FILE}") || !strings.Contains(gr, "${GG_REVIEW_DIFF}") {
+		t.Fatalf("kimi review must write GG_MESSAGE_FILE and read GG_REVIEW_DIFF: %q", gr)
+	}
+	if !strings.Contains(gr, "<range>") {
+		t.Fatalf("kimi review must carry the <range> token: %q", gr)
+	}
+
+	cf := findTemplate(t, CatConflict, "Kimi")
+	if cf.OptIn || cf.Mode != ModeTerminal {
+		t.Fatalf("kimi conflict must be a plain terminal entry (no yolo variant exists): %+v", cf)
+	}
+	if !strings.HasPrefix(cf.Command, `<bin> -p "`) {
+		t.Fatalf("kimi conflict command = %q, want `<bin> -p \"…\"", cf.Command)
+	}
+	if !strings.Contains(cf.Command, "Do NOT run git commit") {
+		t.Fatal("kimi conflict prompt must keep the sequencer-boundary clause")
+	}
+	for _, goos := range []string{"linux", "windows"} {
+		for _, ct := range []CommandTemplate{cm, rv, cf} {
+			gen := GenerateCommandFor(ct, "kimi", goos)
+			if err := template.ValidateCommandTokens(gen, ct.PerFile); err != nil {
+				t.Errorf("GenerateCommandFor(%s) %s: %v", goos, ct.Name, err)
+			}
+		}
+	}
+}

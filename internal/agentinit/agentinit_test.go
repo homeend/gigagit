@@ -261,3 +261,33 @@ func TestCheckedDefaults(t *testing.T) {
 		t.Error("installed targets must default checked")
 	}
 }
+
+// TestKimiDetectedAndInstallsSkillFile: Kimi Code discovers Agent Skills
+// from .kimi-code/skills/<name>/SKILL.md (project) and ~/.kimi-code/skills/
+// (user) — the same frontmatter SKILL.md form as Claude, so ModeSkillFile.
+func TestKimiDetectedAndInstallsSkillFile(t *testing.T) {
+	proj, home := fixture(t, []string{".kimi-code"}, []string{".kimi-code"})
+	dets := Detect(proj, home)
+	for _, id := range []string{"kimi", "kimi-global"} {
+		d, ok := byID(dets, id)
+		if !ok {
+			t.Fatalf("%s not detected", id)
+		}
+		if d.Agent.Mode != ModeSkillFile {
+			t.Fatalf("%s mode = %v, want ModeSkillFile", id, d.Agent.Mode)
+		}
+		if err := Install(d); err != nil {
+			t.Fatal(err)
+		}
+		data, err := os.ReadFile(d.Target)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(data), "name: using-gg") {
+			t.Errorf("%s SKILL.md missing frontmatter", id)
+		}
+		if agentskill.InstalledVersion(data) != agentskill.Version {
+			t.Errorf("%s SKILL.md missing version marker", id)
+		}
+	}
+}

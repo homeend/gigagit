@@ -41,6 +41,13 @@ func Builtins() []Agent {
 		{ID: "claude-global", Label: "Claude Code (global)", Detect: "~/.claude", Target: "~/.claude/skills/using-gg/SKILL.md", Mode: ModeSkillFile},
 		{ID: "junie", Label: "Junie (project)", Detect: ".junie", Target: ".junie/skills/using-gg/SKILL.md", Mode: ModeSkillFile},
 		{ID: "junie-global", Label: "Junie (global)", Detect: "~/.junie", Target: "~/.junie/skills/using-gg/SKILL.md", Mode: ModeSkillFile},
+		// Kimi Code discovers Agent Skills from .kimi-code/skills/<name>/SKILL.md
+		// (project) and ~/.kimi-code/skills/<name>/SKILL.md (user) — the same
+		// directory-form SKILL.md with name+description frontmatter as Claude,
+		// so ModeSkillFile fits as-is. The user dir moves with KIMI_CODE_HOME;
+		// this static registry only probes the default location.
+		{ID: "kimi", Label: "Kimi Code (project)", Detect: ".kimi-code", Target: ".kimi-code/skills/using-gg/SKILL.md", Mode: ModeSkillFile},
+		{ID: "kimi-global", Label: "Kimi Code (global)", Detect: "~/.kimi-code", Target: "~/.kimi-code/skills/using-gg/SKILL.md", Mode: ModeSkillFile},
 		{ID: "codex", Label: "Codex (global)", Detect: "~/.codex", Target: "~/.codex/AGENTS.md", Mode: ModeBlock},
 		{ID: "opencode", Label: "OpenCode (global)", Detect: "~/.config/opencode", Target: "~/.config/opencode/AGENTS.md", Mode: ModeBlock},
 		{ID: "agents-md", Label: "AGENTS.md (generic)", Detect: "AGENTS.md", Target: "AGENTS.md", Mode: ModeBlock},

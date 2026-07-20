@@ -9,6 +9,18 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Kimi Code joins the known-agent roster.** `gg init` now detects Kimi
+  Code (project `.kimi-code/`, global `~/.kimi-code/`) and installs the
+  using-gg skill as `skills/using-gg/SKILL.md` under either — Kimi discovers
+  the same directory-form, frontmatter SKILL.md as Claude Code. The
+  external-tools catalog (`internal/exttool`, Settings → "External tools…")
+  gains a Kimi entry probed as `kimi` on PATH: `commit_message` and `review`
+  capture defaults built on `kimi -p` that return through `$GG_MESSAGE_FILE`
+  (print-mode stdout is a work report, never the clean answer), plus a
+  `conflict` command of the same `kimi -p` shape under terminal handover
+  (kimi has no interactive pre-seeded-prompt flag; print mode approves the
+  conflict edits itself). All templates verified against a live kimi 0.27.0
+  (2026-07-20), including an end-to-end headless conflict resolution.
 - **Copy a worktree's absolute path from the `.` menu.** The Worktrees
   panel's context menu gains "Copy absolute path" (the selected worktree's
   root), and the Branches panel's copy rows gain "Copy worktree absolute

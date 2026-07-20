@@ -162,6 +162,46 @@ const junieReviewPrompt = `"You are reviewing a code change. The full diff to re
 
 const junieReviewCommand = `<bin> --task ` + junieReviewPrompt + ` --output-format json --skip-update-check`
 
+// kimiCommitPrompt is the capture-lane commit-message prompt for the Kimi
+// Code CLI. Verified 2026-07-20 against a live install (kimi 0.27.0): in
+// print mode (`-p/--prompt <prompt>`) stdout is a work report — reasoning
+// bullets plus a "To resume this session" trailer — never the clean answer,
+// so like Junie the message comes back through $GG_MESSAGE_FILE (the engine
+// reads that file and prefers it over stdout). A live `kimi -p` probe the
+// same day confirmed the agent reads $GG_CONTEXT_FILE/$GG_STAGED_DIFF and
+// writes $GG_MESSAGE_FILE with no permission prompt, exit 0. The "absolute
+// path outside the repository" clause is load-bearing (a coding agent can
+// refuse to write outside its project root) — same rationale as Junie's.
+const kimiCommitPrompt = `"Your task is to write a git commit message for the staged changes into the file at <env:GG_MESSAGE_FILE> (an absolute path outside the repository). The change summary is at <env:GG_CONTEXT_FILE> and the full diff at <env:GG_STAGED_DIFF>. Write ONLY the commit message to that file: a concise subject line, a blank line, then a short body. Do not run git commit and do not modify any other files."`
+
+// kimiCommitCommand is the default (capture-mode) Kimi commit_message
+// template. `kimi -p` takes the prompt as its flag value, so there is no
+// variadic-flag argv-order hazard. No yolo variant: print mode is headless
+// either way (the probes above needed no approval flag).
+const kimiCommitCommand = `<bin> -p ` + kimiCommitPrompt
+
+// kimiReviewPrompt — same stdout-is-a-report posture as kimiCommitPrompt:
+// the review comes back through $GG_MESSAGE_FILE, fed the diff at
+// $GG_REVIEW_DIFF. <range> is a runtime token (resolved by
+// template.ResolveCommand), empty for the uncommitted target.
+const kimiReviewPrompt = `"You are reviewing a code change. The full diff to review is in the file at <env:GG_REVIEW_DIFF> (range <range>). Write a concise code review — findings with severity and a short summary — into the file at <env:GG_MESSAGE_FILE> (an absolute path outside the repository). Do NOT modify any repository files and do NOT run git commit."`
+
+const kimiReviewCommand = `<bin> -p ` + kimiReviewPrompt
+
+// kimiConflictPrompt is the conflict-resolution prompt for Kimi, same shape
+// and injection posture as claudeConflictPrompt (generation-time <env:...>
+// tokens only), including the sequencer-boundary clause.
+const kimiConflictPrompt = `"A git <env:GG_OP> operation is paused with conflicts in this repository. Read the context file at <env:GG_CONTEXT_FILE> for the operation's parties and the conflicted paths. Resolve each conflict by editing the files, then run git add on each resolved file. Do NOT run git commit or any --continue command -- stop when everything is staged and summarize what you chose."`
+
+// kimiConflictCommand is the conflict template: a headless `-p` run under
+// gg's terminal handover. Kimi has no "start interactive mode with the
+// prompt pre-submitted" flag, and `-y`/`--auto` are REJECTED in combination
+// with `-p` ("Cannot combine --prompt with --yolo", 0.27.0) — but print mode
+// needs neither: it approves the edits itself. Verified end-to-end
+// 2026-07-20 (kimi 0.27.0): against a real paused merge, `kimi -p` read
+// $GG_CONTEXT_FILE, edited the conflicted file, ran `git add`, and exited 0.
+const kimiConflictCommand = `<bin> -p ` + kimiConflictPrompt
+
 // Builtins is the hardcoded catalog. Stage 1 shipped conflict templates;
 // stage 2 added commit_message capture templates; stage 3 adds review
 // capture templates.
@@ -198,6 +238,14 @@ func Builtins() []Tool {
 				{Category: CatConflict, Name: "Junie (yolo)", Mode: ModeTerminal, OptIn: true, Command: junieConflictYoloCommand},
 				{Category: CatCommitMessage, Name: "Junie", Mode: ModeCapture, Command: junieCommitCommand},
 				{Category: CatReview, Name: "Junie", Mode: ModeCapture, Command: junieReviewCommand},
+			},
+		},
+		{
+			ID: "kimi", Label: "Kimi Code", Bins: []string{"kimi"},
+			Commands: []CommandTemplate{
+				{Category: CatConflict, Name: "Kimi", Mode: ModeTerminal, Command: kimiConflictCommand},
+				{Category: CatCommitMessage, Name: "Kimi", Mode: ModeCapture, Command: kimiCommitCommand},
+				{Category: CatReview, Name: "Kimi", Mode: ModeCapture, Command: kimiReviewCommand},
 			},
 		},
 		{
