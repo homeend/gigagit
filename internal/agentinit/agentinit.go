@@ -42,6 +42,16 @@ func Builtins() []Agent {
 		{ID: "junie", Label: "Junie (project)", Detect: ".junie", Target: ".junie/skills/using-gg/SKILL.md", Mode: ModeSkillFile},
 		{ID: "junie-global", Label: "Junie (global)", Detect: "~/.junie", Target: "~/.junie/skills/using-gg/SKILL.md", Mode: ModeSkillFile},
 		{ID: "codex", Label: "Codex (global)", Detect: "~/.codex", Target: "~/.codex/AGENTS.md", Mode: ModeBlock},
+		// Antigravity CLI (agy 1.1.4, verified 2026-07-20): skills are
+		// skills/<name>/SKILL.md with name+description frontmatter under a
+		// customization root; the global root is ~/.gemini/config/ (per the
+		// bundled agy-customizations docs). Detect the agy-specific home,
+		// not plain ~/.gemini (gemini-cli also creates that).
+		{ID: "antigravity", Label: "Antigravity (global)", Detect: "~/.gemini/antigravity-cli", Target: "~/.gemini/config/skills/using-gg/SKILL.md", Mode: ModeSkillFile},
+		// Kimi Code (kimi 0.27.0, verified 2026-07-20): user skills are
+		// auto-discovered from ~/.kimi-code/skills/ (its --skills-dir help
+		// and binary strings document the path).
+		{ID: "kimi", Label: "Kimi Code (global)", Detect: "~/.kimi-code", Target: "~/.kimi-code/skills/using-gg/SKILL.md", Mode: ModeSkillFile},
 		{ID: "opencode", Label: "OpenCode (global)", Detect: "~/.config/opencode", Target: "~/.config/opencode/AGENTS.md", Mode: ModeBlock},
 		{ID: "agents-md", Label: "AGENTS.md (generic)", Detect: "AGENTS.md", Target: "AGENTS.md", Mode: ModeBlock},
 		{ID: "cursor", Label: "Cursor (project)", Detect: ".cursor", Target: ".cursor/rules/using-gg.mdc", Mode: ModePlainFile},

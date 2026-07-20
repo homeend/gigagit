@@ -261,3 +261,52 @@ func TestCheckedDefaults(t *testing.T) {
 		t.Error("installed targets must default checked")
 	}
 }
+
+func TestAntigravityDetectedFromHome(t *testing.T) {
+	// agy's home is the agy-specific ~/.gemini/antigravity-cli (created by
+	// its install), NOT plain ~/.gemini — a dead gemini-cli install also
+	// creates that. The skill lands under agy's documented global
+	// customization root ~/.gemini/config/skills/.
+	proj, home := fixture(t, nil, []string{".gemini/antigravity-cli"})
+	d, ok := byID(Detect(proj, home), "antigravity")
+	if !ok {
+		t.Fatal("antigravity not detected from ~/.gemini/antigravity-cli")
+	}
+	if d.Agent.Mode != ModeSkillFile {
+		t.Fatalf("antigravity mode = %v, want ModeSkillFile", d.Agent.Mode)
+	}
+	if err := Install(d); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(home, ".gemini", "config", "skills", "using-gg", "SKILL.md"))
+	if err != nil {
+		t.Fatalf("global skill not installed: %v", err)
+	}
+	if !strings.Contains(string(data), "name: using-gg") {
+		t.Error("antigravity SKILL.md missing frontmatter")
+	}
+}
+
+func TestAntigravityNotDetectedFromBareGeminiDir(t *testing.T) {
+	proj, home := fixture(t, nil, []string{".gemini"})
+	if _, ok := byID(Detect(proj, home), "antigravity"); ok {
+		t.Error("bare ~/.gemini (gemini-cli leftover) must not detect antigravity")
+	}
+}
+
+func TestKimiDetectedFromHome(t *testing.T) {
+	proj, home := fixture(t, nil, []string{".kimi-code"})
+	d, ok := byID(Detect(proj, home), "kimi")
+	if !ok {
+		t.Fatal("kimi not detected from ~/.kimi-code")
+	}
+	if d.Agent.Mode != ModeSkillFile {
+		t.Fatalf("kimi mode = %v, want ModeSkillFile", d.Agent.Mode)
+	}
+	if err := Install(d); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(home, ".kimi-code", "skills", "using-gg", "SKILL.md")); err != nil {
+		t.Fatalf("global skill not installed: %v", err)
+	}
+}
