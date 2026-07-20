@@ -422,11 +422,15 @@ func (m Model) contextCopyRows() []actionRow {
 	case m.focus == panelBranches:
 		if bi, ok := m.backingIndex(panelBranches); ok {
 			b := m.branches[bi]
-			return []actionRow{
+			rows := []actionRow{
 				m.copyRow("copy-branch-name", i18n.T("Copy branch name"), i18n.T("Copied branch name %s", b.Name), b.Name),
 				m.copyRow("copy-commit-id", i18n.T("Copy commit id"), i18n.T("Copied commit id %s", shortHash(b.Hash)), b.Hash),
 				m.copyShaRow(b.Name, b.Hash),
 			}
+			if wt, ok := m.worktreeAbsPathForBranch(b.Name); ok {
+				rows = append(rows, m.copyRow("copy-worktree-abspath", i18n.T("Copy worktree absolute path"), i18n.T("Copied absolute path: %s", wt), wt))
+			}
+			return rows
 		}
 	case m.focus == panelRemotes:
 		if bi, ok := m.backingIndex(panelRemotes); ok {
@@ -444,6 +448,13 @@ func (m Model) contextCopyRows() []actionRow {
 				m.copyRow("copy-tag-name", i18n.T("Copy tag name"), i18n.T("Copied tag name %s", tg.Name), tg.Name),
 				m.copyRow("copy-commit-id", i18n.T("Copy commit id"), i18n.T("Copied commit id %s", shortHash(tg.Target)), tg.Target),
 				m.copyShaRow(tg.Target, tg.Target),
+			}
+		}
+	case m.focus == panelWorktrees:
+		if bi, ok := m.backingIndex(panelWorktrees); ok {
+			w := m.worktrees[bi]
+			return []actionRow{
+				m.copyRow("copy-worktree-abspath", i18n.T("Copy absolute path"), i18n.T("Copied absolute path: %s", w.Path), w.Path),
 			}
 		}
 	}

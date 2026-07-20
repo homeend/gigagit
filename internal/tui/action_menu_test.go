@@ -218,10 +218,55 @@ func TestContextCopyRowsStaged(t *testing.T) {
 
 func TestContextCopyRowsEmpty(t *testing.T) {
 	m := footerModel()
-	m.focus = panelWorktrees // no copy rows defined for the Worktrees panel
+	m.focus = panelWorktrees
+	m.worktrees = nil // nothing selected → no copy rows
 	m.loading = false
 	if rows := m.contextCopyRows(); len(rows) != 0 {
-		t.Errorf("worktrees panel yields no copy rows, got %v", rows)
+		t.Errorf("worktrees panel with no selection yields no copy rows, got %v", rows)
+	}
+}
+
+func TestContextCopyRowsWorktrees(t *testing.T) {
+	m := footerModel() // worktrees: /repo (main), /repo/wt-x (feat/x)
+	m.loading = false
+	m.focus = panelWorktrees
+	m.sel[panelWorktrees] = 1
+	rows := m.contextCopyRows()
+	r, ok := findRow(rows, "copy-worktree-abspath")
+	if !ok {
+		t.Fatalf("want copy-worktree-abspath row, got %v", rows)
+	}
+	if r.copyText != "/repo/wt-x" {
+		t.Errorf("copyText = %q, want the worktree's absolute path", r.copyText)
+	}
+	if r.run == nil {
+		t.Error("copy rows must carry a run handler")
+	}
+}
+
+func TestContextCopyRowsBranchWorktreePath(t *testing.T) {
+	m := footerModel() // main → /repo (current), feat/x → /repo/wt-x
+	m.loading = false
+	m.focus = panelBranches
+
+	m.sel[panelBranches] = 1 // feat/x, checked out in another worktree
+	r, ok := findRow(m.contextCopyRows(), "copy-worktree-abspath")
+	if !ok {
+		t.Fatal("branch checked out in a worktree must offer copy-worktree-abspath")
+	}
+	if r.copyText != "/repo/wt-x" {
+		t.Errorf("copyText = %q, want the branch's worktree path", r.copyText)
+	}
+
+	m.sel[panelBranches] = 0 // head branch → the current worktree counts too
+	if r, ok = findRow(m.contextCopyRows(), "copy-worktree-abspath"); !ok || r.copyText != "/repo" {
+		t.Errorf("head branch row = (%v, %v), want copy-worktree-abspath /repo", r.copyText, ok)
+	}
+
+	m.branches = append(m.branches, model.Branch{Name: "feat/y"})
+	m.sel[panelBranches] = 2 // not checked out anywhere → no row
+	if _, ok := findRow(m.contextCopyRows(), "copy-worktree-abspath"); ok {
+		t.Error("branch without a worktree must not offer copy-worktree-abspath")
 	}
 }
 
