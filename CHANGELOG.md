@@ -18,8 +18,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   via stdout or `$GG_MESSAGE_FILE` — non-empty file wins), `review` (the
   `<range>` token, `$GG_REVIEW_DIFF`, free-form markdown report), and
   `conflict` (terminal handover, `GG_*` env, per_file mergetool tokens).
-  `agentskill.Version` 48 → 49; run `gg init --update` to refresh installed
-  copies.
+  A hardening pass makes self-registration reliably land: the
+  active-repo-config rule (the private per-repo file, when it exists,
+  replaces `.gg.toml` entirely — write the global config by default), one
+  complete worked example block per category, the `GG_TASK` env and
+  capture-run cwd, and a headless verification path (`gg review --tool
+  <name> HEAD`; the CLI run is its own consent — the TUI approval popup
+  still guards `ctrl+g`/`t`). `agentskill.Version` 48 → 50; run
+  `gg init --update` to refresh installed copies.
 - **Worktree switch guard + cross-environment repair.** Every TUI switch —
   the Worktrees panel, the "go to worktree" branch prompt, the repo
   switcher and "Open repo" popups, and the chained post-operation switches

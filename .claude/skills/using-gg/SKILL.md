@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v49 -->
+<!-- gg:using-gg:v50 -->
 
 # Using gg (gigagit)
 
@@ -322,10 +322,17 @@ easiest path is the human running Settings → External tools, which detects
 installed agents and writes these blocks; write a block yourself only when
 asked to, or for a tool the catalog doesn't know.
 
-Where to write it: the global config (`$XDG_CONFIG_HOME/gg/config.toml`,
-default `~/.config/gg/config.toml`) applies to every repo; the repo's
-`.gg.toml` applies to one. The lists concatenate, and a repo block wins a
-`(category, name)` collision.
+Where to write it — **default to the global config**
+(`$XDG_CONFIG_HOME/gg/config.toml`, default `~/.config/gg/config.toml`); it
+is always active and applies to every repo. A repo-level block is trickier:
+per-repo settings live in ONE of two files, and gg reads whichever is
+active — the machine-local private file
+`$XDG_CONFIG_HOME/gg/projects/<repo-key>/config.toml` **if it exists**
+(`<repo-key>` = the main worktree's absolute path with `/`, `\`, and `:`
+replaced by `-`), else the committed `<repo>/.gg.toml`. Appending to
+`.gg.toml` while the private file exists does nothing — check for the
+private file first. Global and the active repo file concatenate, and a
+repo block wins a `(category, name)` collision.
 
 ```toml
 [[tools.command]]
@@ -343,7 +350,10 @@ The command body cannot contain `'''`. **First run is approval-gated**: gg
 shows the human the fully resolved command (Run/Cancel), remembered per repo
 keyed on the block's text — editing the block re-prompts.
 
-Per-category contract (env vars are absolute paths; stdin is /dev/null):
+Per-category contract (env vars are absolute paths; stdin is /dev/null;
+capture commands run with the repo worktree as working directory; capture
+runs also get `GG_TASK=commit_message` / `GG_TASK=review`, so one command
+can branch on the task):
 
 - **commit_message** (`mode = "capture"`): read `$GG_CONTEXT_FILE` (change
   summary + recent commit subjects) and `$GG_STAGED_DIFF` (full staged diff;
@@ -376,6 +386,42 @@ Tokens usable in `command`: path tokens `<repo>` `<file>` `<local>` `<base>`
 (`<user:…>` prompts the human at run time). Plain `${GG_*}` env references
 work too — the vars are always exported. `<bin>`/`<env:NAME>` are
 wizard-only; in a hand-written block name the binary and env vars directly.
+
+Worked examples (adapt the binary and prompt; `$GG_*` expand at run time):
+
+```toml
+[[tools.command]]
+category = "commit_message"
+name     = "MyAgent"
+mode     = "capture"
+command  = '''myagent run -q "Write a git commit message for the staged changes. Read the summary at $GG_CONTEXT_FILE and the full diff at $GG_STAGED_DIFF. Output ONLY the message: an imperative subject (max ~72 chars), a blank line, a short body."'''
+
+[[tools.command]]
+category = "review"
+name     = "MyAgent"
+mode     = "capture"
+command  = '''myagent run -q "Review the change <range>. The full diff is at $GG_REVIEW_DIFF, a summary at $GG_CONTEXT_FILE. Write a markdown review (findings with severity, then a summary) into the file at $GG_MESSAGE_FILE (an absolute path outside the repository). Do not modify repository files."'''
+
+[[tools.command]]
+category = "conflict"
+name     = "MyAgent"
+mode     = "terminal"
+command  = '''myagent "A git $GG_OP is paused with conflicts. The conflicted paths are listed in $GG_CONTEXT_FILE. Resolve the conflict markers and stage the results with git add. Do not continue or abort the operation."'''
+```
+
+If your tool refuses to write outside its project root, the phrase "an
+absolute path outside the repository" in the `$GG_MESSAGE_FILE` instruction
+is load-bearing — keep it.
+
+Verify a registration headlessly with the review lane: `gg review --tool
+MyAgent HEAD` — exit 0 with a report on stdout proves the block loaded,
+the command resolved, and your output channel works (running the CLI
+yourself is its own consent; the TUI's first-run approval popup still
+guards `ctrl+g`/`t`). Plain `gg review` with a wrong/missing `--tool`
+errors listing the configured names — a cheap existence check. The
+commit_message and conflict lanes have no headless test path; they surface
+in the TUI (`ctrl+g` chooser, conflict `t` picker, Settings → External
+tools).
 
 Once configured: commit messages come from `ctrl+g` in the commit popup,
 reviews from `gg review [--tool <name>]` or the TUI review rows, conflict
