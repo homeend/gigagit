@@ -121,23 +121,28 @@ double-quoted prompt text; prompts state the sequencer boundary (edit +
   `<bin> -p "<kimiConflictPrompt>"` — Kimi has no interactive-with-prompt
   flag, so the conflict lane is a headless agentic run printing to the real
   terminal under the normal handover.
-  **Verification item:** whether plain `-p` can approve file edits (TTY
-  prompt) or silently denies them. **Pre-authorized fallback:** insert
-  `--auto` (Kimi's auto permission mode) into the default template if plain
-  `-p` cannot edit.
+  **VERIFIED 2026-07-20 (kimi 0.27.0, live probe):** plain `-p` (no
+  `--auto`/`--yolo`) edited a file and ran `git add` in a scratch repo
+  headlessly — `git status --porcelain` showed the staged `M ` entry, exit
+  0. Under gg's handover a TTY is present, so Kimi may additionally choose
+  to prompt for approvals — acceptable (that is interactive mode); the
+  OptIn yolo variant covers users who want no prompts.
 - **conflict yolo** (`Name: "Kimi (yolo)"`, ModeTerminal, OptIn):
   `<bin> -p "<kimiConflictPrompt>" --yolo`.
 - **commit_message** (`Name: "Kimi"`, ModeCapture):
-  `<bin> -p "<kimiCommitPrompt>"` — default text output; the printed
-  response IS the message (plain-text parse path).
-  **Verification item:** stdout cleanliness (no banner/progress noise on
-  stdout). **Pre-authorized fallbacks**, in order: (1) switch the prompt to
-  the Junie file-channel wording (write ONLY the message to
-  `$GG_MESSAGE_FILE`, "an absolute path outside the repository") plus
-  `--auto` so the headless write is approvable; (2) keep text mode and
-  accept minor noise if it demonstrably lands on stderr only.
+  `<bin> -p "<kimiCommitPrompt>"` where the prompt uses the Junie
+  file-channel wording: write ONLY the message to `$GG_MESSAGE_FILE` ("an
+  absolute path outside the repository"); the engine prefers the non-empty
+  file over stdout.
+  **VERIFIED 2026-07-20 (kimi 0.27.0, live probes):** `-p` stdout is
+  decorated (the response is prefixed `• `, e.g. `• ok`), so plain-text
+  stdout parsing would corrupt a subject line — the file channel is the
+  primary shape, not a fallback. Plain `-p` read a file outside the
+  workspace and wrote the exact payload to another outside-workspace file
+  with no approval flags (exit 0), so no `--auto` is needed.
 - **review** (`Name: "Kimi"`, ModeCapture): `<bin> -p "<kimiReviewPrompt>"`
-  — same verification item and fallbacks as commit_message.
+  — same file-channel wording, review content (reads `$GG_REVIEW_DIFF`,
+  labels `(range <range>)`), writes the report to `$GG_MESSAGE_FILE`.
 
 ## Part 3 — capture-parser extension (`internal/exttool/parse.go`)
 
@@ -185,12 +190,14 @@ user's shell sourced the export line; gg launched another way would miss it.
    quoted with version + date in comments next to each entry (the
    adding-external-tools rule).
 2. **Auth-needed:** the user authenticates the CLIs they want fully
-   verified (`codex login`, first-run Gemini auth, `kimi login`). Then:
+   verified (`codex login`, first-run Gemini auth). Then:
    `codex exec "Reply with exactly: ok" --sandbox read-only
    --output-last-message <tmp>` (file content check); `gemini -p "Reply with
-   exactly: ok" --output-format json` (envelope shape); `kimi -p "Reply with
-   exactly: ok"` (stdout cleanliness); a small Kimi `-p` edit-task probe
-   (approval behavior).
+   exactly: ok" --output-format json` (envelope shape).
+   **Kimi is DONE** (2026-07-20, kimi 0.27.0 authenticated): stdout
+   decoration (`• ` prefix) confirmed → file channel primary;
+   outside-workspace read+write under plain `-p` confirmed; headless
+   `git add` under plain `-p` confirmed. No Kimi probes remain.
 3. A template whose auth-needed probe cannot run ships in its primary shape
    with the entry comment stating what remains unverified; the changelog
    says the same. Pre-authorized fallbacks above are applied only on
