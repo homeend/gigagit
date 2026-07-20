@@ -277,7 +277,11 @@ guards against removing the worktree you are standing in.
 - `gg repo list` / `gg repo switch <query>` — the known-repository registry
   (MRU); `switch` prints the path of the unique match.
 - `gg inspect` — one-shot repo summary (scriptable health check).
-- `gg init` — install/refresh this skill for detected AI agents.
+- `gg init` — install/refresh this skill for detected AI agents. An agent gg
+doesn't know can still get it: `gg init --to <path>` installs at a custom
+location (a file receives a marker-delimited managed block, surrounding
+content preserved; a directory receives `<dir>/using-gg/SKILL.md`) and
+remembers the target, so `gg init --update` refreshes it too.
 - `gg config init (--repo | --global) [--force]` — write a documented config
   file (every setting commented with its default); `--repo` → `.gg.toml` at the
   repo root, `--global` → `~/.config/gg/config.toml`. Refuses to overwrite

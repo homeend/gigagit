@@ -23,6 +23,11 @@ var RepoStatePath string
 // stay hermetic by default.
 var InitHomeDir string
 
+// InitTargetsPath overrides where `gg init` records custom (--to) install
+// targets. Empty = the default agent-targets.toml beside repos.toml in the
+// state dir. Tests set it to a temp file so they never touch real state.
+var InitTargetsPath string
+
 // Run dispatches a CLI subcommand against the repo at workdir, writing to
 // stdout/stderr, and returns a process exit code.
 func Run(workdir string, args []string, stdin io.Reader, stdout, stderr io.Writer, cwdFile string) int {
