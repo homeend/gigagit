@@ -23,7 +23,9 @@ small, isolated package and know the answer cheaply.
   Ops-over-WebSocket with decision modals is a stage-2 question this probe
   exists to justify.
 - **No auth token.** Read-only on loopback. Any future mutating stage adds
-  token auth *first*.
+  token auth *first*. (The server does validate the request `Host` header
+  against loopback names — a DNS-rebinding defense so a malicious page can't
+  reach `127.0.0.1:<port>` and read repo contents; this is not auth.)
 - **No node toolchain.** Plain ES modules served from `go:embed`. A JS build
   pipeline is a decision for a real product, not a probe.
 - **One browser tab assumed.** The server holds one `CommitFeed` instance;
