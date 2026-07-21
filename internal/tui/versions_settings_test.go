@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/engine"
 )
@@ -165,11 +166,17 @@ func TestOpsHistMenuRowOpensSubView(t *testing.T) {
 }
 
 // TestOpsHistSubViewRendersAtWideWidth verifies that opsHistView and ratesView
-// both render at the same (wide) popup width. This regression test catches
-// removal of p.opsHistView from the wide-box condition by rendering both
-// sub-views and comparing their content line lengths: ratesView already uses
-// wide width, so both should have identical line widths; if opsHistView loses
-// the wide-width fix, its content lines will be noticeably shorter.
+// both render at the same (wide) popup box width. This regression test catches
+// removal of p.opsHistView from the wide-box condition in settings_popup.go's
+// box() (~line 695): ratesView already opts into the wide inner width via that
+// condition, so if opsHistView drops out of it, its box narrows.
+//
+// It measures settingsPopup.box(m) directly — the popup box string itself,
+// not the composited m.View() output — so the terminal-width backdrop (which
+// is identical in both renders and swamps any popup-width difference) never
+// enters the comparison, and border lines (which contain '│') are never
+// silently skipped the way they were in a prior, toothless version of this
+// test.
 func TestOpsHistSubViewRendersAtWideWidth(t *testing.T) {
 	m, dir := settingsModel(t)
 	m.repoConfigPath = filepath.Join(dir, ".gg.toml")
@@ -178,28 +185,6 @@ func TestOpsHistSubViewRendersAtWideWidth(t *testing.T) {
 	// At 100: narrow inner = min(56, 92) = 56, wide = min(96, 92) = 92.
 	const termWidth = 100
 	m.width, m.height = termWidth, 50
-
-	// Helper: find the maximum content line length (excluding border/padding) from rendered output.
-	// Content lines are prefixed with "> " (selection marker) or "  " (normal).
-	maxContentLineLen := func(out string) int {
-		maxLen := 0
-		for _, line := range strings.Split(out, "\n") {
-			stripped := stripANSI(line)
-			// Skip empty lines and border lines (contain box-drawing chars or are borders)
-			if len(stripped) == 0 || strings.ContainsAny(stripped, "╭╮╰╯─│") {
-				continue
-			}
-			// Skip lines that are just padding
-			if strings.TrimSpace(stripped) == "" {
-				continue
-			}
-			// This is a content line; measure it
-			if len(stripped) > maxLen {
-				maxLen = len(stripped)
-			}
-		}
-		return maxLen
-	}
 
 	// Open Settings menu.
 	u, _ := m.Update(keyMsg(","))
@@ -224,11 +209,7 @@ func TestOpsHistSubViewRendersAtWideWidth(t *testing.T) {
 		t.Fatal("failed to open Refresh rates sub-view")
 	}
 
-	ratesOut := m.View()
-	ratesLineLen := maxContentLineLen(ratesOut)
-	if ratesLineLen == 0 {
-		t.Fatalf("could not measure Refresh rates content line length:\n%s", ratesOut)
-	}
+	ratesW := widestLine(layerOf[*settingsPopup](m).box(m))
 
 	// Close rates view to return to menu.
 	u, _ = m.Update(keyMsg("esc"))
@@ -257,42 +238,27 @@ func TestOpsHistSubViewRendersAtWideWidth(t *testing.T) {
 		t.Fatal("failed to open Operations history sub-view")
 	}
 
-	opsOut := m.View()
-	opsLineLen := maxContentLineLen(opsOut)
-	if opsLineLen == 0 {
-		t.Fatalf("could not measure Operations history content line length:\n%s", opsOut)
-	}
+	opsW := widestLine(layerOf[*settingsPopup](m).box(m))
 
-	// Both views should render at the same width (wide width).
-	// If opsHistView is using narrow width (missing fix), opsLineLen << ratesLineLen.
-	// Allow small difference (±3 chars) for rendering variation, but not a major divergence.
-	diff := ratesLineLen - opsLineLen
-	if diff > 5 || diff < -5 {
-		t.Fatalf("Operations history and Refresh rates content line widths differ significantly.\n"+
-			"Refresh rates max content line: %d chars\n"+
-			"Operations history max content line: %d chars\n"+
-			"Difference: %d chars\n"+
-			"Both should be ~%d (wide width). Missing fix? Check settings_popup.go line ~695.\n\n"+
-			"Refresh rates output:\n%s\n\n"+
-			"Operations history output:\n%s",
-			ratesLineLen, opsLineLen, diff, ratesLineLen,
-			ratesOut, opsOut)
+	if ratesW == 0 || opsW == 0 {
+		t.Fatalf("could not measure popup box width: ratesW=%d opsW=%d", ratesW, opsW)
+	}
+	if opsW != ratesW {
+		t.Fatalf("Operations history and Refresh rates popup box widths differ: "+
+			"ratesW=%d opsW=%d (both should be equal — the wide width). "+
+			"Missing fix? Check settings_popup.go's box() condition (~line 695).",
+			ratesW, opsW)
 	}
 }
 
-// stripANSI removes ANSI escape codes from a string for testing.
-func stripANSI(s string) string {
-	// Simple ANSI strip: remove sequences like \x1b[...m
-	var result strings.Builder
-	inEscape := false
-	for _, r := range s {
-		if r == '\x1b' {
-			inEscape = true
-		} else if inEscape && r == 'm' {
-			inEscape = false
-		} else if !inEscape {
-			result.WriteRune(r)
+// widestLine returns the display width of the widest line in s — for a popup
+// box string this IS the box width, unaffected by the backdrop.
+func widestLine(s string) int {
+	max := 0
+	for _, line := range strings.Split(s, "\n") {
+		if w := lipgloss.Width(line); w > max {
+			max = w
 		}
 	}
-	return result.String()
+	return max
 }
