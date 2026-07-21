@@ -84,6 +84,18 @@ func SetWorktreePostCreateHook(path, script string) error {
 	return setMultilineLiteral(path, "worktree", "post_create_hook", script)
 }
 
+// SetVersionsDisabled persists `[versions] disabled` to the given config file
+// (the repo .gg.toml), backing the Settings Operations history toggle.
+func SetVersionsDisabled(path string, disabled bool) error {
+	return setScalarLine(path, "versions", "disabled", strconv.FormatBool(disabled))
+}
+
+// SetVersionsMaxAgeDays persists `[versions] max_age_days` (-1 = keep forever)
+// to the given config file, backing the Settings Operations history editor.
+func SetVersionsMaxAgeDays(path string, days int) error {
+	return setScalarLine(path, "versions", "max_age_days", strconv.Itoa(days))
+}
+
 // setScalarLine sets `key = value` under `[section]` in a TOML file via a
 // line-oriented edit so unrelated lines and comments survive. It updates an
 // existing assignment (uncommenting a commented one), inserts the key under an

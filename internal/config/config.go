@@ -122,12 +122,23 @@ type RefreshConfig struct {
 	RemotesWatch   bool `toml:"remotes_watch"`
 }
 
+// VersionsConfig configures branch-version snapshots (operations history).
+// TOML keys snake_case under [versions]. Disabled is inverted on purpose: the
+// zero-is-unset overlay could never turn a default-on plain bool off from the
+// repo layer (the DisableRemoteTagsAuto precedent). MaxAgeDays uses
+// nonzero-is-set so -1 (keep forever) overlays; 0 means unset (→ default 90).
+type VersionsConfig struct {
+	Disabled   bool `toml:"disabled"`
+	MaxAgeDays int  `toml:"max_age_days"`
+}
+
 // Config is the merged gigagit configuration.
 type Config struct {
 	Worktree WorktreeConfig `toml:"worktree"`
 	UI       UIConfig       `toml:"ui"`
 	Debug    DebugConfig    `toml:"debug"`
 	Refresh  RefreshConfig  `toml:"refresh"`
+	Versions VersionsConfig `toml:"versions"`
 	Tools    ToolsConfig    `toml:"tools"`
 }
 
@@ -140,6 +151,7 @@ func Defaults() Config {
 		},
 		UI: UIConfig{WheelStep: 3, HScrollStep: 8, CommitGraphLanes: 8, CommitGraphMinLanes: 2, CommitGraphStep: 4,
 			CommitInitialCount: 300, CommitBatchSize: 300, CommitSearchMaxPages: 50, CommitSort: "date-order", ShowGraph: "on"},
+		Versions: VersionsConfig{MaxAgeDays: 90},
 	}
 }
 
@@ -159,6 +171,7 @@ func Load(globalPath, repoPath string) (Config, error) {
 			overlayUI(&cfg.UI, layer.UI)
 			overlayDebug(&cfg.Debug, layer.Debug)
 			overlayRefresh(&cfg.Refresh, layer.Refresh)
+			overlayVersions(&cfg.Versions, layer.Versions)
 			overlayTools(&cfg.Tools, layer.Tools)
 		}
 	}
@@ -342,6 +355,17 @@ func overlayRefresh(dst *RefreshConfig, src RefreshConfig) {
 	}
 	if src.RemotesWatch {
 		dst.RemotesWatch = true
+	}
+}
+
+// overlayVersions copies each set field of src onto dst. Disabled: true wins.
+// MaxAgeDays: any nonzero value (including -1 = forever) overlays.
+func overlayVersions(dst *VersionsConfig, src VersionsConfig) {
+	if src.Disabled {
+		dst.Disabled = true
+	}
+	if src.MaxAgeDays != 0 {
+		dst.MaxAgeDays = src.MaxAgeDays
 	}
 }
 
