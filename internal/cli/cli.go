@@ -43,6 +43,13 @@ func Run(workdir string, args []string, stdin io.Reader, stdout, stderr io.Write
 	// EOL-only filter is a TUI Files-panel convenience and the CLI has no config
 	// to disable it, so a script's output must not silently change.
 	svc.SetShowEOLOnlyChanges(true)
+	// Best-effort: inject the configured branch-version snapshot policy (see
+	// internal/engine's VersionsPolicy). A load error (not a repo, no config
+	// files, etc.) silently keeps the domain default (enabled, 90 days) —
+	// every other CLI command must keep working even when this fails.
+	if cfg, err := loadConfigFor(svc); err == nil {
+		svc.SetVersionsPolicy(engine.VersionsPolicy{Enabled: !cfg.Versions.Disabled, MaxAgeDays: cfg.Versions.MaxAgeDays})
+	}
 	cmd, rest := args[0], args[1:]
 	// Record this repo in the switcher registry (best-effort: errors and
 	// non-repo working directories are ignored). Skip for "repo" subcommands
@@ -125,6 +132,8 @@ func runOne(svc *domain.Service, workdir, cmd string, rest []string, stdin io.Re
 		return cmdShow(svc, rest, stdout, stderr)
 	case "review":
 		return cmdReview(svc, workdir, rest, stdout, stderr)
+	case "versions":
+		return cmdVersions(svc, rest, stdin, stdout, stderr)
 	case "repo":
 		return cmdRepo(rest, stdout, stderr, cwdFile)
 	case "init":
@@ -147,7 +156,7 @@ var commands = map[string]bool{
 	"discard": true, "add": true, "unstage": true, "shelf": true, "bookmark": true, "log": true, "prefix": true,
 	"remote": true, "tag": true, "compare": true, "diff": true, "show": true,
 	"inspect": true, "repo": true, "init": true, "config": true, "batch": true,
-	"review": true, "apply": true,
+	"review": true, "apply": true, "versions": true,
 }
 
 // IsCommand reports whether tok is a gg CLI subcommand (used by cmd/gg to
