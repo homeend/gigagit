@@ -166,3 +166,33 @@ func TestCommitsPaging(t *testing.T) {
 		t.Fatalf("more=1 did not grow the feed: %d -> %d", len(first.Rows), len(second.Rows))
 	}
 }
+
+func TestCommitFilesEndpoint(t *testing.T) {
+	dir := newRepoDir(t, 2)
+	sha := gitRun(t, dir, "rev-parse", "HEAD")
+	ts := serve(t, New(domain.Open(dir)))
+	var got struct {
+		Sha   string `json:"sha"`
+		Files []struct {
+			Path   string `json:"path"`
+			Status string `json:"status"`
+		} `json:"files"`
+	}
+	if code := getJSON(t, ts, "/api/commit/"+sha, &got); code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", code)
+	}
+	if got.Sha != sha {
+		t.Errorf("sha = %q, want %q", got.Sha, sha)
+	}
+	if len(got.Files) != 1 || got.Files[0].Path != "f.txt" || got.Files[0].Status != "M" {
+		t.Errorf("files = %+v, want [{f.txt M}]", got.Files)
+	}
+}
+
+func TestCommitFilesBadSha(t *testing.T) {
+	dir := newRepoDir(t, 1)
+	ts := serve(t, New(domain.Open(dir)))
+	if code := getJSON(t, ts, "/api/commit/zzzz", nil); code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", code)
+	}
+}

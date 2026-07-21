@@ -108,3 +108,22 @@ func refKindString(k model.RefKind) string {
 	}
 	return "other"
 }
+
+func (s *Server) handleCommitFiles(w http.ResponseWriter, r *http.Request) {
+	sha := r.PathValue("sha")
+	files, err := s.svc.CommitFiles(r.Context(), sha)
+	if err != nil {
+		writeErr(w, http.StatusNotFound, err)
+		return
+	}
+	type fileInfo struct {
+		Path    string `json:"path"`
+		Status  string `json:"status"`
+		OldPath string `json:"old_path,omitempty"`
+	}
+	out := make([]fileInfo, len(files))
+	for i, f := range files {
+		out[i] = fileInfo{Path: f.Path, Status: f.Status, OldPath: f.OldPath}
+	}
+	writeJSON(w, map[string]any{"sha": sha, "files": out})
+}
