@@ -17,6 +17,11 @@ type Commit struct {
 }
 
 func (op Commit) Run(ctx context.Context, deps OpDeps) (Result, error) {
+	if op.Amend {
+		if cur, cerr := deps.Repo.CurrentBranch(ctx); cerr == nil {
+			snapshotBranchTip(ctx, deps, cur, "amend")
+		}
+	}
 	deps.emit(ctx, Progress{Step: "committing", Detail: op.Message})
 	if err := deps.Repo.Commit(ctx, op.Message, op.All, op.Amend); err != nil {
 		return Result{}, err

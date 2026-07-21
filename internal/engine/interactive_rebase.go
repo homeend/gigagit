@@ -38,6 +38,8 @@ func (op InteractiveRebase) Run(ctx context.Context, deps OpDeps) (Result, error
 		return Result{}, fmt.Errorf("interactive rebase: empty plan")
 	}
 
+	snapshotBranchTip(ctx, deps, op.Branch, "interactive-rebase")
+
 	branches, err := deps.Repo.Branches(ctx)
 	if err != nil {
 		return Result{}, err

@@ -117,11 +117,13 @@ func (op SmartPull) pullCurrent(ctx context.Context, deps OpDeps, remote, branch
 	}
 	switch resp.Option {
 	case "rebase":
+		snapshotBranchTip(ctx, deps, branch, "pull")
 		if err := deps.Repo.Pull(ctx, remote, branch, git.PullRebase); err != nil {
 			return Result{}, err
 		}
 		return Result{Changed: true}.WithSummary("pulled (rebased) %s", branch), nil
 	case "merge":
+		snapshotBranchTip(ctx, deps, branch, "pull")
 		if err := deps.Repo.Pull(ctx, remote, branch, git.PullMerge); err != nil {
 			return Result{}, err
 		}
@@ -131,6 +133,7 @@ func (op SmartPull) pullCurrent(ctx context.Context, deps OpDeps, remote, branch
 		// is the --ff-only guarantee), so there is no in-progress state to abort:
 		// reset --hard alone snaps the branch to the fetched remote tip and
 		// discards local commits + uncommitted changes, as the user asked.
+		snapshotBranchTip(ctx, deps, branch, "pull")
 		remoteTip := remote + "/" + branch
 		deps.emit(ctx, Progress{Step: "resetting (hard)", Detail: remoteTip})
 		if err := deps.Repo.Reset(ctx, "hard", remoteTip); err != nil {
@@ -143,6 +146,7 @@ func (op SmartPull) pullCurrent(ctx context.Context, deps OpDeps, remote, branch
 }
 
 func (op SmartPull) checkoutPull(ctx context.Context, deps OpDeps, remote, target, returnTo string) (Result, error) {
+	// no version snapshot: background checkout-pull is additive in the common case; revisit with workspace groups.
 	repo := deps.Repo
 
 	wt, err := repo.WorktreeForBranch(ctx, target)
