@@ -34,6 +34,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/repo", s.handleRepo)
 	mux.HandleFunc("GET /api/commits", s.handleCommits)
 	mux.HandleFunc("GET /api/commit/{sha}", s.handleCommitFiles)
+	mux.HandleFunc("GET /api/diff", s.handleDiff)
 	return mux
 }
 

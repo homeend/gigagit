@@ -205,3 +205,77 @@ func TestCommitFilesRejectsFlag(t *testing.T) {
 		t.Fatalf("status = %d, want 400 for a flag-shaped sha", code)
 	}
 }
+
+func TestDiffEndpoint(t *testing.T) {
+	dir := newRepoDir(t, 2) // c2 rewrote f.txt: "content 1" -> "content 2"
+	sha := gitRun(t, dir, "rev-parse", "HEAD")
+	ts := serve(t, New(domain.Open(dir)))
+	var got struct {
+		Rows []struct {
+			Kind       string   `json:"kind"`
+			Left       string   `json:"left"`
+			Right      string   `json:"right"`
+			LeftNo     int      `json:"left_no"`
+			RightNo    int      `json:"right_no"`
+			LeftSpans  [][2]int `json:"left_spans"`
+			RightSpans [][2]int `json:"right_spans"`
+		} `json:"rows"`
+		Binary   bool `json:"binary"`
+		TooLarge bool `json:"too_large"`
+	}
+	code := getJSON(t, ts, "/api/diff?sha="+sha+"&path=f.txt&status=M", &got)
+	if code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", code)
+	}
+	if got.Binary || got.TooLarge {
+		t.Fatalf("binary/too_large set on a text diff: %+v", got)
+	}
+	var change bool
+	for _, r := range got.Rows {
+		if r.Kind == "change" && strings.Contains(r.Left, "content 1") && strings.Contains(r.Right, "content 2") {
+			change = true
+			if len(r.LeftSpans) == 0 || len(r.RightSpans) == 0 {
+				t.Errorf("change row missing intraline spans: %+v", r)
+			}
+		}
+	}
+	if !change {
+		t.Fatalf("no change row content 1 -> content 2 in %+v", got.Rows)
+	}
+}
+
+func TestDiffMissingParams(t *testing.T) {
+	dir := newRepoDir(t, 1)
+	ts := serve(t, New(domain.Open(dir)))
+	if code := getJSON(t, ts, "/api/diff?path=f.txt", nil); code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 without sha", code)
+	}
+}
+
+func TestDiffRejectsFlag(t *testing.T) {
+	dir := newRepoDir(t, 1)
+	sha := gitRun(t, dir, "rev-parse", "HEAD")
+	ts := serve(t, New(domain.Open(dir)))
+	// A flag-shaped path must not reach the git argv (argument injection).
+	if code := getJSON(t, ts, "/api/diff?sha="+sha+"&path=--output=x&status=M", nil); code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 for a flag-shaped path", code)
+	}
+}
+
+func TestDiffAddedFile(t *testing.T) {
+	dir := newRepoDir(t, 1) // root commit: f.txt is status A, sha^ does not exist
+	sha := gitRun(t, dir, "rev-parse", "HEAD")
+	ts := serve(t, New(domain.Open(dir)))
+	var got struct {
+		Rows []struct {
+			Kind string `json:"kind"`
+		} `json:"rows"`
+	}
+	code := getJSON(t, ts, "/api/diff?sha="+sha+"&path=f.txt&status=A", &got)
+	if code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", code)
+	}
+	if len(got.Rows) == 0 || got.Rows[0].Kind != "add" {
+		t.Fatalf("rows = %+v, want add rows for a new file", got.Rows)
+	}
+}
