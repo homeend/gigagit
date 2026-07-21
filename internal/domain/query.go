@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -525,6 +526,72 @@ func (s *Service) CommitLookup(ctx context.Context, rev string) (model.LogLine, 
 		return model.LogLine{}, false, nil
 	}
 	return line, true, nil
+}
+
+// BranchVersions lists a branch's recorded pre-operation snapshots, newest
+// first, under a Read reservation.
+func (s *Service) BranchVersions(ctx context.Context, branch string) ([]model.BranchVersion, error) {
+	return query(ctx, s, "branch-versions:"+branch, func(ctx context.Context) ([]model.BranchVersion, error) {
+		infos, err := s.repo.ForEachRef(ctx, strings.TrimSuffix(git.VersionRefPrefix, "/")+"/"+branch)
+		if err != nil {
+			return nil, err
+		}
+		var out []model.BranchVersion
+		for _, info := range infos {
+			b, op, ts, ok := git.ParseVersionRef(info.Ref)
+			if !ok || b != branch { // prefix match may over-catch nested names
+				continue
+			}
+			out = append(out, model.BranchVersion{Ref: info.Ref, Hash: info.Hash, Subject: info.Subject, Op: op, Unix: ts})
+		}
+		sort.Slice(out, func(i, j int) bool { return out[i].Unix > out[j].Unix })
+		return out, nil
+	})
+}
+
+// AllVersionBranches groups every recorded version by branch, marking
+// branches that no longer exist (deleted-branch recovery entry point).
+func (s *Service) AllVersionBranches(ctx context.Context) ([]model.VersionedBranch, error) {
+	return query(ctx, s, "version-branches", func(ctx context.Context) ([]model.VersionedBranch, error) {
+		infos, err := s.repo.ForEachRef(ctx, strings.TrimSuffix(git.VersionRefPrefix, "/"))
+		if err != nil {
+			return nil, err
+		}
+		byBranch := map[string]*model.VersionedBranch{}
+		for _, info := range infos {
+			b, _, ts, ok := git.ParseVersionRef(info.Ref)
+			if !ok {
+				continue
+			}
+			row := byBranch[b]
+			if row == nil {
+				row = &model.VersionedBranch{Branch: b}
+				byBranch[b] = row
+			}
+			row.Count++
+			if ts > row.LatestUnix {
+				row.LatestUnix = ts
+			}
+		}
+		if len(byBranch) == 0 {
+			return nil, nil
+		}
+		branches, err := s.repo.Branches(ctx)
+		if err != nil {
+			return nil, err
+		}
+		exists := map[string]bool{}
+		for _, b := range branches {
+			exists[b.Name] = true
+		}
+		out := make([]model.VersionedBranch, 0, len(byBranch))
+		for _, row := range byBranch {
+			row.Deleted = !exists[row.Branch]
+			out = append(out, *row)
+		}
+		sort.Slice(out, func(i, j int) bool { return out[i].LatestUnix > out[j].LatestUnix })
+		return out, nil
+	})
 }
 
 // DiffNoIndex returns the unified diff between two absolute filesystem paths

@@ -90,6 +90,24 @@ type RefInfo struct {
 	Subject string // commit subject
 }
 
+// BranchVersion is one recorded pre-operation snapshot of a branch
+// (refs/gg/versions/<branch>/<unix>-<op>).
+type BranchVersion struct {
+	Ref     string // full version ref
+	Hash    string // snapshot tip (full sha)
+	Subject string // tip commit subject
+	Op      string // protocol op token: merge, rebase, restore, …
+	Unix    int64  // when the snapshot was recorded
+}
+
+// VersionedBranch summarizes one branch's recorded versions.
+type VersionedBranch struct {
+	Branch     string
+	Deleted    bool // branch no longer exists in refs/heads
+	Count      int
+	LatestUnix int64
+}
+
 // RemoteBranch is one entry from `git for-each-ref refs/remotes`.
 type RemoteBranch struct {
 	Name     string // short ref, e.g. "origin/feature/x"
