@@ -51,3 +51,26 @@ func (m Model) branchRebaseRow() (actionRow, bool) {
 		},
 	}, true
 }
+
+// branchVersionsRow offers "Previous versions…" on the Branches tab, opening
+// the versionsPopup straight into versions mode for the selected branch.
+// Deliberately NOT self-gated on "does this branch have any recorded
+// versions" — that would cost a git read every time the . menu opens; the
+// popup itself shows "no versions recorded" when the list is empty.
+func (m Model) branchVersionsRow() (actionRow, bool) {
+	if m.focus != panelBranches || !m.opsIdle() {
+		return actionRow{}, false
+	}
+	bi, ok := m.backingIndex(panelBranches)
+	if !ok || bi < 0 || bi >= len(m.branches) {
+		return actionRow{}, false
+	}
+	name := m.branches[bi].Name
+	return actionRow{
+		id:    "branch-versions",
+		label: i18n.T("Previous versions…"),
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			return m.openBranchVersions(name, false, false)
+		},
+	}, true
+}

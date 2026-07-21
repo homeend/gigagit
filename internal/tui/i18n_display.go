@@ -51,6 +51,20 @@ func opDisplayName(op string) string {
 		return i18n.T("cherry-pick")
 	case "revert":
 		return i18n.T("revert")
+	case "interactive-rebase":
+		return i18n.T("interactive-rebase")
+	case "amend":
+		return i18n.T("amend")
+	case "undo-commit":
+		return i18n.T("undo-commit")
+	case "reset":
+		return i18n.T("reset")
+	case "pull":
+		return i18n.T("pull")
+	case "delete-branch":
+		return i18n.T("delete-branch")
+	case "restore":
+		return i18n.T("restore")
 	}
 	return op
 }
@@ -156,6 +170,8 @@ func optionDisplayName(value string) string {
 		return i18n.T("Detached")
 	case "Discard":
 		return i18n.T("Discard")
+	case "New branch at version":
+		return i18n.T("New branch at version")
 	case "No":
 		return i18n.T("No")
 	case "Push branch + tags":
@@ -166,6 +182,8 @@ func optionDisplayName(value string) string {
 		return i18n.T("Remove")
 	case "Reorder & squash":
 		return i18n.T("Reorder & squash")
+	case "Reset branch":
+		return i18n.T("Reset branch")
 	case "Yes":
 		return i18n.T("Yes")
 	case "abort":

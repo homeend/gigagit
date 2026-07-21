@@ -304,6 +304,17 @@ func opAffectedSources(op engine.Operation) []sourceKey {
 		// DeleteBranch: unmapped, this fell through to "all sources" and
 		// auto-fired the remote-tags ls-remote probe after every delete.
 		return []sourceKey{srcBranches, srcRemotes, srcFeed}
+	case engine.RestoreBranchVersion:
+		// Moves a branch tip (current branch: a hard reset that also touches
+		// the working tree; another branch: update-ref) and may recreate a
+		// deleted branch — refresh status, the branch list, the feed (%D
+		// decorations/tip markers), and worktrees (a recreated branch could
+		// be one a worktree tracks).
+		return []sourceKey{srcStatus, srcBranches, srcFeed, srcWorktrees}
+	case engine.DeleteBranchVersion:
+		// Removes a refs/gg/versions/... ref only — no panel shows these,
+		// so nothing needs a reload.
+		return []sourceKey{}
 	case engine.ExportFile, engine.ExportToDir:
 		return []sourceKey{} // writes outside the working tree; refresh nothing
 	case engine.WriteCommitGraph, engine.SetGitConfig:

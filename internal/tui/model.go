@@ -66,6 +66,7 @@ type Model struct {
 	blinkOn                bool                   // current blink phase (style alternation)
 	noticeGen              int                    // stale-drop guard for repoHealthMsg across repo switches
 	gitConfigGen           int                    // stale-drop guard for explorer row loads
+	versionsGen            int                    // stale-drop guard for the branch-versions popup's loads
 	blinkGen               int                    // bumped on every blink-tick arm; stale ticks are dropped (single blink lane)
 	noticeSessionDismissed map[string]bool        // "Not now" ids; cleared on reRoot (re-evaluated next load)
 	repoHealth             model.RepoHealth       // last health snapshot (Settings Commit-graph row)
@@ -383,6 +384,50 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, healthCmd
+	case versionsLoadedMsg:
+		if msg.gen != m.versionsGen {
+			return m, nil // stale: reopened, mode-switched, or repo-switched since dispatch
+		}
+		if p := layerOf[*versionsPopup](m); p != nil {
+			p.loading = false
+			if msg.err != nil {
+				p.err = i18n.T("(load failed: %s)", msg.err.Error())
+				p.rows = nil
+			} else {
+				p.err = ""
+				p.rows = msg.rows
+				if n := len(p.rows); p.sel >= n {
+					if n > 0 {
+						p.sel = n - 1
+					} else {
+						p.sel = 0
+					}
+				}
+			}
+		}
+		return m, nil
+	case versionBranchesLoadedMsg:
+		if msg.gen != m.versionsGen {
+			return m, nil // stale: reopened or repo-switched since dispatch
+		}
+		if p := layerOf[*versionsPopup](m); p != nil {
+			p.loading = false
+			if msg.err != nil {
+				p.err = i18n.T("(load failed: %s)", msg.err.Error())
+				p.branchRows = nil
+			} else {
+				p.err = ""
+				p.branchRows = msg.rows
+				if n := len(p.branchRows); p.sel >= n {
+					if n > 0 {
+						p.sel = n - 1
+					} else {
+						p.sel = 0
+					}
+				}
+			}
+		}
+		return m, nil
 	case noticeBlinkMsg:
 		if msg.gen != m.blinkGen || !m.noticesUnread {
 			return m, nil // stale lane or read: stop re-arming
@@ -3060,6 +3105,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.noticesUnread = false
 	m.noticeGen++    // drop any in-flight health read from the old repo
 	m.gitConfigGen++ // drop any in-flight git-config explorer read from the old repo
+	m.versionsGen++  // drop any in-flight branch-versions popup read from the old repo
 	m.noticeSessionDismissed = map[string]bool{}
 	m.repoHealthKnown = false
 	m.pendingNoticeConfig = nil

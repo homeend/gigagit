@@ -83,6 +83,7 @@ func TestCommandPaletteRenders(t *testing.T) {
 func TestPaletteRegistryOrder(t *testing.T) {
 	want := []struct{ label, keyHint string }{
 		{"Apply patch…", ""},
+		{"Branch versions…", ""},
 		{"File blame", ""},
 		{"File history", ""},
 		{"Find", "F"},
