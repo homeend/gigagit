@@ -31,6 +31,45 @@ func TestFriendlyOpErrorExplainsMissingCredentials(t *testing.T) {
 	}
 }
 
+// gg forces ssh into BatchMode (WithSSHBatchMode) so a host-key prompt can
+// never freeze the TUI — first contact with an unknown host fails with "Host
+// key verification failed." plus git's misleading access-rights tail. That
+// reads like a permissions bug, so friendlyOpError points at the ctrl+o shell
+// escape, where ssh can prompt interactively.
+func TestFriendlyOpErrorExplainsUnknownHostKey(t *testing.T) {
+	raw := errors.New("git push failed (exit 128): Host key verification failed. fatal: Could not read from remote repository. Please make sure you have the correct access rights and the repository exists.")
+	got := friendlyOpError(raw)
+	if !statusIsError(got) {
+		t.Fatalf("friendlyOpError(%q) = %q, want an error: line", raw, got)
+	}
+	if strings.Contains(got, "Host key verification failed") {
+		t.Fatalf("friendly message still leaks the raw git noise: %q", got)
+	}
+	if !strings.Contains(got, "ctrl+o") {
+		t.Fatalf("friendly message should point at the ctrl+o shell escape: %q", got)
+	}
+}
+
+// A known_hosts MISMATCH (possible MITM) also ends in the generic "Host key
+// verification failed." line, but must NOT advise accepting the key — the
+// changed-key signature is classified before the unknown-host one.
+func TestFriendlyOpErrorExplainsChangedHostKey(t *testing.T) {
+	raw := errors.New("git push failed (exit 128): @@@ WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED! @@@ IT IS POSSIBLE THAT SOMEONE IS DOING SOMETHING NASTY! Host key verification failed. fatal: Could not read from remote repository.")
+	got := friendlyOpError(raw)
+	if !statusIsError(got) {
+		t.Fatalf("friendlyOpError(%q) = %q, want an error: line", raw, got)
+	}
+	if strings.Contains(got, "Host key verification failed") {
+		t.Fatalf("friendly message still leaks the raw git noise: %q", got)
+	}
+	if !strings.Contains(got, "CHANGED") {
+		t.Fatalf("friendly message should say the key changed: %q", got)
+	}
+	if strings.Contains(got, "ctrl+o") {
+		t.Fatalf("a changed key must not advise accepting it: %q", got)
+	}
+}
+
 func TestFriendlyOpErrorPassesThroughOtherFailures(t *testing.T) {
 	raw := errors.New("git stash apply failed (exit 1): some unrecognised git noise")
 	got := friendlyOpError(raw)

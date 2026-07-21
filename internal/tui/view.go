@@ -97,8 +97,13 @@ var statusErrorPrefixes = []string{"error:", "files:", "commits:", "amend:", "in
 // friendlyOpError turns an operation failure into the status-bar message. gg
 // runs git with GIT_TERMINAL_PROMPT=0 (so a credential prompt can never freeze
 // the TUI), which makes git fail with "could not read Username … terminal
-// prompts disabled" when a remote needs auth and no helper is configured. That
-// raw text reads like a gg bug, so it is rewritten into actionable guidance.
+// prompts disabled" when a remote needs auth and no helper is configured. The
+// same policy forces ssh into BatchMode, so an unknown or changed host key
+// fails with "Host key verification failed." instead of prompting. Both raw
+// texts read like gg bugs (the host-key one even blames "access rights"), so
+// they are rewritten into actionable guidance. The changed-key signature is
+// classified before the generic one — its stderr also ends in the generic
+// line, and a possible MITM must never be answered with "just accept it".
 // Everything else passes through as the cleaned git message.
 func friendlyOpError(err error) string {
 	s := err.Error()
@@ -107,6 +112,12 @@ func friendlyOpError(err error) string {
 		strings.Contains(low, "could not read username") ||
 		strings.Contains(low, "could not read password") {
 		return i18n.T("error: %s", i18n.T("remote needs credentials — configure a git credential helper (gg cannot prompt for them)"))
+	}
+	if strings.Contains(low, "host identification has changed") {
+		return i18n.T("error: %s", i18n.T("the remote host's ssh key CHANGED — verify with the host before trusting it, then update ~/.ssh/known_hosts"))
+	}
+	if strings.Contains(low, "host key verification failed") {
+		return i18n.T("error: %s", i18n.T("ssh does not trust this host yet — press ctrl+o and run the push/pull once to accept its key (gg cannot prompt)"))
 	}
 	if msg, ok := friendlyPushError(low); ok {
 		return msg

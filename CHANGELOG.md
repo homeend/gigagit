@@ -130,6 +130,17 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   (`ExtraProbes` gained `~/` expansion).
 
 ### Fixed
+- **ssh host-key failures now explain themselves.** gg runs ssh in
+  BatchMode (a prompt must never freeze the TUI), so first contact with a
+  host missing from `~/.ssh/known_hosts` failed with the raw `Host key
+  verification failed.` plus git's misleading "check your access rights"
+  tail. The TUI status line now says ssh doesn't trust the host yet and
+  points at the `ctrl+o` shell escape to run the push/pull once
+  interactively and accept the key. A changed key (possible MITM —
+  ssh's "REMOTE HOST IDENTIFICATION HAS CHANGED" warning) gets its own
+  message that deliberately does *not* advise accepting; it says to verify
+  with the host, then update known_hosts. Both are translated (ja/ko/zh/ru);
+  CLI output stays raw English by design.
 - **Running gg from a deleted directory now explains itself.** A shell
   sitting in a directory that was deleted (or deleted and recreated — the
   shell keeps the old inode) used to surface git's raw `fatal: Unable to
