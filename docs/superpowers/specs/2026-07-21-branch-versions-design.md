@@ -77,6 +77,11 @@ Policy reaches the engine the way `SetShowEOLOnlyChanges` does:
 `Service.SetVersionsPolicy(enabled bool, maxAgeDays int)` stored on the domain
 `Service`, passed into `OpDeps` by `Execute`.
 
+Two new non-destructive line-edit writers (the `SetCommitSort` precedent, both
+writing the ACTIVE repo `.gg.toml`): `SetVersionsMaxAgeDays(path, days)` and
+`SetVersionsDisabled(path, disabled)` — backing the Settings "Operations
+history" editor below.
+
 ## Engine
 
 ### New git verbs (`internal/git`)
@@ -173,6 +178,16 @@ fast-forward pull, `CherryPick`, `Push`, `Stash`, checkout/switch, worktree ops.
 - **Command palette**: "Branch versions…" — branch picker over
   `AllVersionBranches` (deleted branches marked, e.g. dim `(deleted)`), then
   the same popup. This is the recovery path for deleted branches.
+- **Settings (`,`) menu**: new row "Operations history" opening a small popup
+  with the recording machinery's config:
+  - "Retention" — shows the effective value (`90 days` / `keep forever`);
+    `enter` opens a numeric textfield (the `saveRefreshInterval` flow), `-1` =
+    keep forever, saved via `SetVersionsMaxAgeDays` to the active repo
+    `.gg.toml`, then the in-memory config and `Service` policy are updated.
+  - "Recording" — on/off toggle saved via `SetVersionsDisabled` (writes the
+    inverted `disabled` key).
+  Esc closes back to Settings. Labels/hints through `i18n.T` like every other
+  Settings row.
 - `opAffectedSources`: `RestoreBranchVersion` → `{status, branches, feed,
   worktrees}` (a reset of the current branch changes the working tree).
 - i18n: every new label/status/option through `i18n.T` with keys in all four
@@ -229,5 +244,9 @@ fast-forward pull, `CherryPick`, `Push`, `Stash`, checkout/switch, worktree ops.
 - **Domain**: BranchVersions ordering/parsing incl. slashed branch names;
   AllVersionBranches deleted-branch marking.
 - **TUI**: popup list rendering, compare dispatch resolves hashes, restore
-  decision wiring; i18n gates (menu_labels, options_vocab, engine_prose) pass.
+  decision wiring; Settings "Operations history" editor writes
+  `[versions] max_age_days`/`disabled` and refreshes the live policy; i18n
+  gates (menu_labels, options_vocab, engine_prose) pass.
+- **Config**: writer tests for `SetVersionsMaxAgeDays`/`SetVersionsDisabled`
+  (create-if-missing, preserve other lines, `-1` accepted).
 - **CLI/e2e**: `gg versions` + restore scenario per gotcha 6.
