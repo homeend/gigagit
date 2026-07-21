@@ -31,6 +31,8 @@ func New(svc *domain.Service) *Server { return &Server{svc: svc} }
 // Handler returns the full route mux.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /{$}", s.handleIndex)
+	mux.Handle("GET /static/", http.FileServerFS(staticFS))
 	mux.HandleFunc("GET /api/repo", s.handleRepo)
 	mux.HandleFunc("GET /api/commits", s.handleCommits)
 	mux.HandleFunc("GET /api/commit/{sha}", s.handleCommitFiles)

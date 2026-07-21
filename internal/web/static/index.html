@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>gg web</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header id="top">
+  <span id="repo-name">…</span>
+  <span id="repo-branch"></span>
+  <span id="repo-worktree"></span>
+</header>
+<main id="panes">
+  <section id="commits-pane" class="pane focused">
+    <div id="commits-scroll"><div id="commits-spacer"><div id="commits-window"></div></div></div>
+  </section>
+  <section id="files-pane" class="pane">
+    <div id="files-header"></div>
+    <ul id="files-list"></ul>
+  </section>
+  <section id="diff-pane" class="pane">
+    <div id="diff-header"></div>
+    <div id="diff-body"></div>
+  </section>
+</main>
+<footer id="foot">j/k move · enter open · tab switch pane · g graph mode</footer>
+<script type="module" src="/static/app.js"></script>
+</body>
+</html>

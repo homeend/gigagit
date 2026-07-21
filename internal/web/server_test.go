@@ -3,6 +3,7 @@ package web
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -277,5 +278,29 @@ func TestDiffAddedFile(t *testing.T) {
 	}
 	if len(got.Rows) == 0 || got.Rows[0].Kind != "add" {
 		t.Fatalf("rows = %+v, want add rows for a new file", got.Rows)
+	}
+}
+
+func TestStaticServing(t *testing.T) {
+	dir := newRepoDir(t, 1)
+	ts := serve(t, New(domain.Open(dir)))
+	resp, err := http.Get(ts.URL + "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), "<title>gg web</title>") {
+		t.Fatalf("GET / = %d %q", resp.StatusCode, body[:min(len(body), 120)])
+	}
+	for _, p := range []string{"/static/style.css", "/static/app.js"} {
+		r2, err := http.Get(ts.URL + p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		r2.Body.Close()
+		if r2.StatusCode != http.StatusOK {
+			t.Errorf("GET %s = %d, want 200", p, r2.StatusCode)
+		}
 	}
 }
