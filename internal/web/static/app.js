@@ -58,8 +58,8 @@ function rowHTML(row, i) {
   );
 }
 
-// text mode: color each glyph by its lane (two display columns per lane).
 function graphHTML(row) {
+  if (state.graphMode === "svg") return graphSVG(row);
   let html = "";
   let col = 0;
   for (const ch of row.cells || "") {
@@ -69,7 +69,56 @@ function graphHTML(row) {
   return html;
 }
 
-function toggleGraphMode() {} // wired in the graph-upgrade task
+function toggleGraphMode() {
+  state.graphMode = state.graphMode === "text" ? "svg" : "text";
+  renderCommits();
+}
+
+const CELL_W = 14;
+const HALF = CELL_W / 2;
+const MID = ROW_H / 2;
+
+const laneColors = [];
+function laneColor(i) {
+  if (!laneColors.length) {
+    const cs = getComputedStyle(document.documentElement);
+    for (let k = 0; k < 8; k++) laneColors.push(cs.getPropertyValue(`--lane${k}`).trim());
+  }
+  return laneColors[i % 8];
+}
+
+// Each glyph maps to stroke path(s) inside its CELL_W x ROW_H box, keyed by
+// which cell edges the glyph connects (top/bottom at center-x, left/right at
+// center-y).
+const GLYPH_PATHS = {
+  "│": (x) => `M${x + HALF},0 V${ROW_H}`,
+  "─": (x) => `M${x},${MID} H${x + CELL_W}`,
+  "╭": (x) => `M${x + CELL_W},${MID} Q${x + HALF},${MID} ${x + HALF},${ROW_H}`,
+  "╮": (x) => `M${x},${MID} Q${x + HALF},${MID} ${x + HALF},${ROW_H}`,
+  "╰": (x) => `M${x + HALF},0 Q${x + HALF},${MID} ${x + CELL_W},${MID}`,
+  "╯": (x) => `M${x + HALF},0 Q${x + HALF},${MID} ${x},${MID}`,
+  "┬": (x) => `M${x},${MID} H${x + CELL_W} M${x + HALF},${MID} V${ROW_H}`,
+  "┴": (x) => `M${x},${MID} H${x + CELL_W} M${x + HALF},0 V${MID}`,
+  "┼": (x) => `M${x + HALF},0 V${ROW_H} M${x},${MID} H${x + CELL_W}`,
+};
+
+function graphSVG(row) {
+  const cells = runes(row.cells || "");
+  const w = cells.length * CELL_W;
+  let parts = `<svg width="${w}" height="${ROW_H}" viewBox="0 0 ${w} ${ROW_H}">`;
+  cells.forEach((ch, col) => {
+    const x = col * CELL_W;
+    const color = laneColor(col >> 1);
+    if (ch === "●") {
+      parts += `<circle cx="${x + HALF}" cy="${MID}" r="4" fill="${color}"/>`;
+    } else if (GLYPH_PATHS[ch]) {
+      parts += `<path d="${GLYPH_PATHS[ch](x)}" stroke="${color}" stroke-width="2" fill="none" stroke-linecap="round"/>`;
+    } else if (ch !== " ") {
+      parts += `<text x="${x}" y="${ROW_H - 6}" fill="${color}" font-size="12">${esc(ch)}</text>`;
+    }
+  });
+  return parts + "</svg>";
+}
 
 async function loadCommits(more) {
   const body = await getJSON(more ? "/api/commits?more=1" : "/api/commits");
