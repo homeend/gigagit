@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/homeend/gigagit/internal/domain"
@@ -63,4 +64,12 @@ func writeErr(w http.ResponseWriter, code int, err error) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+}
+
+// isGitArgSafe reports whether s is safe to pass to a git verb as a
+// positional revision/path. Untrusted HTTP params flow into git argv, so a
+// value git would parse as an option (leading dash) is rejected before any
+// verb sees it.
+func isGitArgSafe(s string) bool {
+	return s != "" && !strings.HasPrefix(s, "-")
 }

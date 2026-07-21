@@ -1,6 +1,7 @@
 package web
 
 import (
+	"errors"
 	"net/http"
 	"path/filepath"
 
@@ -111,6 +112,10 @@ func refKindString(k model.RefKind) string {
 
 func (s *Server) handleCommitFiles(w http.ResponseWriter, r *http.Request) {
 	sha := r.PathValue("sha")
+	if !isGitArgSafe(sha) {
+		writeErr(w, http.StatusBadRequest, errors.New("invalid sha"))
+		return
+	}
 	files, err := s.svc.CommitFiles(r.Context(), sha)
 	if err != nil {
 		writeErr(w, http.StatusNotFound, err)

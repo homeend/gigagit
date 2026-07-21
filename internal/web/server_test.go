@@ -196,3 +196,12 @@ func TestCommitFilesBadSha(t *testing.T) {
 		t.Fatalf("status = %d, want 404", code)
 	}
 }
+
+func TestCommitFilesRejectsFlag(t *testing.T) {
+	dir := newRepoDir(t, 1)
+	ts := serve(t, New(domain.Open(dir)))
+	// A flag-shaped sha must not reach the git argv (argument injection).
+	if code := getJSON(t, ts, "/api/commit/--output=x", nil); code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 for a flag-shaped sha", code)
+	}
+}
