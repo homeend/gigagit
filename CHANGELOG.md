@@ -130,6 +130,15 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   (`ExtraProbes` gained `~/` expansion).
 
 ### Fixed
+- **Running gg from a deleted directory now explains itself.** A shell
+  sitting in a directory that was deleted (or deleted and recreated — the
+  shell keeps the old inode) used to surface git's raw `fatal: Unable to
+  read current working directory: No such file or directory`. gg now checks
+  its working directory up front, before any repo-touching command or the
+  TUI, and prints a friendly two-line message advising `cd "$PWD"` to
+  re-enter the path (exit 1); `friendlyGitError` also recognizes the git
+  message as a backstop. `gg version` and `gg shell-init` still work from a
+  dead cwd.
 - **File-stepping through a comparison no longer shows the wrong file's
   diff.** In a compare files view (marked commits, branch compare, full-tree
   mode, or the finder's HEAD ↔ working tree diff), stepping between files

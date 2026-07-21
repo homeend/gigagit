@@ -41,6 +41,12 @@ func main() {
 		runShellInit(args[1:])
 		return
 	}
+	// Everything past here touches the repo; a shell sitting in a deleted
+	// directory would only get git's raw getcwd failure, so explain it here.
+	if msg := staleCwdMessage(); msg != "" {
+		fmt.Fprintln(os.Stderr, msg)
+		os.Exit(1)
+	}
 	if len(args) > 0 && args[0] == "inspect" {
 		runInspect(args[1:])
 		return

@@ -2,9 +2,28 @@ package main
 
 import (
 	"errors"
+	"os"
 	"os/exec"
 	"strings"
 )
+
+// staleCwdText explains a getcwd failure: the directory the shell launched gg
+// from was deleted (or deleted and recreated — the shell still holds the old
+// inode), so every child process fails with "fatal: Unable to read current
+// working directory". Shared by the startup pre-flight and friendlyGitError.
+const staleCwdText = "gg: the current directory no longer exists — it was deleted or replaced while this shell was in it.\n" +
+	"    Run `cd \"$PWD\"` to re-enter it (or cd to an existing directory), then try again."
+
+// staleCwdMessage reports the friendly stale-cwd explanation when the
+// process's working directory is gone, and "" when it is fine. Checked up
+// front in main so every repo-touching path fails with advice instead of a
+// raw git passthrough.
+func staleCwdMessage() string {
+	if _, err := os.Getwd(); err != nil {
+		return staleCwdText
+	}
+	return ""
+}
 
 // friendlyGitError maps a raw git failure — as produced by the gitexec Runner,
 // e.g. "status failed (exit 128): fatal: not a git repository (or any of the
@@ -30,6 +49,8 @@ func friendlyGitError(err error) string {
 	case strings.Contains(low, "dubious ownership"):
 		return "gg: git refused this repository for safety (it is owned by another user).\n" +
 			"    Trust it with: git config --global --add safe.directory <path>"
+	case strings.Contains(low, "unable to read current working directory"):
+		return staleCwdText
 	}
 	// Unrecognized: drop the "<verb> failed (exit N): " runner noise if present,
 	// keeping git's own message, which is usually the useful part.
