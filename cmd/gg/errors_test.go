@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"os"
 	"strings"
 	"testing"
 )
@@ -36,6 +37,12 @@ func TestFriendlyGitError(t *testing.T) {
 			wantSubstr: "something unusual went wrong here",
 			noRawNoise: true,
 		},
+		{
+			name:       "stale working directory",
+			in:         "rev-parse failed (exit 128): fatal: Unable to read current working directory: No such file or directory",
+			wantSubstr: "no longer exists",
+			noRawNoise: true,
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -56,5 +63,29 @@ func TestFriendlyGitError(t *testing.T) {
 func TestFriendlyGitErrorNil(t *testing.T) {
 	if got := friendlyGitError(nil); got != "" {
 		t.Errorf("nil error should map to empty string, got %q", got)
+	}
+}
+
+func TestStaleCwdMessageLiveDir(t *testing.T) {
+	if got := staleCwdMessage(); got != "" {
+		t.Errorf("live working directory should map to empty string, got %q", got)
+	}
+}
+
+func TestStaleCwdMessageDeletedDir(t *testing.T) {
+	d := t.TempDir()
+	t.Chdir(d)
+	if err := os.Remove(d); err != nil {
+		t.Fatalf("removing cwd: %v", err)
+	}
+	got := staleCwdMessage()
+	if got == "" {
+		t.Fatal("deleted working directory should produce a message, got empty string")
+	}
+	if !strings.HasPrefix(got, "gg: ") {
+		t.Errorf("message should be prefixed 'gg: ', got %q", got)
+	}
+	if !strings.Contains(got, "cd") {
+		t.Errorf("message should advise re-entering the directory with cd, got %q", got)
 	}
 }
