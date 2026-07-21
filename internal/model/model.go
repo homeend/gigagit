@@ -83,6 +83,13 @@ type Branch struct {
 	UnixTime int64 // committer time (unix seconds) of the branch tip; 0 if unknown
 }
 
+// RefInfo is one row from a generic `git for-each-ref` read.
+type RefInfo struct {
+	Ref     string // full ref name
+	Hash    string // full object id
+	Subject string // commit subject
+}
+
 // RemoteBranch is one entry from `git for-each-ref refs/remotes`.
 type RemoteBranch struct {
 	Name     string // short ref, e.g. "origin/feature/x"
