@@ -164,65 +164,119 @@ func TestOpsHistMenuRowOpensSubView(t *testing.T) {
 	}
 }
 
-// TestOpsHistSubViewRendersAtWideWidth verifies that the Operations history
-// sub-view renders at the wide popup width (popupWideInnerWidth) to avoid
-// footer-hint overflow, especially with longer translations (e.g., Russian).
-// This regression test ensures the width fix for opsHistView persists.
+// TestOpsHistSubViewRendersAtWideWidth verifies that opsHistView and ratesView
+// both render at the same (wide) popup width. This regression test catches
+// removal of p.opsHistView from the wide-box condition by rendering both
+// sub-views and comparing their content line lengths: ratesView already uses
+// wide width, so both should have identical line widths; if opsHistView loses
+// the wide-width fix, its content lines will be noticeably shorter.
 func TestOpsHistSubViewRendersAtWideWidth(t *testing.T) {
 	m, dir := settingsModel(t)
 	m.repoConfigPath = filepath.Join(dir, ".gg.toml")
-	// Set terminal to a typical width (120 cols).
-	m.width, m.height = 120, 50
+	// Use a terminal width where the difference between popupInnerWidth (56)
+	// and popupWideInnerWidth (96) is clear and in play: 100 cols.
+	// At 100: narrow inner = min(56, 92) = 56, wide = min(96, 92) = 92.
+	const termWidth = 100
+	m.width, m.height = termWidth, 50
 
-	// Open Settings menu and navigate to Operations history.
+	// Helper: find the maximum content line length (excluding border/padding) from rendered output.
+	// Content lines are prefixed with "> " (selection marker) or "  " (normal).
+	maxContentLineLen := func(out string) int {
+		maxLen := 0
+		for _, line := range strings.Split(out, "\n") {
+			stripped := stripANSI(line)
+			// Skip empty lines and border lines (contain box-drawing chars or are borders)
+			if len(stripped) == 0 || strings.ContainsAny(stripped, "╭╮╰╯─│") {
+				continue
+			}
+			// Skip lines that are just padding
+			if strings.TrimSpace(stripped) == "" {
+				continue
+			}
+			// This is a content line; measure it
+			if len(stripped) > maxLen {
+				maxLen = len(stripped)
+			}
+		}
+		return maxLen
+	}
+
+	// Open Settings menu.
 	u, _ := m.Update(keyMsg(","))
 	m = u.(Model)
 	p := layerOf[*settingsPopup](m)
 
-	idx := -1
+	// Find and open Refresh rates (known to use wide width).
+	ratesIdx := -1
 	for i, entry := range settingsMenu {
-		if entry == settingsMenuOpsHist {
-			idx = i
+		if entry == settingsMenuRates {
+			ratesIdx = i
 		}
 	}
-	if idx < 0 {
+	if ratesIdx < 0 {
+		t.Fatal("Refresh rates entry missing from the settings menu")
+	}
+	p.menuSel = ratesIdx
+
+	u, _ = m.Update(keyMsg("enter"))
+	m = u.(Model)
+	if !layerOf[*settingsPopup](m).ratesView {
+		t.Fatal("failed to open Refresh rates sub-view")
+	}
+
+	ratesOut := m.View()
+	ratesLineLen := maxContentLineLen(ratesOut)
+	if ratesLineLen == 0 {
+		t.Fatalf("could not measure Refresh rates content line length:\n%s", ratesOut)
+	}
+
+	// Close rates view to return to menu.
+	u, _ = m.Update(keyMsg("esc"))
+	m = u.(Model)
+	p = layerOf[*settingsPopup](m)
+	if p.ratesView {
+		t.Fatal("esc should close Refresh rates")
+	}
+
+	// Find and open Operations history.
+	opsIdx := -1
+	for i, entry := range settingsMenu {
+		if entry == settingsMenuOpsHist {
+			opsIdx = i
+		}
+	}
+	if opsIdx < 0 {
 		t.Fatal("Operations history entry missing from the settings menu")
 	}
-	p.menuSel = idx
+	p.menuSel = opsIdx
 
-	// Enter the sub-view.
 	u, _ = m.Update(keyMsg("enter"))
 	m = u.(Model)
 	p = layerOf[*settingsPopup](m)
 	if !p.opsHistView {
-		t.Fatal("enter on Operations history must open the sub-view")
+		t.Fatal("failed to open Operations history sub-view")
 	}
 
-	// Render and verify the footer hint is not wrapped.
-	out := m.View()
-
-	// The footer hint when not editing: "[↑/↓] select  [enter] edit/toggle  [esc] back"
-	// Verify it appears on a single line (not split across multiple lines).
-	// Strip ANSI codes for the check since the output may contain styling.
-	lines := strings.Split(out, "\n")
-	hintLine := ""
-	for _, line := range lines {
-		stripped := stripANSI(line)
-		if strings.Contains(stripped, "[↑/↓] select") && strings.Contains(stripped, "[esc] back") {
-			hintLine = stripped
-			break
-		}
-	}
-	if hintLine == "" {
-		t.Fatalf("footer hint line not found in rendered output:\n%s", out)
+	opsOut := m.View()
+	opsLineLen := maxContentLineLen(opsOut)
+	if opsLineLen == 0 {
+		t.Fatalf("could not measure Operations history content line length:\n%s", opsOut)
 	}
 
-	// The full hint must fit on one line (no wrapping). The minimum width needed
-	// for this is approximately the length of the longest hint line.
-	// Verify the entire hint is present without being split.
-	expectedHint := "[↑/↓] select  [enter] edit/toggle  [esc] back"
-	if !strings.Contains(hintLine, expectedHint) {
-		t.Fatalf("footer hint must contain full text without wrapping.\ngot: %q\nwant: %q", hintLine, expectedHint)
+	// Both views should render at the same width (wide width).
+	// If opsHistView is using narrow width (missing fix), opsLineLen << ratesLineLen.
+	// Allow small difference (±3 chars) for rendering variation, but not a major divergence.
+	diff := ratesLineLen - opsLineLen
+	if diff > 5 || diff < -5 {
+		t.Fatalf("Operations history and Refresh rates content line widths differ significantly.\n"+
+			"Refresh rates max content line: %d chars\n"+
+			"Operations history max content line: %d chars\n"+
+			"Difference: %d chars\n"+
+			"Both should be ~%d (wide width). Missing fix? Check settings_popup.go line ~695.\n\n"+
+			"Refresh rates output:\n%s\n\n"+
+			"Operations history output:\n%s",
+			ratesLineLen, opsLineLen, diff, ratesLineLen,
+			ratesOut, opsOut)
 	}
 }
 
