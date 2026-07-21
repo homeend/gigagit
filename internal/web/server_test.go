@@ -93,3 +93,76 @@ func TestRepoEndpoint(t *testing.T) {
 		t.Errorf("name = %q, want base of worktree %q", got.Name, got.Worktree)
 	}
 }
+
+func TestCommitsEndpoint(t *testing.T) {
+	dir := newRepoDir(t, 3)
+	ts := serve(t, New(domain.Open(dir)))
+	var got struct {
+		Rows []struct {
+			Hash    string `json:"hash"`
+			Short   string `json:"short"`
+			Subject string `json:"subject"`
+			Author  string `json:"author"`
+			Time    int64  `json:"time"`
+			Cells   string `json:"cells"`
+			Refs    []struct {
+				Name string `json:"name"`
+				Kind string `json:"kind"`
+			} `json:"refs"`
+		} `json:"rows"`
+		CanLoadMore bool `json:"can_load_more"`
+	}
+	if code := getJSON(t, ts, "/api/commits", &got); code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", code)
+	}
+	if len(got.Rows) != 3 {
+		t.Fatalf("rows = %d, want 3", len(got.Rows))
+	}
+	tip := got.Rows[0]
+	if tip.Subject != "c3" {
+		t.Errorf("first subject = %q, want c3 (newest first)", tip.Subject)
+	}
+	if len(tip.Short) != 8 || !strings.HasPrefix(tip.Hash, tip.Short) {
+		t.Errorf("short = %q not an 8-char prefix of %q", tip.Short, tip.Hash)
+	}
+	if tip.Time == 0 || tip.Author == "" {
+		t.Errorf("missing time/author: %+v", tip)
+	}
+	if !strings.Contains(tip.Cells, "●") {
+		t.Errorf("cells = %q, want node glyph ●", tip.Cells)
+	}
+	var hasMain bool
+	for _, ref := range tip.Refs {
+		if ref.Name == "main" && ref.Kind == "local" {
+			hasMain = true
+		}
+	}
+	if !hasMain {
+		t.Errorf("tip refs = %+v, want local main", tip.Refs)
+	}
+}
+
+func TestCommitsPaging(t *testing.T) {
+	dir := newRepoDir(t, 30)
+	srv := New(domain.Open(dir))
+	srv.pageInitial, srv.pageBatch = 10, 10
+	ts := serve(t, srv)
+	var first struct {
+		Rows        []json.RawMessage `json:"rows"`
+		CanLoadMore bool              `json:"can_load_more"`
+	}
+	getJSON(t, ts, "/api/commits", &first)
+	if len(first.Rows) < 10 || len(first.Rows) >= 30 {
+		t.Fatalf("initial rows = %d, want a partial page (>=10, <30)", len(first.Rows))
+	}
+	if !first.CanLoadMore {
+		t.Fatal("can_load_more = false after a partial first page")
+	}
+	var second struct {
+		Rows []json.RawMessage `json:"rows"`
+	}
+	getJSON(t, ts, "/api/commits?more=1", &second)
+	if len(second.Rows) <= len(first.Rows) {
+		t.Fatalf("more=1 did not grow the feed: %d -> %d", len(first.Rows), len(second.Rows))
+	}
+}
