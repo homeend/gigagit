@@ -35,6 +35,9 @@ type OpDeps struct {
 	// CaptureRunner runs a headless capture command. Nil ⇒ ShellCaptureRunner{}
 	// (production default); engine tests inject a fake.
 	CaptureRunner CaptureRunner
+	// Versions governs pre-operation branch-version snapshots (see
+	// snapshotBranchTip). Zero value = disabled.
+	Versions VersionsPolicy
 }
 
 // hookRunner is the nil-safe HookRunner (style of emit/escalate).
