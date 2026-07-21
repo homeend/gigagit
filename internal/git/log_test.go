@@ -608,10 +608,19 @@ func TestCommitFilesMergeFirstParent(t *testing.T) {
 // TestLogScopedExcludesVersionRefDecorations verifies that refs/gg/* version
 // refs do not appear in commit-feed decorations. The commit log should show
 // only user-facing refs (branches, tags, remotes).
+//
+// The test sets log.initialDecorationSet=all to force git to show all ref
+// namespaces by default. Without the --decorate-refs-exclude=refs/gg/* flag
+// in LogScoped, this config would cause version refs to leak into decorations.
+// This simulates a non-default git config that the flag must protect against.
 func TestLogScopedExcludesVersionRefDecorations(t *testing.T) {
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 	ctx := context.Background()
+
+	// Force git to show all refs by default. Without the --decorate-refs-exclude
+	// flag in LogScoped, refs/gg/* would appear in commit decorations.
+	gitIn(t, dir, "config", "log.initialDecorationSet", "all")
 
 	head, err := repo.RevParse(ctx, "HEAD")
 	if err != nil {
@@ -639,5 +648,4 @@ func TestLogScopedExcludesVersionRefDecorations(t *testing.T) {
 			}
 		}
 	}
-	_ = dir
 }
