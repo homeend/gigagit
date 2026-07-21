@@ -53,7 +53,7 @@ func (r *Repo) LogScoped(ctx context.Context, limit, skip int, scope LogScope, d
 		Arg("-n", strconv.Itoa(limit)).
 		ArgIf(dateOrder, "--date-order").
 		Arg("--ignore-missing").
-		Arg("--decorate=full", "--source", "--format="+logFormat).
+		Arg("--decorate=full", "--decorate-refs-exclude=refs/gg/*", "--source", "--format="+logFormat).
 		ArgIf(skip > 0, "--skip="+strconv.Itoa(skip)).
 		ArgIf(scope.Author != "", "--author="+scope.Author).
 		ArgIf(scope.Since != "", "--since="+scope.Since).

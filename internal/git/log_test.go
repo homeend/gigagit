@@ -604,3 +604,40 @@ func TestCommitFilesMergeFirstParent(t *testing.T) {
 		t.Fatalf("merge files = %+v, want a single [A b.txt] (first-parent only)", files)
 	}
 }
+
+// TestLogScopedExcludesVersionRefDecorations verifies that refs/gg/* version
+// refs do not appear in commit-feed decorations. The commit log should show
+// only user-facing refs (branches, tags, remotes).
+func TestLogScopedExcludesVersionRefDecorations(t *testing.T) {
+	dir, runner := newTestRepo(t)
+	repo := &Repo{Runner: runner}
+	ctx := context.Background()
+
+	head, err := repo.RevParse(ctx, "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a version ref that should be excluded from decorations.
+	if err := repo.UpdateRef(ctx, "refs/gg/versions/main/1753100000-merge", head); err != nil {
+		t.Fatal(err)
+	}
+
+	commits, err := repo.LogScoped(ctx, 10, 0, LogScope{}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(commits) == 0 {
+		t.Fatal("expected at least one commit")
+	}
+
+	for _, c := range commits {
+		for _, ref := range c.Refs {
+			if strings.Contains(ref.Name, "gg/versions") {
+				t.Fatalf("version ref leaked into decorations: %v", c.Refs)
+			}
+		}
+	}
+	_ = dir
+}
