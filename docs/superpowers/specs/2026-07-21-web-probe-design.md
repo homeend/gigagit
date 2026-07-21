@@ -86,48 +86,59 @@ Drives the server's single `CommitFeed`. Without `more`, calls
 {
   "rows": [
     {"hash": "…", "short": "…", "subject": "…", "author": "…",
-     "date": "…", "refs": ["main", "origin/main"],
-     "lane": 0, "cells": [{"g": "●", "l": 0}]}
+     "time": 1753113600,
+     "refs": [{"name": "main", "kind": "local", "head": true}],
+     "lane": 0, "cells": "● "}
   ],
   "can_load_more": true
 }
 ```
 
-- `lane`/`cells` come from a server-side `commitgraph.Lay` over the loaded
-  feed (glyph rune + lane index per cell; lane index doubles as the color
-  key). The layout is recomputed per response from the feed snapshot —
+- `cells` is the row's `commitgraph.Row.Cells` glyph string (two display
+  columns per lane); the column-pair index is the color key. `lane` is the
+  node's lane. Both come from a server-side `commitgraph.Lay` over the
+  loaded feed. The layout is recomputed per response from the feed
+  snapshot —
   correctness first; incremental layout is a later optimization if profiling
   demands it.
 - Sort mode follows the repo's `[ui] commit_sort` config, same as the TUI.
 
 ### `GET /api/commit/{sha}`
 
-Commit detail + changed files (backed by `CommitFiles`):
+The commit's changed files (backed by `CommitFiles`; the pane header
+reuses the feed row's subject/author/time the frontend already holds):
 
 ```json
-{"sha": "…", "subject": "…", "author": "…", "date": "…",
- "files": [{"path": "a/b.go", "status": "M", "adds": 3, "dels": 1}]}
+{"sha": "…",
+ "files": [{"path": "a/b.go", "status": "M", "old_path": ""}]}
 ```
 
-### `GET /api/diff?sha=<sha>&path=<path>`
+`status` is git's single letter (`A M D R C T`); `old_path` is set only
+for renames/copies.
+
+### `GET /api/diff?sha=<sha>&path=<path>[&status=M&old=<oldPath>]`
 
 The `Differ`'s aligned side-by-side rows for one file of one commit,
-served through the same LRU cache the TUI uses:
+served through the shared cached differ (`svc.Differ()` — the same LRU
+the TUI reads). `status`/`old` come from the `/api/commit` response and
+steer the old/new sides (`A` → no old side, `D` → no new side, rename →
+old side read at `old`):
 
 ```json
 {
   "rows": [
     {"kind": "change",
-     "left":  {"n": 41, "text": "old line", "spans": [[4, 9]]},
-     "right": {"n": 41, "text": "new line", "spans": [[4, 9]]}}
+     "left": "old line", "right": "new line",
+     "left_no": 41, "right_no": 41,
+     "left_spans": [[4, 9]], "right_spans": [[4, 9]]}
   ],
-  "truncated": false
+  "binary": false, "too_large": false, "truncated": false
 }
 ```
 
-`kind` ∈ `same|add|del|change`; `spans` are the enhanced differ's intraline
-byte ranges. Exact field mapping from `domain.Diff`/`textdiff` rows is
-pinned during planning.
+`kind` ∈ `same|add|del|change` (from `textdiff.Kind`); spans are the
+enhanced differ's intraline half-open **rune** ranges. `binary`/`too_large`
+mirror `domain.Diff`, `truncated` mirrors `textdiff.Result.Truncated`.
 
 ## Frontend
 
