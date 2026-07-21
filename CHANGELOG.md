@@ -9,6 +9,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- `gg web` (probe): read-only browser UI — a loopback-only embedded server
+  serving commits + lane graph (text and SVG modes), commit files, and
+  side-by-side diffs straight from the domain read-model; `--open` launches
+  the system browser. Evaluation probe — may be removed after review.
 - **Kimi Code joins the known-agent roster.** `gg init` now detects Kimi
   Code (project `.kimi-code/`, global `~/.kimi-code/`) and installs the
   using-gg skill as `skills/using-gg/SKILL.md` under either — Kimi discovers
