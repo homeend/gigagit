@@ -140,6 +140,8 @@ gg branch ls                    # local branches, "* " marks HEAD, "↑a ↓b" w
 gg branch create <name> [<start-point>]
 gg branch rename <old> <new>
 gg branch delete [--force] <name>
+gg versions [<branch>]                 # list a branch's recorded pre-operation snapshots, newest first (default: current branch)
+gg versions restore [--discard] <branch> <id|latest>  # restore a branch to a recorded version; --discard answers the dirty-tree prompt
 gg merge [--into <target>] [--on-conflict=keep|abort] <source>
 gg fast-forward <commit>               # advance the current branch to a descendant commit (no merge commit)
 gg rebase [--branch <b>] [--on-conflict=keep|abort] <newbase>
@@ -472,6 +474,43 @@ script (choose run or skip); `h` in the create popup is a pre-skip that
 suppresses even the prompt. On the CLI: pass `--hook` to approve without
 prompting, `--no-hook` to skip, or omit both to be asked interactively (`gg`
 skips automatically when stdin is not a terminal).
+
+### Branch versions (operations history)
+
+Before any operation that rewrites, replaces, or deletes a branch's
+history, gg records the branch's current tip as a hidden git ref
+(`refs/gg/versions/<branch>/<unix-ts>-<op>`) — a full-history snapshot
+(every commit, message, and author, not a squash) at zero storage cost
+that also pins those commits against `git gc`. This is a safety net, not
+an opt-in feature: it runs for every branch automatically. What triggers
+a snapshot: merging **into** a branch, rebasing it (including an
+interactive rebase's squash/move/drop), `--amend`ing the last commit,
+undoing the last commit, resetting a branch to its remote tip, deleting a
+branch, and `gg pull`'s rebase/merge/reset-to-remote lanes. A plain commit,
+a fast-forward pull, cherry-pick, push, stash, and switching branches are
+**not** triggers — the old tip stays reachable as an ordinary ancestor, so
+nothing needs recording. A snapshot failure never blocks the real
+operation (best-effort by design).
+
+Browse a branch's versions from the Branches panel's `.` menu → **"Previous
+versions…"**. From the command palette (`ctrl+p`) → **"Branch versions…"**
+picks any branch that has recorded versions — including a **deleted** one
+— which is how you recover a deleted branch's history. In the popup:
+`enter` whole-tree-compares a version against the branch's current tip,
+`r` restores it (reset the branch in place, or start a new branch at that
+version instead — a non-destructive alternative), `d` deletes just that
+snapshot, `y` copies its sha. Settings (`,`) → **"Operations history"**
+shows and edits the retention window and toggles recording on/off.
+
+Scriptable: `gg versions [<branch>]` lists a branch's recorded versions,
+newest first (default: current branch); `gg versions restore [--discard]
+<branch> <id|latest>` restores one (`--discard` answers the "the working
+tree has uncommitted changes" prompt for a current-branch restore).
+
+`[versions] disabled` (default `false`) is a kill-switch — set `true` to
+stop recording entirely. `[versions] max_age_days` (default `90`) prunes
+snapshots older than this on the branch's next write; `-1` keeps them
+forever.
 
 ### External tools
 
