@@ -690,7 +690,9 @@ func (p *settingsPopup) box(m Model) string {
 	// The errors viewer holds long, path-heavy rows (git stderr, the errors.log
 	// location), so it scales wide like the bookmark/shelf switchers — most
 	// errors and the log path then fit on one line instead of wrapping ugly.
-	if p.errorsView || p.ratesView {
+	// The Operations history viewer's footer hints (especially Russian translations)
+	// also need the wide width to avoid overflow.
+	if p.errorsView || p.ratesView || p.opsHistView {
 		inner = popupWideInnerWidth(w)
 	}
 	// The External-tools wizard goes full-screen (live feedback: the standard
