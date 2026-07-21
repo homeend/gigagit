@@ -6,6 +6,8 @@ package web
 
 import (
 	"encoding/json"
+	"errors"
+	"net"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -37,7 +39,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/commits", s.handleCommits)
 	mux.HandleFunc("GET /api/commit/{sha}", s.handleCommitFiles)
 	mux.HandleFunc("GET /api/diff", s.handleDiff)
-	return mux
+	return hostGuard(mux)
 }
 
 func (s *Server) handleRepo(w http.ResponseWriter, r *http.Request) {
@@ -67,6 +69,25 @@ func writeErr(w http.ResponseWriter, code int, err error) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+}
+
+// hostGuard rejects requests whose Host header does not name a loopback
+// address. The listener already binds loopback only, but without this a
+// malicious web page could reach the server via DNS rebinding (the TCP
+// connection is to 127.0.0.1 while the Host header is an attacker domain)
+// and read repository contents. Reuses isLoopbackHost (serve.go).
+func hostGuard(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		host := r.Host
+		if h, _, err := net.SplitHostPort(host); err == nil {
+			host = h
+		}
+		if !isLoopbackHost(host) {
+			writeErr(w, http.StatusForbidden, errors.New("forbidden host"))
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // isGitArgSafe reports whether s is safe to pass to a git verb as a

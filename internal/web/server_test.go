@@ -281,6 +281,35 @@ func TestDiffAddedFile(t *testing.T) {
 	}
 }
 
+func TestHostGuardRejectsForeignHost(t *testing.T) {
+	dir := newRepoDir(t, 1)
+	ts := serve(t, New(domain.Open(dir)))
+	req, err := http.NewRequest("GET", ts.URL+"/api/repo", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Simulate a DNS-rebinding request: the TCP connection is to loopback,
+	// but the Host header names an attacker-controlled domain.
+	req.Host = "evil.example.com"
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403 for a foreign Host header", resp.StatusCode)
+	}
+}
+
+func TestHostGuardAllowsLoopbackHost(t *testing.T) {
+	dir := newRepoDir(t, 1)
+	ts := serve(t, New(domain.Open(dir)))
+	// A normal loopback Host (what httptest sends) must still be served.
+	if code := getJSON(t, ts, "/api/repo", nil); code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 for a loopback Host", code)
+	}
+}
+
 func TestStaticServing(t *testing.T) {
 	dir := newRepoDir(t, 1)
 	ts := serve(t, New(domain.Open(dir)))
