@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/homeend/gigagit/internal/git"
+	"github.com/homeend/gigagit/internal/rebaseplan"
 )
 
 func enabledDeps(repo GitOps) OpDeps {
@@ -249,5 +250,48 @@ func TestDeleteBranchCancelledDoesNotSnapshot(t *testing.T) {
 
 	if refs := versionRefs(t, repo); len(refs) != 0 {
 		t.Fatalf("cancelled delete snapshotted: %v", refs)
+	}
+}
+
+// TestInteractiveRebaseInvalidOntoDoesNotSnapshot: an invalid Onto ref
+// (non-existent commit) must be rejected before snapshotting.
+func TestInteractiveRebaseInvalidOntoDoesNotSnapshot(t *testing.T) {
+	_, repo := newRepo(t)
+	ctx := context.Background()
+
+	if err := repo.CreateBranch(ctx, "feat", ""); err != nil {
+		t.Fatal(err)
+	}
+
+	deps := enabledDeps(repo)
+	deps.Decider = staticTestDecider{}
+
+	// Minimal valid plan: one Pick entry for a real commit.
+	// We reuse head commit for the entry's sha even though the plan
+	// won't actually execute (we expect an earlier validation error).
+	head, err := repo.RevParse(ctx, "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Run with a non-existent Onto: should fail validation and not snapshot.
+	_, err = (InteractiveRebase{
+		Branch: "feat",
+		Onto:   "nosuchref",
+		Plan: rebaseplan.Plan{Entries: []rebaseplan.Entry{
+			{Sha: head, Action: rebaseplan.Pick, Orig: "dummy"},
+		}},
+		GGBin: "/bin/true",
+	}).Run(ctx, deps)
+
+	if err == nil {
+		t.Fatal("expected error for invalid Onto, got nil")
+	}
+	if !strings.Contains(err.Error(), "no such commit") {
+		t.Fatalf("error = %v, want 'no such commit'", err)
+	}
+
+	if refs := versionRefs(t, repo); len(refs) != 0 {
+		t.Fatalf("invalid Onto snapshotted: %v", refs)
 	}
 }

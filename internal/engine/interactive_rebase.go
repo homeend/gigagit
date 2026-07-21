@@ -38,8 +38,6 @@ func (op InteractiveRebase) Run(ctx context.Context, deps OpDeps) (Result, error
 		return Result{}, fmt.Errorf("interactive rebase: empty plan")
 	}
 
-	snapshotBranchTip(ctx, deps, op.Branch, "interactive-rebase")
-
 	branches, err := deps.Repo.Branches(ctx)
 	if err != nil {
 		return Result{}, err
@@ -70,6 +68,8 @@ func (op InteractiveRebase) Run(ctx context.Context, deps OpDeps) (Result, error
 	if hasMerges {
 		return Result{}, fmt.Errorf("interactive rebase: %s..%s contains merge commits (not supported yet)", op.Onto, op.Branch)
 	}
+
+	snapshotBranchTip(ctx, deps, op.Branch, "interactive-rebase")
 
 	planPath, err := writePlanFile(op.Plan)
 	if err != nil {
