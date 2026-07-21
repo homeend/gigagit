@@ -114,6 +114,86 @@ func TestAllVersionBranchesMarksDeleted(t *testing.T) {
 	}
 }
 
+// TestBranchVersionsSameUnixTieBreaksByRefDescending fabricates two version
+// refs for the same branch sharing an identical Unix timestamp (the
+// same-second case: two operations snapshotting within the same wall-clock
+// second) and asserts BranchVersions falls back to a deterministic Ref
+// descending tie-break rather than leaving the order to sort.Slice's
+// not-guaranteed-stable comparator on equal keys — checked across two calls
+// since map/slice construction order could otherwise vary run to run.
+func TestBranchVersionsSameUnixTieBreaksByRefDescending(t *testing.T) {
+	dir := cleanDir(t) // main, base commit
+	mainSha := gitOutDir(t, dir, "rev-parse", "main")
+
+	const sameTs = int64(4242)
+	refMerge := git.VersionRef("main", "merge", sameTs)
+	refRestore := git.VersionRef("main", "restore", sameTs)
+	// refRestore > refMerge lexicographically (".../4242-restore" >
+	// ".../4242-merge") since both share the identical prefix up to the op
+	// token, so Ref-descending puts "restore" first.
+	if refRestore <= refMerge {
+		t.Fatalf("test fixture assumption broken: refRestore=%q must sort after refMerge=%q", refRestore, refMerge)
+	}
+
+	gitRunDir(t, dir, "", "update-ref", refMerge, mainSha)
+	gitRunDir(t, dir, "", "update-ref", refRestore, mainSha)
+
+	svc := svcAt(dir)
+	ctx := context.Background()
+
+	for i := 0; i < 2; i++ {
+		versions, err := svc.BranchVersions(ctx, "main")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(versions) != 2 {
+			t.Fatalf("call %d: versions = %d, want 2: %+v", i, len(versions), versions)
+		}
+		if versions[0].Unix != sameTs || versions[1].Unix != sameTs {
+			t.Fatalf("call %d: expected both rows at Unix=%d: %+v", i, sameTs, versions)
+		}
+		if versions[0].Op != "restore" || versions[1].Op != "merge" {
+			t.Fatalf("call %d: tie-break order = %+v, want restore then merge (Ref descending)", i, versions)
+		}
+	}
+}
+
+// TestAllVersionBranchesSameUnixTieBreaksByBranchAscending fabricates two
+// branches whose LatestUnix values are identical (the same-second case) and
+// asserts AllVersionBranches falls back to a deterministic Branch ascending
+// tie-break — checked across two calls for stability, since the rows are
+// built by ranging a map before sorting.
+func TestAllVersionBranchesSameUnixTieBreaksByBranchAscending(t *testing.T) {
+	dir := cleanDir(t) // main, base commit
+	mainSha := gitOutDir(t, dir, "rev-parse", "main")
+
+	const sameTs = int64(7777)
+	refAlpha := git.VersionRef("alpha", "merge", sameTs)
+	refZulu := git.VersionRef("zulu", "merge", sameTs)
+
+	gitRunDir(t, dir, "", "update-ref", refAlpha, mainSha)
+	gitRunDir(t, dir, "", "update-ref", refZulu, mainSha)
+
+	svc := svcAt(dir)
+	ctx := context.Background()
+
+	for i := 0; i < 2; i++ {
+		rows, err := svc.AllVersionBranches(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(rows) != 2 {
+			t.Fatalf("call %d: rows = %d, want 2: %+v", i, len(rows), rows)
+		}
+		if rows[0].LatestUnix != sameTs || rows[1].LatestUnix != sameTs {
+			t.Fatalf("call %d: expected both rows at LatestUnix=%d: %+v", i, sameTs, rows)
+		}
+		if rows[0].Branch != "alpha" || rows[1].Branch != "zulu" {
+			t.Fatalf("call %d: tie-break order = %+v, want alpha then zulu (Branch ascending)", i, rows)
+		}
+	}
+}
+
 // TestExecuteInjectsVersionsPolicy pins the wiring Task 6 turns on: Execute's
 // OpDeps literal now carries the Service's versions policy, so an op that
 // snapshots on amend (see engine.Commit) actually records a version ref when

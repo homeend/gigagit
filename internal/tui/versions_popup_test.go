@@ -69,6 +69,25 @@ func TestVersionsPopupEnterOpensCompare(t *testing.T) {
 	}
 }
 
+// TestBranchVersionRowTextSingularPlural pins the two-key singular/plural fix
+// (the push-tip-tags convention): a branch with exactly one recorded version
+// must render "1 version", never the grammatically wrong "1 versions", while
+// a branch with more than one keeps the plural form.
+func TestBranchVersionRowTextSingularPlural(t *testing.T) {
+	one := branchVersionRowText(model.VersionedBranch{Branch: "main", Count: 1})
+	if !strings.Contains(one, i18n.T("%d version", 1)) {
+		t.Fatalf("Count=1 row = %q, want it to contain the singular form %q", one, i18n.T("%d version", 1))
+	}
+	if strings.Contains(one, i18n.T("%d versions", 1)) {
+		t.Fatalf("Count=1 row = %q, must not use the plural form", one)
+	}
+
+	many := branchVersionRowText(model.VersionedBranch{Branch: "main", Count: 3})
+	if !strings.Contains(many, i18n.T("%d versions", 3)) {
+		t.Fatalf("Count=3 row = %q, want it to contain the plural form %q", many, i18n.T("%d versions", 3))
+	}
+}
+
 // TestVersionsPopupRestoreOpensModal: pressing 'r' sets m.modal with options
 // ["Reset branch","New branch at version","Cancel"].
 func TestVersionsPopupRestoreOpensModal(t *testing.T) {
@@ -119,6 +138,40 @@ func TestVersionsPopupDeletedBranchDisablesCompare(t *testing.T) {
 
 	if m.filesView != nil {
 		t.Fatal("a deleted branch has no tip to compare against — the files view must not open")
+	}
+	want := i18n.T("branch no longer exists — restore it to compare")
+	if m.statusMsg != want {
+		t.Fatalf("statusMsg = %q, want %q", m.statusMsg, want)
+	}
+	if layerOf[*versionsPopup](m) == nil {
+		t.Fatal("the popup should stay open on a refused compare")
+	}
+}
+
+// TestVersionsPopupMissingFromBranchesDisablesCompare: branch is NOT marked
+// deleted (p.deleted == false, e.g. a stale/incomplete m.branches load), but
+// it is absent from m.branches — branchTipHash's documented fallback returns
+// the branch NAME itself in that case (branch_compare.go). onEnter must
+// detect that fallback (resolved tip == the branch name, not a hash) and
+// refuse the compare exactly like the deleted case, rather than letting a
+// name slip into Endpoint.Hash and poison the immutable diff cache.
+func TestVersionsPopupMissingFromBranchesDisablesCompare(t *testing.T) {
+	m := Model{width: 120, height: 40}
+	m.branches = []model.Branch{{Name: "other", Hash: "otherhash00000000"}} // "main" absent
+	p := &versionsPopup{
+		mode:   versionsModeVersions,
+		branch: "main",
+		rows: []model.BranchVersion{
+			{Ref: "refs/gg/versions/main/1753100000-rebase", Hash: "verhash0000000000", Subject: "did a rebase", Op: "rebase", Unix: 1753100000},
+		},
+	}
+	m = m.pushLayer(p)
+
+	mm, _ := m.Update(keyMsg("enter"))
+	m = mm.(Model)
+
+	if m.filesView != nil {
+		t.Fatal("branch missing from m.branches has no resolvable tip — the files view must not open")
 	}
 	want := i18n.T("branch no longer exists — restore it to compare")
 	if m.statusMsg != want {

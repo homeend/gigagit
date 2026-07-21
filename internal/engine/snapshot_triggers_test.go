@@ -253,6 +253,29 @@ func TestDeleteBranchCancelledDoesNotSnapshot(t *testing.T) {
 	}
 }
 
+// TestInteractiveRebaseSnapshotsBranch is the happy-path counterpart to
+// TestInteractiveRebaseInvalidOntoDoesNotSnapshot below: a valid 2-commit
+// squash actually runs to completion (mirroring
+// TestSquashTwoCommitsEndToEnd in commit_squash_integration_test.go — same
+// fourCommitBranch/buildGG/runSquash fixtures, just with the Versions policy
+// enabled), and must snapshot "work"'s pre-rebase tip under the
+// "interactive-rebase" op token before the plan ever starts collapsing
+// commits.
+func TestInteractiveRebaseSnapshotsBranch(t *testing.T) {
+	gg := buildGG(t)
+	dir, repo := fourCommitBranch(t) // main -> a -> b -> c -> d, HEAD=work=d
+	preRebaseTip := shaOf(t, dir, "work")
+
+	if _, err := runSquash(t, dir, repo, gg, []string{"work", "work~1"}, enabledDeps(repo)); err != nil {
+		t.Fatalf("squash d into c: %v", err)
+	}
+
+	_, hash := findVersionRef(t, repo, "work", "interactive-rebase")
+	if hash != preRebaseTip {
+		t.Fatalf("snapshot hash = %s, want work's pre-rebase tip %s", hash, preRebaseTip)
+	}
+}
+
 // TestInteractiveRebaseInvalidOntoDoesNotSnapshot: an invalid Onto ref
 // (non-existent commit) must be rejected before snapshotting.
 func TestInteractiveRebaseInvalidOntoDoesNotSnapshot(t *testing.T) {

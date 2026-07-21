@@ -855,7 +855,12 @@ func (p *settingsPopup) box(m Model) string {
 		labelW := maxLabelWidth(9, i18n.T("Retention"), i18n.T("Recording"))
 		retention := i18n.T("keep forever")
 		if m.cfg.Versions.MaxAgeDays > 0 {
+			// Two-key singular/plural convention (the push-tip-tags pattern):
+			// "1 days" would otherwise be grammatically wrong in English.
 			retention = i18n.T("%d days", m.cfg.Versions.MaxAgeDays)
+			if m.cfg.Versions.MaxAgeDays == 1 {
+				retention = i18n.T("%d day", m.cfg.Versions.MaxAgeDays)
+			}
 		}
 		retentionCell := retention
 		if p.opsHistEditing && p.opsHistSel == 0 {

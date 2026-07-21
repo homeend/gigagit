@@ -114,6 +114,41 @@ func TestToggleVersionsRecording(t *testing.T) {
 	}
 }
 
+// TestOpsHistRetentionSingularPlural pins the two-key singular/plural fix
+// (the push-tip-tags convention): a MaxAgeDays of exactly 1 must render the
+// singular "1 day", never the grammatically wrong "1 days", while other
+// values keep the plural form.
+func TestOpsHistRetentionSingularPlural(t *testing.T) {
+	m, dir := settingsModel(t)
+	m.repoConfigPath = filepath.Join(dir, ".gg.toml")
+	m.cfg.Versions.MaxAgeDays = 1
+
+	u, _ := m.Update(keyMsg(","))
+	m = u.(Model)
+	p := layerOf[*settingsPopup](m)
+	idx := -1
+	for i, entry := range settingsMenu {
+		if entry == settingsMenuOpsHist {
+			idx = i
+		}
+	}
+	if idx < 0 {
+		t.Fatal("Operations history entry missing from the settings menu")
+	}
+	p.menuSel = idx
+
+	u, _ = m.Update(keyMsg("enter"))
+	m = u.(Model)
+
+	out := m.View()
+	if !strings.Contains(out, "1 day") {
+		t.Fatalf("MaxAgeDays=1 must render the singular form \"1 day\":\n%s", out)
+	}
+	if strings.Contains(out, "1 days") {
+		t.Fatalf("MaxAgeDays=1 must not render the plural form \"1 days\":\n%s", out)
+	}
+}
+
 // TestOpsHistMenuRowOpensSubView exercises the Settings (,) menu wiring: enter
 // on "Operations history" opens the sub-view with both rows selectable, and
 // esc backs out to the menu (mirrors the Refresh-rates sub-view contract).

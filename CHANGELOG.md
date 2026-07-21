@@ -19,8 +19,9 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   Triggers: `SmartMerge` (the branch merged INTO), `SmartRebase`,
   `InteractiveRebase` (squash/move/drop, snapshotted only after the plan
   passes full validation), `Commit --amend` (a plain commit is not a
-  trigger), `UndoLastCommit`, `Reset`'s reset-to-remote-tip lane,
-  `DeleteBranch` (so a deleted branch's history is recoverable), and
+  trigger), `UndoLastCommit`, `Reset` (any reset moving the branch ref,
+  incl. reset-to-remote-tip), `DeleteBranch` (so a deleted branch's history
+  is recoverable), and
   `SmartPull`'s rebase/merge/reset-to-remote lanes (its fast-forward and
   background checkout-pull lanes are untouched). Always-on for every branch;
   best-effort by contract — a snapshot failure never blocks the real

@@ -544,7 +544,12 @@ func (s *Service) BranchVersions(ctx context.Context, branch string) ([]model.Br
 			}
 			out = append(out, model.BranchVersion{Ref: info.Ref, Hash: info.Hash, Subject: info.Subject, Op: op, Unix: ts})
 		}
-		sort.Slice(out, func(i, j int) bool { return out[i].Unix > out[j].Unix })
+		sort.Slice(out, func(i, j int) bool {
+			if out[i].Unix != out[j].Unix {
+				return out[i].Unix > out[j].Unix
+			}
+			return out[i].Ref > out[j].Ref
+		})
 		return out, nil
 	})
 }
@@ -589,7 +594,12 @@ func (s *Service) AllVersionBranches(ctx context.Context) ([]model.VersionedBran
 			row.Deleted = !exists[row.Branch]
 			out = append(out, *row)
 		}
-		sort.Slice(out, func(i, j int) bool { return out[i].LatestUnix > out[j].LatestUnix })
+		sort.Slice(out, func(i, j int) bool {
+			if out[i].LatestUnix != out[j].LatestUnix {
+				return out[i].LatestUnix > out[j].LatestUnix
+			}
+			return out[i].Branch < out[j].Branch
+		})
 		return out, nil
 	})
 }

@@ -207,8 +207,16 @@ func (p *versionsPopup) onEnter(m Model) (Model, tea.Cmd) {
 		// Both endpoints must be HASHES, never the branch name — a name in
 		// Endpoint.Hash would poison the session-lived diff cache, which
 		// treats commit↔commit endpoints as immutable (branch_compare.go's
-		// openBranchCompare doc comment has the full rationale).
+		// openBranchCompare doc comment has the full rationale). branchTipHash
+		// falls back to the branch NAME itself when the branch is absent from
+		// m.branches (see branch_compare.go's doc comment) — indistinguishable
+		// here from "deleted" (no live tip to compare against), so treat it
+		// the same way rather than letting a name slip into Endpoint.Hash.
 		tip := m.branchTipHash(p.branch)
+		if tip == p.branch {
+			m.statusMsg = i18n.T("branch no longer exists — restore it to compare")
+			return m, nil
+		}
 		m = m.clearLayers()
 		return m.openCompareFiles(
 			model.Endpoint{Kind: model.EndpointCommit, Hash: v.Hash},
@@ -316,9 +324,15 @@ func versionRowText(v model.BranchVersion) string {
 }
 
 // branchVersionRowText renders one branches-mode row: "<branch>  <count>
-// versions", with a suffix when the branch no longer exists.
+// versions", with a suffix when the branch no longer exists. The count uses
+// the two-key singular/plural convention (the push-tip-tags pattern): the
+// English source string "1 versions" would otherwise be grammatically wrong.
 func branchVersionRowText(b model.VersionedBranch) string {
-	row := b.Branch + "  " + i18n.T("%d versions", b.Count)
+	countText := i18n.T("%d versions", b.Count)
+	if b.Count == 1 {
+		countText = i18n.T("%d version", b.Count)
+	}
+	row := b.Branch + "  " + countText
 	if b.Deleted {
 		row += " " + i18n.T("(deleted)")
 	}
