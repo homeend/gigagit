@@ -1118,7 +1118,9 @@ Also `rg -n '%D' internal/git internal/domain` — if any OTHER `%D` consumer ex
 - [ ] **Step 4: Run** — `go test ./internal/git/ -run TestLogScoped -v` → PASS.
 - [ ] **Step 5: Commit** — `fix(git): exclude refs/gg/* from commit-feed decorations`.
 
----### Task 8: CLI `gg versions` (list + restore) + policy wiring + e2e + using-gg
+---
+
+### Task 8: CLI `gg versions` (list + restore) + policy wiring + e2e + using-gg
 
 **Files:**
 - Create: `internal/cli/versions.go`, `internal/cli/versions_test.go`, `e2e/scenarios/s80_cli_versions.toml` (check `ls e2e/scenarios | tail` — use the next free number)
