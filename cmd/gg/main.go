@@ -18,6 +18,7 @@ import (
 	"github.com/homeend/gigagit/internal/repos"
 	"github.com/homeend/gigagit/internal/shellinit"
 	"github.com/homeend/gigagit/internal/tui"
+	"github.com/homeend/gigagit/internal/web"
 )
 
 func main() {
@@ -48,6 +49,17 @@ func main() {
 	if len(args) > 0 && args[0] == "mcp" {
 		if err := mcp.Serve(context.Background(), "."); err != nil {
 			fmt.Fprintln(os.Stderr, "gg mcp:", err)
+			os.Exit(1)
+		}
+		return
+	}
+	if len(args) > 0 && args[0] == "web" {
+		fs := flag.NewFlagSet("web", flag.ExitOnError)
+		addr := fs.String("addr", "", "listen address (loopback only; default 127.0.0.1:0)")
+		open := fs.Bool("open", false, "open the system browser at the served URL")
+		_ = fs.Parse(args[1:])
+		if err := web.Serve(context.Background(), ".", *addr, *open); err != nil {
+			fmt.Fprintln(os.Stderr, "gg web:", err)
 			os.Exit(1)
 		}
 		return
