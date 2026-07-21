@@ -23,6 +23,7 @@ func TestFrontendsDoNotImportGit(t *testing.T) {
 		"github.com/homeend/gigagit/internal/tui",
 		"github.com/homeend/gigagit/internal/cli",
 		"github.com/homeend/gigagit/internal/mcp",
+		"github.com/homeend/gigagit/internal/web",
 	} {
 		for _, imp := range directImports(t, pkg) {
 			if why, bad := forbidden[imp]; bad {
@@ -39,22 +40,23 @@ func TestFrontendsDoNotImportGit(t *testing.T) {
 // backwards.
 func TestLayeringDAG(t *testing.T) {
 	cases := map[string][]string{
-		"engine":      {"domain", "tui", "cli", "mcp", "app"},
-		"git":         {"engine", "domain", "tui", "cli", "mcp", "app"},
-		"gitcmd":      {"gitexec", "git", "engine", "domain", "tui", "cli", "mcp", "app"},
-		"gitconfdocs": {"git", "engine", "domain", "tui", "cli", "mcp", "app"},
-		"exttool":     {"git", "engine", "domain", "tui", "cli", "mcp", "app"},
-		"gitexec":     {"gitcmd", "git", "engine", "domain", "tui", "cli", "mcp", "app"},
-		"model":       {"repogate", "gitcmd", "gitexec", "git", "engine", "domain", "tui", "cli", "mcp", "app"},
-		"repogate":    {"git", "engine", "domain", "tui", "cli", "mcp", "app"},
-		"mcp":         {"tui", "cli", "app"},
-		"domain":      {"tui", "cli", "mcp", "app"},
-		"gitwatch":    {"git", "engine", "domain", "tui", "cli", "mcp", "app"},
-		"i18n":        {"git", "engine", "domain", "tui", "cli", "mcp", "app"},
-		"commitgraph": {"git", "engine", "domain", "tui", "cli", "mcp", "app"},
-		"promptstate": {"git", "engine", "domain", "tui", "cli", "mcp", "app"},
-		"textdiff":    {"git", "engine", "domain", "tui", "cli", "mcp", "app"},
-		"template":    {"git", "engine", "domain", "tui", "cli", "mcp", "app"},
+		"engine":      {"domain", "tui", "cli", "mcp", "web", "app"},
+		"git":         {"engine", "domain", "tui", "cli", "mcp", "web", "app"},
+		"gitcmd":      {"gitexec", "git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
+		"gitconfdocs": {"git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
+		"exttool":     {"git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
+		"gitexec":     {"gitcmd", "git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
+		"model":       {"repogate", "gitcmd", "gitexec", "git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
+		"repogate":    {"git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
+		"mcp":         {"tui", "cli", "app", "web"},
+		"domain":      {"tui", "cli", "mcp", "web", "app"},
+		"gitwatch":    {"git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
+		"i18n":        {"git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
+		"commitgraph": {"git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
+		"promptstate": {"git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
+		"textdiff":    {"git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
+		"template":    {"git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
+		"web":         {"tui", "cli", "mcp", "app"},
 	}
 	const root = "github.com/homeend/gigagit/internal/"
 	for pkg, forbidden := range cases {
