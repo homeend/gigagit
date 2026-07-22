@@ -9,6 +9,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- `gg web` (probe) gains its first write pathway: a "● Working tree" row atop
+  the commit list opens a sectioned status pane (Staged / Changes / Untracked /
+  Conflicts) with whole-file stage/unstage (per-row `s`/`u` + bulk buttons) via
+  `POST /api/stage` → `engine.Stage`, working-tree diffs (`/api/diff?wt=`,
+  uncached), and `GET /api/status`. Mutating routes sit behind a CSRF write
+  guard (JSON content type required, loopback-Origin check) on top of the
+  existing Host guard.
 - `gg web` (probe): read-only browser UI — a loopback-only embedded server
   serving commits + lane graph (text and SVG modes), commit files, and
   side-by-side diffs straight from the domain read-model; `--open` launches

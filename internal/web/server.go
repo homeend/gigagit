@@ -1,7 +1,8 @@
-// Package web is gg's read-only browser frontend probe: an embedded HTTP
-// server exposing the domain read-model as JSON plus a static single-page
-// UI. Domain-only frontend — it reaches git through internal/domain, never
-// internal/git (archtest-guarded).
+// Package web is gg's browser frontend probe: an embedded HTTP server
+// exposing the domain read-model as JSON plus a static single-page UI.
+// Domain-only frontend — it reaches git through internal/domain, never
+// internal/git (archtest-guarded). Mutating endpoints (stage) run engine
+// ops through domain.Execute behind writeGuard.
 package web
 
 import (

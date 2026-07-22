@@ -57,3 +57,19 @@ mark.l { background: var(--span-del); color: inherit; }
 mark.r { background: var(--span-add); color: inherit; }
 .notice { padding: 12px; color: var(--dim); }
 #foot { padding: 4px 12px; color: var(--dim); border-top: 1px solid var(--border); background: var(--bg-alt); }
+#files-actions { padding: 3px 8px; display: flex; gap: 8px; border-bottom: 1px solid var(--border); }
+#files-actions.hidden { display: none; }
+#files-actions button {
+  background: var(--bg-alt); color: var(--fg); border: 1px solid var(--border);
+  border-radius: 3px; padding: 1px 8px; font: inherit; cursor: pointer;
+}
+#files-actions button:hover { border-color: var(--accent); }
+#files-list li.sect { color: var(--dim); font-weight: bold; cursor: default; padding-top: 6px; }
+#files-list li button.act {
+  float: right; background: none; color: var(--dim); border: 1px solid var(--border);
+  border-radius: 3px; width: 1.8em; font: inherit; cursor: pointer;
+}
+#files-list li button.act:hover { color: var(--fg); border-color: var(--accent); }
+#files-list li.conflicts { color: #f27a6a; }
+.crow.wt .subj { color: #e0c06c; font-weight: bold; }
+.crow.wt .graph { color: #e0c06c; }

@@ -10,6 +10,9 @@ const state = {
   fileSha: null,
   pane: "commits", // commits | files
   graphMode: "text", // text | svg (svg wired in the graph-upgrade task)
+  wt: null, // /api/status payload while the tree is dirty, else null
+  filesMode: "commit", // commit | status
+  statusEntries: [],
 };
 
 const $ = (id) => document.getElementById(id);
@@ -21,6 +24,17 @@ async function getJSON(url) {
   return body;
 }
 
+async function postJSON(url, body) {
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await resp.json();
+  if (!resp.ok) throw new Error(data.error || resp.statusText);
+  return data;
+}
+
 function esc(s) {
   return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 }
@@ -29,19 +43,70 @@ function runes(s) {
   return Array.from(s);
 }
 
+// --- working-tree row + status state ---
+
+function wtCount() {
+  return state.wt ? 1 : 0;
+}
+
+function applyStatus(st) {
+  state.wt = st.files && st.files.length ? st : null;
+  buildStatusEntries();
+}
+
+async function fetchStatus() {
+  applyStatus(await getJSON("/api/status"));
+}
+
+// A partially-staged file appears twice: once under Staged (unstage
+// control), once under Changes (stage control) — the git-status model.
+function buildStatusEntries() {
+  const es = [];
+  for (const f of state.wt ? state.wt.files : []) {
+    if (f.kind === "conflicted") es.push({ ...f, section: "conflicts" });
+    else if (f.kind === "untracked") es.push({ ...f, section: "untracked" });
+    else {
+      if (f.staged !== ".") es.push({ ...f, section: "staged" });
+      if (f.unstaged !== ".") es.push({ ...f, section: "changes" });
+    }
+  }
+  const order = { staged: 0, changes: 1, untracked: 2, conflicts: 3 };
+  es.sort((a, b) => order[a.section] - order[b.section] || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  state.statusEntries = es;
+}
+
+function wtRowHTML(i) {
+  const sel = i === state.cursor ? " sel" : "";
+  const c = state.wt.counts;
+  const parts = [];
+  if (c.staged) parts.push(c.staged + " staged");
+  if (c.unstaged) parts.push(c.unstaged + " changed");
+  if (c.untracked) parts.push(c.untracked + " untracked");
+  if (c.conflicted) parts.push(c.conflicted + " conflicted");
+  return (
+    `<div class="crow wt${sel}" data-i="${i}">` +
+    `<span class="graph">●</span>` +
+    `<span class="subj">Working tree</span>` +
+    `<span class="meta">${esc(parts.join(" · "))}</span></div>`
+  );
+}
+
 // --- commits pane (virtualized: only visible rows exist in the DOM) ---
 
 function renderCommits() {
   const scroll = $("commits-scroll");
-  $("commits-spacer").style.height = state.rows.length * ROW_H + "px";
+  const total = state.rows.length + wtCount();
+  $("commits-spacer").style.height = total * ROW_H + "px";
   const first = Math.max(0, Math.floor(scroll.scrollTop / ROW_H) - 10);
-  const last = Math.min(state.rows.length, Math.ceil((scroll.scrollTop + scroll.clientHeight) / ROW_H) + 10);
+  const last = Math.min(total, Math.ceil((scroll.scrollTop + scroll.clientHeight) / ROW_H) + 10);
   const win = $("commits-window");
   win.style.top = first * ROW_H + "px";
   let html = "";
-  for (let i = first; i < last; i++) html += rowHTML(state.rows[i], i);
+  for (let i = first; i < last; i++) {
+    html += state.wt && i === 0 ? wtRowHTML(i) : rowHTML(state.rows[i - wtCount()], i);
+  }
   win.innerHTML = html;
-  maybeLoadMore(last);
+  maybeLoadMore(last - wtCount());
 }
 
 function rowHTML(row, i) {
@@ -139,33 +204,79 @@ function maybeLoadMore(lastVisible) {
 // --- files + diff panes ---
 
 async function openCommit(i) {
+  if (state.wt && i === 0) return openWorkingTree(i);
   state.cursor = i;
   renderCommits();
-  const row = state.rows[i];
+  const row = state.rows[i - wtCount()];
   const body = await getJSON("/api/commit/" + row.hash);
   state.files = body.files || [];
   state.fileCursor = 0;
   state.fileSha = row.hash;
   state.pane = "files";
+  state.filesMode = "commit";
   $("files-header").textContent = row.short + " " + row.subject;
   renderFiles();
   focusPane();
   if (state.files.length) openFile(0);
 }
 
+async function openWorkingTree(i) {
+  state.cursor = i;
+  renderCommits();
+  await fetchStatus(); // refresh on open — external changes since boot
+  if (!state.wt) {
+    renderCommits();
+    return;
+  }
+  state.filesMode = "status";
+  state.fileCursor = 0;
+  state.pane = "files";
+  $("files-header").textContent = "Working tree";
+  renderFiles();
+  focusPane();
+  if (state.statusEntries.length) openFile(0);
+}
+
+const SECTION_LABELS = { staged: "Staged", changes: "Changes", untracked: "Untracked", conflicts: "Conflicts" };
+
 function renderFiles() {
-  $("files-list").innerHTML = state.files
-    .map(
-      (f, i) =>
-        `<li class="${i === state.fileCursor ? "sel" : ""}" data-i="${i}">` +
-        `<span class="st ${esc(f.status)}">${esc(f.status)}</span>${esc(f.path)}</li>`
-    )
-    .join("");
+  if (state.filesMode !== "status") {
+    $("files-actions").classList.add("hidden");
+    $("files-list").innerHTML = state.files
+      .map(
+        (f, i) =>
+          `<li class="${i === state.fileCursor ? "sel" : ""}" data-i="${i}">` +
+          `<span class="st ${esc(f.status)}">${esc(f.status)}</span>${esc(f.path)}</li>`
+      )
+      .join("");
+    return;
+  }
+  $("files-actions").classList.remove("hidden");
+  let html = "";
+  let lastSection = "";
+  state.statusEntries.forEach((f, i) => {
+    if (f.section !== lastSection) {
+      html += `<li class="sect">${SECTION_LABELS[f.section]}</li>`;
+      lastSection = f.section;
+    }
+    const badge = f.section === "staged" ? f.staged : f.unstaged;
+    const btn =
+      f.section === "conflicts"
+        ? ""
+        : f.section === "staged"
+          ? `<button class="act" data-i="${i}" data-un="1">u</button>`
+          : `<button class="act" data-i="${i}">s</button>`;
+    html +=
+      `<li class="${i === state.fileCursor ? "sel" : ""} ${f.section}" data-i="${i}">` +
+      `<span class="st">${esc(badge)}</span>${esc(f.path)}${btn}</li>`;
+  });
+  $("files-list").innerHTML = html;
 }
 
 async function openFile(i) {
   state.fileCursor = i;
   renderFiles();
+  if (state.filesMode === "status") return openStatusDiff(i);
   const f = state.files[i];
   const q = new URLSearchParams({ sha: state.fileSha, path: f.path, status: f.status });
   if (f.old_path) q.set("old", f.old_path);
@@ -176,6 +287,47 @@ async function openFile(i) {
   } catch (e) {
     $("diff-body").innerHTML = `<div class="notice">error: ${esc(e.message || e)}</div>`;
   }
+}
+
+async function openStatusDiff(i) {
+  const f = state.statusEntries[i];
+  $("diff-header").textContent = f.path;
+  if (f.section === "conflicts") {
+    $("diff-body").innerHTML = `<div class="notice">conflicted — resolve in the TUI</div>`;
+    return;
+  }
+  const q = new URLSearchParams({ wt: f.section === "staged" ? "staged" : "unstaged", path: f.path });
+  if (f.orig_path) q.set("old", f.orig_path);
+  $("diff-body").innerHTML = `<div class="notice">loading…</div>`;
+  try {
+    renderDiff(await getJSON("/api/diff?" + q));
+  } catch (e) {
+    $("diff-body").innerHTML = `<div class="notice">error: ${esc(e.message || e)}</div>`;
+  }
+}
+
+async function stage(body) {
+  try {
+    applyStatus(await postJSON("/api/stage", body));
+  } catch (e) {
+    $("files-header").textContent = "error: " + (e.message || e);
+    return;
+  }
+  if (!state.wt) {
+    // tree went clean: leave status mode, drop the synthetic row
+    state.filesMode = "commit";
+    state.pane = "commits";
+    state.cursor = 0;
+    $("files-list").innerHTML = "";
+    $("files-actions").classList.add("hidden");
+    $("files-header").textContent = "";
+    renderCommits();
+    focusPane();
+    return;
+  }
+  state.fileCursor = Math.min(state.fileCursor, state.statusEntries.length - 1);
+  renderFiles();
+  renderCommits(); // badge counts changed
 }
 
 function markSpans(text, spans, side) {
@@ -223,8 +375,9 @@ function focusPane() {
 
 function moveCursor(delta) {
   if (state.pane === "commits") {
-    if (!state.rows.length) return;
-    state.cursor = Math.max(0, Math.min(state.rows.length - 1, state.cursor + delta));
+    const total = state.rows.length + wtCount();
+    if (!total) return;
+    state.cursor = Math.max(0, Math.min(total - 1, state.cursor + delta));
     const scroll = $("commits-scroll");
     const top = state.cursor * ROW_H;
     if (top < scroll.scrollTop) scroll.scrollTop = top;
@@ -257,6 +410,12 @@ document.addEventListener("keydown", (e) => {
     focusPane();
   } else if (e.key === "g") {
     toggleGraphMode();
+  } else if ((e.key === "s" || e.key === "u") && state.pane === "files" && state.filesMode === "status") {
+    const f = state.statusEntries[state.fileCursor];
+    if (f && f.section !== "conflicts") {
+      if (e.key === "s" && f.section !== "staged") stage({ paths: [f.path] });
+      else if (e.key === "u" && f.section === "staged") stage({ paths: [f.path], unstage: true });
+    }
   }
 });
 
@@ -266,12 +425,23 @@ $("commits-window").addEventListener("click", (e) => {
   if (row) openCommit(Number(row.dataset.i));
 });
 $("files-list").addEventListener("click", (e) => {
+  const btn = e.target.closest("button.act");
+  if (btn && state.filesMode === "status") {
+    const f = state.statusEntries[Number(btn.dataset.i)];
+    stage(btn.dataset.un ? { paths: [f.path], unstage: true } : { paths: [f.path] });
+    return;
+  }
   const li = e.target.closest("li");
-  if (li) {
+  if (li && li.dataset.i !== undefined) {
     state.pane = "files";
     focusPane();
     openFile(Number(li.dataset.i));
   }
+});
+$("stage-all").addEventListener("click", () => stage({ all: true }));
+$("unstage-all").addEventListener("click", () => {
+  const paths = state.statusEntries.filter((f) => f.section === "staged").map((f) => f.path);
+  if (paths.length) stage({ paths, unstage: true }); // engine.Stage{All} can't unstage
 });
 window.addEventListener("resize", renderCommits);
 
@@ -281,6 +451,7 @@ async function boot() {
   $("repo-branch").textContent = repo.branch;
   $("repo-worktree").textContent = repo.worktree;
   document.title = "gg web — " + repo.name;
+  await fetchStatus().catch(() => {}); // status failing must not block browse
   await loadCommits(false);
   focusPane();
 }
