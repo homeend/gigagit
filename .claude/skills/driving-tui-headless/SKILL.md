@@ -72,6 +72,12 @@ the snapshot is valid, just taken at the ceiling.
 
 ## Preparing repo state
 
+⚠️ Keystrokes drive a REAL `gg` against `--repo` (default: this repo). A
+keyscript that opens the action menu (`.`) and confirms can run **mutating
+or destructive** git operations — stage, discard, checkout, merge, delete a
+branch/worktree, or push. For anything beyond pure navigation, point
+`--repo` at a throwaway/scratch clone, not your live checkout.
+
 To capture a screen that needs a condition (a merge conflict, a paused
 rebase, a specific branch checked out), set that state up first in a scratch
 repo and point `--repo` at it. The harness only drives keys; it does not

@@ -113,8 +113,9 @@ go build ./cmd/gg            # or ./build.sh [linux|windows|all]
 
 To read the TUI headlessly (no terminal/VM) — e.g. when porting a panel to
 another frontend — `./tui-capture.sh "<keyscript>"` drives the real `gg` under
-a tmux PTY and writes a plain-text snapshot per screen. See the
-`driving-tui-headless` skill.
+a tmux PTY and writes a plain-text snapshot per screen; keystrokes run against
+a live repo, so point `--repo` at a scratch clone for anything beyond
+navigation. See the `driving-tui-headless` skill.
 
 ## Development workflow
 

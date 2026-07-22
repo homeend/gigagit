@@ -46,27 +46,33 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="${REPO:-$SCRIPT_DIR}"
 COLS="${SIZE%x*}"; ROWS="${SIZE#*x}"
 
+BUILD_DIR=""
 if [[ -z "$GG" ]]; then
-  GG="$(mktemp -d)/gg"
+  BUILD_DIR="$(mktemp -d)"
+  GG="$BUILD_DIR/gg"
   echo "tui-capture: building gg ..." >&2
   ( cd "$SCRIPT_DIR" && go build -o "$GG" ./cmd/gg ) \
-    || { echo "tui-capture: gg build failed" >&2; exit 1; }
+    || { echo "tui-capture: gg build failed" >&2; rm -rf "$BUILD_DIR"; exit 1; }
 fi
 
 OUT="${OUT:-$(mktemp -d -t tui-capture.XXXXXX)}"
 mkdir -p "$OUT"
 
 SESSION="ggcap_$$"
-cleanup() { tmux kill-session -t "$SESSION" 2>/dev/null || true; }
+cleanup() {
+  tmux kill-session -t "$SESSION" 2>/dev/null || true
+  [[ -n "$BUILD_DIR" ]] && rm -rf "$BUILD_DIR"
+  return 0
+}
 trap cleanup EXIT
 
 # stable_sig: pane contents MINUS the last 2 lines. The app footer + status/
 # spinner line are volatile (an animating "remote tags…" hint never stops),
 # so masking them lets settle() converge. Used ONLY for settle comparison.
-stable_sig() { tmux capture-pane -t "$SESSION" -p | sed 's/[[:space:]]*$//' | head -n -2; }
+stable_sig() { tmux capture-pane -t "$SESSION" -p 2>/dev/null | sed 's/[[:space:]]*$//' | head -n -2; }
 
 # full_frame: the whole pane, trailing whitespace trimmed. What we save.
-full_frame() { tmux capture-pane -t "$SESSION" -p | sed 's/[[:space:]]*$//'; }
+full_frame() { tmux capture-pane -t "$SESSION" -p 2>/dev/null | sed 's/[[:space:]]*$//'; }
 
 # settle: poll until the stable signature is unchanged between two polls, or
 # the ceiling (argument, in 0.1s units) is reached. Returns 1 on ceiling.
@@ -128,6 +134,12 @@ tmux new-session -d -s "$SESSION" -x "$COLS" -y "$ROWS" -c "$REPO" "$GG"
 
 # initial screen: repo open + first async loads → allow a longer ceiling (~7s)
 settle 70 || echo "tui-capture: initial screen did not settle (captured anyway)" >&2
+
+if ! tmux has-session -t "$SESSION" 2>/dev/null; then
+  echo "tui-capture: gg exited on launch (bad --repo, or gg failed to start)" >&2
+  exit 1
+fi
+
 idx=0
 write_snap "$idx" "init"
 
