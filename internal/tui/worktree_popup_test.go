@@ -26,25 +26,6 @@ func modelWithConfig(t *testing.T, branchTmpl, pathTmpl string) Model {
 	return m
 }
 
-func TestOpenNewBranchPopupOnShiftW(t *testing.T) {
-	m := modelWithConfig(t, "b/from-<parent-branch>", "../<repo>.worktrees/<branch>")
-	updated, _ := m.Update(keyMsg("W"))
-	mm := updated.(Model)
-	p := layerOf[*worktreePopup](mm)
-	if p == nil {
-		t.Fatal("pressing w should open the worktree popup")
-	}
-	if p.startPoint == "" {
-		t.Error("popup startPoint (selected branch) should be set")
-	}
-	if p.state != stAction {
-		t.Errorf("state = %v, want stAction when no user fields", p.state)
-	}
-	if p.previewBranch == "" {
-		t.Error("preview should be computed on open")
-	}
-}
-
 func TestPopupSwallowsGlobalKeys(t *testing.T) {
 	m := modelWithConfig(t, "b/x", "../<repo>.worktrees/<branch>")
 	updated, _ := m.Update(keyMsg("W"))
@@ -70,8 +51,8 @@ func TestPopupEscCancels(t *testing.T) {
 }
 
 func TestPopupInputFieldsAndPreview(t *testing.T) {
-	m := modelWithConfig(t, "<user:user>/fix/<user:issue>", "wt/<branch>")
-	updated, _ := m.Update(keyMsg("W"))
+	m := modelWithConfig(t, "b/x", "wt/<user:user>-<user:issue>/<branch>")
+	updated, _ := m.Update(keyMsg("w"))
 	m = updated.(Model)
 	p := layerOf[*worktreePopup](m)
 	if p.state != stInput {
@@ -109,14 +90,17 @@ func TestPopupInputFieldsAndPreview(t *testing.T) {
 	if layerOf[*worktreePopup](m).state != stAction {
 		t.Fatalf("state = %v, want stAction after last field", layerOf[*worktreePopup](m).state)
 	}
-	if layerOf[*worktreePopup](m).previewBranch != "alic/fix/77" {
-		t.Fatalf("preview branch = %q, want alic/fix/77", layerOf[*worktreePopup](m).previewBranch)
+	if got := layerOf[*worktreePopup](m).previewPath; !contains(got, "alic-77") {
+		t.Fatalf("preview path = %q, want the field values alic-77 in it", got)
+	}
+	if got, want := layerOf[*worktreePopup](m).previewBranch, layerOf[*worktreePopup](m).startPoint; got != want {
+		t.Fatalf("preview branch = %q, want the selection %q (branch is never templated)", got, want)
 	}
 }
 
 func TestPopupBackspaceOnEmptyField(t *testing.T) {
-	m := modelWithConfig(t, "issue/<user:id>", "wt/<branch>")
-	updated, _ := m.Update(keyMsg("W"))
+	m := modelWithConfig(t, "b/x", "wt/<user:id>-<branch>")
+	updated, _ := m.Update(keyMsg("w"))
 	m = updated.(Model)
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
 	m = updated.(Model)
@@ -126,8 +110,8 @@ func TestPopupBackspaceOnEmptyField(t *testing.T) {
 }
 
 func TestPopupMultiByteRune(t *testing.T) {
-	m := modelWithConfig(t, "issue/<user:id>", "wt/<branch>")
-	updated, _ := m.Update(keyMsg("W"))
+	m := modelWithConfig(t, "b/x", "wt/<user:id>-<branch>")
+	updated, _ := m.Update(keyMsg("w"))
 	m = updated.(Model)
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("é")})
 	m = updated.(Model)
@@ -138,10 +122,11 @@ func TestPopupMultiByteRune(t *testing.T) {
 
 func TestPopupEditMode(t *testing.T) {
 	m := modelWithConfig(t, "b/auto", "../<repo>.worktrees/<branch>")
-	updated, _ := m.Update(keyMsg("W"))
+	updated, _ := m.Update(keyMsg("w"))
 	m = updated.(Model)
-	if layerOf[*worktreePopup](m).previewBranch != "b/auto" {
-		t.Fatalf("preview branch = %q, want b/auto", layerOf[*worktreePopup](m).previewBranch)
+	start := layerOf[*worktreePopup](m).startPoint
+	if layerOf[*worktreePopup](m).previewBranch != start {
+		t.Fatalf("preview branch = %q, want the selection %q", layerOf[*worktreePopup](m).previewBranch, start)
 	}
 
 	updated, _ = m.Update(keyMsg("e"))
@@ -149,8 +134,8 @@ func TestPopupEditMode(t *testing.T) {
 	if layerOf[*worktreePopup](m).state != stEdit {
 		t.Fatalf("state = %v, want stEdit", layerOf[*worktreePopup](m).state)
 	}
-	if layerOf[*worktreePopup](m).editBuf.Value() != "b/auto" {
-		t.Fatalf("editBuf = %q, want b/auto", layerOf[*worktreePopup](m).editBuf.Value())
+	if layerOf[*worktreePopup](m).editBuf.Value() != start {
+		t.Fatalf("editBuf = %q, want the selection %q", layerOf[*worktreePopup](m).editBuf.Value(), start)
 	}
 
 	for len([]rune(layerOf[*worktreePopup](m).editBuf.Value())) > 0 {
@@ -176,8 +161,9 @@ func TestPopupEditMode(t *testing.T) {
 
 func TestPopupEditEscDiscards(t *testing.T) {
 	m := modelWithConfig(t, "b/auto", "../<repo>.worktrees/<branch>")
-	updated, _ := m.Update(keyMsg("W"))
+	updated, _ := m.Update(keyMsg("w"))
 	m = updated.(Model)
+	start := layerOf[*worktreePopup](m).startPoint
 	updated, _ = m.Update(keyMsg("e"))
 	m = updated.(Model)
 	updated, _ = m.Update(keyMsg("z"))
@@ -187,8 +173,8 @@ func TestPopupEditEscDiscards(t *testing.T) {
 	if layerOf[*worktreePopup](m).state != stAction {
 		t.Fatalf("state = %v, want stAction after esc", layerOf[*worktreePopup](m).state)
 	}
-	if layerOf[*worktreePopup](m).previewBranch != "b/auto" {
-		t.Fatalf("preview branch = %q, want b/auto after discard", layerOf[*worktreePopup](m).previewBranch)
+	if layerOf[*worktreePopup](m).previewBranch != start {
+		t.Fatalf("preview branch = %q, want the selection %q after discard", layerOf[*worktreePopup](m).previewBranch, start)
 	}
 }
 
@@ -210,11 +196,11 @@ func TestPopupCreateLaunchesOpAndClearsPopup(t *testing.T) {
 }
 
 func TestPopupCreatePreviewErrorBlocks(t *testing.T) {
-	m := modelWithConfig(t, "b-<bogus>", "../<repo>.worktrees/<branch>")
-	updated, _ := m.Update(keyMsg("W"))
+	m := modelWithConfig(t, "b/x", "wt-<bogus>/<branch>")
+	updated, _ := m.Update(keyMsg("w"))
 	m = updated.(Model)
 	if layerOf[*worktreePopup](m).previewErr == nil {
-		t.Fatal("expected a preview error for the bad template")
+		t.Fatal("expected a preview error for the bad path template")
 	}
 	updated, _ = m.Update(keyMsg("w")) // attempt create
 	m = updated.(Model)
@@ -340,18 +326,15 @@ func (e errTestType) Error() string { return string(e) }
 // the worktree equals what was shown — including after a hand-edit.
 func TestCreateOpEqualsPreview(t *testing.T) {
 	m := modelWithConfig(t, "b/auto", "../<repo>.worktrees/<branch>")
-	updated, _ := m.Update(keyMsg("W"))
+	updated, _ := m.Update(keyMsg("w"))
 	m = updated.(Model)
 	p := layerOf[*worktreePopup](m)
-	op := p.createOp("").(engine.CreateWorktree)
+	op := p.createOp("").(engine.CreateWorktreeForBranch)
 	if op.Branch != p.previewBranch || op.Path != p.previewPath {
 		t.Fatalf("op {%q,%q} != preview {%q,%q}", op.Branch, op.Path, p.previewBranch, p.previewPath)
 	}
-	if op.StartPoint != p.startPoint {
-		t.Fatalf("op.StartPoint = %q, want %q", op.StartPoint, p.startPoint)
-	}
 
-	// After a confirmed edit, the op carries the edited branch.
+	// After a confirmed edit, the op cuts a NEW branch carrying the edited name.
 	updated, _ = m.Update(keyMsg("e"))
 	m = updated.(Model)
 	for len([]rune(layerOf[*worktreePopup](m).editBuf.Value())) > 0 {
@@ -364,30 +347,33 @@ func TestCreateOpEqualsPreview(t *testing.T) {
 	}
 	updated, _ = m.Update(keyMsg("enter"))
 	m = updated.(Model)
-	if op := layerOf[*worktreePopup](m).createOp("").(engine.CreateWorktree); op.Branch != "hf" || op.Branch != layerOf[*worktreePopup](m).previewBranch {
-		t.Fatalf("edited op.Branch = %q, want hf (== preview %q)", op.Branch, layerOf[*worktreePopup](m).previewBranch)
+	edited := layerOf[*worktreePopup](m).createOp("").(engine.CreateWorktree)
+	if edited.Branch != "hf" || edited.Branch != layerOf[*worktreePopup](m).previewBranch {
+		t.Fatalf("edited op.Branch = %q, want hf (== preview %q)", edited.Branch, layerOf[*worktreePopup](m).previewBranch)
+	}
+	if edited.StartPoint != layerOf[*worktreePopup](m).startPoint {
+		t.Fatalf("edited op.StartPoint = %q, want the selection %q", edited.StartPoint, layerOf[*worktreePopup](m).startPoint)
 	}
 }
 
-// Hand-editing the branch away from its <seq> must NOT bump the branch counter;
-// only the path template's <seq> (if any) is consumed.
+// The branch name is never templated in the w/W popup, so a branch template's
+// <seq> is never consumed — only the path template's, before and after a rename.
 func TestConsumedSeqNamesAfterEdit(t *testing.T) {
-	m := modelWithConfig(t, "issue/<seq:issue>", "../<repo>.worktrees/<branch>")
-	updated, _ := m.Update(keyMsg("W"))
+	m := modelWithConfig(t, "issue/<seq:issue>", "../<repo>.worktrees/<seq:wt>-<branch>")
+	updated, _ := m.Update(keyMsg("w"))
 	m = updated.(Model)
-	// Before any edit: the branch <seq:issue> is consumed.
-	if got := layerOf[*worktreePopup](m).consumedSeqNames(); len(got) != 1 || got[0] != "issue" {
-		t.Fatalf("pre-edit consumedSeqNames = %v, want [issue]", got)
+	if got := layerOf[*worktreePopup](m).consumedSeqNames(); len(got) != 1 || got[0] != "wt" {
+		t.Fatalf("pre-edit consumedSeqNames = %v, want [wt] (branch template never runs)", got)
 	}
-	// Hand-edit the branch (override); path template has no <seq>, so nothing is consumed.
+	// Renaming into a new branch changes nothing: still only the path's <seq>.
 	updated, _ = m.Update(keyMsg("e"))
 	m = updated.(Model)
 	updated, _ = m.Update(keyMsg("x"))
 	m = updated.(Model)
 	updated, _ = m.Update(keyMsg("enter"))
 	m = updated.(Model)
-	if got := layerOf[*worktreePopup](m).consumedSeqNames(); len(got) != 0 {
-		t.Fatalf("post-edit consumedSeqNames = %v, want [] (branch <seq> no longer used)", got)
+	if got := layerOf[*worktreePopup](m).consumedSeqNames(); len(got) != 1 || got[0] != "wt" {
+		t.Fatalf("post-edit consumedSeqNames = %v, want [wt]", got)
 	}
 }
 
@@ -438,14 +424,29 @@ func TestPopupOverlaysInterfaceCenteredAndFits(t *testing.T) {
 	}
 }
 
-// End-to-end: pressing W runs a real CreateWorktree op and the model ends up
-// rooted in the worktree that was actually created (closing the seam between
-// the popup, the engine op, and reRoot).
+// End-to-end: W on a non-current branch opens the existing-mode popup, and
+// enter (the switch default) runs a real CreateWorktreeForBranch op leaving
+// the model pointed at the worktree that was actually created (closing the
+// seam between the popup, the engine op, and reRoot).
 func TestPopupCreateAndSwitchEndToEnd(t *testing.T) {
-	m := modelWithConfig(t, "b/from-<parent-branch>", "../<repo>.worktrees/<branch>")
+	dir, repo := newRepoDir(t)
+	runGit(t, dir, "branch", "feature/sw2")
+
+	m := New(domain.New(repo))
+	loaded, _ := m.Update(m.loadCmd()())
+	m = loaded.(Model)
+	m.cfg.Worktree.PathTemplate = "../<repo>.worktrees/<branch>"
+	m.focus = panelBranches
+	for vi := 0; vi < m.panelLen(panelBranches); vi++ {
+		m.sel[panelBranches] = vi
+		if bi, ok := m.backingIndex(panelBranches); ok && m.branches[bi].Name == "feature/sw2" {
+			break
+		}
+	}
+
 	updated, _ := m.Update(keyMsg("W"))
 	m = updated.(Model)
-	updated, cmd := m.Update(keyMsg("W")) // create AND switch
+	updated, cmd := m.Update(keyMsg("enter")) // default = create AND switch
 	m = updated.(Model)
 
 	m = driveOp(t, m, cmd) // run the real op to completion
@@ -506,7 +507,7 @@ func TestWorktreeCreateOpCarriesHookWhenEnabled(t *testing.T) {
 }
 
 func TestWorktreeCreateOpOmitsHookWhenDisabled(t *testing.T) {
-	p := &worktreePopup{previewBranch: "b/x", previewPath: "/tmp/x", existing: true, runHook: false}
+	p := &worktreePopup{startPoint: "b/x", previewBranch: "b/x", previewPath: "/tmp/x", existing: true, runHook: false}
 	op := p.createOp("") // startCreateFromPopup passes "" when runHook is false
 	cwb := op.(engine.CreateWorktreeForBranch)
 	if cwb.PostCreateHook != "" {

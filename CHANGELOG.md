@@ -223,6 +223,25 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   panels and the commit feed's decorations.
 
 ### Changed
+- **Default worktree branch template is now
+  `<parent-branch>-<date:yyyy-MM-dd_HH-mm>`** (e.g. `main-2026-07-22_22-11`)
+  instead of the day-one `b/from-<parent-branch>-<random-alpha:4>`
+  placeholder. After the w/W popup fold below, the template only drives the
+  CLI's `gg worktree add` no-argument lane; a minute-resolution timestamp
+  names the branch after when it was cut rather than four random letters.
+  Date tokens are lowercase `yyyy`/`MM`/`dd`/`HH`/`mm`/`ss`.
+- **One worktree popup for `w` and `W` — the branch starts as the selected
+  branch, and `W` switches to the new worktree.** `W` used to open the popup
+  in new-templated-branch mode, so its directory carried the default branch
+  template's `b/from-` prefix and random 4-letter suffix
+  (`b/from-<parent-branch>-<random-alpha:4>`; the path template mirrored the
+  templated name). Now both keys open the same popup on the selected branch
+  (clean `<repo>.worktrees/<branch>` directory); `W` makes enter default to
+  create & switch (`[w]` still creates without switching). The branch
+  template is no longer applied at all: `e` edits the name (seeded with the
+  selection — confirming a different name creates a NEW branch cut from it)
+  and `p` seeds it from a saved branch prefix, so the new-branch flow lives
+  inside the same popup instead of a separate mode.
 - **Pull/push dialogs name the branch they act on.** The `p` slow-op confirm
   now reads "Pull main? This may rewrite the working tree." (or "Pull
   feat/x (stay here)?" for a Branches-panel background pull) instead of the

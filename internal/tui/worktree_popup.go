@@ -29,7 +29,7 @@ const (
 type worktreePopup struct {
 	popupMax
 	startPoint string // selected branch = <parent-branch>; a commit SHA in fromCommit mode
-	existing   bool   // checkout the startPoint branch itself; no new branch
+	existing   bool   // startPoint is an existing branch; an edited name cuts a NEW branch from it
 	fromCommit bool   // start point is a commit; the branch name is user-typed (no template)
 	branchTmpl string
 	pathTmpl   string
@@ -57,6 +57,10 @@ type worktreePopup struct {
 	previewErr    error
 
 	runHook bool // run the configured post-create hook on create (default true)
+
+	// switchOnCreate makes enter default to create-AND-switch (the model-level
+	// W entry: "w + create & switch" in one flow). [w]/[W] keep their meanings.
+	switchOnCreate bool
 }
 
 // tctx builds a fresh template.Ctx. A new Rand is created from the fixed seed on
@@ -71,16 +75,24 @@ func (p *worktreePopup) tctx() template.Ctx {
 	}
 }
 
-// fixedBranch returns the verbatim branch when one is fixed: the selection in
-// existing mode, the live buffer while editing, or a confirmed hand-edit.
+// fixedBranch returns the verbatim branch when one is fixed: the live buffer
+// while editing (an emptied buffer falls back to the selection in branch mode),
+// a confirmed hand-edit, or the selection itself. Only the fromCommit popup can
+// return "" (no name typed yet — the preview falls back to the template).
 func (p *worktreePopup) fixedBranch() string {
+	if p.state == stEdit {
+		if v := p.editBuf.Value(); v != "" || !p.existing {
+			return v
+		}
+		return p.startPoint
+	}
+	if p.branchOverride != "" {
+		return p.branchOverride
+	}
 	if p.existing {
 		return p.startPoint
 	}
-	if p.state == stEdit {
-		return p.editBuf.Value()
-	}
-	return p.branchOverride
+	return ""
 }
 
 // recompute refreshes the preview from the current fields/state. A confirmed
@@ -96,10 +108,14 @@ func (p *worktreePopup) recompute() {
 	p.previewBranch, p.previewPath, p.previewErr = worktree.Resolve(tm, fixed, vals, p.tctx())
 }
 
-// openWorktreePopup builds a popup for the currently-selected branch. In
-// existing mode the popup checks out that branch itself (no new branch): the
-// branch template is bypassed and only the path template's fields/counters
-// apply. Returns (model, false) if there is no branch to act on.
+// openWorktreePopup builds a popup for the currently-selected branch. The
+// branch starts as the selection itself (checked out in the new worktree; no
+// branch template, so the directory is just the branch name) — e edits the
+// name and a different name creates a NEW branch cut from the selection; p
+// seeds the name from a saved prefix. Only the path template's
+// fields/counters apply. switchOnCreate makes enter default to create &
+// switch (the model-W entry). Returns (model, false) if there is no branch to
+// act on.
 // mainWorktreeRoot returns the main worktree's root for resolving the <repo>
 // token and the relative-path base (git lists the main worktree first), falling
 // back to the current worktree when the list isn't loaded yet. This must match
@@ -113,17 +129,13 @@ func (m Model) mainWorktreeRoot() string {
 	return m.currentWorktree
 }
 
-func (m Model) openWorktreePopup(existing bool) (Model, bool) {
+func (m Model) openWorktreePopup(switchOnCreate bool) (Model, bool) {
 	if len(m.branches) == 0 {
 		return m, false
 	}
-	bt := m.cfg.Worktree.DefaultBranchTemplate
 	pt := m.cfg.Worktree.PathTemplate
 
-	tm := worktree.Templates{Branch: bt, Path: pt}
-	if existing {
-		tm = worktree.Templates{Path: pt} // branch template bypassed entirely
-	}
+	tm := worktree.Templates{Path: pt} // the branch is the selection; no branch template
 	labels := tm.Labels()
 	seqNames := tm.SeqNames()
 
@@ -132,19 +144,19 @@ func (m Model) openWorktreePopup(existing bool) (Model, bool) {
 		return m, false
 	}
 	p := &worktreePopup{
-		startPoint:   m.branches[bi].Name,
-		existing:     existing,
-		branchTmpl:   bt,
-		pathTmpl:     pt,
-		repoName:     worktree.RepoName(m.mainWorktreeRoot()),
-		labels:       labels,
-		inputs:       map[string]textfield{},
-		seqNames:     seqNames,
-		seqs:         worktree.PeekSeqs(m.gitCommonDir, seqNames),
-		gitCommonDir: m.gitCommonDir,
-		seed:         rand.Uint64(),
-		now:          time.Now(),
-		runHook:      true,
+		startPoint:     m.branches[bi].Name,
+		existing:       true,
+		switchOnCreate: switchOnCreate,
+		pathTmpl:       pt,
+		repoName:       worktree.RepoName(m.mainWorktreeRoot()),
+		labels:         labels,
+		inputs:         map[string]textfield{},
+		seqNames:       seqNames,
+		seqs:           worktree.PeekSeqs(m.gitCommonDir, seqNames),
+		gitCommonDir:   m.gitCommonDir,
+		seed:           rand.Uint64(),
+		now:            time.Now(),
+		runHook:        true,
 	}
 	for _, l := range labels {
 		p.inputs[l] = textfield{}
@@ -242,19 +254,15 @@ func (p *worktreePopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		switch msg.String() {
 		case "esc":
 			m = m.popLayer()
-		case "e":
-			if p.existing {
-				return m, nil // the branch IS the point of existing mode
-			}
+		case "e": // edit the name; a different name creates a NEW branch from the selection
 			p.editBuf = newTextField(p.previewBranch)
 			p.state = stEdit
 			p.recompute()
 		case "p":
-			if p.existing {
-				return m, nil // existing mode checks out the branch as-is; no new name
-			}
 			return m, m.openPrefixPicker(p.resolvePrefix(), p.onPrefixPicked())
-		case "w", "enter":
+		case "enter": // follows the popup's default action (switch when opened via model-W)
+			return m.startCreateFromPopup(p, p.switchOnCreate)
+		case "w":
 			return m.startCreateFromPopup(p, false)
 		case "W":
 			return m.startCreateFromPopup(p, true)
@@ -281,7 +289,7 @@ func (p *worktreePopup) box(m Model) string {
 	cw := popupContentWidth(w)
 	var b strings.Builder
 	title := i18n.T("Create worktree from %s", displayStart(p.startPoint))
-	if p.existing {
+	if p.existing && p.previewBranch == p.startPoint {
 		title = i18n.T("Create worktree for %s", p.startPoint)
 	}
 	b.WriteString(title + "\n\n")
@@ -323,19 +331,16 @@ func (p *worktreePopup) box(m Model) string {
 	case stEdit:
 		b.WriteString(i18n.T("[type] edit name  [enter] done  [esc] discard"))
 	default:
-		if p.existing {
-			hint := i18n.T("[w] create  [W] create & switch  [esc] cancel")
+		hint := i18n.T("[w] create  [W] create & switch  [e] edit name  [p] use a prefix  [esc] cancel")
+		if p.switchOnCreate {
+			hint = i18n.T("[enter/W] create & switch  [w] create only  [e] edit name  [p] use a prefix  [esc] cancel")
 			if m.cfg.Worktree.PostCreateHook != "" {
-				hint = i18n.T("[w] create  [W] create & switch  [h] hook  [esc] cancel")
+				hint = i18n.T("[enter/W] create & switch  [w] create only  [e] edit name  [p] use a prefix  [h] hook  [esc] cancel")
 			}
-			b.WriteString(hint)
-		} else {
-			hint := i18n.T("[w] create  [W] create & switch  [e] edit name  [p] use a prefix  [esc] cancel")
-			if m.cfg.Worktree.PostCreateHook != "" {
-				hint = i18n.T("[w] create  [W] create & switch  [e] edit name  [p] use a prefix  [h] hook  [esc] cancel")
-			}
-			b.WriteString(hint)
+		} else if m.cfg.Worktree.PostCreateHook != "" {
+			hint = i18n.T("[w] create  [W] create & switch  [e] edit name  [p] use a prefix  [h] hook  [esc] cancel")
 		}
+		b.WriteString(hint)
 	}
 
 	// Fixed, comfortably-wide content width so a long branch/path wraps (full name
@@ -367,10 +372,12 @@ func (m Model) startCreateFromPopup(p *worktreePopup, switchAfter bool) (Model, 
 }
 
 // createOp builds the engine operation from the (already-resolved) preview, so
-// the worktree that gets created is exactly what the preview showed. hook is the
+// the worktree that gets created is exactly what the preview showed. A branch
+// popup whose name still equals the selection checks that branch out; an
+// edited name creates a NEW branch cut from the selection. hook is the
 // post-create hook script to pass through ("" = skip).
 func (p *worktreePopup) createOp(hook string) engine.Operation {
-	if p.existing {
+	if p.existing && p.previewBranch == p.startPoint {
 		return engine.CreateWorktreeForBranch{Branch: p.previewBranch, Path: p.previewPath, PostCreateHook: hook}
 	}
 	return engine.CreateWorktree{

@@ -58,14 +58,18 @@ func TestExistingModeIgnoresBranchTemplateUserFields(t *testing.T) {
 	}
 }
 
-func TestExistingModeEditKeyInert(t *testing.T) {
+func TestExistingModeEditKeySeedsSelection(t *testing.T) {
 	m := modelWithConfig(t, "b/x", "wt/<branch>")
 	updated, _ := m.Update(keyMsg("w"))
 	m = updated.(Model)
 	updated, _ = m.Update(keyMsg("e"))
 	m = updated.(Model)
-	if layerOf[*worktreePopup](m).state == stEdit {
-		t.Fatal("e must be inert in existing mode — the branch is the point")
+	p := layerOf[*worktreePopup](m)
+	if p.state != stEdit {
+		t.Fatal("e must open branch-name editing (a different name cuts a NEW branch)")
+	}
+	if p.editBuf.Value() != p.startPoint {
+		t.Fatalf("editBuf = %q, want the selection %q as the seed", p.editBuf.Value(), p.startPoint)
 	}
 }
 
@@ -133,7 +137,7 @@ func TestExistingModeRenderTitleAndHints(t *testing.T) {
 	if !strings.Contains(out, "Create worktree for") {
 		t.Errorf("existing-mode title missing:\n%s", out)
 	}
-	if strings.Contains(out, "edit name") {
-		t.Errorf("existing mode must not offer the edit-name hint:\n%s", out)
+	if !strings.Contains(out, "edit name") {
+		t.Errorf("the popup must offer the edit-name hint (rename → new branch):\n%s", out)
 	}
 }

@@ -147,7 +147,7 @@ func Defaults() Config {
 	return Config{
 		Worktree: WorktreeConfig{
 			PathTemplate:          "../<repo>.worktrees/<branch>",
-			DefaultBranchTemplate: "b/from-<parent-branch>-<random-alpha:4>",
+			DefaultBranchTemplate: "<parent-branch>-<date:yyyy-MM-dd_HH-mm>",
 		},
 		UI: UIConfig{WheelStep: 3, HScrollStep: 8, CommitGraphLanes: 8, CommitGraphMinLanes: 2, CommitGraphStep: 4,
 			CommitInitialCount: 300, CommitBatchSize: 300, CommitSearchMaxPages: 50, CommitSort: "date-order", ShowGraph: "on"},
