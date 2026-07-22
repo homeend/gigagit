@@ -385,8 +385,9 @@ function moveCursor(delta) {
       scroll.scrollTop = top + ROW_H - scroll.clientHeight;
     renderCommits();
   } else {
-    if (!state.files.length) return;
-    state.fileCursor = Math.max(0, Math.min(state.files.length - 1, state.fileCursor + delta));
+    const list = state.filesMode === "status" ? state.statusEntries : state.files;
+    if (!list.length) return;
+    state.fileCursor = Math.max(0, Math.min(list.length - 1, state.fileCursor + delta));
     renderFiles();
   }
 }
