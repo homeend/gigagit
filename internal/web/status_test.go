@@ -55,7 +55,7 @@ func postJSON(t *testing.T, ts *httptest.Server, path, body, contentType, origin
 		t.Fatalf("POST %s: %v", path, err)
 	}
 	defer resp.Body.Close()
-	if out != nil && resp.StatusCode == http.StatusOK {
+	if out != nil && resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
 			t.Fatalf("decode %s: %v", path, err)
 		}

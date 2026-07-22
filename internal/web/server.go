@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/homeend/gigagit/internal/domain"
 )
@@ -29,6 +30,12 @@ type Server struct {
 	// page-size overrides applied to the feed when > 0 (test seam).
 	pageInitial int
 	pageBatch   int
+
+	// op transport (oprun.go): one live operation at a time.
+	opMu          sync.Mutex
+	cur           *opRun
+	opSeq         int
+	decideTimeout time.Duration // test seam; zero = defaultDecideTimeout
 }
 
 func New(svc *domain.Service) *Server { return &Server{svc: svc} }
@@ -40,10 +47,14 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /static/", http.FileServerFS(staticFS))
 	mux.HandleFunc("GET /api/repo", s.handleRepo)
 	mux.HandleFunc("GET /api/status", s.handleStatus)
+	mux.HandleFunc("GET /api/branches", s.handleBranches)
 	mux.HandleFunc("GET /api/commits", s.handleCommits)
 	mux.HandleFunc("GET /api/commit/{sha}", s.handleCommitFiles)
 	mux.HandleFunc("GET /api/diff", s.handleDiff)
 	mux.HandleFunc("POST /api/stage", writeGuard(s.handleStage))
+	mux.HandleFunc("POST /api/op", writeGuard(s.handleOpStart))
+	mux.HandleFunc("GET /api/op/{id}/events", s.handleOpEvents)
+	mux.HandleFunc("POST /api/op/{id}/decide", writeGuard(s.handleOpDecide))
 	return hostGuard(mux)
 }
 

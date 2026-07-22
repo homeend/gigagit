@@ -17,6 +17,10 @@ const state = {
   wt: null, // /api/status payload while the tree is dirty, else null
   filesMode: "commit", // commit | status
   statusEntries: [],
+  branches: [],
+  sidebar: true,
+  op: null, // {id, es: EventSource} while an operation is live
+  lastDiff: null,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -61,6 +65,108 @@ function applyStatus(st) {
 async function fetchStatus() {
   applyStatus(await getJSON("/api/status"));
 }
+
+async function fetchBranches() {
+  const body = await getJSON("/api/branches");
+  state.branches = body.branches || [];
+  renderBranches();
+}
+
+function renderBranches() {
+  $("branches-list").innerHTML = state.branches
+    .map((b) => {
+      const ab =
+        (b.ahead ? "↑" + b.ahead : "") + (b.behind ? (b.ahead ? " " : "") + "↓" + b.behind : "");
+      return (
+        `<li class="${b.is_head ? "head" : ""}" data-n="${esc(b.name)}">` +
+        `${b.is_head ? "✓ " : ""}${esc(b.name)}${ab ? `<span class="ab">${ab}</span>` : ""}</li>`
+      );
+    })
+    .join("");
+}
+
+// --- op transport client ---
+
+function opLine(text, isErr) {
+  const el = $("op-line");
+  el.textContent = text || "";
+  el.classList.toggle("err", !!isErr);
+}
+
+async function startSwitch(branch) {
+  if (state.op) return; // one live op; the server would 409 anyway
+  let resp;
+  try {
+    resp = await postJSON("/api/op", { op: "switch", branch });
+  } catch (e) {
+    opLine("error: " + (e.message || e), true);
+    return;
+  }
+  opLine("⟳ switching " + branch + "…");
+  const es = new EventSource("/api/op/" + resp.op_id + "/events");
+  state.op = { id: resp.op_id, es };
+  es.onmessage = (m) => handleOpEvent(JSON.parse(m.data));
+  es.onerror = () => {}; // transient; done handling closes the source
+}
+
+function handleOpEvent(ev) {
+  if (ev.type === "progress") {
+    opLine("⟳ " + ev.step + (ev.detail ? " " + ev.detail : "") + "…");
+  } else if (ev.type === "decision") {
+    showModal(ev);
+  } else if (ev.type === "done") {
+    // done is terminal: close the source (EventSource would auto-reconnect
+    // and replay the history otherwise) and any open modal (covers
+    // notify-only decisions whose op already returned).
+    if (state.op) state.op.es.close();
+    state.op = null;
+    hideModal();
+    if (ev.ok) opLine(ev.summary || "done");
+    else opLine("error: " + (ev.error || "operation failed"), true);
+    if (ev.changed) refreshAfterOp();
+    else fetchStatus().then(renderCommits); // a failed switch may still have moved HEAD/stash state
+  }
+}
+
+async function refreshAfterOp() {
+  await Promise.all([loadRepo(), fetchBranches(), fetchStatus()]);
+  state.rows = [];
+  state.cursor = 0;
+  await loadCommits(false);
+}
+
+function showModal(ev) {
+  $("modal-prompt").textContent = ev.prompt;
+  $("modal-options").innerHTML = (ev.options || [])
+    .map((o) => `<button data-o="${esc(o)}">${esc(o)}</button>`)
+    .join("");
+  $("modal").classList.remove("hidden");
+  $("modal").dataset.opts = JSON.stringify(ev.options || []);
+}
+
+function hideModal() {
+  $("modal").classList.add("hidden");
+}
+
+async function answerModal(option) {
+  if (!state.op) return hideModal();
+  hideModal();
+  try {
+    await postJSON("/api/op/" + state.op.id + "/decide", { option });
+  } catch (e) {
+    opLine("error: " + (e.message || e), true);
+  }
+}
+
+$("modal-options").addEventListener("click", (e) => {
+  const btn = e.target.closest("button");
+  if (btn) answerModal(btn.dataset.o);
+});
+$("branches-list").addEventListener("click", (e) => {
+  const li = e.target.closest("li");
+  if (!li || li.classList.contains("head")) return;
+  startSwitch(li.dataset.n);
+});
 
 // A partially-staged file appears twice: once under Staged (unstage
 // control), once under Changes (stage control) — the git-status model.
@@ -469,6 +575,14 @@ function moveCursor(delta) {
 }
 
 document.addEventListener("keydown", (e) => {
+  if (!$("modal").classList.contains("hidden")) {
+    if (e.key === "Escape") {
+      const opts = JSON.parse($("modal").dataset.opts || "[]");
+      if (opts.includes("abort")) answerModal("abort"); // the TUI's esc rule
+    }
+    e.preventDefault();
+    return; // the modal owns the keyboard
+  }
   if (e.key === "j" || e.key === "ArrowDown") {
     e.preventDefault();
     moveCursor(1);
@@ -487,6 +601,10 @@ document.addEventListener("keydown", (e) => {
     }
   } else if (e.key === "g") {
     toggleGraphMode();
+  } else if (e.key === "b" && state.layout === "list") {
+    state.sidebar = !state.sidebar;
+    $("panes").classList.toggle("nosb", !state.sidebar);
+    renderCommits(); // list width changed
   } else if ((e.key === "s" || e.key === "u") && state.pane === "files" && state.filesMode === "status") {
     const f = state.statusEntries[state.fileCursor];
     if (f && f.section !== "conflicts") {
@@ -525,13 +643,18 @@ window.addEventListener("resize", () => {
   if (state.lastDiff) renderDiff(state.lastDiff); // unified↔side-by-side is width-dependent
 });
 
-async function boot() {
+async function loadRepo() {
   const repo = await getJSON("/api/repo");
   $("repo-name").textContent = repo.name;
   $("repo-branch").textContent = repo.branch;
   $("repo-worktree").textContent = repo.worktree;
   document.title = "gg web — " + repo.name;
+}
+
+async function boot() {
+  await loadRepo();
   await fetchStatus().catch(() => {}); // status failing must not block browse
+  await fetchBranches().catch(() => {});
   await loadCommits(false);
   focusPane();
 }
