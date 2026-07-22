@@ -80,6 +80,14 @@ func (r *recorder) close() {
 // caller records those as comments. Every ok==true token is one send_tokens
 // accepts: a named key, a C-/M- chord, or a literal rune.
 func keyToken(msg tea.KeyMsg) (string, bool) {
+	// Alt-modified keys are not in send_tokens' vocabulary (meta+arrow/rune
+	// does not round-trip reliably through tmux), and the type switch below
+	// would otherwise silently collapse alt+down to "down", alt+a to "a", etc.
+	// Mark them unsupported so the recorder emits an honest
+	// "# unrecorded key: alt+…" comment instead of a wrong token.
+	if msg.Alt {
+		return "", false
+	}
 	switch msg.Type {
 	case tea.KeyRunes:
 		return string(msg.Runes), true
@@ -105,9 +113,6 @@ func keyToken(msg tea.KeyMsg) (string, bool) {
 	s := msg.String()
 	if strings.HasPrefix(s, "ctrl+") {
 		return "C-" + strings.TrimPrefix(s, "ctrl+"), true
-	}
-	if strings.HasPrefix(s, "alt+") {
-		return "M-" + strings.TrimPrefix(s, "alt+"), true
 	}
 	return "", false
 }

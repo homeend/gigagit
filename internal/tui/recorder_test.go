@@ -31,6 +31,10 @@ func TestKeyToken(t *testing.T) {
 		{"question", tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("?")}, "?", true},
 		{"ctrl-g", tea.KeyMsg{Type: tea.KeyCtrlG}, "C-g", true},
 		{"pgup-unsupported", tea.KeyMsg{Type: tea.KeyPgUp}, "", false},
+		{"alt-down", tea.KeyMsg{Type: tea.KeyDown, Alt: true}, "", false},
+		{"alt-left", tea.KeyMsg{Type: tea.KeyLeft, Alt: true}, "", false},
+		{"alt-rune", tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a"), Alt: true}, "", false},
+		{"hash-literal", tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("#")}, "#", true},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
