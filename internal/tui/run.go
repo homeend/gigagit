@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -17,7 +18,7 @@ import (
 // user quits. It returns the directory the shell should switch to (the worktree
 // the user switched into during the session, or "" if none) so a wrapper can
 // cd there on exit.
-func Run(svc *domain.Service) (string, error) {
+func Run(svc *domain.Service, recordPath string) (string, error) {
 	m := New(svc)
 	m.statePath = repos.DefaultStatePath()
 	if home, err := os.UserHomeDir(); err == nil {
@@ -39,6 +40,17 @@ func Run(svc *domain.Service) (string, error) {
 		}
 	}
 	m = m.initSnapshotTarget()
+	if recordPath != "" {
+		repo := ""
+		if top, err := svc.TopLevel(context.Background()); err == nil {
+			repo = top
+		}
+		rec, rerr := newRecorder(recordPath, repo)
+		if rerr != nil {
+			return "", fmt.Errorf("--record: %w", rerr)
+		}
+		m.recorder = rec
+	}
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	final, err := p.Run()
 	if fm, ok := final.(Model); ok {
@@ -46,6 +58,7 @@ func Run(svc *domain.Service) (string, error) {
 			fm.opCancel()
 		}
 		removeSnapshotFile(fm.snapshotPath)
+		fm.recorder.close()
 	}
 	if err != nil {
 		return "", err

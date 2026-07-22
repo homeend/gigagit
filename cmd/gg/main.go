@@ -27,6 +27,7 @@ func main() {
 	}
 	cwdFile, args := extractCwdFile(os.Args[1:])
 	timeTrack, args := extractTimeTrack(args)
+	recordPath, args := extractRecord(args)
 	if timeTrack != "" {
 		if err := setupTimeTrack(timeTrack, args); err != nil {
 			fmt.Fprintln(os.Stderr, "gg: --time-track:", err)
@@ -107,7 +108,13 @@ func main() {
 		observ.SetFailureSink(ef)
 		defer func() { observ.SetFailureSink(nil); _ = ef.Close() }()
 	}
-	cwd, err := tui.Run(svc)
+	if recordPath != "" {
+		if err := checkRecordPath(recordPath); err != nil {
+			fmt.Fprintln(os.Stderr, "gg: --record:", err)
+			os.Exit(2)
+		}
+	}
+	cwd, err := tui.Run(svc, recordPath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, friendlyGitError(err))
 		os.Exit(1)
@@ -164,6 +171,39 @@ func extractTimeTrack(args []string) (string, []string) {
 		}
 	}
 	return path, rest
+}
+
+// extractRecord pulls the global --record flag (in either "--record path" or
+// "--record=path" form) out of args, returning its value and the remaining
+// args. A trailing "--record" with no value is dropped.
+func extractRecord(args []string) (string, []string) {
+	path := ""
+	rest := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "--record":
+			if i+1 < len(args) {
+				path = args[i+1]
+				i++
+			}
+		case strings.HasPrefix(a, "--record="):
+			path = strings.TrimPrefix(a, "--record=")
+		default:
+			rest = append(rest, a)
+		}
+	}
+	return path, rest
+}
+
+// checkRecordPath verifies the --record file can be created, so a bad path is
+// reported cleanly before the TUI takes over the screen.
+func checkRecordPath(path string) error {
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return err
+	}
+	return f.Close()
 }
 
 // setupTimeTrack opens path for appending (creating it if missing), routes

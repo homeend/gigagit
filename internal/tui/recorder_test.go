@@ -135,3 +135,25 @@ func TestRecorderNilSafe(t *testing.T) {
 	r.note(tea.KeyMsg{Type: tea.KeyEnter}) // must not panic
 	r.close()                              // must not panic
 }
+
+// The Update tap must record a keystroke. Because recorder is a pointer field,
+// both Update calls share it even though Update has a value receiver; the first
+// key is flushed when the second arrives, and the second (buffered) is dropped
+// at close — so exactly the first key lands in the file.
+func TestUpdateRecordsKeystroke(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "s.keys")
+	r, err := newRecorder(path, "repo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := New(nil)
+	m.recorder = r
+	m.Update(keyMsg("down")) // recorded (buffered)
+	m.Update(keyMsg("down")) // flushes the first; buffers the second
+	r.close()                // drops the buffered second
+
+	got, _ := os.ReadFile(path)
+	if body := nonCommentLines(string(got)); !reflect.DeepEqual(body, []string{"down"}) {
+		t.Errorf("body = %v, want [down]", body)
+	}
+}

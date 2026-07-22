@@ -180,6 +180,7 @@ type Model struct {
 	statusMsg string
 	opMsgs    chan tea.Msg
 	modal     *decisionState
+	recorder  *recorder // keystroke recorder (nil unless gg --record)
 
 	// Session snapshot (agent-facing; see session_snapshot.go). snapshotPath
 	// "" = disabled (no repo / no state root). lastSnapshot is the last
@@ -977,6 +978,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			msg.Type = tea.KeySpace
 			msg.Runes = nil
 		}
+		// Record the (normalized) keypress before it is handled, when gg --record
+		// is active. note() is nil-safe, so this is a no-op in the common case.
+		m.recorder.note(msg)
 		// The status line holds a transient message (an op result, an error, a
 		// refusal hint). Clear it as the user moves on to the next interaction,
 		// so a stale error doesn't linger across navigation and reloads; the
