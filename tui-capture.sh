@@ -101,6 +101,28 @@ write_snap() { # idx label
   echo "wrote $OUT/snap-$n-$label.txt"
 }
 
+send_tokens() { # tokens (whitespace-separated); word-splitting is intentional
+  local t
+  for t in $1; do
+    case "$t" in
+      enter|Enter)      tmux send-keys -t "$SESSION" Enter ;;
+      esc|escape|Esc)   tmux send-keys -t "$SESSION" Escape ;;
+      space|Space)      tmux send-keys -t "$SESSION" Space ;;
+      tab|Tab)          tmux send-keys -t "$SESSION" Tab ;;
+      up|Up)            tmux send-keys -t "$SESSION" Up ;;
+      down|Down)        tmux send-keys -t "$SESSION" Down ;;
+      left|Left)        tmux send-keys -t "$SESSION" Left ;;
+      right|Right)      tmux send-keys -t "$SESSION" Right ;;
+      bspace|backspace) tmux send-keys -t "$SESSION" BSpace ;;
+      C-*|M-*)          tmux send-keys -t "$SESSION" "$t" ;;   # ctrl/meta chords
+      *)                tmux send-keys -t "$SESSION" -l "$t" ;; # literal: ".", "?", digits, words
+    esac
+    sleep 0.05
+  done
+}
+
+sanitize() { echo "$1" | tr -cd '[:alnum:]_-'; }
+
 # launch gg in a headless PTY sized COLSxROWS, opening REPO
 tmux new-session -d -s "$SESSION" -x "$COLS" -y "$ROWS" -c "$REPO" "$GG"
 
@@ -108,5 +130,28 @@ tmux new-session -d -s "$SESSION" -x "$COLS" -y "$ROWS" -c "$REPO" "$GG"
 settle 70 || echo "tui-capture: initial screen did not settle (captured anyway)" >&2
 idx=0
 write_snap "$idx" "init"
+
+# walk the keyscript: steps separated by ';' or newline, each optionally
+# "label: tokens". Send keys, wait for the screen to settle, snapshot.
+if [[ -n "$KEYSCRIPT" ]]; then
+  script="${KEYSCRIPT//;/$'\n'}"
+  while IFS= read -r step; do
+    step="${step#"${step%%[![:space:]]*}"}"   # ltrim
+    step="${step%"${step##*[![:space:]]}"}"   # rtrim
+    [[ -z "$step" ]] && continue
+    idx=$((idx + 1))
+    if [[ "$step" == *:* ]]; then
+      label="$(sanitize "${step%%:*}")"
+      tokens="${step#*:}"
+    else
+      label="step$idx"
+      tokens="$step"
+    fi
+    [[ -z "$label" ]] && label="step$idx"
+    send_tokens "$tokens"
+    settle 30 || echo "tui-capture: step $idx ($label) did not settle (captured anyway)" >&2
+    write_snap "$idx" "$label"
+  done <<< "$script"
+fi
 
 echo "tui-capture: $((idx + 1)) snapshot(s) in $OUT"
