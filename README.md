@@ -512,6 +512,18 @@ stop recording entirely. `[versions] max_age_days` (default `90`) prunes
 snapshots older than this on the branch's next write; `-1` keeps them
 forever.
 
+**Where it lives, and what pushes.** Versions are ordinary git refs inside
+your repo's own `.git` directory (loose files under `.git/refs/gg/versions/…`,
+or lines in `.git/packed-refs` once git packs them) — the ref name carries
+the metadata, the commits live in the normal object database, and no file
+outside the repository is involved. They sit in the repo's *common* git dir,
+so every linked worktree sees the same history. Because `refs/gg/*` is
+outside `refs/heads`/`refs/tags`, **a normal push or fetch never transfers
+them** — the remote and your teammates never see your versions, and a fresh
+clone starts with an empty history. The only ways they travel are explicit:
+a `--mirror` clone/push (which copies *all* refs), or a hand-written refspec
+(`git push origin 'refs/gg/versions/*:refs/gg/versions/*'`).
+
 ### External tools
 
 Settings (`,`) → **"External tools…"** probes PATH (plus a few known install
