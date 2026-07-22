@@ -50,7 +50,9 @@ body {
   position: sticky; top: 0; background: var(--bg);
 }
 table.diff { width: 100%; border-collapse: collapse; table-layout: fixed; }
-table.diff td { vertical-align: top; white-space: pre-wrap; word-break: break-all; padding: 0 6px; }
+/* Wrap at whitespace; break inside a token only when it alone overflows
+   (break-all shattered code mid-word, e.g. import paths). */
+table.diff td { vertical-align: top; white-space: pre-wrap; overflow-wrap: anywhere; padding: 0 6px; }
 td.no { width: 3.5em; text-align: right; color: var(--dim); user-select: none; }
 tr.add td.side.r, tr.add td.no.r { background: var(--add); }
 tr.del td.side.l, tr.del td.no.l { background: var(--del); }

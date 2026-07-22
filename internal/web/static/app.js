@@ -381,14 +381,33 @@ function renderDiff(d) {
     $("diff-body").innerHTML = `<div class="notice">diff too large</div>`;
     return;
   }
+  const rows = d.rows || [];
+  // An all-new or all-deleted file renders single-column: a side-by-side
+  // with one permanently empty side wastes half the pane and forces harsh
+  // wrapping on the populated half.
+  const pureAdd = rows.length > 0 && rows.every((r) => !r.left_no);
+  const pureDel = rows.length > 0 && rows.every((r) => !r.right_no);
   let html = `<table class="diff">`;
-  for (const r of d.rows || []) {
-    html +=
-      `<tr class="${r.kind}">` +
-      `<td class="no l">${r.left_no || ""}</td>` +
-      `<td class="side l">${markSpans(r.left, r.left_spans, "l")}</td>` +
-      `<td class="no r">${r.right_no || ""}</td>` +
-      `<td class="side r">${markSpans(r.right, r.right_spans, "r")}</td></tr>`;
+  if (pureAdd || pureDel) {
+    const side = pureAdd ? "r" : "l";
+    for (const r of rows) {
+      const no = pureAdd ? r.right_no : r.left_no;
+      const text = pureAdd ? r.right : r.left;
+      const spans = pureAdd ? r.right_spans : r.left_spans;
+      html +=
+        `<tr class="${r.kind}">` +
+        `<td class="no ${side}">${no || ""}</td>` +
+        `<td class="side ${side}">${markSpans(text, spans, side)}</td></tr>`;
+    }
+  } else {
+    for (const r of rows) {
+      html +=
+        `<tr class="${r.kind}">` +
+        `<td class="no l">${r.left_no || ""}</td>` +
+        `<td class="side l">${markSpans(r.left, r.left_spans, "l")}</td>` +
+        `<td class="no r">${r.right_no || ""}</td>` +
+        `<td class="side r">${markSpans(r.right, r.right_spans, "r")}</td></tr>`;
+    }
   }
   html += "</table>";
   if (d.truncated) html += `<div class="notice">alignment truncated (size guard)</div>`;
