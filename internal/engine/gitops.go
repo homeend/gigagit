@@ -61,6 +61,9 @@ type GitOps interface {
 
 	CheckRefFormatBranch(ctx context.Context, name string) error
 	CreateBranch(ctx context.Context, name, startPoint string) error
+	UpdateRef(ctx context.Context, ref, sha string) error
+	DeleteRef(ctx context.Context, ref string) error
+	ForEachRef(ctx context.Context, prefix string) ([]model.RefInfo, error)
 	CreateTag(ctx context.Context, name, commit, message string, force bool) error
 	DeleteTag(ctx context.Context, name string) error
 	RenameBranch(ctx context.Context, oldName, newName string) error

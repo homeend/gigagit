@@ -1,0 +1,40 @@
+name = "cli: versions records a pre-merge snapshot and restore rewinds it"
+
+[input]
+steps = [
+  { write = "a.txt", content = "A\n" },
+  { commit = "base" },
+  { branch = "feat" },
+  { switch = "feat" },
+  { write = "b.txt", content = "B\n" },
+  { commit = "feat work" },
+  { switch = "main" },
+  { write = "c.txt", content = "C\n" },
+  { commit = "main work" },
+]
+
+[[run]]
+cmd  = ["merge", "feat"]
+exit = 0
+
+[[run]]
+cmd             = ["versions"]
+exit            = 0
+stdout_contains = ["-merge", "main work"]
+
+[[run]]
+cmd  = ["versions", "restore", "main", "latest"]
+exit = 0
+
+[[run]]
+cmd             = ["versions"]
+exit            = 0
+stdout_contains = ["-merge", "-restore"]
+
+[expect]
+branch = "main"
+
+[[expect.log]]
+# Restore rewound main to its pre-merge tip: the merge commit and "feat work"
+# are gone, leaving just the two ordinary commits.
+subjects = ["main work", "base"]

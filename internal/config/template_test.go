@@ -31,6 +31,7 @@ func TestSettingDocsCoverAllFields(t *testing.T) {
 	check("ui", reflect.TypeOf(UIConfig{}))
 	check("debug", reflect.TypeOf(DebugConfig{}))
 	check("refresh", reflect.TypeOf(RefreshConfig{}))
+	check("versions", reflect.TypeOf(VersionsConfig{}))
 	check("tools", reflect.TypeOf(ToolsConfig{}))
 }
 
@@ -47,6 +48,7 @@ func TestSettingDocsMatchDefaults(t *testing.T) {
 		"ui.commit_graph_lanes":            d.UI.CommitGraphLanes,
 		"ui.commit_graph_min_lanes":        d.UI.CommitGraphMinLanes,
 		"ui.commit_graph_step":             d.UI.CommitGraphStep,
+		"versions.max_age_days":            d.Versions.MaxAgeDays,
 	}
 	got := map[string]any{}
 	for _, doc := range settingDocs {

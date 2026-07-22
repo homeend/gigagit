@@ -59,6 +59,10 @@ type Service struct {
 	// TUI re-applies it from config inside loadCmd on every reload, which races
 	// op-triggered status refreshes reading it on another goroutine.
 	showEOLOnly atomic.Bool
+
+	// versionsPolicy stores the engine.VersionsPolicy injected into every
+	// Execute. nil (never set) resolves to the default: enabled, 90 days.
+	versionsPolicy atomic.Value
 }
 
 // SetShowEOLOnlyChanges controls whether a file whose ONLY unstaged change is
@@ -68,6 +72,23 @@ type Service struct {
 func (s *Service) SetShowEOLOnlyChanges(show bool) *Service {
 	s.showEOLOnly.Store(show)
 	return s
+}
+
+// SetVersionsPolicy overrides the branch-version snapshot policy injected
+// into operations (from [versions] config). Unset = enabled, 90 days.
+func (s *Service) SetVersionsPolicy(p engine.VersionsPolicy) *Service {
+	s.versionsPolicy.Store(p)
+	return s
+}
+
+// currentVersionsPolicy resolves the active branch-version snapshot policy:
+// whatever was last set via SetVersionsPolicy, or the default (enabled, 90
+// days) when never set.
+func (s *Service) currentVersionsPolicy() engine.VersionsPolicy {
+	if v := s.versionsPolicy.Load(); v != nil {
+		return v.(engine.VersionsPolicy)
+	}
+	return engine.VersionsPolicy{Enabled: true, MaxAgeDays: 90}
 }
 
 // Open builds a Service rooted at workdir with the standard runner — the
@@ -187,6 +208,7 @@ func (s *Service) Execute(ctx context.Context, op engine.Operation,
 		Events:   events,
 		Decider:  dec,
 		Escalate: res.Escalate,
+		Versions: s.currentVersionsPolicy(),
 	})
 	span := observ.Span{Name: label, Start: opStart, Duration: time.Since(opStart)}
 	if opErr != nil {

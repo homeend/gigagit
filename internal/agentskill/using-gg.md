@@ -144,6 +144,14 @@ guards against removing the worktree you are standing in.
   checked-out branch and branches checked out in a worktree. An unmerged
   branch is a `branch-unmerged` fork (`force-delete`/`keep`): pass `--force`
   to pre-answer it.
+- `gg versions [<branch>]` — list a branch's recorded pre-operation
+  snapshots (taken automatically before merges, rebases, resets, amends,
+  and branch deletion), newest first: `<id> <short-sha> <time> <subject>`.
+- `gg versions restore [--discard] <branch> <id|latest>` — move the branch
+  back to a recorded version (its own pre-restore state is snapshotted
+  first). Restoring the current branch hard-resets; `--discard` answers the
+  dirty-tree prompt. Also recreates a deleted branch. Exit 0 restored,
+  1 failure/unknown id, 2 usage.
 - `gg merge [--into <target>] [--on-conflict=keep|abort] <source>` — merge one
   branch into another (default target: the current branch; worktree-aware —
   merges in the worktree that has the target checked out, autostashes when it

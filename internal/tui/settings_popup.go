@@ -30,6 +30,10 @@ type settingsPopup struct {
 	ratesSel          int       // selected row in the Refresh rates editor
 	ratesEditing      bool      // an interval field is open
 	ratesField        textfield // the inline numeric editor
+	opsHistView       bool      // true = Operations history (branch-version snapshot) editor screen
+	opsHistSel        int       // selected row: 0 = Retention, 1 = Recording
+	opsHistEditing    bool      // the retention field is open
+	opsHistField      textfield // the inline numeric (days) editor
 	dets              []agentinit.Detection
 	checked           []bool
 	toolsView         bool            // true = external-tools wizard screen
@@ -51,6 +55,7 @@ const (
 	settingsMenuAutoRefresh = "Auto-refresh"
 	settingsMenuRemoteTags  = "Auto remote-tag refresh"
 	settingsMenuRates       = "Refresh rates"
+	settingsMenuOpsHist     = "Operations history"
 	settingsMenuCommitSort  = "Commit sort"
 	settingsMenuShowGraph   = "Show graph"
 	settingsMenuLanguage    = "Language"
@@ -59,7 +64,7 @@ const (
 )
 
 // settingsMenu is the top-level menu order.
-var settingsMenu = []string{settingsMenuTools, settingsMenuIdentity, settingsMenuPrefixes, settingsMenuHook, settingsMenuOpLog, settingsMenuErrors, settingsMenuAutoRefresh, settingsMenuRemoteTags, settingsMenuRates, settingsMenuCommitSort, settingsMenuShowGraph, settingsMenuLanguage, settingsMenuRepoLoc, settingsMenuCommitGraph}
+var settingsMenu = []string{settingsMenuTools, settingsMenuIdentity, settingsMenuPrefixes, settingsMenuHook, settingsMenuOpLog, settingsMenuErrors, settingsMenuAutoRefresh, settingsMenuRemoteTags, settingsMenuRates, settingsMenuOpsHist, settingsMenuCommitSort, settingsMenuShowGraph, settingsMenuLanguage, settingsMenuRepoLoc, settingsMenuCommitGraph}
 
 // commitSortModes is the cycle order for the "Commit sort" menu toggle:
 // date-order (default; git --date-order, perfect lanes) → plain (fast, git's
@@ -90,6 +95,8 @@ func settingsMenuTitle(entry string) string {
 		return i18n.T("Auto remote-tag refresh")
 	case settingsMenuRates:
 		return i18n.T("Refresh rates")
+	case settingsMenuOpsHist:
+		return i18n.T("Operations history")
 	case settingsMenuCommitSort:
 		return i18n.T("Commit sort")
 	case settingsMenuShowGraph:
@@ -367,6 +374,14 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			p.ratesView = false
 			return m, nil
 		}
+		if p.opsHistView && p.opsHistEditing {
+			p.opsHistEditing = false
+			return m, nil
+		}
+		if p.opsHistView && !p.opsHistEditing {
+			p.opsHistView = false
+			return m, nil
+		}
 		if p.picker {
 			if p.pickerFromPalette { // launched from the palette → esc backs out to base
 				m = m.popLayer()
@@ -403,7 +418,7 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	if !p.picker && !p.errorsView && !p.ratesView && !p.toolsView {
+	if !p.picker && !p.errorsView && !p.ratesView && !p.toolsView && !p.opsHistView {
 		switch msg.Type {
 		case tea.KeyUp:
 			// Wrap: up on the first option lands on the last.
@@ -459,6 +474,12 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				p.ratesSel = 0
 				p.ratesEditing = false
 				p.sel = 0
+				p.hscroll = 0
+				return m, nil
+			case settingsMenuOpsHist:
+				p.opsHistView = true
+				p.opsHistSel = 0
+				p.opsHistEditing = false
 				p.hscroll = 0
 				return m, nil
 			case settingsMenuErrors:
@@ -561,6 +582,59 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		return m, nil
 	}
+	if p.opsHistView {
+		if p.opsHistEditing {
+			switch msg.Type {
+			case tea.KeyEnter:
+				days := 0
+				if v := strings.TrimSpace(p.opsHistField.Value()); v != "" {
+					if n, err := strconv.Atoi(v); err == nil {
+						days = n
+					}
+				}
+				m = m.saveVersionsRetention(days)
+				p.opsHistEditing = false
+				return m, nil
+			case tea.KeyRunes:
+				ok := true
+				for _, r := range msg.Runes {
+					if (r < '0' || r > '9') && r != '-' {
+						ok = false
+					}
+				}
+				if ok {
+					(&p.opsHistField).insert(msg.Runes)
+				}
+				return m, nil
+			default:
+				(&p.opsHistField).HandleEditKey(msg)
+				return m, nil
+			}
+		}
+		switch msg.Type {
+		case tea.KeyUp:
+			if p.opsHistSel > 0 {
+				p.opsHistSel--
+			}
+		case tea.KeyDown:
+			if p.opsHistSel < 1 { // two rows: 0 Retention, 1 Recording
+				p.opsHistSel++
+			}
+		case tea.KeyEnter:
+			switch p.opsHistSel {
+			case 0: // Retention
+				start := ""
+				if m.cfg.Versions.MaxAgeDays != 0 {
+					start = strconv.Itoa(m.cfg.Versions.MaxAgeDays)
+				}
+				p.opsHistField = newTextField(start)
+				p.opsHistEditing = true
+			case 1: // Recording
+				m = m.toggleVersionsRecording()
+			}
+		}
+		return m, nil
+	}
 	if p.toolsView {
 		switch msg.Type {
 		case tea.KeyUp:
@@ -643,7 +717,9 @@ func (p *settingsPopup) box(m Model) string {
 	// The errors viewer holds long, path-heavy rows (git stderr, the errors.log
 	// location), so it scales wide like the bookmark/shelf switchers — most
 	// errors and the log path then fit on one line instead of wrapping ugly.
-	if p.errorsView || p.ratesView {
+	// The Operations history viewer's footer hints (especially Russian translations)
+	// also need the wide width to avoid overflow.
+	if p.errorsView || p.ratesView || p.opsHistView {
 		inner = popupWideInnerWidth(w)
 	}
 	// The External-tools wizard goes full-screen (live feedback: the standard
@@ -800,6 +876,38 @@ func (p *settingsPopup) box(m Model) string {
 		} else {
 			b.WriteString("\n" + i18n.T("file-watch = auto-detect .git changes instantly (else poll on the interval)"))
 			b.WriteString("\n" + i18n.T("[↑/↓] select  [enter] edit interval  [space]/[w] file-watch  [esc] back"))
+		}
+	} else if p.opsHistView {
+		b.WriteString(i18n.T("Operations history") + "\n\n")
+		labelW := maxLabelWidth(9, i18n.T("Retention"), i18n.T("Recording"))
+		retention := i18n.T("keep forever")
+		if m.cfg.Versions.MaxAgeDays > 0 {
+			// Two-key singular/plural convention (the push-tip-tags pattern):
+			// "1 days" would otherwise be grammatically wrong in English.
+			retention = i18n.T("%d days", m.cfg.Versions.MaxAgeDays)
+			if m.cfg.Versions.MaxAgeDays == 1 {
+				retention = i18n.T("%d day", m.cfg.Versions.MaxAgeDays)
+			}
+		}
+		retentionCell := retention
+		if p.opsHistEditing && p.opsHistSel == 0 {
+			retentionCell = p.opsHistField.View(true)
+		}
+		rows := []string{
+			padCell(i18n.T("Retention"), labelW) + " " + retentionCell,
+			padCell(i18n.T("Recording"), labelW) + " " + onOff(!m.cfg.Versions.Disabled),
+		}
+		for i, row := range rows {
+			prefix := "  "
+			if i == p.opsHistSel {
+				prefix = "> "
+			}
+			b.WriteString(prefix + row + "\n")
+		}
+		if p.opsHistEditing {
+			b.WriteString("\n" + i18n.T("[0-9/-] edit  [enter] save  [esc] cancel   (-1 = keep forever)"))
+		} else {
+			b.WriteString("\n" + i18n.T("[↑/↓] select  [enter] edit/toggle  [esc] back"))
 		}
 	} else if p.toolsView {
 		// hint is computed up front (not just written at the end) because the

@@ -57,6 +57,8 @@ func (op SmartMerge) Run(ctx context.Context, deps OpDeps) (Result, error) {
 		return Result{}, fmt.Errorf("smart merge: no such commit: %s", op.Source)
 	}
 
+	snapshotBranchTip(ctx, deps, target, "merge")
+
 	// Rung 1: Target is checked out right here.
 	if target == cur {
 		return op.mergeAt(ctx, deps, "", target)

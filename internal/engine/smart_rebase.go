@@ -58,6 +58,8 @@ func (op SmartRebase) Run(ctx context.Context, deps OpDeps) (Result, error) {
 		return Result{}, fmt.Errorf("smart rebase: no such commit: %s", op.Onto)
 	}
 
+	snapshotBranchTip(ctx, deps, branch, "rebase")
+
 	// Rung 1: Branch is checked out right here.
 	if branch == cur {
 		return op.rebaseAt(ctx, deps, "", branch)

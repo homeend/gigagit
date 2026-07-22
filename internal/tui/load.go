@@ -87,6 +87,7 @@ func (m Model) loadCmd() tea.Cmd {
 		// Apply the EOL-only visibility setting before the Snapshot below reads
 		// status, so the Files panel and count badge honor it from first paint.
 		svc.SetShowEOLOnlyChanges(cfg.UI.ShowEOLOnlyChanges)
+		svc.SetVersionsPolicy(versionsPolicyFromConfig(cfg))
 
 		var (
 			snap    domain.Snapshot

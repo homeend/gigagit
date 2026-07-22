@@ -17,6 +17,47 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   decided once at entry so it never fights a later `ctrl+t`), and `esc`
   back to the menu restores the normal size — unless the maximize was the
   user's own earlier `ctrl+t`, which is left alone.
+- **Branch versions (operations history): pre-operation snapshots as hidden
+  refs; list/compare/restore/delete via Branches `.` menu, command palette,
+  Settings, and `gg versions`.** Before any operation that rewrites,
+  replaces, or deletes a branch's history, gg now records the branch's
+  current tip as a hidden, gg-owned git ref
+  (`refs/gg/versions/<branch>/<unix-ts>-<op>`) — a full-history snapshot at
+  zero storage cost that also pins the old commits against `git gc`.
+  Triggers: `SmartMerge` (the branch merged INTO), `SmartRebase`,
+  `InteractiveRebase` (squash/move/drop, snapshotted only after the plan
+  passes full validation), `Commit --amend` (a plain commit is not a
+  trigger), `UndoLastCommit`, `Reset` (any reset moving the branch ref,
+  incl. reset-to-remote-tip), `DeleteBranch` (so a deleted branch's history
+  is recoverable), and
+  `SmartPull`'s rebase/merge/reset-to-remote lanes (its fast-forward and
+  background checkout-pull lanes are untouched). Always-on for every branch;
+  best-effort by contract — a snapshot failure never blocks the real
+  operation. Retention is time-based (default 90 days, configurable via the
+  new `[versions]` config section: `disabled` to turn recording off,
+  `max_age_days` to change the window, `-1` to keep forever), pruned lazily
+  on the branch's next snapshot. Two new engine ops back restore/delete:
+  `RestoreBranchVersion` (current branch → hard reset with a
+  proceed/cancel fork on a dirty tree; a branch checked out in another
+  worktree is refused by name; any other branch — including a deleted one —
+  is moved via `update-ref`; the pre-restore tip is snapshotted first, so a
+  restore is itself undoable) and `DeleteBranchVersion` (removes one
+  snapshot ref, refusing anything outside `refs/gg/versions/`). TUI: the
+  Branches panel's `.` menu gains "Previous versions…" (opens a popup of
+  that branch's recorded snapshots: `enter` whole-tree-compares a version
+  against the branch's current tip, `r` restores — reset in place or start
+  a new branch at that version — `d` deletes the snapshot, `y` copies its
+  sha); the command palette gains "Branch versions…", a branch picker over
+  every branch with recorded versions (deleted branches marked) — the
+  recovery path for a deleted branch's history; Settings (`,`) → "Operations
+  history" edits the retention window and toggles recording, writing the
+  active repo `.gg.toml`. CLI: `gg versions [<branch>]` lists a branch's
+  recorded versions (default: current branch), and `gg versions restore
+  [--discard] <branch> <id|latest>` restores one (`--discard` pre-answers
+  the dirty-tree prompt). The commit feed's `%D` decorations now exclude
+  `refs/gg/*` so a merge's old tip doesn't show a version ref as a
+  decoration. `agentskill.Version` 52 → 53; `gg init --update` refreshes
+  installed copies.
 - **Kimi Code joins the known-agent roster.** `gg init` now detects Kimi
   Code (project `.kimi-code/`, global `~/.kimi-code/`) and installs the
   using-gg skill as `skills/using-gg/SKILL.md` under either — Kimi discovers

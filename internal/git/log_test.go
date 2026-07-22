@@ -604,3 +604,48 @@ func TestCommitFilesMergeFirstParent(t *testing.T) {
 		t.Fatalf("merge files = %+v, want a single [A b.txt] (first-parent only)", files)
 	}
 }
+
+// TestLogScopedExcludesVersionRefDecorations verifies that refs/gg/* version
+// refs do not appear in commit-feed decorations. The commit log should show
+// only user-facing refs (branches, tags, remotes).
+//
+// The test sets log.initialDecorationSet=all to force git to show all ref
+// namespaces by default. Without the --decorate-refs-exclude=refs/gg/* flag
+// in LogScoped, this config would cause version refs to leak into decorations.
+// This simulates a non-default git config that the flag must protect against.
+func TestLogScopedExcludesVersionRefDecorations(t *testing.T) {
+	dir, runner := newTestRepo(t)
+	repo := &Repo{Runner: runner}
+	ctx := context.Background()
+
+	// Force git to show all refs by default. Without the --decorate-refs-exclude
+	// flag in LogScoped, refs/gg/* would appear in commit decorations.
+	gitIn(t, dir, "config", "log.initialDecorationSet", "all")
+
+	head, err := repo.RevParse(ctx, "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a version ref that should be excluded from decorations.
+	if err := repo.UpdateRef(ctx, "refs/gg/versions/main/1753100000-merge", head); err != nil {
+		t.Fatal(err)
+	}
+
+	commits, err := repo.LogScoped(ctx, 10, 0, LogScope{}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(commits) == 0 {
+		t.Fatal("expected at least one commit")
+	}
+
+	for _, c := range commits {
+		for _, ref := range c.Refs {
+			if strings.Contains(ref.Name, "gg/versions") {
+				t.Fatalf("version ref leaked into decorations: %v", c.Refs)
+			}
+		}
+	}
+}
