@@ -11,7 +11,7 @@ func TestDefaults(t *testing.T) {
 	if d.Worktree.PathTemplate != "../<repo>.worktrees/<branch>" {
 		t.Errorf("path default = %q", d.Worktree.PathTemplate)
 	}
-	if d.Worktree.DefaultBranchTemplate != "b/from-<parent-branch>-<random-alpha:4>" {
+	if d.Worktree.DefaultBranchTemplate != "<parent-branch>-<date:yyyy-MM-dd_HH-mm>" {
 		t.Errorf("branch default = %q", d.Worktree.DefaultBranchTemplate)
 	}
 }

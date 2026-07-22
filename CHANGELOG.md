@@ -223,6 +223,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   panels and the commit feed's decorations.
 
 ### Changed
+- **Default worktree branch template is now
+  `<parent-branch>-<date:yyyy-MM-dd_HH-mm>`** (e.g. `main-2026-07-22_22-11`)
+  instead of the day-one `b/from-<parent-branch>-<random-alpha:4>`
+  placeholder. After the w/W popup fold below, the template only drives the
+  CLI's `gg worktree add` no-argument lane; a minute-resolution timestamp
+  names the branch after when it was cut rather than four random letters.
+  Date tokens are lowercase `yyyy`/`MM`/`dd`/`HH`/`mm`/`ss`.
 - **One worktree popup for `w` and `W` — the branch starts as the selected
   branch, and `W` switches to the new worktree.** `W` used to open the popup
   in new-templated-branch mode, so its directory carried the default branch
