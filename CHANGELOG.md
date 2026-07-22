@@ -9,6 +9,9 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- `gg web`: the sidebar grows worktrees and tags sections (read-only; tags
+  capped at 100 with a truncation marker). Clicking a tag opens that
+  commit's detail screen (`GET /api/worktrees`, `GET /api/tags`).
 - `gg web` gains the op transport — the streaming spine for web write
   operations: `POST /api/op` starts an engine op (`switch` →
   `engine.SmartSwitch` first), `GET /api/op/{id}/events` streams its
