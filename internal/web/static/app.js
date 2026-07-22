@@ -145,6 +145,15 @@ function handleOpEvent(ev) {
 
 async function refreshAfterOp() {
   await Promise.all([loadRepo(), fetchBranches(), fetchStatus()]);
+  // an op can change the working tree while its status screen is open
+  // (commit empties it) — reconcile instead of showing stale rows
+  if (state.filesMode === "status") {
+    if (!state.wt) exitStatusToList();
+    else {
+      state.fileCursor = Math.min(state.fileCursor, Math.max(0, state.statusEntries.length - 1));
+      renderFiles();
+    }
+  }
   state.rows = [];
   state.cursor = 0;
   await loadCommits(false);
@@ -460,6 +469,24 @@ async function openStatusDiff(i) {
   }
 }
 
+// exitStatusToList tears the status screen down to the full-width list —
+// used when the working tree goes clean (all staged changes committed, or
+// the last change unstaged away).
+function exitStatusToList() {
+  state.filesMode = "commit";
+  state.pane = "commits";
+  state.cursor = 0;
+  $("files-list").innerHTML = "";
+  $("files-actions").classList.add("hidden");
+  $("commit-box").classList.add("hidden");
+  $("files-header").textContent = "";
+  $("diff-header").textContent = "";
+  $("diff-body").innerHTML = "";
+  state.lastDiff = null; // a resize must not resurrect the cleared diff
+  setLayout("list");
+  focusPane();
+}
+
 async function stage(body) {
   try {
     applyStatus(await postJSON("/api/stage", body));
@@ -468,20 +495,7 @@ async function stage(body) {
     return;
   }
   if (!state.wt) {
-    // tree went clean: leave status mode, drop the synthetic row, and give
-    // the commit list its full width back (nothing is on display anymore)
-    state.filesMode = "commit";
-    state.pane = "commits";
-    state.cursor = 0;
-    $("files-list").innerHTML = "";
-    $("files-actions").classList.add("hidden");
-    $("commit-box").classList.add("hidden");
-    $("files-header").textContent = "";
-    $("diff-header").textContent = "";
-    $("diff-body").innerHTML = "";
-    state.lastDiff = null; // a resize must not resurrect the cleared diff
-    setLayout("list");
-    focusPane();
+    exitStatusToList();
     return;
   }
   state.fileCursor = Math.min(state.fileCursor, state.statusEntries.length - 1);
