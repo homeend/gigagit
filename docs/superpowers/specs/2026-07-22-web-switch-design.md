@@ -19,11 +19,18 @@ op").
   (`Progress`/`GitLine`/`DecisionNeeded`/`Timing`/`Done`) and resolves forks
   through a `Decider` that only ever picks from an option list. Operations
   never block on a human — the decider's channel send selects on `ctx.Done`.
-- `SmartSwitch{Branch}` auto-stashes a dirty tree, switches, restores; its
-  one fork is `stash-pop-conflict` (options `keep`/`abort`) when the restore
-  conflicts on the new branch. Progress steps: `stashing` → `switching` →
-  `restoring changes`. Refusals (e.g. branch checked out in another
-  worktree) surface as op errors, not decisions.
+- `SmartSwitch{Branch}` auto-stashes a dirty tree, switches, restores; on a
+  restore conflict it emits `stash-pop-conflict` (options `keep`/`abort`)
+  **notify-only** — via `deps.emit`, NOT the blocking `deps.decide` — and
+  returns immediately with the error (git preserves the stash; the conflict
+  is visible in the working tree). Progress steps: `stashing` →
+  `switching` → `restoring changes`. Refusals (e.g. branch checked out in
+  another worktree) surface as op errors, not decisions.
+- The transport's PARKING path (`deps.decide` → web Decider blocks until an
+  answer) is therefore exercised in tests by a genuinely-parking op —
+  `engine.DeleteBranch`, whose `delete-branch` confirm parks
+  deterministically — started through the server's internal registry
+  (test-only; `POST /api/op` still accepts only `switch`).
 - **SSE, not WebSocket** (user-approved): gg's web stack is stdlib-only and
   WebSocket would be its first external dependency. Server-Sent Events give
   server→client streaming from `net/http` alone; client→server answers are
@@ -136,6 +143,10 @@ reset lives in the op-finish path (server-side), not in the client.
   Clicking POSTs `/api/op/{id}/decide` and closes the modal. **Esc clicks
   the option named `abort` if present** (the TUI's esc rule); no `abort`
   option → esc does nothing. The modal blocks other interaction (overlay).
+  **A `done` event closes any open modal** — the one rule covers both a
+  parked op finishing after its answer AND a notify-only decision (e.g.
+  `stash-pop-conflict`) whose op has already returned: the modal yields to
+  the error status line + the status pane's Conflicts section.
 - After `done{changed:true}`: refetch `/api/repo` (header branch),
   `/api/branches`, `/api/status`, and reload commits from scratch
   (`loadCommits(false)` — the server has reset its feed; the client resets
@@ -159,20 +170,26 @@ reset lives in the op-finish path (server-side), not in the client.
    stream to `done{ok:true,changed:true}` → `git rev-parse --abbrev-ref
    HEAD` (test-side) confirms; `/api/commits` afterward reflects the new
    HEAD (feed reset verified by subject set).
-2. **Forced stash-pop conflict**: branch A dirty edit on a file whose
-   content differs on branch B such that the stash pop conflicts → stream
-   yields `decision{id:"stash-pop-conflict"}` → POST decide `"abort"` →
-   stream ends with `done` (op error propagated, `ok:false`); repo state
-   sane (still on B, stash preserved — assert via `git stash list`).
-3. **Replay**: attach the SSE reader only AFTER `done` → still receives the
+2. **Forced stash-pop conflict (notify-only)**: dirty edit on main to a file
+   branch `side` also changed → POST switch → stream yields
+   `decision{id:"stash-pop-conflict"}` followed (with NO decide) by
+   `done{ok:false}`; repo now on `side`, stash preserved (`git stash
+   list`), `/api/status` shows the file conflicted.
+3. **Parked decide round-trip**: start `engine.DeleteBranch{Name}` via the
+   internal registry (test-only) → stream parks after
+   `decision{id:"delete-branch"}` → POST `/api/op/{id}/decide` `"abort"`
+   over real HTTP → `done` arrives, branch still exists. Decide with an
+   option outside the list → 400 and the op stays parked; decide after
+   `done` → 409.
+4. **Replay**: attach the SSE reader only AFTER `done` → still receives the
    full buffered history.
-4. **Busy**: second POST /api/op while one is parked on a decision → 409.
-5. **Validation**: unknown `op` → 400; empty/`--evil` branch → 400; decide
-   with an option outside the list → 400; unknown op id → 404 (events and
-   decide).
-6. **Decision timeout**: with the timeout shrunk via a test seam (field on
-   Server, default 5m), an unanswered decision ends the stream with
-   `done{ok:false}`.
+5. **Busy**: second POST /api/op while a parked op is live → 409; after the
+   parked op is decided and finishes, a new op starts cleanly.
+6. **Validation**: unknown `op` → 400; empty/`--evil` branch → 400; unknown
+   op id → 404 (events and decide).
+7. **Decision timeout**: with the timeout shrunk via a test seam (field on
+   Server, default 5m), an unanswered parked decision ends the stream with
+   `done{ok:false}` and releases the busy slot.
 7. **Branches endpoint**: two branches + upstream/ahead-behind fixture →
    JSON fields as spec'd, `is_head` on the right row.
 
