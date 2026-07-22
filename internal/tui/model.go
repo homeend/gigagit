@@ -1400,16 +1400,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.hscroll[m.focus] += m.hscrollStep()
 			}
 			return m, nil
-		case "w": // worktree for the selected EXISTING branch
+		case "w": // worktree for the selected branch (e/p rename into a NEW branch)
 			if m.canOpenWorktreePopup() {
-				if mm, ok := m.openWorktreePopup(true, false); ok {
+				if mm, ok := m.openWorktreePopup(false); ok {
 					return mm, nil
 				}
 			}
-		case "W": // worktree for the selected EXISTING branch, create & switch
-			// (a worktree on a NEW templated branch moved to the Branches . menu)
+		case "W": // the same popup with create & switch as enter's default
 			if m.canOpenWorktreePopup() {
-				if mm, ok := m.openWorktreePopup(true, true); ok {
+				if mm, ok := m.openWorktreePopup(true); ok {
 					return mm, nil
 				}
 			}

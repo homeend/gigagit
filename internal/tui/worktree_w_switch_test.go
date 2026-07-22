@@ -3,12 +3,14 @@ package tui
 import (
 	"strings"
 	"testing"
+
+	"github.com/homeend/gigagit/internal/engine"
 )
 
-// Model-level W = "w + create & switch": the popup opens for the selected
-// EXISTING branch (no templated new branch, so the dir carries no b/from-
-// prefix or random suffix) with create-and-switch as enter's default. The old
-// new-templated-branch flow lives in the Branches `.` menu.
+// One popup for w and W: the branch starts as the SELECTED branch (no
+// templated name, so the dir carries no b/from- prefix or random suffix).
+// W makes create-and-switch enter's default; e/p rename the branch into a
+// NEW branch cut from the selection.
 
 func TestShiftWOpensExistingModeWithSwitchDefault(t *testing.T) {
 	m := modelWithConfig(t, "b/from-<parent-branch>-<random-alpha:4>", "../<repo>.worktrees/<branch>")
@@ -18,7 +20,7 @@ func TestShiftWOpensExistingModeWithSwitchDefault(t *testing.T) {
 		t.Fatal("W should open the worktree popup")
 	}
 	if !p.existing {
-		t.Fatal("W must open in existing-branch mode (same popup as w)")
+		t.Fatal("W must open on the selected existing branch (same popup as w)")
 	}
 	if !p.switchOnCreate {
 		t.Fatal("W must default enter to create & switch")
@@ -90,40 +92,76 @@ func TestShiftWSwitchHintRendered(t *testing.T) {
 	}
 }
 
-// The new-templated-branch flow moved to the Branches `.` menu.
+// ---- e/p fold: renaming inside the w/W popup creates a NEW branch ----
 
-func TestWorktreeNewBranchRowGating(t *testing.T) {
+func TestEditRenamesIntoNewBranchFromSelection(t *testing.T) {
 	m := modelWithConfig(t, "b/from-<parent-branch>", "../<repo>.worktrees/<branch>")
-	m.focus = panelBranches
-	r, ok := m.worktreeNewBranchRow()
+	updated, _ := m.Update(keyMsg("w"))
+	m = updated.(Model)
+	start := layerOf[*worktreePopup](m).startPoint
+
+	updated, _ = m.Update(keyMsg("e"))
+	m = updated.(Model)
+	p := layerOf[*worktreePopup](m)
+	if p.state != stEdit {
+		t.Fatal("e must open branch-name editing in the w/W popup")
+	}
+	if p.editBuf.Value() != start {
+		t.Fatalf("editBuf seeded with %q, want the selection %q (not a template)", p.editBuf.Value(), start)
+	}
+
+	for len([]rune(layerOf[*worktreePopup](m).editBuf.Value())) > 0 {
+		updated, _ = m.Update(keyMsg("backspace"))
+		m = updated.(Model)
+	}
+	for _, ch := range []string{"f", "x"} {
+		updated, _ = m.Update(keyMsg(ch))
+		m = updated.(Model)
+	}
+	updated, _ = m.Update(keyMsg("enter"))
+	m = updated.(Model)
+	p = layerOf[*worktreePopup](m)
+	if p.previewBranch != "fx" {
+		t.Fatalf("previewBranch = %q, want fx", p.previewBranch)
+	}
+	op, ok := p.createOp("").(engine.CreateWorktree)
 	if !ok {
-		t.Fatal("new-branch worktree row must be present on the Branches panel")
+		t.Fatalf("createOp = %T, want engine.CreateWorktree (new branch)", p.createOp(""))
 	}
-	if r.run == nil {
-		t.Fatal("new-branch worktree row must have a run handler")
-	}
-	m.focus = panelCommits
-	if _, ok := m.worktreeNewBranchRow(); ok {
-		t.Fatal("new-branch worktree row must be Branches-panel only")
+	if op.StartPoint != start || op.Branch != "fx" {
+		t.Fatalf("op = {StartPoint:%q Branch:%q}, want {%q fx}", op.StartPoint, op.Branch, start)
 	}
 }
 
-func TestWorktreeNewBranchRowOpensTemplatedPopup(t *testing.T) {
+func TestEmptyEditFallsBackToSelection(t *testing.T) {
 	m := modelWithConfig(t, "b/from-<parent-branch>", "../<repo>.worktrees/<branch>")
-	m.focus = panelBranches
-	r, ok := m.worktreeNewBranchRow()
-	if !ok {
-		t.Fatal("row absent")
+	updated, _ := m.Update(keyMsg("w"))
+	m = updated.(Model)
+	start := layerOf[*worktreePopup](m).startPoint
+
+	updated, _ = m.Update(keyMsg("e"))
+	m = updated.(Model)
+	for len([]rune(layerOf[*worktreePopup](m).editBuf.Value())) > 0 {
+		updated, _ = m.Update(keyMsg("backspace"))
+		m = updated.(Model)
 	}
-	tm, _ := r.run(m)
-	p := layerOf[*worktreePopup](tm.(Model))
-	if p == nil {
-		t.Fatal("row must open the worktree popup")
+	updated, _ = m.Update(keyMsg("enter")) // confirm the emptied name
+	m = updated.(Model)
+	p := layerOf[*worktreePopup](m)
+	if p.previewBranch != start {
+		t.Fatalf("previewBranch = %q, want the selection %q after an empty confirm", p.previewBranch, start)
 	}
-	if p.existing || p.switchOnCreate {
-		t.Fatalf("row must open new-branch mode without a switch default, got existing=%v switchOnCreate=%v", p.existing, p.switchOnCreate)
+	if _, ok := p.createOp("").(engine.CreateWorktreeForBranch); !ok {
+		t.Fatalf("createOp = %T, want CreateWorktreeForBranch (still the existing branch)", p.createOp(""))
 	}
-	if !strings.HasPrefix(p.previewBranch, "b/from-") {
-		t.Fatalf("previewBranch = %q, want it resolved from the branch template", p.previewBranch)
+}
+
+func TestPrefixKeyActiveInBranchPopup(t *testing.T) {
+	m := modelWithConfig(t, "b/from-<parent-branch>", "../<repo>.worktrees/<branch>")
+	updated, _ := m.Update(keyMsg("w"))
+	m = updated.(Model)
+	_, cmd := m.Update(keyMsg("p"))
+	if cmd == nil {
+		t.Fatal("p must open the prefix picker in the w/W popup (no longer inert)")
 	}
 }
