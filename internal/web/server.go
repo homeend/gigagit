@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/homeend/gigagit/internal/domain"
 )
@@ -29,6 +30,12 @@ type Server struct {
 	// page-size overrides applied to the feed when > 0 (test seam).
 	pageInitial int
 	pageBatch   int
+
+	// op transport (oprun.go): one live operation at a time.
+	opMu          sync.Mutex
+	cur           *opRun
+	opSeq         int
+	decideTimeout time.Duration // test seam; zero = defaultDecideTimeout
 }
 
 func New(svc *domain.Service) *Server { return &Server{svc: svc} }
