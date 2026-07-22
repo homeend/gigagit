@@ -47,6 +47,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /static/", http.FileServerFS(staticFS))
 	mux.HandleFunc("GET /api/repo", s.handleRepo)
 	mux.HandleFunc("GET /api/status", s.handleStatus)
+	mux.HandleFunc("GET /api/branches", s.handleBranches)
 	mux.HandleFunc("GET /api/commits", s.handleCommits)
 	mux.HandleFunc("GET /api/commit/{sha}", s.handleCommitFiles)
 	mux.HandleFunc("GET /api/diff", s.handleDiff)
