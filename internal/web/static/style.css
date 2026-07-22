@@ -16,9 +16,12 @@ body {
 #repo-branch::before { content: " \2387  "; color: var(--dim); }
 #repo-worktree { float: right; color: var(--dim); }
 #panes { flex: 1; display: grid; grid-template-columns: 5fr 3fr 6fr; min-height: 0; }
-/* Nothing opened yet: the commit list gets the whole width. */
+/* Drill-in layout, mirroring the TUI: the list and the opened commit are
+   two separate full-screen states, never crammed side by side. */
 #panes.solo { grid-template-columns: 1fr; }
 #panes.solo #files-pane, #panes.solo #diff-pane { display: none; }
+#panes.detail { grid-template-columns: 3fr 9fr; }
+#panes.detail #commits-pane { display: none; }
 .pane { overflow: auto; border-right: 1px solid var(--border); min-width: 0; }
 .pane.focused { box-shadow: inset 2px 0 0 var(--accent); }
 #commits-pane { overflow: hidden; }

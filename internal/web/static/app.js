@@ -9,6 +9,7 @@ const state = {
   fileCursor: 0,
   fileSha: null,
   pane: "commits", // commits | files
+  layout: "list", // list (commits full-width) | detail (files+diff, list hidden)
   // svg is the default: browser rows (22px) are taller than the 13px font
   // box, so text-mode │ glyphs leave vertical gaps and lanes look broken —
   // SVG strokes span the full row height. g toggles back to text.
@@ -219,12 +220,15 @@ function maybeLoadMore(lastVisible) {
 
 // --- files + diff panes ---
 
-// setSolo(true) gives the commit list the whole width (nothing opened);
-// setSolo(false) restores the three-pane split. Width changes shift the
-// virtualized window, so re-render after toggling.
-function setSolo(v) {
-  $("panes").classList.toggle("solo", v);
-  renderCommits();
+// Layout mirrors the TUI's drill-in: "list" = the commit list alone, full
+// width; "detail" = the opened commit's files + diff, list hidden (esc
+// returns). Never both crammed on one screen.
+function setLayout(mode) {
+  state.layout = mode;
+  const p = $("panes");
+  p.classList.toggle("solo", mode === "list");
+  p.classList.toggle("detail", mode === "detail");
+  if (mode === "list") moveCursor(0); // re-render + rescroll: display:none dropped the scroll position
 }
 
 async function openCommit(i) {
@@ -238,7 +242,7 @@ async function openCommit(i) {
   state.fileSha = row.hash;
   state.pane = "files";
   state.filesMode = "commit";
-  setSolo(false);
+  setLayout("detail");
   $("files-header").textContent = row.short + " " + row.subject;
   renderFiles();
   focusPane();
@@ -256,7 +260,7 @@ async function openWorkingTree(i) {
   state.filesMode = "status";
   state.fileCursor = 0;
   state.pane = "files";
-  setSolo(false);
+  setLayout("detail");
   $("files-header").textContent = "Working tree";
   renderFiles();
   focusPane();
@@ -351,7 +355,7 @@ async function stage(body) {
     $("diff-header").textContent = "";
     $("diff-body").innerHTML = "";
     state.lastDiff = null; // a resize must not resurrect the cleared diff
-    setSolo(true);
+    setLayout("list");
     focusPane();
     return;
   }
@@ -474,13 +478,13 @@ document.addEventListener("keydown", (e) => {
   } else if (e.key === "Enter") {
     if (state.pane === "commits") openCommit(state.cursor);
     else if (state.filesMode === "status" ? state.statusEntries.length : state.files.length) openFile(state.fileCursor);
-  } else if (e.key === "Tab") {
-    e.preventDefault();
-    state.pane = state.pane === "commits" ? "files" : "commits";
-    focusPane();
   } else if (e.key === "Escape") {
-    state.pane = "commits";
-    focusPane();
+    // drill back out: detail (files+diff) → the full-width commit list
+    if (state.layout === "detail") {
+      state.pane = "commits";
+      setLayout("list");
+      focusPane();
+    }
   } else if (e.key === "g") {
     toggleGraphMode();
   } else if ((e.key === "s" || e.key === "u") && state.pane === "files" && state.filesMode === "status") {
