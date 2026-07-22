@@ -401,7 +401,7 @@ document.addEventListener("keydown", (e) => {
     moveCursor(-1);
   } else if (e.key === "Enter") {
     if (state.pane === "commits") openCommit(state.cursor);
-    else if (state.files.length) openFile(state.fileCursor);
+    else if (state.filesMode === "status" ? state.statusEntries.length : state.files.length) openFile(state.fileCursor);
   } else if (e.key === "Tab") {
     e.preventDefault();
     state.pane = state.pane === "commits" ? "files" : "commits";
