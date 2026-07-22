@@ -52,6 +52,30 @@ func (m Model) branchRebaseRow() (actionRow, bool) {
 	}, true
 }
 
+// worktreeNewBranchRow offers "Worktree on a new branch from <branch>…" on the
+// Branches tab — the new-templated-branch popup (branch template + prefix
+// picker) that used to live on the W key before W became "create & switch for
+// the existing branch".
+func (m Model) worktreeNewBranchRow() (actionRow, bool) {
+	if m.focus != panelBranches || !m.canOpenWorktreePopup() {
+		return actionRow{}, false
+	}
+	b, ok := m.selectedBranch()
+	if !ok {
+		return actionRow{}, false
+	}
+	return actionRow{
+		id:    "worktree-new-branch",
+		label: i18n.T("Worktree on a new branch from %s…", b.Name),
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			if mm, ok := m.openWorktreePopup(false, false); ok {
+				return mm, nil
+			}
+			return m, nil
+		},
+	}, true
+}
+
 // branchVersionsRow offers "Previous versions…" on the Branches tab, opening
 // the versionsPopup straight into versions mode for the selected branch.
 // Deliberately NOT self-gated on "does this branch have any recorded

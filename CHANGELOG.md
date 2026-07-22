@@ -223,6 +223,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   panels and the commit feed's decorations.
 
 ### Changed
+- **`W` now creates a worktree for the selected EXISTING branch and switches
+  to it** (`w` + create & switch in one flow) — so its directory matches
+  `w`'s (`<repo>.worktrees/<branch>`), with no `b-from-` prefix or random
+  4-letter suffix. Those came from the default NEW-branch template
+  (`b/from-<parent-branch>-<random-alpha:4>`), which `W` used to run; the
+  path template just mirrored the templated branch name. The popup opened
+  via `W` makes enter default to create & switch (`[w]` still creates
+  without switching). The new-templated-branch flow (branch template +
+  `p` prefix picker) moved to the Branches `.` menu: "Worktree on a new
+  branch from <branch>…".
 - **Pull/push dialogs name the branch they act on.** The `p` slow-op confirm
   now reads "Pull main? This may rewrite the working tree." (or "Pull
   feat/x (stay here)?" for a Branches-panel background pull) instead of the

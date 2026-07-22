@@ -1402,13 +1402,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case "w": // worktree for the selected EXISTING branch
 			if m.canOpenWorktreePopup() {
-				if mm, ok := m.openWorktreePopup(true); ok {
+				if mm, ok := m.openWorktreePopup(true, false); ok {
 					return mm, nil
 				}
 			}
-		case "W": // worktree on a NEW branch from the selected one
+		case "W": // worktree for the selected EXISTING branch, create & switch
+			// (a worktree on a NEW templated branch moved to the Branches . menu)
 			if m.canOpenWorktreePopup() {
-				if mm, ok := m.openWorktreePopup(false); ok {
+				if mm, ok := m.openWorktreePopup(true, true); ok {
 					return mm, nil
 				}
 			}

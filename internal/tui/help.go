@@ -25,7 +25,7 @@ func helpContent() []contentLine {
 		r("!", i18n.T("notification center: health recommendations for this repo (e.g. write a commit-graph on a big repo — makes commit browsing ~10× faster). ↑↓ select, enter shows a notice's actions, esc closes. 'Not now' asks again next load; 'Never for this repo' is remembered in prompts.toml")),
 		r("F", i18n.T("fuzzy file finder: opens a picker over every tracked file; press / then type a query (fvgo → files_view.go) to filter by path, ↑↓/pgup/pgdn to move, enter to open a per-file menu (View content, Diff HEAD↔working tree, History, Blame, Open in editor, Copy path, Copy absolute path), esc closes")),
 		r("w", i18n.T("worktree popup for the selected existing branch")),
-		r("W", i18n.T("worktree popup on a new templated branch. In the popup, p picks a saved branch prefix (Settings → Branch prefixes), fills any <user:…> labels, and seeds the editable name")),
+		r("W", i18n.T("worktree popup for the selected existing branch with create & switch as enter's default (w + switch in one flow). A worktree on a NEW templated branch is in the . menu; in that popup, p picks a saved branch prefix (Settings → Branch prefixes)")),
 		r("m", i18n.T("mark a row; m on a second row opens the pair-op picker (merge / rebase / interactive rebase / compare branches)")),
 		r("R", i18n.T("repo switcher popup (navigation-first: ↑↓/jk/pgup/pgdn move, / filters, enter switches — while filtering, the first enter locks the filter)")),
 		r(",", i18n.T("settings")),

@@ -57,6 +57,10 @@ type worktreePopup struct {
 	previewErr    error
 
 	runHook bool // run the configured post-create hook on create (default true)
+
+	// switchOnCreate makes enter default to create-AND-switch (the model-level
+	// W entry: "w + create & switch" in one flow). [w]/[W] keep their meanings.
+	switchOnCreate bool
 }
 
 // tctx builds a fresh template.Ctx. A new Rand is created from the fixed seed on
@@ -99,7 +103,8 @@ func (p *worktreePopup) recompute() {
 // openWorktreePopup builds a popup for the currently-selected branch. In
 // existing mode the popup checks out that branch itself (no new branch): the
 // branch template is bypassed and only the path template's fields/counters
-// apply. Returns (model, false) if there is no branch to act on.
+// apply. switchOnCreate makes enter default to create & switch (the model-W
+// entry). Returns (model, false) if there is no branch to act on.
 // mainWorktreeRoot returns the main worktree's root for resolving the <repo>
 // token and the relative-path base (git lists the main worktree first), falling
 // back to the current worktree when the list isn't loaded yet. This must match
@@ -113,7 +118,7 @@ func (m Model) mainWorktreeRoot() string {
 	return m.currentWorktree
 }
 
-func (m Model) openWorktreePopup(existing bool) (Model, bool) {
+func (m Model) openWorktreePopup(existing, switchOnCreate bool) (Model, bool) {
 	if len(m.branches) == 0 {
 		return m, false
 	}
@@ -132,19 +137,20 @@ func (m Model) openWorktreePopup(existing bool) (Model, bool) {
 		return m, false
 	}
 	p := &worktreePopup{
-		startPoint:   m.branches[bi].Name,
-		existing:     existing,
-		branchTmpl:   bt,
-		pathTmpl:     pt,
-		repoName:     worktree.RepoName(m.mainWorktreeRoot()),
-		labels:       labels,
-		inputs:       map[string]textfield{},
-		seqNames:     seqNames,
-		seqs:         worktree.PeekSeqs(m.gitCommonDir, seqNames),
-		gitCommonDir: m.gitCommonDir,
-		seed:         rand.Uint64(),
-		now:          time.Now(),
-		runHook:      true,
+		startPoint:     m.branches[bi].Name,
+		existing:       existing,
+		switchOnCreate: switchOnCreate,
+		branchTmpl:     bt,
+		pathTmpl:       pt,
+		repoName:       worktree.RepoName(m.mainWorktreeRoot()),
+		labels:         labels,
+		inputs:         map[string]textfield{},
+		seqNames:       seqNames,
+		seqs:           worktree.PeekSeqs(m.gitCommonDir, seqNames),
+		gitCommonDir:   m.gitCommonDir,
+		seed:           rand.Uint64(),
+		now:            time.Now(),
+		runHook:        true,
 	}
 	for _, l := range labels {
 		p.inputs[l] = textfield{}
@@ -254,7 +260,9 @@ func (p *worktreePopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				return m, nil // existing mode checks out the branch as-is; no new name
 			}
 			return m, m.openPrefixPicker(p.resolvePrefix(), p.onPrefixPicked())
-		case "w", "enter":
+		case "enter": // follows the popup's default action (switch when opened via model-W)
+			return m.startCreateFromPopup(p, p.switchOnCreate)
+		case "w":
 			return m.startCreateFromPopup(p, false)
 		case "W":
 			return m.startCreateFromPopup(p, true)
@@ -325,7 +333,12 @@ func (p *worktreePopup) box(m Model) string {
 	default:
 		if p.existing {
 			hint := i18n.T("[w] create  [W] create & switch  [esc] cancel")
-			if m.cfg.Worktree.PostCreateHook != "" {
+			if p.switchOnCreate {
+				hint = i18n.T("[enter/W] create & switch  [w] create only  [esc] cancel")
+				if m.cfg.Worktree.PostCreateHook != "" {
+					hint = i18n.T("[enter/W] create & switch  [w] create only  [h] hook  [esc] cancel")
+				}
+			} else if m.cfg.Worktree.PostCreateHook != "" {
 				hint = i18n.T("[w] create  [W] create & switch  [h] hook  [esc] cancel")
 			}
 			b.WriteString(hint)
