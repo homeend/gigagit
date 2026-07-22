@@ -108,3 +108,16 @@ mark.r { background: var(--span-add); color: inherit; }
 #tags-list li { cursor: pointer; }
 #tags-list li:hover { background: var(--bg-alt); }
 #tags-list li.more { color: var(--dim); cursor: default; }
+#commit-box { padding: 4px 8px; border-bottom: 1px solid var(--border); display: flex; gap: 8px; align-items: flex-start; }
+#commit-box.hidden { display: none; }
+#commit-box textarea {
+  flex: 1; background: var(--bg-alt); color: var(--fg); border: 1px solid var(--border);
+  border-radius: 3px; font: inherit; padding: 3px 6px; resize: vertical;
+}
+#commit-box textarea:focus { outline: none; border-color: var(--accent); }
+#commit-box button {
+  background: var(--bg-alt); color: var(--fg); border: 1px solid var(--border);
+  border-radius: 3px; padding: 2px 12px; font: inherit; cursor: pointer;
+}
+#commit-box button:hover:not(:disabled) { border-color: var(--accent); }
+#commit-box button:disabled { opacity: .45; cursor: default; }

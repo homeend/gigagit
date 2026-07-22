@@ -5,13 +5,15 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/homeend/gigagit/internal/engine"
 )
 
 type opStartRequest struct {
-	Op     string `json:"op"`
-	Branch string `json:"branch"`
+	Op      string `json:"op"`
+	Branch  string `json:"branch"`
+	Message string `json:"message"`
 }
 
 // handleOpStart begins an operation and returns 202 {op_id}. Only "switch"
@@ -30,6 +32,12 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		op = engine.SmartSwitch{Branch: req.Branch}
+	case "commit":
+		if strings.TrimSpace(req.Message) == "" {
+			writeErr(w, http.StatusBadRequest, errors.New("message required"))
+			return
+		}
+		op = engine.Commit{Message: req.Message}
 	default:
 		writeErr(w, http.StatusBadRequest, fmt.Errorf("unknown op %q", req.Op))
 		return

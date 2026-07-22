@@ -9,6 +9,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- `gg web`: commit from the working-tree screen — a message box + commit
+  button (Ctrl+Enter) on the status pane, wired as the op transport's second
+  operation (`op:"commit"` → `engine.Commit`; empty message → 400). Typing
+  in form fields no longer triggers the j/k/s/u keyboard shortcuts.
 - `gg web`: the sidebar grows worktrees and tags sections (read-only; tags
   capped at 100 with a truncation marker). Clicking a tag opens that
   commit's detail screen (`GET /api/worktrees`, `GET /api/tags`).
