@@ -12,12 +12,16 @@
   <span id="repo-branch"></span>
   <span id="repo-worktree"></span>
 </header>
-<main id="panes">
+<main id="panes" class="solo">
   <section id="commits-pane" class="pane focused">
     <div id="commits-scroll"><div id="commits-spacer"><div id="commits-window"></div></div></div>
   </section>
   <section id="files-pane" class="pane">
     <div id="files-header"></div>
+    <div id="files-actions" class="hidden">
+      <button id="stage-all">stage all</button>
+      <button id="unstage-all">unstage all</button>
+    </div>
     <ul id="files-list"></ul>
   </section>
   <section id="diff-pane" class="pane">
@@ -25,7 +29,7 @@
     <div id="diff-body"></div>
   </section>
 </main>
-<footer id="foot">j/k move · enter open · tab switch pane · g graph mode</footer>
+<footer id="foot">j/k move · enter open · esc back · g graph mode · s stage · u unstage</footer>
 <script type="module" src="/static/app.js"></script>
 </body>
 </html>

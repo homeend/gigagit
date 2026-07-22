@@ -1,14 +1,17 @@
-// Package web is gg's read-only browser frontend probe: an embedded HTTP
-// server exposing the domain read-model as JSON plus a static single-page
-// UI. Domain-only frontend — it reaches git through internal/domain, never
-// internal/git (archtest-guarded).
+// Package web is gg's browser frontend probe: an embedded HTTP server
+// exposing the domain read-model as JSON plus a static single-page UI.
+// Domain-only frontend — it reaches git through internal/domain, never
+// internal/git (archtest-guarded). Mutating endpoints (stage) run engine
+// ops through domain.Execute behind writeGuard.
 package web
 
 import (
 	"encoding/json"
 	"errors"
+	"mime"
 	"net"
 	"net/http"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -36,9 +39,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /{$}", s.handleIndex)
 	mux.Handle("GET /static/", http.FileServerFS(staticFS))
 	mux.HandleFunc("GET /api/repo", s.handleRepo)
+	mux.HandleFunc("GET /api/status", s.handleStatus)
 	mux.HandleFunc("GET /api/commits", s.handleCommits)
 	mux.HandleFunc("GET /api/commit/{sha}", s.handleCommitFiles)
 	mux.HandleFunc("GET /api/diff", s.handleDiff)
+	mux.HandleFunc("POST /api/stage", writeGuard(s.handleStage))
 	return hostGuard(mux)
 }
 
@@ -88,6 +93,30 @@ func hostGuard(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// writeGuard hardens mutating endpoints against cross-site requests. A
+// cross-site HTML form cannot send application/json without a CORS
+// preflight (which this server never answers), and browsers always attach
+// an Origin header to cross-site POSTs — so requiring the JSON content
+// type plus a loopback Origin (when one is present; curl sends none)
+// closes CSRF on top of hostGuard's DNS-rebinding check.
+func writeGuard(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		mt, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+		if err != nil || mt != "application/json" {
+			writeErr(w, http.StatusUnsupportedMediaType, errors.New("Content-Type must be application/json"))
+			return
+		}
+		if origin := r.Header.Get("Origin"); origin != "" {
+			u, err := url.Parse(origin)
+			if err != nil || !isLoopbackHost(u.Hostname()) {
+				writeErr(w, http.StatusForbidden, errors.New("forbidden origin"))
+				return
+			}
+		}
+		next(w, r)
+	}
 }
 
 // isGitArgSafe reports whether s is safe to pass to a git verb as a
