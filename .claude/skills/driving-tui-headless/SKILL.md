@@ -36,6 +36,18 @@ you can read.
 Snapshots are `snap-<NN>-<label>.txt` in the out dir: `00-init` is the first
 screen, then one per keyscript step.
 
+## Recording a scenario (the input side)
+
+To author a scenario instead of hand-writing a keyscript, a human runs the
+TUI with `gg --record <file>`, drives it normally, and quits (`q`). gg writes
+every keystroke to `<file>` in this exact keyscript format (one token per
+line), with a `#` header naming the repo it was recorded against. The
+terminating quit is not written. Hand that file straight to
+`tui-capture.sh <file>` (via `--repo <the header's repo>`) to replay it and
+capture a snapshot of every screen. Mouse clicks, alt-modified keys, and
+page/function keys are not recorded (they appear as `# unrecorded key:`
+comments); keep scenarios keyboard-driven with the vocabulary above.
+
 ## Keyscript
 
 Steps separated by `;` or newlines; each is `[label:] tokens`. Tokens sent
