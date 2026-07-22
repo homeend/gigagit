@@ -13,6 +13,10 @@
   <span id="repo-worktree"></span>
 </header>
 <main id="panes" class="solo">
+  <aside id="branches-pane">
+    <div id="branches-header">branches</div>
+    <ul id="branches-list"></ul>
+  </aside>
   <section id="commits-pane" class="pane focused">
     <div id="commits-scroll"><div id="commits-spacer"><div id="commits-window"></div></div></div>
   </section>
@@ -29,7 +33,13 @@
     <div id="diff-body"></div>
   </section>
 </main>
-<footer id="foot">j/k move · enter open · esc back · g graph mode · s stage · u unstage</footer>
+<footer id="foot"><span id="op-line"></span>j/k move · enter open · esc back · b branches · g graph mode · s stage · u unstage</footer>
+<div id="modal" class="hidden">
+  <div id="modal-box">
+    <div id="modal-prompt"></div>
+    <div id="modal-options"></div>
+  </div>
+</div>
 <script type="module" src="/static/app.js"></script>
 </body>
 </html>

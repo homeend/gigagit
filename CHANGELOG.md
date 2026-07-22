@@ -9,6 +9,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- `gg web` gains the op transport — the streaming spine for web write
+  operations: `POST /api/op` starts an engine op (`switch` →
+  `engine.SmartSwitch` first), `GET /api/op/{id}/events` streams its
+  progress/decision/done events over SSE (stdlib, no WebSocket dep), and
+  `POST /api/op/{id}/decide` answers forks parked on a channel-based web
+  Decider (5-min timeout so an abandoned modal can't wedge the repo gate).
+  The SPA adds a branches sidebar (click to switch, `b` toggles), a live op
+  status line, and the decision modal (esc = abort, the TUI rule). A
+  successful op resets the server's commit-feed cache so `/api/commits`
+  reflects the new HEAD.
 - `gg web` (probe) gains its first write pathway: a "● Working tree" row atop
   the commit list opens a sectioned status pane (Staged / Changes / Untracked /
   Conflicts) with whole-file stage/unstage (per-row `s`/`u` + bulk buttons) via

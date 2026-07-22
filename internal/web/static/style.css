@@ -18,7 +18,10 @@ body {
 #panes { flex: 1; display: grid; grid-template-columns: 5fr 3fr 6fr; min-height: 0; }
 /* Drill-in layout, mirroring the TUI: the list and the opened commit are
    two separate full-screen states, never crammed side by side. */
-#panes.solo { grid-template-columns: 1fr; }
+#panes.solo { grid-template-columns: 230px 1fr; }
+#panes.solo.nosb { grid-template-columns: 1fr; }
+#panes.solo.nosb #branches-pane { display: none; }
+#panes.detail #branches-pane { display: none; }
 #panes.solo #files-pane, #panes.solo #diff-pane { display: none; }
 #panes.detail { grid-template-columns: 3fr 9fr; }
 #panes.detail #commits-pane { display: none; }
@@ -81,3 +84,19 @@ mark.r { background: var(--span-add); color: inherit; }
 #files-list li.conflicts { color: #f27a6a; }
 .crow.wt .subj { color: #e0c06c; font-weight: bold; }
 .crow.wt .graph { color: #e0c06c; }
+#branches-pane { border-right: 1px solid var(--border); overflow-y: auto; }
+#branches-header { padding: 4px 8px; color: var(--dim); border-bottom: 1px solid var(--border); }
+#branches-list { list-style: none; }
+#branches-list li { padding: 2px 10px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#branches-list li:hover { background: var(--bg-alt); }
+#branches-list li.head { color: var(--accent); font-weight: bold; cursor: default; }
+#branches-list li .ab { float: right; color: var(--dim); font-size: 11px; }
+#op-line { color: var(--accent); padding-right: 12px; }
+#op-line.err { color: #f27a6a; }
+#modal { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; z-index: 10; }
+#modal.hidden { display: none; }
+#modal-box { background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; padding: 18px 22px; max-width: 560px; }
+#modal-prompt { margin-bottom: 14px; }
+#modal-options { display: flex; gap: 10px; justify-content: flex-end; }
+#modal-options button { background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 4px; padding: 4px 14px; font: inherit; cursor: pointer; }
+#modal-options button:hover { border-color: var(--accent); }
