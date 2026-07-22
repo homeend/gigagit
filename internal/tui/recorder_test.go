@@ -130,6 +130,21 @@ func TestRecorderCommentsUnsupportedKey(t *testing.T) {
 	}
 }
 
+func TestRecorderExpandsMultiRune(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "s.keys")
+	r, _ := newRecorder(path, "repo")
+	// A coalesced "up" (2 runes in one KeyMsg) must expand to u, p — NOT the
+	// token "up" (which would replay as the Up arrow).
+	r.note(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("up")})
+	r.note(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(":")}) // literal colon
+	r.note(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")}) // quit
+	r.close()
+	got, _ := os.ReadFile(path)
+	if body := nonCommentLines(string(got)); !reflect.DeepEqual(body, []string{"u", "p", ":"}) {
+		t.Errorf("body = %v, want [u p :] (q dropped, up expanded, colon literal)", body)
+	}
+}
+
 func TestRecorderNilSafe(t *testing.T) {
 	var r *recorder
 	r.note(tea.KeyMsg{Type: tea.KeyEnter}) // must not panic

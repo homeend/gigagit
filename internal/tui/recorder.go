@@ -39,31 +39,51 @@ func (r *recorder) writeLine(s string) {
 	if r.broken {
 		return
 	}
+	s = strings.ReplaceAll(s, "\n", " ")
 	if _, err := fmt.Fprintln(r.f, s); err != nil {
 		r.broken = true
 	}
 }
 
 // note records one keypress. A supported key is buffered (lag-by-one) so the
-// final quit can be dropped at close. An unsupported key flushes any buffered
-// token, then writes a replay-skipped `#` comment so the scenario stays honest.
+// final quit can be dropped at close. A KeyRunes carrying several runes (fast
+// typing coalesced into one message, or a paste) is expanded into one
+// single-rune token per rune, so replay types them verbatim and a coalesced
+// run like "up" can never be mis-sent as the Up key. An unsupported key
+// flushes any buffered token, then writes a replay-skipped `#` comment.
 func (r *recorder) note(msg tea.KeyMsg) {
 	if r == nil || r.broken {
 		return
 	}
+	if msg.Type == tea.KeyRunes && len(msg.Runes) > 1 {
+		for _, ru := range msg.Runes {
+			r.push(string(ru))
+		}
+		return
+	}
 	tok, ok := keyToken(msg)
 	if !ok {
-		if r.has {
-			r.writeLine(r.pending)
-			r.has = false
-		}
+		r.flush()
 		r.writeLine("# unrecorded key: " + msg.String())
 		return
 	}
+	r.push(tok)
+}
+
+// push buffers a real token, flushing the previously buffered one (lag-by-one).
+func (r *recorder) push(tok string) {
 	if r.has {
 		r.writeLine(r.pending)
 	}
 	r.pending, r.has = tok, true
+}
+
+// flush writes any buffered token now (used before a comment, to keep order).
+func (r *recorder) flush() {
+	if r.has {
+		r.writeLine(r.pending)
+		r.has = false
+	}
 }
 
 // close closes the file WITHOUT flushing the buffered token — that token is

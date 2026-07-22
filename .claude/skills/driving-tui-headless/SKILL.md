@@ -43,8 +43,11 @@ TUI with `gg --record <file>`, drives it normally, and quits (`q`). gg writes
 every keystroke to `<file>` in this exact keyscript format (one token per
 line), with a `#` header naming the repo it was recorded against. The
 terminating quit is not written. Hand that file straight to
-`tui-capture.sh <file>` (via `--repo <the header's repo>`) to replay it and
-capture a snapshot of every screen. Mouse clicks, alt-modified keys, and
+`tui-capture.sh <file>` — a positional that is an existing file is replayed
+line by line (one keystroke per step; no `;`/`label:` splitting, so a
+recorded `:` or `;` keystroke round-trips as a literal) — pointing `--repo`
+at the header's repo, to replay it and capture a snapshot of every screen.
+Mouse clicks, alt-modified keys, and
 page/function keys are not recorded (they appear as `# unrecorded key:`
 comments); keep scenarios keyboard-driven with the vocabulary above.
 
