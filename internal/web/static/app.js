@@ -608,6 +608,14 @@ function moveCursor(delta) {
 }
 
 document.addEventListener("keydown", (e) => {
+  if (!$("modal").classList.contains("hidden")) {
+    if (e.key === "Escape") {
+      const opts = JSON.parse($("modal").dataset.opts || "[]");
+      if (opts.includes("abort")) answerModal("abort"); // the TUI's esc rule
+    }
+    e.preventDefault();
+    return; // the modal owns the keyboard — even over a focused form field
+  }
   // Form fields own the keyboard: without this, typing a commit message
   // triggers j/k navigation and s/u staging. Ctrl/Cmd+Enter commits.
   if (e.target.closest && e.target.closest("input,textarea")) {
@@ -616,14 +624,6 @@ document.addEventListener("keydown", (e) => {
       doCommit();
     }
     return;
-  }
-  if (!$("modal").classList.contains("hidden")) {
-    if (e.key === "Escape") {
-      const opts = JSON.parse($("modal").dataset.opts || "[]");
-      if (opts.includes("abort")) answerModal("abort"); // the TUI's esc rule
-    }
-    e.preventDefault();
-    return; // the modal owns the keyboard
   }
   if (e.key === "j" || e.key === "ArrowDown") {
     e.preventDefault();
