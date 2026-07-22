@@ -531,19 +531,33 @@ ls "$OUTD"
 ```
 Expected (pre-fix): there is a `snap-01-*` for the `# header line` step (the comment was sent as keystrokes) in addition to the real `.` step — i.e. MORE snapshots than the one real step. (The `#` line was treated as input.)
 
-- [ ] **Step 2: Add the skip**
+- [ ] **Step 2: Add the skip (hash + SPACE, not bare `#`)**
 
 In `tui-capture.sh`, in the keyscript-walk `while IFS= read -r step` loop, directly AFTER the trim lines and the existing `[[ -z "$step" ]] && continue`, add:
 
 ```bash
-    [[ "$step" == \#* ]] && continue   # skip comment lines (recorder header)
+    # Skip comment lines. The recorder writes every comment as "# <text>"
+    # (hash + space), so match that exactly — a lone "#" step is a real
+    # literal '#' keystroke (gg binds # to goto-commit) and must NOT be
+    # skipped, or that keystroke would silently vanish on replay.
+    [[ "$step" == "# "* ]] && continue
 ```
 
-- [ ] **Step 3: Verify**
+- [ ] **Step 3: Verify (header skipped, literal `#` preserved)**
 
 Run: `bash -n tui-capture.sh && echo "syntax ok"` → `syntax ok`.
 
-Then re-run the Step-1 commands. Expected (post-fix): only `snap-00-init.txt` and `snap-01-step1.txt` (the real `.`), and NO snapshot corresponding to the `# header line` — the header was skipped. Confirm with `ls "$OUTD"`.
+Then re-run the Step-1 commands. Expected (post-fix): only `snap-00-init.txt` and `snap-01-step1.txt` (the real `.`), and NO snapshot for the `# header line` — the hash-space header was skipped. Confirm with `ls "$OUTD"`.
+
+Then verify a **literal `#` keystroke is NOT skipped** (the round-trip fix for gg's `#` binding):
+
+```bash
+OUTD2=$(mktemp -d)
+printf '# a header\n#\n. \n' > /tmp/ks2.txt
+./tui-capture.sh --gg /tmp/ggrec --out "$OUTD2" "$(cat /tmp/ks2.txt)" >/dev/null 2>&1
+ls "$OUTD2"
+```
+Expected: `snap-00-init.txt`, `snap-01-step1.txt` (the bare `#` line — a real keystroke, sent), and `snap-02-step2.txt` (the `.`). The `# a header` line (hash-space) is skipped; the lone `#` line is replayed. If the lone `#` is missing (only two snapshots), the pattern is wrong — it must be `"# "*` (hash-space), never `\#*`.
 
 - [ ] **Step 4: Commit**
 
