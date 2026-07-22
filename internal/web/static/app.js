@@ -93,20 +93,33 @@ function opLine(text, isErr) {
   el.classList.toggle("err", !!isErr);
 }
 
-async function startSwitch(branch) {
+// startOp is the transport client, op-agnostic: POST /api/op, then follow
+// the SSE stream. state.op.kind lets done-handling react per op (a commit
+// clears the message box; a switch must not eat a draft).
+async function startOp(body, label) {
   if (state.op) return; // one live op; the server would 409 anyway
   let resp;
   try {
-    resp = await postJSON("/api/op", { op: "switch", branch });
+    resp = await postJSON("/api/op", body);
   } catch (e) {
     opLine("error: " + (e.message || e), true);
     return;
   }
-  opLine("⟳ switching " + branch + "…");
+  opLine("⟳ " + label + "…");
   const es = new EventSource("/api/op/" + resp.op_id + "/events");
-  state.op = { id: resp.op_id, es };
+  state.op = { id: resp.op_id, es, kind: body.op };
   es.onmessage = (m) => handleOpEvent(JSON.parse(m.data));
   es.onerror = () => {}; // transient; done handling closes the source
+}
+
+function startSwitch(branch) {
+  startOp({ op: "switch", branch }, "switching " + branch);
+}
+
+function doCommit() {
+  const message = $("commit-msg").value;
+  if (!message.trim()) return;
+  startOp({ op: "commit", message }, "committing");
 }
 
 function handleOpEvent(ev) {
@@ -115,12 +128,14 @@ function handleOpEvent(ev) {
   } else if (ev.type === "decision") {
     showModal(ev);
   } else if (ev.type === "done") {
+    const kind = state.op && state.op.kind;
     // done is terminal: close the source (EventSource would auto-reconnect
     // and replay the history otherwise) and any open modal (covers
     // notify-only decisions whose op already returned).
     if (state.op) state.op.es.close();
     state.op = null;
     hideModal();
+    if (ev.ok && kind === "commit") $("commit-msg").value = "";
     if (ev.ok) opLine(ev.summary || "done");
     else opLine("error: " + (ev.error || "operation failed"), true);
     if (ev.changed) refreshAfterOp();
@@ -378,6 +393,7 @@ const SECTION_LABELS = { staged: "Staged", changes: "Changes", untracked: "Untra
 function renderFiles() {
   if (state.filesMode !== "status") {
     $("files-actions").classList.add("hidden");
+    $("commit-box").classList.add("hidden");
     $("files-list").innerHTML = state.files
       .map(
         (f, i) =>
@@ -388,6 +404,8 @@ function renderFiles() {
     return;
   }
   $("files-actions").classList.remove("hidden");
+  $("commit-box").classList.remove("hidden");
+  $("commit-btn").disabled = !(state.wt && state.wt.counts.staged > 0) || !!state.op;
   let html = "";
   let lastSection = "";
   state.statusEntries.forEach((f, i) => {
@@ -457,6 +475,7 @@ async function stage(body) {
     state.cursor = 0;
     $("files-list").innerHTML = "";
     $("files-actions").classList.add("hidden");
+    $("commit-box").classList.add("hidden");
     $("files-header").textContent = "";
     $("diff-header").textContent = "";
     $("diff-body").innerHTML = "";
@@ -575,6 +594,15 @@ function moveCursor(delta) {
 }
 
 document.addEventListener("keydown", (e) => {
+  // Form fields own the keyboard: without this, typing a commit message
+  // triggers j/k navigation and s/u staging. Ctrl/Cmd+Enter commits.
+  if (e.target.closest && e.target.closest("input,textarea")) {
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && e.target.id === "commit-msg") {
+      e.preventDefault();
+      doCommit();
+    }
+    return;
+  }
   if (!$("modal").classList.contains("hidden")) {
     if (e.key === "Escape") {
       const opts = JSON.parse($("modal").dataset.opts || "[]");
@@ -638,6 +666,7 @@ $("unstage-all").addEventListener("click", () => {
   const paths = state.statusEntries.filter((f) => f.section === "staged").map((f) => f.path);
   if (paths.length) stage({ paths, unstage: true }); // engine.Stage{All} can't unstage
 });
+$("commit-btn").addEventListener("click", doCommit);
 window.addEventListener("resize", () => {
   renderCommits();
   if (state.lastDiff) renderDiff(state.lastDiff); // unified↔side-by-side is width-dependent

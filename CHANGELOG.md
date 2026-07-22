@@ -9,6 +9,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- `gg web`: commit from the working-tree screen — a message box + commit
+  button (Ctrl+Enter) on the status pane, wired as the op transport's second
+  operation (`op:"commit"` → `engine.Commit`; empty message → 400). Typing
+  in form fields no longer triggers the j/k/s/u keyboard shortcuts.
 - `gg web` gains the op transport — the streaming spine for web write
   operations: `POST /api/op` starts an engine op (`switch` →
   `engine.SmartSwitch` first), `GET /api/op/{id}/events` streams its
