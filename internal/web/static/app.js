@@ -120,14 +120,14 @@ function rowHTML(row, i) {
   const when = new Date(row.time * 1000).toISOString().slice(0, 10);
   return (
     `<div class="crow${sel}" data-i="${i}">` +
-    `<span class="graph">${graphHTML(row)}</span>` +
+    `<span class="graph">${graphHTML(row, i - wtCount())}</span>` +
     `<span class="subj">${refs}${esc(row.subject)}</span>` +
     `<span class="meta">${esc(row.author)} · ${row.short} · ${when}</span></div>`
   );
 }
 
-function graphHTML(row) {
-  if (state.graphMode === "svg") return graphSVG(row);
+function graphHTML(row, feedIdx) {
+  if (state.graphMode === "svg") return graphSVG(row, feedIdx);
   let html = "";
   let col = 0;
   for (const ch of row.cells || "") {
@@ -170,14 +170,27 @@ const GLYPH_PATHS = {
   "┼": (x) => `M${x + HALF},0 V${ROW_H} M${x},${MID} H${x + CELL_W}`,
 };
 
-function graphSVG(row) {
+// Node-cell continuity: Lay emits a bare ● on a commit's own row — in a
+// terminal the lane's continuation is implied by cell adjacency, but at
+// 22px web rows the gap shows, so the node draws up/down stubs whenever the
+// neighboring feed row's SAME column carries ink touching the shared edge.
+const TOP_TOUCH = new Set(["│", "╰", "╯", "┴", "┼", "●"]); // ink touches its row's top edge
+const BOT_TOUCH = new Set(["│", "╭", "╮", "┬", "┼", "●"]); // ink touches its row's bottom edge
+
+function graphSVG(row, feedIdx) {
   const cells = runes(row.cells || "");
+  const prev = runes((state.rows[feedIdx - 1] || {}).cells || "");
+  const next = runes((state.rows[feedIdx + 1] || {}).cells || "");
   const w = cells.length * CELL_W;
   let parts = `<svg width="${w}" height="${ROW_H}" viewBox="0 0 ${w} ${ROW_H}">`;
   cells.forEach((ch, col) => {
     const x = col * CELL_W;
     const color = laneColor(col >> 1);
     if (ch === "●") {
+      if (BOT_TOUCH.has(prev[col]))
+        parts += `<path d="M${x + HALF},0 V${MID}" stroke="${color}" stroke-width="2" fill="none"/>`;
+      if (TOP_TOUCH.has(next[col]))
+        parts += `<path d="M${x + HALF},${MID} V${ROW_H}" stroke="${color}" stroke-width="2" fill="none"/>`;
       parts += `<circle cx="${x + HALF}" cy="${MID}" r="4" fill="${color}"/>`;
     } else if (GLYPH_PATHS[ch]) {
       parts += `<path d="${GLYPH_PATHS[ch](x)}" stroke="${color}" stroke-width="2" fill="none" stroke-linecap="round"/>`;
@@ -206,6 +219,14 @@ function maybeLoadMore(lastVisible) {
 
 // --- files + diff panes ---
 
+// setSolo(true) gives the commit list the whole width (nothing opened);
+// setSolo(false) restores the three-pane split. Width changes shift the
+// virtualized window, so re-render after toggling.
+function setSolo(v) {
+  $("panes").classList.toggle("solo", v);
+  renderCommits();
+}
+
 async function openCommit(i) {
   if (state.wt && i === 0) return openWorkingTree(i);
   state.cursor = i;
@@ -217,6 +238,7 @@ async function openCommit(i) {
   state.fileSha = row.hash;
   state.pane = "files";
   state.filesMode = "commit";
+  setSolo(false);
   $("files-header").textContent = row.short + " " + row.subject;
   renderFiles();
   focusPane();
@@ -234,6 +256,7 @@ async function openWorkingTree(i) {
   state.filesMode = "status";
   state.fileCursor = 0;
   state.pane = "files";
+  setSolo(false);
   $("files-header").textContent = "Working tree";
   renderFiles();
   focusPane();
@@ -317,14 +340,17 @@ async function stage(body) {
     return;
   }
   if (!state.wt) {
-    // tree went clean: leave status mode, drop the synthetic row
+    // tree went clean: leave status mode, drop the synthetic row, and give
+    // the commit list its full width back (nothing is on display anymore)
     state.filesMode = "commit";
     state.pane = "commits";
     state.cursor = 0;
     $("files-list").innerHTML = "";
     $("files-actions").classList.add("hidden");
     $("files-header").textContent = "";
-    renderCommits();
+    $("diff-header").textContent = "";
+    $("diff-body").innerHTML = "";
+    setSolo(true);
     focusPane();
     return;
   }
