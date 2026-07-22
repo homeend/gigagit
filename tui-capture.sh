@@ -151,6 +151,11 @@ if [[ -n "$KEYSCRIPT" ]]; then
     step="${step#"${step%%[![:space:]]*}"}"   # ltrim
     step="${step%"${step##*[![:space:]]}"}"   # rtrim
     [[ -z "$step" ]] && continue
+    # Skip comment lines. The recorder writes every comment as "# <text>"
+    # (hash + space), so match that exactly — a lone "#" step is a real
+    # literal '#' keystroke (gg binds # to goto-commit) and must NOT be
+    # skipped, or that keystroke would silently vanish on replay.
+    [[ "$step" == "# "* ]] && continue
     idx=$((idx + 1))
     if [[ "$step" == *:* ]]; then
       label="$(sanitize "${step%%:*}")"
