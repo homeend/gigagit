@@ -25,6 +25,7 @@ type settingsPopup struct {
 	picker            bool      // false = menu screen, true = agent picker
 	pickerFromPalette bool      // true = picker opened from the command palette → esc returns to base, not the menu
 	errorsView        bool      // true = session-errors viewer screen
+	errAutoMax        bool      // maximized was set BY the errors view (auto width) → esc restores it
 	ratesView         bool      // true = refresh-rates viewer screen
 	ratesSel          int       // selected row in the Refresh rates editor
 	ratesEditing      bool      // an interval field is open
@@ -350,6 +351,12 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case tea.KeyEsc:
 		if p.errorsView {
 			p.errorsView = false
+			// Undo only an errors-view auto-maximize — the small menu must not
+			// inherit a near-fullscreen box it never asked for.
+			if p.errAutoMax {
+				p.maximized = false
+				p.errAutoMax = false
+			}
 			return m, nil
 		}
 		if p.ratesView && p.ratesEditing {
@@ -458,6 +465,26 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				p.errorsView = true
 				p.sel = 0
 				p.hscroll = 0
+				// Auto width: git stderr rows are long, and even the wide box
+				// truncates them. Open maximized when the widest row demands it
+				// (the pair-op autoMaxForContent precedent — decided once here,
+				// never fighting a later ctrl+t), but only when the maximize is
+				// ours to grant: a pre-existing manual ctrl+t stays the user's.
+				if !p.maximized {
+					content := 0
+					for _, e := range observ.SessionFailures() {
+						l := lipgloss.Width(fmt.Sprintf("> %s  %s — %s",
+							e.Time.Format("15:04:05"), e.Source, e.Detail))
+						if l > content {
+							content = l
+						}
+					}
+					w, _ := m.overlayDims()
+					if autoMaxForContentAt(w, popupWideInnerWidth(w), content) {
+						p.maximized = true
+						p.errAutoMax = true
+					}
+				}
 				return m, nil
 			}
 			return m, nil

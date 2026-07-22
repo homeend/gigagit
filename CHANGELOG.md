@@ -9,6 +9,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- **Session-errors viewer sizes itself to its content.** Settings →
+  "Session errors" already rendered wider than a standard popup, but long
+  git stderr rows still truncated until a manual `ctrl+t`. Entering the
+  viewer now opens it maximized automatically when its widest row wouldn't
+  fit even the wide box (the pair-op popup's auto-maximize precedent,
+  decided once at entry so it never fights a later `ctrl+t`), and `esc`
+  back to the menu restores the normal size — unless the maximize was the
+  user's own earlier `ctrl+t`, which is left alone.
 - **Kimi Code joins the known-agent roster.** `gg init` now detects Kimi
   Code (project `.kimi-code/`, global `~/.kimi-code/`) and installs the
   using-gg skill as `skills/using-gg/SKILL.md` under either — Kimi discovers

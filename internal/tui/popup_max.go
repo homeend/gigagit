@@ -57,7 +57,16 @@ func popupResolveRowCap(maximized bool, termH, normal int) int {
 // manual ctrl+t toggle. This is how "a popup whose essential content would be
 // clipped opens full-size by default".
 func autoMaxForContent(w, contentW int) bool {
-	normal := popupTextWidth(popupInnerWidth(w))
+	return autoMaxForContentAt(w, popupInnerWidth(w), contentW)
+}
+
+// autoMaxForContentAt is autoMaxForContent for a popup (or sub-view) whose
+// normal unmaximized width is not the standard popupInnerWidth — e.g. the
+// Settings errors viewer, which already renders at popupWideInnerWidth. The
+// baseline the content must exceed is that screen's own normal width; the
+// same tiny-terminal guard applies (maximizing must actually buy room).
+func autoMaxForContentAt(w, normalInner, contentW int) bool {
+	normal := popupTextWidth(normalInner)
 	full := popupTextWidth(popupFullInnerWidth(w))
 	return contentW > normal && full > normal
 }

@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/homeend/gigagit/internal/observ"
 )
 
@@ -115,6 +117,75 @@ func TestSettingsErrorsViewerWrapRevealsDetail(t *testing.T) {
 	}
 	if out := m.View(); !strings.Contains(out, tail) {
 		t.Fatalf("wrap mode should reveal the detail tail on a continuation line:\n%s", out)
+	}
+}
+
+// openErrorsView sizes the terminal (auto-maximize needs full > wide to have
+// room to buy), opens Settings, and enters the Session errors view.
+func openErrorsView(t *testing.T, m Model) Model {
+	t.Helper()
+	u, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m = u.(Model)
+	u, _ = m.Update(keyMsg(","))
+	m = u.(Model)
+	layerOf[*settingsPopup](m).menuSel = errorsMenuIndex(t)
+	u, _ = m.Update(keyMsg("enter"))
+	return u.(Model)
+}
+
+// TestSettingsErrorsAutoMaximizesForLongRows: a failure row too wide for even
+// the wide errors box opens the viewer maximized (the pair-op
+// autoMaxForContent precedent — decided once at entry), and esc restores the
+// menu's normal size instead of leaving the small menu near-fullscreen.
+func TestSettingsErrorsAutoMaximizesForLongRows(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	m, _ := settingsModel(t)
+	observ.ResetFailures()
+	observ.NoteFailure("op Push",
+		errors.New("git push failed (exit 128): fatal: "+strings.Repeat("wide-token-", 20)))
+	m = openErrorsView(t, m)
+	if p := layerOf[*settingsPopup](m); !p.maximized {
+		t.Fatal("a row wider than the wide box should open the errors viewer maximized")
+	}
+	u, _ := m.Update(keyMsg("esc"))
+	m = u.(Model)
+	if p := layerOf[*settingsPopup](m); p.maximized {
+		t.Fatal("esc after an auto-maximize should restore the menu's normal size")
+	}
+}
+
+// Short rows fit the wide box — the viewer must NOT open maximized.
+func TestSettingsErrorsStaysWideForShortRows(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	m, _ := settingsModel(t)
+	observ.ResetFailures()
+	observ.NoteFailure("op X", errors.New("short"))
+	m = openErrorsView(t, m)
+	if p := layerOf[*settingsPopup](m); p.maximized {
+		t.Fatal("short rows should keep the errors viewer at its wide (non-maximized) width")
+	}
+}
+
+// A maximize the user chose BEFORE entering the errors view is theirs — esc
+// out of the viewer must not shrink it.
+func TestSettingsErrorsEscKeepsManualMaximize(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	m, _ := settingsModel(t)
+	observ.ResetFailures()
+	observ.NoteFailure("op X", errors.New("short"))
+	u, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m = u.(Model)
+	u, _ = m.Update(keyMsg(","))
+	m = u.(Model)
+	u, _ = m.Update(keyMsg("ctrl+t"))
+	m = u.(Model)
+	layerOf[*settingsPopup](m).menuSel = errorsMenuIndex(t)
+	u, _ = m.Update(keyMsg("enter"))
+	m = u.(Model)
+	u, _ = m.Update(keyMsg("esc"))
+	m = u.(Model)
+	if p := layerOf[*settingsPopup](m); !p.maximized {
+		t.Fatal("esc out of the errors view must not undo a manual ctrl+t maximize")
 	}
 }
 
