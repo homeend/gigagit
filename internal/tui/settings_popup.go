@@ -867,8 +867,8 @@ func (p *settingsPopup) box(m Model) string {
 			retentionCell = p.opsHistField.View(true)
 		}
 		rows := []string{
-			padCell(i18n.T("Retention"), labelW) + retentionCell,
-			padCell(i18n.T("Recording"), labelW) + onOff(!m.cfg.Versions.Disabled),
+			padCell(i18n.T("Retention"), labelW) + " " + retentionCell,
+			padCell(i18n.T("Recording"), labelW) + " " + onOff(!m.cfg.Versions.Disabled),
 		}
 		for i, row := range rows {
 			prefix := "  "
