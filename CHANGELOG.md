@@ -9,6 +9,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 ### Added
+- `gg --record <file>` — record a TUI session's keystrokes to a file in the
+  `tui-capture.sh` keyscript format (one step per key, terminating quit
+  excluded, a `#` header naming the repo), so a human can author a scenario
+  for headless replay + screen capture.
 - **Session-errors viewer sizes itself to its content.** Settings →
   "Session errors" already rendered wider than a standard popup, but long
   git stderr rows still truncated until a manual `ctrl+t`. Entering the

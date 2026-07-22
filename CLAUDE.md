@@ -117,6 +117,11 @@ a tmux PTY and writes a plain-text snapshot per screen; keystrokes run against
 a live repo, so point `--repo` at a scratch clone for anything beyond
 navigation. See the `driving-tui-headless` skill.
 
+To author a scenario for that harness, `gg --record <file>` dumps a live TUI
+session's keystrokes to `<file>` in the same keyscript format (quit excluded);
+replay it with `tui-capture.sh` (pass the recording file as the positional —
+a file-mode replay, one keystroke per line, no `;`/`label:` splitting).
+
 ## Development workflow
 
 Features follow: **brainstorm → spec → plan → subagent-driven execution → human merges**

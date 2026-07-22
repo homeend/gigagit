@@ -145,12 +145,31 @@ write_snap "$idx" "init"
 
 # walk the keyscript: steps separated by ';' or newline, each optionally
 # "label: tokens". Send keys, wait for the screen to settle, snapshot.
-if [[ -n "$KEYSCRIPT" ]]; then
+if [[ -n "$KEYSCRIPT" && -f "$KEYSCRIPT" ]]; then
+  # File mode: a recording/scenario FILE — one token per line, NO ';' or
+  # 'label:' syntax (a recorded ':' or ';' keystroke is a literal, not a
+  # separator). '# ' comment lines are skipped.
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line#"${line%%[![:space:]]*}"}"   # ltrim
+    line="${line%"${line##*[![:space:]]}"}"    # rtrim
+    [[ -z "$line" ]] && continue
+    [[ "$line" == "# "* ]] && continue
+    idx=$((idx + 1))
+    send_tokens "$line"
+    settle 30 || echo "tui-capture: step $idx did not settle (captured anyway)" >&2
+    write_snap "$idx" "step$idx"
+  done < "$KEYSCRIPT"
+elif [[ -n "$KEYSCRIPT" ]]; then
   script="${KEYSCRIPT//;/$'\n'}"
   while IFS= read -r step; do
     step="${step#"${step%%[![:space:]]*}"}"   # ltrim
     step="${step%"${step##*[![:space:]]}"}"   # rtrim
     [[ -z "$step" ]] && continue
+    # Skip comment lines. The recorder writes every comment as "# <text>"
+    # (hash + space), so match that exactly — a lone "#" step is a real
+    # literal '#' keystroke (gg binds # to goto-commit) and must NOT be
+    # skipped, or that keystroke would silently vanish on replay.
+    [[ "$step" == "# "* ]] && continue
     idx=$((idx + 1))
     if [[ "$step" == *:* ]]; then
       label="$(sanitize "${step%%:*}")"
