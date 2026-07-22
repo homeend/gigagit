@@ -1244,7 +1244,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "p":
 			if !m.running && !m.loading {
-				return m.confirmOp(m.pullForFocus(), i18n.T("Pull? This may rewrite the working tree."))
+				op := m.pullForFocus()
+				return m.confirmOp(op, m.pullPrompt(op))
 			}
 		case "f":
 			if m.canFetchRemotes() {
@@ -2002,9 +2003,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if len(unpushed) == 0 {
 			return m.startOp(m.pushCurrentOp()) // nothing to offer (or timed out) → just push
 		}
-		prompt := i18n.T("Branch tip has tags %s not on the remote. Push too?", strings.Join(unpushed, ", "))
+		prompt := i18n.T("Push %s: branch tip has tags %s not on the remote. Push too?", m.status.Branch, strings.Join(unpushed, ", "))
 		if len(unpushed) == 1 {
-			prompt = i18n.T("Branch tip has tag %s not on the remote. Push too?", unpushed[0])
+			prompt = i18n.T("Push %s: branch tip has tag %s not on the remote. Push too?", m.status.Branch, unpushed[0])
 		}
 		m.modal = &decisionState{
 			req: engine.DecisionRequest{

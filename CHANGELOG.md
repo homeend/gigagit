@@ -219,6 +219,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   panels and the commit feed's decorations.
 
 ### Changed
+- **Pull/push dialogs name the branch they act on.** The `p` slow-op confirm
+  now reads "Pull main? This may rewrite the working tree." (or "Pull
+  feat/x (stay here)?" for a Branches-panel background pull) instead of the
+  branch-less "Pull?", and the `P` unpushed-tip-tags modal now leads with
+  the branch being pushed ("Push main: branch tip has tag v1.2 not on the
+  remote. Push too?"). A detached HEAD falls back to the old branch-less
+  pull wording. New keys translated in all four bundles.
 - **Multilanguage TUI (stage 5): operation status, progress, and prompts,
   localized.** The last English-only surface inside the TUI — the busy line
   while an operation runs, the after-op status summary, and the decision-

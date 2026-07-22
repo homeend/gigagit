@@ -22,6 +22,20 @@ func (m Model) pullForFocus() engine.SmartPull {
 	return engine.SmartPull{Intent: engine.PullAndStay}
 }
 
+// pullPrompt is the slow-op confirm prompt for the given pull, naming the
+// branch it targets: the background-pull target when set, else the current
+// branch. A detached HEAD (git status v2 reports the literal "(detached)") and
+// an unknown branch fall back to the branch-less wording.
+func (m Model) pullPrompt(op engine.SmartPull) string {
+	if op.Branch != "" {
+		return i18n.T("Pull %s (stay here)?", op.Branch)
+	}
+	if b := m.status.Branch; b != "" && b != "(detached)" {
+		return i18n.T("Pull %s? This may rewrite the working tree.", b)
+	}
+	return i18n.T("Pull? This may rewrite the working tree.")
+}
+
 // backgroundPullRow is the Branches-panel `.`-menu action "Pull <branch> (stay
 // here)", offered only for a non-current branch (the current branch uses plain
 // pull). Runs the same background SmartPull as the context-aware `p` key.
