@@ -48,16 +48,23 @@ after the previous screen settles:
 
 Example — open the action menu, close it, focus commits, drill in:
 ```bash
-./tui-capture.sh "menu: . ; close: esc ; commits: tab ; drill: enter"
+./tui-capture.sh "menu: . ; close: esc ; commits: right ; drill: enter"
 ```
+From the default Branches focus, `right` moves focus directly to the Commits
+panel (`tab` instead cycles the left-column tabs to Files); `enter` on the
+selected commit then opens its Files/diff view.
+
 A literal text token has no spaces (spaces separate tokens); multi-word
-field input isn't supported — send the words as separate tokens.
+field input isn't supported — send the words as separate tokens. Where a key
+lands depends on current focus/cursor, so confirm any keyscript by reading
+its snapshots rather than assuming a label is accurate.
 
 ## How settling works (and its one caveat)
 
 After each step the script polls `capture-pane` until the frame is unchanged
-between two polls (or a ceiling: ~7s for the first screen, ~3s per step).
-For the comparison it **masks the bottom two lines** — gg's footer + status
+between two polls, non-blank, and past gg's `⏳`/`(loading…)` placeholders
+(or a ceiling: ~7s for the first screen, ~3s per step). For the unchanged
+comparison it **masks the bottom two lines** — gg's footer + status
 line hold an animating `⟳ remote tags…` hint that never stops, so without the
 mask nothing would ever settle. The saved snapshot is still the FULL frame.
 If a step logs `did not settle (captured anyway)`, an element kept animating;
@@ -84,6 +91,6 @@ create repo state.
 
 ## Gotchas
 
-- Requires `tmux` and `go` on PATH.
+- Requires `tmux` on PATH (and `go`, unless you pass a prebuilt `--gg`).
 - One tmux session per run (unique name); concurrent runs don't collide.
 - The built `gg` binary and the snapshot dir are temporary — never commit them.
