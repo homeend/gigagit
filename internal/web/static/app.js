@@ -18,6 +18,9 @@ const state = {
   filesMode: "commit", // commit | status
   statusEntries: [],
   branches: [],
+  worktrees: [],
+  tags: [],
+  tagsTruncated: false,
   sidebar: true,
   op: null, // {id, es: EventSource} while an operation is live
   lastDiff: null,
@@ -67,9 +70,18 @@ async function fetchStatus() {
 }
 
 async function fetchBranches() {
-  const body = await getJSON("/api/branches");
-  state.branches = body.branches || [];
+  const [b, w, tg] = await Promise.all([
+    getJSON("/api/branches"),
+    getJSON("/api/worktrees").catch(() => ({ worktrees: [] })),
+    getJSON("/api/tags").catch(() => ({ tags: [], truncated: false })),
+  ]);
+  state.branches = b.branches || [];
+  state.worktrees = w.worktrees || [];
+  state.tags = tg.tags || [];
+  state.tagsTruncated = !!tg.truncated;
   renderBranches();
+  renderWorktrees();
+  renderTags();
 }
 
 function renderBranches() {
@@ -83,6 +95,30 @@ function renderBranches() {
       );
     })
     .join("");
+}
+
+function renderWorktrees() {
+  $("worktrees-list").innerHTML = state.worktrees
+    .map((w) => {
+      const label = w.bare ? "(bare)" : w.detached ? "(detached)" : w.branch || "(?)";
+      const base = w.path.split("/").pop();
+      const cur = state.worktree && w.path === state.worktree ? " cur" : "";
+      return `<li class="${cur.trim()}" title="${esc(w.path)}">${cur ? "● " : ""}${esc(label)}<span class="wpath">${esc(base)}</span></li>`;
+    })
+    .join("");
+}
+
+function renderTags() {
+  let html = state.tags
+    .map(
+      (t) =>
+        `<li data-h="${esc(t.target)}" data-n="${esc(t.name)}">${esc(t.name)}` +
+        (t.subject ? `<span class="tsub">${esc(t.subject)}</span>` : "") +
+        `</li>`
+    )
+    .join("");
+  if (state.tagsTruncated) html += `<li class="more">… more (capped at 100)</li>`;
+  $("tags-list").innerHTML = html;
 }
 
 // --- op transport client ---
@@ -166,6 +202,11 @@ $("branches-list").addEventListener("click", (e) => {
   const li = e.target.closest("li");
   if (!li || li.classList.contains("head")) return;
   startSwitch(li.dataset.n);
+});
+$("tags-list").addEventListener("click", (e) => {
+  const li = e.target.closest("li");
+  if (!li || !li.dataset.h) return;
+  openCommitByHash(li.dataset.h, "🏷 " + li.dataset.n);
 });
 
 // A partially-staged file appears twice: once under Staged (unstage
@@ -350,6 +391,22 @@ async function openCommit(i) {
   state.filesMode = "commit";
   setLayout("detail");
   $("files-header").textContent = row.short + " " + row.subject;
+  renderFiles();
+  focusPane();
+  if (state.files.length) openFile(0);
+}
+
+// openCommitByHash enters commit detail without a feed row — the path for
+// sidebar tags (and future non-feed jump-ins).
+async function openCommitByHash(hash, title) {
+  const body = await getJSON("/api/commit/" + hash);
+  state.files = body.files || [];
+  state.fileCursor = 0;
+  state.fileSha = hash;
+  state.pane = "files";
+  state.filesMode = "commit";
+  setLayout("detail");
+  $("files-header").textContent = title;
   renderFiles();
   focusPane();
   if (state.files.length) openFile(0);
@@ -649,6 +706,7 @@ async function loadRepo() {
   $("repo-branch").textContent = repo.branch;
   $("repo-worktree").textContent = repo.worktree;
   document.title = "gg web — " + repo.name;
+  state.worktree = repo.worktree;
 }
 
 async function boot() {

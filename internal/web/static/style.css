@@ -100,3 +100,11 @@ mark.r { background: var(--span-add); color: inherit; }
 #modal-options { display: flex; gap: 10px; justify-content: flex-end; }
 #modal-options button { background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 4px; padding: 4px 14px; font: inherit; cursor: pointer; }
 #modal-options button:hover { border-color: var(--accent); }
+.side-header { padding: 6px 8px 2px; color: var(--dim); border-top: 1px solid var(--border); margin-top: 6px; }
+#worktrees-list, #tags-list { list-style: none; }
+#worktrees-list li, #tags-list li { padding: 2px 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#worktrees-list li .wpath, #tags-list li .tsub { color: var(--dim); font-size: 11px; padding-left: 6px; }
+#worktrees-list li.cur { color: var(--accent); }
+#tags-list li { cursor: pointer; }
+#tags-list li:hover { background: var(--bg-alt); }
+#tags-list li.more { color: var(--dim); cursor: default; }
