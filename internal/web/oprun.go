@@ -200,6 +200,7 @@ func (r *opRun) decide(option string) error {
 	}
 	select {
 	case r.answer <- option:
+		r.pending = nil // consumed: a second decide must 409, and no stale answer can outlive its fork
 		return nil
 	default:
 		return errNotWaiting // answer already queued

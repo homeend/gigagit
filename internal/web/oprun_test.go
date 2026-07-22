@@ -119,6 +119,11 @@ func TestOpRunParkedDecide(t *testing.T) {
 	if err := run.decide("abort"); err != nil {
 		t.Fatalf("decide abort: %v", err)
 	}
+	// stale-answer guard: the first decide consumed the pending decision —
+	// a second decide must be rejected, never queued for a future fork.
+	if err := run.decide("abort"); err == nil {
+		t.Fatal("second decide accepted — stale answer would auto-resolve a later fork")
+	}
 	events := drainRun(t, run, 15*time.Second)
 	dec, _ := findEvent(events, "decision")
 	if dec == nil || dec["id"] != "delete-branch" {
