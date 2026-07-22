@@ -350,6 +350,7 @@ async function stage(body) {
     $("files-header").textContent = "";
     $("diff-header").textContent = "";
     $("diff-body").innerHTML = "";
+    state.lastDiff = null; // a resize must not resurrect the cleared diff
     setSolo(true);
     focusPane();
     return;
@@ -373,6 +374,7 @@ function markSpans(text, spans, side) {
 }
 
 function renderDiff(d) {
+  state.lastDiff = d; // re-rendered on window resize (layout is width-dependent)
   if (d.binary) {
     $("diff-body").innerHTML = `<div class="notice">binary file</div>`;
     return;
@@ -398,6 +400,28 @@ function renderDiff(d) {
         `<tr class="${r.kind}">` +
         `<td class="no ${side}">${no || ""}</td>` +
         `<td class="side ${side}">${markSpans(text, spans, side)}</td></tr>`;
+    }
+  } else if ($("diff-pane").clientWidth < 950) {
+    // Unified: below ~950px each side-by-side half is too narrow to read
+    // (heavy wrapping, context text duplicated on both sides). One
+    // full-width column; a changed pair becomes a del row then an add row,
+    // keeping the intraline marks of each side.
+    for (const r of rows) {
+      if (r.kind === "same") {
+        html +=
+          `<tr class="same"><td class="no l">${r.left_no || ""}</td>` +
+          `<td class="no r">${r.right_no || ""}</td>` +
+          `<td class="side">${esc(r.right)}</td></tr>`;
+      } else {
+        if (r.kind !== "add")
+          html +=
+            `<tr class="del"><td class="no l">${r.left_no || ""}</td><td class="no r"></td>` +
+            `<td class="side l">${markSpans(r.left, r.left_spans, "l")}</td></tr>`;
+        if (r.kind !== "del")
+          html +=
+            `<tr class="add"><td class="no l"></td><td class="no r">${r.right_no || ""}</td>` +
+            `<td class="side r">${markSpans(r.right, r.right_spans, "r")}</td></tr>`;
+      }
     }
   } else {
     for (const r of rows) {
@@ -492,7 +516,10 @@ $("unstage-all").addEventListener("click", () => {
   const paths = state.statusEntries.filter((f) => f.section === "staged").map((f) => f.path);
   if (paths.length) stage({ paths, unstage: true }); // engine.Stage{All} can't unstage
 });
-window.addEventListener("resize", renderCommits);
+window.addEventListener("resize", () => {
+  renderCommits();
+  if (state.lastDiff) renderDiff(state.lastDiff); // unified↔side-by-side is width-dependent
+});
 
 async function boot() {
   const repo = await getJSON("/api/repo");
