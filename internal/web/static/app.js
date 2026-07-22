@@ -9,7 +9,10 @@ const state = {
   fileCursor: 0,
   fileSha: null,
   pane: "commits", // commits | files
-  graphMode: "text", // text | svg (svg wired in the graph-upgrade task)
+  // svg is the default: browser rows (22px) are taller than the 13px font
+  // box, so text-mode │ glyphs leave vertical gaps and lanes look broken —
+  // SVG strokes span the full row height. g toggles back to text.
+  graphMode: "svg", // svg | text
   wt: null, // /api/status payload while the tree is dirty, else null
   filesMode: "commit", // commit | status
   statusEntries: [],
