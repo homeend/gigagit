@@ -8,6 +8,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- `gg web`: clicking a branch no longer switches — a left-click jumps the
+  commit list to the branch tip (the TUI's enter-on-branch behavior) and
+  mutations moved behind a right-click context menu (go to tip / switch).
+  A stray click can no longer start an operation.
+
 ### Added
 - `gg web`: commit from the working-tree screen — a message box + commit
   button (Ctrl+Enter) on the status pane, wired as the op transport's second
