@@ -15,10 +15,11 @@ type opStartRequest struct {
 	Branch  string `json:"branch"`
 	Message string `json:"message"`
 	Tag     string `json:"tag"`
+	Path    string `json:"path"`
 }
 
 // handleOpStart begins an operation and returns 202 {op_id}. Ops wired so
-// far: switch, commit, pull, push, delete-branch, delete-tag; the switch
+// far: switch, commit, pull, push, delete-branch, delete-tag, remove-worktree; the switch
 // statement is where future ops land.
 func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 	var req opStartRequest
@@ -74,6 +75,33 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 		}
 		// Decision-free op: the client shows its own confirm before starting.
 		op = engine.DeleteTag{Name: req.Tag}
+	case "remove-worktree":
+		if req.Path == "" {
+			writeErr(w, http.StatusBadRequest, errors.New("path required"))
+			return
+		}
+		// The client-sent path is an identifier, not an argument: resolve it
+		// against the server's own worktree list so only server-owned values
+		// reach git argv (worktree paths legitimately contain characters
+		// isGitArgSafe would reject). The engine still guards the current and
+		// main worktree.
+		wts, werr := s.svc.Worktrees(r.Context())
+		if werr != nil {
+			writeErr(w, http.StatusInternalServerError, werr)
+			return
+		}
+		found := false
+		for _, wt := range wts {
+			if wt.Path == req.Path {
+				op = engine.RemoveWorktree{Path: wt.Path, Branch: wt.Branch}
+				found = true
+				break
+			}
+		}
+		if !found {
+			writeErr(w, http.StatusNotFound, errors.New("unknown worktree"))
+			return
+		}
 	default:
 		writeErr(w, http.StatusBadRequest, fmt.Errorf("unknown op %q", req.Op))
 		return
