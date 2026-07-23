@@ -8,6 +8,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- `gg web`: push. A `⇫ push` header button (`P`) pushes the current branch to
+  origin (`engine.Push`, set-upstream). The engine's full rejection recovery
+  rides the existing modal: a non-fast-forward rejection offers
+  rebase / force / abort, and force chains a force-with-lease-first confirm.
+  Force is never settable from the wire; detached HEAD is refused up front.
+
 - `gg web` fails fast at startup (before binding a port or opening the
   browser) when the served directory isn't a usable repository — including
   a friendly hint for the WSL↔Windows case where a linked worktree's .git
