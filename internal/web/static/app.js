@@ -222,10 +222,69 @@ $("modal-options").addEventListener("click", (e) => {
   const btn = e.target.closest("button");
   if (btn) answerModal(btn.dataset.o);
 });
+// Left-click on a branch is a READ: jump the commit list to its tip (the
+// TUI's enter-on-branch behavior). Mutations (switch) live behind the
+// right-click menu — a single stray click must never start an operation.
+async function gotoBranchTip(b) {
+  // /api/branches carries a SHORT hash (%(objectname:short)); feed rows a
+  // full one — match by prefix, never equality.
+  let disp = () => state.rows.findIndex((r) => r.hash.startsWith(b.hash));
+  let idx = disp();
+  let guard = 0;
+  while (idx < 0 && state.canLoadMore && guard < 20) {
+    await loadCommits(true); // page deeper — an all-branches feed keeps tips near the top
+    idx = disp();
+    guard++;
+  }
+  if (idx < 0) {
+    opLine("tip of " + b.name + " not in loaded history", true);
+    return;
+  }
+  state.cursor = idx + wtCount();
+  state.pane = "commits";
+  moveCursor(0); // clamp + scroll into view + render
+  focusPane();
+}
+
+function hideCtxMenu() {
+  $("ctx-menu").classList.add("hidden");
+}
+
+// showBranchMenu renders the right-click menu: safe action first, the
+// mutating switch below it (absent on the HEAD row).
+function showBranchMenu(b, x, y) {
+  const items = [{ label: "go to tip", act: () => gotoBranchTip(b) }];
+  if (!b.is_head) items.push({ label: "switch to " + b.name, act: () => startSwitch(b.name) });
+  const menu = $("ctx-menu");
+  menu._items = items;
+  menu.innerHTML = items.map((it, i) => `<button data-i="${i}">${esc(it.label)}</button>`).join("");
+  menu.style.left = Math.min(x, window.innerWidth - 200) + "px";
+  menu.style.top = Math.min(y, window.innerHeight - 80) + "px";
+  menu.classList.remove("hidden");
+}
+
+$("ctx-menu").addEventListener("click", (e) => {
+  const btn = e.target.closest("button");
+  const menu = $("ctx-menu");
+  if (btn && menu._items) menu._items[Number(btn.dataset.i)].act();
+  hideCtxMenu();
+});
+document.addEventListener("click", (e) => {
+  if (!e.target.closest("#ctx-menu")) hideCtxMenu();
+});
+
 $("branches-list").addEventListener("click", (e) => {
   const li = e.target.closest("li");
-  if (!li || li.classList.contains("head")) return;
-  startSwitch(li.dataset.n);
+  if (!li || !li.dataset.n) return;
+  const b = state.branches.find((x) => x.name === li.dataset.n);
+  if (b) gotoBranchTip(b);
+});
+$("branches-list").addEventListener("contextmenu", (e) => {
+  const li = e.target.closest("li");
+  if (!li || !li.dataset.n) return;
+  e.preventDefault();
+  const b = state.branches.find((x) => x.name === li.dataset.n);
+  if (b) showBranchMenu(b, e.clientX, e.clientY);
 });
 $("tags-list").addEventListener("click", (e) => {
   const li = e.target.closest("li");
@@ -672,6 +731,10 @@ document.addEventListener("keydown", (e) => {
     }
     e.preventDefault();
     return; // the modal owns the keyboard — even over a focused form field
+  }
+  if (!$("ctx-menu").classList.contains("hidden")) {
+    if (e.key === "Escape") hideCtxMenu();
+    return; // the context menu owns the keyboard until closed
   }
   // Form fields own the keyboard: without this, typing a commit message
   // triggers j/k navigation and s/u staging. Ctrl/Cmd+Enter commits.

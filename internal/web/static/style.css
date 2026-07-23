@@ -121,3 +121,8 @@ mark.r { background: var(--span-add); color: inherit; }
 }
 #commit-box button:hover:not(:disabled) { border-color: var(--accent); }
 #commit-box button:disabled { opacity: .45; cursor: default; }
+#ctx-menu { position: fixed; z-index: 20; background: var(--bg-alt); border: 1px solid var(--border); border-radius: 4px; display: flex; flex-direction: column; min-width: 170px; box-shadow: 0 4px 14px rgba(0,0,0,.5); }
+#ctx-menu.hidden { display: none; }
+#ctx-menu button { background: none; border: none; color: var(--fg); font: inherit; text-align: left; padding: 5px 12px; cursor: pointer; }
+#ctx-menu button:hover { background: var(--sel); }
+#branches-list li.head { cursor: pointer; } /* left-click = go to tip, safe for HEAD too */
