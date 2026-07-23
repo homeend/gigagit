@@ -8,6 +8,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- `gg web`: a `← back` button atop the detail screen (mouse alternative to
+  esc), and sidebar section headers (branches/worktrees/tags) collapse on
+  double-click — long lists no longer force constant sidebar scrolling.
+
 - `gg web`: clicking a branch no longer switches — a left-click jumps the
   commit list to the branch tip (the TUI's enter-on-branch behavior) and
   mutations moved behind a right-click context menu (go to tip / switch).

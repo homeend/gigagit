@@ -286,6 +286,26 @@ $("branches-list").addEventListener("contextmenu", (e) => {
   const b = state.branches.find((x) => x.name === li.dataset.n);
   if (b) showBranchMenu(b, e.clientX, e.clientY);
 });
+// drillOut leaves the detail screen for the full-width commit list — the
+// esc key and the mouse back button share it.
+function drillOut() {
+  if (state.layout !== "detail") return;
+  state.pane = "commits";
+  setLayout("list");
+  focusPane();
+}
+$("back-btn").addEventListener("click", drillOut);
+
+// Double-click a sidebar section header to collapse/expand its list — long
+// branch/tag lists otherwise force constant scrolling.
+function toggleSection(name) {
+  const collapsed = $(name + "-list").classList.toggle("collapsed");
+  $(name + "-header").textContent = (collapsed ? "\u25b8 " : "") + name;
+}
+["branches", "worktrees", "tags"].forEach((n) => {
+  $(n + "-header").addEventListener("dblclick", () => toggleSection(n));
+});
+
 $("tags-list").addEventListener("click", (e) => {
   const li = e.target.closest("li");
   if (!li || !li.dataset.h) return;
@@ -755,12 +775,7 @@ document.addEventListener("keydown", (e) => {
     if (state.pane === "commits") openCommit(state.cursor);
     else if (state.filesMode === "status" ? state.statusEntries.length : state.files.length) openFile(state.fileCursor);
   } else if (e.key === "Escape") {
-    // drill back out: detail (files+diff) → the full-width commit list
-    if (state.layout === "detail") {
-      state.pane = "commits";
-      setLayout("list");
-      focusPane();
-    }
+    drillOut();
   } else if (e.key === "g") {
     toggleGraphMode();
   } else if (e.key === "b" && state.layout === "list") {
