@@ -14,10 +14,13 @@ type opStartRequest struct {
 	Op      string `json:"op"`
 	Branch  string `json:"branch"`
 	Message string `json:"message"`
+	Tag     string `json:"tag"`
+	Path    string `json:"path"`
 }
 
 // handleOpStart begins an operation and returns 202 {op_id}. Ops wired so
-// far: switch, commit, pull; the switch statement is where future ops land.
+// far: switch, commit, pull, push, delete-branch, delete-tag, remove-worktree; the switch
+// statement is where future ops land.
 func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 	var req opStartRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -40,6 +43,65 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 		op = engine.Commit{Message: req.Message}
 	case "pull":
 		op = engine.SmartPull{} // current branch, its configured remote, PullAndStay
+	case "push":
+		// Branch resolved server-side — nothing client-sent reaches argv, and
+		// Force is never wire-settable (force is only reachable through the
+		// op's own parked push-rejected → push-force decisions).
+		branch, berr := s.svc.CurrentBranch(r.Context())
+		if berr != nil {
+			writeErr(w, http.StatusInternalServerError, berr)
+			return
+		}
+		if branch == "" {
+			// Detached HEAD only. An unborn branch still resolves via
+			// symbolic-ref, so it dispatches and surfaces git's own refspec
+			// error through the op instead.
+			writeErr(w, http.StatusConflict, errors.New("push: no current branch (detached HEAD?)"))
+			return
+		}
+		op = engine.Push{Remote: "origin", Branch: branch, SetUpstream: true} // the TUI's exact P dispatch
+	case "delete-branch":
+		if req.Branch == "" || !isGitArgSafe(req.Branch) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid branch"))
+			return
+		}
+		// The engine confirms ("delete-branch") and forks on an unmerged
+		// branch ("branch-unmerged") — both park in the browser modal.
+		op = engine.DeleteBranch{Name: req.Branch}
+	case "delete-tag":
+		if req.Tag == "" || !isGitArgSafe(req.Tag) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid tag"))
+			return
+		}
+		// Decision-free op: the client shows its own confirm before starting.
+		op = engine.DeleteTag{Name: req.Tag}
+	case "remove-worktree":
+		if req.Path == "" {
+			writeErr(w, http.StatusBadRequest, errors.New("path required"))
+			return
+		}
+		// The client-sent path is an identifier, not an argument: resolve it
+		// against the server's own worktree list so only server-owned values
+		// reach git argv (worktree paths legitimately contain characters
+		// isGitArgSafe would reject). The engine still guards the current and
+		// main worktree.
+		wts, werr := s.svc.Worktrees(r.Context())
+		if werr != nil {
+			writeErr(w, http.StatusInternalServerError, werr)
+			return
+		}
+		found := false
+		for _, wt := range wts {
+			if wt.Path == req.Path {
+				op = engine.RemoveWorktree{Path: wt.Path, Branch: wt.Branch}
+				found = true
+				break
+			}
+		}
+		if !found {
+			writeErr(w, http.StatusNotFound, errors.New("unknown worktree"))
+			return
+		}
 	default:
 		writeErr(w, http.StatusBadRequest, fmt.Errorf("unknown op %q", req.Op))
 		return
