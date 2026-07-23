@@ -1,6 +1,9 @@
 package web
 
 import (
+	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -42,5 +45,31 @@ func TestListenDefaultLoopback(t *testing.T) {
 	defer ln.Close()
 	if !strings.HasPrefix(url, "http://127.0.0.1:") {
 		t.Fatalf("url = %q, want http://127.0.0.1:<port>", url)
+	}
+}
+
+func TestServePreflightNonRepo(t *testing.T) {
+	err := Serve(context.Background(), t.TempDir(), "127.0.0.1:0", false)
+	if err == nil {
+		t.Fatal("Serve on a non-repo dir returned nil")
+	}
+	if !strings.Contains(err.Error(), "not a git repository") {
+		t.Errorf("error = %v, want friendly not-a-repo message", err)
+	}
+}
+
+func TestServePreflightForeignWorktreeLink(t *testing.T) {
+	// A worktree link whose gitdir this environment cannot resolve — the
+	// WSL↔Windows cross-notation case.
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".git"), []byte("gitdir: /nonexistent/repo/.git/worktrees/x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	err := Serve(context.Background(), dir, "127.0.0.1:0", false)
+	if err == nil {
+		t.Fatal("Serve on a broken worktree link returned nil")
+	}
+	if !strings.Contains(err.Error(), "linked worktree") || !strings.Contains(err.Error(), "WSL") {
+		t.Errorf("error = %v, want the cross-environment worktree hint", err)
 	}
 }

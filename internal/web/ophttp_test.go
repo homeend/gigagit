@@ -210,7 +210,7 @@ func TestOpHTTPBusyAndValidation(t *testing.T) {
 		body, name string
 		want       int
 	}{
-		{`{"op":"pull","branch":"side"}`, "unknown op", http.StatusBadRequest},
+		{`{"op":"unknown"}`, "unknown op", http.StatusBadRequest},
 		{`{"op":"switch","branch":""}`, "empty branch", http.StatusBadRequest},
 		{`{"op":"switch","branch":"--evil"}`, "argv-unsafe branch", http.StatusBadRequest},
 		{`{`, "bad json", http.StatusBadRequest},

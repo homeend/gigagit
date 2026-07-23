@@ -8,6 +8,17 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- `gg web` fails fast at startup (before binding a port or opening the
+  browser) when the served directory isn't a usable repository — including
+  a friendly hint for the WSL↔Windows case where a linked worktree's .git
+  file points at the other environment's path notation. Previously the
+  server started and every request 500ed with a raw rev-parse error.
+
+- `gg web`: SmartPull — a `⟳ pull` header button (`p`) runs the hero op on
+  the transport; a diverged branch parks the first live decision modal
+  (rebase / merge / reset / abort). Conflicted pulls surface in the status
+  pane.
+
 - `gg web`: a `← back` button atop the detail screen (mouse alternative to
   esc), and sidebar section headers (branches/worktrees/tags) collapse on
   double-click — long lists no longer force constant sidebar scrolling.
