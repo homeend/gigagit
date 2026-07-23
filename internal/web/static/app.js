@@ -103,7 +103,7 @@ function renderWorktrees() {
       const label = w.bare ? "(bare)" : w.detached ? "(detached)" : w.branch || "(?)";
       const base = w.path.split("/").pop();
       const cur = state.worktree && w.path === state.worktree ? " cur" : "";
-      return `<li class="${cur.trim()}" title="${esc(w.path)}">${cur ? "● " : ""}${esc(label)}<span class="wpath">${esc(base)}</span></li>`;
+      return `<li class="${cur.trim()}" data-p="${esc(w.path)}" title="${esc(w.path)}">${cur ? "● " : ""}${esc(label)}<span class="wpath">${esc(base)}</span></li>`;
     })
     .join("");
 }
@@ -286,17 +286,30 @@ function hideCtxMenu() {
   $("ctx-menu").classList.add("hidden");
 }
 
-// showBranchMenu renders the right-click menu: safe action first, the
-// mutating switch below it (absent on the HEAD row).
-function showBranchMenu(b, x, y) {
-  const items = [{ label: "go to tip", act: () => gotoBranchTip(b) }];
-  if (!b.is_head) items.push({ label: "switch to " + b.name, act: () => startSwitch(b.name) });
+// showCtxMenu renders the shared right-click menu at (x,y): safe actions
+// first; rows flagged danger render red.
+function showCtxMenu(items, x, y) {
   const menu = $("ctx-menu");
   menu._items = items;
-  menu.innerHTML = items.map((it, i) => `<button data-i="${i}">${esc(it.label)}</button>`).join("");
+  menu.innerHTML = items
+    .map((it, i) => `<button data-i="${i}"${it.danger ? ' class="danger"' : ""}>${esc(it.label)}</button>`)
+    .join("");
   menu.style.left = Math.min(x, window.innerWidth - 200) + "px";
-  menu.style.top = Math.min(y, window.innerHeight - 80) + "px";
+  menu.style.top = Math.min(y, window.innerHeight - 120) + "px";
   menu.classList.remove("hidden");
+}
+
+function showBranchMenu(b, x, y) {
+  const items = [{ label: "go to tip", act: () => gotoBranchTip(b) }];
+  if (!b.is_head) {
+    items.push({ label: "switch to " + b.name, act: () => startSwitch(b.name) });
+    items.push({
+      label: "delete " + b.name,
+      danger: true,
+      act: () => startOp({ op: "delete-branch", branch: b.name }, "deleting " + b.name),
+    });
+  }
+  showCtxMenu(items, x, y);
 }
 
 $("ctx-menu").addEventListener("click", (e) => {
@@ -322,6 +335,31 @@ $("branches-list").addEventListener("contextmenu", (e) => {
   const b = state.branches.find((x) => x.name === li.dataset.n);
   if (b) showBranchMenu(b, e.clientX, e.clientY);
 });
+
+function copyText(text) {
+  navigator.clipboard.writeText(text).catch(() => opLine("copy failed (clipboard unavailable)", true));
+}
+
+function showWorktreeMenu(w, x, y) {
+  const items = [{ label: "copy path", act: () => copyText(w.path) }];
+  // The served worktree's row gets no remove (the engine would refuse it
+  // anyway); main is engine-guarded too.
+  if (!(state.worktree && w.path === state.worktree)) {
+    items.push({
+      label: "remove worktree",
+      danger: true,
+      act: () => startOp({ op: "remove-worktree", path: w.path }, "removing " + w.path.split("/").pop()),
+    });
+  }
+  showCtxMenu(items, x, y);
+}
+$("worktrees-list").addEventListener("contextmenu", (e) => {
+  const li = e.target.closest("li");
+  if (!li || !li.dataset.p) return;
+  e.preventDefault();
+  const w = state.worktrees.find((x) => x.path === li.dataset.p);
+  if (w) showWorktreeMenu(w, e.clientX, e.clientY);
+});
 // drillOut leaves the detail screen for the full-width commit list — the
 // esc key and the mouse back button share it.
 function drillOut() {
@@ -346,6 +384,34 @@ $("tags-list").addEventListener("click", (e) => {
   const li = e.target.closest("li");
   if (!li || !li.dataset.h) return;
   openCommitByHash(li.dataset.h, "🏷 " + li.dataset.n);
+});
+
+function showTagMenu(tg, x, y) {
+  showCtxMenu(
+    [
+      { label: "show commit", act: () => openCommitByHash(tg.target, "🏷 " + tg.name) },
+      { label: "copy name", act: () => copyText(tg.name) },
+      {
+        label: "delete " + tg.name,
+        danger: true,
+        // engine.DeleteTag is decision-free, so the confirm lives here — a
+        // right-click plus one click must never delete a ref unconfirmed.
+        act: () =>
+          showLocalConfirm("Delete tag " + tg.name + "?", ["delete", "abort"], (o) => {
+            if (o === "delete") startOp({ op: "delete-tag", tag: tg.name }, "deleting tag " + tg.name);
+          }),
+      },
+    ],
+    x,
+    y
+  );
+}
+$("tags-list").addEventListener("contextmenu", (e) => {
+  const li = e.target.closest("li");
+  if (!li || !li.dataset.n) return;
+  e.preventDefault();
+  const tg = state.tags.find((x) => x.name === li.dataset.n);
+  if (tg) showTagMenu(tg, e.clientX, e.clientY);
 });
 
 // A partially-staged file appears twice: once under Staged (unstage
