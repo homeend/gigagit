@@ -16,10 +16,12 @@ type opStartRequest struct {
 	Message string `json:"message"`
 	Tag     string `json:"tag"`
 	Path    string `json:"path"`
+	Ref     string `json:"ref"`
 }
 
 // handleOpStart begins an operation and returns 202 {op_id}. Ops wired so
-// far: switch, commit, pull, push, delete-branch, delete-tag, remove-worktree; the switch
+// far: switch, commit, pull, push, delete-branch, delete-tag,
+// remove-worktree, stash, stash-apply, stash-pop, stash-drop; the switch
 // statement is where future ops land.
 func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 	var req opStartRequest
@@ -100,6 +102,44 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 		}
 		if !found {
 			writeErr(w, http.StatusNotFound, errors.New("unknown worktree"))
+			return
+		}
+	case "stash":
+		// All changes incl. untracked (the common case; path-scoped stashing
+		// stays TUI-only). Message optional; nothing-to-stash surfaces git's
+		// own error through the op.
+		op = engine.Stash{Message: req.Message, IncludeUntracked: true}
+	case "stash-apply", "stash-pop", "stash-drop":
+		if req.Ref == "" {
+			writeErr(w, http.StatusBadRequest, errors.New("ref required"))
+			return
+		}
+		// The client-sent ref is an identifier: resolve it against the
+		// server's own stash list so only server-owned values reach git argv
+		// (the remove-worktree allowlist pattern). All three ops are
+		// decision-free; drop's confirm lives client-side.
+		entries, serr := s.svc.StashList(r.Context())
+		if serr != nil {
+			writeErr(w, http.StatusInternalServerError, serr)
+			return
+		}
+		found := false
+		for _, e := range entries {
+			if e.Ref == req.Ref {
+				switch req.Op {
+				case "stash-apply":
+					op = engine.StashApply{Ref: e.Ref}
+				case "stash-pop":
+					op = engine.StashPop{Ref: e.Ref}
+				default:
+					op = engine.StashDrop{Ref: e.Ref}
+				}
+				found = true
+				break
+			}
+		}
+		if !found {
+			writeErr(w, http.StatusNotFound, errors.New("unknown stash"))
 			return
 		}
 	default:
