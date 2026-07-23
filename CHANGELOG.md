@@ -8,6 +8,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- `gg web`: right-click context menus on all three sidebar sections. Branches
+  gain **delete branch** (engine confirm + unmerged force fork in the modal;
+  the tip is snapshotted to `refs/gg/versions` first, so it's recoverable via
+  `gg versions`). Worktrees gain **copy path** and **remove worktree** (scope /
+  locked / dirty forks in the modal; the served worktree's row is exempt).
+  Tags gain **show commit**, **copy name**, and **delete tag** (client-side
+  confirm — the engine op is decision-free). Destructive rows render red; the
+  remove-worktree path is resolved against the server's own worktree list, so
+  no client string reaches git argv.
+
 - `gg web`: push. A `⇫ push` header button (`P`) pushes the current branch to
   origin (`engine.Push`, set-upstream). The engine's full rejection recovery
   rides the existing modal: a non-fast-forward rejection offers

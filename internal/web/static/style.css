@@ -125,6 +125,7 @@ mark.r { background: var(--span-add); color: inherit; }
 #ctx-menu.hidden { display: none; }
 #ctx-menu button { background: none; border: none; color: var(--fg); font: inherit; text-align: left; padding: 5px 12px; cursor: pointer; }
 #ctx-menu button:hover { background: var(--sel); }
+#ctx-menu button.danger { color: #f27a6a; } /* matches #op-line.err */
 #branches-list li.head { cursor: pointer; } /* left-click = go to tip, safe for HEAD too */
 #back-btn {
   display: block; width: 100%; text-align: left; padding: 4px 8px;
