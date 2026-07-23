@@ -14,11 +14,12 @@ type opStartRequest struct {
 	Op      string `json:"op"`
 	Branch  string `json:"branch"`
 	Message string `json:"message"`
+	Tag     string `json:"tag"`
 }
 
 // handleOpStart begins an operation and returns 202 {op_id}. Ops wired so
-// far: switch, commit, pull, push; the switch statement is where future ops
-// land.
+// far: switch, commit, pull, push, delete-branch, delete-tag; the switch
+// statement is where future ops land.
 func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 	var req opStartRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -58,6 +59,21 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		op = engine.Push{Remote: "origin", Branch: branch, SetUpstream: true} // the TUI's exact P dispatch
+	case "delete-branch":
+		if req.Branch == "" || !isGitArgSafe(req.Branch) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid branch"))
+			return
+		}
+		// The engine confirms ("delete-branch") and forks on an unmerged
+		// branch ("branch-unmerged") — both park in the browser modal.
+		op = engine.DeleteBranch{Name: req.Branch}
+	case "delete-tag":
+		if req.Tag == "" || !isGitArgSafe(req.Tag) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid tag"))
+			return
+		}
+		// Decision-free op: the client shows its own confirm before starting.
+		op = engine.DeleteTag{Name: req.Tag}
 	default:
 		writeErr(w, http.StatusBadRequest, fmt.Errorf("unknown op %q", req.Op))
 		return
