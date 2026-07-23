@@ -160,7 +160,13 @@ function doCommit() {
 }
 
 function doPull() {
-  startOp({ op: "pull" }, "pulling");
+  if (state.op) return;
+  // TUI parity: pull is confirmed up front (it may rewrite the working
+  // tree); esc maps to abort via the modal's existing rule.
+  const branch = $("repo-branch").textContent || "current branch";
+  showLocalConfirm("Pull " + branch + "? This may rewrite the working tree.", ["pull", "abort"], (o) => {
+    if (o === "pull") startOp({ op: "pull" }, "pulling");
+  });
 }
 
 function handleOpEvent(ev) {
@@ -210,11 +216,28 @@ function showModal(ev) {
   $("modal").dataset.opts = JSON.stringify(ev.options || []);
 }
 
+// modalLocalCb, when set, routes the next modal answer to a CLIENT-side
+// callback instead of the op decide endpoint — pre-flight confirms (pull)
+// reuse the one modal without touching the transport.
+let modalLocalCb = null;
+
+function showLocalConfirm(prompt, options, cb) {
+  modalLocalCb = cb;
+  showModal({ prompt, options });
+}
+
 function hideModal() {
   $("modal").classList.add("hidden");
+  modalLocalCb = null; // a done-driven close must not leak the callback to the next modal
 }
 
 async function answerModal(option) {
+  if (modalLocalCb) {
+    const cb = modalLocalCb; // capture first — hideModal clears it
+    hideModal();
+    cb(option);
+    return;
+  }
   if (!state.op) return hideModal();
   hideModal();
   try {
