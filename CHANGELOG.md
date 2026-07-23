@@ -8,7 +8,44 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- `gg web`: a `← back` button atop the detail screen (mouse alternative to
+  esc), and sidebar section headers (branches/worktrees/tags) collapse on
+  double-click — long lists no longer force constant sidebar scrolling.
+
+- `gg web`: clicking a branch no longer switches — a left-click jumps the
+  commit list to the branch tip (the TUI's enter-on-branch behavior) and
+  mutations moved behind a right-click context menu (go to tip / switch).
+  A stray click can no longer start an operation.
+
 ### Added
+- `gg web`: commit from the working-tree screen — a message box + commit
+  button (Ctrl+Enter) on the status pane, wired as the op transport's second
+  operation (`op:"commit"` → `engine.Commit`; empty message → 400). Typing
+  in form fields no longer triggers the j/k/s/u keyboard shortcuts.
+- `gg web`: the sidebar grows worktrees and tags sections (read-only; tags
+  capped at 100 with a truncation marker). Clicking a tag opens that
+  commit's detail screen (`GET /api/worktrees`, `GET /api/tags`).
+- `gg web` gains the op transport — the streaming spine for web write
+  operations: `POST /api/op` starts an engine op (`switch` →
+  `engine.SmartSwitch` first), `GET /api/op/{id}/events` streams its
+  progress/decision/done events over SSE (stdlib, no WebSocket dep), and
+  `POST /api/op/{id}/decide` answers forks parked on a channel-based web
+  Decider (5-min timeout so an abandoned modal can't wedge the repo gate).
+  The SPA adds a branches sidebar (click to switch, `b` toggles), a live op
+  status line, and the decision modal (esc = abort, the TUI rule). A
+  successful op resets the server's commit-feed cache so `/api/commits`
+  reflects the new HEAD.
+- `gg web` (probe) gains its first write pathway: a "● Working tree" row atop
+  the commit list opens a sectioned status pane (Staged / Changes / Untracked /
+  Conflicts) with whole-file stage/unstage (per-row `s`/`u` + bulk buttons) via
+  `POST /api/stage` → `engine.Stage`, working-tree diffs (`/api/diff?wt=`,
+  uncached), and `GET /api/status`. Mutating routes sit behind a CSRF write
+  guard (JSON content type required, loopback-Origin check) on top of the
+  existing Host guard.
+- `gg web` (probe): read-only browser UI — a loopback-only embedded server
+  serving commits + lane graph (text and SVG modes), commit files, and
+  side-by-side diffs straight from the domain read-model; `--open` launches
+  the system browser. Evaluation probe — may be removed after review.
 - `gg --record <file>` — record a TUI session's keystrokes to a file in the
   `tui-capture.sh` keyscript format (one step per key, terminating quit
   excluded, a `#` header naming the repo), so a human can author a scenario

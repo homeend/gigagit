@@ -1,0 +1,129 @@
+package web
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"strings"
+
+	"github.com/homeend/gigagit/internal/engine"
+)
+
+type opStartRequest struct {
+	Op      string `json:"op"`
+	Branch  string `json:"branch"`
+	Message string `json:"message"`
+}
+
+// handleOpStart begins an operation and returns 202 {op_id}. Only "switch"
+// exists this increment; the switch statement is where future ops land.
+func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
+	var req opStartRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, fmt.Errorf("bad request body: %w", err))
+		return
+	}
+	var op engine.Operation
+	switch req.Op {
+	case "switch":
+		if req.Branch == "" || !isGitArgSafe(req.Branch) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid branch"))
+			return
+		}
+		op = engine.SmartSwitch{Branch: req.Branch}
+	case "commit":
+		if strings.TrimSpace(req.Message) == "" {
+			writeErr(w, http.StatusBadRequest, errors.New("message required"))
+			return
+		}
+		op = engine.Commit{Message: req.Message}
+	default:
+		writeErr(w, http.StatusBadRequest, fmt.Errorf("unknown op %q", req.Op))
+		return
+	}
+	run, err := s.startOp(op)
+	if err != nil {
+		writeErr(w, http.StatusConflict, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusAccepted)
+	_ = json.NewEncoder(w).Encode(map[string]string{"op_id": run.id})
+}
+
+// handleOpEvents streams the run's events as SSE: buffered history first
+// (replay), then live, closing after the terminal done event.
+func (s *Server) handleOpEvents(w http.ResponseWriter, r *http.Request) {
+	run := s.opByID(r.PathValue("id"))
+	if run == nil {
+		writeErr(w, http.StatusNotFound, errors.New("unknown operation"))
+		return
+	}
+	fl, ok := w.(http.Flusher)
+	if !ok {
+		writeErr(w, http.StatusInternalServerError, errors.New("streaming unsupported"))
+		return
+	}
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	history, live, cancel := run.subscribe()
+	defer cancel()
+	for _, we := range history {
+		writeSSE(w, we)
+	}
+	fl.Flush()
+	if live == nil {
+		return // already finished; history ended with done
+	}
+	for {
+		select {
+		case we, ok := <-live:
+			if !ok {
+				return
+			}
+			writeSSE(w, we)
+			fl.Flush()
+			if we["type"] == "done" {
+				return
+			}
+		case <-r.Context().Done():
+			return
+		}
+	}
+}
+
+func writeSSE(w http.ResponseWriter, we wireEvent) {
+	b, err := json.Marshal(we)
+	if err != nil {
+		return
+	}
+	fmt.Fprintf(w, "data: %s\n\n", b)
+}
+
+type opDecideRequest struct {
+	Option string `json:"option"`
+}
+
+// handleOpDecide feeds a parked decision. Options are validated against the
+// pending request's list — decisions are option-lists only.
+func (s *Server) handleOpDecide(w http.ResponseWriter, r *http.Request) {
+	run := s.opByID(r.PathValue("id"))
+	if run == nil {
+		writeErr(w, http.StatusNotFound, errors.New("unknown operation"))
+		return
+	}
+	var req opDecideRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, fmt.Errorf("bad request body: %w", err))
+		return
+	}
+	switch err := run.decide(req.Option); err {
+	case nil:
+		writeJSON(w, map[string]any{})
+	case errBadOption:
+		writeErr(w, http.StatusBadRequest, err)
+	default: // errNotWaiting, errOpDone
+		writeErr(w, http.StatusConflict, err)
+	}
+}

@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>gg web</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header id="top">
+  <span id="repo-name">…</span>
+  <span id="repo-branch"></span>
+  <span id="repo-worktree"></span>
+</header>
+<main id="panes" class="solo">
+  <aside id="branches-pane">
+    <div id="branches-header">branches</div>
+    <ul id="branches-list"></ul>
+    <div id="worktrees-header" class="side-header">worktrees</div>
+    <ul id="worktrees-list"></ul>
+    <div id="tags-header" class="side-header">tags</div>
+    <ul id="tags-list"></ul>
+  </aside>
+  <section id="commits-pane" class="pane focused">
+    <div id="commits-scroll"><div id="commits-spacer"><div id="commits-window"></div></div></div>
+  </section>
+  <section id="files-pane" class="pane">
+    <button id="back-btn" title="back to the commit list (esc)">← back</button>
+    <div id="files-header"></div>
+    <div id="files-actions" class="hidden">
+      <button id="stage-all">stage all</button>
+      <button id="unstage-all">unstage all</button>
+    </div>
+    <div id="commit-box" class="hidden">
+      <textarea id="commit-msg" rows="3" placeholder="commit message — first line is the subject"></textarea>
+      <button id="commit-btn">commit</button>
+    </div>
+    <ul id="files-list"></ul>
+  </section>
+  <section id="diff-pane" class="pane">
+    <div id="diff-header"></div>
+    <div id="diff-body"></div>
+  </section>
+</main>
+<footer id="foot"><span id="op-line"></span>j/k move · enter open · esc back · b branches · g graph mode · s stage · u unstage</footer>
+<div id="ctx-menu" class="hidden"></div>
+<div id="modal" class="hidden">
+  <div id="modal-box">
+    <div id="modal-prompt"></div>
+    <div id="modal-options"></div>
+  </div>
+</div>
+<script type="module" src="/static/app.js"></script>
+</body>
+</html>
