@@ -22,6 +22,8 @@
     <ul id="worktrees-list"></ul>
     <div id="tags-header" class="side-header">tags</div>
     <ul id="tags-list"></ul>
+    <div id="stashes-header" class="side-header">stashes</div>
+    <ul id="stashes-list"></ul>
   </aside>
   <section id="commits-pane" class="pane focused">
     <div id="commits-scroll"><div id="commits-spacer"><div id="commits-window"></div></div></div>
@@ -36,6 +38,7 @@
     <div id="commit-box" class="hidden">
       <textarea id="commit-msg" rows="3" placeholder="commit message — first line is the subject"></textarea>
       <button id="commit-btn">commit</button>
+      <button id="stash-btn" title="stash all working-tree changes">stash</button>
     </div>
     <ul id="files-list"></ul>
   </section>

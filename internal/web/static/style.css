@@ -101,12 +101,12 @@ mark.r { background: var(--span-add); color: inherit; }
 #modal-options button { background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 4px; padding: 4px 14px; font: inherit; cursor: pointer; }
 #modal-options button:hover { border-color: var(--accent); }
 .side-header { padding: 6px 8px 2px; color: var(--dim); border-top: 1px solid var(--border); margin-top: 6px; }
-#worktrees-list, #tags-list { list-style: none; }
-#worktrees-list li, #tags-list li { padding: 2px 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#worktrees-list li .wpath, #tags-list li .tsub { color: var(--dim); font-size: 11px; padding-left: 6px; }
+#worktrees-list, #tags-list, #stashes-list { list-style: none; }
+#worktrees-list li, #tags-list li, #stashes-list li { padding: 2px 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#worktrees-list li .wpath, #tags-list li .tsub, #stashes-list li .tsub { color: var(--dim); font-size: 11px; padding-left: 6px; }
 #worktrees-list li.cur { color: var(--accent); }
-#tags-list li { cursor: pointer; }
-#tags-list li:hover { background: var(--bg-alt); }
+#tags-list li, #stashes-list li { cursor: pointer; }
+#tags-list li:hover, #stashes-list li:hover { background: var(--bg-alt); }
 #tags-list li.more { color: var(--dim); cursor: default; }
 #commit-box { padding: 4px 8px; border-bottom: 1px solid var(--border); display: flex; gap: 8px; align-items: flex-start; }
 #commit-box.hidden { display: none; }
@@ -134,7 +134,7 @@ mark.r { background: var(--span-add); color: inherit; }
 }
 #back-btn:hover { color: var(--accent); }
 #branches-header, .side-header { cursor: pointer; user-select: none; } /* dblclick collapses */
-#branches-list.collapsed, #worktrees-list.collapsed, #tags-list.collapsed { display: none; }
+#branches-list.collapsed, #worktrees-list.collapsed, #tags-list.collapsed, #stashes-list.collapsed { display: none; }
 #top #pull-btn, #top #push-btn {
   margin-left: 10px; background: var(--bg); color: var(--fg);
   border: 1px solid var(--border); border-radius: 3px; padding: 1px 10px;
