@@ -134,10 +134,10 @@ mark.r { background: var(--span-add); color: inherit; }
 #back-btn:hover { color: var(--accent); }
 #branches-header, .side-header { cursor: pointer; user-select: none; } /* dblclick collapses */
 #branches-list.collapsed, #worktrees-list.collapsed, #tags-list.collapsed { display: none; }
-#top #pull-btn {
+#top #pull-btn, #top #push-btn {
   margin-left: 10px; background: var(--bg); color: var(--fg);
   border: 1px solid var(--border); border-radius: 3px; padding: 1px 10px;
   font: inherit; cursor: pointer;
 }
-#top #pull-btn:hover:not(:disabled) { border-color: var(--accent); }
-#top #pull-btn:disabled { opacity: .45; cursor: default; }
+#top #pull-btn:hover:not(:disabled), #top #push-btn:hover:not(:disabled) { border-color: var(--accent); }
+#top #pull-btn:disabled, #top #push-btn:disabled { opacity: .45; cursor: default; }
