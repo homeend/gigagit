@@ -17,7 +17,8 @@ type opStartRequest struct {
 }
 
 // handleOpStart begins an operation and returns 202 {op_id}. Ops wired so
-// far: switch, commit, pull; the switch statement is where future ops land.
+// far: switch, commit, pull, push; the switch statement is where future ops
+// land.
 func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 	var req opStartRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -40,6 +41,20 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 		op = engine.Commit{Message: req.Message}
 	case "pull":
 		op = engine.SmartPull{} // current branch, its configured remote, PullAndStay
+	case "push":
+		// Branch resolved server-side — nothing client-sent reaches argv, and
+		// Force is never wire-settable (force is only reachable through the
+		// op's own parked push-rejected → push-force decisions).
+		branch, berr := s.svc.CurrentBranch(r.Context())
+		if berr != nil {
+			writeErr(w, http.StatusInternalServerError, berr)
+			return
+		}
+		if branch == "" {
+			writeErr(w, http.StatusConflict, errors.New("push: no current branch (detached HEAD?)"))
+			return
+		}
+		op = engine.Push{Remote: "origin", Branch: branch, SetUpstream: true} // the TUI's exact P dispatch
 	default:
 		writeErr(w, http.StatusBadRequest, fmt.Errorf("unknown op %q", req.Op))
 		return
