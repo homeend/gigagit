@@ -21,6 +21,7 @@ const state = {
   worktrees: [],
   tags: [],
   tagsTruncated: false,
+  stashes: [],
   sidebar: true,
   op: null, // {id, es: EventSource} while an operation is live
   lastDiff: null,
@@ -70,18 +71,21 @@ async function fetchStatus() {
 }
 
 async function fetchBranches() {
-  const [b, w, tg] = await Promise.all([
+  const [b, w, tg, st] = await Promise.all([
     getJSON("/api/branches"),
     getJSON("/api/worktrees").catch(() => ({ worktrees: [] })),
     getJSON("/api/tags").catch(() => ({ tags: [], truncated: false })),
+    getJSON("/api/stashes").catch(() => ({ stashes: [] })),
   ]);
   state.branches = b.branches || [];
   state.worktrees = w.worktrees || [];
   state.tags = tg.tags || [];
   state.tagsTruncated = !!tg.truncated;
+  state.stashes = st.stashes || [];
   renderBranches();
   renderWorktrees();
   renderTags();
+  renderStashes();
 }
 
 function renderBranches() {
@@ -119,6 +123,17 @@ function renderTags() {
     .join("");
   if (state.tagsTruncated) html += `<li class="more">… more (capped at 100)</li>`;
   $("tags-list").innerHTML = html;
+}
+
+function renderStashes() {
+  $("stashes-list").innerHTML = state.stashes
+    .map(
+      (s) =>
+        `<li data-r="${esc(s.ref)}"${s.sha ? ` data-h="${esc(s.sha)}"` : ""}>${esc(s.ref)}` +
+        (s.subject ? `<span class="tsub">${esc(s.subject)}</span>` : "") +
+        `</li>`
+    )
+    .join("");
 }
 
 // --- op transport client ---
@@ -175,6 +190,14 @@ function doPush() {
   startOp({ op: "push" }, "pushing");
 }
 
+function doStash() {
+  if (state.op || !state.wt) return;
+  const message = $("commit-msg").value.trim();
+  showLocalConfirm("Stash all working-tree changes?", ["stash", "abort"], (o) => {
+    if (o === "stash") startOp({ op: "stash", message }, "stashing");
+  });
+}
+
 function handleOpEvent(ev) {
   if (ev.type === "progress") {
     opLine("⟳ " + ev.step + (ev.detail ? " " + ev.detail : "") + "…");
@@ -190,7 +213,7 @@ function handleOpEvent(ev) {
     $("pull-btn").disabled = false;
     $("push-btn").disabled = false;
     hideModal();
-    if (ev.ok && kind === "commit") $("commit-msg").value = "";
+    if (ev.ok && (kind === "commit" || kind === "stash")) $("commit-msg").value = "";
     if (ev.ok) opLine(ev.summary || "done");
     else opLine("error: " + (ev.error || "operation failed"), true);
     if (ev.changed) refreshAfterOp();
@@ -376,7 +399,7 @@ function toggleSection(name) {
   const collapsed = $(name + "-list").classList.toggle("collapsed");
   $(name + "-header").textContent = (collapsed ? "\u25b8 " : "") + name;
 }
-["branches", "worktrees", "tags"].forEach((n) => {
+["branches", "worktrees", "tags", "stashes"].forEach((n) => {
   $(n + "-header").addEventListener("dblclick", () => toggleSection(n));
 });
 
@@ -412,6 +435,37 @@ $("tags-list").addEventListener("contextmenu", (e) => {
   e.preventDefault();
   const tg = state.tags.find((x) => x.name === li.dataset.n);
   if (tg) showTagMenu(tg, e.clientX, e.clientY);
+});
+
+$("stashes-list").addEventListener("click", (e) => {
+  const li = e.target.closest("li");
+  if (!li || !li.dataset.h) return; // a sha-less row ignores left-click
+  openCommitByHash(li.dataset.h, "≡ " + li.dataset.r);
+});
+
+function showStashMenu(st, x, y) {
+  const items = [];
+  if (st.sha) items.push({ label: "show changes", act: () => openCommitByHash(st.sha, "≡ " + st.ref) });
+  items.push({ label: "apply", act: () => startOp({ op: "stash-apply", ref: st.ref }, "applying " + st.ref) });
+  items.push({ label: "pop", act: () => startOp({ op: "stash-pop", ref: st.ref }, "popping " + st.ref) });
+  items.push({
+    label: "drop " + st.ref,
+    danger: true,
+    // engine.StashDrop is decision-free — the confirm lives here (the
+    // delete-tag precedent; the TUI confirms drop with y/n too).
+    act: () =>
+      showLocalConfirm("Drop " + st.ref + "?", ["drop", "abort"], (o) => {
+        if (o === "drop") startOp({ op: "stash-drop", ref: st.ref }, "dropping " + st.ref);
+      }),
+  });
+  showCtxMenu(items, x, y);
+}
+$("stashes-list").addEventListener("contextmenu", (e) => {
+  const li = e.target.closest("li");
+  if (!li || !li.dataset.r) return;
+  e.preventDefault();
+  const st = state.stashes.find((x) => x.ref === li.dataset.r);
+  if (st) showStashMenu(st, e.clientX, e.clientY);
 });
 
 // A partially-staged file appears twice: once under Staged (unstage
@@ -653,6 +707,7 @@ function renderFiles() {
   $("files-actions").classList.remove("hidden");
   $("commit-box").classList.remove("hidden");
   $("commit-btn").disabled = !(state.wt && state.wt.counts.staged > 0) || !!state.op;
+  $("stash-btn").disabled = !state.wt || !!state.op;
   let html = "";
   let lastSection = "";
   state.statusEntries.forEach((f, i) => {
@@ -924,6 +979,7 @@ $("unstage-all").addEventListener("click", () => {
 $("commit-btn").addEventListener("click", doCommit);
 $("pull-btn").addEventListener("click", doPull);
 $("push-btn").addEventListener("click", doPush);
+$("stash-btn").addEventListener("click", doStash);
 window.addEventListener("resize", () => {
   renderCommits();
   if (state.lastDiff) renderDiff(state.lastDiff); // unified↔side-by-side is width-dependent

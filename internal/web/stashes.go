@@ -1,0 +1,30 @@
+package web
+
+import "net/http"
+
+type stashRow struct {
+	Ref     string `json:"ref"`
+	Subject string `json:"subject"`
+	Sha     string `json:"sha,omitempty"`
+}
+
+// handleStashes lists stash entries newest-first. Each row carries the
+// stash's commit sha, resolved here so the client's left-click needs no
+// second request (the tags-row pattern); a resolve failure drops only the
+// sha, never the row.
+func (s *Server) handleStashes(w http.ResponseWriter, r *http.Request) {
+	es, err := s.svc.StashList(r.Context())
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	rows := make([]stashRow, 0, len(es))
+	for _, e := range es {
+		row := stashRow{Ref: e.Ref, Subject: e.Subject}
+		if sha, serr := s.svc.StashCommit(r.Context(), e.Ref); serr == nil {
+			row.Sha = sha
+		}
+		rows = append(rows, row)
+	}
+	writeJSON(w, map[string]any{"stashes": rows})
+}
