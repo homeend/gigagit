@@ -30,10 +30,13 @@ Decision: wire `engine.Push` as-is (user-approved 2026-07-23).
 
 New `case "push"` in `handleOpStart`:
 
-1. Resolve the branch server-side: `svc.CurrentBranch(ctx)`. Empty branch or
-   error (detached HEAD, unborn) → HTTP 409 with a clear message
-   (`"push: no current branch (detached HEAD?)"`). Nothing client-sent ever
-   reaches git argv.
+1. Resolve the branch server-side: `svc.CurrentBranch(ctx)`. Empty branch
+   (detached HEAD) → HTTP 409 with a clear message
+   (`"push: no current branch (detached HEAD?)"`); a read *error* → HTTP 500.
+   An unborn branch is NOT detectable here (`symbolic-ref` resolves it), so it
+   dispatches and surfaces git's own refspec error through the op — acceptable,
+   a zero-commit repo isn't usable in the web UI anyway. Nothing client-sent
+   ever reaches git argv.
 2. Dispatch `engine.Push{Remote: "origin", Branch: cur, SetUpstream: true}` —
    byte-for-byte the TUI's `P` dispatch (`internal/tui/remote_tags.go`).
 3. `Force` is **never** settable from the wire. The only route to a force push

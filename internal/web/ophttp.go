@@ -51,6 +51,9 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if branch == "" {
+			// Detached HEAD only. An unborn branch still resolves via
+			// symbolic-ref, so it dispatches and surfaces git's own refspec
+			// error through the op instead.
 			writeErr(w, http.StatusConflict, errors.New("push: no current branch (detached HEAD?)"))
 			return
 		}
