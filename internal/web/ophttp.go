@@ -16,8 +16,8 @@ type opStartRequest struct {
 	Message string `json:"message"`
 }
 
-// handleOpStart begins an operation and returns 202 {op_id}. Only "switch"
-// exists this increment; the switch statement is where future ops land.
+// handleOpStart begins an operation and returns 202 {op_id}. Ops wired so
+// far: switch, commit, pull; the switch statement is where future ops land.
 func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 	var req opStartRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -38,6 +38,8 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		op = engine.Commit{Message: req.Message}
+	case "pull":
+		op = engine.SmartPull{} // current branch, its configured remote, PullAndStay
 	default:
 		writeErr(w, http.StatusBadRequest, fmt.Errorf("unknown op %q", req.Op))
 		return
