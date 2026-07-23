@@ -144,6 +144,7 @@ async function startOp(body, label) {
   opLine("⟳ " + label + "…");
   const es = new EventSource("/api/op/" + resp.op_id + "/events");
   state.op = { id: resp.op_id, es, kind: body.op };
+  $("pull-btn").disabled = true;
   es.onmessage = (m) => handleOpEvent(JSON.parse(m.data));
   es.onerror = () => {}; // transient; done handling closes the source
 }
@@ -158,6 +159,10 @@ function doCommit() {
   startOp({ op: "commit", message }, "committing");
 }
 
+function doPull() {
+  startOp({ op: "pull" }, "pulling");
+}
+
 function handleOpEvent(ev) {
   if (ev.type === "progress") {
     opLine("⟳ " + ev.step + (ev.detail ? " " + ev.detail : "") + "…");
@@ -170,6 +175,7 @@ function handleOpEvent(ev) {
     // notify-only decisions whose op already returned).
     if (state.op) state.op.es.close();
     state.op = null;
+    $("pull-btn").disabled = false;
     hideModal();
     if (ev.ok && kind === "commit") $("commit-msg").value = "";
     if (ev.ok) opLine(ev.summary || "done");
@@ -782,6 +788,8 @@ document.addEventListener("keydown", (e) => {
     state.sidebar = !state.sidebar;
     $("panes").classList.toggle("nosb", !state.sidebar);
     renderCommits(); // list width changed
+  } else if (e.key === "p") {
+    doPull();
   } else if ((e.key === "s" || e.key === "u") && state.pane === "files" && state.filesMode === "status") {
     const f = state.statusEntries[state.fileCursor];
     if (f && f.section !== "conflicts") {
@@ -816,6 +824,7 @@ $("unstage-all").addEventListener("click", () => {
   if (paths.length) stage({ paths, unstage: true }); // engine.Stage{All} can't unstage
 });
 $("commit-btn").addEventListener("click", doCommit);
+$("pull-btn").addEventListener("click", doPull);
 window.addEventListener("resize", () => {
   renderCommits();
   if (state.lastDiff) renderDiff(state.lastDiff); // unified↔side-by-side is width-dependent

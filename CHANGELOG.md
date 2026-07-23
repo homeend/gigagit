@@ -8,6 +8,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- `gg web`: SmartPull — a `⟳ pull` header button (`p`) runs the hero op on
+  the transport; a diverged branch parks the first live decision modal
+  (rebase / merge / reset / abort). Conflicted pulls surface in the status
+  pane.
+
 - `gg web`: a `← back` button atop the detail screen (mouse alternative to
   esc), and sidebar section headers (branches/worktrees/tags) collapse on
   double-click — long lists no longer force constant sidebar scrolling.
