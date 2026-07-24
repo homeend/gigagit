@@ -55,6 +55,16 @@ body {
   padding: 4px 8px; color: var(--dim); border-bottom: 1px solid var(--border);
   position: sticky; top: 0; background: var(--bg);
 }
+#diff-header { display: flex; align-items: center; gap: 8px; }
+#diff-title { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#diff-nav { flex: 0 0 auto; display: flex; gap: 4px; }
+#diff-nav button {
+  background: var(--bg); color: var(--fg); border: 1px solid var(--border);
+  border-radius: 3px; padding: 0 8px; font: inherit; font-size: 11px; cursor: pointer;
+}
+#diff-nav button:hover:not(:disabled) { border-color: var(--accent); }
+#diff-nav button:disabled { opacity: .45; cursor: default; }
+table.diff tr.flash td { background: var(--sel); }
 table.diff { width: 100%; border-collapse: collapse; table-layout: fixed; }
 /* Wrap at whitespace; break inside a token only when it alone overflows
    (break-all shattered code mid-word, e.g. import paths). */
