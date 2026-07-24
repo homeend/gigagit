@@ -8,6 +8,20 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- `gg web`: diff-pane navigation + stash untracked files. The diff header
+  gains ‹/› arrows stepping between files and between change blocks within
+  a diff. A stash's untracked files (stored in its `^3` parent, invisible
+  to a first-parent diff — an untracked-only stash listed NO files) now
+  appear in the stash drill-in, diffed as added content.
+
+- `gg web`: stashes. A 4th sidebar section lists stash entries (left-click
+  opens the stash's changes in the commit detail); right-click offers
+  apply / pop / drop (drop confirms — the engine op is decision-free). A
+  `stash` button beside commit stashes all working-tree changes incl.
+  untracked, taking the message box's text as the optional stash message.
+  Apply/pop/drop refs are resolved against the server's own stash list
+  (allowlist); a pop/apply conflict surfaces in the status pane as usual.
+
 - `gg web`: right-click context menus on all three sidebar sections. Branches
   gain **delete branch** (engine confirm + unmerged force fork in the modal;
   the tip is snapshotted to `refs/gg/versions` first, so it's recoverable via

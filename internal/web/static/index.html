@@ -22,6 +22,8 @@
     <ul id="worktrees-list"></ul>
     <div id="tags-header" class="side-header">tags</div>
     <ul id="tags-list"></ul>
+    <div id="stashes-header" class="side-header">stashes</div>
+    <ul id="stashes-list"></ul>
   </aside>
   <section id="commits-pane" class="pane focused">
     <div id="commits-scroll"><div id="commits-spacer"><div id="commits-window"></div></div></div>
@@ -36,11 +38,20 @@
     <div id="commit-box" class="hidden">
       <textarea id="commit-msg" rows="3" placeholder="commit message — first line is the subject"></textarea>
       <button id="commit-btn">commit</button>
+      <button id="stash-btn" title="stash all working-tree changes">stash</button>
     </div>
     <ul id="files-list"></ul>
   </section>
   <section id="diff-pane" class="pane">
-    <div id="diff-header"></div>
+    <div id="diff-header">
+      <span id="diff-title"></span>
+      <span id="diff-nav">
+        <button id="prev-file" title="previous file">‹ file</button>
+        <button id="next-file" title="next file">file ›</button>
+        <button id="prev-change" title="previous change">‹ change</button>
+        <button id="next-change" title="next change">change ›</button>
+      </span>
+    </div>
     <div id="diff-body"></div>
   </section>
 </main>

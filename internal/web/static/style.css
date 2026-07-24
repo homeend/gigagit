@@ -55,6 +55,16 @@ body {
   padding: 4px 8px; color: var(--dim); border-bottom: 1px solid var(--border);
   position: sticky; top: 0; background: var(--bg);
 }
+#diff-header { display: flex; align-items: center; gap: 8px; }
+#diff-title { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#diff-nav { flex: 0 0 auto; display: flex; gap: 4px; }
+#diff-nav button {
+  background: var(--bg); color: var(--fg); border: 1px solid var(--border);
+  border-radius: 3px; padding: 0 8px; font: inherit; font-size: 11px; cursor: pointer;
+}
+#diff-nav button:hover:not(:disabled) { border-color: var(--accent); }
+#diff-nav button:disabled { opacity: .45; cursor: default; }
+table.diff tr.flash td { background: var(--sel); }
 table.diff { width: 100%; border-collapse: collapse; table-layout: fixed; }
 /* Wrap at whitespace; break inside a token only when it alone overflows
    (break-all shattered code mid-word, e.g. import paths). */
@@ -101,12 +111,13 @@ mark.r { background: var(--span-add); color: inherit; }
 #modal-options button { background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 4px; padding: 4px 14px; font: inherit; cursor: pointer; }
 #modal-options button:hover { border-color: var(--accent); }
 .side-header { padding: 6px 8px 2px; color: var(--dim); border-top: 1px solid var(--border); margin-top: 6px; }
-#worktrees-list, #tags-list { list-style: none; }
-#worktrees-list li, #tags-list li { padding: 2px 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#worktrees-list li .wpath, #tags-list li .tsub { color: var(--dim); font-size: 11px; padding-left: 6px; }
+#worktrees-list, #tags-list, #stashes-list { list-style: none; }
+#worktrees-list li, #tags-list li, #stashes-list li { padding: 2px 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#worktrees-list li .wpath, #tags-list li .tsub, #stashes-list li .tsub { color: var(--dim); font-size: 11px; padding-left: 6px; }
 #worktrees-list li.cur { color: var(--accent); }
-#tags-list li { cursor: pointer; }
-#tags-list li:hover { background: var(--bg-alt); }
+#worktrees-list li { cursor: default; } /* right-click menu only — no left-click, so no pointer (and no text I-beam) */
+#tags-list li, #stashes-list li { cursor: pointer; }
+#tags-list li:hover, #stashes-list li:hover { background: var(--bg-alt); }
 #tags-list li.more { color: var(--dim); cursor: default; }
 #commit-box { padding: 4px 8px; border-bottom: 1px solid var(--border); display: flex; gap: 8px; align-items: flex-start; }
 #commit-box.hidden { display: none; }
@@ -134,7 +145,7 @@ mark.r { background: var(--span-add); color: inherit; }
 }
 #back-btn:hover { color: var(--accent); }
 #branches-header, .side-header { cursor: pointer; user-select: none; } /* dblclick collapses */
-#branches-list.collapsed, #worktrees-list.collapsed, #tags-list.collapsed { display: none; }
+#branches-list.collapsed, #worktrees-list.collapsed, #tags-list.collapsed, #stashes-list.collapsed { display: none; }
 #top #pull-btn, #top #push-btn {
   margin-left: 10px; background: var(--bg); color: var(--fg);
   border: 1px solid var(--border); border-radius: 3px; padding: 1px 10px;

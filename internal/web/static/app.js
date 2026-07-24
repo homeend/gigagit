@@ -21,9 +21,11 @@ const state = {
   worktrees: [],
   tags: [],
   tagsTruncated: false,
+  stashes: [],
   sidebar: true,
   op: null, // {id, es: EventSource} while an operation is live
   lastDiff: null,
+  diffBlockIdx: -1,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -70,18 +72,21 @@ async function fetchStatus() {
 }
 
 async function fetchBranches() {
-  const [b, w, tg] = await Promise.all([
+  const [b, w, tg, st] = await Promise.all([
     getJSON("/api/branches"),
     getJSON("/api/worktrees").catch(() => ({ worktrees: [] })),
     getJSON("/api/tags").catch(() => ({ tags: [], truncated: false })),
+    getJSON("/api/stashes").catch(() => ({ stashes: [] })),
   ]);
   state.branches = b.branches || [];
   state.worktrees = w.worktrees || [];
   state.tags = tg.tags || [];
   state.tagsTruncated = !!tg.truncated;
+  state.stashes = st.stashes || [];
   renderBranches();
   renderWorktrees();
   renderTags();
+  renderStashes();
 }
 
 function renderBranches() {
@@ -119,6 +124,17 @@ function renderTags() {
     .join("");
   if (state.tagsTruncated) html += `<li class="more">… more (capped at 100)</li>`;
   $("tags-list").innerHTML = html;
+}
+
+function renderStashes() {
+  $("stashes-list").innerHTML = state.stashes
+    .map(
+      (s) =>
+        `<li data-r="${esc(s.ref)}"${s.sha ? ` data-h="${esc(s.sha)}"` : ""}>${esc(s.ref)}` +
+        (s.subject ? `<span class="tsub">${esc(s.subject)}</span>` : "") +
+        `</li>`
+    )
+    .join("");
 }
 
 // --- op transport client ---
@@ -175,6 +191,14 @@ function doPush() {
   startOp({ op: "push" }, "pushing");
 }
 
+function doStash() {
+  if (state.op || !state.wt) return;
+  const message = $("commit-msg").value.trim();
+  showLocalConfirm("Stash all working-tree changes?", ["stash", "abort"], (o) => {
+    if (o === "stash") startOp({ op: "stash", message }, "stashing");
+  });
+}
+
 function handleOpEvent(ev) {
   if (ev.type === "progress") {
     opLine("⟳ " + ev.step + (ev.detail ? " " + ev.detail : "") + "…");
@@ -190,7 +214,7 @@ function handleOpEvent(ev) {
     $("pull-btn").disabled = false;
     $("push-btn").disabled = false;
     hideModal();
-    if (ev.ok && kind === "commit") $("commit-msg").value = "";
+    if (ev.ok && (kind === "commit" || kind === "stash")) $("commit-msg").value = "";
     if (ev.ok) opLine(ev.summary || "done");
     else opLine("error: " + (ev.error || "operation failed"), true);
     if (ev.changed) refreshAfterOp();
@@ -376,7 +400,7 @@ function toggleSection(name) {
   const collapsed = $(name + "-list").classList.toggle("collapsed");
   $(name + "-header").textContent = (collapsed ? "\u25b8 " : "") + name;
 }
-["branches", "worktrees", "tags"].forEach((n) => {
+["branches", "worktrees", "tags", "stashes"].forEach((n) => {
   $(n + "-header").addEventListener("dblclick", () => toggleSection(n));
 });
 
@@ -412,6 +436,38 @@ $("tags-list").addEventListener("contextmenu", (e) => {
   e.preventDefault();
   const tg = state.tags.find((x) => x.name === li.dataset.n);
   if (tg) showTagMenu(tg, e.clientX, e.clientY);
+});
+
+$("stashes-list").addEventListener("click", (e) => {
+  const li = e.target.closest("li");
+  if (!li || !li.dataset.h) return; // a sha-less row ignores left-click
+  const st = state.stashes.find((x) => x.ref === li.dataset.r);
+  if (st) openStashDetail(st);
+});
+
+function showStashMenu(st, x, y) {
+  const items = [];
+  if (st.sha) items.push({ label: "show changes", act: () => openStashDetail(st) });
+  items.push({ label: "apply", act: () => startOp({ op: "stash-apply", ref: st.ref }, "applying " + st.ref) });
+  items.push({ label: "pop", act: () => startOp({ op: "stash-pop", ref: st.ref }, "popping " + st.ref) });
+  items.push({
+    label: "drop " + st.ref,
+    danger: true,
+    // engine.StashDrop is decision-free — the confirm lives here (the
+    // delete-tag precedent; the TUI confirms drop with y/n too).
+    act: () =>
+      showLocalConfirm("Drop " + st.ref + "?", ["drop", "abort"], (o) => {
+        if (o === "drop") startOp({ op: "stash-drop", ref: st.ref }, "dropping " + st.ref);
+      }),
+  });
+  showCtxMenu(items, x, y);
+}
+$("stashes-list").addEventListener("contextmenu", (e) => {
+  const li = e.target.closest("li");
+  if (!li || !li.dataset.r) return;
+  e.preventDefault();
+  const st = state.stashes.find((x) => x.ref === li.dataset.r);
+  if (st) showStashMenu(st, e.clientX, e.clientY);
 });
 
 // A partially-staged file appears twice: once under Staged (unstage
@@ -617,6 +673,30 @@ async function openCommitByHash(hash, title) {
   if (state.files.length) openFile(0);
 }
 
+// openStashDetail opens a stash's changes: the stash commit's tracked
+// first-parent diff plus, when present, its untracked-files parent
+// (stash^3 — a root commit whose file list shows every untracked file as
+// added). Untracked rows carry a per-file sha so their diffs read from
+// that parent; a failed untracked fetch degrades to the tracked list.
+async function openStashDetail(st) {
+  const body = await getJSON("/api/commit/" + st.sha);
+  let files = body.files || [];
+  if (st.untracked_sha) {
+    const u = await getJSON("/api/commit/" + st.untracked_sha).catch(() => ({ files: [] }));
+    files = files.concat((u.files || []).map((f) => ({ ...f, sha: st.untracked_sha })));
+  }
+  state.files = files;
+  state.fileCursor = 0;
+  state.fileSha = st.sha;
+  state.pane = "files";
+  state.filesMode = "commit";
+  setLayout("detail");
+  $("files-header").textContent = "≡ " + st.ref;
+  renderFiles();
+  focusPane();
+  if (state.files.length) openFile(0);
+}
+
 async function openWorkingTree(i) {
   state.cursor = i;
   renderCommits();
@@ -653,6 +733,7 @@ function renderFiles() {
   $("files-actions").classList.remove("hidden");
   $("commit-box").classList.remove("hidden");
   $("commit-btn").disabled = !(state.wt && state.wt.counts.staged > 0) || !!state.op;
+  $("stash-btn").disabled = !state.wt || !!state.op;
   let html = "";
   let lastSection = "";
   state.statusEntries.forEach((f, i) => {
@@ -677,11 +758,12 @@ function renderFiles() {
 async function openFile(i) {
   state.fileCursor = i;
   renderFiles();
+  updateDiffNav();
   if (state.filesMode === "status") return openStatusDiff(i);
   const f = state.files[i];
-  const q = new URLSearchParams({ sha: state.fileSha, path: f.path, status: f.status });
+  const q = new URLSearchParams({ sha: f.sha || state.fileSha, path: f.path, status: f.status });
   if (f.old_path) q.set("old", f.old_path);
-  $("diff-header").textContent = f.path;
+  $("diff-title").textContent = f.path;
   $("diff-body").innerHTML = `<div class="notice">loading…</div>`;
   try {
     renderDiff(await getJSON("/api/diff?" + q));
@@ -692,7 +774,7 @@ async function openFile(i) {
 
 async function openStatusDiff(i) {
   const f = state.statusEntries[i];
-  $("diff-header").textContent = f.path;
+  $("diff-title").textContent = f.path;
   if (f.section === "conflicts") {
     $("diff-body").innerHTML = `<div class="notice">conflicted — resolve in the TUI</div>`;
     return;
@@ -718,7 +800,7 @@ function exitStatusToList() {
   $("files-actions").classList.add("hidden");
   $("commit-box").classList.add("hidden");
   $("files-header").textContent = "";
-  $("diff-header").textContent = "";
+  $("diff-title").textContent = "";
   $("diff-body").innerHTML = "";
   state.lastDiff = null; // a resize must not resurrect the cleared diff
   setLayout("list");
@@ -756,12 +838,15 @@ function markSpans(text, spans, side) {
 
 function renderDiff(d) {
   state.lastDiff = d; // re-rendered on window resize (layout is width-dependent)
+  state.diffBlockIdx = -1;
   if (d.binary) {
     $("diff-body").innerHTML = `<div class="notice">binary file</div>`;
+    updateDiffNav();
     return;
   }
   if (d.too_large) {
     $("diff-body").innerHTML = `<div class="notice">diff too large</div>`;
+    updateDiffNav();
     return;
   }
   const rows = d.rows || [];
@@ -817,7 +902,62 @@ function renderDiff(d) {
   html += "</table>";
   if (d.truncated) html += `<div class="notice">alignment truncated (size guard)</div>`;
   $("diff-body").innerHTML = html;
+  updateDiffNav();
 }
+
+// --- diff-pane navigation (the diff-header toolbar) ---
+
+function activeFileList() {
+  return state.filesMode === "status" ? state.statusEntries : state.files;
+}
+
+function updateDiffNav() {
+  const list = activeFileList();
+  $("prev-file").disabled = list.length === 0 || state.fileCursor <= 0;
+  $("next-file").disabled = list.length === 0 || state.fileCursor >= list.length - 1;
+  const any = diffChangeBlocks().length > 0;
+  $("prev-change").disabled = !any;
+  $("next-change").disabled = !any;
+}
+
+function stepFile(delta) {
+  const list = activeFileList();
+  const i = state.fileCursor + delta;
+  if (i < 0 || i >= list.length) return;
+  openFile(i);
+}
+
+// diffChangeBlocks returns the first row of each contiguous non-"same" run
+// in the rendered diff table (add/del/change rows; a unified changed pair
+// renders del+add adjacent — still one run). Derived from the live DOM so
+// it survives any render mode (side-by-side, unified, single-column).
+function diffChangeBlocks() {
+  const rows = $("diff-body").querySelectorAll("table.diff tr");
+  const blocks = [];
+  let inBlock = false;
+  rows.forEach((tr) => {
+    const change = !tr.classList.contains("same");
+    if (change && !inBlock) blocks.push(tr);
+    inBlock = change;
+  });
+  return blocks;
+}
+
+function stepChange(delta) {
+  const blocks = diffChangeBlocks();
+  if (!blocks.length) return;
+  const i = Math.max(0, Math.min(blocks.length - 1, state.diffBlockIdx + delta));
+  state.diffBlockIdx = i;
+  const tr = blocks[i];
+  tr.scrollIntoView({ block: "center" });
+  tr.classList.add("flash");
+  setTimeout(() => tr.classList.remove("flash"), 600);
+}
+
+$("prev-file").addEventListener("click", () => stepFile(-1));
+$("next-file").addEventListener("click", () => stepFile(1));
+$("prev-change").addEventListener("click", () => stepChange(-1));
+$("next-change").addEventListener("click", () => stepChange(1));
 
 // --- focus + keyboard ---
 
@@ -924,6 +1064,7 @@ $("unstage-all").addEventListener("click", () => {
 $("commit-btn").addEventListener("click", doCommit);
 $("pull-btn").addEventListener("click", doPull);
 $("push-btn").addEventListener("click", doPush);
+$("stash-btn").addEventListener("click", doStash);
 window.addEventListener("resize", () => {
   renderCommits();
   if (state.lastDiff) renderDiff(state.lastDiff); // unified↔side-by-side is width-dependent
