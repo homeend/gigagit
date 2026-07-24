@@ -25,6 +25,7 @@ const state = {
   sidebar: true,
   op: null, // {id, es: EventSource} while an operation is live
   lastDiff: null,
+  diffBlockIdx: -1,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -440,12 +441,13 @@ $("tags-list").addEventListener("contextmenu", (e) => {
 $("stashes-list").addEventListener("click", (e) => {
   const li = e.target.closest("li");
   if (!li || !li.dataset.h) return; // a sha-less row ignores left-click
-  openCommitByHash(li.dataset.h, "≡ " + li.dataset.r);
+  const st = state.stashes.find((x) => x.ref === li.dataset.r);
+  if (st) openStashDetail(st);
 });
 
 function showStashMenu(st, x, y) {
   const items = [];
-  if (st.sha) items.push({ label: "show changes", act: () => openCommitByHash(st.sha, "≡ " + st.ref) });
+  if (st.sha) items.push({ label: "show changes", act: () => openStashDetail(st) });
   items.push({ label: "apply", act: () => startOp({ op: "stash-apply", ref: st.ref }, "applying " + st.ref) });
   items.push({ label: "pop", act: () => startOp({ op: "stash-pop", ref: st.ref }, "popping " + st.ref) });
   items.push({
@@ -671,6 +673,30 @@ async function openCommitByHash(hash, title) {
   if (state.files.length) openFile(0);
 }
 
+// openStashDetail opens a stash's changes: the stash commit's tracked
+// first-parent diff plus, when present, its untracked-files parent
+// (stash^3 — a root commit whose file list shows every untracked file as
+// added). Untracked rows carry a per-file sha so their diffs read from
+// that parent; a failed untracked fetch degrades to the tracked list.
+async function openStashDetail(st) {
+  const body = await getJSON("/api/commit/" + st.sha);
+  let files = body.files || [];
+  if (st.untracked_sha) {
+    const u = await getJSON("/api/commit/" + st.untracked_sha).catch(() => ({ files: [] }));
+    files = files.concat((u.files || []).map((f) => ({ ...f, sha: st.untracked_sha })));
+  }
+  state.files = files;
+  state.fileCursor = 0;
+  state.fileSha = st.sha;
+  state.pane = "files";
+  state.filesMode = "commit";
+  setLayout("detail");
+  $("files-header").textContent = "≡ " + st.ref;
+  renderFiles();
+  focusPane();
+  if (state.files.length) openFile(0);
+}
+
 async function openWorkingTree(i) {
   state.cursor = i;
   renderCommits();
@@ -732,11 +758,12 @@ function renderFiles() {
 async function openFile(i) {
   state.fileCursor = i;
   renderFiles();
+  updateDiffNav();
   if (state.filesMode === "status") return openStatusDiff(i);
   const f = state.files[i];
-  const q = new URLSearchParams({ sha: state.fileSha, path: f.path, status: f.status });
+  const q = new URLSearchParams({ sha: f.sha || state.fileSha, path: f.path, status: f.status });
   if (f.old_path) q.set("old", f.old_path);
-  $("diff-header").textContent = f.path;
+  $("diff-title").textContent = f.path;
   $("diff-body").innerHTML = `<div class="notice">loading…</div>`;
   try {
     renderDiff(await getJSON("/api/diff?" + q));
@@ -747,7 +774,7 @@ async function openFile(i) {
 
 async function openStatusDiff(i) {
   const f = state.statusEntries[i];
-  $("diff-header").textContent = f.path;
+  $("diff-title").textContent = f.path;
   if (f.section === "conflicts") {
     $("diff-body").innerHTML = `<div class="notice">conflicted — resolve in the TUI</div>`;
     return;
@@ -773,7 +800,7 @@ function exitStatusToList() {
   $("files-actions").classList.add("hidden");
   $("commit-box").classList.add("hidden");
   $("files-header").textContent = "";
-  $("diff-header").textContent = "";
+  $("diff-title").textContent = "";
   $("diff-body").innerHTML = "";
   state.lastDiff = null; // a resize must not resurrect the cleared diff
   setLayout("list");
@@ -811,12 +838,15 @@ function markSpans(text, spans, side) {
 
 function renderDiff(d) {
   state.lastDiff = d; // re-rendered on window resize (layout is width-dependent)
+  state.diffBlockIdx = -1;
   if (d.binary) {
     $("diff-body").innerHTML = `<div class="notice">binary file</div>`;
+    updateDiffNav();
     return;
   }
   if (d.too_large) {
     $("diff-body").innerHTML = `<div class="notice">diff too large</div>`;
+    updateDiffNav();
     return;
   }
   const rows = d.rows || [];
@@ -872,7 +902,62 @@ function renderDiff(d) {
   html += "</table>";
   if (d.truncated) html += `<div class="notice">alignment truncated (size guard)</div>`;
   $("diff-body").innerHTML = html;
+  updateDiffNav();
 }
+
+// --- diff-pane navigation (the diff-header toolbar) ---
+
+function activeFileList() {
+  return state.filesMode === "status" ? state.statusEntries : state.files;
+}
+
+function updateDiffNav() {
+  const list = activeFileList();
+  $("prev-file").disabled = list.length === 0 || state.fileCursor <= 0;
+  $("next-file").disabled = list.length === 0 || state.fileCursor >= list.length - 1;
+  const any = diffChangeBlocks().length > 0;
+  $("prev-change").disabled = !any;
+  $("next-change").disabled = !any;
+}
+
+function stepFile(delta) {
+  const list = activeFileList();
+  const i = state.fileCursor + delta;
+  if (i < 0 || i >= list.length) return;
+  openFile(i);
+}
+
+// diffChangeBlocks returns the first row of each contiguous non-"same" run
+// in the rendered diff table (add/del/change rows; a unified changed pair
+// renders del+add adjacent — still one run). Derived from the live DOM so
+// it survives any render mode (side-by-side, unified, single-column).
+function diffChangeBlocks() {
+  const rows = $("diff-body").querySelectorAll("table.diff tr");
+  const blocks = [];
+  let inBlock = false;
+  rows.forEach((tr) => {
+    const change = !tr.classList.contains("same");
+    if (change && !inBlock) blocks.push(tr);
+    inBlock = change;
+  });
+  return blocks;
+}
+
+function stepChange(delta) {
+  const blocks = diffChangeBlocks();
+  if (!blocks.length) return;
+  const i = Math.max(0, Math.min(blocks.length - 1, state.diffBlockIdx + delta));
+  state.diffBlockIdx = i;
+  const tr = blocks[i];
+  tr.scrollIntoView({ block: "center" });
+  tr.classList.add("flash");
+  setTimeout(() => tr.classList.remove("flash"), 600);
+}
+
+$("prev-file").addEventListener("click", () => stepFile(-1));
+$("next-file").addEventListener("click", () => stepFile(1));
+$("prev-change").addEventListener("click", () => stepChange(-1));
+$("next-change").addEventListener("click", () => stepChange(1));
 
 // --- focus + keyboard ---
 

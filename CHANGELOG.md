@@ -8,6 +8,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- `gg web`: diff-pane navigation + stash untracked files. The diff header
+  gains ‹/› arrows stepping between files and between change blocks within
+  a diff. A stash's untracked files (stored in its `^3` parent, invisible
+  to a first-parent diff — an untracked-only stash listed NO files) now
+  appear in the stash drill-in, diffed as added content.
+
 - `gg web`: stashes. A 4th sidebar section lists stash entries (left-click
   opens the stash's changes in the commit detail); right-click offers
   apply / pop / drop (drop confirms — the engine op is decision-free). A

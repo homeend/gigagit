@@ -43,7 +43,15 @@
     <ul id="files-list"></ul>
   </section>
   <section id="diff-pane" class="pane">
-    <div id="diff-header"></div>
+    <div id="diff-header">
+      <span id="diff-title"></span>
+      <span id="diff-nav">
+        <button id="prev-file" title="previous file">‹ file</button>
+        <button id="next-file" title="next file">file ›</button>
+        <button id="prev-change" title="previous change">‹ change</button>
+        <button id="next-change" title="next change">change ›</button>
+      </span>
+    </div>
     <div id="diff-body"></div>
   </section>
 </main>
