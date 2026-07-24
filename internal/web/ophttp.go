@@ -17,6 +17,7 @@ type opStartRequest struct {
 	Tag     string `json:"tag"`
 	Path    string `json:"path"`
 	Ref     string `json:"ref"`
+	Sha     string `json:"sha"`
 }
 
 // handleOpStart begins an operation and returns 202 {op_id}. Ops wired so
@@ -126,6 +127,16 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 		found := false
 		for _, e := range entries {
 			if e.Ref == req.Ref {
+				// Optional freshness guard: the client sends the sha it
+				// listed; a successful resolve that mismatches means the
+				// stash list changed under it (stash@{N} is positional).
+				// A resolve error does not block — best-effort only.
+				if req.Sha != "" {
+					if cs, cerr := s.svc.StashCommit(r.Context(), e.Ref); cerr == nil && cs != req.Sha {
+						writeErr(w, http.StatusConflict, errors.New("stash list changed; refresh"))
+						return
+					}
+				}
 				switch req.Op {
 				case "stash-apply":
 					op = engine.StashApply{Ref: e.Ref}
