@@ -3,9 +3,10 @@ package web
 import "net/http"
 
 type stashRow struct {
-	Ref     string `json:"ref"`
-	Subject string `json:"subject"`
-	Sha     string `json:"sha,omitempty"`
+	Ref          string `json:"ref"`
+	Subject      string `json:"subject"`
+	Sha          string `json:"sha,omitempty"`
+	UntrackedSha string `json:"untracked_sha,omitempty"`
 }
 
 // handleStashes lists stash entries newest-first. Each row carries the
@@ -23,6 +24,14 @@ func (s *Server) handleStashes(w http.ResponseWriter, r *http.Request) {
 		row := stashRow{Ref: e.Ref, Subject: e.Subject}
 		if sha, serr := s.svc.StashCommit(r.Context(), e.Ref); serr == nil {
 			row.Sha = sha
+		}
+		// A -u stash stores untracked files in a THIRD parent (a root
+		// commit) invisible to the stash commit's first-parent diff;
+		// surface it so the client can list and diff those files. The
+		// input is the server-owned ref plus a literal — nothing
+		// client-sent. No ^3 → rev-parse errors → field omitted.
+		if usha, uerr := s.svc.StashCommit(r.Context(), e.Ref+"^3"); uerr == nil {
+			row.UntrackedSha = usha
 		}
 		rows = append(rows, row)
 	}

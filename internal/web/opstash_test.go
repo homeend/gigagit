@@ -13,9 +13,10 @@ import (
 
 type stashesResp struct {
 	Stashes []struct {
-		Ref     string `json:"ref"`
-		Subject string `json:"subject"`
-		Sha     string `json:"sha"`
+		Ref          string `json:"ref"`
+		Subject      string `json:"subject"`
+		Sha          string `json:"sha"`
+		UntrackedSha string `json:"untracked_sha"`
 	} `json:"stashes"`
 }
 
@@ -172,5 +173,106 @@ func TestOpHTTPStashBadRef(t *testing.T) {
 		if code := postJSON(t, ts, "/api/op", body, "application/json", "", nil); code != http.StatusNotFound {
 			t.Errorf("ref %q code = %d, want 404", ref, code)
 		}
+	}
+}
+
+func TestStashUntrackedOnly(t *testing.T) {
+	dir := newRepoDir(t, 1)
+	if err := os.WriteFile(filepath.Join(dir, "new.txt"), []byte("brand new\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, dir, "stash", "push", "-u", "-m", "untracked only")
+	ts := serve(t, New(domain.Open(dir)))
+
+	var body stashesResp
+	if code := getJSON(t, ts, "/api/stashes", &body); code != http.StatusOK {
+		t.Fatalf("code = %d", code)
+	}
+	if len(body.Stashes) != 1 {
+		t.Fatalf("stashes = %+v", body.Stashes)
+	}
+	row := body.Stashes[0]
+	if row.UntrackedSha == "" {
+		t.Fatal("untracked_sha missing on a -u stash")
+	}
+	if want := gitRun(t, dir, "rev-parse", "stash@{0}^3"); row.UntrackedSha != want {
+		t.Errorf("untracked_sha = %q, want %q", row.UntrackedSha, want)
+	}
+	// The untracked parent is a root commit: its file list shows the file as
+	// added, and the diff endpoint serves its content (status=A skips sha^).
+	var cf struct {
+		Files []struct {
+			Path   string `json:"path"`
+			Status string `json:"status"`
+		} `json:"files"`
+	}
+	if code := getJSON(t, ts, "/api/commit/"+row.UntrackedSha, &cf); code != http.StatusOK {
+		t.Fatalf("commit files code = %d", code)
+	}
+	if len(cf.Files) != 1 || cf.Files[0].Path != "new.txt" || cf.Files[0].Status != "A" {
+		t.Fatalf("untracked parent files = %+v", cf.Files)
+	}
+	var d struct {
+		Rows   []map[string]any `json:"rows"`
+		Binary bool             `json:"binary"`
+	}
+	q := "/api/diff?sha=" + row.UntrackedSha + "&path=new.txt&status=A"
+	if code := getJSON(t, ts, q, &d); code != http.StatusOK {
+		t.Fatalf("diff code = %d", code)
+	}
+	if len(d.Rows) == 0 {
+		t.Error("diff of the untracked file is empty")
+	}
+}
+
+func TestStashTrackedOnlyHasNoUntrackedSha(t *testing.T) {
+	dir := newRepoDir(t, 1)
+	dirtyFile(t, dir, "edited\n")
+	gitRun(t, dir, "stash", "push", "-m", "tracked only")
+	ts := serve(t, New(domain.Open(dir)))
+
+	var body stashesResp
+	if code := getJSON(t, ts, "/api/stashes", &body); code != http.StatusOK {
+		t.Fatalf("code = %d", code)
+	}
+	if len(body.Stashes) != 1 || body.Stashes[0].Sha == "" {
+		t.Fatalf("stashes = %+v", body.Stashes)
+	}
+	if body.Stashes[0].UntrackedSha != "" {
+		t.Errorf("untracked_sha = %q on a plain stash, want empty", body.Stashes[0].UntrackedSha)
+	}
+}
+
+func TestStashMixedTrackedAndUntracked(t *testing.T) {
+	dir := newRepoDir(t, 1)
+	dirtyFile(t, dir, "edited\n")
+	if err := os.WriteFile(filepath.Join(dir, "new.txt"), []byte("brand new\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, dir, "stash", "push", "-u", "-m", "mixed")
+	ts := serve(t, New(domain.Open(dir)))
+
+	var body stashesResp
+	getJSON(t, ts, "/api/stashes", &body)
+	if len(body.Stashes) != 1 {
+		t.Fatalf("stashes = %+v", body.Stashes)
+	}
+	row := body.Stashes[0]
+	if row.Sha == "" || row.UntrackedSha == "" {
+		t.Fatalf("row = %+v, want both shas", row)
+	}
+	var tracked, untracked struct {
+		Files []struct {
+			Path   string `json:"path"`
+			Status string `json:"status"`
+		} `json:"files"`
+	}
+	getJSON(t, ts, "/api/commit/"+row.Sha, &tracked)
+	getJSON(t, ts, "/api/commit/"+row.UntrackedSha, &untracked)
+	if len(tracked.Files) != 1 || tracked.Files[0].Path != "f.txt" {
+		t.Errorf("tracked files = %+v, want [f.txt]", tracked.Files)
+	}
+	if len(untracked.Files) != 1 || untracked.Files[0].Path != "new.txt" || untracked.Files[0].Status != "A" {
+		t.Errorf("untracked files = %+v, want [new.txt A]", untracked.Files)
 	}
 }
