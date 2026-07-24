@@ -65,6 +65,7 @@ body {
 #diff-nav button:hover:not(:disabled) { border-color: var(--accent); }
 #diff-nav button:disabled { opacity: .45; cursor: default; }
 table.diff tr.flash td { background: var(--sel); }
+table.diff { width: 100%; border-collapse: collapse; table-layout: fixed; }
 /* Wrap at whitespace; break inside a token only when it alone overflows
    (break-all shattered code mid-word, e.g. import paths). */
 table.diff td { vertical-align: top; white-space: pre-wrap; overflow-wrap: anywhere; padding: 0 6px; }
