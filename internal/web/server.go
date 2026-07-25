@@ -70,6 +70,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/commit/{sha}", s.handleCommitFiles)
 	mux.HandleFunc("GET /api/diff", s.handleDiff)
 	mux.HandleFunc("POST /api/stage", writeGuard(s.handleStage))
+	mux.HandleFunc("GET /api/hunks", s.handleHunks)
+	mux.HandleFunc("POST /api/stage-hunks", writeGuard(s.handleStageHunks))
 	mux.HandleFunc("POST /api/op", writeGuard(s.handleOpStart))
 	mux.HandleFunc("GET /api/op/{id}/events", s.handleOpEvents)
 	mux.HandleFunc("POST /api/op/{id}/decide", writeGuard(s.handleOpDecide))

@@ -8,6 +8,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- web: hunk-staging backend — `GET /api/hunks?path=` lists a file's
+  unstaged change blocks with a freshness hash; `POST /api/stage-hunks`
+  stages a picked subset through the TUI's own hunkpick → StageHunks
+  machinery (409 when the file changed under the client; untracked,
+  binary, and CRLF files refused with clear messages). UI arrives with
+  the diff-pane work.
+
 - web: right-click a worktree → "switch here" re-points the running server
   at it (the page reloads into the new root). Served and switched-to repos
   are recorded in the MRU registry (`GET /api/repos` lists it), so
