@@ -57,11 +57,17 @@ func cmdPush(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr
 	force := fs.Bool("force", false, "force-push, overwriting the remote branch unconditionally (no lease)")
 	lease := fs.Bool("force-with-lease", false, "force-push only if the remote branch has not moved")
 	onReject := fs.String("on-reject", "", "if a plain push is rejected (remote ahead): rebase|force|force-with-lease|abort (default abort)")
+	mapFlag := fs.Bool("map", false, "if the pushed branch isn't covered by the fetch refspec, add a per-branch mapping + fetch it without prompting")
+	noMap := fs.Bool("no-map", false, "never add a fetch-refspec mapping for the pushed branch")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	if *force && *lease {
 		fmt.Fprintln(stderr, "push: choose at most one of --force/--force-with-lease")
+		return 2
+	}
+	if *mapFlag && *noMap {
+		fmt.Fprintln(stderr, "push: choose at most one of --map/--no-map")
 		return 2
 	}
 	if *onReject != "" && (*force || *lease) {
@@ -105,6 +111,17 @@ func cmdPush(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr
 			return 2
 		}
 		policy = rp
+	}
+	if policy == nil {
+		policy = map[string]string{}
+	}
+	switch {
+	case *mapFlag:
+		policy[engine.FetchMappingDecisionID] = "add"
+	case *noMap:
+		policy[engine.FetchMappingDecisionID] = "skip"
+	case !stdinIsTerminal():
+		policy[engine.FetchMappingDecisionID] = "skip" // pipelines never mutate config unseen
 	}
 	dec := cliDecider{policy: policy, in: stdin, out: stderr, interactive: stdinIsTerminal()}
 	res, err := runOperation(context.Background(), svc,

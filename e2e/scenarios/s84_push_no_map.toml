@@ -1,0 +1,29 @@
+name = "push --no-map pushes but never touches the fetch refspec"
+
+[input.origin]
+transport = "path"
+steps = [
+  { write = "a.txt", content = "1" },
+  { commit = "init" },
+]
+
+[input]
+steps = [
+  { git_config = "remote.origin.fetch", value = "+refs/heads/main:refs/remotes/origin/main" },
+  { branch = "feat" },
+  { switch = "feat" },
+  { write = "f.txt", content = "x" },
+  { commit = "feat work" },
+]
+
+[[run]]
+cmd = ["push", "--no-map"]
+exit = 0
+stdout_contains = ["pushed"]
+stdout_excludes = ["mapped"]
+
+[expect]
+branch = "feat"
+
+[expect.origin]
+branches = ["feat", "main"]

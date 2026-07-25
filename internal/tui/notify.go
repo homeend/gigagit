@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -42,6 +43,10 @@ const noticeCommitGraph = "commit_graph_recommend"
 
 // noticeClipboard is the "install a clipboard tool" recommendation's stable id.
 const noticeClipboard = "clipboard_tool_missing"
+
+// noticeNarrowRefspec is the "branches aren't tracked by the fetch refspec"
+// recommendation's stable id.
+const noticeNarrowRefspec = "narrow_fetch_refspec"
 
 // bigRepoPackBytes is the pack-size floor for "big repo": below it the
 // commit-graph win doesn't matter enough to nag about.
@@ -139,6 +144,9 @@ func (m Model) rebuildNotices() Model {
 	if n := commitGraphNotice(m.repoHealth); n != nil && !dismissed[n.id] && !m.noticeSessionDismissed[n.id] {
 		next = append(next, *n)
 	}
+	if n := narrowRefspecNotice(m.repoHealth); n != nil && !dismissed[n.id] && !m.noticeSessionDismissed[n.id] {
+		next = append(next, *n)
+	}
 	if n := clipboardNotice(m.clipAvail, m.repoHealth.GitCommonDir); n != nil && !dismissed[n.id] && !m.noticeSessionDismissed[n.id] {
 		next = append(next, *n)
 	}
@@ -168,6 +176,40 @@ func commitGraphNotice(h model.RepoHealth) *notice {
 				run: func(m Model) (Model, tea.Cmd) {
 					m.refreshHealthAfterOp = true
 					return m.startOp(engine.SetGitConfig{Key: "fetch.writeCommitGraph", Value: "true"})
+				}},
+			{label: i18n.T("Not now (ask again next load)")},
+			{label: i18n.T("Never for this repo"), never: true},
+		},
+	}
+}
+
+// narrowRefspecNotice fires when local branches have a configured upstream
+// the fetch refspec cannot resolve (single-branch/shallow clones): pushes
+// never move their remote-tracking refs, so the Commits panel's ↓↑ tip
+// markers and ahead/behind silently stay stale. The fix action adds a
+// per-branch mapping and fetches ONLY those branches — never the wildcard,
+// which could trigger a mass download on a monorepo remote.
+func narrowRefspecNotice(h model.RepoHealth) *notice {
+	if len(h.UnmappedBranches) == 0 {
+		return nil
+	}
+	title := i18n.T("%d branches aren't tracked by the fetch refspec", len(h.UnmappedBranches))
+	if len(h.UnmappedBranches) == 1 {
+		title = i18n.T("1 branch isn't tracked by the fetch refspec")
+	}
+	return &notice{
+		id:      noticeNarrowRefspec,
+		repoKey: h.GitCommonDir,
+		title:   title,
+		detail: []string{
+			i18n.T("This clone's fetch refspec doesn't map these branches, so a push never moves their remote-tracking ref — the ↓↑ tip markers and ahead/behind cannot follow them: %s", strings.Join(h.UnmappedBranches, ", ")),
+			i18n.T("gg can add a per-branch mapping and fetch just those branches (no mass download)."),
+		},
+		actions: []noticeAction{
+			{label: i18n.T("Add mappings + fetch these branches"),
+				run: func(m Model) (Model, tea.Cmd) {
+					m.refreshHealthAfterOp = true
+					return m.startOp(engine.AddFetchMappings{Remote: "origin", Branches: m.repoHealth.UnmappedBranches})
 				}},
 			{label: i18n.T("Not now (ask again next load)")},
 			{label: i18n.T("Never for this repo"), never: true},

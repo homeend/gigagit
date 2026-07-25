@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v53 -->
+<!-- gg:using-gg:v54 -->
 
 # Using gg (gigagit)
 
@@ -93,7 +93,7 @@ guards against removing the worktree you are standing in.
   ref without checking it out. On a diverged current branch, `--on-conflict=reset`
   hard-resets it to the remote tip, discarding local commits and uncommitted
   changes.
-- `gg push [--force | --force-with-lease] [--on-reject rebase|force|force-with-lease|abort] [<branch>]`
+- `gg push [--force | --force-with-lease] [--on-reject ...] [--map | --no-map] [<branch>]`
   — push a branch (sets upstream when missing). With no positional it pushes the
   current branch; with `<branch>` it pushes that local branch **by name without
   checking it out** (git pushes any local ref) — handy for a branch never pushed
@@ -108,7 +108,10 @@ guards against removing the worktree you are standing in.
   `push-force` decision, so a force push never prompts; `--on-reject` cannot be
   combined with `--force`/`--force-with-lease`. `--on-reject=rebase` applies only
   when pushing the current branch — rebasing rewrites HEAD, so a rejected push of
-  a non-current `<branch>` offers only force/abort.
+  a non-current `<branch>` offers only force/abort. `--map` adds a per-branch
+  fetch-refspec mapping when the clone's refspec doesn't cover the pushed branch
+  (single-branch/depth clones); `--no-map` declines; with neither, non-interactive
+  runs skip.
 - `gg switch <branch>` — switch branches, auto-stashing and restoring local
   changes; on a restore conflict the stash is preserved, never dropped.
 - `gg checkout <remote>/<branch> [-s|--switch] [--as <local>]` — check out a

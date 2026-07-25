@@ -22,6 +22,19 @@ func (r *Repo) FetchAll(ctx context.Context) error {
 	return err
 }
 
+// FetchBranches updates the remote-tracking refs for exactly the named
+// branches (`git fetch <remote> <branch>…`). Callers guarantee non-empty
+// branches (engine ops no-op before calling). --no-write-fetch-head matches
+// Fetch's concurrency contract.
+func (r *Repo) FetchBranches(ctx context.Context, remote string, branches []string) error {
+	b := gitcmd.New("fetch").Arg("--no-write-fetch-head", remote)
+	for _, br := range branches {
+		b = b.Arg(br)
+	}
+	_, err := r.Runner.Run(ctx, "git fetch (branches)", b.ToArgv())
+	return err
+}
+
 // RemoteNames lists configured remote names, one per line.
 func (r *Repo) RemoteNames(ctx context.Context) ([]string, error) {
 	argv := gitcmd.New("remote").ToArgv()
