@@ -247,6 +247,19 @@ function doPush() {
   startOp({ op: "push" }, "pushing");
 }
 
+// doReroot points the server at another root. The whole client state is
+// repo-scoped, so a clean reload is the honest reset on success
+// (localStorage prefs survive); errors land on the status strip.
+async function doReroot(path) {
+  if (state.op) return;
+  try {
+    await postJSON("/api/reroot", { path });
+    location.reload();
+  } catch (e) {
+    opLine("error: " + (e.message || e), true);
+  }
+}
+
 // toggleSidebar and stageFocused are shared by their keys (b, s/u) and the
 // clickable footer chips.
 function toggleSidebar() {
@@ -463,6 +476,11 @@ function copyText(text) {
 
 function showWorktreeMenu(w, x, y) {
   const items = [{ label: "copy path", act: () => copyText(w.path) }];
+  // Every row except the served worktree can be switched to (the same
+  // exemption the remove row uses).
+  if (!(state.worktree && w.path === state.worktree)) {
+    items.unshift({ label: "switch here", act: () => doReroot(w.path) });
+  }
   // The served worktree's row gets no remove (the engine would refuse it
   // anyway); main is engine-guarded too.
   if (!(state.worktree && w.path === state.worktree)) {

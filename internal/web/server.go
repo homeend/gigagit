@@ -74,6 +74,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/op/{id}/events", s.handleOpEvents)
 	mux.HandleFunc("POST /api/op/{id}/decide", writeGuard(s.handleOpDecide))
 	mux.HandleFunc("POST /api/reroot", writeGuard(s.handleReroot))
+	mux.HandleFunc("GET /api/repos", s.handleRepos)
 	return hostGuard(mux)
 }
 

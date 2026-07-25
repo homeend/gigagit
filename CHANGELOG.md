@@ -8,6 +8,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- web: right-click a worktree → "switch here" re-points the running server
+  at it (the page reloads into the new root). Served and switched-to repos
+  are recorded in the MRU registry (`GET /api/repos` lists it), so
+  re-rooting away is always reversible.
+
 - TUI: an error too long for the status bar now temporarily (30s) takes the
   footer row too, ending with a pointer to the full text in Settings `,` →
   Session errors. A newer status message collapses it back to one line
