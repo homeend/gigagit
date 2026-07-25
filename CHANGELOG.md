@@ -8,6 +8,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- TUI: an error too long for the status bar now temporarily (30s) takes the
+  footer row too, ending with a pointer to the full text in Settings `,` →
+  Session errors. A newer status message collapses it back to one line
+  immediately.
+
 - `gg web`: diff-pane navigation + stash untracked files. The diff header
   gains ‹/› arrows stepping between files and between change blocks within
   a diff. A stash's untracked files (stored in its `^3` parent, invisible
