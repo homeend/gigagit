@@ -8,6 +8,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- web: right-click a worktree → "switch here" re-points the running server
+  at it (the page reloads into the new root). Served and switched-to repos
+  are recorded in the MRU registry (`GET /api/repos` lists it), so
+  re-rooting away is always reversible.
+
 - web: overlay surfaces (decision modal, help, context menu) now share one
   layer stack with a single keyboard-routing rule — groundwork for the
   command palette and menus; behavior unchanged.
