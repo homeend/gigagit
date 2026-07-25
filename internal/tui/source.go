@@ -266,6 +266,12 @@ func opAffectedSources(op engine.Operation) []sourceKey {
 		return []sourceKey{srcBranches, srcRemotes, srcFeed}
 	case engine.Fetch:
 		return []sourceKey{srcRemotes}
+	case engine.AddFetchMappings:
+		// New remote-tracking refs appear (Remotes panel, the feed's %D
+		// decorations/↓↑ markers) and tracked branches gain ahead/behind
+		// (Branches). Mapped explicitly so it doesn't fall through to "all
+		// sources" and auto-fire the srcTags remote-tags network probe.
+		return []sourceKey{srcBranches, srcRemotes, srcFeed}
 	case engine.CreateWorktree, engine.CreateWorktreeForBranch:
 		return []sourceKey{srcBranches, srcWorktrees}
 	case engine.RemoveWorktree:
