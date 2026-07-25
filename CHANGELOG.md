@@ -8,6 +8,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- Push now detects a narrowed fetch refspec (single-branch/`--depth` monorepo
+  clones): after a successful push of a branch the refspec doesn't cover, gg
+  offers to add a per-branch tracking mapping and fetch just that branch, so
+  the Commits panel's ↓↑ tip markers and ahead/behind can follow it. A
+  notification-center notice (`!`) fixes already-affected branches the same
+  way, in one batch. New CLI flags: `gg push --map` / `--no-map`.
+
 - `gg web`: diff-pane navigation + stash untracked files. The diff header
   gains ‹/› arrows stepping between files and between change blocks within
   a diff. A stash's untracked files (stored in its `^3` parent, invisible
