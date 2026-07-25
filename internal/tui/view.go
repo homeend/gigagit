@@ -492,9 +492,27 @@ func (m Model) renderInterface() string {
 	var statusRow string
 	hint := " · " + i18n.T("full: , → Session errors")
 	room := g.w - lipgloss.Width(hint)
-	if errMode && lipgloss.Width(full) > g.w && room >= statusErrHintMinRoom && time.Since(m.statusMsgAt) < statusErrExpandFor {
+	// The trigger is the ERROR's own overflow, not the composed line's: full
+	// also carries the conflict/mark/notice hints and the "⏳ reloading…"/
+	// elapsed-time wrappers, none of which live in m.statusMsg. Gating on
+	// full's width instead would expand-and-collapse a one-line error on
+	// every post-failure background reload (the "⏳ reloading… · " prefix
+	// alone can push an otherwise-fitting error past g.w) and would let an
+	// unrelated conflict notice eat into row 2 of a short error that never
+	// needed to expand at all. lipgloss.Width(full) > g.w is not ANDed in
+	// alongside msgOverflows: in error mode m.statusMsg always leads parts
+	// (see above) and is only ever appended to, never shortened, so
+	// msgOverflows already implies full's width exceeds g.w too — repeating
+	// that check would just be dead weight.
+	msgOverflows := lipgloss.Width(oneLine(m.statusMsg)) > g.w
+	if errMode && msgOverflows && room >= statusErrHintMinRoom && time.Since(m.statusMsgAt) < statusErrExpandFor {
 		head, tail := splitCols(full, g.w)
-		footerRow = statusErrStyle.Render(head)
+		// splitCols returns the widest prefix that FITS — a wide glyph that
+		// would straddle the g.w boundary moves wholly into tail, leaving
+		// head up to one column short. padRight closes that gap so the red
+		// background spans exactly g.w columns on both rows instead of
+		// visibly differing by a column.
+		footerRow = statusErrStyle.Render(padRight(head, g.w))
 		// room >= statusErrHintMinRoom > 0 (the gate above), so
 		// truncate(tail, room) is at most room columns and the whole row is
 		// bounded by g.w = room + width(hint) BY CONSTRUCTION — not by a

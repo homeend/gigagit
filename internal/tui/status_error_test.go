@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
@@ -249,7 +250,15 @@ func TestStatusNormalLinePreservesText(t *testing.T) {
 
 // TestStatusErrorLeadsConflictNotice guards the stash-apply-conflict workflow:
 // when an error coexists with the conflict notice, the error must lead so a
-// narrow terminal truncates the notice, not the error.
+// narrow terminal truncates the notice, not the error. statusMsgAt is
+// stamped fresh (what production always does via the Update wrapper) rather
+// than left zero — with a zero stamp time.Since(zero) is enormous, so the
+// two-line expansion's freshness gate happened to be false regardless of
+// what this test was asserting, letting it pass for an accidental reason.
+// With a fresh stamp the message here still doesn't overflow g.w on its
+// own, so the two-line path never triggers either — this exercises the
+// ordinary single-line truncate path, which is what the assertion is
+// actually about.
 func TestStatusErrorLeadsConflictNotice(t *testing.T) {
 	m := statusRenderModel()
 	m.width = 50 // narrow enough that the whole line can't fit
@@ -257,6 +266,7 @@ func TestStatusErrorLeadsConflictNotice(t *testing.T) {
 		{Path: "timing3.log", Kind: model.KindUnmerged, Staged: 'U', Unstaged: 'U'},
 	}}
 	m.statusMsg = "error: git stash apply failed (exit 1)"
+	m.statusMsgAt = time.Now()
 	line := ansi.Strip(lastLine(m.View()))
 	if !strings.Contains(line, "error:") {
 		t.Fatalf("error must lead the status line, got: %q", line)
@@ -378,6 +388,33 @@ func TestShortErrorStaysOneLine(t *testing.T) {
 	}
 }
 
+// TestShortErrorWithConflictNoticeNeverExpands guards the whole-branch review
+// finding: the expansion trigger must be the ERROR's OWN overflow, not the
+// composed status line's. The composed line also carries the conflict
+// notice (and, elsewhere, the "⏳ reloading…"/elapsed-time wrappers) — none
+// of which live in m.statusMsg. Gating on the composed line's width let a
+// short error that fit fine on its own expand anyway once a conflict notice
+// pushed the TOTAL past g.w, truncating the notice's own "press [x] to
+// resolve" into row 2 and hiding the footer's [x] hint for 30s — the one
+// case where hiding both pointers at once actually hurts. The error here
+// (39 cols) fits g.w=50 alone; only the appended "⚠ 1 conflict — press [x]
+// to resolve" notice pushes the total over.
+func TestShortErrorWithConflictNoticeNeverExpands(t *testing.T) {
+	m := sizedModel(t, 50, 30)
+	m.status = model.WorkingTreeStatus{Files: []model.FileStatus{
+		{Path: "timing3.log", Kind: model.KindUnmerged, Staged: 'U', Unstaged: 'U'},
+	}}
+	m.statusMsg = "error: git stash apply failed (exit 1)"
+	m.statusMsgAt = time.Now()
+	out := ansi.Strip(m.View())
+	if !strings.Contains(out, "[b]ranch") {
+		t.Fatalf("a short error must not hide the footer just because a conflict notice pushed the composed line over g.w:\n%s", out)
+	}
+	if strings.Contains(out, "full: , → Session errors") {
+		t.Fatalf("a short error must not grow a pointer row it doesn't need:\n%s", out)
+	}
+}
+
 // A long NON-error message never expands — the footer survives and the
 // message truncates as before.
 func TestLongNonErrorNeverExpands(t *testing.T) {
@@ -401,6 +438,44 @@ func TestExpiredErrorCollapses(t *testing.T) {
 	}
 	if strings.Contains(out, "full: , → Session errors") {
 		t.Fatalf("an expired error must not keep the pointer row:\n%s", out)
+	}
+}
+
+// TestNewerMessageCollapsesExpandedBar guards the other half of the
+// stamp-and-collapse design — only the stamp mechanism itself was pinned
+// before (TestStatusMsgChangeStampsStatusMsgAt): a newer message must
+// immediately collapse an in-progress two-line expansion back to one line
+// with the footer hints restored, not merely reset the countdown on the
+// STALE message. The newer message is delivered through the real
+// Model.Update path (not by poking statusMsg/statusMsgAt directly by hand),
+// so the wrapper's re-stamp — the actual production mechanism — is what's
+// under test. pendingSources is set to an empty (non-nil) slice first so
+// opFinishedMsg's own post-op source-reload machinery — which would
+// otherwise flip every source's loading flag and hide the ops-gated footer
+// hints for a reason unrelated to this test — stays out of the way.
+func TestNewerMessageCollapsesExpandedBar(t *testing.T) {
+	m := sizedModel(t, 80, 30)
+	m.statusMsg = "error: git push failed (exit 128): ssh: Could not resolve hostname " +
+		strings.Repeat("x", 30)
+	m.statusMsgAt = time.Now()
+	pre := ansi.Strip(m.View())
+	if !strings.Contains(pre, "full: , → Session errors") {
+		t.Fatalf("precondition: the bar should be expanded before the newer message lands:\n%s", pre)
+	}
+
+	m.pendingSources = []sourceKey{}
+	u, _ := m.Update(opFinishedMsg{res: engine.Result{Summary: "done"}})
+	m = u.(Model)
+
+	out := ansi.Strip(m.View())
+	if !strings.Contains(out, "[b]ranch") {
+		t.Fatalf("a newer message must restore the footer hints immediately:\n%s", out)
+	}
+	if strings.Contains(out, "full: , → Session errors") {
+		t.Fatalf("a newer message must collapse the pointer row, not just reset its clock:\n%s", out)
+	}
+	if !strings.Contains(out, "done") {
+		t.Fatalf("the newer message itself must render:\n%s", out)
 	}
 }
 

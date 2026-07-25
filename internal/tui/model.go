@@ -303,6 +303,11 @@ func (m Model) Init() tea.Cmd {
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	before := m.statusMsg
 	nm, cmd := m.dispatch(msg)
+	// Invariant this relies on: every dispatch path returns a Model (true of
+	// every case today). If that ever stopped holding, the ok-guard below
+	// would silently skip the stamp instead of failing loud — statusMsgAt
+	// would quietly stop advancing and the two-line error expansion would
+	// quietly stop working, with no test catching it.
 	if next, ok := nm.(Model); ok && next.statusMsg != before {
 		next.statusMsgAt = time.Now()
 		return next, cmd
