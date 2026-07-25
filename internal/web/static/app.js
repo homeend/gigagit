@@ -190,9 +190,15 @@ function renderStashes() {
 // --- op transport client ---
 
 let opLineTimer = null;
+function hideOpLine() {
+  clearTimeout(opLineTimer);
+  $("op-text").textContent = "";
+  $("op-line").classList.add("hidden");
+}
+
 function opLine(text, isErr) {
   const el = $("op-line");
-  el.textContent = text || "";
+  $("op-text").textContent = text || "";
   el.classList.toggle("err", !!isErr);
   el.classList.toggle("hidden", !text);
   clearTimeout(opLineTimer);
@@ -201,10 +207,13 @@ function opLine(text, isErr) {
   // (each op event overwrites the line and re-arms the timer anyway)
   opLineTimer = setTimeout(() => {
     if (state.op) return;
-    el.textContent = "";
-    el.classList.add("hidden");
+    hideOpLine();
   }, 30000);
 }
+
+// Double-click anywhere in the strip dismisses it immediately (the error
+// header advertises this); a live op's next event just re-shows it.
+$("op-line").addEventListener("dblclick", hideOpLine);
 
 // startOp is the transport client, op-agnostic: POST /api/op, then follow
 // the SSE stream. state.op.kind lets done-handling react per op (a commit

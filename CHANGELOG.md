@@ -8,6 +8,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- web: error messages in the status strip carry a header bar — "Problem"
+  on the left, "(double-click anywhere to hide)" on the right — and
+  double-clicking anywhere in the strip dismisses it immediately (the 30s
+  auto-hide stays).
+
 - Push now detects a narrowed fetch refspec (single-branch/`--depth` monorepo
   clones): after a successful push of a branch the refspec doesn't cover, gg
   offers to add a per-branch tracking mapping and fetch just that branch, so
