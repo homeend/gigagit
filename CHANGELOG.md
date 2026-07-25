@@ -8,6 +8,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- web: the status/error line moved into its own strip ABOVE the bottom bar
+  (it no longer covers the key hints) and auto-hides after 30s (never while
+  an operation is still running); the bottom-bar entries are now clickable
+  chips that run their action (pull, push, refresh, stage/unstage, graph,
+  sidebar, back, help).
+
 - web: the flat list's gutter is a continuous colored line (the commit's
   lane color) instead of monochrome dots; `r` soft-reloads everything, and
   the working-tree status auto-refreshes when the tab regains focus — files
