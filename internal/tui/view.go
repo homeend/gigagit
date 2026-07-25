@@ -972,6 +972,43 @@ func padRight(s string, n int) string {
 	return s
 }
 
+// widthUnsafe reports whether r is a symbol that lipgloss/uniseg measure as a
+// single cell but many terminals (tmux, Windows Terminal) draw as two — the
+// emoji-eligible "text symbols" in the Miscellaneous Symbols (U+2600–26FF),
+// Dingbats (U+2700–27BF) and Misc Symbols & Arrows (U+2B00–2BFF) blocks (e.g.
+// ☰ U+2630). One such rune in a rendered row makes the line one cell wider than
+// gg budgeted, so it overflows the panel border and the terminal WRAPS it; the
+// wrap desyncs Bubble Tea's line-diff renderer and cascades into duplicated,
+// garbled rows on the next repaint. This is the display-width sibling of the
+// tab problem sanitizeForDisplay already guards (a char measured narrow that
+// the terminal draws wide). Proper emoji already measure as 2 (excluded here),
+// and gg's own row markers (● U+25CF, ◇ U+25C7, ↓² , ─) live in other blocks,
+// so they are never rewritten.
+func widthUnsafe(r rune) bool {
+	// Range check first — cheap, and false for all ASCII/CJK/common text, so the
+	// per-rune lipgloss.Width (which allocates) runs only for the rare in-block
+	// candidate.
+	if !((r >= 0x2600 && r <= 0x27BF) || (r >= 0x2B00 && r <= 0x2BFF)) {
+		return false
+	}
+	return lipgloss.Width(string(r)) == 1 // already-wide emoji in-block are fine
+}
+
+// safeRowText replaces width-unsafe symbols in single-line row text that gg does
+// not control (commit subjects, ref names) with '?', so gg, lipgloss, and the
+// terminal agree on the row's width and no row can overflow its panel and wrap.
+func safeRowText(s string) string {
+	if !strings.ContainsFunc(s, widthUnsafe) {
+		return s // the overwhelmingly common path — no allocation
+	}
+	return strings.Map(func(r rune) rune {
+		if widthUnsafe(r) {
+			return '?'
+		}
+		return r
+	}, s)
+}
+
 // worktreePathOf returns the path of the worktree that has branch checked out,
 // if any (git allows a branch in at most one worktree). Includes the current
 // worktree.
@@ -1314,9 +1351,9 @@ func (m Model) commitTextRevealAt(i int) string {
 	group, _, _ := commitDecoGroup(id, -1)
 	combined := strings.TrimSpace(id.label() + group)
 	if combined == "" {
-		return c.Subject
+		return safeRowText(c.Subject)
 	}
-	return combined + " " + c.Subject
+	return combined + " " + safeRowText(c.Subject)
 }
 
 // trackedUpstreams maps each local branch's upstream short ref ("origin/main")
@@ -1402,7 +1439,7 @@ func (m Model) commitIdentRowAt(i, w int, full bool, budget int) string {
 		tok, _ = id.token(w)
 	}
 	group, _, _ := commitDecoGroup(id, budget)
-	row := tok + group + " " + c.Subject
+	row := tok + group + " " + safeRowText(c.Subject)
 	switch {
 	case m.commitListMode:
 		row = "● " + row
