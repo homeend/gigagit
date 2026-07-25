@@ -78,6 +78,14 @@ function wtCount() {
   return state.wt ? 1 : 0;
 }
 
+// The Working-tree row renders taller than a commit row (WT_H vs ROW_H);
+// the virtualized list accounts for the difference in its spacer and
+// scroll math via wtExtra.
+const WT_H = 30;
+function wtExtra() {
+  return state.wt ? WT_H - ROW_H : 0;
+}
+
 function applyStatus(st) {
   state.wt = st.files && st.files.length ? st : null;
   buildStatusEntries();
@@ -617,11 +625,11 @@ function wtRowHTML(i) {
 function renderCommits() {
   const scroll = $("commits-scroll");
   const total = state.rows.length + wtCount();
-  $("commits-spacer").style.height = total * ROW_H + "px";
+  $("commits-spacer").style.height = total * ROW_H + wtExtra() + "px";
   const first = Math.max(0, Math.floor(scroll.scrollTop / ROW_H) - 10);
   const last = Math.min(total, Math.ceil((scroll.scrollTop + scroll.clientHeight) / ROW_H) + 10);
   const win = $("commits-window");
-  win.style.top = first * ROW_H + "px";
+  win.style.top = first * ROW_H + (first > 0 ? wtExtra() : 0) + "px";
   let html = "";
   for (let i = first; i < last; i++) {
     html += state.wt && i === 0 ? wtRowHTML(i) : rowHTML(state.rows[i - wtCount()], i);
@@ -1096,10 +1104,11 @@ function moveCursor(delta) {
     if (!total) return;
     state.cursor = Math.max(0, Math.min(total - 1, state.cursor + delta));
     const scroll = $("commits-scroll");
-    const top = state.cursor * ROW_H;
+    const top = state.cursor * ROW_H + (state.cursor > 0 ? wtExtra() : 0);
+    const h = state.cursor === 0 && state.wt ? WT_H : ROW_H;
     if (top < scroll.scrollTop) scroll.scrollTop = top;
-    else if (top + ROW_H > scroll.scrollTop + scroll.clientHeight)
-      scroll.scrollTop = top + ROW_H - scroll.clientHeight;
+    else if (top + h > scroll.scrollTop + scroll.clientHeight)
+      scroll.scrollTop = top + h - scroll.clientHeight;
     renderCommits();
   } else {
     const list = state.filesMode === "status" ? state.statusEntries : state.files;
