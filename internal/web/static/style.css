@@ -182,3 +182,15 @@ mark.r { background: var(--span-add); color: inherit; }
 #palette-list li.empty { color: var(--dim); cursor: default; }
 #menu-btn { background: none; border: 1px solid var(--border); border-radius: 4px; color: var(--fg); font: inherit; padding: 1px 8px; margin-right: 10px; cursor: pointer; }
 #menu-btn:hover { border-color: var(--accent); }
+
+/* hunk staging view (pane content in #diff-body) */
+.hunk-bar { display: flex; gap: 10px; padding: 8px 10px; position: sticky; top: 0; background: var(--bg); z-index: 1; }
+.hunk-bar button { background: var(--bg-alt); color: var(--fg); border: 1px solid var(--border); border-radius: 4px; padding: 3px 10px; font: inherit; cursor: pointer; }
+.hunk-bar button:hover:not(:disabled) { border-color: var(--accent); }
+.hunk-bar button:disabled { opacity: .45; cursor: default; }
+.hunk-block { margin: 6px 10px; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
+.hunk-head { padding: 4px 10px; background: var(--bg-alt); cursor: pointer; user-select: none; }
+.hunk-line { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; white-space: pre-wrap; word-break: break-all; padding: 0 10px; }
+.hunk-line.del { background: var(--del); }
+.hunk-line.add { background: var(--add); }
+.hunk-sep { text-align: center; color: var(--dim); padding: 2px 0; }
