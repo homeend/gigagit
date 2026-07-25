@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/homeend/gigagit/internal/i18n"
@@ -260,5 +261,30 @@ func TestStatusErrorLeadsConflictNotice(t *testing.T) {
 	}
 	if strings.HasPrefix(strings.TrimSpace(line), "⚠") {
 		t.Errorf("conflict notice should not lead while an error is shown: %q", line)
+	}
+}
+
+// Any message that changes statusMsg must stamp statusMsgAt (the central
+// stamp lives in the Update wrapper, so no statusMsg call site needs to know
+// about it); a message that leaves statusMsg alone must not re-stamp — the
+// stamp is what bounds the two-line error expansion window at render time.
+func TestStatusMsgChangeStampsStatusMsgAt(t *testing.T) {
+	m := newTestModel(t)
+	if !m.statusMsgAt.IsZero() {
+		t.Fatal("precondition: a fresh model must have a zero stamp")
+	}
+	u, _ := m.Update(opFinishedMsg{err: errors.New("boom")})
+	m = u.(Model)
+	if m.statusMsg == "" {
+		t.Fatal("precondition: a failed op must set statusMsg")
+	}
+	if m.statusMsgAt.IsZero() {
+		t.Fatal("a statusMsg change must stamp statusMsgAt")
+	}
+	was := m.statusMsgAt
+	u, _ = m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
+	m = u.(Model)
+	if m.statusMsg == "" || !m.statusMsgAt.Equal(was) {
+		t.Fatalf("a message that does not change statusMsg must not re-stamp (was %v, got %v)", was, m.statusMsgAt)
 	}
 }

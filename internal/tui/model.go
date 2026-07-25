@@ -174,13 +174,14 @@ type Model struct {
 	bgFetchGen          int                             // bumped per fetch launch; stale bgFetchDoneMsg are dropped
 	proc                process                         // the single active long-running process; nil = none. IS the interface lock.
 
-	running   bool
-	opStart   time.Time // when the in-flight op began; the heartbeat reads it for the busy line's elapsed readout
-	opIsFetch bool      // the in-flight op is engine.Fetch → record its duration into the fetch refresh row on completion
-	statusMsg string
-	opMsgs    chan tea.Msg
-	modal     *decisionState
-	recorder  *recorder // keystroke recorder (nil unless gg --record)
+	running     bool
+	opStart     time.Time // when the in-flight op began; the heartbeat reads it for the busy line's elapsed readout
+	opIsFetch   bool      // the in-flight op is engine.Fetch → record its duration into the fetch refresh row on completion
+	statusMsg   string
+	statusMsgAt time.Time // when statusMsg last changed; bounds the two-line error expansion (view.go)
+	opMsgs      chan tea.Msg
+	modal       *decisionState
+	recorder    *recorder // keystroke recorder (nil unless gg --record)
 
 	// Session snapshot (agent-facing; see session_snapshot.go). snapshotPath
 	// "" = disabled (no repo / no state root). lastSnapshot is the last
@@ -292,8 +293,26 @@ func (m Model) Init() tea.Cmd {
 	return tea.Batch(m.bootstrapCmd(), loadSearchHistCmd(m.svc), heartbeatCmd(), m.repoHealthCmd(m.noticeGen))
 }
 
-// Update implements tea.Model.
+// Update wraps the real dispatcher with the one piece of bookkeeping every
+// message shares: whenever dispatch changed statusMsg — there are ~110 call
+// sites, so this is the only place that can know — stamp statusMsgAt. The
+// stamp bounds the temporary two-line error expansion in renderInterface;
+// a newer message restarts the window by re-stamping. Recursive
+// m.Update(synthKey(…)) self-calls pass through here too, which is correct:
+// a synthesized key that changes statusMsg deserves a fresh stamp.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	before := m.statusMsg
+	nm, cmd := m.dispatch(msg)
+	if next, ok := nm.(Model); ok && next.statusMsg != before {
+		next.statusMsgAt = time.Now()
+		return next, cmd
+	}
+	return nm, cmd
+}
+
+// dispatch implements tea.Model's Update logic (see the Update wrapper above
+// for the statusMsgAt stamping this leaves to its caller).
+func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
