@@ -1366,7 +1366,7 @@ function paletteCommands() {
     { label: "push", detail: "P", run: () => doPush() },
     { label: "refresh", detail: "r", run: () => { if (!state.op) refreshAfterOp(); } },
     { label: "switch repo…", detail: "", run: null }, // drills into repo mode (runPaletteRow)
-    { label: "open working tree", detail: "", run: () => openWorkingTree() },
+    { label: "open working tree", detail: "", run: () => openWorkingTree(0) }, // 0 = the WT row; a bare call would set state.cursor = undefined and break j/k/enter
     { label: "toggle sidebar", detail: "b", run: () => toggleSidebar() },
     { label: "toggle graph", detail: "g", run: () => toggleGraphMode() },
     { label: "help", detail: "?", run: () => openHelp() },

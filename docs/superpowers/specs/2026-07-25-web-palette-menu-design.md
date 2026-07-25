@@ -100,7 +100,7 @@ state; each `{label, hint?, run}`):
 | `push` | `P` | `doPush()` |
 | `refresh` | `r` | `if (!state.op) refreshAfterOp()` |
 | `switch repo…` | | switch to repo mode in place (`fromCmd: true`) |
-| `open working tree` | | `openWorkingTree()` |
+| `open working tree` | | `openWorkingTree(0)` (the WT row index — a bare call corrupts state.cursor) |
 | `toggle sidebar` | `b` | `toggleSidebar()` |
 | `toggle graph` | `g` | `toggleGraphMode()` |
 | `help` | `?` | `openHelp()` |
