@@ -31,6 +31,23 @@ func (s *Server) handleReroot(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, fmt.Errorf("bad request body: %w", err))
 		return
 	}
+	// Refuse while an op is live BEFORE any domain read: a parked op holds
+	// the repo-gate reservation, so a Worktrees() read here would block
+	// until the op finishes instead of 409ing. (A tiny window remains where
+	// an op starts after this check; the authoritative re-check at swap
+	// time still runs under opMu.)
+	s.opMu.Lock()
+	if s.cur != nil {
+		s.cur.mu.Lock()
+		live := !s.cur.done
+		s.cur.mu.Unlock()
+		if live {
+			s.opMu.Unlock()
+			writeErr(w, http.StatusConflict, errOpBusy)
+			return
+		}
+	}
+	s.opMu.Unlock()
 	target := ""
 	if wts, err := s.service().Worktrees(r.Context()); err == nil {
 		for _, wt := range wts {
