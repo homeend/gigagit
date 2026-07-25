@@ -646,10 +646,10 @@ function rowHTML(row, i) {
 
 function graphHTML(row, feedIdx) {
   if (state.graphMode === "off") {
-    // flat mode: a thin full-height bar in the commit's lane color — the
-    // gutter reads as a continuous colored line, not a row of dots
+    // flat mode: one dot per row in the commit's lane color — dots keep
+    // rows visually separate (full-height bars merged into one line)
     const col = runes(row.cells || "").indexOf("●");
-    return `<span class="flatbar lane-${col >= 0 ? (col >> 1) % 8 : 0}"></span>`;
+    return `<span class="flatdot lane-${col >= 0 ? (col >> 1) % 8 : 0}">●</span>`;
   }
   return graphSVG(row, feedIdx);
 }
