@@ -55,7 +55,7 @@
     <div id="diff-body"></div>
   </section>
 </main>
-<footer id="foot"><span id="op-line"></span>j/k move · enter open · esc back · b branches · g graph · s stage · u unstage · ? help</footer>
+<footer id="foot"><span id="op-line"></span>j/k move · enter open · esc back · b branches · g graph · s stage · u unstage · r refresh · ? help</footer>
 <div id="ctx-menu" class="hidden"></div>
 <div id="modal" class="hidden">
   <div id="modal-box">
@@ -71,6 +71,7 @@
     <div class="hrow"><span class="hkey">enter</span><span>open the selected commit / file</span></div>
     <div class="hrow"><span class="hkey">esc</span><span>back — close detail, menus, modals (in a decision modal: abort, when offered)</span></div>
     <div class="hrow"><span class="hkey">g</span><span>commit graph on/off — off is a flat list, more room for subjects (persisted)</span></div>
+    <div class="hrow"><span class="hkey">r</span><span>refresh everything (status, branches, commits) — also happens automatically when the tab regains focus</span></div>
     <div class="hrow"><span class="hkey">b</span><span>show / hide the sidebar (persisted)</span></div>
     <div class="hrow"><span class="hkey">p</span><span>pull the current branch (confirms first; conflicts and forks arrive in the modal)</span></div>
     <div class="hrow"><span class="hkey">P</span><span>push the current branch (rejection recovery — rebase / force — in the modal)</span></div>
@@ -78,7 +79,7 @@
     <div class="hrow"><span class="hkey">ctrl+enter</span><span>commit, from the message box</span></div>
     <div class="hrow"><span class="hkey">?</span><span>this help</span></div>
     <h3>Mouse</h3>
-    <div class="hrow"><span class="hkey">commit row</span><span>open its files + diff; the yellow <b>Working tree</b> row opens the status view (stage/unstage buttons, commit box, stash)</span></div>
+    <div class="hrow"><span class="hkey">commit row</span><span>open its files + diff; the yellow <b>Working tree</b> row (appears at the top while the tree is dirty) opens the status view: stage/unstage buttons per file, stage-all/unstage-all, commit box, stash</span></div>
     <div class="hrow"><span class="hkey">branch</span><span>click: jump the list to its tip · right-click: switch, delete</span></div>
     <div class="hrow"><span class="hkey">worktree</span><span>right-click: copy path, remove</span></div>
     <div class="hrow"><span class="hkey">tag</span><span>click: show its commit · right-click: show, copy name, delete</span></div>
