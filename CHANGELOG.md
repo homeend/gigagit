@@ -8,6 +8,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- tui: the stash drill-in now shows a -u stash's untracked files (the ^3
+  third parent, previously invisible); their diff, preview, history/blame,
+  and bookmarks resolve against that parent via a per-line sha override.
+
 - web: hunk-staging backend — `GET /api/hunks?path=` lists a file's
   unstaged change blocks with a freshness hash; `POST /api/stage-hunks`
   stages a picked subset through the TUI's own hunkpick → StageHunks

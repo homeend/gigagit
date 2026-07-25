@@ -470,6 +470,36 @@ func TestCommitFilesStashNoDuplicate(t *testing.T) {
 	}
 }
 
+// A -u stash stores untracked files in a THIRD parent (^3, a root commit).
+// CommitFiles must list that parent's files as adds — the first test
+// anywhere to drive ^3 (the TUI/web stash drill-ins depend on it).
+func TestCommitFilesStashUntrackedParent(t *testing.T) {
+	dir, runner := newTestRepo(t)
+	repo := &Repo{Runner: runner}
+
+	gitIn(t, dir, "config", "user.email", "t@t")
+	gitIn(t, dir, "config", "user.name", "t")
+	writeFile(t, dir, "brand-new.txt", "untracked\n")
+	gitIn(t, dir, "stash", "push", "-u", "-m", "wip")
+
+	out, err := exec.Command("git", "-C", dir, "rev-parse", "stash@{0}^3").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	usha := strings.TrimSpace(string(out))
+
+	if got, err := repo.StashCommit(context.Background(), "stash@{0}^3"); err != nil || got != usha {
+		t.Fatalf("StashCommit(^3) = %q, %v; want %q", got, err, usha)
+	}
+	files, err := repo.CommitFiles(context.Background(), usha)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 1 || files[0].Path != "brand-new.txt" || files[0].Status != "A" {
+		t.Fatalf("untracked-parent files = %+v, want [A brand-new.txt]", files)
+	}
+}
+
 // writeFile writes content to path (creating parent dirs as needed) for test setup.
 func writeFile(t *testing.T, dir, name, content string) {
 	t.Helper()
