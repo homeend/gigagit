@@ -155,10 +155,21 @@ function renderStashes() {
 
 // --- op transport client ---
 
+let opLineTimer = null;
 function opLine(text, isErr) {
   const el = $("op-line");
   el.textContent = text || "";
   el.classList.toggle("err", !!isErr);
+  el.classList.toggle("hidden", !text);
+  clearTimeout(opLineTimer);
+  if (!text) return;
+  // every message expires after 30s — but never while its op still runs
+  // (each op event overwrites the line and re-arms the timer anyway)
+  opLineTimer = setTimeout(() => {
+    if (state.op) return;
+    el.textContent = "";
+    el.classList.add("hidden");
+  }, 30000);
 }
 
 // startOp is the transport client, op-agnostic: POST /api/op, then follow
@@ -226,6 +237,24 @@ function doPull() {
 function doPush() {
   if (state.op) return;
   startOp({ op: "push" }, "pushing");
+}
+
+// toggleSidebar and stageFocused are shared by their keys (b, s/u) and the
+// clickable footer chips.
+function toggleSidebar() {
+  if (state.layout !== "list") return;
+  state.sidebar = !state.sidebar;
+  lsSet("gg.sidebar.hidden", state.sidebar ? "0" : "1");
+  $("panes").classList.toggle("nosb", !state.sidebar);
+  renderCommits(); // list width changed
+}
+
+function stageFocused(unstage) {
+  if (state.pane !== "files" || state.filesMode !== "status") return;
+  const f = state.statusEntries[state.fileCursor];
+  if (!f || f.section === "conflicts") return;
+  if (!unstage && f.section !== "staged") stage({ paths: [f.path] });
+  else if (unstage && f.section === "staged") stage({ paths: [f.path], unstage: true });
 }
 
 function doStash() {
@@ -1120,11 +1149,8 @@ document.addEventListener("keydown", (e) => {
     drillOut();
   } else if (e.key === "g") {
     toggleGraphMode();
-  } else if (e.key === "b" && state.layout === "list") {
-    state.sidebar = !state.sidebar;
-    lsSet("gg.sidebar.hidden", state.sidebar ? "0" : "1");
-    $("panes").classList.toggle("nosb", !state.sidebar);
-    renderCommits(); // list width changed
+  } else if (e.key === "b") {
+    toggleSidebar();
   } else if (e.key === "p") {
     doPull();
   } else if (e.key === "P") {
@@ -1133,12 +1159,25 @@ document.addEventListener("keydown", (e) => {
     $("help").classList.remove("hidden");
   } else if (e.key === "r") {
     if (!state.op) refreshAfterOp(); // full soft reload: repo, sidebar, status, commits
-  } else if ((e.key === "s" || e.key === "u") && state.pane === "files" && state.filesMode === "status") {
-    const f = state.statusEntries[state.fileCursor];
-    if (f && f.section !== "conflicts") {
-      if (e.key === "s" && f.section !== "staged") stage({ paths: [f.path] });
-      else if (e.key === "u" && f.section === "staged") stage({ paths: [f.path], unstage: true });
-    }
+  } else if (e.key === "s" || e.key === "u") {
+    stageFocused(e.key === "u");
+  }
+});
+
+// The footer chips execute their key's action on click.
+$("foot").addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-act]");
+  if (!btn) return;
+  switch (btn.dataset.act) {
+    case "back": drillOut(); break;
+    case "sidebar": toggleSidebar(); break;
+    case "graph": toggleGraphMode(); break;
+    case "stage": stageFocused(false); break;
+    case "unstage": stageFocused(true); break;
+    case "pull": doPull(); break;
+    case "push": doPush(); break;
+    case "refresh": if (!state.op) refreshAfterOp(); break;
+    case "help": $("help").classList.remove("hidden"); break;
   }
 });
 

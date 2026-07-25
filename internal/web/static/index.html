@@ -55,7 +55,8 @@
     <div id="diff-body"></div>
   </section>
 </main>
-<footer id="foot"><span id="op-line"></span>j/k move · enter open · esc back · b branches · g graph · s stage · u unstage · r refresh · ? help</footer>
+<div id="op-line" class="hidden"></div>
+<footer id="foot"><span>j/k move</span><span>enter open</span><button data-act="back">esc back</button><button data-act="sidebar">b branches</button><button data-act="graph">g graph</button><button data-act="stage">s stage</button><button data-act="unstage">u unstage</button><button data-act="pull">p pull</button><button data-act="push">P push</button><button data-act="refresh">r refresh</button><button data-act="help">? help</button></footer>
 <div id="ctx-menu" class="hidden"></div>
 <div id="modal" class="hidden">
   <div id="modal-box">
@@ -85,6 +86,7 @@
     <div class="hrow"><span class="hkey">tag</span><span>click: show its commit · right-click: show, copy name, delete</span></div>
     <div class="hrow"><span class="hkey">stash</span><span>click: show its changes (incl. untracked) · right-click: apply, pop, drop</span></div>
     <div class="hrow"><span class="hkey">section header</span><span>double-click: collapse / expand that sidebar section (persisted)</span></div>
+    <div class="hrow"><span class="hkey">bottom bar</span><span>the footer entries are clickable — pull, push, refresh, stage/unstage, graph, sidebar, help</span></div>
     <div class="hrow"><span class="hkey">diff header ‹ ›</span><span>previous / next file · previous / next change block</span></div>
     <h3>Notes</h3>
     <div class="hrow"><span class="hkey">decisions</span><span>operations pause mid-flight and ask in the modal; destructive options render red; esc aborts when an abort option exists</span></div>

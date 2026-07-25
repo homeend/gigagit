@@ -77,7 +77,9 @@ tr.change td.side.r { background: var(--add); }
 mark.l { background: var(--span-del); color: inherit; }
 mark.r { background: var(--span-add); color: inherit; }
 .notice { padding: 12px; color: var(--dim); }
-#foot { padding: 4px 12px; color: var(--dim); border-top: 1px solid var(--border); background: var(--bg-alt); }
+#foot { display: flex; gap: 14px; padding: 4px 12px; color: var(--dim); border-top: 1px solid var(--border); background: var(--bg-alt); white-space: nowrap; overflow: hidden; }
+#foot button { background: none; border: none; color: inherit; font: inherit; padding: 0; cursor: pointer; }
+#foot button:hover { color: var(--accent); }
 #files-actions { padding: 3px 8px; display: flex; gap: 8px; border-bottom: 1px solid var(--border); }
 #files-actions.hidden { display: none; }
 #files-actions button {
@@ -101,7 +103,8 @@ mark.r { background: var(--span-add); color: inherit; }
 #branches-list li:hover { background: var(--bg-alt); }
 #branches-list li.head { color: var(--accent); font-weight: bold; cursor: default; }
 #branches-list li .ab { float: right; color: var(--dim); font-size: 11px; }
-#op-line { color: var(--accent); padding-right: 12px; }
+#op-line { flex: none; padding: 3px 12px; color: var(--accent); background: var(--bg-alt); border-top: 1px solid var(--border); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#op-line.hidden { display: none; }
 #op-line.err { color: #f27a6a; }
 #modal { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; z-index: 10; }
 #modal.hidden { display: none; }
