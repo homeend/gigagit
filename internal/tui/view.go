@@ -466,11 +466,15 @@ func (m Model) renderInterface() string {
 	// row's tail always keeps the pointer to the full text in the Session
 	// errors viewer: truncation eats the message, never the pointer.
 	//
-	// The tail is elided from the FRONT (elideLeft), not the back (truncate):
-	// when the message plus the two rows' combined budget still doesn't fit,
-	// something in the middle has to give, and the message's own tail — often
-	// the specific detail (hostname, exit code, sha) — is the part worth
-	// keeping, not the head repeated across both rows.
+	// The tail is cut from the BACK (truncate), not the front: git puts the
+	// operation and the diagnosis up front (e.g. "ssh: ... Temporary failure
+	// in name resolution") and its least useful boilerplate at the very end
+	// ("Please make sure you have the correct access rights…" — the same
+	// text friendlyOpError's doc comment already calls out as misleading).
+	// Row 2 is simply the continuation right after row 1, so keeping ITS
+	// front keeps the part of the message nearest row 1's context; the "…"
+	// plus the Session-errors pointer is how the reader reaches whatever
+	// got cut.
 	full := oneLine(statusLine)
 	footerRow := footer
 	var statusRow string
@@ -482,7 +486,7 @@ func (m Model) renderInterface() string {
 			room = 1
 		}
 		footerRow = statusErrStyle.Render(head)
-		statusRow = statusErrStyle.Render(elideLeft(tail, room) + hint)
+		statusRow = statusErrStyle.Render(truncate(tail, room) + hint)
 	} else {
 		statusRow = truncate(full, g.w)
 		if errMode {

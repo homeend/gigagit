@@ -314,12 +314,17 @@ func sizedModel(t *testing.T, w, h int) Model {
 // A fresh error too long for one line takes over the footer row: the message
 // continues on a second row, the key hints vanish for the duration, and the
 // bottom row always ends with the pointer to the full text in the Session
-// errors viewer.
+// errors viewer. The message is sized to overflow ONE row (> g.w) but still
+// fit within the two-row budget (g.w plus room, room = g.w minus the hint's
+// width) — the case where the second row earns its keep by revealing text
+// the first row could not hold, rather than being truncated a second time
+// (a message too long for even the two-row budget is a different case,
+// covered by TestHintSurvivesExtremeTruncation).
 func TestLongFreshErrorExpandsOverFooter(t *testing.T) {
 	m := sizedModel(t, 80, 30)
 	tail := "the-very-end-of-the-error-text"
 	m.statusMsg = "error: git push failed (exit 128): ssh: Could not resolve hostname " +
-		strings.Repeat("x", 60) + " " + tail
+		strings.Repeat("x", 30) + " " + tail
 	m.statusMsgAt = time.Now()
 	out := ansi.Strip(m.View())
 	if strings.Contains(out, "[b]ranch") {
@@ -375,12 +380,27 @@ func TestExpiredErrorCollapses(t *testing.T) {
 
 // Even when two rows cannot hold the message, the viewer pointer survives at
 // the bottom row's tail — truncation eats the message, never the pointer.
+// frontToken is placed exactly where row 1 ends (pad fills row 1's g.w
+// columns exactly), so it is the first thing row 2's tail truncation must
+// decide whether to keep. It sits well inside the front of the whole
+// message — this is the regression guard for cutting the tail from the
+// wrong end: keeping it (truncate, which keeps the tail's FRONT) means row 2
+// continues naturally from row 1; losing it (elideLeft, which keeps the
+// tail's END) would mean row 2 jumps straight to trailing "zzzz…" boilerplate
+// instead, exactly the bug a real git error hits (see the view.go comment).
 func TestHintSurvivesExtremeTruncation(t *testing.T) {
 	m := sizedModel(t, 44, 30)
-	m.statusMsg = "error: " + strings.Repeat("z", 400)
+	prefix := "error: "
+	pad := strings.Repeat("a", 44-len(prefix)) // fills row 1 (g.w=44) exactly
+	frontToken := "DIAGNOSIS-HERE"
+	m.statusMsg = prefix + pad + frontToken + strings.Repeat("z", 400)
 	m.statusMsgAt = time.Now()
-	if out := ansi.Strip(m.View()); !strings.Contains(out, "full: , → Session errors") {
+	out := ansi.Strip(m.View())
+	if !strings.Contains(out, "full: , → Session errors") {
 		t.Fatalf("the pointer must survive extreme truncation:\n%s", out)
+	}
+	if !strings.Contains(out, frontToken) {
+		t.Fatalf("row 2 must continue from where row 1 left off, not jump to the message's trailing boilerplate:\n%s", out)
 	}
 }
 
