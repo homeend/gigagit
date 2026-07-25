@@ -10,10 +10,11 @@ const state = {
   fileSha: null,
   pane: "commits", // commits | files
   layout: "list", // list (commits full-width) | detail (files+diff, list hidden)
-  // svg is the default: browser rows (22px) are taller than the 13px font
-  // box, so text-mode │ glyphs leave vertical gaps and lanes look broken —
-  // SVG strokes span the full row height. g toggles back to text.
-  graphMode: "svg", // svg | text
+  // svg is the only graph renderer: browser rows (22px) are taller than
+  // the 13px font box, so text glyphs would leave vertical gaps. g toggles
+  // the graph off entirely — a flat ●-gutter list (TUI show_graph parity)
+  // with the lane column's space going to subjects.
+  graphMode: "svg", // svg | off
   wt: null, // /api/status payload while the tree is dirty, else null
   filesMode: "commit", // commit | status
   statusEntries: [],
@@ -594,20 +595,18 @@ function rowHTML(row, i) {
 }
 
 function graphHTML(row, feedIdx) {
-  if (state.graphMode === "svg") return graphSVG(row, feedIdx);
-  let html = "";
-  let col = 0;
-  for (const ch of row.cells || "") {
-    html += `<span class="lane-${(col >> 1) % 8}">${esc(ch)}</span>`;
-    col += 1;
-  }
-  return html;
+  if (state.graphMode === "off") return "● "; // flat gutter, no lanes
+  return graphSVG(row, feedIdx);
 }
 
 function toggleGraphMode() {
-  state.graphMode = state.graphMode === "text" ? "svg" : "text";
+  state.graphMode = state.graphMode === "svg" ? "off" : "svg";
+  lsSet("gg.graph", state.graphMode);
   renderCommits();
 }
+
+// Restore the persisted graph mode before the first render.
+if (lsGet("gg.graph") === "off") state.graphMode = "off";
 
 const CELL_W = 14;
 const HALF = CELL_W / 2;
