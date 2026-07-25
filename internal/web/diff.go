@@ -21,6 +21,7 @@ type diffRow struct {
 }
 
 func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request) {
+	svc := s.service()
 	q := r.URL.Query()
 	if wt := q.Get("wt"); wt != "" {
 		s.handleWorktreeDiff(w, r, wt)
@@ -45,12 +46,12 @@ func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request) {
 	}
 	var oldSrc, newSrc domain.ByteSource
 	if status != "A" {
-		oldSrc = func(ctx context.Context) ([]byte, error) { return s.svc.ShowFile(ctx, sha+"^", oldPath) }
+		oldSrc = func(ctx context.Context) ([]byte, error) { return svc.ShowFile(ctx, sha+"^", oldPath) }
 	}
 	if status != "D" {
-		newSrc = func(ctx context.Context) ([]byte, error) { return s.svc.ShowFile(ctx, sha, path) }
+		newSrc = func(ctx context.Context) ([]byte, error) { return svc.ShowFile(ctx, sha, path) }
 	}
-	d, err := s.svc.Differ().Diff(r.Context(), domain.Request{
+	d, err := svc.Differ().Diff(r.Context(), domain.Request{
 		Key: sha + "^.." + sha + ":" + path,
 		Old: oldSrc,
 		New: newSrc,
@@ -90,6 +91,7 @@ func spanPairs(spans []textdiff.Span) [][2]int {
 // working tree mutates without a key change): Key "" disables caching in
 // the Differ.
 func (s *Server) handleWorktreeDiff(w http.ResponseWriter, r *http.Request, wt string) {
+	svc := s.service()
 	q := r.URL.Query()
 	if q.Get("sha") != "" {
 		writeErr(w, http.StatusBadRequest, errors.New("wt and sha are mutually exclusive"))
@@ -108,23 +110,23 @@ func (s *Server) handleWorktreeDiff(w http.ResponseWriter, r *http.Request, wt s
 	switch wt {
 	case "unstaged":
 		oldSrc = lenient(func(ctx context.Context) ([]byte, error) {
-			return s.svc.ResolveBytes(ctx, model.FileRef{Source: model.SourceStaged, Path: oldPath})
+			return svc.ResolveBytes(ctx, model.FileRef{Source: model.SourceStaged, Path: oldPath})
 		})
 		newSrc = lenient(func(ctx context.Context) ([]byte, error) {
-			return s.svc.ResolveBytes(ctx, model.FileRef{Source: model.SourceUnstaged, Path: path})
+			return svc.ResolveBytes(ctx, model.FileRef{Source: model.SourceUnstaged, Path: path})
 		})
 	case "staged":
 		oldSrc = lenient(func(ctx context.Context) ([]byte, error) {
-			return s.svc.ShowFile(ctx, "HEAD", oldPath)
+			return svc.ShowFile(ctx, "HEAD", oldPath)
 		})
 		newSrc = lenient(func(ctx context.Context) ([]byte, error) {
-			return s.svc.ResolveBytes(ctx, model.FileRef{Source: model.SourceStaged, Path: path})
+			return svc.ResolveBytes(ctx, model.FileRef{Source: model.SourceStaged, Path: path})
 		})
 	default:
 		writeErr(w, http.StatusBadRequest, errors.New("wt must be unstaged or staged"))
 		return
 	}
-	d, err := s.svc.Differ().Diff(r.Context(), domain.Request{Key: "", Old: oldSrc, New: newSrc})
+	d, err := svc.Differ().Diff(r.Context(), domain.Request{Key: "", Old: oldSrc, New: newSrc})
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return

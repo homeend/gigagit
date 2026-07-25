@@ -13,7 +13,8 @@ type branchRow struct {
 }
 
 func (s *Server) handleBranches(w http.ResponseWriter, r *http.Request) {
-	bs, err := s.svc.Branches(r.Context())
+	svc := s.service()
+	bs, err := svc.Branches(r.Context())
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return

@@ -19,6 +19,7 @@ type stageRequest struct {
 }
 
 func (s *Server) handleStage(w http.ResponseWriter, r *http.Request) {
+	svc := s.service()
 	var req stageRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeErr(w, http.StatusBadRequest, fmt.Errorf("bad request body: %w", err))
@@ -40,7 +41,7 @@ func (s *Server) handleStage(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if _, err := runOp(r.Context(), s.svc, engine.Stage{Paths: req.Paths, All: req.All, Unstage: req.Unstage}); err != nil {
+	if _, err := runOp(r.Context(), svc, engine.Stage{Paths: req.Paths, All: req.All, Unstage: req.Unstage}); err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}

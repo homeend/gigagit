@@ -14,7 +14,8 @@ type stashRow struct {
 // second request (the tags-row pattern); a resolve failure drops only the
 // sha, never the row.
 func (s *Server) handleStashes(w http.ResponseWriter, r *http.Request) {
-	es, err := s.svc.StashList(r.Context())
+	svc := s.service()
+	es, err := svc.StashList(r.Context())
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
@@ -22,7 +23,7 @@ func (s *Server) handleStashes(w http.ResponseWriter, r *http.Request) {
 	rows := make([]stashRow, 0, len(es))
 	for _, e := range es {
 		row := stashRow{Ref: e.Ref, Subject: e.Subject}
-		if sha, serr := s.svc.StashCommit(r.Context(), e.Ref); serr == nil {
+		if sha, serr := svc.StashCommit(r.Context(), e.Ref); serr == nil {
 			row.Sha = sha
 		}
 		// A -u stash stores untracked files in a THIRD parent (a root
@@ -30,7 +31,7 @@ func (s *Server) handleStashes(w http.ResponseWriter, r *http.Request) {
 		// surface it so the client can list and diff those files. The
 		// input is the server-owned ref plus a literal — nothing
 		// client-sent. No ^3 → rev-parse errors → field omitted.
-		if usha, uerr := s.svc.StashCommit(r.Context(), e.Ref+"^3"); uerr == nil {
+		if usha, uerr := svc.StashCommit(r.Context(), e.Ref+"^3"); uerr == nil {
 			row.UntrackedSha = usha
 		}
 		rows = append(rows, row)

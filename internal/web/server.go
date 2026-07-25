@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/homeend/gigagit/internal/domain"
@@ -22,7 +23,9 @@ import (
 
 // Server serves the probe's JSON API and static assets for one repository.
 type Server struct {
-	svc *domain.Service
+	// svc is swappable at runtime (POST /api/reroot) — handlers read it
+	// once per request via service(), never cache it.
+	svc atomic.Pointer[domain.Service]
 
 	mu   sync.Mutex
 	feed *domain.CommitFeed
@@ -38,7 +41,15 @@ type Server struct {
 	decideTimeout time.Duration // test seam; zero = defaultDecideTimeout
 }
 
-func New(svc *domain.Service) *Server { return &Server{svc: svc} }
+func New(svc *domain.Service) *Server {
+	s := &Server{}
+	s.svc.Store(svc)
+	return s
+}
+
+// service returns the current domain service. Read it once at the top of a
+// handler and use the local for the whole request.
+func (s *Server) service() *domain.Service { return s.svc.Load() }
 
 // Handler returns the full route mux.
 func (s *Server) Handler() http.Handler {
@@ -62,12 +73,13 @@ func (s *Server) Handler() http.Handler {
 }
 
 func (s *Server) handleRepo(w http.ResponseWriter, r *http.Request) {
-	top, err := s.svc.TopLevel(r.Context())
+	svc := s.service()
+	top, err := svc.TopLevel(r.Context())
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	branch, err := s.svc.CurrentBranch(r.Context())
+	branch, err := svc.CurrentBranch(r.Context())
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
