@@ -823,6 +823,7 @@ function renderFiles() {
 async function openFile(i) {
   state.fileCursor = i;
   renderFiles();
+  updateDiffNav();
   if (state.filesMode === "status") return openStatusDiff(i);
   const f = state.files[i];
   const q = new URLSearchParams({ sha: f.sha || state.fileSha, path: f.path, status: f.status });
