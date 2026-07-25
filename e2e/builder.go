@@ -130,6 +130,8 @@ func (b *Sandbox) runSteps(t *testing.T, steps []Step, defaultDir string) {
 			} else {
 				b.git(t, dir, "tag", st.Tag)
 			}
+		case "git_config":
+			b.git(t, dir, "config", st.GitConfig, st.Value)
 		}
 	}
 }

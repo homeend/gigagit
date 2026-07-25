@@ -9,4 +9,9 @@ type RepoHealth struct {
 	HasCommitGraph        bool   // objects/info/commit-graph file OR commit-graphs/ chain dir present
 	WriteCommitGraphSet   bool   // fetch.writeCommitGraph set in local or global scope
 	WriteCommitGraphValue string // the set value ("" when unset)
+	// UnmappedBranches lists local branches whose upstream is configured
+	// (branch.<n>.remote + .merge) but unresolvable because the remote's
+	// fetch refspec does not map them (single-branch/shallow clones) — the
+	// state where a push never moves the remote-tracking ref. Sorted.
+	UnmappedBranches []string
 }

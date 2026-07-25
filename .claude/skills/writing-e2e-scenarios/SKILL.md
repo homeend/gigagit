@@ -21,7 +21,7 @@ one real engine bug this way — worktree remove's relative-path matching.)
 
 | Section | Purpose |
 |---|---|
-| `[input] steps` | build the local repo: `{write,content}`, `{rm}`, `{commit}` (= `git add -A` + commit), `{branch}` (create, stay), `{switch}`, `{stash}` (setup stash, includes untracked via -u), `{worktree,branch}` (branch must exist); any step takes `cwd` (sandbox-root-relative) |
+| `[input] steps` | build the local repo: `{write,content}`, `{rm}`, `{commit}` (= `git add -A` + commit), `{branch}` (create, stay), `{switch}`, `{stash}` (setup stash, includes untracked via -u), `{worktree,branch}` (branch must exist), `{git_config,value}` (runs `git config <git_config> <value>` in the step's cwd — e.g. narrowing `remote.origin.fetch` to simulate a single-branch clone); any step takes `cwd` (sandbox-root-relative) |
 | `[input.origin]` | upstream repo: `steps` (pre-clone; needs ≥1 commit), `after` (post-clone divergence), `transport` http (default, real HTTP server) / path. Local repo = clone of origin |
 | `[[run]]` | `cmd` (gg argv, FLAGS BEFORE POSITIONALS), `exit` (required), `cwd`, `stdin` (multi-line TOML string fed to the command's stdin; default `""` = the empty reader; primarily for `gg batch`'s script-on-stdin) |
 | `[expect]` | `branch`, `branches` (exact set), `clean`, `ahead`/`behind` (need origin), `in_progress` none/rebase/merge, `stashes` (count), `worktrees` (sandbox-root-relative), `[expect.files]`, `[expect.status]` staged/unstaged/untracked/conflicted, `[[expect.stash]]` `contains` (newest first), `[[expect.log]]` subjects newest-first (string or `{matches="re"}`), optional `branch` (default HEAD), `[expect.worktree."path"]` files/status, `[expect.origin]` branches/log |

@@ -108,6 +108,9 @@ type GitOps interface {
 
 	ConfigSet(ctx context.Context, scope git.ConfigScope, key, value string) error
 	ConfigUnset(ctx context.Context, scope git.ConfigScope, key string) error
+	ConfigAdd(ctx context.Context, scope git.ConfigScope, key, value string) error
+	ConfigGetAll(ctx context.Context, key string) ([]string, error)
+	FetchBranches(ctx context.Context, remote string, branches []string) error
 	CommitGraphWrite(ctx context.Context, onLine func(string)) error
 
 	StagePaths(ctx context.Context, paths []string) error

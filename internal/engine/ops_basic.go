@@ -77,7 +77,8 @@ func (op Push) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	deps.emit(ctx, Progress{Step: "pushing", Detail: op.Remote + " " + op.Branch})
 	err := deps.Repo.Push(ctx, op.Remote, op.Branch, op.SetUpstream, git.PushNoForce)
 	if err == nil {
-		res := Result{Changed: true}.WithSummary("pushed")
+		res := ensureRemoteTracking(ctx, deps, op.Remote, op.Branch,
+			Result{Changed: true}.WithSummary("pushed"))
 		deps.emit(ctx, Done{Result: res})
 		return res, nil
 	}
@@ -118,7 +119,8 @@ func (op Push) push(ctx context.Context, deps OpDeps, force git.PushForce) (Resu
 	if err := deps.Repo.Push(ctx, op.Remote, op.Branch, op.SetUpstream, force); err != nil {
 		return Result{}, err
 	}
-	res := Result{Changed: true}.WithSummary("pushed")
+	res := ensureRemoteTracking(ctx, deps, op.Remote, op.Branch,
+		Result{Changed: true}.WithSummary("pushed"))
 	deps.emit(ctx, Done{Result: res})
 	return res, nil
 }
@@ -218,7 +220,8 @@ func (op Push) rebaseThenPush(ctx context.Context, deps OpDeps) (Result, error) 
 	if err := deps.Repo.Push(ctx, op.Remote, op.Branch, op.SetUpstream, git.PushNoForce); err != nil {
 		return Result{}, err // second rejection or other error: surface, no loop
 	}
-	res := Result{Changed: true}.WithSummary("rebased and pushed")
+	res := ensureRemoteTracking(ctx, deps, op.Remote, op.Branch,
+		Result{Changed: true}.WithSummary("rebased and pushed"))
 	deps.emit(ctx, Done{Result: res})
 	return res, nil
 }

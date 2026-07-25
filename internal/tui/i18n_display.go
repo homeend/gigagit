@@ -188,6 +188,8 @@ func optionDisplayName(value string) string {
 		return i18n.T("Yes")
 	case "abort":
 		return i18n.T("abort")
+	case "add":
+		return i18n.T("add")
 	case "cancel":
 		return i18n.T("cancel")
 	case "check out as different name…":
