@@ -1304,6 +1304,25 @@ $("files-list").addEventListener("contextmenu", (e) => {
       },
     });
   }
+  if (f.section === "changes") {
+    items.push({
+      label: "discard changes", danger: true,
+      act: () => showLocalConfirm(
+        "Discard changes to " + f.path + "? This cannot be undone.",
+        ["discard", "abort"],
+        (o) => { if (o === "discard") startOp({ op: "discard", path: f.path }, "discard " + f.path); }
+      ),
+    });
+  } else if (f.section === "untracked") {
+    items.push({
+      label: "delete untracked file", danger: true,
+      act: () => showLocalConfirm(
+        "Delete untracked " + f.path + "? This cannot be undone.",
+        ["discard", "abort"],
+        (o) => { if (o === "discard") startOp({ op: "discard", path: f.path }, "discard " + f.path); }
+      ),
+    });
+  }
   showCtxMenu(items, e.clientX, e.clientY);
 });
 

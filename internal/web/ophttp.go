@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 type opStartRequest struct {
@@ -22,8 +23,8 @@ type opStartRequest struct {
 
 // handleOpStart begins an operation and returns 202 {op_id}. Ops wired so
 // far: switch, commit, pull, push, delete-branch, delete-tag,
-// remove-worktree, stash, stash-apply, stash-pop, stash-drop; the switch
-// statement is where future ops land.
+// remove-worktree, stash, stash-apply, stash-pop, stash-drop, discard; the
+// switch statement is where future ops land.
 func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 	svc := s.service()
 	var req opStartRequest
@@ -154,6 +155,41 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusNotFound, errors.New("unknown stash"))
 			return
 		}
+	case "discard":
+		// Per-file discard. The path resolves against a fresh status read
+		// (the remove-worktree/stash allowlist pattern): a stale client row
+		// 404s instead of discarding the wrong thing. Decision-free — the
+		// client confirms before POSTing (the delete-tag convention).
+		if req.Path == "" || !isGitArgSafe(req.Path) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid path"))
+			return
+		}
+		st, err := svc.Status(r.Context())
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, err)
+			return
+		}
+		var discard engine.Operation
+		for _, f := range st.Files {
+			if f.Path != req.Path {
+				continue
+			}
+			switch f.Kind {
+			case model.KindUnmerged:
+				writeErr(w, http.StatusUnprocessableEntity, errors.New("conflicted — resolve instead"))
+				return
+			case model.KindUntracked:
+				discard = engine.Discard{Remove: []string{req.Path}}
+			default:
+				discard = engine.Discard{Restore: []string{req.Path}}
+			}
+			break
+		}
+		if discard == nil {
+			writeErr(w, http.StatusNotFound, errors.New("unknown path"))
+			return
+		}
+		op = discard
 	default:
 		writeErr(w, http.StatusBadRequest, fmt.Errorf("unknown op %q", req.Op))
 		return

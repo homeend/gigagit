@@ -8,6 +8,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- web: right-click a changed file → **discard changes** (untracked →
+  **delete untracked file**), behind a red confirm. The op resolves the
+  path server-side against a fresh status read; conflicted files are
+  refused (resolve instead).
+
+- Hunk staging no longer rewrites CRLF files to LF: `hunkpick` now re-applies
+  the file's own line terminator on resolve, so the TUI `H` picker and the
+  web hunk view round-trip pure-CRLF files byte-faithfully. The web guard
+  narrows to refusing only mixed-EOL files.
+
 - web: error messages in the status strip carry a header bar — "Problem"
   on the left, "(double-click anywhere to hide)" on the right — and
   double-clicking anywhere in the strip dismisses it immediately (the 30s
