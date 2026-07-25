@@ -56,7 +56,7 @@ func (m Model) focusedBookmark() (model.Bookmark, bool) {
 				if vis[v.sel].status == "D" {
 					return model.Bookmark{}, false
 				}
-				return model.Bookmark{State: model.StateCommitted, Commit: m.filesHash, Path: vis[v.sel].path}, true
+				return model.Bookmark{State: model.StateCommitted, Commit: m.lineHash(vis[v.sel]), Path: vis[v.sel].path}, true
 			}
 		}
 		return model.Bookmark{}, false
