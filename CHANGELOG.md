@@ -8,6 +8,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- web: overlay surfaces (decision modal, help, context menu) now share one
+  layer stack with a single keyboard-routing rule — groundwork for the
+  command palette and menus; behavior unchanged.
+
 - TUI: an error too long for the status bar now temporarily (30s) takes the
   footer row too, ending with a pointer to the full text in Settings `,` →
   Session errors. A newer status message collapses it back to one line
