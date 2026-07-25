@@ -41,7 +41,7 @@ func (m Model) viewFileRow() (actionRow, bool) {
 	if !ok || l.status == "D" {
 		return actionRow{}, false
 	}
-	path, hash := l.path, m.filesHash
+	path, hash := l.path, m.lineHash(l)
 	if m.inShelfFiles() {
 		// Shelf mode: the frozen member bytes, not ShowFile — filesHash is empty
 		// here and `git show :path` would silently preview the INDEX blob.
@@ -75,7 +75,7 @@ func (m Model) openExternalRow() (actionRow, bool) {
 	if !ok || l.status == "D" {
 		return actionRow{}, false
 	}
-	path, hash, svc := l.path, m.filesHash, m.svc
+	path, hash, svc := l.path, m.lineHash(l), m.svc
 	if m.inShelfFiles() {
 		// Shelf mode: same INDEX-blob trap as viewFileRow — resolve the member.
 		ref := model.FileRef{Source: model.SourceShelf, Locator: m.filesShelfID, Path: path}

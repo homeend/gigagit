@@ -8,6 +8,32 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- web: command palette (`ctrl+k` / `ctrl+p`) — pull/push/refresh, sidebar and
+  graph toggles, help, and a **switch repo…** mode listing previously-opened
+  repos (the MRU registry) that re-roots the server in place. A global ☰
+  menu in the top bar offers the same actions by mouse.
+
+- web: hunk staging, inline in the diff — an unstaged file's diff highlights
+  its change blocks in place (full context and line numbers stay visible,
+  TUI-style); click a block to select it and *stage selected* in the diff
+  header stages just those hunks. The diff reloads after every round (picks
+  are positional against a freshness hash; a concurrent edit surfaces as
+  "file changed; refresh" and reloads the blocks).
+- web: right-click a changed file → **discard changes** (untracked →
+  **delete untracked file**), behind a red confirm. The op resolves the
+  path server-side against a fresh status read; conflicted files are
+  refused (resolve instead).
+
+- Hunk staging no longer rewrites CRLF files to LF: `hunkpick` now re-applies
+  the file's own line terminator on resolve, so the TUI `H` picker and the
+  web hunk view round-trip pure-CRLF files byte-faithfully. The web guard
+  narrows to refusing only mixed-EOL files.
+
+- web: error messages in the status strip carry a header bar — "Problem"
+  on the left, "(double-click anywhere to hide)" on the right — and
+  double-clicking anywhere in the strip dismisses it immediately (the 30s
+  auto-hide stays).
+
 - Push now detects a narrowed fetch refspec (single-branch/`--depth` monorepo
   clones): after a successful push of a branch the refspec doesn't cover, gg
   offers to add a per-branch tracking mapping and fetch just that branch, so
@@ -24,6 +50,31 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   with CRLF, and a surviving `\r` would send the terminal back to column 0
   mid-line and overwrite the box's own border. Every failure this session is
   still kept in Settings `,` → Session errors.
+
+- tui: the stash drill-in now shows a -u stash's untracked files (the ^3
+  third parent, previously invisible); their diff, preview, history/blame,
+  and bookmarks resolve against that parent via a per-line sha override.
+
+- web: hunk-staging backend — `GET /api/hunks?path=` lists a file's
+  unstaged change blocks with a freshness hash; `POST /api/stage-hunks`
+  stages a picked subset through the TUI's own hunkpick → StageHunks
+  machinery (409 when the file changed under the client; untracked,
+  binary, and CRLF files refused with clear messages). UI arrives with
+  the diff-pane work.
+
+- web: right-click a worktree → "switch here" re-points the running server
+  at it (the page reloads into the new root). Served and switched-to repos
+  are recorded in the MRU registry (`GET /api/repos` lists it), so
+  re-rooting away is always reversible.
+
+- web: overlay surfaces (decision modal, help, context menu) now share one
+  layer stack with a single keyboard-routing rule — groundwork for the
+  command palette and menus; behavior unchanged.
+
+- TUI: an error too long for the status bar now temporarily (30s) takes the
+  footer row too, ending with a pointer to the full text in Settings `,` →
+  Session errors. A newer status message collapses it back to one line
+  immediately.
 
 - web: right-click on a working-tree status file offers stage / unstage
   (per its section), stage all / unstage all, and copy path.

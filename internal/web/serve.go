@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/repos"
 )
 
 // Serve runs the probe server on a loopback address until ctx is cancelled
@@ -27,6 +28,7 @@ func Serve(ctx context.Context, workdir, addr string, launch bool) error {
 	if err := preflight(ctx, svc, workdir); err != nil {
 		return err
 	}
+	touchMRU(ctx, svc, repos.DefaultStatePath())
 	ln, url, err := listen(addr)
 	if err != nil {
 		return err
@@ -136,4 +138,15 @@ func isWSL() bool {
 	}
 	s := strings.ToLower(string(b))
 	return strings.Contains(s, "microsoft") || strings.Contains(s, "wsl")
+}
+
+// touchMRU records the served repo in the machine's MRU registry so a
+// later re-root can always navigate back. Best-effort: recording must
+// never block serving.
+func touchMRU(ctx context.Context, svc *domain.Service, statePath string) {
+	top, err := svc.TopLevel(ctx)
+	if err != nil {
+		return
+	}
+	_ = repos.Touch(statePath, top, time.Now())
 }

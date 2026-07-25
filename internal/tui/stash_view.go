@@ -42,7 +42,11 @@ type stashFilesMsg struct {
 }
 
 // loadStashFilesCmd resolves the stash ref to a SHA, then loads its changed
-// files, tagged by ref for stale-gating.
+// files, tagged by ref for stale-gating. A -u stash stores its untracked
+// files in a THIRD parent (^3, a root commit) invisible to the first-parent
+// diff — resolve it best-effort and merge its files in with a per-line sha,
+// so diff/preview/history read them from the right commit. No ^3 = a plain
+// stash (skip); a failed ^3 file read degrades to the tracked-only list.
 func (m Model) loadStashFilesCmd(ref string) tea.Cmd {
 	svc := m.svc
 	return func() tea.Msg {
@@ -54,7 +58,22 @@ func (m Model) loadStashFilesCmd(ref string) tea.Cmd {
 		if err != nil {
 			return stashFilesMsg{tag: ref, sha: sha, err: err}
 		}
-		return stashFilesMsg{tag: ref, sha: sha, lines: commitFileLines(files)}
+		lines := commitFileLines(files)
+		if usha, uerr := svc.StashCommit(context.Background(), ref+"^3"); uerr == nil {
+			if ufiles, ferr := svc.CommitFiles(context.Background(), usha); ferr == nil && len(ufiles) > 0 {
+				upaths := make(map[string]bool, len(ufiles))
+				for _, f := range ufiles {
+					upaths[f.Path] = true
+				}
+				lines = commitFileLines(append(files, ufiles...))
+				for i := range lines {
+					if !lines[i].heading && upaths[lines[i].path] {
+						lines[i].sha = usha
+					}
+				}
+			}
+		}
+		return stashFilesMsg{tag: ref, sha: sha, lines: lines}
 	}
 }
 

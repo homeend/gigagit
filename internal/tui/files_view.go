@@ -273,6 +273,15 @@ func (m Model) filesViewCommit() model.Commit {
 	return model.Commit{Hash: m.filesHash}
 }
 
+// lineHash resolves the commit a tree line's content lives in: a per-line
+// sha (a -u stash's untracked ^3 parent) wins over the view-wide hash.
+func (m Model) lineHash(l contentLine) string {
+	if l.sha != "" {
+		return l.sha
+	}
+	return m.filesHash
+}
+
 // canShowFilesViewMessage reports whether i in the files view can show the
 // displayed commit's message: a real single-commit view (not a stash or a
 // compare, which have no single commit behind them), idle, with a resolved
@@ -511,7 +520,7 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if p.sel < 0 || p.sel >= len(vis) || vis[p.sel].path == "" {
 			return m, nil
 		}
-		ctx := navContext{path: vis[p.sel].path, rev: m.filesHash}
+		ctx := navContext{path: vis[p.sel].path, rev: m.lineHash(vis[p.sel])}
 		hv := newHistoryView(ctx)
 		m = m.pushLayer(hv)
 		return m, m.loadHistoryListCmd(ctx, hv.listTag)
@@ -523,7 +532,7 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if p.sel < 0 || p.sel >= len(vis) || vis[p.sel].path == "" {
 			return m, nil
 		}
-		ctx := navContext{path: vis[p.sel].path, rev: m.filesHash}
+		ctx := navContext{path: vis[p.sel].path, rev: m.lineHash(vis[p.sel])}
 		bv := newBlameView(ctx)
 		m = m.pushLayer(bv)
 		return m, m.loadBlameCmd(ctx, bv.tag)
@@ -645,8 +654,9 @@ func (m Model) openDiffForFileLine(l contentLine) (tea.Model, tea.Cmd) {
 		m.diffTag = "shelffile:" + m.filesShelfID + ":" + l.path
 		return m, m.loadCompareTwoRefsCmd(left, right, l.path, subtitle, m.diffTag)
 	}
-	m.diffTag = "commit:" + m.filesHash + ":" + l.path
-	return m, m.loadCommitDiffCmd(m.filesHash, l)
+	hash := m.lineHash(l)
+	m.diffTag = "commit:" + hash + ":" + l.path
+	return m, m.loadCommitDiffCmd(hash, l)
 }
 
 // moveListUnderFilesView moves the list side (the right column) by delta and

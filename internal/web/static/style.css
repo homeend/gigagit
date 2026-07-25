@@ -106,6 +106,8 @@ mark.r { background: var(--span-add); color: inherit; }
 #branches-list li .ab { float: right; color: var(--dim); font-size: 11px; }
 #op-line { flex: none; padding: 3px 12px; color: var(--accent); background: var(--bg-alt); border-top: 1px solid var(--border); white-space: pre-wrap; word-break: break-word; max-height: 30vh; overflow-y: auto; }
 #op-line.hidden { display: none; }
+#op-head { display: none; justify-content: space-between; color: var(--dim); font-size: 11px; margin-bottom: 2px; }
+#op-line.err #op-head { display: flex; }
 #op-line.err { color: #f27a6a; }
 #modal { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; z-index: 10; }
 #modal.hidden { display: none; }
@@ -167,3 +169,28 @@ mark.r { background: var(--span-add); color: inherit; }
 #help-box .hrow { display: flex; gap: 14px; line-height: 1.65; }
 #help-box .hkey { flex: none; width: 140px; color: var(--accent); }
 .crow .graph .flatdot { margin-right: 10px; }
+
+/* command palette (z-index 21: above modal 10 / help 11 / ctx-menu 20) */
+#palette { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: flex-start; justify-content: center; z-index: 21; }
+#palette.hidden { display: none; }
+#palette-box { margin-top: 18vh; background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; width: 90vw; max-width: 560px; display: flex; flex-direction: column; }
+#palette-input { background: var(--bg); color: var(--fg); border: none; border-bottom: 1px solid var(--border); border-radius: 6px 6px 0 0; padding: 10px 14px; font: inherit; outline: none; }
+#palette-list { list-style: none; margin: 0; padding: 6px 0; max-height: 50vh; overflow-y: auto; }
+#palette-list li { display: flex; justify-content: space-between; gap: 14px; padding: 5px 14px; cursor: pointer; }
+#palette-list li.sel { background: var(--sel); }
+#palette-list li .detail { color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60%; }
+#palette-list li.empty { color: var(--dim); cursor: default; }
+#menu-btn { background: none; border: 1px solid var(--border); border-radius: 4px; color: var(--fg); font: inherit; padding: 1px 8px; margin-right: 10px; cursor: pointer; }
+#menu-btn:hover { border-color: var(--accent); }
+
+/* inline hunk staging: tagged rows in an unstaged diff toggle on click */
+tr.hk td { cursor: pointer; }
+tr.hk td:first-child { border-left: 3px solid var(--border); }
+tr.hk.picked td:first-child { border-left-color: var(--accent); }
+tr.hk.picked td.no { background: var(--sel); color: var(--fg); }
+#hunk-bar { flex: 0 0 auto; display: flex; gap: 4px; }
+#hunk-bar.hidden { display: none; }
+#hunk-bar button { background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 3px; padding: 0 8px; font: inherit; font-size: 11px; cursor: pointer; }
+#hunk-bar button:hover:not(:disabled) { border-color: var(--accent); }
+#hunk-bar button:disabled { opacity: .45; cursor: default; }
+#hunk-bar #hunk-stage:not(:disabled) { color: var(--accent); }

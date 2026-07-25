@@ -46,6 +46,32 @@ const SECTIONS = ["branches", "worktrees", "tags", "stashes"];
 function lsGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
 function lsSet(k, v) { try { localStorage.setItem(k, v); } catch {} }
 
+// --- overlay layer stack ---
+// Every overlay surface (decision modal, help, ctx-menu, future popups)
+// registers here. One rule: a non-empty stack owns the keyboard — the top
+// layer's onKey sees the event first; an unhandled Escape closes the top
+// layer. closeLayer(id) removes a layer WHEREVER it sits in the stack:
+// the op transport must be able to close a parked decision modal even
+// under an open help overlay.
+const layers = [];
+
+function pushLayer(id, el, opts) {
+  if (layers.some((l) => l.id === id)) return; // one instance per surface
+  el.classList.remove("hidden");
+  layers.push({ id, el, onKey: (opts && opts.onKey) || null });
+}
+
+function closeLayer(id) {
+  const i = layers.findIndex((l) => l.id === id);
+  if (i < 0) return; // idempotent
+  const [l] = layers.splice(i, 1);
+  l.el.classList.add("hidden");
+}
+
+function topLayer() {
+  return layers[layers.length - 1] || null;
+}
+
 async function getJSON(url) {
   const resp = await fetch(url);
   const body = await resp.json();
@@ -164,9 +190,15 @@ function renderStashes() {
 // --- op transport client ---
 
 let opLineTimer = null;
+function hideOpLine() {
+  clearTimeout(opLineTimer);
+  $("op-text").textContent = "";
+  $("op-line").classList.add("hidden");
+}
+
 function opLine(text, isErr) {
   const el = $("op-line");
-  el.textContent = text || "";
+  $("op-text").textContent = text || "";
   el.classList.toggle("err", !!isErr);
   el.classList.toggle("hidden", !text);
   clearTimeout(opLineTimer);
@@ -175,10 +207,13 @@ function opLine(text, isErr) {
   // (each op event overwrites the line and re-arms the timer anyway)
   opLineTimer = setTimeout(() => {
     if (state.op) return;
-    el.textContent = "";
-    el.classList.add("hidden");
+    hideOpLine();
   }, 30000);
 }
+
+// Double-click anywhere in the strip dismisses it immediately (the error
+// header advertises this); a live op's next event just re-shows it.
+$("op-line").addEventListener("dblclick", hideOpLine);
 
 // startOp is the transport client, op-agnostic: POST /api/op, then follow
 // the SSE stream. state.op.kind lets done-handling react per op (a commit
@@ -247,6 +282,19 @@ function doPush() {
   startOp({ op: "push" }, "pushing");
 }
 
+// doReroot points the server at another root. The whole client state is
+// repo-scoped, so a clean reload is the honest reset on success
+// (localStorage prefs survive); errors land on the status strip.
+async function doReroot(path) {
+  if (state.op) return;
+  try {
+    await postJSON("/api/reroot", { path });
+    location.reload();
+  } catch (e) {
+    opLine("error: " + (e.message || e), true);
+  }
+}
+
 // toggleSidebar and stageFocused are shared by their keys (b, s/u) and the
 // clickable footer chips.
 function toggleSidebar() {
@@ -308,6 +356,9 @@ function reconcileStatusView() {
     state.fileCursor = Math.min(state.fileCursor, Math.max(0, state.statusEntries.length - 1));
     renderFiles();
   }
+  // a status re-read can invalidate an open hunk view (file fully staged or
+  // gone): exit rather than offer stale positional picks
+  if (diffHunks && !state.statusEntries.some((f) => f.path === diffHunks.path && hunkEligible(f))) clearDiffHunks();
 }
 
 async function refreshAfterOp() {
@@ -340,8 +391,17 @@ function showModal(ev) {
   $("modal-options").innerHTML = (ev.options || [])
     .map((o) => `<button data-o="${esc(o)}"${DANGER_OPTIONS.has(o) ? ' class="danger"' : ""}>${esc(o)}</button>`)
     .join("");
-  $("modal").classList.remove("hidden");
   $("modal").dataset.opts = JSON.stringify(ev.options || []);
+  pushLayer("modal", $("modal"), {
+    onKey: (e) => {
+      if (e.key === "Escape") {
+        const opts = JSON.parse($("modal").dataset.opts || "[]");
+        if (opts.includes("abort")) answerModal("abort"); // the TUI's esc rule
+      }
+      e.preventDefault();
+      return true; // the modal owns the keyboard — even over a focused form field
+    },
+  });
 }
 
 // modalLocalCb, when set, routes the next modal answer to a CLIENT-side
@@ -355,8 +415,18 @@ function showLocalConfirm(prompt, options, cb) {
 }
 
 function hideModal() {
-  $("modal").classList.add("hidden");
   modalLocalCb = null; // a done-driven close must not leak the callback to the next modal
+  closeLayer("modal");
+}
+
+function openHelp() {
+  pushLayer("help", $("help"), {
+    onKey: (e) => {
+      if (e.key === "Escape" || e.key === "?") closeLayer("help");
+      e.preventDefault();
+      return true; // help owns the keyboard until closed
+    },
+  });
 }
 
 async function answerModal(option) {
@@ -404,7 +474,7 @@ async function gotoBranchTip(b) {
 }
 
 function hideCtxMenu() {
-  $("ctx-menu").classList.add("hidden");
+  closeLayer("ctx");
 }
 
 // showCtxMenu renders the shared right-click menu at (x,y): safe actions
@@ -417,7 +487,12 @@ function showCtxMenu(items, x, y) {
     .join("");
   menu.style.left = Math.min(x, window.innerWidth - 200) + "px";
   menu.style.top = Math.min(y, window.innerHeight - 120) + "px";
-  menu.classList.remove("hidden");
+  pushLayer("ctx", menu, {
+    onKey: (e) => {
+      if (e.key === "Escape") closeLayer("ctx");
+      return true; // swallowed without preventDefault (today's behavior)
+    },
+  });
 }
 
 function showBranchMenu(b, x, y) {
@@ -463,6 +538,11 @@ function copyText(text) {
 
 function showWorktreeMenu(w, x, y) {
   const items = [{ label: "copy path", act: () => copyText(w.path) }];
+  // Every row except the served worktree can be switched to (the same
+  // exemption the remove row uses).
+  if (!(state.worktree && w.path === state.worktree)) {
+    items.unshift({ label: "switch here", act: () => doReroot(w.path) });
+  }
   // The served worktree's row gets no remove (the engine would refuse it
   // anyway); main is engine-guarded too.
   if (!(state.worktree && w.path === state.worktree)) {
@@ -883,6 +963,7 @@ function renderFiles() {
 }
 
 async function openFile(i) {
+  clearDiffHunks();
   state.fileCursor = i;
   renderFiles();
   updateDiffNav();
@@ -902,6 +983,7 @@ async function openFile(i) {
 }
 
 async function openStatusDiff(i) {
+  clearDiffHunks();
   const f = state.statusEntries[i];
   $("diff-title").textContent = f.path;
   if (f.section === "conflicts") {
@@ -914,7 +996,14 @@ async function openStatusDiff(i) {
   $("diff-body").innerHTML = `<div class="notice">loading…</div>`;
   updateDiffNav();
   try {
-    renderDiff(await getJSON("/api/diff?" + q));
+    const d = await getJSON("/api/diff?" + q);
+    // server tags eligible unstaged diffs with hunk ordinals — arm inline
+    // staging BEFORE the render so the rows pick up their hk classes
+    if (d.hunks && hunkEligible(f)) {
+      diffHunks = { path: f.path, hash: d.hunks.hash, count: d.hunks.count, picks: new Set() };
+    }
+    renderDiff(d);
+    renderHunkBar();
   } catch (e) {
     $("diff-body").innerHTML = `<div class="notice">error: ${esc(e.message || e)}</div>`;
     updateDiffNav();
@@ -968,6 +1057,18 @@ function markSpans(text, spans, side) {
   return out + esc(rs.slice(pos).join(""));
 }
 
+// hunkCls/hunkAttr decorate a diff row that belongs to a stageable hunk:
+// the data-hunk tag drives click-to-select, the classes the highlight (a
+// resize re-render keeps the current picks).
+function hunkCls(r) {
+  if (r.hunk == null || !diffHunks) return "";
+  return " hk" + (diffHunks.picks.has(r.hunk) ? " picked" : "");
+}
+
+function hunkAttr(r) {
+  return r.hunk == null || !diffHunks ? "" : ` data-hunk="${r.hunk}"`;
+}
+
 function renderDiff(d) {
   state.lastDiff = d; // re-rendered on window resize (layout is width-dependent)
   state.diffBlockIdx = -1;
@@ -995,7 +1096,7 @@ function renderDiff(d) {
       const text = pureAdd ? r.right : r.left;
       const spans = pureAdd ? r.right_spans : r.left_spans;
       html +=
-        `<tr class="${r.kind}">` +
+        `<tr class="${r.kind}${hunkCls(r)}"${hunkAttr(r)}>` +
         `<td class="no ${side}">${no || ""}</td>` +
         `<td class="side ${side}">${markSpans(text, spans, side)}</td></tr>`;
     }
@@ -1013,18 +1114,18 @@ function renderDiff(d) {
       } else {
         if (r.kind !== "add")
           html +=
-            `<tr class="del"><td class="no l">${r.left_no || ""}</td><td class="no r"></td>` +
+            `<tr class="del${hunkCls(r)}"${hunkAttr(r)}><td class="no l">${r.left_no || ""}</td><td class="no r"></td>` +
             `<td class="side l">${markSpans(r.left, r.left_spans, "l")}</td></tr>`;
         if (r.kind !== "del")
           html +=
-            `<tr class="add"><td class="no l"></td><td class="no r">${r.right_no || ""}</td>` +
+            `<tr class="add${hunkCls(r)}"${hunkAttr(r)}><td class="no l"></td><td class="no r">${r.right_no || ""}</td>` +
             `<td class="side r">${markSpans(r.right, r.right_spans, "r")}</td></tr>`;
       }
     }
   } else {
     for (const r of rows) {
       html +=
-        `<tr class="${r.kind}">` +
+        `<tr class="${r.kind}${hunkCls(r)}"${hunkAttr(r)}>` +
         `<td class="no l">${r.left_no || ""}</td>` +
         `<td class="side l">${markSpans(r.left, r.left_spans, "l")}</td>` +
         `<td class="no r">${r.right_no || ""}</td>` +
@@ -1091,6 +1192,114 @@ $("next-file").addEventListener("click", () => stepFile(1));
 $("prev-change").addEventListener("click", () => stepChange(-1));
 $("next-change").addEventListener("click", () => stepChange(1));
 
+// ---- inline hunk staging (wave 3, reworked from live feedback) -----------
+// Hunks are selected IN the unstaged diff itself (TUI-style: full context,
+// line numbers, the same view — a separate block list lost the "what is
+// what" context). The server tags eligible /api/diff?wt=unstaged rows with
+// hunk ordinals + the staging freshness hash; clicking a tagged block
+// toggles it and the diff-header bar stages the picked set. Picks are
+// POSITIONAL against the exact bytes the server hashed — every staged
+// round changes the hash, so the diff is RELOADED after each round (a 409
+// means someone else moved the file: same reload).
+
+let diffHunks = null; // {path, hash, count, picks: Set<int>} — set only while an eligible unstaged diff is open
+
+function hunkEligible(f) {
+  return !!f && f.section === "changes" && f.kind === "tracked";
+}
+
+function clearDiffHunks() {
+  diffHunks = null;
+  renderHunkBar();
+}
+
+function renderHunkBar() {
+  const bar = $("hunk-bar");
+  if (!diffHunks) {
+    bar.classList.add("hidden");
+    return;
+  }
+  bar.classList.remove("hidden");
+  const n = diffHunks.picks.size;
+  $("hunk-stage").disabled = !n;
+  $("hunk-stage").textContent = `stage selected (${n})`;
+}
+
+// paintHunkPicks flips only the picked classes — no diff re-render, so
+// scroll position and text selection survive a toggle.
+function paintHunkPicks() {
+  document.querySelectorAll("#diff-body tr[data-hunk]").forEach((tr) => {
+    tr.classList.toggle("picked", !!diffHunks && diffHunks.picks.has(Number(tr.dataset.hunk)));
+  });
+  renderHunkBar();
+}
+
+async function stageHunksPicked() {
+  const v = diffHunks;
+  if (!v || !v.picks.size) return;
+  let resp;
+  try {
+    resp = await postJSON("/api/stage-hunks", {
+      path: v.path,
+      picks: [...v.picks].sort((a, b) => a - b),
+      hash: v.hash,
+    });
+  } catch (e) {
+    opLine("error: " + (e.message || e), true);
+    // 409 = stale picks (the file moved): reload the diff for fresh tags
+    if (/file changed/.test(e.message || "")) reopenAfterHunkStage(v.path);
+    return;
+  }
+  applyStatus(resp); // the 200 body IS a fresh /api/status payload
+  reconcileStatusView();
+  renderFiles();
+  reopenAfterHunkStage(v.path);
+}
+
+// reopenAfterHunkStage re-opens the freshest view of path after a staging
+// round: its unstaged diff while hunks remain, else whatever the cursor
+// lands on (the file may have moved wholly into Staged).
+function reopenAfterHunkStage(path) {
+  const i = state.statusEntries.findIndex((f) => f.path === path && f.section === "changes");
+  if (i >= 0) {
+    state.fileCursor = i;
+    renderFiles();
+    openStatusDiff(i);
+    return;
+  }
+  clearDiffHunks();
+  const f = state.statusEntries[state.fileCursor];
+  if (state.filesMode === "status" && f) {
+    openStatusDiff(state.fileCursor);
+  } else {
+    $("diff-title").textContent = "";
+    $("diff-body").innerHTML = "";
+    updateDiffNav();
+  }
+}
+
+$("hunk-stage").addEventListener("click", () => void stageHunksPicked());
+$("hunk-all").addEventListener("click", () => {
+  if (!diffHunks) return;
+  diffHunks.picks = new Set(Array.from({ length: diffHunks.count }, (_, i) => i));
+  paintHunkPicks();
+});
+$("hunk-none").addEventListener("click", () => {
+  if (!diffHunks) return;
+  diffHunks.picks = new Set();
+  paintHunkPicks();
+});
+
+$("diff-body").addEventListener("click", (e) => {
+  if (!diffHunks) return;
+  const tr = e.target.closest("tr[data-hunk]");
+  if (!tr || !getSelection().isCollapsed) return; // don't toggle mid text-selection
+  const i = Number(tr.dataset.hunk);
+  if (diffHunks.picks.has(i)) diffHunks.picks.delete(i);
+  else diffHunks.picks.add(i);
+  paintHunkPicks();
+});
+
 // --- focus + keyboard ---
 
 function focusPane() {
@@ -1119,22 +1328,18 @@ function moveCursor(delta) {
 }
 
 document.addEventListener("keydown", (e) => {
-  if (!$("modal").classList.contains("hidden")) {
-    if (e.key === "Escape") {
-      const opts = JSON.parse($("modal").dataset.opts || "[]");
-      if (opts.includes("abort")) answerModal("abort"); // the TUI's esc rule
-    }
-    e.preventDefault();
-    return; // the modal owns the keyboard — even over a focused form field
+  const top = topLayer();
+  if (top) {
+    if (top.onKey && top.onKey(e)) return;
+    if (e.key === "Escape") closeLayer(top.id); // default close for layers without onKey
+    return; // a non-empty stack owns the keyboard
   }
-  if (!$("ctx-menu").classList.contains("hidden")) {
-    if (e.key === "Escape") hideCtxMenu();
-    return; // the context menu owns the keyboard until closed
-  }
-  if (!$("help").classList.contains("hidden")) {
-    if (e.key === "Escape" || e.key === "?") $("help").classList.add("hidden");
-    e.preventDefault();
-    return; // the help overlay owns the keyboard until closed
+  // Palette shortcut: after layer routing (an open layer keeps the keyboard),
+  // before the form-field guard (ctrl+k must work from the commit box).
+  if ((e.ctrlKey || e.metaKey) && (e.key === "k" || e.key === "p")) {
+    e.preventDefault(); // ctrl+p would open the browser print dialog
+    openPalette("cmd");
+    return;
   }
   // Form fields own the keyboard: without this, typing a commit message
   // triggers j/k navigation and s/u staging. Ctrl/Cmd+Enter commits.
@@ -1165,7 +1370,7 @@ document.addEventListener("keydown", (e) => {
   } else if (e.key === "P") {
     doPush();
   } else if (e.key === "?") {
-    $("help").classList.remove("hidden");
+    openHelp();
   } else if (e.key === "r") {
     if (!state.op) refreshAfterOp(); // full soft reload: repo, sidebar, status, commits
   } else if (e.key === "s" || e.key === "u") {
@@ -1186,7 +1391,8 @@ $("foot").addEventListener("click", (e) => {
     case "pull": doPull(); break;
     case "push": doPush(); break;
     case "refresh": if (!state.op) refreshAfterOp(); break;
-    case "help": $("help").classList.remove("hidden"); break;
+    case "help": openHelp(); break;
+    case "palette": openPalette("cmd"); break;
   }
 });
 
@@ -1209,7 +1415,7 @@ $("files-list").addEventListener("click", (e) => {
     openFile(Number(li.dataset.i));
   }
 });
-$("help").addEventListener("click", () => $("help").classList.add("hidden"));
+$("help").addEventListener("click", () => closeLayer("help"));
 $("help-box").addEventListener("click", (e) => e.stopPropagation()); // allow selecting/copying text
 // Right-click on a working-tree status file: stage/unstage it (per its
 // section), bulk actions, copy path. Selects the row for feedback without
@@ -1238,6 +1444,25 @@ $("files-list").addEventListener("contextmenu", (e) => {
       },
     });
   }
+  if (f.section === "changes") {
+    items.push({
+      label: "discard changes", danger: true,
+      act: () => showLocalConfirm(
+        "Discard changes to " + f.path + "? This cannot be undone.",
+        ["discard", "abort"],
+        (o) => { if (o === "discard") startOp({ op: "discard", path: f.path }, "discard " + f.path); }
+      ),
+    });
+  } else if (f.section === "untracked") {
+    items.push({
+      label: "delete untracked file", danger: true,
+      act: () => showLocalConfirm(
+        "Delete untracked " + f.path + "? This cannot be undone.",
+        ["discard", "abort"],
+        (o) => { if (o === "discard") startOp({ op: "discard", path: f.path }, "discard " + f.path); }
+      ),
+    });
+  }
   showCtxMenu(items, e.clientX, e.clientY);
 });
 
@@ -1257,6 +1482,7 @@ window.addEventListener("resize", () => {
 
 async function loadRepo() {
   const repo = await getJSON("/api/repo");
+  state.repo = repo; // {name, worktree, branch} — the palette repo-picker filters out the served root
   $("repo-name").textContent = repo.name;
   $("repo-branch").textContent = repo.branch;
   $("repo-worktree").textContent = repo.worktree;
@@ -1273,4 +1499,161 @@ async function boot() {
 }
 boot().catch((e) => {
   $("repo-name").textContent = "error: " + (e.message || e);
+});
+
+// ---- command palette + global ☰ menu (wave 3) ----------------------------
+// The palette is a layer with an input INSIDE it: onKey consumes nav keys
+// (returns true) and returns false for everything else, so the browser
+// delivers the keystroke to the focused input while the router's
+// non-empty-stack short-circuit keeps global keys off. Every close path MUST
+// go through closePalette() — the input.blur() is load-bearing: a focused
+// input after close would trap all global keys in the form-field guard.
+
+let pal = null; // {mode: "cmd"|"repo", fromCmd, rows, filtered, sel}
+
+function paletteCommands() {
+  return [
+    { label: "pull", detail: "p", run: () => doPull() },
+    { label: "push", detail: "P", run: () => doPush() },
+    { label: "refresh", detail: "r", run: () => { if (!state.op) refreshAfterOp(); } },
+    { label: "switch repo…", detail: "", run: null }, // drills into repo mode (runPaletteRow)
+    { label: "open working tree", detail: "", run: () => openWorkingTree(0) }, // 0 = the WT row; a bare call would set state.cursor = undefined and break j/k/enter
+    { label: "toggle sidebar", detail: "b", run: () => toggleSidebar() },
+    { label: "toggle graph", detail: "g", run: () => toggleGraphMode() },
+    { label: "help", detail: "?", run: () => openHelp() },
+  ];
+}
+
+function openPalette(mode, fromCmd) {
+  const already = !!pal;
+  pal = { mode, fromCmd: !!fromCmd, rows: [], filtered: [], sel: 0 };
+  if (!already) pushLayer("palette", $("palette"), { onKey: paletteKey });
+  $("palette-input").value = "";
+  if (mode === "cmd") {
+    pal.rows = paletteCommands();
+    filterPalette();
+  } else {
+    renderPalette([{ label: "loading…", empty: true }]);
+    getJSON("/api/repos")
+      .then((j) => {
+        if (!pal || pal.mode !== "repo") return; // closed or switched meanwhile
+        const cur = state.repo && state.repo.worktree;
+        pal.rows = (j.repos || [])
+          .filter((r) => r.path !== cur)
+          .map((r) => ({ label: r.name, detail: r.path, path: r.path }));
+        filterPalette();
+      })
+      .catch((e) => {
+        closePalette();
+        opLine("error: " + (e.message || e), true);
+      });
+  }
+  $("palette-input").focus();
+}
+
+function closePalette() {
+  closeLayer("palette");
+  $("palette-input").blur();
+  pal = null;
+}
+
+function filterPalette() {
+  if (!pal) return;
+  const q = $("palette-input").value.trim().toLowerCase();
+  pal.filtered = pal.rows.filter(
+    (r) => !q || r.label.toLowerCase().includes(q) || (r.detail || "").toLowerCase().includes(q)
+  );
+  pal.sel = 0;
+  renderPalette(pal.filtered.length ? pal.filtered : [{ label: pal.mode === "repo" ? "no other repos" : "no match", empty: true }]);
+}
+
+function renderPalette(rows) {
+  $("palette-list").innerHTML = rows
+    .map((r, i) =>
+      r.empty
+        ? `<li class="empty">${esc(r.label)}</li>`
+        : `<li data-i="${i}"${i === pal.sel ? ' class="sel"' : ""}><span>${esc(r.label)}</span><span class="detail">${esc(r.detail || "")}</span></li>`
+    )
+    .join("");
+}
+
+function runPaletteRow(row) {
+  if (!row) return;
+  if (pal.mode === "repo") {
+    const path = row.path;
+    closePalette();
+    doReroot(path);
+    return;
+  }
+  if (row.label === "switch repo…") {
+    openPalette("repo", true);
+    return;
+  }
+  const run = row.run;
+  closePalette();
+  run();
+}
+
+function paletteKey(e) {
+  if (!pal) return false;
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    const n = pal.filtered.length;
+    if (n) {
+      pal.sel = Math.min(n - 1, Math.max(0, pal.sel + (e.key === "ArrowDown" ? 1 : -1)));
+      renderPalette(pal.filtered);
+    }
+    e.preventDefault();
+    return true;
+  }
+  if (e.key === "Enter") {
+    runPaletteRow(pal.filtered[pal.sel]);
+    e.preventDefault();
+    return true;
+  }
+  if (e.key === "Escape") {
+    if (pal.mode === "repo" && pal.fromCmd) openPalette("cmd");
+    else closePalette();
+    e.preventDefault();
+    return true;
+  }
+  if (e.key === "Tab") {
+    e.preventDefault();
+    return true;
+  }
+  return false; // typing lands in the focused input; its input event re-filters
+}
+
+$("palette-input").addEventListener("input", filterPalette);
+$("palette").addEventListener("click", closePalette); // backdrop
+$("palette-box").addEventListener("click", (e) => e.stopPropagation());
+$("palette-list").addEventListener("click", (e) => {
+  const li = e.target.closest("li[data-i]");
+  if (li && pal) runPaletteRow(pal.filtered[Number(li.dataset.i)]);
+});
+
+function openGlobalMenu() {
+  const r = $("menu-btn").getBoundingClientRect();
+  showCtxMenu(
+    [
+      { label: "pull", act: () => doPull() },
+      { label: "push", act: () => doPush() },
+      { label: "refresh", act: () => { if (!state.op) refreshAfterOp(); } },
+      { label: "switch repo…", act: () => openPalette("repo") },
+      { label: "command palette…", act: () => openPalette("cmd") },
+      { label: "toggle sidebar", act: () => toggleSidebar() },
+      { label: "toggle graph", act: () => toggleGraphMode() },
+      { label: "help", act: () => openHelp() },
+    ],
+    r.left,
+    r.bottom + 4
+  );
+}
+
+$("menu-btn").addEventListener("click", (e) => {
+  // stopPropagation: the document-level outside-click closer would otherwise
+  // see this same click and close the menu the moment it opens.
+  e.stopPropagation();
+  const t = topLayer();
+  if (t && t.id === "ctx") { hideCtxMenu(); return; } // second click toggles closed
+  openGlobalMenu();
 });
