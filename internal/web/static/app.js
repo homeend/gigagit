@@ -356,6 +356,9 @@ function reconcileStatusView() {
     state.fileCursor = Math.min(state.fileCursor, Math.max(0, state.statusEntries.length - 1));
     renderFiles();
   }
+  // a status re-read can invalidate an open hunk view (file fully staged or
+  // gone): exit rather than offer stale positional picks
+  if (hunkView && !state.statusEntries.some((f) => f.path === hunkView.path && hunkEligible(f))) exitHunkView();
 }
 
 async function refreshAfterOp() {
@@ -561,6 +564,7 @@ $("worktrees-list").addEventListener("contextmenu", (e) => {
 // drillOut leaves the detail screen for the full-width commit list — the
 // esc key and the mouse back button share it.
 function drillOut() {
+  if (hunkView) { exitHunkView(); return; } // esc exits the hunk view, not the status screen
   if (state.layout !== "detail") return;
   state.detailGen++; // invalidate any in-flight detail fetch
   state.pane = "commits";
@@ -960,6 +964,7 @@ function renderFiles() {
 }
 
 async function openFile(i) {
+  hunkView = null;
   state.fileCursor = i;
   renderFiles();
   updateDiffNav();
@@ -979,6 +984,7 @@ async function openFile(i) {
 }
 
 async function openStatusDiff(i) {
+  hunkView = null;
   const f = state.statusEntries[i];
   $("diff-title").textContent = f.path;
   if (f.section === "conflicts") {
@@ -1127,6 +1133,8 @@ function updateDiffNav() {
   const any = diffChangeBlocks().length > 0;
   $("prev-change").disabled = !any;
   $("next-change").disabled = !any;
+  const f = state.filesMode === "status" ? list[state.fileCursor] : null;
+  $("hunks-btn").disabled = !hunkEligible(f);
 }
 
 function stepFile(delta) {
@@ -1167,6 +1175,131 @@ $("prev-file").addEventListener("click", () => stepFile(-1));
 $("next-file").addEventListener("click", () => stepFile(1));
 $("prev-change").addEventListener("click", () => stepChange(-1));
 $("next-change").addEventListener("click", () => stepChange(1));
+
+// ---- hunk staging view (wave 3) ------------------------------------------
+// Pane content, not a layer: replaces #diff-body while active. Picks are
+// POSITIONAL against the exact bytes the server hashed — after every staged
+// round the index moves and the hash changes, so the view REFETCHES before
+// offering more picks (a 409 means someone else moved the file: same
+// refetch). 422 messages from the server are user-ready and shown verbatim.
+
+let hunkView = null; // {path, hash, blocks, picks: Set<int>}
+
+function hunkEligible(f) {
+  return !!f && f.section === "changes" && f.kind === "tracked";
+}
+
+async function enterHunkView(path) {
+  let j;
+  try {
+    j = await getJSON("/api/hunks?" + new URLSearchParams({ path }));
+  } catch (e) {
+    opLine("error: " + (e.message || e), true);
+    return;
+  }
+  hunkView = { path, hash: j.hash, blocks: j.blocks || [], picks: new Set() };
+  renderHunks();
+}
+
+function exitHunkView() {
+  hunkView = null;
+  const f = state.statusEntries[state.fileCursor];
+  if (state.filesMode === "status" && f) {
+    openStatusDiff(state.fileCursor);
+  } else {
+    $("diff-title").textContent = "";
+    $("diff-body").innerHTML = "";
+    updateDiffNav();
+  }
+}
+
+function renderHunks() {
+  if (!hunkView) return;
+  const v = hunkView;
+  $("diff-title").textContent = v.path + " — stage hunks";
+  const n = v.picks.size;
+  const bar =
+    `<div class="hunk-bar">` +
+    `<button id="hunk-stage"${n ? "" : " disabled"}>Stage selected (${n})</button>` +
+    `<button id="hunk-all">Select all</button>` +
+    `<button id="hunk-none">Clear</button>` +
+    `<button id="hunk-back">‹ back to diff</button>` +
+    `</div>`;
+  const blocks = v.blocks
+    .map((b, i) => {
+      const lines =
+        (b.del || []).map((l) => `<div class="hunk-line del">- ${esc(l)}</div>`).join("") +
+        (b.add || []).map((l) => `<div class="hunk-line add">+ ${esc(l)}</div>`).join("");
+      return (
+        `<div class="hunk-block" data-i="${i}">` +
+        `<div class="hunk-head"><input type="checkbox"${v.picks.has(i) ? " checked" : ""}> hunk ${i + 1}/${v.blocks.length}</div>` +
+        lines +
+        `</div>`
+      );
+    })
+    .join(`<div class="hunk-sep">⋯</div>`);
+  $("diff-body").innerHTML = bar + (blocks || `<div class="notice">no hunks</div>`);
+  updateDiffNav();
+}
+
+async function stagePicked() {
+  const v = hunkView;
+  if (!v || !v.picks.size) return;
+  let resp;
+  try {
+    resp = await postJSON("/api/stage-hunks", {
+      path: v.path,
+      picks: [...v.picks].sort((a, b) => a - b),
+      hash: v.hash,
+    });
+  } catch (e) {
+    opLine("error: " + (e.message || e), true);
+    // 409 = stale picks: refetch fresh blocks; other errors keep the picks
+    if (/file changed/.test(e.message || "")) await refetchHunks();
+    return;
+  }
+  applyStatus(resp); // the 200 body IS a fresh /api/status payload
+  reconcileStatusView(); // may exit the view via its eligibility guard
+  renderFiles();
+  await refetchHunks();
+}
+
+async function refetchHunks() {
+  if (!hunkView) return;
+  const path = hunkView.path;
+  let j;
+  try {
+    j = await getJSON("/api/hunks?" + new URLSearchParams({ path }));
+  } catch {
+    exitHunkView(); // 404/422: the file left the eligible set (fully staged)
+    return;
+  }
+  if (!j.count) {
+    exitHunkView();
+    return;
+  }
+  hunkView = { path, hash: j.hash, blocks: j.blocks || [], picks: new Set() };
+  renderHunks();
+}
+
+$("hunks-btn").addEventListener("click", () => {
+  const f = state.statusEntries[state.fileCursor];
+  if (state.filesMode === "status" && hunkEligible(f)) enterHunkView(f.path);
+});
+
+$("diff-body").addEventListener("click", (e) => {
+  if (!hunkView) return;
+  if (e.target.id === "hunk-back") return exitHunkView();
+  if (e.target.id === "hunk-all") { hunkView.picks = new Set(hunkView.blocks.map((_, i) => i)); return renderHunks(); }
+  if (e.target.id === "hunk-none") { hunkView.picks = new Set(); return renderHunks(); }
+  if (e.target.id === "hunk-stage") return void stagePicked();
+  const head = e.target.closest(".hunk-head");
+  if (head) {
+    const i = Number(head.parentElement.dataset.i);
+    if (hunkView.picks.has(i)) hunkView.picks.delete(i); else hunkView.picks.add(i);
+    renderHunks();
+  }
+});
 
 // --- focus + keyboard ---
 
@@ -1293,6 +1426,7 @@ $("files-list").addEventListener("contextmenu", (e) => {
   const items = [];
   if (f.section === "staged") items.push({ label: "unstage " + f.path, act: () => stage({ paths: [f.path], unstage: true }) });
   else if (f.section !== "conflicts") items.push({ label: "stage " + f.path, act: () => stage({ paths: [f.path] }) });
+  if (hunkEligible(f)) items.push({ label: "stage hunks…", act: () => enterHunkView(f.path) });
   items.push({ label: "copy path", act: () => copyText(f.path) });
   items.push({ label: "stage all", act: () => stage({ all: true }) });
   if (state.statusEntries.some((x) => x.section === "staged")) {

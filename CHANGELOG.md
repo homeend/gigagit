@@ -8,6 +8,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- web: hunk staging UI — a `hunks` button in the diff toolbar (and a
+  `stage hunks…` right-click entry) opens a per-file hunk view: tick the
+  change blocks to stage and hit *Stage selected*; the view refetches after
+  every round (picks are positional against a freshness hash; a concurrent
+  edit surfaces as "file changed; refresh" and reloads the blocks).
 - web: error messages in the status strip carry a header bar — "Problem"
   on the left, "(double-click anywhere to hide)" on the right — and
   double-clicking anywhere in the strip dismisses it immediately (the 30s
