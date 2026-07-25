@@ -8,6 +8,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- web: the status/error strip wraps long messages (git's own newlines
+  preserved, scrollable past 30% of the screen) instead of cutting them
+  off with an ellipsis.
+
 - web: the status/error line moved into its own strip ABOVE the bottom bar
   (it no longer covers the key hints) and auto-hides after 30s (never while
   an operation is still running); the bottom-bar entries are now clickable
