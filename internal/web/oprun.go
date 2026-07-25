@@ -87,6 +87,7 @@ func (s *Server) resetFeed() {
 }
 
 func (s *Server) runOpStream(ctx context.Context, run *opRun, op engine.Operation) {
+	svc := s.service() // pinned: the op runs against the repo it started on
 	events := make(chan engine.Event, 32)
 	pumpDone := make(chan struct{})
 	go func() {
@@ -101,7 +102,7 @@ func (s *Server) runOpStream(ctx context.Context, run *opRun, op engine.Operatio
 	if timeout <= 0 {
 		timeout = defaultDecideTimeout
 	}
-	res, err := s.svc.Execute(ctx, op, events, webDecider{run: run, timeout: timeout})
+	res, err := svc.Execute(ctx, op, events, webDecider{run: run, timeout: timeout})
 	close(events)
 	<-pumpDone
 	if res.Changed {

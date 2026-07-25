@@ -8,6 +8,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- web: `POST /api/reroot` — the running server can switch to another
+  worktree of the repo or a previously-opened repo (MRU registry);
+  allowlist-resolved, preflighted before the swap, refused while an
+  operation runs. No client UI yet.
+
 - web: transport hardening — SSE-drop recovery (reconnecting hint; a lost
   op unlocks the UI and refreshes), `resolved` wire event closes answered
   decision modals on replay and in second tabs, destructive modal options

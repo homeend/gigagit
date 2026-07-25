@@ -11,7 +11,8 @@ type worktreeRow struct {
 }
 
 func (s *Server) handleWorktrees(w http.ResponseWriter, r *http.Request) {
-	ws, err := s.svc.Worktrees(r.Context())
+	svc := s.service()
+	ws, err := svc.Worktrees(r.Context())
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return

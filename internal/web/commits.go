@@ -33,12 +33,13 @@ type refInfo struct {
 // committed .gg.toml only (the machine-local private repo config file is
 // not consulted).
 func (s *Server) feedFor(r *http.Request) *domain.CommitFeed {
+	svc := s.service()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.feed == nil {
-		f := s.svc.CommitFeed()
+		f := svc.CommitFeed()
 		mode := "date-order"
-		if top, err := s.svc.TopLevel(r.Context()); err == nil {
+		if top, err := svc.TopLevel(r.Context()); err == nil {
 			if cfg, err := config.Load(config.DefaultGlobalPath(), filepath.Join(top, ".gg.toml")); err == nil {
 				mode = cfg.UI.CommitSort
 			}
@@ -111,12 +112,13 @@ func refKindString(k model.RefKind) string {
 }
 
 func (s *Server) handleCommitFiles(w http.ResponseWriter, r *http.Request) {
+	svc := s.service()
 	sha := r.PathValue("sha")
 	if !isGitArgSafe(sha) {
 		writeErr(w, http.StatusBadRequest, errors.New("invalid sha"))
 		return
 	}
-	files, err := s.svc.CommitFiles(r.Context(), sha)
+	files, err := svc.CommitFiles(r.Context(), sha)
 	if err != nil {
 		writeErr(w, http.StatusNotFound, err)
 		return
