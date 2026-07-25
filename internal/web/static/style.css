@@ -169,3 +169,16 @@ mark.r { background: var(--span-add); color: inherit; }
 #help-box .hrow { display: flex; gap: 14px; line-height: 1.65; }
 #help-box .hkey { flex: none; width: 140px; color: var(--accent); }
 .crow .graph .flatdot { margin-right: 10px; }
+
+/* command palette (z-index 21: above modal 10 / help 11 / ctx-menu 20) */
+#palette { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: flex-start; justify-content: center; z-index: 21; }
+#palette.hidden { display: none; }
+#palette-box { margin-top: 18vh; background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; width: 90vw; max-width: 560px; display: flex; flex-direction: column; }
+#palette-input { background: var(--bg); color: var(--fg); border: none; border-bottom: 1px solid var(--border); border-radius: 6px 6px 0 0; padding: 10px 14px; font: inherit; outline: none; }
+#palette-list { list-style: none; margin: 0; padding: 6px 0; max-height: 50vh; overflow-y: auto; }
+#palette-list li { display: flex; justify-content: space-between; gap: 14px; padding: 5px 14px; cursor: pointer; }
+#palette-list li.sel { background: var(--sel); }
+#palette-list li .detail { color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60%; }
+#palette-list li.empty { color: var(--dim); cursor: default; }
+#menu-btn { background: none; border: 1px solid var(--border); border-radius: 4px; color: var(--fg); font: inherit; padding: 1px 8px; margin-right: 10px; cursor: pointer; }
+#menu-btn:hover { border-color: var(--accent); }
