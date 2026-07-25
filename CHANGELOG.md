@@ -14,8 +14,8 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   chips that run their action (pull, push, refresh, stage/unstage, graph,
   sidebar, back, help).
 
-- web: the flat list's gutter is a continuous colored line (the commit's
-  lane color) instead of monochrome dots; `r` soft-reloads everything, and
+- web: the flat list's gutter shows one dot per commit in its lane color
+  (was monochrome white); `r` soft-reloads everything, and
   the working-tree status auto-refreshes when the tab regains focus — files
   edited while the page was in the background now surface without a manual
   reload.
