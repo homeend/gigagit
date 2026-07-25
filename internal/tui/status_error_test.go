@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
@@ -286,5 +287,125 @@ func TestStatusMsgChangeStampsStatusMsgAt(t *testing.T) {
 	m = u.(Model)
 	if m.statusMsg == "" || !m.statusMsgAt.Equal(was) {
 		t.Fatalf("a message that does not change statusMsg must not re-stamp (was %v, got %v)", was, m.statusMsgAt)
+	}
+}
+
+// sizedModel returns a test model laid out at w×h with no layers open, so
+// View() renders the base interface (header/panels/footer/status). ready and
+// loading are forced to their post-startup steady state (the
+// TestInitialLoadBlanksUntilReady/TestReloadAfterFirstData… precedent): New()
+// leaves ready=false/loading=true until the first source's data lands, and
+// this helper sends no data — without the override View() would show the
+// "gigagit (loading…)" placeholder, and opsIdle() (gated on !loading) would
+// stay false and hide every ops-gated footer hint, including [b]ranch. A
+// single branch is seeded so that hint (gated on a Branches selection
+// existing) actually renders — the assertions below need the ordinary
+// footer hints present to prove the error bar hides them.
+func sizedModel(t *testing.T, w, h int) Model {
+	t.Helper()
+	m := newTestModel(t)
+	m.ready = true
+	m.loading = false
+	m.branches = []model.Branch{{Name: "main"}}
+	u, _ := m.Update(tea.WindowSizeMsg{Width: w, Height: h})
+	return u.(Model)
+}
+
+// A fresh error too long for one line takes over the footer row: the message
+// continues on a second row, the key hints vanish for the duration, and the
+// bottom row always ends with the pointer to the full text in the Session
+// errors viewer.
+func TestLongFreshErrorExpandsOverFooter(t *testing.T) {
+	m := sizedModel(t, 80, 30)
+	tail := "the-very-end-of-the-error-text"
+	m.statusMsg = "error: git push failed (exit 128): ssh: Could not resolve hostname " +
+		strings.Repeat("x", 60) + " " + tail
+	m.statusMsgAt = time.Now()
+	out := ansi.Strip(m.View())
+	if strings.Contains(out, "[b]ranch") {
+		t.Fatalf("expanded error must replace the footer hints:\n%s", out)
+	}
+	if !strings.Contains(out, tail) {
+		t.Fatalf("the second row must reveal the error tail:\n%s", out)
+	}
+	if !strings.Contains(out, "full: , → Session errors") {
+		t.Fatalf("the bottom row must point at the Session errors viewer:\n%s", out)
+	}
+}
+
+// A short error keeps today's single-line bar and the footer hints.
+func TestShortErrorStaysOneLine(t *testing.T) {
+	m := sizedModel(t, 80, 30)
+	m.statusMsg = "error: boom"
+	m.statusMsgAt = time.Now()
+	out := ansi.Strip(m.View())
+	if !strings.Contains(out, "[b]ranch") {
+		t.Fatalf("a short error must not hide the footer:\n%s", out)
+	}
+	if strings.Contains(out, "full: , → Session errors") {
+		t.Fatalf("a short error needs no viewer pointer:\n%s", out)
+	}
+}
+
+// A long NON-error message never expands — the footer survives and the
+// message truncates as before.
+func TestLongNonErrorNeverExpands(t *testing.T) {
+	m := sizedModel(t, 80, 30)
+	m.statusMsg = "pulled and rebased onto origin/main " + strings.Repeat("y", 120)
+	m.statusMsgAt = time.Now()
+	if out := ansi.Strip(m.View()); !strings.Contains(out, "[b]ranch") {
+		t.Fatalf("a non-error message must not take the footer row:\n%s", out)
+	}
+}
+
+// The expansion is temporary: past the 30s window the bar collapses back to
+// one truncated line and the footer returns.
+func TestExpiredErrorCollapses(t *testing.T) {
+	m := sizedModel(t, 80, 30)
+	m.statusMsg = "error: git push failed (exit 128): " + strings.Repeat("x", 120)
+	m.statusMsgAt = time.Now().Add(-statusErrExpandFor - time.Second)
+	out := ansi.Strip(m.View())
+	if !strings.Contains(out, "[b]ranch") {
+		t.Fatalf("an expired error must give the footer row back:\n%s", out)
+	}
+	if strings.Contains(out, "full: , → Session errors") {
+		t.Fatalf("an expired error must not keep the pointer row:\n%s", out)
+	}
+}
+
+// Even when two rows cannot hold the message, the viewer pointer survives at
+// the bottom row's tail — truncation eats the message, never the pointer.
+func TestHintSurvivesExtremeTruncation(t *testing.T) {
+	m := sizedModel(t, 44, 30)
+	m.statusMsg = "error: " + strings.Repeat("z", 400)
+	m.statusMsgAt = time.Now()
+	if out := ansi.Strip(m.View()); !strings.Contains(out, "full: , → Session errors") {
+		t.Fatalf("the pointer must survive extreme truncation:\n%s", out)
+	}
+}
+
+// splitCols is the wrap primitive: head is the widest prefix that fits the
+// column budget (no ellipsis), tail the remainder with leading spaces
+// dropped; a wide glyph that would straddle the boundary moves wholly into
+// tail so neither row can exceed its width.
+func TestSplitCols(t *testing.T) {
+	head, tail := splitCols("abcdef", 4)
+	if head != "abcd" || tail != "ef" {
+		t.Fatalf("plain split: got %q %q", head, tail)
+	}
+	// "ab " exactly fills 3 columns; the tail's leading spaces are dropped so
+	// the second row never starts with dead space.
+	head, tail = splitCols("ab cdef", 3)
+	if head != "ab " || tail != "cdef" {
+		t.Fatalf("split near a space: got %q %q", head, tail)
+	}
+	head, tail = splitCols("ab", 10)
+	if head != "ab" || tail != "" {
+		t.Fatalf("short input: got %q %q", head, tail)
+	}
+	// ⏳ is 2 columns wide; with 1 column left it must move to tail entirely.
+	head, tail = splitCols("a⏳b", 2)
+	if head != "a" || tail != "⏳b" {
+		t.Fatalf("wide glyph must not straddle the boundary: got %q %q", head, tail)
 	}
 }
