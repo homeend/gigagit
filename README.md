@@ -45,10 +45,10 @@ panel and selected row right now. When the terminal is too narrow for all of
 them, whole entries are dropped from the end and the line ends with
 `… [?] help` — the dropped keys are listed at the top of the `?` help window
 ("More keys"), so nothing is ever silently hidden. `?` opens the full
-searchable reference. An operation error too long to read on one line
-temporarily takes over the footer row too (30s, or until a newer status
-message), the bottom row ending with a pointer to the full text in Settings
-`,` → Session errors.
+searchable reference. An operation error leads with an `[E] full
+details` pointer; **`E`** opens the whole message wrapped in a red box (the
+status bar is one line and git writes a paragraph of stderr). Every failure
+this session is also kept in Settings `,` → Session errors.
 
 | Key | Action |
 |-----|--------|

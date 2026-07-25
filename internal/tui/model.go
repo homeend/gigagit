@@ -174,14 +174,14 @@ type Model struct {
 	bgFetchGen          int                             // bumped per fetch launch; stale bgFetchDoneMsg are dropped
 	proc                process                         // the single active long-running process; nil = none. IS the interface lock.
 
-	running     bool
-	opStart     time.Time // when the in-flight op began; the heartbeat reads it for the busy line's elapsed readout
-	opIsFetch   bool      // the in-flight op is engine.Fetch → record its duration into the fetch refresh row on completion
-	statusMsg   string
-	statusMsgAt time.Time // when statusMsg last changed; bounds the two-line error expansion (view.go)
-	opMsgs      chan tea.Msg
-	modal       *decisionState
-	recorder    *recorder // keystroke recorder (nil unless gg --record)
+	running   bool
+	opStart   time.Time // when the in-flight op began; the heartbeat reads it for the busy line's elapsed readout
+	opIsFetch bool      // the in-flight op is engine.Fetch → record its duration into the fetch refresh row on completion
+	statusMsg string
+	lastError string // full text of the most recent failure status message; [E] shows it wrapped (error_popup.go)
+	opMsgs    chan tea.Msg
+	modal     *decisionState
+	recorder  *recorder // keystroke recorder (nil unless gg --record)
 
 	// Session snapshot (agent-facing; see session_snapshot.go). snapshotPath
 	// "" = disabled (no repo / no state root). lastSnapshot is the last
@@ -294,29 +294,30 @@ func (m Model) Init() tea.Cmd {
 }
 
 // Update wraps the real dispatcher with the one piece of bookkeeping every
-// message shares: whenever dispatch changed statusMsg — there are ~110 call
-// sites, so this is the only place that can know — stamp statusMsgAt. The
-// stamp bounds the temporary two-line error expansion in renderInterface;
-// a newer message restarts the window by re-stamping. Recursive
-// m.Update(synthKey(…)) self-calls pass through here too, which is correct:
-// a synthesized key that changes statusMsg deserves a fresh stamp.
+// message shares: whenever dispatch changed statusMsg to a failure, keep the
+// full text in lastError. The status bar is one line and truncates, so the
+// untruncated message has to survive somewhere for [E] to show it. There are
+// ~110 statusMsg call sites, so this is the only place that can know a
+// message changed. Recursive m.Update(synthKey(…)) self-calls pass through
+// here too, which is correct: a synthesized key that reports a failure
+// deserves to be recorded like any other.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	before := m.statusMsg
 	nm, cmd := m.dispatch(msg)
 	// Invariant this relies on: every dispatch path returns a Model (true of
 	// every case today). If that ever stopped holding, the ok-guard below
-	// would silently skip the stamp instead of failing loud — statusMsgAt
-	// would quietly stop advancing and the two-line error expansion would
-	// quietly stop working, with no test catching it.
-	if next, ok := nm.(Model); ok && next.statusMsg != before {
-		next.statusMsgAt = time.Now()
+	// would silently skip the capture instead of failing loud — lastError
+	// would quietly go stale and [E] would show an older failure, with no
+	// test catching it.
+	if next, ok := nm.(Model); ok && next.statusMsg != before && statusIsError(next.statusMsg) {
+		next.lastError = next.statusMsg
 		return next, cmd
 	}
 	return nm, cmd
 }
 
 // dispatch implements tea.Model's Update logic (see the Update wrapper above
-// for the statusMsgAt stamping this leaves to its caller).
+// for the lastError capture this leaves to its caller).
 func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -1371,6 +1372,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.openShelfSwitcher()
 		case "!": // open the notification center (global; inert while a text field captures — this switch is only reached in navigation mode)
 			return m.openNoticeCenter()
+		case "E": // show the last failure in full (global; see openErrorPopup)
+			return m.openErrorPopup()
 		case "F": // open the fuzzy file finder (global; see openFileFinder)
 			return m.openFileFinder()
 		case "z": // cycle the focused panel's text display mode
