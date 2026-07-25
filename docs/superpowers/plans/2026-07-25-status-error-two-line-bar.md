@@ -238,12 +238,11 @@ func TestSplitCols(t *testing.T) {
 	if head != "abcd" || tail != "ef" {
 		t.Fatalf("plain split: got %q %q", head, tail)
 	}
+	// "ab " exactly fills 3 columns; the tail's leading spaces are dropped so
+	// the second row never starts with dead space.
 	head, tail = splitCols("ab cdef", 3)
-	if head != "ab " && head != "ab" {
-		t.Fatalf("split near a space: got head %q", head)
-	}
-	if strings.HasPrefix(tail, " ") {
-		t.Fatalf("tail must not start with a space: %q", tail)
+	if head != "ab " || tail != "cdef" {
+		t.Fatalf("split near a space: got %q %q", head, tail)
 	}
 	head, tail = splitCols("ab", 10)
 	if head != "ab" || tail != "" {
