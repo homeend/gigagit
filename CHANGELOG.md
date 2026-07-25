@@ -13,11 +13,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   repos (the MRU registry) that re-roots the server in place. A global ☰
   menu in the top bar offers the same actions by mouse.
 
-- web: hunk staging UI — a `hunks` button in the diff toolbar (and a
-  `stage hunks…` right-click entry) opens a per-file hunk view: tick the
-  change blocks to stage and hit *Stage selected*; the view refetches after
-  every round (picks are positional against a freshness hash; a concurrent
-  edit surfaces as "file changed; refresh" and reloads the blocks).
+- web: hunk staging, inline in the diff — an unstaged file's diff highlights
+  its change blocks in place (full context and line numbers stay visible,
+  TUI-style); click a block to select it and *stage selected* in the diff
+  header stages just those hunks. The diff reloads after every round (picks
+  are positional against a freshness hash; a concurrent edit surfaces as
+  "file changed; refresh" and reloads the blocks).
 - web: right-click a changed file → **discard changes** (untracked →
   **delete untracked file**), behind a red confirm. The op resolves the
   path server-side against a fresh status read; conflicted files are

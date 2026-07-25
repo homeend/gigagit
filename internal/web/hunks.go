@@ -2,6 +2,7 @@ package web
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -21,40 +22,54 @@ type hunkBlock struct {
 	Add   []string `json:"add"`
 }
 
-// loadHunkDoc reads a tracked file's index + worktree bytes and builds the
-// hunk doc, mapping the TUI's guards to HTTP statuses. The hash is the
+// hunkRefusal is a hunk-eligibility failure with its HTTP mapping —
+// loadHunkDoc writes it; the diff handler's inline-hunk tagging drops
+// metadata silently instead.
+type hunkRefusal struct {
+	status int
+	err    error
+}
+
+// buildHunkDoc reads a tracked file's index + worktree bytes and builds the
+// hunk doc, mapping the TUI's guards to typed refusals. The hash is the
 // freshness token a stage POST must echo (picks are positional — valid
 // only against the exact bytes the client saw). Mixed EOL is refused
 // (dominant-EOL rejoin would silently normalize the minority); consistent
 // CRLF round-trips since hunkpick's EOL fix.
-func loadHunkDoc(w http.ResponseWriter, r *http.Request, svc *domain.Service, path string) (*hunkpick.Doc, string, bool) {
+func buildHunkDoc(ctx context.Context, svc *domain.Service, path string) (*hunkpick.Doc, string, *hunkRefusal) {
 	if !isGitArgSafe(path) {
-		writeErr(w, http.StatusBadRequest, errors.New("invalid path"))
-		return nil, "", false
+		return nil, "", &hunkRefusal{http.StatusBadRequest, errors.New("invalid path")}
 	}
-	work, werr := svc.WorktreeFile(r.Context(), path)
+	work, werr := svc.WorktreeFile(ctx, path)
 	if werr != nil {
-		writeErr(w, http.StatusNotFound, fmt.Errorf("unreadable path: %w", werr))
-		return nil, "", false
+		return nil, "", &hunkRefusal{http.StatusNotFound, fmt.Errorf("unreadable path: %w", werr)}
 	}
-	index, ierr := svc.ShowFile(r.Context(), "", path)
+	index, ierr := svc.ShowFile(ctx, "", path)
 	if ierr != nil {
-		writeErr(w, http.StatusUnprocessableEntity, errors.New("no index blob (untracked?) — stage the whole file instead"))
-		return nil, "", false
+		return nil, "", &hunkRefusal{http.StatusUnprocessableEntity, errors.New("no index blob (untracked?) — stage the whole file instead")}
 	}
 	if textdiff.IsBinary(index) || textdiff.IsBinary(work) {
-		writeErr(w, http.StatusUnprocessableEntity, errors.New("binary file — stage the whole file instead"))
-		return nil, "", false
+		return nil, "", &hunkRefusal{http.StatusUnprocessableEntity, errors.New("binary file — stage the whole file instead")}
 	}
 	if mixedEOL(work) || mixedEOL(index) {
-		writeErr(w, http.StatusUnprocessableEntity, errors.New("file mixes CRLF and LF line endings — stage the whole file instead"))
-		return nil, "", false
+		return nil, "", &hunkRefusal{http.StatusUnprocessableEntity, errors.New("file mixes CRLF and LF line endings — stage the whole file instead")}
 	}
 	sum := sha256.New()
 	sum.Write(index)
 	sum.Write([]byte{0})
 	sum.Write(work)
-	return hunkpick.FromDiff(index, work), hex.EncodeToString(sum.Sum(nil)), true
+	return hunkpick.FromDiff(index, work), hex.EncodeToString(sum.Sum(nil)), nil
+}
+
+// loadHunkDoc is buildHunkDoc plus the HTTP error layer, for the endpoints
+// that answer a hunk request directly.
+func loadHunkDoc(w http.ResponseWriter, r *http.Request, svc *domain.Service, path string) (*hunkpick.Doc, string, bool) {
+	doc, hash, ref := buildHunkDoc(r.Context(), svc, path)
+	if ref != nil {
+		writeErr(w, ref.status, ref.err)
+		return nil, "", false
+	}
+	return doc, hash, true
 }
 
 // mixedEOL reports whether b mixes CRLF and bare-LF line endings — the one

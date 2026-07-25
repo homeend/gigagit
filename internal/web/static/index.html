@@ -46,12 +46,12 @@
   <section id="diff-pane" class="pane">
     <div id="diff-header">
       <span id="diff-title"></span>
+      <span id="hunk-bar" class="hidden"><button id="hunk-stage" disabled>stage selected (0)</button><button id="hunk-all">all</button><button id="hunk-none">none</button></span>
       <span id="diff-nav">
         <button id="prev-file" title="previous file">‹ file</button>
         <button id="next-file" title="next file">file ›</button>
         <button id="prev-change" title="previous change">‹ change</button>
         <button id="next-change" title="next change">change ›</button>
-        <button id="hunks-btn" title="stage hunks">hunks</button>
       </span>
     </div>
     <div id="diff-body"></div>
@@ -94,6 +94,7 @@
     <div class="hrow"><span class="hkey">worktree</span><span>right-click: switch here (re-root the server), copy path, remove</span></div>
     <div class="hrow"><span class="hkey">tag</span><span>click: show its commit · right-click: show, copy name, delete</span></div>
     <div class="hrow"><span class="hkey">stash</span><span>click: show its changes (incl. untracked) · right-click: apply, pop, drop</span></div>
+    <div class="hrow"><span class="hkey">change block</span><span>in an unstaged file's diff: click a highlighted block to select it, then <b>stage selected</b> in the diff header stages just those hunks</span></div>
     <div class="hrow"><span class="hkey">status file</span><span>right-click: stage / unstage, stage all / unstage all, copy path</span></div>
     <div class="hrow"><span class="hkey">section header</span><span>double-click: collapse / expand that sidebar section (persisted)</span></div>
     <div class="hrow"><span class="hkey">bottom bar</span><span>the footer entries are clickable — pull, push, refresh, stage/unstage, graph, sidebar, help</span></div>
