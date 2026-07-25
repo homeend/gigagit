@@ -8,6 +8,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- web: `g` now toggles the commit graph on/off — off is a flat ●-gutter
+  list with the lane column's space going to subjects (TUI show_graph
+  parity), persisted across reloads. The near-identical text-glyph
+  renderer (the old second `g` state) is gone.
+
 - web: `POST /api/reroot` — the running server can switch to another
   worktree of the repo or a previously-opened repo (MRU registry);
   allowlist-resolved, preflighted before the swap, refused while an
