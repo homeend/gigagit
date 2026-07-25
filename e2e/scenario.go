@@ -51,6 +51,8 @@ type Step struct {
 	Tag          string `toml:"tag"`           // tag name; lightweight, or annotated when TagMessage is set
 	TagMessage   string `toml:"tag_message"`   // when set, the tag is annotated (`git tag -a -m`)
 	Cwd          string `toml:"cwd"`
+	GitConfig    string `toml:"git_config"` // config key; Value holds the value (`git config <key> <value>`)
+	Value        string `toml:"value"`
 }
 
 // kind returns the step's single action name, or an error when the step is
@@ -83,6 +85,9 @@ func (s Step) kind() (string, error) {
 	if s.Tag != "" {
 		kinds = append(kinds, "tag")
 	}
+	if s.GitConfig != "" {
+		kinds = append(kinds, "git_config")
+	}
 	if len(kinds) != 1 {
 		return "", fmt.Errorf("step %+v: want exactly one action, got %v", s, kinds)
 	}
@@ -95,6 +100,9 @@ func (s Step) kind() (string, error) {
 	}
 	if s.TagMessage != "" && k != "tag" {
 		return "", fmt.Errorf("step %+v: tag_message is only valid with tag", s)
+	}
+	if s.Value != "" && k != "git_config" {
+		return "", fmt.Errorf("step %+v: value is only valid with git_config", s)
 	}
 	return k, nil
 }

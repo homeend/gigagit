@@ -1,0 +1,37 @@
+name = "push --map adds a fetch-refspec mapping and the tracking ref appears"
+
+[input.origin]
+transport = "path"
+steps = [
+  { write = "a.txt", content = "1" },
+  { commit = "init" },
+]
+
+[input]
+steps = [
+  # Narrow the clone's refspec to main only — the single-branch monorepo shape.
+  { git_config = "remote.origin.fetch", value = "+refs/heads/main:refs/remotes/origin/main" },
+  { branch = "feat" },
+  { switch = "feat" },
+  { write = "f.txt", content = "x" },
+  { commit = "feat work" },
+]
+
+[[run]]
+cmd = ["push", "--map"]
+exit = 0
+stdout_contains = ["pushed", "mapped origin/feat for tracking"]
+
+# Second push: the branch is now mapped and current — no decision, no note.
+[[run]]
+cmd = ["push"]
+exit = 0
+stdout_contains = ["pushed"]
+stdout_excludes = ["mapped"]
+
+[expect]
+branch = "feat"
+ahead = 0            # resolvable upstream, in sync — only true if the mapping + fetch landed
+
+[expect.origin]
+branches = ["feat", "main"]
