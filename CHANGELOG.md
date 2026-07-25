@@ -8,6 +8,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- web: `?` opens a help overlay listing every implemented key and mouse
+  action (grouped keys / mouse / notes; esc, `?`, or a backdrop click
+  closes); the footer advertises it.
+
 - web: `g` now toggles the commit graph on/off — off is a flat ●-gutter
   list with the lane column's space going to subjects (TUI show_graph
   parity), persisted across reloads. The near-identical text-glyph

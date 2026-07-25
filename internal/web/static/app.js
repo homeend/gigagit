@@ -1067,6 +1067,11 @@ document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") hideCtxMenu();
     return; // the context menu owns the keyboard until closed
   }
+  if (!$("help").classList.contains("hidden")) {
+    if (e.key === "Escape" || e.key === "?") $("help").classList.add("hidden");
+    e.preventDefault();
+    return; // the help overlay owns the keyboard until closed
+  }
   // Form fields own the keyboard: without this, typing a commit message
   // triggers j/k navigation and s/u staging. Ctrl/Cmd+Enter commits.
   if (e.target.closest && e.target.closest("input,textarea")) {
@@ -1098,6 +1103,8 @@ document.addEventListener("keydown", (e) => {
     doPull();
   } else if (e.key === "P") {
     doPush();
+  } else if (e.key === "?") {
+    $("help").classList.remove("hidden");
   } else if ((e.key === "s" || e.key === "u") && state.pane === "files" && state.filesMode === "status") {
     const f = state.statusEntries[state.fileCursor];
     if (f && f.section !== "conflicts") {
@@ -1126,6 +1133,8 @@ $("files-list").addEventListener("click", (e) => {
     openFile(Number(li.dataset.i));
   }
 });
+$("help").addEventListener("click", () => $("help").classList.add("hidden"));
+$("help-box").addEventListener("click", (e) => e.stopPropagation()); // allow selecting/copying text
 $("stage-all").addEventListener("click", () => stage({ all: true }));
 $("unstage-all").addEventListener("click", () => {
   const paths = state.statusEntries.filter((f) => f.section === "staged").map((f) => f.path);
