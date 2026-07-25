@@ -8,6 +8,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- web: hunk-staging backend — `GET /api/hunks?path=` lists a file's
+  unstaged change blocks with a freshness hash; `POST /api/stage-hunks`
+  stages a picked subset through the TUI's own hunkpick → StageHunks
+  machinery (409 when the file changed under the client; untracked,
+  binary, and CRLF files refused with clear messages). UI arrives with
+  the diff-pane work.
+
 - TUI: an error too long for the status bar now temporarily (30s) takes the
   footer row too, ending with a pointer to the full text in Settings `,` →
   Session errors. A newer status message collapses it back to one line
