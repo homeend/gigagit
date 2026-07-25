@@ -8,6 +8,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- web: transport hardening — SSE-drop recovery (reconnecting hint; a lost
+  op unlocks the UI and refreshes), `resolved` wire event closes answered
+  decision modals on replay and in second tabs, destructive modal options
+  render red, sidebar collapse/visibility persist across reloads, stash
+  apply/pop/drop guard ref+sha (409 when the list changed), gen-guarded
+  detail opens, diff arrows disable on notice panes.
+
 - `gg web`: diff-pane navigation + stash untracked files. The diff header
   gains ‹/› arrows stepping between files and between change blocks within
   a diff. A stash's untracked files (stored in its `^3` parent, invisible

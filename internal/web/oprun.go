@@ -136,6 +136,12 @@ func toWire(ev engine.Event) wireEvent {
 func (r *opRun) publish(we wireEvent) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.publishLocked(we)
+}
+
+// publishLocked is publish for callers already holding r.mu — decide must
+// append its resolved marker atomically with consuming the pending fork.
+func (r *opRun) publishLocked(we wireEvent) {
 	r.history = append(r.history, we)
 	for ch := range r.subs {
 		select {
@@ -201,6 +207,10 @@ func (r *opRun) decide(option string) error {
 	select {
 	case r.answer <- option:
 		r.pending = nil // consumed: a second decide must 409, and no stale answer can outlive its fork
+		// The resolved marker makes replay idempotent (a reconnecting
+		// client re-hides the modal it just re-showed) and closes a second
+		// tab's modal live.
+		r.publishLocked(wireEvent{"type": "resolved"})
 		return nil
 	default:
 		return errNotWaiting // answer already queued
