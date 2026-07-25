@@ -1,6 +1,9 @@
 package web
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -131,14 +134,6 @@ func TestHunksGuards(t *testing.T) {
 	if code := getJSON(t, ts, "/api/hunks?path=bin.dat", &struct{}{}); code != http.StatusUnprocessableEntity {
 		t.Errorf("binary = %d, want 422", code)
 	}
-	// CRLF
-	writeRepoFile(t, dir, "cr.txt", "a\r\nb\r\n")
-	gitRun(t, dir, "add", "cr.txt")
-	gitRun(t, dir, "commit", "-m", "cr")
-	writeRepoFile(t, dir, "cr.txt", "a\r\nB\r\n")
-	if code := getJSON(t, ts, "/api/hunks?path=cr.txt", &struct{}{}); code != http.StatusUnprocessableEntity {
-		t.Errorf("crlf = %d, want 422", code)
-	}
 	// missing file
 	if code := getJSON(t, ts, "/api/hunks?path=nope.txt", &struct{}{}); code != http.StatusNotFound {
 		t.Errorf("missing = %d, want 404", code)
@@ -153,6 +148,84 @@ func TestHunksGuards(t *testing.T) {
 		if code := postJSON(t, ts, "/api/stage-hunks", body, "application/json", "", nil); code != want {
 			t.Errorf("body %s = %d, want %d", body, code, want)
 		}
+	}
+}
+
+// TestHunksCRLFRoundTrip proves a pure-CRLF file is now stage-able through
+// the hunk endpoints, and that the staged blob keeps its \r\n bytes intact
+// (the hunkpick EOL fix from Task 1): index "a,b,c" (CRLF), worktree edits
+// line 2 (b -> B) and appends a new line (d), both still CRLF.
+func TestHunksCRLFRoundTrip(t *testing.T) {
+	dir := newRepoDir(t, 1)
+	// Pin autocrlf off: some environments' global gitconfig sets
+	// core.autocrlf=input, which would normalize the CRLF fixture to LF on
+	// `git add`, defeating the "pure CRLF on both sides" precondition below.
+	gitRun(t, dir, "config", "core.autocrlf", "false")
+	writeRepoFile(t, dir, "cr.txt", "a\r\nb\r\nc\r\n")
+	gitRun(t, dir, "add", "cr.txt")
+	gitRun(t, dir, "commit", "-m", "seed cr")
+	writeRepoFile(t, dir, "cr.txt", "a\r\nB\r\nc\r\nd\r\n")
+
+	svc := domain.Open(dir)
+	ts := serve(t, New(svc))
+
+	var out hunksResp
+	if code := getJSON(t, ts, "/api/hunks?path=cr.txt", &out); code != http.StatusOK {
+		t.Fatalf("code = %d, want 200 for a pure-CRLF file", code)
+	}
+	if out.Count < 1 || out.Hash == "" {
+		t.Fatalf("resp = %+v", out)
+	}
+
+	// Pick only block 0 (the b → B change) to prove selectivity under CRLF.
+	picks := []int{0}
+	body := fmt.Sprintf(`{"path":"cr.txt","picks":%v,"hash":%q}`, picks, out.Hash)
+	if code := postJSON(t, ts, "/api/stage-hunks", body, "application/json", "", nil); code != http.StatusOK {
+		t.Fatalf("stage code = %d", code)
+	}
+
+	staged, err := svc.ShowFile(context.Background(), "", "cr.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The staged blob must equal exactly the picked hunk (block 0) and NOT the unpicked hunk (block 1).
+	// Block 0 changes line 2 (b → B), block 1 appends a new line (d).
+	// So the staged content must be "a\r\nB\r\nc\r\n" — with B but no d, proving selectivity and CRLF preservation.
+	want := []byte("a\r\nB\r\nc\r\n")
+	if !bytes.Equal(staged, want) {
+		t.Fatalf("staged blob = %q, want %q (B picked, d not picked, CRLF preserved)", staged, want)
+	}
+}
+
+// TestHunksMixedEOL422 proves the guard still blocks a file that mixes CRLF
+// and bare-LF line endings — the one case hunkpick's dominant-EOL rejoin
+// would silently normalize.
+func TestHunksMixedEOL422(t *testing.T) {
+	dir := newRepoDir(t, 1)
+	writeRepoFile(t, dir, "mixed.txt", "a\nb\nc\n")
+	gitRun(t, dir, "add", "mixed.txt")
+	gitRun(t, dir, "commit", "-m", "seed mixed")
+	writeRepoFile(t, dir, "mixed.txt", "a\nb\r\nc\n") // worktree mixes CRLF and LF
+
+	ts := serve(t, New(domain.Open(dir)))
+
+	resp, err := http.Get(ts.URL + "/api/hunks?path=mixed.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("code = %d, want 422", resp.StatusCode)
+	}
+	var out struct {
+		Error string `json:"error"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatal(err)
+	}
+	const want = "file mixes CRLF and LF line endings — stage the whole file instead"
+	if out.Error != want {
+		t.Fatalf("error = %q, want %q", out.Error, want)
 	}
 }
 

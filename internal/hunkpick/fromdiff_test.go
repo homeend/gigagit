@@ -1,6 +1,9 @@
 package hunkpick
 
-import "testing"
+import (
+	"bytes"
+	"testing"
+)
 
 func TestFromDiffSplitsLiteralAndBlocks(t *testing.T) {
 	// left (index) vs right (working tree): line 2 changed, a line appended.
@@ -41,5 +44,35 @@ func TestFromDiffAllAdd(t *testing.T) {
 	bs := d.Blocks()
 	if len(bs) != 1 || len(bs[0].Current) != 0 || len(bs[0].Incoming) != 2 {
 		t.Fatalf("all-add block wrong: %+v", bs)
+	}
+}
+
+func TestFromDiffCRLFRoundTrip(t *testing.T) {
+	left := []byte("a\r\nb\r\nc\r\n")
+	right := []byte("a\r\nB\r\nc\r\nd\r\n")
+	d := FromDiff(left, right)
+	d.SetAll(TakeIncoming)
+	got, ok := d.Resolved()
+	if !ok || !bytes.Equal(got, right) {
+		t.Fatalf("TakeIncoming = %q ok=%v, want %q", got, ok, right)
+	}
+	d.SetAll(TakeCurrent)
+	got, ok = d.Resolved()
+	if !ok || !bytes.Equal(got, left) {
+		t.Fatalf("TakeCurrent = %q ok=%v, want %q", got, ok, left)
+	}
+}
+
+func TestFromDiffMixedEOLStaysLF(t *testing.T) {
+	// mixed endings: dominant-EOL detection must NOT fire; today's
+	// normalize-to-LF behavior is kept and documented
+	left := []byte("a\nb\r\nc\n")
+	right := []byte("a\nB\r\nc\n")
+	d := FromDiff(left, right)
+	d.SetAll(TakeIncoming)
+	got, ok := d.Resolved()
+	want := []byte("a\nB\nc\n")
+	if !ok || !bytes.Equal(got, want) {
+		t.Fatalf("mixed = %q ok=%v, want %q", got, ok, want)
 	}
 }

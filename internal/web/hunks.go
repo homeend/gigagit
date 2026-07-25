@@ -24,10 +24,9 @@ type hunkBlock struct {
 // loadHunkDoc reads a tracked file's index + worktree bytes and builds the
 // hunk doc, mapping the TUI's guards to HTTP statuses. The hash is the
 // freshness token a stage POST must echo (picks are positional — valid
-// only against the exact bytes the client saw). CRLF is refused
-// deliberately: the shared picker pipeline would silently rewrite the
-// whole file to LF (the TUI does exactly that today — shared-fix
-// candidate, not replicated here).
+// only against the exact bytes the client saw). Mixed EOL is refused
+// (dominant-EOL rejoin would silently normalize the minority); consistent
+// CRLF round-trips since hunkpick's EOL fix.
 func loadHunkDoc(w http.ResponseWriter, r *http.Request, svc *domain.Service, path string) (*hunkpick.Doc, string, bool) {
 	if !isGitArgSafe(path) {
 		writeErr(w, http.StatusBadRequest, errors.New("invalid path"))
@@ -47,8 +46,8 @@ func loadHunkDoc(w http.ResponseWriter, r *http.Request, svc *domain.Service, pa
 		writeErr(w, http.StatusUnprocessableEntity, errors.New("binary file — stage the whole file instead"))
 		return nil, "", false
 	}
-	if bytes.Contains(work, []byte("\r\n")) || bytes.Contains(index, []byte("\r\n")) {
-		writeErr(w, http.StatusUnprocessableEntity, errors.New("file uses CRLF line endings; hunk staging would rewrite them — stage the whole file instead"))
+	if mixedEOL(work) || mixedEOL(index) {
+		writeErr(w, http.StatusUnprocessableEntity, errors.New("file mixes CRLF and LF line endings — stage the whole file instead"))
 		return nil, "", false
 	}
 	sum := sha256.New()
@@ -56,6 +55,14 @@ func loadHunkDoc(w http.ResponseWriter, r *http.Request, svc *domain.Service, pa
 	sum.Write([]byte{0})
 	sum.Write(work)
 	return hunkpick.FromDiff(index, work), hex.EncodeToString(sum.Sum(nil)), true
+}
+
+// mixedEOL reports whether b mixes CRLF and bare-LF line endings — the one
+// case hunkpick's dominant-EOL rejoin would still silently normalize.
+// Consistent CRLF round-trips byte-faithfully since the hunkpick EOL fix.
+func mixedEOL(b []byte) bool {
+	crlf := bytes.Count(b, []byte("\r\n"))
+	return crlf > 0 && bytes.Count(b, []byte("\n")) > crlf
 }
 
 // handleHunks lists a file's unstaged change blocks plus the freshness

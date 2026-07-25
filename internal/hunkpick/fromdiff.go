@@ -1,6 +1,20 @@
 package hunkpick
 
-import "github.com/homeend/gigagit/internal/textdiff"
+import (
+	"bytes"
+
+	"github.com/homeend/gigagit/internal/textdiff"
+)
+
+// eolOf reports whether b ends every line with CRLF, and whether it has any
+// newlines at all (a side with none — or a nil side — expresses no opinion).
+func eolOf(b []byte) (crlf, any bool) {
+	nl := bytes.Count(b, []byte("\n"))
+	if nl == 0 {
+		return false, false
+	}
+	return bytes.Count(b, []byte("\r\n")) == nl, true
+}
 
 // FromDiff builds a Doc from a line diff of two file versions (left = the
 // baseline, e.g. the index; right = the new side, e.g. the working tree).
@@ -48,5 +62,14 @@ func FromDiff(left, right []byte) *Doc {
 	}
 	flushBlock()
 	flushLit()
+
+	lc, la := eolOf(left)
+	rc, ra := eolOf(right)
+	// CRLF only when at least one side has newlines and every side that
+	// does is consistently CRLF; anything mixed stays LF (documented).
+	if (la || ra) && (!la || lc) && (!ra || rc) && (lc || rc) {
+		d.EOL = "\r\n"
+	}
+
 	return d
 }

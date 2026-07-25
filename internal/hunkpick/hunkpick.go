@@ -102,6 +102,15 @@ type Item struct {
 type Doc struct {
 	Items        []Item
 	FinalNewline bool // whether the source file ended with a newline
+
+	// EOL is the terminator Resolved joins lines with; "" means "\n".
+	// FromDiff sets "\r\n" when both inputs are consistently CRLF —
+	// textdiff strips the \r from every line for alignment identity, so
+	// the terminator must be re-applied at join time or a CRLF file
+	// comes back entirely LF (the silent-rewrite bug the TUI H picker
+	// shipped with). ParseConflict leaves it "" on purpose: its lines
+	// keep their own \r (it splits on \n without trimming).
+	EOL string
 }
 
 // Blocks returns the decidable blocks in file order (pointers into Items).
@@ -147,9 +156,13 @@ func (d *Doc) Resolved() (out []byte, ok bool) {
 			return nil, false
 		}
 	}
-	buf := bytes.Join(toBytes(lines), []byte("\n"))
+	sep := d.EOL
+	if sep == "" {
+		sep = "\n"
+	}
+	buf := bytes.Join(toBytes(lines), []byte(sep))
 	if d.FinalNewline && len(lines) > 0 {
-		buf = append(buf, '\n')
+		buf = append(buf, sep...)
 	}
 	return buf, true
 }
