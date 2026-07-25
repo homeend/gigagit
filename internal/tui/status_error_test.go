@@ -9,6 +9,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/homeend/gigagit/internal/i18n"
@@ -311,6 +312,30 @@ func sizedModel(t *testing.T, w, h int) Model {
 	return u.(Model)
 }
 
+// assertFrameFits checks the two universal invariants any base-interface
+// render must hold: exactly wantLines rows (the frame must never render
+// taller than the model's own height — the Finding 1 bug: a composed row
+// wider than the terminal wraps when actually printed, pushing the header
+// off the top of a real terminal, even though the in-memory string here
+// stays wantLines "\n"-joined segments either way, which is why the width
+// check below is the one that actually catches it), and no single line
+// exceeding maxWidth display columns. Width is measured via lipgloss.Width
+// on an already ansi.Strip'd string, never len/byte length — byte length
+// would silently pass a line that overflows only because of a wide glyph
+// (⏳) or a non-Latin script (Cyrillic), exactly the languages this bug hits.
+func assertFrameFits(t *testing.T, out string, wantLines, maxWidth int) {
+	t.Helper()
+	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+	if len(lines) != wantLines {
+		t.Fatalf("frame has %d lines, want %d:\n%s", len(lines), wantLines, out)
+	}
+	for i, l := range lines {
+		if w := lipgloss.Width(l); w > maxWidth {
+			t.Fatalf("line %d is %d display columns wide, want <= %d:\n%q\nfull frame:\n%s", i, w, maxWidth, l, out)
+		}
+	}
+}
+
 // A fresh error too long for one line takes over the footer row: the message
 // continues on a second row, the key hints vanish for the duration, and the
 // bottom row always ends with the pointer to the full text in the Session
@@ -336,6 +361,7 @@ func TestLongFreshErrorExpandsOverFooter(t *testing.T) {
 	if !strings.Contains(out, "full: , → Session errors") {
 		t.Fatalf("the bottom row must point at the Session errors viewer:\n%s", out)
 	}
+	assertFrameFits(t, out, 30, 80)
 }
 
 // A short error keeps today's single-line bar and the footer hints.
@@ -402,6 +428,51 @@ func TestHintSurvivesExtremeTruncation(t *testing.T) {
 	if !strings.Contains(out, frontToken) {
 		t.Fatalf("row 2 must continue from where row 1 left off, not jump to the message's trailing boilerplate:\n%s", out)
 	}
+}
+
+// TestNarrowFreshErrorNeverExceedsWidth guards the Finding 1 regression: at a
+// terminal at or below the (English) hint's own width — i18n.T("full: , →
+// Session errors") alone is 24 columns, before the " · " separator — the old
+// room<1 clamp let the composed row become truncate(tail,1)+hint = "…" (1
+// col) + the full hint, strictly wider than g.w. The fix instead gates the
+// whole expansion on room >= statusErrHintMinRoom, so a terminal this narrow
+// must fall through to the ordinary single-line truncate, which fits g.w by
+// construction. w=24 is deliberately AT the hint's bare width (not merely
+// "close"), the tightest case that still must not overflow.
+func TestNarrowFreshErrorNeverExceedsWidth(t *testing.T) {
+	m := sizedModel(t, 24, 30)
+	m.statusMsg = "error: git push failed (exit 128): ssh: Could not resolve hostname " +
+		strings.Repeat("x", 60)
+	m.statusMsgAt = time.Now()
+	out := ansi.Strip(m.View())
+	assertFrameFits(t, out, 30, 24)
+}
+
+// TestNarrowRussianFreshErrorNeverExceedsWidth guards the other half of
+// Finding 1: the hint's width is translation-dependent — 24 columns in
+// English, 31 in Russian (i18n.T("full: , → Session errors") under the
+// embedded ru bundle) — and must be MEASURED per-language, never assumed
+// from the English literal. w=30 is comfortably safe for the English hint
+// (27 cols with its " · " separator) but not for the Russian one (34 cols
+// with separator), so this is a case that would only fail in Russian; a fix
+// that hardcoded the English hint's width instead of measuring
+// lipgloss.Width(hint) live would pass TestNarrowFreshErrorNeverExceedsWidth
+// above yet still overflow here. i18n.SetLanguage activates the embedded ru
+// bundle (the TestTranslatedPadColumnsAlign precedent in
+// i18n_display_test.go); Cleanup resets to English so no other test in the
+// package observes the switch.
+func TestNarrowRussianFreshErrorNeverExceedsWidth(t *testing.T) {
+	if err := i18n.SetLanguage("ru", t.TempDir()); err != nil {
+		t.Fatalf("SetLanguage(ru): %v", err)
+	}
+	t.Cleanup(func() { _ = i18n.SetLanguage("", "") })
+
+	m := sizedModel(t, 30, 30)
+	m.statusMsg = "error: git push failed (exit 128): ssh: Could not resolve hostname " +
+		strings.Repeat("x", 60)
+	m.statusMsgAt = time.Now()
+	out := ansi.Strip(m.View())
+	assertFrameFits(t, out, 30, 30)
 }
 
 // splitCols is the wrap primitive: head is the widest prefix that fits the

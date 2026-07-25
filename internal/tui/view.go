@@ -93,6 +93,18 @@ var (
 // status message re-stamps statusMsgAt). Constant on purpose — not config.
 const statusErrExpandFor = 30 * time.Second
 
+// statusErrHintMinRoom is the smallest message-column budget the expansion
+// must leave after the translated "full: , → Session errors" hint before
+// it's worth taking the footer row at all. The hint's width varies by
+// language (24 cols in English, 31 in Russian) and is measured, never
+// assumed; on a terminal too narrow to leave even this much room for actual
+// message text, the second row would render as little more than "…" plus the
+// hint — not enough to justify hiding the footer — so rendering falls
+// through to the ordinary single-line truncate instead, which already fits
+// g.w by construction. 4 columns is enough for a couple of real characters
+// plus the ellipsis truncate() itself adds.
+const statusErrHintMinRoom = 4
+
 // statusErrorPrefixes are the leading tokens the status-setting sites use when
 // the message reports a failure (built from an error). Render-time styling keys
 // off these so there is no severity flag to keep in sync across call sites; keep
@@ -478,14 +490,18 @@ func (m Model) renderInterface() string {
 	full := oneLine(statusLine)
 	footerRow := footer
 	var statusRow string
-	if errMode && lipgloss.Width(full) > g.w && time.Since(m.statusMsgAt) < statusErrExpandFor {
-		hint := " · " + i18n.T("full: , → Session errors")
+	hint := " · " + i18n.T("full: , → Session errors")
+	room := g.w - lipgloss.Width(hint)
+	if errMode && lipgloss.Width(full) > g.w && room >= statusErrHintMinRoom && time.Since(m.statusMsgAt) < statusErrExpandFor {
 		head, tail := splitCols(full, g.w)
-		room := g.w - lipgloss.Width(hint)
-		if room < 1 {
-			room = 1
-		}
 		footerRow = statusErrStyle.Render(head)
+		// room >= statusErrHintMinRoom > 0 (the gate above), so
+		// truncate(tail, room) is at most room columns and the whole row is
+		// bounded by g.w = room + width(hint) BY CONSTRUCTION — not by a
+		// clamp. A terminal too narrow to leave statusErrHintMinRoom columns
+		// for the message never reaches this branch at all (see the gate),
+		// so room is never forced up to an arbitrary minimum that could push
+		// the row past g.w.
 		statusRow = statusErrStyle.Render(truncate(tail, room) + hint)
 	} else {
 		statusRow = truncate(full, g.w)
