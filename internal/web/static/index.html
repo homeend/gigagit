@@ -8,6 +8,7 @@
 </head>
 <body>
 <header id="top">
+  <button id="menu-btn" title="menu">☰</button>
   <span id="repo-name">…</span>
   <span id="repo-branch"></span>
   <button id="pull-btn" title="pull the current branch (p)">⟳ pull</button>
@@ -56,12 +57,18 @@
   </section>
 </main>
 <div id="op-line" class="hidden"><div id="op-head"><span>Problem</span><span>(double-click anywhere to hide)</span></div><div id="op-text"></div></div>
-<footer id="foot"><span>j/k move</span><span>enter open</span><button data-act="back">esc back</button><button data-act="sidebar">b branches</button><button data-act="graph">g graph</button><button data-act="stage">s stage</button><button data-act="unstage">u unstage</button><button data-act="pull">p pull</button><button data-act="push">P push</button><button data-act="refresh">r refresh</button><button data-act="help">? help</button></footer>
+<footer id="foot"><span>j/k move</span><span>enter open</span><button data-act="back">esc back</button><button data-act="sidebar">b branches</button><button data-act="graph">g graph</button><button data-act="stage">s stage</button><button data-act="unstage">u unstage</button><button data-act="pull">p pull</button><button data-act="push">P push</button><button data-act="refresh">r refresh</button><button data-act="help">? help</button><button data-act="palette">ctrl+k palette</button></footer>
 <div id="ctx-menu" class="hidden"></div>
 <div id="modal" class="hidden">
   <div id="modal-box">
     <div id="modal-prompt"></div>
     <div id="modal-options"></div>
+  </div>
+</div>
+<div id="palette" class="hidden">
+  <div id="palette-box">
+    <input id="palette-input" type="text" autocomplete="off" spellcheck="false" placeholder="type a command…">
+    <ul id="palette-list"></ul>
   </div>
 </div>
 <div id="help" class="hidden">
@@ -79,6 +86,7 @@
     <div class="hrow"><span class="hkey">s / u</span><span>stage / unstage the focused file (working-tree status view)</span></div>
     <div class="hrow"><span class="hkey">ctrl+enter</span><span>commit, from the message box</span></div>
     <div class="hrow"><span class="hkey">?</span><span>this help</span></div>
+    <div class="hrow"><span class="hkey">ctrl+k / ctrl+p</span><span>command palette (incl. switch repo)</span></div>
     <h3>Mouse</h3>
     <div class="hrow"><span class="hkey">commit row</span><span>open its files + diff; the yellow <b>Working tree</b> row (appears at the top while the tree is dirty) opens the status view: stage/unstage buttons per file, stage-all/unstage-all, commit box, stash</span></div>
     <div class="hrow"><span class="hkey">branch</span><span>click: jump the list to its tip · right-click: switch, delete</span></div>
@@ -89,6 +97,7 @@
     <div class="hrow"><span class="hkey">section header</span><span>double-click: collapse / expand that sidebar section (persisted)</span></div>
     <div class="hrow"><span class="hkey">bottom bar</span><span>the footer entries are clickable — pull, push, refresh, stage/unstage, graph, sidebar, help</span></div>
     <div class="hrow"><span class="hkey">diff header ‹ ›</span><span>previous / next file · previous / next change block</span></div>
+    <div class="hrow"><span class="hkey">☰</span><span>global menu (top-left)</span></div>
     <h3>Notes</h3>
     <div class="hrow"><span class="hkey">decisions</span><span>operations pause mid-flight and ask in the modal; destructive options render red; esc aborts when an abort option exists</span></div>
     <div class="hrow"><span class="hkey">connection</span><span>a dropped stream reconnects and replays; if the server is gone the op line reports it and the UI unlocks</span></div>

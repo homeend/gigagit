@@ -8,6 +8,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- web: command palette (`ctrl+k` / `ctrl+p`) — pull/push/refresh, sidebar and
+  graph toggles, help, and a **switch repo…** mode listing previously-opened
+  repos (the MRU registry) that re-roots the server in place. A global ☰
+  menu in the top bar offers the same actions by mouse.
+
 - web: error messages in the status strip carry a header bar — "Problem"
   on the left, "(double-click anywhere to hide)" on the right — and
   double-clicking anywhere in the strip dismisses it immediately (the 30s

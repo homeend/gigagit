@@ -1202,6 +1202,13 @@ document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") closeLayer(top.id); // default close for layers without onKey
     return; // a non-empty stack owns the keyboard
   }
+  // Palette shortcut: after layer routing (an open layer keeps the keyboard),
+  // before the form-field guard (ctrl+k must work from the commit box).
+  if ((e.ctrlKey || e.metaKey) && (e.key === "k" || e.key === "p")) {
+    e.preventDefault(); // ctrl+p would open the browser print dialog
+    openPalette("cmd");
+    return;
+  }
   // Form fields own the keyboard: without this, typing a commit message
   // triggers j/k navigation and s/u staging. Ctrl/Cmd+Enter commits.
   if (e.target.closest && e.target.closest("input,textarea")) {
@@ -1253,6 +1260,7 @@ $("foot").addEventListener("click", (e) => {
     case "push": doPush(); break;
     case "refresh": if (!state.op) refreshAfterOp(); break;
     case "help": openHelp(); break;
+    case "palette": openPalette("cmd"); break;
   }
 });
 
@@ -1323,6 +1331,7 @@ window.addEventListener("resize", () => {
 
 async function loadRepo() {
   const repo = await getJSON("/api/repo");
+  state.repo = repo; // {name, worktree, branch} — the palette repo-picker filters out the served root
   $("repo-name").textContent = repo.name;
   $("repo-branch").textContent = repo.branch;
   $("repo-worktree").textContent = repo.worktree;
@@ -1339,4 +1348,161 @@ async function boot() {
 }
 boot().catch((e) => {
   $("repo-name").textContent = "error: " + (e.message || e);
+});
+
+// ---- command palette + global ☰ menu (wave 3) ----------------------------
+// The palette is a layer with an input INSIDE it: onKey consumes nav keys
+// (returns true) and returns false for everything else, so the browser
+// delivers the keystroke to the focused input while the router's
+// non-empty-stack short-circuit keeps global keys off. Every close path MUST
+// go through closePalette() — the input.blur() is load-bearing: a focused
+// input after close would trap all global keys in the form-field guard.
+
+let pal = null; // {mode: "cmd"|"repo", fromCmd, rows, filtered, sel}
+
+function paletteCommands() {
+  return [
+    { label: "pull", detail: "p", run: () => doPull() },
+    { label: "push", detail: "P", run: () => doPush() },
+    { label: "refresh", detail: "r", run: () => { if (!state.op) refreshAfterOp(); } },
+    { label: "switch repo…", detail: "", run: null }, // drills into repo mode (runPaletteRow)
+    { label: "open working tree", detail: "", run: () => openWorkingTree(0) }, // 0 = the WT row; a bare call would set state.cursor = undefined and break j/k/enter
+    { label: "toggle sidebar", detail: "b", run: () => toggleSidebar() },
+    { label: "toggle graph", detail: "g", run: () => toggleGraphMode() },
+    { label: "help", detail: "?", run: () => openHelp() },
+  ];
+}
+
+function openPalette(mode, fromCmd) {
+  const already = !!pal;
+  pal = { mode, fromCmd: !!fromCmd, rows: [], filtered: [], sel: 0 };
+  if (!already) pushLayer("palette", $("palette"), { onKey: paletteKey });
+  $("palette-input").value = "";
+  if (mode === "cmd") {
+    pal.rows = paletteCommands();
+    filterPalette();
+  } else {
+    renderPalette([{ label: "loading…", empty: true }]);
+    getJSON("/api/repos")
+      .then((j) => {
+        if (!pal || pal.mode !== "repo") return; // closed or switched meanwhile
+        const cur = state.repo && state.repo.worktree;
+        pal.rows = (j.repos || [])
+          .filter((r) => r.path !== cur)
+          .map((r) => ({ label: r.name, detail: r.path, path: r.path }));
+        filterPalette();
+      })
+      .catch((e) => {
+        closePalette();
+        opLine("error: " + (e.message || e), true);
+      });
+  }
+  $("palette-input").focus();
+}
+
+function closePalette() {
+  closeLayer("palette");
+  $("palette-input").blur();
+  pal = null;
+}
+
+function filterPalette() {
+  if (!pal) return;
+  const q = $("palette-input").value.trim().toLowerCase();
+  pal.filtered = pal.rows.filter(
+    (r) => !q || r.label.toLowerCase().includes(q) || (r.detail || "").toLowerCase().includes(q)
+  );
+  pal.sel = 0;
+  renderPalette(pal.filtered.length ? pal.filtered : [{ label: pal.mode === "repo" ? "no other repos" : "no match", empty: true }]);
+}
+
+function renderPalette(rows) {
+  $("palette-list").innerHTML = rows
+    .map((r, i) =>
+      r.empty
+        ? `<li class="empty">${esc(r.label)}</li>`
+        : `<li data-i="${i}"${i === pal.sel ? ' class="sel"' : ""}><span>${esc(r.label)}</span><span class="detail">${esc(r.detail || "")}</span></li>`
+    )
+    .join("");
+}
+
+function runPaletteRow(row) {
+  if (!row) return;
+  if (pal.mode === "repo") {
+    const path = row.path;
+    closePalette();
+    doReroot(path);
+    return;
+  }
+  if (row.label === "switch repo…") {
+    openPalette("repo", true);
+    return;
+  }
+  const run = row.run;
+  closePalette();
+  run();
+}
+
+function paletteKey(e) {
+  if (!pal) return false;
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    const n = pal.filtered.length;
+    if (n) {
+      pal.sel = Math.min(n - 1, Math.max(0, pal.sel + (e.key === "ArrowDown" ? 1 : -1)));
+      renderPalette(pal.filtered);
+    }
+    e.preventDefault();
+    return true;
+  }
+  if (e.key === "Enter") {
+    runPaletteRow(pal.filtered[pal.sel]);
+    e.preventDefault();
+    return true;
+  }
+  if (e.key === "Escape") {
+    if (pal.mode === "repo" && pal.fromCmd) openPalette("cmd");
+    else closePalette();
+    e.preventDefault();
+    return true;
+  }
+  if (e.key === "Tab") {
+    e.preventDefault();
+    return true;
+  }
+  return false; // typing lands in the focused input; its input event re-filters
+}
+
+$("palette-input").addEventListener("input", filterPalette);
+$("palette").addEventListener("click", closePalette); // backdrop
+$("palette-box").addEventListener("click", (e) => e.stopPropagation());
+$("palette-list").addEventListener("click", (e) => {
+  const li = e.target.closest("li[data-i]");
+  if (li && pal) runPaletteRow(pal.filtered[Number(li.dataset.i)]);
+});
+
+function openGlobalMenu() {
+  const r = $("menu-btn").getBoundingClientRect();
+  showCtxMenu(
+    [
+      { label: "pull", act: () => doPull() },
+      { label: "push", act: () => doPush() },
+      { label: "refresh", act: () => { if (!state.op) refreshAfterOp(); } },
+      { label: "switch repo…", act: () => openPalette("repo") },
+      { label: "command palette…", act: () => openPalette("cmd") },
+      { label: "toggle sidebar", act: () => toggleSidebar() },
+      { label: "toggle graph", act: () => toggleGraphMode() },
+      { label: "help", act: () => openHelp() },
+    ],
+    r.left,
+    r.bottom + 4
+  );
+}
+
+$("menu-btn").addEventListener("click", (e) => {
+  // stopPropagation: the document-level outside-click closer would otherwise
+  // see this same click and close the menu the moment it opens.
+  e.stopPropagation();
+  const t = topLayer();
+  if (t && t.id === "ctx") { hideCtxMenu(); return; } // second click toggles closed
+  openGlobalMenu();
 });
