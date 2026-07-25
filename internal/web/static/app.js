@@ -358,7 +358,7 @@ function reconcileStatusView() {
   }
   // a status re-read can invalidate an open hunk view (file fully staged or
   // gone): exit rather than offer stale positional picks
-  if (hunkView && !state.statusEntries.some((f) => f.path === hunkView.path && hunkEligible(f))) exitHunkView();
+  if (diffHunks && !state.statusEntries.some((f) => f.path === diffHunks.path && hunkEligible(f))) clearDiffHunks();
 }
 
 async function refreshAfterOp() {
@@ -564,7 +564,6 @@ $("worktrees-list").addEventListener("contextmenu", (e) => {
 // drillOut leaves the detail screen for the full-width commit list — the
 // esc key and the mouse back button share it.
 function drillOut() {
-  if (hunkView) { exitHunkView(); return; } // esc exits the hunk view, not the status screen
   if (state.layout !== "detail") return;
   state.detailGen++; // invalidate any in-flight detail fetch
   state.pane = "commits";
@@ -964,7 +963,7 @@ function renderFiles() {
 }
 
 async function openFile(i) {
-  hunkView = null;
+  clearDiffHunks();
   state.fileCursor = i;
   renderFiles();
   updateDiffNav();
@@ -984,7 +983,7 @@ async function openFile(i) {
 }
 
 async function openStatusDiff(i) {
-  hunkView = null;
+  clearDiffHunks();
   const f = state.statusEntries[i];
   $("diff-title").textContent = f.path;
   if (f.section === "conflicts") {
@@ -997,7 +996,14 @@ async function openStatusDiff(i) {
   $("diff-body").innerHTML = `<div class="notice">loading…</div>`;
   updateDiffNav();
   try {
-    renderDiff(await getJSON("/api/diff?" + q));
+    const d = await getJSON("/api/diff?" + q);
+    // server tags eligible unstaged diffs with hunk ordinals — arm inline
+    // staging BEFORE the render so the rows pick up their hk classes
+    if (d.hunks && hunkEligible(f)) {
+      diffHunks = { path: f.path, hash: d.hunks.hash, count: d.hunks.count, picks: new Set() };
+    }
+    renderDiff(d);
+    renderHunkBar();
   } catch (e) {
     $("diff-body").innerHTML = `<div class="notice">error: ${esc(e.message || e)}</div>`;
     updateDiffNav();
@@ -1051,6 +1057,18 @@ function markSpans(text, spans, side) {
   return out + esc(rs.slice(pos).join(""));
 }
 
+// hunkCls/hunkAttr decorate a diff row that belongs to a stageable hunk:
+// the data-hunk tag drives click-to-select, the classes the highlight (a
+// resize re-render keeps the current picks).
+function hunkCls(r) {
+  if (r.hunk == null || !diffHunks) return "";
+  return " hk" + (diffHunks.picks.has(r.hunk) ? " picked" : "");
+}
+
+function hunkAttr(r) {
+  return r.hunk == null || !diffHunks ? "" : ` data-hunk="${r.hunk}"`;
+}
+
 function renderDiff(d) {
   state.lastDiff = d; // re-rendered on window resize (layout is width-dependent)
   state.diffBlockIdx = -1;
@@ -1078,7 +1096,7 @@ function renderDiff(d) {
       const text = pureAdd ? r.right : r.left;
       const spans = pureAdd ? r.right_spans : r.left_spans;
       html +=
-        `<tr class="${r.kind}">` +
+        `<tr class="${r.kind}${hunkCls(r)}"${hunkAttr(r)}>` +
         `<td class="no ${side}">${no || ""}</td>` +
         `<td class="side ${side}">${markSpans(text, spans, side)}</td></tr>`;
     }
@@ -1096,18 +1114,18 @@ function renderDiff(d) {
       } else {
         if (r.kind !== "add")
           html +=
-            `<tr class="del"><td class="no l">${r.left_no || ""}</td><td class="no r"></td>` +
+            `<tr class="del${hunkCls(r)}"${hunkAttr(r)}><td class="no l">${r.left_no || ""}</td><td class="no r"></td>` +
             `<td class="side l">${markSpans(r.left, r.left_spans, "l")}</td></tr>`;
         if (r.kind !== "del")
           html +=
-            `<tr class="add"><td class="no l"></td><td class="no r">${r.right_no || ""}</td>` +
+            `<tr class="add${hunkCls(r)}"${hunkAttr(r)}><td class="no l"></td><td class="no r">${r.right_no || ""}</td>` +
             `<td class="side r">${markSpans(r.right, r.right_spans, "r")}</td></tr>`;
       }
     }
   } else {
     for (const r of rows) {
       html +=
-        `<tr class="${r.kind}">` +
+        `<tr class="${r.kind}${hunkCls(r)}"${hunkAttr(r)}>` +
         `<td class="no l">${r.left_no || ""}</td>` +
         `<td class="side l">${markSpans(r.left, r.left_spans, "l")}</td>` +
         `<td class="no r">${r.right_no || ""}</td>` +
@@ -1133,8 +1151,6 @@ function updateDiffNav() {
   const any = diffChangeBlocks().length > 0;
   $("prev-change").disabled = !any;
   $("next-change").disabled = !any;
-  const f = state.filesMode === "status" ? list[state.fileCursor] : null;
-  $("hunks-btn").disabled = !hunkEligible(f);
 }
 
 function stepFile(delta) {
@@ -1176,74 +1192,50 @@ $("next-file").addEventListener("click", () => stepFile(1));
 $("prev-change").addEventListener("click", () => stepChange(-1));
 $("next-change").addEventListener("click", () => stepChange(1));
 
-// ---- hunk staging view (wave 3) ------------------------------------------
-// Pane content, not a layer: replaces #diff-body while active. Picks are
-// POSITIONAL against the exact bytes the server hashed — after every staged
-// round the index moves and the hash changes, so the view REFETCHES before
-// offering more picks (a 409 means someone else moved the file: same
-// refetch). 422 messages from the server are user-ready and shown verbatim.
+// ---- inline hunk staging (wave 3, reworked from live feedback) -----------
+// Hunks are selected IN the unstaged diff itself (TUI-style: full context,
+// line numbers, the same view — a separate block list lost the "what is
+// what" context). The server tags eligible /api/diff?wt=unstaged rows with
+// hunk ordinals + the staging freshness hash; clicking a tagged block
+// toggles it and the diff-header bar stages the picked set. Picks are
+// POSITIONAL against the exact bytes the server hashed — every staged
+// round changes the hash, so the diff is RELOADED after each round (a 409
+// means someone else moved the file: same reload).
 
-let hunkView = null; // {path, hash, blocks, picks: Set<int>}
+let diffHunks = null; // {path, hash, count, picks: Set<int>} — set only while an eligible unstaged diff is open
 
 function hunkEligible(f) {
   return !!f && f.section === "changes" && f.kind === "tracked";
 }
 
-async function enterHunkView(path) {
-  let j;
-  try {
-    j = await getJSON("/api/hunks?" + new URLSearchParams({ path }));
-  } catch (e) {
-    opLine("error: " + (e.message || e), true);
+function clearDiffHunks() {
+  diffHunks = null;
+  renderHunkBar();
+}
+
+function renderHunkBar() {
+  const bar = $("hunk-bar");
+  if (!diffHunks) {
+    bar.classList.add("hidden");
     return;
   }
-  hunkView = { path, hash: j.hash, blocks: j.blocks || [], picks: new Set() };
-  renderHunks();
+  bar.classList.remove("hidden");
+  const n = diffHunks.picks.size;
+  $("hunk-stage").disabled = !n;
+  $("hunk-stage").textContent = `stage selected (${n})`;
 }
 
-function exitHunkView() {
-  hunkView = null;
-  const f = state.statusEntries[state.fileCursor];
-  if (state.filesMode === "status" && f) {
-    openStatusDiff(state.fileCursor);
-  } else {
-    $("diff-title").textContent = "";
-    $("diff-body").innerHTML = "";
-    updateDiffNav();
-  }
+// paintHunkPicks flips only the picked classes — no diff re-render, so
+// scroll position and text selection survive a toggle.
+function paintHunkPicks() {
+  document.querySelectorAll("#diff-body tr[data-hunk]").forEach((tr) => {
+    tr.classList.toggle("picked", !!diffHunks && diffHunks.picks.has(Number(tr.dataset.hunk)));
+  });
+  renderHunkBar();
 }
 
-function renderHunks() {
-  if (!hunkView) return;
-  const v = hunkView;
-  $("diff-title").textContent = v.path + " — stage hunks";
-  const n = v.picks.size;
-  const bar =
-    `<div class="hunk-bar">` +
-    `<button id="hunk-stage"${n ? "" : " disabled"}>Stage selected (${n})</button>` +
-    `<button id="hunk-all">Select all</button>` +
-    `<button id="hunk-none">Clear</button>` +
-    `<button id="hunk-back">‹ back to diff</button>` +
-    `</div>`;
-  const blocks = v.blocks
-    .map((b, i) => {
-      const lines =
-        (b.del || []).map((l) => `<div class="hunk-line del">- ${esc(l)}</div>`).join("") +
-        (b.add || []).map((l) => `<div class="hunk-line add">+ ${esc(l)}</div>`).join("");
-      return (
-        `<div class="hunk-block" data-i="${i}">` +
-        `<div class="hunk-head"><input type="checkbox"${v.picks.has(i) ? " checked" : ""}> hunk ${i + 1}/${v.blocks.length}</div>` +
-        lines +
-        `</div>`
-      );
-    })
-    .join(`<div class="hunk-sep">⋯</div>`);
-  $("diff-body").innerHTML = bar + (blocks || `<div class="notice">no hunks</div>`);
-  updateDiffNav();
-}
-
-async function stagePicked() {
-  const v = hunkView;
+async function stageHunksPicked() {
+  const v = diffHunks;
   if (!v || !v.picks.size) return;
   let resp;
   try {
@@ -1254,51 +1246,58 @@ async function stagePicked() {
     });
   } catch (e) {
     opLine("error: " + (e.message || e), true);
-    // 409 = stale picks: refetch fresh blocks; other errors keep the picks
-    if (/file changed/.test(e.message || "")) await refetchHunks();
+    // 409 = stale picks (the file moved): reload the diff for fresh tags
+    if (/file changed/.test(e.message || "")) reopenAfterHunkStage(v.path);
     return;
   }
   applyStatus(resp); // the 200 body IS a fresh /api/status payload
-  reconcileStatusView(); // may exit the view via its eligibility guard
+  reconcileStatusView();
   renderFiles();
-  await refetchHunks();
+  reopenAfterHunkStage(v.path);
 }
 
-async function refetchHunks() {
-  if (!hunkView) return;
-  const path = hunkView.path;
-  let j;
-  try {
-    j = await getJSON("/api/hunks?" + new URLSearchParams({ path }));
-  } catch {
-    exitHunkView(); // 404/422: the file left the eligible set (fully staged)
+// reopenAfterHunkStage re-opens the freshest view of path after a staging
+// round: its unstaged diff while hunks remain, else whatever the cursor
+// lands on (the file may have moved wholly into Staged).
+function reopenAfterHunkStage(path) {
+  const i = state.statusEntries.findIndex((f) => f.path === path && f.section === "changes");
+  if (i >= 0) {
+    state.fileCursor = i;
+    renderFiles();
+    openStatusDiff(i);
     return;
   }
-  if (!j.count) {
-    exitHunkView();
-    return;
-  }
-  hunkView = { path, hash: j.hash, blocks: j.blocks || [], picks: new Set() };
-  renderHunks();
-}
-
-$("hunks-btn").addEventListener("click", () => {
+  clearDiffHunks();
   const f = state.statusEntries[state.fileCursor];
-  if (state.filesMode === "status" && hunkEligible(f)) enterHunkView(f.path);
+  if (state.filesMode === "status" && f) {
+    openStatusDiff(state.fileCursor);
+  } else {
+    $("diff-title").textContent = "";
+    $("diff-body").innerHTML = "";
+    updateDiffNav();
+  }
+}
+
+$("hunk-stage").addEventListener("click", () => void stageHunksPicked());
+$("hunk-all").addEventListener("click", () => {
+  if (!diffHunks) return;
+  diffHunks.picks = new Set(Array.from({ length: diffHunks.count }, (_, i) => i));
+  paintHunkPicks();
+});
+$("hunk-none").addEventListener("click", () => {
+  if (!diffHunks) return;
+  diffHunks.picks = new Set();
+  paintHunkPicks();
 });
 
 $("diff-body").addEventListener("click", (e) => {
-  if (!hunkView) return;
-  if (e.target.id === "hunk-back") return exitHunkView();
-  if (e.target.id === "hunk-all") { hunkView.picks = new Set(hunkView.blocks.map((_, i) => i)); return renderHunks(); }
-  if (e.target.id === "hunk-none") { hunkView.picks = new Set(); return renderHunks(); }
-  if (e.target.id === "hunk-stage") return void stagePicked();
-  const head = e.target.closest(".hunk-head");
-  if (head) {
-    const i = Number(head.parentElement.dataset.i);
-    if (hunkView.picks.has(i)) hunkView.picks.delete(i); else hunkView.picks.add(i);
-    renderHunks();
-  }
+  if (!diffHunks) return;
+  const tr = e.target.closest("tr[data-hunk]");
+  if (!tr || !getSelection().isCollapsed) return; // don't toggle mid text-selection
+  const i = Number(tr.dataset.hunk);
+  if (diffHunks.picks.has(i)) diffHunks.picks.delete(i);
+  else diffHunks.picks.add(i);
+  paintHunkPicks();
 });
 
 // --- focus + keyboard ---
@@ -1434,7 +1433,6 @@ $("files-list").addEventListener("contextmenu", (e) => {
   const items = [];
   if (f.section === "staged") items.push({ label: "unstage " + f.path, act: () => stage({ paths: [f.path], unstage: true }) });
   else if (f.section !== "conflicts") items.push({ label: "stage " + f.path, act: () => stage({ paths: [f.path] }) });
-  if (hunkEligible(f)) items.push({ label: "stage hunks…", act: () => enterHunkView(f.path) });
   items.push({ label: "copy path", act: () => copyText(f.path) });
   items.push({ label: "stage all", act: () => stage({ all: true }) });
   if (state.statusEntries.some((x) => x.section === "staged")) {

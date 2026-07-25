@@ -18,6 +18,40 @@ type diffRow struct {
 	RightNo    int      `json:"right_no"`
 	LeftSpans  [][2]int `json:"left_spans,omitempty"`
 	RightSpans [][2]int `json:"right_spans,omitempty"`
+	Hunk       *int     `json:"hunk,omitempty"`
+}
+
+// diffHunksMeta tags an unstaged working-tree diff's rows with hunk
+// ordinals so the client can stage hunks INLINE in the diff view (full
+// context preserved) instead of a separate block list. Valid only because
+// /api/diff's rows and hunkpick.FromDiff's blocks derive from the same
+// textdiff alignment of the same index↔worktree pair — the count equality
+// checked at the build site is the safety latch.
+type diffHunksMeta struct {
+	count   int
+	hash    string
+	rowTags []int // per aligned row; -1 = context
+}
+
+// diffHunkTags numbers each aligned row's hunk: contiguous non-Same runs
+// in order, -1 for context rows — the same segmentation hunkpick's
+// Doc.Blocks() yields from the same alignment.
+func diffHunkTags(rows []textdiff.Row) (tags []int, count int) {
+	tags = make([]int, len(rows))
+	in := false
+	for i, r := range rows {
+		if r.Kind == textdiff.Same {
+			tags[i] = -1
+			in = false
+			continue
+		}
+		if !in {
+			count++
+			in = true
+		}
+		tags[i] = count - 1
+	}
+	return tags, count
 }
 
 func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request) {
@@ -60,7 +94,7 @@ func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	writeDiffJSON(w, d)
+	writeDiffJSON(w, d, nil)
 }
 
 func diffKindString(k textdiff.Kind) string {
@@ -131,7 +165,21 @@ func (s *Server) handleWorktreeDiff(w http.ResponseWriter, r *http.Request, wt s
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	writeDiffJSON(w, d)
+	// Inline-hunk tagging: only the unstaged form of an eligible file (no
+	// rename — the hunk doc is single-path) gets hunk ordinals + the
+	// freshness hash. Any refusal or a run/block count mismatch (e.g. a
+	// truncated alignment) just yields an untagged diff — the client then
+	// simply offers no hunk staging for it.
+	var hunks *diffHunksMeta
+	if wt == "unstaged" && oldPath == path && !d.Binary && !d.TooLarge && !d.Result.Truncated {
+		if doc, hash, ref := buildHunkDoc(r.Context(), svc, path); ref == nil {
+			tags, n := diffHunkTags(d.Result.Rows)
+			if n > 0 && n == len(doc.Blocks()) {
+				hunks = &diffHunksMeta{count: n, hash: hash, rowTags: tags}
+			}
+		}
+	}
+	writeDiffJSON(w, d, hunks)
 }
 
 // lenient maps a byte-source error to an empty side. A missing side is
@@ -153,8 +201,9 @@ func lenient(src domain.ByteSource) domain.ByteSource {
 }
 
 // writeDiffJSON converts an aligned diff into the /api/diff JSON contract.
-// Shared by the commit (sha=) and working-tree (wt=) branches.
-func writeDiffJSON(w http.ResponseWriter, d domain.Diff) {
+// Shared by the commit (sha=) and working-tree (wt=) branches; a non-nil
+// hunks adds inline hunk ordinals + the staging freshness hash.
+func writeDiffJSON(w http.ResponseWriter, d domain.Diff, hunks *diffHunksMeta) {
 	rows := make([]diffRow, len(d.Result.Rows))
 	for i, row := range d.Result.Rows {
 		rows[i] = diffRow{
@@ -166,11 +215,19 @@ func writeDiffJSON(w http.ResponseWriter, d domain.Diff) {
 			LeftSpans:  spanPairs(row.LeftSpans),
 			RightSpans: spanPairs(row.RightSpans),
 		}
+		if hunks != nil && hunks.rowTags[i] >= 0 {
+			tag := hunks.rowTags[i]
+			rows[i].Hunk = &tag
+		}
 	}
-	writeJSON(w, map[string]any{
+	payload := map[string]any{
 		"rows":      rows,
 		"binary":    d.Binary,
 		"too_large": d.TooLarge,
 		"truncated": d.Result.Truncated,
-	})
+	}
+	if hunks != nil {
+		payload["hunks"] = map[string]any{"count": hunks.count, "hash": hunks.hash}
+	}
+	writeJSON(w, payload)
 }
