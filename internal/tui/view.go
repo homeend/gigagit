@@ -88,6 +88,23 @@ var (
 	errorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
 )
 
+// statusErrExpandFor bounds the temporary two-line error bar: an error too
+// long for one line may take the footer row for this long (or until a newer
+// status message re-stamps statusMsgAt). Constant on purpose — not config.
+const statusErrExpandFor = 30 * time.Second
+
+// statusErrHintMinRoom is the smallest message-column budget the expansion
+// must leave after the translated "full: , → Session errors" hint before
+// it's worth taking the footer row at all. The hint's width varies by
+// language (24 cols in English, 31 in Russian) and is measured, never
+// assumed; on a terminal too narrow to leave even this much room for actual
+// message text, the second row would render as little more than "…" plus the
+// hint — not enough to justify hiding the footer — so rendering falls
+// through to the ordinary single-line truncate instead, which already fits
+// g.w by construction. 4 columns is enough for a couple of real characters
+// plus the ellipsis truncate() itself adds.
+const statusErrHintMinRoom = 4
+
 // statusErrorPrefixes are the leading tokens the status-setting sites use when
 // the message reports a failure (built from an error). Render-time styling keys
 // off these so there is no severity flag to keep in sync across call sites; keep
@@ -454,17 +471,68 @@ func (m Model) renderInterface() string {
 			statusLine = i18n.T("⏳ reloading…") + " · " + statusLine
 		}
 	}
-	statusLine = truncate(oneLine(statusLine), g.w)
 	// Style after truncation: truncate slices runes and would corrupt ANSI codes.
-	if errMode {
-		statusLine = statusErrStyle.Render(statusLine)
+	// An error too long for one line and still fresh temporarily takes the
+	// footer row too (30s, or until a newer message re-stamps statusMsgAt —
+	// the perpetual heartbeat re-render collapses it on expiry). The bottom
+	// row's tail always keeps the pointer to the full text in the Session
+	// errors viewer: truncation eats the message, never the pointer.
+	//
+	// The tail is cut from the BACK (truncate), not the front: git puts the
+	// operation and the diagnosis up front (e.g. "ssh: ... Temporary failure
+	// in name resolution") and its least useful boilerplate at the very end
+	// ("Please make sure you have the correct access rights…" — the same
+	// text friendlyOpError's doc comment already calls out as misleading).
+	// Row 2 is simply the continuation right after row 1, so keeping ITS
+	// front keeps the part of the message nearest row 1's context; the "…"
+	// plus the Session-errors pointer is how the reader reaches whatever
+	// got cut.
+	full := oneLine(statusLine)
+	footerRow := footer
+	var statusRow string
+	hint := " · " + i18n.T("full: , → Session errors")
+	room := g.w - lipgloss.Width(hint)
+	// The trigger is the ERROR's own overflow, not the composed line's: full
+	// also carries the conflict/mark/notice hints and the "⏳ reloading…"/
+	// elapsed-time wrappers, none of which live in m.statusMsg. Gating on
+	// full's width instead would expand-and-collapse a one-line error on
+	// every post-failure background reload (the "⏳ reloading… · " prefix
+	// alone can push an otherwise-fitting error past g.w) and would let an
+	// unrelated conflict notice eat into row 2 of a short error that never
+	// needed to expand at all. lipgloss.Width(full) > g.w is not ANDed in
+	// alongside msgOverflows: in error mode m.statusMsg always leads parts
+	// (see above) and is only ever appended to, never shortened, so
+	// msgOverflows already implies full's width exceeds g.w too — repeating
+	// that check would just be dead weight.
+	msgOverflows := lipgloss.Width(oneLine(m.statusMsg)) > g.w
+	if errMode && msgOverflows && room >= statusErrHintMinRoom && time.Since(m.statusMsgAt) < statusErrExpandFor {
+		head, tail := splitCols(full, g.w)
+		// splitCols returns the widest prefix that FITS — a wide glyph that
+		// would straddle the g.w boundary moves wholly into tail, leaving
+		// head up to one column short. padRight closes that gap so the red
+		// background spans exactly g.w columns on both rows instead of
+		// visibly differing by a column.
+		footerRow = statusErrStyle.Render(padRight(head, g.w))
+		// room >= statusErrHintMinRoom > 0 (the gate above), so
+		// truncate(tail, room) is at most room columns and the whole row is
+		// bounded by g.w = room + width(hint) BY CONSTRUCTION — not by a
+		// clamp. A terminal too narrow to leave statusErrHintMinRoom columns
+		// for the message never reaches this branch at all (see the gate),
+		// so room is never forced up to an arbitrary minimum that could push
+		// the row past g.w.
+		statusRow = statusErrStyle.Render(truncate(tail, room) + hint)
+	} else {
+		statusRow = truncate(full, g.w)
+		if errMode {
+			statusRow = statusErrStyle.Render(statusRow)
+		}
 	}
 
 	// Narrow terminals: a single commits column (two columns won't fit cleanly).
 	if g.w < 40 {
 		cmRows, _, decos := m.commitBody(g.w, g.boxH[panelCommits])
 		body := m.renderPanel(panelCommits, m.panelLabel(panelCommits, i18n.T("Commits (%s)", m.commitScopeLabel())), cmRows, decos, g.w, g.boxH[panelCommits])
-		return strings.Join([]string{header, body, footer, statusLine}, "\n")
+		return strings.Join([]string{header, body, footerRow, statusRow}, "\n")
 	}
 
 	var left string
@@ -510,7 +578,7 @@ func (m Model) renderInterface() string {
 		body = lipgloss.JoinHorizontal(lipgloss.Top, left, right)
 	}
 
-	return strings.Join([]string{header, body, footer, statusLine}, "\n")
+	return strings.Join([]string{header, body, footerRow, statusRow}, "\n")
 }
 
 // headerLine renders the bold title plus branch info on the left, and the
@@ -931,6 +999,30 @@ func truncate(s string, n int) string {
 		r = r[:len(r)-1]
 	}
 	return string(r) + "…"
+}
+
+// splitCols splits s at n display columns: head is the widest prefix that
+// fits (no ellipsis), tail the remainder with leading spaces dropped. The
+// split is column-exact — a wide glyph that would straddle the boundary
+// moves entirely into tail, so neither part can exceed its budget.
+func splitCols(s string, n int) (head, tail string) {
+	if n <= 0 {
+		return "", s
+	}
+	if lipgloss.Width(s) <= n {
+		return s, ""
+	}
+	r := []rune(s)
+	i, w := 0, 0
+	for i < len(r) {
+		cw := lipgloss.Width(string(r[i]))
+		if w+cw > n {
+			break
+		}
+		w += cw
+		i++
+	}
+	return string(r[:i]), strings.TrimLeft(string(r[i:]), " ")
 }
 
 // elideLeft shortens s to at most n display columns by dropping from the FRONT
