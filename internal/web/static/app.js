@@ -46,6 +46,32 @@ const SECTIONS = ["branches", "worktrees", "tags", "stashes"];
 function lsGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
 function lsSet(k, v) { try { localStorage.setItem(k, v); } catch {} }
 
+// --- overlay layer stack ---
+// Every overlay surface (decision modal, help, ctx-menu, future popups)
+// registers here. One rule: a non-empty stack owns the keyboard — the top
+// layer's onKey sees the event first; an unhandled Escape closes the top
+// layer. closeLayer(id) removes a layer WHEREVER it sits in the stack:
+// the op transport must be able to close a parked decision modal even
+// under an open help overlay.
+const layers = [];
+
+function pushLayer(id, el, opts) {
+  if (layers.some((l) => l.id === id)) return; // one instance per surface
+  el.classList.remove("hidden");
+  layers.push({ id, el, onKey: (opts && opts.onKey) || null });
+}
+
+function closeLayer(id) {
+  const i = layers.findIndex((l) => l.id === id);
+  if (i < 0) return; // idempotent
+  const [l] = layers.splice(i, 1);
+  l.el.classList.add("hidden");
+}
+
+function topLayer() {
+  return layers[layers.length - 1] || null;
+}
+
 async function getJSON(url) {
   const resp = await fetch(url);
   const body = await resp.json();
@@ -340,8 +366,17 @@ function showModal(ev) {
   $("modal-options").innerHTML = (ev.options || [])
     .map((o) => `<button data-o="${esc(o)}"${DANGER_OPTIONS.has(o) ? ' class="danger"' : ""}>${esc(o)}</button>`)
     .join("");
-  $("modal").classList.remove("hidden");
   $("modal").dataset.opts = JSON.stringify(ev.options || []);
+  pushLayer("modal", $("modal"), {
+    onKey: (e) => {
+      if (e.key === "Escape") {
+        const opts = JSON.parse($("modal").dataset.opts || "[]");
+        if (opts.includes("abort")) answerModal("abort"); // the TUI's esc rule
+      }
+      e.preventDefault();
+      return true; // the modal owns the keyboard — even over a focused form field
+    },
+  });
 }
 
 // modalLocalCb, when set, routes the next modal answer to a CLIENT-side
@@ -355,8 +390,18 @@ function showLocalConfirm(prompt, options, cb) {
 }
 
 function hideModal() {
-  $("modal").classList.add("hidden");
   modalLocalCb = null; // a done-driven close must not leak the callback to the next modal
+  closeLayer("modal");
+}
+
+function openHelp() {
+  pushLayer("help", $("help"), {
+    onKey: (e) => {
+      if (e.key === "Escape" || e.key === "?") closeLayer("help");
+      e.preventDefault();
+      return true; // help owns the keyboard until closed
+    },
+  });
 }
 
 async function answerModal(option) {
@@ -404,7 +449,7 @@ async function gotoBranchTip(b) {
 }
 
 function hideCtxMenu() {
-  $("ctx-menu").classList.add("hidden");
+  closeLayer("ctx");
 }
 
 // showCtxMenu renders the shared right-click menu at (x,y): safe actions
@@ -417,7 +462,12 @@ function showCtxMenu(items, x, y) {
     .join("");
   menu.style.left = Math.min(x, window.innerWidth - 200) + "px";
   menu.style.top = Math.min(y, window.innerHeight - 120) + "px";
-  menu.classList.remove("hidden");
+  pushLayer("ctx", menu, {
+    onKey: (e) => {
+      if (e.key === "Escape") closeLayer("ctx");
+      return true; // swallowed without preventDefault (today's behavior)
+    },
+  });
 }
 
 function showBranchMenu(b, x, y) {
@@ -1119,22 +1169,11 @@ function moveCursor(delta) {
 }
 
 document.addEventListener("keydown", (e) => {
-  if (!$("modal").classList.contains("hidden")) {
-    if (e.key === "Escape") {
-      const opts = JSON.parse($("modal").dataset.opts || "[]");
-      if (opts.includes("abort")) answerModal("abort"); // the TUI's esc rule
-    }
-    e.preventDefault();
-    return; // the modal owns the keyboard — even over a focused form field
-  }
-  if (!$("ctx-menu").classList.contains("hidden")) {
-    if (e.key === "Escape") hideCtxMenu();
-    return; // the context menu owns the keyboard until closed
-  }
-  if (!$("help").classList.contains("hidden")) {
-    if (e.key === "Escape" || e.key === "?") $("help").classList.add("hidden");
-    e.preventDefault();
-    return; // the help overlay owns the keyboard until closed
+  const top = topLayer();
+  if (top) {
+    if (top.onKey && top.onKey(e)) return;
+    if (e.key === "Escape") closeLayer(top.id); // default close for layers without onKey
+    return; // a non-empty stack owns the keyboard
   }
   // Form fields own the keyboard: without this, typing a commit message
   // triggers j/k navigation and s/u staging. Ctrl/Cmd+Enter commits.
@@ -1165,7 +1204,7 @@ document.addEventListener("keydown", (e) => {
   } else if (e.key === "P") {
     doPush();
   } else if (e.key === "?") {
-    $("help").classList.remove("hidden");
+    openHelp();
   } else if (e.key === "r") {
     if (!state.op) refreshAfterOp(); // full soft reload: repo, sidebar, status, commits
   } else if (e.key === "s" || e.key === "u") {
@@ -1186,7 +1225,7 @@ $("foot").addEventListener("click", (e) => {
     case "pull": doPull(); break;
     case "push": doPush(); break;
     case "refresh": if (!state.op) refreshAfterOp(); break;
-    case "help": $("help").classList.remove("hidden"); break;
+    case "help": openHelp(); break;
   }
 });
 
@@ -1209,7 +1248,7 @@ $("files-list").addEventListener("click", (e) => {
     openFile(Number(li.dataset.i));
   }
 });
-$("help").addEventListener("click", () => $("help").classList.add("hidden"));
+$("help").addEventListener("click", () => closeLayer("help"));
 $("help-box").addEventListener("click", (e) => e.stopPropagation()); // allow selecting/copying text
 // Right-click on a working-tree status file: stage/unstage it (per its
 // section), bulk actions, copy path. Selects the row for feedback without
