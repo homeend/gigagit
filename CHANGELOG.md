@@ -8,6 +8,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- web: `POST /api/reroot` — the running server can switch to another
+  worktree of the repo or a previously-opened repo (MRU registry);
+  allowlist-resolved, preflighted before the swap, refused while an
+  operation runs. No client UI yet.
+
 - `gg web`: diff-pane navigation + stash untracked files. The diff header
   gains ‹/› arrows stepping between files and between change blocks within
   a diff. A stash's untracked files (stored in its `^3` parent, invisible

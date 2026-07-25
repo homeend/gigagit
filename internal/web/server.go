@@ -39,6 +39,10 @@ type Server struct {
 	cur           *opRun
 	opSeq         int
 	decideTimeout time.Duration // test seam; zero = defaultDecideTimeout
+
+	// reposPath overrides the MRU registry location (test seam); empty =
+	// repos.DefaultStatePath().
+	reposPath string
 }
 
 func New(svc *domain.Service) *Server {
@@ -69,11 +73,17 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/op", writeGuard(s.handleOpStart))
 	mux.HandleFunc("GET /api/op/{id}/events", s.handleOpEvents)
 	mux.HandleFunc("POST /api/op/{id}/decide", writeGuard(s.handleOpDecide))
+	mux.HandleFunc("POST /api/reroot", writeGuard(s.handleReroot))
 	return hostGuard(mux)
 }
 
 func (s *Server) handleRepo(w http.ResponseWriter, r *http.Request) {
-	svc := s.service()
+	writeRepoInfo(w, r, s.service())
+}
+
+// writeRepoInfo writes the repo-identity payload for svc — shared by GET
+// /api/repo and the POST /api/reroot success response.
+func writeRepoInfo(w http.ResponseWriter, r *http.Request, svc *domain.Service) {
 	top, err := svc.TopLevel(r.Context())
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
