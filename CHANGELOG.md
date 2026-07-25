@@ -8,6 +8,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- web: the flat list's gutter is a continuous colored line (the commit's
+  lane color) instead of monochrome dots; `r` soft-reloads everything, and
+  the working-tree status auto-refreshes when the tab regains focus — files
+  edited while the page was in the background now surface without a manual
+  reload.
+
 - web: `?` opens a help overlay listing every implemented key and mouse
   action (grouped keys / mouse / notes; esc, `?`, or a backdrop click
   closes); the footer advertises it.

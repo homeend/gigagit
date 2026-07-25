@@ -261,21 +261,42 @@ function handleOpEvent(ev) {
   }
 }
 
+// reconcileStatusView keeps an open status screen truthful after any
+// status re-read (op done, r, tab focus): the tree may have gone clean or
+// shrunk under it.
+function reconcileStatusView() {
+  if (state.filesMode !== "status") return;
+  if (!state.wt) exitStatusToList();
+  else {
+    state.fileCursor = Math.min(state.fileCursor, Math.max(0, state.statusEntries.length - 1));
+    renderFiles();
+  }
+}
+
 async function refreshAfterOp() {
   await Promise.all([loadRepo(), fetchBranches(), fetchStatus()]);
   // an op can change the working tree while its status screen is open
   // (commit empties it) — reconcile instead of showing stale rows
-  if (state.filesMode === "status") {
-    if (!state.wt) exitStatusToList();
-    else {
-      state.fileCursor = Math.min(state.fileCursor, Math.max(0, state.statusEntries.length - 1));
-      renderFiles();
-    }
-  }
+  reconcileStatusView();
   state.rows = [];
   state.cursor = 0;
   await loadCommits(false);
 }
+
+// Files edited while the page is in the background are otherwise invisible
+// (no polling; ops are the only other refresh trigger) — re-read the
+// status when the tab regains focus, throttled, never during a live op.
+let lastFocusRefresh = 0;
+window.addEventListener("focus", () => {
+  if (state.op || Date.now() - lastFocusRefresh < 2000) return;
+  lastFocusRefresh = Date.now();
+  fetchStatus()
+    .then(() => {
+      reconcileStatusView();
+      renderCommits();
+    })
+    .catch(() => {});
+});
 
 function showModal(ev) {
   $("modal-prompt").textContent = ev.prompt;
@@ -595,7 +616,12 @@ function rowHTML(row, i) {
 }
 
 function graphHTML(row, feedIdx) {
-  if (state.graphMode === "off") return "● "; // flat gutter, no lanes
+  if (state.graphMode === "off") {
+    // flat mode: a thin full-height bar in the commit's lane color — the
+    // gutter reads as a continuous colored line, not a row of dots
+    const col = runes(row.cells || "").indexOf("●");
+    return `<span class="flatbar lane-${col >= 0 ? (col >> 1) % 8 : 0}"></span>`;
+  }
   return graphSVG(row, feedIdx);
 }
 
@@ -1105,6 +1131,8 @@ document.addEventListener("keydown", (e) => {
     doPush();
   } else if (e.key === "?") {
     $("help").classList.remove("hidden");
+  } else if (e.key === "r") {
+    if (!state.op) refreshAfterOp(); // full soft reload: repo, sidebar, status, commits
   } else if ((e.key === "s" || e.key === "u") && state.pane === "files" && state.filesMode === "status") {
     const f = state.statusEntries[state.fileCursor];
     if (f && f.section !== "conflicts") {
