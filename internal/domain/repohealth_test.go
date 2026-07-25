@@ -133,15 +133,28 @@ func TestUnmappedFromConfig(t *testing.T) {
 		{"branch.orphan.remote", "gone-remote"}, // remote without a fetch refspec: not listed
 		{"branch.orphan.merge", "refs/heads/orphan"},
 		{"remote.origin.fetch", "+refs/heads/main:refs/remotes/origin/main"},
+		{"branch.other.remote", "upstream"}, // non-origin remote WITH a fetch refspec: out of scope, not listed
+		{"branch.other.merge", "refs/heads/main"},
+		{"remote.upstream.fetch", "+refs/heads/main:refs/remotes/upstream/main"},
+		{"branch.release.1.x.remote", "origin"}, // dotted branch name: parsed from both ends, not Split
+		{"branch.release.1.x.merge", "refs/heads/release.1.x"},
 	}
 	branches := []model.Branch{
 		{Name: "feat", Upstream: ""},            // configured but unresolvable → listed
 		{Name: "main", Upstream: "origin/main"}, // resolvable → not listed
 		{Name: "orphan", Upstream: ""},          // remote has no refspec → not listed
 		{Name: "local-only", Upstream: ""},      // no branch config at all → not listed
+		{Name: "other", Upstream: ""},           // tracks a non-origin remote → out of scope, not listed
+		{Name: "release.1.x", Upstream: ""},     // dotted name, configured but unresolvable → listed
 	}
 	got := unmappedFromConfig(cfg, branches)
-	if len(got) != 1 || got[0] != "feat" {
-		t.Fatalf("unmapped = %v, want [feat]", got)
+	want := []string{"feat", "release.1.x"}
+	if len(got) != len(want) {
+		t.Fatalf("unmapped = %v, want %v", got, want)
+	}
+	for i, w := range want {
+		if got[i] != w {
+			t.Fatalf("unmapped = %v, want %v", got, want)
+		}
 	}
 }

@@ -65,16 +65,21 @@ func pathExists(p string) bool {
 }
 
 // unmappedFromConfig joins branch tracking config against live branches:
-// a branch is unmapped when branch.<n>.remote AND branch.<n>.merge are set,
-// its remote HAS a fetch refspec (a remote with none is a different
-// problem), and yet %(upstream:short) resolved to nothing — the narrowed-
-// refspec state where pushes never move the remote-tracking ref. Branch
-// names may contain dots, so config keys are parsed from both ends
-// (strip "branch." prefix and ".remote"/".merge" suffix), never by Split.
+// a branch is unmapped when branch.<n>.remote is exactly "origin" and
+// branch.<n>.merge is set, origin HAS a fetch refspec (a remote with none
+// is a different problem), and yet %(upstream:short) resolved to nothing —
+// the narrowed-refspec state where pushes never move the remote-tracking
+// ref. Detection is scoped to "origin" on purpose: the notice's fix action
+// (narrowRefspecNotice) only ever writes remote.origin.fetch and fetches
+// from "origin", so a branch tracking a different remote must never be
+// listed here — that would forge a bogus origin mapping the fetch can't
+// satisfy. Branch names may contain dots, so config keys are parsed from
+// both ends (strip "branch." prefix and ".remote"/".merge" suffix), never
+// by Split.
 func unmappedFromConfig(kvs [][2]string, branches []model.Branch) []string {
 	remoteOf := map[string]string{} // branch name → configured remote
 	hasMerge := map[string]bool{}   // branch name → branch.<n>.merge present
-	fetchable := map[string]bool{}  // remote name → has a fetch refspec
+	originFetchable := false        // remote.origin.fetch present
 	for _, kv := range kvs {
 		key := kv[0]
 		switch {
@@ -84,17 +89,19 @@ func unmappedFromConfig(kvs [][2]string, branches []model.Branch) []string {
 		case strings.HasPrefix(key, "branch.") && strings.HasSuffix(key, ".merge"):
 			name := strings.TrimSuffix(strings.TrimPrefix(key, "branch."), ".merge")
 			hasMerge[name] = true
-		case strings.HasPrefix(key, "remote.") && strings.HasSuffix(key, ".fetch"):
-			name := strings.TrimSuffix(strings.TrimPrefix(key, "remote."), ".fetch")
-			fetchable[name] = true
+		case key == "remote.origin.fetch":
+			originFetchable = true
 		}
 	}
 	var out []string
+	if !originFetchable {
+		return out
+	}
 	for _, b := range branches {
 		if b.Upstream != "" {
 			continue
 		}
-		if r := remoteOf[b.Name]; r != "" && hasMerge[b.Name] && fetchable[r] {
+		if remoteOf[b.Name] == "origin" && hasMerge[b.Name] {
 			out = append(out, b.Name)
 		}
 	}
