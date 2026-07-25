@@ -26,9 +26,24 @@ const state = {
   op: null, // {id, es: EventSource} while an operation is live
   lastDiff: null,
   diffBlockIdx: -1,
+  detailGen: 0,
 };
 
 const $ = (id) => document.getElementById(id);
+
+// Destructive decision options render red in the modal (the ctx-menu
+// danger precedent). Options are English protocol values — i18n never
+// translates them — so a client-side set is reliable.
+const DANGER_OPTIONS = new Set([
+  "force", "force-with-lease", "force-delete", "reset", "delete", "drop",
+  "unlock-and-remove", "discard", "overwrite", "hard",
+]);
+
+const SECTIONS = ["branches", "worktrees", "tags", "stashes"];
+
+// localStorage can throw (private mode); persistence is best-effort.
+function lsGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
+function lsSet(k, v) { try { localStorage.setItem(k, v); } catch {} }
 
 async function getJSON(url) {
   const resp = await fetch(url);
@@ -163,7 +178,28 @@ async function startOp(body, label) {
   $("pull-btn").disabled = true;
   $("push-btn").disabled = true;
   es.onmessage = (m) => handleOpEvent(JSON.parse(m.data));
-  es.onerror = () => {}; // transient; done handling closes the source
+  // EventSource auto-retries transient drops (readyState CONNECTING) and
+  // the server replays full history on reconnect. A permanent failure
+  // (readyState CLOSED — e.g. the server restarted and the op id is gone)
+  // or 5 straight failed retries declares the op lost: unlock the UI and
+  // refresh so panels show whatever the op actually did.
+  let errCount = 0;
+  es.onopen = () => { errCount = 0; };
+  es.onerror = () => {
+    if (!state.op || state.op.es !== es) return; // stale source after done
+    errCount++;
+    if (es.readyState === EventSource.CLOSED || errCount >= 5) {
+      es.close();
+      state.op = null;
+      $("pull-btn").disabled = false;
+      $("push-btn").disabled = false;
+      hideModal();
+      opLine("error: lost connection to operation — repo state refreshed", true);
+      refreshAfterOp();
+    } else {
+      opLine("⟳ reconnecting…");
+    }
+  };
 }
 
 function startSwitch(branch) {
@@ -204,6 +240,8 @@ function handleOpEvent(ev) {
     opLine("⟳ " + ev.step + (ev.detail ? " " + ev.detail : "") + "…");
   } else if (ev.type === "decision") {
     showModal(ev);
+  } else if (ev.type === "resolved") {
+    hideModal(); // this decision was answered (another tab, or a replay)
   } else if (ev.type === "done") {
     const kind = state.op && state.op.kind;
     // done is terminal: close the source (EventSource would auto-reconnect
@@ -241,7 +279,7 @@ async function refreshAfterOp() {
 function showModal(ev) {
   $("modal-prompt").textContent = ev.prompt;
   $("modal-options").innerHTML = (ev.options || [])
-    .map((o) => `<button data-o="${esc(o)}">${esc(o)}</button>`)
+    .map((o) => `<button data-o="${esc(o)}"${DANGER_OPTIONS.has(o) ? ' class="danger"' : ""}>${esc(o)}</button>`)
     .join("");
   $("modal").classList.remove("hidden");
   $("modal").dataset.opts = JSON.stringify(ev.options || []);
@@ -388,6 +426,7 @@ $("worktrees-list").addEventListener("contextmenu", (e) => {
 // esc key and the mouse back button share it.
 function drillOut() {
   if (state.layout !== "detail") return;
+  state.detailGen++; // invalidate any in-flight detail fetch
   state.pane = "commits";
   setLayout("list");
   focusPane();
@@ -399,10 +438,29 @@ $("back-btn").addEventListener("click", drillOut);
 function toggleSection(name) {
   const collapsed = $(name + "-list").classList.toggle("collapsed");
   $(name + "-header").textContent = (collapsed ? "\u25b8 " : "") + name;
+  lsSet("gg.sidebar.collapsed", JSON.stringify(SECTIONS.filter((n) => $(n + "-list").classList.contains("collapsed"))));
 }
-["branches", "worktrees", "tags", "stashes"].forEach((n) => {
+SECTIONS.forEach((n) => {
   $(n + "-header").addEventListener("dblclick", () => toggleSection(n));
 });
+
+// Restore persisted sidebar state (b-key visibility + per-section
+// collapse). The collapsed class lives on the persistent <ul> containers,
+// so a one-time boot restore survives every re-render.
+(function restoreSidebar() {
+  let names = [];
+  try { names = JSON.parse(lsGet("gg.sidebar.collapsed") || "[]"); } catch {}
+  SECTIONS.forEach((n) => {
+    if (names.includes(n)) {
+      $(n + "-list").classList.add("collapsed");
+      $(n + "-header").textContent = "\u25b8 " + n;
+    }
+  });
+  if (lsGet("gg.sidebar.hidden") === "1") {
+    state.sidebar = false;
+    $("panes").classList.add("nosb");
+  }
+})();
 
 $("tags-list").addEventListener("click", (e) => {
   const li = e.target.closest("li");
@@ -448,8 +506,8 @@ $("stashes-list").addEventListener("click", (e) => {
 function showStashMenu(st, x, y) {
   const items = [];
   if (st.sha) items.push({ label: "show changes", act: () => openStashDetail(st) });
-  items.push({ label: "apply", act: () => startOp({ op: "stash-apply", ref: st.ref }, "applying " + st.ref) });
-  items.push({ label: "pop", act: () => startOp({ op: "stash-pop", ref: st.ref }, "popping " + st.ref) });
+  items.push({ label: "apply", act: () => startOp({ op: "stash-apply", ref: st.ref, sha: st.sha || "" }, "applying " + st.ref) });
+  items.push({ label: "pop", act: () => startOp({ op: "stash-pop", ref: st.ref, sha: st.sha || "" }, "popping " + st.ref) });
   items.push({
     label: "drop " + st.ref,
     danger: true,
@@ -457,7 +515,7 @@ function showStashMenu(st, x, y) {
     // delete-tag precedent; the TUI confirms drop with y/n too).
     act: () =>
       showLocalConfirm("Drop " + st.ref + "?", ["drop", "abort"], (o) => {
-        if (o === "drop") startOp({ op: "stash-drop", ref: st.ref }, "dropping " + st.ref);
+        if (o === "drop") startOp({ op: "stash-drop", ref: st.ref, sha: st.sha || "" }, "dropping " + st.ref);
       }),
   });
   showCtxMenu(items, x, y);
@@ -644,7 +702,9 @@ async function openCommit(i) {
   state.cursor = i;
   renderCommits();
   const row = state.rows[i - wtCount()];
+  const gen = ++state.detailGen;
   const body = await getJSON("/api/commit/" + row.hash);
+  if (gen !== state.detailGen) return; // superseded by a newer open or esc
   state.files = body.files || [];
   state.fileCursor = 0;
   state.fileSha = row.hash;
@@ -660,7 +720,9 @@ async function openCommit(i) {
 // openCommitByHash enters commit detail without a feed row — the path for
 // sidebar tags (and future non-feed jump-ins).
 async function openCommitByHash(hash, title) {
+  const gen = ++state.detailGen;
   const body = await getJSON("/api/commit/" + hash);
+  if (gen !== state.detailGen) return; // superseded by a newer open or esc
   state.files = body.files || [];
   state.fileCursor = 0;
   state.fileSha = hash;
@@ -679,10 +741,13 @@ async function openCommitByHash(hash, title) {
 // added). Untracked rows carry a per-file sha so their diffs read from
 // that parent; a failed untracked fetch degrades to the tracked list.
 async function openStashDetail(st) {
+  const gen = ++state.detailGen;
   const body = await getJSON("/api/commit/" + st.sha);
+  if (gen !== state.detailGen) return; // superseded by a newer open or esc
   let files = body.files || [];
   if (st.untracked_sha) {
     const u = await getJSON("/api/commit/" + st.untracked_sha).catch(() => ({ files: [] }));
+    if (gen !== state.detailGen) return;
     files = files.concat((u.files || []).map((f) => ({ ...f, sha: st.untracked_sha })));
   }
   state.files = files;
@@ -758,17 +823,18 @@ function renderFiles() {
 async function openFile(i) {
   state.fileCursor = i;
   renderFiles();
-  updateDiffNav();
   if (state.filesMode === "status") return openStatusDiff(i);
   const f = state.files[i];
   const q = new URLSearchParams({ sha: f.sha || state.fileSha, path: f.path, status: f.status });
   if (f.old_path) q.set("old", f.old_path);
   $("diff-title").textContent = f.path;
   $("diff-body").innerHTML = `<div class="notice">loading…</div>`;
+  updateDiffNav();
   try {
     renderDiff(await getJSON("/api/diff?" + q));
   } catch (e) {
     $("diff-body").innerHTML = `<div class="notice">error: ${esc(e.message || e)}</div>`;
+    updateDiffNav();
   }
 }
 
@@ -777,15 +843,18 @@ async function openStatusDiff(i) {
   $("diff-title").textContent = f.path;
   if (f.section === "conflicts") {
     $("diff-body").innerHTML = `<div class="notice">conflicted — resolve in the TUI</div>`;
+    updateDiffNav();
     return;
   }
   const q = new URLSearchParams({ wt: f.section === "staged" ? "staged" : "unstaged", path: f.path });
   if (f.orig_path) q.set("old", f.orig_path);
   $("diff-body").innerHTML = `<div class="notice">loading…</div>`;
+  updateDiffNav();
   try {
     renderDiff(await getJSON("/api/diff?" + q));
   } catch (e) {
     $("diff-body").innerHTML = `<div class="notice">error: ${esc(e.message || e)}</div>`;
+    updateDiffNav();
   }
 }
 
@@ -1022,6 +1091,7 @@ document.addEventListener("keydown", (e) => {
     toggleGraphMode();
   } else if (e.key === "b" && state.layout === "list") {
     state.sidebar = !state.sidebar;
+    lsSet("gg.sidebar.hidden", state.sidebar ? "0" : "1");
     $("panes").classList.toggle("nosb", !state.sidebar);
     renderCommits(); // list width changed
   } else if (e.key === "p") {

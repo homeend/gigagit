@@ -110,6 +110,8 @@ mark.r { background: var(--span-add); color: inherit; }
 #modal-options { display: flex; gap: 10px; justify-content: flex-end; }
 #modal-options button { background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 4px; padding: 4px 14px; font: inherit; cursor: pointer; }
 #modal-options button:hover { border-color: var(--accent); }
+#modal-options button.danger { color: #f27a6a; }
+#modal-options button.danger:hover { border-color: #f27a6a; }
 .side-header { padding: 6px 8px 2px; color: var(--dim); border-top: 1px solid var(--border); margin-top: 6px; }
 #worktrees-list, #tags-list, #stashes-list { list-style: none; }
 #worktrees-list li, #tags-list li, #stashes-list li { padding: 2px 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
