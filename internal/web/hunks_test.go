@@ -177,16 +177,9 @@ func TestHunksCRLFRoundTrip(t *testing.T) {
 		t.Fatalf("resp = %+v", out)
 	}
 
-	// Pick every block so the staged content matches the whole edited file.
-	picks := make([]int, out.Count)
-	for i := range picks {
-		picks[i] = i
-	}
-	picksJSON, err := json.Marshal(picks)
-	if err != nil {
-		t.Fatal(err)
-	}
-	body := fmt.Sprintf(`{"path":"cr.txt","picks":%s,"hash":%q}`, picksJSON, out.Hash)
+	// Pick only block 0 (the b → B change) to prove selectivity under CRLF.
+	picks := []int{0}
+	body := fmt.Sprintf(`{"path":"cr.txt","picks":%v,"hash":%q}`, picks, out.Hash)
 	if code := postJSON(t, ts, "/api/stage-hunks", body, "application/json", "", nil); code != http.StatusOK {
 		t.Fatalf("stage code = %d", code)
 	}
@@ -195,11 +188,12 @@ func TestHunksCRLFRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Contains(staged, []byte("\r\n")) {
-		t.Fatalf("staged blob lost its CRLF bytes: %q", staged)
-	}
-	if !bytes.Contains(staged, []byte("B")) || !bytes.Contains(staged, []byte("d")) {
-		t.Fatalf("staged blob missing the picked hunks' new content: %q", staged)
+	// The staged blob must equal exactly the picked hunk (block 0) and NOT the unpicked hunk (block 1).
+	// Block 0 changes line 2 (b → B), block 1 appends a new line (d).
+	// So the staged content must be "a\r\nB\r\nc\r\n" — with B but no d, proving selectivity and CRLF preservation.
+	want := []byte("a\r\nB\r\nc\r\n")
+	if !bytes.Equal(staged, want) {
+		t.Fatalf("staged blob = %q, want %q (B picked, d not picked, CRLF preserved)", staged, want)
 	}
 }
 
