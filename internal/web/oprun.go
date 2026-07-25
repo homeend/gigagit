@@ -87,6 +87,7 @@ func (s *Server) resetFeed() {
 }
 
 func (s *Server) runOpStream(ctx context.Context, run *opRun, op engine.Operation) {
+	svc := s.service() // pinned: the op runs against the repo it started on
 	events := make(chan engine.Event, 32)
 	pumpDone := make(chan struct{})
 	go func() {
@@ -101,7 +102,7 @@ func (s *Server) runOpStream(ctx context.Context, run *opRun, op engine.Operatio
 	if timeout <= 0 {
 		timeout = defaultDecideTimeout
 	}
-	res, err := s.svc.Execute(ctx, op, events, webDecider{run: run, timeout: timeout})
+	res, err := svc.Execute(ctx, op, events, webDecider{run: run, timeout: timeout})
 	close(events)
 	<-pumpDone
 	if res.Changed {
@@ -136,6 +137,12 @@ func toWire(ev engine.Event) wireEvent {
 func (r *opRun) publish(we wireEvent) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.publishLocked(we)
+}
+
+// publishLocked is publish for callers already holding r.mu — decide must
+// append its resolved marker atomically with consuming the pending fork.
+func (r *opRun) publishLocked(we wireEvent) {
 	r.history = append(r.history, we)
 	for ch := range r.subs {
 		select {
@@ -201,6 +208,10 @@ func (r *opRun) decide(option string) error {
 	select {
 	case r.answer <- option:
 		r.pending = nil // consumed: a second decide must 409, and no stale answer can outlive its fork
+		// The resolved marker makes replay idempotent (a reconnecting
+		// client re-hides the modal it just re-showed) and closes a second
+		// tab's modal live.
+		r.publishLocked(wireEvent{"type": "resolved"})
 		return nil
 	default:
 		return errNotWaiting // answer already queued

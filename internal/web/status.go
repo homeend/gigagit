@@ -23,7 +23,8 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 // stage handler, whose success response is a fresh status read (one
 // round-trip for the SPA).
 func (s *Server) writeStatus(w http.ResponseWriter, r *http.Request) {
-	st, err := s.svc.Status(r.Context())
+	svc := s.service()
+	st, err := svc.Status(r.Context())
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return

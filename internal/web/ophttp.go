@@ -17,6 +17,7 @@ type opStartRequest struct {
 	Tag     string `json:"tag"`
 	Path    string `json:"path"`
 	Ref     string `json:"ref"`
+	Sha     string `json:"sha"`
 }
 
 // handleOpStart begins an operation and returns 202 {op_id}. Ops wired so
@@ -24,6 +25,7 @@ type opStartRequest struct {
 // remove-worktree, stash, stash-apply, stash-pop, stash-drop; the switch
 // statement is where future ops land.
 func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
+	svc := s.service()
 	var req opStartRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeErr(w, http.StatusBadRequest, fmt.Errorf("bad request body: %w", err))
@@ -49,7 +51,7 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 		// Branch resolved server-side — nothing client-sent reaches argv, and
 		// Force is never wire-settable (force is only reachable through the
 		// op's own parked push-rejected → push-force decisions).
-		branch, berr := s.svc.CurrentBranch(r.Context())
+		branch, berr := svc.CurrentBranch(r.Context())
 		if berr != nil {
 			writeErr(w, http.StatusInternalServerError, berr)
 			return
@@ -87,7 +89,7 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 		// reach git argv (worktree paths legitimately contain characters
 		// isGitArgSafe would reject). The engine still guards the current and
 		// main worktree.
-		wts, werr := s.svc.Worktrees(r.Context())
+		wts, werr := svc.Worktrees(r.Context())
 		if werr != nil {
 			writeErr(w, http.StatusInternalServerError, werr)
 			return
@@ -118,7 +120,7 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 		// server's own stash list so only server-owned values reach git argv
 		// (the remove-worktree allowlist pattern). All three ops are
 		// decision-free; drop's confirm lives client-side.
-		entries, serr := s.svc.StashList(r.Context())
+		entries, serr := svc.StashList(r.Context())
 		if serr != nil {
 			writeErr(w, http.StatusInternalServerError, serr)
 			return
@@ -126,6 +128,16 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 		found := false
 		for _, e := range entries {
 			if e.Ref == req.Ref {
+				// Optional freshness guard: the client sends the sha it
+				// listed; a successful resolve that mismatches means the
+				// stash list changed under it (stash@{N} is positional).
+				// A resolve error does not block — best-effort only.
+				if req.Sha != "" {
+					if cs, cerr := svc.StashCommit(r.Context(), e.Ref); cerr == nil && cs != req.Sha {
+						writeErr(w, http.StatusConflict, errors.New("stash list changed; refresh"))
+						return
+					}
+				}
 				switch req.Op {
 				case "stash-apply":
 					op = engine.StashApply{Ref: e.Ref}

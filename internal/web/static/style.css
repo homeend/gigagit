@@ -77,7 +77,9 @@ tr.change td.side.r { background: var(--add); }
 mark.l { background: var(--span-del); color: inherit; }
 mark.r { background: var(--span-add); color: inherit; }
 .notice { padding: 12px; color: var(--dim); }
-#foot { padding: 4px 12px; color: var(--dim); border-top: 1px solid var(--border); background: var(--bg-alt); }
+#foot { display: flex; gap: 14px; padding: 4px 12px; color: var(--dim); border-top: 1px solid var(--border); background: var(--bg-alt); white-space: nowrap; overflow: hidden; }
+#foot button { background: none; border: none; color: inherit; font: inherit; padding: 0; cursor: pointer; }
+#foot button:hover { color: var(--accent); }
 #files-actions { padding: 3px 8px; display: flex; gap: 8px; border-bottom: 1px solid var(--border); }
 #files-actions.hidden { display: none; }
 #files-actions button {
@@ -92,8 +94,9 @@ mark.r { background: var(--span-add); color: inherit; }
 }
 #files-list li button.act:hover { color: var(--fg); border-color: var(--accent); }
 #files-list li.conflicts { color: #f27a6a; }
+.crow.wt { height: 30px; line-height: 30px; font-size: 14px; padding: 0 12px; }
 .crow.wt .subj { color: #e0c06c; font-weight: bold; }
-.crow.wt .graph { color: #e0c06c; }
+.crow.wt .graph { color: #e0c06c; margin-right: 12px; }
 #branches-pane { border-right: 1px solid var(--border); overflow-y: auto; }
 #branches-header { padding: 4px 8px; color: var(--dim); border-bottom: 1px solid var(--border); }
 #branches-list { list-style: none; }
@@ -101,7 +104,8 @@ mark.r { background: var(--span-add); color: inherit; }
 #branches-list li:hover { background: var(--bg-alt); }
 #branches-list li.head { color: var(--accent); font-weight: bold; cursor: default; }
 #branches-list li .ab { float: right; color: var(--dim); font-size: 11px; }
-#op-line { color: var(--accent); padding-right: 12px; }
+#op-line { flex: none; padding: 3px 12px; color: var(--accent); background: var(--bg-alt); border-top: 1px solid var(--border); white-space: pre-wrap; word-break: break-word; max-height: 30vh; overflow-y: auto; }
+#op-line.hidden { display: none; }
 #op-line.err { color: #f27a6a; }
 #modal { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; z-index: 10; }
 #modal.hidden { display: none; }
@@ -110,6 +114,8 @@ mark.r { background: var(--span-add); color: inherit; }
 #modal-options { display: flex; gap: 10px; justify-content: flex-end; }
 #modal-options button { background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 4px; padding: 4px 14px; font: inherit; cursor: pointer; }
 #modal-options button:hover { border-color: var(--accent); }
+#modal-options button.danger { color: #f27a6a; }
+#modal-options button.danger:hover { border-color: #f27a6a; }
 .side-header { padding: 6px 8px 2px; color: var(--dim); border-top: 1px solid var(--border); margin-top: 6px; }
 #worktrees-list, #tags-list, #stashes-list { list-style: none; }
 #worktrees-list li, #tags-list li, #stashes-list li { padding: 2px 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -153,3 +159,11 @@ mark.r { background: var(--span-add); color: inherit; }
 }
 #top #pull-btn:hover:not(:disabled), #top #push-btn:hover:not(:disabled) { border-color: var(--accent); }
 #top #pull-btn:disabled, #top #push-btn:disabled { opacity: .45; cursor: default; }
+#help { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; z-index: 11; cursor: pointer; }
+#help.hidden { display: none; }
+#help-box { background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; padding: 18px 24px; max-width: 700px; max-height: 84vh; overflow-y: auto; cursor: default; }
+#help-box h2 { margin: 0 0 10px; font-size: 15px; }
+#help-box h3 { margin: 14px 0 6px; font-size: 12px; color: var(--dim); text-transform: uppercase; letter-spacing: .05em; }
+#help-box .hrow { display: flex; gap: 14px; line-height: 1.65; }
+#help-box .hkey { flex: none; width: 140px; color: var(--accent); }
+.crow .graph .flatdot { margin-right: 10px; }

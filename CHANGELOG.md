@@ -13,6 +13,50 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   Session errors. A newer status message collapses it back to one line
   immediately.
 
+- web: right-click on a working-tree status file offers stage / unstage
+  (per its section), stage all / unstage all, and copy path.
+
+- web: the Working-tree row is taller (30px, larger type) with breathing
+  room around the dot and label; the virtualized list accounts for its
+  extra height exactly.
+
+- web: the status/error strip wraps long messages (git's own newlines
+  preserved, scrollable past 30% of the screen) instead of cutting them
+  off with an ellipsis.
+
+- web: the status/error line moved into its own strip ABOVE the bottom bar
+  (it no longer covers the key hints) and auto-hides after 30s (never while
+  an operation is still running); the bottom-bar entries are now clickable
+  chips that run their action (pull, push, refresh, stage/unstage, graph,
+  sidebar, back, help).
+
+- web: the flat list's gutter shows one dot per commit in its lane color
+  (was monochrome white); `r` soft-reloads everything, and
+  the working-tree status auto-refreshes when the tab regains focus — files
+  edited while the page was in the background now surface without a manual
+  reload.
+
+- web: `?` opens a help overlay listing every implemented key and mouse
+  action (grouped keys / mouse / notes; esc, `?`, or a backdrop click
+  closes); the footer advertises it.
+
+- web: `g` now toggles the commit graph on/off — off is a flat ●-gutter
+  list with the lane column's space going to subjects (TUI show_graph
+  parity), persisted across reloads. The near-identical text-glyph
+  renderer (the old second `g` state) is gone.
+
+- web: `POST /api/reroot` — the running server can switch to another
+  worktree of the repo or a previously-opened repo (MRU registry);
+  allowlist-resolved, preflighted before the swap, refused while an
+  operation runs. No client UI yet.
+
+- web: transport hardening — SSE-drop recovery (reconnecting hint; a lost
+  op unlocks the UI and refreshes), `resolved` wire event closes answered
+  decision modals on replay and in second tabs, destructive modal options
+  render red, sidebar collapse/visibility persist across reloads, stash
+  apply/pop/drop guard ref+sha (409 when the list changed), gen-guarded
+  detail opens, diff arrows disable on notice panes.
+
 - `gg web`: diff-pane navigation + stash untracked files. The diff header
   gains ‹/› arrows stepping between files and between change blocks within
   a diff. A stash's untracked files (stored in its `^3` parent, invisible

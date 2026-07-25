@@ -10,10 +10,11 @@ const state = {
   fileSha: null,
   pane: "commits", // commits | files
   layout: "list", // list (commits full-width) | detail (files+diff, list hidden)
-  // svg is the default: browser rows (22px) are taller than the 13px font
-  // box, so text-mode │ glyphs leave vertical gaps and lanes look broken —
-  // SVG strokes span the full row height. g toggles back to text.
-  graphMode: "svg", // svg | text
+  // svg is the only graph renderer: browser rows (22px) are taller than
+  // the 13px font box, so text glyphs would leave vertical gaps. g toggles
+  // the graph off entirely — a flat ●-gutter list (TUI show_graph parity)
+  // with the lane column's space going to subjects.
+  graphMode: "svg", // svg | off
   wt: null, // /api/status payload while the tree is dirty, else null
   filesMode: "commit", // commit | status
   statusEntries: [],
@@ -26,9 +27,24 @@ const state = {
   op: null, // {id, es: EventSource} while an operation is live
   lastDiff: null,
   diffBlockIdx: -1,
+  detailGen: 0,
 };
 
 const $ = (id) => document.getElementById(id);
+
+// Destructive decision options render red in the modal (the ctx-menu
+// danger precedent). Options are English protocol values — i18n never
+// translates them — so a client-side set is reliable.
+const DANGER_OPTIONS = new Set([
+  "force", "force-with-lease", "force-delete", "reset", "delete", "drop",
+  "unlock-and-remove", "discard", "overwrite", "hard",
+]);
+
+const SECTIONS = ["branches", "worktrees", "tags", "stashes"];
+
+// localStorage can throw (private mode); persistence is best-effort.
+function lsGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
+function lsSet(k, v) { try { localStorage.setItem(k, v); } catch {} }
 
 async function getJSON(url) {
   const resp = await fetch(url);
@@ -60,6 +76,14 @@ function runes(s) {
 
 function wtCount() {
   return state.wt ? 1 : 0;
+}
+
+// The Working-tree row renders taller than a commit row (WT_H vs ROW_H);
+// the virtualized list accounts for the difference in its spacer and
+// scroll math via wtExtra.
+const WT_H = 30;
+function wtExtra() {
+  return state.wt ? WT_H - ROW_H : 0;
 }
 
 function applyStatus(st) {
@@ -139,10 +163,21 @@ function renderStashes() {
 
 // --- op transport client ---
 
+let opLineTimer = null;
 function opLine(text, isErr) {
   const el = $("op-line");
   el.textContent = text || "";
   el.classList.toggle("err", !!isErr);
+  el.classList.toggle("hidden", !text);
+  clearTimeout(opLineTimer);
+  if (!text) return;
+  // every message expires after 30s — but never while its op still runs
+  // (each op event overwrites the line and re-arms the timer anyway)
+  opLineTimer = setTimeout(() => {
+    if (state.op) return;
+    el.textContent = "";
+    el.classList.add("hidden");
+  }, 30000);
 }
 
 // startOp is the transport client, op-agnostic: POST /api/op, then follow
@@ -163,7 +198,28 @@ async function startOp(body, label) {
   $("pull-btn").disabled = true;
   $("push-btn").disabled = true;
   es.onmessage = (m) => handleOpEvent(JSON.parse(m.data));
-  es.onerror = () => {}; // transient; done handling closes the source
+  // EventSource auto-retries transient drops (readyState CONNECTING) and
+  // the server replays full history on reconnect. A permanent failure
+  // (readyState CLOSED — e.g. the server restarted and the op id is gone)
+  // or 5 straight failed retries declares the op lost: unlock the UI and
+  // refresh so panels show whatever the op actually did.
+  let errCount = 0;
+  es.onopen = () => { errCount = 0; };
+  es.onerror = () => {
+    if (!state.op || state.op.es !== es) return; // stale source after done
+    errCount++;
+    if (es.readyState === EventSource.CLOSED || errCount >= 5) {
+      es.close();
+      state.op = null;
+      $("pull-btn").disabled = false;
+      $("push-btn").disabled = false;
+      hideModal();
+      opLine("error: lost connection to operation — repo state refreshed", true);
+      refreshAfterOp();
+    } else {
+      opLine("⟳ reconnecting…");
+    }
+  };
 }
 
 function startSwitch(branch) {
@@ -191,6 +247,24 @@ function doPush() {
   startOp({ op: "push" }, "pushing");
 }
 
+// toggleSidebar and stageFocused are shared by their keys (b, s/u) and the
+// clickable footer chips.
+function toggleSidebar() {
+  if (state.layout !== "list") return;
+  state.sidebar = !state.sidebar;
+  lsSet("gg.sidebar.hidden", state.sidebar ? "0" : "1");
+  $("panes").classList.toggle("nosb", !state.sidebar);
+  renderCommits(); // list width changed
+}
+
+function stageFocused(unstage) {
+  if (state.pane !== "files" || state.filesMode !== "status") return;
+  const f = state.statusEntries[state.fileCursor];
+  if (!f || f.section === "conflicts") return;
+  if (!unstage && f.section !== "staged") stage({ paths: [f.path] });
+  else if (unstage && f.section === "staged") stage({ paths: [f.path], unstage: true });
+}
+
 function doStash() {
   if (state.op || !state.wt) return;
   const message = $("commit-msg").value.trim();
@@ -204,6 +278,8 @@ function handleOpEvent(ev) {
     opLine("⟳ " + ev.step + (ev.detail ? " " + ev.detail : "") + "…");
   } else if (ev.type === "decision") {
     showModal(ev);
+  } else if (ev.type === "resolved") {
+    hideModal(); // this decision was answered (another tab, or a replay)
   } else if (ev.type === "done") {
     const kind = state.op && state.op.kind;
     // done is terminal: close the source (EventSource would auto-reconnect
@@ -222,26 +298,47 @@ function handleOpEvent(ev) {
   }
 }
 
+// reconcileStatusView keeps an open status screen truthful after any
+// status re-read (op done, r, tab focus): the tree may have gone clean or
+// shrunk under it.
+function reconcileStatusView() {
+  if (state.filesMode !== "status") return;
+  if (!state.wt) exitStatusToList();
+  else {
+    state.fileCursor = Math.min(state.fileCursor, Math.max(0, state.statusEntries.length - 1));
+    renderFiles();
+  }
+}
+
 async function refreshAfterOp() {
   await Promise.all([loadRepo(), fetchBranches(), fetchStatus()]);
   // an op can change the working tree while its status screen is open
   // (commit empties it) — reconcile instead of showing stale rows
-  if (state.filesMode === "status") {
-    if (!state.wt) exitStatusToList();
-    else {
-      state.fileCursor = Math.min(state.fileCursor, Math.max(0, state.statusEntries.length - 1));
-      renderFiles();
-    }
-  }
+  reconcileStatusView();
   state.rows = [];
   state.cursor = 0;
   await loadCommits(false);
 }
 
+// Files edited while the page is in the background are otherwise invisible
+// (no polling; ops are the only other refresh trigger) — re-read the
+// status when the tab regains focus, throttled, never during a live op.
+let lastFocusRefresh = 0;
+window.addEventListener("focus", () => {
+  if (state.op || Date.now() - lastFocusRefresh < 2000) return;
+  lastFocusRefresh = Date.now();
+  fetchStatus()
+    .then(() => {
+      reconcileStatusView();
+      renderCommits();
+    })
+    .catch(() => {});
+});
+
 function showModal(ev) {
   $("modal-prompt").textContent = ev.prompt;
   $("modal-options").innerHTML = (ev.options || [])
-    .map((o) => `<button data-o="${esc(o)}">${esc(o)}</button>`)
+    .map((o) => `<button data-o="${esc(o)}"${DANGER_OPTIONS.has(o) ? ' class="danger"' : ""}>${esc(o)}</button>`)
     .join("");
   $("modal").classList.remove("hidden");
   $("modal").dataset.opts = JSON.stringify(ev.options || []);
@@ -388,6 +485,7 @@ $("worktrees-list").addEventListener("contextmenu", (e) => {
 // esc key and the mouse back button share it.
 function drillOut() {
   if (state.layout !== "detail") return;
+  state.detailGen++; // invalidate any in-flight detail fetch
   state.pane = "commits";
   setLayout("list");
   focusPane();
@@ -399,10 +497,29 @@ $("back-btn").addEventListener("click", drillOut);
 function toggleSection(name) {
   const collapsed = $(name + "-list").classList.toggle("collapsed");
   $(name + "-header").textContent = (collapsed ? "\u25b8 " : "") + name;
+  lsSet("gg.sidebar.collapsed", JSON.stringify(SECTIONS.filter((n) => $(n + "-list").classList.contains("collapsed"))));
 }
-["branches", "worktrees", "tags", "stashes"].forEach((n) => {
+SECTIONS.forEach((n) => {
   $(n + "-header").addEventListener("dblclick", () => toggleSection(n));
 });
+
+// Restore persisted sidebar state (b-key visibility + per-section
+// collapse). The collapsed class lives on the persistent <ul> containers,
+// so a one-time boot restore survives every re-render.
+(function restoreSidebar() {
+  let names = [];
+  try { names = JSON.parse(lsGet("gg.sidebar.collapsed") || "[]"); } catch {}
+  SECTIONS.forEach((n) => {
+    if (names.includes(n)) {
+      $(n + "-list").classList.add("collapsed");
+      $(n + "-header").textContent = "\u25b8 " + n;
+    }
+  });
+  if (lsGet("gg.sidebar.hidden") === "1") {
+    state.sidebar = false;
+    $("panes").classList.add("nosb");
+  }
+})();
 
 $("tags-list").addEventListener("click", (e) => {
   const li = e.target.closest("li");
@@ -448,8 +565,8 @@ $("stashes-list").addEventListener("click", (e) => {
 function showStashMenu(st, x, y) {
   const items = [];
   if (st.sha) items.push({ label: "show changes", act: () => openStashDetail(st) });
-  items.push({ label: "apply", act: () => startOp({ op: "stash-apply", ref: st.ref }, "applying " + st.ref) });
-  items.push({ label: "pop", act: () => startOp({ op: "stash-pop", ref: st.ref }, "popping " + st.ref) });
+  items.push({ label: "apply", act: () => startOp({ op: "stash-apply", ref: st.ref, sha: st.sha || "" }, "applying " + st.ref) });
+  items.push({ label: "pop", act: () => startOp({ op: "stash-pop", ref: st.ref, sha: st.sha || "" }, "popping " + st.ref) });
   items.push({
     label: "drop " + st.ref,
     danger: true,
@@ -457,7 +574,7 @@ function showStashMenu(st, x, y) {
     // delete-tag precedent; the TUI confirms drop with y/n too).
     act: () =>
       showLocalConfirm("Drop " + st.ref + "?", ["drop", "abort"], (o) => {
-        if (o === "drop") startOp({ op: "stash-drop", ref: st.ref }, "dropping " + st.ref);
+        if (o === "drop") startOp({ op: "stash-drop", ref: st.ref, sha: st.sha || "" }, "dropping " + st.ref);
       }),
   });
   showCtxMenu(items, x, y);
@@ -508,11 +625,11 @@ function wtRowHTML(i) {
 function renderCommits() {
   const scroll = $("commits-scroll");
   const total = state.rows.length + wtCount();
-  $("commits-spacer").style.height = total * ROW_H + "px";
+  $("commits-spacer").style.height = total * ROW_H + wtExtra() + "px";
   const first = Math.max(0, Math.floor(scroll.scrollTop / ROW_H) - 10);
   const last = Math.min(total, Math.ceil((scroll.scrollTop + scroll.clientHeight) / ROW_H) + 10);
   const win = $("commits-window");
-  win.style.top = first * ROW_H + "px";
+  win.style.top = first * ROW_H + (first > 0 ? wtExtra() : 0) + "px";
   let html = "";
   for (let i = first; i < last; i++) {
     html += state.wt && i === 0 ? wtRowHTML(i) : rowHTML(state.rows[i - wtCount()], i);
@@ -536,20 +653,23 @@ function rowHTML(row, i) {
 }
 
 function graphHTML(row, feedIdx) {
-  if (state.graphMode === "svg") return graphSVG(row, feedIdx);
-  let html = "";
-  let col = 0;
-  for (const ch of row.cells || "") {
-    html += `<span class="lane-${(col >> 1) % 8}">${esc(ch)}</span>`;
-    col += 1;
+  if (state.graphMode === "off") {
+    // flat mode: one dot per row in the commit's lane color — dots keep
+    // rows visually separate (full-height bars merged into one line)
+    const col = runes(row.cells || "").indexOf("●");
+    return `<span class="flatdot lane-${col >= 0 ? (col >> 1) % 8 : 0}">●</span>`;
   }
-  return html;
+  return graphSVG(row, feedIdx);
 }
 
 function toggleGraphMode() {
-  state.graphMode = state.graphMode === "text" ? "svg" : "text";
+  state.graphMode = state.graphMode === "svg" ? "off" : "svg";
+  lsSet("gg.graph", state.graphMode);
   renderCommits();
 }
+
+// Restore the persisted graph mode before the first render.
+if (lsGet("gg.graph") === "off") state.graphMode = "off";
 
 const CELL_W = 14;
 const HALF = CELL_W / 2;
@@ -644,7 +764,9 @@ async function openCommit(i) {
   state.cursor = i;
   renderCommits();
   const row = state.rows[i - wtCount()];
+  const gen = ++state.detailGen;
   const body = await getJSON("/api/commit/" + row.hash);
+  if (gen !== state.detailGen) return; // superseded by a newer open or esc
   state.files = body.files || [];
   state.fileCursor = 0;
   state.fileSha = row.hash;
@@ -660,7 +782,9 @@ async function openCommit(i) {
 // openCommitByHash enters commit detail without a feed row — the path for
 // sidebar tags (and future non-feed jump-ins).
 async function openCommitByHash(hash, title) {
+  const gen = ++state.detailGen;
   const body = await getJSON("/api/commit/" + hash);
+  if (gen !== state.detailGen) return; // superseded by a newer open or esc
   state.files = body.files || [];
   state.fileCursor = 0;
   state.fileSha = hash;
@@ -679,10 +803,13 @@ async function openCommitByHash(hash, title) {
 // added). Untracked rows carry a per-file sha so their diffs read from
 // that parent; a failed untracked fetch degrades to the tracked list.
 async function openStashDetail(st) {
+  const gen = ++state.detailGen;
   const body = await getJSON("/api/commit/" + st.sha);
+  if (gen !== state.detailGen) return; // superseded by a newer open or esc
   let files = body.files || [];
   if (st.untracked_sha) {
     const u = await getJSON("/api/commit/" + st.untracked_sha).catch(() => ({ files: [] }));
+    if (gen !== state.detailGen) return;
     files = files.concat((u.files || []).map((f) => ({ ...f, sha: st.untracked_sha })));
   }
   state.files = files;
@@ -765,10 +892,12 @@ async function openFile(i) {
   if (f.old_path) q.set("old", f.old_path);
   $("diff-title").textContent = f.path;
   $("diff-body").innerHTML = `<div class="notice">loading…</div>`;
+  updateDiffNav();
   try {
     renderDiff(await getJSON("/api/diff?" + q));
   } catch (e) {
     $("diff-body").innerHTML = `<div class="notice">error: ${esc(e.message || e)}</div>`;
+    updateDiffNav();
   }
 }
 
@@ -777,15 +906,18 @@ async function openStatusDiff(i) {
   $("diff-title").textContent = f.path;
   if (f.section === "conflicts") {
     $("diff-body").innerHTML = `<div class="notice">conflicted — resolve in the TUI</div>`;
+    updateDiffNav();
     return;
   }
   const q = new URLSearchParams({ wt: f.section === "staged" ? "staged" : "unstaged", path: f.path });
   if (f.orig_path) q.set("old", f.orig_path);
   $("diff-body").innerHTML = `<div class="notice">loading…</div>`;
+  updateDiffNav();
   try {
     renderDiff(await getJSON("/api/diff?" + q));
   } catch (e) {
     $("diff-body").innerHTML = `<div class="notice">error: ${esc(e.message || e)}</div>`;
+    updateDiffNav();
   }
 }
 
@@ -972,10 +1104,11 @@ function moveCursor(delta) {
     if (!total) return;
     state.cursor = Math.max(0, Math.min(total - 1, state.cursor + delta));
     const scroll = $("commits-scroll");
-    const top = state.cursor * ROW_H;
+    const top = state.cursor * ROW_H + (state.cursor > 0 ? wtExtra() : 0);
+    const h = state.cursor === 0 && state.wt ? WT_H : ROW_H;
     if (top < scroll.scrollTop) scroll.scrollTop = top;
-    else if (top + ROW_H > scroll.scrollTop + scroll.clientHeight)
-      scroll.scrollTop = top + ROW_H - scroll.clientHeight;
+    else if (top + h > scroll.scrollTop + scroll.clientHeight)
+      scroll.scrollTop = top + h - scroll.clientHeight;
     renderCommits();
   } else {
     const list = state.filesMode === "status" ? state.statusEntries : state.files;
@@ -997,6 +1130,11 @@ document.addEventListener("keydown", (e) => {
   if (!$("ctx-menu").classList.contains("hidden")) {
     if (e.key === "Escape") hideCtxMenu();
     return; // the context menu owns the keyboard until closed
+  }
+  if (!$("help").classList.contains("hidden")) {
+    if (e.key === "Escape" || e.key === "?") $("help").classList.add("hidden");
+    e.preventDefault();
+    return; // the help overlay owns the keyboard until closed
   }
   // Form fields own the keyboard: without this, typing a commit message
   // triggers j/k navigation and s/u staging. Ctrl/Cmd+Enter commits.
@@ -1020,20 +1158,35 @@ document.addEventListener("keydown", (e) => {
     drillOut();
   } else if (e.key === "g") {
     toggleGraphMode();
-  } else if (e.key === "b" && state.layout === "list") {
-    state.sidebar = !state.sidebar;
-    $("panes").classList.toggle("nosb", !state.sidebar);
-    renderCommits(); // list width changed
+  } else if (e.key === "b") {
+    toggleSidebar();
   } else if (e.key === "p") {
     doPull();
   } else if (e.key === "P") {
     doPush();
-  } else if ((e.key === "s" || e.key === "u") && state.pane === "files" && state.filesMode === "status") {
-    const f = state.statusEntries[state.fileCursor];
-    if (f && f.section !== "conflicts") {
-      if (e.key === "s" && f.section !== "staged") stage({ paths: [f.path] });
-      else if (e.key === "u" && f.section === "staged") stage({ paths: [f.path], unstage: true });
-    }
+  } else if (e.key === "?") {
+    $("help").classList.remove("hidden");
+  } else if (e.key === "r") {
+    if (!state.op) refreshAfterOp(); // full soft reload: repo, sidebar, status, commits
+  } else if (e.key === "s" || e.key === "u") {
+    stageFocused(e.key === "u");
+  }
+});
+
+// The footer chips execute their key's action on click.
+$("foot").addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-act]");
+  if (!btn) return;
+  switch (btn.dataset.act) {
+    case "back": drillOut(); break;
+    case "sidebar": toggleSidebar(); break;
+    case "graph": toggleGraphMode(); break;
+    case "stage": stageFocused(false); break;
+    case "unstage": stageFocused(true); break;
+    case "pull": doPull(); break;
+    case "push": doPush(); break;
+    case "refresh": if (!state.op) refreshAfterOp(); break;
+    case "help": $("help").classList.remove("hidden"); break;
   }
 });
 
@@ -1056,6 +1209,38 @@ $("files-list").addEventListener("click", (e) => {
     openFile(Number(li.dataset.i));
   }
 });
+$("help").addEventListener("click", () => $("help").classList.add("hidden"));
+$("help-box").addEventListener("click", (e) => e.stopPropagation()); // allow selecting/copying text
+// Right-click on a working-tree status file: stage/unstage it (per its
+// section), bulk actions, copy path. Selects the row for feedback without
+// opening its diff.
+$("files-list").addEventListener("contextmenu", (e) => {
+  if (state.filesMode !== "status") return;
+  const li = e.target.closest("li");
+  if (!li || li.dataset.i === undefined) return;
+  e.preventDefault();
+  const i = Number(li.dataset.i);
+  const f = state.statusEntries[i];
+  if (!f) return;
+  state.fileCursor = i;
+  renderFiles();
+  const items = [];
+  if (f.section === "staged") items.push({ label: "unstage " + f.path, act: () => stage({ paths: [f.path], unstage: true }) });
+  else if (f.section !== "conflicts") items.push({ label: "stage " + f.path, act: () => stage({ paths: [f.path] }) });
+  items.push({ label: "copy path", act: () => copyText(f.path) });
+  items.push({ label: "stage all", act: () => stage({ all: true }) });
+  if (state.statusEntries.some((x) => x.section === "staged")) {
+    items.push({
+      label: "unstage all",
+      act: () => {
+        const paths = state.statusEntries.filter((x) => x.section === "staged").map((x) => x.path);
+        if (paths.length) stage({ paths, unstage: true }); // engine.Stage{All} can't unstage
+      },
+    });
+  }
+  showCtxMenu(items, e.clientX, e.clientY);
+});
+
 $("stage-all").addEventListener("click", () => stage({ all: true }));
 $("unstage-all").addEventListener("click", () => {
   const paths = state.statusEntries.filter((f) => f.section === "staged").map((f) => f.path);
