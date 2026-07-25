@@ -81,3 +81,64 @@ func (r *Repo) ConfigUnset(ctx context.Context, scope ConfigScope, key string) e
 	}
 	return err
 }
+
+// ConfigAdd appends one value to a (possibly multi-valued) config key at the
+// given scope (Local or Global only; an Effective/unknown scope falls back to
+// Local). `git config --add` never replaces existing values — the fetch-
+// refspec mapping use case must not clobber a user's refspec list.
+func (r *Repo) ConfigAdd(ctx context.Context, scope ConfigScope, key, value string) error {
+	f, ok := scope.flag()
+	if !ok {
+		f = "--local"
+	}
+	b := gitcmd.New("config").Arg(f, "--add", key, value)
+	_, err := r.Runner.Run(ctx, "git config --add", b.ToArgv())
+	return err
+}
+
+// ConfigGetAll reads every value of a (possibly multi-valued) key at the
+// effective scope, in definition order. A key that is unset returns
+// (nil, nil): `git config --get-all` exits 1 for a missing key (the
+// ConfigGet exit-1 pattern).
+func (r *Repo) ConfigGetAll(ctx context.Context, key string) ([]string, error) {
+	b := gitcmd.New("config").Arg("--get-all", key)
+	res, err := r.Runner.Run(ctx, "git config --get-all", b.ToArgv())
+	if err != nil {
+		if res.ExitCode == 1 {
+			return nil, nil // key unset
+		}
+		return nil, err
+	}
+	var out []string
+	for _, ln := range strings.Split(strings.TrimRight(res.Stdout, "\n"), "\n") {
+		if ln != "" {
+			out = append(out, ln)
+		}
+	}
+	return out, nil
+}
+
+// ConfigGetRegexp lists every effective-scope key matching pattern as
+// [key, value] pairs. -z framing (records NUL-terminated, key separated
+// from value by a newline) survives multi-line values — the
+// ConfigListScoped precedent. No match returns (nil, nil): exit 1, the
+// ConfigGet pattern.
+func (r *Repo) ConfigGetRegexp(ctx context.Context, pattern string) ([][2]string, error) {
+	b := gitcmd.New("config").Arg("-z", "--get-regexp", pattern)
+	res, err := r.Runner.Run(ctx, "git config --get-regexp", b.ToArgv())
+	if err != nil {
+		if res.ExitCode == 1 {
+			return nil, nil // no key matched
+		}
+		return nil, err
+	}
+	var out [][2]string
+	for _, rec := range strings.Split(res.Stdout, "\x00") {
+		if rec == "" {
+			continue
+		}
+		key, val, _ := strings.Cut(rec, "\n")
+		out = append(out, [2]string{key, val})
+	}
+	return out, nil
+}
