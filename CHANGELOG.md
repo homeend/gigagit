@@ -8,6 +8,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- web: the Working-tree row is taller (30px, larger type) with breathing
+  room around the dot and label; the virtualized list accounts for its
+  extra height exactly.
+
 - web: the status/error strip wraps long messages (git's own newlines
   preserved, scrollable past 30% of the screen) instead of cutting them
   off with an ellipsis.

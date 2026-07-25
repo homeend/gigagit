@@ -94,8 +94,9 @@ mark.r { background: var(--span-add); color: inherit; }
 }
 #files-list li button.act:hover { color: var(--fg); border-color: var(--accent); }
 #files-list li.conflicts { color: #f27a6a; }
+.crow.wt { height: 30px; line-height: 30px; font-size: 14px; padding: 0 12px; }
 .crow.wt .subj { color: #e0c06c; font-weight: bold; }
-.crow.wt .graph { color: #e0c06c; }
+.crow.wt .graph { color: #e0c06c; margin-right: 12px; }
 #branches-pane { border-right: 1px solid var(--border); overflow-y: auto; }
 #branches-header { padding: 4px 8px; color: var(--dim); border-bottom: 1px solid var(--border); }
 #branches-list { list-style: none; }
