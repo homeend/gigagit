@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/homeend/gigagit/internal/git"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 func TestRepoHealthFreshRepo(t *testing.T) {
@@ -120,5 +121,27 @@ func TestRepoHealthSeesCommitGraphChainDir(t *testing.T) {
 	}
 	if !h.HasCommitGraph {
 		t.Fatal("a commit-graphs/ chain dir must count as having a commit-graph")
+	}
+}
+
+func TestUnmappedFromConfig(t *testing.T) {
+	cfg := [][2]string{
+		{"branch.feat.remote", "origin"},
+		{"branch.feat.merge", "refs/heads/feat"},
+		{"branch.main.remote", "origin"},
+		{"branch.main.merge", "refs/heads/main"},
+		{"branch.orphan.remote", "gone-remote"}, // remote without a fetch refspec: not listed
+		{"branch.orphan.merge", "refs/heads/orphan"},
+		{"remote.origin.fetch", "+refs/heads/main:refs/remotes/origin/main"},
+	}
+	branches := []model.Branch{
+		{Name: "feat", Upstream: ""},            // configured but unresolvable → listed
+		{Name: "main", Upstream: "origin/main"}, // resolvable → not listed
+		{Name: "orphan", Upstream: ""},          // remote has no refspec → not listed
+		{Name: "local-only", Upstream: ""},      // no branch config at all → not listed
+	}
+	got := unmappedFromConfig(cfg, branches)
+	if len(got) != 1 || got[0] != "feat" {
+		t.Fatalf("unmapped = %v, want [feat]", got)
 	}
 }
