@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -255,10 +254,6 @@ func TestStatusNormalLinePreservesText(t *testing.T) {
 // than left zero — with a zero stamp time.Since(zero) is enormous, so the
 // two-line expansion's freshness gate happened to be false regardless of
 // what this test was asserting, letting it pass for an accidental reason.
-// With a fresh stamp the message here still doesn't overflow g.w on its
-// own, so the two-line path never triggers either — this exercises the
-// ordinary single-line truncate path, which is what the assertion is
-// actually about.
 func TestStatusErrorLeadsConflictNotice(t *testing.T) {
 	m := statusRenderModel()
 	m.width = 50 // narrow enough that the whole line can't fit
@@ -266,38 +261,12 @@ func TestStatusErrorLeadsConflictNotice(t *testing.T) {
 		{Path: "timing3.log", Kind: model.KindUnmerged, Staged: 'U', Unstaged: 'U'},
 	}}
 	m.statusMsg = "error: git stash apply failed (exit 1)"
-	m.statusMsgAt = time.Now()
 	line := ansi.Strip(lastLine(m.View()))
 	if !strings.Contains(line, "error:") {
 		t.Fatalf("error must lead the status line, got: %q", line)
 	}
 	if strings.HasPrefix(strings.TrimSpace(line), "⚠") {
 		t.Errorf("conflict notice should not lead while an error is shown: %q", line)
-	}
-}
-
-// Any message that changes statusMsg must stamp statusMsgAt (the central
-// stamp lives in the Update wrapper, so no statusMsg call site needs to know
-// about it); a message that leaves statusMsg alone must not re-stamp — the
-// stamp is what bounds the two-line error expansion window at render time.
-func TestStatusMsgChangeStampsStatusMsgAt(t *testing.T) {
-	m := newTestModel(t)
-	if !m.statusMsgAt.IsZero() {
-		t.Fatal("precondition: a fresh model must have a zero stamp")
-	}
-	u, _ := m.Update(opFinishedMsg{err: errors.New("boom")})
-	m = u.(Model)
-	if m.statusMsg == "" {
-		t.Fatal("precondition: a failed op must set statusMsg")
-	}
-	if m.statusMsgAt.IsZero() {
-		t.Fatal("a statusMsg change must stamp statusMsgAt")
-	}
-	was := m.statusMsgAt
-	u, _ = m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
-	m = u.(Model)
-	if m.statusMsg == "" || !m.statusMsgAt.Equal(was) {
-		t.Fatalf("a message that does not change statusMsg must not re-stamp (was %v, got %v)", was, m.statusMsgAt)
 	}
 }
 
@@ -355,223 +324,146 @@ func assertFrameFits(t *testing.T, out string, wantLines, maxWidth int) {
 // the first row could not hold, rather than being truncated a second time
 // (a message too long for even the two-row budget is a different case,
 // covered by TestHintSurvivesExtremeTruncation).
-func TestLongFreshErrorExpandsOverFooter(t *testing.T) {
+
+// An error status line leads with the [E] pointer so the reader knows the full
+// text is one key away, and the bar stays ONE line — the footer keeps its row.
+func TestErrorLineLeadsWithPointerAndStaysOneLine(t *testing.T) {
 	m := sizedModel(t, 80, 30)
-	tail := "the-very-end-of-the-error-text"
-	m.statusMsg = "error: git push failed (exit 128): ssh: Could not resolve hostname " +
-		strings.Repeat("x", 30) + " " + tail
-	m.statusMsgAt = time.Now()
+	m.statusMsg = "error: git push failed (exit 128): ssh: Could not resolve hostname " + strings.Repeat("x", 90)
+	m.lastError = m.statusMsg
 	out := ansi.Strip(m.View())
-	if strings.Contains(out, "[b]ranch") {
-		t.Fatalf("expanded error must replace the footer hints:\n%s", out)
-	}
-	if !strings.Contains(out, tail) {
-		t.Fatalf("the second row must reveal the error tail:\n%s", out)
-	}
-	if !strings.Contains(out, "full: , → Session errors") {
-		t.Fatalf("the bottom row must point at the Session errors viewer:\n%s", out)
-	}
 	assertFrameFits(t, out, 30, 80)
-}
-
-// A short error keeps today's single-line bar and the footer hints.
-func TestShortErrorStaysOneLine(t *testing.T) {
-	m := sizedModel(t, 80, 30)
-	m.statusMsg = "error: boom"
-	m.statusMsgAt = time.Now()
-	out := ansi.Strip(m.View())
 	if !strings.Contains(out, "[b]ranch") {
-		t.Fatalf("a short error must not hide the footer:\n%s", out)
+		t.Fatalf("the footer must keep its row — the bar is one line now:\n%s", out)
 	}
-	if strings.Contains(out, "full: , → Session errors") {
-		t.Fatalf("a short error needs no viewer pointer:\n%s", out)
-	}
-}
-
-// TestShortErrorWithConflictNoticeNeverExpands guards the whole-branch review
-// finding: the expansion trigger must be the ERROR's OWN overflow, not the
-// composed status line's. The composed line also carries the conflict
-// notice (and, elsewhere, the "⏳ reloading…"/elapsed-time wrappers) — none
-// of which live in m.statusMsg. Gating on the composed line's width let a
-// short error that fit fine on its own expand anyway once a conflict notice
-// pushed the TOTAL past g.w, truncating the notice's own "press [x] to
-// resolve" into row 2 and hiding the footer's [x] hint for 30s — the one
-// case where hiding both pointers at once actually hurts. The error here
-// (39 cols) fits g.w=50 alone; only the appended "⚠ 1 conflict — press [x]
-// to resolve" notice pushes the total over.
-func TestShortErrorWithConflictNoticeNeverExpands(t *testing.T) {
-	m := sizedModel(t, 50, 30)
-	m.status = model.WorkingTreeStatus{Files: []model.FileStatus{
-		{Path: "timing3.log", Kind: model.KindUnmerged, Staged: 'U', Unstaged: 'U'},
-	}}
-	m.statusMsg = "error: git stash apply failed (exit 1)"
-	m.statusMsgAt = time.Now()
-	out := ansi.Strip(m.View())
-	if !strings.Contains(out, "[b]ranch") {
-		t.Fatalf("a short error must not hide the footer just because a conflict notice pushed the composed line over g.w:\n%s", out)
-	}
-	if strings.Contains(out, "full: , → Session errors") {
-		t.Fatalf("a short error must not grow a pointer row it doesn't need:\n%s", out)
+	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+	last := lines[len(lines)-1]
+	if !strings.HasPrefix(last, "[E] full details") {
+		t.Fatalf("the pointer must LEAD the status line so truncation (which cuts from the back) cannot eat it, got:\n%s", last)
 	}
 }
 
-// A long NON-error message never expands — the footer survives and the
-// message truncates as before.
-func TestLongNonErrorNeverExpands(t *testing.T) {
+// A non-error status message is untouched: no pointer, since there is nothing
+// to open.
+func TestNonErrorLineHasNoPointer(t *testing.T) {
 	m := sizedModel(t, 80, 30)
-	m.statusMsg = "pulled and rebased onto origin/main " + strings.Repeat("y", 120)
-	m.statusMsgAt = time.Now()
-	if out := ansi.Strip(m.View()); !strings.Contains(out, "[b]ranch") {
-		t.Fatalf("a non-error message must not take the footer row:\n%s", out)
+	m.statusMsg = "pulled and rebased onto origin/main"
+	if out := ansi.Strip(m.View()); strings.Contains(out, "[E] full details") {
+		t.Fatalf("a successful message must not advertise the error viewer:\n%s", out)
 	}
 }
 
-// The expansion is temporary: past the 30s window the bar collapses back to
-// one truncated line and the footer returns.
-func TestExpiredErrorCollapses(t *testing.T) {
+// [E] opens the last failure in full: the part the one-line bar had to cut is
+// visible in the popup, wrapped rather than truncated.
+func TestErrorPopupShowsTheTextTheBarCut(t *testing.T) {
 	m := sizedModel(t, 80, 30)
-	m.statusMsg = "error: git push failed (exit 128): " + strings.Repeat("x", 120)
-	m.statusMsgAt = time.Now().Add(-statusErrExpandFor - time.Second)
-	out := ansi.Strip(m.View())
-	if !strings.Contains(out, "[b]ranch") {
-		t.Fatalf("an expired error must give the footer row back:\n%s", out)
+	tail := "Temporary-failure-in-name-resolution"
+	m.lastError = "error: git push failed (exit 128): ssh: Could not resolve hostname " +
+		strings.Repeat("x", 90) + " " + tail
+	if strings.Contains(ansi.Strip(m.View()), tail) {
+		t.Fatal("precondition: the one-line bar must have cut the tail")
 	}
-	if strings.Contains(out, "full: , → Session errors") {
-		t.Fatalf("an expired error must not keep the pointer row:\n%s", out)
-	}
-}
-
-// TestNewerMessageCollapsesExpandedBar guards the other half of the
-// stamp-and-collapse design — only the stamp mechanism itself was pinned
-// before (TestStatusMsgChangeStampsStatusMsgAt): a newer message must
-// immediately collapse an in-progress two-line expansion back to one line
-// with the footer hints restored, not merely reset the countdown on the
-// STALE message. The newer message is delivered through the real
-// Model.Update path (not by poking statusMsg/statusMsgAt directly by hand),
-// so the wrapper's re-stamp — the actual production mechanism — is what's
-// under test. pendingSources is set to an empty (non-nil) slice first so
-// opFinishedMsg's own post-op source-reload machinery — which would
-// otherwise flip every source's loading flag and hide the ops-gated footer
-// hints for a reason unrelated to this test — stays out of the way.
-func TestNewerMessageCollapsesExpandedBar(t *testing.T) {
-	m := sizedModel(t, 80, 30)
-	m.statusMsg = "error: git push failed (exit 128): ssh: Could not resolve hostname " +
-		strings.Repeat("x", 30)
-	m.statusMsgAt = time.Now()
-	pre := ansi.Strip(m.View())
-	if !strings.Contains(pre, "full: , → Session errors") {
-		t.Fatalf("precondition: the bar should be expanded before the newer message lands:\n%s", pre)
-	}
-
-	m.pendingSources = []sourceKey{}
-	u, _ := m.Update(opFinishedMsg{res: engine.Result{Summary: "done"}})
+	u, _ := m.Update(keyMsg("E"))
 	m = u.(Model)
-
+	if layerOf[*contentPopup](m) == nil {
+		t.Fatal("E must open the error viewer")
+	}
 	out := ansi.Strip(m.View())
-	if !strings.Contains(out, "[b]ranch") {
-		t.Fatalf("a newer message must restore the footer hints immediately:\n%s", out)
-	}
-	if strings.Contains(out, "full: , → Session errors") {
-		t.Fatalf("a newer message must collapse the pointer row, not just reset its clock:\n%s", out)
-	}
-	if !strings.Contains(out, "done") {
-		t.Fatalf("the newer message itself must render:\n%s", out)
+	if !strings.Contains(out, tail) {
+		t.Fatalf("the popup must show the text the bar cut:\n%s", out)
 	}
 }
 
-// Even when two rows cannot hold the message, the viewer pointer survives at
-// the bottom row's tail — truncation eats the message, never the pointer.
-// frontToken is placed exactly where row 1 ends (pad fills row 1's g.w
-// columns exactly), so it is the first thing row 2's tail truncation must
-// decide whether to keep. It sits well inside the front of the whole
-// message — this is the regression guard for cutting the tail from the
-// wrong end: keeping it (truncate, which keeps the tail's FRONT) means row 2
-// continues naturally from row 1; losing it (elideLeft, which keeps the
-// tail's END) would mean row 2 jumps straight to trailing "zzzz…" boilerplate
-// instead, exactly the bug a real git error hits (see the view.go comment).
-func TestHintSurvivesExtremeTruncation(t *testing.T) {
-	m := sizedModel(t, 44, 30)
-	prefix := "error: "
-	pad := strings.Repeat("a", 44-len(prefix)) // fills row 1 (g.w=44) exactly
-	frontToken := "DIAGNOSIS-HERE"
-	m.statusMsg = prefix + pad + frontToken + strings.Repeat("z", 400)
-	m.statusMsgAt = time.Now()
-	out := ansi.Strip(m.View())
-	if !strings.Contains(out, "full: , → Session errors") {
-		t.Fatalf("the pointer must survive extreme truncation:\n%s", out)
+// The viewer wraps by default: a status message is prose, and cutoff mode
+// would hide the tail all over again.
+func TestErrorPopupWrapsByDefault(t *testing.T) {
+	p := newErrorPopup("error: " + strings.Repeat("z", 400))
+	if p.mode != modeWrap {
+		t.Fatalf("the error viewer must open in wrap mode, got %v", p.mode)
 	}
-	if !strings.Contains(out, frontToken) {
-		t.Fatalf("row 2 must continue from where row 1 left off, not jump to the message's trailing boilerplate:\n%s", out)
+	if !p.danger {
+		t.Fatal("the error viewer must use the danger (red) frame")
 	}
 }
 
-// TestNarrowFreshErrorNeverExceedsWidth guards the Finding 1 regression: at a
-// terminal at or below the (English) hint's own width — i18n.T("full: , →
-// Session errors") alone is 24 columns, before the " · " separator — the old
-// room<1 clamp let the composed row become truncate(tail,1)+hint = "…" (1
-// col) + the full hint, strictly wider than g.w. The fix instead gates the
-// whole expansion on room >= statusErrHintMinRoom, so a terminal this narrow
-// must fall through to the ordinary single-line truncate, which fits g.w by
-// construction. w=24 is deliberately AT the hint's bare width (not merely
-// "close"), the tightest case that still must not overflow.
-func TestNarrowFreshErrorNeverExceedsWidth(t *testing.T) {
-	m := sizedModel(t, 24, 30)
-	m.statusMsg = "error: git push failed (exit 128): ssh: Could not resolve hostname " +
-		strings.Repeat("x", 60)
-	m.statusMsgAt = time.Now()
-	out := ansi.Strip(m.View())
-	assertFrameFits(t, out, 30, 24)
+// git writes multi-line stderr; the viewer keeps that structure instead of
+// collapsing it the way the one-line bar does.
+func TestErrorPopupKeepsGitsLineStructure(t *testing.T) {
+	p := newErrorPopup("error: first line\nsecond line\nthird line")
+	if len(p.lines) != 3 {
+		t.Fatalf("want one contentLine per stderr line, got %d: %+v", len(p.lines), p.lines)
+	}
+	if p.lines[2].text != "third line" {
+		t.Fatalf("line order/content wrong: %+v", p.lines)
+	}
 }
 
-// TestNarrowRussianFreshErrorNeverExceedsWidth guards the other half of
-// Finding 1: the hint's width is translation-dependent — 24 columns in
-// English, 31 in Russian (i18n.T("full: , → Session errors") under the
-// embedded ru bundle) — and must be MEASURED per-language, never assumed
-// from the English literal. w=30 is comfortably safe for the English hint
-// (27 cols with its " · " separator) but not for the Russian one (34 cols
-// with separator), so this is a case that would only fail in Russian; a fix
-// that hardcoded the English hint's width instead of measuring
-// lipgloss.Width(hint) live would pass TestNarrowFreshErrorNeverExceedsWidth
-// above yet still overflow here. i18n.SetLanguage activates the embedded ru
-// bundle (the TestTranslatedPadColumnsAlign precedent in
-// i18n_display_test.go); Cleanup resets to English so no other test in the
-// package observes the switch.
-func TestNarrowRussianFreshErrorNeverExceedsWidth(t *testing.T) {
-	if err := i18n.SetLanguage("ru", t.TempDir()); err != nil {
-		t.Fatalf("SetLanguage(ru): %v", err)
+// Nothing has failed yet: E is inert rather than opening an empty box.
+func TestErrorPopupInertWithoutAnError(t *testing.T) {
+	m := sizedModel(t, 80, 30)
+	u, _ := m.Update(keyMsg("E"))
+	if layerOf[*contentPopup](u.(Model)) != nil {
+		t.Fatal("E must do nothing when no failure has been recorded")
 	}
-	t.Cleanup(func() { _ = i18n.SetLanguage("", "") })
-
-	m := sizedModel(t, 30, 30)
-	m.statusMsg = "error: git push failed (exit 128): ssh: Could not resolve hostname " +
-		strings.Repeat("x", 60)
-	m.statusMsgAt = time.Now()
-	out := ansi.Strip(m.View())
-	assertFrameFits(t, out, 30, 30)
 }
 
-// splitCols is the wrap primitive: head is the widest prefix that fits the
-// column budget (no ellipsis), tail the remainder with leading spaces
-// dropped; a wide glyph that would straddle the boundary moves wholly into
-// tail so neither row can exceed its width.
-func TestSplitCols(t *testing.T) {
-	head, tail := splitCols("abcdef", 4)
-	if head != "abcd" || tail != "ef" {
-		t.Fatalf("plain split: got %q %q", head, tail)
+// The viewer swallows keys: a global action key pressed while it is open must
+// not reach the panels underneath.
+func TestErrorPopupSwallowsGlobalKeys(t *testing.T) {
+	m := sizedModel(t, 80, 30)
+	m.lastError = "error: boom"
+	u, _ := m.Update(keyMsg("E"))
+	m = u.(Model)
+	u, _ = m.Update(keyMsg("p")) // would start a pull if it leaked
+	m = u.(Model)
+	if m.running {
+		t.Fatal("a key pressed inside the viewer must not start an operation")
 	}
-	// "ab " exactly fills 3 columns; the tail's leading spaces are dropped so
-	// the second row never starts with dead space.
-	head, tail = splitCols("ab cdef", 3)
-	if head != "ab " || tail != "cdef" {
-		t.Fatalf("split near a space: got %q %q", head, tail)
+	if layerOf[*contentPopup](m) == nil {
+		t.Fatal("the viewer should still be open")
 	}
-	head, tail = splitCols("ab", 10)
-	if head != "ab" || tail != "" {
-		t.Fatalf("short input: got %q %q", head, tail)
+	u, _ = m.Update(keyMsg("esc"))
+	if layerOf[*contentPopup](u.(Model)) != nil {
+		t.Fatal("esc must close the viewer")
 	}
-	// ⏳ is 2 columns wide; with 1 column left it must move to tail entirely.
-	head, tail = splitCols("a⏳b", 2)
-	if head != "a" || tail != "⏳b" {
-		t.Fatalf("wide glyph must not straddle the boundary: got %q %q", head, tail)
+}
+
+// The full text survives in lastError even after a later message replaces the
+// status line — E is about the last FAILURE, not the last message.
+func TestLastErrorSurvivesALaterMessage(t *testing.T) {
+	m := newTestModel(t)
+	u, _ := m.Update(opFinishedMsg{err: errors.New("boom: the whole story")})
+	m = u.(Model)
+	if m.lastError == "" {
+		t.Fatal("a failed op must record lastError")
+	}
+	captured := m.lastError
+	u, _ = m.Update(opFinishedMsg{res: engine.Result{Summary: "done"}})
+	m = u.(Model)
+	if m.lastError != captured {
+		t.Fatalf("a later success must not overwrite the recorded failure: %q", m.lastError)
+	}
+}
+
+// ssh ends its lines with CRLF. A surviving \r makes the terminal jump to
+// column 0 mid-line, so the rest of the row overwrites the popup's own border
+// — invisible to width math (\r measures zero) and therefore only reproducible
+// on a real terminal. Tabs are the mirror image: one column to lipgloss, up to
+// eight on screen.
+func TestErrorPopupStripsCursorMovingControlBytes(t *testing.T) {
+	p := newErrorPopup("error: ssh: Could not resolve hostname host-xyz: Temporary failure\r\nfatal: Could not read from remote repository.\r\n\tindented hint\x1b[31m")
+	for i, l := range p.lines {
+		if strings.ContainsAny(l.text, "\r\x1b\x08") {
+			t.Fatalf("line %d still carries a cursor-moving control byte: %q", i, l.text)
+		}
+	}
+	if len(p.lines) != 3 {
+		t.Fatalf("CRLF must split into the same lines LF does, got %d: %+v", len(p.lines), p.lines)
+	}
+	if !strings.Contains(p.lines[0].text, "Temporary failure") {
+		t.Fatalf("the message text itself must survive sanitizing: %q", p.lines[0].text)
+	}
+	if !strings.HasPrefix(p.lines[2].text, "    indented hint") {
+		t.Fatalf("a tab must become width-exact spaces, got %q", p.lines[2].text)
 	}
 }

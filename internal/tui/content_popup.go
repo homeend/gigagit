@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/homeend/gigagit/internal/i18n"
 )
@@ -41,6 +42,11 @@ type contentPopup struct {
 	mode    dispMode      // text display mode; z cycles
 	hscroll int           // modeScroll horizontal offset
 	footer  string        // optional line above the hint (e.g. commit author · date); "" = none
+	danger  bool          // frame the box in red — a failure, not information (error_popup.go)
+	// noCursor drops the row cursor: no "> " marker and no reverse-video
+	// highlight. A viewer showing one prose message has nothing to select or
+	// act on, so the cursor is noise — the rows are text, not choices.
+	noCursor bool
 }
 
 func newContentPopup(title string, lines []contentLine) *contentPopup {
@@ -263,6 +269,11 @@ func (p *contentPopup) box(m Model) string {
 	wr := make([]winRow, len(vis))
 	for i, l := range vis {
 		switch {
+		case p.noCursor:
+			wr[i] = winRow{text: "  " + l.text}
+			if l.heading {
+				wr[i].style = titleStyle
+			}
 		case i == p.sel:
 			// Cursor highlight wins over heading style: the cursor must remain
 			// visible even when it rests on a heading row.
@@ -276,7 +287,20 @@ func (p *contentPopup) box(m Model) string {
 	capRows := m.contentPageRows()
 	// h grows with content up to the page capacity; renderWindow scrolls to keep
 	// p.sel visible once vis overflows. Styling is applied after truncate/wrap.
+	//
+	// renderWindow's h is a budget of DISPLAY lines, not of rows. In the
+	// single-line modes those coincide, but a wrapped row spans several lines,
+	// so sizing by len(vis) would clip the wrap — a one-line error message
+	// would render only its first line, which is exactly what the [E] viewer
+	// exists to avoid. Measure with the same wrapWidth renderWindow itself
+	// uses so the count cannot drift from the layout it is sizing.
 	h := len(vis)
+	if p.mode == modeWrap {
+		h = 0
+		for _, r := range wr {
+			h += len(wrapWidth(r.text, textW, 1<<20))
+		}
+	}
 	if h > capRows {
 		h = capRows
 	}
@@ -305,5 +329,16 @@ func (p *contentPopup) box(m Model) string {
 		hint = fmt.Sprintf("%d/%d  %s", p.sel+1, len(vis), hint)
 	}
 	b.WriteString(truncate(hint, textW))
-	return modalStyle.Width(inner).Render(b.String()) + "\n"
+	return p.boxStyle().Width(inner).Render(b.String()) + "\n"
+}
+
+// boxStyle picks the frame: the ordinary yellow modal border, or a red one
+// when the popup reports a failure. Only the border colour changes, so the
+// body text keeps the terminal's own foreground and stays readable — a
+// red-on-red block of wrapped stderr would not.
+func (p *contentPopup) boxStyle() lipgloss.Style {
+	if p.danger {
+		return modalStyle.BorderForeground(lipgloss.Color("9"))
+	}
+	return modalStyle
 }

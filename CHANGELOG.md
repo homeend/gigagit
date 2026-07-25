@@ -8,6 +8,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- TUI: press **[E]** to read the last failure in full. The status bar stays
+  one line, but an error now leads with an `[E] full details` pointer (it
+  leads so truncation, which cuts from the back, can never eat it), and E
+  opens the whole message wrapped in a red box — `/` searches it, `z` cycles
+  the display mode, `ctrl+t` maximizes, esc closes. git's line structure is
+  preserved, and cursor-moving control bytes are stripped: ssh ends its lines
+  with CRLF, and a surviving `\r` would send the terminal back to column 0
+  mid-line and overwrite the box's own border. Every failure this session is
+  still kept in Settings `,` → Session errors.
+
 - tui: the stash drill-in now shows a -u stash's untracked files (the ^3
   third parent, previously invisible); their diff, preview, history/blame,
   and bookmarks resolve against that parent via a per-line sha override.
