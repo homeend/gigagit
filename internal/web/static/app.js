@@ -1211,6 +1211,36 @@ $("files-list").addEventListener("click", (e) => {
 });
 $("help").addEventListener("click", () => $("help").classList.add("hidden"));
 $("help-box").addEventListener("click", (e) => e.stopPropagation()); // allow selecting/copying text
+// Right-click on a working-tree status file: stage/unstage it (per its
+// section), bulk actions, copy path. Selects the row for feedback without
+// opening its diff.
+$("files-list").addEventListener("contextmenu", (e) => {
+  if (state.filesMode !== "status") return;
+  const li = e.target.closest("li");
+  if (!li || li.dataset.i === undefined) return;
+  e.preventDefault();
+  const i = Number(li.dataset.i);
+  const f = state.statusEntries[i];
+  if (!f) return;
+  state.fileCursor = i;
+  renderFiles();
+  const items = [];
+  if (f.section === "staged") items.push({ label: "unstage " + f.path, act: () => stage({ paths: [f.path], unstage: true }) });
+  else if (f.section !== "conflicts") items.push({ label: "stage " + f.path, act: () => stage({ paths: [f.path] }) });
+  items.push({ label: "copy path", act: () => copyText(f.path) });
+  items.push({ label: "stage all", act: () => stage({ all: true }) });
+  if (state.statusEntries.some((x) => x.section === "staged")) {
+    items.push({
+      label: "unstage all",
+      act: () => {
+        const paths = state.statusEntries.filter((x) => x.section === "staged").map((x) => x.path);
+        if (paths.length) stage({ paths, unstage: true }); // engine.Stage{All} can't unstage
+      },
+    });
+  }
+  showCtxMenu(items, e.clientX, e.clientY);
+});
+
 $("stage-all").addEventListener("click", () => stage({ all: true }));
 $("unstage-all").addEventListener("click", () => {
   const paths = state.statusEntries.filter((f) => f.section === "staged").map((f) => f.path);

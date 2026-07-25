@@ -8,6 +8,9 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- web: right-click on a working-tree status file offers stage / unstage
+  (per its section), stage all / unstage all, and copy path.
+
 - web: the Working-tree row is taller (30px, larger type) with breathing
   room around the dot and label; the virtualized list accounts for its
   extra height exactly.
