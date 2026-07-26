@@ -501,10 +501,28 @@ function showCtxMenu(items, x, y) {
   });
 }
 
+// A branch is checked out in at most one worktree, and both lists are
+// already in hand (the sidebar fetches them together), so the join is a
+// client-side lookup — same shape as the TUI's worktreeAbsPathForBranch.
+// No match (the common case) simply omits the row.
+function worktreePathForBranch(name) {
+  const w = state.worktrees.find((x) => x.branch === name);
+  return w ? w.path : null;
+}
+
 function showBranchMenu(b, x, y) {
   const items = [{ label: "go to tip", act: () => gotoBranchTip(b) }];
+  if (!b.is_head) items.push({ label: "switch to " + b.name, act: () => startSwitch(b.name) });
+  items.push({ label: "copy branch name", act: () => copyText(b.name, "branch name " + b.name) });
+  // b.hash is git's abbreviated sha (%(objectname:short)) — the same value
+  // the TUI's row copies, and short enough to name in full on the line.
+  if (b.hash) items.push({ label: "copy commit id", act: () => copyText(b.hash, "commit id " + b.hash) });
+  const wt = worktreePathForBranch(b.name);
+  if (wt) {
+    items.push({ label: "copy worktree absolute path", act: () => copyText(wt, "absolute path " + wt) });
+  }
+  // Destructive row last, as in the worktree and tag menus.
   if (!b.is_head) {
-    items.push({ label: "switch to " + b.name, act: () => startSwitch(b.name) });
     items.push({
       label: "delete " + b.name,
       danger: true,
@@ -611,8 +629,14 @@ function showBranchPairMenu(src, dst, x, y) {
   );
 }
 
-function copyText(text) {
-  navigator.clipboard.writeText(text).catch(() => opLine("copy failed (clipboard unavailable)", true));
+// A clipboard write is otherwise silent — you cannot tell a success from a
+// no-op without pasting. `what` names what landed (the TUI reports the same
+// way); it defaults to the copied text.
+function copyText(text, what) {
+  navigator.clipboard.writeText(text).then(
+    () => opLine("copied " + (what || text)),
+    () => opLine("copy failed (clipboard unavailable)", true),
+  );
 }
 
 function showWorktreeMenu(w, x, y) {
