@@ -341,6 +341,11 @@ function handleOpEvent(ev) {
     hideModal();
     if (ev.ok && (kind === "commit" || kind === "stash")) $("commit-msg").value = "";
     if (ev.ok) opLine(ev.summary || "done");
+    // changed && !ok is the engine's deliberate success-with-conflicts shape
+    // (a chosen keep-conflicts on merge/rebase/pull/apply-patch/stash-pop):
+    // conflicts were left in the tree on purpose, not a failure — the
+    // summary already reads as "…has conflicts (left in tree)" etc.
+    else if (ev.changed) opLine(ev.summary || "left conflicts in the working tree — resolve them, then commit");
     else opLine("error: " + (ev.error || "operation failed"), true);
     if (ev.changed) refreshAfterOp();
     else fetchStatus().then(renderCommits); // a failed switch may still have moved HEAD/stash state
