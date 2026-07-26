@@ -23,7 +23,7 @@ type opStartRequest struct {
 }
 
 // handleOpStart begins an operation and returns 202 {op_id}. Ops wired so
-// far: switch, commit, pull, push, merge, delete-branch, delete-tag,
+// far: switch, commit, pull, push, merge, rebase, delete-branch, delete-tag,
 // remove-worktree, stash, stash-apply, stash-pop, stash-drop, discard; the
 // switch statement is where future ops land.
 func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
@@ -58,6 +58,21 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 		// arbitrary pair works with no client-side precondition. A conflict
 		// forks "merge-conflict" into the parking modal.
 		op = engine.SmartMerge{Source: req.Branch, Target: req.Onto}
+	case "rebase":
+		// Branch is the dragged branch — the one REWRITTEN and ended on —
+		// and Onto the branch it was dropped on. Unlike merge, the ladder
+		// pivots on Branch, so the labels must not be swapped.
+		if req.Branch == "" || !isGitArgSafe(req.Branch) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid branch"))
+			return
+		}
+		if req.Onto == "" || !isGitArgSafe(req.Onto) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid base branch"))
+			return
+		}
+		// A conflict pauses the replay and forks "rebase-conflict" into the
+		// parking modal.
+		op = engine.SmartRebase{Branch: req.Branch, Onto: req.Onto}
 	case "commit":
 		if strings.TrimSpace(req.Message) == "" {
 			writeErr(w, http.StatusBadRequest, errors.New("message required"))
