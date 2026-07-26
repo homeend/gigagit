@@ -8,6 +8,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- web: in the working-tree view, **Staged is now the last section** rather
+  than the first. Staging a hunk used to move the file up to the top and push
+  the remaining work down, so the list seemed to reorder itself under you
+  mid-task. Order is Changes, Untracked, Conflicts, Staged.
 - web: **rename a branch**, **create a branch from one**, and **create a
   worktree for one** — three new rows on a branch's right-click menu, each
   asking for the name or path in a shared one-line prompt (enter confirms,
