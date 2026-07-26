@@ -8,6 +8,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **web:** drag a branch onto another in the sidebar to merge or rebase —
+  the drop opens a menu offering "merge A into B" / "rebase A onto B",
+  dispatching `engine.SmartMerge` / `engine.SmartRebase` over the existing
+  op transport (conflicts park in the decision modal).
+- **web:** the line-mode commit dot now aligns with the graph's leftmost
+  lane; the working-tree row's dot aligns in both modes.
+
 - web: command palette (`ctrl+k` / `ctrl+p`) — pull/push/refresh, sidebar and
   graph toggles, help, and a **switch repo…** mode listing previously-opened
   repos (the MRU registry) that re-roots the server in place. A global ☰
