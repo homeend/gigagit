@@ -680,6 +680,81 @@ SECTIONS.forEach((n) => {
   }
 })();
 
+// --- pane resizing ---
+// One drag handle per layout: sidebar↔commits in list mode, files↔diff in
+// detail mode. Both resize the FIRST grid column, so the width is always
+// the pointer's offset from the #panes left edge. Branch names ellipsize,
+// so a fixed sidebar width left a long name unreadable with no recourse.
+// Widths live as CSS custom properties on #panes and persist per handle.
+const RESIZERS = {
+  "rs-sidebar": { prop: "--sb-w", key: "gg.sidebar.width", def: 230 },
+  "rs-detail": { prop: "--files-w", key: "gg.panes.files-width", def: 320 },
+};
+const RS_MIN = 120; // narrower than this and the pane holds nothing readable
+const RS_KEEP = 200; // always leave this much for the pane on the right
+
+function setPaneWidth(cfg, w) {
+  $("panes").style.setProperty(cfg.prop, w + "px");
+}
+
+// Clamp against the live #panes width so a drag can never squeeze either
+// side to nothing — including on a window far narrower than the defaults,
+// where the minimum wins over the keep-back.
+function clampPaneWidth(w) {
+  const total = $("panes").getBoundingClientRect().width;
+  return Math.round(Math.min(Math.max(RS_MIN, total - RS_KEEP), Math.max(RS_MIN, w)));
+}
+
+// What the user asked for is stored and persisted; what the window can
+// currently afford is what gets applied. Shrinking the window therefore
+// squeezes the pane without forgetting the chosen width, and widening it
+// again restores that width.
+function applyPaneWidths() {
+  Object.values(RESIZERS).forEach((cfg) => setPaneWidth(cfg, clampPaneWidth(cfg.want)));
+}
+
+function initResizer(id) {
+  const cfg = RESIZERS[id];
+  const el = $(id);
+  const saved = parseInt(lsGet(cfg.key) || "", 10);
+  cfg.want = Number.isFinite(saved) ? saved : cfg.def;
+
+  el.addEventListener("pointerdown", (e) => {
+    e.preventDefault(); // no text selection, no native drag
+    const left = $("panes").getBoundingClientRect().left;
+    // Capture keeps the move/up events coming while the pointer is off the
+    // 5px handle. It throws when the pointer id is not active (a synthetic
+    // event), which must not abort the drag.
+    try { el.setPointerCapture(e.pointerId); } catch {}
+    el.classList.add("dragging");
+    document.body.classList.add("resizing");
+    const onMove = (ev) => {
+      cfg.want = clampPaneWidth(ev.clientX - left);
+      setPaneWidth(cfg, cfg.want);
+    };
+    const onUp = () => {
+      el.classList.remove("dragging");
+      document.body.classList.remove("resizing");
+      el.removeEventListener("pointermove", onMove);
+      el.removeEventListener("pointerup", onUp);
+      el.removeEventListener("pointercancel", onUp);
+      lsSet(cfg.key, String(cfg.want));
+    };
+    el.addEventListener("pointermove", onMove);
+    el.addEventListener("pointerup", onUp);
+    el.addEventListener("pointercancel", onUp);
+  });
+
+  el.addEventListener("dblclick", () => {
+    cfg.want = cfg.def;
+    setPaneWidth(cfg, clampPaneWidth(cfg.want));
+    lsSet(cfg.key, String(cfg.want));
+  });
+}
+Object.keys(RESIZERS).forEach(initResizer);
+applyPaneWidths();
+window.addEventListener("resize", applyPaneWidths);
+
 $("tags-list").addEventListener("click", (e) => {
   const li = e.target.closest("li");
   if (!li || !li.dataset.h) return;
