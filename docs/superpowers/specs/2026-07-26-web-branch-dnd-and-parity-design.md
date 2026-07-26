@@ -97,6 +97,54 @@ success-with-conflicts.
 
 ---
 
+## Part A2 — align the line-mode dot with the graph's leftmost lane
+
+A small rendering fix that rides along with this increment.
+
+### Problem
+
+The commits pane has two modes (`state.graphMode`): `svg` (lane graph) and
+`off` (flat ●-gutter list, the TUI `show_graph = off` parity). The dots do not
+line up between them, so toggling the mode shifts the whole gutter.
+
+Cause: the two modes render the dot with different machinery.
+
+- `svg` mode: `graphSVG` draws `<circle cx="${x + HALF}">`, so the leftmost
+  lane's centre sits at `CELL_W / 2` = **7px** from the `.graph` span's left
+  edge (`CELL_W = 14`).
+- `off` mode: `graphHTML` returns a text glyph, `<span class="flatdot">●</span>`,
+  which starts at x=0 and centres wherever the font's advance width puts it —
+  7px only by coincidence.
+- The working-tree row (`wtRowHTML`) hard-codes a bare text `●` in **both**
+  modes, so it aligns with neither.
+
+### Fix
+
+Make line mode use the graph's geometry instead of tuning a margin against it:
+`graphHTML`'s `off` branch returns a **one-cell SVG** — `CELL_W × ROW_H`,
+`<circle cx=HALF cy=MID r=4>`, filled with `laneColor(col >> 1)` from the same
+`●` column lookup it already does. The centre is then `CELL_W / 2` **by
+construction**, identical to the leftmost lane in graph mode, and cannot drift
+when the font changes.
+
+`wtRowHTML` gets the same one-cell SVG so the working-tree row's dot aligns in
+both modes.
+
+The now-redundant `.crow .graph .flatdot { margin-right: 10px }` rule goes; the
+gap between the dot column and the subject moves onto `.crow .graph` so the
+subject column starts at a consistent x in both modes.
+
+Line mode keeps its point: the gutter is one cell wide, and the rest of the
+lane column's space still goes to subjects.
+
+### Verification
+
+Toggle the mode with a commit selected and confirm the dot does not move
+horizontally; check a working-tree row in both modes. A Playwright screenshot
+per mode makes the comparison exact.
+
+---
+
 ## Part B — branch-menu parity backlog
 
 Every remaining TUI Branches-panel action, ordered by **verification cost**:
