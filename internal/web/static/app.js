@@ -530,6 +530,22 @@ function worktreePathForBranch(name) {
   return w ? w.path : null;
 }
 
+// A starting point for the worktree-path prompt, not a decision: a sibling of
+// the MAIN worktree named <repo>-<branch>. Anchoring on the main worktree
+// (git lists it first) rather than the served one keeps new worktrees from
+// nesting inside each other when you create one while inside another — the
+// same anchor the TUI's template resolver uses. Slashes in a branch name
+// become dashes so `feat/x` does not imply a directory.
+function defaultWorktreePath(branch) {
+  const main = (state.worktrees[0] && state.worktrees[0].path) || (state.repo && state.repo.worktree) || "";
+  if (!main) return "";
+  const sep = main.includes("\\") && !main.includes("/") ? "\\" : "/";
+  const cut = main.lastIndexOf(sep);
+  const parent = cut > 0 ? main.slice(0, cut) : main;
+  const name = cut >= 0 ? main.slice(cut + 1) : main;
+  return parent + sep + name + "-" + branch.replace(/[^\w.-]+/g, "-");
+}
+
 function showBranchMenu(b, x, y) {
   const items = [{ label: "go to tip", act: () => gotoBranchTip(b) }];
   if (!b.is_head) items.push({ label: "switch to " + b.name, act: () => startSwitch(b.name) });
@@ -541,6 +557,40 @@ function showBranchMenu(b, x, y) {
   } else {
     items.push({ label: "pull " + b.name + " (stay here)", act: () => doPullBranch(b.name) });
     items.push({ label: "push " + b.name, act: () => doPushBranch(b.name) });
+  }
+  items.push({
+    label: "rename branch…",
+    act: () =>
+      openPrompt({
+        title: "Rename " + b.name + " to:",
+        value: b.name,
+        onSubmit: (name) => {
+          if (name === b.name) return; // no-op, and the engine would refuse it
+          startOp({ op: "rename-branch", branch: b.name, name }, "renaming " + b.name);
+        },
+      }),
+  });
+  items.push({
+    label: "create branch from here…",
+    act: () =>
+      openPrompt({
+        title: "New branch, starting at " + b.name + ":",
+        placeholder: "branch name",
+        onSubmit: (name) => startOp({ op: "create-branch", name, branch: b.name }, "creating " + name),
+      }),
+  });
+  // Only offered when the branch has no worktree — git allows exactly one,
+  // and the engine would refuse a second (same gate as the copy-path row).
+  if (!worktreePathForBranch(b.name)) {
+    items.push({
+      label: "create worktree for this branch…",
+      act: () =>
+        openPrompt({
+          title: "New worktree for " + b.name + ", at path:",
+          value: defaultWorktreePath(b.name),
+          onSubmit: (path) => startOp({ op: "create-worktree", branch: b.name, path }, "creating worktree " + path),
+        }),
+    });
   }
   if (state.solo === b.name) {
     items.push({ label: "exit solo (show every branch)", act: () => setSolo("") });
@@ -1046,6 +1096,55 @@ async function loadCommits(more) {
   setSoloChip(body.solo || "");
   renderCommits();
 }
+
+// --- one-line prompt ---
+// A name or a path cannot come from a menu row, so this is the shared way to
+// ask for one: a layer like any other (esc closes it, the top layer owns the
+// keyboard). onSubmit receives the TRIMMED value and is never called with an
+// empty string — every caller would have had to check.
+let promptCb = null;
+
+function openPrompt({ title, value, placeholder, onSubmit }) {
+  promptCb = onSubmit;
+  $("prompt-title").textContent = title;
+  const input = $("prompt-input");
+  input.value = value || "";
+  input.placeholder = placeholder || "";
+  pushLayer("prompt", $("prompt"), { onKey: promptKey });
+  input.focus();
+  input.select();
+}
+
+function closePrompt() {
+  promptCb = null;
+  // Blur before closing: the form-field guard keys off the focused element,
+  // and a still-focused input would swallow every global key (the palette's
+  // hard-won lesson).
+  $("prompt-input").blur();
+  closeLayer("prompt");
+}
+
+function submitPrompt() {
+  const v = $("prompt-input").value.trim();
+  if (!v) return; // nothing to submit; leave the prompt open
+  const cb = promptCb; // capture before closing clears it
+  closePrompt();
+  if (cb) cb(v);
+}
+
+function promptKey(e) {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    submitPrompt();
+    return true;
+  }
+  if (e.key === "Escape") {
+    closePrompt();
+    return true;
+  }
+  return false; // everything else is typing
+}
+$("prompt-ok").addEventListener("click", submitPrompt);
 
 // --- solo mode ---
 // Narrowing the commit list to one branch is a mode you can get stuck in, so

@@ -191,6 +191,18 @@ mark.r { background: var(--span-add); color: inherit; }
 .crow .graph .flatdot { display: inline-block; margin-right: 10px; }
 
 /* command palette (z-index 21: above modal 10 / help 11 / ctx-menu 20) */
+/* One-line text prompt. Same layer stack and visual language as the palette;
+   it exists because a name or a path cannot come from a menu row. */
+#prompt { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: flex-start; justify-content: center; z-index: 22; }
+#prompt.hidden { display: none; }
+#prompt-box { margin-top: 20vh; background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; width: 90vw; max-width: 560px; display: flex; flex-direction: column; }
+#prompt-title { padding: 10px 14px 6px; color: var(--fg); }
+#prompt-input { margin: 0 14px; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 3px; padding: 7px 10px; font: inherit; outline: none; }
+#prompt-input:focus { border-color: var(--accent); }
+#prompt-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; }
+#prompt-hint { color: var(--dim); font-size: 11px; }
+#prompt-ok { background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 3px; padding: 2px 14px; font: inherit; cursor: pointer; }
+#prompt-ok:hover { border-color: var(--accent); }
 #palette { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: flex-start; justify-content: center; z-index: 21; }
 #palette.hidden { display: none; }
 #palette-box { margin-top: 18vh; background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; width: 90vw; max-width: 560px; display: flex; flex-direction: column; }

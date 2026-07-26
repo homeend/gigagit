@@ -69,6 +69,13 @@
     <div id="modal-options"></div>
   </div>
 </div>
+<div id="prompt" class="hidden">
+  <div id="prompt-box">
+    <div id="prompt-title"></div>
+    <input id="prompt-input" type="text" autocomplete="off" spellcheck="false">
+    <div id="prompt-actions"><span id="prompt-hint">enter to confirm · esc to cancel</span><button id="prompt-ok">ok</button></div>
+  </div>
+</div>
 <div id="palette" class="hidden">
   <div id="palette-box">
     <input id="palette-input" type="text" autocomplete="off" spellcheck="false" placeholder="type a command…">
@@ -94,6 +101,7 @@
     <h3>Mouse</h3>
     <div class="hrow"><span class="hkey">commit row</span><span>open its files + diff; the yellow <b>Working tree</b> row (appears at the top while the tree is dirty) opens the status view: stage/unstage buttons per file, stage-all/unstage-all, commit box, stash</span></div>
     <div class="hrow"><span class="hkey">branch</span><span>click: jump the list to its tip · right-click: switch, pull / push it, copy its name / tip commit id / worktree path, delete · drag onto another branch: merge or rebase</span></div>
+    <div class="hrow"><span class="hkey">make a branch</span><span>right-click a branch → <b>rename</b>, <b>create branch from here</b>, or <b>create worktree for this branch</b> (only when it has none). Each asks in a one-line prompt: enter confirms, esc cancels. A configured worktree post-create hook is shown for approval before it runs</span></div>
     <div class="hrow"><span class="hkey">solo a branch</span><span>right-click a branch → <b>solo this branch</b> narrows the commit list to that branch's history. A <b>solo: name ✕</b> chip appears in the top bar — click it (or the menu's exit row) to show every branch again. The scope belongs to the server, so every tab sees it, and it survives commits, merges and pulls until you clear it</span></div>
     <div class="hrow"><span class="hkey">pull a branch</span><span>pulling a branch you are <b>not</b> on updates it in place and leaves you where you are — no checkout, nothing to confirm. Pulling the branch you are on asks first, since it can rewrite the working tree</span></div>
     <div class="hrow"><span class="hkey">worktree</span><span>right-click: switch here (re-root the server), copy path, remove</span></div>

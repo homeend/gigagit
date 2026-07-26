@@ -5,6 +5,12 @@
 #   ./build.sh linux      # build only ./gg
 #   ./build.sh windows    # build only ./gg.exe
 #   ./build.sh install    # install into GOBIN, version-stamped
+#   ./build.sh web        # build ./gg-web-new.exe (windows) for run-win.cmd
+#
+# The web target exists because run-win.cmd cannot overwrite a running
+# gg-web.exe — Windows locks it. It writes gg-web-new.exe instead, which
+# run-win.cmd renames into place on the next launch. Run it in the worktree
+# you want to serve; the exe lands beside this script.
 #
 # GOARCH may be overridden (default: amd64), e.g. GOARCH=arm64 ./build.sh linux
 set -euo pipefail
@@ -55,7 +61,11 @@ case "${target}" in
 	windows) build windows ./gg.exe ;;
 	all)     build linux ./gg; build windows ./gg.exe ;;
 	install) install ;;
-	*) echo "usage: $0 [linux|windows|all|install]" >&2; exit 2 ;;
+	web)
+		build windows ./gg-web-new.exe
+		echo "wrote $(pwd)/gg-web-new.exe — run-win.cmd swaps it in on next launch"
+		;;
+	*) echo "usage: $0 [linux|windows|all|install|web]" >&2; exit 2 ;;
 esac
 
 echo "done: ${VERSION} (${COMMIT})"
