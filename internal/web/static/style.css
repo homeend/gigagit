@@ -42,10 +42,6 @@ body {
 .ref.remote { background: #3a2e52; color: #cbb4f5; }
 .ref.tag { background: #4d431f; color: #e8d47c; }
 .ref.head { outline: 1px solid var(--accent); }
-.lane-0 { color: var(--lane0); } .lane-1 { color: var(--lane1); }
-.lane-2 { color: var(--lane2); } .lane-3 { color: var(--lane3); }
-.lane-4 { color: var(--lane4); } .lane-5 { color: var(--lane5); }
-.lane-6 { color: var(--lane6); } .lane-7 { color: var(--lane7); }
 #files-list { list-style: none; }
 #files-list li { padding: 2px 8px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #files-list li.sel { background: var(--sel); }
