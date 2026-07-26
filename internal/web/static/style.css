@@ -104,6 +104,12 @@ mark.r { background: var(--span-add); color: inherit; }
 #branches-list li:hover { background: var(--bg-alt); }
 #branches-list li.head { color: var(--accent); font-weight: bold; cursor: default; }
 #branches-list li .ab { float: right; color: var(--dim); font-size: 11px; }
+/* A branch row accepting a drop — the only feedback that the pair is valid. */
+#branches-list li.drop-target {
+  outline: 1px solid var(--lane0);
+  outline-offset: -1px;
+  background: rgba(110, 168, 254, 0.12);
+}
 #op-line { flex: none; padding: 3px 12px; color: var(--accent); background: var(--bg-alt); border-top: 1px solid var(--border); white-space: pre-wrap; word-break: break-word; max-height: 30vh; overflow-y: auto; }
 #op-line.hidden { display: none; }
 #op-head { display: none; justify-content: space-between; color: var(--dim); font-size: 11px; margin-bottom: 2px; }
