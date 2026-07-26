@@ -28,6 +28,7 @@ const state = {
   lastDiff: null,
   diffBlockIdx: -1,
   detailGen: 0,
+  dragBranch: null, // name of the branch being dragged, else null
 };
 
 const $ = (id) => document.getElementById(id);
@@ -145,7 +146,7 @@ function renderBranches() {
       const ab =
         (b.ahead ? "↑" + b.ahead : "") + (b.behind ? (b.ahead ? " " : "") + "↓" + b.behind : "");
       return (
-        `<li class="${b.is_head ? "head" : ""}" data-n="${esc(b.name)}">` +
+        `<li class="${b.is_head ? "head" : ""}" draggable="true" data-n="${esc(b.name)}">` +
         `${b.is_head ? "✓ " : ""}${esc(b.name)}${ab ? `<span class="ab">${ab}</span>` : ""}</li>`
       );
     })
@@ -340,6 +341,11 @@ function handleOpEvent(ev) {
     hideModal();
     if (ev.ok && (kind === "commit" || kind === "stash")) $("commit-msg").value = "";
     if (ev.ok) opLine(ev.summary || "done");
+    // changed && !ok is the engine's deliberate success-with-conflicts shape
+    // (a chosen keep-conflicts on merge/rebase/pull/apply-patch/stash-pop):
+    // conflicts were left in the tree on purpose, not a failure — the
+    // summary already reads as "…has conflicts (left in tree)" etc.
+    else if (ev.changed) opLine(ev.summary || "left conflicts in the working tree — resolve them, then commit");
     else opLine("error: " + (ev.error || "operation failed"), true);
     if (ev.changed) refreshAfterOp();
     else fetchStatus().then(renderCommits); // a failed switch may still have moved HEAD/stash state
@@ -532,6 +538,79 @@ $("branches-list").addEventListener("contextmenu", (e) => {
   if (b) showBranchMenu(b, e.clientX, e.clientY);
 });
 
+// Drag a branch onto another to merge or rebase. The drop opens the shared
+// ctx-menu naming the pair in both directions — the menu row IS the
+// confirmation, the same standing the TUI's pair-op popup has.
+const branchesList = $("branches-list");
+
+branchesList.addEventListener("dragstart", (e) => {
+  const li = e.target.closest("li");
+  if (!li || !li.dataset.n) return;
+  state.dragBranch = li.dataset.n;
+  // Required for a drag to start at all in Firefox; also gives the browser
+  // its default drag image.
+  e.dataTransfer.setData("text/plain", li.dataset.n);
+  e.dataTransfer.effectAllowed = "move";
+});
+
+branchesList.addEventListener("dragover", (e) => {
+  const li = e.target.closest("li");
+  if (!li || !li.dataset.n) return;
+  if (!state.dragBranch || li.dataset.n === state.dragBranch) return;
+  // preventDefault is what marks this element as a valid drop target.
+  e.preventDefault();
+  e.dataTransfer.dropEffect = "move";
+  li.classList.add("drop-target");
+});
+
+branchesList.addEventListener("dragleave", (e) => {
+  const li = e.target.closest("li");
+  if (li) li.classList.remove("drop-target");
+});
+
+branchesList.addEventListener("dragend", () => {
+  state.dragBranch = null;
+  clearDropTargets();
+});
+
+branchesList.addEventListener("drop", (e) => {
+  const li = e.target.closest("li");
+  const src = state.dragBranch;
+  state.dragBranch = null;
+  clearDropTargets();
+  if (!li || !li.dataset.n || !src) return;
+  const dst = li.dataset.n;
+  if (dst === src) return;
+  e.preventDefault();
+  showBranchPairMenu(src, dst, e.clientX, e.clientY);
+});
+
+function clearDropTargets() {
+  for (const el of $("branches-list").querySelectorAll(".drop-target")) {
+    el.classList.remove("drop-target");
+  }
+}
+
+// showBranchPairMenu offers the two-branch operations on (dragged, dropped-on).
+// Directions are spelled out in the labels so the pair never carries implicit
+// meaning: merge ends on dst, rebase rewrites and ends on src.
+function showBranchPairMenu(src, dst, x, y) {
+  showCtxMenu(
+    [
+      {
+        label: "merge " + src + " into " + dst,
+        act: () => startOp({ op: "merge", branch: src, onto: dst }, "merging " + src + " into " + dst),
+      },
+      {
+        label: "rebase " + src + " onto " + dst,
+        act: () => startOp({ op: "rebase", branch: src, onto: dst }, "rebasing " + src + " onto " + dst),
+      },
+    ],
+    x,
+    y
+  );
+}
+
 function copyText(text) {
   navigator.clipboard.writeText(text).catch(() => opLine("copy failed (clipboard unavailable)", true));
 }
@@ -694,7 +773,7 @@ function wtRowHTML(i) {
   if (c.conflicted) parts.push(c.conflicted + " conflicted");
   return (
     `<div class="crow wt${sel}" data-i="${i}">` +
-    `<span class="graph">●</span>` +
+    `<span class="graph">${flatDotSVG("#e0c06c")}</span>` +
     `<span class="subj">Working tree</span>` +
     `<span class="meta">${esc(parts.join(" · "))}</span></div>`
   );
@@ -735,11 +814,25 @@ function rowHTML(row, i) {
 function graphHTML(row, feedIdx) {
   if (state.graphMode === "off") {
     // flat mode: one dot per row in the commit's lane color — dots keep
-    // rows visually separate (full-height bars merged into one line)
+    // rows visually separate (full-height bars merged into one line).
+    // Drawn as a ONE-CELL SVG with the graph's own geometry so its centre
+    // lands exactly on the leftmost lane's centre; a text glyph would
+    // centre wherever the font's advance width happens to put it.
     const col = runes(row.cells || "").indexOf("●");
-    return `<span class="flatdot lane-${col >= 0 ? (col >> 1) % 8 : 0}">●</span>`;
+    return flatDotSVG(laneColor(col >= 0 ? col >> 1 : 0));
   }
   return graphSVG(row, feedIdx);
+}
+
+// flatDotSVG draws a single node dot in a one-cell box, identical in
+// geometry to graphSVG's leftmost-lane circle. It keeps the .flatdot class
+// so the existing spacing rule still applies — graph mode's own spacing
+// must not change.
+function flatDotSVG(color) {
+  return (
+    `<svg class="flatdot" width="${CELL_W}" height="${ROW_H}" viewBox="0 0 ${CELL_W} ${ROW_H}">` +
+    `<circle cx="${HALF}" cy="${MID}" r="4" fill="${color}"/></svg>`
+  );
 }
 
 function toggleGraphMode() {

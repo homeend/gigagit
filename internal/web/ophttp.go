@@ -14,6 +14,7 @@ import (
 type opStartRequest struct {
 	Op      string `json:"op"`
 	Branch  string `json:"branch"`
+	Onto    string `json:"onto"`
 	Message string `json:"message"`
 	Tag     string `json:"tag"`
 	Path    string `json:"path"`
@@ -22,7 +23,7 @@ type opStartRequest struct {
 }
 
 // handleOpStart begins an operation and returns 202 {op_id}. Ops wired so
-// far: switch, commit, pull, push, delete-branch, delete-tag,
+// far: switch, commit, pull, push, merge, rebase, delete-branch, delete-tag,
 // remove-worktree, stash, stash-apply, stash-pop, stash-drop, discard; the
 // switch statement is where future ops land.
 func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
@@ -40,6 +41,38 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		op = engine.SmartSwitch{Branch: req.Branch}
+	case "merge":
+		// Drag-and-drop pair: Branch is the dragged source, Onto the branch
+		// it was dropped on. Both names are validated here; the engine then
+		// checks they exist and refuses source == target itself.
+		if req.Branch == "" || !isGitArgSafe(req.Branch) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid branch"))
+			return
+		}
+		if req.Onto == "" || !isGitArgSafe(req.Onto) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid target branch"))
+			return
+		}
+		// SmartMerge is worktree-aware: it merges in place, or inside the
+		// worktree holding the target, or autostashes and switches — so an
+		// arbitrary pair works with no client-side precondition. A conflict
+		// forks "merge-conflict" into the parking modal.
+		op = engine.SmartMerge{Source: req.Branch, Target: req.Onto}
+	case "rebase":
+		// Branch is the dragged branch — the one REWRITTEN and ended on —
+		// and Onto the branch it was dropped on. Unlike merge, the ladder
+		// pivots on Branch, so the labels must not be swapped.
+		if req.Branch == "" || !isGitArgSafe(req.Branch) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid branch"))
+			return
+		}
+		if req.Onto == "" || !isGitArgSafe(req.Onto) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid base branch"))
+			return
+		}
+		// A conflict pauses the replay and forks "rebase-conflict" into the
+		// parking modal.
+		op = engine.SmartRebase{Branch: req.Branch, Onto: req.Onto}
 	case "commit":
 		if strings.TrimSpace(req.Message) == "" {
 			writeErr(w, http.StatusBadRequest, errors.New("message required"))
