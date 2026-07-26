@@ -2,6 +2,8 @@ package web
 
 import (
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -66,6 +68,69 @@ func TestOpHTTPMergeSameBranch(t *testing.T) {
 	done := events[len(events)-1]
 	if done["ok"] != false {
 		t.Fatalf("done = %v, want ok=false (source == target)", done)
+	}
+}
+
+// conflictingRepo builds main and feature that both edit the SAME line of
+// f.txt, guaranteeing a real merge conflict — divergedRepo's commits are
+// --allow-empty (touch no file at all) so they can never conflict.
+func conflictingRepo(t *testing.T) string {
+	t.Helper()
+	dir := newRepoDir(t, 1)
+	gitRun(t, dir, "checkout", "-b", "feature")
+	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("feature\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, dir, "add", "-A")
+	gitRun(t, dir, "commit", "-m", "feature edit")
+	gitRun(t, dir, "checkout", "main")
+	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("main\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, dir, "add", "-A")
+	gitRun(t, dir, "commit", "-m", "main edit")
+	return dir
+}
+
+// TestOpHTTPMergeConflict drives a conflicted merge through the drop path's
+// exact wire contract: POST /api/op, park on the merge-conflict decision,
+// answer keep-conflicts, then verify the conflict is really left in the
+// tree (git-visible, not just an HTTP response shape).
+func TestOpHTTPMergeConflict(t *testing.T) {
+	dir := conflictingRepo(t)
+	srv := New(domain.Open(dir))
+	ts := serve(t, srv)
+
+	opID := startOpBody(t, ts, `{"op":"merge","branch":"feature","onto":"main"}`)
+	run := srv.opByID(opID)
+	if run == nil {
+		t.Fatal("run not found")
+	}
+	waitDecision(t, run)
+	run.mu.Lock()
+	req := run.pending
+	run.mu.Unlock()
+	if req.ID != "merge-conflict" {
+		t.Fatalf("pending = %+v, want id merge-conflict", req)
+	}
+	if code := postJSON(t, ts, "/api/op/"+opID+"/decide", `{"option":"keep-conflicts"}`, "application/json", "", nil); code != http.StatusOK {
+		t.Fatalf("decide code = %d", code)
+	}
+	events := readSSE(t, ts, opID, 30*time.Second)
+	done := events[len(events)-1]
+	if done["ok"] != false || done["changed"] != true {
+		t.Fatalf("done = %v, want ok=false changed=true (keep-conflicts)", done)
+	}
+	// git-visible conflict state, not just the wire response shape.
+	if out := gitRun(t, dir, "ls-files", "-u"); out == "" {
+		t.Error("expected unmerged index entries after keep-conflicts, got none")
+	}
+	var st statusResp
+	if code := getJSON(t, ts, "/api/status", &st); code != http.StatusOK {
+		t.Fatalf("status = %d", code)
+	}
+	if i, ok := findFile(t, st, "f.txt"); !ok || st.Files[i].Kind != "conflicted" {
+		t.Errorf("f.txt not conflicted after keep-conflicts: %+v", st.Files)
 	}
 }
 
