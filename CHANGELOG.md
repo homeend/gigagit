@@ -8,6 +8,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- web: **rename a branch**, **create a branch from one**, and **create a
+  worktree for one** — three new rows on a branch's right-click menu, each
+  asking for the name or path in a shared one-line prompt (enter confirms,
+  esc cancels). The worktree row appears only when the branch has no worktree
+  yet, and its path is pre-filled with a sibling of the main worktree named
+  `<repo>-<branch>`. A configured worktree post-create hook is honoured
+  rather than skipped: the engine shows the script in the decision modal and
+  runs it only if you say so.
 - web: **solo a branch** — right-click a branch → *solo this branch* narrows
   the commit list to its history, with a `solo: <name> ✕` chip in the top bar
   to leave again. The scope lives on the server (there is one commit feed, so
