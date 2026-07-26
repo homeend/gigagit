@@ -8,6 +8,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- web: a branch's right-click menu gains **copy branch name**, **copy commit
+  id** (its tip), and **copy worktree absolute path** — the last only when
+  some worktree has that branch checked out. A copy now reports what it
+  copied on the status line; it used to report only failures, so a silent
+  clipboard write was indistinguishable from nothing happening.
 - web: the pane dividers are draggable — the sidebar in the commit list and
   the file list in a commit's detail. Double-click a divider to reset it.
   Each width persists (`gg.sidebar.width`, `gg.panes.files-width`) and is
