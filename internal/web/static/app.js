@@ -29,6 +29,7 @@ const state = {
   diffBlockIdx: -1,
   detailGen: 0,
   dragBranch: null, // name of the branch being dragged, else null
+  solo: "", // branch the commit list is narrowed to ("" = every branch)
 };
 
 const $ = (id) => document.getElementById(id);
@@ -541,6 +542,11 @@ function showBranchMenu(b, x, y) {
     items.push({ label: "pull " + b.name + " (stay here)", act: () => doPullBranch(b.name) });
     items.push({ label: "push " + b.name, act: () => doPushBranch(b.name) });
   }
+  if (state.solo === b.name) {
+    items.push({ label: "exit solo (show every branch)", act: () => setSolo("") });
+  } else {
+    items.push({ label: "solo this branch", act: () => setSolo(b.name) });
+  }
   items.push({ label: "copy branch name", act: () => copyText(b.name, "branch name " + b.name) });
   // b.hash is git's abbreviated sha (%(objectname:short)) — the same value
   // the TUI's row copies, and short enough to name in full on the line.
@@ -1034,8 +1040,37 @@ async function loadCommits(more) {
   const body = await getJSON(more ? "/api/commits?more=1" : "/api/commits");
   state.rows = body.rows || [];
   state.canLoadMore = body.can_load_more;
+  // The scope is server state (one feed for every tab), so it is reported by
+  // the very response it scopes rather than tracked client-side. A reload or
+  // a second tab therefore shows the chip without asking for it.
+  setSoloChip(body.solo || "");
   renderCommits();
 }
+
+// --- solo mode ---
+// Narrowing the commit list to one branch is a mode you can get stuck in, so
+// the chip is not decoration: it is the exit. It renders from state.solo,
+// which survives a failing /api/commits, and clicking it clears the scope.
+function setSoloChip(branch) {
+  state.solo = branch;
+  const el = $("solo-chip");
+  el.classList.toggle("hidden", !branch);
+  if (branch) el.textContent = "solo: " + branch + " ✕";
+}
+
+async function setSolo(branch) {
+  if (state.op) return;
+  try {
+    await postJSON("/api/solo", { branch });
+    setSoloChip(branch);
+    await loadCommits(false);
+    moveCursor(0);
+    opLine(branch ? "commit list scoped to " + branch : "showing every branch");
+  } catch (e) {
+    opLine("error: " + (e.message || e), true);
+  }
+}
+$("solo-chip").addEventListener("click", () => setSolo(""));
 
 function maybeLoadMore(lastVisible) {
   if (!state.canLoadMore || state.loadingMore) return;

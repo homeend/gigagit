@@ -171,6 +171,15 @@ mark.r { background: var(--span-add); color: inherit; }
   font: inherit; cursor: pointer;
 }
 #top #pull-btn:hover:not(:disabled), #top #push-btn:hover:not(:disabled) { border-color: var(--accent); }
+/* The solo chip IS the way out of solo mode, so it is styled to be noticed:
+   accent-filled, unlike the outline buttons beside it. */
+#top #solo-chip {
+  margin-left: 10px; background: var(--sel); color: var(--accent);
+  border: 1px solid var(--accent); border-radius: 3px; padding: 1px 10px;
+  font: inherit; cursor: pointer;
+}
+#top #solo-chip:hover { background: var(--accent); color: var(--bg); }
+#top #solo-chip.hidden { display: none; }
 #top #pull-btn:disabled, #top #push-btn:disabled { opacity: .45; cursor: default; }
 #help { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; z-index: 11; cursor: pointer; }
 #help.hidden { display: none; }

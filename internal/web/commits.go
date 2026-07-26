@@ -45,6 +45,11 @@ func (s *Server) feedFor(r *http.Request) *domain.CommitFeed {
 			}
 		}
 		f.SetSortMode(mode)
+		// Re-derive the solo scope on every build. SetScope only records the
+		// refspec — the LoadInitial the caller is about to make does the walk,
+		// so a rebuild costs nothing extra. This is what makes solo survive
+		// resetFeed after a state-changing op.
+		f.SetScope(soloScope(s.solo))
 		if s.pageInitial > 0 {
 			f.SetPageSizes(s.pageInitial, s.pageBatch)
 		}
@@ -66,9 +71,12 @@ func (s *Server) handleCommits(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
+	// solo rides along on the response whose content it scopes, so a reload
+	// or a second tab always learns the active scope without a second call.
 	writeJSON(w, map[string]any{
 		"rows":          buildRows(st.Commits),
 		"can_load_more": !st.Exhausted,
+		"solo":          s.soloBranch(),
 	})
 }
 
