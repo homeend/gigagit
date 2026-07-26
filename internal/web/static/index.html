@@ -11,6 +11,7 @@
   <button id="menu-btn" title="menu">☰</button>
   <span id="repo-name">…</span>
   <span id="repo-branch"></span>
+  <button id="solo-chip" class="hidden" title="showing one branch only — click to show every branch again"></button>
   <button id="pull-btn" title="pull the current branch (p)">⟳ pull</button>
   <button id="push-btn" title="push the current branch (P)">⇫ push</button>
   <span id="repo-worktree"></span>
@@ -93,6 +94,7 @@
     <h3>Mouse</h3>
     <div class="hrow"><span class="hkey">commit row</span><span>open its files + diff; the yellow <b>Working tree</b> row (appears at the top while the tree is dirty) opens the status view: stage/unstage buttons per file, stage-all/unstage-all, commit box, stash</span></div>
     <div class="hrow"><span class="hkey">branch</span><span>click: jump the list to its tip · right-click: switch, pull / push it, copy its name / tip commit id / worktree path, delete · drag onto another branch: merge or rebase</span></div>
+    <div class="hrow"><span class="hkey">solo a branch</span><span>right-click a branch → <b>solo this branch</b> narrows the commit list to that branch's history. A <b>solo: name ✕</b> chip appears in the top bar — click it (or the menu's exit row) to show every branch again. The scope belongs to the server, so every tab sees it, and it survives commits, merges and pulls until you clear it</span></div>
     <div class="hrow"><span class="hkey">pull a branch</span><span>pulling a branch you are <b>not</b> on updates it in place and leaves you where you are — no checkout, nothing to confirm. Pulling the branch you are on asks first, since it can rewrite the working tree</span></div>
     <div class="hrow"><span class="hkey">worktree</span><span>right-click: switch here (re-root the server), copy path, remove</span></div>
     <div class="hrow"><span class="hkey">tag</span><span>click: show its commit · right-click: show, copy name, delete</span></div>

@@ -8,6 +8,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- web: **solo a branch** — right-click a branch → *solo this branch* narrows
+  the commit list to its history, with a `solo: <name> ✕` chip in the top bar
+  to leave again. The scope lives on the server (there is one commit feed, so
+  every tab shares it) and survives commits, merges and pulls until cleared;
+  a branch that does not exist is refused rather than entered, since a scope
+  that cannot render would take the exit affordance with it.
 - web: **fetch all remotes** in the ☰ menu and command palette, and per-branch
   **pull** / **push** on a branch's right-click menu. Pulling a branch you are
   not standing on updates it in place and leaves you where you are — no
