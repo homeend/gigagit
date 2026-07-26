@@ -8,6 +8,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- web: the pane dividers are draggable — the sidebar in the commit list and
+  the file list in a commit's detail. Double-click a divider to reset it.
+  Each width persists (`gg.sidebar.width`, `gg.panes.files-width`) and is
+  clamped to the window, so a stored width squeezes rather than pushing the
+  neighbouring pane off-screen and comes back when the window widens again.
 - web: drag a branch onto another in the sidebar to merge or rebase —
   the drop opens a menu offering "merge A into B" / "rebase A onto B",
   dispatching `engine.SmartMerge` / `engine.SmartRebase` over the existing

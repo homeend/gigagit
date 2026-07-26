@@ -4,6 +4,8 @@
   --add: #1f3d2b; --del: #46262a; --span-add: #2f6b41; --span-del: #8a3b42;
   --lane0: #6ea8fe; --lane1: #f2a65a; --lane2: #7bd88f; --lane3: #e06c9f;
   --lane4: #b58ef2; --lane5: #5ad0c8; --lane6: #e0c06c; --lane7: #f27a6a;
+  /* Pane widths — the drag handles rewrite --sb-w / --files-w on #panes. */
+  --sb-w: 230px; --files-w: 320px; --rs-w: 5px;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; }
@@ -15,16 +17,23 @@ body {
 #repo-name { font-weight: bold; color: var(--accent); }
 #repo-branch::before { content: " \2387  "; color: var(--dim); }
 #repo-worktree { float: right; color: var(--dim); }
-#panes { flex: 1; display: grid; grid-template-columns: 5fr 3fr 6fr; min-height: 0; }
 /* Drill-in layout, mirroring the TUI: the list and the opened commit are
-   two separate full-screen states, never crammed side by side. */
-#panes.solo { grid-template-columns: 230px 1fr; }
+   two separate full-screen states, never crammed side by side. Each mode
+   shows exactly three grid children — left pane, drag handle, right pane —
+   so the hidden mode's handle must be hidden with its panes or it would
+   claim a column. */
+#panes { flex: 1; display: grid; grid-template-columns: var(--sb-w) var(--rs-w) 1fr; min-height: 0; }
+#panes.solo { grid-template-columns: var(--sb-w) var(--rs-w) 1fr; }
 #panes.solo.nosb { grid-template-columns: 1fr; }
-#panes.solo.nosb #branches-pane { display: none; }
-#panes.detail #branches-pane { display: none; }
-#panes.solo #files-pane, #panes.solo #diff-pane { display: none; }
-#panes.detail { grid-template-columns: 3fr 9fr; }
-#panes.detail #commits-pane { display: none; }
+#panes.solo.nosb #branches-pane, #panes.solo.nosb #rs-sidebar { display: none; }
+#panes.solo #files-pane, #panes.solo #diff-pane, #panes.solo #rs-detail { display: none; }
+#panes.detail { grid-template-columns: var(--files-w) var(--rs-w) 1fr; }
+#panes.detail #branches-pane, #panes.detail #rs-sidebar, #panes.detail #commits-pane { display: none; }
+/* The handle is its own grid column, so dragging never overlaps a pane's
+   content and the hit area does not depend on hovering a 1px border. */
+.resizer { cursor: col-resize; background: var(--bg); touch-action: none; }
+.resizer:hover, .resizer.dragging { background: var(--accent); }
+body.resizing { cursor: col-resize; user-select: none; }
 .pane { overflow: auto; border-right: 1px solid var(--border); min-width: 0; }
 .pane.focused { box-shadow: inset 2px 0 0 var(--accent); }
 #commits-pane { overflow: hidden; }
