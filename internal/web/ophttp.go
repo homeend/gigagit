@@ -23,9 +23,10 @@ type opStartRequest struct {
 }
 
 // handleOpStart begins an operation and returns 202 {op_id}. Ops wired so
-// far: switch, commit, pull, push, merge, rebase, delete-branch, delete-tag,
-// remove-worktree, stash, stash-apply, stash-pop, stash-drop, discard; the
-// switch statement is where future ops land.
+// far: switch, commit, fetch, pull, push, merge, rebase, delete-branch,
+// delete-tag, remove-worktree, stash, stash-apply, stash-pop, stash-drop,
+// discard; the switch statement is where future ops land. pull and push each
+// take an OPTIONAL branch — omitted means the current one.
 func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 	svc := s.service()
 	var req opStartRequest
@@ -79,22 +80,43 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		op = engine.Commit{Message: req.Message}
+	case "fetch":
+		op = engine.Fetch{} // all remotes; no arguments, no decisions
 	case "pull":
-		op = engine.SmartPull{} // current branch, its configured remote, PullAndStay
-	case "push":
-		// Branch resolved server-side — nothing client-sent reaches argv, and
-		// Force is never wire-settable (force is only reachable through the
-		// op's own parked push-rejected → push-force decisions).
-		branch, berr := svc.CurrentBranch(r.Context())
-		if berr != nil {
-			writeErr(w, http.StatusInternalServerError, berr)
+		// No branch = the current one, checked out and stayed on (the header
+		// button and palette). A named branch pulls WITHOUT leaving the
+		// current one — SmartPull sends the current branch down its own lane
+		// anyway when the two coincide, so the client needs no precondition.
+		if req.Branch == "" {
+			op = engine.SmartPull{} // current branch, its configured remote, PullAndStay
+			break
+		}
+		if !isGitArgSafe(req.Branch) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid branch"))
 			return
 		}
+		op = engine.SmartPull{Branch: req.Branch, Intent: engine.PullInBackground}
+	case "push":
+		// Force is never wire-settable — force is only reachable through the
+		// op's own parked push-rejected → push-force decisions.
+		branch := req.Branch
 		if branch == "" {
-			// Detached HEAD only. An unborn branch still resolves via
-			// symbolic-ref, so it dispatches and surfaces git's own refspec
-			// error through the op instead.
-			writeErr(w, http.StatusConflict, errors.New("push: no current branch (detached HEAD?)"))
+			// No branch named: resolve the current one server-side.
+			cur, berr := svc.CurrentBranch(r.Context())
+			if berr != nil {
+				writeErr(w, http.StatusInternalServerError, berr)
+				return
+			}
+			if cur == "" {
+				// Detached HEAD only. An unborn branch still resolves via
+				// symbolic-ref, so it dispatches and surfaces git's own refspec
+				// error through the op instead.
+				writeErr(w, http.StatusConflict, errors.New("push: no current branch (detached HEAD?)"))
+				return
+			}
+			branch = cur
+		} else if !isGitArgSafe(branch) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid branch"))
 			return
 		}
 		op = engine.Push{Remote: "origin", Branch: branch, SetUpstream: true} // the TUI's exact P dispatch

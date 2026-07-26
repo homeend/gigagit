@@ -8,6 +8,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- web: **fetch all remotes** in the ☰ menu and command palette, and per-branch
+  **pull** / **push** on a branch's right-click menu. Pulling a branch you are
+  not standing on updates it in place and leaves you where you are — no
+  checkout, so nothing to confirm; pulling the branch you *are* on keeps the
+  existing confirm, since it can rewrite the working tree. `pull` and `push`
+  now take an optional `branch` on the wire; omitting it means the current
+  branch, exactly as before.
 - web: a branch's right-click menu gains **copy branch name**, **copy commit
   id** (its tip), and **copy worktree absolute path** — the last only when
   some worktree has that branch checked out. A copy now reports what it

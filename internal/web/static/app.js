@@ -278,6 +278,25 @@ function doPull() {
   });
 }
 
+// Pulling a branch you are NOT standing on updates its ref without checking
+// it out, so there is nothing to rewrite and nothing to confirm — unlike
+// doPull above. The server sends the current branch down the ordinary
+// pull-and-stay lane if the two happen to coincide.
+function doPullBranch(name) {
+  if (state.op) return;
+  startOp({ op: "pull", branch: name }, "pulling " + name);
+}
+
+function doPushBranch(name) {
+  if (state.op) return;
+  startOp({ op: "push", branch: name }, "pushing " + name);
+}
+
+function doFetch() {
+  if (state.op) return;
+  startOp({ op: "fetch" }, "fetching");
+}
+
 function doPush() {
   if (state.op) return;
   startOp({ op: "push" }, "pushing");
@@ -513,6 +532,15 @@ function worktreePathForBranch(name) {
 function showBranchMenu(b, x, y) {
   const items = [{ label: "go to tip", act: () => gotoBranchTip(b) }];
   if (!b.is_head) items.push({ label: "switch to " + b.name, act: () => startSwitch(b.name) });
+  if (b.is_head) {
+    // The checked-out branch: pulling it rewrites the working tree, so it
+    // goes through the confirming current-branch path the header button uses.
+    items.push({ label: "pull " + b.name, act: () => doPull() });
+    items.push({ label: "push " + b.name, act: () => doPush() });
+  } else {
+    items.push({ label: "pull " + b.name + " (stay here)", act: () => doPullBranch(b.name) });
+    items.push({ label: "push " + b.name, act: () => doPushBranch(b.name) });
+  }
   items.push({ label: "copy branch name", act: () => copyText(b.name, "branch name " + b.name) });
   // b.hash is git's abbreviated sha (%(objectname:short)) — the same value
   // the TUI's row copies, and short enough to name in full on the line.
@@ -1707,6 +1735,7 @@ function paletteCommands() {
   return [
     { label: "pull", detail: "p", run: () => doPull() },
     { label: "push", detail: "P", run: () => doPush() },
+    { label: "fetch all remotes", detail: "", run: () => doFetch() },
     { label: "refresh", detail: "r", run: () => { if (!state.op) refreshAfterOp(); } },
     { label: "switch repo…", detail: "", run: null }, // drills into repo mode (runPaletteRow)
     { label: "open working tree", detail: "", run: () => openWorkingTree(0) }, // 0 = the WT row; a bare call would set state.cursor = undefined and break j/k/enter
@@ -1829,6 +1858,7 @@ function openGlobalMenu() {
     [
       { label: "pull", act: () => doPull() },
       { label: "push", act: () => doPush() },
+      { label: "fetch all remotes", act: () => doFetch() },
       { label: "refresh", act: () => { if (!state.op) refreshAfterOp(); } },
       { label: "switch repo…", act: () => openPalette("repo") },
       { label: "command palette…", act: () => openPalette("cmd") },
