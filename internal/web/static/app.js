@@ -929,8 +929,8 @@ $("stashes-list").addEventListener("contextmenu", (e) => {
   if (st) showStashMenu(st, e.clientX, e.clientY);
 });
 
-// A partially-staged file appears twice: once under Staged (unstage
-// control), once under Changes (stage control) — the git-status model.
+// A partially-staged file appears twice: once under Changes (stage control),
+// once under Staged (unstage control) — the git-status model.
 function buildStatusEntries() {
   const es = [];
   for (const f of state.wt ? state.wt.files : []) {
@@ -941,7 +941,11 @@ function buildStatusEntries() {
       if (f.unstaged !== ".") es.push({ ...f, section: "changes" });
     }
   }
-  const order = { staged: 0, changes: 1, untracked: 2, conflicts: 3 };
+  // Staged sits LAST: everything above it still wants attention, and what is
+  // already staged does not. Staging a hunk otherwise made the file jump
+  // upward into a section you were done with, pushing the rest of the work
+  // down — the list appeared to reorder itself under the cursor.
+  const order = { changes: 0, untracked: 1, conflicts: 2, staged: 3 };
   es.sort((a, b) => order[a.section] - order[b.section] || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
   state.statusEntries = es;
 }
