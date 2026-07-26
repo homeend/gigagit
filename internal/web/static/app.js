@@ -768,7 +768,7 @@ function wtRowHTML(i) {
   if (c.conflicted) parts.push(c.conflicted + " conflicted");
   return (
     `<div class="crow wt${sel}" data-i="${i}">` +
-    `<span class="graph">●</span>` +
+    `<span class="graph">${flatDotSVG("#e0c06c")}</span>` +
     `<span class="subj">Working tree</span>` +
     `<span class="meta">${esc(parts.join(" · "))}</span></div>`
   );
@@ -809,11 +809,25 @@ function rowHTML(row, i) {
 function graphHTML(row, feedIdx) {
   if (state.graphMode === "off") {
     // flat mode: one dot per row in the commit's lane color — dots keep
-    // rows visually separate (full-height bars merged into one line)
+    // rows visually separate (full-height bars merged into one line).
+    // Drawn as a ONE-CELL SVG with the graph's own geometry so its centre
+    // lands exactly on the leftmost lane's centre; a text glyph would
+    // centre wherever the font's advance width happens to put it.
     const col = runes(row.cells || "").indexOf("●");
-    return `<span class="flatdot lane-${col >= 0 ? (col >> 1) % 8 : 0}">●</span>`;
+    return flatDotSVG(laneColor(col >= 0 ? col >> 1 : 0));
   }
   return graphSVG(row, feedIdx);
+}
+
+// flatDotSVG draws a single node dot in a one-cell box, identical in
+// geometry to graphSVG's leftmost-lane circle. It keeps the .flatdot class
+// so the existing spacing rule still applies — graph mode's own spacing
+// must not change.
+function flatDotSVG(color) {
+  return (
+    `<svg class="flatdot" width="${CELL_W}" height="${ROW_H}" viewBox="0 0 ${CELL_W} ${ROW_H}">` +
+    `<circle cx="${HALF}" cy="${MID}" r="4" fill="${color}"/></svg>`
+  );
 }
 
 function toggleGraphMode() {

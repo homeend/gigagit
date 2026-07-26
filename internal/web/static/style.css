@@ -174,7 +174,7 @@ mark.r { background: var(--span-add); color: inherit; }
 #help-box h3 { margin: 14px 0 6px; font-size: 12px; color: var(--dim); text-transform: uppercase; letter-spacing: .05em; }
 #help-box .hrow { display: flex; gap: 14px; line-height: 1.65; }
 #help-box .hkey { flex: none; width: 140px; color: var(--accent); }
-.crow .graph .flatdot { margin-right: 10px; }
+.crow .graph .flatdot { display: inline-block; margin-right: 10px; }
 
 /* command palette (z-index 21: above modal 10 / help 11 / ctx-menu 20) */
 #palette { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: flex-start; justify-content: center; z-index: 21; }
