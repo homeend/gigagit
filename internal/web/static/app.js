@@ -16,7 +16,8 @@ const state = {
   // with the lane column's space going to subjects.
   graphMode: "svg", // svg | off
   wt: null, // /api/status payload while the tree is dirty, else null
-  filesMode: "commit", // commit | status
+  filesMode: "commit", // commit | status | compare
+  compare: null, // {a, b, aHash, bHash, all, filter, originsError} while comparing two branches
   statusEntries: [],
   branches: [],
   worktrees: [],
@@ -546,6 +547,17 @@ function defaultWorktreePath(branch) {
   return parent + sep + name + "-" + branch.replace(/[^\w.-]+/g, "-");
 }
 
+// The global create-branch entry (☰ / palette): same op as the branch
+// menu's row, but with no start point on the wire — the server reads that as
+// HEAD, which is what "new branch" means with nothing selected.
+function openCreateBranchPrompt() {
+  openPrompt({
+    title: "New branch, starting at the current HEAD:",
+    placeholder: "branch name",
+    onSubmit: (name) => startOp({ op: "create-branch", name }, "creating " + name),
+  });
+}
+
 function showBranchMenu(b, x, y) {
   const items = [{ label: "go to tip", act: () => gotoBranchTip(b) }];
   if (!b.is_head) items.push({ label: "switch to " + b.name, act: () => startSwitch(b.name) });
@@ -707,6 +719,8 @@ function showBranchPairMenu(src, dst, x, y) {
         label: "rebase " + src + " onto " + dst,
         act: () => startOp({ op: "rebase", branch: src, onto: dst }, "rebasing " + src + " onto " + dst),
       },
+      // Read-only, so it sits below the two ops that rewrite history.
+      { label: "compare " + src + " ↔ " + dst, act: () => openCompare(src, dst) },
     ],
     x,
     y
@@ -1262,6 +1276,94 @@ async function openStashDetail(st) {
   if (state.files.length) openFile(0);
 }
 
+// --- branch ↔ branch comparison ---
+//
+// Opens the same detail screen a commit uses, over the whole tip-to-tip
+// changed-file list. Each file's per-side diff runs against the two TIP
+// HASHES the server resolved (never the branch names — see compare.go), so
+// the diff cache cannot serve a stale side after a commit.
+async function openCompare(a, b) {
+  const gen = ++state.detailGen;
+  let body;
+  try {
+    body = await getJSON("/api/compare?a=" + encodeURIComponent(a) + "&b=" + encodeURIComponent(b));
+  } catch (e) {
+    opLine("compare failed: " + (e.message || e), true);
+    return;
+  }
+  if (gen !== state.detailGen) return; // superseded by a newer open or esc
+  state.compare = {
+    a,
+    b,
+    aHash: body.a_hash,
+    bHash: body.b_hash,
+    all: body.files || [],
+    filter: "all",
+    originsError: body.origins_error || "",
+  };
+  state.filesMode = "compare";
+  state.fileSha = null;
+  state.pane = "files";
+  setLayout("detail");
+  $("files-header").textContent = a + " ↔ " + b;
+  applyCompareFilter();
+  focusPane();
+}
+
+// The origin filter (the TUI's f key): "all", or only the files one side
+// touched since the two diverged. A file both sides touched stays in both
+// filtered views — the TUI's filterCompareFiles rule.
+function applyCompareFilter() {
+  const c = state.compare;
+  state.files =
+    c.filter === "all" ? c.all : c.all.filter((f) => f.origin === c.filter || f.origin === "both");
+  state.fileCursor = 0;
+  renderFiles();
+  updateDiffNav();
+  if (state.files.length) {
+    openFile(0);
+  } else {
+    $("diff-title").textContent = "";
+    $("diff-body").innerHTML = `<div class="notice">${
+      c.all.length ? "no files match this filter" : "the two branches are identical"
+    }</div>`;
+  }
+}
+
+function renderCompareBar() {
+  const bar = $("compare-bar");
+  const c = state.filesMode === "compare" ? state.compare : null;
+  if (!c) {
+    bar.classList.add("hidden");
+    bar.innerHTML = "";
+    return;
+  }
+  bar.classList.remove("hidden");
+  // Without a merge base there are no origin sets, so only "all" is
+  // meaningful — the comparison itself still stands (compare.go).
+  const off = c.originsError
+    ? ` disabled title="${esc(c.originsError)} — the per-side filter needs a merge base"`
+    : "";
+  const rows = [
+    ["all", "all (" + c.all.length + ")", ""],
+    ["a", "only " + c.a, off],
+    ["b", "only " + c.b, off],
+  ];
+  bar.innerHTML = rows
+    .map(
+      ([key, label, attrs]) =>
+        `<button data-f="${key}"${c.filter === key ? ' class="on"' : ""}${attrs}>${esc(label)}</button>`
+    )
+    .join("");
+}
+
+$("compare-bar").addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-f]");
+  if (!btn || !state.compare) return;
+  state.compare.filter = btn.dataset.f;
+  applyCompareFilter();
+});
+
 async function openWorkingTree(i) {
   state.cursor = i;
   renderCommits();
@@ -1283,6 +1385,9 @@ async function openWorkingTree(i) {
 const SECTION_LABELS = { staged: "Staged", changes: "Changes", untracked: "Untracked", conflicts: "Conflicts" };
 
 function renderFiles() {
+  // Driven off filesMode, not off state.compare, so the bar cannot linger
+  // into the next commit's detail screen.
+  renderCompareBar();
   if (state.filesMode !== "status") {
     $("files-actions").classList.add("hidden");
     $("commit-box").classList.add("hidden");
@@ -1327,7 +1432,13 @@ async function openFile(i) {
   updateDiffNav();
   if (state.filesMode === "status") return openStatusDiff(i);
   const f = state.files[i];
-  const q = new URLSearchParams({ sha: f.sha || state.fileSha, path: f.path, status: f.status });
+  const q = new URLSearchParams({ path: f.path, status: f.status });
+  if (state.filesMode === "compare") {
+    q.set("left", state.compare.aHash);
+    q.set("right", state.compare.bHash);
+  } else {
+    q.set("sha", f.sha || state.fileSha);
+  }
   if (f.old_path) q.set("old", f.old_path);
   $("diff-title").textContent = f.path;
   $("diff-body").innerHTML = `<div class="notice">loading…</div>`;
@@ -1874,6 +1985,7 @@ function paletteCommands() {
     { label: "pull", detail: "p", run: () => doPull() },
     { label: "push", detail: "P", run: () => doPush() },
     { label: "fetch all remotes", detail: "", run: () => doFetch() },
+    { label: "create branch…", detail: "", run: () => openCreateBranchPrompt() },
     { label: "refresh", detail: "r", run: () => { if (!state.op) refreshAfterOp(); } },
     { label: "switch repo…", detail: "", run: null }, // drills into repo mode (runPaletteRow)
     { label: "open working tree", detail: "", run: () => openWorkingTree(0) }, // 0 = the WT row; a bare call would set state.cursor = undefined and break j/k/enter
@@ -1997,6 +2109,7 @@ function openGlobalMenu() {
       { label: "pull", act: () => doPull() },
       { label: "push", act: () => doPush() },
       { label: "fetch all remotes", act: () => doFetch() },
+      { label: "create branch…", act: () => openCreateBranchPrompt() },
       { label: "refresh", act: () => { if (!state.op) refreshAfterOp(); } },
       { label: "switch repo…", act: () => openPalette("repo") },
       { label: "command palette…", act: () => openPalette("cmd") },
