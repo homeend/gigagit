@@ -42,6 +42,14 @@ func TestRerootRecordsNewRoot(t *testing.T) {
 	}
 }
 
+type reposResp struct {
+	Repos []struct {
+		Path    string `json:"path"`
+		Name    string `json:"name"`
+		Current bool   `json:"current"`
+	} `json:"repos"`
+}
+
 func TestReposEndpoint(t *testing.T) {
 	dir := newRepoDir(t, 1)
 	other := newRepoDir(t, 1)
@@ -52,13 +60,46 @@ func TestReposEndpoint(t *testing.T) {
 	}
 	ts := serve(t, srv)
 
-	var out struct {
-		Repos []struct{ Path, Name string } `json:"repos"`
-	}
+	var out reposResp
 	if code := getJSON(t, ts, "/api/repos", &out); code != http.StatusOK {
 		t.Fatalf("code = %d", code)
 	}
 	if len(out.Repos) != 1 || out.Repos[0].Path != other || out.Repos[0].Name == "" {
 		t.Fatalf("repos = %+v", out.Repos)
+	}
+}
+
+// The picker filters on this flag, so the served repo must carry it and its
+// neighbours must not — otherwise "switch repo" offers the repo already open
+// and switching to it does nothing.
+func TestReposMarksServedRepoCurrent(t *testing.T) {
+	dir := newRepoDir(t, 1)
+	other := newRepoDir(t, 1)
+	srv := New(domain.Open(dir))
+	srv.reposPath = filepath.Join(t.TempDir(), "repos.toml")
+	now := time.Now()
+	for _, p := range []string{dir, other} {
+		if err := repos.Touch(srv.reposPath, p, now); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ts := serve(t, srv)
+
+	var out reposResp
+	if code := getJSON(t, ts, "/api/repos", &out); code != http.StatusOK {
+		t.Fatalf("code = %d", code)
+	}
+	if len(out.Repos) != 2 {
+		t.Fatalf("repos = %+v, want both", out.Repos)
+	}
+	seen := map[string]bool{}
+	for _, r := range out.Repos {
+		seen[r.Path] = r.Current
+	}
+	if !seen[dir] {
+		t.Errorf("served repo %s not marked current: %+v", dir, out.Repos)
+	}
+	if seen[other] {
+		t.Errorf("a different repo %s marked current: %+v", other, out.Repos)
 	}
 }

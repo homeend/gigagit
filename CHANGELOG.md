@@ -8,6 +8,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- web: fixed **switch repo** offering the repository already open — picking it
+  re-rooted onto the same repo. The list is filtered by the server now,
+  because the two sides of "is this the one I'm serving?" were spelled
+  differently: git reports a top-level with forward slashes even on Windows,
+  while the recent-repos registry stores platform-cleaned paths, so on
+  Windows the two never matched. Linux was unaffected, which is why it took a
+  report to find.
 - web: **review with an AI agent** — right-click a branch for *review … (AI)*,
   or reach *review working changes (AI)* from the ☰ menu and the command
   palette. gg runs a review agent you have configured (a `[[tools.command]]`
