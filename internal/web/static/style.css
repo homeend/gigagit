@@ -238,3 +238,19 @@ tr.hk.picked td.no { background: var(--sel); color: var(--fg); }
 #hunk-bar button:hover:not(:disabled) { border-color: var(--accent); }
 #hunk-bar button:disabled { opacity: .45; cursor: default; }
 #hunk-bar #hunk-stage:not(:disabled) { color: var(--accent); }
+
+/* Branch versions (the operations history) — a list overlay on the shared
+   layer stack, styled after the palette. */
+#versions { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: flex-start; justify-content: center; z-index: 21; }
+#versions.hidden { display: none; }
+#versions-box { margin-top: 14vh; background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; width: 92vw; max-width: 720px; display: flex; flex-direction: column; }
+#versions-title { padding: 10px 14px; border-bottom: 1px solid var(--border); }
+#versions-hint { padding: 6px 14px; border-top: 1px solid var(--border); color: var(--dim); font-size: 11px; }
+#versions-list { list-style: none; margin: 0; padding: 6px 0; max-height: 55vh; overflow-y: auto; }
+#versions-list li { display: flex; gap: 10px; padding: 5px 14px; cursor: pointer; white-space: nowrap; }
+#versions-list li:hover { background: var(--sel); }
+#versions-list li.empty { color: var(--dim); cursor: default; }
+#versions-list .vwhen { color: var(--dim); width: 13em; overflow: hidden; text-overflow: ellipsis; }
+#versions-list .vop { color: var(--accent); width: 9em; overflow: hidden; text-overflow: ellipsis; }
+#versions-list .vsha { color: var(--dim); }
+#versions-list .vsub { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; }

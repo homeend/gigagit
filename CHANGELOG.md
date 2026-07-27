@@ -8,6 +8,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- web: **previous versions** — right-click a branch for the operations
+  history: what it pointed at before each recent merge, rebase, amend, reset
+  or delete, newest first with how long ago. Click one to restore the branch
+  to it (asked for first), copy its commit id, or delete the snapshot.
+  Restoring is itself recorded, so it can be undone the same way.
 - web: **compare two branches** — drag one branch onto another and pick
   *compare A ↔ B* (the third row, below merge and rebase). The whole
   tip-to-tip changed-file list opens in the existing detail screen, and a bar

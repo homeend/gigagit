@@ -28,7 +28,8 @@ type opStartRequest struct {
 // handleOpStart begins an operation and returns 202 {op_id}. Ops wired so
 // far: switch, commit, fetch, pull, push, merge, rebase, create-branch,
 // rename-branch, create-worktree, delete-branch, delete-tag, remove-worktree,
-// stash, stash-apply, stash-pop, stash-drop, discard; the switch statement is
+// stash, stash-apply, stash-pop, stash-drop, discard, restore-version,
+// delete-version; the switch statement is
 // where future ops land. pull and push each take an OPTIONAL branch — omitted
 // means the current one.
 func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
@@ -257,6 +258,32 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusNotFound, errors.New("unknown stash"))
 			return
 		}
+	case "restore-version":
+		// Move a branch back to a recorded snapshot. The engine snapshots the
+		// pre-restore tip first (a restore is itself undoable), refuses a
+		// branch checked out in another worktree, and forks "restore-dirty"
+		// into the parking modal when the current branch has uncommitted
+		// changes. It also verifies the ref BELONGS to the branch, so the two
+		// values cannot be crossed.
+		if req.Branch == "" || !isGitArgSafe(req.Branch) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid branch"))
+			return
+		}
+		if req.Ref == "" || !isGitArgSafe(req.Ref) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid version ref"))
+			return
+		}
+		op = engine.RestoreBranchVersion{Branch: req.Branch, Ref: req.Ref}
+	case "delete-version":
+		// Removes one snapshot ref. Decision-free — the client confirms first
+		// (the delete-tag convention). The engine refuses any ref outside
+		// refs/gg/versions/, which is what keeps a client bug from deleting a
+		// real branch or tag through this op.
+		if req.Ref == "" || !isGitArgSafe(req.Ref) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid version ref"))
+			return
+		}
+		op = engine.DeleteBranchVersion{Ref: req.Ref}
 	case "discard":
 		// Per-file discard. The path resolves against a fresh status read
 		// (the remove-worktree/stash allowlist pattern): a stale client row
