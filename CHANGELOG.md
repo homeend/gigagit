@@ -8,6 +8,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- web: fixed the **previous versions** rows being dead to the mouse. A left
+  click opened the row menu and the same click immediately closed it again;
+  a right click fell through to the browser's own menu. Both buttons now open
+  the row menu and it stays up.
 - web: **force push** — a new row on a branch's right-click menu. It does not
   force anything on its own: it opens the same force-mode prompt an ordinary
   rejected push shows — *force-with-lease* (refuses if the remote moved since
