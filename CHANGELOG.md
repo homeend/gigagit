@@ -8,6 +8,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- web: **clicking the "review running in the background" line now reopens the
+  review** instead of doing nothing — and double-clicking it no longer makes
+  it vanish. That line is the most visible mention of a backgrounded run, so
+  it is what you click; the status strip's dismiss-on-double-click is only
+  advertised in the header shown for *errors*, which made it invisible here.
+  Every other status message keeps its old dismiss behaviour.
 - web: the **"review running in the background" line now clears when the run
   ends** instead of being replaced by another line you had to dismiss by
   hand — the chip in the top bar is what announces the result. (A failure
