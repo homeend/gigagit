@@ -8,6 +8,18 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- web: **review with an AI agent** — right-click a branch for *review … (AI)*,
+  or reach *review working changes (AI)* from the ☰ menu and the command
+  palette. gg runs a review agent you have configured (a `[[tools.command]]`
+  block with `category = "review"`, the same ones `gg review` and the TUI
+  use), then shows the report and saves it to a file.
+
+  The browser names a **tool**, never a command: the command text comes from
+  your own config, is resolved server-side, and is shown to you in full
+  before its first run. Approving it is remembered per repository until you
+  edit the command — and the memory is shared with the TUI, so approving in
+  either covers both. A run holds the operation lane and can take minutes, so
+  it can be **cancelled** at any point, including while it is starting.
 - web: fixed the **previous versions** rows being dead to the mouse. A left
   click opened the row menu and the same click immediately closed it again;
   a right click fell through to the browser's own menu. Both buttons now open
