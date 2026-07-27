@@ -212,7 +212,12 @@ function opLine(text, isErr) {
   // every message expires after 30s — but never while its op still runs
   // (each op event overwrites the line and re-arms the timer anyway)
   opLineTimer = setTimeout(() => {
-    if (state.op) return; // NOT opBusy(): that reports, and reporting re-arms this timer
+    // NOT opBusy(): that reports, and reporting re-arms this timer.
+    // A BACKGROUNDED review is exempt from the never-expire-while-running
+    // rule: that rule assumes the line is being rewritten by the op's own
+    // progress events, and a parked run emits none — so its line would
+    // otherwise just sit there for the whole run. The chip is the indicator.
+    if (state.op && !parkedRunning()) return;
     hideOpLine();
   }, 30000);
 }
@@ -229,9 +234,15 @@ $("op-line").addEventListener("dblclick", hideOpLine);
 // to sit in front of a visible modal or progress line that explained itself,
 // but a backgrounded review holds the lane with nothing on screen at all —
 // and a button that does nothing without saying why reads as broken.
+// parkedRunning: a review is live but backgrounded, so the only thing on
+// screen speaking for it is the top-bar chip.
+function parkedRunning() {
+  return !!(state.task && state.task.status === "running");
+}
+
 function opBusy() {
   if (!state.op) return false;
-  if (state.task && state.task.status === "running") {
+  if (parkedRunning()) {
     opLine("a review is running in the background — open the chip to watch or cancel it", true);
   } else {
     opLine("an operation is already running", true);
@@ -825,7 +836,13 @@ function reviewDone(ev) {
     };
     if (state.task.status === "cancelled") state.task = null; // nothing to collect
     renderTaskChip(true);
-    opLine(ev.ok ? "review ready — open it from the chip in the top bar" : "review failed: " + (ev.error || "unknown error"), !ev.ok);
+    // The banner belongs to the RUN, so it goes when the run does — the chip
+    // is what announces the result, and a second, permanent status line
+    // saying the same thing is clutter you have to dismiss by hand.
+    // A failure still speaks: an error that vanished silently would be worse
+    // than one line of clutter.
+    if (ev.ok) hideOpLine();
+    else opLine("review failed: " + (ev.error || "unknown error"), true);
     return;
   }
   if (ev.ok) {
@@ -1041,9 +1058,12 @@ function openReport(title, path, content) {
 
 $("report-close").addEventListener("click", () => closeLayer("report"));
 $("report-copy").addEventListener("click", () => copyText($("report-body").textContent, "the report"));
-$("report").addEventListener("click", (e) => {
-  if (e.target.id === "report") closeLayer("report"); // backdrop
-});
+// Deliberately NO backdrop-closes handler, unlike the picker overlays. A
+// report is a document you read, and the chip that raised it is cleared the
+// moment it opens — so a stray click outside the box used to discard the
+// only copy in the UI. Double-clicking the ready chip did exactly that: the
+// first click opened the report, the second landed on this backdrop.
+// Closing stays explicit: the close button, or esc via the layer stack.
 
 // The global create-branch entry (☰ / palette): same op as the branch
 // menu's row, but with no start point on the wire — the server reads that as
