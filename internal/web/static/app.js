@@ -511,6 +511,13 @@ async function gotoBranchTip(b) {
 
 function hideCtxMenu() {
   closeLayer("ctx");
+  // Emptied, not just hidden: a closed menu that still holds its last rows
+  // reads as open to anything inspecting the DOM — which is exactly how a
+  // browser check of the versions popup passed while the menu was in fact
+  // being closed in the same event it opened.
+  const menu = $("ctx-menu");
+  menu.innerHTML = "";
+  menu._items = null;
 }
 
 // showCtxMenu renders the shared right-click menu at (x,y): safe actions
@@ -650,13 +657,22 @@ function showVersionMenu(branch, v, x, y) {
   );
 }
 
-$("versions-list").addEventListener("click", (e) => {
+// Both buttons open the row menu. LEFT click must stopPropagation: the
+// document-level outside-click closer would otherwise see this very click
+// bubble up and shut the menu in the same event, so the row would look dead
+// (the ☰ button's lesson). RIGHT click must preventDefault or the browser's
+// own context menu covers ours.
+function versionRowMenu(e) {
   const li = e.target.closest("li[data-i]");
   if (!li) return;
+  e.preventDefault();
+  e.stopPropagation();
   const list = $("versions-list");
   const v = list._rows[Number(li.dataset.i)];
   if (v) showVersionMenu(list._branch, v, e.clientX, e.clientY);
-});
+}
+$("versions-list").addEventListener("click", versionRowMenu);
+$("versions-list").addEventListener("contextmenu", versionRowMenu);
 $("versions").addEventListener("click", (e) => {
   if (e.target.id === "versions") closeVersions(); // backdrop
 });
