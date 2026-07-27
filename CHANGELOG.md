@@ -8,6 +8,17 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- web: an AI review can now be **put in the background**. *run in background*
+  (or esc, or clicking outside the box) hides the waiting dialog and leaves
+  the agent running; a chip appears in the top bar, and clicking it brings the
+  run back so you can watch or cancel it. When the report is ready the chip
+  fills and blinks, and the report **waits there** until you click it —
+  finishing a run no longer interrupts what you were doing.
+
+  Backgrounding never cancels: only the labelled *cancel the run* button does.
+  While a run is live you can read the repo normally, but a second operation
+  still waits for it — and now says so instead of doing nothing, which
+  previously only worked because the dialog was on screen to explain itself.
 - web: fixed **switch repo** offering the repository already open — picking it
   re-rooted onto the same repo. The list is filtered by the server now,
   because the two sides of "is this the one I'm serving?" were spelled

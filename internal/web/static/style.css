@@ -200,6 +200,24 @@ mark.r { background: var(--span-add); color: inherit; }
 }
 #top #solo-chip:hover { background: var(--accent); color: var(--bg); }
 #top #solo-chip.hidden { display: none; }
+/* Background-task chip: a parked run's only remaining presence. While the
+   run is live it is quiet (outline); when it finishes it has to be noticed
+   without stealing the screen, so it fills and blinks — for a FIXED number
+   of iterations, then stays filled. An endless blink is noise you learn to
+   ignore; a one-shot flash is one you can miss. */
+#top #task-chip {
+  margin-left: 10px; background: none; color: var(--dim);
+  border: 1px solid var(--border); border-radius: 3px; padding: 1px 10px;
+  font: inherit; cursor: pointer;
+}
+#top #task-chip.hidden { display: none; }
+#top #task-chip.running { color: var(--fg); }
+#top #task-chip.running:hover { border-color: var(--accent); }
+#top #task-chip.ready { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+#top #task-chip.failed { background: #f27a6a; color: var(--bg); border-color: #f27a6a; }
+#top #task-chip.blink { animation: taskblink .8s steps(1, end) 6; }
+@keyframes taskblink { 50% { background: none; color: var(--fg); } }
+@media (prefers-reduced-motion: reduce) { #top #task-chip.blink { animation: none; } }
 #top #pull-btn:disabled, #top #push-btn:disabled { opacity: .45; cursor: default; }
 #help { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; z-index: 11; cursor: pointer; }
 #help.hidden { display: none; }
