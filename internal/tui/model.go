@@ -178,7 +178,8 @@ type Model struct {
 	opStart   time.Time // when the in-flight op began; the heartbeat reads it for the busy line's elapsed readout
 	opIsFetch bool      // the in-flight op is engine.Fetch → record its duration into the fetch refresh row on completion
 	statusMsg string
-	lastError string // full text of the most recent failure status message; [E] shows it wrapped (error_popup.go)
+	lastError string // full text of the most recent status message worth reopening (a failure, or anything the one-line bar had to cut); [E] shows it wrapped (error_popup.go)
+	loadedOK  bool   // a snapshot load has succeeded at least once: a later failure keeps the interface instead of blanking it
 	opMsgs    chan tea.Msg
 	modal     *decisionState
 	recorder  *recorder // keystroke recorder (nil unless gg --record)
@@ -309,7 +310,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// would silently skip the capture instead of failing loud — lastError
 	// would quietly go stale and [E] would show an older failure, with no
 	// test catching it.
-	if next, ok := nm.(Model); ok && next.statusMsg != before && statusIsError(next.statusMsg) {
+	if next, ok := nm.(Model); ok && next.statusMsg != before && statusNeedsFull(next.statusMsg, next.width) {
 		next.lastError = next.statusMsg
 		return next, cmd
 	}
@@ -786,8 +787,19 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loading = false
 		m.ready = true
 		m.commitsLoading = false // the full load (which includes the feed) is done
+		// A failed load replaces the whole screen with a bare error line (see
+		// View), which is the right answer at startup — there is no interface
+		// yet — but a trap once one is up: a repo switch into an unreadable
+		// repo would leave no panels, no status bar and no key to press. Once
+		// a load has succeeded, report the failure like any other and keep the
+		// interface, so [E] can show git's full text.
+		if msg.err != nil && m.loadedOK {
+			m.statusMsg = i18n.T("error: %s", msg.err.Error())
+			return m, nil
+		}
 		m.err = msg.err
 		if msg.err == nil {
+			m.loadedOK = true
 			m = m.withStatus(msg.status)
 			m.conflict = msg.conflict
 			m.branches = msg.branches

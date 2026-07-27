@@ -156,6 +156,29 @@ func friendlyPushError(low string) (string, bool) {
 // to its first verb). A translation that reorders its arguments ahead of
 // the topic word yields a too-short head and is skipped — that message
 // just renders unstyled, never mis-styled.
+// statusNeedsFull reports whether a status message's untruncated text has to
+// be kept for [E].
+//
+// Classification alone is not enough. statusIsError matches a short allowlist
+// of prefixes, but the TUI sets ~40 distinct error-prefixed messages — the
+// per-source refresh failures ("branches: <git stderr>", "worktrees: …") among
+// them, of which only "commits:" happens to be listed. Those went unclassified,
+// so a repo switch that failed while reloading branches truncated a paragraph
+// of git stderr into one line with no way to read the rest. Rather than grow
+// the allowlist (the next prefix added elsewhere would be missed again), the
+// second condition is structural: ANY message the one-line bar cannot show in
+// full is worth keeping, error or not. Nothing has to be registered for it to
+// work.
+//
+// width <= 0 means the terminal size has not arrived yet; fall back to
+// classification rather than treating every message as overflowing.
+func statusNeedsFull(msg string, width int) bool {
+	if statusIsError(msg) {
+		return true
+	}
+	return width > 0 && lipgloss.Width(oneLine(msg)) > width
+}
+
 func statusIsError(msg string) bool {
 	for _, p := range statusErrorPrefixes {
 		if strings.HasPrefix(msg, p) {
@@ -460,7 +483,12 @@ func (m Model) renderInterface() string {
 	// pointer leads the line so ordinary truncation can never eat it (it cuts
 	// from the back), and E opens the untruncated text wrapped in a popup.
 	full := oneLine(statusLine)
-	if errMode {
+	// The pointer leads on any error (git stderr is worth opening even when it
+	// fits) and on any other message the bar had to cut — but only when
+	// lastError actually holds THIS message, so it can never point at text the
+	// popup would not show.
+	haveFull := m.lastError != "" && m.lastError == m.statusMsg
+	if errMode || (haveFull && lipgloss.Width(full) > g.w) {
 		full = i18n.T("[E] full details") + " · " + full
 	}
 	statusRow := truncate(full, g.w)

@@ -142,7 +142,7 @@ func globalBindings() []footerBinding {
 		{"bookmarks", "g", i18n.T("[g] bookmarks"), Model.opsIdle, scopeGlobal},
 		{"shelf", "G", i18n.T("[G] shelf"), Model.opsIdle, scopeGlobal},
 		{"notices", "!", i18n.T("[!] notices"), func(m Model) bool { return len(m.notices) > 0 }, scopeGlobal},
-		{"last-error", "E", i18n.T("[E] last error"), func(m Model) bool { return m.lastError != "" }, scopeGlobal},
+		{"last-error", "E", i18n.T("[E] full message"), func(m Model) bool { return m.lastError != "" }, scopeGlobal},
 		{"find", "F", i18n.T("[F] find file"), Model.opsIdle, scopeGlobal},
 		{"order", "o", i18n.T("[o]rder"), Model.opsIdle, scopeGlobal},
 		{"view", "z", i18n.T("[z] view"), Model.opsIdle, scopeGlobal},
