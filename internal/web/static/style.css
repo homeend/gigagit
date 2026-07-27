@@ -129,6 +129,10 @@ mark.r { background: var(--span-add); color: inherit; }
 }
 #op-line { flex: none; padding: 3px 12px; color: var(--accent); background: var(--bg-alt); border-top: 1px solid var(--border); white-space: pre-wrap; word-break: break-word; max-height: 30vh; overflow-y: auto; }
 #op-line.hidden { display: none; }
+/* The parked-run line is a handle on something still running, not a notice:
+   it opens the review on click, so it has to look clickable. */
+#op-line.task { cursor: pointer; }
+#op-line.task:hover { background: var(--sel); }
 #op-head { display: none; justify-content: space-between; color: var(--dim); font-size: 11px; margin-bottom: 2px; }
 #op-line.err #op-head { display: flex; }
 #op-line.err { color: #f27a6a; }

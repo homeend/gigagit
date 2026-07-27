@@ -206,6 +206,7 @@ function opLine(text, isErr) {
   const el = $("op-line");
   $("op-text").textContent = text || "";
   el.classList.toggle("err", !!isErr);
+  el.classList.remove("task"); // a new message is never the parked-run handle
   el.classList.toggle("hidden", !text);
   clearTimeout(opLineTimer);
   if (!text) return;
@@ -222,9 +223,29 @@ function opLine(text, isErr) {
   }, 30000);
 }
 
+// taskLine is the parked-run status line. Unlike every other message it is a
+// live HANDLE on something still running, not a notice — so it is clickable
+// and exempt from dismissal (see the two listeners below).
+function taskLine(text) {
+  opLine(text); // clears .task first, then we claim it
+  $("op-line").classList.add("task");
+}
+
+// Clicking the parked-run line reopens the review. This line is the biggest
+// thing on screen mentioning that run, so it is what people click; without
+// this the click did nothing and the double-click below deleted it.
+$("op-line").addEventListener("click", () => {
+  if ($("op-line").classList.contains("task") && parkedRunning()) unparkReview();
+});
+
 // Double-click anywhere in the strip dismisses it immediately (the error
-// header advertises this); a live op's next event just re-shows it.
-$("op-line").addEventListener("dblclick", hideOpLine);
+// header advertises this) — but NOT the parked-run line, whose dismissal is
+// undiscoverable (the header only renders on errors) and which would silently
+// remove the most visible mention of a running review.
+$("op-line").addEventListener("dblclick", () => {
+  if ($("op-line").classList.contains("task")) return;
+  hideOpLine();
+});
 
 // startOp is the transport client, op-agnostic: POST /api/op, then follow
 // the SSE stream. state.op.kind lets done-handling react per op (a commit
@@ -868,7 +889,7 @@ function parkReview() {
   state.task = { label: rev.label || "", status: "running" };
   closeLayer("review");
   renderTaskChip(false);
-  opLine("review running in the background");
+  taskLine("review running in the background — click here to watch or cancel it");
 }
 
 function unparkReview() {
@@ -876,6 +897,8 @@ function unparkReview() {
   rev.parked = false;
   state.task = null;
   renderTaskChip(false);
+  // The lane is back on screen, so its status line has nothing left to say.
+  if ($("op-line").classList.contains("task")) hideOpLine();
   pushLayer("review", $("review"), { onKey: reviewKey });
   renderReview();
 }
