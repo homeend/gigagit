@@ -547,6 +547,111 @@ function defaultWorktreePath(branch) {
   return parent + sep + name + "-" + branch.replace(/[^\w.-]+/g, "-");
 }
 
+// --- branch versions (the operations history) ---
+//
+// Every destructive operation snapshots the branch tip before it runs, so
+// this list is "what this branch pointed at before each of the last N
+// operations" — the undo of last resort. Restoring is itself snapshotted, so
+// nothing here is a one-way door.
+
+// versionWhen renders a snapshot's age. Absolute dates read as history;
+// what you actually want to know is "how far back do I have to go".
+function versionWhen(unix) {
+  const secs = Math.max(0, Math.floor(Date.now() / 1000) - unix);
+  const units = [
+    [86400 * 7, "w"],
+    [86400, "d"],
+    [3600, "h"],
+    [60, "m"],
+  ];
+  for (const [size, tag] of units) {
+    if (secs >= size) return Math.floor(secs / size) + tag + " ago";
+  }
+  return "just now";
+}
+
+async function openVersions(branch) {
+  let body;
+  try {
+    body = await getJSON("/api/versions?branch=" + encodeURIComponent(branch));
+  } catch (e) {
+    opLine("versions failed: " + (e.message || e), true);
+    return;
+  }
+  const rows = body.versions || [];
+  $("versions-title").textContent = branch + " — previous versions";
+  $("versions-list").innerHTML = rows.length
+    ? rows
+        .map(
+          (v, i) =>
+            `<li data-i="${i}"><span class="vwhen">${esc(versionWhen(v.unix))}</span>` +
+            `<span class="vop">${esc(v.op)}</span>` +
+            `<span class="vsha">${esc(v.short)}</span>` +
+            `<span class="vsub">${esc(v.subject)}</span></li>`
+        )
+        .join("")
+    : `<li class="empty">no recorded versions — they are written as operations run</li>`;
+  $("versions-list")._rows = rows;
+  $("versions-list")._branch = branch;
+  pushLayer("versions", $("versions"));
+}
+
+function closeVersions() {
+  closeLayer("versions");
+}
+
+// Per-row actions go through the shared ctx-menu rather than inline buttons:
+// same interaction language as the sidebar, and the row stays readable.
+function showVersionMenu(branch, v, x, y) {
+  showCtxMenu(
+    [
+      {
+        label: "restore " + branch + " to this version",
+        act: () =>
+          // The engine only asks when the CURRENT branch is dirty; every
+          // other lane moves the ref with no prompt at all. So the confirm
+          // is the client's, as with delete-tag and discard.
+          showLocalConfirm(
+            "Move " + branch + " back to " + v.short + " (" + v.subject + ")?",
+            ["restore", "abort"],
+            (o) => {
+              if (o !== "restore") return;
+              closeVersions();
+              startOp(
+                { op: "restore-version", branch, ref: v.ref },
+                "restoring " + branch + " to " + v.short
+              );
+            }
+          ),
+      },
+      { label: "copy commit id", act: () => copyText(v.hash, "commit id " + v.short) },
+      {
+        label: "delete this snapshot",
+        danger: true,
+        act: () =>
+          showLocalConfirm("Delete the " + v.op + " snapshot at " + v.short + "?", ["delete", "abort"], (o) => {
+            if (o !== "delete") return;
+            closeVersions();
+            startOp({ op: "delete-version", ref: v.ref }, "deleting snapshot " + v.short);
+          }),
+      },
+    ],
+    x,
+    y
+  );
+}
+
+$("versions-list").addEventListener("click", (e) => {
+  const li = e.target.closest("li[data-i]");
+  if (!li) return;
+  const list = $("versions-list");
+  const v = list._rows[Number(li.dataset.i)];
+  if (v) showVersionMenu(list._branch, v, e.clientX, e.clientY);
+});
+$("versions").addEventListener("click", (e) => {
+  if (e.target.id === "versions") closeVersions(); // backdrop
+});
+
 // The global create-branch entry (☰ / palette): same op as the branch
 // menu's row, but with no start point on the wire — the server reads that as
 // HEAD, which is what "new branch" means with nothing selected.
@@ -604,6 +709,10 @@ function showBranchMenu(b, x, y) {
         }),
     });
   }
+  // Not gated on "does this branch have versions" — that would cost a read
+  // on every menu open; the popup shows the empty state instead (the TUI's
+  // branchVersionsRow rule).
+  items.push({ label: "previous versions…", act: () => openVersions(b.name) });
   if (state.solo === b.name) {
     items.push({ label: "exit solo (show every branch)", act: () => setSolo("") });
   } else {
