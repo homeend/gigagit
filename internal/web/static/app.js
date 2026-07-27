@@ -230,9 +230,17 @@ async function startOp(body, label) {
     opLine("error: " + (e.message || e), true);
     return;
   }
+  followOp(resp.op_id, label, body.op, null);
+}
+
+// followOp attaches the SSE client to an already-started run. Split out of
+// startOp because the review lane starts its run at a different endpoint but
+// wants the identical stream handling — including the lost-connection rules.
+// onDone, when given, REPLACES the generic done handling for that run.
+function followOp(opID, label, kind, onDone) {
   opLine("⟳ " + label + "…");
-  const es = new EventSource("/api/op/" + resp.op_id + "/events");
-  state.op = { id: resp.op_id, es, kind: body.op };
+  const es = new EventSource("/api/op/" + opID + "/events");
+  state.op = { id: opID, es, kind, onDone: onDone || null };
   $("pull-btn").disabled = true;
   $("push-btn").disabled = true;
   es.onmessage = (m) => handleOpEvent(JSON.parse(m.data));
@@ -252,6 +260,7 @@ async function startOp(body, label) {
       $("pull-btn").disabled = false;
       $("push-btn").disabled = false;
       hideModal();
+      closeReviewLane(); // a review's own overlay would otherwise spin forever
       opLine("error: lost connection to operation — repo state refreshed", true);
       refreshAfterOp();
     } else {
@@ -360,15 +369,23 @@ function handleOpEvent(ev) {
   } else if (ev.type === "resolved") {
     hideModal(); // this decision was answered (another tab, or a replay)
   } else if (ev.type === "done") {
-    const kind = state.op && state.op.kind;
+    const op = state.op;
+    const kind = op && op.kind;
     // done is terminal: close the source (EventSource would auto-reconnect
     // and replay the history otherwise) and any open modal (covers
     // notify-only decisions whose op already returned).
-    if (state.op) state.op.es.close();
+    if (op) op.es.close();
     state.op = null;
     $("pull-btn").disabled = false;
     $("push-btn").disabled = false;
     hideModal();
+    // A run with its own done handler (the review lane) owns the outcome
+    // entirely — it changes nothing in the repo, so none of the refreshing
+    // below applies to it.
+    if (op && op.onDone) {
+      op.onDone(ev);
+      return;
+    }
     if (ev.ok && (kind === "commit" || kind === "stash")) $("commit-msg").value = "";
     if (ev.ok) opLine(ev.summary || "done");
     // changed && !ok is the engine's deliberate success-with-conflicts shape
@@ -677,6 +694,225 @@ $("versions").addEventListener("click", (e) => {
   if (e.target.id === "versions") closeVersions(); // backdrop
 });
 
+// --- AI review ---
+//
+// One overlay walks the whole lane — choose a tool, approve its command, wait
+// — because the three are steps of one decision, not three surfaces. The
+// command text is never sent from here: the server looks it up in the config
+// and resolves it, and this only ever names a TOOL. What is shown in the
+// approval step is what the server said it would run.
+
+let rev = null; // {target, branch, tools, sel, phase, tool, label}
+
+function reviewTitle() {
+  if (!rev) return "";
+  return "Review " + (rev.label || (rev.target === "working" ? "working changes" : rev.branch)) + " (AI)";
+}
+
+async function startReview(target, branch) {
+  if (rev) return; // the lane is already open
+  if (state.op) {
+    // One lane, and the server would 409 anyway — but a menu row that does
+    // nothing at all reads as broken.
+    opLine("review: an operation is already running", true);
+    return;
+  }
+  let info;
+  try {
+    const q = "?target=" + encodeURIComponent(target) + (branch ? "&branch=" + encodeURIComponent(branch) : "");
+    info = await getJSON("/api/review/tools" + q);
+  } catch (e) {
+    opLine("review: " + (e.message || e), true);
+    return;
+  }
+  const tools = info.tools || [];
+  if (!tools.length) {
+    // Nothing to run and nothing this UI can do about it — say where it comes
+    // from rather than opening an empty chooser.
+    opLine('review: no review tool configured — add a [[tools.command]] block with category = "review"', true);
+    return;
+  }
+  rev = { target, branch, label: info.label, tools, sel: 0, phase: "choose", tool: null };
+  pushLayer("review", $("review"), { onKey: reviewKey });
+  if (tools.length === 1) reviewPick(tools[0]);
+  else renderReview();
+}
+
+function reviewPick(tool) {
+  if (!rev) return;
+  rev.tool = tool;
+  // The server decides whether an approval is needed; this only skips the
+  // step it already told us is unnecessary. An out-of-date "approved" here
+  // costs one extra prompt, never an unapproved run.
+  if (tool.approved) reviewRun(false);
+  else {
+    rev.phase = "approve";
+    renderReview();
+  }
+}
+
+async function reviewRun(approve) {
+  if (!rev) return;
+  const { target, branch, tool } = rev;
+  rev.phase = "running";
+  renderReview();
+  let resp;
+  try {
+    resp = await postJSON("/api/review", { target, branch, tool: tool.name, approve: !!approve });
+  } catch (e) {
+    // Most often a 403: the server does not consider this command approved,
+    // whatever the tools list said. Fall back to the approval step (the
+    // resolved command is already in hand from that list) and show why.
+    if (!rev) return;
+    rev.phase = "approve";
+    renderReview();
+    opLine("review: " + (e.message || e), true);
+    return;
+  }
+  if (!rev) {
+    // Cancelled while the start request was in flight. The run EXISTS —
+    // simply returning would leave an agent running with nobody following
+    // it, holding the single lane until it finished on its own.
+    postJSON("/api/op/" + resp.op_id + "/cancel", {}).catch(() => {});
+    opLine("review cancelled");
+    return;
+  }
+  rev.opID = resp.op_id;
+  renderReview();
+  followOp(resp.op_id, "reviewing " + (rev.label || ""), "review", reviewDone);
+}
+
+function reviewDone(ev) {
+  const title = reviewTitle() || "Review"; // capture before the lane closes — it reads rev
+  closeReviewLane();
+  if (ev.ok) {
+    openReport(title, ev.path, ev.report);
+    opLine(ev.summary || "review done");
+    return;
+  }
+  if (ev.cancelled) opLine("review cancelled");
+  else opLine("review failed: " + (ev.error || "unknown error"), true);
+}
+
+// Cancelling mid-run is not a nicety: an agent can take minutes, it holds the
+// single op lane while it does, and the tab must not be a hostage to it.
+async function reviewCancel() {
+  const id = rev && rev.opID;
+  closeReviewLane();
+  if (!id) return;
+  try {
+    await postJSON("/api/op/" + id + "/cancel", {});
+  } catch (e) {
+    opLine("cancel: " + (e.message || e), true);
+  }
+}
+
+function closeReviewLane() {
+  rev = null;
+  closeLayer("review");
+}
+
+function renderReview() {
+  if (!rev) return;
+  $("review-title").textContent = reviewTitle();
+  const body = $("review-body");
+  const hint = $("review-hint");
+  const runBtn = $("review-run");
+  const cancelBtn = $("review-cancel");
+  if (rev.phase === "choose") {
+    body.innerHTML =
+      "<ul>" +
+      rev.tools
+        .map(
+          (t, i) =>
+            `<li data-i="${i}"${i === rev.sel ? ' class="sel"' : ""}>${esc(t.name)}` +
+            `<span class="detail">${esc(t.command)}</span></li>`
+        )
+        .join("") +
+      "</ul>";
+    hint.textContent = "choose a review tool · enter runs · esc cancels";
+    runBtn.classList.remove("hidden");
+    runBtn.textContent = "run";
+    cancelBtn.textContent = "cancel";
+    return;
+  }
+  if (rev.phase === "approve") {
+    body.innerHTML =
+      `<div class="rcmd">${esc(rev.tool.command)}</div>` +
+      `<div class="rnote">This runs on your machine with your permissions. Approval is remembered for this repo until the command text changes.</div>`;
+    hint.textContent = "run this command?";
+    runBtn.classList.remove("hidden");
+    runBtn.textContent = "run";
+    cancelBtn.textContent = "cancel";
+    return;
+  }
+  body.innerHTML = `<div class="rnote">${esc(rev.tool ? rev.tool.name : "")} is reading the diff — this can take a few minutes.</div>`;
+  hint.textContent = "⟳ reviewing…";
+  runBtn.classList.add("hidden"); // nothing to run twice
+  cancelBtn.textContent = "cancel the run";
+}
+
+function reviewKey(e) {
+  if (!rev) return false;
+  if (e.key === "Escape") {
+    if (rev.phase === "running") reviewCancel();
+    else closeReviewLane();
+    e.preventDefault();
+    return true;
+  }
+  if (rev.phase === "choose" && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+    rev.sel = Math.min(rev.tools.length - 1, Math.max(0, rev.sel + (e.key === "ArrowDown" ? 1 : -1)));
+    renderReview();
+    e.preventDefault();
+    return true;
+  }
+  if (e.key === "Enter") {
+    reviewConfirm();
+    e.preventDefault();
+    return true;
+  }
+  return true; // the lane owns the keyboard while it is open
+}
+
+function reviewConfirm() {
+  if (!rev) return;
+  if (rev.phase === "choose") reviewPick(rev.tools[rev.sel]);
+  else if (rev.phase === "approve") reviewRun(true);
+}
+
+$("review-run").addEventListener("click", reviewConfirm);
+$("review-cancel").addEventListener("click", () => {
+  if (rev && rev.phase === "running") reviewCancel();
+  else closeReviewLane();
+});
+$("review-body").addEventListener("click", (e) => {
+  const li = e.target.closest("li[data-i]");
+  if (li && rev && rev.phase === "choose") reviewPick(rev.tools[Number(li.dataset.i)]);
+});
+$("review").addEventListener("click", (e) => {
+  // Backdrop closes, except while a run is live: a stray click outside the
+  // box must not silently kill an agent halfway through. Cancel is explicit.
+  if (e.target.id === "review" && rev && rev.phase !== "running") closeReviewLane();
+});
+
+// The report viewer: plain text, deliberately not rendered as markdown — a
+// review is prose to read, and a parser here would be a dependency and a
+// rendering bug surface for no gain.
+function openReport(title, path, content) {
+  $("report-title").textContent = title;
+  $("report-body").textContent = content || "";
+  $("report-path").textContent = path || "";
+  $("report-path").title = path || "";
+  $("report-body").scrollTop = 0;
+  pushLayer("report", $("report"));
+}
+
+$("report-close").addEventListener("click", () => closeLayer("report"));
+$("report-copy").addEventListener("click", () => copyText($("report-body").textContent, "the report"));
+$("report").addEventListener("click", (e) => {
+  if (e.target.id === "report") closeLayer("report"); // backdrop
+});
+
 // The global create-branch entry (☰ / palette): same op as the branch
 // menu's row, but with no start point on the wire — the server reads that as
 // HEAD, which is what "new branch" means with nothing selected.
@@ -741,6 +977,7 @@ function showBranchMenu(b, x, y) {
   // on every menu open; the popup shows the empty state instead (the TUI's
   // branchVersionsRow rule).
   items.push({ label: "previous versions…", act: () => openVersions(b.name) });
+  items.push({ label: "review " + b.name + " (AI)…", act: () => startReview("branch", b.name) });
   if (state.solo === b.name) {
     items.push({ label: "exit solo (show every branch)", act: () => setSolo("") });
   } else {
@@ -2123,6 +2360,8 @@ function paletteCommands() {
     { label: "push", detail: "P", run: () => doPush() },
     { label: "fetch all remotes", detail: "", run: () => doFetch() },
     { label: "create branch…", detail: "", run: () => openCreateBranchPrompt() },
+    { label: "review working changes (AI)…", detail: "", run: () => startReview("working", "") },
+    { label: "review this branch (AI)…", detail: "", run: () => startReview("branch", "") },
     { label: "refresh", detail: "r", run: () => { if (!state.op) refreshAfterOp(); } },
     { label: "switch repo…", detail: "", run: null }, // drills into repo mode (runPaletteRow)
     { label: "open working tree", detail: "", run: () => openWorkingTree(0) }, // 0 = the WT row; a bare call would set state.cursor = undefined and break j/k/enter
@@ -2247,6 +2486,7 @@ function openGlobalMenu() {
       { label: "push", act: () => doPush() },
       { label: "fetch all remotes", act: () => doFetch() },
       { label: "create branch…", act: () => openCreateBranchPrompt() },
+      { label: "review working changes (AI)…", act: () => startReview("working", "") },
       { label: "refresh", act: () => { if (!state.op) refreshAfterOp(); } },
       { label: "switch repo…", act: () => openPalette("repo") },
       { label: "command palette…", act: () => openPalette("cmd") },

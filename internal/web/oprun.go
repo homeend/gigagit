@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/engine"
 )
 
@@ -27,22 +28,42 @@ const defaultDecideTimeout = 5 * time.Minute
 // wireEvent is one SSE message, already shaped for the client.
 type wireEvent map[string]any
 
+// runFunc is the body of one run lane. Everything the transport provides —
+// the severed context, the pinned service, the event channel and the parking
+// decider — arrives as arguments, so a lane is free to be something other
+// than a bare Execute: the review lane calls domain.ReviewReport, which owns
+// persistence as well as the op. The extra map is merged into the terminal
+// done event, which is how a review's report reaches the browser.
+type runFunc func(ctx context.Context, svc *domain.Service, events chan<- engine.Event, dec engine.Decider) (engine.Result, map[string]any, error)
+
 type opRun struct {
-	id     string
+	id string
+	// kind distinguishes lanes for the endpoints that must not apply to all
+	// of them — only a review may be cancelled mid-flight.
+	kind   string
 	cancel context.CancelFunc
 
-	mu      sync.Mutex
-	history []wireEvent
-	subs    map[chan wireEvent]struct{}
-	pending *engine.DecisionRequest // non-nil while parked on deps.decide
-	answer  chan string
-	done    bool
+	mu        sync.Mutex
+	history   []wireEvent
+	subs      map[chan wireEvent]struct{}
+	pending   *engine.DecisionRequest // non-nil while parked on deps.decide
+	answer    chan string
+	done      bool
+	cancelled bool // set by requestCancel, so the done event says so
 }
 
 // startOp begins op in a background goroutine. Exactly one op may be live;
 // the previous (finished) run's record is kept for late SSE reads until the
 // next start replaces it.
 func (s *Server) startOp(op engine.Operation) (*opRun, error) {
+	return s.startRun("op", func(ctx context.Context, svc *domain.Service, events chan<- engine.Event, dec engine.Decider) (engine.Result, map[string]any, error) {
+		res, err := svc.Execute(ctx, op, events, dec)
+		return res, nil, err
+	})
+}
+
+// startRun is the shared lane starter behind startOp and the review lane.
+func (s *Server) startRun(kind string, fn runFunc) (*opRun, error) {
 	s.opMu.Lock()
 	defer s.opMu.Unlock()
 	if s.cur != nil {
@@ -59,12 +80,13 @@ func (s *Server) startOp(op engine.Operation) (*opRun, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	run := &opRun{
 		id:     fmt.Sprintf("op%d", s.opSeq),
+		kind:   kind,
 		cancel: cancel,
 		subs:   make(map[chan wireEvent]struct{}),
 		answer: make(chan string, 1),
 	}
 	s.cur = run
-	go s.runOpStream(ctx, run, op)
+	go s.runOpStream(ctx, run, fn)
 	return run, nil
 }
 
@@ -86,7 +108,7 @@ func (s *Server) resetFeed() {
 	s.mu.Unlock()
 }
 
-func (s *Server) runOpStream(ctx context.Context, run *opRun, op engine.Operation) {
+func (s *Server) runOpStream(ctx context.Context, run *opRun, fn runFunc) {
 	svc := s.service() // pinned: the op runs against the repo it started on
 	events := make(chan engine.Event, 32)
 	pumpDone := make(chan struct{})
@@ -102,7 +124,7 @@ func (s *Server) runOpStream(ctx context.Context, run *opRun, op engine.Operatio
 	if timeout <= 0 {
 		timeout = defaultDecideTimeout
 	}
-	res, err := svc.Execute(ctx, op, events, webDecider{run: run, timeout: timeout})
+	res, extra, err := fn(ctx, svc, events, webDecider{run: run, timeout: timeout})
 	close(events)
 	<-pumpDone
 	if res.Changed {
@@ -110,7 +132,19 @@ func (s *Server) runOpStream(ctx context.Context, run *opRun, op engine.Operatio
 	}
 	done := wireEvent{"type": "done", "ok": err == nil, "changed": res.Changed, "summary": res.Summary}
 	if err != nil {
-		done["error"] = err.Error()
+		// A context-killed subprocess reports its signal, not context.Canceled
+		// (the TUI's review lane learned the same), so the deliberate-cancel
+		// case is recognised by the flag requestCancel set — never by the
+		// error's type or text.
+		if run.wasCancelled() {
+			done["error"] = "cancelled"
+			done["cancelled"] = true
+		} else {
+			done["error"] = err.Error()
+		}
+	}
+	for k, v := range extra {
+		done[k] = v
 	}
 	run.finish(done)
 	run.cancel()
@@ -216,6 +250,29 @@ func (r *opRun) decide(option string) error {
 	default:
 		return errNotWaiting // answer already queued
 	}
+}
+
+// requestCancel cancels a live run's context. Only the review lane exposes
+// this (see handleOpCancel): an agent that hangs would otherwise hold the
+// single lane — and the whole UI — until the process gave up on its own,
+// whereas cancelling a git operation part-way is a different question with a
+// different answer.
+func (r *opRun) requestCancel() error {
+	r.mu.Lock()
+	if r.done {
+		r.mu.Unlock()
+		return errOpDone
+	}
+	r.cancelled = true
+	r.mu.Unlock()
+	r.cancel()
+	return nil
+}
+
+func (r *opRun) wasCancelled() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.cancelled
 }
 
 func (r *opRun) setPending(req *engine.DecisionRequest) {
