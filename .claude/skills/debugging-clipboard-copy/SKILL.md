@@ -36,7 +36,7 @@ echo "$DISPLAY $WAYLAND_DISPLAY $TMUX $SSH_CONNECTION"
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `binfmt_misc/` has no `WSLInterop*`; `clip.exe` exits 126 `exec format error` | **WSL interop unregistered.** `systemd=true` in `/etc/wsl.conf` makes `systemd-binfmt.service` flush the registration at boot. `exec.LookPath` still finds `clip.exe`, so gg picks it (`native.go:61`) and only fails at exec time. | `sudo sh -c 'mkdir -p /etc/binfmt.d && echo ":WSLInterop:M::MZ::/init:PF" > /etc/binfmt.d/WSLInterop.conf' && sudo systemctl restart systemd-binfmt`. The `/etc/binfmt.d` file is what makes it survive reboot — a bare `echo > /proc/.../register` comes back broken. |
+| `binfmt_misc/` has no `WSLInterop*`; `clip.exe` exits 126 `exec format error` | **WSL interop unregistered.** `systemd=true` in `/etc/wsl.conf` makes `systemd-binfmt.service` flush the registration at boot. | Already detected: `wslInteropOK` (`native.go`) reads `binfmt_misc`, `nativeCopyCmd` skips `clip.exe` and falls through to `wl-copy`/`xclip`, and the `wsl_interop_broken` notice fires when nothing covers it. Two fixes: `sudo sh -c 'mkdir -p /etc/binfmt.d && echo ":WSLInterop:M::MZ::/init:PF" > /etc/binfmt.d/WSLInterop.conf' && sudo systemctl restart systemd-binfmt` (the `/etc/binfmt.d` file is what survives reboot — a bare `echo > /proc/.../register` comes back broken), or `apt install wl-clipboard` (WSLg syncs its clipboard to Windows). |
 | Linux desktop, no `xclip`/`xsel`/`wl-copy` on PATH | **No native tool.** A CLI process cannot set the X11/Wayland selection from raw bytes; it needs a helper or a terminal that honours OSC 52. | `apt install xclip` (X11) / `wl-clipboard` (Wayland). gg picks it up with no restart. The `!` notification center already warns for this case (`clipboardNotice`, `internal/tui/notify.go:236`). |
 | Wayland session, `wl-copy` installed, still nothing — **inside tmux** | tmux does not propagate `WAYLAND_DISPLAY` (not in its default `update-environment`). | Already handled: `resolveWaylandDisplay` (`native.go:88`) scans `$XDG_RUNTIME_DIR` for a live `wayland-N` socket and injects it into the child. If this recurs, verify the socket exists before suspecting gg. |
 | Short strings (tag/branch names) paste as CJK mojibake; a 40-char SHA is fine | `clip.exe`'s stdin-encoding heuristic misreads short pure-ASCII payloads as UTF-16. | Already handled: `clipboardStdin` (`native.go:220`) UTF-16LE-encodes stdin for `clip`/`clip.exe` only. |
@@ -47,11 +47,11 @@ echo "$DISPLAY $WAYLAND_DISPLAY $TMUX $SSH_CONNECTION"
 `nativeCopyCmd` (`native.go:48`) — read it before theorising:
 
 - darwin → `pbcopy` · windows → `clip`
-- linux, **WSL → `clip.exe` wins over WSLg's `wl-copy`** (the Windows clipboard is the one the user sees)
+- linux, **WSL → `clip.exe` wins over WSLg's `wl-copy`** (the Windows clipboard is the one the user sees) — but only when `wslInteropOK()` says the kernel can actually run it
 - linux → `wl-copy` (only if a Wayland display *resolves*), then `xclip`, then `xsel`
 - nothing → OSC 52, else `ErrUnavailable`
 
-Selection is by `exec.LookPath` presence only. **Presence ≠ runnable** — that gap is the WSL-interop bug above.
+Selection is otherwise by `exec.LookPath` presence alone. **Presence ≠ runnable** — `clip.exe` is the one command with a runnability gate, because it is the one that can be present and unrunnable. `wslInteropOK` resolves an unreadable `binfmt_misc` to *true* deliberately: a false positive would strip `clip.exe` from a machine where it works.
 
 ## Do not reintroduce
 

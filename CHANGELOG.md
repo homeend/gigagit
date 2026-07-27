@@ -8,6 +8,24 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- clipboard: detect a WSL kernel that cannot execute Windows binaries, and stop
+  handing copies to a `clip.exe` that will fail. `exec.LookPath` finds
+  `clip.exe` whether or not WSL interop is registered, so gg used to choose it,
+  fail at exec time with `exec format error`, fall through to the OSC 52 escape
+  (whose write always "succeeds"), and report a green `Copied …` while the
+  clipboard never changed. `nativeCopyCmd` now gates `clip.exe` on a
+  `binfmt_misc` probe: with interop dead it falls through to `wl-copy` / `xclip`
+  / `xsel`, which under WSLg reaches the Windows clipboard anyway. An
+  unreadable `binfmt_misc` is treated as working, so a machine gg cannot
+  inspect (WSL1, a sandboxed `/proc`) keeps its existing behavior. A new
+  `wsl_interop_broken` notice fires in the `!` center — only when no fallback
+  tool covers it, superseding the generic "install a clipboard tool" notice so
+  one problem yields one notice — explaining why the green status lied and
+  offering both remedies: a persistent `/etc/binfmt.d/WSLInterop.conf` or
+  installing `wl-clipboard`. Dismiss-only, and it self-clears once either fix
+  lands. New `debugging-clipboard-copy` project skill documents the whole
+  triage.
+
 - web: command palette (`ctrl+k` / `ctrl+p`) — pull/push/refresh, sidebar and
   graph toggles, help, and a **switch repo…** mode listing previously-opened
   repos (the MRU registry) that re-roots the server in place. A global ☰

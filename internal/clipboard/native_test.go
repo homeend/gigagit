@@ -37,6 +37,22 @@ func waylandAt(disp string) func() (string, bool) {
 	return func() (string, bool) { return disp, true }
 }
 
+// interopLive / interopDead are wslInteropOK stubs: whether the kernel can
+// execute Windows binaries at all.
+func interopLive() bool { return true }
+func interopDead() bool { return false }
+
+// procFiles returns a readFile stub serving exactly the named binfmt_misc
+// files; anything else is ENOENT.
+func procFiles(files map[string]string) func(string) ([]byte, error) {
+	return func(path string) ([]byte, error) {
+		if body, ok := files[path]; ok {
+			return []byte(body), nil
+		}
+		return nil, os.ErrNotExist
+	}
+}
+
 func TestNativeCopyCmd(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -45,6 +61,7 @@ func TestNativeCopyCmd(t *testing.T) {
 		env     func(string) string
 		look    func(string) (string, error)
 		wayland func() (string, bool)
+		interop func() bool // nil = interopLive
 		want    nativeCopy
 		wantOK  bool
 	}{
@@ -121,10 +138,66 @@ func TestNativeCopyCmd(t *testing.T) {
 			wayland: waylandAt("wayland-0"),
 			want:    nativeCopy{argv: []string{"xclip", "-selection", "clipboard"}}, wantOK: true,
 		},
+		{
+			// WSL interop unregistered: clip.exe is on PATH and executable, but
+			// the kernel cannot run it (exec format error). Picking it would
+			// send every copy down the silent OSC 52 fallback, so fall through
+			// to WSLg's wl-copy instead — WSLg syncs its clipboard to Windows.
+			name: "WSL with dead interop falls to wl-copy", goos: "linux", isWSL: true,
+			env:     noEnv, // WAYLAND_DISPLAY stripped by tmux
+			look:    lookOnly("clip.exe", "wl-copy"),
+			wayland: waylandAt("/run/user/1000/wayland-0"),
+			interop: interopDead,
+			want: nativeCopy{
+				argv: []string{"wl-copy"},
+				env:  []string{"WAYLAND_DISPLAY=/run/user/1000/wayland-0"},
+			}, wantOK: true,
+		},
+		{
+			name: "WSL with dead interop falls to xclip", goos: "linux", isWSL: true,
+			env:     envWith(map[string]string{"DISPLAY": ":0"}),
+			look:    lookOnly("clip.exe", "xclip"),
+			wayland: noWayland,
+			interop: interopDead,
+			want:    nativeCopy{argv: []string{"xclip", "-selection", "clipboard"}}, wantOK: true,
+		},
+		{
+			// Nothing else installed: report no native command rather than
+			// handing back a clip.exe that cannot run.
+			name: "WSL with dead interop and no Linux tool → none", goos: "linux", isWSL: true,
+			env:     noEnv,
+			look:    lookOnly("clip.exe"),
+			wayland: noWayland,
+			interop: interopDead,
+			want:    nativeCopy{}, wantOK: false,
+		},
+		{
+			// Live interop keeps the existing precedence untouched.
+			name: "WSL with live interop still prefers clip.exe", goos: "linux", isWSL: true,
+			env:     noEnv,
+			look:    lookOnly("clip.exe", "wl-copy", "xclip"),
+			wayland: waylandAt("/run/user/1000/wayland-0"),
+			interop: interopLive,
+			want:    nativeCopy{argv: []string{"clip.exe"}}, wantOK: true,
+		},
+		{
+			// Interop is a WSL-only concern: off WSL it must never be consulted,
+			// so a "dead" answer cannot disturb a plain Linux desktop.
+			name: "non-WSL Linux ignores interop", goos: "linux",
+			env:     envWith(map[string]string{"DISPLAY": ":0"}),
+			look:    lookOnly("xclip"),
+			wayland: noWayland,
+			interop: interopDead,
+			want:    nativeCopy{argv: []string{"xclip", "-selection", "clipboard"}}, wantOK: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, ok := nativeCopyCmd(tt.goos, tt.isWSL, tt.env, tt.look, tt.wayland)
+			interop := tt.interop
+			if interop == nil {
+				interop = interopLive
+			}
+			got, ok := nativeCopyCmd(tt.goos, tt.isWSL, tt.env, tt.look, tt.wayland, interop)
 			if ok != tt.wantOK {
 				t.Fatalf("ok = %v, want %v (cmd=%+v)", ok, tt.wantOK, got)
 			}
@@ -133,6 +206,58 @@ func TestNativeCopyCmd(t *testing.T) {
 			}
 			if strings.Join(got.env, " ") != strings.Join(tt.want.env, " ") {
 				t.Errorf("env = %v, want %v", got.env, tt.want.env)
+			}
+		})
+	}
+}
+
+// TestWSLInteropOK covers the binfmt_misc resolution matrix. The load-bearing
+// case is the last one: binfmt_misc is mounted and enabled, but the WSLInterop
+// registration is gone (systemd-binfmt flushes it at boot when systemd=true),
+// so clip.exe is on PATH yet exits 126 with "exec format error".
+func TestWSLInteropOK(t *testing.T) {
+	const dir = "/proc/sys/fs/binfmt_misc/"
+	tests := []struct {
+		name  string
+		files map[string]string
+		want  bool
+	}{
+		{
+			// No evidence either way: never strip clip.exe from a machine we
+			// cannot read (WSL1, binfmt_misc unmounted, a sandboxed /proc).
+			name: "binfmt_misc not visible → assume OK", files: nil, want: true,
+		},
+		{
+			name:  "registration live",
+			files: map[string]string{dir + "status": "enabled\n", dir + "WSLInterop": "enabled\ninterpreter /init\n"},
+			want:  true,
+		},
+		{
+			// Newer WSL registers it under this name instead.
+			name:  "registration live under WSLInterop-late",
+			files: map[string]string{dir + "status": "enabled\n", dir + "WSLInterop-late": "enabled\ninterpreter /init\n"},
+			want:  true,
+		},
+		{
+			name:  "master switch disabled",
+			files: map[string]string{dir + "status": "disabled\n", dir + "WSLInterop": "enabled\n"},
+			want:  false,
+		},
+		{
+			name:  "entry present but disabled",
+			files: map[string]string{dir + "status": "enabled\n", dir + "WSLInterop": "disabled\n"},
+			want:  false,
+		},
+		{
+			name:  "mounted and enabled but no WSLInterop entry",
+			files: map[string]string{dir + "status": "enabled\n"},
+			want:  false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := wslInteropOK(procFiles(tt.files)); got != tt.want {
+				t.Errorf("wslInteropOK = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -209,16 +334,18 @@ func TestClipboardStdinLeavesOtherCommandsAsUTF8(t *testing.T) {
 // headless session does not.
 func TestProbe(t *testing.T) {
 	tests := []struct {
-		name        string
-		goos        string
-		isWSL       bool
-		env         func(string) string
-		look        func(string) (string, error)
-		wayland     func() (string, bool)
-		wantAvail   bool
-		wantTool    string
-		wantSession string
-		wantInstall string
+		name         string
+		goos         string
+		isWSL        bool
+		env          func(string) string
+		look         func(string) (string, error)
+		wayland      func() (string, bool)
+		interop      func() bool // nil = interopLive
+		wantAvail    bool
+		wantTool     string
+		wantSession  string
+		wantInstall  string
+		wantWSLBroke bool
 	}{
 		{
 			name: "X11 desktop, no clipboard tool → suggest xclip", goos: "linux",
@@ -253,10 +380,52 @@ func TestProbe(t *testing.T) {
 			env: noEnv, look: lookOnly("pbcopy"), wayland: noWayland,
 			wantAvail: true, wantTool: "pbcopy",
 		},
+		{
+			// The reported machine: WSLg gives a Wayland session, interop is
+			// dead, and wl-clipboard is not installed — so copy is genuinely
+			// broken and BOTH the flag and the install hint must be set.
+			name: "WSL, dead interop, no fallback tool → broken + suggest wl-clipboard",
+			goos: "linux", isWSL: true,
+			env: noEnv, look: lookOnly("clip.exe"), wayland: waylandAt("/run/user/1000/wayland-0"),
+			interop:   interopDead,
+			wantAvail: false, wantSession: "wayland", wantInstall: "wl-clipboard",
+			wantWSLBroke: true,
+		},
+		{
+			// Interop is dead but wl-copy covers it: copy works, so the notice
+			// must stay quiet. The flag still reports the true state.
+			name: "WSL, dead interop, wl-copy present → available, still flagged",
+			goos: "linux", isWSL: true,
+			env: noEnv, look: lookOnly("clip.exe", "wl-copy"), wayland: waylandAt("/run/user/1000/wayland-0"),
+			interop:   interopDead,
+			wantAvail: true, wantTool: "wl-copy", wantSession: "wayland",
+			wantWSLBroke: true,
+		},
+		{
+			name: "WSL with live interop → available via clip.exe, not flagged",
+			goos: "linux", isWSL: true,
+			env: noEnv, look: lookOnly("clip.exe"), wayland: noWayland,
+			interop:   interopLive,
+			wantAvail: true, wantTool: "clip.exe",
+		},
+		{
+			// Off WSL the flag can never be set, whatever the probe would say.
+			name: "non-WSL Linux is never flagged", goos: "linux",
+			env: envWith(map[string]string{"DISPLAY": ":0"}), look: lookOnly(), wayland: noWayland,
+			interop:   interopDead,
+			wantAvail: false, wantSession: "x11", wantInstall: "xclip",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			av := probe(tt.goos, tt.isWSL, tt.env, tt.look, tt.wayland)
+			interop := tt.interop
+			if interop == nil {
+				interop = interopLive
+			}
+			av := probe(tt.goos, tt.isWSL, tt.env, tt.look, tt.wayland, interop)
+			if av.WSLInteropBroken != tt.wantWSLBroke {
+				t.Errorf("WSLInteropBroken = %v, want %v", av.WSLInteropBroken, tt.wantWSLBroke)
+			}
 			if av.Available != tt.wantAvail {
 				t.Errorf("Available = %v, want %v", av.Available, tt.wantAvail)
 			}

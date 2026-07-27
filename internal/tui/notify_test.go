@@ -110,6 +110,71 @@ func TestNoClipboardNoticeWhenToolAvailable(t *testing.T) {
 	}
 }
 
+// wslBrokenAvail is the reported machine: WSL with interop unregistered, WSLg
+// providing a Wayland session, and no wl-clipboard installed — so clip.exe is
+// on PATH but cannot run, and nothing else can reach the clipboard either.
+func wslBrokenAvail() clipboard.Availability {
+	return clipboard.Availability{
+		Session: "wayland", Install: "wl-clipboard", WSLInteropBroken: true,
+	}
+}
+
+func TestWSLInteropNoticeBuilder(t *testing.T) {
+	// Fires: interop is dead AND nothing else can copy.
+	n := wslInteropNotice(wslBrokenAvail(), "/k")
+	if n == nil || n.id != noticeWSLInterop {
+		t.Fatalf("want the WSL interop notice, got %+v", n)
+	}
+	// Both remedies must be reachable from the notice itself: the user cannot
+	// be told "copy is broken" without being told how to fix it.
+	body := strings.Join(n.detail, "\n")
+	for _, want := range []string{"binfmt.d", "systemd-binfmt", "wl-clipboard"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("notice detail must mention %q, detail=%v", want, n.detail)
+		}
+	}
+	// nil: interop is dead but wl-copy covers it — copy works, so stay quiet.
+	// Broken Windows-exe interop in general is not gg's business.
+	covered := clipboard.Availability{
+		Available: true, Tool: "wl-copy", Session: "wayland", WSLInteropBroken: true,
+	}
+	if n := wslInteropNotice(covered, "/k"); n != nil {
+		t.Errorf("no notice when a fallback tool covers it, got %+v", n)
+	}
+	// nil: not WSL at all.
+	if n := wslInteropNotice(x11NoToolAvail(), "/k"); n != nil {
+		t.Errorf("no notice off WSL, got %+v", n)
+	}
+}
+
+// The interop notice supersedes the generic "install a clipboard tool" one:
+// they describe the same failure, and two notices for one problem is noise.
+func TestWSLInteropNoticeSupersedesClipboardNotice(t *testing.T) {
+	if n := clipboardNotice(wslBrokenAvail(), "/k"); n != nil {
+		t.Errorf("clipboard notice must yield to the interop notice, got %+v", n)
+	}
+	m, _ := noticeTestModel(t)
+	nm, _ := m.Update(repoHealthMsg{gen: m.noticeGen, health: model.RepoHealth{GitCommonDir: "/k"}, clipAvail: wslBrokenAvail()})
+	got := nm.(Model).notices
+	if len(got) != 1 || got[0].id != noticeWSLInterop {
+		t.Fatalf("notices = %+v, want exactly the WSL interop notice", got)
+	}
+	if !nm.(Model).noticesUnread {
+		t.Fatal("a fresh interop notice must start unread (blinking)")
+	}
+}
+
+func TestWSLInteropNoticePersistedDismissalFilters(t *testing.T) {
+	m, st := noticeTestModel(t)
+	if err := st.DismissNotice("/k", noticeWSLInterop); err != nil {
+		t.Fatal(err)
+	}
+	nm, _ := m.Update(repoHealthMsg{gen: m.noticeGen, health: model.RepoHealth{GitCommonDir: "/k"}, clipAvail: wslBrokenAvail()})
+	if got := nm.(Model).notices; len(got) != 0 {
+		t.Fatalf("persisted dismissal must filter the interop notice, got %+v", got)
+	}
+}
+
 func TestNoNoticeWhenRepoSmallOrGraphPresentOrConfigSet(t *testing.T) {
 	m, _ := noticeTestModel(t)
 	small := bigRepoHealth()
