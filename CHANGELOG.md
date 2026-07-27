@@ -8,6 +8,26 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- tui: `[E]` now reaches every status message the one-line bar had to cut, not
+  just the seven prefixes `statusIsError` recognises. That predicate gated both
+  the red styling *and* the capture into `lastError`, while the TUI sets ~40
+  distinct error-prefixed messages — including the per-source refresh failures
+  (`branches: <git stderr>`, `worktrees: …`), of which only `commits:` happened
+  to be listed. A repo switch that failed while reloading branches truncated a
+  paragraph of git stderr into one line with no way to read the rest. Capture is
+  now structural (`statusNeedsFull`): anything too wide for the bar is kept,
+  error or not, so a message added anywhere can never be missed again. The
+  pointer renders for those too, and the viewer titles itself "Full message"
+  with no red frame when the message is not a failure. `[E]` relabelled from
+  "last error" to "full message".
+- tui: a snapshot load that fails **after** the UI is up — a repo switch into an
+  unreadable repo — no longer replaces the whole screen with a bare `error: …`
+  line that has no status bar, no footer and nothing to press. Once one load has
+  succeeded (`loadedOK`), a later failure is reported like any other, keeping
+  the interface and making the full text readable via `[E]`. A first-load
+  failure still shows the bare error: there is no interface to preserve, and an
+  empty frame would read as a working UI onto a broken repo.
+
 - clipboard: detect a WSL kernel that cannot execute Windows binaries, and stop
   handing copies to a `clip.exe` that will fail. `exec.LookPath` finds
   `clip.exe` whether or not WSL interop is registered, so gg used to choose it,
