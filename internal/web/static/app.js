@@ -2384,9 +2384,13 @@ function openPalette(mode, fromCmd) {
     getJSON("/api/repos")
       .then((j) => {
         if (!pal || pal.mode !== "repo") return; // closed or switched meanwhile
-        const cur = state.repo && state.repo.worktree;
+        // The SERVER says which row is the repo it is serving. Comparing
+        // paths here looked equivalent and was not: /api/repo reports git's
+        // forward-slash top-level while the registry stores platform-cleaned
+        // paths, so on Windows the served repo never matched and stayed in
+        // the list — picking it re-rooted onto the repo already open.
         pal.rows = (j.repos || [])
-          .filter((r) => r.path !== cur)
+          .filter((r) => !r.current)
           .map((r) => ({ label: r.name, detail: r.path, path: r.path }));
         filterPalette();
       })
