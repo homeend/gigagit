@@ -11,7 +11,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - web: fixed the **previous versions** rows being dead to the mouse. A left
   click opened the row menu and the same click immediately closed it again;
   a right click fell through to the browser's own menu. Both buttons now open
-  the row menu and it stays up.
+  the row menu and it stays up. It was then still invisible, because the
+  right-click menu (and the confirm dialog it raises) painted *underneath*
+  the popup — both are now stacked above every panel overlay, so a menu or a
+  confirmation opened from inside a popup is always on top of it.
 - web: **force push** — a new row on a branch's right-click menu. It does not
   force anything on its own: it opens the same force-mode prompt an ordinary
   rejected push shows — *force-with-lease* (refuses if the remote moved since
