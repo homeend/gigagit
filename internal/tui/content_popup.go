@@ -47,7 +47,13 @@ type contentPopup struct {
 	// highlight. A viewer showing one prose message has nothing to select or
 	// act on, so the cursor is noise — the rows are text, not choices.
 	noCursor bool
+	// saved is where `s` last wrote this window's text. Shown inside the box:
+	// a tall popup covers the status bar, so reporting the path only there
+	// hides it behind the box's own border (save_content.go).
+	saved string
 }
+
+func (p *contentPopup) noteSaved(path string) { p.saved = path }
 
 func newContentPopup(title string, lines []contentLine) *contentPopup {
 	return &contentPopup{title: title, lines: lines}
@@ -185,6 +191,12 @@ func (p *contentPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			p.hscroll += m.hscrollStep()
 		}
 		return m, nil
+	case "s": // write the text to a temp file — see save_content.go for why
+		lines := make([]string, 0, len(p.lines))
+		for _, l := range p.lines {
+			lines = append(lines, l.text)
+		}
+		return m, saveTextCmd(p.title, lines)
 	case "q": // close the window, not the app (q quits only at top level)
 		m = m.popLayer()
 		return m, nil
@@ -324,7 +336,10 @@ func (p *contentPopup) box(m Model) string {
 	if p.footer != "" {
 		b.WriteString("  " + truncate(p.footer, textW-2) + "\n")
 	}
-	hint := i18n.T("[/] search  [z] mode  [ctrl+t] full  [q] close")
+	if p.saved != "" {
+		b.WriteString("  " + truncate(i18n.T("saved to %s", p.saved), textW-2) + "\n")
+	}
+	hint := i18n.T("[/] search  [z] mode  [s] save  [ctrl+t] full  [q] close")
 	if len(vis) > capRows {
 		hint = fmt.Sprintf("%d/%d  %s", p.sel+1, len(vis), hint)
 	}

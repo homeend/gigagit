@@ -2540,6 +2540,16 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMsg = msg.ok
 		}
 		return m, nil
+	case contentSavedMsg:
+		if msg.err != nil {
+			m.statusMsg = i18n.T("error: %s", msg.err.Error())
+		} else {
+			m.notifySaved(msg.path)
+			// A long temp path can itself outrun the one-line bar; statusNeedsFull
+			// keeps it recoverable via [E].
+			m.statusMsg = i18n.T("saved to %s", msg.path)
+		}
+		return m, nil
 	}
 	return m, nil
 }
