@@ -31,6 +31,9 @@ const state = {
   detailGen: 0,
   dragBranch: null, // name of the branch being dragged, else null
   solo: "", // branch the commit list is narrowed to ("" = every branch)
+  // A parked (backgrounded) long task, and then its result until collected:
+  // {label, status: running|done|failed|cancelled, title, path, report, error}
+  task: null,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -209,7 +212,7 @@ function opLine(text, isErr) {
   // every message expires after 30s — but never while its op still runs
   // (each op event overwrites the line and re-arms the timer anyway)
   opLineTimer = setTimeout(() => {
-    if (state.op) return;
+    if (state.op) return; // NOT opBusy(): that reports, and reporting re-arms this timer
     hideOpLine();
   }, 30000);
 }
@@ -221,8 +224,23 @@ $("op-line").addEventListener("dblclick", hideOpLine);
 // startOp is the transport client, op-agnostic: POST /api/op, then follow
 // the SSE stream. state.op.kind lets done-handling react per op (a commit
 // clears the message box; a switch must not eat a draft).
+// opBusy is the shared "an operation is already running" guard for every op
+// entry point. It REPORTS rather than returning silently: these guards used
+// to sit in front of a visible modal or progress line that explained itself,
+// but a backgrounded review holds the lane with nothing on screen at all —
+// and a button that does nothing without saying why reads as broken.
+function opBusy() {
+  if (!state.op) return false;
+  if (state.task && state.task.status === "running") {
+    opLine("a review is running in the background — open the chip to watch or cancel it", true);
+  } else {
+    opLine("an operation is already running", true);
+  }
+  return true;
+}
+
 async function startOp(body, label) {
-  if (state.op) return; // one live op; the server would 409 anyway
+  if (opBusy()) return; // one live op; the server would 409 anyway
   let resp;
   try {
     resp = await postJSON("/api/op", body);
@@ -280,7 +298,7 @@ function doCommit() {
 }
 
 function doPull() {
-  if (state.op) return;
+  if (opBusy()) return;
   // TUI parity: pull is confirmed up front (it may rewrite the working
   // tree); esc maps to abort via the modal's existing rule.
   const branch = $("repo-branch").textContent || "current branch";
@@ -294,7 +312,7 @@ function doPull() {
 // doPull above. The server sends the current branch down the ordinary
 // pull-and-stay lane if the two happen to coincide.
 function doPullBranch(name) {
-  if (state.op) return;
+  if (opBusy()) return;
   startOp({ op: "pull", branch: name }, "pulling " + name);
 }
 
@@ -308,17 +326,17 @@ function doForcePush(name) {
 }
 
 function doPushBranch(name) {
-  if (state.op) return;
+  if (opBusy()) return;
   startOp({ op: "push", branch: name }, "pushing " + name);
 }
 
 function doFetch() {
-  if (state.op) return;
+  if (opBusy()) return;
   startOp({ op: "fetch" }, "fetching");
 }
 
 function doPush() {
-  if (state.op) return;
+  if (opBusy()) return;
   startOp({ op: "push" }, "pushing");
 }
 
@@ -326,7 +344,7 @@ function doPush() {
 // repo-scoped, so a clean reload is the honest reset on success
 // (localStorage prefs survive); errors land on the status strip.
 async function doReroot(path) {
-  if (state.op) return;
+  if (opBusy()) return;
   try {
     await postJSON("/api/reroot", { path });
     location.reload();
@@ -710,7 +728,12 @@ function reviewTitle() {
 }
 
 async function startReview(target, branch) {
-  if (rev) return; // the lane is already open
+  if (rev) {
+    // Parked: the overlay is not on screen, so a silent refusal here looks
+    // like the menu row does nothing.
+    if (rev.parked) opLine("a review is already running in the background — open the chip to watch or cancel it", true);
+    return;
+  }
   if (state.op) {
     // One lane, and the server would 409 anyway — but a menu row that does
     // nothing at all reads as broken.
@@ -783,8 +806,28 @@ async function reviewRun(approve) {
 }
 
 function reviewDone(ev) {
-  const title = reviewTitle() || "Review"; // capture before the lane closes — it reads rev
+  // Capture everything the lane owns BEFORE closing it: closeReviewLane
+  // clears both rev and a running task chip.
+  const title = reviewTitle() || "Review";
+  const parked = !!(rev && rev.parked);
+  const label = (state.task && state.task.label) || (rev && rev.label) || "";
   closeReviewLane();
+  if (parked) {
+    // The whole point of parking is not being interrupted, so the result
+    // WAITS: the chip goes loud, and opening it is the user's move.
+    state.task = {
+      label,
+      status: ev.ok ? "done" : ev.cancelled ? "cancelled" : "failed",
+      title,
+      path: ev.path,
+      report: ev.report,
+      error: ev.error,
+    };
+    if (state.task.status === "cancelled") state.task = null; // nothing to collect
+    renderTaskChip(true);
+    opLine(ev.ok ? "review ready — open it from the chip in the top bar" : "review failed: " + (ev.error || "unknown error"), !ev.ok);
+    return;
+  }
   if (ev.ok) {
     openReport(title, ev.path, ev.report);
     opLine(ev.summary || "review done");
@@ -793,6 +836,78 @@ function reviewDone(ev) {
   if (ev.cancelled) opLine("review cancelled");
   else opLine("review failed: " + (ev.error || "unknown error"), true);
 }
+
+// --- parking a running review ---
+//
+// A review can take minutes and there is nothing to watch while it does.
+// Parking hides the overlay and leaves the run streaming into the chip. It
+// does NOT free the operation lane — the run still holds it, so another op
+// is still refused, but every read (commits, diffs, files, branches) stays
+// available, which is what "let me get on with something else" needs.
+
+function parkReview() {
+  if (!rev || rev.phase !== "running") return;
+  rev.parked = true;
+  state.task = { label: rev.label || "", status: "running" };
+  closeLayer("review");
+  renderTaskChip(false);
+  opLine("review running in the background");
+}
+
+function unparkReview() {
+  if (!rev || !rev.parked) return;
+  rev.parked = false;
+  state.task = null;
+  renderTaskChip(false);
+  pushLayer("review", $("review"), { onKey: reviewKey });
+  renderReview();
+}
+
+// renderTaskChip paints state.task. blink is passed only on the transition
+// into a finished state, so a re-render (or a second tab's refresh) does not
+// restart the animation.
+function renderTaskChip(blink) {
+  const el = $("task-chip");
+  const t = state.task;
+  el.classList.remove("running", "ready", "failed", "blink");
+  if (!t) {
+    el.classList.add("hidden");
+    return;
+  }
+  el.classList.remove("hidden");
+  if (t.status === "running") {
+    el.textContent = "⟳ review" + (t.label ? ": " + t.label : "");
+    el.title = "a review is running in the background — click to watch or cancel it";
+    el.classList.add("running");
+    return;
+  }
+  if (t.status === "done") {
+    el.textContent = "✓ review ready";
+    el.title = "click to read the report";
+    el.classList.add("ready");
+  } else {
+    el.textContent = "✗ review failed";
+    el.title = "click for the error";
+    el.classList.add("failed");
+  }
+  if (blink) el.classList.add("blink");
+}
+
+function collectTask() {
+  const t = state.task;
+  if (!t) return;
+  if (t.status === "running") {
+    unparkReview();
+    return;
+  }
+  state.task = null;
+  renderTaskChip(false);
+  if (t.status === "done") openReport(t.title || "Review", t.path, t.report);
+  else opLine("review failed: " + (t.error || "unknown error"), true);
+}
+
+$("task-chip").addEventListener("click", collectTask);
+$("review-park").addEventListener("click", parkReview);
 
 // Cancelling mid-run is not a nicety: an agent can take minutes, it holds the
 // single op lane while it does, and the tab must not be a hostage to it.
@@ -810,6 +925,13 @@ async function reviewCancel() {
 function closeReviewLane() {
   rev = null;
   closeLayer("review");
+  // A RUNNING parked task has just stopped being a thing (cancelled, or the
+  // stream was lost) — its chip must not linger as a spinner nobody is
+  // driving. A finished one is re-set by reviewDone right after this.
+  if (state.task && state.task.status === "running") {
+    state.task = null;
+    renderTaskChip(false);
+  }
 }
 
 function renderReview() {
@@ -819,6 +941,8 @@ function renderReview() {
   const hint = $("review-hint");
   const runBtn = $("review-run");
   const cancelBtn = $("review-cancel");
+  const parkBtn = $("review-park");
+  parkBtn.classList.toggle("hidden", rev.phase !== "running"); // nothing to background before it starts
   if (rev.phase === "choose") {
     body.innerHTML =
       "<ul>" +
@@ -846,8 +970,10 @@ function renderReview() {
     cancelBtn.textContent = "cancel";
     return;
   }
-  body.innerHTML = `<div class="rnote">${esc(rev.tool ? rev.tool.name : "")} is reading the diff — this can take a few minutes.</div>`;
-  hint.textContent = "⟳ reviewing…";
+  body.innerHTML =
+    `<div class="rnote">${esc(rev.tool ? rev.tool.name : "")} is reading the diff — this can take a few minutes.` +
+    ` You can put it in the background and carry on reading the repo; the chip in the top bar lights up when the report is ready.</div>`;
+  hint.textContent = "⟳ reviewing… · esc backgrounds it";
   runBtn.classList.add("hidden"); // nothing to run twice
   cancelBtn.textContent = "cancel the run";
 }
@@ -855,7 +981,11 @@ function renderReview() {
 function reviewKey(e) {
   if (!rev) return false;
   if (e.key === "Escape") {
-    if (rev.phase === "running") reviewCancel();
+    // esc puts a live run in the BACKGROUND rather than killing it: esc means
+    // "off my screen" everywhere else in this UI, and destroying minutes of
+    // agent work on the key people press reflexively would be a trap.
+    // Cancelling stays an explicit, labelled button.
+    if (rev.phase === "running") parkReview();
     else closeReviewLane();
     e.preventDefault();
     return true;
@@ -890,9 +1020,11 @@ $("review-body").addEventListener("click", (e) => {
   if (li && rev && rev.phase === "choose") reviewPick(rev.tools[Number(li.dataset.i)]);
 });
 $("review").addEventListener("click", (e) => {
-  // Backdrop closes, except while a run is live: a stray click outside the
-  // box must not silently kill an agent halfway through. Cancel is explicit.
-  if (e.target.id === "review" && rev && rev.phase !== "running") closeReviewLane();
+  // Backdrop dismisses. While a run is live that means BACKGROUND it, never
+  // kill it — a stray click outside the box must not destroy an agent's work.
+  if (e.target.id !== "review" || !rev) return;
+  if (rev.phase === "running") parkReview();
+  else closeReviewLane();
 });
 
 // The report viewer: plain text, deliberately not rendered as markdown — a
@@ -1550,7 +1682,7 @@ function setSoloChip(branch) {
 }
 
 async function setSolo(branch) {
-  if (state.op) return;
+  if (opBusy()) return;
   try {
     await postJSON("/api/solo", { branch });
     setSoloChip(branch);
