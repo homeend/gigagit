@@ -8,6 +8,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- web: **force push** — a new row on a branch's right-click menu. It does not
+  force anything on its own: it opens the same force-mode prompt an ordinary
+  rejected push shows — *force-with-lease* (refuses if the remote moved since
+  your last fetch), plain *force*, or abort, the two force options in red.
+  The row's only effect is reaching that prompt without waiting for a
+  rejection first; a silent force push is not expressible from the browser.
 - web: **previous versions** — right-click a branch for the operations
   history: what it pointed at before each recent merge, rebase, amend, reset
   or delete, newest first with how long ago. Click one to restore the branch

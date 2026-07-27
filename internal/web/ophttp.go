@@ -23,6 +23,7 @@ type opStartRequest struct {
 	Ref     string `json:"ref"`
 	Sha     string `json:"sha"`
 	Name    string `json:"name"` // new branch name (create-branch, rename-branch)
+	Force   bool   `json:"force"`
 }
 
 // handleOpStart begins an operation and returns 202 {op_id}. Ops wired so
@@ -145,8 +146,12 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 		}
 		op = engine.SmartPull{Branch: req.Branch, Intent: engine.PullInBackground}
 	case "push":
-		// Force is never wire-settable — force is only reachable through the
-		// op's own parked push-rejected → push-force decisions.
+		// `force` does NOT force-push. engine.Push{Force:true} asks the
+		// push-force decision (force-with-lease / force / abort) and pushes
+		// whatever comes back, so the flag only reaches that prompt — the
+		// same one the rejection-recovery path already parks in the browser
+		// modal — without needing a rejection first. A silent force is not
+		// expressible on this wire.
 		branch := req.Branch
 		if branch == "" {
 			// No branch named: resolve the current one server-side.
@@ -167,7 +172,7 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusBadRequest, errors.New("invalid branch"))
 			return
 		}
-		op = engine.Push{Remote: "origin", Branch: branch, SetUpstream: true} // the TUI's exact P dispatch
+		op = engine.Push{Remote: "origin", Branch: branch, SetUpstream: true, Force: req.Force} // the TUI's exact P dispatch
 	case "delete-branch":
 		if req.Branch == "" || !isGitArgSafe(req.Branch) {
 			writeErr(w, http.StatusBadRequest, errors.New("invalid branch"))

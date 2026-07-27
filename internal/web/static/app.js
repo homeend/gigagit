@@ -289,6 +289,15 @@ function doPullBranch(name) {
   startOp({ op: "pull", branch: name }, "pulling " + name);
 }
 
+// Force push. The wire flag does NOT force anything: engine.Push{Force} asks
+// the push-force decision (force-with-lease / force / abort) and pushes what
+// comes back, so this row's only effect is reaching that modal without
+// waiting for a rejection. Hence no client confirm — the modal IS the
+// confirm, and its two force options render red via DANGER_OPTIONS.
+function doForcePush(name) {
+  startOp({ op: "push", branch: name, force: true }, "force-pushing " + name);
+}
+
 function doPushBranch(name) {
   if (state.op) return;
   startOp({ op: "push", branch: name }, "pushing " + name);
@@ -675,6 +684,9 @@ function showBranchMenu(b, x, y) {
     items.push({ label: "pull " + b.name + " (stay here)", act: () => doPullBranch(b.name) });
     items.push({ label: "push " + b.name, act: () => doPushBranch(b.name) });
   }
+  // Not marked danger: the row opens the force-mode modal, where the actual
+  // destructive options are the red ones.
+  items.push({ label: "force push " + b.name + "…", act: () => doForcePush(b.name) });
   items.push({
     label: "rename branch…",
     act: () =>
