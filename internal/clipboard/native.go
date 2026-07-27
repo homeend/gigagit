@@ -45,7 +45,14 @@ type nativeCopy struct {
 // dir; when it comes back off-environment we inject it so the wl-copy child
 // can connect. This mirrors detectWSL's reason for reading osrelease instead
 // of $WSL_DISTRO_NAME: the same tmux env-staleness, a different variable.
-func nativeCopyCmd(goos string, isWSL bool, env func(string) string, lookPath func(string) (string, error), waylandDisplay func() (string, bool)) (nativeCopy, bool) {
+//
+// clip.exe is additionally gated on interopOK: PATH presence is not proof it
+// can RUN. When WSL interop is unregistered the file is still there and still
+// executable, so choosing it would send every copy down the silent OSC 52
+// fallback. Falling through to WSLg's wl-copy instead keeps copy working —
+// WSLg shares its clipboard with Windows. interopOK is consulted only under
+// WSL; off WSL it is irrelevant and never called.
+func nativeCopyCmd(goos string, isWSL bool, env func(string) string, lookPath func(string) (string, error), waylandDisplay func() (string, bool), interopOK func() bool) (nativeCopy, bool) {
 	has := func(name string) bool { _, err := lookPath(name); return err == nil }
 
 	switch goos {
@@ -58,7 +65,7 @@ func nativeCopyCmd(goos string, isWSL bool, env func(string) string, lookPath fu
 			return nativeCopy{argv: []string{"clip"}}, true
 		}
 	case "linux":
-		if isWSL && has("clip.exe") {
+		if isWSL && has("clip.exe") && interopOK() {
 			return nativeCopy{argv: []string{"clip.exe"}}, true
 		}
 		if has("wl-copy") {
@@ -126,6 +133,43 @@ func findWaylandSocket(runtimeDir string) (string, bool) {
 	return filepath.Join(runtimeDir, best), true
 }
 
+// binfmtDir is where the kernel exposes its registered binary formats. WSL
+// registers Windows executables here under WSLInterop (older) or
+// WSLInterop-late (newer); without that entry no .exe can be executed and
+// clip.exe fails with "exec format error".
+const binfmtDir = "/proc/sys/fs/binfmt_misc/"
+
+// wslInteropOK reports whether the kernel can execute Windows binaries, by
+// reading the binfmt_misc registration rather than trying to run one (running
+// clip.exe to find out would clobber the user's clipboard).
+//
+// An unreadable binfmt_misc resolves to TRUE on purpose: absence of evidence is
+// not evidence of breakage, and a false positive would strip clip.exe from a
+// machine where it works (WSL1, an unmounted binfmt_misc, a sandboxed /proc).
+// Only a mounted-and-enabled binfmt_misc that lacks a live WSLInterop entry —
+// the state systemd-binfmt leaves behind when `systemd=true` — reports false.
+func wslInteropOK(readFile func(string) ([]byte, error)) bool {
+	status, err := readFile(binfmtDir + "status")
+	if err != nil {
+		return true // binfmt_misc not visible: no evidence either way.
+	}
+	if strings.TrimSpace(string(status)) == "disabled" {
+		return false // Master switch off: nothing can exec.
+	}
+	for _, name := range []string{"WSLInterop", "WSLInterop-late"} {
+		body, err := readFile(binfmtDir + name)
+		if err != nil {
+			continue
+		}
+		// An entry's first line is its own enabled/disabled state.
+		first, _, _ := strings.Cut(string(body), "\n")
+		if strings.TrimSpace(first) == "enabled" {
+			return true
+		}
+	}
+	return false
+}
+
 // Availability reports whether gg can put text on the system clipboard via a
 // native command, and — when it cannot — the local display session that was
 // detected and what to install for it. It backs the "install a clipboard tool"
@@ -137,6 +181,13 @@ type Availability struct {
 	Tool      string // the command gg will use, when Available (e.g. "xclip")
 	Session   string // detected local display: "wayland", "x11", or "" (headless/unknown)
 	Install   string // package to install when a present local display lacks its tool ("" = nothing to suggest)
+
+	// WSLInteropBroken reports that we are on WSL and the kernel cannot execute
+	// Windows binaries, so clip.exe — which is on PATH and looks perfectly
+	// usable — cannot run. It is set independently of Available: a machine with
+	// wl-copy installed copies fine through WSLg and needs no notice, but the
+	// state is still true and the caller decides what to do about it.
+	WSLInteropBroken bool
 }
 
 // probe is the pure core of Probe: it resolves what Copy would do from injected
@@ -145,7 +196,7 @@ type Availability struct {
 // clipboard right here and gg can't reach it" case. A headless/SSH session
 // (no local display) leaves Install empty: OSC 52 is the expected path there
 // and a "missing tool" nag would be a false positive.
-func probe(goos string, isWSL bool, env func(string) string, lookPath func(string) (string, error), waylandDisplay func() (string, bool)) Availability {
+func probe(goos string, isWSL bool, env func(string) string, lookPath func(string) (string, error), waylandDisplay func() (string, bool), interopOK func() bool) Availability {
 	disp, wlOK := "", false
 	if goos == "linux" {
 		disp, wlOK = waylandDisplay()
@@ -159,8 +210,13 @@ func probe(goos string, isWSL bool, env func(string) string, lookPath func(strin
 	case goos == "linux" && env("DISPLAY") != "":
 		av.Session = "x11"
 	}
+	// Resolved once and memoized: nativeCopyCmd would otherwise re-read
+	// binfmt_misc, and the flag must match the selection it drove.
+	interopBroken := isWSL && goos == "linux" && !interopOK()
+	av.WSLInteropBroken = interopBroken
+	memoInterop := func() bool { return !interopBroken }
 
-	if nc, ok := nativeCopyCmd(goos, isWSL, env, lookPath, memoWayland); ok {
+	if nc, ok := nativeCopyCmd(goos, isWSL, env, lookPath, memoWayland, memoInterop); ok {
 		av.Available = true
 		av.Tool = nc.argv[0]
 		return av
@@ -180,7 +236,8 @@ func probe(goos string, isWSL bool, env func(string) string, lookPath func(strin
 // matches what Copy will actually do.
 func Probe() Availability {
 	return probe(runtime.GOOS, detectWSL(), os.Getenv, exec.LookPath,
-		func() (string, bool) { return resolveWaylandDisplay(os.Getenv) })
+		func() (string, bool) { return resolveWaylandDisplay(os.Getenv) },
+		func() bool { return wslInteropOK(os.ReadFile) })
 }
 
 // detectWSL reports whether we run under WSL. It reads the kernel osrelease
@@ -302,8 +359,12 @@ func (c sysClipboard) copy(tty io.Writer, text string) (string, error) {
 // nil when no terminal is available. It returns a short method label
 // ("clip.exe", "osc52", …) for status reporting.
 func Copy(tty io.Writer, text string) (string, error) {
+	// The interop probe is deliberately NOT cached across calls: interop can be
+	// repaired mid-session, and copy must pick that up with no restart (the
+	// notice promises exactly that). Three small /proc reads are free.
 	nc, _ := nativeCopyCmd(runtime.GOOS, detectWSL(), os.Getenv, exec.LookPath,
-		func() (string, bool) { return resolveWaylandDisplay(os.Getenv) })
+		func() (string, bool) { return resolveWaylandDisplay(os.Getenv) },
+		func() bool { return wslInteropOK(os.ReadFile) })
 	c := sysClipboard{argv: nc.argv, argvEnv: nc.env, run: runArgv, preferOSC: preferOSC52(os.Getenv)}
 	return c.copy(tty, text)
 }
