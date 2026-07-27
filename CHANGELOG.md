@@ -8,6 +8,17 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- web: the **"review running in the background" line now clears when the run
+  ends** instead of being replaced by another line you had to dismiss by
+  hand — the chip in the top bar is what announces the result. (A failure
+  still says so: an error that vanished silently would be worse.) The line
+  also expires normally while the run is going, rather than sitting there for
+  the whole run.
+- web: fixed **double-clicking the ready chip discarding the report**. The
+  first click opened it and the second landed on the report's own backdrop,
+  closing it again — with the chip already cleared, so there was nothing left
+  to click. The report viewer no longer closes on a backdrop click at all: it
+  is a document to read, not a picker, and closing stays the button or esc.
 - web: an AI review can now be **put in the background**. *run in background*
   (or esc, or clicking outside the box) hides the waiting dialog and leaves
   the agent running; a chip appears in the top bar, and clicking it brings the
