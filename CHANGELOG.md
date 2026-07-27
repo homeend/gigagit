@@ -8,6 +8,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- web: **compare two branches** — drag one branch onto another and pick
+  *compare A ↔ B* (the third row, below merge and rebase). The whole
+  tip-to-tip changed-file list opens in the existing detail screen, and a bar
+  above it filters by **origin**: all, or only the files one side changed
+  since the two diverged (a file both sides touched stays in either view —
+  the TUI's rule). Unrelated histories still list their differences; only the
+  filter is unavailable, and says why.
+- web: **create branch…** in the ☰ menu and the command palette. Every way to
+  make a branch used to hang off right-clicking an existing one; this starts
+  from the current HEAD.
 - web: in the working-tree view, **Staged is now the last section** rather
   than the first. Staging a hunk used to move the file up to the top and push
   the remaining work down, so the list seemed to reorder itself under you

@@ -92,6 +92,18 @@ mark.r { background: var(--span-add); color: inherit; }
   border-radius: 3px; padding: 1px 8px; font: inherit; cursor: pointer;
 }
 #files-actions button:hover { border-color: var(--accent); }
+/* Branch-comparison origin filter. Branch names can be long, so each button
+   ellipsises rather than pushing its neighbours off the pane. */
+#compare-bar { padding: 3px 8px; display: flex; gap: 6px; border-bottom: 1px solid var(--border); }
+#compare-bar.hidden { display: none; }
+#compare-bar button {
+  background: var(--bg-alt); color: var(--fg); border: 1px solid var(--border);
+  border-radius: 3px; padding: 1px 8px; font: inherit; font-size: 11px; cursor: pointer;
+  max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+#compare-bar button:hover:not(:disabled) { border-color: var(--accent); }
+#compare-bar button.on { border-color: var(--accent); color: var(--accent); }
+#compare-bar button:disabled { opacity: .45; cursor: default; }
 #files-list li.sect { color: var(--dim); font-weight: bold; cursor: default; padding-top: 6px; }
 #files-list li button.act {
   float: right; background: none; color: var(--dim); border: 1px solid var(--border);
