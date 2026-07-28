@@ -8,6 +8,8 @@ import (
 	"os/exec"
 	"runtime"
 	"time"
+
+	"github.com/homeend/gigagit/internal/template"
 )
 
 // CaptureSpec is one headless capture invocation. Command is a shell command
@@ -40,7 +42,11 @@ func (ShellCaptureRunner) Capture(ctx context.Context, spec CaptureSpec, onLine 
 	}
 	name := f.Name()
 	defer os.Remove(name)
-	if _, err := f.WriteString(spec.Command); err != nil {
+	body := spec.Command
+	if runtime.GOOS == "windows" {
+		body = template.FlattenForCmd(body) // see FlattenForCmd: a .bat cannot span lines
+	}
+	if _, err := f.WriteString(body); err != nil {
 		f.Close()
 		return nil, err
 	}

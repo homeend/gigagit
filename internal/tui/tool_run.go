@@ -159,7 +159,11 @@ func toolScript(resolved string) (string, error) {
 		// Windows ctrl-C semantics differ from POSIX signals (no reliable
 		// 130/143 exit-code convention), so the hold-on-failure block stays
 		// unconditional here; revisit if this becomes a live issue on Windows.
-		body = resolved + "\r\n" +
+		// cmd.exe cannot run a POSIX continuation or a quoted string that
+		// spans lines: it would launch the tool from the first line with a
+		// truncated argument and no flags (how "Claude (yolo)" ran without
+		// --dangerously-skip-permissions).
+		body = template.FlattenForCmd(resolved) + "\r\n" +
 			"set RC=%ERRORLEVEL%\r\n" +
 			"if %RC% neq 0 (\r\n" +
 			"  echo.\r\n" +

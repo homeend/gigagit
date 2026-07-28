@@ -47,7 +47,33 @@ type contentPopup struct {
 	// highlight. A viewer showing one prose message has nothing to select or
 	// act on, so the cursor is noise — the rows are text, not choices.
 	noCursor bool
+	// block lays the content out as one quoted message rather than a list of
+	// rows: a faint background band spanning the box, every line (including a
+	// wrap continuation) on the same margin as the title and the key hints, and
+	// a blank line below it so the hints read as actions rather than as one
+	// more line of git's stderr. Set by the [E] viewer (error_popup.go).
+	block bool
+	// saved is where `s` last wrote this window's text. Shown inside the box:
+	// a tall popup covers the status bar, so reporting the path only there
+	// hides it behind the box's own border (save_content.go).
+	saved string
 }
+
+// The message a block-mode viewer shows is quoted text — git's stderr, a
+// notice's fix instructions — not the popup's own words. A faint band behind
+// it says so, the way a code block does in prose: dark enough to separate it
+// from the box, light enough to leave the text at the terminal's own
+// foreground (the box can already be framed red; red-on-red would not read).
+// The gutter is the band's inner padding, and matches the indent the title and
+// the key hints take, so every line in the box starts in one column.
+const (
+	messageBlockColor  = "236"
+	messageBlockGutter = 2
+)
+
+var messageBlockStyle = lipgloss.NewStyle().Background(lipgloss.Color(messageBlockColor))
+
+func (p *contentPopup) noteSaved(path string) { p.saved = path }
 
 func newContentPopup(title string, lines []contentLine) *contentPopup {
 	return &contentPopup{title: title, lines: lines}
@@ -185,6 +211,12 @@ func (p *contentPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			p.hscroll += m.hscrollStep()
 		}
 		return m, nil
+	case "s": // write the text to a temp file — see save_content.go for why
+		lines := make([]string, 0, len(p.lines))
+		for _, l := range p.lines {
+			lines = append(lines, l.text)
+		}
+		return m, saveTextCmd(p.title, lines)
 	case "q": // close the window, not the app (q quits only at top level)
 		m = m.popLayer()
 		return m, nil
@@ -265,10 +297,28 @@ func (p *contentPopup) box(m Model) string {
 	// that true text width so a full-width row can never spill onto a wrap line.
 	textW := inner - modalStyle.GetHorizontalPadding()
 
+	// In block mode the indent sits OUTSIDE the window: rows are laid out at
+	// bodyW and the gutter is added to each finished line here. That keeps a
+	// WRAPPED continuation on the same margin as the line it belongs to (spaces
+	// baked into the row text would be consumed by its first display line only)
+	// AND keeps the band's tint off the gutter — the band is the message, so it
+	// starts where the text starts.
+	gutter := 0
+	if p.block {
+		gutter = messageBlockGutter
+	}
+	pad := strings.Repeat(" ", gutter)
+	bodyW := textW - 2*gutter
+
 	vis := p.visible()
 	wr := make([]winRow, len(vis))
 	for i, l := range vis {
 		switch {
+		case p.block:
+			wr[i] = winRow{text: l.text, style: messageBlockStyle}
+			if l.heading {
+				wr[i].style = messageBlockStyle.Bold(true)
+			}
 		case p.noCursor:
 			wr[i] = winRow{text: "  " + l.text}
 			if l.heading {
@@ -285,6 +335,24 @@ func (p *contentPopup) box(m Model) string {
 		}
 	}
 	capRows := m.contentPageRows()
+	// contentPageRows budgets for title + blank + hint. Anything else the box
+	// draws has to be paid for here or the box grows past the terminal: block
+	// mode's blank below the band, a search line (which in block mode adds to
+	// the blank rather than replacing it), and the saved-to note with its own
+	// trailing blank.
+	extra := 0
+	if p.block {
+		extra++
+		if p.searchLine() != "" {
+			extra++
+		}
+	}
+	if p.saved != "" {
+		extra += 2
+	}
+	if capRows-extra >= 3 {
+		capRows -= extra
+	}
 	// h grows with content up to the page capacity; renderWindow scrolls to keep
 	// p.sel visible once vis overflows. Styling is applied after truncate/wrap.
 	//
@@ -298,37 +366,69 @@ func (p *contentPopup) box(m Model) string {
 	if p.mode == modeWrap {
 		h = 0
 		for _, r := range wr {
-			h += len(wrapWidth(r.text, textW, 1<<20))
+			// An empty row wraps to NO segments but still occupies one display
+			// line (renderWindow substitutes a blank), so counting the segments
+			// alone loses a line per blank — and git's stderr separates its
+			// paragraphs with blank lines, so the tail fell off the window.
+			n := len(wrapWidth(r.text, bodyW, 1<<20))
+			if n == 0 {
+				n = 1
+			}
+			h += n
 		}
 	}
 	if h > capRows {
 		h = capRows
 	}
-	win := renderWindow(wr, winOpts{w: textW, h: h, mode: p.mode, anchor: p.sel, hscroll: p.hscroll})
+	win := renderWindow(wr, winOpts{w: bodyW, h: h, mode: p.mode, anchor: p.sel, hscroll: p.hscroll})
 
 	var b strings.Builder
 	// The /-search input rides its own line beneath the title (replacing the
 	// blank separator) so a long title can't truncate the query out of view.
-	b.WriteString(truncate(p.title, textW) + "\n")
+	// Block mode keeps BOTH — the band needs its blank line above it as much as
+	// the one below it, or the message runs into the search input.
+	b.WriteString(pad + truncate(p.title, textW-gutter) + "\n")
 	if s := p.searchLine(); s != "" {
-		b.WriteString(truncate(s, textW) + "\n")
-	} else {
+		b.WriteString(pad + truncate(s, textW-gutter) + "\n")
+	}
+	if s := p.searchLine(); s == "" || p.block {
 		b.WriteString("\n")
 	}
 	if len(vis) == 0 {
-		b.WriteString(i18n.T("  (no match)") + "\n")
+		b.WriteString(pad + i18n.T("  (no match)") + "\n")
 	}
 	for _, r := range win {
-		b.WriteString(r + "\n")
+		b.WriteString(pad + r + pad + "\n")
+	}
+	if p.block {
+		b.WriteString("\n") // set what follows apart from the message itself
 	}
 	if p.footer != "" {
 		b.WriteString("  " + truncate(p.footer, textW-2) + "\n")
 	}
-	hint := i18n.T("[/] search  [z] mode  [ctrl+t] full  [q] close")
+	if p.saved != "" {
+		// One blank line above the note and one below it: it is a note ABOUT the
+		// window, so it stands apart from both the content and the key hints.
+		// Block mode already wrote the one above — a second would leave the note
+		// floating two lines below the message it belongs to.
+		if !p.block {
+			b.WriteString("\n")
+		}
+		// The note lines up with the content band above it, and is styled AFTER
+		// truncation: truncate slices runes and would cut an ANSI sequence in
+		// half (the same rule the status bar follows).
+		noteW := textW - 2
+		notePad := "  "
+		if p.block {
+			noteW, notePad = bodyW, pad
+		}
+		b.WriteString(notePad + savedNoteStyle.Width(noteW).Render(truncate(i18n.T("saved to %s", p.saved), noteW)) + "\n\n")
+	}
+	hint := i18n.T("[/] search  [z] mode  [s] save  [ctrl+t] full  [q] close")
 	if len(vis) > capRows {
 		hint = fmt.Sprintf("%d/%d  %s", p.sel+1, len(vis), hint)
 	}
-	b.WriteString(truncate(hint, textW))
+	b.WriteString(pad + truncate(hint, textW-gutter))
 	return p.boxStyle().Width(inner).Render(b.String()) + "\n"
 }
 

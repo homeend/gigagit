@@ -48,6 +48,10 @@ const noticeClipboard = "clipboard_tool_missing"
 // recommendation's stable id.
 const noticeNarrowRefspec = "narrow_fetch_refspec"
 
+// noticeWSLInterop is the "WSL interop is unregistered, so copy is broken"
+// warning's stable id.
+const noticeWSLInterop = "wsl_interop_broken"
+
 // bigRepoPackBytes is the pack-size floor for "big repo": below it the
 // commit-graph win doesn't matter enough to nag about.
 const bigRepoPackBytes = 100 << 20
@@ -150,6 +154,9 @@ func (m Model) rebuildNotices() Model {
 	if n := clipboardNotice(m.clipAvail, m.repoHealth.GitCommonDir); n != nil && !dismissed[n.id] && !m.noticeSessionDismissed[n.id] {
 		next = append(next, *n)
 	}
+	if n := wslInteropNotice(m.clipAvail, m.repoHealth.GitCommonDir); n != nil && !dismissed[n.id] && !m.noticeSessionDismissed[n.id] {
+		next = append(next, *n)
+	}
 	m.notices = next
 	return m
 }
@@ -237,6 +244,9 @@ func clipboardNotice(av clipboard.Availability, repoKey string) *notice {
 	if av.Available || av.Install == "" {
 		return nil
 	}
+	if av.WSLInteropBroken {
+		return nil // wslInteropNotice covers this same failure, with the real cause.
+	}
 	detail := []string{
 		i18n.T("gg's copy actions (commit SHAs, branch/tag names, diffs) can't reach your system clipboard: a Linux terminal app needs a small helper program and none is installed."),
 		i18n.T("gg is falling back to a terminal escape (OSC 52) that many terminals — and tmux without extra config — don't honour, so a copy can silently do nothing."),
@@ -249,6 +259,47 @@ func clipboardNotice(av clipboard.Availability, repoKey string) *notice {
 		id:      noticeClipboard,
 		repoKey: repoKey,
 		title:   i18n.T("Clipboard copy may not work — install a clipboard tool"),
+		detail:  detail,
+		actions: []noticeAction{
+			{label: i18n.T("Not now (ask again next load)")},
+			{label: i18n.T("Never for this repo"), never: true},
+		},
+	}
+}
+
+// wslInteropNotice fires on WSL when the kernel cannot execute Windows
+// binaries: clip.exe is on PATH and looks usable, but running it fails with
+// "exec format error", so every copy falls through to an OSC 52 escape that
+// tmux does not forward — and the status line still says "Copied …".
+//
+// It only fires when NOTHING else can reach the clipboard. If wl-copy or xclip
+// covers it, copy works and gg stays quiet; broken Windows-exe interop in
+// general is the user's business, not gg's. Dismiss-only, because the fix needs
+// root; it self-clears on the next load once either remedy lands.
+func wslInteropNotice(av clipboard.Availability, repoKey string) *notice {
+	if !av.WSLInteropBroken || av.Available {
+		return nil
+	}
+	detail := []string{
+		i18n.T("Copying is broken on this machine: WSL cannot run Windows programs, so gg can't hand text to clip.exe."),
+		i18n.T("gg falls back to a terminal escape (OSC 52) that tmux doesn't forward, so a copy silently does nothing — even though the status line says it worked."),
+		"",
+		i18n.T("The cause is outside gg: the kernel has no WSLInterop entry (systemd-binfmt drops it at boot when systemd is enabled in /etc/wsl.conf)."),
+		"",
+		i18n.T("Fix it once, so it survives a reboot:"),
+		"",
+		"    sudo sh -c 'mkdir -p /etc/binfmt.d && \\",
+		"      echo \":WSLInterop:M::MZ::/init:PF\" > /etc/binfmt.d/WSLInterop.conf'",
+		"    sudo systemctl restart systemd-binfmt",
+		"",
+		i18n.T("Or, without touching binfmt — install a Linux clipboard tool, which gg will use instead (WSLg shares its clipboard with Windows):"),
+		"",
+	}
+	detail = append(detail, clipboardInstallLines("wl-clipboard")...)
+	return &notice{
+		id:      noticeWSLInterop,
+		repoKey: repoKey,
+		title:   i18n.T("Clipboard copy is broken — WSL can't run Windows programs"),
 		detail:  detail,
 		actions: []noticeAction{
 			{label: i18n.T("Not now (ask again next load)")},

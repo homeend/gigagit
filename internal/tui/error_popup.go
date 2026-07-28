@@ -40,10 +40,19 @@ func newErrorPopup(msg string) *contentPopup {
 	for _, l := range strings.Split(strings.TrimRight(sanitizeForDisplay(msg), "\n"), "\n") {
 		lines = append(lines, contentLine{text: strings.TrimRight(l, " \t")})
 	}
-	p := newContentPopup(i18n.T("Last error"), lines)
+	// The viewer also serves messages that are merely too long for the bar, so
+	// the red frame and the title follow what the message actually is — framing
+	// a successful summary as an error would misreport it.
+	isErr := statusIsError(msg)
+	title := i18n.T("Full message")
+	if isErr {
+		title = i18n.T("Last error")
+	}
+	p := newContentPopup(title, lines)
 	p.mode = modeWrap
-	p.danger = true
+	p.danger = isErr
 	p.noCursor = true
+	p.block = true // the message is quoted text: its own band, its own margins
 	return p
 }
 

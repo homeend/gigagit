@@ -353,6 +353,119 @@ func TestNonErrorLineHasNoPointer(t *testing.T) {
 	}
 }
 
+// A failure whose prefix statusIsError does not recognise still needs [E]:
+// the bar truncated it, so the tail is unreadable without the popup. Seven of
+// the eight refresh sources report as "<source>: <git stderr>" and only
+// "commits:" happens to be in the error-prefix list, so a repo switch that
+// fails while reloading branches/status/worktrees lands here.
+func TestLongUnclassifiedMessageIsCaptured(t *testing.T) {
+	m := sizedModel(t, 80, 30)
+	long := "branches: fatal: could not read from remote repository " + strings.Repeat("x", 120)
+	u, _ := m.Update(dataAvailableMsg{source: srcBranches, gen: m.srcGen[srcBranches], manual: true, err: errors.New(strings.TrimPrefix(long, "branches: "))})
+	m = u.(Model)
+	if m.statusMsg != long {
+		t.Fatalf("precondition: status not set as expected: %q", m.statusMsg)
+	}
+	if m.lastError != long {
+		t.Fatalf("a message too long for the bar must be recoverable via [E], got lastError=%q", m.lastError)
+	}
+}
+
+// The converse: a short message fits, so there is nothing to recover and the
+// footer must not advertise [E] for it.
+func TestShortUnclassifiedMessageIsNotCaptured(t *testing.T) {
+	m := sizedModel(t, 80, 30)
+	u, _ := m.Update(dataAvailableMsg{source: srcBranches, gen: m.srcGen[srcBranches], manual: true, err: errors.New("boom")})
+	if got := u.(Model).lastError; got != "" {
+		t.Fatalf("a message that fits the bar needs no [E] pointer, got %q", got)
+	}
+}
+
+// …and the pointer is rendered for it, or the user has no way to know E works.
+func TestLongUnclassifiedMessageShowsPointer(t *testing.T) {
+	m := sizedModel(t, 80, 30)
+	m.statusMsg = "branches: fatal: could not read from remote repository " + strings.Repeat("x", 120)
+	m.lastError = m.statusMsg
+	out := ansi.Strip(m.View())
+	assertFrameFits(t, out, 30, 80)
+	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+	if last := lines[len(lines)-1]; !strings.HasPrefix(last, "[E] full details") {
+		t.Fatalf("a truncated message must lead with the pointer, got:\n%s", last)
+	}
+}
+
+// The whole loop for the reported case, driven through Update: an
+// unclassified failure arrives, the bar cuts it, and E opens the tail the bar
+// could not show.
+func TestUnclassifiedFailureIsReadableViaE(t *testing.T) {
+	m := sizedModel(t, 80, 30)
+	tail := "Temporary-failure-in-name-resolution"
+	u, _ := m.Update(dataAvailableMsg{
+		source: srcBranches, gen: m.srcGen[srcBranches], manual: true,
+		err: errors.New("fatal: could not read from remote repository " + strings.Repeat("x", 120) + " " + tail),
+	})
+	m = u.(Model)
+	if strings.Contains(ansi.Strip(m.View()), tail) {
+		t.Fatal("precondition: the one-line bar must have cut the tail")
+	}
+	u, _ = m.Update(keyMsg("E"))
+	m = u.(Model)
+	if layerOf[*contentPopup](m) == nil {
+		t.Fatal("E must open the viewer for a truncated non-error-prefixed failure")
+	}
+	// The viewer wraps, so the tail can straddle a row boundary — compare with
+	// whitespace removed rather than asserting it lands on one line.
+	out := ansi.Strip(m.View())
+	if !strings.Contains(squashToWordChars(out), tail) {
+		t.Fatalf("the viewer must show the text the bar cut:\n%s", out)
+	}
+}
+
+// squashToWordChars keeps only letters, digits and hyphens. A wrapped row
+// boundary inserts not just a newline but the popup's own box borders between
+// the halves of a split word, so dropping whitespace alone is not enough to
+// check that a long string reached the screen intact.
+func squashToWordChars(s string) string {
+	return strings.Map(func(r rune) rune {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-':
+			return r
+		}
+		return -1
+	}, s)
+}
+
+// A snapshot load that fails AFTER the UI has been up (a repo switch into a
+// broken repo) must not replace the whole screen with a bare error line: that
+// leaves no status bar, no footer, and no key to press. Surface it like any
+// other failure so [E] can show the full text.
+func TestFailedReloadKeepsTheInterface(t *testing.T) {
+	m := sizedModel(t, 80, 30)
+	m.loadedOK = true // a successful load already happened
+	boom := "fatal: not a git repository (or any parent up to mount point /mnt) " + strings.Repeat("y", 120)
+	u, _ := m.Update(dataLoadedMsg{gen: m.loadGen, err: errors.New(boom)})
+	m = u.(Model)
+	out := ansi.Strip(m.View())
+	if !strings.Contains(out, "[b]ranch") {
+		t.Fatalf("the interface must survive a failed reload:\n%s", out)
+	}
+	if !strings.Contains(m.lastError, boom) {
+		t.Fatalf("the failure must be recoverable via [E], got lastError=%q", m.lastError)
+	}
+}
+
+// But a load that fails before anything was ever shown keeps the bare screen:
+// there is no interface to preserve, and an empty frame would read as a
+// working UI onto an unreadable repo.
+func TestFirstLoadFailureStillShowsBareError(t *testing.T) {
+	m := sizedModel(t, 80, 30)
+	m.loadedOK = false
+	u, _ := m.Update(dataLoadedMsg{gen: m.loadGen, err: errors.New("fatal: not a git repository")})
+	if out := ansi.Strip(u.(Model).View()); strings.Contains(out, "[b]ranch") {
+		t.Fatalf("a first-load failure must not render an empty interface:\n%s", out)
+	}
+}
+
 // [E] opens the last failure in full: the part the one-line bar had to cut is
 // visible in the popup, wrapped rather than truncated.
 func TestErrorPopupShowsTheTextTheBarCut(t *testing.T) {
@@ -368,8 +481,12 @@ func TestErrorPopupShowsTheTextTheBarCut(t *testing.T) {
 	if layerOf[*contentPopup](m) == nil {
 		t.Fatal("E must open the error viewer")
 	}
+	// Compare with whitespace and box borders removed, like the sibling test
+	// above: the viewer wraps, so the tail can straddle a row boundary — which
+	// it now does, the message block having traded two columns of text width
+	// for its margins.
 	out := ansi.Strip(m.View())
-	if !strings.Contains(out, tail) {
+	if !strings.Contains(squashToWordChars(out), tail) {
 		t.Fatalf("the popup must show the text the bar cut:\n%s", out)
 	}
 }

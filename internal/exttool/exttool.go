@@ -14,6 +14,8 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+
+	"github.com/homeend/gigagit/internal/template"
 )
 
 // Category is a task category a command belongs to.
@@ -441,5 +443,15 @@ func GenerateCommandFor(tmpl CommandTemplate, bin, goos string) string {
 		}
 		return "${" + name + "}"
 	})
+	if goos == "windows" {
+		// The catalog templates are written multi-line for readability, which
+		// a POSIX shell accepts (a quoted string spans lines; a trailing \
+		// continues one) but cmd.exe cannot run at all — it would launch the
+		// tool from the first line with no flags. Materialize the single-line
+		// form so the config says what will actually run: it is shown for
+		// approval before its first run, and gg must not execute text the
+		// user did not see.
+		out = template.FlattenForCmd(out)
+	}
 	return out
 }

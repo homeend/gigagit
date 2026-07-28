@@ -8,6 +8,24 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **fix: external tools ran with none of their flags on Windows.** Selecting
+  *Claude (yolo)* for a conflict launched Claude in normal permission mode —
+  `--dangerously-skip-permissions` never reached it. gg writes the configured
+  command to a temp `.bat` and runs it through cmd.exe, which cannot express
+  two things a POSIX shell accepts and gg's own templates use: a line ending
+  in a backslash (POSIX continuation) and a double-quoted string spanning
+  lines. cmd.exe ran the tool from the FIRST line — truncated prompt, no flags
+  — and treated the rest as separate commands. Both shapes are now joined
+  before the script is written; a genuine multi-line batch script (a worktree
+  post-create hook) still runs line by line. Affects every Windows lane that
+  runs a configured command: the conflict picker, `ctrl+g` commit-message
+  generation, AI review (TUI, CLI and web) and the post-create hook. **No
+  config change is needed** — existing `[[tools.command]]` blocks are repaired
+  as they run. New blocks are also **written** single-line on Windows, so the
+  config says what will actually run — it is what the approval popup shows
+  before a command's first run, and gg should not execute text you were not
+  shown.
+
 - **fix: interactive rebase and reword failed on Windows.** git runs
   `GIT_SEQUENCE_EDITOR` and every rebase `exec` line through its own bundled
   POSIX sh — not cmd.exe — and gg passed the gg binary's path unquoted, so a
@@ -164,6 +182,78 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   op transport (conflicts park in the decision modal).
 - web: the line-mode commit dot now aligns with the graph's leftmost
   lane; the working-tree row's dot aligns in both modes.
+
+- tui: **the `[E]` message viewer reads as one block, on one margin.** The window
+  used to indent its three kinds of line by three different amounts — the title
+  and the key hints at the box padding, each message line two columns further
+  in, and a *wrapped* message line all the way back at the padding — so a single
+  wrapped error came out as a ragged staircase, with the hints running straight
+  on from git's stderr. Now the message is a faint band: every line, wrap
+  continuations included, starts in one column and keeps an equal margin on the
+  right (the indent moved outside the window rather than into the row text,
+  which is what carries it onto a continuation), the band covers the text
+  columns only — no tinted gutter down either side — and a blank line below it
+  sets what follows apart from the message. Only the background changes, so the
+  text keeps the terminal's own foreground and stays readable inside the red
+  danger frame. The `saved to …` note now sits between one blank line above and
+  one below rather than two above and none. Fixed alongside it: a blank line in the
+  message wrapped to *no* segments while still occupying a display line, so the
+  window came up one row short per blank and clipped the tail off the very
+  message the viewer exists to show — git separates its stderr paragraphs with
+  blank lines, so the common `Please make sure you have the correct access
+  rights / and the repository exists.` block lost its last line.
+
+- tui: **`s` saves a popup's text to a temp file** and reports the path — in the
+  notification dialog and in every `contentPopup`-backed window (the `[E]` full
+  message viewer, help, …). Reading a fix instruction out of a popup and then
+  getting it into a shell was a chore: a terminal multiplexer selects whole
+  terminal-width *lines*, so a centred box comes with the panels either side of
+  it, and the box's own wrapping breaks a long command across rows. The RAW
+  lines are written, never the wrapped render, so a `sudo …` block comes back as
+  one pasteable line. Deliberately a file rather than the clipboard: gg's
+  clipboard path can silently no-op (a WSL `clip.exe` that can't exec, an OSC 52
+  escape the terminal drops) while still reporting success — and the reason
+  someone is reading a fix instruction out of a popup may be that copying is
+  what broke.
+
+- tui: `[E]` now reaches every status message the one-line bar had to cut, not
+  just the seven prefixes `statusIsError` recognises. That predicate gated both
+  the red styling *and* the capture into `lastError`, while the TUI sets ~40
+  distinct error-prefixed messages — including the per-source refresh failures
+  (`branches: <git stderr>`, `worktrees: …`), of which only `commits:` happened
+  to be listed. A repo switch that failed while reloading branches truncated a
+  paragraph of git stderr into one line with no way to read the rest. Capture is
+  now structural (`statusNeedsFull`): anything too wide for the bar is kept,
+  error or not, so a message added anywhere can never be missed again. The
+  pointer renders for those too, and the viewer titles itself "Full message"
+  with no red frame when the message is not a failure. `[E]` relabelled from
+  "last error" to "full message".
+- tui: a snapshot load that fails **after** the UI is up — a repo switch into an
+  unreadable repo — no longer replaces the whole screen with a bare `error: …`
+  line that has no status bar, no footer and nothing to press. Once one load has
+  succeeded (`loadedOK`), a later failure is reported like any other, keeping
+  the interface and making the full text readable via `[E]`. A first-load
+  failure still shows the bare error: there is no interface to preserve, and an
+  empty frame would read as a working UI onto a broken repo.
+
+- clipboard: detect a WSL kernel that cannot execute Windows binaries, and stop
+  handing copies to a `clip.exe` that will fail. `exec.LookPath` finds
+  `clip.exe` whether or not WSL interop is registered, so gg used to choose it,
+  fail at exec time with `exec format error`, fall through to the OSC 52 escape
+  (whose write always "succeeds"), and report a green `Copied …` while the
+  clipboard never changed. `nativeCopyCmd` now gates `clip.exe` on a
+  `binfmt_misc` probe: with interop dead it falls through to `wl-copy` / `xclip`
+  / `xsel`, which under WSLg reaches the Windows clipboard anyway. An
+  unreadable `binfmt_misc` is treated as working, so a machine gg cannot
+  inspect (WSL1, a sandboxed `/proc`) keeps its existing behavior. A new
+  `wsl_interop_broken` notice fires in the `!` center — only when no fallback
+  tool covers it, superseding the generic "install a clipboard tool" notice so
+  one problem yields one notice — explaining why the green status lied and
+  offering both remedies: a persistent `/etc/binfmt.d/WSLInterop.conf` or
+  installing `wl-clipboard`. Dismiss-only, and it self-clears once either fix
+  lands. New `debugging-clipboard-copy` project skill documents the whole
+  triage.
+
 
 - web: command palette (`ctrl+k` / `ctrl+p`) — pull/push/refresh, sidebar and
   graph toggles, help, and a **switch repo…** mode listing previously-opened

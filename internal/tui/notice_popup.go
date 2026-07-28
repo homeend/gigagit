@@ -20,7 +20,12 @@ type noticePopup struct {
 	actSel      int
 	mode        dispMode
 	hscroll     int
+	// saved is where `s` last wrote the selected notice. Shown inside the box —
+	// the dialog covers the status bar (save_content.go).
+	saved string
 }
+
+func (p *noticePopup) noteSaved(path string) { p.saved = path }
 
 // openNoticeCenter opens the dialog and marks every notice read (the blink
 // tick stops re-arming on its next fire).
@@ -58,6 +63,12 @@ func (p *noticePopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				p.hscroll += m.hscrollStep()
 			}
 			return m, nil
+		case "s": // write the notice to a temp file — see save_content.go for why
+			n := p.currentNotice(m)
+			if n == nil {
+				return m, nil
+			}
+			return m, saveTextCmd(n.title, append([]string{n.title, ""}, n.detail...))
 		}
 	}
 	switch msg.Type {
@@ -194,7 +205,12 @@ func (p *noticePopup) box(m Model) string {
 				b.WriteString(line + "\n")
 			}
 		}
-		b.WriteString("\n" + i18n.T("[↑/↓] select  [enter] actions  [z] mode  [esc] close"))
+		if p.saved != "" {
+			// Blank line above, then the styled band — see content_popup.go for
+			// the truncate-then-style ordering.
+			b.WriteString("\n\n" + savedNoteStyle.Width(textW).Render(truncate(i18n.T("saved to %s", p.saved), textW)))
+		}
+		b.WriteString("\n" + i18n.T("[↑/↓] select  [enter] actions  [z] mode  [s] save  [esc] close"))
 	}
 	return popupBox(inner, strings.TrimRight(b.String(), "\n"))
 }
