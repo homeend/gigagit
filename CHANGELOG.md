@@ -8,6 +8,24 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- tui: **the `[E]` message viewer reads as one block, on one margin.** The window
+  used to indent its three kinds of line by three different amounts — the title
+  and the key hints at the box padding, each message line two columns further
+  in, and a *wrapped* message line all the way back at the padding — so a single
+  wrapped error came out as a ragged staircase, with the hints running straight
+  on from git's stderr. Now the message is a faint band spanning the box: every
+  line, wrap continuations included, starts in one column and keeps an equal
+  margin on the right (the indent became a frozen gutter column rather than
+  text, which is what carries it onto a continuation), and a blank line below
+  the band sets the actions apart from the message. The tint is the popup's, not
+  the terminal's, so the text keeps the terminal's own foreground and stays
+  readable inside the red danger frame. Fixed alongside it: a blank line in the
+  message wrapped to *no* segments while still occupying a display line, so the
+  window came up one row short per blank and clipped the tail off the very
+  message the viewer exists to show — git separates its stderr paragraphs with
+  blank lines, so the common `Please make sure you have the correct access
+  rights / and the repository exists.` block lost its last line.
+
 - tui: **`s` saves a popup's text to a temp file** and reports the path — in the
   notification dialog and in every `contentPopup`-backed window (the `[E]` full
   message viewer, help, …). Reading a fix instruction out of a popup and then

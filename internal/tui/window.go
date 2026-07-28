@@ -52,6 +52,11 @@ type winOpts struct {
 	anchor  int
 	hscroll int // modeScroll horizontal offset (display columns)
 	prefixW int // width of the frozen winRow.prefix column (0 = none)
+	// suffixW reserves trailing columns the body never wraps or scrolls into.
+	// Every line is still padded to w, so a row style paints the reserved
+	// columns too — that is what gives a styled block an inner right margin
+	// matching the prefixW gutter on the left (the [E] message viewer).
+	suffixW int
 }
 
 // renderWindow lays rows out under o and returns exactly o.h display lines,
@@ -114,7 +119,14 @@ func renderWindow(rows []winRow, o winOpts) []string {
 	if pw > w-1 {
 		pw = w - 1 // always leave at least one column for the body
 	}
-	bodyW := w - pw
+	sw := o.suffixW
+	if sw < 0 {
+		sw = 0
+	}
+	if sw > w-pw-1 {
+		sw = w - pw - 1 // as with the prefix: the body keeps at least one column
+	}
+	bodyW := w - pw - sw
 
 	type dline struct {
 		text  string
