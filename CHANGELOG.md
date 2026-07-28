@@ -8,6 +8,19 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- tui: **`s` saves a popup's text to a temp file** and reports the path — in the
+  notification dialog and in every `contentPopup`-backed window (the `[E]` full
+  message viewer, help, …). Reading a fix instruction out of a popup and then
+  getting it into a shell was a chore: a terminal multiplexer selects whole
+  terminal-width *lines*, so a centred box comes with the panels either side of
+  it, and the box's own wrapping breaks a long command across rows. The RAW
+  lines are written, never the wrapped render, so a `sudo …` block comes back as
+  one pasteable line. Deliberately a file rather than the clipboard: gg's
+  clipboard path can silently no-op (a WSL `clip.exe` that can't exec, an OSC 52
+  escape the terminal drops) while still reporting success — and the reason
+  someone is reading a fix instruction out of a popup may be that copying is
+  what broke.
+
 - tui: `[E]` now reaches every status message the one-line bar had to cut, not
   just the seven prefixes `statusIsError` recognises. That predicate gated both
   the red styling *and* the capture into `lastError`, while the TUI sets ~40
