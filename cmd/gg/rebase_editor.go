@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -29,7 +30,7 @@ func runRebaseSeq(args []string) error {
 	if err != nil {
 		return err
 	}
-	todo, err := p.RewriteTodo(ggBin, planPath)
+	todo, err := p.RewriteTodo(ggBin, planPath, runtime.GOOS)
 	if err != nil {
 		return err
 	}

@@ -8,6 +8,17 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **fix: interactive rebase and reword failed on Windows.** git runs
+  `GIT_SEQUENCE_EDITOR` and every rebase `exec` line through its own bundled
+  POSIX sh — not cmd.exe — and gg passed the gg binary's path unquoted, so a
+  Windows path's backslashes were eaten as escapes: `t:\others\…\gg.exe`
+  reached the shell as `t:othersgg.exe` and git reported *"there was a problem
+  with the editor"*. Both paths are now converted to forward slashes and
+  single-quoted. The same defect broke any path containing a **space** on
+  every platform, which is what the new regression test exercises. Affects the
+  TUI's interactive rebase, reword and single-commit move/drop as well as the
+  web editor.
+
 - web: **an interactive-rebase plan editor.** Drag a branch onto another and
   pick *interactive rebase A onto B…*: every commit A has that B does not is
   listed newest-first, and each row can be **pick**, **reword** (the message
