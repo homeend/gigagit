@@ -13,11 +13,18 @@ import (
 	"github.com/homeend/gigagit/internal/observ"
 )
 
-// waitDelay bounds how long Wait lingers for the stdout/stderr pipes to close
-// after the git process itself has exited. A large checkout can spawn a
-// long-lived background daemon (fsmonitor, `gc --auto`, `git maintenance`) that
-// inherits the subprocess's stdout fd and outlives it; without this bound the
-// pipe never reaches EOF and a reader blocks forever even though git is done.
+// waitDelay bounds two things Wait would otherwise do forever.
+//
+// First, how long Wait lingers for the stdout/stderr pipes to close after the
+// git process itself has exited. A large checkout can spawn a long-lived
+// background daemon (fsmonitor, `gc --auto`, `git maintenance`) that inherits
+// the subprocess's stdout fd and outlives it; without this bound the pipe
+// never reaches EOF and a reader blocks forever even though git is done.
+//
+// Second, how long a cancelled git gets to honour the graceful terminate
+// signal before Wait escalates to a hard kill. Git's lockfile cleanup runs
+// from its signal handler, so it needs those milliseconds — but a git wedged
+// inside the handler must not hold the repo gate indefinitely.
 const waitDelay = 2 * time.Second
 
 // compile-time assertion that ExecRunner satisfies Runner.
@@ -30,6 +37,29 @@ type ExecRunner struct {
 	recorder observ.Recorder
 	now      func() time.Time
 	sshBatch bool
+	// waitDelay overrides the package const; tests shorten it to keep the
+	// escalation path fast. Zero means use waitDelay.
+	waitDelay time.Duration
+}
+
+// cancelDelay is the effective grace period for this runner.
+func (r *ExecRunner) cancelDelay() time.Duration {
+	if r.waitDelay > 0 {
+		return r.waitDelay
+	}
+	return waitDelay
+}
+
+// prepare applies the settings every git invocation shares. The Cancel hook is
+// the important one: without it os/exec SIGKILLs git on context cancellation,
+// which strands whatever lockfiles it held (see terminate's doc comment). gg
+// cancels git routinely — startOp preempts the background refresh lane on every
+// user action — so this is a hot path, not an edge case.
+func (r *ExecRunner) prepare(cmd *exec.Cmd, env []string) {
+	cmd.Dir = r.workDir
+	cmd.Env = r.gitEnv(env)
+	cmd.WaitDelay = r.cancelDelay()
+	cmd.Cancel = func() error { return terminate(cmd.Process) }
 }
 
 // NewExecRunner returns a runner that invokes gitPath in workDir, recording
@@ -151,9 +181,7 @@ func (r *ExecRunner) Run(ctx context.Context, name string, argv []string) (Resul
 func (r *ExecRunner) RunEnv(ctx context.Context, name string, argv, env []string) (Result, error) {
 	start := r.now()
 	cmd := exec.CommandContext(ctx, r.gitPath, argv...)
-	cmd.Dir = r.workDir
-	cmd.Env = r.gitEnv(env)
-	cmd.WaitDelay = waitDelay
+	r.prepare(cmd, env)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -183,9 +211,7 @@ func (r *ExecRunner) RunEnv(ctx context.Context, name string, argv, env []string
 func (r *ExecRunner) Stream(ctx context.Context, name string, argv []string, onLine func(string)) (Result, error) {
 	start := r.now()
 	cmd := exec.CommandContext(ctx, r.gitPath, argv...)
-	cmd.Dir = r.workDir
-	cmd.Env = r.gitEnv(nil)
-	cmd.WaitDelay = waitDelay
+	r.prepare(cmd, nil)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	// Stream stdout through a line-splitting writer rather than StdoutPipe() + a

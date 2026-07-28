@@ -2100,6 +2100,11 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		pendingCo := m.pendingCheckout // captured; cleared below whatever happened
 		if msg.err != nil {
 			m.statusMsg = friendlyOpError(msg.err)
+			// A lock failure is recoverable in-app; arm the notice before the
+			// generic health re-read below picks it up. Safe to reach the
+			// refreshHealthAfterOp path from here: every early return between
+			// this point and it is on the success branch.
+			m = m.maybeStaleLockNotice(msg.err)
 			var div engine.CheckoutDivergedError
 			// Field-match the typed error against the armed pending checkout so a
 			// mismatched-arm dispatch site is structurally unable to show a wrong prompt.

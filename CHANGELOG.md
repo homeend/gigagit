@@ -8,6 +8,36 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **fix: gg stranded `.git/index.lock` files, breaking the repo until the user
+  deleted them by hand.** Reported as: in a big repo, with a background fetch
+  running, pressing keys (space to stage, `c` to commit) produced "another
+  operation is already running" and a git lock that never went away. The cause
+  was in `internal/gitexec`: every git subprocess is built with
+  `exec.CommandContext` and no `cmd.Cancel`, so Go's default cancel action —
+  **SIGKILL** — was used. Git releases its lockfiles from a signal handler
+  (`sigchain`), which SIGKILL cannot run, so any git cancelled while holding a
+  lock stranded it permanently. And gg cancels git constantly: `startOp`
+  preempts the in-flight background refresh on *every* user action
+  (`tui/op.go`), so a keypress landing inside a slow `git status`'s index
+  writeback — likely on a 20 GB head, invisible on a small repo — left the lock
+  behind and the *next* operation failed. Two layers now:
+  - **Cancellation is graceful.** `ExecRunner.prepare` sets `cmd.Cancel` to send
+    SIGTERM (`terminate`, platform-split), letting git remove its own locks;
+    `cmd.WaitDelay` still escalates to a hard kill so a wedged git cannot hold
+    the repo gate. Verified against a real git: a cancelled `git add` now leaves
+    no `index.lock` and the next operation succeeds.
+  - **Stale locks are detected and removable in-app.** Windows has no SIGTERM
+    (`os.Process.Signal` only supports Kill), so locks can still leak there, and
+    nothing helps with a lock left by another tool or a power loss. New:
+    `git.LockFiles` (stat-level probe of a fixed candidate list over the
+    worktree git dir + common dir), `git.IsLockError`, the
+    `engine.RemoveGitLocks` op (exclusive reservation; refuses any path that is
+    not a known lockfile name inside the repo's git dirs; validates the whole
+    batch before removing anything), a `stale_git_lock` notification-center
+    notice — raised on repo load AND reactively when an operation fails with a
+    lock error, showing each lock's age — and `gg unlock [--yes]`. gg never
+    decides a lock is stale on its own: it cannot see git processes it did not
+    start, so it reports what it found and the human chooses.
 - **fix: external tools ran with none of their flags on Windows.** Selecting
   *Claude (yolo)* for a conflict launched Claude in normal permission mode —
   `--dangerously-skip-permissions` never reached it. gg writes the configured

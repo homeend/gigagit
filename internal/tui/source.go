@@ -276,6 +276,14 @@ func opAffectedSources(op engine.Operation) []sourceKey {
 		return []sourceKey{srcBranches, srcWorktrees}
 	case engine.RemoveWorktree:
 		return []sourceKey{srcBranches, srcWorktrees}
+	case engine.RemoveGitLocks:
+		// Removing a lockfile changes no git state of its own — git's lock
+		// protocol means the killed write was never applied. But the process
+		// that died may have completed work gg never observed, and the panels
+		// have been showing whatever was cached since, so re-read status.
+		// Explicit rather than falling through to "all sources", which would
+		// auto-fire the srcTags remote-tags network probe.
+		return []sourceKey{srcStatus}
 	case engine.RepairWorktree:
 		// Only the worktree admin metadata changed. (The success path chains
 		// a full reRoot before this mapping is consulted; this covers the

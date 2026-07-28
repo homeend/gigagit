@@ -91,7 +91,9 @@ func main() {
 	// A mistyped/unknown subcommand should error, not silently open the TUI.
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 		fmt.Fprintf(os.Stderr, "gg: unknown command %q\n", args[0])
-		fmt.Fprintln(os.Stderr, "commands: status commit pull push switch checkout branch stash undo discard shelf bookmark merge rebase cherry-pick revert reset worktree remote tag compare repo init mcp inspect version (run `gg` with no arguments for the TUI)")
+		// Kept in sync with cli.commands (plus the commands main routes itself:
+		// shell-init, inspect, mcp, web, version).
+		fmt.Fprintln(os.Stderr, "commands: status commit pull push switch checkout branch stash undo merge rebase fast-forward cherry-pick revert reset discard add unstage log diff show compare shelf bookmark prefix worktree remote tag versions review apply unlock config repo init batch mcp web shell-init inspect version (run `gg` with no arguments for the TUI)")
 		os.Exit(2)
 	}
 	// No subcommand: launch the TUI. The runner stack (LimitRunner + ssh

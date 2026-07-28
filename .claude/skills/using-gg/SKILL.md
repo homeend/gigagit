@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v54 -->
+<!-- gg:using-gg:v55 -->
 
 # Using gg (gigagit)
 
@@ -162,6 +162,13 @@ guards against removing the worktree you are standing in.
   first). Restoring the current branch hard-resets; `--discard` answers the
   dirty-tree prompt. Also recreates a deleted branch. Exit 0 restored,
   1 failure/unknown id, 2 usage.
+- `gg unlock [--yes]` — list git lock files (`.git/index.lock` and friends)
+  stranded by a git process that was killed before it could clean up. While
+  one exists every git command fails with "Another git process seems to be
+  running in this repository". Without `--yes` nothing is removed: exit 0 when
+  clean, **exit 1 when locks are present** (so it works as a precondition
+  check), 2 usage. Pass `--yes` to remove them — but only once you are sure no
+  other git is running, since deleting a live git's lock corrupts its write.
 - `gg merge [--into <target>] [--on-conflict=keep|abort] <source>` — merge one
   branch into another (default target: the current branch; worktree-aware —
   merges in the worktree that has the target checked out, autostashes when it
