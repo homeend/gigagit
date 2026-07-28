@@ -148,6 +148,70 @@ func TestSavedPathIsVisibleInsideTheNoticeDialog(t *testing.T) {
 	}
 }
 
+// savedRow returns the rendered line carrying path, raw (escapes intact), plus
+// the stripped line above it — the two things the confirmation's presentation
+// depends on.
+func savedRow(t *testing.T, m Model, path string) (raw, above string) {
+	t.Helper()
+	rawLines := strings.Split(m.View(), "\n")
+	for i, l := range rawLines {
+		if strings.Contains(ansi.Strip(l), path) {
+			if i == 0 {
+				t.Fatal("the confirmation must not be the first line — nothing could sit above it")
+			}
+			return l, ansi.Strip(rawLines[i-1])
+		}
+	}
+	t.Fatalf("no rendered line carries %q:\n%s", path, ansi.Strip(m.View()))
+	return "", ""
+}
+
+// boxNoise strips the characters a bordered box contributes, so "is this line
+// blank?" can be asked of a line that still has borders on it.
+func boxNoise(s string) string {
+	return strings.TrimSpace(strings.Map(func(r rune) rune {
+		if strings.ContainsRune("│║╔╗╚╝╭╮╰╯─═", r) {
+			return -1
+		}
+		return r
+	}, s))
+}
+
+// The confirmation gets breathing room above it and its own background, so it
+// reads as a separate note rather than another row of the content.
+func TestSavedLineIsSetApart(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		open func(t *testing.T) Model
+		path string
+	}{
+		{"content popup", func(t *testing.T) Model {
+			m := sizedModel(t, 100, 40)
+			return m.pushLayer(newContentPopup("Full message", []contentLine{{text: "hello"}}))
+		}, "/tmp/gg-full-message-42.txt"},
+		{"notice dialog", func(t *testing.T) Model {
+			m, _ := noticeTestModel(t)
+			u, _ := m.Update(repoHealthMsg{gen: m.noticeGen, health: model.RepoHealth{GitCommonDir: "/k"}, clipAvail: x11NoToolAvail()})
+			u, _ = u.(Model).Update(tea.WindowSizeMsg{Width: 100, Height: 40})
+			u, _ = u.(Model).Update(keyMsg("!"))
+			return u.(Model)
+		}, "/tmp/gg-notice-42.txt"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			forceColor(t) // lipgloss emits no escapes when stdout is not a terminal
+			m := tt.open(t)
+			u, _ := m.Update(contentSavedMsg{path: tt.path})
+			raw, above := savedRow(t, u.(Model), tt.path)
+			if boxNoise(above) != "" {
+				t.Errorf("want a blank line above the confirmation, got %q", boxNoise(above))
+			}
+			if !strings.Contains(raw, "\x1b[") {
+				t.Errorf("the confirmation must be styled, got an unstyled line: %q", ansi.Strip(raw))
+			}
+		})
+	}
+}
+
 // Advertised in the footer of both popups, or nobody finds it.
 func TestSaveHintIsAdvertised(t *testing.T) {
 	m := sizedModel(t, 100, 40)

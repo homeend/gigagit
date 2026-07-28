@@ -206,7 +206,9 @@ func (p *noticePopup) box(m Model) string {
 			}
 		}
 		if p.saved != "" {
-			b.WriteString("\n" + truncate(i18n.T("saved to %s", p.saved), textW))
+			// Blank line above, then the styled band — see content_popup.go for
+			// the truncate-then-style ordering.
+			b.WriteString("\n\n" + savedNoteStyle.Width(textW).Render(truncate(i18n.T("saved to %s", p.saved), textW)))
 		}
 		b.WriteString("\n" + i18n.T("[↑/↓] select  [enter] actions  [z] mode  [s] save  [esc] close"))
 	}

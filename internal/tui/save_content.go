@@ -6,7 +6,17 @@ import (
 	"unicode"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
+
+// savedNoteStyle sets the "saved to …" confirmation apart from the window's
+// own content: it is a note ABOUT the window, not another row of it. Dark
+// green reads as done without competing with the red danger frame the [E]
+// viewer can carry. Render it with .Width(n) so the band spans the box rather
+// than stopping at the end of the path.
+var savedNoteStyle = lipgloss.NewStyle().
+	Foreground(lipgloss.Color("15")).
+	Background(lipgloss.Color("22"))
 
 // Popups show text you often need somewhere else: a notice's `sudo …` fix
 // block, git's multi-line stderr in the [E] viewer. Selecting it by hand is

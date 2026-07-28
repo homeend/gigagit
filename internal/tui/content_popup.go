@@ -337,7 +337,9 @@ func (p *contentPopup) box(m Model) string {
 		b.WriteString("  " + truncate(p.footer, textW-2) + "\n")
 	}
 	if p.saved != "" {
-		b.WriteString("  " + truncate(i18n.T("saved to %s", p.saved), textW-2) + "\n")
+		// Style AFTER truncation: truncate slices runes and would cut an ANSI
+		// sequence in half (the same rule the status bar follows).
+		b.WriteString("\n  " + savedNoteStyle.Width(textW-2).Render(truncate(i18n.T("saved to %s", p.saved), textW-2)) + "\n")
 	}
 	hint := i18n.T("[/] search  [z] mode  [s] save  [ctrl+t] full  [q] close")
 	if len(vis) > capRows {
