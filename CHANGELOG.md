@@ -8,6 +8,20 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- web: **right-clicking a commit now opens gg's own menu** — previously it
+  fell through to the browser's. It carries *show this commit*, *copy commit
+  id*, *copy subject*, and the single-commit history edits: **move up
+  (newer)** / **move down (older)** swap the commit with its neighbour, and
+  **drop this commit** removes it (confirmed first, and shown red). All three
+  rewrite the checked-out branch from that commit up, through the same
+  `engine.InteractiveRebase` the TUI's commit menu uses, so the previous tip
+  is recorded and a branch's *previous versions…* can put it back. They are
+  offered only on an ordinary commit — a merge and the root show the copy
+  rows alone — and the branch is left untouched when the commit is not on it,
+  when it has no neighbour in that direction, or when the range spans a
+  merge, each refused with a message on the status line. The wire carries a
+  commit id and one of three verbs; the rebase plan is built on the server
+  from a range it reads itself.
 - web: **clicking the "review running in the background" line now reopens the
   review** instead of doing nothing — and double-clicking it no longer makes
   it vanish. That line is the most visible mention of a backgrounded run, so

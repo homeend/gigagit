@@ -2419,6 +2419,63 @@ $("commits-window").addEventListener("click", (e) => {
   const row = e.target.closest(".crow");
   if (row) openCommit(Number(row.dataset.i));
 });
+// Right-click a commit: copy rows plus the single-commit history edits. The
+// row is selected first (the files-list menu's rule) so the menu is visibly
+// about the line under the pointer.
+$("commits-window").addEventListener("contextmenu", (e) => {
+  const rowEl = e.target.closest(".crow");
+  if (!rowEl) return;
+  const i = Number(rowEl.dataset.i);
+  if (state.wt && i === 0) return; // the working-tree row is not a commit
+  const c = state.rows[i - wtCount()];
+  if (!c) return;
+  // preventDefault only once there is a menu to show in its place: doing it
+  // above would leave the working-tree row with neither menu — a right-click
+  // that does nothing at all.
+  e.preventDefault();
+  state.cursor = i;
+  renderCommits();
+  showCommitMenu(c, i, e.clientX, e.clientY);
+});
+
+// showCommitMenu offers the per-commit actions. The history edits are gated
+// on a single parent: a merge (2+) and the root (0) are not what "move" and
+// "drop" mean here, and the engine refuses a range containing a merge anyway
+// — the TUI's commitEditRow applies the same gate.
+function showCommitMenu(c, i, x, y) {
+  const short = c.short || c.hash.slice(0, 8);
+  const items = [
+    { label: "show this commit", act: () => openCommit(i) },
+    { label: "copy commit id", act: () => copyText(c.hash, "commit id " + short) },
+    { label: "copy subject", act: () => copyText(c.subject, "subject") },
+  ];
+  if (c.parents === 1) {
+    items.push({ label: "move up (newer)", act: () => commitEdit(c, "move-up") });
+    items.push({ label: "move down (older)", act: () => commitEdit(c, "move-down") });
+    items.push({
+      label: "drop this commit",
+      danger: true,
+      act: () =>
+        showLocalConfirm(
+          "Drop " + short + " " + c.subject + "? The branch is rewritten from here up.",
+          ["drop", "abort"],
+          (o) => { if (o === "drop") commitEdit(c, "drop"); }
+        ),
+    });
+  }
+  showCtxMenu(items, x, y);
+}
+
+// commitEdit rewrites the checked-out branch so that one commit is dropped or
+// swapped with its neighbour. The server builds the rebase plan itself from
+// the commit id and this verb — nothing plan-shaped goes on the wire — and
+// refuses (leaving the branch untouched) when the commit is not on the
+// checked-out branch, or has no neighbour in that direction.
+function commitEdit(c, edit) {
+  const short = c.short || c.hash.slice(0, 8);
+  const what = edit === "drop" ? "dropping " : edit === "move-up" ? "moving up " : "moving down ";
+  startOp({ op: "commit-edit", sha: c.hash, edit }, what + short);
+}
 $("files-list").addEventListener("click", (e) => {
   const btn = e.target.closest("button.act");
   if (btn && state.filesMode === "status") {
