@@ -481,8 +481,12 @@ func TestErrorPopupShowsTheTextTheBarCut(t *testing.T) {
 	if layerOf[*contentPopup](m) == nil {
 		t.Fatal("E must open the error viewer")
 	}
+	// Compare with whitespace and box borders removed, like the sibling test
+	// above: the viewer wraps, so the tail can straddle a row boundary — which
+	// it now does, the message block having traded two columns of text width
+	// for its margins.
 	out := ansi.Strip(m.View())
-	if !strings.Contains(out, tail) {
+	if !strings.Contains(squashToWordChars(out), tail) {
 		t.Fatalf("the popup must show the text the bar cut:\n%s", out)
 	}
 }
