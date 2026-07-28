@@ -25,6 +25,8 @@ type opStartRequest struct {
 	Name    string `json:"name"` // new branch name (create-branch, rename-branch)
 	Edit    string `json:"edit"` // commit-edit: drop | move-up | move-down
 	Force   bool   `json:"force"`
+	// Plan is the interactive-rebase plan, in git todo order (oldest first).
+	Plan []planEntry `json:"plan"`
 }
 
 // handleOpStart begins an operation and returns 202 {op_id}. Ops wired so
@@ -81,6 +83,15 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 		// A conflict pauses the replay and forks "rebase-conflict" into the
 		// parking modal.
 		op = engine.SmartRebase{Branch: req.Branch, Onto: req.Onto}
+	case "interactive-rebase":
+		// The full plan editor. The client may reorder and annotate; the plan
+		// is checked against a freshly read range before anything runs.
+		built, code, err := s.buildInteractiveRebase(r.Context(), svc, req.Branch, req.Onto, req.Plan)
+		if err != nil {
+			writeErr(w, code, err)
+			return
+		}
+		op = built
 	case "commit-edit":
 		// A single-commit history edit on the checked-out branch. The plan is
 		// built server-side from a range read here (buildCommitEdit) — the

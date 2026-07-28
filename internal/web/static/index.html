@@ -78,6 +78,26 @@
     <div id="prompt-actions"><span id="prompt-hint">enter to confirm · esc to cancel</span><button id="prompt-ok">ok</button></div>
   </div>
 </div>
+<div id="rebase" class="hidden">
+  <div id="rebase-box">
+    <div id="rebase-title"></div>
+    <ul id="rebase-list"></ul>
+    <div id="rebase-msg" class="hidden">
+      <div id="rebase-msg-title"></div>
+      <textarea id="rebase-msg-text" rows="6" spellcheck="false"></textarea>
+      <div class="rb-buttons">
+        <button id="rebase-msg-ok">set message</button>
+        <button id="rebase-msg-cancel">cancel</button>
+      </div>
+    </div>
+    <div id="rebase-hint">newest first, like the commit list · <b>squash</b> melds a commit into the one below it · nothing runs until you start</div>
+    <div class="rb-buttons">
+      <button id="rebase-start">start rebase</button>
+      <button id="rebase-reset">reset</button>
+      <button id="rebase-cancel">cancel</button>
+    </div>
+  </div>
+</div>
 <div id="versions" class="hidden">
   <div id="versions-box">
     <div id="versions-title"></div>
@@ -128,6 +148,7 @@
     <div class="hrow"><span class="hkey">ctrl+k / ctrl+p</span><span>command palette (incl. switch repo)</span></div>
     <h3>Mouse</h3>
     <div class="hrow"><span class="hkey">commit row</span><span>open its files + diff; the yellow <b>Working tree</b> row (appears at the top while the tree is dirty) opens the status view: stage/unstage buttons per file, stage-all/unstage-all, commit box, stash</span></div>
+    <div class="hrow"><span class="hkey">interactive rebase</span><span>drag a branch onto another → <b>interactive rebase A onto B…</b> opens a plan editor listing every commit A has that B does not, newest first. Per row choose <b>pick</b> (keep), <b>reword</b> (edit the message — the editor opens straight away), <b>squash</b> (meld into the commit below it) or <b>drop</b>, and move rows with ↑/↓. <b>Nothing runs until you press start</b>: cancel, esc and clicking outside all leave the branch untouched. If the branch moves while the editor is open the plan is refused rather than applied to a history that changed</span></div>
     <div class="hrow"><span class="hkey">commit right-click</span><span>show it, copy its commit id or subject, and edit history: <b>move up / move down</b> swaps the commit with its neighbour, <b>drop this commit</b> removes it (confirmed first, shown red). Both rewrite the checked-out branch from that commit up by replaying the commits above it, so they are offered only on an ordinary commit — not a merge — and the branch is left untouched when the commit is not on it. The previous tip is recorded, so the branch's <b>previous versions…</b> can put it back</span></div>
     <div class="hrow"><span class="hkey">branch</span><span>click: jump the list to its tip · right-click: switch, pull / push it, copy its name / tip commit id / worktree path, delete · drag onto another branch: merge or rebase</span></div>
     <div class="hrow"><span class="hkey">make a branch</span><span>right-click a branch → <b>rename</b>, <b>create branch from here</b>, or <b>create worktree for this branch</b> (only when it has none). Each asks in a one-line prompt: enter confirms, esc cancels. A configured worktree post-create hook is shown for approval before it runs</span></div>

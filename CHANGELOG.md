@@ -8,6 +8,21 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- web: **an interactive-rebase plan editor.** Drag a branch onto another and
+  pick *interactive rebase A onto B…*: every commit A has that B does not is
+  listed newest-first, and each row can be **pick**, **reword** (the message
+  editor opens straight away, prefilled with the real message, body included),
+  **squash** (meld into the commit below it) or **drop**, with ↑/↓ to reorder.
+  **Nothing runs until you press start** — cancel, esc and clicking outside all
+  leave the branch exactly as it was. The oldest row cannot squash (there is
+  nothing older to meld into) and a row moved into that slot stops being one.
+  The browser may reorder and annotate the plan but never invent it: the server
+  rebuilds it against a freshly read range and refuses (409, nothing run) a
+  plan that names a commit outside the range, names one twice, or no longer
+  covers the branch — which is also the staleness guard when a commit lands
+  while the editor is open. A message likewise only comes off the wire for a
+  row you marked as a reword.
+
 - web: **right-clicking a commit now opens gg's own menu** — previously it
   fell through to the browser's. It carries *show this commit*, *copy commit
   id*, *copy subject*, and the single-commit history edits: **move up
