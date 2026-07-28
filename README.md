@@ -146,6 +146,7 @@ gg branch rename <old> <new>
 gg branch delete [--force] <name>
 gg versions [<branch>]                 # list a branch's recorded pre-operation snapshots, newest first (default: current branch)
 gg versions restore [--discard] <branch> <id|latest>  # restore a branch to a recorded version; --discard answers the dirty-tree prompt
+gg unlock [--yes]                      # list (or with --yes remove) stranded .git/*.lock files; exit 1 while locks are present
 gg merge [--into <target>] [--on-conflict=keep|abort] <source>
 gg fast-forward <commit>               # advance the current branch to a descendant commit (no merge commit)
 gg rebase [--branch <b>] [--on-conflict=keep|abort] <newbase>
@@ -444,6 +445,31 @@ ordered commit browsing roughly 10× faster, and enabling
 fresh, enable only, *Not now* (asks again next load), or *Never for this
 repo* (remembered in `<state>/gg/prompts.toml`). The Settings (`,`) →
 "Commit-graph" row shows the current state and applies the same fix.
+
+### Stranded git locks
+
+Git creates a `.lock` file while it rewrites the file beside it (`index.lock`
+for `add`/`commit`/`status`, `HEAD.lock` for a checkout, and so on) and removes
+it on the way out — including when it is interrupted, since it cleans up from
+its own signal handler. A lock that outlives its process therefore means a git
+was killed before it could tidy up: a `kill -9`, a crash, a lost power. Until
+it's gone, every git command fails with *"Another git process seems to be
+running in this repository"* and git's own advice is to delete the file by hand.
+
+gg surfaces that as a notice (it also appears the moment an operation fails
+this way, not just on the next load), listing each lock with **how old it is**,
+and offers to remove them. Scriptable: `gg unlock` lists what's there and exits
+1 while any lock is present, so it works as a precondition check; `gg unlock
+--yes` removes them.
+
+gg won't decide a lock is stale for you — it can't see git processes it didn't
+start, and a git running right now legitimately holds one, so deleting it would
+corrupt that write. Check nothing else is running, then confirm.
+
+(gg used to *cause* this: cancelling a git subprocess killed it outright, and a
+user action cancels the background refresh. gg now stops git gracefully so it
+cleans up after itself. Windows has no such signal, so recovery still matters
+there.)
 
 ### Git config explorer
 

@@ -22,6 +22,12 @@ type GitOps interface {
 	IsDirty(ctx context.Context) (bool, error)
 	LastReflogSubject(ctx context.Context) (string, error)
 	TopLevel(ctx context.Context) (string, error)
+	// GitDir is THIS worktree's git dir; GitCommonDir is the shared one. They
+	// differ for a linked worktree, and both are needed to bound where
+	// RemoveGitLocks is allowed to delete: index.lock/HEAD.lock are
+	// per-worktree, packed-refs.lock/config.lock live in the common dir.
+	GitDir(ctx context.Context) (string, error)
+	GitCommonDir(ctx context.Context) (string, error)
 	Worktrees(ctx context.Context) ([]model.Worktree, error)
 	WorktreeForBranch(ctx context.Context, branch string) (*model.Worktree, error)
 	LogRangeMessages(ctx context.Context, onto, branch string) ([]model.RangeCommit, error)
