@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"runtime"
 
 	"github.com/homeend/gigagit/internal/rebaseplan"
 )
@@ -102,7 +103,7 @@ func (op Reword) Run(ctx context.Context, deps OpDeps) (Result, error) {
 		return Result{}, err
 	}
 	defer os.Remove(planPath) // a pure reword cannot conflict, so it never pauses
-	env := []string{"GIT_SEQUENCE_EDITOR=" + op.GGBin + " __rebase-seq " + planPath}
+	env := []string{"GIT_SEQUENCE_EDITOR=" + rebaseplan.SequenceEditor(op.GGBin, planPath, runtime.GOOS)}
 
 	deps.emit(ctx, Progress{Step: "rewording", Detail: shortSHA(target)})
 	// wrapped reads only Branch/Onto (it never touches Plan — Run writes the file).

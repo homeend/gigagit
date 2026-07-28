@@ -8,6 +8,17 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **fix: interactive rebase and reword failed on Windows.** git runs
+  `GIT_SEQUENCE_EDITOR` and every rebase `exec` line through its own bundled
+  POSIX sh — not cmd.exe — and gg passed the gg binary's path unquoted, so a
+  Windows path's backslashes were eaten as escapes: `t:\others\…\gg.exe`
+  reached the shell as `t:othersgg.exe` and git reported *"there was a problem
+  with the editor"*. Both paths are now converted to forward slashes and
+  single-quoted. The same defect broke any path containing a **space** on
+  every platform, which is what the new regression test exercises. Affects the
+  TUI's interactive rebase, reword and single-commit move/drop as well as the
+  web editor.
+
 - tui: **the `[E]` message viewer reads as one block, on one margin.** The window
   used to indent its three kinds of line by three different amounts — the title
   and the key hints at the box padding, each message line two columns further

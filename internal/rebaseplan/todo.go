@@ -10,7 +10,11 @@ import (
 // form the `exec` lines that apply reword/squash messages. A reworded target or
 // a target with squashed commits gets one exec line (referencing the target's
 // original index) after its pick (+ fixups).
-func (p Plan) RewriteTodo(ggBin, planPath string) (string, error) {
+//
+// goos selects the path quoting: git runs an exec line through its own POSIX
+// sh on every platform, so a Windows path needs forward slashes (see
+// ShellPath).
+func (p Plan) RewriteTodo(ggBin, planPath, goos string) (string, error) {
 	groups, err := p.Groups()
 	if err != nil {
 		return "", err
@@ -22,7 +26,7 @@ func (p Plan) RewriteTodo(ggBin, planPath string) (string, error) {
 			fmt.Fprintf(&b, "fixup %s\n", p.Entries[si].Sha)
 		}
 		if p.Entries[g.Target].Action == Reword || len(g.Squash) > 0 {
-			fmt.Fprintf(&b, "exec %q __rebase-message %q %d\n", ggBin, planPath, g.Target)
+			fmt.Fprintf(&b, "exec %s __rebase-message %s %d\n", ShellPath(ggBin, goos), ShellPath(planPath, goos), g.Target)
 		}
 	}
 	return b.String(), nil
