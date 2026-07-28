@@ -8,6 +8,21 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **fix: external tools ran with none of their flags on Windows.** Selecting
+  *Claude (yolo)* for a conflict launched Claude in normal permission mode —
+  `--dangerously-skip-permissions` never reached it. gg writes the configured
+  command to a temp `.bat` and runs it through cmd.exe, which cannot express
+  two things a POSIX shell accepts and gg's own templates use: a line ending
+  in a backslash (POSIX continuation) and a double-quoted string spanning
+  lines. cmd.exe ran the tool from the FIRST line — truncated prompt, no flags
+  — and treated the rest as separate commands. Both shapes are now joined
+  before the script is written; a genuine multi-line batch script (a worktree
+  post-create hook) still runs line by line. Affects every Windows lane that
+  runs a configured command: the conflict picker, `ctrl+g` commit-message
+  generation, AI review (TUI, CLI and web) and the post-create hook. **No
+  config change is needed** — existing `[[tools.command]]` blocks are repaired
+  as they run.
+
 - **fix: interactive rebase and reword failed on Windows.** git runs
   `GIT_SEQUENCE_EDITOR` and every rebase `exec` line through its own bundled
   POSIX sh — not cmd.exe — and gg passed the gg binary's path unquoted, so a
