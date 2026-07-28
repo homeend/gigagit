@@ -23,6 +23,7 @@ type opStartRequest struct {
 	Ref     string `json:"ref"`
 	Sha     string `json:"sha"`
 	Name    string `json:"name"` // new branch name (create-branch, rename-branch)
+	Edit    string `json:"edit"` // commit-edit: drop | move-up | move-down
 	Force   bool   `json:"force"`
 }
 
@@ -80,6 +81,16 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 		// A conflict pauses the replay and forks "rebase-conflict" into the
 		// parking modal.
 		op = engine.SmartRebase{Branch: req.Branch, Onto: req.Onto}
+	case "commit-edit":
+		// A single-commit history edit on the checked-out branch. The plan is
+		// built server-side from a range read here (buildCommitEdit) — the
+		// wire carries a commit id and one of three verbs, never a plan.
+		built, code, err := s.buildCommitEdit(r.Context(), svc, req.Sha, req.Edit)
+		if err != nil {
+			writeErr(w, code, err)
+			return
+		}
+		op = built
 	case "commit":
 		if strings.TrimSpace(req.Message) == "" {
 			writeErr(w, http.StatusBadRequest, errors.New("message required"))
