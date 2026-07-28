@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+
+	"github.com/homeend/gigagit/internal/template"
 )
 
 // HookSpec is one hook invocation: a working directory, a full environment
@@ -40,7 +42,13 @@ func (ShellHookRunner) Run(ctx context.Context, spec HookSpec, onLine func(strin
 	}
 	name := f.Name()
 	defer os.Remove(name)
-	if _, err := f.WriteString(spec.Script); err != nil {
+	body := spec.Script
+	if runtime.GOOS == "windows" {
+		// Only lines cmd.exe cannot run are joined, so a genuine multi-line
+		// batch hook still runs line by line.
+		body = template.FlattenForCmd(body)
+	}
+	if _, err := f.WriteString(body); err != nil {
 		f.Close()
 		return -1, err
 	}

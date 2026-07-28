@@ -190,3 +190,46 @@ func TestInteractiveRebaseStashWrapPreservesWorkingTree(t *testing.T) {
 		t.Error("wip1.txt edit should be restored as unstaged")
 	}
 }
+
+// A gg path containing a space must survive the shell git runs the sequence
+// editor through. This is the platform-independent half of the Windows bug
+// where an unquoted `t:\others\…\gg-web.exe` reached sh with its backslashes
+// eaten ("command not found"): unquoted, ANY space in the path splits the
+// command the same way — so this reproduces the defect class on Linux.
+func TestInteractiveRebaseGGBinWithSpace(t *testing.T) {
+	src := buildGG(t)
+	spaced := filepath.Join(t.TempDir(), "gg dir")
+	if err := os.MkdirAll(spaced, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	gg := filepath.Join(spaced, "gg bin")
+	data, err := os.ReadFile(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(gg, data, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	dir, repo := threeCommitBranch(t)
+	plan := rebaseplan.Plan{Entries: []rebaseplan.Entry{
+		{Sha: shaOf(t, dir, "work~2"), Action: rebaseplan.Reword, Orig: "wip1", NewMsg: "wip1 reworded"},
+		{Sha: shaOf(t, dir, "work~1"), Action: rebaseplan.Pick, Orig: "wip2"},
+		{Sha: shaOf(t, dir, "work"), Action: rebaseplan.Pick, Orig: "wip3"},
+	}}
+	res, err := InteractiveRebase{Branch: "work", Onto: "main", Plan: plan, GGBin: gg}.
+		Run(context.Background(), OpDeps{Repo: repo})
+	if err != nil {
+		t.Fatalf("interactive rebase with a spaced gg path: %v", err)
+	}
+	if !res.Changed {
+		t.Fatalf("result = %+v, want Changed", res)
+	}
+	// The reword's exec step runs the SAME spaced path a second time, so this
+	// covers the todo file's exec line as well as the sequence editor.
+	got := subjects(t, dir, "main..work")
+	want := []string{"wip3", "wip2", "wip1 reworded"}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("subjects = %v, want %v", got, want)
+	}
+}

@@ -8,6 +8,35 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **fix: external tools ran with none of their flags on Windows.** Selecting
+  *Claude (yolo)* for a conflict launched Claude in normal permission mode —
+  `--dangerously-skip-permissions` never reached it. gg writes the configured
+  command to a temp `.bat` and runs it through cmd.exe, which cannot express
+  two things a POSIX shell accepts and gg's own templates use: a line ending
+  in a backslash (POSIX continuation) and a double-quoted string spanning
+  lines. cmd.exe ran the tool from the FIRST line — truncated prompt, no flags
+  — and treated the rest as separate commands. Both shapes are now joined
+  before the script is written; a genuine multi-line batch script (a worktree
+  post-create hook) still runs line by line. Affects every Windows lane that
+  runs a configured command: the conflict picker, `ctrl+g` commit-message
+  generation, AI review (TUI, CLI and web) and the post-create hook. **No
+  config change is needed** — existing `[[tools.command]]` blocks are repaired
+  as they run. New blocks are also **written** single-line on Windows, so the
+  config says what will actually run — it is what the approval popup shows
+  before a command's first run, and gg should not execute text you were not
+  shown.
+
+- **fix: interactive rebase and reword failed on Windows.** git runs
+  `GIT_SEQUENCE_EDITOR` and every rebase `exec` line through its own bundled
+  POSIX sh — not cmd.exe — and gg passed the gg binary's path unquoted, so a
+  Windows path's backslashes were eaten as escapes: `t:\others\…\gg.exe`
+  reached the shell as `t:othersgg.exe` and git reported *"there was a problem
+  with the editor"*. Both paths are now converted to forward slashes and
+  single-quoted. The same defect broke any path containing a **space** on
+  every platform, which is what the new regression test exercises. Affects the
+  TUI's interactive rebase, reword and single-commit move/drop as well as the
+  web editor.
+
 - tui: **the `[E]` message viewer reads as one block, on one margin.** The window
   used to indent its three kinds of line by three different amounts — the title
   and the key hints at the box padding, each message line two columns further
