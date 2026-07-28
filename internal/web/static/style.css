@@ -271,6 +271,31 @@ tr.hk.picked td.no { background: var(--sel); color: var(--fg); }
 
 /* Branch versions (the operations history) — a list overlay on the shared
    layer stack, styled after the palette. */
+/* interactive-rebase plan editor — same overlay family as #versions, wider
+   because every row carries an action select and two reorder buttons. */
+#rebase { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: flex-start; justify-content: center; z-index: 21; }
+#rebase.hidden { display: none; }
+#rebase-box { margin-top: 10vh; background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; width: 94vw; max-width: 860px; display: flex; flex-direction: column; }
+#rebase-title { padding: 10px 14px; border-bottom: 1px solid var(--border); }
+#rebase-hint { padding: 6px 14px; border-top: 1px solid var(--border); color: var(--dim); font-size: 11px; }
+#rebase-list { list-style: none; margin: 0; padding: 6px 0; max-height: 52vh; overflow-y: auto; }
+#rebase-list li { display: flex; gap: 8px; align-items: center; padding: 3px 14px; white-space: nowrap; }
+#rebase-list li.drop .rb-subj { text-decoration: line-through; color: var(--dim); }
+#rebase-list li.moved { background: var(--sel); }
+#rebase-list .rb-short { color: var(--dim); }
+#rebase-list .rb-subj { overflow: hidden; text-overflow: ellipsis; flex: 1; }
+#rebase-list .rb-note { color: var(--accent); font-size: 11px; }
+#rebase-list select { background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 3px; padding: 1px 3px; font: inherit; font-size: 11px; }
+#rebase-list button.rb-move { background: none; border: 1px solid var(--border); color: var(--fg); border-radius: 3px; cursor: pointer; padding: 0 5px; }
+#rebase-list button.rb-move:disabled { opacity: .3; cursor: default; }
+#rebase-msg { padding: 8px 14px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 6px; }
+#rebase-msg.hidden { display: none; }
+#rebase-msg-text { width: 100%; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 3px; font: inherit; padding: 4px; resize: vertical; }
+.rb-buttons { padding: 8px 14px; display: flex; gap: 8px; justify-content: flex-end; border-top: 1px solid var(--border); }
+.rb-buttons button { background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 3px; padding: 3px 10px; cursor: pointer; font: inherit; }
+.rb-buttons button:hover { background: var(--sel); }
+#rebase-start { border-color: var(--accent); }
+
 #versions { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: flex-start; justify-content: center; z-index: 21; }
 #versions.hidden { display: none; }
 #versions-box { margin-top: 14vh; background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; width: 92vw; max-width: 720px; display: flex; flex-direction: column; }

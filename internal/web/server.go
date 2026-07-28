@@ -74,6 +74,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/commit/{sha}", s.handleCommitFiles)
 	mux.HandleFunc("GET /api/compare", s.handleCompare)
 	mux.HandleFunc("GET /api/versions", s.handleVersions)
+	mux.HandleFunc("GET /api/rebase-range", s.handleRebaseRange)
 	mux.HandleFunc("GET /api/diff", s.handleDiff)
 	mux.HandleFunc("POST /api/stage", writeGuard(s.handleStage))
 	mux.HandleFunc("GET /api/hunks", s.handleHunks)
