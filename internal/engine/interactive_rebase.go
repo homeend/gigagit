@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"runtime"
 
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/rebaseplan"
@@ -75,7 +76,7 @@ func (op InteractiveRebase) Run(ctx context.Context, deps OpDeps) (Result, error
 	if err != nil {
 		return Result{}, err
 	}
-	env := []string{"GIT_SEQUENCE_EDITOR=" + op.GGBin + " __rebase-seq " + planPath}
+	env := []string{"GIT_SEQUENCE_EDITOR=" + rebaseplan.SequenceEditor(op.GGBin, planPath, runtime.GOOS)}
 
 	cur, err := deps.Repo.CurrentBranch(ctx)
 	if err != nil {
