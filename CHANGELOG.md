@@ -13,13 +13,15 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   and the key hints at the box padding, each message line two columns further
   in, and a *wrapped* message line all the way back at the padding — so a single
   wrapped error came out as a ragged staircase, with the hints running straight
-  on from git's stderr. Now the message is a faint band spanning the box: every
-  line, wrap continuations included, starts in one column and keeps an equal
-  margin on the right (the indent became a frozen gutter column rather than
-  text, which is what carries it onto a continuation), and a blank line below
-  the band sets the actions apart from the message. The tint is the popup's, not
-  the terminal's, so the text keeps the terminal's own foreground and stays
-  readable inside the red danger frame. Fixed alongside it: a blank line in the
+  on from git's stderr. Now the message is a faint band: every line, wrap
+  continuations included, starts in one column and keeps an equal margin on the
+  right (the indent moved outside the window rather than into the row text,
+  which is what carries it onto a continuation), the band covers the text
+  columns only — no tinted gutter down either side — and a blank line below it
+  sets what follows apart from the message. Only the background changes, so the
+  text keeps the terminal's own foreground and stays readable inside the red
+  danger frame. The `saved to …` note now sits between one blank line above and
+  one below rather than two above and none. Fixed alongside it: a blank line in the
   message wrapped to *no* segments while still occupying a display line, so the
   window came up one row short per blank and clipped the tail off the very
   message the viewer exists to show — git separates its stderr paragraphs with

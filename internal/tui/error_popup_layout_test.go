@@ -153,9 +153,10 @@ func TestMessageViewerTintsOnlyTheMessage(t *testing.T) {
 	}
 }
 
-// The tint spans the whole text area, not just the words: a short message must
-// not leave a coloured stub in the middle of the line.
-func TestMessageBlockSpansTheBoxWidth(t *testing.T) {
+// The tint is the MESSAGE's, so it starts where the text starts and runs to the
+// far margin: no coloured stub after a short line, and no coloured gutter
+// column down either side of the band.
+func TestMessageBlockTintsTheTextColumnsOnly(t *testing.T) {
 	forceColor(t)
 	m := sizedModel(t, 80, 30)
 	p := newErrorPopup("error: short\nand a much longer second line of stderr output")
@@ -170,13 +171,47 @@ func TestMessageBlockSpansTheBoxWidth(t *testing.T) {
 		t.Fatalf("box did not render the short message line:\n%s", p.box(m))
 	}
 	// The tinted span is what lipgloss wrapped in the background SGR: measure
-	// the text it actually covers against the box's own text width.
+	// what it covers, and where it begins, against the box's own text area.
 	span := regexp.MustCompile("\x1b\\[[0-9;]*48;5;" + messageBlockColor + "[0-9;]*m(.*?)\x1b\\[0m").FindStringSubmatch(short)
 	if span == nil {
 		t.Fatalf("no tinted span on the message line: %q", short)
 	}
-	if got, want := lipgloss.Width(span[1]), len(boxLines(t, p, m)[0]); got != want {
-		t.Fatalf("the tint covers %d columns, want the text area's %d: %q", got, want, span[1])
+	area := boxLines(t, p, m)[0]
+	if got, want := lipgloss.Width(span[1]), len(area)-2*messageBlockGutter; got != want {
+		t.Fatalf("the tint covers %d columns, want %d (text area %d less its gutters): %q",
+			got, want, len(area), span[1])
+	}
+	if strings.HasPrefix(span[1], " ") {
+		t.Fatalf("the tint must start at the text, not on the gutter: %q", span[1])
+	}
+}
+
+// The saved-to note is a note ABOUT the window, so it stands apart from both
+// the message and the key hints — one blank line above it and one below, not
+// two above and none below.
+func TestSavedNoteIsFramedByOneBlankLineEachSide(t *testing.T) {
+	m := sizedModel(t, 80, 30)
+	p := newErrorPopup("error: git push failed (exit 128)")
+	p.noteSaved("/tmp/gg-last-error-12345.txt")
+
+	lines := boxLines(t, p, m)
+	note := -1
+	for i, l := range lines {
+		if strings.Contains(l, "saved to") {
+			note = i
+		}
+	}
+	if note < 1 || note+2 >= len(lines) {
+		t.Fatalf("saved note not found (or nothing follows it):\n%s", strings.Join(lines, "\n"))
+	}
+	if strings.TrimSpace(lines[note-1]) != "" || strings.TrimSpace(lines[note-2]) == "" {
+		t.Fatalf("want exactly ONE blank line above the note:\n%s", strings.Join(lines, "\n"))
+	}
+	if strings.TrimSpace(lines[note+1]) != "" {
+		t.Fatalf("want a blank line below the note:\n%s", strings.Join(lines, "\n"))
+	}
+	if !strings.Contains(lines[note+2], "[q]") {
+		t.Fatalf("the key hints must follow the note's blank line:\n%s", strings.Join(lines, "\n"))
 	}
 }
 

@@ -297,10 +297,12 @@ func (p *contentPopup) box(m Model) string {
 	// that true text width so a full-width row can never spill onto a wrap line.
 	textW := inner - modalStyle.GetHorizontalPadding()
 
-	// In block mode the indent is a frozen prefix column, not part of the row
-	// text: that is what keeps a WRAPPED continuation on the same margin as the
-	// line it belongs to (baked-in spaces are consumed by the first display
-	// line only). The matching suffix keeps the band's right margin equal.
+	// In block mode the indent sits OUTSIDE the window: rows are laid out at
+	// bodyW and the gutter is added to each finished line here. That keeps a
+	// WRAPPED continuation on the same margin as the line it belongs to (spaces
+	// baked into the row text would be consumed by its first display line only)
+	// AND keeps the band's tint off the gutter — the band is the message, so it
+	// starts where the text starts.
 	gutter := 0
 	if p.block {
 		gutter = messageBlockGutter
@@ -333,17 +335,23 @@ func (p *contentPopup) box(m Model) string {
 		}
 	}
 	capRows := m.contentPageRows()
-	// contentPageRows budgets for title + blank + hint. Block mode draws one
-	// more chrome line (the blank below the band), and a search line adds
-	// another — without paying for them the box grows past the terminal.
+	// contentPageRows budgets for title + blank + hint. Anything else the box
+	// draws has to be paid for here or the box grows past the terminal: block
+	// mode's blank below the band, a search line (which in block mode adds to
+	// the blank rather than replacing it), and the saved-to note with its own
+	// trailing blank.
+	extra := 0
 	if p.block {
-		extra := 1
+		extra++
 		if p.searchLine() != "" {
 			extra++
 		}
-		if capRows-extra >= 3 {
-			capRows -= extra
-		}
+	}
+	if p.saved != "" {
+		extra += 2
+	}
+	if capRows-extra >= 3 {
+		capRows -= extra
 	}
 	// h grows with content up to the page capacity; renderWindow scrolls to keep
 	// p.sel visible once vis overflows. Styling is applied after truncate/wrap.
@@ -372,7 +380,7 @@ func (p *contentPopup) box(m Model) string {
 	if h > capRows {
 		h = capRows
 	}
-	win := renderWindow(wr, winOpts{w: textW, h: h, mode: p.mode, anchor: p.sel, hscroll: p.hscroll, prefixW: gutter, suffixW: gutter})
+	win := renderWindow(wr, winOpts{w: bodyW, h: h, mode: p.mode, anchor: p.sel, hscroll: p.hscroll})
 
 	var b strings.Builder
 	// The /-search input rides its own line beneath the title (replacing the
@@ -390,18 +398,31 @@ func (p *contentPopup) box(m Model) string {
 		b.WriteString(pad + i18n.T("  (no match)") + "\n")
 	}
 	for _, r := range win {
-		b.WriteString(r + "\n")
+		b.WriteString(pad + r + pad + "\n")
 	}
 	if p.block {
-		b.WriteString("\n") // set the actions apart from the message itself
+		b.WriteString("\n") // set what follows apart from the message itself
 	}
 	if p.footer != "" {
 		b.WriteString("  " + truncate(p.footer, textW-2) + "\n")
 	}
 	if p.saved != "" {
-		// Style AFTER truncation: truncate slices runes and would cut an ANSI
-		// sequence in half (the same rule the status bar follows).
-		b.WriteString("\n  " + savedNoteStyle.Width(textW-2).Render(truncate(i18n.T("saved to %s", p.saved), textW-2)) + "\n")
+		// One blank line above the note and one below it: it is a note ABOUT the
+		// window, so it stands apart from both the content and the key hints.
+		// Block mode already wrote the one above — a second would leave the note
+		// floating two lines below the message it belongs to.
+		if !p.block {
+			b.WriteString("\n")
+		}
+		// The note lines up with the content band above it, and is styled AFTER
+		// truncation: truncate slices runes and would cut an ANSI sequence in
+		// half (the same rule the status bar follows).
+		noteW := textW - 2
+		notePad := "  "
+		if p.block {
+			noteW, notePad = bodyW, pad
+		}
+		b.WriteString(notePad + savedNoteStyle.Width(noteW).Render(truncate(i18n.T("saved to %s", p.saved), noteW)) + "\n\n")
 	}
 	hint := i18n.T("[/] search  [z] mode  [s] save  [ctrl+t] full  [q] close")
 	if len(vis) > capRows {
