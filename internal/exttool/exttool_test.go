@@ -539,3 +539,48 @@ func TestAntigravityTemplates(t *testing.T) {
 		t.Fatalf("agy review must read GG_REVIEW_DIFF and label <range>: %q", gr)
 	}
 }
+
+// A Windows config must be materialized as a SINGLE line: cmd.exe cannot run
+// a quoted string that spans lines or a POSIX continuation, and the generated
+// text is what the approval popup shows before the first run — gg must not
+// execute something the user did not see.
+func TestGenerateCommandForWindowsIsSingleLine(t *testing.T) {
+	for _, tc := range []struct{ name, mustEnd string }{
+		{"Claude (yolo)", "--dangerously-skip-permissions"},
+		{"Claude", `"Bash(git push *)"`},
+	} {
+		tmpl, ok := conflictTemplate(t, "claude", tc.name)
+		if !ok {
+			t.Fatalf("no %q conflict template in the catalog", tc.name)
+		}
+		got := GenerateCommandFor(tmpl, "claude", "windows")
+		if strings.Contains(got, "\n") {
+			t.Errorf("%s: still spans lines:\n%s", tc.name, got)
+		}
+		if !strings.HasSuffix(strings.TrimSpace(got), tc.mustEnd) {
+			t.Errorf("%s: does not end with %s:\n%s", tc.name, tc.mustEnd, got)
+		}
+		if strings.Contains(got, `\`+"\n") || strings.HasSuffix(strings.TrimSpace(got), `\`) {
+			t.Errorf("%s: a continuation backslash survived:\n%s", tc.name, got)
+		}
+		// POSIX keeps the readable multi-line form — its shell accepts it.
+		if posix := GenerateCommandFor(tmpl, "claude", "linux"); !strings.Contains(posix, "\n") {
+			t.Errorf("%s: the POSIX form should be unchanged (multi-line)", tc.name)
+		}
+	}
+}
+
+func conflictTemplate(t *testing.T, toolID, name string) (CommandTemplate, bool) {
+	t.Helper()
+	for _, tool := range Builtins() {
+		if tool.ID != toolID {
+			continue
+		}
+		for _, c := range tool.Commands {
+			if c.Category == CatConflict && c.Name == name {
+				return c, true
+			}
+		}
+	}
+	return CommandTemplate{}, false
+}

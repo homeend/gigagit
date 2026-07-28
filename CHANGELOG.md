@@ -21,7 +21,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   runs a configured command: the conflict picker, `ctrl+g` commit-message
   generation, AI review (TUI, CLI and web) and the post-create hook. **No
   config change is needed** — existing `[[tools.command]]` blocks are repaired
-  as they run.
+  as they run. New blocks are also **written** single-line on Windows, so the
+  config says what will actually run — it is what the approval popup shows
+  before a command's first run, and gg should not execute text you were not
+  shown.
 
 - **fix: interactive rebase and reword failed on Windows.** git runs
   `GIT_SEQUENCE_EDITOR` and every rebase `exec` line through its own bundled
