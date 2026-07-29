@@ -2,7 +2,6 @@ package tui
 
 import (
 	"context"
-	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -243,30 +242,39 @@ func (m Model) tagRefreshRemoteRow() (actionRow, bool) {
 }
 
 // tagJumpToCommit moves the Commits cursor to the selected tag's target commit
-// (matched by short-hash prefix) and focuses the Commits panel. A target that
-// isn't in the loaded commit page leaves a notice (never-trap: no-op + explain).
+// and focuses the Commits panel. A target that isn't in the loaded page falls
+// back to the ctrl+f eager deep-search on the hash — the same "go to" contract
+// as the Branches-panel enter (gotoCommitByHash handles both halves).
 func (m Model) tagJumpToCommit() (tea.Model, tea.Cmd) {
 	bi, ok := m.backingIndex(panelTags)
 	if !ok || bi < 0 || bi >= len(m.tags) {
 		return m, nil
 	}
-	t := m.tags[bi]
-	// If the target commit is already in the loaded feed, jump the Commits cursor
-	// to it (in-graph context).
-	idx := m.displayIndices(panelCommits)
-	for di, ci := range idx {
-		if c, ok := m.commitAtUnified(ci); ok && strings.HasPrefix(c.Hash, t.Target) {
-			m.sel[panelCommits] = di
-			m = m.focusCommitsPanel()
-			return m, nil
-		}
+	nm, cmd := m.gotoCommitByHash(m.tags[bi].Target)
+	return nm, cmd
+}
+
+// tagShowFilesRow offers "Show changed files" on the Tags panel: open the
+// target commit's changed-files view directly by hash (the reflog pattern —
+// git serves the commit by SHA on demand, no paging). This was enter's
+// not-loaded fallback before the eager search took that role; now opt-in.
+func (m Model) tagShowFilesRow() (actionRow, bool) {
+	if m.focus != panelTags || !m.opsIdle() {
+		return actionRow{}, false
 	}
-	// Otherwise open the target commit's changed-files view directly by hash. In a
-	// big repo (e.g. babel: 922 tags, old releases) the target is almost never in
-	// the loaded page, so paging the whole history to find it would be unbounded —
-	// inspect it by hash instead, exactly like enter on a reflog entry.
-	m, cmd := m.openChangedFiles(model.Commit{Hash: t.Target, Subject: t.Subject})
-	m.focus = panelCommits
-	m = m.focusTree()
-	return m, cmd
+	bi, ok := m.backingIndex(panelTags)
+	if !ok || bi < 0 || bi >= len(m.tags) {
+		return actionRow{}, false
+	}
+	t := m.tags[bi]
+	return actionRow{
+		id:    "tag-show-files",
+		label: i18n.T("Show changed files"),
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			m, cmd := m.openChangedFiles(model.Commit{Hash: t.Target, Subject: t.Subject})
+			m.focus = panelCommits
+			m = m.focusTree()
+			return m, cmd
+		},
+	}, true
 }
