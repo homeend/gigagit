@@ -33,7 +33,9 @@ func TestPushBranchRowPushesSelectedNotCurrent(t *testing.T) {
 	pushRealGit(t, bare, "init", "--bare")
 
 	dir := t.TempDir()
-	pushRealGit(t, dir, "init")
+	// -b master: the test names its branches explicitly rather than assuming
+	// the machine's init.defaultBranch (git's own default differs from CI's).
+	pushRealGit(t, dir, "init", "-b", "master")
 	pushRealGit(t, dir, "config", "user.email", "a@b.c")
 	pushRealGit(t, dir, "config", "user.name", "a")
 	pushRealGit(t, dir, "remote", "add", "origin", bare)
