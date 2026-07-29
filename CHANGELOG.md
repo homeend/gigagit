@@ -8,6 +8,17 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Automated releases via GoReleaser.** Pushing a `v*` tag now triggers
+  `.github/workflows/release.yml`: tests run, GoReleaser builds `gg` for
+  linux/darwin/windows × amd64/arm64 (same `buildinfo` ldflags as
+  `build.sh`), publishes the GitHub Release with archives + checksums, and
+  pushes an updated binary-install formula to `homeend/homebrew-tap` — so
+  `brew install homeend/tap/gg` tracks releases with no manual formula
+  bumps. Requires a `HOMEBREW_TAP_TOKEN` repo secret (a PAT with write
+  access to the tap). GoReleaser is pinned to `~> v2.17` because the
+  `brews` pipe is deprecated upstream in favor of macOS-only casks, and
+  the formula must keep serving Linux brew users.
+
 - **fix: dropping the newest commit failed with "interactive rebase … error:
   nothing to do".** "Drop commit" on the branch tip (and "Drop N selected
   commits" when the selection was the N newest) rebases a range that contains
