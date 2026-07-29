@@ -22,9 +22,13 @@ only when there's a real decision to make.
 
 ## Install
 
-Requires Go 1.26 and a `git` binary on `PATH`.
+Requires a `git` binary on `PATH` (and Go 1.26 for the `go install` / source
+routes).
 
 ```bash
+# Homebrew (macOS / Linux)
+brew install homeend/tap/gg
+
 # install the latest from GitHub (binary lands in $GOBIN / $GOPATH/bin as `gg`)
 go install github.com/homeend/gigagit/cmd/gg@latest
 
@@ -670,3 +674,7 @@ state, history shape). Scenarios are run as standard Go tests and cover
 SmartSwitch, SmartPull, stash, commit+push, undo, and worktree add/remove.
 
 See [`CLAUDE.md`](CLAUDE.md) for architecture and contributor conventions.
+
+## License
+
+[MIT](LICENSE)
