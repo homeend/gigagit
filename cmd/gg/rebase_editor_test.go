@@ -32,8 +32,8 @@ func TestRunRebaseSeqRewritesTodo(t *testing.T) {
 		t.Fatalf("runRebaseSeq: %v", err)
 	}
 	got, _ := os.ReadFile(todoPath)
-	if string(got) != "pick aaaaaaa\n" {
-		t.Fatalf("todo = %q, want %q", string(got), "pick aaaaaaa\n")
+	if want := "pick aaaaaaa\ndrop bbbbbbb\n"; string(got) != want {
+		t.Fatalf("todo = %q, want %q", string(got), want)
 	}
 }
 

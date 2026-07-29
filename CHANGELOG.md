@@ -8,6 +8,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **fix: dropping the newest commit failed with "interactive rebase … error:
+  nothing to do".** "Drop commit" on the branch tip (and "Drop N selected
+  commits" when the selection was the N newest) rebases a range that contains
+  only dropped commits, and `rebaseplan.RewriteTodo` expressed a drop by
+  omitting the todo line — leaving an empty todo, which git treats as abort.
+  Drops are now written as explicit `drop <sha>` todo lines (a first-class
+  todo command), so dropping the tip works; middle-commit drops are unchanged.
+
 - **fix: gg stranded `.git/index.lock` files, breaking the repo until the user
   deleted them by hand.** Reported as: in a big repo, with a background fetch
   running, pressing keys (space to stage, `c` to commit) produced "another
