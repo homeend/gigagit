@@ -20,6 +20,15 @@ jobs:
         with:
           go-version-file: go.mod
 
+      # The test suite drives a real git in temp repos and inherits identity
+      # from global config — absent on a fresh runner, every commit-making
+      # test dies with "empty ident name" (exit 128).
+      - name: Configure git identity for tests
+        run: |
+          git config --global user.name "gg-ci"
+          git config --global user.email "gg-ci@users.noreply.github.com"
+          git config --global init.defaultBranch main
+
       - name: Run tests
         run: go test ./...
 
