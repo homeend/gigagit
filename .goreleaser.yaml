@@ -38,6 +38,11 @@ archives:
 checksum:
   name_template: checksums.txt
 
+# A re-run of a partially failed release (e.g. assets uploaded, tap push
+# failed) must overwrite the already-uploaded assets instead of 422ing.
+release:
+  replace_existing_artifacts: true
+
 changelog:
   filters:
     exclude:
