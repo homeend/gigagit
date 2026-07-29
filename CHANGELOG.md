@@ -8,6 +8,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Tags panel: enter now searches history for the tag's commit.** Enter on a
+  tag whose target is already in the loaded Commits page still jumps the cursor
+  to it; a target that isn't loaded now falls back to the ctrl+f eager
+  deep-search on the hash (paging history under the search budget, prompting
+  before scanning deeper) — the same "go to" contract as enter on a branch.
+  Previously the not-loaded case forked into the commit's changed-files view;
+  that view is no longer the default and instead lives on as an opt-in
+  "Show changed files" row in the Tags panel's `.` menu (it opens the commit
+  by hash directly, no paging — the reflog pattern).
+
 - **Automated releases via GoReleaser.** Pushing a `v*` tag now triggers
   `.github/workflows/release.yml`: tests run, GoReleaser builds `gg` for
   linux/darwin/windows × amd64/arm64 (same `buildinfo` ldflags as
