@@ -154,6 +154,71 @@ func TestCompareUnrelatedHistories(t *testing.T) {
 	}
 }
 
+// The rev form (revs=1): both sides must be plain hex object ids, used
+// directly as the compare endpoints with no branch-list resolution — the
+// version ↔ tip compare's transport. The name allowlist doesn't transfer
+// because its rationale is name-specific: an unknown NAME yields an empty
+// compare indistinguishable from "identical", while an unknown hash fails
+// loudly in git.
+func TestCompareRevs(t *testing.T) {
+	dir := compareRepo(t)
+	a := gitRun(t, dir, "rev-parse", "main")
+	b := gitRun(t, dir, "rev-parse", "side")
+	ts := serve(t, New(domain.Open(dir)))
+
+	var body compareResp
+	if code := getJSON(t, ts, "/api/compare?a="+a+"&b="+b+"&revs=1", &body); code != http.StatusOK {
+		t.Fatalf("code = %d", code)
+	}
+	if body.AHash != a || body.BHash != b {
+		t.Fatalf("hashes = %q/%q, want the inputs %q/%q", body.AHash, body.BHash, a, b)
+	}
+	got := map[string][2]string{}
+	for _, f := range body.Files {
+		got[f.Path] = [2]string{f.Status, f.Origin}
+	}
+	want := map[string][2]string{
+		"main.txt":   {"D", "a"},
+		"side.txt":   {"A", "b"},
+		"shared.txt": {"M", "both"},
+	}
+	for path, w := range want {
+		if got[path] != w {
+			t.Errorf("%s = %v, want %v (all: %v)", path, got[path], w, got)
+		}
+	}
+}
+
+// A branch name under revs=1 is a 400, never a resolution: the rev form's
+// whole contract is hex-only.
+func TestCompareRevsRejects(t *testing.T) {
+	dir := compareRepo(t)
+	a := gitRun(t, dir, "rev-parse", "main")
+	ts := serve(t, New(domain.Open(dir)))
+	for _, p := range []string{
+		"/api/compare?a=main&b=side&revs=1",      // names
+		"/api/compare?a=" + a + "&b=side&revs=1", // one name
+		"/api/compare?a=" + a + "&revs=1",        // missing b
+		"/api/compare?a=" + a + "&b=HEAD&revs=1", // rev expression
+	} {
+		if code := getJSON(t, ts, p, nil); code != http.StatusBadRequest {
+			t.Errorf("GET %s = %d, want 400", p, code)
+		}
+	}
+}
+
+// handleRevDiff's "hashes only" doc comment is now enforced: a branch name
+// in left/right is refused before it can poison the commit↔commit diff
+// cache, instead of merely being isGitArgSafe.
+func TestRevDiffRequiresHex(t *testing.T) {
+	dir := compareRepo(t)
+	ts := serve(t, New(domain.Open(dir)))
+	q := "/api/diff?left=main&right=side&path=shared.txt&status=M"
+	if code := getJSON(t, ts, q, nil); code != http.StatusBadRequest {
+		t.Errorf("GET %s = %d, want 400", q, code)
+	}
+}
+
 func TestCompareRejects(t *testing.T) {
 	dir := compareRepo(t)
 	ts := serve(t, New(domain.Open(dir)))

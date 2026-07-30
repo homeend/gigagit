@@ -70,19 +70,35 @@ func (s *Server) handleCompare(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, errors.New("a and b are required"))
 		return
 	}
-	if !isGitArgSafe(a) || !isGitArgSafe(b) {
-		writeErr(w, http.StatusBadRequest, errors.New("invalid branch"))
-		return
-	}
-	branches, err := svc.Branches(r.Context())
-	if err != nil {
-		writeErr(w, http.StatusInternalServerError, err)
-		return
-	}
-	aHash, bHash := branchTip(branches, a), branchTip(branches, b)
-	if aHash == "" || bHash == "" {
-		writeErr(w, http.StatusNotFound, errors.New("unknown branch"))
-		return
+	var aHash, bHash string
+	if q.Get("revs") == "1" {
+		// The rev form: both sides are plain hex object ids (the commit-edit
+		// isHexSha guard), used directly — the version ↔ tip compare's
+		// transport. The name allowlist below deliberately does NOT apply:
+		// its rationale is name-specific (an unknown name yields an empty
+		// compare indistinguishable from "identical"), while an unknown hash
+		// makes CompareFiles fail loudly. Hex-only is also a stricter argv
+		// gate than isGitArgSafe — a hash cannot be a flag or a range.
+		if !isHexSha(a) || !isHexSha(b) {
+			writeErr(w, http.StatusBadRequest, errors.New("revs must be hex commit ids"))
+			return
+		}
+		aHash, bHash = a, b
+	} else {
+		if !isGitArgSafe(a) || !isGitArgSafe(b) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid branch"))
+			return
+		}
+		branches, err := svc.Branches(r.Context())
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, err)
+			return
+		}
+		aHash, bHash = branchTip(branches, a), branchTip(branches, b)
+		if aHash == "" || bHash == "" {
+			writeErr(w, http.StatusNotFound, errors.New("unknown branch"))
+			return
+		}
 	}
 	files, err := svc.CompareFiles(r.Context(),
 		model.Endpoint{Kind: model.EndpointCommit, Hash: aHash},
