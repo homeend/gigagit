@@ -138,7 +138,9 @@ func (s *Server) handleRevDiff(w http.ResponseWriter, r *http.Request) {
 	if oldPath == "" {
 		oldPath = path
 	}
-	if !isGitArgSafe(left) || !isGitArgSafe(right) || !isGitArgSafe(path) || !isGitArgSafe(oldPath) {
+	// left/right are hex-only, enforcing the doc comment above: a branch
+	// name here would poison the session-lived commit↔commit diff cache.
+	if !isHexSha(left) || !isHexSha(right) || !isGitArgSafe(path) || !isGitArgSafe(oldPath) {
 		writeErr(w, http.StatusBadRequest, errors.New("invalid left/right/path"))
 		return
 	}

@@ -173,3 +173,63 @@ func TestVersionsRejects(t *testing.T) {
 		}
 	}
 }
+
+// The all-branches picker read: every branch with recorded versions, the
+// DELETED flag being the point — a deleted branch's snapshots (recorded by
+// delete-branch itself) are only reachable through this listing.
+func TestVersionBranches(t *testing.T) {
+	dir := divergedRepo(t)
+	srv := New(domain.Open(dir))
+	ts := serve(t, srv)
+
+	var empty struct {
+		Branches []struct{} `json:"branches"`
+	}
+	if code := getJSON(t, ts, "/api/version-branches", &empty); code != http.StatusOK {
+		t.Fatalf("code = %d", code)
+	}
+	if len(empty.Branches) != 0 {
+		t.Fatalf("branches before any op = %v, want none", empty.Branches)
+	}
+
+	// merge records a snapshot on main; delete-branch records one on
+	// feature and removes the branch (its confirm decision answered through
+	// the transport — a raw `git branch -d` would record nothing).
+	runOpOK(t, ts, `{"op":"merge","branch":"feature","onto":"main"}`)
+	opID := startOpBody(t, ts, `{"op":"delete-branch","branch":"feature"}`)
+	waitDecision(t, srv.opByID(opID))
+	if code := postJSON(t, ts, "/api/op/"+opID+"/decide", `{"option":"delete"}`, "application/json", "", nil); code != http.StatusOK {
+		t.Fatalf("decide code = %d", code)
+	}
+	if done := readSSE(t, ts, opID, 30*time.Second); done[len(done)-1]["ok"] != true {
+		t.Fatalf("delete-branch failed: %v", done[len(done)-1])
+	}
+
+	var body struct {
+		Branches []struct {
+			Branch     string `json:"branch"`
+			Deleted    bool   `json:"deleted"`
+			Count      int    `json:"count"`
+			LatestUnix int64  `json:"latest_unix"`
+		} `json:"branches"`
+	}
+	if code := getJSON(t, ts, "/api/version-branches", &body); code != http.StatusOK {
+		t.Fatalf("code = %d", code)
+	}
+	got := map[string][2]any{}
+	for _, b := range body.Branches {
+		if b.Count < 1 || b.LatestUnix == 0 {
+			t.Errorf("%s: count=%d latest_unix=%d, want both set", b.Branch, b.Count, b.LatestUnix)
+		}
+		got[b.Branch] = [2]any{b.Deleted, b.Count}
+	}
+	if len(body.Branches) != 2 {
+		t.Fatalf("branches = %v, want main + feature", got)
+	}
+	if v, ok := got["main"]; !ok || v[0] != false {
+		t.Errorf("main = %v, want present and not deleted", v)
+	}
+	if v, ok := got["feature"]; !ok || v[0] != true {
+		t.Errorf("feature = %v, want present and deleted", v)
+	}
+}
