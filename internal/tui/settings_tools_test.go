@@ -65,20 +65,24 @@ func TestDefaultToolCheckedOptInUnchecked(t *testing.T) {
 }
 
 // TestOpenToolsWizardCatalogOptInDefaults exercises the real catalog through
-// defaultToolChecked (openToolsWizard's row shape): every yolo variant lands
-// unchecked, every base template checked.
+// defaultToolChecked (openToolsWizard's row shape): every OptIn variant lands
+// unchecked, every conflict_complete row lands unchecked (regardless of OptIn),
+// and every other base template checked.
 func TestOpenToolsWizardCatalogOptInDefaults(t *testing.T) {
 	rows := wizardRows(nil)
 	checked := defaultToolChecked(rows)
 	sawOptIn := false
 	for i, row := range rows {
-		if row.tmpl.OptIn {
-			sawOptIn = true
+		aggressive := row.tmpl.OptIn || row.tmpl.Category == exttool.CatConflictComplete
+		if aggressive {
+			if row.tmpl.OptIn {
+				sawOptIn = true
+			}
 			if checked[i] {
-				t.Errorf("OptIn row %s must default unchecked", row.tmpl.Name)
+				t.Errorf("aggressive row %s (OptIn=%v, category=%s) must default unchecked", row.tmpl.Name, row.tmpl.OptIn, row.tmpl.Category)
 			}
 		} else if !checked[i] {
-			t.Errorf("non-OptIn row %s must default checked", row.tmpl.Name)
+			t.Errorf("non-aggressive row %s must default checked", row.tmpl.Name)
 		}
 	}
 	if !sawOptIn {
@@ -90,24 +94,35 @@ func TestApplyToolsWizardWritesMissingOnly(t *testing.T) {
 	m := toolCfg() // empty tools config
 	path := filepath.Join(t.TempDir(), "config.toml")
 	rows := wizardRows(map[string]bool{"conflict\x00Claude": true}) // Claude pre-existing
-	checked := make([]bool, len(rows))
-	for i := range checked {
-		checked[i] = true
+	checked := defaultToolChecked(rows)                             // use default checked state (conflict_complete unchecked)
+	// Manually check OptIn conflict rows (not conflict_complete)
+	for i, row := range rows {
+		if row.tmpl.Category == exttool.CatConflict && !row.tmpl.OptIn {
+			checked[i] = true
+		}
 	}
 	m2, n, err := m.applyToolsWizard(rows, checked, path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantWritten := len(rows) - 1 // all but the existing Claude row
-	if n != wantWritten {
-		t.Errorf("wrote %d rows, want %d", n, wantWritten)
+	// Count expected writes: all conflict base (non-OptIn) + commit_message + review,
+	// minus the pre-existing (conflict, Claude)
+	expectedWrites := 0
+	for i, row := range rows {
+		if !checked[i] || row.existing {
+			continue
+		}
+		expectedWrites++
+	}
+	if n != expectedWrites {
+		t.Errorf("wrote %d rows, want %d", n, expectedWrites)
 	}
 	cfg, err := config.Load(path, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(cfg.Tools.Command) != wantWritten {
-		t.Errorf("config has %d commands, want %d", len(cfg.Tools.Command), wantWritten)
+	if len(cfg.Tools.Command) != expectedWrites {
+		t.Errorf("config has %d commands, want %d", len(cfg.Tools.Command), expectedWrites)
 	}
 	sawCommitMsg := false
 	sawReview := false
@@ -137,7 +152,7 @@ func TestApplyToolsWizardWritesMissingOnly(t *testing.T) {
 		t.Error("wizard should write review blocks (stage 3)")
 	}
 	// The in-memory config was reloaded onto the model.
-	if len(m2.cfg.Tools.Command) != wantWritten {
+	if len(m2.cfg.Tools.Command) != expectedWrites {
 		t.Errorf("model cfg not refreshed: %d", len(m2.cfg.Tools.Command))
 	}
 	// Generated commands must not contain <bin>.
@@ -303,6 +318,27 @@ func TestToolsWizardWideTerminalAvoidsMidWordWrap(t *testing.T) {
 	}
 	if !strings.Contains(out, wantLine) {
 		t.Fatalf("expected the --allowedTools line to render on one unwrapped line at full width:\nwant substring: %q\ngot:\n%s", wantLine, out)
+	}
+}
+
+// TestDefaultToolCheckedConflictCompleteUnchecked pins the wizard's initial
+// checkbox states for the conflict_complete category: EVERY row of it starts
+// unchecked — the category is aggressive (it completes the user's paused
+// operation autonomously), so adding any of it is an explicit opt-in even
+// where no bypass flag exists to mark OptIn (Kimi).
+func TestDefaultToolCheckedConflictCompleteUnchecked(t *testing.T) {
+	rows := []toolWizardRow{
+		{tmpl: exttool.CommandTemplate{Category: exttool.CatConflict, Name: "A"}},
+		{tmpl: exttool.CommandTemplate{Category: exttool.CatConflictComplete, Name: "B", OptIn: true}},
+		{tmpl: exttool.CommandTemplate{Category: exttool.CatConflictComplete, Name: "C"}}, // Kimi shape
+		{tmpl: exttool.CommandTemplate{Category: exttool.CatConflictComplete, Name: "D"}, existing: true},
+	}
+	got := defaultToolChecked(rows)
+	want := []bool{true, false, false, true} // existing rows always show checked
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("row %d: checked = %v, want %v", i, got[i], want[i])
+		}
 	}
 }
 
