@@ -172,6 +172,36 @@ func (m Model) commitSoloRow() (actionRow, bool) {
 	}, true
 }
 
+// commitSoloCommitRow offers "Solo from this commit" on the Commits panel: the
+// commit-anchored twin of branch solo (and the tagSoloRow precedent — a sha is
+// just a rev to git log), scoping the feed to the history reachable from the
+// selected commit, or un-soloing if it is already the sole scope. Either
+// direction remembers the commit so the commitsReloadedMsg drain lands the
+// cursor back on it once the scope reload finishes.
+func (m Model) commitSoloCommitRow() (actionRow, bool) {
+	if m.focus != panelCommits || !m.opsIdle() {
+		return actionRow{}, false
+	}
+	bi, ok := m.backingIndex(panelCommits) // pure-feed index; refuses ◇ WIP rows
+	if !ok || bi < 0 || bi >= len(m.commits) {
+		return actionRow{}, false
+	}
+	hash := m.commits[bi].Hash
+	return actionRow{
+		id:    "commits-solo-commit",
+		label: i18n.T("Solo from this commit"),
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			if len(m.commitScopeBranches) == 1 && m.commitScopeBranches[0] == hash {
+				m.commitScopeBranches = nil // re-solo → un-solo
+			} else {
+				m.commitScopeBranches = []string{hash}
+			}
+			m.pendingGotoTip = hash
+			return m.startFeedReload()
+		},
+	}, true
+}
+
 // commitToggleRow offers "Add to commit view" / "Remove from commit view" on the
 // Branches panel: add or remove the selected branch from the multi-branch
 // Commits-feed scope. Removing the last branch returns the feed to all branches.
@@ -854,6 +884,21 @@ func (m Model) commitResetRow() (actionRow, bool) {
 // matches (so an unknown branch tip is "not loaded", not the first commit).
 func commitIsHash(c model.Commit, short string) bool {
 	return short != "" && strings.HasPrefix(c.Hash, short)
+}
+
+// scopeEntryDisplay shortens a commit-solo scope entry (a full 40-hex sha, what
+// commitSoloCommitRow stores — full so the git walk can never hit a short-sha
+// ambiguity) for the panel header; branch and tag names pass through untouched.
+func scopeEntryDisplay(s string) string {
+	if len(s) != 40 {
+		return s
+	}
+	for _, r := range s {
+		if (r < '0' || r > '9') && (r < 'a' || r > 'f') {
+			return s
+		}
+	}
+	return s[:7]
 }
 
 // commitHasLocalRef reports whether commit c is decorated with a local branch ref

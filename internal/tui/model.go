@@ -1594,6 +1594,13 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 			}
+			// Commits panel: the same gesture anchored at the selected commit
+			// (the row's run remembers the commit for the post-reload landing).
+			if m.focus == panelCommits {
+				if r, rowOK := m.commitSoloCommitRow(); rowOK { // gates opsIdle + a real commit
+					return r.run(m)
+				}
+			}
 		case "h":
 			if m.canShowFileDiff() {
 				bi, _ := m.backingIndex(m.focus)
@@ -2888,7 +2895,7 @@ func (m Model) commitScopeLabel() string {
 	case 0:
 		base = i18n.T("all")
 	case 1:
-		base = i18n.T("solo: %s", m.commitScopeBranches[0])
+		base = i18n.T("solo: %s", scopeEntryDisplay(m.commitScopeBranches[0]))
 	default:
 		base = i18n.T("%d branches", len(m.commitScopeBranches))
 	}

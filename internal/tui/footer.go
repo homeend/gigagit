@@ -107,6 +107,10 @@ func contextBindings() []footerBinding {
 			_, ok := m.commitForMessageView()
 			return ok
 		}, scopeRow},
+		{"", "ctrl+g", i18n.T("[ctrl+g] solo"), func(m Model) bool {
+			_, ok := m.commitSoloCommitRow() // gates Commits focus + opsIdle + a real commit
+			return ok
+		}, scopeRow},
 		{"commit-filter", "\\", i18n.T(`[\] filter`), func(m Model) bool {
 			return m.focus == panelCommits && !(m.width > 0 && m.width < 40)
 		}, scopeWindow},

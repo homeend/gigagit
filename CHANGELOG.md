@@ -8,6 +8,17 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **`ctrl+g` in the Commits panel solos from the selected commit.** The
+  commit-window twin of the Branches panel's `ctrl+g` solo+tip: the Commits
+  feed scopes to the history reachable from the commit under the cursor —
+  the commit tree that starts there — and the cursor lands back on that
+  commit once the reload finishes. Press `ctrl+g` again on the same commit
+  to un-solo (back to all branches); the cursor stays on the commit in the
+  expanded feed. Also available as a `.`-menu row, "Solo from this commit"
+  (skipped on the ◇ Working tree / ◇ Staged pseudo-rows). The panel header
+  shows the scope as `Commits (solo: <short-sha>)` — the scope itself stores
+  the full sha so the git walk can never hit a short-sha ambiguity.
+
 - **Resolve & complete: an AI agent can finish a paused merge/rebase for
   you.** The conflict window's `t` picker gains a second row group — a new
   `conflict_complete` tool category, alongside the existing `conflict`
