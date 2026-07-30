@@ -2311,6 +2311,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				os.Remove(f)
 			}
 		}
+		removeOverviewFile(msg.pending)
 		return m, m.loadCmd()
 
 	case editorViewMsg:

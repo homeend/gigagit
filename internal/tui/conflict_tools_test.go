@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -31,7 +32,7 @@ import (
 // first keypress that starts a tool run.
 func cleanupToolTemp(t *testing.T) {
 	t.Helper()
-	patterns := []string{"gg-tool-*", "gg-context-*"}
+	patterns := []string{"gg-tool-*", "gg-context-*", "gg-overview-*"}
 	seen := map[string]bool{}
 	for _, pat := range patterns {
 		before, _ := filepath.Glob(filepath.Join(os.TempDir(), pat))
@@ -65,6 +66,117 @@ func conflictModelWithTools(t *testing.T, cmds ...config.ToolCommand) (Model, *c
 		t.Fatal("conflict process did not open")
 	}
 	return m2, p
+}
+
+func TestBuildToolRunCompleteCreatesOverviewFile(t *testing.T) {
+	cleanupToolTemp(t)
+	tc := config.ToolCommand{Category: "conflict_complete", Name: "Agent (yolo)", Mode: "terminal", Command: "agent"}
+	m, p := conflictModelWithTools(t, tc)
+	m, _ = p.update(m, keyRunes("t"))
+	m, _ = p.update(m, tea.KeyMsg{Type: tea.KeyEnter}) // pick the only row
+	if p.pending == nil {
+		t.Fatal("want a pending run")
+	}
+	if p.pending.messageFile == "" {
+		t.Fatal("conflict_complete run must create an overview file")
+	}
+	t.Cleanup(func() { os.Remove(p.pending.messageFile) })
+	if _, err := os.Stat(p.pending.messageFile); err != nil {
+		t.Fatalf("overview file must exist on disk: %v", err)
+	}
+	var hasMsg, hasTask bool
+	for _, e := range p.pending.env {
+		if e == "GG_MESSAGE_FILE="+p.pending.messageFile {
+			hasMsg = true
+		}
+		if e == "GG_TASK=conflict_complete" {
+			hasTask = true
+		}
+	}
+	if !hasMsg || !hasTask {
+		t.Fatalf("env must carry GG_MESSAGE_FILE and GG_TASK, got %v", p.pending.env)
+	}
+	for _, f := range p.pending.cleanup {
+		if f == p.pending.messageFile {
+			t.Fatal("overview file must NOT be in cleanup (the viewer needs it)")
+		}
+	}
+}
+
+func TestToolFinishedCompleteOpensOverviewViewer(t *testing.T) {
+	m, p := conflictModelWithTools(t)
+	mf, err := os.CreateTemp(t.TempDir(), "overview-*.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := mf.WriteString("## Overview\nresolved a.txt (kept both hunks)\n"); err != nil {
+		t.Fatal(err)
+	}
+	mf.Close()
+	pending := &pendingToolRun{
+		tc:          config.ToolCommand{Category: "conflict_complete", Name: "Agent", Mode: "terminal", Command: "agent"},
+		messageFile: mf.Name(),
+	}
+	m2, cmd := p.toolFinished(m, toolFinishedMsg{pending: pending, start: time.Now()})
+	if m2.proc != nil {
+		t.Fatal("process must close so the viewer gets keys (proc preempts layers)")
+	}
+	if layerOf[*reviewView](m2) == nil {
+		t.Fatal("want the overview open in a reviewView layer")
+	}
+	if cmd == nil {
+		t.Fatal("want a reload cmd (state must re-derive)")
+	}
+	if _, err := os.Stat(mf.Name()); err != nil {
+		t.Fatalf("overview file must survive for the viewer's [e]: %v", err)
+	}
+}
+
+func TestToolFinishedCompleteEmptyOverviewIsStatusNote(t *testing.T) {
+	m, p := conflictModelWithTools(t)
+	mf, err := os.CreateTemp(t.TempDir(), "overview-*.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mf.Close()
+	pending := &pendingToolRun{
+		tc:          config.ToolCommand{Category: "conflict_complete", Name: "Agent", Mode: "terminal", Command: "agent"},
+		messageFile: mf.Name(),
+	}
+	m2, _ := p.toolFinished(m, toolFinishedMsg{pending: pending, start: time.Now()})
+	if m2.proc == nil {
+		t.Fatal("empty overview: the process stays open")
+	}
+	if m2.statusMsg == "" {
+		t.Fatal("want a status note about the missing overview")
+	}
+	if _, err := os.Stat(mf.Name()); !os.IsNotExist(err) {
+		t.Fatal("empty overview file must be removed")
+	}
+}
+
+func TestToolFinishedCompleteFailureDiscardsOverview(t *testing.T) {
+	m, p := conflictModelWithTools(t)
+	mf, err := os.CreateTemp(t.TempDir(), "overview-*.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mf.WriteString("partial overview from a crashed run\n")
+	mf.Close()
+	pending := &pendingToolRun{
+		tc:          config.ToolCommand{Category: "conflict_complete", Name: "Agent", Mode: "terminal", Command: "agent"},
+		messageFile: mf.Name(),
+	}
+	m2, _ := p.toolFinished(m, toolFinishedMsg{pending: pending, start: time.Now(), err: fmt.Errorf("exit status 1")})
+	if p.st != confReporting {
+		t.Fatalf("failure must report, st = %v", p.st)
+	}
+	if layerOf[*reviewView](m2) != nil {
+		t.Fatal("a failed run must not open the viewer")
+	}
+	if _, err := os.Stat(mf.Name()); !os.IsNotExist(err) {
+		t.Fatal("failed run's overview file must be removed")
+	}
 }
 
 func TestConflictTKeyOpensPicker(t *testing.T) {

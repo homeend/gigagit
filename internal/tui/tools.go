@@ -92,4 +92,6 @@ type pendingToolRun struct {
 	cleanup  []string // temp files to remove after the run (quartet)
 	file     string   // per-file: repo-relative conflicted path
 	merged   string   // per-file: absolute worktree path of the file
+
+	messageFile string // conflict_complete: the overview file ($GG_MESSAGE_FILE); kept out of cleanup — on success it backs the report viewer
 }
