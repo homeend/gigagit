@@ -14,6 +14,7 @@ import (
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/exttool"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/template"
@@ -182,6 +183,7 @@ func (p *conflictProcess) updateListing(m Model, msg tea.KeyMsg) (Model, tea.Cmd
 			focused = &p.files[p.sel]
 		}
 		choices := conflictToolChoices(m.toolCommands("conflict"), p.src.Op, focused)
+		choices = append(choices, completeToolChoices(m.toolCommands(string(exttool.CatConflictComplete)), p.src.Op)...)
 		if len(choices) == 0 {
 			m.statusMsg = i18n.T("no external tools configured — Settings (,) → External tools")
 			return m, nil
@@ -639,7 +641,8 @@ func conflictListBox(m Model, files []model.FileStatus, sel int, src domain.Conf
 			b.WriteString(line + "\n")
 		}
 	}
-	hintParts := append(conflictHints(files, sel, inProgress, len(m.toolCommands("conflict"))), i18n.T("[L] leave"), i18n.T("[z] mode"))
+	nTools := len(m.toolCommands("conflict")) + len(m.toolCommands(string(exttool.CatConflictComplete)))
+	hintParts := append(conflictHints(files, sel, inProgress, nTools), i18n.T("[L] leave"), i18n.T("[z] mode"))
 	b.WriteString("\n" + strings.Join(wrapParts(hintParts, textW, "  "), "\n"))
 	return popupBox(inner, b.String())
 }

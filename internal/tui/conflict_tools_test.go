@@ -324,3 +324,31 @@ func TestToolFinishedErrorNamesTheTool(t *testing.T) {
 		t.Errorf("errMsg = %q, must not use the old generic phrasing", p.errMsg)
 	}
 }
+
+func TestConflictTKeyIncludesCompleteRows(t *testing.T) {
+	cmds := []config.ToolCommand{
+		{Category: "conflict", Name: "Fix", Mode: "terminal", Command: "helper"},
+		{Category: "conflict_complete", Name: "Finish (yolo)", Mode: "terminal", Command: "agent"},
+	}
+	m, p := conflictModelWithTools(t, cmds...)
+	m, _ = p.update(m, keyRunes("t"))
+	if p.st != confToolPick {
+		t.Fatalf("st = %v, want confToolPick", p.st)
+	}
+	if len(p.toolChoices) != 2 || p.toolChoices[1].Name != "Finish (yolo)" {
+		t.Fatalf("want [Fix, Finish (yolo)], got %v", p.toolChoices)
+	}
+}
+
+func TestConflictTKeyCompleteRowsNeedPausedOp(t *testing.T) {
+	cmds := []config.ToolCommand{
+		{Category: "conflict", Name: "Fix", Mode: "terminal", Command: "helper"},
+		{Category: "conflict_complete", Name: "Finish (yolo)", Mode: "terminal", Command: "agent"},
+	}
+	m, p := conflictModelWithTools(t, cmds...)
+	p.src.Op = "" // conflicts exist but no paused sequencer op — nothing to complete
+	m, _ = p.update(m, keyRunes("t"))
+	if len(p.toolChoices) != 1 || p.toolChoices[0].Name != "Fix" {
+		t.Fatalf("no paused op: want only the conflict row, got %v", p.toolChoices)
+	}
+}

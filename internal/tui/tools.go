@@ -66,6 +66,23 @@ func conflictToolChoices(cmds []config.ToolCommand, op string, focused *model.Fi
 	return out
 }
 
+// completeToolChoices filters conflict_complete commands: they exist to
+// COMPLETE a paused sequencer op, so with no paused op (op == "") there is
+// nothing to offer; when_op narrows further when set. Pure, for tests.
+func completeToolChoices(cmds []config.ToolCommand, op string) []config.ToolCommand {
+	if op == "" {
+		return nil
+	}
+	var out []config.ToolCommand
+	for _, tc := range cmds {
+		if tc.WhenOp != "" && tc.WhenOp != op {
+			continue
+		}
+		out = append(out, tc)
+	}
+	return out
+}
+
 // pendingToolRun is a resolved, ready-to-execute tool command (built by the
 // pick/fill flow; executed after approval in tool_run.go).
 type pendingToolRun struct {
