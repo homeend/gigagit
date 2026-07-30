@@ -38,11 +38,14 @@ So the design is an **explicit second mode, not a widened first one**:
 
 - `GET /api/compare?a=<name>&b=<name>` — unchanged. Names resolved against
   the live branch list, 404 on unknown, exactly as today.
-- `GET /api/compare?a=<hex40>&b=<hex40>&revs=1` — both values must satisfy
-  a new `isHexHash` (exactly 40 lowercase hex chars), else 400. No branch
-  resolution; the hashes are the endpoints. Response shape identical
-  (`a_hash`/`b_hash` echo the inputs), so the client's per-file diff and
-  origin-filter paths need no changes.
+- `GET /api/compare?a=<hex>&b=<hex>&revs=1` — both values must satisfy
+  `isHexSha` (7–64 lowercase hex chars — the existing commit-edit argv
+  guard, reused rather than duplicated), else 400. No branch resolution;
+  the hashes are the endpoints. Response shape identical (`a_hash`/`b_hash`
+  echo the inputs), so the client's per-file diff and origin-filter paths
+  need no changes. Short hashes are accepted because the client's tip
+  source (`/api/branches`) serves git's abbreviated sha: an abbreviation
+  stays immutable for its object, and an ambiguous one fails loudly.
 
 No sniffing ("is this 40-hex value a branch name?") and no mixed mode: a
 request is either names or revs. The tip hash comes from the client's

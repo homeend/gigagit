@@ -8,6 +8,22 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: version ↔ tip compare and the all-branches versions picker.** The
+  two pieces deliberately left out of the web's "previous versions…" popup.
+  A version row's menu gains *compare against current tip* — the whole-tree
+  compare of a recorded snapshot against the branch's live tip, in the
+  existing compare view with readable labels (`<branch>@<short> ↔ <branch>
+  (tip)`); absent for a deleted branch (restore it to compare, the TUI's
+  rule). A new *branch versions…* entry (palette + ☰ menu) opens a picker
+  over every branch with recorded snapshots — deleted branches tagged red —
+  and drills into the versions popup, which is the deleted-branch recovery
+  path: restore there recreates the ref. Transport: `/api/compare` gains an
+  explicit rev form (`revs=1`, both sides plain hex ids, no branch-list
+  resolution — the name allowlist's empty-vs-unknown ambiguity doesn't
+  exist for hashes, which fail loudly), `/api/diff`'s `left`/`right` now
+  enforce the hex-only contract their doc always promised, and
+  `GET /api/version-branches` lists every branch with snapshots.
+
 - **fix: external tools ran with none of their flags on Windows.** Selecting
   *Claude (yolo)* for a conflict launched Claude in normal permission mode —
   `--dangerously-skip-permissions` never reached it. gg writes the configured
