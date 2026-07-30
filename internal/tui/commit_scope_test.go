@@ -1041,3 +1041,118 @@ func TestCtrlGBusyNoOp(t *testing.T) {
 		t.Fatalf("busy ctrl+g mutated state: scope=%v pending=%q cmd=%v", m.commitScopeBranches, m.pendingGotoTip, cmd != nil)
 	}
 }
+
+// commitsPanelSoloModel is an idle fixture focused on the Commits panel with
+// one loaded commit (full 40-hex sha) selected.
+func commitsPanelSoloModel(full string) Model {
+	m := footerModel()
+	m.focus = panelCommits
+	m.commits = []model.Commit{{Hash: full, Subject: "x"}}
+	m.sel[panelCommits] = 0
+	return m
+}
+
+// TestCommitSoloCommitTogglesScope: the Commits-panel "Solo from this commit"
+// row scopes the feed to the selected commit's sha (the commit-anchored twin
+// of branch solo), remembers the commit for the post-reload cursor landing,
+// and un-solos on a second run.
+func TestCommitSoloCommitTogglesScope(t *testing.T) {
+	full := strings.Repeat("a", 40)
+	m := commitsPanelSoloModel(full)
+	r, ok := findRow(availableActions(m), "commits-solo-commit")
+	if !ok {
+		t.Fatal("Solo from this commit missing on the Commits panel")
+	}
+	mm, cmd := r.run(m)
+	m = mm.(Model)
+	if cmd == nil {
+		t.Fatal("solo should dispatch a scope reload")
+	}
+	if len(m.commitScopeBranches) != 1 || m.commitScopeBranches[0] != full {
+		t.Fatalf("scope = %v, want [%s]", m.commitScopeBranches, full)
+	}
+	if m.pendingGotoTip != full {
+		t.Fatalf("pendingGotoTip = %q, want the commit hash", m.pendingGotoTip)
+	}
+	// Re-solo the same commit → un-solo (back to all); the cursor still lands
+	// on the commit in the expanded feed.
+	r2, _ := findRow(availableActions(m), "commits-solo-commit")
+	mm, _ = r2.run(m)
+	m = mm.(Model)
+	if len(m.commitScopeBranches) != 0 {
+		t.Fatalf("re-solo should clear scope, got %v", m.commitScopeBranches)
+	}
+	if m.pendingGotoTip != full {
+		t.Fatalf("un-solo pendingGotoTip = %q, want the commit hash", m.pendingGotoTip)
+	}
+}
+
+// TestCommitSoloCommitRowGating: the row is offered only on the Commits panel,
+// only when idle, and only with a real commit under the cursor.
+func TestCommitSoloCommitRowGating(t *testing.T) {
+	full := strings.Repeat("a", 40)
+	m := commitsPanelSoloModel(full)
+	m.focus = panelFiles
+	if _, ok := findRow(availableActions(m), "commits-solo-commit"); ok {
+		t.Fatal("row must not appear off the Commits panel")
+	}
+	m = commitsPanelSoloModel(full)
+	m.running = true // opsIdle() == false
+	if _, ok := findRow(availableActions(m), "commits-solo-commit"); ok {
+		t.Fatal("row must not appear while an op runs")
+	}
+	m = commitsPanelSoloModel(full)
+	m.commits = nil // nothing selectable
+	if _, ok := findRow(availableActions(m), "commits-solo-commit"); ok {
+		t.Fatal("row must not appear with no commit selected")
+	}
+}
+
+// TestCtrlGOnCommitsSolosSelectedCommit: ctrl+g on the Commits panel runs the
+// solo-from-commit row — the commit-window twin of the Branches ctrl+g.
+func TestCtrlGOnCommitsSolosSelectedCommit(t *testing.T) {
+	full := strings.Repeat("b", 40)
+	m := commitsPanelSoloModel(full)
+	nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlG})
+	m = nm.(Model)
+	if len(m.commitScopeBranches) != 1 || m.commitScopeBranches[0] != full {
+		t.Fatalf("scope = %v, want [%s]", m.commitScopeBranches, full)
+	}
+	if m.pendingGotoTip != full {
+		t.Fatalf("pendingGotoTip = %q, want the commit hash", m.pendingGotoTip)
+	}
+	if !m.commitsLoading || cmd == nil {
+		t.Fatalf("loading=%v cmd=%v, want a scope reload dispatched", m.commitsLoading, cmd != nil)
+	}
+}
+
+// TestCtrlGOnSoloedCommitUnsolos: ctrl+g keeps solo's toggle on the Commits
+// panel — a second press on the same commit restores the all-branches scope.
+func TestCtrlGOnSoloedCommitUnsolos(t *testing.T) {
+	full := strings.Repeat("b", 40)
+	m := commitsPanelSoloModel(full)
+	m.commitScopeBranches = []string{full} // already soloed on the selected commit
+	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlG})
+	m = nm.(Model)
+	if len(m.commitScopeBranches) != 0 {
+		t.Fatalf("scope = %v, want cleared (un-solo)", m.commitScopeBranches)
+	}
+	if m.pendingGotoTip != full {
+		t.Fatalf("pendingGotoTip = %q, want the commit hash even on un-solo", m.pendingGotoTip)
+	}
+}
+
+// TestCommitScopeLabelShortensFullSha: a commit-solo scope entry (a full
+// 40-hex sha) renders shortened in the panel header; branch/tag names pass
+// through untouched.
+func TestCommitScopeLabelShortensFullSha(t *testing.T) {
+	full := strings.Repeat("c", 40)
+	m := Model{commitScopeBranches: []string{full}}
+	if got := m.commitScopeLabel(); got != "solo: "+full[:7] {
+		t.Fatalf("label = %q, want solo: %s", got, full[:7])
+	}
+	m = Model{commitScopeBranches: []string{"feat"}}
+	if got := m.commitScopeLabel(); got != "solo: feat" {
+		t.Fatalf("label = %q, want solo: feat", got)
+	}
+}
