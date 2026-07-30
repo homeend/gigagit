@@ -450,6 +450,16 @@ func (p *conflictProcess) toolReady(m Model, msg toolReadyMsg) (Model, tea.Cmd) 
 	return p.gateOrRun(m)
 }
 
+// removeOverviewFile discards a conflict_complete run's overview temp file
+// on the exits that will not open the viewer (failure / cancel / interrupt /
+// empty). It is deliberately not in pending.cleanup: the success path hands
+// the file to the report viewer, whose [e] open-in-editor needs it on disk.
+func removeOverviewFile(pending *pendingToolRun) {
+	if pending != nil && pending.messageFile != "" {
+		os.Remove(pending.messageFile)
+	}
+}
+
 // toolFinished receives the tool process's exit (handed-over terminal run or
 // background capture alike): clean temps, log the exit disposition, surface a
 // failure (with the captured output tail — a capture run has no terminal of
@@ -461,16 +471,6 @@ func (p *conflictProcess) toolReady(m Model, msg toolReadyMsg) (Model, tea.Cmd) 
 // OR an esc-cancelled capture run — is a normal quit, not a failure: it takes
 // the exact same success path as a zero exit, just with a status hint instead
 // of silence.
-// removeOverviewFile discards a conflict_complete run's overview temp file
-// on the exits that will not open the viewer (failure / cancel / interrupt /
-// empty). It is deliberately not in pending.cleanup: the success path hands
-// the file to the report viewer, whose [e] open-in-editor needs it on disk.
-func removeOverviewFile(pending *pendingToolRun) {
-	if pending != nil && pending.messageFile != "" {
-		os.Remove(pending.messageFile)
-	}
-}
-
 func (p *conflictProcess) toolFinished(m Model, msg toolFinishedMsg) (Model, tea.Cmd) {
 	if msg.script != "" {
 		os.Remove(msg.script)
