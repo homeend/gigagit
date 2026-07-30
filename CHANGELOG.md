@@ -8,6 +8,20 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Resolve & complete: an AI agent can finish a paused merge/rebase for
+  you.** The conflict window's `t` picker gains a second row group — a new
+  `conflict_complete` tool category, alongside the existing `conflict`
+  category — for agents that don't just resolve conflicts but also stage
+  them and drive the operation to completion: the matching `--continue`
+  (`git merge`/`rebase`/`cherry-pick`/`revert --continue`), repeated through
+  further rebase rounds, and never `--abort`. On a clean exit the agent's
+  overview (which files, how resolved, how many continue rounds, final
+  state) — written to `$GG_MESSAGE_FILE` — opens straight in gg's report
+  viewer; the conflict process closes first so the viewer isn't fighting it
+  for keys. Every row is **yolo-only and unchecked by default** in the
+  external-tools wizard (Claude, Junie, Codex, and Antigravity via their
+  terminal-handover bypass-flag variant; Kimi via headless capture, since
+  its `-p` mode has no bypass flag to opt into).
 - **Tags panel: enter now searches history for the tag's commit.** Enter on a
   tag whose target is already in the loaded Commits page still jumps the cursor
   to it; a target that isn't loaded now falls back to the ctrl+f eager

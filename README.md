@@ -600,6 +600,19 @@ Tokens for hand-written commands: `<repo>` `<file>` `<local>` `<base>`
 literally — prefer `"$GG_*"`/`<context-file>` when a value might carry shell
 metacharacters).
 
+**Resolve & complete.** The same `t` picker also lists any configured
+`conflict_complete` commands (shown whenever an op is paused): an agent in
+this category doesn't just resolve the conflicts, it stages them and drives
+the operation to completion itself — the matching `--continue`, repeating
+through further rebase rounds, never `--abort` — then reports an overview
+via `$GG_MESSAGE_FILE`, which gg opens in a read-only report viewer on a
+clean exit (the conflict window closes first). Catalog defaults ship for
+Claude Code, Junie, Codex, and Antigravity (terminal handover with their
+bypass-permissions flag) and Kimi Code (headless capture, since `kimi -p`
+has no bypass flag to combine with). Every row is deliberately **yolo-only
+and unchecked by default** in the wizard — completing your paused operation
+autonomously is an explicit opt-in, checked or not.
+
 **Commit-message generation.** Press **`ctrl+g`** in the commit popup (`c`/`C`)
 to draft a message from the staged diff with a configured `commit_message`
 command — these run **headless** (`mode =
