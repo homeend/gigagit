@@ -49,3 +49,29 @@ func (s *Server) handleVersions(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, map[string]any{"branch": branch, "versions": rows})
 }
+
+// vbranchRow is one branch with recorded versions — the all-branches picker
+// read, and the only route to a DELETED branch's snapshots (recorded by
+// delete-branch itself; restore-version recreates the ref).
+type vbranchRow struct {
+	Branch     string `json:"branch"`
+	Deleted    bool   `json:"deleted"`
+	Count      int    `json:"count"`
+	LatestUnix int64  `json:"latest_unix"`
+}
+
+func (s *Server) handleVersionBranches(w http.ResponseWriter, r *http.Request) {
+	vs, err := s.service().AllVersionBranches(r.Context())
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	rows := make([]vbranchRow, 0, len(vs))
+	for _, v := range vs {
+		rows = append(rows, vbranchRow{
+			Branch: v.Branch, Deleted: v.Deleted,
+			Count: v.Count, LatestUnix: v.LatestUnix,
+		})
+	}
+	writeJSON(w, map[string]any{"branches": rows})
+}
