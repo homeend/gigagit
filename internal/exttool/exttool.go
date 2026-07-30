@@ -1,8 +1,8 @@
 // Package exttool is the hardcoded catalog of external tools/AI agents gg can
-// run per task category (conflict resolution, commit-message generation, and
-// code review), plus their detection. Supporting a new tool is a code change
-// (one Builtins entry), never a runtime definition — the agentinit
-// philosophy.
+// run per task category (conflict resolution, resolve-and-complete,
+// commit-message generation, and code review), plus their detection.
+// Supporting a new tool is a code change (one Builtins entry), never a
+// runtime definition — the agentinit philosophy.
 // The catalog's command TEMPLATES never execute directly: the Settings wizard
 // materializes them as editable [[tools.command]] blocks in the gg config, and
 // only config content runs.
@@ -25,6 +25,13 @@ const (
 	CatConflict      Category = "conflict"
 	CatCommitMessage Category = "commit_message"
 	CatReview        Category = "review"
+	// CatConflictComplete is the resolve-AND-complete task: unlike CatConflict
+	// (whose contract forbids --continue — gg's ContinueOp owns the sequencer),
+	// this category's agent deliberately OWNS the sequencer for the run:
+	// resolve, stage, continue, repeat through further rebase rounds, then
+	// report an overview via GG_MESSAGE_FILE. Yolo-only: one bypass-flag
+	// variant per agent, no cautious row.
+	CatConflictComplete Category = "conflict_complete"
 )
 
 // Mode is how a command runs: terminal = suspend the TUI and hand over the
@@ -277,6 +284,53 @@ const agyReviewPrompt = `"You are reviewing a code change. The full diff to revi
 
 const agyReviewCommand = `<bin> -p ` + agyReviewPrompt + ` --dangerously-skip-permissions`
 
+// Resolve-and-complete (CatConflictComplete) prompts. The shared contract:
+// read the paused op from GG_OP/GG_CONTEXT_FILE, resolve every conflict,
+// git add, run the MATCHING --continue with GIT_EDITOR=true (so no editor
+// can block a handover-less run), repeat through further rebase rounds,
+// NEVER --abort or push, stop-and-leave-paused when unsafe, and write the
+// overview to GG_MESSAGE_FILE (the "absolute path outside the repository"
+// phrasing is load-bearing for task-agents — the Junie precedent).
+const claudeCompletePrompt = `"A git <env:GG_OP> operation is paused with conflicts in this repository.
+   Read the context file at <env:GG_CONTEXT_FILE> for the operation's parties and the conflicted paths.
+   Inspect both sides' history to understand intent, resolve every conflict by editing the files,
+   and run git add on each resolved file. Then COMPLETE the operation: run the matching continue
+   command (git merge --continue, git rebase --continue, git cherry-pick --continue, or
+   git revert --continue) with GIT_EDITOR=true so no editor can block. If the operation pauses
+   again on new conflicts, resolve them the same way and continue again, until it finishes.
+   NEVER run any --abort command and never push. If a conflict cannot be resolved safely, stop
+   and leave the operation paused instead. Finally, write an overview to the file at
+   <env:GG_MESSAGE_FILE> (an absolute path outside the repository): which operation was paused,
+   each file and how you resolved it, how many continue rounds ran, and the final state."`
+
+// claudeCompleteCommand: prompt FIRST (the variadic-flag ordering contract),
+// bypass flag only — bypass mode never consults allow/deny lists.
+const claudeCompleteCommand = `<bin> ` + claudeCompletePrompt + ` --dangerously-skip-permissions`
+
+const junieCompletePrompt = `"A git <env:GG_OP> operation is paused with conflicts in this repository. Read the context file at <env:GG_CONTEXT_FILE> for the operation's parties and the conflicted paths. Resolve every conflict by editing the files, run git add on each resolved file, then COMPLETE the operation: run the matching continue command (git merge --continue, git rebase --continue, git cherry-pick --continue, or git revert --continue) with GIT_EDITOR=true so no editor can block. If it pauses again on new conflicts, resolve and continue again until it finishes. NEVER run any --abort command and never push. If a conflict cannot be resolved safely, stop and leave the operation paused. Finally write an overview (which operation, each file and how you resolved it, how many continue rounds ran, the final state) into the file at <env:GG_MESSAGE_FILE> (an absolute path outside the repository)."`
+
+const junieCompleteCommand = `<bin> --prompt ` + junieCompletePrompt + ` --brave`
+
+const codexCompletePrompt = junieCompletePrompt
+
+const codexCompleteCommand = `<bin> ` + codexCompletePrompt + ` --dangerously-bypass-approvals-and-sandbox`
+
+const agyCompletePrompt = junieCompletePrompt
+
+const agyCompleteCommand = `<bin> --prompt-interactive ` + agyCompletePrompt + ` --dangerously-skip-permissions`
+
+// kimiCompleteCommand: headless -p (Kimi has no interactive-with-prompt
+// mode, and -p REFUSES --yolo/--auto — but print mode approves its own
+// edits and was verified 2026-07-20 running `git add` autonomously, so it
+// can honestly attempt the task without a flag; hence NOT OptIn, per the
+// invariant). ModeCapture like kimiConflictCommand: -p draws no UI, a
+// handover would show a dead screen. MUST be re-verified against a real
+// paused rebase before merge — if print mode refuses to run the --continue
+// commands, DELETE this row (the spec's Kimi conditional).
+const kimiCompletePrompt = junieCompletePrompt
+
+const kimiCompleteCommand = `<bin> -p ` + kimiCompletePrompt
+
 // Builtins is the hardcoded catalog. Stage 1 shipped conflict templates;
 // stage 2 added commit_message capture templates; stage 3 adds review
 // capture templates.
@@ -287,6 +341,7 @@ func Builtins() []Tool {
 			Commands: []CommandTemplate{
 				{Category: CatConflict, Name: "Claude", Mode: ModeTerminal, Command: claudeConflictCommand},
 				{Category: CatConflict, Name: "Claude (yolo)", Mode: ModeTerminal, OptIn: true, Command: claudeConflictYoloCommand},
+				{Category: CatConflictComplete, Name: "Claude — resolve & complete (yolo)", Mode: ModeTerminal, OptIn: true, Command: claudeCompleteCommand},
 				{Category: CatCommitMessage, Name: "Claude", Mode: ModeCapture, Command: claudeCommitCommand},
 				{Category: CatReview, Name: "Claude", Mode: ModeCapture, Command: claudeReviewCommand},
 			},
@@ -311,6 +366,7 @@ func Builtins() []Tool {
 			Commands: []CommandTemplate{
 				{Category: CatConflict, Name: "Junie", Mode: ModeTerminal, Command: junieConflictCommand},
 				{Category: CatConflict, Name: "Junie (yolo)", Mode: ModeTerminal, OptIn: true, Command: junieConflictYoloCommand},
+				{Category: CatConflictComplete, Name: "Junie — resolve & complete (yolo)", Mode: ModeTerminal, OptIn: true, Command: junieCompleteCommand},
 				{Category: CatCommitMessage, Name: "Junie", Mode: ModeCapture, Command: junieCommitCommand},
 				{Category: CatReview, Name: "Junie", Mode: ModeCapture, Command: junieReviewCommand},
 			},
@@ -320,6 +376,7 @@ func Builtins() []Tool {
 			Commands: []CommandTemplate{
 				{Category: CatConflict, Name: "Codex", Mode: ModeTerminal, Command: codexConflictCommand},
 				{Category: CatConflict, Name: "Codex (yolo)", Mode: ModeTerminal, OptIn: true, Command: codexConflictYoloCommand},
+				{Category: CatConflictComplete, Name: "Codex — resolve & complete (yolo)", Mode: ModeTerminal, OptIn: true, Command: codexCompleteCommand},
 				{Category: CatCommitMessage, Name: "Codex", Mode: ModeCapture, Command: codexCommitCommand},
 				{Category: CatReview, Name: "Codex", Mode: ModeCapture, Command: codexReviewCommand},
 			},
@@ -329,6 +386,7 @@ func Builtins() []Tool {
 			Commands: []CommandTemplate{
 				{Category: CatConflict, Name: "Antigravity", Mode: ModeTerminal, Command: agyConflictCommand},
 				{Category: CatConflict, Name: "Antigravity (yolo)", Mode: ModeTerminal, OptIn: true, Command: agyConflictYoloCommand},
+				{Category: CatConflictComplete, Name: "Antigravity — resolve & complete (yolo)", Mode: ModeTerminal, OptIn: true, Command: agyCompleteCommand},
 				{Category: CatCommitMessage, Name: "Antigravity", Mode: ModeCapture, OptIn: true, Command: agyCommitCommand},
 				{Category: CatReview, Name: "Antigravity", Mode: ModeCapture, OptIn: true, Command: agyReviewCommand},
 			},
@@ -341,6 +399,7 @@ func Builtins() []Tool {
 			ExtraProbes: []string{"~/.kimi-code/bin/kimi"},
 			Commands: []CommandTemplate{
 				{Category: CatConflict, Name: "Kimi", Mode: ModeCapture, Command: kimiConflictCommand},
+				{Category: CatConflictComplete, Name: "Kimi — resolve & complete", Mode: ModeCapture, Command: kimiCompleteCommand},
 				{Category: CatCommitMessage, Name: "Kimi", Mode: ModeCapture, Command: kimiCommitCommand},
 				{Category: CatReview, Name: "Kimi", Mode: ModeCapture, Command: kimiReviewCommand},
 			},
