@@ -305,9 +305,14 @@ tr.hk.picked td.no { background: var(--sel); color: var(--fg); }
 #versions-list li { display: flex; gap: 10px; padding: 5px 14px; cursor: pointer; white-space: nowrap; }
 #versions-list li:hover { background: var(--sel); }
 #versions-list li.empty { color: var(--dim); cursor: default; }
-#versions-list .vwhen { color: var(--dim); width: 13em; overflow: hidden; text-overflow: ellipsis; }
-#versions-list .vop { color: var(--accent); width: 9em; overflow: hidden; text-overflow: ellipsis; }
-#versions-list .vsha { color: var(--dim); }
+/* The fixed columns are flex: none — with the default flex-shrink they
+   shrank PROPORTIONALLY TO EACH ROW'S OVERFLOW (.vsub's flex-basis is the
+   subject's full text width), so a long subject pulled its own row's
+   op/sha columns left and the columns drifted between rows. Only .vsub
+   may shrink. */
+#versions-list .vwhen { flex: none; color: var(--dim); width: 7em; overflow: hidden; text-overflow: ellipsis; }
+#versions-list .vop { flex: none; color: var(--accent); width: 9em; overflow: hidden; text-overflow: ellipsis; }
+#versions-list .vsha { flex: none; color: var(--dim); }
 #versions-list .vsub { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; }
 
 /* All-branches versions picker — sits at z-index 20, deliberately BELOW
@@ -323,9 +328,9 @@ tr.hk.picked td.no { background: var(--sel); color: var(--fg); }
 #vbranches-list li:hover { background: var(--sel); }
 #vbranches-list li.empty { color: var(--dim); cursor: default; }
 #vbranches-list .vbname { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; }
-#vbranches-list .vbdel { color: #f27a6a; font-size: 11px; border: 1px solid #f27a6a; border-radius: 3px; padding: 0 4px; }
-#vbranches-list .vbcount { color: var(--dim); }
-#vbranches-list .vbwhen { color: var(--dim); width: 10em; overflow: hidden; text-overflow: ellipsis; text-align: right; }
+#vbranches-list .vbdel { flex: none; color: #f27a6a; font-size: 11px; border: 1px solid #f27a6a; border-radius: 3px; padding: 0 4px; }
+#vbranches-list .vbcount { flex: none; color: var(--dim); }
+#vbranches-list .vbwhen { flex: none; color: var(--dim); width: 10em; overflow: hidden; text-overflow: ellipsis; text-align: right; }
 
 /* AI review: the lane (chooser / approval / progress) and the report viewer.
    Both sit at 21 with the other panel overlays — the ctx-menu (40) and the
