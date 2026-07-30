@@ -844,7 +844,7 @@ $("rebase-start").addEventListener("click", () => {
   startOp({ op: "interactive-rebase", branch, onto, plan }, label);
 });
 
-async function openVersions(branch) {
+async function openVersions(branch, opts) {
   let body;
   try {
     body = await getJSON("/api/versions?branch=" + encodeURIComponent(branch));
@@ -853,7 +853,10 @@ async function openVersions(branch) {
     return;
   }
   const rows = body.versions || [];
-  $("versions-title").textContent = branch + " — previous versions";
+  // The deleted tag matters here: it says the restore row will RECREATE the
+  // branch, and why there is no compare row (nothing live to compare with).
+  $("versions-title").textContent =
+    branch + " — previous versions" + (opts && opts.deleted ? " (branch deleted)" : "");
   $("versions-list").innerHTML = rows.length
     ? rows
         .map(
@@ -874,11 +877,38 @@ function closeVersions() {
   closeLayer("versions");
 }
 
+// The live tip hash of a local branch, or "" when no such branch exists.
+// This is the version-compare gate: a deleted branch has no tip to compare
+// against (the TUI's "restore it to compare" rule). The value is git's
+// abbreviated sha (what /api/branches serves) — fine for the rev form,
+// which takes any plain hex id: it stays immutable for the object, and an
+// ambiguous abbreviation fails loudly server-side.
+function branchTipHash(name) {
+  const b = (state.branches || []).find((x) => x.name === name);
+  return b ? b.hash : "";
+}
+
 // Per-row actions go through the shared ctx-menu rather than inline buttons:
 // same interaction language as the sidebar, and the row stays readable.
 function showVersionMenu(branch, v, x, y) {
+  const items = [];
+  const tip = branchTipHash(branch);
+  if (tip) {
+    items.push({
+      label: "compare against current tip",
+      act: () => {
+        closeVersions();
+        closeVersionBranches(); // reached via the picker: the compare replaces it
+        openCompare(v.hash, tip, {
+          revs: true,
+          aLabel: branch + "@" + v.short,
+          bLabel: branch + " (tip)",
+        });
+      },
+    });
+  }
   showCtxMenu(
-    [
+    items.concat([
       {
         label: "restore " + branch + " to this version",
         act: () =>
@@ -891,6 +921,7 @@ function showVersionMenu(branch, v, x, y) {
             (o) => {
               if (o !== "restore") return;
               closeVersions();
+              closeVersionBranches(); // reached via the picker: its rows are now stale
               startOp(
                 { op: "restore-version", branch, ref: v.ref },
                 "restoring " + branch + " to " + v.short
@@ -906,10 +937,11 @@ function showVersionMenu(branch, v, x, y) {
           showLocalConfirm("Delete the " + v.op + " snapshot at " + v.short + "?", ["delete", "abort"], (o) => {
             if (o !== "delete") return;
             closeVersions();
+            closeVersionBranches(); // reached via the picker: its rows are now stale
             startOp({ op: "delete-version", ref: v.ref }, "deleting snapshot " + v.short);
           }),
       },
-    ],
+    ]),
     x,
     y
   );
@@ -933,6 +965,50 @@ $("versions-list").addEventListener("click", versionRowMenu);
 $("versions-list").addEventListener("contextmenu", versionRowMenu);
 $("versions").addEventListener("click", (e) => {
   if (e.target.id === "versions") closeVersions(); // backdrop
+});
+
+// --- all-branches versions picker (the deleted-branch recovery path) ---
+//
+// Lists every branch with recorded versions, deleted ones tagged — the only
+// route to a DELETED branch's snapshots, whose restore recreates the ref.
+// Clicking a row opens the versions overlay ON TOP (it sits at z-index 21,
+// this picker at 20), so esc drills back out to the picker for free.
+async function openVersionBranches() {
+  let body;
+  try {
+    body = await getJSON("/api/version-branches");
+  } catch (e) {
+    opLine("branch versions failed: " + (e.message || e), true);
+    return;
+  }
+  const rows = body.branches || [];
+  $("vbranches-list").innerHTML = rows.length
+    ? rows
+        .map(
+          (b, i) =>
+            `<li data-i="${i}"><span class="vbname">${esc(b.branch)}</span>` +
+            (b.deleted ? `<span class="vbdel">deleted</span>` : "") +
+            `<span class="vbcount">${b.count} snapshot${b.count === 1 ? "" : "s"}</span>` +
+            `<span class="vbwhen">${esc(versionWhen(b.latest_unix))}</span></li>`
+        )
+        .join("")
+    : `<li class="empty">no recorded versions anywhere — they are written as operations run</li>`;
+  $("vbranches-list")._rows = rows;
+  pushLayer("vbranches", $("vbranches"));
+}
+
+function closeVersionBranches() {
+  closeLayer("vbranches");
+}
+
+$("vbranches-list").addEventListener("click", (e) => {
+  const li = e.target.closest("li[data-i]");
+  if (!li) return;
+  const b = $("vbranches-list")._rows[Number(li.dataset.i)];
+  if (b) openVersions(b.branch, { deleted: b.deleted });
+});
+$("vbranches").addEventListener("click", (e) => {
+  if (e.target.id === "vbranches") closeVersionBranches(); // backdrop
 });
 
 // --- AI review ---
@@ -2028,19 +2104,28 @@ async function openStashDetail(st) {
 // changed-file list. Each file's per-side diff runs against the two TIP
 // HASHES the server resolved (never the branch names — see compare.go), so
 // the diff cache cannot serve a stale side after a commit.
-async function openCompare(a, b) {
+//
+// The rev form (opts.revs): a and b are hex commit ids sent with revs=1 —
+// no server-side branch resolution — and opts.aLabel/bLabel supply the
+// display names, since a bare hash is unreadable in the header and the
+// origin-filter buttons. state.compare.a/b hold the LABELS (display-only
+// after the fetch; every git-facing consumer reads aHash/bHash).
+async function openCompare(a, b, opts) {
+  const o = opts || {};
   const gen = ++state.detailGen;
   let body;
   try {
-    body = await getJSON("/api/compare?a=" + encodeURIComponent(a) + "&b=" + encodeURIComponent(b));
+    body = await getJSON(
+      "/api/compare?a=" + encodeURIComponent(a) + "&b=" + encodeURIComponent(b) + (o.revs ? "&revs=1" : "")
+    );
   } catch (e) {
     opLine("compare failed: " + (e.message || e), true);
     return;
   }
   if (gen !== state.detailGen) return; // superseded by a newer open or esc
   state.compare = {
-    a,
-    b,
+    a: o.aLabel || a,
+    b: o.bLabel || b,
     aHash: body.a_hash,
     bHash: body.b_hash,
     all: body.files || [],
@@ -2051,7 +2136,7 @@ async function openCompare(a, b) {
   state.fileSha = null;
   state.pane = "files";
   setLayout("detail");
-  $("files-header").textContent = a + " ↔ " + b;
+  $("files-header").textContent = state.compare.a + " ↔ " + state.compare.b;
   applyCompareFilter();
   focusPane();
 }
@@ -2789,6 +2874,7 @@ function paletteCommands() {
     { label: "push", detail: "P", run: () => doPush() },
     { label: "fetch all remotes", detail: "", run: () => doFetch() },
     { label: "create branch…", detail: "", run: () => openCreateBranchPrompt() },
+    { label: "branch versions…", detail: "", run: () => openVersionBranches() },
     { label: "review working changes (AI)…", detail: "", run: () => startReview("working", "") },
     { label: "review this branch (AI)…", detail: "", run: () => startReview("branch", "") },
     { label: "refresh", detail: "r", run: () => { if (!state.op) refreshAfterOp(); } },
@@ -2919,6 +3005,7 @@ function openGlobalMenu() {
       { label: "push", act: () => doPush() },
       { label: "fetch all remotes", act: () => doFetch() },
       { label: "create branch…", act: () => openCreateBranchPrompt() },
+      { label: "branch versions…", act: () => openVersionBranches() },
       { label: "review working changes (AI)…", act: () => startReview("working", "") },
       { label: "refresh", act: () => { if (!state.op) refreshAfterOp(); } },
       { label: "switch repo…", act: () => openPalette("repo") },
