@@ -305,18 +305,34 @@ const claudeCompletePrompt = `"A git <env:GG_OP> operation is paused with confli
 
 // claudeCompleteCommand: prompt FIRST (the variadic-flag ordering contract),
 // bypass flag only — bypass mode never consults allow/deny lists.
+//
+// Verified 2026-07-30 (real binary, Claude Code 2.1.220): `claude --help`
+// lists `--dangerously-skip-permissions  Bypass all permission checks.` —
+// the flag this template uses exists as written.
 const claudeCompleteCommand = `<bin> ` + claudeCompletePrompt + ` --dangerously-skip-permissions`
 
 const junieCompletePrompt = `"A git <env:GG_OP> operation is paused with conflicts in this repository. Read the context file at <env:GG_CONTEXT_FILE> for the operation's parties and the conflicted paths. Resolve every conflict by editing the files, run git add on each resolved file, then COMPLETE the operation: run the matching continue command (git merge --continue, git rebase --continue, git cherry-pick --continue, or git revert --continue) with GIT_EDITOR=true so no editor can block. If it pauses again on new conflicts, resolve and continue again until it finishes. NEVER run any --abort command and never push. If a conflict cannot be resolved safely, stop and leave the operation paused. Finally write an overview (which operation, each file and how you resolved it, how many continue rounds ran, the final state) into the file at <env:GG_MESSAGE_FILE> (an absolute path outside the repository)."`
 
+// Verified 2026-07-30 (real binary, Junie 26.6.29 (2144.7)): `junie --help`
+// lists both `--prompt=<text>  Start interactive mode with an initial
+// prompt already submitted` and `--brave  Turns on Brave Mode (interactive
+// only)` — both flags this template uses exist as written.
 const junieCompleteCommand = `<bin> --prompt ` + junieCompletePrompt + ` --brave`
 
 const codexCompletePrompt = junieCompletePrompt
 
+// Verified 2026-07-30 (real binary, codex-cli 0.144.6): `codex --help`
+// lists `--dangerously-bypass-approvals-and-sandbox` — the flag this
+// template uses exists as written.
 const codexCompleteCommand = `<bin> ` + codexCompletePrompt + ` --dangerously-bypass-approvals-and-sandbox`
 
 const agyCompletePrompt = junieCompletePrompt
 
+// Verified 2026-07-30 (real binary, agy 1.1.4): `agy --help` lists both
+// `--prompt-interactive  Run an initial prompt interactively and continue
+// the session` and `--dangerously-skip-permissions  Auto-approve all tool
+// permission requests without prompting` — both flags this template uses
+// exist as written.
 const agyCompleteCommand = `<bin> --prompt-interactive ` + agyCompletePrompt + ` --dangerously-skip-permissions`
 
 // kimiCompleteCommand: headless -p (Kimi has no interactive-with-prompt
@@ -327,6 +343,19 @@ const agyCompleteCommand = `<bin> --prompt-interactive ` + agyCompletePrompt + `
 // handover would show a dead screen. MUST be re-verified against a real
 // paused rebase before merge — if print mode refuses to run the --continue
 // commands, DELETE this row (the spec's Kimi conditional).
+//
+// Verified 2026-07-30 (real binary, Kimi Code 0.28.0, via ~/.kimi-code/bin/
+// kimi): `kimi --help` lists `-p, --prompt <prompt>  Run one prompt
+// non-interactively and print the response.` — the flag this template uses
+// exists as written. Also re-confirmed at this version: `kimi -p "test"
+// --yolo` still fails fast with `error: Cannot combine --prompt with
+// --yolo.`, matching the 2026-07-20 finding above — -p alone (no yolo/auto
+// flag) remains the only viable headless invocation. This --help/flag-combo
+// check does NOT verify the actual behavioral claim (that headless -p mode
+// will resolve conflicts, `git add`, and run the matching `--continue`
+// command against a real paused rebase) — that is the still-outstanding
+// human end-to-end step; the spec's Kimi conditional (delete this row if
+// print mode refuses to run --continue) is UNRESOLVED pending that run.
 const kimiCompletePrompt = junieCompletePrompt
 
 const kimiCompleteCommand = `<bin> -p ` + kimiCompletePrompt
