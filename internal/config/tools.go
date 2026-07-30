@@ -11,7 +11,7 @@ import (
 // by the Settings "External tools" wizard or by hand; only config content
 // ever executes (catalog templates are generation-time input).
 type ToolCommand struct {
-	Category string `toml:"category"` // conflict | commit_message | review
+	Category string `toml:"category"` // conflict | commit_message | review | conflict_complete
 	Name     string `toml:"name"`     // menu label; unique per category
 	Mode     string `toml:"mode"`     // terminal | capture (capture: stage 2+)
 	PerFile  bool   `toml:"per_file"` // conflict only: run once per conflicted file
@@ -53,9 +53,9 @@ func overlayTools(dst *ToolsConfig, src ToolsConfig) {
 // never a startup error.
 func ValidateToolCommand(tc ToolCommand) error {
 	switch tc.Category {
-	case "conflict", "commit_message", "review":
+	case "conflict", "commit_message", "review", "conflict_complete":
 	default:
-		return fmt.Errorf("tools: unknown category %q (want conflict|commit_message|review)", tc.Category)
+		return fmt.Errorf("tools: unknown category %q (want conflict|commit_message|review|conflict_complete)", tc.Category)
 	}
 	if strings.TrimSpace(tc.Name) == "" {
 		return fmt.Errorf("tools: a command needs a name")

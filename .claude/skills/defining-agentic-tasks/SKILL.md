@@ -21,6 +21,7 @@ description: Use when defining or changing an AGENTIC TASK in gigagit — what a
 | Task | `category` | Human surface | Execution lane |
 |------|-----------|---------------|----------------|
 | Conflict resolution | `conflict` | conflict window `t` picker | terminal handover (no engine op) |
+| Resolve & complete | `conflict_complete` | conflict window `t` picker | terminal handover (capture for Kimi); overview via `$GG_MESSAGE_FILE` |
 | Commit-message generation | `commit_message` | commit popup `ctrl+g` | `engine.GenerateMessage` (headless capture) |
 | Change review | `review` | `gg review`, TUI review rows | `engine.ReviewChanges` via `domain.ReviewReport` (headless capture) |
 
@@ -34,9 +35,20 @@ agent; changing one is a breaking change to all configured tools.
 conflicted path per line), a real TTY, cwd = the worktree. Expects: edit
 the conflicted files, `git add` the results, exit. **Never `git commit`,
 `--continue`, or `--abort`** — gg's `ContinueOp` owns the sequencer, and
-the resume-paused-op prompt is the completion oracle. (`per_file = true`
-is the classic-mergetool variant — quartet paths, one file — not an
-agentic task.)
+the resume-paused-op prompt is the completion oracle
+(`conflict_complete` is the deliberate exception — its contract hands the
+sequencer to the agent). (`per_file = true` is the classic-mergetool
+variant — quartet paths, one file — not an agentic task.)
+
+**conflict_complete** — provides: the same env as `conflict` plus an
+empty `GG_MESSAGE_FILE` and `GG_TASK=conflict_complete`. Expects: every
+conflict resolved and staged, and the paused operation COMPLETED — this
+is the sanctioned exception to `conflict`'s never-`--continue` rule, since
+this category's agent owns the sequencer for the whole run (resolve,
+stage, the matching `--continue`, repeating through further rebase
+rounds) — plus the overview written to `$GG_MESSAGE_FILE`. **Never
+`--abort`**; if a conflict cannot be resolved safely, stop and leave the
+operation paused instead of forcing completion.
 
 **commit_message** — provides: `GG_CONTEXT_FILE` (numstat + recent
 subjects), `GG_STAGED_DIFF` (full staged diff; stat-only note past

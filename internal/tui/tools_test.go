@@ -86,3 +86,19 @@ func TestConflictToolChoices(t *testing.T) {
 		t.Errorf("no focused file drops per_file: %v", got)
 	}
 }
+
+func TestCompleteToolChoices(t *testing.T) {
+	cmds := []config.ToolCommand{
+		{Category: "conflict_complete", Name: "A", Mode: "terminal", Command: "x"},
+		{Category: "conflict_complete", Name: "B", Mode: "terminal", WhenOp: "rebase", Command: "x"},
+	}
+	if got := completeToolChoices(cmds, ""); got != nil {
+		t.Fatalf("no paused op: nothing to complete, got %v", got)
+	}
+	if got := completeToolChoices(cmds, "merge"); len(got) != 1 || got[0].Name != "A" {
+		t.Fatalf("merge: want [A] (B is when_op=rebase), got %v", got)
+	}
+	if got := completeToolChoices(cmds, "rebase"); len(got) != 2 {
+		t.Fatalf("rebase: want both rows, got %v", got)
+	}
+}

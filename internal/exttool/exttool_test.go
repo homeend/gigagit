@@ -100,7 +100,7 @@ func TestBuiltinsCatalogInvariants(t *testing.T) {
 		}
 		for _, ct := range tl.Commands {
 			switch ct.Category {
-			case CatConflict, CatCommitMessage, CatReview:
+			case CatConflict, CatConflictComplete, CatCommitMessage, CatReview:
 			default:
 				t.Errorf("%s/%s: bad category %q", tl.ID, ct.Name, ct.Category)
 			}
@@ -583,4 +583,61 @@ func conflictTemplate(t *testing.T, toolID, name string) (CommandTemplate, bool)
 		}
 	}
 	return CommandTemplate{}, false
+}
+
+// TestConflictCompleteTemplates pins the resolve-and-complete category's
+// contract: every agent gets exactly ONE row (yolo-only — no cautious
+// variant), terminal handover except Kimi (headless -p, capture), the
+// permission-bypass flag present except Kimi (whose -p refuses yolo flags
+// but auto-approves anyway), and a prompt that (a) instructs the matching
+// --continue command, (b) forbids --abort, and (c) routes the overview
+// through GG_MESSAGE_FILE. Meld is a mergetool, not an agent: no row.
+func TestConflictCompleteTemplates(t *testing.T) {
+	want := map[string]struct {
+		mode  Mode
+		optIn bool
+		flag  string // required bypass-flag substring; "" = none allowed
+	}{
+		"claude":      {ModeTerminal, true, "--dangerously-skip-permissions"},
+		"junie":       {ModeTerminal, true, "--brave"},
+		"codex":       {ModeTerminal, true, "--dangerously-bypass-approvals-and-sandbox"},
+		"antigravity": {ModeTerminal, true, "--dangerously-skip-permissions"},
+		"kimi":        {ModeCapture, false, ""},
+	}
+	for _, tl := range Builtins() {
+		var rows []CommandTemplate
+		for _, ct := range tl.Commands {
+			if ct.Category == CatConflictComplete {
+				rows = append(rows, ct)
+			}
+		}
+		spec, ok := want[tl.ID]
+		if !ok {
+			if len(rows) != 0 {
+				t.Errorf("%s: unexpected conflict_complete rows: %v", tl.ID, rows)
+			}
+			continue
+		}
+		if len(rows) != 1 {
+			t.Fatalf("%s: want exactly one conflict_complete row, got %d", tl.ID, len(rows))
+		}
+		ct := rows[0]
+		if ct.Mode != spec.mode {
+			t.Errorf("%s: mode = %s, want %s", tl.ID, ct.Mode, spec.mode)
+		}
+		if ct.OptIn != spec.optIn {
+			t.Errorf("%s: OptIn = %v, want %v", tl.ID, ct.OptIn, spec.optIn)
+		}
+		if spec.flag != "" && !strings.Contains(ct.Command, spec.flag) {
+			t.Errorf("%s: command missing bypass flag %s", tl.ID, spec.flag)
+		}
+		if ct.PerFile {
+			t.Errorf("%s: conflict_complete must not be per-file", tl.ID)
+		}
+		for _, must := range []string{"--continue", "<env:GG_MESSAGE_FILE>", "--abort", "<env:GG_CONTEXT_FILE>"} {
+			if !strings.Contains(ct.Command, must) {
+				t.Errorf("%s: prompt must mention %s", tl.ID, must)
+			}
+		}
+	}
 }
