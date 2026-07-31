@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -44,6 +45,39 @@ func TestSKeyOnOtherWorktreeBranchOpensJumpModal(t *testing.T) {
 	}
 	if !strings.Contains(m.modal.req.Prompt, "feature/e") {
 		t.Fatalf("prompt should name the branch: %q", m.modal.req.Prompt)
+	}
+}
+
+// TestSKeyOnOtherWorktreeBranchOpensJumpModalEvenWhenDirty: checked-out-
+// elsewhere precedence wins over the dirty-tree fork — a dirty CURRENT
+// worktree selecting a branch checked out elsewhere must still get the
+// "switch-to-worktree" jump modal, never "switch-dirty".
+func TestSKeyOnOtherWorktreeBranchOpensJumpModalEvenWhenDirty(t *testing.T) {
+	dir, repo := newRepoDir(t)
+	wt := filepath.Join(filepath.Dir(dir), "wt-feat-e")
+	runGit(t, dir, "worktree", "add", "-b", "feature/e", wt, "main")
+	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("dirty\n"), 0o644); err != nil {
+		t.Fatalf("dirty README.md: %v", err)
+	}
+
+	m := loadModel(t, repo)
+	if c := m.status.Counts(); c.Staged+c.Unstaged+c.Conflicted == 0 {
+		t.Fatalf("expected a dirty current worktree, got status = %+v", m.status)
+	}
+	m.focus = panelBranches
+	selectBranchRow(t, &m, "feature/e")
+
+	updated, cmd := m.Update(keyMsg("s"))
+	m = updated.(Model)
+
+	if m.running {
+		t.Fatal("jumping to a worktree is navigation; no git op should start")
+	}
+	if cmd != nil {
+		t.Fatal("opening the modal should not return a command")
+	}
+	if m.modal == nil || m.modal.req.ID != "switch-to-worktree" {
+		t.Fatalf("expected switch-to-worktree modal even on a dirty tree, got %+v", m.modal)
 	}
 }
 

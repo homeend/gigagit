@@ -1376,6 +1376,13 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 						onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {
 							switch opt {
 							case "worktree":
+								// Re-guard against the captured branch: openWorktreePopup
+								// re-reads the Branches-panel selection at resolve time, and
+								// a background refresh between the prompt and the answer
+								// could have shifted the index onto a different branch.
+								if b, ok := m.selectedBranch(); !ok || b.Name != branch {
+									return m, nil
+								}
 								if mm, ok := m.openWorktreePopup(true); ok {
 									return mm, nil
 								}
