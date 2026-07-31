@@ -68,8 +68,9 @@ type snapCursor struct {
 }
 
 type snapEndpoint struct {
-	Kind string `json:"kind"` // worktree|index|commit
-	Hash string `json:"hash,omitempty"`
+	Kind    string `json:"kind"` // worktree|index|commit|shelf
+	Hash    string `json:"hash,omitempty"`
+	ShelfID string `json:"shelf_id,omitempty"`
 }
 
 type snapFilesView struct {
@@ -146,6 +147,8 @@ func endpointProto(e model.Endpoint) *snapEndpoint {
 		return &snapEndpoint{Kind: "worktree"}
 	case model.EndpointIndex:
 		return &snapEndpoint{Kind: "index"}
+	case model.EndpointShelf:
+		return &snapEndpoint{Kind: "shelf", ShelfID: e.ShelfID}
 	default:
 		return &snapEndpoint{Kind: "commit", Hash: e.Hash}
 	}

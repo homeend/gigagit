@@ -76,6 +76,45 @@ func TestBuildSessionSnapshotFilterAndScope(t *testing.T) {
 	}
 }
 
+// TestEndpointProtoShelf covers a frozen shelved-commit compare endpoint
+// (model.EndpointShelf): it must serialize as kind "shelf" carrying the
+// shelf entry id, never fall into the default "commit" branch with an
+// empty hash (protocol misinformation for gg mcp's gg_ui_state).
+func TestEndpointProtoShelf(t *testing.T) {
+	e := model.Endpoint{Kind: model.EndpointShelf, ShelfID: "commit-abc1234-deadbeef"}
+	got := endpointProto(e)
+	if got == nil || got.Kind != "shelf" || got.ShelfID != "commit-abc1234-deadbeef" {
+		t.Fatalf("endpointProto(shelf) = %+v, want kind=shelf shelf_id=commit-abc1234-deadbeef", got)
+	}
+	if got.Kind == "commit" {
+		t.Fatal("shelf endpoint must not serialize as kind commit")
+	}
+}
+
+// TestBuildSessionSnapshotCompareShelfEndpoint covers the full path: a
+// compare-mode files view whose right side is a frozen shelved commit must
+// come through buildSessionSnapshot as FilesView.Right.Kind == "shelf" with
+// the shelf id, not the misclassified default "commit"/empty-hash shape.
+func TestBuildSessionSnapshotCompareShelfEndpoint(t *testing.T) {
+	m := newTestModel(t)
+	m.filesView = &contentPopup{}
+	m.filesMode = filesModeCompare
+	m.filesLeft = model.Endpoint{Kind: model.EndpointCommit, Hash: "aaa111"}
+	m.filesRight = model.Endpoint{Kind: model.EndpointShelf, ShelfID: "commit-abc1234-deadbeef"}
+
+	s := buildSessionSnapshot(m)
+	if s.FilesView == nil || s.FilesView.Right == nil {
+		t.Fatalf("files_view.right must be set: %+v", s.FilesView)
+	}
+	right := s.FilesView.Right
+	if right.Kind != "shelf" || right.ShelfID != "commit-abc1234-deadbeef" {
+		t.Fatalf("files_view.right = %+v, want kind=shelf shelf_id=commit-abc1234-deadbeef", right)
+	}
+	if right.Kind == "commit" {
+		t.Fatal("frozen shelf compare side must not serialize as kind commit")
+	}
+}
+
 func TestSnapshotJSONKeys(t *testing.T) {
 	m := newTestModel(t)
 	s := buildSessionSnapshot(m)
