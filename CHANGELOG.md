@@ -8,6 +8,15 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Compare two commit entries (bookmarks / shelved commits).** The `g`/`G`
+  switchers compare two commit entries as a whole-tree compare: `m`
+  mark-two within a picker, `c` across pickers (commit bookmark ↔ shelved
+  commit). Live sha-vs-sha while both commits exist; a gc'd shelved commit
+  falls back to its frozen tar (labelled "frozen" in the compare title; the
+  cross fallback scopes to the frozen side's members). `gg compare` gains
+  `bookmark:<id>` / `shelf:<id>` specs and `--patch`; a frozen fallback is
+  noted on stderr.
+
 - **Dirty-tree branch switch asks before carrying changes.** The Branches
   panel's `s` on a branch with staged/unstaged/conflicted changes now forks
   a modal — *worktree* (opens the create-worktree popup for the branch, the
