@@ -298,6 +298,9 @@ func (m Model) appendCommitContextRows(out []actionRow) []actionRow {
 	if r, ok := m.commitSoloRow(); ok {
 		out = append(out, r)
 	}
+	if r, ok := m.commitSoloCommitRow(); ok {
+		out = append(out, r)
+	}
 	if r, ok := m.commitGotoTipRow(); ok {
 		out = append(out, r)
 	}
@@ -311,6 +314,9 @@ func (m Model) appendCommitContextRows(out []actionRow) []actionRow {
 		out = append(out, r)
 	}
 	if r, ok := m.commitViewModeRow(); ok {
+		out = append(out, r)
+	}
+	if r, ok := m.tagShowFilesRow(); ok {
 		out = append(out, r)
 	}
 	if r, ok := m.tagCheckoutRow(); ok {

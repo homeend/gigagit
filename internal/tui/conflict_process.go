@@ -14,6 +14,7 @@ import (
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/exttool"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/template"
@@ -182,6 +183,7 @@ func (p *conflictProcess) updateListing(m Model, msg tea.KeyMsg) (Model, tea.Cmd
 			focused = &p.files[p.sel]
 		}
 		choices := conflictToolChoices(m.toolCommands("conflict"), p.src.Op, focused)
+		choices = append(choices, completeToolChoices(m.toolCommands(string(exttool.CatConflictComplete)), p.src.Op)...)
 		if len(choices) == 0 {
 			m.statusMsg = i18n.T("no external tools configured — Settings (,) → External tools")
 			return m, nil
@@ -304,7 +306,21 @@ func (p *conflictProcess) buildToolRun(m Model, tc config.ToolCommand, inputs ma
 			p.errMsg = err.Error()
 			return m, nil
 		}
-		p.pending = &pendingToolRun{tc: tc, resolved: resolved, env: toolEnv(ctx), cleanup: []string{ctxFile}}
+		env := toolEnv(ctx)
+		messageFile := ""
+		if tc.Category == string(exttool.CatConflictComplete) {
+			mf, mErr := os.CreateTemp("", "gg-overview-*.md")
+			if mErr != nil {
+				os.Remove(ctxFile)
+				p.st = confReporting
+				p.errMsg = mErr.Error()
+				return m, nil
+			}
+			mf.Close()
+			messageFile = mf.Name()
+			env = append(env, "GG_MESSAGE_FILE="+messageFile, "GG_TASK=conflict_complete")
+		}
+		p.pending = &pendingToolRun{tc: tc, resolved: resolved, env: env, cleanup: []string{ctxFile}, messageFile: messageFile}
 		return p.gateOrRun(m)
 	}
 	// Per-file: quartet first (async), then resolve in the toolReadyMsg handler.
@@ -419,6 +435,7 @@ func (p *conflictProcess) cleanupPending() {
 	for _, f := range p.pending.cleanup {
 		os.Remove(f)
 	}
+	removeOverviewFile(p.pending)
 	p.pending = nil
 }
 
@@ -431,6 +448,16 @@ func (p *conflictProcess) toolReady(m Model, msg toolReadyMsg) (Model, tea.Cmd) 
 	}
 	p.pending = msg.pending
 	return p.gateOrRun(m)
+}
+
+// removeOverviewFile discards a conflict_complete run's overview temp file
+// on the exits that will not open the viewer (failure / cancel / interrupt /
+// empty). It is deliberately not in pending.cleanup: the success path hands
+// the file to the report viewer, whose [e] open-in-editor needs it on disk.
+func removeOverviewFile(pending *pendingToolRun) {
+	if pending != nil && pending.messageFile != "" {
+		os.Remove(pending.messageFile)
+	}
 }
 
 // toolFinished receives the tool process's exit (handed-over terminal run or
@@ -463,8 +490,10 @@ func (p *conflictProcess) toolFinished(m Model, msg toolFinishedMsg) (Model, tea
 	}
 	logToolExit(msg)
 	if msg.canceled {
+		removeOverviewFile(msg.pending)
 		m.statusMsg = i18n.T("tool cancelled")
 	} else if msg.err != nil {
+		removeOverviewFile(msg.pending)
 		if !toolInterruptExit(msg.err) {
 			p.st = confReporting
 			p.errMsg = toolExitName(msg.pending) + ": " + msg.err.Error() + outputTail(msg.output, 8)
@@ -476,6 +505,22 @@ func (p *conflictProcess) toolFinished(m Model, msg toolFinishedMsg) (Model, tea
 		p.pending = msg.pending
 		p.st = confToolMark
 		return m, nil
+	}
+	// conflict_complete: a clean exit's overview opens in the report viewer.
+	// The process closes FIRST — it preempts the layer stack for keys
+	// (model.go's KeyMsg routing), so a viewer pushed over it would be
+	// key-dead. If the operation is still paused (the agent stopped early),
+	// the ⏸ status segment and [x] lead back in, exactly as after [L] leave.
+	if msg.pending != nil && msg.pending.messageFile != "" && msg.err == nil && !msg.canceled {
+		data, _ := os.ReadFile(msg.pending.messageFile)
+		if strings.TrimSpace(string(data)) != "" {
+			m.proc = nil
+			title := i18n.T("Resolution overview — %s", msg.pending.tc.Name)
+			m = m.pushLayer(newReviewView(title, msg.pending.messageFile, string(data)))
+			return m, m.loadCmd()
+		}
+		removeOverviewFile(msg.pending)
+		m.statusMsg = i18n.T("%s reported no overview", msg.pending.tc.Name)
 	}
 	p.st = confWorking
 	return m, m.loadCmd()
@@ -639,7 +684,8 @@ func conflictListBox(m Model, files []model.FileStatus, sel int, src domain.Conf
 			b.WriteString(line + "\n")
 		}
 	}
-	hintParts := append(conflictHints(files, sel, inProgress, len(m.toolCommands("conflict"))), i18n.T("[L] leave"), i18n.T("[z] mode"))
+	nTools := len(m.toolCommands("conflict")) + len(m.toolCommands(string(exttool.CatConflictComplete)))
+	hintParts := append(conflictHints(files, sel, inProgress, nTools), i18n.T("[L] leave"), i18n.T("[z] mode"))
 	b.WriteString("\n" + strings.Join(wrapParts(hintParts, textW, "  "), "\n"))
 	return popupBox(inner, b.String())
 }

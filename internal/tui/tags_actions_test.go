@@ -80,10 +80,33 @@ func TestEnterOnTagJumpsToCommit(t *testing.T) {
 	}
 }
 
-// When the tag's target commit is NOT in the loaded feed (common in big repos
-// with old release tags), enter opens that commit's files view directly by hash
-// — instead of the old "target not in the loaded commits" dead end.
-func TestEnterOnTagNotLoadedOpensFilesView(t *testing.T) {
+// When the tag's target commit is NOT in the loaded feed and the feed can page,
+// enter falls back to the ctrl+f eager deep-search on the target hash — the
+// same "go to" contract as the Branches-panel enter — instead of forking into
+// the commit's files view.
+func TestEnterOnTagNotLoadedStartsEagerSearch(t *testing.T) {
+	m := newTestModelForReload(t) // real FakeRunner feed, can load more
+	m.commits = []model.Commit{{Hash: "1111111aaaa", Subject: "one"}}
+	m.tags = []model.Tag{{Name: "v1", Target: "9999999", Subject: "rel one"}}
+	m.activeFilesTab = panelTags
+	m.focus = panelTags
+	m.sel[panelTags] = 0
+	u, cmd := m.Update(keyMsg("enter"))
+	mm := u.(Model)
+	if mm.filesView != nil {
+		t.Fatal("enter on a tag must no longer open the files view by default")
+	}
+	if !mm.eager.active || mm.eager.query != "9999999" {
+		t.Fatalf("eager = %+v, want active search for the tag target", mm.eager)
+	}
+	if !mm.commitsLoading || cmd == nil {
+		t.Fatalf("loading=%v cmd=%v, want a page load dispatched", mm.commitsLoading, cmd != nil)
+	}
+}
+
+// With no feed to page (nil = cannot load more), the eager fallback reports
+// exhaustion instead of silently stopping or opening a files view.
+func TestEnterOnTagNotLoadedNotifies(t *testing.T) {
 	m := footerModel()
 	m.commits = []model.Commit{{Hash: "1111111aaaa", Subject: "one"}}
 	m.tags = []model.Tag{{Name: "v1", Target: "9999999", Subject: "rel one"}}
@@ -92,19 +115,38 @@ func TestEnterOnTagNotLoadedOpensFilesView(t *testing.T) {
 	m.sel[panelTags] = 0
 	u, _ := m.Update(keyMsg("enter"))
 	mm := u.(Model)
-	if mm.filesView == nil {
-		t.Fatal("enter on a tag whose target isn't loaded should open the commit's files view")
+	if mm.filesView != nil {
+		t.Fatal("enter on a tag must no longer open the files view by default")
 	}
-	if mm.filesHash != "9999999" {
-		t.Fatalf("filesHash = %q, want the tag target 9999999", mm.filesHash)
+	if !strings.Contains(mm.statusMsg, "not found in full history") {
+		t.Fatalf("statusMsg = %q, want the eager 'not found in full history' report", mm.statusMsg)
+	}
+}
+
+// The files-view fork lives on as an opt-in `.`-menu row: "Show changed files"
+// opens the target commit's changed-files view directly by hash (the reflog
+// pattern, no paging).
+func TestTagShowFilesRowPresent(t *testing.T) {
+	m := footerModel()
+	m.tags = []model.Tag{{Name: "v1", Target: "9999999", Subject: "rel one"}}
+	m.activeFilesTab = panelTags
+	m.focus = panelTags
+	m.sel[panelTags] = 0
+	if _, ok := findRow(availableActions(m), "tag-show-files"); !ok {
+		t.Fatal("tag-show-files row missing on the Tags panel")
+	}
+	m.focus = panelBranches
+	if _, ok := findRow(availableActions(m), "tag-show-files"); ok {
+		t.Fatal("tag-show-files row must be inert off the Tags panel")
 	}
 }
 
 // End-to-end against a real repo: the tag's target is a SHORT sha (as the parser
-// produces) and is NOT in the loaded feed, so enter must open the files view AND
-// the async load must actually land (not hang on "(loading…)") — the short hash
-// must match through loadCommitFilesCmd → commitFilesMsg → filesHash.
-func TestEnterOnTagNotLoadedLoadsCommitFilesEndToEnd(t *testing.T) {
+// produces) and is NOT in the loaded feed, so the "Show changed files" row must
+// open the files view AND the async load must actually land (not hang on
+// "(loading…)") — the short hash must match through loadCommitFilesCmd →
+// commitFilesMsg → filesHash.
+func TestTagShowFilesRowLoadsCommitFilesEndToEnd(t *testing.T) {
 	_, repo := newRepoDir(t)
 	m := loadModel(t, repo)
 	if len(m.commits) == 0 {
@@ -118,10 +160,17 @@ func TestEnterOnTagNotLoadedLoadsCommitFilesEndToEnd(t *testing.T) {
 	m.focus = panelTags
 	m.sel[panelTags] = 0
 
-	u, cmd := m.Update(keyMsg("enter"))
+	r, ok := findRow(availableActions(m), "tag-show-files")
+	if !ok {
+		t.Fatal("tag-show-files row missing on the Tags panel")
+	}
+	u, cmd := r.run(m)
 	m = u.(Model)
 	if m.filesView == nil || cmd == nil {
-		t.Fatal("enter should open the files view and return a load cmd")
+		t.Fatal("the row should open the files view and return a load cmd")
+	}
+	if m.filesHash != shortHash(head) {
+		t.Fatalf("filesHash = %q, want the tag target %q", m.filesHash, shortHash(head))
 	}
 	// Run the async load and feed the result back through Update.
 	u2, _ := m.Update(cmd())
@@ -524,18 +573,23 @@ func TestTagSoloRowTogglesOff(t *testing.T) {
 	}
 }
 
-// esc from a files view opened by enter on a tag must return focus to the Tags
-// panel (the source), not leave the user on the Commits panel.
+// esc from a files view opened from a tag ("Show changed files" row) must
+// return focus to the Tags panel (the source), not leave the user on the
+// Commits panel.
 func TestEscFromTagOpenedFilesReturnsToTags(t *testing.T) {
 	m := footerModel()
 	m.focus = panelTags
 	m.activeFilesTab = panelTags
 	m.tags = []model.Tag{{Name: "v1", Target: "9999999", Subject: "rel"}}
 	m.sel[panelTags] = 0
-	u, _ := m.Update(keyMsg("enter")) // target not in feed → opens files view
+	row, ok := findRow(availableActions(m), "tag-show-files")
+	if !ok {
+		t.Fatal("tag-show-files row missing on the Tags panel")
+	}
+	u, _ := row.run(m)
 	m = u.(Model)
 	if m.filesView == nil {
-		t.Fatal("enter on a tag should open the files view")
+		t.Fatal("the Show changed files row should open the files view")
 	}
 	u2, _ := m.Update(keyMsg("esc"))
 	m = u2.(Model)

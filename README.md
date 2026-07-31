@@ -22,9 +22,13 @@ only when there's a real decision to make.
 
 ## Install
 
-Requires Go 1.26 and a `git` binary on `PATH`.
+Requires a `git` binary on `PATH` (and Go 1.26 for the `go install` / source
+routes).
 
 ```bash
+# Homebrew (macOS / Linux)
+brew install homeend/tap/gg
+
 # install the latest from GitHub (binary lands in $GOBIN / $GOPATH/bin as `gg`)
 go install github.com/homeend/gigagit/cmd/gg@latest
 
@@ -59,7 +63,7 @@ this session is also kept in Settings `,` → Session errors.
 | `u` | undo last commit (ref-only, soft reset) |
 | `w` | create a worktree **for the selected branch** (popup); `W` opens the same popup with **create & switch** as enter's default — one flow onto the branch's own clean directory (`<repo>.worktrees/<branch>`). The branch name starts as the selection (never templated); `e` edits it — confirming a **different** name creates a **new** branch cut from the selection — and `p` seeds it from a saved **branch prefix** (fills any `<user:…>` labels, then edit). Inside the popup: `enter` runs the popup's default, `w` create only, `W` create **and** switch |
 | `enter` | on the Branches panel: jump to the selected branch's **tip commit** in the Commits panel (deep-searching unloaded history if needed — the same machinery as `ctrl+f`); on the Worktrees panel: switch into the selected worktree; on the Files panel: full-screen side-by-side diff of the unstaged change (index → working tree); on the Staged panel: the staged diff (HEAD → index); on the files-view tree: diff of the file in the viewed commit. Inside the diff: `↑`/`↓` scroll, `pgup`/`pgdn` page, `n`/`p` (or `ctrl+↑`/`ctrl+↓`) jump between changes, `home`/`end` jump to the top/bottom of the file, then at the edge prime a step to the previous/next file in the list — a bottom-left cue appears and the next press moves to that file, announced by a bottom-left notice naming it (the tree or Status/Staged panel selection follows), `f` toggles full file ↔ changed-lines-only, `z` cycles the text display mode (scroll/wrap/truncate), `←`/`→`/`0` pan in scroll mode, `esc` closes. Changed lines highlight the exact words that differ; commit diffs are cached for instant re-open |
-| `ctrl+g` | on the Branches panel: **Solo this branch + go to its tip** — scopes the Commits feed to the branch (same toggle as the `.`-menu Solo: press again to un-solo) and lands the cursor on the tip once the reload finishes; in the **commit popup** (`c`/`C`): **generate a commit message** from the staged diff using a configured `commit_message` external agent (Settings → External tools), run headless — fills the title/description fields for you to review, nothing commits until `ctrl+s`. More than one tool configured shows a numbered chooser; an unapproved command shows a first-run approval (remembered per repo); existing title/description text asks before being replaced; `esc` cancels an in-flight run |
+| `ctrl+g` | on the Branches panel: **Solo this branch + go to its tip** — scopes the Commits feed to the branch (same toggle as the `.`-menu Solo: press again to un-solo) and lands the cursor on the tip once the reload finishes; on the **Commits panel**: **Solo from the selected commit** — scopes the feed to the history reachable from the commit under the cursor, the commit tree that starts there (press again on the same commit to un-solo; also a `.`-menu row, **Solo from this commit**), with the cursor landing back on the commit after the reload and the header showing `Commits (solo: <short-sha>)`; in the **commit popup** (`c`/`C`): **generate a commit message** from the staged diff using a configured `commit_message` external agent (Settings → External tools), run headless — fills the title/description fields for you to review, nothing commits until `ctrl+s`. More than one tool configured shows a numbered chooser; an unapproved command shows a first-run approval (remembered per repo); existing title/description text asks before being replaced; `esc` cancels an in-flight run |
 | `z` | cycle the focused window's **text display mode** — cutoff (truncate, default) → wrap → scroll — for any list/tree/text window (panels, stash list, files tree, history, blame) and every list popup (repo switcher, help, conflict resolver, settings, pair-op, stash actions); `shift+←/→` pans horizontally in scroll mode |
 | `space` | on the **Files** panel: stage the selected working-tree file (`git add`); on the **Staged** panel: unstage it (`git restore --staged`); conflicted files are skipped; on the **Commits** panel: mark/unmark the selected commit for compare (same ◉ set as `m`, max 2) — marking the second commit opens the two-commit comparison immediately; `esc` clears all marks |
 | `H` | on the **Files** panel: open the region/line **staging picker** for the selected tracked file (the same surface as the conflict resolver) — `←`/`→` switch side (index ↔ working), `↑`/`↓` move the line cursor, `space` stages a line (result follows pick order), `c`/`i` take the whole hunk from index/working, `C`/`I` all hunks, `n`/`p` jump, `enter` applies (only the index changes — the working tree is untouched), `esc` cancels. Long lines are readable: `z` cycles the display mode (**scroll** default / wrap / cutoff) and `shift+←/→` pans in scroll mode; the picker scrolls vertically to keep the cursor in view |
@@ -75,7 +79,7 @@ this session is also kept in Settings `,` → Session errors.
 | `tab` | move focus between panels |
 | `shift+tab` | move focus backwards |
 | `←`/`→` | focus the left column / the Commits panel (inside the files view: switch between the file tree and the commit list) |
-| Commits panel | shows commits from **all local branches** by default, in date order, with branch/HEAD labels (`‹*current›‹branch›`). The `.` menu on the Branches panel offers **Solo this branch** (scope the list to one branch; re-run to un-solo) and **Show all branches** (also on the Commits menu) to clear it; the header shows `Commits (all)` / `Commits (solo: <branch>)`. A single-line **commit graph** (`●─╮`/`│`/`╯` …) is drawn to the left of each commit, showing forks and merges across branches — visible in natural order, hidden while the panel is filtered or re-sorted. `■` marks a local branch's tip; `▲` marks the tip of that branch's tracked remote (`■▲` together = local and remote in sync). When ≥2 local branches tip a commit, `■` gains a **superscript count badge** (`■²`, `■³`, …; dropped when both `■▲` are present). A **decoration group** is rendered **before the subject** listing all extra refs at the commit beyond its primary identity: extra local-branch tips in default color, then tags as `⊙<name>` in **yellow** — including on non-tip lineage rows where the tag actually lives. When the group is too wide for the panel it collapses to `(+N)` (N = extras + tags). Tags are searchable via the Commits `/` filter and `@` highlight. *v1: remote-tracking refs appear only as `▲`, not inside the group; in wrap mode the group still collapses by panel width.* Loads in pages as you scroll |
+| Commits panel | shows commits from **all local branches** by default, in date order, with branch/HEAD labels (`‹*current›‹branch›`). The `.` menu on the Branches panel offers **Solo this branch** (scope the list to one branch; re-run to un-solo) and **Show all branches** (also on the Commits menu) to clear it; the Commits `.` menu adds **Solo from this commit** (`ctrl+g`) — scope the feed to the history reachable from the selected commit; the header shows `Commits (all)` / `Commits (solo: <branch or short-sha>)`. A single-line **commit graph** (`●─╮`/`│`/`╯` …) is drawn to the left of each commit, showing forks and merges across branches — visible in natural order, hidden while the panel is filtered or re-sorted. `■` marks a local branch's tip; `▲` marks the tip of that branch's tracked remote (`■▲` together = local and remote in sync). When ≥2 local branches tip a commit, `■` gains a **superscript count badge** (`■²`, `■³`, …; dropped when both `■▲` are present). A **decoration group** is rendered **before the subject** listing all extra refs at the commit beyond its primary identity: extra local-branch tips in default color, then tags as `⊙<name>` in **yellow** — including on non-tip lineage rows where the tag actually lives. When the group is too wide for the panel it collapses to `(+N)` (N = extras + tags). Tags are searchable via the Commits `/` filter and `@` highlight. *v1: remote-tracking refs appear only as `▲`, not inside the group; in wrap mode the group still collapses by panel width.* Loads in pages as you scroll |
 | `ctrl+←/→` | cycle the **focused** tab slot (and focus it); you can also **click a tab name** in a slot's header to switch directly to it. The **top** slot holds **Branches / Remotes / Worktrees** (active tab spelled out and bracketed, the others as single-letter markers `B`/`R`/`W`); the **middle** (Files) box holds **Files / Tags**; the **bottom** (Staged) box holds **Staged / Reflog**. The **Remotes** tab lists remote-tracking branches (`refs/remotes`); on it, `c` checks out the selected remote branch as a local tracking branch (stay) and `s` checks out and switches to it — both fast-forward-safe (a diverged local branch offers **check out as different name…**, pre-filled with a free `-2`/`-3` suggestion, instead of a dead-end refusal); on the **current** branch's own remote, `c`/`s` prompt instead of erroring — **pull now** (only when actually behind) or **check out as different name…**; `f` fetches all remotes and the `.` menu offers **Check out `<remote>` as…** / **Switch to `<remote>` as…** (a name popup pre-filled with the branch name — materialize the remote branch under a local name you choose), **Prune** (drop tracking refs for branches deleted upstream), **Delete `<remote>/<branch>`** (push `--delete` with a confirm prompt), **Create worktree from** the remote branch, **Merge** it into the current branch, **Rebase** the current branch onto it (merge/rebase hidden on a detached HEAD), and **Copy commit id** / **Copy commit sha** for the branch tip. The **Tags** tab lists tags (`●` annotated / `○` lightweight) with their target and subject; a trailing `▲` marks tags that exist on the default remote (origin if configured, else the first remote) — a tag that is local-only **or that has not been checked this session** shows no marker (deliberately indistinguishable before a lookup runs); `enter` goes to a tag's target commit — jumping the Commits cursor to it when it's in the loaded feed, otherwise opening that commit's files view directly by hash (so it works for old tags far back in history); the `.` menu offers **Check out** / **Push** / **Delete** the tag, **Delete `<tag>` from remote** (confirm prompt), **Annotate `<tag>`** (a message dialog prefilled with the tag's current subject — turns a lightweight tag annotated or updates an annotated tag's message, keeping its target), **Merge `<tag>` into current** and **Rebase current onto `<tag>`** (hidden on a detached HEAD), **Solo this tag** (scope the Commits list to the tag's history), **Refresh remote status** (one-shot `git ls-remote --tags`; annotates every visible tag with `▲` or not; see also `[refresh] remote_tags` for background auto-refresh), plus **Copy tag name** / **Copy commit id** / **Copy commit sha** (the tag's target commit). The **Reflog** tab lists the HEAD reflog (read-only, newest first, per-worktree, capped by `[ui] reflog_limit` — default 200); `enter`/`l` opens an entry's commit in the files view (even dangling commits), and the `.` menu offers **Copy SHA**, **Bookmark this commit**, **Shelf this commit** (freeze its changed files, content-only, into the shelf — see `G`), **Reset to this entry** (soft/mixed/hard), and **Check out this entry** (detached or as a new branch you switch to) — recovery that works on dangling commits. **Bookmark this commit** and **Shelf this commit** open a one-line name popup pre-filled with the commit's subject — edit it, `ctrl+s` inserts the commit's short sha at the cursor, `enter` creates with that name, `esc` cancels; an empty name falls back to the subject for a bookmark, or leaves the shelf entry unlabeled |
 | `.` (on a file) | **Add to shelf** — wherever a file is focused (Files, Staged, a commit's file tree, file history), the `.` menu can freeze a copy onto the **shelf**: a non-git, per-file store of frozen copies that survive even permanent deletion of the source. Restore them later to any path as an unstaged change. The same menu offers **Bookmark this file** — a *live* reference (see `g`) rather than a frozen copy — and **Compare against bookmark** / **Compare against shelf** (pick one, then diff the focused file against it). On the Commits panel the `.` menu additionally offers **Shelf this commit** — freeze the selected commit's **changed files** (content only, via `git archive`; no message/author) as one durable shelf entry, so it survives `git gc`/history rewrites the same way a file entry survives deletion of its source (capped at 200MiB); it appears in the `G` switcher, path-less like a commit bookmark. Both **Shelf this commit** and **Bookmark this commit** first prompt for a name (pre-filled with the commit's subject; `ctrl+s` inserts the short sha) — see the Commits panel row above |
 | `g` | **bookmark quick-switcher** — a centered, filterable list of bookmarks (richly-addressed references to files anywhere: a worktree's working/index file, a commit/branch file, a shelf entry). Navigation-first: `↑↓/jk` move, `enter` diffs the bookmark against the current working-tree file, `e` opens the bookmarked file in your external editor (`$VISUAL`/`$EDITOR`, read-only), `m`+`m` compares two bookmarks, `c` compares the highlighted bookmark against a shelf entry, `p` pastes its contents to a path you type, `t` **copies it to a temp dir** (see below), `y` copies the bookmarked file's path or name to the clipboard, `x` removes (confirms), `/` filters, `ctrl+t` maximizes the popup to a near-fullscreen box, `esc` closes. A bookmark to a working file is *live* (reflects later edits); to freeze bytes, use the shelf. You can also bookmark a **commit** itself — the Commits panel `.` menu has **Bookmark this commit** — which appears here as a path-less entry showing the name you gave it at creation (or the commit's subject if you left the name blank), e.g. `feat / a1b2c3d — Fix the parser crash`; `enter` on it whole-tree-compares it (base) against the commit selected in the Commits panel, and `a` **cherry-picks it onto the current branch** (confirm first; a bookmark stores no snapshot, so if the commit no longer exists you get a clear notice — shelve commits to keep them applyable) (paste / vs-shelf / mark are file-only; `t` works on it too — see below). The `.` menu on **any file reference** (file tree, a history row, blame, diff, stash files, the Files/Staged panels) offers **Bookmark this file** and **Compare against bookmark** (pick a bookmark, then diff the focused file against it); in history each row is that commit's version of the file |
@@ -146,6 +150,7 @@ gg branch rename <old> <new>
 gg branch delete [--force] <name>
 gg versions [<branch>]                 # list a branch's recorded pre-operation snapshots, newest first (default: current branch)
 gg versions restore [--discard] <branch> <id|latest>  # restore a branch to a recorded version; --discard answers the dirty-tree prompt
+gg unlock [--yes]                      # list (or with --yes remove) stranded .git/*.lock files; exit 1 while locks are present
 gg merge [--into <target>] [--on-conflict=keep|abort] <source>
 gg fast-forward <commit>               # advance the current branch to a descendant commit (no merge commit)
 gg rebase [--branch <b>] [--on-conflict=keep|abort] <newbase>
@@ -445,6 +450,31 @@ fresh, enable only, *Not now* (asks again next load), or *Never for this
 repo* (remembered in `<state>/gg/prompts.toml`). The Settings (`,`) →
 "Commit-graph" row shows the current state and applies the same fix.
 
+### Stranded git locks
+
+Git creates a `.lock` file while it rewrites the file beside it (`index.lock`
+for `add`/`commit`/`status`, `HEAD.lock` for a checkout, and so on) and removes
+it on the way out — including when it is interrupted, since it cleans up from
+its own signal handler. A lock that outlives its process therefore means a git
+was killed before it could tidy up: a `kill -9`, a crash, a lost power. Until
+it's gone, every git command fails with *"Another git process seems to be
+running in this repository"* and git's own advice is to delete the file by hand.
+
+gg surfaces that as a notice (it also appears the moment an operation fails
+this way, not just on the next load), listing each lock with **how old it is**,
+and offers to remove them. Scriptable: `gg unlock` lists what's there and exits
+1 while any lock is present, so it works as a precondition check; `gg unlock
+--yes` removes them.
+
+gg won't decide a lock is stale for you — it can't see git processes it didn't
+start, and a git running right now legitimately holds one, so deleting it would
+corrupt that write. Check nothing else is running, then confirm.
+
+(gg used to *cause* this: cancelling a git subprocess killed it outright, and a
+user action cancels the background refresh. gg now stops git gracefully so it
+cleans up after itself. Windows has no such signal, so recovery still matters
+there.)
+
 ### Git config explorer
 
 The command palette (`ctrl+p`) → **"Git config explorer"** lists every config key git knows
@@ -570,6 +600,19 @@ Tokens for hand-written commands: `<repo>` `<file>` `<local>` `<base>`
 literally — prefer `"$GG_*"`/`<context-file>` when a value might carry shell
 metacharacters).
 
+**Resolve & complete.** The same `t` picker also lists any configured
+`conflict_complete` commands (shown whenever an op is paused): an agent in
+this category doesn't just resolve the conflicts, it stages them and drives
+the operation to completion itself — the matching `--continue`, repeating
+through further rebase rounds, never `--abort` — then reports an overview
+via `$GG_MESSAGE_FILE`, which gg opens in a read-only report viewer on a
+clean exit (the conflict window closes first). Catalog defaults ship for
+Claude Code, Junie, Codex, and Antigravity (terminal handover with their
+bypass-permissions flag) and Kimi Code (headless capture, since `kimi -p`
+has no bypass flag to combine with). Every row is deliberately **yolo-only
+and unchecked by default** in the wizard — completing your paused operation
+autonomously is an explicit opt-in, checked or not.
+
 **Commit-message generation.** Press **`ctrl+g`** in the commit popup (`c`/`C`)
 to draft a message from the staged diff with a configured `commit_message`
 command — these run **headless** (`mode =
@@ -644,3 +687,7 @@ state, history shape). Scenarios are run as standard Go tests and cover
 SmartSwitch, SmartPull, stash, commit+push, undo, and worktree add/remove.
 
 See [`CLAUDE.md`](CLAUDE.md) for architecture and contributor conventions.
+
+## License
+
+[MIT](LICENSE)

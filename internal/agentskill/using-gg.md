@@ -155,6 +155,13 @@ guards against removing the worktree you are standing in.
   first). Restoring the current branch hard-resets; `--discard` answers the
   dirty-tree prompt. Also recreates a deleted branch. Exit 0 restored,
   1 failure/unknown id, 2 usage.
+- `gg unlock [--yes]` — list git lock files (`.git/index.lock` and friends)
+  stranded by a git process that was killed before it could clean up. While
+  one exists every git command fails with "Another git process seems to be
+  running in this repository". Without `--yes` nothing is removed: exit 0 when
+  clean, **exit 1 when locks are present** (so it works as a precondition
+  check), 2 usage. Pass `--yes` to remove them — but only once you are sure no
+  other git is running, since deleting a live git's lock corrupts its write.
 - `gg merge [--into <target>] [--on-conflict=keep|abort] <source>` — merge one
   branch into another (default target: the current branch; worktree-aware —
   merges in the worktree that has the target checked out, autostashes when it
@@ -322,8 +329,11 @@ Exit codes: 0 = success, 1 = operation failed or needs a decision,
 
 ## Registering yourself as a gg tool
 
-gg can call an external AI agent for three tasks: **resolving conflicts**
-(the TUI conflict window's `t` picker), **generating commit messages** (the
+gg can call an external AI agent for four tasks: **resolving conflicts**
+(the TUI conflict window's `t` picker), **resolving-and-completing a paused
+operation** (the same `t` picker — the agent resolves, stages, runs the
+matching `--continue` through further rebase rounds, and writes an overview
+to `$GG_MESSAGE_FILE`; never `--abort`), **generating commit messages** (the
 commit popup's `ctrl+g`), and **reviewing changes** (`gg review` and the TUI
 review rows). Each tool is a `[[tools.command]]` block in gg's config. The
 easiest path is the human running Settings → External tools, which detects
@@ -344,7 +354,7 @@ repo block wins a `(category, name)` collision.
 
 ```toml
 [[tools.command]]
-category = "commit_message"   # conflict | commit_message | review
+category = "commit_message"   # conflict | commit_message | review | conflict_complete
 name     = "MyAgent"          # picker label; unique per category
 mode     = "capture"          # capture = headless | terminal = takes the TTY
 command  = '''myagent --do-the-task'''
@@ -387,6 +397,17 @@ can branch on the task):
   (mergetool style) the command instead runs for one file with the
   `<local>`/`<base>`/`<remote>`/`<merged>` path tokens (also as `GG_LOCAL`
   etc.); editing `<merged>` offers mark-resolved on return.
+- **conflict_complete** (`mode = "terminal"` or `"capture"`): same env as
+  `conflict`, plus an empty `$GG_MESSAGE_FILE` and `GG_TASK=conflict_complete`.
+  Unlike `conflict`, you OWN the sequencer for this run: resolve every
+  conflict, stage it, run the matching continue command (`git merge
+  --continue`, `git rebase --continue`, `git cherry-pick --continue`, or
+  `git revert --continue`), and repeat through further rebase rounds until
+  the operation finishes. Never run any `--abort` command and never push —
+  if a conflict cannot be resolved safely, stop and leave the operation
+  paused instead. Finally write an overview (which operation, each file and
+  how you resolved it, how many continue rounds ran, the final state) to
+  `$GG_MESSAGE_FILE`; gg opens it in a report viewer on a clean exit.
 
 Tokens usable in `command`: path tokens `<repo>` `<file>` `<local>` `<base>`
 `<remote>` `<merged>` `<context-file>` (gg shell-quotes them), prose tokens

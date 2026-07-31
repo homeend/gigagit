@@ -1,0 +1,72 @@
+# GoReleaser config — runs from .github/workflows/release.yml on every v* tag.
+# Builds gg for all platforms, publishes the GitHub Release, and pushes an
+# updated binary-install formula to homeend/homebrew-tap.
+version: 2
+
+project_name: gg
+
+builds:
+  - id: gg
+    main: ./cmd/gg
+    binary: gg
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    # Same buildinfo stamping as build.sh; {{.Version}} is the tag without
+    # the leading v, which build.sh keeps — so re-add it.
+    ldflags:
+      - -s -w
+      - -X github.com/homeend/gigagit/internal/buildinfo.Version=v{{.Version}}
+      - -X github.com/homeend/gigagit/internal/buildinfo.Commit={{.ShortCommit}}
+
+archives:
+  - formats: [tar.gz]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+
+checksum:
+  name_template: checksums.txt
+
+# A re-run of a partially failed release (e.g. assets uploaded, tap push
+# failed) must overwrite the already-uploaded assets instead of 422ing.
+release:
+  replace_existing_artifacts: true
+
+changelog:
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+
+# `brews` is deprecated upstream in favor of homebrew_casks, but casks are
+# macOS-only and this formula must keep serving Linux brew users — so we stay
+# on `brews` and pin goreleaser to ~> v2.17 in the release workflow.
+brews:
+  - name: gg
+    repository:
+      owner: homeend
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    directory: Formula
+    homepage: https://github.com/homeend/gigagit
+    description: Fast terminal git client for very large monorepos (TUI + scriptable CLI)
+    license: MIT
+    # The generated formula installs prebuilt release binaries (no Go needed),
+    # replacing the hand-written build-from-source formula.
+    test: |
+      assert_match version.to_s, shell_output("#{bin}/gg version")
+    commit_author:
+      name: goreleaser-bot
+      email: code.drill.eu@gmail.com
+    commit_msg_template: "Brew formula update for {{ .ProjectName }} version v{{ .Version }}"

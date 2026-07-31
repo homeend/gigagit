@@ -56,6 +56,45 @@ func TestSingleCommitDrop(t *testing.T) {
 	}
 }
 
+func TestSingleCommitDropNewest(t *testing.T) {
+	gg := buildGG(t)
+	dir, repo := fourCommitBranch(t)
+	// Drop d (the branch tip). The range d~1..work holds ONLY d, so the todo
+	// must carry an explicit `drop` line — an empty todo makes git abort with
+	// "error: nothing to do" (the bug this test pins).
+	if _, err := runEdit(t, dir, repo, gg, "work", rebaseplan.EditDrop, OpDeps{}); err != nil {
+		t.Fatalf("drop newest: %v", err)
+	}
+	got := subjects(t, dir, "main..work") // newest-first
+	if want := []string{"c", "b", "a"}; strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("after drop d: %v, want %v", got, want)
+	}
+}
+
+func TestMultiCommitDropEntireRange(t *testing.T) {
+	gg := buildGG(t)
+	dir, repo := fourCommitBranch(t)
+	// Drop c and d — the two newest, so the selection IS the whole rebase
+	// range (onto = c^): every entry is a Drop and the todo has no picks.
+	onto := shaOf(t, dir, "work~1") + "^" // c's parent
+	commits, err := repo.LogRangeMessages(context.Background(), onto, "work")
+	if err != nil {
+		t.Fatalf("range: %v", err)
+	}
+	c, d := shaOf(t, dir, "work~1"), shaOf(t, dir, "work")
+	plan, err := rebaseplan.BuildDrop(commits, []string{c, d})
+	if err != nil {
+		t.Fatalf("buildDrop: %v", err)
+	}
+	if _, err := (InteractiveRebase{Branch: "work", Onto: onto, Plan: plan, GGBin: gg}).Run(context.Background(), OpDeps{Repo: repo}); err != nil {
+		t.Fatalf("drop: %v", err)
+	}
+	got := subjects(t, dir, "main..work") // newest-first
+	if want := []string{"b", "a"}; strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("after drop c,d: %v, want %v", got, want)
+	}
+}
+
 func TestMultiCommitDrop(t *testing.T) {
 	gg := buildGG(t)
 	dir, repo := fourCommitBranch(t)

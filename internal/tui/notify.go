@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/homeend/gigagit/internal/clipboard"
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
@@ -51,6 +52,13 @@ const noticeNarrowRefspec = "narrow_fetch_refspec"
 // noticeWSLInterop is the "WSL interop is unregistered, so copy is broken"
 // warning's stable id.
 const noticeWSLInterop = "wsl_interop_broken"
+
+// noticeStaleLock is the "a git process left lockfiles behind" recovery
+// notice's stable id. Unlike the other notices this one is a BLOCKER, not a
+// recommendation: while the lock is there every operation touching that file
+// fails, so it is also raised reactively (see maybeStaleLockNotice) rather
+// than only on repo load.
+const noticeStaleLock = "stale_git_lock"
 
 // bigRepoPackBytes is the pack-size floor for "big repo": below it the
 // commit-graph win doesn't matter enough to nag about.
@@ -145,6 +153,11 @@ func (m Model) rebuildNotices() Model {
 		dismissed = m.promptStore.DismissedNotices(m.repoHealth.GitCommonDir)
 	}
 	var next []notice
+	// Stale locks first: they block every subsequent operation, so they
+	// outrank any advisory below them in the list.
+	if n := staleLockNotice(m.repoHealth, time.Now()); n != nil && !dismissed[n.id] && !m.noticeSessionDismissed[n.id] {
+		next = append(next, *n)
+	}
 	if n := commitGraphNotice(m.repoHealth); n != nil && !dismissed[n.id] && !m.noticeSessionDismissed[n.id] {
 		next = append(next, *n)
 	}
@@ -221,6 +234,97 @@ func narrowRefspecNotice(h model.RepoHealth) *notice {
 			{label: i18n.T("Not now (ask again next load)")},
 			{label: i18n.T("Never for this repo"), never: true},
 		},
+	}
+}
+
+// staleLockNotice fires whenever a git lockfile is present. Git removes its
+// own locks on exit — including when gg cancels it, which now terminates
+// gracefully — so one still sitting there means a git died hard: a machine
+// that lost power, a `kill -9`, a crashed tool, or gg itself on Windows,
+// where cancellation cannot be graceful.
+//
+// The notice deliberately does NOT claim the lock is definitely stale: a git
+// running right now (started from a terminal, an IDE, a hook) legitimately
+// holds one, and deleting it would corrupt that write. gg cannot see
+// processes it did not start, so it reports what it found — with each lock's
+// age, the one usable staleness signal — and lets the human decide.
+func staleLockNotice(h model.RepoHealth, now time.Time) *notice {
+	if len(h.StaleLocks) == 0 {
+		return nil
+	}
+	title := i18n.T("%d git lock files are present — operations will fail", len(h.StaleLocks))
+	if len(h.StaleLocks) == 1 {
+		title = i18n.T("A git lock file is present — operations will fail")
+	}
+	detail := []string{
+		i18n.T("git creates a lock file while it rewrites the file beside it and removes it on exit, so one left behind means a git process was killed before it could clean up."),
+		i18n.T("Until it is removed, git refuses to run with \"Another git process seems to be running in this repository\"."),
+	}
+	for _, l := range h.StaleLocks {
+		detail = append(detail, "  "+l.Name+"  ("+lockAgeLabel(now.Sub(l.ModTime))+")")
+	}
+	detail = append(detail, i18n.T("Only remove these if no other git is running right now — a live git holding one is doing real work, and deleting its lock would corrupt that write."))
+
+	paths := make([]string, 0, len(h.StaleLocks))
+	for _, l := range h.StaleLocks {
+		paths = append(paths, l.Path)
+	}
+	remove := i18n.T("Remove the lock files")
+	if len(paths) == 1 {
+		remove = i18n.T("Remove the lock file")
+	}
+	return &notice{
+		id:      noticeStaleLock,
+		repoKey: h.GitCommonDir,
+		title:   title,
+		detail:  detail,
+		actions: []noticeAction{
+			{label: remove, run: func(m Model) (Model, tea.Cmd) {
+				m.refreshHealthAfterOp = true
+				return m.startOp(engine.RemoveGitLocks{Paths: paths})
+			}},
+			{label: i18n.T("Not now (ask again next load)")},
+			{label: i18n.T("Never for this repo"), never: true},
+		},
+	}
+}
+
+// maybeStaleLockNotice reacts to an operation that failed because a git
+// lockfile is in the way. It re-reads repo health (which rescans for locks)
+// so the stale-lock notice appears immediately, and points the user at the
+// key that opens it — otherwise the failure reads as a dead end and the only
+// apparent fix is deleting the file by hand, which is exactly the pain this
+// feature removes.
+//
+// It also clears the notice's SESSION dismissal. Every other notice is an
+// advisory where "Not now" rightly silences it until the next load; this one
+// is a hard blocker, and a fresh failure is new information — not the same
+// advice resurfacing. Without this, dismissing it once would leave the user
+// stuck with an unfixable error for the rest of the session.
+func (m Model) maybeStaleLockNotice(err error) Model {
+	if err == nil || !domain.IsLockError(err) {
+		return m
+	}
+	if m.noticeSessionDismissed != nil {
+		delete(m.noticeSessionDismissed, noticeStaleLock)
+	}
+	m.refreshHealthAfterOp = true
+	m.statusMsg = m.statusMsg + i18n.T("  — press [!] to remove the lock")
+	return m
+}
+
+// lockAgeLabel renders how long a lock has been sitting there. Age is the only
+// staleness signal available, so it is shown per lock rather than aggregated.
+func lockAgeLabel(d time.Duration) string {
+	switch {
+	case d < time.Minute:
+		return i18n.T("less than a minute old")
+	case d < time.Hour:
+		return i18n.T("%dm old", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return i18n.T("%dh old", int(d.Hours()))
+	default:
+		return i18n.T("%dd old", int(d.Hours()/24))
 	}
 }
 

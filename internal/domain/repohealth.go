@@ -31,6 +31,13 @@ func (s *Service) RepoHealth(ctx context.Context) (model.RepoHealth, error) {
 		} else if v, set, _ := s.repo.ConfigGet(ctx, git.ConfigGlobal, "fetch.writeCommitGraph"); set {
 			h.WriteCommitGraphSet, h.WriteCommitGraphValue = true, v
 		}
+		// Stale lockfiles: two stats per candidate name, no git invocation.
+		// Both dirs are probed because index.lock/HEAD.lock are per-worktree
+		// while packed-refs.lock/config.lock live in the common dir; they are
+		// the same directory in the main worktree and LockFiles dedupes.
+		// Inlined rather than calling s.StaleLocks: that would take a second
+		// Read reservation while this query already holds one.
+		h.StaleLocks = git.LockFiles(s.gitDirCached(ctx), h.GitCommonDir)
 		if kvs, err := s.repo.ConfigGetRegexp(ctx, `^(branch\..*\.(remote|merge)|remote\..*\.fetch)$`); err == nil && len(kvs) > 0 {
 			if branches, err := s.repo.Branches(ctx); err == nil {
 				h.UnmappedBranches = unmappedFromConfig(kvs, branches)

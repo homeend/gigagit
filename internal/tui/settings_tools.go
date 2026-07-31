@@ -45,13 +45,16 @@ func (m Model) openToolsWizard() Model {
 
 // defaultToolChecked computes the wizard's initial checkbox states: a new
 // row defaults checked, EXCEPT an OptIn template (an aggressive
-// yolo/auto-approve variant) which starts unchecked so adding it is an
-// explicit opt-in. An existing row stays checked as before — it is skipped
-// on apply regardless.
+// yolo/auto-approve variant) and EVERY conflict_complete row — that whole
+// category completes the user's paused operation autonomously, so adding
+// any of it is an explicit opt-in even where no bypass flag exists to mark
+// OptIn (Kimi). An existing row stays checked as before — it is skipped on
+// apply regardless.
 func defaultToolChecked(rows []toolWizardRow) []bool {
 	checked := make([]bool, len(rows))
 	for i, row := range rows {
-		checked[i] = row.existing || !row.tmpl.OptIn
+		aggressive := row.tmpl.OptIn || row.tmpl.Category == exttool.CatConflictComplete
+		checked[i] = row.existing || !aggressive
 	}
 	return checked
 }

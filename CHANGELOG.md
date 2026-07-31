@@ -36,6 +36,90 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   enforce the hex-only contract their doc always promised, and
   `GET /api/version-branches` lists every branch with snapshots.
 
+- **`ctrl+g` in the Commits panel solos from the selected commit.** The
+  commit-window twin of the Branches panel's `ctrl+g` solo+tip: the Commits
+  feed scopes to the history reachable from the commit under the cursor —
+  the commit tree that starts there — and the cursor lands back on that
+  commit once the reload finishes. Press `ctrl+g` again on the same commit
+  to un-solo (back to all branches); the cursor stays on the commit in the
+  expanded feed. Also available as a `.`-menu row, "Solo from this commit"
+  (skipped on the ◇ Working tree / ◇ Staged pseudo-rows). The panel header
+  shows the scope as `Commits (solo: <short-sha>)` — the scope itself stores
+  the full sha so the git walk can never hit a short-sha ambiguity.
+
+- **Resolve & complete: an AI agent can finish a paused merge/rebase for
+  you.** The conflict window's `t` picker gains a second row group — a new
+  `conflict_complete` tool category, alongside the existing `conflict`
+  category — for agents that don't just resolve conflicts but also stage
+  them and drive the operation to completion: the matching `--continue`
+  (`git merge`/`rebase`/`cherry-pick`/`revert --continue`), repeated through
+  further rebase rounds, and never `--abort`. On a clean exit the agent's
+  overview (which files, how resolved, how many continue rounds, final
+  state) — written to `$GG_MESSAGE_FILE` — opens straight in gg's report
+  viewer; the conflict process closes first so the viewer isn't fighting it
+  for keys. Every row is **yolo-only and unchecked by default** in the
+  external-tools wizard (Claude, Junie, Codex, and Antigravity via their
+  terminal-handover bypass-flag variant; Kimi via headless capture, since
+  its `-p` mode has no bypass flag to opt into).
+- **Tags panel: enter now searches history for the tag's commit.** Enter on a
+  tag whose target is already in the loaded Commits page still jumps the cursor
+  to it; a target that isn't loaded now falls back to the ctrl+f eager
+  deep-search on the hash (paging history under the search budget, prompting
+  before scanning deeper) — the same "go to" contract as enter on a branch.
+  Previously the not-loaded case forked into the commit's changed-files view;
+  that view is no longer the default and instead lives on as an opt-in
+  "Show changed files" row in the Tags panel's `.` menu (it opens the commit
+  by hash directly, no paging — the reflog pattern).
+
+- **Automated releases via GoReleaser.** Pushing a `v*` tag now triggers
+  `.github/workflows/release.yml`: tests run, GoReleaser builds `gg` for
+  linux/darwin/windows × amd64/arm64 (same `buildinfo` ldflags as
+  `build.sh`), publishes the GitHub Release with archives + checksums, and
+  pushes an updated binary-install formula to `homeend/homebrew-tap` — so
+  `brew install homeend/tap/gg` tracks releases with no manual formula
+  bumps. Requires a `HOMEBREW_TAP_TOKEN` repo secret (a PAT with write
+  access to the tap). GoReleaser is pinned to `~> v2.17` because the
+  `brews` pipe is deprecated upstream in favor of macOS-only casks, and
+  the formula must keep serving Linux brew users.
+
+- **fix: dropping the newest commit failed with "interactive rebase … error:
+  nothing to do".** "Drop commit" on the branch tip (and "Drop N selected
+  commits" when the selection was the N newest) rebases a range that contains
+  only dropped commits, and `rebaseplan.RewriteTodo` expressed a drop by
+  omitting the todo line — leaving an empty todo, which git treats as abort.
+  Drops are now written as explicit `drop <sha>` todo lines (a first-class
+  todo command), so dropping the tip works; middle-commit drops are unchanged.
+
+- **fix: gg stranded `.git/index.lock` files, breaking the repo until the user
+  deleted them by hand.** Reported as: in a big repo, with a background fetch
+  running, pressing keys (space to stage, `c` to commit) produced "another
+  operation is already running" and a git lock that never went away. The cause
+  was in `internal/gitexec`: every git subprocess is built with
+  `exec.CommandContext` and no `cmd.Cancel`, so Go's default cancel action —
+  **SIGKILL** — was used. Git releases its lockfiles from a signal handler
+  (`sigchain`), which SIGKILL cannot run, so any git cancelled while holding a
+  lock stranded it permanently. And gg cancels git constantly: `startOp`
+  preempts the in-flight background refresh on *every* user action
+  (`tui/op.go`), so a keypress landing inside a slow `git status`'s index
+  writeback — likely on a 20 GB head, invisible on a small repo — left the lock
+  behind and the *next* operation failed. Two layers now:
+  - **Cancellation is graceful.** `ExecRunner.prepare` sets `cmd.Cancel` to send
+    SIGTERM (`terminate`, platform-split), letting git remove its own locks;
+    `cmd.WaitDelay` still escalates to a hard kill so a wedged git cannot hold
+    the repo gate. Verified against a real git: a cancelled `git add` now leaves
+    no `index.lock` and the next operation succeeds.
+  - **Stale locks are detected and removable in-app.** Windows has no SIGTERM
+    (`os.Process.Signal` only supports Kill), so locks can still leak there, and
+    nothing helps with a lock left by another tool or a power loss. New:
+    `git.LockFiles` (stat-level probe of a fixed candidate list over the
+    worktree git dir + common dir), `git.IsLockError`, the
+    `engine.RemoveGitLocks` op (exclusive reservation; refuses any path that is
+    not a known lockfile name inside the repo's git dirs; validates the whole
+    batch before removing anything), a `stale_git_lock` notification-center
+    notice — raised on repo load AND reactively when an operation fails with a
+    lock error, showing each lock's age — and `gg unlock [--yes]`. gg never
+    decides a lock is stale on its own: it cannot see git processes it did not
+    start, so it reports what it found and the human chooses.
 - **fix: external tools ran with none of their flags on Windows.** Selecting
   *Claude (yolo)* for a conflict launched Claude in normal permission mode —
   `--dangerously-skip-permissions` never reached it. gg writes the configured

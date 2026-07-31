@@ -168,3 +168,20 @@ func TestScalarWriterSurvivesToolBlocks(t *testing.T) {
 		t.Errorf("tool block corrupted: %+v", cfg.Tools.Command)
 	}
 }
+
+func TestValidateToolCommandConflictComplete(t *testing.T) {
+	ok := ToolCommand{Category: "conflict_complete", Name: "Agent", Mode: "terminal", Command: "agent"}
+	if err := ValidateToolCommand(ok); err != nil {
+		t.Fatalf("conflict_complete must validate, got %v", err)
+	}
+	perFile := ok
+	perFile.PerFile = true
+	if err := ValidateToolCommand(perFile); err == nil {
+		t.Fatal("per_file with conflict_complete must be invalid")
+	}
+	whenOp := ok
+	whenOp.WhenOp = "rebase"
+	if err := ValidateToolCommand(whenOp); err != nil {
+		t.Fatalf("when_op with conflict_complete must validate, got %v", err)
+	}
+}
