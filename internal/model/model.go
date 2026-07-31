@@ -240,12 +240,14 @@ const (
 	EndpointWorkTree EndpointKind = iota // the working tree (unstaged)
 	EndpointIndex                        // the index (staged)
 	EndpointCommit                       // a commit, by Hash
+	EndpointShelf                        // a shelved commit's frozen changed-file set, by ShelfID
 )
 
 // Endpoint names one side of a whole-tree comparison.
 type Endpoint struct {
-	Kind EndpointKind
-	Hash string // commit hash when Kind == EndpointCommit; "" otherwise
+	Kind    EndpointKind
+	Hash    string // commit hash when Kind == EndpointCommit; "" otherwise
+	ShelfID string // shelf entry id when Kind == EndpointShelf; "" otherwise
 }
 
 // Display is the human label for an endpoint.
@@ -255,6 +257,12 @@ func (e Endpoint) Display() string {
 		return "Working Tree"
 	case EndpointIndex:
 		return "Staged"
+	case EndpointShelf:
+		id := e.ShelfID
+		if len(id) > 9 {
+			id = id[:9]
+		}
+		return "shelf #" + id + " (frozen)"
 	default:
 		if len(e.Hash) > 7 {
 			return e.Hash[:7]
@@ -270,6 +278,8 @@ func (e Endpoint) FileRef(path string) FileRef {
 		return FileRef{Source: SourceUnstaged, Path: path}
 	case EndpointIndex:
 		return FileRef{Source: SourceStaged, Path: path}
+	case EndpointShelf:
+		return FileRef{Source: SourceShelf, Locator: e.ShelfID, Path: path}
 	default:
 		return FileRef{Source: SourceCommit, Locator: e.Hash, Path: path}
 	}
@@ -289,6 +299,8 @@ func (e Endpoint) CacheTag() string {
 		return "worktree"
 	case EndpointIndex:
 		return "index"
+	case EndpointShelf:
+		return "shelf:" + e.ShelfID
 	default:
 		return e.Hash
 	}
