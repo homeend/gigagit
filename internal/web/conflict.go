@@ -3,10 +3,13 @@ package web
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/hunkpick"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/textdiff"
@@ -104,4 +107,59 @@ func (s *Server) handleConflictHunks(w http.ResponseWriter, r *http.Request) {
 		idx++
 	}
 	writeJSON(w, map[string]any{"count": idx, "hash": hash, "items": items})
+}
+
+type resolveHunksRequest struct {
+	Path  string   `json:"path"`
+	Picks []string `json:"picks"` // positional: picks[i] resolves block i — "ours" | "theirs"
+	Hash  string   `json:"hash"`
+}
+
+// handleResolveHunks resolves a conflicted file from a full set of per-block
+// picks: recompute the doc fresh, verify the freshness hash (409 on drift),
+// require EVERY block picked (a partial resolve would stage a file still
+// containing markers), assemble Doc.Resolved(), and write+stage through
+// engine.ResolveConflictHunks. Success response = fresh status (the
+// stage-hunks convention).
+func (s *Server) handleResolveHunks(w http.ResponseWriter, r *http.Request) {
+	svc := s.service()
+	var req resolveHunksRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, fmt.Errorf("bad request body: %w", err))
+		return
+	}
+	doc, hash, ok := loadConflictDoc(w, r, svc, req.Path)
+	if !ok {
+		return
+	}
+	if req.Hash != hash {
+		writeErr(w, http.StatusConflict, errors.New("file changed; refresh"))
+		return
+	}
+	blocks := doc.Blocks()
+	if len(req.Picks) != len(blocks) {
+		writeErr(w, http.StatusBadRequest, fmt.Errorf("picks: got %d, want %d (every block must be picked)", len(req.Picks), len(blocks)))
+		return
+	}
+	for i, p := range req.Picks {
+		switch p {
+		case "ours":
+			blocks[i].Mode = hunkpick.TakeCurrent
+		case "theirs":
+			blocks[i].Mode = hunkpick.TakeIncoming
+		default:
+			writeErr(w, http.StatusBadRequest, fmt.Errorf("pick %d: %q (want ours|theirs)", i, p))
+			return
+		}
+	}
+	content, resolved := doc.Resolved()
+	if !resolved {
+		writeErr(w, http.StatusInternalServerError, errors.New("unresolved blocks"))
+		return
+	}
+	if _, err := runOp(r.Context(), svc, engine.ResolveConflictHunks{Path: req.Path, Content: content}); err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	s.writeStatus(w, r)
 }

@@ -172,3 +172,96 @@ func TestConflictHunksMalformed(t *testing.T) {
 		t.Errorf("code = %d, want 422", code)
 	}
 }
+
+func TestResolveHunks(t *testing.T) {
+	dir := conflictingRepo(t)
+	conflictedMergeState(t, dir)
+	ts := serve(t, New(domain.Open(dir)))
+
+	var d conflictHunksResp
+	if code := getJSON(t, ts, "/api/conflict-hunks?path=f.txt", &d); code != http.StatusOK {
+		t.Fatalf("hunks code = %d", code)
+	}
+	var st conflictStatusResp
+	code := postJSON(t, ts, "/api/resolve-hunks",
+		`{"path":"f.txt","picks":["theirs"],"hash":"`+d.Hash+`"}`,
+		"application/json", "", &st)
+	if code != http.StatusOK {
+		t.Fatalf("resolve code = %d", code)
+	}
+	// file resolved to the incoming side and staged
+	b, err := os.ReadFile(filepath.Join(dir, "f.txt"))
+	if err != nil || string(b) != "feature\n" {
+		t.Errorf("f.txt = %q, %v; want feature", b, err)
+	}
+	if out := gitRun(t, dir, "ls-files", "-u"); out != "" {
+		t.Errorf("still unmerged:\n%s", out)
+	}
+	// the merge is still paused with zero conflicts — Continue's moment
+	if st.Conflict == nil || st.Conflict.Op != "merge" || st.Conflict.Conflicted != 0 {
+		t.Errorf("response conflict = %+v, want paused merge with 0 conflicted", st.Conflict)
+	}
+}
+
+// Two regions, opposite picks — the positional contract end-to-end. The
+// working-tree content is ours to write (the index, not the file, is what
+// keeps the path unmerged), so a synthetic two-block marker file works.
+func TestResolveHunksMixedPicks(t *testing.T) {
+	dir := conflictingRepo(t)
+	conflictedMergeState(t, dir)
+	two := "keep\n<<<<<<< HEAD\nm1\n=======\nf1\n>>>>>>> feature\nmid\n<<<<<<< HEAD\nm2\n=======\nf2\n>>>>>>> feature\nend\n"
+	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte(two), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ts := serve(t, New(domain.Open(dir)))
+
+	var d conflictHunksResp
+	if code := getJSON(t, ts, "/api/conflict-hunks?path=f.txt", &d); code != http.StatusOK || d.Count != 2 {
+		t.Fatalf("hunks code = %d count = %d, want 200/2", code, d.Count)
+	}
+	if code := postJSON(t, ts, "/api/resolve-hunks",
+		`{"path":"f.txt","picks":["ours","theirs"],"hash":"`+d.Hash+`"}`,
+		"application/json", "", nil); code != http.StatusOK {
+		t.Fatalf("resolve code = %d", code)
+	}
+	b, _ := os.ReadFile(filepath.Join(dir, "f.txt"))
+	if string(b) != "keep\nm1\nmid\nf2\nend\n" {
+		t.Errorf("f.txt = %q", b)
+	}
+}
+
+func TestResolveHunksHashDrift(t *testing.T) {
+	dir := conflictingRepo(t)
+	conflictedMergeState(t, dir)
+	ts := serve(t, New(domain.Open(dir)))
+
+	var d conflictHunksResp
+	if code := getJSON(t, ts, "/api/conflict-hunks?path=f.txt", &d); code != http.StatusOK {
+		t.Fatalf("hunks code = %d", code)
+	}
+	// the file moves under the client's feet
+	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("<<<<<<< HEAD\nx\n=======\ny\n>>>>>>> feature\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code := postJSON(t, ts, "/api/resolve-hunks",
+		`{"path":"f.txt","picks":["theirs"],"hash":"`+d.Hash+`"}`,
+		"application/json", "", nil); code != http.StatusConflict {
+		t.Errorf("code = %d, want 409", code)
+	}
+}
+
+func TestResolveHunksPickCount(t *testing.T) {
+	dir := conflictingRepo(t)
+	conflictedMergeState(t, dir)
+	ts := serve(t, New(domain.Open(dir)))
+
+	var d conflictHunksResp
+	getJSON(t, ts, "/api/conflict-hunks?path=f.txt", &d)
+	for _, bad := range []string{`[]`, `["theirs","ours"]`, `["sideways"]`} {
+		if code := postJSON(t, ts, "/api/resolve-hunks",
+			`{"path":"f.txt","picks":`+bad+`,"hash":"`+d.Hash+`"}`,
+			"application/json", "", nil); code != http.StatusBadRequest {
+			t.Errorf("picks %s: code = %d, want 400", bad, code)
+		}
+	}
+}
