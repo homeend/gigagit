@@ -189,6 +189,10 @@ mark.r { background: var(--span-add); color: inherit; }
 #tags-list li.more { color: var(--dim); cursor: default; }
 #commit-box { padding: 4px 8px; border-bottom: 1px solid var(--border); display: flex; gap: 8px; align-items: flex-start; }
 #commit-box.hidden { display: none; }
+/* Takes the commit box's slot while a sequencer op is paused: the way to
+   finish is the banner's Continue, and this line says so. */
+#conflict-note { padding: 6px 10px; border-bottom: 1px solid var(--border); color: var(--dim); font-size: 12px; font-style: italic; }
+#conflict-note.hidden { display: none; }
 #commit-box textarea {
   flex: 1; background: var(--bg-alt); color: var(--fg); border: 1px solid var(--border);
   border-radius: 3px; font: inherit; padding: 3px 6px; resize: vertical;
