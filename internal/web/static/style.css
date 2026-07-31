@@ -47,6 +47,13 @@ body {
 #panes.detail #diff-pane { order: 1; }
 #panes.detail #rs-detail { order: 2; }
 #panes.detail #files-pane { order: 3; }
+/* The file list's left separator. The commits/diff pane's own border-right
+   technically draws one, but it sits on the FAR side of the 5px handle
+   gutter and --border-on---bg is near-invisible on a real monitor (a user
+   report circled the exact spot the line was rendered in). The line the
+   eye expects is at the file list's own edge, against its content, a
+   shade brighter. */
+#panes.files #files-pane, #panes.detail #files-pane { border-left: 1px solid #3a4150; }
 /* The handle is its own grid column, so dragging never overlaps a pane's
    content and the hit area does not depend on hovering a 1px border. */
 .resizer { cursor: col-resize; background: var(--bg); touch-action: none; }
