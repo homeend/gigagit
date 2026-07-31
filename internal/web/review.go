@@ -247,6 +247,9 @@ func (s *Server) reviewCommands(ctx context.Context, svc *domain.Service) ([]con
 		if tc.Category != string(exttool.CatReview) {
 			continue
 		}
+		if !config.ToolVisibleIn(tc, "web") {
+			continue
+		}
 		if config.ValidateToolCommand(tc) != nil || template.ValidateCommandTokens(tc.Command, tc.PerFile) != nil {
 			continue
 		}

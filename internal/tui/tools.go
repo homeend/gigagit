@@ -26,6 +26,9 @@ func (m Model) toolCommands(category string) []config.ToolCommand {
 		if tc.Category != category {
 			continue
 		}
+		if !config.ToolVisibleIn(tc, "tui") {
+			continue
+		}
 		out = append(out, tc)
 	}
 	return out
