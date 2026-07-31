@@ -741,9 +741,11 @@ func (m Model) commitDropSelectionRow() (actionRow, bool) {
 	}, true
 }
 
-// commitCreateWorktreeRow offers "Create worktree here" on the Commits panel:
-// open the create-worktree dialog based at the selected commit, with a user-typed
-// (non-templated) branch name.
+// commitCreateWorktreeRow offers "Create worktree from this commit" on the
+// Commits panel: open the create-worktree dialog based at the selected
+// commit, with a prefilled (still user-editable) branch name and a
+// keep-changes mode line ([m] cycles at this commit / at parent staged / at
+// parent unstaged; locked to "at this commit" for a root or merge commit).
 func (m Model) commitCreateWorktreeRow() (actionRow, bool) {
 	if m.focus != panelCommits || !m.opsIdle() {
 		return actionRow{}, false
@@ -753,11 +755,20 @@ func (m Model) commitCreateWorktreeRow() (actionRow, bool) {
 		return actionRow{}, false
 	}
 	hash := m.commits[bi].Hash
+	parents := len(m.commits[bi].Parents)
+	short := hash
+	if len(short) > 7 {
+		short = short[:7]
+	}
+	prefill := "wt_" + short
+	if b := m.status.Branch; b != "" && b != "(detached)" {
+		prefill = b + "_" + short
+	}
 	return actionRow{
 		id:    "commit-create-worktree",
-		label: i18n.T("Create worktree here"),
+		label: i18n.T("Create worktree from this commit"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
-			return m.openWorktreeAt(hash, ""), nil
+			return m.openWorktreeAtCommit(hash, prefill, parents), nil
 		},
 	}, true
 }

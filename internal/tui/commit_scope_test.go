@@ -654,7 +654,8 @@ func TestCommitCreateWorktreeRowOpensInEdit(t *testing.T) {
 	}
 	m.focus = panelCommits
 	full := "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-	m.commits = []model.Commit{{Hash: full, Subject: "x"}}
+	m.commits = []model.Commit{{Hash: full, Subject: "x", Parents: []string{"aaaaaaaa"}}}
+	m.status.Branch = "main"
 	m.sel[panelCommits] = 0
 	r, ok := findRow(availableActions(m), "commit-create-worktree")
 	if !ok {
@@ -669,8 +670,33 @@ func TestCommitCreateWorktreeRowOpensInEdit(t *testing.T) {
 	if !p.fromCommit || p.startPoint != full {
 		t.Fatalf("fromCommit=%v startPoint=%q (want true + full hash)", p.fromCommit, p.startPoint)
 	}
-	if p.state != stEdit || p.editBuf.Value() != "" {
-		t.Fatalf("should open in branch-edit with an empty buffer; state=%v buf=%q", p.state, p.editBuf.Value())
+	if p.state != stEdit || p.editBuf.Value() != "main_"+full[:7] {
+		t.Fatalf("should open in branch-edit prefilled; state=%v buf=%q", p.state, p.editBuf.Value())
+	}
+	if !p.keepOffered || p.keepLocked {
+		t.Fatalf("keepOffered=%v keepLocked=%v, want offered and unlocked", p.keepOffered, p.keepLocked)
+	}
+}
+
+func TestCommitCreateWorktreeRowRootCommitLocksKeep(t *testing.T) {
+	m := footerModel()
+	if m.sel == nil {
+		m.sel = map[panel]int{}
+	}
+	m.focus = panelCommits
+	full := "dddddddddddddddddddddddddddddddddddddddd"
+	m.commits = []model.Commit{{Hash: full, Subject: "root"}} // no parents
+	m.sel[panelCommits] = 0
+	m.status.Branch = "(detached)"
+	r, _ := findRow(availableActions(m), "commit-create-worktree")
+	mm, _ := r.run(m)
+	m = mm.(Model)
+	p := m.topLayer().(*worktreePopup)
+	if !p.keepLocked {
+		t.Fatal("a root commit must lock the keep mode")
+	}
+	if p.editBuf.Value() != "wt_"+full[:7] {
+		t.Fatalf("detached prefill = %q, want wt_%s", p.editBuf.Value(), full[:7])
 	}
 }
 
