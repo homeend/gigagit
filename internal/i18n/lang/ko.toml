@@ -1339,6 +1339,8 @@ name = "한국어"
 "wrote %s" = "%s 기록됨"
 
 " (branch %s kept)" = " (브랜치 %s 유지됨)"
+" (commit's changes staged)" = " (커밋의 변경 사항은 스테이지됨)"
+" (commit's changes unstaged)" = " (커밋의 변경 사항은 스테이지되지 않음)"
 " (post-create hook error: %s)" = " (생성 후 훅 오류: %s)"
 " (post-create hook failed: exit %d)" = " (생성 후 훅 실패: 종료 코드 %d)"
 " and branch %s" = ", 브랜치 %s도 삭제됨"

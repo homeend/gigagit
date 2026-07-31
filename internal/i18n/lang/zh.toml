@@ -1339,6 +1339,8 @@ name = "中文"
 "wrote %s" = "已写入 %s"
 
 " (branch %s kept)" = " (分支 %s 已保留)"
+" (commit's changes staged)" = "（提交的更改已暂存）"
+" (commit's changes unstaged)" = "（提交的更改未暂存）"
 " (post-create hook error: %s)" = " (创建后钩子错误: %s)"
 " (post-create hook failed: exit %d)" = " (创建后钩子失败: 退出码 %d)"
 " and branch %s" = "，分支 %s 也已删除"

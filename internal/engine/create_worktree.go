@@ -7,14 +7,42 @@ import (
 	"path/filepath"
 )
 
+// WorktreeKeep selects what the new worktree holds relative to StartPoint.
+type WorktreeKeep int
+
+const (
+	KeepNone     WorktreeKeep = iota // branch at StartPoint (default)
+	KeepStaged                       // branch at StartPoint^, commit's changes staged (reset --soft)
+	KeepUnstaged                     // branch at StartPoint^, commit's changes unstaged (reset --mixed)
+)
+
+// WorktreeKeepParentError refuses a keep mode on a commit whose parent is
+// missing (root) or ambiguous (merge). Returned BEFORE anything is created.
+type WorktreeKeepParentError struct {
+	Sha     string
+	Parents int
+}
+
+func (e WorktreeKeepParentError) Error() string {
+	if e.Parents == 0 {
+		return fmt.Sprintf("create worktree: %s is a root commit — there is no parent to keep its changes against", e.Sha)
+	}
+	return fmt.Sprintf("create worktree: %s is a merge commit (%d parents) — its changes are ambiguous", e.Sha, e.Parents)
+}
+
 // CreateWorktree creates a new linked worktree on a NEW branch (Branch) based on
 // StartPoint, at Path. A relative Path is resolved against the repository root.
 // The fields are fully resolved by the frontend (template resolution and any
 // <user:> input happen there, not here — see spec §3).
 type CreateWorktree struct {
-	StartPoint     string
-	Branch         string
-	Path           string
+	StartPoint string
+	Branch     string
+	Path       string
+	// Keep, when non-zero, lands the branch on StartPoint's parent instead of
+	// StartPoint itself: KeepStaged/KeepUnstaged land the branch on
+	// StartPoint's parent with the commit's diff left staged/unstaged in the
+	// new worktree; StartPoint must then be a non-root, non-merge commit.
+	Keep           WorktreeKeep
 	PostCreateHook string // shell script run in the new worktree; "" = none
 }
 
@@ -29,6 +57,16 @@ func (op CreateWorktree) Run(ctx context.Context, deps OpDeps) (Result, error) {
 		return Result{}, fmt.Errorf("create worktree: invalid branch name %q: %w", op.Branch, err)
 	}
 
+	if op.Keep != KeepNone {
+		n, err := deps.Repo.ParentCount(ctx, op.StartPoint)
+		if err != nil {
+			return Result{}, fmt.Errorf("create worktree: %w", err)
+		}
+		if n != 1 {
+			return Result{}, WorktreeKeepParentError{Sha: op.StartPoint, Parents: n}
+		}
+	}
+
 	abs, err := resolveNewWorktreePath(ctx, deps, op.Path)
 	if err != nil {
 		return Result{}, err
@@ -41,7 +79,26 @@ func (op CreateWorktree) Run(ctx context.Context, deps OpDeps) (Result, error) {
 		return Result{}, fmt.Errorf("create worktree: %w", err)
 	}
 
-	res := runPostCreateHook(ctx, deps, Result{Changed: true, Path: abs}.WithSummary("worktree created: %s", abs), abs, op.Branch, op.PostCreateHook)
+	base := Result{Changed: true, Path: abs}.WithSummary("worktree created: %s", abs)
+	if op.Keep != KeepNone {
+		soft := op.Keep == KeepStaged
+		mode := "--mixed"
+		if soft {
+			mode = "--soft"
+		}
+		deps.emit(ctx, Progress{Step: "resetting", Detail: mode + " → " + op.StartPoint + "^"})
+		if err := deps.Repo.ResetInDir(ctx, abs, op.StartPoint+"^", soft); err != nil {
+			// The parent count was pre-validated, so this is a near-impossible
+			// failure; name the created path so the user knows what exists.
+			return Result{}, fmt.Errorf("create worktree: created at %s but reset failed: %w", abs, err)
+		}
+		if soft {
+			base = base.AppendSummary(" (commit's changes staged)")
+		} else {
+			base = base.AppendSummary(" (commit's changes unstaged)")
+		}
+	}
+	res := runPostCreateHook(ctx, deps, base, abs, op.Branch, op.PostCreateHook)
 	deps.emit(ctx, Done{Result: res})
 	return res, nil
 }

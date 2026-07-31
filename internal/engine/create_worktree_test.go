@@ -2,7 +2,9 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -264,5 +266,138 @@ func TestCreateWorktreeHookSkippedWithNoDecider(t *testing.T) {
 	}
 	if fh.called {
 		t.Fatal("hook must not run when no decider can approve")
+	}
+}
+
+// addCommit writes path=content and commits it in dir, returning nothing; the
+// keep-mode tests need a second commit so HEAD has exactly one parent.
+func addCommit(t *testing.T, dir, path, content, msg string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(dir, path), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	run := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	run("add", path)
+	run("commit", "-m", msg)
+}
+
+// gitOut (already declared in smart_merge_test.go) runs git in dir and
+// returns trimmed stdout.
+
+func TestCreateWorktreeKeepStaged(t *testing.T) {
+	dir, repo := newRepo(t)
+	addCommit(t, dir, "a.txt", "two\n", "second")
+	head := gitOut(t, dir, "rev-parse", "HEAD")
+	parent := gitOut(t, dir, "rev-parse", "HEAD^")
+
+	op := CreateWorktree{StartPoint: head, Branch: "redo/x", Path: "../wt-keep-staged", Keep: KeepStaged}
+	res, err := op.Run(context.Background(), OpDeps{Repo: repo})
+	if err != nil {
+		t.Fatalf("CreateWorktree keep-staged: %v", err)
+	}
+	// The new branch must land on the PARENT, with the commit's diff staged.
+	if got := gitOut(t, res.Path, "rev-parse", "HEAD"); got != parent {
+		t.Fatalf("worktree HEAD = %s, want parent %s", got, parent)
+	}
+	status := gitOut(t, res.Path, "status", "--porcelain")
+	if !strings.Contains(status, "A  a.txt") && !strings.Contains(status, "M  a.txt") {
+		t.Fatalf("a.txt not staged in the new worktree; status:\n%s", status)
+	}
+	if !strings.Contains(res.Summary, "commit's changes staged") {
+		t.Fatalf("Summary = %q, want the staged suffix", res.Summary)
+	}
+}
+
+func TestCreateWorktreeKeepUnstaged(t *testing.T) {
+	dir, repo := newRepo(t)
+	addCommit(t, dir, "a.txt", "two\n", "second")
+	head := gitOut(t, dir, "rev-parse", "HEAD")
+	parent := gitOut(t, dir, "rev-parse", "HEAD^")
+
+	op := CreateWorktree{StartPoint: head, Branch: "redo/y", Path: "../wt-keep-unstaged", Keep: KeepUnstaged}
+	res, err := op.Run(context.Background(), OpDeps{Repo: repo})
+	if err != nil {
+		t.Fatalf("CreateWorktree keep-unstaged: %v", err)
+	}
+	if got := gitOut(t, res.Path, "rev-parse", "HEAD"); got != parent {
+		t.Fatalf("worktree HEAD = %s, want parent %s", got, parent)
+	}
+	// --mixed: nothing staged, a.txt untracked-or-modified in the working tree.
+	status := gitOut(t, res.Path, "status", "--porcelain")
+	if strings.Contains(status, "A  a.txt") || strings.Contains(status, "M  a.txt") {
+		t.Fatalf("a.txt unexpectedly staged; status:\n%s", status)
+	}
+	if !strings.Contains(status, "a.txt") {
+		t.Fatalf("a.txt missing from the new worktree's status:\n%s", status)
+	}
+}
+
+func TestCreateWorktreeKeepRefusesRootCommit(t *testing.T) {
+	dir, repo := newRepo(t) // exactly one commit — HEAD is the root
+	op := CreateWorktree{StartPoint: "HEAD", Branch: "redo/root", Path: "../wt-keep-root", Keep: KeepStaged}
+	_, err := op.Run(context.Background(), OpDeps{Repo: repo})
+	var wantErr WorktreeKeepParentError
+	if !errors.As(err, &wantErr) || wantErr.Parents != 0 {
+		t.Fatalf("err = %v, want WorktreeKeepParentError{Parents: 0}", err)
+	}
+	// Refusal happens BEFORE anything is created.
+	if _, statErr := os.Stat(filepath.Join(dir, "..", "wt-keep-root")); statErr == nil {
+		t.Fatal("worktree directory must not exist after the refusal")
+	}
+	if out := gitOut(t, dir, "branch", "--list", "redo/root"); out != "" {
+		t.Fatalf("branch must not exist after the refusal, got %q", out)
+	}
+}
+
+func TestCreateWorktreeKeepRefusesMergeCommit(t *testing.T) {
+	dir, repo := newRepo(t)
+	run := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	run("checkout", "-b", "side")
+	addCommit(t, dir, "s.txt", "side\n", "side work")
+	run("checkout", "main")
+	addCommit(t, dir, "m.txt", "main\n", "main work")
+	run("merge", "--no-ff", "-m", "merge side", "side")
+
+	op := CreateWorktree{StartPoint: "HEAD", Branch: "redo/merge", Path: "../wt-keep-merge", Keep: KeepUnstaged}
+	_, err := op.Run(context.Background(), OpDeps{Repo: repo})
+	var wantErr WorktreeKeepParentError
+	if !errors.As(err, &wantErr) || wantErr.Parents != 2 {
+		t.Fatalf("err = %v, want WorktreeKeepParentError{Parents: 2}", err)
+	}
+}
+
+func TestCreateWorktreeKeepHookSeesResetState(t *testing.T) {
+	dir, repo := newRepo(t)
+	addCommit(t, dir, "a.txt", "two\n", "second")
+	head := gitOut(t, dir, "rev-parse", "HEAD")
+
+	// The hook snapshots status at hook time; if it ran before the reset the
+	// tree would be clean and the file would be empty.
+	op := CreateWorktree{StartPoint: head, Branch: "redo/hook", Path: "../wt-keep-hook",
+		Keep: KeepStaged, PostCreateHook: "git status --porcelain > hook-status.txt"}
+	res, err := op.Run(context.Background(), opDepsApprovingHook(repo)) // same deps shape TestCreateWorktreeForBranchRunsHook uses
+	if err != nil {
+		t.Fatalf("CreateWorktree keep+hook: %v", err)
+	}
+	out, rerr := os.ReadFile(filepath.Join(res.Path, "hook-status.txt"))
+	if rerr != nil {
+		t.Fatalf("hook did not run: %v", rerr)
+	}
+	if !strings.Contains(string(out), "a.txt") {
+		t.Fatalf("hook ran before the reset — status at hook time:\n%s", out)
 	}
 }

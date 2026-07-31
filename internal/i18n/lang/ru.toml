@@ -1339,6 +1339,8 @@ name = "Русский"
 "wrote %s" = "записано %s"
 
 " (branch %s kept)" = " (ветка %s сохранена)"
+" (commit's changes staged)" = " (изменения коммита в индексе)"
+" (commit's changes unstaged)" = " (изменения коммита не в индексе)"
 " (post-create hook error: %s)" = " (ошибка хука после создания: %s)"
 " (post-create hook failed: exit %d)" = " (хук после создания завершился с ошибкой, код %d)"
 " and branch %s" = ", а также ветка %s"

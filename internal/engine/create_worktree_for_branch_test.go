@@ -119,6 +119,15 @@ func TestCreateWorktreeForBranchRequiresFields(t *testing.T) {
 	}
 }
 
+// opDepsApprovingHook wires the run-approval decider (the MapDecider{HookDecisionID: "run"}
+// construction used across this file's hook tests) with NO HookRunner override,
+// so the hook runs for real via the default ShellHookRunner{} — needed by
+// tests (e.g. CreateWorktree's keep-mode hook test) that assert on the hook's
+// actual on-disk effect rather than a fakeHookRunner's recorded call.
+func opDepsApprovingHook(repo GitOps) OpDeps {
+	return OpDeps{Repo: repo, Decider: MapDecider{HookDecisionID: "run"}}
+}
+
 func TestCreateWorktreeForBranchRunsHook(t *testing.T) {
 	dir, repo := newRepo(t)
 	gitIn(t, dir, "branch", "hooked/b")

@@ -1339,6 +1339,8 @@ name = "日本語"
 "wrote %s" = "%s を書き込みました"
 
 " (branch %s kept)" = " (ブランチ %s は保持)"
+" (commit's changes staged)" = " (コミットの変更はステージ済み)"
+" (commit's changes unstaged)" = " (コミットの変更は未ステージ)"
 " (post-create hook error: %s)" = " (作成後フックエラー: %s)"
 " (post-create hook failed: exit %d)" = " (作成後フック失敗: 終了コード %d)"
 " and branch %s" = "、ブランチ %s も削除しました"
