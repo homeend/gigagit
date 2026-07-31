@@ -2288,11 +2288,14 @@ function renderFiles() {
       .join("");
     return;
   }
-  $("files-actions").classList.remove("hidden");
-  // While a sequencer op is paused, the commit box steps aside: finishing
-  // the op is the banner's Continue (git supplies the merge message), and a
-  // competing commit button here reads as the way out when it isn't.
+  // While a sequencer op is paused, the commit box AND the mass staging
+  // buttons step aside: finishing the op is the banner's Continue (git
+  // supplies the merge message), "stage all" would mark every conflict
+  // resolved with the markers still inside the files, and "unstage all"
+  // would pull git's auto-merged results back out of the coming merge
+  // commit. Per-file actions (mark resolved) stay available.
   if (state.conflict) {
+    $("files-actions").classList.add("hidden");
     $("commit-box").classList.add("hidden");
     const note = $("conflict-note");
     note.classList.remove("hidden");
@@ -2300,6 +2303,7 @@ function renderFiles() {
       ? "resolving " + state.conflict.op + " — pick through the conflicts below, then press Continue above"
       : "all conflicts resolved — press Continue above to finish the " + state.conflict.op;
   } else {
+    $("files-actions").classList.remove("hidden");
     $("conflict-note").classList.add("hidden");
     $("commit-box").classList.remove("hidden");
     $("commit-btn").disabled = !(state.wt && state.wt.counts.staged > 0) || !!state.op;
@@ -2981,15 +2985,20 @@ $("files-list").addEventListener("contextmenu", (e) => {
   else if (f.section === "conflicts") items.push({ label: "mark resolved (stage as-is)", act: () => stage({ paths: [f.path] }) });
   else items.push({ label: "stage " + f.path, act: () => stage({ paths: [f.path] }) });
   items.push({ label: "copy path", act: () => copyText(f.path) });
-  items.push({ label: "stage all", act: () => stage({ all: true }) });
-  if (state.statusEntries.some((x) => x.section === "staged")) {
-    items.push({
-      label: "unstage all",
-      act: () => {
-        const paths = state.statusEntries.filter((x) => x.section === "staged").map((x) => x.path);
-        if (paths.length) stage({ paths, unstage: true }); // engine.Stage{All} can't unstage
-      },
-    });
+  // the mass rows vanish while an op is paused — same footguns as the
+  // hidden #files-actions buttons (stage all = markers staged as resolved,
+  // unstage all = auto-merged results pulled out of the merge commit)
+  if (!state.conflict) {
+    items.push({ label: "stage all", act: () => stage({ all: true }) });
+    if (state.statusEntries.some((x) => x.section === "staged")) {
+      items.push({
+        label: "unstage all",
+        act: () => {
+          const paths = state.statusEntries.filter((x) => x.section === "staged").map((x) => x.path);
+          if (paths.length) stage({ paths, unstage: true }); // engine.Stage{All} can't unstage
+        },
+      });
+    }
   }
   if (f.section === "changes") {
     items.push({
