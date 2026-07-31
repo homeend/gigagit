@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v56 -->
+<!-- gg:using-gg:v57 -->
 
 # Using gg (gigagit)
 
@@ -287,6 +287,18 @@ guards against removing the worktree you are standing in.
   the new worktree (no new branch; refuses a branch already checked out).
   `remove` refuses a dirty or **locked** worktree (an interrupted `add` can
   leave one locked); `--force` removes a dirty tree and unlocks a locked one.
+- `gg worktree add --from <commit> [--keep staged|unstaged] [<branch-name>]`
+  — create a worktree on a NEW branch cut from `<commit>` rather than a
+  branch tip. Default name `<current-branch>_<short-sha>` (a trailing
+  positional overrides it); mutually exclusive with `--branch` (`--from`
+  always makes a new branch). `--keep staged`/`--keep unstaged` instead
+  land the new branch on the commit's PARENT, with the commit's own diff
+  left staged (`git reset --soft`) or unstaged (`git reset --mixed`) in the
+  fresh worktree — redo a commit differently without touching the branch
+  it came from. `--keep` requires `--from` (exit 2 without it, or on an
+  unrecognized value); a root or merge commit under `--keep` is refused
+  (exit 1) before anything is created — there is no single parent to keep
+  the diff against.
   If `[worktree] post_create_hook` is set in `.gg.toml` (a multi-line TOML
   literal `'''…'''` shell script), `gg worktree add` will offer to run it
   inside the new worktree. The hook requires approval before it runs (the
@@ -366,7 +378,7 @@ name     = "MyAgent"          # picker label; unique per category
 mode     = "capture"          # capture = headless | terminal = takes the TTY
 command  = '''myagent --do-the-task'''
 # per_file = true             # conflict only: run once per conflicted file
-# when_op  = "merge"          # conflict only: merge|rebase|cherry-pick|revert
+# when_op  = "merge"          # conflict/conflict_complete only: merge|rebase|cherry-pick|revert
 ```
 
 A structurally invalid block (unknown category/mode, empty name/command,
