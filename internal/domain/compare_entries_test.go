@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/homeend/gigagit/internal/model"
@@ -241,5 +242,50 @@ func TestCompareFilesShelfShelfIdenticalOmitted(t *testing.T) {
 	}
 	if _, present := got["twin.txt"]; present {
 		t.Fatalf("files = %v, twin.txt has identical bytes in both tars and must be omitted", got)
+	}
+}
+
+func TestComparePatchFrozen(t *testing.T) {
+	dir, svc := newRealRepo(t)
+	svc.SetShelfStore(shelf.NewFileStore(t.TempDir()))
+	ctx := context.Background()
+
+	shaA := writeAndCommit(t, dir, "A", map[string]string{"f.txt": "old\n"})
+	ea, err := svc.ShelfAddCommit(ctx, shaA, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	shaB := writeAndCommit(t, dir, "B", map[string]string{"f.txt": "new\n"})
+
+	patch, err := svc.ComparePatch(ctx,
+		model.Endpoint{Kind: model.EndpointShelf, ShelfID: ea.ID},
+		model.Endpoint{Kind: model.EndpointCommit, Hash: shaB})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"--- a/f.txt", "+++ b/f.txt", "-old", "+new"} {
+		if !strings.Contains(patch, want) {
+			t.Errorf("patch missing %q:\n%s", want, patch)
+		}
+	}
+	if strings.Contains(patch, os.TempDir()) {
+		t.Errorf("patch leaks temp paths:\n%s", patch)
+	}
+}
+
+func TestComparePatchLiveCommits(t *testing.T) {
+	dir, svc := newRealRepo(t)
+	ctx := context.Background()
+	shaA := writeAndCommit(t, dir, "A", map[string]string{"f.txt": "old\n"})
+	shaB := writeAndCommit(t, dir, "B", map[string]string{"f.txt": "new\n"})
+
+	patch, err := svc.ComparePatch(ctx,
+		model.Endpoint{Kind: model.EndpointCommit, Hash: shaA},
+		model.Endpoint{Kind: model.EndpointCommit, Hash: shaB})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(patch, "-old") || !strings.Contains(patch, "+new") {
+		t.Errorf("live patch wrong:\n%s", patch)
 	}
 }
