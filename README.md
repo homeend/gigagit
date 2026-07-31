@@ -174,6 +174,11 @@ gg undo
 gg worktree list
 gg worktree add [<start-point>]
 gg worktree add --branch <name>
+gg worktree add --from <commit> [--keep staged|unstaged] [<branch-name>]
+                                      # new branch at <commit> (default name <current-branch>_<short-sha>,
+                                      # a trailing positional overrides it); --keep staged|unstaged instead
+                                      # lands the branch on the commit's PARENT with the commit's own diff
+                                      # left staged/unstaged in the new worktree; refuses a root/merge commit
 gg worktree remove [--with-branch] [--force] <path>
 gg worktree prune                     # drop stale worktree administrative entries
 gg repo list

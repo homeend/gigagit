@@ -64,6 +64,8 @@ func cmdWorktreeAdd(svc *domain.Service, args []string, stdin io.Reader, stdout,
 	forBranch := fs.String("branch", "", "create the worktree for this existing branch (no new branch)")
 	noHook := fs.Bool("no-hook", false, "skip the configured [worktree] post_create_hook")
 	runHookFlag := fs.Bool("hook", false, "run the configured [worktree] post_create_hook without prompting")
+	fromRev := fs.String("from", "", "create the worktree from this commit (new branch named <current-branch>_<short-sha> unless a name is given)")
+	keepFlag := fs.String("keep", "", "with --from: leave the commit's changes in the new worktree ('staged' or 'unstaged'); the branch lands on the commit's parent")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -76,15 +78,65 @@ func cmdWorktreeAdd(svc *domain.Service, args []string, stdin io.Reader, stdout,
 		return 2
 	}
 
-	if *forBranch != "" && len(args) > 0 {
+	if *forBranch != "" && *fromRev == "" && len(args) > 0 {
 		fmt.Fprintln(stderr, "worktree add: --branch and a start-point are mutually exclusive (the branch is the source)")
+		return 2
+	}
+
+	if *keepFlag != "" && *keepFlag != "staged" && *keepFlag != "unstaged" {
+		fmt.Fprintf(stderr, "worktree add: --keep must be 'staged' or 'unstaged', got %q\n", *keepFlag)
+		return 2
+	}
+	if *keepFlag != "" && *fromRev == "" {
+		fmt.Fprintln(stderr, "worktree add: --keep requires --from")
+		return 2
+	}
+	if *fromRev != "" && *forBranch != "" {
+		fmt.Fprintln(stderr, "worktree add: --from and --branch are mutually exclusive (--from always creates a new branch)")
 		return 2
 	}
 
 	// Start point: explicit arg, else the current branch. With --branch the
 	// branch itself plays the <parent-branch> role for the path template.
+	// With --from the start point is the resolved commit and any positional
+	// is the new branch name (handled below), not a start-point.
+	fromBranch := ""
 	startPoint := *forBranch
-	if startPoint == "" {
+	if *fromRev != "" {
+		if len(args) > 1 {
+			fmt.Fprintln(stderr, "worktree add: at most one branch name after --from")
+			return 2
+		}
+		line, ok, err := svc.CommitLookup(ctxBg, *fromRev)
+		if err != nil {
+			fmt.Fprintln(stderr, "error:", err)
+			return 1
+		}
+		if !ok {
+			fmt.Fprintf(stderr, "worktree add: unknown revision %q\n", *fromRev)
+			return 1
+		}
+		startPoint = line.Hash // short sha — stable even if the ref moves
+		if len(args) > 0 {
+			fromBranch = args[0]
+		}
+		if fromBranch == "" {
+			// git's %h can run past 7 chars on a big repo; cap the NAME
+			// component to match the TUI's hash[:7] truncation
+			// (internal/tui/commit_scope.go) so default branch names agree
+			// across frontends. startPoint itself stays the full resolved
+			// short hash from git — only the name is capped.
+			short := line.Hash
+			if len(short) > 7 {
+				short = short[:7]
+			}
+			if cur, cerr := svc.CurrentBranch(ctxBg); cerr == nil && cur != "" && cur != "(detached)" {
+				fromBranch = cur + "_" + short
+			} else {
+				fromBranch = "wt_" + short
+			}
+		}
+	} else if startPoint == "" {
 		if len(args) > 0 {
 			startPoint = args[0]
 		}
@@ -123,7 +175,7 @@ func cmdWorktreeAdd(svc *domain.Service, args []string, stdin io.Reader, stdout,
 		Branch: cfg.Worktree.DefaultBranchTemplate,
 		Path:   cfg.Worktree.PathTemplate,
 	}
-	if *forBranch != "" {
+	if *forBranch != "" || fromBranch != "" {
 		tm = worktree.Templates{Path: cfg.Worktree.PathTemplate} // branch template bypassed
 	}
 
@@ -154,7 +206,11 @@ func cmdWorktreeAdd(svc *domain.Service, args []string, stdin io.Reader, stdout,
 		Now:          time.Now,
 		Rand:         rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64())),
 	}
-	branch, path, err := worktree.Resolve(tm, *forBranch, inputs, ctx)
+	fixed := *forBranch
+	if fromBranch != "" {
+		fixed = fromBranch
+	}
+	branch, path, err := worktree.Resolve(tm, fixed, inputs, ctx)
 	if err != nil {
 		fmt.Fprintln(stderr, "error:", err)
 		return 1
@@ -172,7 +228,15 @@ func cmdWorktreeAdd(svc *domain.Service, args []string, stdin io.Reader, stdout,
 	}
 	dec := cliDecider{policy: policy, in: stdin, out: stderr, interactive: stdinIsTerminal()}
 
-	var op engine.Operation = engine.CreateWorktree{StartPoint: startPoint, Branch: branch, Path: path, PostCreateHook: hook}
+	keep := engine.KeepNone
+	switch *keepFlag {
+	case "staged":
+		keep = engine.KeepStaged
+	case "unstaged":
+		keep = engine.KeepUnstaged
+	}
+
+	var op engine.Operation = engine.CreateWorktree{StartPoint: startPoint, Branch: branch, Path: path, PostCreateHook: hook, Keep: keep}
 	if *forBranch != "" {
 		op = engine.CreateWorktreeForBranch{Branch: branch, Path: path, PostCreateHook: hook}
 	}

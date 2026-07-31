@@ -524,3 +524,40 @@ func TestWorktreeHKeyTogglesHook(t *testing.T) {
 		t.Fatal("h should toggle runHook off")
 	}
 }
+
+// TestWorktreeKeepModeCycles proves [m] cycles the three keep modes in
+// stAction and is inert when the commit is root/merge (keepLocked).
+func TestWorktreeKeepModeCycles(t *testing.T) {
+	var m Model
+	p := &worktreePopup{fromCommit: true, keepOffered: true, state: stAction}
+	key := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}}
+	p.update(m, key)
+	if p.keep != engine.KeepStaged {
+		t.Fatalf("after one m: keep = %v, want KeepStaged", p.keep)
+	}
+	p.update(m, key)
+	if p.keep != engine.KeepUnstaged {
+		t.Fatalf("after two m: keep = %v, want KeepUnstaged", p.keep)
+	}
+	p.update(m, key)
+	if p.keep != engine.KeepNone {
+		t.Fatalf("after three m: keep = %v, want KeepNone (wrapped)", p.keep)
+	}
+	locked := &worktreePopup{fromCommit: true, keepOffered: true, keepLocked: true, state: stAction}
+	locked.update(m, key)
+	if locked.keep != engine.KeepNone {
+		t.Fatalf("locked popup must ignore m; keep = %v", locked.keep)
+	}
+}
+
+// TestWorktreeCreateOpCarriesKeep proves the chosen mode reaches the engine op.
+func TestWorktreeCreateOpCarriesKeep(t *testing.T) {
+	p := &worktreePopup{previewBranch: "redo/x", previewPath: "/tmp/x", keep: engine.KeepUnstaged}
+	op, ok := p.createOp("").(engine.CreateWorktree)
+	if !ok {
+		t.Fatalf("op = %T, want engine.CreateWorktree", p.createOp(""))
+	}
+	if op.Keep != engine.KeepUnstaged {
+		t.Fatalf("Keep = %v, want KeepUnstaged", op.Keep)
+	}
+}

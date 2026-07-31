@@ -58,6 +58,12 @@ type worktreePopup struct {
 
 	runHook bool // run the configured post-create hook on create (default true)
 
+	// keep-changes mode (Commits-panel entrance only). keepOffered shows the
+	// mode line; keepLocked (root/merge commit) pins it to "at this commit".
+	keep        engine.WorktreeKeep
+	keepOffered bool
+	keepLocked  bool
+
 	// switchOnCreate makes enter default to create-AND-switch (the model-level
 	// W entry: "w + create & switch" in one flow). [w]/[W] keep their meanings.
 	switchOnCreate bool
@@ -171,13 +177,15 @@ func (m Model) openWorktreePopup(switchOnCreate bool) (Model, bool) {
 	return m, true
 }
 
-// openWorktreeAt opens the create-worktree dialog based at startPoint (a commit
-// SHA or a tag/ref). The new branch name is NOT templated — the popup starts in
-// branch-edit mode seeded with prefillBranch ("" = empty, user types it). The
-// path resolves from that branch (sanitized per-OS into a single segment).
-// engine.CreateWorktree creates the branch at startPoint and the worktree in one
-// step.
-func (m Model) openWorktreeAt(startPoint, prefillBranch string) Model {
+// worktreeAtPopup builds the create-worktree dialog based at startPoint (a
+// commit SHA or a tag/ref). The new branch name is NOT templated — the popup
+// starts in branch-edit mode seeded with prefillBranch ("" = empty, user types
+// it). The path resolves from that branch (sanitized per-OS into a single
+// segment). engine.CreateWorktree creates the branch at startPoint and the
+// worktree in one step. The caller pushes the returned popup as a layer,
+// letting the Commits-panel entrance (openWorktreeAtCommit) set extra fields
+// first.
+func (m Model) worktreeAtPopup(startPoint, prefillBranch string) *worktreePopup {
 	bt := m.cfg.Worktree.DefaultBranchTemplate
 	pt := m.cfg.Worktree.PathTemplate
 	tm := worktree.Templates{Branch: bt, Path: pt}
@@ -204,6 +212,23 @@ func (m Model) openWorktreeAt(startPoint, prefillBranch string) Model {
 		p.inputs[l] = textfield{}
 	}
 	p.recompute()
+	return p
+}
+
+// openWorktreeAt opens the create-worktree dialog based at startPoint (a
+// commit SHA or a tag/ref) with no keep-changes mode line (the tag/remote
+// entrances).
+func (m Model) openWorktreeAt(startPoint, prefillBranch string) Model {
+	return m.pushLayer(m.worktreeAtPopup(startPoint, prefillBranch))
+}
+
+// openWorktreeAtCommit is the Commits-panel entrance: same popup, plus the
+// keep-changes mode line. parents is the commit's parent count from the feed
+// (no git call); != 1 locks the mode to "at this commit".
+func (m Model) openWorktreeAtCommit(hash, prefillBranch string, parents int) Model {
+	p := m.worktreeAtPopup(hash, prefillBranch)
+	p.keepOffered = true
+	p.keepLocked = parents != 1
 	return m.pushLayer(p)
 }
 
@@ -271,6 +296,11 @@ func (p *worktreePopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				p.runHook = !p.runHook
 			}
 			return m, nil
+		case "m":
+			if p.keepOffered && !p.keepLocked {
+				p.keep = (p.keep + 1) % keepModeCount
+			}
+			return m, nil
 		}
 		return m, nil
 	}
@@ -325,6 +355,17 @@ func (p *worktreePopup) box(m Model) string {
 		}
 		b.WriteString(mark + " " + i18n.T("run post-create hook  ([h] toggle)") + "\n")
 	}
+	if (p.state == stAction || p.state == stEdit) && p.keepOffered {
+		line := i18n.T("start:  ") + keepModeLabel(p.keep)
+		if p.keepLocked {
+			line += "  " + i18n.T("(root/merge commit — at this commit only)")
+		} else if p.state == stAction {
+			// In stEdit, "m" types into the branch-name field, so the
+			// [m] change hint would be misleading there — omit it.
+			line += "  " + i18n.T("([m] change)")
+		}
+		b.WriteString(line + "\n")
+	}
 	switch p.state {
 	case stInput:
 		b.WriteString(i18n.T("[type] value  [tab/enter] next field  [esc] cancel"))
@@ -347,6 +388,23 @@ func (p *worktreePopup) box(m Model) string {
 	// stays visible) instead of stretching the box past the terminal edge. Capped
 	// to leave a margin on each side for the centered overlay.
 	return modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
+}
+
+// keepModeCount is the number of engine.WorktreeKeep values the "m" key
+// cycles through (KeepNone, KeepStaged, KeepUnstaged). Kept here rather than
+// in internal/engine because it's unexported and only used by the TUI cycle
+// below; update alongside the engine enum if a mode is ever added/removed.
+const keepModeCount = 3
+
+// keepModeLabel renders one keep mode for the popup's mode line.
+func keepModeLabel(k engine.WorktreeKeep) string {
+	switch k {
+	case engine.KeepStaged:
+		return i18n.T("at parent, changes staged")
+	case engine.KeepUnstaged:
+		return i18n.T("at parent, changes unstaged")
+	}
+	return i18n.T("at this commit")
 }
 
 // startCreateFromPopup launches the CreateWorktree op for the previewed names,
@@ -385,6 +443,7 @@ func (p *worktreePopup) createOp(hook string) engine.Operation {
 		Branch:         p.previewBranch,
 		Path:           p.previewPath,
 		PostCreateHook: hook,
+		Keep:           p.keep,
 	}
 }
 

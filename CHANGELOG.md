@@ -8,6 +8,27 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Create a worktree from a commit — with its changes optionally kept
+  staged/unstaged.** The Commits panel's `.` menu row (renamed **Create
+  worktree from this commit**) prefills the branch name as
+  `<current-branch>_<short-sha>` (`wt_<short-sha>` when detached) and gains
+  an `[m]`-cycled start mode: *at this commit* (default) / *at parent,
+  changes staged* / *at parent, changes unstaged* — locked to "at this
+  commit" for a root or merge commit (the parent count comes from the
+  already-loaded feed, no extra git call). The CLI gets the matching
+  surface: `gg worktree add --from <commit> [--keep staged|unstaged]
+  [<branch-name>]` creates a new branch at `<commit>` (default name
+  `<current-branch>_<short-sha>`; a trailing positional overrides it, and
+  `--from`/`--branch` are mutually exclusive since `--from` always makes a
+  new branch). `--keep staged`/`--keep unstaged` instead land the new
+  branch on the commit's **parent**, with the commit's own diff left
+  staged (`git reset --soft`) or unstaged (`git reset --mixed`) in the
+  freshly created worktree — handy for redoing a commit differently
+  without touching the branch it came from. `--keep` requires `--from`
+  (usage error otherwise) and refuses a root or merge commit **before**
+  creating anything — `WorktreeKeepParentError`, since there is no single
+  parent to keep the diff against.
+
 - **Web: staged detail layout (the GitKraken flow).** Clicking a commit no
   longer jumps straight to a diff: the sidebar stays put, the commits pane
   shrinks beside it, and the changed-file list appears as a fixed column

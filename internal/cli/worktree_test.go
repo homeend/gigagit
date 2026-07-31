@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -524,6 +525,45 @@ func TestWorktreeAddHookSkippedNonInteractiveByDefault(t *testing.T) {
 	marker := filepath.Join(filepath.Dir(dir), "wt-cli-default-skip", "hook-ran")
 	if _, err := os.Stat(marker); err == nil {
 		t.Fatal("non-interactive default must skip the hook")
+	}
+}
+
+// TestWorktreeAddFromDefaultNameCapsShortSha covers the `gg worktree add
+// --from <commit>` default-naming lane (no positional branch name, no
+// --keep): the branch name is `<current-branch>_<short-sha>`, and the sha
+// component must be capped to 7 chars to match the TUI's hash[:7]
+// truncation (internal/tui/commit_scope.go), even though git's own %h can
+// report a longer abbreviation. core.abbrev is forced high here so the test
+// actually exercises the cap — a tiny repo's default abbrev already fits in
+// 7 chars, which would pass trivially without the fix. This is the e2e
+// harness's `branches` assertion (exact-set only, no regex support) can't
+// pin: the default name embeds a commit sha that varies per run.
+func TestWorktreeAddFromDefaultNameCapsShortSha(t *testing.T) {
+	dir := newCLIRepo(t)
+	c := exec.Command("git", "-C", dir, "config", "core.abbrev", "20")
+	if out, err := c.CombinedOutput(); err != nil {
+		t.Fatalf("git config core.abbrev: %v\n%s", err, out)
+	}
+
+	var out, errb bytes.Buffer
+	code := Run(dir, []string{"worktree", "add", "--from", "HEAD"}, strings.NewReader(""), &out, &errb, "")
+	if code != 0 {
+		t.Fatalf("exit = %d, stderr=%s", code, errb.String())
+	}
+
+	re := regexp.MustCompile(`created worktree (\S+) at`)
+	m := re.FindStringSubmatch(out.String())
+	if m == nil {
+		t.Fatalf("could not find created branch name in output:\n%s", out.String())
+	}
+	branch := m[1]
+	shaRe := regexp.MustCompile(`^main_([0-9a-f]+)$`)
+	sm := shaRe.FindStringSubmatch(branch)
+	if sm == nil {
+		t.Fatalf("branch name %q does not match main_<sha>", branch)
+	}
+	if len(sm[1]) != 7 {
+		t.Fatalf("branch name sha suffix = %q (len %d), want 7 chars (capped like the TUI's hash[:7])", sm[1], len(sm[1]))
 	}
 }
 

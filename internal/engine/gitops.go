@@ -86,6 +86,11 @@ type GitOps interface {
 	UnlockWorktree(ctx context.Context, path string) error
 	PruneWorktrees(ctx context.Context) error
 	WorktreeRepair(ctx context.Context, path string) error
+	// ParentCount reports how many parents rev has (0 root, 1 normal, ≥2
+	// merge) — the keep-modes pre-check before any worktree is created.
+	ParentCount(ctx context.Context, rev string) (int, error)
+	// ResetInDir resets another worktree's checkout (git -C dir reset).
+	ResetInDir(ctx context.Context, dir, ref string, soft bool) error
 
 	Merge(ctx context.Context, dir, branch string) error
 	MergeFFOnly(ctx context.Context, dir, commit string) error
