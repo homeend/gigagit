@@ -8,6 +8,17 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: staged detail layout (the GitKraken flow).** Clicking a commit no
+  longer jumps straight to a diff: the commits pane shrinks to the left
+  and the changed-file list appears as a fixed column on the RIGHT, with
+  nothing auto-opened — click other commits to browse their files in
+  place. Clicking a file then opens its diff in the space the commits
+  occupied, file list staying right; esc steps one stage back (diff →
+  file list → full-width commit list). The same staged flow applies to
+  the working-tree row, stash drill-ins, sidebar tags, and branch
+  compare. The files/diff drag handle now resizes the right-hand file
+  list column (width persisted as before).
+
 - **Web: version ↔ tip compare and the all-branches versions picker.** The
   two pieces deliberately left out of the web's "previous versions…" popup.
   A version row's menu gains *compare against current tip* — the whole-tree

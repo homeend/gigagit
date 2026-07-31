@@ -17,18 +17,29 @@ body {
 #repo-name { font-weight: bold; color: var(--accent); }
 #repo-branch::before { content: " \2387  "; color: var(--dim); }
 #repo-worktree { float: right; color: var(--dim); }
-/* Drill-in layout, mirroring the TUI: the list and the opened commit are
-   two separate full-screen states, never crammed side by side. Each mode
-   shows exactly three grid children — left pane, drag handle, right pane —
-   so the hidden mode's handle must be hidden with its panes or it would
-   claim a column. */
+/* Staged drill-in layout (the GitKraken flow): "solo" = the full-width
+   commit list; "files" = commit clicked — the commits pane shrinks to the
+   flexible column and the FILE LIST takes a fixed column on the RIGHT, no
+   diff yet; "detail" = file clicked — the diff replaces the commits area,
+   file list stays right. Each mode shows exactly three grid children —
+   flexible pane, drag handle, fixed pane — so the other modes' panes AND
+   handle must be hidden or they would claim a column. The file list is
+   placed right via `order`, not DOM moves, so its handlers stay put. */
 #panes { flex: 1; display: grid; grid-template-columns: var(--sb-w) var(--rs-w) 1fr; min-height: 0; }
 #panes.solo { grid-template-columns: var(--sb-w) var(--rs-w) 1fr; }
 #panes.solo.nosb { grid-template-columns: 1fr; }
 #panes.solo.nosb #branches-pane, #panes.solo.nosb #rs-sidebar { display: none; }
 #panes.solo #files-pane, #panes.solo #diff-pane, #panes.solo #rs-detail { display: none; }
-#panes.detail { grid-template-columns: var(--files-w) var(--rs-w) 1fr; }
+#panes.files { grid-template-columns: 1fr var(--rs-w) var(--files-w); }
+#panes.files #branches-pane, #panes.files #rs-sidebar, #panes.files #diff-pane { display: none; }
+#panes.files #commits-pane { order: 1; }
+#panes.files #rs-detail { order: 2; }
+#panes.files #files-pane { order: 3; }
+#panes.detail { grid-template-columns: 1fr var(--rs-w) var(--files-w); }
 #panes.detail #branches-pane, #panes.detail #rs-sidebar, #panes.detail #commits-pane { display: none; }
+#panes.detail #diff-pane { order: 1; }
+#panes.detail #rs-detail { order: 2; }
+#panes.detail #files-pane { order: 3; }
 /* The handle is its own grid column, so dragging never overlaps a pane's
    content and the hit area does not depend on hovering a 1px border. */
 .resizer { cursor: col-resize; background: var(--bg); touch-action: none; }
