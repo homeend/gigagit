@@ -39,7 +39,7 @@ func TestShelfSwitcherHelpListsKeys(t *testing.T) {
 // In compare mode the action keys are inert, so the sheet must omit them.
 func TestSwitcherHelpCompareModeOmitsInertKeys(t *testing.T) {
 	h := helpJoin(bookmarkSwitcherHelp(true))
-	if !strings.Contains(h, "compare the focused file") {
+	if !strings.Contains(h, "compare the first pick") {
 		t.Errorf("compare-mode bookmark help must describe the compare action:\n%s", h)
 	}
 	for _, gone := range []string{"paste", "remove the bookmark"} {
