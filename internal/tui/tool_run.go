@@ -3,7 +3,6 @@ package tui
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"os/exec"
 	"runtime"
@@ -63,41 +62,7 @@ func toolEnv(ctx template.CmdCtx) []string {
 // rune-wise: a git path is a byte string, and UTF-8 continuation/lead bytes
 // are always >= 0x80, so they can never be mistaken for a control byte.
 func cQuotePath(p string) string {
-	needsQuote := false
-	for i := 0; i < len(p); i++ {
-		if p[i] < 0x20 {
-			needsQuote = true
-			break
-		}
-	}
-	if !needsQuote {
-		return p
-	}
-	var b strings.Builder
-	b.WriteByte('"')
-	for i := 0; i < len(p); i++ {
-		c := p[i]
-		switch c {
-		case '\n':
-			b.WriteString(`\n`)
-		case '\r':
-			b.WriteString(`\r`)
-		case '\t':
-			b.WriteString(`\t`)
-		case '"':
-			b.WriteString(`\"`)
-		case '\\':
-			b.WriteString(`\\`)
-		default:
-			if c < 0x20 {
-				fmt.Fprintf(&b, `\%03o`, c)
-			} else {
-				b.WriteByte(c)
-			}
-		}
-	}
-	b.WriteByte('"')
-	return b.String()
+	return template.CQuotePath(p)
 }
 
 // toolContextFile writes the per-run context file: op/source/target header
@@ -111,19 +76,12 @@ func cQuotePath(p string) string {
 // environment" section). Created for conflict-category runs only, the only
 // category stage 1 has.
 func toolContextFile(ctx template.CmdCtx) (string, error) {
-	var b strings.Builder
-	b.WriteString("op: " + cQuotePath(ctx.Op) + "\n")
-	b.WriteString("source: " + cQuotePath(ctx.Source) + "\n")
-	b.WriteString("target: " + cQuotePath(ctx.Target) + "\n")
-	b.WriteString("conflicted:\n")
-	for _, f := range ctx.ConflictedFiles {
-		b.WriteString(cQuotePath(f) + "\n")
-	}
+	b := template.ConflictContextDoc(ctx.Op, ctx.Source, ctx.Target, ctx.ConflictedFiles)
 	f, err := os.CreateTemp("", "gg-context-*.txt")
 	if err != nil {
 		return "", err
 	}
-	if _, err := f.WriteString(b.String()); err != nil {
+	if _, err := f.WriteString(b); err != nil {
 		f.Close()
 		os.Remove(f.Name())
 		return "", err
