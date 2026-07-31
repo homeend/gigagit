@@ -1,0 +1,28 @@
+name = "worktree add --from/--keep: usage and root-commit refusals"
+
+[input]
+steps = [
+  { write = "a.txt", content = "one\n" },
+  { commit = "only" },
+]
+
+[[run]]                            # --keep without --from: usage error
+cmd  = ["worktree", "add", "--keep", "staged"]
+exit = 2
+
+[[run]]                            # bad --keep value: usage error
+cmd  = ["worktree", "add", "--from", "HEAD", "--keep", "later"]
+exit = 2
+
+[[run]]                            # --from + --branch: usage error
+cmd  = ["worktree", "add", "--from", "HEAD", "--branch", "main"]
+exit = 2
+
+[[run]]                            # keep mode on the root commit: refused, nothing created
+cmd  = ["worktree", "add", "--from", "HEAD", "--keep", "unstaged"]
+exit = 1
+
+[expect]
+branch    = "main"
+branches  = ["main"]               # no branch was created by any failed run
+worktrees = []

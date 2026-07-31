@@ -1,0 +1,28 @@
+name = "worktree add --from --keep: branch at parent, changes staged"
+
+[input]
+steps = [
+  { write = "a.txt", content = "one\n" },
+  { commit = "first" },
+  { write = "a.txt", content = "two\n" },
+  { commit = "second" },
+]
+
+[[run]]
+cmd  = ["worktree", "add", "--from", "HEAD", "--keep", "staged", "redo"]
+exit = 0
+
+[expect]
+branch    = "main"                # the current checkout is untouched
+branches  = ["main", "redo"]
+worktrees = ["wt/redo"]
+
+[[expect.log]]                    # the new branch's tip is the PARENT
+branch   = "redo"
+subjects = ["first"]
+
+[expect.worktree."wt/redo".status]
+staged = ["a.txt"]
+
+[expect.worktree."wt/redo".files]
+"a.txt" = "two\n"                 # the commit's content, kept in the tree
