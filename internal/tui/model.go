@@ -674,7 +674,11 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.open && msg.err == nil {
 			p := newShelfPopup(msg.entries)
 			if pc := m.pendingCompare; pc != nil && pc.target == compareShelf {
-				p.compareRef = &pc.ref
+				if pc.entry != nil {
+					p.compareEntry = pc.entry
+				} else {
+					p.compareRef = &pc.ref
+				}
 				p.compareLabel = pc.label
 				m.pendingCompare = nil
 			}
@@ -731,7 +735,11 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		p := newBookmarkPopup(msg.items)
 		if pc := m.pendingCompare; pc != nil && pc.target == compareBookmark {
-			p.compareRef = &pc.ref
+			if pc.entry != nil {
+				p.compareEntry = pc.entry
+			} else {
+				p.compareRef = &pc.ref
+			}
 			p.compareLabel = pc.label
 			m.pendingCompare = nil
 		}

@@ -31,8 +31,13 @@ type bookmarkPopup struct {
 	hscroll   int      // modeScroll horizontal offset
 
 	compareRef   *model.FileRef // non-nil → compare mode (enter diffs against the highlighted bookmark)
+	compareEntry *entrySide     // commit-entry compare mode: the first pick (nil = none)
 	compareLabel string         // human label for the focused side, shown in the header
 }
+
+// inCompareMode reports whether this switcher was opened to pick the second
+// side of a comparison (file- or commit-flavored); action keys are inert then.
+func (p *bookmarkPopup) inCompareMode() bool { return p.compareRef != nil || p.compareEntry != nil }
 
 // bookmarkPastePopup collects the (mandatory, no-default) paste destination,
 // carrying the already-resolved bytes so Enter just writes them.
@@ -108,8 +113,8 @@ func (m Model) renderBookmarkPopupBox(p *bookmarkPopup) string {
 	textW := popupTextWidth(inner)
 
 	header := i18n.T("Bookmarks")
-	if p.compareRef != nil {
-		header = i18n.T("Compare %s against:", p.compareRef.Path)
+	if p.inCompareMode() {
+		header = i18n.T("Compare %s against:", p.compareLabel)
 	}
 	if p.filtering {
 		header += "  /" + p.filter + "█"
@@ -246,6 +251,17 @@ func (p *bookmarkPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case tea.KeyEnter:
 		m.pickGen++         // every enter path leaves or re-stacks the switcher; drop an in-flight probe
 		m.entryCompareGen++ // ditto for a commit-entry compare resolve
+		if p.compareEntry != nil {
+			b, ok := p.selected()
+			if !ok {
+				return m, nil
+			}
+			if !b.IsCommit() {
+				m.statusMsg = i18n.T("cannot compare a commit against a file")
+				return m, nil
+			}
+			return m.startEntryCompare(*p.compareEntry, bookmarkEntrySide(b))
+		}
 		if p.compareRef != nil {
 			b, ok := p.selected()
 			if !ok {
@@ -274,7 +290,7 @@ func (p *bookmarkPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		case "?":
 			// Open the compact cheat sheet over the still-open switcher; esc
 			// closes it and returns here (contentPopup's esc just nils itself).
-			m = m.pushLayer(newContentPopup(bookmarkSwitcherHelpTitle(), bookmarkSwitcherHelp(p.compareRef != nil)))
+			m = m.pushLayer(newContentPopup(bookmarkSwitcherHelpTitle(), bookmarkSwitcherHelp(p.inCompareMode())))
 			return m, nil
 		case "/":
 			p.filtering = true
@@ -284,12 +300,12 @@ func (p *bookmarkPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		case "j":
 			p.moveSel(1)
 		case "x":
-			if p.compareRef != nil {
+			if p.inCompareMode() {
 				return m, nil
 			}
 			return m.bookmarkRemovePrompt()
 		case "p":
-			if p.compareRef != nil {
+			if p.inCompareMode() {
 				return m, nil
 			}
 			if mm, yes := m.commitBookmarkNotice(p); yes {
@@ -297,16 +313,13 @@ func (p *bookmarkPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			}
 			return m.bookmarkPastePrompt()
 		case "m":
-			if p.compareRef != nil {
+			if p.inCompareMode() {
 				return m, nil
 			}
 			return m.bookmarkMark()
 		case "c":
-			if p.compareRef != nil {
+			if p.inCompareMode() {
 				return m, nil
-			}
-			if mm, yes := m.commitBookmarkNotice(p); yes {
-				return mm, nil
 			}
 			b, ok := p.selected()
 			if !ok {
@@ -314,10 +327,15 @@ func (p *bookmarkPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			}
 			// Keep this switcher on the stack: the shelf picker is pushed on top so
 			// esc in it returns here (the diff on a pick clears both via openPickerDiff).
+			if b.IsCommit() {
+				side := bookmarkEntrySide(b)
+				m.pendingCompare = &pendingCompare{entry: &side, label: side.label, target: compareShelf}
+				return m, m.loadShelfCmd(true)
+			}
 			m.pendingCompare = &pendingCompare{ref: bookmarkToFileRef(b), label: bookmarkDisplay(b), target: compareShelf}
 			return m, m.loadShelfCmd(true)
 		case "e":
-			if p.compareRef != nil {
+			if p.inCompareMode() {
 				return m, nil
 			}
 			if mm, yes := m.commitBookmarkNotice(p); yes { // a commit pointer has no file content
@@ -332,7 +350,7 @@ func (p *bookmarkPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				return svc.BookmarkBytes(ctx, b)
 			})
 		case "t":
-			if p.compareRef != nil {
+			if p.inCompareMode() {
 				return m, nil
 			}
 			b, ok := p.selected()
@@ -344,7 +362,7 @@ func (p *bookmarkPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			// file bookmarks.
 			return m.startTempExportBookmark(b)
 		case "a":
-			if p.compareRef != nil {
+			if p.inCompareMode() {
 				return m, nil
 			}
 			b, ok := p.selected()
@@ -357,7 +375,7 @@ func (p *bookmarkPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			}
 			return m.startPickCommit(pickTarget{sha: b.Commit})
 		case "y":
-			if p.compareRef != nil {
+			if p.inCompareMode() {
 				return m, nil
 			}
 			if mm, yes := m.commitBookmarkNotice(p); yes {

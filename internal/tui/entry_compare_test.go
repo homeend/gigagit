@@ -3,6 +3,8 @@ package tui
 import (
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -84,5 +86,61 @@ func TestEntryCompareSelfCompareNotice(t *testing.T) {
 	}
 	if mm.statusMsg == "" {
 		t.Fatal("self-compare must set a notice")
+	}
+}
+
+// Two DIFFERENT shelf entries of the SAME commit sha must dispatch a compare
+// (the distinctShelves exception) rather than the self-compare notice.
+func TestEntryCompareDistinctShelvesOfSameCommit(t *testing.T) {
+	m := newTestModel(t)
+	sha := "4444444444444444444444444444444444444444"
+	left := entrySide{sha: sha, shelfID: "s1", label: "shelf #s1"}
+	right := entrySide{sha: sha, shelfID: "s2", label: "shelf #s2"}
+	mm, cmd := m.startEntryCompare(left, right)
+	if cmd == nil {
+		t.Fatal("two distinct shelf entries of the same commit must dispatch a compare")
+	}
+	if mm.statusMsg != "" {
+		t.Fatalf("unexpected notice: %q", mm.statusMsg)
+	}
+}
+
+// c on a commit bookmark must arm a commit-flavored pendingCompare targeting
+// the shelf picker.
+func TestBookmarkCommitCrossCompareArm(t *testing.T) {
+	m := newTestModel(t)
+	b := model.Bookmark{ID: "b1", Commit: "1111111111111111111111111111111111111111", State: model.StateCommitted}
+	p := newBookmarkPopup([]model.Bookmark{b})
+	m = m.pushLayer(p)
+
+	mm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")}) // keys route to the top layer through Model.Update
+	got := mm.(Model)
+	if got.pendingCompare == nil || got.pendingCompare.entry == nil {
+		t.Fatalf("pendingCompare = %+v, want a commit-flavored arm", got.pendingCompare)
+	}
+	if got.pendingCompare.target != compareShelf {
+		t.Errorf("target = %v, want compareShelf", got.pendingCompare.target)
+	}
+	if cmd == nil {
+		t.Error("c must dispatch the shelf load")
+	}
+}
+
+// In commit-flavored compare mode, enter on a FILE entry is a notice.
+func TestShelfCompareModeCommitVsFileRefused(t *testing.T) {
+	m := newTestModel(t)
+	fileEntry := model.ShelfEntry{ID: "s1", Origin: model.FileAddress{State: model.StateUnstaged, Path: "f.go"}}
+	p := newShelfPopup([]model.ShelfEntry{fileEntry})
+	side := entrySide{sha: "1111111111111111111111111111111111111111", label: "bm"}
+	p.compareEntry = &side
+	m = m.pushLayer(p)
+
+	mm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	got := mm.(Model)
+	if cmd != nil {
+		t.Fatal("commit-vs-file must not dispatch a compare")
+	}
+	if got.statusMsg == "" {
+		t.Fatal("commit-vs-file must set a notice")
 	}
 }

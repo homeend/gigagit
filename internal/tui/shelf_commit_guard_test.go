@@ -18,13 +18,15 @@ func shCommitEntry(id string) model.ShelfEntry {
 }
 
 // A shelved commit has no single file behind it: the per-file switcher actions
-// (p restore, e editor, c vs-bookmark) must notice-and-no-op instead of
-// treating the tar payload as a file. (enter is different: it opens the shelf
-// files view — TestShelfSwitcherEnterOpensCommitFilesView. m is different too,
-// now that mark-two supports comparing two commit entries — see
-// TestShelfPopupMarkTogglesOnLoneCommitEntry in entry_compare_test.go.)
+// (p restore, e editor) must notice-and-no-op instead of treating the tar
+// payload as a file. (enter is different: it opens the shelf files view —
+// TestShelfSwitcherEnterOpensCommitFilesView. m is different too, now that
+// mark-two supports comparing two commit entries — see
+// TestShelfPopupMarkTogglesOnLoneCommitEntry in entry_compare_test.go. c is
+// different too, now that it arms a commit-flavored compare against a
+// bookmark instead of refusing — see TestShelfCommitEntryCompareArm below.)
 func TestShelfPopupCommitEntryGuardsFileActions(t *testing.T) {
-	for _, key := range []string{"p", "e", "c"} {
+	for _, key := range []string{"p", "e"} {
 		m := shelfPopModel(shCommitEntry("ce"))
 		mm, cmd := m.Update(keyMsg(key))
 		m = mm.(Model)
@@ -49,6 +51,23 @@ func TestShelfPopupCommitEntryGuardsFileActions(t *testing.T) {
 		if m.shelfSwitcher().markID != "" {
 			t.Fatalf("[%s] must not mark a shelved commit", key)
 		}
+	}
+}
+
+// c on a shelved commit entry must arm a commit-flavored pendingCompare
+// targeting the bookmark picker, not refuse (mirrors TestBookmarkCommitCrossCompareArm).
+func TestShelfCommitEntryCompareArm(t *testing.T) {
+	m := shelfPopModel(shCommitEntry("ce"))
+	mm, cmd := m.Update(keyMsg("c"))
+	got := mm.(Model)
+	if got.pendingCompare == nil || got.pendingCompare.entry == nil {
+		t.Fatalf("pendingCompare = %+v, want a commit-flavored arm", got.pendingCompare)
+	}
+	if got.pendingCompare.target != compareBookmark {
+		t.Errorf("target = %v, want compareBookmark", got.pendingCompare.target)
+	}
+	if cmd == nil {
+		t.Error("c must dispatch the bookmark load")
 	}
 }
 
