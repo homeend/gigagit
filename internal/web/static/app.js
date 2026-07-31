@@ -134,9 +134,13 @@ function renderConflictBar() {
   const bar = $("conflict-bar"), c = state.conflict;
   if (!c) { bar.classList.add("hidden"); return; }
   bar.classList.remove("hidden");
-  $("conflict-msg").textContent =
-    "⏸ " + c.op + " paused" + (c.desc ? " (" + c.desc + ")" : "") +
-    (c.conflicted ? " — " + c.conflicted + " conflicted" : " — all conflicts resolved");
+  // innerHTML so the conflicted count can carry its highlight class — c.op
+  // and c.desc come off the wire (desc holds branch names), so both esc().
+  $("conflict-msg").innerHTML =
+    "⏸ " + esc(c.op) + " paused" + (c.desc ? " (" + esc(c.desc) + ")" : "") +
+    (c.conflicted
+      ? ` — <span class="conflict-count">${c.conflicted} conflicted</span>`
+      : " — all conflicts resolved");
   $("conflict-continue").disabled = !!c.conflicted;
 }
 
@@ -1826,16 +1830,18 @@ function buildStatusEntries() {
 function wtRowHTML(i) {
   const sel = i === state.cursor ? " sel" : "";
   const c = state.wt.counts;
+  // parts are pre-escaped HTML fragments (counts are numbers, labels are
+  // literals) so the conflicted one can carry its highlight class.
   const parts = [];
   if (c.staged) parts.push(c.staged + " staged");
   if (c.unstaged) parts.push(c.unstaged + " changed");
   if (c.untracked) parts.push(c.untracked + " untracked");
-  if (c.conflicted) parts.push(c.conflicted + " conflicted");
+  if (c.conflicted) parts.push(`<span class="conflict-count">${c.conflicted} conflicted</span>`);
   return (
     `<div class="crow wt${sel}" data-i="${i}">` +
     `<span class="graph">${flatDotSVG("#e0c06c")}</span>` +
     `<span class="subj">Working tree</span>` +
-    `<span class="meta">${esc(parts.join(" · "))}</span></div>`
+    `<span class="meta">${parts.join(" · ")}</span></div>`
   );
 }
 
