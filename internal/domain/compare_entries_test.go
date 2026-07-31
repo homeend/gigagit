@@ -130,14 +130,17 @@ func TestCompareFilesShelfVsCommit(t *testing.T) {
 	ctx := context.Background()
 
 	shaA := writeAndCommit(t, dir, "A", map[string]string{
-		"changed.txt": "old\n",
-		"gone.txt":    "will vanish\n",
+		"changed.txt":   "old\n",
+		"gone.txt":      "will vanish\n",
+		"untouched.txt": "never touched again\n",
 	})
 	ea, err := svc.ShelfAddCommit(ctx, shaA, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The newer commit rewrites changed.txt and deletes gone.txt.
+	// The newer commit rewrites changed.txt and deletes gone.txt; untouched.txt
+	// is left alone, so it is byte-identical between A's shelf tar and B's
+	// live tree — the "identical → omitted" outcome of shelfCommitCompare.
 	gitRun(t, dir, "rm", "gone.txt")
 	shaB := writeAndCommit(t, dir, "B", map[string]string{"changed.txt": "new\n"})
 
@@ -153,7 +156,10 @@ func TestCompareFilesShelfVsCommit(t *testing.T) {
 		got[f.Path] = f.Status
 	}
 	if got["changed.txt"] != "M" || got["gone.txt"] != "D" || len(got) != 2 {
-		t.Fatalf("files = %v, want changed.txt=M gone.txt=D only", got)
+		t.Fatalf("files = %v, want changed.txt=M gone.txt=D only (untouched.txt omitted)", got)
+	}
+	if _, present := got["untouched.txt"]; present {
+		t.Fatalf("files = %v, untouched.txt has identical bytes on both sides and must be omitted", got)
 	}
 
 	// Reversed order (commit older, shelf newer): the vanished member reads as added.
@@ -168,6 +174,72 @@ func TestCompareFilesShelfVsCommit(t *testing.T) {
 		got[f.Path] = f.Status
 	}
 	if got["changed.txt"] != "M" || got["gone.txt"] != "A" || len(got) != 2 {
-		t.Fatalf("reversed files = %v, want changed.txt=M gone.txt=A only", got)
+		t.Fatalf("reversed files = %v, want changed.txt=M gone.txt=A only (untouched.txt omitted)", got)
+	}
+	if _, present := got["untouched.txt"]; present {
+		t.Fatalf("reversed files = %v, untouched.txt has identical bytes on both sides and must be omitted", got)
+	}
+}
+
+// TestCompareFilesShelfShelfIdenticalOmitted covers the fourth outcome of
+// shelfShelfCompare (D/A/M/identical-omitted) that TestCompareFilesShelfShelf
+// cannot exercise: a path present in BOTH shelf tars with byte-identical
+// content. A shelf entry's tar holds only its own commit's changed paths, so
+// getting the same path into two independent tars with the same bytes needs
+// two commits that each ADD it fresh from a common base — two branches
+// diverging from the same parent, each introducing twin.txt with identical
+// content alongside a branch-distinguishing file.
+func TestCompareFilesShelfShelfIdenticalOmitted(t *testing.T) {
+	dir, svc := newRealRepo(t)
+	svc.SetShelfStore(shelf.NewFileStore(t.TempDir()))
+	ctx := context.Background()
+
+	base := headHash(t, dir)
+
+	gitRun(t, dir, "checkout", "-b", "branch-a", base)
+	shaA := writeAndCommit(t, dir, "A", map[string]string{
+		"twin.txt":   "same everywhere\n",
+		"only-a.txt": "a\n",
+	})
+
+	gitRun(t, dir, "checkout", "-b", "branch-b", base)
+	shaB := writeAndCommit(t, dir, "B", map[string]string{
+		"twin.txt":   "same everywhere\n",
+		"only-b.txt": "b\n",
+	})
+
+	ea, err := svc.ShelfAddCommit(ctx, shaA, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	eb, err := svc.ShelfAddCommit(ctx, shaB, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	files, err := svc.CompareFiles(ctx,
+		model.Endpoint{Kind: model.EndpointShelf, ShelfID: ea.ID},
+		model.Endpoint{Kind: model.EndpointShelf, ShelfID: eb.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for _, f := range files {
+		got[f.Path] = f.Status
+	}
+	want := map[string]string{
+		"only-a.txt": "D",
+		"only-b.txt": "A",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("files = %v, want exactly %v (twin.txt omitted)", got, want)
+	}
+	for p, s := range want {
+		if got[p] != s {
+			t.Errorf("%s = %q, want %q", p, got[p], s)
+		}
+	}
+	if _, present := got["twin.txt"]; present {
+		t.Fatalf("files = %v, twin.txt has identical bytes in both tars and must be omitted", got)
 	}
 }
