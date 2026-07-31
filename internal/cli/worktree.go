@@ -121,10 +121,19 @@ func cmdWorktreeAdd(svc *domain.Service, args []string, stdin io.Reader, stdout,
 			fromBranch = args[0]
 		}
 		if fromBranch == "" {
+			// git's %h can run past 7 chars on a big repo; cap the NAME
+			// component to match the TUI's hash[:7] truncation
+			// (internal/tui/commit_scope.go) so default branch names agree
+			// across frontends. startPoint itself stays the full resolved
+			// short hash from git — only the name is capped.
+			short := line.Hash
+			if len(short) > 7 {
+				short = short[:7]
+			}
 			if cur, cerr := svc.CurrentBranch(ctxBg); cerr == nil && cur != "" && cur != "(detached)" {
-				fromBranch = cur + "_" + line.Hash
+				fromBranch = cur + "_" + short
 			} else {
-				fromBranch = "wt_" + line.Hash
+				fromBranch = "wt_" + short
 			}
 		}
 	} else if startPoint == "" {

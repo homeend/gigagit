@@ -298,7 +298,7 @@ func (p *worktreePopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			return m, nil
 		case "m":
 			if p.keepOffered && !p.keepLocked {
-				p.keep = (p.keep + 1) % 3
+				p.keep = (p.keep + 1) % keepModeCount
 			}
 			return m, nil
 		}
@@ -355,11 +355,13 @@ func (p *worktreePopup) box(m Model) string {
 		}
 		b.WriteString(mark + " " + i18n.T("run post-create hook  ([h] toggle)") + "\n")
 	}
-	if p.state == stAction && p.keepOffered {
+	if (p.state == stAction || p.state == stEdit) && p.keepOffered {
 		line := i18n.T("start:  ") + keepModeLabel(p.keep)
 		if p.keepLocked {
 			line += "  " + i18n.T("(root/merge commit — at this commit only)")
-		} else {
+		} else if p.state == stAction {
+			// In stEdit, "m" types into the branch-name field, so the
+			// [m] change hint would be misleading there — omit it.
 			line += "  " + i18n.T("([m] change)")
 		}
 		b.WriteString(line + "\n")
@@ -387,6 +389,12 @@ func (p *worktreePopup) box(m Model) string {
 	// to leave a margin on each side for the centered overlay.
 	return modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 }
+
+// keepModeCount is the number of engine.WorktreeKeep values the "m" key
+// cycles through (KeepNone, KeepStaged, KeepUnstaged). Kept here rather than
+// in internal/engine because it's unexported and only used by the TUI cycle
+// below; update alongside the engine enum if a mode is ever added/removed.
+const keepModeCount = 3
 
 // keepModeLabel renders one keep mode for the popup's mode line.
 func keepModeLabel(k engine.WorktreeKeep) string {

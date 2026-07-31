@@ -90,7 +90,10 @@ func (op CreateWorktree) Run(ctx context.Context, deps OpDeps) (Result, error) {
 		if err := deps.Repo.ResetInDir(ctx, abs, op.StartPoint+"^", soft); err != nil {
 			// The parent count was pre-validated, so this is a near-impossible
 			// failure; name the created path so the user knows what exists.
-			return Result{}, fmt.Errorf("create worktree: created at %s but reset failed: %w", abs, err)
+			// The worktree and branch DID get created, so this is a
+			// mutated-then-failed outcome (Changed:true + error), the same
+			// shape as SmartMerge's keep-conflicts result.
+			return Result{Changed: true, Path: abs}, fmt.Errorf("create worktree: created at %s but reset failed: %w", abs, err)
 		}
 		if soft {
 			base = base.AppendSummary(" (commit's changes staged)")
