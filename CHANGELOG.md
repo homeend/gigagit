@@ -8,6 +8,15 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: conflict resolution.** A paused merge/rebase/cherry-pick/revert now
+  shows a banner in the browser — the op, what it's doing, and the
+  conflicted-file count — with Continue (disabled until every file is
+  resolved) and a red, confirm-gated Abort. The old dead-end "conflicted —
+  resolve in the TUI" row is gone: a conflicted file now opens an in-diff-pane
+  block picker, taking ours/theirs per region (or all at once) with a
+  full-coverage gate before resolving, plus a "mark resolved (stage as-is)"
+  option for a file you've already fixed by hand.
+
 - **Web: staged detail layout (the GitKraken flow).** Clicking a commit no
   longer jumps straight to a diff: the sidebar stays put, the commits pane
   shrinks beside it, and the changed-file list appears as a fixed column

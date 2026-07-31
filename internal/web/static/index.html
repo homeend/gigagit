@@ -17,6 +17,11 @@
   <button id="push-btn" title="push the current branch (P)">⇫ push</button>
   <span id="repo-worktree"></span>
 </header>
+<div id="conflict-bar" class="hidden">
+  <span id="conflict-msg"></span>
+  <button id="conflict-continue">continue</button>
+  <button id="conflict-abort" class="danger">abort</button>
+</div>
 <main id="panes" class="solo">
   <aside id="branches-pane">
     <div id="branches-header">branches</div>
@@ -52,6 +57,7 @@
     <div id="diff-header">
       <span id="diff-title"></span>
       <span id="hunk-bar" class="hidden"><button id="hunk-stage" disabled>stage selected (0)</button><button id="hunk-all">all</button><button id="hunk-none">none</button></span>
+      <span id="resolve-bar" class="hidden"><span id="resolve-count"></span><button id="resolve-ours">all ours</button><button id="resolve-theirs">all theirs</button><button id="resolve-go" disabled>resolve</button></span>
       <span id="diff-nav">
         <button id="prev-file" title="previous file">‹ file</button>
         <button id="next-file" title="next file">file ›</button>

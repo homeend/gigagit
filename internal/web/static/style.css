@@ -248,6 +248,25 @@ mark.r { background: var(--span-add); color: inherit; }
 @keyframes taskblink { 50% { background: none; color: var(--fg); } }
 @media (prefers-reduced-motion: reduce) { #top #task-chip.blink { animation: none; } }
 #top #pull-btn:disabled, #top #push-btn:disabled { opacity: .45; cursor: default; }
+/* Paused-sequencer-op banner: sits between the header and the panes, a
+   BLOCKER (not an advisory) so it stays visible until continue/abort
+   resolves the paused op. */
+#conflict-bar {
+  display: flex; gap: 10px; align-items: center;
+  padding: 4px 12px;
+  background: #38222261; border-bottom: 1px solid #6b3a3a;
+  font-size: 13px;
+}
+#conflict-bar.hidden { display: none; }
+#conflict-bar button {
+  background: var(--bg); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 3px;
+  padding: 1px 10px; font: inherit; cursor: pointer;
+}
+#conflict-bar button:hover:not(:disabled) { border-color: var(--accent); }
+#conflict-bar button:disabled { opacity: .45; cursor: default; }
+#conflict-bar #conflict-abort { color: #e06c75; border-color: #6b3a3a; }
+#conflict-bar #conflict-abort:hover:not(:disabled) { border-color: #e06c75; }
 #help { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; z-index: 11; cursor: pointer; }
 #help.hidden { display: none; }
 #help-box { background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; padding: 18px 24px; max-width: 700px; max-height: 84vh; overflow-y: auto; cursor: default; }
@@ -293,6 +312,27 @@ tr.hk.picked td.no { background: var(--sel); color: var(--fg); }
 #hunk-bar button:hover:not(:disabled) { border-color: var(--accent); }
 #hunk-bar button:disabled { opacity: .45; cursor: default; }
 #hunk-bar #hunk-stage:not(:disabled) { color: var(--accent); }
+
+/* Conflict block picker — a conflicted status row opens its marker regions
+   as pickable ours/theirs blocks (#cf-doc) instead of a diff table; the
+   header bar (#resolve-bar) mirrors #hunk-bar's shape. */
+#resolve-bar { flex: 0 0 auto; display: flex; align-items: center; gap: 4px; }
+#resolve-bar.hidden { display: none; }
+#resolve-bar button { background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 3px; padding: 0 8px; font: inherit; font-size: 11px; cursor: pointer; }
+#resolve-bar button:hover:not(:disabled) { border-color: var(--accent); }
+#resolve-bar button:disabled { opacity: .45; cursor: default; }
+#resolve-bar #resolve-go:not(:disabled) { color: var(--accent); }
+#resolve-count { color: var(--dim); font-size: 11px; margin-right: 4px; }
+#cf-doc { padding: 8px 12px; font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace; font-size: 12px; }
+#cf-doc pre { margin: 0; white-space: pre-wrap; word-break: break-all; }
+.cf-text { color: var(--dim); padding: 2px 0; }
+.cf-block { border: 1px solid var(--border); border-radius: 4px; margin: 6px 0; overflow: hidden; }
+.cf-side { padding: 4px 8px; cursor: pointer; border-left: 3px solid transparent; }
+.cf-side .cf-tag { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--dim); }
+.cf-ours { background: #1f3d2b88; }
+.cf-theirs { background: #46262a88; border-top: 1px dashed var(--border); }
+.cf-side.picked { border-left-color: var(--accent); background: var(--sel); }
+.cf-block.decided .cf-side:not(.picked) { opacity: .45; }
 
 /* Branch versions (the operations history) — a list overlay on the shared
    layer stack, styled after the palette. */
