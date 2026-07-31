@@ -16,6 +16,7 @@ const state = {
   // with the lane column's space going to subjects.
   graphMode: "svg", // svg | off
   wt: null, // /api/status payload while the tree is dirty, else null
+  conflict: null, // {op, source, target, desc, conflicted} while a sequencer op is paused, else null
   filesMode: "commit", // commit | status | compare
   compare: null, // {a, b, aHash, bHash, all, filter, originsError} while comparing two branches
   statusEntries: [],
@@ -44,6 +45,7 @@ const $ = (id) => document.getElementById(id);
 const DANGER_OPTIONS = new Set([
   "force", "force-with-lease", "force-delete", "reset", "delete", "drop",
   "unlock-and-remove", "discard", "overwrite", "hard",
+  "abort merge", "abort rebase", "abort cherry-pick", "abort revert",
 ]);
 
 const SECTIONS = ["branches", "worktrees", "tags", "stashes"];
@@ -120,7 +122,22 @@ function wtExtra() {
 
 function applyStatus(st) {
   state.wt = st.files && st.files.length ? st : null;
+  state.conflict = st.conflict || null;
   buildStatusEntries();
+  renderConflictBar();
+}
+
+// The banner shows whenever a sequencer op is paused — including with zero
+// conflicted files (resolved by hand, never continued): that is exactly when
+// Continue lights up. Never leave the user in a paused op with no way out.
+function renderConflictBar() {
+  const bar = $("conflict-bar"), c = state.conflict;
+  if (!c) { bar.classList.add("hidden"); return; }
+  bar.classList.remove("hidden");
+  $("conflict-msg").textContent =
+    "⏸ " + c.op + " paused" + (c.desc ? " (" + c.desc + ")" : "") +
+    (c.conflicted ? " — " + c.conflicted + " conflicted" : " — all conflicts resolved");
+  $("conflict-continue").disabled = !!c.conflicted;
 }
 
 async function fetchStatus() {
@@ -2824,7 +2841,8 @@ $("files-list").addEventListener("contextmenu", (e) => {
   renderFiles();
   const items = [];
   if (f.section === "staged") items.push({ label: "unstage " + f.path, act: () => stage({ paths: [f.path], unstage: true }) });
-  else if (f.section !== "conflicts") items.push({ label: "stage " + f.path, act: () => stage({ paths: [f.path] }) });
+  else if (f.section === "conflicts") items.push({ label: "mark resolved (stage as-is)", act: () => stage({ paths: [f.path] }) });
+  else items.push({ label: "stage " + f.path, act: () => stage({ paths: [f.path] }) });
   items.push({ label: "copy path", act: () => copyText(f.path) });
   items.push({ label: "stage all", act: () => stage({ all: true }) });
   if (state.statusEntries.some((x) => x.section === "staged")) {
@@ -2867,6 +2885,19 @@ $("commit-btn").addEventListener("click", doCommit);
 $("pull-btn").addEventListener("click", doPull);
 $("push-btn").addEventListener("click", doPush);
 $("stash-btn").addEventListener("click", doStash);
+$("conflict-continue").addEventListener("click", () => {
+  if (opBusy() || !state.conflict) return;
+  startOp({ op: "continue" }, "continue " + state.conflict.op);
+});
+$("conflict-abort").addEventListener("click", () => {
+  if (opBusy() || !state.conflict) return;
+  const op = state.conflict.op;
+  showLocalConfirm(
+    "Abort the paused " + op + "? Conflict resolutions so far are discarded.",
+    ["abort " + op, "cancel"],
+    (o) => { if (o !== "cancel") startOp({ op: "abort" }, "abort " + op); }
+  );
+});
 window.addEventListener("resize", () => {
   renderCommits();
   if (state.lastDiff) renderDiff(state.lastDiff); // unified↔side-by-side is width-dependent
