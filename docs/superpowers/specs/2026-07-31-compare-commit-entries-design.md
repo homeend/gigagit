@@ -35,8 +35,9 @@ list, drill into per-file diffs), since both entry kinds carry a commit sha
   the view labels the frozen side so the semantic switch is visible.
 - **Frontends: TUI + CLI.** The comparison logic lands in `internal/domain`
   so other frontends can adopt it later.
-- **No raw revs in the CLI command** this iteration — `gg diff A..B` already
-  covers sha-vs-sha.
+- **The CLI surface is the existing `gg compare`**, extended with entry
+  specs (`bookmark:<id>` / `shelf:<id>`) and `--patch`; its existing
+  commit-ish/`@staged`/`@worktree` tokens are untouched.
 
 ## Design
 
@@ -129,20 +130,26 @@ there:
   i18n bundles; the AST gates (`i18n_scan_test`, `menu_labels_test`)
   enforce coverage.
 
-### 4. CLI — `gg compare`
+### 4. CLI — extend the existing `gg compare`
 
-New top-level command, dispatched through `runOne` (so `gg batch` drives it):
+`gg compare <left> [<right>]` already exists (`internal/cli/compare.go`):
+endpoint tokens are a commit-ish, `@staged`, or `@worktree`, output is one
+`<status>\t<path>` line per differing file. This feature extends it rather
+than adding a command:
 
 ```
-gg compare [--patch] <spec> <spec>      # spec = bookmark:<id> | shelf:<id>
+gg compare [--patch] <spec> [<spec>]    # adds: bookmark:<id> | shelf:<id>
 ```
 
 - Flags precede positionals (the `gg review` convention).
-- Spec resolution: `bookmark:<id>` via the bookmark store (must be a commit
-  bookmark), `shelf:<id>` via the shelf store (must be a commit entry); a
-  file entry or unknown ID is a usage-level error with a clear message.
-- Default output: one line per differing file, `<status>\t<path>` (the
-  `CompareFiles` result, terse, parseable).
+- Spec resolution: `bookmark:<id>` via `BookmarkGet` (must be a commit
+  bookmark), `shelf:<id>` via `ShelfFind` (must be a commit entry); a file
+  entry or unknown ID is a usage-level error with a clear message. Entry
+  specs resolve through `ResolveCommitEntryEndpoint` (hybrid live/frozen),
+  then flow into the same `CompareFiles` call as the existing tokens.
+- `validComparePair` learns shelf endpoints (a frozen side pairs with a
+  commit or another shelf endpoint; never with `@staged`/`@worktree`).
+- Default output: unchanged `<status>\t<path>` lines.
 - `--patch`: live lane = one `git diff <A> <B>` (`DiffPatch` with a range
   spec); frozen lane = per-member temp-file `git diff --no-index` with
   relabelled headers (the proven MCP `gg_compare_file` machinery).
@@ -183,13 +190,18 @@ gg compare [--patch] <spec> <spec>      # spec = bookmark:<id> | shelf:<id>
   `bookmark_test`: mark-two on commit entries, mixed-pair refusal, cross `c`
   flow both directions, compare-mode enter refusals, gen-guard staleness
   drop, self-compare notice.
-- `internal/cli` + one e2e scenario: shelve a commit, rewrite history +
-  `git gc --prune=now`, then assert `gg compare` list output, `--patch`
-  output shape, the stderr frozen note, and exit codes (0/1/2 paths).
+- `internal/cli`: in-process `Run(...)` tests covering the full story —
+  shelve a commit, rewrite history + `git gc --prune=now`, then assert
+  `gg compare` list output, `--patch` output shape, the stderr frozen note,
+  and exit codes (0/1/2 paths). A declarative e2e TOML scenario is NOT used
+  here: a commit entry's ID embeds the commit sha and blob hash
+  (`commit-<shortsha>-<blob8>`), which the TOML harness cannot capture at
+  runtime; the Go tests parse the ID from `gg shelf list` output instead.
 
 ## Out of scope
 
 - MCP / web surfaces (domain core is ready for them later).
-- Raw-rev specs in `gg compare` (`gg diff` covers it).
+- Changing `gg compare`'s existing raw-rev/`@staged`/`@worktree` tokens
+  (they stay as-is; entry specs are additive).
 - Rename detection in frozen compares.
 - Comparing file entries against commit entries (stays refused).
