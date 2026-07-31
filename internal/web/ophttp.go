@@ -33,7 +33,7 @@ type opStartRequest struct {
 // far: switch, commit, fetch, pull, push, merge, rebase, create-branch,
 // rename-branch, create-worktree, delete-branch, delete-tag, remove-worktree,
 // stash, stash-apply, stash-pop, stash-drop, discard, restore-version,
-// delete-version; the switch statement is
+// delete-version, continue, abort; the switch statement is
 // where future ops land. pull and push each take an OPTIONAL branch — omitted
 // means the current one.
 func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
@@ -110,6 +110,12 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 		op = engine.Commit{Message: req.Message}
 	case "fetch":
 		op = engine.Fetch{} // all remotes; no arguments, no decisions
+	case "continue":
+		// The engine probes which of merge/rebase/cherry-pick/revert is
+		// paused and dispatches; nothing paused is its own clear refusal.
+		op = engine.ContinueOp{}
+	case "abort":
+		op = engine.AbortOp{}
 	case "create-branch":
 		// Only the leading-dash check here: the engine runs the new name
 		// through git check-ref-format and reports a clear refusal, which is
