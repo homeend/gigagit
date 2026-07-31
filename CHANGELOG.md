@@ -20,7 +20,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   for a one-line pointer at Continue — finishing the op is Continue's job
   (git supplies the merge message), so no message needs typing; and an
   empty-message commit click now says "write a commit message first" on
-  the status line instead of doing nothing.
+  the status line instead of doing nothing. Emptiness is rendered visibly in
+  the picker — side tags carry line counts, empty lines show as ¶, space/tab
+  runs as ·/→, and a side that deletes the region says "(empty)" — so a
+  conflict between blank-line runs no longer reads as nothing vs nothing.
 
 - **Web: staged detail layout (the GitKraken flow).** Clicking a commit no
   longer jumps straight to a diff: the sidebar stays put, the commits pane
