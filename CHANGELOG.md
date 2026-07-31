@@ -23,7 +23,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   grow/shrink per tool; and the detail block is reserved *before* the tool
   list, so on a small terminal the list is what shrinks and scrolls — the
   command preview and footer stay visible instead of falling below the
-  viewport.
+  viewport. Follow-up from live testing: a commit message pasted from a web
+  page can carry bare `\r` characters, which make the terminal jump to
+  column 0 mid-line and overwrite the popup frame (invisible to width math —
+  the `[E]` viewer's `sanitizeForDisplay` story). Line breaks are now
+  normalized (CRLF / bare `\r` → newline) at the read-only content path
+  (commit message view, file previews) and at the textfield boundary
+  (prefill + paste), and the commit message view opens in wrap mode — a
+  generated/pasted body is prose, unreadable as one truncated line.
 
 - **Create a worktree from a commit — with its changes optionally kept
   staged/unstaged.** The Commits panel's `.` menu row (renamed **Create

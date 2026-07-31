@@ -173,12 +173,26 @@ func fileContentLines(data []byte) []contentLine {
 	if s == "" {
 		return []contentLine{{text: i18n.T("(empty file)")}}
 	}
-	parts := strings.Split(s, "\n")
+	// Line-break normalization BEFORE the C0 sweep: CRLF collapses to one
+	// break, a lone \r becomes one (web-pasted commit bodies separate their
+	// paragraphs with bare \r\r — dropping the \r would glue the words
+	// together). sanitizeForDisplay then expands tabs and strips whatever
+	// controls remain, so a \r can never reach the terminal, where it jumps
+	// to column 0 and overwrites the popup's own border (invisible to width
+	// math — the error_popup.go story).
+	s = normalizeLineBreaks(s)
+	parts := strings.Split(sanitizeForDisplay(s), "\n")
 	out := make([]contentLine, len(parts))
 	for i, ln := range parts {
-		out[i] = contentLine{text: strings.ReplaceAll(ln, "\t", "    ")}
+		out[i] = contentLine{text: ln}
 	}
 	return out
+}
+
+// normalizeLineBreaks maps CRLF and bare-CR line endings to \n.
+func normalizeLineBreaks(s string) string {
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	return strings.ReplaceAll(s, "\r", "\n")
 }
 
 // filePreviewRowsCap is how many content lines the preview window shows right

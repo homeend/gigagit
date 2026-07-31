@@ -16,9 +16,14 @@ type textfield struct {
 	cursor int
 }
 
-// newTextField makes a field pre-filled with s, cursor at the end.
+// newTextField makes a field pre-filled with s, cursor at the end. Line
+// breaks are normalized (CRLF / bare \r → \n): prefills come from existing
+// commit messages, which can carry bare \r from web-pasted text, and a \r
+// rune rendered by styledLines makes the terminal jump to column 0 mid-row
+// and overwrite the popup border (the sanitizeForDisplay story). The buffer
+// must simply never hold one.
 func newTextField(s string) textfield {
-	r := []rune(s)
+	r := []rune(normalizeLineBreaks(s))
 	return textfield{runes: r, cursor: len(r)}
 }
 
@@ -32,12 +37,23 @@ func (f textfield) Value() string { return string(f.runes) }
 // legitimate keystroke or paste needs a literal NUL. Left unfiltered, one
 // reaching a field whose Value() becomes a git argv item (a tag name or
 // message, say) fails on Windows with the opaque syscall.EINVAL "invalid
-// argument", since Windows command-line strings are NUL-terminated.
+// argument", since Windows command-line strings are NUL-terminated. A \r is
+// normalized to \n (a following \n is absorbed, so CRLF stays ONE break):
+// bracketed paste delivers raw clipboard runes — CRLF from Windows, bare \r
+// from web copies — and a \r rune in the buffer corrupts the rendered row
+// (see newTextField).
 func (f *textfield) insert(rs []rune) {
 	clean := make([]rune, 0, len(rs))
-	for _, r := range rs {
-		if r != 0 {
-			clean = append(clean, r)
+	for i := 0; i < len(rs); i++ {
+		switch rs[i] {
+		case 0:
+		case '\r':
+			clean = append(clean, '\n')
+			if i+1 < len(rs) && rs[i+1] == '\n' {
+				i++
+			}
+		default:
+			clean = append(clean, rs[i])
 		}
 	}
 	out := make([]rune, 0, len(f.runes)+len(clean))
