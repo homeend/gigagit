@@ -258,6 +258,10 @@ mark.r { background: var(--span-add); color: inherit; }
   font-size: 13px;
 }
 #conflict-bar.hidden { display: none; }
+/* The "N conflicted" fragment — in the banner AND the Working-tree row's
+   meta — pops against the surrounding text so a conflict is spotted at a
+   glance (dim gray / banner fg elsewhere). */
+.conflict-count { color: #ff8577; font-weight: 600; }
 #conflict-bar button {
   background: var(--bg); color: var(--fg);
   border: 1px solid var(--border); border-radius: 3px;
