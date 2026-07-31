@@ -30,8 +30,15 @@ body {
 #panes.solo.nosb { grid-template-columns: 1fr; }
 #panes.solo.nosb #branches-pane, #panes.solo.nosb #rs-sidebar { display: none; }
 #panes.solo #files-pane, #panes.solo #diff-pane, #panes.solo #rs-detail { display: none; }
-#panes.files { grid-template-columns: 1fr var(--rs-w) var(--files-w); }
-#panes.files #branches-pane, #panes.files #rs-sidebar, #panes.files #diff-pane { display: none; }
+/* The files stage KEEPS the sidebar — five grid children (the one mode
+   exempt from the three-children rule): sidebar | handle | commits |
+   handle | file list. The unordered sidebar pair sorts first (order 0 in
+   DOM order), commits/handle/files follow via explicit order. The b
+   toggle's nosb variant drops the sidebar pair back to three columns. */
+#panes.files { grid-template-columns: var(--sb-w) var(--rs-w) 1fr var(--rs-w) var(--files-w); }
+#panes.files #diff-pane { display: none; }
+#panes.files.nosb { grid-template-columns: 1fr var(--rs-w) var(--files-w); }
+#panes.files.nosb #branches-pane, #panes.files.nosb #rs-sidebar { display: none; }
 #panes.files #commits-pane { order: 1; }
 #panes.files #rs-detail { order: 2; }
 #panes.files #files-pane { order: 3; }

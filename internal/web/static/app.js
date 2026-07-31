@@ -388,7 +388,7 @@ async function doReroot(path) {
 // toggleSidebar and stageFocused are shared by their keys (b, s/u) and the
 // clickable footer chips.
 function toggleSidebar() {
-  if (state.layout !== "list") return;
+  if (state.layout === "diff") return; // no sidebar on the diff screen to toggle
   state.sidebar = !state.sidebar;
   lsSet("gg.sidebar.hidden", state.sidebar ? "0" : "1");
   $("panes").classList.toggle("nosb", !state.sidebar);
@@ -1651,10 +1651,18 @@ function setPaneWidth(cfg, w) {
 
 // Clamp against the live #panes width so a drag can never squeeze either
 // side to nothing — including on a window far narrower than the defaults,
-// where the minimum wins over the keep-back.
-function clampPaneWidth(w) {
+// where the minimum wins over the keep-back. In the files stage BOTH fixed
+// columns are on screen at once, so each handle's keep-back also reserves
+// the other handle's column, or the flexible commits pane between them
+// could be squeezed to zero.
+function clampPaneWidth(cfg, w) {
   const total = $("panes").getBoundingClientRect().width;
-  return Math.round(Math.min(Math.max(RS_MIN, total - RS_KEEP), Math.max(RS_MIN, w)));
+  let reserve = RS_KEEP;
+  if (state.layout === "files" && state.sidebar) {
+    const other = Object.values(RESIZERS).find((c) => c !== cfg);
+    if (other) reserve += other.want;
+  }
+  return Math.round(Math.min(Math.max(RS_MIN, total - reserve), Math.max(RS_MIN, w)));
 }
 
 // What the user asked for is stored and persisted; what the window can
@@ -1662,7 +1670,7 @@ function clampPaneWidth(w) {
 // squeezes the pane without forgetting the chosen width, and widening it
 // again restores that width.
 function applyPaneWidths() {
-  Object.values(RESIZERS).forEach((cfg) => setPaneWidth(cfg, clampPaneWidth(cfg.want)));
+  Object.values(RESIZERS).forEach((cfg) => setPaneWidth(cfg, clampPaneWidth(cfg, cfg.want)));
 }
 
 function initResizer(id) {
@@ -1681,7 +1689,7 @@ function initResizer(id) {
     el.classList.add("dragging");
     document.body.classList.add("resizing");
     const onMove = (ev) => {
-      cfg.want = clampPaneWidth(cfg.right ? rect.right - ev.clientX : ev.clientX - rect.left);
+      cfg.want = clampPaneWidth(cfg, cfg.right ? rect.right - ev.clientX : ev.clientX - rect.left);
       setPaneWidth(cfg, cfg.want);
     };
     const onUp = () => {
@@ -1699,7 +1707,7 @@ function initResizer(id) {
 
   el.addEventListener("dblclick", () => {
     cfg.want = cfg.def;
-    setPaneWidth(cfg, clampPaneWidth(cfg.want));
+    setPaneWidth(cfg, clampPaneWidth(cfg, cfg.want));
     lsSet(cfg.key, String(cfg.want));
   });
 }
