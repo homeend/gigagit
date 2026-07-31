@@ -18,11 +18,13 @@ func shCommitEntry(id string) model.ShelfEntry {
 }
 
 // A shelved commit has no single file behind it: the per-file switcher actions
-// (p restore, e editor, m mark, c vs-bookmark) must notice-and-no-op instead of
+// (p restore, e editor, c vs-bookmark) must notice-and-no-op instead of
 // treating the tar payload as a file. (enter is different: it opens the shelf
-// files view — TestShelfSwitcherEnterOpensCommitFilesView.)
+// files view — TestShelfSwitcherEnterOpensCommitFilesView. m is different too,
+// now that mark-two supports comparing two commit entries — see
+// TestShelfPopupMarkTogglesOnLoneCommitEntry in entry_compare_test.go.)
 func TestShelfPopupCommitEntryGuardsFileActions(t *testing.T) {
-	for _, key := range []string{"p", "e", "m", "c"} {
+	for _, key := range []string{"p", "e", "c"} {
 		m := shelfPopModel(shCommitEntry("ce"))
 		mm, cmd := m.Update(keyMsg(key))
 		m = mm.(Model)

@@ -211,10 +211,12 @@ func (p *shelfPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	}
 	switch msg.Type {
 	case tea.KeyEsc:
-		m.pickGen++ // invalidate an in-flight cherry-pick probe
+		m.pickGen++         // invalidate an in-flight cherry-pick probe
+		m.entryCompareGen++ // invalidate an in-flight commit-entry compare resolve
 		m = m.popLayer()
 	case tea.KeyEnter:
-		m.pickGen++ // every enter path leaves or re-stacks the switcher; drop an in-flight probe
+		m.pickGen++         // every enter path leaves or re-stacks the switcher; drop an in-flight probe
+		m.entryCompareGen++ // ditto for a commit-entry compare resolve
 		e, ok := p.selected()
 		if !ok {
 			return m, nil
@@ -274,9 +276,6 @@ func (p *shelfPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		case "m":
 			if p.compareRef != nil {
 				return m, nil
-			}
-			if nm, blocked := m.commitShelfNotice(p); blocked {
-				return nm, nil
 			}
 			return m.shelfPopupMark()
 		case "c":
@@ -407,6 +406,13 @@ func (m Model) shelfPopupMark() (Model, tea.Cmd) {
 	a, okA := m.shelfEntryByID(p.markID)
 	b, okB := m.shelfEntryByID(e.ID)
 	if !okA || !okB {
+		return m, nil
+	}
+	switch {
+	case a.IsCommit() && b.IsCommit():
+		return m.startEntryCompare(shelfEntrySide(a), shelfEntrySide(b))
+	case a.IsCommit() != b.IsCommit():
+		m.statusMsg = i18n.T("marked entries are different kinds — mark two files or two commits")
 		return m, nil
 	}
 	return m.openShelfCompareTwoEntries(a, b)

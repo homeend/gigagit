@@ -91,15 +91,21 @@ func TestCommitBookmarkPasteIsNoop(t *testing.T) {
 	}
 }
 
-func TestCommitBookmarkMarkIsNoop(t *testing.T) {
+// m on a lone commit bookmark (nothing marked yet) is a plain toggle-mark —
+// mark-two now supports comparing two commit entries, so the guard only
+// blocks "m" when there's no second entry selected yet.
+func TestCommitBookmarkMarkTogglesOnLoneEntry(t *testing.T) {
 	m := commitBmPopupModel(t)
-	mm, _ := m.Update(keyMsg("m"))
+	mm, cmd := m.Update(keyMsg("m"))
 	m = mm.(Model)
-	if p := m.bookmarkSwitcher(); p == nil || p.markID != "" {
-		t.Fatal("m on a commit bookmark must not record a mark")
+	if cmd != nil {
+		t.Fatal("marking the only commit bookmark must not dispatch a command")
 	}
-	if m.statusMsg == "" {
-		t.Fatal("expected a notice for m on a commit bookmark")
+	if p := m.bookmarkSwitcher(); p == nil || p.markID != "cb1" {
+		t.Fatal("m must mark the lone commit bookmark")
+	}
+	if m.statusMsg != "" {
+		t.Fatalf("unexpected notice: %q", m.statusMsg)
 	}
 }
 

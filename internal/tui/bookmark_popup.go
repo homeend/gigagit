@@ -240,10 +240,12 @@ func (p *bookmarkPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	}
 	switch msg.Type {
 	case tea.KeyEsc:
-		m.pickGen++ // invalidate an in-flight cherry-pick probe
+		m.pickGen++         // invalidate an in-flight cherry-pick probe
+		m.entryCompareGen++ // invalidate an in-flight commit-entry compare resolve
 		m = m.popLayer()
 	case tea.KeyEnter:
-		m.pickGen++ // every enter path leaves or re-stacks the switcher; drop an in-flight probe
+		m.pickGen++         // every enter path leaves or re-stacks the switcher; drop an in-flight probe
+		m.entryCompareGen++ // ditto for a commit-entry compare resolve
 		if p.compareRef != nil {
 			b, ok := p.selected()
 			if !ok {
@@ -297,9 +299,6 @@ func (p *bookmarkPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		case "m":
 			if p.compareRef != nil {
 				return m, nil
-			}
-			if mm, yes := m.commitBookmarkNotice(p); yes {
-				return mm, nil
 			}
 			return m.bookmarkMark()
 		case "c":
@@ -463,6 +462,18 @@ func (m Model) bookmarkMark() (Model, tea.Cmd) {
 		} else {
 			p.markID = b.ID
 		}
+		return m, nil
+	}
+	a, okA := p.byID(p.markID)
+	b2, okB := p.byID(b.ID)
+	if !okA || !okB {
+		return m, nil
+	}
+	switch {
+	case a.IsCommit() && b2.IsCommit():
+		return m.startEntryCompare(bookmarkEntrySide(a), bookmarkEntrySide(b2))
+	case a.IsCommit() != b2.IsCommit():
+		m.statusMsg = i18n.T("marked entries are different kinds — mark two files or two commits")
 		return m, nil
 	}
 	return m.openBookmarkCompareTwo(p.markID, b.ID)
