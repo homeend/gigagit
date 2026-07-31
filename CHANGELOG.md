@@ -8,6 +8,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Dirty-tree branch switch asks before carrying changes.** The Branches
+  panel's `s` on a branch with staged/unstaged/conflicted changes now forks
+  a modal — *worktree* (opens the create-worktree popup for the branch, the
+  dirty tree left untouched), *carry changes* (today's autostash switch), or
+  *cancel* — instead of silently stashing. A clean tree keeps the existing
+  confirm flow, and a branch already checked out in another worktree still
+  gets the go-to-worktree jump prompt.
 - **Create a worktree from a commit — with its changes optionally kept
   staged/unstaged.** The Commits panel's `.` menu row (renamed **Create
   worktree from this commit**) prefills the branch name as
