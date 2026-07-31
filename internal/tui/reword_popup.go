@@ -90,10 +90,21 @@ func (p *rewordPopup) render(m Model, below string) string {
 
 // box draws the reword dialog (reuses the commit field renderer).
 func (p *rewordPopup) box(m Model) string {
-	w, _ := m.overlayDims()
+	w, termH := m.overlayDims()
+	contentW := popupContentWidth(w)
+	hint := i18n.T("[tab] switch field  [enter] newline/next  [ctrl+s] reword  [esc] cancel")
+	// Same viewport-fit budget as the commit popup (commitDescBudget): a long
+	// reworded body must scroll inside the field, not push the footer past
+	// termH. The hint is one string here, so measure its wrapped lines.
+	hintH := len(wrapWidth(hint, contentW, 1<<20))
+	titleH := len(p.popup.title.styledLines(false, contentW-commitFieldIndent))
+	budget := termH - 2 - titleH - 1 - hintH - 4 - 1
+	if budget < 3 {
+		budget = 3
+	}
 	var b strings.Builder
 	b.WriteString(i18n.T("Reword commit %s", shortHash(p.commit)) + "\n\n")
-	b.WriteString(renderCommitFields(&p.popup, popupContentWidth(w)))
-	b.WriteString("\n" + i18n.T("[tab] switch field  [enter] newline/next  [ctrl+s] reword  [esc] cancel"))
+	b.WriteString(renderCommitFields(&p.popup, contentW, budget))
+	b.WriteString("\n" + hint)
 	return modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 }

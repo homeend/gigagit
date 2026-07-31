@@ -154,7 +154,18 @@ func (e *irebaseEditor) render(m Model, _ string) string {
 	}
 	if e.reword != nil {
 		b.WriteString("\n" + i18n.T("Reword:") + "\n")
-		b.WriteString(renderCommitFields(e.reword, popupContentWidth(w)))
+		// Viewport-fit budget (the commitDescBudget shape, full-screen surface
+		// so no modal chrome): whatever height the commit list left over, so a
+		// long reworded body scrolls inside the field instead of pushing the
+		// fields and footer past the terminal bottom.
+		contentW := popupContentWidth(w)
+		used := strings.Count(b.String(), "\n") // heading + rows + the "Reword:" block above
+		titleH := len(e.reword.title.styledLines(false, contentW-commitFieldIndent))
+		budget := h - used - titleH - 2 // blank before hint + the hint line
+		if budget < 3 {
+			budget = 3
+		}
+		b.WriteString(renderCommitFields(e.reword, contentW, budget))
 		b.WriteString("\n" + i18n.T("[tab] switch field  [enter] newline/next  [ctrl+s] set  [esc] cancel"))
 	} else {
 		b.WriteString("\n" + i18n.T("[p]ick [r]eword [s]quash [d]rop  [ctrl+↑/↓] move  [enter] start  [R]eset  [esc] cancel"))

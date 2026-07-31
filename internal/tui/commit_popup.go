@@ -23,6 +23,12 @@ type commitPopup struct {
 	field int // 0 = title, 1 = description
 	amend bool
 
+	// descScroll is the description field's internal window offset (display
+	// lines), owned here so it persists across renders; viewFieldWindow
+	// adjusts it to keep the cursor visible. A long generated/squashed body
+	// scrolls INSIDE the field instead of growing the box past the terminal.
+	descScroll int
+
 	generating bool               // a ctrl+g generate run (commit_generate.go) is in flight
 	genGen     int                // generation guard: bumped on every dispatch AND every esc-cancel
 	genCmd     config.ToolCommand // the commit_message tool the last/current generate run used
@@ -166,7 +172,7 @@ func (p *commitPopup) box(m Model) string {
 	if p.amend {
 		heading = i18n.T("Amend last commit")
 	}
-	w, _ := m.overlayDims()
+	w, termH := m.overlayDims()
 	// Wider-than-standard default (commitNormalWidth); ctrl+t maximizes to
 	// popupFullInnerWidth via the shared popupMax mechanism (popupResolveWidth).
 	innerW := popupResolveWidth(w, p.maximized, commitNormalWidth(w))
@@ -174,9 +180,9 @@ func (p *commitPopup) box(m Model) string {
 	if contentW < 1 {
 		contentW = 1
 	}
-	b.WriteString(heading + "\n\n")
-	b.WriteString(renderCommitFields(p, contentW))
-	b.WriteString("\n")
+	// The footer is built BEFORE the fields: its wrapped line count feeds the
+	// description's height budget below.
+	var footer string
 	if p.generating {
 		// While a run is in flight every key but esc is swallowed, so show an
 		// animated spinner + elapsed seconds (a clear "still working" signal)
@@ -184,19 +190,40 @@ func (p *commitPopup) box(m Model) string {
 		frames := []rune("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
 		frame := frames[p.spinFrame%len(frames)]
 		elapsed := int(time.Since(p.genStart).Seconds())
-		b.WriteString(i18n.T("%c generating message… %ds  ([esc] to cancel)", frame, elapsed))
+		footer = i18n.T("%c generating message… %ds  ([esc] to cancel)", frame, elapsed)
 	} else {
-		b.WriteString(packHints([]string{
+		footer = packHints([]string{
 			i18n.T("[tab] switch field"),
 			i18n.T("[enter] newline/next"),
 			i18n.T("[ctrl+g] generate"),
 			i18n.T("[ctrl+t] fullscreen"),
 			i18n.T("[ctrl+s] commit"),
 			i18n.T("[esc] cancel"),
-		}, contentW))
+		}, contentW)
 	}
+	b.WriteString(heading + "\n\n")
+	b.WriteString(renderCommitFields(p, contentW, commitDescBudget(termH, p, contentW, footer)))
+	b.WriteString("\n")
+	b.WriteString(footer)
 
 	return modalStyle.Width(innerW).Render(b.String()) + "\n"
+}
+
+// commitDescBudget is the description field's display-line budget: terminal
+// height minus everything else the box holds — heading+blank (2), the title
+// field's own wrapped lines, the blank before the footer (1), the footer's
+// lines, the modal frame (border 2 + padding 2), and box()'s trailing newline
+// (1). Floored so a tiny terminal still shows a usable slice of the body.
+// Without this cap a long description grew the box past termH and
+// overlayCenter silently dropped the bottom rows (fields, footer).
+func commitDescBudget(termH int, p *commitPopup, contentW int, footer string) int {
+	titleH := len(p.title.styledLines(false, contentW-commitFieldIndent))
+	footerH := strings.Count(footer, "\n") + 1
+	budget := termH - 2 - titleH - 1 - footerH - 4 - 1
+	if budget < 3 {
+		budget = 3
+	}
+	return budget
 }
 
 // commitNormalWidth is the commit popup's NON-maximized inner width: wider than
@@ -243,10 +270,19 @@ func packHints(pairs []string, width int) string {
 	return b.String()
 }
 
+// commitFieldIndent is the display width of a commit field's cursor+label
+// prefix ("> title:       " / "  description: ") — the column every value
+// line starts in. commitDescBudget needs it to measure the title's wrapped
+// height with the same math renderCommitFields lays out with.
+const commitFieldIndent = 2 + len("title:       ")
+
 // renderCommitFields draws the title/description fields with the focus cursor,
 // each on a visible editable background filling contentWidth. The description's
 // continuation lines align under its first line (shared viewField indent).
-func renderCommitFields(p *commitPopup, contentWidth int) string {
+// maxDescLines caps the description's display lines (<= 0 = unlimited): an
+// over-long body scrolls inside the field (window follows the cursor, dim
+// "(from-to/total)" marker on the last line) instead of growing the popup.
+func renderCommitFields(p *commitPopup, contentWidth, maxDescLines int) string {
 	titleCur, descCur := "  ", "  "
 	if p.field == 0 {
 		titleCur = "> "
@@ -255,6 +291,6 @@ func renderCommitFields(p *commitPopup, contentWidth int) string {
 	}
 	var b strings.Builder
 	b.WriteString(viewField(titleCur+"title:       ", p.title, p.field == 0, contentWidth) + "\n")
-	b.WriteString(viewField(descCur+"description: ", p.desc, p.field == 1, contentWidth) + "\n")
+	b.WriteString(viewFieldWindow(descCur+"description: ", p.desc, p.field == 1, contentWidth, maxDescLines, &p.descScroll) + "\n")
 	return b.String()
 }

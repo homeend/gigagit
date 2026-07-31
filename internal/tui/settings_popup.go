@@ -941,17 +941,46 @@ func (p *settingsPopup) box(m Model) string {
 				}
 				wr[i] = winRow{text: text, style: st, decorate: deco}
 			}
-			// The catalog is small today, but this keeps the list from ever
-			// blowing the box past the terminal height if it grows later.
-			listCap := termH - 10
-			if listCap < 3 {
-				listCap = 3
+			// Layout budget. The detail block (destination + command preview)
+			// gets a FIXED height — the tallest any row needs (toolDetailHeights)
+			// — reserved BEFORE the list, for two live-feedback bugs: on a big
+			// terminal a per-selection preview height made the box visibly
+			// grow/shrink while scrolling the list, and on a small terminal the
+			// list was sized first (termH-10) so the preview and footer fell
+			// past termH, where overlayCenter silently drops rows. The LIST is
+			// what shrinks and scrolls; when both are hungry the two split the
+			// leftover about evenly so neither collapses.
+			const modalChrome = 4 // DoubleBorder (2 lines) + vertical Padding(1,2) (2 lines)
+			const margin = 2      // breathing room + popupBox's own trailing blank line
+			destH, cmdH := toolDetailHeights(p.toolRows, textW)
+			overhead := 2 /* title+blank */ + 1 /* blank before detail */ + destH + 1 /* blank before hint */ + len(hintLines) + modalChrome + margin
+			avail := termH - overhead
+			minList := 3
+			if len(p.toolRows) < minList {
+				minList = len(p.toolRows)
 			}
-			h := len(p.toolRows)
-			if h > listCap {
-				h = listCap
+			listWant := len(p.toolRows)
+			if listWant > avail/2 {
+				listWant = avail / 2
 			}
-			bodyLines := renderWindow(wr, winOpts{w: textW, h: h, mode: p.mode, anchor: p.sel, hscroll: p.hscroll})
+			if listWant < minList {
+				listWant = minList
+			}
+			previewH := cmdH
+			if previewH > avail-listWant {
+				previewH = avail - listWant
+			}
+			if previewH < 1 {
+				previewH = 1
+			}
+			listH := avail - previewH
+			if listH > len(p.toolRows) {
+				listH = len(p.toolRows)
+			}
+			if listH < minList {
+				listH = minList
+			}
+			bodyLines := renderWindow(wr, winOpts{w: textW, h: listH, mode: p.mode, anchor: p.sel, hscroll: p.hscroll})
 			for _, line := range bodyLines {
 				b.WriteString(line + "\n")
 			}
@@ -960,48 +989,36 @@ func (p *settingsPopup) box(m Model) string {
 			// so the user has no way to see what they're consenting to. This
 			// mirrors toolConfiguredSuffixDecorator's dim style; it recomputes
 			// on every frame (GenerateCommand is a cheap string replace — no
-			// caching).
+			// caching). Both areas are padded to their fixed heights (destH /
+			// previewH) so the box height cannot change with the selection.
 			if p.sel >= 0 && p.sel < len(p.toolRows) {
 				row := p.toolRows[p.sel]
 				b.WriteString("\n")
 				var destLines []string
 				if row.existing {
-					destLines = []string{i18n.T("already configured — skipped on apply")}
+					destLines = wrapWidth(i18n.T("already configured — skipped on apply"), textW, 1<<20)
 				} else {
 					destLines = wrapWidth(i18n.T("writes to: %s", config.DefaultGlobalPath()), textW, 1<<20)
 				}
 				for _, seg := range destLines {
 					b.WriteString(dimRowStyle.Render(seg) + "\n")
 				}
-				// The preview's line cap is computed from the height actually
-				// left over — total terminal height minus everything else in
-				// the box (title+blank, list rows, the blank before this
-				// block, destination lines, the blank before the hint, and the
-				// hint itself) and the modal frame's own chrome — instead of a
-				// hardcoded cap, so a wide/tall terminal shows as much of the
-				// command as truly fits before falling back to "…". Getting
-				// this wrong either clips the footer (overlayCenter silently
-				// drops rows past termH) or under-uses the available space.
-				const modalChrome = 4 // DoubleBorder (2 lines) + vertical Padding(1,2) (2 lines)
-				const margin = 2      // breathing room + popupBox's own trailing blank line
-				used := 2 /* title+blank */ + len(bodyLines) + 1 /* blank before this block */ + len(destLines) + 1 /* blank before hint */ + len(hintLines) + modalChrome + margin
-				previewCap := termH - used
-				if previewCap < 1 {
-					previewCap = 1
+				for i := len(destLines); i < destH; i++ {
+					b.WriteString("\n")
 				}
 				// Split on "\n" first (a multi-line catalog command, e.g. the
 				// Claude template's backslash continuations, must not have its
 				// embedded newlines absorbed into one wrapped segment), then
 				// word-wrap each raw line on its own so long flags/tokens
 				// never split mid-word (the live-feedback bug), then cap the
-				// flattened total.
+				// flattened total at the fixed preview height.
 				cmd := exttool.GenerateCommand(row.tmpl, row.det.Bin)
 				var cmdLines []string
 				for _, ln := range strings.Split(cmd, "\n") {
 					cmdLines = append(cmdLines, wrapWords(ln, textW)...)
 				}
-				if len(cmdLines) > previewCap {
-					keep := previewCap - 1
+				if len(cmdLines) > previewH {
+					keep := previewH - 1
 					if keep < 0 {
 						keep = 0
 					}
@@ -1009,6 +1026,9 @@ func (p *settingsPopup) box(m Model) string {
 				}
 				for _, seg := range cmdLines {
 					b.WriteString(dimRowStyle.Render(seg) + "\n")
+				}
+				for i := len(cmdLines); i < previewH; i++ {
+					b.WriteString("\n")
 				}
 			}
 		}

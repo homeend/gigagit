@@ -8,6 +8,23 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Popups fit the viewport: commit-message internal scroll + fixed-height
+  External-tools wizard.** Two live-report fixes. (1) The commit popup (and
+  the reword popup / interactive-rebase reword sub-mode, which share its
+  field renderer) no longer grows past the terminal when the description is
+  long (an AI-generated or squash-composed body): the description field now
+  scrolls internally — the window follows the cursor and a dim
+  `(from-to/total)` marker shows the position — so the fields and footer
+  hints always stay on screen (`overlayCenter` silently drops rows past the
+  terminal height, which used to cut them off with no way to see them).
+  (2) The Settings → External tools wizard's detail block (destination line +
+  command preview) now has a FIXED height computed from the tallest command
+  across all rows, so moving the selection no longer makes the popup
+  grow/shrink per tool; and the detail block is reserved *before* the tool
+  list, so on a small terminal the list is what shrinks and scrolls — the
+  command preview and footer stay visible instead of falling below the
+  viewport.
+
 - **Create a worktree from a commit — with its changes optionally kept
   staged/unstaged.** The Commits panel's `.` menu row (renamed **Create
   worktree from this commit**) prefills the branch name as
