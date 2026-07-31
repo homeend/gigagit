@@ -340,6 +340,11 @@ tr.hk.picked td.no { background: var(--sel); color: var(--fg); }
 .cf-block { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--border); border-radius: 4px; margin: 6px 0; overflow: hidden; }
 .cf-side { padding: 4px 8px; cursor: pointer; border-left: 3px solid transparent; }
 .cf-side .cf-tag { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--dim); }
+/* Visible emptiness: ¶ for an empty line, ·/→ for space/tab-only lines,
+   and the zero-lines placeholder — a blank-run conflict must never read
+   as nothing vs nothing. */
+.cf-ws { color: var(--dim); opacity: .75; }
+.cf-empty { color: var(--dim); font-style: italic; }
 .cf-ours { background: #1f3d2b88; border-right: 1px dashed var(--border); }
 .cf-theirs { background: #46262a88; }
 .cf-side.picked { border-left-color: var(--accent); background: var(--sel); }

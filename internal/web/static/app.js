@@ -2712,13 +2712,39 @@ async function openConflictPicker(f) {
       html += `<pre class="cf-text">${esc((it.lines || []).join("\n"))}</pre>`;
     } else {
       html += `<div class="cf-block" data-b="${it.index}">` +
-        `<div class="cf-side cf-ours" data-side="ours"><div class="cf-tag">ours</div><pre>${esc((it.ours || []).join("\n"))}</pre></div>` +
-        `<div class="cf-side cf-theirs" data-side="theirs"><div class="cf-tag">theirs</div><pre>${esc((it.theirs || []).join("\n"))}</pre></div>` +
+        `<div class="cf-side cf-ours" data-side="ours"><div class="cf-tag">ours${cfSideCount(it.ours)}</div><pre>${cfSideHTML(it.ours)}</pre></div>` +
+        `<div class="cf-side cf-theirs" data-side="theirs"><div class="cf-tag">theirs${cfSideCount(it.theirs)}</div><pre>${cfSideHTML(it.theirs)}</pre></div>` +
         `</div>`;
     }
   }
   $("diff-body").innerHTML = html + "</div>";
   renderResolveBar();
+}
+
+// cfSideCount renders the tag's " · N lines" suffix — the disambiguator when
+// both sides are visually blank (a conflict between runs of empty lines
+// otherwise reads as nothing vs nothing).
+function cfSideCount(lines) {
+  const n = (lines || []).length;
+  return n === 0 ? " · empty" : n === 1 ? " · 1 line" : ` · ${n} lines`;
+}
+
+// cfSideHTML renders one side's lines with emptiness made visible: a side
+// with no lines at all says so (this side deletes the region), an empty line
+// shows a dim ¶, and a whitespace-only line shows its spaces/tabs as ·/→ so
+// "3 spaces" and "empty" stop looking identical. A trailing \r (CRLF file —
+// ParseConflict keeps it) is ignored for the blank test so a "\r" line reads
+// as empty rather than invisible.
+function cfSideHTML(lines) {
+  if (!lines || !lines.length) return '<span class="cf-empty">(empty — this side has no lines)</span>';
+  return lines
+    .map((ln) => {
+      const bare = ln.replace(/\r$/, "");
+      if (!/^\s*$/.test(bare)) return esc(ln);
+      const glyphs = bare.length ? bare.replace(/\t/g, "→").replace(/ /g, "·") : "¶";
+      return `<span class="cf-ws">${esc(glyphs)}</span>`;
+    })
+    .join("\n");
 }
 
 function paintConflictPicks() {
