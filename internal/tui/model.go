@@ -1365,6 +1365,29 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 					return m, nil
 				}
+				if c := m.status.Counts(); c.Staged+c.Unstaged+c.Conflicted > 0 {
+					branch := b.Name
+					m.modal = &decisionState{
+						req: engine.DecisionRequest{
+							ID:      "switch-dirty",
+							Prompt:  i18n.T("You have uncommitted changes. Switch to %s?", branch),
+							Options: []string{"worktree", "carry changes", "cancel"},
+						},
+						onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {
+							switch opt {
+							case "worktree":
+								if mm, ok := m.openWorktreePopup(true); ok {
+									return mm, nil
+								}
+								return m, nil
+							case "carry changes":
+								return m.startOp(engine.SmartSwitch{Branch: branch})
+							}
+							return m, nil
+						},
+					}
+					return m, nil
+				}
 				return m.confirmOp(engine.SmartSwitch{Branch: b.Name}, i18n.T("Switch to %s?", b.Name))
 			}
 		case "S":

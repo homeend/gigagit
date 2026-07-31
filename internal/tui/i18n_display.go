@@ -192,6 +192,8 @@ func optionDisplayName(value string) string {
 		return i18n.T("add")
 	case "cancel":
 		return i18n.T("cancel")
+	case "carry changes":
+		return i18n.T("carry changes")
 	case "check out as different name…":
 		return i18n.T("check out as different name…")
 	case "checkout-and-resolve":
@@ -242,6 +244,8 @@ func optionDisplayName(value string) string {
 		return i18n.T("unlock-and-remove")
 	case "working-tree":
 		return i18n.T("working-tree")
+	case "worktree":
+		return i18n.T("worktree")
 	case "worktree-and-branch":
 		return i18n.T("worktree-and-branch")
 	case "worktree-only":
