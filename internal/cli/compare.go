@@ -89,7 +89,11 @@ func cmdCompare(svc *domain.Service, args []string, stdout, stderr io.Writer) in
 		}
 	}
 	if !validComparePair(left, right) {
-		fmt.Fprintln(stderr, "compare: order endpoints oldest→newest (a commit, then @staged, then @worktree); a frozen shelf entry pairs only with a commit or another shelf entry")
+		if left.Kind == model.EndpointShelf || right.Kind == model.EndpointShelf {
+			fmt.Fprintln(stderr, "compare: a frozen shelf entry pairs only with a commit or another shelf entry (never @staged/@worktree)")
+		} else {
+			fmt.Fprintln(stderr, "compare: order endpoints oldest→newest (a commit, then @staged, then @worktree); e.g. `gg compare main @worktree`, not the reverse")
+		}
 		return 2
 	}
 	if *patch {

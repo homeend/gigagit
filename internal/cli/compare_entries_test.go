@@ -158,3 +158,54 @@ func TestCompareSpecErrors(t *testing.T) {
 		t.Errorf("file entry: exit %d stderr %q, want 2 + 'not a commit'", code, errb)
 	}
 }
+
+// TestCompareInvalidPairMessages pins the two distinct invalid-pair error
+// messages: an ordinary reversed live pair keeps the original actionable
+// example, while a frozen shelf side paired with @staged/@worktree gets the
+// shelf-specific explanation instead of that (irrelevant) example.
+func TestCompareInvalidPairMessages(t *testing.T) {
+	dir := newRepoDir(t)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+
+	// Plain reverse pair: no shelf/bookmark side → the original example text.
+	code, _, errb := runCompare(t, dir, "compare", "@worktree", "HEAD")
+	if code != 2 {
+		t.Fatalf("reverse pair: exit %d, want 2", code)
+	}
+	if !strings.Contains(errb, "gg compare main @worktree") || !strings.Contains(errb, "not the reverse") {
+		t.Errorf("reverse pair: stderr = %q, want the original example text", errb)
+	}
+	if strings.Contains(errb, "shelf entry") {
+		t.Errorf("reverse pair: stderr = %q, must not mention shelf entries", errb)
+	}
+
+	// Shelf side paired with @staged: the shelf-specific explanation. The
+	// entry's commit must be gone (a frozen model.EndpointShelf) — a live
+	// shelf entry resolves to an ordinary EndpointCommit and would fall
+	// through to the plain live-pair message instead.
+	writeFile(t, dir, "f.txt", "base\n")
+	gitc(t, dir, "add", ".")
+	gitc(t, dir, "commit", "-m", "base")
+	baseSha := headSha(t, dir)
+
+	writeFile(t, dir, "f.txt", "doomed\n")
+	gitc(t, dir, "add", ".")
+	gitc(t, dir, "commit", "-m", "doomed")
+	doomedSha := headSha(t, dir)
+	id := shelfCommitID(t, dir, doomedSha)
+
+	gitc(t, dir, "reset", "--hard", baseSha)
+	gitc(t, dir, "reflog", "expire", "--expire=now", "--all")
+	gitc(t, dir, "gc", "--prune=now")
+
+	code, _, errb = runCompare(t, dir, "compare", "shelf:"+id, "@staged")
+	if code != 2 {
+		t.Fatalf("shelf vs @staged: exit %d, want 2", code)
+	}
+	if !strings.Contains(errb, "a frozen shelf entry pairs only with a commit or another shelf entry") {
+		t.Errorf("shelf vs @staged: stderr = %q, want the shelf-specific message", errb)
+	}
+	if strings.Contains(errb, "gg compare main @worktree") {
+		t.Errorf("shelf vs @staged: stderr = %q, must not show the live-pair example", errb)
+	}
+}
