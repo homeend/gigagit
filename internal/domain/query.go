@@ -357,8 +357,14 @@ func (s *Service) TreeFiles(ctx context.Context, hash string) ([]model.CommitFil
 // older, right = newer), under a Read reservation. The singleflight key
 // includes both endpoints; live endpoints (working tree / index) change
 // underfoot, so callers that need strict freshness should not rely on a long
-// coalesce window.
+// coalesce window. Either endpoint may be a frozen EndpointShelf side, which
+// is delegated to shelfCompareFiles BEFORE the query() wrapper below — see
+// its doc comment for why that dispatch must not nest inside a held
+// reservation.
 func (s *Service) CompareFiles(ctx context.Context, left, right model.Endpoint) ([]model.CommitFile, error) {
+	if left.Kind == model.EndpointShelf || right.Kind == model.EndpointShelf {
+		return s.shelfCompareFiles(ctx, left, right)
+	}
 	return query(ctx, s, "compare-files:"+left.CacheTag()+":"+right.CacheTag(), func(ctx context.Context) ([]model.CommitFile, error) {
 		files, err := s.repo.DiffTreeFiles(ctx, left, right)
 		if err != nil {
