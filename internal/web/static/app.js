@@ -479,6 +479,10 @@ function reconcileStatusView() {
   // a status re-read can invalidate an open hunk view (file fully staged or
   // gone): exit rather than offer stale positional picks
   if (diffHunks && !state.statusEntries.some((f) => f.path === diffHunks.path && hunkEligible(f))) clearDiffHunks();
+  if (conflictPick && !state.statusEntries.some((f) => f.path === conflictPick.path && f.section === "conflicts")) {
+    conflictPick = null;
+    renderResolveBar();
+  }
 }
 
 async function refreshAfterOp() {
@@ -2338,11 +2342,7 @@ async function openStatusDiff(i) {
   clearDiffHunks();
   const f = state.statusEntries[i];
   $("diff-title").textContent = f.path;
-  if (f.section === "conflicts") {
-    $("diff-body").innerHTML = `<div class="notice">conflicted — resolve in the TUI</div>`;
-    updateDiffNav();
-    return;
-  }
+  if (f.section === "conflicts") return openConflictPicker(f);
   const q = new URLSearchParams({ wt: f.section === "staged" ? "staged" : "unstaged", path: f.path });
   if (f.orig_path) q.set("old", f.orig_path);
   $("diff-body").innerHTML = `<div class="notice">loading…</div>`;
@@ -2562,7 +2562,9 @@ function hunkEligible(f) {
 
 function clearDiffHunks() {
   diffHunks = null;
+  conflictPick = null;
   renderHunkBar();
+  renderResolveBar();
 }
 
 function renderHunkBar() {
@@ -2650,6 +2652,118 @@ $("diff-body").addEventListener("click", (e) => {
   if (diffHunks.picks.has(i)) diffHunks.picks.delete(i);
   else diffHunks.picks.add(i);
   paintHunkPicks();
+});
+
+// ---- conflict block picker (conflict surface) -----------------------------
+// A conflicted row opens the file's marker regions as pickable ours/theirs
+// blocks (GET /api/conflict-hunks). Picks are POSITIONAL against the exact
+// bytes the server hashed; resolving POSTs the full pick set and the server
+// writes + stages via engine.ResolveConflictHunks. A 409 means the file
+// moved: reload the picker (the stage-hunks rule).
+
+let conflictPick = null; // {path, hash, count, choices: Array<null|"ours"|"theirs">} — set only while the picker is open
+
+async function openConflictPicker(f) {
+  clearDiffHunks(); // also nulls conflictPick — order matters, set it after
+  $("diff-title").textContent = f.path + " — resolve";
+  $("diff-body").innerHTML = `<div class="notice">loading…</div>`;
+  updateDiffNav();
+  let d;
+  try {
+    d = await getJSON("/api/conflict-hunks?" + new URLSearchParams({ path: f.path }));
+  } catch (e) {
+    // typed 422 refusal (binary / markers gone): show the reason + the way out
+    $("diff-body").innerHTML =
+      `<div class="notice">${esc(e.message || e)}</div>` +
+      `<div class="notice">right-click the file → mark resolved when it is done</div>`;
+    return;
+  }
+  conflictPick = { path: f.path, hash: d.hash, count: d.count, choices: new Array(d.count).fill(null) };
+  let html = '<div id="cf-doc">';
+  for (const it of d.items) {
+    if (it.kind === "text") {
+      html += `<pre class="cf-text">${esc((it.lines || []).join("\n"))}</pre>`;
+    } else {
+      html += `<div class="cf-block" data-b="${it.index}">` +
+        `<div class="cf-side cf-ours" data-side="ours"><div class="cf-tag">ours</div><pre>${esc((it.ours || []).join("\n"))}</pre></div>` +
+        `<div class="cf-side cf-theirs" data-side="theirs"><div class="cf-tag">theirs</div><pre>${esc((it.theirs || []).join("\n"))}</pre></div>` +
+        `</div>`;
+    }
+  }
+  $("diff-body").innerHTML = html + "</div>";
+  renderResolveBar();
+}
+
+function paintConflictPicks() {
+  document.querySelectorAll("#cf-doc .cf-block").forEach((el) => {
+    const choice = conflictPick && conflictPick.choices[Number(el.dataset.b)];
+    el.classList.toggle("decided", !!choice);
+    el.querySelectorAll(".cf-side").forEach((s) =>
+      s.classList.toggle("picked", !!choice && s.dataset.side === choice));
+  });
+  renderResolveBar();
+}
+
+function renderResolveBar() {
+  const bar = $("resolve-bar");
+  if (!conflictPick) { bar.classList.add("hidden"); return; }
+  bar.classList.remove("hidden");
+  const n = conflictPick.choices.filter(Boolean).length;
+  $("resolve-count").textContent = n + "/" + conflictPick.count + " picked";
+  $("resolve-go").disabled = n !== conflictPick.count;
+}
+
+function setAllConflictPicks(side) {
+  if (!conflictPick) return;
+  conflictPick.choices.fill(side);
+  paintConflictPicks();
+}
+
+async function resolveConflictPicked() {
+  const v = conflictPick;
+  if (!v || v.choices.some((c) => !c)) return;
+  let resp;
+  try {
+    resp = await postJSON("/api/resolve-hunks", { path: v.path, picks: v.choices, hash: v.hash });
+  } catch (e) {
+    opLine("error: " + (e.message || e), true);
+    // 409 = the file moved under the picker: reload it for fresh blocks
+    if (/file changed/.test(e.message || "")) {
+      const i = state.statusEntries.findIndex((f) => f.path === v.path && f.section === "conflicts");
+      if (i >= 0) { state.fileCursor = i; openStatusDiff(i); }
+    }
+    return;
+  }
+  const path = v.path;
+  conflictPick = null;
+  applyStatus(resp); // the 200 body IS a fresh /api/status payload
+  reconcileStatusView();
+  renderFiles();
+  stepToNextConflict(path);
+}
+
+// After a resolve: the same path if somehow still conflicted, else the next
+// conflicted file, else whatever the cursor lands on (the resolved file
+// moved to Staged).
+function stepToNextConflict(path) {
+  let i = state.statusEntries.findIndex((f) => f.path === path && f.section === "conflicts");
+  if (i < 0) i = state.statusEntries.findIndex((f) => f.section === "conflicts");
+  if (i >= 0) { state.fileCursor = i; renderFiles(); openStatusDiff(i); return; }
+  const f = state.statusEntries[state.fileCursor];
+  if (state.filesMode === "status" && f) openStatusDiff(state.fileCursor);
+  else { $("diff-title").textContent = ""; $("diff-body").innerHTML = ""; updateDiffNav(); }
+}
+
+$("resolve-ours").addEventListener("click", () => setAllConflictPicks("ours"));
+$("resolve-theirs").addEventListener("click", () => setAllConflictPicks("theirs"));
+$("resolve-go").addEventListener("click", resolveConflictPicked);
+$("diff-body").addEventListener("click", (e) => {
+  if (!conflictPick) return;
+  if (!getSelection().isCollapsed) return; // selecting text is not a pick
+  const side = e.target.closest(".cf-side");
+  if (!side) return;
+  conflictPick.choices[Number(side.closest(".cf-block").dataset.b)] = side.dataset.side;
+  paintConflictPicks();
 });
 
 // --- focus + keyboard ---
