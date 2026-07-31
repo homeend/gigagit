@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -41,6 +42,17 @@ func (f textfield) cursorLineCol() (line, col int) {
 // is drawn as a light block. Each display line is self-contained styled segments
 // (no nesting) so the background never bleeds past a reset.
 func (f textfield) styledLines(focused bool, width int) []string {
+	lines, _ := f.styledLinesCursor(focused, width)
+	return lines
+}
+
+// styledLinesCursor is styledLines plus the index (within the returned slice)
+// of the display line holding the cursor, or -1 when unfocused. Computed by
+// the SAME chunk walk that renders the lines, so a windowing caller
+// (viewFieldWindow) can never disagree with the render about where the cursor
+// sits — the two must share one source of truth or the scroll-to-cursor logic
+// drifts the moment the chunking rules change.
+func (f textfield) styledLinesCursor(focused bool, width int) ([]string, int) {
 	if width < 1 {
 		width = 1
 	}
@@ -50,6 +62,7 @@ func (f textfield) styledLines(focused bool, width int) []string {
 		curLine, curCol = f.cursorLineCol()
 	}
 	var out []string
+	cursorIdx := -1
 	for li, ln := range logical {
 		runes := []rune(ln)
 		n := len(runes)
@@ -79,6 +92,7 @@ func (f textfield) styledLines(focused bool, width int) []string {
 			}
 			if li == curLine && curCol >= start && curCol < start+width {
 				cc := curCol - start
+				cursorIdx = len(out)
 				out = append(out, fieldStyle.Render(string(chunk[:cc]))+
 					fieldCursorStyle.Render(string(chunk[cc:cc+1]))+
 					fieldStyle.Render(string(chunk[cc+1:])))
@@ -87,7 +101,7 @@ func (f textfield) styledLines(focused bool, width int) []string {
 			}
 		}
 	}
-	return out
+	return out, cursorIdx
 }
 
 // viewField renders a labeled editable row: the (unstyled) prefix, then the
@@ -96,12 +110,63 @@ func (f textfield) styledLines(focused bool, width int) []string {
 // every value line starts in the same column as the first. Single- and
 // multi-line fields share this one code path.
 func viewField(prefix string, f textfield, focused bool, contentWidth int) string {
+	return joinFieldLines(prefix, f.styledLines(focused, contentWidth-lipgloss.Width(prefix)))
+}
+
+// viewFieldWindow is viewField with an internal vertical scrolling window:
+// at most maxLines display lines are shown (maxLines <= 0 = unlimited). When
+// the value overflows, the last window line becomes a dim "(from-to/total)"
+// scroll marker and the window is scrolled so the cursor's display line stays
+// visible; *scroll is the caller-owned offset (persisted across renders so an
+// unfocused field doesn't jump). This is what keeps a popup holding a long
+// (AI-generated / squashed) commit body inside the terminal height —
+// overlayCenter silently drops rows past termH, so an unwindowed field pushed
+// the footer (and its own tail) off-screen with no way to see them.
+func viewFieldWindow(prefix string, f textfield, focused bool, contentWidth, maxLines int, scroll *int) string {
 	indentW := lipgloss.Width(prefix)
-	lines := f.styledLines(focused, contentWidth-indentW)
-	indent := strings.Repeat(" ", indentW)
+	lines, cursorIdx := f.styledLinesCursor(focused, contentWidth-indentW)
+	total := len(lines)
+	if maxLines <= 0 || total <= maxLines {
+		*scroll = 0
+		return joinFieldLines(prefix, lines)
+	}
+	view := maxLines - 1 // the last line is the scroll marker
+	if view < 1 {
+		view = 1
+	}
+	s := *scroll
+	if s > total-view {
+		s = total - view
+	}
+	if s < 0 {
+		s = 0
+	}
+	if cursorIdx >= 0 {
+		if cursorIdx < s {
+			s = cursorIdx
+		}
+		if cursorIdx >= s+view {
+			s = cursorIdx - view + 1
+		}
+	}
+	*scroll = s
+	out := joinFieldLines(prefix, lines[s:s+view])
+	// Wordless marker (pure numbers) — nothing to translate, so it stays
+	// outside the i18n catalog on purpose.
+	marker := fmt.Sprintf("(%d-%d/%d)", s+1, s+view, total)
+	return out + "\n" + strings.Repeat(" ", indentW) + dimRowStyle.Render(marker)
+}
+
+// joinFieldLines lays field display lines out under a label prefix: the first
+// line follows the prefix, continuations indent to the prefix width (the
+// viewField layout, shared with the windowed variant).
+func joinFieldLines(prefix string, lines []string) string {
+	indent := strings.Repeat(" ", lipgloss.Width(prefix))
 	var b strings.Builder
 	b.WriteString(prefix)
-	b.WriteString(lines[0])
+	if len(lines) > 0 {
+		b.WriteString(lines[0])
+	}
 	for _, l := range lines[1:] {
 		b.WriteString("\n")
 		b.WriteString(indent)

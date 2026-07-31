@@ -119,7 +119,7 @@ func TestCommitPopupDescriptionColumnsAlign(t *testing.T) {
 	p.title = newTextField("mod 1")
 	p.desc = newTextField("mod 2\nmod 3")
 	p.field = 1
-	out := renderCommitFields(p, 52)
+	out := renderCommitFields(p, 52, 0) // 0 = no description height cap
 	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
 	if len(lines) < 3 {
 		t.Fatalf("want >=3 lines (title, desc, cont), got %d: %q", len(lines), out)

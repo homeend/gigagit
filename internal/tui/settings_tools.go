@@ -9,6 +9,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/exttool"
+	"github.com/homeend/gigagit/internal/i18n"
 )
 
 // toolWizardRow is one detected tool × catalog command template pairing shown
@@ -88,6 +89,36 @@ func (m Model) applyToolsWizard(rows []toolWizardRow, checked []bool, globalPath
 		m.cfg = cfg
 	}
 	return m, len(blocks), nil
+}
+
+// toolDetailHeights sizes the wizard's detail block ONCE for the whole row
+// set: destH is the tallest destination area (the "writes to: <path>" /
+// "already configured" line, wrapped at textW) and cmdH the tallest command
+// preview (each command split on its own newlines, then word-wrapped — the
+// same shaping the render does) any row needs. The render pads shorter rows
+// up to these heights, so the box height is a constant of the CATALOG, not of
+// the selection — moving through the list can never grow or shrink the popup.
+func toolDetailHeights(rows []toolWizardRow, textW int) (destH, cmdH int) {
+	destH, cmdH = 1, 1
+	writesTo := len(wrapWidth(i18n.T("writes to: %s", config.DefaultGlobalPath()), textW, 1<<20))
+	configured := len(wrapWidth(i18n.T("already configured — skipped on apply"), textW, 1<<20))
+	for _, row := range rows {
+		d := writesTo
+		if row.existing {
+			d = configured
+		}
+		if d > destH {
+			destH = d
+		}
+		n := 0
+		for _, ln := range strings.Split(exttool.GenerateCommand(row.tmpl, row.det.Bin), "\n") {
+			n += len(wrapWords(ln, textW))
+		}
+		if n > cmdH {
+			cmdH = n
+		}
+	}
+	return destH, cmdH
 }
 
 // wrapWords greedily word-wraps s into lines of at most w display columns,

@@ -15,6 +15,31 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   *cancel* — instead of silently stashing. A clean tree keeps the existing
   confirm flow, and a branch already checked out in another worktree still
   gets the go-to-worktree jump prompt.
+
+- **Popups fit the viewport: commit-message internal scroll + fixed-height
+  External-tools wizard.** Two live-report fixes. (1) The commit popup (and
+  the reword popup / interactive-rebase reword sub-mode, which share its
+  field renderer) no longer grows past the terminal when the description is
+  long (an AI-generated or squash-composed body): the description field now
+  scrolls internally — the window follows the cursor and a dim
+  `(from-to/total)` marker shows the position — so the fields and footer
+  hints always stay on screen (`overlayCenter` silently drops rows past the
+  terminal height, which used to cut them off with no way to see them).
+  (2) The Settings → External tools wizard's detail block (destination line +
+  command preview) now has a FIXED height computed from the tallest command
+  across all rows, so moving the selection no longer makes the popup
+  grow/shrink per tool; and the detail block is reserved *before* the tool
+  list, so on a small terminal the list is what shrinks and scrolls — the
+  command preview and footer stay visible instead of falling below the
+  viewport. Follow-up from live testing: a commit message pasted from a web
+  page can carry bare `\r` characters, which make the terminal jump to
+  column 0 mid-line and overwrite the popup frame (invisible to width math —
+  the `[E]` viewer's `sanitizeForDisplay` story). Line breaks are now
+  normalized (CRLF / bare `\r` → newline) at the read-only content path
+  (commit message view, file previews) and at the textfield boundary
+  (prefill + paste), and the commit message view opens in wrap mode — a
+  generated/pasted body is prose, unreadable as one truncated line.
+
 - **Create a worktree from a commit — with its changes optionally kept
   staged/unstaged.** The Commits panel's `.` menu row (renamed **Create
   worktree from this commit**) prefills the branch name as

@@ -49,6 +49,10 @@ type commitMessageMsg struct {
 func (m Model) openCommitMessagePopup(c model.Commit) (Model, tea.Cmd) {
 	short := shortHash(c.Hash)
 	cp := newContentPopup(commitMessageTitle(short), append(commitMetaHeader(c), contentLine{text: i18n.T("(loading…)")}))
+	// A commit message is prose — a generated/pasted body can be one logical
+	// line thousands of characters long, unreadable as a cutoff row. Open
+	// wrapped (the error popup's precedent); z still cycles the modes.
+	cp.mode = modeWrap
 	cp.footer = commitFooterLine(c)
 	m = m.pushLayer(cp)
 	return m, m.loadCommitMessageCmd(c, short)
