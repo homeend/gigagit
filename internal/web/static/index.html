@@ -11,6 +11,8 @@
   <button id="menu-btn" title="menu">☰</button>
   <span id="repo-name">…</span>
   <span id="repo-branch"></span>
+  <button id="solo-chip" class="hidden" title="showing one branch only — click to show every branch again"></button>
+  <button id="task-chip" class="hidden"></button>
   <button id="pull-btn" title="pull the current branch (p)">⟳ pull</button>
   <button id="push-btn" title="push the current branch (P)">⇫ push</button>
   <span id="repo-worktree"></span>
@@ -26,12 +28,14 @@
     <div id="stashes-header" class="side-header">stashes</div>
     <ul id="stashes-list"></ul>
   </aside>
+  <div id="rs-sidebar" class="resizer" title="drag to resize · double-click to reset"></div>
   <section id="commits-pane" class="pane focused">
     <div id="commits-scroll"><div id="commits-spacer"><div id="commits-window"></div></div></div>
   </section>
   <section id="files-pane" class="pane">
-    <button id="back-btn" title="back to the commit list (esc)">← back</button>
+    <button id="back-btn" title="one stage back (esc): diff → files → list">← back</button>
     <div id="files-header"></div>
+    <div id="compare-bar" class="hidden"></div>
     <div id="files-actions" class="hidden">
       <button id="stage-all">stage all</button>
       <button id="unstage-all">unstage all</button>
@@ -43,6 +47,7 @@
     </div>
     <ul id="files-list"></ul>
   </section>
+  <div id="rs-detail" class="resizer" title="drag to resize · double-click to reset"></div>
   <section id="diff-pane" class="pane">
     <div id="diff-header">
       <span id="diff-title"></span>
@@ -66,6 +71,66 @@
     <div id="modal-options"></div>
   </div>
 </div>
+<div id="prompt" class="hidden">
+  <div id="prompt-box">
+    <div id="prompt-title"></div>
+    <input id="prompt-input" type="text" autocomplete="off" spellcheck="false">
+    <div id="prompt-actions"><span id="prompt-hint">enter to confirm · esc to cancel</span><button id="prompt-ok">ok</button></div>
+  </div>
+</div>
+<div id="rebase" class="hidden">
+  <div id="rebase-box">
+    <div id="rebase-title"></div>
+    <ul id="rebase-list"></ul>
+    <div id="rebase-msg" class="hidden">
+      <div id="rebase-msg-title"></div>
+      <textarea id="rebase-msg-text" rows="6" spellcheck="false"></textarea>
+      <div class="rb-buttons">
+        <button id="rebase-msg-ok">set message</button>
+        <button id="rebase-msg-cancel">cancel</button>
+      </div>
+    </div>
+    <div id="rebase-hint">newest first, like the commit list · <b>squash</b> melds a commit into the one below it · nothing runs until you start</div>
+    <div class="rb-buttons">
+      <button id="rebase-start">start rebase</button>
+      <button id="rebase-reset">reset</button>
+      <button id="rebase-cancel">cancel</button>
+    </div>
+  </div>
+</div>
+<div id="versions" class="hidden">
+  <div id="versions-box">
+    <div id="versions-title"></div>
+    <ul id="versions-list"></ul>
+    <div id="versions-hint">click a version for what you can do with it · esc closes</div>
+  </div>
+</div>
+<div id="vbranches" class="hidden">
+  <div id="vbranches-box">
+    <div id="vbranches-title">branch versions</div>
+    <ul id="vbranches-list"></ul>
+    <div id="vbranches-hint">click a branch for its recorded versions · esc closes</div>
+  </div>
+</div>
+<div id="review" class="hidden">
+  <div id="review-box">
+    <div id="review-title"></div>
+    <div id="review-body"></div>
+    <div id="review-actions">
+      <span id="review-hint"></span>
+      <button id="review-park" class="hidden">run in background</button>
+      <button id="review-cancel">cancel</button>
+      <button id="review-run">run</button>
+    </div>
+  </div>
+</div>
+<div id="report" class="hidden">
+  <div id="report-box">
+    <div id="report-title"></div>
+    <pre id="report-body"></pre>
+    <div id="report-actions"><span id="report-path"></span><button id="report-copy">copy</button><button id="report-close">close</button></div>
+  </div>
+</div>
 <div id="palette" class="hidden">
   <div id="palette-box">
     <input id="palette-input" type="text" autocomplete="off" spellcheck="false" placeholder="type a command…">
@@ -77,8 +142,8 @@
     <h2>gg web — keys &amp; features</h2>
     <h3>Keys</h3>
     <div class="hrow"><span class="hkey">j / k · ↓ / ↑</span><span>move the selection (commit list, or file list in detail)</span></div>
-    <div class="hrow"><span class="hkey">enter</span><span>open the selected commit / file</span></div>
-    <div class="hrow"><span class="hkey">esc</span><span>back — close detail, menus, modals (in a decision modal: abort, when offered)</span></div>
+    <div class="hrow"><span class="hkey">enter</span><span>open the selected commit (file list appears right) / open the selected file (diff)</span></div>
+    <div class="hrow"><span class="hkey">esc</span><span>one stage back — diff → file list → commit list; closes menus and modals (in a decision modal: abort, when offered)</span></div>
     <div class="hrow"><span class="hkey">g</span><span>commit graph on/off — off is a flat list, more room for subjects (persisted)</span></div>
     <div class="hrow"><span class="hkey">r</span><span>refresh everything (status, branches, commits) — also happens automatically when the tab regains focus</span></div>
     <div class="hrow"><span class="hkey">b</span><span>show / hide the sidebar (persisted)</span></div>
@@ -90,16 +155,27 @@
     <div class="hrow"><span class="hkey">ctrl+k / ctrl+p</span><span>command palette (incl. switch repo)</span></div>
     <h3>Mouse</h3>
     <div class="hrow"><span class="hkey">commit row</span><span>open its files + diff; the yellow <b>Working tree</b> row (appears at the top while the tree is dirty) opens the status view: stage/unstage buttons per file, stage-all/unstage-all, commit box, stash</span></div>
-    <div class="hrow"><span class="hkey">branch</span><span>click: jump the list to its tip · right-click: switch, delete</span></div>
+    <div class="hrow"><span class="hkey">interactive rebase</span><span>drag a branch onto another → <b>interactive rebase A onto B…</b> opens a plan editor listing every commit A has that B does not, newest first. Per row choose <b>pick</b> (keep), <b>reword</b> (edit the message — the editor opens straight away), <b>squash</b> (meld into the commit below it) or <b>drop</b>, and move rows with ↑/↓. <b>Nothing runs until you press start</b>: cancel, esc and clicking outside all leave the branch untouched. If the branch moves while the editor is open the plan is refused rather than applied to a history that changed</span></div>
+    <div class="hrow"><span class="hkey">commit right-click</span><span>show it, copy its commit id or subject, and edit history: <b>move up / move down</b> swaps the commit with its neighbour, <b>drop this commit</b> removes it (confirmed first, shown red). Both rewrite the checked-out branch from that commit up by replaying the commits above it, so they are offered only on an ordinary commit — not a merge — and the branch is left untouched when the commit is not on it. The previous tip is recorded, so the branch's <b>previous versions…</b> can put it back</span></div>
+    <div class="hrow"><span class="hkey">branch</span><span>click: jump the list to its tip · right-click: switch, pull / push it, copy its name / tip commit id / worktree path, delete · drag onto another branch: merge or rebase</span></div>
+    <div class="hrow"><span class="hkey">make a branch</span><span>right-click a branch → <b>rename</b>, <b>create branch from here</b>, or <b>create worktree for this branch</b> (only when it has none). Each asks in a one-line prompt: enter confirms, esc cancels. A configured worktree post-create hook is shown for approval before it runs</span></div>
+    <div class="hrow"><span class="hkey">compare two branches</span><span>drag a branch onto another → <b>compare A ↔ B</b> lists every file that differs between the two tips. The bar above the file list filters by <b>origin</b>: only the files one side changed since the branches diverged (a file both sides touched shows in either). Without a common ancestor the list still opens — only the filter is unavailable</span></div>
+    <div class="hrow"><span class="hkey">force push</span><span>right-click a branch → <b>force push…</b> asks which kind before doing anything: <b>force-with-lease</b> (refuses if the remote moved since your last fetch) or plain <b>force</b> (overwrites regardless), both red, plus abort. The same prompt you get when an ordinary push is rejected — this row just reaches it without waiting for the rejection</span></div>
+    <div class="hrow"><span class="hkey">previous versions</span><span>right-click a branch → <b>previous versions…</b> lists what it pointed at before each recent operation (merge, rebase, amend, reset, delete…). Click one to <b>restore</b> the branch to it, copy its commit id, or delete the snapshot. Restoring is itself recorded, so it can be undone the same way</span></div>
+    <div class="hrow"><span class="hkey">review (AI)</span><span>right-click a branch → <b>review … (AI)</b> runs a configured review agent over that branch's work; the ☰ menu and palette carry <b>review working changes</b>. gg names a <b>tool</b>, never a command: the command comes from your own <code>[[tools.command]]</code> config with <code>category = "review"</code>, is shown in full for approval before its first run, and the approval is remembered per repo until you edit it. The report is shown when it finishes and also saved to a file, whose path the viewer shows</span></div>
+    <div class="hrow"><span class="hkey">background a run</span><span>a review takes minutes, so you do not have to watch it: <b>run in background</b> (or esc, or clicking outside the box) hides it and leaves it running. A chip appears in the top bar; click it to watch or cancel the run. When the report is ready the chip <b>fills and blinks</b> — click it to read the report, which waits there until you do. Backgrounding never cancels; only the labelled <b>cancel the run</b> button does. The run still holds the operation lane, so reading the repo works normally but a second operation waits until it finishes</span></div>
+    <div class="hrow"><span class="hkey">solo a branch</span><span>right-click a branch → <b>solo this branch</b> narrows the commit list to that branch's history. A <b>solo: name ✕</b> chip appears in the top bar — click it (or the menu's exit row) to show every branch again. The scope belongs to the server, so every tab sees it, and it survives commits, merges and pulls until you clear it</span></div>
+    <div class="hrow"><span class="hkey">pull a branch</span><span>pulling a branch you are <b>not</b> on updates it in place and leaves you where you are — no checkout, nothing to confirm. Pulling the branch you are on asks first, since it can rewrite the working tree</span></div>
     <div class="hrow"><span class="hkey">worktree</span><span>right-click: switch here (re-root the server), copy path, remove</span></div>
     <div class="hrow"><span class="hkey">tag</span><span>click: show its commit · right-click: show, copy name, delete</span></div>
     <div class="hrow"><span class="hkey">stash</span><span>click: show its changes (incl. untracked) · right-click: apply, pop, drop</span></div>
     <div class="hrow"><span class="hkey">change block</span><span>in an unstaged file's diff: click a highlighted block to select it, then <b>stage selected</b> in the diff header stages just those hunks</span></div>
     <div class="hrow"><span class="hkey">status file</span><span>right-click: stage / unstage, stage all / unstage all, copy path</span></div>
     <div class="hrow"><span class="hkey">section header</span><span>double-click: collapse / expand that sidebar section (persisted)</span></div>
+    <div class="hrow"><span class="hkey">pane divider</span><span>drag to resize — the sidebar in the commit list, the file list in a commit's detail · double-click resets it (persisted)</span></div>
     <div class="hrow"><span class="hkey">bottom bar</span><span>the footer entries are clickable — pull, push, refresh, stage/unstage, graph, sidebar, help</span></div>
     <div class="hrow"><span class="hkey">diff header ‹ ›</span><span>previous / next file · previous / next change block</span></div>
-    <div class="hrow"><span class="hkey">☰</span><span>global menu (top-left)</span></div>
+    <div class="hrow"><span class="hkey">☰</span><span>global menu (top-left) — pull, push, fetch all remotes, create branch, refresh, switch repo, toggles</span></div>
     <h3>Notes</h3>
     <div class="hrow"><span class="hkey">decisions</span><span>operations pause mid-flight and ask in the modal; destructive options render red; esc aborts when an abort option exists</span></div>
     <div class="hrow"><span class="hkey">connection</span><span>a dropped stream reconnects and replays; if the server is gone the op line reports it and the UI unlocks</span></div>

@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"path/filepath"
 	"strings"
 
+	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/model"
 )
@@ -14,17 +16,26 @@ import (
 type opStartRequest struct {
 	Op      string `json:"op"`
 	Branch  string `json:"branch"`
+	Onto    string `json:"onto"`
 	Message string `json:"message"`
 	Tag     string `json:"tag"`
 	Path    string `json:"path"`
 	Ref     string `json:"ref"`
 	Sha     string `json:"sha"`
+	Name    string `json:"name"` // new branch name (create-branch, rename-branch)
+	Edit    string `json:"edit"` // commit-edit: drop | move-up | move-down
+	Force   bool   `json:"force"`
+	// Plan is the interactive-rebase plan, in git todo order (oldest first).
+	Plan []planEntry `json:"plan"`
 }
 
 // handleOpStart begins an operation and returns 202 {op_id}. Ops wired so
-// far: switch, commit, pull, push, delete-branch, delete-tag,
-// remove-worktree, stash, stash-apply, stash-pop, stash-drop, discard; the
-// switch statement is where future ops land.
+// far: switch, commit, fetch, pull, push, merge, rebase, create-branch,
+// rename-branch, create-worktree, delete-branch, delete-tag, remove-worktree,
+// stash, stash-apply, stash-pop, stash-drop, discard, restore-version,
+// delete-version; the switch statement is
+// where future ops land. pull and push each take an OPTIONAL branch — omitted
+// means the current one.
 func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 	svc := s.service()
 	var req opStartRequest
@@ -40,31 +51,150 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		op = engine.SmartSwitch{Branch: req.Branch}
+	case "merge":
+		// Drag-and-drop pair: Branch is the dragged source, Onto the branch
+		// it was dropped on. Both names are validated here; the engine then
+		// checks they exist and refuses source == target itself.
+		if req.Branch == "" || !isGitArgSafe(req.Branch) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid branch"))
+			return
+		}
+		if req.Onto == "" || !isGitArgSafe(req.Onto) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid target branch"))
+			return
+		}
+		// SmartMerge is worktree-aware: it merges in place, or inside the
+		// worktree holding the target, or autostashes and switches — so an
+		// arbitrary pair works with no client-side precondition. A conflict
+		// forks "merge-conflict" into the parking modal.
+		op = engine.SmartMerge{Source: req.Branch, Target: req.Onto}
+	case "rebase":
+		// Branch is the dragged branch — the one REWRITTEN and ended on —
+		// and Onto the branch it was dropped on. Unlike merge, the ladder
+		// pivots on Branch, so the labels must not be swapped.
+		if req.Branch == "" || !isGitArgSafe(req.Branch) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid branch"))
+			return
+		}
+		if req.Onto == "" || !isGitArgSafe(req.Onto) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid base branch"))
+			return
+		}
+		// A conflict pauses the replay and forks "rebase-conflict" into the
+		// parking modal.
+		op = engine.SmartRebase{Branch: req.Branch, Onto: req.Onto}
+	case "interactive-rebase":
+		// The full plan editor. The client may reorder and annotate; the plan
+		// is checked against a freshly read range before anything runs.
+		built, code, err := s.buildInteractiveRebase(r.Context(), svc, req.Branch, req.Onto, req.Plan)
+		if err != nil {
+			writeErr(w, code, err)
+			return
+		}
+		op = built
+	case "commit-edit":
+		// A single-commit history edit on the checked-out branch. The plan is
+		// built server-side from a range read here (buildCommitEdit) — the
+		// wire carries a commit id and one of three verbs, never a plan.
+		built, code, err := s.buildCommitEdit(r.Context(), svc, req.Sha, req.Edit)
+		if err != nil {
+			writeErr(w, code, err)
+			return
+		}
+		op = built
 	case "commit":
 		if strings.TrimSpace(req.Message) == "" {
 			writeErr(w, http.StatusBadRequest, errors.New("message required"))
 			return
 		}
 		op = engine.Commit{Message: req.Message}
+	case "fetch":
+		op = engine.Fetch{} // all remotes; no arguments, no decisions
+	case "create-branch":
+		// Only the leading-dash check here: the engine runs the new name
+		// through git check-ref-format and reports a clear refusal, which is
+		// a better error than any allowlist this layer could invent.
+		if req.Name == "" || !isGitArgSafe(req.Name) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid branch name"))
+			return
+		}
+		if req.Branch != "" && !isGitArgSafe(req.Branch) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid start point"))
+			return
+		}
+		op = engine.CreateBranch{Name: req.Name, StartPoint: req.Branch} // "" = HEAD
+	case "rename-branch":
+		if req.Branch == "" || !isGitArgSafe(req.Branch) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid branch"))
+			return
+		}
+		if req.Name == "" || !isGitArgSafe(req.Name) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid branch name"))
+			return
+		}
+		op = engine.RenameBranch{Old: req.Branch, New: req.Name}
+	case "create-worktree":
+		// For an EXISTING branch: the engine refuses a branch that is not
+		// local, and git itself refuses one already checked out elsewhere.
+		if req.Branch == "" || !isGitArgSafe(req.Branch) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid branch"))
+			return
+		}
+		if req.Path == "" || !isGitArgSafe(req.Path) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid path"))
+			return
+		}
+		// The configured post-create hook is honoured rather than silently
+		// skipped, so the web behaves like the TUI. It is not run unopposed:
+		// the engine's approval decision shows the script and parks in the
+		// browser modal, defaulting to skip on anything but an explicit run.
+		op = engine.CreateWorktreeForBranch{
+			Branch:         req.Branch,
+			Path:           req.Path,
+			PostCreateHook: s.postCreateHook(r),
+		}
 	case "pull":
-		op = engine.SmartPull{} // current branch, its configured remote, PullAndStay
+		// No branch = the current one, checked out and stayed on (the header
+		// button and palette). A named branch pulls WITHOUT leaving the
+		// current one — SmartPull sends the current branch down its own lane
+		// anyway when the two coincide, so the client needs no precondition.
+		if req.Branch == "" {
+			op = engine.SmartPull{} // current branch, its configured remote, PullAndStay
+			break
+		}
+		if !isGitArgSafe(req.Branch) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid branch"))
+			return
+		}
+		op = engine.SmartPull{Branch: req.Branch, Intent: engine.PullInBackground}
 	case "push":
-		// Branch resolved server-side — nothing client-sent reaches argv, and
-		// Force is never wire-settable (force is only reachable through the
-		// op's own parked push-rejected → push-force decisions).
-		branch, berr := svc.CurrentBranch(r.Context())
-		if berr != nil {
-			writeErr(w, http.StatusInternalServerError, berr)
-			return
-		}
+		// `force` does NOT force-push. engine.Push{Force:true} asks the
+		// push-force decision (force-with-lease / force / abort) and pushes
+		// whatever comes back, so the flag only reaches that prompt — the
+		// same one the rejection-recovery path already parks in the browser
+		// modal — without needing a rejection first. A silent force is not
+		// expressible on this wire.
+		branch := req.Branch
 		if branch == "" {
-			// Detached HEAD only. An unborn branch still resolves via
-			// symbolic-ref, so it dispatches and surfaces git's own refspec
-			// error through the op instead.
-			writeErr(w, http.StatusConflict, errors.New("push: no current branch (detached HEAD?)"))
+			// No branch named: resolve the current one server-side.
+			cur, berr := svc.CurrentBranch(r.Context())
+			if berr != nil {
+				writeErr(w, http.StatusInternalServerError, berr)
+				return
+			}
+			if cur == "" {
+				// Detached HEAD only. An unborn branch still resolves via
+				// symbolic-ref, so it dispatches and surfaces git's own refspec
+				// error through the op instead.
+				writeErr(w, http.StatusConflict, errors.New("push: no current branch (detached HEAD?)"))
+				return
+			}
+			branch = cur
+		} else if !isGitArgSafe(branch) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid branch"))
 			return
 		}
-		op = engine.Push{Remote: "origin", Branch: branch, SetUpstream: true} // the TUI's exact P dispatch
+		op = engine.Push{Remote: "origin", Branch: branch, SetUpstream: true, Force: req.Force} // the TUI's exact P dispatch
 	case "delete-branch":
 		if req.Branch == "" || !isGitArgSafe(req.Branch) {
 			writeErr(w, http.StatusBadRequest, errors.New("invalid branch"))
@@ -155,6 +285,32 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusNotFound, errors.New("unknown stash"))
 			return
 		}
+	case "restore-version":
+		// Move a branch back to a recorded snapshot. The engine snapshots the
+		// pre-restore tip first (a restore is itself undoable), refuses a
+		// branch checked out in another worktree, and forks "restore-dirty"
+		// into the parking modal when the current branch has uncommitted
+		// changes. It also verifies the ref BELONGS to the branch, so the two
+		// values cannot be crossed.
+		if req.Branch == "" || !isGitArgSafe(req.Branch) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid branch"))
+			return
+		}
+		if req.Ref == "" || !isGitArgSafe(req.Ref) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid version ref"))
+			return
+		}
+		op = engine.RestoreBranchVersion{Branch: req.Branch, Ref: req.Ref}
+	case "delete-version":
+		// Removes one snapshot ref. Decision-free — the client confirms first
+		// (the delete-tag convention). The engine refuses any ref outside
+		// refs/gg/versions/, which is what keeps a client bug from deleting a
+		// real branch or tag through this op.
+		if req.Ref == "" || !isGitArgSafe(req.Ref) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid version ref"))
+			return
+		}
+		op = engine.DeleteBranchVersion{Ref: req.Ref}
 	case "discard":
 		// Per-file discard. The path resolves against a fresh status read
 		// (the remove-worktree/stash allowlist pattern): a stale client row
@@ -278,4 +434,25 @@ func (s *Server) handleOpDecide(w http.ResponseWriter, r *http.Request) {
 	default: // errNotWaiting, errOpDone
 		writeErr(w, http.StatusConflict, err)
 	}
+}
+
+// postCreateHook reads the repo's configured worktree post-create hook, the
+// same probe feedFor uses for commit-sort (committed .gg.toml only; the
+// machine-local private repo config is not consulted). Any failure yields ""
+// — no hook — because a config read must never block creating a worktree.
+//
+// Returning the script rather than "" is deliberate: skipping it silently
+// would make the web quietly diverge from the TUI. The engine gates it behind
+// an approval decision that shows the script and defaults to skip, so it
+// reaches the browser modal before anything runs.
+func (s *Server) postCreateHook(r *http.Request) string {
+	top, err := s.service().TopLevel(r.Context())
+	if err != nil {
+		return ""
+	}
+	cfg, err := config.Load(config.DefaultGlobalPath(), filepath.Join(top, ".gg.toml"))
+	if err != nil {
+		return ""
+	}
+	return cfg.Worktree.PostCreateHook
 }

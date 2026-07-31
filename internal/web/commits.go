@@ -20,6 +20,10 @@ type commitRow struct {
 	Refs    []refInfo `json:"refs,omitempty"`
 	Cells   string    `json:"cells"`
 	Lane    int       `json:"lane"`
+	// Parents is the parent COUNT, not the ids: it is what the client needs
+	// to keep the history-edit rows off a merge (2+) or the root (0), the
+	// same gate the TUI's commitEditRow applies.
+	Parents int `json:"parents"`
 }
 
 type refInfo struct {
@@ -45,6 +49,11 @@ func (s *Server) feedFor(r *http.Request) *domain.CommitFeed {
 			}
 		}
 		f.SetSortMode(mode)
+		// Re-derive the solo scope on every build. SetScope only records the
+		// refspec — the LoadInitial the caller is about to make does the walk,
+		// so a rebuild costs nothing extra. This is what makes solo survive
+		// resetFeed after a state-changing op.
+		f.SetScope(soloScope(s.solo))
 		if s.pageInitial > 0 {
 			f.SetPageSizes(s.pageInitial, s.pageBatch)
 		}
@@ -66,9 +75,12 @@ func (s *Server) handleCommits(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
+	// solo rides along on the response whose content it scopes, so a reload
+	// or a second tab always learns the active scope without a second call.
 	writeJSON(w, map[string]any{
 		"rows":          buildRows(st.Commits),
 		"can_load_more": !st.Exhausted,
+		"solo":          s.soloBranch(),
 	})
 }
 
@@ -84,7 +96,7 @@ func buildRows(commits []model.Commit) []commitRow {
 		if len(short) > 8 {
 			short = short[:8]
 		}
-		row := commitRow{Hash: c.Hash, Short: short, Subject: c.Subject, Author: c.Author, Time: c.UnixTime}
+		row := commitRow{Hash: c.Hash, Short: short, Subject: c.Subject, Author: c.Author, Time: c.UnixTime, Parents: len(c.Parents)}
 		for _, ref := range c.Refs {
 			row.Refs = append(row.Refs, refInfo{Name: ref.Name, Kind: refKindString(ref.Kind), Head: ref.Head})
 		}

@@ -61,6 +61,10 @@ func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request) {
 		s.handleWorktreeDiff(w, r, wt)
 		return
 	}
+	if q.Get("left") != "" || q.Get("right") != "" {
+		s.handleRevDiff(w, r)
+		return
+	}
 	sha, path := q.Get("sha"), q.Get("path")
 	if sha == "" || path == "" {
 		writeErr(w, http.StatusBadRequest, errors.New("sha and path are required"))
@@ -118,6 +122,48 @@ func spanPairs(spans []textdiff.Span) [][2]int {
 		out[i] = [2]int{sp.Start, sp.End}
 	}
 	return out
+}
+
+// handleRevDiff serves the two-revision form: one file as it stands at
+// `left` against the same file at `right`. It backs the branch comparison,
+// whose two sides are unrelated revisions rather than a commit and its
+// parent. Both revs are commit HASHES resolved by /api/compare, never branch
+// names, so the pair is immutable and the diff cache key (left..right:path)
+// stays honest.
+func (s *Server) handleRevDiff(w http.ResponseWriter, r *http.Request) {
+	svc := s.service()
+	q := r.URL.Query()
+	left, right, path := q.Get("left"), q.Get("right"), q.Get("path")
+	oldPath := q.Get("old")
+	if oldPath == "" {
+		oldPath = path
+	}
+	// left/right are hex-only, enforcing the doc comment above: a branch
+	// name here would poison the session-lived commit↔commit diff cache.
+	if !isHexSha(left) || !isHexSha(right) || !isGitArgSafe(path) || !isGitArgSafe(oldPath) {
+		writeErr(w, http.StatusBadRequest, errors.New("invalid left/right/path"))
+		return
+	}
+	// Status has the same meaning as in the commit form, relative to the
+	// right side: A = absent on the left, D = absent on the right.
+	status := q.Get("status")
+	var oldSrc, newSrc domain.ByteSource
+	if status != "A" {
+		oldSrc = func(ctx context.Context) ([]byte, error) { return svc.ShowFile(ctx, left, oldPath) }
+	}
+	if status != "D" {
+		newSrc = func(ctx context.Context) ([]byte, error) { return svc.ShowFile(ctx, right, path) }
+	}
+	d, err := svc.Differ().Diff(r.Context(), domain.Request{
+		Key: left + ".." + right + ":" + path,
+		Old: oldSrc,
+		New: newSrc,
+	})
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeDiffJSON(w, d, nil)
 }
 
 // handleWorktreeDiff serves the wt=unstaged|staged forms: the working

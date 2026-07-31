@@ -2,8 +2,6 @@ package tui
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -16,16 +14,16 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/observ"
+	"github.com/homeend/gigagit/internal/promptstate"
 	"github.com/homeend/gigagit/internal/template"
 )
 
 // toolCommandHash keys first-run approval memory: the TEMPLATE text (not the
 // per-run resolved values), so approving once covers every run until the
-// config text changes.
-func toolCommandHash(command string) string {
-	sum := sha256.Sum256([]byte(command))
-	return hex.EncodeToString(sum[:])[:16]
-}
+// config text changes. The format lives in promptstate, beside the store that
+// keys on it, because the web's review lane records approvals against the same
+// file and the two frontends cannot import each other.
+func toolCommandHash(command string) string { return promptstate.CommandHash(command) }
 
 // toolRepoKey scopes approvals per repo: the git common dir when the repo
 // health probe has resolved it (startup/reRoot), else the worktree path.

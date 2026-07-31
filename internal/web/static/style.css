@@ -4,6 +4,8 @@
   --add: #1f3d2b; --del: #46262a; --span-add: #2f6b41; --span-del: #8a3b42;
   --lane0: #6ea8fe; --lane1: #f2a65a; --lane2: #7bd88f; --lane3: #e06c9f;
   --lane4: #b58ef2; --lane5: #5ad0c8; --lane6: #e0c06c; --lane7: #f27a6a;
+  /* Pane widths — the drag handles rewrite --sb-w / --files-w on #panes. */
+  --sb-w: 230px; --files-w: 320px; --rs-w: 5px;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; }
@@ -15,16 +17,48 @@ body {
 #repo-name { font-weight: bold; color: var(--accent); }
 #repo-branch::before { content: " \2387  "; color: var(--dim); }
 #repo-worktree { float: right; color: var(--dim); }
-#panes { flex: 1; display: grid; grid-template-columns: 5fr 3fr 6fr; min-height: 0; }
-/* Drill-in layout, mirroring the TUI: the list and the opened commit are
-   two separate full-screen states, never crammed side by side. */
-#panes.solo { grid-template-columns: 230px 1fr; }
+/* Staged drill-in layout (the GitKraken flow): "solo" = the full-width
+   commit list; "files" = commit clicked — the commits pane shrinks to the
+   flexible column and the FILE LIST takes a fixed column on the RIGHT, no
+   diff yet; "detail" = file clicked — the diff replaces the commits area,
+   file list stays right. Each mode shows exactly three grid children —
+   flexible pane, drag handle, fixed pane — so the other modes' panes AND
+   handle must be hidden or they would claim a column. The file list is
+   placed right via `order`, not DOM moves, so its handlers stay put. */
+#panes { flex: 1; display: grid; grid-template-columns: var(--sb-w) var(--rs-w) 1fr; min-height: 0; }
+#panes.solo { grid-template-columns: var(--sb-w) var(--rs-w) 1fr; }
 #panes.solo.nosb { grid-template-columns: 1fr; }
-#panes.solo.nosb #branches-pane { display: none; }
-#panes.detail #branches-pane { display: none; }
-#panes.solo #files-pane, #panes.solo #diff-pane { display: none; }
-#panes.detail { grid-template-columns: 3fr 9fr; }
-#panes.detail #commits-pane { display: none; }
+#panes.solo.nosb #branches-pane, #panes.solo.nosb #rs-sidebar { display: none; }
+#panes.solo #files-pane, #panes.solo #diff-pane, #panes.solo #rs-detail { display: none; }
+/* The files stage KEEPS the sidebar — five grid children (the one mode
+   exempt from the three-children rule): sidebar | handle | commits |
+   handle | file list. The unordered sidebar pair sorts first (order 0 in
+   DOM order), commits/handle/files follow via explicit order. The b
+   toggle's nosb variant drops the sidebar pair back to three columns. */
+#panes.files { grid-template-columns: var(--sb-w) var(--rs-w) 1fr var(--rs-w) var(--files-w); }
+#panes.files #diff-pane { display: none; }
+#panes.files.nosb { grid-template-columns: 1fr var(--rs-w) var(--files-w); }
+#panes.files.nosb #branches-pane, #panes.files.nosb #rs-sidebar { display: none; }
+#panes.files #commits-pane { order: 1; }
+#panes.files #rs-detail { order: 2; }
+#panes.files #files-pane { order: 3; }
+#panes.detail { grid-template-columns: 1fr var(--rs-w) var(--files-w); }
+#panes.detail #branches-pane, #panes.detail #rs-sidebar, #panes.detail #commits-pane { display: none; }
+#panes.detail #diff-pane { order: 1; }
+#panes.detail #rs-detail { order: 2; }
+#panes.detail #files-pane { order: 3; }
+/* The file list's left separator. The commits/diff pane's own border-right
+   technically draws one, but it sits on the FAR side of the 5px handle
+   gutter and --border-on---bg is near-invisible on a real monitor (a user
+   report circled the exact spot the line was rendered in). The line the
+   eye expects is at the file list's own edge, against its content, a
+   shade brighter. */
+#panes.files #files-pane, #panes.detail #files-pane { border-left: 1px solid #3a4150; }
+/* The handle is its own grid column, so dragging never overlaps a pane's
+   content and the hit area does not depend on hovering a 1px border. */
+.resizer { cursor: col-resize; background: var(--bg); touch-action: none; }
+.resizer:hover, .resizer.dragging { background: var(--accent); }
+body.resizing { cursor: col-resize; user-select: none; }
 .pane { overflow: auto; border-right: 1px solid var(--border); min-width: 0; }
 .pane.focused { box-shadow: inset 2px 0 0 var(--accent); }
 #commits-pane { overflow: hidden; }
@@ -42,10 +76,6 @@ body {
 .ref.remote { background: #3a2e52; color: #cbb4f5; }
 .ref.tag { background: #4d431f; color: #e8d47c; }
 .ref.head { outline: 1px solid var(--accent); }
-.lane-0 { color: var(--lane0); } .lane-1 { color: var(--lane1); }
-.lane-2 { color: var(--lane2); } .lane-3 { color: var(--lane3); }
-.lane-4 { color: var(--lane4); } .lane-5 { color: var(--lane5); }
-.lane-6 { color: var(--lane6); } .lane-7 { color: var(--lane7); }
 #files-list { list-style: none; }
 #files-list li { padding: 2px 8px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #files-list li.sel { background: var(--sel); }
@@ -87,6 +117,18 @@ mark.r { background: var(--span-add); color: inherit; }
   border-radius: 3px; padding: 1px 8px; font: inherit; cursor: pointer;
 }
 #files-actions button:hover { border-color: var(--accent); }
+/* Branch-comparison origin filter. Branch names can be long, so each button
+   ellipsises rather than pushing its neighbours off the pane. */
+#compare-bar { padding: 3px 8px; display: flex; gap: 6px; border-bottom: 1px solid var(--border); }
+#compare-bar.hidden { display: none; }
+#compare-bar button {
+  background: var(--bg-alt); color: var(--fg); border: 1px solid var(--border);
+  border-radius: 3px; padding: 1px 8px; font: inherit; font-size: 11px; cursor: pointer;
+  max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+#compare-bar button:hover:not(:disabled) { border-color: var(--accent); }
+#compare-bar button.on { border-color: var(--accent); color: var(--accent); }
+#compare-bar button:disabled { opacity: .45; cursor: default; }
 #files-list li.sect { color: var(--dim); font-weight: bold; cursor: default; padding-top: 6px; }
 #files-list li button.act {
   float: right; background: none; color: var(--dim); border: 1px solid var(--border);
@@ -104,12 +146,30 @@ mark.r { background: var(--span-add); color: inherit; }
 #branches-list li:hover { background: var(--bg-alt); }
 #branches-list li.head { color: var(--accent); font-weight: bold; cursor: default; }
 #branches-list li .ab { float: right; color: var(--dim); font-size: 11px; }
+/* A branch row accepting a drop — the only feedback that the pair is valid. */
+#branches-list li.drop-target {
+  outline: 1px solid var(--lane0);
+  outline-offset: -1px;
+  background: rgba(110, 168, 254, 0.12);
+}
 #op-line { flex: none; padding: 3px 12px; color: var(--accent); background: var(--bg-alt); border-top: 1px solid var(--border); white-space: pre-wrap; word-break: break-word; max-height: 30vh; overflow-y: auto; }
 #op-line.hidden { display: none; }
+/* The parked-run line is a handle on something still running, not a notice:
+   it opens the review on click, so it has to look clickable. */
+#op-line.task { cursor: pointer; }
+#op-line.task:hover { background: var(--sel); }
 #op-head { display: none; justify-content: space-between; color: var(--dim); font-size: 11px; margin-bottom: 2px; }
 #op-line.err #op-head { display: flex; }
 #op-line.err { color: #f27a6a; }
-#modal { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; z-index: 10; }
+/* Overlay stacking. Two of these are RAISED FROM the others, so they must
+   sit above every panel overlay, not beside them:
+     30  #modal    — a decision/confirm can be raised from a popup (a version
+                     row's restore) or from the transport mid-op
+     40  #ctx-menu — raised from the sidebar AND from inside popups
+   Everything a menu or modal can be opened over stays below 30: help 11,
+   palette 21, versions 21, vbranches 20 (below versions — the drill-in), prompt 22. Getting this wrong does not hide the
+   surface — it paints it UNDERNEATH, which reads as a dead click. */
+#modal { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; z-index: 30; }
 #modal.hidden { display: none; }
 #modal-box { background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; padding: 18px 22px; max-width: 560px; }
 #modal-prompt { margin-bottom: 14px; }
@@ -140,7 +200,7 @@ mark.r { background: var(--span-add); color: inherit; }
 }
 #commit-box button:hover:not(:disabled) { border-color: var(--accent); }
 #commit-box button:disabled { opacity: .45; cursor: default; }
-#ctx-menu { position: fixed; z-index: 20; background: var(--bg-alt); border: 1px solid var(--border); border-radius: 4px; display: flex; flex-direction: column; min-width: 170px; box-shadow: 0 4px 14px rgba(0,0,0,.5); }
+#ctx-menu { position: fixed; z-index: 40; background: var(--bg-alt); border: 1px solid var(--border); border-radius: 4px; display: flex; flex-direction: column; min-width: 170px; box-shadow: 0 4px 14px rgba(0,0,0,.5); }
 #ctx-menu.hidden { display: none; }
 #ctx-menu button { background: none; border: none; color: var(--fg); font: inherit; text-align: left; padding: 5px 12px; cursor: pointer; }
 #ctx-menu button:hover { background: var(--sel); }
@@ -160,6 +220,33 @@ mark.r { background: var(--span-add); color: inherit; }
   font: inherit; cursor: pointer;
 }
 #top #pull-btn:hover:not(:disabled), #top #push-btn:hover:not(:disabled) { border-color: var(--accent); }
+/* The solo chip IS the way out of solo mode, so it is styled to be noticed:
+   accent-filled, unlike the outline buttons beside it. */
+#top #solo-chip {
+  margin-left: 10px; background: var(--sel); color: var(--accent);
+  border: 1px solid var(--accent); border-radius: 3px; padding: 1px 10px;
+  font: inherit; cursor: pointer;
+}
+#top #solo-chip:hover { background: var(--accent); color: var(--bg); }
+#top #solo-chip.hidden { display: none; }
+/* Background-task chip: a parked run's only remaining presence. While the
+   run is live it is quiet (outline); when it finishes it has to be noticed
+   without stealing the screen, so it fills and blinks — for a FIXED number
+   of iterations, then stays filled. An endless blink is noise you learn to
+   ignore; a one-shot flash is one you can miss. */
+#top #task-chip {
+  margin-left: 10px; background: none; color: var(--dim);
+  border: 1px solid var(--border); border-radius: 3px; padding: 1px 10px;
+  font: inherit; cursor: pointer;
+}
+#top #task-chip.hidden { display: none; }
+#top #task-chip.running { color: var(--fg); }
+#top #task-chip.running:hover { border-color: var(--accent); }
+#top #task-chip.ready { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+#top #task-chip.failed { background: #f27a6a; color: var(--bg); border-color: #f27a6a; }
+#top #task-chip.blink { animation: taskblink .8s steps(1, end) 6; }
+@keyframes taskblink { 50% { background: none; color: var(--fg); } }
+@media (prefers-reduced-motion: reduce) { #top #task-chip.blink { animation: none; } }
 #top #pull-btn:disabled, #top #push-btn:disabled { opacity: .45; cursor: default; }
 #help { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; z-index: 11; cursor: pointer; }
 #help.hidden { display: none; }
@@ -168,9 +255,21 @@ mark.r { background: var(--span-add); color: inherit; }
 #help-box h3 { margin: 14px 0 6px; font-size: 12px; color: var(--dim); text-transform: uppercase; letter-spacing: .05em; }
 #help-box .hrow { display: flex; gap: 14px; line-height: 1.65; }
 #help-box .hkey { flex: none; width: 140px; color: var(--accent); }
-.crow .graph .flatdot { margin-right: 10px; }
+.crow .graph .flatdot { display: inline-block; margin-right: 10px; }
 
-/* command palette (z-index 21: above modal 10 / help 11 / ctx-menu 20) */
+/* command palette (z-index 21: above help 11, below modal 30 / ctx-menu 40) */
+/* One-line text prompt. Same layer stack and visual language as the palette;
+   it exists because a name or a path cannot come from a menu row. */
+#prompt { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: flex-start; justify-content: center; z-index: 22; }
+#prompt.hidden { display: none; }
+#prompt-box { margin-top: 20vh; background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; width: 90vw; max-width: 560px; display: flex; flex-direction: column; }
+#prompt-title { padding: 10px 14px 6px; color: var(--fg); }
+#prompt-input { margin: 0 14px; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 3px; padding: 7px 10px; font: inherit; outline: none; }
+#prompt-input:focus { border-color: var(--accent); }
+#prompt-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; }
+#prompt-hint { color: var(--dim); font-size: 11px; }
+#prompt-ok { background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 3px; padding: 2px 14px; font: inherit; cursor: pointer; }
+#prompt-ok:hover { border-color: var(--accent); }
 #palette { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: flex-start; justify-content: center; z-index: 21; }
 #palette.hidden { display: none; }
 #palette-box { margin-top: 18vh; background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; width: 90vw; max-width: 560px; display: flex; flex-direction: column; }
@@ -194,3 +293,89 @@ tr.hk.picked td.no { background: var(--sel); color: var(--fg); }
 #hunk-bar button:hover:not(:disabled) { border-color: var(--accent); }
 #hunk-bar button:disabled { opacity: .45; cursor: default; }
 #hunk-bar #hunk-stage:not(:disabled) { color: var(--accent); }
+
+/* Branch versions (the operations history) — a list overlay on the shared
+   layer stack, styled after the palette. */
+/* interactive-rebase plan editor — same overlay family as #versions, wider
+   because every row carries an action select and two reorder buttons. */
+#rebase { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: flex-start; justify-content: center; z-index: 21; }
+#rebase.hidden { display: none; }
+#rebase-box { margin-top: 10vh; background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; width: 94vw; max-width: 860px; display: flex; flex-direction: column; }
+#rebase-title { padding: 10px 14px; border-bottom: 1px solid var(--border); }
+#rebase-hint { padding: 6px 14px; border-top: 1px solid var(--border); color: var(--dim); font-size: 11px; }
+#rebase-list { list-style: none; margin: 0; padding: 6px 0; max-height: 52vh; overflow-y: auto; }
+#rebase-list li { display: flex; gap: 8px; align-items: center; padding: 3px 14px; white-space: nowrap; }
+#rebase-list li.drop .rb-subj { text-decoration: line-through; color: var(--dim); }
+#rebase-list li.moved { background: var(--sel); }
+#rebase-list .rb-short { color: var(--dim); }
+#rebase-list .rb-subj { overflow: hidden; text-overflow: ellipsis; flex: 1; }
+#rebase-list .rb-note { color: var(--accent); font-size: 11px; }
+#rebase-list select { background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 3px; padding: 1px 3px; font: inherit; font-size: 11px; }
+#rebase-list button.rb-move { background: none; border: 1px solid var(--border); color: var(--fg); border-radius: 3px; cursor: pointer; padding: 0 5px; }
+#rebase-list button.rb-move:disabled { opacity: .3; cursor: default; }
+#rebase-msg { padding: 8px 14px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 6px; }
+#rebase-msg.hidden { display: none; }
+#rebase-msg-text { width: 100%; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 3px; font: inherit; padding: 4px; resize: vertical; }
+.rb-buttons { padding: 8px 14px; display: flex; gap: 8px; justify-content: flex-end; border-top: 1px solid var(--border); }
+.rb-buttons button { background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 3px; padding: 3px 10px; cursor: pointer; font: inherit; }
+.rb-buttons button:hover { background: var(--sel); }
+#rebase-start { border-color: var(--accent); }
+
+#versions { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: flex-start; justify-content: center; z-index: 21; }
+#versions.hidden { display: none; }
+#versions-box { margin-top: 14vh; background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; width: 92vw; max-width: 720px; display: flex; flex-direction: column; }
+#versions-title { padding: 10px 14px; border-bottom: 1px solid var(--border); }
+#versions-hint { padding: 6px 14px; border-top: 1px solid var(--border); color: var(--dim); font-size: 11px; }
+#versions-list { list-style: none; margin: 0; padding: 6px 0; max-height: 55vh; overflow-y: auto; }
+#versions-list li { display: flex; gap: 10px; padding: 5px 14px; cursor: pointer; white-space: nowrap; }
+#versions-list li:hover { background: var(--sel); }
+#versions-list li.empty { color: var(--dim); cursor: default; }
+/* The fixed columns are flex: none — with the default flex-shrink they
+   shrank PROPORTIONALLY TO EACH ROW'S OVERFLOW (.vsub's flex-basis is the
+   subject's full text width), so a long subject pulled its own row's
+   op/sha columns left and the columns drifted between rows. Only .vsub
+   may shrink. */
+#versions-list .vwhen { flex: none; color: var(--dim); width: 7em; overflow: hidden; text-overflow: ellipsis; }
+#versions-list .vop { flex: none; color: var(--accent); width: 9em; overflow: hidden; text-overflow: ellipsis; }
+#versions-list .vsha { flex: none; color: var(--dim); }
+#versions-list .vsub { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; }
+
+/* All-branches versions picker — sits at z-index 20, deliberately BELOW
+   #versions (21): drilling into a branch opens the versions overlay on top,
+   and esc closes it back to the picker (the client layer stack's default). */
+#vbranches { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: flex-start; justify-content: center; z-index: 20; }
+#vbranches.hidden { display: none; }
+#vbranches-box { margin-top: 14vh; background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; width: 92vw; max-width: 560px; display: flex; flex-direction: column; }
+#vbranches-title { padding: 10px 14px; border-bottom: 1px solid var(--border); }
+#vbranches-hint { padding: 6px 14px; border-top: 1px solid var(--border); color: var(--dim); font-size: 11px; }
+#vbranches-list { list-style: none; margin: 0; padding: 6px 0; max-height: 55vh; overflow-y: auto; }
+#vbranches-list li { display: flex; gap: 10px; align-items: baseline; padding: 5px 14px; cursor: pointer; white-space: nowrap; }
+#vbranches-list li:hover { background: var(--sel); }
+#vbranches-list li.empty { color: var(--dim); cursor: default; }
+#vbranches-list .vbname { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; }
+#vbranches-list .vbdel { flex: none; color: #f27a6a; font-size: 11px; border: 1px solid #f27a6a; border-radius: 3px; padding: 0 4px; }
+#vbranches-list .vbcount { flex: none; color: var(--dim); }
+#vbranches-list .vbwhen { flex: none; color: var(--dim); width: 10em; overflow: hidden; text-overflow: ellipsis; text-align: right; }
+
+/* AI review: the lane (chooser / approval / progress) and the report viewer.
+   Both sit at 21 with the other panel overlays — the ctx-menu (40) and the
+   decision modal (30) still have to paint over them. */
+#review, #report { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: flex-start; justify-content: center; z-index: 21; }
+#review.hidden, #report.hidden { display: none; }
+#review-box { margin-top: 16vh; background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; width: 92vw; max-width: 760px; display: flex; flex-direction: column; }
+#review-title { padding: 10px 14px; border-bottom: 1px solid var(--border); }
+#review-body { padding: 12px 14px; max-height: 46vh; overflow-y: auto; }
+#review-body .rcmd { white-space: pre-wrap; word-break: break-word; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 8px 10px; color: var(--fg); }
+#review-body .rnote { color: var(--dim); font-size: 11px; margin-top: 10px; }
+#review-body ul { list-style: none; margin: 0; padding: 0; }
+#review-body li { padding: 5px 10px; cursor: pointer; border-radius: 3px; }
+#review-body li:hover, #review-body li.sel { background: var(--sel); }
+#review-body li .detail { color: var(--dim); display: block; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#review-actions, #report-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 10px 14px; border-top: 1px solid var(--border); }
+#review-hint, #report-path { margin-right: auto; color: var(--dim); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#review-actions button, #report-actions button { background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 3px; padding: 2px 14px; font: inherit; cursor: pointer; }
+#review-actions button:hover, #report-actions button:hover { border-color: var(--accent); }
+#review-actions button.hidden { display: none; }
+#report-box { margin-top: 8vh; background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; width: 94vw; max-width: 900px; display: flex; flex-direction: column; }
+#report-title { padding: 10px 14px; border-bottom: 1px solid var(--border); }
+#report-body { margin: 0; padding: 12px 16px; max-height: 68vh; overflow: auto; white-space: pre-wrap; word-break: break-word; font: inherit; }

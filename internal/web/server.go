@@ -29,6 +29,9 @@ type Server struct {
 
 	mu   sync.Mutex
 	feed *domain.CommitFeed
+	// solo narrows the commit list to one branch ("" = all). Read at every
+	// feed build, so it survives resetFeed (see solo.go).
+	solo string
 
 	// page-size overrides applied to the feed when > 0 (test seam).
 	pageInitial int
@@ -67,14 +70,22 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/tags", s.handleTags)
 	mux.HandleFunc("GET /api/stashes", s.handleStashes)
 	mux.HandleFunc("GET /api/commits", s.handleCommits)
+	mux.HandleFunc("POST /api/solo", writeGuard(s.handleSolo))
 	mux.HandleFunc("GET /api/commit/{sha}", s.handleCommitFiles)
+	mux.HandleFunc("GET /api/compare", s.handleCompare)
+	mux.HandleFunc("GET /api/versions", s.handleVersions)
+	mux.HandleFunc("GET /api/version-branches", s.handleVersionBranches)
+	mux.HandleFunc("GET /api/rebase-range", s.handleRebaseRange)
 	mux.HandleFunc("GET /api/diff", s.handleDiff)
 	mux.HandleFunc("POST /api/stage", writeGuard(s.handleStage))
 	mux.HandleFunc("GET /api/hunks", s.handleHunks)
 	mux.HandleFunc("POST /api/stage-hunks", writeGuard(s.handleStageHunks))
+	mux.HandleFunc("GET /api/review/tools", s.handleReviewTools)
+	mux.HandleFunc("POST /api/review", writeGuard(s.handleReviewStart))
 	mux.HandleFunc("POST /api/op", writeGuard(s.handleOpStart))
 	mux.HandleFunc("GET /api/op/{id}/events", s.handleOpEvents)
 	mux.HandleFunc("POST /api/op/{id}/decide", writeGuard(s.handleOpDecide))
+	mux.HandleFunc("POST /api/op/{id}/cancel", writeGuard(s.handleOpCancel))
 	mux.HandleFunc("POST /api/reroot", writeGuard(s.handleReroot))
 	mux.HandleFunc("GET /api/repos", s.handleRepos)
 	return hostGuard(mux)

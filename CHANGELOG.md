@@ -8,6 +8,34 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: staged detail layout (the GitKraken flow).** Clicking a commit no
+  longer jumps straight to a diff: the sidebar stays put, the commits pane
+  shrinks beside it, and the changed-file list appears as a fixed column
+  on the RIGHT, with
+  nothing auto-opened — click other commits to browse their files in
+  place. Clicking a file then opens its diff in the space the commits
+  occupied, file list staying right; esc steps one stage back (diff →
+  file list → full-width commit list). The same staged flow applies to
+  the working-tree row, stash drill-ins, sidebar tags, and branch
+  compare. The files/diff drag handle now resizes the right-hand file
+  list column (width persisted as before).
+
+- **Web: version ↔ tip compare and the all-branches versions picker.** The
+  two pieces deliberately left out of the web's "previous versions…" popup.
+  A version row's menu gains *compare against current tip* — the whole-tree
+  compare of a recorded snapshot against the branch's live tip, in the
+  existing compare view with readable labels (`<branch>@<short> ↔ <branch>
+  (tip)`); absent for a deleted branch (restore it to compare, the TUI's
+  rule). A new *branch versions…* entry (palette + ☰ menu) opens a picker
+  over every branch with recorded snapshots — deleted branches tagged red —
+  and drills into the versions popup, which is the deleted-branch recovery
+  path: restore there recreates the ref. Transport: `/api/compare` gains an
+  explicit rev form (`revs=1`, both sides plain hex ids, no branch-list
+  resolution — the name allowlist's empty-vs-unknown ambiguity doesn't
+  exist for hashes, which fail loudly), `/api/diff`'s `left`/`right` now
+  enforce the hex-only contract their doc always promised, and
+  `GET /api/version-branches` lists every branch with snapshots.
+
 - **`ctrl+g` in the Commits panel solos from the selected commit.** The
   commit-window twin of the Branches panel's `ctrl+g` solo+tip: the Commits
   feed scopes to the history reachable from the commit under the cursor —
@@ -121,6 +149,152 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   TUI's interactive rebase, reword and single-commit move/drop as well as the
   web editor.
 
+- web: **an interactive-rebase plan editor.** Drag a branch onto another and
+  pick *interactive rebase A onto B…*: every commit A has that B does not is
+  listed newest-first, and each row can be **pick**, **reword** (the message
+  editor opens straight away, prefilled with the real message, body included),
+  **squash** (meld into the commit below it) or **drop**, with ↑/↓ to reorder.
+  **Nothing runs until you press start** — cancel, esc and clicking outside all
+  leave the branch exactly as it was. The oldest row cannot squash (there is
+  nothing older to meld into) and a row moved into that slot stops being one.
+  The browser may reorder and annotate the plan but never invent it: the server
+  rebuilds it against a freshly read range and refuses (409, nothing run) a
+  plan that names a commit outside the range, names one twice, or no longer
+  covers the branch — which is also the staleness guard when a commit lands
+  while the editor is open. A message likewise only comes off the wire for a
+  row you marked as a reword.
+
+- web: **right-clicking a commit now opens gg's own menu** — previously it
+  fell through to the browser's. It carries *show this commit*, *copy commit
+  id*, *copy subject*, and the single-commit history edits: **move up
+  (newer)** / **move down (older)** swap the commit with its neighbour, and
+  **drop this commit** removes it (confirmed first, and shown red). All three
+  rewrite the checked-out branch from that commit up, through the same
+  `engine.InteractiveRebase` the TUI's commit menu uses, so the previous tip
+  is recorded and a branch's *previous versions…* can put it back. They are
+  offered only on an ordinary commit — a merge and the root show the copy
+  rows alone — and the branch is left untouched when the commit is not on it,
+  when it has no neighbour in that direction, or when the range spans a
+  merge, each refused with a message on the status line. The wire carries a
+  commit id and one of three verbs; the rebase plan is built on the server
+  from a range it reads itself.
+- web: **clicking the "review running in the background" line now reopens the
+  review** instead of doing nothing — and double-clicking it no longer makes
+  it vanish. That line is the most visible mention of a backgrounded run, so
+  it is what you click; the status strip's dismiss-on-double-click is only
+  advertised in the header shown for *errors*, which made it invisible here.
+  Every other status message keeps its old dismiss behaviour.
+- web: the **"review running in the background" line now clears when the run
+  ends** instead of being replaced by another line you had to dismiss by
+  hand — the chip in the top bar is what announces the result. (A failure
+  still says so: an error that vanished silently would be worse.) The line
+  also expires normally while the run is going, rather than sitting there for
+  the whole run.
+- web: fixed **double-clicking the ready chip discarding the report**. The
+  first click opened it and the second landed on the report's own backdrop,
+  closing it again — with the chip already cleared, so there was nothing left
+  to click. The report viewer no longer closes on a backdrop click at all: it
+  is a document to read, not a picker, and closing stays the button or esc.
+- web: an AI review can now be **put in the background**. *run in background*
+  (or esc, or clicking outside the box) hides the waiting dialog and leaves
+  the agent running; a chip appears in the top bar, and clicking it brings the
+  run back so you can watch or cancel it. When the report is ready the chip
+  fills and blinks, and the report **waits there** until you click it —
+  finishing a run no longer interrupts what you were doing.
+
+  Backgrounding never cancels: only the labelled *cancel the run* button does.
+  While a run is live you can read the repo normally, but a second operation
+  still waits for it — and now says so instead of doing nothing, which
+  previously only worked because the dialog was on screen to explain itself.
+- web: fixed **switch repo** offering the repository already open — picking it
+  re-rooted onto the same repo. The list is filtered by the server now,
+  because the two sides of "is this the one I'm serving?" were spelled
+  differently: git reports a top-level with forward slashes even on Windows,
+  while the recent-repos registry stores platform-cleaned paths, so on
+  Windows the two never matched. Linux was unaffected, which is why it took a
+  report to find.
+- web: **review with an AI agent** — right-click a branch for *review … (AI)*,
+  or reach *review working changes (AI)* from the ☰ menu and the command
+  palette. gg runs a review agent you have configured (a `[[tools.command]]`
+  block with `category = "review"`, the same ones `gg review` and the TUI
+  use), then shows the report and saves it to a file.
+
+  The browser names a **tool**, never a command: the command text comes from
+  your own config, is resolved server-side, and is shown to you in full
+  before its first run. Approving it is remembered per repository until you
+  edit the command — and the memory is shared with the TUI, so approving in
+  either covers both. A run holds the operation lane and can take minutes, so
+  it can be **cancelled** at any point, including while it is starting.
+- web: fixed the **previous versions** rows being dead to the mouse. A left
+  click opened the row menu and the same click immediately closed it again;
+  a right click fell through to the browser's own menu. Both buttons now open
+  the row menu and it stays up. It was then still invisible, because the
+  right-click menu (and the confirm dialog it raises) painted *underneath*
+  the popup — both are now stacked above every panel overlay, so a menu or a
+  confirmation opened from inside a popup is always on top of it.
+- web: **force push** — a new row on a branch's right-click menu. It does not
+  force anything on its own: it opens the same force-mode prompt an ordinary
+  rejected push shows — *force-with-lease* (refuses if the remote moved since
+  your last fetch), plain *force*, or abort, the two force options in red.
+  The row's only effect is reaching that prompt without waiting for a
+  rejection first; a silent force push is not expressible from the browser.
+- web: **previous versions** — right-click a branch for the operations
+  history: what it pointed at before each recent merge, rebase, amend, reset
+  or delete, newest first with how long ago. Click one to restore the branch
+  to it (asked for first), copy its commit id, or delete the snapshot.
+  Restoring is itself recorded, so it can be undone the same way.
+- web: **compare two branches** — drag one branch onto another and pick
+  *compare A ↔ B* (the third row, below merge and rebase). The whole
+  tip-to-tip changed-file list opens in the existing detail screen, and a bar
+  above it filters by **origin**: all, or only the files one side changed
+  since the two diverged (a file both sides touched stays in either view —
+  the TUI's rule). Unrelated histories still list their differences; only the
+  filter is unavailable, and says why.
+- web: **create branch…** in the ☰ menu and the command palette. Every way to
+  make a branch used to hang off right-clicking an existing one; this starts
+  from the current HEAD.
+- web: in the working-tree view, **Staged is now the last section** rather
+  than the first. Staging a hunk used to move the file up to the top and push
+  the remaining work down, so the list seemed to reorder itself under you
+  mid-task. Order is Changes, Untracked, Conflicts, Staged.
+- web: **rename a branch**, **create a branch from one**, and **create a
+  worktree for one** — three new rows on a branch's right-click menu, each
+  asking for the name or path in a shared one-line prompt (enter confirms,
+  esc cancels). The worktree row appears only when the branch has no worktree
+  yet, and its path is pre-filled with a sibling of the main worktree named
+  `<repo>-<branch>`. A configured worktree post-create hook is honoured
+  rather than skipped: the engine shows the script in the decision modal and
+  runs it only if you say so.
+- web: **solo a branch** — right-click a branch → *solo this branch* narrows
+  the commit list to its history, with a `solo: <name> ✕` chip in the top bar
+  to leave again. The scope lives on the server (there is one commit feed, so
+  every tab shares it) and survives commits, merges and pulls until cleared;
+  a branch that does not exist is refused rather than entered, since a scope
+  that cannot render would take the exit affordance with it.
+- web: **fetch all remotes** in the ☰ menu and command palette, and per-branch
+  **pull** / **push** on a branch's right-click menu. Pulling a branch you are
+  not standing on updates it in place and leaves you where you are — no
+  checkout, so nothing to confirm; pulling the branch you *are* on keeps the
+  existing confirm, since it can rewrite the working tree. `pull` and `push`
+  now take an optional `branch` on the wire; omitting it means the current
+  branch, exactly as before.
+- web: a branch's right-click menu gains **copy branch name**, **copy commit
+  id** (its tip), and **copy worktree absolute path** — the last only when
+  some worktree has that branch checked out. A copy now reports what it
+  copied on the status line; it used to report only failures, so a silent
+  clipboard write was indistinguishable from nothing happening.
+- web: the pane dividers are draggable — the sidebar in the commit list and
+  the file list in a commit's detail. Double-click a divider to reset it.
+  Each width persists (`gg.sidebar.width`, `gg.panes.files-width`) and is
+  clamped to the window, so a stored width squeezes rather than pushing the
+  neighbouring pane off-screen and comes back when the window widens again.
+- web: drag a branch onto another in the sidebar to merge or rebase —
+  the drop opens a menu offering "merge A into B" / "rebase A onto B",
+  dispatching `engine.SmartMerge` / `engine.SmartRebase` over the existing
+  op transport (conflicts park in the decision modal).
+- web: the line-mode commit dot now aligns with the graph's leftmost
+  lane; the working-tree row's dot aligns in both modes.
+
 - tui: **the `[E]` message viewer reads as one block, on one margin.** The window
   used to indent its three kinds of line by three different amounts — the title
   and the key hints at the box padding, each message line two columns further
@@ -191,6 +365,7 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   installing `wl-clipboard`. Dismiss-only, and it self-clears once either fix
   lands. New `debugging-clipboard-copy` project skill documents the whole
   triage.
+
 
 - web: command palette (`ctrl+k` / `ctrl+p`) — pull/push/refresh, sidebar and
   graph toggles, help, and a **switch repo…** mode listing previously-opened
