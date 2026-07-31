@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/homeend/gigagit/internal/model"
 )
@@ -155,7 +156,12 @@ func (s *Service) shelfCommitCompare(ctx context.Context, shelfID, commitHash st
 // through git directly (one invocation); a pair involving a frozen shelf
 // side is materialized per differing file into temp files and diffed with
 // git diff --no-index, headers relabelled to a/<path> b/<path> (the MCP
-// gg_compare_file precedent — git cannot see the tar).
+// gg_compare_file precedent — git cannot see the tar). Per the spec's error
+// handling rule ("unreadable/missing shelf blob → the store's error surfaces
+// as-is"), a resolve failure on a side the file list says IS present
+// propagates to the caller rather than being silently treated as absent —
+// only the side an "A"/"D" status says is genuinely missing is left
+// unresolved (empty bytes, no read attempted).
 func (s *Service) ComparePatch(ctx context.Context, left, right model.Endpoint) (string, error) {
 	if left.Kind != model.EndpointShelf && right.Kind != model.EndpointShelf {
 		return s.DiffPatch(ctx, livePairSpec(left, right))
@@ -171,8 +177,28 @@ func (s *Service) ComparePatch(ctx context.Context, left, right model.Endpoint) 
 	defer os.RemoveAll(tmp)
 	var b strings.Builder
 	for i, f := range files {
-		lb := s.sideBytes(ctx, left, f.Path) // nil = absent on that side
-		rb := s.sideBytes(ctx, right, f.Path)
+		var lb, rb []byte
+		switch f.Status {
+		case "A": // left genuinely absent; only the right side is read
+			rb, err = s.ResolveBytes(ctx, right.FileRef(f.Path))
+		case "D": // right genuinely absent; only the left side is read
+			lb, err = s.ResolveBytes(ctx, left.FileRef(f.Path))
+		default: // "M": both sides are present — resolve both, any error propagates
+			lb, err = s.ResolveBytes(ctx, left.FileRef(f.Path))
+			if err == nil {
+				rb, err = s.ResolveBytes(ctx, right.FileRef(f.Path))
+			}
+		}
+		if err != nil {
+			return "", err
+		}
+		if isBinaryContent(lb) || isBinaryContent(rb) {
+			// git diff --no-index would print the temp paths on this line
+			// (no @@ hunk to flip RelabelNoIndexDiff's header latch), so a
+			// binary pair is rendered directly instead of ever being diffed.
+			fmt.Fprintf(&b, "Binary files a/%s and b/%s differ\n", f.Path, f.Path)
+			continue
+		}
 		lp := filepath.Join(tmp, fmt.Sprintf("l%d", i))
 		rp := filepath.Join(tmp, fmt.Sprintf("r%d", i))
 		if err := os.WriteFile(lp, lb, 0o600); err != nil {
@@ -190,15 +216,11 @@ func (s *Service) ComparePatch(ctx context.Context, left, right model.Endpoint) 
 	return b.String(), nil
 }
 
-// sideBytes resolves one endpoint's bytes for path, treating any miss as
-// absent (empty) — the file list already told us which side holds the file,
-// and a diff against empty renders the full add/delete correctly.
-func (s *Service) sideBytes(ctx context.Context, e model.Endpoint, path string) []byte {
-	data, err := s.ResolveBytes(ctx, e.FileRef(path))
-	if err != nil {
-		return nil
-	}
-	return data
+// isBinaryContent reports whether data looks binary — a NUL byte, or invalid
+// UTF-8 — the same heuristic internal/mcp's gg_compare_file uses (isBinary).
+// nil/empty data (an absent side) is never binary.
+func isBinaryContent(data []byte) bool {
+	return bytes.IndexByte(data, 0) >= 0 || !utf8.Valid(data)
 }
 
 // livePairSpec maps a non-shelf endpoint pair onto the DiffSpec vocabulary.

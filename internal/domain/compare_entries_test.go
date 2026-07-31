@@ -273,6 +273,38 @@ func TestComparePatchFrozen(t *testing.T) {
 	}
 }
 
+// TestComparePatchFrozenBinary covers a differing binary file in the frozen
+// lane: git diff --no-index never emits an @@ hunk line for a binary pair,
+// so RelabelNoIndexDiff's header latch would never flip and the raw
+// "Binary files <tmp>/l0 and <tmp>/r0 differ" line would leak temp paths
+// straight into the patch. ComparePatch must detect binary content itself
+// and render the relabelled line without ever calling DiffNoIndex.
+func TestComparePatchFrozenBinary(t *testing.T) {
+	dir, svc := newRealRepo(t)
+	svc.SetShelfStore(shelf.NewFileStore(t.TempDir()))
+	ctx := context.Background()
+
+	shaA := writeAndCommit(t, dir, "A", map[string]string{"f.bin": "\x00old"})
+	ea, err := svc.ShelfAddCommit(ctx, shaA, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	shaB := writeAndCommit(t, dir, "B", map[string]string{"f.bin": "\x00new"})
+
+	patch, err := svc.ComparePatch(ctx,
+		model.Endpoint{Kind: model.EndpointShelf, ShelfID: ea.ID},
+		model.Endpoint{Kind: model.EndpointCommit, Hash: shaB})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(patch, "Binary files a/f.bin and b/f.bin differ") {
+		t.Errorf("patch missing relabelled binary line:\n%s", patch)
+	}
+	if strings.Contains(patch, os.TempDir()) {
+		t.Errorf("patch leaks temp paths:\n%s", patch)
+	}
+}
+
 func TestComparePatchLiveCommits(t *testing.T) {
 	dir, svc := newRealRepo(t)
 	ctx := context.Background()
@@ -287,5 +319,63 @@ func TestComparePatchLiveCommits(t *testing.T) {
 	}
 	if !strings.Contains(patch, "-old") || !strings.Contains(patch, "+new") {
 		t.Errorf("live patch wrong:\n%s", patch)
+	}
+}
+
+// errBlobGone is the sentinel failAfterStore.Get returns once tripped.
+var errBlobGone = errors.New("shelf blob gone (injected)")
+
+// failAfterStore wraps a real shelf.Store and starts failing every Get call
+// once it has been called more than failAfter times — a controlled way to
+// make a shelf blob "go missing" only AFTER shelfCompareFiles' own file-list
+// classification (which also calls Get, to decide A/D/M) has already
+// succeeded. Without this staggering, corrupting the blob on disk up front
+// makes shelfCompareFiles itself fail first, never reaching the resolve
+// path inside ComparePatch's own loop that Finding 2 fixed.
+type failAfterStore struct {
+	shelf.Store
+	failAfter int
+	calls     int
+}
+
+func (f *failAfterStore) Get(entryID string) ([]byte, error) {
+	f.calls++
+	if f.calls > f.failAfter {
+		return nil, errBlobGone
+	}
+	return f.Store.Get(entryID)
+}
+
+// TestComparePatchResolveErrorPropagates covers the spec's error-handling
+// rule ("unreadable/missing shelf blob → the store's error surfaces
+// as-is"): a resolve failure on an "M" file's shelf side (both sides
+// present per the file list) must propagate to the caller, never be
+// silently swallowed into a false full add/delete the way the reviewed
+// sideBytes shape did.
+func TestComparePatchResolveErrorPropagates(t *testing.T) {
+	dir, svc := newRealRepo(t)
+	real := shelf.NewFileStore(t.TempDir())
+	ctx := context.Background()
+	svc.SetShelfStore(real)
+
+	shaA := writeAndCommit(t, dir, "A", map[string]string{"f.txt": "old\n"})
+	ea, err := svc.ShelfAddCommit(ctx, shaA, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	shaB := writeAndCommit(t, dir, "B", map[string]string{"f.txt": "new\n"})
+
+	// shelfCompareFiles' own classification for this shelf(left)↔commit(right)
+	// pair makes exactly 2 Get calls (member listing, then the one member's
+	// byte-equality check) before ComparePatch's loop makes its own 3rd —
+	// failAfter:2 lets classification succeed and fails only that 3rd call.
+	fs := &failAfterStore{Store: real, failAfter: 2}
+	svc.SetShelfStore(fs)
+
+	_, err = svc.ComparePatch(ctx,
+		model.Endpoint{Kind: model.EndpointShelf, ShelfID: ea.ID},
+		model.Endpoint{Kind: model.EndpointCommit, Hash: shaB})
+	if !errors.Is(err, errBlobGone) {
+		t.Fatalf("ComparePatch error = %v, want errBlobGone propagated (got no error or a different one)", err)
 	}
 }
