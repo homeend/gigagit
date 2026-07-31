@@ -30,9 +30,10 @@ and `detail` is renamed to what it now means:
 
 **Escape steps back one stage**: `diff` → `files` → `list`. The `← back`
 button and the footer chip share the same stepping (`drillOut`). The
-sidebar hides during the drill (both stages), exactly as today's detail
-mode; `exitStatusToList` (working tree went clean) still drops straight
-to `list`.
+sidebar STAYS through the files stage (revised from the first cut after
+live use — GitKraken keeps its left panel too) and hides only on the
+diff screen; `exitStatusToList` (working tree went clean) still drops
+straight to `list`.
 
 All five detail entry points move to the staged flow — `openCommit`,
 `openCommitByHash` (tags), `openStashDetail`, `openWorkingTree`,
@@ -43,13 +44,20 @@ load cannot be undone by the fetch completing.
 
 ## Mechanics
 
-**Grid.** `#panes` keeps the exactly-three-visible-children rule:
+**Grid.** `#panes` keeps the exactly-three-visible-children rule in
+`list` and `diff`; `files` is the one five-children mode (its `nosb`
+variant drops back to three):
 
-| mode  | class    | children (left → right)            | columns |
-|-------|----------|------------------------------------|---------|
-| list  | `solo`   | branches, rs-sidebar, commits      | `var(--sb-w) var(--rs-w) 1fr` (unchanged) |
-| files | `files`  | commits, rs-detail, files-pane     | `1fr var(--rs-w) var(--files-w)` |
-| diff  | `detail` | diff-pane, rs-detail, files-pane   | `1fr var(--rs-w) var(--files-w)` |
+| mode  | class    | children (left → right)                          | columns |
+|-------|----------|--------------------------------------------------|---------|
+| list  | `solo`   | branches, rs-sidebar, commits                    | `var(--sb-w) var(--rs-w) 1fr` (unchanged) |
+| files | `files`  | branches, rs-sidebar, commits, rs-detail, files  | `var(--sb-w) var(--rs-w) 1fr var(--rs-w) var(--files-w)` |
+| diff  | `detail` | diff-pane, rs-detail, files-pane                 | `1fr var(--rs-w) var(--files-w)` |
+
+With both fixed columns on screen at once in the files stage, each
+handle's clamp also reserves the OTHER handle's width
+(`clampPaneWidth(cfg, w)`), or the flexible commits column between them
+could be squeezed to nothing.
 
 The file list moves to the right via CSS `order` on the grid children —
 no DOM moves, so every existing `$("files-list")` handler is untouched.
@@ -74,8 +82,8 @@ so a later stage-3 entry never flashes the previous drill's diff.
 - Server: zero changes — this is `index.html`/`style.css`/`app.js` only.
 - `state.pane` focus model, files-list rendering, hunk staging, compare
   bar, diff-nav — all untouched except where the layout class is read.
-- The sidebar `b` toggle still applies to `list` mode only (hidden during
-  the drill either way).
+- The sidebar `b` toggle works in `list` AND `files` (both show the
+  sidebar); only the diff screen refuses it (nothing to toggle).
 
 ## Verification
 

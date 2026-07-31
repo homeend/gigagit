@@ -9,8 +9,9 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 - **Web: staged detail layout (the GitKraken flow).** Clicking a commit no
-  longer jumps straight to a diff: the commits pane shrinks to the left
-  and the changed-file list appears as a fixed column on the RIGHT, with
+  longer jumps straight to a diff: the sidebar stays put, the commits pane
+  shrinks beside it, and the changed-file list appears as a fixed column
+  on the RIGHT, with
   nothing auto-opened — click other commits to browse their files in
   place. Clicking a file then opens its diff in the space the commits
   occupied, file list staying right; esc steps one stage back (diff →
