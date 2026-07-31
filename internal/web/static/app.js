@@ -1584,10 +1584,15 @@ $("worktrees-list").addEventListener("contextmenu", (e) => {
   const w = state.worktrees.find((x) => x.path === li.dataset.p);
   if (w) showWorktreeMenu(w, e.clientX, e.clientY);
 });
-// drillOut leaves the detail screen for the full-width commit list — the
-// esc key and the mouse back button share it.
+// drillOut steps ONE stage back — diff → file list → full-width commit
+// list. The esc key, the ← back button, and the footer chip all share it.
 function drillOut() {
-  if (state.layout !== "detail") return;
+  if (state.layout === "diff") {
+    enterFilesStage(); // also clears the diff a late fetch may repaint
+    focusPane();
+    return;
+  }
+  if (state.layout !== "files") return;
   state.detailGen++; // invalidate any in-flight detail fetch
   state.pane = "commits";
   setLayout("list");
@@ -1625,17 +1630,20 @@ SECTIONS.forEach((n) => {
 })();
 
 // --- pane resizing ---
-// One drag handle per layout: sidebar↔commits in list mode, files↔diff in
-// detail mode. Both resize the FIRST grid column, so the width is always
-// the pointer's offset from the #panes left edge. Branch names ellipsize,
-// so a fixed sidebar width left a long name unreadable with no recourse.
-// Widths live as CSS custom properties on #panes and persist per handle.
+// One drag handle per layout: sidebar↔commits in list mode, and the file
+// list's edge in the files/diff stages. rs-sidebar resizes the FIRST grid
+// column (width = pointer offset from the #panes left edge); rs-detail
+// resizes the LAST — the file list sits on the right — so it carries
+// `right: true` and measures from the right edge instead. Branch names
+// ellipsize, so a fixed sidebar width left a long name unreadable with no
+// recourse. Widths live as CSS custom properties on #panes and persist
+// per handle.
 const RESIZERS = {
   "rs-sidebar": { prop: "--sb-w", key: "gg.sidebar.width", def: 230 },
-  "rs-detail": { prop: "--files-w", key: "gg.panes.files-width", def: 320 },
+  "rs-detail": { prop: "--files-w", key: "gg.panes.files-width", def: 320, right: true },
 };
 const RS_MIN = 120; // narrower than this and the pane holds nothing readable
-const RS_KEEP = 200; // always leave this much for the pane on the right
+const RS_KEEP = 200; // always leave this much for the OTHER pane (the flexible column)
 
 function setPaneWidth(cfg, w) {
   $("panes").style.setProperty(cfg.prop, w + "px");
@@ -1665,7 +1673,7 @@ function initResizer(id) {
 
   el.addEventListener("pointerdown", (e) => {
     e.preventDefault(); // no text selection, no native drag
-    const left = $("panes").getBoundingClientRect().left;
+    const rect = $("panes").getBoundingClientRect();
     // Capture keeps the move/up events coming while the pointer is off the
     // 5px handle. It throws when the pointer id is not active (a synthetic
     // event), which must not abort the drag.
@@ -1673,7 +1681,7 @@ function initResizer(id) {
     el.classList.add("dragging");
     document.body.classList.add("resizing");
     const onMove = (ev) => {
-      cfg.want = clampPaneWidth(ev.clientX - left);
+      cfg.want = clampPaneWidth(cfg.right ? rect.right - ev.clientX : ev.clientX - rect.left);
       setPaneWidth(cfg, cfg.want);
     };
     const onUp = () => {
@@ -2022,15 +2030,30 @@ function maybeLoadMore(lastVisible) {
 
 // --- files + diff panes ---
 
-// Layout mirrors the TUI's drill-in: "list" = the commit list alone, full
-// width; "detail" = the opened commit's files + diff, list hidden (esc
-// returns). Never both crammed on one screen.
+// Staged layout (the GitKraken flow): "list" = the commit list alone, full
+// width; "files" = a commit is open — commits shrink left, the file list
+// takes a fixed column on the right, NO diff yet; "diff" = a file is open —
+// the diff replaces the commits area, file list stays right. esc steps one
+// stage back (drillOut).
 function setLayout(mode) {
   state.layout = mode;
   const p = $("panes");
   p.classList.toggle("solo", mode === "list");
-  p.classList.toggle("detail", mode === "detail");
+  p.classList.toggle("files", mode === "files");
+  p.classList.toggle("detail", mode === "diff");
   if (mode === "list") moveCursor(0); // re-render + rescroll: display:none dropped the scroll position
+}
+
+// enterFilesStage swaps to the file-list stage: browse the changed files
+// with the commit list still alongside, nothing auto-opened. The diff pane
+// is cleared so a later stage-3 entry never flashes the previous drill's
+// diff, and a window resize cannot resurrect it through state.lastDiff.
+function enterFilesStage() {
+  state.pane = "files";
+  setLayout("files");
+  $("diff-title").textContent = "";
+  $("diff-body").innerHTML = "";
+  state.lastDiff = null;
 }
 
 async function openCommit(i) {
@@ -2044,13 +2067,11 @@ async function openCommit(i) {
   state.files = body.files || [];
   state.fileCursor = 0;
   state.fileSha = row.hash;
-  state.pane = "files";
   state.filesMode = "commit";
-  setLayout("detail");
+  enterFilesStage();
   $("files-header").textContent = row.short + " " + row.subject;
   renderFiles();
   focusPane();
-  if (state.files.length) openFile(0);
 }
 
 // openCommitByHash enters commit detail without a feed row — the path for
@@ -2062,13 +2083,11 @@ async function openCommitByHash(hash, title) {
   state.files = body.files || [];
   state.fileCursor = 0;
   state.fileSha = hash;
-  state.pane = "files";
   state.filesMode = "commit";
-  setLayout("detail");
+  enterFilesStage();
   $("files-header").textContent = title;
   renderFiles();
   focusPane();
-  if (state.files.length) openFile(0);
 }
 
 // openStashDetail opens a stash's changes: the stash commit's tracked
@@ -2089,13 +2108,11 @@ async function openStashDetail(st) {
   state.files = files;
   state.fileCursor = 0;
   state.fileSha = st.sha;
-  state.pane = "files";
   state.filesMode = "commit";
-  setLayout("detail");
+  enterFilesStage();
   $("files-header").textContent = "≡ " + st.ref;
   renderFiles();
   focusPane();
-  if (state.files.length) openFile(0);
 }
 
 // --- branch ↔ branch comparison ---
@@ -2134,8 +2151,7 @@ async function openCompare(a, b, opts) {
   };
   state.filesMode = "compare";
   state.fileSha = null;
-  state.pane = "files";
-  setLayout("detail");
+  enterFilesStage();
   $("files-header").textContent = state.compare.a + " ↔ " + state.compare.b;
   applyCompareFilter();
   focusPane();
@@ -2151,14 +2167,19 @@ function applyCompareFilter() {
   state.fileCursor = 0;
   renderFiles();
   updateDiffNav();
-  if (state.files.length) {
-    openFile(0);
-  } else {
-    $("diff-title").textContent = "";
-    $("diff-body").innerHTML = `<div class="notice">${
+  if (!state.files.length) {
+    // The empty state must live in the FILE LIST: in the files stage the
+    // diff pane is not on screen, and stepping back there from an open
+    // diff must not strand a stale one.
+    $("files-list").innerHTML = `<li class="sect">${
       c.all.length ? "no files match this filter" : "the two branches are identical"
-    }</div>`;
+    }</li>`;
+    if (state.layout === "diff") drillOut();
+    return;
   }
+  // Filtering under an open diff keeps a diff open (the pre-staged-layout
+  // behavior); in the files stage nothing auto-opens.
+  if (state.layout === "diff") openFile(0);
 }
 
 function renderCompareBar() {
@@ -2205,12 +2226,10 @@ async function openWorkingTree(i) {
   }
   state.filesMode = "status";
   state.fileCursor = 0;
-  state.pane = "files";
-  setLayout("detail");
+  enterFilesStage();
   $("files-header").textContent = "Working tree";
   renderFiles();
   focusPane();
-  if (state.statusEntries.length) openFile(0);
 }
 
 const SECTION_LABELS = { staged: "Staged", changes: "Changes", untracked: "Untracked", conflicts: "Conflicts" };
@@ -2258,6 +2277,14 @@ function renderFiles() {
 
 async function openFile(i) {
   clearDiffHunks();
+  // The layout switch sits in the SYNC prefix: an esc during a slow diff
+  // load steps back to the files stage, and the fetch completing later
+  // must not be able to undo that.
+  if (state.layout !== "diff") {
+    state.pane = "files";
+    setLayout("diff");
+    focusPane();
+  }
   state.fileCursor = i;
   renderFiles();
   updateDiffNav();

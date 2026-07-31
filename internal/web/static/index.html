@@ -33,7 +33,7 @@
     <div id="commits-scroll"><div id="commits-spacer"><div id="commits-window"></div></div></div>
   </section>
   <section id="files-pane" class="pane">
-    <button id="back-btn" title="back to the commit list (esc)">← back</button>
+    <button id="back-btn" title="one stage back (esc): diff → files → list">← back</button>
     <div id="files-header"></div>
     <div id="compare-bar" class="hidden"></div>
     <div id="files-actions" class="hidden">
@@ -142,8 +142,8 @@
     <h2>gg web — keys &amp; features</h2>
     <h3>Keys</h3>
     <div class="hrow"><span class="hkey">j / k · ↓ / ↑</span><span>move the selection (commit list, or file list in detail)</span></div>
-    <div class="hrow"><span class="hkey">enter</span><span>open the selected commit / file</span></div>
-    <div class="hrow"><span class="hkey">esc</span><span>back — close detail, menus, modals (in a decision modal: abort, when offered)</span></div>
+    <div class="hrow"><span class="hkey">enter</span><span>open the selected commit (file list appears right) / open the selected file (diff)</span></div>
+    <div class="hrow"><span class="hkey">esc</span><span>one stage back — diff → file list → commit list; closes menus and modals (in a decision modal: abort, when offered)</span></div>
     <div class="hrow"><span class="hkey">g</span><span>commit graph on/off — off is a flat list, more room for subjects (persisted)</span></div>
     <div class="hrow"><span class="hkey">r</span><span>refresh everything (status, branches, commits) — also happens automatically when the tab regains focus</span></div>
     <div class="hrow"><span class="hkey">b</span><span>show / hide the sidebar (persisted)</span></div>
