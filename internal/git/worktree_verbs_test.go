@@ -240,3 +240,23 @@ func TestDeleteBranchRefusesUnmergedUntilForced(t *testing.T) {
 		t.Fatalf("branch still present after force delete: %q", out)
 	}
 }
+
+func TestResetInDirArgv(t *testing.T) {
+	f := gitexec.NewFakeRunner()
+	f.SetResponse("git -C reset", gitexec.Result{})
+	repo := &Repo{Runner: f}
+	if err := repo.ResetInDir(context.Background(), "/x/wt", "abc123^", true); err != nil {
+		t.Fatalf("ResetInDir soft: %v", err)
+	}
+	want := []string{"-C", "/x/wt", "reset", "--soft", "abc123^"}
+	if !reflect.DeepEqual(f.Calls[0].Argv, want) {
+		t.Fatalf("argv = %v, want %v", f.Calls[0].Argv, want)
+	}
+	if err := repo.ResetInDir(context.Background(), "/x/wt", "abc123^", false); err != nil {
+		t.Fatalf("ResetInDir mixed: %v", err)
+	}
+	want = []string{"-C", "/x/wt", "reset", "--mixed", "abc123^"}
+	if !reflect.DeepEqual(f.Calls[1].Argv, want) {
+		t.Fatalf("argv = %v, want %v", f.Calls[1].Argv, want)
+	}
+}

@@ -133,3 +133,18 @@ func (r *Repo) DeleteBranch(ctx context.Context, name string, force bool) error 
 	_, err := r.Runner.Run(ctx, "git branch (delete)", argv)
 	return err
 }
+
+// ResetInDir runs `git -C <dir> reset --soft|--mixed <ref>` — a reset scoped to
+// another worktree's checkout (the ShowFileInDir -C precedent). Used by
+// CreateWorktree's keep-changes modes right after the new worktree is created:
+// --soft leaves the commit's changes staged there, --mixed leaves them
+// unstaged. One invocation.
+func (r *Repo) ResetInDir(ctx context.Context, dir, ref string, soft bool) error {
+	mode := "--mixed"
+	if soft {
+		mode = "--soft"
+	}
+	argv := gitcmd.New("-C").Arg(dir, "reset", mode, ref).ToArgv()
+	_, err := r.Runner.Run(ctx, "git -C reset", argv)
+	return err
+}
