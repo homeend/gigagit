@@ -346,7 +346,9 @@ function startSwitch(branch) {
 
 function doCommit() {
   const message = $("commit-msg").value;
-  if (!message.trim()) return;
+  // report instead of a dead click — a silent return here read as
+  // "commit is broken" the first time someone hit it mid-merge
+  if (!message.trim()) { opLine("write a commit message first", true); return; }
   startOp({ op: "commit", message }, "committing");
 }
 
@@ -2276,6 +2278,7 @@ function renderFiles() {
   if (state.filesMode !== "status") {
     $("files-actions").classList.add("hidden");
     $("commit-box").classList.add("hidden");
+    $("conflict-note").classList.add("hidden");
     $("files-list").innerHTML = state.files
       .map(
         (f, i) =>
@@ -2286,9 +2289,22 @@ function renderFiles() {
     return;
   }
   $("files-actions").classList.remove("hidden");
-  $("commit-box").classList.remove("hidden");
-  $("commit-btn").disabled = !(state.wt && state.wt.counts.staged > 0) || !!state.op;
-  $("stash-btn").disabled = !state.wt || !!state.op;
+  // While a sequencer op is paused, the commit box steps aside: finishing
+  // the op is the banner's Continue (git supplies the merge message), and a
+  // competing commit button here reads as the way out when it isn't.
+  if (state.conflict) {
+    $("commit-box").classList.add("hidden");
+    const note = $("conflict-note");
+    note.classList.remove("hidden");
+    note.textContent = state.conflict.conflicted
+      ? "resolving " + state.conflict.op + " — pick through the conflicts below, then press Continue above"
+      : "all conflicts resolved — press Continue above to finish the " + state.conflict.op;
+  } else {
+    $("conflict-note").classList.add("hidden");
+    $("commit-box").classList.remove("hidden");
+    $("commit-btn").disabled = !(state.wt && state.wt.counts.staged > 0) || !!state.op;
+    $("stash-btn").disabled = !state.wt || !!state.op;
+  }
   let html = "";
   let lastSection = "";
   state.statusEntries.forEach((f, i) => {
@@ -2378,6 +2394,7 @@ function exitStatusToList() {
   $("files-list").innerHTML = "";
   $("files-actions").classList.add("hidden");
   $("commit-box").classList.add("hidden");
+  $("conflict-note").classList.add("hidden");
   $("files-header").textContent = "";
   $("diff-title").textContent = "";
   $("diff-body").innerHTML = "";

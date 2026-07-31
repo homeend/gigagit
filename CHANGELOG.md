@@ -16,7 +16,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   block picker showing each region side by side — ours left, theirs right —
   taking either per region (or all at once) with a full-coverage gate before
   resolving, plus a "mark resolved (stage as-is)" option for a file you've
-  already fixed by hand.
+  already fixed by hand. While an op is paused the commit box steps aside
+  for a one-line pointer at Continue — finishing the op is Continue's job
+  (git supplies the merge message), so no message needs typing; and an
+  empty-message commit click now says "write a commit message first" on
+  the status line instead of doing nothing.
 
 - **Web: staged detail layout (the GitKraken flow).** Clicking a commit no
   longer jumps straight to a diff: the sidebar stays put, the commits pane
