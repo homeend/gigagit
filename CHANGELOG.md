@@ -23,6 +23,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   prompts, and history/blame buttons in the diff toolbar. The history diff
   reuses the /api/diff commit form; `diffHTML` extracted from `renderDiff`
   so both panes share one renderer.
+- Filter follow-ups from live use: the commits pane is a flex column so the
+  filter bar shrinks the scroll area instead of clipping its last row (the
+  load-more hint sat hidden under the pane edge when matches filled the
+  window), and ctrl+enter in the filter input pages deeper — the TUI's
+  ctrl+f search-deeper analog (advertised in the hint row and help).
 
 - Web: the global ☰ menu lists its entries alphabetically (sorted at render,
   so a future entry cannot land unsorted), with help pinned last below a

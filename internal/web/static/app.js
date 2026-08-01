@@ -2219,7 +2219,7 @@ function renderFilteredCommits() {
   for (let i = first; i < last; i++) {
     if (i === m.length) {
       const tail = state.canLoadMore
-        ? ` — <a id="cfilter-more">load more</a>`
+        ? ` — <a id="cfilter-more">load more</a> (ctrl+enter)`
         : " — all loaded commits searched";
       html += `<div class="crow hintrow">${m.length} of ${state.rows.length} loaded commits match${tail}</div>`;
       continue;
@@ -3383,11 +3383,16 @@ $("commits-window").addEventListener("click", async (e) => {
 });
 $("cfilter-input").addEventListener("input", applyCommitFilter);
 // Escape must be handled HERE: the global router's form-field guard eats
-// every key typed in an input, so it can never see this one.
+// every key typed in an input, so it can never see this one. Ctrl+Enter is
+// the keyboard path to the hint row's "load more" — the TUI's ctrl+f
+// search-deeper analog; loadCommits re-filters over the grown feed.
 $("cfilter-input").addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
     e.preventDefault();
     closeCommitFilter();
+  } else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+    if (state.canLoadMore) loadCommits(true);
   }
 });
 // Right-click a commit: copy rows plus the single-commit history edits. The
