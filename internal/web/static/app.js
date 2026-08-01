@@ -3237,6 +3237,8 @@ $("palette-list").addEventListener("click", (e) => {
 
 function openGlobalMenu() {
   const r = $("menu-btn").getBoundingClientRect();
+  // Sorted at render so a future entry cannot land unsorted: the menu is a
+  // lookup surface (no workflow order to preserve, no destructive rows).
   showCtxMenu(
     [
       { label: "pull", act: () => doPull() },
@@ -3251,7 +3253,7 @@ function openGlobalMenu() {
       { label: "toggle sidebar", act: () => toggleSidebar() },
       { label: "toggle graph", act: () => toggleGraphMode() },
       { label: "help", act: () => openHelp() },
-    ],
+    ].sort((a, b) => a.label.localeCompare(b.label)),
     r.left,
     r.bottom + 4
   );

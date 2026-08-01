@@ -8,6 +8,8 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- Web: the global ☰ menu lists its entries alphabetically (sorted at render,
+  so a future entry cannot land unsorted).
 - **Web: conflict resolution.** A paused merge/rebase/cherry-pick/revert now
   shows a banner in the browser — the op, what it's doing, and the
   conflicted-file count — with Continue (disabled until every file is
