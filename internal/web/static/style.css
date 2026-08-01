@@ -61,8 +61,10 @@ body {
 body.resizing { cursor: col-resize; user-select: none; }
 .pane { overflow: auto; border-right: 1px solid var(--border); min-width: 0; }
 .pane.focused { box-shadow: inset 2px 0 0 var(--accent); }
-#commits-pane { overflow: hidden; }
-#commits-scroll { height: 100%; overflow-y: auto; }
+/* flex column so the quick-filter bar SHRINKS the scroll area instead of
+   pushing its last row under the pane edge (the load-more hint was clipped) */
+#commits-pane { overflow: hidden; display: flex; flex-direction: column; }
+#commits-scroll { flex: 1; min-height: 0; overflow-y: auto; }
 #commits-spacer { position: relative; }
 #commits-window { position: absolute; left: 0; right: 0; }
 .crow { display: flex; height: 22px; line-height: 22px; white-space: nowrap; cursor: pointer; padding: 0 6px; }
