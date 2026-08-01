@@ -616,12 +616,14 @@ function hideCtxMenu() {
 }
 
 // showCtxMenu renders the shared right-click menu at (x,y): safe actions
-// first; rows flagged danger render red.
+// first; rows flagged danger render red. A row with sep:true renders as a
+// non-clickable divider (it occupies an index in _items, which the click
+// handler resolves by data-i, so alignment is preserved).
 function showCtxMenu(items, x, y) {
   const menu = $("ctx-menu");
   menu._items = items;
   menu.innerHTML = items
-    .map((it, i) => `<button data-i="${i}"${it.danger ? ' class="danger"' : ""}>${esc(it.label)}</button>`)
+    .map((it, i) => (it.sep ? `<div class="sep"></div>` : `<button data-i="${i}"${it.danger ? ' class="danger"' : ""}>${esc(it.label)}</button>`))
     .join("");
   menu.style.left = Math.min(x, window.innerWidth - 200) + "px";
   menu.style.top = Math.min(y, window.innerHeight - 120) + "px";
@@ -3312,24 +3314,22 @@ function openGlobalMenu() {
   const r = $("menu-btn").getBoundingClientRect();
   // Sorted at render so a future entry cannot land unsorted: the menu is a
   // lookup surface (no workflow order to preserve, no destructive rows).
-  showCtxMenu(
-    [
-      { label: "pull", act: () => doPull() },
-      { label: "push", act: () => doPush() },
-      { label: "fetch all remotes", act: () => doFetch() },
-      { label: "create branch…", act: () => openCreateBranchPrompt() },
-      { label: "branch versions…", act: () => openVersionBranches() },
-      { label: "review working changes (AI)…", act: () => startReview("working", "") },
-      { label: "refresh", act: () => { if (!state.op) refreshAfterOp(); } },
-      { label: "switch repo…", act: () => openPalette("repo") },
-      { label: "command palette…", act: () => openPalette("cmd") },
-      { label: "toggle sidebar", act: () => toggleSidebar() },
-      { label: "toggle graph", act: () => toggleGraphMode() },
-      { label: "help", act: () => openHelp() },
-    ].sort((a, b) => a.label.localeCompare(b.label)),
-    r.left,
-    r.bottom + 4
-  );
+  // help sits alone below a separator — the one fixed anchor.
+  const rows = [
+    { label: "pull", act: () => doPull() },
+    { label: "push", act: () => doPush() },
+    { label: "fetch all remotes", act: () => doFetch() },
+    { label: "create branch…", act: () => openCreateBranchPrompt() },
+    { label: "branch versions…", act: () => openVersionBranches() },
+    { label: "review working changes (AI)…", act: () => startReview("working", "") },
+    { label: "refresh", act: () => { if (!state.op) refreshAfterOp(); } },
+    { label: "switch repo…", act: () => openPalette("repo") },
+    { label: "command palette…", act: () => openPalette("cmd") },
+    { label: "toggle sidebar", act: () => toggleSidebar() },
+    { label: "toggle graph", act: () => toggleGraphMode() },
+  ].sort((a, b) => a.label.localeCompare(b.label));
+  rows.push({ sep: true }, { label: "help", act: () => openHelp() });
+  showCtxMenu(rows, r.left, r.bottom + 4);
 }
 
 $("menu-btn").addEventListener("click", (e) => {
