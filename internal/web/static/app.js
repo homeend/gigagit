@@ -28,6 +28,7 @@ const state = {
   sidebar: true,
   op: null, // {id, es: EventSource} while an operation is live
   lastDiff: null,
+  diffCtx: null, // {path, rev} — the file the diff pane currently shows, else null
   diffBlockIdx: -1,
   detailGen: 0,
   dragBranch: null, // name of the branch being dragged, else null
@@ -2434,6 +2435,7 @@ function enterFilesStage() {
   $("diff-title").textContent = "";
   $("diff-body").innerHTML = "";
   state.lastDiff = null;
+  state.diffCtx = null;
 }
 
 async function openCommit(i) {
@@ -2742,6 +2744,7 @@ async function openFile(i) {
   updateDiffNav();
   if (state.filesMode === "status") return openStatusDiff(i);
   const f = state.files[i];
+  state.diffCtx = { path: f.path, rev: state.filesMode === "compare" ? state.compare.bHash : f.sha || state.fileSha };
   const q = new URLSearchParams({ path: f.path, status: f.status });
   if (state.filesMode === "compare") {
     q.set("left", state.compare.aHash);
@@ -2764,6 +2767,7 @@ async function openFile(i) {
 async function openStatusDiff(i) {
   clearDiffHunks();
   const f = state.statusEntries[i];
+  state.diffCtx = f.section === "conflicts" ? null : { path: f.path, rev: "" };
   $("diff-title").textContent = f.path;
   if (f.section === "conflicts") return openConflictPicker(f);
   const q = new URLSearchParams({ wt: f.section === "staged" ? "staged" : "unstaged", path: f.path });
@@ -2800,6 +2804,7 @@ function exitStatusToList() {
   $("diff-title").textContent = "";
   $("diff-body").innerHTML = "";
   state.lastDiff = null; // a resize must not resurrect the cleared diff
+  state.diffCtx = null;
   setLayout("list");
   focusPane();
 }
@@ -2927,6 +2932,7 @@ function updateDiffNav() {
   const any = diffChangeBlocks().length > 0;
   $("prev-change").disabled = !any;
   $("next-change").disabled = !any;
+  $("hist-btn").disabled = $("blame-btn").disabled = !state.diffCtx;
 }
 
 function stepFile(delta) {
@@ -3436,9 +3442,28 @@ $("help-box").addEventListener("click", (e) => e.stopPropagation()); // allow se
 // section), bulk actions, copy path. Selects the row for feedback without
 // opening its diff.
 $("files-list").addEventListener("contextmenu", (e) => {
-  if (state.filesMode !== "status") return;
   const li = e.target.closest("li");
   if (!li || li.dataset.i === undefined) return;
+  if (state.filesMode !== "status") {
+    // commit / compare rows: read-only file actions. rev picks what "here"
+    // means — the commit being viewed, or the compare's right tip.
+    const f = state.files[Number(li.dataset.i)];
+    if (!f) return;
+    e.preventDefault();
+    state.fileCursor = Number(li.dataset.i);
+    renderFiles();
+    const rev = state.filesMode === "compare" ? state.compare.bHash : f.sha || state.fileSha;
+    showCtxMenu(
+      [
+        { label: "file history", act: () => openFileHistory(f.path, rev) },
+        { label: "blame at this commit", act: () => openFileBlame(f.path, rev) },
+        { label: "copy path", act: () => copyText(f.path) },
+      ],
+      e.clientX,
+      e.clientY
+    );
+    return;
+  }
   e.preventDefault();
   const i = Number(li.dataset.i);
   const f = state.statusEntries[i];
@@ -3450,6 +3475,8 @@ $("files-list").addEventListener("contextmenu", (e) => {
   else if (f.section === "conflicts") items.push({ label: "mark resolved (stage as-is)", act: () => stage({ paths: [f.path] }) });
   else items.push({ label: "stage " + f.path, act: () => stage({ paths: [f.path] }) });
   items.push({ label: "copy path", act: () => copyText(f.path) });
+  items.push({ label: "file history", act: () => openFileHistory(f.path, "") });
+  items.push({ label: "blame (working tree)", act: () => openFileBlame(f.path, "") });
   // the mass rows vanish while an op is paused — same footguns as the
   // hidden #files-actions buttons (stage all = markers staged as resolved,
   // unstage all = auto-merged results pulled out of the merge commit)
@@ -3491,6 +3518,12 @@ $("stage-all").addEventListener("click", () => stage({ all: true }));
 $("unstage-all").addEventListener("click", () => {
   const paths = state.statusEntries.filter((f) => f.section === "staged").map((f) => f.path);
   if (paths.length) stage({ paths, unstage: true }); // engine.Stage{All} can't unstage
+});
+$("hist-btn").addEventListener("click", () => {
+  if (state.diffCtx) openFileHistory(state.diffCtx.path, state.diffCtx.rev);
+});
+$("blame-btn").addEventListener("click", () => {
+  if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
 $("commit-btn").addEventListener("click", doCommit);
 $("pull-btn").addEventListener("click", doPull);
