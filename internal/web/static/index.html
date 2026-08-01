@@ -78,7 +78,7 @@
   </section>
 </main>
 <div id="op-line" class="hidden"><div id="op-head"><span>Problem</span><span>(double-click anywhere to hide)</span></div><div id="op-text"></div></div>
-<footer id="foot"><span>j/k move</span><span>enter open</span><button data-act="back">esc back</button><button data-act="sidebar">b branches</button><button data-act="graph">g graph</button><button data-act="stage">s stage</button><button data-act="unstage">u unstage</button><button data-act="pull">p pull</button><button data-act="push">P push</button><button data-act="refresh">r refresh</button><button data-act="help">? help</button><button data-act="palette">ctrl+k palette</button></footer>
+<footer id="foot"><span>j/k move</span><span>enter open</span><button data-act="back">esc back</button><button data-act="sidebar">b branches</button><button data-act="graph">g graph</button><button data-act="filter">/ filter</button><button data-act="stage">s stage</button><button data-act="unstage">u unstage</button><button data-act="pull">p pull</button><button data-act="push">P push</button><button data-act="refresh">r refresh</button><button data-act="help">? help</button><button data-act="palette">ctrl+k palette</button></footer>
 <div id="ctx-menu" class="hidden"></div>
 <div id="modal" class="hidden">
   <div id="modal-box">
@@ -183,6 +183,8 @@
     <div class="hrow"><span class="hkey">P</span><span>push the current branch (rejection recovery — rebase / force — in the modal)</span></div>
     <div class="hrow"><span class="hkey">s / u</span><span>stage / unstage the focused file (working-tree status view)</span></div>
     <div class="hrow"><span class="hkey">ctrl+enter</span><span>commit, from the message box</span></div>
+    <div class="hrow"><span class="hkey">/</span><span>filter the commit list — subject, author, or sha prefix, over the loaded rows; esc clears it</span></div>
+    <div class="hrow"><span class="hkey">#</span><span>goto commit — jump to a sha, branch, tag, or any rev, paging the list deeper if needed</span></div>
     <div class="hrow"><span class="hkey">?</span><span>this help</span></div>
     <div class="hrow"><span class="hkey">ctrl+k / ctrl+p</span><span>command palette (incl. switch repo)</span></div>
     <h3>Mouse</h3>

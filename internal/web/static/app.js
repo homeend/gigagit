@@ -1146,10 +1146,14 @@ async function openHistoryDiff(i) {
   $("history-diff").innerHTML = `<div class="notice">loading…</div>`;
   try {
     const d = await getJSON("/api/diff?" + q);
-    if (!hist || hist.gen !== gen) return;
+    // Stale-response guard: rapid j/k can land responses out of order, so a
+    // slow response for a commit the selection has since moved past must not
+    // clobber a newer diff already on screen — same overlay (gen) AND the
+    // selection still sitting on the row this response is for (i).
+    if (!hist || hist.gen !== gen || hist.sel !== i) return;
     $("history-diff").innerHTML = diffHTML(d, $("history-diff").clientWidth);
   } catch (e) {
-    if (hist && hist.gen === gen)
+    if (hist && hist.gen === gen && hist.sel === i)
       $("history-diff").innerHTML = `<div class="notice">error: ${esc(e.message || e)}</div>`;
   }
 }
@@ -2151,7 +2155,10 @@ function rowHTML(row, i, flat) {
 // render flat — lanes are meaningless on a subset. Deeper search is always
 // an explicit click on the hint row, never an automatic git walk.
 function openCommitFilter() {
-  if (state.layout === "diff") return; // commits pane is off-screen
+  if (state.layout === "diff") {
+    opLine("filter works on the commit list — press esc to it first", false);
+    return; // commits pane is off-screen
+  }
   $("cfilter").classList.remove("hidden");
   const input = $("cfilter-input");
   input.value = state.cfilter ? state.cfilter.q : "";
@@ -2494,7 +2501,11 @@ async function gotoCommit(rev) {
     return;
   }
   const gen = ++state.gotoGen;
-  for (;;) {
+  let guard = 0;
+  // goto is explicit (the user typed a rev they expect to exist), so the
+  // bound is generous — 100 pages vs. the branch-tip jump's 20 — but still
+  // finite: an all-branches feed on a huge repo must not page to exhaustion.
+  while (guard < 100) {
     const idx = state.rows.findIndex((r) => r.hash === res.hash);
     if (idx >= 0) return revealCommit(idx);
     if (!state.canLoadMore) break;
@@ -2502,6 +2513,7 @@ async function gotoCommit(rev) {
     await loadCommits(true);
     if (gen !== state.gotoGen) return; // superseded: re-root or a second goto
     if (state.rows.length === before) break; // no growth: feed exhausted
+    guard++;
   }
   opLine("commit is not in the current list (scope?) — opening its detail", false);
   openCommitByHash(res.hash, res.hash.slice(0, 8) + " " + (res.subject || ""));
@@ -3303,10 +3315,22 @@ document.addEventListener("keydown", (e) => {
     e.preventDefault();
     moveCursor(-1);
   } else if (e.key === "Enter") {
-    if (state.pane === "commits") openCommit(state.cursor);
-    else if (state.filesMode === "status" ? state.statusEntries.length : state.files.length) openFile(state.fileCursor);
+    if (state.pane === "commits") {
+      // A zero-match filter leaves state.cursor pointing at an invisible
+      // row (or the hint row) — nothing there to open.
+      if (!(state.cfilter && state.cfilter.matches.length === 0)) openCommit(state.cursor);
+    } else if (state.filesMode === "status" ? state.statusEntries.length : state.files.length) openFile(state.fileCursor);
   } else if (e.key === "Escape") {
-    drillOut();
+    // The filter bar can be open with its input unfocused (a click landed
+    // back on a commit row) — drillOut() no-ops in list layout, so Escape
+    // would otherwise do nothing at all. Clearing the filter takes priority
+    // over the layered close in list layout; diff/files behavior (drillOut)
+    // is unchanged.
+    if (state.layout === "list" && (!$("cfilter").classList.contains("hidden") || state.cfilter)) {
+      closeCommitFilter();
+    } else {
+      drillOut();
+    }
   } else if (e.key === "g") {
     toggleGraphMode();
   } else if (e.key === "b") {
@@ -3337,6 +3361,7 @@ $("foot").addEventListener("click", (e) => {
     case "back": drillOut(); break;
     case "sidebar": toggleSidebar(); break;
     case "graph": toggleGraphMode(); break;
+    case "filter": openCommitFilter(); break;
     case "stage": stageFocused(false); break;
     case "unstage": stageFocused(true); break;
     case "pull": doPull(); break;
@@ -3590,6 +3615,7 @@ function paletteCommands() {
     { label: "review working changes (AI)…", detail: "", run: () => startReview("working", "") },
     { label: "review this branch (AI)…", detail: "", run: () => startReview("branch", "") },
     { label: "goto commit…", detail: "#", run: () => gotoCommitPrompt() },
+    { label: "filter commits…", detail: "/", run: () => openCommitFilter() },
     { label: "refresh", detail: "r", run: () => { if (!state.op) refreshAfterOp(); } },
     { label: "switch repo…", detail: "", run: null }, // drills into repo mode (runPaletteRow)
     { label: "open working tree", detail: "", run: () => openWorkingTree(0) }, // 0 = the WT row; a bare call would set state.cursor = undefined and break j/k/enter
