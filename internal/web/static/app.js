@@ -457,7 +457,7 @@ function handleOpEvent(ev) {
     // entirely — it changes nothing in the repo, so none of the refreshing
     // below applies to it.
     if (op && op.onDone) {
-      op.onDone(ev);
+      op.onDone(ev, kind);
       return;
     }
     if (ev.ok && (kind === "commit" || kind === "stash")) $("commit-msg").value = "";
@@ -1173,13 +1173,20 @@ async function reviewRun(approve) {
     reviewDone);
 }
 
-function reviewDone(ev) {
-  // Capture everything the lane owns BEFORE closing it: closeReviewLane
-  // clears both rev and a running task chip.
-  const title = rev && rev.mode === "conflict"
-    ? "Resolution overview — " + ((rev.tool && rev.tool.name) || "agent")
+function reviewDone(ev, kind) {
+  // kind is the op's own kind ("conflict_complete" | "review"), threaded in
+  // from handleOpEvent/state.op — NOT derived from rev.mode. reviewCancel()
+  // closes the lane (nulling rev) BEFORE its cancel round-trip completes, so
+  // the eventual done event for that cancel arrives with rev already gone;
+  // deriving the conflict/review distinction from rev here would silently
+  // fall back to "review" on every cancelled (or lost-connection) run,
+  // skipping the conflict-only refreshAfterOp() below and misreporting the
+  // outcome. rev/state.task are read only for DISPLAY (title, label, tool
+  // name) below and degrade gracefully once the lane is gone.
+  const isConflict = kind === "conflict_complete";
+  const title = isConflict
+    ? "Resolution overview — " + ((rev && rev.tool && rev.tool.name) || "agent")
     : reviewTitle() || "Review";
-  const isConflict = !!(rev && rev.mode === "conflict");
   const parked = !!(rev && rev.parked);
   const label = (state.task && state.task.label) || (rev && rev.label) || "";
   closeReviewLane();
