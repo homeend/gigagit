@@ -1169,6 +1169,52 @@ $("history").addEventListener("click", (e) => {
   if (e.target.id === "history") closeHistory(); // backdrop closes, box does not
 });
 
+// --- blame overlay -----------------------------------------------------------
+// Fetch-then-open: a blame failure (untracked path, binary) surfaces on the
+// status line and the overlay never opens — nothing worse than an empty modal.
+async function openFileBlame(path, rev) {
+  let body;
+  try {
+    body = await getJSON(
+      "/api/blame?path=" + encodeURIComponent(path) + "&rev=" + encodeURIComponent(rev || "")
+    );
+  } catch (e) {
+    opLine("blame failed: " + (e.message || e), true);
+    return;
+  }
+  $("blame-title").textContent = "blame — " + path + (rev ? " @ " + rev.slice(0, 8) : " (working tree)");
+  const lines = body.lines || [];
+  let html = "";
+  let prev = null;
+  for (const l of lines) {
+    const first = l.hash !== prev;
+    prev = l.hash;
+    const gut = !first
+      ? ""
+      : l.hash
+        ? `<span class="bsha" data-h="${esc(l.hash)}" title="${esc(l.summary)}">${esc(l.short)}</span> ${esc(l.author)} · ${versionWhen(l.time)}`
+        : `<span class="bwork">working</span>`;
+    html +=
+      `<div class="bline${first ? " bfirst" : ""}">` +
+      `<span class="bgut">${gut}</span>` +
+      `<span class="bno">${l.line}</span>` +
+      `<span class="btext">${esc(l.text) || " "}</span></div>`;
+  }
+  $("blame-body").innerHTML = html || `<div class="notice">(empty file)</div>`;
+  pushLayer("blame", $("blame"), {}); // no onKey: the stack's default esc-closes applies
+  $("blame-body").scrollTop = 0;
+}
+
+$("blame-body").addEventListener("click", (e) => {
+  const sha = e.target.closest(".bsha");
+  if (!sha) return;
+  closeLayer("blame");
+  openCommitByHash(sha.dataset.h, sha.dataset.h.slice(0, 8));
+});
+$("blame").addEventListener("click", (e) => {
+  if (e.target.id === "blame") closeLayer("blame"); // backdrop closes, box does not
+});
+
 // --- AI review ---
 //
 // One overlay walks the whole lane — choose a tool, approve its command, wait
@@ -3507,6 +3553,7 @@ function paletteCommands() {
     { label: "create branch…", detail: "", run: () => openCreateBranchPrompt() },
     { label: "branch versions…", detail: "", run: () => openVersionBranches() },
     { label: "file history…", detail: "", run: () => openPrompt({ title: "File history — repo-relative path", placeholder: "e.g. internal/web/server.go", onSubmit: (p) => openFileHistory(p, "") }) },
+    { label: "file blame…", detail: "", run: () => openPrompt({ title: "File blame — repo-relative path", placeholder: "e.g. internal/web/server.go", onSubmit: (p) => openFileBlame(p, "") }) },
     { label: "review working changes (AI)…", detail: "", run: () => startReview("working", "") },
     { label: "review this branch (AI)…", detail: "", run: () => startReview("branch", "") },
     { label: "goto commit…", detail: "#", run: () => gotoCommitPrompt() },

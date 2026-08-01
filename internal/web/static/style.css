@@ -432,6 +432,22 @@ tr.hk.picked td.no { background: var(--sel); color: var(--fg); }
 #history-list .hshow:hover { border-color: var(--accent); color: var(--accent); }
 #history-diff { flex: 1; overflow: auto; }
 
+/* blame overlay: gutter (sha · author · age) + source line; repeated gutters
+   blank so commit blocks read as groups */
+#blame { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; z-index: 21; }
+#blame.hidden { display: none; }
+#blame-box { background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; width: 94vw; height: 88vh; display: flex; flex-direction: column; }
+#blame-title { padding: 10px 14px; border-bottom: 1px solid var(--border); }
+#blame-hint { padding: 6px 14px; border-top: 1px solid var(--border); color: var(--dim); font-size: 11px; }
+#blame-body { flex: 1; overflow: auto; font-family: ui-monospace, monospace; font-size: 12px; padding: 6px 0; }
+.bline { display: flex; white-space: pre; }
+.bline.bfirst { border-top: 1px solid var(--border); }
+.bgut { flex: none; width: 300px; overflow: hidden; text-overflow: ellipsis; color: var(--dim); padding-left: 10px; }
+.bsha { color: var(--accent); cursor: pointer; text-decoration: underline dotted; }
+.bwork { color: var(--dim); font-style: italic; }
+.bno { flex: none; width: 4em; text-align: right; color: var(--dim); padding-right: 10px; }
+.btext { flex: 1; }
+
 /* AI review: the lane (chooser / approval / progress) and the report viewer.
    Both sit at 21 with the other panel overlays — the ctx-menu (40) and the
    decision modal (30) still have to paint over them. */
