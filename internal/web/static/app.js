@@ -223,7 +223,8 @@ function hideOpLine() {
   $("op-line").classList.add("hidden");
 }
 
-function opLine(text, isErr) {
+let taskRestoreTimer = null;
+function opLine(text, isErr, isTask) {
   const el = $("op-line");
   $("op-text").textContent = text || "";
   el.classList.toggle("err", !!isErr);
@@ -231,24 +232,42 @@ function opLine(text, isErr) {
   el.classList.toggle("hidden", !text);
   clearTimeout(opLineTimer);
   if (!text) return;
+  // A transient notice may borrow the line from the parked-run handle (there
+  // is only one line), but the handle must come BACK: it is the standing
+  // indicator that something is still running (user report: the "already
+  // running" guard ate the background-run line for good).
+  if (!isTask) {
+    clearTimeout(taskRestoreTimer);
+    if (parkedRunning()) {
+      taskRestoreTimer = setTimeout(() => {
+        if (parkedRunning() && !$("op-line").classList.contains("task")) taskLine(parkedTaskText());
+      }, 6000);
+    }
+  }
   // every message expires after 30s — but never while its op still runs
   // (each op event overwrites the line and re-arms the timer anyway)
   opLineTimer = setTimeout(() => {
     // NOT opBusy(): that reports, and reporting re-arms this timer.
-    // A BACKGROUNDED review is exempt from the never-expire-while-running
-    // rule: that rule assumes the line is being rewritten by the op's own
-    // progress events, and a parked run emits none — so its line would
-    // otherwise just sit there for the whole run. The chip is the indicator.
+    // The parked-run HANDLE never expires: it stays until the run finishes
+    // (reviewDone repaints or hides it). Only ordinary notices time out.
     if (state.op && !parkedRunning()) return;
+    if ($("op-line").classList.contains("task") && parkedRunning()) return;
     hideOpLine();
   }, 30000);
+}
+
+// parkedTaskText is the parked-run handle's one message — shared by the park
+// action and the restore-after-a-transient-notice timer above.
+function parkedTaskText() {
+  const noun = state.task && state.task.kind === "conflict" ? "AI resolve" : "review";
+  return noun + " running in the background — click here to watch or cancel it";
 }
 
 // taskLine is the parked-run status line. Unlike every other message it is a
 // live HANDLE on something still running, not a notice — so it is clickable
 // and exempt from dismissal (see the two listeners below).
 function taskLine(text) {
-  opLine(text); // clears .task first, then we claim it
+  opLine(text, false, true); // clears .task first, then we claim it
   $("op-line").classList.add("task");
 }
 
@@ -1255,7 +1274,7 @@ function parkReview() {
   state.task = { kind, label: rev.label || "", status: "running" };
   closeLayer("review");
   renderTaskChip(false);
-  taskLine((kind === "conflict" ? "AI resolve" : "review") + " running in the background — click here to watch or cancel it");
+  taskLine(parkedTaskText());
 }
 
 function unparkReview() {
