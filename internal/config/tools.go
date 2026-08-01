@@ -11,12 +11,13 @@ import (
 // by the Settings "External tools" wizard or by hand; only config content
 // ever executes (catalog templates are generation-time input).
 type ToolCommand struct {
-	Category string `toml:"category"` // conflict | commit_message | review | conflict_complete
-	Name     string `toml:"name"`     // menu label; unique per category
-	Mode     string `toml:"mode"`     // terminal | capture (capture: stage 2+)
-	PerFile  bool   `toml:"per_file"` // conflict only: run once per conflicted file
-	WhenOp   string `toml:"when_op"`  // "" = any paused op; else merge|rebase|cherry-pick|revert
-	Command  string `toml:"command"`  // shell command with <token> placeholders
+	Category  string   `toml:"category"`  // conflict | commit_message | review | conflict_complete
+	Name      string   `toml:"name"`      // menu label; unique per category
+	Mode      string   `toml:"mode"`      // terminal | capture (capture: stage 2+)
+	PerFile   bool     `toml:"per_file"`  // conflict only: run once per conflicted file
+	WhenOp    string   `toml:"when_op"`   // "" = any paused op; else merge|rebase|cherry-pick|revert
+	Frontends []string `toml:"frontends"` // limits which frontends offer this command: any of "tui", "web", "cli". Empty = everywhere.
+	Command   string   `toml:"command"`   // shell command with <token> placeholders
 }
 
 // ToolsConfig is the [tools] section.
@@ -76,7 +77,28 @@ func ValidateToolCommand(tc ToolCommand) error {
 	default:
 		return fmt.Errorf("tools: %s: unknown when_op %q", tc.Name, tc.WhenOp)
 	}
+	for _, f := range tc.Frontends {
+		switch f {
+		case "tui", "web", "cli":
+		default:
+			return fmt.Errorf("tools: %s: unknown frontend %q (want tui|web|cli)", tc.Name, f)
+		}
+	}
 	return nil
+}
+
+// ToolVisibleIn reports whether frontend ("tui"|"web"|"cli") offers tc.
+// Empty Frontends means everywhere.
+func ToolVisibleIn(tc ToolCommand, frontend string) bool {
+	if len(tc.Frontends) == 0 {
+		return true
+	}
+	for _, f := range tc.Frontends {
+		if f == frontend {
+			return true
+		}
+	}
+	return false
 }
 
 // AppendToolCommands appends [[tools.command]] blocks to the config file at
@@ -113,6 +135,13 @@ func AppendToolCommands(path string, cmds []ToolCommand) error {
 		fmt.Fprintf(&b, "mode = %q\n", tc.Mode)
 		fmt.Fprintf(&b, "per_file = %t\n", tc.PerFile)
 		fmt.Fprintf(&b, "when_op = %q\n", tc.WhenOp)
+		if len(tc.Frontends) > 0 {
+			quoted := make([]string, len(tc.Frontends))
+			for i, f := range tc.Frontends {
+				quoted[i] = fmt.Sprintf("%q", f)
+			}
+			fmt.Fprintf(&b, "frontends = [%s]\n", strings.Join(quoted, ", "))
+		}
 		b.WriteString("command = '''\n")
 		b.WriteString(strings.TrimRight(tc.Command, "\n"))
 		b.WriteString("\n'''\n")

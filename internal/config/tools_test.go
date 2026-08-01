@@ -185,3 +185,68 @@ func TestValidateToolCommandConflictComplete(t *testing.T) {
 		t.Fatalf("when_op with conflict_complete must validate, got %v", err)
 	}
 }
+
+func TestToolCommandFrontends(t *testing.T) {
+	tc := ToolCommand{Category: "conflict_complete", Name: "X", Mode: "capture", Command: "x"}
+	if err := ValidateToolCommand(tc); err != nil {
+		t.Fatalf("no frontends should validate: %v", err)
+	}
+	tc.Frontends = []string{"tui", "web", "cli"}
+	if err := ValidateToolCommand(tc); err != nil {
+		t.Fatalf("known frontends should validate: %v", err)
+	}
+	tc.Frontends = []string{"gui"}
+	if err := ValidateToolCommand(tc); err == nil {
+		t.Fatal("unknown frontend value must be rejected")
+	}
+}
+
+func TestToolVisibleIn(t *testing.T) {
+	empty := ToolCommand{}
+	for _, f := range []string{"tui", "web", "cli"} {
+		if !ToolVisibleIn(empty, f) {
+			t.Errorf("empty Frontends must be visible in %s", f)
+		}
+	}
+	webOnly := ToolCommand{Frontends: []string{"web"}}
+	if ToolVisibleIn(webOnly, "tui") || !ToolVisibleIn(webOnly, "web") {
+		t.Error("web-only row: hidden from tui, visible in web")
+	}
+}
+
+func TestAppendToolCommandsWritesFrontends(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "gg.toml")
+	err := AppendToolCommands(path, []ToolCommand{{
+		Category: "conflict_complete", Name: "X", Mode: "capture",
+		Frontends: []string{"web"}, Command: "echo hi",
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := os.ReadFile(path)
+	if !strings.Contains(string(raw), "frontends = [\"web\"]\n") {
+		t.Fatalf("frontends line missing:\n%s", raw)
+	}
+	// Round-trip: the written file parses back with the field intact.
+	cfg, err := Load("", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Tools.Command) != 1 || len(cfg.Tools.Command[0].Frontends) != 1 || cfg.Tools.Command[0].Frontends[0] != "web" {
+		t.Fatalf("round-trip lost frontends: %+v", cfg.Tools.Command)
+	}
+
+	// Also assert the no-frontends case writes NO `frontends` line.
+	path2 := filepath.Join(t.TempDir(), "gg.toml")
+	err = AppendToolCommands(path2, []ToolCommand{{
+		Category: "conflict_complete", Name: "Y", Mode: "capture",
+		Command: "echo hi",
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw2, _ := os.ReadFile(path2)
+	if strings.Contains(string(raw2), "frontends = ") {
+		t.Fatalf("empty Frontends must not write frontends line:\n%s", raw2)
+	}
+}

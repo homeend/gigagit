@@ -586,58 +586,144 @@ func conflictTemplate(t *testing.T, toolID, name string) (CommandTemplate, bool)
 }
 
 // TestConflictCompleteTemplates pins the resolve-and-complete category's
-// contract: every agent gets exactly ONE row (yolo-only — no cautious
-// variant), terminal handover except Kimi (headless -p, capture), the
-// permission-bypass flag present except Kimi (whose -p refuses yolo flags
-// but auto-approves anyway), and a prompt that (a) instructs the matching
-// --continue command, (b) forbids --abort, and (c) routes the overview
-// through GG_MESSAGE_FILE. Meld is a mergetool, not an agent: no row.
+// contract. Terminal-agent tools (claude/junie/codex/antigravity) get
+// exactly ONE ModeTerminal row (yolo-only — no cautious variant), the
+// permission-bypass flag present (Junie's is --brave). Web needs a headless
+// counterpart because a browser has no terminal to hand over: claude/codex/
+// antigravity additionally get exactly ONE ModeCapture row (same bypass-flag
+// posture); Junie gets none (--brave is interactive-only, so a headless
+// Junie cannot approve its own edits). Kimi has no interactive-with-prompt
+// mode at all, so it is ModeCapture-only (its existing single row, no bypass
+// flag — print mode approves its own edits). Every row's prompt must (a)
+// instruct the matching --continue command, (b) forbid --abort, and (c)
+// route the overview through GG_MESSAGE_FILE. Meld is a mergetool, not an
+// agent: no row of either mode.
 func TestConflictCompleteTemplates(t *testing.T) {
-	want := map[string]struct {
-		mode  Mode
+	wantTerminal := map[string]struct {
 		optIn bool
 		flag  string // required bypass-flag substring; "" = none allowed
 	}{
-		"claude":      {ModeTerminal, true, "--dangerously-skip-permissions"},
-		"junie":       {ModeTerminal, true, "--brave"},
-		"codex":       {ModeTerminal, true, "--dangerously-bypass-approvals-and-sandbox"},
-		"antigravity": {ModeTerminal, true, "--dangerously-skip-permissions"},
-		"kimi":        {ModeCapture, false, ""},
+		"claude":      {true, "--dangerously-skip-permissions"},
+		"junie":       {true, "--brave"},
+		"codex":       {true, "--dangerously-bypass-approvals-and-sandbox"},
+		"antigravity": {true, "--dangerously-skip-permissions"},
 	}
-	for _, tl := range Builtins() {
-		var rows []CommandTemplate
-		for _, ct := range tl.Commands {
-			if ct.Category == CatConflictComplete {
-				rows = append(rows, ct)
-			}
-		}
-		spec, ok := want[tl.ID]
-		if !ok {
-			if len(rows) != 0 {
-				t.Errorf("%s: unexpected conflict_complete rows: %v", tl.ID, rows)
-			}
-			continue
-		}
-		if len(rows) != 1 {
-			t.Fatalf("%s: want exactly one conflict_complete row, got %d", tl.ID, len(rows))
-		}
-		ct := rows[0]
-		if ct.Mode != spec.mode {
-			t.Errorf("%s: mode = %s, want %s", tl.ID, ct.Mode, spec.mode)
-		}
+	wantCapture := map[string]struct {
+		optIn bool
+		flag  string
+	}{
+		"claude":      {true, "--dangerously-skip-permissions"},
+		"codex":       {true, "--dangerously-bypass-approvals-and-sandbox"},
+		"antigravity": {true, "--dangerously-skip-permissions"},
+		"kimi":        {false, ""},
+	}
+	checkCompleteRow := func(t *testing.T, id, kind string, ct CommandTemplate, spec struct {
+		optIn bool
+		flag  string
+	}) {
+		t.Helper()
 		if ct.OptIn != spec.optIn {
-			t.Errorf("%s: OptIn = %v, want %v", tl.ID, ct.OptIn, spec.optIn)
+			t.Errorf("%s: %s OptIn = %v, want %v", id, kind, ct.OptIn, spec.optIn)
 		}
 		if spec.flag != "" && !strings.Contains(ct.Command, spec.flag) {
-			t.Errorf("%s: command missing bypass flag %s", tl.ID, spec.flag)
+			t.Errorf("%s: %s command missing bypass flag %s", id, kind, spec.flag)
 		}
 		if ct.PerFile {
-			t.Errorf("%s: conflict_complete must not be per-file", tl.ID)
+			t.Errorf("%s: %s conflict_complete must not be per-file", id, kind)
 		}
 		for _, must := range []string{"--continue", "<env:GG_MESSAGE_FILE>", "--abort", "<env:GG_CONTEXT_FILE>"} {
 			if !strings.Contains(ct.Command, must) {
-				t.Errorf("%s: prompt must mention %s", tl.ID, must)
+				t.Errorf("%s: %s prompt must mention %s", id, kind, must)
 			}
+		}
+	}
+	for _, tl := range Builtins() {
+		var terminalRows, captureRows []CommandTemplate
+		for _, ct := range tl.Commands {
+			if ct.Category != CatConflictComplete {
+				continue
+			}
+			switch ct.Mode {
+			case ModeTerminal:
+				terminalRows = append(terminalRows, ct)
+			case ModeCapture:
+				captureRows = append(captureRows, ct)
+			}
+		}
+
+		if spec, ok := wantTerminal[tl.ID]; ok {
+			if len(terminalRows) != 1 {
+				t.Fatalf("%s: want exactly one ModeTerminal conflict_complete row, got %d", tl.ID, len(terminalRows))
+			}
+			checkCompleteRow(t, tl.ID, "terminal", terminalRows[0], spec)
+		} else if len(terminalRows) != 0 {
+			t.Errorf("%s: unexpected ModeTerminal conflict_complete rows: %v", tl.ID, terminalRows)
+		}
+
+		if spec, ok := wantCapture[tl.ID]; ok {
+			if len(captureRows) != 1 {
+				t.Fatalf("%s: want exactly one ModeCapture conflict_complete row, got %d", tl.ID, len(captureRows))
+			}
+			checkCompleteRow(t, tl.ID, "capture", captureRows[0], spec)
+		} else if len(captureRows) != 0 {
+			t.Errorf("%s: unexpected ModeCapture conflict_complete rows: %v", tl.ID, captureRows)
+		}
+	}
+}
+
+// TestConflictCompleteFrontendTags asserts every conflict_complete row's
+// Frontends tag matches its role: a ModeTerminal row is TUI-only (a browser
+// has no terminal to hand over to), and a ModeCapture row must be visible in
+// web (that is precisely why it exists — the headless counterpart for a
+// frontend with no terminal handover).
+func TestConflictCompleteFrontendTags(t *testing.T) {
+	for _, tl := range Builtins() {
+		for _, ct := range tl.Commands {
+			if ct.Category != CatConflictComplete {
+				continue
+			}
+			switch ct.Mode {
+			case ModeTerminal:
+				if len(ct.Frontends) != 1 || ct.Frontends[0] != "tui" {
+					t.Errorf("%s/%s: terminal conflict_complete row must be tagged [tui], got %v", tl.ID, ct.Name, ct.Frontends)
+				}
+			case ModeCapture:
+				hasWeb := false
+				for _, f := range ct.Frontends {
+					if f == "web" {
+						hasWeb = true
+					}
+				}
+				if !hasWeb {
+					t.Errorf("%s/%s: capture conflict_complete row must be visible in web, got %v", tl.ID, ct.Name, ct.Frontends)
+				}
+			}
+		}
+	}
+}
+
+// TestHeadlessCompleteRows pins which tools get a web-visible (ModeCapture)
+// conflict_complete row: claude/codex/antigravity/kimi have a headless
+// bypass posture that can honestly attempt the task; Junie does not
+// (--brave is interactive-only).
+func TestHeadlessCompleteRows(t *testing.T) {
+	want := map[string]bool{ // tool ID -> expects a web-tagged capture complete row
+		"claude": true, "codex": true, "antigravity": true, "kimi": true,
+		"junie": false, // no headless bypass flag — cannot honestly attempt the task
+	}
+	for _, tl := range Builtins() {
+		expect, tracked := want[tl.ID]
+		if !tracked {
+			continue
+		}
+		got := false
+		for _, ct := range tl.Commands {
+			if ct.Category == CatConflictComplete && ct.Mode == ModeCapture {
+				got = true
+			}
+		}
+		if got != expect {
+			t.Errorf("%s: capture conflict_complete row present=%v want %v", tl.ID, got, expect)
 		}
 	}
 }

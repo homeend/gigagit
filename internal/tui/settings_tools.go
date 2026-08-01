@@ -70,12 +70,13 @@ func (m Model) applyToolsWizard(rows []toolWizardRow, checked []bool, globalPath
 			continue
 		}
 		blocks = append(blocks, config.ToolCommand{
-			Category: string(row.tmpl.Category),
-			Name:     row.tmpl.Name,
-			Mode:     string(row.tmpl.Mode),
-			PerFile:  row.tmpl.PerFile,
-			WhenOp:   row.tmpl.WhenOp,
-			Command:  exttool.GenerateCommand(row.tmpl, row.det.Bin),
+			Category:  string(row.tmpl.Category),
+			Name:      row.tmpl.Name,
+			Mode:      string(row.tmpl.Mode),
+			PerFile:   row.tmpl.PerFile,
+			WhenOp:    row.tmpl.WhenOp,
+			Frontends: row.tmpl.Frontends,
+			Command:   exttool.GenerateCommand(row.tmpl, row.det.Bin),
 		})
 	}
 	if len(blocks) == 0 {

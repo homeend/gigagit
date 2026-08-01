@@ -62,6 +62,18 @@ func TestToolCommandsReviewCaptureLive(t *testing.T) {
 	}
 }
 
+func TestToolCommandsFrontendFilter(t *testing.T) {
+	m := toolCfg(
+		config.ToolCommand{Category: "conflict_complete", Name: "WebOnly", Mode: "capture", Frontends: []string{"web"}, Command: "x"},
+		config.ToolCommand{Category: "conflict_complete", Name: "Everywhere", Mode: "capture", Command: "x"},
+		config.ToolCommand{Category: "conflict_complete", Name: "TuiToo", Mode: "capture", Frontends: []string{"tui", "web"}, Command: "x"},
+	)
+	got := m.toolCommands("conflict_complete")
+	if len(got) != 2 || got[0].Name != "Everywhere" || got[1].Name != "TuiToo" {
+		t.Fatalf("web-only row must be hidden from the TUI, got %+v", got)
+	}
+}
+
 func TestConflictToolChoices(t *testing.T) {
 	repoLevel := config.ToolCommand{Category: "conflict", Name: "Agent", Mode: "terminal", Command: "a"}
 	mergeOnly := config.ToolCommand{Category: "conflict", Name: "JM", Mode: "terminal", WhenOp: "merge", Command: "j"}

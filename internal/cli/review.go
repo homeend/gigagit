@@ -115,6 +115,9 @@ func selectReviewCommand(svc *domain.Service, name string, stderr io.Writer) (co
 		if tc.Category != string(exttool.CatReview) {
 			continue
 		}
+		if !config.ToolVisibleIn(tc, "cli") {
+			continue
+		}
 		if config.ValidateToolCommand(tc) != nil || template.ValidateCommandTokens(tc.Command, tc.PerFile) != nil {
 			continue
 		}

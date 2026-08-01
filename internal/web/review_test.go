@@ -121,6 +121,29 @@ func TestReviewToolsWorkingTarget(t *testing.T) {
 	}
 }
 
+const tuiOnlyReviewTool = `
+[[tools.command]]
+category = "review"
+name = "TuiOnly"
+mode = "capture"
+frontends = ["tui"]
+command = '''
+printf '# review of <range>\nlooks fine\n'
+'''
+`
+
+// A review block tagged frontends=["tui"] must be invisible to the web
+// tools listing — it stays hidden alongside the one web-visible tool.
+func TestReviewToolsHidesTuiOnlyFrontend(t *testing.T) {
+	dir := reviewRepo(t, echoReviewTool+tuiOnlyReviewTool)
+	ts := serve(t, New(domain.Open(dir)))
+
+	got := reviewTools(t, ts, "?target=branch&branch=feature")
+	if len(got.Tools) != 1 || got.Tools[0].Name != "Echo" {
+		t.Fatalf("tools = %+v, want only Echo (TuiOnly is frontends=[\"tui\"])", got.Tools)
+	}
+}
+
 func TestReviewToolsEmptyWithoutConfig(t *testing.T) {
 	dir := reviewRepo(t, "")
 	ts := serve(t, New(domain.Open(dir)))

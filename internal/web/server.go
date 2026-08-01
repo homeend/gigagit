@@ -84,6 +84,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/resolve-hunks", writeGuard(s.handleResolveHunks))
 	mux.HandleFunc("GET /api/review/tools", s.handleReviewTools)
 	mux.HandleFunc("POST /api/review", writeGuard(s.handleReviewStart))
+	mux.HandleFunc("GET /api/conflict/tools", s.handleConflictTools)
+	mux.HandleFunc("POST /api/conflict/complete", writeGuard(s.handleConflictComplete))
 	mux.HandleFunc("POST /api/op", writeGuard(s.handleOpStart))
 	mux.HandleFunc("GET /api/op/{id}/events", s.handleOpEvents)
 	mux.HandleFunc("POST /api/op/{id}/decide", writeGuard(s.handleOpDecide))
