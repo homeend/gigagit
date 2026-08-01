@@ -164,7 +164,11 @@ func (s *Server) handleConflictComplete(w http.ResponseWriter, r *http.Request) 
 		if rerr != nil {
 			return engine.Result{}, nil, rerr
 		}
-		return engine.Result{Summary: "conflict agent finished"},
+		// Changed:true on EVERY successful run, not just one that fully
+		// resolves the op: a stop-early agent may still have advanced a
+		// rebase round and created commits. A spurious feed reset is cheap;
+		// a stale commits pane after a real commit landed is a bug.
+		return engine.Result{Summary: "conflict agent finished", Changed: true},
 			map[string]any{"report": res.Overview, "tool": tc.Name, "op": res.Op, "still_paused": res.StillPaused},
 			nil
 	})

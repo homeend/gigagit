@@ -247,6 +247,12 @@ func TestConflictCompleteRunResolvesMerge(t *testing.T) {
 	if last["still_paused"] != false {
 		t.Errorf("still_paused = %v, want false", last["still_paused"])
 	}
+	// changed:true is what triggers the server-side commit-feed reset
+	// (resetFeed in runOpStream) — this run created a merge commit, so a
+	// later /api/commits must not serve a stale, pre-merge feed.
+	if last["changed"] != true {
+		t.Errorf("changed = %v, want true", last["changed"])
+	}
 
 	var st conflictStatusResp
 	if code := getJSON(t, ts, "/api/status", &st); code != http.StatusOK {
@@ -257,6 +263,9 @@ func TestConflictCompleteRunResolvesMerge(t *testing.T) {
 	}
 	if out := gitRun(t, dir, "ls-files", "-u"); out != "" {
 		t.Errorf("still unmerged:\n%s", out)
+	}
+	if log := gitRun(t, dir, "log", "--merges", "--oneline"); log == "" {
+		t.Error("no merge commit after the agent completed the merge")
 	}
 }
 
