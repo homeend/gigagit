@@ -20,7 +20,9 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   keeps the TUI picker unchanged while new web-only headless catalog rows
   (Claude/Codex/Antigravity; Kimi's existing capture row is shared) power the
   web lane. Engine: new `CompleteConflict` capture op (LockMode Read — the
-  agent mutates, gg only reads).
+  agent mutates, gg only reads). The agent chooser always opens first — even
+  with a single configured agent — so opening the dialog never starts a run;
+  clicking an agent row is the confirmation.
 
 - **Web: conflict resolution.** A paused merge/rebase/cherry-pick/revert now
   shows a banner in the browser — the op, what it's doing, and the
