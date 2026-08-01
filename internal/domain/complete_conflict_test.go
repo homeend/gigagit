@@ -113,7 +113,7 @@ func TestCompleteConflictReportStopEarlyLeavesPaused(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("uses sh")
 	}
-	_, svc := conflictedMergeRepo(t)
+	dir, svc := conflictedMergeRepo(t)
 
 	res, err := svc.CompleteConflictReport(context.Background(), "echo gave up", nil)
 	if err != nil {
@@ -127,6 +127,17 @@ func TestCompleteConflictReportStopEarlyLeavesPaused(t *testing.T) {
 	}
 	if res.Overview != "gave up" {
 		t.Fatalf("Overview = %q, want %q", res.Overview, "gave up")
+	}
+
+	// Independent git-level assertions: res.StillPaused is computed by the
+	// same s.Status/s.Conflict machinery under test, so it alone can't catch
+	// a latent bug in Conflict()'s attribution. Mirror the completes-a-merge
+	// test's symmetry by checking the raw repo state directly instead.
+	if _, err := os.Stat(filepath.Join(dir, ".git", "MERGE_HEAD")); err != nil {
+		t.Fatalf("MERGE_HEAD missing, want present (merge still genuinely paused): %v", err)
+	}
+	if out := strings.TrimSpace(gitOutput(t, dir, "ls-files", "-u")); out == "" {
+		t.Fatal("ls-files -u empty, want unmerged entries still present")
 	}
 }
 
