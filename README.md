@@ -13,7 +13,9 @@ system `git`.
 > roadmap. A loopback-only browser UI (`gg web`) mirrors core flows —
 > status, commits, branches, stashes, pull/push/merge/rebase, and now
 > paused-op conflict resolution with an in-browser per-block ours/theirs
-> picker — over a small HTTP API, no node toolchain required. See
+> picker plus an "AI resolve…" button that runs a headless agent to finish
+> the paused op for you — over a small HTTP API, no node toolchain required.
+> See
 > [`CHANGELOG.md`](CHANGELOG.md) for the full feature list and
 > [`CLAUDE.md`](CLAUDE.md) for the architecture.
 

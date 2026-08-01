@@ -8,6 +8,17 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: AI conflict resolution.** An "AI resolve…" button on the
+  paused-operation banner runs a headless `conflict_complete` agent (chooser
+  → one-time command approval shared with the TUI → background run with
+  park/cancel); the agent resolves, stages, runs the matching `--continue`,
+  and its overview opens in the report viewer. New `frontends` tag on
+  `[[tools.command]]` blocks (`"tui"`/`"web"`/`"cli"`, empty = everywhere)
+  keeps the TUI picker unchanged while new web-only headless catalog rows
+  (Claude/Codex/Antigravity; Kimi's existing capture row is shared) power the
+  web lane. Engine: new `CompleteConflict` capture op (LockMode Read — the
+  agent mutates, gg only reads).
+
 - **Web: conflict resolution.** A paused merge/rebase/cherry-pick/revert now
   shows a banner in the browser — the op, what it's doing, and the
   conflicted-file count — with Continue (disabled until every file is
