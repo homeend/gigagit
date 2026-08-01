@@ -22,6 +22,11 @@ type fakeCapture struct {
 	stdout string
 	err    error
 
+	// writeMsgFile, when non-empty, is written to $GG_MESSAGE_FILE during
+	// Capture — simulating a task-agent tool that reports via the file
+	// channel instead of (or alongside) stdout.
+	writeMsgFile string
+
 	sawEnv   bool
 	diffPath string
 	ctxPath  string
@@ -40,6 +45,9 @@ func (f *fakeCapture) Capture(_ context.Context, s CaptureSpec, _ func(string)) 
 	}
 	if b, err := os.ReadFile(f.ctxPath); err == nil {
 		f.ctxBody = string(b)
+	}
+	if f.writeMsgFile != "" && f.msgPath != "" {
+		_ = os.WriteFile(f.msgPath, []byte(f.writeMsgFile), 0o644)
 	}
 	return []byte(f.stdout), f.err
 }
