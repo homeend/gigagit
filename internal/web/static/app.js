@@ -35,6 +35,7 @@ const state = {
   // A parked (backgrounded) long task, and then its result until collected:
   // {label, status: running|done|failed|cancelled, title, path, report, error}
   task: null,
+  cfilter: null, // {q, matches: [feedIdx...]} while the commits quick filter (/) is active, else null
 };
 
 const $ = (id) => document.getElementById(id);
@@ -419,6 +420,7 @@ function doPush() {
 // repo-scoped, so a clean reload is the honest reset on success
 // (localStorage prefs survive); errors land on the status strip.
 async function doReroot(path) {
+  closeCommitFilter();
   if (opBusy()) return;
   try {
     await postJSON("/api/reroot", { path });
@@ -1955,6 +1957,7 @@ function wtRowHTML(i) {
 // --- commits pane (virtualized: only visible rows exist in the DOM) ---
 
 function renderCommits() {
+  if (state.cfilter) return renderFilteredCommits();
   const scroll = $("commits-scroll");
   const total = state.rows.length + wtCount();
   $("commits-spacer").style.height = total * ROW_H + wtExtra() + "px";
@@ -1970,18 +1973,98 @@ function renderCommits() {
   maybeLoadMore(last - wtCount());
 }
 
-function rowHTML(row, i) {
+function rowHTML(row, i, flat) {
   const sel = i === state.cursor ? " sel" : "";
   const refs = (row.refs || [])
     .map((r) => `<span class="ref ${r.kind}${r.head ? " head" : ""}">${esc(r.name)}</span>`)
     .join("");
   const when = new Date(row.time * 1000).toISOString().slice(0, 10);
+  const graph = flat
+    ? (() => { const col = runes(row.cells || "").indexOf("●"); return flatDotSVG(laneColor(col >= 0 ? col >> 1 : 0)); })()
+    : graphHTML(row, i - wtCount());
   return (
     `<div class="crow${sel}" data-i="${i}">` +
-    `<span class="graph">${graphHTML(row, i - wtCount())}</span>` +
+    `<span class="graph">${graph}</span>` +
     `<span class="subj">${refs}${esc(row.subject)}</span>` +
     `<span class="meta">${esc(row.author)} · ${row.short} · ${when}</span></div>`
   );
+}
+
+// --- commits quick filter (/) ----------------------------------------------
+// Client-only narrowing of the LOADED feed rows: case-insensitive substring
+// on subject and author, sha PREFIX when the query is hex. Filtered rows
+// render flat — lanes are meaningless on a subset. Deeper search is always
+// an explicit click on the hint row, never an automatic git walk.
+function openCommitFilter() {
+  if (state.layout === "diff") return; // commits pane is off-screen
+  $("cfilter").classList.remove("hidden");
+  const input = $("cfilter-input");
+  input.value = state.cfilter ? state.cfilter.q : "";
+  applyCommitFilter();
+  input.focus();
+}
+
+function closeCommitFilter() {
+  const open = !$("cfilter").classList.contains("hidden");
+  if (!open && !state.cfilter) return;
+  state.cfilter = null;
+  $("cfilter-input").value = "";
+  $("cfilter-input").blur(); // a focused input would trap all global keys
+  $("cfilter").classList.add("hidden");
+  // moveCursor(0) re-renders AND rescrolls to the selected row — but only
+  // steers the commits list while that pane has focus; otherwise plain render.
+  if (state.pane === "commits") moveCursor(0);
+  else renderCommits();
+}
+
+function applyCommitFilter() {
+  const q = $("cfilter-input").value.trim().toLowerCase();
+  if (!q) {
+    state.cfilter = null; // empty query = unfiltered, bar stays open
+    $("cfilter-count").textContent = "";
+    renderCommits();
+    return;
+  }
+  const hexish = /^[0-9a-f]+$/.test(q);
+  const matches = [];
+  state.rows.forEach((r, i) => {
+    if (
+      r.subject.toLowerCase().includes(q) ||
+      (r.author || "").toLowerCase().includes(q) ||
+      (hexish && r.hash.startsWith(q))
+    )
+      matches.push(i);
+  });
+  state.cfilter = { q, matches };
+  $("cfilter-count").textContent = matches.length + " / " + state.rows.length;
+  $("commits-scroll").scrollTop = 0;
+  renderCommits();
+}
+
+// Filtered render: the same virtualized window, over the match list, plus a
+// trailing hint row stating coverage. The working-tree row is not a commit
+// and stays out of a filtered list.
+function renderFilteredCommits() {
+  const scroll = $("commits-scroll");
+  const m = state.cfilter.matches;
+  const total = m.length + 1; // + hint row
+  $("commits-spacer").style.height = total * ROW_H + "px";
+  const first = Math.max(0, Math.floor(scroll.scrollTop / ROW_H) - 10);
+  const last = Math.min(total, Math.ceil((scroll.scrollTop + scroll.clientHeight) / ROW_H) + 10);
+  const win = $("commits-window");
+  win.style.top = first * ROW_H + "px";
+  let html = "";
+  for (let i = first; i < last; i++) {
+    if (i === m.length) {
+      const tail = state.canLoadMore
+        ? ` — <a id="cfilter-more">load more</a>`
+        : " — all loaded commits searched";
+      html += `<div class="crow hintrow">${m.length} of ${state.rows.length} loaded commits match${tail}</div>`;
+      continue;
+    }
+    html += rowHTML(state.rows[m[i]], m[i] + wtCount(), true);
+  }
+  win.innerHTML = html;
 }
 
 function graphHTML(row, feedIdx) {
@@ -2084,7 +2167,8 @@ async function loadCommits(more) {
   // the very response it scopes rather than tracked client-side. A reload or
   // a second tab therefore shows the chip without asking for it.
   setSoloChip(body.solo || "");
-  renderCommits();
+  if (state.cfilter) applyCommitFilter(); // recompute over the grown/reloaded feed (ends in renderCommits)
+  else renderCommits();
 }
 
 // --- one-line prompt ---
@@ -2999,6 +3083,9 @@ document.addEventListener("keydown", (e) => {
     if (!state.op) refreshAfterOp(); // full soft reload: repo, sidebar, status, commits
   } else if (e.key === "s" || e.key === "u") {
     stageFocused(e.key === "u");
+  } else if (e.key === "/") {
+    e.preventDefault(); // the browser's quick-find would grab it
+    openCommitFilter();
   }
 });
 
@@ -3021,9 +3108,22 @@ $("foot").addEventListener("click", (e) => {
 });
 
 $("commits-scroll").addEventListener("scroll", renderCommits);
-$("commits-window").addEventListener("click", (e) => {
+$("commits-window").addEventListener("click", async (e) => {
+  if (e.target.id === "cfilter-more") {
+    await loadCommits(true); // appends server-side; loadCommits re-filters
+    return;
+  }
   const row = e.target.closest(".crow");
-  if (row) openCommit(Number(row.dataset.i));
+  if (row && row.dataset.i !== undefined) openCommit(Number(row.dataset.i));
+});
+$("cfilter-input").addEventListener("input", applyCommitFilter);
+// Escape must be handled HERE: the global router's form-field guard eats
+// every key typed in an input, so it can never see this one.
+$("cfilter-input").addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    e.preventDefault();
+    closeCommitFilter();
+  }
 });
 // Right-click a commit: copy rows plus the single-commit history edits. The
 // row is selected first (the files-list menu's rule) so the menu is visibly

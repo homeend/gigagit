@@ -36,6 +36,11 @@
   </aside>
   <div id="rs-sidebar" class="resizer" title="drag to resize · double-click to reset"></div>
   <section id="commits-pane" class="pane focused">
+    <div id="cfilter" class="hidden">
+      <input id="cfilter-input" type="text" autocomplete="off" spellcheck="false"
+             placeholder="filter loaded commits — subject, author, sha">
+      <span id="cfilter-count"></span>
+    </div>
     <div id="commits-scroll"><div id="commits-spacer"><div id="commits-window"></div></div></div>
   </section>
   <section id="files-pane" class="pane">
