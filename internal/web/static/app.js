@@ -36,6 +36,7 @@ const state = {
   // {label, status: running|done|failed|cancelled, title, path, report, error}
   task: null,
   cfilter: null, // {q, matches: [feedIdx...]} while the commits quick filter (/) is active, else null
+  gotoGen: 0, flashHash: "",
 };
 
 const $ = (id) => document.getElementById(id);
@@ -421,6 +422,7 @@ function doPush() {
 // (localStorage prefs survive); errors land on the status strip.
 async function doReroot(path) {
   closeCommitFilter();
+  state.gotoGen++;
   if (opBusy()) return;
   try {
     await postJSON("/api/reroot", { path });
@@ -1975,6 +1977,7 @@ function renderCommits() {
 
 function rowHTML(row, i, flat) {
   const sel = i === state.cursor ? " sel" : "";
+  const fl = row.hash === state.flashHash ? " flash" : "";
   const refs = (row.refs || [])
     .map((r) => `<span class="ref ${r.kind}${r.head ? " head" : ""}">${esc(r.name)}</span>`)
     .join("");
@@ -1983,7 +1986,7 @@ function rowHTML(row, i, flat) {
     ? (() => { const col = runes(row.cells || "").indexOf("●"); return flatDotSVG(laneColor(col >= 0 ? col >> 1 : 0)); })()
     : graphHTML(row, i - wtCount());
   return (
-    `<div class="crow${sel}" data-i="${i}">` +
+    `<div class="crow${sel}${fl}" data-i="${i}">` +
     `<span class="graph">${graph}</span>` +
     `<span class="subj">${refs}${esc(row.subject)}</span>` +
     `<span class="meta">${esc(row.author)} · ${row.short} · ${when}</span></div>`
@@ -2314,6 +2317,55 @@ async function openCommitByHash(hash, title) {
   $("files-header").textContent = title;
   renderFiles();
   focusPane();
+}
+
+// --- goto commit (#) --------------------------------------------------------
+// Reveal-first: the point is the commit IN ITS PLACE in history. Paging stops
+// the moment a page adds nothing (feed exhausted — e.g. a solo scope that
+// excludes the commit), then falls back to opening the detail directly so the
+// user always lands on the commit.
+function gotoCommitPrompt() {
+  openPrompt({
+    title: "Goto commit — sha, branch, tag, or any rev",
+    placeholder: "e.g. a1b2c3d or main~3",
+    onSubmit: (rev) => gotoCommit(rev),
+  });
+}
+
+async function gotoCommit(rev) {
+  let res;
+  try {
+    res = await getJSON("/api/resolve?rev=" + encodeURIComponent(rev));
+  } catch (e) {
+    opLine("cannot resolve " + rev + ": " + (e.message || e), true);
+    return;
+  }
+  const gen = ++state.gotoGen;
+  for (;;) {
+    const idx = state.rows.findIndex((r) => r.hash === res.hash);
+    if (idx >= 0) return revealCommit(idx);
+    if (!state.canLoadMore) break;
+    const before = state.rows.length;
+    await loadCommits(true);
+    if (gen !== state.gotoGen) return; // superseded: re-root or a second goto
+    if (state.rows.length === before) break; // no growth: feed exhausted
+  }
+  opLine("commit is not in the current list (scope?) — opening its detail", false);
+  openCommitByHash(res.hash, res.hash.slice(0, 8) + " " + (res.subject || ""));
+}
+
+function revealCommit(feedIdx) {
+  closeCommitFilter(); // reveal happens in the FULL list
+  const i = feedIdx + wtCount();
+  state.cursor = i;
+  const scroll = $("commits-scroll");
+  scroll.scrollTop = Math.max(0, i * ROW_H + wtExtra() - scroll.clientHeight / 2);
+  state.flashHash = state.rows[feedIdx].hash;
+  renderCommits();
+  setTimeout(() => {
+    state.flashHash = "";
+    renderCommits();
+  }, 1700);
 }
 
 // openStashDetail opens a stash's changes: the stash commit's tracked
@@ -3110,6 +3162,8 @@ document.addEventListener("keydown", (e) => {
   } else if (e.key === "/") {
     e.preventDefault(); // the browser's quick-find would grab it
     openCommitFilter();
+  } else if (e.key === "#") {
+    gotoCommitPrompt();
   }
 });
 
@@ -3344,6 +3398,7 @@ function paletteCommands() {
     { label: "branch versions…", detail: "", run: () => openVersionBranches() },
     { label: "review working changes (AI)…", detail: "", run: () => startReview("working", "") },
     { label: "review this branch (AI)…", detail: "", run: () => startReview("branch", "") },
+    { label: "goto commit…", detail: "#", run: () => gotoCommitPrompt() },
     { label: "refresh", detail: "r", run: () => { if (!state.op) refreshAfterOp(); } },
     { label: "switch repo…", detail: "", run: null }, // drills into repo mode (runPaletteRow)
     { label: "open working tree", detail: "", run: () => openWorkingTree(0) }, // 0 = the WT row; a bare call would set state.cursor = undefined and break j/k/enter

@@ -447,3 +447,10 @@ tr.hk.picked td.no { background: var(--sel); color: var(--fg); }
 #cfilter-count { color: var(--dim); font-size: 11px; white-space: nowrap; }
 .crow.hintrow { color: var(--dim); cursor: default; }
 .crow.hintrow a { color: var(--accent); cursor: pointer; }
+
+/* goto-sha reveal: a brief flash so the eye lands on the revealed row */
+.crow.flash { animation: gflash 1.6s ease-out; }
+@keyframes gflash {
+  0%, 55% { background: var(--sel); }
+  100% { background: transparent; }
+}
