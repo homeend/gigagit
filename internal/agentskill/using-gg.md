@@ -135,6 +135,12 @@ guards against removing the worktree you are standing in.
   `@worktree`. E.g. `gg compare HEAD` (working tree vs HEAD), `gg compare
   HEAD~3 HEAD` (what changed across the last 3 commits), `gg compare main
   @staged` (the index vs `main`).
+- `gg compare [--patch] <spec> [<spec>]` — specs may also be `bookmark:<id>`
+  or `shelf:<id>` (a stored commit entry; find ids via `gg bookmark list` /
+  `gg shelf list`). While the entry's commit exists this is a live tree
+  compare; a gc'd shelved commit falls back to its frozen snapshot (noted on
+  stderr, scoped to the files that commit changed). `--patch` prints unified
+  diffs instead of the file list.
 - `gg branch current` — just the branch name (HEAD's short sha when
   detached).
 - `gg branch ls` — local branches, `* ` marking HEAD, `↑a ↓b` when an

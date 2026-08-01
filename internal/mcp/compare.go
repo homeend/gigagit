@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"unicode/utf8"
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -135,35 +135,6 @@ func isBinary(data []byte) bool {
 	return bytes.IndexByte(data, 0) >= 0 || !utf8.Valid(data)
 }
 
-// relabelDiff strips the temp-path noise from git diff --no-index output:
-// drops the "diff --git"/"index" header lines and rewrites ---/+++ to the
-// human display labels. Header rewriting stops at the first @@ hunk line so
-// body lines that merely look like headers (e.g., a removed SQL comment
-// "-- foo" renders as "--- foo") are never touched.
-func relabelDiff(diff, leftDisplay, rightDisplay string) string {
-	lines := strings.Split(diff, "\n")
-	out := make([]string, 0, len(lines))
-	inHeader := true
-	for _, ln := range lines {
-		if inHeader {
-			switch {
-			case strings.HasPrefix(ln, "@@"):
-				inHeader = false
-			case strings.HasPrefix(ln, "diff --git "), strings.HasPrefix(ln, "index "):
-				continue
-			case strings.HasPrefix(ln, "--- "):
-				out = append(out, "--- "+leftDisplay)
-				continue
-			case strings.HasPrefix(ln, "+++ "):
-				out = append(out, "+++ "+rightDisplay)
-				continue
-			}
-		}
-		out = append(out, ln)
-	}
-	return strings.Join(out, "\n")
-}
-
 func (s *Server) registerCompareTools(srv *sdk.Server) {
 	sdk.AddTool(srv, &sdk.Tool{
 		Name:        "gg_compare_trees",
@@ -236,7 +207,7 @@ func (s *Server) registerCompareTools(srv *sdk.Server) {
 		if err != nil {
 			return nil, out, fmt.Errorf("diffing: %v", err)
 		}
-		out.UnifiedDiff = relabelDiff(diff, ld, rd)
+		out.UnifiedDiff = domain.RelabelNoIndexDiff(diff, ld, rd)
 		return nil, out, nil
 	})
 }

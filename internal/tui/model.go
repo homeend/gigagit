@@ -57,6 +57,7 @@ type Model struct {
 	pendingRemoteTagAdds  []string            // tags to optimistically add to remoteTagNames on PushTags success
 	pushCheckGen          int                 // generation guard for the async pre-push remote-tag check
 	pickGen               int                 // generation guard for the async cherry-pick commit probe
+	entryCompareGen       int                 // drops stale commit-entry compare resolves (the pickGen pattern)
 	pickPatchTemp         string              // patch lane's temp file; removed when its op finishes
 	reflog                []model.ReflogEntry // HEAD reflog; shown by the Reflog tab in the bottom slot
 	currentWorktree       string
@@ -651,6 +652,16 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			b.sel = 0
 		}
 		return m, nil
+	case entryCompareMsg:
+		if msg.gen != m.entryCompareGen {
+			return m, nil
+		}
+		if msg.err != nil {
+			m.statusMsg = i18n.T("compare: %s", msg.err.Error())
+			return m, nil
+		}
+		m = m.clearLayers() // the files view is not a layer; the switchers must not draw over it
+		return m.openCompareFiles(msg.left, msg.right)
 	case shelfLoadedMsg:
 		// A disabled shelf (no state dir) reports its reason but is not fatal.
 		if msg.err != nil {
@@ -663,7 +674,11 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.open && msg.err == nil {
 			p := newShelfPopup(msg.entries)
 			if pc := m.pendingCompare; pc != nil && pc.target == compareShelf {
-				p.compareRef = &pc.ref
+				if pc.entry != nil {
+					p.compareEntry = pc.entry
+				} else {
+					p.compareRef = &pc.ref
+				}
 				p.compareLabel = pc.label
 				m.pendingCompare = nil
 			}
@@ -720,7 +735,11 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		p := newBookmarkPopup(msg.items)
 		if pc := m.pendingCompare; pc != nil && pc.target == compareBookmark {
-			p.compareRef = &pc.ref
+			if pc.entry != nil {
+				p.compareEntry = pc.entry
+			} else {
+				p.compareRef = &pc.ref
+			}
 			p.compareLabel = pc.label
 			m.pendingCompare = nil
 		}
@@ -3178,6 +3197,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.remoteTagNames = nil // tag names from a different repo must not bleed into the new one
 	m.pushCheckGen++       // drop any in-flight pre-push tag check from the old repo
 	m.pickGen++            // drop any in-flight cherry-pick probe from the old repo
+	m.entryCompareGen++    // drop any in-flight commit-entry compare resolve from the old repo
 	m = m.cleanupPickPatchTemp()
 	m.pendingPushTags = nil
 	m.pendingRepairSwitch = ""            // a repo switch must not fire a stale repair chain

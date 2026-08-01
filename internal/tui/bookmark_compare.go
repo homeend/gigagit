@@ -25,6 +25,7 @@ const (
 // target decides which picker (bookmark vs shelf) consumes it.
 type pendingCompare struct {
 	ref    model.FileRef
+	entry  *entrySide // non-nil = the first pick is a commit entry (ref is then unused)
 	label  string
 	target comparePopupKind
 }

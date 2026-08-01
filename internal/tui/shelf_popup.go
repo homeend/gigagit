@@ -26,8 +26,13 @@ type shelfPopup struct {
 	hscroll   int      // modeScroll horizontal offset
 
 	compareRef   *model.FileRef // compare mode: enter diffs compareRef (left) vs the picked entry (right)
+	compareEntry *entrySide     // commit-entry compare mode: the first pick (nil = none)
 	compareLabel string
 }
+
+// inCompareMode reports whether this switcher was opened to pick the second
+// side of a comparison (file- or commit-flavored); action keys are inert then.
+func (p *shelfPopup) inCompareMode() bool { return p.compareRef != nil || p.compareEntry != nil }
 
 // shelfEntryDisplay is the switcher row text: the address, plus " — <label>"
 // when the entry carries a human name (mirrors bookmarkDisplay).
@@ -88,8 +93,8 @@ func (m Model) renderShelfPopupBox(p *shelfPopup) string {
 	textW := popupTextWidth(inner)
 
 	header := i18n.T("Shelf")
-	if p.compareRef != nil {
-		header = i18n.T("Compare %s against:", p.compareRef.Path)
+	if p.inCompareMode() {
+		header = i18n.T("Compare %s against:", p.compareLabel)
 	}
 	if p.filtering {
 		header += "  /" + p.filter + "█"
@@ -211,13 +216,22 @@ func (p *shelfPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	}
 	switch msg.Type {
 	case tea.KeyEsc:
-		m.pickGen++ // invalidate an in-flight cherry-pick probe
+		m.pickGen++         // invalidate an in-flight cherry-pick probe
+		m.entryCompareGen++ // invalidate an in-flight commit-entry compare resolve
 		m = m.popLayer()
 	case tea.KeyEnter:
-		m.pickGen++ // every enter path leaves or re-stacks the switcher; drop an in-flight probe
+		m.pickGen++         // every enter path leaves or re-stacks the switcher; drop an in-flight probe
+		m.entryCompareGen++ // ditto for a commit-entry compare resolve
 		e, ok := p.selected()
 		if !ok {
 			return m, nil
+		}
+		if p.compareEntry != nil {
+			if !e.IsCommit() {
+				m.statusMsg = i18n.T("cannot compare a commit against a file")
+				return m, nil
+			}
+			return m.startEntryCompare(*p.compareEntry, shelfEntrySide(e))
 		}
 		if p.compareRef != nil {
 			if e.IsCommit() {
@@ -245,7 +259,7 @@ func (p *shelfPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		case "?":
 			// Open the compact cheat sheet over the still-open switcher; esc
 			// closes it and returns here (contentPopup's esc just nils itself).
-			m = m.pushLayer(newContentPopup(shelfSwitcherHelpTitle(), shelfSwitcherHelp(p.compareRef != nil)))
+			m = m.pushLayer(newContentPopup(shelfSwitcherHelpTitle(), shelfSwitcherHelp(p.inCompareMode())))
 			return m, nil
 		case "/":
 			p.filtering = true
@@ -255,12 +269,12 @@ func (p *shelfPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		case "j":
 			p.moveSel(1)
 		case "x":
-			if p.compareRef != nil {
+			if p.inCompareMode() {
 				return m, nil
 			}
 			return m.shelfPopupRemovePrompt()
 		case "p":
-			if p.compareRef != nil {
+			if p.inCompareMode() {
 				return m, nil
 			}
 			if nm, blocked := m.commitShelfNotice(p); blocked {
@@ -272,23 +286,17 @@ func (p *shelfPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			}
 			return m.openShelfRestore(e)
 		case "m":
-			if p.compareRef != nil {
+			if p.inCompareMode() {
 				return m, nil
-			}
-			if nm, blocked := m.commitShelfNotice(p); blocked {
-				return nm, nil
 			}
 			return m.shelfPopupMark()
 		case "c":
-			if p.compareRef != nil {
+			if p.inCompareMode() {
 				return m, nil
-			}
-			if nm, blocked := m.commitShelfNotice(p); blocked {
-				return nm, nil
 			}
 			return m.shelfCompareAgainstBookmark()
 		case "e":
-			if p.compareRef != nil {
+			if p.inCompareMode() {
 				return m, nil
 			}
 			if nm, blocked := m.commitShelfNotice(p); blocked {
@@ -303,7 +311,7 @@ func (p *shelfPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				return svc.ShelfBlob(ctx, id)
 			})
 		case "t":
-			if p.compareRef != nil {
+			if p.inCompareMode() {
 				return m, nil
 			}
 			e, ok := p.selected()
@@ -312,7 +320,7 @@ func (p *shelfPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			}
 			return m.startTempExportShelf(e)
 		case "a":
-			if p.compareRef != nil {
+			if p.inCompareMode() {
 				return m, nil
 			}
 			e, ok := p.selected()
@@ -328,7 +336,7 @@ func (p *shelfPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				shelfID: e.ID, hasPatch: e.PatchSHA != "",
 			})
 		case "y":
-			if p.compareRef != nil {
+			if p.inCompareMode() {
 				return m, nil
 			}
 			if nm, blocked := m.commitShelfNotice(p); blocked {
@@ -409,6 +417,13 @@ func (m Model) shelfPopupMark() (Model, tea.Cmd) {
 	if !okA || !okB {
 		return m, nil
 	}
+	switch {
+	case a.IsCommit() && b.IsCommit():
+		return m.startEntryCompare(shelfEntrySide(a), shelfEntrySide(b))
+	case a.IsCommit() != b.IsCommit():
+		m.statusMsg = i18n.T("marked entries are different kinds — mark two files or two commits")
+		return m, nil
+	}
 	return m.openShelfCompareTwoEntries(a, b)
 }
 
@@ -422,6 +437,11 @@ func (m Model) shelfCompareAgainstBookmark() (Model, tea.Cmd) {
 	e, ok := p.selected()
 	if !ok {
 		return m, nil
+	}
+	if e.IsCommit() {
+		side := shelfEntrySide(e)
+		m.pendingCompare = &pendingCompare{entry: &side, label: side.label, target: compareBookmark}
+		return m, m.loadBookmarksCmd()
 	}
 	ref := model.FileRef{Source: model.SourceShelf, Locator: e.ID, Path: e.Origin.Path}
 	// Keep this switcher on the stack: the bookmark picker is pushed on top so esc
