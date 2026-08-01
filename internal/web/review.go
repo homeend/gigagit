@@ -139,16 +139,17 @@ func (s *Server) handleReviewStart(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]string{"op_id": run.id, "tool": cmd.Name, "label": label})
 }
 
-// handleOpCancel cancels a live review run. Restricted to the review lane on
-// purpose: an agent can hang for minutes holding the single lane, whereas
-// interrupting a git operation half-way is a separate design question.
+// handleOpCancel cancels a live agent run (review or conflict_complete).
+// Restricted to those lanes on purpose: an agent can hang for minutes holding
+// the single lane, whereas interrupting a git operation half-way is a
+// separate design question.
 func (s *Server) handleOpCancel(w http.ResponseWriter, r *http.Request) {
 	run := s.opByID(r.PathValue("id"))
 	if run == nil {
 		writeErr(w, http.StatusNotFound, errors.New("unknown operation"))
 		return
 	}
-	if run.kind != "review" {
+	if run.kind != "review" && run.kind != "conflict_complete" {
 		writeErr(w, http.StatusConflict, errors.New("this operation cannot be cancelled"))
 		return
 	}
