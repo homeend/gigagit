@@ -9,7 +9,8 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 - Web: the global ☰ menu lists its entries alphabetically (sorted at render,
-  so a future entry cannot land unsorted).
+  so a future entry cannot land unsorted), with help pinned last below a
+  separator.
 - **Web: AI conflict resolution.** An "AI resolve…" button on the
   paused-operation banner runs a headless `conflict_complete` agent (chooser
   → one-time command approval shared with the TUI → background run with
