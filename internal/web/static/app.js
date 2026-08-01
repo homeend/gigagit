@@ -1119,8 +1119,10 @@ async function startConflictAI() {
   }
   rev = { mode: "conflict", op: info.op, label: info.desc || info.op, tools, sel: 0, phase: "choose", tool: null };
   pushLayer("review", $("review"), { onKey: reviewKey });
-  if (tools.length === 1) reviewPick(tools[0]);
-  else renderReview();
+  // ALWAYS show the chooser, even with a single agent: opening this dialog
+  // must never itself start an agent — clicking a row is the confirmation
+  // (user feedback: a menu click that instantly launches a run is a surprise).
+  renderReview();
 }
 $("conflict-ai").addEventListener("click", startConflictAI);
 
@@ -1350,7 +1352,12 @@ function renderReview() {
   const parkBtn = $("review-park");
   parkBtn.classList.toggle("hidden", rev.phase !== "running"); // nothing to background before it starts
   if (rev.phase === "choose") {
+    const intro =
+      rev.mode === "conflict"
+        ? `<div class="rnote">These agents are registered for resolving this conflict. Click one to start the resolution — it runs in the background. Nothing runs until you pick; cancel below closes this dialog.</div>`
+        : "";
     body.innerHTML =
+      intro +
       "<ul>" +
       rev.tools
         .map(
@@ -1360,7 +1367,7 @@ function renderReview() {
         )
         .join("") +
       "</ul>";
-    hint.textContent = rev.mode === "conflict" ? "choose an agent · enter runs · esc cancels" : "choose a review tool · enter runs · esc cancels";
+    hint.textContent = rev.mode === "conflict" ? "click an agent to start · enter runs the selected one · esc cancels" : "choose a review tool · enter runs · esc cancels";
     runBtn.classList.remove("hidden");
     runBtn.textContent = "run";
     cancelBtn.textContent = "cancel";
