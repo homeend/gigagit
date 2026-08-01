@@ -210,3 +210,27 @@ func TestCommitLookup(t *testing.T) {
 		t.Fatalf("missing commit: found=%v err=%v, want false, nil", found, err)
 	}
 }
+
+func TestResolveRev(t *testing.T) {
+	repoDir, svc := newRealRepo(t)
+	ctx := context.Background()
+
+	writeCommit(t, repoDir, "a.txt", "a\n", "subject here")
+	sha := headHash(t, repoDir)
+
+	got, found, err := svc.ResolveRev(ctx, "HEAD")
+	if err != nil || !found {
+		t.Fatalf("ResolveRev(HEAD): found=%v err=%v", found, err)
+	}
+	if got != sha {
+		t.Fatalf("ResolveRev(HEAD) = %q, want full sha %q", got, sha)
+	}
+	if len(got) != 40 {
+		t.Fatalf("want FULL sha (40 hex), got %d chars", len(got))
+	}
+
+	_, found, err = svc.ResolveRev(ctx, "no-such-rev-anywhere")
+	if err != nil || found {
+		t.Fatalf("missing rev: found=%v err=%v, want false, nil", found, err)
+	}
+}

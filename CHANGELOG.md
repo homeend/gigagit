@@ -8,6 +8,22 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+## 2026-08-01 — web: commits-panel parity (/ filter, goto-sha, file history/blame)
+
+- `/` quick filter narrows the LOADED commit rows (subject/author substring,
+  sha prefix); filtered rows render flat; a hint row states coverage and
+  offers explicit deeper paging — never an automatic git walk.
+- `#` / palette "goto commit…": `GET /api/resolve` (new, full-sha via the new
+  `domain.ResolveRev`) then reveal-in-list with flash highlight, paging until
+  the feed stops growing; a commit outside the current scope falls back to
+  opening its detail.
+- File history (`GET /api/filelog` over `domain.FileLog`) and blame
+  (`GET /api/blame` over `domain.Blame`) as full-screen overlays; entry
+  points: file-row right-click (commit/compare/status modes), palette path
+  prompts, and history/blame buttons in the diff toolbar. The history diff
+  reuses the /api/diff commit form; `diffHTML` extracted from `renderDiff`
+  so both panes share one renderer.
+
 - Web: the global ☰ menu lists its entries alphabetically (sorted at render,
   so a future entry cannot land unsorted), with help pinned last below a
   separator.

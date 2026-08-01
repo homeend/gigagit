@@ -36,6 +36,11 @@
   </aside>
   <div id="rs-sidebar" class="resizer" title="drag to resize · double-click to reset"></div>
   <section id="commits-pane" class="pane focused">
+    <div id="cfilter" class="hidden">
+      <input id="cfilter-input" type="text" autocomplete="off" spellcheck="false"
+             placeholder="filter loaded commits — subject, author, sha">
+      <span id="cfilter-count"></span>
+    </div>
     <div id="commits-scroll"><div id="commits-spacer"><div id="commits-window"></div></div></div>
   </section>
   <section id="files-pane" class="pane">
@@ -65,13 +70,15 @@
         <button id="next-file" title="next file">file ›</button>
         <button id="prev-change" title="previous change">‹ change</button>
         <button id="next-change" title="next change">change ›</button>
+        <button id="hist-btn" title="this file's history">history</button>
+        <button id="blame-btn" title="blame this file">blame</button>
       </span>
     </div>
     <div id="diff-body"></div>
   </section>
 </main>
 <div id="op-line" class="hidden"><div id="op-head"><span>Problem</span><span>(double-click anywhere to hide)</span></div><div id="op-text"></div></div>
-<footer id="foot"><span>j/k move</span><span>enter open</span><button data-act="back">esc back</button><button data-act="sidebar">b branches</button><button data-act="graph">g graph</button><button data-act="stage">s stage</button><button data-act="unstage">u unstage</button><button data-act="pull">p pull</button><button data-act="push">P push</button><button data-act="refresh">r refresh</button><button data-act="help">? help</button><button data-act="palette">ctrl+k palette</button></footer>
+<footer id="foot"><span>j/k move</span><span>enter open</span><button data-act="back">esc back</button><button data-act="sidebar">b branches</button><button data-act="graph">g graph</button><button data-act="filter">/ filter</button><button data-act="stage">s stage</button><button data-act="unstage">u unstage</button><button data-act="pull">p pull</button><button data-act="push">P push</button><button data-act="refresh">r refresh</button><button data-act="help">? help</button><button data-act="palette">ctrl+k palette</button></footer>
 <div id="ctx-menu" class="hidden"></div>
 <div id="modal" class="hidden">
   <div id="modal-box">
@@ -120,6 +127,23 @@
     <div id="vbranches-hint">click a branch for its recorded versions · esc closes</div>
   </div>
 </div>
+<div id="history" class="hidden">
+  <div id="history-box">
+    <div id="history-title"></div>
+    <div id="history-main">
+      <ul id="history-list"></ul>
+      <div id="history-diff"></div>
+    </div>
+    <div id="history-hint">click a commit for the file's change there · show opens the full commit · esc closes</div>
+  </div>
+</div>
+<div id="blame" class="hidden">
+  <div id="blame-box">
+    <div id="blame-title"></div>
+    <div id="blame-body"></div>
+    <div id="blame-hint">click a line's commit to open it · esc closes</div>
+  </div>
+</div>
 <div id="review" class="hidden">
   <div id="review-box">
     <div id="review-title"></div>
@@ -159,6 +183,8 @@
     <div class="hrow"><span class="hkey">P</span><span>push the current branch (rejection recovery — rebase / force — in the modal)</span></div>
     <div class="hrow"><span class="hkey">s / u</span><span>stage / unstage the focused file (working-tree status view)</span></div>
     <div class="hrow"><span class="hkey">ctrl+enter</span><span>commit, from the message box</span></div>
+    <div class="hrow"><span class="hkey">/</span><span>filter the commit list — subject, author, or sha prefix, over the loaded rows; esc clears it</span></div>
+    <div class="hrow"><span class="hkey">#</span><span>goto commit — jump to a sha, branch, tag, or any rev, paging the list deeper if needed</span></div>
     <div class="hrow"><span class="hkey">?</span><span>this help</span></div>
     <div class="hrow"><span class="hkey">ctrl+k / ctrl+p</span><span>command palette (incl. switch repo)</span></div>
     <h3>Mouse</h3>
