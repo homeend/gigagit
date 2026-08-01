@@ -414,6 +414,24 @@ tr.hk.picked td.no { background: var(--sel); color: var(--fg); }
 #vbranches-list .vbcount { flex: none; color: var(--dim); }
 #vbranches-list .vbwhen { flex: none; color: var(--dim); width: 10em; overflow: hidden; text-overflow: ellipsis; text-align: right; }
 
+/* file-history overlay: commits left, that commit's change to the file right */
+#history { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; z-index: 21; }
+#history.hidden { display: none; }
+#history-box { background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; width: 94vw; height: 88vh; display: flex; flex-direction: column; }
+#history-title { padding: 10px 14px; border-bottom: 1px solid var(--border); }
+#history-hint { padding: 6px 14px; border-top: 1px solid var(--border); color: var(--dim); font-size: 11px; }
+#history-main { display: flex; flex: 1; min-height: 0; }
+#history-list { list-style: none; margin: 0; padding: 6px 0; width: 360px; flex: none; overflow-y: auto; border-right: 1px solid var(--border); }
+#history-list li { padding: 5px 14px; cursor: pointer; }
+#history-list li:hover { background: var(--sel); }
+#history-list li.sel { background: var(--sel); }
+#history-list li.empty { color: var(--dim); cursor: default; }
+#history-list .hsubj { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#history-list .hmeta { display: block; color: var(--dim); font-size: 11px; }
+#history-list .hshow { float: right; background: none; color: var(--dim); border: 1px solid var(--border); border-radius: 4px; font-size: 10px; cursor: pointer; }
+#history-list .hshow:hover { border-color: var(--accent); color: var(--accent); }
+#history-diff { flex: 1; overflow: auto; }
+
 /* AI review: the lane (chooser / approval / progress) and the report viewer.
    Both sit at 21 with the other panel overlays — the ctx-menu (40) and the
    decision modal (30) still have to paint over them. */

@@ -1064,6 +1064,111 @@ $("vbranches").addEventListener("click", (e) => {
   if (e.target.id === "vbranches") closeVersionBranches(); // backdrop
 });
 
+// --- file history overlay ----------------------------------------------------
+// A layer, not a layout mode: esc drops you exactly where you were. Gen-guarded
+// like every async open (a slow filelog racing a close must not resurrect it).
+let hist = null; // {path, rev, rows, sel, gen}
+let histGen = 0;
+
+async function openFileHistory(path, rev) {
+  const gen = ++histGen;
+  hist = { path, rev: rev || "", rows: [], sel: 0, gen };
+  $("history-title").textContent = "history — " + path + (rev ? " @ " + rev.slice(0, 8) : "");
+  $("history-list").innerHTML = `<li class="empty">loading…</li>`;
+  $("history-diff").innerHTML = "";
+  pushLayer("history", $("history"), { onKey: historyKey });
+  let body;
+  try {
+    body = await getJSON(
+      "/api/filelog?path=" + encodeURIComponent(path) + "&rev=" + encodeURIComponent(rev || "")
+    );
+  } catch (e) {
+    if (hist && hist.gen === gen)
+      $("history-list").innerHTML = `<li class="empty">error: ${esc(e.message || e)}</li>`;
+    return;
+  }
+  if (!hist || hist.gen !== gen) return; // closed or superseded meanwhile
+  hist.rows = body.rows || [];
+  if (!hist.rows.length) {
+    $("history-list").innerHTML = `<li class="empty">(no history)</li>`;
+    return;
+  }
+  renderHistoryList();
+  openHistoryDiff(0);
+}
+
+function closeHistory() {
+  hist = null;
+  closeLayer("history");
+}
+
+function historyKey(e) {
+  if (e.key === "Escape") {
+    closeHistory();
+    return true;
+  }
+  if (["j", "ArrowDown", "k", "ArrowUp"].includes(e.key)) {
+    if (hist && hist.rows.length) {
+      const d = e.key === "j" || e.key === "ArrowDown" ? 1 : -1;
+      openHistoryDiff(Math.max(0, Math.min(hist.rows.length - 1, hist.sel + d)));
+    }
+    e.preventDefault();
+    return true;
+  }
+  return true; // the overlay owns the keyboard entirely while open
+}
+
+function renderHistoryList() {
+  $("history-list").innerHTML = hist.rows
+    .map(
+      (r, i) =>
+        `<li data-i="${i}" class="${i === hist.sel ? "sel" : ""}">` +
+        `<button class="hshow" data-i="${i}">show</button>` +
+        `<span class="hsubj"><span class="st ${esc(r.status)}">${esc(r.status)}</span> ${esc(r.subject)}</span>` +
+        `<span class="hmeta">${esc(r.short)} · ${esc(r.author)} · ${versionWhen(r.time)}</span></li>`
+    )
+    .join("");
+  const sel = $("history-list").querySelector("li.sel");
+  if (sel) sel.scrollIntoView({ block: "nearest" });
+}
+
+async function openHistoryDiff(i) {
+  hist.sel = i;
+  renderHistoryList();
+  const r = hist.rows[i];
+  const gen = hist.gen;
+  // The /api/diff COMMIT form is already parent-vs-commit with A/D handling —
+  // exactly "this file's change at this commit". path is the file's name AT
+  // that commit (post-rename), old the parent-side name.
+  const q = new URLSearchParams({ sha: r.hash, path: r.path || hist.path, status: r.status });
+  if (r.old_path) q.set("old", r.old_path);
+  $("history-diff").innerHTML = `<div class="notice">loading…</div>`;
+  try {
+    const d = await getJSON("/api/diff?" + q);
+    if (!hist || hist.gen !== gen) return;
+    $("history-diff").innerHTML = diffHTML(d, $("history-diff").clientWidth);
+  } catch (e) {
+    if (hist && hist.gen === gen)
+      $("history-diff").innerHTML = `<div class="notice">error: ${esc(e.message || e)}</div>`;
+  }
+}
+
+$("history-list").addEventListener("click", (e) => {
+  if (!hist) return;
+  const show = e.target.closest("button.hshow");
+  if (show) {
+    const r = hist.rows[Number(show.dataset.i)];
+    closeHistory();
+    openCommitByHash(r.hash, r.short + " " + r.subject);
+    return;
+  }
+  const li = e.target.closest("li[data-i]");
+  if (li) openHistoryDiff(Number(li.dataset.i));
+});
+$("history").addEventListener("click", (e) => {
+  if (e.target.id === "history") closeHistory(); // backdrop closes, box does not
+});
+
 // --- AI review ---
 //
 // One overlay walks the whole lane — choose a tool, approve its command, wait
@@ -2694,19 +2799,13 @@ function hunkAttr(r) {
   return r.hunk == null || !diffHunks ? "" : ` data-hunk="${r.hunk}"`;
 }
 
-function renderDiff(d) {
-  state.lastDiff = d; // re-rendered on window resize (layout is width-dependent)
-  state.diffBlockIdx = -1;
-  if (d.binary) {
-    $("diff-body").innerHTML = `<div class="notice">binary file</div>`;
-    updateDiffNav();
-    return;
-  }
-  if (d.too_large) {
-    $("diff-body").innerHTML = `<div class="notice">diff too large</div>`;
-    updateDiffNav();
-    return;
-  }
+// diffHTML builds the diff table for a /api/diff response — shared by the
+// main diff pane and the history overlay. paneWidth picks side-by-side vs
+// unified exactly as before. Hunk classes no-op when diffHunks is null, so
+// non-staging consumers get a plain read-only table.
+function diffHTML(d, paneWidth) {
+  if (d.binary) return `<div class="notice">binary file</div>`;
+  if (d.too_large) return `<div class="notice">diff too large</div>`;
   const rows = d.rows || [];
   // An all-new or all-deleted file renders single-column: a side-by-side
   // with one permanently empty side wastes half the pane and forces harsh
@@ -2725,7 +2824,7 @@ function renderDiff(d) {
         `<td class="no ${side}">${no || ""}</td>` +
         `<td class="side ${side}">${markSpans(text, spans, side)}</td></tr>`;
     }
-  } else if ($("diff-pane").clientWidth < 950) {
+  } else if (paneWidth < 950) {
     // Unified: below ~950px each side-by-side half is too narrow to read
     // (heavy wrapping, context text duplicated on both sides). One
     // full-width column; a changed pair becomes a del row then an add row,
@@ -2759,7 +2858,13 @@ function renderDiff(d) {
   }
   html += "</table>";
   if (d.truncated) html += `<div class="notice">alignment truncated (size guard)</div>`;
-  $("diff-body").innerHTML = html;
+  return html;
+}
+
+function renderDiff(d) {
+  state.lastDiff = d; // re-rendered on window resize (layout is width-dependent)
+  state.diffBlockIdx = -1;
+  $("diff-body").innerHTML = diffHTML(d, $("diff-pane").clientWidth);
   updateDiffNav();
 }
 
@@ -3401,6 +3506,7 @@ function paletteCommands() {
     { label: "fetch all remotes", detail: "", run: () => doFetch() },
     { label: "create branch…", detail: "", run: () => openCreateBranchPrompt() },
     { label: "branch versions…", detail: "", run: () => openVersionBranches() },
+    { label: "file history…", detail: "", run: () => openPrompt({ title: "File history — repo-relative path", placeholder: "e.g. internal/web/server.go", onSubmit: (p) => openFileHistory(p, "") }) },
     { label: "review working changes (AI)…", detail: "", run: () => startReview("working", "") },
     { label: "review this branch (AI)…", detail: "", run: () => startReview("branch", "") },
     { label: "goto commit…", detail: "#", run: () => gotoCommitPrompt() },
