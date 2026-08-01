@@ -285,7 +285,8 @@ function parkedRunning() {
 function opBusy() {
   if (!state.op) return false;
   if (parkedRunning()) {
-    opLine("a review is running in the background — open the chip to watch or cancel it", true);
+    const noun = state.task.kind === "conflict" ? "an AI resolve run" : "a review";
+    opLine(noun + " is running in the background — open the chip to watch or cancel it", true);
   } else {
     opLine("an operation is already running", true);
   }
@@ -1046,18 +1047,21 @@ $("vbranches").addEventListener("click", (e) => {
 // and resolves it, and this only ever names a TOOL. What is shown in the
 // approval step is what the server said it would run.
 
-let rev = null; // {target, branch, tools, sel, phase, tool, label}
+let rev = null; // {target, branch, tools, sel, phase, tool, label, mode}
 
 function reviewTitle() {
   if (!rev) return "";
+  if (rev.mode === "conflict") return "AI resolve — " + (rev.label || rev.op || "");
   return "Review " + (rev.label || (rev.target === "working" ? "working changes" : rev.branch)) + " (AI)";
 }
 
 async function startReview(target, branch) {
   if (rev) {
     // Parked: the overlay is not on screen, so a silent refusal here looks
-    // like the menu row does nothing.
-    if (rev.parked) opLine("a review is already running in the background — open the chip to watch or cancel it", true);
+    // like the menu row does nothing. The parked run may be the OTHER mode
+    // (an AI resolve), so name it correctly rather than always saying
+    // "review".
+    if (rev.parked) opLine((rev.mode === "conflict" ? "an agent" : "a review") + " is already running in the background — open the chip to watch or cancel it", true);
     return;
   }
   if (state.op) {
@@ -1081,11 +1085,42 @@ async function startReview(target, branch) {
     opLine('review: no review tool configured — add a [[tools.command]] block with category = "review"', true);
     return;
   }
-  rev = { target, branch, label: info.label, tools, sel: 0, phase: "choose", tool: null };
+  rev = { mode: "review", target, branch, label: info.label, tools, sel: 0, phase: "choose", tool: null };
   pushLayer("review", $("review"), { onKey: reviewKey });
   if (tools.length === 1) reviewPick(tools[0]);
   else renderReview();
 }
+
+// startConflictAI is the conflict-mode twin of startReview above: same
+// overlay, same lane, but sourced from the paused-op tools endpoint and
+// dispatched to /api/conflict/complete instead of /api/review.
+async function startConflictAI() {
+  if (rev) {
+    if (rev.parked) opLine("an agent is already running in the background — open the chip to watch or cancel it", true);
+    return;
+  }
+  if (state.op) {
+    opLine("AI resolve: an operation is already running", true);
+    return;
+  }
+  let info;
+  try {
+    info = await getJSON("/api/conflict/tools");
+  } catch (e) {
+    opLine("AI resolve: " + (e.message || e), true);
+    return;
+  }
+  const tools = info.tools || [];
+  if (!tools.length) {
+    opLine('AI resolve: no headless conflict agent configured — add a [[tools.command]] block with category = "conflict_complete", mode = "capture", frontends = ["web"]', true);
+    return;
+  }
+  rev = { mode: "conflict", op: info.op, label: info.desc || info.op, tools, sel: 0, phase: "choose", tool: null };
+  pushLayer("review", $("review"), { onKey: reviewKey });
+  if (tools.length === 1) reviewPick(tools[0]);
+  else renderReview();
+}
+$("conflict-ai").addEventListener("click", startConflictAI);
 
 function reviewPick(tool) {
   if (!rev) return;
@@ -1103,11 +1138,15 @@ function reviewPick(tool) {
 async function reviewRun(approve) {
   if (!rev) return;
   const { target, branch, tool } = rev;
+  const isConflict = rev.mode === "conflict";
   rev.phase = "running";
   renderReview();
   let resp;
   try {
-    resp = await postJSON("/api/review", { target, branch, tool: tool.name, approve: !!approve });
+    resp = await postJSON(
+      isConflict ? "/api/conflict/complete" : "/api/review",
+      isConflict ? { tool: tool.name, approve: !!approve } : { target, branch, tool: tool.name, approve: !!approve }
+    );
   } catch (e) {
     // Most often a 403: the server does not consider this command approved,
     // whatever the tools list said. Fall back to the approval step (the
@@ -1115,7 +1154,7 @@ async function reviewRun(approve) {
     if (!rev) return;
     rev.phase = "approve";
     renderReview();
-    opLine("review: " + (e.message || e), true);
+    opLine((isConflict ? "AI resolve: " : "review: ") + (e.message || e), true);
     return;
   }
   if (!rev) {
@@ -1123,25 +1162,36 @@ async function reviewRun(approve) {
     // simply returning would leave an agent running with nobody following
     // it, holding the single lane until it finished on its own.
     postJSON("/api/op/" + resp.op_id + "/cancel", {}).catch(() => {});
-    opLine("review cancelled");
+    opLine(isConflict ? "AI resolve cancelled" : "review cancelled");
     return;
   }
   rev.opID = resp.op_id;
   renderReview();
-  followOp(resp.op_id, "reviewing " + (rev.label || ""), "review", reviewDone);
+  followOp(resp.op_id,
+    (isConflict ? "AI resolving " : "reviewing ") + (rev.label || ""),
+    isConflict ? "conflict_complete" : "review",
+    reviewDone);
 }
 
 function reviewDone(ev) {
   // Capture everything the lane owns BEFORE closing it: closeReviewLane
   // clears both rev and a running task chip.
-  const title = reviewTitle() || "Review";
+  const title = rev && rev.mode === "conflict"
+    ? "Resolution overview — " + ((rev.tool && rev.tool.name) || "agent")
+    : reviewTitle() || "Review";
+  const isConflict = !!(rev && rev.mode === "conflict");
   const parked = !!(rev && rev.parked);
   const label = (state.task && state.task.label) || (rev && rev.label) || "";
   closeReviewLane();
+  // A conflict run mutates the repo (or leaves it paused) whether it
+  // finished, was cancelled, or was lost — reality first, before anything
+  // else in this function decides what to tell the user.
+  if (isConflict) refreshAfterOp();
   if (parked) {
     // The whole point of parking is not being interrupted, so the result
     // WAITS: the chip goes loud, and opening it is the user's move.
     state.task = {
+      kind: isConflict ? "conflict" : "review",
       label,
       status: ev.ok ? "done" : ev.cancelled ? "cancelled" : "failed",
       title,
@@ -1157,16 +1207,26 @@ function reviewDone(ev) {
     // A failure still speaks: an error that vanished silently would be worse
     // than one line of clutter.
     if (ev.ok) hideOpLine();
-    else opLine("review failed: " + (ev.error || "unknown error"), true);
+    else opLine((isConflict ? "AI resolve failed: " : "review failed: ") + (ev.error || "unknown error"), true);
     return;
   }
   if (ev.ok) {
+    if (isConflict) {
+      // The agent may have finished its own work but left the sequencer
+      // paused (a partial resolve, or a multi-round rebase it didn't
+      // finish) — that is not a failure, but it is not "done" either.
+      if (ev.still_paused) opLine("the agent left the " + (ev.op || "operation") + " paused — finish it manually or run another agent", true);
+      else opLine((ev.op || "operation") + " completed");
+      if (ev.report) openReport(title, "", ev.report);
+      else if (!ev.still_paused) opLine((ev.op || "operation") + " completed — the agent reported no overview");
+      return;
+    }
     openReport(title, ev.path, ev.report);
     opLine(ev.summary || "review done");
     return;
   }
-  if (ev.cancelled) opLine("review cancelled");
-  else opLine("review failed: " + (ev.error || "unknown error"), true);
+  if (ev.cancelled) opLine(isConflict ? "AI resolve cancelled" : "review cancelled");
+  else opLine((isConflict ? "AI resolve failed: " : "review failed: ") + (ev.error || "unknown error"), true);
 }
 
 // --- parking a running review ---
@@ -1180,10 +1240,11 @@ function reviewDone(ev) {
 function parkReview() {
   if (!rev || rev.phase !== "running") return;
   rev.parked = true;
-  state.task = { label: rev.label || "", status: "running" };
+  const kind = rev.mode === "conflict" ? "conflict" : "review";
+  state.task = { kind, label: rev.label || "", status: "running" };
   closeLayer("review");
   renderTaskChip(false);
-  taskLine("review running in the background — click here to watch or cancel it");
+  taskLine((kind === "conflict" ? "AI resolve" : "review") + " running in the background — click here to watch or cancel it");
 }
 
 function unparkReview() {
@@ -1208,19 +1269,20 @@ function renderTaskChip(blink) {
     el.classList.add("hidden");
     return;
   }
+  const noun = t.kind === "conflict" ? "AI resolve" : "review";
   el.classList.remove("hidden");
   if (t.status === "running") {
-    el.textContent = "⟳ review" + (t.label ? ": " + t.label : "");
-    el.title = "a review is running in the background — click to watch or cancel it";
+    el.textContent = "⟳ " + noun + (t.label ? ": " + t.label : "");
+    el.title = noun + " running in the background — click to watch or cancel it";
     el.classList.add("running");
     return;
   }
   if (t.status === "done") {
-    el.textContent = "✓ review ready";
-    el.title = "click to read the report";
+    el.textContent = "✓ " + noun + (t.kind === "conflict" ? " done" : " ready");
+    el.title = t.kind === "conflict" ? "click to read the overview" : "click to read the report";
     el.classList.add("ready");
   } else {
-    el.textContent = "✗ review failed";
+    el.textContent = "✗ " + noun + " failed";
     el.title = "click for the error";
     el.classList.add("failed");
   }
@@ -1234,10 +1296,11 @@ function collectTask() {
     unparkReview();
     return;
   }
+  const noun = t.kind === "conflict" ? "AI resolve" : "review";
   state.task = null;
   renderTaskChip(false);
   if (t.status === "done") openReport(t.title || "Review", t.path, t.report);
-  else opLine("review failed: " + (t.error || "unknown error"), true);
+  else opLine(noun + " failed: " + (t.error || "unknown error"), true);
 }
 
 $("task-chip").addEventListener("click", collectTask);
@@ -1288,7 +1351,7 @@ function renderReview() {
         )
         .join("") +
       "</ul>";
-    hint.textContent = "choose a review tool · enter runs · esc cancels";
+    hint.textContent = rev.mode === "conflict" ? "choose an agent · enter runs · esc cancels" : "choose a review tool · enter runs · esc cancels";
     runBtn.classList.remove("hidden");
     runBtn.textContent = "run";
     cancelBtn.textContent = "cancel";
@@ -1305,9 +1368,12 @@ function renderReview() {
     return;
   }
   body.innerHTML =
-    `<div class="rnote">${esc(rev.tool ? rev.tool.name : "")} is reading the diff — this can take a few minutes.` +
-    ` You can put it in the background and carry on reading the repo; the chip in the top bar lights up when the report is ready.</div>`;
-  hint.textContent = "⟳ reviewing… · esc backgrounds it";
+    `<div class="rnote">${esc(rev.tool ? rev.tool.name : "")} ` +
+    (rev.mode === "conflict"
+      ? "is resolving the conflicts and completing the operation — this can take a few minutes."
+      : "is reading the diff — this can take a few minutes.") +
+    ` You can put it in the background and carry on reading the repo; the chip in the top bar lights up when it finishes.</div>`;
+  hint.textContent = rev.mode === "conflict" ? "⟳ resolving… · esc backgrounds it" : "⟳ reviewing… · esc backgrounds it";
   runBtn.classList.add("hidden"); // nothing to run twice
   cancelBtn.textContent = "cancel the run";
 }
