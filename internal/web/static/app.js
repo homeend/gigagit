@@ -1354,7 +1354,7 @@ function renderReview() {
   if (rev.phase === "choose") {
     const intro =
       rev.mode === "conflict"
-        ? `<div class="rnote">These agents are registered for resolving this conflict. Click one to start the resolution — it runs in the background. Nothing runs until you pick; cancel below closes this dialog.</div>`
+        ? `<div class="rnote rintro">These agents are registered for resolving this conflict. Click one to start the resolution — it runs in the background. Nothing runs until you pick; cancel below closes this dialog.</div>`
         : "";
     body.innerHTML =
       intro +
@@ -1367,8 +1367,12 @@ function renderReview() {
         )
         .join("") +
       "</ul>";
-    hint.textContent = rev.mode === "conflict" ? "click an agent to start · enter runs the selected one · esc cancels" : "choose a review tool · enter runs · esc cancels";
-    runBtn.classList.remove("hidden");
+    hint.textContent = rev.mode === "conflict" ? "click an agent to start · esc cancels" : "choose a review tool · enter runs · esc cancels";
+    // Conflict chooser: clicking a row IS the action, so a separate "run"
+    // button beside it only contradicts the copy (user report) — cancel is
+    // the sole bottom button. (Enter still runs the ↑/↓-selected row for
+    // keyboard users; the review chooser keeps its run button.)
+    runBtn.classList.toggle("hidden", rev.mode === "conflict");
     runBtn.textContent = "run";
     cancelBtn.textContent = "cancel";
     return;
