@@ -2356,6 +2356,11 @@ async function gotoCommit(rev) {
 
 function revealCommit(feedIdx) {
   closeCommitFilter(); // reveal happens in the FULL list
+  // goto is a jump command: land the user ON the row, not behind whatever
+  // stage they were drilled into (diff/files would otherwise hide the
+  // commits pane entirely — display:none — so the scroll+flash below would
+  // target an invisible pane). Bounded at 2 steps: diff -> files -> list.
+  while (state.layout !== "list") drillOut();
   const i = feedIdx + wtCount();
   state.cursor = i;
   const scroll = $("commits-scroll");
