@@ -8,6 +8,25 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+## 2026-08-02 — web: big-repo optimization suggestion
+
+- `gg web` now detects a big repository (pack bytes ≥ 100 MB, the TUI's
+  floor) and shows a dismissible banner after load suggesting the settings
+  that make commit browsing fast: **turn graph off + plain sort** (writes
+  `[ui] show_graph = "off"` + `commit_sort = "plain"` to the repo
+  `.gg.toml` — shared with the TUI) and **write commit-graph + keep it
+  fresh** (a new `op:"commit-graph"` chaining `git commit-graph write
+  --reachable` with `fetch.writeCommitGraph=true`, the TUI notice's
+  write+enable pair, run server-side).
+- "Never for this repo" persists via the TUI-shared promptstate store; the
+  commit-graph recommendation reuses the TUI's dismissal id, so dismissing
+  it in either frontend silences both. "Not now" is session-only.
+- The web now honors `[ui] show_graph` as its default graph mode when the
+  browser has no local `g`-toggle override — a config-off repo renders the
+  flat list on first load.
+- New endpoints: `GET /api/health`, `POST /api/ui-config` (enum-allowlisted
+  values only), `POST /api/notice-dismiss` (allowlisted ids only).
+
 ## 2026-08-01 — web: commits-panel parity (/ filter, goto-sha, file history/blame)
 
 - `/` quick filter narrows the LOADED commit rows (subject/author substring,
