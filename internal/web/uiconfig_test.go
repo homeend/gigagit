@@ -2,6 +2,7 @@ package web
 
 import (
 	"net/http"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -96,5 +97,45 @@ func TestUIConfigRefusals(t *testing.T) {
 	cfg, _ := config.Load("", filepath.Join(dir, ".gg.toml"))
 	if cfg.UI.ShowGraph == "maybe" || cfg.UI.CommitSort == "topo" {
 		t.Errorf("refused value reached the file: %q/%q", cfg.UI.ShowGraph, cfg.UI.CommitSort)
+	}
+}
+
+// When a machine-local private repo config exists, gg's config resolution
+// reads THAT file — so the write must land there too, or health keeps
+// reporting the old values and the banner never retires.
+func TestUIConfigWritesActivePrivateConfig(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	dir := newRepoDir(t, 1)
+	// PrivateRepoPath is keyed on the main worktree path as the SERVER will
+	// resolve it (svc.TopLevel/Worktrees, which run through git and can
+	// resolve symlinks a raw t.TempDir() path doesn't — the TestRepoEndpoint
+	// precedent), so anchor on the same resolved path here.
+	resolved := dir
+	if real, err := filepath.EvalSymlinks(dir); err == nil {
+		resolved = real
+	}
+	priv := config.PrivateRepoPath(resolved)
+	if err := os.MkdirAll(filepath.Dir(priv), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(priv, []byte("[ui]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	srv := New(domain.Open(dir))
+	ts := serve(t, srv)
+
+	if code := postJSON(t, ts, "/api/ui-config",
+		`{"show_graph":"off","commit_sort":"plain"}`, "application/json", "", nil); code != http.StatusOK {
+		t.Fatalf("ui-config status = %d, want 200", code)
+	}
+	cfg, err := config.Load("", priv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.UI.ShowGraph != "off" || cfg.UI.CommitSort != "plain" {
+		t.Errorf("private config = %q/%q, want off/plain", cfg.UI.ShowGraph, cfg.UI.CommitSort)
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".gg.toml")); !os.IsNotExist(err) {
+		t.Errorf("committed .gg.toml was created despite an active private config")
 	}
 }

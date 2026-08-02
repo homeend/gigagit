@@ -4,17 +4,17 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"path/filepath"
 
 	"github.com/homeend/gigagit/internal/config"
 )
 
-// handleUIConfig writes [ui] show_graph / commit_sort to the COMMITTED repo
-// .gg.toml (the feedFor probe's file) — the web's accept path for the
-// big-repo banner's "graph off + plain sort". Values are allowlisted to the
-// exact enum vocabulary: free config text never crosses the wire (the
-// commit-edit "wire carries a verb" rule). Not an engine op — no git, no
-// repogate; the same standing as the TUI Settings rows.
+// handleUIConfig writes [ui] show_graph / commit_sort to the ACTIVE per-repo
+// config file (the machine-local private file when one exists, else the
+// committed .gg.toml — the same resolution feedFor's commit-sort probe uses)
+// — the web's accept path for the big-repo banner's "graph off + plain sort".
+// Values are allowlisted to the exact enum vocabulary: free config text never
+// crosses the wire (the commit-edit "wire carries a verb" rule). Not an
+// engine op — no git, no repogate; the same standing as the TUI Settings rows.
 func (s *Server) handleUIConfig(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		ShowGraph  string `json:"show_graph"`
@@ -37,12 +37,11 @@ func (s *Server) handleUIConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	svc := s.service()
-	top, err := svc.TopLevel(r.Context())
+	path, err := s.activeRepoConfigPath(r.Context(), svc)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	path := filepath.Join(top, ".gg.toml")
 	if req.ShowGraph != "" {
 		if err := config.SetShowGraph(path, req.ShowGraph); err != nil {
 			writeErr(w, http.StatusInternalServerError, err)

@@ -24,6 +24,7 @@ type healthOut struct {
 // A small loose-object repo under the real 100MB floor: not big, nothing
 // set, defaults reported, both ids present and false.
 func TestHealthEndpointDefaults(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	dir := newRepoDir(t, 3)
 	srv := New(domain.Open(dir))
 	srv.reposPath = filepath.Join(t.TempDir(), "repos.toml")
@@ -49,6 +50,7 @@ func TestHealthEndpointDefaults(t *testing.T) {
 
 // The packThreshold seam: gc packs the objects, threshold 1 makes it "big".
 func TestHealthBigViaSeam(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	dir := newRepoDir(t, 3)
 	gitRun(t, dir, "gc", "--quiet")
 	srv := New(domain.Open(dir))
@@ -66,6 +68,7 @@ func TestHealthBigViaSeam(t *testing.T) {
 
 // Real flags + configured .gg.toml values are projected, not defaulted.
 func TestHealthFlagsAndConfig(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	dir := newRepoDir(t, 3)
 	gitRun(t, dir, "commit-graph", "write", "--reachable")
 	gitRun(t, dir, "config", "fetch.writeCommitGraph", "true")
@@ -90,6 +93,7 @@ func TestHealthFlagsAndConfig(t *testing.T) {
 // A dismissal seeded in the shared prompts store (keyed by git common dir,
 // the TUI's key) is reported; the other id stays false.
 func TestHealthDismissed(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	dir := newRepoDir(t, 3)
 	srv := New(domain.Open(dir))
 	stateDir := t.TempDir()
@@ -121,6 +125,7 @@ func TestHealthDismissed(t *testing.T) {
 // and /api/health reflects it; an unknown id is refused with the store
 // untouched.
 func TestNoticeDismiss(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	dir := newRepoDir(t, 1)
 	srv := New(domain.Open(dir))
 	stateDir := t.TempDir()
@@ -159,6 +164,7 @@ func TestNoticeDismiss(t *testing.T) {
 
 // The writeGuard applies: wrong content type is refused before the handler.
 func TestNoticeDismissGuard(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	dir := newRepoDir(t, 1)
 	ts := serve(t, New(domain.Open(dir)))
 	if code := postJSON(t, ts, "/api/notice-dismiss",

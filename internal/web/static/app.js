@@ -493,6 +493,10 @@ function handleOpEvent(ev) {
     }
     if (ev.ok && (kind === "commit" || kind === "stash")) $("commit-msg").value = "";
     if (ev.ok) opLine(ev.summary || "done");
+    // commit-graph's !ok-but-changed is a genuine partial failure (the graph
+    // write landed, a later step in the chain didn't) — NOT the keep-conflicts
+    // shape below, so it must not print the success summary and swallow ev.error.
+    else if (!ev.ok && ev.changed && kind === "commit-graph") opLine("error: " + (ev.error || "operation failed"), true);
     // changed && !ok is the engine's deliberate success-with-conflicts shape
     // (a chosen keep-conflicts on merge/rebase/pull/apply-patch/stash-pop):
     // conflicts were left in the tree on purpose, not a failure — the
@@ -3593,9 +3597,14 @@ $("bigrepo-graphoff").onclick = async () => {
   fetchHealth();
 };
 $("bigrepo-cgraph").onclick = () => startOp({ op: "commit-graph" }, "write commit-graph");
+// sessionStorage survives the re-root reload, so the key is scoped per repo —
+// otherwise "not now" in one repo would suppress the banner in another.
+function bigrepoLaterKey() {
+  return "gg.bigrepo.later:" + (state.repo ? state.repo.worktree : "");
+}
 $("bigrepo-later").onclick = () => {
-  ssSet("gg.bigrepo.later", "1"); // session-only, re-evaluated next visit
-  $("bigrepo-bar").classList.add("hidden");
+  ssSet(bigrepoLaterKey(), "1"); // session-only, re-evaluated next visit
+  setBigRepoBarHidden(true);
 };
 $("bigrepo-never").onclick = async () => {
   // dismiss only the ids the banner is currently showing
@@ -3649,16 +3658,28 @@ function bigRepoGroups() {
   return groups;
 }
 
-function renderBigRepoBanner() {
+// setBigRepoBarHidden toggles #bigrepo-bar's hidden class and re-renders the
+// commits list exactly once when the visibility actually flips: hiding or
+// showing the bar changes the panes' height, and the virtualized commit list
+// otherwise keeps its stale render window until the next interaction (a
+// blank strip). renderCommits() is already called unconditionally on window
+// resize, so it is safe to call with no commits loaded yet.
+function setBigRepoBarHidden(hidden) {
   const bar = $("bigrepo-bar");
-  if (ssGet("gg.bigrepo.later") === "1") { bar.classList.add("hidden"); return; }
+  const was = bar.classList.contains("hidden");
+  bar.classList.toggle("hidden", hidden);
+  if (was !== hidden) renderCommits();
+}
+
+function renderBigRepoBanner() {
+  if (ssGet(bigrepoLaterKey()) === "1") { setBigRepoBarHidden(true); return; }
   const groups = bigRepoGroups();
-  if (!groups.length) { bar.classList.add("hidden"); return; }
+  if (!groups.length) { setBigRepoBarHidden(true); return; }
   $("bigrepo-msg").textContent =
     "big repository (" + state.health.pack_mb + " MB of packs) — commit browsing can be faster:";
   $("bigrepo-graphoff").classList.toggle("hidden", !groups.includes("graphoff"));
   $("bigrepo-cgraph").classList.toggle("hidden", !groups.includes("cgraph"));
-  bar.classList.remove("hidden");
+  setBigRepoBarHidden(false);
 }
 
 async function loadRepo() {

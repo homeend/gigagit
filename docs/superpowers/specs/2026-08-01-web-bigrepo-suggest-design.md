@@ -92,9 +92,13 @@ POST /api/ui-config  {"show_graph": "off", "commit_sort": "plain"}
   {"on","off"}, `commit_sort` ∈ {"date-order","plain"}; each key optional,
   at least one required; anything else → 400. Free config text never
   crosses the wire (the commit-edit "wire carries a verb" rule).
-- Server resolves the repo `.gg.toml` path (`TopLevel` + `.gg.toml`, the
-  `feedFor` probe's file) and calls `config.SetShowGraph` /
-  `config.SetCommitSort`.
+- Server resolves the ACTIVE per-repo config file via
+  `config.ActiveRepoConfigPath` (the machine-local private file when one
+  exists, else the committed `.gg.toml` — the TUI Settings writers' target)
+  and calls `config.SetShowGraph` / `config.SetCommitSort`. `feedFor`'s
+  commit-sort probe uses this same resolution. (Final-review adjudication:
+  the earlier "committed" wording here was a drafting error — the approved
+  decision was "shared with the TUI".)
 - After a successful `commit_sort` write, the feed is dropped under the
   same `s.mu` section `resetFeed` uses — `feedFor` re-reads commit_sort at
   next build, so the new sort takes effect on the next `/api/commits`.
