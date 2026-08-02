@@ -6,6 +6,7 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"mime"
@@ -109,15 +110,30 @@ func (s *Server) handleRepo(w http.ResponseWriter, r *http.Request) {
 	writeRepoInfo(w, r, s.service())
 }
 
+// readCtx detaches a boot-critical read from its request's lifetime.
+// These reads coalesce across page loads (the domain singleflight), and a
+// follower inherits the leader's error — so an F5 that aborted one load's
+// slow read (a minute-long git status on a huge working tree) poisoned the
+// NEXT load's identical request with "context canceled" in milliseconds:
+// the every-other-refresh wireframes report. Detached, the aborted load's
+// read runs to completion and the reload's request joins it, finishing with
+// the remaining time. Waste is bounded — at most one in-flight read per
+// singleflight key. Only load-bearing surfaces (boot + sidebar) use this;
+// user-driven detail reads (a commit's files, diffs) keep request
+// cancellation so an abandoned view frees its git read.
+func readCtx(r *http.Request) context.Context {
+	return context.WithoutCancel(r.Context())
+}
+
 // writeRepoInfo writes the repo-identity payload for svc — shared by GET
 // /api/repo and the POST /api/reroot success response.
 func writeRepoInfo(w http.ResponseWriter, r *http.Request, svc *domain.Service) {
-	top, err := svc.TopLevel(r.Context())
+	top, err := svc.TopLevel(readCtx(r))
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	branch, err := svc.CurrentBranch(r.Context())
+	branch, err := svc.CurrentBranch(readCtx(r))
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return

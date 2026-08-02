@@ -44,7 +44,7 @@ func (s *Server) feedFor(r *http.Request) *domain.CommitFeed {
 	if s.feed == nil {
 		f := svc.CommitFeed()
 		mode := "date-order"
-		if active, err := s.activeRepoConfigPath(r.Context(), svc); err == nil {
+		if active, err := s.activeRepoConfigPath(readCtx(r), svc); err == nil {
 			if cfg, err := config.Load(config.DefaultGlobalPath(), active); err == nil {
 				mode = cfg.UI.CommitSort
 			}
@@ -68,9 +68,9 @@ func (s *Server) handleCommits(w http.ResponseWriter, r *http.Request) {
 	var st domain.FeedState
 	var err error
 	if r.URL.Query().Get("more") == "1" {
-		st, _, err = feed.LoadMore(r.Context())
+		st, _, err = feed.LoadMore(readCtx(r))
 	} else {
-		st, err = feed.LoadInitial(r.Context())
+		st, err = feed.LoadInitial(readCtx(r))
 	}
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)

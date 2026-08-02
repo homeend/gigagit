@@ -8,6 +8,22 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+## 2026-08-02 — web: big-repo boot no longer starves behind slow reads
+
+- On a huge repository the web UI's first render waited for EVERY boot read
+  in sequence — `git status` alone takes a minute on a 90k-file working
+  tree, and listing hundreds of tags costs seconds — so the page sat as an
+  empty wireframe, and refreshing alternated between stuck and loaded
+  (an aborted load's read poisoned the next load's identical, coalesced
+  request with its cancellation). Two fixes:
+  - the client boots in parallel: commits render as soon as they load;
+    status and the sidebar fill their own panels in whenever they land;
+  - boot-critical read endpoints detach from the request's lifetime
+    (`readCtx`), so an abandoned page load's read runs to completion and
+    the reload joins it instead of inheriting `context canceled`.
+  User-driven detail reads (a commit's files, diffs) keep request
+  cancellation so abandoned views still free their git reads.
+
 ## 2026-08-02 — web: big-repo optimization suggestion
 
 - `gg web` now detects a big repository (pack bytes ≥ 100 MB, the TUI's

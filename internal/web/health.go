@@ -44,7 +44,7 @@ func (s *Server) packFloor() int64 {
 // fail the request).
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	svc := s.service()
-	h, err := svc.RepoHealth(r.Context())
+	h, err := svc.RepoHealth(readCtx(r))
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
@@ -58,7 +58,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		CommitSort:          "date-order",
 		Dismissed:           map[string]bool{noticeCommitGraph: false, noticeWebGraphOff: false},
 	}
-	if cfg, cerr := s.effectiveConfig(r.Context(), svc); cerr == nil {
+	if cfg, cerr := s.effectiveConfig(readCtx(r), svc); cerr == nil {
 		if cfg.UI.ShowGraph != "" {
 			resp.ShowGraph = cfg.UI.ShowGraph
 		}
