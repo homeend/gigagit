@@ -84,6 +84,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/filelog", s.handleFileLog)
 	mux.HandleFunc("GET /api/blame", s.handleBlame)
 	mux.HandleFunc("GET /api/health", s.handleHealth)
+	mux.HandleFunc("POST /api/notice-dismiss", writeGuard(s.handleNoticeDismiss))
 	mux.HandleFunc("GET /api/diff", s.handleDiff)
 	mux.HandleFunc("POST /api/stage", writeGuard(s.handleStage))
 	mux.HandleFunc("GET /api/hunks", s.handleHunks)

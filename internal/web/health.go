@@ -1,6 +1,8 @@
 package web
 
 import (
+	"encoding/json"
+	"errors"
 	"net/http"
 )
 
@@ -70,4 +72,38 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		resp.Dismissed[noticeWebGraphOff] = d[noticeWebGraphOff]
 	}
 	writeJSON(w, resp)
+}
+
+// handleNoticeDismiss persists a "never for this repo" banner dismissal into
+// the TUI-shared prompts store. The id is allowlisted to the two banner ids —
+// a frontend bug can never pollute prompts.toml with garbage keys (the
+// DeleteBranchVersion refuse-outside-the-namespace precedent).
+func (s *Server) handleNoticeDismiss(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, errors.New("bad request body"))
+		return
+	}
+	if req.ID != noticeCommitGraph && req.ID != noticeWebGraphOff {
+		writeErr(w, http.StatusBadRequest, errors.New("unknown notice id"))
+		return
+	}
+	svc := s.service()
+	key, err := svc.GitCommonDir(r.Context())
+	if err != nil || key == "" {
+		writeErr(w, http.StatusInternalServerError, errors.New("cannot resolve repo key"))
+		return
+	}
+	store := s.promptStore()
+	if store == nil {
+		writeErr(w, http.StatusInternalServerError, errors.New("no state dir for dismissals"))
+		return
+	}
+	if err := store.DismissNotice(key, req.ID); err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, map[string]bool{"ok": true})
 }

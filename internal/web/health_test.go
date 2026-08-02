@@ -116,3 +116,53 @@ func TestHealthDismissed(t *testing.T) {
 		t.Errorf("unseeded id reported dismissed: %v", h.Dismissed)
 	}
 }
+
+// A known id lands in the shared prompts store under the git-common-dir key
+// and /api/health reflects it; an unknown id is refused with the store
+// untouched.
+func TestNoticeDismiss(t *testing.T) {
+	dir := newRepoDir(t, 1)
+	srv := New(domain.Open(dir))
+	stateDir := t.TempDir()
+	srv.reposPath = filepath.Join(stateDir, "repos.toml")
+	ts := serve(t, srv)
+
+	if code := postJSON(t, ts, "/api/notice-dismiss",
+		`{"id":"web_graph_off_suggest"}`, "application/json", "", nil); code != http.StatusOK {
+		t.Fatalf("dismiss status = %d, want 200", code)
+	}
+	key, err := domain.Open(dir).GitCommonDir(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := promptstate.NewFileStore(filepath.Join(stateDir, "prompts.toml"))
+	if !store.DismissedNotices(key)["web_graph_off_suggest"] {
+		t.Errorf("dismissal not persisted: %v", store.DismissedNotices(key))
+	}
+
+	if code := postJSON(t, ts, "/api/notice-dismiss",
+		`{"id":"evil_id"}`, "application/json", "", nil); code != http.StatusBadRequest {
+		t.Errorf("unknown id status = %d, want 400", code)
+	}
+	if store.DismissedNotices(key)["evil_id"] {
+		t.Errorf("unknown id polluted the store")
+	}
+
+	var h healthOut
+	if code := getJSON(t, ts, "/api/health", &h); code != http.StatusOK {
+		t.Fatalf("health status = %d", code)
+	}
+	if !h.Dismissed["web_graph_off_suggest"] {
+		t.Errorf("health does not reflect the dismissal: %v", h.Dismissed)
+	}
+}
+
+// The writeGuard applies: wrong content type is refused before the handler.
+func TestNoticeDismissGuard(t *testing.T) {
+	dir := newRepoDir(t, 1)
+	ts := serve(t, New(domain.Open(dir)))
+	if code := postJSON(t, ts, "/api/notice-dismiss",
+		`{"id":"web_graph_off_suggest"}`, "text/plain", "", nil); code != http.StatusUnsupportedMediaType {
+		t.Errorf("text/plain status = %d, want 415", code)
+	}
+}
