@@ -67,18 +67,68 @@ func TestRerootToMRURepo(t *testing.T) {
 	}
 }
 
+// A path that is neither allowlisted nor a repository flows into the custom
+// lane and fails PREFLIGHT (409) — the old root must keep serving. (Was a
+// 404 "unknown target" before the custom-path lane existed.)
 func TestRerootUnknownTarget(t *testing.T) {
 	dir := newRepoDir(t, 1)
 	srv := New(domain.Open(dir))
 	ts := serve(t, srv)
 
-	if code := postJSON(t, ts, "/api/reroot", rerootBody(filepath.Join(t.TempDir(), "nope")), "application/json", "", nil); code != http.StatusNotFound {
-		t.Fatalf("code = %d, want 404", code)
+	if code := postJSON(t, ts, "/api/reroot", rerootBody(filepath.Join(t.TempDir(), "nope")), "application/json", "", nil); code != http.StatusConflict {
+		t.Fatalf("code = %d, want 409", code)
 	}
 	var repo repoResp
 	getJSON(t, ts, "/api/repo", &repo)
 	if repo.Worktree != dir {
 		t.Errorf("old root gone: %q", repo.Worktree)
+	}
+}
+
+// The palette's "open repo (path)" lane: a raw filesystem path outside the
+// worktree/MRU allowlist re-roots when it IS a repository.
+func TestRerootCustomPath(t *testing.T) {
+	dir := newRepoDir(t, 1)
+	other := newRepoDir(t, 1)
+	srv := New(domain.Open(dir))
+	srv.reposPath = filepath.Join(t.TempDir(), "repos.toml") // empty MRU — nothing allowlists `other`
+	ts := serve(t, srv)
+
+	var out repoResp
+	if code := postJSON(t, ts, "/api/reroot", rerootBody(other), "application/json", "", &out); code != http.StatusOK {
+		t.Fatalf("custom-path reroot code = %d", code)
+	}
+	if out.Worktree != other {
+		t.Errorf("worktree = %q, want %q", out.Worktree, other)
+	}
+}
+
+// A leading dash never reaches git argv through the custom lane.
+func TestRerootDashPathRefused(t *testing.T) {
+	dir := newRepoDir(t, 1)
+	srv := New(domain.Open(dir))
+	ts := serve(t, srv)
+
+	for _, p := range []string{"-C/evil", "  ", ""} {
+		if code := postJSON(t, ts, "/api/reroot", rerootBody(p), "application/json", "", nil); code != http.StatusBadRequest {
+			t.Errorf("path %q: code = %d, want 400", p, code)
+		}
+	}
+}
+
+func TestExpandHome(t *testing.T) {
+	cases := []struct{ path, home, want string }{
+		{"~", "/home/u", "/home/u"},
+		{"~/r", "/home/u", filepath.Join("/home/u", "r")},
+		{"~/a/b", "/home/u", filepath.Join("/home/u", "a", "b")},
+		{"/abs/p", "/home/u", "/abs/p"},
+		{"~user/r", "/home/u", "~user/r"}, // ~user unsupported, passed through
+		{"~/r", "", "~/r"},                // no home: untouched
+	}
+	for _, c := range cases {
+		if got := expandHome(c.path, c.home); got != c.want {
+			t.Errorf("expandHome(%q, %q) = %q, want %q", c.path, c.home, got, c.want)
+		}
 	}
 }
 

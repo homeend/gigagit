@@ -5,6 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/repos"
@@ -21,10 +24,31 @@ func (s *Server) reposStatePath() string {
 	return repos.DefaultStatePath()
 }
 
+// expandHome resolves a leading "~" against home ("" leaves the path
+// untouched — no home dir, nothing to expand). Only the bare "~" and "~/…"
+// forms expand; "~user" is not supported (the TUI's repoPathPopup rule).
+func expandHome(path, home string) string {
+	if home == "" {
+		return path
+	}
+	if path == "~" {
+		return home
+	}
+	if strings.HasPrefix(path, "~/") || strings.HasPrefix(path, `~\`) {
+		return filepath.Join(home, path[2:])
+	}
+	return path
+}
+
 // handleReroot points the running server at a different worktree of the
-// current repo, or a previously-opened repo from the MRU registry. The
-// client string is an identifier resolved by allowlist — only server-owned
-// values ever reach domain.Open.
+// current repo, a previously-opened repo from the MRU registry, or — the
+// palette's "open repo (path)" — any filesystem path the user typed. The
+// allowlist is tried first (it maps picker rows to exact known paths); a
+// miss falls back to treating the value as a path, like the TUI's Open
+// repo palette entry. That widens nothing meaningful: writeGuard +
+// hostGuard already gate this to the local user, who can open any of
+// their repos in the TUI, and the preflight below still runs BEFORE the
+// swap, so a garbage path is a 409 and the old root keeps serving.
 func (s *Server) handleReroot(w http.ResponseWriter, r *http.Request) {
 	var req rerootRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -66,8 +90,17 @@ func (s *Server) handleReroot(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if target == "" {
-		writeErr(w, http.StatusNotFound, errors.New("unknown target"))
-		return
+		// Custom path lane. A leading dash is refused defensively (the
+		// path reaches git argv via -C); everything else is preflight's
+		// call — git reports "not a repository" more clearly than any
+		// check this layer could invent.
+		p := strings.TrimSpace(req.Path)
+		if p == "" || strings.HasPrefix(p, "-") {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid repo path"))
+			return
+		}
+		home, _ := os.UserHomeDir()
+		target = expandHome(p, home)
 	}
 	// Preflight BEFORE swapping: a broken target must never take down a
 	// working server (the startup preflight, reused — same friendly

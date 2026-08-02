@@ -8,6 +8,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+## 2026-08-02 — web: open repo by path + repo-picker placeholder
+
+- The command palette gains **open repo (path)…** — type any filesystem
+  path (`~` expands server-side), like the TUI's Open repo entry.
+  `/api/reroot` falls back to treating a non-allowlisted value as a path;
+  the existing preflight still runs before the swap, so a bad path is an
+  error line and the current repo keeps serving.
+- The switch-repo picker's input placeholder now reads "type a repo name…"
+  instead of the command-mode text.
+
 ## 2026-08-02 — web: big-repo boot no longer starves behind slow reads
 
 - On a huge repository the web UI's first render waited for EVERY boot read

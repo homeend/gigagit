@@ -3738,6 +3738,11 @@ function paletteCommands() {
     { label: "filter commits…", detail: "/", run: () => openCommitFilter() },
     { label: "refresh", detail: "r", run: () => { if (!state.op) refreshAfterOp(); } },
     { label: "switch repo…", detail: "", run: null }, // drills into repo mode (runPaletteRow)
+    // The TUI palette's Open repo twin: a typed path (custom, ~-expandable
+    // server-side) instead of the known-repos picker. doReroot posts it and
+    // reloads; the server preflights before swapping, so a bad path is just
+    // an error line and the current repo keeps serving.
+    { label: "open repo (path)…", detail: "", run: () => openPrompt({ title: "Open repo — path", placeholder: "/path/to/repo or ~/repo", onSubmit: (p) => doReroot(p) }) },
     { label: "open working tree", detail: "", run: () => openWorkingTree(0) }, // 0 = the WT row; a bare call would set state.cursor = undefined and break j/k/enter
     { label: "toggle sidebar", detail: "b", run: () => toggleSidebar() },
     { label: "toggle graph", detail: "g", run: () => toggleGraphMode() },
@@ -3750,6 +3755,7 @@ function openPalette(mode, fromCmd) {
   pal = { mode, fromCmd: !!fromCmd, rows: [], filtered: [], sel: 0 };
   if (!already) pushLayer("palette", $("palette"), { onKey: paletteKey });
   $("palette-input").value = "";
+  $("palette-input").placeholder = mode === "repo" ? "type a repo name…" : "type a command…";
   if (mode === "cmd") {
     pal.rows = paletteCommands();
     filterPalette();
