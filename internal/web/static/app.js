@@ -3694,9 +3694,18 @@ async function loadRepo() {
 
 async function boot() {
   await loadRepo();
-  await fetchStatus().catch(() => {}); // status failing must not block browse
-  await fetchBranches().catch(() => {});
-  await fetchHealth(true); // banner + [ui] show_graph default (self-catching)
+  // Neither status (a MINUTE of working-tree scan on a huge repo) nor the
+  // sidebar (tags alone cost ~7s with hundreds of tags — for-each-ref peels
+  // and abbreviates per tag) may gate the first commits render; awaiting
+  // them serially here is what showed a bare wireframe page on big repos
+  // until an F5 raced past it. Each fills its own panel when it lands —
+  // status additionally re-renders commits because the working-tree row is
+  // status-driven and the pane has usually rendered by then. Only health
+  // stays awaited: it is cheap and the [ui] show_graph default must land
+  // before the first commits render.
+  fetchStatus().then(() => renderCommits()).catch(() => {});
+  fetchBranches().catch(() => {});
+  await fetchHealth(true);
   await loadCommits(false);
   focusPane();
 }
