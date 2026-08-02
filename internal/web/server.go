@@ -100,6 +100,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/op/{id}/decide", writeGuard(s.handleOpDecide))
 	mux.HandleFunc("POST /api/op/{id}/cancel", writeGuard(s.handleOpCancel))
 	mux.HandleFunc("POST /api/reroot", writeGuard(s.handleReroot))
+	mux.HandleFunc("POST /api/ui-config", writeGuard(s.handleUIConfig))
 	mux.HandleFunc("GET /api/repos", s.handleRepos)
 	return hostGuard(mux)
 }
