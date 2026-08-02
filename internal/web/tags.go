@@ -15,7 +15,7 @@ type tagRow struct {
 
 func (s *Server) handleTags(w http.ResponseWriter, r *http.Request) {
 	svc := s.service()
-	ts, err := svc.Tags(r.Context())
+	ts, err := svc.Tags(readCtx(r))
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return

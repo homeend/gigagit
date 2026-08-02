@@ -534,6 +534,25 @@ func (s *Service) CommitLookup(ctx context.Context, rev string) (model.LogLine, 
 	return line, true, nil
 }
 
+// ResolveRev resolves rev to its FULL commit sha, reporting found=false when
+// git cannot resolve it. Missing is an expected state here (a typo, a gc'd
+// sha), so it is not an error and never recorded to the failure log
+// (queryQuiet) — the CommitLookup convention. CommitLookup stays the
+// display-facing short-sha read; this exists for callers that must match
+// feed rows by full hash (the web goto-sha).
+func (s *Service) ResolveRev(ctx context.Context, rev string) (string, bool, error) {
+	sha, err := queryQuiet(ctx, s, "resolveRev:"+rev, func(ctx context.Context) (string, error) {
+		return s.repo.ResolveCommit(ctx, rev)
+	})
+	if err != nil {
+		if ctx.Err() != nil {
+			return "", false, ctx.Err()
+		}
+		return "", false, nil
+	}
+	return sha, true, nil
+}
+
 // BranchVersions lists a branch's recorded pre-operation snapshots, newest
 // first, under a Read reservation.
 func (s *Service) BranchVersions(ctx context.Context, branch string) ([]model.BranchVersion, error) {

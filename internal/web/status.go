@@ -24,7 +24,7 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 // round-trip for the SPA).
 func (s *Server) writeStatus(w http.ResponseWriter, r *http.Request) {
 	svc := s.service()
-	st, err := svc.Status(r.Context())
+	st, err := svc.Status(readCtx(r))
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
@@ -40,13 +40,23 @@ func (s *Server) writeStatus(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	c := st.Counts()
-	writeJSON(w, map[string]any{
+	resp := map[string]any{
 		"files": files,
 		"counts": map[string]int{
 			"staged": c.Staged, "unstaged": c.Unstaged,
 			"untracked": c.Untracked, "conflicted": c.Conflicted,
 		},
-	})
+	}
+	// domain.Conflict derives the paused-op state from the status just read
+	// (no second status round-trip); the clean steady state costs zero git
+	// invocations.
+	if cs := svc.Conflict(readCtx(r), st); cs.Op != "" {
+		resp["conflict"] = conflictPayload{
+			Op: cs.Op, Source: cs.Source, Target: cs.Target,
+			Desc: cs.Describe(), Conflicted: c.Conflicted,
+		}
+	}
+	writeJSON(w, resp)
 }
 
 // statusByte renders a porcelain XY byte as a 1-char string; a zero byte

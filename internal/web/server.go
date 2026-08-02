@@ -6,6 +6,7 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"mime"
@@ -46,6 +47,10 @@ type Server struct {
 	// reposPath overrides the MRU registry location (test seam); empty =
 	// repos.DefaultStatePath().
 	reposPath string
+
+	// packThreshold overrides bigRepoPackBytes for /api/health's "big"
+	// verdict (test seam); 0 = the production const.
+	packThreshold int64
 }
 
 func New(svc *domain.Service) *Server {
@@ -76,17 +81,27 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/versions", s.handleVersions)
 	mux.HandleFunc("GET /api/version-branches", s.handleVersionBranches)
 	mux.HandleFunc("GET /api/rebase-range", s.handleRebaseRange)
+	mux.HandleFunc("GET /api/resolve", s.handleResolve)
+	mux.HandleFunc("GET /api/filelog", s.handleFileLog)
+	mux.HandleFunc("GET /api/blame", s.handleBlame)
+	mux.HandleFunc("GET /api/health", s.handleHealth)
+	mux.HandleFunc("POST /api/notice-dismiss", writeGuard(s.handleNoticeDismiss))
 	mux.HandleFunc("GET /api/diff", s.handleDiff)
 	mux.HandleFunc("POST /api/stage", writeGuard(s.handleStage))
 	mux.HandleFunc("GET /api/hunks", s.handleHunks)
 	mux.HandleFunc("POST /api/stage-hunks", writeGuard(s.handleStageHunks))
+	mux.HandleFunc("GET /api/conflict-hunks", s.handleConflictHunks)
+	mux.HandleFunc("POST /api/resolve-hunks", writeGuard(s.handleResolveHunks))
 	mux.HandleFunc("GET /api/review/tools", s.handleReviewTools)
 	mux.HandleFunc("POST /api/review", writeGuard(s.handleReviewStart))
+	mux.HandleFunc("GET /api/conflict/tools", s.handleConflictTools)
+	mux.HandleFunc("POST /api/conflict/complete", writeGuard(s.handleConflictComplete))
 	mux.HandleFunc("POST /api/op", writeGuard(s.handleOpStart))
 	mux.HandleFunc("GET /api/op/{id}/events", s.handleOpEvents)
 	mux.HandleFunc("POST /api/op/{id}/decide", writeGuard(s.handleOpDecide))
 	mux.HandleFunc("POST /api/op/{id}/cancel", writeGuard(s.handleOpCancel))
 	mux.HandleFunc("POST /api/reroot", writeGuard(s.handleReroot))
+	mux.HandleFunc("POST /api/ui-config", writeGuard(s.handleUIConfig))
 	mux.HandleFunc("GET /api/repos", s.handleRepos)
 	return hostGuard(mux)
 }
@@ -95,15 +110,30 @@ func (s *Server) handleRepo(w http.ResponseWriter, r *http.Request) {
 	writeRepoInfo(w, r, s.service())
 }
 
+// readCtx detaches a boot-critical read from its request's lifetime.
+// These reads coalesce across page loads (the domain singleflight), and a
+// follower inherits the leader's error — so an F5 that aborted one load's
+// slow read (a minute-long git status on a huge working tree) poisoned the
+// NEXT load's identical request with "context canceled" in milliseconds:
+// the every-other-refresh wireframes report. Detached, the aborted load's
+// read runs to completion and the reload's request joins it, finishing with
+// the remaining time. Waste is bounded — at most one in-flight read per
+// singleflight key. Only load-bearing surfaces (boot + sidebar) use this;
+// user-driven detail reads (a commit's files, diffs) keep request
+// cancellation so an abandoned view frees its git read.
+func readCtx(r *http.Request) context.Context {
+	return context.WithoutCancel(r.Context())
+}
+
 // writeRepoInfo writes the repo-identity payload for svc — shared by GET
 // /api/repo and the POST /api/reroot success response.
 func writeRepoInfo(w http.ResponseWriter, r *http.Request, svc *domain.Service) {
-	top, err := svc.TopLevel(r.Context())
+	top, err := svc.TopLevel(readCtx(r))
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	branch, err := svc.CurrentBranch(r.Context())
+	branch, err := svc.CurrentBranch(readCtx(r))
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return

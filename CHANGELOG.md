@@ -70,6 +70,105 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   creating anything — `WorktreeKeepParentError`, since there is no single
   parent to keep the diff against.
 
+## 2026-08-02 — web: open repo by path + repo-picker placeholder
+
+- The command palette gains **open repo (path)…** — type any filesystem
+  path (`~` expands server-side), like the TUI's Open repo entry.
+  `/api/reroot` falls back to treating a non-allowlisted value as a path;
+  the existing preflight still runs before the swap, so a bad path is an
+  error line and the current repo keeps serving.
+- The switch-repo picker's input placeholder now reads "type a repo name…"
+  instead of the command-mode text.
+
+## 2026-08-02 — web: big-repo boot no longer starves behind slow reads
+
+- On a huge repository the web UI's first render waited for EVERY boot read
+  in sequence — `git status` alone takes a minute on a 90k-file working
+  tree, and listing hundreds of tags costs seconds — so the page sat as an
+  empty wireframe, and refreshing alternated between stuck and loaded
+  (an aborted load's read poisoned the next load's identical, coalesced
+  request with its cancellation). Two fixes:
+  - the client boots in parallel: commits render as soon as they load;
+    status and the sidebar fill their own panels in whenever they land;
+  - boot-critical read endpoints detach from the request's lifetime
+    (`readCtx`), so an abandoned page load's read runs to completion and
+    the reload joins it instead of inheriting `context canceled`.
+  User-driven detail reads (a commit's files, diffs) keep request
+  cancellation so abandoned views still free their git reads.
+
+## 2026-08-02 — web: big-repo optimization suggestion
+
+- `gg web` now detects a big repository (pack bytes ≥ 100 MB, the TUI's
+  floor) and shows a dismissible banner after load suggesting the settings
+  that make commit browsing fast: **turn graph off + plain sort** (writes
+  `[ui] show_graph = "off"` + `commit_sort = "plain"` to the repo
+  `.gg.toml` — shared with the TUI) and **write commit-graph + keep it
+  fresh** (a new `op:"commit-graph"` chaining `git commit-graph write
+  --reachable` with `fetch.writeCommitGraph=true`, the TUI notice's
+  write+enable pair, run server-side).
+- "Never for this repo" persists via the TUI-shared promptstate store; the
+  commit-graph recommendation reuses the TUI's dismissal id, so dismissing
+  it in either frontend silences both. "Not now" is session-only.
+- The web now honors `[ui] show_graph` as its default graph mode when the
+  browser has no local `g`-toggle override — a config-off repo renders the
+  flat list on first load.
+- New endpoints: `GET /api/health`, `POST /api/ui-config` (enum-allowlisted
+  values only), `POST /api/notice-dismiss` (allowlisted ids only).
+
+## 2026-08-01 — web: commits-panel parity (/ filter, goto-sha, file history/blame)
+
+- `/` quick filter narrows the LOADED commit rows (subject/author substring,
+  sha prefix); filtered rows render flat; a hint row states coverage and
+  offers explicit deeper paging — never an automatic git walk.
+- `#` / palette "goto commit…": `GET /api/resolve` (new, full-sha via the new
+  `domain.ResolveRev`) then reveal-in-list with flash highlight, paging until
+  the feed stops growing; a commit outside the current scope falls back to
+  opening its detail.
+- File history (`GET /api/filelog` over `domain.FileLog`) and blame
+  (`GET /api/blame` over `domain.Blame`) as full-screen overlays; entry
+  points: file-row right-click (commit/compare/status modes), palette path
+  prompts, and history/blame buttons in the diff toolbar. The history diff
+  reuses the /api/diff commit form; `diffHTML` extracted from `renderDiff`
+  so both panes share one renderer.
+- Filter follow-ups from live use: the commits pane is a flex column so the
+  filter bar shrinks the scroll area instead of clipping its last row (the
+  load-more hint sat hidden under the pane edge when matches filled the
+  window), and ctrl+enter in the filter input pages deeper — the TUI's
+  ctrl+f search-deeper analog (advertised in the hint row and help).
+
+- Web: the global ☰ menu lists its entries alphabetically (sorted at render,
+  so a future entry cannot land unsorted), with help pinned last below a
+  separator.
+- **Web: AI conflict resolution.** An "AI resolve…" button on the
+  paused-operation banner runs a headless `conflict_complete` agent (chooser
+  → one-time command approval shared with the TUI → background run with
+  park/cancel); the agent resolves, stages, runs the matching `--continue`,
+  and its overview opens in the report viewer. New `frontends` tag on
+  `[[tools.command]]` blocks (`"tui"`/`"web"`/`"cli"`, empty = everywhere)
+  keeps the TUI picker unchanged while new web-only headless catalog rows
+  (Claude/Codex/Antigravity; Kimi's existing capture row is shared) power the
+  web lane. Engine: new `CompleteConflict` capture op (LockMode Read — the
+  agent mutates, gg only reads). The agent chooser always opens first — even
+  with a single configured agent — so opening the dialog never starts a run;
+  clicking an agent row is the confirmation.
+
+- **Web: conflict resolution.** A paused merge/rebase/cherry-pick/revert now
+  shows a banner in the browser — the op, what it's doing, and the
+  conflicted-file count — with Continue (disabled until every file is
+  resolved) and a red, confirm-gated Abort. The old dead-end "conflicted —
+  resolve in the TUI" row is gone: a conflicted file now opens an in-diff-pane
+  block picker showing each region side by side — ours left, theirs right —
+  taking either per region (or all at once) with a full-coverage gate before
+  resolving, plus a "mark resolved (stage as-is)" option for a file you've
+  already fixed by hand. While an op is paused the commit box steps aside
+  for a one-line pointer at Continue — finishing the op is Continue's job
+  (git supplies the merge message), so no message needs typing; and an
+  empty-message commit click now says "write a commit message first" on
+  the status line instead of doing nothing. Emptiness is rendered visibly in
+  the picker — side tags carry line counts, empty lines show as ¶, space/tab
+  runs as ·/→, and a side that deletes the region says "(empty)" — so a
+  conflict between blank-line runs no longer reads as nothing vs nothing.
+
 - **Web: staged detail layout (the GitKraken flow).** Clicking a commit no
   longer jumps straight to a diff: the sidebar stays put, the commits pane
   shrinks beside it, and the changed-file list appears as a fixed column

@@ -62,8 +62,11 @@ type CommandTemplate struct {
 	// bypasses the agent's own permission prompts): the Settings wizard
 	// shows OptIn rows UNCHECKED by default so adding one is an explicit
 	// opt-in; everything else defaults checked.
-	OptIn   bool
-	Command string
+	OptIn bool
+	// Frontends limits where the materialized command is OFFERED (config
+	// `frontends` field): "tui" / "web" / "cli"; empty = everywhere.
+	Frontends []string
+	Command   string
 }
 
 // Tool is one catalog entry. Bins are candidate binary names probed via
@@ -360,6 +363,24 @@ const kimiCompletePrompt = junieCompletePrompt
 
 const kimiCompleteCommand = `<bin> -p ` + kimiCompletePrompt
 
+// Headless (capture) resolve-and-complete variants — the web frontend's rows
+// (a browser has no terminal to hand over). Same prompts, same contract; the
+// permission-bypass flags make them OptIn like their terminal siblings.
+// Verified 2026-08-01 (real binaries): claude -p + --dangerously-skip-permissions;
+// codex exec + --dangerously-bypass-approvals-and-sandbox (the agent itself
+// writes $GG_MESSAGE_FILE — no --output-last-message, which would overwrite
+// the agent's overview with its final chat message); agy -p +
+// --dangerously-skip-permissions (probe-verified for the commit lane
+// 2026-07-20: bypass lifts headless auto-deny for reads AND the message-file
+// write). Junie has NO headless variant: --brave is interactive-only, so a
+// headless Junie cannot approve its own edits and cannot honestly attempt
+// the task.
+const claudeCompleteHeadlessCommand = `<bin> -p ` + claudeCompletePrompt + ` --dangerously-skip-permissions`
+
+const codexCompleteHeadlessCommand = `<bin> exec ` + codexCompletePrompt + ` --dangerously-bypass-approvals-and-sandbox`
+
+const agyCompleteHeadlessCommand = `<bin> -p ` + agyCompletePrompt + ` --dangerously-skip-permissions`
+
 // Builtins is the hardcoded catalog. Stage 1 shipped conflict templates;
 // stage 2 added commit_message capture templates; stage 3 adds review
 // capture templates.
@@ -370,7 +391,8 @@ func Builtins() []Tool {
 			Commands: []CommandTemplate{
 				{Category: CatConflict, Name: "Claude", Mode: ModeTerminal, Command: claudeConflictCommand},
 				{Category: CatConflict, Name: "Claude (yolo)", Mode: ModeTerminal, OptIn: true, Command: claudeConflictYoloCommand},
-				{Category: CatConflictComplete, Name: "Claude — resolve & complete (yolo)", Mode: ModeTerminal, OptIn: true, Command: claudeCompleteCommand},
+				{Category: CatConflictComplete, Name: "Claude — resolve & complete (yolo)", Mode: ModeTerminal, OptIn: true, Frontends: []string{"tui"}, Command: claudeCompleteCommand},
+				{Category: CatConflictComplete, Name: "Claude — resolve & complete (yolo, headless)", Mode: ModeCapture, OptIn: true, Frontends: []string{"web"}, Command: claudeCompleteHeadlessCommand},
 				{Category: CatCommitMessage, Name: "Claude", Mode: ModeCapture, Command: claudeCommitCommand},
 				{Category: CatReview, Name: "Claude", Mode: ModeCapture, Command: claudeReviewCommand},
 			},
@@ -395,7 +417,7 @@ func Builtins() []Tool {
 			Commands: []CommandTemplate{
 				{Category: CatConflict, Name: "Junie", Mode: ModeTerminal, Command: junieConflictCommand},
 				{Category: CatConflict, Name: "Junie (yolo)", Mode: ModeTerminal, OptIn: true, Command: junieConflictYoloCommand},
-				{Category: CatConflictComplete, Name: "Junie — resolve & complete (yolo)", Mode: ModeTerminal, OptIn: true, Command: junieCompleteCommand},
+				{Category: CatConflictComplete, Name: "Junie — resolve & complete (yolo)", Mode: ModeTerminal, OptIn: true, Frontends: []string{"tui"}, Command: junieCompleteCommand},
 				{Category: CatCommitMessage, Name: "Junie", Mode: ModeCapture, Command: junieCommitCommand},
 				{Category: CatReview, Name: "Junie", Mode: ModeCapture, Command: junieReviewCommand},
 			},
@@ -405,7 +427,8 @@ func Builtins() []Tool {
 			Commands: []CommandTemplate{
 				{Category: CatConflict, Name: "Codex", Mode: ModeTerminal, Command: codexConflictCommand},
 				{Category: CatConflict, Name: "Codex (yolo)", Mode: ModeTerminal, OptIn: true, Command: codexConflictYoloCommand},
-				{Category: CatConflictComplete, Name: "Codex — resolve & complete (yolo)", Mode: ModeTerminal, OptIn: true, Command: codexCompleteCommand},
+				{Category: CatConflictComplete, Name: "Codex — resolve & complete (yolo)", Mode: ModeTerminal, OptIn: true, Frontends: []string{"tui"}, Command: codexCompleteCommand},
+				{Category: CatConflictComplete, Name: "Codex — resolve & complete (yolo, headless)", Mode: ModeCapture, OptIn: true, Frontends: []string{"web"}, Command: codexCompleteHeadlessCommand},
 				{Category: CatCommitMessage, Name: "Codex", Mode: ModeCapture, Command: codexCommitCommand},
 				{Category: CatReview, Name: "Codex", Mode: ModeCapture, Command: codexReviewCommand},
 			},
@@ -415,7 +438,8 @@ func Builtins() []Tool {
 			Commands: []CommandTemplate{
 				{Category: CatConflict, Name: "Antigravity", Mode: ModeTerminal, Command: agyConflictCommand},
 				{Category: CatConflict, Name: "Antigravity (yolo)", Mode: ModeTerminal, OptIn: true, Command: agyConflictYoloCommand},
-				{Category: CatConflictComplete, Name: "Antigravity — resolve & complete (yolo)", Mode: ModeTerminal, OptIn: true, Command: agyCompleteCommand},
+				{Category: CatConflictComplete, Name: "Antigravity — resolve & complete (yolo)", Mode: ModeTerminal, OptIn: true, Frontends: []string{"tui"}, Command: agyCompleteCommand},
+				{Category: CatConflictComplete, Name: "Antigravity — resolve & complete (yolo, headless)", Mode: ModeCapture, OptIn: true, Frontends: []string{"web"}, Command: agyCompleteHeadlessCommand},
 				{Category: CatCommitMessage, Name: "Antigravity", Mode: ModeCapture, OptIn: true, Command: agyCommitCommand},
 				{Category: CatReview, Name: "Antigravity", Mode: ModeCapture, OptIn: true, Command: agyReviewCommand},
 			},
@@ -428,7 +452,7 @@ func Builtins() []Tool {
 			ExtraProbes: []string{"~/.kimi-code/bin/kimi"},
 			Commands: []CommandTemplate{
 				{Category: CatConflict, Name: "Kimi", Mode: ModeCapture, Command: kimiConflictCommand},
-				{Category: CatConflictComplete, Name: "Kimi — resolve & complete", Mode: ModeCapture, Command: kimiCompleteCommand},
+				{Category: CatConflictComplete, Name: "Kimi — resolve & complete", Mode: ModeCapture, Frontends: []string{"tui", "web"}, Command: kimiCompleteCommand},
 				{Category: CatCommitMessage, Name: "Kimi", Mode: ModeCapture, Command: kimiCommitCommand},
 				{Category: CatReview, Name: "Kimi", Mode: ModeCapture, Command: kimiReviewCommand},
 			},

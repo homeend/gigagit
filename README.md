@@ -10,7 +10,13 @@ system `git`.
 > and a fully scriptable CLI are all in place. No `1.0` tag has been cut yet. An
 > MCP server (`gg mcp`) has shipped, stage 1 (read-only) and stage 2 (mutating
 > tools, gated by client consent); heavy-ops MCP surfaces remain on the
-> roadmap. See [`CHANGELOG.md`](CHANGELOG.md) for the full feature list and
+> roadmap. A loopback-only browser UI (`gg web`) mirrors core flows —
+> status, commits, branches, stashes, pull/push/merge/rebase, and now
+> paused-op conflict resolution with an in-browser per-block ours/theirs
+> picker plus an "AI resolve…" button that runs a headless agent to finish
+> the paused op for you — over a small HTTP API, no node toolchain required.
+> See
+> [`CHANGELOG.md`](CHANGELOG.md) for the full feature list and
 > [`CLAUDE.md`](CLAUDE.md) for the architecture.
 
 ## Why

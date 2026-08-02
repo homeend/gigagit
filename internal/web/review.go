@@ -139,16 +139,17 @@ func (s *Server) handleReviewStart(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]string{"op_id": run.id, "tool": cmd.Name, "label": label})
 }
 
-// handleOpCancel cancels a live review run. Restricted to the review lane on
-// purpose: an agent can hang for minutes holding the single lane, whereas
-// interrupting a git operation half-way is a separate design question.
+// handleOpCancel cancels a live agent run (review or conflict_complete).
+// Restricted to those lanes on purpose: an agent can hang for minutes holding
+// the single lane, whereas interrupting a git operation half-way is a
+// separate design question.
 func (s *Server) handleOpCancel(w http.ResponseWriter, r *http.Request) {
 	run := s.opByID(r.PathValue("id"))
 	if run == nil {
 		writeErr(w, http.StatusNotFound, errors.New("unknown operation"))
 		return
 	}
-	if run.kind != "review" {
+	if run.kind != "review" && run.kind != "conflict_complete" {
 		writeErr(w, http.StatusConflict, errors.New("this operation cannot be cancelled"))
 		return
 	}
@@ -247,6 +248,9 @@ func (s *Server) reviewCommands(ctx context.Context, svc *domain.Service) ([]con
 		if tc.Category != string(exttool.CatReview) {
 			continue
 		}
+		if !config.ToolVisibleIn(tc, "web") {
+			continue
+		}
 		if config.ValidateToolCommand(tc) != nil || template.ValidateCommandTokens(tc.Command, tc.PerFile) != nil {
 			continue
 		}
@@ -255,20 +259,30 @@ func (s *Server) reviewCommands(ctx context.Context, svc *domain.Service) ([]con
 	return out, nil
 }
 
-// effectiveConfig loads global + the ACTIVE per-repo config (the machine-local
-// private file when one exists, else the committed .gg.toml) — the resolution
-// `gg review` uses, so a tool configured for one frontend is visible to the
-// other. Distinct from postCreateHook's narrower committed-only probe.
-func (s *Server) effectiveConfig(ctx context.Context, svc *domain.Service) (config.Config, error) {
+// activeRepoConfigPath resolves the per-repo config file gg actually reads
+// and writes — the machine-local private file when one exists, else the
+// committed .gg.toml (the TUI Settings writers' target).
+func (s *Server) activeRepoConfigPath(ctx context.Context, svc *domain.Service) (string, error) {
 	top, err := svc.TopLevel(ctx)
 	if err != nil {
-		return config.Config{}, err
+		return "", err
 	}
 	privatePath := ""
 	if wts, werr := svc.Worktrees(ctx); werr == nil && len(wts) > 0 && wts[0].Path != "" {
 		privatePath = config.PrivateRepoPath(wts[0].Path)
 	}
-	active := config.ActiveRepoConfigPath(filepath.Join(top, ".gg.toml"), privatePath)
+	return config.ActiveRepoConfigPath(filepath.Join(top, ".gg.toml"), privatePath), nil
+}
+
+// effectiveConfig loads global + the ACTIVE per-repo config (the machine-local
+// private file when one exists, else the committed .gg.toml) — the resolution
+// `gg review` uses, so a tool configured for one frontend is visible to the
+// other. Distinct from postCreateHook's narrower committed-only probe.
+func (s *Server) effectiveConfig(ctx context.Context, svc *domain.Service) (config.Config, error) {
+	active, err := s.activeRepoConfigPath(ctx, svc)
+	if err != nil {
+		return config.Config{}, err
+	}
 	return config.Load(config.DefaultGlobalPath(), active)
 }
 

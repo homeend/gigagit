@@ -106,6 +106,61 @@ func TestReviewInvalidToolIgnoredFallsBackToOther(t *testing.T) {
 	}
 }
 
+// writeReviewToolFrontends is writeReviewTool but with an explicit
+// frontends = [...] tag, for testing the "cli" visibility filter.
+func writeReviewToolFrontends(t *testing.T, dir, name, command string, frontends []string) {
+	t.Helper()
+	quoted := make([]string, len(frontends))
+	for i, f := range frontends {
+		quoted[i] = fmt.Sprintf("%q", f)
+	}
+	block := fmt.Sprintf("\n[[tools.command]]\ncategory = \"review\"\nname = %q\nmode = \"capture\"\nfrontends = [%s]\ncommand = %q\n",
+		name, strings.Join(quoted, ", "), command)
+	f, err := os.OpenFile(filepath.Join(dir, ".gg.toml"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if _, err := f.WriteString(block); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A review block tagged frontends=["web"] must never be visible to the CLI:
+// as the sole candidate it must NOT be auto-picked (falls through to "no
+// review tool configured"), and alongside other candidates it must not
+// appear in the ambiguous-tool name list.
+func TestReviewFrontendsWebOnlyHiddenFromCLISoleCandidate(t *testing.T) {
+	isolateReviewEnv(t)
+	dir := newRepoDir(t)
+	writeReviewToolFrontends(t, dir, "WebOnly", `printf "web only\n"`, []string{"web"})
+	code, _, errb := runCLI(t, dir, "review", "--working")
+	if code != 1 {
+		t.Fatalf("exit=%d stderr=%s, want 1 (web-only tool must not be picked by the CLI)", code, errb)
+	}
+	if !strings.Contains(errb, "no review tool configured") {
+		t.Fatalf("stderr = %q, want it to report no review tool configured", errb)
+	}
+}
+
+func TestReviewFrontendsWebOnlyExcludedFromAmbiguousList(t *testing.T) {
+	isolateReviewEnv(t)
+	dir := newRepoDir(t)
+	writeReviewTool(t, dir, "Echo1", `printf "one\n"`)
+	writeReviewTool(t, dir, "Echo2", `printf "two\n"`)
+	writeReviewToolFrontends(t, dir, "WebOnly", `printf "web only\n"`, []string{"web"})
+	code, _, errb := runCLI(t, dir, "review", "--working")
+	if code != 1 {
+		t.Fatalf("exit=%d stderr=%s, want 1", code, errb)
+	}
+	if !strings.Contains(errb, "multiple review tools") || !strings.Contains(errb, "Echo1") || !strings.Contains(errb, "Echo2") {
+		t.Fatalf("stderr = %q, want Echo1 and Echo2 listed", errb)
+	}
+	if strings.Contains(errb, "WebOnly") {
+		t.Fatalf("stderr = %q, WebOnly must not appear in the CLI candidate list", errb)
+	}
+}
+
 func TestReviewWorkingAndPositionalMutuallyExclusive(t *testing.T) {
 	dir := newRepoDir(t)
 	code, _, errb := runCLI(t, dir, "review", "--working", "HEAD")

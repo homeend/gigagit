@@ -15,7 +15,9 @@ const state = {
   // the graph off entirely — a flat ●-gutter list (TUI show_graph parity)
   // with the lane column's space going to subjects.
   graphMode: "svg", // svg | off
+  health: null, // /api/health payload (big-repo banner), else null
   wt: null, // /api/status payload while the tree is dirty, else null
+  conflict: null, // {op, source, target, desc, conflicted} while a sequencer op is paused, else null
   filesMode: "commit", // commit | status | compare
   compare: null, // {a, b, aHash, bHash, all, filter, originsError} while comparing two branches
   statusEntries: [],
@@ -27,6 +29,7 @@ const state = {
   sidebar: true,
   op: null, // {id, es: EventSource} while an operation is live
   lastDiff: null,
+  diffCtx: null, // {path, rev} — the file the diff pane currently shows, else null
   diffBlockIdx: -1,
   detailGen: 0,
   dragBranch: null, // name of the branch being dragged, else null
@@ -34,6 +37,8 @@ const state = {
   // A parked (backgrounded) long task, and then its result until collected:
   // {label, status: running|done|failed|cancelled, title, path, report, error}
   task: null,
+  cfilter: null, // {q, matches: [feedIdx...]} while the commits quick filter (/) is active, else null
+  gotoGen: 0, flashHash: "",
 };
 
 const $ = (id) => document.getElementById(id);
@@ -44,6 +49,7 @@ const $ = (id) => document.getElementById(id);
 const DANGER_OPTIONS = new Set([
   "force", "force-with-lease", "force-delete", "reset", "delete", "drop",
   "unlock-and-remove", "discard", "overwrite", "hard",
+  "abort merge", "abort rebase", "abort cherry-pick", "abort revert",
 ]);
 
 const SECTIONS = ["branches", "worktrees", "tags", "stashes"];
@@ -51,6 +57,12 @@ const SECTIONS = ["branches", "worktrees", "tags", "stashes"];
 // localStorage can throw (private mode); persistence is best-effort.
 function lsGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
 function lsSet(k, v) { try { localStorage.setItem(k, v); } catch {} }
+
+// sessionStorage-backed: the big-repo banner's "not now" dismissal is
+// per-tab-session only (re-evaluated next visit), unlike localStorage's
+// gg.graph override which persists across sessions.
+function ssGet(k) { try { return sessionStorage.getItem(k); } catch { return null; } }
+function ssSet(k, v) { try { sessionStorage.setItem(k, v); } catch {} }
 
 // --- overlay layer stack ---
 // Every overlay surface (decision modal, help, ctx-menu, future popups)
@@ -120,7 +132,26 @@ function wtExtra() {
 
 function applyStatus(st) {
   state.wt = st.files && st.files.length ? st : null;
+  state.conflict = st.conflict || null;
   buildStatusEntries();
+  renderConflictBar();
+}
+
+// The banner shows whenever a sequencer op is paused — including with zero
+// conflicted files (resolved by hand, never continued): that is exactly when
+// Continue lights up. Never leave the user in a paused op with no way out.
+function renderConflictBar() {
+  const bar = $("conflict-bar"), c = state.conflict;
+  if (!c) { bar.classList.add("hidden"); return; }
+  bar.classList.remove("hidden");
+  // innerHTML so the conflicted count can carry its highlight class — c.op
+  // and c.desc come off the wire (desc holds branch names), so both esc().
+  $("conflict-msg").innerHTML =
+    "⏸ " + esc(c.op) + " paused" + (c.desc ? " (" + esc(c.desc) + ")" : "") +
+    (c.conflicted
+      ? ` — <span class="conflict-count">${c.conflicted} conflicted</span>`
+      : " — all conflicts resolved");
+  $("conflict-continue").disabled = !!c.conflicted;
 }
 
 async function fetchStatus() {
@@ -202,7 +233,8 @@ function hideOpLine() {
   $("op-line").classList.add("hidden");
 }
 
-function opLine(text, isErr) {
+let taskRestoreTimer = null;
+function opLine(text, isErr, isTask) {
   const el = $("op-line");
   $("op-text").textContent = text || "";
   el.classList.toggle("err", !!isErr);
@@ -210,24 +242,42 @@ function opLine(text, isErr) {
   el.classList.toggle("hidden", !text);
   clearTimeout(opLineTimer);
   if (!text) return;
+  // A transient notice may borrow the line from the parked-run handle (there
+  // is only one line), but the handle must come BACK: it is the standing
+  // indicator that something is still running (user report: the "already
+  // running" guard ate the background-run line for good).
+  if (!isTask) {
+    clearTimeout(taskRestoreTimer);
+    if (parkedRunning()) {
+      taskRestoreTimer = setTimeout(() => {
+        if (parkedRunning() && !$("op-line").classList.contains("task")) taskLine(parkedTaskText());
+      }, 6000);
+    }
+  }
   // every message expires after 30s — but never while its op still runs
   // (each op event overwrites the line and re-arms the timer anyway)
   opLineTimer = setTimeout(() => {
     // NOT opBusy(): that reports, and reporting re-arms this timer.
-    // A BACKGROUNDED review is exempt from the never-expire-while-running
-    // rule: that rule assumes the line is being rewritten by the op's own
-    // progress events, and a parked run emits none — so its line would
-    // otherwise just sit there for the whole run. The chip is the indicator.
+    // The parked-run HANDLE never expires: it stays until the run finishes
+    // (reviewDone repaints or hides it). Only ordinary notices time out.
     if (state.op && !parkedRunning()) return;
+    if ($("op-line").classList.contains("task") && parkedRunning()) return;
     hideOpLine();
   }, 30000);
+}
+
+// parkedTaskText is the parked-run handle's one message — shared by the park
+// action and the restore-after-a-transient-notice timer above.
+function parkedTaskText() {
+  const noun = state.task && state.task.kind === "conflict" ? "AI resolve" : "review";
+  return noun + " running in the background — click here to watch or cancel it";
 }
 
 // taskLine is the parked-run status line. Unlike every other message it is a
 // live HANDLE on something still running, not a notice — so it is clickable
 // and exempt from dismissal (see the two listeners below).
 function taskLine(text) {
-  opLine(text); // clears .task first, then we claim it
+  opLine(text, false, true); // clears .task first, then we claim it
   $("op-line").classList.add("task");
 }
 
@@ -264,7 +314,8 @@ function parkedRunning() {
 function opBusy() {
   if (!state.op) return false;
   if (parkedRunning()) {
-    opLine("a review is running in the background — open the chip to watch or cancel it", true);
+    const noun = state.task.kind === "conflict" ? "an AI resolve run" : "a review";
+    opLine(noun + " is running in the background — open the chip to watch or cancel it", true);
   } else {
     opLine("an operation is already running", true);
   }
@@ -325,7 +376,9 @@ function startSwitch(branch) {
 
 function doCommit() {
   const message = $("commit-msg").value;
-  if (!message.trim()) return;
+  // report instead of a dead click — a silent return here read as
+  // "commit is broken" the first time someone hit it mid-merge
+  if (!message.trim()) { opLine("write a commit message first", true); return; }
   startOp({ op: "commit", message }, "committing");
 }
 
@@ -376,6 +429,8 @@ function doPush() {
 // repo-scoped, so a clean reload is the honest reset on success
 // (localStorage prefs survive); errors land on the status strip.
 async function doReroot(path) {
+  closeCommitFilter();
+  state.gotoGen++;
   if (opBusy()) return;
   try {
     await postJSON("/api/reroot", { path });
@@ -433,17 +488,22 @@ function handleOpEvent(ev) {
     // entirely — it changes nothing in the repo, so none of the refreshing
     // below applies to it.
     if (op && op.onDone) {
-      op.onDone(ev);
+      op.onDone(ev, kind);
       return;
     }
     if (ev.ok && (kind === "commit" || kind === "stash")) $("commit-msg").value = "";
     if (ev.ok) opLine(ev.summary || "done");
+    // commit-graph's !ok-but-changed is a genuine partial failure (the graph
+    // write landed, a later step in the chain didn't) — NOT the keep-conflicts
+    // shape below, so it must not print the success summary and swallow ev.error.
+    else if (!ev.ok && ev.changed && kind === "commit-graph") opLine("error: " + (ev.error || "operation failed"), true);
     // changed && !ok is the engine's deliberate success-with-conflicts shape
     // (a chosen keep-conflicts on merge/rebase/pull/apply-patch/stash-pop):
     // conflicts were left in the tree on purpose, not a failure — the
     // summary already reads as "…has conflicts (left in tree)" etc.
     else if (ev.changed) opLine(ev.summary || "left conflicts in the working tree — resolve them, then commit");
     else opLine("error: " + (ev.error || "operation failed"), true);
+    if (kind === "commit-graph") fetchHealth(); // retires the banner group
     if (ev.changed) refreshAfterOp();
     else fetchStatus().then(renderCommits); // a failed switch may still have moved HEAD/stash state
   }
@@ -462,6 +522,10 @@ function reconcileStatusView() {
   // a status re-read can invalidate an open hunk view (file fully staged or
   // gone): exit rather than offer stale positional picks
   if (diffHunks && !state.statusEntries.some((f) => f.path === diffHunks.path && hunkEligible(f))) clearDiffHunks();
+  if (conflictPick && !state.statusEntries.some((f) => f.path === conflictPick.path && f.section === "conflicts")) {
+    conflictPick = null;
+    renderResolveBar();
+  }
 }
 
 async function refreshAfterOp() {
@@ -588,12 +652,14 @@ function hideCtxMenu() {
 }
 
 // showCtxMenu renders the shared right-click menu at (x,y): safe actions
-// first; rows flagged danger render red.
+// first; rows flagged danger render red. A row with sep:true renders as a
+// non-clickable divider (it occupies an index in _items, which the click
+// handler resolves by data-i, so alignment is preserved).
 function showCtxMenu(items, x, y) {
   const menu = $("ctx-menu");
   menu._items = items;
   menu.innerHTML = items
-    .map((it, i) => `<button data-i="${i}"${it.danger ? ' class="danger"' : ""}>${esc(it.label)}</button>`)
+    .map((it, i) => (it.sep ? `<div class="sep"></div>` : `<button data-i="${i}"${it.danger ? ' class="danger"' : ""}>${esc(it.label)}</button>`))
     .join("");
   menu.style.left = Math.min(x, window.innerWidth - 200) + "px";
   menu.style.top = Math.min(y, window.innerHeight - 120) + "px";
@@ -1011,6 +1077,161 @@ $("vbranches").addEventListener("click", (e) => {
   if (e.target.id === "vbranches") closeVersionBranches(); // backdrop
 });
 
+// --- file history overlay ----------------------------------------------------
+// A layer, not a layout mode: esc drops you exactly where you were. Gen-guarded
+// like every async open (a slow filelog racing a close must not resurrect it).
+let hist = null; // {path, rev, rows, sel, gen}
+let histGen = 0;
+
+async function openFileHistory(path, rev) {
+  const gen = ++histGen;
+  hist = { path, rev: rev || "", rows: [], sel: 0, gen };
+  $("history-title").textContent = "history — " + path + (rev ? " @ " + rev.slice(0, 8) : "");
+  $("history-list").innerHTML = `<li class="empty">loading…</li>`;
+  $("history-diff").innerHTML = "";
+  pushLayer("history", $("history"), { onKey: historyKey });
+  let body;
+  try {
+    body = await getJSON(
+      "/api/filelog?path=" + encodeURIComponent(path) + "&rev=" + encodeURIComponent(rev || "")
+    );
+  } catch (e) {
+    if (hist && hist.gen === gen)
+      $("history-list").innerHTML = `<li class="empty">error: ${esc(e.message || e)}</li>`;
+    return;
+  }
+  if (!hist || hist.gen !== gen) return; // closed or superseded meanwhile
+  hist.rows = body.rows || [];
+  if (!hist.rows.length) {
+    $("history-list").innerHTML = `<li class="empty">(no history)</li>`;
+    return;
+  }
+  renderHistoryList();
+  openHistoryDiff(0);
+}
+
+function closeHistory() {
+  hist = null;
+  closeLayer("history");
+}
+
+function historyKey(e) {
+  if (e.key === "Escape") {
+    closeHistory();
+    return true;
+  }
+  if (["j", "ArrowDown", "k", "ArrowUp"].includes(e.key)) {
+    if (hist && hist.rows.length) {
+      const d = e.key === "j" || e.key === "ArrowDown" ? 1 : -1;
+      openHistoryDiff(Math.max(0, Math.min(hist.rows.length - 1, hist.sel + d)));
+    }
+    e.preventDefault();
+    return true;
+  }
+  return true; // the overlay owns the keyboard entirely while open
+}
+
+function renderHistoryList() {
+  $("history-list").innerHTML = hist.rows
+    .map(
+      (r, i) =>
+        `<li data-i="${i}" class="${i === hist.sel ? "sel" : ""}">` +
+        `<button class="hshow" data-i="${i}">show</button>` +
+        `<span class="hsubj"><span class="st ${esc(r.status)}">${esc(r.status)}</span> ${esc(r.subject)}</span>` +
+        `<span class="hmeta">${esc(r.short)} · ${esc(r.author)} · ${versionWhen(r.time)}</span></li>`
+    )
+    .join("");
+  const sel = $("history-list").querySelector("li.sel");
+  if (sel) sel.scrollIntoView({ block: "nearest" });
+}
+
+async function openHistoryDiff(i) {
+  hist.sel = i;
+  renderHistoryList();
+  const r = hist.rows[i];
+  const gen = hist.gen;
+  // The /api/diff COMMIT form is already parent-vs-commit with A/D handling —
+  // exactly "this file's change at this commit". path is the file's name AT
+  // that commit (post-rename), old the parent-side name.
+  const q = new URLSearchParams({ sha: r.hash, path: r.path || hist.path, status: r.status });
+  if (r.old_path) q.set("old", r.old_path);
+  $("history-diff").innerHTML = `<div class="notice">loading…</div>`;
+  try {
+    const d = await getJSON("/api/diff?" + q);
+    // Stale-response guard: rapid j/k can land responses out of order, so a
+    // slow response for a commit the selection has since moved past must not
+    // clobber a newer diff already on screen — same overlay (gen) AND the
+    // selection still sitting on the row this response is for (i).
+    if (!hist || hist.gen !== gen || hist.sel !== i) return;
+    $("history-diff").innerHTML = diffHTML(d, $("history-diff").clientWidth);
+  } catch (e) {
+    if (hist && hist.gen === gen && hist.sel === i)
+      $("history-diff").innerHTML = `<div class="notice">error: ${esc(e.message || e)}</div>`;
+  }
+}
+
+$("history-list").addEventListener("click", (e) => {
+  if (!hist) return;
+  const show = e.target.closest("button.hshow");
+  if (show) {
+    const r = hist.rows[Number(show.dataset.i)];
+    closeHistory();
+    openCommitByHash(r.hash, r.short + " " + r.subject);
+    return;
+  }
+  const li = e.target.closest("li[data-i]");
+  if (li) openHistoryDiff(Number(li.dataset.i));
+});
+$("history").addEventListener("click", (e) => {
+  if (e.target.id === "history") closeHistory(); // backdrop closes, box does not
+});
+
+// --- blame overlay -----------------------------------------------------------
+// Fetch-then-open: a blame failure (untracked path, binary) surfaces on the
+// status line and the overlay never opens — nothing worse than an empty modal.
+async function openFileBlame(path, rev) {
+  let body;
+  try {
+    body = await getJSON(
+      "/api/blame?path=" + encodeURIComponent(path) + "&rev=" + encodeURIComponent(rev || "")
+    );
+  } catch (e) {
+    opLine("blame failed: " + (e.message || e), true);
+    return;
+  }
+  $("blame-title").textContent = "blame — " + path + (rev ? " @ " + rev.slice(0, 8) : " (working tree)");
+  const lines = body.lines || [];
+  let html = "";
+  let prev = null;
+  for (const l of lines) {
+    const first = l.hash !== prev;
+    prev = l.hash;
+    const gut = !first
+      ? ""
+      : l.hash
+        ? `<span class="bsha" data-h="${esc(l.hash)}" title="${esc(l.summary)}">${esc(l.short)}</span> ${esc(l.author)} · ${versionWhen(l.time)}`
+        : `<span class="bwork">working</span>`;
+    html +=
+      `<div class="bline${first ? " bfirst" : ""}">` +
+      `<span class="bgut">${gut}</span>` +
+      `<span class="bno">${l.line}</span>` +
+      `<span class="btext">${esc(l.text) || " "}</span></div>`;
+  }
+  $("blame-body").innerHTML = html || `<div class="notice">(empty file)</div>`;
+  pushLayer("blame", $("blame"), {}); // no onKey: the stack's default esc-closes applies
+  $("blame-body").scrollTop = 0;
+}
+
+$("blame-body").addEventListener("click", (e) => {
+  const sha = e.target.closest(".bsha");
+  if (!sha) return;
+  closeLayer("blame");
+  openCommitByHash(sha.dataset.h, sha.dataset.h.slice(0, 8));
+});
+$("blame").addEventListener("click", (e) => {
+  if (e.target.id === "blame") closeLayer("blame"); // backdrop closes, box does not
+});
+
 // --- AI review ---
 //
 // One overlay walks the whole lane — choose a tool, approve its command, wait
@@ -1019,18 +1240,21 @@ $("vbranches").addEventListener("click", (e) => {
 // and resolves it, and this only ever names a TOOL. What is shown in the
 // approval step is what the server said it would run.
 
-let rev = null; // {target, branch, tools, sel, phase, tool, label}
+let rev = null; // {target, branch, tools, sel, phase, tool, label, mode}
 
 function reviewTitle() {
   if (!rev) return "";
+  if (rev.mode === "conflict") return "AI resolve — " + (rev.label || rev.op || "");
   return "Review " + (rev.label || (rev.target === "working" ? "working changes" : rev.branch)) + " (AI)";
 }
 
 async function startReview(target, branch) {
   if (rev) {
     // Parked: the overlay is not on screen, so a silent refusal here looks
-    // like the menu row does nothing.
-    if (rev.parked) opLine("a review is already running in the background — open the chip to watch or cancel it", true);
+    // like the menu row does nothing. The parked run may be the OTHER mode
+    // (an AI resolve), so name it correctly rather than always saying
+    // "review".
+    if (rev.parked) opLine((rev.mode === "conflict" ? "an agent" : "a review") + " is already running in the background — open the chip to watch or cancel it", true);
     return;
   }
   if (state.op) {
@@ -1054,11 +1278,44 @@ async function startReview(target, branch) {
     opLine('review: no review tool configured — add a [[tools.command]] block with category = "review"', true);
     return;
   }
-  rev = { target, branch, label: info.label, tools, sel: 0, phase: "choose", tool: null };
+  rev = { mode: "review", target, branch, label: info.label, tools, sel: 0, phase: "choose", tool: null };
   pushLayer("review", $("review"), { onKey: reviewKey });
   if (tools.length === 1) reviewPick(tools[0]);
   else renderReview();
 }
+
+// startConflictAI is the conflict-mode twin of startReview above: same
+// overlay, same lane, but sourced from the paused-op tools endpoint and
+// dispatched to /api/conflict/complete instead of /api/review.
+async function startConflictAI() {
+  if (rev) {
+    if (rev.parked) opLine("an agent is already running in the background — open the chip to watch or cancel it", true);
+    return;
+  }
+  if (state.op) {
+    opLine("AI resolve: an operation is already running", true);
+    return;
+  }
+  let info;
+  try {
+    info = await getJSON("/api/conflict/tools");
+  } catch (e) {
+    opLine("AI resolve: " + (e.message || e), true);
+    return;
+  }
+  const tools = info.tools || [];
+  if (!tools.length) {
+    opLine('AI resolve: no headless conflict agent configured — add a [[tools.command]] block with category = "conflict_complete", mode = "capture", frontends = ["web"]', true);
+    return;
+  }
+  rev = { mode: "conflict", op: info.op, label: info.desc || info.op, tools, sel: 0, phase: "choose", tool: null };
+  pushLayer("review", $("review"), { onKey: reviewKey });
+  // ALWAYS show the chooser, even with a single agent: opening this dialog
+  // must never itself start an agent — clicking a row is the confirmation
+  // (user feedback: a menu click that instantly launches a run is a surprise).
+  renderReview();
+}
+$("conflict-ai").addEventListener("click", startConflictAI);
 
 function reviewPick(tool) {
   if (!rev) return;
@@ -1076,11 +1333,15 @@ function reviewPick(tool) {
 async function reviewRun(approve) {
   if (!rev) return;
   const { target, branch, tool } = rev;
+  const isConflict = rev.mode === "conflict";
   rev.phase = "running";
   renderReview();
   let resp;
   try {
-    resp = await postJSON("/api/review", { target, branch, tool: tool.name, approve: !!approve });
+    resp = await postJSON(
+      isConflict ? "/api/conflict/complete" : "/api/review",
+      isConflict ? { tool: tool.name, approve: !!approve } : { target, branch, tool: tool.name, approve: !!approve }
+    );
   } catch (e) {
     // Most often a 403: the server does not consider this command approved,
     // whatever the tools list said. Fall back to the approval step (the
@@ -1088,7 +1349,7 @@ async function reviewRun(approve) {
     if (!rev) return;
     rev.phase = "approve";
     renderReview();
-    opLine("review: " + (e.message || e), true);
+    opLine((isConflict ? "AI resolve: " : "review: ") + (e.message || e), true);
     return;
   }
   if (!rev) {
@@ -1096,25 +1357,43 @@ async function reviewRun(approve) {
     // simply returning would leave an agent running with nobody following
     // it, holding the single lane until it finished on its own.
     postJSON("/api/op/" + resp.op_id + "/cancel", {}).catch(() => {});
-    opLine("review cancelled");
+    opLine(isConflict ? "AI resolve cancelled" : "review cancelled");
     return;
   }
   rev.opID = resp.op_id;
   renderReview();
-  followOp(resp.op_id, "reviewing " + (rev.label || ""), "review", reviewDone);
+  followOp(resp.op_id,
+    (isConflict ? "AI resolving " : "reviewing ") + (rev.label || ""),
+    isConflict ? "conflict_complete" : "review",
+    reviewDone);
 }
 
-function reviewDone(ev) {
-  // Capture everything the lane owns BEFORE closing it: closeReviewLane
-  // clears both rev and a running task chip.
-  const title = reviewTitle() || "Review";
+function reviewDone(ev, kind) {
+  // kind is the op's own kind ("conflict_complete" | "review"), threaded in
+  // from handleOpEvent/state.op — NOT derived from rev.mode. reviewCancel()
+  // closes the lane (nulling rev) BEFORE its cancel round-trip completes, so
+  // the eventual done event for that cancel arrives with rev already gone;
+  // deriving the conflict/review distinction from rev here would silently
+  // fall back to "review" on every cancelled (or lost-connection) run,
+  // skipping the conflict-only refreshAfterOp() below and misreporting the
+  // outcome. rev/state.task are read only for DISPLAY (title, label, tool
+  // name) below and degrade gracefully once the lane is gone.
+  const isConflict = kind === "conflict_complete";
+  const title = isConflict
+    ? "Resolution overview — " + ((rev && rev.tool && rev.tool.name) || "agent")
+    : reviewTitle() || "Review";
   const parked = !!(rev && rev.parked);
   const label = (state.task && state.task.label) || (rev && rev.label) || "";
   closeReviewLane();
+  // A conflict run mutates the repo (or leaves it paused) whether it
+  // finished, was cancelled, or was lost — reality first, before anything
+  // else in this function decides what to tell the user.
+  if (isConflict) refreshAfterOp();
   if (parked) {
     // The whole point of parking is not being interrupted, so the result
     // WAITS: the chip goes loud, and opening it is the user's move.
     state.task = {
+      kind: isConflict ? "conflict" : "review",
       label,
       status: ev.ok ? "done" : ev.cancelled ? "cancelled" : "failed",
       title,
@@ -1130,16 +1409,26 @@ function reviewDone(ev) {
     // A failure still speaks: an error that vanished silently would be worse
     // than one line of clutter.
     if (ev.ok) hideOpLine();
-    else opLine("review failed: " + (ev.error || "unknown error"), true);
+    else opLine((isConflict ? "AI resolve failed: " : "review failed: ") + (ev.error || "unknown error"), true);
     return;
   }
   if (ev.ok) {
+    if (isConflict) {
+      // The agent may have finished its own work but left the sequencer
+      // paused (a partial resolve, or a multi-round rebase it didn't
+      // finish) — that is not a failure, but it is not "done" either.
+      if (ev.still_paused) opLine("the agent left the " + (ev.op || "operation") + " paused — finish it manually or run another agent", true);
+      else opLine((ev.op || "operation") + " completed");
+      if (ev.report) openReport(title, "", ev.report);
+      else if (!ev.still_paused) opLine((ev.op || "operation") + " completed — the agent reported no overview");
+      return;
+    }
     openReport(title, ev.path, ev.report);
     opLine(ev.summary || "review done");
     return;
   }
-  if (ev.cancelled) opLine("review cancelled");
-  else opLine("review failed: " + (ev.error || "unknown error"), true);
+  if (ev.cancelled) opLine(isConflict ? "AI resolve cancelled" : "review cancelled");
+  else opLine((isConflict ? "AI resolve failed: " : "review failed: ") + (ev.error || "unknown error"), true);
 }
 
 // --- parking a running review ---
@@ -1153,10 +1442,11 @@ function reviewDone(ev) {
 function parkReview() {
   if (!rev || rev.phase !== "running") return;
   rev.parked = true;
-  state.task = { label: rev.label || "", status: "running" };
+  const kind = rev.mode === "conflict" ? "conflict" : "review";
+  state.task = { kind, label: rev.label || "", status: "running" };
   closeLayer("review");
   renderTaskChip(false);
-  taskLine("review running in the background — click here to watch or cancel it");
+  taskLine(parkedTaskText());
 }
 
 function unparkReview() {
@@ -1181,19 +1471,20 @@ function renderTaskChip(blink) {
     el.classList.add("hidden");
     return;
   }
+  const noun = t.kind === "conflict" ? "AI resolve" : "review";
   el.classList.remove("hidden");
   if (t.status === "running") {
-    el.textContent = "⟳ review" + (t.label ? ": " + t.label : "");
-    el.title = "a review is running in the background — click to watch or cancel it";
+    el.textContent = "⟳ " + noun + (t.label ? ": " + t.label : "");
+    el.title = noun + " running in the background — click to watch or cancel it";
     el.classList.add("running");
     return;
   }
   if (t.status === "done") {
-    el.textContent = "✓ review ready";
-    el.title = "click to read the report";
+    el.textContent = "✓ " + noun + (t.kind === "conflict" ? " done" : " ready");
+    el.title = t.kind === "conflict" ? "click to read the overview" : "click to read the report";
     el.classList.add("ready");
   } else {
-    el.textContent = "✗ review failed";
+    el.textContent = "✗ " + noun + " failed";
     el.title = "click for the error";
     el.classList.add("failed");
   }
@@ -1207,10 +1498,11 @@ function collectTask() {
     unparkReview();
     return;
   }
+  const noun = t.kind === "conflict" ? "AI resolve" : "review";
   state.task = null;
   renderTaskChip(false);
   if (t.status === "done") openReport(t.title || "Review", t.path, t.report);
-  else opLine("review failed: " + (t.error || "unknown error"), true);
+  else opLine(noun + " failed: " + (t.error || "unknown error"), true);
 }
 
 $("task-chip").addEventListener("click", collectTask);
@@ -1251,7 +1543,12 @@ function renderReview() {
   const parkBtn = $("review-park");
   parkBtn.classList.toggle("hidden", rev.phase !== "running"); // nothing to background before it starts
   if (rev.phase === "choose") {
+    const intro =
+      rev.mode === "conflict"
+        ? `<div class="rnote rintro">These agents are registered for resolving this conflict. Click one to start the resolution — it runs in the background. Nothing runs until you pick; cancel below closes this dialog.</div>`
+        : "";
     body.innerHTML =
+      intro +
       "<ul>" +
       rev.tools
         .map(
@@ -1261,8 +1558,12 @@ function renderReview() {
         )
         .join("") +
       "</ul>";
-    hint.textContent = "choose a review tool · enter runs · esc cancels";
-    runBtn.classList.remove("hidden");
+    hint.textContent = rev.mode === "conflict" ? "click an agent to start · esc cancels" : "choose a review tool · enter runs · esc cancels";
+    // Conflict chooser: clicking a row IS the action, so a separate "run"
+    // button beside it only contradicts the copy (user report) — cancel is
+    // the sole bottom button. (Enter still runs the ↑/↓-selected row for
+    // keyboard users; the review chooser keeps its run button.)
+    runBtn.classList.toggle("hidden", rev.mode === "conflict");
     runBtn.textContent = "run";
     cancelBtn.textContent = "cancel";
     return;
@@ -1278,9 +1579,12 @@ function renderReview() {
     return;
   }
   body.innerHTML =
-    `<div class="rnote">${esc(rev.tool ? rev.tool.name : "")} is reading the diff — this can take a few minutes.` +
-    ` You can put it in the background and carry on reading the repo; the chip in the top bar lights up when the report is ready.</div>`;
-  hint.textContent = "⟳ reviewing… · esc backgrounds it";
+    `<div class="rnote">${esc(rev.tool ? rev.tool.name : "")} ` +
+    (rev.mode === "conflict"
+      ? "is resolving the conflicts and completing the operation — this can take a few minutes."
+      : "is reading the diff — this can take a few minutes.") +
+    ` You can put it in the background and carry on reading the repo; the chip in the top bar lights up when it finishes.</div>`;
+  hint.textContent = rev.mode === "conflict" ? "⟳ resolving… · esc backgrounds it" : "⟳ reviewing… · esc backgrounds it";
   runBtn.classList.add("hidden"); // nothing to run twice
   cancelBtn.textContent = "cancel the run";
 }
@@ -1805,22 +2109,25 @@ function buildStatusEntries() {
 function wtRowHTML(i) {
   const sel = i === state.cursor ? " sel" : "";
   const c = state.wt.counts;
+  // parts are pre-escaped HTML fragments (counts are numbers, labels are
+  // literals) so the conflicted one can carry its highlight class.
   const parts = [];
   if (c.staged) parts.push(c.staged + " staged");
   if (c.unstaged) parts.push(c.unstaged + " changed");
   if (c.untracked) parts.push(c.untracked + " untracked");
-  if (c.conflicted) parts.push(c.conflicted + " conflicted");
+  if (c.conflicted) parts.push(`<span class="conflict-count">${c.conflicted} conflicted</span>`);
   return (
     `<div class="crow wt${sel}" data-i="${i}">` +
     `<span class="graph">${flatDotSVG("#e0c06c")}</span>` +
     `<span class="subj">Working tree</span>` +
-    `<span class="meta">${esc(parts.join(" · "))}</span></div>`
+    `<span class="meta">${parts.join(" · ")}</span></div>`
   );
 }
 
 // --- commits pane (virtualized: only visible rows exist in the DOM) ---
 
 function renderCommits() {
+  if (state.cfilter) return renderFilteredCommits();
   const scroll = $("commits-scroll");
   const total = state.rows.length + wtCount();
   $("commits-spacer").style.height = total * ROW_H + wtExtra() + "px";
@@ -1836,18 +2143,102 @@ function renderCommits() {
   maybeLoadMore(last - wtCount());
 }
 
-function rowHTML(row, i) {
+function rowHTML(row, i, flat) {
   const sel = i === state.cursor ? " sel" : "";
+  const fl = row.hash === state.flashHash ? " flash" : "";
   const refs = (row.refs || [])
     .map((r) => `<span class="ref ${r.kind}${r.head ? " head" : ""}">${esc(r.name)}</span>`)
     .join("");
   const when = new Date(row.time * 1000).toISOString().slice(0, 10);
+  const graph = flat
+    ? (() => { const col = runes(row.cells || "").indexOf("●"); return flatDotSVG(laneColor(col >= 0 ? col >> 1 : 0)); })()
+    : graphHTML(row, i - wtCount());
   return (
-    `<div class="crow${sel}" data-i="${i}">` +
-    `<span class="graph">${graphHTML(row, i - wtCount())}</span>` +
+    `<div class="crow${sel}${fl}" data-i="${i}">` +
+    `<span class="graph">${graph}</span>` +
     `<span class="subj">${refs}${esc(row.subject)}</span>` +
     `<span class="meta">${esc(row.author)} · ${row.short} · ${when}</span></div>`
   );
+}
+
+// --- commits quick filter (/) ----------------------------------------------
+// Client-only narrowing of the LOADED feed rows: case-insensitive substring
+// on subject and author, sha PREFIX when the query is hex. Filtered rows
+// render flat — lanes are meaningless on a subset. Deeper search is always
+// an explicit click on the hint row, never an automatic git walk.
+function openCommitFilter() {
+  if (state.layout === "diff") {
+    opLine("filter works on the commit list — press esc to it first", false);
+    return; // commits pane is off-screen
+  }
+  $("cfilter").classList.remove("hidden");
+  const input = $("cfilter-input");
+  input.value = state.cfilter ? state.cfilter.q : "";
+  applyCommitFilter();
+  input.focus();
+}
+
+function closeCommitFilter() {
+  const open = !$("cfilter").classList.contains("hidden");
+  if (!open && !state.cfilter) return;
+  state.cfilter = null;
+  $("cfilter-input").value = "";
+  $("cfilter-input").blur(); // a focused input would trap all global keys
+  $("cfilter").classList.add("hidden");
+  // moveCursor(0) re-renders AND rescrolls to the selected row — but only
+  // steers the commits list while that pane has focus; otherwise plain render.
+  if (state.pane === "commits") moveCursor(0);
+  else renderCommits();
+}
+
+function applyCommitFilter() {
+  const q = $("cfilter-input").value.trim().toLowerCase();
+  if (!q) {
+    state.cfilter = null; // empty query = unfiltered, bar stays open
+    $("cfilter-count").textContent = "";
+    renderCommits();
+    return;
+  }
+  const hexish = /^[0-9a-f]+$/.test(q);
+  const matches = [];
+  state.rows.forEach((r, i) => {
+    if (
+      r.subject.toLowerCase().includes(q) ||
+      (r.author || "").toLowerCase().includes(q) ||
+      (hexish && r.hash.startsWith(q))
+    )
+      matches.push(i);
+  });
+  state.cfilter = { q, matches };
+  $("cfilter-count").textContent = matches.length + " / " + state.rows.length;
+  $("commits-scroll").scrollTop = 0;
+  renderCommits();
+}
+
+// Filtered render: the same virtualized window, over the match list, plus a
+// trailing hint row stating coverage. The working-tree row is not a commit
+// and stays out of a filtered list.
+function renderFilteredCommits() {
+  const scroll = $("commits-scroll");
+  const m = state.cfilter.matches;
+  const total = m.length + 1; // + hint row
+  $("commits-spacer").style.height = total * ROW_H + "px";
+  const first = Math.max(0, Math.floor(scroll.scrollTop / ROW_H) - 10);
+  const last = Math.min(total, Math.ceil((scroll.scrollTop + scroll.clientHeight) / ROW_H) + 10);
+  const win = $("commits-window");
+  win.style.top = first * ROW_H + "px";
+  let html = "";
+  for (let i = first; i < last; i++) {
+    if (i === m.length) {
+      const tail = state.canLoadMore
+        ? ` — <a id="cfilter-more">load more</a> (ctrl+enter)`
+        : " — all loaded commits searched";
+      html += `<div class="crow hintrow">${m.length} of ${state.rows.length} loaded commits match${tail}</div>`;
+      continue;
+    }
+    html += rowHTML(state.rows[m[i]], m[i] + wtCount(), true);
+  }
+  win.innerHTML = html;
 }
 
 function graphHTML(row, feedIdx) {
@@ -1950,7 +2341,8 @@ async function loadCommits(more) {
   // the very response it scopes rather than tracked client-side. A reload or
   // a second tab therefore shows the chip without asking for it.
   setSoloChip(body.solo || "");
-  renderCommits();
+  if (state.cfilter) applyCommitFilter(); // recompute over the grown/reloaded feed (ends in renderCommits)
+  else renderCommits();
 }
 
 // --- one-line prompt ---
@@ -2062,6 +2454,7 @@ function enterFilesStage() {
   $("diff-title").textContent = "";
   $("diff-body").innerHTML = "";
   state.lastDiff = null;
+  state.diffCtx = null;
 }
 
 async function openCommit(i) {
@@ -2096,6 +2489,65 @@ async function openCommitByHash(hash, title) {
   $("files-header").textContent = title;
   renderFiles();
   focusPane();
+}
+
+// --- goto commit (#) --------------------------------------------------------
+// Reveal-first: the point is the commit IN ITS PLACE in history. Paging stops
+// the moment a page adds nothing (feed exhausted — e.g. a solo scope that
+// excludes the commit), then falls back to opening the detail directly so the
+// user always lands on the commit.
+function gotoCommitPrompt() {
+  openPrompt({
+    title: "Goto commit — sha, branch, tag, or any rev",
+    placeholder: "e.g. a1b2c3d or main~3",
+    onSubmit: (rev) => gotoCommit(rev),
+  });
+}
+
+async function gotoCommit(rev) {
+  let res;
+  try {
+    res = await getJSON("/api/resolve?rev=" + encodeURIComponent(rev));
+  } catch (e) {
+    opLine("cannot resolve " + rev + ": " + (e.message || e), true);
+    return;
+  }
+  const gen = ++state.gotoGen;
+  let guard = 0;
+  // goto is explicit (the user typed a rev they expect to exist), so the
+  // bound is generous — 100 pages vs. the branch-tip jump's 20 — but still
+  // finite: an all-branches feed on a huge repo must not page to exhaustion.
+  while (guard < 100) {
+    const idx = state.rows.findIndex((r) => r.hash === res.hash);
+    if (idx >= 0) return revealCommit(idx);
+    if (!state.canLoadMore) break;
+    const before = state.rows.length;
+    await loadCommits(true);
+    if (gen !== state.gotoGen) return; // superseded: re-root or a second goto
+    if (state.rows.length === before) break; // no growth: feed exhausted
+    guard++;
+  }
+  opLine("commit is not in the current list (scope?) — opening its detail", false);
+  openCommitByHash(res.hash, res.hash.slice(0, 8) + " " + (res.subject || ""));
+}
+
+function revealCommit(feedIdx) {
+  closeCommitFilter(); // reveal happens in the FULL list
+  // goto is a jump command: land the user ON the row, not behind whatever
+  // stage they were drilled into (diff/files would otherwise hide the
+  // commits pane entirely — display:none — so the scroll+flash below would
+  // target an invisible pane). Bounded at 2 steps: diff -> files -> list.
+  while (state.layout !== "list") drillOut();
+  const i = feedIdx + wtCount();
+  state.cursor = i;
+  const scroll = $("commits-scroll");
+  scroll.scrollTop = Math.max(0, i * ROW_H + wtExtra() - scroll.clientHeight / 2);
+  state.flashHash = state.rows[feedIdx].hash;
+  renderCommits();
+  setTimeout(() => {
+    state.flashHash = "";
+    renderCommits();
+  }, 1700);
 }
 
 // openStashDetail opens a stash's changes: the stash commit's tracked
@@ -2249,6 +2701,7 @@ function renderFiles() {
   if (state.filesMode !== "status") {
     $("files-actions").classList.add("hidden");
     $("commit-box").classList.add("hidden");
+    $("conflict-note").classList.add("hidden");
     $("files-list").innerHTML = state.files
       .map(
         (f, i) =>
@@ -2258,10 +2711,27 @@ function renderFiles() {
       .join("");
     return;
   }
-  $("files-actions").classList.remove("hidden");
-  $("commit-box").classList.remove("hidden");
-  $("commit-btn").disabled = !(state.wt && state.wt.counts.staged > 0) || !!state.op;
-  $("stash-btn").disabled = !state.wt || !!state.op;
+  // While a sequencer op is paused, the commit box AND the mass staging
+  // buttons step aside: finishing the op is the banner's Continue (git
+  // supplies the merge message), "stage all" would mark every conflict
+  // resolved with the markers still inside the files, and "unstage all"
+  // would pull git's auto-merged results back out of the coming merge
+  // commit. Per-file actions (mark resolved) stay available.
+  if (state.conflict) {
+    $("files-actions").classList.add("hidden");
+    $("commit-box").classList.add("hidden");
+    const note = $("conflict-note");
+    note.classList.remove("hidden");
+    note.textContent = state.conflict.conflicted
+      ? "resolving " + state.conflict.op + " — pick through the conflicts below, then press Continue above"
+      : "all conflicts resolved — press Continue above to finish the " + state.conflict.op;
+  } else {
+    $("files-actions").classList.remove("hidden");
+    $("conflict-note").classList.add("hidden");
+    $("commit-box").classList.remove("hidden");
+    $("commit-btn").disabled = !(state.wt && state.wt.counts.staged > 0) || !!state.op;
+    $("stash-btn").disabled = !state.wt || !!state.op;
+  }
   let html = "";
   let lastSection = "";
   state.statusEntries.forEach((f, i) => {
@@ -2298,6 +2768,7 @@ async function openFile(i) {
   updateDiffNav();
   if (state.filesMode === "status") return openStatusDiff(i);
   const f = state.files[i];
+  state.diffCtx = { path: f.path, rev: state.filesMode === "compare" ? state.compare.bHash : f.sha || state.fileSha };
   const q = new URLSearchParams({ path: f.path, status: f.status });
   if (state.filesMode === "compare") {
     q.set("left", state.compare.aHash);
@@ -2320,12 +2791,9 @@ async function openFile(i) {
 async function openStatusDiff(i) {
   clearDiffHunks();
   const f = state.statusEntries[i];
+  state.diffCtx = f.section === "conflicts" ? null : { path: f.path, rev: "" };
   $("diff-title").textContent = f.path;
-  if (f.section === "conflicts") {
-    $("diff-body").innerHTML = `<div class="notice">conflicted — resolve in the TUI</div>`;
-    updateDiffNav();
-    return;
-  }
+  if (f.section === "conflicts") return openConflictPicker(f);
   const q = new URLSearchParams({ wt: f.section === "staged" ? "staged" : "unstaged", path: f.path });
   if (f.orig_path) q.set("old", f.orig_path);
   $("diff-body").innerHTML = `<div class="notice">loading…</div>`;
@@ -2355,10 +2823,12 @@ function exitStatusToList() {
   $("files-list").innerHTML = "";
   $("files-actions").classList.add("hidden");
   $("commit-box").classList.add("hidden");
+  $("conflict-note").classList.add("hidden");
   $("files-header").textContent = "";
   $("diff-title").textContent = "";
   $("diff-body").innerHTML = "";
   state.lastDiff = null; // a resize must not resurrect the cleared diff
+  state.diffCtx = null;
   setLayout("list");
   focusPane();
 }
@@ -2404,19 +2874,13 @@ function hunkAttr(r) {
   return r.hunk == null || !diffHunks ? "" : ` data-hunk="${r.hunk}"`;
 }
 
-function renderDiff(d) {
-  state.lastDiff = d; // re-rendered on window resize (layout is width-dependent)
-  state.diffBlockIdx = -1;
-  if (d.binary) {
-    $("diff-body").innerHTML = `<div class="notice">binary file</div>`;
-    updateDiffNav();
-    return;
-  }
-  if (d.too_large) {
-    $("diff-body").innerHTML = `<div class="notice">diff too large</div>`;
-    updateDiffNav();
-    return;
-  }
+// diffHTML builds the diff table for a /api/diff response — shared by the
+// main diff pane and the history overlay. paneWidth picks side-by-side vs
+// unified exactly as before. Hunk classes no-op when diffHunks is null, so
+// non-staging consumers get a plain read-only table.
+function diffHTML(d, paneWidth) {
+  if (d.binary) return `<div class="notice">binary file</div>`;
+  if (d.too_large) return `<div class="notice">diff too large</div>`;
   const rows = d.rows || [];
   // An all-new or all-deleted file renders single-column: a side-by-side
   // with one permanently empty side wastes half the pane and forces harsh
@@ -2435,7 +2899,7 @@ function renderDiff(d) {
         `<td class="no ${side}">${no || ""}</td>` +
         `<td class="side ${side}">${markSpans(text, spans, side)}</td></tr>`;
     }
-  } else if ($("diff-pane").clientWidth < 950) {
+  } else if (paneWidth < 950) {
     // Unified: below ~950px each side-by-side half is too narrow to read
     // (heavy wrapping, context text duplicated on both sides). One
     // full-width column; a changed pair becomes a del row then an add row,
@@ -2469,7 +2933,13 @@ function renderDiff(d) {
   }
   html += "</table>";
   if (d.truncated) html += `<div class="notice">alignment truncated (size guard)</div>`;
-  $("diff-body").innerHTML = html;
+  return html;
+}
+
+function renderDiff(d) {
+  state.lastDiff = d; // re-rendered on window resize (layout is width-dependent)
+  state.diffBlockIdx = -1;
+  $("diff-body").innerHTML = diffHTML(d, $("diff-pane").clientWidth);
   updateDiffNav();
 }
 
@@ -2486,6 +2956,7 @@ function updateDiffNav() {
   const any = diffChangeBlocks().length > 0;
   $("prev-change").disabled = !any;
   $("next-change").disabled = !any;
+  $("hist-btn").disabled = $("blame-btn").disabled = !state.diffCtx;
 }
 
 function stepFile(delta) {
@@ -2545,7 +3016,9 @@ function hunkEligible(f) {
 
 function clearDiffHunks() {
   diffHunks = null;
+  conflictPick = null;
   renderHunkBar();
+  renderResolveBar();
 }
 
 function renderHunkBar() {
@@ -2635,6 +3108,144 @@ $("diff-body").addEventListener("click", (e) => {
   paintHunkPicks();
 });
 
+// ---- conflict block picker (conflict surface) -----------------------------
+// A conflicted row opens the file's marker regions as pickable ours/theirs
+// blocks (GET /api/conflict-hunks). Picks are POSITIONAL against the exact
+// bytes the server hashed; resolving POSTs the full pick set and the server
+// writes + stages via engine.ResolveConflictHunks. A 409 means the file
+// moved: reload the picker (the stage-hunks rule).
+
+let conflictPick = null; // {path, hash, count, choices: Array<null|"ours"|"theirs">} — set only while the picker is open
+
+async function openConflictPicker(f) {
+  clearDiffHunks(); // also nulls conflictPick — order matters, set it after
+  $("diff-title").textContent = f.path + " — resolve";
+  $("diff-body").innerHTML = `<div class="notice">loading…</div>`;
+  updateDiffNav();
+  let d;
+  try {
+    d = await getJSON("/api/conflict-hunks?" + new URLSearchParams({ path: f.path }));
+  } catch (e) {
+    // typed 422 refusal (binary / markers gone): show the reason + the way out
+    $("diff-body").innerHTML =
+      `<div class="notice">${esc(e.message || e)}</div>` +
+      `<div class="notice">right-click the file → mark resolved when it is done</div>`;
+    return;
+  }
+  conflictPick = { path: f.path, hash: d.hash, count: d.count, choices: new Array(d.count).fill(null) };
+  let html = '<div id="cf-doc">';
+  for (const it of d.items) {
+    if (it.kind === "text") {
+      html += `<pre class="cf-text">${esc((it.lines || []).join("\n"))}</pre>`;
+    } else {
+      html += `<div class="cf-block" data-b="${it.index}">` +
+        `<div class="cf-side cf-ours" data-side="ours"><div class="cf-tag">ours${cfSideCount(it.ours)}</div><pre>${cfSideHTML(it.ours)}</pre></div>` +
+        `<div class="cf-side cf-theirs" data-side="theirs"><div class="cf-tag">theirs${cfSideCount(it.theirs)}</div><pre>${cfSideHTML(it.theirs)}</pre></div>` +
+        `</div>`;
+    }
+  }
+  $("diff-body").innerHTML = html + "</div>";
+  renderResolveBar();
+}
+
+// cfSideCount renders the tag's " · N lines" suffix — the disambiguator when
+// both sides are visually blank (a conflict between runs of empty lines
+// otherwise reads as nothing vs nothing).
+function cfSideCount(lines) {
+  const n = (lines || []).length;
+  return n === 0 ? " · empty" : n === 1 ? " · 1 line" : ` · ${n} lines`;
+}
+
+// cfSideHTML renders one side's lines with emptiness made visible: a side
+// with no lines at all says so (this side deletes the region), an empty line
+// shows a dim ¶, and a whitespace-only line shows its spaces/tabs as ·/→ so
+// "3 spaces" and "empty" stop looking identical. A trailing \r (CRLF file —
+// ParseConflict keeps it) is ignored for the blank test so a "\r" line reads
+// as empty rather than invisible.
+function cfSideHTML(lines) {
+  if (!lines || !lines.length) return '<span class="cf-empty">(empty — this side has no lines)</span>';
+  return lines
+    .map((ln) => {
+      const bare = ln.replace(/\r$/, "");
+      if (!/^\s*$/.test(bare)) return esc(ln);
+      const glyphs = bare.length ? bare.replace(/\t/g, "→").replace(/ /g, "·") : "¶";
+      return `<span class="cf-ws">${esc(glyphs)}</span>`;
+    })
+    .join("\n");
+}
+
+function paintConflictPicks() {
+  document.querySelectorAll("#cf-doc .cf-block").forEach((el) => {
+    const choice = conflictPick && conflictPick.choices[Number(el.dataset.b)];
+    el.classList.toggle("decided", !!choice);
+    el.querySelectorAll(".cf-side").forEach((s) =>
+      s.classList.toggle("picked", !!choice && s.dataset.side === choice));
+  });
+  renderResolveBar();
+}
+
+function renderResolveBar() {
+  const bar = $("resolve-bar");
+  if (!conflictPick) { bar.classList.add("hidden"); return; }
+  bar.classList.remove("hidden");
+  const n = conflictPick.choices.filter(Boolean).length;
+  $("resolve-count").textContent = n + "/" + conflictPick.count + " picked";
+  $("resolve-go").disabled = n !== conflictPick.count;
+}
+
+function setAllConflictPicks(side) {
+  if (!conflictPick) return;
+  conflictPick.choices.fill(side);
+  paintConflictPicks();
+}
+
+async function resolveConflictPicked() {
+  const v = conflictPick;
+  if (!v || v.choices.some((c) => !c)) return;
+  let resp;
+  try {
+    resp = await postJSON("/api/resolve-hunks", { path: v.path, picks: v.choices, hash: v.hash });
+  } catch (e) {
+    opLine("error: " + (e.message || e), true);
+    // 409 = the file moved under the picker: reload it for fresh blocks
+    if (/file changed/.test(e.message || "")) {
+      const i = state.statusEntries.findIndex((f) => f.path === v.path && f.section === "conflicts");
+      if (i >= 0) { state.fileCursor = i; openStatusDiff(i); }
+    }
+    return;
+  }
+  const path = v.path;
+  conflictPick = null;
+  applyStatus(resp); // the 200 body IS a fresh /api/status payload
+  reconcileStatusView();
+  renderFiles();
+  stepToNextConflict(path);
+}
+
+// After a resolve: the same path if somehow still conflicted, else the next
+// conflicted file, else whatever the cursor lands on (the resolved file
+// moved to Staged).
+function stepToNextConflict(path) {
+  let i = state.statusEntries.findIndex((f) => f.path === path && f.section === "conflicts");
+  if (i < 0) i = state.statusEntries.findIndex((f) => f.section === "conflicts");
+  if (i >= 0) { state.fileCursor = i; renderFiles(); openStatusDiff(i); return; }
+  const f = state.statusEntries[state.fileCursor];
+  if (state.filesMode === "status" && f) openStatusDiff(state.fileCursor);
+  else { $("diff-title").textContent = ""; $("diff-body").innerHTML = ""; updateDiffNav(); }
+}
+
+$("resolve-ours").addEventListener("click", () => setAllConflictPicks("ours"));
+$("resolve-theirs").addEventListener("click", () => setAllConflictPicks("theirs"));
+$("resolve-go").addEventListener("click", resolveConflictPicked);
+$("diff-body").addEventListener("click", (e) => {
+  if (!conflictPick) return;
+  if (!getSelection().isCollapsed) return; // selecting text is not a pick
+  const side = e.target.closest(".cf-side");
+  if (!side) return;
+  conflictPick.choices[Number(side.closest(".cf-block").dataset.b)] = side.dataset.side;
+  paintConflictPicks();
+});
+
 // --- focus + keyboard ---
 
 function focusPane() {
@@ -2644,6 +3255,30 @@ function focusPane() {
 
 function moveCursor(delta) {
   if (state.pane === "commits") {
+    if (state.cfilter) {
+      // Filtered mode: the spacer/window are sized to matches.length + 1
+      // (the hint row), not the full feed, so navigation and scroll math
+      // must operate on POSITION WITHIN THE MATCH LIST rather than the
+      // full-feed display index state.cursor otherwise holds.
+      const m = state.cfilter.matches;
+      if (!m.length) return;
+      let pos = m.findIndex((idx) => idx + wtCount() === state.cursor);
+      if (pos === -1) {
+        // Cursor isn't on a match (filter just narrowed, or a fresh open):
+        // snap to the nearest match at or after it, else the last match.
+        pos = m.findIndex((idx) => idx + wtCount() >= state.cursor);
+        if (pos === -1) pos = m.length - 1;
+      }
+      pos = Math.max(0, Math.min(m.length - 1, pos + delta));
+      state.cursor = m[pos] + wtCount();
+      const scroll = $("commits-scroll");
+      const top = pos * ROW_H;
+      if (top < scroll.scrollTop) scroll.scrollTop = top;
+      else if (top + ROW_H > scroll.scrollTop + scroll.clientHeight)
+        scroll.scrollTop = top + ROW_H - scroll.clientHeight;
+      renderCommits();
+      return;
+    }
     const total = state.rows.length + wtCount();
     if (!total) return;
     state.cursor = Math.max(0, Math.min(total - 1, state.cursor + delta));
@@ -2692,10 +3327,22 @@ document.addEventListener("keydown", (e) => {
     e.preventDefault();
     moveCursor(-1);
   } else if (e.key === "Enter") {
-    if (state.pane === "commits") openCommit(state.cursor);
-    else if (state.filesMode === "status" ? state.statusEntries.length : state.files.length) openFile(state.fileCursor);
+    if (state.pane === "commits") {
+      // A zero-match filter leaves state.cursor pointing at an invisible
+      // row (or the hint row) — nothing there to open.
+      if (!(state.cfilter && state.cfilter.matches.length === 0)) openCommit(state.cursor);
+    } else if (state.filesMode === "status" ? state.statusEntries.length : state.files.length) openFile(state.fileCursor);
   } else if (e.key === "Escape") {
-    drillOut();
+    // The filter bar can be open with its input unfocused (a click landed
+    // back on a commit row) — drillOut() no-ops in list layout, so Escape
+    // would otherwise do nothing at all. Clearing the filter takes priority
+    // over the layered close in list layout; diff/files behavior (drillOut)
+    // is unchanged.
+    if (state.layout === "list" && (!$("cfilter").classList.contains("hidden") || state.cfilter)) {
+      closeCommitFilter();
+    } else {
+      drillOut();
+    }
   } else if (e.key === "g") {
     toggleGraphMode();
   } else if (e.key === "b") {
@@ -2710,6 +3357,11 @@ document.addEventListener("keydown", (e) => {
     if (!state.op) refreshAfterOp(); // full soft reload: repo, sidebar, status, commits
   } else if (e.key === "s" || e.key === "u") {
     stageFocused(e.key === "u");
+  } else if (e.key === "/") {
+    e.preventDefault(); // the browser's quick-find would grab it
+    openCommitFilter();
+  } else if (e.key === "#") {
+    gotoCommitPrompt();
   }
 });
 
@@ -2721,6 +3373,7 @@ $("foot").addEventListener("click", (e) => {
     case "back": drillOut(); break;
     case "sidebar": toggleSidebar(); break;
     case "graph": toggleGraphMode(); break;
+    case "filter": openCommitFilter(); break;
     case "stage": stageFocused(false); break;
     case "unstage": stageFocused(true); break;
     case "pull": doPull(); break;
@@ -2732,9 +3385,27 @@ $("foot").addEventListener("click", (e) => {
 });
 
 $("commits-scroll").addEventListener("scroll", renderCommits);
-$("commits-window").addEventListener("click", (e) => {
+$("commits-window").addEventListener("click", async (e) => {
+  if (e.target.id === "cfilter-more") {
+    await loadCommits(true); // appends server-side; loadCommits re-filters
+    return;
+  }
   const row = e.target.closest(".crow");
-  if (row) openCommit(Number(row.dataset.i));
+  if (row && row.dataset.i !== undefined) openCommit(Number(row.dataset.i));
+});
+$("cfilter-input").addEventListener("input", applyCommitFilter);
+// Escape must be handled HERE: the global router's form-field guard eats
+// every key typed in an input, so it can never see this one. Ctrl+Enter is
+// the keyboard path to the hint row's "load more" — the TUI's ctrl+f
+// search-deeper analog; loadCommits re-filters over the grown feed.
+$("cfilter-input").addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    e.preventDefault();
+    closeCommitFilter();
+  } else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+    if (state.canLoadMore) loadCommits(true);
+  }
 });
 // Right-click a commit: copy rows plus the single-commit history edits. The
 // row is selected first (the files-list menu's rule) so the menu is visibly
@@ -2813,9 +3484,28 @@ $("help-box").addEventListener("click", (e) => e.stopPropagation()); // allow se
 // section), bulk actions, copy path. Selects the row for feedback without
 // opening its diff.
 $("files-list").addEventListener("contextmenu", (e) => {
-  if (state.filesMode !== "status") return;
   const li = e.target.closest("li");
   if (!li || li.dataset.i === undefined) return;
+  if (state.filesMode !== "status") {
+    // commit / compare rows: read-only file actions. rev picks what "here"
+    // means — the commit being viewed, or the compare's right tip.
+    const f = state.files[Number(li.dataset.i)];
+    if (!f) return;
+    e.preventDefault();
+    state.fileCursor = Number(li.dataset.i);
+    renderFiles();
+    const rev = state.filesMode === "compare" ? state.compare.bHash : f.sha || state.fileSha;
+    showCtxMenu(
+      [
+        { label: "file history", act: () => openFileHistory(f.path, rev) },
+        { label: "blame at this commit", act: () => openFileBlame(f.path, rev) },
+        { label: "copy path", act: () => copyText(f.path) },
+      ],
+      e.clientX,
+      e.clientY
+    );
+    return;
+  }
   e.preventDefault();
   const i = Number(li.dataset.i);
   const f = state.statusEntries[i];
@@ -2824,17 +3514,25 @@ $("files-list").addEventListener("contextmenu", (e) => {
   renderFiles();
   const items = [];
   if (f.section === "staged") items.push({ label: "unstage " + f.path, act: () => stage({ paths: [f.path], unstage: true }) });
-  else if (f.section !== "conflicts") items.push({ label: "stage " + f.path, act: () => stage({ paths: [f.path] }) });
+  else if (f.section === "conflicts") items.push({ label: "mark resolved (stage as-is)", act: () => stage({ paths: [f.path] }) });
+  else items.push({ label: "stage " + f.path, act: () => stage({ paths: [f.path] }) });
   items.push({ label: "copy path", act: () => copyText(f.path) });
-  items.push({ label: "stage all", act: () => stage({ all: true }) });
-  if (state.statusEntries.some((x) => x.section === "staged")) {
-    items.push({
-      label: "unstage all",
-      act: () => {
-        const paths = state.statusEntries.filter((x) => x.section === "staged").map((x) => x.path);
-        if (paths.length) stage({ paths, unstage: true }); // engine.Stage{All} can't unstage
-      },
-    });
+  items.push({ label: "file history", act: () => openFileHistory(f.path, "") });
+  items.push({ label: "blame (working tree)", act: () => openFileBlame(f.path, "") });
+  // the mass rows vanish while an op is paused — same footguns as the
+  // hidden #files-actions buttons (stage all = markers staged as resolved,
+  // unstage all = auto-merged results pulled out of the merge commit)
+  if (!state.conflict) {
+    items.push({ label: "stage all", act: () => stage({ all: true }) });
+    if (state.statusEntries.some((x) => x.section === "staged")) {
+      items.push({
+        label: "unstage all",
+        act: () => {
+          const paths = state.statusEntries.filter((x) => x.section === "staged").map((x) => x.path);
+          if (paths.length) stage({ paths, unstage: true }); // engine.Stage{All} can't unstage
+        },
+      });
+    }
   }
   if (f.section === "changes") {
     items.push({
@@ -2863,14 +3561,126 @@ $("unstage-all").addEventListener("click", () => {
   const paths = state.statusEntries.filter((f) => f.section === "staged").map((f) => f.path);
   if (paths.length) stage({ paths, unstage: true }); // engine.Stage{All} can't unstage
 });
+$("hist-btn").addEventListener("click", () => {
+  if (state.diffCtx) openFileHistory(state.diffCtx.path, state.diffCtx.rev);
+});
+$("blame-btn").addEventListener("click", () => {
+  if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
+});
 $("commit-btn").addEventListener("click", doCommit);
 $("pull-btn").addEventListener("click", doPull);
 $("push-btn").addEventListener("click", doPush);
 $("stash-btn").addEventListener("click", doStash);
+$("conflict-continue").addEventListener("click", () => {
+  if (opBusy() || !state.conflict) return;
+  startOp({ op: "continue" }, "continue " + state.conflict.op);
+});
+$("conflict-abort").addEventListener("click", () => {
+  if (opBusy() || !state.conflict) return;
+  const op = state.conflict.op;
+  showLocalConfirm(
+    "Abort the paused " + op + "? Conflict resolutions so far are discarded.",
+    ["abort " + op, "cancel"],
+    (o) => { if (o !== "cancel") startOp({ op: "abort" }, "abort " + op); }
+  );
+});
+$("bigrepo-graphoff").onclick = async () => {
+  try {
+    await postJSON("/api/ui-config", { show_graph: "off", commit_sort: "plain" });
+  } catch (e) {
+    opLine("error: " + (e.message || e), true);
+    return; // banner stays; the action can be retried
+  }
+  state.graphMode = "off";
+  lsSet("gg.graph", "off"); // this browser matches immediately and keeps matching
+  await loadCommits(false); // sort changed server-side — reload the feed
+  fetchHealth();
+};
+$("bigrepo-cgraph").onclick = () => startOp({ op: "commit-graph" }, "write commit-graph");
+// sessionStorage survives the re-root reload, so the key is scoped per repo —
+// otherwise "not now" in one repo would suppress the banner in another.
+function bigrepoLaterKey() {
+  return "gg.bigrepo.later:" + (state.repo ? state.repo.worktree : "");
+}
+$("bigrepo-later").onclick = () => {
+  ssSet(bigrepoLaterKey(), "1"); // session-only, re-evaluated next visit
+  setBigRepoBarHidden(true);
+};
+$("bigrepo-never").onclick = async () => {
+  // dismiss only the ids the banner is currently showing
+  const groups = bigRepoGroups();
+  const ids = [];
+  if (groups.includes("graphoff")) ids.push("web_graph_off_suggest");
+  if (groups.includes("cgraph")) ids.push("commit_graph_recommend");
+  try {
+    for (const id of ids) await postJSON("/api/notice-dismiss", { id });
+  } catch (e) {
+    opLine("error: " + (e.message || e), true);
+    return;
+  }
+  fetchHealth();
+};
 window.addEventListener("resize", () => {
   renderCommits();
   if (state.lastDiff) renderDiff(state.lastDiff); // unified↔side-by-side is width-dependent
 });
+
+// fetchHealth loads /api/health and re-renders the big-repo banner. With
+// applyDefault (boot only), a repo-config show_graph=off becomes the initial
+// graph mode when this browser has no localStorage override — [ui] show_graph
+// honored as the web default, the TUI-parity fix. Failures are silent: no
+// banner, existing localStorage-or-default behavior (the TUI's "health never
+// surfaces errors" rule).
+async function fetchHealth(applyDefault) {
+  try {
+    state.health = await getJSON("/api/health");
+  } catch {
+    state.health = null;
+  }
+  if (applyDefault && state.health && lsGet("gg.graph") === null && state.health.show_graph === "off") {
+    state.graphMode = "off";
+  }
+  renderBigRepoBanner();
+}
+
+// bigRepoGroups derives which action groups still apply — empty means no
+// banner. "graphoff": the effective graph state is on (config not off AND no
+// per-browser off override) OR the sort is not plain (either misalignment
+// keeps the offer; accepting writes both keys). "cgraph": exactly the TUI
+// notice's conditions.
+function bigRepoGroups() {
+  const h = state.health;
+  if (!h || !h.big) return [];
+  const groups = [];
+  const graphOn = h.show_graph !== "off" && lsGet("gg.graph") !== "off";
+  if (!h.dismissed.web_graph_off_suggest && (graphOn || h.commit_sort !== "plain")) groups.push("graphoff");
+  if (!h.dismissed.commit_graph_recommend && !h.has_commit_graph && !h.write_commit_graph_set) groups.push("cgraph");
+  return groups;
+}
+
+// setBigRepoBarHidden toggles #bigrepo-bar's hidden class and re-renders the
+// commits list exactly once when the visibility actually flips: hiding or
+// showing the bar changes the panes' height, and the virtualized commit list
+// otherwise keeps its stale render window until the next interaction (a
+// blank strip). renderCommits() is already called unconditionally on window
+// resize, so it is safe to call with no commits loaded yet.
+function setBigRepoBarHidden(hidden) {
+  const bar = $("bigrepo-bar");
+  const was = bar.classList.contains("hidden");
+  bar.classList.toggle("hidden", hidden);
+  if (was !== hidden) renderCommits();
+}
+
+function renderBigRepoBanner() {
+  if (ssGet(bigrepoLaterKey()) === "1") { setBigRepoBarHidden(true); return; }
+  const groups = bigRepoGroups();
+  if (!groups.length) { setBigRepoBarHidden(true); return; }
+  $("bigrepo-msg").textContent =
+    "big repository (" + state.health.pack_mb + " MB of packs) — commit browsing can be faster:";
+  $("bigrepo-graphoff").classList.toggle("hidden", !groups.includes("graphoff"));
+  $("bigrepo-cgraph").classList.toggle("hidden", !groups.includes("cgraph"));
+  setBigRepoBarHidden(false);
+}
 
 async function loadRepo() {
   const repo = await getJSON("/api/repo");
@@ -2884,8 +3694,18 @@ async function loadRepo() {
 
 async function boot() {
   await loadRepo();
-  await fetchStatus().catch(() => {}); // status failing must not block browse
-  await fetchBranches().catch(() => {});
+  // Neither status (a MINUTE of working-tree scan on a huge repo) nor the
+  // sidebar (tags alone cost ~7s with hundreds of tags — for-each-ref peels
+  // and abbreviates per tag) may gate the first commits render; awaiting
+  // them serially here is what showed a bare wireframe page on big repos
+  // until an F5 raced past it. Each fills its own panel when it lands —
+  // status additionally re-renders commits because the working-tree row is
+  // status-driven and the pane has usually rendered by then. Only health
+  // stays awaited: it is cheap and the [ui] show_graph default must land
+  // before the first commits render.
+  fetchStatus().then(() => renderCommits()).catch(() => {});
+  fetchBranches().catch(() => {});
+  await fetchHealth(true);
   await loadCommits(false);
   focusPane();
 }
@@ -2910,10 +3730,19 @@ function paletteCommands() {
     { label: "fetch all remotes", detail: "", run: () => doFetch() },
     { label: "create branch…", detail: "", run: () => openCreateBranchPrompt() },
     { label: "branch versions…", detail: "", run: () => openVersionBranches() },
+    { label: "file history…", detail: "", run: () => openPrompt({ title: "File history — repo-relative path", placeholder: "e.g. internal/web/server.go", onSubmit: (p) => openFileHistory(p, "") }) },
+    { label: "file blame…", detail: "", run: () => openPrompt({ title: "File blame — repo-relative path", placeholder: "e.g. internal/web/server.go", onSubmit: (p) => openFileBlame(p, "") }) },
     { label: "review working changes (AI)…", detail: "", run: () => startReview("working", "") },
     { label: "review this branch (AI)…", detail: "", run: () => startReview("branch", "") },
+    { label: "goto commit…", detail: "#", run: () => gotoCommitPrompt() },
+    { label: "filter commits…", detail: "/", run: () => openCommitFilter() },
     { label: "refresh", detail: "r", run: () => { if (!state.op) refreshAfterOp(); } },
     { label: "switch repo…", detail: "", run: null }, // drills into repo mode (runPaletteRow)
+    // The TUI palette's Open repo twin: a typed path (custom, ~-expandable
+    // server-side) instead of the known-repos picker. doReroot posts it and
+    // reloads; the server preflights before swapping, so a bad path is just
+    // an error line and the current repo keeps serving.
+    { label: "open repo (path)…", detail: "", run: () => openPrompt({ title: "Open repo — path", placeholder: "/path/to/repo or ~/repo", onSubmit: (p) => doReroot(p) }) },
     { label: "open working tree", detail: "", run: () => openWorkingTree(0) }, // 0 = the WT row; a bare call would set state.cursor = undefined and break j/k/enter
     { label: "toggle sidebar", detail: "b", run: () => toggleSidebar() },
     { label: "toggle graph", detail: "g", run: () => toggleGraphMode() },
@@ -2926,6 +3755,7 @@ function openPalette(mode, fromCmd) {
   pal = { mode, fromCmd: !!fromCmd, rows: [], filtered: [], sel: 0 };
   if (!already) pushLayer("palette", $("palette"), { onKey: paletteKey });
   $("palette-input").value = "";
+  $("palette-input").placeholder = mode === "repo" ? "type a repo name…" : "type a command…";
   if (mode === "cmd") {
     pal.rows = paletteCommands();
     filterPalette();
@@ -3034,24 +3864,24 @@ $("palette-list").addEventListener("click", (e) => {
 
 function openGlobalMenu() {
   const r = $("menu-btn").getBoundingClientRect();
-  showCtxMenu(
-    [
-      { label: "pull", act: () => doPull() },
-      { label: "push", act: () => doPush() },
-      { label: "fetch all remotes", act: () => doFetch() },
-      { label: "create branch…", act: () => openCreateBranchPrompt() },
-      { label: "branch versions…", act: () => openVersionBranches() },
-      { label: "review working changes (AI)…", act: () => startReview("working", "") },
-      { label: "refresh", act: () => { if (!state.op) refreshAfterOp(); } },
-      { label: "switch repo…", act: () => openPalette("repo") },
-      { label: "command palette…", act: () => openPalette("cmd") },
-      { label: "toggle sidebar", act: () => toggleSidebar() },
-      { label: "toggle graph", act: () => toggleGraphMode() },
-      { label: "help", act: () => openHelp() },
-    ],
-    r.left,
-    r.bottom + 4
-  );
+  // Sorted at render so a future entry cannot land unsorted: the menu is a
+  // lookup surface (no workflow order to preserve, no destructive rows).
+  // help sits alone below a separator — the one fixed anchor.
+  const rows = [
+    { label: "pull", act: () => doPull() },
+    { label: "push", act: () => doPush() },
+    { label: "fetch all remotes", act: () => doFetch() },
+    { label: "create branch…", act: () => openCreateBranchPrompt() },
+    { label: "branch versions…", act: () => openVersionBranches() },
+    { label: "review working changes (AI)…", act: () => startReview("working", "") },
+    { label: "refresh", act: () => { if (!state.op) refreshAfterOp(); } },
+    { label: "switch repo…", act: () => openPalette("repo") },
+    { label: "command palette…", act: () => openPalette("cmd") },
+    { label: "toggle sidebar", act: () => toggleSidebar() },
+    { label: "toggle graph", act: () => toggleGraphMode() },
+  ].sort((a, b) => a.label.localeCompare(b.label));
+  rows.push({ sep: true }, { label: "help", act: () => openHelp() });
+  showCtxMenu(rows, r.left, r.bottom + 4);
 }
 
 $("menu-btn").addEventListener("click", (e) => {
