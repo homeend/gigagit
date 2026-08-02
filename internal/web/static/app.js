@@ -15,6 +15,7 @@ const state = {
   // the graph off entirely — a flat ●-gutter list (TUI show_graph parity)
   // with the lane column's space going to subjects.
   graphMode: "svg", // svg | off
+  health: null, // /api/health payload (big-repo banner), else null
   wt: null, // /api/status payload while the tree is dirty, else null
   conflict: null, // {op, source, target, desc, conflicted} while a sequencer op is paused, else null
   filesMode: "commit", // commit | status | compare
@@ -56,6 +57,12 @@ const SECTIONS = ["branches", "worktrees", "tags", "stashes"];
 // localStorage can throw (private mode); persistence is best-effort.
 function lsGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
 function lsSet(k, v) { try { localStorage.setItem(k, v); } catch {} }
+
+// sessionStorage-backed: the big-repo banner's "not now" dismissal is
+// per-tab-session only (re-evaluated next visit), unlike localStorage's
+// gg.graph override which persists across sessions.
+function ssGet(k) { try { return sessionStorage.getItem(k); } catch { return null; } }
+function ssSet(k, v) { try { sessionStorage.setItem(k, v); } catch {} }
 
 // --- overlay layer stack ---
 // Every overlay surface (decision modal, help, ctx-menu, future popups)
@@ -492,6 +499,7 @@ function handleOpEvent(ev) {
     // summary already reads as "…has conflicts (left in tree)" etc.
     else if (ev.changed) opLine(ev.summary || "left conflicts in the working tree — resolve them, then commit");
     else opLine("error: " + (ev.error || "operation failed"), true);
+    if (kind === "commit-graph") fetchHealth(); // retires the banner group
     if (ev.changed) refreshAfterOp();
     else fetchStatus().then(renderCommits); // a failed switch may still have moved HEAD/stash state
   }
@@ -3572,10 +3580,86 @@ $("conflict-abort").addEventListener("click", () => {
     (o) => { if (o !== "cancel") startOp({ op: "abort" }, "abort " + op); }
   );
 });
+$("bigrepo-graphoff").onclick = async () => {
+  try {
+    await postJSON("/api/ui-config", { show_graph: "off", commit_sort: "plain" });
+  } catch (e) {
+    opLine("error: " + (e.message || e), true);
+    return; // banner stays; the action can be retried
+  }
+  state.graphMode = "off";
+  lsSet("gg.graph", "off"); // this browser matches immediately and keeps matching
+  await loadCommits(false); // sort changed server-side — reload the feed
+  fetchHealth();
+};
+$("bigrepo-cgraph").onclick = () => startOp({ op: "commit-graph" }, "write commit-graph");
+$("bigrepo-later").onclick = () => {
+  ssSet("gg.bigrepo.later", "1"); // session-only, re-evaluated next visit
+  $("bigrepo-bar").classList.add("hidden");
+};
+$("bigrepo-never").onclick = async () => {
+  // dismiss only the ids the banner is currently showing
+  const groups = bigRepoGroups();
+  const ids = [];
+  if (groups.includes("graphoff")) ids.push("web_graph_off_suggest");
+  if (groups.includes("cgraph")) ids.push("commit_graph_recommend");
+  try {
+    for (const id of ids) await postJSON("/api/notice-dismiss", { id });
+  } catch (e) {
+    opLine("error: " + (e.message || e), true);
+    return;
+  }
+  fetchHealth();
+};
 window.addEventListener("resize", () => {
   renderCommits();
   if (state.lastDiff) renderDiff(state.lastDiff); // unified↔side-by-side is width-dependent
 });
+
+// fetchHealth loads /api/health and re-renders the big-repo banner. With
+// applyDefault (boot only), a repo-config show_graph=off becomes the initial
+// graph mode when this browser has no localStorage override — [ui] show_graph
+// honored as the web default, the TUI-parity fix. Failures are silent: no
+// banner, existing localStorage-or-default behavior (the TUI's "health never
+// surfaces errors" rule).
+async function fetchHealth(applyDefault) {
+  try {
+    state.health = await getJSON("/api/health");
+  } catch {
+    state.health = null;
+  }
+  if (applyDefault && state.health && lsGet("gg.graph") === null && state.health.show_graph === "off") {
+    state.graphMode = "off";
+  }
+  renderBigRepoBanner();
+}
+
+// bigRepoGroups derives which action groups still apply — empty means no
+// banner. "graphoff": the effective graph state is on (config not off AND no
+// per-browser off override) OR the sort is not plain (either misalignment
+// keeps the offer; accepting writes both keys). "cgraph": exactly the TUI
+// notice's conditions.
+function bigRepoGroups() {
+  const h = state.health;
+  if (!h || !h.big) return [];
+  const groups = [];
+  const graphOn = h.show_graph !== "off" && lsGet("gg.graph") !== "off";
+  if (!h.dismissed.web_graph_off_suggest && (graphOn || h.commit_sort !== "plain")) groups.push("graphoff");
+  if (!h.dismissed.commit_graph_recommend && !h.has_commit_graph && !h.write_commit_graph_set) groups.push("cgraph");
+  return groups;
+}
+
+function renderBigRepoBanner() {
+  const bar = $("bigrepo-bar");
+  if (ssGet("gg.bigrepo.later") === "1") { bar.classList.add("hidden"); return; }
+  const groups = bigRepoGroups();
+  if (!groups.length) { bar.classList.add("hidden"); return; }
+  $("bigrepo-msg").textContent =
+    "big repository (" + state.health.pack_mb + " MB of packs) — commit browsing can be faster:";
+  $("bigrepo-graphoff").classList.toggle("hidden", !groups.includes("graphoff"));
+  $("bigrepo-cgraph").classList.toggle("hidden", !groups.includes("cgraph"));
+  bar.classList.remove("hidden");
+}
 
 async function loadRepo() {
   const repo = await getJSON("/api/repo");
@@ -3591,6 +3675,7 @@ async function boot() {
   await loadRepo();
   await fetchStatus().catch(() => {}); // status failing must not block browse
   await fetchBranches().catch(() => {});
+  await fetchHealth(true); // banner + [ui] show_graph default (self-catching)
   await loadCommits(false);
   focusPane();
 }

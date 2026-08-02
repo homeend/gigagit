@@ -278,6 +278,25 @@ mark.r { background: var(--span-add); color: inherit; }
 #conflict-bar button:disabled { opacity: .45; cursor: default; }
 #conflict-bar #conflict-abort { color: #e06c75; border-color: #6b3a3a; }
 #conflict-bar #conflict-abort:hover:not(:disabled) { border-color: #e06c75; }
+/* Big-repo suggestion banner: an ADVISORY (not a blocker like #conflict-bar),
+   offering perf actions (graph off, write commit-graph) once the repo is
+   large enough to feel it. Amber tone keeps it visually distinct from the
+   conflict bar's red. */
+#bigrepo-bar {
+  display: flex; gap: 10px; align-items: center;
+  padding: 4px 12px;
+  background: #3a301161; border-bottom: 1px solid #6b5d2e;
+  color: #e8d48b;
+  font-size: 13px;
+}
+#bigrepo-bar.hidden { display: none; }
+#bigrepo-bar button {
+  background: var(--bg); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 3px;
+  padding: 1px 10px; font: inherit; font-size: 12px; cursor: pointer;
+}
+#bigrepo-bar button:hover:not(:disabled) { border-color: var(--accent); }
+#bigrepo-bar button:disabled { opacity: .45; cursor: default; }
 #help { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; z-index: 11; cursor: pointer; }
 #help.hidden { display: none; }
 #help-box { background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; padding: 18px 24px; max-width: 700px; max-height: 84vh; overflow-y: auto; cursor: default; }
