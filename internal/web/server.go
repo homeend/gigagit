@@ -46,6 +46,10 @@ type Server struct {
 	// reposPath overrides the MRU registry location (test seam); empty =
 	// repos.DefaultStatePath().
 	reposPath string
+
+	// packThreshold overrides bigRepoPackBytes for /api/health's "big"
+	// verdict (test seam); 0 = the production const.
+	packThreshold int64
 }
 
 func New(svc *domain.Service) *Server {
@@ -79,6 +83,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/resolve", s.handleResolve)
 	mux.HandleFunc("GET /api/filelog", s.handleFileLog)
 	mux.HandleFunc("GET /api/blame", s.handleBlame)
+	mux.HandleFunc("GET /api/health", s.handleHealth)
+	mux.HandleFunc("POST /api/notice-dismiss", writeGuard(s.handleNoticeDismiss))
 	mux.HandleFunc("GET /api/diff", s.handleDiff)
 	mux.HandleFunc("POST /api/stage", writeGuard(s.handleStage))
 	mux.HandleFunc("GET /api/hunks", s.handleHunks)
@@ -94,6 +100,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/op/{id}/decide", writeGuard(s.handleOpDecide))
 	mux.HandleFunc("POST /api/op/{id}/cancel", writeGuard(s.handleOpCancel))
 	mux.HandleFunc("POST /api/reroot", writeGuard(s.handleReroot))
+	mux.HandleFunc("POST /api/ui-config", writeGuard(s.handleUIConfig))
 	mux.HandleFunc("GET /api/repos", s.handleRepos)
 	return hostGuard(mux)
 }

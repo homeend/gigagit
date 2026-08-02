@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/homeend/gigagit/internal/config"
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/model"
 )
@@ -352,6 +354,29 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		op = discard
+	case "commit-graph":
+		// Write the commit-graph now, then keep it fresh — the TUI notice's
+		// write+enable chain (tui.startCommitGraphWriteAndEnable), run
+		// server-side inside ONE run so the config key/value never come off
+		// the wire: a client cannot write arbitrary git config through this.
+		run, err := s.startRun("op", func(ctx context.Context, svc *domain.Service, events chan<- engine.Event, dec engine.Decider) (engine.Result, map[string]any, error) {
+			res, err := svc.Execute(ctx, engine.WriteCommitGraph{}, events, dec)
+			if err != nil {
+				return res, nil, err
+			}
+			if _, err := svc.Execute(ctx, engine.SetGitConfig{Key: "fetch.writeCommitGraph", Value: "true"}, events, dec); err != nil {
+				return res, nil, err
+			}
+			return res, nil, nil
+		})
+		if err != nil {
+			writeErr(w, http.StatusConflict, err)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(http.StatusAccepted)
+		_ = json.NewEncoder(w).Encode(map[string]string{"op_id": run.id})
+		return
 	default:
 		writeErr(w, http.StatusBadRequest, fmt.Errorf("unknown op %q", req.Op))
 		return

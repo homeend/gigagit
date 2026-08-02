@@ -3,7 +3,6 @@ package web
 import (
 	"errors"
 	"net/http"
-	"path/filepath"
 
 	"github.com/homeend/gigagit/internal/commitgraph"
 	"github.com/homeend/gigagit/internal/config"
@@ -34,8 +33,10 @@ type refInfo struct {
 
 // feedFor lazily builds the single server-side feed, applying the repo's
 // commit-sort config the way the TUI does at load. The probe reads the
-// committed .gg.toml only (the machine-local private repo config file is
-// not consulted).
+// ACTIVE per-repo config file (the machine-local private file when one
+// exists, else the committed .gg.toml — the same resolution effectiveConfig
+// and handleUIConfig use), so a private-config repo's commit_sort takes
+// effect here too.
 func (s *Server) feedFor(r *http.Request) *domain.CommitFeed {
 	svc := s.service()
 	s.mu.Lock()
@@ -43,8 +44,8 @@ func (s *Server) feedFor(r *http.Request) *domain.CommitFeed {
 	if s.feed == nil {
 		f := svc.CommitFeed()
 		mode := "date-order"
-		if top, err := svc.TopLevel(r.Context()); err == nil {
-			if cfg, err := config.Load(config.DefaultGlobalPath(), filepath.Join(top, ".gg.toml")); err == nil {
+		if active, err := s.activeRepoConfigPath(r.Context(), svc); err == nil {
+			if cfg, err := config.Load(config.DefaultGlobalPath(), active); err == nil {
 				mode = cfg.UI.CommitSort
 			}
 		}

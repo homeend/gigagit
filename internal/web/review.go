@@ -259,20 +259,30 @@ func (s *Server) reviewCommands(ctx context.Context, svc *domain.Service) ([]con
 	return out, nil
 }
 
-// effectiveConfig loads global + the ACTIVE per-repo config (the machine-local
-// private file when one exists, else the committed .gg.toml) — the resolution
-// `gg review` uses, so a tool configured for one frontend is visible to the
-// other. Distinct from postCreateHook's narrower committed-only probe.
-func (s *Server) effectiveConfig(ctx context.Context, svc *domain.Service) (config.Config, error) {
+// activeRepoConfigPath resolves the per-repo config file gg actually reads
+// and writes — the machine-local private file when one exists, else the
+// committed .gg.toml (the TUI Settings writers' target).
+func (s *Server) activeRepoConfigPath(ctx context.Context, svc *domain.Service) (string, error) {
 	top, err := svc.TopLevel(ctx)
 	if err != nil {
-		return config.Config{}, err
+		return "", err
 	}
 	privatePath := ""
 	if wts, werr := svc.Worktrees(ctx); werr == nil && len(wts) > 0 && wts[0].Path != "" {
 		privatePath = config.PrivateRepoPath(wts[0].Path)
 	}
-	active := config.ActiveRepoConfigPath(filepath.Join(top, ".gg.toml"), privatePath)
+	return config.ActiveRepoConfigPath(filepath.Join(top, ".gg.toml"), privatePath), nil
+}
+
+// effectiveConfig loads global + the ACTIVE per-repo config (the machine-local
+// private file when one exists, else the committed .gg.toml) — the resolution
+// `gg review` uses, so a tool configured for one frontend is visible to the
+// other. Distinct from postCreateHook's narrower committed-only probe.
+func (s *Server) effectiveConfig(ctx context.Context, svc *domain.Service) (config.Config, error) {
+	active, err := s.activeRepoConfigPath(ctx, svc)
+	if err != nil {
+		return config.Config{}, err
+	}
 	return config.Load(config.DefaultGlobalPath(), active)
 }
 
