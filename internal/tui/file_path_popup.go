@@ -199,10 +199,39 @@ func (p *filePathPopup) render(m Model, below string) string {
 }
 
 func (p *filePathPopup) box(m Model) string {
-	w, _ := m.overlayDims()
+	w, termH := m.overlayDims()
+	cw := popupContentWidth(w)
 	var b strings.Builder
 	b.WriteString(p.title() + "\n\n")
-	b.WriteString(viewField(i18n.T("path: "), p.input, true, popupContentWidth(w)) + "\n")
-	b.WriteString("\n" + i18n.T("[enter] show  [esc] cancel"))
+	b.WriteString(viewField(i18n.T("path: "), p.input, true, cw) + "\n")
+	if p.suggesting {
+		b.WriteString("\n")
+		if p.loading {
+			b.WriteString(i18n.T("  (loading…)") + "\n")
+		} else {
+			rows := make([]winRow, 1+len(p.matches))
+			rows[0] = winRow{text: i18n.T("open as typed: %s", strings.TrimSpace(p.input.Value()))}
+			for i, mt := range p.matches {
+				rows[i+1] = winRow{text: mt.S}
+			}
+			for i := range rows {
+				if i == p.sel {
+					rows[i] = winRow{text: "> " + rows[i].text, style: selectedRow}
+				} else {
+					rows[i].text = "  " + rows[i].text
+				}
+			}
+			visH := len(rows)
+			if capRows := popupResolveRowCap(p.maximized, termH, 12); visH > capRows {
+				visH = capRows
+			}
+			for _, ln := range renderWindow(rows, winOpts{w: cw, h: visH, anchor: p.sel}) {
+				b.WriteString(ln + "\n")
+			}
+		}
+		b.WriteString("\n" + i18n.T("[enter] open  [↑↓ pgup/pgdn] nav  [esc] back"))
+	} else {
+		b.WriteString("\n" + i18n.T("[enter] show  [esc] cancel"))
+	}
 	return modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 }

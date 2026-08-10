@@ -427,3 +427,33 @@ func TestFilePathPopupEnterWhileLoadingThenError(t *testing.T) {
 		t.Fatalf("escape row must still open as typed after a load error; hv=%+v", hv)
 	}
 }
+
+func TestFilePathPopupRendersSuggestions(t *testing.T) {
+	m := gotoModel(t, gotoFullHash)
+	m, _ = m.openFilePathPopup(filePathHistory)
+	m = lsReady(t, m, "internal/tui/model.go")
+	m = typeRunes(t, m, "model")
+	m, _ = send(m, keyType(tea.KeyEnter))
+	p := layerOf[*filePathPopup](m)
+	out := p.box(m)
+	if !strings.Contains(out, "open as typed: model") {
+		t.Fatalf("box must render the escape row; out=%s", out)
+	}
+	if !strings.Contains(out, "internal/tui/model.go") {
+		t.Fatalf("box must render the fuzzy matches; out=%s", out)
+	}
+	if !strings.Contains(out, "[esc] back") {
+		t.Fatalf("box must render the suggestion-mode hint; out=%s", out)
+	}
+}
+
+func TestFilePathPopupRendersLoadingList(t *testing.T) {
+	m := gotoModel(t, gotoFullHash)
+	m, _ = m.openFilePathPopup(filePathHistory)
+	m = typeRunes(t, m, "model")
+	m, _ = send(m, keyType(tea.KeyEnter)) // suggesting while loading
+	p := layerOf[*filePathPopup](m)
+	if out := p.box(m); !strings.Contains(out, "(loading…)") {
+		t.Fatalf("box must show the loading placeholder; out=%s", out)
+	}
+}
