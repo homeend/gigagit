@@ -95,6 +95,9 @@ func (p *filePathPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
 	}
+	if p.suggesting {
+		return p.updateSuggesting(m, msg)
+	}
 	switch msg.Type {
 	case tea.KeyEsc:
 		return m.popLayer(), nil
@@ -103,25 +106,91 @@ func (p *filePathPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		if rel == "" { // nothing to open; keep the popup open
 			return m, nil
 		}
-		// Unwind this popup and, if the palette launched us, the palette too — the
-		// full-screen surface must open over the base, not a stale popup.
-		m = m.popLayer()
-		if _, ok := m.topLayer().(*commandPalette); ok {
-			m = m.popLayer()
+		if _, ok := p.set[rel]; ok || p.loadErr != nil {
+			// Exact tracked file — or no list to validate against: open as before.
+			return p.open(m, rel)
 		}
-		ctx := navContext{path: rel, rev: ""}
-		if p.kind == filePathBlame {
-			bv := newBlameView(ctx)
-			m = m.pushLayer(bv)
-			return m, m.loadBlameCmd(ctx, bv.tag)
-		}
-		hv := newHistoryView(ctx)
-		m = m.pushLayer(hv)
-		return m, m.loadHistoryListCmd(ctx, hv.listTag)
+		p.suggesting = true
+		p.sel = 0
+		p.rerank(rel)
+		return m, nil
 	default:
 		p.input.HandleEditKey(msg) // spaces included — do NOT swallow KeySpace
 	}
 	return m, nil
+}
+
+// updateSuggesting handles keys while the suggestion list is visible.
+// sel 0 is the open-as-typed escape row; 1..len(matches) are match rows.
+func (p *filePathPopup) updateSuggesting(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyEsc:
+		p.suggesting = false
+		p.matches = nil
+		p.sel = 0
+		return m, nil
+	case tea.KeyUp:
+		if p.sel > 0 {
+			p.sel--
+		}
+		return m, nil
+	case tea.KeyDown:
+		if p.sel < len(p.matches) {
+			p.sel++
+		}
+		return m, nil
+	case tea.KeyPgUp:
+		if p.sel -= popupFilterPage; p.sel < 0 {
+			p.sel = 0
+		}
+		return m, nil
+	case tea.KeyPgDown:
+		if p.sel += popupFilterPage; p.sel > len(p.matches) {
+			p.sel = len(p.matches)
+		}
+		return m, nil
+	case tea.KeyEnter:
+		if p.sel > 0 {
+			return p.open(m, p.matches[p.sel-1].S)
+		}
+		rel := repoRelPath(m.currentWorktree, p.input.Value())
+		if rel == "" {
+			return m, nil
+		}
+		return p.open(m, rel)
+	default:
+		p.input.HandleEditKey(msg)
+		p.sel = 0
+		p.rerank(repoRelPath(m.currentWorktree, p.input.Value()))
+	}
+	return m, nil
+}
+
+// open unwinds the popup (and the palette beneath, if any) and opens the
+// history or blame surface for rel.
+func (p *filePathPopup) open(m Model, rel string) (Model, tea.Cmd) {
+	m = m.popLayer()
+	if _, ok := m.topLayer().(*commandPalette); ok {
+		m = m.popLayer()
+	}
+	ctx := navContext{path: rel, rev: ""}
+	if p.kind == filePathBlame {
+		bv := newBlameView(ctx)
+		m = m.pushLayer(bv)
+		return m, m.loadBlameCmd(ctx, bv.tag)
+	}
+	hv := newHistoryView(ctx)
+	m = m.pushLayer(hv)
+	return m, m.loadHistoryListCmd(ctx, hv.listTag)
+}
+
+// rerank rebuilds the suggestion list for query (the NORMALIZED input) and
+// clamps sel to 0..len(matches).
+func (p *filePathPopup) rerank(query string) {
+	p.matches = fuzzy.Rank(query, p.all, filePathSuggestLimit)
+	if p.sel > len(p.matches) {
+		p.sel = len(p.matches)
+	}
 }
 
 func (p *filePathPopup) render(m Model, below string) string {

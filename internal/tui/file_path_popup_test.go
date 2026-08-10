@@ -9,6 +9,13 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+// lsReady delivers the popup's tracked-file list, as if LsFiles returned.
+func lsReady(t *testing.T, m Model, paths ...string) Model {
+	t.Helper()
+	nm, _ := send(m, filePathLsMsg{paths: paths})
+	return nm
+}
+
 func TestRepoRelPath(t *testing.T) {
 	root := filepath.FromSlash("/repo")
 	outside := filepath.FromSlash("/elsewhere/x.go")
@@ -66,6 +73,7 @@ func TestPaletteFileHistoryOpensPopup(t *testing.T) {
 func TestFilePathPopupHistoryOpensSurface(t *testing.T) {
 	m := gotoModel(t, gotoFullHash)
 	m, _ = palettePick(t, m, "File history")
+	m = lsReady(t, m, "README.md")
 	m = typeRunes(t, m, "README.md")
 	m, _ = send(m, keyType(tea.KeyEnter))
 	if layerOf[*filePathPopup](m) != nil || layerOf[*commandPalette](m) != nil {
@@ -83,6 +91,7 @@ func TestFilePathPopupHistoryOpensSurface(t *testing.T) {
 func TestFilePathPopupBlameOpensSurface(t *testing.T) {
 	m := gotoModel(t, gotoFullHash)
 	m, _ = palettePick(t, m, "File blame")
+	m = lsReady(t, m, "README.md")
 	m = typeRunes(t, m, "README.md")
 	m, _ = send(m, keyType(tea.KeyEnter))
 	bv := layerOf[*blameView](m)
@@ -133,6 +142,7 @@ func TestFilePathPopupAllowsSpaces(t *testing.T) {
 func TestFilePathPopupSpaceReachesNavContext(t *testing.T) {
 	m := gotoModel(t, gotoFullHash)
 	m, _ = m.openFilePathPopup(filePathHistory)
+	m = lsReady(t, m, "a b.txt")
 	m = typeRunes(t, m, "a b.txt")
 	m, _ = send(m, keyType(tea.KeyEnter))
 	hv := layerOf[*historyView](m)
@@ -250,4 +260,170 @@ func TestFilePathPopupLsLateDeliveryIsNoop(t *testing.T) {
 	m := gotoModel(t, gotoFullHash)
 	m, _ = send(m, filePathLsMsg{paths: []string{"a"}}) // no popup open — must not panic
 	_ = m
+}
+
+func TestFilePathPopupNonMatchEntersSuggestionMode(t *testing.T) {
+	m := gotoModel(t, gotoFullHash)
+	m, _ = m.openFilePathPopup(filePathHistory)
+	m = lsReady(t, m, "internal/tui/model.go", "internal/tui/view.go", "README.md")
+	m = typeRunes(t, m, "model.go")
+	m, _ = send(m, keyType(tea.KeyEnter))
+	p := layerOf[*filePathPopup](m)
+	if p == nil || !p.suggesting {
+		t.Fatal("a non-tracked path must switch the popup to suggestion mode")
+	}
+	if p.sel != 0 {
+		t.Fatal("suggestion mode must start on the open-as-typed row")
+	}
+	if len(p.matches) == 0 || p.matches[0].S != "internal/tui/model.go" {
+		t.Fatalf("matches must rank tracked files; got %+v", p.matches)
+	}
+}
+
+func TestFilePathPopupSuggestionEnterOpensHistory(t *testing.T) {
+	m := gotoModel(t, gotoFullHash)
+	m, _ = palettePick(t, m, "File history")
+	m = lsReady(t, m, "internal/tui/model.go", "README.md")
+	m = typeRunes(t, m, "model")
+	m, _ = send(m, keyType(tea.KeyEnter)) // → suggestion mode
+	m, _ = send(m, keyType(tea.KeyDown))  // sel=1: first match
+	m, _ = send(m, keyType(tea.KeyEnter))
+	hv := layerOf[*historyView](m)
+	if hv == nil || hv.ctx.path != "internal/tui/model.go" {
+		t.Fatalf("enter on a suggestion must open history for it; hv=%+v", hv)
+	}
+	if layerOf[*filePathPopup](m) != nil || layerOf[*commandPalette](m) != nil {
+		t.Fatal("opening must unwind the popup and the palette beneath")
+	}
+}
+
+func TestFilePathPopupSuggestionEnterOpensBlame(t *testing.T) {
+	m := gotoModel(t, gotoFullHash)
+	m, _ = m.openFilePathPopup(filePathBlame)
+	m = lsReady(t, m, "internal/tui/model.go")
+	m = typeRunes(t, m, "model")
+	m, _ = send(m, keyType(tea.KeyEnter))
+	m, _ = send(m, keyType(tea.KeyDown))
+	m, _ = send(m, keyType(tea.KeyEnter))
+	bv := layerOf[*blameView](m)
+	if bv == nil || bv.ctx.path != "internal/tui/model.go" {
+		t.Fatalf("enter on a suggestion must open blame for it; bv=%+v", bv)
+	}
+}
+
+func TestFilePathPopupEscapeRowOpensAsTyped(t *testing.T) {
+	m := gotoModel(t, gotoFullHash)
+	m, _ = m.openFilePathPopup(filePathHistory)
+	m = lsReady(t, m, "internal/tui/model.go")
+	m = typeRunes(t, m, "deleted/file.go")
+	m, _ = send(m, keyType(tea.KeyEnter)) // suggestion mode; sel=0 = escape row
+	m, _ = send(m, keyType(tea.KeyEnter))
+	hv := layerOf[*historyView](m)
+	if hv == nil || hv.ctx.path != "deleted/file.go" {
+		t.Fatalf("the escape row must open the typed path; hv=%+v", hv)
+	}
+}
+
+func TestFilePathPopupSuggestionTypingReranks(t *testing.T) {
+	m := gotoModel(t, gotoFullHash)
+	m, _ = m.openFilePathPopup(filePathHistory)
+	m = lsReady(t, m, "aaa/x.go", "bbb/y.go")
+	m = typeRunes(t, m, "zzz")
+	m, _ = send(m, keyType(tea.KeyEnter))
+	p := layerOf[*filePathPopup](m)
+	if !p.suggesting || len(p.matches) != 0 {
+		t.Fatalf("zzz matches nothing; got %+v", p.matches)
+	}
+	for range 3 {
+		m, _ = send(m, keyType(tea.KeyBackspace))
+	}
+	m = typeRunes(t, m, "aaa")
+	if p = layerOf[*filePathPopup](m); len(p.matches) != 1 || p.matches[0].S != "aaa/x.go" {
+		t.Fatalf("typing must re-rank live; got %+v", p.matches)
+	}
+	if p.sel != 0 {
+		t.Fatal("editing the query must reset the cursor to the escape row")
+	}
+}
+
+func TestFilePathPopupSuggestionNavClamps(t *testing.T) {
+	m := gotoModel(t, gotoFullHash)
+	m, _ = m.openFilePathPopup(filePathHistory)
+	m = lsReady(t, m, "aaa/x.go", "aab/y.go")
+	m = typeRunes(t, m, "aa")
+	m, _ = send(m, keyType(tea.KeyEnter))
+	p := layerOf[*filePathPopup](m)
+	m, _ = send(m, keyType(tea.KeyUp)) // above escape row: clamp
+	if p.sel != 0 {
+		t.Fatal("up on row 0 must clamp")
+	}
+	m, _ = send(m, keyType(tea.KeyPgDown)) // far past end: clamp
+	if p.sel != len(p.matches) {
+		t.Fatalf("pgdown must clamp to the last row; sel=%d", p.sel)
+	}
+}
+
+func TestFilePathPopupSuggestionEscReturnsToInput(t *testing.T) {
+	m := gotoModel(t, gotoFullHash)
+	m, _ = m.openFilePathPopup(filePathHistory)
+	m = lsReady(t, m, "aaa/x.go")
+	m = typeRunes(t, m, "zzz")
+	m, _ = send(m, keyType(tea.KeyEnter))
+	m, _ = send(m, keyType(tea.KeyEsc))
+	p := layerOf[*filePathPopup](m)
+	if p == nil || p.suggesting {
+		t.Fatal("esc must drop back to plain input, popup kept")
+	}
+	if p.input.Value() != "zzz" {
+		t.Fatalf("esc must preserve the input; got %q", p.input.Value())
+	}
+	m, _ = send(m, keyType(tea.KeyEsc))
+	if layerOf[*filePathPopup](m) != nil {
+		t.Fatal("second esc must close the popup")
+	}
+}
+
+func TestFilePathPopupLoadErrorOpensAsTyped(t *testing.T) {
+	m := gotoModel(t, gotoFullHash)
+	m, _ = m.openFilePathPopup(filePathHistory)
+	m, _ = send(m, filePathLsMsg{err: errors.New("boom")})
+	m = typeRunes(t, m, "some/file.go")
+	m, _ = send(m, keyType(tea.KeyEnter))
+	hv := layerOf[*historyView](m)
+	if hv == nil || hv.ctx.path != "some/file.go" {
+		t.Fatalf("LsFiles failure must fall through to open-as-typed; hv=%+v", hv)
+	}
+}
+
+func TestFilePathPopupEnterWhileLoadingThenDelivery(t *testing.T) {
+	m := gotoModel(t, gotoFullHash)
+	m, _ = m.openFilePathPopup(filePathHistory)
+	m = typeRunes(t, m, "model")
+	m, _ = send(m, keyType(tea.KeyEnter)) // list not loaded yet
+	p := layerOf[*filePathPopup](m)
+	if p == nil || !p.suggesting || !p.loading {
+		t.Fatal("enter while loading must enter suggestion mode in the loading state")
+	}
+	m, _ = send(m, filePathLsMsg{paths: []string{"internal/tui/model.go"}})
+	if len(p.matches) != 1 || p.matches[0].S != "internal/tui/model.go" {
+		t.Fatalf("delivery while suggesting must fill the list; got %+v", p.matches)
+	}
+}
+
+func TestFilePathPopupEnterWhileLoadingThenError(t *testing.T) {
+	m := gotoModel(t, gotoFullHash)
+	m, _ = m.openFilePathPopup(filePathHistory)
+	m = typeRunes(t, m, "model")
+	m, _ = send(m, keyType(tea.KeyEnter))
+	m, _ = send(m, filePathLsMsg{err: errors.New("boom")})
+	p := layerOf[*filePathPopup](m)
+	if p == nil || !p.suggesting || p.loading {
+		t.Fatal("a late error must land in suggestion mode with loading cleared")
+	}
+	// The always-present escape row keeps this from being a dead end.
+	m, _ = send(m, keyType(tea.KeyEnter))
+	hv := layerOf[*historyView](m)
+	if hv == nil || hv.ctx.path != "model" {
+		t.Fatalf("escape row must still open as typed after a load error; hv=%+v", hv)
+	}
 }

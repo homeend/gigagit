@@ -788,6 +788,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		for _, s := range msg.paths {
 			p.set[s] = struct{}{}
 		}
+		if p.suggesting { // enter landed before the load; fill the list now
+			p.rerank(repoRelPath(m.currentWorktree, p.input.Value()))
+		}
 		return m, nil
 	case configReadyMsg:
 		m.cfg = msg.cfg
