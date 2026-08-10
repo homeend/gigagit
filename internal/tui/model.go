@@ -773,6 +773,11 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		p.loading = false
 		p.rerank()
 		return m, nil
+	case repoFSMsg:
+		if p := layerOf[*repoPopup](m); p != nil {
+			p.foreign = msg.foreign
+		}
+		return m, nil // popup closed before the probe returned: drop it
 	case filePathLsMsg:
 		p := layerOf[*filePathPopup](m)
 		if p == nil {
@@ -1841,8 +1846,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "R":
 			if !m.running && !m.loading {
-				if mm, ok := m.openRepoPopup(); ok {
-					return mm, nil
+				if mm, cmd, ok := m.openRepoPopup(); ok {
+					return mm, cmd
 				}
 				return m, nil
 			}

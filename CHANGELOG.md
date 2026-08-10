@@ -8,6 +8,15 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Repo switcher warns about slow filesystem mounts.** Rows whose repository
+  sits on a foreign mount (WSL's `/mnt/<drive>` drvfs, network filesystems —
+  cifs/smb, nfs, sshfs/fuse; UNC paths on Windows) are marked `(slow fs)`,
+  and selecting one shows "⚠ this repository is mounted on a foreign
+  filesystem — switching may be very slow" before you commit to the switch
+  (a whole-tree `git status` on such a mount can take a minute). Probes run
+  async off-thread with a deadline, so a dead network mount can cost a row
+  its marker but never freeze the picker.
+
 - **Tags reads are served from a fingerprint-validated cache.** Listing tags
   newest-first forces git to read every tag object for the date sort (seconds
   per read on a huge pack — `--count` cannot help, the sort runs first). The
