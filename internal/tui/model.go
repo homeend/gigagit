@@ -773,6 +773,22 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		p.loading = false
 		p.rerank()
 		return m, nil
+	case filePathLsMsg:
+		p := layerOf[*filePathPopup](m)
+		if p == nil {
+			return m, nil // user closed before the load returned
+		}
+		p.loading = false
+		if msg.err != nil {
+			p.loadErr = msg.err
+			return m, nil
+		}
+		p.all = msg.paths
+		p.set = make(map[string]struct{}, len(msg.paths))
+		for _, s := range msg.paths {
+			p.set[s] = struct{}{}
+		}
+		return m, nil
 	case configReadyMsg:
 		m.cfg = msg.cfg
 		m.repoConfigPath = msg.repoTOML

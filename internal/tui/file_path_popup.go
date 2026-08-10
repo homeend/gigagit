@@ -1,11 +1,13 @@
 package tui
 
 import (
+	"context"
 	"path/filepath"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/fuzzy"
 	"github.com/homeend/gigagit/internal/i18n"
 )
 
@@ -16,6 +18,9 @@ const (
 	filePathHistory filePathKind = iota
 	filePathBlame
 )
+
+// filePathSuggestLimit caps the fuzzy suggestion list, like fileFinderLimit.
+const filePathSuggestLimit = 200
 
 // repoRelPath turns user-typed input into the repo-relative, forward-slashed
 // path the git verbs expect. An absolute path inside root is reduced to its
@@ -47,10 +52,36 @@ type filePathPopup struct {
 	popupMax
 	kind  filePathKind
 	input textfield
+
+	// Fuzzy-suggestion state. The tracked-file list loads async on open
+	// (distinct msg from the F finder's lsFilesMsg so the two never cross).
+	all        []string            // tracked files from LsFiles
+	set        map[string]struct{} // exact-match test over all
+	loading    bool                // true until filePathLsMsg lands
+	loadErr    error               // LsFiles failure → enter falls back to open-as-typed
+	suggesting bool                // suggestion list visible below the input
+	matches    []fuzzy.Match       // ranked subset of all
+	sel        int                 // 0 = open-as-typed escape row, 1..len(matches) = match rows
+}
+
+// filePathLsMsg is the async LsFiles result for the file-path popup.
+type filePathLsMsg struct {
+	paths []string
+	err   error
 }
 
 func (m Model) openFilePathPopup(kind filePathKind) (Model, tea.Cmd) {
-	return m.pushLayer(&filePathPopup{kind: kind, input: newTextField("")}), nil
+	m = m.pushLayer(&filePathPopup{kind: kind, input: newTextField(""), loading: true})
+	return m, m.loadFilePathLsCmd()
+}
+
+// loadFilePathLsCmd calls LsFiles off-thread and delivers filePathLsMsg.
+func (m Model) loadFilePathLsCmd() tea.Cmd {
+	svc := m.svc
+	return func() tea.Msg {
+		paths, err := svc.LsFiles(context.Background())
+		return filePathLsMsg{paths: paths, err: err}
+	}
 }
 
 func (p *filePathPopup) title() string {

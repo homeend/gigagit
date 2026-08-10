@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -208,4 +209,45 @@ func TestPaletteAgentSkillsEscReturnsToBase(t *testing.T) {
 	if layerOf[*settingsPopup](m) != nil {
 		t.Fatal("esc from a palette-launched picker must close Settings entirely (return to base)")
 	}
+}
+
+func TestFilePathPopupStartsLsFilesLoad(t *testing.T) {
+	m := gotoModel(t, gotoFullHash)
+	m, cmd := m.openFilePathPopup(filePathHistory)
+	p := layerOf[*filePathPopup](m)
+	if p == nil || !p.loading {
+		t.Fatal("opening the popup must mark it loading")
+	}
+	if cmd == nil {
+		t.Fatal("opening the popup must start the LsFiles load")
+	}
+}
+
+func TestFilePathPopupLsDeliveryBuildsSet(t *testing.T) {
+	m := gotoModel(t, gotoFullHash)
+	m, _ = m.openFilePathPopup(filePathHistory)
+	m, _ = send(m, filePathLsMsg{paths: []string{"a/b.go", "README.md"}})
+	p := layerOf[*filePathPopup](m)
+	if p.loading {
+		t.Fatal("delivery must clear loading")
+	}
+	if _, ok := p.set["README.md"]; !ok || len(p.all) != 2 {
+		t.Fatalf("delivery must fill all+set; all=%v", p.all)
+	}
+}
+
+func TestFilePathPopupLsErrorKeepsPopup(t *testing.T) {
+	m := gotoModel(t, gotoFullHash)
+	m, _ = m.openFilePathPopup(filePathHistory)
+	m, _ = send(m, filePathLsMsg{err: errors.New("boom")})
+	p := layerOf[*filePathPopup](m)
+	if p == nil || p.loadErr == nil || p.loading {
+		t.Fatal("an LsFiles error must be recorded and the popup kept open")
+	}
+}
+
+func TestFilePathPopupLsLateDeliveryIsNoop(t *testing.T) {
+	m := gotoModel(t, gotoFullHash)
+	m, _ = send(m, filePathLsMsg{paths: []string{"a"}}) // no popup open — must not panic
+	_ = m
 }
