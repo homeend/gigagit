@@ -8,6 +8,15 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Repo switcher warns about slow filesystem mounts.** Rows whose repository
+  sits on a foreign mount (WSL's `/mnt/<drive>` drvfs, network filesystems —
+  cifs/smb, nfs, sshfs/fuse; UNC paths on Windows) are marked `(slow fs)`,
+  and selecting one shows "⚠ this repository is mounted on a foreign
+  filesystem — switching may be very slow" before you commit to the switch
+  (a whole-tree `git status` on such a mount can take a minute). Probes run
+  async off-thread with a deadline, so a dead network mount can cost a row
+  its marker but never freeze the picker.
+
 - **Palette file history/blame: fuzzy path suggestions.** A path that isn't
   an exact tracked file now opens an inline suggestion list (with an "open
   as typed" escape row) instead of dead-ending; typing refines the list live.

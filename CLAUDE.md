@@ -79,6 +79,7 @@ feature; keep THIS file's map to one line per package.
 | `textdiff`   | Pure line-alignment engine (Myers + guards) behind the side-by-side diff; optional word-level intraline spans. |
 | `commitgraph`| Pure single-line commit-graph lane engine; no git/TUI/lipgloss imports. |
 | `cache`      | Generic injected in-memory LRU cache factory (entry-count + byte budget); first consumer is the commit-diff cache. |
+| `fsprobe`    | Pure per-OS probe classifying paths on slow "foreign" filesystem mounts (9p/WSL drvfs, cifs/smb, nfs, fuse; UNC on Windows) behind the repo-switcher slow-fs warning; fail-open, callers probe off-thread. DAG leaf. |
 | `clipboard`  | System-clipboard writer: native OS command first (WSL-interop-gated `clip.exe`, Wayland-socket-resolved `wl-copy`, …), OSC 52 fallback; `Probe()` backs the clipboard notices. |
 | `shelf`      | Non-git per-file/per-commit content store (blobs + TOML index under XDG state); shelved commits keep a tar + best-effort format-patch snapshot. Owned by `domain`; frontends never import it. |
 | `bookmark`   | Persistent registry of richly-addressed file/commit references (records only, no blobs). Owned by `domain`. |

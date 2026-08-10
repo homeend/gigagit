@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/homeend/gigagit/internal/fsprobe"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/repos"
 )
@@ -23,6 +24,42 @@ type repoPopup struct {
 	now       time.Time
 	mode      dispMode // text display mode; z cycles (cutoff default = no wrapping)
 	hscroll   int      // modeScroll horizontal offset
+
+	// foreign holds the async slow-filesystem verdicts (path → true when the
+	// repo sits on a network/OS-bridge mount where switching crawls). nil until
+	// repoFSMsg lands; rows gain a marker and the selected row a warning then.
+	foreign map[string]bool
+}
+
+// repoFSMsg carries the async slow-filesystem verdicts for the switcher rows.
+type repoFSMsg struct{ foreign map[string]bool }
+
+// probeReposCmd probes each entry's filesystem off-thread. One goroutine per
+// entry under a shared deadline: statfs on a dead network mount can block
+// indefinitely, and a wedged entry must cost the popup its marker, not its
+// responsiveness (unanswered entries simply stay unmarked).
+func probeReposCmd(entries []repos.Entry) tea.Cmd {
+	return func() tea.Msg {
+		type verdict struct {
+			path    string
+			foreign bool
+		}
+		ch := make(chan verdict, len(entries))
+		for _, e := range entries {
+			go func(p string) { ch <- verdict{p, fsprobe.Foreign(p)} }(e.Path)
+		}
+		out := make(map[string]bool, len(entries))
+		deadline := time.After(time.Second)
+		for range entries {
+			select {
+			case v := <-ch:
+				out[v.path] = v.foreign
+			case <-deadline:
+				return repoFSMsg{foreign: out}
+			}
+		}
+		return repoFSMsg{foreign: out}
+	}
 }
 
 // moveSel moves the cursor by d, clamped to the filtered view.
@@ -38,15 +75,16 @@ func (p *repoPopup) moveSel(d int) {
 }
 
 // openRepoPopup snapshots the registry. With no known repos it sets a status
-// hint instead of opening an empty picker.
-func (m Model) openRepoPopup() (Model, bool) {
+// hint instead of opening an empty picker. The returned cmd (probe of each
+// entry's filesystem) must be dispatched alongside the popup.
+func (m Model) openRepoPopup() (Model, tea.Cmd, bool) {
 	entries := repos.Load(m.statePath)
 	if len(entries) == 0 {
 		m.statusMsg = i18n.T("no known repositories yet (gg records them as you open repos)")
-		return m, false
+		return m, nil, false
 	}
 	m = m.pushLayer(&repoPopup{entries: entries, now: time.Now()})
-	return m, true
+	return m, probeReposCmd(entries), true
 }
 
 // visible returns the filtered entries in display order.
@@ -217,7 +255,14 @@ func (p *repoPopup) box(m Model) string {
 				prefix = "> "
 				st = selectedRow
 			}
-			row := fmt.Sprintf("%s%s%s  %s  (%s)", prefix, marker, repos.Name(e), e.Path, ageString(p.now, e.LastOpened))
+			// The slow-fs marker sits between name and path: the row tail is
+			// what cutoff mode truncates first, so a suffix there would be
+			// invisible at the default popup width.
+			slow := ""
+			if p.foreign[e.Path] {
+				slow = i18n.T("(slow fs)") + "  "
+			}
+			row := fmt.Sprintf("%s%s%s  %s%s  (%s)", prefix, marker, repos.Name(e), slow, e.Path, ageString(p.now, e.LastOpened))
 			wr[i] = winRow{text: row, style: st}
 		}
 		// Cap the visible body; renderWindow scrolls to keep p.sel in view.
@@ -233,6 +278,12 @@ func (p *repoPopup) box(m Model) string {
 	parts := []string{header, ""}
 	parts = append(parts, bodyLines...)
 	parts = append(parts, "")
+	if len(vis) > 0 && p.sel < len(vis) && p.foreign[vis[p.sel].Path] {
+		// Word-wrapped: the sentence exceeds the default popup width, and a
+		// truncated warning would hide exactly the "very slow" part it exists for.
+		parts = append(parts, wrapWords(i18n.T("⚠ this repository is mounted on a foreign filesystem — switching may be very slow"), textW)...)
+		parts = append(parts, "")
+	}
 	parts = append(parts, wrapParts(hint, textW, "  ")...)
 	return popupBox(inner, strings.Join(parts, "\n"))
 }
