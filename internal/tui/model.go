@@ -789,7 +789,13 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			p.set[s] = struct{}{}
 		}
 		if p.suggesting { // enter landed before the load; fill the list now
-			p.rerank(repoRelPath(m.currentWorktree, p.input.Value()))
+			rel := repoRelPath(m.currentWorktree, p.input.Value())
+			if _, ok := p.set[rel]; ok {
+				// The typed path is now known exact — open it directly rather
+				// than making the user press enter again from the list.
+				return p.open(m, rel)
+			}
+			p.rerank(rel)
 		}
 		return m, nil
 	case configReadyMsg:

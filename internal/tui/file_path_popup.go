@@ -159,9 +159,12 @@ func (p *filePathPopup) updateSuggesting(m Model, msg tea.KeyMsg) (Model, tea.Cm
 		}
 		return p.open(m, rel)
 	default:
+		before := p.input.Value()
 		p.input.HandleEditKey(msg)
-		p.sel = 0
-		p.rerank(repoRelPath(m.currentWorktree, p.input.Value()))
+		if p.input.Value() != before {
+			p.sel = 0
+			p.rerank(repoRelPath(m.currentWorktree, p.input.Value()))
+		}
 	}
 	return m, nil
 }
@@ -200,7 +203,8 @@ func (p *filePathPopup) render(m Model, below string) string {
 
 func (p *filePathPopup) box(m Model) string {
 	w, termH := m.overlayDims()
-	cw := popupContentWidth(w)
+	inner := popupResolveWidth(w, p.maximized, popupInnerWidth(w))
+	cw := popupTextWidth(inner)
 	var b strings.Builder
 	b.WriteString(p.title() + "\n\n")
 	b.WriteString(viewField(i18n.T("path: "), p.input, true, cw) + "\n")
@@ -233,5 +237,5 @@ func (p *filePathPopup) box(m Model) string {
 	} else {
 		b.WriteString("\n" + i18n.T("[enter] show  [esc] cancel"))
 	}
-	return modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
+	return modalStyle.Width(inner).Render(b.String()) + "\n"
 }

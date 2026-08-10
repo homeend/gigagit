@@ -447,6 +447,84 @@ func TestFilePathPopupRendersSuggestions(t *testing.T) {
 	}
 }
 
+// The maximized box() must resolve its width the same way the outer frame
+// does (popupResolveWidth first, text width derived from THAT) — otherwise
+// ctrl+t grows the frame but leaves rows/input truncated at the unmaximized
+// ~52-column text width.
+func TestFilePathPopupMaximizeRendersLongPathUntruncated(t *testing.T) {
+	m := gotoModel(t, gotoFullHash) // width 120
+	m, _ = m.openFilePathPopup(filePathHistory)
+	long := "internal/tui/" + strings.Repeat("nested/", 6) + "very_long_file_name.go"
+	if len(long) <= 60 {
+		t.Fatalf("test path too short: %d cols", len(long))
+	}
+	m = lsReady(t, m, long)
+	m = typeRunes(t, m, "long")
+	m, _ = send(m, keyType(tea.KeyEnter))
+	p := layerOf[*filePathPopup](m)
+	if p == nil || !p.suggesting || len(p.matches) == 0 {
+		t.Fatalf("setup: expected a suggestion match; matches=%+v", p.matches)
+	}
+	if unmax := p.box(m); strings.Contains(unmax, long) {
+		t.Fatalf("sanity: unmaximized box should truncate the long path; out=%s", unmax)
+	}
+	p.maximized = true
+	if maxed := p.box(m); !strings.Contains(maxed, long) {
+		t.Fatalf("maximized box must render the long path un-truncated; out=%s", maxed)
+	}
+}
+
+// While loading, enter falls into suggestion mode (the list isn't built yet).
+// When the tracked-file list lands and the typed input turns out to be an
+// exact tracked path, the popup should open it right away instead of
+// stranding the user in the suggestion list waiting for a second enter.
+func TestFilePathPopupExactDeliveryAutoOpens(t *testing.T) {
+	m := gotoModel(t, gotoFullHash)
+	m, _ = palettePick(t, m, "File history")
+	m = typeRunes(t, m, "README.md")
+	m, _ = send(m, keyType(tea.KeyEnter)) // list not loaded yet
+	p := layerOf[*filePathPopup](m)
+	if p == nil || !p.suggesting || !p.loading {
+		t.Fatal("setup: enter while loading must enter suggestion mode in the loading state")
+	}
+	m, _ = send(m, filePathLsMsg{paths: []string{"README.md"}})
+	hv := layerOf[*historyView](m)
+	if hv == nil || hv.ctx.path != "README.md" {
+		t.Fatalf("delivery of an exact match must auto-open the surface; hv=%+v", hv)
+	}
+	if layerOf[*filePathPopup](m) != nil || layerOf[*commandPalette](m) != nil {
+		t.Fatal("auto-open must unwind both the popup and the palette")
+	}
+}
+
+// Cursor/navigation keys that HandleEditKey doesn't change the value for
+// (Left, Right, Home, End, and unconsumed keys) must not drop the user's
+// place in the suggestion list.
+func TestFilePathPopupSuggestionCursorKeyPreservesSel(t *testing.T) {
+	m := gotoModel(t, gotoFullHash)
+	m, _ = m.openFilePathPopup(filePathHistory)
+	m = lsReady(t, m, "internal/tui/model.go", "internal/tui/view.go")
+	m = typeRunes(t, m, "model")
+	m, _ = send(m, keyType(tea.KeyEnter))
+	m, _ = send(m, keyType(tea.KeyDown)) // sel=1
+	p := layerOf[*filePathPopup](m)
+	if p.sel != 1 {
+		t.Fatalf("setup: expected sel=1, got %d", p.sel)
+	}
+	wantLen := len(p.matches)
+	var wantFirst string
+	if wantLen > 0 {
+		wantFirst = p.matches[0].S
+	}
+	m, _ = send(m, keyType(tea.KeyLeft))
+	if p.sel != 1 {
+		t.Fatalf("Left must not reset sel to 0; got %d", p.sel)
+	}
+	if len(p.matches) != wantLen || (wantLen > 0 && p.matches[0].S != wantFirst) {
+		t.Fatalf("Left must not rerank the matches; got %+v", p.matches)
+	}
+}
+
 func TestFilePathPopupRendersLoadingList(t *testing.T) {
 	m := gotoModel(t, gotoFullHash)
 	m, _ = m.openFilePathPopup(filePathHistory)
