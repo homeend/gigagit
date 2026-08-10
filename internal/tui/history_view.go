@@ -15,6 +15,10 @@ import (
 // historyMaxCommits bounds file-history depth on huge repos.
 const historyMaxCommits = 200
 
+// historyListMaxW caps the commit-list column so a wide terminal gives the
+// extra width to the diff pane, not the list.
+const historyListMaxW = 60
+
 // navContext identifies the file + revision a history/blame view explores.
 // rev "" means the working-tree context (history from HEAD).
 type navContext struct {
@@ -143,6 +147,40 @@ func (m Model) historyBodyRows() int {
 	return n
 }
 
+// listRows lays each commit out as a two-line entry: a meta line
+// (date  author  hash  status) then the subject, wrapped onto indented
+// continuation lines so a long title stays fully readable. Returns the
+// flattened rows plus the selected entry's meta-row index (the window anchor).
+func (h *historyView) listRows(listW int) ([]winRow, int) {
+	const indent = "    "
+	var rows []winRow
+	anchor := 0
+	for i, fc := range h.commits {
+		prefix := "  "
+		var st lipgloss.Style
+		if i == h.sel {
+			prefix = "> "
+			st = selectedRow
+			anchor = len(rows)
+		}
+		date := commitDateString(fc.Commit)
+		hash := shortHash(fc.Hash)
+		// Truncate the author alone (not the composed line) so a long name can
+		// never push the hash/status off the right edge.
+		authorW := listW - lipgloss.Width(prefix+date+hash+fc.Status) - 6
+		if authorW < 5 {
+			authorW = 5
+		}
+		author := truncate(safeRowText(fc.Author), authorW)
+		meta := truncate(prefix+date+"  "+author+"  "+hash+"  "+fc.Status, listW)
+		rows = append(rows, winRow{text: meta, style: st})
+		for _, seg := range wrapWidth(safeRowText(fc.Subject), listW-len(indent), 1<<20) {
+			rows = append(rows, winRow{text: indent + seg, style: st})
+		}
+	}
+	return rows, anchor
+}
+
 func (h *historyView) render(m Model, _ string) string {
 	w, scrH := m.overlayDims()
 	body := m.historyBodyRows()
@@ -151,24 +189,18 @@ func (h *historyView) render(m Model, _ string) string {
 	hint := truncate(i18n.T("[↑↓] commit  [enter] diff  [e] editor  [esc] back"), w)
 
 	// Left list. Right pane shown only when wide enough (>=60); else list-only.
+	// The list is capped at historyListMaxW; extra width goes to the diff pane.
 	split := w >= 60
 	listW := w
 	if split {
 		listW = (w - 1) / 2
+		if listW > historyListMaxW {
+			listW = historyListMaxW
+		}
 	}
 
-	wr := make([]winRow, len(h.commits))
-	for i, fc := range h.commits {
-		line := shortHash(fc.Hash) + "  " + fc.Status + "  " + fc.Subject
-		prefix := "  "
-		var st lipgloss.Style
-		if i == h.sel {
-			prefix = "> "
-			st = selectedRow
-		}
-		wr[i] = winRow{text: prefix + line, style: st}
-	}
-	win := renderWindow(wr, winOpts{w: listW, h: body, mode: h.mode, anchor: h.sel, hscroll: h.hscroll})
+	wr, anchor := h.listRows(listW)
+	win := renderWindow(wr, winOpts{w: listW, h: body, mode: h.mode, anchor: anchor, hscroll: h.hscroll})
 	if h.loading {
 		win = padLines(i18n.T("  (loading…)"), listW, body)
 	} else if h.err != nil {
