@@ -8,6 +8,15 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **File-history list: two-line entries, capped at 60 columns.** Each commit
+  in the file-history window (`h`) now renders as a meta line (date, author,
+  short hash, status letter) with the commit subject on the line below,
+  wrapped onto indented continuation lines when it exceeds the list width —
+  long titles stay fully readable instead of being cut off. On wide
+  terminals the list column is capped at 60 columns and the reclaimed width
+  goes to the diff pane; a long author name is truncated in place so the
+  hash never falls off the line.
+
 - **Compare two commit entries (bookmarks / shelved commits).** The `g`/`G`
   switchers compare two commit entries as a whole-tree compare: `m`
   mark-two within a picker, `c` across pickers (commit bookmark ↔ shelved

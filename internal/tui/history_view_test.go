@@ -3,8 +3,10 @@ package tui
 import (
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/homeend/gigagit/internal/model"
 )
@@ -161,5 +163,101 @@ func TestHistoryViewWrapMode(t *testing.T) {
 	out := h.render(m, "")
 	if strings.Count(out, "w") < 30 {
 		t.Errorf("history wrap mode did not expand the subject:\n%s", out)
+	}
+}
+
+// The left list is capped at 60 columns even on wide terminals; the remaining
+// width goes to the diff pane.
+func TestHistoryListWidthCappedAt60(t *testing.T) {
+	m := Model{width: 200, height: 30}
+	h := histFixture()
+	out := h.render(m, "")
+	lines := strings.Split(out, "\n")
+	for i, ln := range lines[1 : len(lines)-1] { // body: skip header + hint
+		idx := strings.Index(ln, "│")
+		if idx < 0 {
+			t.Fatalf("body line %d missing the pane separator:\n%s", i, out)
+		}
+		if w := lipgloss.Width(ln[:idx]); w != 60 {
+			t.Fatalf("left list must be 60 cols wide, got %d: %q", w, ln)
+		}
+	}
+}
+
+// Each history entry spans two lines: date+author+hash on the first, the
+// commit subject on the second.
+func TestHistoryEntryTwoLines(t *testing.T) {
+	ts := int64(1754800000)
+	h := &historyView{
+		ctx: navContext{path: "a.go"},
+		commits: []model.FileCommit{
+			{Commit: model.Commit{Hash: "abcdef1234", Subject: "fix parser", Author: "Ada", UnixTime: ts}, Status: "M", Path: "a.go"},
+		},
+	}
+	m := Model{width: 50, height: 20} // list-only
+	out := h.render(m, "")
+	lines := strings.Split(out, "\n")
+	meta := -1
+	for i, ln := range lines {
+		if strings.Contains(ln, "abcdef1") {
+			meta = i
+			break
+		}
+	}
+	if meta < 0 {
+		t.Fatalf("no meta line carrying the short hash:\n%s", out)
+	}
+	ml := lines[meta]
+	date := time.Unix(ts, 0).Format("2006-01-02 15:04")
+	if !strings.Contains(ml, date) {
+		t.Errorf("meta line must carry the commit date %q, got %q", date, ml)
+	}
+	if !strings.Contains(ml, "Ada") {
+		t.Errorf("meta line must carry the author, got %q", ml)
+	}
+	if !strings.HasPrefix(ml, "> ") {
+		t.Errorf("selected entry's meta line should carry the cursor, got %q", ml)
+	}
+	if strings.Contains(ml, "fix parser") {
+		t.Errorf("subject must not share the meta line: %q", ml)
+	}
+	if meta+1 >= len(lines) || !strings.Contains(lines[meta+1], "fix parser") {
+		t.Errorf("subject must sit on the line below the meta line:\n%s", out)
+	}
+}
+
+// A subject longer than the list width wraps onto continuation lines instead
+// of being cut off.
+func TestHistoryLongSubjectWrapsFully(t *testing.T) {
+	h := &historyView{
+		ctx: navContext{path: "a.go"},
+		commits: []model.FileCommit{
+			{Commit: model.Commit{Hash: "abcdef1234", Subject: strings.Repeat("Q", 120), Author: "Ada", UnixTime: 1754800000}, Status: "M", Path: "a.go"},
+		},
+	}
+	m := Model{width: 50, height: 20} // list-only
+	out := h.render(m, "")
+	if got := strings.Count(out, "Q"); got != 120 {
+		t.Errorf("wrapped subject must stay fully visible: want 120 Qs, got %d:\n%s", got, out)
+	}
+	for _, ln := range strings.Split(out, "\n") {
+		if lipgloss.Width(ln) > 50 {
+			t.Errorf("line exceeds the view width: %q", ln)
+		}
+	}
+}
+
+// A long author name is truncated in place; the hash stays visible.
+func TestHistoryLongAuthorStillShowsHash(t *testing.T) {
+	h := &historyView{
+		ctx: navContext{path: "a.go"},
+		commits: []model.FileCommit{
+			{Commit: model.Commit{Hash: "abcdef1234", Subject: "fix", Author: strings.Repeat("A", 80), UnixTime: 1754800000}, Status: "M", Path: "a.go"},
+		},
+	}
+	m := Model{width: 50, height: 20} // list-only
+	out := h.render(m, "")
+	if !strings.Contains(out, "abcdef1") {
+		t.Errorf("hash must survive a long author name:\n%s", out)
 	}
 }
