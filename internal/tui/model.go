@@ -773,6 +773,31 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		p.loading = false
 		p.rerank()
 		return m, nil
+	case filePathLsMsg:
+		p := layerOf[*filePathPopup](m)
+		if p == nil {
+			return m, nil // user closed before the load returned
+		}
+		p.loading = false
+		if msg.err != nil {
+			p.loadErr = msg.err
+			return m, nil
+		}
+		p.all = msg.paths
+		p.set = make(map[string]struct{}, len(msg.paths))
+		for _, s := range msg.paths {
+			p.set[s] = struct{}{}
+		}
+		if p.suggesting { // enter landed before the load; fill the list now
+			rel := repoRelPath(m.currentWorktree, p.input.Value())
+			if _, ok := p.set[rel]; ok {
+				// The typed path is now known exact — open it directly rather
+				// than making the user press enter again from the list.
+				return p.open(m, rel)
+			}
+			p.rerank(rel)
+		}
+		return m, nil
 	case configReadyMsg:
 		m.cfg = msg.cfg
 		m.repoConfigPath = msg.repoTOML

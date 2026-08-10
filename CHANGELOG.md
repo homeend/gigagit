@@ -8,6 +8,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Palette file history/blame: fuzzy path suggestions.** A path that isn't
+  an exact tracked file now opens an inline suggestion list (with an "open
+  as typed" escape row) instead of dead-ending; typing refines the list live.
+
 - **File-history list: two-line entries, capped at 60 columns.** Each commit
   in the file-history window (`h`) now renders as a meta line (date, author,
   short hash, status letter) with the commit subject on the line below,
