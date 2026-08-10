@@ -80,6 +80,22 @@ func (r *Repo) Tags(ctx context.Context) ([]model.Tag, error) {
 	return ParseTags([]byte(res.Stdout))
 }
 
+// TagsFingerprint returns a cheap identity of the tag ref state: one
+// "%(refname)%00%(objectname)" line per tag, in ref order, read straight from
+// the refs (no sort, no peel, no object access). Tags() sorts by creatordate,
+// which forces git to read every tag object — seconds on a huge pack — while
+// this probe stays ~instant. Tag and commit objects are immutable, so an
+// unchanged fingerprint proves an earlier Tags() result (including its order)
+// is still exact; domain uses that to cache the expensive read.
+func (r *Repo) TagsFingerprint(ctx context.Context) (string, error) {
+	argv := gitcmd.New("for-each-ref").Arg("--format=%(refname)%00%(objectname)", "refs/tags").ToArgv()
+	res, err := r.Runner.Run(ctx, "git for-each-ref (tags fp)", argv)
+	if err != nil {
+		return "", err
+	}
+	return res.Stdout, nil
+}
+
 // RemoteTags returns the set of bare tag names that exist on the named remote,
 // via one `git ls-remote --tags <remote>`. This is a NETWORK call. The "^{}"
 // peeled rows of annotated tags are folded into their base name by the parser.

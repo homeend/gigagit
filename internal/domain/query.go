@@ -186,8 +186,10 @@ func (s *Service) loadSnapshot(ctx context.Context) (Snapshot, error) {
 	})
 	run(func() {
 		// Tags is best-effort: a repo with no tags (or a failing for-each-ref)
-		// must not block startup.
-		if tags, err := s.repo.Tags(ctx); err == nil {
+		// must not block startup. Shares tagsCached with Tags() so the TUI's
+		// first Tags-tab read after startup is a cache hit, not a second
+		// multi-second object-store pass on a big repo.
+		if tags, err := s.tagsCached(ctx); err == nil {
 			mu.Lock()
 			snap.Tags = tags
 			mu.Unlock()
@@ -311,7 +313,38 @@ func (s *Service) RemoteBranches(ctx context.Context) ([]model.RemoteBranch, err
 
 // Tags is a single gated read for the CLI tag commands and the TUI Tags tab.
 func (s *Service) Tags(ctx context.Context) ([]model.Tag, error) {
-	return query(ctx, s, "tags", s.repo.Tags)
+	return query(ctx, s, "tags", s.tagsCached)
+}
+
+// tagsCached serves Tags from a fingerprint-validated cache. The full read
+// sorts by creatordate, forcing git to read every tag object before any
+// --count could apply — seconds on a big pack, on every sidebar/tab refresh.
+// A cheap refname+objectname probe (no object access) decides staleness:
+// tag objects are immutable, so an unchanged probe proves the cached rows and
+// their order are still exact. A probe failure falls through to the full read
+// — the cache must never make Tags fail. Callers share the returned slice
+// (singleflight already hands one slice to all followers); nobody mutates it.
+func (s *Service) tagsCached(ctx context.Context) ([]model.Tag, error) {
+	fp, fpErr := s.repo.TagsFingerprint(ctx)
+	if fpErr == nil {
+		s.tagsMu.Lock()
+		if s.tagsOK && s.tagsFP == fp {
+			v := s.tagsVal
+			s.tagsMu.Unlock()
+			return v, nil
+		}
+		s.tagsMu.Unlock()
+	}
+	tags, err := s.repo.Tags(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if fpErr == nil {
+		s.tagsMu.Lock()
+		s.tagsFP, s.tagsVal, s.tagsOK = fp, tags, true
+		s.tagsMu.Unlock()
+	}
+	return tags, nil
 }
 
 // defaultReflogLimit caps the HEAD reflog read when no [ui] reflog_limit is set.

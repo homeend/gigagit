@@ -18,6 +18,7 @@ import (
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/git"
 	"github.com/homeend/gigagit/internal/gitexec"
+	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/observ"
 	"github.com/homeend/gigagit/internal/prefix"
 	"github.com/homeend/gigagit/internal/profile"
@@ -63,6 +64,16 @@ type Service struct {
 	// versionsPolicy stores the engine.VersionsPolicy injected into every
 	// Execute. nil (never set) resolves to the default: enabled, 90 days.
 	versionsPolicy atomic.Value
+
+	// tagsMu guards the fingerprint-validated Tags cache. The full tags read
+	// sorts by creatordate, which makes git read every tag object — seconds on
+	// a big pack — so tagsCached revalidates with the cheap TagsFingerprint
+	// probe instead and re-reads only when the tag ref set actually changed.
+	// tagsOK (not a nil check) marks "cached", so a tagless repo caches too.
+	tagsMu  sync.Mutex
+	tagsFP  string
+	tagsVal []model.Tag
+	tagsOK  bool
 }
 
 // SetShowEOLOnlyChanges controls whether a file whose ONLY unstaged change is

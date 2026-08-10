@@ -8,6 +8,17 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Tags reads are served from a fingerprint-validated cache.** Listing tags
+  newest-first forces git to read every tag object for the date sort (seconds
+  per read on a huge pack — `--count` cannot help, the sort runs first). The
+  domain layer now revalidates with a cheap `refname+objectname` probe (no
+  object access, ~40ms on the linux repo) and re-runs the full read only when
+  the tag set actually changed: tag objects are immutable, so an unchanged
+  probe proves the cached rows and their order are still exact. First read per
+  session still pays the full cost; every later web-sidebar refetch, TUI
+  Tags-tab refresh, and startup-snapshot reuse is ~instant (measured 2.3s →
+  0.04s on a 937-tag repo).
+
 - **Palette file history/blame: fuzzy path suggestions.** A path that isn't
   an exact tracked file now opens an inline suggestion list (with an "open
   as typed" escape row) instead of dead-ending; typing refines the list live.
