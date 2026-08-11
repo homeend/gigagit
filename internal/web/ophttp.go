@@ -29,6 +29,9 @@ type opStartRequest struct {
 	Force   bool   `json:"force"`
 	Ext     bool   `json:"ext"` // ignore: the whole extension, not the one file
 	All     bool   `json:"all"` // discard: everything unstaged, no path
+	// Paths is discard's batch form (the marked set). All-or-nothing: any
+	// member failing the per-file rules refuses the whole batch.
+	Paths []string `json:"paths"`
 	// Plan is the interactive-rebase plan, in git todo order (oldest first).
 	Plan []planEntry `json:"plan"`
 }
@@ -346,6 +349,45 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			op = engine.Discard{All: true}
+			break
+		}
+		if len(req.Paths) > 0 {
+			// Batch form (the client's marked set), all-or-nothing: every
+			// member must pass the per-file rules before anything runs, so
+			// a stale mark can never half-discard.
+			for _, p := range req.Paths {
+				if p == "" || !isGitArgSafe(p) {
+					writeErr(w, http.StatusBadRequest, errors.New("invalid path"))
+					return
+				}
+			}
+			st, err := svc.Status(r.Context())
+			if err != nil {
+				writeErr(w, http.StatusInternalServerError, err)
+				return
+			}
+			kind := make(map[string]model.FileKind, len(st.Files))
+			for _, f := range st.Files {
+				kind[f.Path] = f.Kind
+			}
+			var restore, remove []string
+			for _, p := range req.Paths {
+				k, ok := kind[p]
+				if !ok {
+					writeErr(w, http.StatusNotFound, errors.New("unknown path: "+p))
+					return
+				}
+				switch k {
+				case model.KindUnmerged:
+					writeErr(w, http.StatusUnprocessableEntity, errors.New("conflicted — resolve instead: "+p))
+					return
+				case model.KindUntracked:
+					remove = append(remove, p)
+				default:
+					restore = append(restore, p)
+				}
+			}
+			op = engine.Discard{Restore: restore, Remove: remove}
 			break
 		}
 		if req.Path == "" || !isGitArgSafe(req.Path) {
