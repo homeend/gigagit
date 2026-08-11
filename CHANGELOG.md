@@ -8,6 +8,22 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **TUI mouse: right-click opens the action menu, double-click acts as enter,
+  middle-click acts as esc.**
+  A right-click on a panel row (or a files-view row, or on the diff/history/
+  blame views) selects the row under the cursor and opens its `.` action menu —
+  a shortcut for `.`, never the only path. Two quick left-clicks on the same
+  row act as enter on it: double-click a commit to drill into its files,
+  double-click a branch to jump to its tip, double-click to run the selected
+  action-menu row or a list popup's selected row (repo/bookmark/shelf
+  switchers, command palette, pair-op picker; the help viewer closes). Both
+  are synthesized key events, so they can never drift from what the keys do.
+  A middle-click acts as esc where closing loses nothing: the diff/history/
+  blame readers, list popups, the action menu, the files view, and the base
+  layout. Text-entry popups, the rebase/conflict editors, and the decision
+  modal stay mouse-inert — a stray double-click or wheel-press must never
+  submit a form, discard typed input, or commit/abort a decision.
+
 - **Web: solo a tag + check out a tag.** The tag menu gains **solo this
   tag** (narrows the commit list to the tag's history — `/api/solo` now
   accepts tag names alongside branches, resolved against a fresh read so
