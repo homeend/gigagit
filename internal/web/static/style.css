@@ -81,6 +81,9 @@ body.resizing { cursor: col-resize; user-select: none; }
 #files-list { list-style: none; }
 #files-list li { padding: 2px 8px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #files-list li.sel { background: var(--sel); }
+/* batch-marked rows: an accent edge + tint that stacks visibly with .sel */
+#files-list li.marked { border-left: 3px solid var(--accent); padding-left: 5px; background: color-mix(in srgb, var(--accent) 12%, transparent); }
+#files-list li.marked.sel { background: color-mix(in srgb, var(--accent) 22%, var(--sel)); }
 .st { display: inline-block; width: 1.5em; color: var(--dim); }
 .st.A { color: #7bd88f; } .st.D { color: #f27a6a; } .st.M { color: #e0c06c; } .st.R { color: #6ea8fe; }
 #files-header, #diff-header {

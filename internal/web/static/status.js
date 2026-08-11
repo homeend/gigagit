@@ -70,6 +70,11 @@ function buildStatusEntries() {
   const order = { changes: 0, untracked: 1, conflicts: 2, staged: 3 };
   es.sort((a, b) => order[a.section] - order[b.section] || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
   state.statusEntries = es;
+  // prune marks whose file left the status (committed, discarded, renamed)
+  if (state.marked.size) {
+    const present = new Set(es.map((f) => f.path));
+    for (const p of state.marked) if (!present.has(p)) state.marked.delete(p);
+  }
 }
 
 

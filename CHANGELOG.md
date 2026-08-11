@@ -8,6 +8,18 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web status files: multi-select marks + batch actions.** `ctrl+click`
+  (or `m` on the focused row, which advances like the TUI's mark) marks
+  working-tree status files — accent-highlighted rows; conflict rows are
+  not markable. Right-click then offers **stage / unstage / discard N
+  marked** per the marked set's sections (marks survive a stage and flip
+  to the unstage row; discard is confirmed and all-or-nothing — the
+  `discard` op's new `paths` batch form resolves every member against a
+  fresh status read and refuses the whole batch on any unknown (404) or
+  conflicted (422) member, so a stale mark can never half-discard), plus
+  **clear marks**. Marks prune themselves when files leave the status and
+  clear when the tree goes clean.
+
 - **Web file context menu: TUI-parity batch.** Right-clicking a
   working-tree status file now offers **copy absolute path** (anchored on
   the served worktree) and **copy file name** beside copy path (the

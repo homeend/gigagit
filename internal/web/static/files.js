@@ -256,7 +256,7 @@ function renderFiles() {
           ? `<button class="act" data-i="${i}" data-un="1">u</button>`
           : `<button class="act" data-i="${i}">s</button>`;
     html +=
-      `<li class="${i === state.fileCursor ? "sel" : ""} ${f.section}" data-i="${i}">` +
+      `<li class="${i === state.fileCursor ? "sel" : ""} ${f.section}${state.marked.has(f.path) ? " marked" : ""}" data-i="${i}">` +
       `<span class="st">${esc(badge)}</span>${esc(f.path)}${btn}</li>`;
   });
   $("files-list").innerHTML = html;
@@ -328,7 +328,19 @@ async function openStatusDiff(i) {
 // exitStatusToList tears the status screen down to the full-width list —
 // used when the working tree goes clean (all staged changes committed, or
 // the last change unstaged away).
+// toggleMark flips a status file's batch mark. Conflict rows are never
+// markable: the batch rows stage/discard, and both are wrong answers to a
+// conflict (mark-resolved stays a deliberate per-file act).
+function toggleMark(path) {
+  const f = state.statusEntries.find((x) => x.path === path);
+  if (!f || f.section === "conflicts") return;
+  if (state.marked.has(path)) state.marked.delete(path);
+  else state.marked.add(path);
+  renderFiles();
+}
+
 function exitStatusToList() {
+  state.marked.clear();
   state.filesMode = "commit";
   state.pane = "commits";
   state.cursor = 0;
@@ -806,6 +818,11 @@ $("files-list").addEventListener("click", (e) => {
     return;
   }
   const li = e.target.closest("li");
+  if (li && li.dataset.i !== undefined && (e.ctrlKey || e.metaKey) && state.filesMode === "status") {
+    const f = state.statusEntries[Number(li.dataset.i)];
+    if (f) toggleMark(f.path);
+    return;
+  }
   if (li && li.dataset.i !== undefined) {
     state.pane = "files";
     focusPane();
@@ -878,6 +895,19 @@ $("files-list").addEventListener("contextmenu", (e) => {
     const ext = fileExt(f.path);
     if (ext) items.push({ label: "add *" + ext + " to .gitignore", act: () => startOp({ op: "ignore", path: f.path, ext: true }, "ignore *" + ext) });
   }
+  // batch rows for the marked set (ctrl+click / m): recomputed per section
+  // every open, so marks surviving a stage flip from "stage N" to
+  // "unstage N" naturally. Marks never include conflict rows (toggleMark).
+  if (state.marked.size) {
+    const mk = state.statusEntries.filter((x) => state.marked.has(x.path));
+    const stageable = mk.filter((x) => x.section === "changes" || x.section === "untracked").map((x) => x.path);
+    const unstageable = mk.filter((x) => x.section === "staged").map((x) => x.path);
+    if (stageable.length)
+      items.push({ label: "stage " + stageable.length + " marked", act: () => stage({ paths: stageable }) });
+    if (unstageable.length)
+      items.push({ label: "unstage " + unstageable.length + " marked", act: () => stage({ paths: unstageable, unstage: true }) });
+    items.push({ label: "clear marks (" + state.marked.size + ")", act: () => { state.marked.clear(); renderFiles(); } });
+  }
   // the mass rows vanish while an op is paused — same footguns as the
   // hidden #files-actions buttons (stage all = markers staged as resolved,
   // unstage all = auto-merged results pulled out of the merge commit)
@@ -912,6 +942,21 @@ $("files-list").addEventListener("contextmenu", (e) => {
       ),
     });
   }
+  // discard of the marked set: danger, all-or-nothing server-side (any
+  // stale mark refuses the whole batch rather than half-discarding)
+  if (state.marked.size) {
+    const dk = state.statusEntries.filter((x) => state.marked.has(x.path) && (x.section === "changes" || x.section === "untracked")).map((x) => x.path);
+    if (dk.length) {
+      items.push({
+        label: "discard " + dk.length + " marked", danger: true,
+        act: () => showLocalConfirm(
+          "Discard the " + dk.length + " marked file" + (dk.length > 1 ? "s" : "") + "? Tracked edits are reverted, untracked files are deleted. This cannot be undone.",
+          ["discard", "abort"],
+          (o) => { if (o === "discard") startOp({ op: "discard", paths: dk }, "discard " + dk.length + " marked"); }
+        ),
+      });
+    }
+  }
   // discard-all shares the paused-op gate with the other mass rows, and the
   // confirm names BOTH halves — tracked edits reverted AND untracked files
   // deleted — because "all" spans two different kinds of loss.
@@ -943,4 +988,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { SECTION_LABELS, activeFileList, applyCompareFilter, cfSideCount, cfSideHTML, clearDiffHunks, conflictPick, diffChangeBlocks, diffHTML, diffHunks, drillOut, enterFilesStage, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markSpans, openCompare, openConflictPicker, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, renderResolveBar, reopenAfterHunkStage, resolveConflictPicked, setAllConflictPicks, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepToNextConflict, updateDiffNav };
+export { SECTION_LABELS, activeFileList, applyCompareFilter, cfSideCount, cfSideHTML, clearDiffHunks, conflictPick, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, enterFilesStage, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markSpans, openCompare, openConflictPicker, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, renderResolveBar, reopenAfterHunkStage, resolveConflictPicked, setAllConflictPicks, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepToNextConflict, updateDiffNav };

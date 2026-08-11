@@ -5,7 +5,7 @@ import { closeLayer, topLayer } from "./layers.js";
 import { WT_H, wtCount, wtExtra } from "./status.js";
 import { doCommit, doPull, doPush, openHelp, refreshAfterOp, stageFocused, toggleSidebar } from "./ops.js";
 import { closeCommitFilter, gotoCommitPrompt, openCommit, openCommitFilter, renderCommits, toggleGraphMode } from "./commits.js";
-import { drillOut, openFile, renderFiles } from "./files.js";
+import { drillOut, openFile, renderFiles, toggleMark } from "./files.js";
 import { openPalette } from "./palette.js";
 
 // --- focus + keyboard ---
@@ -121,6 +121,13 @@ document.addEventListener("keydown", (e) => {
     if (!state.op) refreshAfterOp(); // full soft reload: repo, sidebar, status, commits
   } else if (e.key === "s" || e.key === "u") {
     stageFocused(e.key === "u");
+  } else if (e.key === "m") {
+    // mark the focused status file for a batch action (ctx-menu rows), then
+    // advance so a run of files marks with a run of m presses
+    if (state.filesMode === "status" && state.pane === "files") {
+      const f = state.statusEntries[state.fileCursor];
+      if (f) { toggleMark(f.path); moveCursor(1); }
+    }
   } else if (e.key === "/") {
     e.preventDefault(); // the browser's quick-find would grab it
     openCommitFilter();
