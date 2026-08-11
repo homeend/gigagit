@@ -39,12 +39,15 @@ type opStartRequest struct {
 }
 
 // handleOpStart begins an operation and returns 202 {op_id}. Ops wired so
-// far: switch, commit, fetch, pull, push, merge, rebase, create-branch,
-// rename-branch, create-worktree, delete-branch, delete-tag, remove-worktree,
-// stash, stash-apply, stash-pop, stash-drop, discard, restore-version,
-// delete-version, continue, abort; the switch statement is
-// where future ops land. pull and push each take an OPTIONAL branch — omitted
-// means the current one.
+// far: switch, commit, fetch, pull, push, merge, rebase, interactive-rebase,
+// commit-edit, create-branch, rename-branch, create-worktree, delete-branch,
+// delete-tag, create-tag, annotate-tag, push-tag, delete-remote-tag,
+// fast-forward, checkout, reset, checkout-remote, delete-remote-branch,
+// reset-remote, prune, remove-worktree, stash, stash-apply, stash-pop,
+// stash-drop, discard, ignore, commit-graph, restore-version,
+// delete-version, continue, abort; the switch statement is where future ops
+// land. pull and push each take an OPTIONAL branch — omitted means the
+// current one.
 func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 	svc := s.service()
 	var req opStartRequest
