@@ -22,9 +22,15 @@ async function openSettings() {
   renderSettings();
   pushLayer("settings", $("settings"), {
     onKey: (e) => {
-      if (e.key === "Escape") closeLayer("settings");
-      e.preventDefault();
-      return true; // the overlay owns the keyboard until closed
+      if (e.key === "Escape") {
+        closeLayer("settings");
+        e.preventDefault();
+        return true;
+      }
+      // Swallow WITHOUT preventDefault (the ctx-menu convention): the app's
+      // hotkeys must not fire under the overlay, but default behavior must —
+      // preventDefault here is what would make every input/textarea deaf.
+      return true;
     },
   });
 }
