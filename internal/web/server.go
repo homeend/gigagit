@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/exttool"
 )
 
 // Server serves the probe's JSON API and static assets for one repository.
@@ -47,6 +48,10 @@ type Server struct {
 	// reposPath overrides the MRU registry location (test seam); empty =
 	// repos.DefaultStatePath().
 	reposPath string
+
+	// detectTools overrides the external-tools catalog probe (test seam);
+	// nil = exttool.Detect against the real machine.
+	detectTools func() []exttool.Detection
 
 	// packThreshold overrides bigRepoPackBytes for /api/health's "big"
 	// verdict (test seam); 0 = the production const.
@@ -81,6 +86,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/identity", s.handleIdentity)
 	mux.HandleFunc("POST /api/profiles", writeGuard(s.handleProfileAdd))
 	mux.HandleFunc("POST /api/profiles/remove", writeGuard(s.handleProfileRemove))
+	mux.HandleFunc("GET /api/exttools", s.handleExtTools)
 	mux.HandleFunc("GET /api/prefixes", s.handlePrefixes)
 	mux.HandleFunc("POST /api/prefixes", writeGuard(s.handlePrefixAdd))
 	mux.HandleFunc("POST /api/prefixes/remove", writeGuard(s.handlePrefixRemove))

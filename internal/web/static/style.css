@@ -219,16 +219,16 @@ mark.r { background: var(--span-add); color: inherit; }
 
 /* settings + identity overlays — the help overlay's shell with control rows
    (the identity overlay reuses the settings recipe wholesale) */
-#settings, #identity, #prefixes { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; z-index: 11; }
-#settings.hidden, #identity.hidden, #prefixes.hidden { display: none; }
-#settings-box, #identity-box, #prefixes-box { background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; padding: 18px 24px; width: 640px; max-width: 92vw; max-height: 84vh; overflow-y: auto; }
-#settings-box h2, #identity-box h2, #prefixes-box h2 { margin: 0 0 10px; font-size: 15px; }
-#settings-box h3, #identity-box h3, #prefixes-box h3 { margin: 24px 0 8px; padding-top: 14px; border-top: 1px solid var(--border); font-size: 12px; color: var(--dim); text-transform: uppercase; letter-spacing: .05em; }
-#settings-box h3:first-of-type, #identity-box h3:first-of-type, #prefixes-box h3:first-of-type { margin-top: 12px; padding-top: 0; border-top: none; }
-#settings-box .srow, #identity-box .srow, #prefixes-box .srow { display: flex; gap: 10px; align-items: center; line-height: 1.9; flex-wrap: wrap; margin: 2px 0; }
+#settings, #identity, #prefixes, #exttools { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; z-index: 11; }
+#settings.hidden, #identity.hidden, #prefixes.hidden, #exttools.hidden { display: none; }
+#settings-box, #identity-box, #prefixes-box, #exttools-box { background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; padding: 18px 24px; width: 640px; max-width: 92vw; max-height: 84vh; overflow-y: auto; }
+#settings-box h2, #identity-box h2, #prefixes-box h2, #exttools-box h2 { margin: 0 0 10px; font-size: 15px; }
+#settings-box h3, #identity-box h3, #prefixes-box h3, #exttools-box h3 { margin: 24px 0 8px; padding-top: 14px; border-top: 1px solid var(--border); font-size: 12px; color: var(--dim); text-transform: uppercase; letter-spacing: .05em; }
+#settings-box h3:first-of-type, #identity-box h3:first-of-type, #prefixes-box h3:first-of-type, #exttools-box h3:first-of-type { margin-top: 12px; padding-top: 0; border-top: none; }
+#settings-box .srow, #identity-box .srow, #prefixes-box .srow, #exttools-box .srow { display: flex; gap: 10px; align-items: center; line-height: 1.9; flex-wrap: wrap; margin: 2px 0; }
 #settings-box .slbl, #identity-box .slbl, #prefixes-box .slbl { flex: none; width: 190px; color: var(--accent); }
-#settings-box .snote, #identity-box .snote, #prefixes-box .snote { color: var(--dim); font-size: 11px; }
-#settings-box .sval, #identity-box .sval, #prefixes-box .sval { color: var(--fg); }
+#settings-box .snote, #identity-box .snote, #prefixes-box .snote, #exttools-box .snote { color: var(--dim); font-size: 11px; }
+#settings-box .sval, #identity-box .sval, #prefixes-box .sval, #exttools-box .sval { color: var(--fg); }
 #settings-box .stui { color: var(--dim); font-size: 10px; text-transform: none; letter-spacing: 0; }
 /* controls: the app's dark button recipe (files-actions), never the UA default */
 #settings-box button, #identity-box button, #prefixes-box button {
@@ -267,7 +267,7 @@ mark.r { background: var(--span-add); color: inherit; }
 #settings-box .ssave button { border-color: #a8843c; color: #d9a441; font-weight: 600; }
 #settings-box :disabled, #identity-box :disabled, #prefixes-box :disabled { opacity: .45; cursor: default; }
 #settings-box .serr, #identity-box .serr, #prefixes-box .serr { color: var(--err, #e66); min-height: 1.2em; }
-#settings-box .sfoot, #identity-box .sfoot, #prefixes-box .sfoot { margin-top: 10px; color: var(--dim); font-size: 11px; }
+#settings-box .sfoot, #identity-box .sfoot, #prefixes-box .sfoot, #exttools-box .sfoot { margin-top: 10px; color: var(--dim); font-size: 11px; }
 /* identity-only bits: a profile is ONE line — name, identity (ellipsized),
    buttons pinned right; form inputs get a usable width */
 #identity-box .prow, #prefixes-box .prow { flex-wrap: nowrap; }
@@ -578,3 +578,10 @@ tr.hk.picked td.no { background: var(--sel); color: var(--fg); }
 /* prefixes overlay: the VALUE is the row's main content — it flexes and
    ellipsizes (unlike the identity rows, where the name column is fixed) */
 #prefixes-box .prow .pfxval { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* exttools overlay: category/mode badges, dimmed command line, red problem */
+#exttools-box .xcmd, #exttools-box .xdet { margin: 6px 0 10px; }
+#exttools-box .xbadge { background: var(--bg); border: 1px solid var(--border); border-radius: 3px; padding: 0 6px; font-size: 10px; color: var(--dim); text-transform: none; }
+#exttools-box .xok { color: #7dbd7d; font-size: 11px; }
+#exttools-box .xcmdline { color: var(--dim); font-size: 11px; font-family: inherit; margin: 2px 0 0 12px; overflow-wrap: anywhere; }
+#exttools-box .xproblem { color: var(--err, #e66); font-size: 11px; margin: 2px 0 0 12px; }
+#exttools-box .xtmpl { margin-left: 12px; }
