@@ -222,7 +222,8 @@ mark.r { background: var(--span-add); color: inherit; }
 #settings.hidden { display: none; }
 #settings-box { background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; padding: 18px 24px; width: 640px; max-width: 92vw; max-height: 84vh; overflow-y: auto; }
 #settings-box h2 { margin: 0 0 10px; font-size: 15px; }
-#settings-box h3 { margin: 14px 0 6px; font-size: 12px; color: var(--dim); text-transform: uppercase; letter-spacing: .05em; }
+#settings-box h3 { margin: 24px 0 8px; padding-top: 14px; border-top: 1px solid var(--border); font-size: 12px; color: var(--dim); text-transform: uppercase; letter-spacing: .05em; }
+#settings-box h3:first-of-type { margin-top: 12px; padding-top: 0; border-top: none; }
 #settings-box .srow { display: flex; gap: 10px; align-items: center; line-height: 1.9; flex-wrap: wrap; margin: 2px 0; }
 #settings-box .slbl { flex: none; width: 190px; color: var(--accent); }
 #settings-box .snote { color: var(--dim); font-size: 11px; }
@@ -246,9 +247,12 @@ mark.r { background: var(--span-add); color: inherit; }
 #settings-box input:focus, #settings-box textarea:focus, #settings-box button:focus-visible {
   outline: none; border-color: var(--accent);
 }
-#settings-box .sratewrap { display: flex; flex-wrap: wrap; gap: 6px 14px; }
-#settings-box .srate { color: var(--dim); font-size: 11px; display: inline-flex; align-items: center; gap: 5px; }
-#settings-box .srate input, #settings-box #s-retention { width: 52px; text-align: right; }
+#settings-box .srates { align-items: flex-start; }
+#settings-box .srates .slbl { line-height: 1.9; }
+#settings-box .sratewrap { display: flex; flex-direction: column; gap: 4px; }
+#settings-box .srate { color: var(--dim); font-size: 12px; display: flex; align-items: center; gap: 10px; }
+#settings-box .srate span { width: 110px; }
+#settings-box .srate input, #settings-box #s-retention { width: 64px; text-align: right; }
 #settings-box .shook textarea { flex: 1 1 260px; resize: vertical; }
 #settings-box .serr { color: var(--err, #e66); min-height: 1.2em; }
 #settings-box .sfoot { margin-top: 10px; color: var(--dim); font-size: 11px; }

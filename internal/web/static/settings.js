@@ -59,9 +59,11 @@ function commitGraphRow(d) {
 function renderSettings() {
   const d = state.settings;
   if (!d) return;
+  // One label+input per line (a vertical list, not a flow) — nine wrapped
+  // pairs read as noise; a column scans.
   const rates = REFRESH_SOURCES.map(
     (src) =>
-      `<label class="srate">${esc(src.replace("_", " "))} <input type="number" min="0" data-rate="${src}" value="${d.refresh[src] ?? 0}"></label>`
+      `<label class="srate"><span>${esc(src.replace("_", " "))}</span><input type="number" min="0" data-rate="${src}" value="${d.refresh[src] ?? 0}"></label>`
   ).join("");
   $("settings-box").innerHTML = `
     <h2>settings</h2>
