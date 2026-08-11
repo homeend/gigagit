@@ -10,12 +10,13 @@ import { gotoBranchTip, openCommitByHash, openStashDetail, setSolo } from "./com
 import { openCompare } from "./files.js";
 
 async function fetchBranches() {
-  const [b, w, tg, st, rl] = await Promise.all([
+  const [b, w, tg, st, rl, rm] = await Promise.all([
     getJSON("/api/branches"),
     getJSON("/api/worktrees").catch(() => ({ worktrees: [] })),
     getJSON("/api/tags").catch(() => ({ tags: [], truncated: false })),
     getJSON("/api/stashes").catch(() => ({ stashes: [] })),
     getJSON("/api/reflog").catch(() => ({ entries: [], truncated: false })),
+    getJSON("/api/remotes").catch(() => ({ remotes: [], truncated: false })),
   ]);
   state.branches = b.branches || [];
   state.worktrees = w.worktrees || [];
@@ -24,7 +25,10 @@ async function fetchBranches() {
   state.stashes = st.stashes || [];
   state.reflog = rl.entries || [];
   state.reflogTruncated = !!rl.truncated;
+  state.remotes = rm.remotes || [];
+  state.remotesTruncated = !!rm.truncated;
   renderBranches();
+  renderRemotes();
   renderWorktrees();
   renderTags();
   renderStashes();
@@ -43,6 +47,15 @@ function renderBranches() {
       );
     })
     .join("");
+}
+
+
+function renderRemotes() {
+  let html = state.remotes
+    .map((rb) => `<li data-n="${esc(rb.name)}" data-h="${esc(rb.hash)}">${esc(rb.name)}</li>`)
+    .join("");
+  if (state.remotesTruncated) html += `<li class="more">… more (capped at 100)</li>`;
+  $("remotes-list").innerHTML = html;
 }
 
 
@@ -350,6 +363,89 @@ function showBranchPairMenu(src, dst, x, y) {
 }
 
 
+// Left-click a remote branch: show its tip commit (a READ, like tags).
+$("remotes-list").addEventListener("click", (e) => {
+  const li = e.target.closest("li");
+  if (!li || !li.dataset.h) return;
+  openCommitByHash(li.dataset.h, li.dataset.n);
+});
+
+
+function showRemoteMenu(rb, x, y) {
+  const cur = state.branches.find((x) => x.is_head);
+  const items = [
+    { label: "show commit", act: () => openCommitByHash(rb.hash, rb.name) },
+    {
+      // Materialize under a local name, staying on the current branch. The
+      // engine is fast-forward-safe: a diverged local name is refused —
+      // rerun with a different name.
+      label: "check out " + rb.name + " as…",
+      act: () =>
+        openPrompt({
+          title: "Check out " + rb.name + " as local branch (stay here):",
+          value: rb.branch,
+          onSubmit: (name) => startOp({ op: "checkout-remote", ref: rb.name, name }, "checking out " + rb.name + " as " + name),
+        }),
+    },
+    {
+      label: "switch to " + rb.name + " as…",
+      act: () =>
+        openPrompt({
+          title: "Check out " + rb.name + " as local branch and switch to it:",
+          value: rb.branch,
+          onSubmit: (name) => startOp({ op: "checkout-remote", ref: rb.name, name, switch: true }, "switching to " + rb.name + " as " + name),
+        }),
+    },
+  ];
+  if (cur) {
+    items.push({
+      label: "merge " + rb.name + " into current (" + cur.name + ")",
+      act: () => startOp({ op: "merge", branch: rb.name, onto: cur.name }, "merging " + rb.name + " into " + cur.name),
+    });
+    items.push({
+      label: "rebase current (" + cur.name + ") onto " + rb.name,
+      act: () => startOp({ op: "rebase", branch: cur.name, onto: rb.name }, "rebasing " + cur.name + " onto " + rb.name),
+    });
+  }
+  // Only on the CURRENT branch's own remote counterpart — resetting to
+  // another branch's remote would move the wrong branch (the TUI rule; the
+  // server enforces it too). The preset hard mode skips every engine guard,
+  // so this local confirm is the only one.
+  if (cur && rb.branch === cur.name) {
+    items.push({
+      label: "reset current (" + cur.name + ") to " + rb.name + " tip",
+      danger: true,
+      act: () =>
+        showLocalConfirm(
+          "Reset " + cur.name + " to " + rb.name + "? This discards local commits and uncommitted changes.",
+          ["reset", "abort"],
+          (o) => {
+            if (o === "reset") startOp({ op: "reset-remote", ref: rb.name }, "resetting " + cur.name + " to " + rb.name);
+          }
+        ),
+    });
+  }
+  items.push({ label: "copy name", act: () => copyText(rb.name, "name " + rb.name) });
+  if (rb.hash) items.push({ label: "copy commit id", act: () => copyText(rb.hash, "commit id " + rb.hash) });
+  items.push({
+    // The engine's own confirm parks in the modal before the deletion is
+    // pushed (the delete-branch precedent).
+    label: "delete " + rb.name + " from remote",
+    danger: true,
+    act: () => startOp({ op: "delete-remote-branch", ref: rb.name }, "deleting " + rb.name),
+  });
+  showCtxMenu(items, x, y);
+}
+
+$("remotes-list").addEventListener("contextmenu", (e) => {
+  const li = e.target.closest("li");
+  if (!li || !li.dataset.n) return;
+  e.preventDefault();
+  const rb = state.remotes.find((x) => x.name === li.dataset.n);
+  if (rb) showRemoteMenu(rb, e.clientX, e.clientY);
+});
+
+
 function showWorktreeMenu(w, x, y) {
   const items = [{ label: "copy path", act: () => copyText(w.path) }];
   // A bare or detached worktree has no branch name to copy.
@@ -558,4 +654,4 @@ $("reflog-list").addEventListener("contextmenu", (e) => {
   if (en) showReflogMenu(en, e.clientX, e.clientY);
 });
 
-export { branchesList, clearDropTargets, defaultWorktreePath, fetchBranches, openCreateBranchPrompt, renderBranches, renderReflog, renderStashes, renderTags, renderWorktrees, showBranchMenu, showBranchPairMenu, showReflogMenu, showStashMenu, showTagMenu, showWorktreeMenu, toggleSection, worktreePathForBranch };
+export { branchesList, clearDropTargets, defaultWorktreePath, fetchBranches, openCreateBranchPrompt, renderBranches, renderReflog, renderRemotes, renderStashes, renderTags, renderWorktrees, showBranchMenu, showBranchPairMenu, showReflogMenu, showRemoteMenu, showStashMenu, showTagMenu, showWorktreeMenu, toggleSection, worktreePathForBranch };
