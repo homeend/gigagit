@@ -94,7 +94,11 @@ async function postJSON(url, body) {
     body: JSON.stringify(body),
   });
   const data = await resp.json();
-  if (!resp.ok) throw new Error(data.error || resp.statusText);
+  if (!resp.ok) {
+    const err = new Error(data.error || resp.statusText);
+    err.data = data; // structured refusals (e.g. reroot's repairable handshake)
+    throw err;
+  }
   return data;
 }
 
