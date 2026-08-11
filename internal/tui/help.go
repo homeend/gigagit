@@ -75,6 +75,8 @@ func helpContent() []contentLine {
 		h(i18n.T("Worktrees panel")),
 		r("enter", i18n.T("switch into the selected worktree")),
 		r("d", i18n.T("remove the selected worktree")),
+		r("e", i18n.T("rename the selected worktree directory (git worktree move; the current worktree follows the move)")),
+		r(".", i18n.T("Move worktree (.-menu): relocate the selected worktree to any path")),
 		h(i18n.T("Tags panel")),
 		r("", i18n.T("a tab in the middle (Files) box — ctrl+←/→ switches Files ⇄ Tags; ● annotated, ○ lightweight; ▲ marks tags that exist on the default remote (origin or first remote) — local-only or not-yet-checked tags show no marker (deliberately indistinguishable before a lookup runs)")),
 		r("enter", i18n.T("jump the Commits cursor to the tag's target commit")),

@@ -240,6 +240,8 @@ func optionDisplayName(value string) string {
 		return i18n.T("skip")
 	case "soft":
 		return i18n.T("soft")
+	case "unlock-and-move":
+		return i18n.T("unlock-and-move")
 	case "unlock-and-remove":
 		return i18n.T("unlock-and-remove")
 	case "working-tree":

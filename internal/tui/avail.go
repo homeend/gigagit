@@ -157,6 +157,14 @@ func (m Model) canDeleteWorktree() bool {
 	return m.opsIdle() && ok && wt.Path != m.currentWorktree
 }
 
+// canMoveWorktree gates e / the rename+move menu rows on Worktrees: any
+// linked worktree may move — including the current one (the TUI follows the
+// move) — but never the main worktree.
+func (m Model) canMoveWorktree() bool {
+	wt, ok := m.selectedWorktree()
+	return m.opsIdle() && ok && len(m.worktrees) > 0 && wt.Path != m.worktrees[0].Path
+}
+
 // canEnterWorktree gates enter on Worktrees: re-root into another worktree.
 func (m Model) canEnterWorktree() bool {
 	wt, ok := m.selectedWorktree()
