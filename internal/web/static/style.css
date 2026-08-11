@@ -215,6 +215,56 @@ mark.r { background: var(--span-add); color: inherit; }
 #ctx-menu button:hover { background: var(--sel); }
 #ctx-menu button.danger { color: #f27a6a; } /* matches #op-line.err */
 #ctx-menu .sep { border-top: 1px solid var(--border); margin: 4px 0; }
+#ctx-menu .ctx-header { padding: 3px 12px 1px; font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: .08em; cursor: default; }
+
+/* settings overlay — the help overlay's shell with control rows */
+#settings { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; z-index: 11; }
+#settings.hidden { display: none; }
+#settings-box { background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; padding: 18px 24px; width: 640px; max-width: 92vw; max-height: 84vh; overflow-y: auto; }
+#settings-box h2 { margin: 0 0 10px; font-size: 15px; }
+#settings-box h3 { margin: 24px 0 8px; padding-top: 14px; border-top: 1px solid var(--border); font-size: 12px; color: var(--dim); text-transform: uppercase; letter-spacing: .05em; }
+#settings-box h3:first-of-type { margin-top: 12px; padding-top: 0; border-top: none; }
+#settings-box .srow { display: flex; gap: 10px; align-items: center; line-height: 1.9; flex-wrap: wrap; margin: 2px 0; }
+#settings-box .slbl { flex: none; width: 190px; color: var(--accent); }
+#settings-box .snote { color: var(--dim); font-size: 11px; }
+#settings-box .sval { color: var(--fg); }
+#settings-box .stui { color: var(--dim); font-size: 10px; text-transform: none; letter-spacing: 0; }
+/* controls: the app's dark button recipe (files-actions), never the UA default */
+#settings-box button {
+  background: var(--bg); color: var(--fg); border: 1px solid var(--border);
+  border-radius: 4px; padding: 2px 12px; font: inherit; font-size: 12px; cursor: pointer;
+}
+#settings-box button:hover { border-color: var(--accent); }
+#settings-box .stgl { min-width: 52px; text-align: center; color: var(--dim); }
+#settings-box .stgl.on { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--bg)); }
+#settings-box input, #settings-box textarea {
+  background: var(--bg); color: var(--fg); border: 1px solid var(--border);
+  border-radius: 4px; padding: 2px 8px; font: inherit; font-size: 12px;
+}
+#settings-box input:focus, #settings-box textarea:focus, #settings-box button:focus-visible {
+  outline: none; border-color: var(--accent);
+}
+#settings-box .srates { align-items: flex-start; }
+#settings-box .srates .slbl { line-height: 1.9; }
+#settings-box .sratewrap { display: flex; flex-direction: column; gap: 4px; }
+#settings-box .srate { color: var(--dim); font-size: 12px; display: flex; align-items: center; gap: 10px; }
+#settings-box .srate span { width: 110px; }
+#settings-box .srate input, #settings-box #s-retention { width: 64px; text-align: right; }
+#settings-box .shook textarea { flex: 1 1 260px; resize: vertical; }
+#settings-box .ssave {
+  display: flex; align-items: center; gap: 14px; margin-top: 14px;
+  padding: 8px 12px; border: 1px solid #a8843c; border-radius: 4px;
+  /* Sticky within the scrollable box: an edit near the top must still show
+     its warning without scrolling to the bottom. */
+  position: sticky; bottom: 0; background: var(--bg-alt);
+  box-shadow: 0 -6px 12px rgba(0,0,0,.35);
+}
+#settings-box .ssave.hidden { display: none; }
+#settings-box .swarn { color: #d9a441; }
+#settings-box .ssave button { border-color: #a8843c; color: #d9a441; font-weight: 600; }
+#settings-box :disabled { opacity: .45; cursor: default; }
+#settings-box .serr { color: var(--err, #e66); min-height: 1.2em; }
+#settings-box .sfoot { margin-top: 10px; color: var(--dim); font-size: 11px; }
 #branches-list li.head { cursor: pointer; } /* left-click = go to tip, safe for HEAD too */
 #back-btn {
   display: block; width: 100%; text-align: left; padding: 4px 8px;

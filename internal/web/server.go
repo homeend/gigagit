@@ -76,6 +76,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/stashes", s.handleStashes)
 	mux.HandleFunc("GET /api/reflog", s.handleReflog)
 	mux.HandleFunc("GET /api/remotes", s.handleRemotes)
+	mux.HandleFunc("GET /api/settings", s.handleSettingsGet)
+	mux.HandleFunc("POST /api/settings", writeGuard(s.handleSettingsSet))
 	mux.HandleFunc("GET /api/commits", s.handleCommits)
 	mux.HandleFunc("POST /api/solo", writeGuard(s.handleSolo))
 	mux.HandleFunc("GET /api/commit/{sha}", s.handleCommitFiles)

@@ -131,6 +131,8 @@ func (s *Server) handleReroot(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	s.feed = nil
 	s.mu.Unlock()
+	// The new root's [versions] policy (the serve-boot re-apply point).
+	applyVersionsPolicy(r.Context(), cand, s.activeRepoConfigPathOr(r.Context(), cand))
 	// The new root becomes navigable-back-to forever (touchMRU on serve
 	// covers the original root).
 	touchMRU(r.Context(), cand, s.reposStatePath())
