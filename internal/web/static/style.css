@@ -215,6 +215,27 @@ mark.r { background: var(--span-add); color: inherit; }
 #ctx-menu button:hover { background: var(--sel); }
 #ctx-menu button.danger { color: #f27a6a; } /* matches #op-line.err */
 #ctx-menu .sep { border-top: 1px solid var(--border); margin: 4px 0; }
+#ctx-menu .ctx-header { padding: 3px 12px 1px; font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: .08em; cursor: default; }
+
+/* settings overlay — the help overlay's shell with control rows */
+#settings { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; z-index: 11; }
+#settings.hidden { display: none; }
+#settings-box { background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; padding: 18px 24px; width: 640px; max-width: 92vw; max-height: 84vh; overflow-y: auto; }
+#settings-box h2 { margin: 0 0 10px; font-size: 15px; }
+#settings-box h3 { margin: 14px 0 6px; font-size: 12px; color: var(--dim); text-transform: uppercase; letter-spacing: .05em; }
+#settings-box .srow { display: flex; gap: 10px; align-items: baseline; line-height: 1.9; flex-wrap: wrap; }
+#settings-box .slbl { flex: none; width: 190px; color: var(--accent); }
+#settings-box .snote { color: var(--dim); font-size: 11px; }
+#settings-box .sval { color: var(--fg); }
+#settings-box .stui { color: var(--dim); font-size: 10px; text-transform: none; letter-spacing: 0; }
+#settings-box .stgl { min-width: 44px; }
+#settings-box .stgl.on { border-color: var(--accent); color: var(--accent); }
+#settings-box .sratewrap { display: flex; flex-wrap: wrap; gap: 6px 12px; }
+#settings-box .srate { color: var(--dim); font-size: 11px; }
+#settings-box .srate input, #settings-box #s-retention { width: 58px; }
+#settings-box .shook textarea { flex: 1 1 260px; font: inherit; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 4px; padding: 4px 6px; }
+#settings-box .serr { color: var(--err, #e66); min-height: 1.2em; }
+#settings-box .sfoot { margin-top: 10px; color: var(--dim); font-size: 11px; }
 #branches-list li.head { cursor: pointer; } /* left-click = go to tip, safe for HEAD too */
 #back-btn {
   display: block; width: 100%; text-align: left; padding: 4px 8px;

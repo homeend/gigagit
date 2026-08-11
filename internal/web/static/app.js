@@ -16,6 +16,7 @@ import { loadCommits, renderCommits } from "./commits.js";
 import "./files.js";
 import { focusPane } from "./keys.js";
 import { fetchHealth } from "./bigrepo.js";
+import "./settings.js";
 import "./palette.js";
 
 async function boot() {

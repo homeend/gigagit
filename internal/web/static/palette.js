@@ -6,6 +6,7 @@ import { doFetch, doPull, doPush, doReroot, opLine, openHelp, refreshAfterOp, st
 import { openCreateBranchPrompt } from "./sidebar.js";
 import { openVersionBranches } from "./versions.js";
 import { openFileBlame, openFileHistory } from "./filehist.js";
+import { openSettings } from "./settings.js";
 import { startReview } from "./review.js";
 import { gotoCommitPrompt, openCommitFilter, toggleGraphMode } from "./commits.js";
 import { openWorkingTree } from "./files.js";
@@ -27,6 +28,7 @@ function paletteCommands() {
     { label: "push", detail: "P", run: () => doPush() },
     { label: "fetch all remotes", detail: "", run: () => doFetch() },
     { label: "prune remotes (drop deleted branches)", detail: "", run: () => startOp({ op: "prune" }, "pruning remotes") },
+    { label: "settings…", detail: "", run: () => openSettings() },
     { label: "create branch…", detail: "", run: () => openCreateBranchPrompt() },
     { label: "branch versions…", detail: "", run: () => openVersionBranches() },
     { label: "file history…", detail: "", run: () => openPrompt({ title: "File history — repo-relative path", placeholder: "e.g. internal/web/server.go", onSubmit: (p) => openFileHistory(p, "") }) },
@@ -174,10 +176,11 @@ $("palette-list").addEventListener("click", (e) => {
 
 function openGlobalMenu() {
   const r = $("menu-btn").getBoundingClientRect();
-  // Sorted at render so a future entry cannot land unsorted: the menu is a
-  // lookup surface (no workflow order to preserve, no destructive rows).
-  // help sits alone below a separator — the one fixed anchor.
-  const rows = [
+  // Two labelled groups — git operations, then the UI's own controls — each
+  // sorted at render so a future entry cannot land unsorted within its
+  // group; a new row must pick its group, nothing else. help sits alone
+  // below a separator — the one fixed anchor.
+  const git = [
     { label: "pull", act: () => doPull() },
     { label: "push", act: () => doPush() },
     { label: "fetch all remotes", act: () => doFetch() },
@@ -185,13 +188,16 @@ function openGlobalMenu() {
     { label: "create branch…", act: () => openCreateBranchPrompt() },
     { label: "branch versions…", act: () => openVersionBranches() },
     { label: "review working changes (AI)…", act: () => startReview("working", "") },
+  ].sort((a, b) => a.label.localeCompare(b.label));
+  const ui = [
     { label: "refresh", act: () => { if (!state.op) refreshAfterOp(); } },
     { label: "switch repo…", act: () => openPalette("repo") },
     { label: "command palette…", act: () => openPalette("cmd") },
     { label: "toggle sidebar", act: () => toggleSidebar() },
     { label: "toggle graph", act: () => toggleGraphMode() },
+    { label: "settings…", act: () => openSettings() },
   ].sort((a, b) => a.label.localeCompare(b.label));
-  rows.push({ sep: true }, { label: "help", act: () => openHelp() });
+  const rows = [{ header: "git" }, ...git, { header: "ui" }, ...ui, { sep: true }, { label: "help", act: () => openHelp() }];
   showCtxMenu(rows, r.left, r.bottom + 4);
 }
 

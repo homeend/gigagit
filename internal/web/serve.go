@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/repos"
 )
@@ -29,6 +30,16 @@ func Serve(ctx context.Context, workdir, addr string, launch bool) error {
 		return err
 	}
 	touchMRU(ctx, svc, repos.DefaultStatePath())
+	// Honor [versions] like the one-shot frontends do (cli.Run applies it per
+	// invocation; this server lives long, so boot + re-root + settings writes
+	// are the re-apply points).
+	if top, terr := svc.TopLevel(ctx); terr == nil {
+		private := ""
+		if wts, werr := svc.Worktrees(ctx); werr == nil && len(wts) > 0 && wts[0].Path != "" {
+			private = config.PrivateRepoPath(wts[0].Path)
+		}
+		applyVersionsPolicy(ctx, svc, config.ActiveRepoConfigPath(filepath.Join(top, ".gg.toml"), private))
+	}
 	ln, url, err := listen(addr)
 	if err != nil {
 		return err
