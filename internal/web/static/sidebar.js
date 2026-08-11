@@ -1,0 +1,443 @@
+// sidebar.js — part of gg's web client. Split from the original app.js;
+// see app.js (the entry module) for the load order.
+import { $, SECTIONS, esc, getJSON, lsGet, lsSet, state } from "./core.js";
+import { copyText, openPrompt, showCtxMenu } from "./layers.js";
+import { doForcePush, doPull, doPullBranch, doPush, doPushBranch, doReroot, showLocalConfirm, startOp, startSwitch } from "./ops.js";
+import { openVersions } from "./versions.js";
+import { openRebaseEditor } from "./rebase.js";
+import { startReview } from "./review.js";
+import { gotoBranchTip, openCommitByHash, openStashDetail, setSolo } from "./commits.js";
+import { openCompare } from "./files.js";
+
+async function fetchBranches() {
+  const [b, w, tg, st] = await Promise.all([
+    getJSON("/api/branches"),
+    getJSON("/api/worktrees").catch(() => ({ worktrees: [] })),
+    getJSON("/api/tags").catch(() => ({ tags: [], truncated: false })),
+    getJSON("/api/stashes").catch(() => ({ stashes: [] })),
+  ]);
+  state.branches = b.branches || [];
+  state.worktrees = w.worktrees || [];
+  state.tags = tg.tags || [];
+  state.tagsTruncated = !!tg.truncated;
+  state.stashes = st.stashes || [];
+  renderBranches();
+  renderWorktrees();
+  renderTags();
+  renderStashes();
+}
+
+
+function renderBranches() {
+  $("branches-list").innerHTML = state.branches
+    .map((b) => {
+      const ab =
+        (b.ahead ? "↑" + b.ahead : "") + (b.behind ? (b.ahead ? " " : "") + "↓" + b.behind : "");
+      return (
+        `<li class="${b.is_head ? "head" : ""}" draggable="true" data-n="${esc(b.name)}">` +
+        `${b.is_head ? "✓ " : ""}${esc(b.name)}${ab ? `<span class="ab">${ab}</span>` : ""}</li>`
+      );
+    })
+    .join("");
+}
+
+
+function renderWorktrees() {
+  $("worktrees-list").innerHTML = state.worktrees
+    .map((w) => {
+      const label = w.bare ? "(bare)" : w.detached ? "(detached)" : w.branch || "(?)";
+      const base = w.path.split("/").pop();
+      const cur = state.worktree && w.path === state.worktree ? " cur" : "";
+      return `<li class="${cur.trim()}" data-p="${esc(w.path)}" title="${esc(w.path)}">${cur ? "● " : ""}${esc(label)}<span class="wpath">${esc(base)}</span></li>`;
+    })
+    .join("");
+}
+
+
+function renderTags() {
+  let html = state.tags
+    .map(
+      (t) =>
+        `<li data-h="${esc(t.target)}" data-n="${esc(t.name)}">${esc(t.name)}` +
+        (t.subject ? `<span class="tsub">${esc(t.subject)}</span>` : "") +
+        `</li>`
+    )
+    .join("");
+  if (state.tagsTruncated) html += `<li class="more">… more (capped at 100)</li>`;
+  $("tags-list").innerHTML = html;
+}
+
+
+function renderStashes() {
+  $("stashes-list").innerHTML = state.stashes
+    .map(
+      (s) =>
+        `<li data-r="${esc(s.ref)}"${s.sha ? ` data-h="${esc(s.sha)}"` : ""}>${esc(s.ref)}` +
+        (s.subject ? `<span class="tsub">${esc(s.subject)}</span>` : "") +
+        `</li>`
+    )
+    .join("");
+}
+
+
+// A branch is checked out in at most one worktree, and both lists are
+// already in hand (the sidebar fetches them together), so the join is a
+// client-side lookup — same shape as the TUI's worktreeAbsPathForBranch.
+// No match (the common case) simply omits the row.
+function worktreePathForBranch(name) {
+  const w = state.worktrees.find((x) => x.branch === name);
+  return w ? w.path : null;
+}
+
+
+// A starting point for the worktree-path prompt, not a decision: a sibling of
+// the MAIN worktree named <repo>-<branch>. Anchoring on the main worktree
+// (git lists it first) rather than the served one keeps new worktrees from
+// nesting inside each other when you create one while inside another — the
+// same anchor the TUI's template resolver uses. Slashes in a branch name
+// become dashes so `feat/x` does not imply a directory.
+function defaultWorktreePath(branch) {
+  const main = (state.worktrees[0] && state.worktrees[0].path) || (state.repo && state.repo.worktree) || "";
+  if (!main) return "";
+  const sep = main.includes("\\") && !main.includes("/") ? "\\" : "/";
+  const cut = main.lastIndexOf(sep);
+  const parent = cut > 0 ? main.slice(0, cut) : main;
+  const name = cut >= 0 ? main.slice(cut + 1) : main;
+  return parent + sep + name + "-" + branch.replace(/[^\w.-]+/g, "-");
+}
+
+
+// Deliberately NO backdrop-closes handler, unlike the picker overlays. A
+// report is a document you read, and the chip that raised it is cleared the
+// moment it opens — so a stray click outside the box used to discard the
+// only copy in the UI. Double-clicking the ready chip did exactly that: the
+// first click opened the report, the second landed on this backdrop.
+// Closing stays explicit: the close button, or esc via the layer stack.
+
+// The global create-branch entry (☰ / palette): same op as the branch
+// menu's row, but with no start point on the wire — the server reads that as
+// HEAD, which is what "new branch" means with nothing selected.
+function openCreateBranchPrompt() {
+  openPrompt({
+    title: "New branch, starting at the current HEAD:",
+    placeholder: "branch name",
+    onSubmit: (name) => startOp({ op: "create-branch", name }, "creating " + name),
+  });
+}
+
+
+function showBranchMenu(b, x, y) {
+  const items = [{ label: "go to tip", act: () => gotoBranchTip(b) }];
+  if (!b.is_head) items.push({ label: "switch to " + b.name, act: () => startSwitch(b.name) });
+  if (b.is_head) {
+    // The checked-out branch: pulling it rewrites the working tree, so it
+    // goes through the confirming current-branch path the header button uses.
+    items.push({ label: "pull " + b.name, act: () => doPull() });
+    items.push({ label: "push " + b.name, act: () => doPush() });
+  } else {
+    items.push({ label: "pull " + b.name + " (stay here)", act: () => doPullBranch(b.name) });
+    items.push({ label: "push " + b.name, act: () => doPushBranch(b.name) });
+  }
+  // Not marked danger: the row opens the force-mode modal, where the actual
+  // destructive options are the red ones.
+  items.push({ label: "force push " + b.name + "…", act: () => doForcePush(b.name) });
+  items.push({
+    label: "rename branch…",
+    act: () =>
+      openPrompt({
+        title: "Rename " + b.name + " to:",
+        value: b.name,
+        onSubmit: (name) => {
+          if (name === b.name) return; // no-op, and the engine would refuse it
+          startOp({ op: "rename-branch", branch: b.name, name }, "renaming " + b.name);
+        },
+      }),
+  });
+  items.push({
+    label: "create branch from here…",
+    act: () =>
+      openPrompt({
+        title: "New branch, starting at " + b.name + ":",
+        placeholder: "branch name",
+        onSubmit: (name) => startOp({ op: "create-branch", name, branch: b.name }, "creating " + name),
+      }),
+  });
+  // Only offered when the branch has no worktree — git allows exactly one,
+  // and the engine would refuse a second (same gate as the copy-path row).
+  if (!worktreePathForBranch(b.name)) {
+    items.push({
+      label: "create worktree for this branch…",
+      act: () =>
+        openPrompt({
+          title: "New worktree for " + b.name + ", at path:",
+          value: defaultWorktreePath(b.name),
+          onSubmit: (path) => startOp({ op: "create-worktree", branch: b.name, path }, "creating worktree " + path),
+        }),
+    });
+  }
+  // Not gated on "does this branch have versions" — that would cost a read
+  // on every menu open; the popup shows the empty state instead (the TUI's
+  // branchVersionsRow rule).
+  items.push({ label: "previous versions…", act: () => openVersions(b.name) });
+  items.push({ label: "review " + b.name + " (AI)…", act: () => startReview("branch", b.name) });
+  if (state.solo === b.name) {
+    items.push({ label: "exit solo (show every branch)", act: () => setSolo("") });
+  } else {
+    items.push({ label: "solo this branch", act: () => setSolo(b.name) });
+  }
+  items.push({ label: "copy branch name", act: () => copyText(b.name, "branch name " + b.name) });
+  // b.hash is git's abbreviated sha (%(objectname:short)) — the same value
+  // the TUI's row copies, and short enough to name in full on the line.
+  if (b.hash) items.push({ label: "copy commit id", act: () => copyText(b.hash, "commit id " + b.hash) });
+  const wt = worktreePathForBranch(b.name);
+  if (wt) {
+    items.push({ label: "copy worktree absolute path", act: () => copyText(wt, "absolute path " + wt) });
+  }
+  // Destructive row last, as in the worktree and tag menus.
+  if (!b.is_head) {
+    items.push({
+      label: "delete " + b.name,
+      danger: true,
+      act: () => startOp({ op: "delete-branch", branch: b.name }, "deleting " + b.name),
+    });
+  }
+  showCtxMenu(items, x, y);
+}
+
+
+$("branches-list").addEventListener("click", (e) => {
+  const li = e.target.closest("li");
+  if (!li || !li.dataset.n) return;
+  const b = state.branches.find((x) => x.name === li.dataset.n);
+  if (b) gotoBranchTip(b);
+});
+
+$("branches-list").addEventListener("contextmenu", (e) => {
+  const li = e.target.closest("li");
+  if (!li || !li.dataset.n) return;
+  e.preventDefault();
+  const b = state.branches.find((x) => x.name === li.dataset.n);
+  if (b) showBranchMenu(b, e.clientX, e.clientY);
+});
+
+
+// Drag a branch onto another to merge or rebase. The drop opens the shared
+// ctx-menu naming the pair in both directions — the menu row IS the
+// confirmation, the same standing the TUI's pair-op popup has.
+const branchesList = $("branches-list");
+
+
+branchesList.addEventListener("dragstart", (e) => {
+  const li = e.target.closest("li");
+  if (!li || !li.dataset.n) return;
+  state.dragBranch = li.dataset.n;
+  // Required for a drag to start at all in Firefox; also gives the browser
+  // its default drag image.
+  e.dataTransfer.setData("text/plain", li.dataset.n);
+  e.dataTransfer.effectAllowed = "move";
+});
+
+
+branchesList.addEventListener("dragover", (e) => {
+  const li = e.target.closest("li");
+  if (!li || !li.dataset.n) return;
+  if (!state.dragBranch || li.dataset.n === state.dragBranch) return;
+  // preventDefault is what marks this element as a valid drop target.
+  e.preventDefault();
+  e.dataTransfer.dropEffect = "move";
+  li.classList.add("drop-target");
+});
+
+
+branchesList.addEventListener("dragleave", (e) => {
+  const li = e.target.closest("li");
+  if (li) li.classList.remove("drop-target");
+});
+
+
+branchesList.addEventListener("dragend", () => {
+  state.dragBranch = null;
+  clearDropTargets();
+});
+
+
+branchesList.addEventListener("drop", (e) => {
+  const li = e.target.closest("li");
+  const src = state.dragBranch;
+  state.dragBranch = null;
+  clearDropTargets();
+  if (!li || !li.dataset.n || !src) return;
+  const dst = li.dataset.n;
+  if (dst === src) return;
+  e.preventDefault();
+  showBranchPairMenu(src, dst, e.clientX, e.clientY);
+});
+
+
+function clearDropTargets() {
+  for (const el of $("branches-list").querySelectorAll(".drop-target")) {
+    el.classList.remove("drop-target");
+  }
+}
+
+
+// showBranchPairMenu offers the two-branch operations on (dragged, dropped-on).
+// Directions are spelled out in the labels so the pair never carries implicit
+// meaning: merge ends on dst, rebase rewrites and ends on src.
+function showBranchPairMenu(src, dst, x, y) {
+  showCtxMenu(
+    [
+      {
+        label: "merge " + src + " into " + dst,
+        act: () => startOp({ op: "merge", branch: src, onto: dst }, "merging " + src + " into " + dst),
+      },
+      {
+        label: "rebase " + src + " onto " + dst,
+        act: () => startOp({ op: "rebase", branch: src, onto: dst }, "rebasing " + src + " onto " + dst),
+      },
+      {
+        // Opens an editor; nothing runs until you start it there, which is
+        // why it sits with the ops rather than below the read-only row.
+        label: "interactive rebase " + src + " onto " + dst + "…",
+        act: () => openRebaseEditor(src, dst),
+      },
+      // Read-only, so it sits below the ops that rewrite history.
+      { label: "compare " + src + " ↔ " + dst, act: () => openCompare(src, dst) },
+    ],
+    x,
+    y
+  );
+}
+
+
+function showWorktreeMenu(w, x, y) {
+  const items = [{ label: "copy path", act: () => copyText(w.path) }];
+  // Every row except the served worktree can be switched to (the same
+  // exemption the remove row uses).
+  if (!(state.worktree && w.path === state.worktree)) {
+    items.unshift({ label: "switch here", act: () => doReroot(w.path) });
+  }
+  // The served worktree's row gets no remove (the engine would refuse it
+  // anyway); main is engine-guarded too.
+  if (!(state.worktree && w.path === state.worktree)) {
+    items.push({
+      label: "remove worktree",
+      danger: true,
+      act: () => startOp({ op: "remove-worktree", path: w.path }, "removing " + w.path.split("/").pop()),
+    });
+  }
+  showCtxMenu(items, x, y);
+}
+
+$("worktrees-list").addEventListener("contextmenu", (e) => {
+  const li = e.target.closest("li");
+  if (!li || !li.dataset.p) return;
+  e.preventDefault();
+  const w = state.worktrees.find((x) => x.path === li.dataset.p);
+  if (w) showWorktreeMenu(w, e.clientX, e.clientY);
+});
+
+// Double-click a sidebar section header to collapse/expand its list — long
+// branch/tag lists otherwise force constant scrolling.
+function toggleSection(name) {
+  const collapsed = $(name + "-list").classList.toggle("collapsed");
+  $(name + "-header").textContent = (collapsed ? "\u25b8 " : "") + name;
+  lsSet("gg.sidebar.collapsed", JSON.stringify(SECTIONS.filter((n) => $(n + "-list").classList.contains("collapsed"))));
+}
+
+SECTIONS.forEach((n) => {
+  $(n + "-header").addEventListener("dblclick", () => toggleSection(n));
+});
+
+
+// Restore persisted sidebar state (b-key visibility + per-section
+// collapse). The collapsed class lives on the persistent <ul> containers,
+// so a one-time boot restore survives every re-render.
+(function restoreSidebar() {
+  let names = [];
+  try { names = JSON.parse(lsGet("gg.sidebar.collapsed") || "[]"); } catch {}
+  SECTIONS.forEach((n) => {
+    if (names.includes(n)) {
+      $(n + "-list").classList.add("collapsed");
+      $(n + "-header").textContent = "\u25b8 " + n;
+    }
+  });
+  if (lsGet("gg.sidebar.hidden") === "1") {
+    state.sidebar = false;
+    $("panes").classList.add("nosb");
+  }
+})();
+
+
+$("tags-list").addEventListener("click", (e) => {
+  const li = e.target.closest("li");
+  if (!li || !li.dataset.h) return;
+  openCommitByHash(li.dataset.h, "🏷 " + li.dataset.n);
+});
+
+
+function showTagMenu(tg, x, y) {
+  showCtxMenu(
+    [
+      { label: "show commit", act: () => openCommitByHash(tg.target, "🏷 " + tg.name) },
+      { label: "copy name", act: () => copyText(tg.name) },
+      {
+        label: "delete " + tg.name,
+        danger: true,
+        // engine.DeleteTag is decision-free, so the confirm lives here — a
+        // right-click plus one click must never delete a ref unconfirmed.
+        act: () =>
+          showLocalConfirm("Delete tag " + tg.name + "?", ["delete", "abort"], (o) => {
+            if (o === "delete") startOp({ op: "delete-tag", tag: tg.name }, "deleting tag " + tg.name);
+          }),
+      },
+    ],
+    x,
+    y
+  );
+}
+
+$("tags-list").addEventListener("contextmenu", (e) => {
+  const li = e.target.closest("li");
+  if (!li || !li.dataset.n) return;
+  e.preventDefault();
+  const tg = state.tags.find((x) => x.name === li.dataset.n);
+  if (tg) showTagMenu(tg, e.clientX, e.clientY);
+});
+
+
+$("stashes-list").addEventListener("click", (e) => {
+  const li = e.target.closest("li");
+  if (!li || !li.dataset.h) return; // a sha-less row ignores left-click
+  const st = state.stashes.find((x) => x.ref === li.dataset.r);
+  if (st) openStashDetail(st);
+});
+
+
+function showStashMenu(st, x, y) {
+  const items = [];
+  if (st.sha) items.push({ label: "show changes", act: () => openStashDetail(st) });
+  items.push({ label: "apply", act: () => startOp({ op: "stash-apply", ref: st.ref, sha: st.sha || "" }, "applying " + st.ref) });
+  items.push({ label: "pop", act: () => startOp({ op: "stash-pop", ref: st.ref, sha: st.sha || "" }, "popping " + st.ref) });
+  items.push({
+    label: "drop " + st.ref,
+    danger: true,
+    // engine.StashDrop is decision-free — the confirm lives here (the
+    // delete-tag precedent; the TUI confirms drop with y/n too).
+    act: () =>
+      showLocalConfirm("Drop " + st.ref + "?", ["drop", "abort"], (o) => {
+        if (o === "drop") startOp({ op: "stash-drop", ref: st.ref, sha: st.sha || "" }, "dropping " + st.ref);
+      }),
+  });
+  showCtxMenu(items, x, y);
+}
+
+$("stashes-list").addEventListener("contextmenu", (e) => {
+  const li = e.target.closest("li");
+  if (!li || !li.dataset.r) return;
+  e.preventDefault();
+  const st = state.stashes.find((x) => x.ref === li.dataset.r);
+  if (st) showStashMenu(st, e.clientX, e.clientY);
+});
+
+export { branchesList, clearDropTargets, defaultWorktreePath, fetchBranches, openCreateBranchPrompt, renderBranches, renderStashes, renderTags, renderWorktrees, showBranchMenu, showBranchPairMenu, showStashMenu, showTagMenu, showWorktreeMenu, toggleSection, worktreePathForBranch };

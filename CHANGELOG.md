@@ -8,6 +8,21 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web client split into ES modules.** The web frontend's `app.js` (a
+  ~3.9k-line monolith) is now 16 ES modules split along its own section
+  comments — `core` (state + fetch/esc helpers), `layers` (layer stack,
+  ctx menu, prompt), `status`, `ops` (op transport + modal), `sidebar`,
+  `versions`, `rebase`, `filehist`, `review`, `resize`, `commits`, `files`
+  (files/diff/hunks/conflict picker), `keys`, `bigrepo`, `palette`, with
+  `app.js` reduced to the entry module that imports them in the original
+  order and boots. The split is mechanical — every code line is unchanged
+  and none were added or dropped (verified by line-multiset comparison);
+  `index.html` still loads `/static/app.js`. Three functions moved to the
+  module owning the state they touch (`reconcileStatusView`,
+  `openStatusDiff` → files; `loadRepo` → ops) so every module-level `let`
+  is written only by its own module — cross-module writes would break ES
+  import bindings.
+
 - **Compare two commit entries (bookmarks / shelved commits).** The `g`/`G`
   switchers compare two commit entries as a whole-tree compare: `m`
   mark-two within a picker, `c` across pickers (commit bookmark ↔ shelved
