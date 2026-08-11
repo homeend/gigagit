@@ -8,6 +8,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: history/blame rows only where git has history.** The status-file
+  context menu no longer offers **file history** / **blame** on untracked
+  files (never committed: empty history, blame errors) or staged NEW
+  files (same file one step later); conflicted files keep both (blame
+  works on unmerged paths). A staged rename's history row now queries the
+  OLD path (`--follow` can only follow from a committed path).
+
 - **Web status files: multi-select marks + batch actions.** `ctrl+click`
   (or `m` on the focused row, which advances like the TUI's mark) marks
   working-tree status files — accent-highlighted rows; conflict rows are
