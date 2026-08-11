@@ -1,23 +1,43 @@
-// prefixes.js — the Branch prefixes overlay: manage the templated
-// branch-name skeletons (global + repo scopes) and start a new branch from
-// one (the TUI create-branch popup's ctrl+p lane, inverted: pick the prefix
-// here, fill its <user:…> labels, and the create-branch prompt opens
-// prefilled with the resolved name — editable, like the TUI seeds its name
-// field). The resolve is a server-side PREVIEW (seq counters peeked); the
-// counters are consumed only when the create succeeds, because the submit
-// carries the picked prefix's identity.
+// prefixes.js — branch-name prefixes, in two modes over one overlay (the
+// TUI split: Settings defines them, the create-branch popup PICKS one):
+//   - manage (☰ → branch prefixes…): define/delete the templated skeletons.
+//   - pick (the create-branch prompt's "use prefix…"): select-only — choose
+//     a prefix, fill its <user:…> labels, and the resolved name goes back
+//     to the caller. Canceling reports null so the caller can restore its
+//     prompt. The resolve is a server-side PREVIEW (seq counters peeked);
+//     counters are consumed only when the create carrying the prefix
+//     identity succeeds.
 import { $, esc, getJSON, postJSON } from "./core.js";
-import { closeLayer, openPrompt, pushLayer } from "./layers.js";
-import { startOp } from "./ops.js";
+import { closeLayer, pushLayer } from "./layers.js";
 
 let data = null; // last GET /api/prefixes payload
 // null = browse · {kind:"add"} · {kind:"labels", p} (collecting <user:…> inputs)
 let mode = null;
+// pick-mode callback: (resolved, prefix) — (null, null) = canceled. null = manage mode.
+let picking = null;
 
 async function openPrefixesView() {
+  picking = null;
+  await openOverlay();
+}
+
+// openPrefixPicker: select-only mode for the create-branch prompt. onPicked
+// fires exactly once — with the resolved name + prefix, or (null, null) on
+// cancel (esc from browse / backdrop) so the caller can reopen its prompt.
+async function openPrefixPicker(onPicked) {
+  picking = onPicked;
+  await openOverlay();
+}
+
+async function openOverlay() {
   try {
     data = await getJSON("/api/prefixes");
   } catch (e) {
+    if (picking) {
+      const cb = picking;
+      picking = null;
+      cb(null, null);
+    }
     return;
   }
   mode = null;
@@ -29,7 +49,7 @@ async function openPrefixesView() {
           mode = null;
           renderPrefixes();
         } else {
-          closeLayer("prefixes");
+          dismiss();
         }
         e.preventDefault();
         return true;
@@ -37,6 +57,22 @@ async function openPrefixesView() {
       return true; // swallow WITHOUT preventDefault — inputs stay alive
     },
   });
+}
+
+// dismiss closes the overlay; in pick mode that IS a cancel.
+function dismiss() {
+  const cb = picking;
+  picking = null;
+  closeLayer("prefixes");
+  if (cb) cb(null, null);
+}
+
+// finishPick closes the overlay and hands the resolved name to the caller.
+function finishPick(resolved, p) {
+  const cb = picking;
+  picking = null;
+  closeLayer("prefixes");
+  if (cb) cb(resolved, p);
 }
 
 async function reloadPrefixes() {
@@ -58,24 +94,33 @@ function showPfxErr(msg) {
 const pfxScopeTag = (s) => (s === "repo" ? "[this repo]" : "[global]");
 
 function pfxBrowseHTML() {
+  const pick = !!picking;
   const rows = (data.prefixes || [])
     .map(
       (p, i) => `
     <div class="srow prow">
       <span class="sval pfxval">${esc(p.value)}</span>
       <span class="snote pscope">${esc(pfxScopeTag(p.scope))}</span>
-      <span class="pbtns">
-        <button data-act="branch-from" data-i="${i}">new branch…</button>
-        <button class="danger" data-act="delete-prefix" data-i="${i}">delete</button>
-      </span>
+      <span class="pbtns">${
+        pick
+          ? `<button data-act="pick" data-i="${i}">use</button>`
+          : `<button class="danger" data-act="delete-prefix" data-i="${i}">delete</button>`
+      }</span>
     </div>`
     )
     .join("");
+  const empty = pick
+    ? '<div class="srow"><span class="snote">(none defined yet — add them via ☰ → branch prefixes…)</span></div>'
+    : '<div class="srow"><span class="snote">(none yet)</span></div>';
+  const manageRow = pick ? "" : '<div class="srow"><button data-act="new-prefix">new prefix…</button></div>';
+  const foot = pick
+    ? "pick a prefix to seed the branch name — <user:…> fields are asked next; <seq> counters advance only when the create succeeds · esc cancels"
+    : "tokens: &lt;user:LABEL&gt; &lt;seq:NAME:N&gt; &lt;date&gt; &lt;parent-branch&gt; &lt;repo&gt; &lt;random-alpha:N&gt; · used from the create-branch prompt's <b>use prefix…</b> · esc closes";
   return `
-    ${rows || '<div class="srow"><span class="snote">(none yet)</span></div>'}
-    <div class="srow"><button data-act="new-prefix">new prefix…</button></div>
+    ${rows || empty}
+    ${manageRow}
     <div class="serr"></div>
-    <div class="sfoot">tokens: &lt;user:LABEL&gt; &lt;seq:NAME:N&gt; &lt;date&gt; &lt;parent-branch&gt; &lt;repo&gt; &lt;random-alpha:N&gt; · <b>new branch…</b> opens the create prompt prefilled with the resolved name · esc closes</div>`;
+    <div class="sfoot">${foot}</div>`;
 }
 
 function pfxAddHTML() {
@@ -113,7 +158,8 @@ function renderPrefixes() {
     default:
       body = pfxBrowseHTML();
   }
-  $("prefixes-box").innerHTML = `<h2>branch prefixes</h2>${body}`;
+  const title = picking ? "use a branch prefix" : "branch prefixes";
+  $("prefixes-box").innerHTML = `<h2>${title}</h2>${body}`;
   const first = $("prefixes-box").querySelector("input");
   if (first) {
     first.focus();
@@ -121,10 +167,9 @@ function renderPrefixes() {
   }
 }
 
-// resolveAndPrompt asks the server for the preview, closes the overlay and
-// opens the create-branch prompt seeded with it. The submitted op carries the
-// prefix identity so the server can bump its seq counters on success.
-async function resolveAndPrompt(p, inputs) {
+// resolveAndFinish asks the server for the preview and hands it back to the
+// pick-mode caller (who reopens the create prompt prefilled).
+async function resolveAndFinish(p, inputs) {
   let out;
   try {
     out = await postJSON("/api/prefixes/resolve", { scope: p.scope, id: p.id, inputs });
@@ -132,13 +177,7 @@ async function resolveAndPrompt(p, inputs) {
     showPfxErr("not resolved: " + e.message);
     return;
   }
-  closeLayer("prefixes");
-  openPrompt({
-    title: "New branch, starting at the current HEAD:",
-    value: out.resolved,
-    placeholder: "branch name",
-    onSubmit: (name) => startOp({ op: "create-branch", name, prefix_id: p.id, prefix_scope: p.scope }, "creating " + name),
-  });
+  finishPick(out.resolved, p);
 }
 
 $("prefixes-box").addEventListener("click", (e) => {
@@ -171,13 +210,13 @@ $("prefixes-box").addEventListener("click", (e) => {
         .then(reloadPrefixes)
         .catch((err) => showPfxErr("not deleted: " + err.message));
       break;
-    case "branch-from":
+    case "pick":
       if (!p) return;
       if (p.user_labels && p.user_labels.length) {
         mode = { kind: "labels", p };
         renderPrefixes();
       } else {
-        resolveAndPrompt(p, {});
+        resolveAndFinish(p, {});
       }
       break;
     case "resolve-go": {
@@ -192,7 +231,7 @@ $("prefixes-box").addEventListener("click", (e) => {
         showPfxErr("every field is required");
         return;
       }
-      resolveAndPrompt(mode.p, inputs);
+      resolveAndFinish(mode.p, inputs);
       break;
     }
     default:
@@ -206,7 +245,7 @@ $("prefixes-box").addEventListener("click", (e) => {
 });
 
 $("prefixes").addEventListener("click", (e) => {
-  if (e.target === $("prefixes")) closeLayer("prefixes");
+  if (e.target === $("prefixes")) dismiss();
 });
 
-export { openPrefixesView };
+export { openPrefixPicker, openPrefixesView };

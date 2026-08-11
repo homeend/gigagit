@@ -99,10 +99,19 @@ function copyText(text, what) {
 // keyboard). onSubmit receives the TRIMMED value and is never called with an
 // empty string — every caller would have had to check.
 let promptCb = null;
+let promptExtraCb = null;
 
 
-function openPrompt({ title, value, placeholder, onSubmit }) {
+// extra: optional {label, run} — a caller-owned side action rendered LEFT of
+// cancel/ok (the create-branch prompt's "use prefix…" lane). run() receives
+// the CURRENT input value; it owns what happens next (typically: close this
+// prompt, run a picker, reopen the prompt prefilled).
+function openPrompt({ title, value, placeholder, onSubmit, extra }) {
   promptCb = onSubmit;
+  promptExtraCb = extra ? extra.run : null;
+  const xb = $("prompt-extra");
+  xb.classList.toggle("hidden", !extra);
+  if (extra) xb.textContent = extra.label;
   $("prompt-title").textContent = title;
   const input = $("prompt-input");
   input.value = value || "";
@@ -115,6 +124,8 @@ function openPrompt({ title, value, placeholder, onSubmit }) {
 
 function closePrompt() {
   promptCb = null;
+  promptExtraCb = null;
+  $("prompt-extra").classList.add("hidden");
   // Blur before closing: the form-field guard keys off the focused element,
   // and a still-focused input would swallow every global key (the palette's
   // hard-won lesson).
@@ -147,6 +158,10 @@ function promptKey(e) {
 
 $("prompt-ok").addEventListener("click", submitPrompt);
 $("prompt-cancel").addEventListener("click", closePrompt);
+$("prompt-extra").addEventListener("click", () => {
+  const run = promptExtraCb;
+  if (run) run($("prompt-input").value);
+});
 
 
 $("help").addEventListener("click", () => closeLayer("help"));
