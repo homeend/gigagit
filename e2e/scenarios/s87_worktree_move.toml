@@ -1,0 +1,27 @@
+name = "worktree rename + move: directory relocated, branch checkout preserved"
+
+[input]
+steps = [
+  { write = "README.md", content = "hello\n" },
+  { commit = "initial" },
+]
+
+[[run]]
+cmd  = ["worktree", "add", "main"]
+exit = 0
+
+[[run]]
+cmd  = ["worktree", "rename", "../wt/wt-main", "wt-renamed"]
+exit = 0
+
+[[run]]
+cmd  = ["worktree", "move", "../wt/wt-renamed", "../wt-moved"]
+exit = 0
+
+[expect]
+branch    = "main"
+branches  = ["main", "wt-main"]
+worktrees = ["wt-moved"]
+
+[expect.worktree."wt-moved".files]
+"README.md" = "hello\n"
