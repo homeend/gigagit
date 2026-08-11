@@ -887,8 +887,16 @@ $("files-list").addEventListener("contextmenu", (e) => {
   else if (f.section === "conflicts") items.push({ label: "mark resolved (stage as-is)", act: () => stage({ paths: [f.path] }) });
   else items.push({ label: "stage " + f.path, act: () => stage({ paths: [f.path] }) });
   items.push(...copyPathRows(f.path));
-  items.push({ label: "file history", act: () => openFileHistory(f.path, "") });
-  items.push({ label: "blame (working tree)", act: () => openFileBlame(f.path, "") });
+  // history/blame only where git has something to say: an untracked file
+  // was never committed (empty history, blame errors), and a staged NEW
+  // file ("A") is the same file one step later. A conflicted file keeps
+  // both — blame works on unmerged paths (markers blame as uncommitted).
+  // A staged rename's history lives under the OLD name (--follow can only
+  // follow from a committed path), so the row queries orig_path.
+  if (f.section !== "untracked" && !(f.section === "staged" && f.staged === "A")) {
+    items.push({ label: "file history", act: () => openFileHistory(f.orig_path || f.path, "") });
+    items.push({ label: "blame (working tree)", act: () => openFileBlame(f.path, "") });
+  }
   if (f.section === "untracked") {
     // git ignores only untracked paths — the server 422s anything else
     items.push({ label: "add to .gitignore", act: () => startOp({ op: "ignore", path: f.path }, "ignore " + f.path) });
