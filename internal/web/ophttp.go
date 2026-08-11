@@ -223,6 +223,108 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 		}
 		// Decision-free op: the client shows its own confirm before starting.
 		op = engine.DeleteTag{Name: req.Tag}
+	case "create-tag":
+		// New tag at Sha ("" = HEAD), annotated when Message is set. Only the
+		// leading-dash check on the name: git's own check-ref-format produces
+		// the better refusal (the create-branch precedent). No force on this
+		// lane — force-recreate belongs to annotate-tag, where the target
+		// comes from a server-side read.
+		if req.Tag == "" || !isGitArgSafe(req.Tag) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid tag"))
+			return
+		}
+		if req.Sha != "" && !isGitArgSafe(req.Sha) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid commit"))
+			return
+		}
+		op = engine.CreateTag{Name: req.Tag, Commit: req.Sha, Message: req.Message}
+	case "annotate-tag":
+		// Force-recreate an EXISTING tag as annotated at its current target.
+		// The tag resolves against a fresh read and the target comes from
+		// that entry — never the wire: CreateTag{Force} moves a ref, so a
+		// client-supplied target would let one POST retarget any tag.
+		if req.Tag == "" || !isGitArgSafe(req.Tag) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid tag"))
+			return
+		}
+		if strings.TrimSpace(req.Message) == "" {
+			writeErr(w, http.StatusBadRequest, errors.New("message required"))
+			return
+		}
+		tgs, terr := svc.Tags(r.Context())
+		if terr != nil {
+			writeErr(w, http.StatusInternalServerError, terr)
+			return
+		}
+		target := ""
+		for _, tg := range tgs {
+			if tg.Name == req.Tag {
+				target = tg.Target
+				break
+			}
+		}
+		if target == "" {
+			writeErr(w, http.StatusNotFound, errors.New("unknown tag"))
+			return
+		}
+		op = engine.CreateTag{Name: req.Tag, Commit: target, Message: req.Message, Force: true}
+	case "push-tag", "delete-remote-tag":
+		// Both resolve the tag against a fresh read (the stash/remove-worktree
+		// allowlist pattern). The engine resolves the remote itself — auto for
+		// one, a Decider pick for several — and delete confirms via its own
+		// Decider; both park in the browser modal.
+		if req.Tag == "" || !isGitArgSafe(req.Tag) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid tag"))
+			return
+		}
+		tgs, terr := svc.Tags(r.Context())
+		if terr != nil {
+			writeErr(w, http.StatusInternalServerError, terr)
+			return
+		}
+		known := false
+		for _, tg := range tgs {
+			if tg.Name == req.Tag {
+				known = true
+				break
+			}
+		}
+		if !known {
+			writeErr(w, http.StatusNotFound, errors.New("unknown tag"))
+			return
+		}
+		if req.Op == "push-tag" {
+			op = engine.PushTag{Name: req.Tag}
+		} else {
+			op = engine.DeleteRemoteTag{Tag: req.Tag}
+		}
+	case "fast-forward":
+		// Advance the CURRENT branch to another local branch's tip (git merge
+		// --ff-only semantics). The branch resolves against a fresh read; the
+		// engine refuses a target that is not strictly ahead. Decision-free
+		// and never history-rewriting, so the labelled menu row is
+		// confirmation enough (the DnD pair-menu standing).
+		if req.Branch == "" || !isGitArgSafe(req.Branch) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid branch"))
+			return
+		}
+		bs, berr := svc.Branches(r.Context())
+		if berr != nil {
+			writeErr(w, http.StatusInternalServerError, berr)
+			return
+		}
+		known := false
+		for _, b := range bs {
+			if b.Name == req.Branch {
+				known = true
+				break
+			}
+		}
+		if !known {
+			writeErr(w, http.StatusNotFound, errors.New("unknown branch"))
+			return
+		}
+		op = engine.FastForward{Commit: req.Branch}
 	case "remove-worktree":
 		if req.Path == "" {
 			writeErr(w, http.StatusBadRequest, errors.New("path required"))
