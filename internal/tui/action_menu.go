@@ -209,6 +209,9 @@ func availableActions(m Model) []actionRow {
 	if r, ok := m.forcePushRow(); ok {
 		out = append(out, r)
 	}
+	if r, ok := m.moveWorktreeRow(); ok {
+		out = append(out, r)
+	}
 	return m.appendCommitContextRows(out)
 }
 

@@ -260,3 +260,33 @@ func TestResetInDirArgv(t *testing.T) {
 		t.Fatalf("argv = %v, want %v", f.Calls[1].Argv, want)
 	}
 }
+
+func TestMoveWorktree(t *testing.T) {
+	dir, runner := newTestRepo(t)
+	repo := &Repo{Runner: runner}
+	// create a linked worktree next to the repo
+	wt := filepath.Join(filepath.Dir(dir), "wt-src")
+	if err := repo.AddWorktree(context.Background(), wt, "wt-branch", "HEAD", nil); err != nil {
+		t.Fatalf("AddWorktree: %v", err)
+	}
+	dest := filepath.Join(filepath.Dir(dir), "wt-dst")
+	if err := repo.MoveWorktree(context.Background(), dir, wt, dest, nil); err != nil {
+		t.Fatalf("MoveWorktree: %v", err)
+	}
+	wts, err := repo.Worktrees(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, w := range wts {
+		if w.Path == dest && w.Branch == "wt-branch" {
+			found = true
+		}
+		if w.Path == wt {
+			t.Fatalf("old path still listed: %v", wts)
+		}
+	}
+	if !found {
+		t.Fatalf("dest not listed with its branch: %v", wts)
+	}
+}

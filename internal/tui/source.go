@@ -276,6 +276,10 @@ func opAffectedSources(op engine.Operation) []sourceKey {
 		return []sourceKey{srcBranches, srcWorktrees}
 	case engine.RemoveWorktree:
 		return []sourceKey{srcBranches, srcWorktrees}
+	case engine.MoveWorktree:
+		// The worktree list changed; Branches shows per-branch worktree markers.
+		// (A current-worktree move chains a full reRoot before this is consulted.)
+		return []sourceKey{srcBranches, srcWorktrees}
 	case engine.RemoveGitLocks:
 		// Removing a lockfile changes no git state of its own — git's lock
 		// protocol means the killed write was never applied. But the process

@@ -8,6 +8,23 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Rename and move worktree directories.** The Worktrees panel's `e` key
+  renames the selected worktree's directory (a popup prefilled with just the
+  basename — the current worktree follows the rename), and the `.` menu adds
+  **Move worktree…** for relocating it to any path (full path in the popup).
+  Both wrap `git worktree move`; the main worktree is refused. If you rename
+  or move the worktree gg's own process is standing in, gg leaves the tree
+  first (required on Windows, which cannot rename a directory a process holds
+  as cwd) and re-roots into the new location once the op finishes. A locked
+  worktree (an interrupted `add` can leave one locked) forks a
+  `move-worktree-locked` decision — *unlock and move* or *abort*. CLI:
+  `gg worktree rename [--force] <worktree> <new-name>` / `gg worktree move
+  [--force] <worktree> <new-path>` — `<worktree>` resolves by path or branch
+  name like `worktree remove`, a relative `<new-path>` resolves against the
+  invocation directory, `--force` pre-answers unlock-and-move, and moving the
+  worktree your shell sits in updates the shell-init cwd handoff so `cd`
+  follows.
+
 - **TUI mouse: right-click opens the action menu, double-click acts as enter,
   middle-click acts as esc.**
   A right-click on a panel row (or a files-view row, or on the diff/history/

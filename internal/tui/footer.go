@@ -64,6 +64,9 @@ func contextBindings() []footerBinding {
 		}, scopeRow},
 		{"switch-worktree", "enter", i18n.T("[enter] switch"), func(m Model) bool { return m.focus == panelWorktrees && m.canEnterWorktree() }, scopeRow},
 		{"delete-worktree", "d", i18n.T("[d]elete"), func(m Model) bool { return m.focus == panelWorktrees && m.canDeleteWorktree() }, scopeRow},
+		{"rename-worktree", "e", i18n.T("[e] rename"), func(m Model) bool {
+			return m.focus == panelWorktrees && m.canMoveWorktree()
+		}, scopeRow},
 		{"checkout-remote", "c", i18n.T("[c]heckout"), func(m Model) bool { return m.focus == panelRemotes && m.canCheckoutRemote() }, scopeRow},
 		{"switch-remote", "s", i18n.T("[s]witch"), func(m Model) bool { return m.focus == panelRemotes && m.canCheckoutRemote() }, scopeRow},
 		{"fetch", "f", i18n.T("[f]etch"), func(m Model) bool { return m.canFetchRemotes() }, scopeWindow},

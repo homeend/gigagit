@@ -578,3 +578,218 @@ func TestWorktreePruneCommand(t *testing.T) {
 		t.Fatalf("out = %q", out.String())
 	}
 }
+
+// TestWorktreeMoveToNewPath: `worktree move <old> <new>` relocates the
+// worktree; the new path is listed by git afterward and the CLI prints a ✓
+// summary line.
+func TestWorktreeMoveToNewPath(t *testing.T) {
+	dir := newCLIRepo(t)
+	wt := addCLIWorktree(t, dir, "feature/mv1", "wt-cli-mv1")
+	dest := filepath.Join(filepath.Dir(dir), "wt-cli-mv1-dest")
+
+	var out, errb bytes.Buffer
+	code := Run(dir, []string{"worktree", "move", wt, dest}, strings.NewReader(""), &out, &errb, "")
+	if code != 0 {
+		t.Fatalf("exit = %d, stderr=%s", code, errb.String())
+	}
+	if !strings.Contains(out.String(), "✓") {
+		t.Fatalf("stdout missing ✓ line: %q", out.String())
+	}
+	listOut, err := exec.Command("git", "-C", dir, "worktree", "list").CombinedOutput()
+	if err != nil {
+		t.Fatalf("worktree list: %v\n%s", err, listOut)
+	}
+	if !strings.Contains(string(listOut), dest) {
+		t.Fatalf("worktree list missing new path %s:\n%s", dest, listOut)
+	}
+	// wt is a path-prefix of dest ("...-mv1" vs "...-mv1-dest"), so match the
+	// old path as its own listing entry (followed by whitespace before the
+	// sha column) rather than a bare substring check.
+	if strings.Contains(string(listOut), wt+" ") || strings.Contains(string(listOut), wt+"\t") {
+		t.Fatalf("worktree list still shows old path %s:\n%s", wt, listOut)
+	}
+}
+
+// TestWorktreeMoveRelativeDestResolvesAgainstWorkdir: a relative new-path
+// must resolve against the workdir the CLI was opened with, not the real OS
+// process cwd. In production those are the same thing (cmd/gg passes "."),
+// but the in-process e2e harness runs every scenario step in one process
+// without ever os.Chdir-ing it (t.Parallel() subtests share one OS cwd), so
+// a bare filepath.Abs(dest) would silently resolve against the test
+// binary's package directory instead of the caller-supplied dir — landing
+// the moved worktree outside the sandbox entirely. Regression for that gap.
+func TestWorktreeMoveRelativeDestResolvesAgainstWorkdir(t *testing.T) {
+	dir := newCLIRepo(t)
+	wt := addCLIWorktree(t, dir, "feature/mv-rel", "wt-cli-mv-rel")
+
+	// Guard against a regression littering the real source tree: if the bug
+	// were reintroduced, filepath.Abs would resolve the relative dest against
+	// this package's directory instead of dir, landing the worktree one level
+	// above it. Clean that up too so a future red run doesn't leave it behind.
+	if wrongCwd, err := os.Getwd(); err == nil {
+		wrongDest := filepath.Join(filepath.Dir(wrongCwd), "wt-cli-mv-rel-dest")
+		t.Cleanup(func() {
+			if _, err := os.Stat(wrongDest); err == nil {
+				exec.Command("git", "-C", dir, "worktree", "remove", "--force", wrongDest).Run()
+				os.RemoveAll(wrongDest)
+			}
+		})
+	}
+
+	var out, errb bytes.Buffer
+	code := Run(dir, []string{"worktree", "move", wt, "../wt-cli-mv-rel-dest"}, strings.NewReader(""), &out, &errb, "")
+	if code != 0 {
+		t.Fatalf("exit = %d, stderr=%s", code, errb.String())
+	}
+	want := filepath.Join(filepath.Dir(dir), "wt-cli-mv-rel-dest")
+	if _, err := os.Stat(want); err != nil {
+		t.Fatalf("relative dest should resolve against workdir (%s): %v", want, err)
+	}
+	if _, err := os.Stat(wt); !os.IsNotExist(err) {
+		t.Fatalf("old worktree path %s still present: %v", wt, err)
+	}
+}
+
+// TestWorktreeRenameByBranch: `worktree rename <branch> <new-name>` resolves
+// the target by branch name and renames the directory in place (same parent).
+func TestWorktreeRenameByBranch(t *testing.T) {
+	dir := newCLIRepo(t)
+	wt := addCLIWorktree(t, dir, "feature/rn1", "wt-cli-rn1")
+
+	var out, errb bytes.Buffer
+	code := Run(dir, []string{"worktree", "rename", "feature/rn1", "wt-cli-rn1-new"}, strings.NewReader(""), &out, &errb, "")
+	if code != 0 {
+		t.Fatalf("exit = %d, stderr=%s", code, errb.String())
+	}
+	want := filepath.Join(filepath.Dir(wt), "wt-cli-rn1-new")
+	if _, err := os.Stat(want); err != nil {
+		t.Fatalf("renamed worktree not found at %s: %v", want, err)
+	}
+	if _, err := os.Stat(wt); !os.IsNotExist(err) {
+		t.Fatalf("old worktree path %s still present: %v", wt, err)
+	}
+}
+
+// TestWorktreeRenamePathSeparatorRejected: a rename destination containing a
+// path separator is rejected before any move is attempted.
+func TestWorktreeRenamePathSeparatorRejected(t *testing.T) {
+	dir := newCLIRepo(t)
+	wt := addCLIWorktree(t, dir, "x", "wt-cli-x")
+
+	var out, errb bytes.Buffer
+	code := Run(dir, []string{"worktree", "rename", "x", "new/name"}, strings.NewReader(""), &out, &errb, "")
+	if code != 2 {
+		t.Fatalf("exit = %d, want 2; stderr=%s", code, errb.String())
+	}
+	if !strings.Contains(errb.String(), "path separator") {
+		t.Fatalf("stderr should explain the path-separator restriction: %s", errb.String())
+	}
+	if _, err := os.Stat(wt); err != nil {
+		t.Fatalf("worktree should be untouched: %v", err)
+	}
+}
+
+// TestWorktreeMoveUnknownTarget: an unresolvable target is a non-zero exit
+// with a "no worktree at" message, matching `worktree remove`.
+func TestWorktreeMoveUnknownTarget(t *testing.T) {
+	dir := newCLIRepo(t)
+	var out, errb bytes.Buffer
+	code := Run(dir, []string{"worktree", "move", filepath.Join(dir, "nope"), filepath.Join(dir, "..", "dest")},
+		strings.NewReader(""), &out, &errb, "")
+	if code == 0 {
+		t.Fatal("moving an unknown target should be a non-zero exit")
+	}
+	if !strings.Contains(errb.String(), "no worktree at") {
+		t.Fatalf("stderr should explain the unknown target: %s", errb.String())
+	}
+}
+
+// TestWorktreeMoveLockedNeedsForce: a locked worktree, run non-interactively
+// without --force, fails on the missing move-worktree-locked decision.
+func TestWorktreeMoveLockedNeedsForce(t *testing.T) {
+	dir := newCLIRepo(t)
+	wt := addCLIWorktree(t, dir, "feature/mv-lock", "wt-cli-mv-lock")
+	if out, err := exec.Command("git", "-C", dir, "worktree", "lock", wt).CombinedOutput(); err != nil {
+		t.Fatalf("lock: %v\n%s", err, out)
+	}
+	dest := filepath.Join(filepath.Dir(dir), "wt-cli-mv-lock-dest")
+
+	var out, errb bytes.Buffer
+	code := Run(dir, []string{"worktree", "move", wt, dest}, strings.NewReader(""), &out, &errb, "")
+	if code == 0 {
+		t.Fatal("locked move without --force should fail non-interactively")
+	}
+	// Pin down that this is specifically the move-worktree-locked decision
+	// going unanswered — not some other non-zero-exit failure. cliDecider
+	// (internal/cli/core.go) reports this two ways depending on whether
+	// os.Stdin reads as interactive: non-interactively it's "<id> needs a
+	// decision (options: ...); rerun with the matching flag"; interactively
+	// (reads an empty/invalid line from the supplied stdin reader) it's
+	// "invalid choice %q for <id>". Both embed the decision ID, which is the
+	// stable, distinguishing substring across environments — under `go test`
+	// in this sandbox, os.Stdin.Stat() reports ModeCharDevice even when the
+	// `go test` invocation's own stdin is redirected from /dev/null or a
+	// pipe (verified: the same compiled test binary run directly reports it
+	// correctly as non-interactive), so asserting the exact wording would be
+	// environment-dependent.
+	if !strings.Contains(errb.String(), "move-worktree-locked") {
+		t.Fatalf("stderr should report the unanswered move-worktree-locked decision: %s", errb.String())
+	}
+	if _, err := os.Stat(wt); err != nil {
+		t.Fatalf("worktree should still exist at old path: %v", err)
+	}
+}
+
+// TestWorktreeMoveLockedWithForce: --force answers move-worktree-locked with
+// unlock-and-move, and the move succeeds.
+func TestWorktreeMoveLockedWithForce(t *testing.T) {
+	dir := newCLIRepo(t)
+	wt := addCLIWorktree(t, dir, "feature/mv-lock2", "wt-cli-mv-lock2")
+	if out, err := exec.Command("git", "-C", dir, "worktree", "lock", wt).CombinedOutput(); err != nil {
+		t.Fatalf("lock: %v\n%s", err, out)
+	}
+	dest := filepath.Join(filepath.Dir(dir), "wt-cli-mv-lock2-dest")
+
+	var out, errb bytes.Buffer
+	code := Run(dir, []string{"worktree", "move", "--force", wt, dest}, strings.NewReader(""), &out, &errb, "")
+	if code != 0 {
+		t.Fatalf("forced move exit = %d, stderr=%s", code, errb.String())
+	}
+	if _, err := os.Stat(dest); err != nil {
+		t.Fatalf("worktree not moved after --force: %v", err)
+	}
+}
+
+// TestWorktreeMoveUpdatesCwdFile: moving the worktree that contains the
+// process's current directory writes the moved-equivalent path into
+// cwdFile, mirroring the `worktree add` cwd-file contract.
+func TestWorktreeMoveUpdatesCwdFile(t *testing.T) {
+	dir := newCLIRepo(t)
+	wt := addCLIWorktree(t, dir, "feature/mv-cwd", "wt-cli-mv-cwd")
+	sub := filepath.Join(wt, "sub")
+	if err := os.Mkdir(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	dest := filepath.Join(filepath.Dir(dir), "wt-cli-mv-cwd-dest")
+
+	origCwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(sub); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chdir(origCwd) }()
+
+	cwdFile := filepath.Join(t.TempDir(), "cwd")
+	var out, errb bytes.Buffer
+	code := Run(dir, []string{"worktree", "move", wt, dest}, strings.NewReader(""), &out, &errb, cwdFile)
+	if code != 0 {
+		t.Fatalf("exit = %d, stderr=%s", code, errb.String())
+	}
+	got, _ := os.ReadFile(cwdFile)
+	want := filepath.Join(dest, "sub")
+	if strings.TrimSpace(string(got)) != want {
+		t.Fatalf("cwd-file = %q, want %q", strings.TrimSpace(string(got)), want)
+	}
+}

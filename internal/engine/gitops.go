@@ -86,6 +86,7 @@ type GitOps interface {
 	UnlockWorktree(ctx context.Context, path string) error
 	PruneWorktrees(ctx context.Context) error
 	WorktreeRepair(ctx context.Context, path string) error
+	MoveWorktree(ctx context.Context, fromDir, path, dest string, onLine func(string)) error
 	// ParentCount reports how many parents rev has (0 root, 1 normal, ≥2
 	// merge) — the keep-modes pre-check before any worktree is created.
 	ParentCount(ctx context.Context, rev string) (int, error)

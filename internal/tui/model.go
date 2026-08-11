@@ -23,6 +23,7 @@ import (
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/promptstate"
 	"github.com/homeend/gigagit/internal/rebaseplan"
+	"github.com/homeend/gigagit/internal/repos"
 	"github.com/homeend/gigagit/internal/textdiff"
 )
 
@@ -45,22 +46,23 @@ type Model struct {
 	branches  []model.Branch
 	commits   []model.Commit
 
-	worktrees             []model.Worktree
-	tags                  []model.Tag         // refs/tags; shown by the Tags tab in the middle slot
-	remoteTagNames        map[string]bool     // tag names known on the default remote (▲); nil until a lookup runs
-	pendingRemoteTagSet   string              // tag to add to remoteTagNames on next op success (optimistic push)
-	pendingRemoteTagUnset string              // tag to drop from remoteTagNames on next op success (optimistic delete-remote)
-	pendingPushTags       []string            // tip tags to push after a successful branch Push (chained as PushTags op)
-	pendingRepairSwitch   string              // translated worktree path to switch to after a successful RepairWorktree (chained in opFinishedMsg)
-	pendingGotoTip        string              // branch tip to jump to once the ctrl+g solo reload lands (drained by commitsReloadedMsg)
-	pendingCheckout       pendingCheckout     // arms the diverged-checkout recovery modal; zero remoteRef = none
-	pendingRemoteTagAdds  []string            // tags to optimistically add to remoteTagNames on PushTags success
-	pushCheckGen          int                 // generation guard for the async pre-push remote-tag check
-	pickGen               int                 // generation guard for the async cherry-pick commit probe
-	entryCompareGen       int                 // drops stale commit-entry compare resolves (the pickGen pattern)
-	pickPatchTemp         string              // patch lane's temp file; removed when its op finishes
-	reflog                []model.ReflogEntry // HEAD reflog; shown by the Reflog tab in the bottom slot
-	currentWorktree       string
+	worktrees              []model.Worktree
+	tags                   []model.Tag         // refs/tags; shown by the Tags tab in the middle slot
+	remoteTagNames         map[string]bool     // tag names known on the default remote (▲); nil until a lookup runs
+	pendingRemoteTagSet    string              // tag to add to remoteTagNames on next op success (optimistic push)
+	pendingRemoteTagUnset  string              // tag to drop from remoteTagNames on next op success (optimistic delete-remote)
+	pendingPushTags        []string            // tip tags to push after a successful branch Push (chained as PushTags op)
+	pendingRepairSwitch    string              // translated worktree path to switch to after a successful RepairWorktree (chained in opFinishedMsg)
+	pendingWorktreeMoveOld string              // old path of a just-moved worktree; MRU registry cleanup in opFinishedMsg
+	pendingGotoTip         string              // branch tip to jump to once the ctrl+g solo reload lands (drained by commitsReloadedMsg)
+	pendingCheckout        pendingCheckout     // arms the diverged-checkout recovery modal; zero remoteRef = none
+	pendingRemoteTagAdds   []string            // tags to optimistically add to remoteTagNames on PushTags success
+	pushCheckGen           int                 // generation guard for the async pre-push remote-tag check
+	pickGen                int                 // generation guard for the async cherry-pick commit probe
+	entryCompareGen        int                 // drops stale commit-entry compare resolves (the pickGen pattern)
+	pickPatchTemp          string              // patch lane's temp file; removed when its op finishes
+	reflog                 []model.ReflogEntry // HEAD reflog; shown by the Reflog tab in the bottom slot
+	currentWorktree        string
 
 	notices                []notice               // session notice list (see notify.go)
 	noticesUnread          bool                   // blink while true; opening the ! dialog clears it
@@ -1553,6 +1555,11 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return mm, nil
 				}
 			}
+		case "e":
+			if m.focus == panelWorktrees && m.canMoveWorktree() {
+				wt, _ := m.selectedWorktree()
+				return m.openMoveWorktreePopup(wt, true), nil
+			}
 		case "d":
 			switch m.focus {
 			case panelWorktrees:
@@ -2219,6 +2226,12 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				pushTags = m.pendingPushTags
 				noticeCfg = m.pendingNoticeConfig
 				repairSwitch = m.pendingRepairSwitch
+				if m.pendingWorktreeMoveOld != "" {
+					// The moved-from path must not linger in the repo switcher's MRU;
+					// the destination registers itself on next open (load.go Touches
+					// the current worktree), incl. immediately via the chained reRoot.
+					_ = repos.Remove(repos.DefaultStatePath(), m.pendingWorktreeMoveOld)
+				}
 			}
 			m = m.applyPendingRemoteTag()
 		}
@@ -2228,6 +2241,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.pendingPushTags = nil               // unconditional; covers both error and success paths
 		m.pendingNoticeConfig = nil           // unconditional; covers both error and success paths
 		m.pendingRepairSwitch = ""            // unconditional; covers both error and success paths
+		m.pendingWorktreeMoveOld = ""         // unconditional; covers both error and success paths
 		m.pendingCheckout = pendingCheckout{} // unconditional; only a fresh checkout dispatch re-arms it
 		srcs := m.pendingSources              // nil = all (safe default for any unmapped op)
 		m.pendingSources = nil
@@ -3234,6 +3248,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m = m.cleanupPickPatchTemp()
 	m.pendingPushTags = nil
 	m.pendingRepairSwitch = ""            // a repo switch must not fire a stale repair chain
+	m.pendingWorktreeMoveOld = ""         // a repo switch must not fire a stale move cleanup
 	m.pendingGotoTip = ""                 // a repo switch must not fire a stale tip jump
 	m.pendingCheckout = pendingCheckout{} // a diverged checkout from the old repo must not prompt in the new one
 	m.pendingRemoteTagAdds = nil

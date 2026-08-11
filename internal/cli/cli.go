@@ -119,7 +119,7 @@ func runOne(svc *domain.Service, workdir, cmd string, rest []string, stdin io.Re
 	case "fast-forward":
 		return cmdFastForward(svc, rest, stdin, stdout, stderr)
 	case "worktree":
-		return cmdWorktree(svc, rest, stdin, stdout, stderr, cwdFile)
+		return cmdWorktree(svc, workdir, rest, stdin, stdout, stderr, cwdFile)
 	case "remote":
 		return cmdRemote(svc, rest, stdin, stdout, stderr)
 	case "tag":
