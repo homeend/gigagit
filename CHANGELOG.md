@@ -8,6 +8,18 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: external tools view.** ☰ → **external tools…** (git group;
+  also in the palette) is a read-only inventory of the configured
+  `[[tools.command]]` blocks — every category and frontend, each row
+  with category/mode/per-file/when-op/frontend badges, its full
+  command text, this repo's approval state (the promptstate store the
+  TUI and the web lanes share), and a problem line when a block fails
+  the structural checks the run-time lanes apply — plus which catalog
+  tools are detected on this machine and which of their templates are
+  already configured (opt-in variants marked). Adding/editing stays in
+  the TUI Settings wizard. Server: `GET /api/exttools`, with the
+  detection probe behind a test seam so wire tests never touch the
+  developer's machine.
 - **Web: branch prefixes.** ☰ → **branch prefixes…** (git group; also
   in the palette) manages the templated branch-name skeletons — list
   with scope tags, add (validated: empty values, `<branch>`, and

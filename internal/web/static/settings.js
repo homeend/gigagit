@@ -13,8 +13,9 @@
 //
 // Settings the web itself does not consume (the TUI's background-refresh
 // lane, its operation log) are captioned (TUI). The sub-editors still
-// TUI-only: external tools, language. Identity & profiles and branch prefixes
-// have their own overlays (identity.js, prefixes.js).
+// TUI-only: the external-tools WIZARD, language. Identity & profiles,
+// branch prefixes and the external-tools view have their own overlays
+// (identity.js, prefixes.js, exttools.js).
 import { $, esc, getJSON, postJSON, state } from "./core.js";
 import { closeLayer, pushLayer } from "./layers.js";
 import { startOp } from "./ops.js";
@@ -194,7 +195,7 @@ function renderSettings(opts = {}) {
     <div class="srow"><span class="snote">runs after create-worktree; shown for approval before it ever executes</span></div>
     <div class="ssave hidden"><span class="swarn">unsaved changes — nothing is applied until you save</span><button data-act="save">save</button></div>
     <div class="serr"></div>
-    <div class="sfoot">toggles apply on click · edited fields need <b>save</b> · identity &amp; profiles and branch prefixes: in the ☰ git group · external tools, language: in the TUI settings (,) for now · esc closes</div>`;
+    <div class="sfoot">toggles apply on click · edited fields need <b>save</b> · identity &amp; profiles, branch prefixes, external tools: in the ☰ git group · the tools wizard and language: in the TUI settings (,) for now · esc closes</div>`;
   for (const [k, raw] of Object.entries(pending)) {
     const el = k.startsWith("rate:")
       ? $("settings-box").querySelector(`input[data-rate="${k.slice(5)}"]`)
