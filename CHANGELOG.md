@@ -8,6 +8,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: mouse-first polish + reflog restyle** (testing feedback). The
+  text prompt (rename branch, create branch/worktree from here, goto
+  commit, …) gains a **cancel** button and the versions / branch-
+  versions overlays gain **close** buttons — a pointer-only user never
+  needs a key to leave a dialog. The sidebar reflog is restyled into
+  columns: `@{N}` selector (full `HEAD@{N}` kept for the menus), short
+  sha, the action/subject (ellipsized), and a compact age (`13h`,
+  hover for the full phrase).
 - **Web: session errors viewer.** ☰ → **session errors…** (ui group;
   also in the palette): this server session's genuine failures, newest
   first — time, source, and the one-line detail — from the same observ

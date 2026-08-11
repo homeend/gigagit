@@ -85,12 +85,27 @@ function renderTags() {
 }
 
 
+// compactRel squeezes git's "13 hours ago" into "13h" so the sidebar row's
+// width goes to the subject, not the age. Unrecognized forms pass through.
+function compactRel(rel) {
+  const m = /^(\d+)\s+(second|minute|hour|day|week|month|year)s?\s+ago$/.exec(rel || "");
+  if (!m) return rel || "";
+  return m[1] + (m[2] === "month" ? "mo" : m[2][0]);
+}
+
+
 function renderReflog() {
+  // Column-ish row: @{N} (the recovery selector, shortened for display —
+  // data-s keeps the full form the menus use), short sha, subject
+  // (ellipsized), compact age pinned right.
   let html = state.reflog
     .map(
       (e) =>
-        `<li data-h="${esc(e.hash)}" data-s="${esc(e.selector)}">${esc(e.selector)}` +
-        (e.subject ? `<span class="tsub">${esc(e.subject)}${e.rel ? " · " + esc(e.rel) : ""}</span>` : "") +
+        `<li data-h="${esc(e.hash)}" data-s="${esc(e.selector)}">` +
+        `<span class="rsel">${esc(e.selector.replace(/^HEAD@/, "@"))}</span>` +
+        `<span class="rsha">${esc(e.short || "")}</span>` +
+        `<span class="rsub">${esc(e.subject || "")}</span>` +
+        (e.rel ? `<span class="rrel" title="${esc(e.rel)}">${esc(compactRel(e.rel))}</span>` : "") +
         `</li>`
     )
     .join("");
