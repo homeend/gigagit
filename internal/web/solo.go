@@ -55,11 +55,13 @@ type soloRequest struct {
 
 // handleSolo sets or clears the commit-list scope.
 //
-// The branch is resolved against the server's own branch list rather than
-// merely sanitized. That is not about argv safety (isGitArgSafe already
+// The ref is resolved against the server's own branch AND tag lists rather
+// than merely sanitized. That is not about argv safety (isGitArgSafe already
 // covers that) but about never entering a scope that cannot render: a
-// nonexistent branch would make every subsequent /api/commits fail, and the
+// nonexistent ref would make every subsequent /api/commits fail, and the
 // exit affordance the client draws from that response would go with it.
+// Tags qualify because a tag is just a ref to git log — the same scope
+// machinery the TUI's solo-this-tag uses.
 func (s *Server) handleSolo(w http.ResponseWriter, r *http.Request) {
 	var req soloRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -68,15 +70,15 @@ func (s *Server) handleSolo(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Branch != "" {
 		if !isGitArgSafe(req.Branch) {
-			writeErr(w, http.StatusBadRequest, errors.New("invalid branch"))
+			writeErr(w, http.StatusBadRequest, errors.New("invalid ref"))
 			return
 		}
+		found := false
 		branches, err := s.service().Branches(r.Context())
 		if err != nil {
 			writeErr(w, http.StatusInternalServerError, err)
 			return
 		}
-		found := false
 		for _, b := range branches {
 			if b.Name == req.Branch {
 				found = true
@@ -84,7 +86,20 @@ func (s *Server) handleSolo(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if !found {
-			writeErr(w, http.StatusNotFound, errors.New("unknown branch"))
+			tags, err := s.service().Tags(r.Context())
+			if err != nil {
+				writeErr(w, http.StatusInternalServerError, err)
+				return
+			}
+			for _, tg := range tags {
+				if tg.Name == req.Branch {
+					found = true
+					break
+				}
+			}
+		}
+		if !found {
+			writeErr(w, http.StatusNotFound, errors.New("unknown branch or tag"))
 			return
 		}
 	}
