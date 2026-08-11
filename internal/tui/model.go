@@ -23,6 +23,7 @@ import (
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/promptstate"
 	"github.com/homeend/gigagit/internal/rebaseplan"
+	"github.com/homeend/gigagit/internal/repos"
 	"github.com/homeend/gigagit/internal/textdiff"
 )
 
@@ -2222,6 +2223,12 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				pushTags = m.pendingPushTags
 				noticeCfg = m.pendingNoticeConfig
 				repairSwitch = m.pendingRepairSwitch
+				if m.pendingWorktreeMoveOld != "" {
+					// The moved-from path must not linger in the repo switcher's MRU;
+					// the destination registers itself on next open (load.go Touches
+					// the current worktree), incl. immediately via the chained reRoot.
+					_ = repos.Remove(repos.DefaultStatePath(), m.pendingWorktreeMoveOld)
+				}
 			}
 			m = m.applyPendingRemoteTag()
 		}
@@ -2231,6 +2238,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.pendingPushTags = nil               // unconditional; covers both error and success paths
 		m.pendingNoticeConfig = nil           // unconditional; covers both error and success paths
 		m.pendingRepairSwitch = ""            // unconditional; covers both error and success paths
+		m.pendingWorktreeMoveOld = ""         // unconditional; covers both error and success paths
 		m.pendingCheckout = pendingCheckout{} // unconditional; only a fresh checkout dispatch re-arms it
 		srcs := m.pendingSources              // nil = all (safe default for any unmapped op)
 		m.pendingSources = nil
@@ -3237,6 +3245,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m = m.cleanupPickPatchTemp()
 	m.pendingPushTags = nil
 	m.pendingRepairSwitch = ""            // a repo switch must not fire a stale repair chain
+	m.pendingWorktreeMoveOld = ""         // a repo switch must not fire a stale move cleanup
 	m.pendingGotoTip = ""                 // a repo switch must not fire a stale tip jump
 	m.pendingCheckout = pendingCheckout{} // a diverged checkout from the old repo must not prompt in the new one
 	m.pendingRemoteTagAdds = nil

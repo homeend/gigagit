@@ -5,10 +5,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/repos"
 )
 
 // linkedWorktreeIndex returns the index of the first worktree whose path is
@@ -287,4 +289,118 @@ func TestRenameCurrentWorktreeReRoots(t *testing.T) {
 			_ = m.watcher.Close()
 		}
 	})
+}
+
+// TestMoveWorktreeRemovesOldPathFromMRU: a successful move must not leave the
+// moved-from path lingering in the repo switcher's MRU registry (the
+// destination re-registers itself on next open). The model resolves the
+// registry via repos.DefaultStatePath() (see errlog.go/oplog.go for the same
+// pattern), so isolation here is via XDG_STATE_HOME (errlog_test.go's
+// pattern), not a test-injected statePath field.
+//
+// The raw-file assertion (not just repos.Load) matters: Load prunes dead
+// paths in memory on every read, and the real `git worktree move` below
+// physically relocates the directory — so Load alone would report the old
+// path gone even if opFinishedMsg never called repos.Remove. Reading the
+// persisted file directly proves the registry was actually rewritten.
+func TestMoveWorktreeRemovesOldPathFromMRU(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	statePath := repos.DefaultStatePath()
+
+	dir, repo := newRepoDir(t)
+	wt := filepath.Join(filepath.Dir(dir), "wt-f")
+	runGit(t, dir, "worktree", "add", "-b", "feature/f", wt, "main")
+
+	m := New(domain.New(repo))
+	loaded, _ := m.Update(m.loadCmd()())
+	m = loaded.(Model)
+
+	m.focus = panelWorktrees
+	idx := linkedWorktreeIndex(t, m)
+	m.sel[panelWorktrees] = idx
+	oldPath := m.worktrees[idx].Path
+
+	if err := repos.Touch(statePath, oldPath, time.Now()); err != nil {
+		t.Fatalf("seed registry: %v", err)
+	}
+
+	updated, _ := m.Update(keyMsg("e"))
+	m = updated.(Model)
+	p, ok := m.topLayer().(*moveWorktreePopup)
+	if !ok {
+		t.Fatalf("expected moveWorktreePopup on top; got %T", m.topLayer())
+	}
+	p.field = newTextField("wt-f-renamed")
+	m, cmd := p.update(m, tea.KeyMsg{Type: tea.KeyEnter})
+	m, cmd = driveOpKeepCmd(t, m, cmd)
+	m = applyCmdChain(t, m, cmd) // worktrees reload (opAffectedSources)
+
+	raw, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatalf("read registry file: %v", err)
+	}
+	if strings.Contains(string(raw), oldPath) {
+		t.Errorf("registry file still references old path %q after a successful move:\n%s", oldPath, raw)
+	}
+	for _, e := range repos.Load(statePath) {
+		if e.Path == oldPath {
+			t.Errorf("repos.Load still lists old path %q after a successful move", oldPath)
+		}
+	}
+}
+
+// TestMoveWorktreeFailureLeavesMRUUnchanged: a move that fails (forced here
+// by a destination that already exists — MoveWorktree refuses before
+// touching anything) must not remove the old path from the MRU registry: the
+// worktree is still there under its old path.
+func TestMoveWorktreeFailureLeavesMRUUnchanged(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	statePath := repos.DefaultStatePath()
+
+	dir, repo := newRepoDir(t)
+	wt := filepath.Join(filepath.Dir(dir), "wt-g")
+	runGit(t, dir, "worktree", "add", "-b", "feature/g", wt, "main")
+
+	m := New(domain.New(repo))
+	loaded, _ := m.Update(m.loadCmd()())
+	m = loaded.(Model)
+
+	m.focus = panelWorktrees
+	idx := linkedWorktreeIndex(t, m)
+	m.sel[panelWorktrees] = idx
+	oldPath := m.worktrees[idx].Path
+
+	if err := repos.Touch(statePath, oldPath, time.Now()); err != nil {
+		t.Fatalf("seed registry: %v", err)
+	}
+
+	destName := "wt-g-renamed"
+	dest := filepath.Join(filepath.Dir(oldPath), destName)
+	if err := os.Mkdir(dest, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	updated, _ := m.Update(keyMsg("e"))
+	m = updated.(Model)
+	p, ok := m.topLayer().(*moveWorktreePopup)
+	if !ok {
+		t.Fatalf("expected moveWorktreePopup on top; got %T", m.topLayer())
+	}
+	p.field = newTextField(destName)
+	m, cmd := p.update(m, tea.KeyMsg{Type: tea.KeyEnter})
+	m = driveOp(t, m, cmd)
+
+	if m.statusMsg == "" {
+		t.Fatal("expected an error status message from the failed move")
+	}
+
+	found := false
+	for _, e := range repos.Load(statePath) {
+		if e.Path == oldPath {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("repos.Load lost old path %q after a FAILED move (registry must be untouched)", oldPath)
+	}
 }
