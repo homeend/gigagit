@@ -7,14 +7,21 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/repos"
+	"github.com/homeend/gigagit/internal/worktree"
 )
 
 type rerootRequest struct {
 	Path string `json:"path"`
+	// Repair: the client confirmed rebinding a worktree recorded under the
+	// other environment's path notation (WSL vs Windows) before switching —
+	// the second leg of the 409-confirm-retry handshake below.
+	Repair bool `json:"repair"`
 }
 
 func (s *Server) reposStatePath() string {
@@ -101,6 +108,47 @@ func (s *Server) handleReroot(w http.ResponseWriter, r *http.Request) {
 		}
 		home, _ := os.UserHomeDir()
 		target = expandHome(p, home)
+	}
+	// Cross-environment guard (the TUI's guardedReRoot, wire-shaped): a
+	// worktree recorded under the other environment's path notation (a WSL
+	// path seen from Windows gg, or vice versa on a shared disk) would fail
+	// the preflight with a raw chdir error. Reachable-as-recorded proceeds;
+	// reachable only under the translated notation asks the client to
+	// confirm a `git worktree repair` (409 + repairable:true — the repair
+	// rebinds the link records, so the worktree stops working in the OTHER
+	// environment until repaired back); confirmed (req.Repair) runs the
+	// repair from the CURRENT service, then switches to the translated path.
+	// A foreign BACKSLASH-notation admin record makes git report the
+	// worktree path with a trailing \.git — with backslashes it cannot
+	// strip the suffix it strips from forward-slash records. Trim either
+	// form so the reachability check sees the worktree dir, not its link.
+	target = strings.TrimSuffix(strings.TrimSuffix(target, `\.git`), "/.git")
+	if verdict, translated := worktree.CheckSwitchTarget(func(p string) error { _, err := os.Stat(p); return err }, runtime.GOOS, target); verdict == worktree.SwitchRepairable {
+		if !req.Repair {
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error":      "worktree is linked for another environment — repair it for this one?",
+				"repairable": true,
+				"translated": translated,
+			})
+			return
+		}
+		events := make(chan engine.Event, 16)
+		drained := make(chan struct{})
+		go func() {
+			for range events {
+			}
+			close(drained)
+		}()
+		_, rerr := s.service().Execute(r.Context(), engine.RepairWorktree{Path: translated}, events, nil)
+		close(events)
+		<-drained
+		if rerr != nil {
+			writeErr(w, http.StatusConflict, fmt.Errorf("worktree repair: %w", rerr))
+			return
+		}
+		target = translated
 	}
 	// Preflight BEFORE swapping: a broken target must never take down a
 	// working server (the startup preflight, reused — same friendly

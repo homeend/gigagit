@@ -8,6 +8,21 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: cross-environment worktree switch** (testing feedback: the raw
+  `chdir … cannot find the path` crash). Switching to a worktree
+  recorded under the other environment's path notation on a shared
+  WSL/Windows disk now answers a structured refusal, and the client
+  shows the TUI's repair/cancel modal ("linked for another environment —
+  it will stop working there until repaired back"); confirming runs
+  `git worktree repair` server-side and switches to the translated
+  path. Underneath: the cross-env path logic moved from the TUI to
+  `internal/worktree` (shared, still pure), and `engine.RepairWorktree`
+  now normalizes the worktree's `.git` pointer first — a worktree
+  CREATED by the other environment has both link records foreign, a
+  state `git worktree repair` alone cannot heal (this also fixes the
+  TUI's repair offer for that state). A foreign backslash record's
+  reported path keeps a trailing `\.git` git cannot strip; the switch
+  lane trims it.
 - **Web: mouse-first polish + reflog restyle** (testing feedback). The
   text prompt (rename branch, create branch/worktree from here, goto
   commit, …) gains a **cancel** button and the versions / branch-

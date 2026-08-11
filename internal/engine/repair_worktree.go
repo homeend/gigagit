@@ -2,6 +2,10 @@ package engine
 
 import (
 	"context"
+	"os"
+	"runtime"
+
+	"github.com/homeend/gigagit/internal/worktree"
 )
 
 // RepairWorktree rebinds a linked worktree's two absolute-path link records
@@ -19,6 +23,12 @@ var _ Operation = RepairWorktree{}
 
 func (op RepairWorktree) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	deps.emit(ctx, Progress{Step: "repairing worktree"})
+	// A worktree CREATED by the other environment has both link records in
+	// foreign notation, and `git worktree repair` alone fixes neither
+	// (measured: it heals one broken side only from the other valid one).
+	// Normalizing the worktree's .git pointer first reduces that state to
+	// the admin-side breakage repair handles. Best-effort no-op otherwise.
+	worktree.NormalizeWorktreeLink(func(p string) error { _, err := os.Stat(p); return err }, runtime.GOOS, op.Path)
 	if err := deps.Repo.WorktreeRepair(ctx, op.Path); err != nil {
 		return Result{}, err
 	}
