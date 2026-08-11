@@ -192,7 +192,7 @@ gg worktree add --from <commit> [--keep staged|unstaged] [<branch-name>]
                                       # left staged/unstaged in the new worktree; refuses a root/merge commit
 gg worktree remove [--with-branch] [--force] <path>
 gg worktree rename [--force] <worktree> <new-name>
-                                      # <worktree> resolves by path or branch name, like remove;
+                                      # <worktree> resolves by path (like remove) or by branch name;
                                       # --force unlocks a locked worktree and renames it
 gg worktree move [--force] <worktree> <new-path>
                                       # relative <new-path> resolves against the invocation directory;
