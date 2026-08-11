@@ -813,6 +813,26 @@ $("files-list").addEventListener("click", (e) => {
   }
 });
 
+// copyPathRows: the three copy actions every file menu offers — the
+// repo-relative path, the absolute path anchored on the served worktree
+// (the TUI's fileCopyPathName anchor), and the basename.
+function copyPathRows(path) {
+  const abs = (state.worktree || "").replace(/\/+$/, "") + "/" + path;
+  return [
+    { label: "copy path", act: () => copyText(path) },
+    { label: "copy absolute path", act: () => copyText(abs, "absolute path") },
+    { label: "copy file name", act: () => copyText(path.split("/").pop(), "file name") },
+  ];
+}
+
+// fileExt: the basename's extension including the dot ("" when none) —
+// mirrors Go's path.Ext, which the engine uses to build the *<ext> pattern.
+function fileExt(path) {
+  const base = path.split("/").pop();
+  const di = base.lastIndexOf(".");
+  return di >= 0 ? base.slice(di) : "";
+}
+
 // Right-click on a working-tree status file: stage/unstage it (per its
 // section), bulk actions, copy path. Selects the row for feedback without
 // opening its diff.
@@ -832,7 +852,7 @@ $("files-list").addEventListener("contextmenu", (e) => {
       [
         { label: "file history", act: () => openFileHistory(f.path, rev) },
         { label: "blame at this commit", act: () => openFileBlame(f.path, rev) },
-        { label: "copy path", act: () => copyText(f.path) },
+        ...copyPathRows(f.path),
       ],
       e.clientX,
       e.clientY
@@ -849,9 +869,15 @@ $("files-list").addEventListener("contextmenu", (e) => {
   if (f.section === "staged") items.push({ label: "unstage " + f.path, act: () => stage({ paths: [f.path], unstage: true }) });
   else if (f.section === "conflicts") items.push({ label: "mark resolved (stage as-is)", act: () => stage({ paths: [f.path] }) });
   else items.push({ label: "stage " + f.path, act: () => stage({ paths: [f.path] }) });
-  items.push({ label: "copy path", act: () => copyText(f.path) });
+  items.push(...copyPathRows(f.path));
   items.push({ label: "file history", act: () => openFileHistory(f.path, "") });
   items.push({ label: "blame (working tree)", act: () => openFileBlame(f.path, "") });
+  if (f.section === "untracked") {
+    // git ignores only untracked paths — the server 422s anything else
+    items.push({ label: "add to .gitignore", act: () => startOp({ op: "ignore", path: f.path }, "ignore " + f.path) });
+    const ext = fileExt(f.path);
+    if (ext) items.push({ label: "add *" + ext + " to .gitignore", act: () => startOp({ op: "ignore", path: f.path, ext: true }, "ignore *" + ext) });
+  }
   // the mass rows vanish while an op is paused — same footguns as the
   // hidden #files-actions buttons (stage all = markers staged as resolved,
   // unstage all = auto-merged results pulled out of the merge commit)
@@ -883,6 +909,19 @@ $("files-list").addEventListener("contextmenu", (e) => {
         "Delete untracked " + f.path + "? This cannot be undone.",
         ["discard", "abort"],
         (o) => { if (o === "discard") startOp({ op: "discard", path: f.path }, "discard " + f.path); }
+      ),
+    });
+  }
+  // discard-all shares the paused-op gate with the other mass rows, and the
+  // confirm names BOTH halves — tracked edits reverted AND untracked files
+  // deleted — because "all" spans two different kinds of loss.
+  if (!state.conflict && state.statusEntries.some((x) => x.section === "changes" || x.section === "untracked")) {
+    items.push({
+      label: "discard all changes", danger: true,
+      act: () => showLocalConfirm(
+        "Discard ALL unstaged changes? Tracked edits are reverted AND untracked files are deleted. Staged changes are kept. This cannot be undone.",
+        ["discard", "abort"],
+        (o) => { if (o === "discard") startOp({ op: "discard", all: true }, "discard all"); }
       ),
     });
   }

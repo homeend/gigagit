@@ -27,6 +27,8 @@ type opStartRequest struct {
 	Name    string `json:"name"` // new branch name (create-branch, rename-branch)
 	Edit    string `json:"edit"` // commit-edit: drop | move-up | move-down
 	Force   bool   `json:"force"`
+	Ext     bool   `json:"ext"` // ignore: the whole extension, not the one file
+	All     bool   `json:"all"` // discard: everything unstaged, no path
 	// Plan is the interactive-rebase plan, in git todo order (oldest first).
 	Plan []planEntry `json:"plan"`
 }
@@ -320,10 +322,32 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 		}
 		op = engine.DeleteBranchVersion{Ref: req.Ref}
 	case "discard":
-		// Per-file discard. The path resolves against a fresh status read
-		// (the remove-worktree/stash allowlist pattern): a stale client row
-		// 404s instead of discarding the wrong thing. Decision-free — the
-		// client confirms before POSTing (the delete-tag convention).
+		// Per-file discard, or — with all:true — everything unstaged. The
+		// path resolves against a fresh status read (the remove-worktree/
+		// stash allowlist pattern): a stale client row 404s instead of
+		// discarding the wrong thing. Decision-free — the client confirms
+		// before POSTing (the delete-tag convention).
+		if req.All {
+			st, err := svc.Status(r.Context())
+			if err != nil {
+				writeErr(w, http.StatusInternalServerError, err)
+				return
+			}
+			// The TUI's canDiscardAll rule: never during a conflict (a bulk
+			// discard would destroy resolution state), and refuse a clean
+			// tree rather than reporting a no-op success.
+			counts := st.Counts()
+			if len(st.Conflicts()) > 0 {
+				writeErr(w, http.StatusUnprocessableEntity, errors.New("tree has conflicts — resolve first"))
+				return
+			}
+			if counts.Unstaged == 0 && counts.Untracked == 0 {
+				writeErr(w, http.StatusUnprocessableEntity, errors.New("nothing to discard"))
+				return
+			}
+			op = engine.Discard{All: true}
+			break
+		}
 		if req.Path == "" || !isGitArgSafe(req.Path) {
 			writeErr(w, http.StatusBadRequest, errors.New("invalid path"))
 			return
@@ -354,6 +378,38 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		op = discard
+	case "ignore":
+		// Add an untracked file (or its whole extension, ext:true) to the
+		// repo-root .gitignore. The path resolves against a fresh status
+		// read like discard's, and must be UNTRACKED — git ignores only
+		// untracked paths, so offering this on a tracked file would write a
+		// dead pattern (the TUI's untrackedFile gate).
+		if req.Path == "" || !isGitArgSafe(req.Path) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid path"))
+			return
+		}
+		st, err := svc.Status(r.Context())
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, err)
+			return
+		}
+		found := false
+		for _, f := range st.Files {
+			if f.Path != req.Path {
+				continue
+			}
+			if f.Kind != model.KindUntracked {
+				writeErr(w, http.StatusUnprocessableEntity, errors.New("not an untracked file"))
+				return
+			}
+			found = true
+			break
+		}
+		if !found {
+			writeErr(w, http.StatusNotFound, errors.New("unknown path"))
+			return
+		}
+		op = engine.Ignore{Path: req.Path, Ext: req.Ext}
 	case "commit-graph":
 		// Write the commit-graph now, then keep it fresh — the TUI notice's
 		// write+enable chain (tui.startCommitGraphWriteAndEnable), run
