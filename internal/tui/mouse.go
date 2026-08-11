@@ -125,6 +125,13 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 			nm, cmd := l.update(m, synthKey("."))
 			return nm, cmd
 		}
+		// Middle-click = esc, on the same safe set: closing a reader or a
+		// list popup loses nothing. Text-entry popups and the editors stay
+		// inert — an accidental wheel-press must never discard typed input.
+		if msg.Button == tea.MouseButtonMiddle && (clickEnterLayer(l) || rightClickMenuLayer(l)) {
+			nm, cmd := l.update(m, synthKey("esc"))
+			return nm, cmd
+		}
 		return m, nil
 	}
 	if m.actionMenu != nil {
@@ -138,10 +145,19 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 				return m.updateActionMenuKey(synthKey("enter"))
 			}
 		}
+		if msg.Button == tea.MouseButtonMiddle {
+			return m.updateActionMenuKey(synthKey("esc"))
+		}
 		return m, nil
 	}
 	if m.filesView != nil {
 		return m.mouseInFilesView(msg, wheel)
+	}
+	// Middle-click at the base layout = esc (whatever esc currently does:
+	// clear a filter, collapse a state) — esc isn't positional, so neither
+	// is this.
+	if msg.Button == tea.MouseButtonMiddle {
+		return m.Update(synthKey("esc"))
 	}
 
 	p, ok := m.panelAt(msg.X, msg.Y)
@@ -224,6 +240,10 @@ func (m Model) mouseInFilesView(msg tea.MouseMsg, wheel int) (tea.Model, tea.Cmd
 		inCommits = true
 	}
 	switch {
+	case msg.Button == tea.MouseButtonMiddle:
+		// Middle-click = esc: close the files view through the normal esc
+		// path (not positional — anywhere over the view counts).
+		return m.Update(synthKey("esc"))
 	case wheel != 0 && inTree:
 		m.filesView.move(wheel)
 	case wheel != 0 && inCommits:

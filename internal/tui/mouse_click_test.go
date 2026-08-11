@@ -200,3 +200,45 @@ func TestRightClickFilesViewTreeOpensMenu(t *testing.T) {
 		t.Fatal("right-click on the files tree should open the action menu")
 	}
 }
+
+// Middle-click = esc on the same safe set of controls.
+
+func TestMiddleClickClosesContentPopup(t *testing.T) {
+	m := mouseModel().pushLayer(newContentPopup("t", []contentLine{{text: "x"}}))
+	u, _ := m.Update(mouseMsg(40, 12, tea.MouseButtonMiddle))
+	if u.(Model).topLayer() != nil {
+		t.Fatal("middle-click acts as esc: the content popup closes")
+	}
+}
+
+func TestMiddleClickClosesActionMenu(t *testing.T) {
+	m := mouseModel()
+	m.actionMenu = &actionMenu{rows: []actionRow{{id: "spy", label: "spy"}}}
+	u, _ := m.Update(mouseMsg(40, 12, tea.MouseButtonMiddle))
+	if u.(Model).actionMenu != nil {
+		t.Fatal("middle-click acts as esc: the action menu closes")
+	}
+}
+
+func TestMiddleClickClosesFilesView(t *testing.T) {
+	m := loadedModelLinearCommits(t, 2)
+	m.width, m.height = 80, 24
+	m.focus = panelCommits
+	m, _ = pressEnter(m) // open the files view
+	if m.filesView == nil {
+		t.Fatal("setup: enter should open the files view")
+	}
+	u, _ := m.Update(mouseMsg(40, 12, tea.MouseButtonMiddle))
+	if u.(Model).filesView != nil {
+		t.Fatal("middle-click acts as esc: the files view closes")
+	}
+}
+
+func TestMiddleClickTextPopupInert(t *testing.T) {
+	p := &branchPopup{}
+	m := mouseModel().pushLayer(p)
+	u, _ := m.Update(mouseMsg(40, 12, tea.MouseButtonMiddle))
+	if u.(Model).topLayer() != layer(p) {
+		t.Fatal("middle-click must not discard a text popup's typed input")
+	}
+}

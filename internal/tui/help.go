@@ -49,6 +49,7 @@ func helpContent() []contentLine {
 		r("click", i18n.T("focus the window under the cursor and select the clicked row")),
 		r("dbl-click", i18n.T("act on the clicked row like enter (drill into a commit, go to a branch tip, run the selected menu row)")),
 		r("right-click", i18n.T("select the row under the cursor and open its . action menu (also on the diff/history/blame views)")),
+		r("mid-click", i18n.T("act as esc: close the hovered reader, list popup, menu, or files view (text inputs are not affected)")),
 		r("wheel", i18n.T("scroll the list under the cursor ([ui] wheel_step rows; files view: tree or commits)")),
 		r("↑/k ↓/j", i18n.T("move the selection")),
 		r("pgup/pgdn", i18n.T("page the selection (a quarter of the viewport)")),

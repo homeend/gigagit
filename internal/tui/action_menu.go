@@ -511,6 +511,8 @@ func synthKey(name string) tea.KeyMsg {
 	switch name {
 	case "enter":
 		return tea.KeyMsg{Type: tea.KeyEnter}
+	case "esc":
+		return tea.KeyMsg{Type: tea.KeyEsc}
 	case "space":
 		return tea.KeyMsg{Type: tea.KeySpace}
 	default:
