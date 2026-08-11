@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/fsprobe"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/repos"
@@ -182,6 +183,28 @@ func (p *repoPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		if samePathTUI(target, m.currentWorktree) {
 			return m, nil // already here
 		}
+		if p.foreign[target] && m.confirmSlowOps() {
+			// A foreign-fs switch can block the interface for a minute (the
+			// snapshot's whole-tree status walk), so it confirms like every
+			// other slow op — same [ui] disable_slow_op_confirm bypass,
+			// default No.
+			m.modal = &decisionState{
+				req: engine.DecisionRequest{
+					ID:      "confirm-slow-op",
+					Prompt:  i18n.T("Switch to a repository on a foreign filesystem? The switch may be very slow."),
+					Options: []string{"Yes", "No"},
+				},
+				sel:     1,
+				confirm: true,
+				onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {
+					if opt == "Yes" {
+						return m.guardedReRoot(target, false)
+					}
+					return m, nil
+				},
+			}
+			return m, nil
+		}
 		tm, cmd := m.guardedReRoot(target, false)
 		return tm.(Model), cmd
 	case tea.KeyCtrlD:
@@ -216,10 +239,68 @@ func (p *repoPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	return m, nil
 }
 
-// render composites the picker over the layer beneath.
+// render composites the picker over the layer beneath, plus the slow-fs
+// tooltip when the selected row warrants one.
 func (p *repoPopup) render(m Model, below string) string {
 	w, h := m.overlayDims()
-	return overlayCenter(clipToHeight(below, h), p.box(m), w, h)
+	box := p.box(m)
+	out := overlayCenter(clipToHeight(below, h), box, w, h)
+	if line, x, y, ok := p.slowTooltip(m, box, w, h); ok {
+		out = overlayAt(out, line, x, y, w, h)
+	}
+	return out
+}
+
+// slowTooltip returns the slow-filesystem warning as an overlay strip drawn
+// one line beneath the selected row — tooltip-style, NEVER a body line: an
+// in-body warning made the popup height flip with every local↔slow cursor
+// move (user report). Cutoff/scroll modes only; in wrap mode a row's display
+// height varies and the line math below would mis-anchor.
+func (p *repoPopup) slowTooltip(m Model, box string, termW, termH int) (line string, x, y int, ok bool) {
+	if p.mode == modeWrap {
+		return "", 0, 0, false
+	}
+	vis := p.visible()
+	if len(vis) == 0 || p.sel < 0 || p.sel >= len(vis) || !p.foreign[vis[p.sel].Path] {
+		return "", 0, 0, false
+	}
+	boxLines := strings.Split(box, "\n")
+	boxW := 0
+	for _, l := range boxLines {
+		if w := lipgloss.Width(l); w > boxW {
+			boxW = w
+		}
+	}
+	left := (termW - boxW) / 2 // mirrors overlayCenter's placement of the box
+	top := (termH - len(boxLines)) / 2
+	// Rows start after border + pad + header + blank (popupBox layout; the
+	// overlay test pins the tooltip one line under the selected row, so a
+	// layout change here fails loudly rather than drifting).
+	capRows := popupResolveRowCap(p.maximized, termH, 12)
+	h := len(vis)
+	if h > capRows {
+		h = capRows
+	}
+	start := 0
+	if len(vis) > h {
+		start = windowStart(len(vis), h, p.sel)
+	}
+	rowY := top + 4 + (p.sel - start)
+	text := " " + i18n.T("⚠ this repository is mounted on a foreign filesystem — switching may be very slow") + " "
+	// Anchor at the box's content edge; when the sentence would run past the
+	// screen, shift the strip left to fit (truncation would eat exactly the
+	// "very slow" tail the tooltip exists for).
+	x = left + 2
+	if need := lipgloss.Width(text); x+need > termW {
+		x = termW - need
+		if x < 0 {
+			x = 0
+		}
+	}
+	if lines := wrapWidth(text, termW-x, 1); len(lines) > 0 {
+		text = lines[0]
+	}
+	return tooltipStyle.Render(text), x, rowY + 1, true
 }
 
 // box draws the picker box (modal box only).
@@ -278,12 +359,6 @@ func (p *repoPopup) box(m Model) string {
 	parts := []string{header, ""}
 	parts = append(parts, bodyLines...)
 	parts = append(parts, "")
-	if len(vis) > 0 && p.sel < len(vis) && p.foreign[vis[p.sel].Path] {
-		// Word-wrapped: the sentence exceeds the default popup width, and a
-		// truncated warning would hide exactly the "very slow" part it exists for.
-		parts = append(parts, wrapWords(i18n.T("⚠ this repository is mounted on a foreign filesystem — switching may be very slow"), textW)...)
-		parts = append(parts, "")
-	}
 	parts = append(parts, wrapParts(hint, textW, "  ")...)
 	return popupBox(inner, strings.Join(parts, "\n"))
 }

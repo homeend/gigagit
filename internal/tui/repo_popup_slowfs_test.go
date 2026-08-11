@@ -33,14 +33,12 @@ func TestRepoPopupSlowFSRowMarkerAndWarning(t *testing.T) {
 	if strings.Count(out, "(slow fs)") != 1 {
 		t.Fatalf("want exactly one (slow fs) marker (on the slow row):\n%s", out)
 	}
-	if strings.Contains(out, "switching may be very slow") {
-		t.Fatalf("warning line shown while a local repo is selected:\n%s", out)
-	}
-
+	// The warning itself lives in the render-time tooltip overlay (see
+	// repo_popup_slowfs_tooltip_test.go) — never in the box, whose height
+	// must not depend on the selection.
 	p.moveSel(1) // select the slow row
-	out = p.box(m)
-	if !strings.Contains(out, "switching may be very slow") {
-		t.Fatalf("selected slow row must show the warning line:\n%s", out)
+	if strings.Contains(p.box(m), "switching may be very slow") {
+		t.Fatalf("warning must not render inside the box:\n%s", p.box(m))
 	}
 }
 
