@@ -679,6 +679,22 @@ func TestWorktreeMoveLockedNeedsForce(t *testing.T) {
 	if code == 0 {
 		t.Fatal("locked move without --force should fail non-interactively")
 	}
+	// Pin down that this is specifically the move-worktree-locked decision
+	// going unanswered — not some other non-zero-exit failure. cliDecider
+	// (internal/cli/core.go) reports this two ways depending on whether
+	// os.Stdin reads as interactive: non-interactively it's "<id> needs a
+	// decision (options: ...); rerun with the matching flag"; interactively
+	// (reads an empty/invalid line from the supplied stdin reader) it's
+	// "invalid choice %q for <id>". Both embed the decision ID, which is the
+	// stable, distinguishing substring across environments — under `go test`
+	// in this sandbox, os.Stdin.Stat() reports ModeCharDevice even when the
+	// `go test` invocation's own stdin is redirected from /dev/null or a
+	// pipe (verified: the same compiled test binary run directly reports it
+	// correctly as non-interactive), so asserting the exact wording would be
+	// environment-dependent.
+	if !strings.Contains(errb.String(), "move-worktree-locked") {
+		t.Fatalf("stderr should report the unanswered move-worktree-locked decision: %s", errb.String())
+	}
 	if _, err := os.Stat(wt); err != nil {
 		t.Fatalf("worktree should still exist at old path: %v", err)
 	}
