@@ -8,6 +8,25 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: settings panel + grouped ☰ menu.** The ☰ menu is now two
+  labelled groups — **git** (pull, push, fetch, prune, create branch,
+  versions, review) and **ui** (refresh, switch repo, palette, sidebar,
+  graph, **settings…**) — with help anchored last. The new settings
+  panel (☰ or palette) carries the TUI Settings popup's config-value
+  rows, grouped: **commits** (show graph, commit sort, commit-graph
+  file write+keep-fresh), **refresh (TUI)** (auto-refresh master
+  switch, auto remote-tag refresh, per-source intervals), **history &
+  logs** (operations-history snapshots on/off + retention days,
+  operation log), **repo** (active settings file display, worktree
+  post-create hook editor). Every change saves immediately through
+  `GET/POST /api/settings` with per-key file routing — per-repo keys to
+  the repo's active settings file, machine keys to the global config —
+  and `[versions]` writes now re-apply to the running server (which
+  also honors the configured policy at startup and after a repo
+  switch, previously a long-lived-server gap). The external-tools
+  wizard, identity & profiles, branch prefixes and the display-language
+  picker remain TUI-only for now.
+
 - **Rename and move worktree directories.** The Worktrees panel's `e` key
   renames the selected worktree's directory (a popup prefilled with just the
   basename — the current worktree follows the rename), and the `.` menu adds

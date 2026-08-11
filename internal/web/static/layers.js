@@ -53,7 +53,11 @@ function showCtxMenu(items, x, y) {
   const menu = $("ctx-menu");
   menu._items = items;
   menu.innerHTML = items
-    .map((it, i) => (it.sep ? `<div class="sep"></div>` : `<button data-i="${i}"${it.danger ? ' class="danger"' : ""}>${esc(it.label)}</button>`))
+    .map((it, i) => {
+      if (it.sep) return `<div class="sep"></div>`;
+      if (it.header) return `<div class="ctx-header">${esc(it.header)}</div>`; // non-clickable group label
+      return `<button data-i="${i}"${it.danger ? ' class="danger"' : ""}>${esc(it.label)}</button>`;
+    })
     .join("");
   menu.style.left = Math.min(x, window.innerWidth - 200) + "px";
   menu.style.top = Math.min(y, window.innerHeight - 120) + "px";
