@@ -295,6 +295,11 @@ func opAffectedSources(op engine.Operation) []sourceKey {
 		return []sourceKey{srcWorktrees}
 	case engine.SetIdentity:
 		return []sourceKey{srcIdentity}
+	case engine.AbortApply:
+		// Only the working tree changes (conflicted files reset to HEAD; no
+		// ref moves). Mapped so it doesn't fall through to "all sources" and
+		// auto-fire the srcTags remote-tags network probe.
+		return []sourceKey{srcStatus}
 	case engine.SmartMerge, engine.SmartRebase:
 		return []sourceKey{srcStatus, srcFeed, srcBranches}
 	case engine.CherryPick:

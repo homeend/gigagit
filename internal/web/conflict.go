@@ -25,6 +25,10 @@ type conflictPayload struct {
 	Target     string `json:"target,omitempty"`
 	Desc       string `json:"desc,omitempty"` // domain's human phrase ("merging feature into main")
 	Conflicted int    `json:"conflicted"`
+	// Standalone: unmerged paths with NO paused sequencer op (a conflicted
+	// stash apply). The client swaps continue/abort/AI for the
+	// discard-conflicted-changes action (abort-apply).
+	Standalone bool `json:"standalone,omitempty"`
 }
 
 // conflictItem is one run of the conflicted file in order: passthrough text

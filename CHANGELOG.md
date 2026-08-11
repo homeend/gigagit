@@ -8,6 +8,19 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: conflicted stash apply has a way out** (testing feedback: no
+  abort/discard options after `stash → apply → conflict`). Unmerged
+  paths with NO paused sequencer op — a conflicted stash apply — now
+  raise the conflict bar in a standalone mode: per-file resolution
+  works as always (click the file), and a confirmed **discard
+  conflicted changes** runs the new decision-free `AbortApply` engine
+  op (`git reset --merge HEAD`): conflict markers are removed and
+  conflicted files return to HEAD while unrelated local changes and
+  the stash entry are kept, so the apply can be retried. The paused-op
+  bar (continue · abort · AI resolve) is unchanged; continue/abort/AI
+  hide in standalone mode (nothing is paused, and conflict_complete
+  tools finish a paused op). The op refuses on a clean tree and when a
+  paused op owns the conflicts.
 - **Web: cross-environment worktree switch** (testing feedback: the raw
   `chdir … cannot find the path` crash). Switching to a worktree
   recorded under the other environment's path notation on a shared

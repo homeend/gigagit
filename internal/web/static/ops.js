@@ -457,6 +457,15 @@ $("conflict-abort").addEventListener("click", () => {
   );
 });
 
+$("conflict-discard").addEventListener("click", () => {
+  if (opBusy() || !state.conflict) return;
+  showLocalConfirm(
+    "Discard the conflicted application? Conflicted files return to HEAD; other local changes and the stash are kept, so the apply can be retried.",
+    ["discard", "cancel"],
+    (o) => { if (o !== "cancel") startOp({ op: "abort-apply" }, "discarding conflicted apply"); }
+  );
+});
+
 async function loadRepo() {
   const repo = await getJSON("/api/repo");
   state.repo = repo; // {name, worktree, branch} — the palette repo-picker filters out the served root

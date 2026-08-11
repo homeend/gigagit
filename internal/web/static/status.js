@@ -35,13 +35,26 @@ function renderConflictBar() {
   const bar = $("conflict-bar"), c = state.conflict;
   if (!c) { bar.classList.add("hidden"); return; }
   bar.classList.remove("hidden");
+  // Standalone = unmerged paths with NO paused op (a conflicted stash
+  // apply): nothing to continue, nothing for abort's sequencer cleanup, and
+  // the conflict_complete AI lane finishes a paused op — so those three
+  // hide, and the discard-conflicted-changes escape (abort-apply) shows.
+  // Per-file resolution works the same either way (click the file).
+  const standalone = !!c.standalone;
+  $("conflict-ai").classList.toggle("hidden", standalone);
+  $("conflict-continue").classList.toggle("hidden", standalone);
+  $("conflict-abort").classList.toggle("hidden", standalone);
+  $("conflict-discard").classList.toggle("hidden", !standalone);
   // innerHTML so the conflicted count can carry its highlight class — c.op
   // and c.desc come off the wire (desc holds branch names), so both esc().
-  $("conflict-msg").innerHTML =
-    "⏸ " + esc(c.op) + " paused" + (c.desc ? " (" + esc(c.desc) + ")" : "") +
-    (c.conflicted
-      ? ` — <span class="conflict-count">${c.conflicted} conflicted</span>`
-      : " — all conflicts resolved");
+  $("conflict-msg").innerHTML = standalone
+    ? `⚠ <span class="conflict-count">${c.conflicted} conflicted</span> — ` +
+      esc(c.desc || "a stash apply left conflicts") +
+      " · click a file to resolve, or discard"
+    : "⏸ " + esc(c.op) + " paused" + (c.desc ? " (" + esc(c.desc) + ")" : "") +
+      (c.conflicted
+        ? ` — <span class="conflict-count">${c.conflicted} conflicted</span>`
+        : " — all conflicts resolved");
   $("conflict-continue").disabled = !!c.conflicted;
 }
 

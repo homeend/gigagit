@@ -50,7 +50,8 @@ type opStartRequest struct {
 // delete-tag, create-tag, annotate-tag, push-tag, delete-remote-tag,
 // fast-forward, checkout, reset, checkout-remote, delete-remote-branch,
 // reset-remote, prune, remove-worktree, stash, stash-apply, stash-pop,
-// stash-drop, discard, ignore, commit-graph, set-identity, restore-version,
+// stash-drop, discard, ignore, commit-graph, set-identity, abort-apply,
+// restore-version,
 // delete-version, continue, abort; the switch statement is where future ops
 // land. pull and push each take an OPTIONAL branch — omitted means the
 // current one.
@@ -134,6 +135,26 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 		op = engine.ContinueOp{}
 	case "abort":
 		op = engine.AbortOp{}
+	case "abort-apply":
+		// Discard a STANDALONE conflicted application (stash apply): only
+		// valid when unmerged paths exist and no paused sequencer op owns
+		// them — a paused op's conflicts belong to abort (git's own
+		// sequencer cleanup), and reset --merge under a clean tree would be
+		// a silent no-op the button should never offer.
+		st, serr := svc.Status(r.Context())
+		if serr != nil {
+			writeErr(w, http.StatusInternalServerError, serr)
+			return
+		}
+		if st.Counts().Conflicted == 0 {
+			writeErr(w, http.StatusUnprocessableEntity, errors.New("nothing is conflicted"))
+			return
+		}
+		if cs := svc.Conflict(r.Context(), st); cs.Op != "" {
+			writeErr(w, http.StatusUnprocessableEntity, fmt.Errorf("a paused %s owns these conflicts — use abort", cs.Op))
+			return
+		}
+		op = engine.AbortApply{}
 	case "create-branch":
 		// Only the leading-dash check here: the engine runs the new name
 		// through git check-ref-format and reports a clear refusal, which is
