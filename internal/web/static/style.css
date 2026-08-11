@@ -237,13 +237,10 @@ mark.r { background: var(--span-add); color: inherit; }
 #settings-box button:hover { border-color: var(--accent); }
 #settings-box .stgl { min-width: 52px; text-align: center; color: var(--dim); }
 #settings-box .stgl.on { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--bg)); }
-#settings-box input[type="number"], #settings-box textarea {
+#settings-box input, #settings-box textarea {
   background: var(--bg); color: var(--fg); border: 1px solid var(--border);
   border-radius: 4px; padding: 2px 8px; font: inherit; font-size: 12px;
-  -moz-appearance: textfield; appearance: textfield;
 }
-#settings-box input[type="number"]::-webkit-inner-spin-button,
-#settings-box input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 #settings-box input:focus, #settings-box textarea:focus, #settings-box button:focus-visible {
   outline: none; border-color: var(--accent);
 }

@@ -77,9 +77,14 @@ function renderSettings() {
   }
   // One label+input per line (a vertical list, not a flow) — nine wrapped
   // pairs read as noise; a column scans.
+  //
+  // type=text + a keystroke sanitizer, NOT type=number: a number input
+  // whose content goes invalid ("12e", letters on some platforms) reports
+  // value="" — and Number("") is 0, so a change handler would silently
+  // post 0 over the real value. Text inputs always report what is shown.
   const rates = REFRESH_SOURCES.map(
     (src) =>
-      `<label class="srate"><span>${esc(src.replace("_", " "))}</span><input type="number" min="0" data-rate="${src}" value="${d.refresh[src] ?? 0}"></label>`
+      `<label class="srate"><span>${esc(src.replace("_", " "))}</span><input type="text" inputmode="numeric" data-rate="${src}" value="${d.refresh[src] ?? 0}"></label>`
   ).join("");
   $("settings-box").innerHTML = `
     <h2>settings</h2>
@@ -94,7 +99,7 @@ function renderSettings() {
     <div class="srow"><span class="snote">0 = off · per repo · applies to the TUI's background lane</span></div>
     <h3>history &amp; logs</h3>
     <div class="srow"><span class="slbl">operations history</span>${toggleBtn("versions_enabled", d.versions_enabled)}<span class="snote">pre-operation branch snapshots (per repo)</span></div>
-    <div class="srow"><span class="slbl">history retention</span><input type="number" id="s-retention" value="${d.versions_max_age_days}"> <button class="sact" data-act="retention">apply</button><span class="snote">days; -1 = keep forever</span></div>
+    <div class="srow"><span class="slbl">history retention</span><input type="text" inputmode="numeric" id="s-retention" value="${d.versions_max_age_days}"> <button class="sact" data-act="retention">apply</button><span class="snote">days; -1 = keep forever</span></div>
     <div class="srow"><span class="slbl">operation log <span class="stui">(TUI)</span></span>${toggleBtn("op_log", d.op_log)}<span class="snote">${esc(d.op_log_path || "")}</span></div>
     <h3>repo</h3>
     <div class="srow"><span class="slbl">settings file</span><span class="sval">${esc(d.repo_config_path)}</span><span class="snote">${d.repo_config_private ? "machine-local (private)" : "committed .gg.toml"} · move it from the TUI</span></div>
@@ -127,8 +132,14 @@ $("settings-box").addEventListener("click", (e) => {
       setOpt({ commit_sort: state.settings.commit_sort === "plain" ? "date-order" : "plain" });
       break;
     case "retention": {
-      const v = Number($("s-retention").value);
-      if (!Number.isInteger(v)) return;
+      const raw = $("s-retention").value;
+      const v = parseInt(raw, 10);
+      if (raw === "" || raw === "-" || !Number.isInteger(v)) {
+        renderSettings(); // nothing usable typed — restore the server value
+        return;
+      }
+      // 0 / below -1 go to the server anyway: its refusal lands in .serr,
+      // which is better feedback than silently doing nothing.
       setOpt({ versions_max_age_days: v });
       break;
     }
@@ -144,12 +155,31 @@ $("settings-box").addEventListener("click", (e) => {
   }
 });
 
+// Keystroke-level sanitizing: digits only for the rates, digits plus one
+// leading minus for retention. A letter never lands, so there is no invalid
+// state to validate later — paste included ("input" fires for both).
+$("settings-box").addEventListener("input", (e) => {
+  const inp = e.target;
+  if (!(inp instanceof HTMLInputElement)) return;
+  if (inp.dataset.rate) {
+    const clean = inp.value.replace(/\D/g, "");
+    if (clean !== inp.value) inp.value = clean;
+  } else if (inp.id === "s-retention") {
+    const clean = inp.value.replace(/[^0-9-]/g, "").replace(/(?!^)-/g, "");
+    if (clean !== inp.value) inp.value = clean;
+  }
+});
+
 $("settings-box").addEventListener("change", (e) => {
   const inp = e.target.closest("input[data-rate]");
   if (!inp) return;
-  const v = Number(inp.value);
-  if (!Number.isInteger(v) || v < 0) return;
-  setOpt({ refresh: { [inp.dataset.rate]: v } });
+  if (inp.value === "") {
+    // Emptying a field is not a value: restore what the server holds
+    // rather than inventing 0 (turning a source off is an explicit 0).
+    renderSettings();
+    return;
+  }
+  setOpt({ refresh: { [inp.dataset.rate]: parseInt(inp.value, 10) } });
 });
 
 // Backdrop click closes (the picker-overlay convention — settings is a
