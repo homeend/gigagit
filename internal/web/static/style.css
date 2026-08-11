@@ -251,6 +251,18 @@ mark.r { background: var(--span-add); color: inherit; }
 #settings-box .srate span { width: 110px; }
 #settings-box .srate input, #settings-box #s-retention { width: 64px; text-align: right; }
 #settings-box .shook textarea { flex: 1 1 260px; resize: vertical; }
+#settings-box .ssave {
+  display: flex; align-items: center; gap: 14px; margin-top: 14px;
+  padding: 8px 12px; border: 1px solid #a8843c; border-radius: 4px;
+  /* Sticky within the scrollable box: an edit near the top must still show
+     its warning without scrolling to the bottom. */
+  position: sticky; bottom: 0; background: var(--bg-alt);
+  box-shadow: 0 -6px 12px rgba(0,0,0,.35);
+}
+#settings-box .ssave.hidden { display: none; }
+#settings-box .swarn { color: #d9a441; }
+#settings-box .ssave button { border-color: #a8843c; color: #d9a441; font-weight: 600; }
+#settings-box :disabled { opacity: .45; cursor: default; }
 #settings-box .serr { color: var(--err, #e66); min-height: 1.2em; }
 #settings-box .sfoot { margin-top: 10px; color: var(--dim); font-size: 11px; }
 #branches-list li.head { cursor: pointer; } /* left-click = go to tip, safe for HEAD too */
