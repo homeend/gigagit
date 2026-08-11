@@ -55,6 +55,17 @@ func (s *Server) writeStatus(w http.ResponseWriter, r *http.Request) {
 			Op: cs.Op, Source: cs.Source, Target: cs.Target,
 			Desc: cs.Describe(), Conflicted: c.Conflicted,
 		}
+	} else if c.Conflicted > 0 {
+		// Unmerged paths with NO paused sequencer op: a conflicted stash
+		// apply (or similar application). The client bar must still appear —
+		// per-file resolution works exactly as in the paused case — but with
+		// the standalone action set: no continue (nothing is paused), no
+		// conflict_complete AI lane (those tools finish a paused op), and a
+		// "discard conflicted changes" escape backed by abort-apply.
+		resp["conflict"] = conflictPayload{
+			Op: "apply", Desc: "a stash apply or similar left conflicts",
+			Conflicted: c.Conflicted, Standalone: true,
+		}
 	}
 	writeJSON(w, resp)
 }
