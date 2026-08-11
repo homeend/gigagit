@@ -223,17 +223,33 @@ mark.r { background: var(--span-add); color: inherit; }
 #settings-box { background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; padding: 18px 24px; width: 640px; max-width: 92vw; max-height: 84vh; overflow-y: auto; }
 #settings-box h2 { margin: 0 0 10px; font-size: 15px; }
 #settings-box h3 { margin: 14px 0 6px; font-size: 12px; color: var(--dim); text-transform: uppercase; letter-spacing: .05em; }
-#settings-box .srow { display: flex; gap: 10px; align-items: baseline; line-height: 1.9; flex-wrap: wrap; }
+#settings-box .srow { display: flex; gap: 10px; align-items: center; line-height: 1.9; flex-wrap: wrap; margin: 2px 0; }
 #settings-box .slbl { flex: none; width: 190px; color: var(--accent); }
 #settings-box .snote { color: var(--dim); font-size: 11px; }
 #settings-box .sval { color: var(--fg); }
 #settings-box .stui { color: var(--dim); font-size: 10px; text-transform: none; letter-spacing: 0; }
-#settings-box .stgl { min-width: 44px; }
-#settings-box .stgl.on { border-color: var(--accent); color: var(--accent); }
-#settings-box .sratewrap { display: flex; flex-wrap: wrap; gap: 6px 12px; }
-#settings-box .srate { color: var(--dim); font-size: 11px; }
-#settings-box .srate input, #settings-box #s-retention { width: 58px; }
-#settings-box .shook textarea { flex: 1 1 260px; font: inherit; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 4px; padding: 4px 6px; }
+/* controls: the app's dark button recipe (files-actions), never the UA default */
+#settings-box button {
+  background: var(--bg); color: var(--fg); border: 1px solid var(--border);
+  border-radius: 4px; padding: 2px 12px; font: inherit; font-size: 12px; cursor: pointer;
+}
+#settings-box button:hover { border-color: var(--accent); }
+#settings-box .stgl { min-width: 52px; text-align: center; color: var(--dim); }
+#settings-box .stgl.on { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--bg)); }
+#settings-box input[type="number"], #settings-box textarea {
+  background: var(--bg); color: var(--fg); border: 1px solid var(--border);
+  border-radius: 4px; padding: 2px 8px; font: inherit; font-size: 12px;
+  -moz-appearance: textfield; appearance: textfield;
+}
+#settings-box input[type="number"]::-webkit-inner-spin-button,
+#settings-box input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+#settings-box input:focus, #settings-box textarea:focus, #settings-box button:focus-visible {
+  outline: none; border-color: var(--accent);
+}
+#settings-box .sratewrap { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+#settings-box .srate { color: var(--dim); font-size: 11px; display: inline-flex; align-items: center; gap: 5px; }
+#settings-box .srate input, #settings-box #s-retention { width: 52px; text-align: right; }
+#settings-box .shook textarea { flex: 1 1 260px; resize: vertical; }
 #settings-box .serr { color: var(--err, #e66); min-height: 1.2em; }
 #settings-box .sfoot { margin-top: 10px; color: var(--dim); font-size: 11px; }
 #branches-list li.head { cursor: pointer; } /* left-click = go to tip, safe for HEAD too */
