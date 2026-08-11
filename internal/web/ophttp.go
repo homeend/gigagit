@@ -24,20 +24,30 @@ type opStartRequest struct {
 	Path    string `json:"path"`
 	Ref     string `json:"ref"`
 	Sha     string `json:"sha"`
-	Name    string `json:"name"` // new branch name (create-branch, rename-branch)
-	Edit    string `json:"edit"` // commit-edit: drop | move-up | move-down
+	Name    string `json:"name"`   // new branch name (create-branch, rename-branch)
+	Edit    string `json:"edit"`   // commit-edit: drop | move-up | move-down
+	Mode    string `json:"mode"`   // reset: "" (interactive picker) | soft | mixed | hard
+	Switch  bool   `json:"switch"` // checkout-remote: switch to the new local branch
 	Force   bool   `json:"force"`
+	Ext     bool   `json:"ext"` // ignore: the whole extension, not the one file
+	All     bool   `json:"all"` // discard: everything unstaged, no path
+	// Paths is discard's batch form (the marked set). All-or-nothing: any
+	// member failing the per-file rules refuses the whole batch.
+	Paths []string `json:"paths"`
 	// Plan is the interactive-rebase plan, in git todo order (oldest first).
 	Plan []planEntry `json:"plan"`
 }
 
 // handleOpStart begins an operation and returns 202 {op_id}. Ops wired so
-// far: switch, commit, fetch, pull, push, merge, rebase, create-branch,
-// rename-branch, create-worktree, delete-branch, delete-tag, remove-worktree,
-// stash, stash-apply, stash-pop, stash-drop, discard, restore-version,
-// delete-version, continue, abort; the switch statement is
-// where future ops land. pull and push each take an OPTIONAL branch — omitted
-// means the current one.
+// far: switch, commit, fetch, pull, push, merge, rebase, interactive-rebase,
+// commit-edit, create-branch, rename-branch, create-worktree, delete-branch,
+// delete-tag, create-tag, annotate-tag, push-tag, delete-remote-tag,
+// fast-forward, checkout, reset, checkout-remote, delete-remote-branch,
+// reset-remote, prune, remove-worktree, stash, stash-apply, stash-pop,
+// stash-drop, discard, ignore, commit-graph, restore-version,
+// delete-version, continue, abort; the switch statement is where future ops
+// land. pull and push each take an OPTIONAL branch — omitted means the
+// current one.
 func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 	svc := s.service()
 	var req opStartRequest
@@ -218,6 +228,274 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 		}
 		// Decision-free op: the client shows its own confirm before starting.
 		op = engine.DeleteTag{Name: req.Tag}
+	case "create-tag":
+		// New tag at Sha ("" = HEAD), annotated when Message is set. Only the
+		// leading-dash check on the name: git's own check-ref-format produces
+		// the better refusal (the create-branch precedent). No force on this
+		// lane — force-recreate belongs to annotate-tag, where the target
+		// comes from a server-side read.
+		if req.Tag == "" || !isGitArgSafe(req.Tag) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid tag"))
+			return
+		}
+		if req.Sha != "" && !isGitArgSafe(req.Sha) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid commit"))
+			return
+		}
+		op = engine.CreateTag{Name: req.Tag, Commit: req.Sha, Message: req.Message}
+	case "annotate-tag":
+		// Force-recreate an EXISTING tag as annotated at its current target.
+		// The tag resolves against a fresh read and the target comes from
+		// that entry — never the wire: CreateTag{Force} moves a ref, so a
+		// client-supplied target would let one POST retarget any tag.
+		if req.Tag == "" || !isGitArgSafe(req.Tag) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid tag"))
+			return
+		}
+		if strings.TrimSpace(req.Message) == "" {
+			writeErr(w, http.StatusBadRequest, errors.New("message required"))
+			return
+		}
+		tgs, terr := svc.Tags(r.Context())
+		if terr != nil {
+			writeErr(w, http.StatusInternalServerError, terr)
+			return
+		}
+		target := ""
+		for _, tg := range tgs {
+			if tg.Name == req.Tag {
+				target = tg.Target
+				break
+			}
+		}
+		if target == "" {
+			writeErr(w, http.StatusNotFound, errors.New("unknown tag"))
+			return
+		}
+		op = engine.CreateTag{Name: req.Tag, Commit: target, Message: req.Message, Force: true}
+	case "push-tag", "delete-remote-tag":
+		// Both resolve the tag against a fresh read (the stash/remove-worktree
+		// allowlist pattern). The engine resolves the remote itself — auto for
+		// one, a Decider pick for several — and delete confirms via its own
+		// Decider; both park in the browser modal.
+		if req.Tag == "" || !isGitArgSafe(req.Tag) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid tag"))
+			return
+		}
+		tgs, terr := svc.Tags(r.Context())
+		if terr != nil {
+			writeErr(w, http.StatusInternalServerError, terr)
+			return
+		}
+		known := false
+		for _, tg := range tgs {
+			if tg.Name == req.Tag {
+				known = true
+				break
+			}
+		}
+		if !known {
+			writeErr(w, http.StatusNotFound, errors.New("unknown tag"))
+			return
+		}
+		if req.Op == "push-tag" {
+			op = engine.PushTag{Name: req.Tag}
+		} else {
+			op = engine.DeleteRemoteTag{Tag: req.Tag}
+		}
+	case "checkout-tag":
+		// Check out a tag — detached (no name) or onto a new branch created
+		// at it (the reflog checkout's two lanes, addressed by tag name so
+		// the reflog message reads "moving to <tag>"). The tag resolves
+		// against a fresh read; only the server-owned name reaches argv.
+		if req.Tag == "" || !isGitArgSafe(req.Tag) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid tag"))
+			return
+		}
+		if req.Name != "" && !isGitArgSafe(req.Name) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid branch name"))
+			return
+		}
+		tgs, terr := svc.Tags(r.Context())
+		if terr != nil {
+			writeErr(w, http.StatusInternalServerError, terr)
+			return
+		}
+		ref := ""
+		for _, tg := range tgs {
+			if tg.Name == req.Tag {
+				ref = tg.Name
+				break
+			}
+		}
+		if ref == "" {
+			writeErr(w, http.StatusNotFound, errors.New("unknown tag"))
+			return
+		}
+		op = engine.Checkout{Ref: ref, Branch: req.Name}
+	case "fast-forward":
+		// Advance the CURRENT branch to another local branch's tip (git merge
+		// --ff-only semantics). The branch resolves against a fresh read; the
+		// engine refuses a target that is not strictly ahead. Decision-free
+		// and never history-rewriting, so the labelled menu row is
+		// confirmation enough (the DnD pair-menu standing).
+		if req.Branch == "" || !isGitArgSafe(req.Branch) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid branch"))
+			return
+		}
+		bs, berr := svc.Branches(r.Context())
+		if berr != nil {
+			writeErr(w, http.StatusInternalServerError, berr)
+			return
+		}
+		known := false
+		for _, b := range bs {
+			if b.Name == req.Branch {
+				known = true
+				break
+			}
+		}
+		if !known {
+			writeErr(w, http.StatusNotFound, errors.New("unknown branch"))
+			return
+		}
+		op = engine.FastForward{Commit: req.Branch}
+	case "checkout":
+		// Check out a commit by id — detached (no name) or onto a new branch
+		// created there (the reflog menu's two lanes). The target is hex-only
+		// (isHexSha): a commit id is content-addressed, so unlike a positional
+		// identifier (stash@{N}) there is no staleness hazard to allowlist
+		// against — but names ("main", "HEAD~1") have dedicated ops and are
+		// refused here.
+		if !isHexSha(req.Sha) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid commit id"))
+			return
+		}
+		if req.Name != "" && !isGitArgSafe(req.Name) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid branch name"))
+			return
+		}
+		op = engine.Checkout{Ref: req.Sha, Branch: req.Name}
+	case "reset":
+		// Move the current branch to a commit id (hex-only, as above). Empty
+		// mode keeps the engine's interactive flow — the soft/mixed/hard
+		// picker (plus the non-ancestor confirm) parks in the browser modal
+		// and IS the deliberate confirmation. A preset mode skips every
+		// engine guard, so a client sending one owns the confirm itself
+		// (the reset-to-remote-tip lane).
+		if !isHexSha(req.Sha) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid commit id"))
+			return
+		}
+		switch req.Mode {
+		case "", "soft", "mixed", "hard":
+		default:
+			writeErr(w, http.StatusBadRequest, errors.New("invalid mode"))
+			return
+		}
+		op = engine.Reset{Commit: req.Sha, Mode: req.Mode}
+	case "checkout-remote":
+		// Materialize a remote-tracking branch under a local name (fast-
+		// forward-safe; the engine refuses a diverged or checked-out local).
+		// The ref is an identifier resolved against a fresh read — Remote/
+		// Branch never come from the wire (the remove-worktree allowlist
+		// pattern). The local name is free text for git check-ref-format.
+		if req.Ref == "" || !isGitArgSafe(req.Ref) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid remote ref"))
+			return
+		}
+		if req.Name == "" || !isGitArgSafe(req.Name) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid branch name"))
+			return
+		}
+		rbs, rerr := svc.RemoteBranches(r.Context())
+		if rerr != nil {
+			writeErr(w, http.StatusInternalServerError, rerr)
+			return
+		}
+		var ref string
+		for _, rb := range rbs {
+			if rb.Name == req.Ref {
+				ref = rb.Name
+				break
+			}
+		}
+		if ref == "" {
+			writeErr(w, http.StatusNotFound, errors.New("unknown remote branch"))
+			return
+		}
+		intent := engine.CheckoutStay
+		if req.Switch {
+			intent = engine.CheckoutSwitch
+		}
+		op = engine.SmartCheckout{RemoteRef: ref, Local: req.Name, Intent: intent}
+	case "delete-remote-branch":
+		// Fresh-read resolve as above; the engine's own confirm ("delete-
+		// remote-branch") parks in the browser modal before the deletion is
+		// pushed, so the client needs no local confirm.
+		if req.Ref == "" || !isGitArgSafe(req.Ref) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid remote ref"))
+			return
+		}
+		rbs, rerr := svc.RemoteBranches(r.Context())
+		if rerr != nil {
+			writeErr(w, http.StatusInternalServerError, rerr)
+			return
+		}
+		found := false
+		for _, rb := range rbs {
+			if rb.Name == req.Ref {
+				op = engine.DeleteRemoteBranch{Remote: rb.Remote, Branch: rb.Branch}
+				found = true
+				break
+			}
+		}
+		if !found {
+			writeErr(w, http.StatusNotFound, errors.New("unknown remote branch"))
+			return
+		}
+	case "reset-remote":
+		// Hard-reset the current branch to its remote counterpart's tip. This
+		// is the one lane that presets Reset's Mode — which skips the engine's
+		// picker AND its non-ancestor confirm — so two server-side guards
+		// carry the safety: the ref must resolve against a fresh read, and it
+		// must be the counterpart of the CHECKED-OUT branch (the TUI's
+		// remoteResetRow rule — resetting to another branch's remote would
+		// move the wrong branch). The client owns the explicit confirm.
+		if req.Ref == "" || !isGitArgSafe(req.Ref) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid remote ref"))
+			return
+		}
+		rbs, rerr := svc.RemoteBranches(r.Context())
+		if rerr != nil {
+			writeErr(w, http.StatusInternalServerError, rerr)
+			return
+		}
+		var target *model.RemoteBranch
+		for i := range rbs {
+			if rbs[i].Name == req.Ref {
+				target = &rbs[i]
+				break
+			}
+		}
+		if target == nil {
+			writeErr(w, http.StatusNotFound, errors.New("unknown remote branch"))
+			return
+		}
+		cur, cerr := svc.CurrentBranch(r.Context())
+		if cerr != nil {
+			writeErr(w, http.StatusInternalServerError, cerr)
+			return
+		}
+		if cur == "" || target.Branch != cur {
+			writeErr(w, http.StatusUnprocessableEntity, errors.New(req.Ref+" is not the current branch's remote counterpart"))
+			return
+		}
+		op = engine.Reset{Commit: target.Name, Mode: "hard"}
+	case "prune":
+		// Drop tracking refs for branches deleted upstream, all remotes.
+		// Refs-only and re-fetchable, so no confirm.
+		op = engine.Prune{}
 	case "remove-worktree":
 		if req.Path == "" {
 			writeErr(w, http.StatusBadRequest, errors.New("path required"))
@@ -320,10 +598,71 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 		}
 		op = engine.DeleteBranchVersion{Ref: req.Ref}
 	case "discard":
-		// Per-file discard. The path resolves against a fresh status read
-		// (the remove-worktree/stash allowlist pattern): a stale client row
-		// 404s instead of discarding the wrong thing. Decision-free — the
-		// client confirms before POSTing (the delete-tag convention).
+		// Per-file discard, or — with all:true — everything unstaged. The
+		// path resolves against a fresh status read (the remove-worktree/
+		// stash allowlist pattern): a stale client row 404s instead of
+		// discarding the wrong thing. Decision-free — the client confirms
+		// before POSTing (the delete-tag convention).
+		if req.All {
+			st, err := svc.Status(r.Context())
+			if err != nil {
+				writeErr(w, http.StatusInternalServerError, err)
+				return
+			}
+			// The TUI's canDiscardAll rule: never during a conflict (a bulk
+			// discard would destroy resolution state), and refuse a clean
+			// tree rather than reporting a no-op success.
+			counts := st.Counts()
+			if len(st.Conflicts()) > 0 {
+				writeErr(w, http.StatusUnprocessableEntity, errors.New("tree has conflicts — resolve first"))
+				return
+			}
+			if counts.Unstaged == 0 && counts.Untracked == 0 {
+				writeErr(w, http.StatusUnprocessableEntity, errors.New("nothing to discard"))
+				return
+			}
+			op = engine.Discard{All: true}
+			break
+		}
+		if len(req.Paths) > 0 {
+			// Batch form (the client's marked set), all-or-nothing: every
+			// member must pass the per-file rules before anything runs, so
+			// a stale mark can never half-discard.
+			for _, p := range req.Paths {
+				if p == "" || !isGitArgSafe(p) {
+					writeErr(w, http.StatusBadRequest, errors.New("invalid path"))
+					return
+				}
+			}
+			st, err := svc.Status(r.Context())
+			if err != nil {
+				writeErr(w, http.StatusInternalServerError, err)
+				return
+			}
+			kind := make(map[string]model.FileKind, len(st.Files))
+			for _, f := range st.Files {
+				kind[f.Path] = f.Kind
+			}
+			var restore, remove []string
+			for _, p := range req.Paths {
+				k, ok := kind[p]
+				if !ok {
+					writeErr(w, http.StatusNotFound, errors.New("unknown path: "+p))
+					return
+				}
+				switch k {
+				case model.KindUnmerged:
+					writeErr(w, http.StatusUnprocessableEntity, errors.New("conflicted — resolve instead: "+p))
+					return
+				case model.KindUntracked:
+					remove = append(remove, p)
+				default:
+					restore = append(restore, p)
+				}
+			}
+			op = engine.Discard{Restore: restore, Remove: remove}
+			break
+		}
 		if req.Path == "" || !isGitArgSafe(req.Path) {
 			writeErr(w, http.StatusBadRequest, errors.New("invalid path"))
 			return
@@ -354,6 +693,38 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		op = discard
+	case "ignore":
+		// Add an untracked file (or its whole extension, ext:true) to the
+		// repo-root .gitignore. The path resolves against a fresh status
+		// read like discard's, and must be UNTRACKED — git ignores only
+		// untracked paths, so offering this on a tracked file would write a
+		// dead pattern (the TUI's untrackedFile gate).
+		if req.Path == "" || !isGitArgSafe(req.Path) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid path"))
+			return
+		}
+		st, err := svc.Status(r.Context())
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, err)
+			return
+		}
+		found := false
+		for _, f := range st.Files {
+			if f.Path != req.Path {
+				continue
+			}
+			if f.Kind != model.KindUntracked {
+				writeErr(w, http.StatusUnprocessableEntity, errors.New("not an untracked file"))
+				return
+			}
+			found = true
+			break
+		}
+		if !found {
+			writeErr(w, http.StatusNotFound, errors.New("unknown path"))
+			return
+		}
+		op = engine.Ignore{Path: req.Path, Ext: req.Ext}
 	case "commit-graph":
 		// Write the commit-graph now, then keep it fresh — the TUI notice's
 		// write+enable chain (tui.startCommitGraphWriteAndEnable), run

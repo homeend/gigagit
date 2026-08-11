@@ -8,6 +8,93 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: solo a tag + check out a tag.** The tag menu gains **solo this
+  tag** (narrows the commit list to the tag's history — `/api/solo` now
+  accepts tag names alongside branches, resolved against a fresh read so
+  the scope can always render; the top-bar chip exits as usual) and
+  **check out** lanes: detached, or as a new branch created at the tag
+  (prompt prefilled with the tag name), via a new `checkout-tag` op case
+  addressed by server-resolved tag name.
+
+- **Web: remotes sidebar section.** `GET /api/remotes` lists
+  remote-tracking branches (capped at 100 like tags) in a new section
+  under branches. Click shows the tip commit; right-click offers **check
+  out as… / switch to as…** (materialize under a local name,
+  fast-forward-safe), **merge into the current branch**, **rebase the
+  current branch onto it**, **reset current to its tip** (offered and
+  server-enforced only on the checked-out branch's own counterpart;
+  explicitly confirmed — it discards local commits and uncommitted
+  changes), copy name / commit id, and **delete from remote** (the
+  engine's confirm parks in the modal). **prune remotes** joins fetch in
+  the ☰ menu and palette.
+
+- **Web: reflog sidebar section.** `GET /api/reflog` serves the HEAD
+  reflog (capped at 100 rows); a new last sidebar section lists where
+  HEAD has been — dangling commits included, since rows open by full
+  sha. Right-click: show, copy sha, **check out here** (detached or as a
+  new branch via prompt), **reset the current branch to the entry** —
+  the engine's soft/mixed/hard picker (with cancel, plus the
+  non-ancestor confirm) parks in the browser modal.
+
+- **Web: tag operations.** Right-clicking a commit offers **create tag
+  here…**; the tag menu gains **annotate…** (force-recreates as
+  annotated at the tag's current target, which the server re-reads —
+  a wire-supplied target is ignored), **push tag** and **delete from
+  remote** (remote auto-picked when there is one, else the pick parks;
+  deleting confirms via the parked modal), and **copy commit id**.
+
+- **Web: branch pair-ops as plain menu rows.** A non-head branch row's
+  menu now carries **merge it into the current branch**, **rebase the
+  current branch onto it** (the drag-and-drop pair ops, now reachable
+  without a drag) and **fast-forward the current branch to it** (ff-only
+  advance; refused unless strictly ahead). The worktree menu gains
+  **copy branch name**.
+
+- **Web: history/blame rows only where git has history.** The status-file
+  context menu no longer offers **file history** / **blame** on untracked
+  files (never committed: empty history, blame errors) or staged NEW
+  files (same file one step later); conflicted files keep both (blame
+  works on unmerged paths). A staged rename's history row now queries the
+  OLD path (`--follow` can only follow from a committed path).
+
+- **Web status files: multi-select marks + batch actions.** `ctrl+click`
+  (or `m` on the focused row, which advances like the TUI's mark) marks
+  working-tree status files — accent-highlighted rows; conflict rows are
+  not markable. Right-click then offers **stage / unstage / discard N
+  marked** per the marked set's sections (marks survive a stage and flip
+  to the unstage row; discard is confirmed and all-or-nothing — the
+  `discard` op's new `paths` batch form resolves every member against a
+  fresh status read and refuses the whole batch on any unknown (404) or
+  conflicted (422) member, so a stale mark can never half-discard), plus
+  **clear marks**. Marks prune themselves when files leave the status and
+  clear when the tree goes clean.
+
+- **Web file context menu: TUI-parity batch.** Right-clicking a
+  working-tree status file now offers **copy absolute path** (anchored on
+  the served worktree) and **copy file name** beside copy path (the
+  commit/compare file menus get all three too); an untracked file gains
+  **add to .gitignore** and **add *<ext> to .gitignore** (a new `ignore`
+  op over `engine.Ignore` — the path must resolve to an untracked entry in
+  a fresh status read: tracked 422, unknown 404); and a **discard all
+  changes** danger row runs `engine.Discard{All}` via `discard` +
+  `all:true` (refused with 422 while conflicts exist — the TUI's
+  canDiscardAll rule — or when nothing is unstaged; the confirm names both
+  halves: tracked edits reverted AND untracked files deleted).
+
+- **Web client split into ES modules.** The web frontend's `app.js` (a
+  ~3.9k-line monolith) is now 16 ES modules split along its own section
+  comments — `core` (state + fetch/esc helpers), `layers` (layer stack,
+  ctx menu, prompt), `status`, `ops` (op transport + modal), `sidebar`,
+  `versions`, `rebase`, `filehist`, `review`, `resize`, `commits`, `files`
+  (files/diff/hunks/conflict picker), `keys`, `bigrepo`, `palette`, with
+  `app.js` reduced to the entry module that imports them in the original
+  order and boots. The split is mechanical — every code line is unchanged
+  and none were added or dropped (verified by line-multiset comparison);
+  `index.html` still loads `/static/app.js`. Three functions moved to the
+  module owning the state they touch (`reconcileStatusView`,
+  `openStatusDiff` → files; `loadRepo` → ops) so every module-level `let`
+  is written only by its own module — cross-module writes would break ES
+  import bindings.
 - **Repo switcher warns about slow filesystem mounts.** Rows whose repository
   sits on a foreign mount (WSL's `/mnt/<drive>` drvfs, network filesystems —
   cifs/smb, nfs, sshfs/fuse; UNC paths on Windows) are marked `(slow fs)`;
