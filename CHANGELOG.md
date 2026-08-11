@@ -8,6 +8,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: session errors viewer.** ☰ → **session errors…** (ui group;
+  also in the palette): this server session's genuine failures, newest
+  first — time, source, and the one-line detail — from the same observ
+  failure ring the TUI's settings errors view reads (captured at the
+  domain boundary; user aborts excluded). The panel names the durable
+  `errors.log` path for history older than the session. Riding along:
+  `gg web` now wires the always-on `errors.log` sink at startup, the
+  same way the TUI does — previously a web session's failures were
+  ring-only and the durable file depended on which frontend ran.
+  Server: capped `GET /api/session-errors`.
 - **Web: external tools view.** ☰ → **external tools…** (git group;
   also in the palette) is a read-only inventory of the configured
   `[[tools.command]]` blocks — every category and frontend, each row
