@@ -40,6 +40,8 @@
     <ul id="tags-list"></ul>
     <div id="stashes-header" class="side-header">stashes</div>
     <ul id="stashes-list"></ul>
+    <div id="reflog-header" class="side-header">reflog</div>
+    <ul id="reflog-list"></ul>
   </aside>
   <div id="rs-sidebar" class="resizer" title="drag to resize · double-click to reset"></div>
   <section id="commits-pane" class="pane focused">
@@ -212,6 +214,7 @@
     <div class="hrow"><span class="hkey">tag</span><span>click: show its commit · right-click: show, copy name / commit id, <b>annotate</b> (set or replace the message, keeping the target), <b>push tag</b> / <b>delete from remote</b> (the remote is picked for you when there is one; deleting confirms first), delete</span></div>
     <div class="hrow"><span class="hkey">make a tag</span><span>right-click a commit → <b>create tag here…</b> makes a lightweight tag at that commit; annotate it afterwards from the tag's own menu</span></div>
     <div class="hrow"><span class="hkey">stash</span><span>click: show its changes (incl. untracked) · right-click: apply, pop, drop</span></div>
+    <div class="hrow"><span class="hkey">reflog</span><span>the sidebar's last section lists where HEAD has been (HEAD@{0} is newest) — commits survive here even after a reset or rewrite. Click: show that commit · right-click: show, copy its sha, <b>check out here</b> (detached, or as a new branch), <b>reset the current branch to it</b> (pick soft / mixed / hard in the modal; cancel is always offered)</span></div>
     <div class="hrow"><span class="hkey">change block</span><span>in an unstaged file's diff: click a highlighted block to select it, then <b>stage selected</b> in the diff header stages just those hunks</span></div>
     <div class="hrow"><span class="hkey">status file</span><span>right-click: stage / unstage, stage all / unstage all, copy path / absolute path / file name, add an untracked file (or its extension) to .gitignore, discard — per file, the marked set, or all</span></div>
     <div class="hrow"><span class="hkey">section header</span><span>double-click: collapse / expand that sidebar section (persisted)</span></div>

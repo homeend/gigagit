@@ -10,21 +10,25 @@ import { gotoBranchTip, openCommitByHash, openStashDetail, setSolo } from "./com
 import { openCompare } from "./files.js";
 
 async function fetchBranches() {
-  const [b, w, tg, st] = await Promise.all([
+  const [b, w, tg, st, rl] = await Promise.all([
     getJSON("/api/branches"),
     getJSON("/api/worktrees").catch(() => ({ worktrees: [] })),
     getJSON("/api/tags").catch(() => ({ tags: [], truncated: false })),
     getJSON("/api/stashes").catch(() => ({ stashes: [] })),
+    getJSON("/api/reflog").catch(() => ({ entries: [], truncated: false })),
   ]);
   state.branches = b.branches || [];
   state.worktrees = w.worktrees || [];
   state.tags = tg.tags || [];
   state.tagsTruncated = !!tg.truncated;
   state.stashes = st.stashes || [];
+  state.reflog = rl.entries || [];
+  state.reflogTruncated = !!rl.truncated;
   renderBranches();
   renderWorktrees();
   renderTags();
   renderStashes();
+  renderReflog();
 }
 
 
@@ -65,6 +69,20 @@ function renderTags() {
     .join("");
   if (state.tagsTruncated) html += `<li class="more">… more (capped at 100)</li>`;
   $("tags-list").innerHTML = html;
+}
+
+
+function renderReflog() {
+  let html = state.reflog
+    .map(
+      (e) =>
+        `<li data-h="${esc(e.hash)}" data-s="${esc(e.selector)}">${esc(e.selector)}` +
+        (e.subject ? `<span class="tsub">${esc(e.subject)}${e.rel ? " · " + esc(e.rel) : ""}</span>` : "") +
+        `</li>`
+    )
+    .join("");
+  if (state.reflogTruncated) html += `<li class="more">… more (capped at 100)</li>`;
+  $("reflog-list").innerHTML = html;
 }
 
 
@@ -490,4 +508,54 @@ $("stashes-list").addEventListener("contextmenu", (e) => {
   if (st) showStashMenu(st, e.clientX, e.clientY);
 });
 
-export { branchesList, clearDropTargets, defaultWorktreePath, fetchBranches, openCreateBranchPrompt, renderBranches, renderStashes, renderTags, renderWorktrees, showBranchMenu, showBranchPairMenu, showStashMenu, showTagMenu, showWorktreeMenu, toggleSection, worktreePathForBranch };
+
+// Reflog rows address commits by full sha, so a dangling commit (dropped,
+// reset past, rewritten) still opens — git serves it by id on demand.
+$("reflog-list").addEventListener("click", (e) => {
+  const li = e.target.closest("li");
+  if (!li || !li.dataset.h) return;
+  openCommitByHash(li.dataset.h, li.dataset.s || li.dataset.h.slice(0, 8));
+});
+
+
+function showReflogMenu(en, x, y) {
+  const short = en.short || en.hash.slice(0, 8);
+  showCtxMenu(
+    [
+      { label: "show commit", act: () => openCommitByHash(en.hash, en.selector) },
+      { label: "copy commit sha", act: () => copyText(en.hash, "commit sha " + short) },
+      // Both lanes are explicit in the label; the detached one is the escape
+      // hatch for inspecting a lost state without inventing a branch name.
+      { label: "check out here (detached)", act: () => startOp({ op: "checkout", sha: en.hash }, "checking out " + short) },
+      {
+        label: "check out as new branch…",
+        act: () =>
+          openPrompt({
+            title: "New branch at " + short + ", then switch to it:",
+            placeholder: "branch name",
+            onSubmit: (name) => startOp({ op: "checkout", sha: en.hash, name }, "creating " + name + " at " + short),
+          }),
+      },
+      {
+        // Empty mode = the engine's interactive flow: the soft/mixed/hard
+        // picker (with cancel, plus the non-ancestor confirm) parks in the
+        // modal — that modal IS the confirmation, so no local confirm here.
+        label: "reset current branch to this entry…",
+        danger: true,
+        act: () => startOp({ op: "reset", sha: en.hash }, "resetting to " + short),
+      },
+    ],
+    x,
+    y
+  );
+}
+
+$("reflog-list").addEventListener("contextmenu", (e) => {
+  const li = e.target.closest("li");
+  if (!li || !li.dataset.h) return;
+  e.preventDefault();
+  const en = state.reflog.find((x) => x.hash === li.dataset.h && x.selector === li.dataset.s);
+  if (en) showReflogMenu(en, e.clientX, e.clientY);
+});
+
+export { branchesList, clearDropTargets, defaultWorktreePath, fetchBranches, openCreateBranchPrompt, renderBranches, renderReflog, renderStashes, renderTags, renderWorktrees, showBranchMenu, showBranchPairMenu, showReflogMenu, showStashMenu, showTagMenu, showWorktreeMenu, toggleSection, worktreePathForBranch };
