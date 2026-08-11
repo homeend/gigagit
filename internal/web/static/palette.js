@@ -7,6 +7,10 @@ import { openCreateBranchPrompt } from "./sidebar.js";
 import { openVersionBranches } from "./versions.js";
 import { openFileBlame, openFileHistory } from "./filehist.js";
 import { openSettings } from "./settings.js";
+import { openIdentityView } from "./identity.js";
+import { openPrefixesView } from "./prefixes.js";
+import { openExtToolsView } from "./exttools.js";
+import { openSessionErrorsView } from "./sessionerrors.js";
 import { startReview } from "./review.js";
 import { gotoCommitPrompt, openCommitFilter, toggleGraphMode } from "./commits.js";
 import { openWorkingTree } from "./files.js";
@@ -29,6 +33,10 @@ function paletteCommands() {
     { label: "fetch all remotes", detail: "", run: () => doFetch() },
     { label: "prune remotes (drop deleted branches)", detail: "", run: () => startOp({ op: "prune" }, "pruning remotes") },
     { label: "settings…", detail: "", run: () => openSettings() },
+    { label: "identity & profiles…", detail: "", run: () => openIdentityView() },
+    { label: "branch prefixes…", detail: "", run: () => openPrefixesView() },
+    { label: "external tools…", detail: "", run: () => openExtToolsView() },
+    { label: "session errors…", detail: "", run: () => openSessionErrorsView() },
     { label: "create branch…", detail: "", run: () => openCreateBranchPrompt() },
     { label: "branch versions…", detail: "", run: () => openVersionBranches() },
     { label: "file history…", detail: "", run: () => openPrompt({ title: "File history — repo-relative path", placeholder: "e.g. internal/web/server.go", onSubmit: (p) => openFileHistory(p, "") }) },
@@ -187,6 +195,9 @@ function openGlobalMenu() {
     { label: "prune remotes (drop deleted branches)", act: () => startOp({ op: "prune" }, "pruning remotes") },
     { label: "create branch…", act: () => openCreateBranchPrompt() },
     { label: "branch versions…", act: () => openVersionBranches() },
+    { label: "identity & profiles…", act: () => openIdentityView() },
+    { label: "branch prefixes…", act: () => openPrefixesView() },
+    { label: "external tools…", act: () => openExtToolsView() },
     { label: "review working changes (AI)…", act: () => startReview("working", "") },
   ].sort((a, b) => a.label.localeCompare(b.label));
   const ui = [
@@ -196,6 +207,7 @@ function openGlobalMenu() {
     { label: "toggle sidebar", act: () => toggleSidebar() },
     { label: "toggle graph", act: () => toggleGraphMode() },
     { label: "settings…", act: () => openSettings() },
+    { label: "session errors…", act: () => openSessionErrorsView() },
   ].sort((a, b) => a.label.localeCompare(b.label));
   const rows = [{ header: "git" }, ...git, { header: "ui" }, ...ui, { sep: true }, { label: "help", act: () => openHelp() }];
   showCtxMenu(rows, r.left, r.bottom + 4);

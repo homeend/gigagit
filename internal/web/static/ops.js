@@ -241,6 +241,23 @@ async function doReroot(path) {
     await postJSON("/api/reroot", { path });
     location.reload();
   } catch (e) {
+    // Cross-environment worktree (WSL path seen from Windows gg, or vice
+    // versa): the server answers 409 repairable and waits for an explicit
+    // confirm — repairing rebinds the link records, so the worktree stops
+    // working in the other environment until repaired back.
+    if (e.data && e.data.repairable) {
+      showLocalConfirm(
+        "This worktree is linked for another environment. Repair it for this one? It will stop working there until repaired back.",
+        ["repair", "cancel"],
+        (opt) => {
+          if (opt !== "repair") return;
+          postJSON("/api/reroot", { path, repair: true })
+            .then(() => location.reload())
+            .catch((err) => opLine("error: " + (err.message || err), true));
+        }
+      );
+      return;
+    }
     opLine("error: " + (e.message || e), true);
   }
 }
@@ -437,6 +454,15 @@ $("conflict-abort").addEventListener("click", () => {
     "Abort the paused " + op + "? Conflict resolutions so far are discarded.",
     ["abort " + op, "cancel"],
     (o) => { if (o !== "cancel") startOp({ op: "abort" }, "abort " + op); }
+  );
+});
+
+$("conflict-discard").addEventListener("click", () => {
+  if (opBusy() || !state.conflict) return;
+  showLocalConfirm(
+    "Discard the conflicted application? Conflicted files return to HEAD; other local changes and the stash are kept, so the apply can be retried.",
+    ["discard", "cancel"],
+    (o) => { if (o !== "cancel") startOp({ op: "abort-apply" }, "discarding conflicted apply"); }
   );
 });
 

@@ -8,6 +8,116 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: prefix use moves into the create-branch prompt** (TUI parity).
+  ☰ → **branch prefixes…** now only DEFINES the templated skeletons
+  (add/delete); creating from one lives where creating happens — the
+  create-branch prompt (☰/palette **create branch…** and a branch's
+  **create branch from here…**) gains a **use prefix…** button (the
+  TUI popup's ctrl+p): pick a saved prefix in a select-only picker,
+  fill any `<user:…>` labels, and the resolved name seeds the input,
+  still editable; plain typing needs no prefix at all. The picked
+  prefix's identity rides the submit so `<seq>` counters advance only
+  when the create succeeds; canceling the picker restores the prompt
+  with whatever was typed, and the from-here start point survives the
+  whole lane. Underneath: the prompt layer gained an optional
+  caller-owned `extra` action button.
+- **Web: prompt cancel styling + conflict-bar hiding fix** (testing
+  feedback + a Playwright sweep). The prompt's cancel button now
+  shares ok's dark styling and sits grouped with it at the right edge
+  (it floated unstyled mid-popup: `space-between` with three children
+  plus no shared recipe). And the standalone conflict bar's
+  continue/abort/AI buttons now actually disappear — the `hidden`
+  class had no matching CSS rule for buttons inside the bar, a false
+  pass in the class-asserting CDP check that a Playwright
+  visibility-based sweep caught.
+- **Web: conflicted stash apply has a way out** (testing feedback: no
+  abort/discard options after `stash → apply → conflict`). Unmerged
+  paths with NO paused sequencer op — a conflicted stash apply — now
+  raise the conflict bar in a standalone mode: per-file resolution
+  works as always (click the file), and a confirmed **discard
+  conflicted changes** runs the new decision-free `AbortApply` engine
+  op (`git reset --merge HEAD`): conflict markers are removed and
+  conflicted files return to HEAD while unrelated local changes and
+  the stash entry are kept, so the apply can be retried. The paused-op
+  bar (continue · abort · AI resolve) is unchanged; continue/abort/AI
+  hide in standalone mode (nothing is paused, and conflict_complete
+  tools finish a paused op). The op refuses on a clean tree and when a
+  paused op owns the conflicts.
+- **Web: cross-environment worktree switch** (testing feedback: the raw
+  `chdir … cannot find the path` crash). Switching to a worktree
+  recorded under the other environment's path notation on a shared
+  WSL/Windows disk now answers a structured refusal, and the client
+  shows the TUI's repair/cancel modal ("linked for another environment —
+  it will stop working there until repaired back"); confirming runs
+  `git worktree repair` server-side and switches to the translated
+  path. Underneath: the cross-env path logic moved from the TUI to
+  `internal/worktree` (shared, still pure), and `engine.RepairWorktree`
+  now normalizes the worktree's `.git` pointer first — a worktree
+  CREATED by the other environment has both link records foreign, a
+  state `git worktree repair` alone cannot heal (this also fixes the
+  TUI's repair offer for that state). A foreign backslash record's
+  reported path keeps a trailing `\.git` git cannot strip; the switch
+  lane trims it.
+- **Web: mouse-first polish + reflog restyle** (testing feedback). The
+  text prompt (rename branch, create branch/worktree from here, goto
+  commit, …) gains a **cancel** button and the versions / branch-
+  versions overlays gain **close** buttons — a pointer-only user never
+  needs a key to leave a dialog. The sidebar reflog is restyled into
+  columns: `@{N}` selector (full `HEAD@{N}` kept for the menus), short
+  sha, the action/subject (ellipsized), and a compact age (`13h`,
+  hover for the full phrase).
+- **Web: session errors viewer.** ☰ → **session errors…** (ui group;
+  also in the palette): this server session's genuine failures, newest
+  first — time, source, and the one-line detail — from the same observ
+  failure ring the TUI's settings errors view reads (captured at the
+  domain boundary; user aborts excluded). The panel names the durable
+  `errors.log` path for history older than the session. Riding along:
+  `gg web` now wires the always-on `errors.log` sink at startup, the
+  same way the TUI does — previously a web session's failures were
+  ring-only and the durable file depended on which frontend ran.
+  Server: capped `GET /api/session-errors`.
+- **Web: external tools view.** ☰ → **external tools…** (git group;
+  also in the palette) is a read-only inventory of the configured
+  `[[tools.command]]` blocks — every category and frontend, each row
+  with category/mode/per-file/when-op/frontend badges, its full
+  command text, this repo's approval state (the promptstate store the
+  TUI and the web lanes share), and a problem line when a block fails
+  the structural checks the run-time lanes apply — plus which catalog
+  tools are detected on this machine and which of their templates are
+  already configured (opt-in variants marked). Adding/editing stays in
+  the TUI Settings wizard. Server: `GET /api/exttools`, with the
+  detection probe behind a test seam so wire tests never touch the
+  developer's machine.
+- **Web: branch prefixes.** ☰ → **branch prefixes…** (git group; also
+  in the palette) manages the templated branch-name skeletons — list
+  with scope tags, add (validated: empty values, `<branch>`, and
+  malformed tokens refuse), delete — and starts a branch from one:
+  **new branch…** fills any `<user:…>` labels in a small form, resolves
+  the value server-side against the live repo (`<parent-branch>`,
+  `<repo>`, `<date>`, peeked `<seq:…>` counters) and opens the
+  create-branch prompt prefilled with the result, still editable. The
+  submit carries the picked prefix's identity, and its `<seq>` counters
+  are consumed only when the create succeeds — a canceled prompt or
+  failed create never burns a number (the TUI's pendingSeqBump
+  contract, now enforced server-side). Server: `GET/POST
+  /api/prefixes`, `POST /api/prefixes/remove`, `POST
+  /api/prefixes/resolve`; new domain wrappers `ResolvePrefixValue` /
+  `BumpPrefixSeqs` / `PrefixSeqNames` keep `internal/template` a
+  layering detail.
+- **Web: identity & profiles.** The TUI's identity view comes to the
+  browser: ☰ → **identity & profiles…** (git group; also in the
+  palette) opens an overlay showing the current git `user.name`/
+  `user.email` per scope (global · repo · effective, with an
+  inherits-global note), an edit-identity form, and the named identity
+  presets — create, edit/rename, delete, and apply. Applying (a preset
+  or an edited identity) picks the scope explicitly — **to this repo**
+  or **globally** — and runs the engine's decision-free `SetIdentity`
+  op through the normal op transport. Server side: `GET /api/identity`
+  (identity + profiles in one payload), `POST /api/profiles` (create/
+  rename with add-first semantics), `POST /api/profiles/remove`
+  (fresh-read 404 on an unknown id), and a `set-identity` op case; all
+  forms are explicit-save, and profile presets stay gg-local — only an
+  apply touches git config.
 - **Web: settings panel + grouped ☰ menu.** The ☰ menu is now two
   labelled groups — **git** (pull, push, fetch, prune, create branch,
   versions, review) and **ui** (refresh, switch repo, palette, sidebar,

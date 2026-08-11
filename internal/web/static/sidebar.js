@@ -1,7 +1,8 @@
 // sidebar.js — part of gg's web client. Split from the original app.js;
 // see app.js (the entry module) for the load order.
 import { $, SECTIONS, esc, getJSON, lsGet, lsSet, state } from "./core.js";
-import { copyText, openPrompt, showCtxMenu } from "./layers.js";
+import { closePrompt, copyText, openPrompt, showCtxMenu } from "./layers.js";
+import { openPrefixPicker } from "./prefixes.js";
 import { doForcePush, doPull, doPullBranch, doPush, doPushBranch, doReroot, showLocalConfirm, startOp, startSwitch } from "./ops.js";
 import { openVersions } from "./versions.js";
 import { openRebaseEditor } from "./rebase.js";
@@ -85,12 +86,27 @@ function renderTags() {
 }
 
 
+// compactRel squeezes git's "13 hours ago" into "13h" so the sidebar row's
+// width goes to the subject, not the age. Unrecognized forms pass through.
+function compactRel(rel) {
+  const m = /^(\d+)\s+(second|minute|hour|day|week|month|year)s?\s+ago$/.exec(rel || "");
+  if (!m) return rel || "";
+  return m[1] + (m[2] === "month" ? "mo" : m[2][0]);
+}
+
+
 function renderReflog() {
+  // Column-ish row: @{N} (the recovery selector, shortened for display —
+  // data-s keeps the full form the menus use), short sha, subject
+  // (ellipsized), compact age pinned right.
   let html = state.reflog
     .map(
       (e) =>
-        `<li data-h="${esc(e.hash)}" data-s="${esc(e.selector)}">${esc(e.selector)}` +
-        (e.subject ? `<span class="tsub">${esc(e.subject)}${e.rel ? " · " + esc(e.rel) : ""}</span>` : "") +
+        `<li data-h="${esc(e.hash)}" data-s="${esc(e.selector)}">` +
+        `<span class="rsel">${esc(e.selector.replace(/^HEAD@/, "@"))}</span>` +
+        `<span class="rsha">${esc(e.short || "")}</span>` +
+        `<span class="rsub">${esc(e.subject || "")}</span>` +
+        (e.rel ? `<span class="rrel" title="${esc(e.rel)}">${esc(compactRel(e.rel))}</span>` : "") +
         `</li>`
     )
     .join("");
@@ -148,11 +164,40 @@ function defaultWorktreePath(branch) {
 // The global create-branch entry (☰ / palette): same op as the branch
 // menu's row, but with no start point on the wire — the server reads that as
 // HEAD, which is what "new branch" means with nothing selected.
-function openCreateBranchPrompt() {
+// openCreateBranchPrompt: the one create-branch dialog (☰/palette = from
+// HEAD; the branch menu passes its start point). "use prefix…" mirrors the
+// TUI popup's ctrl+p: pick a saved prefix, fill its <user:…> labels, and
+// the resolved name seeds the input — still editable; plain typing needs no
+// prefix at all. A completed pick rides along on the submit as the prefix
+// identity, so its <seq> counters advance only when the create succeeds;
+// canceling the picker restores the prompt with whatever was typed.
+function openCreateBranchPrompt(start, seed) {
   openPrompt({
-    title: "New branch, starting at the current HEAD:",
+    title: start ? "New branch, starting at " + start + ":" : "New branch, starting at the current HEAD:",
     placeholder: "branch name",
-    onSubmit: (name) => startOp({ op: "create-branch", name }, "creating " + name),
+    value: seed ? seed.value : "",
+    extra: {
+      label: "use prefix…",
+      run: (typed) => {
+        closePrompt();
+        openPrefixPicker((resolved, p) => {
+          if (resolved == null) {
+            openCreateBranchPrompt(start, typed ? { value: typed } : undefined);
+            return;
+          }
+          openCreateBranchPrompt(start, { value: resolved, prefix: p });
+        });
+      },
+    },
+    onSubmit: (name) => {
+      const body = { op: "create-branch", name };
+      if (start) body.branch = start;
+      if (seed && seed.prefix) {
+        body.prefix_id = seed.prefix.id;
+        body.prefix_scope = seed.prefix.scope;
+      }
+      startOp(body, "creating " + name);
+    },
   });
 }
 
@@ -208,12 +253,7 @@ function showBranchMenu(b, x, y) {
   });
   items.push({
     label: "create branch from here…",
-    act: () =>
-      openPrompt({
-        title: "New branch, starting at " + b.name + ":",
-        placeholder: "branch name",
-        onSubmit: (name) => startOp({ op: "create-branch", name, branch: b.name }, "creating " + name),
-      }),
+    act: () => openCreateBranchPrompt(b.name),
   });
   // Only offered when the branch has no worktree — git allows exactly one,
   // and the engine would refuse a second (same gate as the copy-path row).

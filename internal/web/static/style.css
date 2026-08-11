@@ -217,31 +217,34 @@ mark.r { background: var(--span-add); color: inherit; }
 #ctx-menu .sep { border-top: 1px solid var(--border); margin: 4px 0; }
 #ctx-menu .ctx-header { padding: 3px 12px 1px; font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: .08em; cursor: default; }
 
-/* settings overlay — the help overlay's shell with control rows */
-#settings { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; z-index: 11; }
-#settings.hidden { display: none; }
-#settings-box { background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; padding: 18px 24px; width: 640px; max-width: 92vw; max-height: 84vh; overflow-y: auto; }
-#settings-box h2 { margin: 0 0 10px; font-size: 15px; }
-#settings-box h3 { margin: 24px 0 8px; padding-top: 14px; border-top: 1px solid var(--border); font-size: 12px; color: var(--dim); text-transform: uppercase; letter-spacing: .05em; }
-#settings-box h3:first-of-type { margin-top: 12px; padding-top: 0; border-top: none; }
-#settings-box .srow { display: flex; gap: 10px; align-items: center; line-height: 1.9; flex-wrap: wrap; margin: 2px 0; }
-#settings-box .slbl { flex: none; width: 190px; color: var(--accent); }
-#settings-box .snote { color: var(--dim); font-size: 11px; }
-#settings-box .sval { color: var(--fg); }
+/* settings + identity overlays — the help overlay's shell with control rows
+   (the identity overlay reuses the settings recipe wholesale) */
+#settings, #identity, #prefixes, #exttools, #sesserrors { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; z-index: 11; }
+#settings.hidden, #identity.hidden, #prefixes.hidden, #exttools.hidden, #sesserrors.hidden { display: none; }
+#settings-box, #identity-box, #prefixes-box, #exttools-box, #sesserrors-box { background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; padding: 18px 24px; width: 640px; max-width: 92vw; max-height: 84vh; overflow-y: auto; }
+#settings-box h2, #identity-box h2, #prefixes-box h2, #exttools-box h2, #sesserrors-box h2 { margin: 0 0 10px; font-size: 15px; }
+#settings-box h3, #identity-box h3, #prefixes-box h3, #exttools-box h3 { margin: 24px 0 8px; padding-top: 14px; border-top: 1px solid var(--border); font-size: 12px; color: var(--dim); text-transform: uppercase; letter-spacing: .05em; }
+#settings-box h3:first-of-type, #identity-box h3:first-of-type, #prefixes-box h3:first-of-type, #exttools-box h3:first-of-type { margin-top: 12px; padding-top: 0; border-top: none; }
+#settings-box .srow, #identity-box .srow, #prefixes-box .srow, #exttools-box .srow, #sesserrors-box .srow { display: flex; gap: 10px; align-items: center; line-height: 1.9; flex-wrap: wrap; margin: 2px 0; }
+#settings-box .slbl, #identity-box .slbl, #prefixes-box .slbl { flex: none; width: 190px; color: var(--accent); }
+#settings-box .snote, #identity-box .snote, #prefixes-box .snote, #exttools-box .snote, #sesserrors-box .snote { color: var(--dim); font-size: 11px; }
+#settings-box .sval, #identity-box .sval, #prefixes-box .sval, #exttools-box .sval { color: var(--fg); }
 #settings-box .stui { color: var(--dim); font-size: 10px; text-transform: none; letter-spacing: 0; }
 /* controls: the app's dark button recipe (files-actions), never the UA default */
-#settings-box button {
+#settings-box button, #identity-box button, #prefixes-box button {
   background: var(--bg); color: var(--fg); border: 1px solid var(--border);
   border-radius: 4px; padding: 2px 12px; font: inherit; font-size: 12px; cursor: pointer;
 }
-#settings-box button:hover { border-color: var(--accent); }
-#settings-box .stgl { min-width: 52px; text-align: center; color: var(--dim); }
-#settings-box .stgl.on { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--bg)); }
-#settings-box input, #settings-box textarea {
+#settings-box button:hover, #identity-box button:hover, #prefixes-box button:hover { border-color: var(--accent); }
+#settings-box .stgl, #identity-box .stgl, #prefixes-box .stgl { min-width: 52px; text-align: center; color: var(--dim); }
+#settings-box .stgl.on, #identity-box .stgl.on, #prefixes-box .stgl.on { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--bg)); }
+#settings-box input, #settings-box textarea, #identity-box input, #prefixes-box input {
   background: var(--bg); color: var(--fg); border: 1px solid var(--border);
   border-radius: 4px; padding: 2px 8px; font: inherit; font-size: 12px;
 }
-#settings-box input:focus, #settings-box textarea:focus, #settings-box button:focus-visible {
+#settings-box input:focus, #settings-box textarea:focus, #settings-box button:focus-visible,
+#identity-box input:focus, #identity-box button:focus-visible,
+#prefixes-box input:focus, #prefixes-box button:focus-visible {
   outline: none; border-color: var(--accent);
 }
 #settings-box .srates { align-items: flex-start; }
@@ -262,9 +265,19 @@ mark.r { background: var(--span-add); color: inherit; }
 #settings-box .ssave.hidden { display: none; }
 #settings-box .swarn { color: #d9a441; }
 #settings-box .ssave button { border-color: #a8843c; color: #d9a441; font-weight: 600; }
-#settings-box :disabled { opacity: .45; cursor: default; }
-#settings-box .serr { color: var(--err, #e66); min-height: 1.2em; }
-#settings-box .sfoot { margin-top: 10px; color: var(--dim); font-size: 11px; }
+#settings-box :disabled, #identity-box :disabled, #prefixes-box :disabled { opacity: .45; cursor: default; }
+#settings-box .serr, #identity-box .serr, #prefixes-box .serr { color: var(--err, #e66); min-height: 1.2em; }
+#settings-box .sfoot, #identity-box .sfoot, #prefixes-box .sfoot, #exttools-box .sfoot, #sesserrors-box .sfoot { margin-top: 10px; color: var(--dim); font-size: 11px; }
+/* identity-only bits: a profile is ONE line — name, identity (ellipsized),
+   buttons pinned right; form inputs get a usable width */
+#identity-box .prow, #prefixes-box .prow { flex-wrap: nowrap; }
+#identity-box .prow .sval, #prefixes-box .prow .sval { flex: none; min-width: 110px; }
+#identity-box .prow .snote, #prefixes-box .prow .snote { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#identity-box .prow .pscope, #prefixes-box .prow .pscope { flex: none; } /* the scope tag never ellipsizes — it's the fact that matters */
+#identity-box .prow .pbtns, #prefixes-box .prow .pbtns { margin-left: auto; flex: none; display: flex; gap: 6px; }
+#identity-box .prow button.danger, #prefixes-box .prow button.danger { color: #f27a6a; }
+#identity-box input, #prefixes-box input { flex: 1 1 220px; }
+#identity-box .stgl, #prefixes-box .stgl { min-width: 150px; }
 #branches-list li.head { cursor: pointer; } /* left-click = go to tip, safe for HEAD too */
 #back-btn {
   display: block; width: 100%; text-align: left; padding: 4px 8px;
@@ -318,6 +331,7 @@ mark.r { background: var(--span-add); color: inherit; }
   font-size: 13px;
 }
 #conflict-bar.hidden { display: none; }
+#conflict-bar button.hidden { display: none; } /* standalone mode hides continue/abort/AI */
 /* The "N conflicted" fragment — in the banner AND the Working-tree row's
    meta — pops against the surrounding text so a conflict is spotted at a
    glance (dim gray / banner fg elsewhere). */
@@ -368,10 +382,11 @@ mark.r { background: var(--span-add); color: inherit; }
 #prompt-title { padding: 10px 14px 6px; color: var(--fg); }
 #prompt-input { margin: 0 14px; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 3px; padding: 7px 10px; font: inherit; outline: none; }
 #prompt-input:focus { border-color: var(--accent); }
-#prompt-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; }
-#prompt-hint { color: var(--dim); font-size: 11px; }
-#prompt-ok { background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 3px; padding: 2px 14px; font: inherit; cursor: pointer; }
-#prompt-ok:hover { border-color: var(--accent); }
+#prompt-actions { display: flex; align-items: center; gap: 12px; padding: 10px 14px; }
+#prompt-hint { color: var(--dim); font-size: 11px; margin-right: auto; }
+#prompt-ok, #prompt-cancel, #prompt-extra { background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 3px; padding: 2px 14px; font: inherit; cursor: pointer; }
+#prompt-ok:hover, #prompt-cancel:hover, #prompt-extra:hover { border-color: var(--accent); }
+#prompt-extra.hidden { display: none; }
 #palette { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: flex-start; justify-content: center; z-index: 21; }
 #palette.hidden { display: none; }
 #palette-box { margin-top: 18vh; background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; width: 90vw; max-width: 560px; display: flex; flex-direction: column; }
@@ -562,3 +577,33 @@ tr.hk.picked td.no { background: var(--sel); color: var(--fg); }
   0%, 55% { background: var(--sel); }
   100% { background: transparent; }
 }
+/* prefixes overlay: the VALUE is the row's main content — it flexes and
+   ellipsizes (unlike the identity rows, where the name column is fixed) */
+#prefixes-box .prow .pfxval { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* exttools overlay: category/mode badges, dimmed command line, red problem */
+#exttools-box .xcmd, #exttools-box .xdet { margin: 6px 0 10px; }
+#exttools-box .xbadge { background: var(--bg); border: 1px solid var(--border); border-radius: 3px; padding: 0 6px; font-size: 10px; color: var(--dim); text-transform: none; }
+#exttools-box .xok { color: #7dbd7d; font-size: 11px; }
+#exttools-box .xcmdline { color: var(--dim); font-size: 11px; font-family: inherit; margin: 2px 0 0 12px; overflow-wrap: anywhere; }
+#exttools-box .xproblem { color: var(--err, #e66); font-size: 11px; margin: 2px 0 0 12px; }
+#exttools-box .xtmpl { margin-left: 12px; }
+/* session-errors overlay: compact rows, red detail line, source badge */
+#sesserrors-box .erow { margin: 6px 0; }
+#sesserrors-box .xbadge { background: var(--bg); border: 1px solid var(--border); border-radius: 3px; padding: 0 6px; font-size: 10px; color: var(--dim); }
+#sesserrors-box .edetail { color: var(--err, #e66); font-size: 11px; margin: 1px 0 0 12px; overflow-wrap: anywhere; }
+/* reflog rows (testing feedback: the bare-text list read as noise) —
+   selector / sha / subject / age columns, subject ellipsized, age pinned */
+#reflog-list li { display: flex; gap: 6px; align-items: baseline; padding: 2px 10px; white-space: nowrap; overflow: hidden; cursor: pointer; }
+#reflog-list li:hover { background: var(--bg-alt); }
+#reflog-list li .rsel { color: var(--accent); font-size: 11px; flex: none; min-width: 40px; }
+#reflog-list li .rsha { color: var(--dim); font-size: 11px; flex: none; font-family: inherit; }
+#reflog-list li .rsub { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
+#reflog-list li .rrel { color: var(--dim); font-size: 10px; flex: none; margin-left: auto; }
+#reflog-list li.more { color: var(--dim); cursor: default; }
+/* mouse-first buttons in the prompt / versions overlays */
+#versions-hint, #vbranches-hint { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+#versions-hint button, #vbranches-hint button {
+  background: var(--bg); color: var(--fg); border: 1px solid var(--border);
+  border-radius: 4px; padding: 2px 12px; font: inherit; font-size: 12px; cursor: pointer;
+}
+#versions-hint button:hover, #vbranches-hint button:hover { border-color: var(--accent); }

@@ -208,3 +208,8 @@ $("vbranches").addEventListener("click", (e) => {
 });
 
 export { branchTipHash, closeVersionBranches, closeVersions, openVersionBranches, openVersions, showVersionMenu, versionRowMenu, versionWhen };
+
+// Mouse-first close buttons (testing feedback): a pointer-only user must
+// never need a key to leave an overlay.
+$("versions-close").addEventListener("click", () => closeLayer("versions"));
+$("vbranches-close").addEventListener("click", () => closeLayer("vbranches"));

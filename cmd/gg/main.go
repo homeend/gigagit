@@ -65,6 +65,14 @@ func main() {
 		addr := fs.String("addr", "", "listen address (loopback only; default 127.0.0.1:0)")
 		open := fs.Bool("open", false, "open the system browser at the served URL")
 		_ = fs.Parse(args[1:])
+		// The always-on error log the TUI keeps (errors.log beside
+		// operations.log): the web server's genuine failures were previously
+		// ring-only — /api/session-errors shows the ring either way, but the
+		// durable file should not depend on which frontend ran.
+		if ef, _, eerr := tui.OpenErrorLog(); eerr == nil && ef != nil {
+			observ.SetFailureSink(ef)
+			defer func() { observ.SetFailureSink(nil); _ = ef.Close() }()
+		}
 		if err := web.Serve(context.Background(), ".", *addr, *open); err != nil {
 			fmt.Fprintln(os.Stderr, "gg web:", err)
 			os.Exit(1)

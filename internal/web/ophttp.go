@@ -24,13 +24,19 @@ type opStartRequest struct {
 	Path    string `json:"path"`
 	Ref     string `json:"ref"`
 	Sha     string `json:"sha"`
-	Name    string `json:"name"`   // new branch name (create-branch, rename-branch)
-	Edit    string `json:"edit"`   // commit-edit: drop | move-up | move-down
-	Mode    string `json:"mode"`   // reset: "" (interactive picker) | soft | mixed | hard
-	Switch  bool   `json:"switch"` // checkout-remote: switch to the new local branch
-	Force   bool   `json:"force"`
-	Ext     bool   `json:"ext"` // ignore: the whole extension, not the one file
-	All     bool   `json:"all"` // discard: everything unstaged, no path
+	Name    string `json:"name"` // new branch name (create-branch, rename-branch); user.name (set-identity)
+	// create-branch: the picked prefix's identity when the name came from a
+	// prefix prefill — its <seq> counters bump after a successful create.
+	PrefixID    string `json:"prefix_id"`
+	PrefixScope string `json:"prefix_scope"`
+	Email       string `json:"email"`  // set-identity: user.email
+	Global      bool   `json:"global"` // set-identity: write the global scope instead of the repo's
+	Edit        string `json:"edit"`   // commit-edit: drop | move-up | move-down
+	Mode        string `json:"mode"`   // reset: "" (interactive picker) | soft | mixed | hard
+	Switch      bool   `json:"switch"` // checkout-remote: switch to the new local branch
+	Force       bool   `json:"force"`
+	Ext         bool   `json:"ext"` // ignore: the whole extension, not the one file
+	All         bool   `json:"all"` // discard: everything unstaged, no path
 	// Paths is discard's batch form (the marked set). All-or-nothing: any
 	// member failing the per-file rules refuses the whole batch.
 	Paths []string `json:"paths"`
@@ -44,7 +50,8 @@ type opStartRequest struct {
 // delete-tag, create-tag, annotate-tag, push-tag, delete-remote-tag,
 // fast-forward, checkout, reset, checkout-remote, delete-remote-branch,
 // reset-remote, prune, remove-worktree, stash, stash-apply, stash-pop,
-// stash-drop, discard, ignore, commit-graph, restore-version,
+// stash-drop, discard, ignore, commit-graph, set-identity, abort-apply,
+// restore-version,
 // delete-version, continue, abort; the switch statement is where future ops
 // land. pull and push each take an OPTIONAL branch — omitted means the
 // current one.
@@ -128,6 +135,26 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 		op = engine.ContinueOp{}
 	case "abort":
 		op = engine.AbortOp{}
+	case "abort-apply":
+		// Discard a STANDALONE conflicted application (stash apply): only
+		// valid when unmerged paths exist and no paused sequencer op owns
+		// them — a paused op's conflicts belong to abort (git's own
+		// sequencer cleanup), and reset --merge under a clean tree would be
+		// a silent no-op the button should never offer.
+		st, serr := svc.Status(r.Context())
+		if serr != nil {
+			writeErr(w, http.StatusInternalServerError, serr)
+			return
+		}
+		if st.Counts().Conflicted == 0 {
+			writeErr(w, http.StatusUnprocessableEntity, errors.New("nothing is conflicted"))
+			return
+		}
+		if cs := svc.Conflict(r.Context(), st); cs.Op != "" {
+			writeErr(w, http.StatusUnprocessableEntity, fmt.Errorf("a paused %s owns these conflicts — use abort", cs.Op))
+			return
+		}
+		op = engine.AbortApply{}
 	case "create-branch":
 		// Only the leading-dash check here: the engine runs the new name
 		// through git check-ref-format and reports a clear refusal, which is
@@ -138,6 +165,41 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.Branch != "" && !isGitArgSafe(req.Branch) {
 			writeErr(w, http.StatusBadRequest, errors.New("invalid start point"))
+			return
+		}
+		if req.PrefixID != "" {
+			// The name came from a prefix prefill: consume the prefix's <seq>
+			// counters AFTER a successful create (the TUI's pendingSeqBump
+			// contract — a failed create must not burn a number). The wire
+			// carries only the prefix's identity; the seq names derive
+			// server-side from a fresh read, so a client cannot bump
+			// arbitrary counters.
+			scope, ok := parseProfileScope(req.PrefixScope)
+			if !ok {
+				writeErr(w, http.StatusBadRequest, errors.New("prefix_scope must be global or repo"))
+				return
+			}
+			p, ok := s.prefixByID(r, req.PrefixID, scope)
+			if !ok {
+				writeErr(w, http.StatusNotFound, errors.New("unknown prefix"))
+				return
+			}
+			name, start := req.Name, req.Branch
+			seqNames := domain.PrefixSeqNames(p.Value)
+			run, err := s.startRun("op", func(ctx context.Context, svc *domain.Service, events chan<- engine.Event, dec engine.Decider) (engine.Result, map[string]any, error) {
+				res, err := svc.Execute(ctx, engine.CreateBranch{Name: name, StartPoint: start}, events, dec)
+				if err == nil {
+					_ = svc.BumpPrefixSeqs(ctx, seqNames)
+				}
+				return res, nil, err
+			})
+			if err != nil {
+				writeErr(w, http.StatusConflict, err)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			w.WriteHeader(http.StatusAccepted)
+			_ = json.NewEncoder(w).Encode(map[string]string{"op_id": run.id})
 			return
 		}
 		op = engine.CreateBranch{Name: req.Name, StartPoint: req.Branch} // "" = HEAD
@@ -725,6 +787,22 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		op = engine.Ignore{Path: req.Path, Ext: req.Ext}
+	case "set-identity":
+		// One decision-free write of user.name/user.email to the chosen
+		// scope — the same engine op behind the TUI's identity view. The
+		// scope is fixed client-side before the POST (two buttons), so no
+		// fork ever parks. Values are free text by design (they're config
+		// values, not refs), but a leading dash is still refused before it
+		// can reach git argv.
+		if req.Name == "" || !isGitArgSafe(req.Name) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid name"))
+			return
+		}
+		if req.Email == "" || !isGitArgSafe(req.Email) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid email"))
+			return
+		}
+		op = engine.SetIdentity{Name: req.Name, Email: req.Email, Global: req.Global}
 	case "commit-graph":
 		// Write the commit-graph now, then keep it fresh — the TUI notice's
 		// write+enable chain (tui.startCommitGraphWriteAndEnable), run
