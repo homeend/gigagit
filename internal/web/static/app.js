@@ -20,6 +20,7 @@ import "./settings.js";
 import "./identity.js";
 import "./prefixes.js";
 import "./exttools.js";
+import "./sessionerrors.js";
 import "./palette.js";
 
 async function boot() {

@@ -87,6 +87,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/profiles", writeGuard(s.handleProfileAdd))
 	mux.HandleFunc("POST /api/profiles/remove", writeGuard(s.handleProfileRemove))
 	mux.HandleFunc("GET /api/exttools", s.handleExtTools)
+	mux.HandleFunc("GET /api/session-errors", s.handleSessionErrors)
 	mux.HandleFunc("GET /api/prefixes", s.handlePrefixes)
 	mux.HandleFunc("POST /api/prefixes", writeGuard(s.handlePrefixAdd))
 	mux.HandleFunc("POST /api/prefixes/remove", writeGuard(s.handlePrefixRemove))
