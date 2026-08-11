@@ -122,6 +122,21 @@ func (r *Repo) WorktreeRepair(ctx context.Context, path string) error {
 	return err
 }
 
+// MoveWorktree relocates the linked worktree at path to dest
+// (`git -C <fromDir> worktree move <path> <dest>`). fromDir should be the
+// MAIN worktree: the command must never run with its own cwd inside the tree
+// being moved (Windows cannot rename a directory any process holds as cwd).
+// onLine receives any output lines (nil is allowed). A refusal (locked tree,
+// existing dest, submodules) is returned as an error.
+func (r *Repo) MoveWorktree(ctx context.Context, fromDir, path, dest string, onLine func(string)) error {
+	if onLine == nil {
+		onLine = func(string) {}
+	}
+	argv := gitcmd.New("-C").Arg(fromDir, "worktree", "move", path, dest).ToArgv()
+	_, err := r.Runner.Stream(ctx, "git worktree move", argv, onLine)
+	return err
+}
+
 // DeleteBranch deletes a local branch (`git branch -d|-D <name>`). Without force
 // git refuses to delete a branch that is not fully merged; force uses -D.
 func (r *Repo) DeleteBranch(ctx context.Context, name string, force bool) error {
