@@ -561,3 +561,153 @@ func TestWorktreeCreateOpCarriesKeep(t *testing.T) {
 		t.Fatalf("Keep = %v, want KeepUnstaged", op.Keep)
 	}
 }
+
+func TestPopupEditPathModeSticksAcrossBranchEdit(t *testing.T) {
+	m := modelWithConfig(t, "b/auto", "../<repo>.worktrees/<branch>")
+	updated, _ := m.Update(keyMsg("w"))
+	m = updated.(Model)
+	tmplPath := layerOf[*worktreePopup](m).previewPath
+
+	updated, _ = m.Update(keyMsg("E"))
+	m = updated.(Model)
+	p := layerOf[*worktreePopup](m)
+	if p.state != stEditPath {
+		t.Fatalf("state = %v, want stEditPath", p.state)
+	}
+	if p.editBuf.Value() != tmplPath {
+		t.Fatalf("editBuf = %q, want seeded with the previewed path %q", p.editBuf.Value(), tmplPath)
+	}
+
+	// Clear and type a custom path; the live preview follows the buffer.
+	for len([]rune(layerOf[*worktreePopup](m).editBuf.Value())) > 0 {
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+		m = updated.(Model)
+	}
+	m = typeRunes(t, m, "my/wt")
+	if got := layerOf[*worktreePopup](m).previewPath; got != "my/wt" {
+		t.Fatalf("live preview path = %q, want my/wt", got)
+	}
+
+	updated, _ = m.Update(keyMsg("enter"))
+	m = updated.(Model)
+	p = layerOf[*worktreePopup](m)
+	if p.state != stAction {
+		t.Fatalf("state = %v, want stAction after enter", p.state)
+	}
+	if p.pathOverride != "my/wt" || p.previewPath != "my/wt" {
+		t.Fatalf("pathOverride/previewPath = %q/%q, want my/wt", p.pathOverride, p.previewPath)
+	}
+
+	// Now change the branch name — the edited path must stick verbatim.
+	updated, _ = m.Update(keyMsg("e"))
+	m = updated.(Model)
+	m = typeRunes(t, m, "x")
+	updated, _ = m.Update(keyMsg("enter"))
+	m = updated.(Model)
+	if got := layerOf[*worktreePopup](m).previewPath; got != "my/wt" {
+		t.Fatalf("preview path = %q after a branch edit, want the sticky override my/wt", got)
+	}
+}
+
+func TestPopupEditPathEscDiscards(t *testing.T) {
+	m := modelWithConfig(t, "b/auto", "../<repo>.worktrees/<branch>")
+	updated, _ := m.Update(keyMsg("w"))
+	m = updated.(Model)
+	tmplPath := layerOf[*worktreePopup](m).previewPath
+
+	updated, _ = m.Update(keyMsg("E"))
+	m = updated.(Model)
+	m = typeRunes(t, m, "zz")
+	updated, _ = m.Update(keyMsg("esc"))
+	m = updated.(Model)
+	p := layerOf[*worktreePopup](m)
+	if p.state != stAction {
+		t.Fatalf("state = %v, want stAction after esc", p.state)
+	}
+	if p.pathOverride != "" || p.previewPath != tmplPath {
+		t.Fatalf("override/preview = %q/%q, want discarded edit (\"\"/%q)", p.pathOverride, p.previewPath, tmplPath)
+	}
+}
+
+func TestPopupEditPathEmptyConfirmReverts(t *testing.T) {
+	m := modelWithConfig(t, "b/auto", "../<repo>.worktrees/<branch>")
+	updated, _ := m.Update(keyMsg("w"))
+	m = updated.(Model)
+	tmplPath := layerOf[*worktreePopup](m).previewPath
+
+	// Confirm a custom path first.
+	updated, _ = m.Update(keyMsg("E"))
+	m = updated.(Model)
+	for len([]rune(layerOf[*worktreePopup](m).editBuf.Value())) > 0 {
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+		m = updated.(Model)
+	}
+	m = typeRunes(t, m, "q")
+	updated, _ = m.Update(keyMsg("enter"))
+	m = updated.(Model)
+	if layerOf[*worktreePopup](m).pathOverride != "q" {
+		t.Fatalf("pathOverride = %q, want q", layerOf[*worktreePopup](m).pathOverride)
+	}
+
+	// Re-edit, clear to empty, confirm: back to the template path.
+	updated, _ = m.Update(keyMsg("E"))
+	m = updated.(Model)
+	for len([]rune(layerOf[*worktreePopup](m).editBuf.Value())) > 0 {
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+		m = updated.(Model)
+	}
+	updated, _ = m.Update(keyMsg("enter"))
+	m = updated.(Model)
+	p := layerOf[*worktreePopup](m)
+	if p.pathOverride != "" || p.previewPath != tmplPath {
+		t.Fatalf("override/preview = %q/%q, want reverted to template (\"\"/%q)", p.pathOverride, p.previewPath, tmplPath)
+	}
+}
+
+func TestCreateOpCarriesPathOverride(t *testing.T) {
+	m := modelWithConfig(t, "b/auto", "../<repo>.worktrees/<branch>")
+	updated, _ := m.Update(keyMsg("w"))
+	m = updated.(Model)
+	updated, _ = m.Update(keyMsg("E"))
+	m = updated.(Model)
+	for len([]rune(layerOf[*worktreePopup](m).editBuf.Value())) > 0 {
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+		m = updated.(Model)
+	}
+	m = typeRunes(t, m, "ov")
+	updated, _ = m.Update(keyMsg("enter"))
+	m = updated.(Model)
+	p := layerOf[*worktreePopup](m)
+	op, ok := p.createOp("").(engine.CreateWorktreeForBranch)
+	if !ok {
+		t.Fatalf("createOp = %T, want CreateWorktreeForBranch (unedited branch)", p.createOp(""))
+	}
+	if op.Path != "ov" {
+		t.Fatalf("op.Path = %q, want the overridden ov", op.Path)
+	}
+}
+
+func TestConsumedSeqNamesWithPathOverride(t *testing.T) {
+	m := modelWithConfig(t, "b/auto", "wt-<seq:wt>/<branch>")
+	updated, _ := m.Update(keyMsg("w"))
+	m = updated.(Model)
+	p := layerOf[*worktreePopup](m)
+	if got := p.consumedSeqNames(); len(got) != 1 || got[0] != "wt" {
+		t.Fatalf("consumedSeqNames = %v before override, want [wt]", got)
+	}
+
+	updated, _ = m.Update(keyMsg("E"))
+	m = updated.(Model)
+	for len([]rune(layerOf[*worktreePopup](m).editBuf.Value())) > 0 {
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+		m = updated.(Model)
+	}
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("z")})
+	m = updated.(Model)
+	updated, _ = m.Update(keyMsg("enter"))
+	m = updated.(Model)
+	p = layerOf[*worktreePopup](m)
+	if got := p.consumedSeqNames(); len(got) != 0 {
+		t.Fatalf("consumedSeqNames = %v with the path template bypassed, want none", got)
+	}
+}
