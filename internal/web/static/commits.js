@@ -493,6 +493,17 @@ function showCommitMenu(c, i, x, y) {
     { label: "show this commit", act: () => openCommit(i) },
     { label: "copy commit id", act: () => copyText(c.hash, "commit id " + short) },
     { label: "copy subject", act: () => copyText(c.subject, "subject") },
+    {
+      // Lightweight tag at this commit; annotate afterwards via the tag
+      // menu's row. Name validation is git's own (check-ref-format server-side).
+      label: "create tag here…",
+      act: () =>
+        openPrompt({
+          title: "New tag at " + short + ":",
+          placeholder: "tag name",
+          onSubmit: (name) => startOp({ op: "create-tag", tag: name, sha: c.hash }, "tagging " + short + " as " + name),
+        }),
+    },
   ];
   if (c.parents === 1) {
     items.push({ label: "move up (newer)", act: () => commitEdit(c, "move-up") });

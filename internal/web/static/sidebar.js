@@ -155,6 +155,13 @@ function showBranchMenu(b, x, y) {
       label: "rebase current (" + cur.name + ") onto " + b.name,
       act: () => startOp({ op: "rebase", branch: cur.name, onto: b.name }, "rebasing " + cur.name + " onto " + b.name),
     });
+    // ff-only advance of the current branch to this branch's tip: no merge
+    // commit, no rewrite; the engine refuses when the tip is not strictly
+    // ahead, so the row is safe to offer unconditionally.
+    items.push({
+      label: "fast-forward current (" + cur.name + ") to " + b.name,
+      act: () => startOp({ op: "fast-forward", branch: b.name }, "fast-forwarding " + cur.name + " to " + b.name),
+    });
   }
   items.push({
     label: "rename branch…",
@@ -403,6 +410,27 @@ function showTagMenu(tg, x, y) {
       // target is git's abbreviated sha (the branch-menu copy-id precedent:
       // short enough to name in full on the notice line).
       { label: "copy commit id", act: () => copyText(tg.target, "commit id " + tg.target) },
+      {
+        // Force-recreates the tag as annotated at its current target (the
+        // server re-reads the target itself). Prefilled with the current
+        // subject, the TUI popup's prefill.
+        label: "annotate " + tg.name + "…",
+        act: () =>
+          openPrompt({
+            title: "Annotate " + tg.name + " — message:",
+            value: tg.subject || "",
+            onSubmit: (msg) => startOp({ op: "annotate-tag", tag: tg.name, message: msg }, "annotating " + tg.name),
+          }),
+      },
+      // The engine resolves the remote (auto for one, a parked pick for
+      // several); delete-from-remote confirms via its own parked decision,
+      // so neither row needs a local confirm.
+      { label: "push tag", act: () => startOp({ op: "push-tag", tag: tg.name }, "pushing tag " + tg.name) },
+      {
+        label: "delete " + tg.name + " from remote",
+        danger: true,
+        act: () => startOp({ op: "delete-remote-tag", tag: tg.name }, "deleting tag " + tg.name + " from remote"),
+      },
       {
         label: "delete " + tg.name,
         danger: true,
