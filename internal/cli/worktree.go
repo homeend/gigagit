@@ -23,7 +23,7 @@ import (
 // cmdWorktree dispatches `gg worktree <sub>`.
 func cmdWorktree(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr io.Writer, cwdFile string) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: gg worktree <list|add|remove|prune> [args]")
+		fmt.Fprintln(stderr, "usage: gg worktree <list|add|remove|move|rename|prune> [args]")
 		return 2
 	}
 	switch args[0] {
@@ -33,11 +33,15 @@ func cmdWorktree(svc *domain.Service, args []string, stdin io.Reader, stdout, st
 		return cmdWorktreeAdd(svc, args[1:], stdin, stdout, stderr, cwdFile)
 	case "remove":
 		return cmdWorktreeRemove(svc, args[1:], stdin, stdout, stderr)
+	case "move":
+		return cmdWorktreeMove(svc, args[1:], stdin, stdout, stderr, cwdFile, false)
+	case "rename":
+		return cmdWorktreeMove(svc, args[1:], stdin, stdout, stderr, cwdFile, true)
 	case "prune":
 		res, err := runOperation(context.Background(), svc, engine.PruneWorktrees{}, cliDecider{}, stderr)
 		return finish(res, err, stdout, stderr)
 	default:
-		fmt.Fprintf(stderr, "worktree: unknown subcommand %q (use list, add, remove, or prune)\n", args[0])
+		fmt.Fprintf(stderr, "worktree: unknown subcommand %q (use list, add, remove, move, rename, or prune)\n", args[0])
 		return 2
 	}
 }
@@ -317,5 +321,90 @@ func cmdWorktreeRemove(svc *domain.Service, args []string, stdin io.Reader, stdo
 
 	res, err := runOperation(ctxBg, svc,
 		engine.RemoveWorktree{Path: match.Path, Branch: match.Branch}, dec, stderr)
+	return finish(res, err, stdout, stderr)
+}
+
+// cmdWorktreeMove implements `gg worktree move [--force] <worktree> <new-path>`
+// and, with rename=true, `gg worktree rename [--force] <worktree> <new-name>`
+// (same-parent move). The target resolves by path — absolute, cwd-relative,
+// or main-worktree-relative, exactly like `worktree remove` — or by branch
+// name. --force answers the move-worktree-locked fork with unlock-and-move.
+func cmdWorktreeMove(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr io.Writer, cwdFile string, rename bool) int {
+	verb := "move"
+	if rename {
+		verb = "rename"
+	}
+	fs := flag.NewFlagSet("worktree "+verb, flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	force := fs.Bool("force", false, "unlock a locked worktree and move it")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if fs.NArg() != 2 || fs.Arg(0) == "" || fs.Arg(1) == "" {
+		if rename {
+			fmt.Fprintln(stderr, "worktree rename: usage: gg worktree rename [--force] <worktree> <new-name>")
+		} else {
+			fmt.Fprintln(stderr, "worktree move: usage: gg worktree move [--force] <worktree> <new-path>")
+		}
+		return 2
+	}
+	target, dest := fs.Arg(0), fs.Arg(1)
+
+	ctxBg := context.Background()
+	wts, err := svc.Worktrees(ctxBg)
+	if err != nil {
+		fmt.Fprintln(stderr, "error:", err)
+		return 1
+	}
+	absTarget, _ := filepath.Abs(target)
+	fromTop := ""
+	if !filepath.IsAbs(target) && len(wts) > 0 && wts[0].Path != "" {
+		fromTop = filepath.Clean(filepath.Join(wts[0].Path, target))
+	}
+	var match *model.Worktree
+	for i := range wts {
+		if wts[i].Path == target || wts[i].Path == absTarget ||
+			(fromTop != "" && wts[i].Path == fromTop) ||
+			(wts[i].Branch != "" && wts[i].Branch == target) {
+			match = &wts[i]
+			break
+		}
+	}
+	if match == nil {
+		fmt.Fprintf(stderr, "worktree %s: no worktree at %q\n", verb, target)
+		return 1
+	}
+
+	if rename {
+		if strings.ContainsAny(dest, `/\`) {
+			fmt.Fprintf(stderr, "worktree rename: a new name cannot contain a path separator (use `gg worktree move`)\n")
+			return 2
+		}
+		dest = filepath.Join(filepath.Dir(match.Path), dest)
+	} else if !filepath.IsAbs(dest) {
+		dest, _ = filepath.Abs(dest)
+	}
+
+	policy := map[string]string{}
+	if *force {
+		policy["move-worktree-locked"] = "unlock-and-move"
+	}
+	dec := cliDecider{policy: policy, in: stdin, out: stderr, interactive: stdinIsTerminal()}
+
+	// If the process cwd sits inside the tree being moved, leave it first
+	// (Windows cannot rename a directory any process holds as cwd) and hand
+	// the shell wrapper the equivalent new path afterward.
+	movedCwdRel := ""
+	if cwd, err := os.Getwd(); err == nil {
+		if rel, rerr := filepath.Rel(match.Path, cwd); rerr == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			movedCwdRel = rel
+			_ = os.Chdir(filepath.Dir(match.Path))
+		}
+	}
+
+	res, err := runOperation(ctxBg, svc, engine.MoveWorktree{Path: match.Path, Dest: dest}, dec, stderr)
+	if err == nil && res.Changed && movedCwdRel != "" && cwdFile != "" {
+		_ = os.WriteFile(cwdFile, []byte(filepath.Join(dest, movedCwdRel)), 0o644)
+	}
 	return finish(res, err, stdout, stderr)
 }
