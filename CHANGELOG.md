@@ -8,6 +8,40 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: remotes sidebar section.** `GET /api/remotes` lists
+  remote-tracking branches (capped at 100 like tags) in a new section
+  under branches. Click shows the tip commit; right-click offers **check
+  out as… / switch to as…** (materialize under a local name,
+  fast-forward-safe), **merge into the current branch**, **rebase the
+  current branch onto it**, **reset current to its tip** (offered and
+  server-enforced only on the checked-out branch's own counterpart;
+  explicitly confirmed — it discards local commits and uncommitted
+  changes), copy name / commit id, and **delete from remote** (the
+  engine's confirm parks in the modal). **prune remotes** joins fetch in
+  the ☰ menu and palette.
+
+- **Web: reflog sidebar section.** `GET /api/reflog` serves the HEAD
+  reflog (capped at 100 rows); a new last sidebar section lists where
+  HEAD has been — dangling commits included, since rows open by full
+  sha. Right-click: show, copy sha, **check out here** (detached or as a
+  new branch via prompt), **reset the current branch to the entry** —
+  the engine's soft/mixed/hard picker (with cancel, plus the
+  non-ancestor confirm) parks in the browser modal.
+
+- **Web: tag operations.** Right-clicking a commit offers **create tag
+  here…**; the tag menu gains **annotate…** (force-recreates as
+  annotated at the tag's current target, which the server re-reads —
+  a wire-supplied target is ignored), **push tag** and **delete from
+  remote** (remote auto-picked when there is one, else the pick parks;
+  deleting confirms via the parked modal), and **copy commit id**.
+
+- **Web: branch pair-ops as plain menu rows.** A non-head branch row's
+  menu now carries **merge it into the current branch**, **rebase the
+  current branch onto it** (the drag-and-drop pair ops, now reachable
+  without a drag) and **fast-forward the current branch to it** (ff-only
+  advance; refused unless strictly ahead). The worktree menu gains
+  **copy branch name**.
+
 - **Web: history/blame rows only where git has history.** The status-file
   context menu no longer offers **file history** / **blame** on untracked
   files (never committed: empty history, blame errors) or staged NEW
