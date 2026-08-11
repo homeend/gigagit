@@ -146,6 +146,7 @@ function promptKey(e) {
 }
 
 $("prompt-ok").addEventListener("click", submitPrompt);
+$("prompt-cancel").addEventListener("click", closePrompt);
 
 
 $("help").addEventListener("click", () => closeLayer("help"));

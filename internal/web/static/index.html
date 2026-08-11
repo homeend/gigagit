@@ -101,7 +101,7 @@
   <div id="prompt-box">
     <div id="prompt-title"></div>
     <input id="prompt-input" type="text" autocomplete="off" spellcheck="false">
-    <div id="prompt-actions"><span id="prompt-hint">enter to confirm · esc to cancel</span><button id="prompt-ok">ok</button></div>
+    <div id="prompt-actions"><span id="prompt-hint">enter to confirm · esc to cancel</span><button id="prompt-cancel">cancel</button><button id="prompt-ok">ok</button></div>
   </div>
 </div>
 <div id="rebase" class="hidden">
@@ -128,14 +128,14 @@
   <div id="versions-box">
     <div id="versions-title"></div>
     <ul id="versions-list"></ul>
-    <div id="versions-hint">click a version for what you can do with it · esc closes</div>
+    <div id="versions-hint"><span>click a version for what you can do with it</span><button id="versions-close">close</button></div>
   </div>
 </div>
 <div id="vbranches" class="hidden">
   <div id="vbranches-box">
     <div id="vbranches-title">branch versions</div>
     <ul id="vbranches-list"></ul>
-    <div id="vbranches-hint">click a branch for its recorded versions · esc closes</div>
+    <div id="vbranches-hint"><span>click a branch for its recorded versions</span><button id="vbranches-close">close</button></div>
   </div>
 </div>
 <div id="history" class="hidden">
