@@ -2,7 +2,7 @@
 // see app.js (the entry module) for the load order.
 import { $, esc, getJSON, state } from "./core.js";
 import { closeLayer, hideCtxMenu, openPrompt, pushLayer, showCtxMenu, topLayer } from "./layers.js";
-import { doFetch, doPull, doPush, doReroot, opLine, openHelp, refreshAfterOp, toggleSidebar } from "./ops.js";
+import { doFetch, doPull, doPush, doReroot, opLine, openHelp, refreshAfterOp, startOp, toggleSidebar } from "./ops.js";
 import { openCreateBranchPrompt } from "./sidebar.js";
 import { openVersionBranches } from "./versions.js";
 import { openFileBlame, openFileHistory } from "./filehist.js";
@@ -26,6 +26,7 @@ function paletteCommands() {
     { label: "pull", detail: "p", run: () => doPull() },
     { label: "push", detail: "P", run: () => doPush() },
     { label: "fetch all remotes", detail: "", run: () => doFetch() },
+    { label: "prune remotes (drop deleted branches)", detail: "", run: () => startOp({ op: "prune" }, "pruning remotes") },
     { label: "create branch…", detail: "", run: () => openCreateBranchPrompt() },
     { label: "branch versions…", detail: "", run: () => openVersionBranches() },
     { label: "file history…", detail: "", run: () => openPrompt({ title: "File history — repo-relative path", placeholder: "e.g. internal/web/server.go", onSubmit: (p) => openFileHistory(p, "") }) },
@@ -180,6 +181,7 @@ function openGlobalMenu() {
     { label: "pull", act: () => doPull() },
     { label: "push", act: () => doPush() },
     { label: "fetch all remotes", act: () => doFetch() },
+    { label: "prune remotes (drop deleted branches)", act: () => startOp({ op: "prune" }, "pruning remotes") },
     { label: "create branch…", act: () => openCreateBranchPrompt() },
     { label: "branch versions…", act: () => openVersionBranches() },
     { label: "review working changes (AI)…", act: () => startReview("working", "") },

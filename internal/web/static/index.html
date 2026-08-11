@@ -34,6 +34,8 @@
   <aside id="branches-pane">
     <div id="branches-header">branches</div>
     <ul id="branches-list"></ul>
+    <div id="remotes-header" class="side-header">remotes</div>
+    <ul id="remotes-list"></ul>
     <div id="worktrees-header" class="side-header">worktrees</div>
     <ul id="worktrees-list"></ul>
     <div id="tags-header" class="side-header">tags</div>
@@ -210,6 +212,7 @@
     <div class="hrow"><span class="hkey">background a run</span><span>a review takes minutes, so you do not have to watch it: <b>run in background</b> (or esc, or clicking outside the box) hides it and leaves it running. A chip appears in the top bar; click it to watch or cancel the run. When the report is ready the chip <b>fills and blinks</b> — click it to read the report, which waits there until you do. Backgrounding never cancels; only the labelled <b>cancel the run</b> button does. The run still holds the operation lane, so reading the repo works normally but a second operation waits until it finishes</span></div>
     <div class="hrow"><span class="hkey">solo a branch</span><span>right-click a branch → <b>solo this branch</b> narrows the commit list to that branch's history. A <b>solo: name ✕</b> chip appears in the top bar — click it (or the menu's exit row) to show every branch again. The scope belongs to the server, so every tab sees it, and it survives commits, merges and pulls until you clear it</span></div>
     <div class="hrow"><span class="hkey">pull a branch</span><span>pulling a branch you are <b>not</b> on updates it in place and leaves you where you are — no checkout, nothing to confirm. Pulling the branch you are on asks first, since it can rewrite the working tree</span></div>
+    <div class="hrow"><span class="hkey">remote branch</span><span>the sidebar's <b>remotes</b> section lists remote-tracking branches. Click: show its tip commit · right-click: <b>check out as…</b> / <b>switch to as…</b> (materialize under a local name, fast-forward-safe), <b>merge into the current branch</b>, <b>rebase the current branch onto it</b>, <b>reset the current branch to its tip</b> (only on the current branch's own counterpart; confirmed — discards local commits and uncommitted changes), copy name / commit id, <b>delete from remote</b> (confirmed first). <b>fetch all remotes</b> and <b>prune remotes</b> live in the ☰ menu and palette</span></div>
     <div class="hrow"><span class="hkey">worktree</span><span>right-click: switch here (re-root the server), copy path / branch name, remove</span></div>
     <div class="hrow"><span class="hkey">tag</span><span>click: show its commit · right-click: show, copy name / commit id, <b>annotate</b> (set or replace the message, keeping the target), <b>push tag</b> / <b>delete from remote</b> (the remote is picked for you when there is one; deleting confirms first), delete</span></div>
     <div class="hrow"><span class="hkey">make a tag</span><span>right-click a commit → <b>create tag here…</b> makes a lightweight tag at that commit; annotate it afterwards from the tag's own menu</span></div>

@@ -24,9 +24,10 @@ type opStartRequest struct {
 	Path    string `json:"path"`
 	Ref     string `json:"ref"`
 	Sha     string `json:"sha"`
-	Name    string `json:"name"` // new branch name (create-branch, rename-branch)
-	Edit    string `json:"edit"` // commit-edit: drop | move-up | move-down
-	Mode    string `json:"mode"` // reset: "" (interactive picker) | soft | mixed | hard
+	Name    string `json:"name"`   // new branch name (create-branch, rename-branch)
+	Edit    string `json:"edit"`   // commit-edit: drop | move-up | move-down
+	Mode    string `json:"mode"`   // reset: "" (interactive picker) | soft | mixed | hard
+	Switch  bool   `json:"switch"` // checkout-remote: switch to the new local branch
 	Force   bool   `json:"force"`
 	Ext     bool   `json:"ext"` // ignore: the whole extension, not the one file
 	All     bool   `json:"all"` // discard: everything unstaged, no path
@@ -38,12 +39,15 @@ type opStartRequest struct {
 }
 
 // handleOpStart begins an operation and returns 202 {op_id}. Ops wired so
-// far: switch, commit, fetch, pull, push, merge, rebase, create-branch,
-// rename-branch, create-worktree, delete-branch, delete-tag, remove-worktree,
-// stash, stash-apply, stash-pop, stash-drop, discard, restore-version,
-// delete-version, continue, abort; the switch statement is
-// where future ops land. pull and push each take an OPTIONAL branch — omitted
-// means the current one.
+// far: switch, commit, fetch, pull, push, merge, rebase, interactive-rebase,
+// commit-edit, create-branch, rename-branch, create-worktree, delete-branch,
+// delete-tag, create-tag, annotate-tag, push-tag, delete-remote-tag,
+// fast-forward, checkout, reset, checkout-remote, delete-remote-branch,
+// reset-remote, prune, remove-worktree, stash, stash-apply, stash-pop,
+// stash-drop, discard, ignore, commit-graph, restore-version,
+// delete-version, continue, abort; the switch statement is where future ops
+// land. pull and push each take an OPTIONAL branch — omitted means the
+// current one.
 func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 	svc := s.service()
 	var req opStartRequest
@@ -360,6 +364,108 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		op = engine.Reset{Commit: req.Sha, Mode: req.Mode}
+	case "checkout-remote":
+		// Materialize a remote-tracking branch under a local name (fast-
+		// forward-safe; the engine refuses a diverged or checked-out local).
+		// The ref is an identifier resolved against a fresh read — Remote/
+		// Branch never come from the wire (the remove-worktree allowlist
+		// pattern). The local name is free text for git check-ref-format.
+		if req.Ref == "" || !isGitArgSafe(req.Ref) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid remote ref"))
+			return
+		}
+		if req.Name == "" || !isGitArgSafe(req.Name) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid branch name"))
+			return
+		}
+		rbs, rerr := svc.RemoteBranches(r.Context())
+		if rerr != nil {
+			writeErr(w, http.StatusInternalServerError, rerr)
+			return
+		}
+		var ref string
+		for _, rb := range rbs {
+			if rb.Name == req.Ref {
+				ref = rb.Name
+				break
+			}
+		}
+		if ref == "" {
+			writeErr(w, http.StatusNotFound, errors.New("unknown remote branch"))
+			return
+		}
+		intent := engine.CheckoutStay
+		if req.Switch {
+			intent = engine.CheckoutSwitch
+		}
+		op = engine.SmartCheckout{RemoteRef: ref, Local: req.Name, Intent: intent}
+	case "delete-remote-branch":
+		// Fresh-read resolve as above; the engine's own confirm ("delete-
+		// remote-branch") parks in the browser modal before the deletion is
+		// pushed, so the client needs no local confirm.
+		if req.Ref == "" || !isGitArgSafe(req.Ref) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid remote ref"))
+			return
+		}
+		rbs, rerr := svc.RemoteBranches(r.Context())
+		if rerr != nil {
+			writeErr(w, http.StatusInternalServerError, rerr)
+			return
+		}
+		found := false
+		for _, rb := range rbs {
+			if rb.Name == req.Ref {
+				op = engine.DeleteRemoteBranch{Remote: rb.Remote, Branch: rb.Branch}
+				found = true
+				break
+			}
+		}
+		if !found {
+			writeErr(w, http.StatusNotFound, errors.New("unknown remote branch"))
+			return
+		}
+	case "reset-remote":
+		// Hard-reset the current branch to its remote counterpart's tip. This
+		// is the one lane that presets Reset's Mode — which skips the engine's
+		// picker AND its non-ancestor confirm — so two server-side guards
+		// carry the safety: the ref must resolve against a fresh read, and it
+		// must be the counterpart of the CHECKED-OUT branch (the TUI's
+		// remoteResetRow rule — resetting to another branch's remote would
+		// move the wrong branch). The client owns the explicit confirm.
+		if req.Ref == "" || !isGitArgSafe(req.Ref) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid remote ref"))
+			return
+		}
+		rbs, rerr := svc.RemoteBranches(r.Context())
+		if rerr != nil {
+			writeErr(w, http.StatusInternalServerError, rerr)
+			return
+		}
+		var target *model.RemoteBranch
+		for i := range rbs {
+			if rbs[i].Name == req.Ref {
+				target = &rbs[i]
+				break
+			}
+		}
+		if target == nil {
+			writeErr(w, http.StatusNotFound, errors.New("unknown remote branch"))
+			return
+		}
+		cur, cerr := svc.CurrentBranch(r.Context())
+		if cerr != nil {
+			writeErr(w, http.StatusInternalServerError, cerr)
+			return
+		}
+		if cur == "" || target.Branch != cur {
+			writeErr(w, http.StatusUnprocessableEntity, errors.New(req.Ref+" is not the current branch's remote counterpart"))
+			return
+		}
+		op = engine.Reset{Commit: target.Name, Mode: "hard"}
+	case "prune":
+		// Drop tracking refs for branches deleted upstream, all remotes.
+		// Refs-only and re-fetchable, so no confirm.
+		op = engine.Prune{}
 	case "remove-worktree":
 		if req.Path == "" {
 			writeErr(w, http.StatusBadRequest, errors.New("path required"))
