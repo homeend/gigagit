@@ -8,6 +8,15 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: prompt cancel styling + conflict-bar hiding fix** (testing
+  feedback + a Playwright sweep). The prompt's cancel button now
+  shares ok's dark styling and sits grouped with it at the right edge
+  (it floated unstyled mid-popup: `space-between` with three children
+  plus no shared recipe). And the standalone conflict bar's
+  continue/abort/AI buttons now actually disappear — the `hidden`
+  class had no matching CSS rule for buttons inside the bar, a false
+  pass in the class-asserting CDP check that a Playwright
+  visibility-based sweep caught.
 - **Web: conflicted stash apply has a way out** (testing feedback: no
   abort/discard options after `stash → apply → conflict`). Unmerged
   paths with NO paused sequencer op — a conflicted stash apply — now
