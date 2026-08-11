@@ -76,6 +76,7 @@ this session is also kept in Settings `,` → Session errors.
 | `c` | commit the staged index: opens a popup with a title + multi-line description (`tab` switches fields, `enter` is newline/next, `ctrl+s` commits, `esc` cancels). Like every editable popup field (branch/tag/stash names, worktree fields, …), the text has a visible cursor with full line editing — `←`/`→`, `Home`/`End`, insert/delete at the cursor, word-jumps (`alt`/`ctrl`+`←`/`→`), `ctrl+w`; in the description `↑`/`↓` move between lines |
 | `C` | amend the last commit: the same popup opens pre-filled with its message — `ctrl+s` rewrites the message and folds in whatever is currently staged |
 | `d` | on the Worktrees panel: delete the selected worktree; on the Branches panel: delete the selected branch; on the **Files** panel: **discard** the marked files (or, with nothing marked, the cursor row) — reverts tracked edits (keeping any staged hunks) and deletes new untracked files, after a confirmation modal; conflicted files are skipped |
+| `e` | on the Worktrees panel: **rename** the selected worktree's directory — a popup prefilled with just the basename (`git worktree move` under the hood); if it's the worktree gg is standing in, gg follows the rename. The `.` menu adds **Move worktree…** for relocating it to any path (full path in the popup). Both refuse the main worktree; a **locked** worktree asks to unlock and move, or abort |
 | `D` | on the **Files** panel: **discard all** unstaged changes (revert every edit + delete every new file), after a confirmation modal; refuses while the repo is conflicted |
 | `m` | mark the selected row; press `m` on a second row of the same panel to open the pair-operation picker (Branches: Merge, Rebase, **Interactive rebase** — the last opens a GitKraken-style editor: per-row `p`/`r`/`s`/`d` = pick/reword/squash/drop, `ctrl+↑/↓` reorder, `enter` start, `R` reset, `esc` cancel; `esc` from the picker clears the mark before clearing the filter). Marking two branches also offers **Compare A ↔ B** — the whole-tree diff between the tips, with an `f`-key filter to show only the files either branch changed since they diverged |
 | `l` | on the Commits panel: show the selected commit's files as a directory tree in the left column (`←`/`→`/`tab` switch focus between the tree and the commit list; movement keys act on the focused side — the commits side reloads the tree; `ctrl+↑`/`ctrl+↓` always scroll the tree; `/` searches paths; `esc`/`l` close) |
@@ -190,6 +191,12 @@ gg worktree add --from <commit> [--keep staged|unstaged] [<branch-name>]
                                       # lands the branch on the commit's PARENT with the commit's own diff
                                       # left staged/unstaged in the new worktree; refuses a root/merge commit
 gg worktree remove [--with-branch] [--force] <path>
+gg worktree rename [--force] <worktree> <new-name>
+                                      # <worktree> resolves by path or branch name, like remove;
+                                      # --force unlocks a locked worktree and renames it
+gg worktree move [--force] <worktree> <new-path>
+                                      # relative <new-path> resolves against the invocation directory;
+                                      # moving the worktree your shell sits in updates the cd-on-switch handoff
 gg worktree prune                     # drop stale worktree administrative entries
 gg repo list
 gg repo switch <query>

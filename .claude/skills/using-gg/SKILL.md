@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v58 -->
+<!-- gg:using-gg:v59 -->
 
 # Using gg (gigagit)
 
@@ -317,6 +317,20 @@ guards against removing the worktree you are standing in.
   busy log; a hook failure is reported but does not roll back the worktree.
 - `gg worktree prune` — drop stale worktree admin entries left behind by an
   interrupted or manually-deleted worktree (`git worktree prune`).
+- `gg worktree rename [--force] <worktree> <new-name>` / `gg worktree move
+  [--force] <worktree> <new-path>` — relocate a linked worktree's directory
+  (`git worktree move`); `rename` is a same-parent move computed from just
+  the new directory name (refuses a name containing `/` or `\` — use `move`
+  for that). `<worktree>` resolves by path (absolute, cwd-relative, or
+  main-worktree-relative, exactly like `worktree remove`) or by branch name.
+  A relative `<new-path>` resolves against the invocation directory. The
+  **main worktree is refused**. A **locked** worktree (an interrupted `add`
+  can leave one locked) forks the `move-worktree-locked` decision —
+  `unlock-and-move` / `abort`; `--force` pre-answers `unlock-and-move`.
+  Moving/renaming the worktree your shell is sitting in still succeeds: gg
+  leaves the tree before the git call (required on Windows, which cannot
+  rename a directory a process holds as cwd) and updates the shell-init
+  cwd-handoff file so a wrapped shell's `cd` follows to the new path.
 - `gg repo list` / `gg repo switch <query>` — the known-repository registry
   (MRU); `switch` prints the path of the unique match.
 - `gg inspect` — one-shot repo summary (scriptable health check).
@@ -345,6 +359,7 @@ gg never hangs waiting for input mid-operation. When an operation hits a fork
   and print the decision and its options to stderr** instead of blocking.
 - Pre-answer decisions with the matching flag: `--on-conflict` for pull
   divergence; `--with-branch` / `--force` for worktree removal; `--force`
+  for a locked worktree under `worktree rename`/`worktree move`; `--force`
   for unmerged branch deletion.
 - On a non-zero exit, read stderr: it names the decision and the valid
   options; re-run with the matching flag.

@@ -8,6 +8,23 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Rename and move worktree directories.** The Worktrees panel's `e` key
+  renames the selected worktree's directory (a popup prefilled with just the
+  basename — the current worktree follows the rename), and the `.` menu adds
+  **Move worktree…** for relocating it to any path (full path in the popup).
+  Both wrap `git worktree move`; the main worktree is refused. If you rename
+  or move the worktree gg's own process is standing in, gg leaves the tree
+  first (required on Windows, which cannot rename a directory a process holds
+  as cwd) and re-roots into the new location once the op finishes. A locked
+  worktree (an interrupted `add` can leave one locked) forks a
+  `move-worktree-locked` decision — *unlock and move* or *abort*. CLI:
+  `gg worktree rename [--force] <worktree> <new-name>` / `gg worktree move
+  [--force] <worktree> <new-path>` — `<worktree>` resolves by path or branch
+  name like `worktree remove`, a relative `<new-path>` resolves against the
+  invocation directory, `--force` pre-answers unlock-and-move, and moving the
+  worktree your shell sits in updates the shell-init cwd handoff so `cd`
+  follows.
+
 - **Repo switcher warns about slow filesystem mounts.** Rows whose repository
   sits on a foreign mount (WSL's `/mnt/<drive>` drvfs, network filesystems —
   cifs/smb, nfs, sshfs/fuse; UNC paths on Windows) are marked `(slow fs)`;
