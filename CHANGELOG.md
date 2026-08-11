@@ -8,6 +8,18 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web file context menu: TUI-parity batch.** Right-clicking a
+  working-tree status file now offers **copy absolute path** (anchored on
+  the served worktree) and **copy file name** beside copy path (the
+  commit/compare file menus get all three too); an untracked file gains
+  **add to .gitignore** and **add *<ext> to .gitignore** (a new `ignore`
+  op over `engine.Ignore` — the path must resolve to an untracked entry in
+  a fresh status read: tracked 422, unknown 404); and a **discard all
+  changes** danger row runs `engine.Discard{All}` via `discard` +
+  `all:true` (refused with 422 while conflicts exist — the TUI's
+  canDiscardAll rule — or when nothing is unstaged; the confirm names both
+  halves: tracked edits reverted AND untracked files deleted).
+
 - **Web client split into ES modules.** The web frontend's `app.js` (a
   ~3.9k-line monolith) is now 16 ES modules split along its own section
   comments — `core` (state + fetch/esc helpers), `layers` (layer stack,
