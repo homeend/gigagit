@@ -141,6 +141,21 @@ function showBranchMenu(b, x, y) {
   // Not marked danger: the row opens the force-mode modal, where the actual
   // destructive options are the red ones.
   items.push({ label: "force push " + b.name + "…", act: () => doForcePush(b.name) });
+  // The DnD pair-menu ops as plain rows against the CURRENT branch — the
+  // accessible route to the same startOp calls (drag is the power-user path).
+  // Labels spell the direction, and the labelled row is the confirmation (the
+  // DnD precedent). Hidden on detached HEAD (no is_head row to pair with).
+  const cur = state.branches.find((x) => x.is_head);
+  if (!b.is_head && cur) {
+    items.push({
+      label: "merge " + b.name + " into current (" + cur.name + ")",
+      act: () => startOp({ op: "merge", branch: b.name, onto: cur.name }, "merging " + b.name + " into " + cur.name),
+    });
+    items.push({
+      label: "rebase current (" + cur.name + ") onto " + b.name,
+      act: () => startOp({ op: "rebase", branch: cur.name, onto: b.name }, "rebasing " + cur.name + " onto " + b.name),
+    });
+  }
   items.push({
     label: "rename branch…",
     act: () =>
@@ -312,6 +327,10 @@ function showBranchPairMenu(src, dst, x, y) {
 
 function showWorktreeMenu(w, x, y) {
   const items = [{ label: "copy path", act: () => copyText(w.path) }];
+  // A bare or detached worktree has no branch name to copy.
+  if (w.branch) {
+    items.push({ label: "copy branch name", act: () => copyText(w.branch, "branch name " + w.branch) });
+  }
   // Every row except the served worktree can be switched to (the same
   // exemption the remove row uses).
   if (!(state.worktree && w.path === state.worktree)) {
@@ -381,6 +400,9 @@ function showTagMenu(tg, x, y) {
     [
       { label: "show commit", act: () => openCommitByHash(tg.target, "🏷 " + tg.name) },
       { label: "copy name", act: () => copyText(tg.name) },
+      // target is git's abbreviated sha (the branch-menu copy-id precedent:
+      // short enough to name in full on the notice line).
+      { label: "copy commit id", act: () => copyText(tg.target, "commit id " + tg.target) },
       {
         label: "delete " + tg.name,
         danger: true,
