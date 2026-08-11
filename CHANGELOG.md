@@ -8,6 +8,22 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: branch prefixes.** ☰ → **branch prefixes…** (git group; also
+  in the palette) manages the templated branch-name skeletons — list
+  with scope tags, add (validated: empty values, `<branch>`, and
+  malformed tokens refuse), delete — and starts a branch from one:
+  **new branch…** fills any `<user:…>` labels in a small form, resolves
+  the value server-side against the live repo (`<parent-branch>`,
+  `<repo>`, `<date>`, peeked `<seq:…>` counters) and opens the
+  create-branch prompt prefilled with the result, still editable. The
+  submit carries the picked prefix's identity, and its `<seq>` counters
+  are consumed only when the create succeeds — a canceled prompt or
+  failed create never burns a number (the TUI's pendingSeqBump
+  contract, now enforced server-side). Server: `GET/POST
+  /api/prefixes`, `POST /api/prefixes/remove`, `POST
+  /api/prefixes/resolve`; new domain wrappers `ResolvePrefixValue` /
+  `BumpPrefixSeqs` / `PrefixSeqNames` keep `internal/template` a
+  layering detail.
 - **Web: identity & profiles.** The TUI's identity view comes to the
   browser: ☰ → **identity & profiles…** (git group; also in the
   palette) opens an overlay showing the current git `user.name`/

@@ -8,6 +8,7 @@ import { openVersionBranches } from "./versions.js";
 import { openFileBlame, openFileHistory } from "./filehist.js";
 import { openSettings } from "./settings.js";
 import { openIdentityView } from "./identity.js";
+import { openPrefixesView } from "./prefixes.js";
 import { startReview } from "./review.js";
 import { gotoCommitPrompt, openCommitFilter, toggleGraphMode } from "./commits.js";
 import { openWorkingTree } from "./files.js";
@@ -31,6 +32,7 @@ function paletteCommands() {
     { label: "prune remotes (drop deleted branches)", detail: "", run: () => startOp({ op: "prune" }, "pruning remotes") },
     { label: "settings…", detail: "", run: () => openSettings() },
     { label: "identity & profiles…", detail: "", run: () => openIdentityView() },
+    { label: "branch prefixes…", detail: "", run: () => openPrefixesView() },
     { label: "create branch…", detail: "", run: () => openCreateBranchPrompt() },
     { label: "branch versions…", detail: "", run: () => openVersionBranches() },
     { label: "file history…", detail: "", run: () => openPrompt({ title: "File history — repo-relative path", placeholder: "e.g. internal/web/server.go", onSubmit: (p) => openFileHistory(p, "") }) },
@@ -190,6 +192,7 @@ function openGlobalMenu() {
     { label: "create branch…", act: () => openCreateBranchPrompt() },
     { label: "branch versions…", act: () => openVersionBranches() },
     { label: "identity & profiles…", act: () => openIdentityView() },
+    { label: "branch prefixes…", act: () => openPrefixesView() },
     { label: "review working changes (AI)…", act: () => startReview("working", "") },
   ].sort((a, b) => a.label.localeCompare(b.label));
   const ui = [
