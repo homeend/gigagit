@@ -65,6 +65,16 @@ function commitGraphRow(d) {
 function renderSettings() {
   const d = state.settings;
   if (!d) return;
+  // Every committed change rebuilds this panel from a fresh GET — which
+  // DESTROYS the control the user just moved into (clicking input B fires
+  // input A's change → re-render → B is a dead node and focus falls to
+  // body). Remember which control held focus and restore it (selected, the
+  // overwrite intent) after the rebuild.
+  const active = document.activeElement;
+  let restore = null;
+  if (active && $("settings-box").contains(active)) {
+    restore = active.dataset && active.dataset.rate ? { rate: active.dataset.rate } : { id: active.id };
+  }
   // One label+input per line (a vertical list, not a flow) — nine wrapped
   // pairs read as noise; a column scans.
   const rates = REFRESH_SOURCES.map(
@@ -92,6 +102,15 @@ function renderSettings() {
     <div class="srow"><span class="snote">runs after create-worktree; shown for approval before it ever executes</span></div>
     <div class="serr"></div>
     <div class="sfoot">external tools · identity &amp; profiles · branch prefixes · language: in the TUI settings (,) for now · esc closes</div>`;
+  if (restore) {
+    const el = restore.rate
+      ? $("settings-box").querySelector(`input[data-rate="${restore.rate}"]`)
+      : restore.id && document.getElementById(restore.id);
+    if (el && el.focus) {
+      el.focus();
+      if (el.select) el.select();
+    }
+  }
 }
 
 $("settings-box").addEventListener("click", (e) => {
