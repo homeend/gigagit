@@ -8,6 +8,19 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: prefix use moves into the create-branch prompt** (TUI parity).
+  ☰ → **branch prefixes…** now only DEFINES the templated skeletons
+  (add/delete); creating from one lives where creating happens — the
+  create-branch prompt (☰/palette **create branch…** and a branch's
+  **create branch from here…**) gains a **use prefix…** button (the
+  TUI popup's ctrl+p): pick a saved prefix in a select-only picker,
+  fill any `<user:…>` labels, and the resolved name seeds the input,
+  still editable; plain typing needs no prefix at all. The picked
+  prefix's identity rides the submit so `<seq>` counters advance only
+  when the create succeeds; canceling the picker restores the prompt
+  with whatever was typed, and the from-here start point survives the
+  whole lane. Underneath: the prompt layer gained an optional
+  caller-owned `extra` action button.
 - **Web: prompt cancel styling + conflict-bar hiding fix** (testing
   feedback + a Playwright sweep). The prompt's cancel button now
   shares ok's dark styling and sits grouped with it at the right edge
