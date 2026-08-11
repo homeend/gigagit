@@ -183,6 +183,9 @@
 <div id="settings" class="hidden">
   <div id="settings-box"></div>
 </div>
+<div id="identity" class="hidden">
+  <div id="identity-box"></div>
+</div>
 <div id="help" class="hidden">
   <div id="help-box">
     <h2>gg web — keys &amp; features</h2>
@@ -223,8 +226,9 @@
     <div class="hrow"><span class="hkey">reflog</span><span>the sidebar's last section lists where HEAD has been (HEAD@{0} is newest) — commits survive here even after a reset or rewrite. Click: show that commit · right-click: show, copy its sha, <b>check out here</b> (detached, or as a new branch), <b>reset the current branch to it</b> (pick soft / mixed / hard in the modal; cancel is always offered)</span></div>
     <div class="hrow"><span class="hkey">change block</span><span>in an unstaged file's diff: click a highlighted block to select it, then <b>stage selected</b> in the diff header stages just those hunks</span></div>
     <div class="hrow"><span class="hkey">status file</span><span>right-click: stage / unstage, stage all / unstage all, copy path / absolute path / file name, add an untracked file (or its extension) to .gitignore, discard — per file, the marked set, or all</span></div>
-    <div class="hrow"><span class="hkey">settings</span><span>☰ → <b>settings…</b> (also in the palette): grouped panel — commits (show graph, commit sort, commit-graph file), refresh <b>(TUI)</b>, history &amp; logs (operations-history snapshots + retention, operation log), repo (active settings file, worktree post-create hook). Every change saves immediately to the right config file — per-repo keys to the repo's settings file, machine keys to the global one. External tools, identity &amp; profiles, branch prefixes and language remain in the TUI settings for now</span></div>
-    <div class="hrow"><span class="hkey">☰ menu</span><span>grouped: <b>git</b> (pull, push, fetch, prune, create branch, versions, review) · <b>ui</b> (refresh, switch repo, palette, sidebar, graph, settings) · help</span></div>
+    <div class="hrow"><span class="hkey">settings</span><span>☰ → <b>settings…</b> (also in the palette): grouped panel — commits (show graph, commit sort, commit-graph file), refresh <b>(TUI)</b>, history &amp; logs (operations-history snapshots + retention, operation log), repo (active settings file, worktree post-create hook). Every change saves immediately to the right config file — per-repo keys to the repo's settings file, machine keys to the global one. External tools, branch prefixes and language remain in the TUI settings for now</span></div>
+    <div class="hrow"><span class="hkey">identity</span><span>☰ → <b>identity &amp; profiles…</b> (also in the palette): current git user.name/email per scope (global · repo · effective), edit-and-apply to this repo or globally, and named identity presets — create, edit, delete, apply. Presets are gg-local; only an apply touches git config</span></div>
+    <div class="hrow"><span class="hkey">☰ menu</span><span>grouped: <b>git</b> (pull, push, fetch, prune, create branch, versions, review, identity) · <b>ui</b> (refresh, switch repo, palette, sidebar, graph, settings) · help</span></div>
     <div class="hrow"><span class="hkey">section header</span><span>double-click: collapse / expand that sidebar section (persisted)</span></div>
     <div class="hrow"><span class="hkey">pane divider</span><span>drag to resize — the sidebar in the commit list, the file list in a commit's detail · double-click resets it (persisted)</span></div>
     <div class="hrow"><span class="hkey">bottom bar</span><span>the footer entries are clickable — pull, push, refresh, stage/unstage, graph, sidebar, help</span></div>

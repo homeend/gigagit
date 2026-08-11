@@ -17,6 +17,7 @@ import "./files.js";
 import { focusPane } from "./keys.js";
 import { fetchHealth } from "./bigrepo.js";
 import "./settings.js";
+import "./identity.js";
 import "./palette.js";
 
 async function boot() {

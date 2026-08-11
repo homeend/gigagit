@@ -8,6 +8,20 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: identity & profiles.** The TUI's identity view comes to the
+  browser: ☰ → **identity & profiles…** (git group; also in the
+  palette) opens an overlay showing the current git `user.name`/
+  `user.email` per scope (global · repo · effective, with an
+  inherits-global note), an edit-identity form, and the named identity
+  presets — create, edit/rename, delete, and apply. Applying (a preset
+  or an edited identity) picks the scope explicitly — **to this repo**
+  or **globally** — and runs the engine's decision-free `SetIdentity`
+  op through the normal op transport. Server side: `GET /api/identity`
+  (identity + profiles in one payload), `POST /api/profiles` (create/
+  rename with add-first semantics), `POST /api/profiles/remove`
+  (fresh-read 404 on an unknown id), and a `set-identity` op case; all
+  forms are explicit-save, and profile presets stay gg-local — only an
+  apply touches git config.
 - **Web: settings panel + grouped ☰ menu.** The ☰ menu is now two
   labelled groups — **git** (pull, push, fetch, prune, create branch,
   versions, review) and **ui** (refresh, switch repo, palette, sidebar,

@@ -24,7 +24,9 @@ type opStartRequest struct {
 	Path    string `json:"path"`
 	Ref     string `json:"ref"`
 	Sha     string `json:"sha"`
-	Name    string `json:"name"`   // new branch name (create-branch, rename-branch)
+	Name    string `json:"name"`   // new branch name (create-branch, rename-branch); user.name (set-identity)
+	Email   string `json:"email"`  // set-identity: user.email
+	Global  bool   `json:"global"` // set-identity: write the global scope instead of the repo's
 	Edit    string `json:"edit"`   // commit-edit: drop | move-up | move-down
 	Mode    string `json:"mode"`   // reset: "" (interactive picker) | soft | mixed | hard
 	Switch  bool   `json:"switch"` // checkout-remote: switch to the new local branch
@@ -44,7 +46,7 @@ type opStartRequest struct {
 // delete-tag, create-tag, annotate-tag, push-tag, delete-remote-tag,
 // fast-forward, checkout, reset, checkout-remote, delete-remote-branch,
 // reset-remote, prune, remove-worktree, stash, stash-apply, stash-pop,
-// stash-drop, discard, ignore, commit-graph, restore-version,
+// stash-drop, discard, ignore, commit-graph, set-identity, restore-version,
 // delete-version, continue, abort; the switch statement is where future ops
 // land. pull and push each take an OPTIONAL branch — omitted means the
 // current one.
@@ -725,6 +727,22 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		op = engine.Ignore{Path: req.Path, Ext: req.Ext}
+	case "set-identity":
+		// One decision-free write of user.name/user.email to the chosen
+		// scope — the same engine op behind the TUI's identity view. The
+		// scope is fixed client-side before the POST (two buttons), so no
+		// fork ever parks. Values are free text by design (they're config
+		// values, not refs), but a leading dash is still refused before it
+		// can reach git argv.
+		if req.Name == "" || !isGitArgSafe(req.Name) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid name"))
+			return
+		}
+		if req.Email == "" || !isGitArgSafe(req.Email) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid email"))
+			return
+		}
+		op = engine.SetIdentity{Name: req.Name, Email: req.Email, Global: req.Global}
 	case "commit-graph":
 		// Write the commit-graph now, then keep it fresh — the TUI notice's
 		// write+enable chain (tui.startCommitGraphWriteAndEnable), run
