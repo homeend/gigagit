@@ -192,6 +192,9 @@
 <div id="exttools" class="hidden">
   <div id="exttools-box"></div>
 </div>
+<div id="sesserrors" class="hidden">
+  <div id="sesserrors-box"></div>
+</div>
 <div id="help" class="hidden">
   <div id="help-box">
     <h2>gg web — keys &amp; features</h2>
@@ -236,7 +239,8 @@
     <div class="hrow"><span class="hkey">identity</span><span>☰ → <b>identity &amp; profiles…</b> (also in the palette): current git user.name/email per scope (global · repo · effective), edit-and-apply to this repo or globally, and named identity presets — create, edit, delete, apply. Presets are gg-local; only an apply touches git config</span></div>
     <div class="hrow"><span class="hkey">prefixes</span><span>☰ → <b>branch prefixes…</b> (also in the palette): manage the templated branch-name skeletons (global · per-repo; tokens like <code>&lt;user:LABEL&gt;</code>, <code>&lt;seq:NAME:N&gt;</code>, <code>&lt;date&gt;</code>, <code>&lt;parent-branch&gt;</code>). <b>new branch…</b> on a row fills any <code>&lt;user:…&gt;</code> labels, resolves the name against the live repo and opens the create-branch prompt prefilled (still editable); <code>&lt;seq&gt;</code> counters advance only when the create succeeds</span></div>
     <div class="hrow"><span class="hkey">ext. tools</span><span>☰ → <b>external tools…</b> (also in the palette): read-only inventory of your configured <code>[[tools.command]]</code> blocks — category/mode badges, per-repo approval state, the full command text, and a problem line for a misconfigured block — plus which catalog tools (Claude, aider, …) are detected on this machine and which of their templates are already configured. Add or edit in the TUI settings (,)</span></div>
-    <div class="hrow"><span class="hkey">☰ menu</span><span>grouped: <b>git</b> (pull, push, fetch, prune, create branch, versions, review, identity, prefixes, external tools) · <b>ui</b> (refresh, switch repo, palette, sidebar, graph, settings) · help</span></div>
+    <div class="hrow"><span class="hkey">errors</span><span>☰ → <b>session errors…</b> (ui group; also in the palette): this server session's genuine failures, newest first — time, source, and the one-line detail (user aborts excluded). The full history persists in the state dir's errors.log, whose path the panel shows</span></div>
+    <div class="hrow"><span class="hkey">☰ menu</span><span>grouped: <b>git</b> (pull, push, fetch, prune, create branch, versions, review, identity, prefixes, external tools) · <b>ui</b> (refresh, switch repo, palette, sidebar, graph, settings, session errors) · help</span></div>
     <div class="hrow"><span class="hkey">section header</span><span>double-click: collapse / expand that sidebar section (persisted)</span></div>
     <div class="hrow"><span class="hkey">pane divider</span><span>drag to resize — the sidebar in the commit list, the file list in a commit's detail · double-click resets it (persisted)</span></div>
     <div class="hrow"><span class="hkey">bottom bar</span><span>the footer entries are clickable — pull, push, refresh, stage/unstage, graph, sidebar, help</span></div>

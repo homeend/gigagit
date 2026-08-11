@@ -10,6 +10,7 @@ import { openSettings } from "./settings.js";
 import { openIdentityView } from "./identity.js";
 import { openPrefixesView } from "./prefixes.js";
 import { openExtToolsView } from "./exttools.js";
+import { openSessionErrorsView } from "./sessionerrors.js";
 import { startReview } from "./review.js";
 import { gotoCommitPrompt, openCommitFilter, toggleGraphMode } from "./commits.js";
 import { openWorkingTree } from "./files.js";
@@ -35,6 +36,7 @@ function paletteCommands() {
     { label: "identity & profiles…", detail: "", run: () => openIdentityView() },
     { label: "branch prefixes…", detail: "", run: () => openPrefixesView() },
     { label: "external tools…", detail: "", run: () => openExtToolsView() },
+    { label: "session errors…", detail: "", run: () => openSessionErrorsView() },
     { label: "create branch…", detail: "", run: () => openCreateBranchPrompt() },
     { label: "branch versions…", detail: "", run: () => openVersionBranches() },
     { label: "file history…", detail: "", run: () => openPrompt({ title: "File history — repo-relative path", placeholder: "e.g. internal/web/server.go", onSubmit: (p) => openFileHistory(p, "") }) },
@@ -205,6 +207,7 @@ function openGlobalMenu() {
     { label: "toggle sidebar", act: () => toggleSidebar() },
     { label: "toggle graph", act: () => toggleGraphMode() },
     { label: "settings…", act: () => openSettings() },
+    { label: "session errors…", act: () => openSessionErrorsView() },
   ].sort((a, b) => a.label.localeCompare(b.label));
   const rows = [{ header: "git" }, ...git, { header: "ui" }, ...ui, { sep: true }, { label: "help", act: () => openHelp() }];
   showCtxMenu(rows, r.left, r.bottom + 4);
