@@ -610,6 +610,46 @@ func TestWorktreeMoveToNewPath(t *testing.T) {
 	}
 }
 
+// TestWorktreeMoveRelativeDestResolvesAgainstWorkdir: a relative new-path
+// must resolve against the workdir the CLI was opened with, not the real OS
+// process cwd. In production those are the same thing (cmd/gg passes "."),
+// but the in-process e2e harness runs every scenario step in one process
+// without ever os.Chdir-ing it (t.Parallel() subtests share one OS cwd), so
+// a bare filepath.Abs(dest) would silently resolve against the test
+// binary's package directory instead of the caller-supplied dir — landing
+// the moved worktree outside the sandbox entirely. Regression for that gap.
+func TestWorktreeMoveRelativeDestResolvesAgainstWorkdir(t *testing.T) {
+	dir := newCLIRepo(t)
+	wt := addCLIWorktree(t, dir, "feature/mv-rel", "wt-cli-mv-rel")
+
+	// Guard against a regression littering the real source tree: if the bug
+	// were reintroduced, filepath.Abs would resolve the relative dest against
+	// this package's directory instead of dir, landing the worktree one level
+	// above it. Clean that up too so a future red run doesn't leave it behind.
+	if wrongCwd, err := os.Getwd(); err == nil {
+		wrongDest := filepath.Join(filepath.Dir(wrongCwd), "wt-cli-mv-rel-dest")
+		t.Cleanup(func() {
+			if _, err := os.Stat(wrongDest); err == nil {
+				exec.Command("git", "-C", dir, "worktree", "remove", "--force", wrongDest).Run()
+				os.RemoveAll(wrongDest)
+			}
+		})
+	}
+
+	var out, errb bytes.Buffer
+	code := Run(dir, []string{"worktree", "move", wt, "../wt-cli-mv-rel-dest"}, strings.NewReader(""), &out, &errb, "")
+	if code != 0 {
+		t.Fatalf("exit = %d, stderr=%s", code, errb.String())
+	}
+	want := filepath.Join(filepath.Dir(dir), "wt-cli-mv-rel-dest")
+	if _, err := os.Stat(want); err != nil {
+		t.Fatalf("relative dest should resolve against workdir (%s): %v", want, err)
+	}
+	if _, err := os.Stat(wt); !os.IsNotExist(err) {
+		t.Fatalf("old worktree path %s still present: %v", wt, err)
+	}
+}
+
 // TestWorktreeRenameByBranch: `worktree rename <branch> <new-name>` resolves
 // the target by branch name and renames the directory in place (same parent).
 func TestWorktreeRenameByBranch(t *testing.T) {

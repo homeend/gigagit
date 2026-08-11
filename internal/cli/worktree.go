@@ -21,7 +21,7 @@ import (
 )
 
 // cmdWorktree dispatches `gg worktree <sub>`.
-func cmdWorktree(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr io.Writer, cwdFile string) int {
+func cmdWorktree(svc *domain.Service, workdir string, args []string, stdin io.Reader, stdout, stderr io.Writer, cwdFile string) int {
 	if len(args) == 0 {
 		fmt.Fprintln(stderr, "usage: gg worktree <list|add|remove|move|rename|prune> [args]")
 		return 2
@@ -34,9 +34,9 @@ func cmdWorktree(svc *domain.Service, args []string, stdin io.Reader, stdout, st
 	case "remove":
 		return cmdWorktreeRemove(svc, args[1:], stdin, stdout, stderr)
 	case "move":
-		return cmdWorktreeMove(svc, args[1:], stdin, stdout, stderr, cwdFile, false)
+		return cmdWorktreeMove(svc, workdir, args[1:], stdin, stdout, stderr, cwdFile, false)
 	case "rename":
-		return cmdWorktreeMove(svc, args[1:], stdin, stdout, stderr, cwdFile, true)
+		return cmdWorktreeMove(svc, workdir, args[1:], stdin, stdout, stderr, cwdFile, true)
 	case "prune":
 		res, err := runOperation(context.Background(), svc, engine.PruneWorktrees{}, cliDecider{}, stderr)
 		return finish(res, err, stdout, stderr)
@@ -329,7 +329,7 @@ func cmdWorktreeRemove(svc *domain.Service, args []string, stdin io.Reader, stdo
 // (same-parent move). The target resolves by path — absolute, cwd-relative,
 // or main-worktree-relative, exactly like `worktree remove` — or by branch
 // name. --force answers the move-worktree-locked fork with unlock-and-move.
-func cmdWorktreeMove(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr io.Writer, cwdFile string, rename bool) int {
+func cmdWorktreeMove(svc *domain.Service, workdir string, args []string, stdin io.Reader, stdout, stderr io.Writer, cwdFile string, rename bool) int {
 	verb := "move"
 	if rename {
 		verb = "rename"
@@ -382,7 +382,13 @@ func cmdWorktreeMove(svc *domain.Service, args []string, stdin io.Reader, stdout
 		}
 		dest = filepath.Join(filepath.Dir(match.Path), dest)
 	} else if !filepath.IsAbs(dest) {
-		dest, _ = filepath.Abs(dest)
+		// Resolve against workdir (the CLI's notion of "here"), not the real
+		// process cwd: in production workdir is "." so this is byte-identical
+		// to filepath.Abs today, but the in-process e2e harness passes a
+		// per-run sandboxed workdir without ever chdir'ing the test process
+		// (t.Parallel() subtests share one OS cwd), so a bare filepath.Abs
+		// would resolve against the test binary's package directory instead.
+		dest, _ = filepath.Abs(filepath.Join(workdir, dest))
 	}
 
 	policy := map[string]string{}
