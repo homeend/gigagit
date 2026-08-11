@@ -26,6 +26,7 @@ type opStartRequest struct {
 	Sha     string `json:"sha"`
 	Name    string `json:"name"` // new branch name (create-branch, rename-branch)
 	Edit    string `json:"edit"` // commit-edit: drop | move-up | move-down
+	Mode    string `json:"mode"` // reset: "" (interactive picker) | soft | mixed | hard
 	Force   bool   `json:"force"`
 	Ext     bool   `json:"ext"` // ignore: the whole extension, not the one file
 	All     bool   `json:"all"` // discard: everything unstaged, no path
@@ -325,6 +326,40 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		op = engine.FastForward{Commit: req.Branch}
+	case "checkout":
+		// Check out a commit by id — detached (no name) or onto a new branch
+		// created there (the reflog menu's two lanes). The target is hex-only
+		// (isHexSha): a commit id is content-addressed, so unlike a positional
+		// identifier (stash@{N}) there is no staleness hazard to allowlist
+		// against — but names ("main", "HEAD~1") have dedicated ops and are
+		// refused here.
+		if !isHexSha(req.Sha) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid commit id"))
+			return
+		}
+		if req.Name != "" && !isGitArgSafe(req.Name) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid branch name"))
+			return
+		}
+		op = engine.Checkout{Ref: req.Sha, Branch: req.Name}
+	case "reset":
+		// Move the current branch to a commit id (hex-only, as above). Empty
+		// mode keeps the engine's interactive flow — the soft/mixed/hard
+		// picker (plus the non-ancestor confirm) parks in the browser modal
+		// and IS the deliberate confirmation. A preset mode skips every
+		// engine guard, so a client sending one owns the confirm itself
+		// (the reset-to-remote-tip lane).
+		if !isHexSha(req.Sha) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid commit id"))
+			return
+		}
+		switch req.Mode {
+		case "", "soft", "mixed", "hard":
+		default:
+			writeErr(w, http.StatusBadRequest, errors.New("invalid mode"))
+			return
+		}
+		op = engine.Reset{Commit: req.Sha, Mode: req.Mode}
 	case "remove-worktree":
 		if req.Path == "" {
 			writeErr(w, http.StatusBadRequest, errors.New("path required"))

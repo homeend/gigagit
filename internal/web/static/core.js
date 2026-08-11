@@ -62,7 +62,7 @@ const DANGER_OPTIONS = new Set([
 ]);
 
 
-const SECTIONS = ["branches", "worktrees", "tags", "stashes"];
+const SECTIONS = ["branches", "worktrees", "tags", "stashes", "reflog"];
 
 
 // localStorage can throw (private mode); persistence is best-effort.
