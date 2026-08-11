@@ -267,10 +267,13 @@ mark.r { background: var(--span-add); color: inherit; }
 #settings-box :disabled, #identity-box :disabled { opacity: .45; cursor: default; }
 #settings-box .serr, #identity-box .serr { color: var(--err, #e66); min-height: 1.2em; }
 #settings-box .sfoot, #identity-box .sfoot { margin-top: 10px; color: var(--dim); font-size: 11px; }
-/* identity-only bits: profile rows push their buttons to the right edge;
-   form inputs get a usable width */
-#identity-box .prow .sval { flex: none; min-width: 120px; }
-#identity-box .prow .pbtns { margin-left: auto; display: flex; gap: 6px; }
+/* identity-only bits: a profile is ONE line — name, identity (ellipsized),
+   buttons pinned right; form inputs get a usable width */
+#identity-box .prow { flex-wrap: nowrap; }
+#identity-box .prow .sval { flex: none; min-width: 110px; }
+#identity-box .prow .snote { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#identity-box .prow .pscope { flex: none; } /* the scope tag never ellipsizes — it's the fact that matters */
+#identity-box .prow .pbtns { margin-left: auto; flex: none; display: flex; gap: 6px; }
 #identity-box .prow button.danger { color: #f27a6a; }
 #identity-box input { flex: 1 1 220px; }
 #identity-box .stgl { min-width: 150px; }

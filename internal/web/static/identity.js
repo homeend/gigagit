@@ -74,7 +74,8 @@ function browseHTML() {
       (p, i) => `
     <div class="srow prow">
       <span class="sval">${esc(p.name)}</span>
-      <span class="snote">${esc(p.git_name)} &lt;${esc(p.git_email)}&gt; ${esc(scopeTag(p.scope))}</span>
+      <span class="snote">${esc(p.git_name)} &lt;${esc(p.git_email)}&gt;</span>
+      <span class="snote pscope">${esc(scopeTag(p.scope))}</span>
       <span class="pbtns">
         <button data-act="apply" data-i="${i}">apply</button>
         <button data-act="edit-profile" data-i="${i}">edit</button>
