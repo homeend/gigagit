@@ -303,6 +303,36 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 		} else {
 			op = engine.DeleteRemoteTag{Tag: req.Tag}
 		}
+	case "checkout-tag":
+		// Check out a tag — detached (no name) or onto a new branch created
+		// at it (the reflog checkout's two lanes, addressed by tag name so
+		// the reflog message reads "moving to <tag>"). The tag resolves
+		// against a fresh read; only the server-owned name reaches argv.
+		if req.Tag == "" || !isGitArgSafe(req.Tag) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid tag"))
+			return
+		}
+		if req.Name != "" && !isGitArgSafe(req.Name) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid branch name"))
+			return
+		}
+		tgs, terr := svc.Tags(r.Context())
+		if terr != nil {
+			writeErr(w, http.StatusInternalServerError, terr)
+			return
+		}
+		ref := ""
+		for _, tg := range tgs {
+			if tg.Name == req.Tag {
+				ref = tg.Name
+				break
+			}
+		}
+		if ref == "" {
+			writeErr(w, http.StatusNotFound, errors.New("unknown tag"))
+			return
+		}
+		op = engine.Checkout{Ref: ref, Branch: req.Name}
 	case "fast-forward":
 		// Advance the CURRENT branch to another local branch's tip (git merge
 		// --ff-only semantics). The branch resolves against a fresh read; the

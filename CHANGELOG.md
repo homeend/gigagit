@@ -8,6 +8,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: solo a tag + check out a tag.** The tag menu gains **solo this
+  tag** (narrows the commit list to the tag's history — `/api/solo` now
+  accepts tag names alongside branches, resolved against a fresh read so
+  the scope can always render; the top-bar chip exits as usual) and
+  **check out** lanes: detached, or as a new branch created at the tag
+  (prompt prefilled with the tag name), via a new `checkout-tag` op case
+  addressed by server-resolved tag name.
+
 - **Web: remotes sidebar section.** `GET /api/remotes` lists
   remote-tracking branches (capped at 100 like tags) in a new section
   under branches. Click shows the tip commit; right-click offers **check

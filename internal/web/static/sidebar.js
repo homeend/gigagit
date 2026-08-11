@@ -520,6 +520,24 @@ function showTagMenu(tg, x, y) {
   showCtxMenu(
     [
       { label: "show commit", act: () => openCommitByHash(tg.target, "🏷 " + tg.name) },
+      // The reflog checkout's two explicit lanes, addressed by tag name so
+      // the reflog reads "moving to <tag>". Detached is the inspect-only
+      // escape hatch; the branch lane prefills the tag name (TUI parity).
+      { label: "check out " + tg.name + " (detached)", act: () => startOp({ op: "checkout-tag", tag: tg.name }, "checking out " + tg.name) },
+      {
+        label: "check out " + tg.name + " as new branch…",
+        act: () =>
+          openPrompt({
+            title: "New branch at " + tg.name + ", then switch to it:",
+            value: tg.name,
+            onSubmit: (name) => startOp({ op: "checkout-tag", tag: tg.name, name }, "creating " + name + " at " + tg.name),
+          }),
+      },
+      // A tag is a ref to git log like any other, so the branch solo scope
+      // machinery carries it; the top-bar chip is the shared exit.
+      state.solo === tg.name
+        ? { label: "exit solo (show every branch)", act: () => setSolo("") }
+        : { label: "solo this tag", act: () => setSolo(tg.name) },
       { label: "copy name", act: () => copyText(tg.name) },
       // target is git's abbreviated sha (the branch-menu copy-id precedent:
       // short enough to name in full on the notice line).
