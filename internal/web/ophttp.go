@@ -24,15 +24,19 @@ type opStartRequest struct {
 	Path    string `json:"path"`
 	Ref     string `json:"ref"`
 	Sha     string `json:"sha"`
-	Name    string `json:"name"`   // new branch name (create-branch, rename-branch); user.name (set-identity)
-	Email   string `json:"email"`  // set-identity: user.email
-	Global  bool   `json:"global"` // set-identity: write the global scope instead of the repo's
-	Edit    string `json:"edit"`   // commit-edit: drop | move-up | move-down
-	Mode    string `json:"mode"`   // reset: "" (interactive picker) | soft | mixed | hard
-	Switch  bool   `json:"switch"` // checkout-remote: switch to the new local branch
-	Force   bool   `json:"force"`
-	Ext     bool   `json:"ext"` // ignore: the whole extension, not the one file
-	All     bool   `json:"all"` // discard: everything unstaged, no path
+	Name    string `json:"name"` // new branch name (create-branch, rename-branch); user.name (set-identity)
+	// create-branch: the picked prefix's identity when the name came from a
+	// prefix prefill — its <seq> counters bump after a successful create.
+	PrefixID    string `json:"prefix_id"`
+	PrefixScope string `json:"prefix_scope"`
+	Email       string `json:"email"`  // set-identity: user.email
+	Global      bool   `json:"global"` // set-identity: write the global scope instead of the repo's
+	Edit        string `json:"edit"`   // commit-edit: drop | move-up | move-down
+	Mode        string `json:"mode"`   // reset: "" (interactive picker) | soft | mixed | hard
+	Switch      bool   `json:"switch"` // checkout-remote: switch to the new local branch
+	Force       bool   `json:"force"`
+	Ext         bool   `json:"ext"` // ignore: the whole extension, not the one file
+	All         bool   `json:"all"` // discard: everything unstaged, no path
 	// Paths is discard's batch form (the marked set). All-or-nothing: any
 	// member failing the per-file rules refuses the whole batch.
 	Paths []string `json:"paths"`
@@ -140,6 +144,41 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.Branch != "" && !isGitArgSafe(req.Branch) {
 			writeErr(w, http.StatusBadRequest, errors.New("invalid start point"))
+			return
+		}
+		if req.PrefixID != "" {
+			// The name came from a prefix prefill: consume the prefix's <seq>
+			// counters AFTER a successful create (the TUI's pendingSeqBump
+			// contract — a failed create must not burn a number). The wire
+			// carries only the prefix's identity; the seq names derive
+			// server-side from a fresh read, so a client cannot bump
+			// arbitrary counters.
+			scope, ok := parseProfileScope(req.PrefixScope)
+			if !ok {
+				writeErr(w, http.StatusBadRequest, errors.New("prefix_scope must be global or repo"))
+				return
+			}
+			p, ok := s.prefixByID(r, req.PrefixID, scope)
+			if !ok {
+				writeErr(w, http.StatusNotFound, errors.New("unknown prefix"))
+				return
+			}
+			name, start := req.Name, req.Branch
+			seqNames := domain.PrefixSeqNames(p.Value)
+			run, err := s.startRun("op", func(ctx context.Context, svc *domain.Service, events chan<- engine.Event, dec engine.Decider) (engine.Result, map[string]any, error) {
+				res, err := svc.Execute(ctx, engine.CreateBranch{Name: name, StartPoint: start}, events, dec)
+				if err == nil {
+					_ = svc.BumpPrefixSeqs(ctx, seqNames)
+				}
+				return res, nil, err
+			})
+			if err != nil {
+				writeErr(w, http.StatusConflict, err)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			w.WriteHeader(http.StatusAccepted)
+			_ = json.NewEncoder(w).Encode(map[string]string{"op_id": run.id})
 			return
 		}
 		op = engine.CreateBranch{Name: req.Name, StartPoint: req.Branch} // "" = HEAD
