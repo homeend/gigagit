@@ -8,6 +8,17 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **TUI mouse: right-click opens the action menu, double-click acts as enter.**
+  A right-click on a panel row (or a files-view row, or on the diff/history/
+  blame views) selects the row under the cursor and opens its `.` action menu —
+  a shortcut for `.`, never the only path. Two quick left-clicks on the same
+  row act as enter on it: double-click a commit to drill into its files,
+  double-click a branch to jump to its tip, double-click to run the selected
+  action-menu row or a list popup's selected row (repo/bookmark/shelf
+  switchers, command palette, pair-op picker; the help viewer closes). Both
+  are synthesized key events, so they can never drift from what the keys do.
+  Text-entry popups and the decision modal stay mouse-inert — a stray
+  double-click must never submit a form or commit a decision.
 - **Repo switcher warns about slow filesystem mounts.** Rows whose repository
   sits on a foreign mount (WSL's `/mnt/<drive>` drvfs, network filesystems —
   cifs/smb, nfs, sshfs/fuse; UNC paths on Windows) are marked `(slow fs)`;

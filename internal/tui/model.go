@@ -216,6 +216,9 @@ type Model struct {
 	filterQuery  string // case-insensitive substring; "" = no filter
 	filterTyping bool   // true while /-input mode is capturing keys
 
+	lastClick   clickTarget // last left-click target, for double-click detection
+	lastClickAt time.Time   // when lastClick was pressed
+
 	highlightQuery  string // Commits-panel @-highlight: case-insensitive substring; "" = no committed query
 	highlightTyping bool   // true while @-input mode is capturing keys
 
