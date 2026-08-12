@@ -304,7 +304,7 @@ func (e *hunkPicker) render(m Model, _ string) string {
 
 	// The hint wraps instead of truncating so no command is ever cut off.
 	hintLines := wrapParts([]string{
-		i18n.T("[←/→] side"), i18n.T("[shift+←/→] scroll"), i18n.T("[z] mode"), i18n.T("[↑/↓] line"), i18n.T("[space] pick"),
+		i18n.T("[←/→] side"), i18n.T("[shift+←/→] scroll"), i18n.T("[z] mode"), i18n.T("[↑/↓] line"), i18n.T("[alt+↑/↓] view"), i18n.T("[space] pick"),
 		"[c] " + e.leftLabel, "[i] " + e.rightLabel, i18n.T("[C/I] all"), i18n.T("[n/p] hunk"),
 		i18n.T("[enter] apply"), i18n.T("[esc] cancel"),
 	}, w, "  ")
