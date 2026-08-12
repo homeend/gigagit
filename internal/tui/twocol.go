@@ -24,12 +24,16 @@ type colRow struct {
 }
 
 // twoColOpts configures renderTwoCol. anchor is the colRow index kept visible.
+// vshift slides the anchored window by that many display lines (free
+// view-scroll); the render clamps it to the content and reports the
+// effective shift back so callers can store the clamped value.
 type twoColOpts struct {
 	w, h    int
 	sep     string
 	mode    dispMode
 	hscroll int
 	anchor  int
+	vshift  int
 }
 
 // cellSegs lays a cell's body out at width under mode, returning the raw
@@ -80,7 +84,7 @@ func segOrBlank(segs []string, k int) string {
 // padded to o.w columns. The horizontal mode applies per cell body; wrapped
 // left/right pairs are aligned by padding the shorter side; the vertical window
 // is shared and anchored to o.anchor.
-func renderTwoCol(rows []colRow, o twoColOpts) []string {
+func renderTwoCol(rows []colRow, o twoColOpts) ([]string, int) {
 	w, h := o.w, o.h
 	if w < 1 {
 		w = 1
@@ -126,6 +130,22 @@ func renderTwoCol(rows []colRow, o twoColOpts) []string {
 		}
 	}
 	start := windowStart(len(dl), h, anchorLine)
+	eff := 0
+	if o.vshift != 0 {
+		maxStart := len(dl) - h
+		if maxStart < 0 {
+			maxStart = 0
+		}
+		s := start + o.vshift
+		if s > maxStart {
+			s = maxStart
+		}
+		if s < 0 {
+			s = 0
+		}
+		eff = s - start
+		start = s
+	}
 
 	out := make([]string, 0, h)
 	for i := 0; i < h; i++ {
@@ -136,7 +156,7 @@ func renderTwoCol(rows []colRow, o twoColOpts) []string {
 			out = append(out, padRight("", w))
 		}
 	}
-	return out
+	return out, eff
 }
 
 // cellStyle returns a cell's style (zero value for a nil/blank cell).

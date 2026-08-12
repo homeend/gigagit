@@ -344,7 +344,7 @@ func (e *hunkPicker) render(m Model, _ string) string {
 		blockNo++
 	}
 
-	body := renderTwoCol(rows, twoColOpts{
+	body, _ := renderTwoCol(rows, twoColOpts{
 		w: w, h: bodyH, sep: pickerColSep, mode: e.mode, hscroll: e.hscroll, anchor: anchor,
 	})
 
