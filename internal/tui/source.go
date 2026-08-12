@@ -313,13 +313,25 @@ func opAffectedSources(op engine.Operation) []sourceKey {
 		// mode changes status (possibly to conflicted). One op covers both,
 		// so refresh the union.
 		return []sourceKey{srcStatus, srcFeed, srcBranches}
-	case engine.DeleteBranch, engine.RenameBranch:
+	case engine.DeleteBranch:
 		// Branch-only ref change: refresh the Branches panel and the feed (its
 		// %D ref decorations and tip markers move). NOT tags — leaving these
 		// unmapped fell through to "all sources", and the tags reload
 		// auto-triggered a background ls-remote (the ▲ pushed-state lookup) on
-		// every branch delete/rename, a needless network round-trip.
+		// every branch delete/rename, a needless network round-trip. NOT
+		// worktrees either: git refuses to delete a branch checked out in any
+		// worktree, so a delete can never change the worktree list.
 		return []sourceKey{srcBranches, srcFeed}
+	case engine.RenameBranch:
+		// Same Branches+feed+no-tags rationale as DeleteBranch, but a rename
+		// reaches further: `git branch -m` follows the branch into any worktree
+		// that has it checked out, and both the Branches panel's worktree
+		// annotation and the Worktrees panel render from the cached worktree
+		// list — without srcWorktrees the marker vanished until a manual
+		// refresh. Renaming the CURRENT branch also changes the header's
+		// "branch <name>" segment, which renders from srcStatus. One op covers
+		// both, so refresh the union.
+		return []sourceKey{srcStatus, srcBranches, srcFeed, srcWorktrees}
 	case engine.DeleteRemoteBranch:
 		// The remote-tracking ref vanishes (Remotes panel + the feed's %D
 		// decorations/tip markers), and a local branch tracking it loses its

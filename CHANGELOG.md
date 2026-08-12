@@ -8,6 +8,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **TUI: renaming a branch no longer drops its worktree marker.** Renaming
+  a branch that a worktree has checked out left the Branches panel without
+  the worktree annotation (and the Worktrees panel showing the old name)
+  until a manual refresh: `git branch -m` follows the branch into the
+  worktree, but the rename op only refreshed the branch list and feed, so
+  the new name matched nothing in the stale cached worktree list. The op
+  now also refreshes worktrees — and status, since renaming the current
+  branch changes the header's "branch <name>" segment the same way.
 - **Web: prefix use moves into the create-branch prompt** (TUI parity).
   ☰ → **branch prefixes…** now only DEFINES the templated skeletons
   (add/delete); creating from one lives where creating happens — the

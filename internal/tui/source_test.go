@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 
@@ -353,7 +354,7 @@ func TestOpAffectedSources(t *testing.T) {
 		{engine.CherryPick{}, []sourceKey{srcStatus, srcFeed, srcBranches}},
 		{engine.ApplyPatch{}, []sourceKey{srcStatus, srcFeed, srcBranches}},
 		{engine.DeleteBranch{}, []sourceKey{srcBranches, srcFeed}},
-		{engine.RenameBranch{}, []sourceKey{srcBranches, srcFeed}},
+		{engine.RenameBranch{}, []sourceKey{srcStatus, srcBranches, srcFeed, srcWorktrees}},
 		{engine.Stash{}, nil}, // unmapped → all (safe default)
 	}
 	for _, tc := range cases {
@@ -385,6 +386,23 @@ func TestBranchOpsDoNotRefreshTags(t *testing.T) {
 			if s == srcTags {
 				t.Errorf("opAffectedSources(%T) includes srcTags", op)
 			}
+		}
+	}
+}
+
+// TestRenameBranchRefreshesWorktreesAndStatus pins the fix for the stale
+// worktree marker after a rename: `git branch -m` follows the branch into any
+// worktree that has it checked out, and the Branches panel's worktree
+// annotation (and the Worktrees panel itself) render from the cached worktree
+// list — so a rename must dirty srcWorktrees or the marker vanishes until a
+// manual refresh. Renaming the CURRENT branch likewise changes the header's
+// "branch <name>" segment, which renders from srcStatus. DeleteBranch needs
+// neither: git refuses to delete a branch checked out in any worktree.
+func TestRenameBranchRefreshesWorktreesAndStatus(t *testing.T) {
+	got := opAffectedSources(engine.RenameBranch{})
+	for _, want := range []sourceKey{srcWorktrees, srcStatus} {
+		if !slices.Contains(got, want) {
+			t.Errorf("opAffectedSources(RenameBranch) = %v, missing %v", got, want)
 		}
 	}
 }
