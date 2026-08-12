@@ -18,9 +18,10 @@ import (
 type popupState int
 
 const (
-	stInput  popupState = iota // collecting <user:LABEL> field values
-	stAction                   // preview shown; choose create / edit / cancel
-	stEdit                     // free-editing the resolved branch name
+	stInput    popupState = iota // collecting <user:LABEL> field values
+	stAction                     // preview shown; choose create / edit / cancel
+	stEdit                       // free-editing the resolved branch name
+	stEditPath                   // free-editing the resolved worktree path
 )
 
 // worktreePopup holds the in-flight create-worktree dialog. The <random>/<date>
@@ -51,6 +52,7 @@ type worktreePopup struct {
 	state          popupState
 	editBuf        textfield // stEdit working buffer
 	branchOverride string    // a confirmed hand-edited branch name; "" = use the template
+	pathOverride   string    // a confirmed hand-edited worktree path; "" = use the template
 
 	previewBranch string
 	previewPath   string
@@ -101,17 +103,35 @@ func (p *worktreePopup) fixedBranch() string {
 	return ""
 }
 
+// fixedPath returns the verbatim worktree path when one is fixed: the live
+// buffer while editing the path, or a confirmed hand-edit. "" means the path
+// template applies — an emptied buffer previews (and, once confirmed,
+// reverts to) the template result.
+func (p *worktreePopup) fixedPath() string {
+	if p.state == stEditPath {
+		return p.editBuf.Value()
+	}
+	return p.pathOverride
+}
+
 // recompute refreshes the preview from the current fields/state. A confirmed
 // hand-edit (branchOverride) wins over the template; while actively editing, the
 // live editBuf is shown.
 func (p *worktreePopup) recompute() {
 	fixed := p.fixedBranch()
 	tm := worktree.Templates{Branch: p.branchTmpl, Path: p.pathTmpl}
+	fp := p.fixedPath()
+	if fp != "" {
+		tm.Path = "" // hand-edited path: the template (and its <seq>s) is bypassed
+	}
 	vals := make(map[string]string, len(p.inputs))
 	for l, f := range p.inputs {
 		vals[l] = f.Value()
 	}
 	p.previewBranch, p.previewPath, p.previewErr = worktree.Resolve(tm, fixed, vals, p.tctx())
+	if fp != "" {
+		p.previewPath = fp
+	}
 }
 
 // openWorktreePopup builds a popup for the currently-selected branch. The
@@ -275,6 +295,21 @@ func (p *worktreePopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			}
 		}
 		return m, nil
+	case stEditPath:
+		switch msg.Type {
+		case tea.KeyEnter:
+			p.pathOverride = p.editBuf.Value() // "" reverts to the template path
+			p.state = stAction
+			p.recompute()
+		case tea.KeyEsc:
+			p.state = stAction
+			p.recompute()
+		default:
+			if p.editBuf.HandleEditKey(msg) {
+				p.recompute()
+			}
+		}
+		return m, nil
 	default: // stAction
 		switch msg.String() {
 		case "esc":
@@ -282,6 +317,10 @@ func (p *worktreePopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		case "e": // edit the name; a different name creates a NEW branch from the selection
 			p.editBuf = newTextField(p.previewBranch)
 			p.state = stEdit
+			p.recompute()
+		case "E": // edit the worktree path; a confirmed edit sticks verbatim
+			p.editBuf = newTextField(p.previewPath)
+			p.state = stEditPath
 			p.recompute()
 		case "p":
 			return m, m.openPrefixPicker(p.resolvePrefix(), p.onPrefixPicked())
@@ -342,7 +381,11 @@ func (p *worktreePopup) box(m Model) string {
 	} else {
 		b.WriteString(i18n.T("branch: ") + p.previewBranch + "\n")
 	}
-	b.WriteString(i18n.T("path:   ") + p.previewPath + "\n")
+	if p.state == stEditPath {
+		b.WriteString(viewField(i18n.T("path:   "), p.editBuf, true, cw) + "\n")
+	} else {
+		b.WriteString(i18n.T("path:   ") + p.previewPath + "\n")
+	}
 	if p.previewErr != nil {
 		b.WriteString("\n⚠ " + p.previewErr.Error() + "\n")
 	}
@@ -355,12 +398,12 @@ func (p *worktreePopup) box(m Model) string {
 		}
 		b.WriteString(mark + " " + i18n.T("run post-create hook  ([h] toggle)") + "\n")
 	}
-	if (p.state == stAction || p.state == stEdit) && p.keepOffered {
+	if (p.state == stAction || p.state == stEdit || p.state == stEditPath) && p.keepOffered {
 		line := i18n.T("start:  ") + keepModeLabel(p.keep)
 		if p.keepLocked {
 			line += "  " + i18n.T("(root/merge commit — at this commit only)")
 		} else if p.state == stAction {
-			// In stEdit, "m" types into the branch-name field, so the
+			// In stEdit/stEditPath, "m" types into the edited field, so the
 			// [m] change hint would be misleading there — omit it.
 			line += "  " + i18n.T("([m] change)")
 		}
@@ -371,15 +414,17 @@ func (p *worktreePopup) box(m Model) string {
 		b.WriteString(i18n.T("[type] value  [tab/enter] next field  [esc] cancel"))
 	case stEdit:
 		b.WriteString(i18n.T("[type] edit name  [enter] done  [esc] discard"))
+	case stEditPath:
+		b.WriteString(i18n.T("[type] edit path  [enter] done  [esc] discard"))
 	default:
-		hint := i18n.T("[w] create  [W] create & switch  [e] edit name  [p] use a prefix  [esc] cancel")
+		hint := i18n.T("[w] create  [W] create & switch  [e] edit name  [E] edit path  [p] use a prefix  [esc] cancel")
 		if p.switchOnCreate {
-			hint = i18n.T("[enter/W] create & switch  [w] create only  [e] edit name  [p] use a prefix  [esc] cancel")
+			hint = i18n.T("[enter/W] create & switch  [w] create only  [e] edit name  [E] edit path  [p] use a prefix  [esc] cancel")
 			if m.cfg.Worktree.PostCreateHook != "" {
-				hint = i18n.T("[enter/W] create & switch  [w] create only  [e] edit name  [p] use a prefix  [h] hook  [esc] cancel")
+				hint = i18n.T("[enter/W] create & switch  [w] create only  [e] edit name  [E] edit path  [p] use a prefix  [h] hook  [esc] cancel")
 			}
 		} else if m.cfg.Worktree.PostCreateHook != "" {
-			hint = i18n.T("[w] create  [W] create & switch  [e] edit name  [p] use a prefix  [h] hook  [esc] cancel")
+			hint = i18n.T("[w] create  [W] create & switch  [e] edit name  [E] edit path  [p] use a prefix  [h] hook  [esc] cancel")
 		}
 		b.WriteString(hint)
 	}
@@ -448,15 +493,21 @@ func (p *worktreePopup) createOp(hook string) engine.Operation {
 }
 
 // consumedSeqNames returns the <seq> counters the created names actually used.
-// In existing mode and after a confirmed hand-edit the branch template is
-// bypassed, so only the path template's <seq> tokens are consumed. A chosen
-// prefix's own <seq> names are always unioned in.
+// A bypassed template contributes nothing: in existing mode and after a
+// confirmed branch edit the branch template is skipped; after a confirmed
+// path edit the path template is skipped. A chosen prefix's own <seq> names
+// are always unioned in.
 func (p *worktreePopup) consumedSeqNames() []string {
+	branchTemplated := !p.existing && p.branchOverride == ""
+	pathTemplated := p.pathOverride == ""
 	var base []string
-	if p.existing || p.branchOverride != "" {
-		base = worktree.Templates{Path: p.pathTmpl}.SeqNames()
-	} else {
+	switch {
+	case branchTemplated && pathTemplated:
 		base = p.seqNames
+	case branchTemplated:
+		base = worktree.Templates{Branch: p.branchTmpl}.SeqNames()
+	case pathTemplated:
+		base = worktree.Templates{Path: p.pathTmpl}.SeqNames()
 	}
 	return appendDistinctAll(base, p.prefixSeqNames)
 }

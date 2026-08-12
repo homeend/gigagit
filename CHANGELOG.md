@@ -154,6 +154,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   worktree your shell sits in updates the shell-init cwd handoff so `cd`
   follows.
 
+- **Worktree popup (w/W): `E` edits the worktree path.** A confirmed edit is used
+  verbatim (relative paths anchor at the main worktree root, absolute paths
+  as-is) and sticks across later branch-name changes; confirming an empty
+  field reverts to the template-derived path. Hand-edited paths do not bump
+  the path template's `<seq>` counters.
+
 - **TUI mouse: right-click opens the action menu, double-click acts as enter,
   middle-click acts as esc.**
   A right-click on a panel row (or a files-view row, or on the diff/history/
