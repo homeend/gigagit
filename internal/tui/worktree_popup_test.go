@@ -711,3 +711,18 @@ func TestConsumedSeqNamesWithPathOverride(t *testing.T) {
 		t.Fatalf("consumedSeqNames = %v with the path template bypassed, want none", got)
 	}
 }
+
+func TestRenderWorktreePopupPathEdit(t *testing.T) {
+	m := modelWithConfig(t, "b/auto", "../<repo>.worktrees/<branch>")
+	updated, _ := m.Update(keyMsg("w"))
+	m = updated.(Model)
+	if v := layerOf[*worktreePopup](m).box(m); !contains(v, "[E] edit path") {
+		t.Fatalf("stAction hint should advertise [E] edit path, got:\n%s", v)
+	}
+	updated, _ = m.Update(keyMsg("E"))
+	m = updated.(Model)
+	v := layerOf[*worktreePopup](m).box(m)
+	if !contains(v, "[enter] done") || !contains(v, "edit path") {
+		t.Fatalf("stEditPath should show its own hint line, got:\n%s", v)
+	}
+}

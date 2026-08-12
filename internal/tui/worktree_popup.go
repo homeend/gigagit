@@ -381,7 +381,11 @@ func (p *worktreePopup) box(m Model) string {
 	} else {
 		b.WriteString(i18n.T("branch: ") + p.previewBranch + "\n")
 	}
-	b.WriteString(i18n.T("path:   ") + p.previewPath + "\n")
+	if p.state == stEditPath {
+		b.WriteString(viewField(i18n.T("path:   "), p.editBuf, true, cw) + "\n")
+	} else {
+		b.WriteString(i18n.T("path:   ") + p.previewPath + "\n")
+	}
 	if p.previewErr != nil {
 		b.WriteString("\n⚠ " + p.previewErr.Error() + "\n")
 	}
@@ -394,12 +398,12 @@ func (p *worktreePopup) box(m Model) string {
 		}
 		b.WriteString(mark + " " + i18n.T("run post-create hook  ([h] toggle)") + "\n")
 	}
-	if (p.state == stAction || p.state == stEdit) && p.keepOffered {
+	if (p.state == stAction || p.state == stEdit || p.state == stEditPath) && p.keepOffered {
 		line := i18n.T("start:  ") + keepModeLabel(p.keep)
 		if p.keepLocked {
 			line += "  " + i18n.T("(root/merge commit — at this commit only)")
 		} else if p.state == stAction {
-			// In stEdit, "m" types into the branch-name field, so the
+			// In stEdit/stEditPath, "m" types into the edited field, so the
 			// [m] change hint would be misleading there — omit it.
 			line += "  " + i18n.T("([m] change)")
 		}
@@ -410,15 +414,17 @@ func (p *worktreePopup) box(m Model) string {
 		b.WriteString(i18n.T("[type] value  [tab/enter] next field  [esc] cancel"))
 	case stEdit:
 		b.WriteString(i18n.T("[type] edit name  [enter] done  [esc] discard"))
+	case stEditPath:
+		b.WriteString(i18n.T("[type] edit path  [enter] done  [esc] discard"))
 	default:
-		hint := i18n.T("[w] create  [W] create & switch  [e] edit name  [p] use a prefix  [esc] cancel")
+		hint := i18n.T("[w] create  [W] create & switch  [e] edit name  [E] edit path  [p] use a prefix  [esc] cancel")
 		if p.switchOnCreate {
-			hint = i18n.T("[enter/W] create & switch  [w] create only  [e] edit name  [p] use a prefix  [esc] cancel")
+			hint = i18n.T("[enter/W] create & switch  [w] create only  [e] edit name  [E] edit path  [p] use a prefix  [esc] cancel")
 			if m.cfg.Worktree.PostCreateHook != "" {
-				hint = i18n.T("[enter/W] create & switch  [w] create only  [e] edit name  [p] use a prefix  [h] hook  [esc] cancel")
+				hint = i18n.T("[enter/W] create & switch  [w] create only  [e] edit name  [E] edit path  [p] use a prefix  [h] hook  [esc] cancel")
 			}
 		} else if m.cfg.Worktree.PostCreateHook != "" {
-			hint = i18n.T("[w] create  [W] create & switch  [e] edit name  [p] use a prefix  [h] hook  [esc] cancel")
+			hint = i18n.T("[w] create  [W] create & switch  [e] edit name  [E] edit path  [p] use a prefix  [h] hook  [esc] cancel")
 		}
 		b.WriteString(hint)
 	}
