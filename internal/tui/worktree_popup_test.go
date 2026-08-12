@@ -712,6 +712,119 @@ func TestConsumedSeqNamesWithPathOverride(t *testing.T) {
 	}
 }
 
+// noopLayer is a stand-in for the prefix-picker layer that the real "p" flow
+// pushes (async, off m.svc.Prefixes) before its onPick callback runs. Tests
+// that call worktreePopup.onPrefixPicked() directly (bypassing the picker
+// itself, which needs saved prefixes) push this first so the callback's
+// internal popLayer() pops the stand-in rather than the worktree popup below
+// it — mirroring the real stack shape without standing up a picker.
+type noopLayer struct{}
+
+func (noopLayer) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) { return m, nil }
+func (noopLayer) render(m Model, below string) string             { return below }
+
+// TestPopupEditPathStickyAcrossPrefixPick proves the path-override stickiness
+// spec covers BOTH routes that change the branch name: not just [e] (covered
+// by TestPopupEditPathModeSticksAcrossBranchEdit) but also the [p] prefix
+// picker. onPrefixPicked is exactly the callback the real picker invokes on
+// selection (see prefixPicker.finish), so calling it directly exercises the
+// real code path without needing saved prefixes/profile plumbing.
+func TestPopupEditPathStickyAcrossPrefixPick(t *testing.T) {
+	m := modelWithConfig(t, "b/auto", "../<repo>.worktrees/<branch>")
+	updated, _ := m.Update(keyMsg("w"))
+	m = updated.(Model)
+
+	// Override the path via [E] and confirm.
+	updated, _ = m.Update(keyMsg("E"))
+	m = updated.(Model)
+	for len([]rune(layerOf[*worktreePopup](m).editBuf.Value())) > 0 {
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+		m = updated.(Model)
+	}
+	m = typeRunes(t, m, "custom/path")
+	updated, _ = m.Update(keyMsg("enter"))
+	m = updated.(Model)
+	p := layerOf[*worktreePopup](m)
+	if p.pathOverride != "custom/path" {
+		t.Fatalf("pathOverride = %q, want custom/path", p.pathOverride)
+	}
+
+	// Drive the prefix-picker route: push a stand-in for the picker layer (the
+	// real flow has it on top when the selection fires), then invoke the same
+	// callback the picker calls on select.
+	m = m.pushLayer(noopLayer{})
+	m, _ = p.onPrefixPicked()(m, "pref/", nil)
+	if got := layerOf[*worktreePopup](m); got != p {
+		t.Fatalf("worktree popup should be back on top after the picker pops, got %v", got)
+	}
+	if p.state != stEdit || p.editBuf.Value() != "pref/" {
+		t.Fatalf("state/editBuf = %v/%q, want stEdit seeded with pref/", p.state, p.editBuf.Value())
+	}
+
+	// Append a name and confirm — the branch changes but the overridden path
+	// must stick verbatim.
+	m = typeRunes(t, m, "name")
+	updated, _ = m.Update(keyMsg("enter"))
+	m = updated.(Model)
+	p = layerOf[*worktreePopup](m)
+	if p.state != stAction {
+		t.Fatalf("state = %v, want stAction after enter", p.state)
+	}
+	if p.previewBranch != "pref/name" {
+		t.Fatalf("previewBranch = %q, want the prefix-seeded pref/name", p.previewBranch)
+	}
+	if p.previewPath != "custom/path" {
+		t.Fatalf("previewPath = %q after a prefix-picker branch change, want the sticky override custom/path", p.previewPath)
+	}
+}
+
+// TestWorktreeFromCommitPathEditCreateOp proves [E] works from the fromCommit
+// entrance (tag/commit popups start in stEdit with a typed branch, not the
+// w/W selection flow) and that the createOp carries both the typed branch and
+// the overridden path.
+func TestWorktreeFromCommitPathEditCreateOp(t *testing.T) {
+	m := modelWithConfig(t, "b/from-<parent-branch>", "../<repo>.worktrees/<branch>")
+	full := "dddddddddddddddddddddddddddddddddddddddd"
+	m = m.openWorktreeAt(full, "prefill")
+	p := layerOf[*worktreePopup](m)
+	if p.state != stEdit {
+		t.Fatalf("state = %v, want stEdit (fromCommit starts editing the branch)", p.state)
+	}
+
+	// Confirm the typed branch name.
+	updated, _ := m.Update(keyMsg("enter"))
+	m = updated.(Model)
+	if layerOf[*worktreePopup](m).state != stAction {
+		t.Fatalf("state = %v, want stAction after confirming the branch", layerOf[*worktreePopup](m).state)
+	}
+
+	// Override the path.
+	updated, _ = m.Update(keyMsg("E"))
+	m = updated.(Model)
+	for len([]rune(layerOf[*worktreePopup](m).editBuf.Value())) > 0 {
+		updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+		m = updated.(Model)
+	}
+	m = typeRunes(t, m, "custom/from-commit/path")
+	updated, _ = m.Update(keyMsg("enter"))
+	m = updated.(Model)
+
+	p = layerOf[*worktreePopup](m)
+	op, ok := p.createOp("").(engine.CreateWorktree)
+	if !ok {
+		t.Fatalf("op = %T, want engine.CreateWorktree", p.createOp(""))
+	}
+	if op.StartPoint != full {
+		t.Fatalf("StartPoint = %q, want the full commit hash", op.StartPoint)
+	}
+	if op.Branch != "prefill" {
+		t.Fatalf("Branch = %q, want the typed name 'prefill'", op.Branch)
+	}
+	if op.Path != "custom/from-commit/path" {
+		t.Fatalf("Path = %q, want the overridden path", op.Path)
+	}
+}
+
 func TestRenderWorktreePopupPathEdit(t *testing.T) {
 	m := modelWithConfig(t, "b/auto", "../<repo>.worktrees/<branch>")
 	updated, _ := m.Update(keyMsg("w"))
