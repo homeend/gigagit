@@ -8,6 +8,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **TUI: free view-scroll in the hunk picker.** In the conflict resolver
+  (`x` → enter) and the hunk-staging picker (`H`), the viewport followed
+  the line cursor and nothing else — with many differences on screen there
+  was no way to look at the line-by-line `result:` preview without moving
+  the selection. `alt+↑/↓` now scrolls the view freely without touching
+  the cursor or the picks; the first plain `↑/↓` afterwards snaps the view
+  back to the selected line (that keypress is consumed), and any pick/nav
+  key re-anchors and acts as usual. The scroll is a clamped delta from the
+  cursor-anchored window, so it survives wrap-mode toggles and never
+  drifts past the content.
 - **TUI: renaming a branch no longer drops its worktree marker.** Renaming
   a branch that a worktree has checked out left the Branches panel without
   the worktree annotation (and the Worktrees panel showing the old name)
