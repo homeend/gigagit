@@ -39,6 +39,7 @@ type hunkPicker struct {
 
 	mode    dispMode // display mode for candidate lines (default scroll)
 	hscroll int      // modeScroll horizontal offset
+	vshift  int      // free view-scroll: display-line delta from the cursor-anchored window
 }
 
 const pickerHScrollStep = 8
@@ -137,6 +138,23 @@ func (e *hunkPicker) focusFirstUndecided() {
 func (e *hunkPicker) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
+	}
+	switch msg.String() {
+	case "alt+up":
+		e.vshift--
+		return m, nil
+	case "alt+down":
+		e.vshift++
+		return m, nil
+	}
+	if e.vshift != 0 {
+		// Any other key returns the viewport to the cursor first; a bare
+		// up/down is consumed by that snap-back so the cursor stays put.
+		e.vshift = 0
+		switch msg.String() {
+		case "up", "k", "down", "j":
+			return m, nil
+		}
 	}
 	b := e.cur()
 	switch msg.String() {
@@ -344,9 +362,10 @@ func (e *hunkPicker) render(m Model, _ string) string {
 		blockNo++
 	}
 
-	body, _ := renderTwoCol(rows, twoColOpts{
-		w: w, h: bodyH, sep: pickerColSep, mode: e.mode, hscroll: e.hscroll, anchor: anchor,
+	body, eff := renderTwoCol(rows, twoColOpts{
+		w: w, h: bodyH, sep: pickerColSep, mode: e.mode, hscroll: e.hscroll, anchor: anchor, vshift: e.vshift,
 	})
+	e.vshift = eff
 
 	lines := []string{header, colLabels}
 	lines = append(lines, body...)

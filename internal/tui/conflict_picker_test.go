@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/homeend/gigagit/internal/hunkpick"
 )
 
@@ -248,4 +250,68 @@ func splitLinesTest(s string) []string {
 		return nil
 	}
 	return strings.Split(s, "\n")
+}
+
+func TestConflictPickerAltScrollMovesViewNotCursor(t *testing.T) {
+	e := newConflictPicker("f.txt", pickerDoc())
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
+	m, _ = e.update(m, tea.KeyMsg{Type: tea.KeyDown, Alt: true})
+	m, _ = e.update(m, tea.KeyMsg{Type: tea.KeyDown, Alt: true})
+	m, _ = e.update(m, tea.KeyMsg{Type: tea.KeyUp, Alt: true})
+	if e.vshift != 1 {
+		t.Fatalf("vshift = %d, want 1", e.vshift)
+	}
+	if e.bi != 0 || e.line != 0 || e.side != hunkpick.Current {
+		t.Fatal("alt+scroll must not move the cursor")
+	}
+	if e.doc.Blocks()[0].Mode != hunkpick.Undecided {
+		t.Fatal("alt+scroll must not touch picks")
+	}
+}
+
+func TestConflictPickerPlainArrowSnapsBackConsumed(t *testing.T) {
+	e := newConflictPicker("f.txt", pickerDoc())
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
+	m, _ = e.update(m, tea.KeyMsg{Type: tea.KeyDown, Alt: true})
+	m, _ = e.update(m, keyMsg("down"))
+	if e.vshift != 0 {
+		t.Fatalf("plain ↓ must reset vshift, got %d", e.vshift)
+	}
+	if e.bi != 0 || e.line != 0 {
+		t.Fatal("first plain ↓ after a free scroll must not move the cursor")
+	}
+	// region 0's current side has one line, so the next ↓ steps to block 1.
+	m, _ = e.update(m, keyMsg("down"))
+	if e.bi != 1 || e.line != 0 {
+		t.Fatalf("second ↓ must move the cursor: bi=%d line=%d", e.bi, e.line)
+	}
+}
+
+func TestConflictPickerOtherKeysResetViewScroll(t *testing.T) {
+	e := newConflictPicker("f.txt", pickerDoc())
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
+	m, _ = e.update(m, tea.KeyMsg{Type: tea.KeyDown, Alt: true})
+	m, _ = e.update(m, key("c")) // pick key resets AND acts
+	if e.vshift != 0 {
+		t.Fatalf("c must reset vshift, got %d", e.vshift)
+	}
+	if e.doc.Blocks()[0].Mode != hunkpick.TakeCurrent {
+		t.Fatal("c must still take current")
+	}
+	m, _ = e.update(m, tea.KeyMsg{Type: tea.KeyDown, Alt: true})
+	m, _ = e.update(m, key("n"))
+	if e.vshift != 0 || e.bi != 1 {
+		t.Fatalf("n must reset vshift and move block: vshift=%d bi=%d", e.vshift, e.bi)
+	}
+}
+
+func TestConflictPickerRenderStoresClampedShift(t *testing.T) {
+	e := newConflictPicker("f.txt", pickerDoc())
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
+	// The doc's display lines fit the 24-row overlay, so any shift clamps to 0.
+	e.vshift = 9999
+	_ = e.render(m, "")
+	if e.vshift != 0 {
+		t.Fatalf("render must store the clamped shift back, got %d", e.vshift)
+	}
 }
