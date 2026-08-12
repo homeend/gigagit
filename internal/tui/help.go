@@ -174,6 +174,7 @@ func helpContent() []contentLine {
 		h(i18n.T("Worktree popup (w/W)")),
 		r("enter/tab", i18n.T("next input field / confirm")),
 		r("e", i18n.T("edit the branch name — confirming a different name creates a NEW branch from the selected one")),
+		r("E", i18n.T("edit the worktree path — a confirmed edit is used verbatim (empty reverts to the template path); relative paths anchor at the main worktree root")),
 		r("p", i18n.T("seed the branch name from a saved prefix (Settings → Branch prefixes)")),
 		r("w/enter", i18n.T("create the worktree (enter = create & switch when opened via W)")),
 		r("W", i18n.T("create the worktree and switch to it")),
