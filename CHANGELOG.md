@@ -8,6 +8,15 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **TUI: switching branch now clears the commit-view solo/scope too.**
+  The worktree/repo-switch fix below covered only `reRoot`; a plain
+  same-worktree branch switch (`s`, SmartSwitch/SmartCheckout/Checkout)
+  kept the ◉ solo marker and "solo:" title pointing at the old branch. A
+  checkout-family op now arms a pending scope-clear in `startOp`; on a
+  Changed success `opFinishedMsg` drops the scope + filter and re-points
+  the feed before the post-op source reload, so the feed re-walks all
+  branches. A failed or "already on branch" switch keeps the scope.
+
 - **TUI: switching worktree/repo now clears the commit-view solo/scope.**
   A repo re-root builds a fresh, unscoped commit feed, but the old solo/multi
   branch scope (and any commit filter) stayed in the model — so the Branches
