@@ -631,3 +631,69 @@ func TestPickerTabExpandsCollapsedPane(t *testing.T) {
 			e.outCollapsed, e.outFocused, e.oshift)
 	}
 }
+
+func TestPickerOutputScrollMovesPaneWindow(t *testing.T) {
+	var sb strings.Builder
+	for i := 0; i < 30; i++ {
+		fmt.Fprintf(&sb, "line%02d\n", i)
+	}
+	sb.WriteString("<<<<<<< HEAD\nfoo\n=======\nbar\n>>>>>>> x\n")
+	d, err := hunkpick.ParseConflict([]byte(sb.String()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := newConflictPicker("f.txt", d)
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 30}
+	// Follow mode pins the pane near the focused (EOF) region: top not visible.
+	if out := plain(e.render(m, "")); strings.Contains(out, "line00") {
+		t.Fatalf("follow mode should sit at the focused region, not the top:\n%s", out)
+	}
+	m, _ = e.update(m, keyMsg("tab"))
+	for i := 0; i < 50; i++ {
+		m, _ = e.update(m, keyMsg("down"))
+	}
+	_ = e.render(m, "")
+	if e.oshift < 0 || e.oshift > 10 {
+		t.Fatalf("downward scroll past the end must clamp near 0, got %d", e.oshift)
+	}
+	for i := 0; i < 100; i++ {
+		m, _ = e.update(m, keyMsg("up"))
+	}
+	out := plain(e.render(m, ""))
+	if !strings.Contains(out, "line00") {
+		t.Fatalf("scrolled-up pane must reach the top of the result:\n%s", out)
+	}
+	if e.oshift <= -100 || e.oshift >= 0 {
+		t.Fatalf("render must store the clamped effective shift back, got %d", e.oshift)
+	}
+	m, _ = e.update(m, keyMsg("tab")) // back to grid: follow resumes
+	if out := plain(e.render(m, "")); strings.Contains(out, "line00") {
+		t.Fatalf("tab back must resume following the cursor:\n%s", out)
+	}
+}
+
+func TestPickerOutputRuleShowsFocus(t *testing.T) {
+	e := newConflictPicker("f.txt", pickerDoc())
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 30}
+	if strings.Contains(plain(e.render(m, "")), "▶ output") {
+		t.Fatal("unfocused rule must not carry the focus marker")
+	}
+	m, _ = e.update(m, keyMsg("tab"))
+	if !strings.Contains(plain(e.render(m, "")), "▶ output") {
+		t.Fatal("focused rule must carry the focus marker")
+	}
+}
+
+func TestPickerHintsSwapWithFocus(t *testing.T) {
+	e := newConflictPicker("f.txt", pickerDoc())
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 30}
+	out := plain(e.render(m, ""))
+	if !strings.Contains(out, "[tab] output") || strings.Contains(out, "[tab] grid") {
+		t.Fatalf("grid-focus hints wrong:\n%s", out)
+	}
+	m, _ = e.update(m, keyMsg("tab"))
+	out = plain(e.render(m, ""))
+	if !strings.Contains(out, "[tab] grid") || !strings.Contains(out, "[↑/↓] scroll") || strings.Contains(out, "[space] pick") {
+		t.Fatalf("output-focus hints wrong:\n%s", out)
+	}
+}
