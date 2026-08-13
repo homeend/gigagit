@@ -19,7 +19,9 @@ scrolls the output.
 - **Output focused:** plain `↑`/`↓` (and `k`/`j`) scroll the output one
   line per press, end to end. The selection keys (`space`, `c`, `i`, `C`,
   `I`, `n`, `p`, `←`, `→`) are **inert** until focus returns to the grid.
-  `esc`/`enter` keep their global meanings (cancel / save), `z` and
+  `esc`/`enter` keep their global meanings (cancel / save; a gated enter —
+  pending regions — also returns focus to the grid on the revealed
+  region), `z` and
   `shift+←/→` keep changing the shared display mode / hscroll, `alt+↑/↓`
   keeps free-scrolling the grid view, and `o` collapses the pane and
   returns focus to the grid.

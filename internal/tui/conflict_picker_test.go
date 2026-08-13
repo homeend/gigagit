@@ -697,3 +697,32 @@ func TestPickerHintsSwapWithFocus(t *testing.T) {
 		t.Fatalf("output-focus hints wrong:\n%s", out)
 	}
 }
+
+// Spec test #4's enter half: from output focus, the pending gate warns AND
+// hands the arrows back to the grid (the anchor moved with the revealed
+// region, so a retained manual scroll would land nowhere meaningful).
+func TestPickerEnterGateReturnsGridFocus(t *testing.T) {
+	e := newConflictPicker("f.txt", pickerDoc())
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 30}
+	m, _ = e.update(m, keyMsg("tab"))
+	m, _ = e.update(m, keyMsg("down"))
+	m, _ = e.update(m, keyMsg("enter"))
+	if m.statusMsg == "" || m.topLayer() == nil {
+		t.Fatal("enter with pending regions must warn and keep the surface")
+	}
+	if e.outFocused || e.oshift != 0 {
+		t.Fatalf("the gate must return focus to the grid: focused=%v oshift=%d", e.outFocused, e.oshift)
+	}
+	// z and shift+→ keep falling through under output focus
+	m, _ = e.update(m, keyMsg("tab"))
+	m, _ = e.update(m, key("z"))
+	if e.mode != modeWrap {
+		t.Fatalf("z must keep cycling the display mode under output focus, got %v", e.mode)
+	}
+	m, _ = e.update(m, key("z"))
+	m, _ = e.update(m, key("z")) // back to scroll so shift can pan
+	m, _ = e.update(m, keyMsg("shift+right"))
+	if e.hscroll == 0 {
+		t.Fatal("shift+→ must keep panning under output focus")
+	}
+}

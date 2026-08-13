@@ -296,6 +296,10 @@ func (e *hunkPicker) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			if n := e.doc.Pending(); n > 0 {
 				m.statusMsg = i18n.T("%d region(s) left to resolve", n)
 				e.focusFirstUndecided()
+				// The gate moved the grid cursor (and with it the pane's
+				// follow-anchor): hand the arrows back to the grid so the
+				// user lands on the region they must resolve.
+				e.outFocused, e.oshift = false, 0
 				return m, nil
 			}
 		}
