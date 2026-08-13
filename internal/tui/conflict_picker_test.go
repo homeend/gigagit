@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -432,5 +433,77 @@ func TestConflictPickerMasterCheckboxStates(t *testing.T) {
 	m, _ = e.update(m, key("c")) // clear region 0's current → partial
 	if out := e.render(m, ""); !strings.Contains(out, "[~] current") {
 		t.Fatalf("partial master state must show [~]:\n%s", out)
+	}
+}
+
+func TestConflictPickerOutputPane(t *testing.T) {
+	e := newConflictPicker("f.txt", pickerDoc())
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 30}
+	out := e.render(m, "")
+	if !strings.Contains(out, "output") || !strings.Contains(out, "─") {
+		t.Fatalf("expanded pane needs its titled rule:\n%s", out)
+	}
+	if !strings.Contains(out, "‹region 1 undecided›") {
+		t.Fatalf("undecided region must render its placeholder in the pane:\n%s", out)
+	}
+	m, _ = e.update(m, key("I")) // all incoming everywhere
+	out = e.render(m, "")
+	if !strings.Contains(out, "bar") || strings.Contains(out, "‹region 1 undecided›") {
+		t.Fatalf("decided regions must show their picked lines in the pane:\n%s", out)
+	}
+	m, _ = e.update(m, key("o")) // collapse
+	out = e.render(m, "")
+	if strings.Contains(out, "‹region") || countRule(out) != 0 {
+		t.Fatalf("collapsed pane must disappear:\n%s", out)
+	}
+}
+
+// countRule counts lines that look like the output rule (contain the dashes).
+func countRule(s string) int {
+	n := 0
+	for _, ln := range strings.Split(s, "\n") {
+		if strings.Contains(ln, "──") {
+			n++
+		}
+	}
+	return n
+}
+
+func TestConflictPickerOutputAnchorFollowsFocus(t *testing.T) {
+	e := newConflictPicker("f.txt", pickerDoc())
+	lines, anchor := e.outputLines()
+	if anchor != 1 { // "top" literal, then region 0's contribution
+		t.Fatalf("anchor = %d (lines %v), want 1", anchor, lines)
+	}
+	e.bi = 1
+	_, anchor = e.outputLines()
+	if anchor != 3 { // top, ‹region 1›, mid, then region 1's contribution
+		t.Fatalf("anchor for block 1 = %d, want 3", anchor)
+	}
+}
+
+func TestConflictPickerOutputAnchorEmptyTrailingRegion(t *testing.T) {
+	// 30 distinct literal lines, then a final conflict block with no trailing
+	// literal; deciding that block to empty must pin the pane to the END.
+	var sb strings.Builder
+	for i := 0; i < 30; i++ {
+		fmt.Fprintf(&sb, "line%02d\n", i)
+	}
+	sb.WriteString("<<<<<<< HEAD\nfoo\n=======\nbar\n>>>>>>> x\n")
+	d, err := hunkpick.ParseConflict([]byte(sb.String()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := newConflictPicker("f.txt", d)
+	b := e.doc.Blocks()[0]
+	b.ToggleSide(hunkpick.Current)
+	b.ToggleSide(hunkpick.Current) // touched-empty
+	out := e.renderOutput(80, 5)
+	joined := strings.Join(out, "\n")
+	if !strings.Contains(joined, "line29") {
+		t.Fatalf("pane must pin to the end for a trailing empty focused region:\n%s", joined)
+	}
+	if strings.Contains(joined, "line00") {
+		t.Fatalf("pane must not window from the top:\n%s", joined)
 	}
 }

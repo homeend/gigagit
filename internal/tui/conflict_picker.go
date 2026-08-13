@@ -40,6 +40,8 @@ type hunkPicker struct {
 	mode    dispMode // display mode for candidate lines (default scroll)
 	hscroll int      // modeScroll horizontal offset
 	vshift  int      // free view-scroll: display-line delta from the cursor-anchored window
+
+	outCollapsed bool // [o] hides the output pane; default shown
 }
 
 const pickerHScrollStep = 8
@@ -202,6 +204,8 @@ func (e *hunkPicker) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case "z":
 		e.mode = cyclePickerMode(e.mode)
 		e.hscroll = 0
+	case "o":
+		e.outCollapsed = !e.outCollapsed
 	case "shift+left":
 		if e.mode == modeScroll {
 			if e.hscroll -= pickerHScrollStep; e.hscroll < 0 {
@@ -317,7 +321,7 @@ func (e *hunkPicker) render(m Model, _ string) string {
 	// The hint wraps instead of truncating so no command is ever cut off.
 	hintLines := wrapParts([]string{
 		i18n.T("[←/→] side"), i18n.T("[shift+←/→] scroll"), i18n.T("[z] mode"), i18n.T("[↑/↓] line"), i18n.T("[alt+↑/↓] view"), i18n.T("[space] pick"),
-		"[c] " + e.leftLabel, "[i] " + e.rightLabel, i18n.T("[C/I] all"), i18n.T("[n/p] hunk"),
+		"[c] " + e.leftLabel, "[i] " + e.rightLabel, i18n.T("[C/I] all"), i18n.T("[n/p] hunk"), i18n.T("[o] output"),
 		i18n.T("[enter] apply"), i18n.T("[esc] cancel"),
 	}, w, "  ")
 
@@ -325,6 +329,21 @@ func (e *hunkPicker) render(m Model, _ string) string {
 	bodyH := H - 3 - len(hintLines)
 	if bodyH < 1 {
 		bodyH = 1
+	}
+	gridH, outH := bodyH, 0
+	if !e.outCollapsed {
+		outH = bodyH / 3
+		if outH < 3 {
+			outH = 3
+		}
+		if outH > bodyH-4 {
+			outH = bodyH - 4 // keep ≥3 grid lines + the rule
+		}
+		if outH < 1 {
+			outH = 0 // too small to show a pane at all
+		} else {
+			gridH = bodyH - outH - 1
+		}
 	}
 
 	var rows []colRow
@@ -366,25 +385,20 @@ func (e *hunkPicker) render(m Model, _ string) string {
 				right: pickerCell(blk, hunkpick.Incoming, r, rCur),
 			})
 		}
-		if blk.Mode == hunkpick.LineByLine {
-			rows = append(rows, colRow{full: &winCell{body: "  " + i18n.T("result:"), style: pickerDim}})
-			tmp := &hunkpick.Doc{Items: []hunkpick.Item{{Block: blk}}}
-			if out, ok := tmp.Resolved(); ok {
-				for _, l := range strings.Split(strings.TrimRight(string(out), "\n"), "\n") {
-					rows = append(rows, colRow{full: &winCell{body: "    " + l, style: pickerDim}})
-				}
-			}
-		}
 		blockNo++
 	}
 
 	body, eff := renderTwoCol(rows, twoColOpts{
-		w: w, h: bodyH, sep: pickerColSep, mode: e.mode, hscroll: e.hscroll, anchor: anchor, vshift: e.vshift,
+		w: w, h: gridH, sep: pickerColSep, mode: e.mode, hscroll: e.hscroll, anchor: anchor, vshift: e.vshift,
 	})
 	e.vshift = eff
 
 	lines := []string{header, colLabels}
 	lines = append(lines, body...)
+	if outH > 0 {
+		lines = append(lines, outputRule(w))
+		lines = append(lines, e.renderOutput(w, outH)...)
+	}
 	lines = append(lines, "")
 	lines = append(lines, hintLines...)
 	return strings.Join(lines, "\n")
@@ -407,4 +421,77 @@ func (e *hunkPicker) columnLabels(w int) string {
 	}
 	return cell(e.leftLabel, hunkpick.Current) +
 		pickerColSep + cell(e.rightLabel, hunkpick.Incoming)
+}
+
+// outputLines assembles the live result — literals verbatim, each region's
+// picked lines, a placeholder for an undecided region — and returns the index
+// of the focused region's first line so the pane can follow the cursor.
+func (e *hunkPicker) outputLines() ([]string, int) {
+	var lines []string
+	anchor, blockNo := 0, 0
+	for _, it := range e.doc.Items {
+		if it.Block == nil {
+			lines = append(lines, it.Literal...)
+			continue
+		}
+		if blockNo == e.bi {
+			anchor = len(lines)
+		}
+		if ls, ok := it.Block.ResolvedLines(); ok {
+			lines = append(lines, ls...)
+		} else {
+			lines = append(lines, i18n.T("‹region %d undecided›", blockNo+1))
+		}
+		blockNo++
+	}
+	return lines, anchor
+}
+
+// renderOutput windows the assembled result to h display lines of width w,
+// keeping the focused region's first line in view; the picker's display mode
+// applies per line (wrap expands, scroll pans with the shared hscroll).
+func (e *hunkPicker) renderOutput(w, h int) []string {
+	src, srcAnchor := e.outputLines()
+	var dl []string
+	anchor := 0
+	for i, l := range src {
+		if i == srcAnchor {
+			anchor = len(dl)
+		}
+		switch e.mode {
+		case modeWrap:
+			ws := wrapWidth(l, w, 1<<20)
+			if len(ws) == 0 {
+				ws = []string{""}
+			}
+			dl = append(dl, ws...)
+		case modeScroll:
+			dl = append(dl, hslice(l, e.hscroll, w))
+		default:
+			dl = append(dl, truncate(l, w))
+		}
+	}
+	if srcAnchor >= len(src) {
+		anchor = len(dl) // focused region is empty at EOF: pin the window to the end
+	}
+	start := windowStart(len(dl), h, anchor)
+	out := make([]string, 0, h)
+	for i := 0; i < h; i++ {
+		if idx := start + i; idx < len(dl) {
+			out = append(out, padRight(dl[idx], w))
+		} else {
+			out = append(out, padRight("", w))
+		}
+	}
+	return out
+}
+
+// outputRule is the pane's titled separator line.
+func outputRule(w int) string {
+	label := "── " + i18n.T("output") + " "
+	fill := w - lipgloss.Width(label)
+	if fill < 0 {
+		fill = 0
+	}
+	return pickerDim.Render(padRight(label+strings.Repeat("─", fill), w))
 }
