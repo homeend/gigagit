@@ -8,6 +8,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **TUI: the hunk picker no longer corrupts the screen on CRLF files.**
+  `ParseConflict` keeps each line's `\r` so the resolution round-trips the
+  file's line endings — but the picker printed those lines raw, and a
+  carriage return inside a padded cell makes the terminal jump to column 0
+  and overwrite the line start, shredding the whole frame (stale panels
+  bleeding through, fragments at odd offsets). Tabs likewise desynced cell
+  widths. The picker's grid cells, literal rows, and output pane now route
+  through the diff view's display sanitizer (strip trailing `\r`, expand
+  tabs, dot control chars) — display only, the resolved content keeps its
+  CRLF endings.
 - **TUI: hunk-picker sides are now toggles — keep left, right, or BOTH.**
   In the conflict resolver and the `H` staging picker, `c`/`i` no longer
   exclusively take one side: they toggle that side's lines on/off per
