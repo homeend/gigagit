@@ -70,6 +70,102 @@ func (b *Block) ToggleLine(s Side, line int) {
 	b.Picks = append(b.Picks, Pick{Side: s, Line: line})
 }
 
+// EnsurePicks converts a block to the line-pick representation: a legacy
+// whole-side mode materializes as that side's full ordered picks, Undecided
+// becomes an empty (touched) pick list. Already-LineByLine blocks are
+// untouched.
+func (b *Block) EnsurePicks() {
+	switch b.Mode {
+	case TakeCurrent:
+		b.Picks = fullPicks(Current, len(b.Current))
+	case TakeIncoming:
+		b.Picks = fullPicks(Incoming, len(b.Incoming))
+	case LineByLine:
+		return
+	default:
+		b.Picks = nil
+	}
+	b.Mode = LineByLine
+}
+
+func fullPicks(s Side, n int) []Pick {
+	ps := make([]Pick, 0, n)
+	for i := 0; i < n; i++ {
+		ps = append(ps, Pick{Side: s, Line: i})
+	}
+	return ps
+}
+
+// SideState reports whether all/any of side s's lines are picked, reading
+// legacy whole-side modes as full picks of that side. A zero-line side is
+// never all (nor any) picked.
+func (b *Block) SideState(s Side) (all, any bool) {
+	n := len(b.lines(s))
+	if n == 0 {
+		return false, false
+	}
+	switch b.Mode {
+	case TakeCurrent:
+		return s == Current, s == Current
+	case TakeIncoming:
+		return s == Incoming, s == Incoming
+	case LineByLine:
+		cnt := 0
+		for _, p := range b.Picks {
+			if p.Side == s && p.Line >= 0 && p.Line < n {
+				cnt++
+			}
+		}
+		return cnt == n, cnt > 0
+	default:
+		return false, false
+	}
+}
+
+// LinePicked reports whether side s's line is in the result, reading legacy
+// whole-side modes as full picks of that side.
+func (b *Block) LinePicked(s Side, line int) bool {
+	switch b.Mode {
+	case TakeCurrent:
+		return s == Current
+	case TakeIncoming:
+		return s == Incoming
+	}
+	return b.Picked(s, line)
+}
+
+// ToggleSide is the tri-state whole-side toggle: with every line of s picked
+// it removes s's picks (the other side keeps its order); otherwise it appends
+// s's missing lines top-to-bottom. A zero-line side is a no-op (the block is
+// not even touched).
+func (b *Block) ToggleSide(s Side) {
+	if len(b.lines(s)) == 0 {
+		return
+	}
+	b.EnsurePicks()
+	if all, _ := b.SideState(s); all {
+		kept := b.Picks[:0]
+		for _, p := range b.Picks {
+			if p.Side != s {
+				kept = append(kept, p)
+			}
+		}
+		b.Picks = kept
+		return
+	}
+	for i := range b.lines(s) {
+		if !b.Picked(s, i) {
+			b.Picks = append(b.Picks, Pick{Side: s, Line: i})
+		}
+	}
+}
+
+// ResolvedLines is the exported per-block view of resolved (for previews):
+// the block's picked lines in order, ok=false while Undecided.
+func (b *Block) ResolvedLines() ([]string, bool) {
+	return b.resolved(nil)
+}
+
 // resolved appends this block's resolved lines to out, or reports ok=false when
 // the block is still Undecided.
 func (b *Block) resolved(out []string) ([]string, bool) {
@@ -140,6 +236,57 @@ func (d *Doc) SetAll(m Mode) {
 	for _, b := range d.Blocks() {
 		b.Mode = m
 	}
+}
+
+// ToggleSideAll is ToggleSide across the document: if every block that has
+// s-lines is fully picked on s, it clears s from those blocks; otherwise it
+// completes s on every block that has s-lines. Blocks without s-lines are
+// left alone.
+func (d *Doc) ToggleSideAll(s Side) {
+	allFull, seen := true, false
+	for _, b := range d.Blocks() {
+		if len(b.lines(s)) == 0 {
+			continue
+		}
+		seen = true
+		if full, _ := b.SideState(s); !full {
+			allFull = false
+		}
+	}
+	if !seen {
+		return
+	}
+	for _, b := range d.Blocks() {
+		if len(b.lines(s)) == 0 {
+			continue
+		}
+		full, _ := b.SideState(s)
+		if allFull || !full {
+			b.ToggleSide(s)
+		}
+	}
+}
+
+// SideStateAll aggregates SideState for the master checkbox: all = every
+// block with s-lines has s fully picked (false when no block has s-lines);
+// any = at least one s line picked anywhere.
+func (d *Doc) SideStateAll(s Side) (all, any bool) {
+	seen := false
+	all = true
+	for _, b := range d.Blocks() {
+		if len(b.lines(s)) == 0 {
+			continue
+		}
+		seen = true
+		ba, bany := b.SideState(s)
+		if !ba {
+			all = false
+		}
+		if bany {
+			any = true
+		}
+	}
+	return all && seen, any
 }
 
 // Resolved assembles the whole document. ok=false if any block is Undecided.
