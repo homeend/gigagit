@@ -129,7 +129,7 @@ func helpContent() []contentLine {
 		h(i18n.T("Hunk picker (x conflict resolve / H stage)")),
 		r("←/→", i18n.T("switch the focused side (current ↔ incoming)")),
 		r("↑/k ↓/j", i18n.T("move the line cursor (steps across regions)")),
-		r("alt+↑/↓", i18n.T("scroll the view without moving the line cursor (e.g. to inspect the result: preview); the first plain ↑/↓ snaps the view back to the cursor")),
+		r("alt+↑/↓", i18n.T("scroll the view without moving the line cursor; the first plain ↑/↓ snaps the view back to the cursor")),
 		r("space", i18n.T("pick the cursor line (builds the result in pick order)")),
 		r("c / i", i18n.T("toggle this side of the region — all its lines; left, right, or both can be on, and toggle order = order in the result")),
 		r("C / I", i18n.T("toggle this side across ALL regions (tri-state: complete everywhere, else clear everywhere)")),

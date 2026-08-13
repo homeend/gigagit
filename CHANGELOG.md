@@ -19,7 +19,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   deliberately emptied resolves to nothing (drop both sides); untouched
   regions still gate enter. The inline `result:` preview is replaced by a
   bottom **output** pane with the live assembled result following the
-  cursor (`o` collapses it).
+  cursor (`o` collapses it). A side with no lines (e.g. a pure-insertion
+  region's current side) is a toggle no-op and is skipped by `C`/`I` —
+  decide such regions from the other side (toggle it on, or on-and-off to
+  drop the region).
 
 - **TUI: free view-scroll in the hunk picker.** In the conflict resolver
   (`x` → enter) and the hunk-staging picker (`H`), the viewport followed
