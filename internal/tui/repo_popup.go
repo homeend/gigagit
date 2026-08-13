@@ -336,12 +336,13 @@ func (p *repoPopup) box(m Model) string {
 			wr[i] = winRow{text: row, style: st}
 		}
 		// Cap the visible body; renderWindow scrolls to keep p.sel in view.
+		// Wrap mode hang-indents continuations under the name (past the "> ● "
+		// column) and separates entries with a blank line; the height budget
+		// then counts display lines, not rows.
 		capRows := popupResolveRowCap(p.maximized, termH, 12)
-		h := len(vis)
-		if h > capRows {
-			h = capRows
-		}
-		bodyLines = renderWindow(wr, winOpts{w: textW, h: h, mode: p.mode, anchor: p.sel, hscroll: p.hscroll})
+		o := winOpts{w: textW, mode: p.mode, anchor: p.sel, hscroll: p.hscroll, wrapIndent: 4, wrapGap: true}
+		o.h = wrapContentLines(wr, o, capRows)
+		bodyLines = renderWindow(wr, o)
 	}
 
 	hint := []string{i18n.T("[enter] switch"), i18n.T("[ctrl+d] forget"), i18n.T("[/] filter"), i18n.T("[z] mode"), i18n.T("[ctrl+t] full"), i18n.T("[esc] close")}

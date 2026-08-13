@@ -8,6 +8,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **TUI: wrap mode (`z`) in list popups got a readable layout.** Wrapped
+  continuation lines now hang-indent under the entry's text instead of
+  restarting at column 0 beneath the `> ` cursor, and a blank separator line
+  sits between entries so multi-line entries no longer blur together. The
+  popup's height budget counts display lines, so short lists stay fully
+  visible with their separators. Applies to the repo switcher,
+  bookmarks/shelf switcher, action menu, fuzzy file finder, git-config
+  explorer, and the conflict file list; content viewers (file preview,
+  commit message, blame) keep their dense prose wrap.
+
 - **TUI: cherry-pick applies every ◉ marked commit.** The Commits-panel
   context menu's cherry-pick row now targets the space-marked (◉) selection
   whenever any mark exists — the label says so ("Cherry-pick N marked commits
