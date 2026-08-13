@@ -52,7 +52,7 @@ func naiveWrapWindow(rows []winRow, o winOpts) []string {
 	}
 	var dl []dline
 	for ri, r := range rows {
-		segs := wrapHang(r.text, bodyW, o.wrapIndent, 1<<20)
+		segs := wrapHang(r.text, bodyW, wrapAlignIndent(r.text, bodyW, o.wrapAlign), 1<<20)
 		if len(segs) == 0 {
 			segs = []string{""}
 		}
@@ -94,13 +94,15 @@ func naiveWrapWindow(rows []winRow, o winOpts) []string {
 // wrapTestRows builds n rows with deterministic per-row content of varied
 // width (1..4 wrapped lines at w=12), distinct per row so a mis-windowed
 // output can never coincide with the correct one. Every 3rd row is styled,
-// every 4th carries a width-preserving decorator.
+// every 4th carries a width-preserving decorator, and rows alternate leading
+// marker glyphs ("", "* ", "● │ ") so wrapAlign exercises per-row indents.
 func wrapTestRows(n int, withPrefix bool) []winRow {
 	rows := make([]winRow, n)
 	st := lipgloss.NewStyle().Bold(true)
+	markers := []string{"", "* ", "● │ "}
 	for i := range rows {
 		filler := strings.Repeat(fmt.Sprintf("w%02d ", i), i%4+1)
-		r := winRow{text: fmt.Sprintf("row%03d %s", i, filler)}
+		r := winRow{text: fmt.Sprintf("%srow%03d %s", markers[i%len(markers)], i, filler)}
 		if withPrefix {
 			r.prefix = fmt.Sprintf("p%d", i%10)
 		}
@@ -122,25 +124,25 @@ func wrapTestRows(n int, withPrefix bool) []winRow {
 // renderWindow must produce byte-identical output to the naive full layout.
 func TestRenderWindowWrapMatchesFullLayout(t *testing.T) {
 	for _, withPrefix := range []bool{false, true} {
-		for _, indent := range []int{0, 4} {
+		for _, align := range []bool{false, true} {
 			for _, n := range []int{0, 1, 5, 23, 60} {
 				rows := wrapTestRows(n, withPrefix)
 				for _, h := range []int{1, 3, 7, 12} {
 					for anchor := -2; anchor <= n+2; anchor++ {
-						o := winOpts{w: 12, h: h, mode: modeWrap, anchor: anchor, wrapIndent: indent}
+						o := winOpts{w: 12, h: h, mode: modeWrap, anchor: anchor, wrapAlign: align}
 						if withPrefix {
 							o.prefixW = 3
 						}
 						got := renderWindow(rows, o)
 						want := naiveWrapWindow(rows, o)
 						if len(got) != len(want) {
-							t.Fatalf("prefix=%v indent=%d n=%d h=%d anchor=%d: line count %d != %d",
-								withPrefix, indent, n, h, anchor, len(got), len(want))
+							t.Fatalf("prefix=%v align=%v n=%d h=%d anchor=%d: line count %d != %d",
+								withPrefix, align, n, h, anchor, len(got), len(want))
 						}
 						for i := range got {
 							if got[i] != want[i] {
-								t.Fatalf("prefix=%v indent=%d n=%d h=%d anchor=%d line %d:\n got %q\nwant %q",
-									withPrefix, indent, n, h, anchor, i, got[i], want[i])
+								t.Fatalf("prefix=%v align=%v n=%d h=%d anchor=%d line %d:\n got %q\nwant %q",
+									withPrefix, align, n, h, anchor, i, got[i], want[i])
 							}
 						}
 					}
@@ -183,11 +185,11 @@ func TestWrapHang(t *testing.T) {
 // capped with early exit, one line per row in other modes.
 func TestWrapContentLines(t *testing.T) {
 	rows := []winRow{
-		{text: "abcdefgh"}, // 3 lines at w=4 indent=2
+		{text: "* abcdef"}, // aligns at 2 → "* ab"/"  cd"/"  ef" = 3 lines at w=4
 		{text: "ab"},       // 1 line
 		{text: ""},         // empty row still renders one blank line
 	}
-	o := winOpts{w: 4, mode: modeWrap, wrapIndent: 2}
+	o := winOpts{w: 4, mode: modeWrap, wrapAlign: true}
 	if got := wrapContentLines(rows, o, 100); got != 5 {
 		t.Fatalf("wrap content lines = %d, want 5", got)
 	}
@@ -196,6 +198,32 @@ func TestWrapContentLines(t *testing.T) {
 	}
 	if got := wrapContentLines(rows, winOpts{w: 4, mode: modeCutoff}, 100); got != 3 {
 		t.Fatalf("cutoff content lines = %d, want 3 (one per row)", got)
+	}
+}
+
+// TestWrapAlignIndent pins the per-row auto indent: the width of everything
+// before the row's first letter/digit, capped at half the body width.
+func TestWrapAlignIndent(t *testing.T) {
+	cases := []struct {
+		s     string
+		bodyW int
+		want  int
+	}{
+		{"name", 20, 0},              // text at column 0
+		{"> name", 20, 2},            // cursor prefix
+		{"> ● name", 20, 4},          // cursor + marker
+		{"  * feat/x (path)", 20, 4}, // panel row with baked-in branch marker
+		{"● │ ─ deep", 8, 4},         // cap at bodyW/2
+		{"----", 20, 0},              // no letter/digit: nothing to align under
+		{"→ 日本語", 20, 2},             // CJK letter stops the scan
+	}
+	for _, c := range cases {
+		if got := wrapAlignIndent(c.s, c.bodyW, true); got != c.want {
+			t.Errorf("wrapAlignIndent(%q, %d) = %d, want %d", c.s, c.bodyW, got, c.want)
+		}
+	}
+	if got := wrapAlignIndent("> name", 20, false); got != 0 {
+		t.Errorf("align off must return 0, got %d", got)
 	}
 }
 

@@ -841,9 +841,10 @@ func (m Model) renderPanel(p panel, label string, rows []string, decos []rowDeco
 			}
 			wr = append(wr, winRow{text: prefix + text, style: st, decorate: deco})
 		}
-		// wrapIndent 2: wrap continuations hang under the row text, past the
-		// two-column cursor/mark prefix every panel row carries.
-		body := renderWindow(wr, winOpts{w: innerW, h: rowsCap, mode: m.dispModes[p], anchor: anchor - start, hscroll: m.hscroll[p], wrapIndent: 2})
+		// wrapAlign: wrap continuations hang at each row's own text start —
+		// past the cursor/mark prefix AND any per-row decoration baked into
+		// the text (a branch's `* `, a commit's graph lanes).
+		body := renderWindow(wr, winOpts{w: innerW, h: rowsCap, mode: m.dispModes[p], anchor: anchor - start, hscroll: m.hscroll[p], wrapAlign: true})
 		lines = append(lines, body...)
 	}
 	for len(lines) < contentH {
