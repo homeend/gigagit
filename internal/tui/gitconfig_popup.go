@@ -553,11 +553,13 @@ func (p *gitConfigPopup) box(m Model) string {
 		if capRows < 3 {
 			capRows = 3
 		}
-		h := len(vis)
-		if h > capRows {
-			h = capRows
-		}
-		bodyLines = renderWindow(wr, winOpts{w: textW, h: h, mode: p.mode, anchor: p.sel, hscroll: p.hscroll})
+		// Wrap mode: hang-indent continuations (rows have no cursor column, so
+		// a small indent just marks them as continuations). configRowDecorator
+		// only ever decorates a row's first visual line, so the indent cannot
+		// drift its column spans.
+		o := winOpts{w: textW, mode: p.mode, anchor: p.sel, hscroll: p.hscroll, wrapIndent: 2}
+		o.h = wrapContentLines(wr, o, capRows)
+		bodyLines = renderWindow(wr, o)
 	}
 
 	// The selected row's curated description (blank for a non-curated key).

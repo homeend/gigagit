@@ -255,6 +255,64 @@ func TestRepoPopupDoesNotWrapLongPath(t *testing.T) {
 	}
 }
 
+// TestRepoPopupWrapModeIndentsContinuations pins the z-wrap layout fix: wrap
+// continuations hang-indent under the entry name (past the "> ● " column), so
+// multi-line entries stay readable.
+func TestRepoPopupWrapModeIndentsContinuations(t *testing.T) {
+	m := Model{width: 60, height: 30}
+	long1 := "/very/deeply/nested/path/that/is/longer/than/the/box/one-tail"
+	long2 := "/very/deeply/nested/path/that/is/longer/than/the/box/two-tail"
+	m = m.pushLayer(&repoPopup{
+		entries: []repos.Entry{{Path: long1, LastOpened: time.Now()}, {Path: long2, LastOpened: time.Now()}},
+		now:     time.Now(),
+		mode:    modeWrap,
+	})
+	p := layerOf[*repoPopup](m)
+	lines := strings.Split(p.box(m), "\n")
+	inner := func(s string) string { // content between the border glyphs
+		r := []rune(ansiStrip(s))
+		if len(r) < 2 {
+			return ""
+		}
+		return string(r[1 : len(r)-1])
+	}
+	lead := func(s string) int {
+		n := 0
+		for _, r := range s {
+			if r != ' ' {
+				break
+			}
+			n++
+		}
+		return n
+	}
+	first, second := -1, -1
+	for i, l := range lines {
+		c := inner(l)
+		if first == -1 && strings.Contains(c, "> ") {
+			first = i
+		}
+		if second == -1 && strings.Contains(c, "two-tail  /very") {
+			second = i
+		}
+	}
+	if first == -1 || second == -1 || second <= first+1 {
+		t.Fatalf("could not locate both wrapped entries (first=%d second=%d):\n%s", first, second, strings.Join(lines, "\n"))
+	}
+	// The continuation line hangs 4 columns (the "> ● " prefix) past the
+	// first line's start.
+	if got, want := lead(inner(lines[first+1])), lead(inner(lines[first]))+4; got != want {
+		t.Errorf("continuation indent = %d, want %d:\n%s", got, want, strings.Join(lines, "\n"))
+	}
+	// No blank separator lines between entries (indent-only layout — the
+	// separator variant was tried and rejected).
+	for i := first + 1; i < second; i++ {
+		if strings.TrimSpace(inner(lines[i])) == "" {
+			t.Errorf("unexpected blank line %d between wrapped entries:\n%s", i, strings.Join(lines, "\n"))
+		}
+	}
+}
+
 func TestRepoPopupMaximizeWidensAndLiftsRowCap(t *testing.T) {
 	m := Model{}
 	m.width, m.height = 200, 50

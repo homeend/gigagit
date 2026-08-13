@@ -52,7 +52,7 @@ func naiveWrapWindow(rows []winRow, o winOpts) []string {
 	}
 	var dl []dline
 	for ri, r := range rows {
-		segs := wrapWidth(r.text, bodyW, 1<<20)
+		segs := wrapHang(r.text, bodyW, o.wrapIndent, 1<<20)
 		if len(segs) == 0 {
 			segs = []string{""}
 		}
@@ -122,29 +122,141 @@ func wrapTestRows(n int, withPrefix bool) []winRow {
 // renderWindow must produce byte-identical output to the naive full layout.
 func TestRenderWindowWrapMatchesFullLayout(t *testing.T) {
 	for _, withPrefix := range []bool{false, true} {
-		for _, n := range []int{0, 1, 5, 23, 60} {
-			rows := wrapTestRows(n, withPrefix)
-			for _, h := range []int{1, 3, 7, 12} {
-				for anchor := -2; anchor <= n+2; anchor++ {
-					o := winOpts{w: 12, h: h, mode: modeWrap, anchor: anchor}
-					if withPrefix {
-						o.prefixW = 3
-					}
-					got := renderWindow(rows, o)
-					want := naiveWrapWindow(rows, o)
-					if len(got) != len(want) {
-						t.Fatalf("prefix=%v n=%d h=%d anchor=%d: line count %d != %d",
-							withPrefix, n, h, anchor, len(got), len(want))
-					}
-					for i := range got {
-						if got[i] != want[i] {
-							t.Fatalf("prefix=%v n=%d h=%d anchor=%d line %d:\n got %q\nwant %q",
-								withPrefix, n, h, anchor, i, got[i], want[i])
+		for _, indent := range []int{0, 4} {
+			for _, n := range []int{0, 1, 5, 23, 60} {
+				rows := wrapTestRows(n, withPrefix)
+				for _, h := range []int{1, 3, 7, 12} {
+					for anchor := -2; anchor <= n+2; anchor++ {
+						o := winOpts{w: 12, h: h, mode: modeWrap, anchor: anchor, wrapIndent: indent}
+						if withPrefix {
+							o.prefixW = 3
+						}
+						got := renderWindow(rows, o)
+						want := naiveWrapWindow(rows, o)
+						if len(got) != len(want) {
+							t.Fatalf("prefix=%v indent=%d n=%d h=%d anchor=%d: line count %d != %d",
+								withPrefix, indent, n, h, anchor, len(got), len(want))
+						}
+						for i := range got {
+							if got[i] != want[i] {
+								t.Fatalf("prefix=%v indent=%d n=%d h=%d anchor=%d line %d:\n got %q\nwant %q",
+									withPrefix, indent, n, h, anchor, i, got[i], want[i])
+							}
 						}
 					}
 				}
 			}
 		}
+	}
+}
+
+// TestWrapHang pins the hanging-indent wrap: first line at full width,
+// continuations indented and wrapped in the remaining width.
+func TestWrapHang(t *testing.T) {
+	cases := []struct {
+		name   string
+		s      string
+		w      int
+		indent int
+		want   []string
+	}{
+		{"no wrap needed", "abc", 8, 2, []string{"abc"}},
+		{"basic hang", "abcdefgh", 4, 2, []string{"abcd", "  ef", "  gh"}},
+		{"zero indent = wrapWidth", "abcdefgh", 4, 0, []string{"abcd", "efgh"}},
+		{"indent clamped to w-1", "abcdefgh", 3, 9, []string{"abc", "  d", "  e", "  f", "  g", "  h"}},
+		{"wide glyphs stay unsplit", "日本語です", 4, 2, []string{"日本", "  語", "  で", "  す"}},
+	}
+	for _, c := range cases {
+		got := wrapHang(c.s, c.w, c.indent, 1<<20)
+		if len(got) != len(c.want) {
+			t.Fatalf("%s: got %q want %q", c.name, got, c.want)
+		}
+		for i := range got {
+			if got[i] != c.want[i] {
+				t.Fatalf("%s: line %d: got %q want %q", c.name, i, got[i], c.want[i])
+			}
+		}
+	}
+}
+
+// TestWrapContentLines pins the popup-height measurement: wrapped lines
+// capped with early exit, one line per row in other modes.
+func TestWrapContentLines(t *testing.T) {
+	rows := []winRow{
+		{text: "abcdefgh"}, // 3 lines at w=4 indent=2
+		{text: "ab"},       // 1 line
+		{text: ""},         // empty row still renders one blank line
+	}
+	o := winOpts{w: 4, mode: modeWrap, wrapIndent: 2}
+	if got := wrapContentLines(rows, o, 100); got != 5 {
+		t.Fatalf("wrap content lines = %d, want 5", got)
+	}
+	if got := wrapContentLines(rows, o, 4); got != 4 {
+		t.Fatalf("capped content lines = %d, want 4", got)
+	}
+	if got := wrapContentLines(rows, winOpts{w: 4, mode: modeCutoff}, 100); got != 3 {
+		t.Fatalf("cutoff content lines = %d, want 3 (one per row)", got)
+	}
+}
+
+// ansiStrip removes ANSI escape sequences for line-content assertions.
+func ansiStrip(s string) string {
+	var b strings.Builder
+	inEsc := false
+	for _, r := range s {
+		switch {
+		case inEsc:
+			if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') {
+				inEsc = false
+			}
+		case r == '\x1b':
+			inEsc = true
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+// TestRenderPanelWrapIndentsContinuations pins the panel-level hang indent:
+// in wrap mode a panel row's continuation lines start 2 columns (the cursor/
+// mark prefix) past the row's first line.
+func TestRenderPanelWrapIndentsContinuations(t *testing.T) {
+	m := benchModel(2, 20, 8)
+	m.dispModes[panelCommits] = modeWrap
+	m.sel[panelCommits] = 0
+	rows := []string{"alpha-" + strings.Repeat("x", 40) + "-tail", "beta"}
+	out := m.renderPanel(panelCommits, "Commits", rows, nil, 24, 10)
+	lines := strings.Split(out, "\n")
+	lead := func(s string) int {
+		n := 0
+		for _, r := range s {
+			if r != ' ' {
+				break
+			}
+			n++
+		}
+		return n
+	}
+	inner := func(s string) string { // content between the border glyphs
+		r := []rune(ansiStrip(s))
+		if len(r) < 2 {
+			return ""
+		}
+		return string(r[1 : len(r)-1])
+	}
+	first := -1
+	for i, l := range lines {
+		if strings.Contains(ansiStrip(l), "> alpha") {
+			first = i
+			break
+		}
+	}
+	if first == -1 || first+1 >= len(lines) {
+		t.Fatalf("selected wrapped row not found:\n%s", out)
+	}
+	if got, want := lead(inner(lines[first+1])), lead(inner(lines[first]))+2; got != want {
+		t.Fatalf("panel continuation indent = %d, want %d:\n%s", got, want, out)
 	}
 }
 

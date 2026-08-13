@@ -703,11 +703,10 @@ func (m Model) renderActionMenu() string {
 			}
 			wr[i] = winRow{text: prefix + r.label, style: st}
 		}
-		h := len(vis)
-		if h > 14 {
-			h = 14
-		}
-		bodyLines = renderWindow(wr, winOpts{w: textW, h: h, mode: a.mode, anchor: a.sel, hscroll: a.hscroll})
+		// Wrap mode: hang-indent continuations past the "> " column.
+		o := winOpts{w: textW, mode: a.mode, anchor: a.sel, hscroll: a.hscroll, wrapIndent: 2}
+		o.h = wrapContentLines(wr, o, 14)
+		bodyLines = renderWindow(wr, o)
 	}
 	header := i18n.T("Actions")
 	if a.typing {

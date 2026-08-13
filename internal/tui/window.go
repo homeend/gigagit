@@ -52,6 +52,11 @@ type winOpts struct {
 	anchor  int
 	hscroll int // modeScroll horizontal offset (display columns)
 	prefixW int // width of the frozen winRow.prefix column (0 = none)
+
+	// wrapIndent (modeWrap only) hang-indents a row's wrap continuations by
+	// this many columns, so continuations line up under the row's text instead
+	// of restarting at column 0 beneath the caller's cursor/marker prefix.
+	wrapIndent int
 }
 
 // renderWindow lays rows out under o and returns exactly o.h display lines,
@@ -130,7 +135,7 @@ func renderWindow(rows []winRow, o winOpts) []string {
 		hs := 0
 		switch o.mode {
 		case modeWrap:
-			segs = wrapWidth(r.text, bodyW, 1<<20) // huge cap => clean full wrap, no ellipsis
+			segs = wrapHang(r.text, bodyW, o.wrapIndent, 1<<20) // huge cap => clean full wrap, no ellipsis
 		case modeScroll:
 			segs = []string{hslice(r.text, o.hscroll, bodyW)}
 			hs = o.hscroll
@@ -189,3 +194,88 @@ func hslice(s string, off, w int) string {
 // rowTruncated reports whether s would be cut off in a w-wide cutoff window
 // (drives the truncated-row reveal).
 func rowTruncated(s string, w int) bool { return lipgloss.Width(s) > w }
+
+// splitWidth splits s at the last rune boundary that fits w display columns.
+// Width-aware like wrapWidth; a single glyph wider than w is emitted rather
+// than looping forever.
+func splitWidth(s string, w int) (head, tail string) {
+	r := []rune(s)
+	n, width := 0, 0
+	for n < len(r) {
+		cw := lipgloss.Width(string(r[n]))
+		if width+cw > w {
+			break
+		}
+		width += cw
+		n++
+	}
+	if n == 0 && len(r) > 0 {
+		n = 1
+	}
+	return string(r[:n]), string(r[n:])
+}
+
+// wrapHang wraps s like wrapWidth but hang-indents every continuation line by
+// indent columns (the first line keeps the full width w). wrapWidth itself is
+// untouched: tooltip paths depend on its exact cap/ellipsis behavior.
+func wrapHang(s string, w, indent, maxLines int) []string {
+	if w < 1 {
+		w = 1
+	}
+	if indent > w-1 {
+		indent = w - 1 // always leave at least one column for the text
+	}
+	if indent <= 0 {
+		return wrapWidth(s, w, maxLines)
+	}
+	head, tail := splitWidth(s, w)
+	if tail == "" || maxLines <= 1 {
+		return wrapWidth(s, w, maxLines)
+	}
+	pad := strings.Repeat(" ", indent)
+	out := []string{head}
+	for _, seg := range wrapWidth(tail, w-indent, maxLines-1) {
+		out = append(out, pad+seg)
+	}
+	return out
+}
+
+// wrapContentLines returns how many display lines rows occupy under o in wrap
+// mode (indent included), capped at max with early exit — callers use it to
+// size a popup's height budget to its wrapped content instead of the
+// one-line-per-row count the other modes use. Non-wrap modes are one line per
+// row by construction.
+func wrapContentLines(rows []winRow, o winOpts, max int) int {
+	if max < 1 {
+		max = 1
+	}
+	if o.mode != modeWrap {
+		if len(rows) < max {
+			return len(rows)
+		}
+		return max
+	}
+	w := o.w
+	if w < 1 {
+		w = 1
+	}
+	pw := o.prefixW
+	if pw < 0 {
+		pw = 0
+	}
+	if pw > w-1 {
+		pw = w - 1
+	}
+	n := 0
+	for _, r := range rows {
+		segs := len(wrapHang(r.text, w-pw, o.wrapIndent, 1<<20))
+		if segs == 0 {
+			segs = 1 // renderWindow substitutes one blank line for an empty row
+		}
+		n += segs
+		if n >= max {
+			return max
+		}
+	}
+	return n
+}

@@ -247,7 +247,11 @@ func (p *fileFinderPopup) box(m Model) string {
 				wr[i] = winRow{text: padRight("  "+path, textW)}
 			}
 		}
-		bodyLines = renderWindow(wr, winOpts{w: textW, h: visH, mode: p.mode, anchor: p.sel - start, hscroll: p.hscroll})
+		// Wrap mode: hang-indent continuations past the "> " column. The
+		// height budget counts display lines of the pre-windowed slice, capped.
+		o := winOpts{w: textW, mode: p.mode, anchor: p.sel - start, hscroll: p.hscroll, wrapIndent: 2}
+		o.h = wrapContentLines(wr, o, capRows)
+		bodyLines = renderWindow(wr, o)
 	}
 
 	// Wrap the hint so [/] filter / [esc] survive on a narrow terminal (mirrors

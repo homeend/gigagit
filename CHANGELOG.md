@@ -15,6 +15,17 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   `esc` restores before it cancels, including in the conflict process's
   picker; `o` drops the zoom and collapses the pane as usual.
 
+- **TUI: wrap mode (`z`) in lists got a readable layout.** Wrapped
+  continuation lines now hang-indent under the entry's text instead of
+  restarting at column 0 beneath the `> ` cursor, so it is obvious where
+  each entry starts. Applies to every list surface: the main panels
+  (Branches/Commits/Files/Staged/Tags/Reflog/Remotes/Worktrees), the repo
+  switcher, bookmarks/shelf switcher, action menu, fuzzy file finder,
+  git-config explorer, conflict file list, notifications, and the commit
+  files view. Popup height budgets count display lines, so short wrapped
+  lists stay fully visible. Content viewers (file preview, commit message,
+  blame) keep their dense prose wrap.
+
 - **TUI: cherry-pick applies every ◉ marked commit.** The Commits-panel
   context menu's cherry-pick row now targets the space-marked (◉) selection
   whenever any mark exists — the label says so ("Cherry-pick N marked commits
