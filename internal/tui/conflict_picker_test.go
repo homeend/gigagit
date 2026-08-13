@@ -571,3 +571,63 @@ func TestConflictPickerHeaderTicksAlign(t *testing.T) {
 		t.Fatal("no group header row rendered")
 	}
 }
+
+func TestPickerTabTogglesOutputFocus(t *testing.T) {
+	e := newConflictPicker("f.txt", pickerDoc())
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 30}
+	m, _ = e.update(m, keyMsg("tab"))
+	if !e.outFocused {
+		t.Fatal("tab must focus the output")
+	}
+	m, _ = e.update(m, keyMsg("down"))
+	m, _ = e.update(m, keyMsg("down"))
+	m, _ = e.update(m, keyMsg("up"))
+	if e.oshift != 1 || e.bi != 0 || e.line != 0 {
+		t.Fatalf("output arrows must scroll the pane only: oshift=%d bi=%d line=%d", e.oshift, e.bi, e.line)
+	}
+	m, _ = e.update(m, tea.KeyMsg{Type: tea.KeyDown, Alt: true})
+	if e.vshift != 1 {
+		t.Fatal("alt+↓ must keep free-scrolling the grid under output focus")
+	}
+	m, _ = e.update(m, keyMsg("tab"))
+	if e.outFocused || e.oshift != 0 {
+		t.Fatalf("tab back must return to the grid and resume follow: focused=%v oshift=%d", e.outFocused, e.oshift)
+	}
+}
+
+func TestPickerOutputFocusInertSelectionKeys(t *testing.T) {
+	e := newConflictPicker("f.txt", pickerDoc())
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 30}
+	m, _ = e.update(m, keyMsg("tab"))
+	m, _ = e.update(m, key("c"))
+	m, _ = e.update(m, keyMsg("space"))
+	m, _ = e.update(m, key("n"))
+	m, _ = e.update(m, keyMsg("right"))
+	b := e.doc.Blocks()[0]
+	if b.Mode != hunkpick.Undecided || e.bi != 0 || e.side != hunkpick.Current {
+		t.Fatalf("selection keys must be inert under output focus: mode=%v bi=%d side=%v", b.Mode, e.bi, e.side)
+	}
+	m, _ = e.update(m, keyMsg("esc"))
+	if m.topLayer() != nil {
+		t.Fatal("esc must still cancel from output focus")
+	}
+}
+
+func TestPickerTabExpandsCollapsedPane(t *testing.T) {
+	e := newConflictPicker("f.txt", pickerDoc())
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 30}
+	m, _ = e.update(m, key("o")) // collapse under grid focus, as today
+	if !e.outCollapsed {
+		t.Fatal("o must collapse")
+	}
+	m, _ = e.update(m, keyMsg("tab"))
+	if e.outCollapsed || !e.outFocused {
+		t.Fatal("tab on a collapsed pane must expand AND focus it")
+	}
+	m, _ = e.update(m, keyMsg("down"))
+	m, _ = e.update(m, key("o")) // collapse from output focus
+	if !e.outCollapsed || e.outFocused || e.oshift != 0 {
+		t.Fatalf("o under output focus must collapse, unfocus, and reset: collapsed=%v focused=%v oshift=%d",
+			e.outCollapsed, e.outFocused, e.oshift)
+	}
+}

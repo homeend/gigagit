@@ -42,6 +42,8 @@ type hunkPicker struct {
 	vshift  int      // free view-scroll: display-line delta from the cursor-anchored window
 
 	outCollapsed bool // [o] hides the output pane; default shown
+	outFocused   bool // tab moves the arrows to the output pane
+	oshift       int  // output free-scroll: display-line delta from the follow-anchor window
 }
 
 const pickerHScrollStep = 8
@@ -173,6 +175,35 @@ func (e *hunkPicker) focusFirstUndecided() {
 func (e *hunkPicker) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
+	}
+	if msg.String() == "tab" {
+		switch {
+		case e.outCollapsed:
+			e.outCollapsed, e.outFocused = false, true
+		case e.outFocused:
+			e.outFocused, e.oshift = false, 0
+		default:
+			e.outFocused = true
+		}
+		return m, nil
+	}
+	if e.outFocused {
+		// The output owns the plain arrows; global keys fall through, every
+		// selection key waits until tab returns focus to the grid.
+		switch msg.String() {
+		case "up", "k":
+			e.oshift--
+			return m, nil
+		case "down", "j":
+			e.oshift++
+			return m, nil
+		case "o":
+			e.outCollapsed, e.outFocused, e.oshift = true, false, 0
+			return m, nil
+		case "esc", "enter", "z", "shift+left", "shift+right", "alt+up", "alt+down":
+		default:
+			return m, nil
+		}
 	}
 	switch msg.String() {
 	case "alt+up":
