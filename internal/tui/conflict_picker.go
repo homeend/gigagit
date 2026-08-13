@@ -299,7 +299,7 @@ func pickerCell(blk *hunkpick.Block, side hunkpick.Side, r int, cursor bool) *wi
 	if blk.LinePicked(side, r) {
 		tick = "[x] "
 	}
-	c := &winCell{gutter: cur + tick, body: lines[r]}
+	c := &winCell{gutter: cur + tick, body: sanitizeLine(lines[r])}
 	if cursor {
 		c.style = selectedRow
 	}
@@ -352,7 +352,7 @@ func (e *hunkPicker) render(m Model, _ string) string {
 	for _, it := range e.doc.Items {
 		if it.Block == nil {
 			for _, l := range it.Literal {
-				rows = append(rows, colRow{full: &winCell{body: "  " + l, style: pickerDim}})
+				rows = append(rows, colRow{full: &winCell{body: "  " + sanitizeLine(l), style: pickerDim}})
 			}
 			continue
 		}
@@ -458,6 +458,7 @@ func (e *hunkPicker) renderOutput(w, h int) []string {
 		if i == srcAnchor {
 			anchor = len(dl)
 		}
+		l = sanitizeLine(l)
 		switch e.mode {
 		case modeWrap:
 			ws := wrapWidth(l, w, 1<<20)

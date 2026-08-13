@@ -507,3 +507,29 @@ func TestConflictPickerOutputAnchorEmptyTrailingRegion(t *testing.T) {
 		t.Fatalf("pane must not window from the top:\n%s", joined)
 	}
 }
+
+// A CRLF file's lines reach the picker with their \r kept (ParseConflict
+// preserves them so Resolved round-trips the endings). The DISPLAY must
+// sanitize them — a raw \r in a padded cell makes the terminal jump to
+// column 0 and corrupts the whole frame (tabs likewise desync widths).
+func TestConflictPickerSanitizesCRLFDisplay(t *testing.T) {
+	d, err := hunkpick.ParseConflict([]byte("top\ttabbed\r\n<<<<<<< HEAD\r\nfoo\r\n=======\r\nbar\r\n>>>>>>> x\r\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := newConflictPicker("f.txt", d)
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 30}
+	out := e.render(m, "")
+	if strings.Contains(out, "\r") {
+		t.Fatal("rendered frame must not contain carriage returns")
+	}
+	if strings.Contains(out, "\t") {
+		t.Fatal("rendered frame must not contain raw tabs")
+	}
+	// Display-only: the resolution keeps the file's CRLF endings.
+	e.doc.Blocks()[0].ToggleSide(hunkpick.Current)
+	res, ok := d.Resolved()
+	if !ok || !strings.Contains(string(res), "foo\r\n") {
+		t.Fatalf("Resolved must keep CRLF: %q ok=%v", res, ok)
+	}
+}
