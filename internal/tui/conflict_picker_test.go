@@ -547,3 +547,27 @@ func TestConflictFileLoadedSizedMarkers(t *testing.T) {
 		t.Fatalf("sized conflict content should push the picker (status %q)", m.statusMsg)
 	}
 }
+
+// The group-header row's right cell must carry the same 2-char gutter the
+// line rows' cursor slot occupies, or its checkbox juts out two columns left
+// of every other tick in the column.
+func TestConflictPickerHeaderTicksAlign(t *testing.T) {
+	e := newConflictPicker("f.txt", pickerDoc())
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 30}
+	out := plain(e.render(m, ""))
+	found := false
+	for _, ln := range strings.Split(out, "\n") {
+		if strings.Contains(ln, "region 1/2") {
+			_, right, ok := strings.Cut(ln, "║")
+			// sep is " ║ ", so the right cell starts after one space; the
+			// cell itself must open with the 2-char gutter then the tick.
+			if !ok || !strings.HasPrefix(right, "   [") {
+				t.Fatalf("right header tick misaligned: %q", ln)
+			}
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("no group header row rendered")
+	}
+}
