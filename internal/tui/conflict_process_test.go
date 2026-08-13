@@ -259,3 +259,23 @@ func TestConflictProcessRefreshedReLists(t *testing.T) {
 		t.Fatalf("sel must clamp into the shorter list, got %d", cp.sel)
 	}
 }
+
+func TestConflictProcessEscRestoresPickerZoom(t *testing.T) {
+	p := &conflictProcess{st: confPicking, picker: newProcessConflictPicker("f.txt", pickerDoc())}
+	m := Model{proc: p, sel: map[panel]int{}, sortModes: map[panel]sortMode{}, width: 80, height: 24}
+	m, _ = p.update(m, keyMsg("ctrl+t"))
+	if !p.picker.zoomed {
+		t.Fatalf("ctrl+t did not reach the process picker")
+	}
+	m, _ = p.update(m, keyMsg("esc"))
+	if p.picker == nil || p.st != confPicking {
+		t.Fatalf("esc under zoom left the picker (st=%v)", p.st)
+	}
+	if p.picker.zoomed {
+		t.Fatalf("esc under zoom did not restore the split")
+	}
+	m, _ = p.update(m, keyMsg("esc"))
+	if p.picker != nil || p.st != confListing {
+		t.Fatalf("second esc did not leave the picker (st=%v)", p.st)
+	}
+}
