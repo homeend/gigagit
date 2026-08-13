@@ -8,6 +8,20 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **TUI: cherry-pick applies every ◉ marked commit.** The Commits-panel
+  context menu's cherry-pick row now targets the space-marked (◉) selection
+  whenever any mark exists — the label says so ("Cherry-pick N marked commits
+  here" / "Cherry-pick the marked commit here") — and falls back to the
+  highlighted commit with no marks. Marked commits replay oldest→newest as a
+  single `git cherry-pick` sequencer run: aborting a mid-sequence conflict
+  rewinds the whole batch (all-or-nothing), keep-conflicts leaves the paused
+  sequence for the resume lane to finish, and a commit already on the branch
+  is skipped (`--skip`) with the summary reporting the skip count. WIP rows
+  and merge commits in the selection are refused with a clean message naming
+  the offending commit. The engine op is now `CherryPick{Commits: []string}`;
+  single-commit callers (CLI, MCP, shelf/bookmark lanes) behave exactly as
+  before.
+
 - **TUI: the repo switcher's slow-filesystem warning is centered on the popup.**
   The strip above the box was left-anchored at the box's content edge, which
   read as lopsided (user report). It is now horizontally centered on the box,

@@ -586,6 +586,120 @@ func TestCommitCherryPickRowGating(t *testing.T) {
 	}
 }
 
+// The ◉ marked set wins over the cursor, and targets come out oldest→newest
+// by feed rank regardless of (random) map iteration order.
+func TestCommitCherryPickMarkedTargetsOrderedOldestFirst(t *testing.T) {
+	m := footerModel()
+	if m.sel == nil {
+		m.sel = map[panel]int{}
+	}
+	newest := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	middle := "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	oldest := "cccccccccccccccccccccccccccccccccccccccc"
+	// feed is newest-first
+	m.commits = []model.Commit{{Hash: newest}, {Hash: middle}, {Hash: oldest}}
+	m.sel[panelCommits] = 1 // cursor elsewhere; marks must win
+	m.focus = panelCommits
+	m.commitCompareSet = map[string]bool{middle: true, oldest: true, newest: true}
+
+	targets, fromMarks := m.cherryPickTargets()
+	if !fromMarks {
+		t.Fatal("marked commits must win over the cursor")
+	}
+	want := []string{oldest, middle, newest}
+	if len(targets) != 3 || targets[0] != want[0] || targets[1] != want[1] || targets[2] != want[2] {
+		t.Fatalf("targets = %v, want oldest→newest %v", targets, want)
+	}
+
+	// A single mark still wins over the cursor.
+	m.commitCompareSet = map[string]bool{oldest: true}
+	targets, fromMarks = m.cherryPickTargets()
+	if !fromMarks || len(targets) != 1 || targets[0] != oldest {
+		t.Fatalf("single mark: targets = %v fromMarks=%v, want [%s] true", targets, fromMarks, oldest)
+	}
+
+	// No marks → the cursor commit.
+	m.commitCompareSet = nil
+	targets, fromMarks = m.cherryPickTargets()
+	if fromMarks || len(targets) != 1 || targets[0] != middle {
+		t.Fatalf("no marks: targets = %v fromMarks=%v, want cursor [%s] false", targets, fromMarks, middle)
+	}
+
+	// Stale marks (rows gone from the feed) don't count; cursor wins again.
+	m.commitCompareSet = map[string]bool{"dddddddddddddddddddddddddddddddddddddddd": true}
+	targets, fromMarks = m.cherryPickTargets()
+	if fromMarks || len(targets) != 1 || targets[0] != middle {
+		t.Fatalf("stale marks: targets = %v fromMarks=%v, want cursor [%s] false", targets, fromMarks, middle)
+	}
+}
+
+func TestCommitCherryPickRowMarkedLabelsAndGuards(t *testing.T) {
+	m := footerModel()
+	if m.sel == nil {
+		m.sel = map[panel]int{}
+	}
+	a := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	b := "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	m.commits = []model.Commit{{Hash: a, Parents: []string{"p"}}, {Hash: b, Parents: []string{"p"}}}
+	m.sel[panelCommits] = 0
+	m.focus = panelCommits
+
+	// 2+ marks → plural label
+	m.commitCompareSet = map[string]bool{a: true, b: true}
+	r, ok := findRow(availableActions(m), "commit-cherry-pick")
+	if !ok {
+		t.Fatal("cherry-pick row missing")
+	}
+	if r.label != "Cherry-pick 2 marked commits here" {
+		t.Fatalf("label = %q", r.label)
+	}
+
+	// exactly 1 mark → singular marked label
+	m.commitCompareSet = map[string]bool{b: true}
+	r, _ = findRow(availableActions(m), "commit-cherry-pick")
+	if r.label != "Cherry-pick the marked commit here" {
+		t.Fatalf("label = %q", r.label)
+	}
+
+	// a WIP row in the marks: refused with a clean message, no op started
+	m.wipRows = []wipRow{{kind: wipWorktree}}
+	m.commitCompareSet = map[string]bool{a: true, wipKey(wipRow{kind: wipWorktree}): true}
+	r, _ = findRow(availableActions(m), "commit-cherry-pick")
+	mm, cmd := r.run(m)
+	if cmd != nil {
+		t.Fatal("a WIP mark must not start an op")
+	}
+	if got := mm.(Model).statusMsg; got != "cherry-pick is commits-only; remove the working tree / staged row" {
+		t.Fatalf("statusMsg = %q", got)
+	}
+
+	// a merge commit among the targets: refused with a clean message
+	m.wipRows = nil
+	merge := "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+	m.commits = append(m.commits, model.Commit{Hash: merge, Subject: "m", Parents: []string{"p1", "p2"}})
+	m.commitCompareSet = map[string]bool{a: true, merge: true}
+	r, _ = findRow(availableActions(m), "commit-cherry-pick")
+	mm, cmd = r.run(m)
+	if cmd != nil {
+		t.Fatal("a merge commit in the targets must not start an op")
+	}
+	if got := mm.(Model).statusMsg; got != "cannot cherry-pick a merge commit (eeeeeee)" {
+		t.Fatalf("statusMsg = %q", got)
+	}
+
+	// the merge guard also covers the cursor path
+	m.commitCompareSet = nil
+	m.sel[panelCommits] = 2 // cursor on the merge commit
+	r, _ = findRow(availableActions(m), "commit-cherry-pick")
+	mm, cmd = r.run(m)
+	if cmd != nil {
+		t.Fatal("cursor on a merge commit must not start an op")
+	}
+	if got := mm.(Model).statusMsg; got != "cannot cherry-pick a merge commit (eeeeeee)" {
+		t.Fatalf("statusMsg = %q", got)
+	}
+}
+
 func TestCommitRevertRowGatingAndMergeGuard(t *testing.T) {
 	m := footerModel()
 	if m.sel == nil {

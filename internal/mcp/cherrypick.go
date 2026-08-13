@@ -102,7 +102,7 @@ func (s *Server) registerCherryPickTool(srv *sdk.Server) {
 
 		if found && in.Mode != "patch" { // live lane
 			out.Lane, out.Commit, out.Subject = "live", line.Hash, line.Subject
-			res, opErr := runOp(ctx, s.svc, engine.CherryPick{Commit: sha}, staticDecider{policy: policy})
+			res, opErr := runOp(ctx, s.svc, engine.CherryPick{Commits: []string{sha}}, staticDecider{policy: policy})
 			out.Summary = res.Summary
 			switch {
 			case opErr == nil && res.Changed: // applied cleanly

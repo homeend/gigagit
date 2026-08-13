@@ -301,7 +301,7 @@ func shelfCherryPick(svc *domain.Service, args []string, stdin io.Reader, stdout
 	}
 	if found && !*patch { // live lane: the commit object still exists
 		dec := cliDecider{policy: policy, in: stdin, out: stderr, interactive: stdinIsTerminal()}
-		res, err := runOperation(ctx, svc, engine.CherryPick{Commit: sha}, dec, stderr)
+		res, err := runOperation(ctx, svc, engine.CherryPick{Commits: []string{sha}}, dec, stderr)
 		return finish(res, err, stdout, stderr)
 	}
 	// Patch lane: forced by --patch, or the commit is gone.
