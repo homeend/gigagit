@@ -56,6 +56,7 @@ type Model struct {
 	pendingWorktreeMoveOld string              // old path of a just-moved worktree; MRU registry cleanup in opFinishedMsg
 	pendingGotoTip         string              // branch tip to jump to once the ctrl+g solo reload lands (drained by commitsReloadedMsg)
 	pendingCheckout        pendingCheckout     // arms the diverged-checkout recovery modal; zero remoteRef = none
+	pendingScopeClear      bool                // armed by startOp for checkout-family ops; a Changed success drops the solo/scope (the reRoot precedent, but for a same-worktree switch)
 	pendingRemoteTagAdds   []string            // tags to optimistically add to remoteTagNames on PushTags success
 	pushCheckGen           int                 // generation guard for the async pre-push remote-tag check
 	pickGen                int                 // generation guard for the async cherry-pick commit probe
@@ -2223,6 +2224,16 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			chainSwitch = m.pendingSwitchBranch
 			if msg.res.Changed {
+				if m.pendingScopeClear && (len(m.commitScopeBranches) > 0 || m.commitFilter.filtered()) {
+					// The checkout moved HEAD: drop the solo/scope + filter
+					// (the reRoot precedent) and re-point the feed BEFORE the
+					// source fan-out below, so its srcFeed LoadInitial walks
+					// the cleared scope instead of the stale solo.
+					m.commitScopeBranches = nil
+					m.commitFilter = commitFilterFields{}
+					m.feed.SetScope(m.feedScope())
+					m.feedScopeApplied = m.feedScopeSig()
+				}
 				pushTags = m.pendingPushTags
 				noticeCfg = m.pendingNoticeConfig
 				repairSwitch = m.pendingRepairSwitch
@@ -2243,6 +2254,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.pendingRepairSwitch = ""            // unconditional; covers both error and success paths
 		m.pendingWorktreeMoveOld = ""         // unconditional; covers both error and success paths
 		m.pendingCheckout = pendingCheckout{} // unconditional; only a fresh checkout dispatch re-arms it
+		m.pendingScopeClear = false           // unconditional; only a fresh checkout-family dispatch re-arms it
 		srcs := m.pendingSources              // nil = all (safe default for any unmapped op)
 		m.pendingSources = nil
 		if switchTo != "" {

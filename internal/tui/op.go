@@ -193,6 +193,17 @@ func (m Model) startOp(op engine.Operation) (Model, tea.Cmd) {
 	m.bgBusy = false
 	m.bgQueue = nil
 	m.pendingSources = opAffectedSources(op)
+	// A checkout-family op moves HEAD to a different branch/commit, which
+	// obsoletes the solo/multi commit scope the same way a worktree switch
+	// does (reRoot). Armed here — the single dispatch path — so every site
+	// (direct key, confirm modal, dirty-switch chain) is covered; consumed
+	// on a Changed success in opFinishedMsg.
+	switch op.(type) {
+	case engine.SmartSwitch, engine.SmartCheckout, engine.Checkout:
+		m.pendingScopeClear = true
+	default:
+		m.pendingScopeClear = false
+	}
 	_, m.opIsFetch = op.(engine.Fetch) // a foreground fetch records its duration into the fetch row
 	msgs := make(chan tea.Msg, 32)
 	events := make(chan engine.Event, 32)
