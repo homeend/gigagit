@@ -8,6 +8,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **TUI: the repo switcher's slow-filesystem warning is centered on the popup.**
+  The strip above the box was left-anchored at the box's content edge, which
+  read as lopsided (user report). It is now horizontally centered on the box,
+  still shifting on-screen when the sentence would run past a terminal edge.
+
 - **TUI: the repo switcher's slow-filesystem warning moved above the popup.**
   The tooltip strip used to be drawn one line beneath the selected row, where
   it covered the next entry in the list (user report: "having it under the
