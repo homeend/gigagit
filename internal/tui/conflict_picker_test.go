@@ -533,3 +533,17 @@ func TestConflictPickerSanitizesCRLFDisplay(t *testing.T) {
 		t.Fatalf("Resolved must keep CRLF: %q ok=%v", res, ok)
 	}
 }
+
+// Regenerated conflict text arrives with an explicit marker size; the loaded
+// handler must parse with that size so content imitating 7-char markers (an
+// old conflict committed unresolved) stays plain content.
+func TestConflictFileLoadedSizedMarkers(t *testing.T) {
+	m := Model{width: 80, height: 24}
+	content := []byte(strings.Repeat("<", 31) + " current\n<<<<<<< HEAD\n=======\n" +
+		strings.Repeat("=", 31) + "\nb\n" + strings.Repeat(">", 31) + " incoming\n")
+	updated, _ := m.Update(conflictFileLoadedMsg{path: "f.txt", content: content, markerSize: 31})
+	m = updated.(Model)
+	if _, ok := m.topLayer().(*hunkPicker); !ok {
+		t.Fatalf("sized conflict content should push the picker (status %q)", m.statusMsg)
+	}
+}

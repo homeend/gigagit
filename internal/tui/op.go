@@ -239,20 +239,24 @@ func (m Model) loadIrebaseCmd(branch, onto string) tea.Cmd {
 	}
 }
 
-// conflictFileLoadedMsg carries a conflicted file's marker text for the picker.
+// conflictFileLoadedMsg carries a conflicted file's marker text for the picker,
+// with the marker size it must be parsed at (0 clamps to git's default 7).
 type conflictFileLoadedMsg struct {
-	path    string
-	content []byte
-	err     error
+	path       string
+	content    []byte
+	markerSize int
+	err        error
 }
 
-// loadConflictFileCmd reads a conflicted file's working-tree bytes off the UI
-// thread; the resulting msg parses + pushes the picker.
+// loadConflictFileCmd fetches a conflicted file's picker text off the UI
+// thread — regenerated from the index stages with oversized markers, so file
+// content that itself looks like conflict markers stays parseable; the
+// resulting msg parses + pushes the picker.
 func (m Model) loadConflictFileCmd(path string) tea.Cmd {
 	svc := m.svc
 	return func() tea.Msg {
-		c, err := svc.WorktreeFile(context.Background(), path)
-		return conflictFileLoadedMsg{path: path, content: c, err: err}
+		c, size, err := svc.ConflictPickerFile(context.Background(), path)
+		return conflictFileLoadedMsg{path: path, content: c, markerSize: size, err: err}
 	}
 }
 

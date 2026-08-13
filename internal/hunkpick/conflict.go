@@ -5,19 +5,27 @@ import (
 	"strings"
 )
 
-// conflict-marker prefixes (git writes exactly seven characters).
-const (
-	markStart = "<<<<<<<"
-	markBase  = "|||||||"
-	markSep   = "======="
-	markEnd   = ">>>>>>>"
-)
-
 // ParseConflict splits a conflicted working-tree file into ordered Items:
 // passthrough text becomes Literal items; each <<<<<<< / ======= / >>>>>>>
 // region becomes a Block{Current, Incoming}. diff3 ||||||| base lines are
 // skipped. Unbalanced or out-of-order markers return an error.
 func ParseConflict(content []byte) (*Doc, error) {
+	return ParseConflictSized(content, 7)
+}
+
+// ParseConflictSized is ParseConflict with an explicit marker length (git's
+// default is seven; sizes below that clamp to it). Content regenerated with
+// an oversized --marker-size stays parseable even when the file's own lines
+// look like standard markers — e.g. a conflict that was once committed
+// unresolved — because only runs of exactly the chosen length match.
+func ParseConflictSized(content []byte, markerSize int) (*Doc, error) {
+	if markerSize < 7 {
+		markerSize = 7
+	}
+	markStart := strings.Repeat("<", markerSize)
+	markBase := strings.Repeat("|", markerSize)
+	markSep := strings.Repeat("=", markerSize)
+	markEnd := strings.Repeat(">", markerSize)
 	final := len(content) > 0 && content[len(content)-1] == '\n'
 	text := string(content)
 	if final {

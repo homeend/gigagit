@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"strings"
 
 	"github.com/homeend/gigagit/internal/git"
 	"github.com/homeend/gigagit/internal/model"
@@ -166,4 +167,66 @@ func (s *Service) InProgressOp(ctx context.Context) (string, error) {
 		}
 		return "", nil
 	})
+}
+
+// ConflictPickerFile returns the marker text the hunk picker should parse for
+// an unmerged path, plus the marker size to parse it with. The text is
+// regenerated from the index stages via merge-file, with markers sized past
+// the longest marker-like run in any input — so content that itself looks
+// like conflict markers (a conflict once committed unresolved, a =======
+// underline) stays plain content instead of derailing the parse. When the
+// stages cannot be read (path not unmerged, or a side missing) it falls back
+// to the working-tree bytes at git's default size 7 — exactly the previous
+// behavior.
+func (s *Service) ConflictPickerFile(ctx context.Context, path string) ([]byte, int, error) {
+	type sized struct {
+		content []byte
+		size    int
+	}
+	res, err := query(ctx, s, "conflict-picker-file:"+path, func(c context.Context) (sized, error) {
+		base, cur, inc, err := s.repo.UnmergedStages(c, path)
+		if err != nil {
+			return sized{}, err
+		}
+		size := conflictMarkerSize(base, cur, inc)
+		out, err := s.repo.RegenerateConflict(c, base, cur, inc, size)
+		if err != nil {
+			return sized{}, err
+		}
+		return sized{content: out, size: size}, nil
+	})
+	if err != nil {
+		content, ferr := s.WorktreeFile(ctx, path)
+		return content, 7, ferr
+	}
+	return res.content, res.size, nil
+}
+
+// conflictMarkerSize picks a marker length no content line can imitate: eight
+// past the longest line-leading run of '<', '=', or '>' in any input (git's
+// default 7 as the floor).
+func conflictMarkerSize(inputs ...[]byte) int {
+	longest := 0
+	for _, in := range inputs {
+		for _, ln := range strings.Split(string(in), "\n") {
+			if ln == "" {
+				continue
+			}
+			c := ln[0]
+			if c != '<' && c != '=' && c != '>' {
+				continue
+			}
+			n := 0
+			for n < len(ln) && ln[n] == c {
+				n++
+			}
+			if n > longest {
+				longest = n
+			}
+		}
+	}
+	if longest+8 < 7 {
+		return 7
+	}
+	return longest + 8
 }

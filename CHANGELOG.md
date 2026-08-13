@@ -18,6 +18,20 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   through the diff view's display sanitizer (strip trailing `\r`, expand
   tabs, dot control chars) — display only, the resolved content keeps its
   CRLF endings.
+- **TUI: the conflict picker now opens on files whose content looks like
+  conflict markers.** A conflict once committed with its markers unresolved
+  (or any `=======` underline in the content) made the worktree marker text
+  ambiguous, and the picker refused with `nested <<<<<<< marker` — parsing
+  it anyway could silently split the sides at the wrong `=======` and
+  mangle the resolution. The picker text is now REGENERATED from the index
+  stages with `git merge-file --marker-size=N`, N sized past the longest
+  marker-like run in the content, so the real markers are unambiguous by
+  construction and old marker lines appear as what they are: content.
+  Stages are materialized via `checkout-index` (checkout conversion
+  applies, so CRLF files keep their endings), `merge.conflictStyle` is
+  pinned to classic merge, and unreadable stages fall back to the previous
+  worktree-text behavior. The web conflict lane still parses the worktree
+  text; it adopts the same query in a `web-dev` pass.
 - **TUI: hunk-picker sides are now toggles — keep left, right, or BOTH.**
   In the conflict resolver and the `H` staging picker, `c`/`i` no longer
   exclusively take one side: they toggle that side's lines on/off per
