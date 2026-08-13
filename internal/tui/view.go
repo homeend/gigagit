@@ -885,7 +885,7 @@ func (m Model) renderListBox(label string, rows []string, sel, boxW, boxH int, f
 			}
 			wr[i] = winRow{text: prefix + row, style: st}
 		}
-		body := renderWindow(wr, winOpts{w: innerW, h: rowsCap, mode: mode, anchor: sel, hscroll: hscroll})
+		body := renderWindow(wr, winOpts{w: innerW, h: rowsCap, mode: mode, anchor: sel, hscroll: hscroll, wrapAlign: true})
 		lines = append(lines, body...)
 	}
 	for len(lines) < contentH {

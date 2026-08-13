@@ -122,7 +122,7 @@ func (a *stashActionPopup) box(m Model) string {
 		}
 		wr[i] = winRow{text: prefix + stashActionLabel(name), style: st}
 	}
-	for _, line := range renderWindow(wr, winOpts{w: textW, h: len(stashActions), mode: a.mode, anchor: a.sel, hscroll: a.hscroll}) {
+	for _, line := range renderWindow(wr, winOpts{w: textW, h: len(stashActions), mode: a.mode, anchor: a.sel, hscroll: a.hscroll, wrapAlign: true}) {
 		b.WriteString(line + "\n")
 	}
 	b.WriteString("\n" + i18n.T("[enter] do  [z] mode  [esc] cancel"))

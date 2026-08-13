@@ -761,23 +761,16 @@ func (p *settingsPopup) box(m Model) string {
 			// display lines, so size the viewport to the wrapped line count
 			// (capped to keep the popup on-screen) — not the entry count, which
 			// would leave wrap no vertical room and make z look like a no-op.
+			// wrapContentLines measures with the same wrapAlign hang indent the
+			// window renders with.
 			_, termH := m.overlayDims()
 			capRows := termH - 12
 			if capRows < 3 {
 				capRows = 3
 			}
-			h := len(fs)
-			if p.mode == modeWrap {
-				total := 0
-				for _, r := range wr {
-					total += len(wrapWidth(r.text, textW, 1<<20))
-				}
-				h = total
-			}
-			if h > capRows {
-				h = capRows
-			}
-			for _, line := range renderWindow(wr, winOpts{w: textW, h: h, mode: p.mode, anchor: p.sel, hscroll: p.hscroll}) {
+			o := winOpts{w: textW, mode: p.mode, anchor: p.sel, hscroll: p.hscroll, wrapAlign: true}
+			o.h = wrapContentLines(wr, o, capRows)
+			for _, line := range renderWindow(wr, o) {
 				b.WriteString(line + "\n")
 			}
 		}
@@ -980,7 +973,7 @@ func (p *settingsPopup) box(m Model) string {
 			if listH < minList {
 				listH = minList
 			}
-			bodyLines := renderWindow(wr, winOpts{w: textW, h: listH, mode: p.mode, anchor: p.sel, hscroll: p.hscroll})
+			bodyLines := renderWindow(wr, winOpts{w: textW, h: listH, mode: p.mode, anchor: p.sel, hscroll: p.hscroll, wrapAlign: true})
 			for _, line := range bodyLines {
 				b.WriteString(line + "\n")
 			}
@@ -1045,7 +1038,7 @@ func (p *settingsPopup) box(m Model) string {
 			wr[i] = winRow{text: prefix + settingsMenuLabel(m, i), style: st}
 		}
 		// Same selected-row highlight as the . action menu (winRow + selectedRow).
-		for _, line := range renderWindow(wr, winOpts{w: textW, h: len(settingsMenu), mode: p.mode, anchor: p.menuSel, hscroll: p.hscroll}) {
+		for _, line := range renderWindow(wr, winOpts{w: textW, h: len(settingsMenu), mode: p.mode, anchor: p.menuSel, hscroll: p.hscroll, wrapAlign: true}) {
 			b.WriteString(line + "\n")
 		}
 		b.WriteString("\n" + i18n.T("[↑/↓] select  [enter] open/toggle  [esc] close"))
@@ -1072,7 +1065,7 @@ func (p *settingsPopup) box(m Model) string {
 			if h > capRows {
 				h = capRows
 			}
-			for _, line := range renderWindow(wr, winOpts{w: textW, h: h, mode: p.mode, anchor: p.sel, hscroll: p.hscroll}) {
+			for _, line := range renderWindow(wr, winOpts{w: textW, h: h, mode: p.mode, anchor: p.sel, hscroll: p.hscroll, wrapAlign: true}) {
 				b.WriteString(line + "\n")
 			}
 		}

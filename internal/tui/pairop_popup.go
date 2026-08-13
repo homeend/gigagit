@@ -111,7 +111,7 @@ func (p *pairOpPopup) box(m Model) string {
 		}
 		wr[i] = winRow{text: prefix + line, style: st}
 	}
-	body := renderWindow(wr, winOpts{w: textW, h: len(p.ops), mode: p.mode, anchor: p.sel, hscroll: p.hscroll})
+	body := renderWindow(wr, winOpts{w: textW, h: len(p.ops), mode: p.mode, anchor: p.sel, hscroll: p.hscroll, wrapAlign: true})
 	parts := []string{p.marked + " + " + p.selected, ""}
 	parts = append(parts, body...)
 	parts = append(parts, "", i18n.T("[↑/↓] choose  [enter] run  [z] mode  [esc] cancel"))
