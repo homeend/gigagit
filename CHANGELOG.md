@@ -8,6 +8,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **TUI: `ctrl+t` zooms the focused hunk-picker half.** In the picker
+  (conflict resolve / stage), `ctrl+t` gives the tab-focused half — the
+  selection grid or the output pane — the whole body; `tab` swaps which half
+  is zoomed (zoom follows focus), and `ctrl+t`/`esc` restores the split.
+  `esc` restores before it cancels, including in the conflict process's
+  picker; `o` drops the zoom and collapses the pane as usual.
+
 - **TUI: cherry-pick applies every ◉ marked commit.** The Commits-panel
   context menu's cherry-pick row now targets the space-marked (◉) selection
   whenever any mark exists — the label says so ("Cherry-pick N marked commits

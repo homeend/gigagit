@@ -244,6 +244,16 @@ func TestHunkPickerRenderFitsHeight(t *testing.T) {
 	if got := len(splitLinesTest(out)); got != 12 {
 		t.Fatalf("render produced %d lines, want 12 (the overlay height)", got)
 	}
+	// The zoomed paths must hold the same invariant: grid-zoom…
+	m, _ = e.update(m, keyMsg("ctrl+t"))
+	if got := len(splitLinesTest(e.render(m, ""))); got != 12 {
+		t.Fatalf("grid-zoom render produced %d lines, want 12", got)
+	}
+	// …and output-zoom (its early-return builds the frame separately).
+	m, _ = e.update(m, keyMsg("tab"))
+	if got := len(splitLinesTest(e.render(m, ""))); got != 12 {
+		t.Fatalf("output-zoom render produced %d lines, want 12", got)
+	}
 }
 
 func splitLinesTest(s string) []string {
@@ -724,5 +734,118 @@ func TestPickerEnterGateReturnsGridFocus(t *testing.T) {
 	m, _ = e.update(m, keyMsg("shift+right"))
 	if e.hscroll == 0 {
 		t.Fatal("shift+→ must keep panning under output focus")
+	}
+}
+
+func TestPickerCtrlTTogglesZoom(t *testing.T) {
+	e := newConflictPicker("f.txt", pickerDoc())
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
+	m, _ = e.update(m, keyMsg("ctrl+t"))
+	if !e.zoomed {
+		t.Fatalf("ctrl+t did not zoom")
+	}
+	m, _ = e.update(m, keyMsg("ctrl+t"))
+	if e.zoomed {
+		t.Fatalf("second ctrl+t did not restore the split")
+	}
+}
+
+func TestPickerEscRestoresZoomFirst(t *testing.T) {
+	e := newConflictPicker("f.txt", pickerDoc())
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
+	m, _ = e.update(m, keyMsg("ctrl+t"))
+	m, _ = e.update(m, keyMsg("esc"))
+	if e.zoomed {
+		t.Fatalf("esc under zoom did not restore the split")
+	}
+	if len(m.layers.entries) != 1 {
+		t.Fatalf("esc under zoom closed the picker (layers = %d, want 1)", len(m.layers.entries))
+	}
+	m, _ = e.update(m, keyMsg("esc"))
+	if len(m.layers.entries) != 0 {
+		t.Fatalf("second esc did not close the picker")
+	}
+}
+
+func TestPickerEscRestoresZoomWhileOutputFocused(t *testing.T) {
+	e := newConflictPicker("f.txt", pickerDoc())
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
+	m, _ = e.update(m, keyMsg("tab")) // focus output
+	m, _ = e.update(m, keyMsg("ctrl+t"))
+	m, _ = e.update(m, keyMsg("esc"))
+	if e.zoomed || len(m.layers.entries) != 1 {
+		t.Fatalf("esc under output-zoom: zoomed=%v layers=%d, want false/1", e.zoomed, len(m.layers.entries))
+	}
+}
+
+func TestPickerODropsZoom(t *testing.T) {
+	// Grid-focused: o unzooms AND collapses the pane.
+	e := newConflictPicker("f.txt", pickerDoc())
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
+	m, _ = e.update(m, keyMsg("ctrl+t"))
+	m, _ = e.update(m, keyMsg("o"))
+	if e.zoomed || !e.outCollapsed {
+		t.Fatalf("grid o under zoom: zoomed=%v collapsed=%v, want false/true", e.zoomed, e.outCollapsed)
+	}
+	// Output-focused: o unzooms, collapses, and returns focus to the grid.
+	e2 := newConflictPicker("f.txt", pickerDoc())
+	m2 := Model{layers: &layerStack{entries: []layer{e2}}, width: 80, height: 24}
+	m2, _ = e2.update(m2, keyMsg("tab"))
+	m2, _ = e2.update(m2, keyMsg("ctrl+t"))
+	m2, _ = e2.update(m2, keyMsg("o"))
+	if e2.zoomed || !e2.outCollapsed || e2.outFocused {
+		t.Fatalf("output o under zoom: zoomed=%v collapsed=%v focused=%v", e2.zoomed, e2.outCollapsed, e2.outFocused)
+	}
+}
+
+func TestPickerZoomGridHidesOutput(t *testing.T) {
+	e := newConflictPicker("f.txt", pickerDoc())
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
+	m, _ = e.update(m, keyMsg("ctrl+t")) // grid focused → grid-zoom
+	out := e.render(m, "")
+	if strings.Contains(out, "── ") {
+		t.Fatalf("grid-zoom still shows the output rule:\n%s", out)
+	}
+	if !strings.Contains(out, "region 1/2") {
+		t.Fatalf("grid-zoom lost the grid rows:\n%s", out)
+	}
+}
+
+func TestPickerZoomOutputHidesGrid(t *testing.T) {
+	e := newConflictPicker("f.txt", pickerDoc())
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
+	m, _ = e.update(m, keyMsg("tab"))    // focus output
+	m, _ = e.update(m, keyMsg("ctrl+t")) // output-zoom
+	out := e.render(m, "")
+	if !strings.Contains(out, "── ") {
+		t.Fatalf("output-zoom lost the rule:\n%s", out)
+	}
+	if strings.Contains(out, "region 1/2") {
+		t.Fatalf("output-zoom still shows grid rows:\n%s", out)
+	}
+}
+
+func TestPickerTabSwapsZoomedHalf(t *testing.T) {
+	e := newConflictPicker("f.txt", pickerDoc())
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
+	m, _ = e.update(m, keyMsg("ctrl+t")) // grid-zoom
+	m, _ = e.update(m, keyMsg("tab"))    // focus output → zoom follows
+	if !e.zoomed {
+		t.Fatalf("tab dropped the zoom")
+	}
+	out := e.render(m, "")
+	if strings.Contains(out, "region 1/2") || !strings.Contains(out, "── ") {
+		t.Fatalf("after tab, zoom did not swap to the output half:\n%s", out)
+	}
+}
+
+func TestPickerZoomRestoreShowsSplit(t *testing.T) {
+	e := newConflictPicker("f.txt", pickerDoc())
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
+	m, _ = e.update(m, keyMsg("ctrl+t"))
+	m, _ = e.update(m, keyMsg("ctrl+t"))
+	out := e.render(m, "")
+	if !strings.Contains(out, "── ") || !strings.Contains(out, "region 1/2") {
+		t.Fatalf("restore did not bring back the split view:\n%s", out)
 	}
 }
