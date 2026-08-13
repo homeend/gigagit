@@ -2,6 +2,7 @@ package hunkpick
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 )
 
@@ -85,5 +86,138 @@ func TestNoFinalNewlinePreserved(t *testing.T) {
 	out, _ := d.Resolved()
 	if string(out) != "only" {
 		t.Fatalf("no-final-newline = %q, want %q", out, "only")
+	}
+}
+
+func twoSideBlock() *Block {
+	return &Block{Current: []string{"c1", "c2"}, Incoming: []string{"i1"}}
+}
+
+func TestEnsurePicksMaterializesLegacyModes(t *testing.T) {
+	b := twoSideBlock()
+	b.Mode = TakeCurrent
+	b.EnsurePicks()
+	if b.Mode != LineByLine || len(b.Picks) != 2 || !b.Picked(Current, 0) || !b.Picked(Current, 1) {
+		t.Fatalf("TakeCurrent should materialize as full current picks: %+v", b.Picks)
+	}
+	b = twoSideBlock()
+	b.Mode = TakeIncoming
+	b.EnsurePicks()
+	if len(b.Picks) != 1 || !b.Picked(Incoming, 0) {
+		t.Fatalf("TakeIncoming should materialize as full incoming picks: %+v", b.Picks)
+	}
+	b = twoSideBlock() // Undecided
+	b.EnsurePicks()
+	if b.Mode != LineByLine || len(b.Picks) != 0 {
+		t.Fatalf("Undecided should become touched-empty: mode=%v picks=%v", b.Mode, b.Picks)
+	}
+}
+
+func TestToggleSideTriState(t *testing.T) {
+	b := twoSideBlock()
+	b.ToggleSide(Current) // complete
+	if all, _ := b.SideState(Current); !all {
+		t.Fatal("first toggle should pick all current lines")
+	}
+	b.ToggleSide(Incoming) // both on; incoming appended after current
+	out, _ := b.ResolvedLines()
+	if strings.Join(out, ",") != "c1,c2,i1" {
+		t.Fatalf("both-on order = %v, want current then incoming", out)
+	}
+	b.ToggleSide(Current) // clear current, incoming order kept
+	out, _ = b.ResolvedLines()
+	if strings.Join(out, ",") != "i1" {
+		t.Fatalf("after clearing current = %v, want just incoming", out)
+	}
+	// partial → toggle completes (does not clear)
+	b = twoSideBlock()
+	b.EnsurePicks()
+	b.ToggleLine(Current, 1)
+	b.ToggleSide(Current)
+	out, _ = b.ResolvedLines()
+	if strings.Join(out, ",") != "c2,c1" {
+		t.Fatalf("completing a partial side = %v, want c2 first (pick order)", out)
+	}
+}
+
+func TestToggleSideOrderReversed(t *testing.T) {
+	b := twoSideBlock()
+	b.ToggleSide(Incoming)
+	b.ToggleSide(Current)
+	out, _ := b.ResolvedLines()
+	if strings.Join(out, ",") != "i1,c1,c2" {
+		t.Fatalf("i-then-c order = %v, want incoming first", out)
+	}
+}
+
+func TestToggleSideEmptySideNoOp(t *testing.T) {
+	b := &Block{Current: nil, Incoming: []string{"i1"}}
+	b.ToggleSide(Current)
+	if b.Mode != Undecided {
+		t.Fatal("toggling a zero-line side must not touch the block")
+	}
+	if all, any := b.SideState(Current); all || any {
+		t.Fatal("a zero-line side never reads as picked")
+	}
+}
+
+func TestSideStateLegacyAndLineByLine(t *testing.T) {
+	b := twoSideBlock()
+	b.Mode = TakeCurrent
+	if all, any := b.SideState(Current); !all || !any {
+		t.Fatal("TakeCurrent reads as all-current")
+	}
+	if all, any := b.SideState(Incoming); all || any {
+		t.Fatal("TakeCurrent reads as no-incoming")
+	}
+	if !b.LinePicked(Current, 1) || b.LinePicked(Incoming, 0) {
+		t.Fatal("LinePicked must read legacy modes")
+	}
+	b = twoSideBlock()
+	b.EnsurePicks()
+	b.ToggleLine(Current, 0)
+	if all, any := b.SideState(Current); all || !any {
+		t.Fatal("one of two picked = some")
+	}
+}
+
+func TestToggleSideAllAndSideStateAll(t *testing.T) {
+	d := &Doc{Items: []Item{
+		{Block: &Block{Current: []string{"a"}, Incoming: []string{"x"}}},
+		{Literal: []string{"mid"}},
+		{Block: &Block{Current: []string{"b"}, Incoming: []string{"y"}}},
+	}}
+	d.ToggleSideAll(Current)
+	if all, any := d.SideStateAll(Current); !all || !any {
+		t.Fatal("master toggle should complete current everywhere")
+	}
+	if d.Pending() != 0 {
+		t.Fatal("master toggle touches every block with that side")
+	}
+	// partial: clear one block, master completes instead of clearing
+	d.Blocks()[0].ToggleSide(Current)
+	if all, any := d.SideStateAll(Current); all || !any {
+		t.Fatal("mixed state = some")
+	}
+	d.ToggleSideAll(Current)
+	if all, _ := d.SideStateAll(Current); !all {
+		t.Fatal("master on a partial state completes")
+	}
+	d.ToggleSideAll(Current) // now everything full → clears
+	if _, any := d.SideStateAll(Current); any {
+		t.Fatal("master on a full state clears")
+	}
+	// cleared blocks stay touched: decided-empty, Resolved drops them
+	// (no FinalNewline on this hand-built doc, so no trailing \n)
+	out, ok := d.Resolved()
+	if !ok || string(out) != "mid" {
+		t.Fatalf("decided-empty resolve = %q ok=%v, want just the literal", out, ok)
+	}
+}
+
+func TestResolvedLinesUndecided(t *testing.T) {
+	b := twoSideBlock()
+	if _, ok := b.ResolvedLines(); ok {
+		t.Fatal("undecided block must report ok=false")
 	}
 }
