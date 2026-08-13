@@ -108,11 +108,11 @@ func TestConflictPickerActiveSideMarked(t *testing.T) {
 	e := newConflictPicker("f.txt", pickerDoc())
 	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
 	// Current side is active by default → its label carries the focus marker.
-	if !strings.Contains(e.render(m, ""), "▶ current") {
+	if !strings.Contains(e.render(m, ""), "▶ [ ] current") {
 		t.Fatalf("current side not marked active:\n%s", e.render(m, ""))
 	}
 	m, _ = e.update(m, keyMsg("right")) // → incoming
-	if !strings.Contains(e.render(m, ""), "▶ incoming") {
+	if !strings.Contains(e.render(m, ""), "▶ [ ] incoming") {
 		t.Fatalf("incoming side not marked active after →:\n%s", e.render(m, ""))
 	}
 }
@@ -383,5 +383,54 @@ func TestStagePickerSpaceMaterializesDefault(t *testing.T) {
 	out, ok := d.Resolved()
 	if !ok || string(out) != "a\nb\nB\n" {
 		t.Fatalf("space on the default must keep the index side and add the line: %q ok=%v", out, ok)
+	}
+}
+
+func TestConflictPickerCheckboxHierarchy(t *testing.T) {
+	e := newConflictPicker("f.txt", pickerDoc())
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 30}
+	out := e.render(m, "")
+	// master checkboxes in the column-label row, empty at start
+	if !strings.Contains(out, "[ ] current") || !strings.Contains(out, "[ ] incoming") {
+		t.Fatalf("column labels must carry master checkboxes:\n%s", out)
+	}
+	// paired group header: region counter on the left cell, undecided suffix right
+	if !strings.Contains(out, "region 1/2") {
+		t.Fatalf("group header must show the region counter:\n%s", out)
+	}
+	if !strings.Contains(out, "undecided") {
+		t.Fatalf("untouched region must show the undecided suffix:\n%s", out)
+	}
+	// every selectable line carries a tick even while undecided
+	if !strings.Contains(out, "[ ] foo") {
+		t.Fatalf("line rows must always show ticks:\n%s", out)
+	}
+	m, _ = e.update(m, key("c"))
+	m, _ = e.update(m, key("i"))
+	out = e.render(m, "")
+	if !strings.Contains(out, "[x] foo") {
+		t.Fatalf("picked line must tick:\n%s", out)
+	}
+	if !strings.Contains(out, "current first") {
+		t.Fatalf("both-on region must show the order suffix:\n%s", out)
+	}
+	m, _ = e.update(m, key("c"))
+	m, _ = e.update(m, key("i"))
+	out = e.render(m, "")
+	if !strings.Contains(out, "none") {
+		t.Fatalf("touched-empty region must show the none suffix:\n%s", out)
+	}
+}
+
+func TestConflictPickerMasterCheckboxStates(t *testing.T) {
+	e := newConflictPicker("f.txt", pickerDoc())
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 30}
+	m, _ = e.update(m, key("C"))
+	if out := e.render(m, ""); !strings.Contains(out, "[x] current") {
+		t.Fatalf("full master state must show [x]:\n%s", out)
+	}
+	m, _ = e.update(m, key("c")) // clear region 0's current → partial
+	if out := e.render(m, ""); !strings.Contains(out, "[~] current") {
+		t.Fatalf("partial master state must show [~]:\n%s", out)
 	}
 }

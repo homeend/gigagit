@@ -126,6 +126,39 @@ func (e *hunkPicker) clampLine() {
 	}
 }
 
+// tickFor renders the three-state checkbox for an (all, any) side state.
+func tickFor(all, any bool) string {
+	switch {
+	case all:
+		return "[x]"
+	case any:
+		return "[~]"
+	default:
+		return "[ ]"
+	}
+}
+
+// stateSuffix names what the checkboxes cannot show: an untouched region, a
+// touched-empty one, or — with both sides on — which side's lines come first.
+func (e *hunkPicker) stateSuffix(b *hunkpick.Block) string {
+	if b.Mode == hunkpick.Undecided {
+		return " — " + i18n.T("undecided")
+	}
+	if b.Mode == hunkpick.LineByLine && len(b.Picks) == 0 {
+		return " — " + i18n.T("none")
+	}
+	ca, _ := b.SideState(hunkpick.Current)
+	ia, _ := b.SideState(hunkpick.Incoming)
+	if ca && ia && len(b.Picks) > 0 {
+		lbl := e.leftLabel
+		if b.Picks[0].Side == hunkpick.Incoming {
+			lbl = e.rightLabel
+		}
+		return " — " + i18n.T("%s first", lbl)
+	}
+	return ""
+}
+
 func (e *hunkPicker) focusFirstUndecided() {
 	for i, b := range e.blocks {
 		if b.Mode == hunkpick.Undecided {
@@ -241,20 +274,6 @@ func (e *hunkPicker) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	return m, nil
 }
 
-// badge labels a block's current decision using the picker's side labels.
-func (e *hunkPicker) badge(b *hunkpick.Block) string {
-	switch b.Mode {
-	case hunkpick.TakeCurrent:
-		return "✓ " + e.leftLabel
-	case hunkpick.TakeIncoming:
-		return "✓ " + e.rightLabel
-	case hunkpick.LineByLine:
-		return i18n.T("line-by-line")
-	default:
-		return i18n.T("· undecided")
-	}
-}
-
 // pickerCell builds the winCell for one candidate line; r past the side's line
 // count yields a blank cell (the gap when sides differ in length). cursor adds
 // the "> " marker so the gutter width is constant (focused or not).
@@ -272,13 +291,9 @@ func pickerCell(blk *hunkpick.Block, side hunkpick.Side, r int, cursor bool) *wi
 	if cursor {
 		cur = "> "
 	}
-	tick := ""
-	if blk.Mode == hunkpick.LineByLine {
-		if blk.Picked(side, r) {
-			tick = "[x] "
-		} else {
-			tick = "[ ] "
-		}
+	tick := "[ ] "
+	if blk.LinePicked(side, r) {
+		tick = "[x] "
 	}
 	c := &winCell{gutter: cur + tick, body: lines[r]}
 	if cursor {
@@ -328,10 +343,14 @@ func (e *hunkPicker) render(m Model, _ string) string {
 		if focused {
 			marker, hstyle = "▶ ", pickerFocus
 		}
-		rows = append(rows, colRow{full: &winCell{
-			body:  marker + i18n.T("hunk %d/%d — %s", blockNo+1, len(e.blocks), e.badge(blk)),
-			style: hstyle,
-		}})
+		lAll, lAny := blk.SideState(hunkpick.Current)
+		rAll, rAny := blk.SideState(hunkpick.Incoming)
+		rows = append(rows, colRow{
+			left: &winCell{gutter: marker, style: hstyle,
+				body: tickFor(lAll, lAny) + " " + e.leftLabel + " · " + i18n.T("region %d/%d", blockNo+1, len(e.blocks))},
+			right: &winCell{style: hstyle,
+				body: tickFor(rAll, rAny) + " " + e.rightLabel + e.stateSuffix(blk)},
+		})
 		n := len(blk.Current)
 		if len(blk.Incoming) > n {
 			n = len(blk.Incoming)
@@ -379,13 +398,13 @@ func (e *hunkPicker) columnLabels(w int) string {
 	if colW < 1 {
 		colW = 1
 	}
-	cell := func(label string, active bool) string {
+	cell := func(label string, s hunkpick.Side) string {
 		marker, style := "  ", pickerLabel
-		if active {
+		if e.side == s {
 			marker, style = "▶ ", selectedRow
 		}
-		return styleCell(style, marker+label, colW)
+		return styleCell(style, marker+tickFor(e.doc.SideStateAll(s))+" "+label, colW)
 	}
-	return cell(e.leftLabel, e.side == hunkpick.Current) +
-		pickerColSep + cell(e.rightLabel, e.side == hunkpick.Incoming)
+	return cell(e.leftLabel, hunkpick.Current) +
+		pickerColSep + cell(e.rightLabel, hunkpick.Incoming)
 }
