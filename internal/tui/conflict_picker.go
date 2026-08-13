@@ -103,6 +103,23 @@ func newStagePicker(path string, doc *hunkpick.Doc) *hunkPicker {
 	}
 }
 
+// newUnstagePicker wires the hunk-unstaging params: the grid runs index ↔
+// HEAD and the assembled content goes back through StageHunks, so taking the
+// HEAD side of a region reverts that region of the index (git reset -p).
+func newUnstagePicker(path string, doc *hunkpick.Doc) *hunkPicker {
+	return &hunkPicker{
+		title:      i18n.T("Unstage hunks: %s", path),
+		leftLabel:  i18n.T("staged"),
+		rightLabel: i18n.T("HEAD"),
+		requireAll: false,
+		apply: func(m Model, content []byte) (Model, tea.Cmd) {
+			m = m.popLayer()
+			return m.startOp(engine.StageHunks{Path: path, Content: content})
+		},
+		doc: doc, blocks: doc.Blocks(), side: hunkpick.Current, mode: modeScroll,
+	}
+}
+
 func (e *hunkPicker) cur() *hunkpick.Block {
 	if e.bi < 0 || e.bi >= len(e.blocks) {
 		return nil

@@ -1380,6 +1380,16 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				bi, _ := m.backingIndex(panelFiles)
 				return m, m.loadStageHunksCmd(m.status.Files[bi].Path)
 			}
+			if m.canUnstageHunks() {
+				bi, _ := m.backingIndex(panelStaged)
+				return m, m.loadUnstageHunksCmd(m.status.Files[bi].Path)
+			}
+			if m.focus == panelStaged && m.opsIdle() {
+				if bi, ok := m.backingIndex(panelStaged); ok && m.status.Files[bi].Staged == 'A' {
+					m.statusMsg = i18n.T("new file — space unstages it whole")
+					return m, nil
+				}
+			}
 		case "s":
 			if m.focus == panelRemotes && m.canCheckoutRemote() {
 				rb, _ := m.selectedRemote()
@@ -2652,6 +2662,24 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m = m.pushLayer(newStagePicker(msg.path, doc))
+		return m, nil
+
+	case unstageHunksLoadedMsg:
+		if msg.err != nil {
+			m.statusMsg = i18n.T("unstage hunks: %s", msg.err.Error())
+			return m, nil
+		}
+		if textdiff.IsBinary(msg.index) || textdiff.IsBinary(msg.head) {
+			m.statusMsg = i18n.T("unstage hunks: binary file")
+			return m, nil
+		}
+		doc := hunkpick.FromDiff(msg.index, msg.head)
+		doc.SetAll(hunkpick.TakeCurrent) // default: everything stays staged
+		if len(doc.Blocks()) == 0 {
+			m.statusMsg = i18n.T("unstage hunks: nothing to unstage")
+			return m, nil
+		}
+		m = m.pushLayer(newUnstagePicker(msg.path, doc))
 		return m, nil
 
 	case clipboardCopiedMsg:
