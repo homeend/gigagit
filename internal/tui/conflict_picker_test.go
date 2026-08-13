@@ -244,6 +244,16 @@ func TestHunkPickerRenderFitsHeight(t *testing.T) {
 	if got := len(splitLinesTest(out)); got != 12 {
 		t.Fatalf("render produced %d lines, want 12 (the overlay height)", got)
 	}
+	// The zoomed paths must hold the same invariant: grid-zoom…
+	m, _ = e.update(m, keyMsg("ctrl+t"))
+	if got := len(splitLinesTest(e.render(m, ""))); got != 12 {
+		t.Fatalf("grid-zoom render produced %d lines, want 12", got)
+	}
+	// …and output-zoom (its early-return builds the frame separately).
+	m, _ = e.update(m, keyMsg("tab"))
+	if got := len(splitLinesTest(e.render(m, ""))); got != 12 {
+		t.Fatalf("output-zoom render produced %d lines, want 12", got)
+	}
 }
 
 func splitLinesTest(s string) []string {
