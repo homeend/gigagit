@@ -8,6 +8,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **TUI: the picker's output pane is now focusable and scrollable.** With
+  a long assembled result only the window around the focused region was
+  visible — nothing scrolled the output. `tab` now toggles focus between
+  the selection grid and the output pane (a collapsed pane expands and
+  takes focus in one press; the pane's rule shows `▶` while focused):
+  under output focus `↑`/`↓` scroll the result end to end, the selection
+  keys wait until `tab` returns to the grid, and `esc`/`enter`/`z`/
+  `shift+←/→`/`alt+↑/↓` keep their meanings. Leaving the pane discards
+  the manual scroll and resumes following the cursor. The hint row adapts
+  to the focus so only live keys are advertised.
 - **TUI: the repo switcher's slow-filesystem warning moved above the popup.**
   The tooltip strip used to be drawn one line beneath the selected row, where
   it covered the next entry in the list (user report: "having it under the

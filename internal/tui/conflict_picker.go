@@ -42,6 +42,8 @@ type hunkPicker struct {
 	vshift  int      // free view-scroll: display-line delta from the cursor-anchored window
 
 	outCollapsed bool // [o] hides the output pane; default shown
+	outFocused   bool // tab moves the arrows to the output pane
+	oshift       int  // output free-scroll: display-line delta from the follow-anchor window
 }
 
 const pickerHScrollStep = 8
@@ -174,6 +176,35 @@ func (e *hunkPicker) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
 	}
+	if msg.String() == "tab" {
+		switch {
+		case e.outCollapsed:
+			e.outCollapsed, e.outFocused = false, true
+		case e.outFocused:
+			e.outFocused, e.oshift = false, 0
+		default:
+			e.outFocused = true
+		}
+		return m, nil
+	}
+	if e.outFocused {
+		// The output owns the plain arrows; global keys fall through, every
+		// selection key waits until tab returns focus to the grid.
+		switch msg.String() {
+		case "up", "k":
+			e.oshift--
+			return m, nil
+		case "down", "j":
+			e.oshift++
+			return m, nil
+		case "o":
+			e.outCollapsed, e.outFocused, e.oshift = true, false, 0
+			return m, nil
+		case "esc", "enter", "z", "shift+left", "shift+right", "alt+up", "alt+down":
+		default:
+			return m, nil
+		}
+	}
 	switch msg.String() {
 	case "alt+up":
 		e.vshift--
@@ -265,6 +296,10 @@ func (e *hunkPicker) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			if n := e.doc.Pending(); n > 0 {
 				m.statusMsg = i18n.T("%d region(s) left to resolve", n)
 				e.focusFirstUndecided()
+				// The gate moved the grid cursor (and with it the pane's
+				// follow-anchor): hand the arrows back to the grid so the
+				// user lands on the region they must resolve.
+				e.outFocused, e.oshift = false, 0
 				return m, nil
 			}
 		}
@@ -318,12 +353,20 @@ func (e *hunkPicker) render(m Model, _ string) string {
 	// (the one the cursor edits) marked and highlighted.
 	colLabels := e.columnLabels(w)
 
-	// The hint wraps instead of truncating so no command is ever cut off.
-	hintLines := wrapParts([]string{
+	// The hint wraps instead of truncating so no command is ever cut off;
+	// the set follows the focus so only live keys are advertised.
+	hintParts := []string{
 		i18n.T("[←/→] side"), i18n.T("[shift+←/→] scroll"), i18n.T("[z] mode"), i18n.T("[↑/↓] line"), i18n.T("[alt+↑/↓] view"), i18n.T("[space] pick"),
-		"[c] " + e.leftLabel, "[i] " + e.rightLabel, i18n.T("[C/I] all"), i18n.T("[n/p] hunk"), i18n.T("[o] output"),
+		"[c] " + e.leftLabel, "[i] " + e.rightLabel, i18n.T("[C/I] all"), i18n.T("[n/p] hunk"), i18n.T("[o] output"), i18n.T("[tab] output"),
 		i18n.T("[enter] apply"), i18n.T("[esc] cancel"),
-	}, w, "  ")
+	}
+	if e.outFocused {
+		hintParts = []string{
+			i18n.T("[↑/↓] scroll"), i18n.T("[tab] grid"), i18n.T("[o] hide"), i18n.T("[z] mode"), i18n.T("[shift+←/→] scroll"), i18n.T("[alt+↑/↓] view"),
+			i18n.T("[enter] apply"), i18n.T("[esc] cancel"),
+		}
+	}
+	hintLines := wrapParts(hintParts, w, "  ")
 
 	// header, column labels, blank, hint(N).
 	bodyH := H - 3 - len(hintLines)
@@ -396,7 +439,7 @@ func (e *hunkPicker) render(m Model, _ string) string {
 	lines := []string{header, colLabels}
 	lines = append(lines, body...)
 	if outH > 0 {
-		lines = append(lines, outputRule(w))
+		lines = append(lines, e.outputRule(w))
 		lines = append(lines, e.renderOutput(w, outH)...)
 	}
 	lines = append(lines, "")
@@ -476,6 +519,21 @@ func (e *hunkPicker) renderOutput(w, h int) []string {
 		anchor = len(dl) // focused region is empty at EOF: pin the window to the end
 	}
 	start := windowStart(len(dl), h, anchor)
+	if e.oshift != 0 {
+		maxStart := len(dl) - h
+		if maxStart < 0 {
+			maxStart = 0
+		}
+		s := start + e.oshift
+		if s > maxStart {
+			s = maxStart
+		}
+		if s < 0 {
+			s = 0
+		}
+		e.oshift = s - start
+		start = s
+	}
 	out := make([]string, 0, h)
 	for i := 0; i < h; i++ {
 		if idx := start + i; idx < len(dl) {
@@ -487,12 +545,16 @@ func (e *hunkPicker) renderOutput(w, h int) []string {
 	return out
 }
 
-// outputRule is the pane's titled separator line.
-func outputRule(w int) string {
-	label := "── " + i18n.T("output") + " "
+// outputRule is the pane's titled separator line; the title carries the
+// focus marker while the pane owns the arrows.
+func (e *hunkPicker) outputRule(w int) string {
+	label, style := "── "+i18n.T("output")+" ", pickerDim
+	if e.outFocused {
+		label, style = "── ▶ "+i18n.T("output")+" ", pickerFocus
+	}
 	fill := w - lipgloss.Width(label)
 	if fill < 0 {
 		fill = 0
 	}
-	return pickerDim.Render(padRight(label+strings.Repeat("─", fill), w))
+	return style.Render(padRight(label+strings.Repeat("─", fill), w))
 }

@@ -571,3 +571,158 @@ func TestConflictPickerHeaderTicksAlign(t *testing.T) {
 		t.Fatal("no group header row rendered")
 	}
 }
+
+func TestPickerTabTogglesOutputFocus(t *testing.T) {
+	e := newConflictPicker("f.txt", pickerDoc())
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 30}
+	m, _ = e.update(m, keyMsg("tab"))
+	if !e.outFocused {
+		t.Fatal("tab must focus the output")
+	}
+	m, _ = e.update(m, keyMsg("down"))
+	m, _ = e.update(m, keyMsg("down"))
+	m, _ = e.update(m, keyMsg("up"))
+	if e.oshift != 1 || e.bi != 0 || e.line != 0 {
+		t.Fatalf("output arrows must scroll the pane only: oshift=%d bi=%d line=%d", e.oshift, e.bi, e.line)
+	}
+	m, _ = e.update(m, tea.KeyMsg{Type: tea.KeyDown, Alt: true})
+	if e.vshift != 1 {
+		t.Fatal("alt+↓ must keep free-scrolling the grid under output focus")
+	}
+	m, _ = e.update(m, keyMsg("tab"))
+	if e.outFocused || e.oshift != 0 {
+		t.Fatalf("tab back must return to the grid and resume follow: focused=%v oshift=%d", e.outFocused, e.oshift)
+	}
+}
+
+func TestPickerOutputFocusInertSelectionKeys(t *testing.T) {
+	e := newConflictPicker("f.txt", pickerDoc())
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 30}
+	m, _ = e.update(m, keyMsg("tab"))
+	m, _ = e.update(m, key("c"))
+	m, _ = e.update(m, keyMsg("space"))
+	m, _ = e.update(m, key("n"))
+	m, _ = e.update(m, keyMsg("right"))
+	b := e.doc.Blocks()[0]
+	if b.Mode != hunkpick.Undecided || e.bi != 0 || e.side != hunkpick.Current {
+		t.Fatalf("selection keys must be inert under output focus: mode=%v bi=%d side=%v", b.Mode, e.bi, e.side)
+	}
+	m, _ = e.update(m, keyMsg("esc"))
+	if m.topLayer() != nil {
+		t.Fatal("esc must still cancel from output focus")
+	}
+}
+
+func TestPickerTabExpandsCollapsedPane(t *testing.T) {
+	e := newConflictPicker("f.txt", pickerDoc())
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 30}
+	m, _ = e.update(m, key("o")) // collapse under grid focus, as today
+	if !e.outCollapsed {
+		t.Fatal("o must collapse")
+	}
+	m, _ = e.update(m, keyMsg("tab"))
+	if e.outCollapsed || !e.outFocused {
+		t.Fatal("tab on a collapsed pane must expand AND focus it")
+	}
+	m, _ = e.update(m, keyMsg("down"))
+	m, _ = e.update(m, key("o")) // collapse from output focus
+	if !e.outCollapsed || e.outFocused || e.oshift != 0 {
+		t.Fatalf("o under output focus must collapse, unfocus, and reset: collapsed=%v focused=%v oshift=%d",
+			e.outCollapsed, e.outFocused, e.oshift)
+	}
+}
+
+func TestPickerOutputScrollMovesPaneWindow(t *testing.T) {
+	var sb strings.Builder
+	for i := 0; i < 30; i++ {
+		fmt.Fprintf(&sb, "line%02d\n", i)
+	}
+	sb.WriteString("<<<<<<< HEAD\nfoo\n=======\nbar\n>>>>>>> x\n")
+	d, err := hunkpick.ParseConflict([]byte(sb.String()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := newConflictPicker("f.txt", d)
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 30}
+	// Follow mode pins the pane near the focused (EOF) region: top not visible.
+	if out := plain(e.render(m, "")); strings.Contains(out, "line00") {
+		t.Fatalf("follow mode should sit at the focused region, not the top:\n%s", out)
+	}
+	m, _ = e.update(m, keyMsg("tab"))
+	for i := 0; i < 50; i++ {
+		m, _ = e.update(m, keyMsg("down"))
+	}
+	_ = e.render(m, "")
+	if e.oshift < 0 || e.oshift > 10 {
+		t.Fatalf("downward scroll past the end must clamp near 0, got %d", e.oshift)
+	}
+	for i := 0; i < 100; i++ {
+		m, _ = e.update(m, keyMsg("up"))
+	}
+	out := plain(e.render(m, ""))
+	if !strings.Contains(out, "line00") {
+		t.Fatalf("scrolled-up pane must reach the top of the result:\n%s", out)
+	}
+	if e.oshift <= -100 || e.oshift >= 0 {
+		t.Fatalf("render must store the clamped effective shift back, got %d", e.oshift)
+	}
+	m, _ = e.update(m, keyMsg("tab")) // back to grid: follow resumes
+	if out := plain(e.render(m, "")); strings.Contains(out, "line00") {
+		t.Fatalf("tab back must resume following the cursor:\n%s", out)
+	}
+}
+
+func TestPickerOutputRuleShowsFocus(t *testing.T) {
+	e := newConflictPicker("f.txt", pickerDoc())
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 30}
+	if strings.Contains(plain(e.render(m, "")), "▶ output") {
+		t.Fatal("unfocused rule must not carry the focus marker")
+	}
+	m, _ = e.update(m, keyMsg("tab"))
+	if !strings.Contains(plain(e.render(m, "")), "▶ output") {
+		t.Fatal("focused rule must carry the focus marker")
+	}
+}
+
+func TestPickerHintsSwapWithFocus(t *testing.T) {
+	e := newConflictPicker("f.txt", pickerDoc())
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 30}
+	out := plain(e.render(m, ""))
+	if !strings.Contains(out, "[tab] output") || strings.Contains(out, "[tab] grid") {
+		t.Fatalf("grid-focus hints wrong:\n%s", out)
+	}
+	m, _ = e.update(m, keyMsg("tab"))
+	out = plain(e.render(m, ""))
+	if !strings.Contains(out, "[tab] grid") || !strings.Contains(out, "[↑/↓] scroll") || strings.Contains(out, "[space] pick") {
+		t.Fatalf("output-focus hints wrong:\n%s", out)
+	}
+}
+
+// Spec test #4's enter half: from output focus, the pending gate warns AND
+// hands the arrows back to the grid (the anchor moved with the revealed
+// region, so a retained manual scroll would land nowhere meaningful).
+func TestPickerEnterGateReturnsGridFocus(t *testing.T) {
+	e := newConflictPicker("f.txt", pickerDoc())
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 30}
+	m, _ = e.update(m, keyMsg("tab"))
+	m, _ = e.update(m, keyMsg("down"))
+	m, _ = e.update(m, keyMsg("enter"))
+	if m.statusMsg == "" || m.topLayer() == nil {
+		t.Fatal("enter with pending regions must warn and keep the surface")
+	}
+	if e.outFocused || e.oshift != 0 {
+		t.Fatalf("the gate must return focus to the grid: focused=%v oshift=%d", e.outFocused, e.oshift)
+	}
+	// z and shift+→ keep falling through under output focus
+	m, _ = e.update(m, keyMsg("tab"))
+	m, _ = e.update(m, key("z"))
+	if e.mode != modeWrap {
+		t.Fatalf("z must keep cycling the display mode under output focus, got %v", e.mode)
+	}
+	m, _ = e.update(m, key("z"))
+	m, _ = e.update(m, key("z")) // back to scroll so shift can pan
+	m, _ = e.update(m, keyMsg("shift+right"))
+	if e.hscroll == 0 {
+		t.Fatal("shift+→ must keep panning under output focus")
+	}
+}
