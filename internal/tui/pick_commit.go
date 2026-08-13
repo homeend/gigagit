@@ -77,7 +77,7 @@ func (m Model) handlePickProbe(msg pickProbeMsg) (Model, tea.Cmd) {
 				// Close the switcher: a conflicted pick must land in the main
 				// view, where the status refresh feeds the conflict process.
 				m = m.clearLayers()
-				return m.startOp(engine.CherryPick{Commit: sha})
+				return m.startOp(engine.CherryPick{Commits: []string{sha}})
 			},
 		}
 		return m, nil

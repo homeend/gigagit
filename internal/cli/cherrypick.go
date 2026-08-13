@@ -38,6 +38,6 @@ func cmdCherryPick(svc *domain.Service, args []string, stdin io.Reader, stdout, 
 	}
 	dec := cliDecider{policy: policy, in: stdin, out: stderr, interactive: stdinIsTerminal()}
 	res, err := runOperation(context.Background(), svc,
-		engine.CherryPick{Commit: fs.Arg(0)}, dec, stderr)
+		engine.CherryPick{Commits: []string{fs.Arg(0)}}, dec, stderr)
 	return finish(res, err, stdout, stderr)
 }

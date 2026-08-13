@@ -7,15 +7,31 @@ import (
 	"github.com/homeend/gigagit/internal/gitcmd"
 )
 
-// CherryPick applies commit onto the branch checked out at dir ("" = this
-// repo's own worktree) as a new commit. A conflict leaves CHERRY_PICK_HEAD set
-// and unmerged paths in the index (detected via CherryPickInProgress).
-func (r *Repo) CherryPick(ctx context.Context, dir, commit string) error {
-	b := gitcmd.New("cherry-pick").Arg(commit)
+// CherryPick applies the given commits onto the branch checked out at dir
+// ("" = this repo's own worktree), one new commit each, in the order given
+// (pass oldest first). Several commits run as ONE invocation through git's
+// sequencer, so a mid-sequence stop is resumed/skipped/aborted as a whole. A
+// conflict leaves CHERRY_PICK_HEAD set and unmerged paths in the index
+// (detected via CherryPickInProgress).
+func (r *Repo) CherryPick(ctx context.Context, dir string, commits ...string) error {
+	b := gitcmd.New("cherry-pick").Arg(commits...)
 	if dir != "" {
 		b = b.Dir(dir)
 	}
 	_, err := r.Runner.Run(ctx, "git cherry-pick", b.ToArgv())
+	return err
+}
+
+// CherryPickSkip skips the commit the sequencer is stopped on (an
+// empty/already-applied pick) and continues with the rest of the sequence.
+// Returns nil when the remainder completes cleanly; a further stop (another
+// empty commit or a conflict) surfaces as an error like CherryPick's.
+func (r *Repo) CherryPickSkip(ctx context.Context, dir string) error {
+	b := gitcmd.New("cherry-pick").Arg("--skip")
+	if dir != "" {
+		b = b.Dir(dir)
+	}
+	_, err := r.Runner.Run(ctx, "git cherry-pick --skip", b.ToArgv())
 	return err
 }
 

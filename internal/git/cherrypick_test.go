@@ -37,6 +37,32 @@ func TestCherryPickArgvWithDir(t *testing.T) {
 	}
 }
 
+func TestCherryPickArgvMultiple(t *testing.T) {
+	f := gitexec.NewFakeRunner()
+	f.SetResponse("git cherry-pick", gitexec.Result{})
+	r := &Repo{Runner: f}
+	if err := r.CherryPick(context.Background(), "", "aaa111", "bbb222", "ccc333"); err != nil {
+		t.Fatalf("cherry-pick: %v", err)
+	}
+	want := []string{"cherry-pick", "aaa111", "bbb222", "ccc333"}
+	if !reflect.DeepEqual(f.Calls[0].Argv, want) {
+		t.Fatalf("argv = %v, want %v", f.Calls[0].Argv, want)
+	}
+}
+
+func TestCherryPickSkipArgv(t *testing.T) {
+	f := gitexec.NewFakeRunner()
+	f.SetResponse("git cherry-pick --skip", gitexec.Result{})
+	r := &Repo{Runner: f}
+	if err := r.CherryPickSkip(context.Background(), "/wt/x"); err != nil {
+		t.Fatalf("skip: %v", err)
+	}
+	want := []string{"-C", "/wt/x", "cherry-pick", "--skip"}
+	if !reflect.DeepEqual(f.Calls[0].Argv, want) {
+		t.Fatalf("argv = %v, want %v", f.Calls[0].Argv, want)
+	}
+}
+
 func TestCherryPickAbortArgv(t *testing.T) {
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git cherry-pick --abort", gitexec.Result{})
@@ -104,6 +130,44 @@ func TestCherryPickCleanReal(t *testing.T) {
 	}
 	if in, _ := repo.CherryPickInProgress(context.Background(), ""); in {
 		t.Fatal("a clean cherry-pick must not leave CHERRY_PICK_HEAD set")
+	}
+}
+
+// Real-git: one invocation with several commits applies them all, in the
+// given order (git's sequencer).
+func TestCherryPickMultipleCleanReal(t *testing.T) {
+	dir, runner := newTestRepo(t)
+	repo := &Repo{Runner: runner}
+
+	os.WriteFile(filepath.Join(dir, "base.txt"), []byte("base\n"), 0o644)
+	gitIn(t, dir, "add", ".")
+	gitIn(t, dir, "commit", "-m", "base")
+	gitIn(t, dir, "checkout", "-b", "feat")
+	os.WriteFile(filepath.Join(dir, "one.txt"), []byte("one\n"), 0o644)
+	gitIn(t, dir, "add", ".")
+	gitIn(t, dir, "commit", "-m", "add one")
+	first := gitOutIn(t, dir, "rev-parse", "HEAD")
+	os.WriteFile(filepath.Join(dir, "two.txt"), []byte("two\n"), 0o644)
+	gitIn(t, dir, "add", ".")
+	gitIn(t, dir, "commit", "-m", "add two")
+	second := gitOutIn(t, dir, "rev-parse", "HEAD")
+	gitIn(t, dir, "checkout", "main")
+
+	if err := repo.CherryPick(context.Background(), "", first, second); err != nil {
+		t.Fatalf("cherry-pick: %v", err)
+	}
+	// Both changes landed, newest-first log order matches the pick order.
+	if _, err := os.ReadFile(filepath.Join(dir, "one.txt")); err != nil {
+		t.Fatalf("one.txt missing: %v", err)
+	}
+	if _, err := os.ReadFile(filepath.Join(dir, "two.txt")); err != nil {
+		t.Fatalf("two.txt missing: %v", err)
+	}
+	if got := gitOutIn(t, dir, "log", "--format=%s", "-2"); got != "add two\nadd one" {
+		t.Fatalf("log order = %q, want %q", got, "add two\nadd one")
+	}
+	if in, _ := repo.CherryPickInProgress(context.Background(), ""); in {
+		t.Fatal("a clean multi cherry-pick must not leave CHERRY_PICK_HEAD set")
 	}
 }
 

@@ -773,23 +773,70 @@ func (m Model) commitCreateWorktreeRow() (actionRow, bool) {
 	}, true
 }
 
-// commitCherryPickRow offers "Cherry-pick here" on the Commits panel: apply the
-// selected commit onto the current branch as a new commit. A conflict drops into
-// the existing conflict resolver (continue/abort).
+// cherryPickTargets resolves what the cherry-pick row applies: the ◉ marked
+// rows when any valid mark exists (even one — a mark is an explicit choice),
+// else the selected commit. Marked targets come out oldest→newest by feed
+// rank so the sequencer replays them in history order. WIP sentinel keys pass
+// through unfiltered (the run refuses them with a message); stale marks are
+// dropped like everywhere else (validCompareKeys).
+func (m Model) cherryPickTargets() (targets []string, fromMarks bool) {
+	if keys := m.validCompareKeys(); len(keys) > 0 {
+		slices.SortFunc(keys, func(a, b string) int {
+			return m.compareKeyRank(b) - m.compareKeyRank(a) // larger rank = older first
+		})
+		return keys, true
+	}
+	bi, ok := m.backingIndex(panelCommits)
+	if !ok {
+		return nil, false
+	}
+	return []string{m.commits[bi].Hash}, false // full SHA → unambiguous
+}
+
+// commitCherryPickRow offers cherry-pick on the Commits panel: every ◉ marked
+// commit (oldest→newest, one sequencer run) when marks exist, else the
+// selected commit, applied onto the current branch as new commits. A conflict
+// drops into the existing conflict resolver (continue/abort).
 func (m Model) commitCherryPickRow() (actionRow, bool) {
 	if m.focus != panelCommits || !m.opsIdle() {
 		return actionRow{}, false
 	}
-	bi, ok := m.backingIndex(panelCommits)
-	if !ok {
+	targets, fromMarks := m.cherryPickTargets()
+	if len(targets) == 0 {
 		return actionRow{}, false
 	}
-	hash := m.commits[bi].Hash // full SHA → unambiguous
+	label := i18n.T("Cherry-pick here")
+	if fromMarks {
+		if len(targets) == 1 {
+			label = i18n.T("Cherry-pick the marked commit here")
+		} else {
+			label = i18n.T("Cherry-pick %d marked commits here", len(targets))
+		}
+	}
 	return actionRow{
 		id:    "commit-cherry-pick",
-		label: i18n.T("Cherry-pick here"),
+		label: label,
 		run: func(m Model) (tea.Model, tea.Cmd) {
-			return m.startOp(engine.CherryPick{Commit: hash})
+			targets, _ := m.cherryPickTargets() // re-resolve against current state
+			if len(targets) == 0 {
+				return m, nil
+			}
+			byHash := make(map[string]int, len(m.commits))
+			for i := range m.commits {
+				byHash[m.commits[i].Hash] = i
+			}
+			for _, t := range targets {
+				switch t {
+				case wipKey(wipRow{kind: wipWorktree}), wipKey(wipRow{kind: wipStaged}):
+					m.statusMsg = i18n.T("cherry-pick is commits-only; remove the working tree / staged row")
+					return m, nil
+				}
+				if i, ok := byHash[t]; ok && len(m.commits[i].Parents) > 1 {
+					m.statusMsg = i18n.T("cannot cherry-pick a merge commit")
+					return m, nil
+				}
+			}
+			return m.startOp(engine.CherryPick{Commits: targets})
 		},
 	}, true
 }
