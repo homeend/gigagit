@@ -295,8 +295,8 @@ func TestConflictPickerOtherKeysResetViewScroll(t *testing.T) {
 	if e.vshift != 0 {
 		t.Fatalf("c must reset vshift, got %d", e.vshift)
 	}
-	if e.doc.Blocks()[0].Mode != hunkpick.TakeCurrent {
-		t.Fatal("c must still take current")
+	if all, _ := e.doc.Blocks()[0].SideState(hunkpick.Current); !all {
+		t.Fatal("c must still pick the whole current side")
 	}
 	m, _ = e.update(m, tea.KeyMsg{Type: tea.KeyDown, Alt: true})
 	m, _ = e.update(m, key("n"))
@@ -313,5 +313,75 @@ func TestConflictPickerRenderStoresClampedShift(t *testing.T) {
 	_ = e.render(m, "")
 	if e.vshift != 0 {
 		t.Fatalf("render must store the clamped shift back, got %d", e.vshift)
+	}
+}
+
+func TestConflictPickerSideTogglesBoth(t *testing.T) {
+	e := newConflictPicker("f.txt", pickerDoc())
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
+	m, _ = e.update(m, key("c"))
+	m, _ = e.update(m, key("i")) // both on, current first
+	b := e.doc.Blocks()[0]
+	if ca, _ := b.SideState(hunkpick.Current); !ca {
+		t.Fatal("i must not clear current")
+	}
+	out, _ := b.ResolvedLines()
+	if strings.Join(out, ",") != "foo,bar" {
+		t.Fatalf("both = %v, want current then incoming", out)
+	}
+	m, _ = e.update(m, key("c")) // toggle current off
+	out, _ = b.ResolvedLines()
+	if strings.Join(out, ",") != "bar" {
+		t.Fatalf("after c off = %v, want just incoming", out)
+	}
+}
+
+func TestConflictPickerToggleOffIsDecidedEmpty(t *testing.T) {
+	e := newConflictPicker("f.txt", pickerDoc())
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
+	m, _ = e.update(m, key("c"))
+	m, _ = e.update(m, key("c")) // region 0 now touched-empty
+	if e.doc.Pending() != 1 {
+		t.Fatalf("Pending = %d, want 1 (only untouched region 1)", e.doc.Pending())
+	}
+	m, _ = e.update(m, key("n"))
+	m, _ = e.update(m, key("i")) // region 1 decided
+	// The gate is Pending==0; do NOT press enter here — the apply path calls
+	// startOp, which needs a real domain service this test doesn't have.
+	if e.doc.Pending() != 0 {
+		t.Fatal("touched-empty region must count as decided")
+	}
+	out, ok := e.doc.Resolved()
+	if !ok || string(out) != "top\nmid\nC\n" {
+		t.Fatalf("resolved = %q ok=%v, want region 0 dropped entirely", out, ok)
+	}
+}
+
+func TestConflictPickerMasterToggleTriState(t *testing.T) {
+	e := newConflictPicker("f.txt", pickerDoc())
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
+	m, _ = e.update(m, key("C"))
+	if all, _ := e.doc.SideStateAll(hunkpick.Current); !all {
+		t.Fatal("C should complete current everywhere")
+	}
+	m, _ = e.update(m, key("C"))
+	if _, any := e.doc.SideStateAll(hunkpick.Current); any {
+		t.Fatal("C on a full state should clear everywhere")
+	}
+	if e.doc.Pending() != 0 {
+		t.Fatal("cleared regions stay touched (decided empty)")
+	}
+}
+
+func TestStagePickerSpaceMaterializesDefault(t *testing.T) {
+	d := hunkpick.FromDiff([]byte("a\nb\n"), []byte("a\nB\n"))
+	d.SetAll(hunkpick.TakeCurrent) // the H picker's nothing-staged default
+	e := newStagePicker("f.txt", d)
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
+	m, _ = e.update(m, keyMsg("right")) // working side
+	m, _ = e.update(m, keyMsg("space"))
+	out, ok := d.Resolved()
+	if !ok || string(out) != "a\nb\nB\n" {
+		t.Fatalf("space on the default must keep the index side and add the line: %q ok=%v", out, ok)
 	}
 }

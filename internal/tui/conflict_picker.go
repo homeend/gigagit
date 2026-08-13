@@ -208,22 +208,19 @@ func (e *hunkPicker) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 	case "c":
 		if b != nil {
-			b.Mode = hunkpick.TakeCurrent
+			b.ToggleSide(hunkpick.Current)
 		}
 	case "i":
 		if b != nil {
-			b.Mode = hunkpick.TakeIncoming
+			b.ToggleSide(hunkpick.Incoming)
 		}
 	case "C":
-		e.doc.SetAll(hunkpick.TakeCurrent)
+		e.doc.ToggleSideAll(hunkpick.Current)
 	case "I":
-		e.doc.SetAll(hunkpick.TakeIncoming)
+		e.doc.ToggleSideAll(hunkpick.Incoming)
 	case " ":
 		if b != nil && e.sideLen() > 0 {
-			if b.Mode != hunkpick.LineByLine {
-				b.Mode = hunkpick.LineByLine
-				b.Picks = nil
-			}
+			b.EnsurePicks()
 			b.ToggleLine(e.side, e.line)
 		}
 	case "enter":
