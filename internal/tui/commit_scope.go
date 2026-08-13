@@ -832,7 +832,9 @@ func (m Model) commitCherryPickRow() (actionRow, bool) {
 					return m, nil
 				}
 				if i, ok := byHash[t]; ok && len(m.commits[i].Parents) > 1 {
-					m.statusMsg = i18n.T("cannot cherry-pick a merge commit")
+					// Name the offender: with marks in play it may not be the
+					// commit under the cursor (a forgotten ◉ elsewhere).
+					m.statusMsg = i18n.T("cannot cherry-pick a merge commit (%s)", shortHash(t))
 					return m, nil
 				}
 			}

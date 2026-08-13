@@ -683,7 +683,7 @@ func TestCommitCherryPickRowMarkedLabelsAndGuards(t *testing.T) {
 	if cmd != nil {
 		t.Fatal("a merge commit in the targets must not start an op")
 	}
-	if got := mm.(Model).statusMsg; got != "cannot cherry-pick a merge commit" {
+	if got := mm.(Model).statusMsg; got != "cannot cherry-pick a merge commit (eeeeeee)" {
 		t.Fatalf("statusMsg = %q", got)
 	}
 
@@ -695,7 +695,7 @@ func TestCommitCherryPickRowMarkedLabelsAndGuards(t *testing.T) {
 	if cmd != nil {
 		t.Fatal("cursor on a merge commit must not start an op")
 	}
-	if got := mm.(Model).statusMsg; got != "cannot cherry-pick a merge commit" {
+	if got := mm.(Model).statusMsg; got != "cannot cherry-pick a merge commit (eeeeeee)" {
 		t.Fatalf("statusMsg = %q", got)
 	}
 }
