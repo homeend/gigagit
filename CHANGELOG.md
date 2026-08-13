@@ -8,6 +8,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **TUI: the repo switcher's slow-filesystem warning moved above the popup.**
+  The tooltip strip used to be drawn one line beneath the selected row, where
+  it covered the next entry in the list (user report: "having it under the
+  line is very annoying"). It now sits one line above the popup box, over the
+  backdrop, so no picker row is ever obscured — and it shows in wrap display
+  mode too, which the under-row anchoring couldn't support.
+
 - **TUI: switching worktree/repo now clears the commit-view solo/scope.**
   A repo re-root builds a fresh, unscoped commit feed, but the old solo/multi
   branch scope (and any commit filter) stayed in the model — so the Branches

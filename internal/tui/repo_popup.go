@@ -252,14 +252,11 @@ func (p *repoPopup) render(m Model, below string) string {
 }
 
 // slowTooltip returns the slow-filesystem warning as an overlay strip drawn
-// one line beneath the selected row — tooltip-style, NEVER a body line: an
-// in-body warning made the popup height flip with every local↔slow cursor
-// move (user report). Cutoff/scroll modes only; in wrap mode a row's display
-// height varies and the line math below would mis-anchor.
+// one line above the popup box — tooltip-style, NEVER a body line: an in-body
+// warning made the popup height flip with every local↔slow cursor move, and
+// anchoring it under the selected row covered the row beneath (user reports).
+// Above the box it covers nothing the picker draws.
 func (p *repoPopup) slowTooltip(m Model, box string, termW, termH int) (line string, x, y int, ok bool) {
-	if p.mode == modeWrap {
-		return "", 0, 0, false
-	}
 	vis := p.visible()
 	if len(vis) == 0 || p.sel < 0 || p.sel >= len(vis) || !p.foreign[vis[p.sel].Path] {
 		return "", 0, 0, false
@@ -273,19 +270,6 @@ func (p *repoPopup) slowTooltip(m Model, box string, termW, termH int) (line str
 	}
 	left := (termW - boxW) / 2 // mirrors overlayCenter's placement of the box
 	top := (termH - len(boxLines)) / 2
-	// Rows start after border + pad + header + blank (popupBox layout; the
-	// overlay test pins the tooltip one line under the selected row, so a
-	// layout change here fails loudly rather than drifting).
-	capRows := popupResolveRowCap(p.maximized, termH, 12)
-	h := len(vis)
-	if h > capRows {
-		h = capRows
-	}
-	start := 0
-	if len(vis) > h {
-		start = windowStart(len(vis), h, p.sel)
-	}
-	rowY := top + 4 + (p.sel - start)
 	text := " " + i18n.T("⚠ this repository is mounted on a foreign filesystem — switching may be very slow") + " "
 	// Anchor at the box's content edge; when the sentence would run past the
 	// screen, shift the strip left to fit (truncation would eat exactly the
@@ -300,7 +284,10 @@ func (p *repoPopup) slowTooltip(m Model, box string, termW, termH int) (line str
 	if lines := wrapWidth(text, termW-x, 1); len(lines) > 0 {
 		text = lines[0]
 	}
-	return tooltipStyle.Render(text), x, rowY + 1, true
+	// top-1 goes negative when the box touches the screen top; overlayAt clamps
+	// to row 0, so the strip then overwrites the top border — deliberate: in a
+	// cramped terminal the warning beats one border line.
+	return tooltipStyle.Render(text), x, top - 1, true
 }
 
 // box draws the picker box (modal box only).

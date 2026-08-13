@@ -42,8 +42,9 @@ func TestRepoPopupHeightStableAcrossSelection(t *testing.T) {
 }
 
 // TestRepoPopupSlowFSTooltipOverlay pins the tooltip: rendered output carries
-// the warning as an overlay one line beneath the selected slow row, and not at
-// all while a local row is selected.
+// the warning as an overlay one line above the popup box (under-row placement
+// covered the neighbouring row — user report), and not at all while a local
+// row is selected.
 func TestRepoPopupSlowFSTooltipOverlay(t *testing.T) {
 	m, _, _ := slowFSPopupModel()
 	p := layerOf[*repoPopup](m)
@@ -57,10 +58,10 @@ func TestRepoPopupSlowFSTooltipOverlay(t *testing.T) {
 	p.moveSel(1)
 	out = p.render(m, below)
 	lines := strings.Split(out, "\n")
-	rowLine, tipLine := -1, -1
+	boxTop, tipLine := -1, -1
 	for i, l := range lines {
-		if strings.Contains(l, "slowrepo") && strings.Contains(l, ">") {
-			rowLine = i
+		if boxTop == -1 && strings.Contains(l, "╔") {
+			boxTop = i // modalStyle's DoubleBorder top edge
 		}
 		if strings.Contains(l, "switching may be very slow") {
 			tipLine = i
@@ -69,8 +70,8 @@ func TestRepoPopupSlowFSTooltipOverlay(t *testing.T) {
 	if tipLine == -1 {
 		t.Fatalf("tooltip missing for selected slow row:\n%s", out)
 	}
-	if rowLine == -1 || tipLine != rowLine+1 {
-		t.Fatalf("tooltip at line %d, selected row at %d — want directly beneath", tipLine, rowLine)
+	if boxTop == -1 || tipLine != boxTop-1 {
+		t.Fatalf("tooltip at line %d, box top border at %d — want directly above the box", tipLine, boxTop)
 	}
 }
 
