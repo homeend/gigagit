@@ -18,6 +18,36 @@ func runGit(t *testing.T, dir string, args ...string) {
 	}
 }
 
+// TestReRootClearsCommitScope: reRoot replaces the feed with a fresh unscoped
+// one, so the solo/multi commit scope (the ◉ branch marker + "solo:" title) and
+// the commit filter must be dropped with it — otherwise the Branches panel keeps
+// marking the old solo branch while the Commits panel shows all branches.
+func TestReRootClearsCommitScope(t *testing.T) {
+	dir, repo := newRepoDir(t)
+	m := New(domain.New(repo))
+	updated, _ := m.Update(m.loadCmd()())
+	m = updated.(Model)
+
+	m.commitScopeBranches = []string{"main"}
+	m.commitFilter = commitFilterFields{Author: "someone"}
+	m.feedScopeApplied = m.feedScopeSig()
+
+	wt := filepath.Join(filepath.Dir(dir), "wt-scope")
+	runGit(t, dir, "worktree", "add", "-b", "feature/s", wt, "main")
+
+	updated, _ = m.reRoot(wt)
+	m = updated.(Model)
+	if len(m.commitScopeBranches) != 0 {
+		t.Errorf("reRoot kept commitScopeBranches = %v, want empty", m.commitScopeBranches)
+	}
+	if m.commitFilter.filtered() {
+		t.Errorf("reRoot kept commitFilter = %+v, want zero", m.commitFilter)
+	}
+	if m.feedScopeApplied != "" {
+		t.Errorf("reRoot kept feedScopeApplied = %q, want \"\" (startup state)", m.feedScopeApplied)
+	}
+}
+
 func TestReRootPointsAtNewWorktreeAndReloads(t *testing.T) {
 	dir, repo := newRepoDir(t)
 	m := New(domain.New(repo))

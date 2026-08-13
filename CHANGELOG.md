@@ -8,6 +8,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **TUI: switching worktree/repo now clears the commit-view solo/scope.**
+  A repo re-root builds a fresh, unscoped commit feed, but the old solo/multi
+  branch scope (and any commit filter) stayed in the model — so the Branches
+  panel kept the ◉ solo marker (and the Commits title its "solo:" label) on the
+  previously soloed branch while the Commits panel actually showed all
+  branches. `reRoot` now drops the scope, the filter, and the applied-scope
+  signature alongside the other repo-scoped view state.
+
 - **TUI: the hunk picker no longer corrupts the screen on CRLF files.**
   `ParseConflict` keeps each line's `\r` so the resolution round-trips the
   file's line endings — but the picker printed those lines raw, and a
