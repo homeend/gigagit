@@ -22,8 +22,9 @@ GitKraken-inspired picker plan: a `git reset -p` analog on the same surface.
   message: `new file — space unstages it whole` (user decision). Rationale:
   `StageHunks` sets index *content* and cannot remove an entry, so "take all
   HEAD" would leave an empty file staged — dishonest semantics. Detection is
-  by the row's kind before loading, with a load-time fallback (HEAD read
-  fails → same message) in case kind classification misses.
+  by the row's porcelain staged byte (`'A'`) before loading; if a HEAD read
+  still fails at load time it surfaces the generic `unstage hunks: <error>`
+  message (the picker never opens on a missing side).
 - Binary content (either side) refuses like the stage picker:
   `unstage hunks: binary file`.
 - No differing regions → `unstage hunks: nothing to unstage`.
