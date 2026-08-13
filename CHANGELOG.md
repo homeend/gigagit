@@ -8,6 +8,8 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- Hunk picker: `ctrl+t` zooms the tab-focused half (selection grid or output pane) to the whole body; Tab swaps which half is zoomed, `ctrl+t`/`esc` restores the split (esc restores before it cancels — including in the conflict process's picker).
+
 - **TUI: the repo switcher's slow-filesystem warning is centered on the popup.**
   The strip above the box was left-anchored at the box's content edge, which
   read as lopsided (user report). It is now horizontally centered on the box,

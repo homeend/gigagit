@@ -136,6 +136,7 @@ func helpContent() []contentLine {
 		r("o", i18n.T("collapse / expand the output pane (the live assembled result)")),
 		r("tab", i18n.T("switch focus between the selection grid and the output pane — Tab on a collapsed pane expands and focuses it")),
 		r("", i18n.T("while the output pane is focused: ↑/↓ scroll the result end to end; selection keys wait until Tab returns focus to the grid; esc/enter keep cancel/apply")),
+		r("ctrl+t", i18n.T("zoom the focused half (grid or output) to the whole body — Tab swaps which half is zoomed, ctrl+t or esc restores the split")),
 		r("n / p", i18n.T("jump to the next / previous region")),
 		r("enter", i18n.T("apply when every region is resolved")),
 		r("esc", i18n.T("cancel (close without resolving)")),

@@ -372,12 +372,12 @@ func (e *hunkPicker) render(m Model, _ string) string {
 	hintParts := []string{
 		i18n.T("[←/→] side"), i18n.T("[shift+←/→] scroll"), i18n.T("[z] mode"), i18n.T("[↑/↓] line"), i18n.T("[alt+↑/↓] view"), i18n.T("[space] pick"),
 		"[c] " + e.leftLabel, "[i] " + e.rightLabel, i18n.T("[C/I] all"), i18n.T("[n/p] hunk"), i18n.T("[o] output"), i18n.T("[tab] output"),
-		i18n.T("[enter] apply"), i18n.T("[esc] cancel"),
+		i18n.T("[ctrl+t] full"), i18n.T("[enter] apply"), i18n.T("[esc] cancel"),
 	}
 	if e.outFocused {
 		hintParts = []string{
 			i18n.T("[↑/↓] scroll"), i18n.T("[tab] grid"), i18n.T("[o] hide"), i18n.T("[z] mode"), i18n.T("[shift+←/→] scroll"), i18n.T("[alt+↑/↓] view"),
-			i18n.T("[enter] apply"), i18n.T("[esc] cancel"),
+			i18n.T("[ctrl+t] full"), i18n.T("[enter] apply"), i18n.T("[esc] cancel"),
 		}
 	}
 	hintLines := wrapParts(hintParts, w, "  ")
