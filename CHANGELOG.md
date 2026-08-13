@@ -8,6 +8,19 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **TUI: hunk-picker sides are now toggles — keep left, right, or BOTH.**
+  In the conflict resolver and the `H` staging picker, `c`/`i` no longer
+  exclusively take one side: they toggle that side's lines on/off per
+  region (tri-state — complete, else clear), `C`/`I` do the same across
+  all regions, and `space` still toggles single lines. Everything is one
+  ordered pick model, so toggle order = result order within a region, and
+  a GitKraken-style checkbox hierarchy (`[x]`/`[~]`/`[ ]` at the
+  side/region/line levels) shows the selection state at a glance. A region
+  deliberately emptied resolves to nothing (drop both sides); untouched
+  regions still gate enter. The inline `result:` preview is replaced by a
+  bottom **output** pane with the live assembled result following the
+  cursor (`o` collapses it).
+
 - **TUI: free view-scroll in the hunk picker.** In the conflict resolver
   (`x` → enter) and the hunk-staging picker (`H`), the viewport followed
   the line cursor and nothing else — with many differences on screen there
