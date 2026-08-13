@@ -134,6 +134,8 @@ func helpContent() []contentLine {
 		r("c / i", i18n.T("toggle this side of the region — all its lines; left, right, or both can be on, and toggle order = order in the result")),
 		r("C / I", i18n.T("toggle this side across ALL regions (tri-state: complete everywhere, else clear everywhere)")),
 		r("o", i18n.T("collapse / expand the output pane (the live assembled result)")),
+		r("tab", i18n.T("switch focus between the selection grid and the output pane — Tab on a collapsed pane expands and focuses it")),
+		r("", i18n.T("while the output pane is focused: ↑/↓ scroll the result end to end; selection keys wait until Tab returns focus to the grid; esc/enter keep cancel/apply")),
 		r("n / p", i18n.T("jump to the next / previous region")),
 		r("enter", i18n.T("apply when every region is resolved")),
 		r("esc", i18n.T("cancel (close without resolving)")),
