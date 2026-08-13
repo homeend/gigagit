@@ -367,7 +367,7 @@ func (e *hunkPicker) render(m Model, _ string) string {
 		rows = append(rows, colRow{
 			left: &winCell{gutter: marker, style: hstyle,
 				body: tickFor(lAll, lAny) + " " + e.leftLabel + " · " + i18n.T("region %d/%d", blockNo+1, len(e.blocks))},
-			right: &winCell{style: hstyle,
+			right: &winCell{gutter: "  ", style: hstyle,
 				body: tickFor(rAll, rAny) + " " + e.rightLabel + e.stateSuffix(blk)},
 		})
 		n := len(blk.Current)
