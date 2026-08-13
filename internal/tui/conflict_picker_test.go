@@ -726,3 +726,64 @@ func TestPickerEnterGateReturnsGridFocus(t *testing.T) {
 		t.Fatal("shift+→ must keep panning under output focus")
 	}
 }
+
+func TestPickerCtrlTTogglesZoom(t *testing.T) {
+	e := newConflictPicker("f.txt", pickerDoc())
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
+	m, _ = e.update(m, keyMsg("ctrl+t"))
+	if !e.zoomed {
+		t.Fatalf("ctrl+t did not zoom")
+	}
+	m, _ = e.update(m, keyMsg("ctrl+t"))
+	if e.zoomed {
+		t.Fatalf("second ctrl+t did not restore the split")
+	}
+}
+
+func TestPickerEscRestoresZoomFirst(t *testing.T) {
+	e := newConflictPicker("f.txt", pickerDoc())
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
+	m, _ = e.update(m, keyMsg("ctrl+t"))
+	m, _ = e.update(m, keyMsg("esc"))
+	if e.zoomed {
+		t.Fatalf("esc under zoom did not restore the split")
+	}
+	if len(m.layers.entries) != 1 {
+		t.Fatalf("esc under zoom closed the picker (layers = %d, want 1)", len(m.layers.entries))
+	}
+	m, _ = e.update(m, keyMsg("esc"))
+	if len(m.layers.entries) != 0 {
+		t.Fatalf("second esc did not close the picker")
+	}
+}
+
+func TestPickerEscRestoresZoomWhileOutputFocused(t *testing.T) {
+	e := newConflictPicker("f.txt", pickerDoc())
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
+	m, _ = e.update(m, keyMsg("tab")) // focus output
+	m, _ = e.update(m, keyMsg("ctrl+t"))
+	m, _ = e.update(m, keyMsg("esc"))
+	if e.zoomed || len(m.layers.entries) != 1 {
+		t.Fatalf("esc under output-zoom: zoomed=%v layers=%d, want false/1", e.zoomed, len(m.layers.entries))
+	}
+}
+
+func TestPickerODropsZoom(t *testing.T) {
+	// Grid-focused: o unzooms AND collapses the pane.
+	e := newConflictPicker("f.txt", pickerDoc())
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
+	m, _ = e.update(m, keyMsg("ctrl+t"))
+	m, _ = e.update(m, keyMsg("o"))
+	if e.zoomed || !e.outCollapsed {
+		t.Fatalf("grid o under zoom: zoomed=%v collapsed=%v, want false/true", e.zoomed, e.outCollapsed)
+	}
+	// Output-focused: o unzooms, collapses, and returns focus to the grid.
+	e2 := newConflictPicker("f.txt", pickerDoc())
+	m2 := Model{layers: &layerStack{entries: []layer{e2}}, width: 80, height: 24}
+	m2, _ = e2.update(m2, keyMsg("tab"))
+	m2, _ = e2.update(m2, keyMsg("ctrl+t"))
+	m2, _ = e2.update(m2, keyMsg("o"))
+	if e2.zoomed || !e2.outCollapsed || e2.outFocused {
+		t.Fatalf("output o under zoom: zoomed=%v collapsed=%v focused=%v", e2.zoomed, e2.outCollapsed, e2.outFocused)
+	}
+}

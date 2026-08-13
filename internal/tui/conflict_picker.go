@@ -44,6 +44,7 @@ type hunkPicker struct {
 	outCollapsed bool // [o] hides the output pane; default shown
 	outFocused   bool // tab moves the arrows to the output pane
 	oshift       int  // output free-scroll: display-line delta from the follow-anchor window
+	zoomed       bool // ctrl+t: the tab-focused half owns the whole body; zoom follows focus
 }
 
 const pickerHScrollStep = 8
@@ -187,6 +188,17 @@ func (e *hunkPicker) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		return m, nil
 	}
+	// ctrl+t zooms the tab-focused half (grid or output) to the whole body;
+	// the zoomed half is not stored — render shows the focused one, so tab
+	// swaps the zoom for free. esc restores the split before it can cancel.
+	if msg.String() == "ctrl+t" {
+		e.zoomed = !e.zoomed
+		return m, nil
+	}
+	if e.zoomed && msg.String() == "esc" {
+		e.zoomed = false
+		return m, nil
+	}
 	if e.outFocused {
 		// The output owns the plain arrows; global keys fall through, every
 		// selection key waits until tab returns focus to the grid.
@@ -199,6 +211,7 @@ func (e *hunkPicker) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			return m, nil
 		case "o":
 			e.outCollapsed, e.outFocused, e.oshift = true, false, 0
+			e.zoomed = false
 			return m, nil
 		case "esc", "enter", "z", "shift+left", "shift+right", "alt+up", "alt+down":
 		default:
@@ -237,6 +250,7 @@ func (e *hunkPicker) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		e.hscroll = 0
 	case "o":
 		e.outCollapsed = !e.outCollapsed
+		e.zoomed = false
 	case "shift+left":
 		if e.mode == modeScroll {
 			if e.hscroll -= pickerHScrollStep; e.hscroll < 0 {
