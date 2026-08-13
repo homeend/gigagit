@@ -265,6 +265,41 @@ func splitLinesTest(s string) []string {
 	return strings.Split(s, "\n")
 }
 
+func TestPickerSuffixEmptyAndFirst(t *testing.T) {
+	e := newConflictPicker("f.txt", pickerDoc())
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 100, height: 30}
+	// Region 0: both sides on, current toggled first → " — current first".
+	m, _ = e.update(m, keyMsg("c"))
+	m, _ = e.update(m, keyMsg("i"))
+	out := e.render(m, "")
+	if !strings.Contains(out, i18n.T("%s first", i18n.T("current"))) {
+		t.Fatalf("'current first' suffix missing:\n%s", out)
+	}
+	// Region 0: clear both → touched-empty → " — empty" (not "none").
+	m, _ = e.update(m, keyMsg("c"))
+	m, _ = e.update(m, keyMsg("i"))
+	out = e.render(m, "")
+	if !strings.Contains(out, " — "+i18n.T("empty")) {
+		t.Fatalf("'empty' suffix missing:\n%s", out)
+	}
+}
+
+// At width 80, height 12 the OLD split math yields bodyH=6 → outH=2 (capped
+// below 3 but still >0): a degraded 2-line pane with its rule shown. The
+// fix must hide the pane entirely at this size instead (verified empirically
+// via a scratch run — see task-3-report.md).
+func TestPickerTinyOverlayHidesOutputPane(t *testing.T) {
+	e := newConflictPicker("f.txt", pickerDoc())
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 12}
+	out := e.render(m, "")
+	if strings.Contains(out, "── ") {
+		t.Fatalf("tiny overlay must hide the output pane:\n%s", out)
+	}
+	if got := len(splitLinesTest(out)); got != 12 {
+		t.Fatalf("render produced %d lines, want 12", got)
+	}
+}
+
 func TestConflictPickerAltScrollMovesViewNotCursor(t *testing.T) {
 	e := newConflictPicker("f.txt", pickerDoc())
 	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
@@ -505,8 +540,8 @@ func TestConflictPickerCheckboxHierarchy(t *testing.T) {
 	m, _ = e.update(m, key("c"))
 	m, _ = e.update(m, key("i"))
 	out = e.render(m, "")
-	if !strings.Contains(out, "none") {
-		t.Fatalf("touched-empty region must show the none suffix:\n%s", out)
+	if !strings.Contains(out, "empty") {
+		t.Fatalf("touched-empty region must show the empty suffix:\n%s", out)
 	}
 }
 

@@ -167,7 +167,7 @@ func (e *hunkPicker) stateSuffix(b *hunkpick.Block) string {
 		return " — " + i18n.T("undecided")
 	}
 	if b.Mode == hunkpick.LineByLine && len(b.Picks) == 0 {
-		return " — " + i18n.T("none")
+		return " — " + i18n.T("empty")
 	}
 	ca, _ := b.SideState(hunkpick.Current)
 	ia, _ := b.SideState(hunkpick.Incoming)
@@ -423,8 +423,8 @@ func (e *hunkPicker) render(m Model, _ string) string {
 		if outH > bodyH-4 {
 			outH = bodyH - 4 // keep ≥3 grid lines + the rule
 		}
-		if outH < 1 {
-			outH = 0 // too small to show a pane at all
+		if outH < 3 {
+			outH = 0 // can't meet the 3-line minimum: hide rather than degrade
 		} else {
 			gridH = bodyH - outH - 1
 		}
