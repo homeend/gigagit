@@ -141,9 +141,8 @@ func (m Model) renderBookmarkPopupBox(p *bookmarkPopup) string {
 			wr[n] = winRow{text: prefix + mark + " " + p.rows[i], style: st}
 		}
 		capRows := popupResolveRowCap(p.maximized, termH, 12)
-		// Wrap mode: hang-indent continuations past the "> • " column and
-		// separate entries with a blank line (see winOpts).
-		o := winOpts{w: textW, mode: p.mode, anchor: p.sel, hscroll: p.hscroll, wrapIndent: 4, wrapGap: true}
+		// Wrap mode: hang-indent continuations past the "> • " column.
+		o := winOpts{w: textW, mode: p.mode, anchor: p.sel, hscroll: p.hscroll, wrapIndent: 4}
 		o.h = wrapContentLines(wr, o, capRows)
 		bodyLines = renderWindow(wr, o)
 	}

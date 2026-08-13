@@ -255,10 +255,10 @@ func TestRepoPopupDoesNotWrapLongPath(t *testing.T) {
 	}
 }
 
-// TestRepoPopupWrapModeIndentsAndSeparatesEntries pins the z-wrap layout fix:
-// wrap continuations hang-indent under the entry name (past the "> ● " column)
-// and a blank line separates entries, so multi-line entries stay readable.
-func TestRepoPopupWrapModeIndentsAndSeparatesEntries(t *testing.T) {
+// TestRepoPopupWrapModeIndentsContinuations pins the z-wrap layout fix: wrap
+// continuations hang-indent under the entry name (past the "> ● " column), so
+// multi-line entries stay readable.
+func TestRepoPopupWrapModeIndentsContinuations(t *testing.T) {
 	m := Model{width: 60, height: 30}
 	long1 := "/very/deeply/nested/path/that/is/longer/than/the/box/one-tail"
 	long2 := "/very/deeply/nested/path/that/is/longer/than/the/box/two-tail"
@@ -304,16 +304,12 @@ func TestRepoPopupWrapModeIndentsAndSeparatesEntries(t *testing.T) {
 	if got, want := lead(inner(lines[first+1])), lead(inner(lines[first]))+4; got != want {
 		t.Errorf("continuation indent = %d, want %d:\n%s", got, want, strings.Join(lines, "\n"))
 	}
-	// A blank separator line sits between the two entries.
-	gap := false
+	// No blank separator lines between entries (indent-only layout — the
+	// separator variant was tried and rejected).
 	for i := first + 1; i < second; i++ {
 		if strings.TrimSpace(inner(lines[i])) == "" {
-			gap = true
-			break
+			t.Errorf("unexpected blank line %d between wrapped entries:\n%s", i, strings.Join(lines, "\n"))
 		}
-	}
-	if !gap {
-		t.Errorf("no blank separator line between wrapped entries:\n%s", strings.Join(lines, "\n"))
 	}
 }
 

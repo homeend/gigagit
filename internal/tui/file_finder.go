@@ -247,10 +247,9 @@ func (p *fileFinderPopup) box(m Model) string {
 				wr[i] = winRow{text: padRight("  "+path, textW)}
 			}
 		}
-		// Wrap mode: hang-indent continuations past the "> " column and
-		// separate entries with a blank line (see winOpts). The height budget
-		// counts display lines of the pre-windowed slice, still capped.
-		o := winOpts{w: textW, mode: p.mode, anchor: p.sel - start, hscroll: p.hscroll, wrapIndent: 2, wrapGap: true}
+		// Wrap mode: hang-indent continuations past the "> " column. The
+		// height budget counts display lines of the pre-windowed slice, capped.
+		o := winOpts{w: textW, mode: p.mode, anchor: p.sel - start, hscroll: p.hscroll, wrapIndent: 2}
 		o.h = wrapContentLines(wr, o, capRows)
 		bodyLines = renderWindow(wr, o)
 	}

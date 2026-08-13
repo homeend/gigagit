@@ -676,9 +676,8 @@ func conflictListBox(m Model, files []model.FileStatus, sel int, src domain.Conf
 			}
 			wr[i] = winRow{text: fmt.Sprintf("%s%s  — %s", prefix, f.Path, f.ConflictLabel()), style: st}
 		}
-		// Wrap mode: hang-indent continuations past the "> " column and
-		// separate entries with a blank line (see winOpts).
-		o := winOpts{w: textW, mode: mode, anchor: sel, hscroll: hscroll, wrapIndent: 2, wrapGap: true}
+		// Wrap mode: hang-indent continuations past the "> " column.
+		o := winOpts{w: textW, mode: mode, anchor: sel, hscroll: hscroll, wrapIndent: 2}
 		o.h = wrapContentLines(wr, o, 12)
 		for _, line := range renderWindow(wr, o) {
 			b.WriteString(line + "\n")

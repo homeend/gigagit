@@ -201,7 +201,7 @@ func (p *noticePopup) box(m Model) string {
 			if rows > capRows {
 				rows = capRows
 			}
-			for _, line := range renderWindow(wr, winOpts{w: textW, h: rows, mode: p.mode, anchor: p.sel, hscroll: p.hscroll}) {
+			for _, line := range renderWindow(wr, winOpts{w: textW, h: rows, mode: p.mode, anchor: p.sel, hscroll: p.hscroll, wrapIndent: 2}) {
 				b.WriteString(line + "\n")
 			}
 		}

@@ -57,11 +57,6 @@ type winOpts struct {
 	// this many columns, so continuations line up under the row's text instead
 	// of restarting at column 0 beneath the caller's cursor/marker prefix.
 	wrapIndent int
-	// wrapGap (modeWrap only) inserts one blank display line BETWEEN rows
-	// (never after the last), so multi-line entries stay distinguishable.
-	// Gap lines carry no style and no decorator — a gap under the selected
-	// row must not inherit its reverse-video.
-	wrapGap bool
 }
 
 // renderWindow lays rows out under o and returns exactly o.h display lines,
@@ -76,14 +71,6 @@ func renderWindow(rows []winRow, o winOpts) []string {
 		h = 1
 	}
 
-	// lastRow tracks the ORIGINAL last row index across the pre-slice below:
-	// wrapGap inserts its blank line between rows only, and "is this the last
-	// row" must be answered against the full list, not the slice — otherwise
-	// sliced and full layouts diverge (the equivalence the wrap windowing
-	// depends on).
-	lastRow := len(rows) - 1
-	rowOff := 0
-
 	// Window BEFORE building any per-row state, making the whole call O(visible)
 	// instead of O(len(rows)). Without this a 40k-row panel rebuilds every row on
 	// every frame, and gg's perpetual 1s heartbeat re-renders the whole UI, so a
@@ -96,7 +83,6 @@ func renderWindow(rows []winRow, o winOpts) []string {
 			start := windowStart(len(rows), h, o.anchor)
 			rows = rows[start : start+h]
 			o.anchor -= start
-			rowOff = start
 		} else {
 			// Wrap mode: a row spans a variable number of lines, but every row is
 			// at least ONE line, so the h-line window anchored on row a can only
@@ -120,7 +106,6 @@ func renderWindow(rows []winRow, o winOpts) []string {
 			}
 			rows = rows[lo:hi]
 			o.anchor -= lo
-			rowOff = lo
 		}
 	}
 
@@ -169,10 +154,6 @@ func renderWindow(rows []winRow, o winOpts) []string {
 				s = pre + s
 			}
 			dl = append(dl, dline{text: s, style: r.style, deco: r.decorate, hs: hs, si: si, row: ri})
-		}
-		if o.mode == modeWrap && o.wrapGap && rowOff+ri < lastRow {
-			// Separator between rows; unstyled and undecorated (see winOpts).
-			dl = append(dl, dline{text: "", row: ri})
 		}
 	}
 
@@ -260,8 +241,8 @@ func wrapHang(s string, w, indent, maxLines int) []string {
 }
 
 // wrapContentLines returns how many display lines rows occupy under o in wrap
-// mode (indent + gaps included), capped at max with early exit — callers use
-// it to size a popup's height budget to its wrapped content instead of the
+// mode (indent included), capped at max with early exit — callers use it to
+// size a popup's height budget to its wrapped content instead of the
 // one-line-per-row count the other modes use. Non-wrap modes are one line per
 // row by construction.
 func wrapContentLines(rows []winRow, o winOpts, max int) int {
@@ -286,10 +267,7 @@ func wrapContentLines(rows []winRow, o winOpts, max int) int {
 		pw = w - 1
 	}
 	n := 0
-	for i, r := range rows {
-		if i > 0 && o.wrapGap {
-			n++
-		}
+	for _, r := range rows {
 		segs := len(wrapHang(r.text, w-pw, o.wrapIndent, 1<<20))
 		if segs == 0 {
 			segs = 1 // renderWindow substitutes one blank line for an empty row

@@ -337,10 +337,9 @@ func (p *repoPopup) box(m Model) string {
 		}
 		// Cap the visible body; renderWindow scrolls to keep p.sel in view.
 		// Wrap mode hang-indents continuations under the name (past the "> ● "
-		// column) and separates entries with a blank line; the height budget
-		// then counts display lines, not rows.
+		// column); the height budget then counts display lines, not rows.
 		capRows := popupResolveRowCap(p.maximized, termH, 12)
-		o := winOpts{w: textW, mode: p.mode, anchor: p.sel, hscroll: p.hscroll, wrapIndent: 4, wrapGap: true}
+		o := winOpts{w: textW, mode: p.mode, anchor: p.sel, hscroll: p.hscroll, wrapIndent: 4}
 		o.h = wrapContentLines(wr, o, capRows)
 		bodyLines = renderWindow(wr, o)
 	}

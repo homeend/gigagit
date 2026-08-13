@@ -554,11 +554,10 @@ func (p *gitConfigPopup) box(m Model) string {
 			capRows = 3
 		}
 		// Wrap mode: hang-indent continuations (rows have no cursor column, so
-		// a small indent just marks them as continuations) and separate rows
-		// with a blank line (see winOpts). configRowDecorator only ever
-		// decorates a row's first visual line, so the indent cannot drift its
-		// column spans.
-		o := winOpts{w: textW, mode: p.mode, anchor: p.sel, hscroll: p.hscroll, wrapIndent: 2, wrapGap: true}
+		// a small indent just marks them as continuations). configRowDecorator
+		// only ever decorates a row's first visual line, so the indent cannot
+		// drift its column spans.
+		o := winOpts{w: textW, mode: p.mode, anchor: p.sel, hscroll: p.hscroll, wrapIndent: 2}
 		o.h = wrapContentLines(wr, o, capRows)
 		bodyLines = renderWindow(wr, o)
 	}

@@ -703,9 +703,8 @@ func (m Model) renderActionMenu() string {
 			}
 			wr[i] = winRow{text: prefix + r.label, style: st}
 		}
-		// Wrap mode: hang-indent continuations past the "> " column and
-		// separate entries with a blank line (see winOpts).
-		o := winOpts{w: textW, mode: a.mode, anchor: a.sel, hscroll: a.hscroll, wrapIndent: 2, wrapGap: true}
+		// Wrap mode: hang-indent continuations past the "> " column.
+		o := winOpts{w: textW, mode: a.mode, anchor: a.sel, hscroll: a.hscroll, wrapIndent: 2}
 		o.h = wrapContentLines(wr, o, 14)
 		bodyLines = renderWindow(wr, o)
 	}

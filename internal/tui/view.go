@@ -841,7 +841,9 @@ func (m Model) renderPanel(p panel, label string, rows []string, decos []rowDeco
 			}
 			wr = append(wr, winRow{text: prefix + text, style: st, decorate: deco})
 		}
-		body := renderWindow(wr, winOpts{w: innerW, h: rowsCap, mode: m.dispModes[p], anchor: anchor - start, hscroll: m.hscroll[p]})
+		// wrapIndent 2: wrap continuations hang under the row text, past the
+		// two-column cursor/mark prefix every panel row carries.
+		body := renderWindow(wr, winOpts{w: innerW, h: rowsCap, mode: m.dispModes[p], anchor: anchor - start, hscroll: m.hscroll[p], wrapIndent: 2})
 		lines = append(lines, body...)
 	}
 	for len(lines) < contentH {
