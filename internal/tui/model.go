@@ -3230,14 +3230,17 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	// Drop selections from the old repo so the highlight doesn't land on a
 	// surprising row in the newly-loaded panels.
 	m.sel = map[panel]int{}
-	m.mark = nil                        // a mark from the old repo must not re-attach by name in the new one
-	m.fileMarks = nil                   // likewise drop Status file-marks from the old repo
-	m.commitCompareSet = nil            // ◉ marks are repo-scoped: stale keys from the old repo would eat the two space slots and skew Unmark-all counts
-	m.filterMemo = &commitFilterMemo{}  // fresh pointer: an in-flight copy from the old repo must not repopulate the new repo's memo
-	m.stashView = nil                   // the new repo has its own stashes
-	m = m.closeFilesView()              // the new repo has a different commit list
-	m = m.reconcileFullscreenFocus()    // a resuming pin must not inherit focus from a surface that just closed
-	if dv := m.diffLayer(); dv != nil { // the new repo invalidates any open diff
+	m.mark = nil                          // a mark from the old repo must not re-attach by name in the new one
+	m.fileMarks = nil                     // likewise drop Status file-marks from the old repo
+	m.commitCompareSet = nil              // ◉ marks are repo-scoped: stale keys from the old repo would eat the two space slots and skew Unmark-all counts
+	m.commitScopeBranches = nil           // the fresh feed walks all branches; a kept solo/multi scope would leave the ◉ branch marker and "solo:" title pointing at a scope the feed no longer has
+	m.commitFilter = commitFilterFields{} // same staleness: the filter is part of the feed scope the new feed doesn't carry
+	m.feedScopeApplied = ""               // back to the startup state so the upstream rewalk re-fires for the new repo
+	m.filterMemo = &commitFilterMemo{}    // fresh pointer: an in-flight copy from the old repo must not repopulate the new repo's memo
+	m.stashView = nil                     // the new repo has its own stashes
+	m = m.closeFilesView()                // the new repo has a different commit list
+	m = m.reconcileFullscreenFocus()      // a resuming pin must not inherit focus from a surface that just closed
+	if dv := m.diffLayer(); dv != nil {   // the new repo invalidates any open diff
 		m = m.removeLayer(dv)
 	}
 	m.diffTag = ""
