@@ -787,3 +787,55 @@ func TestPickerODropsZoom(t *testing.T) {
 		t.Fatalf("output o under zoom: zoomed=%v collapsed=%v focused=%v", e2.zoomed, e2.outCollapsed, e2.outFocused)
 	}
 }
+
+func TestPickerZoomGridHidesOutput(t *testing.T) {
+	e := newConflictPicker("f.txt", pickerDoc())
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
+	m, _ = e.update(m, keyMsg("ctrl+t")) // grid focused → grid-zoom
+	out := e.render(m, "")
+	if strings.Contains(out, "── ") {
+		t.Fatalf("grid-zoom still shows the output rule:\n%s", out)
+	}
+	if !strings.Contains(out, "region 1/2") {
+		t.Fatalf("grid-zoom lost the grid rows:\n%s", out)
+	}
+}
+
+func TestPickerZoomOutputHidesGrid(t *testing.T) {
+	e := newConflictPicker("f.txt", pickerDoc())
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
+	m, _ = e.update(m, keyMsg("tab"))    // focus output
+	m, _ = e.update(m, keyMsg("ctrl+t")) // output-zoom
+	out := e.render(m, "")
+	if !strings.Contains(out, "── ") {
+		t.Fatalf("output-zoom lost the rule:\n%s", out)
+	}
+	if strings.Contains(out, "region 1/2") {
+		t.Fatalf("output-zoom still shows grid rows:\n%s", out)
+	}
+}
+
+func TestPickerTabSwapsZoomedHalf(t *testing.T) {
+	e := newConflictPicker("f.txt", pickerDoc())
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
+	m, _ = e.update(m, keyMsg("ctrl+t")) // grid-zoom
+	m, _ = e.update(m, keyMsg("tab"))    // focus output → zoom follows
+	if !e.zoomed {
+		t.Fatalf("tab dropped the zoom")
+	}
+	out := e.render(m, "")
+	if strings.Contains(out, "region 1/2") || !strings.Contains(out, "── ") {
+		t.Fatalf("after tab, zoom did not swap to the output half:\n%s", out)
+	}
+}
+
+func TestPickerZoomRestoreShowsSplit(t *testing.T) {
+	e := newConflictPicker("f.txt", pickerDoc())
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
+	m, _ = e.update(m, keyMsg("ctrl+t"))
+	m, _ = e.update(m, keyMsg("ctrl+t"))
+	out := e.render(m, "")
+	if !strings.Contains(out, "── ") || !strings.Contains(out, "region 1/2") {
+		t.Fatalf("restore did not bring back the split view:\n%s", out)
+	}
+}

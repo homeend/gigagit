@@ -387,8 +387,18 @@ func (e *hunkPicker) render(m Model, _ string) string {
 	if bodyH < 1 {
 		bodyH = 1
 	}
+	// Output-zoom: the rule replaces the column-labels row and the pane gets
+	// the full body; no grid rows are built at all.
+	if e.zoomed && e.outFocused {
+		lines := []string{header, e.outputRule(w)}
+		lines = append(lines, e.renderOutput(w, bodyH)...)
+		lines = append(lines, "")
+		lines = append(lines, hintLines...)
+		return strings.Join(lines, "\n")
+	}
+
 	gridH, outH := bodyH, 0
-	if !e.outCollapsed {
+	if !e.outCollapsed && !e.zoomed {
 		outH = bodyH / 3
 		if outH < 3 {
 			outH = 3
