@@ -2609,7 +2609,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if textdiff.IsBinary(msg.content) {
 			return fail(i18n.T("hunk picker: binary file"))
 		}
-		doc, err := hunkpick.ParseConflict(msg.content)
+		doc, err := hunkpick.ParseConflictSized(msg.content, msg.markerSize)
 		if err != nil {
 			return fail(i18n.T("hunk picker: %s", err.Error()))
 		}

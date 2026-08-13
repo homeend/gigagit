@@ -1,6 +1,9 @@
 package hunkpick
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestParseConflictTwoWay(t *testing.T) {
 	src := "top\n<<<<<<< HEAD\nfoo\nlog\n=======\nbar\nlog\n>>>>>>> feature\nend\n"
@@ -65,5 +68,38 @@ func TestParseConflictNoFinalNewline(t *testing.T) {
 	}
 	if len(d.Blocks()) != 0 {
 		t.Fatal("no markers → no blocks")
+	}
+}
+
+func TestParseConflictSizedNestedMarkersAsContent(t *testing.T) {
+	src := "top\n" +
+		strings.Repeat("<", 31) + " current\n" +
+		"<<<<<<< HEAD\n" +
+		"=======\n" +
+		">>>>>>> old (v2)\n" +
+		strings.Repeat("=", 31) + "\n" +
+		"theirs\n" +
+		strings.Repeat(">", 31) + " incoming\n"
+	d, err := ParseConflictSized([]byte(src), 31)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bs := d.Blocks()
+	if len(bs) != 1 {
+		t.Fatalf("blocks = %d, want 1", len(bs))
+	}
+	if strings.Join(bs[0].Current, ",") != "<<<<<<< HEAD,=======,>>>>>>> old (v2)" {
+		t.Fatalf("current = %v — old 7-char markers must be plain content", bs[0].Current)
+	}
+	if strings.Join(bs[0].Incoming, ",") != "theirs" {
+		t.Fatalf("incoming = %v", bs[0].Incoming)
+	}
+}
+
+func TestParseConflictSizedClampsToSeven(t *testing.T) {
+	src := "<<<<<<< HEAD\nx\n=======\ny\n>>>>>>> b\n"
+	d, err := ParseConflictSized([]byte(src), 0)
+	if err != nil || len(d.Blocks()) != 1 {
+		t.Fatalf("size<7 must clamp to git's default: err=%v", err)
 	}
 }

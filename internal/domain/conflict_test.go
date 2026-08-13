@@ -10,6 +10,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/git"
 	"github.com/homeend/gigagit/internal/gitexec"
+	"github.com/homeend/gigagit/internal/hunkpick"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/observ"
 )
@@ -336,5 +337,51 @@ func TestConflictCleanSteadyStateCachesGitDir(t *testing.T) {
 	}
 	if n != 1 {
 		t.Fatalf("git dir resolved %d times across 3 clean calls, want 1 (cached)", n)
+	}
+}
+
+// TestConflictPickerFileRegenerates: the base content itself contains literal
+// 7-char conflict markers (committed unresolved once), so the worktree marker
+// text is unparseable — the picker text must be regenerated from the stages
+// with oversized markers.
+func TestConflictPickerFileRegenerates(t *testing.T) {
+	dir := t.TempDir()
+	old := "top\n<<<<<<< HEAD\nold ours\n=======\nold theirs\n>>>>>>> old (v2)\n"
+	gitRunDir(t, dir, "", "init", "-q", "-b", "main")
+	writeFile(t, dir, "f.txt", old+"bottom\n")
+	gitRunDir(t, dir, "", "add", "-A")
+	gitRunDir(t, dir, "", "commit", "-m", "base")
+	gitRunDir(t, dir, "", "checkout", "-q", "-b", "side")
+	writeFile(t, dir, "f.txt", old+"bottom side\n")
+	gitRunDir(t, dir, "", "commit", "-am", "side")
+	gitRunDir(t, dir, "", "checkout", "-q", "main")
+	writeFile(t, dir, "f.txt", old+"bottom main\n")
+	gitRunDir(t, dir, "", "commit", "-am", "main")
+	gitRunDir(t, dir, "merge", "merge", "side")
+	svc := New(&git.Repo{Runner: gitexec.NewExecRunner("git", dir, observ.NewRing(50))})
+
+	content, size, err := svc.ConflictPickerFile(context.Background(), "f.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if size <= 7 {
+		t.Fatalf("size = %d, want > 7 (content imitates 7-char markers)", size)
+	}
+	d, perr := hunkpick.ParseConflictSized(content, size)
+	if perr != nil {
+		t.Fatalf("regenerated text must parse: %v", perr)
+	}
+	if len(d.Blocks()) == 0 {
+		t.Fatal("want at least one conflict region")
+	}
+	if !strings.Contains(string(content), "<<<<<<< HEAD") {
+		t.Fatal("the old committed markers must survive as content")
+	}
+
+	// A path that is not unmerged falls back to worktree bytes at size 7.
+	writeFile(t, dir, "g.txt", "plain\n")
+	content, size, err = svc.ConflictPickerFile(context.Background(), "g.txt")
+	if err != nil || string(content) != "plain\n" || size != 7 {
+		t.Fatalf("fallback = %q size=%d err=%v, want worktree bytes at 7", content, size, err)
 	}
 }
