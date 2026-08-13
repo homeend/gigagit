@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
+
 	"github.com/homeend/gigagit/internal/repos"
 )
 
@@ -73,6 +75,38 @@ func TestRepoPopupSlowFSTooltipOverlay(t *testing.T) {
 	if boxTop == -1 || tipLine != boxTop-1 {
 		t.Fatalf("tooltip at line %d, box top border at %d — want directly above the box", tipLine, boxTop)
 	}
+
+	// Centered horizontally on the box (left-anchoring read as lopsided — user
+	// report): side gaps must match within the one-cell integer-division slack.
+	// All runes involved are width-1, so rune columns are screen columns.
+	stripped := strings.Split(ansi.Strip(out), "\n")
+	boxLeft := runeCol(stripped[boxTop], '╔')
+	boxRightExcl := runeCol(stripped[boxTop], '╗') + 1
+	tipRunes := []rune(stripped[tipLine])
+	tipLeft := runeCol(stripped[tipLine], '⚠') - 1 // strip's leading pad space
+	tipRightExcl := len(tipRunes)
+	for tipRightExcl > 0 && tipRunes[tipRightExcl-1] == ' ' {
+		tipRightExcl--
+	}
+	tipRightExcl++ // strip's trailing pad space
+	leftGap := tipLeft - boxLeft
+	rightGap := boxRightExcl - tipRightExcl
+	if d := leftGap - rightGap; d < -1 || d > 1 {
+		t.Fatalf("tooltip gaps left=%d right=%d — want centered on the box:\n%s", leftGap, rightGap, out)
+	}
+}
+
+// runeCol returns the rune column of the first occurrence of target, -1 if
+// absent (valid as a column only when every rune on the line renders 1 cell).
+func runeCol(line string, target rune) int {
+	col := 0
+	for _, r := range line {
+		if r == target {
+			return col
+		}
+		col++
+	}
+	return -1
 }
 
 // TestRepoPopupSlowFSEnterConfirms pins the confirm: enter on a slow-fs row

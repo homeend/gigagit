@@ -271,15 +271,17 @@ func (p *repoPopup) slowTooltip(m Model, box string, termW, termH int) (line str
 	left := (termW - boxW) / 2 // mirrors overlayCenter's placement of the box
 	top := (termH - len(boxLines)) / 2
 	text := " " + i18n.T("⚠ this repository is mounted on a foreign filesystem — switching may be very slow") + " "
-	// Anchor at the box's content edge; when the sentence would run past the
-	// screen, shift the strip left to fit (truncation would eat exactly the
-	// "very slow" tail the tooltip exists for).
-	x = left + 2
-	if need := lipgloss.Width(text); x+need > termW {
+	// Center the strip on the box (left-anchoring read as lopsided — user
+	// report); when the sentence would run past a screen edge, shift it back
+	// on-screen (truncation would eat exactly the "very slow" tail the tooltip
+	// exists for).
+	need := lipgloss.Width(text)
+	x = left + (boxW-need)/2
+	if x+need > termW {
 		x = termW - need
-		if x < 0 {
-			x = 0
-		}
+	}
+	if x < 0 {
+		x = 0
 	}
 	if lines := wrapWidth(text, termW-x, 1); len(lines) > 0 {
 		text = lines[0]
