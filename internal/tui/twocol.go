@@ -97,6 +97,48 @@ func renderTwoCol(rows []colRow, o twoColOpts) ([]string, int) {
 		colW = 1
 	}
 
+	// Fast path: outside wrap mode every row is exactly ONE display line
+	// (scroll pans, cutoff truncates — neither expands), so the window can
+	// be computed in row space and only the h visible rows built and styled.
+	// The full-document pass below styles every line before windowing —
+	// O(doc) of lipgloss work per frame, measured 35ms on a 5000-row doc.
+	if o.mode != modeWrap {
+		start := windowStart(len(rows), h, o.anchor)
+		eff := 0
+		if o.vshift != 0 {
+			maxStart := len(rows) - h
+			if maxStart < 0 {
+				maxStart = 0
+			}
+			s := start + o.vshift
+			if s > maxStart {
+				s = maxStart
+			}
+			if s < 0 {
+				s = 0
+			}
+			eff = s - start
+			start = s
+		}
+		out := make([]string, 0, h)
+		for i := 0; i < h; i++ {
+			idx := start + i
+			if idx >= len(rows) {
+				out = append(out, padRight("", w))
+				continue
+			}
+			r := rows[idx]
+			if r.full != nil {
+				out = append(out, styleCell(r.full.style, cellSegs(r.full, w, o.mode, o.hscroll)[0], w))
+				continue
+			}
+			left := styleCell(cellStyle(r.left), cellSegs(r.left, colW, o.mode, o.hscroll)[0], colW)
+			right := styleCell(cellStyle(r.right), cellSegs(r.right, colW, o.mode, o.hscroll)[0], colW)
+			out = append(out, left+o.sep+right)
+		}
+		return out, eff
+	}
+
 	type dline struct {
 		text string
 		row  int
