@@ -437,6 +437,7 @@ tr.hk.picked td.no { background: var(--sel); color: var(--fg); }
    side's background fills level with the taller one. */
 /* ‹/› change flash — the region equivalent of table.diff tr.flash. */
 .cf-region.flash { outline: 2px solid var(--accent); outline-offset: 1px; }
+.cf-out-region.flash { background: var(--sel); }
 .cf-block { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
 .cf-side { padding: 4px 8px; border-left: 3px solid transparent; }
 .cf-side .cf-tag { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--dim); }
