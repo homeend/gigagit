@@ -195,7 +195,9 @@ func (m Model) handleShellDone(msg shellDoneMsg) (Model, tea.Cmd) {
 	// per-source gen bump (reloadSourcesCmd) makes this safe unconditionally —
 	// any stale in-flight read is dropped when it lands.
 	var cmd tea.Cmd
-	m, cmd = m.reloadAllCmd(true, false)
+	// hardFeed: arbitrary git (rebase, reset, filter-branch) may have run in the
+	// shell, so start the commit list clean rather than trust the accumulation.
+	m, cmd = m.reloadAllCmd(reloadOpts{manual: true, hardFeed: true})
 	return m, cmd
 }
 

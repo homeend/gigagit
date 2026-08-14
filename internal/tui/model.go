@@ -832,7 +832,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.refreshLastRun[it] = now
 		}
 		var cmd tea.Cmd
-		m, cmd = m.reloadAllCmd(true, true) // startup=true → these reads do not feed measurements
+		// startup=true → these reads do not feed measurements; hardFeed because
+		// nothing is loaded yet (a reconcile would degrade to the same walk).
+		m, cmd = m.reloadAllCmd(reloadOpts{manual: true, startup: true, hardFeed: true})
 		m.watchGen++
 		return m, tea.Batch(cmd, m.startWatchCmd(m.watchGen))
 	case dataLoadedMsg:
@@ -1046,6 +1048,13 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.commitsLoading = false
 			m = m.graphLayerReset().rebuildCommitGraph()
 			m = m.restorePanelSel(panelCommits, key)
+			if m.eager.active {
+				// Same contract as the scope-reload path: the refresh bumped the
+				// feed generation, so the page this scan was waiting on dropped.
+				// Abort but keep the query, so a repeat ctrl+f digs deeper from
+				// the (now reconciled) list instead of the scan hanging.
+				m.eager = eagerSearch{query: m.eager.query}
+			}
 			// The initial feed read just landed; fire the upstream re-walk now if
 			// branches already arrived and set the latch. This is the other half
 			// of the startup ordering: exactly one path fires the re-walk, always
@@ -1335,7 +1344,10 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// loading guard, r races loadCmd during a repo switch.
 			if !m.running && !m.loading && !m.anySourceInflight() {
 				var cmd tea.Cmd
-				m, cmd = m.reloadAllCmd(true, false) // manual r → measured (startup=false)
+				// manual r → measured (startup=false), and the one reload that
+				// starts the commit list clean: the user's escape hatch when a
+				// reconciled deep tail has gone stale (someone rewrote history).
+				m, cmd = m.reloadAllCmd(reloadOpts{manual: true, hardFeed: true})
 				return m, cmd
 			}
 		case "p":
@@ -2300,7 +2312,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// working tree — refresh status and the stash list.
 			m.stashView.loading = true
 			var cmd tea.Cmd
-			m, cmd = m.reloadSourcesCmd([]sourceKey{srcStatus}, true, false)
+			m, cmd = m.reloadSourcesCmd([]sourceKey{srcStatus}, reloadOpts{manual: true})
 			return m, tea.Batch(healthCmd, cmd, m.loadStashListCmd(m.stashView.tag))
 		}
 		// A job an active process started just returned: let the process advance
@@ -2312,7 +2324,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Route op completion through the per-source registry: refresh only the
 		// sources the op dirtied (nil pendingSources = all sources, safe default).
 		var cmd tea.Cmd
-		m, cmd = m.reloadSourcesCmd(sourcesOrAll(srcs), true, false)
+		// No hardFeed: an op that adds commits (commit, merge, cherry-pick) should
+		// prepend them, not collapse the list back to page 0.
+		m, cmd = m.reloadSourcesCmd(sourcesOrAll(srcs), reloadOpts{manual: true})
 		return m, tea.Batch(healthCmd, cmd)
 
 	case prefixDataMsg:

@@ -401,6 +401,17 @@ row drives the `▲` tag-pushed-state indicator: it runs `git ls-remote --tags` 
 the default remote (origin if present, else the first remote) and updates the `▲`
 markers for every visible tag; comparison is by name only (v1).
 
+A `commits` refresh **keeps the history you already paged in**. It re-walks only
+the first page (as it always has) and reconciles it into the loaded list: new
+commits are prepended, a tip that vanished (amend, `reset`) is trimmed, and every
+page below — everything a long scroll, `ctrl+l` or a deep `ctrl+f` search pulled
+in — stays put, filter and cursor included. The same holds after an operation
+completes (a fresh commit simply appears on top). When the new page can't be
+aligned with the loaded list — history was rewritten, or more commits arrived
+than one page holds — the list falls back to a clean walk from the top. Manual
+`r`, a commit-sort or page-size change, and returning from the shell escape
+(`ctrl+o`) always start clean.
+
 The `▲` indicator also **auto-refreshes by default** whenever the tag list
 changes — on app load and after any tag add/remove/push/delete-from-remote — via
 a silent background lookup that is independent of the `[refresh] enabled` master
