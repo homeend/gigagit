@@ -461,6 +461,18 @@ tr.hk.picked td.no { background: var(--sel); color: var(--fg); }
 #cf-out-head:hover { color: var(--fg); }
 #cf-out-body { margin: 0; padding: 6px 8px; font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace; font-size: 12px; white-space: pre-wrap; word-break: break-all; max-height: 240px; overflow-y: auto; }
 #cf-out-body.hidden { display: none; }
+/* Fixed split while the picker is open: the pick area scrolls in the top
+   half and the output pane owns the bottom half of the pane, always visible
+   (no scrolling to find the preview). Scoped via :has so every other diff
+   view keeps the pane's normal single-scroll behavior; same flex pattern as
+   #commits-pane/#commits-scroll. A collapsed pane shrinks to its header row
+   and the pick area takes the freed space. */
+#diff-pane:has(#cf-out) { overflow: hidden; display: flex; flex-direction: column; }
+#diff-pane:has(#cf-out) #diff-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+#diff-pane:has(#cf-out) #cf-doc { flex: 1 1 50%; min-height: 0; overflow-y: auto; }
+#diff-pane:has(#cf-out) #cf-out { flex: 0 0 50%; min-height: 0; display: flex; flex-direction: column; }
+#diff-pane:has(#cf-out) #cf-out-body { flex: 1; min-height: 0; max-height: none; }
+#diff-pane:has(#cf-out-body.hidden) #cf-out { flex: 0 0 auto; }
 
 /* Branch versions (the operations history) — a list overlay on the shared
    layer stack, styled after the palette. */
