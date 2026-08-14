@@ -413,7 +413,9 @@ tr.hk.picked td.no { background: var(--sel); color: var(--fg); }
 
 /* Conflict block picker — a conflicted status row opens its marker regions
    as pickable ours/theirs blocks (#cf-doc) instead of a diff table; the
-   header bar (#resolve-bar) mirrors #hunk-bar's shape. */
+   header bar (#resolve-bar) mirrors #hunk-bar's shape. Picks are per-LINE
+   (checkboxes on .cf-ln rows) with a tri-state side tag and a live output
+   pane (#cf-out) below the document. */
 #resolve-bar { flex: 0 0 auto; display: flex; align-items: center; gap: 4px; }
 #resolve-bar.hidden { display: none; }
 #resolve-bar button { background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 3px; padding: 0 8px; font: inherit; font-size: 11px; cursor: pointer; }
@@ -424,12 +426,22 @@ tr.hk.picked td.no { background: var(--sel); color: var(--fg); }
 #cf-doc { padding: 8px 12px; font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace; font-size: 12px; }
 #cf-doc pre { margin: 0; white-space: pre-wrap; word-break: break-all; }
 .cf-text { color: var(--dim); padding: 2px 0; }
+/* One region = a header row (number + decided-state suffix) above the
+   side-by-side block. */
+.cf-region { margin: 6px 0; }
+.cf-region-head { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--dim); padding: 2px 2px; }
+.cf-region.decided .cf-region-head { color: var(--fg); }
+.cf-region-state { margin-left: 2px; text-transform: none; letter-spacing: normal; font-style: italic; }
 /* Side-by-side: ours LEFT, theirs RIGHT (source order in the markup), equal
    columns; the grid row keeps both cells the same height so the shorter
    side's background fills level with the taller one. */
-.cf-block { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--border); border-radius: 4px; margin: 6px 0; overflow: hidden; }
-.cf-side { padding: 4px 8px; cursor: pointer; border-left: 3px solid transparent; }
+.cf-block { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
+.cf-side { padding: 4px 8px; border-left: 3px solid transparent; }
 .cf-side .cf-tag { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--dim); }
+.cf-tag[data-act="side"] { cursor: pointer; }
+.cf-tag[data-act="side"]:hover { color: var(--fg); }
+.cf-tag.some { color: var(--fg); }
+.cf-tag.all { color: var(--accent); }
 /* Visible emptiness: ¶ for an empty line, ·/→ for space/tab-only lines,
    and the zero-lines placeholder — a blank-run conflict must never read
    as nothing vs nothing. */
@@ -437,8 +449,18 @@ tr.hk.picked td.no { background: var(--sel); color: var(--fg); }
 .cf-empty { color: var(--dim); font-style: italic; }
 .cf-ours { background: #1f3d2b88; border-right: 1px dashed var(--border); }
 .cf-theirs { background: #46262a88; }
-.cf-side.picked { border-left-color: var(--accent); background: var(--sel); }
-.cf-block.decided .cf-side:not(.picked) { opacity: .45; }
+/* Per-line checkbox rows — the actual pick targets. */
+.cf-ln { padding: 1px 4px; cursor: pointer; white-space: pre-wrap; word-break: break-all; border-left: 3px solid transparent; }
+.cf-ln:hover { background: var(--bg-alt); }
+.cf-ln.picked { border-left-color: var(--accent); background: var(--sel); }
+.cf-tick { font-family: inherit; color: var(--dim); margin-right: 4px; }
+.cf-ln.picked .cf-tick { color: var(--accent); }
+/* Live output pane — the resolved file as it would be written right now. */
+#cf-out { margin: 8px 12px 12px; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
+#cf-out-head { padding: 4px 8px; font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--dim); cursor: pointer; background: var(--bg-alt); }
+#cf-out-head:hover { color: var(--fg); }
+#cf-out-body { margin: 0; padding: 6px 8px; font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace; font-size: 12px; white-space: pre-wrap; word-break: break-all; max-height: 240px; overflow-y: auto; }
+#cf-out-body.hidden { display: none; }
 
 /* Branch versions (the operations history) — a list overlay on the shared
    layer stack, styled after the palette. */
