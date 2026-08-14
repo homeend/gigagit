@@ -99,9 +99,12 @@ func (s *Server) opByID(id string) *opRun {
 	return nil
 }
 
-// resetFeed drops the cached CommitFeed so the next /api/commits rebuilds —
-// required after any op that changed state (e.g. a switch moved HEAD; the
-// old feed would keep serving the previous branch's commits).
+// resetFeed drops the cached CommitFeed so the next /api/commits rebuilds it
+// from scratch. Required when something the BUILD depends on changed — the
+// commit-sort mode (settings), the solo scope, or the repo itself (re-root).
+// A state-changing op does NOT need it: the next reload reconciles page 0 into
+// the accumulation and re-derives the list from the new refs, so dropping the
+// feed there would only discard the pages the browser scrolled in.
 func (s *Server) resetFeed() {
 	s.mu.Lock()
 	s.feed = nil
@@ -127,9 +130,9 @@ func (s *Server) runOpStream(ctx context.Context, run *opRun, fn runFunc) {
 	res, extra, err := fn(ctx, svc, events, webDecider{run: run, timeout: timeout})
 	close(events)
 	<-pumpDone
-	if res.Changed {
-		s.resetFeed()
-	}
+	// No resetFeed here: the client reloads /api/commits after a changing op,
+	// and that reload reconciles — a commit prepends, a moved HEAD trims or
+	// re-walks — so the feed follows the new state without losing depth.
 	done := wireEvent{"type": "done", "ok": err == nil, "changed": res.Changed, "summary": res.Summary}
 	if err != nil {
 		// A context-killed subprocess reports its signal, not context.Canceled

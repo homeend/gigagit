@@ -70,7 +70,14 @@ func (s *Server) handleCommits(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("more") == "1" {
 		st, _, err = feed.LoadMore(readCtx(r))
 	} else {
-		st, err = feed.LoadInitial(readCtx(r))
+		// A plain reload RECONCILES: it walks the same single page 0 and merges
+		// it into whatever this feed already holds, so the pages the browser
+		// scrolled in survive an op or an F5. New commits prepend, a vanished
+		// tip is trimmed, and a rewrite that can't be aligned degrades to the
+		// hard reset LoadInitial always did. A freshly built feed (solo change,
+		// sort change, re-root — each drops s.feed) holds nothing, so this
+		// degenerates to the plain page-0 walk there.
+		st, err = feed.Refresh(readCtx(r))
 	}
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
