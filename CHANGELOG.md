@@ -8,6 +8,21 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: conflict picker parity with the TUI.** The browser conflict picker
+  now has per-line checkboxes and tri-state side toggles (left, right, or
+  both — pick order = result order), decided-empty regions, and a live
+  assembled-output pane; `all ours`/`all theirs` are tri-state document
+  toggles. The server regenerates the conflict text from index stages
+  (`ConflictPickerFile`), so files whose content contains literal conflict
+  markers now load in the web picker too, and picks ride a new tagged wire
+  format (`ours`/`theirs`/ordered `lines`).
+
+- **Web: picker layout + navigation polish.** While the picker is open the
+  diff pane is a fixed split — the pick area scrolls in the top half and the
+  live output pane is pinned to the bottom half, always visible — and the
+  `‹ change`/`change ›` buttons step between conflict regions with the
+  output pane following to each region's contribution (both flash).
+
 - **TUI: the repo switcher (`R`) is fullscreen and table-aligned.** The
   picker now always opens at the maximized width/row budget (ctrl+t is gone
   from this popup) and lays its rows out as a table: repo name, the slow-fs

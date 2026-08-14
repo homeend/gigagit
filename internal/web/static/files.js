@@ -481,11 +481,19 @@ function activeFileList() {
 }
 
 
+// changeNavRows: what the ‹/› change buttons step over — conflict regions
+// while the picker is open, else the rendered diff's change runs.
+function changeNavRows() {
+  if (conflictPick) return [...document.querySelectorAll("#cf-doc .cf-region")];
+  return diffChangeBlocks();
+}
+
+
 function updateDiffNav() {
   const list = activeFileList();
   $("prev-file").disabled = list.length === 0 || state.fileCursor <= 0;
   $("next-file").disabled = list.length === 0 || state.fileCursor >= list.length - 1;
-  const any = diffChangeBlocks().length > 0;
+  const any = changeNavRows().length > 0;
   $("prev-change").disabled = !any;
   $("next-change").disabled = !any;
   $("hist-btn").disabled = $("blame-btn").disabled = !state.diffCtx;
@@ -518,7 +526,7 @@ function diffChangeBlocks() {
 
 
 function stepChange(delta) {
-  const blocks = diffChangeBlocks();
+  const blocks = changeNavRows();
   if (!blocks.length) return;
   const i = Math.max(0, Math.min(blocks.length - 1, state.diffBlockIdx + delta));
   state.diffBlockIdx = i;
@@ -526,6 +534,16 @@ function stepChange(delta) {
   tr.scrollIntoView({ block: "center" });
   tr.classList.add("flash");
   setTimeout(() => tr.classList.remove("flash"), 600);
+  if (conflictPick && tr.dataset.b != null) {
+    // The output pane follows: scroll the region's contribution (its own
+    // scroll container, so the pick area is unaffected) and flash it too.
+    const seg = document.querySelector(`#cf-out-body .cf-out-region[data-b="${tr.dataset.b}"]`);
+    if (seg) {
+      seg.scrollIntoView({ block: "center" });
+      seg.classList.add("flash");
+      setTimeout(() => seg.classList.remove("flash"), 600);
+    }
+  }
 }
 
 
@@ -661,12 +679,106 @@ $("diff-body").addEventListener("click", (e) => {
 
 // ---- conflict block picker (conflict surface) -----------------------------
 // A conflicted row opens the file's marker regions as pickable ours/theirs
-// blocks (GET /api/conflict-hunks). Picks are POSITIONAL against the exact
-// bytes the server hashed; resolving POSTs the full pick set and the server
-// writes + stages via engine.ResolveConflictHunks. A 409 means the file
-// moved: reload the picker (the stage-hunks rule).
+// blocks (GET /api/conflict-hunks). Picks are per-LINE and ordered (the TUI
+// line-pick rule): resolving POSTs a positional pick per block — a whole-side
+// fast path ({mode:"ours"|"theirs"}) when the picks are exactly that side in
+// order, else the ordered line list ({mode:"lines", lines:[{side,line},…]}).
+// The server writes + stages via engine.ResolveConflictHunks. A 409 means the
+// file moved: reload the picker (the stage-hunks rule).
 
-let conflictPick = null; // {path, hash, count, choices: Array<null|"ours"|"theirs">} — set only while the picker is open
+// choices[i] = {picks: Array<{side:"ours"|"theirs", line:number}>, touched:boolean}
+// - order of `picks` = order in the assembled result (the TUI rule)
+// - touched && picks.length === 0  → decided-empty ("drop both sides")
+// - !touched                       → undecided (gates resolve)
+let conflictPick = null; // {path, hash, count, items, blocks, choices} — set only while the picker is open
+
+
+function regionDecided(ch) { return ch.touched; }
+
+
+function sideState(ch, it, side) {
+  // → "all" | "some" | "none" for the tri-state tag
+  const total = (side === "ours" ? it.ours : it.theirs)?.length || 0;
+  if (!total) return "none";
+  const n = ch.picks.filter((p) => p.side === side).length;
+  return n === total ? "all" : n ? "some" : "none";
+}
+
+
+function toggleLine(ch, side, line) {
+  ch.touched = true;
+  const at = ch.picks.findIndex((p) => p.side === side && p.line === line);
+  if (at >= 0) ch.picks.splice(at, 1);
+  else ch.picks.push({ side, line });
+}
+
+
+function toggleSide(ch, it, side) {
+  // TUI ToggleSide: zero-line side is a no-op; fully-on clears that side's
+  // picks (others keep order); else append the side's unpicked lines in order.
+  const lines = side === "ours" ? it.ours : it.theirs;
+  if (!lines || !lines.length) return;
+  ch.touched = true;
+  if (sideState(ch, it, side) === "all") {
+    ch.picks = ch.picks.filter((p) => p.side !== side);
+  } else {
+    for (let i = 0; i < lines.length; i++)
+      if (!ch.picks.some((p) => p.side === side && p.line === i)) ch.picks.push({ side, line: i });
+  }
+}
+
+
+function wirePick(ch, it) {
+  // Collapse to the fast path when the picks are exactly one full side in order.
+  const full = (side) => {
+    const lines = side === "ours" ? it.ours : it.theirs;
+    return (lines?.length || 0) > 0 && ch.picks.length === lines.length &&
+      ch.picks.every((p, i) => p.side === side && p.line === i);
+  };
+  if (full("ours")) return { mode: "ours" };
+  if (full("theirs")) return { mode: "theirs" };
+  return { mode: "lines", lines: ch.picks.map((p) => ({ side: p.side, line: p.line })) };
+}
+
+
+// regionSuffix is the dim state note next to a region's header: nothing
+// while undecided, "empty" when decided-empty (both sides dropped), else —
+// only once BOTH sides are fully picked (matching the TUI's stateSuffix,
+// which gates on both sides' all-state) — the side of the first pick. The
+// ticks already convey partial/single-side state; this suffix exists solely
+// to surface interleave order once everything from both sides is merged. A
+// region with a zero-line side can never reach "all" on that side, so it
+// never shows this suffix either — same as the TUI.
+function regionSuffix(ch, it) {
+  if (!ch.touched) return "";
+  if (!ch.picks.length) return "empty";
+  if (sideState(ch, it, "ours") !== "all" || sideState(ch, it, "theirs") !== "all") return "";
+  return (ch.picks[0].side === "ours" ? "ours" : "theirs") + " first";
+}
+
+
+// assembleOutput is the live preview: the resolved file as it would be
+// written, undecided regions rendered as a placeholder so the pane always
+// reflects the CURRENT (possibly incomplete) pick state.
+function assembleOutput(v) {
+  // HTML with each region's contribution wrapped in a .cf-out-region span so
+  // the ‹/› change nav can scroll the pane to it. The TEXT stays byte-equal
+  // to the join of all contributed lines (empty parts are dropped whole, so
+  // no stray newlines appear around a decided-empty region).
+  const parts = [];
+  for (const it of v.items) {
+    if (it.kind === "text") {
+      if ((it.lines || []).length) parts.push(esc(it.lines.join("\n")));
+      continue;
+    }
+    const ch = v.choices[it.index];
+    const lines = !ch.touched
+      ? [`‹region ${it.index + 1} undecided›`]
+      : ch.picks.map((p) => (p.side === "ours" ? it.ours : it.theirs)[p.line]);
+    if (lines.length) parts.push(`<span class="cf-out-region" data-b="${it.index}">${esc(lines.join("\n"))}</span>`);
+  }
+  return parts.join("\n");
+}
 
 
 async function openConflictPicker(f) {
@@ -684,20 +796,36 @@ async function openConflictPicker(f) {
       `<div class="notice">right-click the file → mark resolved when it is done</div>`;
     return;
   }
-  conflictPick = { path: f.path, hash: d.hash, count: d.count, choices: new Array(d.count).fill(null) };
+  const blocks = []; // index → block item, built once for wirePick/toggle/paint lookups
+  for (const it of d.items) if (it.kind === "block") blocks[it.index] = it;
+  conflictPick = {
+    path: f.path,
+    hash: d.hash,
+    count: d.count,
+    items: d.items,
+    blocks,
+    choices: Array.from({ length: d.count }, () => ({ picks: [], touched: false })),
+  };
   let html = '<div id="cf-doc">';
   for (const it of d.items) {
     if (it.kind === "text") {
       html += `<pre class="cf-text">${esc((it.lines || []).join("\n"))}</pre>`;
     } else {
-      html += `<div class="cf-block" data-b="${it.index}">` +
-        `<div class="cf-side cf-ours" data-side="ours"><div class="cf-tag">ours${cfSideCount(it.ours)}</div><pre>${cfSideHTML(it.ours)}</pre></div>` +
-        `<div class="cf-side cf-theirs" data-side="theirs"><div class="cf-tag">theirs${cfSideCount(it.theirs)}</div><pre>${cfSideHTML(it.theirs)}</pre></div>` +
+      html += `<div class="cf-region" data-b="${it.index}">` +
+        `<div class="cf-region-head">region ${it.index + 1}<span class="cf-region-state"></span></div>` +
+        `<div class="cf-block">${cfSideDiv(it, "ours")}${cfSideDiv(it, "theirs")}</div>` +
         `</div>`;
     }
   }
-  $("diff-body").innerHTML = html + "</div>";
-  renderResolveBar();
+  html += "</div>" +
+    `<div id="cf-out">` +
+    `<div id="cf-out-head" data-act="collapse">output — live preview</div>` +
+    `<pre id="cf-out-body"></pre>` +
+    `</div>`;
+  $("diff-body").innerHTML = html;
+  state.diffBlockIdx = -1; // ‹/› change steps regions from the top
+  paintConflictPicks();
+  updateDiffNav(); // the early call saw no regions; enable ‹/› change now
 }
 
 
@@ -710,32 +838,74 @@ function cfSideCount(lines) {
 }
 
 
-// cfSideHTML renders one side's lines with emptiness made visible: a side
-// with no lines at all says so (this side deletes the region), an empty line
-// shows a dim ¶, and a whitespace-only line shows its spaces/tabs as ·/→ so
-// "3 spaces" and "empty" stop looking identical. A trailing \r (CRLF file —
-// ParseConflict keeps it) is ignored for the blank test so a "\r" line reads
-// as empty rather than invisible.
-function cfSideHTML(lines) {
-  if (!lines || !lines.length) return '<span class="cf-empty">(empty — this side has no lines)</span>';
-  return lines
-    .map((ln) => {
-      const bare = ln.replace(/\r$/, "");
-      if (!/^\s*$/.test(bare)) return esc(ln);
-      const glyphs = bare.length ? bare.replace(/\t/g, "→").replace(/ /g, "·") : "¶";
-      return `<span class="cf-ws">${esc(glyphs)}</span>`;
-    })
-    .join("\n");
+// cfLineHTML renders ONE line's inner HTML with emptiness made visible: an
+// empty line shows a dim ¶, and a whitespace-only line shows its spaces/tabs
+// as ·/→ so "3 spaces" and "empty" stop looking identical. A trailing \r
+// (CRLF file — ParseConflict keeps it) is ignored for the blank test so a
+// "\r" line reads as empty rather than invisible.
+function cfLineHTML(ln) {
+  const bare = ln.replace(/\r$/, "");
+  if (!/^\s*$/.test(bare)) return esc(ln);
+  const glyphs = bare.length ? bare.replace(/\t/g, "→").replace(/ /g, "·") : "¶";
+  return `<span class="cf-ws">${esc(glyphs)}</span>`;
 }
 
 
+// cfSideDiv renders one side of a block: a zero-line side gets the existing
+// "(empty — this side has no lines)" body and NO actionable tick (nothing to
+// toggle); a non-empty side gets a clickable tri-state tag plus one row per
+// line, each with its own checkbox tick.
+function cfSideDiv(it, side) {
+  const lines = side === "ours" ? it.ours : it.theirs;
+  const n = (lines || []).length;
+  const tag = n
+    ? `<div class="cf-tag" data-act="side"><span class="cf-tick">[ ]</span> ${side}${cfSideCount(lines)}</div>`
+    : `<div class="cf-tag">${side}${cfSideCount(lines)}</div>`;
+  const body = n
+    ? lines.map((ln, i) =>
+      `<div class="cf-ln" data-side="${side}" data-line="${i}"><span class="cf-tick">[ ]</span>${cfLineHTML(ln)}</div>`).join("")
+    : '<span class="cf-empty">(empty — this side has no lines)</span>';
+  return `<div class="cf-side cf-${side}" data-side="${side}">${tag}${body}</div>`;
+}
+
+
+// paintConflictPicks repaints tick glyphs, .picked line classes, the tri-state
+// tag emphasis, the region suffix, the output pane body, and the resolve
+// bar. The one repaint function — called after every toggle.
 function paintConflictPicks() {
-  document.querySelectorAll("#cf-doc .cf-block").forEach((el) => {
-    const choice = conflictPick && conflictPick.choices[Number(el.dataset.b)];
-    el.classList.toggle("decided", !!choice);
-    el.querySelectorAll(".cf-side").forEach((s) =>
-      s.classList.toggle("picked", !!choice && s.dataset.side === choice));
+  const v = conflictPick;
+  document.querySelectorAll("#cf-doc .cf-region").forEach((regionEl) => {
+    const i = Number(regionEl.dataset.b);
+    const ch = v && v.choices[i];
+    const it = v && v.blocks[i];
+    if (!ch || !it) return;
+    regionEl.classList.toggle("decided", regionDecided(ch));
+    const stateEl = regionEl.querySelector(".cf-region-state");
+    if (stateEl) {
+      const suffix = regionSuffix(ch, it);
+      stateEl.textContent = suffix ? " · " + suffix : "";
+    }
+    regionEl.querySelectorAll(".cf-side").forEach((sideEl) => {
+      const side = sideEl.dataset.side;
+      const tag = sideEl.querySelector(".cf-tag");
+      const tick = tag && tag.querySelector(".cf-tick");
+      if (tick) {
+        const st = sideState(ch, it, side);
+        tick.textContent = st === "all" ? "[x]" : st === "some" ? "[~]" : "[ ]";
+        tag.classList.toggle("some", st === "some");
+        tag.classList.toggle("all", st === "all");
+      }
+      sideEl.querySelectorAll(".cf-ln").forEach((lnEl) => {
+        const line = Number(lnEl.dataset.line);
+        const picked = ch.picks.some((p) => p.side === side && p.line === line);
+        lnEl.classList.toggle("picked", picked);
+        const lt = lnEl.querySelector(".cf-tick");
+        if (lt) lt.textContent = picked ? "[x]" : "[ ]";
+      });
+    });
   });
+  const outBody = $("cf-out-body");
+  if (outBody) outBody.innerHTML = v ? assembleOutput(v) : "";
   renderResolveBar();
 }
 
@@ -744,25 +914,50 @@ function renderResolveBar() {
   const bar = $("resolve-bar");
   if (!conflictPick) { bar.classList.add("hidden"); return; }
   bar.classList.remove("hidden");
-  const n = conflictPick.choices.filter(Boolean).length;
-  $("resolve-count").textContent = n + "/" + conflictPick.count + " picked";
-  $("resolve-go").disabled = n !== conflictPick.count;
+  const v = conflictPick;
+  const n = v.choices.filter(regionDecided).length;
+  $("resolve-count").textContent = n + "/" + v.count + " decided";
+  $("resolve-go").disabled = !v.choices.every(regionDecided);
 }
 
 
+// setAllConflictPicks is the resolve bar's "all ours"/"all theirs": a
+// document-wide TRI-STATE toggle (the TUI C/I rule) — if every region with a
+// non-empty that-side is already fully-on for that side, clear that side
+// everywhere (still touched, may become decided-empty); else complete it
+// everywhere (append that side's missing lines in order). Zero-line sides
+// are skipped entirely, both for the "already all-on" check and the apply.
 function setAllConflictPicks(side) {
-  if (!conflictPick) return;
-  conflictPick.choices.fill(side);
+  const v = conflictPick;
+  if (!v) return;
+  const eligible = v.blocks.filter((it) => ((side === "ours" ? it.ours : it.theirs) || []).length);
+  if (!eligible.length) return;
+  const allOn = eligible.every((it) => sideState(v.choices[it.index], it, side) === "all");
+  for (const it of eligible) {
+    const ch = v.choices[it.index];
+    ch.touched = true;
+    if (allOn) {
+      ch.picks = ch.picks.filter((p) => p.side !== side);
+    } else {
+      const lines = side === "ours" ? it.ours : it.theirs;
+      for (let i = 0; i < lines.length; i++)
+        if (!ch.picks.some((p) => p.side === side && p.line === i)) ch.picks.push({ side, line: i });
+    }
+  }
   paintConflictPicks();
 }
 
 
 async function resolveConflictPicked() {
   const v = conflictPick;
-  if (!v || v.choices.some((c) => !c)) return;
+  if (!v || !v.choices.every(regionDecided)) return;
   let resp;
   try {
-    resp = await postJSON("/api/resolve-hunks", { path: v.path, picks: v.choices, hash: v.hash });
+    resp = await postJSON("/api/resolve-hunks", {
+      path: v.path,
+      picks: v.choices.map((ch, i) => wirePick(ch, v.blocks[i])),
+      hash: v.hash,
+    });
   } catch (e) {
     opLine("error: " + (e.message || e), true);
     // 409 = the file moved under the picker: reload it for fresh blocks
@@ -802,11 +997,29 @@ $("resolve-go").addEventListener("click", resolveConflictPicked);
 
 $("diff-body").addEventListener("click", (e) => {
   if (!conflictPick) return;
+  const collapse = e.target.closest("#cf-out-head");
+  if (collapse) {
+    $("cf-out-body").classList.toggle("hidden");
+    return;
+  }
   if (!getSelection().isCollapsed) return; // selecting text is not a pick
-  const side = e.target.closest(".cf-side");
-  if (!side) return;
-  conflictPick.choices[Number(side.closest(".cf-block").dataset.b)] = side.dataset.side;
-  paintConflictPicks();
+  const v = conflictPick;
+  const lnEl = e.target.closest(".cf-ln");
+  if (lnEl) {
+    const region = lnEl.closest(".cf-region");
+    const ch = v.choices[Number(region.dataset.b)];
+    toggleLine(ch, lnEl.dataset.side, Number(lnEl.dataset.line));
+    paintConflictPicks();
+    return;
+  }
+  const tag = e.target.closest('[data-act="side"]');
+  if (tag) {
+    const region = tag.closest(".cf-region");
+    const side = tag.closest(".cf-side").dataset.side;
+    const i = Number(region.dataset.b);
+    toggleSide(v.choices[i], v.blocks[i], side);
+    paintConflictPicks();
+  }
 });
 
 
@@ -996,4 +1209,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { SECTION_LABELS, activeFileList, applyCompareFilter, cfSideCount, cfSideHTML, clearDiffHunks, conflictPick, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, enterFilesStage, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markSpans, openCompare, openConflictPicker, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, renderResolveBar, reopenAfterHunkStage, resolveConflictPicked, setAllConflictPicks, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepToNextConflict, updateDiffNav };
+export { SECTION_LABELS, activeFileList, applyCompareFilter, cfSideCount, clearDiffHunks, conflictPick, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, enterFilesStage, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markSpans, openCompare, openConflictPicker, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, renderResolveBar, reopenAfterHunkStage, resolveConflictPicked, setAllConflictPicks, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepToNextConflict, updateDiffNav };

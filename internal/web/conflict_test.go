@@ -1,6 +1,7 @@
 package web
 
 import (
+	"encoding/json"
 	"net/http"
 	"os"
 	"os/exec"
@@ -10,6 +11,18 @@ import (
 
 	"github.com/homeend/gigagit/internal/domain"
 )
+
+// resolveBody marshals a /api/resolve-hunks request body. picks is left as
+// `any` so callers can pass literal []map[string]any tagged-object picks
+// without an intermediate named type.
+func resolveBody(t *testing.T, path string, picks any, hash string) string {
+	t.Helper()
+	b, err := json.Marshal(map[string]any{"path": path, "picks": picks, "hash": hash})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
 
 // conflictStatusResp decodes the parts of /api/status these tests assert on.
 type conflictStatusResp struct {
@@ -158,14 +171,24 @@ func TestConflictHunksEligibility(t *testing.T) {
 	}
 }
 
-// The user removed the markers by hand (or the file is binary): the picker
-// has nothing to pick — typed 422, the client falls back to mark-resolved.
+// A modify/delete conflict has no markers at all: one side deletes the path,
+// so UnmergedStages is missing a stage and ConflictPickerFile falls back to
+// the worktree bytes it left there (git's own "ours" copy, unmarked) — the
+// picker has nothing to pick. Typed 422, the client falls back to
+// mark-resolved. (A hand-edited worktree no longer reaches this path at all:
+// the loader regenerates from the index stages, which the edit didn't touch.)
 func TestConflictHunksMalformed(t *testing.T) {
-	dir := conflictingRepo(t)
-	conflictedMergeState(t, dir)
-	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("hand-resolved, no markers\n"), 0o644); err != nil {
+	dir := newRepoDir(t, 1)
+	gitRun(t, dir, "checkout", "-b", "feature")
+	gitRun(t, dir, "rm", "f.txt")
+	gitRun(t, dir, "commit", "-m", "feature deletes f.txt")
+	gitRun(t, dir, "checkout", "main")
+	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("main edit\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	gitRun(t, dir, "add", "-A")
+	gitRun(t, dir, "commit", "-m", "main edit")
+	conflictedMergeState(t, dir)
 	ts := serve(t, New(domain.Open(dir)))
 
 	if code := getJSON(t, ts, "/api/conflict-hunks?path=f.txt", nil); code != http.StatusUnprocessableEntity {
@@ -183,9 +206,8 @@ func TestResolveHunks(t *testing.T) {
 		t.Fatalf("hunks code = %d", code)
 	}
 	var st conflictStatusResp
-	code := postJSON(t, ts, "/api/resolve-hunks",
-		`{"path":"f.txt","picks":["theirs"],"hash":"`+d.Hash+`"}`,
-		"application/json", "", &st)
+	body := resolveBody(t, "f.txt", []map[string]any{{"mode": "theirs"}}, d.Hash)
+	code := postJSON(t, ts, "/api/resolve-hunks", body, "application/json", "", &st)
 	if code != http.StatusOK {
 		t.Fatalf("resolve code = %d", code)
 	}
@@ -203,33 +225,82 @@ func TestResolveHunks(t *testing.T) {
 	}
 }
 
-// Two regions, opposite picks — the positional contract end-to-end. The
-// working-tree content is ours to write (the index, not the file, is what
-// keeps the path unmerged), so a synthetic two-block marker file works.
-func TestResolveHunksMixedPicks(t *testing.T) {
-	dir := conflictingRepo(t)
-	conflictedMergeState(t, dir)
-	two := "keep\n<<<<<<< HEAD\nm1\n=======\nf1\n>>>>>>> feature\nmid\n<<<<<<< HEAD\nm2\n=======\nf2\n>>>>>>> feature\nend\n"
-	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte(two), 0o644); err != nil {
+// twoRegionConflictRepo builds a real merge conflict with two separate
+// conflicting regions in the same file — the loader now regenerates from the
+// index stages (not the worktree bytes), so the multi-block positional
+// contract needs an actual multi-region conflict rather than a synthetic
+// worktree overwrite.
+func twoRegionConflictRepo(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	gitRun(t, dir, "init", "-b", "main")
+	base := "keep\nbase1\nc1\nc2\nc3\nc4\nc5\nbase2\nend\n"
+	f := filepath.Join(dir, "f.txt")
+	if err := os.WriteFile(f, []byte(base), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	gitRun(t, dir, "add", "-A")
+	gitRun(t, dir, "commit", "-m", "base")
+
+	gitRun(t, dir, "checkout", "-b", "feature")
+	feature := strings.NewReplacer("base1", "f1", "base2", "f2").Replace(base)
+	if err := os.WriteFile(f, []byte(feature), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, dir, "add", "-A")
+	gitRun(t, dir, "commit", "-m", "feature edit")
+
+	gitRun(t, dir, "checkout", "main")
+	mainC := strings.NewReplacer("base1", "m1", "base2", "m2").Replace(base)
+	if err := os.WriteFile(f, []byte(mainC), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, dir, "add", "-A")
+	gitRun(t, dir, "commit", "-m", "main edit")
+
+	conflictedMergeState(t, dir)
+	return dir
+}
+
+// Two regions, opposite picks — the positional contract end-to-end.
+func TestResolveHunksMixedPicks(t *testing.T) {
+	dir := twoRegionConflictRepo(t)
 	ts := serve(t, New(domain.Open(dir)))
 
 	var d conflictHunksResp
 	if code := getJSON(t, ts, "/api/conflict-hunks?path=f.txt", &d); code != http.StatusOK || d.Count != 2 {
 		t.Fatalf("hunks code = %d count = %d, want 200/2", code, d.Count)
 	}
-	if code := postJSON(t, ts, "/api/resolve-hunks",
-		`{"path":"f.txt","picks":["ours","theirs"],"hash":"`+d.Hash+`"}`,
-		"application/json", "", nil); code != http.StatusOK {
+	body := resolveBody(t, "f.txt", []map[string]any{{"mode": "ours"}, {"mode": "theirs"}}, d.Hash)
+	if code := postJSON(t, ts, "/api/resolve-hunks", body, "application/json", "", nil); code != http.StatusOK {
 		t.Fatalf("resolve code = %d", code)
 	}
 	b, _ := os.ReadFile(filepath.Join(dir, "f.txt"))
-	if string(b) != "keep\nm1\nmid\nf2\nend\n" {
-		t.Errorf("f.txt = %q", b)
+	want := "keep\nm1\nc1\nc2\nc3\nc4\nc5\nf2\nend\n"
+	if string(b) != want {
+		t.Errorf("f.txt = %q, want %q", b, want)
 	}
 }
 
+// gitIndexInfo feeds "<mode> <object> <stage>\t<path>\n" lines to
+// `git update-index --index-info` — the only way to rewrite a single
+// unmerged stage in place without resolving the conflict. Needed because
+// gitRun has no stdin; this is the drift test's own plumbing.
+func gitIndexInfo(t *testing.T, dir, stdin string) {
+	t.Helper()
+	cmd := exec.Command("git", "-c", "commit.gpgsign=false", "update-index", "--index-info")
+	cmd.Dir = dir
+	cmd.Stdin = strings.NewReader(stdin)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git update-index --index-info: %v\n%s", err, out)
+	}
+}
+
+// The loader now regenerates from the index stages, not the worktree bytes,
+// so drift has to happen in the index: rewrite stage 3 (theirs) to a new
+// blob between GET and POST. The path stays unmerged (still 3 stages), so
+// the eligibility gate still passes — only the regenerated content, and
+// therefore the hash, changes under the client's feet.
 func TestResolveHunksHashDrift(t *testing.T) {
 	dir := conflictingRepo(t)
 	conflictedMergeState(t, dir)
@@ -239,14 +310,83 @@ func TestResolveHunksHashDrift(t *testing.T) {
 	if code := getJSON(t, ts, "/api/conflict-hunks?path=f.txt", &d); code != http.StatusOK {
 		t.Fatalf("hunks code = %d", code)
 	}
-	// the file moves under the client's feet
-	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("<<<<<<< HEAD\nx\n=======\ny\n>>>>>>> feature\n"), 0o644); err != nil {
+	drifted := filepath.Join(t.TempDir(), "drifted.txt")
+	if err := os.WriteFile(drifted, []byte("drifted\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if code := postJSON(t, ts, "/api/resolve-hunks",
-		`{"path":"f.txt","picks":["theirs"],"hash":"`+d.Hash+`"}`,
-		"application/json", "", nil); code != http.StatusConflict {
+	blob := gitRun(t, dir, "hash-object", "-w", drifted)
+	gitIndexInfo(t, dir, "100644 "+blob+" 3\tf.txt\n")
+
+	body := resolveBody(t, "f.txt", []map[string]any{{"mode": "theirs"}}, d.Hash)
+	if code := postJSON(t, ts, "/api/resolve-hunks", body, "application/json", "", nil); code != http.StatusConflict {
 		t.Errorf("code = %d, want 409", code)
+	}
+}
+
+// nestedMarkerRepo builds a repo whose conflicted file's content itself
+// contains literal 7-char conflict-marker lines (a conflict once committed
+// unresolved), the case raw-worktree parsing cannot disambiguate. The base
+// content's ghost markers are untouched by either branch — only the trailing
+// "end" line diverges — so the merge produces exactly one real conflict
+// region, away from the ghost lines, and both sides keep those lines intact.
+func nestedMarkerRepo(t *testing.T) (dir, path string) {
+	t.Helper()
+	dir = t.TempDir()
+	gitRun(t, dir, "init", "-b", "main")
+	base := "top\n<<<<<<< HEAD\nghost\n=======\nother\n>>>>>>> x\nbottom\nend\n"
+	weird := filepath.Join(dir, "weird.txt")
+	if err := os.WriteFile(weird, []byte(base), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, dir, "add", "-A")
+	gitRun(t, dir, "commit", "-m", "base")
+
+	gitRun(t, dir, "checkout", "-b", "feature")
+	if err := os.WriteFile(weird, []byte(strings.Replace(base, "end\n", "END-F\n", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, dir, "add", "-A")
+	gitRun(t, dir, "commit", "-m", "feature edit")
+
+	gitRun(t, dir, "checkout", "main")
+	if err := os.WriteFile(weird, []byte(strings.Replace(base, "end\n", "END-M\n", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, dir, "add", "-A")
+	gitRun(t, dir, "commit", "-m", "main edit")
+
+	conflictedMergeState(t, dir)
+	return dir, "weird.txt"
+}
+
+func TestConflictHunksNestedMarkers(t *testing.T) {
+	dir, path := nestedMarkerRepo(t)
+	ts := serve(t, New(domain.Open(dir)))
+	var d struct {
+		Count int    `json:"count"`
+		Hash  string `json:"hash"`
+		Items []struct {
+			Kind   string   `json:"kind"`
+			Lines  []string `json:"lines"`
+			Ours   []string `json:"ours"`
+			Theirs []string `json:"theirs"`
+		} `json:"items"`
+	}
+	if code := getJSON(t, ts, "/api/conflict-hunks?path="+path, &d); code != http.StatusOK {
+		t.Fatalf("nested-marker file must load via regeneration, got %d", code)
+	}
+	if d.Count != 1 {
+		t.Fatalf("count = %d, want 1 real region", d.Count)
+	}
+	// The literal ghost markers are passthrough text, not a block.
+	found := false
+	for _, it := range d.Items {
+		if it.Kind == "text" && strings.Contains(strings.Join(it.Lines, "\n"), "<<<<<<< HEAD") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("literal marker lines must survive as passthrough text")
 	}
 }
 
@@ -257,11 +397,217 @@ func TestResolveHunksPickCount(t *testing.T) {
 
 	var d conflictHunksResp
 	getJSON(t, ts, "/api/conflict-hunks?path=f.txt", &d)
-	for _, bad := range []string{`[]`, `["theirs","ours"]`, `["sideways"]`} {
-		if code := postJSON(t, ts, "/api/resolve-hunks",
-			`{"path":"f.txt","picks":`+bad+`,"hash":"`+d.Hash+`"}`,
-			"application/json", "", nil); code != http.StatusBadRequest {
-			t.Errorf("picks %s: code = %d, want 400", bad, code)
+	cases := []any{
+		[]map[string]any{},
+		[]map[string]any{{"mode": "theirs"}, {"mode": "ours"}},
+		[]map[string]any{{"mode": "sideways"}},
+	}
+	for _, picks := range cases {
+		body := resolveBody(t, "f.txt", picks, d.Hash)
+		if code := postJSON(t, ts, "/api/resolve-hunks", body, "application/json", "", nil); code != http.StatusBadRequest {
+			t.Errorf("picks %v: code = %d, want 400", picks, code)
 		}
 	}
+}
+
+// singleRegionConflictRepo builds a merge conflict with exactly one region
+// whose ours (current/main) side has TWO lines and whose theirs
+// (incoming/feature) side has ONE — the ordered line-pick fixture: ours
+// [oA,oB], theirs [tA]. Surrounding "keep"/"end" lines stay passthrough on
+// both sides so a dropped-region assertion has something to check survives.
+func singleRegionConflictRepo(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	gitRun(t, dir, "init", "-b", "main")
+	f := filepath.Join(dir, "f.txt")
+	if err := os.WriteFile(f, []byte("keep\nbase1\nend\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, dir, "add", "-A")
+	gitRun(t, dir, "commit", "-m", "base")
+
+	gitRun(t, dir, "checkout", "-b", "feature")
+	if err := os.WriteFile(f, []byte("keep\ntA\nend\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, dir, "add", "-A")
+	gitRun(t, dir, "commit", "-m", "feature edit")
+
+	gitRun(t, dir, "checkout", "main")
+	if err := os.WriteFile(f, []byte("keep\noA\noB\nend\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, dir, "add", "-A")
+	gitRun(t, dir, "commit", "-m", "main edit")
+
+	conflictedMergeState(t, dir)
+	return dir
+}
+
+// The ordered line-pick model: result order is array order regardless of
+// side, and sides may interleave.
+func TestResolveHunksLinePicks(t *testing.T) {
+	dir := singleRegionConflictRepo(t)
+	ts := serve(t, New(domain.Open(dir)))
+
+	var d conflictHunksResp
+	if code := getJSON(t, ts, "/api/conflict-hunks?path=f.txt", &d); code != http.StatusOK || d.Count != 1 {
+		t.Fatalf("hunks code = %d count = %d, want 200/1", code, d.Count)
+	}
+
+	picks := []map[string]any{{
+		"mode": "lines",
+		"lines": []map[string]any{
+			{"side": "theirs", "line": 0},
+			{"side": "ours", "line": 1},
+			{"side": "ours", "line": 0},
+		},
+	}}
+	body := resolveBody(t, "f.txt", picks, d.Hash)
+	if code := postJSON(t, ts, "/api/resolve-hunks", body, "application/json", "", nil); code != http.StatusOK {
+		t.Fatalf("resolve code = %d", code)
+	}
+	b, err := os.ReadFile(filepath.Join(dir, "f.txt"))
+	want := "keep\ntA\noB\noA\nend\n"
+	if err != nil || string(b) != want {
+		t.Errorf("f.txt = %q, %v; want %q", b, err, want)
+	}
+	if out := gitRun(t, dir, "ls-files", "-u"); out != "" {
+		t.Errorf("still unmerged:\n%s", out)
+	}
+}
+
+// An empty "lines" list is decided-empty: neither side's lines make it into
+// the result, but passthrough text around the block is untouched.
+func TestResolveHunksEmptyDecided(t *testing.T) {
+	dir := singleRegionConflictRepo(t)
+	ts := serve(t, New(domain.Open(dir)))
+
+	var d conflictHunksResp
+	if code := getJSON(t, ts, "/api/conflict-hunks?path=f.txt", &d); code != http.StatusOK {
+		t.Fatalf("hunks code = %d", code)
+	}
+
+	picks := []map[string]any{{"mode": "lines", "lines": []map[string]any{}}}
+	body := resolveBody(t, "f.txt", picks, d.Hash)
+	if code := postJSON(t, ts, "/api/resolve-hunks", body, "application/json", "", nil); code != http.StatusOK {
+		t.Fatalf("resolve code = %d", code)
+	}
+	b, err := os.ReadFile(filepath.Join(dir, "f.txt"))
+	want := "keep\nend\n"
+	if err != nil || string(b) != want {
+		t.Errorf("f.txt = %q, %v; want %q (region dropped, passthrough intact)", b, err, want)
+	}
+}
+
+func TestResolveHunksLineValidation(t *testing.T) {
+	dir := singleRegionConflictRepo(t)
+	ts := serve(t, New(domain.Open(dir)))
+
+	var d conflictHunksResp
+	if code := getJSON(t, ts, "/api/conflict-hunks?path=f.txt", &d); code != http.StatusOK {
+		t.Fatalf("hunks code = %d", code)
+	}
+
+	cases := []struct {
+		name    string
+		picks   any
+		hash    string
+		want    int
+		wantMsg string
+	}{
+		{
+			name:    "bad side",
+			picks:   []map[string]any{{"mode": "lines", "lines": []map[string]any{{"side": "nope", "line": 0}}}},
+			hash:    d.Hash,
+			want:    http.StatusBadRequest,
+			wantMsg: `side "nope"`,
+		},
+		{
+			name:    "line out of range",
+			picks:   []map[string]any{{"mode": "lines", "lines": []map[string]any{{"side": "ours", "line": 99}}}},
+			hash:    d.Hash,
+			want:    http.StatusBadRequest,
+			wantMsg: "out of range",
+		},
+		{
+			name:    "duplicate pick",
+			picks:   []map[string]any{{"mode": "lines", "lines": []map[string]any{{"side": "ours", "line": 0}, {"side": "ours", "line": 0}}}},
+			hash:    d.Hash,
+			want:    http.StatusBadRequest,
+			wantMsg: "duplicate",
+		},
+		{
+			name:    "bad mode",
+			picks:   []map[string]any{{"mode": "weird"}},
+			hash:    d.Hash,
+			want:    http.StatusBadRequest,
+			wantMsg: `mode "weird"`,
+		},
+		{
+			name:    "wrong picks count",
+			picks:   []map[string]any{},
+			hash:    d.Hash,
+			want:    http.StatusBadRequest,
+			wantMsg: "picks:",
+		},
+		{
+			name:    "stale hash",
+			picks:   []map[string]any{{"mode": "ours"}},
+			hash:    "deadbeef",
+			want:    http.StatusConflict,
+			wantMsg: "changed",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			body := resolveBody(t, "f.txt", c.picks, c.hash)
+			code, out := postJSONRaw(t, ts, "/api/resolve-hunks", body)
+			if code != c.want {
+				t.Errorf("code = %d, want %d", code, c.want)
+			}
+			if !strings.Contains(out["error"], c.wantMsg) {
+				t.Errorf("error = %q, want substring %q", out["error"], c.wantMsg)
+			}
+		})
+	}
+}
+
+// {"mode":"ours"} / {"mode":"theirs"} behave exactly like the old string
+// picks — the whole-side fast path survives the wire migration.
+func TestResolveHunksFastPathStillWorks(t *testing.T) {
+	t.Run("ours", func(t *testing.T) {
+		dir := twoRegionConflictRepo(t)
+		ts := serve(t, New(domain.Open(dir)))
+		var d conflictHunksResp
+		if code := getJSON(t, ts, "/api/conflict-hunks?path=f.txt", &d); code != http.StatusOK {
+			t.Fatalf("hunks code = %d", code)
+		}
+		body := resolveBody(t, "f.txt", []map[string]any{{"mode": "ours"}, {"mode": "ours"}}, d.Hash)
+		if code := postJSON(t, ts, "/api/resolve-hunks", body, "application/json", "", nil); code != http.StatusOK {
+			t.Fatalf("resolve code = %d", code)
+		}
+		b, _ := os.ReadFile(filepath.Join(dir, "f.txt"))
+		want := "keep\nm1\nc1\nc2\nc3\nc4\nc5\nm2\nend\n"
+		if string(b) != want {
+			t.Errorf("f.txt = %q, want %q", b, want)
+		}
+	})
+	t.Run("theirs", func(t *testing.T) {
+		dir := twoRegionConflictRepo(t)
+		ts := serve(t, New(domain.Open(dir)))
+		var d conflictHunksResp
+		if code := getJSON(t, ts, "/api/conflict-hunks?path=f.txt", &d); code != http.StatusOK {
+			t.Fatalf("hunks code = %d", code)
+		}
+		body := resolveBody(t, "f.txt", []map[string]any{{"mode": "theirs"}, {"mode": "theirs"}}, d.Hash)
+		if code := postJSON(t, ts, "/api/resolve-hunks", body, "application/json", "", nil); code != http.StatusOK {
+			t.Fatalf("resolve code = %d", code)
+		}
+		b, _ := os.ReadFile(filepath.Join(dir, "f.txt"))
+		want := "keep\nf1\nc1\nc2\nc3\nc4\nc5\nf2\nend\n"
+		if string(b) != want {
+			t.Errorf("f.txt = %q, want %q", b, want)
+		}
+	})
 }
