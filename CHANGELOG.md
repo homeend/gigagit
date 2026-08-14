@@ -8,6 +8,15 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: conflict picker parity with the TUI.** The browser conflict picker
+  now has per-line checkboxes and tri-state side toggles (left, right, or
+  both — pick order = result order), decided-empty regions, and a live
+  assembled-output pane; `all ours`/`all theirs` are tri-state document
+  toggles. The server regenerates the conflict text from index stages
+  (`ConflictPickerFile`), so files whose content contains literal conflict
+  markers now load in the web picker too, and picks ride a new tagged wire
+  format (`ours`/`theirs`/ordered `lines`).
+
 - **TUI: `H` on the Staged panel opens the unstage picker.** The same
   region/line picker surface now runs staged ↔ HEAD: taking the HEAD side of
   a region reverts that part of the index (`git reset -p` analog) while the
