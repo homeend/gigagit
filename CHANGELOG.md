@@ -8,6 +8,30 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: the browser's layout is remembered by gg, not by the browser.** It
+  never survived a restart, and the saving code was not at fault: `gg web`
+  binds a RANDOM loopback port, so every run is a different origin and
+  `localStorage` — where the layout lived — starts empty every time. The
+  folded sections, both pane widths, the sidebar toggle and the graph mode now
+  live in gg's machine-local state file (`prompts.toml`, beside the dismissed
+  notices), read at boot from `GET /api/uistate` and written back through
+  `PUT /api/uistate` (debounced; wire values allowlisted, widths bounded).
+  Browser storage stays as a same-session cache. The state is machine-wide,
+  not per repo — how you fold the sidebar is a habit, not a property of a
+  repository — and a first run is still distinguishable from "I unfolded them
+  all", so the defaults are never re-applied over your choice.
+
+- **Web: sidebar sections fold on ONE click, and remember it.** Folding was
+  double-click only, and two of the six lists ignored it entirely: `remotes`
+  and `reflog` were missing from the CSS rule that hides a folded list, so
+  their headers flipped to `▸` while the list stayed on screen — a toggle that
+  looked broken. Now a single left click folds or unfolds any of the six, every
+  header carries a chevron showing its state (`▾` open, `▸` folded) instead of
+  only marking the folded ones, and a fresh install starts with **tags,
+  stashes and reflog folded** so the sidebar opens on what you steer with. Your
+  layout is saved per browser and restored on the next run; an explicitly
+  emptied set ("I opened them all") is kept as such, not re-defaulted.
+
 - **Web: a branch checked out in a worktree says where.** The browser Branches
   list showed no sign that a branch was open somewhere; it now carries the
   worktree's path after the name, the way the TUI's Branches panel does

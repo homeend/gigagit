@@ -5,14 +5,15 @@
 import { $ } from "./core.js";
 import "./layers.js";
 import { fetchStatus } from "./status.js";
-import { loadRepo } from "./ops.js";
-import { fetchBranches } from "./sidebar.js";
+import { applySidebarHidden, loadRepo } from "./ops.js";
+import { applyStoredSections, fetchBranches } from "./sidebar.js";
+import { loadUIState, uiState } from "./uistate.js";
 import "./versions.js";
 import "./rebase.js";
 import "./filehist.js";
 import "./review.js";
-import "./resize.js";
-import { loadCommits, renderCommits } from "./commits.js";
+import { applyStoredWidths } from "./resize.js";
+import { applyGraphMode, loadCommits, renderCommits } from "./commits.js";
 import "./files.js";
 import { focusPane } from "./keys.js";
 import { fetchHealth } from "./bigrepo.js";
@@ -23,7 +24,24 @@ import "./exttools.js";
 import "./sessionerrors.js";
 import "./palette.js";
 
+// applyStoredLayout puts back the layout gg remembered for this machine:
+// folded sections, pane widths, the sidebar toggle, the graph mode. It runs
+// FIRST so the page settles into the remembered shape before any data lands,
+// and it is a no-op on a first run (saved=false) — each module then keeps the
+// defaults its own top-level code already applied.
+async function applyStoredLayout() {
+  await loadUIState();
+  const ui = uiState();
+  if (!ui) return;
+  applyStoredSections(ui.sections);
+  applyStoredWidths(ui.sidebar_width, ui.files_width);
+  if (ui.sidebar_hidden) applySidebarHidden(true);
+  applyGraphMode(ui.graph);
+}
+
+
 async function boot() {
+  await applyStoredLayout();
   await loadRepo();
   // Neither status (a MINUTE of working-tree scan on a huge repo) nor the
   // sidebar (tags alone cost ~7s with hundreds of tags — for-each-ref peels

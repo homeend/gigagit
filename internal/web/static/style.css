@@ -145,7 +145,11 @@ mark.r { background: var(--span-add); color: inherit; }
 .crow.wt .subj { color: #e0c06c; font-weight: bold; }
 .crow.wt .graph { color: #e0c06c; margin-right: 12px; }
 #branches-pane { border-right: 1px solid var(--border); overflow-y: auto; }
-#branches-header { padding: 4px 8px; color: var(--dim); border-bottom: 1px solid var(--border); }
+/* branches is a .side-header like every other section. It only differs in
+   being FIRST: the rule below drops the divider a section draws above itself,
+   because nothing sits above this one. (It used to carry a border-BOTTOM that
+   no other header had, so one section looked underlined and five did not.) */
+#branches-header { border-top: none; margin-top: 0; }
 /* Every sidebar list shares ONE row shape — same padding, same nowrap +
    ellipsis, same hover, and the same leading marker column — so names line up
    from the top of the sidebar to the bottom. Remotes was the odd one out (no
@@ -292,8 +296,12 @@ mark.r { background: var(--span-add); color: inherit; }
   border-bottom: 1px solid var(--border); font: inherit; cursor: pointer;
 }
 #back-btn:hover { color: var(--accent); }
-#branches-header, .side-header { cursor: pointer; user-select: none; } /* dblclick collapses */
-#branches-list.collapsed, #worktrees-list.collapsed, #tags-list.collapsed, #stashes-list.collapsed { display: none; }
+#branches-header, .side-header { cursor: pointer; user-select: none; } /* click folds/unfolds */
+/* Folding a section hides its list. EVERY sidebar list belongs here: remotes
+   and reflog were missing, so clicking their headers set the class and flipped
+   the chevron while the list stayed on screen — a toggle that looked broken. */
+#branches-list.collapsed, #remotes-list.collapsed, #worktrees-list.collapsed,
+#tags-list.collapsed, #stashes-list.collapsed, #reflog-list.collapsed { display: none; }
 #top #pull-btn, #top #push-btn {
   margin-left: 10px; background: var(--bg); color: var(--fg);
   border: 1px solid var(--border); border-radius: 3px; padding: 1px 10px;

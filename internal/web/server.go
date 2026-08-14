@@ -83,6 +83,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/remotes", s.handleRemotes)
 	mux.HandleFunc("GET /api/settings", s.handleSettingsGet)
 	mux.HandleFunc("POST /api/settings", writeGuard(s.handleSettingsSet))
+	// The browser's own layout: kept server-side because gg web's port (and so
+	// the origin behind localStorage) changes every run — see uistate.go.
+	mux.HandleFunc("GET /api/uistate", s.handleUIStateGet)
+	mux.HandleFunc("PUT /api/uistate", writeGuard(s.handleUIStateSet))
 	mux.HandleFunc("GET /api/identity", s.handleIdentity)
 	mux.HandleFunc("POST /api/profiles", writeGuard(s.handleProfileAdd))
 	mux.HandleFunc("POST /api/profiles/remove", writeGuard(s.handleProfileRemove))
