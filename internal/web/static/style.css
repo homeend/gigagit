@@ -292,8 +292,12 @@ mark.r { background: var(--span-add); color: inherit; }
   border-bottom: 1px solid var(--border); font: inherit; cursor: pointer;
 }
 #back-btn:hover { color: var(--accent); }
-#branches-header, .side-header { cursor: pointer; user-select: none; } /* dblclick collapses */
-#branches-list.collapsed, #worktrees-list.collapsed, #tags-list.collapsed, #stashes-list.collapsed { display: none; }
+#branches-header, .side-header { cursor: pointer; user-select: none; } /* click folds/unfolds */
+/* Folding a section hides its list. EVERY sidebar list belongs here: remotes
+   and reflog were missing, so clicking their headers set the class and flipped
+   the chevron while the list stayed on screen — a toggle that looked broken. */
+#branches-list.collapsed, #remotes-list.collapsed, #worktrees-list.collapsed,
+#tags-list.collapsed, #stashes-list.collapsed, #reflog-list.collapsed { display: none; }
 #top #pull-btn, #top #push-btn {
   margin-left: 10px; background: var(--bg); color: var(--fg);
   border: 1px solid var(--border); border-radius: 3px; padding: 1px 10px;

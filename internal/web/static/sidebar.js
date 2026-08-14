@@ -558,31 +558,52 @@ $("worktrees-list").addEventListener("contextmenu", (e) => {
   if (w) showWorktreeMenu(w, e.clientX, e.clientY);
 });
 
-// Double-click a sidebar section header to collapse/expand its list — long
-// branch/tag lists otherwise force constant scrolling.
+// ONE left click on a sidebar section header folds or unfolds its list - long
+// branch/tag lists otherwise force constant scrolling. (It used to take a
+// double click, and two of the six lists ignored it entirely.)
+//
+// COLLAPSED_DEFAULT are the sections a FIRST RUN starts folded: the reference
+// lists you consult now and then, so the sidebar opens on what you steer with
+// (branches, remotes, worktrees) rather than a screenful of tags. It applies
+// only until something is saved - after that, your own layout is what returns.
+const COLLAPSED_DEFAULT = ["tags", "stashes", "reflog"];
+
+// Every header carries its state as a chevron - pointing down when open,
+// right when folded - so a folded section still reads as something you can open.
+function applySection(name, collapsed) {
+  $(name + "-list").classList.toggle("collapsed", collapsed);
+  $(name + "-header").textContent = (collapsed ? "\u25b8 " : "\u25be ") + name;
+}
+
+
 function toggleSection(name) {
-  const collapsed = $(name + "-list").classList.toggle("collapsed");
-  $(name + "-header").textContent = (collapsed ? "\u25b8 " : "") + name;
+  applySection(name, !$(name + "-list").classList.contains("collapsed"));
   lsSet("gg.sidebar.collapsed", JSON.stringify(SECTIONS.filter((n) => $(n + "-list").classList.contains("collapsed"))));
 }
 
 SECTIONS.forEach((n) => {
-  $(n + "-header").addEventListener("dblclick", () => toggleSection(n));
+  $(n + "-header").addEventListener("click", () => toggleSection(n));
 });
 
 
 // Restore persisted sidebar state (b-key visibility + per-section
 // collapse). The collapsed class lives on the persistent <ul> containers,
 // so a one-time boot restore survives every re-render.
+// A MISSING key is a first run and gets COLLAPSED_DEFAULT; a saved EMPTY list
+// means "I opened them all", a decision to honour - so the two are
+// deliberately not conflated.
 (function restoreSidebar() {
-  let names = [];
-  try { names = JSON.parse(lsGet("gg.sidebar.collapsed") || "[]"); } catch {}
-  SECTIONS.forEach((n) => {
-    if (names.includes(n)) {
-      $(n + "-list").classList.add("collapsed");
-      $(n + "-header").textContent = "\u25b8 " + n;
+  const saved = lsGet("gg.sidebar.collapsed");
+  let names = COLLAPSED_DEFAULT;
+  if (saved !== null && saved !== undefined && saved !== "") {
+    try {
+      const parsed = JSON.parse(saved);
+      names = Array.isArray(parsed) ? parsed : COLLAPSED_DEFAULT;
+    } catch {
+      names = COLLAPSED_DEFAULT;
     }
-  });
+  }
+  SECTIONS.forEach((n) => applySection(n, names.includes(n)));
   if (lsGet("gg.sidebar.hidden") === "1") {
     state.sidebar = false;
     $("panes").classList.add("nosb");

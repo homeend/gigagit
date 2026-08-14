@@ -8,6 +8,17 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: sidebar sections fold on ONE click, and remember it.** Folding was
+  double-click only, and two of the six lists ignored it entirely: `remotes`
+  and `reflog` were missing from the CSS rule that hides a folded list, so
+  their headers flipped to `▸` while the list stayed on screen — a toggle that
+  looked broken. Now a single left click folds or unfolds any of the six, every
+  header carries a chevron showing its state (`▾` open, `▸` folded) instead of
+  only marking the folded ones, and a fresh install starts with **tags,
+  stashes and reflog folded** so the sidebar opens on what you steer with. Your
+  layout is saved per browser and restored on the next run; an explicitly
+  emptied set ("I opened them all") is kept as such, not re-defaulted.
+
 - **Web: a branch checked out in a worktree says where.** The browser Branches
   list showed no sign that a branch was open somewhere; it now carries the
   worktree's path after the name, the way the TUI's Branches panel does
