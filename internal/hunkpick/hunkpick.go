@@ -123,8 +123,11 @@ func (b *Block) SideState(s Side) (all, any bool) {
 }
 
 // LinePicked reports whether side s's line is in the result, reading legacy
-// whole-side modes as full picks of that side.
+// whole-side modes as full picks of that side. A zero-line side is never picked.
 func (b *Block) LinePicked(s Side, line int) bool {
+	if len(b.lines(s)) == 0 {
+		return false
+	}
 	switch b.Mode {
 	case TakeCurrent:
 		return s == Current

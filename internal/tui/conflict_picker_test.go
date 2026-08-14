@@ -8,6 +8,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/hunkpick"
+	"github.com/homeend/gigagit/internal/i18n"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 func pickerDoc() *hunkpick.Doc {
@@ -263,6 +265,41 @@ func splitLinesTest(s string) []string {
 	return strings.Split(s, "\n")
 }
 
+func TestPickerSuffixEmptyAndFirst(t *testing.T) {
+	e := newConflictPicker("f.txt", pickerDoc())
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 100, height: 30}
+	// Region 0: both sides on, current toggled first → " — current first".
+	m, _ = e.update(m, keyMsg("c"))
+	m, _ = e.update(m, keyMsg("i"))
+	out := e.render(m, "")
+	if !strings.Contains(out, i18n.T("%s first", i18n.T("current"))) {
+		t.Fatalf("'current first' suffix missing:\n%s", out)
+	}
+	// Region 0: clear both → touched-empty → " — empty" (not "none").
+	m, _ = e.update(m, keyMsg("c"))
+	m, _ = e.update(m, keyMsg("i"))
+	out = e.render(m, "")
+	if !strings.Contains(out, " — "+i18n.T("empty")) {
+		t.Fatalf("'empty' suffix missing:\n%s", out)
+	}
+}
+
+// At width 80, height 12 the OLD split math yields bodyH=6 → outH=2 (capped
+// below 3 but still >0): a degraded 2-line pane with its rule shown. The
+// fix must hide the pane entirely at this size instead (verified empirically
+// via a scratch run — see task-3-report.md).
+func TestPickerTinyOverlayHidesOutputPane(t *testing.T) {
+	e := newConflictPicker("f.txt", pickerDoc())
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 12}
+	out := e.render(m, "")
+	if strings.Contains(out, "── ") {
+		t.Fatalf("tiny overlay must hide the output pane:\n%s", out)
+	}
+	if got := len(splitLinesTest(out)); got != 12 {
+		t.Fatalf("render produced %d lines, want 12", got)
+	}
+}
+
 func TestConflictPickerAltScrollMovesViewNotCursor(t *testing.T) {
 	e := newConflictPicker("f.txt", pickerDoc())
 	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
@@ -277,6 +314,81 @@ func TestConflictPickerAltScrollMovesViewNotCursor(t *testing.T) {
 	}
 	if e.doc.Blocks()[0].Mode != hunkpick.Undecided {
 		t.Fatal("alt+scroll must not touch picks")
+	}
+}
+
+func TestUnstageHunksLoadedPushesPicker(t *testing.T) {
+	m := Model{width: 80, height: 24}
+	mm, _ := m.Update(unstageHunksLoadedMsg{path: "f.txt",
+		index: []byte("a\nX\nc\n"), head: []byte("a\nb\nc\n")})
+	m = mm.(Model)
+	e, ok := m.topLayer().(*hunkPicker)
+	if !ok {
+		t.Fatalf("unstage load did not push a picker, top = %T", m.topLayer())
+	}
+	out := e.render(m, "")
+	if !strings.Contains(out, "Unstage hunks: f.txt") {
+		t.Fatalf("title missing:\n%s", out)
+	}
+	if !strings.Contains(out, "staged") || !strings.Contains(out, "HEAD") {
+		t.Fatalf("column labels missing:\n%s", out)
+	}
+	// Default: everything kept staged — resolves to the index bytes.
+	outBytes, ok2 := e.doc.Resolved()
+	if !ok2 || string(outBytes) != "a\nX\nc\n" {
+		t.Fatalf("default resolve = %q ok=%v, want index bytes", outBytes, ok2)
+	}
+}
+
+func TestUnstageHunksBinaryAndEmptyRefusals(t *testing.T) {
+	m := Model{width: 80, height: 24}
+	mm, _ := m.Update(unstageHunksLoadedMsg{path: "f.bin",
+		index: []byte("x\x00y"), head: []byte("a\n")})
+	m = mm.(Model)
+	if m.topLayer() != nil || !strings.Contains(m.statusMsg, i18n.T("unstage hunks: binary file")) {
+		t.Fatalf("binary refusal missing: layer=%v msg=%q", m.topLayer(), m.statusMsg)
+	}
+	m2 := Model{width: 80, height: 24}
+	mm2, _ := m2.Update(unstageHunksLoadedMsg{path: "same.txt",
+		index: []byte("a\n"), head: []byte("a\n")})
+	m2 = mm2.(Model)
+	if m2.topLayer() != nil || !strings.Contains(m2.statusMsg, i18n.T("unstage hunks: nothing to unstage")) {
+		t.Fatalf("empty refusal missing: layer=%v msg=%q", m2.topLayer(), m2.statusMsg)
+	}
+}
+
+func TestUnstagePickerApplyDispatchesStageHunks(t *testing.T) {
+	doc := hunkpick.FromDiff([]byte("a\nX\nc\n"), []byte("a\nb\nc\n"))
+	doc.SetAll(hunkpick.TakeCurrent)
+	e := newUnstagePicker("f.txt", doc)
+	// Revert the changed region to HEAD: incoming on, current off.
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
+	m, _ = e.update(m, keyMsg("i"))
+	m, _ = e.update(m, keyMsg("c"))
+	out, ok := e.doc.Resolved()
+	if !ok || string(out) != "a\nb\nc\n" {
+		t.Fatalf("resolved = %q ok=%v, want HEAD content", out, ok)
+	}
+}
+
+func TestCanUnstageHunksGate(t *testing.T) {
+	st := model.WorkingTreeStatus{Files: []model.FileStatus{
+		{Path: "mod.txt", Staged: 'M', Kind: model.KindTracked},
+		{Path: "new.txt", Staged: 'A', Kind: model.KindTracked},
+	}}
+	m := Model{status: st, focus: panelStaged, width: 80, height: 24}
+	m.sel = map[panel]int{panelStaged: 0}
+	if !m.canUnstageHunks() {
+		t.Fatalf("gate false for a staged modification")
+	}
+	m.sel[panelStaged] = 1 // the added file
+	if m.canUnstageHunks() {
+		t.Fatalf("gate must refuse a newly added (not-in-HEAD) file")
+	}
+	m.focus = panelFiles
+	m.sel[panelFiles] = 0
+	if m.canUnstageHunks() {
+		t.Fatalf("gate must be Staged-panel only")
 	}
 }
 
@@ -428,8 +540,8 @@ func TestConflictPickerCheckboxHierarchy(t *testing.T) {
 	m, _ = e.update(m, key("c"))
 	m, _ = e.update(m, key("i"))
 	out = e.render(m, "")
-	if !strings.Contains(out, "none") {
-		t.Fatalf("touched-empty region must show the none suffix:\n%s", out)
+	if !strings.Contains(out, "empty") {
+		t.Fatalf("touched-empty region must show the empty suffix:\n%s", out)
 	}
 }
 

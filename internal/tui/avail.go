@@ -50,6 +50,22 @@ func (m Model) canStageHunks() bool {
 	return f.Kind != model.KindUntracked && f.Kind != model.KindUnmerged
 }
 
+// canUnstageHunks reports whether the Staged panel's selected row is a
+// tracked, non-conflicted file the hunk-unstaging picker can open. A file
+// not yet in HEAD (staged 'A') is excluded: StageHunks can only set index
+// content, never remove the entry — space unstages such a file whole.
+func (m Model) canUnstageHunks() bool {
+	if m.focus != panelStaged || !m.opsIdle() {
+		return false
+	}
+	bi, ok := m.backingIndex(panelStaged)
+	if !ok {
+		return false
+	}
+	f := m.status.Files[bi]
+	return f.Kind != model.KindUntracked && f.Kind != model.KindUnmerged && f.Staged != 'A'
+}
+
 // selectedBranch resolves the Branches panel selection through the view
 // transforms. ok is false when the visible list is empty.
 func (m Model) selectedBranch() (model.Branch, bool) {

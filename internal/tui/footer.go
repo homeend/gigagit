@@ -75,6 +75,7 @@ func contextBindings() []footerBinding {
 		{"stage", "space", i18n.T("[space] stage"), func(m Model) bool { return m.focus == panelFiles && m.canStage() }, scopeRow},
 		{"stage-hunks", "H", i18n.T("[H] hunks"), func(m Model) bool { return m.canStageHunks() }, scopeRow},
 		{"unstage", "space", i18n.T("[space] unstage"), func(m Model) bool { return m.focus == panelStaged && m.canStage() }, scopeRow},
+		{"unstage-hunks", "H", i18n.T("[H] hunks"), func(m Model) bool { return m.canUnstageHunks() }, scopeRow},
 		{"stash", "s", i18n.T("[s] stash"), func(m Model) bool {
 			return m.focus == panelFiles && m.opsIdle() && len(stashCandidates(m.status)) > 0
 		}, scopeWindow},

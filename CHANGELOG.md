@@ -8,6 +8,15 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **TUI: `H` on the Staged panel opens the unstage picker.** The same
+  region/line picker surface now runs staged ↔ HEAD: taking the HEAD side of
+  a region reverts that part of the index (`git reset -p` analog) while the
+  working tree stays untouched; apply goes through the existing StageHunks
+  op. A newly added file is refused with a hint (`space` unstages it whole).
+  Also: the picker's touched-empty suffix now reads "empty" (own i18n key),
+  and an output pane that cannot get its 3-line minimum hides instead of
+  degrading.
+
 - **TUI: `ctrl+t` zooms the focused hunk-picker half.** In the picker
   (conflict resolve / stage), `ctrl+t` gives the tab-focused half — the
   selection grid or the output pane — the whole body; `tab` swaps which half

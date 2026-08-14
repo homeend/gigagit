@@ -103,6 +103,23 @@ func newStagePicker(path string, doc *hunkpick.Doc) *hunkPicker {
 	}
 }
 
+// newUnstagePicker wires the hunk-unstaging params: the grid runs index ↔
+// HEAD and the assembled content goes back through StageHunks, so taking the
+// HEAD side of a region reverts that region of the index (git reset -p).
+func newUnstagePicker(path string, doc *hunkpick.Doc) *hunkPicker {
+	return &hunkPicker{
+		title:      i18n.T("Unstage hunks: %s", path),
+		leftLabel:  i18n.T("staged"),
+		rightLabel: i18n.T("HEAD"),
+		requireAll: false,
+		apply: func(m Model, content []byte) (Model, tea.Cmd) {
+			m = m.popLayer()
+			return m.startOp(engine.StageHunks{Path: path, Content: content})
+		},
+		doc: doc, blocks: doc.Blocks(), side: hunkpick.Current, mode: modeScroll,
+	}
+}
+
 func (e *hunkPicker) cur() *hunkpick.Block {
 	if e.bi < 0 || e.bi >= len(e.blocks) {
 		return nil
@@ -150,7 +167,7 @@ func (e *hunkPicker) stateSuffix(b *hunkpick.Block) string {
 		return " — " + i18n.T("undecided")
 	}
 	if b.Mode == hunkpick.LineByLine && len(b.Picks) == 0 {
-		return " — " + i18n.T("none")
+		return " — " + i18n.T("empty")
 	}
 	ca, _ := b.SideState(hunkpick.Current)
 	ia, _ := b.SideState(hunkpick.Incoming)
@@ -406,8 +423,8 @@ func (e *hunkPicker) render(m Model, _ string) string {
 		if outH > bodyH-4 {
 			outH = bodyH - 4 // keep ≥3 grid lines + the rule
 		}
-		if outH < 1 {
-			outH = 0 // too small to show a pane at all
+		if outH < 3 {
+			outH = 0 // can't meet the 3-line minimum: hide rather than degrade
 		} else {
 			gridH = bodyH - outH - 1
 		}

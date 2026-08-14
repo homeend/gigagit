@@ -221,3 +221,38 @@ func TestResolvedLinesUndecided(t *testing.T) {
 		t.Fatal("undecided block must report ok=false")
 	}
 }
+
+func TestLinePickedZeroLineSide(t *testing.T) {
+	// LinePicked must guard zero-line sides in legacy modes. TakeCurrent/TakeIncoming
+	// would unconditionally return true without checking the side's length.
+	// Test both directions: pure-incoming and pure-current blocks.
+
+	// Pure-incoming: Current empty, Mode=TakeCurrent
+	b := block(nil, []string{"a"})
+	b.Mode = TakeCurrent
+	if b.LinePicked(Current, 0) {
+		t.Fatalf("LinePicked(Current, 0) on empty Current in TakeCurrent mode must be false")
+	}
+
+	// Pure-current: Incoming empty, Mode=TakeIncoming
+	b = block([]string{"a"}, nil)
+	b.Mode = TakeIncoming
+	if b.LinePicked(Incoming, 0) {
+		t.Fatalf("LinePicked(Incoming, 0) on empty Incoming in TakeIncoming mode must be false")
+	}
+}
+
+func TestToggleSideClearPreservesInterleavedOrder(t *testing.T) {
+	// space-pick i0, c0, i1 then ToggleSide(Current) clears ONLY the current
+	// picks; the incoming picks keep their original relative order.
+	b := block([]string{"c0"}, []string{"i0", "i1"})
+	b.EnsurePicks()
+	b.ToggleLine(Incoming, 0)
+	b.ToggleLine(Current, 0)
+	b.ToggleLine(Incoming, 1)
+	b.ToggleSide(Current) // all current picked → clears the current side
+	got, ok := b.ResolvedLines()
+	if !ok || len(got) != 2 || got[0] != "i0" || got[1] != "i1" {
+		t.Fatalf("after clearing current: lines=%v ok=%v, want [i0 i1]", got, ok)
+	}
+}

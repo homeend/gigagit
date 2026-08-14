@@ -294,3 +294,27 @@ func (m Model) loadStageHunksCmd(path string) tea.Cmd {
 		return stageHunksLoadedMsg{path: path, index: idx, work: work}
 	}
 }
+
+// unstageHunksLoadedMsg carries the two sides for the unstaging picker.
+type unstageHunksLoadedMsg struct {
+	path        string
+	index, head []byte
+	err         error
+}
+
+// loadUnstageHunksCmd reads the index blob and the HEAD blob off the UI
+// thread; the resulting msg builds the diff and pushes the unstaging picker.
+func (m Model) loadUnstageHunksCmd(path string) tea.Cmd {
+	svc := m.svc
+	return func() tea.Msg {
+		idx, err := svc.ShowFile(context.Background(), "", path)
+		if err != nil {
+			return unstageHunksLoadedMsg{path: path, err: err}
+		}
+		head, herr := svc.ShowFile(context.Background(), "HEAD", path)
+		if herr != nil {
+			return unstageHunksLoadedMsg{path: path, err: herr}
+		}
+		return unstageHunksLoadedMsg{path: path, index: idx, head: head}
+	}
+}
