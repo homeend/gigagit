@@ -356,7 +356,9 @@ func (m Model) refreshTick(now time.Time) (Model, tea.Cmd) {
 	}
 	m.srcGen[it.source]++
 	m.srcInflight[it.source] = true
-	return m, m.readSourceCmd(m.bgCtx, it.source, false, false) // manual=false → silent; startup=false → measured
+	// manual=false → silent; startup=false → measured; no hardFeed → a background
+	// commits refresh reconciles into the loaded pages instead of clearing them.
+	return m, m.readSourceCmd(m.bgCtx, it.source, reloadOpts{})
 }
 
 // bgFetchDoneMsg lands when a background fetch finishes. On success the handler

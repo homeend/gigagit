@@ -8,6 +8,29 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: finishing an operation no longer collapses the commit list.** The
+  browser reloaded `/api/commits` after every state-changing op, and the server
+  additionally dropped the whole feed (`resetFeed`), so a commit, merge or
+  switch threw away everything you had scrolled in — a list scrolled to 850
+  commits came back as 250. The reload now reconciles server-side (the same
+  `CommitFeed.Refresh` the TUI uses), the feed is no longer dropped after an op
+  (only a solo-scope change, a commit-sort change or a re-root rebuild it), and
+  the client keeps its rows and scroll position while the reload is in flight
+  and re-anchors the cursor to the same commit instead of snapping to the top.
+
+- **An automatic commits refresh no longer throws away the loaded history.**
+  Every refresh used to hard-reset the Commits panel to page 0, so a deep
+  `ctrl+f` search or a long scroll was wiped on the next background tick,
+  file-watch event, or completed operation — with a 30s refresh interval the
+  list collapsed to 50 commits every 30 seconds. `CommitFeed.Refresh` now walks
+  the same single page 0 and RECONCILES it into what is already loaded: it
+  anchors on the first commit both walks share, prepends the new commits above
+  it, trims a tip that vanished (amend/reset), and keeps every page below. If
+  the fresh page can't be aligned — a rewrite, or more new commits than one page
+  holds — it falls back to the old hard reset, so the list is never wrong.
+  Manual `r`, a commit-sort/page-size change and the shell escape (`ctrl+o`)
+  return still start clean; `LoadInitial` keeps its exact previous semantics.
+
 - **Web: conflict picker parity with the TUI.** The browser conflict picker
   now has per-line checkboxes and tri-state side toggles (left, right, or
   both — pick order = result order), decided-empty regions, and a live
