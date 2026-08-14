@@ -841,10 +841,10 @@ func (m Model) renderPanel(p panel, label string, rows []string, decos []rowDeco
 			}
 			wr = append(wr, winRow{text: prefix + text, style: st, decorate: deco})
 		}
-		// wrapAlign: wrap continuations hang at each row's own text start —
+		// Wrap continuations hang at each row's own text start —
 		// past the cursor/mark prefix AND any per-row decoration baked into
 		// the text (a branch's `* `, a commit's graph lanes).
-		body := renderWindow(wr, winOpts{w: innerW, h: rowsCap, mode: m.dispModes[p], anchor: anchor - start, hscroll: m.hscroll[p], wrapAlign: true})
+		body := renderWindow(wr, winOpts{w: innerW, h: rowsCap, mode: m.dispModes[p], anchor: anchor - start, hscroll: m.hscroll[p]})
 		lines = append(lines, body...)
 	}
 	for len(lines) < contentH {
@@ -885,7 +885,7 @@ func (m Model) renderListBox(label string, rows []string, sel, boxW, boxH int, f
 			}
 			wr[i] = winRow{text: prefix + row, style: st}
 		}
-		body := renderWindow(wr, winOpts{w: innerW, h: rowsCap, mode: mode, anchor: sel, hscroll: hscroll, wrapAlign: true})
+		body := renderWindow(wr, winOpts{w: innerW, h: rowsCap, mode: mode, anchor: sel, hscroll: hscroll})
 		lines = append(lines, body...)
 	}
 	for len(lines) < contentH {

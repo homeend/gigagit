@@ -703,8 +703,8 @@ func (m Model) renderActionMenu() string {
 			}
 			wr[i] = winRow{text: prefix + r.label, style: st}
 		}
-		// Wrap mode: hang-indent continuations at the row text (wrapAlign).
-		o := winOpts{w: textW, mode: a.mode, anchor: a.sel, hscroll: a.hscroll, wrapAlign: true}
+		// Wrap mode: hang-indent continuations at the row text (intrinsic to wrap mode).
+		o := winOpts{w: textW, mode: a.mode, anchor: a.sel, hscroll: a.hscroll}
 		o.h = wrapContentLines(wr, o, 14)
 		bodyLines = renderWindow(wr, o)
 	}

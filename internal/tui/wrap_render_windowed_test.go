@@ -52,7 +52,7 @@ func naiveWrapWindow(rows []winRow, o winOpts) []string {
 	}
 	var dl []dline
 	for ri, r := range rows {
-		segs := wrapHang(r.text, bodyW, wrapAlignIndent(r.text, bodyW, o.wrapAlign), 1<<20)
+		segs := wrapHang(r.text, bodyW, wrapAlignIndent(r.text, bodyW), 1<<20)
 		if len(segs) == 0 {
 			segs = []string{""}
 		}
@@ -95,7 +95,8 @@ func naiveWrapWindow(rows []winRow, o winOpts) []string {
 // width (1..4 wrapped lines at w=12), distinct per row so a mis-windowed
 // output can never coincide with the correct one. Every 3rd row is styled,
 // every 4th carries a width-preserving decorator, and rows alternate leading
-// marker glyphs ("", "* ", "● │ ") so wrapAlign exercises per-row indents.
+// marker glyphs ("", "* ", "● │ ") so the wrap hang-indent exercises
+// per-row indents.
 func wrapTestRows(n int, withPrefix bool) []winRow {
 	rows := make([]winRow, n)
 	st := lipgloss.NewStyle().Bold(true)
@@ -124,26 +125,24 @@ func wrapTestRows(n int, withPrefix bool) []winRow {
 // renderWindow must produce byte-identical output to the naive full layout.
 func TestRenderWindowWrapMatchesFullLayout(t *testing.T) {
 	for _, withPrefix := range []bool{false, true} {
-		for _, align := range []bool{false, true} {
-			for _, n := range []int{0, 1, 5, 23, 60} {
-				rows := wrapTestRows(n, withPrefix)
-				for _, h := range []int{1, 3, 7, 12} {
-					for anchor := -2; anchor <= n+2; anchor++ {
-						o := winOpts{w: 12, h: h, mode: modeWrap, anchor: anchor, wrapAlign: align}
-						if withPrefix {
-							o.prefixW = 3
-						}
-						got := renderWindow(rows, o)
-						want := naiveWrapWindow(rows, o)
-						if len(got) != len(want) {
-							t.Fatalf("prefix=%v align=%v n=%d h=%d anchor=%d: line count %d != %d",
-								withPrefix, align, n, h, anchor, len(got), len(want))
-						}
-						for i := range got {
-							if got[i] != want[i] {
-								t.Fatalf("prefix=%v align=%v n=%d h=%d anchor=%d line %d:\n got %q\nwant %q",
-									withPrefix, align, n, h, anchor, i, got[i], want[i])
-							}
+		for _, n := range []int{0, 1, 5, 23, 60} {
+			rows := wrapTestRows(n, withPrefix)
+			for _, h := range []int{1, 3, 7, 12} {
+				for anchor := -2; anchor <= n+2; anchor++ {
+					o := winOpts{w: 12, h: h, mode: modeWrap, anchor: anchor}
+					if withPrefix {
+						o.prefixW = 3
+					}
+					got := renderWindow(rows, o)
+					want := naiveWrapWindow(rows, o)
+					if len(got) != len(want) {
+						t.Fatalf("prefix=%v n=%d h=%d anchor=%d: line count %d != %d",
+							withPrefix, n, h, anchor, len(got), len(want))
+					}
+					for i := range got {
+						if got[i] != want[i] {
+							t.Fatalf("prefix=%v n=%d h=%d anchor=%d line %d:\n got %q\nwant %q",
+								withPrefix, n, h, anchor, i, got[i], want[i])
 						}
 					}
 				}
@@ -189,7 +188,7 @@ func TestWrapContentLines(t *testing.T) {
 		{text: "ab"},       // 1 line
 		{text: ""},         // empty row still renders one blank line
 	}
-	o := winOpts{w: 4, mode: modeWrap, wrapAlign: true}
+	o := winOpts{w: 4, mode: modeWrap}
 	if got := wrapContentLines(rows, o, 100); got != 5 {
 		t.Fatalf("wrap content lines = %d, want 5", got)
 	}
@@ -218,12 +217,9 @@ func TestWrapAlignIndent(t *testing.T) {
 		{"→ 日本語", 20, 2},             // CJK letter stops the scan
 	}
 	for _, c := range cases {
-		if got := wrapAlignIndent(c.s, c.bodyW, true); got != c.want {
+		if got := wrapAlignIndent(c.s, c.bodyW); got != c.want {
 			t.Errorf("wrapAlignIndent(%q, %d) = %d, want %d", c.s, c.bodyW, got, c.want)
 		}
-	}
-	if got := wrapAlignIndent("> name", 20, false); got != 0 {
-		t.Errorf("align off must return 0, got %d", got)
 	}
 }
 

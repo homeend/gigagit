@@ -816,7 +816,7 @@ func (m Model) renderFilesView(boxW, boxH int) string {
 	if len(vis) == 0 {
 		lines = append(lines, padRight(truncate(i18n.T("  (no match)"), innerW), innerW))
 	} else {
-		win := renderWindow(wr, winOpts{w: innerW, h: rowsCap, mode: p.mode, anchor: anchor, hscroll: p.hscroll, wrapAlign: true})
+		win := renderWindow(wr, winOpts{w: innerW, h: rowsCap, mode: p.mode, anchor: anchor, hscroll: p.hscroll})
 		lines = append(lines, win...)
 	}
 	for len(lines) < contentH-1 {

@@ -360,27 +360,14 @@ func (p *contentPopup) box(m Model) string {
 	// single-line modes those coincide, but a wrapped row spans several lines,
 	// so sizing by len(vis) would clip the wrap — a one-line error message
 	// would render only its first line, which is exactly what the [E] viewer
-	// exists to avoid. Measure with the same wrapWidth renderWindow itself
-	// uses so the count cannot drift from the layout it is sizing.
-	h := len(vis)
-	if p.mode == modeWrap {
-		h = 0
-		for _, r := range wr {
-			// An empty row wraps to NO segments but still occupies one display
-			// line (renderWindow substitutes a blank), so counting the segments
-			// alone loses a line per blank — and git's stderr separates its
-			// paragraphs with blank lines, so the tail fell off the window.
-			n := len(wrapWidth(r.text, bodyW, 1<<20))
-			if n == 0 {
-				n = 1
-			}
-			h += n
-		}
-	}
-	if h > capRows {
-		h = capRows
-	}
-	win := renderWindow(wr, winOpts{w: bodyW, h: h, mode: p.mode, anchor: p.sel, hscroll: p.hscroll})
+	// exists to avoid. wrapContentLines measures with the exact layout
+	// (hang indent included) renderWindow itself uses, so the count cannot
+	// drift from the window it is sizing; it also counts an empty row as the
+	// one blank line renderWindow substitutes (git's stderr separates its
+	// paragraphs with blank lines, so the tail used to fall off the window).
+	o := winOpts{w: bodyW, mode: p.mode, anchor: p.sel, hscroll: p.hscroll}
+	o.h = wrapContentLines(wr, o, capRows)
+	win := renderWindow(wr, o)
 
 	var b strings.Builder
 	// The /-search input rides its own line beneath the title (replacing the
