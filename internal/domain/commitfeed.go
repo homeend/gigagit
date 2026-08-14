@@ -202,6 +202,85 @@ func (f *CommitFeed) LoadInitial(ctx context.Context) (FeedState, error) {
 	return f.loadInitialWalk(ctx)
 }
 
+// Refresh is the RECONCILING refresh: it re-walks page 0 of the current scope —
+// one git call, exactly what LoadInitial costs — and merges it into the existing
+// accumulation instead of clearing it, so a periodic/background refresh no longer
+// throws away every page the user paged in (a deep ctrl+f search, a long scroll).
+// New commits prepend; a vanished tip (amend/reset) is trimmed. When the fresh
+// page can't be reconciled (a rewrite, or more new commits than one page holds)
+// it degrades to exactly LoadInitial's hard reset, so history is never wrong,
+// only occasionally re-walked. Like LoadInitial it invalidates the scope cache.
+//
+// Frontends use this for automatic refreshes; LoadInitial stays the explicit
+// "start clean" path (manual reload, sort/page-size change).
+func (f *CommitFeed) Refresh(ctx context.Context) (FeedState, error) {
+	f.mu.Lock()
+	f.clearCacheLocked()
+	if f.cancel != nil {
+		f.cancel()
+	}
+	cctx, cancel := context.WithCancel(ctx)
+	f.cancel = cancel
+	// The gen bump is load-bearing beyond staleness: a prepend shifts every --skip
+	// offset, so an in-flight LoadMore page is misaligned and must drop.
+	f.gen++
+	gen0 := f.gen
+	scope := f.scope
+	initial := f.effInitial()
+	loaded := f.commits // entries are never mutated in place, so the header is enough
+	f.inFlight = true
+	f.mu.Unlock()
+
+	page, err := f.pager.Page(cctx, initial, 0, gen0, scope)
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.inFlight = false
+	if f.gen == gen0 {
+		f.cancel = nil
+	}
+	if f.gen != gen0 { // superseded mid-walk; drop this page
+		st := f.snapshotLocked()
+		st.Gen = gen0
+		return st, nil
+	}
+	if err != nil {
+		return f.snapshotLocked(), err
+	}
+	if merged, skipDelta, ok := reconcilePage(loaded, page); ok {
+		f.commits = merged
+		f.hashes = make(map[string]bool, len(merged))
+		for _, c := range merged {
+			f.hashes[c.Hash] = true
+		}
+		// exhausted stays put: the kept tail still ends where it ended, and only
+		// the head of history can grow.
+		f.skip += skipDelta
+		if f.skip < 0 {
+			f.skip = 0 // undershooting only re-reads commits the dedupe drops
+		}
+		return f.snapshotLocked(), nil
+	}
+	f.applyPageZeroLocked(page, initial)
+	return f.snapshotLocked(), nil
+}
+
+// applyPageZeroLocked replaces the accumulation with a freshly walked page 0.
+// Caller holds f.mu. Shared by the initial walk and Refresh's fallback so the
+// two produce identical state.
+func (f *CommitFeed) applyPageZeroLocked(page []model.Commit, initial int) {
+	f.commits = nil
+	f.hashes = map[string]bool{}
+	for _, c := range page {
+		if !f.hashes[c.Hash] {
+			f.commits = append(f.commits, c)
+			f.hashes[c.Hash] = true
+		}
+	}
+	f.skip = len(page)
+	f.exhausted = len(page) < initial
+}
+
 // loadInitialWalk resets the current scope's accumulation and walks page 0. It is
 // the body shared by LoadInitial and ApplyScope's cache-miss path; it does NOT
 // touch the cache.
@@ -239,14 +318,7 @@ func (f *CommitFeed) loadInitialWalk(ctx context.Context) (FeedState, error) {
 	if err != nil {
 		return f.snapshotLocked(), err
 	}
-	for _, c := range page {
-		if !f.hashes[c.Hash] {
-			f.commits = append(f.commits, c)
-			f.hashes[c.Hash] = true
-		}
-	}
-	f.skip = len(page)
-	f.exhausted = len(page) < initial
+	f.applyPageZeroLocked(page, initial)
 	return f.snapshotLocked(), nil
 }
 

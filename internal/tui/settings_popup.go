@@ -236,7 +236,9 @@ func (m Model) cycleCommitSort() (Model, tea.Cmd) {
 		m.statusMsg = i18n.T("commit sort: %s — reloading commits…", next)
 	}
 	m.feed.SetSortMode(next)
-	return m.reloadSourcesCmd([]sourceKey{srcFeed}, true, false)
+	// hardFeed: the sort order changed, so the loaded accumulation is in the old
+	// order — re-walk it clean rather than merge two orderings.
+	return m.reloadSourcesCmd([]sourceKey{srcFeed}, reloadOpts{manual: true, hardFeed: true})
 }
 
 // toggleOpLog flips the operation log, persisting the choice to the global

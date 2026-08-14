@@ -1,0 +1,274 @@
+package domain
+
+import (
+	"context"
+	"strconv"
+	"strings"
+	"sync"
+	"testing"
+
+	"github.com/homeend/gigagit/internal/git"
+	"github.com/homeend/gigagit/internal/gitexec"
+)
+
+// historyRunner serves `git log` from a MUTABLE newest-first hash list, so a test
+// can rewrite history (push new commits, drop the tip) between reads the way a
+// live repo does. Honors -n <limit> and --skip=<n>; other commands return empty.
+type historyRunner struct {
+	mu     sync.Mutex
+	hashes []string
+}
+
+func newHistoryRunner(n int) *historyRunner {
+	hs := make([]string, 0, n)
+	for i := 0; i < n; i++ {
+		hs = append(hs, "c"+strconv.Itoa(i))
+	}
+	return &historyRunner{hashes: hs}
+}
+
+// prepend pushes newest-first hashes onto the head of history.
+func (r *historyRunner) prepend(hashes ...string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.hashes = append(append([]string(nil), hashes...), r.hashes...)
+}
+
+// replaceAll swaps in a completely unrelated history (a rewrite).
+func (r *historyRunner) replaceAll(hashes []string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.hashes = append([]string(nil), hashes...)
+}
+
+// window returns the hashes git would emit for -n limit --skip=skip.
+func (r *historyRunner) window(limit, skip int) []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out []string
+	for i := skip; i < skip+limit && i < len(r.hashes); i++ {
+		out = append(out, r.hashes[i])
+	}
+	return out
+}
+
+func (r *historyRunner) RunEnv(ctx context.Context, name string, argv, env []string) (gitexec.Result, error) {
+	return r.Run(ctx, name, argv)
+}
+
+func (r *historyRunner) Run(ctx context.Context, name string, argv []string) (gitexec.Result, error) {
+	if name != "git log" {
+		return gitexec.Result{}, nil
+	}
+	limit, skip := 0, 0
+	for i, a := range argv {
+		if a == "-n" && i+1 < len(argv) {
+			limit, _ = strconv.Atoi(argv[i+1])
+		}
+		if strings.HasPrefix(a, "--skip=") {
+			skip, _ = strconv.Atoi(strings.TrimPrefix(a, "--skip="))
+		}
+	}
+	var b strings.Builder
+	for _, h := range r.window(limit, skip) {
+		// logFormat = %H%x1f%P%x1f%an%x1f%at%x1f%s%x1f%D — only Hash matters here.
+		b.WriteString(h + "\x1f\x1fauthor\x1f0\x1fsubject\x1f\n")
+	}
+	return gitexec.Result{Stdout: b.String()}, nil
+}
+
+func (r *historyRunner) Stream(ctx context.Context, name string, argv []string, onLine func(string)) (gitexec.Result, error) {
+	return r.Run(ctx, name, argv)
+}
+
+// feedOverHistory returns a feed with small page sizes (5 initial, 10 per page)
+// over a mutable history of n commits.
+func feedOverHistory(n int) (*CommitFeed, *historyRunner) {
+	hr := newHistoryRunner(n)
+	f := New(&git.Repo{Runner: hr}).CommitFeed()
+	f.SetPageSizes(5, 10)
+	return f, hr
+}
+
+// loadDeep loads page 0 plus `pages` further pages — the state a user reaches by
+// scrolling or by hitting ctrl+f a few times.
+func loadDeep(t *testing.T, f *CommitFeed, pages int) FeedState {
+	t.Helper()
+	st, err := f.LoadInitial(context.Background())
+	if err != nil {
+		t.Fatalf("load initial: %v", err)
+	}
+	for i := 0; i < pages; i++ {
+		var loaded bool
+		st, loaded, err = f.LoadMore(context.Background())
+		if err != nil || !loaded {
+			t.Fatalf("load more %d: loaded=%v err=%v", i, loaded, err)
+		}
+	}
+	return st
+}
+
+func TestRefreshKeepsPagedHistoryAndPrependsNewCommits(t *testing.T) {
+	f, hr := feedOverHistory(300)
+	st := loadDeep(t, f, 2) // 5 + 10 + 10 = 25 commits paged in
+	if len(st.Commits) != 25 {
+		t.Fatalf("deep load = %d commits, want 25", len(st.Commits))
+	}
+
+	hr.prepend("new1", "new0") // two commits land while the user reads
+
+	st, err := f.Refresh(context.Background())
+	if err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+	if len(st.Commits) != 27 {
+		t.Fatalf("after refresh = %d commits, want 27 (25 kept + 2 new)", len(st.Commits))
+	}
+	if st.Commits[0].Hash != "new1" || st.Commits[1].Hash != "new0" {
+		t.Fatalf("new commits not at the head: %q %q", st.Commits[0].Hash, st.Commits[1].Hash)
+	}
+	if st.Commits[2].Hash != "c0" || st.Commits[26].Hash != "c24" {
+		t.Fatalf("tail not preserved: [2]=%q [26]=%q", st.Commits[2].Hash, st.Commits[26].Hash)
+	}
+}
+
+// TestRefreshLoadMoreContinuity is the skip-arithmetic guard: after a prepend,
+// the next page must continue exactly where the kept tail ends — no gap, no dup.
+func TestRefreshLoadMoreContinuity(t *testing.T) {
+	f, hr := feedOverHistory(300)
+	loadDeep(t, f, 2)
+	hr.prepend("new1", "new0")
+	if _, err := f.Refresh(context.Background()); err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+
+	st, loaded, err := f.LoadMore(context.Background())
+	if err != nil || !loaded {
+		t.Fatalf("load more after refresh: loaded=%v err=%v", loaded, err)
+	}
+	// 25 kept + 2 prepended + a 10-commit page = the first 37 of the live walk.
+	want := hr.window(37, 0)
+	got := make([]string, 0, len(st.Commits))
+	for _, c := range st.Commits {
+		got = append(got, c.Hash)
+	}
+	if len(got) != len(want) {
+		t.Fatalf("after page = %d commits, want %d (%q)", len(got), len(want), strings.Join(got, " "))
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("commit %d = %q, want %q (full: %q)", i, got[i], want[i], strings.Join(got, " "))
+		}
+	}
+	seen := map[string]bool{}
+	for _, h := range got {
+		if seen[h] {
+			t.Fatalf("duplicate commit %q after refresh + page", h)
+		}
+		seen[h] = true
+	}
+}
+
+func TestRefreshFallsBackToHardResetWithoutOverlap(t *testing.T) {
+	f, hr := feedOverHistory(300)
+	loadDeep(t, f, 2)
+
+	// A rewrite (rebase/filter-branch): nothing in page 0 is recognizable.
+	rewritten := make([]string, 0, 300)
+	for i := 0; i < 300; i++ {
+		rewritten = append(rewritten, "r"+strconv.Itoa(i))
+	}
+	hr.replaceAll(rewritten)
+
+	st, err := f.Refresh(context.Background())
+	if err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+	if len(st.Commits) != 5 {
+		t.Fatalf("fallback = %d commits, want the 5-commit page 0", len(st.Commits))
+	}
+	if st.Commits[0].Hash != "r0" {
+		t.Fatalf("fallback head = %q, want r0", st.Commits[0].Hash)
+	}
+	// The reset must leave the walk offset consistent: the next page continues
+	// from r5, not from somewhere in the discarded accumulation.
+	st, _, err = f.LoadMore(context.Background())
+	if err != nil {
+		t.Fatalf("load more after fallback: %v", err)
+	}
+	if len(st.Commits) != 15 || st.Commits[5].Hash != "r5" {
+		t.Fatalf("after fallback page: %d commits, [5]=%q", len(st.Commits), st.Commits[5].Hash)
+	}
+}
+
+func TestRefreshOnEmptyFeedWalksPageZero(t *testing.T) {
+	f, _ := feedOverHistory(300)
+	st, err := f.Refresh(context.Background())
+	if err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+	if len(st.Commits) != 5 || st.Commits[0].Hash != "c0" {
+		t.Fatalf("empty-feed refresh = %d commits, head %q", len(st.Commits), st.Commits[0].Hash)
+	}
+}
+
+// TestRefreshDropsTheTipWhenHistoryShrinks covers amend/reset: the old tip is
+// gone, the rest of the paged-in history stays.
+func TestRefreshDropsTheTipWhenHistoryShrinks(t *testing.T) {
+	f, hr := feedOverHistory(300)
+	loadDeep(t, f, 1) // 15 commits
+	hr.mu.Lock()
+	hr.hashes = hr.hashes[1:] // c0 dropped (reset --hard HEAD~1)
+	hr.mu.Unlock()
+
+	st, err := f.Refresh(context.Background())
+	if err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+	if len(st.Commits) != 14 || st.Commits[0].Hash != "c1" {
+		t.Fatalf("after drop = %d commits, head %q, want 14 headed by c1", len(st.Commits), st.Commits[0].Hash)
+	}
+	st, _, err = f.LoadMore(context.Background())
+	if err != nil {
+		t.Fatalf("load more: %v", err)
+	}
+	if st.Commits[13].Hash != "c14" || st.Commits[14].Hash != "c15" {
+		t.Fatalf("page continuity after a drop: [13]=%q [14]=%q", st.Commits[13].Hash, st.Commits[14].Hash)
+	}
+}
+
+func TestRefreshBumpsGeneration(t *testing.T) {
+	f, _ := feedOverHistory(300)
+	loadDeep(t, f, 0)
+	before := f.Gen()
+	if _, err := f.Refresh(context.Background()); err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+	if f.Gen() == before {
+		t.Fatal("Refresh must bump gen so an in-flight LoadMore page drops")
+	}
+}
+
+func TestRefreshInvalidatesScopeCache(t *testing.T) {
+	f := gitexec.NewFakeRunner()
+	feed := New(&git.Repo{Runner: f}).CommitFeed()
+	feed.SetPageSizes(50, 50)
+
+	f.SetResponse("git log", gitexec.Result{Stdout: logRows(3)}) // base: 3
+	feed.LoadInitial(context.Background())
+	f.SetResponse("git log", gitexec.Result{Stdout: logRows(1)}) // filtered: 1
+	feed.ApplyScope(context.Background(), LogScope{Grep: "x"})
+
+	// A background refresh of the filtered scope must invalidate the cached base
+	// accumulation, exactly as LoadInitial does.
+	f.SetResponse("git log", gitexec.Result{Stdout: logRows(4)})
+	feed.Refresh(context.Background())
+
+	st, err := feed.ApplyScope(context.Background(), LogScope{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(st.Commits) != 4 {
+		t.Fatalf("base after refresh = %d, want 4 (re-walked, not stale 3)", len(st.Commits))
+	}
+}

@@ -40,7 +40,7 @@ func TestRegistryMapsInitialized(t *testing.T) {
 
 func TestReadSourceBranchesProducesMsg(t *testing.T) {
 	m := newTestModel(t) // wired to a real temp repo (newRepo(t))
-	msg := m.readSourceCmd(context.Background(), srcBranches, true, false)()
+	msg := m.readSourceCmd(context.Background(), srcBranches, reloadOpts{manual: true})()
 	dm, ok := msg.(dataAvailableMsg)
 	if !ok {
 		t.Fatalf("want dataAvailableMsg, got %T", msg)
@@ -55,7 +55,7 @@ func TestReadSourceBranchesProducesMsg(t *testing.T) {
 
 func TestReadSourceStatusCarriesConflict(t *testing.T) {
 	m := newTestModel(t)
-	msg := m.readSourceCmd(context.Background(), srcStatus, false, false)().(dataAvailableMsg)
+	msg := m.readSourceCmd(context.Background(), srcStatus, reloadOpts{})().(dataAvailableMsg)
 	if msg.source != srcStatus {
 		t.Fatalf("envelope source = %v, want srcStatus", msg.source)
 	}
@@ -72,7 +72,7 @@ func TestReadSourceStatusCarriesConflict(t *testing.T) {
 
 func TestReadSourceWorktreesCarriesPayload(t *testing.T) {
 	m := newTestModel(t)
-	msg := m.readSourceCmd(context.Background(), srcWorktrees, true, false)().(dataAvailableMsg)
+	msg := m.readSourceCmd(context.Background(), srcWorktrees, reloadOpts{manual: true})().(dataAvailableMsg)
 	if msg.source != srcWorktrees {
 		t.Fatalf("envelope source = %v, want srcWorktrees", msg.source)
 	}
@@ -159,7 +159,7 @@ func TestReloadAllBumpsEveryGenAndBatches(t *testing.T) {
 	for s := sourceKey(0); s < srcCount; s++ {
 		before[s] = m.srcGen[s]
 	}
-	m, cmd := m.reloadAllCmd(true, false)
+	m, cmd := m.reloadAllCmd(reloadOpts{manual: true})
 	if cmd == nil {
 		t.Fatal("reloadAllCmd must return a batch command")
 	}
@@ -175,12 +175,12 @@ func TestReloadAllBumpsEveryGenAndBatches(t *testing.T) {
 
 func TestReloadSourcesManualSetsConsumerSpinners(t *testing.T) {
 	m := newTestModel(t)
-	m, _ = m.reloadSourcesCmd([]sourceKey{srcStatus}, true, false)
+	m, _ = m.reloadSourcesCmd([]sourceKey{srcStatus}, reloadOpts{manual: true})
 	if !m.srcLoading[srcStatus] {
 		t.Fatal("manual reload must set srcLoading for the source")
 	}
 	m2 := newTestModel(t)
-	m2, _ = m2.reloadSourcesCmd([]sourceKey{srcStatus}, false, false)
+	m2, _ = m2.reloadSourcesCmd([]sourceKey{srcStatus}, reloadOpts{})
 	if m2.srcLoading[srcStatus] {
 		t.Fatal("auto reload must not set srcLoading")
 	}
@@ -191,7 +191,7 @@ func TestReloadSourcesManualSetsConsumerSpinners(t *testing.T) {
 // arrival of the last source must clear it.
 func TestManualReloadDrivesLegacyLoadingFlag(t *testing.T) {
 	m := newTestModel(t)
-	m, _ = m.reloadSourcesCmd([]sourceKey{srcTags}, true, false)
+	m, _ = m.reloadSourcesCmd([]sourceKey{srcTags}, reloadOpts{manual: true})
 	if !m.loading {
 		t.Fatal("manual reload must set m.loading (action guards depend on it)")
 	}
@@ -298,7 +298,7 @@ func TestRemotesArrivalFiresUpstreamRewalk(t *testing.T) {
 func TestManualRefreshShowsConsumerSpinner(t *testing.T) {
 	m := newTestModel(t)
 	m.width, m.height = 120, 40
-	m, _ = m.reloadSourcesCmd([]sourceKey{srcStatus}, true, false) // Files + Staged consume status
+	m, _ = m.reloadSourcesCmd([]sourceKey{srcStatus}, reloadOpts{manual: true}) // Files + Staged consume status
 	// The Files panel title should carry the loading glyph while status is loading.
 	got := m.panelLabel(panelFiles, "Files")
 	if !strings.Contains(got, commitsLoadingGlyph) {
@@ -316,7 +316,7 @@ func TestReloadAfterFirstDataKeepsPanelsVisible(t *testing.T) {
 	m.ready = true
 	m.branches = []model.Branch{{Name: "main"}}
 	// A manual reload-all (r) marks sources loading but must NOT blank the screen.
-	m, _ = m.reloadAllCmd(true, false)
+	m, _ = m.reloadAllCmd(reloadOpts{manual: true})
 	out := m.View()
 	if strings.Contains(out, "(loading…)") {
 		t.Fatal("r after first data must keep panels visible, not blank the screen")
@@ -329,7 +329,7 @@ func TestInitialLoadBlanksUntilReady(t *testing.T) {
 	m := newTestModel(t)
 	m.width, m.height = 120, 40
 	m.ready = false
-	m, _ = m.reloadAllCmd(true, false) // startup fan-out, no data yet
+	m, _ = m.reloadAllCmd(reloadOpts{manual: true}) // startup fan-out, no data yet
 	if !strings.Contains(m.View(), "(loading…)") {
 		t.Fatal("initial load (no data yet) should show the loading screen")
 	}
