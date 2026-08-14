@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"fmt"
 	"strings"
 	"time"
 
@@ -16,8 +15,10 @@ import (
 
 // repoPopup is the transient repo-switcher picker opened with R. It holds an
 // MRU snapshot taken at open; ctrl+d edits both the snapshot and the registry.
+// It is ALWAYS fullscreen (no popupMax embed): it renders at the maximized
+// width/row budget from the start, and ctrl+t falls through to update, which
+// swallows it.
 type repoPopup struct {
-	popupMax
 	entries   []repos.Entry
 	query     string // case-insensitive substring over name+path
 	filtering bool   // true while `/` filter sub-mode captures runes
@@ -295,7 +296,7 @@ func (p *repoPopup) slowTooltip(m Model, box string, termW, termH int) (line str
 // box draws the picker box (modal box only).
 func (p *repoPopup) box(m Model) string {
 	w, termH := m.overlayDims()
-	inner := popupResolveWidth(w, p.maximized, popupInnerWidth(w))
+	inner := popupFullInnerWidth(w)
 	textW := popupTextWidth(inner)
 
 	header := i18n.T("Switch repository")
@@ -313,6 +314,7 @@ func (p *repoPopup) box(m Model) string {
 	if len(vis) == 0 {
 		bodyLines = []string{padRight(i18n.T("  (no match)"), textW)}
 	} else {
+		nameW, slowW, pathW := p.tableCols(textW)
 		wr := make([]winRow, len(vis))
 		for i, e := range vis {
 			marker := "  "
@@ -325,31 +327,77 @@ func (p *repoPopup) box(m Model) string {
 				prefix = "> "
 				st = selectedRow
 			}
-			// The slow-fs marker sits between name and path: the row tail is
-			// what cutoff mode truncates first, so a suffix there would be
-			// invisible at the default popup width.
+			// Table layout: name, slow-fs, path, and age each start at one
+			// shared column. The slow-fs column sits between name and path
+			// (the row tail is what cutoff mode loses first) and is always
+			// reserved, so the async probe verdicts never shift the paths.
 			slow := ""
 			if p.foreign[e.Path] {
-				slow = i18n.T("(slow fs)") + "  "
+				slow = i18n.T("(slow fs)")
 			}
-			row := fmt.Sprintf("%s%s%s  %s%s  (%s)", prefix, marker, repos.Name(e), slow, e.Path, ageString(p.now, e.LastOpened))
+			path := e.Path
+			if p.mode == modeCutoff {
+				// Cutoff keeps the table rectangular: a path wider than its
+				// column is middle-elided (the leaf and the path's start
+				// survive) so the age column stays on the line. Wrap/scroll
+				// are the "show me everything" modes and keep the full path.
+				path = elidePath(path, pathW)
+			}
+			row := prefix + marker +
+				padRight(truncate(repos.Name(e), nameW), nameW) + "  " +
+				padRight(slow, slowW) + "  " +
+				padRight(path, pathW) + "  (" + ageString(p.now, e.LastOpened) + ")"
 			wr[i] = winRow{text: row, style: st}
 		}
 		// Cap the visible body; renderWindow scrolls to keep p.sel in view.
 		// Wrap mode hang-indents continuations at the entry name;
 		// the height budget then counts display lines, not rows.
-		capRows := popupResolveRowCap(p.maximized, termH, 12)
+		capRows := popupResolveRowCap(true, termH, 12)
 		o := winOpts{w: textW, mode: p.mode, anchor: p.sel, hscroll: p.hscroll}
 		o.h = wrapContentLines(wr, o, capRows)
 		bodyLines = renderWindow(wr, o)
 	}
 
-	hint := []string{i18n.T("[enter] switch"), i18n.T("[ctrl+d] forget"), i18n.T("[/] filter"), i18n.T("[z] mode"), i18n.T("[ctrl+t] full"), i18n.T("[esc] close")}
+	hint := []string{i18n.T("[enter] switch"), i18n.T("[ctrl+d] forget"), i18n.T("[/] filter"), i18n.T("[z] mode"), i18n.T("[esc] close")}
 	parts := []string{header, ""}
 	parts = append(parts, bodyLines...)
 	parts = append(parts, "")
 	parts = append(parts, wrapParts(hint, textW, "  ")...)
 	return popupBox(inner, strings.Join(parts, "\n"))
+}
+
+// tableCols computes the switcher's shared column widths over ALL entries (not
+// the filtered view), so the table holds still while a filter narrows the rows.
+// The slow-fs column is always reserved (rows must not shift when the async
+// probe verdicts land); the path column is capped to the width remaining after
+// the age column, so the age survives cutoff mode even for long paths.
+func (p *repoPopup) tableCols(textW int) (nameW, slowW, pathW int) {
+	slowW = lipgloss.Width(i18n.T("(slow fs)"))
+	ageW := 0
+	for _, e := range p.entries {
+		if w := lipgloss.Width(repos.Name(e)); w > nameW {
+			nameW = w
+		}
+		if w := lipgloss.Width(e.Path); w > pathW {
+			pathW = w
+		}
+		if w := lipgloss.Width("(" + ageString(p.now, e.LastOpened) + ")"); w > ageW {
+			ageW = w
+		}
+	}
+	// 4 = the "> ● " cursor/marker prefix; a runaway name may take at most a
+	// third of the remaining width before it is truncated.
+	if max := (textW - 4) / 3; nameW > max {
+		nameW = max
+	}
+	// Three inter-column gaps of 2 sit between the four fields.
+	if budget := textW - 4 - nameW - slowW - ageW - 6; pathW > budget {
+		pathW = budget
+	}
+	if pathW < 1 {
+		pathW = 1
+	}
+	return nameW, slowW, pathW
 }
 
 // samePathTUI compares two paths after trimming trailing separators; symlink

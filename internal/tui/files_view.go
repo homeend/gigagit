@@ -798,12 +798,13 @@ func (m Model) renderFilesView(boxW, boxH int) string {
 		}
 		text := l.text
 		// Directory headings carry the full path; a leaf dir (e.g. .../v3/ApiObject/)
-		// would tail-truncate to look identical to its parent (.../v3/). Elide from
-		// the left in cutoff mode so the distinguishing leaf stays visible; wrap and
-		// scroll modes already show the whole row, and the selected row's reveal
-		// shows the untrimmed path. Pre-elided to fit so renderWindow won't re-cut it.
+		// would tail-truncate to look identical to its parent (.../v3/). Middle-elide
+		// in cutoff mode so the distinguishing leaf (and the path's start) stay
+		// visible; wrap and scroll modes already show the whole row, and the selected
+		// row's reveal shows the untrimmed path. Pre-elided to fit so renderWindow
+		// won't re-cut it.
 		if l.heading && p.mode == modeCutoff {
-			text = elideLeft(l.text, innerW-lipgloss.Width(prefix))
+			text = elidePath(l.text, innerW-lipgloss.Width(prefix))
 		}
 		wr[i] = winRow{text: prefix + text, style: st}
 	}

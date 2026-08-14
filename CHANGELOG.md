@@ -17,6 +17,29 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   markers now load in the web picker too, and picks ride a new tagged wire
   format (`ours`/`theirs`/ordered `lines`).
 
+- **Web: picker layout + navigation polish.** While the picker is open the
+  diff pane is a fixed split — the pick area scrolls in the top half and the
+  live output pane is pinned to the bottom half, always visible — and the
+  `‹ change`/`change ›` buttons step between conflict regions with the
+  output pane following to each region's contribution (both flash).
+
+- **TUI: the repo switcher (`R`) is fullscreen and table-aligned.** The
+  picker now always opens at the maximized width/row budget (ctrl+t is gone
+  from this popup) and lays its rows out as a table: repo name, the slow-fs
+  marker, path, and age each start at one shared column, computed over all
+  entries so the layout holds still while filtering and when the async
+  slow-fs probe lands. In cutoff mode an over-long path is middle-elided so
+  the age column survives; wrap/scroll modes keep the full path.
+
+- **TUI: smarter path elision everywhere.** Wherever a path is shortened to
+  fit (repo switcher paths, the header repo path, Files/Staged panel rows,
+  commit-files directory headings), segments now survive by priority: the
+  file/repo name first, then the directory just before it, then the path's
+  first segment, then alternating right/left working inward — the dropped
+  middle collapses into one `…` (`/mnt/…/deep/path/name`). If not even the
+  name fits, the name itself is cut in the middle so its beginning and
+  extension survive.
+
 - **TUI: `H` on the Staged panel opens the unstage picker.** The same
   region/line picker surface now runs staged ↔ HEAD: taking the HEAD side of
   a region reverts that part of the index (`git reset -p` analog) while the

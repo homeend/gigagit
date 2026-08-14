@@ -10,15 +10,15 @@ import (
 	"github.com/homeend/gigagit/internal/model"
 )
 
-func TestElideMiddlePath(t *testing.T) {
+func TestHeaderPathElision(t *testing.T) {
 	const p = "/mnt/t/others/gigagit"
 	t.Run("fits unchanged", func(t *testing.T) {
-		if got := elideMiddlePath(p, 40); got != p {
+		if got := elidePath(p, 40); got != p {
 			t.Fatalf("got %q, want unchanged", got)
 		}
 	})
 	t.Run("middle-elided keeps head and leaf", func(t *testing.T) {
-		got := elideMiddlePath(p, 15)
+		got := elidePath(p, 15)
 		if lipgloss.Width(got) > 15 {
 			t.Fatalf("width %d > 15: %q", lipgloss.Width(got), got)
 		}
@@ -32,13 +32,13 @@ func TestElideMiddlePath(t *testing.T) {
 			t.Fatalf("path head should stay visible, got %q", got)
 		}
 	})
-	t.Run("leaf too long falls back to leading ellipsis", func(t *testing.T) {
-		got := elideMiddlePath("/very/deep/some-extremely-long-repo-directory-name", 10)
+	t.Run("leaf too long is cut inside the name", func(t *testing.T) {
+		got := elidePath("/very/deep/some-extremely-long-repo-directory-name", 10)
 		if lipgloss.Width(got) > 10 {
 			t.Fatalf("width %d > 10: %q", lipgloss.Width(got), got)
 		}
-		if !strings.HasPrefix(got, "…") {
-			t.Fatalf("expected a leading ellipsis fallback, got %q", got)
+		if !strings.HasPrefix(got, "some-") || !strings.Contains(got, "…") {
+			t.Fatalf("expected the name's beginning + a middle ellipsis, got %q", got)
 		}
 	})
 }
