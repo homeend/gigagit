@@ -2,6 +2,9 @@ package domain
 
 import (
 	"context"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -9,6 +12,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/git"
 	"github.com/homeend/gigagit/internal/gitexec"
+	"github.com/homeend/gigagit/internal/observ"
 )
 
 // historyRunner serves `git log` from a MUTABLE newest-first hash list, so a test
@@ -246,6 +250,82 @@ func TestRefreshBumpsGeneration(t *testing.T) {
 	}
 	if f.Gen() == before {
 		t.Fatal("Refresh must bump gen so an in-flight LoadMore page drops")
+	}
+}
+
+// realRefreshRepo builds a Service over a real repo with n commits, plus a
+// commit(subject) hook so a test can grow history mid-flight.
+func realRefreshRepo(t *testing.T, n int) (*Service, func(subject string)) {
+	t.Helper()
+	dir := t.TempDir()
+	run := func(a ...string) {
+		c := exec.Command("git", a...)
+		c.Dir = dir
+		c.Env = append(os.Environ(), "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t",
+			"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+		if out, err := c.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", a, err, out)
+		}
+	}
+	commit := func(subject string) {
+		if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte(subject+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		run("add", ".")
+		run("commit", "-m", subject)
+	}
+	run("init", "-b", "main")
+	for i := 0; i < n; i++ {
+		commit("c" + strconv.Itoa(i))
+	}
+	return New(&git.Repo{Runner: gitexec.NewExecRunner("git", dir, observ.NewRing(50))}), commit
+}
+
+// The end-to-end shape against a real git: page in depth, commit, refresh —
+// the new commit lands on top and nothing paged in is lost.
+func TestRefreshAgainstRealGitKeepsDepth(t *testing.T) {
+	svc, commit := realRefreshRepo(t, 8)
+	feed := svc.CommitFeed()
+	feed.SetPageSizes(2, 2)
+	st := loadDeep(t, feed, 2) // 2 + 2 + 2 = 6 of the 8 commits
+	if len(st.Commits) != 6 {
+		t.Fatalf("deep load = %d commits, want 6", len(st.Commits))
+	}
+	before := hashList(st.Commits)
+
+	commit("c8") // history grows while the user reads
+
+	st, err := feed.Refresh(context.Background())
+	if err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+	if len(st.Commits) != 7 {
+		t.Fatalf("after refresh = %d commits, want 7 (6 kept + 1 new)", len(st.Commits))
+	}
+	if st.Commits[0].Subject != "c8" {
+		t.Fatalf("head subject = %q, want c8", st.Commits[0].Subject)
+	}
+	if got := hashList(st.Commits[1:]); got != before {
+		t.Fatalf("tail changed:\n got %q\nwant %q", got, before)
+	}
+	// The next page must continue past the kept tail, into the two commits that
+	// were never loaded.
+	st, loaded, err := feed.LoadMore(context.Background())
+	if err != nil || !loaded {
+		t.Fatalf("load more after refresh: loaded=%v err=%v", loaded, err)
+	}
+	if len(st.Commits) != 9 {
+		t.Fatalf("after page = %d commits, want all 9", len(st.Commits))
+	}
+	seen := map[string]bool{}
+	for _, c := range st.Commits {
+		if seen[c.Hash] {
+			t.Fatalf("duplicate commit %q (%s)", c.Hash, c.Subject)
+		}
+		seen[c.Hash] = true
+	}
+	if st.Commits[7].Subject != "c1" || st.Commits[8].Subject != "c0" {
+		t.Fatalf("oldest commits = %q, %q; want c1, c0", st.Commits[7].Subject, st.Commits[8].Subject)
 	}
 }
 
