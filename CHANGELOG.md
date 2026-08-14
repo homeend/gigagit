@@ -13,9 +13,17 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   from this popup) and lays its rows out as a table: repo name, the slow-fs
   marker, path, and age each start at one shared column, computed over all
   entries so the layout holds still while filtering and when the async
-  slow-fs probe lands. In cutoff mode an over-long path is elided from the
-  left (the leaf stays visible) so the age column survives; wrap/scroll
-  modes keep the full path.
+  slow-fs probe lands. In cutoff mode an over-long path is middle-elided so
+  the age column survives; wrap/scroll modes keep the full path.
+
+- **TUI: smarter path elision everywhere.** Wherever a path is shortened to
+  fit (repo switcher paths, the header repo path, Files/Staged panel rows,
+  commit-files directory headings), segments now survive by priority: the
+  file/repo name first, then the directory just before it, then the path's
+  first segment, then alternating right/left working inward — the dropped
+  middle collapses into one `…` (`/mnt/…/deep/path/name`). If not even the
+  name fits, the name itself is cut in the middle so its beginning and
+  extension survive.
 
 - **TUI: `H` on the Staged panel opens the unstage picker.** The same
   region/line picker surface now runs staged ↔ HEAD: taking the HEAD side of

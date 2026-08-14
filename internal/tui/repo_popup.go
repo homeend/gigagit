@@ -338,10 +338,10 @@ func (p *repoPopup) box(m Model) string {
 			path := e.Path
 			if p.mode == modeCutoff {
 				// Cutoff keeps the table rectangular: a path wider than its
-				// column is elided from the front (the leaf distinguishes
-				// repos) so the age column survives. Wrap/scroll are the
-				// "show me everything" modes and keep the full path.
-				path = elideLeft(path, pathW)
+				// column is middle-elided (the leaf and the path's start
+				// survive) so the age column stays on the line. Wrap/scroll
+				// are the "show me everything" modes and keep the full path.
+				path = elidePath(path, pathW)
 			}
 			row := prefix + marker +
 				padRight(truncate(repos.Name(e), nameW), nameW) + "  " +
