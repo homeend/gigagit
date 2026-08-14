@@ -25,9 +25,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   picker; `o` drops the zoom and collapses the pane as usual.
 
 - **TUI: wrap mode (`z`) in lists got a readable layout.** Wrapped
-  continuation lines now hang-indent under the entry's text instead of
-  restarting at column 0 beneath the `> ` cursor, so it is obvious where
-  each entry starts. Applies to every list surface: the main panels
+  continuation lines now hang-indent to the column where each row's own
+  text starts — past the cursor, markers, and graph glyphs leading that
+  row (computed per row, since a branch's `* ` or a commit's graph lanes
+  shift the text start) — instead of restarting at column 0, so it is
+  obvious where each entry starts. Applies to every list surface: the main panels
   (Branches/Commits/Files/Staged/Tags/Reflog/Remotes/Worktrees), the repo
   switcher, bookmarks/shelf switcher, action menu, fuzzy file finder,
   git-config explorer, conflict file list, notifications, and the commit

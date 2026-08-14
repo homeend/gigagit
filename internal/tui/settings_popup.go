@@ -761,23 +761,16 @@ func (p *settingsPopup) box(m Model) string {
 			// display lines, so size the viewport to the wrapped line count
 			// (capped to keep the popup on-screen) — not the entry count, which
 			// would leave wrap no vertical room and make z look like a no-op.
+			// wrapContentLines measures with the same hang indent the window
+			// renders with.
 			_, termH := m.overlayDims()
 			capRows := termH - 12
 			if capRows < 3 {
 				capRows = 3
 			}
-			h := len(fs)
-			if p.mode == modeWrap {
-				total := 0
-				for _, r := range wr {
-					total += len(wrapWidth(r.text, textW, 1<<20))
-				}
-				h = total
-			}
-			if h > capRows {
-				h = capRows
-			}
-			for _, line := range renderWindow(wr, winOpts{w: textW, h: h, mode: p.mode, anchor: p.sel, hscroll: p.hscroll}) {
+			o := winOpts{w: textW, mode: p.mode, anchor: p.sel, hscroll: p.hscroll}
+			o.h = wrapContentLines(wr, o, capRows)
+			for _, line := range renderWindow(wr, o) {
 				b.WriteString(line + "\n")
 			}
 		}

@@ -120,12 +120,12 @@ func (m Model) renderShelfPopupBox(p *shelfPopup) string {
 			}
 			wr[n] = winRow{text: prefix + mark + " " + p.rows[i], style: st}
 		}
+		// Wrap mode: hang-indent continuations at the row text (intrinsic to wrap
+		// the height budget counts display lines, not rows.
 		capRows := popupResolveRowCap(p.maximized, termH, 12)
-		h := len(vis)
-		if h > capRows {
-			h = capRows
-		}
-		bodyLines = renderWindow(wr, winOpts{w: textW, h: h, mode: p.mode, anchor: p.sel, hscroll: p.hscroll})
+		o := winOpts{w: textW, mode: p.mode, anchor: p.sel, hscroll: p.hscroll}
+		o.h = wrapContentLines(wr, o, capRows)
+		bodyLines = renderWindow(wr, o)
 	}
 
 	parts := []string{header, ""}

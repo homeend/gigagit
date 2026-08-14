@@ -2,6 +2,7 @@ package tui
 
 import (
 	"strings"
+	"unicode"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
@@ -52,11 +53,6 @@ type winOpts struct {
 	anchor  int
 	hscroll int // modeScroll horizontal offset (display columns)
 	prefixW int // width of the frozen winRow.prefix column (0 = none)
-
-	// wrapIndent (modeWrap only) hang-indents a row's wrap continuations by
-	// this many columns, so continuations line up under the row's text instead
-	// of restarting at column 0 beneath the caller's cursor/marker prefix.
-	wrapIndent int
 }
 
 // renderWindow lays rows out under o and returns exactly o.h display lines,
@@ -135,7 +131,7 @@ func renderWindow(rows []winRow, o winOpts) []string {
 		hs := 0
 		switch o.mode {
 		case modeWrap:
-			segs = wrapHang(r.text, bodyW, o.wrapIndent, 1<<20) // huge cap => clean full wrap, no ellipsis
+			segs = wrapHang(r.text, bodyW, wrapAlignIndent(r.text, bodyW), 1<<20) // huge cap => clean full wrap, no ellipsis
 		case modeScroll:
 			segs = []string{hslice(r.text, o.hscroll, bodyW)}
 			hs = o.hscroll
@@ -194,6 +190,33 @@ func hslice(s string, off, w int) string {
 // rowTruncated reports whether s would be cut off in a w-wide cutoff window
 // (drives the truncated-row reveal).
 func rowTruncated(s string, w int) bool { return lipgloss.Width(s) > w }
+
+// wrapAlignIndent returns a row's wrap-mode hanging indent: the display width
+// of the row's leading run of spaces and marker/graph glyphs — everything
+// before its first letter or digit — capped at half the body width so a
+// decoration-heavy row keeps a usable continuation column. This is intrinsic
+// to modeWrap (not an option): every wrapped row's continuations start where
+// that row's text starts, past whatever cursor, marker, or graph glyphs lead
+// it. Per-row, because leading decoration varies row to row (a branch's `* `,
+// a commit's graph lanes); rows whose text starts at column 0 — prose — get
+// 0, so content viewers are unaffected by construction.
+func wrapAlignIndent(s string, bodyW int) int {
+	max := bodyW / 2
+	w := 0
+	for _, r := range s {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			break
+		}
+		w += lipgloss.Width(string(r))
+		if w >= max {
+			return max
+		}
+	}
+	if w >= lipgloss.Width(s) {
+		return 0 // no letter/digit anywhere: nothing to align under
+	}
+	return w
+}
 
 // splitWidth splits s at the last rune boundary that fits w display columns.
 // Width-aware like wrapWidth; a single glyph wider than w is emitted rather
@@ -268,7 +291,7 @@ func wrapContentLines(rows []winRow, o winOpts, max int) int {
 	}
 	n := 0
 	for _, r := range rows {
-		segs := len(wrapHang(r.text, w-pw, o.wrapIndent, 1<<20))
+		segs := len(wrapHang(r.text, w-pw, wrapAlignIndent(r.text, w-pw), 1<<20))
 		if segs == 0 {
 			segs = 1 // renderWindow substitutes one blank line for an empty row
 		}
