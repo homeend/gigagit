@@ -2640,6 +2640,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if inProc {
 			cp.picker = newProcessConflictPicker(msg.path, doc)
+			cp.pickPath = msg.path
 			cp.st = confPicking
 			return m, nil
 		}
