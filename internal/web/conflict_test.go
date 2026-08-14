@@ -1,6 +1,7 @@
 package web
 
 import (
+	"encoding/json"
 	"net/http"
 	"os"
 	"os/exec"
@@ -10,6 +11,18 @@ import (
 
 	"github.com/homeend/gigagit/internal/domain"
 )
+
+// resolveBody marshals a /api/resolve-hunks request body. picks is left as
+// `any` so callers can pass literal []map[string]any tagged-object picks
+// without an intermediate named type.
+func resolveBody(t *testing.T, path string, picks any, hash string) string {
+	t.Helper()
+	b, err := json.Marshal(map[string]any{"path": path, "picks": picks, "hash": hash})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
 
 // conflictStatusResp decodes the parts of /api/status these tests assert on.
 type conflictStatusResp struct {
@@ -193,9 +206,8 @@ func TestResolveHunks(t *testing.T) {
 		t.Fatalf("hunks code = %d", code)
 	}
 	var st conflictStatusResp
-	code := postJSON(t, ts, "/api/resolve-hunks",
-		`{"path":"f.txt","picks":["theirs"],"hash":"`+d.Hash+`"}`,
-		"application/json", "", &st)
+	body := resolveBody(t, "f.txt", []map[string]any{{"mode": "theirs"}}, d.Hash)
+	code := postJSON(t, ts, "/api/resolve-hunks", body, "application/json", "", &st)
 	if code != http.StatusOK {
 		t.Fatalf("resolve code = %d", code)
 	}
@@ -259,9 +271,8 @@ func TestResolveHunksMixedPicks(t *testing.T) {
 	if code := getJSON(t, ts, "/api/conflict-hunks?path=f.txt", &d); code != http.StatusOK || d.Count != 2 {
 		t.Fatalf("hunks code = %d count = %d, want 200/2", code, d.Count)
 	}
-	if code := postJSON(t, ts, "/api/resolve-hunks",
-		`{"path":"f.txt","picks":["ours","theirs"],"hash":"`+d.Hash+`"}`,
-		"application/json", "", nil); code != http.StatusOK {
+	body := resolveBody(t, "f.txt", []map[string]any{{"mode": "ours"}, {"mode": "theirs"}}, d.Hash)
+	if code := postJSON(t, ts, "/api/resolve-hunks", body, "application/json", "", nil); code != http.StatusOK {
 		t.Fatalf("resolve code = %d", code)
 	}
 	b, _ := os.ReadFile(filepath.Join(dir, "f.txt"))
@@ -306,9 +317,8 @@ func TestResolveHunksHashDrift(t *testing.T) {
 	blob := gitRun(t, dir, "hash-object", "-w", drifted)
 	gitIndexInfo(t, dir, "100644 "+blob+" 3\tf.txt\n")
 
-	if code := postJSON(t, ts, "/api/resolve-hunks",
-		`{"path":"f.txt","picks":["theirs"],"hash":"`+d.Hash+`"}`,
-		"application/json", "", nil); code != http.StatusConflict {
+	body := resolveBody(t, "f.txt", []map[string]any{{"mode": "theirs"}}, d.Hash)
+	if code := postJSON(t, ts, "/api/resolve-hunks", body, "application/json", "", nil); code != http.StatusConflict {
 		t.Errorf("code = %d, want 409", code)
 	}
 }
@@ -387,11 +397,217 @@ func TestResolveHunksPickCount(t *testing.T) {
 
 	var d conflictHunksResp
 	getJSON(t, ts, "/api/conflict-hunks?path=f.txt", &d)
-	for _, bad := range []string{`[]`, `["theirs","ours"]`, `["sideways"]`} {
-		if code := postJSON(t, ts, "/api/resolve-hunks",
-			`{"path":"f.txt","picks":`+bad+`,"hash":"`+d.Hash+`"}`,
-			"application/json", "", nil); code != http.StatusBadRequest {
-			t.Errorf("picks %s: code = %d, want 400", bad, code)
+	cases := []any{
+		[]map[string]any{},
+		[]map[string]any{{"mode": "theirs"}, {"mode": "ours"}},
+		[]map[string]any{{"mode": "sideways"}},
+	}
+	for _, picks := range cases {
+		body := resolveBody(t, "f.txt", picks, d.Hash)
+		if code := postJSON(t, ts, "/api/resolve-hunks", body, "application/json", "", nil); code != http.StatusBadRequest {
+			t.Errorf("picks %v: code = %d, want 400", picks, code)
 		}
 	}
+}
+
+// singleRegionConflictRepo builds a merge conflict with exactly one region
+// whose ours (current/main) side has TWO lines and whose theirs
+// (incoming/feature) side has ONE — the ordered line-pick fixture: ours
+// [oA,oB], theirs [tA]. Surrounding "keep"/"end" lines stay passthrough on
+// both sides so a dropped-region assertion has something to check survives.
+func singleRegionConflictRepo(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	gitRun(t, dir, "init", "-b", "main")
+	f := filepath.Join(dir, "f.txt")
+	if err := os.WriteFile(f, []byte("keep\nbase1\nend\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, dir, "add", "-A")
+	gitRun(t, dir, "commit", "-m", "base")
+
+	gitRun(t, dir, "checkout", "-b", "feature")
+	if err := os.WriteFile(f, []byte("keep\ntA\nend\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, dir, "add", "-A")
+	gitRun(t, dir, "commit", "-m", "feature edit")
+
+	gitRun(t, dir, "checkout", "main")
+	if err := os.WriteFile(f, []byte("keep\noA\noB\nend\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, dir, "add", "-A")
+	gitRun(t, dir, "commit", "-m", "main edit")
+
+	conflictedMergeState(t, dir)
+	return dir
+}
+
+// The ordered line-pick model: result order is array order regardless of
+// side, and sides may interleave.
+func TestResolveHunksLinePicks(t *testing.T) {
+	dir := singleRegionConflictRepo(t)
+	ts := serve(t, New(domain.Open(dir)))
+
+	var d conflictHunksResp
+	if code := getJSON(t, ts, "/api/conflict-hunks?path=f.txt", &d); code != http.StatusOK || d.Count != 1 {
+		t.Fatalf("hunks code = %d count = %d, want 200/1", code, d.Count)
+	}
+
+	picks := []map[string]any{{
+		"mode": "lines",
+		"lines": []map[string]any{
+			{"side": "theirs", "line": 0},
+			{"side": "ours", "line": 1},
+			{"side": "ours", "line": 0},
+		},
+	}}
+	body := resolveBody(t, "f.txt", picks, d.Hash)
+	if code := postJSON(t, ts, "/api/resolve-hunks", body, "application/json", "", nil); code != http.StatusOK {
+		t.Fatalf("resolve code = %d", code)
+	}
+	b, err := os.ReadFile(filepath.Join(dir, "f.txt"))
+	want := "keep\ntA\noB\noA\nend\n"
+	if err != nil || string(b) != want {
+		t.Errorf("f.txt = %q, %v; want %q", b, err, want)
+	}
+	if out := gitRun(t, dir, "ls-files", "-u"); out != "" {
+		t.Errorf("still unmerged:\n%s", out)
+	}
+}
+
+// An empty "lines" list is decided-empty: neither side's lines make it into
+// the result, but passthrough text around the block is untouched.
+func TestResolveHunksEmptyDecided(t *testing.T) {
+	dir := singleRegionConflictRepo(t)
+	ts := serve(t, New(domain.Open(dir)))
+
+	var d conflictHunksResp
+	if code := getJSON(t, ts, "/api/conflict-hunks?path=f.txt", &d); code != http.StatusOK {
+		t.Fatalf("hunks code = %d", code)
+	}
+
+	picks := []map[string]any{{"mode": "lines", "lines": []map[string]any{}}}
+	body := resolveBody(t, "f.txt", picks, d.Hash)
+	if code := postJSON(t, ts, "/api/resolve-hunks", body, "application/json", "", nil); code != http.StatusOK {
+		t.Fatalf("resolve code = %d", code)
+	}
+	b, err := os.ReadFile(filepath.Join(dir, "f.txt"))
+	want := "keep\nend\n"
+	if err != nil || string(b) != want {
+		t.Errorf("f.txt = %q, %v; want %q (region dropped, passthrough intact)", b, err, want)
+	}
+}
+
+func TestResolveHunksLineValidation(t *testing.T) {
+	dir := singleRegionConflictRepo(t)
+	ts := serve(t, New(domain.Open(dir)))
+
+	var d conflictHunksResp
+	if code := getJSON(t, ts, "/api/conflict-hunks?path=f.txt", &d); code != http.StatusOK {
+		t.Fatalf("hunks code = %d", code)
+	}
+
+	cases := []struct {
+		name    string
+		picks   any
+		hash    string
+		want    int
+		wantMsg string
+	}{
+		{
+			name:    "bad side",
+			picks:   []map[string]any{{"mode": "lines", "lines": []map[string]any{{"side": "nope", "line": 0}}}},
+			hash:    d.Hash,
+			want:    http.StatusBadRequest,
+			wantMsg: `side "nope"`,
+		},
+		{
+			name:    "line out of range",
+			picks:   []map[string]any{{"mode": "lines", "lines": []map[string]any{{"side": "ours", "line": 99}}}},
+			hash:    d.Hash,
+			want:    http.StatusBadRequest,
+			wantMsg: "out of range",
+		},
+		{
+			name:    "duplicate pick",
+			picks:   []map[string]any{{"mode": "lines", "lines": []map[string]any{{"side": "ours", "line": 0}, {"side": "ours", "line": 0}}}},
+			hash:    d.Hash,
+			want:    http.StatusBadRequest,
+			wantMsg: "duplicate",
+		},
+		{
+			name:    "bad mode",
+			picks:   []map[string]any{{"mode": "weird"}},
+			hash:    d.Hash,
+			want:    http.StatusBadRequest,
+			wantMsg: `mode "weird"`,
+		},
+		{
+			name:    "wrong picks count",
+			picks:   []map[string]any{},
+			hash:    d.Hash,
+			want:    http.StatusBadRequest,
+			wantMsg: "picks:",
+		},
+		{
+			name:    "stale hash",
+			picks:   []map[string]any{{"mode": "ours"}},
+			hash:    "deadbeef",
+			want:    http.StatusConflict,
+			wantMsg: "changed",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			body := resolveBody(t, "f.txt", c.picks, c.hash)
+			code, out := postJSONRaw(t, ts, "/api/resolve-hunks", body)
+			if code != c.want {
+				t.Errorf("code = %d, want %d", code, c.want)
+			}
+			if !strings.Contains(out["error"], c.wantMsg) {
+				t.Errorf("error = %q, want substring %q", out["error"], c.wantMsg)
+			}
+		})
+	}
+}
+
+// {"mode":"ours"} / {"mode":"theirs"} behave exactly like the old string
+// picks — the whole-side fast path survives the wire migration.
+func TestResolveHunksFastPathStillWorks(t *testing.T) {
+	t.Run("ours", func(t *testing.T) {
+		dir := twoRegionConflictRepo(t)
+		ts := serve(t, New(domain.Open(dir)))
+		var d conflictHunksResp
+		if code := getJSON(t, ts, "/api/conflict-hunks?path=f.txt", &d); code != http.StatusOK {
+			t.Fatalf("hunks code = %d", code)
+		}
+		body := resolveBody(t, "f.txt", []map[string]any{{"mode": "ours"}, {"mode": "ours"}}, d.Hash)
+		if code := postJSON(t, ts, "/api/resolve-hunks", body, "application/json", "", nil); code != http.StatusOK {
+			t.Fatalf("resolve code = %d", code)
+		}
+		b, _ := os.ReadFile(filepath.Join(dir, "f.txt"))
+		want := "keep\nm1\nc1\nc2\nc3\nc4\nc5\nm2\nend\n"
+		if string(b) != want {
+			t.Errorf("f.txt = %q, want %q", b, want)
+		}
+	})
+	t.Run("theirs", func(t *testing.T) {
+		dir := twoRegionConflictRepo(t)
+		ts := serve(t, New(domain.Open(dir)))
+		var d conflictHunksResp
+		if code := getJSON(t, ts, "/api/conflict-hunks?path=f.txt", &d); code != http.StatusOK {
+			t.Fatalf("hunks code = %d", code)
+		}
+		body := resolveBody(t, "f.txt", []map[string]any{{"mode": "theirs"}, {"mode": "theirs"}}, d.Hash)
+		if code := postJSON(t, ts, "/api/resolve-hunks", body, "application/json", "", nil); code != http.StatusOK {
+			t.Fatalf("resolve code = %d", code)
+		}
+		b, _ := os.ReadFile(filepath.Join(dir, "f.txt"))
+		want := "keep\nf1\nc1\nc2\nc3\nc4\nc5\nf2\nend\n"
+		if string(b) != want {
+			t.Errorf("f.txt = %q, want %q", b, want)
+		}
+	})
 }

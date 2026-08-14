@@ -116,10 +116,23 @@ func (s *Server) handleConflictHunks(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"count": idx, "hash": hash, "items": items})
 }
 
+// resolvePick is one block's decision, positional against Doc.Blocks(): a
+// whole-side take ("ours"/"theirs") or an ordered line-by-line pick list
+// ("lines") — ties to hunkpick's LineByLine mode, where result order is
+// array order and sides may interleave. An empty Lines list under "lines" is
+// decided-empty (both sides dropped for that block), not "undecided".
+type resolvePick struct {
+	Mode  string `json:"mode"` // "ours" | "theirs" | "lines"
+	Lines []struct {
+		Side string `json:"side"` // "ours" | "theirs"
+		Line int    `json:"line"`
+	} `json:"lines"`
+}
+
 type resolveHunksRequest struct {
-	Path  string   `json:"path"`
-	Picks []string `json:"picks"` // positional: picks[i] resolves block i — "ours" | "theirs"
-	Hash  string   `json:"hash"`
+	Path  string        `json:"path"`
+	Picks []resolvePick `json:"picks"` // positional: picks[i] resolves block i
+	Hash  string        `json:"hash"`
 }
 
 // handleResolveHunks resolves a conflicted file from a full set of per-block
@@ -149,13 +162,44 @@ func (s *Server) handleResolveHunks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for i, p := range req.Picks {
-		switch p {
+		switch p.Mode {
 		case "ours":
 			blocks[i].Mode = hunkpick.TakeCurrent
 		case "theirs":
 			blocks[i].Mode = hunkpick.TakeIncoming
+		case "lines":
+			// Ordered line-pick model: result order = array order, sides may
+			// interleave, an empty list is decided-empty (drop both sides).
+			seen := map[[2]int]bool{}
+			picks := make([]hunkpick.Pick, 0, len(p.Lines))
+			for j, ln := range p.Lines {
+				var side hunkpick.Side
+				var max int
+				switch ln.Side {
+				case "ours":
+					side, max = hunkpick.Current, len(blocks[i].Current)
+				case "theirs":
+					side, max = hunkpick.Incoming, len(blocks[i].Incoming)
+				default:
+					writeErr(w, http.StatusBadRequest, fmt.Errorf("pick %d line %d: side %q (want ours|theirs)", i, j, ln.Side))
+					return
+				}
+				if ln.Line < 0 || ln.Line >= max {
+					writeErr(w, http.StatusBadRequest, fmt.Errorf("pick %d line %d: %s line %d out of range (0..%d)", i, j, ln.Side, ln.Line, max-1))
+					return
+				}
+				key := [2]int{int(side), ln.Line}
+				if seen[key] {
+					writeErr(w, http.StatusBadRequest, fmt.Errorf("pick %d: duplicate %s line %d", i, ln.Side, ln.Line))
+					return
+				}
+				seen[key] = true
+				picks = append(picks, hunkpick.Pick{Side: side, Line: ln.Line})
+			}
+			blocks[i].Mode = hunkpick.LineByLine
+			blocks[i].Picks = picks
 		default:
-			writeErr(w, http.StatusBadRequest, fmt.Errorf("pick %d: %q (want ours|theirs)", i, p))
+			writeErr(w, http.StatusBadRequest, fmt.Errorf("pick %d: mode %q (want ours|theirs|lines)", i, p.Mode))
 			return
 		}
 	}
