@@ -8,6 +8,15 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **TUI: the repo switcher (`R`) is fullscreen and table-aligned.** The
+  picker now always opens at the maximized width/row budget (ctrl+t is gone
+  from this popup) and lays its rows out as a table: repo name, the slow-fs
+  marker, path, and age each start at one shared column, computed over all
+  entries so the layout holds still while filtering and when the async
+  slow-fs probe lands. In cutoff mode an over-long path is elided from the
+  left (the leaf stays visible) so the age column survives; wrap/scroll
+  modes keep the full path.
+
 - **TUI: `H` on the Staged panel opens the unstage picker.** The same
   region/line picker surface now runs staged ↔ HEAD: taking the HEAD side of
   a region reverts that part of the index (`git reset -p` analog) while the
