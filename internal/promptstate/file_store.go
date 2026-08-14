@@ -19,6 +19,9 @@ type records struct {
 	SuppressedPrompts []string            `toml:"suppressed_prompts"`
 	DismissedNotices  map[string][]string `toml:"dismissed_notices"`
 	ApprovedTools     map[string][]string `toml:"approved_tools"`
+	// A POINTER so "never saved" stays distinguishable from "saved, all
+	// defaults" — see WebUIState.
+	WebUI *WebUI `toml:"web_ui,omitempty"`
 }
 
 // read loads the file; a missing or malformed file reads as empty (UX memory

@@ -3,6 +3,7 @@
 import { $, DANGER_OPTIONS, esc, getJSON, lsSet, postJSON, state } from "./core.js";
 import { closeLayer, pushLayer } from "./layers.js";
 import { fetchStatus, wtCount } from "./status.js";
+import { saveUI } from "./uistate.js";
 import { fetchBranches } from "./sidebar.js";
 import { closeReviewLane, unparkReview } from "./review.js";
 import { closeCommitFilter, loadCommits, renderCommits } from "./commits.js";
@@ -267,9 +268,17 @@ async function doReroot(path) {
 // clickable footer chips.
 function toggleSidebar() {
   if (state.layout === "diff") return; // no sidebar on the diff screen to toggle
-  state.sidebar = !state.sidebar;
-  lsSet("gg.sidebar.hidden", state.sidebar ? "0" : "1");
-  $("panes").classList.toggle("nosb", !state.sidebar);
+  applySidebarHidden(!state.sidebar);
+  lsSet("gg.sidebar.hidden", state.sidebar ? "0" : "1"); // same-session cache
+  saveUI({ sidebar_hidden: !state.sidebar }); // the copy that survives a restart
+}
+
+
+// applySidebarHidden is the shared "put the sidebar in this state" step, used
+// by the toggle and by the layout restored from the server at boot.
+function applySidebarHidden(hidden) {
+  state.sidebar = !hidden;
+  $("panes").classList.toggle("nosb", hidden);
   renderCommits(); // list width changed
 }
 
@@ -491,4 +500,4 @@ async function loadRepo() {
   state.worktree = repo.worktree;
 }
 
-export { answerModal, doCommit, doFetch, doForcePush, doPull, doPullBranch, doPush, doPushBranch, doReroot, doStash, followOp, handleOpEvent, hideModal, hideOpLine, lastFocusRefresh, loadRepo, modalLocalCb, opBusy, opLine, opLineTimer, openHelp, parkedRunning, parkedTaskText, refreshAfterOp, showLocalConfirm, showModal, stageFocused, startOp, startSwitch, taskLine, taskRestoreTimer, toggleSidebar };
+export { applySidebarHidden, answerModal, doCommit, doFetch, doForcePush, doPull, doPullBranch, doPush, doPushBranch, doReroot, doStash, followOp, handleOpEvent, hideModal, hideOpLine, lastFocusRefresh, loadRepo, modalLocalCb, opBusy, opLine, opLineTimer, openHelp, parkedRunning, parkedTaskText, refreshAfterOp, showLocalConfirm, showModal, stageFocused, startOp, startSwitch, taskLine, taskRestoreTimer, toggleSidebar };

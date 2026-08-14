@@ -8,6 +8,19 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: the browser's layout is remembered by gg, not by the browser.** It
+  never survived a restart, and the saving code was not at fault: `gg web`
+  binds a RANDOM loopback port, so every run is a different origin and
+  `localStorage` — where the layout lived — starts empty every time. The
+  folded sections, both pane widths, the sidebar toggle and the graph mode now
+  live in gg's machine-local state file (`prompts.toml`, beside the dismissed
+  notices), read at boot from `GET /api/uistate` and written back through
+  `PUT /api/uistate` (debounced; wire values allowlisted, widths bounded).
+  Browser storage stays as a same-session cache. The state is machine-wide,
+  not per repo — how you fold the sidebar is a habit, not a property of a
+  repository — and a first run is still distinguishable from "I unfolded them
+  all", so the defaults are never re-applied over your choice.
+
 - **Web: sidebar sections fold on ONE click, and remember it.** Folding was
   double-click only, and two of the six lists ignored it entirely: `remotes`
   and `reflog` were missing from the CSS rule that hides a folded list, so

@@ -1,6 +1,7 @@
 // bigrepo.js — part of gg's web client. Split from the original app.js;
 // see app.js (the entry module) for the load order.
 import { $, getJSON, lsGet, lsSet, postJSON, ssGet, ssSet, state } from "./core.js";
+import { saveUI, uiState } from "./uistate.js";
 import { opLine, startOp } from "./ops.js";
 import { loadCommits, renderCommits } from "./commits.js";
 
@@ -13,6 +14,7 @@ $("bigrepo-graphoff").onclick = async () => {
   }
   state.graphMode = "off";
   lsSet("gg.graph", "off"); // this browser matches immediately and keeps matching
+  saveUI({ graph: "off" }); // and the next run, which has a different origin
   await loadCommits(false); // sort changed server-side — reload the feed
   fetchHealth();
 };
@@ -57,7 +59,9 @@ async function fetchHealth(applyDefault) {
   } catch {
     state.health = null;
   }
-  if (applyDefault && state.health && lsGet("gg.graph") === null && state.health.show_graph === "off") {
+  // A layout saved on this machine already decided the graph mode at boot;
+  // the repo default only speaks for a UI that has never been told otherwise.
+  if (applyDefault && state.health && !uiState() && lsGet("gg.graph") === null && state.health.show_graph === "off") {
     state.graphMode = "off";
   }
   renderBigRepoBanner();
@@ -73,7 +77,7 @@ function bigRepoGroups() {
   const h = state.health;
   if (!h || !h.big) return [];
   const groups = [];
-  const graphOn = h.show_graph !== "off" && lsGet("gg.graph") !== "off";
+  const graphOn = h.show_graph !== "off" && state.graphMode !== "off";
   if (!h.dismissed.web_graph_off_suggest && (graphOn || h.commit_sort !== "plain")) groups.push("graphoff");
   if (!h.dismissed.commit_graph_recommend && !h.has_commit_graph && !h.write_commit_graph_set) groups.push("cgraph");
   return groups;

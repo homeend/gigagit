@@ -1,6 +1,7 @@
 // sidebar.js — part of gg's web client. Split from the original app.js;
 // see app.js (the entry module) for the load order.
 import { $, SECTIONS, charWidth, elidePath, esc, getJSON, lsGet, lsSet, state } from "./core.js";
+import { saveUI } from "./uistate.js";
 import { closePrompt, copyText, openPrompt, showCtxMenu } from "./layers.js";
 import { openPrefixPicker } from "./prefixes.js";
 import { doForcePush, doPull, doPullBranch, doPush, doPushBranch, doReroot, showLocalConfirm, startOp, startSwitch } from "./ops.js";
@@ -576,9 +577,24 @@ function applySection(name, collapsed) {
 }
 
 
+function foldedSections() {
+  return SECTIONS.filter((n) => $(n + "-list").classList.contains("collapsed"));
+}
+
+
 function toggleSection(name) {
   applySection(name, !$(name + "-list").classList.contains("collapsed"));
-  lsSet("gg.sidebar.collapsed", JSON.stringify(SECTIONS.filter((n) => $(n + "-list").classList.contains("collapsed"))));
+  const folded = foldedSections();
+  lsSet("gg.sidebar.collapsed", JSON.stringify(folded)); // same-session cache
+  saveUI({ sections: folded }); // the copy that survives a restart
+}
+
+
+// applyStoredSections re-applies a layout that came back from the server. The
+// caller passes null on a first run, which leaves COLLAPSED_DEFAULT standing.
+function applyStoredSections(names) {
+  if (!Array.isArray(names)) return;
+  SECTIONS.forEach((n) => applySection(n, names.includes(n)));
 }
 
 SECTIONS.forEach((n) => {
@@ -790,4 +806,4 @@ new ResizeObserver(() => {
   });
 }).observe($("branches-pane"));
 
-export { branchesList, clearDropTargets, defaultWorktreePath, fetchBranches, openCreateBranchPrompt, renderBranches, renderReflog, renderRemotes, renderStashes, renderTags, renderWorktrees, showBranchMenu, showBranchPairMenu, showReflogMenu, showRemoteMenu, showStashMenu, showTagMenu, showWorktreeMenu, toggleSection, worktreePathForBranch };
+export { applyStoredSections, branchesList, clearDropTargets, defaultWorktreePath, fetchBranches, openCreateBranchPrompt, renderBranches, renderReflog, renderRemotes, renderStashes, renderTags, renderWorktrees, showBranchMenu, showBranchPairMenu, showReflogMenu, showRemoteMenu, showStashMenu, showTagMenu, showWorktreeMenu, toggleSection, worktreePathForBranch };
