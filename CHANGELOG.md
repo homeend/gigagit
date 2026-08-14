@@ -8,6 +8,26 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: a branch checked out in a worktree says where.** The browser Branches
+  list showed no sign that a branch was open somewhere; it now carries the
+  worktree's path after the name, the way the TUI's Branches panel does
+  (`main /mnt/t/others/gigagit`). The path is shortened with the SAME algorithm
+  the rest of gg uses — whole segments dropped from the middle around a single
+  `…`, outermost parts surviving first — ported from `internal/tui/elide.go`
+  into the web client and pinned to it by a test that runs both over one case
+  table (skipped when `node` isn't installed). It re-fits live as the sidebar
+  is dragged, and the Worktrees list shows the same elided path instead of a
+  bare directory name. Hovering a row still gives the full path.
+
+- **Web: one row shape for every sidebar list.** `remotes` had no styling at
+  all — its rows sat flush against the pane edge and wrapped mid-name
+  (`origin/feat/switch-dirty-` / `prompt`) while every other list was padded,
+  nowrapped and ellipsized. All six lists (branches, remotes, worktrees, tags,
+  stashes, reflog) now share the same row style and the same leading marker
+  column, reserved even on rows with no marker, so names line up from the top
+  of the sidebar to the bottom. The "this is the current one" glyph is `✓`
+  everywhere — the Worktrees list's `●` is gone.
+
 - **TUI: `pgup`/`pgdn` in the hunk picker.** A viewport page at a time —
   the line cursor in the selection grid (stepping across regions like the
   arrows), the scroll in the output pane; after an `alt+↑/↓` free-scroll
