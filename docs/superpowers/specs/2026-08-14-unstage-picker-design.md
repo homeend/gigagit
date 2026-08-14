@@ -47,8 +47,11 @@ exist (the staged diff and staged-editor lanes use them).
   `requireAll=false` (apply freely, like staging).
 - Apply → the existing `engine.StageHunks{Path, Content}` — the index entry
   becomes the assembled content, the working tree is untouched. That is
-  `git reset -p`. **Zero engine/domain changes**; `StageHunks` is already in
-  `opAffectedSources`.
+  `git reset -p`. **Zero engine/domain changes.** `StageHunks` is not in
+  `opAffectedSources`, so an apply falls to the safe all-sources refresh
+  default (correct, wasteful on huge repos; mapping it — together with
+  `ResolveConflictHunks` — to `srcStatus` is a recorded follow-up, out of
+  scope here because it changes the shipped stage picker's behavior too).
 
 Everything the picker surface already has comes along: side toggles +
 checkbox hierarchy, output pane + tab focus + oshift, free view-scroll
