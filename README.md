@@ -12,9 +12,17 @@ system `git`.
 > tools, gated by client consent); heavy-ops MCP surfaces remain on the
 > roadmap. A loopback-only browser UI (`gg web`) mirrors core flows —
 > status, commits, branches, stashes, pull/push/merge/rebase, and now
-> paused-op conflict resolution with an in-browser per-block ours/theirs
-> picker plus an "AI resolve…" button that runs a headless agent to finish
-> the paused op for you — over a small HTTP API, no node toolchain required.
+> paused-op conflict resolution: the browser conflict picker has per-line
+> checkboxes and tri-state side toggles (left, right, or both — pick order
+> = result order), decided-empty regions, and a live assembled-output pane;
+> `all ours`/`all theirs` are tri-state document toggles. The picker
+> regenerates conflict text from index stages (`ConflictPickerFile`), so
+> files whose content contains literal conflict markers now load in the web
+> picker too — the same as the TUI, conflicts are shown as git recorded them
+> (regenerated from the index stages), and hand-edits to conflicted files that
+> were not staged are not reflected in the picker. Plus an "AI resolve…" button
+> that runs a headless agent to finish the paused op for you — over a small
+> HTTP API, no node toolchain required.
 > See
 > [`CHANGELOG.md`](CHANGELOG.md) for the full feature list and
 > [`CLAUDE.md`](CLAUDE.md) for the architecture.
