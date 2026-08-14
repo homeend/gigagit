@@ -279,3 +279,22 @@ func TestConflictProcessEscRestoresPickerZoom(t *testing.T) {
 		t.Fatalf("second esc did not leave the picker (st=%v)", p.st)
 	}
 }
+
+func TestConflictProcessRefreshKeepsPicking(t *testing.T) {
+	p := &conflictProcess{st: confPicking, picker: newProcessConflictPicker("f.txt", pickerDoc()), pickPath: "f.txt"}
+	m := Model{proc: p, width: 80, height: 24}
+	m.status = model.WorkingTreeStatus{Files: []model.FileStatus{
+		{Path: "f.txt", Kind: model.KindUnmerged, Staged: 'U', Unstaged: 'U'},
+	}}
+	m, _ = p.refreshed(m)
+	if p.st != confPicking || p.picker == nil {
+		t.Fatalf("a background refresh discarded the picking session: st=%v picker=%v", p.st, p.picker)
+	}
+	// The file leaving the conflict set (resolved elsewhere) falls back to
+	// the list — a stale editor over a resolved file would be worse.
+	m.status = model.WorkingTreeStatus{}
+	m, _ = p.refreshed(m)
+	if p.st != confListing || p.picker != nil {
+		t.Fatalf("refresh with the file resolved must return to the list: st=%v", p.st)
+	}
+}

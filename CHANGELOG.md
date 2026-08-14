@@ -8,6 +8,17 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **TUI: hunk-picker lag fixed and refresh no longer closes the editor.**
+  Cursor movement in the conflict/stage/unstage picker was O(document) per
+  keystroke: the grid styled every line of the file before windowing (35ms
+  measured on a 5000-row doc; now windows first, 0.19ms), sanitization and
+  the output pane re-ran per frame (now cached; the output reassembles only
+  when picks change), and the whole main interface was re-rendered invisibly
+  underneath every full-screen surface (now skipped — history/blame/diff get
+  the same win). A background auto-refresh also reset the conflict editor to
+  the file list, losing all picks; the picking session now survives
+  refreshes while its file stays conflicted.
+
 - **An automatic commits refresh no longer throws away the loaded history.**
   Every refresh used to hard-reset the Commits panel to page 0, so a deep
   `ctrl+f` search or a long scroll was wiped on the next background tick,

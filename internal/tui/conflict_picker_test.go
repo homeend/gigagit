@@ -961,3 +961,31 @@ func TestPickerZoomRestoreShowsSplit(t *testing.T) {
 		t.Fatalf("restore did not bring back the split view:\n%s", out)
 	}
 }
+
+// bigPickerDoc builds a conflict doc with many regions and long literal runs —
+// the render-cost fixture (thousands of display lines).
+func bigPickerDoc(tb testing.TB, regions, literalRun int) *hunkpick.Doc {
+	tb.Helper()
+	var b strings.Builder
+	for r := 0; r < regions; r++ {
+		for l := 0; l < literalRun; l++ {
+			fmt.Fprintf(&b, "literal %d-%d with some length to it\n", r, l)
+		}
+		fmt.Fprintf(&b, "<<<<<<< HEAD\nours %d a\nours %d b\n=======\ntheirs %d a\n>>>>>>> x\n", r, r, r)
+	}
+	d, err := hunkpick.ParseConflict([]byte(b.String()))
+	if err != nil {
+		tb.Fatalf("fixture parse: %v", err)
+	}
+	return d
+}
+
+func BenchmarkPickerRenderBig(b *testing.B) {
+	e := newConflictPicker("big.txt", bigPickerDoc(b, 60, 80))
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 120, height: 40}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		e.render(m, "")
+	}
+}

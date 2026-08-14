@@ -49,6 +49,7 @@ type conflictProcess struct {
 	inProgress string               // "merge"/"rebase"/"" — set by the probe (Task 5)
 	errMsg     string               // last failed job's message (confReporting)
 	picker     *hunkPicker          // the line editor, while confPicking (owned here, not on the surface stack)
+	pickPath   string               // the file the picker is editing (refresh keeps the session while it stays conflicted)
 	mode       dispMode             // text display mode; z cycles
 	hscroll    int                  // modeScroll horizontal offset
 
@@ -594,6 +595,19 @@ func (p *conflictProcess) refreshed(m Model) (Model, tea.Cmd) {
 	p.src = m.conflict
 	if p.sel >= len(p.files) {
 		p.sel = max(0, len(p.files)-1)
+	}
+	// A background refresh (auto-refresh lane, file-watch, manual r) must
+	// not throw away an in-flight picking session: keep the editor open
+	// while its file is still conflicted. Only when the file left the
+	// conflict set (resolved elsewhere) does the process fall back to the
+	// list — a live editor over a resolved file would stage stale picks.
+	if p.st == confPicking && p.picker != nil {
+		for _, f := range p.files {
+			if f.Path == p.pickPath {
+				return m, m.loadInProgressCmd()
+			}
+		}
+		p.picker, p.pickPath = nil, ""
 	}
 	p.st = confListing
 	return m, m.loadInProgressCmd()

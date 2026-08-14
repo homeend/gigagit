@@ -237,15 +237,28 @@ func (m Model) layerBase() string {
 // returns layerBase unchanged. This is also the background the action menu floats
 // over (it replaces the old menuBackground helper).
 func (m Model) renderLayers() string {
-	below := m.layerBase()
 	if m.layers == nil || len(m.layers.entries) == 0 {
-		return below
+		return m.layerBase()
 	}
 	top := len(m.layers.entries) - 1
 	// Surfaces are always below popups (no surface is ever pushed over a live
 	// popup), so folding the full-screen surfaces beneath the top yields the top
 	// surface as the popup's backdrop — or, when the top layer is itself a
 	// surface, the loop is all-surface and the top surface renders full-screen.
+	// The lowest surface ignores its backdrop entirely, so when one exists the
+	// main interface underneath is invisible — skip its render (the expensive
+	// part of a frame on a big repo) and start compositing from "".
+	below := ""
+	hasSurface := false
+	for i := 0; i <= top; i++ {
+		if isFullScreenLayer(m.layers.entries[i]) {
+			hasSurface = true
+			break
+		}
+	}
+	if !hasSurface {
+		below = m.layerBase()
+	}
 	for i := 0; i < top; i++ {
 		if l := m.layers.entries[i]; isFullScreenLayer(l) {
 			below = l.render(m, below)
@@ -269,6 +282,13 @@ func (m Model) render() string {
 	// just below the modal, above every other window.
 	if m.proc != nil {
 		_, h := m.overlayDims()
+		// While the process's line editor owns the whole screen, the main
+		// interface underneath is invisible — skip its render (it is the
+		// expensive part of a frame on a big repo; the picker's own cost is
+		// windowed and cached).
+		if cp, ok := m.proc.(*conflictProcess); ok && cp.st == confPicking && cp.picker != nil {
+			return clipToHeight(cp.picker.render(m, ""), h)
+		}
 		return clipToHeight(m.proc.render(m, clipToHeight(m.renderInterface(), h)), h)
 	}
 	// The action menu is a modal-like overlay: it draws on top of whatever
