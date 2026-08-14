@@ -60,6 +60,9 @@ type hunkPicker struct {
 	outRev   int      // pickRev the output cache was built at
 	outLines []string // sanitized assembled output
 	outStart []int    // per block index: first output line of the block's contribution
+
+	lastGridH int // grid height at the last render — the pgup/pgdn page size
+	lastOutH  int // output-pane height at the last render — its page size
 }
 
 const pickerHScrollStep = 8
@@ -151,6 +154,47 @@ func (e *hunkPicker) sideLen() int {
 		return len(b.Incoming)
 	}
 	return len(b.Current)
+}
+
+// cursorUp / cursorDown move the line cursor one step, crossing regions the
+// way the arrow keys always have; false means the edge was reached. pgup/pgdn
+// are these steps repeated a viewport page at a time.
+func (e *hunkPicker) cursorUp() bool {
+	if e.line > 0 {
+		e.line--
+		return true
+	}
+	if e.bi > 0 {
+		e.bi--
+		e.line = e.sideLen() - 1
+		if e.line < 0 {
+			e.line = 0
+		}
+		return true
+	}
+	return false
+}
+
+func (e *hunkPicker) cursorDown() bool {
+	if e.line < e.sideLen()-1 {
+		e.line++
+		return true
+	}
+	if e.bi < len(e.blocks)-1 {
+		e.bi++
+		e.line = 0
+		return true
+	}
+	return false
+}
+
+// pageSize is the grid page for pgup/pgdn: the last rendered grid height
+// (minus one row of overlap), with a sane floor before the first render.
+func (e *hunkPicker) pageSize() int {
+	if e.lastGridH > 1 {
+		return e.lastGridH - 1
+	}
+	return 10
 }
 
 func (e *hunkPicker) clampLine() {
@@ -304,6 +348,12 @@ func (e *hunkPicker) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		case "down", "j":
 			e.oshift++
 			return m, nil
+		case "pgup":
+			e.oshift -= max(1, e.lastOutH)
+			return m, nil
+		case "pgdown":
+			e.oshift += max(1, e.lastOutH)
+			return m, nil
 		case "o":
 			e.outCollapsed, e.outFocused, e.oshift = true, false, 0
 			e.zoomed = false
@@ -326,7 +376,7 @@ func (e *hunkPicker) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		// up/down is consumed by that snap-back so the cursor stays put.
 		e.vshift = 0
 		switch msg.String() {
-		case "up", "k", "down", "j":
+		case "up", "k", "down", "j", "pgup", "pgdown":
 			return m, nil
 		}
 	}
@@ -357,21 +407,20 @@ func (e *hunkPicker) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			e.hscroll += pickerHScrollStep
 		}
 	case "up", "k":
-		if e.line > 0 {
-			e.line--
-		} else if e.bi > 0 {
-			e.bi--
-			e.line = e.sideLen() - 1
-			if e.line < 0 {
-				e.line = 0
+		e.cursorUp()
+	case "down", "j":
+		e.cursorDown()
+	case "pgup":
+		for i := 0; i < e.pageSize(); i++ {
+			if !e.cursorUp() {
+				break
 			}
 		}
-	case "down", "j":
-		if e.line < e.sideLen()-1 {
-			e.line++
-		} else if e.bi < len(e.blocks)-1 {
-			e.bi++
-			e.line = 0
+	case "pgdown":
+		for i := 0; i < e.pageSize(); i++ {
+			if !e.cursorDown() {
+				break
+			}
 		}
 	case "n":
 		if e.bi < len(e.blocks)-1 {
@@ -464,13 +513,13 @@ func (e *hunkPicker) render(m Model, _ string) string {
 	// The hint wraps instead of truncating so no command is ever cut off;
 	// the set follows the focus so only live keys are advertised.
 	hintParts := []string{
-		i18n.T("[←/→] side"), i18n.T("[shift+←/→] scroll"), i18n.T("[z] mode"), i18n.T("[↑/↓] line"), i18n.T("[alt+↑/↓] view"), i18n.T("[space] pick"),
+		i18n.T("[←/→] side"), i18n.T("[shift+←/→] scroll"), i18n.T("[z] mode"), i18n.T("[↑/↓] line"), i18n.T("[pgup/pgdn] page"), i18n.T("[alt+↑/↓] view"), i18n.T("[space] pick"),
 		"[c] " + e.leftLabel, "[i] " + e.rightLabel, i18n.T("[C/I] all"), i18n.T("[n/p] hunk"), i18n.T("[o] output"), i18n.T("[tab] output"),
 		i18n.T("[ctrl+t] full"), i18n.T("[enter] apply"), i18n.T("[esc] cancel"),
 	}
 	if e.outFocused {
 		hintParts = []string{
-			i18n.T("[↑/↓] scroll"), i18n.T("[tab] grid"), i18n.T("[o] hide"), i18n.T("[z] mode"), i18n.T("[shift+←/→] scroll"), i18n.T("[alt+↑/↓] view"),
+			i18n.T("[↑/↓] scroll"), i18n.T("[pgup/pgdn] page"), i18n.T("[tab] grid"), i18n.T("[o] hide"), i18n.T("[z] mode"), i18n.T("[shift+←/→] scroll"), i18n.T("[alt+↑/↓] view"),
 			i18n.T("[ctrl+t] full"), i18n.T("[enter] apply"), i18n.T("[esc] cancel"),
 		}
 	}
@@ -550,6 +599,7 @@ func (e *hunkPicker) render(m Model, _ string) string {
 		blockNo++
 	}
 
+	e.lastGridH = gridH
 	body, eff := renderTwoCol(rows, twoColOpts{
 		w: w, h: gridH, sep: pickerColSep, mode: e.mode, hscroll: e.hscroll, anchor: anchor, vshift: e.vshift,
 	})
@@ -603,6 +653,7 @@ func (e *hunkPicker) outputLines() ([]string, int) {
 // lines arrive pre-sanitized from the output cache; outside wrap mode the
 // window is computed first and only the h visible lines are transformed.
 func (e *hunkPicker) renderOutput(w, h int) []string {
+	e.lastOutH = h
 	src, srcAnchor := e.outputLines()
 	if e.mode != modeWrap {
 		// 1 line : 1 display line — window in line space, transform the window.
