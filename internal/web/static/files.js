@@ -481,11 +481,19 @@ function activeFileList() {
 }
 
 
+// changeNavRows: what the ‹/› change buttons step over — conflict regions
+// while the picker is open, else the rendered diff's change runs.
+function changeNavRows() {
+  if (conflictPick) return [...document.querySelectorAll("#cf-doc .cf-region")];
+  return diffChangeBlocks();
+}
+
+
 function updateDiffNav() {
   const list = activeFileList();
   $("prev-file").disabled = list.length === 0 || state.fileCursor <= 0;
   $("next-file").disabled = list.length === 0 || state.fileCursor >= list.length - 1;
-  const any = diffChangeBlocks().length > 0;
+  const any = changeNavRows().length > 0;
   $("prev-change").disabled = !any;
   $("next-change").disabled = !any;
   $("hist-btn").disabled = $("blame-btn").disabled = !state.diffCtx;
@@ -518,7 +526,7 @@ function diffChangeBlocks() {
 
 
 function stepChange(delta) {
-  const blocks = diffChangeBlocks();
+  const blocks = changeNavRows();
   if (!blocks.length) return;
   const i = Math.max(0, Math.min(blocks.length - 1, state.diffBlockIdx + delta));
   state.diffBlockIdx = i;
@@ -526,6 +534,16 @@ function stepChange(delta) {
   tr.scrollIntoView({ block: "center" });
   tr.classList.add("flash");
   setTimeout(() => tr.classList.remove("flash"), 600);
+  if (conflictPick && tr.dataset.b != null) {
+    // The output pane follows: scroll the region's contribution (its own
+    // scroll container, so the pick area is unaffected) and flash it too.
+    const seg = document.querySelector(`#cf-out-body .cf-out-region[data-b="${tr.dataset.b}"]`);
+    if (seg) {
+      seg.scrollIntoView({ block: "center" });
+      seg.classList.add("flash");
+      setTimeout(() => seg.classList.remove("flash"), 600);
+    }
+  }
 }
 
 
@@ -743,14 +761,23 @@ function regionSuffix(ch, it) {
 // written, undecided regions rendered as a placeholder so the pane always
 // reflects the CURRENT (possibly incomplete) pick state.
 function assembleOutput(v) {
-  const out = [];
+  // HTML with each region's contribution wrapped in a .cf-out-region span so
+  // the ‹/› change nav can scroll the pane to it. The TEXT stays byte-equal
+  // to the join of all contributed lines (empty parts are dropped whole, so
+  // no stray newlines appear around a decided-empty region).
+  const parts = [];
   for (const it of v.items) {
-    if (it.kind === "text") { out.push(...(it.lines || [])); continue; }
+    if (it.kind === "text") {
+      if ((it.lines || []).length) parts.push(esc(it.lines.join("\n")));
+      continue;
+    }
     const ch = v.choices[it.index];
-    if (!ch.touched) out.push(`‹region ${it.index + 1} undecided›`);
-    else for (const p of ch.picks) out.push((p.side === "ours" ? it.ours : it.theirs)[p.line]);
+    const lines = !ch.touched
+      ? [`‹region ${it.index + 1} undecided›`]
+      : ch.picks.map((p) => (p.side === "ours" ? it.ours : it.theirs)[p.line]);
+    if (lines.length) parts.push(`<span class="cf-out-region" data-b="${it.index}">${esc(lines.join("\n"))}</span>`);
   }
-  return out.join("\n");
+  return parts.join("\n");
 }
 
 
@@ -796,7 +823,9 @@ async function openConflictPicker(f) {
     `<pre id="cf-out-body"></pre>` +
     `</div>`;
   $("diff-body").innerHTML = html;
+  state.diffBlockIdx = -1; // ‹/› change steps regions from the top
   paintConflictPicks();
+  updateDiffNav(); // the early call saw no regions; enable ‹/› change now
 }
 
 
@@ -876,7 +905,7 @@ function paintConflictPicks() {
     });
   });
   const outBody = $("cf-out-body");
-  if (outBody) outBody.textContent = v ? assembleOutput(v) : "";
+  if (outBody) outBody.innerHTML = v ? assembleOutput(v) : "";
   renderResolveBar();
 }
 
