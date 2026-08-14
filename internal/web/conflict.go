@@ -43,10 +43,13 @@ type conflictItem struct {
 }
 
 // loadConflictDoc resolves path's eligibility against a FRESH status (the
-// discard precedent: unknown → 404, known-but-not-conflicted → 422), reads
-// the working-tree bytes, and parses the conflict markers. The hash is the
-// freshness token resolve-hunks must echo — picks are positional, valid only
-// against the exact bytes the client saw.
+// discard precedent: unknown → 404, known-but-not-conflicted → 422), then
+// regenerates the conflict text from the index stages (svc.ConflictPickerFile)
+// and parses it at the marker size the regeneration chose — nested-marker-safe,
+// unlike a raw worktree read whose markers can be ambiguous. The hash is the
+// freshness token resolve-hunks must echo, computed over the regenerated
+// bytes — picks are positional, valid only against the exact content the
+// client saw.
 func loadConflictDoc(w http.ResponseWriter, r *http.Request, svc *domain.Service, path string) (*hunkpick.Doc, string, bool) {
 	ctx := r.Context()
 	if !isGitArgSafe(path) {
@@ -73,21 +76,21 @@ func loadConflictDoc(w http.ResponseWriter, r *http.Request, svc *domain.Service
 		writeErr(w, http.StatusUnprocessableEntity, errors.New("not conflicted"))
 		return nil, "", false
 	}
-	work, err := svc.WorktreeFile(ctx, path)
+	content, markerSize, err := svc.ConflictPickerFile(ctx, path)
 	if err != nil {
 		writeErr(w, http.StatusNotFound, err)
 		return nil, "", false
 	}
-	if textdiff.IsBinary(work) {
+	if textdiff.IsBinary(content) {
 		writeErr(w, http.StatusUnprocessableEntity, errors.New("binary file — resolve in your editor, then mark resolved"))
 		return nil, "", false
 	}
-	doc, perr := hunkpick.ParseConflict(work)
+	doc, perr := hunkpick.ParseConflictSized(content, markerSize)
 	if perr != nil || len(doc.Blocks()) == 0 {
 		writeErr(w, http.StatusUnprocessableEntity, errors.New("no usable conflict markers — resolve in your editor, then mark resolved"))
 		return nil, "", false
 	}
-	sum := sha256.Sum256(work)
+	sum := sha256.Sum256(content)
 	return doc, hex.EncodeToString(sum[:]), true
 }
 

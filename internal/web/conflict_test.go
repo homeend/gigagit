@@ -158,14 +158,24 @@ func TestConflictHunksEligibility(t *testing.T) {
 	}
 }
 
-// The user removed the markers by hand (or the file is binary): the picker
-// has nothing to pick — typed 422, the client falls back to mark-resolved.
+// A modify/delete conflict has no markers at all: one side deletes the path,
+// so UnmergedStages is missing a stage and ConflictPickerFile falls back to
+// the worktree bytes it left there (git's own "ours" copy, unmarked) — the
+// picker has nothing to pick. Typed 422, the client falls back to
+// mark-resolved. (A hand-edited worktree no longer reaches this path at all:
+// the loader regenerates from the index stages, which the edit didn't touch.)
 func TestConflictHunksMalformed(t *testing.T) {
-	dir := conflictingRepo(t)
-	conflictedMergeState(t, dir)
-	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("hand-resolved, no markers\n"), 0o644); err != nil {
+	dir := newRepoDir(t, 1)
+	gitRun(t, dir, "checkout", "-b", "feature")
+	gitRun(t, dir, "rm", "f.txt")
+	gitRun(t, dir, "commit", "-m", "feature deletes f.txt")
+	gitRun(t, dir, "checkout", "main")
+	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("main edit\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	gitRun(t, dir, "add", "-A")
+	gitRun(t, dir, "commit", "-m", "main edit")
+	conflictedMergeState(t, dir)
 	ts := serve(t, New(domain.Open(dir)))
 
 	if code := getJSON(t, ts, "/api/conflict-hunks?path=f.txt", nil); code != http.StatusUnprocessableEntity {
@@ -203,16 +213,46 @@ func TestResolveHunks(t *testing.T) {
 	}
 }
 
-// Two regions, opposite picks — the positional contract end-to-end. The
-// working-tree content is ours to write (the index, not the file, is what
-// keeps the path unmerged), so a synthetic two-block marker file works.
-func TestResolveHunksMixedPicks(t *testing.T) {
-	dir := conflictingRepo(t)
-	conflictedMergeState(t, dir)
-	two := "keep\n<<<<<<< HEAD\nm1\n=======\nf1\n>>>>>>> feature\nmid\n<<<<<<< HEAD\nm2\n=======\nf2\n>>>>>>> feature\nend\n"
-	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte(two), 0o644); err != nil {
+// twoRegionConflictRepo builds a real merge conflict with two separate
+// conflicting regions in the same file — the loader now regenerates from the
+// index stages (not the worktree bytes), so the multi-block positional
+// contract needs an actual multi-region conflict rather than a synthetic
+// worktree overwrite.
+func twoRegionConflictRepo(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	gitRun(t, dir, "init", "-b", "main")
+	base := "keep\nbase1\nc1\nc2\nc3\nc4\nc5\nbase2\nend\n"
+	f := filepath.Join(dir, "f.txt")
+	if err := os.WriteFile(f, []byte(base), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	gitRun(t, dir, "add", "-A")
+	gitRun(t, dir, "commit", "-m", "base")
+
+	gitRun(t, dir, "checkout", "-b", "feature")
+	feature := strings.NewReplacer("base1", "f1", "base2", "f2").Replace(base)
+	if err := os.WriteFile(f, []byte(feature), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, dir, "add", "-A")
+	gitRun(t, dir, "commit", "-m", "feature edit")
+
+	gitRun(t, dir, "checkout", "main")
+	mainC := strings.NewReplacer("base1", "m1", "base2", "m2").Replace(base)
+	if err := os.WriteFile(f, []byte(mainC), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, dir, "add", "-A")
+	gitRun(t, dir, "commit", "-m", "main edit")
+
+	conflictedMergeState(t, dir)
+	return dir
+}
+
+// Two regions, opposite picks — the positional contract end-to-end.
+func TestResolveHunksMixedPicks(t *testing.T) {
+	dir := twoRegionConflictRepo(t)
 	ts := serve(t, New(domain.Open(dir)))
 
 	var d conflictHunksResp
@@ -225,11 +265,31 @@ func TestResolveHunksMixedPicks(t *testing.T) {
 		t.Fatalf("resolve code = %d", code)
 	}
 	b, _ := os.ReadFile(filepath.Join(dir, "f.txt"))
-	if string(b) != "keep\nm1\nmid\nf2\nend\n" {
-		t.Errorf("f.txt = %q", b)
+	want := "keep\nm1\nc1\nc2\nc3\nc4\nc5\nf2\nend\n"
+	if string(b) != want {
+		t.Errorf("f.txt = %q, want %q", b, want)
 	}
 }
 
+// gitIndexInfo feeds "<mode> <object> <stage>\t<path>\n" lines to
+// `git update-index --index-info` — the only way to rewrite a single
+// unmerged stage in place without resolving the conflict. Needed because
+// gitRun has no stdin; this is the drift test's own plumbing.
+func gitIndexInfo(t *testing.T, dir, stdin string) {
+	t.Helper()
+	cmd := exec.Command("git", "-c", "commit.gpgsign=false", "update-index", "--index-info")
+	cmd.Dir = dir
+	cmd.Stdin = strings.NewReader(stdin)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git update-index --index-info: %v\n%s", err, out)
+	}
+}
+
+// The loader now regenerates from the index stages, not the worktree bytes,
+// so drift has to happen in the index: rewrite stage 3 (theirs) to a new
+// blob between GET and POST. The path stays unmerged (still 3 stages), so
+// the eligibility gate still passes — only the regenerated content, and
+// therefore the hash, changes under the client's feet.
 func TestResolveHunksHashDrift(t *testing.T) {
 	dir := conflictingRepo(t)
 	conflictedMergeState(t, dir)
@@ -239,14 +299,84 @@ func TestResolveHunksHashDrift(t *testing.T) {
 	if code := getJSON(t, ts, "/api/conflict-hunks?path=f.txt", &d); code != http.StatusOK {
 		t.Fatalf("hunks code = %d", code)
 	}
-	// the file moves under the client's feet
-	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("<<<<<<< HEAD\nx\n=======\ny\n>>>>>>> feature\n"), 0o644); err != nil {
+	drifted := filepath.Join(t.TempDir(), "drifted.txt")
+	if err := os.WriteFile(drifted, []byte("drifted\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	blob := gitRun(t, dir, "hash-object", "-w", drifted)
+	gitIndexInfo(t, dir, "100644 "+blob+" 3\tf.txt\n")
+
 	if code := postJSON(t, ts, "/api/resolve-hunks",
 		`{"path":"f.txt","picks":["theirs"],"hash":"`+d.Hash+`"}`,
 		"application/json", "", nil); code != http.StatusConflict {
 		t.Errorf("code = %d, want 409", code)
+	}
+}
+
+// nestedMarkerRepo builds a repo whose conflicted file's content itself
+// contains literal 7-char conflict-marker lines (a conflict once committed
+// unresolved), the case raw-worktree parsing cannot disambiguate. The base
+// content's ghost markers are untouched by either branch — only the trailing
+// "end" line diverges — so the merge produces exactly one real conflict
+// region, away from the ghost lines, and both sides keep those lines intact.
+func nestedMarkerRepo(t *testing.T) (dir, path string) {
+	t.Helper()
+	dir = t.TempDir()
+	gitRun(t, dir, "init", "-b", "main")
+	base := "top\n<<<<<<< HEAD\nghost\n=======\nother\n>>>>>>> x\nbottom\nend\n"
+	weird := filepath.Join(dir, "weird.txt")
+	if err := os.WriteFile(weird, []byte(base), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, dir, "add", "-A")
+	gitRun(t, dir, "commit", "-m", "base")
+
+	gitRun(t, dir, "checkout", "-b", "feature")
+	if err := os.WriteFile(weird, []byte(strings.Replace(base, "end\n", "END-F\n", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, dir, "add", "-A")
+	gitRun(t, dir, "commit", "-m", "feature edit")
+
+	gitRun(t, dir, "checkout", "main")
+	if err := os.WriteFile(weird, []byte(strings.Replace(base, "end\n", "END-M\n", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, dir, "add", "-A")
+	gitRun(t, dir, "commit", "-m", "main edit")
+
+	conflictedMergeState(t, dir)
+	return dir, "weird.txt"
+}
+
+func TestConflictHunksNestedMarkers(t *testing.T) {
+	dir, path := nestedMarkerRepo(t)
+	ts := serve(t, New(domain.Open(dir)))
+	var d struct {
+		Count int    `json:"count"`
+		Hash  string `json:"hash"`
+		Items []struct {
+			Kind   string   `json:"kind"`
+			Lines  []string `json:"lines"`
+			Ours   []string `json:"ours"`
+			Theirs []string `json:"theirs"`
+		} `json:"items"`
+	}
+	if code := getJSON(t, ts, "/api/conflict-hunks?path="+path, &d); code != http.StatusOK {
+		t.Fatalf("nested-marker file must load via regeneration, got %d", code)
+	}
+	if d.Count != 1 {
+		t.Fatalf("count = %d, want 1 real region", d.Count)
+	}
+	// The literal ghost markers are passthrough text, not a block.
+	found := false
+	for _, it := range d.Items {
+		if it.Kind == "text" && strings.Contains(strings.Join(it.Lines, "\n"), "<<<<<<< HEAD") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("literal marker lines must survive as passthrough text")
 	}
 }
 
