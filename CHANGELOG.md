@@ -8,6 +8,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: finishing an operation no longer collapses the commit list.** The
+  browser reloaded `/api/commits` after every state-changing op, and the server
+  additionally dropped the whole feed (`resetFeed`), so a commit, merge or
+  switch threw away everything you had scrolled in — a list scrolled to 850
+  commits came back as 250. The reload now reconciles server-side (the same
+  `CommitFeed.Refresh` the TUI uses), the feed is no longer dropped after an op
+  (only a solo-scope change, a commit-sort change or a re-root rebuild it), and
+  the client keeps its rows and scroll position while the reload is in flight
+  and re-anchors the cursor to the same commit instead of snapping to the top.
+
 - **An automatic commits refresh no longer throws away the loaded history.**
   Every refresh used to hard-reset the Commits panel to page 0, so a deep
   `ctrl+f` search or a long scroll was wiped on the next background tick,

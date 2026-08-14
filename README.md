@@ -410,7 +410,10 @@ completes (a fresh commit simply appears on top). When the new page can't be
 aligned with the loaded list — history was rewritten, or more commits arrived
 than one page holds — the list falls back to a clean walk from the top. Manual
 `r`, a commit-sort or page-size change, and returning from the shell escape
-(`ctrl+o`) always start clean.
+(`ctrl+o`) always start clean. The browser UI (`gg web`) reloads the same way:
+finishing an operation keeps the rows you scrolled in, leaves the scroll where
+it was, and re-anchors the cursor to the same commit instead of jumping to the
+top; a solo-scope change, a commit-sort change and a re-root still start clean.
 
 The `▲` indicator also **auto-refreshes by default** whenever the tag list
 changes — on app load and after any tag add/remove/push/delete-from-remote — via

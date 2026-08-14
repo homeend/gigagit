@@ -2,7 +2,7 @@
 // see app.js (the entry module) for the load order.
 import { $, DANGER_OPTIONS, esc, getJSON, lsSet, postJSON, state } from "./core.js";
 import { closeLayer, pushLayer } from "./layers.js";
-import { fetchStatus } from "./status.js";
+import { fetchStatus, wtCount } from "./status.js";
 import { fetchBranches } from "./sidebar.js";
 import { closeReviewLane, unparkReview } from "./review.js";
 import { closeCommitFilter, loadCommits, renderCommits } from "./commits.js";
@@ -337,13 +337,28 @@ function handleOpEvent(ev) {
 
 
 async function refreshAfterOp() {
+  // Which commit the cursor sits on, read BEFORE anything refreshes: the
+  // status fetch below can add or remove the working-tree row, and that
+  // shifts every display index by one — reading it afterwards anchors to the
+  // neighbouring commit.
+  const at = state.rows[state.cursor - wtCount()];
+  const keep = at && at.hash;
   await Promise.all([loadRepo(), fetchBranches(), fetchStatus()]);
   // an op can change the working tree while its status screen is open
   // (commit empties it) — reconcile instead of showing stale rows
   reconcileStatusView();
-  state.rows = [];
-  state.cursor = 0;
+  // The reload RECONCILES server-side (new commits prepend, a vanished tip is
+  // trimmed, everything paged in stays), so the list is NOT cleared here: the
+  // old rows stay on screen while the request is in flight — which is also
+  // what keeps the scroll position, since a zero-height list would reset it —
+  // and the cursor is re-anchored to the SAME commit afterwards rather than
+  // snapping to the top.
   await loadCommits(false);
+  const last = state.rows.length + wtCount() - 1;
+  const i = keep ? state.rows.findIndex((r) => r.hash === keep) : -1;
+  if (i >= 0) state.cursor = i + wtCount();
+  else if (state.cursor > last) state.cursor = Math.max(0, last);
+  renderCommits();
 }
 
 
