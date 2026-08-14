@@ -989,3 +989,63 @@ func BenchmarkPickerRenderBig(b *testing.B) {
 		e.render(m, "")
 	}
 }
+
+func TestPickerPageKeysGrid(t *testing.T) {
+	e := newConflictPicker("big.txt", bigPickerDoc(t, 6, 2))
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 100, height: 20}
+	_ = e.render(m, "") // records the grid page height
+	if e.lastGridH < 3 {
+		t.Fatalf("render did not record a usable grid height: %d", e.lastGridH)
+	}
+	m, _ = e.update(m, keyMsg("pgdown"))
+	if e.bi == 0 && e.line == 0 {
+		t.Fatalf("pgdown did not move the cursor (bi=%d line=%d)", e.bi, e.line)
+	}
+	afterBi, afterLine := e.bi, e.line
+	for i := 0; i < 50; i++ { // page to the very end
+		m, _ = e.update(m, keyMsg("pgdown"))
+	}
+	if e.bi != len(e.blocks)-1 {
+		t.Fatalf("pgdown must clamp at the last region, bi=%d", e.bi)
+	}
+	for i := 0; i < 100; i++ { // and back to the very top
+		m, _ = e.update(m, keyMsg("pgup"))
+	}
+	if e.bi != 0 || e.line != 0 {
+		t.Fatalf("pgup must clamp at the first line, bi=%d line=%d", e.bi, e.line)
+	}
+	_ = afterBi
+	_ = afterLine
+}
+
+func TestPickerPageKeysOutput(t *testing.T) {
+	e := newConflictPicker("big.txt", bigPickerDoc(t, 6, 20))
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 100, height: 24}
+	_ = e.render(m, "")
+	m, _ = e.update(m, keyMsg("tab")) // focus the output pane
+	if e.lastOutH < 3 {
+		t.Fatalf("render did not record a usable pane height: %d", e.lastOutH)
+	}
+	m, _ = e.update(m, keyMsg("pgdown"))
+	if e.oshift != e.lastOutH {
+		t.Fatalf("output pgdown must scroll one pane height, oshift=%d want %d", e.oshift, e.lastOutH)
+	}
+	m, _ = e.update(m, keyMsg("pgup"))
+	if e.oshift != 0 {
+		t.Fatalf("output pgup must scroll back, oshift=%d", e.oshift)
+	}
+}
+
+func TestPickerPageKeyConsumedBySnapback(t *testing.T) {
+	e := newConflictPicker("big.txt", bigPickerDoc(t, 6, 2))
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 100, height: 20}
+	_ = e.render(m, "")
+	m, _ = e.update(m, keyMsg("alt+down")) // free view-scroll away
+	m, _ = e.update(m, keyMsg("pgdown"))   // first page key snaps back, consumed
+	if e.vshift != 0 {
+		t.Fatalf("page key must snap the free scroll back, vshift=%d", e.vshift)
+	}
+	if e.bi != 0 || e.line != 0 {
+		t.Fatalf("the snapping page key must be consumed, cursor moved to bi=%d line=%d", e.bi, e.line)
+	}
+}

@@ -8,6 +8,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **TUI: `pgup`/`pgdn` in the hunk picker.** A viewport page at a time —
+  the line cursor in the selection grid (stepping across regions like the
+  arrows), the scroll in the output pane; after an `alt+↑/↓` free-scroll
+  the first page key snaps back and is consumed, like the plain arrows.
+
 - **TUI: hunk-picker lag fixed and refresh no longer closes the editor.**
   Cursor movement in the conflict/stage/unstage picker was O(document) per
   keystroke: the grid styled every line of the file before windowing (35ms
