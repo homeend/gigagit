@@ -481,11 +481,19 @@ function activeFileList() {
 }
 
 
+// changeNavRows: what the ‹/› change buttons step over — conflict regions
+// while the picker is open, else the rendered diff's change runs.
+function changeNavRows() {
+  if (conflictPick) return [...document.querySelectorAll("#cf-doc .cf-region")];
+  return diffChangeBlocks();
+}
+
+
 function updateDiffNav() {
   const list = activeFileList();
   $("prev-file").disabled = list.length === 0 || state.fileCursor <= 0;
   $("next-file").disabled = list.length === 0 || state.fileCursor >= list.length - 1;
-  const any = diffChangeBlocks().length > 0;
+  const any = changeNavRows().length > 0;
   $("prev-change").disabled = !any;
   $("next-change").disabled = !any;
   $("hist-btn").disabled = $("blame-btn").disabled = !state.diffCtx;
@@ -518,7 +526,7 @@ function diffChangeBlocks() {
 
 
 function stepChange(delta) {
-  const blocks = diffChangeBlocks();
+  const blocks = changeNavRows();
   if (!blocks.length) return;
   const i = Math.max(0, Math.min(blocks.length - 1, state.diffBlockIdx + delta));
   state.diffBlockIdx = i;
@@ -796,7 +804,9 @@ async function openConflictPicker(f) {
     `<pre id="cf-out-body"></pre>` +
     `</div>`;
   $("diff-body").innerHTML = html;
+  state.diffBlockIdx = -1; // ‹/› change steps regions from the top
   paintConflictPicks();
+  updateDiffNav(); // the early call saw no regions; enable ‹/› change now
 }
 
 
