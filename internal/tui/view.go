@@ -575,38 +575,9 @@ func (m Model) headerLine(w int) string {
 		// No path, or no room for a meaningful one: keep the original left line.
 		return title + truncate(rest, w-titleW)
 	}
-	p := elideMiddlePath(path, w-leftW-gap)
+	p := elidePath(path, w-leftW-gap)
 	pad := w - leftW - lipgloss.Width(p)
 	return title + rest + strings.Repeat(" ", pad) + p
-}
-
-// elideMiddlePath shortens a filesystem path to at most n display columns by
-// dropping characters from the MIDDLE and inserting a "…", keeping the path's
-// head and — most importantly — its final segment (the repo directory name)
-// visible. Falls back to a leading ellipsis when even that segment can't fit.
-func elideMiddlePath(s string, n int) string {
-	if n <= 0 {
-		return ""
-	}
-	if lipgloss.Width(s) <= n {
-		return s
-	}
-	if n == 1 {
-		return "…"
-	}
-	leaf := pathLeaf(s)
-	avail := n - 1 // reserve a column for the middle "…"
-	if lipgloss.Width(leaf) >= avail {
-		// Even the dir name doesn't fit beside a head: show the path's tail.
-		return elideLeft(s, n)
-	}
-	head := avail - lipgloss.Width(leaf)
-	r := []rune(s)
-	hi := 0
-	for hi < len(r) && lipgloss.Width(string(r[:hi+1])) <= head {
-		hi++
-	}
-	return string(r[:hi]) + "…" + leaf
 }
 
 // pathLeaf returns the final segment of a path (the directory name), tolerating
@@ -1147,10 +1118,10 @@ func (m Model) statusRows(p panel) []string {
 
 // elideFilePath shortens a Files-panel row ("<glyph> <path>") to fit n display
 // columns, keeping the status glyph + its space as a fixed left column and
-// middle-eliding the path so BOTH the beginning of the path and the filename
-// survive — the directories nearest the file (the least identifying part) are
-// the ones dropped. A plain truncate would cut off exactly the filename. Pre-
-// elided to fit so renderWindow won't re-cut it.
+// middle-eliding the path via elidePath so both the path's beginning and the
+// filename survive (the middle directories go first). A plain truncate would
+// cut off exactly the filename. Pre-elided to fit so renderWindow won't
+// re-cut it.
 func elideFilePath(row string, n int) string {
 	if lipgloss.Width(row) <= n {
 		return row
@@ -1162,34 +1133,7 @@ func elideFilePath(row string, n int) string {
 		return elideLeft(row, n)
 	}
 	head := string(r[:2]) // "<glyph> "
-	return head + elideFileMiddle(string(r[2:]), n-lipgloss.Width(head))
-}
-
-// elideFileMiddle shortens a slash-separated path to at most n display columns
-// by keeping the filename (final segment) in full plus as much of the path's
-// BEGINNING as fits, replacing the directories just before the filename with a
-// "…". So "a/b/c/d/view.go" becomes "a/b/c…/view.go" — the leading characters
-// fill the column up to the cut, then "…/<filename>". The kept head is trimmed
-// at whatever character fills the width (it may stop mid-directory-name) so
-// every column is used.
-//
-// This differs from elideMiddlePath (the header repo-path helper) by keeping the
-// final path separator, so the result reads as a path ("…/view.go"); there the
-// kept tail is a directory name shown without a leading slash.
-func elideFileMiddle(s string, n int) string {
-	if lipgloss.Width(s) <= n {
-		return s
-	}
-	slash := strings.LastIndex(s, "/")
-	if slash < 0 {
-		return truncate(s, n) // a bare filename: nothing to elide around it
-	}
-	suffix := "…/" + s[slash+1:] // "…" + final separator + filename
-	if lipgloss.Width(suffix) > n {
-		// Not even "…/<filename>" fits; keep the filename's tail instead.
-		return elideLeft(s, n)
-	}
-	return takeWidth(s[:slash], n-lipgloss.Width(suffix)) + suffix
+	return head + elidePath(string(r[2:]), n-lipgloss.Width(head))
 }
 
 // takeWidth returns the longest leading run of s whose display width is <= w.

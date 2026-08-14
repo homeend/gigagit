@@ -241,13 +241,21 @@ func TestRepoPopupDoesNotWrapLongPath(t *testing.T) {
 			t.Errorf("popup line exceeds width (%d): %q", w, line)
 		}
 	}
-	// The long path must occupy exactly ONE line (truncated, not wrapped onto
-	// continuation lines). Match a path-specific token (the header's `/` hint and
-	// the `[/] filter` footer also contain a slash, so a bare "/" over-counts).
+	// The long path must occupy exactly ONE line: in cutoff mode it is elided
+	// from the LEFT (the leaf is what distinguishes repos) so the age column
+	// survives on the same line.
 	pathLines := 0
 	for _, line := range strings.Split(out, "\n") {
-		if strings.Contains(line, "/very") {
-			pathLines++
+		c := ansiStrip(line)
+		if !strings.Contains(c, "myrepo  ") {
+			continue
+		}
+		pathLines++
+		if !strings.Contains(c, "…") {
+			t.Errorf("long path should be left-elided with …: %q", c)
+		}
+		if !strings.Contains(c, "(just now)") {
+			t.Errorf("age must survive a long path in cutoff mode: %q", c)
 		}
 	}
 	if pathLines != 1 {
@@ -292,7 +300,7 @@ func TestRepoPopupWrapModeIndentsContinuations(t *testing.T) {
 		if first == -1 && strings.Contains(c, "> ") {
 			first = i
 		}
-		if second == -1 && strings.Contains(c, "two-tail  /very") {
+		if second == -1 && strings.Contains(c, "two-tail") {
 			second = i
 		}
 	}
@@ -313,34 +321,147 @@ func TestRepoPopupWrapModeIndentsContinuations(t *testing.T) {
 	}
 }
 
-func TestRepoPopupMaximizeWidensAndLiftsRowCap(t *testing.T) {
+// TestRepoPopupOpensFullscreen pins the always-fullscreen switcher: the box
+// renders at the maximized width and row budget from the start, and ctrl+t is
+// inert (the popup no longer implements maximizableLayer).
+func TestRepoPopupOpensFullscreen(t *testing.T) {
 	m := Model{}
 	m.width, m.height = 200, 50
-	p := &repoPopup{}
-	for i := 0; i < 30; i++ { // more than the fixed cap of 12
-		p.entries = append(p.entries, repos.Entry{Path: fmt.Sprintf("/home/user/repos/project-number-%d", i)})
+	p := &repoPopup{now: time.Now()}
+	for i := 0; i < 30; i++ { // more than the old fixed cap of 12
+		p.entries = append(p.entries, repos.Entry{Path: fmt.Sprintf("/home/user/repos/project-number-%d", i), LastOpened: time.Now()})
+	}
+	m = m.pushLayer(p)
+
+	box := p.box(m)
+	if got, want := lipgloss.Width(box), popupFullInnerWidth(m.width)+2; got != want {
+		t.Fatalf("box width = %d, want fullscreen %d", got, want)
+	}
+	rows := 0
+	for _, line := range strings.Split(box, "\n") {
+		if strings.Contains(ansiStrip(line), "project-number-") {
+			rows++
+		}
+	}
+	if rows <= 12 {
+		t.Fatalf("fullscreen popup shows %d rows, want more than the old cap of 12", rows)
 	}
 
-	normal := p.box(m)
-	p.maximized = true
-	maxed := p.box(m)
-
-	if lipgloss.Width(maxed) <= lipgloss.Width(normal) {
-		t.Fatalf("maximized width %d must exceed normal %d", lipgloss.Width(maxed), lipgloss.Width(normal))
+	// ctrl+t must be inert: the central dispatch only toggles layers that
+	// implement maximizableLayer, and the popup's own update swallows the key.
+	if _, ok := layer(p).(maximizableLayer); ok {
+		t.Fatal("repoPopup must not implement maximizableLayer anymore")
 	}
-	if lipgloss.Height(maxed) <= lipgloss.Height(normal) {
-		t.Fatalf("maximized must show more rows: height %d vs %d", lipgloss.Height(maxed), lipgloss.Height(normal))
+	m, _ = p.update(m, keyMsg("ctrl+t"))
+	if after := p.box(m); after != box {
+		t.Fatal("ctrl+t must be inert on the always-fullscreen switcher")
 	}
 }
 
-func TestRepoPopupTKeyDoesNotMaximizeWhileFiltering(t *testing.T) {
+// TestRepoPopupTableAlignsColumns pins the table layout: across rows with
+// different name lengths, the name, slow-fs, path, and age fields each start
+// at one shared column.
+func TestRepoPopupTableAlignsColumns(t *testing.T) {
+	now := time.Now()
+	m := Model{width: 120, height: 40}
+	long := "/tmp/repos/a-much-longer-repository-name"
+	p := &repoPopup{
+		entries: []repos.Entry{
+			{Path: "/tmp/repos/alpha", LastOpened: now},
+			{Path: long, LastOpened: now},
+		},
+		now:     now,
+		foreign: map[string]bool{long: true},
+	}
+	m = m.pushLayer(p)
+
+	var dataRows []string
+	for _, line := range strings.Split(p.box(m), "\n") {
+		if c := ansiStrip(line); strings.Contains(c, "(just now)") {
+			dataRows = append(dataRows, c)
+		}
+	}
+	if len(dataRows) != 2 {
+		t.Fatalf("want 2 data rows, got %d:\n%s", len(dataRows), strings.Join(dataRows, "\n"))
+	}
+	pathCol := strings.Index(dataRows[0], "/tmp")
+	ageCol := strings.Index(dataRows[0], "(just now)")
+	for _, r := range dataRows[1:] {
+		if got := strings.Index(r, "/tmp"); got != pathCol {
+			t.Errorf("path column = %d, want %d:\n%s", got, pathCol, strings.Join(dataRows, "\n"))
+		}
+		if got := strings.Index(r, "(just now)"); got != ageCol {
+			t.Errorf("age column = %d, want %d:\n%s", got, ageCol, strings.Join(dataRows, "\n"))
+		}
+	}
+	// The slow-fs marker sits in its own column, ending right before the path
+	// column's gap (it never rides directly after the name).
+	slowRow := dataRows[1]
+	slowCol := strings.Index(slowRow, "(slow fs)")
+	if slowCol < 0 {
+		t.Fatalf("foreign row lost its (slow fs) marker: %q", slowRow)
+	}
+	if end := slowCol + lipgloss.Width("(slow fs)"); end+2 != pathCol {
+		t.Errorf("(slow fs) ends at %d, want the path column at %d to start 2 after it", end, pathCol)
+	}
+}
+
+// TestRepoPopupSlowColumnAlwaysReserved pins that the async probe verdicts
+// landing must not shift the path column: the slow-fs column is reserved even
+// while foreign is nil.
+func TestRepoPopupSlowColumnAlwaysReserved(t *testing.T) {
+	now := time.Now()
+	entries := []repos.Entry{{Path: "/tmp/repos/alpha", LastOpened: now}}
+	m := Model{width: 120, height: 40}
+	pathColOf := func(p *repoPopup) int {
+		mm := m.pushLayer(p)
+		for _, line := range strings.Split(p.box(mm), "\n") {
+			if c := ansiStrip(line); strings.Contains(c, "(just now)") {
+				return strings.Index(c, "/tmp")
+			}
+		}
+		return -1
+	}
+	before := pathColOf(&repoPopup{entries: entries, now: now})
+	after := pathColOf(&repoPopup{entries: entries, now: now, foreign: map[string]bool{entries[0].Path: true}})
+	if before < 0 || before != after {
+		t.Fatalf("path column moved when probe verdicts landed: before=%d after=%d", before, after)
+	}
+}
+
+// TestRepoPopupColumnsStableWhileFiltering pins that column widths derive from
+// ALL entries, so narrowing the filtered view does not re-flow the table.
+func TestRepoPopupColumnsStableWhileFiltering(t *testing.T) {
+	now := time.Now()
+	m := Model{width: 120, height: 40}
+	p := &repoPopup{
+		entries: []repos.Entry{
+			{Path: "/tmp/repos/alpha", LastOpened: now},
+			{Path: "/tmp/repos/a-much-longer-repository-name", LastOpened: now},
+		},
+		now: now,
+	}
+	m = m.pushLayer(p)
+	pathCol := func() int {
+		for _, line := range strings.Split(p.box(m), "\n") {
+			if c := ansiStrip(line); strings.Contains(c, "(just now)") {
+				return strings.Index(c, "/tmp")
+			}
+		}
+		return -1
+	}
+	all := pathCol()
+	p.query = "alpha" // filters down to the short-named entry only
+	if filtered := pathCol(); all < 0 || filtered != all {
+		t.Fatalf("path column re-flowed under filter: all=%d filtered=%d", all, filtered)
+	}
+}
+
+func TestRepoPopupTKeyIsLiteralWhileFiltering(t *testing.T) {
 	m := Model{}
 	m.width, m.height = 200, 50
 	p := &repoPopup{filtering: true}
 	p.update(m, runeKey("T"))
-	if p.maximized {
-		t.Fatal(`"T" while filtering must not maximize`)
-	}
 	if p.query != "T" {
 		t.Fatalf(`"T" while filtering must be a literal char; query=%q`, p.query)
 	}
