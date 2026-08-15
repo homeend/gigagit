@@ -8,6 +8,25 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: switching to a branch that lives in another worktree offers to go
+  there.** git refuses to check out a branch a second worktree already holds,
+  and the browser answered that with a bare error — a dead end. It now asks
+  the TUI's question first (`<branch> is checked out in another worktree:
+  <path>` → **go to worktree** / **cancel**), and going there re-roots the
+  server at that worktree, carrying the same cross-environment repair offer
+  the TUI's guarded switch does. Modal prompts keep their line breaks now, so
+  the path lands on its own line (engine prompts gain the same).
+
+- **Web: `repositories` is its own menu section.** Switching repository is
+  neither a git operation nor a UI control, so the ☰ menu now reads
+  **git** · **repositories** · **ui** · help, with *switch repo…* moved out of
+  the UI group into the new one.
+
+- **Web: the current worktree row is emphasised like the current branch row.**
+  Both lists already used the same `✓` in the same colour at the same column;
+  the worktree row was missing the bold that marks the branch row, which left
+  the two looking unlike each other.
+
 - **Web: the browser's layout is remembered by gg, not by the browser.** It
   never survived a restart, and the saving code was not at fault: `gg web`
   binds a RANDOM loopback port, so every run is a different origin and
