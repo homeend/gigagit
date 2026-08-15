@@ -45,12 +45,41 @@ function hideCtxMenu() {
 }
 
 
+// A menu is written as ONE list with {sep:true} wherever a group ends, and
+// rows that may not materialize (the delete row on a checked-out branch, the
+// remove row on the served worktree) leave their separator behind. Rather than
+// make every caller track that, the seps are cleaned up here: no leading one,
+// no trailing one, never two in a row. Callers therefore push a separator
+// before a group unconditionally.
+//
+// A menu that carries no separators of its own still gets one above its first
+// red row — a destructive action must never sit flush against the row above it.
+function groupItems(items) {
+  const authored = items.some((it) => it.sep);
+  const out = [];
+  items.forEach((it, i) => {
+    if (it.sep) {
+      if (out.length && !out[out.length - 1].sep) out.push(it);
+      return;
+    }
+    const prev = items[i - 1];
+    if (!authored && it.danger && prev && !prev.danger && !prev.sep && !prev.header && out.length) {
+      out.push({ sep: true });
+    }
+    out.push(it);
+  });
+  while (out.length && out[out.length - 1].sep) out.pop();
+  return out;
+}
+
+
 // showCtxMenu renders the shared right-click menu at (x,y): safe actions
 // first; rows flagged danger render red. A row with sep:true renders as a
 // non-clickable divider (it occupies an index in _items, which the click
 // handler resolves by data-i, so alignment is preserved).
-function showCtxMenu(items, x, y) {
+function showCtxMenu(rows, x, y) {
   const menu = $("ctx-menu");
+  const items = groupItems(rows);
   menu._items = items;
   menu.innerHTML = items
     .map((it, i) => {
@@ -59,14 +88,36 @@ function showCtxMenu(items, x, y) {
       return `<button data-i="${i}"${it.danger ? ' class="danger"' : ""}>${esc(it.label)}</button>`;
     })
     .join("");
-  menu.style.left = Math.min(x, window.innerWidth - 200) + "px";
-  menu.style.top = Math.min(y, window.innerHeight - 120) + "px";
+  // Placement is MEASURED, not guessed: a fixed "reserve 120px at the bottom"
+  // cut the taller menus off against the viewport floor. The menu has to be
+  // visible to have a size, and it has to sit at the origin while measured —
+  // a leftover far-right position from the previous open would wrap its rows
+  // and inflate the height we then place by.
+  menu.style.left = "0px";
+  menu.style.top = "0px";
   pushLayer("ctx", menu, {
     onKey: (e) => {
       if (e.key === "Escape") closeLayer("ctx");
       return true; // swallowed without preventDefault (today's behavior)
     },
   });
+  placeCtxMenu(menu, x, y);
+}
+
+
+// placeCtxMenu keeps the whole menu on screen: it opens at the pointer, is
+// pulled back when its far edge would leave the viewport, and never goes past
+// the top-left margin. A menu taller than the window scrolls (the CSS
+// max-height) instead of running off the bottom.
+const CTX_MARGIN = 8;
+
+function placeCtxMenu(menu, x, y) {
+  const w = menu.offsetWidth;
+  const h = menu.offsetHeight;
+  const left = Math.max(CTX_MARGIN, Math.min(x, window.innerWidth - w - CTX_MARGIN));
+  const top = Math.max(CTX_MARGIN, Math.min(y, window.innerHeight - h - CTX_MARGIN));
+  menu.style.left = left + "px";
+  menu.style.top = top + "px";
 }
 
 

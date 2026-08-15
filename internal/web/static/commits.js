@@ -517,6 +517,7 @@ function showCommitMenu(c, i, x, y) {
   if (c.parents === 1) {
     items.push({ label: "move up (newer)", act: () => commitEdit(c, "move-up") });
     items.push({ label: "move down (older)", act: () => commitEdit(c, "move-down") });
+    items.push({ sep: true });
     items.push({
       label: "drop this commit",
       danger: true,

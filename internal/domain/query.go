@@ -357,7 +357,9 @@ func (s *Service) Reflog(ctx context.Context, limit int) ([]model.ReflogEntry, e
 	if limit <= 0 {
 		limit = defaultReflogLimit
 	}
-	return query(ctx, s, "reflog", func(ctx context.Context) ([]model.ReflogEntry, error) {
+	// Keyed by limit: the web sidebar pages by asking for a bigger window, and
+	// a bare "reflog" key would let a concurrent small read serve the big one.
+	return query(ctx, s, "reflog:"+strconv.Itoa(limit), func(ctx context.Context) ([]model.ReflogEntry, error) {
 		return s.repo.ReflogEntries(ctx, limit)
 	})
 }

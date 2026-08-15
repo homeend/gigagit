@@ -17,7 +17,7 @@ async function fetchBranches() {
     getJSON("/api/worktrees").catch(() => ({ worktrees: [] })),
     getJSON("/api/tags").catch(() => ({ tags: [], truncated: false })),
     getJSON("/api/stashes").catch(() => ({ stashes: [] })),
-    getJSON("/api/reflog").catch(() => ({ entries: [], truncated: false })),
+    getJSON("/api/reflog?limit=" + reflogWindow).catch(() => ({ entries: [], truncated: false })),
     getJSON("/api/remotes").catch(() => ({ remotes: [], truncated: false })),
   ]);
   state.branches = b.branches || [];
@@ -136,6 +136,34 @@ function compactRel(rel) {
 }
 
 
+// The reflog section opens on one page and grows by another page each time the
+// "show more" row is clicked. reflogWindow — not a fixed 100 — is what every
+// later fetch asks for, so a background refresh cannot fold an expanded
+// section back down to the first page.
+const REFLOG_PAGE = 100;
+let reflogWindow = REFLOG_PAGE;
+let reflogLoading = false;
+
+
+async function moreReflog() {
+  if (reflogLoading || !state.reflogTruncated) return; // one page at a time
+  reflogLoading = true;
+  const row = $("reflog-list").querySelector("li.more");
+  if (row) row.textContent = "… loading";
+  const want = reflogWindow + REFLOG_PAGE;
+  const rl = await getJSON("/api/reflog?limit=" + want).catch(() => null);
+  reflogLoading = false;
+  if (!rl) {
+    renderReflog(); // put the row back; the section is unchanged
+    return;
+  }
+  reflogWindow = want;
+  state.reflog = rl.entries || [];
+  state.reflogTruncated = !!rl.truncated;
+  renderReflog();
+}
+
+
 function renderReflog() {
   // Column-ish row: @{N} (the recovery selector, shortened for display —
   // data-s keeps the full form the menus use), short sha, subject
@@ -152,7 +180,8 @@ function renderReflog() {
         `</li>`
     )
     .join("");
-  if (state.reflogTruncated) html += `<li class="more">… more (capped at 100)</li>`;
+  // The last row is the pager, not a notice: clicking it fetches the next page.
+  if (state.reflogTruncated) html += `<li class="more">… show ${REFLOG_PAGE} more</li>`;
   $("reflog-list").innerHTML = html;
 }
 
@@ -244,6 +273,10 @@ function openCreateBranchPrompt(start, seed) {
 }
 
 
+// The rows are grouped by what they do to the repo — navigate, move commits
+// around, create things, inspect, scope, copy, and finally the two that change
+// the branch itself (rename, delete). Separators are pushed unconditionally;
+// showCtxMenu drops the ones a missing row leaves stranded.
 function showBranchMenu(b, x, y) {
   const items = [{ label: "go to tip", act: () => gotoBranchTip(b) }];
   if (!b.is_head) items.push({ label: "switch to " + b.name, act: () => startSwitch(b.name) });
@@ -251,11 +284,12 @@ function showBranchMenu(b, x, y) {
     // The checked-out branch: pulling it rewrites the working tree, so it
     // goes through the confirming current-branch path the header button uses.
     items.push({ label: "pull " + b.name, act: () => doPull() });
-    items.push({ label: "push " + b.name, act: () => doPush() });
   } else {
     items.push({ label: "pull " + b.name + " (stay here)", act: () => doPullBranch(b.name) });
-    items.push({ label: "push " + b.name, act: () => doPushBranch(b.name) });
   }
+  items.push({ sep: true });
+  if (b.is_head) items.push({ label: "push " + b.name, act: () => doPush() });
+  else items.push({ label: "push " + b.name, act: () => doPushBranch(b.name) });
   // Not marked danger: the row opens the force-mode modal, where the actual
   // destructive options are the red ones.
   items.push({ label: "force push " + b.name + "…", act: () => doForcePush(b.name) });
@@ -281,18 +315,7 @@ function showBranchMenu(b, x, y) {
       act: () => startOp({ op: "fast-forward", branch: b.name }, "fast-forwarding " + cur.name + " to " + b.name),
     });
   }
-  items.push({
-    label: "rename branch…",
-    act: () =>
-      openPrompt({
-        title: "Rename " + b.name + " to:",
-        value: b.name,
-        onSubmit: (name) => {
-          if (name === b.name) return; // no-op, and the engine would refuse it
-          startOp({ op: "rename-branch", branch: b.name, name }, "renaming " + b.name);
-        },
-      }),
-  });
+  items.push({ sep: true });
   items.push({
     label: "create branch from here…",
     act: () => openCreateBranchPrompt(b.name),
@@ -313,13 +336,16 @@ function showBranchMenu(b, x, y) {
   // Not gated on "does this branch have versions" — that would cost a read
   // on every menu open; the popup shows the empty state instead (the TUI's
   // branchVersionsRow rule).
+  items.push({ sep: true });
   items.push({ label: "previous versions…", act: () => openVersions(b.name) });
   items.push({ label: "review " + b.name + " (AI)…", act: () => startReview("branch", b.name) });
+  items.push({ sep: true });
   if (state.solo === b.name) {
     items.push({ label: "exit solo (show every branch)", act: () => setSolo("") });
   } else {
     items.push({ label: "solo this branch", act: () => setSolo(b.name) });
   }
+  items.push({ sep: true });
   items.push({ label: "copy branch name", act: () => copyText(b.name, "branch name " + b.name) });
   // b.hash is git's abbreviated sha (%(objectname:short)) — the same value
   // the TUI's row copies, and short enough to name in full on the line.
@@ -328,7 +354,22 @@ function showBranchMenu(b, x, y) {
   if (wt) {
     items.push({ label: "copy worktree absolute path", act: () => copyText(wt, "absolute path " + wt) });
   }
-  // Destructive row last, as in the worktree and tag menus.
+  // Last group: the two rows that act on the branch itself. Rename sits with
+  // delete rather than with the ops above — both change what the branch IS,
+  // not where its commits are.
+  items.push({ sep: true });
+  items.push({
+    label: "rename branch…",
+    act: () =>
+      openPrompt({
+        title: "Rename " + b.name + " to:",
+        value: b.name,
+        onSubmit: (name) => {
+          if (name === b.name) return; // no-op, and the engine would refuse it
+          startOp({ op: "rename-branch", branch: b.name, name }, "renaming " + b.name);
+        },
+      }),
+  });
   if (!b.is_head) {
     items.push({
       label: "delete " + b.name,
@@ -494,6 +535,7 @@ function showRemoteMenu(rb, x, y) {
   // server enforces it too). The preset hard mode skips every engine guard,
   // so this local confirm is the only one.
   if (cur && rb.branch === cur.name) {
+    items.push({ sep: true });
     items.push({
       label: "reset current (" + cur.name + ") to " + rb.name + " tip",
       danger: true,
@@ -507,8 +549,12 @@ function showRemoteMenu(rb, x, y) {
         ),
     });
   }
+  // Fenced on BOTH sides: the copy rows below must not read as part of the
+  // red row above them.
+  items.push({ sep: true });
   items.push({ label: "copy name", act: () => copyText(rb.name, "name " + rb.name) });
   if (rb.hash) items.push({ label: "copy commit id", act: () => copyText(rb.hash, "commit id " + rb.hash) });
+  items.push({ sep: true });
   items.push({
     // The engine's own confirm parks in the modal before the deletion is
     // pushed (the delete-branch precedent).
@@ -542,6 +588,7 @@ function showWorktreeMenu(w, x, y) {
   // The served worktree's row gets no remove (the engine would refuse it
   // anyway); main is engine-guarded too.
   if (!(state.worktree && w.path === state.worktree)) {
+    items.push({ sep: true });
     items.push({
       label: "remove worktree",
       danger: true,
@@ -676,6 +723,7 @@ function showTagMenu(tg, x, y) {
       // several); delete-from-remote confirms via its own parked decision,
       // so neither row needs a local confirm.
       { label: "push tag", act: () => startOp({ op: "push-tag", tag: tg.name }, "pushing tag " + tg.name) },
+      { sep: true },
       {
         label: "delete " + tg.name + " from remote",
         danger: true,
@@ -719,6 +767,7 @@ function showStashMenu(st, x, y) {
   if (st.sha) items.push({ label: "show changes", act: () => openStashDetail(st) });
   items.push({ label: "apply", act: () => startOp({ op: "stash-apply", ref: st.ref, sha: st.sha || "" }, "applying " + st.ref) });
   items.push({ label: "pop", act: () => startOp({ op: "stash-pop", ref: st.ref, sha: st.sha || "" }, "popping " + st.ref) });
+  items.push({ sep: true });
   items.push({
     label: "drop " + st.ref,
     danger: true,
@@ -745,7 +794,12 @@ $("stashes-list").addEventListener("contextmenu", (e) => {
 // reset past, rewritten) still opens — git serves it by id on demand.
 $("reflog-list").addEventListener("click", (e) => {
   const li = e.target.closest("li");
-  if (!li || !li.dataset.h) return;
+  if (!li) return;
+  if (li.classList.contains("more")) {
+    moreReflog();
+    return;
+  }
+  if (!li.dataset.h) return;
   openCommitByHash(li.dataset.h, li.dataset.s || li.dataset.h.slice(0, 8));
 });
 
@@ -768,6 +822,7 @@ function showReflogMenu(en, x, y) {
             onSubmit: (name) => startOp({ op: "checkout", sha: en.hash, name }, "creating " + name + " at " + short),
           }),
       },
+      { sep: true },
       {
         // Empty mode = the engine's interactive flow: the soft/mixed/hard
         // picker (with cancel, plus the non-ancestor confirm) parks in the
