@@ -8,6 +8,26 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: bookmarks and the shelf, stage 1.** gg's two own stores — the ones
+  that are not git — had no browser surface at all: `internal/web` did not
+  mention either. They are now two sidebar sections below the reflog (folded
+  on a first run, and their folded state persists like every other section).
+  A **bookmark** is a live reference to a commit (◆) or a file (▪); a **shelf**
+  entry is a frozen copy — a file's bytes, or a commit's changed files — that
+  outlives a rewrite, a gc, or deleting the source. Right-click a commit (the
+  commit list or the reflog) for **bookmark this commit…** / **shelf this
+  commit…**, which ask for a name prefilled with the subject, or a file (the
+  files pane, a commit's file tree) for **bookmark this file** / **add to
+  shelf**. Clicking a row opens what it points at — the commit, or that file's
+  history — and its right-click menu copies or removes it.
+
+  New endpoints: `GET/POST/DELETE /api/bookmarks`, `GET/POST/DELETE
+  /api/shelf`, `GET /api/shelf/files`. The wire never carries a worktree or a
+  branch: they are read from the served repo, so one POST cannot file an entry
+  against another checkout, and the file-state name is an allowlist rather
+  than a default. Still to come: restoring a shelf entry, comparing against
+  one, and cherry-picking a shelved commit.
+
 - **Web: cherry-pick, revert, reword, worktree-from-a-commit, review-a-commit,
   and undo last commit.** The browser could only move or drop a commit; the
   ops behind the rest already existed and simply had no wire or row. The
