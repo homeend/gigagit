@@ -118,6 +118,7 @@ function showVersionMenu(branch, v, x, y) {
           ),
       },
       { label: "copy commit id", act: () => copyText(v.hash, "commit id " + v.short) },
+      { sep: true },
       {
         label: "delete this snapshot",
         danger: true,
