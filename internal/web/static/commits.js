@@ -9,6 +9,7 @@ import { rev, startReview } from "./review.js";
 import { addCommitEntry } from "./sidebar.js";
 import { drillOut, enterFilesStage, openWorkingTree, renderFiles } from "./files.js";
 import { focusPane, moveCursor } from "./keys.js";
+import { extraRows } from "./menus.js";
 
 // Left-click on a branch is a READ: jump the commit list to its tip (the
 // TUI's enter-on-branch behavior). Mutations (switch) live behind the
@@ -654,6 +655,8 @@ function showCommitMenu(c, i, x, y) {
       act: () => startOp({ op: "reset", sha: c.hash }, "resetting to " + short),
     });
   }
+  // Rows contributed by feature modules (menus.js), after the built-ins.
+  items.push(...extraRows("commit", c));
   showCtxMenu(items, x, y);
 }
 

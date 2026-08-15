@@ -8,6 +8,19 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web (internal): features register instead of editing shared files.** Adding
+  anything to the browser frontend meant editing the same four places — one
+  43-case operation switch, one route table, three menu builders and the static
+  help overlay — so two people (or two agents) working at once collided on
+  adjacent lines every time, in the files where a dropped menu row is hardest
+  to notice. A feature now declares itself from its own file: `RegisterOp` for
+  an operation (with the same builder shape the in-switch ones use, including
+  the post-run cleanup hook), `RegisterRoutes` for endpoints, `registerRows`
+  for context-menu rows in any of the eight menus, `registerHelp` for a row in
+  the `?` overlay, and `mountOverlay` for a new full-screen surface. Nothing
+  user-visible changes, and the existing 43 operations keep their switch — the
+  registry is consulted first, then falls through.
+
 - **Web: bookmarks and the shelf, stage 1.** gg's two own stores — the ones
   that are not git — had no browser surface at all: `internal/web` did not
   mention either. They are now two sidebar sections below the reflog (folded

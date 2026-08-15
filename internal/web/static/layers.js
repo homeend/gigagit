@@ -33,6 +33,23 @@ function topLayer() {
 }
 
 
+// mountOverlay returns the container for a full-screen surface, creating it if
+// this is the first call. A feature can then build its own view without adding
+// markup to index.html — which is what keeps several features out of one
+// another's merges. The element starts hidden and is otherwise an ordinary
+// layer: pushLayer/closeLayer drive it like every other overlay.
+function mountOverlay(id) {
+  let el = document.getElementById(id);
+  if (!el) {
+    el = document.createElement("div");
+    el.id = id;
+    el.className = "hidden";
+    document.body.append(el);
+  }
+  return el;
+}
+
+
 function hideCtxMenu() {
   closeLayer("ctx");
   // Emptied, not just hidden: a closed menu that still holds its last rows
@@ -251,4 +268,4 @@ $("prompt-extra").addEventListener("click", () => {
 $("help").addEventListener("click", () => closeLayer("help"));
 
 $("help-box").addEventListener("click", (e) => e.stopPropagation()); // allow selecting/copying text
-export { closeLayer, closePrompt, copyText, hideCtxMenu, layers, openPrompt, promptCb, promptKey, pushLayer, showCtxMenu, submitPrompt, topLayer };
+export { closeLayer, closePrompt, copyText, hideCtxMenu, layers, mountOverlay, openPrompt, promptCb, promptKey, pushLayer, showCtxMenu, submitPrompt, topLayer };

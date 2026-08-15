@@ -133,6 +133,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/reroot", writeGuard(s.handleReroot))
 	mux.HandleFunc("POST /api/ui-config", writeGuard(s.handleUIConfig))
 	mux.HandleFunc("GET /api/repos", s.handleRepos)
+	// Endpoints a feature declared in its own file (routereg.go). Added last,
+	// so the built-in table above is the one that wins a naming clash — and
+	// net/http panics on a duplicate pattern, which is the right time to hear
+	// about it.
+	s.applyRegisteredRoutes(mux)
 	return hostGuard(mux)
 }
 

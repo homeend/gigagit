@@ -13,6 +13,7 @@ import { openSessionErrorsView } from "./sessionerrors.js";
 import { startReview } from "./review.js";
 import { gotoCommitPrompt, openCommitFilter, toggleGraphMode } from "./commits.js";
 import { openWorkingTree } from "./files.js";
+import { extraRows } from "./menus.js";
 
 // ---- command palette + global ☰ menu (wave 3) ----------------------------
 // The palette is a layer with an input INSIDE it: onKey consumes nav keys
@@ -214,7 +215,10 @@ function openGlobalMenu() {
     { label: "settings…", act: () => openSettings() },
     { label: "session errors…", act: () => openSessionErrorsView() },
   ].sort((a, b) => a.label.localeCompare(b.label));
-  const rows = [{ header: "git" }, ...git, { header: "repositories" }, ...repositories, { header: "ui" }, ...ui, { sep: true }, { label: "help", act: () => openHelp() }];
+  // A feature module may add its own entry to the ui group (menus.js).
+  const extra = extraRows("menu", null);
+  const rows = [{ header: "git" }, ...git, { header: "repositories" }, ...repositories,
+    { header: "ui" }, ...ui, ...extra, { sep: true }, { label: "help", act: () => openHelp() }];
   showCtxMenu(rows, r.left, r.bottom + 4);
 }
 

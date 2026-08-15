@@ -10,6 +10,7 @@ import { startReview } from "./review.js";
 import { gotoBranchTip, openCommitByHash, openStashDetail, setSolo } from "./commits.js";
 import { openCompare } from "./files.js";
 import { openFileHistory } from "./filehist.js";
+import { extraRows } from "./menus.js";
 
 async function fetchBranches() {
   const [b, w, tg, st, rl, rm, bm, sh] = await Promise.all([
@@ -335,6 +336,7 @@ function showBranchMenu(b, x, y) {
       act: () => startOp({ op: "delete-branch", branch: b.name }, "deleting " + b.name),
     });
   }
+  items.push(...extraRows("branch", b));
   showCtxMenu(items, x, y);
 }
 
@@ -520,6 +522,7 @@ function showRemoteMenu(rb, x, y) {
     danger: true,
     act: () => startOp({ op: "delete-remote-branch", ref: rb.name }, "deleting " + rb.name),
   });
+  items.push(...extraRows("remote", rb));
   showCtxMenu(items, x, y);
 }
 
@@ -553,6 +556,7 @@ function showWorktreeMenu(w, x, y) {
       act: () => startOp({ op: "remove-worktree", path: w.path }, "removing " + w.path.split("/").pop()),
     });
   }
+  items.push(...extraRows("worktree", w));
   showCtxMenu(items, x, y);
 }
 
@@ -697,6 +701,7 @@ function showTagMenu(tg, x, y) {
             if (o === "delete") startOp({ op: "delete-tag", tag: tg.name }, "deleting tag " + tg.name);
           }),
       },
+      ...extraRows("tag", tg),
     ],
     x,
     y
@@ -736,6 +741,7 @@ function showStashMenu(st, x, y) {
         if (o === "drop") startOp({ op: "stash-drop", ref: st.ref, sha: st.sha || "" }, "dropping " + st.ref);
       }),
   });
+  items.push(...extraRows("stash", st));
   showCtxMenu(items, x, y);
 }
 
@@ -793,6 +799,7 @@ function showReflogMenu(en, x, y) {
         danger: true,
         act: () => startOp({ op: "reset", sha: en.hash }, "resetting to " + short),
       },
+      ...extraRows("reflog", en),
     ],
     x,
     y
