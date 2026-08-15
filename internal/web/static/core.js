@@ -240,4 +240,21 @@ function charWidth() {
   return charW;
 }
 
-export { $, DANGER_OPTIONS, ROW_H, SECTIONS, charWidth, elideNameMiddle, elidePath, esc, getJSON, lsGet, lsSet, postJSON, runes, splitPathSegs, ssGet, ssSet, state };
+
+// A starting point for the worktree-path prompt, not a decision: a sibling of
+// the MAIN worktree named <repo>-<branch>. Anchoring on the main worktree
+// (git lists it first) rather than the served one keeps new worktrees from
+// nesting inside each other when you create one while inside another — the
+// same anchor the TUI's template resolver uses. Slashes in a branch name
+// become dashes so `feat/x` does not imply a directory.
+function defaultWorktreePath(branch) {
+  const main = (state.worktrees[0] && state.worktrees[0].path) || (state.repo && state.repo.worktree) || "";
+  if (!main) return "";
+  const sep = main.includes("\\") && !main.includes("/") ? "\\" : "/";
+  const cut = main.lastIndexOf(sep);
+  const parent = cut > 0 ? main.slice(0, cut) : main;
+  const name = cut >= 0 ? main.slice(cut + 1) : main;
+  return parent + sep + name + "-" + branch.replace(/[^\w.-]+/g, "-");
+}
+
+export { $, DANGER_OPTIONS, ROW_H, SECTIONS, charWidth, defaultWorktreePath, elideNameMiddle, elidePath, esc, getJSON, lsGet, lsSet, postJSON, runes, splitPathSegs, ssGet, ssSet, state };

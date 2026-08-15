@@ -7,12 +7,14 @@ import (
 	"fmt"
 	"net/http"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/exttool"
+	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/promptstate"
 	"github.com/homeend/gigagit/internal/template"
 )
@@ -47,7 +49,7 @@ type reviewToolRow struct {
 // trip before anything runs.
 func (s *Server) handleReviewTools(w http.ResponseWriter, r *http.Request) {
 	svc := s.service()
-	target, err := s.reviewTarget(r.Context(), svc, r.URL.Query().Get("target"), r.URL.Query().Get("branch"))
+	target, err := s.reviewTarget(r.Context(), svc, r.URL.Query().Get("target"), r.URL.Query().Get("branch"), r.URL.Query().Get("sha"))
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err)
 		return
@@ -61,8 +63,9 @@ func (s *Server) handleReviewTools(w http.ResponseWriter, r *http.Request) {
 }
 
 type reviewStartRequest struct {
-	Target  string `json:"target"` // "branch" (default) | "working"
+	Target  string `json:"target"` // "branch" (default) | "working" | "commit"
 	Branch  string `json:"branch"`
+	Sha     string `json:"sha"` // target "commit": the commit to review, hex only
 	Tool    string `json:"tool"`
 	Approve bool   `json:"approve"` // the user just approved this command
 }
@@ -77,7 +80,7 @@ func (s *Server) handleReviewStart(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, fmt.Errorf("bad request body: %w", err))
 		return
 	}
-	target, err := s.reviewTarget(r.Context(), svc, req.Target, req.Branch)
+	target, err := s.reviewTarget(r.Context(), svc, req.Target, req.Branch, req.Sha)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err)
 		return
@@ -169,9 +172,12 @@ func (s *Server) handleOpCancel(w http.ResponseWriter, r *http.Request) {
 // breaking something downstream, and BranchReviewTarget resolves BOTH
 // endpoints to hex before they reach the tool's <range> token, so no ref name
 // is ever spliced into a command.
-func (s *Server) reviewTarget(ctx context.Context, svc *domain.Service, kind, branch string) (domain.ReviewTarget, error) {
+func (s *Server) reviewTarget(ctx context.Context, svc *domain.Service, kind, branch, sha string) (domain.ReviewTarget, error) {
 	if kind == "working" {
 		return domain.WorkingReviewTarget(), nil
+	}
+	if kind == "commit" {
+		return s.commitReviewTarget(ctx, svc, sha)
 	}
 	if branch == "" {
 		branch = "HEAD"
@@ -180,6 +186,32 @@ func (s *Server) reviewTarget(ctx context.Context, svc *domain.Service, kind, br
 		return domain.ReviewTarget{}, errors.New("invalid branch")
 	}
 	return svc.BranchReviewTarget(ctx, branch)
+}
+
+// commitReviewTarget scopes a review to ONE commit's own change, sha^..sha —
+// the TUI's reviewTargetForCommit. A root commit has no parent, so ^.. would
+// fail and the commit is reviewed alone. Both shapes are built here from a hex
+// id, so no ref name ever reaches the tool's <range> token; the label (the
+// report's title and filename) is read server-side rather than taken from the
+// wire for the same reason.
+func (s *Server) commitReviewTarget(ctx context.Context, svc *domain.Service, sha string) (domain.ReviewTarget, error) {
+	if !isHexSha(sha) {
+		return domain.ReviewTarget{}, errors.New("invalid commit")
+	}
+	rng := sha + "^.." + sha
+	if _, ok, err := svc.ResolveRev(ctx, sha+"^"); err == nil && !ok {
+		rng = sha // root commit
+	}
+	label := sha
+	if len(label) > 8 {
+		label = label[:8]
+	}
+	if msg, err := svc.CommitMessage(ctx, sha); err == nil {
+		if subj := strings.TrimSpace(strings.SplitN(msg, "\n", 2)[0]); subj != "" {
+			label += " " + subj
+		}
+	}
+	return domain.ReviewTarget{Kind: domain.ReviewRange, Range: rng, Label: label, Diff: model.DiffSpec{Rev: rng}}, nil
 }
 
 // reviewToolRows resolves every usable review command for target.

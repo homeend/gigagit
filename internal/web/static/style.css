@@ -404,6 +404,9 @@ mark.r { background: var(--span-add); color: inherit; }
 #prompt-title { padding: 10px 14px 6px; color: var(--fg); }
 #prompt-input { margin: 0 14px; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 3px; padding: 7px 10px; font: inherit; outline: none; }
 #prompt-input:focus { border-color: var(--accent); }
+/* the multiline variant (reword): same box, room for a message body */
+#prompt-text { margin: 0 14px; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 3px; padding: 7px 10px; font: inherit; outline: none; resize: vertical; min-height: 7em; }
+#prompt-text:focus { border-color: var(--accent); }
 #prompt-actions { display: flex; align-items: center; gap: 12px; padding: 10px 14px; }
 #prompt-hint { color: var(--dim); font-size: 11px; margin-right: auto; }
 #prompt-ok, #prompt-cancel, #prompt-extra { background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 3px; padding: 2px 14px; font: inherit; cursor: pointer; }

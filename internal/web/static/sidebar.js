@@ -1,6 +1,6 @@
 // sidebar.js — part of gg's web client. Split from the original app.js;
 // see app.js (the entry module) for the load order.
-import { $, SECTIONS, charWidth, elidePath, esc, getJSON, lsGet, lsSet, state } from "./core.js";
+import { $, SECTIONS, charWidth, defaultWorktreePath, elidePath, esc, getJSON, lsGet, lsSet, state } from "./core.js";
 import { saveUI } from "./uistate.js";
 import { closePrompt, copyText, openPrompt, showCtxMenu } from "./layers.js";
 import { doForcePush, doPull, doPullBranch, doPush, doPushBranch, doReroot, openCreateBranchPrompt, showLocalConfirm, startOp, startSwitch } from "./ops.js";
@@ -207,21 +207,6 @@ function worktreePathForBranch(name) {
 }
 
 
-// A starting point for the worktree-path prompt, not a decision: a sibling of
-// the MAIN worktree named <repo>-<branch>. Anchoring on the main worktree
-// (git lists it first) rather than the served one keeps new worktrees from
-// nesting inside each other when you create one while inside another — the
-// same anchor the TUI's template resolver uses. Slashes in a branch name
-// become dashes so `feat/x` does not imply a directory.
-function defaultWorktreePath(branch) {
-  const main = (state.worktrees[0] && state.worktrees[0].path) || (state.repo && state.repo.worktree) || "";
-  if (!main) return "";
-  const sep = main.includes("\\") && !main.includes("/") ? "\\" : "/";
-  const cut = main.lastIndexOf(sep);
-  const parent = cut > 0 ? main.slice(0, cut) : main;
-  const name = cut >= 0 ? main.slice(cut + 1) : main;
-  return parent + sep + name + "-" + branch.replace(/[^\w.-]+/g, "-");
-}
 
 
 // Deliberately NO backdrop-closes handler, unlike the picker overlays. A
@@ -827,4 +812,4 @@ new ResizeObserver(() => {
   });
 }).observe($("branches-pane"));
 
-export { applyStoredSections, branchesList, clearDropTargets, defaultWorktreePath, fetchBranches, renderBranches, renderReflog, renderRemotes, renderStashes, renderTags, renderWorktrees, showBranchMenu, showBranchPairMenu, showReflogMenu, showRemoteMenu, showStashMenu, showTagMenu, showWorktreeMenu, toggleSection, worktreePathForBranch };
+export { applyStoredSections, branchesList, clearDropTargets, fetchBranches, renderBranches, renderReflog, renderRemotes, renderStashes, renderTags, renderWorktrees, showBranchMenu, showBranchPairMenu, showReflogMenu, showRemoteMenu, showStashMenu, showTagMenu, showWorktreeMenu, toggleSection, worktreePathForBranch };

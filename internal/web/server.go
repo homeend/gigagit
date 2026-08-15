@@ -97,6 +97,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/prefixes/remove", writeGuard(s.handlePrefixRemove))
 	mux.HandleFunc("POST /api/prefixes/resolve", writeGuard(s.handlePrefixResolve))
 	mux.HandleFunc("GET /api/commits", s.handleCommits)
+	mux.HandleFunc("GET /api/commit-message", s.handleCommitMessage)
 	mux.HandleFunc("POST /api/solo", writeGuard(s.handleSolo))
 	mux.HandleFunc("GET /api/commit/{sha}", s.handleCommitFiles)
 	mux.HandleFunc("GET /api/compare", s.handleCompare)

@@ -154,3 +154,21 @@ func (s *Server) handleCommitFiles(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, map[string]any{"sha": sha, "files": out})
 }
+
+// handleCommitMessage serves one commit's FULL message (subject + body). The
+// reword prompt prefills with it — retyping a message to change one word is
+// how bodies get lost. Hex-only: a commit id is content-addressed, so unlike
+// a rev expression there is nothing to resolve or mis-resolve.
+func (s *Server) handleCommitMessage(w http.ResponseWriter, r *http.Request) {
+	rev := r.URL.Query().Get("rev")
+	if !isHexSha(rev) {
+		writeErr(w, http.StatusBadRequest, errors.New("invalid commit"))
+		return
+	}
+	msg, err := s.service().CommitMessage(readCtx(r), rev)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, map[string]any{"message": msg})
+}

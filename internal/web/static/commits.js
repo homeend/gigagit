@@ -1,11 +1,11 @@
 // commits.js — part of gg's web client. Split from the original app.js;
 // see app.js (the entry module) for the load order.
-import { $, ROW_H, esc, getJSON, lsGet, lsSet, postJSON, runes, state } from "./core.js";
+import { $, ROW_H, defaultWorktreePath, esc, getJSON, lsGet, lsSet, postJSON, runes, state } from "./core.js";
 import { saveUI } from "./uistate.js";
 import { closePrompt, copyText, openPrompt, showCtxMenu } from "./layers.js";
 import { wtCount, wtExtra, wtRowHTML } from "./status.js";
 import { opBusy, opLine, openCreateBranchPrompt, showLocalConfirm, startOp } from "./ops.js";
-import { rev } from "./review.js";
+import { rev, startReview } from "./review.js";
 import { drillOut, enterFilesStage, openWorkingTree, renderFiles } from "./files.js";
 import { focusPane, moveCursor } from "./keys.js";
 
@@ -540,6 +540,24 @@ function showCommitMenu(c, i, x, y) {
       label: "create branch here…",
       act: () => openCreateBranchPrompt(c.hash, undefined, short),
     },
+    {
+      // A worktree cut at this commit, on a new branch created there — the
+      // TUI's "create worktree here". Two prompts: the branch name, then
+      // where it goes (prefilled the way the branch menu's row is).
+      label: "create worktree here…",
+      act: () =>
+        openPrompt({
+          title: "New branch for the worktree at " + short + ":",
+          placeholder: "branch name",
+          onSubmit: (name) =>
+            openPrompt({
+              title: "New worktree for " + name + ", at path:",
+              value: defaultWorktreePath(name),
+              onSubmit: (path) =>
+                startOp({ op: "create-worktree", sha: c.hash, name, path }, "creating worktree " + path),
+            }),
+        }),
+    },
   ];
   // Advance the current branch to this commit (ff-only): offered on every
   // commit, since only git can say whether it is strictly ahead — the engine
@@ -551,6 +569,55 @@ function showCommitMenu(c, i, x, y) {
     items.push({
       label: "fast-forward " + cur.name + " to here",
       act: () => startOp({ op: "fast-forward", sha: c.hash }, "fast-forwarding " + cur.name + " to " + short),
+    });
+  }
+  items.push({ sep: true });
+  // Review just this commit's own change (sha^..sha, resolved server-side).
+  // Offered unconditionally: whether a review tool is configured is the
+  // review lane's own answer, and it says so plainly.
+  items.push({ label: "review this commit (AI)…", act: () => startReview("commit", "", c.hash) });
+  items.push({ sep: true });
+  // Apply this commit's change to the current branch, or undo it there. Both
+  // run git's sequencer, so a conflict parks the engine's keep/abort decision
+  // in the modal; the local confirm here is about STARTING one from a menu
+  // click, which the TUI also asks about.
+  items.push({
+    label: "cherry-pick onto " + (cur ? cur.name : "current branch"),
+    act: () =>
+      showLocalConfirm(
+        "Cherry-pick " + short + " " + c.subject + " onto " + (cur ? cur.name : "the current branch") + "?",
+        ["cherry-pick", "abort"],
+        (o) => { if (o === "cherry-pick") startOp({ op: "cherry-pick", sha: c.hash }, "cherry-picking " + short); }
+      ),
+  });
+  if (c.parents === 1) {
+    items.push({
+      label: "revert this commit",
+      act: () =>
+        showLocalConfirm(
+          "Revert " + short + " " + c.subject + "? A new commit undoing it is added on top.",
+          ["revert", "abort"],
+          (o) => { if (o === "revert") startOp({ op: "revert", sha: c.hash }, "reverting " + short); }
+        ),
+    });
+    // Reword prefills with the commit's CURRENT full message — a body is lost
+    // the moment someone has to retype it — so the row reads it first and only
+    // opens the (multiline) prompt once it has it.
+    items.push({
+      label: "reword this commit…",
+      act: async () => {
+        const got = await getJSON("/api/commit-message?rev=" + encodeURIComponent(c.hash)).catch(() => null);
+        if (!got) {
+          opLine("could not read the commit message", true);
+          return;
+        }
+        openPrompt({
+          title: "Reword " + short + ":",
+          value: got.message || "",
+          multiline: true,
+          onSubmit: (message) => startOp({ op: "reword", sha: c.hash, message }, "rewording " + short),
+        });
+      },
     });
   }
   if (c.parents === 1) {
