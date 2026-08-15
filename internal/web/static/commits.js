@@ -2,9 +2,9 @@
 // see app.js (the entry module) for the load order.
 import { $, ROW_H, esc, getJSON, lsGet, lsSet, postJSON, runes, state } from "./core.js";
 import { saveUI } from "./uistate.js";
-import { copyText, openPrompt, showCtxMenu } from "./layers.js";
+import { closePrompt, copyText, openPrompt, showCtxMenu } from "./layers.js";
 import { wtCount, wtExtra, wtRowHTML } from "./status.js";
-import { opBusy, opLine, showLocalConfirm, startOp } from "./ops.js";
+import { opBusy, opLine, openCreateBranchPrompt, showLocalConfirm, startOp } from "./ops.js";
 import { rev } from "./review.js";
 import { drillOut, enterFilesStage, openWorkingTree, renderFiles } from "./files.js";
 import { focusPane, moveCursor } from "./keys.js";
@@ -503,17 +503,56 @@ function showCommitMenu(c, i, x, y) {
     { label: "copy commit id", act: () => copyText(c.hash, "commit id " + short) },
     { label: "copy subject", act: () => copyText(c.subject, "subject") },
     {
-      // Lightweight tag at this commit; annotate afterwards via the tag
-      // menu's row. Name validation is git's own (check-ref-format server-side).
+      // Two prompts, name then annotation: the op creates an ANNOTATED tag
+      // when a message comes with it, a lightweight one when it doesn't — so
+      // an empty second prompt is exactly the old behaviour, not a dead end.
+      // Name validation is git's own (check-ref-format server-side).
       label: "create tag here…",
       act: () =>
         openPrompt({
           title: "New tag at " + short + ":",
           placeholder: "tag name",
-          onSubmit: (name) => startOp({ op: "create-tag", tag: name, sha: c.hash }, "tagging " + short + " as " + name),
+          onSubmit: (name) =>
+            openPrompt({
+              title: "Annotation message for " + name + ":",
+              value: c.subject || "",
+              placeholder: "tag message",
+              // A prompt never submits an empty value, so "no message" is its
+              // own button rather than an empty enter — the create-branch
+              // prompt's "use prefix…" lane, used the other way round. esc
+              // still cancels the whole thing, tagging nothing.
+              extra: {
+                label: "no message (lightweight)",
+                run: () => {
+                  closePrompt();
+                  startOp({ op: "create-tag", tag: name, sha: c.hash }, "tagging " + short + " as " + name);
+                },
+              },
+              onSubmit: (message) =>
+                startOp({ op: "create-tag", tag: name, sha: c.hash, message }, "tagging " + short + " as " + name),
+            }),
         }),
     },
+    { sep: true },
+    {
+      // Branch off this commit — the same dialog the branch menu and the ☰
+      // menu use, prefix lane included; the start point is the sha.
+      label: "create branch here…",
+      act: () => openCreateBranchPrompt(c.hash, undefined, short),
+    },
   ];
+  // Advance the current branch to this commit (ff-only): offered on every
+  // commit, since only git can say whether it is strictly ahead — the engine
+  // refuses the rest, which is a better answer than a hidden row.
+  // b.hash is git's ABBREVIATED sha, so the tip test is a prefix match, not
+  // an equality one.
+  const cur = (state.branches || []).find((b) => b.is_head);
+  if (cur && cur.name && !(cur.hash && c.hash.startsWith(cur.hash))) {
+    items.push({
+      label: "fast-forward " + cur.name + " to here",
+      act: () => startOp({ op: "fast-forward", sha: c.hash }, "fast-forwarding " + cur.name + " to " + short),
+    });
+  }
   if (c.parents === 1) {
     items.push({ label: "move up (newer)", act: () => commitEdit(c, "move-up") });
     items.push({ label: "move down (older)", act: () => commitEdit(c, "move-down") });
@@ -527,6 +566,18 @@ function showCommitMenu(c, i, x, y) {
           ["drop", "abort"],
           (o) => { if (o === "drop") commitEdit(c, "drop"); }
         ),
+    });
+  }
+  if (cur && cur.name) {
+    // The reflog menu's reset, reached from the commit you are looking at:
+    // an empty mode means the engine's own soft/mixed/hard picker parks in
+    // the modal (with cancel, plus the non-ancestor confirm), so that modal
+    // IS the confirmation and there is no local one here.
+    items.push({ sep: true });
+    items.push({
+      label: "reset " + cur.name + " to here…",
+      danger: true,
+      act: () => startOp({ op: "reset", sha: c.hash }, "resetting to " + short),
     });
   }
   showCtxMenu(items, x, y);

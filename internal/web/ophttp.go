@@ -401,6 +401,18 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 		// engine refuses a target that is not strictly ahead. Decision-free
 		// and never history-rewriting, so the labelled menu row is
 		// confirmation enough (the DnD pair-menu standing).
+		//
+		// The commits panel targets a COMMIT instead — it has no branch name
+		// to send. Hex-only (the checkout lane's rule): a commit id is
+		// content-addressed, so there is nothing to resolve against a read.
+		if req.Sha != "" {
+			if !isHexSha(req.Sha) {
+				writeErr(w, http.StatusBadRequest, errors.New("invalid commit"))
+				return
+			}
+			op = engine.FastForward{Commit: req.Sha}
+			break
+		}
 		if req.Branch == "" || !isGitArgSafe(req.Branch) {
 			writeErr(w, http.StatusBadRequest, errors.New("invalid branch"))
 			return

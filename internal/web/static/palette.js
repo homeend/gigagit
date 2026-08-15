@@ -2,8 +2,7 @@
 // see app.js (the entry module) for the load order.
 import { $, esc, getJSON, state } from "./core.js";
 import { closeLayer, hideCtxMenu, openPrompt, pushLayer, showCtxMenu, topLayer } from "./layers.js";
-import { doFetch, doPull, doPush, doReroot, opLine, openHelp, refreshAfterOp, startOp, toggleSidebar } from "./ops.js";
-import { openCreateBranchPrompt } from "./sidebar.js";
+import { doFetch, doPull, doPush, doReroot, opLine, openCreateBranchPrompt, openHelp, refreshAfterOp, startOp, toggleSidebar } from "./ops.js";
 import { openVersionBranches } from "./versions.js";
 import { openFileBlame, openFileHistory } from "./filehist.js";
 import { openSettings } from "./settings.js";

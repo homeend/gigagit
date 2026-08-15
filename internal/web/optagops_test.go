@@ -202,6 +202,42 @@ func TestOpHTTPFastForward(t *testing.T) {
 	}
 }
 
+// The commit menu fast-forwards to the commit under the cursor, which has no
+// branch name — so the op takes a sha as well as a branch.
+func TestOpHTTPFastForwardToSha(t *testing.T) {
+	dir := newRepoDir(t, 3)
+	tip := gitRun(t, dir, "rev-parse", "main")
+	gitRun(t, dir, "branch", "behind", "HEAD~2")
+	gitRun(t, dir, "checkout", "behind")
+	ts := serve(t, New(domain.Open(dir)))
+
+	events := readSSE(t, ts, startOpBody(t, ts, `{"op":"fast-forward","sha":"`+tip+`"}`), 30*time.Second)
+	done := events[len(events)-1]
+	if done["ok"] != true || done["changed"] != true {
+		t.Fatalf("done = %v", done)
+	}
+	if got := gitRun(t, dir, "rev-parse", "behind"); got != tip {
+		t.Errorf("behind = %s, want fast-forwarded to %s", got, tip)
+	}
+}
+
+// A sha that is not a descendant is the engine's refusal, not a crash — and a
+// non-hex target is rejected before any git runs (the checkout lane's rule).
+func TestOpHTTPFastForwardShaGuards(t *testing.T) {
+	dir := newRepoDir(t, 3)
+	behind := gitRun(t, dir, "rev-parse", "HEAD~2")
+	ts := serve(t, New(domain.Open(dir)))
+
+	events := readSSE(t, ts, startOpBody(t, ts, `{"op":"fast-forward","sha":"`+behind+`"}`), 30*time.Second)
+	done := events[len(events)-1]
+	if done["ok"] != false {
+		t.Fatalf("done = %v, want a refusal", done)
+	}
+	if code := postJSON(t, ts, "/api/op", `{"op":"fast-forward","sha":"main"}`, "application/json", "", nil); code != http.StatusBadRequest {
+		t.Errorf("non-hex sha: code = %d, want 400", code)
+	}
+}
+
 func TestOpHTTPFastForwardNotAhead(t *testing.T) {
 	dir := newRepoDir(t, 3)
 	gitRun(t, dir, "branch", "behind", "HEAD~2")
