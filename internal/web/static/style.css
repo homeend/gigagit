@@ -405,8 +405,17 @@ mark.r { background: var(--span-add); color: inherit; }
 #prompt-title { padding: 10px 14px 6px; color: var(--fg); }
 #prompt-input { margin: 0 14px; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 3px; padding: 7px 10px; font: inherit; outline: none; }
 #prompt-input:focus { border-color: var(--accent); }
+/* This sheet has NO global .hidden rule — every surface hides itself by id.
+   Without these two the prompt showed BOTH of its fields at once: the
+   one-line input in use, and the multi-line textarea below it still holding
+   what the previous step typed. */
+#prompt-input.hidden { display: none; }
 /* the multiline variant (reword): same box, room for a message body */
 #prompt-text { margin: 0 14px; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 3px; padding: 7px 10px; font: inherit; outline: none; resize: vertical; min-height: 7em; }
+#prompt-text.hidden { display: none; }
+/* the label above the optional second field (create tag: "message …") */
+#prompt-body-label { padding: 8px 14px 4px; color: var(--dim); font-size: 11px; }
+#prompt-body-label.hidden { display: none; }
 #prompt-text:focus { border-color: var(--accent); }
 #prompt-actions { display: flex; align-items: center; gap: 12px; padding: 10px 14px; }
 #prompt-hint { color: var(--dim); font-size: 11px; margin-right: auto; }

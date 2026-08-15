@@ -3,6 +3,7 @@
 import { $, esc, getJSON, postJSON, runes, state } from "./core.js";
 import { copyText, showCtxMenu } from "./layers.js";
 import { addFileEntry } from "./sidebar.js";
+import { extraRows } from "./menus.js";
 import { applyStatus, fetchStatus } from "./status.js";
 import { opLine, showLocalConfirm, startOp } from "./ops.js";
 import { openFileBlame, openFileHistory } from "./filehist.js";
@@ -1088,6 +1089,7 @@ $("files-list").addEventListener("contextmenu", (e) => {
         { label: "bookmark this file", act: () => addFileEntry("bookmarks", f.path, "committed", rev) },
         { label: "add to shelf", act: () => addFileEntry("shelf", f.path, "committed", rev) },
         ...copyPathRows(f.path),
+        ...extraRows("file", { path: f.path, sha: rev, section: "commit" }),
       ],
       e.clientX,
       e.clientY
@@ -1205,6 +1207,7 @@ $("files-list").addEventListener("contextmenu", (e) => {
       ),
     });
   }
+  items.push(...extraRows("file", { path: f.path, sha: "", section: f.section }));
   showCtxMenu(items, e.clientX, e.clientY);
 });
 

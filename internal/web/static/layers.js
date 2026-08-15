@@ -33,6 +33,23 @@ function topLayer() {
 }
 
 
+// mountOverlay returns the container for a full-screen surface, creating it if
+// this is the first call. A feature can then build its own view without adding
+// markup to index.html — which is what keeps several features out of one
+// another's merges. The element starts hidden and is otherwise an ordinary
+// layer: pushLayer/closeLayer drive it like every other overlay.
+function mountOverlay(id) {
+  let el = document.getElementById(id);
+  if (!el) {
+    el = document.createElement("div");
+    el.id = id;
+    el.className = "hidden";
+    document.body.append(el);
+  }
+  return el;
+}
+
+
 function hideCtxMenu() {
   closeLayer("ctx");
   // Emptied, not just hidden: a closed menu that still holds its last rows
@@ -152,12 +169,18 @@ function copyText(text, what) {
 let promptCb = null;
 let promptExtraCb = null;
 
-// promptField is whichever control the open prompt is using: the one-line
-// input, or the textarea a MULTILINE prompt swaps in (reword, where retyping
-// a message to fix one word is how a commit body gets lost). Everything else
-// — submit, cancel, the extra button, the layer stack — is shared.
+// promptMode is the open prompt's shape, tracked explicitly rather than read
+// back off the DOM: in BODY mode both controls are on screen, so "which one is
+// visible" no longer answers "which one is the primary field".
+//   line  — the one-line input (default)
+//   multi — the textarea alone (reword: a whole commit message)
+//   body  — the input PLUS the textarea under it (create tag: name + message)
+let promptMode = "line";
+
+// promptField is the control the prompt's own value comes from: the textarea
+// only when it is the whole prompt.
 function promptField() {
-  return $("prompt-text").classList.contains("hidden") ? $("prompt-input") : $("prompt-text");
+  return promptMode === "multi" ? $("prompt-text") : $("prompt-input");
 }
 
 
@@ -165,20 +188,43 @@ function promptField() {
 // cancel/ok (the create-branch prompt's "use prefix…" lane). run() receives
 // the CURRENT input value; it owns what happens next (typically: close this
 // prompt, run a picker, reopen the prompt prefilled).
-function openPrompt({ title, value, placeholder, onSubmit, extra, multiline }) {
+// body: optional {label, value, placeholder} — a SECOND, multi-line field
+// shown under the input, both on screen at once (the TUI's create-tag popup:
+// name and message in one box, tab between them). onSubmit then receives two
+// arguments: the input's trimmed value and the body's raw text, which may be
+// empty. A dialog whose optional half only appears after you commit to the
+// first is a surprise, not a flow — this is the shape for "one thing, plus
+// something optional about it".
+function openPrompt({ title, value, placeholder, onSubmit, extra, multiline, body }) {
   promptCb = onSubmit;
   promptExtraCb = extra ? extra.run : null;
   const xb = $("prompt-extra");
   xb.classList.toggle("hidden", !extra);
   if (extra) xb.textContent = extra.label;
   $("prompt-title").textContent = title;
+  promptMode = multiline ? "multi" : body ? "body" : "line";
+  // Three shapes: one line (default), one textarea (multiline), or both (body).
   $("prompt-input").classList.toggle("hidden", !!multiline);
-  $("prompt-text").classList.toggle("hidden", !multiline);
+  $("prompt-text").classList.toggle("hidden", !multiline && !body);
+  const lbl = $("prompt-body-label");
+  lbl.classList.toggle("hidden", !body);
+  if (body) lbl.textContent = body.label || "";
   // In a multiline prompt enter is a NEWLINE, so the confirm key has to be
   // spelled out — and it is ctrl+enter/ctrl+s, the TUI commit popup's key.
   $("prompt-hint").textContent = multiline
     ? "ctrl+enter (or ctrl+s) to confirm · esc to cancel"
-    : "enter to confirm · esc to cancel";
+    : body
+      ? "enter to confirm · tab for the field below · esc to cancel"
+      : "enter to confirm · esc to cancel";
+  // Clear whatever this prompt is not using. A hidden field's contents are
+  // invisible — and an invisible leftover is what would be submitted if a
+  // later prompt switched shape, or read back by anything inspecting the DOM.
+  if (body) {
+    $("prompt-text").value = body.value || "";
+    $("prompt-text").placeholder = body.placeholder || "";
+  } else {
+    (multiline ? $("prompt-input") : $("prompt-text")).value = "";
+  }
   const field = promptField();
   field.value = value || "";
   field.placeholder = placeholder || "";
@@ -196,8 +242,12 @@ function closePrompt() {
   // Blur before closing: the form-field guard keys off the focused element,
   // and a still-focused input would swallow every global key (the palette's
   // hard-won lesson).
-  promptField().blur();
-  $("prompt-text").classList.add("hidden"); // back to the one-line default
+  $("prompt-input").blur();
+  $("prompt-text").blur();
+  // back to the one-line default, so the next prompt starts from a known shape
+  promptMode = "line";
+  $("prompt-text").classList.add("hidden");
+  $("prompt-body-label").classList.add("hidden");
   $("prompt-input").classList.remove("hidden");
   closeLayer("prompt");
 }
@@ -206,14 +256,43 @@ function closePrompt() {
 function submitPrompt() {
   const v = promptField().value.trim();
   if (!v) return; // nothing to submit; leave the prompt open
+  // The body is optional BY DESIGN: empty is a meaningful answer (no
+  // annotation => a lightweight tag), so it is never trimmed away into
+  // nothing the caller cannot distinguish.
+  const bodyText = promptMode === "body" ? $("prompt-text").value : "";
   const cb = promptCb; // capture before closing clears it
   closePrompt();
-  if (cb) cb(v);
+  if (cb) cb(v, bodyText);
 }
 
 
 function promptKey(e) {
-  const multi = promptField() === $("prompt-text");
+  if (promptMode === "body") {
+    const inBody = document.activeElement === $("prompt-text");
+    if (e.key === "Tab") {
+      e.preventDefault();
+      (inBody ? $("prompt-input") : $("prompt-text")).focus();
+      return true;
+    }
+    if (e.key === "Escape") {
+      closePrompt();
+      return true;
+    }
+    // Enter types a newline in the message and confirms from the name; from
+    // the message, ctrl+enter / ctrl+s confirms (the multiline rule).
+    if (e.key === "Enter" && !inBody) {
+      e.preventDefault();
+      submitPrompt();
+      return true;
+    }
+    if ((e.key === "Enter" || e.key === "s") && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      submitPrompt();
+      return true;
+    }
+    return false;
+  }
+  const multi = promptMode === "multi";
   if (multi) {
     // ctrl+enter / ctrl+s confirm; a bare enter types a newline like any
     // other character, so the body of a message survives being edited.
@@ -251,4 +330,4 @@ $("prompt-extra").addEventListener("click", () => {
 $("help").addEventListener("click", () => closeLayer("help"));
 
 $("help-box").addEventListener("click", (e) => e.stopPropagation()); // allow selecting/copying text
-export { closeLayer, closePrompt, copyText, hideCtxMenu, layers, openPrompt, promptCb, promptKey, pushLayer, showCtxMenu, submitPrompt, topLayer };
+export { closeLayer, closePrompt, copyText, hideCtxMenu, layers, mountOverlay, openPrompt, promptCb, promptKey, pushLayer, showCtxMenu, submitPrompt, topLayer };
