@@ -152,24 +152,40 @@ function copyText(text, what) {
 let promptCb = null;
 let promptExtraCb = null;
 
+// promptField is whichever control the open prompt is using: the one-line
+// input, or the textarea a MULTILINE prompt swaps in (reword, where retyping
+// a message to fix one word is how a commit body gets lost). Everything else
+// — submit, cancel, the extra button, the layer stack — is shared.
+function promptField() {
+  return $("prompt-text").classList.contains("hidden") ? $("prompt-input") : $("prompt-text");
+}
+
 
 // extra: optional {label, run} — a caller-owned side action rendered LEFT of
 // cancel/ok (the create-branch prompt's "use prefix…" lane). run() receives
 // the CURRENT input value; it owns what happens next (typically: close this
 // prompt, run a picker, reopen the prompt prefilled).
-function openPrompt({ title, value, placeholder, onSubmit, extra }) {
+function openPrompt({ title, value, placeholder, onSubmit, extra, multiline }) {
   promptCb = onSubmit;
   promptExtraCb = extra ? extra.run : null;
   const xb = $("prompt-extra");
   xb.classList.toggle("hidden", !extra);
   if (extra) xb.textContent = extra.label;
   $("prompt-title").textContent = title;
-  const input = $("prompt-input");
-  input.value = value || "";
-  input.placeholder = placeholder || "";
+  $("prompt-input").classList.toggle("hidden", !!multiline);
+  $("prompt-text").classList.toggle("hidden", !multiline);
+  // In a multiline prompt enter is a NEWLINE, so the confirm key has to be
+  // spelled out — and it is ctrl+enter/ctrl+s, the TUI commit popup's key.
+  $("prompt-hint").textContent = multiline
+    ? "ctrl+enter (or ctrl+s) to confirm · esc to cancel"
+    : "enter to confirm · esc to cancel";
+  const field = promptField();
+  field.value = value || "";
+  field.placeholder = placeholder || "";
   pushLayer("prompt", $("prompt"), { onKey: promptKey });
-  input.focus();
-  input.select();
+  field.focus();
+  if (multiline) field.setSelectionRange(field.value.length, field.value.length);
+  else field.select();
 }
 
 
@@ -180,13 +196,15 @@ function closePrompt() {
   // Blur before closing: the form-field guard keys off the focused element,
   // and a still-focused input would swallow every global key (the palette's
   // hard-won lesson).
-  $("prompt-input").blur();
+  promptField().blur();
+  $("prompt-text").classList.add("hidden"); // back to the one-line default
+  $("prompt-input").classList.remove("hidden");
   closeLayer("prompt");
 }
 
 
 function submitPrompt() {
-  const v = $("prompt-input").value.trim();
+  const v = promptField().value.trim();
   if (!v) return; // nothing to submit; leave the prompt open
   const cb = promptCb; // capture before closing clears it
   closePrompt();
@@ -195,6 +213,21 @@ function submitPrompt() {
 
 
 function promptKey(e) {
+  const multi = promptField() === $("prompt-text");
+  if (multi) {
+    // ctrl+enter / ctrl+s confirm; a bare enter types a newline like any
+    // other character, so the body of a message survives being edited.
+    if ((e.key === "Enter" || e.key === "s") && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      submitPrompt();
+      return true;
+    }
+    if (e.key === "Escape") {
+      closePrompt();
+      return true;
+    }
+    return false;
+  }
   if (e.key === "Enter") {
     e.preventDefault();
     submitPrompt();
@@ -211,7 +244,7 @@ $("prompt-ok").addEventListener("click", submitPrompt);
 $("prompt-cancel").addEventListener("click", closePrompt);
 $("prompt-extra").addEventListener("click", () => {
   const run = promptExtraCb;
-  if (run) run($("prompt-input").value);
+  if (run) run(promptField().value);
 });
 
 

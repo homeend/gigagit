@@ -127,6 +127,48 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		op = engine.Commit{Message: req.Message}
+	case "cherry-pick":
+		// Apply one commit onto the checked-out branch. Hex-only (the
+		// checkout lane's rule). A conflict parks the engine's keep/abort
+		// decision in the modal, so no local confirm is required here — the
+		// client shows one anyway, because a menu click should not start a
+		// sequencer operation unannounced.
+		if !isHexSha(req.Sha) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid commit"))
+			return
+		}
+		op = engine.CherryPick{Commits: []string{req.Sha}}
+	case "revert":
+		// Undo a commit by adding its inverse on top; the engine refuses a
+		// merge commit and reports an already-undone one.
+		if !isHexSha(req.Sha) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid commit"))
+			return
+		}
+		op = engine.Revert{Commit: req.Sha}
+	case "reword":
+		// Replace a commit's whole message. HEAD is an amend; anything older
+		// is replayed by an interactive rebase, which needs the gg binary as
+		// git's sequence editor (the commit-edit lane's requirement).
+		if !isHexSha(req.Sha) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid commit"))
+			return
+		}
+		if strings.TrimSpace(req.Message) == "" {
+			writeErr(w, http.StatusBadRequest, errors.New("message required"))
+			return
+		}
+		ggBin, gerr := execPath()
+		if gerr != nil {
+			writeErr(w, http.StatusInternalServerError, gerr)
+			return
+		}
+		op = engine.Reword{Commit: req.Sha, NewMsg: req.Message, GGBin: ggBin}
+	case "undo-last-commit":
+		// Ref-only: HEAD moves back one and the work stays staged. The engine
+		// refuses when the last reflog entry was not a commit, so an undo
+		// cannot silently unwind a merge or a reset.
+		op = engine.UndoLastCommit{}
 	case "fetch":
 		op = engine.Fetch{} // all remotes; no arguments, no decisions
 	case "continue":
@@ -214,6 +256,30 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 		}
 		op = engine.RenameBranch{Old: req.Branch, New: req.Name}
 	case "create-worktree":
+		// From a COMMIT: a new branch (Name) is cut there and checked out in
+		// the new worktree — the commits panel's lane. Hex-only, like every
+		// other commit target on the wire.
+		if req.Sha != "" {
+			if !isHexSha(req.Sha) {
+				writeErr(w, http.StatusBadRequest, errors.New("invalid commit"))
+				return
+			}
+			if req.Name == "" || !isGitArgSafe(req.Name) {
+				writeErr(w, http.StatusBadRequest, errors.New("invalid branch name"))
+				return
+			}
+			if req.Path == "" || !isGitArgSafe(req.Path) {
+				writeErr(w, http.StatusBadRequest, errors.New("invalid path"))
+				return
+			}
+			op = engine.CreateWorktree{
+				StartPoint:     req.Sha,
+				Branch:         req.Name,
+				Path:           req.Path,
+				PostCreateHook: s.postCreateHook(r),
+			}
+			break
+		}
 		// For an EXISTING branch: the engine refuses a branch that is not
 		// local, and git itself refuses one already checked out elsewhere.
 		if req.Branch == "" || !isGitArgSafe(req.Branch) {

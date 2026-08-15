@@ -8,6 +8,24 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: cherry-pick, revert, reword, worktree-from-a-commit, review-a-commit,
+  and undo last commit.** The browser could only move or drop a commit; the
+  ops behind the rest already existed and simply had no wire or row. The
+  commit menu gains **cherry-pick onto `<branch>`** and **revert this commit**
+  (both confirm first; a conflict parks the engine's keep/abort decision in
+  the modal), **reword this commit…**, **create worktree here…** (branch name,
+  then path), and **review this commit (AI)…**, which scopes a review to
+  `sha^..sha` — resolved server-side, root commits included. **undo last
+  commit** joins the ☰ menu's git group and the palette.
+
+  Reword needed somewhere to put a message: prompts gained a **multi-line**
+  mode (a textarea, ctrl+enter or ctrl+s to confirm, since enter types a
+  newline), and the row prefills it with the commit's whole current message
+  from the new `GET /api/commit-message` — a body is lost the moment someone
+  has to retype it. `POST /api/op` gains `cherry-pick`, `revert`, `reword` and
+  `undo-last-commit`, `create-worktree` accepts a `sha` (new branch cut
+  there), and the review endpoints accept `target=commit&sha=`.
+
 - **Web: the commit menu can create an annotated tag, branch, fast-forward and
   reset.** Tagging from a commit produced a *lightweight* tag with no way to
   annotate it, so a tag made in the browser was awkward to push. **create tag
