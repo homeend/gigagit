@@ -2,7 +2,7 @@
 // see app.js (the entry module) for the load order.
 import { $, ROW_H, defaultWorktreePath, esc, getJSON, lsGet, lsSet, postJSON, runes, state } from "./core.js";
 import { saveUI } from "./uistate.js";
-import { closePrompt, copyText, openPrompt, showCtxMenu } from "./layers.js";
+import { copyText, openPrompt, showCtxMenu } from "./layers.js";
 import { wtCount, wtExtra, wtRowHTML } from "./status.js";
 import { opBusy, opLine, openCreateBranchPrompt, showLocalConfirm, startOp } from "./ops.js";
 import { rev, startReview } from "./review.js";
@@ -505,34 +505,23 @@ function showCommitMenu(c, i, x, y) {
     { label: "copy commit id", act: () => copyText(c.hash, "commit id " + short) },
     { label: "copy subject", act: () => copyText(c.subject, "subject") },
     {
-      // Two prompts, name then annotation: the op creates an ANNOTATED tag
-      // when a message comes with it, a lightweight one when it doesn't — so
-      // an empty second prompt is exactly the old behaviour, not a dead end.
-      // Name validation is git's own (check-ref-format server-side).
+      // ONE dialog with both fields on screen, the TUI's tagPopup: a name, a
+      // message under it, and the rule stated where you can read it — an empty
+      // message makes a lightweight tag, a filled one makes it annotated. The
+      // message starts EMPTY: prefilling it would make "annotated" the silent
+      // default. Name validation is git's own (check-ref-format server-side).
       label: "create tag here…",
       act: () =>
         openPrompt({
           title: "New tag at " + short + ":",
           placeholder: "tag name",
-          onSubmit: (name) =>
-            openPrompt({
-              title: "Annotation message for " + name + ":",
-              value: c.subject || "",
-              placeholder: "tag message",
-              // A prompt never submits an empty value, so "no message" is its
-              // own button rather than an empty enter — the create-branch
-              // prompt's "use prefix…" lane, used the other way round. esc
-              // still cancels the whole thing, tagging nothing.
-              extra: {
-                label: "no message (lightweight)",
-                run: () => {
-                  closePrompt();
-                  startOp({ op: "create-tag", tag: name, sha: c.hash }, "tagging " + short + " as " + name);
-                },
-              },
-              onSubmit: (message) =>
-                startOp({ op: "create-tag", tag: name, sha: c.hash, message }, "tagging " + short + " as " + name),
-            }),
+          body: {
+            label: "message — leave empty for a lightweight tag",
+            value: "",
+            placeholder: "annotation (optional)",
+          },
+          onSubmit: (name, message) =>
+            startOp({ op: "create-tag", tag: name, sha: c.hash, message }, "tagging " + short + " as " + name),
         }),
     },
     { sep: true },
