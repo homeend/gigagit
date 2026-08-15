@@ -69,6 +69,15 @@ func reconcilePage(loaded, page []model.Commit) (merged []model.Commit, skipDelt
 		seen[c.Hash] = true
 		merged = append(merged, c)
 	}
-	merged = append(merged, loaded[i:]...)
+	// The overlap takes the FRESH rows, not the loaded ones. Same commits, but
+	// not the same data: a decoration is a property of the ref graph, not of the
+	// commit, so tagging or moving a branch onto a commit already on screen
+	// changes its row without changing its hash. Keeping the loaded copy there
+	// left a new tag invisible until the feed was rebuilt from scratch.
+	merged = append(merged, page[k:]...)
+	// Below what the fresh walk reached, the loaded pages stand — that is what
+	// makes a deep search survive a refresh. The guard above proved the page
+	// stops short of the loaded tail, so this slice is in range and non-empty.
+	merged = append(merged, loaded[i+len(page)-k:]...)
 	return merged, k - i, true
 }

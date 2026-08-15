@@ -12,6 +12,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/git"
 	"github.com/homeend/gigagit/internal/gitexec"
+	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/observ"
 )
 
@@ -253,9 +254,10 @@ func TestRefreshBumpsGeneration(t *testing.T) {
 	}
 }
 
-// realRefreshRepo builds a Service over a real repo with n commits, plus a
-// commit(subject) hook so a test can grow history mid-flight.
-func realRefreshRepo(t *testing.T, n int) (*Service, func(subject string)) {
+// realRefreshRepo builds a Service over a real repo with n commits, a
+// commit(subject) hook so a test can grow history mid-flight, and the repo dir
+// for tests that change REFS rather than history (tagging, moving a branch).
+func realRefreshRepo(t *testing.T, n int) (*Service, func(subject string), string) {
 	t.Helper()
 	dir := t.TempDir()
 	run := func(a ...string) {
@@ -278,13 +280,13 @@ func realRefreshRepo(t *testing.T, n int) (*Service, func(subject string)) {
 	for i := 0; i < n; i++ {
 		commit("c" + strconv.Itoa(i))
 	}
-	return New(&git.Repo{Runner: gitexec.NewExecRunner("git", dir, observ.NewRing(50))}), commit
+	return New(&git.Repo{Runner: gitexec.NewExecRunner("git", dir, observ.NewRing(50))}), commit, dir
 }
 
 // The end-to-end shape against a real git: page in depth, commit, refresh —
 // the new commit lands on top and nothing paged in is lost.
 func TestRefreshAgainstRealGitKeepsDepth(t *testing.T) {
-	svc, commit := realRefreshRepo(t, 8)
+	svc, commit, _ := realRefreshRepo(t, 8)
 	feed := svc.CommitFeed()
 	feed.SetPageSizes(2, 2)
 	st := loadDeep(t, feed, 2) // 2 + 2 + 2 = 6 of the 8 commits
@@ -351,4 +353,74 @@ func TestRefreshInvalidatesScopeCache(t *testing.T) {
 	if len(st.Commits) != 4 {
 		t.Fatalf("base after refresh = %d, want 4 (re-walked, not stale 3)", len(st.Commits))
 	}
+}
+
+// Tagging a commit that is already on screen must show up on the next refresh.
+// The tag changes the ref graph, not the commit, so the row's hash is unchanged
+// — exactly the case a reconcile is tempted to treat as "nothing to do here".
+// Reported from the browser: the tag was created, F5 did not show it, and only
+// restarting the server did.
+//
+// The boundary is honest and deliberate: a refresh re-walks the FIRST page (50
+// commits in the web frontend), so decorations update there. A commit paged in
+// far below keeps its loaded row until something rebuilds the feed — the price
+// of not re-walking the whole history on every refresh.
+func TestRefreshShowsATagAddedToALoadedCommit(t *testing.T) {
+	svc, _, dir := realRefreshRepo(t, 10)
+	feed := svc.CommitFeed()
+	feed.SetPageSizes(4, 2)    // page zero covers the newest four
+	st := loadDeep(t, feed, 2) // 4 + 2 + 2 = 8 of the 10
+	if len(st.Commits) != 8 {
+		t.Fatalf("deep load = %d commits, want 8", len(st.Commits))
+	}
+	target := st.Commits[2] // inside page zero, but not the tip
+	if len(target.Refs) != 0 {
+		t.Fatalf("target already decorated: %+v", target.Refs)
+	}
+
+	tag := exec.Command("git", "tag", "-a", "v1", "-m", "release", target.Hash)
+	tag.Dir = dir
+	if out, err := tag.CombinedOutput(); err != nil {
+		t.Fatalf("git tag: %v\n%s", err, out)
+	}
+
+	st, err := feed.Refresh(context.Background())
+	if err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+	var got *model.Commit
+	for i := range st.Commits {
+		if st.Commits[i].Hash == target.Hash {
+			got = &st.Commits[i]
+		}
+	}
+	if got == nil {
+		t.Fatalf("the tagged commit vanished from the feed")
+	}
+	found := false
+	for _, r := range got.Refs {
+		if r.Kind == model.RefTag && r.Name == "v1" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("refs after refresh = %+v, want tag v1", got.Refs)
+	}
+	// The depth paged in before the refresh is still there, and nothing is
+	// duplicated by taking fresh rows for the overlap.
+	if len(st.Commits) != 8 {
+		t.Errorf("commits after refresh = %d, want the 8 still loaded", len(st.Commits))
+	}
+	if len(st.Commits) != len(hashSet(st.Commits)) {
+		t.Errorf("refresh duplicated rows: %s", hashList(st.Commits))
+	}
+}
+
+// hashSet is a dedupe helper for the duplicate check above.
+func hashSet(cm []model.Commit) map[string]bool {
+	m := make(map[string]bool, len(cm))
+	for _, c := range cm {
+		m[c.Hash] = true
+	}
+	return m
 }
