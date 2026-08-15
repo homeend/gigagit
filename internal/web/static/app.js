@@ -4,6 +4,8 @@
 // matches a section of the former monolith.
 import { $ } from "./core.js";
 import "./layers.js";
+// The registries (op rows / help) must exist before any feature module runs.
+import "./menus.js";
 import { fetchStatus } from "./status.js";
 import { applySidebarHidden, loadRepo } from "./ops.js";
 import { applyStoredSections, fetchBranches } from "./sidebar.js";

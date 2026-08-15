@@ -66,6 +66,41 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var op engine.Operation
+	// A registered op (opreg.go) is consulted first: features declare
+	// themselves in their own files instead of adding an arm to the switch
+	// below, which is what lets several of them be built in parallel without
+	// every branch editing these same lines.
+	if build, ok := lookupOp(req.Op); ok {
+		built, cleanup, code, berr := build(s, r, req)
+		if berr != nil {
+			writeErr(w, code, berr)
+			return
+		}
+		if cleanup != nil {
+			run, rerr := s.startRun("op", func(ctx context.Context, svc *domain.Service, events chan<- engine.Event, dec engine.Decider) (engine.Result, map[string]any, error) {
+				defer cleanup()
+				res, err := svc.Execute(ctx, built, events, dec)
+				return res, nil, err
+			})
+			if rerr != nil {
+				writeErr(w, http.StatusConflict, rerr)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			w.WriteHeader(http.StatusAccepted)
+			_ = json.NewEncoder(w).Encode(map[string]string{"op_id": run.id})
+			return
+		}
+		run, rerr := s.startOp(built)
+		if rerr != nil {
+			writeErr(w, http.StatusConflict, rerr)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(http.StatusAccepted)
+		_ = json.NewEncoder(w).Encode(map[string]string{"op_id": run.id})
+		return
+	}
 	switch req.Op {
 	case "switch":
 		if req.Branch == "" || !isGitArgSafe(req.Branch) {
