@@ -8,6 +8,19 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: creating a tag is one dialog with both fields, like the TUI's.** It
+  used to ask for the name, and only *then* spring a second prompt for an
+  annotation — an option you could not see when you were deciding, prefilled
+  with the commit's subject, with a **no message (lightweight)** button as the
+  way out. **create tag here…** now opens a single box: the tag name, a message
+  under it (**tab** moves between them), and the rule where you can read it —
+  *leave empty for a lightweight tag*. The message starts empty, so annotated
+  is a thing you choose rather than the silent default, and `enter` from the
+  name creates either kind. The shared prompt grew the shape behind this
+  (`body: {label, value, placeholder}`, a second multi-line field whose text
+  reaches `onSubmit` as a second argument), so any other "one thing plus
+  something optional about it" dialog can use it.
+
 - **Web (internal): features register instead of editing shared files.** Adding
   anything to the browser frontend meant editing the same four places — one
   43-case operation switch, one route table, three menu builders and the static
