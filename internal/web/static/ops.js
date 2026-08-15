@@ -1,7 +1,8 @@
 // ops.js — part of gg's web client. Split from the original app.js;
 // see app.js (the entry module) for the load order.
 import { $, DANGER_OPTIONS, esc, getJSON, lsSet, postJSON, state } from "./core.js";
-import { closeLayer, pushLayer } from "./layers.js";
+import { closeLayer, closePrompt, openPrompt, pushLayer } from "./layers.js";
+import { openPrefixPicker } from "./prefixes.js";
 import { fetchStatus, wtCount } from "./status.js";
 import { saveUI } from "./uistate.js";
 import { fetchBranches } from "./sidebar.js";
@@ -512,4 +513,48 @@ async function loadRepo() {
   state.worktree = repo.worktree;
 }
 
-export { applySidebarHidden, answerModal, doCommit, doFetch, doForcePush, doPull, doPullBranch, doPush, doPushBranch, doReroot, doStash, followOp, handleOpEvent, hideModal, hideOpLine, lastFocusRefresh, loadRepo, modalLocalCb, opBusy, opLine, opLineTimer, openHelp, parkedRunning, parkedTaskText, refreshAfterOp, showLocalConfirm, showModal, stageFocused, startOp, startSwitch, taskLine, taskRestoreTimer, toggleSidebar };
+
+// openCreateBranchPrompt: the one create-branch dialog — ☰/palette start from
+// HEAD, the branch menu passes its branch, the commits menu passes the
+// selected commit's sha. "use prefix…" mirrors the TUI popup's ctrl+p: pick a
+// saved prefix, fill its <user:…> labels, and the resolved name seeds the
+// input — still editable; plain typing needs no prefix at all. A completed
+// pick rides along on the submit as the prefix identity, so its <seq>
+// counters advance only when the create succeeds; canceling the picker
+// restores the prompt with whatever was typed.
+//
+// It lives HERE rather than in sidebar.js because the commits panel opens it
+// too, and commits.js cannot import from sidebar.js (sidebar imports commits).
+function openCreateBranchPrompt(start, seed, label) {
+  const at = label || start;
+  openPrompt({
+    title: at ? "New branch, starting at " + at + ":" : "New branch, starting at the current HEAD:",
+    placeholder: "branch name",
+    value: seed ? seed.value : "",
+    extra: {
+      label: "use prefix…",
+      run: (typed) => {
+        closePrompt();
+        openPrefixPicker((resolved, p) => {
+          if (resolved == null) {
+            openCreateBranchPrompt(start, typed ? { value: typed } : undefined, label);
+            return;
+          }
+          openCreateBranchPrompt(start, { value: resolved, prefix: p }, label);
+        });
+      },
+    },
+    onSubmit: (name) => {
+      const body = { op: "create-branch", name };
+      if (start) body.branch = start;
+      if (seed && seed.prefix) {
+        body.prefix_id = seed.prefix.id;
+        body.prefix_scope = seed.prefix.scope;
+      }
+      startOp(body, "creating " + name);
+    },
+  });
+}
+
+
+export { applySidebarHidden, answerModal, doCommit, doFetch, doForcePush, doPull, doPullBranch, doPush, doPushBranch, doReroot, doStash, followOp, handleOpEvent, hideModal, hideOpLine, lastFocusRefresh, loadRepo, modalLocalCb, opBusy, opLine, opLineTimer, openCreateBranchPrompt, openHelp, parkedRunning, parkedTaskText, refreshAfterOp, showLocalConfirm, showModal, stageFocused, startOp, startSwitch, taskLine, taskRestoreTimer, toggleSidebar };

@@ -8,6 +8,22 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: the commit menu can create an annotated tag, branch, fast-forward and
+  reset.** Tagging from a commit produced a *lightweight* tag with no way to
+  annotate it, so a tag made in the browser was awkward to push. **create tag
+  here…** now asks for the name and then a message — prefilled with the
+  commit's subject, so confirming produces an annotated tag object, ready for
+  the Tags section's **push tag**; the prompt's **no message (lightweight)**
+  button keeps the old kind (a prompt never submits empty, so the choice is a
+  button rather than an empty enter). Three more rows join it: **create branch
+  here…** (the shared create-branch dialog, prefix lane included, starting at
+  the commit), **fast-forward `<branch>` to here** (hidden when the commit is
+  already the tip; git refuses anything not strictly ahead), and **reset
+  `<branch>` to here…**, which opens the same soft/mixed/hard picker the
+  reflog's reset does. `POST /api/op` `fast-forward` now takes a `sha` as well
+  as a `branch`, and the create-branch dialog moved from `sidebar.js` to
+  `ops.js` so the commits panel can open it without an import cycle.
+
 - **Web: right-click menus are grouped, and a destructive row is always fenced
   off.** The branch menu was one undivided run of seventeen rows, so *delete*
   sat flush against *copy commit id*. Every menu now separates its groups —

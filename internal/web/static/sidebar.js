@@ -3,8 +3,7 @@
 import { $, SECTIONS, charWidth, elidePath, esc, getJSON, lsGet, lsSet, state } from "./core.js";
 import { saveUI } from "./uistate.js";
 import { closePrompt, copyText, openPrompt, showCtxMenu } from "./layers.js";
-import { openPrefixPicker } from "./prefixes.js";
-import { doForcePush, doPull, doPullBranch, doPush, doPushBranch, doReroot, showLocalConfirm, startOp, startSwitch } from "./ops.js";
+import { doForcePush, doPull, doPullBranch, doPush, doPushBranch, doReroot, openCreateBranchPrompt, showLocalConfirm, startOp, startSwitch } from "./ops.js";
 import { openVersions } from "./versions.js";
 import { openRebaseEditor } from "./rebase.js";
 import { startReview } from "./review.js";
@@ -235,42 +234,9 @@ function defaultWorktreePath(branch) {
 // The global create-branch entry (☰ / palette): same op as the branch
 // menu's row, but with no start point on the wire — the server reads that as
 // HEAD, which is what "new branch" means with nothing selected.
-// openCreateBranchPrompt: the one create-branch dialog (☰/palette = from
-// HEAD; the branch menu passes its start point). "use prefix…" mirrors the
-// TUI popup's ctrl+p: pick a saved prefix, fill its <user:…> labels, and
-// the resolved name seeds the input — still editable; plain typing needs no
-// prefix at all. A completed pick rides along on the submit as the prefix
-// identity, so its <seq> counters advance only when the create succeeds;
-// canceling the picker restores the prompt with whatever was typed.
-function openCreateBranchPrompt(start, seed) {
-  openPrompt({
-    title: start ? "New branch, starting at " + start + ":" : "New branch, starting at the current HEAD:",
-    placeholder: "branch name",
-    value: seed ? seed.value : "",
-    extra: {
-      label: "use prefix…",
-      run: (typed) => {
-        closePrompt();
-        openPrefixPicker((resolved, p) => {
-          if (resolved == null) {
-            openCreateBranchPrompt(start, typed ? { value: typed } : undefined);
-            return;
-          }
-          openCreateBranchPrompt(start, { value: resolved, prefix: p });
-        });
-      },
-    },
-    onSubmit: (name) => {
-      const body = { op: "create-branch", name };
-      if (start) body.branch = start;
-      if (seed && seed.prefix) {
-        body.prefix_id = seed.prefix.id;
-        body.prefix_scope = seed.prefix.scope;
-      }
-      startOp(body, "creating " + name);
-    },
-  });
-}
+// openCreateBranchPrompt now lives in ops.js — the commits panel opens it too
+// (branch from the selected commit), and commits.js cannot import from here
+// without closing a cycle (this module already imports commits.js).
 
 
 // The rows are grouped by what they do to the repo — navigate, move commits
@@ -861,4 +827,4 @@ new ResizeObserver(() => {
   });
 }).observe($("branches-pane"));
 
-export { applyStoredSections, branchesList, clearDropTargets, defaultWorktreePath, fetchBranches, openCreateBranchPrompt, renderBranches, renderReflog, renderRemotes, renderStashes, renderTags, renderWorktrees, showBranchMenu, showBranchPairMenu, showReflogMenu, showRemoteMenu, showStashMenu, showTagMenu, showWorktreeMenu, toggleSection, worktreePathForBranch };
+export { applyStoredSections, branchesList, clearDropTargets, defaultWorktreePath, fetchBranches, renderBranches, renderReflog, renderRemotes, renderStashes, renderTags, renderWorktrees, showBranchMenu, showBranchPairMenu, showReflogMenu, showRemoteMenu, showStashMenu, showTagMenu, showWorktreeMenu, toggleSection, worktreePathForBranch };
