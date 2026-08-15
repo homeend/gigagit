@@ -25,8 +25,21 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   /api/shelf`, `GET /api/shelf/files`. The wire never carries a worktree or a
   branch: they are read from the served repo, so one POST cannot file an entry
   against another checkout, and the file-state name is an allowlist rather
-  than a default. Still to come: restoring a shelf entry, comparing against
-  one, and cherry-picking a shelved commit.
+  than a default.
+
+- **Web: bookmarks and the shelf, stage 2 — putting an entry back.** A stored
+  entry you cannot use is a museum piece. A shelved file now **restores to a
+  path** (prefilled with its original one; the destination is repo-relative
+  and an absolute one is refused rather than silently mirrored under the repo
+  root), a shelved commit offers **restore a file…** — picked from a menu of
+  the files it froze — and **cherry-pick this commit**, which re-applies it as
+  a real `git cherry-pick` while the commit still exists and replays the
+  format-patch mailbox frozen alongside the files once it does not. A
+  bookmark's **copy its content to a path…** writes what it points at *today*,
+  which is the difference between the two stores made concrete. Overwriting an
+  existing, different file parks the engine's own confirm in the modal.
+  `POST /api/op` gains `restore-entry` and `shelf-cherry-pick`. Still to come:
+  comparing against a bookmark or shelf entry.
 
 - **Web: cherry-pick, revert, reword, worktree-from-a-commit, review-a-commit,
   and undo last commit.** The browser could only move or drop a commit; the

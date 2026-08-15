@@ -918,12 +918,50 @@ function openEntry(e) {
 }
 
 
+// restorePrompt asks WHERE, prefilled with the entry's own path so the common
+// case ("put it back") is one enter. The destination is repo-relative — the
+// op writes into the working tree — and the overwrite question, if the file is
+// already there and differs, parks in the modal from the engine itself.
+function restorePrompt(store, e, innerPath) {
+  const path = innerPath || e.path || "";
+  openPrompt({
+    title: "Restore " + (innerPath || entryLabel(e)) + " to (path in the repo):",
+    value: path,
+    placeholder: "path/inside/the/repo.txt",
+    onSubmit: (dest) =>
+      startOp({ op: "restore-entry", store, id: e.id, path: innerPath || "", dest }, "restoring " + dest),
+  });
+}
+
+
+// pickShelfFile lists what a shelved COMMIT froze and restores the one picked.
+// A menu of paths, because the entry's files are not otherwise visible.
+async function pickShelfFile(e, x, y) {
+  const got = await getJSON("/api/shelf/files?id=" + encodeURIComponent(e.id)).catch(() => null);
+  if (!got || !(got.files || []).length) {
+    opLine("this entry lists no files", true);
+    return;
+  }
+  showCtxMenu(
+    got.files.map((p) => ({ label: p, act: () => restorePrompt("shelf", e, p) })),
+    x,
+    y
+  );
+}
+
+
 function showBookmarkMenu(e, x, y) {
   const items = [];
   if (e.is_commit && e.commit) items.push({ label: "show commit", act: () => openEntry(e) });
   else if (e.path) items.push({ label: "file history", act: () => openEntry(e) });
   if (e.commit) items.push({ label: "copy commit id", act: () => copyText(e.commit, "commit id " + e.commit.slice(0, 8)) });
   if (e.path) items.push({ label: "copy path", act: () => copyText(e.path, "path " + e.path) });
+  if (e.path) {
+    items.push({ sep: true });
+    // A bookmark is LIVE, so this writes what it points at today — not a
+    // snapshot from when you bookmarked it. That is the shelf's job.
+    items.push({ label: "copy its content to a path…", act: () => restorePrompt("bookmarks", e, "") });
+  }
   items.push({ sep: true });
   items.push({
     label: "remove bookmark",
@@ -941,9 +979,24 @@ function showShelfMenu(e, x, y) {
   const items = [];
   if (e.kind === "commit") {
     if (e.commit) items.push({ label: "show the original commit", act: () => openEntry(e) });
+    items.push({ sep: true });
+    // The frozen files are the entry's real content; restoring one is picked
+    // from a list of them rather than typed from memory.
+    items.push({ label: "restore a file…", act: () => pickShelfFile(e, x, y) });
+    items.push({
+      // Re-applies the commit: a live cherry-pick while it still exists, else
+      // the patch frozen with the files. The server picks the lane.
+      label: "cherry-pick this commit",
+      act: () =>
+        showLocalConfirm("Apply " + entryLabel(e) + " onto the current branch?", ["cherry-pick", "abort"], (o) => {
+          if (o === "cherry-pick") startOp({ op: "shelf-cherry-pick", id: e.id }, "applying " + entryLabel(e));
+        }),
+    });
   } else if (e.path) {
     items.push({ label: "file history", act: () => openEntry(e) });
     items.push({ label: "copy path", act: () => copyText(e.path, "path " + e.path) });
+    items.push({ sep: true });
+    items.push({ label: "restore to a path…", act: () => restorePrompt("shelf", e, "") });
   }
   items.push({ sep: true });
   items.push({
