@@ -2,8 +2,7 @@
 // see app.js (the entry module) for the load order.
 import { $, esc, getJSON, state } from "./core.js";
 import { closeLayer, hideCtxMenu, openPrompt, pushLayer, showCtxMenu, topLayer } from "./layers.js";
-import { doFetch, doPull, doPush, doReroot, opLine, openHelp, refreshAfterOp, startOp, toggleSidebar } from "./ops.js";
-import { openCreateBranchPrompt } from "./sidebar.js";
+import { doFetch, doPull, doPush, doReroot, opLine, openCreateBranchPrompt, openHelp, refreshAfterOp, showLocalConfirm, startOp, toggleSidebar } from "./ops.js";
 import { openVersionBranches } from "./versions.js";
 import { openFileBlame, openFileHistory } from "./filehist.js";
 import { openSettings } from "./settings.js";
@@ -43,6 +42,7 @@ function paletteCommands() {
     { label: "file blame…", detail: "", run: () => openPrompt({ title: "File blame — repo-relative path", placeholder: "e.g. internal/web/server.go", onSubmit: (p) => openFileBlame(p, "") }) },
     { label: "review working changes (AI)…", detail: "", run: () => startReview("working", "") },
     { label: "review this branch (AI)…", detail: "", run: () => startReview("branch", "") },
+    { label: "undo last commit", detail: "", run: () => undoLastCommit() },
     { label: "goto commit…", detail: "#", run: () => gotoCommitPrompt() },
     { label: "filter commits…", detail: "/", run: () => openCommitFilter() },
     { label: "refresh", detail: "r", run: () => { if (!state.op) refreshAfterOp(); } },
@@ -199,6 +199,7 @@ function openGlobalMenu() {
     { label: "branch prefixes…", act: () => openPrefixesView() },
     { label: "external tools…", act: () => openExtToolsView() },
     { label: "review working changes (AI)…", act: () => startReview("working", "") },
+    { label: "undo last commit", act: () => undoLastCommit() },
   ].sort((a, b) => a.label.localeCompare(b.label));
   // Switching the repo is neither a git operation nor a UI control, so it
   // gets its own group between them.
@@ -226,5 +227,19 @@ $("menu-btn").addEventListener("click", (e) => {
   if (t && t.id === "ctx") { hideCtxMenu(); return; } // second click toggles closed
   openGlobalMenu();
 });
+
+
+// undoLastCommit moves HEAD back one commit and leaves the work staged — the
+// TUI's `u`. The engine refuses unless the last reflog entry really was a
+// commit, so this cannot quietly unwind a merge or a reset; the confirm is
+// here because the ☰ menu is one click away from everything.
+function undoLastCommit() {
+  showLocalConfirm(
+    "Undo the last commit? The commit is removed and its changes are left staged.",
+    ["undo", "abort"],
+    (o) => { if (o === "undo") startOp({ op: "undo-last-commit" }, "undoing the last commit"); }
+  );
+}
+
 
 export { closePalette, filterPalette, openGlobalMenu, openPalette, pal, paletteCommands, paletteKey, renderPalette, runPaletteRow };

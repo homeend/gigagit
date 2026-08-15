@@ -8,6 +8,73 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: bookmarks and the shelf, stage 1.** gg's two own stores — the ones
+  that are not git — had no browser surface at all: `internal/web` did not
+  mention either. They are now two sidebar sections below the reflog (folded
+  on a first run, and their folded state persists like every other section).
+  A **bookmark** is a live reference to a commit (◆) or a file (▪); a **shelf**
+  entry is a frozen copy — a file's bytes, or a commit's changed files — that
+  outlives a rewrite, a gc, or deleting the source. Right-click a commit (the
+  commit list or the reflog) for **bookmark this commit…** / **shelf this
+  commit…**, which ask for a name prefilled with the subject, or a file (the
+  files pane, a commit's file tree) for **bookmark this file** / **add to
+  shelf**. Clicking a row opens what it points at — the commit, or that file's
+  history — and its right-click menu copies or removes it.
+
+  New endpoints: `GET/POST/DELETE /api/bookmarks`, `GET/POST/DELETE
+  /api/shelf`, `GET /api/shelf/files`. The wire never carries a worktree or a
+  branch: they are read from the served repo, so one POST cannot file an entry
+  against another checkout, and the file-state name is an allowlist rather
+  than a default.
+
+- **Web: bookmarks and the shelf, stage 2 — putting an entry back.** A stored
+  entry you cannot use is a museum piece. A shelved file now **restores to a
+  path** (prefilled with its original one; the destination is repo-relative
+  and an absolute one is refused rather than silently mirrored under the repo
+  root), a shelved commit offers **restore a file…** — picked from a menu of
+  the files it froze — and **cherry-pick this commit**, which re-applies it as
+  a real `git cherry-pick` while the commit still exists and replays the
+  format-patch mailbox frozen alongside the files once it does not. A
+  bookmark's **copy its content to a path…** writes what it points at *today*,
+  which is the difference between the two stores made concrete. Overwriting an
+  existing, different file parks the engine's own confirm in the modal.
+  `POST /api/op` gains `restore-entry` and `shelf-cherry-pick`. Still to come:
+  comparing against a bookmark or shelf entry.
+
+- **Web: cherry-pick, revert, reword, worktree-from-a-commit, review-a-commit,
+  and undo last commit.** The browser could only move or drop a commit; the
+  ops behind the rest already existed and simply had no wire or row. The
+  commit menu gains **cherry-pick onto `<branch>`** and **revert this commit**
+  (both confirm first; a conflict parks the engine's keep/abort decision in
+  the modal), **reword this commit…**, **create worktree here…** (branch name,
+  then path), and **review this commit (AI)…**, which scopes a review to
+  `sha^..sha` — resolved server-side, root commits included. **undo last
+  commit** joins the ☰ menu's git group and the palette.
+
+  Reword needed somewhere to put a message: prompts gained a **multi-line**
+  mode (a textarea, ctrl+enter or ctrl+s to confirm, since enter types a
+  newline), and the row prefills it with the commit's whole current message
+  from the new `GET /api/commit-message` — a body is lost the moment someone
+  has to retype it. `POST /api/op` gains `cherry-pick`, `revert`, `reword` and
+  `undo-last-commit`, `create-worktree` accepts a `sha` (new branch cut
+  there), and the review endpoints accept `target=commit&sha=`.
+
+- **Web: the commit menu can create an annotated tag, branch, fast-forward and
+  reset.** Tagging from a commit produced a *lightweight* tag with no way to
+  annotate it, so a tag made in the browser was awkward to push. **create tag
+  here…** now asks for the name and then a message — prefilled with the
+  commit's subject, so confirming produces an annotated tag object, ready for
+  the Tags section's **push tag**; the prompt's **no message (lightweight)**
+  button keeps the old kind (a prompt never submits empty, so the choice is a
+  button rather than an empty enter). Three more rows join it: **create branch
+  here…** (the shared create-branch dialog, prefix lane included, starting at
+  the commit), **fast-forward `<branch>` to here** (hidden when the commit is
+  already the tip; git refuses anything not strictly ahead), and **reset
+  `<branch>` to here…**, which opens the same soft/mixed/hard picker the
+  reflog's reset does. `POST /api/op` `fast-forward` now takes a `sha` as well
+  as a `branch`, and the create-branch dialog moved from `sidebar.js` to
+  `ops.js` so the commits panel can open it without an import cycle.
+
 - **Web: right-click menus are grouped, and a destructive row is always fenced
   off.** The branch menu was one undivided run of seventeen rows, so *delete*
   sat flush against *copy commit id*. Every menu now separates its groups —

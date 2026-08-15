@@ -32,6 +32,9 @@ type opStartRequest struct {
 	Email       string `json:"email"`  // set-identity: user.email
 	Global      bool   `json:"global"` // set-identity: write the global scope instead of the repo's
 	Edit        string `json:"edit"`   // commit-edit: drop | move-up | move-down
+	Store       string `json:"store"`  // restore-entry: "bookmarks" | "shelf"
+	ID          string `json:"id"`     // restore-entry / shelf-cherry-pick: the entry's id
+	Dest        string `json:"dest"`   // restore-entry: where the content is written
 	Mode        string `json:"mode"`   // reset: "" (interactive picker) | soft | mixed | hard
 	Switch      bool   `json:"switch"` // checkout-remote: switch to the new local branch
 	Force       bool   `json:"force"`
@@ -127,6 +130,48 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		op = engine.Commit{Message: req.Message}
+	case "cherry-pick":
+		// Apply one commit onto the checked-out branch. Hex-only (the
+		// checkout lane's rule). A conflict parks the engine's keep/abort
+		// decision in the modal, so no local confirm is required here — the
+		// client shows one anyway, because a menu click should not start a
+		// sequencer operation unannounced.
+		if !isHexSha(req.Sha) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid commit"))
+			return
+		}
+		op = engine.CherryPick{Commits: []string{req.Sha}}
+	case "revert":
+		// Undo a commit by adding its inverse on top; the engine refuses a
+		// merge commit and reports an already-undone one.
+		if !isHexSha(req.Sha) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid commit"))
+			return
+		}
+		op = engine.Revert{Commit: req.Sha}
+	case "reword":
+		// Replace a commit's whole message. HEAD is an amend; anything older
+		// is replayed by an interactive rebase, which needs the gg binary as
+		// git's sequence editor (the commit-edit lane's requirement).
+		if !isHexSha(req.Sha) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid commit"))
+			return
+		}
+		if strings.TrimSpace(req.Message) == "" {
+			writeErr(w, http.StatusBadRequest, errors.New("message required"))
+			return
+		}
+		ggBin, gerr := execPath()
+		if gerr != nil {
+			writeErr(w, http.StatusInternalServerError, gerr)
+			return
+		}
+		op = engine.Reword{Commit: req.Sha, NewMsg: req.Message, GGBin: ggBin}
+	case "undo-last-commit":
+		// Ref-only: HEAD moves back one and the work stays staged. The engine
+		// refuses when the last reflog entry was not a commit, so an undo
+		// cannot silently unwind a merge or a reset.
+		op = engine.UndoLastCommit{}
 	case "fetch":
 		op = engine.Fetch{} // all remotes; no arguments, no decisions
 	case "continue":
@@ -214,6 +259,30 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 		}
 		op = engine.RenameBranch{Old: req.Branch, New: req.Name}
 	case "create-worktree":
+		// From a COMMIT: a new branch (Name) is cut there and checked out in
+		// the new worktree — the commits panel's lane. Hex-only, like every
+		// other commit target on the wire.
+		if req.Sha != "" {
+			if !isHexSha(req.Sha) {
+				writeErr(w, http.StatusBadRequest, errors.New("invalid commit"))
+				return
+			}
+			if req.Name == "" || !isGitArgSafe(req.Name) {
+				writeErr(w, http.StatusBadRequest, errors.New("invalid branch name"))
+				return
+			}
+			if req.Path == "" || !isGitArgSafe(req.Path) {
+				writeErr(w, http.StatusBadRequest, errors.New("invalid path"))
+				return
+			}
+			op = engine.CreateWorktree{
+				StartPoint:     req.Sha,
+				Branch:         req.Name,
+				Path:           req.Path,
+				PostCreateHook: s.postCreateHook(r),
+			}
+			break
+		}
 		// For an EXISTING branch: the engine refuses a branch that is not
 		// local, and git itself refuses one already checked out elsewhere.
 		if req.Branch == "" || !isGitArgSafe(req.Branch) {
@@ -401,6 +470,18 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 		// engine refuses a target that is not strictly ahead. Decision-free
 		// and never history-rewriting, so the labelled menu row is
 		// confirmation enough (the DnD pair-menu standing).
+		//
+		// The commits panel targets a COMMIT instead — it has no branch name
+		// to send. Hex-only (the checkout lane's rule): a commit id is
+		// content-addressed, so there is nothing to resolve against a read.
+		if req.Sha != "" {
+			if !isHexSha(req.Sha) {
+				writeErr(w, http.StatusBadRequest, errors.New("invalid commit"))
+				return
+			}
+			op = engine.FastForward{Commit: req.Sha}
+			break
+		}
 		if req.Branch == "" || !isGitArgSafe(req.Branch) {
 			writeErr(w, http.StatusBadRequest, errors.New("invalid branch"))
 			return
@@ -826,6 +907,41 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusAccepted)
 		_ = json.NewEncoder(w).Encode(map[string]string{"op_id": run.id})
 		return
+	case "restore-entry":
+		// Put a stored entry's content back on disk. Restoring a BOOKMARK
+		// writes what it points at today; restoring a SHELF entry writes the
+		// frozen copy — the distinction between the two stores, made visible.
+		built, code, berr := s.buildRestore(r, req)
+		if berr != nil {
+			writeErr(w, code, berr)
+			return
+		}
+		op = built
+	case "shelf-cherry-pick":
+		// Re-apply a shelved commit: live cherry-pick while the commit
+		// exists, else the frozen format-patch mailbox. The patch lane leaves
+		// a temp file behind, so the run owns its cleanup.
+		built, cleanup, code, cerr := s.buildShelfCherryPick(r, req)
+		if cerr != nil {
+			writeErr(w, code, cerr)
+			return
+		}
+		if cleanup != nil {
+			run, rerr := s.startRun("op", func(ctx context.Context, svc *domain.Service, events chan<- engine.Event, dec engine.Decider) (engine.Result, map[string]any, error) {
+				defer cleanup()
+				res, err := svc.Execute(ctx, built, events, dec)
+				return res, nil, err
+			})
+			if rerr != nil {
+				writeErr(w, http.StatusConflict, rerr)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			w.WriteHeader(http.StatusAccepted)
+			_ = json.NewEncoder(w).Encode(map[string]string{"op_id": run.id})
+			return
+		}
+		op = built
 	default:
 		writeErr(w, http.StatusBadRequest, fmt.Errorf("unknown op %q", req.Op))
 		return

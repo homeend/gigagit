@@ -16,7 +16,7 @@ import (
 
 // uiSections are the sidebar lists whose folded state is remembered. Wire
 // values are resolved against this allowlist, like every other web input.
-var uiSections = []string{"branches", "remotes", "worktrees", "tags", "stashes", "reflog"}
+var uiSections = []string{"branches", "remotes", "worktrees", "tags", "stashes", "reflog", "bookmarks", "shelf"}
 
 // uiMaxPaneWidth bounds a stored pane width. The client clamps against the
 // live window anyway; this only keeps a nonsense value out of the state file.

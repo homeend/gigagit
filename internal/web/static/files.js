@@ -2,6 +2,7 @@
 // see app.js (the entry module) for the load order.
 import { $, esc, getJSON, postJSON, runes, state } from "./core.js";
 import { copyText, showCtxMenu } from "./layers.js";
+import { addFileEntry } from "./sidebar.js";
 import { applyStatus, fetchStatus } from "./status.js";
 import { opLine, showLocalConfirm, startOp } from "./ops.js";
 import { openFileBlame, openFileHistory } from "./filehist.js";
@@ -1082,6 +1083,10 @@ $("files-list").addEventListener("contextmenu", (e) => {
       [
         { label: "file history", act: () => openFileHistory(f.path, rev) },
         { label: "blame at this commit", act: () => openFileBlame(f.path, rev) },
+        // gg's own stores, addressed at the commit being viewed: a bookmark
+        // points AT this version, a shelf entry freezes its bytes.
+        { label: "bookmark this file", act: () => addFileEntry("bookmarks", f.path, "committed", rev) },
+        { label: "add to shelf", act: () => addFileEntry("shelf", f.path, "committed", rev) },
         ...copyPathRows(f.path),
       ],
       e.clientX,
@@ -1100,6 +1105,11 @@ $("files-list").addEventListener("contextmenu", (e) => {
   else if (f.section === "conflicts") items.push({ label: "mark resolved (stage as-is)", act: () => stage({ paths: [f.path] }) });
   else items.push({ label: "stage " + f.path, act: () => stage({ paths: [f.path] }) });
   items.push(...copyPathRows(f.path));
+  // The address depends on WHICH list the row is in — a staged file and its
+  // working-tree twin are different addresses, not one file in two moods.
+  const fstate = f.section === "staged" ? "staged" : f.section === "untracked" ? "untracked" : "unstaged";
+  items.push({ label: "bookmark this file", act: () => addFileEntry("bookmarks", f.path, fstate, "") });
+  items.push({ label: "add to shelf", act: () => addFileEntry("shelf", f.path, fstate, "") });
   // history/blame only where git has something to say: an untracked file
   // was never committed (empty history, blame errors), and a staged NEW
   // file ("A") is the same file one step later. A conflicted file keeps
