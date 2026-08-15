@@ -151,3 +151,39 @@ func TestReconcilePageDoesNotAliasLoaded(t *testing.T) {
 		t.Fatalf("merged aliases loaded: loaded[0] = %q", loaded[0].Hash)
 	}
 }
+
+// A refresh exists to show what CHANGED, and a decoration is a change: tagging
+// a commit that is already loaded adds a ref to a row whose hash is identical.
+// Keeping the old row there — which is what "the overlap is unchanged" used to
+// mean — left a new tag invisible until the whole feed was rebuilt.
+func TestReconcileTakesFreshRowsForTheOverlap(t *testing.T) {
+	loaded := cs("c5 c4 c3 c2 c1")
+	page := cs("c6 c5 c4")
+	// c4 has just been tagged; the fresh walk sees it, the loaded copy cannot.
+	page[2].Refs = []model.Ref{{Name: "v1", Kind: model.RefTag}}
+
+	merged, skip, ok := reconcilePage(loaded, page)
+	if !ok {
+		t.Fatal("reconcile refused a page that overlaps")
+	}
+	if got := hashList(merged); got != "c6 c5 c4 c3 c2 c1" {
+		t.Fatalf("merged = %q", got)
+	}
+	if skip != 1 {
+		t.Errorf("skipDelta = %d, want 1", skip)
+	}
+	var tagged *model.Commit
+	for i := range merged {
+		if merged[i].Hash == "c4" {
+			tagged = &merged[i]
+		}
+	}
+	if tagged == nil || len(tagged.Refs) != 1 || tagged.Refs[0].Name != "v1" {
+		t.Errorf("c4 = %+v, want the fresh row carrying tag v1", tagged)
+	}
+	// The rows the page did not reach keep their loaded copies — that is what
+	// makes a deep search survive a refresh.
+	if merged[len(merged)-1].Hash != "c1" {
+		t.Errorf("tail = %q, want the deep pages kept", hashList(merged))
+	}
+}
