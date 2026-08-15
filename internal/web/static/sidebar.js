@@ -1,23 +1,26 @@
 // sidebar.js — part of gg's web client. Split from the original app.js;
 // see app.js (the entry module) for the load order.
-import { $, SECTIONS, charWidth, defaultWorktreePath, elidePath, esc, getJSON, lsGet, lsSet, state } from "./core.js";
+import { $, SECTIONS, charWidth, defaultWorktreePath, elidePath, esc, getJSON, lsGet, lsSet, postJSON, state } from "./core.js";
 import { saveUI } from "./uistate.js";
 import { closePrompt, copyText, openPrompt, showCtxMenu } from "./layers.js";
-import { doForcePush, doPull, doPullBranch, doPush, doPushBranch, doReroot, openCreateBranchPrompt, showLocalConfirm, startOp, startSwitch } from "./ops.js";
+import { doForcePush, doPull, doPullBranch, doPush, doPushBranch, doReroot, opLine, openCreateBranchPrompt, showLocalConfirm, startOp, startSwitch } from "./ops.js";
 import { openVersions } from "./versions.js";
 import { openRebaseEditor } from "./rebase.js";
 import { startReview } from "./review.js";
 import { gotoBranchTip, openCommitByHash, openStashDetail, setSolo } from "./commits.js";
 import { openCompare } from "./files.js";
+import { openFileHistory } from "./filehist.js";
 
 async function fetchBranches() {
-  const [b, w, tg, st, rl, rm] = await Promise.all([
+  const [b, w, tg, st, rl, rm, bm, sh] = await Promise.all([
     getJSON("/api/branches"),
     getJSON("/api/worktrees").catch(() => ({ worktrees: [] })),
     getJSON("/api/tags").catch(() => ({ tags: [], truncated: false })),
     getJSON("/api/stashes").catch(() => ({ stashes: [] })),
     getJSON("/api/reflog?limit=" + reflogWindow).catch(() => ({ entries: [], truncated: false })),
     getJSON("/api/remotes").catch(() => ({ remotes: [], truncated: false })),
+    getJSON("/api/bookmarks").catch(() => ({ entries: [] })),
+    getJSON("/api/shelf").catch(() => ({ entries: [] })),
   ]);
   state.branches = b.branches || [];
   state.worktrees = w.worktrees || [];
@@ -28,12 +31,16 @@ async function fetchBranches() {
   state.reflogTruncated = !!rl.truncated;
   state.remotes = rm.remotes || [];
   state.remotesTruncated = !!rm.truncated;
+  state.bookmarks = bm.entries || [];
+  state.shelf = sh.entries || [];
   renderBranches();
   renderRemotes();
   renderWorktrees();
   renderTags();
   renderStashes();
   renderReflog();
+  renderBookmarks();
+  renderShelf();
 }
 
 
@@ -565,7 +572,7 @@ $("worktrees-list").addEventListener("contextmenu", (e) => {
 // lists you consult now and then, so the sidebar opens on what you steer with
 // (branches, remotes, worktrees) rather than a screenful of tags. It applies
 // only until something is saved - after that, your own layout is what returns.
-const COLLAPSED_DEFAULT = ["tags", "stashes", "reflog"];
+const COLLAPSED_DEFAULT = ["tags", "stashes", "reflog", "bookmarks", "shelf"];
 
 // Every header carries its state as a chevron - pointing down when open,
 // right when folded - so a folded section still reads as something you can open.
@@ -773,6 +780,10 @@ function showReflogMenu(en, x, y) {
             onSubmit: (name) => startOp({ op: "checkout", sha: en.hash, name }, "creating " + name + " at " + short),
           }),
       },
+      // The TUI's reflog rows: keep a lost commit as a live reference, or
+      // freeze its files so they survive the commit being gc'd.
+      { label: "bookmark this commit…", act: () => addCommitEntry("bookmarks", en.hash, en.subject) },
+      { label: "shelf this commit…", act: () => addCommitEntry("shelf", en.hash, en.subject) },
       { sep: true },
       {
         // Empty mode = the engine's interactive flow: the soft/mixed/hard
@@ -812,4 +823,224 @@ new ResizeObserver(() => {
   });
 }).observe($("branches-pane"));
 
-export { applyStoredSections, branchesList, clearDropTargets, fetchBranches, renderBranches, renderReflog, renderRemotes, renderStashes, renderTags, renderWorktrees, showBranchMenu, showBranchPairMenu, showReflogMenu, showRemoteMenu, showStashMenu, showTagMenu, showWorktreeMenu, toggleSection, worktreePathForBranch };
+
+// Bookmarks and the shelf are gg's own stores, not git's: a bookmark is a LIVE
+// reference (to a file or a commit), a shelf entry is a FROZEN copy. Both rows
+// lead with the name you gave the entry, falling back to the store's own
+// display string ("path @ container") when you gave none.
+function entryLabel(e) {
+  return e.label || e.display || e.id;
+}
+
+
+function renderBookmarks() {
+  $("bookmarks-list").innerHTML = (state.bookmarks || [])
+    .map(
+      (e) =>
+        `<li data-id="${esc(e.id)}" title="${esc(e.display)}">${mark(false)}` +
+        `<span class="ekind">${e.is_commit ? "◆" : "▪"}</span>` +
+        `${esc(entryLabel(e))}</li>`
+    )
+    .join("");
+}
+
+
+function renderShelf() {
+  $("shelf-list").innerHTML = (state.shelf || [])
+    .map(
+      (e) =>
+        `<li data-id="${esc(e.id)}" title="${esc(e.display)}">${mark(false)}` +
+        `<span class="ekind">${e.kind === "commit" ? "◆" : "▪"}</span>` +
+        `${esc(entryLabel(e))}</li>`
+    )
+    .join("");
+}
+
+
+// --- adding to either store ------------------------------------------------
+// Both stores take an optional NAME, and the TUI prefills it with the commit's
+// subject — so the same prompt serves both, and an empty name is impossible
+// (a prompt never submits one), which is why the subject is the default rather
+// than a placeholder.
+function addCommitEntry(store, sha, subject) {
+  const what = store === "shelf" ? "Shelve" : "Bookmark";
+  openPrompt({
+    title: what + " " + sha.slice(0, 8) + " — name it:",
+    value: subject || sha.slice(0, 8),
+    onSubmit: async (label) => {
+      try {
+        await postJSON("/api/" + store, { sha, label });
+      } catch (e) {
+        opLine(store + ": " + (e.message || e), true);
+        return;
+      }
+      opLine(store === "shelf" ? "shelved " + sha.slice(0, 8) : "bookmarked " + sha.slice(0, 8));
+      fetchBranches();
+    },
+  });
+}
+
+
+// A FILE entry carries no name — the address IS the name — so it is one click.
+async function addFileEntry(store, path, fileState, sha) {
+  try {
+    await postJSON("/api/" + store, { path, state: fileState, sha: sha || "" });
+  } catch (e) {
+    opLine(store + ": " + (e.message || e), true);
+    return;
+  }
+  opLine((store === "shelf" ? "shelved " : "bookmarked ") + path);
+  fetchBranches();
+}
+
+
+async function removeEntry(store, id) {
+  try {
+    await fetch("/api/" + store + "?id=" + encodeURIComponent(id), { method: "DELETE" });
+  } catch (e) {
+    opLine(store + ": " + (e.message || e), true);
+    return;
+  }
+  fetchBranches();
+}
+
+
+// Opening an entry means showing what it points at: a commit opens the commit,
+// a file opens that file's history (the surface that works whether or not the
+// file is still in the working tree).
+function openEntry(e) {
+  if (e.is_commit || e.kind === "commit") {
+    if (e.commit) openCommitByHash(e.commit, entryLabel(e));
+    else opLine("this entry is frozen content, not a commit in git", true);
+    return;
+  }
+  if (e.path) openFileHistory(e.path, e.commit || "");
+}
+
+
+// restorePrompt asks WHERE, prefilled with the entry's own path so the common
+// case ("put it back") is one enter. The destination is repo-relative — the
+// op writes into the working tree — and the overwrite question, if the file is
+// already there and differs, parks in the modal from the engine itself.
+function restorePrompt(store, e, innerPath) {
+  const path = innerPath || e.path || "";
+  openPrompt({
+    title: "Restore " + (innerPath || entryLabel(e)) + " to (path in the repo):",
+    value: path,
+    placeholder: "path/inside/the/repo.txt",
+    onSubmit: (dest) =>
+      startOp({ op: "restore-entry", store, id: e.id, path: innerPath || "", dest }, "restoring " + dest),
+  });
+}
+
+
+// pickShelfFile lists what a shelved COMMIT froze and restores the one picked.
+// A menu of paths, because the entry's files are not otherwise visible.
+async function pickShelfFile(e, x, y) {
+  const got = await getJSON("/api/shelf/files?id=" + encodeURIComponent(e.id)).catch(() => null);
+  if (!got || !(got.files || []).length) {
+    opLine("this entry lists no files", true);
+    return;
+  }
+  showCtxMenu(
+    got.files.map((p) => ({ label: p, act: () => restorePrompt("shelf", e, p) })),
+    x,
+    y
+  );
+}
+
+
+function showBookmarkMenu(e, x, y) {
+  const items = [];
+  if (e.is_commit && e.commit) items.push({ label: "show commit", act: () => openEntry(e) });
+  else if (e.path) items.push({ label: "file history", act: () => openEntry(e) });
+  if (e.commit) items.push({ label: "copy commit id", act: () => copyText(e.commit, "commit id " + e.commit.slice(0, 8)) });
+  if (e.path) items.push({ label: "copy path", act: () => copyText(e.path, "path " + e.path) });
+  if (e.path) {
+    items.push({ sep: true });
+    // A bookmark is LIVE, so this writes what it points at today — not a
+    // snapshot from when you bookmarked it. That is the shelf's job.
+    items.push({ label: "copy its content to a path…", act: () => restorePrompt("bookmarks", e, "") });
+  }
+  items.push({ sep: true });
+  items.push({
+    label: "remove bookmark",
+    danger: true,
+    act: () =>
+      showLocalConfirm("Remove the bookmark " + entryLabel(e) + "?", ["remove", "abort"], (o) => {
+        if (o === "remove") removeEntry("bookmarks", e.id);
+      }),
+  });
+  showCtxMenu(items, x, y);
+}
+
+
+function showShelfMenu(e, x, y) {
+  const items = [];
+  if (e.kind === "commit") {
+    if (e.commit) items.push({ label: "show the original commit", act: () => openEntry(e) });
+    items.push({ sep: true });
+    // The frozen files are the entry's real content; restoring one is picked
+    // from a list of them rather than typed from memory.
+    items.push({ label: "restore a file…", act: () => pickShelfFile(e, x, y) });
+    items.push({
+      // Re-applies the commit: a live cherry-pick while it still exists, else
+      // the patch frozen with the files. The server picks the lane.
+      label: "cherry-pick this commit",
+      act: () =>
+        showLocalConfirm("Apply " + entryLabel(e) + " onto the current branch?", ["cherry-pick", "abort"], (o) => {
+          if (o === "cherry-pick") startOp({ op: "shelf-cherry-pick", id: e.id }, "applying " + entryLabel(e));
+        }),
+    });
+  } else if (e.path) {
+    items.push({ label: "file history", act: () => openEntry(e) });
+    items.push({ label: "copy path", act: () => copyText(e.path, "path " + e.path) });
+    items.push({ sep: true });
+    items.push({ label: "restore to a path…", act: () => restorePrompt("shelf", e, "") });
+  }
+  items.push({ sep: true });
+  items.push({
+    label: "remove from the shelf",
+    danger: true,
+    // A shelf entry is the only copy of its content once the source is gone,
+    // so removing one is confirmed even though it costs a click.
+    act: () =>
+      showLocalConfirm("Remove " + entryLabel(e) + " from the shelf? The frozen copy is deleted.", ["remove", "abort"], (o) => {
+        if (o === "remove") removeEntry("shelf", e.id);
+      }),
+  });
+  showCtxMenu(items, x, y);
+}
+
+
+$("bookmarks-list").addEventListener("click", (e) => {
+  const li = e.target.closest("li");
+  if (!li || !li.dataset.id) return;
+  const b = (state.bookmarks || []).find((x) => x.id === li.dataset.id);
+  if (b) openEntry(b);
+});
+
+$("bookmarks-list").addEventListener("contextmenu", (e) => {
+  const li = e.target.closest("li");
+  if (!li || !li.dataset.id) return;
+  e.preventDefault();
+  const b = (state.bookmarks || []).find((x) => x.id === li.dataset.id);
+  if (b) showBookmarkMenu(b, e.clientX, e.clientY);
+});
+
+$("shelf-list").addEventListener("click", (e) => {
+  const li = e.target.closest("li");
+  if (!li || !li.dataset.id) return;
+  const s = (state.shelf || []).find((x) => x.id === li.dataset.id);
+  if (s) openEntry(s);
+});
+
+$("shelf-list").addEventListener("contextmenu", (e) => {
+  const li = e.target.closest("li");
+  if (!li || !li.dataset.id) return;
+  e.preventDefault();
+  const s = (state.shelf || []).find((x) => x.id === li.dataset.id);
+  if (s) showShelfMenu(s, e.clientX, e.clientY);
+});
+
+export { addCommitEntry, addFileEntry, applyStoredSections, branchesList, clearDropTargets, fetchBranches, renderBranches, renderReflog, renderRemotes, renderStashes, renderTags, renderWorktrees, showBranchMenu, showBranchPairMenu, showReflogMenu, showRemoteMenu, showStashMenu, showTagMenu, showWorktreeMenu, toggleSection, worktreePathForBranch };

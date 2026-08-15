@@ -6,6 +6,7 @@ import { closePrompt, copyText, openPrompt, showCtxMenu } from "./layers.js";
 import { wtCount, wtExtra, wtRowHTML } from "./status.js";
 import { opBusy, opLine, openCreateBranchPrompt, showLocalConfirm, startOp } from "./ops.js";
 import { rev, startReview } from "./review.js";
+import { addCommitEntry } from "./sidebar.js";
 import { drillOut, enterFilesStage, openWorkingTree, renderFiles } from "./files.js";
 import { focusPane, moveCursor } from "./keys.js";
 
@@ -571,6 +572,12 @@ function showCommitMenu(c, i, x, y) {
       act: () => startOp({ op: "fast-forward", sha: c.hash }, "fast-forwarding " + cur.name + " to " + short),
     });
   }
+  items.push({ sep: true });
+  // gg's own stores: a bookmark is a LIVE reference to this commit, a shelf
+  // entry freezes its changed files so they outlive a gc or a rewrite. Both
+  // ask for a name, prefilled with the subject (the TUI's popup).
+  items.push({ label: "bookmark this commit…", act: () => addCommitEntry("bookmarks", c.hash, c.subject) });
+  items.push({ label: "shelf this commit…", act: () => addCommitEntry("shelf", c.hash, c.subject) });
   items.push({ sep: true });
   // Review just this commit's own change (sha^..sha, resolved server-side).
   // Offered unconditionally: whether a review tool is configured is the

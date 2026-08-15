@@ -33,6 +33,8 @@ const state = {
   tags: [],
   tagsTruncated: false,
   stashes: [],
+  bookmarks: [], // gg's own store: live references to a file or a commit
+  shelf: [],     // gg's own store: frozen copies (a file's bytes, a commit's files)
   sidebar: true,
   op: null, // {id, es: EventSource} while an operation is live
   lastDiff: null,
@@ -62,7 +64,7 @@ const DANGER_OPTIONS = new Set([
 ]);
 
 
-const SECTIONS = ["branches", "remotes", "worktrees", "tags", "stashes", "reflog"];
+const SECTIONS = ["branches", "remotes", "worktrees", "tags", "stashes", "reflog", "bookmarks", "shelf"];
 
 
 // localStorage can throw (private mode); persistence is best-effort.

@@ -32,6 +32,9 @@ type opStartRequest struct {
 	Email       string `json:"email"`  // set-identity: user.email
 	Global      bool   `json:"global"` // set-identity: write the global scope instead of the repo's
 	Edit        string `json:"edit"`   // commit-edit: drop | move-up | move-down
+	Store       string `json:"store"`  // restore-entry: "bookmarks" | "shelf"
+	ID          string `json:"id"`     // restore-entry / shelf-cherry-pick: the entry's id
+	Dest        string `json:"dest"`   // restore-entry: where the content is written
 	Mode        string `json:"mode"`   // reset: "" (interactive picker) | soft | mixed | hard
 	Switch      bool   `json:"switch"` // checkout-remote: switch to the new local branch
 	Force       bool   `json:"force"`
@@ -904,6 +907,41 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusAccepted)
 		_ = json.NewEncoder(w).Encode(map[string]string{"op_id": run.id})
 		return
+	case "restore-entry":
+		// Put a stored entry's content back on disk. Restoring a BOOKMARK
+		// writes what it points at today; restoring a SHELF entry writes the
+		// frozen copy — the distinction between the two stores, made visible.
+		built, code, berr := s.buildRestore(r, req)
+		if berr != nil {
+			writeErr(w, code, berr)
+			return
+		}
+		op = built
+	case "shelf-cherry-pick":
+		// Re-apply a shelved commit: live cherry-pick while the commit
+		// exists, else the frozen format-patch mailbox. The patch lane leaves
+		// a temp file behind, so the run owns its cleanup.
+		built, cleanup, code, cerr := s.buildShelfCherryPick(r, req)
+		if cerr != nil {
+			writeErr(w, code, cerr)
+			return
+		}
+		if cleanup != nil {
+			run, rerr := s.startRun("op", func(ctx context.Context, svc *domain.Service, events chan<- engine.Event, dec engine.Decider) (engine.Result, map[string]any, error) {
+				defer cleanup()
+				res, err := svc.Execute(ctx, built, events, dec)
+				return res, nil, err
+			})
+			if rerr != nil {
+				writeErr(w, http.StatusConflict, rerr)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			w.WriteHeader(http.StatusAccepted)
+			_ = json.NewEncoder(w).Encode(map[string]string{"op_id": run.id})
+			return
+		}
+		op = built
 	default:
 		writeErr(w, http.StatusBadRequest, fmt.Errorf("unknown op %q", req.Op))
 		return
