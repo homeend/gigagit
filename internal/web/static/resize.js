@@ -1,6 +1,7 @@
 // resize.js — part of gg's web client. Split from the original app.js;
 // see app.js (the entry module) for the load order.
 import { $, lsGet, lsSet, state } from "./core.js";
+import { saveUI } from "./uistate.js";
 import { renderCommits } from "./commits.js";
 import { renderDiff } from "./files.js";
 
@@ -13,6 +14,24 @@ import { renderDiff } from "./files.js";
 // ellipsize, so a fixed sidebar width left a long name unreadable with no
 // recourse. Widths live as CSS custom properties on #panes and persist
 // per handle.
+// rememberWidth stores a dragged width twice: localStorage for this session
+// (instant on reload) and gg's state file for the next run — gg web's port,
+// and so this page's origin, changes every launch.
+function rememberWidth(cfg) {
+  lsSet(cfg.key, String(cfg.want));
+  saveUI(cfg.key === "gg.sidebar.width" ? { sidebar_width: cfg.want } : { files_width: cfg.want });
+}
+
+
+// applyStoredWidths re-applies widths restored from the server. Zero or
+// missing means "never dragged" and leaves the default standing.
+function applyStoredWidths(sidebarWidth, filesWidth) {
+  if (sidebarWidth > 0) RESIZERS["rs-sidebar"].want = sidebarWidth;
+  if (filesWidth > 0) RESIZERS["rs-detail"].want = filesWidth;
+  applyPaneWidths();
+}
+
+
 const RESIZERS = {
   "rs-sidebar": { prop: "--sb-w", key: "gg.sidebar.width", def: 230 },
   "rs-detail": { prop: "--files-w", key: "gg.panes.files-width", def: 320, right: true },
@@ -79,7 +98,7 @@ function initResizer(id) {
       el.removeEventListener("pointermove", onMove);
       el.removeEventListener("pointerup", onUp);
       el.removeEventListener("pointercancel", onUp);
-      lsSet(cfg.key, String(cfg.want));
+      rememberWidth(cfg);
     };
     el.addEventListener("pointermove", onMove);
     el.addEventListener("pointerup", onUp);
@@ -89,7 +108,7 @@ function initResizer(id) {
   el.addEventListener("dblclick", () => {
     cfg.want = cfg.def;
     setPaneWidth(cfg, clampPaneWidth(cfg, cfg.want));
-    lsSet(cfg.key, String(cfg.want));
+    rememberWidth(cfg);
   });
 }
 
@@ -105,4 +124,4 @@ window.addEventListener("resize", () => {
   if (state.lastDiff) renderDiff(state.lastDiff); // unified↔side-by-side is width-dependent
 });
 
-export { RESIZERS, RS_KEEP, RS_MIN, applyPaneWidths, clampPaneWidth, initResizer, setPaneWidth };
+export { RESIZERS, applyStoredWidths, RS_KEEP, RS_MIN, applyPaneWidths, clampPaneWidth, initResizer, setPaneWidth };

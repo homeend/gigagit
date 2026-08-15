@@ -112,4 +112,132 @@ function runes(s) {
   return Array.from(s);
 }
 
-export { $, DANGER_OPTIONS, ROW_H, SECTIONS, esc, getJSON, lsGet, lsSet, postJSON, runes, ssGet, ssSet, state };
+
+// --- path elision (port of internal/tui/elide.go) ---
+// The whole UI is monospace, so "display columns" are just characters here and
+// the arithmetic matches the TUI's exactly. Keep the two in sync: the browser
+// check in the CDP harness compares this against the Go implementation's
+// output over a shared case table.
+
+// splitPathSegs tokenizes a path (no trailing separator) into {sep, text}
+// segments, preserving each segment's preceding separator run verbatim.
+function splitPathSegs(s) {
+  const segs = [];
+  let cur = { sep: "", text: "" };
+  for (const r of runes(s)) {
+    if (r === "/" || r === "\\") {
+      if (cur.text !== "") { segs.push(cur); cur = { sep: "", text: "" }; }
+      cur.sep += r;
+    } else {
+      cur.text += r;
+    }
+  }
+  segs.push(cur);
+  return segs;
+}
+
+
+// elidePath shortens a filesystem path to at most n columns by dropping WHOLE
+// segments from the middle, marked by a single "…". Segments survive by
+// priority: the final one (the file/repo name) first, then the directory just
+// before it, then the path's FIRST segment, then alternating right/left
+// working inward. The dropped run is always contiguous, so the result reads
+// head + "…" + tail. When not even "…/<name>" fits, the name itself is cut in
+// the middle.
+function elidePath(s, n) {
+  if (n <= 0) return "";
+  if (runes(s).length <= n) return s;
+  if (n === 1) return "…";
+  const trimmed = s.replace(/[/\\]+$/, "");
+  const trail = s.slice(trimmed.length);
+  if (trimmed === "") return runes(s).slice(0, n).join(""); // a pure separator run
+  const segs = splitPathSegs(trimmed);
+  const last = segs.length - 1;
+  if (last === 0) return elideNameMiddle(segs[0].text, n - runes(trail).length) + trail;
+  // build renders segs[:keepL], a "…" for the dropped middle, then segs[keepR:].
+  // The "…" borrows the first dropped segment's separator so it slots into the
+  // path ("/mnt/…/name"); with no prefix kept it leads bare ("…/name").
+  const build = (keepL, keepR) => {
+    let b = "";
+    for (let i = 0; i < keepL; i++) b += segs[i].sep + segs[i].text;
+    if (keepL < keepR) {
+      if (keepL > 0) b += segs[keepL].sep;
+      b += "…";
+    }
+    for (let i = keepR; i < segs.length; i++) b += segs[i].sep + segs[i].text;
+    return b + trail;
+  };
+  if (runes(build(0, last)).length > n) {
+    return elideNameMiddle(segs[last].text, n - runes(trail).length) + trail;
+  }
+  // Grow both kept runs inward, right first, in strict priority order. A side
+  // closes permanently once its next segment no longer fits (widths only grow);
+  // skipping it for a deeper segment would leave a second gap.
+  let keepL = 0, keepR = last, leftNext = 0, rightNext = last - 1;
+  let leftOpen = true, rightOpen = true;
+  while (leftOpen || rightOpen) {
+    if (rightOpen) {
+      if (rightNext >= keepL && runes(build(keepL, rightNext)).length <= n) {
+        keepR = rightNext;
+        rightNext--;
+      } else {
+        rightOpen = false;
+      }
+    }
+    if (leftOpen) {
+      if (leftNext < keepR && runes(build(leftNext + 1, keepR)).length <= n) {
+        keepL = leftNext + 1;
+        leftNext++;
+      } else {
+        leftOpen = false;
+      }
+    }
+  }
+  return build(keepL, keepR);
+}
+
+
+// elideNameMiddle cuts a bare name (no separators) to at most n columns by
+// dropping its MIDDLE: the beginning plus the extension — or, with no
+// extension, the ending — survive around a "…".
+function elideNameMiddle(s, n) {
+  if (n <= 0) return "";
+  const r = runes(s);
+  if (r.length <= n) return s;
+  if (n === 1) return "…";
+  let tail = "";
+  const dot = s.lastIndexOf("."); // >0: a dotfile is a name, not an extension
+  if (dot > 0) tail = s.slice(dot);
+  if (tail === "" || runes(tail).length + 2 > n) {
+    tail = tailWidth(s, Math.floor((n - 1) / 3));
+  }
+  return r.slice(0, n - 1 - runes(tail).length).join("") + "…" + tail;
+}
+
+
+// tailWidth returns the longest trailing run of s at most w columns wide.
+function tailWidth(s, w) {
+  const r = runes(s);
+  for (let lo = 0; lo < r.length; lo++) {
+    if (r.length - lo <= w) return r.slice(lo).join("");
+  }
+  return "";
+}
+
+
+// charWidth measures one monospace column in CSS pixels, so a pixel budget can
+// be turned into the column count elidePath takes. Measured once against the
+// body font and cached; the probe is removed immediately.
+let charW = 0;
+function charWidth() {
+  if (charW) return charW;
+  const probe = document.createElement("span");
+  probe.textContent = "0".repeat(100);
+  probe.style.cssText = "position:absolute;visibility:hidden;white-space:pre;";
+  document.body.appendChild(probe);
+  charW = probe.getBoundingClientRect().width / 100 || 7.8;
+  probe.remove();
+  return charW;
+}
+
+export { $, DANGER_OPTIONS, ROW_H, SECTIONS, charWidth, elideNameMiddle, elidePath, esc, getJSON, lsGet, lsSet, postJSON, runes, splitPathSegs, ssGet, ssSet, state };

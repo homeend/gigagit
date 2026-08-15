@@ -1,6 +1,7 @@
 // sidebar.js — part of gg's web client. Split from the original app.js;
 // see app.js (the entry module) for the load order.
-import { $, SECTIONS, esc, getJSON, lsGet, lsSet, state } from "./core.js";
+import { $, SECTIONS, charWidth, elidePath, esc, getJSON, lsGet, lsSet, state } from "./core.js";
+import { saveUI } from "./uistate.js";
 import { closePrompt, copyText, openPrompt, showCtxMenu } from "./layers.js";
 import { openPrefixPicker } from "./prefixes.js";
 import { doForcePush, doPull, doPullBranch, doPush, doPushBranch, doReroot, showLocalConfirm, startOp, startSwitch } from "./ops.js";
@@ -37,14 +38,46 @@ async function fetchBranches() {
 }
 
 
+// MARK is the one "this is the current one" glyph, shared by every sidebar
+// list. Rows without it still reserve the column (mark("") below) so names
+// line up down the whole sidebar, section to section.
+const MARK = "✓";
+
+function mark(on) {
+  return `<span class="mk">${on ? MARK : ""}</span>`;
+}
+
+
+// listCols is how many monospace columns a sidebar row has to work with:
+// the list's own width less the li padding. Used to budget the elided
+// worktree path — the same column arithmetic the TUI does.
+function listCols(id) {
+  const el = $(id);
+  const w = el ? el.getBoundingClientRect().width : 0;
+  return Math.max(0, Math.floor((w - 20) / charWidth()));
+}
+
+
 function renderBranches() {
+  const cols = listCols("branches-list");
   $("branches-list").innerHTML = state.branches
     .map((b) => {
       const ab =
         (b.ahead ? "↑" + b.ahead : "") + (b.behind ? (b.ahead ? " " : "") + "↓" + b.behind : "");
+      // A branch checked out somewhere shows WHERE, like the TUI's
+      // "main (/path/to/worktree)" — middle-elided into whatever the row has
+      // left after the marker, the name and the ahead/behind counts. Too
+      // narrow to say anything useful (< 4 columns) and it is dropped rather
+      // than shown as a bare "…".
+      const path = worktreePathForBranch(b.name);
+      const budget = cols - 2 - Array.from(b.name).length - (ab ? ab.length + 1 : 0) - 1;
+      const wt = path && budget >= 4 ? elidePath(path, budget) : "";
       return (
-        `<li class="${b.is_head ? "head" : ""}" draggable="true" data-n="${esc(b.name)}">` +
-        `${b.is_head ? "✓ " : ""}${esc(b.name)}${ab ? `<span class="ab">${ab}</span>` : ""}</li>`
+        `<li class="${b.is_head ? "head" : ""}" draggable="true" data-n="${esc(b.name)}"` +
+        (path ? ` title="${esc(path)}"` : "") + `>` +
+        `${mark(b.is_head)}${esc(b.name)}` +
+        (wt ? `<span class="wpath">${esc(wt)}</span>` : "") +
+        `${ab ? `<span class="ab">${ab}</span>` : ""}</li>`
       );
     })
     .join("");
@@ -53,7 +86,7 @@ function renderBranches() {
 
 function renderRemotes() {
   let html = state.remotes
-    .map((rb) => `<li data-n="${esc(rb.name)}" data-h="${esc(rb.hash)}">${esc(rb.name)}</li>`)
+    .map((rb) => `<li data-n="${esc(rb.name)}" data-h="${esc(rb.hash)}">${mark(false)}${esc(rb.name)}</li>`)
     .join("");
   if (state.remotesTruncated) html += `<li class="more">… more (capped at 100)</li>`;
   $("remotes-list").innerHTML = html;
@@ -61,12 +94,20 @@ function renderRemotes() {
 
 
 function renderWorktrees() {
+  const cols = listCols("worktrees-list");
   $("worktrees-list").innerHTML = state.worktrees
     .map((w) => {
       const label = w.bare ? "(bare)" : w.detached ? "(detached)" : w.branch || "(?)";
-      const base = w.path.split("/").pop();
       const cur = state.worktree && w.path === state.worktree ? " cur" : "";
-      return `<li class="${cur.trim()}" data-p="${esc(w.path)}" title="${esc(w.path)}">${cur ? "● " : ""}${esc(label)}<span class="wpath">${esc(base)}</span></li>`;
+      // Same path treatment as the branch rows: as much of the real path as
+      // the row can hold, middle-elided, rather than a bare directory name.
+      const budget = cols - 2 - Array.from(label).length - 1;
+      const path = budget >= 4 ? elidePath(w.path, budget) : "";
+      return (
+        `<li class="${cur.trim()}" data-p="${esc(w.path)}" title="${esc(w.path)}">` +
+        `${mark(!!cur)}${esc(label)}` +
+        (path ? `<span class="wpath">${esc(path)}</span>` : "") + `</li>`
+      );
     })
     .join("");
 }
@@ -76,7 +117,7 @@ function renderTags() {
   let html = state.tags
     .map(
       (t) =>
-        `<li data-h="${esc(t.target)}" data-n="${esc(t.name)}">${esc(t.name)}` +
+        `<li data-h="${esc(t.target)}" data-n="${esc(t.name)}">${mark(false)}${esc(t.name)}` +
         (t.subject ? `<span class="tsub">${esc(t.subject)}</span>` : "") +
         `</li>`
     )
@@ -103,6 +144,7 @@ function renderReflog() {
     .map(
       (e) =>
         `<li data-h="${esc(e.hash)}" data-s="${esc(e.selector)}">` +
+        mark(false) +
         `<span class="rsel">${esc(e.selector.replace(/^HEAD@/, "@"))}</span>` +
         `<span class="rsha">${esc(e.short || "")}</span>` +
         `<span class="rsub">${esc(e.subject || "")}</span>` +
@@ -119,7 +161,7 @@ function renderStashes() {
   $("stashes-list").innerHTML = state.stashes
     .map(
       (s) =>
-        `<li data-r="${esc(s.ref)}"${s.sha ? ` data-h="${esc(s.sha)}"` : ""}>${esc(s.ref)}` +
+        `<li data-r="${esc(s.ref)}"${s.sha ? ` data-h="${esc(s.sha)}"` : ""}>${mark(false)}${esc(s.ref)}` +
         (s.subject ? `<span class="tsub">${esc(s.subject)}</span>` : "") +
         `</li>`
     )
@@ -517,31 +559,67 @@ $("worktrees-list").addEventListener("contextmenu", (e) => {
   if (w) showWorktreeMenu(w, e.clientX, e.clientY);
 });
 
-// Double-click a sidebar section header to collapse/expand its list — long
-// branch/tag lists otherwise force constant scrolling.
+// ONE left click on a sidebar section header folds or unfolds its list - long
+// branch/tag lists otherwise force constant scrolling. (It used to take a
+// double click, and two of the six lists ignored it entirely.)
+//
+// COLLAPSED_DEFAULT are the sections a FIRST RUN starts folded: the reference
+// lists you consult now and then, so the sidebar opens on what you steer with
+// (branches, remotes, worktrees) rather than a screenful of tags. It applies
+// only until something is saved - after that, your own layout is what returns.
+const COLLAPSED_DEFAULT = ["tags", "stashes", "reflog"];
+
+// Every header carries its state as a chevron - pointing down when open,
+// right when folded - so a folded section still reads as something you can open.
+function applySection(name, collapsed) {
+  $(name + "-list").classList.toggle("collapsed", collapsed);
+  $(name + "-header").textContent = (collapsed ? "\u25b8 " : "\u25be ") + name;
+}
+
+
+function foldedSections() {
+  return SECTIONS.filter((n) => $(n + "-list").classList.contains("collapsed"));
+}
+
+
 function toggleSection(name) {
-  const collapsed = $(name + "-list").classList.toggle("collapsed");
-  $(name + "-header").textContent = (collapsed ? "\u25b8 " : "") + name;
-  lsSet("gg.sidebar.collapsed", JSON.stringify(SECTIONS.filter((n) => $(n + "-list").classList.contains("collapsed"))));
+  applySection(name, !$(name + "-list").classList.contains("collapsed"));
+  const folded = foldedSections();
+  lsSet("gg.sidebar.collapsed", JSON.stringify(folded)); // same-session cache
+  saveUI({ sections: folded }); // the copy that survives a restart
+}
+
+
+// applyStoredSections re-applies a layout that came back from the server. The
+// caller passes null on a first run, which leaves COLLAPSED_DEFAULT standing.
+function applyStoredSections(names) {
+  if (!Array.isArray(names)) return;
+  SECTIONS.forEach((n) => applySection(n, names.includes(n)));
 }
 
 SECTIONS.forEach((n) => {
-  $(n + "-header").addEventListener("dblclick", () => toggleSection(n));
+  $(n + "-header").addEventListener("click", () => toggleSection(n));
 });
 
 
 // Restore persisted sidebar state (b-key visibility + per-section
 // collapse). The collapsed class lives on the persistent <ul> containers,
 // so a one-time boot restore survives every re-render.
+// A MISSING key is a first run and gets COLLAPSED_DEFAULT; a saved EMPTY list
+// means "I opened them all", a decision to honour - so the two are
+// deliberately not conflated.
 (function restoreSidebar() {
-  let names = [];
-  try { names = JSON.parse(lsGet("gg.sidebar.collapsed") || "[]"); } catch {}
-  SECTIONS.forEach((n) => {
-    if (names.includes(n)) {
-      $(n + "-list").classList.add("collapsed");
-      $(n + "-header").textContent = "\u25b8 " + n;
+  const saved = lsGet("gg.sidebar.collapsed");
+  let names = COLLAPSED_DEFAULT;
+  if (saved !== null && saved !== undefined && saved !== "") {
+    try {
+      const parsed = JSON.parse(saved);
+      names = Array.isArray(parsed) ? parsed : COLLAPSED_DEFAULT;
+    } catch {
+      names = COLLAPSED_DEFAULT;
     }
-  });
+  }
+  SECTIONS.forEach((n) => applySection(n, names.includes(n)));
   if (lsGet("gg.sidebar.hidden") === "1") {
     state.sidebar = false;
     $("panes").classList.add("nosb");
@@ -712,4 +790,20 @@ $("reflog-list").addEventListener("contextmenu", (e) => {
   if (en) showReflogMenu(en, e.clientX, e.clientY);
 });
 
-export { branchesList, clearDropTargets, defaultWorktreePath, fetchBranches, openCreateBranchPrompt, renderBranches, renderReflog, renderRemotes, renderStashes, renderTags, renderWorktrees, showBranchMenu, showBranchPairMenu, showReflogMenu, showRemoteMenu, showStashMenu, showTagMenu, showWorktreeMenu, toggleSection, worktreePathForBranch };
+
+// The path budget is measured in COLUMNS of the pane, so widening or narrowing
+// the sidebar (drag handle, window resize) has to rebuild those rows —
+// otherwise a pane with room to spare keeps showing yesterday's elision.
+// rAF-coalesced, because a drag fires this per pixel.
+let rowsPending = false;
+new ResizeObserver(() => {
+  if (rowsPending) return;
+  rowsPending = true;
+  requestAnimationFrame(() => {
+    rowsPending = false;
+    renderBranches();
+    renderWorktrees();
+  });
+}).observe($("branches-pane"));
+
+export { applyStoredSections, branchesList, clearDropTargets, defaultWorktreePath, fetchBranches, openCreateBranchPrompt, renderBranches, renderReflog, renderRemotes, renderStashes, renderTags, renderWorktrees, showBranchMenu, showBranchPairMenu, showReflogMenu, showRemoteMenu, showStashMenu, showTagMenu, showWorktreeMenu, toggleSection, worktreePathForBranch };

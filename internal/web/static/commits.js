@@ -1,6 +1,7 @@
 // commits.js — part of gg's web client. Split from the original app.js;
 // see app.js (the entry module) for the load order.
 import { $, ROW_H, esc, getJSON, lsGet, lsSet, postJSON, runes, state } from "./core.js";
+import { saveUI } from "./uistate.js";
 import { copyText, openPrompt, showCtxMenu } from "./layers.js";
 import { wtCount, wtExtra, wtRowHTML } from "./status.js";
 import { opBusy, opLine, showLocalConfirm, startOp } from "./ops.js";
@@ -183,8 +184,16 @@ function flatDotSVG(color) {
 
 
 function toggleGraphMode() {
-  state.graphMode = state.graphMode === "svg" ? "off" : "svg";
-  lsSet("gg.graph", state.graphMode);
+  applyGraphMode(state.graphMode === "svg" ? "off" : "svg");
+  lsSet("gg.graph", state.graphMode); // same-session cache
+  saveUI({ graph: state.graphMode }); // the copy that survives a restart
+}
+
+
+// applyGraphMode is the shared "render the graph this way" step, used by the
+// toggle, by the big-repo banner and by the layout restored at boot.
+function applyGraphMode(mode) {
+  state.graphMode = mode === "off" ? "off" : "svg";
   renderCommits();
 }
 
@@ -533,4 +542,4 @@ function commitEdit(c, edit) {
   const what = edit === "drop" ? "dropping " : edit === "move-up" ? "moving up " : "moving down ";
   startOp({ op: "commit-edit", sha: c.hash, edit }, what + short);
 }
-export { BOT_TOUCH, CELL_W, GLYPH_PATHS, HALF, MID, TOP_TOUCH, applyCommitFilter, closeCommitFilter, commitEdit, flatDotSVG, gotoBranchTip, gotoCommit, gotoCommitPrompt, graphHTML, graphSVG, laneColor, laneColors, loadCommits, maybeLoadMore, openCommit, openCommitByHash, openCommitFilter, openStashDetail, renderCommits, renderFilteredCommits, revealCommit, rowHTML, setSolo, setSoloChip, showCommitMenu, toggleGraphMode };
+export { applyGraphMode, BOT_TOUCH, CELL_W, GLYPH_PATHS, HALF, MID, TOP_TOUCH, applyCommitFilter, closeCommitFilter, commitEdit, flatDotSVG, gotoBranchTip, gotoCommit, gotoCommitPrompt, graphHTML, graphSVG, laneColor, laneColors, loadCommits, maybeLoadMore, openCommit, openCommitByHash, openCommitFilter, openStashDetail, renderCommits, renderFilteredCommits, revealCommit, rowHTML, setSolo, setSoloChip, showCommitMenu, toggleGraphMode };
