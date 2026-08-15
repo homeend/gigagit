@@ -200,16 +200,20 @@ function openGlobalMenu() {
     { label: "external tools…", act: () => openExtToolsView() },
     { label: "review working changes (AI)…", act: () => startReview("working", "") },
   ].sort((a, b) => a.label.localeCompare(b.label));
+  // Switching the repo is neither a git operation nor a UI control, so it
+  // gets its own group between them.
+  const repositories = [
+    { label: "switch repo…", act: () => openPalette("repo") },
+  ];
   const ui = [
     { label: "refresh", act: () => { if (!state.op) refreshAfterOp(); } },
-    { label: "switch repo…", act: () => openPalette("repo") },
     { label: "command palette…", act: () => openPalette("cmd") },
     { label: "toggle sidebar", act: () => toggleSidebar() },
     { label: "toggle graph", act: () => toggleGraphMode() },
     { label: "settings…", act: () => openSettings() },
     { label: "session errors…", act: () => openSessionErrorsView() },
   ].sort((a, b) => a.label.localeCompare(b.label));
-  const rows = [{ header: "git" }, ...git, { header: "ui" }, ...ui, { sep: true }, { label: "help", act: () => openHelp() }];
+  const rows = [{ header: "git" }, ...git, { header: "repositories" }, ...repositories, { header: "ui" }, ...ui, { sep: true }, { label: "help", act: () => openHelp() }];
   showCtxMenu(rows, r.left, r.bottom + 4);
 }
 

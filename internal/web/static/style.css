@@ -188,7 +188,7 @@ mark.r { background: var(--span-add); color: inherit; }
 #modal { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; z-index: 30; }
 #modal.hidden { display: none; }
 #modal-box { background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; padding: 18px 22px; max-width: 560px; }
-#modal-prompt { margin-bottom: 14px; }
+#modal-prompt { margin-bottom: 14px; white-space: pre-line; }
 #modal-options { display: flex; gap: 10px; justify-content: flex-end; }
 #modal-options button { background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 4px; padding: 4px 14px; font: inherit; cursor: pointer; }
 #modal-options button:hover { border-color: var(--accent); }
@@ -198,7 +198,10 @@ mark.r { background: var(--span-add); color: inherit; }
 #worktrees-list, #tags-list, #stashes-list { list-style: none; }
 #worktrees-list li, #tags-list li, #stashes-list li { padding: 2px 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #branches-list li .wpath, #worktrees-list li .wpath, #tags-list li .tsub, #stashes-list li .tsub { color: var(--dim); font-size: 11px; padding-left: 6px; }
-#worktrees-list li.cur { color: var(--accent); }
+/* Same emphasis as the current branch row (#branches-list li.head): the
+   two lists mark "this is the current one" identically — glyph, colour AND
+   weight. */
+#worktrees-list li.cur { color: var(--accent); font-weight: bold; }
 #worktrees-list li { cursor: default; } /* right-click menu only — no left-click, so no pointer (and no text I-beam) */
 #tags-list li, #stashes-list li { cursor: pointer; }
 #tags-list li:hover, #stashes-list li:hover { background: var(--bg-alt); }
@@ -220,12 +223,16 @@ mark.r { background: var(--span-add); color: inherit; }
 }
 #commit-box button:hover:not(:disabled) { border-color: var(--accent); }
 #commit-box button:disabled { opacity: .45; cursor: default; }
-#ctx-menu { position: fixed; z-index: 40; background: var(--bg-alt); border: 1px solid var(--border); border-radius: 4px; display: flex; flex-direction: column; min-width: 170px; box-shadow: 0 4px 14px rgba(0,0,0,.5); }
+/* max-height is the last resort for a menu taller than the window (the file
+   menu with every batch row): it scrolls rather than running off the bottom.
+   Placement itself is measured in layers.js. */
+#ctx-menu { position: fixed; z-index: 40; background: var(--bg-alt); border: 1px solid var(--border); border-radius: 4px; display: flex; flex-direction: column; min-width: 170px; box-shadow: 0 4px 14px rgba(0,0,0,.5); max-height: calc(100vh - 16px); overflow-y: auto; }
 #ctx-menu.hidden { display: none; }
-#ctx-menu button { background: none; border: none; color: var(--fg); font: inherit; text-align: left; padding: 5px 12px; cursor: pointer; }
+/* flex:none so a scrolling menu (max-height above) never squeezes its rows */
+#ctx-menu button { background: none; border: none; color: var(--fg); font: inherit; text-align: left; padding: 5px 12px; cursor: pointer; flex: none; }
 #ctx-menu button:hover { background: var(--sel); }
 #ctx-menu button.danger { color: #f27a6a; } /* matches #op-line.err */
-#ctx-menu .sep { border-top: 1px solid var(--border); margin: 4px 0; }
+#ctx-menu .sep { border-top: 1px solid var(--border); margin: 4px 0; flex: none; }
 #ctx-menu .ctx-header { padding: 3px 12px 1px; font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: .08em; cursor: default; }
 
 /* settings + identity overlays — the help overlay's shell with control rows
@@ -651,7 +658,9 @@ tr.hk.picked td.no { background: var(--sel); color: var(--fg); }
 #reflog-list li .rsha { color: var(--dim); font-size: 11px; flex: none; font-family: inherit; }
 #reflog-list li .rsub { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
 #reflog-list li .rrel { color: var(--dim); font-size: 10px; flex: none; margin-left: auto; }
-#reflog-list li.more { color: var(--dim); cursor: default; }
+/* the reflog's last row is a pager, not a notice — it loads the next page */
+#reflog-list li.more { color: var(--dim); cursor: pointer; }
+#reflog-list li.more:hover { color: var(--fg); background: var(--sel); }
 /* mouse-first buttons in the prompt / versions overlays */
 #versions-hint, #vbranches-hint { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 #versions-hint button, #vbranches-hint button {

@@ -169,6 +169,18 @@ function followOp(opID, label, kind, onDone) {
 
 
 function startSwitch(branch) {
+  // git will not check out a branch that is already checked out in another
+  // worktree, and answering that with an error is a dead end — the TUI asks
+  // whether to GO THERE instead, and so does this. Re-rooting the server at
+  // that worktree is what "switch" means here; doReroot carries the
+  // cross-environment repair offer, the analog of the TUI's guardedReRoot.
+  const wt = (state.worktrees || []).find((w) => w.branch === branch && w.path !== state.worktree);
+  if (wt) {
+    showLocalConfirm(branch + " is checked out in another worktree:\n" + wt.path, ["go to worktree", "cancel"], (opt) => {
+      if (opt === "go to worktree") doReroot(wt.path);
+    });
+    return;
+  }
   startOp({ op: "switch", branch }, "switching " + branch);
 }
 

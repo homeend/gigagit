@@ -8,6 +8,51 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: right-click menus are grouped, and a destructive row is always fenced
+  off.** The branch menu was one undivided run of seventeen rows, so *delete*
+  sat flush against *copy commit id*. Every menu now separates its groups —
+  the branch menu reads navigate · move commits · create · inspect · scope ·
+  copy · **rename + delete**, with rename moved down beside delete (both
+  change what the branch *is*, not where its commits are) — and every red row
+  in every menu (delete, drop, discard, remove, reset-to-remote) is preceded
+  by a separator. Menus write their separators unconditionally; `showCtxMenu`
+  now trims the ones a conditional row leaves stranded (no leading, trailing
+  or doubled lines), and a menu that authors none still gets one above its
+  first red row.
+
+- **Web: a menu opened near the bottom of the window is no longer cut off.**
+  Placement reserved a fixed 120px below the pointer, so the taller menus —
+  the reflog's, opened on one of the last rows — ran past the viewport floor
+  with their last options unreachable. The menu is now measured after it
+  renders and pulled back to fit on every edge; one taller than the window
+  itself scrolls instead of overflowing.
+
+- **Web: the reflog's "… more" row loads the next page.** It was a dead notice
+  ("capped at 100") with no way to see the older entries. It now reads
+  **… show 100 more** and fetches the next hundred; the expanded window is
+  what later refreshes ask for, so a background refresh cannot fold the
+  section back to the first page. `GET /api/reflog` takes a `limit`, and
+  `truncated` now means "there is a next page" rather than "there was more".
+
+- **Web: switching to a branch that lives in another worktree offers to go
+  there.** git refuses to check out a branch a second worktree already holds,
+  and the browser answered that with a bare error — a dead end. It now asks
+  the TUI's question first (`<branch> is checked out in another worktree:
+  <path>` → **go to worktree** / **cancel**), and going there re-roots the
+  server at that worktree, carrying the same cross-environment repair offer
+  the TUI's guarded switch does. Modal prompts keep their line breaks now, so
+  the path lands on its own line (engine prompts gain the same).
+
+- **Web: `repositories` is its own menu section.** Switching repository is
+  neither a git operation nor a UI control, so the ☰ menu now reads
+  **git** · **repositories** · **ui** · help, with *switch repo…* moved out of
+  the UI group into the new one.
+
+- **Web: the current worktree row is emphasised like the current branch row.**
+  Both lists already used the same `✓` in the same colour at the same column;
+  the worktree row was missing the bold that marks the branch row, which left
+  the two looking unlike each other.
+
 - **Web: the browser's layout is remembered by gg, not by the browser.** It
   never survived a restart, and the saving code was not at fault: `gg web`
   binds a RANDOM loopback port, so every run is a different origin and

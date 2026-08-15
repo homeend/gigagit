@@ -1,11 +1,17 @@
 package web
 
-import "net/http"
+import (
+	"net/http"
+	"strconv"
+)
 
-// maxReflogRows caps the sidebar payload (the tags cap precedent): the domain
-// read already stops at its own configured limit, but 200 rows is more than a
-// sidebar section wants to carry.
-const maxReflogRows = 100
+// defaultReflogRows is the sidebar's first page (the tags cap precedent): the
+// section opens on a screenful, and its "show more" row asks for a bigger
+// window. maxReflogRows bounds what a client can ask for at all.
+const (
+	defaultReflogRows = 100
+	maxReflogRows     = 5000
+)
 
 type reflogRow struct {
 	Selector string `json:"selector"` // "HEAD@{0}"
@@ -16,15 +22,21 @@ type reflogRow struct {
 }
 
 func (s *Server) handleReflog(w http.ResponseWriter, r *http.Request) {
+	limit := defaultReflogRows
+	if v, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && v > 0 {
+		limit = min(v, maxReflogRows)
+	}
 	svc := s.service()
-	es, err := svc.Reflog(readCtx(r), 0) // 0 = the domain default limit
+	// One entry past the window: its presence is what "truncated" means, so
+	// the client's "show more" row disappears exactly when nothing follows.
+	es, err := svc.Reflog(readCtx(r), limit+1)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
 	truncated := false
-	if len(es) > maxReflogRows {
-		es = es[:maxReflogRows]
+	if len(es) > limit {
+		es = es[:limit]
 		truncated = true
 	}
 	rows := make([]reflogRow, 0, len(es))

@@ -1144,6 +1144,10 @@ $("files-list").addEventListener("contextmenu", (e) => {
       });
     }
   }
+  // One separator for the whole discard block below: whichever of the three
+  // conditional red rows materializes, it is fenced off from the safe rows
+  // above — and if none does, showCtxMenu trims the stranded line.
+  items.push({ sep: true });
   if (f.section === "changes") {
     items.push({
       label: "discard changes", danger: true,
