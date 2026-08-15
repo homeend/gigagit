@@ -179,6 +179,11 @@ function openPrompt({ title, value, placeholder, onSubmit, extra, multiline }) {
   $("prompt-hint").textContent = multiline
     ? "ctrl+enter (or ctrl+s) to confirm · esc to cancel"
     : "enter to confirm · esc to cancel";
+  // Clear the field this prompt is NOT using. It is hidden, so its contents
+  // are invisible — and an invisible leftover is what would be submitted if a
+  // later prompt switched modes, or read back by anything inspecting the DOM.
+  const idle = multiline ? $("prompt-input") : $("prompt-text");
+  idle.value = "";
   const field = promptField();
   field.value = value || "";
   field.placeholder = placeholder || "";
