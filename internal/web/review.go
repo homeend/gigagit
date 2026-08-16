@@ -152,7 +152,11 @@ func (s *Server) handleOpCancel(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, errors.New("unknown operation"))
 		return
 	}
-	if run.kind != "review" && run.kind != "conflict_complete" {
+	// commit_message joins the two agent lanes here (op_ai.go): it is the same
+	// kind of run — an external tool that can hang for minutes holding the one
+	// lane — and its cancel is the browser's equivalent of the TUI's esc
+	// during a generate.
+	if run.kind != "review" && run.kind != "conflict_complete" && run.kind != "commit_message" {
 		writeErr(w, http.StatusConflict, errors.New("this operation cannot be cancelled"))
 		return
 	}
