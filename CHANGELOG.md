@@ -8,6 +8,15 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: the sidebar toggle works again, and its key is now `t`.** Hiding the
+  branches/tags/stashes column did nothing — from the key, from the ☰ menu's
+  **toggle sidebar**, or from the footer chip. `toggleSidebar` asked for the
+  state the sidebar was already in (`applySidebarHidden(!state.sidebar)`,
+  where the argument means *hidden* and `state.sidebar` means *visible*), so
+  the toggle had been idempotent since the layout moved into gg's state file.
+  The key is `t` now rather than `b` — the column is the tabs, and `b` is
+  worth keeping free. Help row and footer chip renamed with it.
+
 - **Web: the browser can find a commit it has not loaded.** The `/` filter
   narrowed the pages already on screen, which on a 600k-commit repo is a
   rounding error — the commit you want is almost never in the first fifty.
