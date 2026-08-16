@@ -302,11 +302,19 @@ async function doReroot(path) {
 }
 
 
-// toggleSidebar and stageFocused are shared by their keys (b, s/u) and the
+// toggleSidebar and stageFocused are shared by their keys (t, s/u) and the
 // clickable footer chips.
+//
+// state.sidebar is VISIBILITY and applySidebarHidden takes HIDDENNESS, so the
+// argument is state.sidebar itself: "hide it if it is currently shown". It
+// used to read `!state.sidebar`, which asserts the state the sidebar is
+// already in — the toggle became idempotent, and the key, the footer chip and
+// the ☰ row all did nothing at all.
 function toggleSidebar() {
   if (state.layout === "diff") return; // no sidebar on the diff screen to toggle
-  applySidebarHidden(!state.sidebar);
+  applySidebarHidden(state.sidebar);
+  // Both writes read state.sidebar AFTER the flip, so they persist the state
+  // the sidebar is now in.
   lsSet("gg.sidebar.hidden", state.sidebar ? "0" : "1"); // same-session cache
   saveUI({ sidebar_hidden: !state.sidebar }); // the copy that survives a restart
 }

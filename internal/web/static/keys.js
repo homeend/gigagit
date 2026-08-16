@@ -109,8 +109,8 @@ document.addEventListener("keydown", (e) => {
     }
   } else if (e.key === "g") {
     toggleGraphMode();
-  } else if (e.key === "b") {
-    toggleSidebar();
+  } else if (e.key === "t") {
+    toggleSidebar(); // t, not b: the sidebar is the tabs/sections column
   } else if (e.key === "p") {
     doPull();
   } else if (e.key === "P") {

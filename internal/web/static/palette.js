@@ -54,7 +54,7 @@ function paletteCommands() {
     // an error line and the current repo keeps serving.
     { label: "open repo (path)…", detail: "", run: () => openPrompt({ title: "Open repo — path", placeholder: "/path/to/repo or ~/repo", onSubmit: (p) => doReroot(p) }) },
     { label: "open working tree", detail: "", run: () => openWorkingTree(0) }, // 0 = the WT row; a bare call would set state.cursor = undefined and break j/k/enter
-    { label: "toggle sidebar", detail: "b", run: () => toggleSidebar() },
+    { label: "toggle sidebar", detail: "t", run: () => toggleSidebar() },
     { label: "toggle graph", detail: "g", run: () => toggleGraphMode() },
     { label: "help", detail: "?", run: () => openHelp() },
   ];
