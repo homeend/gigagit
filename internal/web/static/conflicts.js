@@ -430,15 +430,20 @@ document.addEventListener(
 // this comparison can use. The two lists are labelled, because "the fix" can
 // be a bookmark and a shelf entry at the same time and they mean different
 // things.
-async function pickEntry({ commits, onPick }) {
+// exclude, when given, is the {store, id} this comparison starts FROM: an
+// entry cannot be compared with itself, and offering it as the other side
+// would produce an empty diff and no explanation.
+async function pickEntry({ commits, onPick, exclude, title }) {
   const { x, y } = lastPointer;
   const [bm, sh] = await Promise.all([
     getJSON("/api/bookmarks").catch(() => null),
     getJSON("/api/shelf").catch(() => null),
   ]);
+  const other = (store, e) => !(exclude && exclude.store === store && exclude.id === e.id);
   const rows = [];
-  const bookmarks = ((bm && bm.entries) || []).filter((e) => !!e.is_commit === commits);
-  const shelf = ((sh && sh.entries) || []).filter((e) => (e.kind === "commit") === commits);
+  const bookmarks = ((bm && bm.entries) || []).filter((e) => !!e.is_commit === commits && other("bookmarks", e));
+  const shelf = ((sh && sh.entries) || []).filter((e) => (e.kind === "commit") === commits && other("shelf", e));
+  if (title && (bookmarks.length || shelf.length)) rows.push({ header: title });
   if (bookmarks.length) {
     rows.push({ header: "bookmarks" });
     for (const e of bookmarks) rows.push({ label: entryLabel(e), act: () => onPick("bookmarks", e) });
@@ -448,7 +453,8 @@ async function pickEntry({ commits, onPick }) {
     for (const e of shelf) rows.push({ label: entryLabel(e), act: () => onPick("shelf", e) });
   }
   if (!rows.length) {
-    opLine(commits ? "no commits are bookmarked or shelved yet" : "no files are bookmarked or shelved yet", true);
+    const what = commits ? "commits" : "files";
+    opLine(exclude ? "no other " + what + " are bookmarked or shelved" : "no " + what + " are bookmarked or shelved yet", true);
     return;
   }
   showCtxMenu(rows, x, y);
@@ -540,6 +546,98 @@ registerRows("file", (f) => {
 });
 
 
+// --- comparing two stored entries -------------------------------------------
+//
+// The other direction, and the one the TUI reaches from the bookmark and shelf
+// popups themselves: not "this commit against something I saved", but "these
+// two saved things against each other". Two shelf entries of the same file
+// taken a week apart, a bookmark against the frozen copy that was made from
+// it, one spike against another.
+//
+// The entry you open the menu on is the LEFT/older side and the one you pick
+// is the right — startEntryCompare's rule, which is what makes an A mean
+// "added since" rather than "missing from".
+//
+// The picker only offers entries of the SAME kind, so the TUI's "cannot
+// compare a commit against a file" refusal has nothing to refuse here: a
+// comparison that cannot be expressed is never offered. The server holds the
+// same line independently (a file entry is not a commit entry).
+
+// entrySpecOf names an entry for /api/entry-diff.
+function entrySpecOf(store, e) {
+  return (store === "shelf" ? "shelf:" : "bookmark:") + e.id;
+}
+
+
+// compareTwoEntries dispatches on kind: commit entries go through the
+// whole-tree lane (which resolves each side hybrid, so a gc'd commit falls
+// back to its frozen copy independently of the other side), file entries
+// through the one-file lane.
+async function compareTwoEntries(leftStore, left, rightStore, right) {
+  if (left.kind === "file" || left.is_commit === false) {
+    // Two stored FILES: neither side needs a path — a shelved file is one
+    // blob and a bookmark resolves its own address — but the endpoint takes
+    // one, and the file's own path is what names the diff.
+    openEntryFileDiff({
+      left: entrySpecOf(leftStore, left),
+      right: entrySpecOf(rightStore, right),
+      path: left.path || right.path || "",
+      leftLabel: entryLabel(left),
+      rightLabel: entryLabel(right),
+    });
+    return;
+  }
+  let body;
+  try {
+    body = await getJSON(
+      "/api/compare-entry?store=" + encodeURIComponent(leftStore) +
+        "&id=" + encodeURIComponent(left.id) +
+        "&right_store=" + encodeURIComponent(rightStore) +
+        "&right_id=" + encodeURIComponent(right.id)
+    );
+  } catch (e) {
+    opLine("compare failed: " + (e.message || e), true);
+    return;
+  }
+  // Both commits still alive → the ordinary hash-keyed compare view. Either
+  // side frozen → the entry-diff lane, fallback named in the header.
+  if (body.frozen) {
+    openEntryCompare(body);
+    return;
+  }
+  openCompare(body.left.hash, body.right.hash, {
+    revs: 1,
+    aLabel: body.left.label,
+    bLabel: body.right.label,
+  });
+}
+
+
+// isCommitEntry reads the two stores' different spellings of the same fact: a
+// bookmark says is_commit, a shelf entry says kind.
+function isCommitEntry(e) {
+  return e.kind === "commit" || e.is_commit === true;
+}
+
+
+function compareWithAnotherEntryRow(store, e) {
+  return {
+    label: "compare with another entry…",
+    act: () =>
+      pickEntry({
+        commits: isCommitEntry(e),
+        exclude: { store, id: e.id },
+        title: entryLabel(e) + " ↔ …",
+        onPick: (otherStore, other) => compareTwoEntries(store, e, otherStore, other),
+      }),
+  };
+}
+
+
+registerRows("bookmark", (e) => (e && e.id ? [compareWithAnotherEntryRow("bookmarks", e)] : []));
+registerRows("shelf", (e) => (e && e.id ? [compareWithAnotherEntryRow("shelf", e)] : []));
+
+
 // The static help already has a "conflicts" row (the bar, the block picker),
 // so this one is keyed apart from it — two rows under one key read as a
 // duplicate rather than as two different things.
@@ -557,8 +655,10 @@ registerHelp({
   html:
     "☰ or a file's menu → <b>stash a selection…</b> opens a checklist (space toggles); ticking everything is the " +
     "plain whole-tree stash. Right-click a commit → <b>compare with a bookmark or shelf entry…</b>, or a file → " +
-    "<b>compare with a stored copy…</b>. A shelved commit still compares after the original is gone — the header " +
-    "says when you are looking at the frozen copy",
+    "<b>compare with a stored copy…</b>; right-click a bookmark or shelf entry itself → " +
+    "<b>compare with another entry…</b> to put two saved things side by side (the one you started from is the " +
+    "older side, and only entries of the same kind are offered). A shelved commit still compares after the " +
+    "original is gone — the header says when you are looking at the frozen copy",
 });
 
 export { conflictActions, conflictCode, openStashPick, stashCandidates };

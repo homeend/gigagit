@@ -969,6 +969,10 @@ function showBookmarkMenu(e, x, y) {
     // snapshot from when you bookmarked it. That is the shelf's job.
     items.push({ label: "copy its content to a path…", act: () => restorePrompt("bookmarks", e, "") });
   }
+  // Feature rows land with the safe ones, above the remove block: these two
+  // menus were the last in the sidebar with no registry hook, which is why
+  // anything entry-rooted had to be reached from the ☰ until now.
+  items.push(...extraRows("bookmark", e));
   items.push({ sep: true });
   items.push({
     label: "remove bookmark",
@@ -1005,6 +1009,7 @@ function showShelfMenu(e, x, y) {
     items.push({ sep: true });
     items.push({ label: "restore to a path…", act: () => restorePrompt("shelf", e, "") });
   }
+  items.push(...extraRows("shelf", e));
   items.push({ sep: true });
   items.push({
     label: "remove from the shelf",

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/homeend/gigagit/internal/domain"
@@ -355,14 +356,66 @@ type entryCompareSide struct {
 	Frozen bool   `json:"frozen,omitempty"`
 }
 
-// handleCompareEntry compares a stored COMMIT entry (bookmark or shelf)
-// against a live commit, entry on the LEFT/older side — the TUI's convention
-// (compareCommitBookmark), which is what makes the A/D statuses read the way
-// the file list shows them.
+// compareSideWire renders a resolved side for the client, plus the sentence
+// naming the fallback when that side is standing on frozen bytes. The note is
+// per SIDE because both of them can fall back independently, and "one of
+// these is a snapshot" is not the same warning as "both are".
+func compareSideWire(ep model.Endpoint, spec commitEntrySpec) (entryCompareSide, string) {
+	if ep.Kind == model.EndpointShelf {
+		return entryCompareSide{Spec: "shelf:" + ep.ShelfID, Label: spec.label, Frozen: true},
+			"frozen copy — commit " + shortSha(spec.sha) + " no longer exists"
+	}
+	return entryCompareSide{Spec: "commit:" + ep.Hash, Label: spec.label, Hash: ep.Hash}, ""
+}
+
+// commitEntrySpec is one requested side of the whole-tree lane: a stored
+// commit entry, or a live commit named by hash.
+type commitEntrySpec struct {
+	sha     string // the FULL sha the side records
+	shelfID string // shelf entry backing it; "" for a bookmark or a bare commit
+	label   string
+}
+
+// resolveEntrySideSpec reads a stored entry named by a store/id pair.
+func resolveEntrySideSpec(ctx context.Context, svc *domain.Service, store, id string) (commitEntrySpec, int, error) {
+	sha, shelfID, label, code, err := commitEntryAddress(ctx, svc, store, id)
+	if err != nil {
+		return commitEntrySpec{}, code, err
+	}
+	return commitEntrySpec{sha: sha, shelfID: shelfID, label: label}, 0, nil
+}
+
+// resolveCompareRight reads the RIGHT side, which accepts either form: `sha`
+// for a live commit (a commit row in the browser) or `right_store`/`right_id`
+// for a second stored entry. One endpoint therefore serves both "this commit
+// against a bookmark" and "these two entries against each other" — and the
+// LEFT side is always an entry (store/id), so `sha` keeps meaning exactly what
+// it meant before this second form existed.
+func resolveCompareRight(ctx context.Context, svc *domain.Service, q url.Values) (commitEntrySpec, int, error) {
+	if sha := q.Get("sha"); sha != "" {
+		if !isHexSha(sha) {
+			return commitEntrySpec{}, http.StatusBadRequest, errors.New("sha must be a hex commit id")
+		}
+		return commitEntrySpec{sha: sha, label: shortSha(sha)}, 0, nil
+	}
+	if q.Get("right_store") == "" && q.Get("right_id") == "" {
+		return commitEntrySpec{}, http.StatusBadRequest,
+			errors.New("a right side is required: sha=<hex>, or right_store + right_id")
+	}
+	return resolveEntrySideSpec(ctx, svc, q.Get("right_store"), q.Get("right_id"))
+}
+
+// handleCompareEntry compares two commit-shaped sides, at least one of them a
+// stored entry: entry ↔ a live commit (a commit row's menu), or entry ↔ entry
+// (two bookmarks, two shelf entries, or one of each). FIRST side = left/older
+// — the TUI's convention (compareCommitBookmark, startEntryCompare), which is
+// what makes the A/D statuses read the way the file list shows them.
 //
-// The entry side resolves HYBRID: the live commit while it still exists, the
-// shelf entry's frozen tar once it does not. That fallback is reported rather
-// than smoothed over — a comparison against a snapshot of a commit that no
+// Each side resolves HYBRID and INDEPENDENTLY: the live commit while it still
+// exists, the shelf entry's frozen tar once it does not. Mixed states
+// therefore compose — a shelf↔shelf pair with one gc'd sha becomes frozen↔live
+// and lands in domain's shelf↔commit lane. Any fallback is reported rather
+// than smoothed over: a comparison against a snapshot of a commit that no
 // longer exists is a different statement from one against the commit itself,
 // and the client puts it in the title.
 //
@@ -371,28 +424,36 @@ type entryCompareSide struct {
 func (s *Server) handleCompareEntry(w http.ResponseWriter, r *http.Request) {
 	svc := s.service()
 	q := r.URL.Query()
-	sha := q.Get("sha")
-	if !isHexSha(sha) {
-		writeErr(w, http.StatusBadRequest, errors.New("sha must be a hex commit id"))
-		return
-	}
 	ctx := r.Context()
-	entrySha, shelfID, label, code, err := commitEntryAddress(ctx, svc, q.Get("store"), q.Get("id"))
+	l, code, err := resolveEntrySideSpec(ctx, svc, q.Get("store"), q.Get("id"))
 	if err != nil {
 		writeErr(w, code, err)
 		return
 	}
-	if entrySha == sha {
+	rr, code, err := resolveCompareRight(ctx, svc, q)
+	if err != nil {
+		writeErr(w, code, err)
+		return
+	}
+	// Two entries recording the SAME commit are a non-comparison — except two
+	// DIFFERENT shelf entries of it, whose frozen sets were taken at different
+	// moments and may legitimately differ (the TUI's distinctShelves rule).
+	distinctShelves := l.shelfID != "" && rr.shelfID != "" && l.shelfID != rr.shelfID
+	if l.sha == rr.sha && !distinctShelves {
 		writeErr(w, http.StatusUnprocessableEntity, errors.New("that is the same commit — pick a different one to compare against"))
 		return
 	}
-	left, err := svc.ResolveCommitEntryEndpoint(ctx, entrySha, shelfID)
+	left, err := svc.ResolveCommitEntryEndpoint(ctx, l.sha, l.shelfID)
 	if err != nil {
 		// A bookmark whose commit is gone has nothing frozen to fall back on.
 		writeErr(w, http.StatusUnprocessableEntity, err)
 		return
 	}
-	right := model.Endpoint{Kind: model.EndpointCommit, Hash: sha}
+	right, err := svc.ResolveCommitEntryEndpoint(ctx, rr.sha, rr.shelfID)
+	if err != nil {
+		writeErr(w, http.StatusUnprocessableEntity, err)
+		return
+	}
 	files, err := svc.CompareFiles(ctx, left, right)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
@@ -402,19 +463,17 @@ func (s *Server) handleCompareEntry(w http.ResponseWriter, r *http.Request) {
 	for i, f := range files {
 		out[i] = compareFile{Path: f.Path, Status: f.Status, OldPath: f.OldPath}
 	}
-	frozen := left.Kind == model.EndpointShelf
-	leftSide := entryCompareSide{Spec: "commit:" + left.Hash, Label: label, Hash: left.Hash}
-	if frozen {
-		leftSide = entryCompareSide{Spec: "shelf:" + left.ShelfID, Label: label, Frozen: true}
-	}
+	leftSide, leftNote := compareSideWire(left, l)
+	rightSide, rightNote := compareSideWire(right, rr)
+	frozen := leftSide.Frozen || rightSide.Frozen
 	payload := map[string]any{
 		"left":   leftSide,
-		"right":  entryCompareSide{Spec: "commit:" + sha, Label: shortSha(sha), Hash: sha},
+		"right":  rightSide,
 		"files":  out,
 		"frozen": frozen,
 	}
-	if frozen {
-		payload["frozen_note"] = "frozen copy — commit " + shortSha(entrySha) + " no longer exists"
+	if note := strings.TrimSpace(leftNote + " " + rightNote); note != "" {
+		payload["frozen_note"] = note
 	}
 	if q.Get("format") == "patch" {
 		patch, perr := svc.ComparePatch(ctx, left, right)

@@ -23,9 +23,10 @@ type compareEntryResp struct {
 		Frozen bool   `json:"frozen"`
 	} `json:"left"`
 	Right struct {
-		Spec  string `json:"spec"`
-		Label string `json:"label"`
-		Hash  string `json:"hash"`
+		Spec   string `json:"spec"`
+		Label  string `json:"label"`
+		Hash   string `json:"hash"`
+		Frozen bool   `json:"frozen"`
 	} `json:"right"`
 	Frozen     bool   `json:"frozen"`
 	FrozenNote string `json:"frozen_note"`

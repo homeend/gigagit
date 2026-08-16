@@ -28,7 +28,7 @@ const rowRegistry = new Map(); // menu key -> [fn]
 
 // The menus a feature may extend. A typo in the key is a silent no-op
 // otherwise, so it is checked against this list.
-const MENUS = ["commit", "file", "branch", "worktree", "tag", "stash", "reflog", "remote", "menu"];
+const MENUS = ["commit", "file", "branch", "worktree", "tag", "stash", "reflog", "remote", "menu", "bookmark", "shelf"];
 
 function registerRows(menu, fn) {
   if (!MENUS.includes(menu)) throw new Error("registerRows: unknown menu " + menu);

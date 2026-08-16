@@ -16,6 +16,22 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   the toggle had been idempotent since the layout moved into gg's state file.
   The key is `t` now rather than `b` — the column is the tabs, and `b` is
   worth keeping free. Help row and footer chip renamed with it.
+- **Web: two saved things, compared against each other.** The browser could
+  already compare a commit or a file *against* a bookmark or shelf entry; the
+  other direction — the one the TUI reaches from the bookmark and shelf popups
+  themselves — was missing. Right-click an entry in either sidebar list and
+  **compare with another entry…** puts two saved things side by side: two
+  spikes, a bookmark against the frozen copy taken from it, or the same file
+  shelved twice a week apart. The entry you start from is the older side, and
+  the picker offers only entries of the *same kind*, so the TUI's "cannot
+  compare a commit against a file" refusal has nothing left to refuse. Commit
+  entries open the whole-tree comparison, file entries a single diff with both
+  sides named. Each side resolves independently and hybrid, so a pair whose
+  commits are both gone still compares — from the two frozen copies — and both
+  fallbacks are named in the header. `GET /api/compare-entry` grew a
+  `right_store`/`right_id` form alongside its `sha` one, and the sidebar's
+  bookmark and shelf menus — the last two in the UI with no row registry —
+  gained one, so a feature no longer has to reach them through the ☰.
 
 - **Web: the browser can find a commit it has not loaded.** The `/` filter
   narrowed the pages already on screen, which on a 600k-commit repo is a
