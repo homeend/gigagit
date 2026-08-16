@@ -82,7 +82,10 @@ state.feedFilter = {};
 function filterValues() {
   const f = {};
   for (const { key } of FIELDS) {
-    const v = $("ff-" + key).value.trim();
+    // Control characters are stripped rather than sent: the server refuses
+    // them (they would collide two filters onto one cache key), and a pasted
+    // stray byte must not leave the feed answering 400 to every later request.
+    const v = $("ff-" + key).value.replace(/[\x00-\x1f\x7f]/g, "").trim();
     if (v) f[key] = v;
   }
   return f;
