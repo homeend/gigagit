@@ -4,12 +4,22 @@ import { $, ROW_H, defaultWorktreePath, esc, getJSON, lsGet, lsSet, postJSON, ru
 import { saveUI } from "./uistate.js";
 import { copyText, openPrompt, showCtxMenu } from "./layers.js";
 import { wtCount, wtExtra, wtRowHTML } from "./status.js";
-import { opBusy, opLine, openCreateBranchPrompt, showLocalConfirm, startOp } from "./ops.js";
+import { followOp, opBusy, opLine, openCreateBranchPrompt, showLocalConfirm, startOp } from "./ops.js";
 import { rev, startReview } from "./review.js";
 import { addCommitEntry } from "./sidebar.js";
-import { drillOut, enterFilesStage, openWorkingTree, renderFiles } from "./files.js";
+import { drillOut, enterFilesStage, openCompare, openWorkingTree, renderFiles } from "./files.js";
 import { focusPane, moveCursor } from "./keys.js";
 import { extraRows } from "./menus.js";
+
+// Feed-scoped state that lives on the shared object so search.js (which owns
+// the filter bar) can set it without this module importing that one — the
+// import runs the other way.
+state.feedFilter = state.feedFilter || {}; // {path,author,grep,since,until}
+state.feedFiltered = false; // the server answered a filtered (subset) page
+state.feedGen = 0; // request generation: a page from an older one is dropped
+state.cmarks = new Set(); // ◉ marked commit hashes (compare a pair, squash a run)
+state.eagerQuery = ""; // the last deep-search query, kept so ctrl+f can repeat
+state.eagerGen = 0;
 
 // Left-click on a branch is a READ: jump the commit list to its tip (the
 // TUI's enter-on-branch behavior). Mutations (switch) live behind the
@@ -49,7 +59,10 @@ function renderCommits() {
   win.style.top = first * ROW_H + (first > 0 ? wtExtra() : 0) + "px";
   let html = "";
   for (let i = first; i < last; i++) {
-    html += state.wt && i === 0 ? wtRowHTML(i) : rowHTML(state.rows[i - wtCount()], i);
+    // A server-filtered feed is a non-contiguous subset, so its rows draw flat
+    // for the same reason the / filter's do: lanes between commits that are
+    // not parent and child would be a drawing, not a graph.
+    html += state.wt && i === 0 ? wtRowHTML(i) : rowHTML(state.rows[i - wtCount()], i, state.feedFiltered);
   }
   win.innerHTML = html;
   maybeLoadMore(last - wtCount());
@@ -59,6 +72,7 @@ function renderCommits() {
 function rowHTML(row, i, flat) {
   const sel = i === state.cursor ? " sel" : "";
   const fl = row.hash === state.flashHash ? " flash" : "";
+  const mark = state.cmarks.has(row.hash) ? "◉ " : "";
   const refs = (row.refs || [])
     .map((r) => `<span class="ref ${r.kind}${r.head ? " head" : ""}">${esc(r.name)}</span>`)
     .join("");
@@ -69,7 +83,7 @@ function rowHTML(row, i, flat) {
   return (
     `<div class="crow${sel}${fl}" data-i="${i}">` +
     `<span class="graph">${graph}</span>` +
-    `<span class="subj">${refs}${esc(row.subject)}</span>` +
+    `<span class="subj">${mark}${refs}${esc(row.subject)}</span>` +
     `<span class="meta">${esc(row.author)} · ${row.short} · ${when}</span></div>`
   );
 }
@@ -118,12 +132,7 @@ function applyCommitFilter() {
   const hexish = /^[0-9a-f]+$/.test(q);
   const matches = [];
   state.rows.forEach((r, i) => {
-    if (
-      r.subject.toLowerCase().includes(q) ||
-      (r.author || "").toLowerCase().includes(q) ||
-      (hexish && r.hash.startsWith(q))
-    )
-      matches.push(i);
+    if (commitMatches(r, q, hexish)) matches.push(i);
   });
   state.cfilter = { q, matches };
   $("cfilter-count").textContent = matches.length + " / " + state.rows.length;
@@ -148,14 +157,121 @@ function renderFilteredCommits() {
   for (let i = first; i < last; i++) {
     if (i === m.length) {
       const tail = state.canLoadMore
-        ? ` — <a id="cfilter-more">load more</a> (ctrl+enter)`
-        : " — all loaded commits searched";
+        ? ` — <a id="cfilter-more">load more</a> · <a id="cfilter-deeper">search deeper</a> (ctrl+f)`
+        : " — all of history searched";
       html += `<div class="crow hintrow">${m.length} of ${state.rows.length} loaded commits match${tail}</div>`;
       continue;
     }
     html += rowHTML(state.rows[m[i]], m[i] + wtCount(), true);
   }
   win.innerHTML = html;
+}
+
+
+// --- deep search (ctrl+f) ---------------------------------------------------
+// The / filter narrows what is LOADED. This pages what is not: each press digs
+// past the current end of the feed looking for the next match, so a repeated
+// press keeps going deeper instead of landing on the same row. The query
+// survives the pass (state.eagerQuery) so it can be repeated after the filter
+// bar is closed — the TUI's eagerSearch keeps it for the same reason.
+
+// commitMatches is the ONE match predicate: substring on subject and author,
+// sha PREFIX when the query is hex. The / filter and the deep search must
+// agree — a deeper hit the visible filter then hides is a bug, not a result.
+function commitMatches(r, q, hexish) {
+  return (
+    r.subject.toLowerCase().includes(q) ||
+    (r.author || "").toLowerCase().includes(q) ||
+    (hexish && r.hash.startsWith(q))
+  );
+}
+
+
+// firstFeedMatch returns the feed index of the first match at or after from,
+// or -1. from is the floor that makes each press dig deeper.
+function firstFeedMatch(query, from) {
+  const q = query.toLowerCase();
+  const hexish = /^[0-9a-f]+$/.test(q);
+  for (let i = Math.max(0, from); i < state.rows.length; i++) {
+    if (commitMatches(state.rows[i], q, hexish)) return i;
+  }
+  return -1;
+}
+
+
+// eagerPages is how many pages one pass walks before asking. The pages are
+// server-side (200 commits each by default), so a pass covers thousands of
+// commits — but it is bounded, because "search all 600k" is a decision the
+// user should get to make, not a default.
+const EAGER_PAGES = 20;
+
+
+async function searchDeeper(query) {
+  const q = (query || (state.cfilter && state.cfilter.q) || state.eagerQuery || "").trim();
+  if (!q) {
+    openCommitFilter(); // nothing to dig for yet — ask for the query first
+    return;
+  }
+  state.eagerQuery = q;
+  // Dig PAST what is loaded: a match already on screen is not what this is
+  // for, so the floor is the current end of the feed.
+  await eagerPass(q, state.rows.length, ++state.eagerGen);
+}
+
+
+async function eagerPass(q, from, gen) {
+  opLine("⟳ searching deeper for " + q + "…");
+  for (let page = 0; page < EAGER_PAGES; page++) {
+    const hit = firstFeedMatch(q, from);
+    if (hit >= 0) {
+      opLine("found " + q + " " + (from > 0 ? "deeper in history" : "in the loaded list"));
+      landOnFeedIdx(hit);
+      return;
+    }
+    if (!state.canLoadMore) {
+      opLine("no further match for " + q + " — all of history searched", false);
+      return;
+    }
+    const before = state.rows.length;
+    await loadCommits(true);
+    if (gen !== state.eagerGen) return; // a newer search superseded this pass
+    if (state.rows.length === before) {
+      opLine("no further match for " + q + " — all of history searched", false);
+      return;
+    }
+  }
+  const hit = firstFeedMatch(q, from);
+  if (hit >= 0) {
+    landOnFeedIdx(hit);
+    return;
+  }
+  const scanned = state.rows.length - from;
+  showLocalConfirm(
+    "Searched " + scanned + " more commits, no match for “" + q + "”. Keep digging?",
+    ["search deeper", "stop"],
+    (o) => {
+      if (o === "search deeper") eagerPass(q, from, gen);
+    }
+  );
+}
+
+
+// landOnFeedIdx puts the cursor on a feed row and shows it. Unlike
+// revealCommit it does NOT clear the / filter: the deep query and the filter
+// text are the same thing here, so every hit is visible in the filtered list
+// and the next ctrl+f still has something to dig with.
+function landOnFeedIdx(i) {
+  let guard = 0;
+  while (state.layout !== "list" && guard++ < 3) drillOut();
+  state.pane = "commits";
+  state.cursor = i + wtCount();
+  state.flashHash = state.rows[i].hash;
+  moveCursor(0); // clamps, scrolls (filtered or not) and renders
+  focusPane();
+  setTimeout(() => {
+    state.flashHash = "";
+    renderCommits();
+  }, 1700);
 }
 
 
@@ -272,20 +388,59 @@ function graphSVG(row, feedIdx) {
 }
 
 
+// feedQuery builds the commits URL: the paging verb plus the active feed
+// filter. The filter travels on EVERY request rather than being remembered
+// server-side — one feed serves every tab, so a stored filter would show a
+// second tab a narrowed list with no bar to clear it.
+function feedQuery(mode) {
+  const p = new URLSearchParams();
+  if (mode) p.set(mode, "1");
+  const f = state.feedFilter || {};
+  for (const k of ["path", "author", "grep", "since", "until"]) if (f[k]) p.set(k, f[k]);
+  const q = p.toString();
+  return "/api/commits" + (q ? "?" + q : "");
+}
+
+
 // more: page deeper. reset: start the list clean (a MANUAL refresh — the
 // reconciling reload is right after an op, and useless when the deep tail has
 // gone stale because history was rewritten).
 async function loadCommits(more, reset) {
-  const q = more ? "/api/commits?more=1" : reset ? "/api/commits?reset=1" : "/api/commits";
-  const body = await getJSON(q);
+  const gen = ++state.feedGen;
+  const body = await getJSON(feedQuery(more ? "more" : reset ? "reset" : ""));
+  // A page that lands after a newer request went out is stale — the filter
+  // moved on while it was in flight — and showing it would put rows on screen
+  // the current query does not select. The server drops stale pages the same
+  // way, by feed generation; this is that rule's client half.
+  if (gen !== state.feedGen) return;
   state.rows = body.rows || [];
   state.canLoadMore = body.can_load_more;
+  // A filtered page is a subset of history: the server computes no lanes for
+  // it, and the rows render flat.
+  state.feedFiltered = !!body.filtered;
   // The scope is server state (one feed for every tab), so it is reported by
   // the very response it scopes rather than tracked client-side. A reload or
   // a second tab therefore shows the chip without asking for it.
-  setSoloChip(body.solo || "");
+  setSoloChip(body.solo || "", body.solo_kind || "");
   if (state.cfilter) applyCommitFilter(); // recompute over the grown/reloaded feed (ends in renderCommits)
   else renderCommits();
+}
+
+
+// refilterFeed re-walks the feed under the filter search.js just changed,
+// keeping the cursor on the commit it was on when that commit survives the new
+// scope.
+//
+// The anchor's HASH is read BEFORE the reload, never its index afterwards: the
+// working-tree row shifts every display index, so an index read after the fact
+// anchors to a different commit — that bug shipped here once already.
+async function refilterFeed() {
+  const anchor = state.rows[state.cursor - wtCount()];
+  const hash = anchor ? anchor.hash : "";
+  await loadCommits(false);
+  const i = hash ? state.rows.findIndex((r) => r.hash === hash) : -1;
+  state.cursor = i >= 0 ? i + wtCount() : wtCount();
+  moveCursor(0);
 }
 
 
@@ -293,22 +448,33 @@ async function loadCommits(more, reset) {
 // Narrowing the commit list to one branch is a mode you can get stuck in, so
 // the chip is not decoration: it is the exit. It renders from state.solo,
 // which survives a failing /api/commits, and clicking it clears the scope.
-function setSoloChip(branch) {
-  state.solo = branch;
+function setSoloChip(ref, kind) {
+  state.solo = ref;
+  state.soloKind = ref ? kind || "branch" : "";
   const el = $("solo-chip");
-  el.classList.toggle("hidden", !branch);
-  if (branch) el.textContent = "solo: " + branch + " ✕";
+  el.classList.toggle("hidden", !ref);
+  if (ref) el.textContent = "solo: " + soloLabel(ref, state.soloKind) + " ✕";
 }
 
 
-async function setSolo(branch) {
+// A commit scope is stored as the full 40-hex sha (no short-sha ambiguity in
+// the walk) and shown short — a chip is a label, not an identifier.
+function soloLabel(ref, kind) {
+  return kind === "commit" ? ref.slice(0, 8) : ref;
+}
+
+
+// setSolo scopes the commit list to a branch/tag (the default) or to the
+// history reachable from a commit. The server resolves the ref and answers
+// with what it stored, so the chip always names the scope actually applied.
+async function setSolo(ref, kind) {
   if (opBusy()) return;
   try {
-    await postJSON("/api/solo", { branch });
-    setSoloChip(branch);
+    const got = await postJSON("/api/solo", { kind: ref ? kind || "branch" : "", ref });
+    setSoloChip(got.solo || "", got.solo_kind || "");
     await loadCommits(false);
     moveCursor(0);
-    opLine(branch ? "commit list scoped to " + branch : "showing every branch");
+    opLine(ref ? "commit list scoped to " + soloLabel(ref, kind || "branch") : "showing every branch");
   } catch (e) {
     opLine("error: " + (e.message || e), true);
   }
@@ -458,23 +624,100 @@ $("commits-window").addEventListener("click", async (e) => {
     await loadCommits(true); // appends server-side; loadCommits re-filters
     return;
   }
+  if (e.target.id === "cfilter-deeper") {
+    searchDeeper();
+    return;
+  }
   const row = e.target.closest(".crow");
-  if (row && row.dataset.i !== undefined) openCommit(Number(row.dataset.i));
+  if (!row || row.dataset.i === undefined) return;
+  const i = Number(row.dataset.i);
+  // ctrl/cmd+click MARKS instead of opening — the pair a compare needs, the
+  // run a squash needs. The working-tree row is not a commit.
+  if ((e.ctrlKey || e.metaKey) && !(state.wt && i === 0)) {
+    toggleCommitMark(state.rows[i - wtCount()]);
+    return;
+  }
+  openCommit(i);
 });
+
+
+// --- ◉ marked commits -------------------------------------------------------
+// Marks are commit HASHES, so they survive a re-render, a paging load and a
+// refilter; a mark on a commit the current scope excludes simply stops being
+// listed by markedInFeedOrder (and "unmark all" clears the whole set, visible
+// or not).
+
+function toggleCommitMark(c) {
+  if (!c) return;
+  if (state.cmarks.has(c.hash)) state.cmarks.delete(c.hash);
+  else state.cmarks.add(c.hash);
+  renderCommits();
+}
+
+
+// markedInFeedOrder returns the marked hashes NEWEST FIRST, dropping marks
+// that are not in the loaded feed. Feed order is what both consumers need:
+// compare wants older→newer, and squash's range starts at the oldest.
+function markedInFeedOrder() {
+  return state.rows.filter((r) => state.cmarks.has(r.hash)).map((r) => r.hash);
+}
+
+
+// compareMarked diffs the two marked commits — tree to tree, no ancestry
+// needed (the compare view's exact 2-commit semantic). The hashes go over the
+// wire as revs so no branch name has to resolve.
+function compareMarked() {
+  const m = markedInFeedOrder();
+  if (m.length !== 2) {
+    opLine("mark exactly 2 commits to compare", true);
+    return;
+  }
+  const [newer, older] = m;
+  openCompare(older, newer, { revs: 1, aLabel: older.slice(0, 8), bLabel: newer.slice(0, 8) });
+}
+
+
+// squashMarked folds the marked commits into one. The client sends only the
+// hashes: the server reads the real range and builds the rebase plan from it,
+// refusing (with the branch untouched) a selection that is not on this branch
+// or not adjacent.
+function squashMarked() {
+  const m = markedInFeedOrder();
+  if (m.length < 2) {
+    opLine("mark at least 2 commits to squash", true);
+    return;
+  }
+  showLocalConfirm(
+    "Squash " + m.length + " marked commits into one? The branch is rewritten from the oldest of them up.",
+    ["squash", "abort"],
+    async (o) => {
+      if (o !== "squash" || opBusy()) return;
+      let resp;
+      try {
+        resp = await postJSON("/api/commit-squash", { shas: m });
+      } catch (e) {
+        opLine("error: " + (e.message || e), true);
+        return;
+      }
+      state.cmarks.clear();
+      followOp(resp.op_id, "squashing " + m.length + " commits", "commit-squash", null);
+    }
+  );
+}
 
 $("cfilter-input").addEventListener("input", applyCommitFilter);
 
 // Escape must be handled HERE: the global router's form-field guard eats
-// every key typed in an input, so it can never see this one. Ctrl+Enter is
-// the keyboard path to the hint row's "load more" — the TUI's ctrl+f
-// search-deeper analog; loadCommits re-filters over the grown feed.
+// every key typed in an input, so it can never see this one. Ctrl+Enter and
+// ctrl+f both start the deep search from the field you typed the query in —
+// the point of the query is rarely a commit that is already loaded.
 $("cfilter-input").addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
     e.preventDefault();
     closeCommitFilter();
-  } else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+  } else if ((e.key === "Enter" || e.key === "f") && (e.ctrlKey || e.metaKey)) {
     e.preventDefault();
-    if (state.canLoadMore) loadCommits(true);
+    searchDeeper();
   }
 });
 
@@ -689,6 +932,38 @@ function showCommitMenu(c, i, x, y) {
         }),
     });
   }
+  // The multi-commit lane: mark rows, then what a set of marks is for. Both
+  // consumers read the marks fresh when they run, so a mark toggled between
+  // opening this menu and clicking a row still counts.
+  items.push({ sep: true });
+  items.push({
+    label: state.cmarks.has(c.hash) ? "unmark this commit" : "mark this commit (ctrl+click)",
+    act: () => toggleCommitMark(c),
+  });
+  const marked = markedInFeedOrder();
+  if (marked.length === 2) {
+    items.push({ label: "compare the 2 marked commits", act: () => compareMarked() });
+  }
+  if (marked.length >= 2) {
+    items.push({ label: "squash " + marked.length + " marked commits…", act: () => squashMarked() });
+  }
+  if (state.cmarks.size) {
+    items.push({
+      label: "unmark all (" + state.cmarks.size + ")",
+      act: () => {
+        state.cmarks.clear();
+        renderCommits();
+      },
+    });
+  }
+  // Scope the list to this commit's ancestry — the commit-anchored twin of
+  // solo-this-branch. The chip clears it, like every other solo.
+  items.push({ sep: true });
+  items.push(
+    state.solo === c.hash
+      ? { label: "exit solo (show every branch)", act: () => setSolo("") }
+      : { label: "solo from this commit", act: () => setSolo(c.hash, "commit") }
+  );
   // Rows contributed by feature modules (menus.js), after the built-ins.
   items.push(...extraRows("commit", c));
   showCtxMenu(items, x, y);
@@ -705,4 +980,4 @@ function commitEdit(c, edit) {
   const what = edit === "drop" ? "dropping " : edit === "move-up" ? "moving up " : "moving down ";
   startOp({ op: "commit-edit", sha: c.hash, edit }, what + short);
 }
-export { applyGraphMode, BOT_TOUCH, CELL_W, GLYPH_PATHS, HALF, MID, TOP_TOUCH, applyCommitFilter, closeCommitFilter, commitEdit, flatDotSVG, gotoBranchTip, gotoCommit, gotoCommitPrompt, graphHTML, graphSVG, laneColor, laneColors, loadCommits, maybeLoadMore, openCommit, openCommitByHash, openCommitFilter, openStashDetail, renderCommits, renderFilteredCommits, revealCommit, rowHTML, setSolo, setSoloChip, showCommitMenu, toggleGraphMode };
+export { applyGraphMode, BOT_TOUCH, CELL_W, EAGER_PAGES, GLYPH_PATHS, HALF, MID, TOP_TOUCH, applyCommitFilter, closeCommitFilter, commitEdit, commitMatches, compareMarked, feedQuery, firstFeedMatch, flatDotSVG, gotoBranchTip, gotoCommit, gotoCommitPrompt, graphHTML, graphSVG, landOnFeedIdx, laneColor, laneColors, loadCommits, markedInFeedOrder, maybeLoadMore, openCommit, openCommitByHash, openCommitFilter, openStashDetail, refilterFeed, renderCommits, renderFilteredCommits, revealCommit, rowHTML, searchDeeper, setSolo, setSoloChip, showCommitMenu, soloLabel, squashMarked, toggleCommitMark, toggleGraphMode };

@@ -8,6 +8,23 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: the browser can find a commit it has not loaded.** The `/` filter
+  narrowed the pages already on screen, which on a 600k-commit repo is a
+  rounding error — the commit you want is almost never in the first fifty.
+  Four answers, all costing one page rather than one history: **`\` filters
+  the feed itself** (path, author, message, since, until — git applies them
+  during the walk, one control clears them, and the lane graph steps aside
+  because lanes over a subset would connect commits that are not parent and
+  child); **ctrl+f searches deeper**, paging unloaded history for the next
+  match and digging PAST the hit on every repeat press, asking before it goes
+  further; **`F` finds a file** by fuzzy match over every tracked path, ranked
+  server-side and cached per HEAD, opening its history on enter; and
+  **ctrl+click marks commits** — two marks compare, two or more squash into
+  one (the plan is built server-side from a range gg reads itself, so a
+  selection that is not on this branch or not adjacent is refused with the
+  branch untouched). A commit's own menu can now **solo from this commit**,
+  scoping the list to its ancestry with the same chip that clears it.
+
 - **Web: refresh says it is working, and starts the commit list clean.** The
   ☰ menu's **refresh** (and `r`, and the footer button) reloaded silently — on
   a repo where nothing had changed there was no way to tell it had run at all,
