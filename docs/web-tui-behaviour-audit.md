@@ -30,6 +30,8 @@ everything not listed has NOT been compared yet.
 | Create tag from a commit | Web asked the name, then sprang a second prompt for an annotation prefilled with the subject, with a "no message (lightweight)" button | One dialog, name + message, tab between them, empty message = lightweight — the TUI's `tagPopup` |
 | Push the current branch | Web pushed silently, leaving unpushed tip tags behind | 5s-budgeted check, then the TUI's *Push branch + tags* / *Push branch only* / *Cancel*, tags chained after a successful push |
 | A tag added to a loaded commit | Invisible in the commit list until the server restarted | The refresh takes fresh rows for the overlap, so decorations appear |
+| Reset to a commit | Straight to the engine's soft/mixed/hard picker | Asks *"Reset to `<sha>`? This moves the current branch ref."* first, as the TUI does |
+| Fast-forward to a commit | Row always offered, then refused by the engine | Hidden when the commit is conclusively not ahead (the TUI's `feedDescendant` walk, ported), and it confirms *"Fast-forward to this commit?"* |
 
 ## Open deltas
 
@@ -37,10 +39,8 @@ everything not listed has NOT been compared yet.
 |---|---|---|---|---|
 | 1 | **Cherry-pick a commit** | Runs immediately; only gates merge commits (`cannot cherry-pick a merge commit`) | Shows a local confirm first | Web is more cautious; **differs** |
 | 2 | **Revert a commit** | Runs immediately; gates merge commits | Shows a local confirm first | Same class as #1 |
-| 3 | **Reset to a commit** | Local confirm *"Reset to `<sha>`? This moves the current branch ref."*, **then** the engine's soft/mixed/hard picker | Goes straight to the engine picker, no local confirm | Web asks **less** than the TUI |
-| 4 | **Fast-forward to a commit** | Row is **hidden** when the commit is conclusively not ahead of the branch | Row always offered; the engine refuses when it cannot fast-forward | Web offers a row that will fail |
-| 5 | **Undo last commit** | Runs immediately on `u` | Shows a confirm | Web asks more |
-| 6 | **Bookmark / shelf a commit** | Name popup prefilled with the subject, **`ctrl+s` inserts the short sha** | Name prompt prefilled with the subject; no sha-insert key | Missing affordance |
+| 3 | **Undo last commit** | Runs immediately on `u` | Shows a confirm | Web asks more |
+| 4 | **Bookmark / shelf a commit** | Name popup prefilled with the subject, **`ctrl+s` inserts the short sha** | Name prompt prefilled with the subject; no sha-insert key | Missing affordance |
 
 None of these is a bug in the sense of "produces the wrong result". They are
 places where the two frontends ask different questions about the same
@@ -59,6 +59,12 @@ knows the TUI.
 - **Reword**: both prefill with the commit's current full message.
 - **Restore a shelf entry**: both prefill the original path and let the
   engine's overwrite decision park.
+
+## Known simplification
+
+The TUI's confirms for slow operations honour `[ui] disable_slow_op_confirm`;
+the web does not read that setting yet, so it always asks. Someone who turned
+the confirms off in the TUI still gets them in the browser.
 
 ## How to keep this honest
 
