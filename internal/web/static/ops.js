@@ -238,9 +238,34 @@ function doFetch() {
 }
 
 
-function doPush() {
+// Pushing the CURRENT branch asks about tags sitting on its tip that the
+// remote does not have — the TUI's P, option for option. The check is bounded
+// server-side (5s) and reports nothing on a timeout, so an unreachable remote
+// never turns a push into a wait; a branch with no tip tags makes no network
+// call at all. Pushing a NAMED branch (the branch menu) skips this, as the TUI
+// does — that lane is not the current branch and has no tip-tag prompt.
+async function doPush() {
   if (opBusy()) return;
-  startOp({ op: "push" }, "pushing");
+  let tags = [];
+  try {
+    const got = await getJSON("/api/push-tag-check");
+    tags = got.tags || [];
+  } catch {
+    tags = []; // the check is an offer, never a gate
+  }
+  if (!tags.length) {
+    startOp({ op: "push" }, "pushing");
+    return;
+  }
+  const branch = (state.repo && state.repo.branch) || "the current branch";
+  const prompt =
+    tags.length === 1
+      ? "Push " + branch + ": branch tip has tag " + tags[0] + " not on the remote. Push too?"
+      : "Push " + branch + ": branch tip has tags " + tags.join(", ") + " not on the remote. Push too?";
+  showLocalConfirm(prompt, ["Push branch + tags", "Push branch only", "Cancel"], (opt) => {
+    if (opt === "Push branch + tags") startOp({ op: "push", tags }, "pushing " + branch + " + tags");
+    else if (opt === "Push branch only") startOp({ op: "push" }, "pushing");
+  });
 }
 
 
