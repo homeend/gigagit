@@ -25,6 +25,9 @@ import "./prefixes.js";
 import "./exttools.js";
 import "./sessionerrors.js";
 import "./palette.js";
+// Feature modules: imported for their side effects only (they register their
+// own menu rows and help rows — see menus.js).
+import "./patch.js";
 
 // applyStoredLayout puts back the layout gg remembered for this machine:
 // folded sections, pane widths, the sidebar toggle, the graph mode. It runs

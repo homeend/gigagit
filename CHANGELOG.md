@@ -8,6 +8,29 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: a change can leave the browser as a patch, and come back.** `gg web`
+  could do neither, so work that started there could only get out through git
+  itself. A commit's right-click menu now offers **export as patch…** — `git
+  format-patch -1 --binary`, downloaded as `<short>.patch` — and a file inside
+  a commit offers **export this file's diff as a patch…** (`<short>-<file>.patch`).
+  A merge commit is refused rather than exported: `format-patch -1` does not
+  error on one, it silently emits a *different* commit's patch, so the download
+  would look right and be wrong. Coming the other way, ☰ → **apply a patch…**
+  takes the path of a `.patch` file and lands it; the engine detects the format
+  itself, so a plain diff goes to the working tree and a format-patch mailbox
+  parks its own *working-tree / commits / abort* question in the modal instead
+  of the browser guessing. A missing file, a mailbox applied the wrong way and
+  a conflicted apply each arrive as the engine's own sentence. The path is one
+  the user types, not an upload: a browser never learns the path behind
+  `<input type=file>`, and this server is loopback-only, so naming the file is
+  the honest lane — the TUI's palette does the same. ☰ → **copy a bookmark or
+  shelf entry to a directory…** completes the set, writing an entry's files to
+  `<repo>.tmp/<name>` (the TUI's `t`), with the destination editable and an
+  existing directory asking before it is overwritten. The per-entry row the TUI
+  puts on the bookmark/shelf lists is not reachable from a feature module yet —
+  the sidebar's two menus are the only ones that do not consult the row
+  registry — so it lives in ☰ and names the entry in the picker.
+
 - **Web: two commit-menu rows now behave as the TUI's do.** **Reset to here**
   asks *"Reset to `<sha>`? This moves the current branch ref."* before the
   engine's soft/mixed/hard picker — the browser went straight to the picker,
