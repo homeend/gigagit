@@ -1,6 +1,10 @@
 package web
 
-import "net/http"
+import (
+	"net/http"
+
+	"github.com/homeend/gigagit/internal/model"
+)
 
 // maxRemoteRows caps the sidebar payload (the tags cap precedent) — big
 // monorepos carry thousands of remote-tracking branches.
@@ -21,6 +25,13 @@ func (s *Server) handleRemotes(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
+	// Sort BEFORE the cap: sorting the truncated window would show "the
+	// server's arbitrary first hundred, sorted" — the wrong rows, not just the
+	// wrong order. Under date-desc this is what makes the section mean "the 100
+	// most recently updated remote branches".
+	rbs = sortedRows(rbs, allowedSortMode(r.URL.Query().Get("sort")),
+		func(rb model.RemoteBranch) string { return rb.Name },
+		func(rb model.RemoteBranch) int64 { return rb.UnixTime })
 	truncated := false
 	if len(rbs) > maxRemoteRows {
 		rbs = rbs[:maxRemoteRows]

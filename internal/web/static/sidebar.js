@@ -11,15 +11,23 @@ import { gotoBranchTip, openCommitByHash, openStashDetail, setSolo } from "./com
 import { openCompare } from "./files.js";
 import { openFileHistory } from "./filehist.js";
 import { extraRows } from "./menus.js";
+import { nextSortMode, setSortMode, sortChipHTML, sortMode, sortedBy } from "./sortlist.js";
+
+// The remotes and tags payloads are CAPPED at 100 rows server-side, so their
+// order has to be decided there — sorting the truncated window would show the
+// arbitrary first hundred, sorted, rather than the hundred you asked for.
+function sortParam(list) {
+  return "sort=" + encodeURIComponent(sortMode(list));
+}
 
 async function fetchBranches() {
   const [b, w, tg, st, rl, rm, bm, sh] = await Promise.all([
     getJSON("/api/branches"),
     getJSON("/api/worktrees").catch(() => ({ worktrees: [] })),
-    getJSON("/api/tags").catch(() => ({ tags: [], truncated: false })),
+    getJSON("/api/tags?" + sortParam("tags")).catch(() => ({ tags: [], truncated: false })),
     getJSON("/api/stashes").catch(() => ({ stashes: [] })),
     getJSON("/api/reflog?limit=" + reflogWindow).catch(() => ({ entries: [], truncated: false })),
-    getJSON("/api/remotes").catch(() => ({ remotes: [], truncated: false })),
+    getJSON("/api/remotes?" + sortParam("remotes")).catch(() => ({ remotes: [], truncated: false })),
     getJSON("/api/bookmarks").catch(() => ({ entries: [] })),
     getJSON("/api/shelf").catch(() => ({ entries: [] })),
   ]);
@@ -67,7 +75,7 @@ function listCols(id) {
 
 function renderBranches() {
   const cols = listCols("branches-list");
-  $("branches-list").innerHTML = state.branches
+  $("branches-list").innerHTML = sortedBy("branches", state.branches, (b) => b.name, (b) => b.time)
     .map((b) => {
       const ab =
         (b.ahead ? "↑" + b.ahead : "") + (b.behind ? (b.ahead ? " " : "") + "↓" + b.behind : "");
@@ -92,7 +100,7 @@ function renderBranches() {
 
 
 function renderRemotes() {
-  let html = state.remotes
+  let html = sortedBy("remotes", state.remotes, (rb) => rb.name, (rb) => rb.time)
     .map((rb) => `<li data-n="${esc(rb.name)}" data-h="${esc(rb.hash)}">${mark(false)}${esc(rb.name)}</li>`)
     .join("");
   if (state.remotesTruncated) html += `<li class="more">… more (capped at 100)</li>`;
@@ -102,7 +110,14 @@ function renderRemotes() {
 
 function renderWorktrees() {
   const cols = listCols("worktrees-list");
-  $("worktrees-list").innerHTML = state.worktrees
+  // A worktree's "name" is its branch, falling back to the path for a
+  // detached or bare one — the TUI's worktreeList.Name rule.
+  $("worktrees-list").innerHTML = sortedBy(
+    "worktrees",
+    state.worktrees,
+    (w) => w.branch || w.path,
+    (w) => w.time
+  )
     .map((w) => {
       const label = w.bare ? "(bare)" : w.detached ? "(detached)" : w.branch || "(?)";
       const cur = state.worktree && w.path === state.worktree ? " cur" : "";
@@ -121,7 +136,7 @@ function renderWorktrees() {
 
 
 function renderTags() {
-  let html = state.tags
+  let html = sortedBy("tags", state.tags, (t) => t.name)
     .map(
       (t) =>
         `<li data-h="${esc(t.target)}" data-n="${esc(t.name)}">${mark(false)}${esc(t.name)}` +
@@ -579,10 +594,50 @@ $("worktrees-list").addEventListener("contextmenu", (e) => {
 const COLLAPSED_DEFAULT = ["tags", "stashes", "reflog", "bookmarks", "shelf"];
 
 // Every header carries its state as a chevron - pointing down when open,
-// right when folded - so a folded section still reads as something you can open.
+// right when folded - so a folded section still reads as something you can
+// open. The header owns the sort chip too (rather than the chip living in the
+// HTML): this function rewrites the header on every fold, so anything it does
+// not draw would be wiped the first time the section is toggled.
 function applySection(name, collapsed) {
   $(name + "-list").classList.toggle("collapsed", collapsed);
-  $(name + "-header").textContent = (collapsed ? "\u25b8 " : "\u25be ") + name;
+  $(name + "-header").innerHTML =
+    (collapsed ? "\u25b8 " : "\u25be ") + esc(name) + sortChipHTML(name);
+}
+
+
+// isCollapsed reads the fold straight off the list, so redrawing a header
+// (after a sort cycle) cannot flip the chevron by accident.
+function isCollapsed(name) {
+  return $(name + "-list").classList.contains("collapsed");
+}
+
+
+// cycleListSort advances one list to its next order. The remotes and tags
+// payloads are capped server-side, so those two REFETCH under the new order
+// (see sortParam); the rest are complete in hand and just re-render.
+async function cycleListSort(name) {
+  setSortMode(name, nextSortMode(name));
+  applySection(name, isCollapsed(name)); // redraw the chip's label
+  if (name === "remotes") {
+    const rm = await getJSON("/api/remotes?" + sortParam("remotes")).catch(() => null);
+    if (rm) {
+      state.remotes = rm.remotes || [];
+      state.remotesTruncated = !!rm.truncated;
+    }
+    renderRemotes();
+    return;
+  }
+  if (name === "tags") {
+    const tg = await getJSON("/api/tags?" + sortParam("tags")).catch(() => null);
+    if (tg) {
+      state.tags = tg.tags || [];
+      state.tagsTruncated = !!tg.truncated;
+    }
+    renderTags();
+    return;
+  }
+  if (name === "branches") renderBranches();
+  if (name === "worktrees") renderWorktrees();
 }
 
 
@@ -592,7 +647,7 @@ function foldedSections() {
 
 
 function toggleSection(name) {
-  applySection(name, !$(name + "-list").classList.contains("collapsed"));
+  applySection(name, !isCollapsed(name));
   const folded = foldedSections();
   lsSet("gg.sidebar.collapsed", JSON.stringify(folded)); // same-session cache
   saveUI({ sections: folded }); // the copy that survives a restart
@@ -607,7 +662,15 @@ function applyStoredSections(names) {
 }
 
 SECTIONS.forEach((n) => {
-  $(n + "-header").addEventListener("click", () => toggleSection(n));
+  $(n + "-header").addEventListener("click", (e) => {
+    // The chip lives INSIDE the header, whose click folds the section — so it
+    // claims its own clicks rather than folding what you were re-ordering.
+    if (e.target.closest(".sortchip")) {
+      cycleListSort(n);
+      return;
+    }
+    toggleSection(n);
+  });
 });
 
 

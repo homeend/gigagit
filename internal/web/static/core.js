@@ -25,6 +25,8 @@ const state = {
   filesMode: "commit", // commit | status | compare
   compare: null, // {a, b, aHash, bHash, all, filter, originsError} while comparing two branches
   statusEntries: [],
+  // each list's display order (list name -> sort mode); see sortlist.js
+  sorts: {},
   // status-file paths marked for batch actions (status mode only; a Set so
   // any module may add/remove — mutation, not reassignment)
   marked: new Set(),

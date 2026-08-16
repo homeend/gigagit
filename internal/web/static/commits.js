@@ -506,7 +506,7 @@ async function openCommit(i) {
   state.fileSha = row.hash;
   state.filesMode = "commit";
   enterFilesStage();
-  $("files-header").textContent = row.short + " " + row.subject;
+  $("files-title").textContent = row.short + " " + row.subject;
   renderFiles();
   focusPane();
 }
@@ -523,7 +523,7 @@ async function openCommitByHash(hash, title) {
   state.fileSha = hash;
   state.filesMode = "commit";
   enterFilesStage();
-  $("files-header").textContent = title;
+  $("files-title").textContent = title;
   renderFiles();
   focusPane();
 }
@@ -611,7 +611,7 @@ async function openStashDetail(st) {
   state.fileSha = st.sha;
   state.filesMode = "commit";
   enterFilesStage();
-  $("files-header").textContent = "≡ " + st.ref;
+  $("files-title").textContent = "≡ " + st.ref;
   renderFiles();
   focusPane();
 }
