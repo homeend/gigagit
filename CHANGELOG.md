@@ -74,6 +74,30 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   back are re-verified against what is actually at the tip before anything is
   pushed. `GET /api/push-tag-check` reports the offer; `POST /api/op`'s `push`
   takes the answer as `tags`.
+- **Web: a notification centre — the browser can be told what's wrong.** On a
+  single-branch or shallow clone the fetch refspec does not map every branch,
+  so a push succeeds while its remote-tracking ref never moves: the ↓↑ tip
+  markers and ahead/behind stay blind, with nothing on screen saying why. The
+  TUI has offered to fix that behind `!` for a while; the browser had no way to
+  hear about it at all. A red **! n notices** chip in the top bar (also `!`)
+  now opens a centre listing every affected branch, each with its own repair,
+  plus one **add mappings + fetch** for all of them. The repair writes a
+  per-branch mapping and fetches only those branches — never the wildcard,
+  which could turn the next fetch into a mass download on a monorepo remote —
+  and the same finding adds an **add fetch mapping + fetch** row to that
+  branch's own menu. Dismissals live in gg's machine-local prompt store, not
+  the browser: `gg web` binds a random port, so every run is a new origin with
+  an empty `localStorage`, and anything remembered there would come back. The
+  refspec notice shares the TUI's notice id, so silencing it in one frontend
+  silences both. `engine.Push`'s own post-push *"add a tracking mapping?"*
+  question — which came back on every push of an unmapped branch with no way to
+  stop it — can now be turned off per repo from the centre, where the finding
+  and its repair stay listed, so turning the question off is not a way to lose
+  the problem. Answering a suppressed question needs a decider that can speak
+  with no client in the loop, and asking domain for the repo key from inside
+  one deadlocks (the operation holds a write reservation while the query wants
+  a read), so the key is cached by the handlers that resolve it outside an
+  operation — a wedged push, caught in the browser, not by the Go tests.
 
 - **Web: creating a tag is one dialog with both fields, like the TUI's.** It
   used to ask for the name, and only *then* spring a second prompt for an

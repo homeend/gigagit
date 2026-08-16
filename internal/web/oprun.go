@@ -127,7 +127,7 @@ func (s *Server) runOpStream(ctx context.Context, run *opRun, fn runFunc) {
 	if timeout <= 0 {
 		timeout = defaultDecideTimeout
 	}
-	res, extra, err := fn(ctx, svc, events, webDecider{run: run, timeout: timeout})
+	res, extra, err := fn(ctx, svc, events, webDecider{run: run, timeout: timeout, srv: s})
 	close(events)
 	<-pumpDone
 	// No resetFeed here: the client reloads /api/commits after a changing op,
@@ -284,6 +284,35 @@ func (r *opRun) setPending(req *engine.DecisionRequest) {
 	r.mu.Unlock()
 }
 
+// AutoAnswer decides a fork WITHOUT asking the browser. It returns the option
+// to take and true to claim the decision, or false to let it park in the modal
+// as usual. It exists so a feature can honour a remembered "don't ask me this
+// again" from its own file: a suppressed prompt has to be answered by
+// somebody, and only the server-side decider can answer one with no client in
+// the loop. The option MUST be one of req.Options — an answer outside the list
+// would break the project-wide option-list contract.
+type AutoAnswer func(s *Server, req engine.DecisionRequest) (string, bool)
+
+var autoAnswers []AutoAnswer
+
+// RegisterAutoAnswer adds a policy consulted before every fork parks.
+func RegisterAutoAnswer(fn AutoAnswer) {
+	if fn == nil {
+		panic("web: RegisterAutoAnswer with a nil func")
+	}
+	autoAnswers = append(autoAnswers, fn)
+}
+
+// autoAnswer returns the first registered policy's claim on req.
+func autoAnswer(s *Server, req engine.DecisionRequest) (string, bool) {
+	for _, fn := range autoAnswers {
+		if opt, ok := fn(s, req); ok && slices.Contains(req.Options, opt) {
+			return opt, true
+		}
+	}
+	return "", false
+}
+
 // webDecider parks the op until the decide endpoint answers, the op context
 // dies, or the timeout fires — an abandoned browser modal must never wedge
 // the repo gate. The DecisionNeeded event was already emitted by
@@ -291,11 +320,21 @@ func (r *opRun) setPending(req *engine.DecisionRequest) {
 type webDecider struct {
 	run     *opRun
 	timeout time.Duration
+	srv     *Server // for the auto-answer policies
 }
 
 func (d webDecider) Decide(ctx context.Context, req engine.DecisionRequest) (engine.DecisionResponse, error) {
 	d.run.setPending(&req)
 	defer d.run.setPending(nil)
+	// A remembered answer is fed through the SAME path a browser answer takes,
+	// after the fork is parked rather than instead of parking it. That ordering
+	// is deliberate: the DecisionNeeded event has already gone out, so the
+	// browser may be answering this very moment, and whichever answer arrives
+	// first wins while the other becomes a no-op. decide also publishes the
+	// "resolved" marker, which closes the modal the client just opened.
+	if opt, ok := autoAnswer(d.srv, req); ok {
+		_ = d.run.decide(opt)
+	}
 	select {
 	case opt := <-d.run.answer:
 		return engine.DecisionResponse{Option: opt}, nil

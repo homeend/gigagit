@@ -29,6 +29,7 @@ import "./palette.js";
 // own menu rows and help rows — see menus.js).
 import "./patch.js";
 import "./locks.js";
+import "./notifications.js";
 
 // applyStoredLayout puts back the layout gg remembered for this machine:
 // folded sections, pane widths, the sidebar toggle, the graph mode. It runs
