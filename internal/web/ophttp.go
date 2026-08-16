@@ -35,11 +35,14 @@ type opStartRequest struct {
 	Store       string `json:"store"`  // restore-entry: "bookmarks" | "shelf"
 	ID          string `json:"id"`     // restore-entry / shelf-cherry-pick: the entry's id
 	Dest        string `json:"dest"`   // restore-entry: where the content is written
-	Mode        string `json:"mode"`   // reset: "" (interactive picker) | soft | mixed | hard
-	Switch      bool   `json:"switch"` // checkout-remote: switch to the new local branch
-	Force       bool   `json:"force"`
-	Ext         bool   `json:"ext"` // ignore: the whole extension, not the one file
-	All         bool   `json:"all"` // discard: everything unstaged, no path
+	// push: tip tags to push after the branch, the client's answer to the
+	// "branch tip has tags not on the remote" offer. Verified server-side.
+	Tags   []string `json:"tags"`
+	Mode   string   `json:"mode"`   // reset: "" (interactive picker) | soft | mixed | hard
+	Switch bool     `json:"switch"` // checkout-remote: switch to the new local branch
+	Force  bool     `json:"force"`
+	Ext    bool     `json:"ext"` // ignore: the whole extension, not the one file
+	All    bool     `json:"all"` // discard: everything unstaged, no path
 	// Paths is discard's batch form (the marked set). All-or-nothing: any
 	// member failing the per-file rules refuses the whole batch.
 	Paths []string `json:"paths"`
@@ -376,6 +379,29 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 			branch = cur
 		} else if !isGitArgSafe(branch) {
 			writeErr(w, http.StatusBadRequest, errors.New("invalid branch"))
+			return
+		}
+		// Tip tags travelling with the branch (the TUI's "Push branch + tags"):
+		// the names are verified against what is actually at the tip, and the
+		// tag push is CHAINED — it runs only if the branch push succeeded, in
+		// the same run, exactly as the TUI's pendingPushTags does.
+		if tags := s.verifiedTipTags(r.Context(), req.Tags); len(tags) > 0 {
+			branchOp := engine.Push{Remote: "origin", Branch: branch, SetUpstream: true, Force: req.Force}
+			run, rerr := s.startRun("op", func(ctx context.Context, svc *domain.Service, events chan<- engine.Event, dec engine.Decider) (engine.Result, map[string]any, error) {
+				res, err := svc.Execute(ctx, branchOp, events, dec)
+				if err != nil {
+					return res, nil, err
+				}
+				res, err = svc.Execute(ctx, engine.PushTags{Remote: "origin", Names: tags}, events, dec)
+				return res, nil, err
+			})
+			if rerr != nil {
+				writeErr(w, http.StatusConflict, rerr)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			w.WriteHeader(http.StatusAccepted)
+			_ = json.NewEncoder(w).Encode(map[string]string{"op_id": run.id})
 			return
 		}
 		op = engine.Push{Remote: "origin", Branch: branch, SetUpstream: true, Force: req.Force} // the TUI's exact P dispatch

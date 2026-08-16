@@ -494,6 +494,32 @@ $("commits-window").addEventListener("contextmenu", (e) => {
 });
 
 
+// feedDescendant reports whether selHash is a descendant of tipHash, walking
+// parent links across the LOADED rows only — the port of the TUI's
+// fast_forward_gate.go. `conclusive` is false when the walk runs off the
+// loaded window or the tip is not loaded: an unknown answer must offer the
+// row, not hide it, because only git can settle it.
+function feedDescendant(rows, selHash, tipHash) {
+  if (selHash === tipHash) return { descendant: false, conclusive: true }; // not ahead of itself
+  const byHash = new Map(rows.map((r) => [r.hash, r]));
+  if (!byHash.has(tipHash) || !byHash.has(selHash)) return { descendant: false, conclusive: false };
+  const seen = new Set();
+  const stack = [selHash];
+  let conclusive = true;
+  while (stack.length) {
+    const h = stack.pop();
+    if (h === tipHash) return { descendant: true, conclusive: true };
+    if (seen.has(h)) continue;
+    seen.add(h);
+    for (const p of byHash.get(h).parent_ids || []) {
+      if (byHash.has(p)) stack.push(p);
+      else conclusive = false; // ran off the loaded window
+    }
+  }
+  return { descendant: false, conclusive };
+}
+
+
 // showCommitMenu offers the per-commit actions. The history edits are gated
 // on a single parent: a merge (2+) and the root (0) are not what "move" and
 // "drop" mean here, and the engine refuses a range containing a merge anyway
@@ -550,17 +576,26 @@ function showCommitMenu(c, i, x, y) {
         }),
     },
   ];
-  // Advance the current branch to this commit (ff-only): offered on every
-  // commit, since only git can say whether it is strictly ahead — the engine
-  // refuses the rest, which is a better answer than a hidden row.
-  // b.hash is git's ABBREVIATED sha, so the tip test is a prefix match, not
-  // an equality one.
+  // Advance the current branch to this commit (ff-only). The row is HIDDEN
+  // when the commit is conclusively not ahead of the branch tip — the TUI's
+  // commitFastForwardRow gate, walked over the loaded feed the same way
+  // (feedDescendant): a row that can only fail is noise, and "inconclusive"
+  // (tip not loaded, or the walk ran off the loaded window) still offers it
+  // and lets the engine be the judge.
   const cur = (state.branches || []).find((b) => b.is_head);
   if (cur && cur.name && !(cur.hash && c.hash.startsWith(cur.hash))) {
-    items.push({
-      label: "fast-forward " + cur.name + " to here",
-      act: () => startOp({ op: "fast-forward", sha: c.hash }, "fast-forwarding " + cur.name + " to " + short),
-    });
+    const tip = state.rows.find((r) => cur.hash && r.hash.startsWith(cur.hash));
+    const gate = tip ? feedDescendant(state.rows, c.hash, tip.hash) : { conclusive: false };
+    if (!(gate.conclusive && !gate.descendant)) {
+      items.push({
+        label: "fast-forward " + cur.name + " to here",
+        // The TUI confirms this one too (confirmOp, default No).
+        act: () =>
+          showLocalConfirm("Fast-forward to this commit?", ["Yes", "No"], (o) => {
+            if (o === "Yes") startOp({ op: "fast-forward", sha: c.hash }, "fast-forwarding " + cur.name + " to " + short);
+          }),
+      });
+    }
   }
   items.push({ sep: true });
   // gg's own stores: a bookmark is a LIVE reference to this commit, a shelf
@@ -641,7 +676,13 @@ function showCommitMenu(c, i, x, y) {
     items.push({
       label: "reset " + cur.name + " to here…",
       danger: true,
-      act: () => startOp({ op: "reset", sha: c.hash }, "resetting to " + short),
+      // The TUI asks BEFORE the engine's picker — moving a branch ref is
+      // worth one deliberate yes, and the picker that follows is about how
+      // far the working tree comes along, not about whether to do it.
+      act: () =>
+        showLocalConfirm("Reset to " + short + "? This moves the current branch ref.", ["Yes", "No"], (o) => {
+          if (o === "Yes") startOp({ op: "reset", sha: c.hash }, "resetting to " + short);
+        }),
     });
   }
   // Rows contributed by feature modules (menus.js), after the built-ins.
