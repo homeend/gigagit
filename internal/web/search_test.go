@@ -313,6 +313,9 @@ func TestSoloGuards(t *testing.T) {
 		{`{"branch":"nope"}`, http.StatusNotFound},
 		{`{"kind":"commit","ref":"nothex"}`, http.StatusBadRequest},
 		{`{"kind":"commit","ref":"deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"}`, http.StatusNotFound},
+		// A real object that is not a commit: the resolve peels with ^{commit},
+		// so a tree sha never enters a scope the feed would then fail to walk.
+		{`{"kind":"commit","ref":"` + gitRun(t, dir, "rev-parse", "HEAD^{tree}") + `"}`, http.StatusNotFound},
 		{`{"kind":"nonsense","ref":"main"}`, http.StatusBadRequest},
 		{`{"kind":"branch","ref":"--upload-pack=x"}`, http.StatusBadRequest},
 	} {
