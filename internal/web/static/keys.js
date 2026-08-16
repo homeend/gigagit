@@ -3,7 +3,7 @@
 import { $, ROW_H, state } from "./core.js";
 import { closeLayer, topLayer } from "./layers.js";
 import { WT_H, wtCount, wtExtra } from "./status.js";
-import { doCommit, doPull, doPush, openHelp, refreshAfterOp, stageFocused, toggleSidebar } from "./ops.js";
+import { doCommit, doPull, doPush, manualRefresh, openHelp, refreshAfterOp, stageFocused, toggleSidebar } from "./ops.js";
 import { closeCommitFilter, gotoCommitPrompt, openCommit, openCommitFilter, renderCommits, toggleGraphMode } from "./commits.js";
 import { drillOut, openFile, renderFiles, toggleMark } from "./files.js";
 import { openPalette } from "./palette.js";
@@ -118,7 +118,7 @@ document.addEventListener("keydown", (e) => {
   } else if (e.key === "?") {
     openHelp();
   } else if (e.key === "r") {
-    if (!state.op) refreshAfterOp(); // full soft reload: repo, sidebar, status, commits
+    manualRefresh(); // the TUI's r: says it is working, and starts the list clean
   } else if (e.key === "s" || e.key === "u") {
     stageFocused(e.key === "u");
   } else if (e.key === "m") {
@@ -150,7 +150,7 @@ $("foot").addEventListener("click", (e) => {
     case "unstage": stageFocused(true); break;
     case "pull": doPull(); break;
     case "push": doPush(); break;
-    case "refresh": if (!state.op) refreshAfterOp(); break;
+    case "refresh": manualRefresh(); break;
     case "help": openHelp(); break;
     case "palette": openPalette("cmd"); break;
   }

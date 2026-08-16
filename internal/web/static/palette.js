@@ -2,7 +2,7 @@
 // see app.js (the entry module) for the load order.
 import { $, esc, getJSON, state } from "./core.js";
 import { closeLayer, hideCtxMenu, openPrompt, pushLayer, showCtxMenu, topLayer } from "./layers.js";
-import { doFetch, doPull, doPush, doReroot, opLine, openCreateBranchPrompt, openHelp, refreshAfterOp, showLocalConfirm, startOp, toggleSidebar } from "./ops.js";
+import { doFetch, doPull, doPush, doReroot, manualRefresh, opLine, openCreateBranchPrompt, openHelp, showLocalConfirm, startOp, toggleSidebar } from "./ops.js";
 import { openVersionBranches } from "./versions.js";
 import { openFileBlame, openFileHistory } from "./filehist.js";
 import { openSettings } from "./settings.js";
@@ -46,7 +46,7 @@ function paletteCommands() {
     { label: "undo last commit", detail: "", run: () => undoLastCommit() },
     { label: "goto commit…", detail: "#", run: () => gotoCommitPrompt() },
     { label: "filter commits…", detail: "/", run: () => openCommitFilter() },
-    { label: "refresh", detail: "r", run: () => { if (!state.op) refreshAfterOp(); } },
+    { label: "refresh", detail: "r", run: () => manualRefresh() },
     { label: "switch repo…", detail: "", run: null }, // drills into repo mode (runPaletteRow)
     // The TUI palette's Open repo twin: a typed path (custom, ~-expandable
     // server-side) instead of the known-repos picker. doReroot posts it and
@@ -208,7 +208,7 @@ function openGlobalMenu() {
     { label: "switch repo…", act: () => openPalette("repo") },
   ];
   const ui = [
-    { label: "refresh", act: () => { if (!state.op) refreshAfterOp(); } },
+    { label: "refresh", act: () => manualRefresh() },
     { label: "command palette…", act: () => openPalette("cmd") },
     { label: "toggle sidebar", act: () => toggleSidebar() },
     { label: "toggle graph", act: () => toggleGraphMode() },
