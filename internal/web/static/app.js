@@ -28,6 +28,7 @@ import "./palette.js";
 // Feature modules: imported for their side effects only (they register their
 // own menu rows and help rows — see menus.js).
 import "./patch.js";
+import "./locks.js";
 
 // applyStoredLayout puts back the layout gg remembered for this machine:
 // folded sections, pane widths, the sidebar toggle, the graph mode. It runs

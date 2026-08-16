@@ -8,6 +8,25 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: worktrees you can move, and git locks you can clear.** The browser
+  could create a worktree and remove one, and nothing in between. The worktree
+  menu now also offers **rename worktree…** (prefilled with the name only,
+  resolved next to where it already lives) and **move worktree…** (prefilled
+  with the whole path) — the same one operation the TUI's `e` runs, kept as two
+  rows because renaming and relocating are different intentions. A *locked*
+  worktree parks the engine's question in the modal (**unlock and move** /
+  **abort**) instead of failing, and moving the worktree gg is standing in
+  re-roots the server at its new path rather than leaving the page pointed at a
+  directory that is gone. The commit menu gained the create-worktree **keep
+  modes** — *worktree here, keeping the change staged / unstaged* — which cut
+  the branch at the commit's parent with that commit's diff waiting in the new
+  worktree; they are offered only where they can work, never on a root or merge
+  commit. And when git dies hard and strands an `index.lock`, a bar names each
+  lockfile with its age and clears them on one click, the recovery the TUI has
+  had and the browser answered with a dead end. Presence is not proof of
+  staleness, so gg reports the age and lets you decide; the delete is refused
+  for anything that is not a lockfile inside this repository's git dir.
+
 - **Web: a change can leave the browser as a patch, and come back.** `gg web`
   could do neither, so work that started there could only get out through git
   itself. A commit's right-click menu now offers **export as patch…** — `git
