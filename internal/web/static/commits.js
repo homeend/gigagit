@@ -272,8 +272,12 @@ function graphSVG(row, feedIdx) {
 }
 
 
-async function loadCommits(more) {
-  const body = await getJSON(more ? "/api/commits?more=1" : "/api/commits");
+// more: page deeper. reset: start the list clean (a MANUAL refresh — the
+// reconciling reload is right after an op, and useless when the deep tail has
+// gone stale because history was rewritten).
+async function loadCommits(more, reset) {
+  const q = more ? "/api/commits?more=1" : reset ? "/api/commits?reset=1" : "/api/commits";
+  const body = await getJSON(q);
   state.rows = body.rows || [];
   state.canLoadMore = body.can_load_more;
   // The scope is server state (one feed for every tab), so it is reported by

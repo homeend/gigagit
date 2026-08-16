@@ -74,6 +74,14 @@ func (s *Server) handleCommits(w http.ResponseWriter, r *http.Request) {
 	var err error
 	if r.URL.Query().Get("more") == "1" {
 		st, _, err = feed.LoadMore(readCtx(r))
+	} else if r.URL.Query().Get("reset") == "1" {
+		// A MANUAL refresh starts the list clean, exactly as the TUI's `r`
+		// does (reloadOpts{hardFeed: true}). That is its point: reconciling
+		// keeps the pages already scrolled in, which is right after an op and
+		// wrong when the deep tail has gone stale — someone rewrote history,
+		// and the only way back is to walk it again from the top.
+		s.resetFeed()
+		st, err = s.feedFor(r).Refresh(readCtx(r))
 	} else {
 		// A plain reload RECONCILES: it walks the same single page 0 and merges
 		// it into whatever this feed already holds, so the pages the browser

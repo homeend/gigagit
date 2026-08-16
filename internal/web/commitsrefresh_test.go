@@ -134,3 +134,37 @@ func TestCommitsReloadFallsBackAfterARewrite(t *testing.T) {
 		}
 	}
 }
+
+// A MANUAL refresh (the ☰ row, r, the footer button) starts the list clean —
+// the TUI's `r` with hardFeed. That is what makes it the escape hatch when a
+// rewrite leaves a reconciled deep tail stale: the reconciling reload keeps
+// the pages already scrolled in, which is exactly wrong there.
+func TestCommitsResetStartsTheListClean(t *testing.T) {
+	dir := newRepoDir(t, 12)
+	srv := New(domain.Open(dir))
+	srv.pageInitial, srv.pageBatch = 4, 4
+	ts := serve(t, srv)
+
+	if got := feedRows(t, ts, false); len(got) != 4 {
+		t.Fatalf("first page = %d rows, want 4", len(got))
+	}
+	if got := feedRows(t, ts, true); len(got) != 8 {
+		t.Fatalf("after ?more=1 = %d rows, want 8", len(got))
+	}
+	// the reconciling reload keeps that depth …
+	if got := feedRows(t, ts, false); len(got) != 8 {
+		t.Errorf("plain reload = %d rows, want the paged depth kept (8)", len(got))
+	}
+	// … and the manual one drops back to a single clean page
+	var out struct {
+		Rows []struct {
+			Subject string `json:"subject"`
+		} `json:"rows"`
+	}
+	if code := getJSON(t, ts, "/api/commits?reset=1", &out); code != http.StatusOK {
+		t.Fatalf("reset reload: code = %d", code)
+	}
+	if len(out.Rows) != 4 {
+		t.Errorf("reset reload = %d rows, want one clean page (4)", len(out.Rows))
+	}
+}

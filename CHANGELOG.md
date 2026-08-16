@@ -8,6 +8,17 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: refresh says it is working, and starts the commit list clean.** The
+  ☰ menu's **refresh** (and `r`, and the footer button) reloaded silently — on
+  a repo where nothing had changed there was no way to tell it had run at all,
+  which reads as a dead button. It now shows **⏳ reloading…** while it works
+  and **reloaded** when it lands, the TUI's own status line. It is also a HARD
+  reload now, as the TUI's `r` is: the reconciling reload keeps the pages you
+  scrolled in, which is right after an operation and useless when the deep
+  tail has gone stale because someone rewrote history — a manual refresh is
+  that escape hatch. `GET /api/commits?reset=1` is the lane; the plain reload
+  still reconciles.
+
 - **Web: worktrees you can move, and git locks you can clear.** The browser
   could create a worktree and remove one, and nothing in between. The worktree
   menu now also offers **rename worktree…** (prefilled with the name only,
