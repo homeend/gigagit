@@ -8,6 +8,31 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: two commit-menu rows now behave as the TUI's do.** **Reset to here**
+  asks *"Reset to `<sha>`? This moves the current branch ref."* before the
+  engine's soft/mixed/hard picker — the browser went straight to the picker,
+  asking *less* than the TUI before moving a branch ref. **Fast-forward to
+  here** is hidden when the selected commit is conclusively not ahead of the
+  current branch (the TUI's `feedDescendant` walk over the loaded feed, ported
+  to the client; an inconclusive answer still offers the row and lets git
+  judge), and it confirms with the TUI's *"Fast-forward to this commit?"*.
+  Commit rows carry their parents' ids for the walk. Both come from a written
+  behaviour audit of the web against the TUI — `docs/web-tui-behaviour-audit.md`
+  — which lists what else still differs.
+
+- **Web: pushing a branch offers its unpushed tip tags, like the TUI's `P`.**
+  The browser pushed the branch and silently left the tags behind. It now runs
+  the same 5-second-budgeted `git ls-remote --tags` check first and, when the
+  branch tip carries tags the remote does not have, asks the TUI's question
+  with the TUI's options — *Push branch + tags* / *Push branch only* /
+  *Cancel* — then pushes the tags in one call **after** the branch push
+  succeeds. A tip with no tags makes no network call at all, and a remote that
+  does not answer within the budget is skipped rather than turning a push into
+  a wait. Only the tip's tags are considered, and the names the client sends
+  back are re-verified against what is actually at the tip before anything is
+  pushed. `GET /api/push-tag-check` reports the offer; `POST /api/op`'s `push`
+  takes the answer as `tags`.
+
 - **Web: creating a tag is one dialog with both fields, like the TUI's.** It
   used to ask for the name, and only *then* spring a second prompt for an
   annotation — an option you could not see when you were deciding, prefilled

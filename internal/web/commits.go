@@ -19,10 +19,15 @@ type commitRow struct {
 	Refs    []refInfo `json:"refs,omitempty"`
 	Cells   string    `json:"cells"`
 	Lane    int       `json:"lane"`
-	// Parents is the parent COUNT, not the ids: it is what the client needs
-	// to keep the history-edit rows off a merge (2+) or the root (0), the
-	// same gate the TUI's commitEditRow applies.
+	// Parents is the parent COUNT: what the client needs to keep the
+	// history-edit rows off a merge (2+) or the root (0), the same gate the
+	// TUI's commitEditRow applies.
 	Parents int `json:"parents"`
+	// ParentIDs are those parents' hashes. The fast-forward row is offered
+	// only when the selected commit is a DESCENDANT of the current branch tip,
+	// and the TUI decides that by walking parent links across the loaded feed
+	// (feedDescendant). The browser cannot walk what it cannot see.
+	ParentIDs []string `json:"parent_ids,omitempty"`
 }
 
 type refInfo struct {
@@ -104,7 +109,7 @@ func buildRows(commits []model.Commit) []commitRow {
 		if len(short) > 8 {
 			short = short[:8]
 		}
-		row := commitRow{Hash: c.Hash, Short: short, Subject: c.Subject, Author: c.Author, Time: c.UnixTime, Parents: len(c.Parents)}
+		row := commitRow{Hash: c.Hash, Short: short, Subject: c.Subject, Author: c.Author, Time: c.UnixTime, Parents: len(c.Parents), ParentIDs: c.Parents}
 		for _, ref := range c.Refs {
 			row.Refs = append(row.Refs, refInfo{Name: ref.Name, Kind: refKindString(ref.Kind), Head: ref.Head})
 		}
