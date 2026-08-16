@@ -8,6 +8,24 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: git config, agent setup, an AI-written commit message, and amend.**
+  Four settings-shaped gaps against the TUI, each behind its own surface.
+  ☰ → **git config…** lists the keys gg documents with each one's effective
+  value and where it comes from (this repo · global · git's own default), and
+  edits it at the scope you pick — bools and enums get buttons, not a text
+  field. The key is resolved server-side against `internal/gitconfdocs`: a key
+  gg does not document is refused, never written, and keys set here outside
+  that catalog are shown read-only, because a loopback page that could set
+  `core.pager` or an alias would be running code the next time git ran.
+  ☰ → **agent setup…** is `gg init` in the browser: the AI agents actually
+  present on this machine, whether each carries gg's `using-gg` skill, and one
+  button to install or refresh it. The commit box gained **generate** — a
+  configured `commit_message` agent writes the message from the staged diff and
+  fills the box for you to read and edit; it never commits, an unapproved
+  command is shown in full first (the same approval the TUI remembers), and a
+  run that hangs can be cancelled — and **amend…** (also in ☰), which rewrites
+  the last commit's message after confirming that it is history editing and
+  that a pushed commit then needs a forced push.
 - **Web: refresh says it is working, and starts the commit list clean.** The
   ☰ menu's **refresh** (and `r`, and the footer button) reloaded silently — on
   a repo where nothing had changed there was no way to tell it had run at all,

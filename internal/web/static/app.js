@@ -30,6 +30,9 @@ import "./palette.js";
 import "./patch.js";
 import "./locks.js";
 import "./notifications.js";
+import "./gitconfig.js";
+import "./agentsetup.js";
+import "./commitai.js";
 
 // applyStoredLayout puts back the layout gg remembered for this machine:
 // folded sections, pane widths, the sidebar toggle, the graph mode. It runs
