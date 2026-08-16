@@ -3,7 +3,10 @@
 import { $, ROW_H, state } from "./core.js";
 import { closeLayer, topLayer } from "./layers.js";
 import { WT_H, wtCount, wtExtra } from "./status.js";
-import { doCommit, doPull, doPush, openHelp, refreshAfterOp, stageFocused, toggleSidebar } from "./ops.js";
+import { doCommit, doPull, openHelp, refreshAfterOp, stageFocused, toggleSidebar } from "./ops.js";
+// P goes through the tip-tag check (notifications.js), the TUI's P: a branch
+// tip carrying tags the remote lacks asks before the push, and never blocks it.
+import { startPushChecked } from "./notifications.js";
 import { closeCommitFilter, gotoCommitPrompt, openCommit, openCommitFilter, renderCommits, toggleGraphMode } from "./commits.js";
 import { drillOut, openFile, renderFiles, toggleMark } from "./files.js";
 import { openPalette } from "./palette.js";
@@ -114,7 +117,7 @@ document.addEventListener("keydown", (e) => {
   } else if (e.key === "p") {
     doPull();
   } else if (e.key === "P") {
-    doPush();
+    startPushChecked("");
   } else if (e.key === "?") {
     openHelp();
   } else if (e.key === "r") {
@@ -149,7 +152,7 @@ $("foot").addEventListener("click", (e) => {
     case "stage": stageFocused(false); break;
     case "unstage": stageFocused(true); break;
     case "pull": doPull(); break;
-    case "push": doPush(); break;
+    case "push": startPushChecked(""); break;
     case "refresh": if (!state.op) refreshAfterOp(); break;
     case "help": openHelp(); break;
     case "palette": openPalette("cmd"); break;

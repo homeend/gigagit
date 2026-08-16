@@ -8,6 +8,31 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: a notification centre, and the push learned to bring its tags.** Two
+  things went quietly wrong in the browser that the TUI would have told you
+  about. The first: on a single-branch or shallow clone the fetch refspec does
+  not map every branch, so a push succeeds while its remote-tracking ref never
+  moves — the ↓↑ tip markers and ahead/behind stay blind, with nothing on
+  screen saying why. A red **! n notices** chip in the top bar (also `!`) now
+  opens a centre listing every affected branch, each with its own repair, plus
+  one **add mappings + fetch** for all of them; the repair writes a per-branch
+  mapping and fetches only those branches, never the wildcard, so it cannot
+  turn into a mass download on a monorepo remote. The same finding also gets a
+  **add fetch mapping + fetch** row in that branch's own menu. The second:
+  pushing the checked-out branch never mentioned tags sitting on its tip, so a
+  tag created in the web UI stayed local forever. `P`, the ⇫ push button and
+  the palette's **push** now run the TUI's bounded (5s) `ls-remote --tags`
+  check first and offer **push branch + tags** / **push branch only** /
+  **cancel**; a slow or unreachable remote skips the question and pushes
+  normally rather than hanging. Dismissals live in gg's machine-local prompt
+  store, not the browser — `gg web` binds a random port, so every run is a new
+  origin with empty `localStorage` — and the refspec notice shares the TUI's
+  id, so silencing it in one frontend silences both. `engine.Push`'s own
+  post-push "add a tracking mapping?" question, which used to come back on
+  every push of an unmapped branch with no way to stop it, can now be turned
+  off per repo from the centre; the finding stays listed with its repair, so
+  turning the question off is not a way to lose the problem.
+
 - **Web: creating a tag is one dialog with both fields, like the TUI's.** It
   used to ask for the name, and only *then* spring a second prompt for an
   annotation — an option you could not see when you were deciding, prefilled

@@ -2,12 +2,14 @@
 // see app.js (the entry module) for the load order.
 import { $, esc, getJSON, state } from "./core.js";
 import { closeLayer, hideCtxMenu, openPrompt, pushLayer, showCtxMenu, topLayer } from "./layers.js";
-import { doFetch, doPull, doPush, doReroot, opLine, openCreateBranchPrompt, openHelp, refreshAfterOp, showLocalConfirm, startOp, toggleSidebar } from "./ops.js";
+import { doFetch, doPull, doReroot, opLine, openCreateBranchPrompt, openHelp, refreshAfterOp, showLocalConfirm, startOp, toggleSidebar } from "./ops.js";
 import { openVersionBranches } from "./versions.js";
 import { openFileBlame, openFileHistory } from "./filehist.js";
 import { openSettings } from "./settings.js";
 import { openIdentityView } from "./identity.js";
 import { openPrefixesView } from "./prefixes.js";
+// push offers the branch tip's unpushed tags first — see notifications.js.
+import { startPushChecked } from "./notifications.js";
 import { openExtToolsView } from "./exttools.js";
 import { openSessionErrorsView } from "./sessionerrors.js";
 import { startReview } from "./review.js";
@@ -29,7 +31,7 @@ let pal = null; // {mode: "cmd"|"repo", fromCmd, rows, filtered, sel}
 function paletteCommands() {
   return [
     { label: "pull", detail: "p", run: () => doPull() },
-    { label: "push", detail: "P", run: () => doPush() },
+    { label: "push", detail: "P", run: () => startPushChecked("") },
     { label: "fetch all remotes", detail: "", run: () => doFetch() },
     { label: "prune remotes (drop deleted branches)", detail: "", run: () => startOp({ op: "prune" }, "pruning remotes") },
     { label: "settings…", detail: "", run: () => openSettings() },
@@ -191,7 +193,7 @@ function openGlobalMenu() {
   // below a separator — the one fixed anchor.
   const git = [
     { label: "pull", act: () => doPull() },
-    { label: "push", act: () => doPush() },
+    { label: "push", act: () => startPushChecked("") },
     { label: "fetch all remotes", act: () => doFetch() },
     { label: "prune remotes (drop deleted branches)", act: () => startOp({ op: "prune" }, "pruning remotes") },
     { label: "create branch…", act: () => openCreateBranchPrompt() },

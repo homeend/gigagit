@@ -25,6 +25,7 @@ import "./prefixes.js";
 import "./exttools.js";
 import "./sessionerrors.js";
 import "./palette.js";
+import "./notifications.js";
 
 // applyStoredLayout puts back the layout gg remembered for this machine:
 // folded sections, pane widths, the sidebar toggle, the graph mode. It runs
