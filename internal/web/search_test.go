@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -38,18 +39,35 @@ func (f feedResp) subjects() []string {
 	return out
 }
 
-// commitAs commits everything staged in dir with an explicit author, so a
-// filter can tell two people apart.
-func commitAs(t *testing.T, dir, author, msg string) {
+// commitAs commits everything staged in dir with an explicit author AND an
+// explicit date, so the author and date filters have something stable to
+// select on.
+//
+// It shells out directly rather than through gitRun because the date is
+// ENVIRONMENT, not an argument: `git commit --date` sets only the author's
+// half, and `git log --since/--until` read the committer's. Dates in the
+// 2020s are also deliberate — git's approxidate answers `--since=1970-01-01`
+// with nothing and `--until=1970-01-01` with everything, so an epoch fixture
+// tests the opposite of what it reads like.
+func commitAs(t *testing.T, dir, author, date, msg string) {
 	t.Helper()
-	gitRun(t, dir, "commit", "--author="+author, "-m", msg)
+	cmd := exec.Command("git", "-c", "commit.gpgsign=false", "commit", "--author="+author, "-m", msg)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(),
+		"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@example.com",
+		"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@example.com",
+		"GIT_AUTHOR_DATE="+date, "GIT_COMMITTER_DATE="+date)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git commit %s: %v\n%s", msg, err, out)
+	}
 }
 
-// filterRepo builds a repo with two authors and two paths on main, plus a
-// side branch, which is everything the feed filters need to be told apart:
+// filterRepo builds a repo with two authors, two paths and four distinct
+// dates on main plus a side branch — everything the feed filters need to be
+// told apart:
 //
-//	main:  c-a1 (alice, a.txt) → c-b1 (bob, b.txt) → c-a2 (alice, a.txt)
-//	side:  c-side (bob, s.txt) branched off c-a1
+//	main:  c-a1 (alice, a.txt, 2020) → c-b1 (bob, b.txt, 2021) → c-a2 (alice, a.txt, 2022)
+//	side:  c-side (bob, s.txt, 2023) branched off c-a1
 func filterRepo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -61,15 +79,15 @@ func filterRepo(t *testing.T) string {
 		gitRun(t, dir, "add", "-A")
 	}
 	write("a.txt", "a1\n")
-	commitAs(t, dir, "Alice <alice@example.com>", "c-a1")
+	commitAs(t, dir, "Alice <alice@example.com>", "2020-01-01T12:00:00+0000", "c-a1")
 	first := gitRun(t, dir, "rev-parse", "HEAD")
 	write("b.txt", "b1\n")
-	commitAs(t, dir, "Bob <bob@example.com>", "c-b1")
+	commitAs(t, dir, "Bob <bob@example.com>", "2021-01-01T12:00:00+0000", "c-b1")
 	write("a.txt", "a2\n")
-	commitAs(t, dir, "Alice <alice@example.com>", "c-a2")
+	commitAs(t, dir, "Alice <alice@example.com>", "2022-01-01T12:00:00+0000", "c-a2")
 	gitRun(t, dir, "checkout", "-q", "-b", "side", first)
 	write("s.txt", "s\n")
-	commitAs(t, dir, "Bob <bob@example.com>", "c-side")
+	commitAs(t, dir, "Bob <bob@example.com>", "2023-01-01T12:00:00+0000", "c-side")
 	gitRun(t, dir, "checkout", "-q", "main")
 	return dir
 }
@@ -87,8 +105,9 @@ func TestFeedFilterNarrows(t *testing.T) {
 		{"author", "?author=Alice", []string{"c-a2", "c-a1"}},
 		{"path", "?path=b.txt", []string{"c-b1"}},
 		{"message", "?grep=side", []string{"c-side"}},
-		{"until the epoch", "?until=1970-01-01", nil},
-		{"since the epoch", "?since=1970-01-01", []string{"c-side", "c-a2", "c-b1", "c-a1"}},
+		{"since", "?since=2021-06-01", []string{"c-side", "c-a2"}},
+		{"until", "?until=2020-06-01", []string{"c-a1"}},
+		{"a date window", "?since=2020-06-01&until=2021-06-01", []string{"c-b1"}},
 		{"author and path together", "?author=Alice&path=a.txt", []string{"c-a2", "c-a1"}},
 		// A key this build does not know is not an error: the browser and the
 		// server ship together but are not necessarily loaded together.
@@ -99,10 +118,9 @@ func TestFeedFilterNarrows(t *testing.T) {
 			if code := getJSON(t, ts, "/api/commits"+tc.query, &got); code != http.StatusOK {
 				t.Fatalf("status = %d, want 200", code)
 			}
-			// Compared as a SET: two branch tips committed in the same second
-			// have no stable order between them, and what is under test here
-			// is which commits the filter selects, not the walk's tie-break
-			// (TestCommitsEndpoint already pins newest-first).
+			// Compared as a SET: what is under test is WHICH commits a
+			// filter selects, not how the walk orders two tips against
+			// each other (TestCommitsEndpoint pins newest-first).
 			gotS, wantS := append([]string(nil), got.subjects()...), append([]string(nil), tc.want...)
 			sort.Strings(gotS)
 			sort.Strings(wantS)
