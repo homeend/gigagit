@@ -130,11 +130,22 @@ out.footClicked = await evaluate(`(() => {
 await sleep(400);
 out.afterFoot = await evaluate(sidebarWidth);
 check("the footer chip hides the sidebar", out.afterFoot === 0, `${out.afterMenu2} → ${out.afterFoot}`);
-check("the footer chip names the new key", /^t /.test(out.footClicked || ""), out.footClicked);
+// The chip, the ☰ row and the help row all name the SAME thing: a control
+// called "branches" in one place and "toggle sidebar" in another reads as two
+// different controls.
+check("the footer chip names the key and the action", (out.footClicked || "").trim() === "t toggle sidebar", out.footClicked);
 
 // --- 4. the state is persisted SERVER-side ---------------------------------
 out.uistate = await evaluate(`fetch("/api/uistate").then((r) => r.json()).then((j) => JSON.stringify(j))`);
 check("hidden is persisted server-side", /"sidebar_hidden":true/.test(out.uistate || ""), out.uistate);
+
+// --- 4b. the help overlay names it the same way ----------------------------
+out.helpRow = await evaluate(`(() => {
+  const rows = [...document.querySelectorAll("#help-box .hrow")];
+  const r = rows.find((x) => (x.querySelector(".hkey") || {}).textContent === "t");
+  return r ? r.textContent : "NO t ROW";
+})()`);
+check("the help overlay has a t row calling it toggle sidebar", /^t\s*toggle sidebar/.test(out.helpRow || ""), out.helpRow);
 
 // --- 5. the old key is gone -------------------------------------------------
 await evaluate(key("b"));

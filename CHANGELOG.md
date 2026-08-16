@@ -15,7 +15,8 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   where the argument means *hidden* and `state.sidebar` means *visible*), so
   the toggle had been idempotent since the layout moved into gg's state file.
   The key is `t` now rather than `b` — the column is the tabs, and `b` is
-  worth keeping free. Help row and footer chip renamed with it.
+  worth keeping free. All three places that name it now say the same thing:
+  the ☰ row, the footer chip (**t toggle sidebar**) and the `?` help row.
 - **Web: two saved things, compared against each other.** The browser could
   already compare a commit or a file *against* a bookmark or shelf entry; the
   other direction — the one the TUI reaches from the bookmark and shelf popups
