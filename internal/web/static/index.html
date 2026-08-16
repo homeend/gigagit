@@ -94,7 +94,7 @@
   </section>
 </main>
 <div id="op-line" class="hidden"><div id="op-head"><span>Problem</span><span>(double-click anywhere to hide)</span></div><div id="op-text"></div></div>
-<footer id="foot"><span>j/k move</span><span>enter open</span><button data-act="back">esc back</button><button data-act="sidebar">t branches</button><button data-act="graph">g graph</button><button data-act="filter">/ filter</button><button data-act="stage">s stage</button><button data-act="unstage">u unstage</button><button data-act="pull">p pull</button><button data-act="push">P push</button><button data-act="refresh">r refresh</button><button data-act="help">? help</button><button data-act="palette">ctrl+k palette</button></footer>
+<footer id="foot"><span>j/k move</span><span>enter open</span><button data-act="back">esc back</button><button data-act="sidebar">t toggle sidebar</button><button data-act="graph">g graph</button><button data-act="filter">/ filter</button><button data-act="stage">s stage</button><button data-act="unstage">u unstage</button><button data-act="pull">p pull</button><button data-act="push">P push</button><button data-act="refresh">r refresh</button><button data-act="help">? help</button><button data-act="palette">ctrl+k palette</button></footer>
 <div id="ctx-menu" class="hidden"></div>
 <div id="modal" class="hidden">
   <div id="modal-box">
@@ -211,7 +211,7 @@
     <div class="hrow"><span class="hkey">esc</span><span>one stage back — diff → file list → commit list; closes menus and modals (in a decision modal: abort, when offered)</span></div>
     <div class="hrow"><span class="hkey">g</span><span>commit graph on/off — off is a flat list, more room for subjects (persisted)</span></div>
     <div class="hrow"><span class="hkey">r</span><span>refresh everything (status, branches, commits) — also happens automatically when the tab regains focus</span></div>
-    <div class="hrow"><span class="hkey">t</span><span>show / hide the sidebar — the branches / tags / stashes column (persisted)</span></div>
+    <div class="hrow"><span class="hkey">t</span><span><b>toggle sidebar</b> — show / hide the branches / tags / stashes column (persisted). Also the ☰ menu's <b>toggle sidebar</b> and the footer's <b>t toggle sidebar</b></span></div>
     <div class="hrow"><span class="hkey">p</span><span>pull the current branch (confirms first; conflicts and forks arrive in the modal)</span></div>
     <div class="hrow"><span class="hkey">P</span><span>push the current branch (rejection recovery — rebase / force — in the modal). If the branch tip carries tags the remote does not have, a prompt offers <b>Push branch + tags</b> / <b>Push branch only</b> / <b>Cancel</b> first — the tags go in one push after the branch. The check is bounded at 5s, so an unreachable remote never delays a push, and a tip with no tags makes no extra call at all</span></div>
     <div class="hrow"><span class="hkey">s / u</span><span>stage / unstage the focused file (working-tree status view)</span></div>
