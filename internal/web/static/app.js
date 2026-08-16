@@ -29,6 +29,7 @@ import "./palette.js";
 // own menu rows and help rows — see menus.js).
 import "./patch.js";
 import "./locks.js";
+import "./conflicts.js";
 import "./notifications.js";
 import "./gitconfig.js";
 import "./agentsetup.js";

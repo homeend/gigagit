@@ -26,6 +26,27 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   run that hangs can be cancelled — and **amend…** (also in ☰), which rewrites
   the last commit's message after confirming that it is history editing and
   that a pushed commit then needs a forced push.
+- **Web: whole-file conflict answers, a stash checklist, and comparing against
+  a stored entry.** Three TUI-only shortcuts arrive in the browser. A
+  conflicted file's menu now offers the **whole-file** resolutions — *keep
+  current (ours)* / *keep incoming (theirs)* when both sides changed it, and
+  *keep the modified file* / *delete the file* / *keep the base version* when
+  one side deleted it, which the block picker cannot express at all — while
+  **mark all N resolved (stage as-is)** sits in the conflict bar for when you
+  already fixed everything in your editor (it stages the conflicted set
+  exactly as it stands, markers included, and nothing else). **stash a
+  selection…** (☰, or a file's own menu) opens a checklist of everything
+  unstaged and untracked — space toggles, ticking all of it is the plain
+  whole-tree stash. And a bookmark or shelf entry is now something you can
+  diff *against*: **compare with a bookmark or shelf entry…** on a commit
+  opens the whole-tree comparison, **compare with a stored copy…** on a file
+  diffs it against a frozen one. A shelved commit still compares after the
+  original commit is gone — the header says so when you are looking at the
+  frozen copy rather than the commit itself. New endpoints
+  `GET /api/compare-entry` and `GET /api/entry-diff` (both sides resolved
+  server-side from an id and an allowlisted kind, and keyed for caching by
+  resolved hash or entry id — never by a name that can be re-pointed), plus
+  the `resolve-conflict`, `mark-all-resolved` and `stash-paths` operations.
 - **Web: refresh says it is working, and starts the commit list clean.** The
   ☰ menu's **refresh** (and `r`, and the footer button) reloaded silently — on
   a repo where nothing had changed there was no way to tell it had run at all,
