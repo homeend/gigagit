@@ -1,27 +1,24 @@
 // notifications.js — part of gg's web client.
 //
-// The notification centre, and the two push repairs that feed it.
+// The notification centre: the browser's half of the TUI's `!` dialog.
 //
-// The TUI notices things it can fix and offers the fix behind `!`; the browser
-// noticed none of them. Two findings meet here:
-//
-//   - a clone whose fetch refspec cannot map a branch, so a push succeeds while
-//     the ↓↑ markers never move and nobody is told why;
-//   - tags on the branch tip that the remote does not have, offered before a
-//     push the way the TUI's P does.
+// The TUI notices repository problems it can fix and offers the fix behind one
+// key; the browser noticed none of them. The finding carried here today is the
+// narrowed fetch refspec — a clone whose refspec cannot map a branch, so a push
+// succeeds while the ↓↑ markers never move and nobody is told why.
 //
 // Everything this file remembers lives SERVER-SIDE, in gg's machine-local
 // prompt store. `gg web` binds a random loopback port, so every run is a new
 // origin and localStorage starts empty — a dismissal kept in the browser would
 // come back on the next run, which is exactly the bug the centre must not have.
-import { $, esc, getJSON, postJSON, state } from "./core.js";
+import { $, esc, getJSON, postJSON } from "./core.js";
 import { closeLayer, mountOverlay, pushLayer, topLayer } from "./layers.js";
 import { registerHelp, registerRows } from "./menus.js";
-import { followOp, opBusy, opLine, refreshAfterOp, showLocalConfirm, startOp } from "./ops.js";
+import { opLine, startOp } from "./ops.js";
 
 // Notice ids are PERMANENT — the server remembers a dismissal by id in
-// prompts.toml. These two mirror the constants in internal/web/notifications.go
-// and must never be renamed on one side only.
+// prompts.toml. This mirrors the constant in internal/web/notifications.go and
+// must never be renamed on one side only.
 const NOTICE_REFSPEC = "narrow_fetch_refspec";
 
 // This sheet has NO global .hidden rule — every surface hides itself by id (a
@@ -194,112 +191,6 @@ new MutationObserver((records) => {
 }).observe($("push-btn"), { attributes: true, attributeFilter: ["disabled"] });
 
 
-// --- push, with the tip-tag question ---------------------------------------
-
-// startPushChecked is the push entry point for every surface that used to call
-// doPush: ask the server whether the branch tip carries tags the remote lacks,
-// offer them, then push. The check is a NETWORK call, so the server bounds it
-// to five seconds and answers checked=false when the budget runs out — a push
-// must never hang behind an unreachable remote.
-async function startPushChecked(branch) {
-  if (opBusy()) return;
-  let chk = null;
-  try {
-    chk = await getJSON("/api/push-check" + (branch ? "?branch=" + encodeURIComponent(branch) : ""));
-  } catch {
-    chk = null; // a check that failed is a check that offers nothing
-  }
-  // The push itself may go out with no branch (the server resolves the current
-  // one), but the prompt and the tag chain both need a NAME, so the resolved
-  // one is read off the check.
-  const target = (chk && chk.branch) || branch || (state.repo && state.repo.branch) || "";
-  const label = "pushing " + (target || "current branch");
-  if (!chk || !chk.checked || !chk.unpushed.length) {
-    startPushRun(branch, label, "");
-    return;
-  }
-  // The world may have moved during those seconds. Both guards are the TUI's,
-  // and both report rather than pushing under something the user just opened.
-  if (state.op) {
-    opLine("push cancelled (an operation is running) — press P again", true);
-    return;
-  }
-  if (topLayer()) {
-    opLine("push cancelled (another dialog opened) — press P again", true);
-    return;
-  }
-  const tags = chk.unpushed;
-  const noun = tags.length === 1 ? "tag " : "tags ";
-  showLocalConfirm(
-    "Push " + target + ": branch tip has " + noun + tags.join(", ") + " not on the remote. Push too?",
-    ["push branch + tags", "push branch only", "cancel"],
-    (o) => {
-      if (o === "push branch + tags") startPushRun(branch, label, target);
-      else if (o === "push branch only") startPushRun(branch, label, "");
-    }
-  );
-}
-
-
-// startPushRun runs the branch push itself. It carries its own done handler
-// because the tag push has to be chained onto a SUCCESSFUL push and nothing
-// else may chain onto a failed one. onDone REPLACES the generic done handling
-// entirely, so everything that handler did is repeated here.
-async function startPushRun(branch, label, tagBranch) {
-  if (opBusy()) return;
-  const body = { op: "push" };
-  if (branch) body.branch = branch;
-  let resp;
-  try {
-    resp = await postJSON("/api/op", body);
-  } catch (e) {
-    opLine("error: " + (e.message || e), true);
-    return;
-  }
-  followOp(resp.op_id, label, "push", (ev) => {
-    if (!ev.ok) {
-      opLine("error: " + (ev.error || "operation failed"), true);
-      // A failed push can still have moved something (a rejection-recovery
-      // fork that force-pushed and then failed later), so the panels are
-      // refreshed either way — the generic handler's reason for doing the
-      // same on its non-changed path.
-      refreshAfterOp();
-      return; // no tags follow a push that did not land
-    }
-    opLine(ev.summary || "done");
-    if (tagBranch) {
-      startTipTagsRun(tagBranch);
-      return;
-    }
-    // The unmapped-branch case is already a fork inside engine.Push, parked in
-    // the shared modal — nothing to ask here. What this feature adds around it
-    // is the way to turn that fork off and the batch repair (notifications.go);
-    // the refresh below is what puts a new finding on the bell.
-    refreshAfterOp();
-  });
-}
-
-
-// startTipTagsRun chains the tag push after a successful branch push — the
-// TUI's pendingPushTags step. It owns its done handling too, so the refresh
-// runs once, after the LAST op of the sequence.
-async function startTipTagsRun(branch) {
-  let resp;
-  try {
-    resp = await postJSON("/api/op", { op: "push-tip-tags", branch });
-  } catch (e) {
-    opLine("error: " + (e.message || e), true);
-    refreshAfterOp();
-    return;
-  }
-  followOp(resp.op_id, "pushing tip tags", "push-tip-tags", (ev) => {
-    if (ev.ok) opLine(ev.summary || "done");
-    else opLine("error: " + (ev.error || "pushing tags failed"), true);
-    refreshAfterOp();
-  });
-}
-
-
 // A branch the centre reports as unmapped can be repaired from its own menu —
 // the finding is about that branch, and the row is where the user is already
 // looking. Rows register themselves; sidebar.js is never edited.
@@ -317,35 +208,7 @@ registerRows("branch", (b) => {
 });
 
 
-// The push button is bound inside ops.js, which parallel work must not edit, so
-// the click is taken one phase earlier: a capture listener on the document runs
-// before any listener on the button itself. The key and the palette entries
-// call startPushChecked directly instead — a plain call beats an interception
-// wherever the call site is reachable.
-document.addEventListener(
-  "click",
-  (e) => {
-    if (!e.target.closest || !e.target.closest("#push-btn")) return;
-    e.stopPropagation();
-    startPushChecked("");
-  },
-  true
-);
-
-
 registerHelp({ key: "!", html: "notifications — repository problems gg can fix (an unmapped fetch refspec today)" });
-
-// P already has a help row. Appending a second one for the same key would read
-// as two different keys, so the existing row is extended in place instead —
-// with a registerHelp fallback if that row is ever renamed or removed.
-(() => {
-  const row = [...document.querySelectorAll("#help-box .hrow")]
-    .find((r) => (r.querySelector(".hkey") || {}).textContent === "P");
-  const note = " — tags on the branch tip that the remote lacks are offered first";
-  const desc = row && row.querySelector("span:not(.hkey)");
-  if (desc) desc.textContent += note;
-  else registerHelp({ key: "P", html: "push" + note });
-})();
 
 // The bell answers to `!`, like the TUI's. Registered here (not in keys.js) so
 // the key and the surface stay in one file; layers own the keyboard first, so
@@ -359,4 +222,4 @@ document.addEventListener("keydown", (e) => {
 
 fetchNotifications();
 
-export { fetchNotifications, openNotifications, startPushChecked };
+export { fetchNotifications, openNotifications };
