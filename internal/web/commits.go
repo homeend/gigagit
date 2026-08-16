@@ -42,7 +42,11 @@ type refInfo struct {
 // exists, else the committed .gg.toml — the same resolution effectiveConfig
 // and handleUIConfig use), so a private-config repo's commit_sort takes
 // effect here too.
-func (s *Server) feedFor(r *http.Request) *domain.CommitFeed {
+//
+// The scope a fresh feed starts under is the solo selection PLUS the filter
+// this request carries: a rebuild (an op dropped the feed, the sort changed,
+// the repo was re-rooted) must not quietly widen a narrowed list.
+func (s *Server) feedFor(r *http.Request, filter feedFilter) *domain.CommitFeed {
 	svc := s.service()
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -55,11 +59,16 @@ func (s *Server) feedFor(r *http.Request) *domain.CommitFeed {
 			}
 		}
 		f.SetSortMode(mode)
-		// Re-derive the solo scope on every build. SetScope only records the
-		// refspec — the LoadInitial the caller is about to make does the walk,
-		// so a rebuild costs nothing extra. This is what makes solo survive
+		// Re-derive the scope on every build. SetScope only records the
+		// refspec — the walk the caller is about to make does the work, so a
+		// rebuild costs nothing extra. This is what makes solo survive
 		// resetFeed after a state-changing op.
-		f.SetScope(soloScope(s.solo))
+		scope := scopeFor(s.solo, filter)
+		f.SetScope(scope)
+		// A fresh feed walks the scope it was just given; recording that is
+		// load-bearing, since a stale signature would make the next filtered
+		// request look already-applied and answer with unfiltered rows.
+		s.scopeApplied(scope)
 		if s.pageInitial > 0 {
 			f.SetPageSizes(s.pageInitial, s.pageBatch)
 		}
@@ -68,49 +77,85 @@ func (s *Server) feedFor(r *http.Request) *domain.CommitFeed {
 	return s.feed
 }
 
+// feedScope is the scope /api/commits should walk: the stored solo selection
+// plus this request's filter.
+func (s *Server) feedScope(filter feedFilter) domain.LogScope {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return scopeFor(s.solo, filter)
+}
+
 func (s *Server) handleCommits(w http.ResponseWriter, r *http.Request) {
-	feed := s.feedFor(r)
-	var st domain.FeedState
-	var err error
-	if r.URL.Query().Get("more") == "1" {
-		st, _, err = feed.LoadMore(readCtx(r))
-	} else if r.URL.Query().Get("reset") == "1" {
+	q := r.URL.Query()
+	filter, ferr := parseFeedFilter(q)
+	if ferr != nil {
+		writeErr(w, http.StatusBadRequest, ferr)
+		return
+	}
+	if q.Get("reset") == "1" {
 		// A MANUAL refresh starts the list clean, exactly as the TUI's `r`
 		// does (reloadOpts{hardFeed: true}). That is its point: reconciling
 		// keeps the pages already scrolled in, which is right after an op and
 		// wrong when the deep tail has gone stale — someone rewrote history,
 		// and the only way back is to walk it again from the top.
 		s.resetFeed()
-		st, err = s.feedFor(r).Refresh(readCtx(r))
-	} else {
+	}
+	feed := s.feedFor(r, filter)
+	scope := s.feedScope(filter)
+	var st domain.FeedState
+	var err error
+	switch {
+	case s.scopeNeedsApply(scope):
+		// The filter changed under a live feed (or a second tab is asking for
+		// a different one): re-walk page 0 under the new scope. ApplyScope
+		// stashes the accumulation it leaves behind, so CLEARING a filter
+		// restores every page that was already walked with no git call at all
+		// — which is what makes a filter cheap to try.
+		st, err = feed.ApplyScope(readCtx(r), scope)
+		s.scopeApplied(scope)
+	case q.Get("more") == "1":
+		st, _, err = feed.LoadMore(readCtx(r))
+	default:
 		// A plain reload RECONCILES: it walks the same single page 0 and merges
 		// it into whatever this feed already holds, so the pages the browser
 		// scrolled in survive an op or an F5. New commits prepend, a vanished
 		// tip is trimmed, and a rewrite that can't be aligned degrades to the
 		// hard reset LoadInitial always did. A freshly built feed (solo change,
-		// sort change, re-root — each drops s.feed) holds nothing, so this
-		// degenerates to the plain page-0 walk there.
+		// sort change, re-root, the reset above — each drops s.feed) holds
+		// nothing, so this degenerates to the plain page-0 walk there.
 		st, err = feed.Refresh(readCtx(r))
 	}
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	// solo rides along on the response whose content it scopes, so a reload
-	// or a second tab always learns the active scope without a second call.
+	// The scope rides along on the response whose content it scopes, so a
+	// reload or a second tab always learns it without a second call.
+	soloKind, soloRef := s.soloRef()
 	writeJSON(w, map[string]any{
-		"rows":          buildRows(st.Commits),
+		// A filtered feed is a non-contiguous SUBSET of history, so its lanes
+		// would connect commits that are not parent and child. The TUI drops
+		// the graph for exactly that reason; here it also drops the cost,
+		// which on a big repo is the larger half of the answer.
+		"rows":          buildRows(st.Commits, !filter.active()),
 		"can_load_more": !st.Exhausted,
-		"solo":          s.soloBranch(),
+		"solo":          soloRef,
+		"solo_kind":     soloKind,
+		"filtered":      filter.active(),
 	})
 }
 
-func buildRows(commits []model.Commit) []commitRow {
-	cs := make([]commitgraph.Commit, len(commits))
-	for i, c := range commits {
-		cs[i] = commitgraph.Commit{Hash: c.Hash, Parents: c.Parents}
+// buildRows renders the feed page for the wire. lanes draws the commit graph;
+// callers pass false when the page is a filtered subset (see handleCommits).
+func buildRows(commits []model.Commit, lanes bool) []commitRow {
+	var graphRows []commitgraph.Row
+	if lanes {
+		cs := make([]commitgraph.Commit, len(commits))
+		for i, c := range commits {
+			cs[i] = commitgraph.Commit{Hash: c.Hash, Parents: c.Parents}
+		}
+		graphRows, _ = commitgraph.Lay(cs)
 	}
-	graphRows, _ := commitgraph.Lay(cs)
 	rows := make([]commitRow, len(commits))
 	for i, c := range commits {
 		short := c.Hash
