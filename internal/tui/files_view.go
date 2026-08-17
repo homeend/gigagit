@@ -10,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
@@ -40,6 +41,7 @@ func (m Model) closeFilesView() Model {
 	m.filesView = nil
 	m.filesTitle = ""
 	m.filesContext = ""
+	m.filesCommit = model.Commit{}
 	m.filesHash = ""
 	m.filesLeft = model.Endpoint{}
 	m.filesRight = model.Endpoint{}
@@ -66,10 +68,37 @@ func (m Model) openChangedFiles(c model.Commit) (Model, tea.Cmd) {
 	m.filesView = &contentPopup{lines: []contentLine{{text: i18n.T("(loading…)")}}}
 	m.filesTitle = i18n.T("Files %s %s", shortHash(c.Hash), c.Subject)
 	m.filesContext = shortHash(c.Hash) + " " + c.Subject
+	m.filesCommit = c // paint the date immediately when the feed row already knows it; the load confirms
 	m.filesHash = c.Hash
 	m.filesMode = filesModeChanged
 	m.filesReadInflight = true
 	return m, m.loadCommitFilesCmd(c)
+}
+
+// filesMetaLine renders the files view's under-title line: the commit's AUTHOR
+// date, then its author. "" when the date is unknown — the view then draws no
+// line at all (and spends no row on it), which beats parking an "(unknown)"
+// placeholder under every header the lookup could not resolve.
+func filesMetaLine(c model.Commit) string {
+	if c.UnixTime == 0 {
+		return ""
+	}
+	s := commitDateString(c) // the same stamp the i popup shows, from one formatter
+	if c.Author != "" {
+		s += " · " + c.Author
+	}
+	return s
+}
+
+// filesMetaLineFor is the date line the view would draw right now: "" unless a
+// single-commit mode is open with a known date. Only the two single-commit
+// modes have one date behind them — a compare has two endpoints, and
+// stash/shelf keep their own headers.
+func (m Model) filesMetaLineFor() string {
+	if m.filesMode != filesModeChanged && m.filesMode != filesModeFullTree {
+		return ""
+	}
+	return filesMetaLine(m.filesCommit)
 }
 
 // openStashFiles opens a stash's files (mode=Stash) from a clean slate. Opens on
@@ -212,10 +241,12 @@ func fileLine(f model.CommitFile) string {
 }
 
 // commitFilesMsg carries one commit's changed files, tagged with the hash so
-// stale results from fast j/k movement can be dropped.
+// stale results from fast j/k movement can be dropped. commit is the resolved
+// commit behind the list (date/author filled in for a bare sha).
 type commitFilesMsg struct {
 	hash    string
 	subject string
+	commit  model.Commit
 	files   []model.CommitFile
 	err     error
 }
@@ -224,9 +255,31 @@ type commitFilesMsg struct {
 func (m Model) loadCommitFilesCmd(c model.Commit) tea.Cmd {
 	svc := m.svc
 	return func() tea.Msg {
+		c = resolveCommitMeta(svc, c)
 		files, err := svc.CommitFiles(context.Background(), c.Hash)
-		return commitFilesMsg{hash: c.Hash, subject: c.Subject, files: files, err: err}
+		return commitFilesMsg{hash: c.Hash, subject: c.Subject, commit: c, files: files, err: err}
 	}
+}
+
+// resolveCommitMeta fills in a commit's date/author/subject when the caller
+// only had a hash — Tags, goto-SHA and the reflog all synthesize a bare
+// model.Commit. Runs on the load goroutine, so the extra read never touches the
+// UI thread, and is best-effort: an unresolvable rev leaves c as it was and the
+// header simply carries no date. Commits that came from the feed already have
+// the fields and cost nothing here.
+func resolveCommitMeta(svc *domain.Service, c model.Commit) model.Commit {
+	if c.UnixTime != 0 || c.Hash == "" {
+		return c
+	}
+	full, err := svc.CommitMeta(context.Background(), c.Hash)
+	if err != nil {
+		return c
+	}
+	c.UnixTime, c.Author = full.UnixTime, full.Author
+	if c.Subject == "" {
+		c.Subject = full.Subject // a goto-SHA open starts hash-only; the title improves too
+	}
+	return c
 }
 
 // treeFilesMsg carries the full file tree of commit hash, with the content lines
@@ -235,6 +288,7 @@ func (m Model) loadCommitFilesCmd(c model.Commit) tea.Cmd {
 type treeFilesMsg struct {
 	hash    string
 	subject string
+	commit  model.Commit
 	lines   []contentLine
 	err     error
 }
@@ -244,11 +298,12 @@ type treeFilesMsg struct {
 func (m Model) loadTreeFilesCmd(c model.Commit) tea.Cmd {
 	svc := m.svc
 	return func() tea.Msg {
+		c = resolveCommitMeta(svc, c)
 		files, err := svc.TreeFiles(context.Background(), c.Hash)
 		if err != nil {
-			return treeFilesMsg{hash: c.Hash, subject: c.Subject, err: err}
+			return treeFilesMsg{hash: c.Hash, subject: c.Subject, commit: c, err: err}
 		}
-		return treeFilesMsg{hash: c.Hash, subject: c.Subject, lines: commitFileLines(files)}
+		return treeFilesMsg{hash: c.Hash, subject: c.Subject, commit: c, lines: commitFileLines(files)}
 	}
 }
 
@@ -263,12 +318,17 @@ func (m Model) loadFilesForCmd(c model.Commit) tea.Cmd {
 }
 
 // filesViewCommit returns the loaded commit the files view is showing (matched
-// by filesHash); falls back to a hash-only Commit when it is outside the feed.
+// by filesHash). Outside the feed — a Tags / goto-SHA / reflog open — it falls
+// back to the commit the load resolved, so the i popup shows the same date the
+// header does instead of "(unknown)"; then to a hash-only Commit.
 func (m Model) filesViewCommit() model.Commit {
 	for i := range m.commits {
 		if m.commits[i].Hash == m.filesHash {
 			return m.commits[i]
 		}
+	}
+	if m.filesCommit.Hash == m.filesHash && m.filesHash != "" {
+		return m.filesCommit
 	}
 	return model.Commit{Hash: m.filesHash}
 }
@@ -356,9 +416,14 @@ func shortHash(h string) string {
 }
 
 // filesPageRows is the tree's visible row capacity: the left column's box
-// height minus borders (2), the title line (1), and the hint line (1).
+// height minus borders (2), the title line (1), the hint line (1), and — in the
+// single-commit modes — the date line (1). It must track renderFilesView's
+// rowsCap, or pgup/pgdn oversteps the window it draws.
 func (m Model) filesPageRows() int {
 	n := m.layout().bodyH - 4
+	if m.filesMetaLineFor() != "" {
+		n--
+	}
 	if n < 1 {
 		n = 1
 	}
@@ -755,7 +820,11 @@ func (m Model) renderFilesView(boxW, boxH int) string {
 	// The /-search input rides its own line beneath the title (not appended to
 	// it) so a long commit subject can't truncate the query out of view.
 	search := p.searchLine()
+	meta := m.filesMetaLineFor()
 	rowsCap := contentH - 2 // title + hint lines
+	if meta != "" {
+		rowsCap-- // the date line claims one more row
+	}
 	if search != "" {
 		rowsCap-- // the search line claims one more row
 	}
@@ -811,6 +880,11 @@ func (m Model) renderFilesView(boxW, boxH int) string {
 
 	lines := make([]string, 0, contentH)
 	lines = append(lines, padRight(truncate(m.filesTitle, innerW), innerW))
+	if meta != "" {
+		// Its own line, directly under the title: a long subject truncates the
+		// title, and the date must not be the casualty of that.
+		lines = append(lines, padRight(truncate(meta, innerW), innerW))
+	}
 	if search != "" {
 		lines = append(lines, padRight(truncate(search, innerW), innerW))
 	}
