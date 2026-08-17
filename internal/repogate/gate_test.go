@@ -229,7 +229,8 @@ func TestReleasedAccessor(t *testing.T) {
 func TestQueueSnapshot(t *testing.T) {
 	g := &Gate{}
 	h := mustAcquire(t, g, Read, "holder")
-	go func() { mustAcquire(t, g, TreeWrite, "waiter").Release() }()
+	done := make(chan struct{})
+	go func() { mustAcquire(t, g, TreeWrite, "waiter").Release(); close(done) }()
 	waitQueued(t, g, "waiter")
 	q := g.Queue()
 	if len(q) != 2 {
@@ -242,6 +243,12 @@ func TestQueueSnapshot(t *testing.T) {
 		t.Fatalf("q[1] = %+v, want waiting TreeWrite waiter", q[1])
 	}
 	h.Release()
+	// Join the waiter before returning. Its acquire WAITED, so it emits a
+	// "gate wait" span — and the span sink is process-global, so a straggler
+	// still in flight lands its span in whatever sink the NEXT test installed.
+	// That is exactly how TestWaitSpanOnlyWhenWaiting failed in CI: it reported
+	// a tree-write "waiter" span it never created.
+	<-done
 }
 
 func TestForRegistry(t *testing.T) {
