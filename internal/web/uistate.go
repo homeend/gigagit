@@ -18,6 +18,11 @@ import (
 // values are resolved against this allowlist, like every other web input.
 var uiSections = []string{"branches", "remotes", "worktrees", "tags", "stashes", "reflog", "bookmarks", "shelf"}
 
+// uiSortLists are the lists whose display order is remembered — the ones the
+// client offers a sort control for. Wire keys are resolved against this
+// allowlist, and their values against allowedSortMode.
+var uiSortLists = []string{"branches", "remotes", "worktrees", "tags", "files"}
+
 // uiMaxPaneWidth bounds a stored pane width. The client clamps against the
 // live window anyway; this only keeps a nonsense value out of the state file.
 const uiMaxPaneWidth = 4000
@@ -32,6 +37,9 @@ type uiStateWire struct {
 	SidebarWidth  int      `json:"sidebar_width"`
 	FilesWidth    int      `json:"files_width"`
 	Graph         string   `json:"graph"`
+	// Sorts is the per-list display order (list name -> sort mode). Always
+	// emitted (never null) so the client can index it without a guard.
+	Sorts map[string]string `json:"sorts"`
 }
 
 // webUIStore is the machine-local state file the layout shares with the
@@ -48,7 +56,7 @@ func (s *Server) webUIStore() *promptstate.FileStore {
 func (s *Server) handleUIStateGet(w http.ResponseWriter, r *http.Request) {
 	store := s.webUIStore()
 	if store == nil {
-		writeJSON(w, uiStateWire{Sections: []string{}})
+		writeJSON(w, uiStateWire{Sections: []string{}, Sorts: map[string]string{}})
 		return
 	}
 	st, saved := store.WebUIState()
@@ -59,6 +67,7 @@ func (s *Server) handleUIStateGet(w http.ResponseWriter, r *http.Request) {
 		SidebarWidth:  st.SidebarWidth,
 		FilesWidth:    st.FilesWidth,
 		Graph:         st.Graph,
+		Sorts:         allowedSorts(st.Sorts), // re-resolved: the file is editable by hand
 	})
 }
 
@@ -79,6 +88,7 @@ func (s *Server) handleUIStateSet(w http.ResponseWriter, r *http.Request) {
 		SidebarWidth:  clampPaneWidth(in.SidebarWidth),
 		FilesWidth:    clampPaneWidth(in.FilesWidth),
 		Graph:         allowedGraph(in.Graph),
+		Sorts:         allowedSorts(in.Sorts),
 	}); err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
@@ -98,6 +108,22 @@ func allowedSections(in []string) []string {
 		if want[n] {
 			out = append(out, n)
 		}
+	}
+	return out
+}
+
+// allowedSorts keeps only known lists paired with known modes, so a stored
+// layout can never carry junk (or grow unboundedly). An explicit "default" IS
+// stored: some lists don't START on git's order (branches opens newest-first),
+// so "I chose the default here" and "I never chose" are different states.
+func allowedSorts(in map[string]string) map[string]string {
+	out := make(map[string]string, len(in))
+	for _, name := range uiSortLists {
+		mode, ok := in[name]
+		if !ok {
+			continue
+		}
+		out[name] = allowedSortMode(mode)
 	}
 	return out
 }

@@ -4,7 +4,8 @@ import { $, esc, getJSON, postJSON, runes, state } from "./core.js";
 import { copyText, showCtxMenu } from "./layers.js";
 import { addFileEntry } from "./sidebar.js";
 import { extraRows } from "./menus.js";
-import { applyStatus, fetchStatus } from "./status.js";
+import { applyStatus, buildStatusEntries, fetchStatus } from "./status.js";
+import { nextSortMode, setSortMode, sortChipHTML } from "./sortlist.js";
 import { opLine, showLocalConfirm, startOp } from "./ops.js";
 import { openFileBlame, openFileHistory } from "./filehist.js";
 import { rev } from "./review.js";
@@ -117,9 +118,78 @@ async function openCompare(a, b, opts) {
   state.filesMode = "compare";
   state.fileSha = null;
   enterFilesStage();
-  $("files-header").textContent = state.compare.a + " ↔ " + state.compare.b;
+  $("files-title").textContent = state.compare.a + " ↔ " + state.compare.b;
   applyCompareFilter();
   focusPane();
+}
+
+
+// openEntryCompare shows a comparison one of whose sides is FROZEN — a
+// shelf entry standing in for a commit that no longer exists (see
+// /api/compare-entry). It is the same screen as a branch compare, with two
+// differences it has to be honest about:
+//
+//   - the per-file diffs cannot go through /api/diff, because git cannot see
+//     a tar in gg's state dir; they go through /api/entry-diff, addressed by
+//     the two SPECS the server resolved rather than by hash;
+//   - there is no merge base between a snapshot and a commit, so there are no
+//     origin sets and the per-side filter is off.
+//
+// The fallback is named in the header. "compared against a shelved copy
+// because the commit is gone" is a materially different statement from
+// "compared against that commit", and the difference is invisible otherwise.
+function openEntryCompare(body) {
+  state.detailGen++;
+  state.compare = {
+    a: body.left.label,
+    b: body.right.label,
+    aHash: body.left.hash || "",
+    bHash: body.right.hash || "",
+    aSpec: body.left.spec,
+    bSpec: body.right.spec,
+    all: body.files || [],
+    filter: "all",
+    originsError: "",
+    frozen: !!body.frozen,
+    note: body.frozen_note || "",
+  };
+  state.filesMode = "compare";
+  state.fileSha = null;
+  enterFilesStage();
+  $("files-title").textContent =
+    state.compare.a + " ↔ " + state.compare.b + (state.compare.note ? " — " + state.compare.note : "");
+  applyCompareFilter();
+  focusPane();
+}
+
+
+// openEntryFileDiff opens ONE file between two arbitrary sides (a stored copy
+// and the file here, typically). Both labels go in the title: a diff whose
+// sides are not named is unreadable when neither of them is "the commit you
+// are looking at".
+async function openEntryFileDiff({ left, right, path, leftLabel, rightLabel, status }) {
+  const gen = ++state.detailGen;
+  if (state.layout !== "diff") {
+    state.pane = "files";
+    setLayout("diff");
+    focusPane();
+  }
+  clearDiffHunks();
+  state.diffCtx = null; // history/blame need a rev; a stored copy has none
+  $("diff-title").textContent = leftLabel + " ↔ " + rightLabel + " · " + path;
+  $("diff-body").innerHTML = `<div class="notice">loading…</div>`;
+  updateDiffNav();
+  const q = new URLSearchParams({ left, right, path });
+  if (status) q.set("status", status);
+  try {
+    const d = await getJSON("/api/entry-diff?" + q);
+    if (gen !== state.detailGen) return; // superseded by a newer open or esc
+    renderDiff(d);
+  } catch (e) {
+    if (gen !== state.detailGen) return;
+    $("diff-body").innerHTML = `<div class="notice">error: ${esc(e.message || e)}</div>`;
+    updateDiffNav();
+  }
 }
 
 
@@ -138,7 +208,7 @@ function applyCompareFilter() {
     // diff pane is not on screen, and stepping back there from an open
     // diff must not strand a stale one.
     $("files-list").innerHTML = `<li class="sect">${
-      c.all.length ? "no files match this filter" : "the two branches are identical"
+      c.all.length ? "no files match this filter" : c.frozen ? "nothing differs" : "the two branches are identical"
     }</li>`;
     if (state.layout === "diff") drillOut();
     return;
@@ -158,6 +228,15 @@ function renderCompareBar() {
     return;
   }
   bar.classList.remove("hidden");
+  // A frozen side has no merge base to derive origin sets from — the filter
+  // is not "unavailable this time", it has no meaning here — so the bar shows
+  // the count alone rather than two buttons that can only disappoint. The
+  // frozen note itself is in the header, where the two sides are named; a
+  // second copy here would only repeat it.
+  if (c.frozen) {
+    bar.innerHTML = `<button class="on" disabled>all (${c.all.length})</button>`;
+    return;
+  }
   // Without a merge base there are no origin sets, so only "all" is
   // meaningful — the comparison itself still stands (compare.go).
   const off = c.originsError
@@ -196,7 +275,7 @@ async function openWorkingTree(i) {
   state.filesMode = "status";
   state.fileCursor = 0;
   enterFilesStage();
-  $("files-header").textContent = "Working tree";
+  $("files-title").textContent = "Working tree";
   renderFiles();
   focusPane();
 }
@@ -205,10 +284,44 @@ async function openWorkingTree(i) {
 const SECTION_LABELS = { staged: "Staged", changes: "Changes", untracked: "Untracked", conflicts: "Conflicts" };
 
 
+// The sort chip belongs to the working-tree list alone: a commit's file list
+// and a compare are both rendered from a server-ordered payload, and neither
+// has a stored order to cycle.
+function renderFilesSort() {
+  const chip = $("files-sort");
+  const on = state.filesMode === "status";
+  chip.classList.toggle("hidden", !on);
+  chip.innerHTML = on ? sortChipHTML("files") : "";
+}
+
+
+// cycleFilesSort re-orders the working-tree list under the next mode. The
+// order lives in statusEntries (every index — cursor, marks, hit-testing —
+// points into it), so the list is REBUILT rather than sorted at render time,
+// and the cursor is carried across by path so it stays on the same file.
+function cycleFilesSort() {
+  setSortMode("files", nextSortMode("files"));
+  const at = state.statusEntries[state.fileCursor];
+  buildStatusEntries();
+  if (at) {
+    const i = state.statusEntries.findIndex((f) => f.path === at.path && f.section === at.section);
+    if (i >= 0) state.fileCursor = i;
+  }
+  renderFiles();
+}
+
+
+$("files-sort").addEventListener("click", (e) => {
+  if (!e.target.closest(".sortchip")) return;
+  cycleFilesSort();
+});
+
+
 function renderFiles() {
   // Driven off filesMode, not off state.compare, so the bar cannot linger
   // into the next commit's detail screen.
   renderCompareBar();
+  renderFilesSort();
   if (state.filesMode !== "status") {
     $("files-actions").classList.add("hidden");
     $("commit-box").classList.add("hidden");
@@ -280,6 +393,18 @@ async function openFile(i) {
   updateDiffNav();
   if (state.filesMode === "status") return openStatusDiff(i);
   const f = state.files[i];
+  // A frozen entry compare addresses its sides by SPEC, not by two hashes:
+  // one of them is a snapshot in gg's own store that git cannot read.
+  if (state.filesMode === "compare" && state.compare.frozen) {
+    return openEntryFileDiff({
+      left: state.compare.aSpec,
+      right: state.compare.bSpec,
+      path: f.path,
+      status: f.status,
+      leftLabel: state.compare.a,
+      rightLabel: state.compare.b,
+    });
+  }
   state.diffCtx = { path: f.path, rev: state.filesMode === "compare" ? state.compare.bHash : f.sha || state.fileSha };
   const q = new URLSearchParams({ path: f.path, status: f.status });
   if (state.filesMode === "compare") {
@@ -350,7 +475,7 @@ function exitStatusToList() {
   $("files-actions").classList.add("hidden");
   $("commit-box").classList.add("hidden");
   $("conflict-note").classList.add("hidden");
-  $("files-header").textContent = "";
+  $("files-title").textContent = "";
   $("diff-title").textContent = "";
   $("diff-body").innerHTML = "";
   state.lastDiff = null; // a resize must not resurrect the cleared diff
@@ -364,7 +489,7 @@ async function stage(body) {
   try {
     applyStatus(await postJSON("/api/stage", body));
   } catch (e) {
-    $("files-header").textContent = "error: " + (e.message || e);
+    $("files-title").textContent = "error: " + (e.message || e);
     return;
   }
   if (!state.wt) {
@@ -792,10 +917,14 @@ async function openConflictPicker(f) {
   try {
     d = await getJSON("/api/conflict-hunks?" + new URLSearchParams({ path: f.path }));
   } catch (e) {
-    // typed 422 refusal (binary / markers gone): show the reason + the way out
+    // Typed 422 refusal (binary / markers gone): show the reason and the way
+    // out. Block-picking is what is impossible here, not resolving — the
+    // whole-file answers in the file's own menu work on a binary conflict
+    // precisely because they never look inside it.
     $("diff-body").innerHTML =
       `<div class="notice">${esc(e.message || e)}</div>` +
-      `<div class="notice">right-click the file → mark resolved when it is done</div>`;
+      `<div class="notice">right-click the file for the whole-file answers (keep current / keep incoming), ` +
+      `or mark resolved when you have fixed it yourself</div>`;
     return;
   }
   const blocks = []; // index → block item, built once for wirePick/toggle/paint lookups
@@ -1226,4 +1355,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { SECTION_LABELS, activeFileList, applyCompareFilter, cfSideCount, clearDiffHunks, conflictPick, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, enterFilesStage, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markSpans, openCompare, openConflictPicker, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, renderResolveBar, reopenAfterHunkStage, resolveConflictPicked, setAllConflictPicks, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepToNextConflict, updateDiffNav };
+export { SECTION_LABELS, activeFileList, applyCompareFilter, cfSideCount, clearDiffHunks, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, enterFilesStage, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markSpans, openCompare, openConflictPicker, openEntryCompare, openEntryFileDiff, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, renderResolveBar, reopenAfterHunkStage, resolveConflictPicked, setAllConflictPicks, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepToNextConflict, updateDiffNav };

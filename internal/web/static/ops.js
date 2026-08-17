@@ -302,11 +302,19 @@ async function doReroot(path) {
 }
 
 
-// toggleSidebar and stageFocused are shared by their keys (b, s/u) and the
+// toggleSidebar and stageFocused are shared by their keys (t, s/u) and the
 // clickable footer chips.
+//
+// state.sidebar is VISIBILITY and applySidebarHidden takes HIDDENNESS, so the
+// argument is state.sidebar itself: "hide it if it is currently shown". It
+// used to read `!state.sidebar`, which asserts the state the sidebar is
+// already in — the toggle became idempotent, and the key, the footer chip and
+// the ☰ row all did nothing at all.
 function toggleSidebar() {
   if (state.layout === "diff") return; // no sidebar on the diff screen to toggle
-  applySidebarHidden(!state.sidebar);
+  applySidebarHidden(state.sidebar);
+  // Both writes read state.sidebar AFTER the flip, so they persist the state
+  // the sidebar is now in.
   lsSet("gg.sidebar.hidden", state.sidebar ? "0" : "1"); // same-session cache
   saveUI({ sidebar_hidden: !state.sidebar }); // the copy that survives a restart
 }
@@ -383,7 +391,23 @@ function handleOpEvent(ev) {
 }
 
 
-async function refreshAfterOp() {
+// manualRefresh is the ☰ menu's (and r's) reload: the TUI's `r`, which says
+// out loud that it is working and starts the commit list CLEAN. Without the
+// notice a refresh over unchanged data looks like a dead button; without the
+// clean start it cannot recover a deep tail that a rewrite made stale.
+async function manualRefresh() {
+  if (state.op) return; // an op owns the data; its own refresh follows
+  opLine("⏳ reloading…");
+  try {
+    await refreshAfterOp(true);
+    opLine("reloaded");
+  } catch (e) {
+    opLine("reload failed: " + (e.message || e), true);
+  }
+}
+
+
+async function refreshAfterOp(hardFeed) {
   // Which commit the cursor sits on, read BEFORE anything refreshes: the
   // status fetch below can add or remove the working-tree row, and that
   // shifts every display index by one — reading it afterwards anchors to the
@@ -400,7 +424,7 @@ async function refreshAfterOp() {
   // what keeps the scroll position, since a zero-height list would reset it —
   // and the cursor is re-anchored to the SAME commit afterwards rather than
   // snapping to the top.
-  await loadCommits(false);
+  await loadCommits(false, !!hardFeed);
   const last = state.rows.length + wtCount() - 1;
   const i = keep ? state.rows.findIndex((r) => r.hash === keep) : -1;
   if (i >= 0) state.cursor = i + wtCount();
@@ -582,4 +606,4 @@ function openCreateBranchPrompt(start, seed, label) {
 }
 
 
-export { applySidebarHidden, answerModal, doCommit, doFetch, doForcePush, doPull, doPullBranch, doPush, doPushBranch, doReroot, doStash, followOp, handleOpEvent, hideModal, hideOpLine, lastFocusRefresh, loadRepo, modalLocalCb, opBusy, opLine, opLineTimer, openCreateBranchPrompt, openHelp, parkedRunning, parkedTaskText, refreshAfterOp, showLocalConfirm, showModal, stageFocused, startOp, startSwitch, taskLine, taskRestoreTimer, toggleSidebar };
+export { applySidebarHidden, answerModal, manualRefresh, doCommit, doFetch, doForcePush, doPull, doPullBranch, doPush, doPushBranch, doReroot, doStash, followOp, handleOpEvent, hideModal, hideOpLine, lastFocusRefresh, loadRepo, modalLocalCb, opBusy, opLine, opLineTimer, openCreateBranchPrompt, openHelp, parkedRunning, parkedTaskText, refreshAfterOp, showLocalConfirm, showModal, stageFocused, startOp, startSwitch, taskLine, taskRestoreTimer, toggleSidebar };

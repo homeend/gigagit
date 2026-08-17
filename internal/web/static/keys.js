@@ -3,9 +3,9 @@
 import { $, ROW_H, state } from "./core.js";
 import { closeLayer, topLayer } from "./layers.js";
 import { WT_H, wtCount, wtExtra } from "./status.js";
-import { doCommit, doPull, doPush, openHelp, refreshAfterOp, stageFocused, toggleSidebar } from "./ops.js";
+import { doCommit, doPull, doPush, manualRefresh, openHelp, refreshAfterOp, stageFocused, toggleSidebar } from "./ops.js";
 import { closeCommitFilter, gotoCommitPrompt, openCommit, openCommitFilter, renderCommits, toggleGraphMode } from "./commits.js";
-import { drillOut, openFile, renderFiles, toggleMark } from "./files.js";
+import { cycleFilesSort, drillOut, openFile, renderFiles, toggleMark } from "./files.js";
 import { openPalette } from "./palette.js";
 
 // --- focus + keyboard ---
@@ -109,8 +109,8 @@ document.addEventListener("keydown", (e) => {
     }
   } else if (e.key === "g") {
     toggleGraphMode();
-  } else if (e.key === "b") {
-    toggleSidebar();
+  } else if (e.key === "t") {
+    toggleSidebar(); // t, not b: the sidebar is the tabs/sections column
   } else if (e.key === "p") {
     doPull();
   } else if (e.key === "P") {
@@ -118,7 +118,7 @@ document.addEventListener("keydown", (e) => {
   } else if (e.key === "?") {
     openHelp();
   } else if (e.key === "r") {
-    if (!state.op) refreshAfterOp(); // full soft reload: repo, sidebar, status, commits
+    manualRefresh(); // the TUI's r: says it is working, and starts the list clean
   } else if (e.key === "s" || e.key === "u") {
     stageFocused(e.key === "u");
   } else if (e.key === "m") {
@@ -128,6 +128,11 @@ document.addEventListener("keydown", (e) => {
       const f = state.statusEntries[state.fileCursor];
       if (f) { toggleMark(f.path); moveCursor(1); }
     }
+  } else if (e.key === "o") {
+    // the TUI's o: cycle the focused list's display order. The working-tree
+    // file list is the one the keyboard can reach — the sidebar's lists cycle
+    // from the chips in their own headers.
+    if (state.pane === "files" && state.filesMode === "status") cycleFilesSort();
   } else if (e.key === "/") {
     e.preventDefault(); // the browser's quick-find would grab it
     openCommitFilter();
@@ -148,9 +153,10 @@ $("foot").addEventListener("click", (e) => {
     case "filter": openCommitFilter(); break;
     case "stage": stageFocused(false); break;
     case "unstage": stageFocused(true); break;
+    case "sort": if (state.pane === "files" && state.filesMode === "status") cycleFilesSort(); break;
     case "pull": doPull(); break;
     case "push": doPush(); break;
-    case "refresh": if (!state.op) refreshAfterOp(); break;
+    case "refresh": manualRefresh(); break;
     case "help": openHelp(); break;
     case "palette": openPalette("cmd"); break;
   }

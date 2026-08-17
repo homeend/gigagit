@@ -9,6 +9,7 @@ import "./menus.js";
 import { fetchStatus } from "./status.js";
 import { applySidebarHidden, loadRepo } from "./ops.js";
 import { applyStoredSections, fetchBranches } from "./sidebar.js";
+import { applyStoredSorts } from "./sortlist.js";
 import { loadUIState, uiState } from "./uistate.js";
 import "./versions.js";
 import "./rebase.js";
@@ -25,6 +26,16 @@ import "./prefixes.js";
 import "./exttools.js";
 import "./sessionerrors.js";
 import "./palette.js";
+// Feature modules: imported for their side effects only (they register their
+// own menu rows and help rows — see menus.js).
+import "./patch.js";
+import "./locks.js";
+import "./conflicts.js";
+import "./notifications.js";
+import "./gitconfig.js";
+import "./agentsetup.js";
+import "./commitai.js";
+import "./search.js";
 
 // applyStoredLayout puts back the layout gg remembered for this machine:
 // folded sections, pane widths, the sidebar toggle, the graph mode. It runs
@@ -35,6 +46,7 @@ async function applyStoredLayout() {
   await loadUIState();
   const ui = uiState();
   if (!ui) return;
+  applyStoredSorts(ui.sorts); // BEFORE the sections: they draw the sort chips
   applyStoredSections(ui.sections);
   applyStoredWidths(ui.sidebar_width, ui.files_width);
   if (ui.sidebar_hidden) applySidebarHidden(true);

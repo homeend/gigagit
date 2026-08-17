@@ -8,6 +8,164 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: every list can be sorted, like the TUI's `o` key.** The sidebar's
+  **branches**, **remotes**, **worktrees** and **tags** sections each carry a
+  small chip in their header showing the current order; clicking it cycles
+  **git** (git's own emission order) → **name↑** → **name↓** → **date↑** →
+  **date↓**, exactly the TUI's five modes — case-insensitive names, stable
+  ties, and an unknown date sorting last in both directions. Branches now open
+  on **date↓**, so the branch you touched last is at the top (the TUI's
+  Branches default). Tags have no date of their own — git does not record one
+  per tag — so they offer the name orders only, as in the TUI. The working-tree
+  file list has the same chip in its own header, plus the `o` key and an
+  `o sort` footer chip; it orders files **within** the Changes / Untracked /
+  Conflicts / Staged sections, never across them, and keeps its familiar
+  name↑ arrangement as the starting mode. Because the remotes and tags
+  payloads are capped at 100 rows, their order is applied **before** the cap —
+  **date↓** on remotes means the 100 most recently updated, not the first
+  hundred re-shuffled. Every list's order is remembered in gg's machine-local
+  state (a random loopback port means the browser cannot remember it itself),
+  and the worktrees payload now carries each HEAD's committer time so the date
+  orders have something to sort on.
+- **Web: ctrl+f means the same thing everywhere.** Typed inside the `\` filter
+  bar's own fields it slipped past the page and opened the browser's find
+  dialog — over the one screen whose own search is what you were reaching for.
+  The bar answers it now, exactly as the `/` field already did.
+
+- **Web: the sidebar toggle works again, and its key is now `t`.** Hiding the
+  branches/tags/stashes column did nothing — from the key, from the ☰ menu's
+  **toggle sidebar**, or from the footer chip. `toggleSidebar` asked for the
+  state the sidebar was already in (`applySidebarHidden(!state.sidebar)`,
+  where the argument means *hidden* and `state.sidebar` means *visible*), so
+  the toggle had been idempotent since the layout moved into gg's state file.
+  The key is `t` now rather than `b` — the column is the tabs, and `b` is
+  worth keeping free. All three places that name it now say the same thing:
+  the ☰ row, the footer chip (**t toggle sidebar**) and the `?` help row.
+- **Web: two saved things, compared against each other.** The browser could
+  already compare a commit or a file *against* a bookmark or shelf entry; the
+  other direction — the one the TUI reaches from the bookmark and shelf popups
+  themselves — was missing. Right-click an entry in either sidebar list and
+  **compare with another entry…** puts two saved things side by side: two
+  spikes, a bookmark against the frozen copy taken from it, or the same file
+  shelved twice a week apart. The entry you start from is the older side, and
+  the picker offers only entries of the *same kind*, so the TUI's "cannot
+  compare a commit against a file" refusal has nothing left to refuse. Commit
+  entries open the whole-tree comparison, file entries a single diff with both
+  sides named. Each side resolves independently and hybrid, so a pair whose
+  commits are both gone still compares — from the two frozen copies — and both
+  fallbacks are named in the header. `GET /api/compare-entry` grew a
+  `right_store`/`right_id` form alongside its `sha` one, and the sidebar's
+  bookmark and shelf menus — the last two in the UI with no row registry —
+  gained one, so a feature no longer has to reach them through the ☰.
+- **Web: the browser can find a commit it has not loaded.** The `/` filter
+  narrowed the pages already on screen, which on a 600k-commit repo is a
+  rounding error — the commit you want is almost never in the first fifty.
+  Four answers, all costing one page rather than one history: **`\` filters
+  the feed itself** (path, author, message, since, until — git applies them
+  during the walk, one control clears them, and the lane graph steps aside
+  because lanes over a subset would connect commits that are not parent and
+  child); **ctrl+f searches deeper**, paging unloaded history for the next
+  match and digging PAST the hit on every repeat press, asking before it goes
+  further; **`F` finds a file** by fuzzy match over every tracked path, ranked
+  server-side and cached per HEAD, opening its history on enter; and
+  **ctrl+click marks commits** — two marks compare, two or more squash into
+  one (the plan is built server-side from a range gg reads itself, so a
+  selection that is not on this branch or not adjacent is refused with the
+  branch untouched). A commit's own menu can now **solo from this commit**,
+  scoping the list to its ancestry with the same chip that clears it.
+
+- **Web: git config, agent setup, an AI-written commit message, and amend.**
+  Four settings-shaped gaps against the TUI, each behind its own surface.
+  ☰ → **git config…** lists the keys gg documents with each one's effective
+  value and where it comes from (this repo · global · git's own default), and
+  edits it at the scope you pick — bools and enums get buttons, not a text
+  field. The key is resolved server-side against `internal/gitconfdocs`: a key
+  gg does not document is refused, never written, and keys set here outside
+  that catalog are shown read-only, because a loopback page that could set
+  `core.pager` or an alias would be running code the next time git ran.
+  ☰ → **agent setup…** is `gg init` in the browser: the AI agents actually
+  present on this machine, whether each carries gg's `using-gg` skill, and one
+  button to install or refresh it. The commit box gained **generate** — a
+  configured `commit_message` agent writes the message from the staged diff and
+  fills the box for you to read and edit; it never commits, an unapproved
+  command is shown in full first (the same approval the TUI remembers), and a
+  run that hangs can be cancelled — and **amend…** (also in ☰), which rewrites
+  the last commit's message after confirming that it is history editing and
+  that a pushed commit then needs a forced push.
+- **Web: whole-file conflict answers, a stash checklist, and comparing against
+  a stored entry.** Three TUI-only shortcuts arrive in the browser. A
+  conflicted file's menu now offers the **whole-file** resolutions — *keep
+  current (ours)* / *keep incoming (theirs)* when both sides changed it, and
+  *keep the modified file* / *delete the file* / *keep the base version* when
+  one side deleted it, which the block picker cannot express at all — while
+  **mark all N resolved (stage as-is)** sits in the conflict bar for when you
+  already fixed everything in your editor (it stages the conflicted set
+  exactly as it stands, markers included, and nothing else). **stash a
+  selection…** (☰, or a file's own menu) opens a checklist of everything
+  unstaged and untracked — space toggles, ticking all of it is the plain
+  whole-tree stash. And a bookmark or shelf entry is now something you can
+  diff *against*: **compare with a bookmark or shelf entry…** on a commit
+  opens the whole-tree comparison, **compare with a stored copy…** on a file
+  diffs it against a frozen one. A shelved commit still compares after the
+  original commit is gone — the header says so when you are looking at the
+  frozen copy rather than the commit itself. New endpoints
+  `GET /api/compare-entry` and `GET /api/entry-diff` (both sides resolved
+  server-side from an id and an allowlisted kind, and keyed for caching by
+  resolved hash or entry id — never by a name that can be re-pointed), plus
+  the `resolve-conflict`, `mark-all-resolved` and `stash-paths` operations.
+- **Web: refresh says it is working, and starts the commit list clean.** The
+  ☰ menu's **refresh** (and `r`, and the footer button) reloaded silently — on
+  a repo where nothing had changed there was no way to tell it had run at all,
+  which reads as a dead button. It now shows **⏳ reloading…** while it works
+  and **reloaded** when it lands, the TUI's own status line. It is also a HARD
+  reload now, as the TUI's `r` is: the reconciling reload keeps the pages you
+  scrolled in, which is right after an operation and useless when the deep
+  tail has gone stale because someone rewrote history — a manual refresh is
+  that escape hatch. `GET /api/commits?reset=1` is the lane; the plain reload
+  still reconciles.
+
+- **Web: worktrees you can move, and git locks you can clear.** The browser
+  could create a worktree and remove one, and nothing in between. The worktree
+  menu now also offers **rename worktree…** (prefilled with the name only,
+  resolved next to where it already lives) and **move worktree…** (prefilled
+  with the whole path) — the same one operation the TUI's `e` runs, kept as two
+  rows because renaming and relocating are different intentions. A *locked*
+  worktree parks the engine's question in the modal (**unlock and move** /
+  **abort**) instead of failing, and moving the worktree gg is standing in
+  re-roots the server at its new path rather than leaving the page pointed at a
+  directory that is gone. The commit menu gained the create-worktree **keep
+  modes** — *worktree here, keeping the change staged / unstaged* — which cut
+  the branch at the commit's parent with that commit's diff waiting in the new
+  worktree; they are offered only where they can work, never on a root or merge
+  commit. And when git dies hard and strands an `index.lock`, a bar names each
+  lockfile with its age and clears them on one click, the recovery the TUI has
+  had and the browser answered with a dead end. Presence is not proof of
+  staleness, so gg reports the age and lets you decide; the delete is refused
+  for anything that is not a lockfile inside this repository's git dir.
+
+- **Web: a change can leave the browser as a patch, and come back.** `gg web`
+  could do neither, so work that started there could only get out through git
+  itself. A commit's right-click menu now offers **export as patch…** — `git
+  format-patch -1 --binary`, downloaded as `<short>.patch` — and a file inside
+  a commit offers **export this file's diff as a patch…** (`<short>-<file>.patch`).
+  A merge commit is refused rather than exported: `format-patch -1` does not
+  error on one, it silently emits a *different* commit's patch, so the download
+  would look right and be wrong. Coming the other way, ☰ → **apply a patch…**
+  takes the path of a `.patch` file and lands it; the engine detects the format
+  itself, so a plain diff goes to the working tree and a format-patch mailbox
+  parks its own *working-tree / commits / abort* question in the modal instead
+  of the browser guessing. A missing file, a mailbox applied the wrong way and
+  a conflicted apply each arrive as the engine's own sentence. The path is one
+  the user types, not an upload: a browser never learns the path behind
+  `<input type=file>`, and this server is loopback-only, so naming the file is
+  the honest lane — the TUI's palette does the same. ☰ → **copy a bookmark or
+  shelf entry to a directory…** completes the set, writing an entry's files to
+  `<repo>.tmp/<name>` (the TUI's `t`), with the destination editable and an
+  existing directory asking before it is overwritten. The per-entry row the TUI
+  puts on the bookmark/shelf lists is not reachable from a feature module yet —
+  the sidebar's two menus are the only ones that do not consult the row
+  registry — so it lives in ☰ and names the entry in the picker.
+
 - **Web: two commit-menu rows now behave as the TUI's do.** **Reset to here**
   asks *"Reset to `<sha>`? This moves the current branch ref."* before the
   engine's soft/mixed/hard picker — the browser went straight to the picker,
@@ -32,6 +190,30 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   back are re-verified against what is actually at the tip before anything is
   pushed. `GET /api/push-tag-check` reports the offer; `POST /api/op`'s `push`
   takes the answer as `tags`.
+- **Web: a notification centre — the browser can be told what's wrong.** On a
+  single-branch or shallow clone the fetch refspec does not map every branch,
+  so a push succeeds while its remote-tracking ref never moves: the ↓↑ tip
+  markers and ahead/behind stay blind, with nothing on screen saying why. The
+  TUI has offered to fix that behind `!` for a while; the browser had no way to
+  hear about it at all. A red **! n notices** chip in the top bar (also `!`)
+  now opens a centre listing every affected branch, each with its own repair,
+  plus one **add mappings + fetch** for all of them. The repair writes a
+  per-branch mapping and fetches only those branches — never the wildcard,
+  which could turn the next fetch into a mass download on a monorepo remote —
+  and the same finding adds an **add fetch mapping + fetch** row to that
+  branch's own menu. Dismissals live in gg's machine-local prompt store, not
+  the browser: `gg web` binds a random port, so every run is a new origin with
+  an empty `localStorage`, and anything remembered there would come back. The
+  refspec notice shares the TUI's notice id, so silencing it in one frontend
+  silences both. `engine.Push`'s own post-push *"add a tracking mapping?"*
+  question — which came back on every push of an unmapped branch with no way to
+  stop it — can now be turned off per repo from the centre, where the finding
+  and its repair stay listed, so turning the question off is not a way to lose
+  the problem. Answering a suppressed question needs a decider that can speak
+  with no client in the loop, and asking domain for the repo key from inside
+  one deadlocks (the operation holds a write reservation while the query wants
+  a read), so the key is cached by the handlers that resolve it outside an
+  operation — a wedged push, caught in the browser, not by the Go tests.
 
 - **Web: creating a tag is one dialog with both fields, like the TUI's.** It
   used to ask for the name, and only *then* spring a second prompt for an

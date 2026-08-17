@@ -18,6 +18,10 @@ type WebUI struct {
 	FilesWidth   int `toml:"files_width"`
 	// Graph is the commit-graph render mode ("svg" or "off").
 	Graph string `toml:"graph"`
+	// Sorts is each list's display order (list name -> sort mode), the web
+	// twin of the TUI's per-panel `o` cycle. Lists left in their default
+	// order are absent rather than stored as "default".
+	Sorts map[string]string `toml:"sorts,omitempty"`
 }
 
 // WebUIState returns the stored layout and whether anything was ever stored.

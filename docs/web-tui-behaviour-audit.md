@@ -33,6 +33,8 @@ everything not listed has NOT been compared yet.
 | Reset to a commit | Straight to the engine's soft/mixed/hard picker | Asks *"Reset to `<sha>`? This moves the current branch ref."* first, as the TUI does |
 | Fast-forward to a commit | Row always offered, then refused by the engine | Hidden when the commit is conclusively not ahead (the TUI's `feedDescendant` walk, ported), and it confirms *"Fast-forward to this commit?"* |
 
+| Manual refresh (☰ / `r`) | Silent, and a RECONCILING reload | Shows *⏳ reloading…* then *reloaded*, and starts the list clean like the TUI's `r` (`hardFeed`) |
+
 ## Open deltas
 
 | # | Feature | TUI | Web | Verdict |
