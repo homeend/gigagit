@@ -9,6 +9,7 @@ import "./menus.js";
 import { fetchStatus } from "./status.js";
 import { applySidebarHidden, loadRepo } from "./ops.js";
 import { applyStoredSections, fetchBranches } from "./sidebar.js";
+import { applyStoredSorts } from "./sortlist.js";
 import { loadUIState, uiState } from "./uistate.js";
 import "./versions.js";
 import "./rebase.js";
@@ -45,6 +46,7 @@ async function applyStoredLayout() {
   await loadUIState();
   const ui = uiState();
   if (!ui) return;
+  applyStoredSorts(ui.sorts); // BEFORE the sections: they draw the sort chips
   applyStoredSections(ui.sections);
   applyStoredWidths(ui.sidebar_width, ui.files_width);
   if (ui.sidebar_hidden) applySidebarHidden(true);

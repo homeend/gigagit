@@ -41,7 +41,16 @@ function uiState() {
 // (a resize drag fires per pixel). The full object is sent every time: the
 // endpoint is a replace, so a half-populated body would drop the other prefs.
 function saveUI(patch) {
-  const base = loaded || { sections: [], sidebar_hidden: false, sidebar_width: 0, files_width: 0, graph: "svg" };
+  // Every field must be in this base: the endpoint REPLACES the record, so a
+  // patch sent while nothing is loaded would drop whatever it omits.
+  const base = loaded || {
+    sections: [],
+    sidebar_hidden: false,
+    sidebar_width: 0,
+    files_width: 0,
+    graph: "svg",
+    sorts: {},
+  };
   loaded = { ...base, ...patch, saved: true };
   state.ui = loaded;
   pending = { ...loaded };

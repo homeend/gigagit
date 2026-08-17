@@ -4,7 +4,8 @@ import { $, esc, getJSON, postJSON, runes, state } from "./core.js";
 import { copyText, showCtxMenu } from "./layers.js";
 import { addFileEntry } from "./sidebar.js";
 import { extraRows } from "./menus.js";
-import { applyStatus, fetchStatus } from "./status.js";
+import { applyStatus, buildStatusEntries, fetchStatus } from "./status.js";
+import { nextSortMode, setSortMode, sortChipHTML } from "./sortlist.js";
 import { opLine, showLocalConfirm, startOp } from "./ops.js";
 import { openFileBlame, openFileHistory } from "./filehist.js";
 import { rev } from "./review.js";
@@ -117,7 +118,7 @@ async function openCompare(a, b, opts) {
   state.filesMode = "compare";
   state.fileSha = null;
   enterFilesStage();
-  $("files-header").textContent = state.compare.a + " ↔ " + state.compare.b;
+  $("files-title").textContent = state.compare.a + " ↔ " + state.compare.b;
   applyCompareFilter();
   focusPane();
 }
@@ -155,7 +156,7 @@ function openEntryCompare(body) {
   state.filesMode = "compare";
   state.fileSha = null;
   enterFilesStage();
-  $("files-header").textContent =
+  $("files-title").textContent =
     state.compare.a + " ↔ " + state.compare.b + (state.compare.note ? " — " + state.compare.note : "");
   applyCompareFilter();
   focusPane();
@@ -274,7 +275,7 @@ async function openWorkingTree(i) {
   state.filesMode = "status";
   state.fileCursor = 0;
   enterFilesStage();
-  $("files-header").textContent = "Working tree";
+  $("files-title").textContent = "Working tree";
   renderFiles();
   focusPane();
 }
@@ -283,10 +284,44 @@ async function openWorkingTree(i) {
 const SECTION_LABELS = { staged: "Staged", changes: "Changes", untracked: "Untracked", conflicts: "Conflicts" };
 
 
+// The sort chip belongs to the working-tree list alone: a commit's file list
+// and a compare are both rendered from a server-ordered payload, and neither
+// has a stored order to cycle.
+function renderFilesSort() {
+  const chip = $("files-sort");
+  const on = state.filesMode === "status";
+  chip.classList.toggle("hidden", !on);
+  chip.innerHTML = on ? sortChipHTML("files") : "";
+}
+
+
+// cycleFilesSort re-orders the working-tree list under the next mode. The
+// order lives in statusEntries (every index — cursor, marks, hit-testing —
+// points into it), so the list is REBUILT rather than sorted at render time,
+// and the cursor is carried across by path so it stays on the same file.
+function cycleFilesSort() {
+  setSortMode("files", nextSortMode("files"));
+  const at = state.statusEntries[state.fileCursor];
+  buildStatusEntries();
+  if (at) {
+    const i = state.statusEntries.findIndex((f) => f.path === at.path && f.section === at.section);
+    if (i >= 0) state.fileCursor = i;
+  }
+  renderFiles();
+}
+
+
+$("files-sort").addEventListener("click", (e) => {
+  if (!e.target.closest(".sortchip")) return;
+  cycleFilesSort();
+});
+
+
 function renderFiles() {
   // Driven off filesMode, not off state.compare, so the bar cannot linger
   // into the next commit's detail screen.
   renderCompareBar();
+  renderFilesSort();
   if (state.filesMode !== "status") {
     $("files-actions").classList.add("hidden");
     $("commit-box").classList.add("hidden");
@@ -440,7 +475,7 @@ function exitStatusToList() {
   $("files-actions").classList.add("hidden");
   $("commit-box").classList.add("hidden");
   $("conflict-note").classList.add("hidden");
-  $("files-header").textContent = "";
+  $("files-title").textContent = "";
   $("diff-title").textContent = "";
   $("diff-body").innerHTML = "";
   state.lastDiff = null; // a resize must not resurrect the cleared diff
@@ -454,7 +489,7 @@ async function stage(body) {
   try {
     applyStatus(await postJSON("/api/stage", body));
   } catch (e) {
-    $("files-header").textContent = "error: " + (e.message || e);
+    $("files-title").textContent = "error: " + (e.message || e);
     return;
   }
   if (!state.wt) {
@@ -1320,4 +1355,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { SECTION_LABELS, activeFileList, applyCompareFilter, cfSideCount, clearDiffHunks, conflictPick, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, enterFilesStage, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markSpans, openCompare, openConflictPicker, openEntryCompare, openEntryFileDiff, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, renderResolveBar, reopenAfterHunkStage, resolveConflictPicked, setAllConflictPicks, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepToNextConflict, updateDiffNav };
+export { SECTION_LABELS, activeFileList, applyCompareFilter, cfSideCount, clearDiffHunks, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, enterFilesStage, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markSpans, openCompare, openConflictPicker, openEntryCompare, openEntryFileDiff, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, renderResolveBar, reopenAfterHunkStage, resolveConflictPicked, setAllConflictPicks, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepToNextConflict, updateDiffNav };

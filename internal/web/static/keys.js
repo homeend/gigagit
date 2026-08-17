@@ -5,7 +5,7 @@ import { closeLayer, topLayer } from "./layers.js";
 import { WT_H, wtCount, wtExtra } from "./status.js";
 import { doCommit, doPull, doPush, manualRefresh, openHelp, refreshAfterOp, stageFocused, toggleSidebar } from "./ops.js";
 import { closeCommitFilter, gotoCommitPrompt, openCommit, openCommitFilter, renderCommits, toggleGraphMode } from "./commits.js";
-import { drillOut, openFile, renderFiles, toggleMark } from "./files.js";
+import { cycleFilesSort, drillOut, openFile, renderFiles, toggleMark } from "./files.js";
 import { openPalette } from "./palette.js";
 
 // --- focus + keyboard ---
@@ -128,6 +128,11 @@ document.addEventListener("keydown", (e) => {
       const f = state.statusEntries[state.fileCursor];
       if (f) { toggleMark(f.path); moveCursor(1); }
     }
+  } else if (e.key === "o") {
+    // the TUI's o: cycle the focused list's display order. The working-tree
+    // file list is the one the keyboard can reach — the sidebar's lists cycle
+    // from the chips in their own headers.
+    if (state.pane === "files" && state.filesMode === "status") cycleFilesSort();
   } else if (e.key === "/") {
     e.preventDefault(); // the browser's quick-find would grab it
     openCommitFilter();
@@ -148,6 +153,7 @@ $("foot").addEventListener("click", (e) => {
     case "filter": openCommitFilter(); break;
     case "stage": stageFocused(false); break;
     case "unstage": stageFocused(true); break;
+    case "sort": if (state.pane === "files" && state.filesMode === "status") cycleFilesSort(); break;
     case "pull": doPull(); break;
     case "push": doPush(); break;
     case "refresh": manualRefresh(); break;

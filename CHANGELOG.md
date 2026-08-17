@@ -8,6 +8,25 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: every list can be sorted, like the TUI's `o` key.** The sidebar's
+  **branches**, **remotes**, **worktrees** and **tags** sections each carry a
+  small chip in their header showing the current order; clicking it cycles
+  **git** (git's own emission order) → **name↑** → **name↓** → **date↑** →
+  **date↓**, exactly the TUI's five modes — case-insensitive names, stable
+  ties, and an unknown date sorting last in both directions. Branches now open
+  on **date↓**, so the branch you touched last is at the top (the TUI's
+  Branches default). Tags have no date of their own — git does not record one
+  per tag — so they offer the name orders only, as in the TUI. The working-tree
+  file list has the same chip in its own header, plus the `o` key and an
+  `o sort` footer chip; it orders files **within** the Changes / Untracked /
+  Conflicts / Staged sections, never across them, and keeps its familiar
+  name↑ arrangement as the starting mode. Because the remotes and tags
+  payloads are capped at 100 rows, their order is applied **before** the cap —
+  **date↓** on remotes means the 100 most recently updated, not the first
+  hundred re-shuffled. Every list's order is remembered in gg's machine-local
+  state (a random loopback port means the browser cannot remember it itself),
+  and the worktrees payload now carries each HEAD's committer time so the date
+  orders have something to sort on.
 - **Web: ctrl+f means the same thing everywhere.** Typed inside the `\` filter
   bar's own fields it slipped past the page and opened the browser's find
   dialog — over the one screen whose own search is what you were reaching for.
@@ -38,7 +57,6 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   `right_store`/`right_id` form alongside its `sha` one, and the sidebar's
   bookmark and shelf menus — the last two in the UI with no row registry —
   gained one, so a feature no longer has to reach them through the ☰.
-
 - **Web: the browser can find a commit it has not loaded.** The `/` filter
   narrowed the pages already on screen, which on a 600k-commit repo is a
   rounding error — the commit you want is almost never in the first fifty.

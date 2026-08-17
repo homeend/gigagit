@@ -2,6 +2,7 @@
 // see app.js (the entry module) for the load order.
 import { $, ROW_H, esc, getJSON, state } from "./core.js";
 import { flatDotSVG } from "./commits.js";
+import { sortMode } from "./sortlist.js";
 
 // --- working-tree row + status state ---
 
@@ -80,8 +81,19 @@ function buildStatusEntries() {
   // already staged does not. Staging a hunk otherwise made the file jump
   // upward into a section you were done with, pushing the rest of the work
   // down — the list appeared to reorder itself under the cursor.
+  //
+  // The sort mode orders files WITHIN a section, never across: the sections
+  // are the structure of the list, not one of its orderings. "default" is
+  // git's own status order (a stable sort leaves it alone); name↑ is what
+  // this list has always done, and stays its starting mode.
   const order = { changes: 0, untracked: 1, conflicts: 2, staged: 3 };
-  es.sort((a, b) => order[a.section] - order[b.section] || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  const mode = sortMode("files");
+  const dir = mode === "name-desc" ? -1 : 1;
+  es.sort(
+    (a, b) =>
+      order[a.section] - order[b.section] ||
+      (mode === "default" ? 0 : dir * (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))
+  );
   state.statusEntries = es;
   // prune marks whose file left the status (committed, discarded, renamed)
   if (state.marked.size) {

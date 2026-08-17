@@ -94,12 +94,16 @@ func TestUIStateSurvivesAServerRestart(t *testing.T) {
 	repo := newRepoDir(t, 1)
 
 	ts1 := serve(t, New(domain.Open(repo)))
-	if code := putJSON(t, ts1, "/api/uistate", `{"sections":["stashes"],"sidebar_width":275}`, "", nil); code != http.StatusOK {
+	body := `{"sections":["stashes"],"sidebar_width":275,"sorts":{"branches":"name-asc"}}`
+	if code := putJSON(t, ts1, "/api/uistate", body, "", nil); code != http.StatusOK {
 		t.Fatalf("PUT code = %d", code)
 	}
 
 	ts2 := serve(t, New(domain.Open(repo))) // a second server, as a restart would be
 	st := getUIState(t, ts2)
+	if st.Sorts["branches"] != "name-asc" {
+		t.Errorf("sorts after a restart = %v", st.Sorts)
+	}
 	if !st.Saved || len(st.Sections) != 1 || st.Sections[0] != "stashes" || st.SidebarWidth != 275 {
 		t.Fatalf("state after a restart = %+v (file: %s)", st, filepath.Join(dir, "gg", "prompts.toml"))
 	}
@@ -126,6 +130,48 @@ func TestUIStateSanitizesInput(t *testing.T) {
 	}
 	if put.Graph != "svg" {
 		t.Fatalf("graph = %q, want the svg fallback", put.Graph)
+	}
+}
+
+// The per-list sort modes ride the same layout record: a browser on a random
+// port cannot remember them itself.
+func TestUIStateSortsRoundTrip(t *testing.T) {
+	ts := serve(t, uiServer(t))
+	body := `{"sections":[],"sorts":{"branches":"date-desc","tags":"name-asc"}}`
+	var put uiStateWire
+	if code := putJSON(t, ts, "/api/uistate", body, "", &put); code != http.StatusOK {
+		t.Fatalf("PUT code = %d", code)
+	}
+	if put.Sorts["branches"] != "date-desc" || put.Sorts["tags"] != "name-asc" {
+		t.Fatalf("PUT response sorts = %v", put.Sorts)
+	}
+	st := getUIState(t, ts)
+	if st.Sorts["branches"] != "date-desc" || st.Sorts["tags"] != "name-asc" {
+		t.Fatalf("stored sorts = %v", st.Sorts)
+	}
+}
+
+// Both dimensions are allowlisted — the list name AND the mode — like
+// allowedSections/allowedGraph. An explicit "default" is kept: the files list
+// does not START on git's order, so choosing it is a real choice.
+func TestUIStateSanitizesSorts(t *testing.T) {
+	ts := serve(t, uiServer(t))
+	body := `{"sections":[],"sorts":{"branches":"bogus","bogus":"name-asc","worktrees":"date-asc","files":"default"}}`
+	var put uiStateWire
+	if code := putJSON(t, ts, "/api/uistate", body, "", &put); code != http.StatusOK {
+		t.Fatalf("PUT code = %d", code)
+	}
+	if _, ok := put.Sorts["bogus"]; ok {
+		t.Errorf("unknown list survived: %v", put.Sorts)
+	}
+	if put.Sorts["branches"] != "default" {
+		t.Errorf("unknown mode = %q, want the default fallback", put.Sorts["branches"])
+	}
+	if put.Sorts["files"] != "default" {
+		t.Errorf("an explicit default must survive: %v", put.Sorts)
+	}
+	if put.Sorts["worktrees"] != "date-asc" {
+		t.Errorf("sorts = %v, want worktrees=date-asc kept", put.Sorts)
 	}
 }
 
