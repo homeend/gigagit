@@ -8,6 +8,18 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: the file list shows the commit's date too.** The browser's file-list
+  header grows a second line under its title carrying the commit's author date
+  and author — `2026-08-17 15:04 · gigagit` — the TUI's line, in the same
+  format. `/api/commit/{sha}` now serves `time`/`author`/`subject` alongside the
+  files (via `domain.CommitMeta`), which is the only source for a commit opened
+  from a **sidebar tag**: that path has no feed row behind it to take a date
+  from. The stamp is rendered in the **browser**, because only the viewer knows
+  the viewer's timezone, so `files.js` carries a port of the Go formatter and a
+  node-shelling guard test holds it to `model.CommitDateLayout` — the constant
+  the TUI formats with. The working tree, a comparison and a stash open with no
+  date line at all: each file-list stage starts without one, and only a commit
+  open sets it.
 - **The commit files view shows the commit's date.** Opening a commit's file
   tree (`l` on the Commits panel, `enter` from Tags/Reflog, `#` goto-SHA) now
   draws a line directly under the title with the commit's **author date and
