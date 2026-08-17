@@ -8,6 +8,23 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **The commit files view shows the commit's date.** Opening a commit's file
+  tree (`l` on the Commits panel, `enter` from Tags/Reflog, `#` goto-SHA) now
+  draws a line directly under the title with the commit's **author date and
+  author** — `2026-08-17 15:04 · gigagit` — the same stamp the `i` message
+  popup shows, from the same formatter. Answering "when was this?" no longer
+  costs a popup. The line lives on its own row rather than in the title, so a
+  long subject can never truncate the date out of view, and it keeps step as
+  you walk the commit list with `j`/`k` under an open tree. A commit opened by
+  **hash** — from Tags, the Reflog, or goto-SHA — carries no date on the row
+  that opened it, so gg now resolves one (a new single-invocation `CommitMeta`
+  read, on the load goroutine); that lookup also fills in the subject, so a
+  goto-SHA view stops being hash-only, and it feeds the `i` popup, which used
+  to print `Date: (unknown)` for exactly those commits. If the date cannot be
+  resolved, no line is drawn at all — no `(unknown)` placeholder parked under
+  the header — and the tree gets its row back. A **comparison** (two
+  endpoints), a **stash** and a **shelved commit** have no single commit date
+  behind them and keep their current headers unchanged.
 - **Web: every list can be sorted, like the TUI's `o` key.** The sidebar's
   **branches**, **remotes**, **worktrees** and **tags** sections each carry a
   small chip in their header showing the current order; clicking it cycles
