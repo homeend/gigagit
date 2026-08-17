@@ -202,6 +202,21 @@ check("clearing restores the full list", out.restoredCount > 40, String(out.rest
 check("clearing brings the lanes back", out.graphRestored === "lanes", out.graphRestored);
 
 // --- 4. eager search finds a commit OUTSIDE the first page ------------------
+// --- 3b. ctrl+f inside the filter bar is OURS, not the browser's ------------
+// dispatchEvent returns false when a handler called preventDefault, which is
+// the only thing that keeps Chrome's own find dialog shut. CDP cannot see that
+// dialog, so this is the assertion that matters.
+out.ctrlFInBar = await evaluate(`(() => {
+  const el = document.getElementById("ff-author");
+  if (!el) return "MISSING";
+  el.focus();
+  const ev = new KeyboardEvent("keydown", { key: "f", ctrlKey: true, bubbles: true, cancelable: true });
+  const notPrevented = el.dispatchEvent(ev);
+  return notPrevented ? "REACHED THE BROWSER" : "handled";
+})()`);
+await sleep(600);
+check("ctrl+f in the filter bar is handled, not left to the browser", out.ctrlFInBar === "handled", out.ctrlFInBar);
+
 await evaluate(key("Escape")); // close the filter bar
 await sleep(200);
 await evaluate(key("/"));
