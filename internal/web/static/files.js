@@ -78,7 +78,39 @@ function enterFilesStage() {
   $("diff-body").innerHTML = "";
   state.lastDiff = null;
   state.diffCtx = null;
+  setFilesMeta(""); // every stage starts without a date; only a commit open sets one
 }
+
+
+// setFilesMeta draws (or hides) the file-list header's second line: the
+// commit's date and author, the web twin of the TUI files view's under-title
+// line. Called with "" by enterFilesStage, so a stage that has no single commit
+// behind it — a comparison, the working tree, a stash — never shows one by
+// simply not setting it. The element carries its own #files-meta.hidden rule;
+// a bare class="hidden" with no id rule would stay visible.
+function setFilesMeta(text) {
+  const el = $("files-meta");
+  el.textContent = text || "";
+  el.classList.toggle("hidden", !text);
+}
+
+
+// --- commit meta line (pure; guarded against Go) ---
+// commitMetaLine formats /api/commit/{sha}'s date + author exactly as the TUI
+// renders it — "2026-08-17 15:04 · gigagit", local time, the commit's AUTHOR
+// date. "" when the server could not resolve one, and then no line is drawn
+// rather than an "(unknown)" placeholder parked under the title. The claim
+// "the browser and the terminal show the same stamp" is a claim about THIS
+// function against the Go formatter; commitmetajs_test.go is what keeps it
+// true, so keep the section pure (no DOM) and the markers in place.
+function commitMetaLine(body) {
+  if (!body || !body.time) return "";
+  const d = new Date(body.time * 1000);
+  const p = (n) => String(n).padStart(2, "0");
+  const s = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  return body.author ? `${s} · ${body.author}` : s;
+}
+// --- end commit meta line ---
 
 
 // --- branch ↔ branch comparison ---
@@ -1355,4 +1387,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { SECTION_LABELS, activeFileList, applyCompareFilter, cfSideCount, clearDiffHunks, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, enterFilesStage, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markSpans, openCompare, openConflictPicker, openEntryCompare, openEntryFileDiff, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, renderResolveBar, reopenAfterHunkStage, resolveConflictPicked, setAllConflictPicks, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepToNextConflict, updateDiffNav };
+export { SECTION_LABELS, activeFileList, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, enterFilesStage, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markSpans, openCompare, openConflictPicker, openEntryCompare, openEntryFileDiff, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, renderResolveBar, reopenAfterHunkStage, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepToNextConflict, updateDiffNav };

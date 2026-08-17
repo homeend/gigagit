@@ -210,7 +210,18 @@ func (s *Server) handleCommitFiles(w http.ResponseWriter, r *http.Request) {
 	for i, f := range files {
 		out[i] = fileInfo{Path: f.Path, Status: f.Status, OldPath: f.OldPath}
 	}
-	writeJSON(w, map[string]any{"sha": sha, "files": out})
+	// The file-list stage draws the commit's date under its title. The feed row
+	// carries a time already, but the by-hash open (a sidebar tag) has no row —
+	// serving it here gives both paths one source, and one that agrees with the
+	// feed by construction (CommitMeta reads %at, the same field the walk does).
+	// Best-effort: an unresolvable date leaves the fields zero and the browser
+	// simply draws no line. The files are the payload; the date is decoration.
+	body := map[string]any{"sha": sha, "files": out}
+	if meta, merr := svc.CommitMeta(r.Context(), sha); merr == nil {
+		body["time"] = meta.UnixTime
+		body["author"] = meta.Author
+	}
+	writeJSON(w, body)
 }
 
 // handleCommitMessage serves one commit's FULL message (subject + body). The

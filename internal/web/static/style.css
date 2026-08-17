@@ -91,11 +91,18 @@ body.resizing { cursor: col-resize; user-select: none; }
   position: sticky; top: 0; background: var(--bg);
 }
 /* The header is a row: the title takes what it needs (elided), the sort chip
-   keeps its place at the right edge. */
-#files-header { display: flex; align-items: center; gap: 8px; }
+   keeps its place at the right edge. The commit's date claims a full basis, so
+   it wraps onto its own second line inside the same sticky header — a long
+   subject elides the title and must never take the date with it. */
+#files-header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 #files-title { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #files-sort { flex: 0 0 auto; }
 #files-sort.hidden { display: none; }
+#files-meta {
+  flex: 1 0 100%; font-size: 11px; opacity: .8;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+#files-meta.hidden { display: none; }
 #diff-header { display: flex; align-items: center; gap: 8px; }
 #diff-title { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #diff-nav { flex: 0 0 auto; display: flex; gap: 4px; }
