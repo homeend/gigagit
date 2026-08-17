@@ -4,29 +4,6 @@ A fast terminal git client for very large monorepos — GitKraken's one-key smar
 operations with lazygit's keyboard-driven TUI. Cross-platform, shells out to the
 system `git`.
 
-> **Status:** actively developed and ready for daily use. The worktree-aware
-> engine, one-key smart operations (pull / switch / merge / rebase / commit /
-> stash / undo), interactive rebase, conflict resolution, a rich keyboard TUI,
-> and a fully scriptable CLI are all in place. No `1.0` tag has been cut yet. An
-> MCP server (`gg mcp`) has shipped, stage 1 (read-only) and stage 2 (mutating
-> tools, gated by client consent); heavy-ops MCP surfaces remain on the
-> roadmap. A loopback-only browser UI (`gg web`) mirrors core flows —
-> status, commits, branches, stashes, pull/push/merge/rebase, and now
-> paused-op conflict resolution: the browser conflict picker has per-line
-> checkboxes and tri-state side toggles (left, right, or both — pick order
-> = result order), decided-empty regions, and a live assembled-output pane;
-> `all ours`/`all theirs` are tri-state document toggles. The picker
-> regenerates conflict text from index stages (`ConflictPickerFile`), so
-> files whose content contains literal conflict markers now load in the web
-> picker too — the same as the TUI, conflicts are shown as git recorded them
-> (regenerated from the index stages), and hand-edits to conflicted files that
-> were not staged are not reflected in the picker. Plus an "AI resolve…" button
-> that runs a headless agent to finish the paused op for you — over a small
-> HTTP API, no node toolchain required.
-> See
-> [`CHANGELOG.md`](CHANGELOG.md) for the full feature list and
-> [`CLAUDE.md`](CLAUDE.md) for the architecture.
-
 ## Why
 
 Huge repos make ordinary git slow and stateful operations error-prone. `gg`
