@@ -109,6 +109,7 @@ type Model struct {
 	filesView         *contentPopup     // commit files tree replacing the left column; nil = closed
 	filesTitle        string            // "Files <short-hash> <subject>", updated with the content — rendered/localized display text; NEVER parsed
 	filesContext      string            // diff-view context payload (ref/subject or compare label) mirroring filesTitle's content sans any "Files "/panel framing; the diff view's "@ <context>" header reads THIS, not filesTitle
+	filesCommit       model.Commit      // the RESOLVED commit the view is showing (date/author/subject), incl. the ones fetched for a bare sha; backs the date line and filesViewCommit's fallback. Zero UnixTime = unknown: no date line is drawn and no row is spent
 	filesHash         string            // commit the view wants; gates stale async results
 	filesLeft         model.Endpoint    // compare mode: older side
 	filesRight        model.Endpoint    // compare mode: newer side
@@ -486,6 +487,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.filesView.sel = 0
 		m.filesTitle = i18n.T("Files %s %s", shortHash(msg.hash), msg.subject)
 		m.filesContext = shortHash(msg.hash) + " " + msg.subject
+		m.filesCommit = msg.commit // authoritative: also the follow-live j/k repaint
 		return m, nil
 	case shelfFilesMsg:
 		if m.filesView == nil || !m.inShelfFiles() || msg.id != m.filesShelfID {
@@ -517,6 +519,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.filesView.sel = 0
 		m.filesTitle = i18n.T("Files %s (all files) %s", shortHash(msg.hash), msg.subject)
 		m.filesContext = i18n.T("%s (all files) %s", shortHash(msg.hash), msg.subject)
+		m.filesCommit = msg.commit
 		return m, nil
 	case fileContentMsg:
 		if m.filesPreview == nil || msg.tag != m.filesPreviewTag {

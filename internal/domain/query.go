@@ -380,6 +380,16 @@ func (s *Service) CommitFiles(ctx context.Context, hash string) ([]model.CommitF
 	})
 }
 
+// CommitMeta returns one commit's metadata (author, AUTHOR time, subject, refs)
+// under a Read reservation, coalesced per rev. It is the door for surfaces that
+// hold a bare sha and never saw the feed row behind it — the files view opened
+// from Tags / goto-SHA / the reflog.
+func (s *Service) CommitMeta(ctx context.Context, rev string) (model.Commit, error) {
+	return query(ctx, s, "commit-meta:"+rev, func(ctx context.Context) (model.Commit, error) {
+		return s.repo.CommitMeta(ctx, rev)
+	})
+}
+
 // TreeFiles returns every file in commit hash's tree (the full checked-out file
 // set at that commit), under a Read reservation, coalesced per hash.
 func (s *Service) TreeFiles(ctx context.Context, hash string) ([]model.CommitFile, error) {
