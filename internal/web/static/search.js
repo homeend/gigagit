@@ -152,6 +152,11 @@ async function clearFeedFilter(keepOpen) {
 
 bar.addEventListener("input", scheduleApply);
 
+// The bar's fields own the keyboard while they are focused (the global router
+// steps aside for any input), so every key that means something here has to be
+// answered here — including ctrl+f, which otherwise reaches the BROWSER and
+// opens its find dialog over a page whose own search is the thing you were
+// reaching for.
 bar.addEventListener("keydown", (e) => {
   if (e.key === "Enter") {
     e.preventDefault();
@@ -159,6 +164,9 @@ bar.addEventListener("keydown", (e) => {
   } else if (e.key === "Escape") {
     e.preventDefault();
     clearFeedFilter(false);
+  } else if (e.key === "f" && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+    searchDeeper(); // same key, same meaning as everywhere else in the page
   }
 });
 

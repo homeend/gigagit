@@ -8,6 +8,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: ctrl+f means the same thing everywhere.** Typed inside the `\` filter
+  bar's own fields it slipped past the page and opened the browser's find
+  dialog — over the one screen whose own search is what you were reaching for.
+  The bar answers it now, exactly as the `/` field already did.
+
 - **Web: the sidebar toggle works again, and its key is now `t`.** Hiding the
   branches/tags/stashes column did nothing — from the key, from the ☰ menu's
   **toggle sidebar**, or from the footer chip. `toggleSidebar` asked for the
