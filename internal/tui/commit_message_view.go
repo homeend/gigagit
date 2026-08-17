@@ -113,7 +113,7 @@ func commitDateString(c model.Commit) string {
 	if c.UnixTime == 0 {
 		return i18n.T("(unknown)")
 	}
-	return time.Unix(c.UnixTime, 0).Format("2006-01-02 15:04")
+	return time.Unix(c.UnixTime, 0).Format(model.CommitDateLayout)
 }
 
 // commitRefsLine joins a commit's ref decorations (tags prefixed "tag: ") for

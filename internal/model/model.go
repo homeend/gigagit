@@ -148,6 +148,15 @@ type Commit struct {
 	Source   string // branch the commit was reached from in the walk (%S); "" when unknown
 }
 
+// CommitDateLayout is the one place gg writes the layout it displays a
+// commit's date in. The TUI formats with it (the files-view header line and
+// the commit-message popup); the web client re-implements it in JavaScript
+// (files.js commitMetaLine) because the server ships unix seconds and the
+// browser owns the viewer's timezone — internal/web/commitmetajs_test.go
+// holds that port to THIS constant, so the browser and the terminal cannot
+// drift into showing the same commit two different ways.
+const CommitDateLayout = "2006-01-02 15:04"
+
 // LogLine is one terse history row (short sha + subject) — the gg log /
 // gg show header unit.
 type LogLine struct {
