@@ -261,4 +261,61 @@ function defaultWorktreePath(branch) {
   return parent + sep + name + "-" + branch.replace(/[^\w.-]+/g, "-");
 }
 
-export { $, DANGER_OPTIONS, ROW_H, SECTIONS, charWidth, defaultWorktreePath, elideNameMiddle, elidePath, esc, getJSON, lsGet, lsSet, postJSON, runes, splitPathSegs, ssGet, ssSet, state };
+// --- single-flight task gate (pure; guarded against node) ---
+//
+// The same background task can be started many times over: a reload answers
+// to r, the footer chip AND the palette, and a held r repeats the keydown.
+// Every start fans the same ten requests at a server that answers them under
+// ONE per-repo gate, so the presses do not reload faster — they queue behind
+// each other and each one re-walks the feed underneath the list. Measured on
+// a 7.6k-commit repo before this gate existed: four presses turned a 3.4s
+// /api/status into 3.4 → 5.5 → 7.6 → 9.9s, with four `?reset=1` walks
+// throwing away each other's pages.
+//
+// runOnce keys a task by TYPE. While one is in flight the next start is
+// DROPPED rather than queued: these tasks are idempotent reloads, so what
+// the running one brings back is exactly what the second press wanted, and
+// queueing would only replay the pile-up later.
+//
+// The timeout is a backstop, not the mechanism — the promise settling is
+// what normally frees the type. It exists for a start whose promise never
+// settles at all (a fetch with no abort behind a wedged server); without it
+// one lost task would wedge its type for the life of the page. Generous on
+// purpose: this targets ~100GB monorepos, where an honest reload can run for
+// tens of seconds, and releasing early would hand back the pile-up.
+const RUN_ONCE_TIMEOUT = 60000;
+
+let runSeq = 0;
+const runningTasks = new Map(); // type -> {id, at}
+
+// runOnce returns the task's promise, or null when a task of this type is
+// already running (the caller decides what to say about the dropped start).
+function runOnce(type, fn, opts = {}) {
+  const now = opts.now || Date.now;
+  const timeout = opts.timeout === undefined ? RUN_ONCE_TIMEOUT : opts.timeout;
+  const live = runningTasks.get(type);
+  if (live && now() - live.at < timeout) return null;
+  const rec = { id: ++runSeq, at: now() };
+  runningTasks.set(type, rec);
+  // Identity-checked release: once a timed-out task's slot has been taken by
+  // a newer start, the straggler settling must not free the NEWER one.
+  const release = () => {
+    if (runningTasks.get(type) === rec) runningTasks.delete(type);
+  };
+  let p;
+  try {
+    p = fn();
+  } catch (e) {
+    release(); // a synchronous throw is a finished task too
+    throw e;
+  }
+  return Promise.resolve(p).then(
+    (v) => { release(); return v; },
+    (e) => { release(); throw e; },
+  );
+}
+
+// --- end single-flight task gate ---
+
+
+export { $, DANGER_OPTIONS, ROW_H, SECTIONS, charWidth, defaultWorktreePath, elideNameMiddle, elidePath, esc, getJSON, lsGet, lsSet, postJSON, runOnce, runes, splitPathSegs, ssGet, ssSet, state };

@@ -1,6 +1,6 @@
 // ops.js — part of gg's web client. Split from the original app.js;
 // see app.js (the entry module) for the load order.
-import { $, DANGER_OPTIONS, esc, getJSON, lsSet, postJSON, state } from "./core.js";
+import { $, DANGER_OPTIONS, esc, getJSON, lsSet, postJSON, runOnce, state } from "./core.js";
 import { closeLayer, closePrompt, openPrompt, pushLayer } from "./layers.js";
 import { openPrefixPicker } from "./prefixes.js";
 import { fetchStatus, wtCount } from "./status.js";
@@ -395,15 +395,35 @@ function handleOpEvent(ev) {
 // out loud that it is working and starts the commit list CLEAN. Without the
 // notice a refresh over unchanged data looks like a dead button; without the
 // clean start it cannot recover a deep tail that a rewrite made stale.
+//
+// One reload at a time, whichever surface asks for it (runOnce, keyed on the
+// task type): a second press while one is in flight is DROPPED, not queued.
+// Overlapping reloads do not finish sooner — every one of them fans the same
+// requests at a server that serialises them under the repo gate, so they
+// stack up (each press pushed /api/status ~2s further out) and each extra
+// `reset` walk throws away the pages the previous one had just walked.
+// Dropping is honest here because a reload is idempotent: the running one
+// fetches the same state the second press was asking for.
+//
+// The press is not swallowed silently — the notice is re-shown, so the
+// keyboard still answers and a reload that is already under way keeps saying
+// so instead of looking like a dead key.
 async function manualRefresh() {
   if (state.op) return; // an op owns the data; its own refresh follows
-  opLine("⏳ reloading…");
-  try {
-    await refreshAfterOp(true);
-    opLine("reloaded");
-  } catch (e) {
-    opLine("reload failed: " + (e.message || e), true);
+  const run = runOnce("refresh", async () => {
+    opLine("⏳ reloading…");
+    try {
+      await refreshAfterOp(true);
+      opLine("reloaded");
+    } catch (e) {
+      opLine("reload failed: " + (e.message || e), true);
+    }
+  });
+  if (!run) {
+    opLine("⏳ reloading…");
+    return;
   }
+  await run;
 }
 
 
