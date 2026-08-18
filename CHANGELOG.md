@@ -8,6 +8,21 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: mashing `r` no longer stacks up overlapping reloads.** A reload
+  answers to `r`, the footer chip and the palette alike, and every start used
+  to fan the same ten requests at the server — which answers them one at a
+  time under the per-repo gate. So four presses did not reload four times
+  faster: they queued behind each other while the commit list churned under
+  four `?reset=1` walks, each throwing away the pages the one before it had
+  just walked. Measured on a 7.6k-commit repo: four presses turned a 3.4s
+  `/api/status` into 3.4 → 5.5 → 7.6 → 9.9 seconds, and 12 requests into 48.
+  Reloads now run under a **single-flight gate keyed by task type** — while
+  one is in flight the next start is dropped rather than queued, which is
+  honest because a reload is idempotent: the running one is already fetching
+  what the second press wanted. The press is not swallowed silently, the
+  `⏳ reloading…` notice is re-shown, so the key never reads as dead; and a
+  generous timeout backstops a start whose promise never settles, so one lost
+  task cannot wedge its type for the life of the page.
 - **Web: the file list shows the commit's date too.** The browser's file-list
   header grows a second line under its title carrying the commit's author date
   and author — `2026-08-17 15:04 · gigagit` — the TUI's line, in the same
