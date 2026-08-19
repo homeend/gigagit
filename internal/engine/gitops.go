@@ -40,6 +40,12 @@ type GitOps interface {
 	PullInWorktree(ctx context.Context, worktreePath, remote, branch string) error
 	FastForwardRef(ctx context.Context, remote, branch string) error
 	Push(ctx context.Context, remote, branch string, setUpstream bool, force git.PushForce) error
+	// RemoteBranchTip/CountRange/CountRangeUnique back the rejected-push
+	// diagnosis: they tell "the remote gained work" from "the remote holds the
+	// pre-rewrite copies of my own commits" without fetching objects.
+	RemoteBranchTip(ctx context.Context, remote, branch string) (string, error)
+	CountRange(ctx context.Context, base, ref string) (int, error)
+	CountRangeUnique(ctx context.Context, base, ref string) (int, error)
 	PushTag(ctx context.Context, remote, name string) error
 	PushTags(ctx context.Context, remote string, names []string) error
 	PushDelete(ctx context.Context, remote, branch string) error

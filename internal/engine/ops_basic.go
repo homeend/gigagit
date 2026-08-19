@@ -140,14 +140,44 @@ func (op Push) recoverRejected(ctx context.Context, deps OpDeps) (Result, error)
 	}
 	var choice DecisionResponse
 	var err error
-	if allowRebase {
+	kind := diagnoseRejection(ctx, deps, op.Remote, op.Branch)
+	switch {
+	case allowRebase && kind == divLocalRewrite:
+		// Nothing to integrate: the remote's commits ARE ours, pre-rewrite.
+		// Rebasing onto them replays the rewrite away, so force leads and the
+		// prompt says what the remote actually holds.
+		choice, err = deps.decide(ctx, PromptReq(
+			"push-rejected",
+			"%s was rewritten locally — the remote holds only the old copies of your commits. Force-push to publish the rewrite, rebase onto the old copies, or abort",
+			[]string{"force", "rebase", "abort"},
+			op.Branch,
+		))
+	case allowRebase && kind == divMixed:
+		// Real remote work AND stale copies of rewritten commits: rebase still
+		// leads (it is the only answer that keeps both), but the prompt warns.
+		choice, err = deps.decide(ctx, PromptReq(
+			"push-rejected",
+			"Remote has new commits on %s plus old copies of commits you rewrote — rebase to keep both, force-push to drop the new ones, or abort",
+			[]string{"rebase", "force", "abort"},
+			op.Branch,
+		))
+	case allowRebase:
 		choice, err = deps.decide(ctx, PromptReq(
 			"push-rejected",
 			"Remote has new commits on %s — rebase onto them, force-push, or abort",
 			[]string{"rebase", "force", "abort"},
 			op.Branch,
 		))
-	} else {
+	case kind == divLocalRewrite:
+		// Same lie to correct on a branch we can't rebase (the Branches-panel
+		// push): the remote has nothing new, only our pre-rewrite copies.
+		choice, err = deps.decide(ctx, PromptReq(
+			"push-rejected",
+			"%s was rewritten locally — the remote holds only the old copies of your commits. Force-push to publish the rewrite, or abort",
+			[]string{"force", "abort"},
+			op.Branch,
+		))
+	default:
 		choice, err = deps.decide(ctx, PromptReq(
 			"push-rejected",
 			"Remote has new commits on %s — force-push or abort",

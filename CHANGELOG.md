@@ -8,6 +8,30 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **A rejected push now tells the two reasons apart before offering to
+  rebase.** Git reports one non-fast-forward rejection for two opposite
+  situations: the remote gained commits you don't have, or you rewrote your
+  own history (rebase/amend/squash) and the remote still holds the *old
+  copies* of your commits. The recovery only ever considered the first, so
+  after rebasing a feature branch onto `main` the offered `rebase` — a
+  `git pull --rebase origin <branch>` — integrated your own stale commits back:
+  git dropped the rebased copies as patch duplicates, restored the published
+  ones, and replayed `main`'s commits on top of them. The branch came back
+  looking like "main was rebased onto my work", and the local rebase was gone.
+  A rejected push is now **diagnosed** first (`inspecting the remote`): one
+  `git ls-remote` names the remote tip and, when that tip is an object we
+  already hold — which is exactly the rewrite case — two `rev-list --count`s
+  (one with `--cherry-pick`) say how many remote-only commits are patch twins
+  of our own. Nothing is fetched. The fork then reads true: a **local rewrite**
+  leads with `force` and says the remote holds only the old copies; a genuine
+  **remote gain** is unchanged (`rebase` leads); a **mixed** remote — real new
+  work *plus* stale copies — keeps `rebase` first but names both. A branch
+  pushed **without being checked out** (the Branches-panel `Push <branch>`)
+  still never offers rebase — that would rewrite HEAD's branch — but its prompt
+  no longer claims new commits either. Every option
+  stays on offer in every case, the option values are untouched (so
+  `gg push --on-reject rebase|force|abort` and the MCP/web mappings keep
+  working), and any classification failure falls back to the previous prompt.
 - **Web: mashing `r` no longer stacks up overlapping reloads.** A reload
   answers to `r`, the footer chip and the palette alike, and every start used
   to fan the same ten requests at the server — which answers them one at a
