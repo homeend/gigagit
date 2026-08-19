@@ -8,6 +8,21 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **`push` lands on the branch it names, whatever your git push config says.**
+  gg ran `git push <remote> <branch>` — a one-sided refspec, whose *destination*
+  git resolves through `push.default` and any `remote.<name>.push` refspec. So
+  on a repo with `push.default = upstream`, pushing a feature branch whose
+  upstream is `origin/main` sent it **to main** (verified: `feature -> main`,
+  reported by gg as a plain `✓ pushed`), and a `remote.origin.push =
+  refs/heads/*:refs/heads/sandbox/*` mapping silently redirected it to
+  `sandbox/<branch>` — while every gg surface said only "push `<branch>`".
+  Nothing in the UI could express the real destination, and the rejected-push
+  recovery then reasoned about the wrong ref. The verb now spells the
+  destination out — `<branch>:refs/heads/<branch>` — so the push goes where the
+  UI says and `-u` records that branch's own upstream. Tags (`refs/tags/…`) and
+  remote-branch deletion were never affected; both were re-checked against both
+  mappings. If you relied on `push.default = upstream` to push a branch onto a
+  differently-named remote branch, gg no longer does that — use git directly.
 - **A rejected push now tells the two reasons apart before offering to
   rebase.** Git reports one non-fast-forward rejection for two opposite
   situations: the remote gained commits you don't have, or you rewrote your
