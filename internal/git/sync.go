@@ -130,9 +130,17 @@ const (
 	PushForcePlain                      // --force (overwrites unconditionally)
 )
 
-// Push pushes branch to remote. When setUpstream is true it records the
-// upstream tracking ref (-u). The force mode chooses how a diverged remote is
-// overwritten: none (default), --force-with-lease (safe), or --force (plain).
+// Push pushes branch to remote's branch of the SAME NAME. When setUpstream is
+// true it records the upstream tracking ref (-u). The force mode chooses how a
+// diverged remote is overwritten: none (default), --force-with-lease (safe),
+// or --force (plain).
+//
+// The destination is spelled out (`<branch>:refs/heads/<branch>`) rather than
+// left to git: for a bare one-sided refspec git resolves the destination
+// through `push.default` and any `remote.<name>.push` refspec, so under
+// `push.default = upstream` a branch whose upstream is origin/main would be
+// pushed ONTO main — silently, since gg's UI only ever says "push <branch>".
+// An explicit destination makes the argv mean what the caller asked for.
 func (r *Repo) Push(ctx context.Context, remote, branch string, setUpstream bool, force PushForce) error {
 	b := gitcmd.New("push").ArgIf(setUpstream, "-u")
 	switch force {
@@ -141,7 +149,7 @@ func (r *Repo) Push(ctx context.Context, remote, branch string, setUpstream bool
 	case PushForcePlain:
 		b = b.Arg("--force")
 	}
-	argv := b.Arg(remote, branch).ToArgv()
+	argv := b.Arg(remote, branch+":refs/heads/"+branch).ToArgv()
 	_, err := r.Runner.Run(ctx, "git push", argv)
 	return err
 }
