@@ -11,6 +11,7 @@ import (
 )
 
 func TestStashPushArgv(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git stash push", gitexec.Result{})
 	r := &Repo{Runner: f}
@@ -24,6 +25,7 @@ func TestStashPushArgv(t *testing.T) {
 }
 
 func TestStashPushNoPathsNoUntracked(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git stash push", gitexec.Result{})
 	r := &Repo{Runner: f}
@@ -35,6 +37,7 @@ func TestStashPushNoPathsNoUntracked(t *testing.T) {
 }
 
 func TestStashPopRefArgv(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git stash pop", gitexec.Result{})
 	r := &Repo{Runner: f}
@@ -52,6 +55,7 @@ func TestStashPopRefArgv(t *testing.T) {
 }
 
 func TestStashApplyDropArgv(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git stash apply", gitexec.Result{})
 	f.SetResponse("git stash drop", gitexec.Result{})
@@ -67,6 +71,7 @@ func TestStashApplyDropArgv(t *testing.T) {
 }
 
 func TestStashCommitArgv(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git rev-parse (stash)", gitexec.Result{Stdout: "deadbeef\n"})
 	r := &Repo{Runner: f}
@@ -84,6 +89,7 @@ func TestStashCommitArgv(t *testing.T) {
 
 // Real-git: stash one tracked modification by path; the other stays dirty.
 func TestStashPushByPathRoundTrip(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 	ctx := context.Background()
@@ -127,6 +133,7 @@ func TestStashPushByPathRoundTrip(t *testing.T) {
 // Real-git smoke for whole-tree push/list/pop (updated from the original
 // single-arg signatures).
 func TestStashPushListPop(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 
@@ -157,6 +164,7 @@ func TestStashPushListPop(t *testing.T) {
 }
 
 func TestStashApplyDropNoRefArgv(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git stash apply", gitexec.Result{})
 	f.SetResponse("git stash drop", gitexec.Result{})

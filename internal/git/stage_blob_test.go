@@ -9,6 +9,7 @@ import (
 )
 
 func TestStageBlobSetsIndexNotWorktree(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t) // README.md = "hello\n" committed & in index
 	repo := &Repo{Runner: runner}
 	ctx := context.Background()

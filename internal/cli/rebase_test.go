@@ -10,6 +10,7 @@ import (
 )
 
 func TestRebaseInteractiveRequiresPlan(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	var out, errb bytes.Buffer
 	code := Run(dir, []string{"rebase", "-i", "main"}, strings.NewReader(""), &out, &errb, "")
@@ -22,6 +23,7 @@ func TestRebaseInteractiveRequiresPlan(t *testing.T) {
 }
 
 func TestRebasePlanRequiresInteractive(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	var out, errb bytes.Buffer
 	code := Run(dir, []string{"rebase", "--plan", "/tmp/x.json", "main"}, strings.NewReader(""), &out, &errb, "")
@@ -31,6 +33,7 @@ func TestRebasePlanRequiresInteractive(t *testing.T) {
 }
 
 func TestRebaseInteractiveBadPlanFile(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	var out, errb bytes.Buffer
 	code := Run(dir, []string{"rebase", "-i", "--plan", "/nonexistent/plan.json", "main"}, strings.NewReader(""), &out, &errb, "")
@@ -57,6 +60,7 @@ func rebaseFixture(t *testing.T) string {
 }
 
 func TestRebaseCurrentOntoBase(t *testing.T) {
+	t.Parallel()
 	dir := rebaseFixture(t)
 	var out, errb bytes.Buffer
 	code := Run(dir, []string{"rebase", "main"}, strings.NewReader(""), &out, &errb, "")
@@ -77,6 +81,7 @@ func TestRebaseCurrentOntoBase(t *testing.T) {
 }
 
 func TestRebaseExplicitBranchSwitchesAndStays(t *testing.T) {
+	t.Parallel()
 	dir := rebaseFixture(t)
 	gitRun(t, dir, "checkout", "main") // now NOT on feat
 	var out, errb bytes.Buffer
@@ -109,6 +114,7 @@ func rebaseConflictFixture(t *testing.T) string {
 }
 
 func TestRebaseConflictUnansweredNonTTY(t *testing.T) {
+	t.Parallel()
 	dir := rebaseConflictFixture(t)
 	var out, errb bytes.Buffer
 	code := Run(dir, []string{"rebase", "main"}, strings.NewReader(""), &out, &errb, "")
@@ -121,6 +127,7 @@ func TestRebaseConflictUnansweredNonTTY(t *testing.T) {
 }
 
 func TestRebaseConflictAbortFlag(t *testing.T) {
+	t.Parallel()
 	dir := rebaseConflictFixture(t)
 	var out, errb bytes.Buffer
 	code := Run(dir, []string{"rebase", "--on-conflict=abort", "main"}, strings.NewReader(""), &out, &errb, "")
@@ -134,6 +141,7 @@ func TestRebaseConflictAbortFlag(t *testing.T) {
 }
 
 func TestRebaseConflictKeepFlag(t *testing.T) {
+	t.Parallel()
 	dir := rebaseConflictFixture(t)
 	var out, errb bytes.Buffer
 	code := Run(dir, []string{"rebase", "--on-conflict=keep", "main"}, strings.NewReader(""), &out, &errb, "")
@@ -147,6 +155,7 @@ func TestRebaseConflictKeepFlag(t *testing.T) {
 }
 
 func TestRebaseUsageErrors(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	for _, args := range [][]string{
 		{"rebase"},           // missing newbase

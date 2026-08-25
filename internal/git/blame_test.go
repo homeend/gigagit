@@ -8,6 +8,7 @@ import (
 )
 
 func TestParseBlamePorcelain(t *testing.T) {
+	t.Parallel()
 	// Full header on a commit's first appearance; abbreviated (sha + line nums)
 	// on repeats; a renamed commit carries previous/filename (ignored cleanly);
 	// the all-zero sha is an uncommitted working-tree line.
@@ -68,6 +69,7 @@ func TestParseBlamePorcelain(t *testing.T) {
 }
 
 func TestBlameVerb(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t) // repo with an initial commit (README.md)
 	repo := &Repo{Runner: runner}
 

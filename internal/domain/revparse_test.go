@@ -10,6 +10,7 @@ import (
 )
 
 func TestRevParseResolvesFullSHA(t *testing.T) {
+	t.Parallel()
 	const full = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef" // 40 chars
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git rev-parse", gitexec.Result{Stdout: full + "\n"})
@@ -25,6 +26,7 @@ func TestRevParseResolvesFullSHA(t *testing.T) {
 }
 
 func TestRevParsePropagatesError(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetError("git rev-parse", errors.New("unknown revision"))
 	svc := New(&git.Repo{Runner: f})

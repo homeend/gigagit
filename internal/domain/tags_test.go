@@ -6,6 +6,7 @@ import (
 )
 
 func TestServiceTags(t *testing.T) {
+	t.Parallel()
 	dir := cleanDir(t)
 	svc := svcAt(dir)
 	gitRunDir(t, dir, "", "tag", "v1.0.0")
@@ -20,6 +21,7 @@ func TestServiceTags(t *testing.T) {
 }
 
 func TestSnapshotIncludesTags(t *testing.T) {
+	t.Parallel()
 	dir := cleanDir(t)
 	svc := svcAt(dir)
 	gitRunDir(t, dir, "", "tag", "v1.0.0")

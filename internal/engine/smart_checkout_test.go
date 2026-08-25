@@ -17,6 +17,7 @@ func configRemote(t *testing.T, dir string) {
 }
 
 func TestSmartCheckoutAbsentLocalStay(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	configRemote(t, dir)
 	gitIn(t, dir, "update-ref", "refs/remotes/origin/foo", "HEAD")
@@ -37,6 +38,7 @@ func TestSmartCheckoutAbsentLocalStay(t *testing.T) {
 }
 
 func TestSmartCheckoutAbsentLocalSwitch(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	configRemote(t, dir)
 	gitIn(t, dir, "update-ref", "refs/remotes/origin/foo", "HEAD")
@@ -51,6 +53,7 @@ func TestSmartCheckoutAbsentLocalSwitch(t *testing.T) {
 }
 
 func TestSmartCheckoutExistingBehindFastForwards(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	gitIn(t, dir, "commit", "--allow-empty", "-m", "c2")
 	gitIn(t, dir, "update-ref", "refs/remotes/origin/foo", "HEAD") // ahead
@@ -66,6 +69,7 @@ func TestSmartCheckoutExistingBehindFastForwards(t *testing.T) {
 }
 
 func TestSmartCheckoutDivergedRefuses(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	gitIn(t, dir, "branch", "foo")
 	gitIn(t, dir, "commit", "--allow-empty", "-m", "main-only")
@@ -81,6 +85,7 @@ func TestSmartCheckoutDivergedRefuses(t *testing.T) {
 }
 
 func TestSmartCheckoutCheckedOutElsewhereRefuses(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	gitIn(t, dir, "branch", "foo")
 	gitIn(t, dir, "worktree", "add", filepath.Join(dir, "..", "wt-foo"), "foo")
@@ -98,6 +103,7 @@ func TestSmartCheckoutCheckedOutElsewhereRefuses(t *testing.T) {
 }
 
 func TestSmartCheckoutCurrentBranchRefuses(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	gitIn(t, dir, "checkout", "-b", "foo")
 	gitIn(t, dir, "update-ref", "refs/remotes/origin/foo", "HEAD")
@@ -117,6 +123,7 @@ func TestSmartCheckoutCurrentBranchRefuses(t *testing.T) {
 }
 
 func TestSmartCheckoutDivergedReturnsTypedError(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	gitIn(t, dir, "branch", "foo")
 	gitIn(t, dir, "commit", "--allow-empty", "-m", "main-only")
@@ -140,6 +147,7 @@ func TestSmartCheckoutDivergedReturnsTypedError(t *testing.T) {
 }
 
 func TestSmartCheckoutCustomLocalName(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	configRemote(t, dir)
 	gitIn(t, dir, "update-ref", "refs/remotes/origin/foo", "HEAD")

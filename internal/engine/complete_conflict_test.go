@@ -14,6 +14,7 @@ import (
 // Test 1: env + context file. The fake records the CaptureSpec; assert env
 // values and that the context file's bytes match template.ConflictContextDoc.
 func TestCompleteConflictEnvAndContextFile(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 
 	fc := &fakeCapture{stdout: "overview"}
@@ -64,6 +65,7 @@ func TestCompleteConflictEnvAndContextFile(t *testing.T) {
 
 // Test 2: file wins over stdout.
 func TestCompleteConflictPrefersMessageFile(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 
 	fc := &fakeCapture{stdout: "stdout noise", writeMsgFile: "file overview"}
@@ -79,6 +81,7 @@ func TestCompleteConflictPrefersMessageFile(t *testing.T) {
 
 // Test 3: stdout fallback when the file is left empty.
 func TestCompleteConflictFallsBackToStdout(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 
 	fc := &fakeCapture{stdout: "from stdout"}
@@ -94,6 +97,7 @@ func TestCompleteConflictFallsBackToStdout(t *testing.T) {
 
 // Test 4: both empty is OK, no error.
 func TestCompleteConflictBothEmptyOK(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 
 	fc := &fakeCapture{stdout: ""}
@@ -109,6 +113,7 @@ func TestCompleteConflictBothEmptyOK(t *testing.T) {
 
 // Test 5: runner error propagates, along with whatever was captured.
 func TestCompleteConflictRunnerError(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 
 	wantErr := errors.New("boom")
@@ -125,6 +130,7 @@ func TestCompleteConflictRunnerError(t *testing.T) {
 
 // Test 6: a resolve error runs nothing — the fake runner must never be invoked.
 func TestCompleteConflictResolveErrorRunsNothing(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 
 	fc := &fakeCapture{stdout: "should not run"}
@@ -140,6 +146,7 @@ func TestCompleteConflictResolveErrorRunsNothing(t *testing.T) {
 
 // Test 7: the context and message temp files are removed once Run returns.
 func TestCompleteConflictTempFilesRemoved(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 
 	fc := &fakeCapture{stdout: "overview"}
@@ -161,6 +168,7 @@ func TestCompleteConflictTempFilesRemoved(t *testing.T) {
 
 // Test 8: LockMode is Read.
 func TestCompleteConflictLockModeRead(t *testing.T) {
+	t.Parallel()
 	if (CompleteConflict{}).LockMode() != repogate.Read {
 		t.Fatal("want Read")
 	}
@@ -170,6 +178,7 @@ func TestCompleteConflictLockModeRead(t *testing.T) {
 // token sees the REAL temp path — unlike ReviewChanges, which is handed an
 // already-resolved command.
 func TestCompleteConflictResolvesContextFileToken(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 
 	fc := &fakeCapture{stdout: "overview"}

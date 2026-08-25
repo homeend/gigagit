@@ -14,6 +14,7 @@ func src(b []byte) ByteSource {
 }
 
 func TestPlainDifferComputes(t *testing.T) {
+	t.Parallel()
 	d := NewDiffer(DifferOptions{Enhanced: true}, nil)
 	out, err := d.Diff(context.Background(), Request{Old: src([]byte("a\n")), New: src([]byte("b\n"))})
 	if err != nil {
@@ -28,6 +29,7 @@ func TestPlainDifferComputes(t *testing.T) {
 }
 
 func TestPlainDifferNilSourceIsAbsentSide(t *testing.T) {
+	t.Parallel()
 	d := NewDiffer(DifferOptions{}, nil)
 	out, err := d.Diff(context.Background(), Request{Old: nil, New: src([]byte("x\ny\n"))})
 	if err != nil {
@@ -44,6 +46,7 @@ func TestPlainDifferNilSourceIsAbsentSide(t *testing.T) {
 }
 
 func TestPlainDifferBinary(t *testing.T) {
+	t.Parallel()
 	d := NewDiffer(DifferOptions{}, nil)
 	out, _ := d.Diff(context.Background(), Request{Old: src([]byte("\x00\x01")), New: src([]byte("ok\n"))})
 	if !out.Binary {
@@ -52,6 +55,7 @@ func TestPlainDifferBinary(t *testing.T) {
 }
 
 func TestPlainDifferTooLarge(t *testing.T) {
+	t.Parallel()
 	big := make([]byte, MaxDiffBytes+1)
 	d := NewDiffer(DifferOptions{}, nil)
 	out, _ := d.Diff(context.Background(), Request{Old: src(nil), New: src(big)})
@@ -61,6 +65,7 @@ func TestPlainDifferTooLarge(t *testing.T) {
 }
 
 func TestDiffSizeCountsRowText(t *testing.T) {
+	t.Parallel()
 	d := NewDiffer(DifferOptions{}, nil)
 	out, _ := d.Diff(context.Background(), Request{Old: src([]byte("abc\n")), New: src([]byte("abxy\n"))})
 	if out.Size() <= 0 {
@@ -74,6 +79,7 @@ func TestDiffSizeCountsRowText(t *testing.T) {
 }
 
 func TestPlainDifferSourceErrorPropagates(t *testing.T) {
+	t.Parallel()
 	d := NewDiffer(DifferOptions{}, nil)
 	fail := func(context.Context) ([]byte, error) { return nil, errors.New("boom") }
 	if _, err := d.Diff(context.Background(), Request{Old: fail, New: src(nil)}); err == nil {
@@ -82,6 +88,7 @@ func TestPlainDifferSourceErrorPropagates(t *testing.T) {
 }
 
 func TestCachedServesWithoutReinvokingSources(t *testing.T) {
+	t.Parallel()
 	c := cache.NewFactory(0, 0).Cache("diff")
 	d := NewDiffer(DifferOptions{Enhanced: true, Cached: true}, c)
 	calls := 0
@@ -95,6 +102,7 @@ func TestCachedServesWithoutReinvokingSources(t *testing.T) {
 }
 
 func TestCachedEmptyKeyNeverCaches(t *testing.T) {
+	t.Parallel()
 	c := cache.NewFactory(0, 0).Cache("diff")
 	d := NewDiffer(DifferOptions{Cached: true}, c)
 	calls := 0
@@ -108,6 +116,7 @@ func TestCachedEmptyKeyNeverCaches(t *testing.T) {
 }
 
 func TestCachedQualityNamespacing(t *testing.T) {
+	t.Parallel()
 	c := cache.NewFactory(0, 0).Cache("diff")
 	enh := NewDiffer(DifferOptions{Enhanced: true, Cached: true}, c)
 	plain := NewDiffer(DifferOptions{Enhanced: false, Cached: true}, c)
@@ -121,6 +130,7 @@ func TestCachedQualityNamespacing(t *testing.T) {
 }
 
 func TestServiceDifferShareCache(t *testing.T) {
+	t.Parallel()
 	// Differ() never touches the repo, so a nil repo is fine here. Two calls
 	// must share one cache, so a diff cached via the first is served via the
 	// second without re-invoking the source.

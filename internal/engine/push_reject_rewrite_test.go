@@ -98,6 +98,7 @@ func captureReject(t *testing.T, repo *git.Repo) DecisionRequest {
 // the old copies and undo the rebase. Force must lead the option list and the
 // prompt must not claim the remote has new commits.
 func TestPushRejectAfterLocalRebaseLeadsWithForce(t *testing.T) {
+	t.Parallel()
 	_, repo := divergedClone(t, true)
 	req := captureReject(t, repo)
 
@@ -116,6 +117,7 @@ func TestPushRejectAfterLocalRebaseLeadsWithForce(t *testing.T) {
 // the case the recovery was designed for: someone else pushed real work, so
 // integrating it (rebase) stays the leading answer.
 func TestPushRejectWithRealRemoteWorkLeadsWithRebase(t *testing.T) {
+	t.Parallel()
 	_, repo := divergedClone(t, false)
 	req := captureReject(t, repo)
 
@@ -131,6 +133,7 @@ func TestPushRejectWithRealRemoteWorkLeadsWithRebase(t *testing.T) {
 // publishes the rewritten branch — the remote ends up with the rebased shape,
 // not the resurrected old copies.
 func TestPushRejectAfterLocalRebaseForceKeepsTheRebase(t *testing.T) {
+	t.Parallel()
 	clone, repo := divergedClone(t, true)
 	local := strings.TrimSpace(gitOut(t, clone, "rev-parse", "feature"))
 
@@ -156,6 +159,7 @@ func TestPushRejectAfterLocalRebaseForceKeepsTheRebase(t *testing.T) {
 // branch), but the prompt must still say the remote holds only old copies
 // instead of claiming new commits.
 func TestPushRejectRewriteOnNonCurrentBranchStillSaysWhy(t *testing.T) {
+	t.Parallel()
 	clone, repo := divergedClone(t, true)
 	gitAt(t, clone, "checkout", "main")
 

@@ -11,6 +11,7 @@ import (
 )
 
 func TestSmartRebaseGuards(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	gitE(t, dir, "branch", "feat")
 
@@ -33,6 +34,7 @@ func TestSmartRebaseGuards(t *testing.T) {
 }
 
 func TestSmartRebaseDetachedHeadNeedsExplicitBranch(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	gitE(t, dir, "branch", "feat")
 	gitE(t, dir, "checkout", "--detach")
@@ -61,6 +63,7 @@ func divergedRepo(t *testing.T) (string, *git.Repo) {
 }
 
 func TestSmartRebaseCurrentBranchOntoBase(t *testing.T) {
+	t.Parallel()
 	// rung 1: feat is current; rebase it onto main (disjoint files → clean).
 	dir, repo := divergedRepo(t)
 	gitE(t, dir, "checkout", "feat")
@@ -82,6 +85,7 @@ func TestSmartRebaseCurrentBranchOntoBase(t *testing.T) {
 }
 
 func TestSmartRebaseBranchInOtherWorktree(t *testing.T) {
+	t.Parallel()
 	// rung 2: feat lives in a linked worktree; rebase happens there, we stay.
 	dir, repo := newRepo(t)
 	gitE(t, dir, "branch", "feat")
@@ -112,6 +116,7 @@ func TestSmartRebaseBranchInOtherWorktree(t *testing.T) {
 }
 
 func TestSmartRebaseUncheckedOutBranchSwitchesAndStays(t *testing.T) {
+	t.Parallel()
 	// rung 3: feat is not checked out anywhere; dirty main autostashes.
 	dir, repo := divergedRepo(t) // ends on main, feat not checked out
 	// dirty tracked file on main → autostash must carry it back to main? No:
@@ -156,6 +161,7 @@ func rebaseConflictRepo(t *testing.T) (string, *git.Repo) {
 }
 
 func TestSmartRebaseConflictAbort(t *testing.T) {
+	t.Parallel()
 	dir, repo := rebaseConflictRepo(t)
 	res, err := SmartRebase{Branch: "feat", Onto: "main"}.Run(context.Background(),
 		OpDeps{Repo: repo, Decider: MapDecider{"rebase-conflict": "abort"}})
@@ -174,6 +180,7 @@ func TestSmartRebaseConflictAbort(t *testing.T) {
 }
 
 func TestSmartRebaseConflictKeep(t *testing.T) {
+	t.Parallel()
 	dir, repo := rebaseConflictRepo(t)
 	res, err := SmartRebase{Branch: "feat", Onto: "main"}.Run(context.Background(),
 		OpDeps{Repo: repo, Decider: MapDecider{"rebase-conflict": "keep-conflicts"}})
@@ -190,6 +197,7 @@ func TestSmartRebaseConflictKeep(t *testing.T) {
 }
 
 func TestSmartRebaseConflictUndecidedLeavesRebaseState(t *testing.T) {
+	t.Parallel()
 	dir, repo := rebaseConflictRepo(t)
 	_, err := SmartRebase{Branch: "feat", Onto: "main"}.Run(context.Background(), OpDeps{Repo: repo})
 	if err == nil {
@@ -205,6 +213,7 @@ func TestSmartRebaseConflictUndecidedLeavesRebaseState(t *testing.T) {
 // SmartRebase must accept any commit-ish, not only local branches. Also covers
 // remote-tracking refs (origin/x).
 func TestSmartRebaseOntoTag(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	gitE(t, dir, "tag", "base") // tag main's initial commit
 	os.WriteFile(filepath.Join(dir, "m.txt"), []byte("m\n"), 0o644)

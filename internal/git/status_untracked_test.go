@@ -10,6 +10,7 @@ import (
 // With --untracked-files=all, an entirely-untracked directory must be reported
 // as its individual files, never collapsed into a single "dir/" entry.
 func TestStatusListsUntrackedFilesNotDirectories(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 

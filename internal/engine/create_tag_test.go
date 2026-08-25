@@ -18,6 +18,7 @@ func engineCatType(t *testing.T, dir, ref string) string {
 }
 
 func TestCreateTagLightweightAndAnnotated(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 
 	ch := make(chan Event, 16)
@@ -46,6 +47,7 @@ func TestCreateTagLightweightAndAnnotated(t *testing.T) {
 }
 
 func TestCreateTagRequiresName(t *testing.T) {
+	t.Parallel()
 	_, repo := newRepo(t)
 	ch := make(chan Event, 4)
 	if _, err := (CreateTag{Name: ""}).Run(context.Background(), OpDeps{Repo: repo, Events: ch}); err == nil {
@@ -54,6 +56,7 @@ func TestCreateTagRequiresName(t *testing.T) {
 }
 
 func TestCreateTagForceReplacesExisting(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	head := gitOut(t, dir, "rev-parse", "HEAD")
 	// Create initial tag

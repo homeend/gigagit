@@ -52,6 +52,7 @@ func findVersionRef(t *testing.T, repo *git.Repo, branch, opToken string) (ref, 
 }
 
 func TestAmendSnapshotsAndPlainCommitDoesNot(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	ctx := context.Background()
 
@@ -76,6 +77,7 @@ func TestAmendSnapshotsAndPlainCommitDoesNot(t *testing.T) {
 // (disjoint files, no conflict); merging feat into main must snapshot main's
 // pre-merge tip.
 func TestSmartMergeSnapshotsTarget(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	ctx := context.Background()
 
@@ -122,6 +124,7 @@ func TestSmartMergeSnapshotsTarget(t *testing.T) {
 // TestSmartRebaseSnapshotsBranch: feat and main diverge with disjoint files;
 // rebasing feat onto main must snapshot feat's pre-rebase tip.
 func TestSmartRebaseSnapshotsBranch(t *testing.T) {
+	t.Parallel()
 	dir, repo := divergedRepo(t)
 	ctx := context.Background()
 	_ = dir
@@ -147,6 +150,7 @@ func TestSmartRebaseSnapshotsBranch(t *testing.T) {
 }
 
 func TestUndoLastCommitSnapshots(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	ctx := context.Background()
 
@@ -172,6 +176,7 @@ func TestUndoLastCommitSnapshots(t *testing.T) {
 }
 
 func TestResetSnapshots(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	ctx := context.Background()
 
@@ -202,6 +207,7 @@ func TestResetSnapshots(t *testing.T) {
 // must still land (after the delete-branch confirm, before either delete
 // attempt) and point at feat's tip — recoverable after the branch is gone.
 func TestDeleteBranchSnapshots(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	ctx := context.Background()
 
@@ -235,6 +241,7 @@ func TestDeleteBranchSnapshots(t *testing.T) {
 }
 
 func TestDeleteBranchCancelledDoesNotSnapshot(t *testing.T) {
+	t.Parallel()
 	_, repo := newRepo(t)
 	ctx := context.Background()
 
@@ -262,6 +269,7 @@ func TestDeleteBranchCancelledDoesNotSnapshot(t *testing.T) {
 // "interactive-rebase" op token before the plan ever starts collapsing
 // commits.
 func TestInteractiveRebaseSnapshotsBranch(t *testing.T) {
+	t.Parallel()
 	gg := buildGG(t)
 	dir, repo := fourCommitBranch(t) // main -> a -> b -> c -> d, HEAD=work=d
 	preRebaseTip := shaOf(t, dir, "work")
@@ -279,6 +287,7 @@ func TestInteractiveRebaseSnapshotsBranch(t *testing.T) {
 // TestInteractiveRebaseInvalidOntoDoesNotSnapshot: an invalid Onto ref
 // (non-existent commit) must be rejected before snapshotting.
 func TestInteractiveRebaseInvalidOntoDoesNotSnapshot(t *testing.T) {
+	t.Parallel()
 	_, repo := newRepo(t)
 	ctx := context.Background()
 

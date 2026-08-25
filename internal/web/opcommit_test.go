@@ -12,6 +12,7 @@ import (
 )
 
 func TestOpHTTPCommitRoundTrip(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	if err := os.WriteFile(filepath.Join(dir, "new.txt"), []byte("n\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -47,6 +48,7 @@ func TestOpHTTPCommitRoundTrip(t *testing.T) {
 }
 
 func TestOpHTTPCommitValidation(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	ts := serve(t, New(domain.Open(dir)))
 	for _, body := range []string{
@@ -61,6 +63,7 @@ func TestOpHTTPCommitValidation(t *testing.T) {
 }
 
 func TestOpHTTPCommitNothingStaged(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1) // clean tree
 	ts := serve(t, New(domain.Open(dir)))
 	var out struct {

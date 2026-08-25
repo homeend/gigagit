@@ -31,6 +31,7 @@ func originFileContent(t *testing.T, origin, path string) string {
 // local commit), so a plain push is rejected non-fast-forward. Choosing rebase
 // must replay the local commit onto v2 and push, leaving BOTH on origin.
 func TestPushRejectRebaseRealGit(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	origin := filepath.Join(root, "origin.git")
 	seed := filepath.Join(root, "seed")

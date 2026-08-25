@@ -25,6 +25,7 @@ func hasProgress(events []Event) bool {
 }
 
 func TestCreateWorktreeRelativePathSucceeds(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	ch := make(chan Event, 32)
 
@@ -52,6 +53,7 @@ func TestCreateWorktreeRelativePathSucceeds(t *testing.T) {
 // otherwise the new worktree nests under the current worktree (the real bug:
 // a doubled ".worktrees" segment in the resolved path).
 func TestCreateWorktreeRelativePathAnchorsOnMainWorktree(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 
 	// A linked worktree nested two levels below main, mirroring the field report.
@@ -79,6 +81,7 @@ func TestCreateWorktreeRelativePathAnchorsOnMainWorktree(t *testing.T) {
 }
 
 func TestCreateWorktreeInvalidBranchErrors(t *testing.T) {
+	t.Parallel()
 	_, repo := newRepo(t)
 	op := CreateWorktree{StartPoint: "main", Branch: "bad..name", Path: "../wt-bad"}
 	_, err := op.Run(context.Background(), OpDeps{Repo: repo})
@@ -88,6 +91,7 @@ func TestCreateWorktreeInvalidBranchErrors(t *testing.T) {
 }
 
 func TestCreateWorktreeExistingPathErrors(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	existing := filepath.Join(filepath.Dir(dir), "wt-exists")
 	if err := os.MkdirAll(existing, 0o755); err != nil {
@@ -101,6 +105,7 @@ func TestCreateWorktreeExistingPathErrors(t *testing.T) {
 }
 
 func TestCreateWorktreeDuplicateBranchErrors(t *testing.T) {
+	t.Parallel()
 	_, repo := newRepo(t)
 	if err := repo.CreateBranch(context.Background(), "dup", ""); err != nil {
 		t.Fatal(err)
@@ -113,6 +118,7 @@ func TestCreateWorktreeDuplicateBranchErrors(t *testing.T) {
 }
 
 func TestCreateWorktreeMissingFieldsError(t *testing.T) {
+	t.Parallel()
 	_, repo := newRepo(t)
 	_, err := CreateWorktree{Branch: "x", Path: "../p"}.Run(context.Background(), OpDeps{Repo: repo})
 	if err == nil {
@@ -121,6 +127,7 @@ func TestCreateWorktreeMissingFieldsError(t *testing.T) {
 }
 
 func TestCreateWorktreeResultCarriesAbsolutePath(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	res, err := CreateWorktree{StartPoint: "main", Branch: "feature/p", Path: "../wt-p"}.
 		Run(context.Background(), OpDeps{Repo: repo})
@@ -160,6 +167,7 @@ func hookEnv(spec HookSpec, key string) string {
 }
 
 func TestCreateWorktreeRunsHook(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	wt := filepath.Join(filepath.Dir(dir), "wt-hook")
 	fh := &fakeHookRunner{lines: []string{"copied .env"}}
@@ -197,6 +205,7 @@ func TestCreateWorktreeRunsHook(t *testing.T) {
 }
 
 func TestCreateWorktreeEmptyHookSkips(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	wt := filepath.Join(filepath.Dir(dir), "wt-nohook")
 	fh := &fakeHookRunner{}
@@ -211,6 +220,7 @@ func TestCreateWorktreeEmptyHookSkips(t *testing.T) {
 }
 
 func TestCreateWorktreeHookFailureNonFatal(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	wt := filepath.Join(filepath.Dir(dir), "wt-failhook")
 	fh := &fakeHookRunner{code: 1}
@@ -228,6 +238,7 @@ func TestCreateWorktreeHookFailureNonFatal(t *testing.T) {
 }
 
 func TestCreateWorktreeHookSkippedWithoutApproval(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	wt := filepath.Join(filepath.Dir(dir), "wt-skip")
 	fh := &fakeHookRunner{}
@@ -256,6 +267,7 @@ func TestCreateWorktreeHookSkippedWithoutApproval(t *testing.T) {
 }
 
 func TestCreateWorktreeHookSkippedWithNoDecider(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	wt := filepath.Join(filepath.Dir(dir), "wt-nodecider")
 	fh := &fakeHookRunner{}
@@ -292,6 +304,7 @@ func addCommit(t *testing.T, dir, path, content, msg string) {
 // returns trimmed stdout.
 
 func TestCreateWorktreeKeepStaged(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	addCommit(t, dir, "a.txt", "two\n", "second")
 	head := gitOut(t, dir, "rev-parse", "HEAD")
@@ -316,6 +329,7 @@ func TestCreateWorktreeKeepStaged(t *testing.T) {
 }
 
 func TestCreateWorktreeKeepUnstaged(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	addCommit(t, dir, "a.txt", "two\n", "second")
 	head := gitOut(t, dir, "rev-parse", "HEAD")
@@ -340,6 +354,7 @@ func TestCreateWorktreeKeepUnstaged(t *testing.T) {
 }
 
 func TestCreateWorktreeKeepRefusesRootCommit(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t) // exactly one commit — HEAD is the root
 	op := CreateWorktree{StartPoint: "HEAD", Branch: "redo/root", Path: "../wt-keep-root", Keep: KeepStaged}
 	_, err := op.Run(context.Background(), OpDeps{Repo: repo})
@@ -357,6 +372,7 @@ func TestCreateWorktreeKeepRefusesRootCommit(t *testing.T) {
 }
 
 func TestCreateWorktreeKeepRefusesMergeCommit(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	run := func(args ...string) {
 		t.Helper()
@@ -381,6 +397,7 @@ func TestCreateWorktreeKeepRefusesMergeCommit(t *testing.T) {
 }
 
 func TestCreateWorktreeKeepHookSeesResetState(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	addCommit(t, dir, "a.txt", "two\n", "second")
 	head := gitOut(t, dir, "rev-parse", "HEAD")

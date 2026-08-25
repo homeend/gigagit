@@ -30,6 +30,7 @@ func hashList(cm []model.Commit) string {
 }
 
 func TestReconcilePage(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name      string
 		loaded    string
@@ -141,6 +142,7 @@ func TestReconcilePage(t *testing.T) {
 // array with the caller's loaded slice: a later write to one must never land in
 // the other.
 func TestReconcilePageDoesNotAliasLoaded(t *testing.T) {
+	t.Parallel()
 	loaded := cs("a b c")
 	merged, _, ok := reconcilePage(loaded, cs("z a b"))
 	if !ok {
@@ -157,6 +159,7 @@ func TestReconcilePageDoesNotAliasLoaded(t *testing.T) {
 // Keeping the old row there — which is what "the overlap is unchanged" used to
 // mean — left a new tag invisible until the whole feed was rebuilt.
 func TestReconcileTakesFreshRowsForTheOverlap(t *testing.T) {
+	t.Parallel()
 	loaded := cs("c5 c4 c3 c2 c1")
 	page := cs("c6 c5 c4")
 	// c4 has just been tagged; the fresh walk sees it, the loaded copy cannot.

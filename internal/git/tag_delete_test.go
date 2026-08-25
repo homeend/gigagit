@@ -6,6 +6,7 @@ import (
 )
 
 func TestRepoDeleteTag(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 	gitIn(t, dir, "commit", "--allow-empty", "-m", "c1")

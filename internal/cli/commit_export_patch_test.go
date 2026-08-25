@@ -13,6 +13,7 @@ import (
 // case a flag.FlagSet would mis-parse (it stops at the first positional), which
 // is why cmdCommitExportPatch hand-parses instead.
 func TestCommitExportPatchWritesFile(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	os.WriteFile(filepath.Join(dir, "foo.go"), []byte("package foo\n"), 0o644)
 	gitRun(t, dir, "add", ".")
@@ -40,6 +41,7 @@ func TestCommitExportPatchWritesFile(t *testing.T) {
 // TestCommitExportPatchFlagsBeforeSha exercises the opposite argument order
 // (flags first, positional last) to confirm the parsing is order-independent.
 func TestCommitExportPatchFlagsBeforeSha(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	os.WriteFile(filepath.Join(dir, "foo.go"), []byte("package foo\n"), 0o644)
 	gitRun(t, dir, "add", ".")
@@ -57,6 +59,7 @@ func TestCommitExportPatchFlagsBeforeSha(t *testing.T) {
 }
 
 func TestCommitExportPatchRefusesMerge(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	gitRun(t, dir, "checkout", "-b", "topic")
 	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("2\n"), 0o644)
@@ -79,6 +82,7 @@ func TestCommitExportPatchRefusesMerge(t *testing.T) {
 }
 
 func TestCommitExportPatchFileScoped(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	os.WriteFile(filepath.Join(dir, "foo.go"), []byte("package foo\n"), 0o644)
 	os.WriteFile(filepath.Join(dir, "bar.go"), []byte("package bar\n"), 0o644)
@@ -104,6 +108,7 @@ func TestCommitExportPatchFileScoped(t *testing.T) {
 }
 
 func TestCommitExportPatchOverwriteRequiresForce(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	os.WriteFile(filepath.Join(dir, "foo.go"), []byte("package foo\n"), 0o644)
 	gitRun(t, dir, "add", ".")
@@ -137,6 +142,7 @@ func TestCommitExportPatchOverwriteRequiresForce(t *testing.T) {
 }
 
 func TestCommitExportPatchMissingShaUsage(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	code, _, errb := runCLI(t, dir, "commit", "export-patch")
 	if code != 2 {
@@ -148,6 +154,7 @@ func TestCommitExportPatchMissingShaUsage(t *testing.T) {
 }
 
 func TestCommitExportPatchUnknownFlag(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	sha := headSHA(t, dir)
 	code, _, errb := runCLI(t, dir, "commit", "export-patch", sha, "--bogus")

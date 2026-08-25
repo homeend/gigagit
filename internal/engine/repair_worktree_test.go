@@ -10,6 +10,7 @@ import (
 )
 
 func TestRepairWorktreeRebindsMovedWorktree(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	parent := t.TempDir()
 	wt := filepath.Join(parent, "alpha")
@@ -52,6 +53,7 @@ func TestRepairWorktreeRebindsMovedWorktree(t *testing.T) {
 }
 
 func TestRepairWorktreeErrorPassesThrough(t *testing.T) {
+	t.Parallel()
 	_, repo := newRepo(t)
 	// A path that is not a worktree: git worktree repair reports an error.
 	res, err := RepairWorktree{Path: filepath.Join(t.TempDir(), "nope")}.Run(context.Background(), OpDeps{Repo: repo})

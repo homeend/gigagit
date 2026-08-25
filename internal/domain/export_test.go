@@ -42,6 +42,7 @@ func writeCommit(t *testing.T, dir, relPath, content, msg string) {
 }
 
 func TestShelfAddCommitAndExportRoundTrip(t *testing.T) {
+	t.Parallel()
 	repoDir, svc := newRealRepo(t)
 	svc.SetShelfStore(shelf.NewFileStore(t.TempDir()))
 	ctx := context.Background()
@@ -104,6 +105,7 @@ func TestShelfAddCommitAndExportRoundTrip(t *testing.T) {
 }
 
 func TestTempExportBaseIsSiblingDotTmp(t *testing.T) {
+	t.Parallel()
 	repoDir, svc := newRealRepo(t)
 	ctx := context.Background()
 
@@ -134,6 +136,7 @@ func TestTempExportBaseIsSiblingDotTmp(t *testing.T) {
 }
 
 func TestShelfAddCommitStoresPatch(t *testing.T) {
+	t.Parallel()
 	repoDir, svc := newRealRepo(t)
 	svc.SetShelfStore(shelf.NewFileStore(t.TempDir()))
 	ctx := context.Background()
@@ -166,6 +169,7 @@ func TestShelfAddCommitStoresPatch(t *testing.T) {
 }
 
 func TestShelfAddCommitMergeSkipsPatch(t *testing.T) {
+	t.Parallel()
 	repoDir, svc := newRealRepo(t)
 	svc.SetShelfStore(shelf.NewFileStore(t.TempDir()))
 	ctx := context.Background()
@@ -191,6 +195,7 @@ func TestShelfAddCommitMergeSkipsPatch(t *testing.T) {
 }
 
 func TestCommitLookup(t *testing.T) {
+	t.Parallel()
 	repoDir, svc := newRealRepo(t)
 	ctx := context.Background()
 
@@ -212,6 +217,7 @@ func TestCommitLookup(t *testing.T) {
 }
 
 func TestResolveRev(t *testing.T) {
+	t.Parallel()
 	repoDir, svc := newRealRepo(t)
 	ctx := context.Background()
 

@@ -9,6 +9,7 @@ import (
 )
 
 func TestOpHTTPCheckoutTagDetached(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 2)
 	gitRun(t, dir, "tag", "v1", "HEAD~1")
 	target := gitRun(t, dir, "rev-parse", "HEAD~1")
@@ -28,6 +29,7 @@ func TestOpHTTPCheckoutTagDetached(t *testing.T) {
 }
 
 func TestOpHTTPCheckoutTagNewBranch(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 2)
 	gitRun(t, dir, "tag", "v1", "HEAD~1")
 	target := gitRun(t, dir, "rev-parse", "HEAD~1")
@@ -47,6 +49,7 @@ func TestOpHTTPCheckoutTagNewBranch(t *testing.T) {
 }
 
 func TestOpHTTPCheckoutTagRefusals(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	gitRun(t, dir, "tag", "v1")
 	ts := serve(t, New(domain.Open(dir)))

@@ -10,6 +10,7 @@ import (
 )
 
 func TestParseEndpoint(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		in   string
 		want model.Endpoint
@@ -28,6 +29,7 @@ func TestParseEndpoint(t *testing.T) {
 }
 
 func TestCompareCommitRange(t *testing.T) {
+	t.Parallel()
 	dir := newCLIRepo(t) // one commit: README.md, on main
 	// second commit adds b.txt
 	os.WriteFile(filepath.Join(dir, "b.txt"), []byte("b\n"), 0o644)
@@ -44,6 +46,7 @@ func TestCompareCommitRange(t *testing.T) {
 }
 
 func TestCompareDefaultsToWorktree(t *testing.T) {
+	t.Parallel()
 	dir := newCLIRepo(t)
 	os.WriteFile(filepath.Join(dir, "README.md"), []byte("dirtied\n"), 0o644) // unstaged change
 
@@ -57,6 +60,7 @@ func TestCompareDefaultsToWorktree(t *testing.T) {
 }
 
 func TestCompareReversePairFriendlyError(t *testing.T) {
+	t.Parallel()
 	dir := newCLIRepo(t)
 	code, _, errb := runCLI(t, dir, "compare", "@worktree", "HEAD") // reverse order
 	if code != 2 {
@@ -71,6 +75,7 @@ func TestCompareReversePairFriendlyError(t *testing.T) {
 }
 
 func TestCompareNoArgsUsage(t *testing.T) {
+	t.Parallel()
 	dir := newCLIRepo(t)
 	code, _, errb := runCLI(t, dir, "compare")
 	if code != 2 {

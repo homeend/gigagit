@@ -3,6 +3,7 @@ package engine
 import "testing"
 
 func TestEventsImplementInterface(t *testing.T) {
+	t.Parallel()
 	events := []Event{
 		Progress{Step: "fetching", Detail: "origin"},
 		GitLine{Raw: "remote: counting"},

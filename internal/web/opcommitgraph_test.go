@@ -15,6 +15,7 @@ import (
 // true — and /api/health reports both flags flipped, which is what retires
 // the banner group.
 func TestOpCommitGraph(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 3)
 	ts := serve(t, New(domain.Open(dir)))
 

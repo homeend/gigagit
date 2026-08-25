@@ -9,6 +9,7 @@ import (
 )
 
 func TestLogRangeMessages(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t) // commit "initial" on main
 	repo := &Repo{Runner: runner}
 	git := func(args ...string) {

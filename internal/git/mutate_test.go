@@ -10,6 +10,7 @@ import (
 )
 
 func TestCommitAllAndCurrentBranch(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 
@@ -26,6 +27,7 @@ func TestCommitAllAndCurrentBranch(t *testing.T) {
 }
 
 func TestCreateBranchAndSwitch(t *testing.T) {
+	t.Parallel()
 	_, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 
@@ -45,6 +47,7 @@ func TestCreateBranchAndSwitch(t *testing.T) {
 }
 
 func TestRenameBranch(t *testing.T) {
+	t.Parallel()
 	_, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 
@@ -67,6 +70,7 @@ func TestRenameBranch(t *testing.T) {
 }
 
 func TestCreateBranchFromStartPoint(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 
@@ -93,6 +97,7 @@ func TestCreateBranchFromStartPoint(t *testing.T) {
 }
 
 func TestCurrentBranchDetachedReturnsEmpty(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 	gitIn(t, dir, "commit", "--allow-empty", "-m", "second")
@@ -122,6 +127,7 @@ func gitExec(t *testing.T, dir string, a ...string) string {
 }
 
 func TestLocalBranchExists(t *testing.T) {
+	t.Parallel()
 	_, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 	if ok, err := repo.LocalBranchExists(context.Background(), "main"); err != nil || !ok {
@@ -133,6 +139,7 @@ func TestLocalBranchExists(t *testing.T) {
 }
 
 func TestIsAncestor(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 	gitExec(t, dir, "commit", "--allow-empty", "-m", "c2")
@@ -154,6 +161,7 @@ func configFakeRemote(t *testing.T, dir string) {
 }
 
 func TestCreateTrackingBranch(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 	configFakeRemote(t, dir)

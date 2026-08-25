@@ -27,6 +27,7 @@ func gitInDir(t *testing.T, dir string, args ...string) {
 
 // TestRemoteTagsNoRemote: no remote configured → empty map, nil error.
 func TestRemoteTagsNoRemote(t *testing.T) {
+	t.Parallel()
 	_, svc := newRealRepo(t)
 	got, err := svc.RemoteTags(context.Background())
 	if err != nil {
@@ -39,6 +40,7 @@ func TestRemoteTagsNoRemote(t *testing.T) {
 
 // TestRemoteTagsOriginPushedVsLocalOnly: origin has v1 pushed; v2 is local-only.
 func TestRemoteTagsOriginPushedVsLocalOnly(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	bare := filepath.Join(root, "bare.git")
 	workdir := filepath.Join(root, "work")
@@ -85,6 +87,7 @@ func TestRemoteTagsOriginPushedVsLocalOnly(t *testing.T) {
 // observ.NoteFailure. Point the service at a bogus remote so ls-remote errors;
 // assert the error is returned (not swallowed) but SessionFailures is unchanged.
 func TestRemoteTagsQueryQuietDoesNotRecordFailure(t *testing.T) {
+	t.Parallel()
 	dir, svc := newRealRepo(t)
 
 	// Add a remote that points at a nonexistent local path so ls-remote fails fast.
@@ -107,6 +110,7 @@ func TestRemoteTagsQueryQuietDoesNotRecordFailure(t *testing.T) {
 
 // TestRemoteTagsFreshNoRemote: no remote configured → empty map, nil error.
 func TestRemoteTagsFreshNoRemote(t *testing.T) {
+	t.Parallel()
 	_, svc := newRealRepo(t)
 	got, err := svc.RemoteTagsFresh(context.Background())
 	if err != nil {
@@ -119,6 +123,7 @@ func TestRemoteTagsFreshNoRemote(t *testing.T) {
 
 // TestRemoteTagsFreshOriginPushedVsLocalOnly: origin has v1 pushed; v2 is local-only.
 func TestRemoteTagsFreshOriginPushedVsLocalOnly(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	bare := filepath.Join(root, "bare.git")
 	workdir := filepath.Join(root, "work")
@@ -162,6 +167,7 @@ func TestRemoteTagsFreshOriginPushedVsLocalOnly(t *testing.T) {
 // SessionFailures count is unchanged — the discriminating test that would fail
 // if the method were incorrectly wired through query() instead.
 func TestRemoteTagsFreshDoesNotRecordFailure(t *testing.T) {
+	t.Parallel()
 	dir, svc := newRealRepo(t)
 
 	// Add a remote that points at a nonexistent local path so ls-remote fails fast.

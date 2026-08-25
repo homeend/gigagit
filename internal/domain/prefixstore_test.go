@@ -9,6 +9,7 @@ import (
 )
 
 func TestPrefixesMergeGlobalThenRepoTagged(t *testing.T) {
+	t.Parallel()
 	s := &Service{}
 	g := prefix.NewFileStore(t.TempDir(), model.ProfileScopeGlobal)
 	r := prefix.NewFileStore(t.TempDir(), model.ProfileScopeRepo)
@@ -29,6 +30,7 @@ func TestPrefixesMergeGlobalThenRepoTagged(t *testing.T) {
 }
 
 func TestAddPrefixRoutesByScopeAndValidates(t *testing.T) {
+	t.Parallel()
 	s := &Service{}
 	g := prefix.NewFileStore(t.TempDir(), model.ProfileScopeGlobal)
 	r := prefix.NewFileStore(t.TempDir(), model.ProfileScopeRepo)
@@ -50,6 +52,7 @@ func TestAddPrefixRoutesByScopeAndValidates(t *testing.T) {
 }
 
 func TestValidatePrefixValue(t *testing.T) {
+	t.Parallel()
 	ok := []string{
 		"feat/",
 		"john_smith/ISSUE-<user:issue-id>",

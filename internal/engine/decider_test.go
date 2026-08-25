@@ -7,6 +7,7 @@ import (
 )
 
 func TestMapDeciderAnswersByID(t *testing.T) {
+	t.Parallel()
 	d := MapDecider{"non-fast-forward": "rebase"}
 	resp, err := d.Decide(context.Background(), DecisionRequest{ID: "non-fast-forward"})
 	if err != nil {
@@ -18,6 +19,7 @@ func TestMapDeciderAnswersByID(t *testing.T) {
 }
 
 func TestMapDeciderUnansweredReturnsErrDecisionRequired(t *testing.T) {
+	t.Parallel()
 	d := MapDecider{}
 	_, err := d.Decide(context.Background(), DecisionRequest{ID: "x"})
 	if !errors.Is(err, ErrDecisionRequired) {
@@ -26,6 +28,7 @@ func TestMapDeciderUnansweredReturnsErrDecisionRequired(t *testing.T) {
 }
 
 func TestDeciderFuncAdapts(t *testing.T) {
+	t.Parallel()
 	d := DeciderFunc(func(_ context.Context, req DecisionRequest) (DecisionResponse, error) {
 		return DecisionResponse{Option: req.Options[0]}, nil
 	})

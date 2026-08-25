@@ -10,6 +10,7 @@ import (
 )
 
 func TestOpHTTPRebase(t *testing.T) {
+	t.Parallel()
 	dir := divergedRepo(t) // main checked out; feature diverged
 	ts := serve(t, New(domain.Open(dir)))
 
@@ -30,6 +31,7 @@ func TestOpHTTPRebase(t *testing.T) {
 }
 
 func TestOpHTTPRebaseSameBranch(t *testing.T) {
+	t.Parallel()
 	dir := divergedRepo(t)
 	ts := serve(t, New(domain.Open(dir)))
 
@@ -41,6 +43,7 @@ func TestOpHTTPRebaseSameBranch(t *testing.T) {
 }
 
 func TestOpHTTPRebaseBadNames(t *testing.T) {
+	t.Parallel()
 	dir := divergedRepo(t)
 	ts := serve(t, New(domain.Open(dir)))
 

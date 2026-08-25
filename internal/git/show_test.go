@@ -12,6 +12,7 @@ import (
 )
 
 func TestShowFileAtHead(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("hello v1\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -42,6 +43,7 @@ func TestShowFileAtHead(t *testing.T) {
 }
 
 func TestShowFileMissingPathErrors(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("x\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -56,6 +58,7 @@ func TestShowFileMissingPathErrors(t *testing.T) {
 }
 
 func TestShowFileArgv(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git show", gitexec.Result{Stdout: "content\n"})
 	r := &Repo{Runner: f}
@@ -72,6 +75,7 @@ func TestShowFileArgv(t *testing.T) {
 }
 
 func TestShowFileBinaryContentLossless(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	blob := []byte{0x00, 0xff, 0xfe, 'P', 'N', 'G', 0x00, 0x01}
 	if err := os.WriteFile(filepath.Join(dir, "b.bin"), blob, 0o644); err != nil {

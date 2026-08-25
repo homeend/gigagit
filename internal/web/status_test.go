@@ -74,6 +74,7 @@ func findFile(t *testing.T, st statusResp, path string) (int, bool) {
 }
 
 func TestStatusClassification(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1) // f.txt committed as "content 1\n"
 	// staged: new file added to the index
 	if err := os.WriteFile(filepath.Join(dir, "staged.txt"), []byte("s\n"), 0o644); err != nil {
@@ -115,6 +116,7 @@ func TestStatusClassification(t *testing.T) {
 }
 
 func TestStatusConflicted(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	gitRun(t, dir, "checkout", "-b", "side")
 	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("side\n"), 0o644); err != nil {
@@ -144,6 +146,7 @@ func TestStatusConflicted(t *testing.T) {
 }
 
 func TestStatusCleanRepo(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	ts := serve(t, New(domain.Open(dir)))
 	var st statusResp

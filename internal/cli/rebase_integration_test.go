@@ -27,6 +27,7 @@ func runGit(t *testing.T, dir string, args ...string) string {
 // gg rebase -i --plan, run as a real built binary (so it can serve as the
 // rebase sequence editor), rewords the oldest commit and drops the middle one.
 func TestRebaseInteractiveCLIEndToEnd(t *testing.T) {
+	t.Parallel()
 	ggBin := filepath.Join(t.TempDir(), "gg-test-bin")
 	if out, err := exec.Command("go", "build", "-o", ggBin, "github.com/homeend/gigagit/cmd/gg").CombinedOutput(); err != nil {
 		t.Fatalf("build gg: %v\n%s", err, out)

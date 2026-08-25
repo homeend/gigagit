@@ -9,6 +9,7 @@ import (
 )
 
 func TestLockFilesFindsKnownLocks(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	for _, n := range []string{"index.lock", "packed-refs.lock", "notes.txt", "somedir.lock"} {
 		if n == "somedir.lock" {
@@ -41,6 +42,7 @@ func TestLockFilesFindsKnownLocks(t *testing.T) {
 }
 
 func TestLockFilesEmptyWhenClean(t *testing.T) {
+	t.Parallel()
 	if got := LockFiles(t.TempDir()); len(got) != 0 {
 		t.Fatalf("clean dir should report nothing, got %+v", got)
 	}
@@ -49,6 +51,7 @@ func TestLockFilesEmptyWhenClean(t *testing.T) {
 // In the main worktree the git dir and the common dir are the same directory;
 // a lock there must be reported once, not twice.
 func TestLockFilesDedupesRepeatedDirs(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "index.lock"), nil, 0o644); err != nil {
 		t.Fatal(err)
@@ -59,6 +62,7 @@ func TestLockFilesDedupesRepeatedDirs(t *testing.T) {
 }
 
 func TestIsLockFilePath(t *testing.T) {
+	t.Parallel()
 	for _, p := range []string{"/r/.git/index.lock", "/r/.git/HEAD.lock", "config.lock"} {
 		if !IsLockFilePath(p) {
 			t.Errorf("%s should be recognised", p)
@@ -72,6 +76,7 @@ func TestIsLockFilePath(t *testing.T) {
 }
 
 func TestIsLockError(t *testing.T) {
+	t.Parallel()
 	// The real message, as git prints it and the runner wraps it.
 	real := fmt.Errorf("git add failed (exit 128): %s", `fatal: Unable to create '/r/.git/index.lock': File exists.
 

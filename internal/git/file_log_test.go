@@ -8,6 +8,7 @@ import (
 )
 
 func TestParseFileLog(t *testing.T) {
+	t.Parallel()
 	// One commit per format line ("%H\x1f%P\x1f%an\x1f%at\x1f%s"), each
 	// followed by its --name-status line for the followed file.
 	data := "" +
@@ -39,6 +40,7 @@ func TestParseFileLog(t *testing.T) {
 }
 
 func TestFileLog(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t) // creates repo with initial commit (README.md)
 	repo := &Repo{Runner: runner}
 
@@ -83,6 +85,7 @@ func TestFileLog(t *testing.T) {
 // surface as a raw UTF-8 path, not git's quoted "timing \342\200\224 …" form,
 // or the history diff's ShowFile(fc.Hash, fc.Path) fails with exit 128.
 func TestFileLogNonASCIIPathRoundTrip(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 

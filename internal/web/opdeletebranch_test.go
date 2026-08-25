@@ -24,6 +24,7 @@ func startOpBody(t *testing.T, ts *httptest.Server, body string) string {
 }
 
 func TestOpHTTPDeleteBranchMerged(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 2)
 	gitRun(t, dir, "branch", "feature") // at HEAD: fully merged
 	srv := New(domain.Open(dir))
@@ -58,6 +59,7 @@ func TestOpHTTPDeleteBranchMerged(t *testing.T) {
 }
 
 func TestOpHTTPDeleteBranchConfirmAbort(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	gitRun(t, dir, "branch", "feature")
 	srv := New(domain.Open(dir))
@@ -80,6 +82,7 @@ func TestOpHTTPDeleteBranchConfirmAbort(t *testing.T) {
 }
 
 func TestOpHTTPDeleteBranchUnmergedKeep(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	gitRun(t, dir, "checkout", "-b", "feature")
 	gitRun(t, dir, "commit", "--allow-empty", "-m", "unmerged work")
@@ -114,6 +117,7 @@ func TestOpHTTPDeleteBranchUnmergedKeep(t *testing.T) {
 }
 
 func TestOpHTTPDeleteBranchUnmergedForce(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	gitRun(t, dir, "checkout", "-b", "feature")
 	gitRun(t, dir, "commit", "--allow-empty", "-m", "unmerged work")
@@ -142,6 +146,7 @@ func TestOpHTTPDeleteBranchUnmergedForce(t *testing.T) {
 }
 
 func TestOpHTTPDeleteBranchCurrent(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	ts := serve(t, New(domain.Open(dir)))
 
@@ -156,6 +161,7 @@ func TestOpHTTPDeleteBranchCurrent(t *testing.T) {
 }
 
 func TestOpHTTPDeleteBranchInWorktree(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	gitRun(t, dir, "branch", "feature")
 	wt := filepath.Join(t.TempDir(), "wt")
@@ -173,6 +179,7 @@ func TestOpHTTPDeleteBranchInWorktree(t *testing.T) {
 }
 
 func TestOpHTTPDeleteBranchBadName(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	ts := serve(t, New(domain.Open(dir)))
 

@@ -9,6 +9,7 @@ import (
 )
 
 func TestProfilesMergeBothScopes(t *testing.T) {
+	t.Parallel()
 	g := profile.NewFileStore(t.TempDir(), model.ProfileScopeGlobal)
 	r := profile.NewFileStore(t.TempDir(), model.ProfileScopeRepo)
 	svc := New(nil) // no git ops needed for profile CRUD

@@ -11,6 +11,7 @@ func partsText(r Result) string {
 }
 
 func TestWithSummaryLockstep(t *testing.T) {
+	t.Parallel()
 	r := Result{Changed: true}.WithSummary("created branch %s", "feat/x")
 	if r.Summary != "created branch feat/x" {
 		t.Fatalf("Summary = %q", r.Summary)
@@ -27,6 +28,7 @@ func TestWithSummaryLockstep(t *testing.T) {
 }
 
 func TestAppendSummaryLockstep(t *testing.T) {
+	t.Parallel()
 	r := Result{}.WithSummary("rebased %s onto %s", "a", "b").
 		AppendSummary(" (your changes remain stashed)")
 	want := "rebased a onto b (your changes remain stashed)"
@@ -39,6 +41,7 @@ func TestAppendSummaryLockstep(t *testing.T) {
 }
 
 func TestAppendSummaryOnFreshResult(t *testing.T) {
+	t.Parallel()
 	r := Result{}.AppendSummary("cancelled")
 	if r.Summary != "cancelled" || len(r.SummaryParts) != 1 {
 		t.Fatalf("Summary=%q parts=%#v", r.Summary, r.SummaryParts)
@@ -46,6 +49,7 @@ func TestAppendSummaryOnFreshResult(t *testing.T) {
 }
 
 func TestAppendSummaryLegacyEnglishFallback(t *testing.T) {
+	t.Parallel()
 	// A hand-built (no-parts) summary must NOT gain a partial parts slice:
 	// the whole summary falls back to English at render.
 	r := Result{Summary: "hand-built"}.AppendSummary("; suffix")
@@ -58,6 +62,7 @@ func TestAppendSummaryLegacyEnglishFallback(t *testing.T) {
 }
 
 func TestPercentInArgsIsSafe(t *testing.T) {
+	t.Parallel()
 	r := Result{}.WithSummary("committed %s %s", "abc1234", "raise coverage to 100%")
 	if r.Summary != "committed abc1234 raise coverage to 100%" {
 		t.Fatalf("Summary = %q", r.Summary)
@@ -65,6 +70,7 @@ func TestPercentInArgsIsSafe(t *testing.T) {
 }
 
 func TestNoArgsFormatIsVerbatim(t *testing.T) {
+	t.Parallel()
 	// Zero args = no Sprintf pass, so a literal % survives (mirrors i18n.T).
 	r := Result{}.WithSummary("100% done")
 	if r.Summary != "100% done" {
@@ -73,6 +79,7 @@ func TestNoArgsFormatIsVerbatim(t *testing.T) {
 }
 
 func TestProgressfLockstep(t *testing.T) {
+	t.Parallel()
 	p := Progressf("rebasing", "%s onto %s", "feat/x", "main")
 	if p.Step != "rebasing" || p.Detail != "feat/x onto main" {
 		t.Fatalf("p = %#v", p)
@@ -83,6 +90,7 @@ func TestProgressfLockstep(t *testing.T) {
 }
 
 func TestPromptReqLockstep(t *testing.T) {
+	t.Parallel()
 	req := PromptReq("branch.delete", "Delete branch %s?", []string{"delete", "cancel"}, "feat/x")
 	if req.ID != "branch.delete" || req.Prompt != "Delete branch feat/x?" {
 		t.Fatalf("req = %#v", req)

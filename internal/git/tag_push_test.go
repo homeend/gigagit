@@ -8,6 +8,7 @@ import (
 )
 
 func TestRepoPushTag(t *testing.T) {
+	t.Parallel()
 	clone, runner := newClonePair(t)
 	repo := &Repo{Runner: runner}
 	gitIn(t, clone, "tag", "v1.0.0")

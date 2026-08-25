@@ -8,6 +8,7 @@ import (
 )
 
 func TestPruneWorktreesRemovesStaleAdminDir(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	wt := filepath.Join(t.TempDir(), "wt")
 	gitE(t, dir, "worktree", "add", wt, "-b", "tmp-branch")

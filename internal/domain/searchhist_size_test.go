@@ -3,6 +3,7 @@ package domain
 import "testing"
 
 func TestEffectiveSearchHistorySize(t *testing.T) {
+	t.Parallel()
 	cases := []struct{ in, want int }{
 		{0, DefaultSearchHistorySize},  // unset -> default 20
 		{-3, DefaultSearchHistorySize}, // negative -> default

@@ -3,6 +3,7 @@ package engine
 import "testing"
 
 func TestOpNameStripsPackagePrefix(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		op   Operation
 		want string

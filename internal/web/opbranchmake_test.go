@@ -24,6 +24,7 @@ func jsonString(s string) string {
 // apart from "created from HEAD".
 
 func TestOpHTTPCreateBranchFromStartPoint(t *testing.T) {
+	t.Parallel()
 	dir := twoBranchRepo(t)
 	ts := serve(t, New(domain.Open(dir)))
 
@@ -44,6 +45,7 @@ func TestOpHTTPCreateBranchFromStartPoint(t *testing.T) {
 
 // No start point means HEAD, the git default.
 func TestOpHTTPCreateBranchDefaultsToHead(t *testing.T) {
+	t.Parallel()
 	dir := twoBranchRepo(t)
 	ts := serve(t, New(domain.Open(dir)))
 
@@ -59,6 +61,7 @@ func TestOpHTTPCreateBranchDefaultsToHead(t *testing.T) {
 // An illegal ref name gets past isGitArgSafe (no leading dash) and is refused
 // by the engine's check-ref-format, which is where the clear message lives.
 func TestOpHTTPCreateBranchIllegalNameFailsInOp(t *testing.T) {
+	t.Parallel()
 	dir := twoBranchRepo(t)
 	ts := serve(t, New(domain.Open(dir)))
 
@@ -73,6 +76,7 @@ func TestOpHTTPCreateBranchIllegalNameFailsInOp(t *testing.T) {
 }
 
 func TestOpHTTPRenameBranch(t *testing.T) {
+	t.Parallel()
 	dir := twoBranchRepo(t)
 	want := gitRun(t, dir, "rev-parse", "side")
 	ts := serve(t, New(domain.Open(dir)))
@@ -90,6 +94,7 @@ func TestOpHTTPRenameBranch(t *testing.T) {
 }
 
 func TestOpHTTPCreateWorktreeForBranch(t *testing.T) {
+	t.Parallel()
 	dir := twoBranchRepo(t)
 	// A sibling of the repo, so the new worktree is not nested inside it.
 	wtPath := filepath.Join(filepath.Dir(dir), "wt-"+filepath.Base(dir))
@@ -117,6 +122,7 @@ func TestOpHTTPCreateWorktreeForBranch(t *testing.T) {
 // A branch already checked out somewhere cannot get a second worktree; the
 // refusal must arrive as a failed op, not a hang or a partial worktree.
 func TestOpHTTPCreateWorktreeRefusesCheckedOutBranch(t *testing.T) {
+	t.Parallel()
 	dir := twoBranchRepo(t)
 	wtPath := filepath.Join(filepath.Dir(dir), "wt2-"+filepath.Base(dir))
 	t.Cleanup(func() { os.RemoveAll(wtPath) })
@@ -133,6 +139,7 @@ func TestOpHTTPCreateWorktreeRefusesCheckedOutBranch(t *testing.T) {
 }
 
 func TestOpHTTPBranchMakeRejectsBadInput(t *testing.T) {
+	t.Parallel()
 	ts := serve(t, New(domain.Open(twoBranchRepo(t))))
 
 	for _, body := range []string{

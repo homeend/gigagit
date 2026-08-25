@@ -6,6 +6,7 @@ import (
 )
 
 func TestRepoSwitchDetach(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 	gitIn(t, dir, "commit", "--allow-empty", "-m", "c1")
@@ -23,6 +24,7 @@ func TestRepoSwitchDetach(t *testing.T) {
 }
 
 func TestRepoSwitchCreate(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 	gitIn(t, dir, "commit", "--allow-empty", "-m", "c1")

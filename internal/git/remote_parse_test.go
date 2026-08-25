@@ -8,6 +8,7 @@ import (
 )
 
 func TestParseRemoteBranches(t *testing.T) {
+	t.Parallel()
 	// Format: %(refname:short)\x00%(objectname:short)\x00%(committerdate:unix)
 	data := []byte(
 		"origin/main\x00abc1234\x001700000000\n" +

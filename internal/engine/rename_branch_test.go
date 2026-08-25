@@ -7,6 +7,7 @@ import (
 )
 
 func TestRenameBranchOpSuccess(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	gitIn(t, dir, "branch", "old")
 
@@ -26,6 +27,7 @@ func TestRenameBranchOpSuccess(t *testing.T) {
 }
 
 func TestRenameBranchOpExistingTarget(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	gitIn(t, dir, "branch", "old")
 	gitIn(t, dir, "branch", "taken")
@@ -36,6 +38,7 @@ func TestRenameBranchOpExistingTarget(t *testing.T) {
 }
 
 func TestRenameBranchOpInvalidName(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	gitIn(t, dir, "branch", "old")
 
@@ -45,6 +48,7 @@ func TestRenameBranchOpInvalidName(t *testing.T) {
 }
 
 func TestRenameBranchOpRequiresBothNames(t *testing.T) {
+	t.Parallel()
 	_, repo := newRepo(t)
 	if _, err := (RenameBranch{Old: "old"}).Run(context.Background(), OpDeps{Repo: repo}); err == nil {
 		t.Fatal("want error when New is empty")

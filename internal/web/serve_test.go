@@ -9,6 +9,7 @@ import (
 )
 
 func TestIsLoopbackHost(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		host string
 		ok   bool
@@ -29,6 +30,7 @@ func TestIsLoopbackHost(t *testing.T) {
 }
 
 func TestListenRefusesPublicAddr(t *testing.T) {
+	t.Parallel()
 	if _, _, err := listen("0.0.0.0:0"); err == nil || !strings.Contains(err.Error(), "loopback") {
 		t.Fatalf("err = %v, want loopback refusal", err)
 	}
@@ -38,6 +40,7 @@ func TestListenRefusesPublicAddr(t *testing.T) {
 }
 
 func TestListenDefaultLoopback(t *testing.T) {
+	t.Parallel()
 	ln, url, err := listen("")
 	if err != nil {
 		t.Fatal(err)
@@ -49,6 +52,7 @@ func TestListenDefaultLoopback(t *testing.T) {
 }
 
 func TestServePreflightNonRepo(t *testing.T) {
+	t.Parallel()
 	err := Serve(context.Background(), t.TempDir(), "127.0.0.1:0", false)
 	if err == nil {
 		t.Fatal("Serve on a non-repo dir returned nil")
@@ -59,6 +63,7 @@ func TestServePreflightNonRepo(t *testing.T) {
 }
 
 func TestServePreflightForeignWorktreeLink(t *testing.T) {
+	t.Parallel()
 	// A worktree link whose gitdir this environment cannot resolve — the
 	// WSL↔Windows cross-notation case.
 	dir := t.TempDir()

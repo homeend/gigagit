@@ -23,6 +23,7 @@ func (d *captureDecider) Decide(_ context.Context, req DecisionRequest) (Decisio
 // cursor (index 0) is never the destructive "hard" — enter must not be one
 // keystroke from discarding work.
 func TestResetModeOptionsLeadWithSafe(t *testing.T) {
+	t.Parallel()
 	dir, repo, base := resetEngineRepo(t)
 	_ = dir
 	dec := &captureDecider{answers: map[string]string{"reset-mode": "cancel"}}
@@ -42,6 +43,7 @@ func TestResetModeOptionsLeadWithSafe(t *testing.T) {
 }
 
 func TestResetGuardEmptyCommit(t *testing.T) {
+	t.Parallel()
 	_, repo := newRepo(t)
 	_, err := Reset{}.Run(context.Background(), OpDeps{Repo: repo})
 	if err == nil || !strings.Contains(err.Error(), "Commit is required") {
@@ -65,6 +67,7 @@ func resetEngineRepo(t *testing.T) (string, GitOps, string) {
 }
 
 func TestResetCancelDoesNothing(t *testing.T) {
+	t.Parallel()
 	dir, repo, base := resetEngineRepo(t)
 	before := gitOut(t, dir, "rev-parse", "HEAD")
 	res, err := Reset{Commit: base}.Run(context.Background(),
@@ -81,6 +84,7 @@ func TestResetCancelDoesNothing(t *testing.T) {
 }
 
 func TestResetSoftMode(t *testing.T) {
+	t.Parallel()
 	dir, repo, base := resetEngineRepo(t)
 	res, err := Reset{Commit: base}.Run(context.Background(),
 		OpDeps{Repo: repo, Decider: MapDecider{"reset-mode": "soft"}})
@@ -96,6 +100,7 @@ func TestResetSoftMode(t *testing.T) {
 }
 
 func TestResetHardMode(t *testing.T) {
+	t.Parallel()
 	dir, repo, base := resetEngineRepo(t)
 	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("dirty\n"), 0o644) // tracked edit
 	res, err := Reset{Commit: base}.Run(context.Background(),
@@ -117,6 +122,7 @@ func TestResetHardMode(t *testing.T) {
 // Resetting to a commit on another branch (NOT an ancestor of HEAD) requires the
 // reset-confirm decision; cancel leaves the branch untouched.
 func TestResetNonAncestorConfirmCancel(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("base\n"), 0o644)
 	gitE(t, dir, "add", ".")
@@ -161,6 +167,7 @@ func TestResetNonAncestorConfirmCancel(t *testing.T) {
 // hard reset still discards tracked edits and reachable commits. Even resetting
 // onto a NON-ancestor commit must not raise reset-confirm.
 func TestResetPresetHardModeSkipsDecisions(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("base\n"), 0o644)
 	gitE(t, dir, "add", ".")
@@ -194,6 +201,7 @@ func TestResetPresetHardModeSkipsDecisions(t *testing.T) {
 }
 
 func TestResetPresetRejectsUnknownMode(t *testing.T) {
+	t.Parallel()
 	dir, repo, base := resetEngineRepo(t)
 	_ = dir
 	_, err := Reset{Commit: base, Mode: "bogus"}.Run(context.Background(),
@@ -206,6 +214,7 @@ func TestResetPresetRejectsUnknownMode(t *testing.T) {
 // A backward reset along the current branch (target IS an ancestor) skips the
 // confirm — only the mode decision is consulted.
 func TestResetAncestorSkipsConfirm(t *testing.T) {
+	t.Parallel()
 	dir, repo, base := resetEngineRepo(t)
 	res, err := Reset{Commit: base}.Run(context.Background(),
 		OpDeps{Repo: repo, Decider: MapDecider{"reset-mode": "mixed"}}) // no reset-confirm provided

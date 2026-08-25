@@ -55,6 +55,7 @@ func forceSucceedAfter(n int, f *gitexec.FakeRunner) func(context.Context, []str
 }
 
 func TestPushRejectedAbortDoesNotForce(t *testing.T) {
+	t.Parallel()
 	repo, f := rejectingPushRepo()
 	res, err := Push{Remote: "origin", Branch: "main", SetUpstream: true}.Run(
 		context.Background(), OpDeps{Repo: repo, Decider: MapDecider{"push-rejected": "abort"}})
@@ -70,6 +71,7 @@ func TestPushRejectedAbortDoesNotForce(t *testing.T) {
 }
 
 func TestPushRejectedForceChainsForceDecision(t *testing.T) {
+	t.Parallel()
 	repo, f := rejectingPushRepo()
 	f.SetHandler("git push", forceSucceedAfter(1, f)) // 1st rejected, 2nd+ succeed
 	dec := &captureDecider{answers: map[string]string{
@@ -91,6 +93,7 @@ func TestPushRejectedForceChainsForceDecision(t *testing.T) {
 }
 
 func TestPushRejectedNeverFiresOnHookRejection(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetError("git push", errors.New(
 		"git push failed (exit 1): ! [remote rejected] main -> main (pre-receive hook declined)"))
@@ -106,6 +109,7 @@ func TestPushRejectedNeverFiresOnHookRejection(t *testing.T) {
 }
 
 func TestPushRejectedRebaseThenPush(t *testing.T) {
+	t.Parallel()
 	repo, f := rejectingPushRepo()
 	f.SetResponse("git pull", gitexec.Result{})       // clean rebase
 	f.SetHandler("git push", forceSucceedAfter(1, f)) // 1st push rejected, 2nd succeeds
@@ -132,6 +136,7 @@ func TestPushRejectedRebaseThenPush(t *testing.T) {
 }
 
 func TestPushRejectedRebaseConflictKeepLeavesTreeAndErrors(t *testing.T) {
+	t.Parallel()
 	repo, f := rejectingPushRepo()
 	f.SetError("git pull", errors.New("git pull failed: CONFLICT (content)"))
 	f.SetResponse("git rebase --show-current-patch", gitexec.Result{}) // exit 0 ⇒ rebase in progress
@@ -152,6 +157,7 @@ func TestPushRejectedRebaseConflictKeepLeavesTreeAndErrors(t *testing.T) {
 }
 
 func TestPushRejectedRebaseConflictAbortRunsRebaseAbort(t *testing.T) {
+	t.Parallel()
 	repo, f := rejectingPushRepo()
 	f.SetError("git pull", errors.New("git pull failed: CONFLICT (content)"))
 	f.SetResponse("git rebase --show-current-patch", gitexec.Result{})
@@ -202,6 +208,7 @@ func pushRejectedOptions(t *testing.T, f *gitexec.FakeRunner, branch string) []s
 // force/abort only — never rebase, which would rewrite the wrong branch — and
 // must not run any pull.
 func TestPushRejectedNonCurrentBranchOmitsRebase(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetError("git push", errors.New(
 		"git push failed (exit 1): ! [rejected] feature -> feature (non-fast-forward)"))
@@ -224,6 +231,7 @@ func TestPushRejectedNonCurrentBranchOmitsRebase(t *testing.T) {
 // TestPushRejectedCurrentBranchKeepsRebase pins that the common case (pushing the
 // checked-out branch) still offers rebase, so this guard didn't regress it.
 func TestPushRejectedCurrentBranchKeepsRebase(t *testing.T) {
+	t.Parallel()
 	_, f := rejectingPushRepo() // HEAD = main
 	opts := pushRejectedOptions(t, f, "main")
 	saw := false
@@ -241,6 +249,7 @@ func TestPushRejectedCurrentBranchKeepsRebase(t *testing.T) {
 // answers "rebase" for a non-current branch (off the offered list), the op must
 // refuse rather than rebase the wrong branch.
 func TestPushRejectedNonCurrentBranchRebaseGuarded(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetError("git push", errors.New(
 		"git push failed (exit 1): ! [rejected] feature -> feature (non-fast-forward)"))
@@ -259,6 +268,7 @@ func TestPushRejectedNonCurrentBranchRebaseGuarded(t *testing.T) {
 }
 
 func TestPushRejectedRebaseSecondRejectionDoesNotLoop(t *testing.T) {
+	t.Parallel()
 	repo, f := rejectingPushRepo() // every "git push" stays rejected
 	f.SetResponse("git pull", gitexec.Result{})
 	dec := &captureDecider{answers: map[string]string{"push-rejected": "rebase"}}

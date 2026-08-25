@@ -14,6 +14,7 @@ import (
 // TestFetchBranches: a clone with a NARROWED refspec + FetchBranches for one
 // branch updates exactly that branch's remote-tracking ref.
 func TestFetchBranches(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	run := func(dir string, args ...string) string {
 		t.Helper()

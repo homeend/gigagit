@@ -12,6 +12,7 @@ import (
 )
 
 func TestCherryPickArgv(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git cherry-pick", gitexec.Result{})
 	r := &Repo{Runner: f}
@@ -25,6 +26,7 @@ func TestCherryPickArgv(t *testing.T) {
 }
 
 func TestCherryPickArgvWithDir(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git cherry-pick", gitexec.Result{})
 	r := &Repo{Runner: f}
@@ -38,6 +40,7 @@ func TestCherryPickArgvWithDir(t *testing.T) {
 }
 
 func TestCherryPickArgvMultiple(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git cherry-pick", gitexec.Result{})
 	r := &Repo{Runner: f}
@@ -51,6 +54,7 @@ func TestCherryPickArgvMultiple(t *testing.T) {
 }
 
 func TestCherryPickSkipArgv(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git cherry-pick --skip", gitexec.Result{})
 	r := &Repo{Runner: f}
@@ -64,6 +68,7 @@ func TestCherryPickSkipArgv(t *testing.T) {
 }
 
 func TestCherryPickAbortArgv(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git cherry-pick --abort", gitexec.Result{})
 	r := &Repo{Runner: f}
@@ -77,6 +82,7 @@ func TestCherryPickAbortArgv(t *testing.T) {
 }
 
 func TestCherryPickContinueArgvAndEnv(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git cherry-pick --continue", gitexec.Result{})
 	r := &Repo{Runner: f}
@@ -93,6 +99,7 @@ func TestCherryPickContinueArgvAndEnv(t *testing.T) {
 }
 
 func TestCherryPickInProgressExitOneMeansNo(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git rev-parse CHERRY_PICK_HEAD", gitexec.Result{ExitCode: 1})
 	f.SetError("git rev-parse CHERRY_PICK_HEAD", errors.New("exit status 1"))
@@ -108,6 +115,7 @@ func TestCherryPickInProgressExitOneMeansNo(t *testing.T) {
 
 // Real-git: a clean cherry-pick lands the side commit's change on main.
 func TestCherryPickCleanReal(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 
@@ -136,6 +144,7 @@ func TestCherryPickCleanReal(t *testing.T) {
 // Real-git: one invocation with several commits applies them all, in the
 // given order (git's sequencer).
 func TestCherryPickMultipleCleanReal(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 
@@ -173,6 +182,7 @@ func TestCherryPickMultipleCleanReal(t *testing.T) {
 
 // Real-git: a conflicting cherry-pick sets CHERRY_PICK_HEAD; abort clears it.
 func TestCherryPickConflictDetectAndAbortReal(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 
@@ -213,6 +223,7 @@ func TestCherryPickConflictDetectAndAbortReal(t *testing.T) {
 // CHERRY_PICK_HEAD, so callers must check RebaseInProgress first. This proves
 // the overlap exists (justifying merge -> rebase -> cherry-pick ordering).
 func TestRebaseConflictAlsoReportsRebaseInProgress(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 

@@ -47,6 +47,7 @@ func branchExists(t *testing.T, dir, branch string) bool {
 }
 
 func TestRemoveWorktreeOnlyKeepsBranch(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	wt := addWorktree(t, dir, "feature/keep", "wt-only")
 
@@ -70,6 +71,7 @@ func TestRemoveWorktreeOnlyKeepsBranch(t *testing.T) {
 }
 
 func TestRemoveWorktreeAndBranchDeletesBoth(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	wt := addWorktree(t, dir, "feature/both", "wt-both")
 
@@ -88,6 +90,7 @@ func TestRemoveWorktreeAndBranchDeletesBoth(t *testing.T) {
 }
 
 func TestRemoveWorktreeAbortAtScopeDoesNothing(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	wt := addWorktree(t, dir, "feature/abort", "wt-abort")
 
@@ -106,6 +109,7 @@ func TestRemoveWorktreeAbortAtScopeDoesNothing(t *testing.T) {
 }
 
 func TestRemoveWorktreeDirtyForced(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	wt := addWorktree(t, dir, "feature/dirty", "wt-dirty")
 	if err := os.WriteFile(filepath.Join(wt, "README.md"), []byte("changed\n"), 0o644); err != nil {
@@ -129,6 +133,7 @@ func TestRemoveWorktreeDirtyForced(t *testing.T) {
 }
 
 func TestRemoveWorktreeDirtyAbortLeavesIt(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	wt := addWorktree(t, dir, "feature/dirty2", "wt-dirty2")
 	if err := os.WriteFile(filepath.Join(wt, "README.md"), []byte("changed\n"), 0o644); err != nil {
@@ -152,6 +157,7 @@ func TestRemoveWorktreeDirtyAbortLeavesIt(t *testing.T) {
 }
 
 func TestRemoveWorktreeUnmergedBranchForceDelete(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	wt := addWorktree(t, dir, "feature/unm", "wt-unm")
 	gitIn(t, wt, "config", "user.email", "t@t")
@@ -180,6 +186,7 @@ func TestRemoveWorktreeUnmergedBranchForceDelete(t *testing.T) {
 }
 
 func TestRemoveWorktreeUnmergedBranchKept(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	wt := addWorktree(t, dir, "feature/unk", "wt-unk")
 	gitIn(t, wt, "config", "user.email", "t@t")
@@ -224,6 +231,7 @@ func worktreeListed(t *testing.T, dir, path string) bool {
 // interrupted `git worktree add` leaves — reason "initializing") is removed when
 // the user picks "unlock-and-remove", since plain remove --force refuses a lock.
 func TestRemoveWorktreeLockedUnlockAndRemove(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	wt := addWorktree(t, dir, "feature/locked", "wt-locked")
 	gitIn(t, dir, "worktree", "lock", wt) // stand in for the "initializing" lock
@@ -251,6 +259,7 @@ func TestRemoveWorktreeLockedUnlockAndRemove(t *testing.T) {
 // TestRemoveWorktreeLockedAbortLeavesIt: declining the unlock prompt leaves the
 // locked worktree untouched (no silent force — a deliberate lock is respected).
 func TestRemoveWorktreeLockedAbortLeavesIt(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	wt := addWorktree(t, dir, "feature/locked2", "wt-locked2")
 	gitIn(t, dir, "worktree", "lock", wt)
@@ -277,6 +286,7 @@ func TestRemoveWorktreeLockedAbortLeavesIt(t *testing.T) {
 // interrupted create left the worktree locked AND the user manually deleted its
 // directory. unlock + remove --force must still clear the stale admin entry.
 func TestRemoveWorktreeLockedMissingDir(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	wt := addWorktree(t, dir, "feature/locked3", "wt-locked3")
 	gitIn(t, dir, "worktree", "lock", wt)
@@ -302,6 +312,7 @@ func TestRemoveWorktreeLockedMissingDir(t *testing.T) {
 }
 
 func TestRemoveWorktreeDetachedOffersNoBranchOption(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	wt := filepath.Join(filepath.Dir(dir), "wt-detached")
 	gitIn(t, dir, "worktree", "add", "--detach", wt, "main")
@@ -327,6 +338,7 @@ func TestRemoveWorktreeDetachedOffersNoBranchOption(t *testing.T) {
 }
 
 func TestRemoveWorktreeGuardsCurrentWorktree(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	_, err := RemoveWorktree{Path: dir, Branch: "main"}.Run(
 		context.Background(),
@@ -337,6 +349,7 @@ func TestRemoveWorktreeGuardsCurrentWorktree(t *testing.T) {
 }
 
 func TestRemoveWorktreeGuardsPrimaryWorktree(t *testing.T) {
+	t.Parallel()
 	dir, _ := newRepo(t)
 	wt := addWorktree(t, dir, "feature/fromhere", "wt-from")
 	linked := &git.Repo{Runner: gitexec.NewExecRunner("git", wt, observ.NewRing(50))}

@@ -3,6 +3,7 @@ package git
 import "testing"
 
 func TestParseBranchesCommitterDate(t *testing.T) {
+	t.Parallel()
 	data := "*\x00main\x00origin/main\x00abc1234\x00[ahead 1]\x001717777777\n" +
 		" \x00old\x00\x00def5678\x00\x00\n"
 	bs, err := ParseBranches([]byte(data))
@@ -21,6 +22,7 @@ func TestParseBranchesCommitterDate(t *testing.T) {
 }
 
 func TestParseBranches(t *testing.T) {
+	t.Parallel()
 	// Format: %(HEAD)\x00%(refname:short)\x00%(upstream:short)\x00%(objectname:short)\x00%(upstream:track)
 	lines := "*\x00main\x00origin/main\x00abc1234\x00[ahead 2, behind 1]\n" +
 		" \x00feature\x00\x00def5678\x00\n"

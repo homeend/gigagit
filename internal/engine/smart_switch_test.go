@@ -8,6 +8,7 @@ import (
 )
 
 func TestSmartSwitchCleanTree(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	if err := repo.CreateBranch(context.Background(), "feature", ""); err != nil {
 		t.Fatal(err)
@@ -28,6 +29,7 @@ func TestSmartSwitchCleanTree(t *testing.T) {
 }
 
 func TestSmartSwitchStashesDirtyTreeAndRestores(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	if err := repo.CreateBranch(context.Background(), "feature", ""); err != nil {
 		t.Fatal(err)
@@ -52,6 +54,7 @@ func TestSmartSwitchStashesDirtyTreeAndRestores(t *testing.T) {
 }
 
 func TestSmartSwitchAlreadyOnBranchIsNoop(t *testing.T) {
+	t.Parallel()
 	_, repo := newRepo(t)
 	res, err := SmartSwitch{Branch: "main"}.Run(context.Background(), OpDeps{Repo: repo})
 	if err != nil {
@@ -63,6 +66,7 @@ func TestSmartSwitchAlreadyOnBranchIsNoop(t *testing.T) {
 }
 
 func TestSmartSwitchStashPopConflictPreservesStash(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	ctx := context.Background()
 

@@ -40,6 +40,7 @@ func pushRemoteCommitOn(t *testing.T, origin, branch, file, content, msg string)
 // axis that inverts silently if the op is dispatched with the wrong intent
 // (PullAndStay would check the branch out).
 func TestOpHTTPPullNamedBranchStaysHere(t *testing.T) {
+	t.Parallel()
 	origin, clone := featureBranchClone(t)
 	pushRemoteCommitOn(t, origin, "feature", "r.txt", "r\n", "remote feature work")
 
@@ -65,6 +66,7 @@ func TestOpHTTPPullNamedBranchStaysHere(t *testing.T) {
 
 // No branch in the request keeps the old meaning: pull the current one.
 func TestOpHTTPPullNoBranchPullsCurrent(t *testing.T) {
+	t.Parallel()
 	origin, clone := cloneWithOrigin(t)
 	pushRemoteCommit(t, origin, "r.txt", "r\n", "remote work")
 	ts := serve(t, New(domain.Open(clone)))
@@ -81,6 +83,7 @@ func TestOpHTTPPullNoBranchPullsCurrent(t *testing.T) {
 // Pushing a NAMED branch must publish that branch, not whatever is checked
 // out — the mirror of the pull axis above.
 func TestOpHTTPPushNamedBranch(t *testing.T) {
+	t.Parallel()
 	origin, clone := featureBranchClone(t)
 	// A local-only commit on feature, made without leaving main.
 	gitRun(t, clone, "checkout", "feature")
@@ -117,6 +120,7 @@ func TestOpHTTPPushNamedBranch(t *testing.T) {
 // both branch-scoped ops. --upload-pack / --receive-pack are the ones that
 // matter here: git executes their value on the far side of a fetch/push.
 func TestOpHTTPBranchSyncRejectsOptionLikeNames(t *testing.T) {
+	t.Parallel()
 	_, clone := featureBranchClone(t)
 	ts := serve(t, New(domain.Open(clone)))
 
@@ -139,6 +143,7 @@ func TestOpHTTPBranchSyncRejectsOptionLikeNames(t *testing.T) {
 // isGitArgSafe to reject them would refuse legal branches while buying
 // nothing — this test fails if someone "hardens" it that way.
 func TestOpHTTPBranchSyncAcceptsOddButLegalNames(t *testing.T) {
+	t.Parallel()
 	origin, clone := featureBranchClone(t)
 	gitRun(t, clone, "branch", "odd;name$x")
 	gitRun(t, clone, "push", "-u", "origin", "odd;name$x")

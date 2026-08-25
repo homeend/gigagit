@@ -10,6 +10,7 @@ import (
 )
 
 func TestResolveConflictHunksWritesAndStages(t *testing.T) {
+	t.Parallel()
 	dir, repo := newConflictRepo(t) // uu.txt is UU (ours/theirs), md.txt is DU
 	ctx := context.Background()
 
@@ -35,6 +36,7 @@ func TestResolveConflictHunksWritesAndStages(t *testing.T) {
 // git conflict file with hunkpick, assemble a line-by-line resolution (incoming
 // then current), and run it through ResolveConflictHunks against the real repo.
 func TestResolveConflictHunksRealRoundTrip(t *testing.T) {
+	t.Parallel()
 	dir, repo := newConflictRepo(t)
 	ctx := context.Background()
 

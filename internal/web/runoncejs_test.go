@@ -78,6 +78,7 @@ console.log(JSON.stringify(out));
 `
 
 func TestRunOnceGateJS(t *testing.T) {
+	t.Parallel()
 	node, err := exec.LookPath("node")
 	if err != nil {
 		t.Skip("node not installed; the JS gate guard needs it")
@@ -132,6 +133,7 @@ func TestRunOnceGateJS(t *testing.T) {
 // a refactor that calls refreshAfterOp directly from manualRefresh would
 // pass the gate test above and still ship the bug.
 func TestManualRefreshUsesTheGate(t *testing.T) {
+	t.Parallel()
 	src, err := os.ReadFile(filepath.Join("static", "ops.js"))
 	if err != nil {
 		t.Fatal(err)

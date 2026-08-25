@@ -8,6 +8,7 @@ import (
 )
 
 func TestParseStashList(t *testing.T) {
+	t.Parallel()
 	in := []string{
 		"stash@{0}: On main: WIP on main",
 		"stash@{1}: WIP on feat: 1a2b3c add api",
@@ -24,6 +25,7 @@ func TestParseStashList(t *testing.T) {
 }
 
 func TestParseStashListEmpty(t *testing.T) {
+	t.Parallel()
 	if got := parseStashList(nil); len(got) != 0 {
 		t.Errorf("nil → %+v, want empty", got)
 	}

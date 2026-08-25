@@ -65,6 +65,7 @@ func cloneOnMainBehindOrigin(t *testing.T) (string, *git.Repo) {
 }
 
 func TestSmartPullCurrentBranchFastForward(t *testing.T) {
+	t.Parallel()
 	clone, repo := cloneOnMainBehindOrigin(t)
 	res, err := SmartPull{Intent: PullAndStay}.Run(context.Background(),
 		OpDeps{Repo: repo, Decider: MapDecider{}})
@@ -80,6 +81,7 @@ func TestSmartPullCurrentBranchFastForward(t *testing.T) {
 }
 
 func TestSmartPullCurrentBranchNonFastForwardRebase(t *testing.T) {
+	t.Parallel()
 	clone, repo := cloneOnMainBehindOrigin(t)
 	os.WriteFile(filepath.Join(clone, "local.txt"), []byte("local\n"), 0o644)
 	gitAt(t, clone, "add", ".")
@@ -105,6 +107,7 @@ func TestSmartPullCurrentBranchNonFastForwardRebase(t *testing.T) {
 // to the fetched remote tip: the local commit is discarded, the remote content
 // wins, and an uncommitted local edit is thrown away too.
 func TestSmartPullCurrentBranchNonFastForwardReset(t *testing.T) {
+	t.Parallel()
 	clone, repo := cloneOnMainBehindOrigin(t)
 	os.WriteFile(filepath.Join(clone, "local.txt"), []byte("local\n"), 0o644)
 	gitAt(t, clone, "add", ".")
@@ -132,6 +135,7 @@ func TestSmartPullCurrentBranchNonFastForwardReset(t *testing.T) {
 }
 
 func TestSmartPullBackgroundFastForwardsOtherBranch(t *testing.T) {
+	t.Parallel()
 	clone, repo := cloneOnMainBehindOrigin(t)
 	root := filepath.Dir(clone)
 	seed := filepath.Join(root, "seed")
@@ -162,6 +166,7 @@ func TestSmartPullBackgroundFastForwardsOtherBranch(t *testing.T) {
 // the first thing tried). MapDecider{} errors on any decision, so a prompt fails
 // the test.
 func TestSmartPullBackgroundPullsWorktreeBranchNoPrompt(t *testing.T) {
+	t.Parallel()
 	clone, repo := cloneOnMainBehindOrigin(t)
 	root := filepath.Dir(clone)
 	seed := filepath.Join(root, "seed")
@@ -199,6 +204,7 @@ func TestSmartPullBackgroundPullsWorktreeBranchNoPrompt(t *testing.T) {
 // ff-only, so a background pull errors and leaves the worktree branch untouched
 // (the user resolves it deliberately, like the same-branch ff-only-then-ask path).
 func TestSmartPullBackgroundWorktreeDivergedErrsNoMerge(t *testing.T) {
+	t.Parallel()
 	clone, repo := cloneOnMainBehindOrigin(t)
 	root := filepath.Dir(clone)
 	seed := filepath.Join(root, "seed")
@@ -229,6 +235,7 @@ func TestSmartPullBackgroundWorktreeDivergedErrsNoMerge(t *testing.T) {
 }
 
 func TestSmartPullStayStashesAndMovesToTarget(t *testing.T) {
+	t.Parallel()
 	clone, repo := cloneOnMainBehindOrigin(t)
 	gitAt(t, clone, "branch", "feature", "origin/main")
 	gitAt(t, clone, "push", "-u", "origin", "feature")
@@ -253,6 +260,7 @@ func TestSmartPullStayStashesAndMovesToTarget(t *testing.T) {
 }
 
 func TestSmartPullLockMode(t *testing.T) {
+	t.Parallel()
 	if got := (SmartPull{Intent: PullInBackground}).LockMode(); got != repogate.RefWrite {
 		t.Fatalf("background lock mode = %v, want RefWrite", got)
 	}
@@ -268,6 +276,7 @@ func TestSmartPullLockMode(t *testing.T) {
 // fires BEFORE checkoutPull touches the worktree: a failing Escalate must
 // abort the operation with the current branch untouched.
 func TestSmartPullBackgroundEscalatesBeforeCheckout(t *testing.T) {
+	t.Parallel()
 	clone, repo := cloneOnMainBehindOrigin(t)
 	root := filepath.Dir(clone)
 	seed := filepath.Join(root, "seed")

@@ -10,6 +10,7 @@ import (
 )
 
 func TestOpHTTPCreateTagLightweight(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	ts := serve(t, New(domain.Open(dir)))
 
@@ -27,6 +28,7 @@ func TestOpHTTPCreateTagLightweight(t *testing.T) {
 }
 
 func TestOpHTTPCreateTagAnnotatedAtCommit(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 2)
 	first := gitRun(t, dir, "rev-parse", "HEAD~1")
 	ts := serve(t, New(domain.Open(dir)))
@@ -46,6 +48,7 @@ func TestOpHTTPCreateTagAnnotatedAtCommit(t *testing.T) {
 }
 
 func TestOpHTTPCreateTagBadInput(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	ts := serve(t, New(domain.Open(dir)))
 
@@ -64,6 +67,7 @@ func TestOpHTTPCreateTagBadInput(t *testing.T) {
 // which the server reads itself — a wire-supplied sha must be ignored, or
 // one POST could retarget any tag.
 func TestOpHTTPAnnotateTag(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 2)
 	gitRun(t, dir, "tag", "v1", "HEAD~1") // lightweight, NOT at HEAD
 	target := gitRun(t, dir, "rev-parse", "HEAD~1")
@@ -89,6 +93,7 @@ func TestOpHTTPAnnotateTag(t *testing.T) {
 }
 
 func TestOpHTTPAnnotateTagRefusals(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	gitRun(t, dir, "tag", "v1")
 	ts := serve(t, New(domain.Open(dir)))
@@ -108,6 +113,7 @@ func TestOpHTTPAnnotateTagRefusals(t *testing.T) {
 }
 
 func TestOpHTTPPushTag(t *testing.T) {
+	t.Parallel()
 	_, clone := cloneWithOrigin(t)
 	gitRun(t, clone, "tag", "v1")
 	ts := serve(t, New(domain.Open(clone)))
@@ -124,6 +130,7 @@ func TestOpHTTPPushTag(t *testing.T) {
 }
 
 func TestOpHTTPPushTagUnknown(t *testing.T) {
+	t.Parallel()
 	_, clone := cloneWithOrigin(t)
 	ts := serve(t, New(domain.Open(clone)))
 
@@ -138,6 +145,7 @@ func TestOpHTTPPushTagUnknown(t *testing.T) {
 // Deleting from the remote goes through the engine's own confirm — the
 // decision parks in the browser modal; "delete" then pushes the deletion.
 func TestOpHTTPDeleteRemoteTag(t *testing.T) {
+	t.Parallel()
 	_, clone := cloneWithOrigin(t)
 	gitRun(t, clone, "tag", "v1")
 	gitRun(t, clone, "push", "origin", "v1")
@@ -174,6 +182,7 @@ func TestOpHTTPDeleteRemoteTag(t *testing.T) {
 }
 
 func TestOpHTTPDeleteRemoteTagUnknown(t *testing.T) {
+	t.Parallel()
 	_, clone := cloneWithOrigin(t)
 	ts := serve(t, New(domain.Open(clone)))
 
@@ -183,6 +192,7 @@ func TestOpHTTPDeleteRemoteTagUnknown(t *testing.T) {
 }
 
 func TestOpHTTPFastForward(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 3)
 	tip := gitRun(t, dir, "rev-parse", "main")
 	gitRun(t, dir, "branch", "behind", "HEAD~2")
@@ -205,6 +215,7 @@ func TestOpHTTPFastForward(t *testing.T) {
 // The commit menu fast-forwards to the commit under the cursor, which has no
 // branch name — so the op takes a sha as well as a branch.
 func TestOpHTTPFastForwardToSha(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 3)
 	tip := gitRun(t, dir, "rev-parse", "main")
 	gitRun(t, dir, "branch", "behind", "HEAD~2")
@@ -224,6 +235,7 @@ func TestOpHTTPFastForwardToSha(t *testing.T) {
 // A sha that is not a descendant is the engine's refusal, not a crash — and a
 // non-hex target is rejected before any git runs (the checkout lane's rule).
 func TestOpHTTPFastForwardShaGuards(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 3)
 	behind := gitRun(t, dir, "rev-parse", "HEAD~2")
 	ts := serve(t, New(domain.Open(dir)))
@@ -239,6 +251,7 @@ func TestOpHTTPFastForwardShaGuards(t *testing.T) {
 }
 
 func TestOpHTTPFastForwardNotAhead(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 3)
 	gitRun(t, dir, "branch", "behind", "HEAD~2")
 	ts := serve(t, New(domain.Open(dir)))
@@ -255,6 +268,7 @@ func TestOpHTTPFastForwardNotAhead(t *testing.T) {
 }
 
 func TestOpHTTPFastForwardUnknownBranch(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	ts := serve(t, New(domain.Open(dir)))
 

@@ -9,6 +9,7 @@ import (
 )
 
 func TestRevParseAndCommitMessage(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 

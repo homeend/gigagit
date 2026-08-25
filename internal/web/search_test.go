@@ -93,6 +93,7 @@ func filterRepo(t *testing.T) string {
 }
 
 func TestFeedFilterNarrows(t *testing.T) {
+	t.Parallel()
 	dir := filterRepo(t)
 	ts := serve(t, New(domain.Open(dir)))
 
@@ -135,6 +136,7 @@ func TestFeedFilterNarrows(t *testing.T) {
 // it — that cost is the reason to skip it on a big repo, and the lanes would
 // be wrong anyway.
 func TestFeedFilterDropsTheGraph(t *testing.T) {
+	t.Parallel()
 	dir := filterRepo(t)
 	ts := serve(t, New(domain.Open(dir)))
 
@@ -162,6 +164,7 @@ func TestFeedFilterDropsTheGraph(t *testing.T) {
 // Clearing the filter restores the whole list — the same feed, re-scoped, not
 // a different one.
 func TestFeedFilterClears(t *testing.T) {
+	t.Parallel()
 	dir := filterRepo(t)
 	ts := serve(t, New(domain.Open(dir)))
 
@@ -185,6 +188,7 @@ func TestFeedFilterClears(t *testing.T) {
 
 // A filter composes with the branch scope rather than replacing it.
 func TestFeedFilterComposesWithSolo(t *testing.T) {
+	t.Parallel()
 	dir := filterRepo(t)
 	ts := serve(t, New(domain.Open(dir)))
 
@@ -205,6 +209,7 @@ func TestFeedFilterComposesWithSolo(t *testing.T) {
 // A filter must survive the feed being dropped (which every state-changing op
 // does): the request carries it, so the rebuilt feed starts under it.
 func TestFeedFilterSurvivesReset(t *testing.T) {
+	t.Parallel()
 	dir := filterRepo(t)
 	srv := New(domain.Open(dir))
 	ts := serve(t, srv)
@@ -228,6 +233,7 @@ func TestFeedFilterSurvivesReset(t *testing.T) {
 // fields with NUL, so a value carrying one could collide two different filters
 // onto one cached page.
 func TestFeedFilterRejectsControlCharacters(t *testing.T) {
+	t.Parallel()
 	dir := filterRepo(t)
 	ts := serve(t, New(domain.Open(dir)))
 	for _, q := range []string{
@@ -245,6 +251,7 @@ func TestFeedFilterRejectsControlCharacters(t *testing.T) {
 // as one argv entry (and a path after `--`), so it narrows to nothing rather
 // than being read as an option.
 func TestFeedFilterValuesAreNotFlags(t *testing.T) {
+	t.Parallel()
 	dir := filterRepo(t)
 	ts := serve(t, New(domain.Open(dir)))
 	var got feedResp
@@ -259,6 +266,7 @@ func TestFeedFilterValuesAreNotFlags(t *testing.T) {
 // --- solo from a commit -----------------------------------------------------
 
 func TestSoloFromCommit(t *testing.T) {
+	t.Parallel()
 	dir := filterRepo(t)
 	ts := serve(t, New(domain.Open(dir)))
 	sha := shaOf(t, dir, "c-b1")
@@ -287,6 +295,7 @@ func TestSoloFromCommit(t *testing.T) {
 // A short (abbreviated) commit id is stored as the full hash, so the walk can
 // never hit a short-sha ambiguity.
 func TestSoloFromCommitStoresFullSha(t *testing.T) {
+	t.Parallel()
 	dir := filterRepo(t)
 	ts := serve(t, New(domain.Open(dir)))
 	sha := shaOf(t, dir, "c-b1")
@@ -304,6 +313,7 @@ func TestSoloFromCommitStoresFullSha(t *testing.T) {
 
 // The branch form keeps behaving exactly as it did, including its refusals.
 func TestSoloBranchUnchanged(t *testing.T) {
+	t.Parallel()
 	dir := filterRepo(t)
 	ts := serve(t, New(domain.Open(dir)))
 
@@ -322,6 +332,7 @@ func TestSoloBranchUnchanged(t *testing.T) {
 }
 
 func TestSoloGuards(t *testing.T) {
+	t.Parallel()
 	dir := filterRepo(t)
 	ts := serve(t, New(domain.Open(dir)))
 	for _, tc := range []struct {
@@ -352,6 +363,7 @@ type filesResp struct {
 }
 
 func TestFilesEndpointRanks(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	gitRun(t, dir, "init", "-b", "main")
 	for _, p := range []string{"cmd/gg/main.go", "internal/web/search.go", "docs/readme.md"} {
@@ -398,6 +410,7 @@ func TestFilesEndpointRanks(t *testing.T) {
 }
 
 func TestFilesEndpointLimits(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	gitRun(t, dir, "init", "-b", "main")
 	for i := 0; i < 60; i++ {
@@ -422,6 +435,7 @@ func TestFilesEndpointLimits(t *testing.T) {
 // The path list is read once per HEAD: a new commit invalidates it, so a file
 // added by that commit shows up without restarting anything.
 func TestFilesCacheFollowsHead(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	srv := New(domain.Open(dir))
 	ts := serve(t, srv)
@@ -465,6 +479,7 @@ func startSquash(t *testing.T, ts *httptest.Server, shas ...string) (string, int
 }
 
 func TestSquashMarkedCommits(t *testing.T) {
+	t.Parallel()
 	useGGSequenceEditor(t)
 	dir := editRepo(t, 4) // c1 a.txt, c2 b.txt, c3 c.txt, c4 d.txt
 	ts := serve(t, New(domain.Open(dir)))
@@ -497,6 +512,7 @@ func TestSquashMarkedCommits(t *testing.T) {
 }
 
 func TestSquashRefusals(t *testing.T) {
+	t.Parallel()
 	useGGSequenceEditor(t)
 	dir := editRepo(t, 4)
 	ts := serve(t, New(domain.Open(dir)))
@@ -532,6 +548,7 @@ func TestSquashRefusals(t *testing.T) {
 // The squash endpoint mutates, so it lives behind the same write guard as
 // every other mutation: a cross-origin post cannot start one.
 func TestSquashWriteGuard(t *testing.T) {
+	t.Parallel()
 	dir := editRepo(t, 3)
 	ts := serve(t, New(domain.Open(dir)))
 	body := `{"shas":["` + shaOf(t, dir, "c3") + `","` + shaOf(t, dir, "c2") + `"]}`

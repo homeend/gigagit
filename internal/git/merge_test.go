@@ -12,6 +12,7 @@ import (
 )
 
 func TestMergeArgv(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git merge", gitexec.Result{})
 	r := &Repo{Runner: f}
@@ -25,6 +26,7 @@ func TestMergeArgv(t *testing.T) {
 }
 
 func TestMergeArgvWithDir(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git merge", gitexec.Result{})
 	r := &Repo{Runner: f}
@@ -38,6 +40,7 @@ func TestMergeArgvWithDir(t *testing.T) {
 }
 
 func TestMergeAbortArgv(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git merge --abort", gitexec.Result{})
 	r := &Repo{Runner: f}
@@ -51,6 +54,7 @@ func TestMergeAbortArgv(t *testing.T) {
 }
 
 func TestMergeInProgressExitOneMeansNo(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git rev-parse MERGE_HEAD", gitexec.Result{ExitCode: 1})
 	f.SetError("git rev-parse MERGE_HEAD", errors.New("exit status 1"))
@@ -66,6 +70,7 @@ func TestMergeInProgressExitOneMeansNo(t *testing.T) {
 
 // Real-git: build an actual conflict, observe MERGE_HEAD, abort, observe clean.
 func TestMergeConflictDetectAndAbortReal(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 
@@ -103,6 +108,7 @@ func TestMergeConflictDetectAndAbortReal(t *testing.T) {
 }
 
 func TestMergeFFOnly(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 	ctx := context.Background()

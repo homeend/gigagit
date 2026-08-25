@@ -19,6 +19,7 @@ import (
 // emits LF. git diff normalizes and sees the file unchanged; gg's diff (ShowFile
 // HEAD vs the raw disk bytes) must agree — every row Same, no spurious changes.
 func TestDiffCRLFWorkingCopyMatchesGit(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	run := func(args ...string) {
 		cmd := exec.Command("git", args...)

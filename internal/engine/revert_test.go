@@ -9,6 +9,7 @@ import (
 )
 
 func TestRevertGuardEmptyCommit(t *testing.T) {
+	t.Parallel()
 	_, repo := newRepo(t)
 	_, err := Revert{}.Run(context.Background(), OpDeps{Repo: repo})
 	if err == nil || !strings.Contains(err.Error(), "Commit is required") {
@@ -18,6 +19,7 @@ func TestRevertGuardEmptyCommit(t *testing.T) {
 
 // A clean revert removes the change the target commit introduced.
 func TestRevertCleanUndoes(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	os.WriteFile(filepath.Join(dir, "new.txt"), []byte("added\n"), 0o644)
 	gitE(t, dir, "add", ".")
@@ -38,6 +40,7 @@ func TestRevertCleanUndoes(t *testing.T) {
 
 // A dirty tree is autostashed and restored across a clean revert.
 func TestRevertAutostashRestores(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	os.WriteFile(filepath.Join(dir, "wip.txt"), []byte("committed\n"), 0o644)
 	gitE(t, dir, "add", ".")
@@ -80,6 +83,7 @@ func setupRevertConflict(t *testing.T, dir string) (target string) {
 }
 
 func TestRevertConflictKeepLeavesState(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	target := setupRevertConflict(t, dir)
 
@@ -97,6 +101,7 @@ func TestRevertConflictKeepLeavesState(t *testing.T) {
 }
 
 func TestRevertConflictAbortRestores(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	target := setupRevertConflict(t, dir)
 
@@ -119,6 +124,7 @@ func TestRevertConflictAbortRestores(t *testing.T) {
 // Reverting a commit whose change is already undone: git refuses with a clean
 // tree (no REVERT_HEAD), so the op returns a legible error and never traps.
 func TestRevertAlreadyUndone(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("x\n"), 0o644)
 	gitE(t, dir, "add", ".")
@@ -141,6 +147,7 @@ func TestRevertAlreadyUndone(t *testing.T) {
 
 // The autostash is restored after the abort path (dirty tree + abort).
 func TestRevertAbortRestoresAutostash(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	target := setupRevertConflict(t, dir)
 	// dirty an unrelated tracked file so autostash kicks in
@@ -165,6 +172,7 @@ func TestRevertAbortRestoresAutostash(t *testing.T) {
 
 // Reverting a merge commit without -m is refused outright with a legible error.
 func TestRevertMergeCommitRefused(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	os.WriteFile(filepath.Join(dir, "f.txt"), []byte("1\n"), 0o644)
 	gitE(t, dir, "add", ".")
@@ -188,6 +196,7 @@ func TestRevertMergeCommitRefused(t *testing.T) {
 
 // ContinueOp routes a resolved revert to `revert --continue`.
 func TestContinueOpFinishesRevert(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	target := setupRevertConflict(t, dir)
 	_, _ = Revert{Commit: target}.Run(context.Background(),
@@ -210,6 +219,7 @@ func TestContinueOpFinishesRevert(t *testing.T) {
 
 // AbortOp routes an in-progress revert to `revert --abort`.
 func TestAbortOpAbortsRevert(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	target := setupRevertConflict(t, dir)
 	_, _ = Revert{Commit: target}.Run(context.Background(),

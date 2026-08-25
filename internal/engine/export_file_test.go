@@ -8,6 +8,7 @@ import (
 )
 
 func TestExportFileWritesNestedPath(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "out", "a1b2c3d.patch")
 	op := ExportFile{Path: path, Data: []byte("From abc\n")}
 	res, err := op.Run(context.Background(), OpDeps{}) // absent → no decider needed
@@ -23,6 +24,7 @@ func TestExportFileWritesNestedPath(t *testing.T) {
 }
 
 func TestExportFileIdenticalBytesNoOp(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "x.patch")
 	if err := os.WriteFile(path, []byte("same"), 0o644); err != nil {
@@ -39,6 +41,7 @@ func TestExportFileIdenticalBytesNoOp(t *testing.T) {
 }
 
 func TestExportFileExistingCancels(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "x.patch")
 	if err := os.WriteFile(path, []byte("old"), 0o644); err != nil {
@@ -55,6 +58,7 @@ func TestExportFileExistingCancels(t *testing.T) {
 }
 
 func TestExportFileExistingOverwrites(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "x.patch")
 	if err := os.WriteFile(path, []byte("old"), 0o644); err != nil {

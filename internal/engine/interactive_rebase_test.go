@@ -2,25 +2,53 @@ package engine
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/homeend/gigagit/internal/git"
 	"github.com/homeend/gigagit/internal/rebaseplan"
 )
 
-// buildGG builds the gg binary once for use as the rebase sequence editor.
+var (
+	ggBinOnce sync.Once
+	ggBinPath string
+	ggBinErr  error
+)
+
+// buildGG builds the gg binary ONCE per test process (25 callers used to each
+// run their own multi-second `go build` — the dominant cost of this package's
+// suite) and hands every caller the same read-only path. The temp dir is
+// removed by TestMain after the run.
 func buildGG(t *testing.T) string {
 	t.Helper()
-	bin := filepath.Join(t.TempDir(), "gg-test-bin")
-	out, err := exec.Command("go", "build", "-o", bin, "github.com/homeend/gigagit/cmd/gg").CombinedOutput()
-	if err != nil {
-		t.Fatalf("build gg: %v\n%s", err, out)
+	ggBinOnce.Do(func() {
+		dir, err := os.MkdirTemp("", "gg-test-bin-*")
+		if err != nil {
+			ggBinErr = err
+			return
+		}
+		ggBinPath = filepath.Join(dir, "gg-test-bin")
+		if out, err := exec.Command("go", "build", "-o", ggBinPath, "github.com/homeend/gigagit/cmd/gg").CombinedOutput(); err != nil {
+			ggBinErr = fmt.Errorf("build gg: %v\n%s", err, out)
+		}
+	})
+	if ggBinErr != nil {
+		t.Fatal(ggBinErr)
 	}
-	return bin
+	return ggBinPath
+}
+
+func TestMain(m *testing.M) {
+	code := m.Run()
+	if ggBinPath != "" {
+		os.RemoveAll(filepath.Dir(ggBinPath))
+	}
+	os.Exit(code)
 }
 
 // shaOf returns the full sha of <rev> in dir.
@@ -63,6 +91,7 @@ func threeCommitBranch(t *testing.T) (string, *git.Repo) {
 }
 
 func TestInteractiveRebaseRewordDropReorder(t *testing.T) {
+	t.Parallel()
 	gg := buildGG(t)
 	dir, repo := threeCommitBranch(t)
 	// oldest-first plan over main..work = [wip1, wip2, wip3]:
@@ -88,6 +117,7 @@ func TestInteractiveRebaseRewordDropReorder(t *testing.T) {
 }
 
 func TestInteractiveRebaseOntoCommitSha(t *testing.T) {
+	t.Parallel()
 	gg := buildGG(t)
 	dir, repo := threeCommitBranch(t)
 	// Onto a raw commit SHA (wip2's parent = wip1 = work~2): range = [wip2, wip3];
@@ -113,6 +143,7 @@ func TestInteractiveRebaseOntoCommitSha(t *testing.T) {
 }
 
 func TestInteractiveRebaseOntoNoSuchCommit(t *testing.T) {
+	t.Parallel()
 	gg := buildGG(t)
 	dir, repo := threeCommitBranch(t)
 	_ = dir
@@ -127,6 +158,7 @@ func TestInteractiveRebaseOntoNoSuchCommit(t *testing.T) {
 }
 
 func TestInteractiveRebaseRefusesMergeCommits(t *testing.T) {
+	t.Parallel()
 	gg := buildGG(t)
 	dir, repo := newRepo(t)
 	gitE(t, dir, "checkout", "-b", "work")
@@ -151,6 +183,7 @@ func TestInteractiveRebaseRefusesMergeCommits(t *testing.T) {
 }
 
 func TestInteractiveRebaseStashWrapPreservesWorkingTree(t *testing.T) {
+	t.Parallel()
 	gg := buildGG(t)
 	dir, repo := threeCommitBranch(t)
 	// Dirty the tree: one staged new file, one unstaged edit to a committed file.
@@ -197,6 +230,7 @@ func TestInteractiveRebaseStashWrapPreservesWorkingTree(t *testing.T) {
 // eaten ("command not found"): unquoted, ANY space in the path splits the
 // command the same way — so this reproduces the defect class on Linux.
 func TestInteractiveRebaseGGBinWithSpace(t *testing.T) {
+	t.Parallel()
 	src := buildGG(t)
 	spaced := filepath.Join(t.TempDir(), "gg dir")
 	if err := os.MkdirAll(spaced, 0o755); err != nil {

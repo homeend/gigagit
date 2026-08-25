@@ -42,6 +42,7 @@ func drain(ch chan Event) []Event {
 }
 
 func TestCommitOperationEmitsProgressAndDone(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	os.WriteFile(filepath.Join(dir, "README.md"), []byte("changed\n"), 0o644)
 
@@ -70,6 +71,7 @@ func TestCommitOperationEmitsProgressAndDone(t *testing.T) {
 }
 
 func TestStashOpByPath(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	ctx := context.Background()
 	// Add a second tracked file so we can stash one path and keep the other dirty.
@@ -105,6 +107,7 @@ func TestStashOpByPath(t *testing.T) {
 }
 
 func TestStashApplyKeepsStash(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	ctx := context.Background()
 	os.WriteFile(filepath.Join(dir, "README.md"), []byte("changed\n"), 0o644)
@@ -123,6 +126,7 @@ func TestStashApplyKeepsStash(t *testing.T) {
 }
 
 func TestStashPopAppliesAndRemoves(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	ctx := context.Background()
 	os.WriteFile(filepath.Join(dir, "README.md"), []byte("changed\n"), 0o644)
@@ -141,6 +145,7 @@ func TestStashPopAppliesAndRemoves(t *testing.T) {
 }
 
 func TestStashDropRemoves(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	ctx := context.Background()
 	os.WriteFile(filepath.Join(dir, "README.md"), []byte("changed\n"), 0o644)
@@ -156,6 +161,7 @@ func TestStashDropRemoves(t *testing.T) {
 }
 
 func TestCommitAmend(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	// newRepo leaves a single "initial" commit. Stage a change and amend it.
 	os.WriteFile(filepath.Join(dir, "f.txt"), []byte("x\n"), 0o644)
@@ -180,6 +186,7 @@ func TestCommitAmend(t *testing.T) {
 }
 
 func TestStashApplyConflictReturnsError(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	ctx := context.Background()
 	os.WriteFile(filepath.Join(dir, "README.md"), []byte("stashed\n"), 0o644)
@@ -195,6 +202,7 @@ func TestStashApplyConflictReturnsError(t *testing.T) {
 }
 
 func TestCommitSummaryIncludesSha(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	os.WriteFile(filepath.Join(dir, "README.md"), []byte("changed\n"), 0o644)
 

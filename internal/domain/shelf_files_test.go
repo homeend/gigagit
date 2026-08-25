@@ -30,6 +30,7 @@ func commitTwoFiles(t *testing.T, dir string) string {
 }
 
 func TestShelfCommitFilesListsTarMembers(t *testing.T) {
+	t.Parallel()
 	repoDir, svc := newRealRepo(t)
 	svc.SetShelfStore(shelf.NewFileStore(t.TempDir()))
 	ctx := context.Background()
@@ -66,6 +67,7 @@ func TestShelfCommitFilesListsTarMembers(t *testing.T) {
 }
 
 func TestResolveBytesShelfCommitMember(t *testing.T) {
+	t.Parallel()
 	repoDir, svc := newRealRepo(t)
 	svc.SetShelfStore(shelf.NewFileStore(t.TempDir()))
 	ctx := context.Background()
@@ -106,6 +108,7 @@ func TestResolveBytesShelfCommitMember(t *testing.T) {
 }
 
 func TestResolveBytesShelfFileEntryUnchanged(t *testing.T) {
+	t.Parallel()
 	repoDir, svc := newRealRepo(t)
 	svc.SetShelfStore(shelf.NewFileStore(t.TempDir()))
 	ctx := context.Background()

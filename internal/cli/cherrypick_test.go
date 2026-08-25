@@ -28,6 +28,7 @@ func cherryPickFixture(t *testing.T) (dir, sha string) {
 }
 
 func TestCherryPickCleanCLI(t *testing.T) {
+	t.Parallel()
 	dir, sha := cherryPickFixture(t)
 	var out, errb bytes.Buffer
 	code := Run(dir, []string{"cherry-pick", sha}, strings.NewReader(""), &out, &errb, "")
@@ -63,6 +64,7 @@ func cherryPickConflictFixtureCLI(t *testing.T) (dir, sha string) {
 }
 
 func TestCherryPickConflictUnansweredNonTTY(t *testing.T) {
+	t.Parallel()
 	dir, sha := cherryPickConflictFixtureCLI(t)
 	var out, errb bytes.Buffer
 	code := Run(dir, []string{"cherry-pick", sha}, strings.NewReader(""), &out, &errb, "")
@@ -75,6 +77,7 @@ func TestCherryPickConflictUnansweredNonTTY(t *testing.T) {
 }
 
 func TestCherryPickConflictAbortFlag(t *testing.T) {
+	t.Parallel()
 	dir, sha := cherryPickConflictFixtureCLI(t)
 	var out, errb bytes.Buffer
 	code := Run(dir, []string{"cherry-pick", "--on-conflict=abort", sha}, strings.NewReader(""), &out, &errb, "")
@@ -88,6 +91,7 @@ func TestCherryPickConflictAbortFlag(t *testing.T) {
 }
 
 func TestCherryPickConflictKeepFlag(t *testing.T) {
+	t.Parallel()
 	dir, sha := cherryPickConflictFixtureCLI(t)
 	var out, errb bytes.Buffer
 	code := Run(dir, []string{"cherry-pick", "--on-conflict=keep", sha}, strings.NewReader(""), &out, &errb, "")
@@ -100,6 +104,7 @@ func TestCherryPickConflictKeepFlag(t *testing.T) {
 }
 
 func TestCherryPickUsageErrors(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	for _, args := range [][]string{
 		{"cherry-pick"},                             // missing commit

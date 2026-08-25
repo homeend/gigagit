@@ -113,6 +113,7 @@ func lineEquals(msg, want string) bool {
 // conflicts → keep-conflicts pauses → resolve + continue → assert the combined
 // message survived.
 func TestSquashReorderConflictContinuePreservesMessage(t *testing.T) {
+	t.Parallel()
 	gg := buildGG(t)
 	dir, repo := sameLineBranch(t, "a", "b", "c") // work=c, work~1=b, work~2=a
 
@@ -140,6 +141,7 @@ func TestSquashReorderConflictContinuePreservesMessage(t *testing.T) {
 // commit (b & d, skipping c), proving the exec-message-after-continue behaviour
 // isn't specific to the oldest commit being a target or to a 3-commit range.
 func TestSquashReorderConflictPreservesMessageMidRange(t *testing.T) {
+	t.Parallel()
 	gg := buildGG(t)
 	dir, repo := sameLineBranch(t, "a", "b", "c", "d") // work=d, work~1=c, work~2=b, work~3=a
 
@@ -166,6 +168,7 @@ func TestSquashReorderConflictPreservesMessageMidRange(t *testing.T) {
 // The abort fork through a squash conflict must leave the branch exactly as it
 // was — original commits, no rebase in progress, nothing half-applied.
 func TestSquashReorderConflictAbortRestoresBranch(t *testing.T) {
+	t.Parallel()
 	gg := buildGG(t)
 	dir, repo := sameLineBranch(t, "a", "b", "c")
 	before := subjects(t, dir, "main..work") // [c b a]
@@ -192,6 +195,7 @@ func TestSquashReorderConflictAbortRestoresBranch(t *testing.T) {
 // — the rebase-conflict decision is never reached (the decider records nothing)
 // and the concatenated message lands without any --continue.
 func TestSquashAdjacentSameLineNeverConflicts(t *testing.T) {
+	t.Parallel()
 	gg := buildGG(t)
 	dir, repo := sameLineBranch(t, "a", "b", "c") // work=c, work~1=b, work~2=a
 

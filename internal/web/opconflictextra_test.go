@@ -114,6 +114,7 @@ func indexBlob(t *testing.T, dir, path string) string {
 // Mark-all is the destructive-sounding one: it stages every conflicted file
 // AS IT STANDS. It must stage all of them — and nothing else.
 func TestOpMarkAllResolvedStagesEveryConflictAndNothingElse(t *testing.T) {
+	t.Parallel()
 	dir := conflictRepo(t, 2)
 	// Two bystanders the op must not touch: a tracked file edited in the
 	// working tree, and an untracked one. "stage everything" would sweep both
@@ -155,6 +156,7 @@ func TestOpMarkAllResolvedStagesEveryConflictAndNothingElse(t *testing.T) {
 // With nothing conflicted the op is refused at build time — a 422 the client
 // can show, not a "success" that staged nothing.
 func TestOpMarkAllResolvedRefusesWhenClean(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	ts := serve(t, New(domain.Open(dir)))
 	code, body := postJSONRaw(t, ts, "/api/op", `{"op":"mark-all-resolved"}`)
@@ -169,6 +171,7 @@ func TestOpMarkAllResolvedRefusesWhenClean(t *testing.T) {
 // Each whole-file action leaves the expected content behind AND stages it, so
 // the conflict actually clears.
 func TestOpResolveConflictWholeFileActions(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		action string
 		want   string
@@ -206,6 +209,7 @@ func TestOpResolveConflictWholeFileActions(t *testing.T) {
 // "mark" is the both-sides "I fixed it in my editor" action: it stages the
 // file untouched, markers and all.
 func TestOpResolveConflictMarkStagesAsIs(t *testing.T) {
+	t.Parallel()
 	dir := conflictRepo(t, 1)
 	write(t, dir, "c1.txt", "hand-merged\n")
 	ts := serve(t, New(domain.Open(dir)))
@@ -229,6 +233,7 @@ func TestOpResolveConflictMarkStagesAsIs(t *testing.T) {
 // A modify/delete conflict offers EXACTLY its three actions — and none of the
 // both-sides ones, which have no meaning when one side has no content.
 func TestConflictActionsForModifyDelete(t *testing.T) {
+	t.Parallel()
 	dir := modifyDeleteRepo(t)
 	st := statusOf(t, dir)
 	var md model.FileStatus
@@ -253,6 +258,7 @@ func TestConflictActionsForModifyDelete(t *testing.T) {
 
 // A both-sides conflict offers exactly the other three.
 func TestConflictActionsForBothSides(t *testing.T) {
+	t.Parallel()
 	dir := conflictRepo(t, 1)
 	st := statusOf(t, dir)
 	var f model.FileStatus
@@ -272,6 +278,7 @@ func TestConflictActionsForBothSides(t *testing.T) {
 // offered — the row should never have been shown, and the server is the
 // backstop that makes a stale page harmless.
 func TestOpResolveConflictRefusesActionOutsideTheClass(t *testing.T) {
+	t.Parallel()
 	dir := modifyDeleteRepo(t)
 	ts := serve(t, New(domain.Open(dir)))
 	code, body := postJSONRaw(t, ts, "/api/op", `{"op":"resolve-conflict","path":"md.txt","mode":"theirs"}`)
@@ -286,6 +293,7 @@ func TestOpResolveConflictRefusesActionOutsideTheClass(t *testing.T) {
 // A path that is not conflicted (already resolved in another tab) is a 422;
 // one git has never heard of is a 404. Neither may resolve anything.
 func TestOpResolveConflictPathGuards(t *testing.T) {
+	t.Parallel()
 	dir := conflictRepo(t, 1)
 	write(t, dir, "plain.txt", "x\n")
 	ts := serve(t, New(domain.Open(dir)))
@@ -306,6 +314,7 @@ func TestOpResolveConflictPathGuards(t *testing.T) {
 
 // The modify/delete "delete" action removes the file and clears the conflict.
 func TestOpResolveConflictDelete(t *testing.T) {
+	t.Parallel()
 	dir := modifyDeleteRepo(t)
 	ts := serve(t, New(domain.Open(dir)))
 	events := readSSE(t, ts, startOpBody(t, ts, `{"op":"resolve-conflict","path":"md.txt","mode":"delete"}`), 30*time.Second)

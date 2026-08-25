@@ -11,6 +11,7 @@ import (
 )
 
 func TestRestoreCurrentBranchResetsAndSnapshotsFirst(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	ctx := context.Background()
 	oldTip, _ := repo.RevParse(ctx, "HEAD")
@@ -45,6 +46,7 @@ func TestRestoreCurrentBranchResetsAndSnapshotsFirst(t *testing.T) {
 }
 
 func TestRestoreDirtyTreeForksAndCancelKeepsState(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	ctx := context.Background()
 	oldTip, _ := repo.RevParse(ctx, "HEAD")
@@ -65,6 +67,7 @@ func TestRestoreDirtyTreeForksAndCancelKeepsState(t *testing.T) {
 }
 
 func TestRestoreOtherBranchMovesRefAndRecreatesDeleted(t *testing.T) {
+	t.Parallel()
 	_, repo := newRepo(t)
 	ctx := context.Background()
 	tip, _ := repo.RevParse(ctx, "HEAD")
@@ -82,6 +85,7 @@ func TestRestoreOtherBranchMovesRefAndRecreatesDeleted(t *testing.T) {
 }
 
 func TestRestoreRefusesBranchCheckedOutElsewhere(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	ctx := context.Background()
 	wt := addWorktree(t, dir, "wt", "wt-elsewhere")
@@ -104,6 +108,7 @@ func TestRestoreRefusesBranchCheckedOutElsewhere(t *testing.T) {
 }
 
 func TestDeleteBranchVersion(t *testing.T) {
+	t.Parallel()
 	_, repo := newRepo(t)
 	ctx := context.Background()
 	tip, _ := repo.RevParse(ctx, "HEAD")

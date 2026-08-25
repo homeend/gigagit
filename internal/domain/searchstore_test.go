@@ -8,6 +8,7 @@ import (
 )
 
 func TestRecordSearchAndSearchHistoryAll(t *testing.T) {
+	t.Parallel()
 	s := New(nil)
 	s.SetSearchStore(searchhist.NewFileStore(t.TempDir()))
 	ctx := context.Background()
@@ -26,6 +27,7 @@ func TestRecordSearchAndSearchHistoryAll(t *testing.T) {
 }
 
 func TestRecordSearchClampsSize(t *testing.T) {
+	t.Parallel()
 	s := New(nil)
 	s.SetSearchStore(searchhist.NewFileStore(t.TempDir()))
 	ctx := context.Background()
@@ -37,6 +39,7 @@ func TestRecordSearchClampsSize(t *testing.T) {
 }
 
 func TestSearchHistoryAllEmptyWhenNothingRecorded(t *testing.T) {
+	t.Parallel()
 	// Pointing SearchStatePath at a temp dir uses it directly, skipping the
 	// git-common-dir resolution (so New(nil)'s nil repo is never touched).
 	old := SearchStatePath

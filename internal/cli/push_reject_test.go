@@ -9,6 +9,7 @@ import (
 )
 
 func TestPushRejectPolicy(t *testing.T) {
+	t.Parallel()
 	cases := map[string]map[string]string{
 		"rebase":           {"push-rejected": "rebase", "rebase-conflict": "keep-conflicts"},
 		"force":            {"push-rejected": "force", "push-force": "force"},
@@ -30,6 +31,7 @@ func TestPushRejectPolicy(t *testing.T) {
 }
 
 func TestPushRejectPolicyRejectsUnknown(t *testing.T) {
+	t.Parallel()
 	if _, err := pushRejectPolicy("merge"); err == nil {
 		t.Fatal("unknown --on-reject value must error")
 	}
@@ -75,6 +77,7 @@ func cloneConflictDiverged(t *testing.T) (clone, origin string) {
 // report the conflict, and leave origin unchanged — never dead-end on an
 // unanswerable rebase-conflict decision.
 func TestPushOnRejectRebaseConflictFailsCleanly(t *testing.T) {
+	t.Parallel()
 	clone, origin := cloneConflictDiverged(t)
 	code, _, stderr := runCLI(t, clone, "push", "--on-reject=rebase")
 	if code == 0 {

@@ -10,6 +10,7 @@ import (
 // user inputs substitute, and — critically — seq counters are PEEKED, never
 // consumed. Canceling a prefill must not burn a number.
 func TestResolvePrefixValuePeeksSeqs(t *testing.T) {
+	t.Parallel()
 	_, svc := newRealRepo(t)
 	ctx := context.Background()
 
@@ -31,6 +32,7 @@ func TestResolvePrefixValuePeeksSeqs(t *testing.T) {
 }
 
 func TestResolvePrefixValueTokens(t *testing.T) {
+	t.Parallel()
 	_, svc := newRealRepo(t)
 	ctx := context.Background()
 
@@ -54,6 +56,7 @@ func TestResolvePrefixValueTokens(t *testing.T) {
 
 // BumpPrefixSeqs consumes the counters, so the next resolve moves on.
 func TestBumpPrefixSeqsAdvances(t *testing.T) {
+	t.Parallel()
 	_, svc := newRealRepo(t)
 	ctx := context.Background()
 
@@ -76,6 +79,7 @@ func TestBumpPrefixSeqsAdvances(t *testing.T) {
 // PrefixUserLabels is the frontends' route to a value's <user:…> labels
 // (internal/template is a layering detail they must not reach for).
 func TestPrefixUserLabels(t *testing.T) {
+	t.Parallel()
 	got := PrefixUserLabels("a/<user:ticket>-<user:who>/<seq:n:2>")
 	if strings.Join(got, ",") != "ticket,who" {
 		t.Errorf("labels = %v", got)

@@ -19,6 +19,7 @@ func bmSvc(t *testing.T) (*Service, *gitexec.FakeRunner) {
 }
 
 func TestBookmarkAddFillsCommittedSHA(t *testing.T) {
+	t.Parallel()
 	svc, f := bmSvc(t)
 	f.SetResponse("git rev-parse blob", gitexec.Result{Stdout: "abc123sha\n"})
 	b, err := svc.BookmarkAdd(context.Background(), model.Bookmark{
@@ -36,6 +37,7 @@ func TestBookmarkAddFillsCommittedSHA(t *testing.T) {
 }
 
 func TestBookmarkBytesCommittedUsesCatFile(t *testing.T) {
+	t.Parallel()
 	svc, f := bmSvc(t)
 	f.SetResponse("git cat-file blob", gitexec.Result{Stdout: "frozen\n"})
 	got, err := svc.BookmarkBytes(context.Background(), model.Bookmark{
@@ -50,6 +52,7 @@ func TestBookmarkBytesCommittedUsesCatFile(t *testing.T) {
 }
 
 func TestBookmarkBytesStagedUsesShowInDir(t *testing.T) {
+	t.Parallel()
 	svc, f := bmSvc(t)
 	f.SetResponse("git -C show", gitexec.Result{Stdout: "idx\n"})
 	if _, err := svc.BookmarkBytes(context.Background(), model.Bookmark{
@@ -63,6 +66,7 @@ func TestBookmarkBytesStagedUsesShowInDir(t *testing.T) {
 }
 
 func TestBookmarkListAndRemove(t *testing.T) {
+	t.Parallel()
 	svc, _ := bmSvc(t)
 	b, _ := svc.BookmarkAdd(context.Background(), model.Bookmark{
 		State: model.StateUnstaged, Worktree: "/wt", Path: "p.go",
@@ -79,6 +83,7 @@ func TestBookmarkListAndRemove(t *testing.T) {
 }
 
 func TestBookmarkAddCommitSkipsBlobSHA(t *testing.T) {
+	t.Parallel()
 	svc, f := bmSvc(t) // FakeRunner has NO rev-parse response; calling it would not fill SHA
 	b, err := svc.BookmarkAdd(context.Background(), model.Bookmark{
 		State: model.StateCommitted, Commit: "c0ffee", Path: "",
@@ -98,6 +103,7 @@ func TestBookmarkAddCommitSkipsBlobSHA(t *testing.T) {
 }
 
 func TestBookmarkBytesCommitErrors(t *testing.T) {
+	t.Parallel()
 	svc, f := bmSvc(t)
 	_, err := svc.BookmarkBytes(context.Background(), model.Bookmark{
 		State: model.StateCommitted, Commit: "c0ffee", Path: "", // commit bookmark

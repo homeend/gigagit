@@ -27,6 +27,7 @@ func cliBranchExists(t *testing.T, dir, name string) bool {
 }
 
 func TestBranchCreate(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	var out, errb bytes.Buffer
 	if code := Run(dir, []string{"branch", "create", "feat/x"}, strings.NewReader(""), &out, &errb, ""); code != 0 {
@@ -41,6 +42,7 @@ func TestBranchCreate(t *testing.T) {
 }
 
 func TestBranchRename(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	gitRun(t, dir, "branch", "old")
 
@@ -60,6 +62,7 @@ func TestBranchRename(t *testing.T) {
 }
 
 func TestBranchRenameUsage(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	var out, errb bytes.Buffer
 	if code := Run(dir, []string{"branch", "rename", "only-one"}, strings.NewReader(""), &out, &errb, ""); code != 2 {
@@ -68,6 +71,7 @@ func TestBranchRenameUsage(t *testing.T) {
 }
 
 func TestBranchCreateFromStartPoint(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	gitRun(t, dir, "branch", "base")
 	gitRun(t, dir, "commit", "--allow-empty", "-m", "advance")
@@ -84,6 +88,7 @@ func TestBranchCreateFromStartPoint(t *testing.T) {
 }
 
 func TestBranchCreateUsageErrors(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	var out, errb bytes.Buffer
 	if code := Run(dir, []string{"branch", "create"}, strings.NewReader(""), &out, &errb, ""); code != 2 {
@@ -98,6 +103,7 @@ func TestBranchCreateUsageErrors(t *testing.T) {
 }
 
 func TestBranchDeleteMergedNeedsNoPrompt(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	gitRun(t, dir, "branch", "merged")
 	var out, errb bytes.Buffer
@@ -123,6 +129,7 @@ func unmerged(t *testing.T, dir, name string) {
 }
 
 func TestBranchDeleteUnmergedNonTTYExits1WithOptions(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	unmerged(t, dir, "risky")
 	var out, errb bytes.Buffer
@@ -139,6 +146,7 @@ func TestBranchDeleteUnmergedNonTTYExits1WithOptions(t *testing.T) {
 }
 
 func TestBranchDeleteUnmergedForce(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	unmerged(t, dir, "risky2")
 	var out, errb bytes.Buffer
@@ -151,6 +159,7 @@ func TestBranchDeleteUnmergedForce(t *testing.T) {
 }
 
 func TestBranchDeleteCurrentBranchFails(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	var out, errb bytes.Buffer
 	if code := Run(dir, []string{"branch", "delete", "main"}, strings.NewReader(""), &out, &errb, ""); code != 1 {
@@ -162,6 +171,7 @@ func TestBranchDeleteCurrentBranchFails(t *testing.T) {
 }
 
 func TestBranchCurrent(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	code, out, errb := runCLI(t, dir, "branch", "current")
 	if code != 0 {
@@ -173,6 +183,7 @@ func TestBranchCurrent(t *testing.T) {
 }
 
 func TestBranchCurrentDetached(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	gitIn(t, dir, "checkout", "--detach", "HEAD")
 	code, out, _ := runCLI(t, dir, "branch", "current")
@@ -186,6 +197,7 @@ func TestBranchCurrentDetached(t *testing.T) {
 }
 
 func TestBranchLs(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	gitIn(t, dir, "branch", "feat-x")
 	code, out, _ := runCLI(t, dir, "branch", "ls")
@@ -198,6 +210,7 @@ func TestBranchLs(t *testing.T) {
 }
 
 func TestBranchLsRejectsExtraArgs(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	code, _, errb := runCLI(t, dir, "branch", "ls", "--merged")
 	if code != 2 {
@@ -206,6 +219,7 @@ func TestBranchLsRejectsExtraArgs(t *testing.T) {
 }
 
 func TestBranchCurrentRejectsExtraArgs(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	code, _, errb := runCLI(t, dir, "branch", "current", "extra")
 	if code != 2 {

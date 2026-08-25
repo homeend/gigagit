@@ -6,6 +6,7 @@ import (
 )
 
 func TestRefVerbs(t *testing.T) {
+	t.Parallel()
 	_, runner := newTestRepo(t)
 	r := &Repo{Runner: runner}
 	head, err := r.RevParse(context.Background(), "HEAD")

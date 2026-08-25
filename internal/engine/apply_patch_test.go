@@ -67,6 +67,7 @@ func mailboxFor(t *testing.T, dir, rev string) string {
 // TestApplyPatchCommitsRoundTrip: export a commit, rewind, re-apply with
 // ApplyModeCommits — the commit is recreated with its message preserved.
 func TestApplyPatchCommitsRoundTrip(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	writeCommit(t, dir, "foo.txt", "one\n", "add foo")
 	sha := writeCommit(t, dir, "foo.txt", "one\ntwo\n", "extend foo")
@@ -92,6 +93,7 @@ func TestApplyPatchCommitsRoundTrip(t *testing.T) {
 // TestApplyPatchWorkingTreeClean: the same patch in working-tree mode lands
 // unstaged, no new commit.
 func TestApplyPatchWorkingTreeClean(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	writeCommit(t, dir, "foo.txt", "one\n", "add foo")
 	sha := writeCommit(t, dir, "foo.txt", "one\ntwo\n", "extend foo")
@@ -126,6 +128,7 @@ func TestApplyPatchWorkingTreeClean(t *testing.T) {
 // "lands unstaged" contract. Also pins the surgical-unstage property: a
 // pre-existing staged change to an UNRELATED file must survive still staged.
 func TestApplyPatchWorkingTreeDriftFallbackUnstaged(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	writeCommit(t, dir, "file.txt", "one\ntwo\nthree\nfour\nfive\n", "base")
 	sha := writeCommit(t, dir, "file.txt", "one\ntwo\nTHREE\nfour\nfive\n", "change three")
@@ -185,6 +188,7 @@ func TestApplyPatchWorkingTreeDriftFallbackUnstaged(t *testing.T) {
 // doesn't confuse it into reporting zero paths (which would turn a
 // successful mailbox apply into a false "applied but left staged" error).
 func TestApplyPatchWorkingTreeDriftFallbackUnstagedMailbox(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	writeCommit(t, dir, "file.txt", "one\ntwo\nthree\nfour\nfive\n", "base")
 	sha := writeCommit(t, dir, "file.txt", "one\ntwo\nTHREE\nfour\nfive\n", "change three")
@@ -217,6 +221,7 @@ func TestApplyPatchWorkingTreeDriftFallbackUnstagedMailbox(t *testing.T) {
 // TestApplyPatchAmConflictAtomic: a conflicting mailbox in Commits mode rolls
 // back completely — HEAD unchanged, no rebase-apply left, worktree clean.
 func TestApplyPatchAmConflictAtomic(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	writeCommit(t, dir, "foo.txt", "base\n", "base")
 	sha := writeCommit(t, dir, "foo.txt", "patched\n", "patch side")
@@ -252,6 +257,7 @@ func TestApplyPatchAmConflictAtomic(t *testing.T) {
 // AmMailbox and refuses outright, so the rollback logic never touches an am
 // it didn't start.
 func TestApplyPatchRefusesPreExistingAm(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	// Build a linear history: base -> change one.txt (conflicting patch) ->
 	// add two.txt (an unrelated, later, DIFFERENT patch).
@@ -291,6 +297,7 @@ func TestApplyPatchRefusesPreExistingAm(t *testing.T) {
 // leaves 3-way conflict markers + unmerged entries, returns Result{Changed}
 // AND an error (the SmartMerge keep-conflicts shape); HEAD unchanged.
 func TestApplyPatchWorkingTreeConflict(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	writeCommit(t, dir, "foo.txt", "base\n", "base")
 	sha := writeCommit(t, dir, "foo.txt", "patched\n", "patch side")
@@ -322,6 +329,7 @@ func TestApplyPatchWorkingTreeConflict(t *testing.T) {
 // TestApplyPatchAutoMailboxDecision: Auto + mailbox forks via
 // apply_patch.mode; each answer routes to its mode; an unknown answer cancels.
 func TestApplyPatchAutoMailboxDecision(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	writeCommit(t, dir, "foo.txt", "one\n", "add foo")
 	sha := writeCommit(t, dir, "foo.txt", "one\ntwo\n", "extend foo")
@@ -366,6 +374,7 @@ func TestApplyPatchAutoMailboxDecision(t *testing.T) {
 // (then-)last option "commits", and the modal's esc key ran `git am` instead
 // of cancelling.
 func TestApplyPatchAutoMailboxAbortAnswer(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	writeCommit(t, dir, "foo.txt", "one\n", "add foo")
 	sha := writeCommit(t, dir, "foo.txt", "one\ntwo\n", "extend foo")
@@ -391,6 +400,7 @@ func TestApplyPatchAutoMailboxAbortAnswer(t *testing.T) {
 // present, so the decision request must offer it explicitly rather than
 // relying on it happening to be last.
 func TestApplyPatchAutoMailboxDecisionOptionsIncludeAbort(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	writeCommit(t, dir, "foo.txt", "one\n", "add foo")
 	sha := writeCommit(t, dir, "foo.txt", "one\ntwo\n", "extend foo")
@@ -421,6 +431,7 @@ func TestApplyPatchAutoMailboxDecisionOptionsIncludeAbort(t *testing.T) {
 // working tree WITHOUT consulting the decider (no Decider in deps — a
 // decision attempt would fail the op).
 func TestApplyPatchAutoPlainDiffNoDecision(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	writeCommit(t, dir, "foo.txt", "one\n", "add foo")
 	writeCommit(t, dir, "foo.txt", "one\ntwo\n", "extend foo")
@@ -442,6 +453,7 @@ func TestApplyPatchAutoPlainDiffNoDecision(t *testing.T) {
 // TestApplyPatchCommitsOnPlainDiff: --am semantics on a bare diff is a typed
 // refusal (git am has no author/message to work with).
 func TestApplyPatchCommitsOnPlainDiff(t *testing.T) {
+	t.Parallel()
 	_, repo := newRepo(t)
 	p := filepath.Join(t.TempDir(), "plain.diff")
 	os.WriteFile(p, []byte("diff --git a/x b/x\n"), 0o644)
@@ -454,6 +466,7 @@ func TestApplyPatchCommitsOnPlainDiff(t *testing.T) {
 
 // TestApplyPatchMissingFile: a bad path errors before any git runs.
 func TestApplyPatchMissingFile(t *testing.T) {
+	t.Parallel()
 	_, repo := newRepo(t)
 	_, err := ApplyPatch{Path: "/nonexistent/x.patch", Mode: ApplyModeWorkingTree}.Run(
 		context.Background(), OpDeps{Repo: repo})

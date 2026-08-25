@@ -11,6 +11,7 @@ import (
 )
 
 func TestRestoreWorktreeArgv(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git restore --worktree", gitexec.Result{})
 	r := &Repo{Runner: f}
@@ -24,6 +25,7 @@ func TestRestoreWorktreeArgv(t *testing.T) {
 }
 
 func TestRestoreWorktreeArgvAll(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git restore --worktree", gitexec.Result{})
 	r := &Repo{Runner: f}
@@ -37,6 +39,7 @@ func TestRestoreWorktreeArgvAll(t *testing.T) {
 }
 
 func TestCleanUntrackedArgvPaths(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git clean -f -d", gitexec.Result{})
 	r := &Repo{Runner: f}
@@ -50,6 +53,7 @@ func TestCleanUntrackedArgvPaths(t *testing.T) {
 }
 
 func TestCleanUntrackedArgvAll(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git clean -f -d", gitexec.Result{})
 	r := &Repo{Runner: f}
@@ -64,6 +68,7 @@ func TestCleanUntrackedArgvAll(t *testing.T) {
 
 // Real-git: restore reverts an unstaged edit but keeps a previously-staged hunk.
 func TestRestoreWorktreeKeepsStaged(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 	os.WriteFile(filepath.Join(dir, "README.md"), []byte("staged\n"), 0o644)
@@ -81,6 +86,7 @@ func TestRestoreWorktreeKeepsStaged(t *testing.T) {
 
 // Real-git: clean removes a new untracked file AND a new untracked directory.
 func TestCleanUntrackedRemovesFileAndDir(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 	os.WriteFile(filepath.Join(dir, "new.txt"), []byte("x\n"), 0o644)

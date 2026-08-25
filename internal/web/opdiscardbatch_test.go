@@ -14,6 +14,7 @@ import (
 // TestOpDiscardPaths discards a marked set in ONE op: tracked edits revert,
 // untracked files are deleted, and an unmarked dirty file is untouched.
 func TestOpDiscardPaths(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1) // f.txt committed as "content 1\n"
 	for _, f := range []string{"a.txt", "b.txt"} {
 		if err := os.WriteFile(filepath.Join(dir, f), []byte("keep\n"), 0o644); err != nil {
@@ -57,6 +58,7 @@ func TestOpDiscardPaths(t *testing.T) {
 // per-file rules, applied all-or-nothing so a stale marked set cannot
 // half-discard.
 func TestOpDiscardPathsRefusals(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("dirty\n"), 0o644); err != nil {
 		t.Fatal(err)

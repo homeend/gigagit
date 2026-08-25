@@ -13,6 +13,7 @@ import (
 // (loadConflictDoc 422s it). The whole-file actions are exactly what is left,
 // so they must work on one — they never look inside the file.
 func TestOpResolveConflictBinaryFile(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	gitRun(t, dir, "init", "-b", "main")
 	if err := os.WriteFile(filepath.Join(dir, "b.bin"), []byte{0, 1, 2, 0, 3}, 0o644); err != nil {

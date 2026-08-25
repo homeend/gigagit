@@ -25,6 +25,7 @@ func sawArg(f *gitexec.FakeRunner, name, arg string) bool {
 }
 
 func TestResolveBytesCommitUsesShow(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git show", gitexec.Result{Stdout: "file-at-commit\n"})
 	svc := New(&git.Repo{Runner: f})
@@ -44,6 +45,7 @@ func TestResolveBytesCommitUsesShow(t *testing.T) {
 }
 
 func TestResolveBytesStagedShowsIndexBlob(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git show", gitexec.Result{Stdout: "index-blob\n"})
 	svc := New(&git.Repo{Runner: f})

@@ -30,6 +30,7 @@ func discardConflictRepo(t *testing.T) string {
 }
 
 func TestDiscardAllYes(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	os.WriteFile(filepath.Join(dir, "README.md"), []byte("dirty\n"), 0o644)
 	os.WriteFile(filepath.Join(dir, "new.txt"), []byte("x\n"), 0o644)
@@ -47,6 +48,7 @@ func TestDiscardAllYes(t *testing.T) {
 }
 
 func TestDiscardPathsYes(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	os.WriteFile(filepath.Join(dir, "README.md"), []byte("dirty\n"), 0o644)
 	os.WriteFile(filepath.Join(dir, "new.txt"), []byte("x\n"), 0o644)
@@ -64,6 +66,7 @@ func TestDiscardPathsYes(t *testing.T) {
 }
 
 func TestDiscardBareUsage(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	code, _, _ := runCLI(t, dir, "discard")
 	if code != 2 {
@@ -72,6 +75,7 @@ func TestDiscardBareUsage(t *testing.T) {
 }
 
 func TestDiscardAllNoYesNonInteractive(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	os.WriteFile(filepath.Join(dir, "README.md"), []byte("dirty\n"), 0o644)
 	// runCLI feeds an empty, non-TTY stdin, so without -y this must refuse.
@@ -85,6 +89,7 @@ func TestDiscardAllNoYesNonInteractive(t *testing.T) {
 }
 
 func TestDiscardAllWithPathsRejected(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	code, _, _ := runCLI(t, dir, "discard", "--all", "README.md")
 	if code != 2 {
@@ -93,6 +98,7 @@ func TestDiscardAllWithPathsRejected(t *testing.T) {
 }
 
 func TestDiscardUnmatchedPath(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	code, _, _ := runCLI(t, dir, "discard", "-y", "nope.txt")
 	if code != 2 {
@@ -101,6 +107,7 @@ func TestDiscardUnmatchedPath(t *testing.T) {
 }
 
 func TestDiscardConflictedPathRejected(t *testing.T) {
+	t.Parallel()
 	dir := discardConflictRepo(t)
 	code, _, _ := runCLI(t, dir, "discard", "-y", "c.txt")
 	if code != 2 {
@@ -109,6 +116,7 @@ func TestDiscardConflictedPathRejected(t *testing.T) {
 }
 
 func TestDiscardAllRefusesOnConflict(t *testing.T) {
+	t.Parallel()
 	dir := discardConflictRepo(t)
 	code, _, _ := runCLI(t, dir, "discard", "--all", "-y")
 	if code != 2 {
@@ -121,6 +129,7 @@ func TestDiscardAllRefusesOnConflict(t *testing.T) {
 // subdirectory must still delete untracked files at the repo root (the op
 // anchors clean to ":/").
 func TestDiscardAllFromSubdirCleansRepoWide(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	os.WriteFile(filepath.Join(dir, "rootjunk.txt"), []byte("r\n"), 0o644)
 	sub := filepath.Join(dir, "sub")
@@ -138,6 +147,7 @@ func TestDiscardAllFromSubdirCleansRepoWide(t *testing.T) {
 }
 
 func TestConfirmDiscard(t *testing.T) {
+	t.Parallel()
 	var out strings.Builder
 	if !confirmDiscard("? ", strings.NewReader("y\n"), &out) {
 		t.Fatal(`"y" should confirm`)

@@ -22,6 +22,7 @@ type repoResp struct {
 }
 
 func TestRerootToWorktree(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 2)
 	wt := addWorktree(t, dir, "side")
 	srv := New(domain.Open(dir))
@@ -49,6 +50,7 @@ func TestRerootToWorktree(t *testing.T) {
 }
 
 func TestRerootToMRURepo(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	other := newRepoDir(t, 1)
 	srv := New(domain.Open(dir))
@@ -71,6 +73,7 @@ func TestRerootToMRURepo(t *testing.T) {
 // lane and fails PREFLIGHT (409) — the old root must keep serving. (Was a
 // 404 "unknown target" before the custom-path lane existed.)
 func TestRerootUnknownTarget(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	srv := New(domain.Open(dir))
 	ts := serve(t, srv)
@@ -88,6 +91,7 @@ func TestRerootUnknownTarget(t *testing.T) {
 // The palette's "open repo (path)" lane: a raw filesystem path outside the
 // worktree/MRU allowlist re-roots when it IS a repository.
 func TestRerootCustomPath(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	other := newRepoDir(t, 1)
 	srv := New(domain.Open(dir))
@@ -105,6 +109,7 @@ func TestRerootCustomPath(t *testing.T) {
 
 // A leading dash never reaches git argv through the custom lane.
 func TestRerootDashPathRefused(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	srv := New(domain.Open(dir))
 	ts := serve(t, srv)
@@ -117,6 +122,7 @@ func TestRerootDashPathRefused(t *testing.T) {
 }
 
 func TestExpandHome(t *testing.T) {
+	t.Parallel()
 	cases := []struct{ path, home, want string }{
 		{"~", "/home/u", "/home/u"},
 		{"~/r", "/home/u", filepath.Join("/home/u", "r")},
@@ -133,6 +139,7 @@ func TestExpandHome(t *testing.T) {
 }
 
 func TestRerootRefusedWhileOpLive(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 2)
 	wt := addWorktree(t, dir, "side")
 	gitRun(t, dir, "branch", "feature")
@@ -153,6 +160,7 @@ func TestRerootRefusedWhileOpLive(t *testing.T) {
 }
 
 func TestRerootBrokenTargetKeepsServing(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	notARepo := t.TempDir() // exists (survives repos.Load pruning) but is no repository
 	srv := New(domain.Open(dir))
@@ -173,6 +181,7 @@ func TestRerootBrokenTargetKeepsServing(t *testing.T) {
 }
 
 func TestRerootDropsOldOpRecord(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 2)
 	wt := addWorktree(t, dir, "side")
 	ts := serve(t, New(domain.Open(dir)))
@@ -193,6 +202,7 @@ func TestRerootDropsOldOpRecord(t *testing.T) {
 }
 
 func TestRerootWriteGuard(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	ts := serve(t, New(domain.Open(dir)))
 

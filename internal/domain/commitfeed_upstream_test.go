@@ -11,6 +11,7 @@ import (
 // a remote-tracking ref (origin/main is ahead of local main) is included in the
 // feed when Upstreams is set, and absent when it is not.
 func TestCommitFeedWalksUpstreamWhenBehind(t *testing.T) {
+	t.Parallel()
 	// newRealRepo (compare_test.go) initialises a 1-commit main + returns dir+svc.
 	dir, svc := newRealRepo(t)
 

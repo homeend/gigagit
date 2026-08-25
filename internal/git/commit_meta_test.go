@@ -15,6 +15,7 @@ import (
 // (and any other surface handed a bare sha): author, author time, subject and
 // ref decorations, with no walk.
 func TestCommitMetaReturnsAuthorTimeAndSubject(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 
@@ -55,6 +56,7 @@ func TestCommitMetaReturnsAuthorTimeAndSubject(t *testing.T) {
 // A tag name resolves like any other rev, and its decorations come back so the
 // caller can show them.
 func TestCommitMetaResolvesATagAndCarriesRefs(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 	cmd := exec.Command("git", "tag", "v1")
@@ -85,6 +87,7 @@ func TestCommitMetaResolvesATagAndCarriesRefs(t *testing.T) {
 // A rev that resolves to nothing is an error, not a zero Commit that would
 // render as an empty header.
 func TestCommitMetaUnknownRevIsAnError(t *testing.T) {
+	t.Parallel()
 	_, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 	if _, err := repo.CommitMeta(context.Background(), "0123456789012345678901234567890123456789"); err == nil {
@@ -95,6 +98,7 @@ func TestCommitMetaUnknownRevIsAnError(t *testing.T) {
 // One verb is one invocation: the header lookup must not fan out into several
 // git calls on the files-view open path.
 func TestCommitMetaIsOneInvocation(t *testing.T) {
+	t.Parallel()
 	fake := gitexec.NewFakeRunner()
 	fake.SetResponse("git log", gitexec.Result{
 		Stdout: "abc\x1f\x1falice\x1f981173106\x1fsubject\x1f\x1f\n",

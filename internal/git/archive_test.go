@@ -9,6 +9,7 @@ import (
 )
 
 func TestArchiveFilesSubset(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 
@@ -43,6 +44,7 @@ func TestArchiveFilesSubset(t *testing.T) {
 }
 
 func TestArchiveFilesEmptyPathsErrors(t *testing.T) {
+	t.Parallel()
 	_, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 

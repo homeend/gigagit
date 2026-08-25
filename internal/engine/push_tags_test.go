@@ -26,6 +26,7 @@ func pushedTagsArgv(f *gitexec.FakeRunner) ([]string, bool) {
 }
 
 func TestPushTagsOp(t *testing.T) {
+	t.Parallel()
 	repo, f := pushTagsFakeRepo()
 	res, err := PushTags{Remote: "origin", Names: []string{"a", "b"}}.Run(
 		context.Background(), OpDeps{Repo: repo})
@@ -54,6 +55,7 @@ func TestPushTagsOp(t *testing.T) {
 }
 
 func TestPushTagsOpEmpty(t *testing.T) {
+	t.Parallel()
 	repo, f := pushTagsFakeRepo()
 	res, err := PushTags{Remote: "origin", Names: nil}.Run(
 		context.Background(), OpDeps{Repo: repo})
@@ -69,6 +71,7 @@ func TestPushTagsOpEmpty(t *testing.T) {
 }
 
 func TestPushTagsOpAutoRemote(t *testing.T) {
+	t.Parallel()
 	// Remote "" with a single configured remote → resolves automatically.
 	repo, f := pushTagsFakeRepo()
 	res, err := PushTags{Remote: "", Names: []string{"v1.0.0"}}.Run(

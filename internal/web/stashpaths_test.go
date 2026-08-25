@@ -40,6 +40,7 @@ func fileBody(t *testing.T, dir, name string) string {
 // The headline: stashing a SUBSET takes exactly those files and leaves the
 // rest dirty. That is the whole reason the checklist exists.
 func TestOpStashPathsStashesTheSubsetOnly(t *testing.T) {
+	t.Parallel()
 	dir := dirtyRepo(t)
 	ts := serve(t, New(domain.Open(dir)))
 
@@ -65,6 +66,7 @@ func TestOpStashPathsStashesTheSubsetOnly(t *testing.T) {
 // An untracked file needs -u, which rides on the selection rather than a
 // second question: picking one is asking for it.
 func TestOpStashPathsIncludesUntrackedWhenPicked(t *testing.T) {
+	t.Parallel()
 	dir := dirtyRepo(t)
 	ts := serve(t, New(domain.Open(dir)))
 
@@ -84,6 +86,7 @@ func TestOpStashPathsIncludesUntrackedWhenPicked(t *testing.T) {
 // An empty message falls back to git's own phrasing rather than stashing
 // under a blank name.
 func TestOpStashPathsDefaultsTheMessage(t *testing.T) {
+	t.Parallel()
 	dir := dirtyRepo(t)
 	ts := serve(t, New(domain.Open(dir)))
 
@@ -99,6 +102,7 @@ func TestOpStashPathsDefaultsTheMessage(t *testing.T) {
 // A path with nothing unstaged is refused for the WHOLE operation. Dropping
 // it quietly would stash something other than what the list showed.
 func TestOpStashPathsRefusesANonCandidate(t *testing.T) {
+	t.Parallel()
 	dir := dirtyRepo(t)
 	gitRun(t, dir, "add", "two.txt") // fully staged: nothing left in the working tree
 	ts := serve(t, New(domain.Open(dir)))
@@ -118,6 +122,7 @@ func TestOpStashPathsRefusesANonCandidate(t *testing.T) {
 // A conflicted path is never stashable: git refuses it, and stashing half a
 // conflict is never what was meant.
 func TestOpStashPathsRefusesConflictedPath(t *testing.T) {
+	t.Parallel()
 	dir := conflictRepo(t, 1)
 	ts := serve(t, New(domain.Open(dir)))
 
@@ -132,6 +137,7 @@ func TestOpStashPathsRefusesConflictedPath(t *testing.T) {
 
 // No selection is a client bug, answered as one.
 func TestOpStashPathsRequiresASelection(t *testing.T) {
+	t.Parallel()
 	dir := dirtyRepo(t)
 	ts := serve(t, New(domain.Open(dir)))
 	code, _ := postJSONRaw(t, ts, "/api/op", `{"op":"stash-paths","paths":[]}`)

@@ -29,6 +29,7 @@ func countSpan(f *gitexec.FakeRunner, name string) int {
 const tagsV1Line = "v1\x00tag\x00abc123\x00def456\x00release one\x001700000000\n"
 
 func TestTagsCacheServedFromProbeWhenUnchanged(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse(tagsFPSpan, gitexec.Result{Stdout: "refs/tags/v1\x00aaa\n"})
 	f.SetResponse(tagsFullSpan, gitexec.Result{Stdout: tagsV1Line})
@@ -60,6 +61,7 @@ func TestTagsCacheServedFromProbeWhenUnchanged(t *testing.T) {
 }
 
 func TestTagsCacheInvalidatesOnFingerprintChange(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	var probes, fulls atomic.Int32
 	f.SetHandler(tagsFPSpan, func(ctx context.Context, argv []string) (gitexec.Result, error) {
@@ -98,6 +100,7 @@ func TestTagsCacheInvalidatesOnFingerprintChange(t *testing.T) {
 }
 
 func TestTagsProbeErrorFallsBackToFullRead(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetError(tagsFPSpan, errors.New("probe boom"))
 	f.SetResponse(tagsFullSpan, gitexec.Result{Stdout: tagsV1Line})
@@ -122,6 +125,7 @@ func TestTagsProbeErrorFallsBackToFullRead(t *testing.T) {
 // TestTagsCacheZeroTags pins that an empty repo caches too: ParseTags returns a
 // nil slice, and the cache must treat "read, and there were none" as a hit.
 func TestTagsCacheZeroTags(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse(tagsFPSpan, gitexec.Result{Stdout: ""})
 	f.SetResponse(tagsFullSpan, gitexec.Result{Stdout: ""})
@@ -145,6 +149,7 @@ func TestTagsCacheZeroTags(t *testing.T) {
 // TestTagsCacheRealGit exercises the whole path against a real repository:
 // adds and deletes must invalidate, unchanged state must not go stale.
 func TestTagsCacheRealGit(t *testing.T) {
+	t.Parallel()
 	dir := cleanDir(t)
 	svc := svcAt(dir)
 	ctx := context.Background()

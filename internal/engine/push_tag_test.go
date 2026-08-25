@@ -26,6 +26,7 @@ func pushedToRemote(f *gitexec.FakeRunner) (string, bool) {
 }
 
 func TestPushTagExplicitRemote(t *testing.T) {
+	t.Parallel()
 	repo, f := pushTagFakeRepo("origin\nbackup\n")
 	res, err := PushTag{Name: "v1.0.0", Remote: "backup"}.Run(context.Background(), OpDeps{Repo: repo})
 	if err != nil || !res.Changed {
@@ -37,6 +38,7 @@ func TestPushTagExplicitRemote(t *testing.T) {
 }
 
 func TestPushTagSingleRemoteAuto(t *testing.T) {
+	t.Parallel()
 	repo, f := pushTagFakeRepo("origin\n")
 	if _, err := (PushTag{Name: "v1.0.0"}).Run(context.Background(), OpDeps{Repo: repo}); err != nil {
 		t.Fatal(err)
@@ -47,6 +49,7 @@ func TestPushTagSingleRemoteAuto(t *testing.T) {
 }
 
 func TestPushTagMultiRemoteDecider(t *testing.T) {
+	t.Parallel()
 	repo, f := pushTagFakeRepo("origin\nbackup\n")
 	_, err := PushTag{Name: "v1.0.0"}.Run(context.Background(),
 		OpDeps{Repo: repo, Decider: MapDecider{"push-tag-remote": "backup"}})
@@ -59,6 +62,7 @@ func TestPushTagMultiRemoteDecider(t *testing.T) {
 }
 
 func TestPushTagAbort(t *testing.T) {
+	t.Parallel()
 	repo, f := pushTagFakeRepo("origin\nbackup\n")
 	res, err := PushTag{Name: "v1.0.0"}.Run(context.Background(),
 		OpDeps{Repo: repo, Decider: MapDecider{"push-tag-remote": "abort"}})
@@ -74,6 +78,7 @@ func TestPushTagAbort(t *testing.T) {
 }
 
 func TestPushTagNoRemotes(t *testing.T) {
+	t.Parallel()
 	repo, _ := pushTagFakeRepo("")
 	if _, err := (PushTag{Name: "v1.0.0"}).Run(context.Background(), OpDeps{Repo: repo}); err == nil {
 		t.Fatal("no remotes must error")
@@ -81,6 +86,7 @@ func TestPushTagNoRemotes(t *testing.T) {
 }
 
 func TestPushTagRequiresName(t *testing.T) {
+	t.Parallel()
 	repo, _ := pushTagFakeRepo("origin\n")
 	if _, err := (PushTag{}).Run(context.Background(), OpDeps{Repo: repo}); err == nil {
 		t.Fatal("empty name must error")

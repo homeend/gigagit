@@ -3,6 +3,7 @@ package git
 import "testing"
 
 func TestParseTags(t *testing.T) {
+	t.Parallel()
 	// fields: name \x00 objecttype \x00 objectname:short \x00 *objectname:short
 	//         \x00 contents:subject \x00 creatordate:unix
 	data := []byte(

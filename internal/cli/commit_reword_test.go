@@ -8,6 +8,7 @@ import (
 )
 
 func TestCommitRewordCLIHead(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t) // single commit "initial" (HEAD == root)
 	var out, errb bytes.Buffer
 	code := Run(dir, []string{"commit", "reword", "HEAD", "-m", "new message"}, strings.NewReader(""), &out, &errb, "")
@@ -26,6 +27,7 @@ func TestCommitRewordCLIHead(t *testing.T) {
 }
 
 func TestCommitRewordCLIUsage(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	var out, errb bytes.Buffer
 	if code := Run(dir, []string{"commit", "reword", "HEAD"}, strings.NewReader(""), &out, &errb, ""); code != 2 {

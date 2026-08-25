@@ -7,6 +7,7 @@ import (
 )
 
 func TestShellCaptureRunnerCapturesStdoutStreamsStderr(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip()
 	}
@@ -29,6 +30,7 @@ func TestShellCaptureRunnerCapturesStdoutStreamsStderr(t *testing.T) {
 }
 
 func TestShellCaptureRunnerNonZeroExitReturnsErr(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip()
 	}
@@ -50,6 +52,7 @@ func TestShellCaptureRunnerNonZeroExitReturnsErr(t *testing.T) {
 // clean (exit 0) ErrWaitDelay as success, not discard the good output as a
 // failure. Takes ~3s (the real WaitDelay), hence -short gating.
 func TestShellCaptureRunnerCleanExitPastWaitDelaySucceeds(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip()
 	}

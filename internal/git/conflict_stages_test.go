@@ -56,6 +56,7 @@ func conflictedRepo(t *testing.T, gitCfg ...string) (string, gitexec.Runner) {
 }
 
 func TestUnmergedStagesReadsAllThree(t *testing.T) {
+	t.Parallel()
 	dir, runner := conflictedRepo(t)
 	repo := &Repo{Runner: runner}
 	base, cur, inc, err := repo.UnmergedStages(context.Background(), "f.txt")
@@ -76,6 +77,7 @@ func TestUnmergedStagesReadsAllThree(t *testing.T) {
 }
 
 func TestUnmergedStagesRejectsNonUnmerged(t *testing.T) {
+	t.Parallel()
 	_, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 	if _, _, _, err := repo.UnmergedStages(context.Background(), "README.md"); err == nil {
@@ -84,6 +86,7 @@ func TestUnmergedStagesRejectsNonUnmerged(t *testing.T) {
 }
 
 func TestUnmergedStagesSmudgesCRLF(t *testing.T) {
+	t.Parallel()
 	// autocrlf=true: blobs stay LF, checkout converts to CRLF. The stages must
 	// come back CONVERTED or a later resolution rewrites the file's endings.
 	_, runner := conflictedRepo(t, "core.autocrlf", "true")
@@ -98,6 +101,7 @@ func TestUnmergedStagesSmudgesCRLF(t *testing.T) {
 }
 
 func TestRegenerateConflictOversizedMarkers(t *testing.T) {
+	t.Parallel()
 	_, runner := conflictedRepo(t)
 	repo := &Repo{Runner: runner}
 	base, cur, inc, err := repo.UnmergedStages(context.Background(), "f.txt")

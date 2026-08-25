@@ -75,6 +75,7 @@ func stageFile(t *testing.T, dir string, repo *git.Repo, name, content string) {
 }
 
 func TestGenerateMessageBuildsContextAndCaptures(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	ctx := context.Background()
 	stageFile(t, dir, repo, "a.txt", "one\ntwo\n")
@@ -122,6 +123,7 @@ func TestGenerateMessageBuildsContextAndCaptures(t *testing.T) {
 }
 
 func TestGenerateMessageOverCapTruncates(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	// A staged change whose diff exceeds MaxDiffBytes; the marker line lets
 	// us assert the ORIGINAL diff body is fully REPLACED by the truncation
@@ -151,6 +153,7 @@ func TestGenerateMessageOverCapTruncates(t *testing.T) {
 }
 
 func TestGenerateMessageEmptyStagedNoError(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 
 	fc := &fakeCapture{stdout: "Subject\n\nBody."}
@@ -173,6 +176,7 @@ func TestGenerateMessageEmptyStagedNoError(t *testing.T) {
 // NUL-laced run-on line), and the context file must never carry a raw NUL
 // byte.
 func TestGenerateMessageMultiFileStatNewlineDelimited(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	stageFile(t, dir, repo, "a.txt", "one\ntwo\n")
 	stageFile(t, dir, repo, "b.txt", "three\nfour\n")
@@ -210,6 +214,7 @@ func TestGenerateMessageMultiFileStatNewlineDelimited(t *testing.T) {
 // report to stdout, as Junie does — has the FILE content returned as
 // Result.Captured, not the stdout. This is the whole point of the file channel.
 func TestGenerateMessagePrefersMessageFile(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip()
 	}
@@ -238,6 +243,7 @@ func TestGenerateMessagePrefersMessageFile(t *testing.T) {
 // leaves $GG_MESSAGE_FILE untouched, so Result.Captured is its stdout verbatim
 // — the pre-existing behavior must not regress now that a file is provided.
 func TestGenerateMessageFallsBackToStdoutWhenFileEmpty(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip()
 	}
@@ -260,6 +266,7 @@ func TestGenerateMessageFallsBackToStdoutWhenFileEmpty(t *testing.T) {
 }
 
 func TestGenerateMessageLockModeRead(t *testing.T) {
+	t.Parallel()
 	if (GenerateMessage{}).LockMode() != repogate.Read {
 		t.Fatal("want Read")
 	}

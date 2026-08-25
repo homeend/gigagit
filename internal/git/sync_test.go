@@ -49,6 +49,7 @@ func newClonePair(t *testing.T) (string, gitexec.Runner) {
 }
 
 func TestFetchAndPullFFOnly(t *testing.T) {
+	t.Parallel()
 	clone, runner := newClonePair(t)
 	repo := &Repo{Runner: runner}
 
@@ -62,6 +63,7 @@ func TestFetchAndPullFFOnly(t *testing.T) {
 }
 
 func TestPushPropagatesCommit(t *testing.T) {
+	t.Parallel()
 	clone, runner := newClonePair(t)
 	repo := &Repo{Runner: runner}
 
@@ -79,6 +81,7 @@ func TestPushPropagatesCommit(t *testing.T) {
 // TestPushForceOverwritesDivergedRemote rewrites local history so it diverges
 // from origin: a plain push is rejected, --force-with-lease and --force both win.
 func TestPushForceOverwritesDivergedRemote(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name  string
 		force PushForce
@@ -126,6 +129,7 @@ func revParse(t *testing.T, dir, ref string) string {
 }
 
 func TestFastForwardRefUpdatesNonCheckedOutBranch(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	origin := filepath.Join(root, "origin.git")
 	seed := filepath.Join(root, "seed")
@@ -166,6 +170,7 @@ func TestFastForwardRefUpdatesNonCheckedOutBranch(t *testing.T) {
 }
 
 func TestPullFFOnlyRejectsNonFastForward(t *testing.T) {
+	t.Parallel()
 	clone, runner := newClonePair(t)
 	repo := &Repo{Runner: runner}
 	root := filepath.Dir(clone)
@@ -191,6 +196,7 @@ func TestPullFFOnlyRejectsNonFastForward(t *testing.T) {
 }
 
 func TestFastForwardToRef(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 
@@ -226,6 +232,7 @@ func gitTry(dir string, args ...string) error {
 }
 
 func TestRemoteNames(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 	gitIn(t, dir, "remote", "add", "origin", "https://example.invalid/x.git")
@@ -240,6 +247,7 @@ func TestRemoteNames(t *testing.T) {
 }
 
 func TestFetchAllUpdatesTrackingRef(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	origin := filepath.Join(root, "origin.git")
 	seed := filepath.Join(root, "seed")
@@ -274,6 +282,7 @@ func TestFetchAllUpdatesTrackingRef(t *testing.T) {
 }
 
 func TestPruneRemotes(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	origin := filepath.Join(root, "origin.git")
 	seed := filepath.Join(root, "seed")
@@ -316,6 +325,7 @@ func gitOut(t *testing.T, dir string, args ...string) string {
 }
 
 func TestPushDeleteArgv(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git push delete", gitexec.Result{})
 	repo := &Repo{Runner: f}
@@ -340,6 +350,7 @@ func TestPushDeleteArgv(t *testing.T) {
 }
 
 func TestPushDeleteRemovesBranchOnRemote(t *testing.T) {
+	t.Parallel()
 	clone, runner := newClonePair(t)
 	repo := &Repo{Runner: runner}
 	// Create a branch and push it to origin, then delete it via PushDelete.
@@ -355,6 +366,7 @@ func TestPushDeleteRemovesBranchOnRemote(t *testing.T) {
 }
 
 func TestPushDeleteTagArgv(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git push delete tag", gitexec.Result{})
 	repo := &Repo{Runner: f}
@@ -379,6 +391,7 @@ func TestPushDeleteTagArgv(t *testing.T) {
 }
 
 func TestPushDeleteTagRemovesTagOnRemote(t *testing.T) {
+	t.Parallel()
 	clone, runner := newClonePair(t)
 	repo := &Repo{Runner: runner}
 	gitIn(t, clone, "tag", "v1.0.0")
@@ -392,6 +405,7 @@ func TestPushDeleteTagRemovesTagOnRemote(t *testing.T) {
 }
 
 func TestPushTagsArgv(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git push (tags)", gitexec.Result{})
 	repo := &Repo{Runner: f}
@@ -416,6 +430,7 @@ func TestPushTagsArgv(t *testing.T) {
 }
 
 func TestPushTagsEmpty(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	repo := &Repo{Runner: f}
 	if err := repo.PushTags(context.Background(), "origin", nil); err != nil {

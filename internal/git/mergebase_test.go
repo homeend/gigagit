@@ -10,6 +10,7 @@ import (
 )
 
 func TestMergeBaseArgv(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git merge-base", gitexec.Result{Stdout: "abc123\n"})
 	r := &Repo{Runner: f}
@@ -27,6 +28,7 @@ func TestMergeBaseArgv(t *testing.T) {
 }
 
 func TestMergeBaseRealRepo(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	r := &Repo{Runner: runner}
 
@@ -53,6 +55,7 @@ func TestMergeBaseRealRepo(t *testing.T) {
 }
 
 func TestMergeBaseNoCommonAncestorErrors(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	r := &Repo{Runner: runner}
 
@@ -63,6 +66,7 @@ func TestMergeBaseNoCommonAncestorErrors(t *testing.T) {
 }
 
 func TestUpstreamRefArgv(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git rev-parse (upstream)", gitexec.Result{Stdout: "origin/feature\n"})
 	r := &Repo{Runner: f}
@@ -80,6 +84,7 @@ func TestUpstreamRefArgv(t *testing.T) {
 }
 
 func TestUpstreamRefRealRepoNoUpstreamErrors(t *testing.T) {
+	t.Parallel()
 	_, runner := newTestRepo(t)
 	r := &Repo{Runner: runner}
 

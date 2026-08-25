@@ -35,6 +35,7 @@ func runSquash(t *testing.T, dir string, repo *git.Repo, gg string, targetRevs [
 // Ground truth: squashing two adjacent commits actually collapses them into one
 // real commit (no editor, no hang) with the concatenated message.
 func TestSquashTwoCommitsEndToEnd(t *testing.T) {
+	t.Parallel()
 	gg := buildGG(t)
 	dir, repo := fourCommitBranch(t) // main -> a -> b -> c -> d
 	if _, err := runSquash(t, dir, repo, gg, []string{"work", "work~1"}, OpDeps{}); err != nil {
@@ -52,6 +53,7 @@ func TestSquashTwoCommitsEndToEnd(t *testing.T) {
 }
 
 func TestSquashThreeCommitsEndToEnd(t *testing.T) {
+	t.Parallel()
 	gg := buildGG(t)
 	dir, repo := fourCommitBranch(t)
 	// Squash b, c, d (the three newest after a) into one.
@@ -67,6 +69,7 @@ func TestSquashThreeCommitsEndToEnd(t *testing.T) {
 // Stage 2: selecting a (oldest) and c (skipping b) reorders b after the squash —
 // result history oldest→newest = (a+c), b, d.
 func TestSquashReorderEndToEnd(t *testing.T) {
+	t.Parallel()
 	gg := buildGG(t)
 	dir, repo := fourCommitBranch(t) // main -> a -> b -> c -> d
 	aSha := shaOf(t, dir, "work~3")

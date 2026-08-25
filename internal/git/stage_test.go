@@ -12,6 +12,7 @@ import (
 )
 
 func TestStagePathsArgv(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git add", gitexec.Result{})
 	r := &Repo{Runner: f}
@@ -25,6 +26,7 @@ func TestStagePathsArgv(t *testing.T) {
 }
 
 func TestStageAllArgv(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git add", gitexec.Result{})
 	r := &Repo{Runner: f}
@@ -41,6 +43,7 @@ func TestStageAllArgv(t *testing.T) {
 }
 
 func TestUnstagePathsArgv(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git restore --staged", gitexec.Result{})
 	r := &Repo{Runner: f}
@@ -56,6 +59,7 @@ func TestUnstagePathsArgv(t *testing.T) {
 // Real-git: stage an unstaged modification, then unstage it, asserting the
 // porcelain transitions via the existing Status verb.
 func TestStageUnstageReal(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 

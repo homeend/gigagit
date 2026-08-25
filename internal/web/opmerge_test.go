@@ -24,6 +24,7 @@ func divergedRepo(t *testing.T) string {
 }
 
 func TestOpHTTPMerge(t *testing.T) {
+	t.Parallel()
 	dir := divergedRepo(t)
 	ts := serve(t, New(domain.Open(dir)))
 
@@ -45,6 +46,7 @@ func TestOpHTTPMerge(t *testing.T) {
 // Target need not be checked out: SmartMerge's ladder switches to it and
 // ends there. This is what makes an arbitrary drop pair work.
 func TestOpHTTPMergeTargetNotCheckedOut(t *testing.T) {
+	t.Parallel()
 	dir := divergedRepo(t)
 	gitRun(t, dir, "checkout", "feature") // main is now the non-checked-out target
 	ts := serve(t, New(domain.Open(dir)))
@@ -61,6 +63,7 @@ func TestOpHTTPMergeTargetNotCheckedOut(t *testing.T) {
 }
 
 func TestOpHTTPMergeSameBranch(t *testing.T) {
+	t.Parallel()
 	dir := divergedRepo(t)
 	ts := serve(t, New(domain.Open(dir)))
 
@@ -97,6 +100,7 @@ func conflictingRepo(t *testing.T) string {
 // answer keep-conflicts, then verify the conflict is really left in the
 // tree (git-visible, not just an HTTP response shape).
 func TestOpHTTPMergeConflict(t *testing.T) {
+	t.Parallel()
 	dir := conflictingRepo(t)
 	srv := New(domain.Open(dir))
 	ts := serve(t, srv)
@@ -135,6 +139,7 @@ func TestOpHTTPMergeConflict(t *testing.T) {
 }
 
 func TestOpHTTPMergeBadNames(t *testing.T) {
+	t.Parallel()
 	dir := divergedRepo(t)
 	ts := serve(t, New(domain.Open(dir)))
 

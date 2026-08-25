@@ -8,6 +8,7 @@ import (
 )
 
 func TestReadWriteWorktreeFile(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t) // has README.md committed
 	repo := &Repo{Runner: runner}
 	ctx := context.Background()
@@ -38,6 +39,7 @@ func TestReadWriteWorktreeFile(t *testing.T) {
 }
 
 func TestWorktreeFileRejectsEscapingPaths(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 	ctx := context.Background()

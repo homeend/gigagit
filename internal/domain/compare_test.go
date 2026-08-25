@@ -54,6 +54,7 @@ func headHash(t *testing.T, dir string) string {
 // CompareFiles against the working tree must include UNTRACKED files (git diff
 // omits them); the user's bug was a new untracked file not showing.
 func TestCompareFilesIncludesUntracked(t *testing.T) {
+	t.Parallel()
 	dir, svc := newRealRepo(t)
 	ctx := context.Background()
 	head := headHash(t, dir)
@@ -117,6 +118,7 @@ func TestCompareFilesIncludesUntracked(t *testing.T) {
 }
 
 func TestCompareFilesGatedQuery(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git diff (compare files)", gitexec.Result{Stdout: "M\x00README.md\x00A\x00b.txt\x00"})
 	f.SetResponse("git ls-files (untracked)", gitexec.Result{Stdout: ""}) // worktree compare also lists untracked

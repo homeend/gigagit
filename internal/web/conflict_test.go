@@ -55,6 +55,7 @@ func conflictedMergeState(t *testing.T, dir string) {
 }
 
 func TestStatusConflictObject(t *testing.T) {
+	t.Parallel()
 	dir := conflictingRepo(t)
 	conflictedMergeState(t, dir)
 	ts := serve(t, New(domain.Open(dir)))
@@ -79,6 +80,7 @@ func TestStatusConflictObject(t *testing.T) {
 }
 
 func TestStatusConflictAbsentWhenClean(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	ts := serve(t, New(domain.Open(dir)))
 
@@ -95,6 +97,7 @@ func TestStatusConflictAbsentWhenClean(t *testing.T) {
 // outside gg, merge never continued) must STILL report — that is the
 // resume-paused-op parity the banner's Continue depends on.
 func TestStatusConflictPausedZeroConflicts(t *testing.T) {
+	t.Parallel()
 	dir := conflictingRepo(t)
 	conflictedMergeState(t, dir)
 	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("resolved\n"), 0o644); err != nil {
@@ -128,6 +131,7 @@ type conflictHunksResp struct {
 }
 
 func TestConflictHunks(t *testing.T) {
+	t.Parallel()
 	dir := conflictingRepo(t)
 	conflictedMergeState(t, dir)
 	ts := serve(t, New(domain.Open(dir)))
@@ -155,6 +159,7 @@ func TestConflictHunks(t *testing.T) {
 }
 
 func TestConflictHunksEligibility(t *testing.T) {
+	t.Parallel()
 	dir := conflictingRepo(t)
 	conflictedMergeState(t, dir)
 	ts := serve(t, New(domain.Open(dir)))
@@ -178,6 +183,7 @@ func TestConflictHunksEligibility(t *testing.T) {
 // mark-resolved. (A hand-edited worktree no longer reaches this path at all:
 // the loader regenerates from the index stages, which the edit didn't touch.)
 func TestConflictHunksMalformed(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	gitRun(t, dir, "checkout", "-b", "feature")
 	gitRun(t, dir, "rm", "f.txt")
@@ -197,6 +203,7 @@ func TestConflictHunksMalformed(t *testing.T) {
 }
 
 func TestResolveHunks(t *testing.T) {
+	t.Parallel()
 	dir := conflictingRepo(t)
 	conflictedMergeState(t, dir)
 	ts := serve(t, New(domain.Open(dir)))
@@ -264,6 +271,7 @@ func twoRegionConflictRepo(t *testing.T) string {
 
 // Two regions, opposite picks — the positional contract end-to-end.
 func TestResolveHunksMixedPicks(t *testing.T) {
+	t.Parallel()
 	dir := twoRegionConflictRepo(t)
 	ts := serve(t, New(domain.Open(dir)))
 
@@ -302,6 +310,7 @@ func gitIndexInfo(t *testing.T, dir, stdin string) {
 // the eligibility gate still passes — only the regenerated content, and
 // therefore the hash, changes under the client's feet.
 func TestResolveHunksHashDrift(t *testing.T) {
+	t.Parallel()
 	dir := conflictingRepo(t)
 	conflictedMergeState(t, dir)
 	ts := serve(t, New(domain.Open(dir)))
@@ -360,6 +369,7 @@ func nestedMarkerRepo(t *testing.T) (dir, path string) {
 }
 
 func TestConflictHunksNestedMarkers(t *testing.T) {
+	t.Parallel()
 	dir, path := nestedMarkerRepo(t)
 	ts := serve(t, New(domain.Open(dir)))
 	var d struct {
@@ -391,6 +401,7 @@ func TestConflictHunksNestedMarkers(t *testing.T) {
 }
 
 func TestResolveHunksPickCount(t *testing.T) {
+	t.Parallel()
 	dir := conflictingRepo(t)
 	conflictedMergeState(t, dir)
 	ts := serve(t, New(domain.Open(dir)))
@@ -447,6 +458,7 @@ func singleRegionConflictRepo(t *testing.T) string {
 // The ordered line-pick model: result order is array order regardless of
 // side, and sides may interleave.
 func TestResolveHunksLinePicks(t *testing.T) {
+	t.Parallel()
 	dir := singleRegionConflictRepo(t)
 	ts := serve(t, New(domain.Open(dir)))
 
@@ -480,6 +492,7 @@ func TestResolveHunksLinePicks(t *testing.T) {
 // An empty "lines" list is decided-empty: neither side's lines make it into
 // the result, but passthrough text around the block is untouched.
 func TestResolveHunksEmptyDecided(t *testing.T) {
+	t.Parallel()
 	dir := singleRegionConflictRepo(t)
 	ts := serve(t, New(domain.Open(dir)))
 
@@ -501,6 +514,7 @@ func TestResolveHunksEmptyDecided(t *testing.T) {
 }
 
 func TestResolveHunksLineValidation(t *testing.T) {
+	t.Parallel()
 	dir := singleRegionConflictRepo(t)
 	ts := serve(t, New(domain.Open(dir)))
 
@@ -576,6 +590,7 @@ func TestResolveHunksLineValidation(t *testing.T) {
 // {"mode":"ours"} / {"mode":"theirs"} behave exactly like the old string
 // picks — the whole-side fast path survives the wire migration.
 func TestResolveHunksFastPathStillWorks(t *testing.T) {
+	t.Parallel()
 	t.Run("ours", func(t *testing.T) {
 		dir := twoRegionConflictRepo(t)
 		ts := serve(t, New(domain.Open(dir)))

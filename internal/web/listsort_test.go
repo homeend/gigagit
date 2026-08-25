@@ -11,6 +11,7 @@ import (
 )
 
 func TestAllowedSortMode(t *testing.T) {
+	t.Parallel()
 	for _, m := range []string{sortNameAsc, sortNameDesc, sortDateAsc, sortDateDesc, sortDefault} {
 		if got := allowedSortMode(m); got != m {
 			t.Errorf("allowedSortMode(%q) = %q", m, got)
@@ -27,6 +28,7 @@ func TestAllowedSortMode(t *testing.T) {
 // is case-insensitive, the sort is stable, and an unknown date (0) sorts LAST
 // in both directions so missing data never floats to the top.
 func TestSortRowsMirrorsTUISemantics(t *testing.T) {
+	t.Parallel()
 	type row struct {
 		name string
 		date int64
@@ -63,6 +65,7 @@ func TestSortRowsMirrorsTUISemantics(t *testing.T) {
 
 // Ties keep the input order (stable), like the TUI's sort.SliceStable.
 func TestSortRowsIsStable(t *testing.T) {
+	t.Parallel()
 	type row struct{ name, tag string }
 	rows := []row{{"a", "first"}, {"A", "second"}, {"a", "third"}}
 	sortRows(rows, sortNameAsc, func(r row) string { return r.name }, func(row) int64 { return 0 })
@@ -75,6 +78,7 @@ func TestSortRowsIsStable(t *testing.T) {
 // cap, or a sorted list is really "the server's arbitrary first hundred,
 // sorted" — the wrong rows, not just the wrong order.
 func TestTagsSortRunsBeforeTheCap(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	for i := 1; i <= maxTagRows+5; i++ {
 		gitRun(t, dir, "tag", fmt.Sprintf("t%03d", i))
@@ -105,6 +109,7 @@ func TestTagsSortRunsBeforeTheCap(t *testing.T) {
 }
 
 func TestTagsSortAscending(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	for _, n := range []string{"v2.0", "v1.0", "v3.0"} {
 		gitRun(t, dir, "tag", n)
@@ -131,6 +136,7 @@ func TestTagsSortAscending(t *testing.T) {
 // request, git's own order was gone for the rest of the process, in this
 // frontend and every other one sharing the service.
 func TestSortingDoesNotMutateTheSharedCache(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	for _, n := range []string{"v2.0", "v1.0", "v3.0"} {
 		gitRun(t, dir, "tag", n)
@@ -167,6 +173,7 @@ func TestSortingDoesNotMutateTheSharedCache(t *testing.T) {
 }
 
 func TestRemotesSortByName(t *testing.T) {
+	t.Parallel()
 	_, clone := cloneWithOrigin(t)
 	// Two more remote-tracking branches, so ordering is observable.
 	gitRun(t, clone, "branch", "aaa")
@@ -197,6 +204,7 @@ func TestRemotesSortByName(t *testing.T) {
 // Worktree rows carry their HEAD's committer time so the client can sort them
 // by date — the web's equivalent of the TUI's headTimes map.
 func TestWorktreesCarryHeadTime(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 2)
 	wt := filepath.Join(t.TempDir(), "wt")
 	gitRun(t, dir, "worktree", "add", "-b", "side", wt)

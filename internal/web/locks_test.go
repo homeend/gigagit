@@ -36,6 +36,7 @@ func removeLocksBody(paths ...string) string {
 // A clean repo has nothing to report — the notice must not appear on an
 // empty list, so the empty list has to be an empty list and not null.
 func TestLocksEmptyOnACleanRepo(t *testing.T) {
+	t.Parallel()
 	ts := serve(t, New(domain.Open(newRepoDir(t, 1))))
 	var out lockList
 	if code := getJSON(t, ts, "/api/locks", &out); code != http.StatusOK {
@@ -49,6 +50,7 @@ func TestLocksEmptyOnACleanRepo(t *testing.T) {
 // The whole point of the surface: a stranded index.lock is listed, with the
 // age that is the only staleness hint gg can honestly offer.
 func TestLocksListsAStrandedLock(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	p := touchLock(t, dir, "index.lock")
 	ts := serve(t, New(domain.Open(dir)))
@@ -78,6 +80,7 @@ func TestLocksListsAStrandedLock(t *testing.T) {
 // Clearing removes the file and empties the list — the client re-reads after
 // the op and hides the notice on an empty answer.
 func TestLocksClearRemovesThemAndEmptiesTheList(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	index := touchLock(t, dir, "index.lock")
 	head := touchLock(t, dir, "HEAD.lock")
@@ -103,6 +106,7 @@ func TestLocksClearRemovesThemAndEmptiesTheList(t *testing.T) {
 // engine (one home for the rule), so the refusal arrives as a failed op —
 // and nothing outside the git dir is touched.
 func TestLocksRefusesAPathOutsideTheGitDir(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	outside := filepath.Join(t.TempDir(), "index.lock")
 	if err := os.WriteFile(outside, []byte("not ours\n"), 0o644); err != nil {
@@ -126,6 +130,7 @@ func TestLocksRefusesAPathOutsideTheGitDir(t *testing.T) {
 // A file that is inside the git dir but is not a lockfile is refused too:
 // the name is half the guard.
 func TestLocksRefusesANonLockFileInTheGitDir(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	cfg := filepath.Join(dir, ".git", "config")
 	ts := serve(t, New(domain.Open(dir)))

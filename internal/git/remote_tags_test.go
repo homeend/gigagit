@@ -7,6 +7,7 @@ import (
 )
 
 func TestParseRemoteTags(t *testing.T) {
+	t.Parallel()
 	out := []byte(
 		"aaaaaaaaaaaa\trefs/tags/v1.0.0\n" +
 			"bbbbbbbbbbbb\trefs/tags/v1.1.0\n" +
@@ -20,12 +21,14 @@ func TestParseRemoteTags(t *testing.T) {
 }
 
 func TestParseRemoteTagsEmpty(t *testing.T) {
+	t.Parallel()
 	if got := ParseRemoteTags(nil); len(got) != 0 {
 		t.Fatalf("empty input should yield empty set, got %v", got)
 	}
 }
 
 func TestRemoteTagsListsPushedOnly(t *testing.T) {
+	t.Parallel()
 	clone, runner := newClonePair(t)
 	repo := &Repo{Runner: runner}
 	gitIn(t, clone, "tag", "v1")

@@ -12,6 +12,7 @@ import (
 )
 
 func TestRevertArgv(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git revert", gitexec.Result{})
 	r := &Repo{Runner: f}
@@ -25,6 +26,7 @@ func TestRevertArgv(t *testing.T) {
 }
 
 func TestRevertArgvWithDir(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git revert", gitexec.Result{})
 	r := &Repo{Runner: f}
@@ -38,6 +40,7 @@ func TestRevertArgvWithDir(t *testing.T) {
 }
 
 func TestRevertAbortArgv(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git revert --abort", gitexec.Result{})
 	r := &Repo{Runner: f}
@@ -51,6 +54,7 @@ func TestRevertAbortArgv(t *testing.T) {
 }
 
 func TestRevertContinueArgvAndEnv(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git revert --continue", gitexec.Result{})
 	r := &Repo{Runner: f}
@@ -67,6 +71,7 @@ func TestRevertContinueArgvAndEnv(t *testing.T) {
 }
 
 func TestRevertInProgressExitOneMeansNo(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git rev-parse REVERT_HEAD", gitexec.Result{ExitCode: 1})
 	f.SetError("git rev-parse REVERT_HEAD", errors.New("exit status 1"))
@@ -82,6 +87,7 @@ func TestRevertInProgressExitOneMeansNo(t *testing.T) {
 
 // Real-git: a clean revert removes the change the picked commit introduced.
 func TestRevertCleanReal(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 
@@ -106,6 +112,7 @@ func TestRevertCleanReal(t *testing.T) {
 
 // Real-git: a conflicting revert sets REVERT_HEAD; abort clears it.
 func TestRevertConflictDetectAndAbortReal(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 
@@ -142,6 +149,7 @@ func TestRevertConflictDetectAndAbortReal(t *testing.T) {
 // Real-git: reverting a merge commit without -m is refused outright (no
 // REVERT_HEAD), so the engine surfaces git's legible error.
 func TestRevertMergeCommitRefusedReal(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 

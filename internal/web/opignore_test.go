@@ -14,6 +14,7 @@ import (
 // TestOpIgnore adds an untracked file to .gitignore through the op and
 // checks the pattern lands (root-anchored) and status stops listing it.
 func TestOpIgnore(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	if err := os.WriteFile(filepath.Join(dir, "notes.tmp"), []byte("x\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -41,6 +42,7 @@ func TestOpIgnore(t *testing.T) {
 
 // TestOpIgnoreExt ignores the whole extension instead of the one file.
 func TestOpIgnoreExt(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	if err := os.WriteFile(filepath.Join(dir, "notes.tmp"), []byte("x\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -67,6 +69,7 @@ func TestOpIgnoreExt(t *testing.T) {
 // untracked paths, the TUI's untrackedFile gate), an unknown path 404s, a
 // leading dash 400s.
 func TestOpIgnoreRefusals(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1) // f.txt committed
 	// make f.txt dirty so it appears in status as tracked-modified
 	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("dirty\n"), 0o644); err != nil {
@@ -89,6 +92,7 @@ func TestOpIgnoreRefusals(t *testing.T) {
 // TestOpDiscardAll discards everything unstaged in one op: the tracked edit
 // reverts AND the untracked file is deleted (both halves, one run).
 func TestOpDiscardAll(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1) // f.txt committed as "content 1\n"
 	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("dirty\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -121,6 +125,7 @@ func TestOpDiscardAll(t *testing.T) {
 // canDiscardAll rule — a bulk discard during a conflict destroys resolution
 // state), and a tree with nothing unstaged refuses rather than no-oping.
 func TestOpDiscardAllRefusals(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	gitRun(t, dir, "checkout", "-b", "side")
 	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("side\n"), 0o644); err != nil {

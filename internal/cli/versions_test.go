@@ -15,6 +15,7 @@ import (
 // versions)", an unknown id fails loud, and a too-many-args list call is a
 // usage error.
 func TestCmdVersionsListAndRestore(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t) // main, one commit "initial", README.md = "hi\n"
 	firstSha := runGit(t, dir, "rev-parse", "HEAD")
 
@@ -75,6 +76,7 @@ func TestCmdVersionsListAndRestore(t *testing.T) {
 // (exit 1, HEAD untouched); --discard pre-answers "proceed" and the restore
 // succeeds, discarding the dirty change along with the hard reset.
 func TestCmdVersionsRestoreDirtyRequiresDiscard(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	firstSha := runGit(t, dir, "rev-parse", "HEAD")
 

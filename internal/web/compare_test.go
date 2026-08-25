@@ -57,6 +57,7 @@ func compareRepo(t *testing.T) string {
 }
 
 func TestCompareBranches(t *testing.T) {
+	t.Parallel()
 	dir := compareRepo(t)
 	ts := serve(t, New(domain.Open(dir)))
 
@@ -94,6 +95,7 @@ func TestCompareBranches(t *testing.T) {
 // The per-file diff of a compare row must read the two BRANCH TIPS, not a
 // commit and its parent — the tips the compare response just handed back.
 func TestCompareRevDiff(t *testing.T) {
+	t.Parallel()
 	dir := compareRepo(t)
 	ts := serve(t, New(domain.Open(dir)))
 
@@ -127,6 +129,7 @@ func TestCompareRevDiff(t *testing.T) {
 }
 
 func TestCompareUnrelatedHistories(t *testing.T) {
+	t.Parallel()
 	dir := compareRepo(t)
 	// An orphan branch shares no ancestor: the file list still stands, only
 	// the per-side origin filter is undefined.
@@ -161,6 +164,7 @@ func TestCompareUnrelatedHistories(t *testing.T) {
 // compare indistinguishable from "identical", while an unknown hash fails
 // loudly in git.
 func TestCompareRevs(t *testing.T) {
+	t.Parallel()
 	dir := compareRepo(t)
 	a := gitRun(t, dir, "rev-parse", "main")
 	b := gitRun(t, dir, "rev-parse", "side")
@@ -192,6 +196,7 @@ func TestCompareRevs(t *testing.T) {
 // A branch name under revs=1 is a 400, never a resolution: the rev form's
 // whole contract is hex-only.
 func TestCompareRevsRejects(t *testing.T) {
+	t.Parallel()
 	dir := compareRepo(t)
 	a := gitRun(t, dir, "rev-parse", "main")
 	ts := serve(t, New(domain.Open(dir)))
@@ -211,6 +216,7 @@ func TestCompareRevsRejects(t *testing.T) {
 // in left/right is refused before it can poison the commit↔commit diff
 // cache, instead of merely being isGitArgSafe.
 func TestRevDiffRequiresHex(t *testing.T) {
+	t.Parallel()
 	dir := compareRepo(t)
 	ts := serve(t, New(domain.Open(dir)))
 	q := "/api/diff?left=main&right=side&path=shared.txt&status=M"
@@ -220,6 +226,7 @@ func TestRevDiffRequiresHex(t *testing.T) {
 }
 
 func TestCompareRejects(t *testing.T) {
+	t.Parallel()
 	dir := compareRepo(t)
 	ts := serve(t, New(domain.Open(dir)))
 	cases := []struct {

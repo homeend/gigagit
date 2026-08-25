@@ -8,6 +8,7 @@ import (
 )
 
 func TestRemotesEndpoint(t *testing.T) {
+	t.Parallel()
 	_, clone := cloneWithOrigin(t)
 	ts := serve(t, New(domain.Open(clone)))
 

@@ -29,6 +29,7 @@ func postJSONRaw(t *testing.T, ts *httptest.Server, path, body string) (int, map
 }
 
 func TestOpDiscard(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	gitRun(t, dir, "init", "-b", "main")
 	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("clean\n"), 0o644); err != nil {
@@ -96,6 +97,7 @@ func TestOpDiscard(t *testing.T) {
 }
 
 func TestOpDiscardConflicted(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1) // f.txt committed as "content 1\n"
 	gitRun(t, dir, "checkout", "-b", "side")
 	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("side\n"), 0o644); err != nil {

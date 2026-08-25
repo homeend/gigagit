@@ -38,6 +38,7 @@ func headSHA(t *testing.T, dir string) string {
 }
 
 func TestResetDefaultMixedCLI(t *testing.T) {
+	t.Parallel()
 	dir, base := resetFixture(t)
 	var out, errb bytes.Buffer
 	code := Run(dir, []string{"reset", base}, strings.NewReader(""), &out, &errb, "")
@@ -53,6 +54,7 @@ func TestResetDefaultMixedCLI(t *testing.T) {
 }
 
 func TestResetSoftCLI(t *testing.T) {
+	t.Parallel()
 	dir, base := resetFixture(t)
 	var out, errb bytes.Buffer
 	code := Run(dir, []string{"reset", "--soft", base}, strings.NewReader(""), &out, &errb, "")
@@ -65,6 +67,7 @@ func TestResetSoftCLI(t *testing.T) {
 }
 
 func TestResetHardCLI(t *testing.T) {
+	t.Parallel()
 	dir, base := resetFixture(t)
 	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("dirty\n"), 0o644)
 	var out, errb bytes.Buffer
@@ -99,6 +102,7 @@ func nonAncestorFixture(t *testing.T) (dir, sideTip, mainTip string) {
 }
 
 func TestResetNonAncestorUnforcedNonTTY(t *testing.T) {
+	t.Parallel()
 	dir, sideTip, mainTip := nonAncestorFixture(t)
 	var out, errb bytes.Buffer
 	code := Run(dir, []string{"reset", sideTip}, strings.NewReader(""), &out, &errb, "")
@@ -114,6 +118,7 @@ func TestResetNonAncestorUnforcedNonTTY(t *testing.T) {
 }
 
 func TestResetNonAncestorForce(t *testing.T) {
+	t.Parallel()
 	dir, sideTip, _ := nonAncestorFixture(t)
 	var out, errb bytes.Buffer
 	code := Run(dir, []string{"reset", "--force", sideTip}, strings.NewReader(""), &out, &errb, "")
@@ -126,6 +131,7 @@ func TestResetNonAncestorForce(t *testing.T) {
 }
 
 func TestResetUsageErrors(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	for _, args := range [][]string{
 		{"reset"},                          // missing commit

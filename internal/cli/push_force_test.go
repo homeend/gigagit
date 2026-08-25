@@ -47,6 +47,7 @@ func originContent(t *testing.T, origin string) string {
 }
 
 func TestPushPlainRejectedOnDivergence(t *testing.T) {
+	t.Parallel()
 	clone, origin := cloneDiverged(t)
 	if code, _, _ := runCLI(t, clone, "push"); code == 0 {
 		t.Fatal("plain push of diverged history should exit non-zero")
@@ -57,6 +58,7 @@ func TestPushPlainRejectedOnDivergence(t *testing.T) {
 }
 
 func TestPushForceOverwritesRemote(t *testing.T) {
+	t.Parallel()
 	clone, origin := cloneDiverged(t)
 	code, out, errb := runCLI(t, clone, "push", "--force")
 	if code != 0 {
@@ -71,6 +73,7 @@ func TestPushForceOverwritesRemote(t *testing.T) {
 }
 
 func TestPushForceWithLeaseOverwritesRemote(t *testing.T) {
+	t.Parallel()
 	clone, origin := cloneDiverged(t)
 	code, _, errb := runCLI(t, clone, "push", "--force-with-lease")
 	if code != 0 {
@@ -82,6 +85,7 @@ func TestPushForceWithLeaseOverwritesRemote(t *testing.T) {
 }
 
 func TestPushForceFlagsMutuallyExclusive(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	code, _, errb := runCLI(t, dir, "push", "--force", "--force-with-lease")
 	if code != 2 {

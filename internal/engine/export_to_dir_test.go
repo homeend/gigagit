@@ -10,6 +10,7 @@ import (
 )
 
 func TestExportToDirWritesNestedFiles(t *testing.T) {
+	t.Parallel()
 	dir := filepath.Join(t.TempDir(), "commit-abc1234")
 	op := ExportToDir{
 		Dir: dir,
@@ -34,6 +35,7 @@ func TestExportToDirWritesNestedFiles(t *testing.T) {
 }
 
 func TestExportToDirExistingDirCancels(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir() // already exists
 	op := ExportToDir{Dir: dir, Files: []model.ExportFile{{RelPath: "x", Data: []byte("y")}}}
 	if _, err := op.Run(context.Background(), OpDeps{Decider: MapDecider{"overwrite": "cancel"}}); err != ErrExportCancelled {

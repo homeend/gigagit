@@ -67,6 +67,7 @@ func gitOutput(t *testing.T, dir string, args ...string) string {
 }
 
 func TestCompleteConflictReportNoPausedOp(t *testing.T) {
+	t.Parallel()
 	dir, svc := newRealRepo(t)
 	_ = dir
 
@@ -77,6 +78,7 @@ func TestCompleteConflictReportNoPausedOp(t *testing.T) {
 }
 
 func TestCompleteConflictReportCompletesAMerge(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS == "windows" {
 		t.Skip("uses sh/printf")
 	}
@@ -110,6 +112,7 @@ func TestCompleteConflictReportCompletesAMerge(t *testing.T) {
 }
 
 func TestCompleteConflictReportStopEarlyLeavesPaused(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS == "windows" {
 		t.Skip("uses sh")
 	}
@@ -142,6 +145,7 @@ func TestCompleteConflictReportStopEarlyLeavesPaused(t *testing.T) {
 }
 
 func TestCompleteConflictReportEnvReachesAgent(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS == "windows" {
 		t.Skip("uses sh/printf")
 	}

@@ -7,6 +7,7 @@ import (
 )
 
 func TestTagListPrintsTags(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	gitRun(t, dir, "tag", "v1.0.0")
 	gitRun(t, dir, "tag", "-a", "v2.0.0", "-m", "rel2")
@@ -21,6 +22,7 @@ func TestTagListPrintsTags(t *testing.T) {
 }
 
 func TestTagUnknownSubcommand(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	if code, _, _ := runCLI(t, dir, "tag", "bogus"); code == 0 {
 		t.Fatal("unknown tag subcommand should fail")
@@ -28,6 +30,7 @@ func TestTagUnknownSubcommand(t *testing.T) {
 }
 
 func TestTagCreateLightweightAndAnnotated(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	if code, _, errb := runCLI(t, dir, "tag", "create", "v1.0.0"); code != 0 {
 		t.Fatalf("lightweight create exit %d: %s", code, errb)
@@ -42,6 +45,7 @@ func TestTagCreateLightweightAndAnnotated(t *testing.T) {
 }
 
 func TestTagCreateRequiresName(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	if code, _, _ := runCLI(t, dir, "tag", "create"); code == 0 {
 		t.Fatal("create with no name must fail")
@@ -49,6 +53,7 @@ func TestTagCreateRequiresName(t *testing.T) {
 }
 
 func TestTagRmDeletes(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	gitRun(t, dir, "tag", "v1.0.0")
 	if code, _, errb := runCLI(t, dir, "tag", "rm", "v1.0.0"); code != 0 {
@@ -61,6 +66,7 @@ func TestTagRmDeletes(t *testing.T) {
 }
 
 func TestTagRmRequiresName(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	if code, _, _ := runCLI(t, dir, "tag", "rm"); code == 0 {
 		t.Fatal("rm with no name must fail")
@@ -68,6 +74,7 @@ func TestTagRmRequiresName(t *testing.T) {
 }
 
 func TestTagCheckoutDetached(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	gitRun(t, dir, "tag", "v1.0.0")
 	gitRun(t, dir, "commit", "--allow-empty", "-m", "c2")
@@ -81,6 +88,7 @@ func TestTagCheckoutDetached(t *testing.T) {
 }
 
 func TestTagCheckoutToBranch(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	gitRun(t, dir, "tag", "v1.0.0")
 	if code, _, errb := runCLI(t, dir, "tag", "checkout", "--branch", "rel", "v1.0.0"); code != 0 {
@@ -93,6 +101,7 @@ func TestTagCheckoutToBranch(t *testing.T) {
 }
 
 func TestTagPushToOrigin(t *testing.T) {
+	t.Parallel()
 	clone := cloneWithRemoteFoo(t)
 	gitRun(t, clone, "tag", "v1.0.0")
 	if code, _, errb := runCLI(t, clone, "tag", "push", "v1.0.0", "origin"); code != 0 {
@@ -105,6 +114,7 @@ func TestTagPushToOrigin(t *testing.T) {
 }
 
 func TestTagPushRequiresName(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	if code, _, _ := runCLI(t, dir, "tag", "push"); code == 0 {
 		t.Fatal("push with no name must fail")
@@ -112,6 +122,7 @@ func TestTagPushRequiresName(t *testing.T) {
 }
 
 func TestTagRmRemoteDeletesTagOnOrigin(t *testing.T) {
+	t.Parallel()
 	clone := cloneWithRemoteFoo(t)
 	origin := runGit(t, clone, "config", "--get", "remote.origin.url")
 	runGit(t, clone, "tag", "v1.0.0")
@@ -126,6 +137,7 @@ func TestTagRmRemoteDeletesTagOnOrigin(t *testing.T) {
 }
 
 func TestTagRmLocalStillLocalOnly(t *testing.T) {
+	t.Parallel()
 	clone := cloneWithRemoteFoo(t)
 	origin := runGit(t, clone, "config", "--get", "remote.origin.url")
 	runGit(t, clone, "tag", "v1.0.0")
@@ -144,6 +156,7 @@ func TestTagRmLocalStillLocalOnly(t *testing.T) {
 }
 
 func TestTagAnnotateMakesAnnotated(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	runGit(t, dir, "tag", "v1.0.0") // lightweight
 	if code, _, errb := runCLI(t, dir, "tag", "annotate", "-m", "release one", "v1.0.0"); code != 0 {
@@ -155,6 +168,7 @@ func TestTagAnnotateMakesAnnotated(t *testing.T) {
 }
 
 func TestTagAnnotateRequiresMessage(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	runGit(t, dir, "tag", "v1.0.0")
 	if code, _, _ := runCLI(t, dir, "tag", "annotate", "v1.0.0"); code != 2 {
@@ -163,6 +177,7 @@ func TestTagAnnotateRequiresMessage(t *testing.T) {
 }
 
 func TestTagAnnotateUnknownTag(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	if code, _, _ := runCLI(t, dir, "tag", "annotate", "-m", "x", "nope"); code == 0 {
 		t.Fatal("unknown tag must exit non-zero")
