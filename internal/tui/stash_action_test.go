@@ -6,17 +6,22 @@ import (
 	"github.com/homeend/gigagit/internal/model"
 )
 
-func TestStashEnterOpensActions(t *testing.T) {
+// enter on the stash list drills into the file tree (the commits gesture);
+// the Apply/Pop/Drop popup moved to the "." menu (and stays on enter under
+// the tree — see TestStashListEnterUnderTreeOpensActions).
+func TestStashEnterOpensFiles(t *testing.T) {
 	m := Model{width: 100, height: 30, sel: map[panel]int{}}
 	m.stashView = &stashView{entries: []model.StashEntry{{Ref: "stash@{0}", Subject: "WIP"}}}
 	mm, _ := m.updateStashViewKey(keyMsg("enter"))
 	got := mm.(Model)
-	a := layerOf[*stashActionPopup](got)
-	if a == nil {
-		t.Fatal("enter should open the stash-action popup")
+	if layerOf[*stashActionPopup](got) != nil {
+		t.Fatal("enter must no longer open the stash-action popup from the list")
 	}
-	if a.ref != "stash@{0}" {
-		t.Errorf("action popup ref = %q", a.ref)
+	if got.filesView == nil || !got.filesTreeFocused {
+		t.Fatal("enter should open the stash's file tree with focus on the tree")
+	}
+	if got.filesStashTag != "stash@{0}" {
+		t.Errorf("filesStashTag = %q", got.filesStashTag)
 	}
 }
 

@@ -69,6 +69,13 @@ func availableActions(m Model) []actionRow {
 				rows = append(rows, r)
 			}
 		}
+		// The stash list is the front surface only when nothing sits over it —
+		// mirrors the contextCopyRows precedence, so the Apply/Pop/Drop rows
+		// never leak onto a files/diff/history/blame menu opened above it.
+		if !onStackFile && m.diffLayer() == nil && m.filesView == nil &&
+			m.stashView != nil && m.focus == panelCommits {
+			rows = append(rows, m.stashActionRows()...)
+		}
 		if r, ok := m.exportFilePatchRow(); ok {
 			rows = append(rows, r)
 		}

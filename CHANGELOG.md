@@ -8,6 +8,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Stash window: tab cycles focus, enter drills into files, `.` holds the
+  actions.** `tab`/`shift+tab` in the stash list now cycle focus into the left
+  panels and back (the window stays open, like `←`/`→`). `enter` on a stash
+  drills into its file tree with focus on the tree — the same gesture as
+  `enter` on a commit (`l` still opens it focused on the list side; with the
+  tree already open, `enter` on the list keeps opening the action popup). The
+  Apply / Pop / Drop actions moved to the `.` context menu (alongside Copy
+  stash ref); Drop still confirms first. Footer and `?` help updated.
 - **Jumping to a commit while the stash window is open no longer mixes the two
   views.** With the stash list open and focus released to the left column (←),
   `ctrl+g` (solo + tip) or `enter` (go to tip) on Branches landed focus on the

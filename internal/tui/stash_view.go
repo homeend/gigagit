@@ -111,6 +111,18 @@ func (m Model) updateStashViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "S", "esc":
 		return m.closeStashView(), nil
+	case "tab", "shift+tab":
+		// Cycle focus exactly like the main dispatch: the stash list occupies
+		// the Commits slot in the focus order, so tab walks into the left
+		// column (and the normal handler cycles back here). The window stays
+		// open, dimmed, like the ← release.
+		dir := 1
+		if msg.String() == "shift+tab" {
+			dir = -1
+		}
+		m = m.rememberLeftFocus()
+		m.focus = nextInOrder(m.focusOrder(), m.focus, dir)
+		return m, nil
 	case "left":
 		// Release focus to the left column (the stash list stays open, dimmed),
 		// so the user can inspect the Status/Branches/Worktrees panels — e.g.
@@ -153,12 +165,19 @@ func (m Model) updateStashViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// files view; ←/→ move focus to/from the tree.
 		return m.openStashFiles(e.Ref, e.Subject)
 	case "enter":
+		// Drill into the stash's file list with focus on the tree — the
+		// commits-panel enter gesture (l keeps opening on the list side; the
+		// Apply/Pop/Drop menu moved to "." and stays on enter under the tree).
 		if v.sel < 0 || v.sel >= len(v.entries) {
 			return m, nil
 		}
+		if m.width > 0 && m.width < 40 {
+			m.statusMsg = i18n.T("terminal too narrow for the files view")
+			return m, nil
+		}
 		e := v.entries[v.sel]
-		m = m.pushLayer(&stashActionPopup{ref: e.Ref, subject: e.Subject})
-		return m, nil
+		mm, cmd := m.openStashFiles(e.Ref, e.Subject)
+		return mm.focusTree(), cmd
 	}
 	return m, nil
 }

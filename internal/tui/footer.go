@@ -212,7 +212,7 @@ func (m Model) footerOverride() (string, bool) {
 	// (no file tree yet). When focus has moved to a left panel, fall through to
 	// that panel's normal footer.
 	if m.stashView != nil && m.focus == panelCommits {
-		return i18n.T("stash: [↑/↓] move  [l] files  [z] view  [←] panels  [enter] apply/pop/drop  [esc/S] close"), true
+		return i18n.T("stash: [↑/↓] move  [enter/l] files  [.] apply/pop/drop  [z] view  [←/tab] panels  [esc/S] close"), true
 	}
 	return "", false
 }
