@@ -224,7 +224,8 @@ func worktreeListed(t *testing.T, dir, path string) bool {
 	if err != nil {
 		t.Fatalf("worktree list: %v\n%s", err, out)
 	}
-	return strings.Contains(string(out), path)
+	// git prints forward slashes even on Windows; compare in one notation.
+	return strings.Contains(filepath.ToSlash(string(out)), filepath.ToSlash(path))
 }
 
 // TestRemoveWorktreeLockedUnlockAndRemove: a locked worktree (the state an

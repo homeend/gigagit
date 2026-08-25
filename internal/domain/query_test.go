@@ -261,7 +261,8 @@ func TestGitCommonDirGatedQuery(t *testing.T) {
 
 func TestGitDirGatedQuery(t *testing.T) {
 	f := gitexec.NewFakeRunner()
-	f.SetResponse("git rev-parse (git-dir)", gitexec.Result{Stdout: "/repo/.git\n"})
+	fakeGitDir := filepath.Join(t.TempDir(), ".git") // platform-absolute
+	f.SetResponse("git rev-parse (git-dir)", gitexec.Result{Stdout: fakeGitDir + "\n"})
 	svc := New(&git.Repo{Runner: f})
 	gd, err := svc.GitDir(context.Background())
 	if err != nil {

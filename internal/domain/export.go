@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	pathpkg "path"
 	"path/filepath"
 	"strings"
 
@@ -74,7 +75,10 @@ func extractTar(data []byte) ([]model.ExportFile, error) {
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, model.ExportFile{RelPath: filepath.Clean(h.Name), Data: b})
+		// Tar members are repo-relative git-notation paths — clean them with
+		// path.Clean, not filepath.Clean, which would flip them to "sub\\x" on
+		// Windows and break every forward-slash consumer.
+		out = append(out, model.ExportFile{RelPath: pathpkg.Clean(h.Name), Data: b})
 	}
 	return out, nil
 }
@@ -95,7 +99,7 @@ func tarMemberNames(data []byte) ([]string, error) {
 		if h.Typeflag != tar.TypeReg && h.Typeflag != tar.TypeRegA {
 			continue
 		}
-		out = append(out, filepath.Clean(h.Name))
+		out = append(out, pathpkg.Clean(h.Name))
 	}
 	return out, nil
 }
@@ -115,7 +119,7 @@ func tarMember(data []byte, path string) ([]byte, error) {
 		if h.Typeflag != tar.TypeReg && h.Typeflag != tar.TypeRegA {
 			continue
 		}
-		if filepath.Clean(h.Name) == filepath.Clean(path) {
+		if pathpkg.Clean(h.Name) == pathpkg.Clean(path) {
 			return io.ReadAll(tr)
 		}
 	}

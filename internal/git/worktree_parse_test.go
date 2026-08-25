@@ -1,6 +1,9 @@
 package git
 
-import "testing"
+import (
+	"path/filepath"
+	"testing"
+)
 
 func TestParseWorktrees(t *testing.T) {
 	t.Parallel()
@@ -14,7 +17,8 @@ func TestParseWorktrees(t *testing.T) {
 	if len(got) != 3 {
 		t.Fatalf("worktrees = %d, want 3", len(got))
 	}
-	if got[0].Path != "/repo" || got[0].Branch != "main" {
+	// ParseWorktrees normalizes to native notation ("\repo" on Windows).
+	if got[0].Path != filepath.Clean("/repo") || got[0].Branch != "main" {
 		t.Errorf("wt0 = %+v", got[0])
 	}
 	if got[2].Branch != "" || !got[2].Detached {

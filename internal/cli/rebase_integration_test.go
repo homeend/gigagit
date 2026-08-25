@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -29,6 +30,9 @@ func runGit(t *testing.T, dir string, args ...string) string {
 func TestRebaseInteractiveCLIEndToEnd(t *testing.T) {
 	t.Parallel()
 	ggBin := filepath.Join(t.TempDir(), "gg-test-bin")
+	if runtime.GOOS == "windows" { // exec of an extensionless file fails on Windows
+		ggBin += ".exe"
+	}
 	if out, err := exec.Command("go", "build", "-o", ggBin, "github.com/homeend/gigagit/cmd/gg").CombinedOutput(); err != nil {
 		t.Fatalf("build gg: %v\n%s", err, out)
 	}

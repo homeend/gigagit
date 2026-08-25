@@ -1,6 +1,7 @@
 package git
 
 import (
+	"path/filepath"
 	"strings"
 
 	"github.com/homeend/gigagit/internal/model"
@@ -24,7 +25,11 @@ func ParseWorktrees(data []byte) ([]model.Worktree, error) {
 			flush()
 		case strings.HasPrefix(line, "worktree "):
 			flush()
-			cur = &model.Worktree{Path: strings.TrimPrefix(line, "worktree ")}
+			// git prints forward slashes even on Windows; Clean converts to
+			// the platform's native notation so every consumer can compare
+			// this path against filepath-built ones (remove/move matching,
+			// current-worktree markers) without / vs \ mismatches.
+			cur = &model.Worktree{Path: filepath.Clean(strings.TrimPrefix(line, "worktree "))}
 		case cur == nil:
 			// ignore stray lines
 		case strings.HasPrefix(line, "HEAD "):
